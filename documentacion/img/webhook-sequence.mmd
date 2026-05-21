@@ -1,0 +1,20 @@
+sequenceDiagram
+    participant Ext as Form externo
+    participant N as Nginx
+    participant API as Backend Node
+    participant DB as PostgreSQL
+    participant BR as Brevo
+
+    Ext->>N: POST /testeo_crm/api/leads/<br/>webhooks/psiko-aprende<br/>X-API-Key: whk_psiko_...
+    N->>API: Proxy a localhost:3002
+    API->>API: valida api_key del proyecto
+    API->>DB: BEGIN
+    API->>DB: SELECT project_queue_state<br/>FOR UPDATE
+    API->>DB: SELECT gestores activos
+    API->>DB: INSERT leads<br/>(responsable_id = gestor[next_index])
+    API->>DB: UPDATE next_index = (next+1) % count
+    API->>DB: INSERT lead_utms
+    API->>DB: detecta duplicado por email<br/>marca reincidente si mismo producto
+    API->>DB: COMMIT
+    API-->>Ext: 200 {success, lead_id}<br/>menos de 500ms
+    API-)BR: async sendLeadAssignedEmail

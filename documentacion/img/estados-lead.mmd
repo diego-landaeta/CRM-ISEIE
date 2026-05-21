@@ -1,0 +1,10 @@
+stateDiagram-v2
+    [*] --> nuevo: webhook / manual
+    nuevo --> por_contactar: gestor lo ve
+    por_contactar --> contactado: llamada / email hecha
+    contactado --> en_seguimiento: respuesta del lead
+    en_seguimiento --> convertido: compra
+    en_seguimiento --> no_interesado: rechaza
+    contactado --> no_interesado: silencio prolongado
+    convertido --> [*]: cliente
+    no_interesado --> [*]

@@ -1,0 +1,63 @@
+erDiagram
+    users ||--o{ commission_rules : "tiene"
+    products ||--o{ commission_rules : "aplica"
+    commission_rules ||--o{ commissions : "genera"
+    conversions ||--|| commissions : "crea"
+    users ||--o{ commissions : "cobra"
+
+    projects ||--o{ expenses : "registra"
+    projects ||--o{ accounts_payable : "debe"
+    accounts_payable ||--o{ accounts_payable_payments : "pagos"
+
+    commission_rules {
+        int id PK
+        int project_id FK
+        int user_id FK
+        int product_id FK
+        decimal pct
+        bool active
+    }
+
+    commissions {
+        int id PK
+        int conversion_id FK "unique"
+        int rule_id FK
+        int user_id FK
+        int product_id FK
+        decimal importe_base
+        decimal pct
+        decimal importe_comision
+        enum estado
+        date fecha_pago
+    }
+
+    expenses {
+        int id PK
+        int project_id FK
+        varchar concepto
+        decimal importe
+        date fecha
+        enum categoria
+        int registrado_por FK
+    }
+
+    accounts_payable {
+        int id PK
+        int project_id FK
+        varchar proveedor
+        varchar concepto
+        enum categoria
+        decimal importe_total
+        decimal importe_pagado
+        date fecha_factura
+        date fecha_compromiso_pago
+        enum estado
+    }
+
+    accounts_payable_payments {
+        int id PK
+        int payable_id FK
+        decimal importe
+        date fecha_pago
+        varchar metodo
+    }
