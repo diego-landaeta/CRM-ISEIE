@@ -21,18 +21,27 @@ El CRM ya en producción es la **fuente de verdad para patrones**:
 - **Remoto:** https://github.com/esos2dev-oss/CRM
 - **Producción:** https://360crm.tech/crm/
 
-Antes de inventar algo, busca cómo está resuelto en el CRM existente:
+**Regla del proyecto:** todo apartado, módulo o patrón que se cree en CRM-ISEIE **debe derivar del CRM existente**. No se inventa nada que ya esté resuelto allí.
 
-- Arquitectura modular backend (`backend/src/modules/<dominio>/`)
-- Arquitectura modular frontend (`frontend/src/modules/<feature>/`)
-- Auth JWT + refresh httpOnly cookie + middleware chain
-- Round-robin transaccional para asignación de leads
-- Pre-signed URLs R2 (15 min)
-- Encriptación AES-256 de credenciales API en DB
-- Sistema de migraciones SQL secuenciales
+Inventario completo de qué hay disponible para replicar (32 módulos backend + 34 frontend + cron jobs + shared) en:
+
+📋 **[documentacion/00-baseline-desde-crm.md](documentacion/00-baseline-desde-crm.md)** — léelo antes de crear cualquier módulo.
+
+Patrones críticos a copiar literalmente del CRM hermano:
+
+- Arquitectura modular backend (`backend/src/modules/<dominio>/`) — un dir por dominio, archivos `<X>.{routes,controller,service,model,validation}.js` + `index.js` que exporta `{ prefix, router }`
+- Arquitectura modular frontend (`frontend/src/modules/<feature>/`) — `api/`, `hooks/`, `components/`, `pages/`
+- Auth JWT (access 15 min Bearer + refresh 30d httpOnly) + bcrypt cost 12 + middleware chain `verifyToken → roleGuard → projectAccess`
+- Round-robin transaccional para asignación de leads (`BEGIN/COMMIT`)
+- Pre-signed URLs R2 (15 min de expiración)
+- Encriptación AES-256 de credenciales API en DB (módulo `credentials`)
+- Sistema de migraciones SQL secuenciales (`001_initial_schema.sql` → `NNN_*.sql`)
+- Validación Zod en cada endpoint
+- Errores con `AppError(message, statusCode)`
+- Logger `pino`
 - Convención commits, ramas, deploy
 
-Su `CLAUDE.md` describe todo. Léelo antes que el nuestro si dudas de algún patrón.
+Su `CLAUDE.md` (en `c:\Users\nange\Documents\Proyectos T\CRM\CLAUDE.md`) describe todo. Léelo antes que el nuestro si dudas de algún patrón.
 
 **Cuándo divergir del CRM existente:** solo si hay una razón concreta documentada en `documentacion/`. Si copias un patrón, copia entero — no mezcles enfoques.
 
@@ -208,13 +217,17 @@ Y la planificación heredada del Claude anterior (`documentacion/`, `fase-1/`, .
 ## Primer paso al abrir el repo
 
 1. Leer este archivo entero
-2. Leer [vps-72.60.90.135-handoff.md](vps-72.60.90.135-handoff.md) para no romper el servidor compartido
-3. Hojear `documentacion/README.md` para ver qué planificó el Claude anterior
-4. Confirmar con el usuario:
+2. Leer **[documentacion/00-baseline-desde-crm.md](documentacion/00-baseline-desde-crm.md)** — el catálogo completo de módulos del CRM hermano
+3. Leer [vps-72.60.90.135-handoff.md](vps-72.60.90.135-handoff.md) para no romper el servidor compartido
+4. Hojear `documentacion/README.md` para ver el resto de la planificación
+5. Confirmar con el usuario:
    - Stack final (¿confirmamos el del CRM existente o se cambia algo?)
    - Dominio / subdominio definitivo
+   - Qué módulos del baseline son obligatorios para la v1 de CRM-ISEIE
    - Si el roadmap heredado se sigue o se reescribe desde cero
-5. Crear `docs/`, `backend/`, `frontend/` con la estructura objetivo de arriba
-6. Primera migración + primer endpoint + login funcional antes de avanzar a nada más
+6. Crear `docs/`, `backend/`, `frontend/` con la estructura objetivo (espejo del CRM hermano)
+7. Primera migración (`001_initial_schema.sql`) **derivada de la del CRM existente + las que añadieron columnas críticas después** (round-robin, refresh tokens, soft-delete leads…) — ver §8 del baseline
+8. Login funcional antes de avanzar a nada más
 
 **No empezar a escribir código de features sin que el usuario confirme stack y scope.**
+**No inventar módulos: cópialos desde el CRM hermano.**

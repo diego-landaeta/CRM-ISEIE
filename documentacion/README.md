@@ -1,11 +1,14 @@
-# Documentacion Grafica del CRM MultiProyecto
+# Documentación — CRM-ISEIE
 
-Todos los flujos y procesos del sistema, en diagramas Mermaid (se renderizan en GitHub automaticamente).
+Flujos, arquitectura y planning. Diagramas en Mermaid (se renderizan en GitHub).
 
-## Indice
+## Índice
 
-### Plan general
-0. [Plan Camino B](00-plan-camino-b.md) - Roadmap de implementacion + orden de features
+### Baseline obligatorio (empezar aquí)
+- **[00 — Baseline desde el CRM existente](00-baseline-desde-crm.md)** — catálogo canónico de los 32 módulos backend + 34 frontend del CRM hermano. **Todo lo que se cree en CRM-ISEIE deriva de aquí.**
+
+### Plan heredado (referencia histórica, no roadmap actual)
+- [Plan Camino B](00-plan-camino-b.md) — roadmap del intento anterior
 
 ### Arquitectura
 1. [Arquitectura general del sistema](01-arquitectura-general.md) - Servidor, DB, frontend, APIs externas
