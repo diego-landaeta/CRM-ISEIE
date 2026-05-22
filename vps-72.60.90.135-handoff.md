@@ -1,4 +1,4 @@
-# VPS 72.60.90.135 — Estado actual y guía para nuevo CRM
+﻿# VPS 72.60.90.135 — Estado actual y guía para nuevo CRM
 
 > **⚠️ LEER ANTES DE TOCAR NADA.** Este servidor tiene 8 sitios productivos y varias apps Node corriendo desde hace 48 días sin reinicio. El nuevo CRM se monta **encapsulado**, sin afectar nada de lo que ya está aquí.
 
@@ -128,7 +128,7 @@ El password de `root` y cualquier otra credencial sensible vive **solo** en [`fa
 
 ### 4.3 Lo que NO está instalado (instalar si se necesita)
 
-- ❌ **PostgreSQL** — no instalado. Si el CRM ISEIH lo requiere (lo requiere): `sudo apt install postgresql-15`
+- ❌ **PostgreSQL** — no instalado. Si el CRM iseie lo requiere (lo requiere): `sudo apt install postgresql-15`
 - ❌ **Docker** — no instalado
 - ❌ **Redis** — no instalado
 - ❌ **pnpm / yarn** — no instalados (usar npm)
@@ -157,8 +157,8 @@ Los puertos 3001-3004 están ocupados. Para el nuevo CRM usar:
 
 ```bash
 # NO usar /var/www/crm (existe vacío pero está reservado/ambiguo)
-mkdir -p /opt/crm-iseih               # backend
-mkdir -p /var/www/crm-iseih           # frontend estático
+mkdir -p /opt/crm-iseie               # backend
+mkdir -p /var/www/crm-iseie           # frontend estático
 ```
 
 ### 5.2 Base de datos PostgreSQL (recomendado para el nuevo CRM)
@@ -168,8 +168,8 @@ sudo apt update && sudo apt install -y postgresql postgresql-contrib
 sudo -u postgres psql
 ```
 ```sql
-CREATE USER crm_iseih_user WITH PASSWORD '<password seguro>';
-CREATE DATABASE crm_iseih OWNER crm_iseih_user;
+CREATE USER crm_iseie_user WITH PASSWORD '<password seguro>';
+CREATE DATABASE crm_iseie OWNER crm_iseie_user;
 \q
 ```
 
@@ -182,9 +182,9 @@ Si el equipo prefiere MariaDB:
 sudo mariadb
 ```
 ```sql
-CREATE DATABASE crm_iseih CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'crm_iseih_user'@'localhost' IDENTIFIED BY '<password>';
-GRANT ALL PRIVILEGES ON crm_iseih.* TO 'crm_iseih_user'@'localhost';
+CREATE DATABASE crm_iseie CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'crm_iseie_user'@'localhost' IDENTIFIED BY '<password>';
+GRANT ALL PRIVILEGES ON crm_iseie.* TO 'crm_iseie_user'@'localhost';
 FLUSH PRIVILEGES;
 ```
 
@@ -193,13 +193,13 @@ FLUSH PRIVILEGES;
 ### 5.4 Nginx — añadir nuevo sitio
 
 ```bash
-sudo nano /etc/nginx/sites-available/crm-iseih.midominio.com
+sudo nano /etc/nginx/sites-available/crm-iseie.midominio.com
 ```
 
 ```nginx
 server {
     listen 80;
-    server_name crm-iseih.midominio.com;
+    server_name crm-iseie.midominio.com;
 
     location / {
         proxy_pass http://127.0.0.1:3005;
@@ -212,22 +212,22 @@ server {
 ```
 
 ```bash
-sudo ln -s /etc/nginx/sites-available/crm-iseih.midominio.com /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/crm-iseie.midominio.com /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
-sudo certbot --nginx -d crm-iseih.midominio.com    # SSL automático
+sudo certbot --nginx -d crm-iseie.midominio.com    # SSL automático
 ```
 
 ### 5.5 PM2 (apps gestionadas por root)
 
 ```bash
 # Como root
-pm2 start ecosystem.config.js --name crm-iseih-api
+pm2 start ecosystem.config.js --name crm-iseie-api
 pm2 save
 ```
 
 Esto añade la app al `pm2-root.service` ya existente (el que también corre `prerender-opynio`, `veterinary-ai`, `psicologo-ia-pro`).
 
-> ⚠️ **Cuidado:** al ser root, `pm2 list` / `pm2 delete` / `pm2 restart` afectan a todas las apps del servidor, no solo al CRM. Usar nombres explícitos (`pm2 restart crm-iseih-api`), nunca `pm2 restart all`.
+> ⚠️ **Cuidado:** al ser root, `pm2 list` / `pm2 delete` / `pm2 restart` afectan a todas las apps del servidor, no solo al CRM. Usar nombres explícitos (`pm2 restart crm-iseie-api`), nunca `pm2 restart all`.
 
 ---
 
@@ -242,7 +242,7 @@ ss -tlnp                         # puertos en uso
 # Ver logs
 tail -f /var/log/nginx/access.log
 journalctl -u nginx -f
-pm2 logs crm-iseih-api           # logs SOLO de nuestra app (no usar `pm2 logs` a secas)
+pm2 logs crm-iseie-api           # logs SOLO de nuestra app (no usar `pm2 logs` a secas)
 
 # Ver config nginx completa
 nginx -T
@@ -258,9 +258,9 @@ Como `root` se puede hacer **todo**. La lista de abajo no es una restricción t�
 | Acción | |
 |---|---|
 | Instalar paquetes (postgresql, redis, etc.) con `apt install` | ✅ |
-| Crear directorios en `/opt/crm-iseih`, `/var/www/crm-iseih` | ✅ |
+| Crear directorios en `/opt/crm-iseie`, `/var/www/crm-iseie` | ✅ |
 | Añadir nuevo sitio en `/etc/nginx/sites-available/` | ✅ |
-| Añadir apps al `pm2-root.service` con nombre explícito `crm-iseih-*` | ✅ |
+| Añadir apps al `pm2-root.service` con nombre explícito `crm-iseie-*` | ✅ |
 | Crear DB y usuario nuevos en MariaDB o PostgreSQL | ✅ |
 | Usar puertos 3005, 3006, 3007 | ✅ |
 | Configurar SSL con certbot para nuestros subdominios | ✅ |
@@ -283,4 +283,4 @@ Como `root` se puede hacer **todo**. La lista de abajo no es una restricción t�
 - VPS proveedor: Hostinger (KVM)
 - Auditoría inicial del estado del servidor: 2026-05-05 21:40 UTC
 
-Cualquier cambio del equipo del CRM debe quedar bajo `/opt/crm-iseih/` o `/var/www/crm-iseih/` y **no debe modificar nada del listado en sección 3**.
+Cualquier cambio del equipo del CRM debe quedar bajo `/opt/crm-iseie/` o `/var/www/crm-iseie/` y **no debe modificar nada del listado en sección 3**.

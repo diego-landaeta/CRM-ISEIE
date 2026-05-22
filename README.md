@@ -1,6 +1,6 @@
-# CRM-ISEIE
+﻿# CRM-ISEIE
 
-CRM nuevo para ISEIH/ISEIE. Construcción desde cero, hermano del CRM existente en [360crm.tech](https://360crm.tech/crm/).
+CRM nuevo para iseie/ISEIE. Construcción desde cero, hermano del CRM existente en [360crm.tech](https://360crm.tech/crm/).
 
 ## Estado
 
@@ -32,8 +32,8 @@ Mismo que el CRM existente. Confirmar con el usuario antes de divergir.
 | VPS | `72.60.90.135` (compartido con otras apps) |
 | Usuario | `root` |
 | Puertos reservados | 3005, 3006, 3007 |
-| Backend | `/opt/crm-iseih/` |
-| Frontend | `/var/www/crm-iseih/` |
+| Backend | `/opt/crm-iseie/` |
+| Frontend | `/var/www/crm-iseie/` |
 | PM2 | `pm2-root.service` (compartido con otras apps del VPS) |
 
 Detalles, reglas y comandos en [vps-72.60.90.135-handoff.md](vps-72.60.90.135-handoff.md).

@@ -40,8 +40,9 @@ coverage/
 *.tmp
 
 # Credenciales privadas (NUNCA committear)
-fase-1/CREDENCIALES-PRIVADO.md
+_historico/fase-1/CREDENCIALES-PRIVADO.md
 **/CREDENCIALES-PRIVADO.md
+docs/_private/
 
 # Backups DB
 *.sql.gz

@@ -1,4 +1,4 @@
-# CRM-ISEIE — Guía de desarrollo
+﻿# CRM-ISEIE — Guía de desarrollo
 
 > **Este archivo es lo primero que lee cualquier Claude que abra el repo.**
 > Léelo entero antes de tocar código.
@@ -7,7 +7,7 @@
 
 ## Qué es este proyecto
 
-CRM nuevo para **ISEIH/ISEIE** que se construye desde cero. Hereda **patrones, convenciones y arquitectura** del CRM existente (`360crm.tech` — repo `esos2dev-oss/CRM`), pero es un sistema independiente con su propio dominio, VPS, base de datos y ciclo de vida.
+CRM nuevo para **iseie/ISEIE** que se construye desde cero. Hereda **patrones, convenciones y arquitectura** del CRM existente (`360crm.tech` — repo `esos2dev-oss/CRM`), pero es un sistema independiente con su propio dominio, VPS, base de datos y ciclo de vida.
 
 **Objetivo:** que este CRM quede **igual de bien o mejor documentado** que el actual. La calidad de los docs es parte del producto, no un extra.
 
@@ -85,11 +85,11 @@ Mismo stack que el CRM existente, salvo que el usuario indique lo contrario:
 | Usuario | `root` |
 | Credenciales | en local: `fase-1/CREDENCIALES-PRIVADO.md` (no versionado) — el usuario lo rellena |
 | Backend (PM2) | puertos `3005` / `3006` / `3007` reservados |
-| Backend (FS) | `/opt/crm-iseih/` |
-| Frontend (FS) | `/var/www/crm-iseih/` |
-| DB | PostgreSQL a instalar — `crm_iseih` / `crm_iseih_user` |
+| Backend (FS) | `/opt/crm-iseie/` |
+| Frontend (FS) | `/var/www/crm-iseie/` |
+| DB | PostgreSQL a instalar — `crm_iseie` / `crm_iseie_user` |
 | PM2 | `pm2-root.service` (compartido con otras apps del VPS — cuidado con `pm2 delete`) |
-| Nginx | añadir sitio en `/etc/nginx/sites-available/crm-iseih.<dominio>` |
+| Nginx | añadir sitio en `/etc/nginx/sites-available/crm-iseie.<dominio>` |
 | Dominio | pendiente decidir (recomendado: subdominio propio + SSL Let's Encrypt) |
 
 **⚠️ Reglas no negociables del VPS:**
@@ -178,7 +178,7 @@ CRM-ISEIE/
 │   ├── backup.sh
 │   └── deploy.sh
 └── nginx/
-    └── crm-iseih.conf
+    └── crm-iseie.conf
 ```
 
 Y la planificación heredada del Claude anterior (`documentacion/`, `fase-1/`, ...) queda como **catálogo de referencia**, no como código.

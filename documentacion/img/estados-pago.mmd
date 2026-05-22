@@ -1,7 +1,0 @@
-stateDiagram-v2
-    [*] --> pendiente: conversion creada<br/>importe_pagado = 0
-    pendiente --> parcial: primer pago < total
-    parcial --> parcial: pago intermedio
-    parcial --> pagado: ultimo pago = total
-    pendiente --> pagado: pago completo de golpe
-    pagado --> [*]
