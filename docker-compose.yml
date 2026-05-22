@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: crm-iseie-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: crm_iseie_user
+      POSTGRES_PASSWORD: crm_iseie_dev_pass
+      POSTGRES_DB: crm_iseie
+    ports:
+      - "5432:5432"
+    volumes:
+      - crm_iseie_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crm_iseie_user -d crm_iseie"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  crm_iseie_pgdata:

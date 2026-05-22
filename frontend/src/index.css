@@ -1,0 +1,113 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Paleta ISEIE — navy corporativo del logo.
+ * Primary: #002776 (fondo del logo) → hsl(220 100% 23%) en light, hsl(220 75% 62%) en dark.
+ * Hue 220 mantiene coherencia en accent/ring.
+ */
+@layer base {
+  :root {
+    --background: 0 0% 98%;
+    --foreground: 222 30% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 30% 10%;
+    --primary: 220 100% 23%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 30% 96%;
+    --secondary-foreground: 220 30% 18%;
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 9% 46%;
+    --accent: 220 30% 95%;
+    --accent-foreground: 220 100% 23%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 220 100% 23%;
+    --radius: 0.5rem;
+    /* Verde forest del escudo del logo ISEIE — uso semantico secundario (badges, success). */
+    --iseie-green: 150 45% 22%;
+    --iseie-green-fg: 0 0% 100%;
+  }
+
+  .dark {
+    /*
+     * Dark mode con tono navy ISEIE muy sutil (no neutro puro, no negro absoluto).
+     * Jerarquía: background es el "papel" exterior, card es la superficie elevada,
+     * secondary/muted son las superficies anidadas. Borders bien visibles.
+     */
+    --background: 220 28% 7%;
+    --foreground: 210 16% 94%;
+    --card: 220 22% 11%;
+    --card-foreground: 210 16% 94%;
+    --primary: 215 78% 58%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 18% 19%;
+    --secondary-foreground: 210 16% 92%;
+    --muted: 220 18% 16%;
+    --muted-foreground: 220 12% 68%;
+    --accent: 220 22% 19%;
+    --accent-foreground: 215 78% 70%;
+    --destructive: 0 70% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 16% 22%;
+    --input: 220 16% 22%;
+    --ring: 215 78% 58%;
+    --iseie-green: 150 38% 52%;
+    --iseie-green-fg: 0 0% 100%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  }
+
+  /* Override autofill blanco del navegador (Chrome/Edge) */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  input:-webkit-autofill:active {
+    -webkit-text-fill-color: hsl(var(--foreground));
+    transition: background-color 9999s ease-out 0s;
+    box-shadow: inset 0 0 0 1000px hsl(var(--background)) !important;
+    caret-color: hsl(var(--foreground));
+    border-radius: inherit;
+  }
+}
+
+@layer components {
+  .crm-card {
+    @apply bg-card text-card-foreground border border-border rounded-lg;
+  }
+  .crm-card-interactive {
+    @apply crm-card transition-colors;
+  }
+  .crm-card-interactive:hover {
+    @apply border-foreground/20;
+  }
+
+  /* Scrollbar slim global */
+  *, *::before, *::after {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.25) transparent;
+  }
+  *::-webkit-scrollbar { width: 8px; height: 8px; }
+  *::-webkit-scrollbar-track { background: transparent; }
+  *::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--muted-foreground) / 0.3);
+    border-radius: 4px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  *::-webkit-scrollbar-thumb:hover { background-color: hsl(var(--muted-foreground) / 0.6); }
+  *::-webkit-scrollbar-corner { background: transparent; }
+}

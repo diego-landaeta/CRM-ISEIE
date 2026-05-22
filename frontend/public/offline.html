@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#002776" />
+    <title>Sin conexion · CRM ISEIE</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="/iseie-icon-32.png" />
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      html, body {
+        height: 100%;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+        background: #f8fafc;
+        color: #0f172a;
+      }
+      @media (prefers-color-scheme: dark) {
+        html, body { background: #020617; color: #e2e8f0; }
+        .card { background: #0f172a; border-color: #1e293b; }
+        .muted { color: #94a3b8; }
+      }
+      body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1.5rem;
+      }
+      .card {
+        max-width: 420px;
+        width: 100%;
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 1rem;
+        padding: 2rem;
+        text-align: center;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+      }
+      .icon {
+        width: 64px;
+        height: 64px;
+        margin: 0 auto 1.25rem;
+        border-radius: 1rem;
+        background: rgba(0, 39, 118, 0.1);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #002776;
+        font-size: 32px;
+      }
+      h1 { font-size: 1.25rem; font-weight: 600; margin-bottom: 0.5rem; }
+      p { font-size: 0.9rem; line-height: 1.5; }
+      .muted { color: #64748b; margin-bottom: 1.5rem; }
+      button {
+        background: #002776;
+        color: white;
+        border: none;
+        padding: 0.625rem 1.25rem;
+        border-radius: 0.5rem;
+        font-weight: 600;
+        font-size: 0.875rem;
+        cursor: pointer;
+        transition: background 0.15s;
+      }
+      button:hover { background: #001a52; }
+    </style>
+  </head>
+  <body>
+    <main class="card" role="main">
+      <div class="icon" aria-hidden="true">⚡</div>
+      <h1>Sin conexion</h1>
+      <p class="muted">No hay conexion a internet. Algunas pantallas requieren red para cargar datos en vivo.</p>
+      <button type="button" onclick="location.reload()">Reintentar</button>
+    </main>
+  </body>
+</html>

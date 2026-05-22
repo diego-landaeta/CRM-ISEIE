@@ -1,0 +1,25 @@
+{
+  "name": "CRM ISEIE",
+  "short_name": "CRM ISEIE",
+  "description": "Gestión multipaís de prospectos, ventas y matrículas de ISEIE.",
+  "lang": "es-ES",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0b0f1a",
+  "theme_color": "#002776",
+  "icons": [
+    { "src": "/iseie-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/iseie-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/iseie-icon-180.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "/iseie-icon-32.png",  "sizes": "32x32",   "type": "image/png" }
+  ],
+  "shortcuts": [
+    { "name": "Prospectos",     "url": "/leads",        "description": "Listado de prospectos" },
+    { "name": "Nueva venta",    "url": "/leads",        "description": "Registrar conversión" },
+    { "name": "Contabilidad",   "url": "/accounting",   "description": "Dashboard contable" },
+    { "name": "Reportes",       "url": "/reports",      "description": "Métricas y análisis" }
+  ],
+  "categories": ["business", "productivity", "education"]
+}

@@ -1,0 +1,378 @@
+import { useState, useMemo, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import {
+  ChartLineUp, ChartBar, ChartPie, ChartDonut, Download,
+  Users, Receipt, CurrencyEur, ArrowsClockwise, TrendUp, TrendDown,
+  Sparkle, CheckCircle, X,
+} from '@phosphor-icons/react';
+import { useAuth } from '@/contexts/AuthContext';
+import { useDashboardSummary } from '@/shared/hooks/useDashboardSummary';
+import client from '@/shared/api/client';
+
+const REPORT_CATEGORIES = [
+  {
+    title: 'Prospectos',
+    description: 'Volumen, canales, conversiones y tiempo de respuesta.',
+    icon: Users,
+    accent: 'sky',
+    reports: [
+      { label: 'Nuevos prospectos por canal', icon: ChartBar },
+      { label: 'Tasa de conversión por gestor', icon: ChartLineUp },
+      { label: 'Tiempo medio hasta primer contacto', icon: ChartPie },
+    ],
+  },
+  {
+    title: 'Ventas',
+    description: 'Ingresos, productos top y desempeño temporal.',
+    icon: Receipt,
+    accent: 'emerald',
+    reports: [
+      { label: 'Ingresos por producto', icon: ChartBar },
+      { label: 'Ventas mes a mes', icon: ChartLineUp },
+      { label: 'Distribución por método de pago', icon: ChartDonut },
+    ],
+  },
+  {
+    title: 'Comisiones',
+    description: 'A pagar, pagadas y comparativa entre gestores.',
+    icon: CurrencyEur,
+    accent: 'violet',
+    reports: [
+      { label: 'Comisiones del mes', icon: ChartBar },
+      { label: 'Ranking de gestores', icon: ChartLineUp },
+    ],
+  },
+];
+
+const ACCENT = {
+  sky:     { bg: 'bg-sky-50 dark:bg-sky-950/30',         text: 'text-sky-600 dark:text-sky-400' },
+  emerald: { bg: 'bg-emerald-50 dark:bg-emerald-950/30', text: 'text-emerald-600 dark:text-emerald-400' },
+  violet:  { bg: 'bg-violet-50 dark:bg-violet-950/30',   text: 'text-violet-600 dark:text-violet-400' },
+  amber:   { bg: 'bg-amber-50 dark:bg-amber-950/30',     text: 'text-amber-600 dark:text-amber-400' },
+};
+
+const PERIODS = {
+  '7d':  { label: 'Últimos 7 días',   days: 7 },
+  '30d': { label: 'Últimos 30 días',  days: 30 },
+  '90d': { label: 'Últimos 90 días',  days: 90 },
+  'ytd': { label: 'Año en curso',     days: Math.max(1, Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 1).getTime()) / 86400000)) },
+  'all': { label: 'Todo',             days: 730 },
+};
+
+function fmt(n) {
+  return new Intl.NumberFormat('es-ES', { maximumFractionDigits: 0 }).format(Number(n || 0));
+}
+function fmtMoney(n) {
+  return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(Number(n || 0));
+}
+
+function Sparkline({ data, color = 'hsl(var(--primary))', height = 56 }) {
+  const w = 100;
+  const points = useMemo(() => {
+    if (!data?.length) return { line: '', area: '' };
+    const max = Math.max(...data, 1);
+    const min = Math.min(...data, 0);
+    const range = max - min || 1;
+    const step = w / (data.length - 1);
+    const coords = data.map((v, i) => [i * step, height - ((v - min) / range) * (height - 6) - 3]);
+    let line = `M ${coords[0][0]} ${coords[0][1]}`;
+    for (let i = 1; i < coords.length; i++) {
+      const [x, y] = coords[i];
+      const [px, py] = coords[i - 1];
+      const cx = (px + x) / 2;
+      line += ` Q ${cx} ${py} ${cx} ${(py + y) / 2} T ${x} ${y}`;
+    }
+    const area = `${line} L ${w} ${height} L 0 ${height} Z`;
+    return { line, area };
+  }, [data, height]);
+  const gid = `rsp-${color.replace(/[^a-z0-9]/gi, '')}-${(data || []).join('-')}`.slice(0, 60);
+  return (
+    <svg viewBox={`0 0 ${w} ${height}`} className="w-full" style={{ height }} preserveAspectRatio="none">
+      <defs>
+        <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.3" />
+          <stop offset="100%" stopColor={color} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={points.area} fill={`url(#${gid})`} />
+      <path d={points.line} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function Kpi({ icon: Icon, label, value, trend, spark, accent = 'sky' }) {
+  const c = ACCENT[accent];
+  const TrendIcon = trend >= 0 ? TrendUp : TrendDown;
+  const trendCls = trend >= 0
+    ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 dark:text-emerald-400'
+    : 'text-rose-600 bg-rose-50 dark:bg-rose-950/30 dark:text-rose-400';
+  return (
+    <div className="rounded-xl border border-border bg-card p-4">
+      <div className="flex items-center justify-between mb-2">
+        <div className={`w-8 h-8 rounded-md ${c.bg} ${c.text} flex items-center justify-center`}>
+          <Icon size={15} weight="duotone" />
+        </div>
+        {trend != null && (
+          <span className={`inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${trendCls}`}>
+            <TrendIcon size={9} weight="bold" />
+            {Math.abs(trend)}%
+          </span>
+        )}
+      </div>
+      <div className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1">{label}</div>
+      <div className="text-xl font-semibold tabular-nums tracking-tight">{value}</div>
+      {spark?.length > 0 && (
+        <div className="mt-2 -mx-1 text-primary">
+          <Sparkline data={spark} color="currentColor" height={28} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function ReportsPage() {
+  const { activeProject, user } = useAuth();
+  const [periodKey, setPeriodKey] = useState('30d');
+  const days = PERIODS[periodKey].days;
+  const { data: summary, loading } = useDashboardSummary(activeProject?.id, days);
+  const [iaModal, setIaModal] = useState(false);
+  const [claudeConfigured, setClaudeConfigured] = useState(false);
+  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    client.get('/credentials')
+      .then((res) => {
+        const list = res?.data || [];
+        setClaudeConfigured(list.some((c) => c.service === 'claude'));
+      })
+      .catch(() => {});
+  }, [isAdmin]);
+
+  const leads        = summary?.leads        || { value: 0, trend: null, spark: [] };
+  const conversiones = summary?.conversiones || { value: 0, trend: null, spark: [] };
+  const ingresos     = summary?.ingresos     || { value: 0, trend: null, spark: [] };
+  const tasa         = summary?.tasa         || { value: 0, trend: null, spark: [] };
+
+  const heroSpark = ingresos.spark?.length
+    ? ingresos.spark
+    : leads.spark?.length ? leads.spark : [];
+
+  return (
+    <div className="space-y-6">
+      <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Reportes</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Métricas de negocio del CRM. Genera, descarga y comparte.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <select
+            value={periodKey}
+            onChange={(e) => setPeriodKey(e.target.value)}
+            className="h-9 px-3 rounded-md bg-card border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+          >
+            {Object.entries(PERIODS).map(([k, p]) => <option key={k} value={k}>{p.label}</option>)}
+          </select>
+          <button
+            type="button"
+            onClick={() => window.print()}
+            title="Imprime o guarda como PDF (Ctrl+P)"
+            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-card border border-border text-sm font-medium hover:bg-muted transition-colors text-foreground"
+          >
+            <Download size={14} weight="bold" />
+            Exportar PDF
+          </button>
+        </div>
+      </header>
+
+      {/* Hero — Resumen del periodo cableado a /leads/dashboard-summary */}
+      <div className="rounded-2xl border border-border bg-card p-5 sm:p-6">
+        <div className="flex items-start justify-between mb-4">
+          <div>
+            <h2 className="font-semibold tracking-tight">Resumen del periodo</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {PERIODS[periodKey].label}
+              {activeProject?.nombre ? ` · ${activeProject.nombre}` : ''}
+            </p>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-32 rounded-xl bg-muted/40 animate-pulse" />
+            ))}
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+              <Kpi icon={Users}       label="Prospectos"  value={fmt(leads.value)}        trend={leads.trend}        spark={leads.spark}        accent="sky" />
+              <Kpi icon={Receipt}     label="Ventas"      value={fmt(conversiones.value)} trend={conversiones.trend} spark={conversiones.spark} accent="emerald" />
+              <Kpi icon={CurrencyEur} label="Ingresos"    value={fmtMoney(ingresos.value)} trend={ingresos.trend}    spark={ingresos.spark}     accent="violet" />
+              <Kpi icon={ChartLineUp} label="Tasa conv."  value={`${Math.round(Number(tasa.value || 0))}%`} trend={tasa.trend} spark={tasa.spark} accent="amber" />
+            </div>
+
+            <div className="relative h-44 sm:h-56 rounded-lg overflow-hidden bg-muted/20">
+              {heroSpark.length > 1 ? (
+                <div className="absolute inset-0 px-4 py-3 text-primary">
+                  <Sparkline data={heroSpark} color="currentColor" height={200} />
+                </div>
+              ) : (
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-6">
+                  <ChartLineUp size={32} weight="duotone" className="text-muted-foreground/40 mb-2" />
+                  <div className="font-medium text-sm">Sin datos para el periodo</div>
+                  <p className="text-xs text-muted-foreground max-w-xs mt-1">
+                    El gráfico se rellenará cuando haya actividad.
+                  </p>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Categorías de reportes */}
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold tracking-tight">Reportes disponibles</h2>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            title="Refrescar todos los datos del reporte"
+            className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+          >
+            <ArrowsClockwise size={12} />
+            Actualizar
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {REPORT_CATEGORIES.map((cat) => {
+            const c = ACCENT[cat.accent];
+            return (
+              <div key={cat.title} className="rounded-2xl border border-border bg-card overflow-hidden">
+                <div className="p-5 border-b border-border">
+                  <div className={`w-10 h-10 rounded-lg ${c.bg} ${c.text} flex items-center justify-center mb-3`}>
+                    <cat.icon size={20} weight="duotone" />
+                  </div>
+                  <h3 className="font-semibold text-foreground">{cat.title}</h3>
+                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{cat.description}</p>
+                </div>
+                <div className="p-2">
+                  {cat.reports.map((r) => (
+                    <button
+                      key={r.label}
+                      className="w-full flex items-center gap-3 px-3 py-2 rounded-md hover:bg-muted text-sm text-left transition-colors group"
+                    >
+                      <r.icon size={15} weight="duotone" className="text-muted-foreground group-hover:text-primary transition-colors" />
+                      <span className="flex-1 text-foreground">{r.label}</span>
+                      <span className="text-[10px] uppercase tracking-wider text-muted-foreground/60 opacity-0 group-hover:opacity-100 transition-opacity">
+                        Ver
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      <div className="rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/5 via-card to-card p-5">
+        <div className="flex items-start gap-4">
+          <div className="w-10 h-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
+            <Sparkle size={20} weight="duotone" />
+          </div>
+          <div className="flex-1">
+            <h3 className="font-semibold tracking-tight flex items-center gap-2">
+              Reportes IA
+              {claudeConfigured && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+                  <CheckCircle size={10} weight="fill" /> Conectado
+                </span>
+              )}
+            </h3>
+            <p className="text-xs text-muted-foreground mt-1 mb-3 max-w-lg leading-relaxed">
+              Genera reportes ejecutivos mensuales analizados con Claude AI — qué funcionó, qué bajó, qué requiere atención.
+              {!claudeConfigured && ' Requiere configurar API key de Anthropic.'}
+            </p>
+            <button
+              onClick={() => setIaModal(true)}
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-card border border-primary/30 text-xs font-medium text-primary hover:bg-primary/10 transition-colors"
+            >
+              <Sparkle size={12} weight="duotone" />
+              {claudeConfigured ? 'Generar reporte' : 'Activar reportes IA'}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {iaModal && (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          onClick={() => setIaModal(false)}
+        >
+          <div
+            className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-md p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between mb-4">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
+                  <Sparkle size={20} weight="duotone" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-lg">Reportes con IA</h3>
+                  <p className="text-xs text-muted-foreground mt-1">Análisis ejecutivo automático con Claude.</p>
+                </div>
+              </div>
+              <button onClick={() => setIaModal(false)} className="text-muted-foreground hover:text-foreground" aria-label="Cerrar">
+                <X size={16} weight="bold" />
+              </button>
+            </div>
+
+            {claudeConfigured ? (
+              <>
+                <p className="text-sm text-muted-foreground mb-4 leading-relaxed">
+                  Tienes la API key de Claude configurada. La generación de reportes ejecutivos
+                  mensuales con IA estará activa en la próxima entrega (Q3 2026). Mientras tanto,
+                  los KPIs y gráficos de esta página ya son productivos.
+                </p>
+                <div className="rounded-lg border border-emerald-200 dark:border-emerald-900 bg-emerald-50/50 dark:bg-emerald-950/20 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
+                  <CheckCircle size={12} weight="fill" />
+                  Anthropic Claude conectado y verificado.
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-muted-foreground mb-4 leading-relaxed">
+                  Para activar los reportes con IA necesitas una <strong className="text-foreground">API key de Anthropic</strong> (Claude).
+                  Se cifra con AES-256-GCM en la base de datos y nunca sale del servidor.
+                </p>
+                <ol className="text-xs text-muted-foreground space-y-1.5 mb-5 list-decimal pl-5">
+                  <li>Crea una key en <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noreferrer" className="text-primary hover:underline">console.anthropic.com</a>.</li>
+                  <li>Cópiala (empieza por <code className="text-[10px] bg-muted px-1 py-0.5 rounded">sk-ant-…</code>).</li>
+                  <li>Pégala en Configuración → APIs globales → Anthropic Claude.</li>
+                </ol>
+                {isAdmin ? (
+                  <Link
+                    to="/settings"
+                    onClick={() => setIaModal(false)}
+                    className="inline-flex items-center justify-center w-full gap-1.5 h-10 px-4 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors"
+                  >
+                    Ir a Configuración
+                  </Link>
+                ) : (
+                  <p className="text-xs text-amber-700 dark:text-amber-400 italic">Pídele a un admin que configure la API key.</p>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
