@@ -33,10 +33,7 @@ export const webhookLeadSchema = z.object({
 );
 
 export const listLeadsSchema = z.object({
-  projectId: z.coerce.number().int().positive().optional(),
-  // Vista multi-proyecto: lista CSV de IDs ("1,2,3")
-  projectIds: z.string().regex(/^\d+(,\d+)*$/).optional()
-    .transform((v) => v ? v.split(',').map(Number) : undefined),
+  projectId: z.coerce.number().int().positive(),
   status: z.enum(['nuevo', 'por_contactar', 'contactado', 'en_seguimiento', 'convertido', 'no_interesado']).optional(),
   responsableId: z.coerce.number().int().positive().optional(),
   unassigned: z.coerce.boolean().optional(),
@@ -53,10 +50,7 @@ export const listLeadsSchema = z.object({
   sort: z.enum(['value', 'recent', 'urgency', 'recent_value']).optional(),
   // Vista de papelera: solo leads con deleted_at IS NOT NULL (rol superadmin).
   archived: z.coerce.boolean().optional(),
-}).refine(
-  (d) => d.projectId || (d.projectIds && d.projectIds.length > 0),
-  { message: 'projectId o projectIds requerido', path: ['projectId'] }
-);
+});
 
 export const updateStatusSchema = z.object({
   status: z.enum(['nuevo', 'por_contactar', 'contactado', 'en_seguimiento', 'convertido', 'no_interesado']),

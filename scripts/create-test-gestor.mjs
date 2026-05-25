@@ -1,5 +1,5 @@
-// Crea un gestor temporal en el VPS para tests RBAC. Solo asociado al
-// primer proyecto activo. Imprime OK_USER_ID=<id>.
+// Crea un gestor temporal en el VPS para tests RBAC. Asociado al proyecto
+// unico ISEIE. Imprime OK_USER_ID=<id>.
 import bcrypt from 'bcrypt';
 import 'dotenv/config';
 import pg from 'pg';
@@ -22,7 +22,7 @@ try {
   const uid = rows[0].id;
   await client.query(
     `INSERT INTO user_projects (user_id, project_id, orden_cola, active)
-     SELECT $1, id, 0, true FROM projects WHERE slug LIKE 'iseie-%' LIMIT 1
+     SELECT $1, id, 0, true FROM projects WHERE slug = 'iseie'
      ON CONFLICT (user_id, project_id) DO UPDATE SET active = true`,
     [uid]
   );

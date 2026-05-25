@@ -18,12 +18,17 @@ interface ModuloField {
 interface CertificateFormValues {
   alumno_nombre: string;
   alumno_dni: string;
+  tipo_documento: string;
   alumno_email: string;
+  fecha_nacimiento: string;
+  nacionalidad: string;
   curso_nombre: string;
   horas_total: string;
+  puntuacion: string;
   modalidad: string;
   fecha_inicio: string;
   fecha_fin: string;
+  fecha_aprobacion: string;
   fecha_expedicion: string;
   ciudad: string;
   pais: string;
@@ -47,16 +52,21 @@ export default function CertificateForm({ onGenerated }: CertificateFormProps) {
     defaultValues: {
       alumno_nombre: '',
       alumno_dni: '',
+      tipo_documento: 'DNI',
       alumno_email: '',
+      fecha_nacimiento: '',
+      nacionalidad: '',
       curso_nombre: '',
       horas_total: '',
+      puntuacion: '',
       modalidad: 'Online',
       fecha_inicio: '',
       fecha_fin: '',
+      fecha_aprobacion: '',
       fecha_expedicion: new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }),
       ciudad: 'Valencia',
       pais: 'España',
-      director_nombre: '',
+      director_nombre: 'Carlos Saiz',
       resp_nombre: '',
       modulos: [{ nombre: '' }],
     },
@@ -143,31 +153,48 @@ export default function CertificateForm({ onGenerated }: CertificateFormProps) {
       {/* Alumno */}
       <div className="bg-card border border-border rounded-lg p-5">
         <h3 className="font-semibold text-sm mb-4">Datos del alumno</h3>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="col-span-2">
+        <div className="grid grid-cols-3 gap-3">
+          <div className="col-span-3">
             <label className="text-xs text-muted-foreground mb-1 block">Nombre completo <span className="text-red-500">*</span></label>
             <input
               {...register('alumno_nombre', { required: true })}
               className={inp + (invalidFields.has('Nombre del alumno') ? ' border-red-400 ring-2 ring-red-400/20' : '')}
-              placeholder="Nombre Apellido Apellido"
+              placeholder="Iris Cristina Alvarez acosta"
             />
           </div>
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">DNI/NIE <span className="text-red-500">*</span></label>
+            <label className="text-xs text-muted-foreground mb-1 block">Tipo documento</label>
+            <select {...register('tipo_documento')} className={inp}>
+              <option value="DNI">DNI</option>
+              <option value="NIE">NIE</option>
+              <option value="PASAPORTE">PASAPORTE</option>
+              <option value="CI">Cédula</option>
+            </select>
+          </div>
+          <div className="col-span-2">
+            <label className="text-xs text-muted-foreground mb-1 block">Nº documento <span className="text-red-500">*</span></label>
             <input
               {...register('alumno_dni', { required: true })}
               className={inp + (invalidFields.has('DNI/NIE') ? ' border-red-400 ring-2 ring-red-400/20' : '')}
-              placeholder="12345678A"
+              placeholder="N20137210"
             />
           </div>
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Email</label>
-            <input
-              type="email"
-              {...register('alumno_email')}
-              className={inp}
-              placeholder="alumno@ejemplo.com"
+            <label className="text-xs text-muted-foreground mb-1 block">Fecha de nacimiento</label>
+            <NaturalDatePicker
+              value={watch('fecha_nacimiento')}
+              onChange={(text) => setValue('fecha_nacimiento', text, { shouldDirty: true })}
+              placeholder="11 de octubre de 1989"
+              ariaLabel="Fecha de nacimiento del alumno"
             />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">Nacionalidad</label>
+            <input {...register('nacionalidad')} className={inp} placeholder="Mexicana"/>
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">Email</label>
+            <input type="email" {...register('alumno_email')} className={inp} placeholder="alumno@ejemplo.com"/>
           </div>
         </div>
       </div>
@@ -177,16 +204,29 @@ export default function CertificateForm({ onGenerated }: CertificateFormProps) {
         <h3 className="font-semibold text-sm mb-4">Datos del curso</h3>
         <div className="grid grid-cols-2 gap-3">
           <div className="col-span-2">
-            <label className="text-xs text-muted-foreground mb-1 block">Nombre del diplomado/curso <span className="text-red-500">*</span></label>
+            <label className="text-xs text-muted-foreground mb-1 block">Nombre del curso/diplomado <span className="text-red-500">*</span></label>
             <input
               {...register('curso_nombre', { required: true })}
               className={inp + (invalidFields.has('Nombre del curso') ? ' border-red-400 ring-2 ring-red-400/20' : '')}
-              placeholder="Diplomado en Psicoterapia Integrativa"
+              placeholder="Curso de Ventas"
             />
           </div>
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">Horas totales</label>
-            <input {...register('horas_total')} className={inp} placeholder="750"/>
+            <input {...register('horas_total')} className={inp} placeholder="100"/>
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">Puntuación / 100</label>
+            <input {...register('puntuacion')} className={inp} placeholder="95,40"/>
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">Fecha aprobación</label>
+            <NaturalDatePicker
+              value={watch('fecha_aprobacion')}
+              onChange={(text) => setValue('fecha_aprobacion', text, { shouldDirty: true })}
+              placeholder="21 de mayo de 2026"
+              ariaLabel="Fecha de aprobación del curso"
+            />
           </div>
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">Fecha expedición <span className="text-red-500">*</span></label>
@@ -195,12 +235,12 @@ export default function CertificateForm({ onGenerated }: CertificateFormProps) {
               onChange={(text) => setValue('fecha_expedicion', text, { shouldDirty: true })}
               required
               invalid={invalidFields.has('Fecha de expedición')}
-              placeholder="7 de mayo de 2026 *"
+              placeholder="21 de mayo de 2026 *"
               ariaLabel="Fecha de expedición"
             />
           </div>
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Fecha inicio</label>
+            <label className="text-xs text-muted-foreground mb-1 block">Fecha inicio (opcional)</label>
             <NaturalDatePicker
               value={watch('fecha_inicio')}
               onChange={(text) => setValue('fecha_inicio', text, { shouldDirty: true })}
@@ -209,7 +249,7 @@ export default function CertificateForm({ onGenerated }: CertificateFormProps) {
             />
           </div>
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Fecha fin</label>
+            <label className="text-xs text-muted-foreground mb-1 block">Fecha fin (opcional)</label>
             <NaturalDatePicker
               value={watch('fecha_fin')}
               onChange={(text) => setValue('fecha_fin', text, { shouldDirty: true })}

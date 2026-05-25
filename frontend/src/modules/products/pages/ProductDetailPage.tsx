@@ -4,6 +4,8 @@ import {
   ArrowLeft, Package, CurrencyEur, Clock, Hash, Tag, Link as LinkIcon,
   PencilSimple, Trash, FilePdf, Image as ImageIcon, GraduationCap,
 } from '@phosphor-icons/react';
+import { useProjectContext } from '@/contexts/ProjectContext';
+import DossierPanel from '../components/DossierPanel';
 
 const TABS = [
   { id: 'overview',  label: 'Resumen' },
@@ -27,7 +29,9 @@ function MetaPill({ icon: Icon, label, value }: { icon: any; label: string; valu
 
 export default function ProductDetailPage() {
   const { id } = useParams();
+  const { activeProject } = useProjectContext() as { activeProject: { id?: number | null } };
   const [tab, setTab] = useState('overview');
+  const productIdNum = Number(id);
 
   // Placeholder data — se conectará al backend GET /api/products/:id
   const product = {
@@ -119,21 +123,8 @@ export default function ProductDetailPage() {
         </div>
       )}
 
-      {tab === 'dossier' && (
-        <div className="crm-card p-8">
-          <div className="flex flex-col items-center text-center">
-            <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center mb-3">
-              <FilePdf size={22} weight="duotone" className="text-muted-foreground" />
-            </div>
-            <h3 className="font-semibold mb-1">Sin dossier subido</h3>
-            <p className="text-sm text-muted-foreground max-w-sm mb-4">
-              Sube un PDF que pueda enviarse automáticamente a los prospectos interesados.
-            </p>
-            <button className="inline-flex items-center gap-1.5 h-9 px-4 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors">
-              Subir PDF
-            </button>
-          </div>
-        </div>
+      {tab === 'dossier' && Number.isFinite(productIdNum) && activeProject?.id && (
+        <DossierPanel productId={productIdNum} projectId={activeProject.id} />
       )}
 
       {tab === 'leads' && (

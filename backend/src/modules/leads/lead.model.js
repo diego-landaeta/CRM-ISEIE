@@ -445,22 +445,17 @@ function buildOrderBy(_sort) {
   return `COALESCE(l.fecha_solicitud, l.created_at) DESC`;
 }
 
-export async function findAll({ projectId, projectIds, status, responsableId, unassigned, canal, productId, search, page, limit, includeConverted, dateFrom, dateTo, sort, archived }) {
+export async function findAll({ projectId, status, responsableId, unassigned, canal, productId, search, page, limit, includeConverted, dateFrom, dateTo, sort, archived }) {
   const conditions = [];
   const params = [];
   let paramIdx = 1;
 
-  // Vista multi-proyecto: si llega projectIds (array) filtra por IN, sino por projectId único
-  if (Array.isArray(projectIds) && projectIds.length > 0) {
-    conditions.push(`l.project_id = ANY($${paramIdx++}::int[])`);
-    params.push(projectIds);
-  } else if (projectId) {
-    conditions.push(`l.project_id = $${paramIdx++}`);
-    params.push(projectId);
-  } else {
+  if (!projectId) {
     // Sin filtro de proyecto no devolvemos nada (seguridad)
     return { leads: [], total: 0, page, limit, totalPages: 0 };
   }
+  conditions.push(`l.project_id = $${paramIdx++}`);
+  params.push(projectId);
 
   // Soft-delete: por defecto excluir; con archived=true invertir el filtro.
   conditions.push(archived ? `l.deleted_at IS NOT NULL` : `l.deleted_at IS NULL`);

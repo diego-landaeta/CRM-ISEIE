@@ -277,22 +277,52 @@ const CERT_WAVES_SVG = `
 </svg>`;
 
 // ============================================================
-// TEMPLATE: CERTIFICADO página 1
+// TEMPLATE: CERTIFICADO página 1 — réplica EXACTA del PDF ISEIE
 // ============================================================
-// Los fondos `cert-bg-p1.png` y `cert-bg-p2.png` heredados del CRM hermano
-// traen elementos visuales bakeados (logo + firmas) que NO aplican a ISEIE.
-// Hay que sustituirlos por los fondos de certificado ISEIE cuando lleguen.
-// Mientras tanto, este template overlaya el texto dinámico (nombre, DNI,
-// curso, fechas) y omite la línea de aval que mencionaba entidades hermanas.
+// Estrategia: el fondo `cert-bg-p1.png` es el PDF de referencia renderizado
+// en alta resolución (incluye marco ornamental barroco, logo, sello, firmas).
+// Las zonas dinámicas (nombre, datos personales, curso, puntuación, fecha,
+// firma alumno) se SUPERPONEN con cajas del color crema del fondo más texto
+// nuevo encima. Posiciones medidas exactamente sobre el PNG @ 297×210mm.
+
+const CERT_BG_CREMA = '#F6EFDA';   // color crema EXACTO del fondo del PDF (sample)
+const CERT_NAME_GOLD = '#B8924A';  // dorado del nombre cursivo
 
 export async function buildCertP1Html(data) {
   const bgUrl = await imgBase64('cert-bg-p1.png');
   const {
-    alumno_nombre, alumno_dni,
+    alumno_nombre,
+    alumno_dni,
+    tipo_documento = 'PASAPORTE',
+    fecha_nacimiento,
+    nacionalidad,
     curso_nombre,
-    horas_total, fecha_inicio, fecha_fin,
-    ciudad = 'Valencia', pais = 'España', fecha_expedicion,
+    horas_total,
+    puntuacion,
+    fecha_aprobacion,
+    ciudad = 'Valencia',
+    pais = 'España',
+    fecha_expedicion,
   } = data;
+
+  const yearMatch = String(fecha_expedicion || fecha_aprobacion || '').match(/\b(20\d{2})\b/);
+  const anio = yearMatch ? yearMatch[1] : new Date().getFullYear();
+
+  // Concordancia femenino/masculino segun nombre (heurística simple).
+  const isFem = /a(\s|$)/i.test((alumno_nombre || '').split(/\s+/)[0] || '');
+  const nacidoEl = isFem ? 'Nacida el' : 'Nacido el';
+
+  const datosPersonales = [
+    fecha_nacimiento ? `${nacidoEl} ${fecha_nacimiento}` : null,
+    alumno_dni ? `${tipo_documento.toUpperCase()}: ${alumno_dni}` : null,
+    nacionalidad ? `Nacionalidad: ${nacionalidad}` : null,
+  ].filter(Boolean).join(', ') + ',';
+
+  const lineaPuntuacion = [
+    puntuacion ? `Con una puntuación de ${puntuacion} sobre 100.` : null,
+    horas_total ? `Por un total de ${horas_total} horas.` : null,
+    fecha_aprobacion ? `Fecha de aprobación el ${fecha_aprobacion}.` : null,
+  ].filter(Boolean).join(' ');
 
   return `<!DOCTYPE html>
 <html lang="es">
@@ -307,87 +337,106 @@ export async function buildCertP1Html(data) {
     background-image: url('${bgUrl}');
     background-size: 100% 100%;
     background-repeat: no-repeat;
-    font-family: 'Plus Jakarta Sans', 'Open Sans', 'Helvetica Neue', Arial, sans-serif;
+    font-family: 'Plus Jakarta Sans', sans-serif;
     color: #1a1a1a;
   }
-  /* Texto dinámico posicionado absolutamente sobre el fondo Canva */
-  .t { position: absolute; left: 0; right: 0; text-align: center; }
-  .alumno-name {
-    top: 36%;
-    font-family: 'Pinyon Script', 'Brush Script MT', cursive;
-    font-size: 38pt; color: #C9A84C; line-height: 1;
-    font-weight: 400;
+
+  /* Cada overlay tapa la zona con el color crema del fondo y dibuja
+     el texto dinámico nuevo encima. Posiciones en mm sobre A4 landscape. */
+  .ovl {
+    position: absolute;
+    background: ${CERT_BG_CREMA};
+    text-align: center;
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden;
   }
-  .subtitle {
-    top: 47%;
-    font-family: 'Plus Jakarta Sans', 'Helvetica Neue', Arial, sans-serif;
-    font-size: 10pt; color: #1a1a1a; letter-spacing: 0.2pt;
+
+  /* Nombre cursivo del alumno — Pinyon Script dorado */
+  .ovl.nombre {
+    top: 70mm; left: 40mm; right: 40mm; height: 22mm;
+    font-family: 'Pinyon Script', cursive;
+    font-size: 50pt; color: ${CERT_NAME_GOLD};
+    line-height: 1; letter-spacing: 0.5pt;
   }
-  .curso-nombre {
-    top: 52%;
-    font-family: 'Sanchez', Georgia, 'Times New Roman', serif;
-    font-size: 22pt; font-weight: 400; color: #1a1a1a; line-height: 1.2;
-    padding: 0 22mm;
+
+  /* Línea de datos personales: nacido + documento + nacionalidad */
+  .ovl.datos {
+    top: 95mm; left: 50mm; right: 50mm; height: 6mm;
+    font-size: 10pt; color: #2a2a2a;
   }
-  .cuerpo {
-    top: 62%;
-    font-family: 'Plus Jakarta Sans', 'Helvetica Neue', Arial, sans-serif;
-    font-size: 10pt; color: #1a1a1a; line-height: 1.5;
-    padding: 0 26mm;
+
+  /* Línea "por haber cursado en el año X estudios..." */
+  .ovl.intro-curso {
+    top: 103mm; left: 50mm; right: 50mm; height: 6mm;
+    font-size: 10pt; color: #2a2a2a;
   }
-  .aval {
-    top: 71%;
-    font-family: 'Plus Jakarta Sans', 'Helvetica Neue', Arial, sans-serif;
-    font-size: 10pt; font-weight: 700; color: #1a1a1a; padding: 0 22mm;
+
+  /* Título del curso — Sanchez bold negro */
+  .ovl.curso {
+    top: 112mm; left: 60mm; right: 60mm; height: 12mm;
+    font-family: 'Sanchez', Georgia, serif;
+    font-size: 24pt; font-weight: 400; color: #1a1a1a;
   }
+
+  /* Línea puntuación + horas + fecha aprobación */
+  .ovl.puntuacion {
+    top: 128mm; left: 30mm; right: 30mm; height: 6mm;
+    font-size: 10pt; color: #2a2a2a;
+  }
+
+  /* Línea ciudad, país, fecha expedición */
+  .ovl.lugar {
+    top: 134mm; left: 80mm; right: 80mm; height: 5mm;
+    font-size: 10pt; color: #2a2a2a;
+  }
+
+  /* Nombre del interesado bajo la línea de firma izquierda */
+  .ovl.firma-interesado {
+    bottom: 22mm; left: 47mm; width: 60mm; height: 5mm;
+    font-size: 9pt; font-weight: 700; color: #1a1a1a;
+    letter-spacing: 0.5pt;
+  }
+
 </style>
 </head>
 <body>
 <div class="page">
-
-  <div class="t alumno-name">${alumno_nombre || ''}</div>
-
-  <div class="t subtitle">
-    con DNI: ${alumno_dni || ''}, ha superado con éxito los objetivos establecidos para el:
-  </div>
-
-  <div class="t curso-nombre">${curso_nombre || ''}</div>
-
-  <div class="t cuerpo">
-    Por un total de ${horas_total || ''} horas teórico prácticas. Inicio el ${fecha_inicio || ''} y finalizado el ${fecha_fin || ''}.<br/>
-    ${ciudad}, ${pais} ${fecha_expedicion || ''}.
-  </div>
-
-  <div class="t aval">
-    Este certificado ha sido expedido por ISEIE Innovation School S.L.
-  </div>
-
+  <div class="ovl nombre">${alumno_nombre || ''}</div>
+  <div class="ovl datos">${datosPersonales}</div>
+  <div class="ovl intro-curso">por haber cursado en el año ${anio} estudios que conducen a la obtención del Título:</div>
+  <div class="ovl curso">${curso_nombre || ''}</div>
+  <div class="ovl puntuacion">${lineaPuntuacion}</div>
+  <div class="ovl lugar">${ciudad}, ${pais} ${fecha_expedicion || ''}.</div>
+  <div class="ovl firma-interesado">${(alumno_nombre || '').toUpperCase()}</div>
 </div>
 </body>
 </html>`;
 }
 
 // ============================================================
-// TEMPLATE: CERTIFICADO página 2 — Plan de estudios
+// TEMPLATE: CERTIFICADO página 2 — réplica EXACTA del PDF ISEIE
 // ============================================================
+// Mismo approach que p1: fondo PNG renderizado del PDF + overlay del texto
+// dinámico (nombre curso, ECTS, lista de materias).
 export async function buildCertP2Html(data) {
   const bgUrl = await imgBase64('cert-bg-p2.png');
   const {
     curso_nombre,
-    modalidad = 'Online',
     horas_total,
     modulos = [],
+    creditos_ects,
   } = data;
 
-  const modulosHtml = modulos.map((m, i) =>
-    `<li><strong>Módulo ${i + 1}:</strong> ${m}</li>`
-  ).join('');
+  const ects = creditos_ects || (horas_total ? Math.round(Number(horas_total) / 25) : '4');
 
-  // Densidad de la lista segun la cantidad de modulos. La columna disponible
-  // tiene aprox 138mm de alto. A 9pt × 1.6 line-height = ~5mm por linea, caben
-  // ~25 modulos antes de overflow. Comprimimos progresivamente.
-  const moduloCount = modulos.length;
-  const listDensityClass = moduloCount > 18 ? 'dense' : moduloCount > 12 ? 'compact' : '';
+  // Lista de materias: cada una en una fila con "OB" a la derecha.
+  // Alineación con la posición que ocupa la lista en el PDF.
+  const modulosHtml = modulos.map((m) => `
+    <div class="row">
+      <div class="materia">${m}</div>
+      <div class="caracter">OB</div>
+    </div>
+  `).join('');
 
   return `<!DOCTYPE html>
 <html lang="es">
@@ -396,76 +445,59 @@ export async function buildCertP2Html(data) {
 <style>
   ${CERT_FONTS_CSS}
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body { width:297mm; height:210mm; overflow:hidden; font-family: 'Plus Jakarta Sans', 'Open Sans', 'Helvetica Neue', Arial, sans-serif; }
+  html, body { width:297mm; height:210mm; overflow:hidden; }
   .page {
-    width:297mm; height:210mm; position:relative;
+    width: 297mm; height: 210mm; position: relative;
     background-image: url('${bgUrl}');
     background-size: 100% 100%;
     background-repeat: no-repeat;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    color: #1a1a1a;
   }
-  .content {
+
+  .ovl {
     position: absolute;
-    top: 22mm; left: 30mm; right: 30mm;
-    bottom: 50mm;
+    background: ${CERT_BG_CREMA};
+    overflow: hidden;
   }
-  .curso-title {
-    font-family: 'Sanchez', Georgia, 'Times New Roman', serif;
-    font-size: 22pt; font-weight: 400;
-    text-align: center; color: #1a1a1a;
-    margin-bottom: 10mm;
+
+  /* Título del curso (esquina superior izquierda del contenido) */
+  .ovl.curso {
+    top: 38mm; left: 30mm; width: 110mm; height: 11mm;
+    font-family: 'Sanchez', Georgia, serif;
+    font-size: 22pt; color: #1a1a1a;
+    display: flex; align-items: center;
   }
-  .plan-title {
-    font-family: 'Plus Jakarta Sans', 'Helvetica Neue', Arial, sans-serif;
-    font-size: 11pt; font-weight: 700;
-    color: #1a1a1a; margin-bottom: 4mm;
+
+  /* Valor del ECTS (columna 2 de la tabla) */
+  .ovl.ects {
+    top: 65mm; left: 78mm; width: 18mm; height: 7mm;
+    font-size: 11pt; color: #1a1a1a; font-weight: 400;
+    display: flex; align-items: center;
   }
-  .plan-grid {
-    display: grid;
-    grid-template-columns: 32mm 36mm 1fr;
-    gap: 0 8mm; align-items: start;
-    font-family: 'Plus Jakarta Sans', 'Helvetica Neue', Arial, sans-serif;
+
+  /* Lista completa de materias (columna 3 de la tabla) */
+  .ovl.materias {
+    top: 65mm; left: 104mm; width: 150mm; height: 90mm;
+    padding: 0;
   }
-  .col-label {
-    font-family: 'Plus Jakarta Sans', 'Helvetica Neue', Arial, sans-serif;
-    font-size: 9pt; font-weight: 700; color: #1a1a1a; margin-bottom: 1.5mm;
+  .ovl.materias .row {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding: 1.2mm 0;
+    font-size: 10pt; color: #2a2a2a; line-height: 1.3;
   }
-  .col-value {
-    font-family: 'Plus Jakarta Sans', 'Helvetica Neue', Arial, sans-serif;
-    font-size: 9pt; color: #333;
+  .ovl.materias .materia { flex: 1; padding-right: 4mm; }
+  .ovl.materias .caracter {
+    width: 22mm; text-align: center; font-weight: 700; color: #1a1a1a;
   }
-  .modulos-list {
-    font-family: 'Plus Jakarta Sans', 'Helvetica Neue', Arial, sans-serif;
-    list-style: disc inside; padding-left: 0;
-    font-size: 9pt; line-height: 1.6; color: #222;
-  }
-  .modulos-list li { margin-bottom: 0.5mm; }
-  .modulos-list li strong { color: #1a1a1a; font-weight: 700; }
-  .modulos-list.compact { font-size: 8pt; line-height: 1.4; }
-  .modulos-list.compact li { margin-bottom: 0.3mm; }
-  .modulos-list.dense { font-size: 7pt; line-height: 1.3; }
-  .modulos-list.dense li { margin-bottom: 0.2mm; }
+
 </style>
 </head>
 <body>
 <div class="page">
-  <div class="content">
-    <div class="curso-title">${curso_nombre || ''}</div>
-    <div class="plan-title">Distribución General del Plan de Estudios</div>
-    <div class="plan-grid">
-      <div>
-        <div class="col-label">Modalidad:</div>
-        <div class="col-value">${modalidad}</div>
-      </div>
-      <div>
-        <div class="col-label">Horas de formación:</div>
-        <div class="col-value">${horas_total || ''}</div>
-      </div>
-      <div>
-        <div class="col-label">Programa formativo</div>
-        <ul class="modulos-list ${listDensityClass}">${modulosHtml}</ul>
-      </div>
-    </div>
-  </div>
+  <div class="ovl curso">${curso_nombre || ''}</div>
+  <div class="ovl ects">${ects}</div>
+  <div class="ovl materias">${modulosHtml}</div>
 </div>
 </body>
 </html>`;

@@ -4,7 +4,7 @@
 > `docs/03-api-endpoints.md` (auto-generado). Para manual de usuario ver
 > `docs/MANUAL-USUARIO.md`.
 
-Última actualización: **2026-05-25**.
+Última actualización: **2026-05-25** (post-consolidación a proyecto único).
 
 ---
 
@@ -15,14 +15,15 @@ deploy atómico via `scripts/deploy-frontend.sh`.
 
 | Métrica | Valor |
 |---|---|
+| Proyectos en DB | **1** (`iseie`, id=10) — consolidado desde 11 países |
 | Paridad real vs CRM hermano (excluyendo módulos IA no aplicables) | **~96%** |
 | Módulos backend operativos | 29 / 29 + 5 cron jobs |
 | Endpoints API | 249 documentados en `docs/03-api-endpoints.md` |
 | Páginas frontend | 40+ rutas activas |
-| Tablas DB | 58 |
-| Tests integración (CRUD + RBAC) | **77 / 77 OK** (~12 segundos) |
+| Tablas DB | 58 (schema intacto, paridad con hermano) |
+| Tests integración (CRUD + RBAC) | **77 / 77 OK** (~32 segundos, validado post-consolidación) |
 | Apps PM2 ajenas en VPS | 3 (intactas, 11 días uptime) |
-| Bundle frontend | 8 MB sin sourcemaps, ~350 KB gzip primera carga |
+| Bundle frontend | 2.3 MB sin sourcemaps (–100 KB tras purga multi-país) |
 
 ---
 
@@ -129,10 +130,25 @@ curl https://crm.iseie.com/api/health/detailed    # DB + integraciones + schedul
 
 ### 🟢 Tareas que puedo seguir haciendo
 
-- Template de certificado ISEIE (pendiente que me mandes el diseño)
-- Optimización extra de bundle (lazy-load más fino)
+- **Template de certificado ISEIE** — diseño recibido (PDF Iris Alvarez Curso de Ventas). En curso.
+- Optimización bundle: lazy-load recharts solo en /reports + /dashboard (~100 KB ahorro)
 - Tests adicionales (edge cases de validación, idempotency, etc.)
+- Limpiar dead code `lead.model.js findAll` branch `projectIds: array`
 - Migración del módulo `audiences` si decides añadir IA
+
+---
+
+## 5.bis Hito de hoy — 2026-05-25
+
+**Consolidación a proyecto único + hardening + UX**:
+
+- DB: 11 proyectos país → 1 proyecto `ISEIE` (datos preservados en id=10)
+- Frontend: ProjectSwitcher + ALL_PROJECTS_ID + banderas eliminados (4 huérfanos borrados)
+- Seguridad: sourcemap OFF, ErrorBoundary fix Vite, AuthContext memoizado, rate-limit en endpoints sensibles
+- UX: ConfirmDialog global (14 confirm + 4 alert migrados), `useLeads.ts` tipado (-18 any)
+- Notificaciones: portado módulo del hermano (centro de preferencias + dropdown popover)
+- Reportes: gráficos recharts profesionales (LineChart con eje XY, tooltip custom, toggle series)
+- Tests integración: 77/77 OK tras consolidación (scripts ajustados a slug='iseie')
 
 ---
 
@@ -162,6 +178,7 @@ En `~/.claude/projects/c--Users-nange-Documents-Proyectos-T-CRM-ISEIE/memory/`:
 - `project_vps_postgres_coexistence.md` — historia DB rename
 - `project_vps_deployment.md` — layout productivo + reglas mantenimiento
 - `feedback_schema_parity.md` — regla de paridad estricta
+- `project_single_project_consolidation.md` — consolidación a proyecto único 2026-05-25
 
 ---
 

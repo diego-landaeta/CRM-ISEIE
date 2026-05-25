@@ -16,9 +16,13 @@ export default defineConfig({
     sourcemap: false,
     rollupOptions: {
       output: {
+        // Manual chunks conservador: separa solo libs que se sabe son grandes.
+        // El resto se deja al automatic chunking de Rollup (que respeta orden
+        // de imports y evita el bug de "PureComponent undefined" por libs que
+        // dependen de React cargadas antes que React).
         manualChunks: {
-          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-          'vendor-ui': ['@phosphor-icons/react', 'class-variance-authority', 'clsx', 'tailwind-merge'],
+          'vendor-charts': ['recharts'],
+          'vendor-icons': ['@phosphor-icons/react'],
         },
       },
     },

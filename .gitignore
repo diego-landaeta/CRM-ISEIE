@@ -47,3 +47,6 @@ docs/_private/
 # Backups DB
 *.sql.gz
 *.dump
+
+# Uploads runtime (PDFs generados, avatares, etc.)
+backend/uploads/
