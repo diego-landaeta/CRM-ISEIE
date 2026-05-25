@@ -104,25 +104,19 @@ export default function ClientsPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const isSuperadmin = user?.role === 'superadmin';
-  const { activeProject, projects, isAllProjects } = useProjectContext() as {
-    activeProject: { id?: number | null; nombre?: string; isAll?: boolean };
-    projects: Array<{ id: number }>;
-    isAllProjects: boolean;
+  const { activeProject } = useProjectContext() as {
+    activeProject: { id?: number | null; nombre?: string };
   };
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [search, setSearch] = useState<string>('');
 
   useEffect(() => {
-    if (isAllProjects && (!projects || projects.length === 0)) return;
-    if (!isAllProjects && !activeProject?.id) return;
+    if (!activeProject?.id) return;
     (async () => {
       setLoading(true);
       try {
-        const qs = isAllProjects
-          ? `projectIds=${projects.map((p) => p.id).join(',')}&status=convertido&limit=100`
-          : `projectId=${activeProject.id}&status=convertido&limit=100`;
-        const res = await client.get(`/leads?${qs}`);
+        const res = await client.get(`/leads?projectId=${activeProject.id}&status=convertido&limit=100`);
         if (res.success) {
           const enriched = await Promise.all((res.data || []).map(async (l) => {
             try {
@@ -151,7 +145,7 @@ export default function ClientsPage() {
         setLoading(false);
       }
     })();
-  }, [activeProject?.id, isAllProjects, projects]);
+  }, [activeProject?.id]);
 
   const filtered = search
     ? clients.filter(c =>

@@ -16,7 +16,7 @@ export function useDashboardSummary(projectId, days = 30) {
     setError(null);
     client
       .get('/leads/dashboard-summary', { params: { projectId, days } })
-      .then((r) => { if (!cancelled) setData(r.data?.data || null); })
+      .then((r) => { if (!cancelled) setData(r?.data || null); })
       .catch((err) => { if (!cancelled) setError(err); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };

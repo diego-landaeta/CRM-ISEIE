@@ -56,8 +56,8 @@ export default function CertificateForm({ onGenerated }: CertificateFormProps) {
       fecha_expedicion: new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }),
       ciudad: 'Valencia',
       pais: 'España',
-      director_nombre: 'Carlos Saiz',
-      resp_nombre: 'Mireia Jareño',
+      director_nombre: '',
+      resp_nombre: '',
       modulos: [{ nombre: '' }],
     },
   });
@@ -240,7 +240,7 @@ export default function CertificateForm({ onGenerated }: CertificateFormProps) {
         </div>
       </div>
 
-      {/* Datos fijos PsikoAprende (colapsable) */}
+      {/* Datos fijos ISEIE (colapsable) */}
       <div className="bg-card border border-border rounded-lg overflow-hidden">
         <button
           type="button"
@@ -249,7 +249,7 @@ export default function CertificateForm({ onGenerated }: CertificateFormProps) {
           className="w-full flex items-center justify-between p-4 text-left hover:bg-muted/30 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
         >
           <div>
-            <h3 className="font-semibold text-sm">Datos fijos · Psiko Aprende</h3>
+            <h3 className="font-semibold text-sm">Datos fijos · ISEIE</h3>
             <p className="text-[11px] text-muted-foreground mt-0.5">Modalidad, ciudad y firmantes — se aplican por defecto</p>
           </div>
           <CaretDown size={14} className={`text-muted-foreground transition-transform ${fixedDataOpen ? 'rotate-180' : ''}`} />

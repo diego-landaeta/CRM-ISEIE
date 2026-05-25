@@ -2,9 +2,8 @@
 // Seed test data — leads + products + conversions + expenses por proyecto.
 // Idempotente: detecta su marca (notas LIKE '[seed-test]%') y omite si ya hay datos.
 // Uso:
-//   node seeds/003_test_data.js                  → siembra
-//   node seeds/003_test_data.js --reset          → borra solo los datos del seed
-//   node seeds/003_test_data.js --project iseie-es  → solo un país
+//   node seeds/003_test_data.js          → siembra
+//   node seeds/003_test_data.js --reset  → borra solo los datos del seed
 import 'dotenv/config';
 import bcrypt from 'bcryptjs';
 import { query, getClient } from '../src/shared/config/db.js';
@@ -14,10 +13,6 @@ const PASSWORD = 'Test1234!';
 
 const args = process.argv.slice(2);
 const RESET = args.includes('--reset');
-const PROJECT_FILTER = (() => {
-  const i = args.indexOf('--project');
-  return i >= 0 ? args[i + 1] : null;
-})();
 
 const PRODUCT_TEMPLATES = [
   { nombre: 'Máster en Gestión Educativa',       precio: 3400 },
@@ -60,12 +55,8 @@ function makeEmail(name, projectSlug) {
   return `${slug}.${randInt(100, 999)}@test-${projectSlug}.iseie.test`;
 }
 
-function makePhone(projectSlug) {
-  const prefixes = { 'iseie-es': '+34', 'iseie-mx': '+52', 'iseie-co': '+57', 'iseie-cl': '+56',
-    'iseie-ec': '+593', 'iseie-pe': '+51', 'iseie-pa': '+507', 'iseie-cr': '+506',
-    'iseie-ar': '+54', 'iseie-br': '+55', 'iseie-cn': '+86' };
-  const p = prefixes[projectSlug] || '+34';
-  return `${p} ${randInt(600, 699)} ${randInt(100, 999)} ${randInt(100, 999)}`;
+function makePhone() {
+  return `+34 ${randInt(600, 699)} ${randInt(100, 999)} ${randInt(100, 999)}`;
 }
 
 async function resetSeed(client) {
@@ -141,7 +132,7 @@ async function seedLeads(client, project, gestores, products, count = 30) {
   for (let i = 0; i < count; i++) {
     const nombre = makeName();
     const email = makeEmail(nombre, project.slug);
-    const telefono = makePhone(project.slug);
+    const telefono = makePhone();
     const status = i < count * 0.3 ? 'nuevo'
       : i < count * 0.5 ? 'por_contactar'
       : i < count * 0.65 ? 'contactado'
@@ -297,14 +288,12 @@ async function main() {
     process.exit(0);
   }
 
-  const projectsQuery = PROJECT_FILTER
-    ? `SELECT id, slug FROM projects WHERE slug = $1 AND active = true`
-    : `SELECT id, slug FROM projects WHERE active = true AND slug LIKE 'iseie-%' ORDER BY id LIMIT 3`;
-  const projectsParams = PROJECT_FILTER ? [PROJECT_FILTER] : [];
-  const { rows: projects } = await query(projectsQuery, projectsParams);
+  const { rows: projects } = await query(
+    `SELECT id, slug FROM projects WHERE slug = 'iseie' AND active = true`
+  );
 
   if (projects.length === 0) {
-    console.error(`${TAG} no se encontraron proyectos activos${PROJECT_FILTER ? ' con slug=' + PROJECT_FILTER : ''}`);
+    console.error(`${TAG} no se encontró el proyecto activo 'iseie'`);
     process.exit(1);
   }
 

@@ -27,8 +27,8 @@ export default function StatusPage() {
     async function load() {
       try {
         const [comps, incs] = await Promise.all([
-          client.get('/status/components').then((r) => r.data?.data || []).catch(() => []),
-          client.get('/status/incidents?status=active').then((r) => r.data?.data || []).catch(() => []),
+          client.get('/status/components').then((r) => Array.isArray(r?.data) ? r.data : []).catch(() => []),
+          client.get('/status/incidents?status=active').then((r) => Array.isArray(r?.data) ? r.data : []).catch(() => []),
         ]);
         if (!cancelled) {
           setComponents(comps);

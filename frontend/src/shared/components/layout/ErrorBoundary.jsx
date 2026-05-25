@@ -59,7 +59,7 @@ export default class ErrorBoundary extends Component {
           <p className="text-sm text-muted-foreground mb-4 leading-relaxed">
             La aplicación encontró un error inesperado. Esto se ha registrado y revisaremos qué pasó.
           </p>
-          {process.env.NODE_ENV !== 'production' && this.state.error?.message && (
+          {import.meta.env.DEV && this.state.error?.message && (
             <pre className="text-[11px] text-left bg-muted/50 border border-border rounded-md p-3 mb-4 overflow-auto max-h-32 font-mono">
               {this.state.error.message}
             </pre>

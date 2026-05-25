@@ -76,7 +76,7 @@ export default function SalesPage() {
     let cancelled = false;
     setLoading(true);
     client.get('/conversions', { params: { projectId, limit: 200 } })
-      .then((r) => { if (!cancelled) setList(r.data?.data || []); })
+      .then((r) => { if (!cancelled) setList(Array.isArray(r?.data) ? r.data : []); })
       .catch(() => { if (!cancelled) setList([]); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };

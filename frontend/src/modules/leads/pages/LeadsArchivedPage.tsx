@@ -4,6 +4,7 @@ import { ArrowLeft, Trash, ArrowCounterClockwise, Users, MagnifyingGlass } from 
 import client from '@/shared/api/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/shared/hooks/useToast';
+import { useConfirm } from '@/shared/components/ui/useConfirm';
 
 interface ArchivedLead {
   id: number;
@@ -30,6 +31,7 @@ export default function LeadsArchivedPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [restoring, setRestoring] = useState<number | null>(null);
+  const confirm = useConfirm();
 
   const load = useCallback(async () => {
     if (!activeProject?.id) return;
@@ -51,7 +53,7 @@ export default function LeadsArchivedPage() {
 
   async function handleRestore(lead: ArchivedLead) {
     if (!isSuperadmin) return;
-    if (!window.confirm(`¿Restaurar "${lead.nombre}"? Volverá al estado "${lead.status}" donde estaba antes de eliminarse.`)) return;
+    if (!(await confirm({ title: 'Restaurar lead', message: `¿Restaurar "${lead.nombre}"? Volverá al estado "${lead.status}" donde estaba antes de eliminarse.`, confirmLabel: 'Restaurar' }))) return;
     setRestoring(lead.id);
     try {
       await client.patch(`/leads/${lead.id}/restore`, {});

@@ -71,17 +71,17 @@ export async function sendDocumentEmail({ doc, data, projectId }) {
     : (data.alumno_nombre || '');
 
   const subject = isInvoice
-    ? `Factura ${doc.number} — Psiko Aprende`
-    : `Certificado ${doc.number} — Psiko Aprende`;
+    ? `Factura ${doc.number} — ISEIE`
+    : `Certificado ${doc.number} — ISEIE`;
 
   const htmlContent = isInvoice
     ? `<p>Estimado/a ${recipientName || 'cliente'},</p>
        <p>Adjuntamos la factura <strong>${doc.number}</strong>.</p>
        <p>Si tienes cualquier duda, responde a este email.</p>
-       <p>Un saludo,<br/>Psiko Aprende</p>`
+       <p>Un saludo,<br/>ISEIE</p>`
     : `<p>Estimado/a ${recipientName || 'alumno'},</p>
        <p>Enhorabuena por completar el curso. Adjuntamos tu certificado <strong>${doc.number}</strong>.</p>
-       <p>Un saludo,<br/>Psiko Aprende</p>`;
+       <p>Un saludo,<br/>ISEIE</p>`;
 
   const attachment = await buildAttachment({ filePath: doc.file_path, r2Key: doc.r2_key });
   if (!attachment) {

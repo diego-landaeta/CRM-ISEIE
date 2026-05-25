@@ -195,24 +195,74 @@ function urlHost(landingUrl) {
 // (subdominios o dominios distintos) que comparten estructura de URL:
 // https://es.foo.com/curso-x/  y  https://mx.foo.com/curso-x/
 // Mapea ambos al mismo producto del catálogo CRM por el último segmento.
-// STUB v1.
-export async function findProductByLandingSlug(_landingUrl, _projectId) {
-  return null;
+//
+// Estrategia:
+//   1) Tabla product_url_aliases (slugs aprendidos manualmente).
+//   2) products.url_info (slug nativo) si la columna existe.
+export async function findProductByLandingSlug(landingUrl, projectId) {
+  const slug = urlSlug(landingUrl);
+  if (!slug || !projectId) return null;
+
+  const aliasRes = await query(
+    `SELECT product_id FROM product_url_aliases
+      WHERE project_id = $1 AND url_slug = $2 LIMIT 1`,
+    [projectId, slug]
+  );
+  if (aliasRes.rows[0]) return { id: aliasRes.rows[0].product_id, _via: 'alias' };
+
+  // Fallback: si products tiene url_info, buscar por slug nativo.
+  // No es columna estándar en nuestro schema; se ignora silenciosamente si no existe.
+  try {
+    const { rows } = await query(
+      `SELECT id FROM products
+        WHERE project_id = $1 AND active = true
+          AND url_info ILIKE '%/' || $2
+        LIMIT 1`,
+      [projectId, slug]
+    );
+    return rows[0] || null;
+  } catch {
+    return null;
+  }
 }
 
 // Aprende: cuando un gestor vincula un lead a un producto, guardamos
-// el slug de la landing_url como alias. STUB v1.
-export async function learnUrlAlias(_args) {
-  return { skipped: true, reason: 'product_url_aliases_not_migrated' };
+// el slug de la landing_url como alias. Los futuros leads desde esa
+// URL se vinculan automáticamente.
+export async function learnUrlAlias({ projectId, productId, landingUrl, userId }) {
+  const slug = urlSlug(landingUrl);
+  if (!slug || !projectId || !productId) return null;
+  const host = urlHost(landingUrl);
+  const { rows } = await query(
+    `INSERT INTO product_url_aliases (project_id, product_id, url_slug, source_host, created_by)
+     VALUES ($1, $2, $3, $4, $5)
+     ON CONFLICT (project_id, url_slug) DO UPDATE
+       SET product_id = EXCLUDED.product_id,
+           source_host = EXCLUDED.source_host,
+           created_at = NOW()
+     RETURNING id, product_id, url_slug, source_host`,
+    [projectId, productId, slug, host, userId || null]
+  );
+  return rows[0];
 }
 
-// Lista aliases por producto. STUB v1.
-export async function listProductAliases(_projectId, _productId) {
-  return [];
+export async function listProductAliases(projectId, productId) {
+  const { rows } = await query(
+    `SELECT id, url_slug, source_host, created_at
+       FROM product_url_aliases
+      WHERE project_id = $1 AND product_id = $2
+      ORDER BY created_at DESC`,
+    [projectId, productId]
+  );
+  return rows;
 }
 
-export async function deleteProductAlias(_aliasId, _projectId) {
-  // STUB v1.
+export async function deleteProductAlias(aliasId, projectId) {
+  const { rowCount } = await query(
+    `DELETE FROM product_url_aliases WHERE id = $1 AND project_id = $2`,
+    [aliasId, projectId]
+  );
+  return rowCount > 0;
 }
 
 // Si forcedResponsableId viene, valida que el user tenga acceso al proyecto
@@ -913,12 +963,11 @@ export async function getDashboardSummary(projectId, { days = 30, responsableId 
     FROM weeks w
     ORDER BY w.w DESC
   `;
-  const sparkParams = isGestor ? [projectId, responsableId] : [projectId];
-  const sparkParamsActual = isGestor
-    ? [projectId, periodStart, periodEnd, responsableId]
-    : [projectId, periodStart, periodEnd];
-  void sparkParams;
-  const { rows: weeksRows } = await query(sparkSql, sparkParamsActual);
+  // El sparkSql solo referencia $1 (projectId) y, si es gestor, $4 (responsableId).
+  // No usar periodStart/periodEnd aquí — eran params sobrantes que causaban
+  // protocol_violation (08P01) en Postgres.
+  const sparkParams = isGestor ? [projectId, null, null, responsableId] : [projectId];
+  const { rows: weeksRows } = await query(sparkSql, sparkParams);
 
   const leadsSpark = weeksRows.map((r) => Number(r.leads || 0));
   const convSpark = weeksRows.map((r) => Number(r.conversiones || 0));

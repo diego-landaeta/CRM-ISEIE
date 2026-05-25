@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { X, CalendarBlank, Plus, Trash, CheckCircle, Coins } from '@phosphor-icons/react';
 import { conversionsApi, type Conversion } from '../api/conversions.api';
 import { toast } from '@/shared/hooks/useToast';
+import { useConfirm } from '@/shared/components/ui/useConfirm';
 import { formatCurrency, formatDate } from '@/shared/lib/format';
 
 interface Installment {
@@ -36,6 +37,7 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
   const [payImporte, setPayImporte] = useState<string>('');
   const [payFecha, setPayFecha] = useState<string>('');
   const [payingNow, setPayingNow] = useState(false);
+  const confirm = useConfirm();
 
   async function load() {
     if (!conversion) return;
@@ -162,7 +164,7 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
 
   async function handleUnpay(inst: Installment) {
     if (!inst.id) return;
-    if (!confirm(`¿Deshacer el pago de la cuota #${inst.numero}? Se borra el cobro y la cuota vuelve a pendiente.`)) return;
+    if (!(await confirm({ title: 'Deshacer pago', message: `¿Deshacer el pago de la cuota #${inst.numero}? Se borra el cobro y la cuota vuelve a pendiente.`, tone: 'warning', confirmLabel: 'Deshacer' }))) return;
     try {
       await conversionsApi.unpayInstallment(inst.id);
       toast({ title: 'Pago deshecho', description: `Cuota #${inst.numero} vuelve a pendiente` });
@@ -202,7 +204,8 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
   }
 
   async function handleDeleteInstallment(inst: Installment) {
-    if (!inst.id || !confirm(`¿Eliminar cuota #${inst.numero}? Esto no es reversible.`)) return;
+    if (!inst.id) return;
+    if (!(await confirm({ title: 'Eliminar cuota', message: `¿Eliminar cuota #${inst.numero}? Esto no es reversible.`, tone: 'destructive', confirmLabel: 'Eliminar' }))) return;
     try {
       await conversionsApi.deleteInstallment(inst.id);
       toast({ title: 'Cuota eliminada' });

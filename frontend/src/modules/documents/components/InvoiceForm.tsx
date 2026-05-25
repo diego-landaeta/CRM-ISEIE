@@ -22,7 +22,10 @@ interface InvoiceLine {
   precio: number | string;
 }
 
+export type InvoiceTipo = 'persona_natural' | 'empresa' | 'contado';
+
 export interface InvoiceFormValues {
+  tipo: InvoiceTipo;
   emisor_nombre: string;
   emisor_nif: string;
   emisor_direccion: string;
@@ -30,13 +33,25 @@ export interface InvoiceFormValues {
   fecha: string;
   iva_pct: number | string;
   iva_exento: boolean;
+  // persona_natural
   cliente_nombre: string;
   cliente_dni: string;
+  // empresa
+  cliente_razon_social: string;
+  cliente_nif: string;
+  // ambos
   cliente_direccion: string;
+  cliente_telefono: string;
   cliente_email: string;
   notas: string;
   lineas: InvoiceLine[];
 }
+
+const TIPO_OPTIONS: { value: InvoiceTipo; label: string; desc: string }[] = [
+  { value: 'persona_natural', label: 'Persona física', desc: 'Cliente individual con DNI' },
+  { value: 'empresa',         label: 'Empresa',         desc: 'Razón social + NIF' },
+  { value: 'contado',         label: 'Contado',         desc: 'Sin datos de cliente' },
+];
 
 interface InvoiceFormProps {
   onGenerated?: (doc: CrmDocument) => void;
@@ -67,16 +82,20 @@ export default function InvoiceForm({ onGenerated, initialValues }: InvoiceFormP
 
   const { register, control, handleSubmit, watch, setValue, reset } = useForm<InvoiceFormValues>({
     defaultValues: {
+      tipo: 'persona_natural',
       emisor_nombre: defaults.emisor_nombre,
       emisor_nif: defaults.emisor_nif,
       emisor_direccion: defaults.emisor_direccion,
       emisor_telefono: defaults.emisor_telefono,
       fecha: todayLocal(),
       iva_pct: defaults.iva_pct,
-      iva_exento: true, // Psikoaprende: cursos educativos exentos por defecto (Art. 20.1.9° LIVA)
+      iva_exento: true, // Formación reglada: cursos exentos (Art. 20.1.9° LIVA)
       cliente_nombre: '',
       cliente_dni: '',
+      cliente_razon_social: '',
+      cliente_nif: '',
       cliente_direccion: '',
+      cliente_telefono: '',
       cliente_email: '',
       notas: defaults.notas,
       lineas: [{ descripcion: '', cantidad: 1, precio: '' }],
@@ -88,6 +107,7 @@ export default function InvoiceForm({ onGenerated, initialValues }: InvoiceFormP
   useEffect(() => {
     if (initialValues) {
       reset({
+        tipo: 'persona_natural',
         emisor_nombre: defaults.emisor_nombre,
         emisor_nif: defaults.emisor_nif,
         emisor_direccion: defaults.emisor_direccion,
@@ -98,7 +118,10 @@ export default function InvoiceForm({ onGenerated, initialValues }: InvoiceFormP
         notas: defaults.notas,
         cliente_nombre: '',
         cliente_dni: '',
+        cliente_razon_social: '',
+        cliente_nif: '',
         cliente_direccion: '',
+        cliente_telefono: '',
         cliente_email: '',
         lineas: [{ descripcion: '', cantidad: 1, precio: '' }],
         ...initialValues,
@@ -124,16 +147,23 @@ export default function InvoiceForm({ onGenerated, initialValues }: InvoiceFormP
 
   const cliente_nombre = watch('cliente_nombre');
   const fecha = watch('fecha');
+  const tipo = watch('tipo');
 
   // Lista de campos obligatorios faltantes. Se usa para bloquear download/preview
   // y para resaltar visualmente cada campo invalido cuando `touched` es true.
   function getMissingFields(values: InvoiceFormValues): string[] {
     const missing: string[] = [];
     if (!values.fecha?.trim()) missing.push('Fecha');
-    if (!values.cliente_nombre?.trim()) missing.push('Nombre del cliente');
-    if (!values.cliente_dni?.trim()) missing.push('DNI / NIF del cliente');
     if (!values.emisor_nombre?.trim()) missing.push('Nombre del emisor');
     if (!values.emisor_nif?.trim()) missing.push('NIF del emisor');
+    if (values.tipo === 'persona_natural') {
+      if (!values.cliente_nombre?.trim()) missing.push('Nombre y apellido del cliente');
+      if (!values.cliente_dni?.trim()) missing.push('DNI del cliente');
+    } else if (values.tipo === 'empresa') {
+      if (!values.cliente_razon_social?.trim()) missing.push('Razón social');
+      if (!values.cliente_nif?.trim()) missing.push('NIF de la empresa');
+    }
+    // 'contado': sin requisitos de cliente
     const validLine = (values.lineas || []).some(l =>
       String(l.descripcion || '').trim() &&
       Number(l.cantidad) > 0 &&
@@ -303,12 +333,45 @@ export default function InvoiceForm({ onGenerated, initialValues }: InvoiceFormP
         </div>
       </section>
 
-      {/* Cliente */}
+      {/* Tipo de factura */}
+      <section className="bg-card border border-border rounded-lg p-5">
+        <h3 className="font-semibold text-sm mb-3">Tipo de factura</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          {TIPO_OPTIONS.map((t) => {
+            const active = tipo === t.value;
+            return (
+              <button
+                key={t.value}
+                type="button"
+                onClick={() => setValue('tipo', t.value, { shouldDirty: true })}
+                className={`text-left rounded-lg border p-3 transition-all ${
+                  active
+                    ? 'border-primary bg-primary/10 ring-2 ring-primary/20'
+                    : 'border-border bg-card hover:bg-muted/40'
+                }`}
+              >
+                <div className={`font-semibold text-sm ${active ? 'text-primary' : 'text-foreground'}`}>
+                  {t.label}
+                </div>
+                <div className="text-[11px] text-muted-foreground mt-0.5">{t.desc}</div>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* Cliente — render condicional según tipo */}
       <section className="bg-card border border-border rounded-lg p-5">
         <div className="flex items-end justify-between gap-3 mb-4">
           <div>
-            <h3 className="font-semibold text-sm">Datos del cliente</h3>
-            <p className="text-[11px] text-muted-foreground">Busca por nombre/email para autocompletar desde tu base de prospectos</p>
+            <h3 className="font-semibold text-sm">
+              {tipo === 'contado' ? 'Sin datos de cliente' : 'Datos del cliente'}
+            </h3>
+            <p className="text-[11px] text-muted-foreground">
+              {tipo === 'contado'
+                ? 'Las facturas de contado no incluyen datos identificativos del comprador.'
+                : 'Busca por nombre/email para autocompletar desde tu base de prospectos.'}
+            </p>
           </div>
           <div className="shrink-0">
             <label className="text-xs text-muted-foreground mb-1 block">Fecha <span className="text-red-500">*</span></label>
@@ -322,43 +385,116 @@ export default function InvoiceForm({ onGenerated, initialValues }: InvoiceFormP
             />
           </div>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div className="sm:col-span-2">
-            <label className="text-xs text-muted-foreground mb-1 block">
-              Nombre o Razón Social <span className="text-red-500">*</span>
-            </label>
-            <div className={invalidFields.has('Nombre del cliente') ? 'ring-2 ring-red-400/20 rounded-md' : ''}>
-              <ClientCombobox
-                projectId={activeProject?.id}
-                value={cliente_nombre}
-                onChange={(v) => setValue('cliente_nombre', v, { shouldDirty: true })}
-                onSelect={handleClientPick}
+
+        {tipo === 'persona_natural' && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="sm:col-span-2">
+              <label className="text-xs text-muted-foreground mb-1 block">
+                Nombre y apellido <span className="text-red-500">*</span>
+              </label>
+              <div className={invalidFields.has('Nombre y apellido del cliente') ? 'ring-2 ring-red-400/20 rounded-md' : ''}>
+                <ClientCombobox
+                  projectId={activeProject?.id}
+                  value={cliente_nombre}
+                  onChange={(v) => setValue('cliente_nombre', v, { shouldDirty: true })}
+                  onSelect={handleClientPick}
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">
+                DNI <span className="text-red-500">*</span>
+              </label>
+              <input
+                {...register('cliente_dni')}
+                placeholder="39.064.302"
+                className={inp + (invalidFields.has('DNI del cliente') ? ' border-red-400 ring-2 ring-red-400/20' : '')}
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Teléfono</label>
+              <input
+                {...register('cliente_telefono')}
+                placeholder="+34 600 000 000"
+                className={inp}
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="text-xs text-muted-foreground mb-1 block">Dirección</label>
+              <input
+                {...register('cliente_direccion')}
+                placeholder="Calle, número, ciudad, país"
+                className={inp}
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="text-xs text-muted-foreground mb-1 block">Email</label>
+              <input
+                type="email"
+                {...register('cliente_email')}
+                placeholder="cliente@ejemplo.com"
+                className={inp}
               />
             </div>
           </div>
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">
-              DNI / NIF <span className="text-red-500">*</span>
-            </label>
-            <input
-              {...register('cliente_dni')}
-              className={inp + (invalidFields.has('DNI / NIF del cliente') ? ' border-red-400 ring-2 ring-red-400/20' : '')}
-            />
+        )}
+
+        {tipo === 'empresa' && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="sm:col-span-2">
+              <label className="text-xs text-muted-foreground mb-1 block">
+                Razón social <span className="text-red-500">*</span>
+              </label>
+              <input
+                {...register('cliente_razon_social')}
+                placeholder="Centro Médico Artemedeci Limitada"
+                className={inp + (invalidFields.has('Razón social') ? ' border-red-400 ring-2 ring-red-400/20' : '')}
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">
+                NIF <span className="text-red-500">*</span>
+              </label>
+              <input
+                {...register('cliente_nif')}
+                placeholder="77489760-7"
+                className={inp + (invalidFields.has('NIF de la empresa') ? ' border-red-400 ring-2 ring-red-400/20' : '')}
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Teléfono</label>
+              <input
+                {...register('cliente_telefono')}
+                placeholder="+56 9 8529 7340"
+                className={inp}
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="text-xs text-muted-foreground mb-1 block">Dirección</label>
+              <input
+                {...register('cliente_direccion')}
+                placeholder="Calle, número, ciudad, país"
+                className={inp}
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="text-xs text-muted-foreground mb-1 block">Email</label>
+              <input
+                type="email"
+                {...register('cliente_email')}
+                placeholder="contacto@empresa.com"
+                className={inp}
+              />
+            </div>
           </div>
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Email</label>
-            <input
-              type="email"
-              {...register('cliente_email')}
-              className={inp}
-              placeholder="cliente@ejemplo.com"
-            />
+        )}
+
+        {tipo === 'contado' && (
+          <div className="rounded-md border border-dashed border-border bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
+            La factura se emitirá con el título <strong className="text-foreground">"FACTURA DE CONTADO"</strong> y
+            sin sección de cliente. Incluye automáticamente el texto de exención IVA del art. 20 L37/1992.
           </div>
-          <div className="sm:col-span-2">
-            <label className="text-xs text-muted-foreground mb-1 block">Dirección</label>
-            <input {...register('cliente_direccion')} className={inp} />
-          </div>
-        </div>
+        )}
       </section>
 
       {/* Líneas */}
@@ -493,7 +629,7 @@ export default function InvoiceForm({ onGenerated, initialValues }: InvoiceFormP
         />
       </section>
 
-      {/* Datos del emisor (colapsable — Psiko Aprende) */}
+      {/* Datos del emisor (colapsable — ISEIE) */}
       <section className="bg-card border border-border rounded-lg overflow-hidden">
         <button
           type="button"
@@ -502,7 +638,7 @@ export default function InvoiceForm({ onGenerated, initialValues }: InvoiceFormP
           className="w-full flex items-center justify-between p-4 text-left hover:bg-muted/30 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
         >
           <div>
-            <h3 className="font-semibold text-sm">Datos del emisor · Psiko Aprende</h3>
+            <h3 className="font-semibold text-sm">Datos del emisor · ISEIE</h3>
             <p className="text-[11px] text-muted-foreground mt-0.5">Razón social, NIF, dirección — se guardan como predeterminados</p>
           </div>
           <CaretDown size={14} className={`text-muted-foreground transition-transform ${emisorOpen ? 'rotate-180' : ''}`} />

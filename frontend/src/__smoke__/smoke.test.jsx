@@ -6,7 +6,7 @@ import React from 'react';
 
 const mockUser = { id: 1, nombre: 'Manuel Test', email: 'manuel@test.com', role: 'superadmin' };
 const mockProjects = [
-  { id: 1, nombre: 'ISEIE España', slug: 'iseie-es', emoji: null, type: 'crm', theme_color: null, logo_url: null },
+  { id: 10, nombre: 'ISEIE', slug: 'iseie', emoji: null, type: 'crm', theme_color: null, logo_url: null },
 ];
 
 beforeAll(() => {
@@ -63,7 +63,7 @@ async function renderAt(path) {
 }
 
 describe('app boot routes', () => {
-  for (const path of ['/dashboard', '/leads', '/products', '/sales', '/notifications', '/activity', '/settings', '/profile', '/accounting', '/clients', '/roles', '/reports', '/documentos', '/email-sequences', '/email-templates']) {
+  for (const path of ['/dashboard', '/leads', '/products', '/sales', '/notificaciones', '/activity', '/settings', '/profile', '/accounting', '/clients', '/roles', '/reports', '/documentos', '/email-sequences', '/email-templates']) {
     it(`renders ${path} without throwing`, { timeout: 15000 }, async () => {
       const errors = [];
       const origError = console.error;

@@ -11,12 +11,15 @@ export interface InvoiceEmisor {
 
 const STORAGE_PREFIX = 'crm.invoice-defaults.';
 
+// Por defecto rellenamos los datos institucionales de ISEIE. El usuario
+// puede editarlos (botón "Guardar" del bloque emisor) y se persisten por
+// proyecto en localStorage como override.
 const FALLBACK: InvoiceEmisor = {
-  emisor_nombre: '',
-  emisor_nif: '',
-  emisor_direccion: '',
+  emisor_nombre: 'ISEIE INNOVATION SCHOOL S.L.',
+  emisor_nif: 'B67799247',
+  emisor_direccion: 'AV. ARAGÓN 30-8-5º, 46021, VALENCIA',
   emisor_telefono: '',
-  iva_pct: 21,
+  iva_pct: 0,
   notas: '',
 };
 

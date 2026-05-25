@@ -146,16 +146,13 @@ Luego como en §5. Login con el superadmin real.
 ## 7. Seed de datos de prueba
 
 `backend/seeds/003_test_data.js` siembra 30 leads + productos + conversiones
-+ egresos por cada proyecto (idempotente: si ya hay datos del seed, omite).
++ egresos en el proyecto `iseie` (idempotente: si ya hay datos del seed, omite).
 
 ```powershell
 cd backend
 
-# Sembrar los 3 primeros proyectos (España, México, Colombia)
+# Sembrar
 node seeds/003_test_data.js
-
-# Sembrar un país concreto
-node seeds/003_test_data.js --project iseie-es
 
 # Borrar todo lo que el seed creó (limpio, no afecta datos reales)
 node seeds/003_test_data.js --reset
@@ -163,12 +160,11 @@ node seeds/003_test_data.js --reset
 
 Crea automáticamente:
 
-- 2 gestores por proyecto (`gestor1.<slug>@test-seed.iseie.test`,
-  `gestor2.<slug>@test-seed.iseie.test`), password **`Test1234!`**.
+- 2 gestores (`gestor1.iseie@test-seed.iseie.test`,
+  `gestor2.iseie@test-seed.iseie.test`), password **`Test1234!`**.
 - 6 productos (Máster, Diplomado, Curso).
-- ~30 leads por proyecto repartidos en todos los estados (nuevo,
-  contactado, en_seguimiento, convertido…) con interacciones y
-  recordatorios realistas.
+- ~30 leads repartidos en todos los estados (nuevo, contactado,
+  en_seguimiento, convertido…) con interacciones y recordatorios realistas.
 - Conversiones de los `convertido`: mezcla de pagadas, parciales y
   pendientes con `conversion_payments` registrados.
 - 12 egresos por proyecto en categorías variadas (sueldos, alquiler,

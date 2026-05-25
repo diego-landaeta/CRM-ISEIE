@@ -9,6 +9,7 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
 import { uploadProductImage, deleteProductImage, getProductImageUrl } from '../api/products.api';
 import { toast } from '@/shared/hooks/useToast';
+import { useConfirm } from '@/shared/components/ui/useConfirm';
 
 const inputClass = 'w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground';
 const smallInput = 'w-full h-9 px-3 rounded-lg border border-border bg-muted/50 text-sm outline-none focus:border-primary';
@@ -40,6 +41,7 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }: 
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [imageUploading, setImageUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const confirm = useConfirm();
 
   const {
     register,
@@ -135,7 +137,7 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }: 
 
   async function handleImageRemove() {
     if (!product?.id || !activeProject?.id) return;
-    if (!confirm('¿Eliminar la imagen del producto?')) return;
+    if (!(await confirm({ title: 'Eliminar imagen', message: '¿Eliminar la imagen del producto?', tone: 'destructive', confirmLabel: 'Eliminar' }))) return;
     setImageUploading(true);
     try {
       await deleteProductImage(product.id, activeProject.id);

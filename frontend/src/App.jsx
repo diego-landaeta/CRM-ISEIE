@@ -40,7 +40,7 @@ const ProfilePage = lazy(() => import('./shared/pages/ProfilePage'));
 const SettingsPage = lazy(() => import('./shared/pages/SettingsPage'));
 const SalesPage = lazy(() => import('./shared/pages/SalesPage'));
 const ReportsPage = lazy(() => import('./shared/pages/ReportsPage'));
-const NotificationsPage = lazy(() => import('./shared/pages/NotificationsPage'));
+const NotificacionesPage = lazy(() => import('./modules/notificaciones/pages/NotificacionesPage'));
 const ActivityPage = lazy(() => import('./shared/pages/ActivityPage'));
 const StatusPage = lazy(() => import('./shared/pages/StatusPage'));
 
@@ -82,7 +82,7 @@ const ROUTE_TITLES = {
   '/roles':                           'Roles',
   '/status':                          'Status',
   '/reports':                         'Reportes',
-  '/notifications':                   'Notificaciones',
+  '/notificaciones':                  'Notificaciones',
   '/activity':                        'Actividad',
   '/profile':                         'Mi cuenta',
   '/settings':                        'Configuración',
@@ -178,7 +178,8 @@ function App() {
           <Route path="/configuracion/campos" element={<FieldDefinitionsPage />} />
           <Route path="/roles" element={<RolesPage />} />
           <Route path="/reports" element={<ReportsPage />} />
-          <Route path="/notifications" element={<NotificationsPage />} />
+          <Route path="/notificaciones" element={<NotificacionesPage />} />
+          <Route path="/notifications" element={<Navigate to="/notificaciones" replace />} />
           <Route path="/activity" element={<ActivityPage />} />
           <Route path="/status" element={<StatusPage />} />
           <Route path="/profile" element={<ProfilePage />} />

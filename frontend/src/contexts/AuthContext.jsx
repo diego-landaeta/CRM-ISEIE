@@ -1,11 +1,7 @@
-import { createContext, useState, useContext, useCallback, useEffect, useRef } from 'react';
+import { createContext, useState, useContext, useCallback, useEffect, useMemo, useRef } from 'react';
 import client, { setAccessToken, setOnAuthFailure, API_BASE_URL } from '@/shared/api/client';
 
 const AuthContext = createContext(null);
-
-// Sentinel para el modo "Todos los proyectos" (vista agregada).
-export const ALL_PROJECTS_ID = -1;
-const ALL_PROJECTS_PSEUDO = { id: ALL_PROJECTS_ID, nombre: 'Todos los proyectos', isAll: true, type: 'multi' };
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -37,12 +33,7 @@ export function AuthProvider({ children }) {
         setUser(data.user);
         const userProjects = data.projects || [];
         setProjects(userProjects);
-
-        const saved = Number(localStorage.getItem('crm_active_project_id'));
-        const restored = saved === ALL_PROJECTS_ID
-          ? ALL_PROJECTS_ID
-          : userProjects.find((p) => p.id === saved)?.id;
-        setActiveProjectId(restored || data.activeProjectId || userProjects[0]?.id || null);
+        setActiveProjectId(data.activeProjectId || userProjects[0]?.id || null);
       } catch {
         // sin sesión válida — caer al login
       } finally {
@@ -75,15 +66,7 @@ export function AuthProvider({ children }) {
     setAccessToken(token);
     setUser(userData);
     setProjects(userProjects || []);
-
-    // Usar proyecto activo del login o el primero disponible
-    const savedProjectId = localStorage.getItem('crm_active_project_id');
-    const projectId = userProjects?.find((p) => p.id === Number(savedProjectId))?.id
-      || apiProjectId
-      || userProjects?.[0]?.id
-      || null;
-    setActiveProjectId(projectId);
-    if (projectId) localStorage.setItem('crm_active_project_id', String(projectId));
+    setActiveProjectId(apiProjectId || userProjects?.[0]?.id || null);
 
     return userData;
   }, []);
@@ -98,28 +81,10 @@ export function AuthProvider({ children }) {
     setUser(null);
     setProjects([]);
     setActiveProjectId(null);
-    localStorage.removeItem('crm_active_project_id');
   }, []);
 
-  const switchProject = useCallback((projectId) => {
-    if (projectId === ALL_PROJECTS_ID) {
-      setActiveProjectId(ALL_PROJECTS_ID);
-      localStorage.setItem('crm_active_project_id', String(ALL_PROJECTS_ID));
-      return;
-    }
-    const project = projects.find((p) => p.id === projectId);
-    if (project) {
-      setActiveProjectId(projectId);
-      localStorage.setItem('crm_active_project_id', String(projectId));
-    }
-  }, [projects]);
-
   const isAuthenticated = !!user;
-  const activeProject =
-    activeProjectId === ALL_PROJECTS_ID
-      ? ALL_PROJECTS_PSEUDO
-      : projects.find((p) => p.id === activeProjectId) || projects[0] || null;
-  const isAllProjects = activeProjectId === ALL_PROJECTS_ID;
+  const activeProject = projects.find((p) => p.id === activeProjectId) || projects[0] || null;
 
   const refreshUser = useCallback(async () => {
     try {
@@ -131,23 +96,19 @@ export function AuthProvider({ children }) {
     } catch { /* ignore */ }
   }, []);
 
-  return (
-    <AuthContext.Provider value={{
-      user,
-      projects,
-      activeProject,
-      activeProjectId: activeProject?.id || null,
-      isAllProjects,
-      isAuthenticated,
-      loading,
-      login,
-      logout,
-      switchProject,
-      refreshUser,
-    }}>
-      {children}
-    </AuthContext.Provider>
-  );
+  const value = useMemo(() => ({
+    user,
+    projects,
+    activeProject,
+    activeProjectId: activeProject?.id || null,
+    isAuthenticated,
+    loading,
+    login,
+    logout,
+    refreshUser,
+  }), [user, projects, activeProject, isAuthenticated, loading, login, logout, refreshUser]);
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {

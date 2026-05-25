@@ -105,9 +105,73 @@ app.get('/api', (_req, res) => {
   });
 });
 
-// Health check
+// Health check (público, ligero).
 app.get('/api/health', (_req, res) => {
   res.json({ success: true, data: { status: 'ok', timestamp: new Date().toISOString() } });
+});
+
+// Health detallado: DB ping + estado de credenciales externas + uptime +
+// memoria. NO requiere auth (operativo para monitoring externo) pero NO
+// expone secretos (solo presencia/ausencia y last_test_result).
+app.get('/api/health/detailed', async (_req, res) => {
+  const start = Date.now();
+  const checks = { timestamp: new Date().toISOString() };
+
+  // Uptime + memoria del proceso
+  checks.process = {
+    uptime_seconds: Math.round(process.uptime()),
+    node_version: process.version,
+    memory_mb: Math.round(process.memoryUsage().rss / 1024 / 1024),
+  };
+
+  // DB connectivity (timeout 3s)
+  try {
+    const { query } = await import('./shared/config/db.js');
+    const r = await Promise.race([
+      query('SELECT 1 AS ping, COUNT(*)::int AS user_count FROM users'),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('DB timeout 3s')), 3000)),
+    ]);
+    checks.database = { status: 'ok', user_count: r.rows[0].user_count };
+  } catch (err) {
+    checks.database = { status: 'fail', error: err.message };
+  }
+
+  // Credenciales externas configuradas (sin exponer valores)
+  try {
+    const { query } = await import('./shared/config/db.js');
+    const { rows } = await query(
+      `SELECT service, last_test_result, last_tested_at
+         FROM api_credentials
+        WHERE active = true`
+    );
+    checks.integrations = rows.reduce((acc, r) => {
+      acc[r.service] = {
+        configured: true,
+        last_test: r.last_test_result || 'never',
+        last_tested_at: r.last_tested_at || null,
+      };
+      return acc;
+    }, {});
+    const expected = ['brevo', 'google_ads', 'gsc', 'stripe', 'claude', 'meta'];
+    for (const svc of expected) {
+      if (!checks.integrations[svc]) checks.integrations[svc] = { configured: false };
+    }
+  } catch (err) {
+    checks.integrations = { error: err.message };
+  }
+
+  // Schedulers: leemos de variables de entorno qué están activos
+  checks.schedulers = {
+    email_sequence: process.env.EMAIL_SEQ_DISABLED !== '1',
+    document_orphan: process.env.DOC_ORPHAN_DISABLED !== '1',
+    google_ads_token: process.env.GOOGLE_ADS_TOKEN_DISABLED !== '1',
+    reminder: process.env.REMINDER_DISABLED !== '1',
+    woocommerce_sync: process.env.WC_SYNC_DISABLED !== '1',
+  };
+
+  checks.elapsed_ms = Date.now() - start;
+  const overallOk = checks.database?.status === 'ok';
+  res.status(overallOk ? 200 : 503).json({ success: overallOk, data: checks });
 });
 
 // Catálogo de módulos a montar.

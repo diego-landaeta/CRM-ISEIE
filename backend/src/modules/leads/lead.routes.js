@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { verifyToken, roleGuard } from '../../shared/middleware/auth.js';
 import * as leadController from './lead.controller.js';
 import * as leadEmailsController from './lead-emails.controller.js';
+import * as spamReportController from './spam-report.controller.js';
 
 const router = Router();
 
@@ -25,7 +26,11 @@ router.get('/dashboard-summary', leadController.dashboardSummary);
 // pueda detectar duplicados de leads que pertenecen a otra asesora.
 router.get('/lookup-by-email', leadController.lookupByEmail);
 
-// TODO: spam-reports endpoints requieren modulo separado lead-spam-reports.
+// Spam reports — admin/superadmin gestiona reportes; cualquier autenticado puede levantar uno.
+// IMPORTANTE: las rutas con path fijo deben ir antes que las que tienen :id.
+router.get('/spam-reports',              roleGuard('admin', 'superadmin'), spamReportController.listPending);
+router.get('/spam-reports/count',        roleGuard('admin', 'superadmin'), spamReportController.countPending);
+router.patch('/spam-reports/:reportId',  roleGuard('superadmin'),          spamReportController.resolveReport);
 
 router.get('/:id', leadController.getById);
 router.post('/:id/merge', leadController.mergeLeads);
@@ -55,7 +60,8 @@ router.get('/:id/purchase-history', leadController.getPurchaseHistory);
 router.post('/:id/send-email', leadEmailsController.sendLeadEmail);
 router.get('/:id/emails', leadEmailsController.listLeadEmails);
 
-// TODO: report-spam omitido (lead_spam_reports requiere modulo separado).
+// Levantar un reporte de spam sobre un lead (cualquier autenticado).
+router.post('/:id/report-spam', spamReportController.reportSpam);
 
 // Reasignar (solo admin/superadmin)
 router.patch('/:id/reassign', roleGuard('admin', 'superadmin'), leadController.reassign);

@@ -5,6 +5,7 @@ import PageHeader from '@/shared/components/ui/PageHeader';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
+import { useConfirm } from '@/shared/components/ui/useConfirm';
 import { emailTemplatesApi, type EmailTemplate, type TemplateVariable } from '../api/templates.api';
 
 const inp = 'w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all';
@@ -12,6 +13,7 @@ const inp = 'w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm
 export default function EmailTemplatesPage() {
   const { user } = useAuth();
   const { activeProject } = useProjectContext();
+  const confirm = useConfirm();
   const role = (user as { role?: string } | null)?.role;
   const isAdmin = role === 'superadmin' || role === 'admin';
 
@@ -55,7 +57,7 @@ export default function EmailTemplatesPage() {
 
   async function handleDelete(t: EmailTemplate) {
     if (!activeProject?.id) return;
-    if (!confirm(`Eliminar la plantilla "${t.name}"?`)) return;
+    if (!(await confirm({ title: 'Eliminar plantilla', message: `Eliminar la plantilla "${t.name}"?`, tone: 'destructive', confirmLabel: 'Eliminar' }))) return;
     try {
       await emailTemplatesApi.remove(t.id, activeProject.id);
       toast({ title: 'Plantilla eliminada' });

@@ -10,9 +10,20 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const UPLOAD_DIR = process.env.UPLOAD_DIR || path.resolve(__dirname, '../../../uploads/documents');
 const ASSETS_DIR = path.join(__dirname, 'assets');
 
-// Logo Psikoaprende real (cerebro line-art) cargado una vez al iniciar el módulo.
-// El archivo está en assets/psiko-logo.png y proviene de frontend/public/projects/psiko-aprende-light.png.
-const PSIKO_LOGO_DATAURL = `data:image/png;base64,${readFileSync(path.join(ASSETS_DIR, 'psiko-logo.png')).toString('base64')}`;
+// Logo ISEIE (color) cargado una vez al iniciar el módulo.
+// Proviene de frontend/public/iseie-logo-color.png.
+const ISEIE_LOGO_DATAURL = `data:image/png;base64,${readFileSync(path.join(ASSETS_DIR, 'iseie-logo.png')).toString('base64')}`;
+// Sello institucional ISEIE (circular, con NIF B67799247).
+// Si el archivo no existe (no se ha subido), pasamos null al template y se omite.
+const ISEIE_SELLO_DATAURL = (() => {
+  try {
+    return `data:image/png;base64,${readFileSync(path.join(ASSETS_DIR, 'iseie-sello.png')).toString('base64')}`;
+  } catch {
+    return null;
+  }
+})();
+// Compat: legacy referencias a PSIKO_LOGO_DATAURL apuntan ahora al logo ISEIE.
+const PSIKO_LOGO_DATAURL = ISEIE_LOGO_DATAURL;
 
 // Fuentes embebidas como base64 (puppeteer bloquea fonts.googleapis.com para
 // evitar timeouts; @font-face con data: funciona en el navegador del modal y
@@ -89,58 +100,6 @@ async function htmlToPdf(html, filename, opts = {}) {
   return filePath;
 }
 
-// Footer template para puppeteer.pdf (multi-pagina). Reproduce la banda
-// rosa-palo del Canva original con email + LOPD info en blanco. Caveats de
-// puppeteer: font-size default es 0 (hay que setearlo explicito), y ciertos
-// bg colors necesitan -webkit-print-color-adjust para imprimirse.
-function buildInvoiceFooterTemplate() {
-  return `
-<style>
-  .footer-tpl {
-    width: 100%;
-    height: 40.8mm;
-    background: #DBC4C3 !important;
-    color: #fff;
-    padding: 2.5mm 6mm 2mm;
-    box-sizing: border-box;
-    text-align: center;
-    font-family: 'Plus Jakarta Sans', Helvetica, Arial, sans-serif;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
-  .footer-tpl .email { font-weight: 700; font-size: 14pt; letter-spacing: 0.3pt; margin-bottom: 2.5mm; }
-  .footer-tpl .lopd-title { font-weight: 700; font-size: 8.5pt; letter-spacing: 0.5pt; margin-bottom: 1mm; }
-  .footer-tpl .lopd-text { font-size: 8pt; line-height: 1.4; padding: 0 2mm; }
-  .footer-tpl .lopd-text p { margin: 0 0 1mm 0; }
-  .footer-tpl .lopd-text p:last-child { margin-bottom: 0; }
-</style>
-<div class="footer-tpl">
-  <div class="email">facturacion@psikoaprende.com</div>
-  <div class="lopd-title">INFORMACIÓN SOBRE PROTECCIÓN DE DATOS</div>
-  <div class="lopd-text">
-    <p>Los datos personales tratados para gestionar la relación contractual y, en su caso, para enviar información comercial por medios electrónicos, se conservarán hasta la finalización de la relación, la baja comercial o durante los plazos de retención legalmente establecidos.</p>
-    <p>Puede ejercer sus derechos de acceso, rectificación, supresión, limitación, oposición y portabilidad enviando su solicitud a la dirección postal del responsable o al correo electrónico info@psikoaprende.com</p>
-  </div>
-</div>`;
-}
-
-async function htmlToPdfLandscape(html, filename) {
-  await ensureDir();
-  const filePath = path.join(UPLOAD_DIR, filename);
-  // En prod (Linux) puede pasarse CHROME_PATH en env; en local Windows
-  // puppeteer (full package) trae Chrome bundleado y lo auto-detecta.
-  const launchOpts = { headless: 'new', args: CHROME_ARGS };
-  if (process.env.CHROME_PATH) launchOpts.executablePath = process.env.CHROME_PATH;
-  const browser = await puppeteer.launch(launchOpts);
-  try {
-    const page = await newPage(browser);
-    await page.setContent(html, { waitUntil: 'domcontentloaded', timeout: 15000 });
-    await page.pdf({ path: filePath, printBackground: true, format: 'A4', landscape: true });
-  } finally {
-    await browser.close();
-  }
-  return filePath;
-}
 
 // ============================================================
 // TEMPLATE: FACTURA
@@ -161,647 +120,36 @@ function detectDocType(doc) {
   return 'NIF';
 }
 
-export function buildInvoiceHtml(data) {
-  const {
-    numero, fecha,
-    emisor_nombre, emisor_nif, emisor_direccion, emisor_telefono,
-    cliente_nombre, cliente_dni, cliente_direccion,
-    lineas = [],
-    notas = '',
-    iva_pct = 21,
-    iva_exento = false,
-  } = data;
-
-  const subtotal = lineas.reduce((s, l) => s + (parseFloat(l.precio) * parseInt(l.cantidad || 1)), 0);
-  const iva = iva_exento ? 0 : subtotal * (iva_pct / 100);
-  const total = subtotal + iva;
-  const clienteDocLabel = detectDocType(cliente_dni);
-
-  // Formato fecha DD-MM-YYYY (matching el diseño Canva del usuario).
-  // fecha viene del form como ISO YYYY-MM-DD.
-  function formatFecha(iso) {
-    if (!iso) return '';
-    const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    return m ? `${m[3]}-${m[2]}-${m[1]}` : String(iso);
-  }
-  const fechaFmt = formatFecha(fecha);
-
-  const fmtEur = n => n.toFixed(2).replace('.', ',') + ' €';
-
-  // Renderizado pixel-perfect del pptx Canva. Coordenadas tomadas del archivo
-  // (EMU/36000 = mm) — slide A4 portrait 210x297mm. Capas top-to-bottom:
-  // 1) Banda rosa-palo full-width (#DBC4C3) en y=0-20mm.
-  // 2) Pentagon-house dropdown (#F2E6E5) colgando desde el top, x=125.8-184.5mm,
-  //    y=0-75mm, con clip-path. Contiene el logo + label "FACTURA NÚMERO" +
-  //    pill blanco con el número.
-  // 3) FACTURA + emisor (lado izquierdo, y=32-79mm).
-  // 4) DATOS DEL CLIENTE (y=87-130mm) + FECHA (top-right).
-  // 5) Tabla items con header rosa-palo (y=130.7-188.5mm).
-  // 6) Sello/Firma + Totals boxes (y=194-256mm), ambos con fondo #F2E6E5.
-  // 7) Banda rosa-palo footer full-width con email + LOPD info en blanco.
-  // Densidad de la tabla segun la cantidad de lineas — evita que la tabla
-  // empuje el sello/totales fuera del area disponible (130-256mm = 126mm).
-  // Espacio para items: 126mm - 12mm header - 65mm sello/totales = ~49mm.
-  // 9mm/fila => 5 lineas. Mas que eso entra modo compacto/denso.
-  const lineCount = lineas.length;
-  const tableDensityClass = lineCount > 12 ? 'dense' : lineCount > 6 ? 'compact' : '';
-
-  // La tabla crece con el numero real de lineas. Si no hay ninguna se muestra
-  // una fila placeholder vacia para que la tabla siga siendo visible.
-  const lineasHtml = (lineas.length > 0 ? lineas : [{ descripcion: '', cantidad: '', precio: '' }]).map((l) => {
-    const precio = parseFloat(l.precio || 0);
-    const cantidad = parseInt(l.cantidad || 0) || (l.descripcion ? 1 : '');
-    const totalLinea = precio && cantidad ? fmtEur(precio * cantidad) : '';
-    return `<tr>
-      <td class="col-desc">${l.descripcion || ''}</td>
-      <td class="col-num">${cantidad || ''}</td>
-      <td class="col-num">${precio ? fmtEur(precio) : ''}</td>
-      <td class="col-num">${totalLinea}</td>
-    </tr>`;
-  }).join('');
-
-  return `<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8"/>
-<style>
-  ${INVOICE_FONTS_CSS}
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body {
-    width: 210mm; min-height: 297mm;
-    font-family: 'Plus Jakarta Sans', 'Open Sans', 'Helvetica Neue', Arial, sans-serif;
-    color: #000;
-    background: #fff;
-    -webkit-font-smoothing: antialiased;
-  }
-  .page {
-    width: 210mm; height: 297mm; position: relative;
-    overflow: hidden;
-    background: #fff;
-  }
-
-  /* ── Top: banda rosa-palo full-width + pentagon dropdown con logo ── */
-  .top-band {
-    position: absolute; top: 0; left: 0; right: 0;
-    height: 20mm;
-    background: #DBC4C3;
-    z-index: 0;
-  }
-  .logo-drop {
-    position: absolute; top: 0; left: 125.8mm;
-    width: 58.7mm; height: 75.2mm;
-    background: #F2E6E5;
-    /* Pentagon: top-left, top-right, mid-right (86%), bottom-center (100%), mid-left (86%) */
-    clip-path: polygon(0 0, 100% 0, 100% 86%, 50% 100%, 0 86%);
-    z-index: 1;
-    text-align: center;
-  }
-  .logo-drop img {
-    width: 36mm; height: auto;
-    margin: 6mm auto 0;
-    display: block;
-    object-fit: contain;
-  }
-  .numero-label {
-    position: absolute; top: 40.2mm; left: 125.8mm;
-    width: 58.7mm;
-    text-align: center;
-    font-size: 13pt; font-weight: 700;
-    letter-spacing: 1.27pt;
-    color: #1a1a1a;
-    z-index: 2;
-  }
-  .numero-pill {
-    position: absolute; top: 49.1mm; left: 132.2mm;
-    width: 45.9mm; height: 10.9mm;
-    background: #fff;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 10.4pt; color: #000;
-    z-index: 2;
-  }
-
-  /* ── Left side: FACTURA title + emisor ── */
-  .factura-title {
-    position: absolute; top: 32mm; left: 14.3mm;
-    font-size: 23.9pt; font-weight: 700;
-    letter-spacing: 2.34pt;
-    color: #000;
-    z-index: 2;
-  }
-  .emisor-name {
-    position: absolute; top: 50.7mm; left: 15.5mm;
-    font-size: 11pt; letter-spacing: 1.07pt;
-    color: #000;
-    z-index: 2;
-    text-transform: uppercase;
-  }
-  .emisor-info {
-    position: absolute; top: 57.1mm; left: 14.3mm;
-    width: 90mm;
-    font-size: 10.4pt; line-height: 1.45;
-    letter-spacing: 1pt;
-    color: #000;
-    z-index: 2;
-  }
-  .emisor-info > div { margin-bottom: 0.6mm; }
-
-  /* ── FECHA (top-right) ── */
-  .fecha-line {
-    position: absolute; top: 82.7mm; left: 134mm;
-    font-size: 10.4pt; letter-spacing: 1pt;
-    color: #000;
-    z-index: 2;
-  }
-
-  /* ── DATOS DEL CLIENTE ── */
-  .cliente-label {
-    position: absolute; top: 87mm; left: 15.5mm;
-    font-size: 10.4pt; font-weight: 700;
-    letter-spacing: 1pt;
-    color: #000;
-    z-index: 2;
-  }
-  .cliente-info {
-    position: absolute; top: 93.8mm; left: 17.9mm;
-    width: 130mm;
-    font-size: 10.4pt; line-height: 1.45;
-    letter-spacing: 1pt;
-    color: #000;
-    z-index: 2;
-  }
-  .cliente-info > div { margin-bottom: 0.6mm; }
-
-  /* Area dinamica: tabla items + sello/totales. Position absolute en el page
-     pero por dentro usa flex column con margin-top auto para empujar el
-     bottom-row al pie. Asi N items crecen hacia abajo sin solapar el sello. */
-  .content-area {
-    position: absolute;
-    top: 130mm;
-    bottom: 41mm;
-    left: 14.5mm; right: 14.3mm;
-    display: flex;
-    flex-direction: column;
-    z-index: 2;
-  }
-  .items-table {
-    width: 100%;
-    border-collapse: collapse;
-    table-layout: fixed;
-    flex-shrink: 0;
-  }
-  .items-table thead th {
-    background: #DBC4C3;
-    padding: 3mm 0;
-    font-size: 10pt; font-weight: 700;
-    text-align: center;
-    color: #000;
-    letter-spacing: 0.3pt;
-    border: none;
-  }
-  .items-table tbody td {
-    border: 1px solid #737373;
-    border-top: none;
-    padding: 2.5mm 4mm;
-    font-size: 10.4pt;
-    color: #6B6B6B;
-    font-weight: 400;
-    vertical-align: middle;
-    height: 9mm;
-  }
-  .items-table tbody tr:first-child td { border-top: 1px solid #737373; }
-  .items-table .col-desc { text-align: left; }
-  .items-table .col-num { text-align: center; }
-  .items-table colgroup col:nth-child(1) { width: 72.4mm; }
-  .items-table colgroup col:nth-child(2) { width: 21.2mm; }
-  .items-table colgroup col:nth-child(3) { width: 44.2mm; }
-  .items-table colgroup col:nth-child(4) { width: 43.9mm; }
-
-  /* Modo compacto cuando hay muchas lineas — se aplica via clase para evitar
-     que la tabla empuje el sello/totales fuera del area disponible. */
-  .items-table.compact tbody td { padding: 1.5mm 4mm; font-size: 9pt; height: 6.5mm; }
-  .items-table.dense tbody td { padding: 1mm 3mm; font-size: 8.2pt; height: 5.5mm; }
-
-  /* ── Bottom: Sello/Firma + Totals (push to bottom of content-area) ── */
-  .bottom-row {
-    margin-top: auto;
-    padding-top: 6mm;
-    display: flex;
-    gap: 7mm;
-    align-items: flex-start;
-    flex-shrink: 0;
-  }
-  .sello-box {
-    flex: 1;
-    height: 55mm;
-    background: #F2E6E5;
-    border: 1px solid #686868;
-    position: relative;
-  }
-  .sello-box::after {
-    content: "Sello / Firma";
-    position: absolute; bottom: 3mm; right: 4mm;
-    font-size: 8pt; color: #b4969a;
-    font-style: italic;
-  }
-  .totals-wrapper {
-    width: 88mm;
-    flex-shrink: 0;
-  }
-  .totals-box {
-    width: 100%;
-    background: #F2E6E5;
-    border: 1px solid #686868;
-    padding: 2mm 3mm;
-    font-size: 12pt;
-    color: #000;
-  }
-  .totals-row {
-    display: flex; justify-content: space-between;
-    padding: 0.4mm 1mm;
-  }
-  .totals-row.total { font-weight: 700; }
-  .iva-exento-note {
-    margin-top: 2mm;
-    font-size: 7.5pt; font-style: italic;
-    color: #555;
-    line-height: 1.3;
-  }
-
-  /* ── Footer rosa-palo (email + LOPD blanco dentro) ── */
-  /* Altura 40.8mm del pptx. Email + LOPD calibrados para llenar la banda
-     respetando proporciones del Canva original (15pt email, 9pt LOPD). */
-  .footer-band {
-    position: absolute; bottom: 0; left: 0; right: 0;
-    height: 40.8mm;
-    background: #DBC4C3;
-    color: #fff;
-    padding: 2.5mm 6mm 2mm;
-    text-align: center;
-    z-index: 1;
-  }
-  .footer-email {
-    font-weight: 700;
-    font-size: 14pt;
-    letter-spacing: 0.3pt;
-    margin-bottom: 2.5mm;
-  }
-  .lopd-title {
-    font-weight: 700;
-    font-size: 8.5pt;
-    letter-spacing: 0.5pt;
-    margin-bottom: 1mm;
-  }
-  .lopd-text {
-    font-size: 8pt;
-    line-height: 1.4;
-    padding: 0 2mm;
-  }
-  .lopd-text p { margin-bottom: 1mm; }
-  .lopd-text p:last-child { margin-bottom: 0; }
-</style>
-</head>
-<body>
-  <div class="page">
-
-    <div class="top-band"></div>
-    <div class="logo-drop">
-      <img src="${PSIKO_LOGO_DATAURL}" alt="Psikoaprende"/>
-    </div>
-    <div class="numero-label">FACTURA NÚMERO</div>
-    <div class="numero-pill">${numero || ''}</div>
-
-    <div class="factura-title">FACTURA</div>
-    <div class="emisor-name">${emisor_nombre || ''}</div>
-    <div class="emisor-info">
-      ${emisor_nif ? `<div>${emisor_nif}</div>` : ''}
-      ${(emisor_direccion || '').split('\n').filter(Boolean).map(l => `<div>${l}</div>`).join('')}
-      ${emisor_telefono ? `<div>Tel: ${emisor_telefono}</div>` : ''}
-    </div>
-
-    <div class="fecha-line">FECHA: ${fechaFmt}</div>
-
-    <div class="cliente-label">DATOS DEL CLIENTE</div>
-    <div class="cliente-info">
-      ${cliente_nombre ? `<div>Nombre o Razón Social: ${cliente_nombre}</div>` : ''}
-      ${cliente_dni ? `<div>${clienteDocLabel}: ${cliente_dni}</div>` : ''}
-      ${cliente_direccion ? `<div>Dirección: ${cliente_direccion}</div>` : ''}
-    </div>
-
-    <div class="content-area">
-      <table class="items-table ${tableDensityClass}">
-        <colgroup><col/><col/><col/><col/></colgroup>
-        <thead>
-          <tr>
-            <th>DESCRIPCIÓN</th>
-            <th>CANTIDAD</th>
-            <th>PRECIO</th>
-            <th>TOTAL</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${lineasHtml}
-        </tbody>
-      </table>
-
-      <div class="bottom-row">
-        <div class="sello-box"></div>
-        <div class="totals-wrapper">
-          <div class="totals-box">
-            <div class="totals-row"><span>Sub Total</span><span>${fmtEur(subtotal)}</span></div>
-            <div class="totals-row"><span>${iva_exento ? 'IVA (exento)' : `IVA (${iva_pct}%)`}</span><span>${fmtEur(iva)}</span></div>
-            <div class="totals-row total"><span>Total</span><span>${fmtEur(total)}</span></div>
-          </div>
-          ${iva_exento ? `<div class="iva-exento-note">Operación exenta de IVA conforme al Art. 20.1.9° de la Ley 37/1992 del IVA (servicios educativos).</div>` : ''}
-        </div>
-      </div>
-    </div>
-
-    <div class="footer-band">
-      <div class="footer-email">facturacion@psikoaprende.com</div>
-      <div class="lopd-title">INFORMACIÓN SOBRE PROTECCIÓN DE DATOS</div>
-      <div class="lopd-text">
-        <p>Los datos personales tratados para gestionar la relación contractual y, en su caso, para enviar información comercial por medios electrónicos, se conservarán hasta la finalización de la relación, la baja comercial o durante los plazos de retención legalmente establecidos.</p>
-        <p>Puede ejercer sus derechos de acceso, rectificación, supresión, limitación, oposición y portabilidad enviando su solicitud a la dirección postal del responsable o al correo electrónico info@psikoaprende.com</p>
-      </div>
-    </div>
-
-  </div>
-</body>
-</html>`;
-}
+import { buildIseieInvoiceHtml, ISEIE_EMISOR } from './_iseie_invoice_template.js';
 
 // ============================================================
-// TEMPLATE: FACTURA MULTI-PAGINA (F4-005)
+// TEMPLATE: FACTURA ISEIE (single page, branding institucional)
 // ============================================================
-// Variante para facturas con >22 lineas. Reescribe el layout para que el
-// flujo natural pagine en N paginas:
-//  - Pagina 1: header completo (logo, factura, emisor, fecha, cliente) +
-//    inicio de tabla.
-//  - Paginas 2..N-1: solo continuacion de tabla con thead repetido.
-//  - Pagina N: ultimo bloque de tabla + sello/firma + totales.
-//  - Footer rosa-palo + LOPD: en cada pagina via puppeteer footerTemplate.
+// Replica los 3 layouts oficiales que el cliente proporcionó:
+//   tipo = 'persona_natural' | 'empresa' | 'contado'
 //
-// Comparte estilos con buildInvoiceHtml en lo posible. Diferencias clave:
-//  - .page no tiene height fijo ni overflow:hidden.
-//  - .content-area usa margin (no absolute) y deja al flujo paginar.
-//  - .items-table thead { display: table-header-group } + tr/td con
-//    page-break-inside: avoid.
-//  - .bottom-row con page-break-inside: avoid + break-before: avoid para
-//    no separarse de la ultima fila si cabe junto.
-//  - No hay .footer-band inline; lo inyecta puppeteer.
-export function buildInvoiceHtmlMultiPage(data) {
-  const {
-    numero, fecha,
-    emisor_nombre, emisor_nif, emisor_direccion, emisor_telefono,
-    cliente_nombre, cliente_dni, cliente_direccion,
-    lineas = [],
-    iva_pct = 21,
-    iva_exento = false,
-  } = data;
-
-  const subtotal = lineas.reduce((s, l) => s + (parseFloat(l.precio) * parseInt(l.cantidad || 1)), 0);
-  const iva = iva_exento ? 0 : subtotal * (iva_pct / 100);
-  const total = subtotal + iva;
-  const clienteDocLabel = detectDocType(cliente_dni);
-
-  function formatFecha(iso) {
-    if (!iso) return '';
-    const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    return m ? `${m[3]}-${m[2]}-${m[1]}` : String(iso);
-  }
-  const fechaFmt = formatFecha(fecha);
-  const fmtEur = n => n.toFixed(2).replace('.', ',') + ' €';
-
-  const lineasHtml = lineas.map((l) => {
-    const precio = parseFloat(l.precio || 0);
-    const cantidad = parseInt(l.cantidad || 0) || (l.descripcion ? 1 : '');
-    const totalLinea = precio && cantidad ? fmtEur(precio * cantidad) : '';
-    return `<tr>
-      <td class="col-desc">${l.descripcion || ''}</td>
-      <td class="col-num">${cantidad || ''}</td>
-      <td class="col-num">${precio ? fmtEur(precio) : ''}</td>
-      <td class="col-num">${totalLinea}</td>
-    </tr>`;
-  }).join('');
-
-  return `<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8"/>
-<style>
-  ${INVOICE_FONTS_CSS}
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  @page { size: A4; margin: 0; }
-  html, body {
-    width: 210mm;
-    font-family: 'Plus Jakarta Sans', 'Open Sans', 'Helvetica Neue', Arial, sans-serif;
-    color: #000;
-    background: #fff;
-    -webkit-font-smoothing: antialiased;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
-  .page { width: 210mm; position: relative; background: #fff; }
-
-  /* Cabecera de la factura — visible solo en pagina 1 (flujo natural).
-     Conserva el bloque absolute del template single-page para mantener el
-     pixel-perfect del Canva, pero envuelta en un wrapper de altura fija
-     que ocupa los primeros 130mm del flujo de la pagina 1. */
-  .header-zone { position: relative; height: 130mm; flex-shrink: 0; }
-  .top-band {
-    position: absolute; top: 0; left: 0; right: 0;
-    height: 20mm; background: #DBC4C3;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
-  .logo-drop {
-    position: absolute; top: 0; left: 125.8mm;
-    width: 58.7mm; height: 75.2mm;
-    background: #F2E6E5;
-    clip-path: polygon(0 0, 100% 0, 100% 86%, 50% 100%, 0 86%);
-    text-align: center;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
-  .logo-drop img { width: 36mm; height: auto; margin: 6mm auto 0; display: block; object-fit: contain; }
-  .numero-label {
-    position: absolute; top: 40.2mm; left: 125.8mm; width: 58.7mm;
-    text-align: center; font-size: 13pt; font-weight: 700;
-    letter-spacing: 1.27pt; color: #1a1a1a;
-  }
-  .numero-pill {
-    position: absolute; top: 49.1mm; left: 132.2mm;
-    width: 45.9mm; height: 10.9mm;
-    background: #fff;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 10.4pt;
-  }
-  .factura-title {
-    position: absolute; top: 32mm; left: 14.3mm;
-    font-size: 23.9pt; font-weight: 700; letter-spacing: 2.34pt; color: #000;
-  }
-  .emisor-name {
-    position: absolute; top: 50.7mm; left: 15.5mm;
-    font-size: 11pt; letter-spacing: 1.07pt; text-transform: uppercase;
-  }
-  .emisor-info {
-    position: absolute; top: 57.1mm; left: 14.3mm;
-    width: 90mm; font-size: 10.4pt; line-height: 1.45; letter-spacing: 1pt;
-  }
-  .emisor-info > div { margin-bottom: 0.6mm; }
-  .fecha-line {
-    position: absolute; top: 82.7mm; left: 134mm;
-    font-size: 10.4pt; letter-spacing: 1pt;
-  }
-  .cliente-label {
-    position: absolute; top: 87mm; left: 15.5mm;
-    font-size: 10.4pt; font-weight: 700; letter-spacing: 1pt;
-  }
-  .cliente-info {
-    position: absolute; top: 93.8mm; left: 17.9mm;
-    width: 130mm; font-size: 10.4pt; line-height: 1.45; letter-spacing: 1pt;
-  }
-  .cliente-info > div { margin-bottom: 0.6mm; }
-
-  /* Zona de contenido (tabla + sello/totales). Flujo natural — pagina sola. */
-  .content-zone { padding: 0 14.3mm 0 14.5mm; }
-  .items-table {
-    width: 100%; border-collapse: collapse; table-layout: fixed;
-  }
-  .items-table colgroup col:nth-child(1) { width: 72.4mm; }
-  .items-table colgroup col:nth-child(2) { width: 21.2mm; }
-  .items-table colgroup col:nth-child(3) { width: 44.2mm; }
-  .items-table colgroup col:nth-child(4) { width: 43.9mm; }
-  /* table-header-group hace que el thead se repita en cada pagina nueva. */
-  .items-table thead { display: table-header-group; }
-  .items-table thead th {
-    background: #DBC4C3;
-    padding: 3mm 0;
-    font-size: 10pt; font-weight: 700; text-align: center;
-    color: #000; letter-spacing: 0.3pt; border: none;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
-  .items-table tbody td {
-    border: 1px solid #737373; border-top: none;
-    padding: 2.5mm 4mm; font-size: 10.4pt; color: #6B6B6B;
-    font-weight: 400; vertical-align: middle; height: 9mm;
-  }
-  .items-table tbody tr:first-child td { border-top: 1px solid #737373; }
-  .items-table tbody tr { page-break-inside: avoid; }
-  .items-table .col-desc { text-align: left; }
-  .items-table .col-num { text-align: center; }
-
-  /* Sello + totales — pagina dedicada al final, anclados al pie. Asi la
-     posicion es la misma siempre (matching el Canva original) en lugar de
-     flotar donde acabe la tabla. La altura del wrapper = A4 (297mm) menos
-     el footer-band del puppeteer footerTemplate (40.8mm) = 256.2mm. */
-  .last-page {
-    page-break-before: always;
-    break-before: page;
-    height: 256.2mm;
-    padding: 0 14.3mm 0 14.5mm;
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-end;
-  }
-  .bottom-row {
-    display: flex;
-    gap: 7mm;
-    align-items: flex-start;
-    page-break-inside: avoid;
-    break-inside: avoid;
-  }
-  .sello-box {
-    flex: 1; height: 55mm;
-    background: #F2E6E5; border: 1px solid #686868;
-    position: relative;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
-  .sello-box::after {
-    content: "Sello / Firma";
-    position: absolute; bottom: 3mm; right: 4mm;
-    font-size: 8pt; color: #b4969a; font-style: italic;
-  }
-  .totals-wrapper { width: 88mm; flex-shrink: 0; }
-  .totals-box {
-    width: 100%;
-    background: #F2E6E5; border: 1px solid #686868;
-    padding: 2mm 3mm; font-size: 12pt; color: #000;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
-  .totals-row { display: flex; justify-content: space-between; padding: 0.4mm 1mm; }
-  .totals-row.total { font-weight: 700; }
-  .iva-exento-note {
-    margin-top: 2mm; font-size: 7.5pt; font-style: italic;
-    color: #555; line-height: 1.3;
-  }
-</style>
-</head>
-<body>
-  <div class="page">
-    <div class="header-zone">
-      <div class="top-band"></div>
-      <div class="logo-drop">
-        <img src="${PSIKO_LOGO_DATAURL}" alt="Psikoaprende"/>
-      </div>
-      <div class="numero-label">FACTURA NÚMERO</div>
-      <div class="numero-pill">${numero || ''}</div>
-
-      <div class="factura-title">FACTURA</div>
-      <div class="emisor-name">${emisor_nombre || ''}</div>
-      <div class="emisor-info">
-        ${emisor_nif ? `<div>${emisor_nif}</div>` : ''}
-        ${(emisor_direccion || '').split('\n').filter(Boolean).map(l => `<div>${l}</div>`).join('')}
-        ${emisor_telefono ? `<div>Tel: ${emisor_telefono}</div>` : ''}
-      </div>
-
-      <div class="fecha-line">FECHA: ${fechaFmt}</div>
-
-      <div class="cliente-label">DATOS DEL CLIENTE</div>
-      <div class="cliente-info">
-        ${cliente_nombre ? `<div>Nombre o Razón Social: ${cliente_nombre}</div>` : ''}
-        ${cliente_dni ? `<div>${clienteDocLabel}: ${cliente_dni}</div>` : ''}
-        ${cliente_direccion ? `<div>Dirección: ${cliente_direccion}</div>` : ''}
-      </div>
-    </div>
-
-    <div class="content-zone">
-      <table class="items-table">
-        <colgroup><col/><col/><col/><col/></colgroup>
-        <thead>
-          <tr>
-            <th>DESCRIPCIÓN</th>
-            <th>CANTIDAD</th>
-            <th>PRECIO</th>
-            <th>TOTAL</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${lineasHtml}
-        </tbody>
-      </table>
-    </div>
-
-    <div class="last-page">
-      <div class="bottom-row">
-        <div class="sello-box"></div>
-        <div class="totals-wrapper">
-          <div class="totals-box">
-            <div class="totals-row"><span>Sub Total</span><span>${fmtEur(subtotal)}</span></div>
-            <div class="totals-row"><span>${iva_exento ? 'IVA (exento)' : `IVA (${iva_pct}%)`}</span><span>${fmtEur(iva)}</span></div>
-            <div class="totals-row total"><span>Total</span><span>${fmtEur(total)}</span></div>
-          </div>
-          ${iva_exento ? `<div class="iva-exento-note">Operación exenta de IVA conforme al Art. 20.1.9° de la Ley 37/1992 del IVA (servicios educativos).</div>` : ''}
-        </div>
-      </div>
-    </div>
-  </div>
-</body>
-</html>`;
+// Reemplaza el template heredado pixel-perfect Canva del CRM hermano
+// (legacy CRM hermano rosa-palo). El nuevo template es institucional: emisor a la
+// izquierda, logo ISEIE arriba a la derecha, número/fecha, FACTURA A:
+// (condicional por tipo), tabla descripción-importe, totales con IVA 0%
+// exento, sello circular bottom-right y datos registrales al pie.
+export function buildInvoiceHtml(data) {
+  return buildIseieInvoiceHtml(data, {
+    logoDataUrl: ISEIE_LOGO_DATAURL,
+    selloDataUrl: ISEIE_SELLO_DATAURL,
+    fontsCss: INVOICE_FONTS_CSS,
+  });
 }
+
+// El multi-page del legacy CRM hermano ya no aplica: las facturas ISEIE
+// son siempre 1 página (1-2 líneas de servicio académico). Si el HTML
+// excede 297mm, el navegador parte naturalmente. Reutiliza el mismo render.
+export function buildInvoiceHtmlMultiPage(data) {
+  return buildInvoiceHtml(data);
+}
+
+void ISEIE_EMISOR; // re-export silencioso para evitar dead-code warning.
+
 
 // Preview factura: lienzo A4 centrado sobre fondo gris (paridad con cert preview).
 // La pagina A4 (210x297mm) puede no caber en iframes estrechos, asi que un
@@ -816,9 +164,14 @@ export function buildInvoicePreviewHtml(data) {
   const originalStyles = styleMatch ? styleMatch[1] : '';
   const bodyContent = bodyMatch ? bodyMatch[1] : '';
 
+  // Limpieza: quita las reglas `html, body { ... }` y `body { ... }` del
+  // template porque el wrapper del preview impone sus propias reglas en el
+  // body (display:flex, padding, etc.). Usamos lookbehind para NO consumir
+  // la `}` del bloque anterior — antes era `(?:^|\n|\})` que se comía la
+  // llave previa y dejaba el CSS desbalanceado, rompiendo todo el parseo.
   const stylesClean = originalStyles
-    .replace(/(?:^|\n|\})\s*html\s*,\s*body[^{}]*\{[^{}]*\}/g, '')
-    .replace(/(?:^|\n|\})\s*body[^{}]*\{[^{}]*\}/g, '');
+    .replace(/(?<=^|\n|\})\s*html\s*,\s*body[^{}]*\{[^{}]*\}/g, '')
+    .replace(/(?<=^|\n|\})\s*body[^{}]*\{[^{}]*\}/g, '');
 
   return `<!DOCTYPE html>
 <html lang="es">
@@ -926,11 +279,11 @@ const CERT_WAVES_SVG = `
 // ============================================================
 // TEMPLATE: CERTIFICADO página 1
 // ============================================================
-// El fondo `cert-bg-p1.png` (extraído del Canva original) ya trae bakeados:
-// el logo PSIKOAPRENDE en la cabecera, las firmas + nombres de Carlos Saiz
-// (Director) y Mireia Jareño (Responsable de Formación), y la línea de
-// firma del alumno (vacía — el alumno firma a mano). Aquí solo overlayeamos
-// el texto dinámico (nombre, DNI, curso, fechas, aval).
+// Los fondos `cert-bg-p1.png` y `cert-bg-p2.png` heredados del CRM hermano
+// traen elementos visuales bakeados (logo + firmas) que NO aplican a ISEIE.
+// Hay que sustituirlos por los fondos de certificado ISEIE cuando lleguen.
+// Mientras tanto, este template overlaya el texto dinámico (nombre, DNI,
+// curso, fechas) y omite la línea de aval que mencionaba entidades hermanas.
 
 export async function buildCertP1Html(data) {
   const bgUrl = await imgBase64('cert-bg-p1.png');
@@ -1006,7 +359,7 @@ export async function buildCertP1Html(data) {
   </div>
 
   <div class="t aval">
-    Este certificado ha sido expedido por Psiko Aprende y avalado por ISEIE Innovation School, e Hispamedic
+    Este certificado ha sido expedido por ISEIE Innovation School S.L.
   </div>
 
 </div>
@@ -1119,30 +472,13 @@ export async function buildCertP2Html(data) {
 }
 
 // ============================================================
-// Generar PDF factura — single-page o multi-page segun cantidad de lineas
+// Generar PDF factura — single page (template ISEIE)
 // ============================================================
-// F4-005: cuando lineas <= MAX_SINGLE_PAGE (22) seguimos con el layout
-// absolute pixel-perfect del Canva. Cuando hay mas items, el HTML se
-// reestructura a flujo natural: la tabla pagina sola con `thead` repetido,
-// el footer rosa-palo se inyecta via `puppeteer.pdf({ footerTemplate })`
-// para aparecer en cada pagina, y el sello+totales caen en la ultima pagina
-// con `page-break-inside: avoid`.
-const MAX_SINGLE_PAGE = 22;
-
+// El template ISEIE incluye datos registrales en el propio HTML, sin
+// necesidad de footerTemplate de puppeteer. Las facturas son siempre 1
+// página (1-2 líneas de servicio académico).
 export async function generateInvoicePdf(data, filename) {
-  const lineCount = (data?.lineas || []).length;
-  const multiPage = lineCount > MAX_SINGLE_PAGE;
-
-  if (!multiPage) {
-    return htmlToPdf(buildInvoiceHtml(data), filename);
-  }
-
-  return htmlToPdf(buildInvoiceHtmlMultiPage(data), filename, {
-    displayHeaderFooter: true,
-    headerTemplate: '<span></span>',
-    footerTemplate: buildInvoiceFooterTemplate(),
-    margin: { top: '0', right: '0', bottom: '40.8mm', left: '0' },
-  });
+  return htmlToPdf(buildInvoiceHtml(data), filename);
 }
 
 export async function generateCertificatePdf(data, filename) {

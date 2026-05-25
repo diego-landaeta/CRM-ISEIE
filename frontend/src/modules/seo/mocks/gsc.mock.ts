@@ -7,7 +7,7 @@ interface SampleProjectMetrics {
 }
 
 const SAMPLE_METRICS: Record<string | number, SampleProjectMetrics> = {
-  // Psiko Aprende
+  // ISEIE España (mock SEO data)
   1: {
     totals: { clicks: 12_480, impressions: 358_400, ctr: 3.48, position: 12.4 },
     queries: [

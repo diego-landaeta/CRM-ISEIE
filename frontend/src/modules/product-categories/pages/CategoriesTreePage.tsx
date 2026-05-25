@@ -25,6 +25,8 @@ import {
   CheckCircle,
   WarningCircle,
 } from '@phosphor-icons/react';
+import { toast } from '@/shared/hooks/useToast';
+import { useConfirm } from '@/shared/components/ui/useConfirm';
 
 type SourceFilter = 'all' | 'manual' | 'wc' | 'wp_menu';
 
@@ -249,6 +251,7 @@ export default function CategoriesTreePage() {
   // el polling devolvera 404 y el banner permanecera oculto.
   const [sync, setSync] = useState<WcRunStatus | null>(null);
   const [syncStarting, setSyncStarting] = useState(false);
+  const confirm = useConfirm();
 
   useEffect(() => {
     if (!activeProject?.id) return;
@@ -278,7 +281,7 @@ export default function CategoriesTreePage() {
       const s = await getCurrentSyncStatus(activeProject.id);
       setSync(s);
     } catch (e) {
-      alert(`No se pudo iniciar el sync: ${(e as Error).message}`);
+      toast({ title: 'No se pudo iniciar el sync', description: (e as Error).message, variant: 'destructive' });
     } finally {
       setSyncStarting(false);
     }
@@ -316,12 +319,12 @@ export default function CategoriesTreePage() {
     const msg = node.children.length > 0
       ? `"${node.nombre}" tiene ${node.children.length} subcategorias. Borrar de todas formas?`
       : `Borrar "${node.nombre}"?`;
-    if (!window.confirm(msg)) return;
+    if (!(await confirm({ title: 'Borrar categoría', message: msg, tone: 'destructive', confirmLabel: 'Borrar' }))) return;
     try {
       await deleteCategory(node.id);
       await reload();
     } catch (e) {
-      alert(`Error: ${(e as Error).message}`);
+      toast({ title: 'Error', description: (e as Error).message, variant: 'destructive' });
     }
   }
   async function handleSubmit(nombre: string) {
@@ -340,7 +343,7 @@ export default function CategoriesTreePage() {
       setForm(null);
       await reload();
     } catch (e) {
-      alert(`Error: ${(e as Error).message}`);
+      toast({ title: 'Error', description: (e as Error).message, variant: 'destructive' });
     } finally {
       setSaving(false);
     }

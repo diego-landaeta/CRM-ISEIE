@@ -8,6 +8,7 @@ import InstallmentsDialog from './InstallmentsDialog';
 import EditConversionDialog from './EditConversionDialog';
 import { Plus, Receipt, CreditCard, Trash, WarningCircle, CheckCircle, ArrowCounterClockwise, Coins, PencilSimple } from '@phosphor-icons/react';
 import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
+import { useConfirm } from '@/shared/components/ui/useConfirm';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { formatCurrency, formatDate } from '@/shared/lib/format';
 
@@ -35,6 +36,7 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
   const [pendingConversion, setPendingConversion] = useState<number | null>(null);
   const [deleteReason, setDeleteReason] = useState<string>('duplicada');
   const [deleteMotivo, setDeleteMotivo] = useState<string>('');
+  const confirm = useConfirm();
 
   async function load(): Promise<void> {
     if (!lead?.id) return;
@@ -52,7 +54,7 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
   useEffect(() => { load(); }, [lead?.id]);
 
   async function handleDeleteRefund(refundId: number): Promise<void> {
-    if (!confirm('¿Eliminar esta devolución? La operación es irreversible.')) return;
+    if (!(await confirm({ title: 'Eliminar devolución', message: '¿Eliminar esta devolución? La operación es irreversible.', tone: 'destructive', confirmLabel: 'Eliminar' }))) return;
     try {
       await conversionsApi.removeRefund(refundId);
       toast({ title: 'Devolución eliminada' });

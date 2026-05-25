@@ -5,6 +5,7 @@ import {
 } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
+import { useConfirm } from '@/shared/components/ui/useConfirm';
 
 interface MakeWebhook {
   id: number;
@@ -75,6 +76,7 @@ export default function MakeWebhookDetailPage() {
   const [savingLabel, setSavingLabel] = useState(false);
   const [newField, setNewField] = useState('');
   const [showSecret, setShowSecret] = useState(false);
+  const confirm = useConfirm();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -135,7 +137,7 @@ export default function MakeWebhookDetailPage() {
   }
 
   async function rotateSecret() {
-    if (!confirm('Rotar el secret? Make dejara de funcionar hasta que actualices el header X-Make-Secret en tu escenario.')) return;
+    if (!(await confirm({ title: 'Rotar secret', message: 'Rotar el secret? Make dejara de funcionar hasta que actualices el header X-Make-Secret en tu escenario.', tone: 'warning', confirmLabel: 'Rotar' }))) return;
     try {
       const res = await client.post(`/make-webhooks/${id}/rotate-secret`, {});
       if (res.success) {
@@ -148,7 +150,7 @@ export default function MakeWebhookDetailPage() {
   }
 
   async function deleteHook() {
-    if (!confirm('Eliminar este conector? Make dejara de poder enviar leads aqui.')) return;
+    if (!(await confirm({ title: 'Eliminar conector', message: 'Eliminar este conector? Make dejara de poder enviar leads aqui.', tone: 'destructive', confirmLabel: 'Eliminar' }))) return;
     await client.delete(`/make-webhooks/${id}`);
     navigate('/make-webhooks');
   }

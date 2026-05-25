@@ -19,30 +19,29 @@ y vuelve al resto cuando necesites un detalle.
 3. [Acceso e inicio de sesión](#3-acceso-e-inicio-de-sesión)
 4. [Primer día en el CRM](#4-primer-día-en-el-crm)
 5. [Tour de la interfaz](#5-tour-de-la-interfaz)
-6. [Multi-país: cambiar de proyecto](#6-multi-país-cambiar-de-proyecto)
-7. [Dashboard](#7-dashboard)
-8. [Prospectos (leads)](#8-prospectos-leads)
-9. [Pipeline de ventas](#9-pipeline-de-ventas)
-10. [Conversión a venta](#10-conversión-a-venta)
-11. [Clientes](#11-clientes)
-12. [Productos y categorías](#12-productos-y-categorías)
-13. [Matrículas](#13-matrículas)
-14. [Contabilidad](#14-contabilidad)
-15. [Comisiones](#15-comisiones)
-16. [Nóminas](#16-nóminas)
-17. [Documentos](#17-documentos)
-18. [Formularios públicos](#18-formularios-públicos)
-19. [Captación: WooCommerce y Make](#19-captación-woocommerce-y-make)
-20. [Email automatizado (secuencias y plantillas)](#20-email-automatizado-secuencias-y-plantillas)
-21. [Reportes](#21-reportes)
-22. [Notificaciones y actividad](#22-notificaciones-y-actividad)
-23. [Configuración general](#23-configuración-general)
-24. [Roles y administración de usuarios](#24-roles-y-administración-de-usuarios)
-25. [Atajos de teclado](#25-atajos-de-teclado)
-26. [Buenas prácticas](#26-buenas-prácticas)
-27. [Resolución de problemas](#27-resolución-de-problemas)
-28. [Glosario](#28-glosario)
-29. [Soporte](#29-soporte)
+6. [Dashboard](#6-dashboard)
+7. [Prospectos (leads)](#7-prospectos-leads)
+8. [Pipeline de ventas](#8-pipeline-de-ventas)
+9. [Conversión a venta](#9-conversión-a-venta)
+10. [Clientes](#10-clientes)
+11. [Productos y categorías](#11-productos-y-categorías)
+12. [Matrículas](#12-matrículas)
+13. [Contabilidad](#13-contabilidad)
+14. [Comisiones](#14-comisiones)
+15. [Nóminas](#15-nóminas)
+16. [Documentos](#16-documentos)
+17. [Formularios públicos](#17-formularios-públicos)
+18. [Captación: WooCommerce y Make](#18-captación-woocommerce-y-make)
+19. [Email automatizado (secuencias y plantillas)](#19-email-automatizado-secuencias-y-plantillas)
+20. [Reportes](#20-reportes)
+21. [Notificaciones y actividad](#21-notificaciones-y-actividad)
+22. [Configuración general](#22-configuración-general)
+23. [Roles y administración de usuarios](#23-roles-y-administración-de-usuarios)
+24. [Atajos de teclado](#24-atajos-de-teclado)
+25. [Buenas prácticas](#25-buenas-prácticas)
+26. [Resolución de problemas](#26-resolución-de-problemas)
+27. [Glosario](#27-glosario)
+28. [Soporte](#28-soporte)
 
 ---
 
@@ -59,11 +58,8 @@ ciclo del estudiante**:
 - Gestión de **cobros, comisiones, nóminas y contabilidad** del instituto.
 - Reportes operativos y financieros consolidados.
 
-ISEIE opera en **11 países** (España, México, Colombia, Chile, Ecuador,
-Perú, Panamá, Costa Rica, Argentina, Brasil, China). Cada país es un
-**proyecto** independiente dentro del CRM, con sus propios prospectos,
-productos, precios y equipo. Tú verás sólo los proyectos a los que se te
-ha dado acceso.
+El CRM trabaja con un único proyecto **ISEIE** que consolida toda la
+actividad comercial (prospectos, productos, ventas, cobros, gestores).
 
 ### Lo que no encontrarás aquí
 
@@ -82,8 +78,8 @@ Cuatro roles definen qué puede ver y hacer cada usuario:
 
 | Rol | Para quién | Puede |
 |---|---|---|
-| **Superadmin** | Dirección + equipo técnico | Todo en todos los proyectos: usuarios, roles, integraciones, datos sensibles, auditoría completa. |
-| **Admin** | Coordinador de país | Todo en su proyecto: leads, productos, precios, contabilidad, comisiones, nóminas, configuración. |
+| **Superadmin** | Dirección + equipo técnico | Todo el CRM: usuarios, roles, integraciones, datos sensibles, auditoría completa. |
+| **Admin** | Coordinación general | Leads, productos, precios, contabilidad, comisiones, nóminas y configuración. |
 | **Gestor** | Comerciales / asesores | Sus prospectos asignados, conversión, ventas; sin acceso a contabilidad ni administración. |
 | **Soporte** | Atención al alumno post-venta | Lectura amplia (ve todos los leads/clientes), sin permisos de edición masiva ni finanzas. |
 
@@ -142,9 +138,7 @@ Un checklist de 10 minutos para tu primer login:
 - [ ] **Cambia el tema** (claro / oscuro) desde tu menú de usuario si te
   resulta más cómodo.
 - [ ] **Revisa tu perfil** → `/profile`: comprueba nombre, email, avatar.
-- [ ] **Confirma tu país asignado** en el switcher de proyecto (esquina
-  superior izquierda).
-- [ ] **Explora el Dashboard** para ver el estado del país.
+- [ ] **Explora el Dashboard** para ver el estado del CRM.
 - [ ] **Abre Prospectos** → filtra por "Asignados a mí" si eres gestor.
 - [ ] **Abre el manual** desde `/manual` para tener una referencia visual.
 - [ ] **Anota tus dudas** y consúltalas a tu coordinador en lugar de
@@ -158,9 +152,6 @@ Un checklist de 10 minutos para tu primer login:
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │ [LOGO ISEIE] [Beta]   ⛶                                          │
-│ ┌──────────┐                                                     │
-│ │ Proyecto │   ← switcher de país (ver §6)                       │
-│ └──────────┘                                                     │
 │ 🔍 Buscar… [Ctrl K]   ← spotlight (próximamente)                 │
 │ ─────────                                                        │
 │ PRINCIPAL                                                        │
@@ -197,8 +188,6 @@ Un checklist de 10 minutos para tu primer login:
 
 - **Logo + badge BETA**: estamos en versión 1.0 productiva pero esperamos
   feedback continuo. Si ves algo raro, repórtalo (§29).
-- **Switcher de proyecto**: cambia entre los países a los que tienes
-  acceso. Tu selección se recuerda entre sesiones.
 - **Búsqueda global**: el atajo `Ctrl K` está reservado; el spotlight se
   añadirá próximamente.
 - **Sidebar colapsable** (escritorio): pulsa la flecha junto al logo para
@@ -213,55 +202,27 @@ Un checklist de 10 minutos para tu primer login:
 ### 5.2 Modo oscuro
 
 ISEIE tiene una paleta corporativa **navy + verde**. El modo oscuro está
-optimizado para reducir fatiga visual en jornadas largas. Algunos
-proyectos tienen color primario personalizado (España rojo, México verde,
-etc.); en modo oscuro estos colores se aclaran automáticamente para
-mantener legibilidad.
+optimizado para reducir fatiga visual en jornadas largas.
 
 ---
 
-## 6. Multi-país: cambiar de proyecto
-
-ISEIE opera con un proyecto por país. En el switcher verás sólo los que
-te han asignado.
-
-**Para cambiar**:
-
-1. Pulsa el bloque con la bandera y nombre del país (esquina superior
-   izquierda).
-2. Selecciona el proyecto destino.
-3. Toda la app se recarga con los datos del nuevo país. Tus filtros,
-   pestañas y vistas vuelven al estado inicial.
-
-> **Importante**: las acciones (crear lead, registrar venta, etc.) se
-> guardan en el **proyecto activo** en ese momento. Si te equivocas y
-> registras una venta en el país incorrecto, un admin puede moverla, pero
-> es trámite — mejor confirmar antes.
-
-### Vista "Todos los proyectos" (sólo superadmin)
-
-Permite ver datos agregados de todos los países a la vez. Útil para
-reportes corporativos. No permite crear/editar — sólo lectura.
-
----
-
-## 7. Dashboard
+## 6. Dashboard
 
 `/dashboard` · disponible para todos
 
-Es la pantalla de inicio. Resume el estado del país activo en un período
+Es la pantalla de inicio. Resume el estado del CRM en un período
 seleccionable (7, 30, 90, 365 días).
 
 ### Bloques
 
-- **Hero de bienvenida**: saludo según hora del día, badge del proyecto,
-  anillo de tasa de conversión y avatar con tu rol.
+- **Hero de bienvenida**: saludo según hora del día, anillo de tasa de
+  conversión y avatar con tu rol.
 - **4 KPIs con sparklines** (tendencia semanal):
   - **Prospectos nuevos**: leads creados en el período.
   - **Ventas cerradas**: conversiones con estado `pagado` o `parcial`.
   - **Ingresos**: total facturado (sumatorio de `importe_total`).
   - **Tasa de conversión**: % leads → ventas.
-- **Actividad reciente**: últimos eventos del país.
+- **Actividad reciente**: últimos eventos.
 - **Accesos rápidos**: atajos a Prospectos, Catálogo y Comisiones.
 
 ### Tips
@@ -269,12 +230,12 @@ seleccionable (7, 30, 90, 365 días).
 - El selector de período afecta sólo a los KPIs, no al feed de actividad.
 - El badge de tendencia (▲ verde / ▼ rojo) compara con el período
   anterior equivalente. Un `--` significa "sin datos del período previo".
-- Si todos los KPIs están a 0, probablemente acabas de cambiar de
-  proyecto o el país no tiene actividad aún.
+- Si todos los KPIs están a 0, probablemente aún no hay actividad en el
+  período seleccionado.
 
 ---
 
-## 8. Prospectos (leads)
+## 7. Prospectos (leads)
 
 `/leads` · disponible para todos los roles
 
@@ -368,7 +329,7 @@ prioridad explícita configurada en Roles.
 
 ---
 
-## 9. Pipeline de ventas
+## 7. Pipeline de ventas
 
 `/leads/pipeline` · misma fuente de datos que el listado pero vista
 **Kanban** por estado.
@@ -384,7 +345,7 @@ el listado va más rápido.
 
 ---
 
-## 10. Conversión a venta
+## 7. Conversión a venta
 
 Una **conversión** representa una venta cerrada de un lead. Convertir
 implica:
@@ -439,7 +400,7 @@ El estado de la conversión se actualiza automáticamente.
 
 ---
 
-## 11. Clientes
+## 7. Clientes
 
 `/clients` · disponible para todos
 
@@ -468,7 +429,7 @@ Similar a la del lead, con más énfasis en:
 
 ---
 
-## 12. Productos y categorías
+## 7. Productos y categorías
 
 `/products` · todos los roles ven el catálogo; sólo admin/superadmin
 edita.
@@ -522,7 +483,7 @@ WooCommerce, los productos pueden sincronizarse automáticamente. Ver §19.
 
 ---
 
-## 13. Matrículas
+## 7. Matrículas
 
 `/matriculas` · disponible para gestores
 
@@ -553,7 +514,7 @@ en lote desde el botón **Importar**.
 
 ---
 
-## 14. Contabilidad
+## 7. Contabilidad
 
 🔒 admin / superadmin · `/accounting`
 
@@ -603,7 +564,7 @@ explícito de vencimientos y estado de pago.
 
 ---
 
-## 15. Comisiones
+## 7. Comisiones
 
 `/commissions`
 
@@ -628,7 +589,7 @@ equipo.
 
 ---
 
-## 16. Nóminas
+## 7. Nóminas
 
 🔒 admin · `/payroll`
 
@@ -643,7 +604,7 @@ Cada mes el admin "cierra" la nómina del proyecto:
 
 ---
 
-## 17. Documentos
+## 7. Documentos
 
 🔒 admin · `/documentos`
 
@@ -669,7 +630,7 @@ abres un PDF y compartes el link, expirará pronto.
 
 ---
 
-## 18. Formularios públicos
+## 7. Formularios públicos
 
 🔒 admin · `/forms`
 
@@ -693,7 +654,7 @@ renderiza con el branding del proyecto.
 
 ---
 
-## 19. Captación: WooCommerce y Make
+## 7. Captación: WooCommerce y Make
 
 🔒 admin
 
@@ -728,7 +689,7 @@ del endpoint, rotas el token y vuelves a copiar a Make.
 
 ---
 
-## 20. Email automatizado (secuencias y plantillas)
+## 7. Email automatizado (secuencias y plantillas)
 
 🔒 admin
 
@@ -762,7 +723,7 @@ Desde la ficha del lead → pestaña **Email** → **Cancelar secuencia**.
 
 ---
 
-## 21. Reportes
+## 7. Reportes
 
 🔒 admin / superadmin · `/reports`
 
@@ -782,7 +743,7 @@ Todos los reportes se exportan a CSV/Excel.
 
 ---
 
-## 22. Notificaciones y actividad
+## 7. Notificaciones y actividad
 
 ### 22.1 Notificaciones
 
@@ -808,7 +769,7 @@ cuándo. Filtros por usuario, tipo de evento, fecha.
 
 ---
 
-## 23. Configuración general
+## 7. Configuración general
 
 `/settings`
 
@@ -829,7 +790,7 @@ Pestañas verticales:
 
 ---
 
-## 24. Roles y administración de usuarios
+## 7. Roles y administración de usuarios
 
 🔒 admin / superadmin · `/roles`
 
@@ -857,7 +818,7 @@ acciones del proyecto. Filtros por usuario, acción, fecha.
 
 ---
 
-## 25. Atajos de teclado
+## 7. Atajos de teclado
 
 | Atajo | Acción |
 |---|---|
@@ -875,7 +836,7 @@ acciones del proyecto. Filtros por usuario, acción, fecha.
 
 ---
 
-## 26. Buenas prácticas
+## 7. Buenas prácticas
 
 ### Para gestores
 
@@ -904,13 +865,10 @@ acciones del proyecto. Filtros por usuario, acción, fecha.
 
 - **No copies tokens ni passwords en notas** del CRM. Es lectura por
   varios roles, no es un gestor de secretos.
-- **Si registras una venta en el país equivocado**, no la borres — pide
-  al admin que la mueva con la herramienta interna (preserva
-  comisiones e historial).
 
 ---
 
-## 27. Resolución de problemas
+## 7. Resolución de problemas
 
 | Síntoma | Causa probable | Solución |
 |---|---|---|
@@ -935,7 +893,7 @@ Si lo anterior no resuelve, abre **Soporte** (§29) con:
 
 ---
 
-## 28. Glosario
+## 7. Glosario
 
 - **Lead / Prospecto**: persona interesada que aún no compró.
 - **Conversión**: registro de una venta cerrada sobre un lead.
@@ -954,7 +912,7 @@ Si lo anterior no resuelve, abre **Soporte** (§29) con:
 
 ---
 
-## 29. Soporte
+## 7. Soporte
 
 | Canal | Para qué | Tiempo de respuesta |
 |---|---|---|

@@ -21,11 +21,11 @@
 | **Módulos backend** | 32 | 26 + 1 public mount | **✅ 90%** (los 3 IA y 3 menores excluidos por contexto) |
 | **Páginas frontend** | 59 | ~30 | **51%** (resto = páginas IA + variantes menores excluidas) |
 | **Branding** | — | ✅ | logo + favicons + paleta corporativa ISEIE |
-| **Seeds** | 1 proyecto | 11 proyectos país | ✅ Multi-país |
+| **Seeds** | 1 proyecto | 1 proyecto `iseie` | ✅ |
 
 ---
 
-## 1. IA → Países (única diferencia funcional grande)
+## 1. IA → Educación (única diferencia funcional grande)
 
 **Hermano** opera proyectos `type='ia'` (Psicólogo IA, Nutricionista IA, Tarot
 IA, Veterinary AI) — plataformas SaaS basadas en IA con sus propias tablas:
@@ -33,27 +33,12 @@ IA, Veterinary AI) — plataformas SaaS basadas en IA con sus propias tablas:
 `ia_metrics_snapshots`, `reports` (IA).
 
 **CRM-ISEIE** no opera plataformas IA. ISEIE es una institución educativa
-multi-país. El equivalente conceptual del "proyecto" en el hermano es **un
-país**.
-
-| Hermano (`type='ia'`) | CRM-ISEIE (`type='crm'`) | Slug | Subdominio público |
-|---|---|---|---|
-| Psicólogo IA | ISEIE España | `iseie-es` | iseie.com |
-| Nutricionista IA | ISEIE México | `iseie-mx` | mxn.iseie.com |
-| Tarot IA | ISEIE Colombia | `iseie-co` | co.iseie.com |
-| Veterinary AI | ISEIE Chile | `iseie-cl` | cl.iseie.com |
-| | ISEIE Ecuador | `iseie-ec` | ec.iseie.com |
-| | ISEIE Perú | `iseie-pe` | pe.iseie.com |
-| | ISEIE Panamá | `iseie-pa` | pa.iseie.com |
-| | ISEIE Costa Rica | `iseie-cr` | cr.iseie.com |
-| | ISEIE Argentina | `iseie-ar` | ar.iseie.com |
-| | ISEIE Brasil | `iseie-br` | br.iseie.com |
-| | ISEIE China | `iseie-cn` | cn.iseie.com |
+operando como un único proyecto (`type='crm'`, slug `iseie`).
 
 **Implicación schema**: el modelo multi-tenant del hermano (basado en
 `projects`, `user_projects`, `project_queue_state`, etc.) se reutiliza tal
-cual. **Cero columnas nuevas** como `pais` ni tablas `countries`. Cada país
-es un row de `projects` con `type='crm'`.
+cual por paridad. La tabla `projects` existe y todas las FK siguen
+referenciándola, pero en CRM-ISEIE solo hay **una fila** (`iseie`).
 
 **Tablas omitidas (las 6 exclusivas del modo IA del hermano)**:
 
@@ -98,7 +83,6 @@ Toda migración del hermano que contenía `ALTER TABLE … OWNER TO crm_user` o
 | Verde acento (forest del escudo) | n/a | `--iseie-green: 150 45% 22%` (light) / `150 38% 52%` (dark) |
 | Logo | placeholder `<Package />` | PNG real ISEIE (`iseie-logo-color.png` light + `iseie-logo.png` dark) |
 | Favicon | SVG genérico | PNGs oficiales (`iseie-icon-32/180/192.png`) |
-| Banderas país | emoji unicode (no renderiza en Windows) | PNG SVG reales descargadas de flagcdn.com en `/flags/<iso>.png` |
 | `theme-color` meta | `#3b82f6` | `#002776` |
 
 ### 2.3 Adaptación automática del theme_color a dark mode
@@ -229,10 +213,10 @@ slug `iseie-<iso>`), `PromptDialog`.
 
 | Hermano | ISEIE |
 |---|---|
-| 1 proyecto seed | 11 proyectos seed (`seeds/002_countries.sql`): uno por país (`iseie-es/mx/co/cl/ec/pe/pa/cr/ar/br/cn`) |
+| 1 proyecto seed | 1 proyecto seed `iseie` (`seeds/002_countries.sql`) |
 
-`seeds/002_countries.sql` de ISEIE crea los 11 países como `projects` y
-asocia el superadmin a todos. No tiene equivalente exacto en el hermano.
+`seeds/002_countries.sql` de ISEIE crea el proyecto único y asocia el
+superadmin. Mismo enfoque que el hermano.
 
 ---
 
@@ -243,11 +227,11 @@ colapsable, mismas secciones generales) pero adaptado:
 
 - **Sin items IA**: ningún sub-item de Chat IA, Análisis IA, Stripe SaaS,
   Audiencias Meta, ni Campañas Meta/Google.
-- **Selector de país** con dropdown integrado al inicio (banderas reales).
+- **Sin selector de proyecto**: como solo hay un proyecto único (`iseie`),
+  el switcher no aparece. El hermano sí lo tiene porque su modelo
+  multi-tenant es activo.
 - **NAV_SECTIONS**: Principal, Captación, Catálogo, Finanzas, Análisis,
   Sistema (6 secciones; hermano tiene esas mismas).
-- Items `comingSoon` en placeholder cuando la página no está portada
-  todavía (`/leads/pipeline`).
 
 ---
 

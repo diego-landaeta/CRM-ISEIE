@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { X, WhatsappLogo, Copy, CheckCircle, Plus, Trash } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
+import { useConfirm } from '@/shared/components/ui/useConfirm';
 
 const STORAGE_KEY = 'crm.whatsapp.templates.v1';
 
@@ -62,6 +63,7 @@ export default function WhatsappTemplatesDialog({ open, onClose, lead }: Whatsap
   const [templates, setTemplates] = useState<WhatsappTemplate[]>(() => loadTemplates());
   const [activeId, setActiveId] = useState<string>('');
   const [editing, setEditing] = useState<WhatsappTemplate | null>(null);
+  const confirm = useConfirm();
 
   useEffect(() => {
     if (open && !activeId && templates[0]) setActiveId(templates[0].id);
@@ -100,12 +102,12 @@ export default function WhatsappTemplatesDialog({ open, onClose, lead }: Whatsap
     setEditing(t);
   }
 
-  function deleteTemplate(id: string) {
+  async function deleteTemplate(id: string) {
     if (id.startsWith('default-')) {
       toast({ title: 'No puedes borrar las plantillas por defecto', variant: 'destructive' });
       return;
     }
-    if (!window.confirm('¿Eliminar esta plantilla?')) return;
+    if (!(await confirm({ title: 'Eliminar plantilla', message: '¿Eliminar esta plantilla?', tone: 'destructive', confirmLabel: 'Eliminar' }))) return;
     const next = templates.filter((t) => t.id !== id);
     setTemplates(next);
     saveTemplates(next);

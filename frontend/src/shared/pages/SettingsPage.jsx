@@ -2,20 +2,19 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import {
-  FolderOpen, Users, Calendar, ShieldCheck, TextT, TreeStructure,
+  Users, Calendar, ShieldCheck, TextT, TreeStructure,
   Megaphone, FileText, PlugsConnected, Envelope, EnvelopeOpen, Lightning,
   ListNumbers, Key, Lock, ArrowSquareOut, Plus, WarningCircle,
-  CheckCircle, Wrench, X,
+  Wrench, X,
 } from '@phosphor-icons/react';
-import ProjectAvatar from '@/shared/components/ui/ProjectAvatar';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
+import { useConfirm } from '@/shared/components/ui/useConfirm';
 
 // Cada item de la nav interna. Si tiene `external: true` se muestra con el
 // icono de "abrir en otra página" y al hacer click navega a esa ruta.
 // Si `to` no está definido es una sección embebida controlada por `tab`.
 const NAV = [
-  { id: 'projects',     label: 'Proyectos',         icon: FolderOpen,  embedded: true },
   { id: 'users',        label: 'Usuarios',          icon: Users,       embedded: true },
   { id: 'availability', label: 'Disponibilidad',    icon: Calendar,    embedded: true },
   { label: 'Roles y permisos',     icon: ShieldCheck,    to: '/roles' },
@@ -43,8 +42,8 @@ const INTEGRATIONS = [
 ];
 
 export default function SettingsPage() {
-  const { user, projects } = useAuth();
-  const [tab, setTab] = useState('projects');
+  const { user } = useAuth();
+  const [tab, setTab] = useState('users');
 
   const isAdmin = user?.role === 'superadmin' || user?.role === 'admin';
 
@@ -115,9 +114,6 @@ export default function SettingsPage() {
 
         {/* Content */}
         <div className="min-w-0 space-y-4">
-          {tab === 'projects' && (
-            <ProjectsSection projects={projects} isAdmin={isAdmin} />
-          )}
           {tab === 'users' && (
             <UsersSection isAdmin={isAdmin} />
           )}
@@ -145,80 +141,6 @@ function SectionHeader({ title, subtitle, action }) {
       </div>
       {action}
     </div>
-  );
-}
-
-function ProjectsSection({ projects, isAdmin }) {
-  const list = projects || [];
-  const summary = list.length
-    ? list.map((p) => p.nombre.replace(/^ISEIE\s*/, '')).slice(0, 4).join(', ') + (list.length > 4 ? '…' : '')
-    : 'Aún no hay proyectos';
-
-  return (
-    <section className="space-y-4">
-      <SectionHeader
-        title="Proyectos"
-        subtitle={summary}
-        action={
-          <button
-            disabled={!isAdmin}
-            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Plus size={14} weight="bold" />
-            Nuevo proyecto
-          </button>
-        }
-      />
-
-      {list.length === 0 ? (
-        <div className="rounded-2xl border border-border bg-card p-12 text-center">
-          <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center mx-auto mb-3">
-            <FolderOpen size={22} weight="duotone" className="text-muted-foreground" />
-          </div>
-          <h3 className="font-semibold mb-1">Sin proyectos creados</h3>
-          <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-            Cada proyecto del CRM es un tenant aislado con sus propios prospectos, productos y métricas.
-          </p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {list.map((p) => (
-            <div key={p.id} className="rounded-2xl border border-border bg-card p-5">
-              <div className="flex items-start gap-3">
-                <ProjectAvatar project={p} size="lg" />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5 flex-wrap mb-1">
-                    <span className="font-semibold text-foreground truncate">{p.nombre}</span>
-                    <span className="inline-flex items-center text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-primary/10 text-primary">
-                      {p.type || 'crm'}
-                    </span>
-                    {p.active && (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded text-[hsl(var(--iseie-green))] bg-[hsl(var(--iseie-green))]/10">
-                        <CheckCircle size={10} weight="fill" />
-                        activo
-                      </span>
-                    )}
-                  </div>
-                  <code className="text-[11px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground">/{p.slug}</code>
-                </div>
-              </div>
-
-              <p className="text-[11px] text-muted-foreground mt-3 leading-relaxed">
-                Gestión completa del proyecto
-              </p>
-
-              <button
-                disabled={!isAdmin}
-                className="mt-2 w-full inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Wrench size={13} weight="bold" />
-                Configurar
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-    </section>
   );
 }
 
@@ -261,21 +183,182 @@ function UsersSection({ isAdmin }) {
 }
 
 function AvailabilitySection() {
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState(null); // userId con bloques abiertos
+  const [blocks, setBlocks] = useState({}); // {userId: [block...]}
+  const [newBlock, setNewBlock] = useState({ fecha_inicio: '', fecha_fin: '', motivo: '' });
+  const confirm = useConfirm();
+
+  async function load() {
+    setLoading(true);
+    try {
+      const res = await client.get('/users/availability');
+      setUsers(res?.data || []);
+    } catch (err) {
+      if (err?.status !== 403) toast({ title: 'Error cargando disponibilidad', description: err?.message, variant: 'destructive' });
+    } finally { setLoading(false); }
+  }
+  useEffect(() => { load(); }, []);
+
+  async function toggle(user, value) {
+    let motivo = null;
+    if (!value) {
+      motivo = window.prompt('¿Motivo? (opcional)', user.unavailable_reason || '');
+      if (motivo === null) return; // cancelado
+    }
+    try {
+      await client.patch(`/users/${user.id}/availability`, { is_available: value, motivo: motivo || null });
+      toast({ title: value ? 'Gestor disponible' : 'Gestor pausado', description: user.nombre });
+      await load();
+    } catch (err) {
+      toast({ title: 'Error', description: err?.message, variant: 'destructive' });
+    }
+  }
+
+  async function loadBlocks(userId) {
+    try {
+      const res = await client.get(`/users/${userId}/availability-blocks`);
+      setBlocks((b) => ({ ...b, [userId]: res?.data || [] }));
+    } catch { /* */ }
+  }
+
+  function toggleExpand(userId) {
+    if (expanded === userId) { setExpanded(null); return; }
+    setExpanded(userId);
+    if (!blocks[userId]) loadBlocks(userId);
+    setNewBlock({ fecha_inicio: '', fecha_fin: '', motivo: '' });
+  }
+
+  async function addBlock(userId) {
+    if (!newBlock.fecha_inicio || !newBlock.fecha_fin) {
+      toast({ title: 'Faltan fechas', variant: 'destructive' });
+      return;
+    }
+    try {
+      await client.post(`/users/${userId}/availability-blocks`, newBlock);
+      toast({ title: 'Bloque añadido' });
+      setNewBlock({ fecha_inicio: '', fecha_fin: '', motivo: '' });
+      await loadBlocks(userId);
+      await load();
+    } catch (err) {
+      toast({ title: 'No se pudo añadir', description: err?.message, variant: 'destructive' });
+    }
+  }
+
+  async function deleteBlock(userId, blockId) {
+    if (!(await confirm({ title: 'Eliminar bloque', message: '¿Eliminar este bloque?', tone: 'destructive', confirmLabel: 'Eliminar' }))) return;
+    try {
+      await client.delete(`/users/availability-blocks/${blockId}`);
+      toast({ title: 'Bloque eliminado' });
+      await loadBlocks(userId);
+      await load();
+    } catch (err) {
+      toast({ title: 'No se pudo eliminar', description: err?.message, variant: 'destructive' });
+    }
+  }
+
+  function fmtDate(d) {
+    if (!d) return '—';
+    return new Date(d + 'T00:00:00').toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+
   return (
     <section className="space-y-4">
       <SectionHeader
         title="Disponibilidad"
-        subtitle="Gestores y horarios habilitados para recibir leads vía round-robin."
+        subtitle="Gestores que reciben leads vía round-robin. Pausa a un gestor o programa bloques de baja."
       />
-      <div className="rounded-2xl border border-border bg-card p-10 text-center">
-        <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center mx-auto mb-3">
-          <Calendar size={22} weight="duotone" className="text-muted-foreground" />
+      {loading ? (
+        <div className="rounded-2xl border border-border bg-card p-8 text-center text-sm text-muted-foreground">Cargando…</div>
+      ) : users.length === 0 ? (
+        <div className="rounded-2xl border border-border bg-card p-10 text-center">
+          <Calendar size={22} weight="duotone" className="mx-auto text-muted-foreground mb-2" />
+          <p className="text-sm text-muted-foreground">Sin usuarios para mostrar.</p>
         </div>
-        <h3 className="font-semibold mb-1">Disponibilidad de gestores</h3>
-        <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-          Configura bloques de vacaciones / baja para que un gestor temporalmente no reciba leads.
-        </p>
-      </div>
+      ) : (
+        <div className="rounded-2xl border border-border bg-card overflow-hidden divide-y divide-border">
+          {users.map((u) => {
+            const isOpen = expanded === u.id;
+            const userBlocks = blocks[u.id] || [];
+            return (
+              <div key={u.id}>
+                <div className="flex items-center gap-3 px-4 py-3">
+                  <div className={`w-9 h-9 rounded-full text-white text-xs font-bold flex items-center justify-center flex-shrink-0 ${u.is_available && !u.bloque_activo ? 'bg-emerald-500' : 'bg-amber-500'}`}>
+                    {u.nombre?.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2) || '?'}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-sm truncate flex items-center gap-2">
+                      {u.nombre}
+                      {!u.active && <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-muted text-muted-foreground">inactivo</span>}
+                    </div>
+                    <div className="text-xs text-muted-foreground truncate">
+                      {u.bloque_activo
+                        ? <span className="text-amber-700 dark:text-amber-300">En baja hasta {fmtDate(u.bloque_activo.fecha_fin)}{u.bloque_activo.motivo ? ` · ${u.bloque_activo.motivo}` : ''}</span>
+                        : u.is_available
+                          ? <span className="text-emerald-700 dark:text-emerald-300">Disponible · recibe leads</span>
+                          : <span className="text-rose-700 dark:text-rose-300">Pausado{u.unavailable_reason ? ` · ${u.unavailable_reason}` : ''}</span>}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {u.bloques_futuros > 0 && (
+                      <span className="text-[10px] text-muted-foreground tabular-nums">{u.bloques_futuros} bloque{u.bloques_futuros === 1 ? '' : 's'}</span>
+                    )}
+                    <label className="inline-flex items-center cursor-pointer gap-2">
+                      <input
+                        type="checkbox"
+                        checked={u.is_available}
+                        onChange={(e) => toggle(u, e.target.checked)}
+                        className="w-4 h-4"
+                      />
+                      <span className="text-xs">{u.is_available ? 'Activo' : 'Pausado'}</span>
+                    </label>
+                    <button
+                      onClick={() => toggleExpand(u.id)}
+                      className="h-7 px-2 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                    >
+                      {isOpen ? 'Cerrar' : 'Bloques'}
+                    </button>
+                  </div>
+                </div>
+                {isOpen && (
+                  <div className="bg-muted/30 px-4 py-3 space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_1.5fr_auto] gap-2 items-end">
+                      <div>
+                        <label className="block text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1">Desde</label>
+                        <input type="date" value={newBlock.fecha_inicio} onChange={(e) => setNewBlock({ ...newBlock, fecha_inicio: e.target.value })} className="w-full h-8 px-2 rounded-md border border-border bg-card text-xs" />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1">Hasta</label>
+                        <input type="date" value={newBlock.fecha_fin} onChange={(e) => setNewBlock({ ...newBlock, fecha_fin: e.target.value })} className="w-full h-8 px-2 rounded-md border border-border bg-card text-xs" />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1">Motivo</label>
+                        <input type="text" value={newBlock.motivo} onChange={(e) => setNewBlock({ ...newBlock, motivo: e.target.value })} placeholder="Vacaciones, baja, formación…" className="w-full h-8 px-2 rounded-md border border-border bg-card text-xs" />
+                      </div>
+                      <button onClick={() => addBlock(u.id)} className="h-8 px-3 rounded-md bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90">+ Añadir</button>
+                    </div>
+                    {userBlocks.length > 0 && (
+                      <div className="space-y-1">
+                        {userBlocks.map((b) => (
+                          <div key={b.id} className={`flex items-center gap-2 px-3 py-2 rounded-md text-xs ${b.activo ? 'bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300' : 'bg-card border border-border'}`}>
+                            <span className="font-medium tabular-nums">{fmtDate(b.fecha_inicio)} → {fmtDate(b.fecha_fin)}</span>
+                            {b.activo && <span className="text-[10px] uppercase font-bold">activo</span>}
+                            <span className="flex-1 truncate text-muted-foreground">{b.motivo || 'Sin motivo'}</span>
+                            <button onClick={() => deleteBlock(u.id, b.id)} className="text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 p-1 rounded transition-colors" aria-label="Eliminar bloque">
+                              <X size={11} weight="bold" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </section>
   );
 }
@@ -287,6 +370,7 @@ function IntegrationsSection({ isAdmin }) {
   const [value, setValue] = useState('');
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(null);
+  const confirm = useConfirm();
 
   async function loadCreds() {
     setLoading(true);
@@ -340,7 +424,7 @@ function IntegrationsSection({ isAdmin }) {
   }
 
   async function handleRemove(cred, name) {
-    if (!window.confirm(`¿Eliminar credencial de ${name}? Las funciones que la usen dejarán de operar.`)) return;
+    if (!(await confirm({ title: 'Eliminar credencial', message: `¿Eliminar credencial de ${name}? Las funciones que la usen dejarán de operar.`, tone: 'destructive', confirmLabel: 'Eliminar' }))) return;
     try {
       await client.delete(`/credentials/${cred.id}`);
       toast({ title: 'Credencial eliminada', description: name });
@@ -354,7 +438,7 @@ function IntegrationsSection({ isAdmin }) {
     <section className="space-y-4">
       <SectionHeader
         title="APIs globales"
-        subtitle="Credenciales cifradas con AES-256-GCM en la base de datos. Se reutilizan en todos los proyectos."
+        subtitle="Credenciales cifradas con AES-256-GCM en la base de datos."
       />
 
       {loading ? (

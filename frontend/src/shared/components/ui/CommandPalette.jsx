@@ -32,7 +32,7 @@ const ITEMS = [
   { id: 'templates',       label: 'Plantillas de email',       to: '/email-templates',              icon: EnvelopeOpen,   group: 'Ir a',  roles: ['admin', 'superadmin'] },
   { id: 'reports',         label: 'Reportes',                  to: '/reports',                      icon: ChartLineUp,    group: 'Ir a',  roles: ['admin', 'superadmin'] },
   { id: 'activity',        label: 'Actividad',                 to: '/activity',                     icon: Pulse,          group: 'Ir a' },
-  { id: 'notifications',   label: 'Notificaciones',            to: '/notifications',                icon: Bell,           group: 'Ir a' },
+  { id: 'notifications',   label: 'Notificaciones',            to: '/notificaciones',               icon: Bell,           group: 'Ir a' },
   { id: 'roles',           label: 'Roles y usuarios',          to: '/roles',                        icon: ShieldCheck,    group: 'Ir a',  roles: ['admin', 'superadmin'] },
   { id: 'fields',          label: 'Campos personalizados',     to: '/configuracion/campos',         icon: TextT,          group: 'Ir a',  roles: ['admin', 'superadmin'] },
   { id: 'categories',      label: 'Categorías',                to: '/configuracion/categorias-arbol', icon: TreeStructure, group: 'Ir a' },

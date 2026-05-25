@@ -73,24 +73,26 @@ export default function LeadsPage() {
   }, [selected.length]);
 
   async function handleCreateLead(data: any) {
-    if (!projectId) {
+    const pid = Number(data?._project_id || projectId);
+    if (!pid) {
       toast({ title: 'Selecciona un proyecto', variant: 'destructive' });
       return;
     }
     try {
       const res: any = await client.post('/leads', {
-        project_id: projectId,
+        project_id: pid,
         nombre: data.nombre,
-        email: data.email,
-        telefono: data.telefono || '',
+        email: data.email || undefined,
+        telefono: data.telefono || undefined,
         canal: data.origen || 'directo',
-        notas: data.notas || '',
+        notas: data.notas || undefined,
         custom_fields: data.custom_fields || undefined,
       });
-      if (res?.success) {
+      if (res?.success !== false) {
         toast({ title: 'Prospecto creado', description: data.nombre });
-        setFormOpen(false);
         setReloadKey((k) => k + 1);
+      } else {
+        toast({ title: 'Error al crear', description: res?.error || 'Respuesta inesperada del servidor', variant: 'destructive' });
       }
     } catch (err: any) {
       toast({ title: 'Error', description: err?.data?.error || err?.message || String(err), variant: 'destructive' });
@@ -103,10 +105,10 @@ export default function LeadsPage() {
     setLoading(true);
     Promise.all([
       client.get('/leads', { params: { projectId, limit: 200, status: activeStatus === 'all' ? undefined : activeStatus, search: search.trim() || undefined } })
-        .then((r) => r.data?.data || [])
+        .then((r: any) => Array.isArray(r?.data) ? r.data : [])
         .catch(() => []),
       client.get('/leads/stats', { params: { projectId } })
-        .then((r) => r.data?.data || {})
+        .then((r: any) => r?.data && typeof r.data === 'object' ? r.data : {})
         .catch(() => ({})),
     ]).then(([list, st]) => {
       if (cancelled) return;

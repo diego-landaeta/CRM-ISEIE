@@ -14,6 +14,22 @@ const loginLimiter = rateLimit({
   message: { success: false, error: 'Demasiados intentos. Intenta de nuevo en 15 minutos.', code: 'RATE_LIMITED' },
 });
 
+const setPasswordLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 8,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Demasiados intentos. Intenta de nuevo en 15 minutos.', code: 'RATE_LIMITED' },
+});
+
+const changePasswordLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Demasiados intentos. Intenta de nuevo en 15 minutos.', code: 'RATE_LIMITED' },
+});
+
 // POST /api/auth/login — email + password → accessToken + refreshToken cookie
 router.post('/login', loginLimiter, authController.login);
 
@@ -24,13 +40,13 @@ router.post('/refresh', authController.refresh);
 router.post('/logout', verifyToken, authController.logout);
 
 // POST /api/auth/set-password — token unico → establecer contrasena
-router.post('/set-password', authController.setPassword);
+router.post('/set-password', setPasswordLimiter, authController.setPassword);
 
 // GET /api/auth/me — datos del usuario autenticado + proyectos
 router.get('/me', verifyToken, authController.me);
 
 // POST /api/auth/change-password — usuario cambia su propia contrasena
-router.post('/change-password', verifyToken, authController.changePassword);
+router.post('/change-password', changePasswordLimiter, verifyToken, authController.changePassword);
 
 // PATCH /api/auth/me — usuario edita su propio perfil (nombre)
 router.patch('/me', verifyToken, authController.updateMyProfile);

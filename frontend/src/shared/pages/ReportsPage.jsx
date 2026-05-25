@@ -5,6 +5,10 @@ import {
   Users, Receipt, CurrencyEur, ArrowsClockwise, TrendUp, TrendDown,
   Sparkle, CheckCircle, X,
 } from '@phosphor-icons/react';
+import {
+  LineChart, Line, AreaChart, Area, XAxis, YAxis, Tooltip,
+  ResponsiveContainer, CartesianGrid,
+} from 'recharts';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDashboardSummary } from '@/shared/hooks/useDashboardSummary';
 import client from '@/shared/api/client';
@@ -66,37 +70,189 @@ function fmtMoney(n) {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(Number(n || 0));
 }
 
-function Sparkline({ data, color = 'hsl(var(--primary))', height = 56 }) {
-  const w = 100;
-  const points = useMemo(() => {
-    if (!data?.length) return { line: '', area: '' };
-    const max = Math.max(...data, 1);
-    const min = Math.min(...data, 0);
-    const range = max - min || 1;
-    const step = w / (data.length - 1);
-    const coords = data.map((v, i) => [i * step, height - ((v - min) / range) * (height - 6) - 3]);
-    let line = `M ${coords[0][0]} ${coords[0][1]}`;
-    for (let i = 1; i < coords.length; i++) {
-      const [x, y] = coords[i];
-      const [px, py] = coords[i - 1];
-      const cx = (px + x) / 2;
-      line += ` Q ${cx} ${py} ${cx} ${(py + y) / 2} T ${x} ${y}`;
-    }
-    const area = `${line} L ${w} ${height} L 0 ${height} Z`;
-    return { line, area };
-  }, [data, height]);
-  const gid = `rsp-${color.replace(/[^a-z0-9]/gi, '')}-${(data || []).join('-')}`.slice(0, 60);
+function Sparkline({ data, color = 'hsl(var(--primary))', height = 32 }) {
+  const series = useMemo(
+    () => (data || []).map((v, i) => ({ i, v: Number(v || 0) })),
+    [data],
+  );
+  if (series.length < 2) {
+    return <div style={{ height }} className="w-full bg-muted/30 rounded" />;
+  }
   return (
-    <svg viewBox={`0 0 ${w} ${height}`} className="w-full" style={{ height }} preserveAspectRatio="none">
-      <defs>
-        <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.3" />
-          <stop offset="100%" stopColor={color} stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d={points.area} fill={`url(#${gid})`} />
-      <path d={points.line} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
+    <ResponsiveContainer width="100%" height={height}>
+      <LineChart data={series} margin={{ top: 2, right: 2, bottom: 0, left: 2 }}>
+        <Line
+          type="monotone"
+          dataKey="v"
+          stroke={color}
+          strokeWidth={1.5}
+          dot={false}
+          isAnimationActive={false}
+        />
+      </LineChart>
+    </ResponsiveContainer>
+  );
+}
+
+function HeroTooltip({ active, payload, label, fmt, color, prevValue }) {
+  if (!active || !payload?.length) return null;
+  const v = payload[0]?.value ?? 0;
+  const delta = prevValue > 0 ? Math.round(((v - prevValue) / prevValue) * 100) : null;
+  return (
+    <div className="rounded-lg border border-border bg-card/95 backdrop-blur shadow-lg px-3 py-2 min-w-[140px]">
+      <div className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1">{label}</div>
+      <div className="flex items-baseline gap-2">
+        <span className="text-base font-semibold tabular-nums tracking-tight" style={{ color }}>{fmt(v)}</span>
+        {delta != null && delta !== 0 && (
+          <span className={`text-[10px] font-bold tabular-nums ${delta >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+            {delta >= 0 ? '+' : ''}{delta}%
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function HeroChart({ heroActive, heroSerie, setHeroSerie, HERO_SERIES, heroData, heroHasData, heroTotal, heroLast, heroDelta, heroAvg, heroMax }) {
+  const TrendIcon = heroDelta >= 0 ? TrendUp : TrendDown;
+  const deltaCls = heroDelta >= 0
+    ? 'text-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200/60 dark:border-emerald-900/60'
+    : 'text-rose-700 bg-rose-50 dark:bg-rose-950/40 dark:text-rose-300 border-rose-200/60 dark:border-rose-900/60';
+
+  return (
+    <div className="relative rounded-2xl border border-border bg-gradient-to-br from-card via-card to-muted/20 overflow-hidden">
+      {/* Header con KPI grande + delta + serie toggle */}
+      <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-4 flex-wrap">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <span
+              className="w-1.5 h-1.5 rounded-full"
+              style={{ background: heroActive.color, boxShadow: `0 0 12px ${heroActive.color}` }}
+            />
+            <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+              {heroActive.label} · última semana
+            </span>
+          </div>
+          <div className="flex items-baseline gap-3 flex-wrap">
+            <span
+              className="text-3xl sm:text-4xl font-bold tabular-nums tracking-tight"
+              style={{ color: heroActive.color }}
+            >
+              {heroActive.fmt(heroLast)}
+            </span>
+            {heroHasData && (
+              <span className={`inline-flex items-center gap-0.5 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${deltaCls}`}>
+                <TrendIcon size={11} weight="bold" />
+                {heroDelta >= 0 ? '+' : ''}{heroDelta}%
+                <span className="opacity-60 ml-1">vs semana ant.</span>
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+            <span>Total 8 sem: <strong className="text-foreground tabular-nums">{heroActive.fmt(heroTotal)}</strong></span>
+            <span className="opacity-40">·</span>
+            <span>Media: <strong className="text-foreground tabular-nums">{heroActive.fmt(Math.round(heroAvg))}</strong></span>
+            <span className="opacity-40">·</span>
+            <span>Pico: <strong className="text-foreground tabular-nums">{heroActive.fmt(heroMax)}</strong></span>
+          </div>
+        </div>
+
+        <div className="inline-flex rounded-lg border border-border bg-card p-1 shadow-sm flex-shrink-0">
+          {Object.entries(HERO_SERIES).map(([key, s]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setHeroSerie(key)}
+              className={`inline-flex items-center gap-1 px-3 h-7 rounded-md text-[11px] font-semibold transition-all ${
+                heroSerie === key
+                  ? 'shadow-sm text-white'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+              style={heroSerie === key ? { background: s.color } : undefined}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Chart */}
+      <div className="h-56 sm:h-64 w-full px-2 pb-2">
+        {heroHasData ? (
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={heroData} margin={{ top: 16, right: 24, bottom: 4, left: 8 }}>
+              <CartesianGrid
+                strokeDasharray="2 4"
+                stroke="hsl(var(--border))"
+                vertical={false}
+                strokeOpacity={0.6}
+              />
+              <XAxis
+                dataKey="label"
+                stroke="hsl(var(--muted-foreground))"
+                tick={{ fontSize: 10, fontWeight: 500 }}
+                tickLine={false}
+                axisLine={false}
+                tickMargin={8}
+                interval="preserveStartEnd"
+                minTickGap={28}
+              />
+              <YAxis
+                stroke="hsl(var(--muted-foreground))"
+                tick={{ fontSize: 10 }}
+                tickLine={false}
+                axisLine={false}
+                width={44}
+                tickFormatter={(v) => {
+                  if (heroSerie === 'ingresos') {
+                    if (v >= 1000) return `${Math.round(v / 1000)}k €`;
+                    return `${v} €`;
+                  }
+                  if (heroSerie === 'tasa') return `${v}%`;
+                  return v;
+                }}
+              />
+              <Tooltip
+                cursor={{ stroke: heroActive.color, strokeWidth: 1, strokeDasharray: '4 4', strokeOpacity: 0.5 }}
+                content={(props) => (
+                  <HeroTooltip
+                    {...props}
+                    fmt={heroActive.fmt}
+                    color={heroActive.color}
+                    prevValue={(() => {
+                      const idx = heroData.findIndex((d) => d.label === props.label);
+                      return idx > 0 ? heroData[idx - 1].value : 0;
+                    })()}
+                  />
+                )}
+                wrapperStyle={{ outline: 'none' }}
+              />
+              <Line
+                type="monotone"
+                dataKey="value"
+                stroke={heroActive.color}
+                strokeWidth={2.5}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                isAnimationActive
+                animationDuration={500}
+                animationEasing="ease-out"
+                dot={{ r: 3.5, stroke: heroActive.color, strokeWidth: 2, fill: 'hsl(var(--card))' }}
+                activeDot={{ r: 6, stroke: heroActive.color, strokeWidth: 2.5, fill: 'hsl(var(--card))' }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="h-full flex flex-col items-center justify-center text-center px-6">
+            <ChartLineUp size={32} weight="duotone" className="text-muted-foreground/40 mb-2" />
+            <div className="font-medium text-sm">Sin datos para el periodo</div>
+            <p className="text-xs text-muted-foreground max-w-xs mt-1">
+              El gráfico se rellenará cuando haya actividad en {heroActive.label.toLowerCase()}.
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -154,9 +310,41 @@ export default function ReportsPage() {
   const ingresos     = summary?.ingresos     || { value: 0, trend: null, spark: [] };
   const tasa         = summary?.tasa         || { value: 0, trend: null, spark: [] };
 
-  const heroSpark = ingresos.spark?.length
-    ? ingresos.spark
-    : leads.spark?.length ? leads.spark : [];
+  const [heroSerie, setHeroSerie] = useState('ingresos');
+  const HERO_SERIES = {
+    leads:        { label: 'Prospectos', spark: leads.spark,        color: 'hsl(199 89% 48%)',  fmt: (v) => fmt(v) },
+    conversiones: { label: 'Ventas',     spark: conversiones.spark, color: 'hsl(160 84% 39%)',  fmt: (v) => fmt(v) },
+    ingresos:     { label: 'Ingresos',   spark: ingresos.spark,     color: 'hsl(258 90% 66%)',  fmt: (v) => fmtMoney(v) },
+    tasa:         { label: 'Tasa conv.', spark: tasa.spark,         color: 'hsl(43 96% 56%)',   fmt: (v) => `${Math.round(v)}%` },
+  };
+  const heroActive = HERO_SERIES[heroSerie] || HERO_SERIES.ingresos;
+
+  // Backend devuelve 8 semanas ordenadas más antigua → más reciente.
+  // Etiquetamos con la fecha de inicio de cada semana.
+  const heroData = useMemo(() => {
+    const arr = heroActive.spark || [];
+    if (arr.length === 0) return [];
+    const out = [];
+    const now = new Date();
+    for (let i = 0; i < arr.length; i++) {
+      const weeksAgo = arr.length - 1 - i;
+      const d = new Date(now);
+      d.setDate(d.getDate() - weeksAgo * 7);
+      out.push({
+        label: d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }),
+        value: Number(arr[i] || 0),
+      });
+    }
+    return out;
+  }, [heroActive]);
+
+  const heroTotal = heroData.reduce((s, d) => s + d.value, 0);
+  const heroHasData = heroData.some((d) => d.value > 0);
+  const heroLast = heroData[heroData.length - 1]?.value ?? 0;
+  const heroPrev = heroData[heroData.length - 2]?.value ?? 0;
+  const heroDelta = heroPrev > 0 ? Math.round(((heroLast - heroPrev) / heroPrev) * 100) : heroLast > 0 ? 100 : 0;
+  const heroMax = Math.max(...heroData.map((d) => d.value), 0);
+  const heroAvg = heroData.length > 0 ? heroTotal / heroData.length : 0;
 
   return (
     <div className="space-y-6">
@@ -215,21 +403,19 @@ export default function ReportsPage() {
               <Kpi icon={ChartLineUp} label="Tasa conv."  value={`${Math.round(Number(tasa.value || 0))}%`} trend={tasa.trend} spark={tasa.spark} accent="amber" />
             </div>
 
-            <div className="relative h-44 sm:h-56 rounded-lg overflow-hidden bg-muted/20">
-              {heroSpark.length > 1 ? (
-                <div className="absolute inset-0 px-4 py-3 text-primary">
-                  <Sparkline data={heroSpark} color="currentColor" height={200} />
-                </div>
-              ) : (
-                <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-6">
-                  <ChartLineUp size={32} weight="duotone" className="text-muted-foreground/40 mb-2" />
-                  <div className="font-medium text-sm">Sin datos para el periodo</div>
-                  <p className="text-xs text-muted-foreground max-w-xs mt-1">
-                    El gráfico se rellenará cuando haya actividad.
-                  </p>
-                </div>
-              )}
-            </div>
+            <HeroChart
+              heroActive={heroActive}
+              heroSerie={heroSerie}
+              setHeroSerie={setHeroSerie}
+              HERO_SERIES={HERO_SERIES}
+              heroData={heroData}
+              heroHasData={heroHasData}
+              heroTotal={heroTotal}
+              heroLast={heroLast}
+              heroDelta={heroDelta}
+              heroAvg={heroAvg}
+              heroMax={heroMax}
+            />
           </>
         )}
       </div>

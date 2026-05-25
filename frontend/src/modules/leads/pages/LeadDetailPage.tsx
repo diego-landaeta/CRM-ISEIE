@@ -1,12 +1,15 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, lazy, Suspense } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, EnvelopeSimple, Phone, WhatsappLogo,
-  Trash, UserCircle, Hash, CheckCircle,
+  Trash, UserCircle, Hash, CheckCircle, WarningOctagon,
 } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/shared/hooks/useToast';
+import { useConfirm } from '@/shared/components/ui/useConfirm';
+
+const SpamReportDialog = lazy(() => import('../components/SpamReportDialog'));
 
 const STATUS_MAP: Record<string, string> = {
   nuevo:          'bg-sky-100 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300',
@@ -56,6 +59,8 @@ export default function LeadDetailPage() {
   const [lead, setLead] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [changing, setChanging] = useState(false);
+  const [spamOpen, setSpamOpen] = useState(false);
+  const confirm = useConfirm();
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -70,15 +75,18 @@ export default function LeadDetailPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  async function changeStatus(status: string) {
+  async function changeStatus(status: string, motivo?: string) {
     if (!lead || status === lead.status) return;
     setChanging(true);
     try {
-      await client.patch(`/leads/${lead.id}/status`, { status });
+      await client.patch(`/leads/${lead.id}/status`, {
+        status,
+        motivo: motivo || `Cambio manual desde ficha (${lead.status} → ${status})`,
+      });
       toast({ title: 'Estado actualizado', description: STATUS_OPTIONS.find((s) => s.value === status)?.label });
       await load();
     } catch (err: any) {
-      toast({ title: 'No se pudo cambiar el estado', description: err?.message || 'Error', variant: 'destructive' });
+      toast({ title: 'No se pudo cambiar el estado', description: err?.data?.error || err?.message || 'Error', variant: 'destructive' });
     } finally { setChanging(false); }
   }
 
@@ -88,12 +96,12 @@ export default function LeadDetailPage() {
       toast({ title: 'Ya estaba marcado como contactado' });
       return;
     }
-    await changeStatus('contactado');
+    await changeStatus('contactado', 'Marcado como contactado desde ficha');
   }
 
   async function handleDelete() {
     if (!lead || !isAdmin) return;
-    if (!window.confirm(`¿Eliminar a "${lead.nombre}"? Se moverá a la papelera y podrá restaurarse por un superadmin.`)) return;
+    if (!(await confirm({ title: 'Eliminar prospecto', message: `¿Eliminar a "${lead.nombre}"? Se moverá a la papelera y podrá restaurarse por un superadmin.`, tone: 'destructive', confirmLabel: 'Eliminar' }))) return;
     try {
       await client.delete(`/leads/${lead.id}`);
       toast({ title: 'Prospecto eliminado', description: 'Movido a la papelera.' });
@@ -243,9 +251,17 @@ export default function LeadDetailPage() {
             </select>
           </div>
 
-          {isAdmin && (
-            <div className="rounded-2xl border border-border bg-card p-5">
-              <h4 className="text-[11px] uppercase tracking-wider font-bold text-muted-foreground mb-3">Zona peligrosa</h4>
+          <div className="rounded-2xl border border-border bg-card p-5 space-y-2">
+            <h4 className="text-[11px] uppercase tracking-wider font-bold text-muted-foreground mb-2">Acciones</h4>
+            <button
+              type="button"
+              onClick={() => setSpamOpen(true)}
+              className="w-full inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-md bg-card border border-border text-xs font-medium text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-colors"
+            >
+              <WarningOctagon size={12} weight="bold" />
+              Reportar como spam
+            </button>
+            {isAdmin && (
               <button
                 type="button"
                 onClick={handleDelete}
@@ -254,10 +270,20 @@ export default function LeadDetailPage() {
                 <Trash size={12} weight="bold" />
                 Eliminar prospecto
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </aside>
       </div>
+
+      <Suspense fallback={null}>
+        <SpamReportDialog
+          open={spamOpen}
+          onClose={() => setSpamOpen(false)}
+          leadId={lead.id}
+          leadNombre={lead.nombre}
+          onReported={load}
+        />
+      </Suspense>
     </div>
   );
 }

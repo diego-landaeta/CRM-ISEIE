@@ -4,6 +4,7 @@ import {
   Plus, ArrowsClockwise, Calendar,
 } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
+import { toast } from '@/shared/hooks/useToast';
 
 const ACTION_TYPES = [
   { id: 'all',    label: 'Todas',         icon: Pulse,   prefix: null },
@@ -71,7 +72,7 @@ export default function ActivityPage() {
     let cancelled = false;
     setLoading(true);
     client.get('/users/activity-log', { params: { limit: 200, search: search || undefined } })
-      .then((r) => { if (!cancelled) setItems(r.data?.data || []); })
+      .then((r) => { if (!cancelled) setItems(Array.isArray(r?.data) ? r.data : (r?.data?.items || [])); })
       .catch(() => { if (!cancelled) setItems([]); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
@@ -129,7 +130,7 @@ export default function ActivityPage() {
           ))}
           <button
             type="button"
-            onClick={() => alert('Filtro por rango de fechas: usa el selector "Tipo" para filtrar. Soporte de rangos personalizados llegará en próxima entrega.')}
+            onClick={() => toast({ title: 'Filtro por rango', description: 'Usa el selector "Tipo" para filtrar. Soporte de rangos personalizados llegará en próxima entrega.' })}
             className="flex-shrink-0 inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-card border border-border text-muted-foreground hover:text-foreground transition-colors text-sm"
           >
             <Calendar size={14} />

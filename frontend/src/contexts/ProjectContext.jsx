@@ -42,7 +42,7 @@ function applyThemeColor(hex, isDark) {
 }
 
 export function ProjectProvider({ children }) {
-  const { activeProject, projects, switchProject, isAllProjects } = useAuth();
+  const { activeProject, projects } = useAuth();
   const { theme } = useTheme();
 
   // Favicon dinamico: si el proyecto activo tiene logo, usarlo. Si no, default.
@@ -66,8 +66,6 @@ export function ProjectProvider({ children }) {
     <ProjectContext.Provider value={{
       activeProject: activeProject || { id: null, nombre: 'Sin proyecto' },
       projects: projects || [],
-      switchProject,
-      isAllProjects: !!isAllProjects,
     }}>
       {children}
     </ProjectContext.Provider>

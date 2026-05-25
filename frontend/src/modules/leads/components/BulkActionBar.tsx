@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { X, CheckCircle, Trash, UserSwitch, Tag } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
+import { useConfirm } from '@/shared/components/ui/useConfirm';
 
 export interface BulkActionBarProps {
   selected: number[];
@@ -21,6 +22,7 @@ const STATUS_OPTIONS = [
 export default function BulkActionBar({ selected, onClear, onRefresh, canDelete = false }: BulkActionBarProps) {
   const [working, setWorking] = useState(false);
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
+  const confirm = useConfirm();
 
   if (selected.length === 0) return null;
 
@@ -29,8 +31,13 @@ export default function BulkActionBar({ selected, onClear, onRefresh, canDelete 
     setWorking(true);
     let ok = 0, fail = 0;
     for (const id of selected) {
-      try { await client.patch(`/leads/${id}/status`, { status }); ok++; }
-      catch { fail++; }
+      try {
+        await client.patch(`/leads/${id}/status`, {
+          status,
+          motivo: `Cambio masivo desde listado (${selected.length} prospectos)`,
+        });
+        ok++;
+      } catch { fail++; }
     }
     setWorking(false);
     toast({
@@ -42,7 +49,7 @@ export default function BulkActionBar({ selected, onClear, onRefresh, canDelete 
   }
 
   async function applyDelete() {
-    if (!window.confirm(`¿Eliminar ${selected.length} prospecto${selected.length === 1 ? '' : 's'}? Se moverán a la papelera.`)) return;
+    if (!(await confirm({ title: 'Eliminar prospectos', message: `¿Eliminar ${selected.length} prospecto${selected.length === 1 ? '' : 's'}? Se moverán a la papelera.`, tone: 'destructive', confirmLabel: 'Eliminar' }))) return;
     setWorking(true);
     let ok = 0, fail = 0;
     for (const id of selected) {

@@ -7,6 +7,7 @@ import client from '@/shared/api/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
+import { useConfirm } from '@/shared/components/ui/useConfirm';
 
 type Estado = 'pendiente' | 'pagado' | 'cancelado';
 
@@ -82,6 +83,7 @@ export default function CommissionsPage() {
   const { user } = useAuth();
   const { activeProject } = useProjectContext();
   const navigate = useNavigate();
+  const confirm = useConfirm();
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
 
   const [period, setPeriod] = useState('current');
@@ -127,7 +129,7 @@ export default function CommissionsPage() {
 
   async function handlePay(row: CommissionRow) {
     if (row.estado !== 'pendiente') return;
-    if (!window.confirm(`¿Marcar como pagada la comisión de ${row.user_nombre} (${fmt(row.importe_comision)})?`)) return;
+    if (!(await confirm({ title: 'Marcar como pagada', message: `¿Marcar como pagada la comisión de ${row.user_nombre} (${fmt(row.importe_comision)})?`, confirmLabel: 'Marcar pagada' }))) return;
     setPaying(row.id);
     try {
       const today = new Date().toISOString().slice(0, 10);

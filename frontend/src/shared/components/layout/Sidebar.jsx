@@ -2,28 +2,17 @@ import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useState, useRef, useEffect } from 'react';
 import {
   SquaresFour, Users, UserCheck, Package, ChartLineUp, Gear, SignOut,
-  Moon, Sun, CaretLeft, CaretRight, UserCircle, CurrencyEur, Receipt,
+  Moon, Sun, CaretLeft, CaretRight, UserCircle,
   CaretUp, CaretDown, Bell, Pulse, Calculator, Envelope, Globe,
   FilePdf, ShieldCheck, MagnifyingGlass, Headset, BookOpen, Sliders,
 } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useProjectContext } from '@/contexts/ProjectContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { cn } from '@/shared/lib/utils';
-import ProjectAvatar from '@/shared/components/ui/ProjectAvatar';
 import client from '@/shared/api/client';
-import { lazy, Suspense } from 'react';
-
-const ProjectSettingsDialog = lazy(() => import('@/modules/settings/components/ProjectSettingsDialog'));
+import NotificationsBell from './NotificationsBell';
 
 const ROLE_LABELS = { superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor', soporte: 'Soporte' };
-
-// Quita el prefijo "ISEIE " del nombre del proyecto en la UI del switcher.
-// El logo ya identifica la marca; mostrar "ISEIE España" + logo ISEIE es redundante.
-function shortProjectName(nombre) {
-  if (!nombre) return '';
-  return nombre.replace(/^ISEIE\s+/i, '').trim() || nombre;
-}
 
 // NAV_SECTIONS: agrupaciones del sidebar. Las "secciones" (Prospectos,
 // Captación, Productos, Contabilidad) son ahora una sola entrada en el
@@ -68,13 +57,11 @@ const NAV_SECTIONS = [
   {
     label: 'Sistema',
     items: [
-      { to: '/notifications', label: 'Notificaciones',   icon: Bell },
+      { to: '/notificaciones', label: 'Notificaciones',   icon: Bell },
       { to: '/preferences',   label: 'Mis preferencias', icon: Sliders },
-      { to: '/soporte',       label: 'Soporte',          icon: Headset },
       { to: '/status',        label: 'Status',           icon: Pulse },
-      { to: '/manual',        label: 'Manual',           icon: BookOpen },
-      { to: '/profile',       label: 'Mi cuenta',        icon: UserCircle },
-      { to: '/settings',      label: 'Configuración',    icon: Gear },
+      // Mi cuenta, Configuración, Manual y Soporte están en el menú de
+      // usuario (avatar inferior) para no inflar el sidebar.
     ],
   },
 ];
@@ -93,7 +80,7 @@ function NavItem({ to, label, icon: Icon, end, comingSoon, collapsed, onClick, s
         title={`${label} — Próximamente`}
         className={cn(
           'relative flex items-center rounded-md text-[13px] text-muted-foreground/45 cursor-not-allowed select-none',
-          collapsed ? 'justify-center h-10' : 'gap-3 px-3 py-2'
+          collapsed ? 'justify-center h-10' : 'gap-3 px-3 py-1.5'
         )}
       >
         <Icon size={18} weight="regular" />
@@ -120,7 +107,7 @@ function NavItem({ to, label, icon: Icon, end, comingSoon, collapsed, onClick, s
         const active = isActive || isPrefixActive;
         return cn(
           'relative flex items-center rounded-md text-[13px] transition-colors',
-          collapsed ? 'justify-center h-10' : 'gap-3 px-3 py-2',
+          collapsed ? 'justify-center h-10' : 'gap-3 px-3 py-1.5',
           active
             ? 'bg-primary/10 text-primary font-semibold'
             : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
@@ -146,22 +133,10 @@ function NavItem({ to, label, icon: Icon, end, comingSoon, collapsed, onClick, s
 
 export default function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }) {
   const { user, logout } = useAuth();
-  const { activeProject, projects, switchProject } = useProjectContext();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const [projectMenuOpen, setProjectMenuOpen] = useState(false);
   const userMenuRef = useRef(null);
-  const projectMenuRef = useRef(null);
-
-  useEffect(() => {
-    if (!projectMenuOpen) return;
-    function onDocClick(e) {
-      if (!projectMenuRef.current?.contains(e.target)) setProjectMenuOpen(false);
-    }
-    document.addEventListener('mousedown', onDocClick);
-    return () => document.removeEventListener('mousedown', onDocClick);
-  }, [projectMenuOpen]);
 
   useEffect(() => {
     if (!userMenuOpen) return;
@@ -179,31 +154,6 @@ export default function Sidebar({ collapsed = false, onToggleCollapsed, onNaviga
   const role = user?.role || 'gestor';
   const initials = user?.nombre?.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2) || '??';
   const rolLabel = ROLE_LABELS[role] || '';
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [projectSettingsOpen, setProjectSettingsOpen] = useState(false);
-
-  // Refresca el badge de notificaciones cada 60s consumiendo /leads/today.
-  // Cuenta: recordatorios pendientes + cobros vencidos + leads inactivos.
-  useEffect(() => {
-    if (!user || !activeProject?.id) { setUnreadCount(0); return; }
-    let cancelled = false;
-    async function load() {
-      try {
-        const res = await client.get('/leads/today', { params: { projectId: activeProject.id } });
-        const s = res?.data || res || {};
-        const n =
-          (s.reminders_pendientes?.length || 0) +
-          (s.cobros_vencidos || 0) +
-          (s.inactivos || 0);
-        if (!cancelled) setUnreadCount(Math.min(99, n));
-      } catch {
-        if (!cancelled) setUnreadCount(0);
-      }
-    }
-    load();
-    const id = setInterval(load, 60000);
-    return () => { cancelled = true; clearInterval(id); };
-  }, [user?.id, activeProject?.id]);
 
   return (
     <aside
@@ -245,72 +195,6 @@ export default function Sidebar({ collapsed = false, onToggleCollapsed, onNaviga
         )}
       </div>
 
-      {/* Project picker + gear */}
-      {!collapsed && activeProject && (
-        <div ref={projectMenuRef} className="relative mb-3">
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/80 mb-1 px-1">
-            Proyecto
-          </div>
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => setProjectMenuOpen((v) => !v)}
-              disabled={projects.length <= 1}
-              className="flex-1 min-w-0 flex items-center gap-2 px-1.5 py-1.5 rounded-md bg-secondary/40 border border-border hover:bg-secondary/70 disabled:cursor-default transition-colors text-left"
-            >
-              <ProjectAvatar project={activeProject} size="xs" />
-              <div className="min-w-0 flex-1 leading-tight">
-                <div className="text-[12px] font-semibold truncate text-foreground">{shortProjectName(activeProject.nombre)}</div>
-                <div className="text-[9px] uppercase tracking-wider text-muted-foreground truncate">{activeProject.slug}</div>
-              </div>
-              {projects.length > 1 && (
-                <CaretDown size={11} weight="bold" className={cn('text-muted-foreground transition-transform', projectMenuOpen && 'rotate-180')} />
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={() => setProjectSettingsOpen(true)}
-              title="Ajustes del proyecto"
-              aria-label="Ajustes del proyecto"
-              className="flex-shrink-0 p-1.5 rounded-md border border-border bg-secondary/40 hover:bg-secondary/70 text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <Gear size={13} weight="bold" />
-            </button>
-          </div>
-          {projectMenuOpen && projects.length > 1 && (
-            <div className="absolute left-0 right-0 top-full mt-1 z-50 max-h-80 overflow-y-auto rounded-lg border border-border bg-card shadow-lg p-1">
-              {projects.map((p) => {
-                const isActive = p.id === activeProject.id;
-                return (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => { switchProject(p.id); setProjectMenuOpen(false); }}
-                    className={cn(
-                      'w-full flex items-center gap-2.5 px-2 py-1.5 rounded-md text-left text-[13px] transition-colors',
-                      isActive ? 'bg-primary/10 text-primary font-semibold' : 'hover:bg-secondary text-foreground'
-                    )}
-                  >
-                    <ProjectAvatar project={p} size="sm" />
-                    <span className="flex-1 truncate">{shortProjectName(p.nombre)}</span>
-                    {isActive && <span className="text-[10px] text-primary">●</span>}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-      {collapsed && activeProject && (
-        <button
-          type="button"
-          onClick={() => setProjectMenuOpen((v) => !v)}
-          title={activeProject.nombre}
-          className="mb-4 flex justify-center w-full"
-        >
-          <ProjectAvatar project={activeProject} size="sm" />
-        </button>
-      )}
 
       {/* Trigger del CommandPalette (atajo Ctrl/Cmd + K). El render del modal
           vive en AppLayout; aquí solo disparamos el evento keydown sintético. */}
@@ -333,7 +217,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapsed, onNaviga
       )}
 
       {/* Nav */}
-      <nav className="flex-1 overflow-y-auto -mx-2 px-2 space-y-4">
+      <nav className="flex-1 overflow-y-auto -mx-2 px-2 space-y-3">
         {NAV_SECTIONS.map((section) => {
           const items = section.items
             .map((it) => {
@@ -350,7 +234,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapsed, onNaviga
           return (
             <div key={section.label}>
               {!collapsed && (
-                <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 px-3 mb-1.5">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 px-3 mb-1">
                   {section.label}
                 </div>
               )}
@@ -397,23 +281,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapsed, onNaviga
               </>
             )}
           </button>
-          <button
-            type="button"
-            onClick={() => navigate('/notifications')}
-            title="Notificaciones"
-            aria-label="Notificaciones"
-            className={cn(
-              'relative p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors flex-shrink-0',
-              collapsed && 'w-full flex justify-center'
-            )}
-          >
-            <Bell size={16} weight={unreadCount > 0 ? 'fill' : 'regular'} />
-            {unreadCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] px-1 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center ring-2 ring-card">
-                {unreadCount > 9 ? '9+' : unreadCount}
-              </span>
-            )}
-          </button>
+          <NotificationsBell collapsed={collapsed} />
         </div>
 
         {userMenuOpen && (
@@ -436,6 +304,21 @@ export default function Sidebar({ collapsed = false, onToggleCollapsed, onNaviga
               Configuración
             </button>
             <button
+              onClick={() => { setUserMenuOpen(false); navigate('/manual'); }}
+              className="w-full flex items-center gap-2.5 px-3 py-2 text-[13px] hover:bg-secondary/60 text-foreground"
+            >
+              <BookOpen size={15} />
+              Manual del CRM
+            </button>
+            <button
+              onClick={() => { setUserMenuOpen(false); navigate('/soporte'); }}
+              className="w-full flex items-center gap-2.5 px-3 py-2 text-[13px] hover:bg-secondary/60 text-foreground"
+            >
+              <Headset size={15} />
+              Soporte
+            </button>
+            <div className="my-1 border-t border-border" />
+            <button
               onClick={() => { setUserMenuOpen(false); toggleTheme(); }}
               className="w-full flex items-center gap-2.5 px-3 py-2 text-[13px] hover:bg-secondary/60 text-foreground"
             >
@@ -453,13 +336,6 @@ export default function Sidebar({ collapsed = false, onToggleCollapsed, onNaviga
           </div>
         )}
       </div>
-      <Suspense fallback={null}>
-        <ProjectSettingsDialog
-          open={projectSettingsOpen}
-          onClose={() => setProjectSettingsOpen(false)}
-          projectId={activeProject?.id || null}
-        />
-      </Suspense>
     </aside>
   );
 }

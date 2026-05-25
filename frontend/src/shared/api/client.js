@@ -59,9 +59,21 @@ async function request(url, options = {}) {
     : { 'Content-Type': 'application/json', ...options.headers };
   if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
 
-  const res = await fetchWithRetry(`${API_BASE_URL}${url}`, {
+  // Soporte axios-style `params`: { params: { foo: 1, bar: undefined } }
+  // → URL?foo=1 (omite undefined/null/'').
+  let finalUrl = url;
+  if (options.params && typeof options.params === 'object') {
+    const qs = Object.entries(options.params)
+      .filter(([, v]) => v !== undefined && v !== null && v !== '')
+      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
+      .join('&');
+    if (qs) finalUrl += (finalUrl.includes('?') ? '&' : '?') + qs;
+  }
+  const { params: _omit, ...fetchOptions } = options;
+
+  const res = await fetchWithRetry(`${API_BASE_URL}${finalUrl}`, {
     credentials: 'include',
-    ...options,
+    ...fetchOptions,
     headers,
   });
 

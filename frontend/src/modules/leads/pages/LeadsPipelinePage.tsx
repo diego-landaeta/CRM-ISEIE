@@ -101,10 +101,8 @@ function LeadCard({ lead, onClick, onDragStart, onDragEnd }: LeadCardProps) {
 }
 
 export default function LeadsPipelinePage() {
-  const { activeProject, projects, isAllProjects } = useProjectContext() as {
-    activeProject: { id?: number | null; isAll?: boolean };
-    projects: Array<{ id: number }>;
-    isAllProjects: boolean;
+  const { activeProject } = useProjectContext() as {
+    activeProject: { id?: number | null };
   };
   const pid = activeProject?.id;
 
@@ -116,14 +114,10 @@ export default function LeadsPipelinePage() {
   const [dragOverCol, setDragOverCol] = useState<LeadStatus | null>(null);
 
   const fetchAllLeads = useCallback(async () => {
-    if (isAllProjects && (!projects || projects.length === 0)) return;
-    if (!isAllProjects && !pid) return;
+    if (!pid) return;
     setLoading(true);
     try {
-      const qs = isAllProjects
-        ? `projectIds=${projects.map((p) => p.id).join(',')}&limit=200&includeConverted=1`
-        : `projectId=${pid}&limit=200&includeConverted=1`;
-      const res = await client.get<PipelineLead[]>(`/leads?${qs}`);
+      const res = await client.get<PipelineLead[]>(`/leads?projectId=${pid}&limit=200&includeConverted=1`);
       if (res.success) {
         // Backend devuelve status, frontend usa estado - normalizar
         setAllLeads((res.data || []).map((l: PipelineLead) => ({
@@ -137,7 +131,7 @@ export default function LeadsPipelinePage() {
     } finally {
       setLoading(false);
     }
-  }, [pid, isAllProjects, projects]);
+  }, [pid]);
 
   useEffect(() => {
     fetchAllLeads();

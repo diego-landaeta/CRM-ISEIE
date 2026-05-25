@@ -90,7 +90,7 @@ export default function AccountingDashboardPage() {
     <div className="space-y-5 pb-8">
       <PageHeader
         title="Contabilidad"
-        subtitle={activeProject ? `${activeProject.nombre}` : 'Todos los proyectos'}
+        subtitle={activeProject?.nombre || ''}
         actions={
           <>
             <input

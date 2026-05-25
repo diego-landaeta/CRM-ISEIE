@@ -3,6 +3,7 @@ import { verifyToken, roleGuard } from '../../shared/middleware/auth.js';
 import { uploadImage } from '../../shared/middleware/upload.js';
 import * as userController from './user.controller.js';
 import * as viewsController from './user.views.controller.js';
+import * as availabilityController from './availability.controller.js';
 
 const router = Router();
 
@@ -24,10 +25,18 @@ router.use(roleGuard('admin', 'superadmin'));
 
 router.get('/', userController.list);
 router.get('/activity-log', userController.activityLog);
+
+// Disponibilidad (rutas con path fijo antes de las que tienen :id)
+router.get('/availability',                       availabilityController.listAvailability);
+router.delete('/availability-blocks/:blockId',    availabilityController.deleteBlock);
+
 router.get('/:id', userController.getById);
 router.post('/', userController.create);
 router.patch('/:id', userController.update);
 router.delete('/:id', userController.deactivate);
 router.patch('/:id/reactivate', userController.reactivate);
+router.patch('/:id/availability',                 availabilityController.setAvailability);
+router.get('/:id/availability-blocks',            availabilityController.listBlocks);
+router.post('/:id/availability-blocks',           availabilityController.createBlock);
 
 export default router;

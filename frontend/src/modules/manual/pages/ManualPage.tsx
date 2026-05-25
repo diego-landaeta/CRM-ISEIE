@@ -664,7 +664,7 @@ export default function ManualPage() {
         ]} />
 
         <Callout type="tip">
-          Los datos fijos del emisor (Psiko Aprende: razón social, NIF, dirección) y del certificado
+          Los datos fijos del emisor (ISEIE Innovation School S.L.: razón social, NIF, dirección) y del certificado
           (Director, Responsable de Formación, modalidad, ciudad) se guardan como predeterminados.
           Solo necesitas cambiarlos si emites para otra entidad.
         </Callout>
@@ -790,9 +790,8 @@ export default function ManualPage() {
 
         <SubHeader>1. Obtener el API key del proyecto</SubHeader>
         <Steps items={[
-          { title: 'Abre el CRM con el proyecto destino seleccionado', desc: 'En el selector del sidebar elige el proyecto al que llegarán los leads (Psiko Aprende, ISEIH, etc.).' },
-          { title: 'Pulsa el engranaje al lado del nombre del proyecto', desc: 'Abre la configuración del proyecto activo (sólo Admin/Superadmin).' },
-          { title: 'Tab «Webhook»', desc: 'Verás la URL del webhook y el API key. Copia ambos — los pegarás en Make. Si necesitas regenerar la key, hay un botón "Regenerar" (invalida la anterior).' },
+          { title: 'Abre Configuración → Webhooks', desc: 'Acceso desde el sidebar (sólo Admin/Superadmin).' },
+          { title: 'Copia URL y API key', desc: 'Verás la URL del webhook y el API key. Copia ambos — los pegarás en Make. Si necesitas regenerar la key, hay un botón "Regenerar" (invalida la anterior).' },
         ]} />
 
         <SubHeader>2. Añadir el módulo HTTP en Make</SubHeader>
