@@ -100,8 +100,8 @@ function PlansTab({ project }: TabProps) {
         client.get(`/payroll/plans?projectId=${project.id}`),
         client.get(`/users`),
       ]);
-      if (pl.success) setPlans(pl.data as PayrollPlan[]);
-      if (us.success) setUsers(us.data as User[]);
+      if (pl.success) setPlans(Array.isArray(pl.data) ? (pl.data as PayrollPlan[]) : []);
+      if (us.success) setUsers(Array.isArray(us.data) ? (us.data as User[]) : []);
     } finally { setLoading(false); }
   }, [project?.id]);
 
@@ -265,8 +265,8 @@ function PeriodsTab({ project }: TabProps) {
         client.get(`/payroll/periods?projectId=${project.id}&year=${year}&month=${month}`),
         client.get(`/payroll/plans?projectId=${project.id}`),
       ]);
-      if (p.success) setPeriods(p.data as PayrollPeriod[]);
-      if (u.success) setUsers(u.data as PayrollPlan[]);
+      if (p.success) setPeriods(Array.isArray(p.data) ? (p.data as PayrollPeriod[]) : []);
+      if (u.success) setUsers(Array.isArray(u.data) ? (u.data as PayrollPlan[]) : []);
     } finally { setLoading(false); }
   }, [project?.id, year, month]);
 
@@ -380,8 +380,8 @@ function HoursTab({ project }: TabProps) {
         client.get(`/payroll/hours?projectId=${project.id}`),
         client.get(`/payroll/plans?projectId=${project.id}`),
       ]);
-      if (h.success) setHours(h.data as PayrollHour[]);
-      if (p.success) setUsers((p.data as PayrollPlan[]).filter(x => x.modo_horas != null && x.modo_horas !== ''));
+      if (h.success) setHours(Array.isArray(h.data) ? (h.data as PayrollHour[]) : []);
+      if (p.success) setUsers(Array.isArray(p.data) ? (p.data as PayrollPlan[]).filter(x => x.modo_horas != null && x.modo_horas !== '') : []);
     } finally { setLoading(false); }
   }, [project?.id]);
 

@@ -84,7 +84,7 @@ export default function ShortcutsConfigPage() {
           client.get('/projects') as Promise<ApiResponse<ProjectWithShortcuts[]>>,
         ]);
         if (cancelled) return;
-        if (catRes.success && catRes.data) setCatalog(catRes.data);
+        if (catRes.success) setCatalog(Array.isArray(catRes.data) ? catRes.data : []);
         if (projRes.success && projRes.data) {
           const map = new Map<number, Map<string, string[]>>();
           for (const p of projRes.data) {

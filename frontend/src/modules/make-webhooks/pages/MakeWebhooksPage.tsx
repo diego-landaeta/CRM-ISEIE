@@ -33,7 +33,7 @@ export default function MakeWebhooksPage() {
     setLoading(true);
     try {
       const res = await client.get(`/make-webhooks?projectId=${activeProject.id}`);
-      if (res.success) setItems((res.data as MakeWebhook[]) || []);
+      if (res.success) setItems(Array.isArray(res.data) ? (res.data as MakeWebhook[]) : []);
     } catch (err: any) {
       toast({ title: 'Error', description: err?.data?.error || err.message, variant: 'destructive' });
     } finally { setLoading(false); }

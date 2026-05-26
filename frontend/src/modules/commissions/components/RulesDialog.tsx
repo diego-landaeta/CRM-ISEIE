@@ -45,12 +45,23 @@ export default function RulesDialog({ onClose, onSaved }: Props) {
         client.get('/users?active=true'),
         client.get('/projects'),
       ]);
-      if (r.success) setRules(r.data || []);
-      if (u.success) setUsers(((u.data?.users || u.data || []) as User[]).filter((x) => x.role === 'gestor' || x.role === 'admin'));
-      if (pj.success) setProjects((pj.data as Project[]) || []);
+      if (r.success) setRules(Array.isArray(r.data) ? r.data : []);
+      if (u.success) {
+        const rawUsers = (u.data as { users?: User[] } | User[] | null);
+        const list = Array.isArray(rawUsers) ? rawUsers : Array.isArray(rawUsers?.users) ? rawUsers.users : [];
+        setUsers(list.filter((x) => x.role === 'gestor' || x.role === 'admin'));
+      }
+      if (pj.success) {
+        const list = Array.isArray(pj.data) ? (pj.data as Project[]) : [];
+        setProjects(list);
+        // Auto-select unico proyecto si solo hay 1 (post-consolidacion)
+        if (list.length === 1 && !newRule.project_id) {
+          setNewRule((prev) => ({ ...prev, project_id: String(list[0].id) }));
+        }
+      }
     } finally { setLoading(false); }
   }
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
 
   useEffect(() => {
     if (!newRule.project_id) { setProducts([]); return; }

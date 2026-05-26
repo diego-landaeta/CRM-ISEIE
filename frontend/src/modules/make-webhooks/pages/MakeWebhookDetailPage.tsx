@@ -90,7 +90,7 @@ export default function MakeWebhookDetailPage() {
         setMapping(r1.data.field_mapping || {});
         setLabelDraft(r1.data.label || '');
       }
-      if (r2.success) setDeliveries(r2.data || []);
+      if (r2.success) setDeliveries(Array.isArray(r2.data) ? r2.data : []);
     } catch (err: any) {
       toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' });
     } finally { setLoading(false); }

@@ -118,7 +118,7 @@ export default function CommissionsPage() {
         client.get(`${baseList}${qs}`).catch(() => ({ success: false, data: [] })),
         client.get(`${baseStats}${qsStats ? '?' + qsStats : ''}`).catch(() => ({ success: false, data: null })),
       ]);
-      setRows((listRes as any).data || []);
+      setRows(Array.isArray((listRes as any).data) ? (listRes as any).data : []);
       setStats((statsRes as any).data || null);
     } finally {
       setLoading(false);

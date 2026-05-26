@@ -192,7 +192,7 @@ export default function WooCommercePage() {
           section_keywords: data.section_keywords || DEFAULT_SECTION_KEYWORDS,
         });
       }
-      if (r.success) setRuns((r.data as WooRun[]) || []);
+      if (r.success) setRuns(Array.isArray(r.data) ? (r.data as WooRun[]) : []);
     } finally { setLoading(false); }
   }, [activeProject?.id]);
 

@@ -62,7 +62,7 @@ export const PERMISSION_RESOURCES: ReadonlyArray<PermissionResource> = [
 export const FIXED_ROLES: ReadonlyArray<FixedRole> = [
   { key: 'superadmin', label: 'Superadmin', desc: 'Acceso total. Solo este rol gestiona usuarios.', color: 'rose' },
   { key: 'admin',      label: 'Admin',      desc: 'Acceso operativo completo, no gestiona usuarios.', color: 'violet' },
-  { key: 'gestor',     label: 'Gestor',     desc: 'Solo proyectos asignados, solo sus leads.', color: 'sky' },
+  { key: 'gestor',     label: 'Gestor',     desc: 'Solo sus leads asignados.', color: 'sky' },
   { key: 'soporte',    label: 'Soporte',    desc: 'Acceso de solo lectura para soporte técnico.', color: 'emerald' },
 ];
 

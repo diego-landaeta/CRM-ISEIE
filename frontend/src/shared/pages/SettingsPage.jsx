@@ -149,7 +149,7 @@ function UsersSection({ isAdmin }) {
     <section className="space-y-4">
       <SectionHeader
         title="Usuarios"
-        subtitle="Invita gestores, admins y soporte. Cada uno con roles y proyectos asignados."
+        subtitle="Invita gestores, admins y soporte. Cada uno con su rol y disponibilidad."
         action={
           <button
             disabled={!isAdmin}
@@ -167,7 +167,7 @@ function UsersSection({ isAdmin }) {
         </div>
         <h3 className="font-semibold mb-1">Sin usuarios todavía</h3>
         <p className="text-sm text-muted-foreground max-w-sm mx-auto mb-4">
-          Cuando invites usuarios aparecerán aquí con su rol y los proyectos a los que tienen acceso.
+          Cuando invites usuarios aparecerán aquí con su rol y disponibilidad.
         </p>
         <div className="flex flex-wrap items-center justify-center gap-2 text-[11px]">
           {['superadmin', 'admin', 'gestor', 'soporte'].map((r) => (

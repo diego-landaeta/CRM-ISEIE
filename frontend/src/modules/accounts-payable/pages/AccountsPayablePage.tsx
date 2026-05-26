@@ -53,7 +53,7 @@ export default function AccountsPayablePage() {
         payableApi.list(params),
         payableApi.stats(projId ? { projectId: projId } : {}),
       ]);
-      if (listRes.success) setItems(listRes.data);
+      if (listRes.success) setItems(Array.isArray(listRes.data) ? listRes.data : []);
       if (statsRes.success) setStats(statsRes.data);
     } catch (err) {
       toast({ title: 'Error cargando', description: err.message, variant: 'destructive' });

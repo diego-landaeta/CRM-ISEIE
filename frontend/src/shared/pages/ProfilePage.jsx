@@ -18,7 +18,7 @@ const ROLE_LABELS = {
 };
 
 export default function ProfilePage() {
-  const { user, projects, refreshUser } = useAuth();
+  const { user, refreshUser } = useAuth();
   const [tab, setTab] = useState('general');
   const [nombre, setNombre] = useState(user?.nombre || '');
   const [savingProfile, setSavingProfile] = useState(false);
@@ -85,7 +85,7 @@ export default function ProfilePage() {
       <header>
         <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Mi cuenta</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Información personal, contraseña y proyectos asignados.
+          Información personal y contraseña.
         </p>
       </header>
 
@@ -94,7 +94,6 @@ export default function ProfilePage() {
         {[
           { id: 'general',  label: 'Perfil' },
           { id: 'security', label: 'Contraseña' },
-          { id: 'projects', label: `Mis proyectos (${projects?.length || 0})` },
         ].map((t) => (
           <button
             key={t.id}
@@ -232,31 +231,6 @@ export default function ProfilePage() {
         </div>
       )}
 
-      {tab === 'projects' && (
-        <div className="space-y-3">
-          {(projects || []).length === 0 ? (
-            <div className="crm-card p-8 text-center text-sm text-muted-foreground">
-              No tienes proyectos asignados todavía.
-            </div>
-          ) : (
-            (projects || []).map((p) => (
-              <div key={p.id} className="crm-card-interactive p-5 flex items-center gap-4">
-                <div
-                  className="w-12 h-12 rounded-lg flex items-center justify-center text-2xl flex-shrink-0"
-                  style={{ background: p.theme_color ? `${p.theme_color}20` : 'hsl(var(--muted))' }}
-                >
-                  {p.emoji || '📁'}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-foreground truncate">{p.nombre}</div>
-                  <div className="text-xs text-muted-foreground truncate">{p.slug} · {p.type}</div>
-                </div>
-                <ArrowRight size={16} className="text-muted-foreground" />
-              </div>
-            ))
-          )}
-        </div>
-      )}
     </div>
   );
 }
