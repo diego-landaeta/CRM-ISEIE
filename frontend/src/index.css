@@ -4,6 +4,10 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Oculta el "ojo" nativo de Edge/IE sobre inputs type=password (tenemos uno propio). */
+input::-ms-reveal,
+input::-ms-clear { display: none; }
+
 /*
  * Paleta ISEIE — navy corporativo del logo.
  * Primary: #002776 (fondo del logo) → hsl(220 100% 23%) en light, hsl(220 75% 62%) en dark.
