@@ -4,7 +4,7 @@ import { logger } from '../utils/logger.js';
 const { Pool, types } = pg;
 
 // IMPORTANTE: las columnas DATE (oid 1082) las devuelve pg por defecto como
-// Date JS en UTC midnight, lo que hace que en front se vea como el dia anterior
+// Date JS en UTC midnight, lo que hace que en front se vea como el día anterior
 // para usuarios en zonas con offset negativo (ej. Venezuela GMT-4).
 // Forzamos a devolverlas como string 'YYYY-MM-DD' para evitar timezone games.
 types.setTypeParser(1082, (val) => val);

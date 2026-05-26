@@ -18,6 +18,9 @@ const METODOS = [
   { value: 'fraccionado', label: 'Fraccionado (cuotas)' },
 ];
 
+// Editar conversión cargada previamente. Permite corregir importe_total (con
+// descuentos/becas), producto, fechas, método de pago y notas. NO modifica
+// pagos ya registrados; para eso usar el diálogo de pagos.
 export default function EditConversionDialog({ conversion, onClose, onSaved }: Props) {
   const [producto, setProducto] = useState('');
   const [importeTotal, setImporteTotal] = useState('');

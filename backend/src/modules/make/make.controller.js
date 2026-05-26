@@ -3,26 +3,26 @@ import * as svc from './make.service.js';
 import { createWebhookSchema, updateWebhookSchema } from './make.validation.js';
 
 // ============================================================
-// ENDPOINT PUBLICO - recibe payloads de Make
+// ENDPOINT PÚBLICO — recibe payloads de Make
 // ============================================================
 export async function receive(req, res, next) {
   try {
     const { slug } = req.params;
     const secret = req.headers['x-make-secret'] || req.query.secret;
 
-    // La asesora (responsable) puede venir en 3 sitios ademas del body:
+    // La asesora (responsable) puede venir en 3 sitios además del body:
     //   1) Header X-Asesora-Email / X-Asesora-Nombre
     //   2) Query param ?asesora_email=... / ?asesora_nombre=...
     //   3) Dentro del JSON del body (lo procesa el mapping normal)
     // Cualquiera de las 3 funciona. Los headers/query tienen prioridad sobre el body
-    // para que sea facil inyectar la asesora sin reconstruir el JSON en Make.
+    // para que sea fácil inyectar la asesora sin reconstruir el JSON en Make.
     const overrides = {};
     const hdrEmail = req.headers['x-asesora-email'] || req.query.asesora_email;
     const hdrNombre = req.headers['x-asesora-nombre'] || req.query.asesora_nombre;
     if (hdrEmail) overrides.responsable_email = String(hdrEmail);
     if (hdrNombre) overrides.responsable_nombre = String(hdrNombre);
 
-    // Canal tambien soportado por header/query (X-Canal / ?canal=)
+    // Canal también soportado por header/query (X-Canal / ?canal=)
     // Acepta cualquier string razonable; el CRM lo normaliza si matchea
     // (whatsapp, instagram, web, email, meta_ads, google_ads, tiktok_ads,
     //  chatgpt_ia, referido, organico, directo).
@@ -41,14 +41,14 @@ export async function receive(req, res, next) {
 }
 
 // ============================================================
-// ADMIN - CRUD de webhooks
+// ADMIN — CRUD de webhooks
 // ============================================================
 export async function list(req, res, next) {
   try {
     const projectId = parseInt(req.query.projectId);
     if (isNaN(projectId)) throw new AppError('projectId requerido', 400, 'MISSING_PROJECT');
     const hooks = await svc.model.listByProject(projectId);
-    // No exponer el secret al listado - solo en getById/create/rotate
+    // No exponer el secret al listado — solo en getById/create/rotate
     res.json({ success: true, data: hooks });
   } catch (err) { next(err); }
 }

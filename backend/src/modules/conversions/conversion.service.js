@@ -1,17 +1,21 @@
 import { AppError } from '../../shared/utils/AppError.js';
 import * as conversionModel from './conversion.model.js';
 import * as commissionModel from '../commissions/commission.model.js';
+import * as seqModel from '../email-sequences/sequence.model.js';
+import { query } from '../../shared/config/db.js';
 import { logger } from '../../shared/utils/logger.js';
 
-// Stub: el modulo email-sequences no esta portado todavia en CRM-ISEIE v1.
-// Cuando se porte, sustituir por el import real del CRM hermano:
-//   import * as seqModel from '../email-sequences/sequence.model.js';
-
-async function triggerSequences(triggerEvent, leadId, _projectId) {
-  // Stub: el modulo email-sequences no esta portado. Cuando se porte,
-  // restaurar la implementacion original (consulta a email_sequences +
-  // seqModel.startRun por cada secuencia con trigger_event match).
-  logger.debug({ triggerEvent, leadId }, 'triggerSequences skipped (module not ported)');
+async function triggerSequences(triggerEvent, leadId, projectId) {
+  try {
+    const { rows: seqs } = await query(
+      `SELECT id FROM email_sequences WHERE project_id = $1 AND trigger_event = $2 AND active = true`,
+      [projectId, triggerEvent]
+    );
+    for (const seq of seqs) await seqModel.startRun(seq.id, leadId);
+    if (seqs.length) logger.info({ triggerEvent, leadId, count: seqs.length }, 'Email sequences disparadas');
+  } catch (err) {
+    logger.warn({ err: err.message, triggerEvent, leadId }, 'Error disparando email sequences');
+  }
 }
 
 export async function create(data, userId) {
@@ -26,9 +30,8 @@ export async function create(data, userId) {
     logger.warn({ err: err.message, conversionId: conv.id }, 'createCommission failed (non-blocking)')
   );
 
-  // Hook: disparar email sequences con trigger conversion_created (fire-and-forget)
-  Promise.resolve(triggerSequences('conversion_created', data.lead_id, data.project_id))
-    .catch(err => logger.warn({ err: err.message, leadId: data.lead_id }, 'triggerSequences failed (non-blocking)'));
+  // Hook: disparar email sequences con trigger conversion_created
+  triggerSequences('conversion_created', data.lead_id, data.project_id);
 
   return conv;
 }
@@ -82,14 +85,14 @@ export async function remove(id, { reason, motivo, userId } = {}) {
   const existing = await conversionModel.findById(id);
   if (!existing) throw new AppError('Conversion no encontrada', 404, 'CONVERSION_NOT_FOUND');
 
-  // Antes de borrar, dejamos rastro en lead_interactions para auditoria.
+  // Antes de borrar, dejamos rastro en lead_interactions para auditoría.
   if (existing.lead_id && reason) {
     try {
       const { query } = await import('../../shared/config/db.js');
       const REASON_LABELS = {
         duplicada: 'Compra duplicada',
         error_carga: 'Error al cargar',
-        anulacion_cliente: 'Anulacion del cliente',
+        anulacion_cliente: 'Anulación del cliente',
         otro: 'Otro',
       };
       const nota = `Compra eliminada — ${REASON_LABELS[reason] || reason}: ${existing.producto_contratado} (${existing.importe_total}€)${motivo ? `. Motivo: ${motivo}` : ''}`;

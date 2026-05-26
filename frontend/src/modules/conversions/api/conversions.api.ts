@@ -25,8 +25,6 @@ export interface Conversion {
   notas_pago?: string | null;
   payments_count?: number;
   payments?: Payment[];
-  refunds?: Refund[];
-  refunds_total?: number | string;
   lead_nombre?: string;
   product_nombre?: string;
   created_at?: string;

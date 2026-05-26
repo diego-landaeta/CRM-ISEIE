@@ -39,7 +39,7 @@ router.get('/:id/refunds', refundsCtrl.list);
 router.post('/:id/refunds', roleGuard('admin', 'superadmin'), refundsCtrl.create);
 router.delete('/refunds/:refundId', roleGuard('admin', 'superadmin'), refundsCtrl.remove);
 
-// Eliminar conversion. Gestor solo si es duena del lead. Requiere motivo.
+// Eliminar conversión. Gestor solo si es dueña del lead. Requiere motivo.
 // Ownership + log a lead_interactions se hace dentro del controller.
 router.delete('/:id', ctrl.remove);
 

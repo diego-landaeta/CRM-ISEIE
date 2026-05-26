@@ -8,7 +8,6 @@ import InstallmentsDialog from './InstallmentsDialog';
 import EditConversionDialog from './EditConversionDialog';
 import { Plus, Receipt, CreditCard, Trash, WarningCircle, CheckCircle, ArrowCounterClockwise, Coins, PencilSimple } from '@phosphor-icons/react';
 import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
-import { useConfirm } from '@/shared/components/ui/useConfirm';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { formatCurrency, formatDate } from '@/shared/lib/format';
 
@@ -36,7 +35,16 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
   const [pendingConversion, setPendingConversion] = useState<number | null>(null);
   const [deleteReason, setDeleteReason] = useState<string>('duplicada');
   const [deleteMotivo, setDeleteMotivo] = useState<string>('');
-  const confirm = useConfirm();
+  const [refundsByConv, setRefundsByConv] = useState<Record<number, Refund[]>>({});
+
+  async function loadRefunds(conversionId: number): Promise<void> {
+    try {
+      const r = await conversionsApi.listRefunds(conversionId);
+      if (r.success) {
+        setRefundsByConv((prev) => ({ ...prev, [conversionId]: r.data || [] }));
+      }
+    } catch { /* silencioso */ }
+  }
 
   async function load(): Promise<void> {
     if (!lead?.id) return;
@@ -53,12 +61,19 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
 
   useEffect(() => { load(); }, [lead?.id]);
 
+  // Tras cargar conversiones, traemos las devoluciones de cada una (suelen ser pocas).
+  useEffect(() => {
+    conversions.forEach((c) => { loadRefunds(c.id); });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversions]);
+
   async function handleDeleteRefund(refundId: number): Promise<void> {
-    if (!(await confirm({ title: 'Eliminar devolución', message: '¿Eliminar esta devolución? La operación es irreversible.', tone: 'destructive', confirmLabel: 'Eliminar' }))) return;
+    if (!confirm('¿Eliminar esta devolución? La operación es irreversible.')) return;
     try {
       await conversionsApi.removeRefund(refundId);
       toast({ title: 'Devolución eliminada' });
-      await load();
+      // Recargamos las devoluciones de TODAS las conversiones (la mas barata)
+      conversions.forEach((c) => loadRefunds(c.id));
     } catch (err: any) {
       toast({ title: 'Error', description: err?.data?.error || err?.message, variant: 'destructive' });
     }
@@ -115,6 +130,7 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
 
   return (
     <div className="space-y-4">
+      {/* Header con stats */}
       <div className="flex items-start justify-between">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 flex-1">
           <div className="bg-card border border-border rounded-md p-3">
@@ -142,6 +158,7 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
         </button>
       )}
 
+      {/* Lista de conversiones */}
       {conversions.length === 0 ? (
         <EmptyState
           icon={Receipt}
@@ -230,6 +247,7 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
                   )}
                 </div>
 
+                {/* Importes */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
                   <div className="bg-muted/50 rounded-lg p-2">
                     <div className="text-[9px] text-muted-foreground font-bold">Total</div>
@@ -245,16 +263,18 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
                   </div>
                 </div>
 
-                {(c.payments_count || 0) > 0 && (
+                {/* Pagos */}
+                {c.payments_count > 0 && (
                   <details className="text-xs">
                     <summary className="cursor-pointer text-muted-foreground hover:text-foreground font-semibold">
                       Ver {c.payments_count} pago{c.payments_count !== 1 ? 's' : ''} registrado{c.payments_count !== 1 ? 's' : ''}
                     </summary>
-                    <PaymentsList payments={c.payments} onDelete={handleDeletePayment} canManage={canManage} />
+                    <PaymentsList conversionId={c.id} onDelete={handleDeletePayment} canManage={canManage} />
                   </details>
                 )}
 
-                {(c.refunds?.length || 0) > 0 && (
+                {/* Devoluciones (FASE DE PRUEBA) */}
+                {(refundsByConv[c.id]?.length || 0) > 0 && (
                   <div className="mt-3 pt-3 border-t border-amber-200 dark:border-amber-900">
                     <div className="flex items-center gap-2 mb-2">
                       <ArrowCounterClockwise size={12} className="text-amber-600" weight="bold" />
@@ -262,11 +282,11 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
                         Devoluciones registradas — fase de prueba
                       </span>
                       <span className="text-[10px] text-muted-foreground ml-auto">
-                        Neto cobrado: {formatCurrency(Number(c.importe_pagado) - Number(c.refunds_total || 0))}
+                        Neto cobrado: {formatCurrency(Number(c.importe_pagado) - (refundsByConv[c.id] || []).reduce((s, r) => s + Number(r.importe), 0))}
                       </span>
                     </div>
                     <div className="space-y-1">
-                      {(c.refunds || []).map((r) => (
+                      {(refundsByConv[c.id] || []).map((r) => (
                         <div key={r.id} className="flex items-center gap-2 text-[11px] bg-amber-50/50 dark:bg-amber-950/20 rounded px-2 py-1">
                           <span className="font-mono text-muted-foreground">{r.fecha}</span>
                           <span className="font-semibold text-amber-700 dark:text-amber-300 tabular-nums">−{formatCurrency(r.importe)}</span>
@@ -308,7 +328,11 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
         open={!!refundDialogConv}
         conversion={refundDialogConv}
         onClose={() => setRefundDialogConv(null)}
-        onSaved={() => { setRefundDialogConv(null); load(); }}
+        onSaved={() => {
+          const id = refundDialogConv?.id;
+          setRefundDialogConv(null);
+          if (id) loadRefunds(id);
+        }}
       />
       <ConfirmDialog open={pendingPayment !== null} title="¿Eliminar pago?" message="Se recalculará el total de la conversión." onConfirm={doDeletePayment} onCancel={() => setPendingPayment(null)} />
       {/* Dialog eliminar conversión con motivo obligatorio para auditoría */}
@@ -378,15 +402,25 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
 }
 
 interface PaymentsListProps {
-  payments: Payment[] | undefined;
+  conversionId: number;
   onDelete: (id: number) => void;
   canManage?: boolean;
 }
 
-function PaymentsList({ payments, onDelete, canManage }: PaymentsListProps) {
+function PaymentsList({ conversionId, onDelete, canManage }: PaymentsListProps) {
+  const [payments, setPayments] = useState<Payment[] | null>(null);
+
+  useEffect(() => {
+    conversionsApi.getById(conversionId).then(res => {
+      if (res.success && res.data) setPayments(res.data.payments || []);
+    });
+  }, [conversionId]);
+
+  if (!payments) return <div className="mt-2 text-muted-foreground">Cargando…</div>;
+
   return (
     <ul className="mt-2 space-y-1">
-      {(payments || []).map(p => (
+      {payments.map(p => (
         <li key={p.id} className="flex items-center justify-between bg-muted/30 rounded px-2 py-1.5">
           <div>
             <span className="font-semibold tabular-nums">{formatCurrency(p.importe)}</span>

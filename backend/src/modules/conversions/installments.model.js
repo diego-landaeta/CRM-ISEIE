@@ -108,7 +108,7 @@ export async function markPaid(id, { fecha_cobro, importe_cobrado, metodo, notas
 
 // Edita un pago YA registrado (fecha_cobro / importe_cobrado).
 // Mantiene en sync el conversion_payment correspondiente y el importe_pagado
-// de la conversion (suma/resta el diff de importe).
+// de la conversión (suma/resta el diff de importe).
 export async function editPaid(id, { fecha_cobro, importe_cobrado }) {
   const c = await getClient();
   try {
@@ -129,7 +129,7 @@ export async function editPaid(id, { fecha_cobro, importe_cobrado }) {
         [newImporte, newFecha, inst.payment_id]
       );
     }
-    // Ajustar importe_pagado de la conversion si cambio el monto
+    // Ajustar importe_pagado de la conversión si cambió el monto
     if (diff !== 0) {
       await c.query(
         `UPDATE conversions SET importe_pagado = importe_pagado + $1, updated_at = NOW() WHERE id = $2`,
@@ -152,7 +152,7 @@ export async function editPaid(id, { fecha_cobro, importe_cobrado }) {
 }
 
 // Deshace el pago de una cuota: borra el conversion_payment, resta del
-// importe_pagado de la conversion, y devuelve la cuota a estado "pendiente".
+// importe_pagado de la conversión, y devuelve la cuota a estado "pendiente".
 export async function unpay(id) {
   const c = await getClient();
   try {

@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { X, CalendarBlank, Plus, Trash, CheckCircle, Coins } from '@phosphor-icons/react';
 import { conversionsApi, type Conversion } from '../api/conversions.api';
 import { toast } from '@/shared/hooks/useToast';
-import { useConfirm } from '@/shared/components/ui/useConfirm';
 import { formatCurrency, formatDate } from '@/shared/lib/format';
 
 interface Installment {
@@ -21,6 +20,9 @@ interface Props {
   onSaved?: () => void;
 }
 
+// Diálogo para gestionar las cuotas de una conversión.
+// - Si la conversión es de pago único: ofrece "Convertir a fraccionado" (N cuotas mensuales o personalizadas).
+// - Si ya tiene cuotas: las lista, permite marcar pagadas, editar fechas/importes, añadir/quitar cuotas.
 export default function InstallmentsDialog({ conversion, onClose, onSaved }: Props) {
   const [installments, setInstallments] = useState<Installment[]>([]);
   const [loading, setLoading] = useState(false);
@@ -28,16 +30,16 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
   const [numCuotas, setNumCuotas] = useState(3);
   const [fechaInicio, setFechaInicio] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [draftInstallments, setDraftInstallments] = useState<Installment[]>([]);
+  // Editor de importe_total para aplicar descuentos/becas antes de fraccionar.
   const [totalDraft, setTotalDraft] = useState<string>('');
   const [savingTotal, setSavingTotal] = useState(false);
-  // Mini-form de cobro/edicion de cuota: pide importe + fecha (no asume hoy).
+  // Mini-form de cobro/edición de cuota: pide importe + fecha (no asume hoy).
   // mode='new' marca pagada por primera vez; mode='edit' modifica un pago hecho.
   const [payingInst, setPayingInst] = useState<Installment | null>(null);
   const [payMode, setPayMode] = useState<'new' | 'edit'>('new');
   const [payImporte, setPayImporte] = useState<string>('');
   const [payFecha, setPayFecha] = useState<string>('');
   const [payingNow, setPayingNow] = useState(false);
-  const confirm = useConfirm();
 
   async function load() {
     if (!conversion) return;
@@ -61,6 +63,7 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversion?.id]);
 
+  // Actualiza el importe_total de la conversión (para aplicar descuentos).
   async function handleSaveTotal() {
     if (!conversion) return;
     const nuevoTotal = Number(totalDraft);
@@ -78,9 +81,11 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
       await conversionsApi.update(conversion.id, { importe_total: nuevoTotal } as any);
       toast({ title: 'Total actualizado', description: `Nuevo pendiente: ${formatCurrency(nuevoTotal - pagado)}` });
       onSaved?.();
+      // Forzar recálculo del draft con el nuevo total
       if (conversion) {
         (conversion as any).importe_total = nuevoTotal;
       }
+      // re-trigger del useEffect generador
       setNumCuotas((n) => n);
     } catch (err: any) {
       toast({ title: 'Error', description: err?.data?.error || err?.message, variant: 'destructive' });
@@ -122,7 +127,7 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
     }
 
     try {
-      // Si la suma de cuotas + pagado no es igual al total actual de la conversion,
+      // Si la suma de cuotas + pagado no es igual al total actual de la conversión,
       // ajustamos el total para que cuadre con lo que la gestora puso. NO redondeamos.
       if (Math.abs(nuevoTotal - totalActual) > 0.001) {
         await conversionsApi.update(conversion.id, { importe_total: nuevoTotal } as any);
@@ -164,7 +169,7 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
 
   async function handleUnpay(inst: Installment) {
     if (!inst.id) return;
-    if (!(await confirm({ title: 'Deshacer pago', message: `¿Deshacer el pago de la cuota #${inst.numero}? Se borra el cobro y la cuota vuelve a pendiente.`, tone: 'warning', confirmLabel: 'Deshacer' }))) return;
+    if (!confirm(`¿Deshacer el pago de la cuota #${inst.numero}? Se borra el cobro y la cuota vuelve a pendiente.`)) return;
     try {
       await conversionsApi.unpayInstallment(inst.id);
       toast({ title: 'Pago deshecho', description: `Cuota #${inst.numero} vuelve a pendiente` });
@@ -204,8 +209,7 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
   }
 
   async function handleDeleteInstallment(inst: Installment) {
-    if (!inst.id) return;
-    if (!(await confirm({ title: 'Eliminar cuota', message: `¿Eliminar cuota #${inst.numero}? Esto no es reversible.`, tone: 'destructive', confirmLabel: 'Eliminar' }))) return;
+    if (!inst.id || !confirm(`¿Eliminar cuota #${inst.numero}? Esto no es reversible.`)) return;
     try {
       await conversionsApi.deleteInstallment(inst.id);
       toast({ title: 'Cuota eliminada' });
@@ -288,11 +292,13 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
               >+ Regenerar cuotas (sobreescribe las no cobradas)</button>
             </>
           ) : (
+            // Modo create
             <>
               <p className="text-xs text-muted-foreground">
                 Convierte esta conversión en pagos fraccionados. Las cuotas se distribuyen sobre el importe <strong>pendiente</strong> ({formatCurrency(pendiente)}).
               </p>
 
+              {/* Editor de importe total para aplicar descuentos/becas */}
               <div className="border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 rounded-md p-3">
                 <label className="text-[11px] font-semibold text-amber-800 dark:text-amber-300 mb-1 block">
                   ¿Aplicar descuento o beca? Modifica el importe total antes de fraccionar:
@@ -387,7 +393,7 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
         </div>
       </div>
 
-      {/* Mini-modal cobro/edicion de cuota: importe + fecha (no se asume hoy) */}
+      {/* Mini-modal cobro de cuota: importe + fecha (no se asume hoy) */}
       {payingInst && (
         <div className="fixed inset-0 !m-0 z-[90] flex items-center justify-center p-4" onClick={() => setPayingInst(null)}>
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />

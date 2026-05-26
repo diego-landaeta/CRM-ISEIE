@@ -104,7 +104,7 @@ export async function remove(req, res, next) {
     }
     // RBAC: gestor solo puede borrar conversiones de sus propios leads
     const existing = await conversionService.getById(id);
-    if (!existing) throw new AppError('Conversion no encontrada', 404, 'CONVERSION_NOT_FOUND');
+    if (!existing) throw new AppError('Conversión no encontrada', 404, 'CONVERSION_NOT_FOUND');
     if (req.user.role === 'gestor') {
       const { rows } = await (await import('../../shared/config/db.js')).query(
         `SELECT responsable_id FROM leads WHERE id = $1`, [existing.lead_id]

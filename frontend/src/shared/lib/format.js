@@ -37,7 +37,7 @@ export function formatNumber(n) {
  * @param {string|Date|null|undefined} d
  */
 // Parsea strings 'YYYY-MM-DD' como fecha LOCAL (no UTC) para evitar el bug
-// clasico de "21 nov" -> "20 nov" en zonas con offset negativo.
+// clásico de "21 nov" → "20 nov" en zonas con offset negativo.
 // Para timestamps con hora ('YYYY-MM-DDTHH...'), usa new Date normal.
 function toLocalDate(d) {
   if (!d) return null;
