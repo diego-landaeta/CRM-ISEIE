@@ -5,12 +5,15 @@ import {
   Moon, Sun, CaretLeft, CaretRight, UserCircle,
   CaretUp, CaretDown, Bell, Pulse, Calculator, Envelope, Globe,
   FilePdf, ShieldCheck, MagnifyingGlass, Headset, BookOpen, Sliders,
+  Megaphone, Robot, Sparkle, PlugsConnected, CreditCard,
+  Receipt, Coins, Wrench, ShoppingBag, ChatCircleText, Wallet, Bank, Clock,
 } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { cn } from '@/shared/lib/utils';
 import client from '@/shared/api/client';
 import NotificationsBell from './NotificationsBell';
+import { isBetaAllowed, BETA_MODE } from '@/shared/config/betaConfig';
 
 const ROLE_LABELS = { superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor', soporte: 'Soporte' };
 
@@ -24,6 +27,7 @@ const NAV_SECTIONS = [
     items: [
       { to: '/dashboard',  label: 'Dashboard',  icon: SquaresFour, end: true },
       { to: '/leads',      label: 'Prospectos', icon: Users,       sectionPrefixes: ['/leads'] },
+      { to: '/leads/audiences', label: 'Audiencias Meta', icon: Megaphone, roles: ['admin', 'superadmin'] },
       { to: '/clients',    label: 'Clientes',   icon: UserCheck,   sectionPrefixes: ['/clients'] },
       { to: '/matriculas', label: 'Matrículas', icon: UserCheck },
     ],
@@ -32,36 +36,54 @@ const NAV_SECTIONS = [
     label: 'Captación',
     items: [
       { to: '/email-sequences', label: 'Email',     icon: Envelope, roles: ['admin', 'superadmin'], sectionPrefixes: ['/email-sequences', '/email-templates'] },
-      { to: '/forms',           label: 'Captación', icon: Globe,    roles: ['admin', 'superadmin'], sectionPrefixes: ['/forms', '/make-webhooks'] },
+      { to: '/forms',           label: 'Formularios', icon: Globe,  roles: ['admin', 'superadmin'], sectionPrefixes: ['/forms'] },
+      { to: '/make-webhooks',   label: 'Make',      icon: PlugsConnected, roles: ['admin', 'superadmin'] },
+      { to: '/webhooks',        label: 'Webhooks',  icon: PlugsConnected, roles: ['admin', 'superadmin'] },
+      { to: '/campaigns',       label: 'Campañas',  icon: Megaphone, roles: ['admin', 'superadmin'], sectionPrefixes: ['/campaigns'] },
+      { to: '/seo',             label: 'Tráfico orgánico', icon: MagnifyingGlass, roles: ['admin', 'superadmin'] },
     ],
   },
   {
     label: 'Catálogo',
     items: [
-      { to: '/products',   label: 'Productos',  icon: Package, sectionPrefixes: ['/products', '/configuracion/categorias-arbol', '/woocommerce'] },
+      { to: '/products',   label: 'Productos',  icon: Package, sectionPrefixes: ['/products'] },
+      { to: '/products/pending', label: 'Cursos pendientes', icon: Clock, roles: ['admin', 'superadmin'] },
+      { to: '/woocommerce', label: 'WooCommerce', icon: ShoppingBag, roles: ['admin', 'superadmin'] },
+      { to: '/configuracion/categorias-arbol', label: 'Árbol de categorías', icon: Sliders, roles: ['admin', 'superadmin'] },
       { to: '/documentos', label: 'Documentos', icon: FilePdf, roles: ['admin', 'superadmin'], sectionPrefixes: ['/documentos'] },
     ],
   },
   {
     label: 'Finanzas',
     items: [
-      { to: '/sales', label: 'Contabilidad', icon: Calculator, sectionPrefixes: ['/sales', '/expenses', '/accounting', '/commissions', '/payroll'] },
+      { to: '/sales',                label: 'Dashboard',          icon: Calculator, roles: ['admin', 'superadmin'] },
+      { to: '/sales',                label: 'Ventas',             icon: Receipt,    roles: ['admin', 'superadmin'] },
+      { to: '/accounting/income',    label: 'Ingresos',           icon: Coins,      roles: ['admin', 'superadmin'] },
+      { to: '/accounting/conversions', label: 'Conversiones',     icon: ChartLineUp, roles: ['admin', 'superadmin'] },
+      { to: '/expenses',             label: 'Egresos',            icon: Receipt,    roles: ['admin', 'superadmin'] },
+      { to: '/accounting/receivable', label: 'Cuentas por cobrar', icon: Wallet,    roles: ['admin', 'superadmin'] },
+      { to: '/accounting/payable',   label: 'Cuentas por pagar',  icon: Wallet,     roles: ['admin', 'superadmin'] },
+      { to: '/commissions',          label: 'Comisiones',         icon: Bank,  roles: ['admin', 'superadmin'] },
+      { to: '/payroll',              label: 'Nóminas',            icon: Coins,      roles: ['admin', 'superadmin'] },
+      { to: '/stripe',               label: 'Stripe',             icon: CreditCard, roles: ['admin', 'superadmin'] },
     ],
   },
   {
     label: 'Análisis',
     items: [
-      { to: '/reports', label: 'Análisis', icon: ChartLineUp, sectionPrefixes: ['/reports', '/activity'] },
+      { to: '/reports',     label: 'Reportes',      icon: ChartLineUp, sectionPrefixes: ['/reports', '/activity'] },
+      { to: '/reports/ia',  label: 'Análisis IA',   icon: Sparkle,     roles: ['admin', 'superadmin'] },
+      { to: '/ai-chat',     label: 'Chat IA',       icon: ChatCircleText, roles: ['admin', 'superadmin'] },
     ],
   },
   {
     label: 'Sistema',
     items: [
       { to: '/notificaciones', label: 'Notificaciones',   icon: Bell },
-      { to: '/preferences',   label: 'Mis preferencias', icon: Sliders },
-      { to: '/status',        label: 'Status',           icon: Pulse },
-      // Mi cuenta, Configuración, Manual y Soporte están en el menú de
-      // usuario (avatar inferior) para no inflar el sidebar.
+      { to: '/preferences',    label: 'Mis preferencias', icon: Sliders },
+      { to: '/soporte',        label: 'Soporte',          icon: Headset },
+      { to: '/manual',         label: 'Manual del CRM',   icon: BookOpen },
+      { to: '/status',         label: 'Status',           icon: Pulse },
     ],
   },
 ];
@@ -229,7 +251,10 @@ export default function Sidebar({ collapsed = false, onToggleCollapsed, onNaviga
               }
               return it;
             })
-            .filter((it) => canSeeItem(it, role));
+            .filter((it) => canSeeItem(it, role))
+            // Marcar como "Próximamente" los items cuya ruta NO está en BETA_ROUTES
+            // (sólo cuando VITE_BETA_MODE=true, definido en .env.production)
+            .map((it) => ({ ...it, comingSoon: it.comingSoon || !isBetaAllowed(it.to) }));
           if (!items.length) return null;
           return (
             <div key={section.label}>
