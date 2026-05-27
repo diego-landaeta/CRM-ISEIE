@@ -688,6 +688,132 @@ export const previewWc = async (req, res, next) => {
     if (!creds) throw new AppError('Credenciales WC no configuradas', 400, 'NO_CREDS');
 
     const customUrl = req.query.url;
+
+    // --- WP_PAGES strategy: no WC, traemos la primera pagina bajo los parent IDs ---
+    if (creds.source_strategy === 'wp_pages') {
+      const parentIds = (Array.isArray(creds.cpt_endpoints) ? creds.cpt_endpoints : [])
+        .map((x) => Number(x)).filter(Number.isFinite);
+      if (parentIds.length === 0) {
+        throw new AppError('wp_pages: configura al menos un parent ID', 400, 'NO_PARENT_IDS');
+      }
+      const { fetchWpPagesByParents } = await import('./wp-rest.js');
+      let firstPage = null;
+      let total = 0;
+      // Traemos solo la primera pagina de cada parent (per_page=3) para el preview
+      const root = creds.store_url.replace(/\/$/, '');
+      for (const pidNum of parentIds) {
+        try {
+          const r = await fetch(`${root}/wp-json/wp/v2/pages?parent=${pidNum}&per_page=1&_fields=id`);
+          if (r.ok) {
+            total += parseInt(r.headers.get('x-wp-total') || '0');
+          }
+        } catch (_) {}
+      }
+      // Buscar la pagina concreta por URL si la dio el user
+      if (customUrl && typeof customUrl === 'string') {
+        const slug = String(customUrl).replace(/\/$/, '').split('/').pop();
+        if (slug) {
+          try {
+            const r = await fetch(`${root}/wp-json/wp/v2/pages?slug=${encodeURIComponent(slug)}&_fields=id,slug,link,title,excerpt,content,parent,date,modified`);
+            if (r.ok) {
+              const arr = await r.json();
+              if (Array.isArray(arr) && arr.length > 0) {
+                const it = arr[0];
+                firstPage = {
+                  id: it.id, name: it.title?.rendered || it.slug, slug: it.slug,
+                  permalink: it.link, short_description: it.excerpt?.rendered || '',
+                  description: it.content?.rendered || '', price: '0', sku: null,
+                  status: 'publish', type: 'wp_page', categories: [], meta_data: [],
+                };
+              }
+            }
+          } catch (_) {}
+        }
+      }
+      if (!firstPage) {
+        const pages = await fetchWpPagesByParents(creds.store_url, [parentIds[0]], { perPage: 1, maxPages: 1 });
+        firstPage = pages[0] || {};
+      }
+
+      const sample = firstPage.id ? [firstPage] : [];
+      const schema = inspectSchema(firstPage);
+      const sugeridos = {
+        nombre: 'name', url_info: 'permalink',
+        descripcion: 'short_description', source_id: 'id',
+      };
+      const targets = TARGETS_CATALOG.product.filter(t => t.key !== 'moneda');
+      const SCRAPER_FIELDS = [
+        { key: 'presentacion_texto', label: 'Presentacion (texto)', group: 'Scraper' },
+        { key: 'objetivos_texto', label: 'Objetivos (texto)', group: 'Scraper' },
+        { key: 'beneficios_texto', label: 'Beneficios (texto)', group: 'Scraper' },
+        { key: 'dirigido_a_texto', label: 'Dirigido a (texto)', group: 'Scraper' },
+        { key: 'para_que_te_prepara_texto', label: 'Para que te prepara (texto)', group: 'Scraper' },
+        { key: 'por_que_estudiar_texto', label: 'Por que estudiar (texto)', group: 'Scraper' },
+        { key: 'modulos_texto', label: 'Modulos / Temario (texto)', group: 'Scraper' },
+        { key: 'metodologia_texto', label: 'Metodologia (texto)', group: 'Scraper' },
+        { key: 'faqs_texto', label: 'FAQs (texto)', group: 'Scraper' },
+        { key: 'profesores_texto', label: 'Profesores (texto)', group: 'Scraper' },
+        { key: 'duracion', label: 'Duracion', group: 'Scraper meta_box' },
+        { key: 'horas', label: 'Horas', group: 'Scraper meta_box' },
+        { key: 'num_modulos', label: 'No de Modulos', group: 'Scraper meta_box' },
+        { key: 'fecha_inicio_texto', label: 'Fecha de inicio', group: 'Scraper meta_box' },
+        { key: 'modalidad', label: 'Modalidad (Online/Presencial)', group: 'Scraper meta_box' },
+      ];
+      const enrichedTargets = [...targets];
+      for (const sf of SCRAPER_FIELDS) {
+        if (!enrichedTargets.find((t) => t.key === sf.key)) enrichedTargets.push({ ...sf, type: 'string' });
+      }
+
+      // Scraper opcional sobre el permalink
+      let scraped = null;
+      if (creds.scraper_enabled && firstPage.permalink) {
+        try {
+          const keywords = creds.section_keywords || {};
+          const stratg = creds.scrape_strategy || 'plain_text';
+          scraped = await scrapeProductPage(firstPage.permalink, keywords, { strategy: stratg, timeoutMs: 15000 });
+          scraped.url_used = firstPage.permalink;
+        } catch (sErr) {
+          scraped = { error: sErr.message };
+        }
+      }
+      if (scraped && !scraped.error) {
+        if (scraped.imagen_og) sugeridos.image_url = 'scraper.imagen_og';
+        if (scraped.sections) {
+          for (const [k, v] of Object.entries(scraped.sections)) {
+            if (v) sugeridos[`${k}_texto`] = `scraper.sections.${k}`;
+          }
+        }
+        if (scraped.meta_box) {
+          if (scraped.meta_box.duracion)     sugeridos.duracion           = 'scraper.meta_box.duracion.text';
+          if (scraped.meta_box.horas)        sugeridos.horas              = 'scraper.meta_box.horas.text';
+          if (scraped.meta_box.fecha_inicio) sugeridos.fecha_inicio_texto = 'scraper.meta_box.fecha_inicio.text';
+          if (scraped.meta_box.num_modulos)  sugeridos.num_modulos        = 'scraper.meta_box.num_modulos.value';
+          if (scraped.meta_box.modalidad)    sugeridos.modalidad          = 'scraper.meta_box.modalidad.text';
+        }
+      }
+
+      const currentMapping = creds.field_mapping && Object.keys(creds.field_mapping).length > 0
+        ? creds.field_mapping
+        : sugeridos;
+      const mapped_preview = applyMappingWithScraper(firstPage, scraped, currentMapping, null);
+
+      return res.json({
+        success: true,
+        data: {
+          count: total,
+          sample,
+          schema,
+          targets: enrichedTargets,
+          transforms: TRANSFORMS_CATALOG,
+          sugeridos,
+          current_mapping: creds.field_mapping || {},
+          mapped_preview,
+          scraped,
+          cpt: null,
+        },
+      });
+    }
+
     const base = `${creds.store_url.replace(/\/$/, '')}/wp-json/wc/v3/products`;
 
     // Total
