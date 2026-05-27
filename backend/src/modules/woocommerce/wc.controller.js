@@ -539,6 +539,9 @@ export async function runFullImport(creds, projectId, runId) {
                 }
                 // Imagen og como fallback si no hay imagen
                 if (scraped.imagen_og && !finalMapped.image_url) finalMapped.image_url = scraped.imagen_og;
+                // Stripe + brochure: si vienen del scraper y no estan mapeados, los usamos
+                if (scraped.stripe_link  && !finalMapped.stripe_link)  finalMapped.stripe_link  = scraped.stripe_link;
+                if (scraped.brochure_url && !finalMapped.brochure_url) finalMapped.brochure_url = scraped.brochure_url;
 
                 // Aplicar mapping del admin AHORA que tenemos scraped (sus paths
                 // pueden referirse a scraper.sections.X o scraper.meta_box.X.text)
@@ -790,6 +793,8 @@ export const previewWc = async (req, res, next) => {
           if (scraped.meta_box.num_modulos)  sugeridos.num_modulos        = 'scraper.meta_box.num_modulos.value';
           if (scraped.meta_box.modalidad)    sugeridos.modalidad          = 'scraper.meta_box.modalidad.text';
         }
+        if (scraped.stripe_link)  sugeridos.stripe_link  = 'scraper.stripe_link';
+        if (scraped.brochure_url) sugeridos.brochure_url = 'scraper.brochure_url';
       }
 
       const currentMapping = creds.field_mapping && Object.keys(creds.field_mapping).length > 0
@@ -917,6 +922,8 @@ export const previewWc = async (req, res, next) => {
       { key: 'num_modulos', label: 'No de Modulos', group: 'Scraper meta_box' },
       { key: 'fecha_inicio_texto', label: 'Fecha de inicio', group: 'Scraper meta_box' },
       { key: 'modalidad', label: 'Modalidad (Online/Presencial)', group: 'Scraper meta_box' },
+      { key: 'stripe_link', label: 'Link de pago Stripe', group: 'Scraper enlaces' },
+      { key: 'brochure_url', label: 'URL del folleto/brochure (PDF)', group: 'Scraper enlaces' },
     ];
     for (const sf of SCRAPER_FIELDS) {
       if (!enrichedTargets.find((t) => t.key === sf.key)) enrichedTargets.push({ ...sf, type: 'string' });
@@ -1230,6 +1237,8 @@ function resolveMappingPath(path, item, scraped, cpt) {
   if (path === 'scraper.titulo')       return scraped?.titulo;
   if (path === 'scraper.imagen_og')    return scraped?.imagen_og;
   if (path === 'scraper.meta_description') return scraped?.meta_description;
+  if (path === 'scraper.stripe_link')  return scraped?.stripe_link;
+  if (path === 'scraper.brochure_url') return scraped?.brochure_url;
   if (path.startsWith('scraper.sections.')) {
     const key = path.slice('scraper.sections.'.length);
     return scraped?.sections?.[key];

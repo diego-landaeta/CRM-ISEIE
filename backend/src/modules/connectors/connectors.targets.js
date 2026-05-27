@@ -13,6 +13,7 @@ export const TARGETS_CATALOG = {
     { key: 'url_info',       label: 'URL de la landing',       type: 'string', group: 'Detalle' },
     { key: 'image_url',      label: 'URL imagen',              type: 'string', group: 'Detalle' },
     { key: 'stripe_link',    label: 'Link de pago Stripe',     type: 'string', group: 'Pagos' },
+    { key: 'brochure_url',   label: 'URL del folleto/brochure (PDF)', type: 'string', group: 'Pagos' },
     { key: 'categoria_id',   label: 'Categoria (resuelve por nombre o ID)', type: 'category', group: 'Categorizacion' },
     { key: 'external_id',    label: 'ID externo (para idempotencia)', type: 'string', group: 'Avanzado' },
     // Array anidado - para modulos del programa

@@ -273,6 +273,50 @@ function extractMetaBox(html) {
   return found;
 }
 
+/**
+ * Extrae enlaces de pago Stripe (buy.stripe.com / checkout.stripe.com) de la
+ * página. Devuelve { first, all } — todos los URLs únicos encontrados,
+ * en orden de aparición, y el primero como conveniencia.
+ */
+function extractStripeLinks(html) {
+  const re = /https?:\/\/(?:buy|checkout)\.stripe\.com\/[A-Za-z0-9_\-\/?=&.%]+/gi;
+  const matches = String(html || '').match(re) || [];
+  const seen = new Set();
+  const all = [];
+  for (const u of matches) {
+    const clean = u.replace(/[)>"',]+$/, '');
+    if (!seen.has(clean)) { seen.add(clean); all.push(clean); }
+  }
+  return { first: all[0] || null, all };
+}
+
+/**
+ * Extrae URL del folleto/brochure/dossier de la página. Estrategia:
+ *   1. <a> cuyo texto contenga brochure|folleto|dossier|temario|descargar|guia|pdf
+ *      Y href termine en .pdf O sea un link a /wp-content/uploads/*.pdf
+ *   2. Cualquier <a href="*.pdf"> con preferencia por los que contengan
+ *      brochure/folleto/dossier en el path.
+ */
+function extractBrochureUrl(html) {
+  if (!html) return null;
+  const aRe = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]{0,200}?)<\/a>/gi;
+  const KEYWORDS = /\b(brochure|folleto|dossier|temario|programa|guia|plan\s+de\s+estudios|descargar)\b/i;
+  let pdfWithKeyword = null;
+  let firstPdf = null;
+  let m;
+  while ((m = aRe.exec(html)) !== null) {
+    const href = m[1].trim();
+    if (!/\.pdf(?:[?#]|$)/i.test(href) && !/\/wp-content\/uploads\/.*\.pdf/i.test(href)) continue;
+    const linkText = htmlToText(m[2]);
+    if (!firstPdf) firstPdf = href;
+    if (KEYWORDS.test(linkText) || KEYWORDS.test(href)) {
+      pdfWithKeyword = href;
+      break;
+    }
+  }
+  return pdfWithKeyword || firstPdf || null;
+}
+
 /** Extrae meta tags utiles del head. */
 function extractMetaTags(html) {
   const ogImg = /<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/i.exec(html);
@@ -357,10 +401,14 @@ export async function scrapeProductPage(url, sectionKeywords = {}, opts = {}) {
     return { error: err.message };
   }
 
+  const stripe = extractStripeLinks(html);
   const result = {
     titulo: extractH1(html),
     meta_box: extractMetaBox(html),
     ...extractMetaTags(html),
+    stripe_link: stripe.first,
+    stripe_links_all: stripe.all,
+    brochure_url: extractBrochureUrl(html),
     sections: {},
     html_size: html.length,
   };

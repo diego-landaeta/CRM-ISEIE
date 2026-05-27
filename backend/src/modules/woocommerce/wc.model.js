@@ -162,6 +162,8 @@ export async function upsertProductFromWc({ projectId, wcId, data }) {
     modalidad:          data.modalidad ?? null,
     image_url:          data.image_url ?? null,
     url_info:           data.url_info ?? null,
+    stripe_link:        data.stripe_link ?? null,
+    brochure_url:       data.brochure_url ?? null,
     presentacion_texto:       data.presentacion_texto ?? null,
     objetivos_texto:          data.objetivos_texto ?? null,
     beneficios_texto:         data.beneficios_texto ?? null,
@@ -198,6 +200,8 @@ export async function upsertProductFromWc({ projectId, wcId, data }) {
            faqs_texto               = COALESCE($24, faqs_texto),
            profesores_texto         = COALESCE($25, profesores_texto),
            otras_secciones          = COALESCE($26::jsonb, otras_secciones),
+           stripe_link              = COALESCE($27, stripe_link),
+           brochure_url             = COALESCE($28, brochure_url),
            updated_at=NOW()
        WHERE id = $8 RETURNING id`,
       [data.nombre, data.precio, data.descripcion || null, data.sku || null,
@@ -207,7 +211,8 @@ export async function upsertProductFromWc({ projectId, wcId, data }) {
        sc.image_url, sc.url_info,
        sc.presentacion_texto, sc.objetivos_texto, sc.beneficios_texto, sc.dirigido_a_texto,
        sc.para_que_te_prepara_texto, sc.por_que_estudiar_texto, sc.modulos_texto,
-       sc.metodologia_texto, sc.faqs_texto, sc.profesores_texto, sc.otras_secciones]);
+       sc.metodologia_texto, sc.faqs_texto, sc.profesores_texto, sc.otras_secciones,
+       sc.stripe_link, sc.brochure_url]);
     return { action: 'updated', id: rows[0].id };
   }
   const { rows } = await query(
@@ -218,10 +223,10 @@ export async function upsertProductFromWc({ projectId, wcId, data }) {
                            presentacion_texto, objetivos_texto, beneficios_texto,
                            dirigido_a_texto, para_que_te_prepara_texto, por_que_estudiar_texto,
                            modulos_texto, metodologia_texto, faqs_texto, profesores_texto,
-                           otras_secciones)
+                           otras_secciones, stripe_link, brochure_url)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9,
              $10, $11, $12, $13, $14, $15, $16,
-             $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27::jsonb)
+             $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27::jsonb, $28, $29)
      RETURNING id`,
     [projectId, data.nombre, data.precio, data.descripcion || null, data.sku || null,
      data.categoria_id || null, data.subcategoria_id || null,
@@ -230,7 +235,8 @@ export async function upsertProductFromWc({ projectId, wcId, data }) {
      sc.image_url, sc.url_info,
      sc.presentacion_texto, sc.objetivos_texto, sc.beneficios_texto, sc.dirigido_a_texto,
      sc.para_que_te_prepara_texto, sc.por_que_estudiar_texto, sc.modulos_texto,
-     sc.metodologia_texto, sc.faqs_texto, sc.profesores_texto, sc.otras_secciones]);
+     sc.metodologia_texto, sc.faqs_texto, sc.profesores_texto, sc.otras_secciones,
+     sc.stripe_link, sc.brochure_url]);
   return { action: 'created', id: rows[0].id };
 }
 
