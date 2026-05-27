@@ -23,6 +23,7 @@ export const BETA_ROUTES: readonly string[] = [
   '/configuracion/categorias-arbol',// Categorias
   '/forms',                         // Captacion (forms + make + webhooks)
   '/make-webhooks',                 // Captacion Make
+  '/webhooks',                      // Webhooks entrantes
   '/email-sequences',               // Email
   '/email-templates',
   '/documentos',                    // Documentos PDF
