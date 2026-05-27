@@ -47,6 +47,53 @@ function htmlToText(s) {
  *   "Online"       -> { text: "Online", type: "text" }
  *   "EUR 1500"     -> { text: "EUR 1500", value: 1500, unit: "EUR", type: "currency" }
  */
+/**
+ * Parsea un string numerico de precio detectando si la coma/punto es separador
+ * de miles o decimal. Casos:
+ *   "1,985"     → 1985    (coma=miles porque hay 3 dig despues)
+ *   "1.985"     → 1985    (punto=miles porque hay 3 dig despues)
+ *   "1,985.00"  → 1985    (coma=miles, punto=decimal — formato US)
+ *   "1.985,00"  → 1985    (punto=miles, coma=decimal — formato europeo)
+ *   "5,50"      → 5.5     (coma=decimal porque solo 2 dig despues)
+ *   "12.5"      → 12.5    (punto=decimal porque solo 1 dig despues)
+ *   "2.500,50"  → 2500.5  (formato europeo completo)
+ *   "1,234,567" → 1234567 (multiples comas = todas son miles)
+ */
+function parsePriceNumber(str) {
+  const s = String(str).trim();
+  if (!s) return NaN;
+  // Si tiene AMBOS separadores, el ultimo en aparecer es el decimal
+  const hasDot = s.includes('.');
+  const hasComma = s.includes(',');
+  if (hasDot && hasComma) {
+    const lastDot = s.lastIndexOf('.');
+    const lastComma = s.lastIndexOf(',');
+    if (lastDot > lastComma) {
+      // 1,234.56 → quitar comas, conservar punto
+      return parseFloat(s.replace(/,/g, ''));
+    } else {
+      // 1.234,56 → quitar puntos, coma → punto
+      return parseFloat(s.replace(/\./g, '').replace(',', '.'));
+    }
+  }
+  // Solo UN tipo de separador (o ninguno)
+  if (hasDot || hasComma) {
+    const sep = hasDot ? '.' : ',';
+    const parts = s.split(sep);
+    if (parts.length === 2 && parts[1].length === 3) {
+      // 1,985 / 1.985 → separador de miles (3 dig despues)
+      return parseFloat(s.replace(sep, ''));
+    }
+    if (parts.length > 2) {
+      // 1,234,567 → todas miles
+      return parseFloat(s.split(sep).join(''));
+    }
+    // 5,50 / 12.5 → decimal
+    return parseFloat(s.replace(',', '.'));
+  }
+  return parseFloat(s);
+}
+
 function parseMetaValue(label, rawText) {
   const text = String(rawText || '').trim();
   if (!text) return null;
@@ -65,7 +112,7 @@ function parseMetaValue(label, rawText) {
   if (norm.includes('precio') || norm.includes('coste')) {
     const m = text.match(/([\d.,]+)/);
     if (m) {
-      const num = parseFloat(m[1].replace(/\./g, '').replace(',', '.'));
+      const num = parsePriceNumber(m[1]);
       const cur = text.match(/[€$]|EUR|USD|GBP|MXN/i);
       return { text, value: num, unit: cur ? cur[0].toUpperCase() : null, type: 'currency' };
     }

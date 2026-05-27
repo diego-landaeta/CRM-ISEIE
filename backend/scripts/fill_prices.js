@@ -38,10 +38,15 @@ async function processOne(p) {
 }
 
 (async () => {
+  // Incluye productos sin precio + productos con precio sospechosamente bajo
+  // (<50 € — probable mis-parse de "1,985 €" como 1.985 en versiones previas
+  // del parser). El nuevo parser entiende coma como separador de miles.
   const { rows } = await query(
-    `SELECT id, nombre, url_info FROM products
-     WHERE project_id = $1 AND active AND (precio IS NULL OR precio = 0) AND url_info IS NOT NULL
-     ORDER BY id LIMIT $2`,
+    `SELECT id, nombre, url_info, precio FROM products
+     WHERE project_id = $1 AND active
+       AND (precio IS NULL OR precio = 0 OR precio < 50)
+       AND url_info IS NOT NULL
+     ORDER BY (precio > 0 AND precio < 50) DESC, id LIMIT $2`,
     [PROJECT_ID, BATCH_SIZE]
   );
   console.log(`Procesando ${rows.length} productos (concurrency=${CONCURRENCY})...`);
