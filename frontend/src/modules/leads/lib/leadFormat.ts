@@ -1,7 +1,7 @@
-// Helpers de formato y avatar para LeadsPage. Extraídos de la página
-// para facilitar su test unitario y aliviar el archivo principal.
 import type { Lead } from '@/shared/types';
 import type { ExportColumn } from '@/shared/lib/export';
+
+export { formatDateShort as formatDate } from '@/shared/lib/format';
 
 const AVATAR_COLORS: ReadonlyArray<string> = [
   'bg-rose-100 text-rose-700',
@@ -19,17 +19,8 @@ export function getInitials(name: string | null | undefined): string {
   return name.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2);
 }
 
-export function getAvatarColor(id: number): string {
-  return AVATAR_COLORS[id % AVATAR_COLORS.length];
-}
-
-export function formatDate(dateStr: string | null | undefined): string {
-  if (!dateStr) return '--';
-  // Strings 'YYYY-MM-DD' se interpretan como local para evitar desfase TZ (-1 día).
-  const m = typeof dateStr === 'string' ? dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/) : null;
-  const d = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(dateStr);
-  if (Number.isNaN(d.getTime())) return '--';
-  return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
+export function avatarColor(id: number | string | null | undefined): string {
+  return AVATAR_COLORS[Number(id || 0) % AVATAR_COLORS.length];
 }
 
 export function formatRelative(
@@ -37,6 +28,7 @@ export function formatRelative(
   { future = false }: { future?: boolean } = {},
 ): string | null {
   if (!dateStr) return null;
+  // Strings 'YYYY-MM-DD' se interpretan como local para evitar desfase TZ (-1 dia).
   const m = typeof dateStr === 'string' ? dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/) : null;
   const d = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(dateStr);
   if (Number.isNaN(d.getTime())) return null;

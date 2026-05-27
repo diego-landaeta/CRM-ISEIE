@@ -108,6 +108,63 @@ export async function fetchCptAll(baseUrl, cptSlug, user, pass, opts = {}) {
   return all;
 }
 
+/**
+ * Trae todas las páginas WordPress bajo unos parent IDs específicos.
+ * Útil para sitios sin WC ni CPTs donde cada "producto" es una página
+ * estándar bajo /cursos, /masters, /diplomados (caso ISEIE).
+ *
+ * Para cada parent, pagina hasta agotar. Devuelve items con la SAME shape
+ * que fetchWcProducts para que el resto del flujo de import sea idéntico:
+ *   { id, name, slug, permalink, short_description, description, meta_data:[] }
+ *
+ * REST API es endpoint OFICIAL y estable de WP — no falla.
+ * Si una página individual falla, se omite y se sigue (graceful degradation).
+ */
+export async function fetchWpPagesByParents(baseUrl, parentIds, opts = {}) {
+  const { perPage = 100, maxPages = 50 } = opts;
+  const base = `${baseUrl.replace(/\/$/, '')}/wp-json/wp/v2/pages`;
+  const all = [];
+  const seen = new Set();
+  for (const parentId of parentIds) {
+    for (let page = 1; page <= maxPages; page++) {
+      const url = `${base}?parent=${parentId}&per_page=${perPage}&page=${page}&_fields=id,slug,link,title,excerpt,content,parent,date,modified`;
+      try {
+        const items = await getJson(url, null, 25000);
+        if (!Array.isArray(items) || items.length === 0) break;
+        for (const it of items) {
+          if (seen.has(it.id)) continue;
+          seen.add(it.id);
+          // Adapta al shape esperado por el resto del flujo (similar a WC product).
+          all.push({
+            id: it.id,
+            name: it.title?.rendered || it.slug,
+            slug: it.slug,
+            permalink: it.link,
+            short_description: it.excerpt?.rendered || '',
+            description: it.content?.rendered || '',
+            price: '0',
+            sku: null,
+            status: 'publish',
+            type: 'wp_page',
+            categories: [],
+            meta_data: [
+              { key: '_wp_page_parent', value: it.parent },
+              { key: '_wp_page_modified', value: it.modified },
+            ],
+            // dejamos info original para auditoría
+            _wp_raw: { id: it.id, parent: it.parent, modified: it.modified },
+          });
+        }
+        if (items.length < perPage) break;
+      } catch (err) {
+        logger.warn({ parentId, page, err: err.message }, 'WP REST pages: error en paginación, sigo con el siguiente parent');
+        break;
+      }
+    }
+  }
+  return all;
+}
+
 /** Resuelve un termino de taxonomia custom (devuelve {name, slug, parent}). */
 const _termCache = new Map();
 export async function resolveTaxonomyTerm(baseUrl, taxSlug, termId, user, pass) {

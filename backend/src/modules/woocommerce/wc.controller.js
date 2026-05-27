@@ -21,7 +21,7 @@ const credsSchema = z.object({
   // WP REST API (para sacar ACF / pages / CPTs personalizados)
   wp_user: z.string().max(100).optional().nullable(),
   wp_app_password: z.string().max(500).optional().nullable(),
-  source_strategy: z.enum(['wc_only', 'wc_plus_cpt']).optional(),
+  source_strategy: z.enum(['wc_only', 'wc_plus_cpt', 'wp_pages']).optional(),
   cpt_endpoints: z.array(z.string()).max(20).optional(),
   // Scraper HTML del permalink
   scraper_enabled: z.boolean().optional(),
@@ -396,16 +396,38 @@ function mapWcProduct(wp, categoryMap, defaultCurrency = 'EUR') {
 // (wooCommerceSyncScheduler) para que ambos apliquen field_mapping y scraper.
 export async function runFullImport(creds, projectId, runId) {
       try {
-        // 1. Sincronizar categorias primero
-        logger.info({ projectId, runId }, 'WC: descargando categorias');
-        const wcCategories = await fetchWcCategories(creds);
-        const categoryMap = await syncCategories(projectId, wcCategories);
-        logger.info({ projectId, count: wcCategories.length }, 'WC: categorias sincronizadas');
+        // 1. Sincronizar categorias primero (skip si fuente es wp_pages: no hay WC)
+        let categoryMap = new Map();
+        if (creds.source_strategy !== 'wp_pages') {
+          logger.info({ projectId, runId }, 'WC: descargando categorias');
+          const wcCategories = await fetchWcCategories(creds);
+          categoryMap = await syncCategories(projectId, wcCategories);
+          logger.info({ projectId, count: wcCategories.length }, 'WC: categorias sincronizadas');
+        } else {
+          logger.info({ projectId, runId }, 'WP-PAGES: source_strategy=wp_pages, skip fetch de categorias WC');
+        }
 
-        // 2. Descargar todos los productos paginados
-        logger.info({ projectId }, 'WC: descargando productos (paginado)');
-        const wcProducts = await fetchWcProducts(creds);
-        logger.info({ projectId, count: wcProducts.length }, 'WC: productos descargados');
+        // 2. Descargar productos / páginas según fuente
+        let wcProducts;
+        if (creds.source_strategy === 'wp_pages') {
+          // ISEIE-style: cada página bajo los parent IDs configurados es un producto.
+          // cpt_endpoints se reusa como array de parent IDs (numbers o strings convertibles).
+          const parentIds = (Array.isArray(creds.cpt_endpoints) ? creds.cpt_endpoints : [])
+            .map((x) => Number(x)).filter(Number.isFinite);
+          if (parentIds.length === 0) {
+            logger.warn({ projectId }, 'WP-PAGES: cpt_endpoints vacío — nada que importar');
+            wcProducts = [];
+          } else {
+            const { fetchWpPagesByParents } = await import('./wp-rest.js');
+            logger.info({ projectId, parentIds }, 'WP-PAGES: descargando páginas');
+            wcProducts = await fetchWpPagesByParents(creds.store_url, parentIds);
+            logger.info({ projectId, count: wcProducts.length }, 'WP-PAGES: páginas descargadas');
+          }
+        } else {
+          logger.info({ projectId }, 'WC: descargando productos (paginado)');
+          wcProducts = await fetchWcProducts(creds);
+          logger.info({ projectId, count: wcProducts.length }, 'WC: productos descargados');
+        }
 
         // 3. Upsert productos con categoria + sku
         let created = 0, updated = 0, skipped = 0;
