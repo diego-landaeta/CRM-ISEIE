@@ -38,15 +38,14 @@ async function processOne(p) {
 }
 
 (async () => {
-  // Incluye productos sin precio + productos con precio sospechosamente bajo
-  // (<50 € — probable mis-parse de "1,985 €" como 1.985 en versiones previas
-  // del parser). El nuevo parser entiende coma como separador de miles.
+  // Re-scrapea TODOS los productos con url_info. Sin umbrales arbitrarios:
+  // el parser nuevo (parsePriceNumber) maneja correctamente formato europeo
+  // y de miles, asi que el resultado es lo que diga la fuente, sea cual sea.
+  // Si la pagina WP no tiene precio publicado, deja el valor actual y omite.
   const { rows } = await query(
     `SELECT id, nombre, url_info, precio FROM products
-     WHERE project_id = $1 AND active
-       AND (precio IS NULL OR precio = 0 OR precio < 50)
-       AND url_info IS NOT NULL
-     ORDER BY (precio > 0 AND precio < 50) DESC, id LIMIT $2`,
+     WHERE project_id = $1 AND active AND url_info IS NOT NULL
+     ORDER BY id LIMIT $2`,
     [PROJECT_ID, BATCH_SIZE]
   );
   console.log(`Procesando ${rows.length} productos (concurrency=${CONCURRENCY})...`);
