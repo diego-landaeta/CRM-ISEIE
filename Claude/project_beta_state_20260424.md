@@ -12,7 +12,7 @@ BETA arrancado 2026-04-24 con DB staging reseteada y datos minimos.
 
 **Proximos proyectos se añaden MANUALMENTE uno a uno.** Usuario prefiere esto para fase 1.
 
-**Usuarios activos (password: `1234567890ASDa,`):**
+**Usuarios activos (password: `<<VPS_ROOT_PASS — ver credenciales fuera de repo>>`):**
 - manuel@empresa.com (superadmin)
 - diego@empresa.com (admin)
 - angel@empresa.com (admin)

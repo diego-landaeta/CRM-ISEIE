@@ -13,11 +13,11 @@ VPS de **CRM-ISEIE** (repo hermano del CRM principal, ver [[project-crm-overview
 - IP: `72.60.90.135`
 - Hostname: `srv965687`
 - OS: Ubuntu 22.04.5 LTS
-- SSH: `root@72.60.90.135` · password `1234567890ASDa,` (la misma que Manuel usa para Samantha/staging del CRM principal)
+- SSH: `root@72.60.90.135` · password `<<VPS_ROOT_PASS — ver credenciales fuera de repo>>` (la misma que Manuel usa para Samantha/staging del CRM principal)
 - Usar `paramiko` (no `sshpass` — no está instalado en Windows local) para SSH automatizado:
   ```python
   c = paramiko.SSHClient(); c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-  c.connect('72.60.90.135', username='root', password='1234567890ASDa,', timeout=15)
+  c.connect('72.60.90.135', username='root', password='<<VPS_ROOT_PASS — ver credenciales fuera de repo>>', timeout=15)
   ```
 
 **DB**:

@@ -6,7 +6,7 @@ Documentacion completa del estado del CRM-ISEIE, repo `esos2dev-oss/CRM-ISEIE`, 
 
 | Componente | Ubicacion |
 |---|---|
-| **VPS** | `72.60.90.135` (Hostinger KVM) — root pass `1234567890ASDa,` |
+| **VPS** | `72.60.90.135` (Hostinger KVM) — root pass `<<VPS_ROOT_PASS — ver credenciales fuera de repo>>` |
 | **Backend** | `/opt/crm-iseie/` — PM2 `crm-iseie-api` puerto `3005` |
 | **Frontend** | `/var/www/crm-iseie/` (sirve Nginx) |
 | **DB** | PostgreSQL local — `crm_iseie` · owner `crm_iseie_user` (~23 MB) · sin acceso externo |
