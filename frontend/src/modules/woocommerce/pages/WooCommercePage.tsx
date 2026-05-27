@@ -668,6 +668,16 @@ export default function WooCommercePage() {
                                   scraper.meta_description (SEO description)
                                 </option>
                               )}
+                              {(previewData.scraped as any).stripe_link && (
+                                <option value="scraper.stripe_link">
+                                  scraper.stripe_link - {String((previewData.scraped as any).stripe_link).slice(0, 70)}
+                                </option>
+                              )}
+                              {(previewData.scraped as any).brochure_url && (
+                                <option value="scraper.brochure_url">
+                                  scraper.brochure_url - {String((previewData.scraped as any).brochure_url).slice(0, 70)}
+                                </option>
+                              )}
                             </optgroup>
                           )}
                           {previewData.scraped && previewData.scraped.sections && Object.keys(previewData.scraped.sections).length > 0 && (
