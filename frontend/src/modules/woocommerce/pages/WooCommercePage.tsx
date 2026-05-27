@@ -7,7 +7,7 @@ import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import { ShoppingBag, FloppyDisk, ArrowsClockwise, Eye } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
 
-type SourceStrategy = 'wc_only' | 'wc_plus_cpt';
+type SourceStrategy = 'wc_only' | 'wc_plus_cpt' | 'wp_pages';
 type ScrapeStrategy = 'plain_text' | 'preserve_html';
 
 interface WooCredentials {
@@ -349,7 +349,14 @@ export default function WooCommercePage() {
             >
               <option value="wc_only">Solo WooCommerce ( /wc/v3/products )</option>
               <option value="wc_plus_cpt">WC + Custom Post Types (cursos, masters, diplomados...)</option>
+              <option value="wp_pages">Páginas WordPress (sin WC, ej. ISEIE — /wp/v2/pages?parent=N)</option>
             </select>
+            {form.source_strategy === 'wp_pages' && (
+              <p className="text-[10px] text-muted-foreground mt-1.5 bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-800 rounded p-2">
+                Modo para sitios sin WooCommerce. Cada página hija de los IDs configurados abajo se importa como producto.
+                Para encontrar el ID de un parent: abre la página padre (ej. <code>/cursos/</code>) en wp-admin → URL contiene <code>post=NNNN</code>.
+              </p>
+            )}
           </label>
 
           <div className="pt-1">
@@ -395,6 +402,23 @@ export default function WooCommercePage() {
                 className="mt-1 w-full px-3 py-2 rounded-lg border border-border bg-muted/30 text-sm font-mono"
               />
               <p className="text-[10px] text-muted-foreground mt-1">Se llamara a {`{store_url}`}/wp-json/wp/v2/{`{slug}`} con el WP user/App Password.</p>
+            </label>
+          )}
+
+          {form.source_strategy === 'wp_pages' && (
+            <label className="block text-xs">
+              <span className="font-bold uppercase text-muted-foreground">Parent IDs (uno por línea — IDs numéricos de las páginas padre)</span>
+              <textarea
+                value={form.cpt_endpoints.join('\n')}
+                onChange={e => setForm({ ...form, cpt_endpoints: e.target.value.split(/\r?\n/).map(s => s.trim()).filter(Boolean) })}
+                placeholder={'3248\n3327\n4651'}
+                rows={5}
+                className="mt-1 w-full px-3 py-2 rounded-lg border border-border bg-muted/30 text-sm font-mono"
+              />
+              <p className="text-[10px] text-muted-foreground mt-1">
+                Ejemplo ISEIE: <code>3248</code>=cursos, <code>3327</code>=masters, <code>4651</code>=diplomados, <code>5762/6812</code>=subcategorías diplomados, <code>26212</code>=cosmética.
+                Se importan todas las páginas hijas (incluyendo nietas) de cada ID.
+              </p>
             </label>
           )}
         </div>
