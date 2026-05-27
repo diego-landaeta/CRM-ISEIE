@@ -53,8 +53,13 @@ export async function handleIncoming({ slug, secret, payload, overrides = {}, ip
   }
   if (!secretOk) throw new AppError('Secret inválido', 401, 'INVALID_SECRET');
 
-  // Siempre guardamos el sample (incluso en modo activo) para inspección
-  await model.saveSample(hook.id, payload);
+  // Siempre guardamos el sample (incluso en modo activo) para inspección.
+  // Enriquecemos con los headers/overrides recibidos (asesora, canal) para
+  // que el panel "Ultimo payload" deje ver si Make los está enviando.
+  const sampleWithMeta = (Object.keys(overrides || {}).length > 0)
+    ? { ...payload, _received_overrides: overrides }
+    : payload;
+  await model.saveSample(hook.id, sampleWithMeta);
 
   // En modo test solo guardamos y avisamos
   if (hook.mode === 'test') {
