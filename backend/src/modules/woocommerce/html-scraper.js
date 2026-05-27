@@ -218,24 +218,38 @@ function extractMetaBox(html) {
   };
   const found = {};
 
-  // Patron 1: Elementor icon-box
-  const blockRe = /<div\b[^>]*class="[^"]*elementor-icon-box-content[^"]*"[^>]*>([\s\S]{0,4000}?)<\/div>/gi;
-  let m;
-  while ((m = blockRe.exec(html)) !== null) {
-    const block = m[1];
-    const titleM = /<(?:h\d|span|div)\b[^>]*class="[^"]*elementor-icon-box-title[^"]*"[^>]*>([\s\S]*?)<\/(?:h\d|span|div)>/i.exec(block);
-    const descM = /<(?:p|div|span)\b[^>]*class="[^"]*elementor-icon-box-description[^"]*"[^>]*>([\s\S]*?)<\/(?:p|div|span)>/i.exec(block);
-    if (titleM && descM) {
-      const label = normalizeForMatch(htmlToText(titleM[1]));
-      const value = htmlToText(descM[1]);
-      if (LABEL_MAP[label] && value && !found[LABEL_MAP[label]]) {
-        found[LABEL_MAP[label]] = parseMetaValue(label, value);
-      }
+  // Patron 1: Elementor icon-box.
+  // Estrategia: localizar cada title y buscar la PRIMERA description que aparezca
+  // después, antes de otro title. No usamos el wrapper icon-box-content porque
+  // la regex lazy se corta en el primer </div> interno cuando el title es <div>.
+  const titleRe = /<(h\d|span|div|p)\b[^>]*class="[^"]*elementor-icon-box-title[^"]*"[^>]*>([\s\S]*?)<\/\1>/gi;
+  const descGlobalRe = /<(p|div|span|h\d)\b[^>]*class="[^"]*elementor-icon-box-description[^"]*"[^>]*>([\s\S]*?)<\/\1>/gi;
+  // Indexar todas las descriptions con su posición.
+  const descsAll = [];
+  let dm;
+  while ((dm = descGlobalRe.exec(html)) !== null) {
+    descsAll.push({ index: dm.index, value: htmlToText(dm[2]) });
+  }
+  const titles = [];
+  let tm;
+  while ((tm = titleRe.exec(html)) !== null) {
+    titles.push({ index: tm.index, end: tm.index + tm[0].length, label: htmlToText(tm[2]) });
+  }
+  for (let i = 0; i < titles.length; i++) {
+    const t = titles[i];
+    const nextTitleIdx = i + 1 < titles.length ? titles[i + 1].index : Infinity;
+    const desc = descsAll.find((d) => d.index > t.end && d.index < nextTitleIdx);
+    if (!desc) continue;
+    const label = normalizeForMatch(t.label);
+    const key = LABEL_MAP[label];
+    if (key && desc.value && !found[key]) {
+      found[key] = parseMetaValue(label, desc.value);
     }
   }
 
   // Patron 2: H4/H5 label seguido inmediatamente de un parrafo o div
   const h4Re = /<h([45])\b[^>]*>([\s\S]*?)<\/h\1>\s*(<(?:p|div|span)[^>]*>[\s\S]{1,150}?<\/(?:p|div|span)>)?/gi;
+  let m;
   while ((m = h4Re.exec(html)) !== null) {
     const labelText = normalizeForMatch(htmlToText(m[2]));
     const valueRaw = m[3] ? htmlToText(m[3]) : '';

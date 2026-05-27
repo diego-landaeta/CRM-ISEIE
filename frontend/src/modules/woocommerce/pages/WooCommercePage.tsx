@@ -125,6 +125,7 @@ export default function WooCommercePage() {
   const [scrapePreview, setScrapePreview] = useState<any | null>(null);
   const [scrapingPreview, setScrapingPreview] = useState(false);
   const [runs, setRuns] = useState<WooRun[]>([]);
+  const [currentRun, setCurrentRun] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
   const [previewData, setPreviewData] = useState<WooPreview | null>(null);
@@ -197,6 +198,29 @@ export default function WooCommercePage() {
   }, [activeProject?.id]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Polling de progreso en vivo cada 2s mientras haya un run en curso
+  useEffect(() => {
+    if (!activeProject?.id) return;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const r = await client.get(`/woocommerce/runs/current?projectId=${activeProject.id}`);
+        if (!cancelled && r.success) {
+          const data = r.data as any;
+          setCurrentRun(data);
+          // Si terminó (status running pasó a otra cosa o llegó finished_at), recargo la tabla
+          if (data && data.finished_at && currentRun && !currentRun.finished_at) {
+            load();
+          }
+        }
+      } catch { /* silencio */ }
+    };
+    poll();
+    const isRunning = currentRun && !currentRun.finished_at;
+    const interval = setInterval(poll, isRunning ? 2000 : 10000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [activeProject?.id, currentRun?.id, currentRun?.finished_at, load]);
 
   async function saveCreds(): Promise<void> {
     if (!activeProject?.id) return;
@@ -550,6 +574,45 @@ export default function WooCommercePage() {
           <p className="text-xs text-muted-foreground">
             Pulsa <strong>Preview</strong> para ver como viene un producto desde WC + lo extraido por el scraper, y elegir que va a cada campo del CRM.
           </p>
+
+          {/* Banner de progreso en vivo */}
+          {currentRun && (
+            <div className={`rounded-lg border p-3 text-xs ${
+              currentRun.status === 'running' ? 'bg-blue-50 border-blue-300 dark:bg-blue-950/30 dark:border-blue-800' :
+              currentRun.status === 'success' ? 'bg-green-50 border-green-300 dark:bg-green-950/30 dark:border-green-800' :
+              currentRun.status === 'error' ? 'bg-red-50 border-red-300 dark:bg-red-950/30 dark:border-red-800' :
+              'bg-muted border-border'
+            }`}>
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  {currentRun.status === 'running' && (
+                    <span className="inline-block w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                  )}
+                  <strong className="capitalize">{currentRun.status}</strong>
+                  <span className="text-muted-foreground">
+                    · Inicio: {new Date(currentRun.started_at).toLocaleTimeString('es-ES')}
+                  </span>
+                  <span className="text-muted-foreground">
+                    · {currentRun.elapsed_seconds}s
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span>Traidos: <strong>{currentRun.total_fetched || 0}</strong></span>
+                  <span className="text-green-700 dark:text-green-400">Creados: <strong>{currentRun.total_created || 0}</strong></span>
+                  <span className="text-blue-700 dark:text-blue-400">Actualizados: <strong>{currentRun.total_updated || 0}</strong></span>
+                  <span className="text-muted-foreground">Saltados: <strong>{currentRun.total_skipped || 0}</strong></span>
+                </div>
+              </div>
+              {currentRun.error_message && (
+                <p className="mt-2 text-red-700 dark:text-red-400 font-mono">{currentRun.error_message}</p>
+              )}
+              {currentRun.status === 'running' && (
+                <p className="mt-1 text-muted-foreground">
+                  Actualizando cada 2s automaticamente. No cierres la pagina o sigue navegando — el import corre en background.
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Input URL para previsualizar un producto especifico */}
           <div className="flex gap-2 items-center pt-2 border-t border-border">

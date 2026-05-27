@@ -119,6 +119,19 @@ export async function startRun(projectId, userId) {
   const { rows } = await query(`INSERT INTO wc_import_runs (project_id, triggered_by) VALUES ($1, $2) RETURNING *`, [projectId, userId]);
   return rows[0];
 }
+// Actualiza contadores mid-run para mostrar progreso en vivo sin marcar finished_at.
+export async function updateRunProgress(id, fields) {
+  const sets = [];
+  const vals = [id];
+  const add = (col, v) => { if (v !== undefined) { sets.push(`${col}=$${vals.length + 1}`); vals.push(v); } };
+  add('total_fetched', fields.total_fetched);
+  add('total_created', fields.total_created);
+  add('total_updated', fields.total_updated);
+  add('total_skipped', fields.total_skipped);
+  if (sets.length === 0) return;
+  await query(`UPDATE wc_import_runs SET ${sets.join(', ')} WHERE id=$1`, vals);
+}
+
 export async function finishRun(id, fields) {
   const { rows } = await query(
     `UPDATE wc_import_runs SET status=$2, total_fetched=$3, total_created=$4, total_updated=$5, total_skipped=$6, error_message=$7, finished_at=NOW() WHERE id=$1 RETURNING *`,

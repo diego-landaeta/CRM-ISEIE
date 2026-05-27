@@ -431,8 +431,12 @@ export async function runFullImport(creds, projectId, runId) {
           logger.info({ projectId, count: wcProducts.length }, 'WC: productos descargados');
         }
 
+        // Progreso inicial: cuántos vamos a procesar
+        try { await model.updateRunProgress(runId, { total_fetched: wcProducts.length, total_created: 0, total_updated: 0, total_skipped: 0 }); } catch {}
+
         // 3. Upsert productos con categoria + sku
         let created = 0, updated = 0, skipped = 0;
+        let lastProgressFlush = Date.now();
         // Si hay field_mapping configurado, sus campos GANAN sobre el mapeo automatico.
         const userMapping = creds.field_mapping || {};
         const hasUserMapping = Object.keys(userMapping).length > 0;
@@ -503,6 +507,10 @@ export async function runFullImport(creds, projectId, runId) {
                   if (mb.fecha_inicio?.text) finalMapped.fecha_inicio_texto = mb.fecha_inicio.text;
                   if (mb.num_modulos?.value) finalMapped.num_modulos      = mb.num_modulos.value;
                   if (mb.modalidad?.text)    finalMapped.modalidad        = mb.modalidad.text;
+                  // precio: si el item no traía precio (>0) y el scraper sí, lo usamos
+                  if (mb.precio?.value && (!finalMapped.precio || Number(finalMapped.precio) === 0)) {
+                    finalMapped.precio = mb.precio.value;
+                  }
                 }
                 // Mapear sections al esquema fijo de products._texto
                 const SECTION_TO_COLUMN = {
@@ -584,6 +592,11 @@ export async function runFullImport(creds, projectId, runId) {
               { err: perItemErr.message, wcId: wp.id, wcName: wp.name, projectId },
               'WC: producto saltado por error per-item'
             );
+          }
+          // Flush de progreso cada 2s para feedback en vivo en la UI
+          if (Date.now() - lastProgressFlush > 2000) {
+            try { await model.updateRunProgress(runId, { total_created: created, total_updated: updated, total_skipped: skipped }); } catch {}
+            lastProgressFlush = Date.now();
           }
         }
         if (scraperOn) {
@@ -792,6 +805,7 @@ export const previewWc = async (req, res, next) => {
           if (scraped.meta_box.fecha_inicio) sugeridos.fecha_inicio_texto = 'scraper.meta_box.fecha_inicio.text';
           if (scraped.meta_box.num_modulos)  sugeridos.num_modulos        = 'scraper.meta_box.num_modulos.value';
           if (scraped.meta_box.modalidad)    sugeridos.modalidad          = 'scraper.meta_box.modalidad.text';
+          if (scraped.meta_box.precio?.value) sugeridos.precio            = 'scraper.meta_box.precio.value';
         }
         if (scraped.stripe_link)  sugeridos.stripe_link  = 'scraper.stripe_link';
         if (scraped.brochure_url) sugeridos.brochure_url = 'scraper.brochure_url';
