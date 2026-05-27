@@ -12,11 +12,13 @@ import { fetchCptAll, mapCptItemToProduct, findSeoPageForProduct } from './wp-re
 const credsSchema = z.object({
   project_id: z.number().int().positive(),
   store_url: z.string().url(),
-  consumer_key: z.string().min(1),
-  consumer_secret: z.string().optional(),
+  // consumer_key opcional: para source_strategy='wp_pages' no se necesita auth WC.
+  consumer_key: z.string().optional().default(''),
+  consumer_secret: z.string().optional().default(''),
   active: z.boolean().optional(),
   auto_sync_enabled: z.boolean().optional(),
-  sync_interval_minutes: z.number().int().min(5).max(1440).optional(),
+  // hasta 1 semana (10080 min) por si quieren sync muy esporádico.
+  sync_interval_minutes: z.number().int().min(5).max(10080).optional(),
   default_currency: z.enum(['EUR', 'USD', 'GBP', 'MXN', 'COP', 'ARS', 'CLP', 'PEN', 'BOB', 'VES', 'BRL', 'JPY', 'CHF']).optional(),
   // WP REST API (para sacar ACF / pages / CPTs personalizados)
   wp_user: z.string().max(100).optional().nullable(),
