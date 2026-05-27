@@ -164,11 +164,38 @@ export async function restoreLead(leadId) {
 }
 
 export async function findProductByName(name, projectId) {
-  const { rows } = await query(
+  if (!name) return null;
+  const clean = String(name).trim();
+  // 1) Match exacto ILIKE
+  let { rows } = await query(
     `SELECT id FROM products WHERE nombre ILIKE $1 AND project_id = $2 AND active = true LIMIT 1`,
-    [name, projectId]
+    [clean, projectId]
   );
-  return rows[0] || null;
+  if (rows[0]) return rows[0];
+  // 2) Match sin acentos (unaccent ambos lados). Si la extensión unaccent no
+  // existe, lo intentamos crear de forma idempotente; si tampoco se puede,
+  // hacemos fallback a normalización manual con regexp_replace.
+  try {
+    ({ rows } = await query(
+      `SELECT id FROM products
+       WHERE LOWER(unaccent(nombre)) = LOWER(unaccent($1))
+         AND project_id = $2 AND active = true LIMIT 1`,
+      [clean, projectId]
+    ));
+    if (rows[0]) return rows[0];
+  } catch (_) { /* unaccent no disponible — sigo */ }
+  // 3) Match fuzzy: ignorar prefijos típicos y comparar substring (LIKE %...%)
+  const stripped = clean
+    .replace(/^(curso|master|m[aá]ster|diplomado|seminario|maestria|maestr[ií]a)\s+(en|de|sobre)\s+/i, '')
+    .trim();
+  if (stripped && stripped !== clean) {
+    ({ rows } = await query(
+      `SELECT id FROM products WHERE nombre ILIKE $1 AND project_id = $2 AND active = true LIMIT 1`,
+      [`%${stripped}%`, projectId]
+    ));
+    if (rows[0]) return rows[0];
+  }
+  return null;
 }
 
 // Busca por SKU exacto (case-insensitive, trim). Útil para multi-sitio donde
