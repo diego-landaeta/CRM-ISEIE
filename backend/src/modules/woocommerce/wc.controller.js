@@ -797,9 +797,10 @@ export const previewWc = async (req, res, next) => {
         if (scraped.brochure_url) sugeridos.brochure_url = 'scraper.brochure_url';
       }
 
-      const currentMapping = creds.field_mapping && Object.keys(creds.field_mapping).length > 0
-        ? creds.field_mapping
-        : sugeridos;
+      // Merge: sugeridos rellena CAMPOS NUEVOS (stripe_link, brochure_url, etc.)
+      // sin pisar lo que el admin ya mapeo a mano. field_mapping guardado siempre gana.
+      const savedMap = creds.field_mapping && typeof creds.field_mapping === 'object' ? creds.field_mapping : {};
+      const currentMapping = { ...sugeridos, ...savedMap };
       const mapped_preview = applyMappingWithScraper(firstPage, scraped, currentMapping, null);
 
       return res.json({
