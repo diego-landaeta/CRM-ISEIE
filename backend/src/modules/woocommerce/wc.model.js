@@ -158,6 +158,37 @@ async function findProductByExactName(projectId, nombre) {
   return rows[0] || null;
 }
 
+// Sanitiza precio: si viene como string "1,950 €" o "1.950,00", lo convierte a numero.
+// Casos: number → pasa; numeric string → parseFloat; europeo con miles → parsePriceNumber.
+function sanitizePrecio(v) {
+  if (v == null || v === '') return null;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  const s = String(v).trim();
+  if (!s) return null;
+  // Si es numero puro JS valido
+  const direct = Number(s);
+  if (Number.isFinite(direct)) return direct;
+  // Sino, extraer y parsear con logica europea (coma=miles si 3 dig despues)
+  const m = s.match(/[\d.,]+/);
+  if (!m) return null;
+  const numStr = m[0];
+  const hasDot = numStr.includes('.');
+  const hasComma = numStr.includes(',');
+  if (hasDot && hasComma) {
+    const lastDot = numStr.lastIndexOf('.');
+    const lastComma = numStr.lastIndexOf(',');
+    return parseFloat(lastDot > lastComma ? numStr.replace(/,/g, '') : numStr.replace(/\./g, '').replace(',', '.'));
+  }
+  if (hasDot || hasComma) {
+    const sep = hasDot ? '.' : ',';
+    const parts = numStr.split(sep);
+    if (parts.length === 2 && parts[1].length === 3) return parseFloat(numStr.replace(sep, ''));
+    if (parts.length > 2) return parseFloat(numStr.split(sep).join(''));
+    return parseFloat(numStr.replace(',', '.'));
+  }
+  return parseFloat(numStr);
+}
+
 export async function upsertProductFromWc({ projectId, wcId, data }) {
   // 1) Por wc_product_id. 2) Fallback por nombre exacto (caso CPT que choca con WC).
   let existing = await findProductByWcId(projectId, wcId);
@@ -165,6 +196,9 @@ export async function upsertProductFromWc({ projectId, wcId, data }) {
     const byName = await findProductByExactName(projectId, data.nombre);
     if (byName) existing = byName;
   }
+  // Sanitizar precio defensivamente — el mapping del user puede apuntar a
+  // scraper.meta_box.precio.text en vez de .value (texto vs numero).
+  data.precio = sanitizePrecio(data.precio);
   const meta = data.meta || {};
   // Campos de scraping (todos opcionales). Si vienen, se guardan; si no, queda NULL.
   const sc = {
