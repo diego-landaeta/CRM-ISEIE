@@ -252,6 +252,7 @@ export default function ClientsPage() {
                   <tr>
                     <th className="text-left px-4 py-2.5 font-bold">Cliente</th>
                     <th className="text-left px-4 py-2.5 font-bold">Email</th>
+                    <th className="text-left px-4 py-2.5 font-bold">Teléfono</th>
                     <th className="text-center px-4 py-2.5 font-bold">Compras</th>
                     <th className="text-right px-4 py-2.5 font-bold">Facturado</th>
                     <th className="text-right px-4 py-2.5 font-bold">Pendiente</th>
@@ -268,6 +269,7 @@ export default function ClientsPage() {
                         <div className="text-xs text-muted-foreground">{c.responsable_nombre || '—'}</div>
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">{c.email}</td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground font-mono">{c.telefono || '—'}</td>
                       <td className="px-4 py-3 text-center">
                         <span className="px-2 py-0.5 rounded bg-primary/10 text-primary text-xs font-semibold">{c.conversiones}</span>
                       </td>
