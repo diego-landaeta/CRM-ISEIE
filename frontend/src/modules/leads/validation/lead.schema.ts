@@ -1,7 +1,10 @@
 import { z } from 'zod';
 
 export const leadSchema = z.object({
-  nombre: z.string().min(2, 'El nombre debe tener al menos 2 caracteres'),
+  // Nombre opcional a nivel de schema — el form muestra error si el checkbox
+  // "sin nombre" no esta marcado Y el campo esta vacio. Si "sin nombre" esta
+  // marcado, handleFormSubmit genera "Anónimo (tel ...)" automaticamente.
+  nombre: z.string().max(200).optional().or(z.literal('')),
   // Email opcional: si viene, debe ser válido; vacío también acepta
   email: z.string().email('Email no valido').optional().or(z.literal('')),
   telefono: z.string().optional().or(z.literal('')),

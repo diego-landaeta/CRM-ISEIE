@@ -9,7 +9,12 @@ interface Props {
 }
 
 function ymd(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  // Local YYYY-MM-DD (NO usar toISOString — convierte a UTC y rompe presets
+  // como "Hoy" cuando el usuario esta en TZ negativa por la noche).
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 function presetRange(preset: string): [string, string] {

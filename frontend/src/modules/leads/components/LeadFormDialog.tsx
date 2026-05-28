@@ -143,7 +143,15 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
 
   async function handleFormSubmit(data: LeadFormData): Promise<void> {
     if (!effectiveProjectId) return;
-    await onSubmit({ ...data, custom_fields: customValues, _project_id: effectiveProjectId } as any);
+    // Si el checkbox "sin nombre" esta marcado y el campo nombre esta vacio,
+    // generamos un identificador unico para evitar choques: "Anonimo - <telef o ts>".
+    let nombre = data.nombre;
+    const sinNombreFlag = (customValues as any)?._sin_nombre === true;
+    if (sinNombreFlag && (!nombre || !nombre.trim() || /^sin nombre$/i.test(nombre.trim()))) {
+      const tag = data.telefono ? `tel ${data.telefono}` : `${Date.now().toString().slice(-6)}`;
+      nombre = `Anónimo (${tag})`;
+    }
+    await onSubmit({ ...data, nombre, custom_fields: customValues, _project_id: effectiveProjectId } as any);
     onClose();
   }
 
@@ -165,13 +173,29 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
 
           <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Nombre *" error={errors.nombre?.message}>
-                <input {...register('nombre')} placeholder="Nombre completo" className={inputClass} />
+              <Field label={(customValues as any)?._sin_nombre ? 'Nombre (se generará automáticamente)' : 'Nombre *'} error={errors.nombre?.message}>
+                <input
+                  {...register('nombre')}
+                  placeholder={(customValues as any)?._sin_nombre ? 'Se autorellenará como Anónimo (tel ...)' : 'Nombre completo'}
+                  className={inputClass}
+                  disabled={(customValues as any)?._sin_nombre === true}
+                />
               </Field>
               <Field label="Email" error={errors.email?.message} hint="Opcional si pones teléfono">
                 <input {...register('email')} type="email" placeholder="correo@ejemplo.com (opcional)" className={inputClass} />
               </Field>
             </div>
+
+            {/* Checkbox para personas que llegan sin nombre — evita duplicados por colision de "Sin nombre" */}
+            <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={(customValues as any)?._sin_nombre === true}
+                onChange={(e) => setCustomValues((v) => ({ ...(v as any), _sin_nombre: e.target.checked }))}
+                className="accent-primary"
+              />
+              <span><strong>No tiene nombre</strong> — el contacto no proporcionó nombre. Se generará un identificador único tipo "Anónimo (tel XXX)" para evitar duplicados.</span>
+            </label>
 
             {duplicates.length > 0 && (
               <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 rounded-md p-3 flex gap-3 items-start">
