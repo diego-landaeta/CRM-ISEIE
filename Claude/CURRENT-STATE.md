@@ -1,4 +1,75 @@
-# CRM-ISEIE — Estado actual (snapshot 2026-05-27)
+# CRM-ISEIE — Estado actual (snapshot 2026-05-29)
+
+> Para changelog cronológico ver [CHANGELOG.md](./CHANGELOG.md). Para handoff completo ver [HANDOFF.md](./HANDOFF.md).
+
+## Cifras live (a 2026-05-29)
+
+| Métrica | Valor |
+|---|---|
+| Total leads activos | ~11,747 |
+| Convertidos (status) | 175 |
+| Conversiones registradas | ~190 |
+| Productos importados desde WP | 615 |
+| Productos con precio scrapeado | 488 (los 127 sin precio = WP source sin precio publicado) |
+| Lead interactions (timeline) | 11,631 |
+| Leads pendiente_reasignar (Agostina) | 1,753 |
+| Spam soft-deleted | 64 |
+
+## Trabajo agregado después del snapshot 2026-05-27
+
+### Imports masivos
+- **CETLAT**: 419 solicitudes de beca → leads
+- **Contactos 2026**: 12,962 filas CSV → 11,747 leads únicos (dedupe email+phone)
+- **Productos**: 615 desde WordPress (sheet 2026 del scraper)
+
+### Scripts creados en `backend/scripts/`
+1. `import_cetlat.js`
+2. `import_contactos.js`
+3. `link_products.js` — matcher fuzzy con unaccent + tokens 70%
+4. `fill_prices.js` — re-scrapea solo precios
+5. `fix_fechas.js` — re-parsea fechas DD/MM (bug JS MM/DD)
+6. `populate_history.js` — crea timeline cronológica
+7. `fix_telefonos_iseie.py` — normaliza desde xlsx (col B preferida, sin 1/9 mobile)
+8. `qa_iseie.mjs` — **suite E2E 54 tests, todos PASS**
+
+### Fixes críticos aplicados
+- **Date timezone**: pg `setTypeParser(1082)` + frontend `toLocalDate()` — fechas locales en todo el FE
+- **DateRangeFilter "Hoy"**: usaba `toISOString` (UTC) → en GMT-4 mostraba mañana. Corregido a fecha local.
+- **`parsePriceNumber` europeo**: `1,985 €` = 1985 (coma=miles si 3 dígitos), `5,50 €` = 5.5 (coma=decimal si 2 dígitos)
+- **`sanitizePrecio()` defensa WC scheduler**: bug por mapping con `.text` (string) en columna numeric — 600+ errores fixed
+- **9971 leads** con `fecha_solicitud` re-parseada (estaban en futuro por bug MM/DD)
+- **1601 leads** renombrados "Sin nombre" → "Anónimo (tel XXX)"
+- **1513 teléfonos** normalizados desde xlsx oficial col B (formato E.164 sin 1/9 mobile)
+- **11,631 lead_interactions** creadas para construir timeline cronológica de leads duplicados
+
+### CETLAT custom fields configurados
+En `project_field_definitions` para project_id=10:
+- `origen` (select: beca_cetlat/web/whatsapp/instagram/referido/otro)
+- `cetlat_id` (text)
+- `porcentaje_resuelto` (select: 0%-100%)
+- `plan_pago_enviado` (boolean)
+- `venta_marcada` (boolean)
+- `observacion` (textarea)
+- `programa_solicitado` (text)
+
+Aparecen automáticamente en el formulario "Nuevo prospecto" bajo grupo CETLAT.
+
+### Frontend portado de ISEIH (avances)
+- ✅ `LeadsPage` completa (filtros avanzados, bulk actions, exports, columnas extra, quick actions) — 1101 líneas
+- ✅ `ProductDetailPage` real (era stub) — fetch + meta pills + secciones expandibles
+- ✅ Sidebar con beta gate (VITE_BETA_MODE=true)
+- ✅ Columna Teléfono en grids de Prospectos y Clientes
+- ⚠️ `ProjectSettingsDialog` sigue como stub mínimo (10 tabs por portar)
+
+### Lo que se mantiene del snapshot original (todavía válido)
+- Infra: VPS 72.60.90.135, PM2 `crm-iseie-api`:3005, DB `crm_iseie`
+- Integraciones: WP importer (`wp_pages`), Make webhook entrante, WC import progress en vivo
+- Migraciones: hasta `065_products_brochure_url.sql`
+
+---
+
+# Documentación original (snapshot 2026-05-27)
+
 
 Documentacion completa del estado del CRM-ISEIE, repo `esos2dev-oss/CRM-ISEIE`, deployado en `https://crm.iseie.com`. Pensado para que Angel/Manuel se pongan al dia rapido.
 
