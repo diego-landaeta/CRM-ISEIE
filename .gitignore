@@ -50,3 +50,8 @@ docs/_private/
 
 # Uploads runtime (PDFs generados, avatares, etc.)
 backend/uploads/
+
+# Backups locales (preprod testing)
+backups/
+*.dump
+
