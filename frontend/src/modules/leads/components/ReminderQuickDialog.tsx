@@ -41,17 +41,19 @@ export default function ReminderQuickDialog({ open, lead, onClose, onSaved }: Pr
     if (!fecha) return;
     setSaving(true);
     try {
-      const fechaIso = new Date(`${fecha}T${hora}:00`).toISOString();
+      // Backend espera fecha_recordatorio en YYYY-MM-DD estricto.
+      // La hora va en la nota para preservar el dato.
+      const horaTxt = hora ? ` a las ${hora}` : '';
       await client.post(`/leads/${lead.id}/reminders`, {
-        fecha: fechaIso,
-        nota: nota || `Contacto programado`,
+        fecha_recordatorio: fecha,
+        nota: (nota || 'Contacto programado') + horaTxt,
       });
       toast({
         title: 'Recordatorio creado',
-        description: `${lead.nombre} — ${new Date(fechaIso).toLocaleString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}`,
+        description: `${lead.nombre} — ${fecha}${horaTxt}`,
       });
       onSaved?.();
-    } catch (err) {
+    } catch (err: any) {
       toast({ title: 'Error', description: err?.data?.error || err.message, variant: 'destructive' });
     } finally {
       setSaving(false);

@@ -361,7 +361,15 @@ function RecordatoriosTab({ leadId, reminders, onRefetch }) {
     if (!fecha) return;
     setLoading(true);
     try {
-      await client.post(`/leads/${leadId}/reminders`, { fecha_recordatorio: fecha, nota });
+      // input datetime-local devuelve "2026-05-31T21:58" pero backend espera
+      // YYYY-MM-DD estricto. Separamos: fecha al campo, hora a la nota.
+      const fechaPart = fecha.slice(0, 10);
+      const horaPart = fecha.length > 10 ? fecha.slice(11, 16) : '';
+      const notaFinal = horaPart ? `${nota ? nota + ' · ' : ''}${horaPart}` : (nota || '');
+      await client.post(`/leads/${leadId}/reminders`, {
+        fecha_recordatorio: fechaPart,
+        nota: notaFinal,
+      });
       setFecha(''); setNota('');
       toast({ title: 'Recordatorio creado' });
       onRefetch();
