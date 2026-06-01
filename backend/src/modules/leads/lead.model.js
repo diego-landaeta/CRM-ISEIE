@@ -908,8 +908,11 @@ export async function getStats(projectId, { responsableId = null } = {}) {
 export async function getDashboardSummary(projectId, { days = 30, responsableId = null } = {}) {
   const isGestor = !!responsableId;
   const respParam = isGestor ? ', $4::int' : '';
-  const respFilterLeads = isGestor ? 'AND l.responsable_id = $4' : '';
-  const respFilterConv  = isGestor ? `AND l.responsable_id = $4` : '';
+  const respFilterLeads = isGestor ? 'AND l.responsable_id = $4::int' : '';
+  const respFilterConv  = isGestor ? `AND l.responsable_id = $4::int` : '';
+  // Filtro para sparkSql usa posición $2 (no $4) porque sparkParams es más chico
+  const respFilterSparkLeads = isGestor ? 'AND l.responsable_id = $2::int' : '';
+  const respFilterSparkConv  = isGestor ? `AND l.responsable_id = $2::int` : '';
 
   // Periodo actual (ultimos N dias) y previo (N dias anteriores a esos).
   const now = new Date();
@@ -968,27 +971,25 @@ export async function getDashboardSummary(projectId, { days = 30, responsableId 
         WHERE l.project_id = $1 AND l.deleted_at IS NULL
           AND l.created_at >= NOW() - ((w.w + 1) * INTERVAL '7 days')
           AND l.created_at <  NOW() - (w.w * INTERVAL '7 days')
-          ${respFilterLeads}
+          ${respFilterSparkLeads}
       ) AS leads,
       (SELECT COUNT(*)::int FROM conversions c LEFT JOIN leads l ON l.id = c.lead_id
         WHERE c.project_id = $1
           AND c.created_at >= NOW() - ((w.w + 1) * INTERVAL '7 days')
           AND c.created_at <  NOW() - (w.w * INTERVAL '7 days')
-          ${respFilterConv}
+          ${respFilterSparkConv}
       ) AS conversiones,
       (SELECT COALESCE(SUM(c.importe_total), 0)::numeric FROM conversions c LEFT JOIN leads l ON l.id = c.lead_id
         WHERE c.project_id = $1
           AND c.created_at >= NOW() - ((w.w + 1) * INTERVAL '7 days')
           AND c.created_at <  NOW() - (w.w * INTERVAL '7 days')
-          ${respFilterConv}
+          ${respFilterSparkConv}
       ) AS ingresos
     FROM weeks w
     ORDER BY w.w DESC
   `;
-  // El sparkSql solo referencia $1 (projectId) y, si es gestor, $4 (responsableId).
-  // No usar periodStart/periodEnd aquí — eran params sobrantes que causaban
-  // protocol_violation (08P01) en Postgres.
-  const sparkParams = isGestor ? [projectId, null, null, responsableId] : [projectId];
+  // sparkSql usa $1 (projectId) y, si es gestor, $2 (responsableId) — sin nulls intermedios
+  const sparkParams = isGestor ? [projectId, responsableId] : [projectId];
   const { rows: weeksRows } = await query(sparkSql, sparkParams);
 
   const leadsSpark = weeksRows.map((r) => Number(r.leads || 0));

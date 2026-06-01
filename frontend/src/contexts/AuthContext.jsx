@@ -3,11 +3,16 @@ import client, { setAccessToken, setOnAuthFailure, API_BASE_URL } from '@/shared
 
 const AuthContext = createContext(null);
 
+// Dev-only bypass: fake superadmin user para validar UI/menus sin backend.
+const BYPASS = String(import.meta.env.VITE_DEV_BYPASS_AUTH || '').toLowerCase() === 'true';
+const FAKE_USER = { id: 1, userId: 1, nombre: 'Dev Bypass', email: 'dev@local', role: 'superadmin' };
+const FAKE_PROJECT = { id: 10, nombre: 'ISEIE', slug: 'iseie' };
+
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const [projects, setProjects] = useState([]);
-  const [activeProjectId, setActiveProjectId] = useState(null);
-  const [loading, setLoading] = useState(true); // true hasta que verifiquemos sesión
+  const [user, setUser] = useState(BYPASS ? FAKE_USER : null);
+  const [projects, setProjects] = useState(BYPASS ? [FAKE_PROJECT] : []);
+  const [activeProjectId, setActiveProjectId] = useState(BYPASS ? FAKE_PROJECT.id : null);
+  const [loading, setLoading] = useState(!BYPASS); // bypass salta el loader
   const initialized = useRef(false);
 
   // Al montar, intentar restaurar sesión con refresh token (cookie httpOnly)

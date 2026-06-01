@@ -28,7 +28,7 @@ export function useDossiers(
     setLoading(true);
     try {
       const data = await getDossierHistory(productId, projectId);
-      setHistory(data);
+      setHistory(Array.isArray(data) ? data : []);
     } catch (err: any) {
       setError(err.response?.data?.error || 'Error al cargar historial');
     } finally {
@@ -66,7 +66,7 @@ export function useDossiers(
     window.open(url, '_blank');
   };
 
-  const activeDossier = history.find((d) => d.active);
+  const activeDossier = Array.isArray(history) ? history.find((d) => d.active) : null;
 
   return { history, activeDossier, loading, uploading, uploadProgress, error, upload, download, refetch: fetchHistory };
 }
