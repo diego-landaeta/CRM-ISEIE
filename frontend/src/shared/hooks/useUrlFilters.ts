@@ -49,23 +49,27 @@ export default function useUrlFilters<T extends UrlFilterDefaults>(defaults: T):
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, JSON.stringify(defaults)]);
 
-  // Setter parcial: aplica patch y omite los que igualan default
+  // Setter parcial: aplica patch y omite los que igualan default.
+  // Lee filters frescos via setSearchParams(prev => ...) para evitar closure stale.
   const setFilters = useCallback((patch: Partial<T>): void => {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
-      const merged = { ...filters, ...patch } as Record<string, string | number>;
+      // Construir "merged" desde prev (no desde `filters` capturado), evita race
+      const current = {} as Record<string, string | number>;
+      for (const [key, def] of Object.entries(defaults)) {
+        const v = prev.get(key);
+        current[key] = v == null ? def : (typeof def === 'number' ? (Number.isFinite(Number(v)) ? Number(v) : def) : v);
+      }
+      const merged = { ...current, ...patch } as Record<string, string | number>;
       for (const [key, def] of Object.entries(defaults)) {
         const value = merged[key];
         const isDefault = value === def || value === '' || value == null;
-        if (isDefault) {
-          next.delete(key);
-        } else {
-          next.set(key, String(value));
-        }
+        if (isDefault) next.delete(key);
+        else next.set(key, String(value));
       }
       return next;
     }, { replace: true, preventScrollReset: true });
-  }, [filters, setSearchParams, defaults]);
+  }, [setSearchParams, defaults]);
 
   const reset = useCallback((): void => {
     setSearchParams((prev) => {
