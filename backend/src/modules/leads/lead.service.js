@@ -3,6 +3,7 @@ import * as leadModel from './lead.model.js';
 import { query } from '../../shared/config/db.js';
 import { sendLeadAssignedEmail } from '../../shared/services/brevo.service.js';
 import { logger } from '../../shared/utils/logger.js';
+import { normalizePhone } from '../../shared/utils/normalizePhone.js';
 
 // Dispara secuencias de email activas. STUB v1 mientras email-sequences no este portado.
 async function triggerSequences(_triggerEvent, _leadId, _projectId) {
@@ -142,7 +143,7 @@ async function _createLeadCore(project, leadData) {
     projectId: project.id,
     nombre: leadData.nombre,
     email: leadData.email || null,
-    telefono: leadData.telefono || null,
+    telefono: normalizePhone(leadData.telefono),
     productoInteresId,
     notas: leadData.notas || null,
     landingUrl: leadData.landing_url || null,
@@ -456,7 +457,7 @@ export async function createManualLead({ project_id, nombre, email, telefono, pr
     projectId: project_id,
     nombre,
     email,
-    telefono: telefono || null,
+    telefono: normalizePhone(telefono),
     productoInteresId: producto_interes_id || null,
     notas: notas || null,
     landingUrl: null,
@@ -494,6 +495,11 @@ export async function createManualLead({ project_id, nombre, email, telefono, pr
 export async function updateLead(leadId, data, opts = {}) {
   const lead = await leadModel.findById(leadId);
   if (!lead) throw new AppError('Lead no encontrado', 404, 'LEAD_NOT_FOUND');
+
+  // Normalizar teléfono si viene en el update
+  if (Object.prototype.hasOwnProperty.call(data, 'telefono')) {
+    data.telefono = normalizePhone(data.telefono);
+  }
 
   const updated = await leadModel.updateLead(leadId, data);
   if (!updated) throw new AppError('No se actualizo el lead', 400, 'NO_FIELDS');

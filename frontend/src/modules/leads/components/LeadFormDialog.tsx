@@ -10,6 +10,7 @@ import Portal from '@/shared/components/ui/portal';
 import Select from '@/shared/components/ui/Select';
 import ProductCombobox from './ProductCombobox';
 import client from '@/shared/api/client';
+import { detectCountryFromPhone } from '../lib/phoneCountry';
 import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
 import type { Lead } from '@/shared/types';
 
@@ -91,6 +92,7 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
   });
 
   const watchedEmail = watch('email');
+  const watchedTelefono = watch('telefono');
 
   // Cargar custom fields al abrir dialog
   useEffect(() => {
@@ -235,7 +237,21 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
 
             <div className="grid grid-cols-2 gap-3">
               <Field label="Teléfono" error={errors.telefono?.message} hint="Opcional si pones email">
-                <input {...register('telefono')} placeholder="+34 600 000 000 (opcional)" className={inputClass} />
+                <div className="relative">
+                  <input {...register('telefono')} placeholder="+34 600 000 000 (opcional)" className={inputClass + ' pr-14'} />
+                  {(() => {
+                    const c = detectCountryFromPhone(watchedTelefono);
+                    if (!c) return null;
+                    return (
+                      <span
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-base leading-none pointer-events-none"
+                        title={c.name}
+                      >
+                        {c.flag} <span className="text-[10px] text-muted-foreground align-middle">{c.code}</span>
+                      </span>
+                    );
+                  })()}
+                </div>
               </Field>
               <Field label="Origen *" error={errors.origen?.message}>
                 <Controller
