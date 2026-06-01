@@ -552,7 +552,7 @@ export default function LeadsPage() {
           </div>
           <select
             value={filterEstado}
-            onChange={(e) => { setFilterEstado(e.target.value); setPage(1); }}
+            onChange={(e) => { setFilterEstado(e.target.value); }}
             aria-label="Filtrar por estado"
             className="h-9 px-3 pr-8 rounded-md border border-border bg-muted/40 text-sm outline-none appearance-none cursor-pointer focus:border-primary focus:ring-2 focus:ring-primary/20"
             style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center' }}
@@ -564,7 +564,7 @@ export default function LeadsPage() {
           </select>
           <SearchableSelect
             value={filterOrigen}
-            onChange={(v) => { setFilterOrigen(v); setPage(1); }}
+            onChange={(v) => { setFilterOrigen(v); }}
             options={[
               { value: 'meta_ads', label: 'Meta Ads' },
               { value: 'google_ads', label: 'Google Ads' },
@@ -583,7 +583,7 @@ export default function LeadsPage() {
           {(user?.role === 'superadmin' || user?.role === 'admin') && (
             <SearchableSelect
               value={filterResponsable}
-              onChange={(v) => { setFilterResponsable(v); setPage(1); }}
+              onChange={(v) => { setFilterResponsable(v); }}
               options={[
                 { value: 'unassigned', label: '— Sin asignar —' },
                 ...gestores.map((g: any) => ({ value: String(g.id), label: g.nombre })),
@@ -596,7 +596,7 @@ export default function LeadsPage() {
           )}
           <SearchableSelect
             value={filterProducto}
-            onChange={(v) => { setFilterProducto(v); setPage(1); }}
+            onChange={(v) => { setFilterProducto(v); }}
             options={(products || []).map((p: any) => ({ value: String(p.id), label: p.nombre }))}
             placeholder="Buscar programa..."
             allLabel="Todos los programas"
@@ -607,7 +607,7 @@ export default function LeadsPage() {
             <MultiProjectPicker
               projects={projects}
               selected={selectedProjectIds}
-              onChange={(ids) => { setSelectedProjectIds(ids); setPage(1); }}
+              onChange={(ids) => { setSelectedProjectIds(ids); }}
               activeProjectId={activeProject?.id}
             />
           )}
