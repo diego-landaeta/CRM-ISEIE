@@ -3,9 +3,22 @@ import { query } from '../../shared/config/db.js';
 // La tabla `product_categories` no existe en 001/002. Los JOINs al árbol de
 // categorías y el filtro por categoryId quedan inhabilitados hasta portar el
 // módulo product-categories.
+// Listado: NO trae campos _texto pesados (HTML grande). Solo lo necesario para
+// el catálogo / cards. Para ver el detalle completo, usar findById(id).
+const LIST_COLS = [
+  'id', 'project_id', 'nombre', 'sku', 'precio', 'moneda',
+  'duracion', 'horas', 'modalidad', 'fecha_inicio_texto', 'num_modulos',
+  'image_url', 'url_info', 'stripe_link', 'brochure_url',
+  'source_type', 'wc_product_id',
+  'categoria_id', 'subcategoria_id',
+  'active', 'created_at', 'updated_at',
+  // descripcion va recortada (los textos largos rompen perf)
+  "LEFT(descripcion, 280) AS descripcion",
+].join(', ');
+
 export async function findByProject(projectId, { includeInactive = false, categoryId: _ignored = null } = {}) {
   const params = [projectId];
-  const base = `SELECT p.*, NULL::text as categoria_nombre, NULL::text as subcategoria_nombre
+  const base = `SELECT ${LIST_COLS}, NULL::text as categoria_nombre, NULL::text as subcategoria_nombre
                 FROM products p
                 WHERE p.project_id = $1`;
   const sql = includeInactive
