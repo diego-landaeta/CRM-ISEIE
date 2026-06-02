@@ -138,6 +138,7 @@ export default function LeadsPage() {
     selectedProjectIds, setSelectedProjectIds,
     dateFrom, dateTo, setDateRange,
     sortMode, setSortMode,
+    filterDup, setFilterDup,
     loading, error, refetch,
   } = useLeads();
 
@@ -382,6 +383,9 @@ export default function LeadsPage() {
       productoInteresId = prod?.id || null;
     }
 
+    // DEBUG: ver qué origen llega del form. Quitar después de validar.
+    // eslint-disable-next-line no-console
+    console.log('[handleCreateLead] data.origen recibido:', data.origen, 'tipo:', typeof data.origen);
     try {
       const res = await client.post('/leads', {
         project_id: projectId,
@@ -687,6 +691,10 @@ export default function LeadsPage() {
           label="Hoy" count={quickCounts.today} tone="warning" />
         <QuickChip active={quickFilter === 'no-contact'} onClick={() => setQuickFilter('no-contact')}
           label="Sin contacto" count={quickCounts.noContact} tone="default" />
+        {(user?.role === 'admin' || user?.role === 'superadmin') && (
+          <QuickChip active={filterDup} onClick={() => setFilterDup(!filterDup)}
+            label="Duplicados" tone="warning" />
+        )}
       </div>
 
       {/* Leyenda de iconos de acción + badges */}

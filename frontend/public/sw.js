@@ -7,7 +7,7 @@
 //
 // Cuando este archivo cambia, el navegador detecta la actualización y al recargar
 // se activa el nuevo SW automáticamente.
-const VERSION = 'v1';
+const VERSION = 'v2';
 const STATIC_CACHE = `iseie-static-${VERSION}`;
 const RUNTIME_CACHE = `iseie-runtime-${VERSION}`;
 const OFFLINE_URL = '/offline.html';

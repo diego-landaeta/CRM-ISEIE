@@ -26,6 +26,10 @@ router.get('/dashboard-summary', leadController.dashboardSummary);
 // pueda detectar duplicados de leads que pertenecen a otra asesora.
 router.get('/lookup-by-email', leadController.lookupByEmail);
 
+// Check duplicado antes de crear (manual). FE llama antes del POST para
+// mostrar diálogo de confirmación si hay match por email o teléfono.
+router.post('/check-duplicate', leadController.checkDuplicate);
+
 // Spam reports — admin/superadmin gestiona reportes; cualquier autenticado puede levantar uno.
 // IMPORTANTE: las rutas con path fijo deben ir antes que las que tienen :id.
 router.get('/spam-reports',              roleGuard('admin', 'superadmin'), spamReportController.listPending);

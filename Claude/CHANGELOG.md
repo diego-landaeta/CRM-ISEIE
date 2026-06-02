@@ -4,6 +4,13 @@ Log cronológico de commits importantes. Más reciente arriba.
 
 ---
 
+## 2026-06-01 — Editar email+canal en ficha + fix WhatsApp→Directo en drawer + fix deploy path
+
+- `feat(leads):` `LeadInfoCard` ahora permite editar **email y canal** en modo edición (antes solo nombre/teléfono/notas). Email se normaliza a `null` si vacío; canal va a `lead_utms.canal_detectado` con `INSERT … ON CONFLICT (lead_id) DO UPDATE` (tabla tiene UNIQUE en `lead_id`). Backend: `updateLeadSchema` acepta `email`+`canal`, `lead.service.updateLead` extrae `canal` antes de pasar a modelo, `lead.model.updateLead` añade `email` a la lista de campos editables. Replicado en ISEIH.
+- `fix(useLeads):` `normalizeLead` ahora lee `lead.utms?.canal_detectado` además de `lead.canal_detectado` al raíz. El listado trae el canal al raíz (vía JOIN), pero el detail lo trae anidado en `utms`. Antes la ficha preliminar (LeadDrawer) caía siempre al fallback `'directo'` aunque la DB tuviera `whatsapp`. Replicado en ISEIH.
+- `fix(deploy):` **bug operativo importante** — Nginx para `crm.iseie.com` tiene `root /var/www/crm-iseie` (sin `/frontend`). Los deploys previos a `/var/www/crm-iseie/frontend/` quedaban huérfanos. Despliegue correcto: extraer tar del build a `/var/www/crm-iseie/` directamente. Documentado para futuro.
+- `feat(sw):` bump `VERSION = 'v2'` en `public/sw.js` para forzar invalidación de cache en clientes que tenían el SW v1 con assets viejos.
+
 ## 2026-05-29 — Normalización teléfonos desde xlsx + QA E2E
 
 - `3d2bb49 feat(qa):` `qa_iseie.mjs` — **suite E2E de 54 tests**. Cubre: lead CRUD, status_history, interactions, reminders, conversions con pagos+cuotas, custom_fields, filtros, soft-delete, products. Cleanup automatico. **54/54 PASS.**

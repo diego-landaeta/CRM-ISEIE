@@ -75,6 +75,12 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
   const [customFields, setCustomFields] = useState<CustomFieldDef[]>([]);
   const [customValues, setCustomValues] = useState<Record<string, unknown>>({});
   const [duplicates, setDuplicates] = useState<DuplicateLead[]>([]);
+  // Confirmación de duplicado bloqueante (busca por email O teléfono)
+  const [pendingDup, setPendingDup] = useState<{
+    lead: { id: number; nombre?: string; email?: string; telefono?: string; status?: string; responsable_nombre?: string; created_at?: string; masked?: boolean; message?: string };
+    formData: LeadFormData;
+    nombreFinal: string;
+  } | null>(null);
 
   const {
     register,
@@ -145,14 +151,34 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
 
   async function handleFormSubmit(data: LeadFormData): Promise<void> {
     if (!effectiveProjectId) return;
-    // Si el checkbox "sin nombre" esta marcado y el campo nombre esta vacio,
-    // generamos un identificador unico para evitar choques: "Anonimo - <telef o ts>".
     let nombre = data.nombre;
     const sinNombreFlag = (customValues as any)?._sin_nombre === true;
     if (sinNombreFlag && (!nombre || !nombre.trim() || /^sin nombre$/i.test(nombre.trim()))) {
       const tag = data.telefono ? `tel ${data.telefono}` : `${Date.now().toString().slice(-6)}`;
       nombre = `Anónimo (${tag})`;
     }
+
+    // Check duplicado por email O teléfono (solo en creación, no edición)
+    if (!isEdit && (data.email || data.telefono)) {
+      try {
+        const res = await client.post('/leads/check-duplicate', {
+          project_id: effectiveProjectId,
+          email: data.email || null,
+          telefono: data.telefono || null,
+        }) as { success: boolean; data?: { duplicate: any } };
+        if (res?.success && res.data?.duplicate) {
+          setPendingDup({ lead: res.data.duplicate, formData: data, nombreFinal: nombre });
+          return; // espera decisión del usuario
+        }
+      } catch {
+        // si el check falla, no bloqueamos — seguimos con el submit
+      }
+    }
+
+    await proceedSubmit(data, nombre);
+  }
+
+  async function proceedSubmit(data: LeadFormData, nombre: string): Promise<void> {
     await onSubmit({ ...data, nombre, custom_fields: customValues, _project_id: effectiveProjectId } as any);
     onClose();
   }
@@ -374,6 +400,50 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
           </form>
         </div>
       </div>
+
+      {pendingDup && (
+        <div role="dialog" aria-label="Lead duplicado detectado" className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setPendingDup(null)} />
+          <div className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-md p-6 space-y-4">
+            <div>
+              <h3 className="text-base font-semibold mb-1">Ya existe un lead con estos datos</h3>
+              <p className="text-sm text-muted-foreground">
+                {pendingDup.lead.masked
+                  ? pendingDup.lead.message || 'Existe un lead duplicado asignado a otro gestor.'
+                  : 'Se encontró un prospecto que coincide por email o teléfono. ¿Qué quieres hacer?'}
+              </p>
+            </div>
+            {!pendingDup.lead.masked && (
+              <div className="bg-muted/40 border border-border rounded-lg p-3 text-xs space-y-1">
+                <div><span className="text-muted-foreground">Nombre:</span> <span className="font-medium">{pendingDup.lead.nombre || '--'}</span></div>
+                {pendingDup.lead.email && <div><span className="text-muted-foreground">Email:</span> {pendingDup.lead.email}</div>}
+                {pendingDup.lead.telefono && <div><span className="text-muted-foreground">Teléfono:</span> {pendingDup.lead.telefono}</div>}
+                {pendingDup.lead.responsable_nombre && <div><span className="text-muted-foreground">Gestor:</span> {pendingDup.lead.responsable_nombre}</div>}
+                {pendingDup.lead.status && <div><span className="text-muted-foreground">Estado:</span> {pendingDup.lead.status}</div>}
+              </div>
+            )}
+            <div className="flex flex-col gap-2 pt-2">
+              {!pendingDup.lead.masked && (
+                <button
+                  type="button"
+                  onClick={() => { const id = pendingDup.lead.id; setPendingDup(null); onClose(); window.location.href = `/leads/${id}`; }}
+                  className="h-9 px-4 rounded-md bg-primary text-white text-sm font-semibold hover:bg-primary/90"
+                >Ver lead existente</button>
+              )}
+              <button
+                type="button"
+                onClick={async () => { const p = pendingDup; setPendingDup(null); await proceedSubmit(p.formData, p.nombreFinal); }}
+                className="h-9 px-4 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted"
+              >Crear igualmente (marcar como duplicado)</button>
+              <button
+                type="button"
+                onClick={() => setPendingDup(null)}
+                className="h-9 px-4 rounded-md text-sm text-muted-foreground hover:bg-muted"
+              >Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </Portal>
   );
 }

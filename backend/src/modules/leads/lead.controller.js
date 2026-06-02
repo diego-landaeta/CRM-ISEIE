@@ -46,6 +46,8 @@ export async function list(req, res, next) {
     if (req.user.role === 'gestor') {
       filters.responsableId = req.user.userId;
       filters.unassigned = false;
+      // Filtro duplicados es operativo (admin/superadmin); el gestor no lo usa.
+      filters.duplicated = false;
     }
     const result = await leadService.list(filters);
     res.json({
@@ -69,6 +71,16 @@ export async function lookupByEmail(req, res, next) {
     }
     if (isNaN(projectId)) throw new AppError('projectId requerido', 400, 'MISSING_PROJECT');
     const data = await leadService.lookupByEmail(email, projectId);
+    res.json({ success: true, data });
+  } catch (err) { next(err); }
+}
+
+// POST /api/leads/check-duplicate — body {email?, telefono?, project_id}
+// Devuelve el lead duplicado existente si lo hay, sin crear nada.
+// Sirve para que el FE muestre diálogo de confirmación antes de submit.
+export async function checkDuplicate(req, res, next) {
+  try {
+    const data = await leadService.checkDuplicate(req.body, req.user);
     res.json({ success: true, data });
   } catch (err) { next(err); }
 }

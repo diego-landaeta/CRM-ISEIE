@@ -9,28 +9,46 @@ interface LeadInfoCardProps {
   onUpdate: (fields: Partial<Lead>) => Promise<void> | void;
 }
 
+const CANAL_OPTIONS = [
+  { value: 'directo', label: 'Directo' },
+  { value: 'whatsapp', label: 'WhatsApp' },
+  { value: 'meta_ads', label: 'Meta Ads' },
+  { value: 'google_ads', label: 'Google Ads' },
+  { value: 'tiktok_ads', label: 'TikTok Ads' },
+  { value: 'organico', label: 'Orgánico' },
+  { value: 'referido', label: 'Referido' },
+  { value: 'chatgpt_ia', label: 'ChatGPT IA' },
+];
+
 export default function LeadInfoCard({ lead, onUpdate }: LeadInfoCardProps) {
   const [editMode, setEditMode] = useState(false);
   const [nombre, setNombre] = useState('');
+  const [email, setEmail] = useState('');
   const [telefono, setTelefono] = useState('');
   const [notas, setNotas] = useState('');
+  const [canal, setCanal] = useState('');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (editMode && lead) {
       setNombre(lead.nombre || '');
+      setEmail(lead.email || '');
       setTelefono(lead.telefono || '');
       setNotas(lead.notas || '');
+      setCanal((lead as any).canal_detectado || (lead as any).origen || 'directo');
     }
   }, [editMode, lead]);
 
   async function handleSave() {
     setLoading(true);
     try {
-      const fields: Partial<Lead> = {};
+      const fields: Partial<Lead> & { canal?: string } = {};
       if (nombre !== lead.nombre) fields.nombre = nombre.trim();
+      if ((email || '') !== (lead.email || '')) (fields as any).email = email.trim() || null;
       if ((telefono || '') !== (lead.telefono || '')) fields.telefono = telefono.trim() || null;
       if ((notas || '') !== (lead.notas || '')) fields.notas = notas.trim() || null;
+      const currentCanal = (lead as any).canal_detectado || (lead as any).origen || 'directo';
+      if (canal !== currentCanal) fields.canal = canal;
       if (Object.keys(fields).length === 0) {
         setEditMode(false);
         return;
@@ -95,12 +113,24 @@ export default function LeadInfoCard({ lead, onUpdate }: LeadInfoCardProps) {
             <input value={nombre} onChange={(e) => setNombre(e.target.value)} className={inputClass} />
           </div>
           <div>
-            <p className="text-xs text-muted-foreground mb-1.5">Email (no editable)</p>
-            <input value={lead.email} disabled className={inputClass + ' opacity-60 cursor-not-allowed'} />
+            <p className="text-xs text-muted-foreground mb-1.5">Email</p>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="correo@ejemplo.com"
+              className={inputClass}
+            />
           </div>
           <div>
             <p className="text-xs text-muted-foreground mb-1.5">Teléfono</p>
             <input value={telefono} onChange={(e) => setTelefono(e.target.value)} className={inputClass} />
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground mb-1.5">Canal</p>
+            <select value={canal} onChange={(e) => setCanal(e.target.value)} className={inputClass}>
+              {CANAL_OPTIONS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+            </select>
           </div>
           <div className="sm:col-span-2">
             <p className="text-xs text-muted-foreground mb-1.5">Notas</p>
