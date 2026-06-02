@@ -139,6 +139,7 @@ export default function LeadsPage() {
     dateFrom, dateTo, setDateRange,
     sortMode, setSortMode,
     filterDup, setFilterDup,
+    filterReincidente, setFilterReincidente,
     loading, error, refetch,
   } = useLeads();
 
@@ -692,8 +693,12 @@ export default function LeadsPage() {
         <QuickChip active={quickFilter === 'no-contact'} onClick={() => setQuickFilter('no-contact')}
           label="Sin contacto" count={quickCounts.noContact} tone="default" />
         {(user?.role === 'admin' || user?.role === 'superadmin') && (
-          <QuickChip active={filterDup} onClick={() => setFilterDup(!filterDup)}
-            label="Duplicados" tone="warning" />
+          <>
+            <QuickChip active={filterDup} onClick={() => setFilterDup(!filterDup)}
+              label="Duplicados" tone="warning" />
+            <QuickChip active={filterReincidente} onClick={() => setFilterReincidente(!filterReincidente)}
+              label="Reincidentes" tone="danger" />
+          </>
         )}
       </div>
 
@@ -712,14 +717,14 @@ export default function LeadsPage() {
         <span className="inline-flex items-center gap-1"><CalendarPlus size={13} weight="regular" /> Programar próximo contacto</span>
         <span className="inline-flex items-center gap-1"><CheckCircle size={13} weight="regular" className="text-emerald-600" /> Marcar contactado</span>
         <span className="inline-flex items-center gap-1"><Lightning size={13} weight="regular" className="text-amber-500" /> Convertir a cliente</span>
-        {user?.role === 'superadmin' && (
+        {(user?.role === 'admin' || user?.role === 'superadmin') && (
           <>
-            <span className="inline-flex items-center gap-1"><Trash size={13} weight="regular" className="text-red-600" /> Eliminar (superadmin)</span>
-            <span className="inline-flex items-center gap-1"><Flag size={13} weight="fill" className="text-orange-600" /> Marcado para revisión = pendiente de spam-report</span>
+            <span className="inline-flex items-center gap-1"><Trash size={13} weight="regular" className="text-red-600" /> Eliminar (admin/superadmin)</span>
+            <span className="inline-flex items-center gap-1"><Flag size={13} weight="regular" className="text-orange-600" /> Reportar spam (admin/superadmin)</span>
           </>
         )}
-        {user?.role !== 'superadmin' && (
-          <span className="inline-flex items-center gap-1"><Flag size={13} weight="regular" className="text-orange-600" /> Reportar spam</span>
+        {user?.role === 'superadmin' && (
+          <span className="inline-flex items-center gap-1"><Flag size={13} weight="fill" className="text-orange-600" /> Marcado para revisión = pendiente de spam-report</span>
         )}
       </div>
 
@@ -738,15 +743,6 @@ export default function LeadsPage() {
           <table className="w-full text-[13px]">
             <thead className="bg-muted/80 backdrop-blur supports-[backdrop-filter]:bg-muted/60 border-b sticky top-0 z-10">
               <tr>
-                <th className="pl-5 pr-2 py-2.5 w-8">
-                  <input
-                    type="checkbox"
-                    checked={selectedIds.length > 0 && selectedIds.length === filteredLeads.length}
-                    onChange={toggleSelectAll}
-                    className="rounded border-border"
-                    aria-label="Seleccionar todos"
-                  />
-                </th>
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Nombre</th>
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Email</th>
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Teléfono</th>
@@ -778,17 +774,8 @@ export default function LeadsPage() {
                   key={lead.id}
                   onClick={() => setDrawerLeadId(lead.id)}
                   title={`Prioridad: ${pStyle.label}`}
-                  className={`border-b last:border-0 border-l-4 ${pStyle.borderClass} ${pStyle.rowBgClass} hover:bg-muted/50 transition-colors cursor-pointer ${selectedIds.includes(lead.id) ? 'bg-primary/5' : ''}`}
+                  className={`border-b last:border-0 border-l-4 ${pStyle.borderClass} ${pStyle.rowBgClass} hover:bg-muted/50 transition-colors cursor-pointer`}
                 >
-                  <td className="pl-5 pr-2 py-3.5" onClick={e => e.stopPropagation()}>
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.includes(lead.id)}
-                      onChange={() => toggleSelected(lead.id)}
-                      className="rounded border-border"
-                      aria-label={`Seleccionar ${lead.nombre}`}
-                    />
-                  </td>
                   <td className="px-5 py-3.5">
                     <div className="flex items-center gap-2.5">
                       <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-semibold ${getAvatarColor(lead.id)}`}>
@@ -882,7 +869,7 @@ export default function LeadsPage() {
                   </td>
                   <td className="px-5 py-3.5 text-muted-foreground">{lead.responsable_nombre || lead.gestor || 'Sin asignar'}</td>
                   <td className="px-5 py-3.5 text-right pr-3">
-                    <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} onEnrollSequence={(l) => setEnrollLeadId(l.id)} onSoftDelete={user?.role === 'superadmin' ? (l) => setDeletingLead(l) : undefined} onReportSpam={user?.role !== 'superadmin' ? (l) => setReportingSpamLead(l) : undefined} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => setWaTemplatesOpen(true)} />
+                    <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} onEnrollSequence={(l) => setEnrollLeadId(l.id)} onSoftDelete={(user?.role === 'superadmin' || user?.role === 'admin') ? (l) => setDeletingLead(l) : undefined} onReportSpam={(user?.role === 'superadmin' || user?.role === 'admin') ? (l) => setReportingSpamLead(l) : undefined} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => setWaTemplatesOpen(true)} />
                   </td>
                 </tr>
                 );
@@ -938,7 +925,7 @@ export default function LeadsPage() {
               </div>
               <div className="flex items-center justify-between pt-1 border-t border-border/60">
                 <span className="text-[11px] text-muted-foreground">{lead.responsable_nombre || 'Sin asignar'}</span>
-                <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} onEnrollSequence={(l) => setEnrollLeadId(l.id)} onSoftDelete={user?.role === 'superadmin' ? (l) => setDeletingLead(l) : undefined} onReportSpam={user?.role !== 'superadmin' ? (l) => setReportingSpamLead(l) : undefined} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => setWaTemplatesOpen(true)} />
+                <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} onEnrollSequence={(l) => setEnrollLeadId(l.id)} onSoftDelete={(user?.role === 'superadmin' || user?.role === 'admin') ? (l) => setDeletingLead(l) : undefined} onReportSpam={(user?.role === 'superadmin' || user?.role === 'admin') ? (l) => setReportingSpamLead(l) : undefined} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => setWaTemplatesOpen(true)} />
               </div>
             </div>
           ))}

@@ -46,8 +46,9 @@ export async function list(req, res, next) {
     if (req.user.role === 'gestor') {
       filters.responsableId = req.user.userId;
       filters.unassigned = false;
-      // Filtro duplicados es operativo (admin/superadmin); el gestor no lo usa.
+      // Filtros operativos (admin/superadmin); gestor no los usa.
       filters.duplicated = false;
+      filters.reincidente = false;
     }
     const result = await leadService.list(filters);
     res.json({

@@ -4,6 +4,25 @@ Log cronológico de commits importantes. Más reciente arriba.
 
 ---
 
+## 2026-06-01 — #11 filtro Reincidentes + #14 quitar selección múltiple + #15 permisos eliminar/spam
+
+- `feat(leads):` chip "Reincidentes" en filtros rápidos (admin/superadmin), backend WHERE `l.reincidente = TRUE`, param URL `?reincidente=true`. Mismo wiring que #10.
+- `refactor(LeadsPage):` eliminados los checkboxes de selección múltiple del header y filas. Estado `selectedIds` queda muerto (sin disparador). Bulk action bar ya no se activa.
+- `chore(routes/permisos):` `DELETE /:id` ahora admin+superadmin (antes solo superadmin). `POST /:id/report-spam` ahora admin+superadmin (antes cualquier autenticado). `PATCH /:id/restore` sigue solo superadmin (audit trail).
+- `chore(LeadsPage UI):` ocultos botones Eliminar y Reportar Spam para gestor. Leyenda actualizada.
+
+## 2026-06-01 — #9 trazabilidad duplicados + reasignación visible + backfill
+
+- `feat(leads):` al confirmar 'Crear igualmente' en el diálogo de duplicado, se insertan 2 interactions enlazadas (`lead_interactions` tipo='nota'):
+  - Nuevo lead: `🔁 Marcado como duplicado del lead #X — creado por <user>`
+  - Original: `📌 Se creó un nuevo lead duplicado #Y (nombre) por <user>`
+  - Etiqueta `[REINCIDENTE — mismo producto]` si aplica.
+  - Mismo registro cuando entra por webhook (`entrada por webhook`).
+- `feat(leads/reassign):` `reassign` ahora registra interaction `👤 Reasignado de <old> a <new> por <actor>` para mantener cadena de propiedad visible.
+- `feat(leads/checkDuplicate):` gestor que detecta dup de otro gestor ve **nombre del responsable + estado** (antes era opaco). Sigue ocultando email/teléfono/notas del lead.
+- `chore(model):` `findDuplicateByEmailOrPhone` añade LEFT JOIN users para traer `responsable_nombre`.
+- `data:` backfill SQL idempotente para duplicados anteriores: **ISEIE +100 interactions** (50×2), **ISEIH prod +36** (18×2). Texto sufijo: `registro retroactivo`.
+
 ## 2026-06-01 — Editar email+canal en ficha + fix WhatsApp→Directo en drawer + fix deploy path
 
 - `feat(leads):` `LeadInfoCard` ahora permite editar **email y canal** en modo edición (antes solo nombre/teléfono/notas). Email se normaliza a `null` si vacío; canal va a `lead_utms.canal_detectado` con `INSERT … ON CONFLICT (lead_id) DO UPDATE` (tabla tiene UNIQUE en `lead_id`). Backend: `updateLeadSchema` acepta `email`+`canal`, `lead.service.updateLead` extrae `canal` antes de pasar a modelo, `lead.model.updateLead` añade `email` a la lista de campos editables. Replicado en ISEIH.

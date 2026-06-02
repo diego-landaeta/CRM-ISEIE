@@ -497,7 +497,7 @@ function buildOrderBy(_sort) {
   return `COALESCE(l.fecha_solicitud, l.created_at) DESC`;
 }
 
-export async function findAll({ projectId, status, responsableId, unassigned, canal, productId, search, page, limit, includeConverted, dateFrom, dateTo, sort, archived, duplicated }) {
+export async function findAll({ projectId, status, responsableId, unassigned, canal, productId, search, page, limit, includeConverted, dateFrom, dateTo, sort, archived, duplicated, reincidente }) {
   const conditions = [];
   const params = [];
   let paramIdx = 1;
@@ -515,6 +515,11 @@ export async function findAll({ projectId, status, responsableId, unassigned, ca
   // Filtro duplicados (solo admin/superadmin a nivel ruta).
   if (duplicated) {
     conditions.push(`l.lead_duplicado_de IS NOT NULL`);
+  }
+
+  // Filtro reincidentes — lead que repite consulta del mismo producto del proyecto.
+  if (reincidente) {
+    conditions.push(`l.reincidente = TRUE`);
   }
 
   if (status) {

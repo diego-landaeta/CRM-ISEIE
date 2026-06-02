@@ -52,6 +52,8 @@ export const listLeadsSchema = z.object({
   archived: z.coerce.boolean().optional(),
   // Filtro de duplicados (lead_duplicado_de IS NOT NULL) — solo admin/superadmin.
   duplicated: z.coerce.boolean().optional(),
+  // Filtro de reincidentes (reincidente = TRUE) — solo admin/superadmin.
+  reincidente: z.coerce.boolean().optional(),
 });
 
 export const checkDuplicateSchema = z.object({
