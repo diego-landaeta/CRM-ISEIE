@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Receipt, X } from '@phosphor-icons/react';
+import { Receipt, X, MagnifyingGlass, UserCheck, UserPlus } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 import Portal from '@/shared/components/ui/portal';
 
 interface Product { id: number; nombre: string; precio?: number | string; moneda?: string }
 interface Project { id: number; nombre?: string }
+interface LeadLite { id: number; nombre?: string; email?: string; telefono?: string; status?: string }
 interface Props {
   open: boolean;
   onClose: () => void;
@@ -20,11 +21,24 @@ const PAYMENT_METHODS = [
   { value: 'fraccionado', label: 'Fraccionado' },
 ];
 
+type Mode = 'existing' | 'new';
+
 export default function RegisterSaleDialog({ open, onClose, project, onSaved }: Props) {
   const today = new Date().toISOString().slice(0, 10);
+  const [mode, setMode] = useState<Mode>('existing');
+
+  // Cliente nuevo
   const [nombre, setNombre] = useState('');
   const [email, setEmail] = useState('');
   const [telefono, setTelefono] = useState('');
+
+  // Cliente existente (búsqueda)
+  const [clientSearch, setClientSearch] = useState('');
+  const [clientResults, setClientResults] = useState<LeadLite[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [selectedClient, setSelectedClient] = useState<LeadLite | null>(null);
+
+  // Venta
   const [productoId, setProductoId] = useState<number | ''>('');
   const [productSearch, setProductSearch] = useState('');
   const [products, setProducts] = useState<Product[]>([]);
@@ -37,11 +51,15 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
 
   useEffect(() => {
     if (!open) return;
-    setNombre(''); setEmail(''); setTelefono(''); setProductoId(''); setProductSearch('');
+    setMode('existing');
+    setNombre(''); setEmail(''); setTelefono('');
+    setClientSearch(''); setClientResults([]); setSelectedClient(null);
+    setProductoId(''); setProductSearch('');
     setImporteTotal(''); setImportePagado(''); setMetodo('transferencia');
     setFecha(today); setNotas('');
   }, [open, today]);
 
+  // Productos del proyecto
   useEffect(() => {
     if (!open || !project?.id) return;
     client.get<Product[]>('/products', { params: { projectId: project.id, limit: 500 } })
@@ -49,14 +67,23 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
       .catch(() => setProducts([]));
   }, [open, project?.id]);
 
-  const productoSel = products.find((p) => p.id === productoId);
-
-  // Si el usuario eligió producto pero no puso importe, sugerir precio del producto.
-  // IMPORTANTE: este effect va ANTES del early return para no violar Rules of Hooks.
+  // Búsqueda debounced de clientes existentes (leads convertidos del proyecto)
   useEffect(() => {
-    if (productoSel && !importeTotal && productoSel.precio) {
-      setImporteTotal(String(productoSel.precio));
-    }
+    if (mode !== 'existing' || !open || !project?.id) return;
+    if (clientSearch.trim().length < 2) { setClientResults([]); return; }
+    const handle = setTimeout(() => {
+      setSearching(true);
+      client.get<LeadLite[]>('/leads', { params: { projectId: project.id, status: 'convertido', search: clientSearch.trim(), limit: 20 } })
+        .then((r) => setClientResults(Array.isArray(r?.data) ? r.data : []))
+        .catch(() => setClientResults([]))
+        .finally(() => setSearching(false));
+    }, 250);
+    return () => clearTimeout(handle);
+  }, [mode, open, project?.id, clientSearch]);
+
+  const productoSel = products.find((p) => p.id === productoId);
+  useEffect(() => {
+    if (productoSel && !importeTotal && productoSel.precio) setImporteTotal(String(productoSel.precio));
   }, [productoSel?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!open) return null;
@@ -66,41 +93,61 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
     : products;
   const isRetroactiva = fecha < today;
 
+  function selectClient(c: LeadLite) {
+    setSelectedClient(c);
+    setNombre(c.nombre || '');
+    setEmail(c.email || '');
+    setTelefono(c.telefono || '');
+    setClientSearch('');
+    setClientResults([]);
+  }
+  function clearSelectedClient() {
+    setSelectedClient(null);
+    setNombre(''); setEmail(''); setTelefono('');
+  }
+
   async function handleSave() {
     if (!project?.id) { toast({ title: 'Selecciona un proyecto', variant: 'destructive' }); return; }
-    if (!nombre.trim()) { toast({ title: 'Nombre requerido', variant: 'destructive' }); return; }
-    if (!email.trim() && !telefono.trim()) {
-      toast({ title: 'Email o teléfono requerido', variant: 'destructive' }); return;
+    if (mode === 'existing' && !selectedClient) {
+      toast({ title: 'Selecciona un cliente', description: 'Búscalo por nombre, email o teléfono.', variant: 'destructive' }); return;
+    }
+    if (mode === 'new') {
+      if (!nombre.trim()) { toast({ title: 'Nombre requerido', variant: 'destructive' }); return; }
+      if (!email.trim() && !telefono.trim()) {
+        toast({ title: 'Email o teléfono requerido', variant: 'destructive' }); return;
+      }
     }
     if (!productoId) { toast({ title: 'Producto requerido', variant: 'destructive' }); return; }
     const totalNum = parseFloat(importeTotal);
     if (!totalNum || totalNum <= 0) { toast({ title: 'Importe inválido', variant: 'destructive' }); return; }
     const pagadoNum = importePagado === '' ? totalNum : parseFloat(importePagado);
     if (pagadoNum < 0 || pagadoNum > totalNum) {
-      toast({ title: 'Importe pagado inválido', description: 'Debe estar entre 0 y el total', variant: 'destructive' }); return;
+      toast({ title: 'Importe pagado inválido', description: 'Entre 0 y el total', variant: 'destructive' }); return;
     }
 
     setSaving(true);
     try {
-      const res = await client.post<{ sale_id: number; lead_id: number; retroactiva: boolean; duplicado: boolean }>(
-        '/sales',
-        {
-          project_id: project.id,
-          nombre: nombre.trim(),
-          email: email.trim() || null,
-          telefono: telefono.trim() || null,
-          producto_interes_id: productoId,
-          importe_total: totalNum,
-          importe_pagado: pagadoNum,
-          metodo_pago: metodo,
-          fecha_pago: fecha,
-          notas: notas.trim() || null,
-        }
-      );
+      const body: Record<string, unknown> = {
+        project_id: project.id,
+        producto_interes_id: productoId,
+        importe_total: totalNum,
+        importe_pagado: pagadoNum,
+        metodo_pago: metodo,
+        fecha_pago: fecha,
+        notas: notas.trim() || null,
+      };
+      if (mode === 'existing' && selectedClient) {
+        body.lead_id = selectedClient.id;
+      } else {
+        body.nombre = nombre.trim();
+        body.email = email.trim() || null;
+        body.telefono = telefono.trim() || null;
+      }
+      const res = await client.post<{ sale_id: number; lead_id: number; retroactiva: boolean; duplicado: boolean }>('/sales', body);
       const data = res.data;
-      const desc = data.retroactiva
-        ? `Venta histórica registrada (${fecha})${data.duplicado ? ' — sobre cliente existente' : ''}`
-        : `Venta registrada${data.duplicado ? ' — sobre cliente existente' : ''}`;
+      const desc = mode === 'existing'
+        ? `Venta añadida al cliente existente${data.retroactiva ? ' (histórica)' : ''}`
+        : (data.retroactiva ? `Venta histórica registrada (${fecha})${data.duplicado ? ' — sobre cliente existente' : ''}` : `Venta registrada${data.duplicado ? ' — sobre cliente existente' : ''}`);
       toast({ title: 'Venta creada', description: desc });
       onSaved?.(data);
       onClose();
@@ -125,87 +172,169 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
               <h3 className="font-semibold text-base">Registrar venta</h3>
               <p className="text-xs text-muted-foreground">
                 Por la fecha que pongas se considera <strong>histórica</strong> (anterior a hoy) o <strong>del día</strong>.
-                Crea cliente + conversión + pago en un solo paso.
               </p>
             </div>
             <button onClick={onClose} className="p-1 rounded hover:bg-muted text-muted-foreground"><X size={18} /></button>
           </div>
 
-          <div className="p-5 space-y-3 overflow-y-auto">
-            <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Nombre del cliente *</label>
-              <input value={nombre} onChange={(e) => setNombre(e.target.value)}
-                className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm" />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Email</label>
-                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-                  placeholder="correo@ejemplo.com"
-                  className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm" />
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Teléfono</label>
-                <input value={telefono} onChange={(e) => setTelefono(e.target.value)}
-                  placeholder="+34..."
-                  className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm" />
-              </div>
-            </div>
-            <p className="text-[11px] text-muted-foreground -mt-1">Requerido al menos uno de los dos.</p>
-
-            <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Producto *</label>
-              <input value={productSearch} onChange={(e) => setProductSearch(e.target.value)}
-                placeholder="Buscar producto…"
-                className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm mb-1.5" />
-              <select value={productoId} onChange={(e) => setProductoId(e.target.value ? Number(e.target.value) : '')}
-                className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm">
-                <option value="">— Selecciona —</option>
-                {productosFiltrados.map((p) => (
-                  <option key={p.id} value={p.id}>{p.nombre}{p.precio ? ` (${p.precio} ${p.moneda || ''})` : ''}</option>
-                ))}
-              </select>
+          <div className="p-5 space-y-4 overflow-y-auto">
+            {/* Toggle: existente / nuevo */}
+            <div className="bg-muted/40 p-1 rounded-lg grid grid-cols-2 gap-1">
+              <button
+                type="button"
+                onClick={() => { setMode('existing'); clearSelectedClient(); }}
+                className={`h-9 rounded-md text-sm font-semibold flex items-center justify-center gap-1.5 transition-colors ${mode === 'existing' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+              >
+                <UserCheck size={14} weight="bold" /> Cliente existente
+              </button>
+              <button
+                type="button"
+                onClick={() => { setMode('new'); clearSelectedClient(); }}
+                className={`h-9 rounded-md text-sm font-semibold flex items-center justify-center gap-1.5 transition-colors ${mode === 'new' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+              >
+                <UserPlus size={14} weight="bold" /> Cliente nuevo
+              </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Importe total *</label>
-                <input type="number" min="0" step="0.01" value={importeTotal}
-                  onChange={(e) => setImporteTotal(e.target.value)}
-                  className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm" />
+            {/* MODO: cliente existente */}
+            {mode === 'existing' && (
+              <div className="space-y-3">
+                {!selectedClient ? (
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">Buscar cliente *</label>
+                    <div className="relative">
+                      <MagnifyingGlass size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                      <input
+                        autoFocus
+                        value={clientSearch}
+                        onChange={(e) => setClientSearch(e.target.value)}
+                        placeholder="Nombre, email o teléfono…"
+                        className="w-full h-10 pl-9 pr-3 rounded-md border border-border bg-card text-sm"
+                      />
+                    </div>
+                    {clientSearch.trim().length > 0 && clientSearch.trim().length < 2 && (
+                      <p className="text-[11px] text-muted-foreground mt-1">Escribe al menos 2 caracteres…</p>
+                    )}
+                    {searching && <p className="text-[11px] text-muted-foreground mt-1">Buscando…</p>}
+                    {!searching && clientSearch.trim().length >= 2 && clientResults.length === 0 && (
+                      <p className="text-[11px] text-muted-foreground mt-1">
+                        No se encontraron clientes. ¿Quizás es <button type="button" onClick={() => setMode('new')} className="text-primary font-semibold hover:underline">un cliente nuevo</button>?
+                      </p>
+                    )}
+                    {clientResults.length > 0 && (
+                      <div className="mt-1.5 border border-border rounded-md max-h-48 overflow-y-auto">
+                        {clientResults.map((c) => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => selectClient(c)}
+                            className="w-full text-left px-3 py-2 hover:bg-muted text-sm border-b last:border-0 border-border"
+                          >
+                            <p className="font-medium truncate">{c.nombre || '— sin nombre —'}</p>
+                            <p className="text-[11px] text-muted-foreground truncate">{c.email || '—'} {c.telefono ? `· ${c.telefono}` : ''}</p>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 rounded-md p-3 flex items-start gap-3">
+                    <UserCheck size={20} weight="duotone" className="text-emerald-600 flex-shrink-0 mt-0.5" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold truncate">{selectedClient.nombre || '— sin nombre —'}</p>
+                      <p className="text-[11px] text-muted-foreground truncate">{selectedClient.email || '—'} {selectedClient.telefono ? `· ${selectedClient.telefono}` : ''}</p>
+                      <p className="text-[11px] text-emerald-700 dark:text-emerald-400 mt-0.5">Cliente seleccionado — se le añadirá una nueva venta.</p>
+                    </div>
+                    <button type="button" onClick={clearSelectedClient} className="text-[11px] text-muted-foreground hover:text-foreground underline flex-shrink-0">
+                      Cambiar
+                    </button>
+                  </div>
+                )}
               </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Importe pagado</label>
-                <input type="number" min="0" step="0.01" value={importePagado}
-                  onChange={(e) => setImportePagado(e.target.value)}
-                  placeholder={`Por defecto: ${importeTotal || 'igual al total'}`}
-                  className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm" />
-              </div>
-            </div>
+            )}
 
-            <div className="grid grid-cols-2 gap-3">
+            {/* MODO: cliente nuevo */}
+            {mode === 'new' && (
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Nombre del cliente *</label>
+                  <input value={nombre} onChange={(e) => setNombre(e.target.value)}
+                    className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">Email</label>
+                    <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                      placeholder="correo@ejemplo.com"
+                      className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">Teléfono</label>
+                    <input value={telefono} onChange={(e) => setTelefono(e.target.value)}
+                      placeholder="+34..."
+                      className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm" />
+                  </div>
+                </div>
+                <p className="text-[11px] text-muted-foreground -mt-1">Requerido al menos uno de los dos.</p>
+              </div>
+            )}
+
+            {/* Producto + importes (común a ambos modos) */}
+            <div className="border-t border-border pt-3 space-y-3">
               <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Método de pago</label>
-                <select value={metodo} onChange={(e) => setMetodo(e.target.value)}
+                <label className="text-xs text-muted-foreground mb-1 block">Producto *</label>
+                <input value={productSearch} onChange={(e) => setProductSearch(e.target.value)}
+                  placeholder="Buscar producto…"
+                  className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm mb-1.5" />
+                <select value={productoId} onChange={(e) => setProductoId(e.target.value ? Number(e.target.value) : '')}
                   className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm">
-                  {PAYMENT_METHODS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+                  <option value="">— Selecciona —</option>
+                  {productosFiltrados.map((p) => (
+                    <option key={p.id} value={p.id}>{p.nombre}{p.precio ? ` (${p.precio} ${p.moneda || ''})` : ''}</option>
+                  ))}
                 </select>
               </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">
-                  Fecha de pago *
-                  {isRetroactiva && <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400">Histórica</span>}
-                </label>
-                <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} max={today}
-                  className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm" />
-              </div>
-            </div>
 
-            <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Notas (opcional)</label>
-              <textarea value={notas} onChange={(e) => setNotas(e.target.value)} rows={2}
-                placeholder="Comentarios sobre la venta…"
-                className="w-full px-3 py-2 rounded-md border border-border bg-card text-sm resize-none" />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Importe total *</label>
+                  <input type="number" min="0" step="0.01" value={importeTotal}
+                    onChange={(e) => setImporteTotal(e.target.value)}
+                    className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm" />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Importe pagado</label>
+                  <input type="number" min="0" step="0.01" value={importePagado}
+                    onChange={(e) => setImportePagado(e.target.value)}
+                    placeholder={`Por defecto: ${importeTotal || 'igual al total'}`}
+                    className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Método de pago</label>
+                  <select value={metodo} onChange={(e) => setMetodo(e.target.value)}
+                    className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm">
+                    {PAYMENT_METHODS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">
+                    Fecha de pago *
+                    {isRetroactiva && <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400">Histórica</span>}
+                  </label>
+                  <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} max={today}
+                    className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm" />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Notas (opcional)</label>
+                <textarea value={notas} onChange={(e) => setNotas(e.target.value)} rows={2}
+                  placeholder="Comentarios sobre la venta…"
+                  className="w-full px-3 py-2 rounded-md border border-border bg-card text-sm resize-none" />
+              </div>
             </div>
           </div>
 

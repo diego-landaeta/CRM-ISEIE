@@ -7,7 +7,11 @@ const PAYMENT_METHODS = ['transferencia', 'tarjeta', 'efectivo', 'fraccionado'];
 // Crea: lead manual + status convertido + conversion + pago si importe_pagado > 0.
 export const createSaleSchema = z.object({
   project_id: z.number().int().positive('project_id requerido'),
-  nombre: z.string().min(1, 'Nombre requerido').max(200),
+  // lead_id opcional: si viene, se salta createManualLead y se crea la conversion
+  // sobre ese lead (caso "cliente existente, busca y selecciona"). Si no viene,
+  // se crea lead nuevo con nombre+email/telefono.
+  lead_id: z.number().int().positive().optional().nullable(),
+  nombre: z.string().min(1, 'Nombre requerido').max(200).optional(),
   email: z.string().email('Email inválido').transform((v) => v.toLowerCase().trim()).optional().nullable().or(z.literal('')),
   telefono: z.string().max(50).optional().nullable().or(z.literal('')),
   producto_interes_id: z.number().int().positive('Producto requerido'),
@@ -17,6 +21,6 @@ export const createSaleSchema = z.object({
   fecha_pago: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato fecha: YYYY-MM-DD'),
   notas: z.string().max(2000).optional().nullable(),
 }).refine(
-  (d) => (d.email && d.email.length > 0) || (d.telefono && d.telefono.length > 0),
-  { message: 'Debes proporcionar al menos email o teléfono', path: ['email'] }
+  (d) => d.lead_id || (d.nombre && ((d.email && d.email.length > 0) || (d.telefono && d.telefono.length > 0))),
+  { message: 'Selecciona un cliente existente o proporciona nombre + email/teléfono', path: ['nombre'] }
 );

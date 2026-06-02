@@ -21,33 +21,47 @@ export async function createSale(data, requestUser) {
     throw new AppError('importe_pagado no puede ser mayor que importe_total', 400, 'INVALID_AMOUNT');
   }
 
-  // 1) Crear lead manual con canal=directo. createManualLead detecta duplicados:
-  // si existe lead con mismo email/tel, lo reusa (rama esPropuesto/duplicadoDe del servicio).
-  // Si quien registra es admin/superadmin → dejamos round-robin (no se auto-asignan ventas).
-  // Si es gestor → se le asigna a sí mismo (es su venta).
-  const passCreator = requestUser && requestUser.role === 'gestor' ? requestUser : null;
-  let leadResult;
-  try {
-    leadResult = await leadService.createManualLead(
-      {
-        project_id: data.project_id,
-        nombre: data.nombre,
-        email: data.email || null,
-        telefono: data.telefono || null,
-        producto_interes_id: data.producto_interes_id,
-        canal: 'directo',
-        notas: isRetroactive
-          ? `[Venta histórica registrada el ${today} con fecha de pago ${data.fecha_pago}]${data.notas ? '\n' + data.notas : ''}`
-          : (data.notas || null),
-        custom_fields: undefined,
-      },
-      { creatorUser: passCreator }
-    );
-  } catch (err) {
-    logger.error({ err: err.message, data }, 'createSale: createManualLead failed');
-    throw err;
+  let leadId;
+  let leadResult = { duplicado: false, duplicado_de: null };
+  let leadNombre = data.nombre;
+
+  if (data.lead_id) {
+    // Modo "cliente existente": usar el lead seleccionado tal cual.
+    const existing = await query(`SELECT id, nombre, project_id FROM leads WHERE id = $1 AND deleted_at IS NULL`, [data.lead_id]);
+    if (!existing.rows[0]) throw new AppError('Cliente no encontrado', 404, 'LEAD_NOT_FOUND');
+    if (existing.rows[0].project_id !== data.project_id) {
+      throw new AppError('El cliente no pertenece al proyecto seleccionado', 400, 'WRONG_PROJECT');
+    }
+    leadId = existing.rows[0].id;
+    leadNombre = existing.rows[0].nombre;
+  } else {
+    // Modo "cliente nuevo": crear lead manual con canal=directo.
+    // createManualLead detecta duplicados: si existe lead con mismo email/tel, lo reusa.
+    // Si quien registra es admin/superadmin → dejamos round-robin (no se auto-asignan ventas).
+    // Si es gestor → se le asigna a sí mismo (es su venta).
+    const passCreator = requestUser && requestUser.role === 'gestor' ? requestUser : null;
+    try {
+      leadResult = await leadService.createManualLead(
+        {
+          project_id: data.project_id,
+          nombre: data.nombre,
+          email: data.email || null,
+          telefono: data.telefono || null,
+          producto_interes_id: data.producto_interes_id,
+          canal: 'directo',
+          notas: isRetroactive
+            ? `[Venta histórica registrada el ${today} con fecha de pago ${data.fecha_pago}]${data.notas ? '\n' + data.notas : ''}`
+            : (data.notas || null),
+          custom_fields: undefined,
+        },
+        { creatorUser: passCreator }
+      );
+    } catch (err) {
+      logger.error({ err: err.message, data }, 'createSale: createManualLead failed');
+      throw err;
+    }
+    leadId = leadResult.lead_id;
   }
-  const leadId = leadResult.lead_id;
 
   // 2) Cambiar status a convertido (si ya estaba convertido, no falla)
   try {
@@ -64,7 +78,7 @@ export async function createSale(data, requestUser) {
     {
       lead_id: leadId,
       project_id: data.project_id,
-      producto_contratado: data.nombre, // será overrideado por el service si tiene lookup; pasamos algo no vacío
+      producto_contratado: leadNombre || data.nombre || 'Cliente', // override por service si tiene lookup
       producto_contratado_id: data.producto_interes_id,
       importe_total: data.importe_total,
       importe_pagado: importePagado,
