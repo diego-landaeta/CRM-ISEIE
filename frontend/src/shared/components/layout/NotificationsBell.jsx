@@ -27,20 +27,37 @@ export default function NotificationsBell({ collapsed = false, className = '' })
 
   const canSee = user?.role === 'admin' || user?.role === 'superadmin';
 
-  // Items derivados de /leads/today + leads nuevos. Cuando exista /api/notifications real, este efecto lo consume.
+  // Combina: notifs reales del backend (/api/notifications) + derivados de /leads/today.
+  // Polling cada 60s para mantener el badge fresco.
   useEffect(() => {
     if (!canSee || !activeProject?.id) return;
     let cancelled = false;
-    (async () => {
+    async function load() {
       try {
-        const [todayRes, leadsRes] = await Promise.all([
+        const [notifsRes, todayRes, leadsRes] = await Promise.all([
+          client.get(`/notifications`, { params: { limit: 20 } }).catch(() => ({ success: false, data: [] })),
           client.get(`/leads/today`, { params: { projectId: activeProject.id } }).catch(() => ({ success: false, data: null })),
           client.get(`/leads`, { params: { projectId: activeProject.id, status: 'nuevo', limit: 3 } }).catch(() => ({ success: false, data: [] })),
         ]);
         if (cancelled) return;
         const list = [];
-        const today = todayRes.success ? todayRes.data : null;
 
+        // 1) Notifs reales (lead_deleted, etc) — prioridad alta
+        const notifs = Array.isArray(notifsRes?.data) ? notifsRes.data : [];
+        for (const n of notifs.slice(0, 10)) {
+          list.push({
+            id: `notif-${n.id}`,
+            notifId: n.id,
+            kind: n.is_read ? 'info' : (n.type === 'lead_deleted' ? 'urgent' : 'info'),
+            title: n.title,
+            body: n.message || '',
+            href: n.link_path || null,
+            when: n.created_at,
+            isRead: n.is_read,
+          });
+        }
+
+        const today = todayRes.success ? todayRes.data : null;
         if (today?.reminders_pendientes) {
           for (const r of today.reminders_pendientes.filter((x) => x.vencido).slice(0, 3)) {
             list.push({
@@ -78,9 +95,19 @@ export default function NotificationsBell({ collapsed = false, className = '' })
       } catch {
         // Silent fail
       }
-    })();
-    return () => { cancelled = true; };
+    }
+    load();
+    const interval = setInterval(load, 60000);
+    return () => { cancelled = true; clearInterval(interval); };
   }, [canSee, activeProject?.id]);
+
+  async function handleItemClick(item) {
+    if (item.notifId && !item.isRead) {
+      client.patch(`/notifications/${item.notifId}/read`).catch(() => {});
+    }
+    setOpen(false);
+    if (item.href) navigate(item.href);
+  }
 
   useLayoutEffect(() => {
     if (!open || !buttonRef.current) return;
@@ -191,8 +218,11 @@ export default function NotificationsBell({ collapsed = false, className = '' })
                   {items.map((it) => (
                     <li key={it.id}>
                       <button
-                        onClick={() => { setOpen(false); navigate(it.href); }}
-                        className="w-full text-left px-4 py-3 hover:bg-muted/50 transition-colors flex items-start gap-3"
+                        onClick={() => handleItemClick(it)}
+                        className={cn(
+                          'w-full text-left px-4 py-3 hover:bg-muted/50 transition-colors flex items-start gap-3',
+                          it.notifId && !it.isRead ? 'bg-primary/5' : ''
+                        )}
                       >
                         <span className={cn(
                           'w-2 h-2 rounded-full mt-1.5 flex-shrink-0',

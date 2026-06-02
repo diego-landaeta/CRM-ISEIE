@@ -112,6 +112,12 @@ export default function ClientsPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [search, setSearch] = useState<string>('');
+  const [filterResp, setFilterResp] = useState<string>('');
+  const [filterProducto, setFilterProducto] = useState<string>('');
+  const [filterEstadoPago, setFilterEstadoPago] = useState<string>('');
+  const [dateFrom, setDateFrom] = useState<string>('');
+  const [dateTo, setDateTo] = useState<string>('');
+  const [sortBy, setSortBy] = useState<string>('recent');
   const [saleOpen, setSaleOpen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -151,12 +157,55 @@ export default function ClientsPage() {
     })();
   }, [activeProject?.id, reloadKey]);
 
-  const filtered = search
-    ? clients.filter(c =>
-        (c.nombre || '').toLowerCase().includes(search.toLowerCase()) ||
-        (c.email || '').toLowerCase().includes(search.toLowerCase())
-      )
-    : clients;
+  // Listas únicas para los selects (gestores + productos a partir de los clientes cargados)
+  const gestoresUnicos = Array.from(new Set(clients.map((c: any) => c.responsable_nombre).filter(Boolean))) as string[];
+  const productosUnicos = Array.from(new Set(clients.map((c: any) => c.producto_interes || c.producto_nombre).filter(Boolean))) as string[];
+
+  let filtered: any[] = clients;
+  if (search.trim()) {
+    const q = search.toLowerCase();
+    filtered = filtered.filter((c: any) =>
+      (c.nombre || '').toLowerCase().includes(q) ||
+      (c.email || '').toLowerCase().includes(q) ||
+      (c.telefono || '').toLowerCase().includes(q)
+    );
+  }
+  if (filterResp) filtered = filtered.filter((c: any) => c.responsable_nombre === filterResp);
+  if (filterProducto) filtered = filtered.filter((c: any) => (c.producto_interes || c.producto_nombre) === filterProducto);
+  if (filterEstadoPago) {
+    filtered = filtered.filter((c: any) => {
+      const total = Number(c.total_compras) || 0;
+      const pagado = Number(c.total_pagado) || 0;
+      if (filterEstadoPago === 'pagado') return total > 0 && pagado >= total;
+      if (filterEstadoPago === 'parcial') return pagado > 0 && pagado < total;
+      if (filterEstadoPago === 'sin_pagar') return total > 0 && pagado === 0;
+      if (filterEstadoPago === 'sin_ventas') return total === 0;
+      return true;
+    });
+  }
+  if (dateFrom || dateTo) {
+    filtered = filtered.filter((c: any) => {
+      const ult = c.ultima_compra ? new Date(c.ultima_compra) : null;
+      if (!ult) return false;
+      if (dateFrom && ult < new Date(dateFrom)) return false;
+      if (dateTo && ult > new Date(dateTo + 'T23:59:59')) return false;
+      return true;
+    });
+  }
+  filtered = [...filtered].sort((a: any, b: any) => {
+    if (sortBy === 'facturado') return (Number(b.total_compras) || 0) - (Number(a.total_compras) || 0);
+    if (sortBy === 'cobrado') return (Number(b.total_pagado) || 0) - (Number(a.total_pagado) || 0);
+    if (sortBy === 'pendiente') return (Number(b.pendiente) || 0) - (Number(a.pendiente) || 0);
+    if (sortBy === 'nombre') return (a.nombre || '').localeCompare(b.nombre || '');
+    const ua = a.ultima_compra ? new Date(a.ultima_compra).getTime() : 0;
+    const ub = b.ultima_compra ? new Date(b.ultima_compra).getTime() : 0;
+    return ub - ua;
+  });
+
+  const hasActiveFilters = !!(search.trim() || filterResp || filterProducto || filterEstadoPago || dateFrom || dateTo);
+  function clearAllFilters() {
+    setSearch(''); setFilterResp(''); setFilterProducto(''); setFilterEstadoPago(''); setDateFrom(''); setDateTo(''); setSortBy('recent');
+  }
 
   const totalFacturado = filtered.reduce((s, c) => s + Number(c.total_compras), 0);
   const totalCobrado = filtered.reduce((s, c) => s + Number(c.total_pagado), 0);
@@ -239,25 +288,67 @@ export default function ClientsPage() {
       </div>
 
       <div className="bg-card border border-border rounded-lg overflow-hidden">
-        <div className="p-3 border-b border-border flex gap-2">
-          <input
-            type="search"
-            placeholder="Buscar por nombre o email…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            aria-label="Buscar clientes"
-            className="flex-1 h-9 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/40"
-          />
-          {filtered.length > 0 && (
-            <button
-              onClick={() => exportCSV(filtered, `clientes-${activeProject?.nombre || 'crm'}-${new Date().toISOString().slice(0,10)}.csv`)}
-              title="Exportar CSV"
-              aria-label="Exportar clientes a CSV"
-              className="h-9 px-3 rounded-md border border-border bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5 text-xs font-medium flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-primary/40"
-            >
-              <DownloadSimple size={14} weight="bold" /> <span className="hidden sm:inline">CSV</span>
-            </button>
-          )}
+        <div className="p-3 border-b border-border flex flex-col gap-2">
+          {/* Fila 1: búsqueda + sort + export */}
+          <div className="flex gap-2 flex-wrap">
+            <input
+              type="search"
+              placeholder="Buscar por nombre, email o teléfono…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              aria-label="Buscar clientes"
+              className="flex-1 min-w-[200px] h-9 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/40"
+            />
+            <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}
+              className="h-9 px-3 rounded-md border border-border bg-muted/50 text-sm">
+              <option value="recent">Más reciente</option>
+              <option value="facturado">Más facturado</option>
+              <option value="cobrado">Más cobrado</option>
+              <option value="pendiente">Más pendiente de cobro</option>
+              <option value="nombre">Nombre A→Z</option>
+            </select>
+            {filtered.length > 0 && (
+              <button
+                onClick={() => exportCSV(filtered, `clientes-${activeProject?.nombre || 'crm'}-${new Date().toISOString().slice(0,10)}.csv`)}
+                title="Exportar CSV"
+                aria-label="Exportar clientes a CSV"
+                className="h-9 px-3 rounded-md border border-border bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5 text-xs font-medium flex-shrink-0"
+              >
+                <DownloadSimple size={14} weight="bold" /> <span className="hidden sm:inline">CSV</span>
+              </button>
+            )}
+          </div>
+          {/* Fila 2: filtros + clear */}
+          <div className="flex gap-2 flex-wrap items-center">
+            <select value={filterResp} onChange={(e) => setFilterResp(e.target.value)}
+              className="h-9 px-3 rounded-md border border-border bg-muted/50 text-sm min-w-[140px]">
+              <option value="">Todos los gestores</option>
+              {gestoresUnicos.map((g) => <option key={g} value={g}>{g}</option>)}
+            </select>
+            <select value={filterProducto} onChange={(e) => setFilterProducto(e.target.value)}
+              className="h-9 px-3 rounded-md border border-border bg-muted/50 text-sm min-w-[140px] max-w-[260px] truncate">
+              <option value="">Todos los programas</option>
+              {productosUnicos.map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
+            <select value={filterEstadoPago} onChange={(e) => setFilterEstadoPago(e.target.value)}
+              className="h-9 px-3 rounded-md border border-border bg-muted/50 text-sm">
+              <option value="">Cualquier estado de pago</option>
+              <option value="pagado">Pagados</option>
+              <option value="parcial">Pago parcial</option>
+              <option value="sin_pagar">Sin pagar</option>
+              <option value="sin_ventas">Sin compras registradas</option>
+            </select>
+            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} title="Última compra desde"
+              className="h-9 px-2 rounded-md border border-border bg-muted/50 text-sm" />
+            <span className="text-xs text-muted-foreground">—</span>
+            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} title="Última compra hasta"
+              className="h-9 px-2 rounded-md border border-border bg-muted/50 text-sm" />
+            {hasActiveFilters && (
+              <button onClick={clearAllFilters} className="h-9 px-3 text-xs text-primary font-semibold hover:underline">
+                Limpiar filtros
+              </button>
+            )}
+          </div>
         </div>
 
         {loading ? (

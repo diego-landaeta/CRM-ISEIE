@@ -4,6 +4,7 @@ import { query } from '../../shared/config/db.js';
 import { sendLeadAssignedEmail } from '../../shared/services/brevo.service.js';
 import { logger } from '../../shared/utils/logger.js';
 import { normalizePhone } from '../../shared/utils/normalizePhone.js';
+import { notifyAdmins } from '../notifications/notifications.service.js';
 
 // Dispara secuencias de email activas. STUB v1 mientras email-sequences no este portado.
 async function triggerSequences(_triggerEvent, _leadId, _projectId) {
@@ -241,8 +242,23 @@ export async function softDelete(leadId, { reason, motivo, userId }) {
   if (!validReasons.includes(reason)) {
     throw new AppError('reason invalido (spam, test, duplicado_manual, otro)', 400, 'INVALID_REASON');
   }
+  // Lookup datos antes del delete para incluirlos en la notif (deleted_at filtra después).
+  const leadRow = await leadModel.findByIdLight(leadId);
+  const { rows: leadFull } = await query(`SELECT nombre, email, telefono FROM leads WHERE id = $1`, [leadId]);
+  const leadInfo = leadFull[0] || {};
   const result = await leadModel.softDeleteLead(leadId, { reason, motivo, userId });
   if (!result) throw new AppError('Lead no encontrado o ya eliminado', 404, 'LEAD_NOT_FOUND');
+
+  // Notif admin/superadmin (#16)
+  notifyAdmins({
+    type: 'lead_deleted',
+    title: `Lead #${leadId} eliminado`,
+    message: `${leadInfo.nombre || '—'} (${leadInfo.email || leadInfo.telefono || '—'}) — motivo: ${reason}${motivo ? ' · ' + motivo : ''}`,
+    link_path: `/leads/papelera`,
+    metadata: { lead_id: leadId, reason, motivo, project_id: leadRow?.project_id },
+    triggered_by_user_id: userId || null,
+  });
+
   return result;
 }
 
