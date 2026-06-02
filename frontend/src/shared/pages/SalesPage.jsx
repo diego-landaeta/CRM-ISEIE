@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import client from '@/shared/api/client';
 
 const RegisterSaleDialog = lazy(() => import('@/modules/sales/components/RegisterSaleDialog'));
+const TopProductsCard = lazy(() => import('@/modules/sales/components/TopProductsCard'));
 
 const STATUS_FILTERS = [
   { id: 'all',       label: 'Todas' },
@@ -189,6 +190,10 @@ export default function SalesPage() {
         <KpiSmall label="Pendiente de cobro" value={formatMoney(kpis.pendiente)} tone="pending" hint={counts.parcial ? `${counts.parcial} parciales` : '—'} />
         <KpiSmall label="Sin cobrar"         value={String(counts.pendiente)}    tone="over"    hint="conversiones sin pago" />
       </section>
+
+      <Suspense fallback={null}>
+        <TopProductsCard projectId={projectId} days={null} limit={10} title="Programas más vendidos (histórico)" />
+      </Suspense>
 
       {/* Toolbar */}
       <div className="flex flex-col lg:flex-row lg:items-center gap-3">

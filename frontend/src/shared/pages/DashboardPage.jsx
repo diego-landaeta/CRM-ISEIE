@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, lazy, Suspense } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+const TopProductsCard = lazy(() => import('@/modules/sales/components/TopProductsCard'));
 import {
   Users, Receipt, CurrencyEur, ChartLineUp, TrendUp, TrendDown,
   Plus, ArrowUpRight, ClockClockwise,
@@ -284,6 +285,11 @@ export default function DashboardPage() {
               ))}
             </div>
           </div>
+
+          {/* Programas más vendidos */}
+          <Suspense fallback={<div className="h-48 rounded-2xl border border-border bg-card animate-pulse" />}>
+            <TopProductsCard projectId={activeProject?.id} days={days || null} limit={5} className="rounded-2xl" />
+          </Suspense>
 
           {/* Card de ayuda — neutra */}
           <div className="rounded-2xl border border-border bg-card p-5">

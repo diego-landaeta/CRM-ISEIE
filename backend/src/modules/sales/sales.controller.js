@@ -12,3 +12,13 @@ export async function create(req, res, next) {
     res.status(201).json({ success: true, data: result });
   } catch (err) { next(err); }
 }
+
+export async function topProducts(req, res, next) {
+  try {
+    const projectId = req.query.projectId ? parseInt(req.query.projectId) : null;
+    const limit = Math.min(parseInt(req.query.limit) || 10, 50);
+    const days = req.query.days ? parseInt(req.query.days) : null; // null = all-time
+    const result = await salesService.getTopProducts({ projectId, limit, days });
+    res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+}

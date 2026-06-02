@@ -8,4 +8,7 @@ router.use(verifyToken);
 // POST /api/sales — registrar venta (cualquier rol autenticado: gestor, admin, superadmin).
 router.post('/', roleGuard('gestor', 'admin', 'superadmin'), salesController.create);
 
+// GET /api/sales/top-products — ranking de programas más vendidos para dashboards.
+router.get('/top-products', salesController.topProducts);
+
 export default router;

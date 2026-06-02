@@ -2,6 +2,7 @@ import * as leadService from '../leads/lead.service.js';
 import * as conversionService from '../conversions/conversion.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
+import { query } from '../../shared/config/db.js';
 
 /**
  * Registra una venta — flujo orquestado:
@@ -86,4 +87,42 @@ export async function createSale(data, requestUser) {
     importe_total: data.importe_total,
     importe_pagado: importePagado,
   };
+}
+
+/**
+ * Top programas vendidos — agrupado por producto. Usado en dashboards (inicial + finanzas).
+ * @param {{ projectId?: number|null, limit?: number, days?: number|null }} opts
+ *   days=null → all-time. days=30 → últimos 30 días.
+ */
+export async function getTopProducts({ projectId, limit = 10, days = null } = {}) {
+  const params = [];
+  const where = [];
+  if (projectId) { params.push(projectId); where.push(`c.project_id = $${params.length}`); }
+  if (days) { params.push(days); where.push(`c.fecha_conversion >= (CURRENT_DATE - ($${params.length}::int))`); }
+  const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+  params.push(limit);
+  const { rows } = await query(
+    `SELECT
+       c.producto_contratado_id AS product_id,
+       COALESCE(p.nombre, c.producto_contratado, '— sin producto —') AS producto,
+       COUNT(*)::int AS ventas,
+       COALESCE(SUM(c.importe_total), 0)::numeric AS facturado,
+       COALESCE(SUM(c.importe_pagado), 0)::numeric AS cobrado,
+       MAX(c.fecha_conversion) AS ultima_venta
+     FROM conversions c
+     LEFT JOIN products p ON p.id = c.producto_contratado_id
+     ${whereSql}
+     GROUP BY c.producto_contratado_id, p.nombre, c.producto_contratado
+     ORDER BY ventas DESC, facturado DESC
+     LIMIT $${params.length}`,
+    params
+  );
+  return rows.map((r) => ({
+    product_id: r.product_id,
+    producto: r.producto,
+    ventas: r.ventas,
+    facturado: Number(r.facturado),
+    cobrado: Number(r.cobrado),
+    ultima_venta: r.ultima_venta,
+  }));
 }

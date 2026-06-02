@@ -6,8 +6,10 @@ import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import {
-  UserCheck, EnvelopeSimple, WhatsappLogo, ShoppingCart, DownloadSimple, Trash,
+  UserCheck, EnvelopeSimple, WhatsappLogo, ShoppingCart, DownloadSimple, Trash, Plus,
 } from '@phosphor-icons/react';
+
+const RegisterSaleDialog = lazy(() => import('@/modules/sales/components/RegisterSaleDialog'));
 import type { Client } from '@/shared/types';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -110,6 +112,8 @@ export default function ClientsPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [search, setSearch] = useState<string>('');
+  const [saleOpen, setSaleOpen] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     if (!activeProject?.id) return;
@@ -145,7 +149,7 @@ export default function ClientsPage() {
         setLoading(false);
       }
     })();
-  }, [activeProject?.id]);
+  }, [activeProject?.id, reloadKey]);
 
   const filtered = search
     ? clients.filter(c =>
@@ -193,10 +197,31 @@ export default function ClientsPage() {
 
   return (
     <div className="space-y-5 pb-8">
-      <PageHeader
-        title="Clientes"
-        subtitle={`Prospectos convertidos en ${activeProject?.nombre || 'todos los proyectos'} — ${filtered.length} clientes`}
-      />
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+        <PageHeader
+          title="Clientes"
+          subtitle={`Prospectos convertidos en ${activeProject?.nombre || 'todos los proyectos'} — ${filtered.length} clientes`}
+        />
+        {activeProject?.id && (
+          <button
+            type="button"
+            onClick={() => setSaleOpen(true)}
+            className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 self-start sm:self-auto"
+          >
+            <Plus size={14} weight="bold" />
+            Registrar venta
+          </button>
+        )}
+      </div>
+
+      <Suspense fallback={null}>
+        <RegisterSaleDialog
+          open={saleOpen}
+          project={activeProject}
+          onClose={() => setSaleOpen(false)}
+          onSaved={() => setReloadKey((k) => k + 1)}
+        />
+      </Suspense>
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         <div className="bg-card border border-border rounded-lg p-4">

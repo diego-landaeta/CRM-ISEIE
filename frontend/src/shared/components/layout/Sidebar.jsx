@@ -57,7 +57,7 @@ const NAV_SECTIONS = [
     label: 'Finanzas',
     items: [
       { to: '/sales',                label: 'Dashboard',          icon: Calculator, roles: ['admin', 'superadmin'] },
-      { to: '/sales',                label: 'Ventas',             icon: Receipt,    roles: ['admin', 'superadmin'] },
+      { to: '/sales',                label: 'Ventas',             icon: Receipt },
       { to: '/accounting/income',    label: 'Ingresos',           icon: Coins,      roles: ['admin', 'superadmin'] },
       { to: '/accounting/conversions', label: 'Conversiones',     icon: ChartLineUp, roles: ['admin', 'superadmin'] },
       { to: '/expenses',             label: 'Egresos',            icon: Receipt,    roles: ['admin', 'superadmin'] },
