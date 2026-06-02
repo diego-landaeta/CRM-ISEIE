@@ -8,6 +8,8 @@ import client from '@/shared/api/client';
 
 const RegisterSaleDialog = lazy(() => import('@/modules/sales/components/RegisterSaleDialog'));
 const TopProductsCard = lazy(() => import('@/modules/sales/components/TopProductsCard'));
+const MyGoalCard = lazy(() => import('@/modules/sales/components/MyGoalCard'));
+const GestoresStatsTable = lazy(() => import('@/modules/sales/components/GestoresStatsTable'));
 
 const STATUS_FILTERS = [
   { id: 'all',       label: 'Todas' },
@@ -66,7 +68,8 @@ function KpiSmall({ label, value, hint, tone }) {
 }
 
 export default function SalesPage() {
-  const { activeProject } = useAuth();
+  const { activeProject, user } = useAuth();
+  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
   const [status, setStatus] = useState('all');
   const [search, setSearch] = useState('');
   const [list, setList] = useState([]);
@@ -191,9 +194,20 @@ export default function SalesPage() {
         <KpiSmall label="Sin cobrar"         value={String(counts.pendiente)}    tone="over"    hint="conversiones sin pago" />
       </section>
 
-      <Suspense fallback={null}>
-        <TopProductsCard projectId={projectId} days={null} limit={10} title="Programas más vendidos (histórico)" />
-      </Suspense>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Suspense fallback={null}>
+          <MyGoalCard projectId={projectId} />
+        </Suspense>
+        <Suspense fallback={null}>
+          <TopProductsCard projectId={projectId} days={null} limit={5} title="Programas más vendidos" />
+        </Suspense>
+      </div>
+
+      {isAdmin && (
+        <Suspense fallback={null}>
+          <GestoresStatsTable projectId={projectId} canEdit={true} />
+        </Suspense>
+      )}
 
       {/* Toolbar */}
       <div className="flex flex-col lg:flex-row lg:items-center gap-3">

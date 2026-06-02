@@ -49,20 +49,22 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
       .catch(() => setProducts([]));
   }, [open, project?.id]);
 
-  if (!open) return null;
-
-  const productosFiltrados = productSearch.trim()
-    ? products.filter((p) => p.nombre.toLowerCase().includes(productSearch.toLowerCase()))
-    : products;
   const productoSel = products.find((p) => p.id === productoId);
-  const isRetroactiva = fecha < today;
 
   // Si el usuario eligió producto pero no puso importe, sugerir precio del producto.
+  // IMPORTANTE: este effect va ANTES del early return para no violar Rules of Hooks.
   useEffect(() => {
     if (productoSel && !importeTotal && productoSel.precio) {
       setImporteTotal(String(productoSel.precio));
     }
   }, [productoSel?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!open) return null;
+
+  const productosFiltrados = productSearch.trim()
+    ? products.filter((p) => p.nombre.toLowerCase().includes(productSearch.toLowerCase()))
+    : products;
+  const isRetroactiva = fecha < today;
 
   async function handleSave() {
     if (!project?.id) { toast({ title: 'Selecciona un proyecto', variant: 'destructive' }); return; }
