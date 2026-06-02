@@ -44,13 +44,16 @@ export async function findDuplicateByEmailOrPhone(email, telefono, projectId) {
   if (!cleanEmail && !cleanTel) return null;
 
   const { rows } = await query(
-    `SELECT id, nombre, email, telefono, status, producto_interes_id, responsable_id, created_at, fecha_solicitud,
-            ($2::text IS NOT NULL AND email = $2) AS match_by_email,
-            ($3::text IS NOT NULL AND telefono = $3) AS match_by_phone
-     FROM leads
-     WHERE project_id = $1 AND deleted_at IS NULL
-       AND (($2::text IS NOT NULL AND email = $2) OR ($3::text IS NOT NULL AND telefono = $3))
-     ORDER BY ($2::text IS NOT NULL AND email = $2) DESC, created_at DESC
+    `SELECT l.id, l.nombre, l.email, l.telefono, l.status, l.producto_interes_id,
+            l.responsable_id, l.created_at, l.fecha_solicitud,
+            u.nombre AS responsable_nombre,
+            ($2::text IS NOT NULL AND l.email = $2) AS match_by_email,
+            ($3::text IS NOT NULL AND l.telefono = $3) AS match_by_phone
+     FROM leads l
+     LEFT JOIN users u ON u.id = l.responsable_id
+     WHERE l.project_id = $1 AND l.deleted_at IS NULL
+       AND (($2::text IS NOT NULL AND l.email = $2) OR ($3::text IS NOT NULL AND l.telefono = $3))
+     ORDER BY ($2::text IS NOT NULL AND l.email = $2) DESC, l.created_at DESC
      LIMIT 1`,
     [projectId, cleanEmail, cleanTel]
   );

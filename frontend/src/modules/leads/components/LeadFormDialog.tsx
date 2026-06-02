@@ -413,15 +413,23 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
                   : 'Se encontró un prospecto que coincide por email o teléfono. ¿Qué quieres hacer?'}
               </p>
             </div>
-            {!pendingDup.lead.masked && (
-              <div className="bg-muted/40 border border-border rounded-lg p-3 text-xs space-y-1">
-                <div><span className="text-muted-foreground">Nombre:</span> <span className="font-medium">{pendingDup.lead.nombre || '--'}</span></div>
-                {pendingDup.lead.email && <div><span className="text-muted-foreground">Email:</span> {pendingDup.lead.email}</div>}
-                {pendingDup.lead.telefono && <div><span className="text-muted-foreground">Teléfono:</span> {pendingDup.lead.telefono}</div>}
-                {pendingDup.lead.responsable_nombre && <div><span className="text-muted-foreground">Gestor:</span> {pendingDup.lead.responsable_nombre}</div>}
-                {pendingDup.lead.status && <div><span className="text-muted-foreground">Estado:</span> {pendingDup.lead.status}</div>}
-              </div>
-            )}
+            <div className="bg-muted/40 border border-border rounded-lg p-3 text-xs space-y-1">
+              {pendingDup.lead.masked ? (
+                <>
+                  {pendingDup.lead.responsable_nombre && <div><span className="text-muted-foreground">Gestor responsable:</span> <span className="font-medium">{pendingDup.lead.responsable_nombre}</span></div>}
+                  {pendingDup.lead.status && <div><span className="text-muted-foreground">Estado:</span> {pendingDup.lead.status}</div>}
+                  <div className="italic text-muted-foreground/80 pt-1">Contacta con el gestor responsable para coordinar el seguimiento.</div>
+                </>
+              ) : (
+                <>
+                  <div><span className="text-muted-foreground">Nombre:</span> <span className="font-medium">{pendingDup.lead.nombre || '--'}</span></div>
+                  {pendingDup.lead.email && <div><span className="text-muted-foreground">Email:</span> {pendingDup.lead.email}</div>}
+                  {pendingDup.lead.telefono && <div><span className="text-muted-foreground">Teléfono:</span> {pendingDup.lead.telefono}</div>}
+                  {pendingDup.lead.responsable_nombre && <div><span className="text-muted-foreground">Gestor:</span> {pendingDup.lead.responsable_nombre}</div>}
+                  {pendingDup.lead.status && <div><span className="text-muted-foreground">Estado:</span> {pendingDup.lead.status}</div>}
+                </>
+              )}
+            </div>
             <div className="flex flex-col gap-2 pt-2">
               {!pendingDup.lead.masked && (
                 <button
