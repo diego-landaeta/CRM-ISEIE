@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { CalendarPlus } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
+import Portal from '@/shared/components/ui/portal';
 
 interface LeadLite {
   id: number;
@@ -68,6 +69,7 @@ export default function ReminderQuickDialog({ open, lead, onClose, onSaved }: Pr
   ];
 
   return (
+    <Portal>
     <div className="fixed inset-0 !m-0 z-[80] flex items-center justify-center sm:p-4">
       <div className="fixed inset-0 !m-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div role="dialog" className="relative bg-card sm:rounded-lg border border-border w-full max-w-md flex flex-col">
@@ -125,5 +127,6 @@ export default function ReminderQuickDialog({ open, lead, onClose, onSaved }: Pr
         </div>
       </div>
     </div>
+    </Portal>
   );
 }

@@ -14,6 +14,7 @@ import statusModule from './modules/status/index.js';
 import leadsModule from './modules/leads/index.js';
 import productsModule from './modules/products/index.js';
 import conversionsModule from './modules/conversions/index.js';
+import salesModule from './modules/sales/index.js';
 import commissionsModule from './modules/commissions/index.js';
 import accountingModule from './modules/accounting/index.js';
 import expensesModule from './modules/expenses/index.js';
@@ -183,6 +184,7 @@ const MODULES = [
   productsModule,
   productCategoriesModule,
   conversionsModule,
+  salesModule,
   commissionsModule,
   accountingModule,
   expensesModule,

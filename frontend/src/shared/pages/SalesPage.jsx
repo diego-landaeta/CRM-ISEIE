@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, lazy, Suspense } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Plus, MagnifyingGlass, Receipt, Funnel, Download, ArrowRight,
 } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import client from '@/shared/api/client';
+
+const RegisterSaleDialog = lazy(() => import('@/modules/sales/components/RegisterSaleDialog'));
 
 const STATUS_FILTERS = [
   { id: 'all',       label: 'Todas' },
@@ -68,6 +70,8 @@ export default function SalesPage() {
   const [search, setSearch] = useState('');
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [registerOpen, setRegisterOpen] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   const projectId = activeProject?.id;
 
@@ -80,7 +84,7 @@ export default function SalesPage() {
       .catch(() => { if (!cancelled) setList([]); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [projectId]);
+  }, [projectId, reloadKey]);
 
   const enriched = useMemo(
     () => (list || []).map((c) => ({ ...c, _status: deriveStatus(c) })),
@@ -159,15 +163,25 @@ export default function SalesPage() {
             <Download size={14} weight="bold" />
             Exportar
           </button>
-          <Link
-            to="/leads"
+          <button
+            type="button"
+            onClick={() => setRegisterOpen(true)}
             className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors flex-1 sm:flex-none"
           >
             <Plus size={14} weight="bold" />
             Nueva venta
-          </Link>
+          </button>
         </div>
       </header>
+
+      <Suspense fallback={null}>
+        <RegisterSaleDialog
+          open={registerOpen}
+          project={activeProject}
+          onClose={() => setRegisterOpen(false)}
+          onSaved={() => setReloadKey((k) => k + 1)}
+        />
+      </Suspense>
 
       <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiSmall label="Total facturado"    value={formatMoney(kpis.total)}     hint={`${kpis.count} conversiones`} />
