@@ -13,6 +13,7 @@ interface Row {
 
 interface Props {
   projectId?: number | null;
+  responsableId?: number | null;
   /** null = all-time, número = últimos N días */
   days?: number | null;
   limit?: number;
@@ -24,7 +25,7 @@ function fmt(n: number) {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n || 0);
 }
 
-export default function TopProductsCard({ projectId, days = null, limit = 5, title = 'Programas más vendidos', className = '' }: Props) {
+export default function TopProductsCard({ projectId, responsableId = null, days = null, limit = 5, title = 'Programas más vendidos', className = '' }: Props) {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -34,12 +35,13 @@ export default function TopProductsCard({ projectId, days = null, limit = 5, tit
     const params: Record<string, string | number> = { limit };
     if (projectId) params.projectId = projectId;
     if (days) params.days = days;
+    if (responsableId) params.responsableId = responsableId;
     client.get<Row[]>('/sales/top-products', { params })
       .then((r) => { if (!cancelled) setRows(Array.isArray(r?.data) ? r.data : []); })
       .catch(() => { if (!cancelled) setRows([]); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [projectId, days, limit]);
+  }, [projectId, responsableId, days, limit]);
 
   return (
     <div className={`bg-card border border-border rounded-lg p-4 ${className}`}>

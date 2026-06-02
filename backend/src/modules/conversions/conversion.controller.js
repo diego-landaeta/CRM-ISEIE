@@ -21,7 +21,12 @@ export async function list(req, res, next) {
   try {
     const parsed = listConversionsSchema.safeParse(req.query);
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
-    const result = await conversionService.list(parsed.data);
+    const filters = { ...parsed.data };
+    // SEGURIDAD: gestor solo ve sus propias ventas, ignora filtro responsableId externo.
+    if (req.user.role === 'gestor') {
+      filters.responsableId = req.user.userId;
+    }
+    const result = await conversionService.list(filters);
     res.json({
       success: true,
       data: result.conversions,

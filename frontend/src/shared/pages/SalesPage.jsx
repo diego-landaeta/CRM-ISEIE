@@ -76,19 +76,33 @@ export default function SalesPage() {
   const [loading, setLoading] = useState(false);
   const [registerOpen, setRegisterOpen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  // Filtro por gestor (solo admin/superadmin lo puede cambiar). 'all' = todas las ventas.
+  const [viewUserId, setViewUserId] = useState('all');
+  const [gestores, setGestores] = useState([]);
 
   const projectId = activeProject?.id;
+  // Si gestor, fuerza filtro a su propio user_id (no afecta UI porque no ve el selector)
+  const effectiveResponsableId = isAdmin ? (viewUserId === 'all' ? null : Number(viewUserId)) : null;
+
+  useEffect(() => {
+    if (!projectId || !isAdmin) return;
+    client.get('/sales/gestores-stats', { params: { projectId } })
+      .then((r) => setGestores(r?.data?.gestores || []))
+      .catch(() => setGestores([]));
+  }, [projectId, isAdmin, reloadKey]);
 
   useEffect(() => {
     if (!projectId) return;
     let cancelled = false;
     setLoading(true);
-    client.get('/conversions', { params: { projectId, limit: 200 } })
+    const params = { projectId, limit: 200 };
+    if (effectiveResponsableId) params.responsableId = effectiveResponsableId;
+    client.get('/conversions', { params })
       .then((r) => { if (!cancelled) setList(Array.isArray(r?.data) ? r.data : []); })
       .catch(() => { if (!cancelled) setList([]); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [projectId, reloadKey]);
+  }, [projectId, reloadKey, effectiveResponsableId]);
 
   const enriched = useMemo(
     () => (list || []).map((c) => ({ ...c, _status: deriveStatus(c) })),
@@ -187,6 +201,33 @@ export default function SalesPage() {
         />
       </Suspense>
 
+      {isAdmin && gestores.length > 0 && (
+        <div className="bg-card border border-border rounded-lg p-3 flex items-center gap-3 flex-wrap">
+          <label className="text-xs font-semibold text-muted-foreground">Ver ventas de:</label>
+          <select
+            value={viewUserId}
+            onChange={(e) => setViewUserId(e.target.value)}
+            className="h-9 px-3 rounded-md border border-border bg-card text-sm font-medium min-w-[200px]"
+          >
+            <option value="all">— Todas (vista general) —</option>
+            {gestores.map((g) => (
+              <option key={g.user_id} value={g.user_id}>
+                {g.nombre} · {g.role} ({g.ventas} venta{g.ventas === 1 ? '' : 's'})
+              </option>
+            ))}
+          </select>
+          {viewUserId !== 'all' && (
+            <button
+              type="button"
+              onClick={() => setViewUserId('all')}
+              className="text-[11px] text-primary hover:underline"
+            >
+              Quitar filtro
+            </button>
+          )}
+        </div>
+      )}
+
       <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiSmall label="Total facturado"    value={formatMoney(kpis.total)}     hint={`${kpis.count} conversiones`} />
         <KpiSmall label="Cobrado"            value={formatMoney(kpis.pagado)}    tone="paid"    hint={counts.pagado ? `${counts.pagado} pagadas` : '—'} />
@@ -199,7 +240,7 @@ export default function SalesPage() {
           <MyGoalCard projectId={projectId} />
         </Suspense>
         <Suspense fallback={null}>
-          <TopProductsCard projectId={projectId} days={null} limit={5} title="Programas más vendidos" />
+          <TopProductsCard projectId={projectId} responsableId={effectiveResponsableId} days={null} limit={5} title={effectiveResponsableId ? `Programas más vendidos por ${gestores.find(g => g.user_id === effectiveResponsableId)?.nombre || 'gestor'}` : 'Programas más vendidos'} />
         </Suspense>
       </div>
 

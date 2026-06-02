@@ -37,6 +37,7 @@ export const createPaymentSchema = z.object({
 export const listConversionsSchema = z.object({
   projectId: z.coerce.number().int().positive().optional(),
   leadId: z.coerce.number().int().positive().optional(),
+  responsableId: z.coerce.number().int().positive().optional(),
   pendiente: z.enum(['true', 'false']).optional(),
   vencido: z.enum(['true', 'false']).optional(),
   from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),

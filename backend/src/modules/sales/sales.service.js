@@ -108,12 +108,14 @@ export async function createSale(data, requestUser) {
  * @param {{ projectId?: number|null, limit?: number, days?: number|null }} opts
  *   days=null → all-time. days=30 → últimos 30 días.
  */
-export async function getTopProducts({ projectId, limit = 10, days = null } = {}) {
+export async function getTopProducts({ projectId, limit = 10, days = null, responsableId = null } = {}) {
   const params = [];
   const where = [];
   if (projectId) { params.push(projectId); where.push(`c.project_id = $${params.length}`); }
+  if (responsableId) { params.push(responsableId); where.push(`l.responsable_id = $${params.length}`); }
   if (days) { params.push(days); where.push(`c.fecha_conversion >= (CURRENT_DATE - ($${params.length}::int))`); }
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+  const needsLeadJoin = !!responsableId;
   params.push(limit);
   const { rows } = await query(
     `SELECT
@@ -125,6 +127,7 @@ export async function getTopProducts({ projectId, limit = 10, days = null } = {}
        MAX(c.fecha_conversion) AS ultima_venta
      FROM conversions c
      LEFT JOIN products p ON p.id = c.producto_contratado_id
+     ${needsLeadJoin ? 'LEFT JOIN leads l ON l.id = c.lead_id' : ''}
      ${whereSql}
      GROUP BY c.producto_contratado_id, p.nombre, c.producto_contratado
      ORDER BY ventas DESC, facturado DESC

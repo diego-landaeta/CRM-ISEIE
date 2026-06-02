@@ -19,7 +19,10 @@ export async function topProducts(req, res, next) {
     const projectId = req.query.projectId ? parseInt(req.query.projectId) : null;
     const limit = Math.min(parseInt(req.query.limit) || 10, 50);
     const days = req.query.days ? parseInt(req.query.days) : null; // null = all-time
-    const result = await salesService.getTopProducts({ projectId, limit, days });
+    let responsableId = req.query.responsableId ? parseInt(req.query.responsableId) : null;
+    // Gestor: forzar su propio responsableId (no puede consultar el de otros)
+    if (req.user.role === 'gestor') responsableId = req.user.userId;
+    const result = await salesService.getTopProducts({ projectId, limit, days, responsableId });
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
 }
