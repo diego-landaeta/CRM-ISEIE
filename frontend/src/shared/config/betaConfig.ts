@@ -19,6 +19,7 @@ export const BETA_ROUTES: readonly string[] = [
   '/clients',                       // Clientes
   '/matriculas',                    // Matriculas
   '/sales',                         // Ventas (registro venta historica + listado conversiones)
+  '/meta-ads',                      // Integracion Meta Ads (metricas campanas)
   '/products',                      // Productos (incluye /products/tree)
   '/woocommerce',                   // Importacion WordPress/WC
   '/configuracion/categorias-arbol',// Categorias
