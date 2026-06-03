@@ -134,7 +134,8 @@ export async function mergeLeads({ winnerId, loserId, comment, userId }) {
     const counts = {};
     const moveTables = [
       'lead_interactions', 'lead_reminders', 'lead_utms',
-      'lead_status_history', 'conversions', 'matriculas',
+      'lead_status_history', 'lead_audit_log',
+      'conversions', 'matriculas',
       'email_sequence_runs', 'lead_emails',
     ];
     for (const t of moveTables) {
@@ -151,20 +152,35 @@ export async function mergeLeads({ winnerId, loserId, comment, userId }) {
     // Apuntar lead_duplicado_de del loser al winner (auditoría)
     await c.query(`UPDATE leads SET lead_duplicado_de = $1 WHERE id = $2`, [winnerId, loserId]);
 
-    // Insertar nota en el winner con el comentario
+    // Nota en el winner explicando la fusión
     await c.query(
       `INSERT INTO lead_interactions (lead_id, tipo, nota, created_by, fecha)
        VALUES ($1, 'nota', $2, $3, NOW())`,
-      [winnerId, `Fusión con lead #${loserId} (${ll.rows[0].nombre}). Comentario: ${comment}`, userId]
+      [winnerId, `🔗 Fusionado con lead #${loserId} (${ll.rows[0].nombre || '—'}). Comentario: ${comment}`, userId]
+    );
+    // Nota en el loser (queda en historial si se restaura desde papelera)
+    await c.query(
+      `INSERT INTO lead_interactions (lead_id, tipo, nota, created_by, fecha)
+       VALUES ($1, 'nota', $2, $3, NOW())`,
+      [loserId, `❌ Fusionado en el lead #${winnerId} (${lw.rows[0].nombre || '—'}). Lead cerrado por fusión. Comentario: ${comment}`, userId]
+    );
+    // Audit log de la operación en ambos
+    await c.query(
+      `INSERT INTO lead_audit_log (lead_id, field_name, old_value, new_value, changed_by_user_id)
+       VALUES ($1, 'fusion_winner', NULL, $2, $3), ($4, 'fusion_loser', NULL, $5, $3)`,
+      [winnerId, String(loserId), userId, loserId, String(winnerId)]
     );
 
-    // Soft-delete del loser. v1: solo deleted_at; el motivo queda en la nota del winner.
+    // Soft-delete del loser con motivo 'duplicado_manual'
     await c.query(
       `UPDATE leads
        SET deleted_at = NOW(),
+           deleted_reason = 'duplicado_manual',
+           deleted_motivo = $2,
+           deleted_by = $3,
            updated_at = NOW()
        WHERE id = $1`,
-      [loserId]
+      [loserId, `Fusionado en #${winnerId}: ${comment}`, userId]
     );
 
     await c.query('COMMIT');

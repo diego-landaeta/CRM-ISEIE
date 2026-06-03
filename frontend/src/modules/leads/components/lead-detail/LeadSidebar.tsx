@@ -1,4 +1,4 @@
-import { Funnel, Lightning, ChartPieSlice, Phone, CalendarCheck, Users } from '@phosphor-icons/react';
+import { Funnel, Lightning, ChartPieSlice, Phone, CalendarCheck, Users, GitMerge } from '@phosphor-icons/react';
 import { STATUS_LABELS as ESTADO_LABELS } from '@/shared/components/ui/StatusBadge';
 import { CHANNEL_LABELS as CANAL_LABELS } from '@/shared/components/ui/ChannelBadge';
 import Select from '@/shared/components/ui/Select';
@@ -16,12 +16,13 @@ interface LeadSidebarProps {
   onOpenInteraction: () => void;
   onOpenReminder: () => void;
   onOpenReassign: () => void;
+  onOpenMerge?: () => void;
 }
 
 export default function LeadSidebar({
   lead, interacciones, reminders, isAdmin,
   selectedEstado, onSelectedEstadoChange, statusLoading, onEstadoUpdate,
-  onOpenInteraction, onOpenReminder, onOpenReassign,
+  onOpenInteraction, onOpenReminder, onOpenReassign, onOpenMerge,
 }: LeadSidebarProps) {
   return (
     <div className="space-y-3">
@@ -67,6 +68,15 @@ export default function LeadSidebar({
               className="w-full h-9 rounded-md border border-border bg-card text-[13px] font-semibold hover:bg-muted transition-colors flex items-center justify-center gap-2"
             >
               <Users size={14} weight="bold" /> Reasignar
+            </button>
+          )}
+          {isAdmin && onOpenMerge && (
+            <button
+              onClick={onOpenMerge}
+              title="Fusionar este lead con un duplicado (combina interacciones, recordatorios, ventas, etc)"
+              className="w-full h-9 rounded-md border border-border bg-card text-[13px] font-semibold hover:bg-muted transition-colors flex items-center justify-center gap-2"
+            >
+              <GitMerge size={14} weight="bold" /> Fusionar duplicado
             </button>
           )}
         </div>

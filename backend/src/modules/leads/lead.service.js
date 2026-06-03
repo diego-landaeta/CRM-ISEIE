@@ -432,7 +432,17 @@ export async function mergeLeads({ winnerId, loserId, comment, userId }) {
     throw new AppError('Comentario obligatorio para auditoría', 400, 'COMMENT_REQUIRED');
   }
   try {
-    return await leadModel.mergeLeads({ winnerId, loserId, comment: comment.trim(), userId });
+    const result = await leadModel.mergeLeads({ winnerId, loserId, comment: comment.trim(), userId });
+    // Notif admin/superadmin (visibilidad operativa, como en softDelete)
+    notifyAdmins({
+      type: 'lead_merged',
+      title: `Fusión: lead #${loserId} → #${winnerId}`,
+      message: comment.trim(),
+      link_path: `/leads/${winnerId}`,
+      metadata: { winner_id: winnerId, loser_id: loserId },
+      triggered_by_user_id: userId || null,
+    });
+    return result;
   } catch (err) {
     throw new AppError(err.message || 'Error en fusión', 400, 'MERGE_FAILED');
   }
