@@ -623,7 +623,7 @@ export async function findById(id) {
 
   const lead = rows[0];
 
-  const [utm, history, interactions, reminders] = await Promise.all([
+  const [utm, history, interactions, reminders, auditLog] = await Promise.all([
     query(`SELECT * FROM lead_utms WHERE lead_id = $1`, [id]),
     query(
       `SELECT lsh.*, u.nombre as changed_by_nombre
@@ -646,12 +646,21 @@ export async function findById(id) {
        WHERE lr.lead_id = $1 ORDER BY lr.fecha_recordatorio ASC`,
       [id]
     ),
+    query(
+      `SELECT la.id, la.field_name, la.old_value, la.new_value, la.changed_at,
+              la.changed_by_user_id, u.nombre as changed_by_nombre
+       FROM lead_audit_log la
+       LEFT JOIN users u ON u.id = la.changed_by_user_id
+       WHERE la.lead_id = $1 ORDER BY la.changed_at DESC`,
+      [id]
+    ),
   ]);
 
   lead.utms = utm.rows[0] || null;
   lead.statusHistory = history.rows;
   lead.interactions = interactions.rows;
   lead.reminders = reminders.rows;
+  lead.auditLog = auditLog.rows;
 
   return lead;
 }

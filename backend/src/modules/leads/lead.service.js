@@ -616,6 +616,23 @@ export async function updateLead(leadId, data, opts = {}) {
   const newCanal = data.canal;
   if (newCanal !== undefined) delete data.canal;
 
+  // Snapshot de valores ANTERIORES (solo de campos que vienen en `data`).
+  // Capturamos antes del UPDATE para registrar en el audit log.
+  const auditFields = ['nombre', 'email', 'telefono', 'notas', 'producto_interes_id'];
+  const auditableData = {};
+  for (const f of auditFields) {
+    if (Object.prototype.hasOwnProperty.call(data, f) && data[f] !== lead[f]) {
+      auditableData[f] = { old: lead[f], new: data[f] };
+    }
+  }
+  // Canal también auditable (viene en variable separada porque va a lead_utms)
+  if (newCanal !== undefined) {
+    const oldCanal = lead.utms?.canal_detectado || null;
+    if (oldCanal !== newCanal) {
+      auditableData.canal = { old: oldCanal, new: newCanal };
+    }
+  }
+
   const updated = await leadModel.updateLead(leadId, data);
 
   // UPDATE/INSERT lead_utms.canal_detectado si se cambió
@@ -628,6 +645,20 @@ export async function updateLead(leadId, data, opts = {}) {
     );
   }
   if (!updated) throw new AppError('No se actualizo el lead', 400, 'NO_FIELDS');
+
+  // Audit log: una fila por campo modificado. Si falla, log pero no rompe.
+  const userId = opts.userId || null;
+  for (const [field, { old, new: nv }] of Object.entries(auditableData)) {
+    try {
+      await query(
+        `INSERT INTO lead_audit_log (lead_id, field_name, old_value, new_value, changed_by_user_id)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [leadId, field, old != null ? String(old) : null, nv != null ? String(nv) : null, userId]
+      );
+    } catch (err) {
+      logger.warn({ err: err.message, leadId, field }, 'audit log insert falló (no crítico)');
+    }
+  }
 
   // APRENDIZAJE: si el usuario vinculó manualmente un producto a este lead
   // y el lead tiene landing_url, guardamos el slug como alias. Los futuros
