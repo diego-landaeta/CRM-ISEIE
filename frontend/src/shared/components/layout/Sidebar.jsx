@@ -67,7 +67,7 @@ const NAV_SECTIONS = [
       { to: '/accounting/payable',   label: 'Cuentas por pagar',  icon: Wallet,     roles: ['admin', 'superadmin'] },
       { to: '/commissions',          label: 'Comisiones',         icon: Bank,  roles: ['admin', 'superadmin'] },
       { to: '/payroll',              label: 'Nóminas',            icon: Coins,      roles: ['admin', 'superadmin'] },
-      { to: '/stripe',               label: 'Stripe',             icon: CreditCard, roles: ['admin', 'superadmin'] },
+      { to: '/stripe',               label: 'Stripe',             icon: CreditCard, roles: ['admin', 'superadmin'], comingSoon: true, statusTag: 'Investigando' },
     ],
   },
   {
@@ -96,12 +96,14 @@ function canSeeItem(item, role) {
   return item.roles.includes(role);
 }
 
-function NavItem({ to, label, icon: Icon, end, comingSoon, collapsed, onClick, sectionPrefixes }) {
+function NavItem({ to, label, icon: Icon, end, comingSoon, statusTag, collapsed, onClick, sectionPrefixes }) {
   const location = useLocation();
   if (comingSoon) {
+    const tag = statusTag || 'Próx.';
+    const title = statusTag ? `${label} — ${statusTag}` : `${label} — Próximamente`;
     return (
       <div
-        title={`${label} — Próximamente`}
+        title={title}
         className={cn(
           'relative flex items-center rounded-md text-[13px] text-muted-foreground/45 cursor-not-allowed select-none',
           collapsed ? 'justify-center h-10' : 'gap-3 px-3 py-1.5'
@@ -109,7 +111,7 @@ function NavItem({ to, label, icon: Icon, end, comingSoon, collapsed, onClick, s
       >
         <Icon size={18} weight="regular" />
         {!collapsed && <span className="truncate">{label}</span>}
-        {!collapsed && <span className="ml-auto text-[9px] uppercase tracking-wider bg-muted/60 text-muted-foreground/70 px-1.5 py-0.5 rounded">Próx.</span>}
+        {!collapsed && <span className="ml-auto text-[9px] uppercase tracking-wider bg-muted/60 text-muted-foreground/70 px-1.5 py-0.5 rounded">{tag}</span>}
       </div>
     );
   }
@@ -274,6 +276,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapsed, onNaviga
                     icon={item.icon}
                     end={item.end}
                     comingSoon={item.comingSoon}
+                    statusTag={item.statusTag}
                     collapsed={collapsed}
                     onClick={onNavigate}
                     sectionPrefixes={item.sectionPrefixes}
