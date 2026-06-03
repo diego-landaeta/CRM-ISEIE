@@ -1,6 +1,7 @@
 import * as leadService from './lead.service.js';
 import * as leadModel from './lead.model.js';
 import { webhookLeadSchema, listLeadsSchema, updateStatusSchema, createInteractionSchema, createReminderSchema, reassignSchema, updateLeadSchema, createLeadManualSchema } from './lead.validation.js';
+import * as dupQueue from './dup-queue.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
 
 // ============================================================
@@ -332,6 +333,27 @@ export async function getLeadSequences(req, res, next) {
     const id = parseInt(req.params.id);
     if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
     const result = await leadService.getLeadSequences(id, req.user);
+    res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+}
+
+// ── #13 Cola de revisión de duplicados ─────────────────────────
+export async function listReviewQueue(req, res, next) {
+  try {
+    const projectId = req.query.projectId ? parseInt(req.query.projectId) : null;
+    const status = req.query.status || 'pending';
+    const result = await dupQueue.list({ projectId, status });
+    const counts = await dupQueue.counts(projectId);
+    res.json({ success: true, data: result, counts });
+  } catch (err) { next(err); }
+}
+
+export async function decideReviewQueue(req, res, next) {
+  try {
+    const queueId = parseInt(req.params.id);
+    if (isNaN(queueId)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    const { action, notas } = req.body || {};
+    const result = await dupQueue.decide({ queueId, action, notas, userId: req.user.userId });
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
 }

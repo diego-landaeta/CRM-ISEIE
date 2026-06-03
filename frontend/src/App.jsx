@@ -40,6 +40,7 @@ const ProfilePage = lazy(() => import('./shared/pages/ProfilePage'));
 const SettingsPage = lazy(() => import('./shared/pages/SettingsPage'));
 const SalesPage = lazy(() => import('./shared/pages/SalesPage'));
 const MetaAdsPage = lazy(() => import('./modules/meta-ads/pages/MetaAdsPage'));
+const DupReviewQueuePage = lazy(() => import('./modules/leads/pages/DupReviewQueuePage'));
 const ReportsPage = lazy(() => import('./shared/pages/ReportsPage'));
 const NotificacionesPage = lazy(() => import('./modules/notificaciones/pages/NotificacionesPage'));
 const ActivityPage = lazy(() => import('./shared/pages/ActivityPage'));
@@ -150,6 +151,7 @@ function App() {
           <Route path="/products/:id" element={<ProductDetailPage />} />
           <Route path="/sales" element={<SalesPage />} />
           <Route path="/meta-ads" element={<MetaAdsPage />} />
+          <Route path="/leads/revision-duplicados" element={<DupReviewQueuePage />} />
           <Route path="/commissions" element={<CommissionsPage />} />
           <Route path="/expenses" element={<ExpensesPage />} />
           <Route path="/accounting" element={<AccountingDashboardPage />} />

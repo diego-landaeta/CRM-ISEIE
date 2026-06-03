@@ -6,7 +6,7 @@ import {
   CaretUp, CaretDown, Bell, Pulse, Calculator, Envelope, Globe,
   FilePdf, ShieldCheck, MagnifyingGlass, Headset, BookOpen, Sliders,
   Megaphone, Robot, Sparkle, PlugsConnected, CreditCard,
-  Receipt, Coins, Wrench, ShoppingBag, ChatCircleText, Wallet, Bank, Clock,
+  Receipt, Coins, Wrench, ShoppingBag, ChatCircleText, Wallet, Bank, Clock, GitMerge,
 } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -28,6 +28,7 @@ const NAV_SECTIONS = [
       { to: '/dashboard',  label: 'Dashboard',  icon: SquaresFour, end: true },
       { to: '/leads',      label: 'Prospectos', icon: Users,       sectionPrefixes: ['/leads'] },
       { to: '/leads/audiences', label: 'Audiencias Meta', icon: Megaphone, roles: ['admin', 'superadmin'] },
+      { to: '/leads/revision-duplicados', label: 'Revisión duplicados', icon: GitMerge, roles: ['admin', 'superadmin'] },
       { to: '/meta-ads', label: 'Meta Ads', icon: ChartLineUp, roles: ['admin', 'superadmin'] },
       { to: '/clients',    label: 'Clientes',   icon: UserCheck,   sectionPrefixes: ['/clients'] },
       { to: '/matriculas', label: 'Matrículas', icon: UserCheck },

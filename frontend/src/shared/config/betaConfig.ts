@@ -15,7 +15,7 @@ export const BETA_MODE: boolean = String(import.meta.env.VITE_BETA_MODE || '').t
 export const BETA_ROUTES: readonly string[] = [
   '/',                              // Dashboard
   '/dashboard',                     // Dashboard
-  '/leads',                         // Prospectos
+  '/leads',                         // Prospectos (incluye /leads/revision-duplicados)
   '/clients',                       // Clientes
   '/matriculas',                    // Matriculas
   '/sales',                         // Ventas (registro venta historica + listado conversiones)

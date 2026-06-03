@@ -17,12 +17,14 @@ interface Props {
   // El winner = lead actual (queda activo)
   winner: LeadLite | null;
   projectId: number | null;
+  /** Si viene, pre-selecciona ese lead como loser (caso: vienes desde cola de revisión). */
+  initialLoserId?: number | null;
   onClose: () => void;
   onMerged?: (result: { winner_id: number; loser_id: number }) => void;
 }
 
 // Diálogo de fusión: buscar candidato → seleccionar → comentario obligatorio → confirmar.
-export default function MergeLeadDialog({ open, winner, projectId, onClose, onMerged }: Props) {
+export default function MergeLeadDialog({ open, winner, projectId, initialLoserId, onClose, onMerged }: Props) {
   const [search, setSearch] = useState('');
   const [results, setResults] = useState<LeadLite[]>([]);
   const [loading, setLoading] = useState(false);
@@ -33,6 +35,17 @@ export default function MergeLeadDialog({ open, winner, projectId, onClose, onMe
   useEffect(() => {
     if (open) { setSearch(''); setResults([]); setSelected(null); setComment(''); }
   }, [open]);
+
+  // Si llega initialLoserId, lo cargamos y pre-seleccionamos como loser.
+  useEffect(() => {
+    if (!open || !initialLoserId || !projectId) return;
+    (async () => {
+      try {
+        const r = await client.get<LeadLite>(`/leads/${initialLoserId}`);
+        if ((r as any).success && (r as any).data) setSelected((r as any).data);
+      } catch { /* silent */ }
+    })();
+  }, [open, initialLoserId, projectId]);
 
   // Búsqueda — usa el endpoint lookup-by-email si parece email, sino /leads?search
   const runSearch = useCallback(async (q: string) => {
