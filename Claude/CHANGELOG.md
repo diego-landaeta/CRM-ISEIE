@@ -4,6 +4,14 @@ Log cronológico de commits importantes. Más reciente arriba.
 
 ---
 
+## 2026-06-03 — Fix login 500 (ISEIH) + auto-reload chunk error + SW v3 + Meta Ads etapa 1+2
+
+- `fix(login):` ISEIH backend devolvía 500 en `/api/auth/login` porque la query `SELECT … p.theme_color … FROM projects p` usaba columnas inexistentes en prod. Faltaban dos migraciones que se quedaron sin aplicar tras la sincronización masiva del 2026-06-01: **045_theme_color.sql** (`ALTER TABLE projects ADD COLUMN theme_color`) y **064_messaging.sql** (`CREATE TABLE messages …`). Aplicadas ambas en `crm_prod_db`. Frontend mostraba "Error del sistema, equipo técnico ha sido notificado". (ISEIE no sufrió este bug porque sí tenía ambas migraciones.)
+- `fix(deploy/chunks):` Cuando se hace deploy, las pestañas abiertas con JS viejo intentan cargar chunks lazy (`/assets/ClientsPage-XXX.js`) con hashes que ya no existen → pantalla blanca. Añadido handler global en `main.jsx` (`window.error` + `unhandledrejection`) que detecta `Failed to fetch dynamically imported module` / `ChunkLoadError` y dispara `window.location.reload()` con guard anti-loop de 10s vía `sessionStorage`. Replicado en ambos CRMs.
+- `chore(sw):` ISEIE `VERSION = 'v3'` (era v2). Invalida cache stale del Service Worker para usuarios que tenían cacheados los chunks viejos.
+- `feat(meta-ads):` integración Meta Marketing API etapa 1+2 desplegada (backend + frontend completos). **Sin probar con cuenta real todavía** — Diego no tiene acceso al Business Manager hoy. Pausado hasta que se conecte. Detalles en memoria persistente `project_pending_meta_ads_validation.md`.
+- `chore(ops):` PAT GitHub ISEIH embebido en `.git/config` del clone local (no se commitea). Caduca ~2026-06-18, rotar antes.
+
 ## 2026-06-01 — #11 filtro Reincidentes + #14 quitar selección múltiple + #15 permisos eliminar/spam
 
 - `feat(leads):` chip "Reincidentes" en filtros rápidos (admin/superadmin), backend WHERE `l.reincidente = TRUE`, param URL `?reincidente=true`. Mismo wiring que #10.
