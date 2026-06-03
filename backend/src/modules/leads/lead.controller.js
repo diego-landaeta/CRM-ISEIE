@@ -2,6 +2,7 @@ import * as leadService from './lead.service.js';
 import * as leadModel from './lead.model.js';
 import { webhookLeadSchema, listLeadsSchema, updateStatusSchema, createInteractionSchema, createReminderSchema, reassignSchema, updateLeadSchema, createLeadManualSchema } from './lead.validation.js';
 import * as dupQueue from './dup-queue.service.js';
+import * as leadProducts from './lead-products.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
 
 // ============================================================
@@ -354,6 +355,54 @@ export async function decideReviewQueue(req, res, next) {
     if (isNaN(queueId)) throw new AppError('ID invalido', 400, 'INVALID_ID');
     const { action, notas } = req.body || {};
     const result = await dupQueue.decide({ queueId, action, notas, userId: req.user.userId });
+    res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+}
+
+// ── #18 Multi-cursos por lead ─────────────────────────────────
+export async function listLeadProducts(req, res, next) {
+  try {
+    const leadId = parseInt(req.params.id);
+    if (isNaN(leadId)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    const items = await leadProducts.listForLead(leadId);
+    res.json({ success: true, data: items });
+  } catch (err) { next(err); }
+}
+
+export async function addLeadProduct(req, res, next) {
+  try {
+    const leadId = parseInt(req.params.id);
+    if (isNaN(leadId)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    const { product_id, responsable_id, notas } = req.body || {};
+    const result = await leadProducts.addProduct({
+      leadId, productId: parseInt(product_id),
+      responsableId: responsable_id ? parseInt(responsable_id) : null,
+      notas: notas || null,
+      addedByUserId: req.user.userId,
+      addedVia: 'manual',
+    });
+    res.status(201).json({ success: true, data: result });
+  } catch (err) { next(err); }
+}
+
+export async function updateLeadProduct(req, res, next) {
+  try {
+    const leadId = parseInt(req.params.id);
+    const leadProductId = parseInt(req.params.lpId);
+    if (isNaN(leadId) || isNaN(leadProductId)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    const result = await leadProducts.updateProduct({
+      leadProductId, leadId, fields: req.body || {}, userId: req.user.userId,
+    });
+    res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+}
+
+export async function removeLeadProduct(req, res, next) {
+  try {
+    const leadId = parseInt(req.params.id);
+    const leadProductId = parseInt(req.params.lpId);
+    if (isNaN(leadId) || isNaN(leadProductId)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    const result = await leadProducts.removeProduct({ leadProductId, leadId });
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
 }

@@ -6,6 +6,7 @@ import { logger } from '../../shared/utils/logger.js';
 import { normalizePhone } from '../../shared/utils/normalizePhone.js';
 import { notifyAdmins } from '../notifications/notifications.service.js';
 import * as dupQueue from './dup-queue.service.js';
+import * as leadProducts from './lead-products.service.js';
 
 // Dispara secuencias de email activas. STUB v1 mientras email-sequences no este portado.
 async function triggerSequences(_triggerEvent, _leadId, _projectId) {
@@ -212,6 +213,17 @@ async function _createLeadCore(project, leadData) {
       source: 'webhook',
       leadName: lead.nombre,
     });
+
+    // #18: si el duplicado pidió OTRO producto, añadirlo al lead original como secundario.
+    // Esto permite al admin ver "este cliente ya pidió esto + ahora también esto otro" en una sola ficha.
+    if (productoInteresId && duplicate && duplicate.producto_interes_id !== productoInteresId) {
+      leadProducts.autoAddFromReincidente({
+        originalLeadId: duplicadoDe,
+        newProductId: productoInteresId,
+        newLeadId: lead.id,
+        addedByUserId: null,
+      });
+    }
   }
 
   // Notificar al gestor asignado (async - no bloquea respuesta del webhook <500ms)

@@ -40,6 +40,12 @@ router.patch('/spam-reports/:reportId',  roleGuard('superadmin'),          spamR
 router.get('/review-queue',              roleGuard('admin', 'superadmin'), leadController.listReviewQueue);
 router.post('/review-queue/:id/decide',  roleGuard('admin', 'superadmin'), leadController.decideReviewQueue);
 
+// #18 Multi-cursos por lead
+router.get('/:id/products',              leadController.listLeadProducts);
+router.post('/:id/products',             leadController.addLeadProduct);
+router.patch('/:id/products/:lpId',      leadController.updateLeadProduct);
+router.delete('/:id/products/:lpId',     leadController.removeLeadProduct);
+
 router.get('/:id', leadController.getById);
 router.post('/:id/merge', leadController.mergeLeads);
 

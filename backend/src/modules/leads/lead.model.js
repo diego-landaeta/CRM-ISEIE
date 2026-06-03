@@ -639,7 +639,7 @@ export async function findById(id) {
 
   const lead = rows[0];
 
-  const [utm, history, interactions, reminders, auditLog] = await Promise.all([
+  const [utm, history, interactions, reminders, auditLog, secondaryProducts] = await Promise.all([
     query(`SELECT * FROM lead_utms WHERE lead_id = $1`, [id]),
     query(
       `SELECT lsh.*, u.nombre as changed_by_nombre
@@ -670,6 +670,18 @@ export async function findById(id) {
        WHERE la.lead_id = $1 ORDER BY la.changed_at DESC`,
       [id]
     ),
+    query(
+      `SELECT lp.id, lp.product_id, p.nombre AS product_nombre,
+              lp.responsable_id, u.nombre AS responsable_nombre,
+              lp.status, lp.notas, lp.added_at, lp.added_via,
+              lp.added_by_user_id, au.nombre AS added_by_nombre
+       FROM lead_products lp
+       LEFT JOIN products p ON p.id = lp.product_id
+       LEFT JOIN users u ON u.id = lp.responsable_id
+       LEFT JOIN users au ON au.id = lp.added_by_user_id
+       WHERE lp.lead_id = $1 ORDER BY lp.added_at DESC`,
+      [id]
+    ),
   ]);
 
   lead.utms = utm.rows[0] || null;
@@ -677,7 +689,7 @@ export async function findById(id) {
   lead.interactions = interactions.rows;
   lead.reminders = reminders.rows;
   lead.auditLog = auditLog.rows;
-
+  lead.secondaryProducts = secondaryProducts.rows;
   return lead;
 }
 
