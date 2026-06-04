@@ -6,16 +6,28 @@ import { metaApi } from '../api/metaAds.api';
 import { toast } from '@/shared/hooks/useToast';
 
 interface Product { id: number; nombre: string; precio?: number | string; moneda?: string }
-interface Campaign { campaign_id: string; nombre: string }
+// Dialog parametrizado por scope: asocia productos a una CAMPAÑA o a un ADSET.
+// Reutilizamos el mismo UI; cambia solo el endpoint según `scope`.
+interface CampaignScope { type: 'campaign'; id: string; nombre: string }
+interface AdSetScope { type: 'adset'; id: string; nombre: string }
+type Scope = CampaignScope | AdSetScope;
+
 interface Props {
   open: boolean;
   projectId: number;
-  campaign: Campaign;
+  scope?: Scope;
+  // Legacy prop — mantiene compat con código viejo que pasaba `campaign={...}`.
+  campaign?: { campaign_id: string; nombre: string };
   onClose: () => void;
   onSaved?: () => void;
 }
 
-export default function AssociateProductsDialog({ open, projectId, campaign, onClose, onSaved }: Props) {
+export default function AssociateProductsDialog({ open, projectId, scope: scopeProp, campaign, onClose, onSaved }: Props) {
+  // Normalizar: si vino `campaign`, lo tratamos como scope campaign.
+  const scope: Scope = scopeProp || (campaign
+    ? { type: 'campaign', id: campaign.campaign_id, nombre: campaign.nombre }
+    : { type: 'campaign', id: '', nombre: '' });
+
   const [products, setProducts] = useState<Product[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [search, setSearch] = useState('');
@@ -25,9 +37,12 @@ export default function AssociateProductsDialog({ open, projectId, campaign, onC
   useEffect(() => {
     if (!open) return;
     setLoading(true);
+    const fetchAssoc = scope.type === 'campaign'
+      ? metaApi.associations(projectId, scope.id)
+      : metaApi.adsetAssociations(projectId, scope.id);
     Promise.all([
       client.get<Product[]>(`/products`, { params: { projectId, limit: 500 } }),
-      metaApi.associations(projectId, campaign.campaign_id),
+      fetchAssoc,
     ])
       .then(([prodRes, assocRes]: any[]) => {
         setProducts(Array.isArray(prodRes?.data) ? prodRes.data : []);
@@ -36,7 +51,7 @@ export default function AssociateProductsDialog({ open, projectId, campaign, onC
       })
       .catch(() => { setProducts([]); setSelected(new Set()); })
       .finally(() => setLoading(false));
-  }, [open, projectId, campaign.campaign_id]);
+  }, [open, projectId, scope.type, scope.id]);
 
   if (!open) return null;
 
@@ -53,12 +68,21 @@ export default function AssociateProductsDialog({ open, projectId, campaign, onC
   async function handleSave() {
     setSaving(true);
     try {
-      await metaApi.setAssociations({
-        project_id: projectId,
-        campaign_id: campaign.campaign_id,
-        product_ids: Array.from(selected),
-      });
-      toast({ title: 'Productos asociados', description: `${selected.size} ${selected.size === 1 ? 'producto' : 'productos'} vinculados a la campaña` });
+      if (scope.type === 'campaign') {
+        await metaApi.setAssociations({
+          project_id: projectId,
+          campaign_id: scope.id,
+          product_ids: Array.from(selected),
+        });
+      } else {
+        await metaApi.setAdSetAssociations({
+          project_id: projectId,
+          adset_id: scope.id,
+          product_ids: Array.from(selected),
+        });
+      }
+      const targetLabel = scope.type === 'campaign' ? 'campaña' : 'conjunto';
+      toast({ title: 'Productos asociados', description: `${selected.size} ${selected.size === 1 ? 'producto' : 'productos'} vinculados al ${targetLabel}` });
       onSaved?.();
     } catch (err: any) {
       toast({ title: 'Error', description: err?.data?.error || err?.message, variant: 'destructive' });
@@ -77,12 +101,16 @@ export default function AssociateProductsDialog({ open, projectId, campaign, onC
               <Package size={18} weight="duotone" />
             </div>
             <div className="min-w-0 flex-1">
-              <h3 className="font-semibold text-base">Asociar productos a la campaña</h3>
-              <p className="text-xs text-muted-foreground truncate" title={campaign.nombre}>
-                <strong>{campaign.nombre}</strong>
+              <h3 className="font-semibold text-base">
+                Asociar productos {scope.type === 'campaign' ? 'a la campaña' : 'al conjunto'}
+              </h3>
+              <p className="text-xs text-muted-foreground truncate" title={scope.nombre}>
+                <strong>{scope.nombre}</strong>
               </p>
               <p className="text-[11px] text-muted-foreground mt-0.5">
-                Marca los programas que esta campaña promociona. El CRM cruzará el gasto Meta con las ventas registradas de esos productos para calcular ROI.
+                {scope.type === 'campaign'
+                  ? 'Marca los programas que esta campaña promociona. El CRM cruzará el gasto Meta con las ventas para calcular ROI.'
+                  : 'Marca los productos que este conjunto promociona. Más granular que asociar a campaña — recomendado cuando una sola campaña tiene varios adsets por producto.'}
               </p>
             </div>
             <button onClick={onClose} className="p-1 rounded hover:bg-muted text-muted-foreground"><X size={18} /></button>

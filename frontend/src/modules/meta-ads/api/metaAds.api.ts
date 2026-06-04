@@ -128,6 +128,12 @@ export const metaApi = {
   setAssociations(payload: { project_id: number; campaign_id: string; product_ids: number[] }) {
     return client.post(`/meta-ads/associations`, payload);
   },
+  adsetAssociations(projectId: number, adsetId: string) {
+    return client.get(`/meta-ads/adset-associations`, { params: { projectId, adsetId } });
+  },
+  setAdSetAssociations(payload: { project_id: number; adset_id: string; product_ids: number[] }) {
+    return client.post(`/meta-ads/adset-associations`, payload);
+  },
   roi(projectId: number, opts: { dateFrom?: string; dateTo?: string } = {}) {
     return client.get<MetaRoiRow[]>(`/meta-ads/roi`, { params: { projectId, ...opts } });
   },

@@ -639,6 +639,39 @@ export async function listAssociations(projectId, campaignId = null) {
   return rows;
 }
 
+// ────────────────────────────────────────────────────────────
+// Asociación AdSet ↔ productos (más granular que campaña-nivel).
+
+export async function listAdSetAssociations(projectId, adsetId = null) {
+  const params = [projectId];
+  const where = ['mp.project_id = $1'];
+  if (adsetId) { params.push(adsetId); where.push(`mp.adset_id = $${params.length}`); }
+  const { rows } = await query(
+    `SELECT mp.id, mp.adset_id, mp.product_id, mp.notas, mp.created_at,
+            p.nombre AS product_nombre, p.precio AS product_precio,
+            ma.nombre AS adset_nombre, ma.campaign_id
+     FROM meta_adset_products mp
+     LEFT JOIN products p ON p.id = mp.product_id
+     LEFT JOIN meta_adsets ma ON ma.adset_id = mp.adset_id
+     WHERE ${where.join(' AND ')}
+     ORDER BY ma.nombre, p.nombre`,
+    params
+  );
+  return rows;
+}
+
+export async function setAdSetAssociations({ projectId, adsetId, productIds, userId }) {
+  await query(`DELETE FROM meta_adset_products WHERE adset_id = $1 AND project_id = $2`, [adsetId, projectId]);
+  for (const pid of productIds || []) {
+    await query(
+      `INSERT INTO meta_adset_products (adset_id, product_id, project_id, asociado_por_user_id)
+       VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING`,
+      [adsetId, pid, projectId, userId || null]
+    );
+  }
+  return { adset_id: adsetId, product_ids: productIds || [] };
+}
+
 export async function setAssociations({ projectId, campaignId, productIds, userId }) {
   // Reemplaza todas las asociaciones de esta campaña por la nueva lista (replace semantics).
   await query(`DELETE FROM meta_campaign_products WHERE campaign_id = $1 AND project_id = $2`, [campaignId, projectId]);

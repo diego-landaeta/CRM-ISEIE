@@ -25,6 +25,8 @@ router.get('/dashboard', ctrl.dashboard);
 
 router.get('/associations', ctrl.listAssociations);
 router.post('/associations', ctrl.setAssociations);
+router.get('/adset-associations', ctrl.listAdSetAssociations);
+router.post('/adset-associations', ctrl.setAdSetAssociations);
 
 router.get('/roi', ctrl.getRoi);
 

@@ -41,6 +41,7 @@ export default function MetaAdsPage() {
   const [syncing, setSyncing] = useState(false);
   const [tab, setTab] = useState<'campaigns' | 'roi' | 'config'>('campaigns');
   const [associateOpen, setAssociateOpen] = useState<MetaCampaign | null>(null);
+  const [associateAdSetOpen, setAssociateAdSetOpen] = useState<MetaAdSet | null>(null);
 
   // Rango de fechas — default últimos 30 días
   const today = new Date().toISOString().slice(0, 10);
@@ -295,6 +296,7 @@ export default function MetaAdsPage() {
                       dateFrom={dateFrom}
                       dateTo={dateTo}
                       onAssociate={() => setAssociateOpen(c)}
+                      onAssociateAdSet={(a) => setAssociateAdSetOpen(a)}
                     />
                   ))}
                 </tbody>
@@ -326,9 +328,18 @@ export default function MetaAdsPage() {
           <AssociateProductsDialog
             open={!!associateOpen}
             projectId={projectId}
-            campaign={associateOpen}
+            scope={{ type: 'campaign', id: associateOpen.campaign_id, nombre: associateOpen.nombre }}
             onClose={() => setAssociateOpen(null)}
             onSaved={() => { setAssociateOpen(null); loadData(); }}
+          />
+        )}
+        {associateAdSetOpen && (
+          <AssociateProductsDialog
+            open={!!associateAdSetOpen}
+            projectId={projectId}
+            scope={{ type: 'adset', id: associateAdSetOpen.adset_id, nombre: associateAdSetOpen.nombre }}
+            onClose={() => setAssociateAdSetOpen(null)}
+            onSaved={() => { setAssociateAdSetOpen(null); }}
           />
         )}
       </Suspense>
@@ -389,8 +400,8 @@ function DailyChart({ daily, currency }: { daily: MetaDashboard['daily']; curren
 // Fila Campaña: expandible → muestra AdSets debajo (carga lazy).
 // Tabla 3 niveles: Campaign → AdSet → Ad. Click en chevron toggle.
 
-function CampaignRow({ c, projectId, currency, dateFrom, dateTo, onAssociate }:
-  { c: MetaCampaign; projectId: number; currency: string; dateFrom: string; dateTo: string; onAssociate: () => void }) {
+function CampaignRow({ c, projectId, currency, dateFrom, dateTo, onAssociate, onAssociateAdSet }:
+  { c: MetaCampaign; projectId: number; currency: string; dateFrom: string; dateTo: string; onAssociate: () => void; onAssociateAdSet: (a: MetaAdSet) => void }) {
   const [open, setOpen] = useState(false);
   const [adsets, setAdSets] = useState<MetaAdSet[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -455,7 +466,8 @@ function CampaignRow({ c, projectId, currency, dateFrom, dateTo, onAssociate }:
               <table className="w-full text-xs">
                 <tbody>
                   {(adsets || []).map((a) => (
-                    <AdSetRow key={a.adset_id} a={a} projectId={projectId} currency={currency} dateFrom={dateFrom} dateTo={dateTo} />
+                    <AdSetRow key={a.adset_id} a={a} projectId={projectId} currency={currency} dateFrom={dateFrom} dateTo={dateTo}
+                      onAssociate={() => onAssociateAdSet(a)} />
                   ))}
                 </tbody>
               </table>
@@ -467,8 +479,8 @@ function CampaignRow({ c, projectId, currency, dateFrom, dateTo, onAssociate }:
   );
 }
 
-function AdSetRow({ a, projectId, currency, dateFrom, dateTo }:
-  { a: MetaAdSet; projectId: number; currency: string; dateFrom: string; dateTo: string }) {
+function AdSetRow({ a, projectId, currency, dateFrom, dateTo, onAssociate }:
+  { a: MetaAdSet; projectId: number; currency: string; dateFrom: string; dateTo: string; onAssociate: () => void }) {
   const [open, setOpen] = useState(false);
   const [ads, setAds] = useState<MetaAd[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -513,7 +525,12 @@ function AdSetRow({ a, projectId, currency, dateFrom, dateTo }:
         <td className="px-3 py-2 text-right tabular-nums">
           {fmtNum(a.total_leads)} <span className="text-muted-foreground">· {a.cpl != null ? fmtMoney(a.cpl, currency) : '—'}</span>
         </td>
-        <td />
+        <td className="px-3 py-2 text-right">
+          <button onClick={(e) => { e.stopPropagation(); onAssociate(); }}
+            className="text-[11px] text-primary hover:underline font-semibold">
+            Asociar
+          </button>
+        </td>
       </tr>
       {open && (
         <tr className="bg-muted/30">

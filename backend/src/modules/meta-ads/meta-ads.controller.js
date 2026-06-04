@@ -139,6 +139,27 @@ export async function campaignDetail(req, res, next) {
   } catch (err) { next(err); }
 }
 
+export async function listAdSetAssociations(req, res, next) {
+  try {
+    const result = await service.listAdSetAssociations(pid(req), req.query.adsetId || null);
+    res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+}
+
+export async function setAdSetAssociations(req, res, next) {
+  try {
+    const { project_id, adset_id, product_ids } = req.body || {};
+    if (!adset_id) throw new AppError('adset_id requerido', 400, 'MISSING_ADSET');
+    const result = await service.setAdSetAssociations({
+      projectId: parseInt(project_id),
+      adsetId: adset_id,
+      productIds: Array.isArray(product_ids) ? product_ids.map((id) => parseInt(id)) : [],
+      userId: req.user.userId,
+    });
+    res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+}
+
 export async function listAssociations(req, res, next) {
   try {
     const result = await service.listAssociations(pid(req), req.query.campaignId || null);
