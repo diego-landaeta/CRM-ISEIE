@@ -756,7 +756,7 @@ export async function getProductsView({ projectId, dateFrom = null, dateTo = nul
      SELECT pla.product_id,
             p.nombre AS producto_nombre,
             p.precio AS producto_precio,
-            p.activo AS producto_activo,
+            p.active AS producto_activo,
             pla.n_campaigns, pla.n_adsets, pla.links,
             COALESCE(psc.spend, 0) + COALESCE(psa.spend, 0) AS spend,
             COALESCE(psc.leads, 0) + COALESCE(psa.leads, 0) AS leads_meta,
