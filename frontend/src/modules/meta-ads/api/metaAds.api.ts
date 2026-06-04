@@ -137,4 +137,7 @@ export const metaApi = {
   roi(projectId: number, opts: { dateFrom?: string; dateTo?: string } = {}) {
     return client.get<MetaRoiRow[]>(`/meta-ads/roi`, { params: { projectId, ...opts } });
   },
+  productsView(projectId: number, opts: { dateFrom?: string; dateTo?: string } = {}) {
+    return client.get(`/meta-ads/products-view`, { params: { projectId, ...opts } });
+  },
 };

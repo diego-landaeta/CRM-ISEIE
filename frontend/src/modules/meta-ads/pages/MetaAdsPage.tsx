@@ -39,7 +39,8 @@ export default function MetaAdsPage() {
   const [dashboard, setDashboard] = useState<MetaDashboard | null>(null);
   const [roi, setRoi] = useState<MetaRoiRow[]>([]);
   const [syncing, setSyncing] = useState(false);
-  const [tab, setTab] = useState<'campaigns' | 'roi' | 'config'>('campaigns');
+  const [tab, setTab] = useState<'campaigns' | 'products' | 'roi' | 'config'>('campaigns');
+  const [productsView, setProductsView] = useState<any[]>([]);
   const [associateOpen, setAssociateOpen] = useState<MetaCampaign | null>(null);
   const [associateAdSetOpen, setAssociateAdSetOpen] = useState<MetaAdSet | null>(null);
 
@@ -66,6 +67,7 @@ export default function MetaAdsPage() {
     metaApi.dashboard(projectId, { dateFrom, dateTo }).then((r: any) => setDashboard(r?.data || null)).catch(() => setDashboard(null));
     metaApi.campaigns(projectId, { dateFrom, dateTo }).then((r: any) => setCampaigns(r?.data || [])).catch(() => setCampaigns([]));
     metaApi.roi(projectId, { dateFrom, dateTo }).then((r: any) => setRoi(r?.data || [])).catch(() => setRoi([]));
+    metaApi.productsView(projectId, { dateFrom, dateTo }).then((r: any) => setProductsView(r?.data || [])).catch(() => setProductsView([]));
   }
 
   useEffect(() => { loadAccounts(); }, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -257,6 +259,10 @@ export default function MetaAdsPage() {
             className={`px-3 py-1.5 rounded-md text-sm font-semibold ${tab === 'campaigns' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-muted-foreground'}`}>
             Campañas ({campaigns.length})
           </button>
+          <button onClick={() => setTab('products')}
+            className={`px-3 py-1.5 rounded-md text-sm font-semibold ${tab === 'products' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-muted-foreground'}`}>
+            Por producto ({productsView.length})
+          </button>
           <button onClick={() => setTab('roi')}
             className={`px-3 py-1.5 rounded-md text-sm font-semibold ${tab === 'roi' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-muted-foreground'}`}>
             ROI (asociaciones manuales)
@@ -303,6 +309,10 @@ export default function MetaAdsPage() {
               </table>
             )}
           </div>
+        )}
+
+        {tab === 'products' && (
+          <ProductsViewTable rows={productsView} currency={currency} />
         )}
 
         {tab === 'roi' && (
@@ -577,6 +587,89 @@ function AdRow({ ad, currency }: { ad: MetaAd; currency: string }) {
       </td>
       <td />
     </tr>
+  );
+}
+
+// Vista por producto: para cada producto asociado, qué campañas/adsets lo promocionan,
+// gasto agregado (campaign + adset spend), leads Meta, ventas registradas y ROI.
+function ProductsViewTable({ rows, currency }: { rows: any[]; currency: string }) {
+  if (rows.length === 0) {
+    return (
+      <p className="p-6 text-center text-sm text-muted-foreground">
+        Ningún producto tiene asociaciones aún. Ve a Campañas → expande un conjunto → "Asociar" para vincular productos.
+      </p>
+    );
+  }
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead className="bg-muted/50 text-[11px] text-muted-foreground">
+          <tr>
+            <th className="text-left px-4 py-2 font-medium">Producto</th>
+            <th className="text-left px-3 py-2 font-medium">Campañas / Conjuntos activos</th>
+            <th className="text-right px-3 py-2 font-medium">Gasto</th>
+            <th className="text-right px-3 py-2 font-medium">Leads · CPL</th>
+            <th className="text-right px-3 py-2 font-medium">Ventas · Facturado</th>
+            <th className="text-right px-3 py-2 font-medium">ROI</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => {
+            const roiTone = r.roi_pct == null ? '' : r.roi_pct >= 0 ? 'text-emerald-600' : 'text-red-600';
+            return (
+              <tr key={r.product_id} className="border-t border-border hover:bg-muted/30 align-top">
+                <td className="px-4 py-2.5">
+                  <p className="font-medium truncate max-w-xs" title={r.producto_nombre}>{r.producto_nombre}</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    {r.producto_precio != null && `${fmtMoney(r.producto_precio, currency)} · `}
+                    {r.producto_activo ? <span className="text-emerald-600">activo</span> : <span>inactivo</span>}
+                  </p>
+                </td>
+                <td className="px-3 py-2.5 text-xs">
+                  <ProductLinks links={r.links || []} />
+                </td>
+                <td className="px-3 py-2.5 text-right tabular-nums font-semibold">{fmtMoney(r.spend, currency)}</td>
+                <td className="px-3 py-2.5 text-right tabular-nums text-xs">
+                  <span className="font-semibold">{fmtNum(r.leads_meta)}</span><br />
+                  <span className="text-muted-foreground">{r.cpl != null ? fmtMoney(r.cpl, currency) : '—'}</span>
+                </td>
+                <td className="px-3 py-2.5 text-right tabular-nums text-xs">
+                  <span className="font-semibold">{r.ventas}</span> · <span>{fmtMoney(r.facturado, currency)}</span><br />
+                  <span className="text-muted-foreground">Cobrado: {fmtMoney(r.cobrado, currency)}</span>
+                </td>
+                <td className={`px-3 py-2.5 text-right tabular-nums font-bold ${roiTone}`}>
+                  {r.roi_pct == null ? '—' : `${r.roi_pct >= 0 ? '+' : ''}${r.roi_pct.toFixed(1)}%`}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function ProductLinks({ links }: { links: Array<{ scope: string; id: string; name: string; status: string | null }> }) {
+  if (!links.length) return <span className="text-muted-foreground italic">—</span>;
+  const camp = links.filter((l) => l.scope === 'campaign');
+  const ads = links.filter((l) => l.scope === 'adset');
+  return (
+    <div className="space-y-1">
+      {camp.map((l) => (
+        <div key={l.id} className="flex items-center gap-1.5">
+          <span className="text-[9px] px-1 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 font-semibold">Camp</span>
+          <span className="truncate max-w-xs" title={l.name}>{l.name}</span>
+          {l.status && <span className={`text-[9px] px-1 py-0.5 rounded ${STATUS_TONE[l.status] || 'bg-muted'}`}>{l.status}</span>}
+        </div>
+      ))}
+      {ads.map((l) => (
+        <div key={l.id} className="flex items-center gap-1.5">
+          <span className="text-[9px] px-1 py-0.5 rounded bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300 font-semibold">AdSet</span>
+          <span className="truncate max-w-xs" title={l.name}>{l.name}</span>
+          {l.status && <span className={`text-[9px] px-1 py-0.5 rounded ${STATUS_TONE[l.status] || 'bg-muted'}`}>{l.status}</span>}
+        </div>
+      ))}
+    </div>
   );
 }
 

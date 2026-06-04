@@ -686,6 +686,115 @@ export async function setAssociations({ projectId, campaignId, productIds, userI
 }
 
 /**
+ * Vista por producto: cada producto del proyecto + campañas/adsets que lo promocionan
+ * (con status), gasto agregado (no doble-cuenta porque agrupamos por producto al final),
+ * leads Meta, ventas y ROI. Filtra a productos QUE TENGAN al menos una asociación.
+ */
+export async function getProductsView({ projectId, dateFrom = null, dateTo = null }) {
+  const params = [projectId];
+  const dailyW = ['d.project_id = $1'];
+  const convW = ['c.project_id = $1'];
+  if (dateFrom) {
+    params.push(dateFrom);
+    dailyW.push(`d.date >= $${params.length}`);
+    convW.push(`c.fecha_conversion >= $${params.length}`);
+  }
+  if (dateTo) {
+    params.push(dateTo);
+    dailyW.push(`d.date <= $${params.length}`);
+    convW.push(`c.fecha_conversion <= $${params.length}`);
+  }
+  // Productos asociados a través de campaña o adset. UNION para no perder ninguno.
+  // El spend se atribuye sumando UNA SOLA vez por adset/campaña (DISTINCT en la subquery).
+  const { rows } = await query(
+    `WITH product_links AS (
+       -- Asociaciones a nivel campaña: cada producto recibe SUM(spend de la campaña entera)
+       SELECT mcp.product_id, 'campaign'::text AS scope, mcp.campaign_id AS link_id, mc.nombre AS link_name, mc.effective_status AS link_status
+       FROM meta_campaign_products mcp
+       JOIN meta_campaigns mc ON mc.campaign_id = mcp.campaign_id
+       WHERE mcp.project_id = $1
+       UNION ALL
+       SELECT map.product_id, 'adset'::text, map.adset_id, ma.nombre, ma.effective_status
+       FROM meta_adset_products map
+       JOIN meta_adsets ma ON ma.adset_id = map.adset_id
+       WHERE map.project_id = $1
+     ),
+     product_spend_camp AS (
+       SELECT mcp.product_id,
+              COALESCE(SUM(d.spend), 0)::numeric AS spend,
+              COALESCE(SUM(d.leads), 0)::int AS leads
+       FROM meta_campaign_products mcp
+       LEFT JOIN meta_campaigns_daily d ON d.campaign_id = mcp.campaign_id AND ${dailyW.join(' AND ')}
+       WHERE mcp.project_id = $1
+       GROUP BY mcp.product_id
+     ),
+     product_spend_adset AS (
+       SELECT map.product_id,
+              COALESCE(SUM(d.spend), 0)::numeric AS spend,
+              COALESCE(SUM(d.leads), 0)::int AS leads
+       FROM meta_adset_products map
+       LEFT JOIN meta_adsets_daily d ON d.adset_id = map.adset_id AND ${dailyW.join(' AND ').replace(/d\.project_id = \$1/, 'd.project_id = $1')}
+       WHERE map.project_id = $1
+       GROUP BY map.product_id
+     ),
+     product_revenue AS (
+       SELECT c.producto_contratado_id AS product_id,
+              COUNT(DISTINCT c.id)::int AS ventas,
+              COALESCE(SUM(c.importe_total), 0)::numeric AS facturado,
+              COALESCE(SUM(c.importe_pagado), 0)::numeric AS cobrado
+       FROM conversions c
+       WHERE ${convW.join(' AND ')} AND c.producto_contratado_id IS NOT NULL
+       GROUP BY c.producto_contratado_id
+     ),
+     product_links_agg AS (
+       SELECT product_id,
+              COUNT(*) FILTER (WHERE scope = 'campaign') AS n_campaigns,
+              COUNT(*) FILTER (WHERE scope = 'adset') AS n_adsets,
+              JSON_AGG(JSON_BUILD_OBJECT('scope', scope, 'id', link_id, 'name', link_name, 'status', link_status) ORDER BY scope, link_name) AS links
+       FROM product_links GROUP BY product_id
+     )
+     SELECT pla.product_id,
+            p.nombre AS producto_nombre,
+            p.precio AS producto_precio,
+            p.activo AS producto_activo,
+            pla.n_campaigns, pla.n_adsets, pla.links,
+            COALESCE(psc.spend, 0) + COALESCE(psa.spend, 0) AS spend,
+            COALESCE(psc.leads, 0) + COALESCE(psa.leads, 0) AS leads_meta,
+            COALESCE(pr.ventas, 0) AS ventas,
+            COALESCE(pr.facturado, 0) AS facturado,
+            COALESCE(pr.cobrado, 0) AS cobrado
+     FROM product_links_agg pla
+     JOIN products p ON p.id = pla.product_id
+     LEFT JOIN product_spend_camp psc ON psc.product_id = pla.product_id
+     LEFT JOIN product_spend_adset psa ON psa.product_id = pla.product_id
+     LEFT JOIN product_revenue pr ON pr.product_id = pla.product_id
+     ORDER BY (COALESCE(psc.spend, 0) + COALESCE(psa.spend, 0)) DESC NULLS LAST, p.nombre`,
+    params
+  );
+  return rows.map((r) => {
+    const spend = Number(r.spend || 0);
+    const facturado = Number(r.facturado || 0);
+    return {
+      product_id: r.product_id,
+      producto_nombre: r.producto_nombre,
+      producto_precio: r.producto_precio != null ? Number(r.producto_precio) : null,
+      producto_activo: !!r.producto_activo,
+      n_campaigns: Number(r.n_campaigns || 0),
+      n_adsets: Number(r.n_adsets || 0),
+      links: r.links || [],
+      spend,
+      leads_meta: Number(r.leads_meta || 0),
+      ventas: Number(r.ventas || 0),
+      facturado,
+      cobrado: Number(r.cobrado || 0),
+      ganancia: facturado - spend,
+      roi_pct: spend > 0 ? Number((((facturado - spend) / spend) * 100).toFixed(2)) : null,
+      cpl: r.leads_meta > 0 ? Number(spend / r.leads_meta) : null,
+    };
+  });
+}
+
+/**
  * ROI: por cada campaña con productos asociados, calcular:
  *   spend (suma de campaign daily en rango)
  *   facturado (suma conversions.importe_total de productos asociados en rango)

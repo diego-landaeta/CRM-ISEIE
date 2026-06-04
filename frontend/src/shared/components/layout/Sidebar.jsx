@@ -29,7 +29,6 @@ const NAV_SECTIONS = [
       { to: '/leads',      label: 'Prospectos', icon: Users,       sectionPrefixes: ['/leads'] },
       { to: '/leads/audiences', label: 'Audiencias Meta', icon: Megaphone, roles: ['admin', 'superadmin'] },
       { to: '/leads/revision-duplicados', label: 'Revisión duplicados', icon: GitMerge, roles: ['admin', 'superadmin'] },
-      { to: '/meta-ads', label: 'Meta Ads', icon: ChartLineUp, roles: ['admin', 'superadmin'] },
       { to: '/clients',    label: 'Clientes',   icon: UserCheck,   sectionPrefixes: ['/clients'] },
       { to: '/matriculas', label: 'Matrículas', icon: UserCheck },
     ],
@@ -43,6 +42,13 @@ const NAV_SECTIONS = [
       { to: '/webhooks',        label: 'Webhooks',  icon: PlugsConnected, roles: ['admin', 'superadmin'] },
       { to: '/campaigns',       label: 'Campañas',  icon: Megaphone, roles: ['admin', 'superadmin'], sectionPrefixes: ['/campaigns'] },
       { to: '/seo',             label: 'Tráfico orgánico', icon: MagnifyingGlass, roles: ['admin', 'superadmin'] },
+    ],
+  },
+  {
+    label: 'Publicidad',
+    items: [
+      { to: '/meta-ads',   label: 'Meta Ads',   icon: ChartLineUp, roles: ['admin', 'superadmin'] },
+      { to: '/google-ads', label: 'Google Ads', icon: ChartLineUp, roles: ['admin', 'superadmin'], comingSoon: true },
     ],
   },
   {

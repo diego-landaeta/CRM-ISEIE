@@ -29,5 +29,6 @@ router.get('/adset-associations', ctrl.listAdSetAssociations);
 router.post('/adset-associations', ctrl.setAdSetAssociations);
 
 router.get('/roi', ctrl.getRoi);
+router.get('/products-view', ctrl.getProductsView);
 
 export default router;

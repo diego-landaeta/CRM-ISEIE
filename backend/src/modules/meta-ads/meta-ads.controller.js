@@ -181,6 +181,17 @@ export async function setAssociations(req, res, next) {
   } catch (err) { next(err); }
 }
 
+export async function getProductsView(req, res, next) {
+  try {
+    const result = await service.getProductsView({
+      projectId: pid(req),
+      dateFrom: req.query.dateFrom || null,
+      dateTo: req.query.dateTo || null,
+    });
+    res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+}
+
 export async function getRoi(req, res, next) {
   try {
     const result = await service.getRoi({
