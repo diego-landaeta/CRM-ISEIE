@@ -7,6 +7,7 @@ import { toast } from '@/shared/hooks/useToast';
 const ConnectWizard = lazy(() => import('../components/ConnectWizard'));
 const AssociateProductsDialog = lazy(() => import('../components/AssociateProductsDialog'));
 const MetaSettingsPanel = lazy(() => import('../components/MetaSettingsPanel'));
+const MetaManual = lazy(() => import('../components/MetaManual'));
 
 function fmtMoney(n: number, currency = 'EUR') {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency, maximumFractionDigits: 0 }).format(n || 0);
@@ -39,7 +40,7 @@ export default function MetaAdsPage() {
   const [dashboard, setDashboard] = useState<MetaDashboard | null>(null);
   const [roi, setRoi] = useState<MetaRoiRow[]>([]);
   const [syncing, setSyncing] = useState(false);
-  const [tab, setTab] = useState<'campaigns' | 'products' | 'roi' | 'config'>('campaigns');
+  const [tab, setTab] = useState<'campaigns' | 'products' | 'roi' | 'manual' | 'config'>('campaigns');
   const [productsView, setProductsView] = useState<any[]>([]);
   const [associateOpen, setAssociateOpen] = useState<MetaCampaign | null>(null);
   const [associateAdSetOpen, setAssociateAdSetOpen] = useState<MetaAdSet | null>(null);
@@ -212,7 +213,7 @@ export default function MetaAdsPage() {
       </div>
 
       {/* Selector rango fechas (oculto cuando estás en config) */}
-      {tab !== 'config' && (
+      {tab !== 'config' && tab !== 'manual' && (
       <div className="bg-card border border-border rounded-lg p-3 flex items-center gap-2 flex-wrap">
         <label className="text-xs font-semibold text-muted-foreground">Rango:</label>
         <input type="date" value={dateFrom} max={dateTo} onChange={(e) => setDateFrom(e.target.value)}
@@ -232,7 +233,7 @@ export default function MetaAdsPage() {
       )}
 
       {/* KPIs del dashboard */}
-      {tab !== 'config' && dashboard && (
+      {tab !== 'config' && tab !== 'manual' && dashboard && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <KpiCard icon={Receipt} label="Gasto" value={fmtMoney(dashboard.totals.spend, currency)} tone="violet" />
           <KpiCard icon={Eye} label="Impresiones" value={fmtNum(dashboard.totals.impressions)} tone="blue" />
@@ -242,7 +243,7 @@ export default function MetaAdsPage() {
       )}
 
       {/* Gráfica daily simple */}
-      {tab !== 'config' && dashboard && dashboard.daily.length > 0 && (
+      {tab !== 'config' && tab !== 'manual' && dashboard && dashboard.daily.length > 0 && (
         <div className="bg-card border border-border rounded-lg p-4">
           <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
             <ChartLineUp size={16} weight="duotone" className="text-blue-600" />
@@ -266,6 +267,10 @@ export default function MetaAdsPage() {
           <button onClick={() => setTab('roi')}
             className={`px-3 py-1.5 rounded-md text-sm font-semibold ${tab === 'roi' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-muted-foreground'}`}>
             ROI (asociaciones manuales)
+          </button>
+          <button onClick={() => setTab('manual')}
+            className={`px-3 py-1.5 rounded-md text-sm font-semibold ${tab === 'manual' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-muted-foreground'}`}>
+            Manual
           </button>
           <button onClick={() => setTab('config')}
             className={`px-3 py-1.5 rounded-md text-sm font-semibold flex items-center gap-1.5 ${tab === 'config' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-muted-foreground'}`}>
@@ -317,6 +322,12 @@ export default function MetaAdsPage() {
 
         {tab === 'roi' && (
           <RoiTable rows={roi} currency={currency} />
+        )}
+
+        {tab === 'manual' && (
+          <Suspense fallback={<div className="h-40 bg-muted/40 rounded animate-pulse" />}>
+            <MetaManual />
+          </Suspense>
         )}
 
         {tab === 'config' && (
