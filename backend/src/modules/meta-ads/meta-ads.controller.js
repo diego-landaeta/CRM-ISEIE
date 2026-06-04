@@ -28,6 +28,17 @@ export async function connect(req, res, next) {
   } catch (err) { next(err); }
 }
 
+export async function updateToken(req, res, next) {
+  try {
+    const { project_id, access_token } = req.body || {};
+    const result = await service.updateToken({
+      project_id: parseInt(project_id),
+      access_token,
+    });
+    res.json({ success: true, data: { rotated: result.rotated, ad_account_nombre: result.validation?.nombre } });
+  } catch (err) { next(err); }
+}
+
 export async function disconnect(req, res, next) {
   try {
     const result = await service.disconnect(pid(req));

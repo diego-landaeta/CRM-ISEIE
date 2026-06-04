@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState, lazy, Suspense } from 'react';
-import { ArrowsClockwise, PlugsConnected, Plugs, Trash, Receipt, Eye, CursorClick, Target, ChartLineUp, Warning } from '@phosphor-icons/react';
+import { ArrowsClockwise, PlugsConnected, Receipt, Eye, CursorClick, Target, ChartLineUp, Warning, Gear } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { metaApi, MetaAccount, MetaCampaign, MetaDashboard, MetaRoiRow } from '../api/metaAds.api';
 import { toast } from '@/shared/hooks/useToast';
 
 const ConnectWizard = lazy(() => import('../components/ConnectWizard'));
 const AssociateProductsDialog = lazy(() => import('../components/AssociateProductsDialog'));
+const MetaSettingsPanel = lazy(() => import('../components/MetaSettingsPanel'));
 
 function fmtMoney(n: number, currency = 'EUR') {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency, maximumFractionDigits: 0 }).format(n || 0);
@@ -34,7 +35,7 @@ export default function MetaAdsPage() {
   const [dashboard, setDashboard] = useState<MetaDashboard | null>(null);
   const [roi, setRoi] = useState<MetaRoiRow[]>([]);
   const [syncing, setSyncing] = useState(false);
-  const [tab, setTab] = useState<'campaigns' | 'roi'>('campaigns');
+  const [tab, setTab] = useState<'campaigns' | 'roi' | 'config'>('campaigns');
   const [associateOpen, setAssociateOpen] = useState<MetaCampaign | null>(null);
 
   // Rango de fechas — default últimos 30 días
@@ -156,14 +157,15 @@ export default function MetaAdsPage() {
             className="h-9 px-3 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted flex items-center gap-1.5">
             <ArrowsClockwise size={14} /> 90d
           </button>
-          <button onClick={handleDisconnect} title="Desconectar cuenta"
-            className="h-9 px-3 rounded-md border border-red-200 dark:border-red-900 bg-card text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 flex items-center gap-1.5">
-            <Plugs size={14} /> Desconectar
+          <button onClick={() => setTab('config')} title="Configuración (token, cuenta, desconectar)"
+            className={`h-9 px-3 rounded-md border text-sm font-medium flex items-center gap-1.5 ${tab === 'config' ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-card hover:bg-muted'}`}>
+            <Gear size={14} weight="duotone" /> Configuración
           </button>
         </div>
       </div>
 
-      {/* Selector rango fechas */}
+      {/* Selector rango fechas (oculto cuando estás en config) */}
+      {tab !== 'config' && (
       <div className="bg-card border border-border rounded-lg p-3 flex items-center gap-2 flex-wrap">
         <label className="text-xs font-semibold text-muted-foreground">Rango:</label>
         <input type="date" value={dateFrom} max={dateTo} onChange={(e) => setDateFrom(e.target.value)}
@@ -180,9 +182,10 @@ export default function MetaAdsPage() {
           ))}
         </div>
       </div>
+      )}
 
       {/* KPIs del dashboard */}
-      {dashboard && (
+      {tab !== 'config' && dashboard && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <KpiCard icon={Receipt} label="Gasto" value={fmtMoney(dashboard.totals.spend, currency)} tone="violet" />
           <KpiCard icon={Eye} label="Impresiones" value={fmtNum(dashboard.totals.impressions)} tone="blue" />
@@ -192,7 +195,7 @@ export default function MetaAdsPage() {
       )}
 
       {/* Gráfica daily simple */}
-      {dashboard && dashboard.daily.length > 0 && (
+      {tab !== 'config' && dashboard && dashboard.daily.length > 0 && (
         <div className="bg-card border border-border rounded-lg p-4">
           <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
             <ChartLineUp size={16} weight="duotone" className="text-blue-600" />
@@ -202,9 +205,9 @@ export default function MetaAdsPage() {
         </div>
       )}
 
-      {/* Tabs Campañas / ROI */}
+      {/* Tabs Campañas / ROI / Configuración */}
       <div className="bg-card border border-border rounded-lg overflow-hidden">
-        <div className="px-4 py-2 border-b border-border flex gap-1">
+        <div className="px-4 py-2 border-b border-border flex gap-1 flex-wrap">
           <button onClick={() => setTab('campaigns')}
             className={`px-3 py-1.5 rounded-md text-sm font-semibold ${tab === 'campaigns' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-muted-foreground'}`}>
             Campañas ({campaigns.length})
@@ -212,6 +215,10 @@ export default function MetaAdsPage() {
           <button onClick={() => setTab('roi')}
             className={`px-3 py-1.5 rounded-md text-sm font-semibold ${tab === 'roi' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-muted-foreground'}`}>
             ROI (asociaciones manuales)
+          </button>
+          <button onClick={() => setTab('config')}
+            className={`px-3 py-1.5 rounded-md text-sm font-semibold flex items-center gap-1.5 ${tab === 'config' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-muted-foreground'}`}>
+            <Gear size={13} weight="duotone" /> Configuración
           </button>
         </div>
 
@@ -271,6 +278,19 @@ export default function MetaAdsPage() {
 
         {tab === 'roi' && (
           <RoiTable rows={roi} currency={currency} />
+        )}
+
+        {tab === 'config' && (
+          <div className="p-4">
+            <Suspense fallback={<div className="h-40 bg-muted/40 rounded animate-pulse" />}>
+              <MetaSettingsPanel
+                projectId={projectId}
+                account={account}
+                onChanged={() => { loadAccount(); loadData(); }}
+                onDisconnect={handleDisconnect}
+              />
+            </Suspense>
+          </div>
         )}
       </div>
 

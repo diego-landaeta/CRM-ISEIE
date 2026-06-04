@@ -76,6 +76,42 @@ export async function connect({ project_id, ad_account_id, access_token, userId 
   return { ...account, validation: meta };
 }
 
+/**
+ * Rota SOLO el access_token de una cuenta ya conectada. NO toca ad_account_id,
+ * NO toca datos sincronizados (campaigns, daily, asociaciones). Valida el nuevo
+ * token contra Meta antes de guardar.
+ */
+export async function updateToken({ project_id, access_token }) {
+  if (!project_id) throw new AppError('project_id requerido', 400, 'MISSING_PROJECT');
+  if (!access_token || access_token.length < 20) {
+    throw new AppError('access_token requerido', 400, 'INVALID_TOKEN');
+  }
+  const existing = await getAccount(project_id);
+  if (!existing) throw new AppError('Cuenta no conectada — usa /connect', 404, 'NOT_CONNECTED');
+  // Validar nuevo token contra la cuenta YA conectada (no permitimos cambiar la cuenta aquí).
+  let meta;
+  try {
+    meta = await metaClient.validateConnection({
+      adAccountId: existing.ad_account_id, accessToken: access_token,
+    });
+  } catch (err) {
+    throw new AppError(`Token nuevo inválido: ${err.message}`, 400, 'META_VALIDATION_FAILED');
+  }
+  const enc = packToken(access_token);
+  await query(
+    `UPDATE meta_ad_accounts SET
+       access_token_enc = $1,
+       ad_account_nombre = $2,
+       currency = $3,
+       timezone_name = $4,
+       last_sync_error = NULL,
+       updated_at = NOW()
+     WHERE project_id = $5`,
+    [enc, meta.nombre, meta.currency, meta.timezone_name, project_id]
+  );
+  return { rotated: true, validation: meta };
+}
+
 export async function disconnect(projectId) {
   await query(`DELETE FROM meta_ad_accounts WHERE project_id = $1`, [projectId]);
   await query(`DELETE FROM meta_campaigns WHERE project_id = $1`, [projectId]);

@@ -9,6 +9,7 @@ router.use(roleGuard('admin', 'superadmin'));
 
 router.get('/account', ctrl.getAccount);
 router.post('/connect', ctrl.connect);
+router.patch('/token', ctrl.updateToken);
 router.delete('/disconnect', ctrl.disconnect);
 
 router.post('/sync', ctrl.syncNow);

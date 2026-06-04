@@ -58,6 +58,9 @@ export const metaApi = {
   connect(payload: { project_id: number; ad_account_id: string; access_token: string }) {
     return client.post(`/meta-ads/connect`, payload);
   },
+  updateToken(payload: { project_id: number; access_token: string }) {
+    return client.patch(`/meta-ads/token`, payload);
+  },
   disconnect(projectId: number) {
     return client.delete(`/meta-ads/disconnect?projectId=${projectId}`);
   },
