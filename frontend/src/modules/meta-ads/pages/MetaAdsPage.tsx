@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, lazy, Suspense } from 'react';
-import { ArrowsClockwise, PlugsConnected, Receipt, Eye, CursorClick, Target, ChartLineUp, Warning, Gear } from '@phosphor-icons/react';
+import { ArrowsClockwise, PlugsConnected, Receipt, Eye, CursorClick, Target, ChartLineUp, Warning, Gear, CaretRight, CaretDown } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
-import { metaApi, MetaAccount, MetaCampaign, MetaDashboard, MetaRoiRow } from '../api/metaAds.api';
+import { metaApi, MetaAccount, MetaCampaign, MetaDashboard, MetaRoiRow, MetaAdSet, MetaAd } from '../api/metaAds.api';
 import { toast } from '@/shared/hooks/useToast';
 
 const ConnectWizard = lazy(() => import('../components/ConnectWizard'));
@@ -243,32 +243,15 @@ export default function MetaAdsPage() {
                 </thead>
                 <tbody>
                   {campaigns.map((c) => (
-                    <tr key={c.campaign_id} className="border-t border-border hover:bg-muted/30">
-                      <td className="px-4 py-2.5">
-                        <p className="font-medium truncate max-w-md" title={c.nombre}>{c.nombre}</p>
-                        <p className="text-[11px] text-muted-foreground truncate">{c.objective || '—'}</p>
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${STATUS_TONE[c.effective_status || c.status || ''] || 'bg-muted text-muted-foreground'}`}>
-                          {c.effective_status || c.status || '—'}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2.5 text-right tabular-nums font-semibold">{fmtMoney(c.total_spend, currency)}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums">{fmtNum(c.total_impressions)}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums text-xs">
-                        {fmtNum(c.total_clicks)}<br />
-                        <span className="text-muted-foreground">{c.ctr != null ? c.ctr.toFixed(2) + '%' : '—'}</span>
-                      </td>
-                      <td className="px-3 py-2.5 text-right tabular-nums text-xs">
-                        <span className="font-semibold">{fmtNum(c.total_leads)}</span><br />
-                        <span className="text-muted-foreground">{c.cpl != null ? fmtMoney(c.cpl, currency) : '—'}</span>
-                      </td>
-                      <td className="px-3 py-2.5 text-right">
-                        <button onClick={() => setAssociateOpen(c)} className="text-[11px] text-primary hover:underline font-semibold">
-                          Asociar
-                        </button>
-                      </td>
-                    </tr>
+                    <CampaignRow
+                      key={c.campaign_id}
+                      c={c}
+                      projectId={projectId}
+                      currency={currency}
+                      dateFrom={dateFrom}
+                      dateTo={dateTo}
+                      onAssociate={() => setAssociateOpen(c)}
+                    />
                   ))}
                 </tbody>
               </table>
@@ -355,6 +338,184 @@ function DailyChart({ daily, currency }: { daily: MetaDashboard['daily']; curren
         );
       })}
     </div>
+  );
+}
+
+// ───────────────────────────────────────────────────────────────────
+// Fila Campaña: expandible → muestra AdSets debajo (carga lazy).
+// Tabla 3 niveles: Campaign → AdSet → Ad. Click en chevron toggle.
+
+function CampaignRow({ c, projectId, currency, dateFrom, dateTo, onAssociate }:
+  { c: MetaCampaign; projectId: number; currency: string; dateFrom: string; dateTo: string; onAssociate: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [adsets, setAdSets] = useState<MetaAdSet[] | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open || adsets) return;
+    setLoading(true);
+    metaApi.adsets(projectId, c.campaign_id, { dateFrom, dateTo })
+      .then((r: any) => setAdSets(r?.data || []))
+      .catch(() => setAdSets([]))
+      .finally(() => setLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  // Si cambia el rango de fechas y ya estaba abierto, recargar.
+  useEffect(() => { if (open) setAdSets(null); /* fuerza recarga */ }, [dateFrom, dateTo]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <>
+      <tr className="border-t border-border hover:bg-muted/30">
+        <td className="px-2 py-2.5">
+          <div className="flex items-center gap-1">
+            <button onClick={() => setOpen(!open)} title={open ? 'Cerrar' : 'Ver conjuntos'}
+              className="w-5 h-5 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted rounded">
+              {open ? <CaretDown size={12} weight="bold" /> : <CaretRight size={12} weight="bold" />}
+            </button>
+            <div className="min-w-0 flex-1">
+              <p className="font-medium truncate max-w-md" title={c.nombre}>{c.nombre}</p>
+              <p className="text-[11px] text-muted-foreground truncate">{c.objective || '—'}</p>
+            </div>
+          </div>
+        </td>
+        <td className="px-3 py-2.5">
+          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${STATUS_TONE[c.effective_status || c.status || ''] || 'bg-muted text-muted-foreground'}`}>
+            {c.effective_status || c.status || '—'}
+          </span>
+        </td>
+        <td className="px-3 py-2.5 text-right tabular-nums font-semibold">{fmtMoney(c.total_spend, currency)}</td>
+        <td className="px-3 py-2.5 text-right tabular-nums">{fmtNum(c.total_impressions)}</td>
+        <td className="px-3 py-2.5 text-right tabular-nums text-xs">
+          {fmtNum(c.total_clicks)}<br />
+          <span className="text-muted-foreground">{c.ctr != null ? c.ctr.toFixed(2) + '%' : '—'}</span>
+        </td>
+        <td className="px-3 py-2.5 text-right tabular-nums text-xs">
+          <span className="font-semibold">{fmtNum(c.total_leads)}</span><br />
+          <span className="text-muted-foreground">{c.cpl != null ? fmtMoney(c.cpl, currency) : '—'}</span>
+        </td>
+        <td className="px-3 py-2.5 text-right">
+          <button onClick={onAssociate} className="text-[11px] text-primary hover:underline font-semibold">
+            Asociar
+          </button>
+        </td>
+      </tr>
+      {open && (
+        <tr className="bg-muted/20">
+          <td colSpan={7} className="px-0 py-0">
+            {loading ? (
+              <div className="px-8 py-3 text-xs text-muted-foreground">Cargando conjuntos…</div>
+            ) : adsets && adsets.length === 0 ? (
+              <div className="px-8 py-3 text-xs text-muted-foreground italic">Sin conjuntos en este rango (o backfill aún no incluye adsets).</div>
+            ) : (
+              <table className="w-full text-xs">
+                <tbody>
+                  {(adsets || []).map((a) => (
+                    <AdSetRow key={a.adset_id} a={a} projectId={projectId} currency={currency} dateFrom={dateFrom} dateTo={dateTo} />
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+function AdSetRow({ a, projectId, currency, dateFrom, dateTo }:
+  { a: MetaAdSet; projectId: number; currency: string; dateFrom: string; dateTo: string }) {
+  const [open, setOpen] = useState(false);
+  const [ads, setAds] = useState<MetaAd[] | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open || ads) return;
+    setLoading(true);
+    metaApi.ads(projectId, a.adset_id, { dateFrom, dateTo })
+      .then((r: any) => setAds(r?.data || []))
+      .catch(() => setAds([]))
+      .finally(() => setLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  useEffect(() => { if (open) setAds(null); }, [dateFrom, dateTo]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <>
+      <tr className="border-t border-border/50 hover:bg-muted/30">
+        <td className="pl-8 pr-2 py-2">
+          <div className="flex items-center gap-1">
+            <button onClick={() => setOpen(!open)} title={open ? 'Cerrar' : 'Ver anuncios'}
+              className="w-4 h-4 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted rounded">
+              {open ? <CaretDown size={10} weight="bold" /> : <CaretRight size={10} weight="bold" />}
+            </button>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs truncate max-w-md" title={a.nombre}>{a.nombre}</p>
+              <p className="text-[10px] text-muted-foreground truncate">{a.optimization_goal || a.billing_event || '—'}</p>
+            </div>
+          </div>
+        </td>
+        <td className="px-3 py-2">
+          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${STATUS_TONE[a.effective_status || a.status || ''] || 'bg-muted text-muted-foreground'}`}>
+            {a.effective_status || a.status || '—'}
+          </span>
+        </td>
+        <td className="px-3 py-2 text-right tabular-nums">{fmtMoney(a.total_spend, currency)}</td>
+        <td className="px-3 py-2 text-right tabular-nums">{fmtNum(a.total_impressions)}</td>
+        <td className="px-3 py-2 text-right tabular-nums">
+          {fmtNum(a.total_clicks)} <span className="text-muted-foreground">· {a.ctr != null ? a.ctr.toFixed(2) + '%' : '—'}</span>
+        </td>
+        <td className="px-3 py-2 text-right tabular-nums">
+          {fmtNum(a.total_leads)} <span className="text-muted-foreground">· {a.cpl != null ? fmtMoney(a.cpl, currency) : '—'}</span>
+        </td>
+        <td />
+      </tr>
+      {open && (
+        <tr className="bg-muted/30">
+          <td colSpan={7} className="px-0 py-0">
+            {loading ? (
+              <div className="pl-14 py-2 text-xs text-muted-foreground">Cargando anuncios…</div>
+            ) : ads && ads.length === 0 ? (
+              <div className="pl-14 py-2 text-xs text-muted-foreground italic">Sin anuncios en este rango.</div>
+            ) : (
+              <table className="w-full text-xs">
+                <tbody>
+                  {(ads || []).map((ad) => (
+                    <AdRow key={ad.ad_id} ad={ad} currency={currency} />
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+function AdRow({ ad, currency }: { ad: MetaAd; currency: string }) {
+  return (
+    <tr className="border-t border-border/30 hover:bg-muted/40">
+      <td className="pl-14 pr-2 py-1.5">
+        <p className="text-xs truncate max-w-md" title={ad.nombre}>{ad.nombre}</p>
+        <p className="text-[10px] text-muted-foreground truncate font-mono">{ad.ad_id}</p>
+      </td>
+      <td className="px-3 py-1.5">
+        <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-semibold ${STATUS_TONE[ad.effective_status || ad.status || ''] || 'bg-muted text-muted-foreground'}`}>
+          {ad.effective_status || ad.status || '—'}
+        </span>
+      </td>
+      <td className="px-3 py-1.5 text-right tabular-nums">{fmtMoney(ad.total_spend, currency)}</td>
+      <td className="px-3 py-1.5 text-right tabular-nums">{fmtNum(ad.total_impressions)}</td>
+      <td className="px-3 py-1.5 text-right tabular-nums">
+        {fmtNum(ad.total_clicks)} <span className="text-muted-foreground">· {ad.ctr != null ? ad.ctr.toFixed(2) + '%' : '—'}</span>
+      </td>
+      <td className="px-3 py-1.5 text-right tabular-nums">
+        {fmtNum(ad.total_leads)} <span className="text-muted-foreground">· {ad.cpl != null ? fmtMoney(ad.cpl, currency) : '—'}</span>
+      </td>
+      <td />
+    </tr>
   );
 }
 

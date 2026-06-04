@@ -83,21 +83,64 @@ export async function listCampaigns({ adAccountId, accessToken, effectiveStatuse
 }
 
 /**
- * Insights diarios por campaña, agrupados por día. Retorna array de filas
- * { campaign_id, date_start, spend, impressions, reach, clicks, ctr, cpc, cpm, leads }.
- * Acepta time_range con since/until (YYYY-MM-DD).
+ * Lista AdSets de la cuenta (snapshot estado/budget). Pagina automáticamente.
  */
-export async function fetchDailyInsights({ adAccountId, accessToken, since, until }) {
-  const fields = ['campaign_id', 'spend', 'impressions', 'reach', 'clicks', 'ctr', 'cpc', 'cpm', 'actions'].join(',');
+export async function listAdSets({ adAccountId, accessToken, limit = 500 }) {
+  const fields = ['id', 'name', 'campaign_id', 'status', 'effective_status', 'optimization_goal',
+                  'billing_event', 'daily_budget', 'lifetime_budget', 'start_time', 'end_time'].join(',');
+  let next = `/${adAccountId}/adsets?fields=${fields}&limit=${limit}`;
+  const out = [];
+  while (next) {
+    const data = await metaFetch(next, accessToken);
+    out.push(...(data.data || []));
+    next = data.paging?.next ? data.paging.next.replace(META_API_BASE, '').replace(/&?access_token=[^&]+/, '') : null;
+    if (!next) break;
+    await sleep(1000);
+  }
+  return out;
+}
+
+/**
+ * Lista Ads (anuncios individuales) de la cuenta. Snapshot creativo.
+ */
+export async function listAds({ adAccountId, accessToken, limit = 500 }) {
+  const fields = ['id', 'name', 'adset_id', 'campaign_id', 'status', 'effective_status',
+                  'creative{id}', 'created_time'].join(',');
+  let next = `/${adAccountId}/ads?fields=${fields}&limit=${limit}`;
+  const out = [];
+  while (next) {
+    const data = await metaFetch(next, accessToken);
+    out.push(...(data.data || []));
+    next = data.paging?.next ? data.paging.next.replace(META_API_BASE, '').replace(/&?access_token=[^&]+/, '') : null;
+    if (!next) break;
+    await sleep(1000);
+  }
+  return out;
+}
+
+/**
+ * Insights diarios. `level` puede ser 'campaign' | 'adset' | 'ad'.
+ * Retorna array con id correspondiente al level: { campaign_id | adset_id | ad_id, date, ... }.
+ */
+export async function fetchDailyInsights({ adAccountId, accessToken, since, until, level = 'campaign' }) {
+  const idField = level === 'ad' ? 'ad_id' : level === 'adset' ? 'adset_id' : 'campaign_id';
+  // Para adset/ad, pedimos también el parent_id para denormalizar en la tabla daily.
+  const idFields = level === 'ad' ? 'ad_id,adset_id,campaign_id'
+                  : level === 'adset' ? 'adset_id,campaign_id'
+                  : 'campaign_id';
+  const fields = `${idFields},spend,impressions,reach,clicks,ctr,cpc,cpm,actions`;
   const tr = encodeURIComponent(JSON.stringify({ since, until }));
-  let next = `/${adAccountId}/insights?level=campaign&time_increment=1&time_range=${tr}&fields=${fields}&limit=500`;
+  let next = `/${adAccountId}/insights?level=${level}&time_increment=1&time_range=${tr}&fields=${fields}&limit=500`;
   const out = [];
   while (next) {
     const data = await metaFetch(next, accessToken);
     for (const row of data.data || []) {
       const leads = (row.actions || []).find((a) => a.action_type === 'lead' || a.action_type === 'onsite_conversion.lead_grouped')?.value || 0;
       out.push({
-        campaign_id: row.campaign_id,
+        [idField]: row[idField],
+        // Parents para denormalizar:
+        ...(level !== 'campaign' && { campaign_id: row.campaign_id }),
+        ...(level === 'ad' && { adset_id: row.adset_id }),
         date: row.date_start,
         spend: Number(row.spend || 0),
         impressions: Number(row.impressions || 0),
@@ -120,7 +163,7 @@ export async function fetchDailyInsights({ adAccountId, accessToken, since, unti
  * Sync por chunks de 7 días con pausas SAFE_DELAY_MS entre cada uno.
  * Devuelve filas acumuladas. Llamar onProgress(chunkIdx, totalChunks, currentSince) si se quiere log.
  */
-export async function fetchDailyInsightsRange({ adAccountId, accessToken, since, until, chunkDays = 7, onProgress = null }) {
+export async function fetchDailyInsightsRange({ adAccountId, accessToken, since, until, chunkDays = 7, onProgress = null, level = 'campaign' }) {
   const sinceDate = new Date(since);
   const untilDate = new Date(until);
   const chunks = [];
@@ -139,7 +182,7 @@ export async function fetchDailyInsightsRange({ adAccountId, accessToken, since,
   for (let i = 0; i < chunks.length; i++) {
     const { since: s, until: u } = chunks[i];
     if (onProgress) onProgress(i + 1, chunks.length, s);
-    const rows = await fetchDailyInsights({ adAccountId, accessToken, since: s, until: u });
+    const rows = await fetchDailyInsights({ adAccountId, accessToken, since: s, until: u, level });
     all.push(...rows);
     if (i < chunks.length - 1) await sleep(SAFE_DELAY_MS);
   }

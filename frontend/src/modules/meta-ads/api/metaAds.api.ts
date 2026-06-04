@@ -36,6 +36,41 @@ export interface MetaDashboard {
   totals: { spend: number; impressions: number; clicks: number; leads: number; cpl: number | null; ctr: number | null };
 }
 
+export interface MetaAdSet {
+  adset_id: string;
+  campaign_id: string;
+  nombre: string;
+  status?: string | null;
+  effective_status?: string | null;
+  optimization_goal?: string | null;
+  billing_event?: string | null;
+  daily_budget?: number | null;
+  lifetime_budget?: number | null;
+  total_spend: number;
+  total_impressions: number;
+  total_clicks: number;
+  total_leads: number;
+  cpl: number | null;
+  ctr: number | null;
+}
+
+export interface MetaAd {
+  ad_id: string;
+  adset_id: string;
+  campaign_id: string;
+  nombre: string;
+  status?: string | null;
+  effective_status?: string | null;
+  creative_id?: string | null;
+  created_time?: string | null;
+  total_spend: number;
+  total_impressions: number;
+  total_clicks: number;
+  total_leads: number;
+  cpl: number | null;
+  ctr: number | null;
+}
+
 export interface MetaRoiRow {
   campaign_id: string;
   nombre: string;
@@ -72,6 +107,12 @@ export const metaApi = {
   },
   campaigns(projectId: number, opts: { status?: string; dateFrom?: string; dateTo?: string } = {}) {
     return client.get<MetaCampaign[]>(`/meta-ads/campaigns`, { params: { projectId, ...opts } });
+  },
+  adsets(projectId: number, campaignId: string, opts: { dateFrom?: string; dateTo?: string } = {}) {
+    return client.get<MetaAdSet[]>(`/meta-ads/campaigns/${encodeURIComponent(campaignId)}/adsets`, { params: { projectId, ...opts } });
+  },
+  ads(projectId: number, adsetId: string, opts: { dateFrom?: string; dateTo?: string } = {}) {
+    return client.get<MetaAd[]>(`/meta-ads/adsets/${encodeURIComponent(adsetId)}/ads`, { params: { projectId, ...opts } });
   },
   dashboard(projectId: number, opts: { dateFrom?: string; dateTo?: string } = {}) {
     return client.get<MetaDashboard>(`/meta-ads/dashboard`, { params: { projectId, ...opts } });

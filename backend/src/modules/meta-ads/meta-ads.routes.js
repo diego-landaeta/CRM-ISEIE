@@ -17,6 +17,8 @@ router.post('/backfill', ctrl.backfill);
 
 router.get('/campaigns', ctrl.listCampaigns);
 router.get('/campaigns/:campaignId', ctrl.campaignDetail);
+router.get('/campaigns/:campaignId/adsets', ctrl.listAdSets);
+router.get('/adsets/:adsetId/ads', ctrl.listAds);
 router.get('/dashboard', ctrl.dashboard);
 
 router.get('/associations', ctrl.listAssociations);

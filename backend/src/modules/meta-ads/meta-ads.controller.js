@@ -86,6 +86,30 @@ export async function dashboard(req, res, next) {
   } catch (err) { next(err); }
 }
 
+export async function listAdSets(req, res, next) {
+  try {
+    const result = await service.listAdSetsForUI({
+      projectId: pid(req),
+      campaignId: req.params.campaignId,
+      dateFrom: req.query.dateFrom || null,
+      dateTo: req.query.dateTo || null,
+    });
+    res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+}
+
+export async function listAds(req, res, next) {
+  try {
+    const result = await service.listAdsForUI({
+      projectId: pid(req),
+      adsetId: req.params.adsetId,
+      dateFrom: req.query.dateFrom || null,
+      dateTo: req.query.dateTo || null,
+    });
+    res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+}
+
 export async function campaignDetail(req, res, next) {
   try {
     const result = await service.getCampaignDetail({
