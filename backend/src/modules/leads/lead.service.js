@@ -208,8 +208,8 @@ async function _createLeadCore(project, leadData) {
       leadId: lead.id,
       originalLeadId: duplicadoDe,
       projectId: project.id,
-      matchByEmail: !!(duplicado && duplicado.match_by_email),
-      matchByPhone: !!(duplicado && duplicado.match_by_phone),
+      matchByEmail: !!(duplicate && duplicate.match_by_email),
+      matchByPhone: !!(duplicate && duplicate.match_by_phone),
       source: 'webhook',
       leadName: lead.nombre,
     });
