@@ -15,17 +15,41 @@ function unpackToken(packed) {
 }
 
 /**
- * Devuelve { connected, ad_account_id, ad_account_nombre, currency, last_synced_at, sync_status, backfill_done }
+ * Lista TODAS las cuentas conectadas a un proyecto (multi-cuenta).
  * NUNCA devuelve el token plano.
  */
-export async function getAccount(projectId) {
+export async function listAccounts(projectId) {
   const { rows } = await query(
     `SELECT id, project_id, ad_account_id, ad_account_nombre, currency, timezone_name,
             last_synced_at, last_sync_status, last_sync_error, backfill_done, created_at
-     FROM meta_ad_accounts WHERE project_id = $1`,
+     FROM meta_ad_accounts WHERE project_id = $1
+     ORDER BY created_at ASC`,
     [projectId]
   );
+  return rows;
+}
+
+/**
+ * Obtiene UNA cuenta por id interno (no por project_id).
+ */
+export async function getAccountById(accountId) {
+  const { rows } = await query(
+    `SELECT id, project_id, ad_account_id, ad_account_nombre, currency, timezone_name,
+            last_synced_at, last_sync_status, last_sync_error, backfill_done, created_at
+     FROM meta_ad_accounts WHERE id = $1`,
+    [accountId]
+  );
   return rows[0] || null;
+}
+
+/**
+ * @deprecated Legacy 1:1. Devuelve la PRIMERA cuenta del proyecto. Útil solo para
+ * migrar código viejo que asumía 1 cuenta por proyecto. Nuevo código debe usar
+ * listAccounts() o getAccountById().
+ */
+export async function getAccount(projectId) {
+  const all = await listAccounts(projectId);
+  return all[0] || null;
 }
 
 /**
@@ -50,12 +74,13 @@ export async function connect({ project_id, ad_account_id, access_token, userId 
   }
 
   const enc = packToken(access_token);
+  // ON CONFLICT (project_id, ad_account_id) — la misma cuenta no se duplica dentro del
+  // mismo proyecto. Si ya existe, actualiza token/metadata (equivale a re-conectar).
   const { rows } = await query(
     `INSERT INTO meta_ad_accounts
        (project_id, ad_account_id, access_token_enc, ad_account_nombre, currency, timezone_name, created_by_user_id)
      VALUES ($1, $2, $3, $4, $5, $6, $7)
-     ON CONFLICT (project_id) DO UPDATE SET
-       ad_account_id = EXCLUDED.ad_account_id,
+     ON CONFLICT (project_id, ad_account_id) DO UPDATE SET
        access_token_enc = EXCLUDED.access_token_enc,
        ad_account_nombre = EXCLUDED.ad_account_nombre,
        currency = EXCLUDED.currency,
@@ -68,8 +93,8 @@ export async function connect({ project_id, ad_account_id, access_token, userId 
 
   // Backfill 90 días en background (no bloquea respuesta)
   if (!account.backfill_done) {
-    setImmediate(() => runBackfill(account.project_id, 90).catch((err) => {
-      logger.error({ err: err.message, project_id }, 'Meta backfill falló');
+    setImmediate(() => runBackfill(account.id, 90).catch((err) => {
+      logger.error({ err: err.message, account_id: account.id }, 'Meta backfill falló');
     }));
   }
 
@@ -77,18 +102,16 @@ export async function connect({ project_id, ad_account_id, access_token, userId 
 }
 
 /**
- * Rota SOLO el access_token de una cuenta ya conectada. NO toca ad_account_id,
- * NO toca datos sincronizados (campaigns, daily, asociaciones). Valida el nuevo
- * token contra Meta antes de guardar.
+ * Rota el access_token de UNA cuenta concreta. Identifica la cuenta por accountId
+ * (id interno, no ad_account_id). Mantiene todos los datos sincronizados.
  */
-export async function updateToken({ project_id, access_token }) {
-  if (!project_id) throw new AppError('project_id requerido', 400, 'MISSING_PROJECT');
+export async function updateToken({ accountId, access_token }) {
+  if (!accountId) throw new AppError('accountId requerido', 400, 'MISSING_ACCOUNT');
   if (!access_token || access_token.length < 20) {
     throw new AppError('access_token requerido', 400, 'INVALID_TOKEN');
   }
-  const existing = await getAccount(project_id);
-  if (!existing) throw new AppError('Cuenta no conectada — usa /connect', 404, 'NOT_CONNECTED');
-  // Validar nuevo token contra la cuenta YA conectada (no permitimos cambiar la cuenta aquí).
+  const existing = await getAccountById(accountId);
+  if (!existing) throw new AppError('Cuenta no encontrada', 404, 'NOT_FOUND');
   let meta;
   try {
     meta = await metaClient.validateConnection({
@@ -106,27 +129,36 @@ export async function updateToken({ project_id, access_token }) {
        timezone_name = $4,
        last_sync_error = NULL,
        updated_at = NOW()
-     WHERE project_id = $5`,
-    [enc, meta.nombre, meta.currency, meta.timezone_name, project_id]
+     WHERE id = $5`,
+    [enc, meta.nombre, meta.currency, meta.timezone_name, accountId]
   );
   return { rotated: true, validation: meta };
 }
 
-export async function disconnect(projectId) {
-  await query(`DELETE FROM meta_ad_accounts WHERE project_id = $1`, [projectId]);
-  await query(`DELETE FROM meta_campaigns WHERE project_id = $1`, [projectId]);
-  // meta_campaigns_daily se borra en cascade por FK
-  return { disconnected: true };
+/**
+ * Desconecta UNA cuenta. Borra credenciales + campañas/adsets/ads + daily de esa
+ * cuenta concreta. NO toca otras cuentas del mismo proyecto.
+ */
+export async function disconnect(accountId) {
+  const acc = await getAccountById(accountId);
+  if (!acc) throw new AppError('Cuenta no encontrada', 404, 'NOT_FOUND');
+  // meta_campaigns.ad_account_id no es FK formal, borro manualmente. Cascade del PK
+  // limpia adsets/ads/daily de cada nivel.
+  await query(`DELETE FROM meta_campaigns WHERE project_id = $1 AND ad_account_id = $2`,
+    [acc.project_id, acc.ad_account_id]);
+  await query(`DELETE FROM meta_ad_accounts WHERE id = $1`, [accountId]);
+  return { disconnected: true, ad_account_id: acc.ad_account_id };
 }
 
 /**
  * Sync incremental: trae el día de ayer y hoy. Ligero (1-2 chunks).
  */
-export async function syncIncremental(projectId) {
-  const account = await getAccount(projectId);
-  if (!account) throw new AppError('Cuenta Meta no conectada', 404, 'NOT_CONNECTED');
-  const token = await loadToken(projectId);
-  await query(`UPDATE meta_ad_accounts SET last_sync_status='in_progress' WHERE project_id=$1`, [projectId]);
+export async function syncIncremental(accountId) {
+  const account = await getAccountById(accountId);
+  if (!account) throw new AppError('Cuenta no encontrada', 404, 'NOT_FOUND');
+  const projectId = account.project_id;
+  const token = await loadTokenById(accountId);
+  await query(`UPDATE meta_ad_accounts SET last_sync_status='in_progress' WHERE id=$1`, [accountId]);
   try {
     await syncCampaignsSnapshot({ account, token });
     await syncAdSetsSnapshot({ account, token });
@@ -144,27 +176,28 @@ export async function syncIncremental(projectId) {
     await recalcAdSetTotals(projectId);
     await recalcAdTotals(projectId);
     await query(
-      `UPDATE meta_ad_accounts SET last_synced_at=NOW(), last_sync_status='ok', last_sync_error=NULL WHERE project_id=$1`,
-      [projectId]
+      `UPDATE meta_ad_accounts SET last_synced_at=NOW(), last_sync_status='ok', last_sync_error=NULL WHERE id=$1`,
+      [accountId]
     );
     return { synced: { campaign: campRows.length, adset: adsetRows.length, ad: adRows.length } };
   } catch (err) {
     await query(
-      `UPDATE meta_ad_accounts SET last_sync_status='error', last_sync_error=$2 WHERE project_id=$1`,
-      [projectId, err.message]
+      `UPDATE meta_ad_accounts SET last_sync_status='error', last_sync_error=$2 WHERE id=$1`,
+      [accountId, err.message]
     );
     throw err;
   }
 }
 
 /**
- * Backfill de N días (default 90). Corre en background — pacing seguro.
+ * Backfill de N días (default 90) para UNA cuenta específica.
  */
-export async function runBackfill(projectId, days = 90) {
-  const account = await getAccount(projectId);
-  if (!account) throw new AppError('Cuenta no conectada', 404, 'NOT_CONNECTED');
-  const token = await loadToken(projectId);
-  await query(`UPDATE meta_ad_accounts SET last_sync_status='in_progress', last_sync_error=NULL WHERE project_id=$1`, [projectId]);
+export async function runBackfill(accountId, days = 90) {
+  const account = await getAccountById(accountId);
+  if (!account) throw new AppError('Cuenta no encontrada', 404, 'NOT_FOUND');
+  const projectId = account.project_id;
+  const token = await loadTokenById(accountId);
+  await query(`UPDATE meta_ad_accounts SET last_sync_status='in_progress', last_sync_error=NULL WHERE id=$1`, [accountId]);
   try {
     await syncCampaignsSnapshot({ account, token });
     await syncAdSetsSnapshot({ account, token });
@@ -193,11 +226,11 @@ export async function runBackfill(projectId, days = 90) {
     await recalcAdSetTotals(projectId);
     await recalcAdTotals(projectId);
     await query(
-      `UPDATE meta_ad_accounts SET last_synced_at=NOW(), last_sync_status='ok', backfill_done=TRUE, last_sync_error=NULL WHERE project_id=$1`,
-      [projectId]
+      `UPDATE meta_ad_accounts SET last_synced_at=NOW(), last_sync_status='ok', backfill_done=TRUE, last_sync_error=NULL WHERE id=$1`,
+      [accountId]
     );
     const total = campRows.length + adsetRows.length + adRows.length;
-    logger.info({ project_id: projectId, rows: { campaign: campRows.length, adset: adsetRows.length, ad: adRows.length } }, 'Meta backfill completo');
+    logger.info({ account_id: accountId, project_id: projectId, rows: { campaign: campRows.length, adset: adsetRows.length, ad: adRows.length } }, 'Meta backfill completo');
     return { rows: total, days, breakdown: { campaign: campRows.length, adset: adsetRows.length, ad: adRows.length } };
   } catch (err) {
     logger.error({ err: err.message, project_id: projectId }, 'Meta backfill error');
@@ -209,9 +242,9 @@ export async function runBackfill(projectId, days = 90) {
   }
 }
 
-async function loadToken(projectId) {
-  const { rows } = await query(`SELECT access_token_enc FROM meta_ad_accounts WHERE project_id=$1`, [projectId]);
-  if (!rows[0]) throw new AppError('Cuenta no conectada', 404, 'NOT_CONNECTED');
+async function loadTokenById(accountId) {
+  const { rows } = await query(`SELECT access_token_enc FROM meta_ad_accounts WHERE id=$1`, [accountId]);
+  if (!rows[0]) throw new AppError('Cuenta no encontrada', 404, 'NOT_FOUND');
   return unpackToken(rows[0].access_token_enc);
 }
 

@@ -8,10 +8,24 @@ function pid(req) {
   return n;
 }
 
+/**
+ * GET /accounts?projectId=N — devuelve TODAS las cuentas conectadas (array, puede ser []).
+ */
+export async function listAccounts(req, res, next) {
+  try {
+    const accounts = await service.listAccounts(pid(req));
+    res.json({ success: true, data: accounts });
+  } catch (err) { next(err); }
+}
+
+/**
+ * GET /account (legacy) — devuelve la primera cuenta del proyecto, o null.
+ * Mantenido por compatibilidad con frontends antiguos. Usar /accounts.
+ */
 export async function getAccount(req, res, next) {
   try {
-    const account = await service.getAccount(pid(req));
-    res.json({ success: true, data: account });
+    const accounts = await service.listAccounts(pid(req));
+    res.json({ success: true, data: accounts[0] || null });
   } catch (err) { next(err); }
 }
 
@@ -30,35 +44,38 @@ export async function connect(req, res, next) {
 
 export async function updateToken(req, res, next) {
   try {
-    const { project_id, access_token } = req.body || {};
-    const result = await service.updateToken({
-      project_id: parseInt(project_id),
-      access_token,
-    });
+    const accountId = parseInt(req.params.accountId);
+    if (!accountId) throw new AppError('accountId requerido', 400, 'MISSING_ACCOUNT');
+    const { access_token } = req.body || {};
+    const result = await service.updateToken({ accountId, access_token });
     res.json({ success: true, data: { rotated: result.rotated, ad_account_nombre: result.validation?.nombre } });
   } catch (err) { next(err); }
 }
 
 export async function disconnect(req, res, next) {
   try {
-    const result = await service.disconnect(pid(req));
+    const accountId = parseInt(req.params.accountId);
+    if (!accountId) throw new AppError('accountId requerido', 400, 'MISSING_ACCOUNT');
+    const result = await service.disconnect(accountId);
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
 }
 
 export async function syncNow(req, res, next) {
   try {
-    const result = await service.syncIncremental(pid(req));
+    const accountId = parseInt(req.params.accountId);
+    if (!accountId) throw new AppError('accountId requerido', 400, 'MISSING_ACCOUNT');
+    const result = await service.syncIncremental(accountId);
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
 }
 
 export async function backfill(req, res, next) {
   try {
+    const accountId = parseInt(req.params.accountId);
+    if (!accountId) throw new AppError('accountId requerido', 400, 'MISSING_ACCOUNT');
     const days = Math.min(parseInt(req.body?.days || 90), 365);
-    // Lanza en background y responde inmediatamente
-    const projectId = pid(req);
-    setImmediate(() => service.runBackfill(projectId, days).catch(() => {}));
+    setImmediate(() => service.runBackfill(accountId, days).catch(() => {}));
     res.json({ success: true, data: { started: true, days, message: 'Backfill iniciado en background. Recarga en unos minutos.' } });
   } catch (err) { next(err); }
 }

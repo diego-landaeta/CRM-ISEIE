@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, lazy, Suspense } from 'react';
-import { ArrowsClockwise, PlugsConnected, Receipt, Eye, CursorClick, Target, ChartLineUp, Warning, Gear, CaretRight, CaretDown } from '@phosphor-icons/react';
+import { ArrowsClockwise, PlugsConnected, Receipt, Eye, CursorClick, Target, ChartLineUp, Warning, Gear, CaretRight, CaretDown, Plus, CaretUpDown } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { metaApi, MetaAccount, MetaCampaign, MetaDashboard, MetaRoiRow, MetaAdSet, MetaAd } from '../api/metaAds.api';
 import { toast } from '@/shared/hooks/useToast';
@@ -29,7 +29,11 @@ const STATUS_TONE: Record<string, string> = {
 export default function MetaAdsPage() {
   const { activeProject } = useAuth() as { activeProject: { id?: number; nombre?: string } | null };
   const projectId = activeProject?.id;
-  const [account, setAccount] = useState<MetaAccount | null>(null);
+  const [accounts, setAccounts] = useState<MetaAccount[]>([]);
+  // ID de la cuenta filtrada en la UI. null = "Todas" (agrega cross-cuentas, default).
+  const [filterAccountId, setFilterAccountId] = useState<number | null>(null);
+  const [showAddAccount, setShowAddAccount] = useState(false);
+  const account = filterAccountId ? accounts.find((a) => a.id === filterAccountId) || null : accounts[0] || null;
   const [loading, setLoading] = useState(true);
   const [campaigns, setCampaigns] = useState<MetaCampaign[]>([]);
   const [dashboard, setDashboard] = useState<MetaDashboard | null>(null);
@@ -44,32 +48,36 @@ export default function MetaAdsPage() {
   const [dateFrom, setDateFrom] = useState(def30);
   const [dateTo, setDateTo] = useState(today);
 
-  function loadAccount() {
+  function loadAccounts() {
     if (!projectId) return;
     setLoading(true);
-    metaApi.account(projectId)
-      .then((r: any) => setAccount(r?.data || null))
-      .catch(() => setAccount(null))
+    metaApi.accounts(projectId)
+      .then((r: any) => setAccounts(r?.data || []))
+      .catch(() => setAccounts([]))
       .finally(() => setLoading(false));
   }
 
   function loadData() {
-    if (!projectId || !account) return;
+    if (!projectId || accounts.length === 0) return;
+    // Dashboard y campaigns suman cross-cuentas del proyecto. Si el usuario selecciona
+    // una cuenta concreta, el backend NO filtra por cuenta todavía — para esa vista
+    // detallada hay que iterar por accountId. Por ahora mostramos siempre el agregado.
     metaApi.dashboard(projectId, { dateFrom, dateTo }).then((r: any) => setDashboard(r?.data || null)).catch(() => setDashboard(null));
     metaApi.campaigns(projectId, { dateFrom, dateTo }).then((r: any) => setCampaigns(r?.data || [])).catch(() => setCampaigns([]));
     metaApi.roi(projectId, { dateFrom, dateTo }).then((r: any) => setRoi(r?.data || [])).catch(() => setRoi([]));
   }
 
-  useEffect(() => { loadAccount(); }, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { loadData(); }, [account?.id, dateFrom, dateTo]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { loadAccounts(); }, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { loadData(); }, [accounts.length, dateFrom, dateTo]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Acciones por cuenta concreta (las del header actúan sobre la cuenta seleccionada).
   async function handleSync() {
-    if (!projectId) return;
+    if (!account) return;
     setSyncing(true);
     try {
-      await metaApi.sync(projectId);
-      toast({ title: 'Sincronizado', description: 'Métricas actualizadas (último día)' });
-      loadAccount();
+      await metaApi.sync(account.id);
+      toast({ title: 'Sincronizado', description: `${account.ad_account_nombre || account.ad_account_id} — métricas actualizadas` });
+      loadAccounts();
       loadData();
     } catch (err: any) {
       toast({ title: 'Error al sincronizar', description: err?.data?.error || err?.message, variant: 'destructive' });
@@ -79,10 +87,10 @@ export default function MetaAdsPage() {
   }
 
   async function handleBackfill() {
-    if (!projectId) return;
-    if (!confirm('Re-descargar 90 días desde Meta? Se ejecuta en background y tarda ~6-7 minutos.')) return;
+    if (!account) return;
+    if (!confirm(`Re-descargar 90 días desde Meta para "${account.ad_account_nombre || account.ad_account_id}"? Tarda ~20 min (3 niveles).`)) return;
     try {
-      await metaApi.backfill(projectId, 90);
+      await metaApi.backfill(account.id, 90);
       toast({ title: 'Backfill iniciado', description: 'Se ejecuta en background. Recarga en unos minutos.' });
     } catch (err: any) {
       toast({ title: 'Error', description: err?.data?.error || err?.message, variant: 'destructive' });
@@ -90,13 +98,13 @@ export default function MetaAdsPage() {
   }
 
   async function handleDisconnect() {
-    if (!projectId) return;
-    if (!confirm('Desconectar la cuenta Meta? Se borrarán las credenciales y todas las campañas/métricas sincronizadas.')) return;
+    if (!account) return;
+    if (!confirm(`Desconectar "${account.ad_account_nombre || account.ad_account_id}"? Solo borra esta cuenta; las demás del proyecto no se tocan.`)) return;
     try {
-      await metaApi.disconnect(projectId);
+      await metaApi.disconnect(account.id);
       toast({ title: 'Cuenta desconectada' });
-      setAccount(null);
-      setCampaigns([]); setDashboard(null); setRoi([]);
+      setFilterAccountId(null);
+      loadAccounts();
     } catch (err: any) {
       toast({ title: 'Error', description: err?.data?.error || err?.message, variant: 'destructive' });
     }
@@ -115,29 +123,61 @@ export default function MetaAdsPage() {
   if (loading) {
     return <div className="h-40 bg-muted/40 rounded-lg animate-pulse" />;
   }
-  if (!account) {
+  if (accounts.length === 0 || showAddAccount) {
     return (
-      <Suspense fallback={null}>
-        <ConnectWizard projectId={projectId} projectName={activeProject?.nombre} onConnected={loadAccount} />
-      </Suspense>
+      <div className="space-y-3">
+        {showAddAccount && (
+          <button onClick={() => setShowAddAccount(false)}
+            className="text-xs text-muted-foreground hover:text-foreground">
+            ← Volver a las cuentas conectadas
+          </button>
+        )}
+        <Suspense fallback={null}>
+          <ConnectWizard
+            projectId={projectId}
+            projectName={activeProject?.nombre}
+            onConnected={() => { setShowAddAccount(false); loadAccounts(); }}
+          />
+        </Suspense>
+      </div>
     );
   }
+  if (!account) return null;
 
   return (
     <div className="space-y-5 pb-8">
-      {/* Header con info de cuenta + acciones */}
+      {/* Header con selector de cuenta (cuando hay >1) + info + acciones */}
       <div className="bg-card border border-border rounded-lg p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div className="flex items-center gap-3 min-w-0">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
           <div className="w-10 h-10 rounded-md bg-blue-100 dark:bg-blue-950/40 text-blue-600 dark:text-blue-300 flex items-center justify-center flex-shrink-0">
             <PlugsConnected size={20} weight="duotone" />
           </div>
-          <div className="min-w-0">
-            <h1 className="text-lg font-bold tracking-tight truncate">{account.ad_account_nombre || account.ad_account_id}</h1>
+          <div className="min-w-0 flex-1">
+            {accounts.length > 1 ? (
+              <div className="relative inline-block">
+                <select
+                  value={account.id}
+                  onChange={(e) => setFilterAccountId(parseInt(e.target.value))}
+                  className="appearance-none h-7 pl-2 pr-6 rounded-md border border-border bg-card text-base font-bold tracking-tight max-w-md truncate cursor-pointer hover:bg-muted"
+                  title="Cambiar cuenta"
+                >
+                  {accounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.ad_account_nombre || a.ad_account_id}
+                    </option>
+                  ))}
+                </select>
+                <CaretUpDown size={12} className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground" />
+              </div>
+            ) : (
+              <h1 className="text-lg font-bold tracking-tight truncate">{account.ad_account_nombre || account.ad_account_id}</h1>
+            )}
             <p className="text-xs text-muted-foreground">
               {account.ad_account_id} · {account.currency || '—'} ·{' '}
               Última sync: {fmtDate(account.last_synced_at)}{' '}
               {account.last_sync_status === 'in_progress' && <span className="text-amber-600">(en progreso…)</span>}
               {account.last_sync_status === 'error' && <span className="text-red-600">(error)</span>}
+              {accounts.length > 1 && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">{accounts.length} cuentas</span>}
             </p>
             {account.last_sync_error && (
               <p className="text-[11px] text-red-600 mt-0.5 truncate" title={account.last_sync_error}>
@@ -156,6 +196,10 @@ export default function MetaAdsPage() {
           <button onClick={handleBackfill} title="Re-descargar últimos 90 días en background"
             className="h-9 px-3 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted flex items-center gap-1.5">
             <ArrowsClockwise size={14} /> 90d
+          </button>
+          <button onClick={() => setShowAddAccount(true)} title="Conectar otra cuenta publicitaria al mismo proyecto"
+            className="h-9 px-3 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted flex items-center gap-1.5">
+            <Plus size={14} weight="bold" /> Cuenta
           </button>
           <button onClick={() => setTab('config')} title="Configuración (token, cuenta, desconectar)"
             className={`h-9 px-3 rounded-md border text-sm font-medium flex items-center gap-1.5 ${tab === 'config' ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-card hover:bg-muted'}`}>

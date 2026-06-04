@@ -87,23 +87,28 @@ export interface MetaRoiRow {
 }
 
 export const metaApi = {
+  // Multi-cuenta: lista todas las cuentas conectadas al proyecto.
+  accounts(projectId: number) {
+    return client.get<MetaAccount[]>(`/meta-ads/accounts`, { params: { projectId } });
+  },
+  // Legacy 1:1 — primera cuenta, mantenido por retro-compat.
   account(projectId: number) {
     return client.get<MetaAccount | null>(`/meta-ads/account`, { params: { projectId } });
   },
   connect(payload: { project_id: number; ad_account_id: string; access_token: string }) {
     return client.post(`/meta-ads/connect`, payload);
   },
-  updateToken(payload: { project_id: number; access_token: string }) {
-    return client.patch(`/meta-ads/token`, payload);
+  updateToken(accountId: number, access_token: string) {
+    return client.patch(`/meta-ads/accounts/${accountId}/token`, { access_token });
   },
-  disconnect(projectId: number) {
-    return client.delete(`/meta-ads/disconnect?projectId=${projectId}`);
+  disconnect(accountId: number) {
+    return client.delete(`/meta-ads/accounts/${accountId}`);
   },
-  sync(projectId: number) {
-    return client.post(`/meta-ads/sync?projectId=${projectId}`, {});
+  sync(accountId: number) {
+    return client.post(`/meta-ads/accounts/${accountId}/sync`, {});
   },
-  backfill(projectId: number, days = 90) {
-    return client.post(`/meta-ads/backfill?projectId=${projectId}`, { days });
+  backfill(accountId: number, days = 90) {
+    return client.post(`/meta-ads/accounts/${accountId}/backfill`, { days });
   },
   campaigns(projectId: number, opts: { status?: string; dateFrom?: string; dateTo?: string } = {}) {
     return client.get<MetaCampaign[]>(`/meta-ads/campaigns`, { params: { projectId, ...opts } });

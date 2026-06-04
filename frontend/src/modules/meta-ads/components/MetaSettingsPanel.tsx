@@ -54,7 +54,7 @@ function TabBtn({ active, onClick, icon: Icon, children }: any) {
 // ────────────────────────────────────────────────────────────
 // Sección: rotar token
 
-function TokenSection({ projectId, account, onChanged }: { projectId: number; account: MetaAccount; onChanged: () => void }) {
+function TokenSection({ account, onChanged }: { projectId: number; account: MetaAccount; onChanged: () => void }) {
   const [newToken, setNewToken] = useState('');
   const [show, setShow] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -67,7 +67,7 @@ function TokenSection({ projectId, account, onChanged }: { projectId: number; ac
     if (!confirm(`Rotar el token de "${account.ad_account_nombre || account.ad_account_id}"?\n\nEl token antiguo dejará de funcionar (revócalo manualmente en Meta después). Los datos sincronizados se mantienen.`)) return;
     setSaving(true);
     try {
-      await metaApi.updateToken({ project_id: projectId, access_token: newToken.trim() });
+      await metaApi.updateToken(account.id, newToken.trim());
       toast({ title: 'Token rotado', description: 'El nuevo token está activo. Revoca el antiguo en Business Manager.' });
       setNewToken('');
       onChanged();
@@ -198,11 +198,11 @@ function AdvancedSection({ projectId, account, onDisconnect, onChanged }: { proj
       toast({ title: 'Token requerido', variant: 'destructive' });
       return;
     }
-    if (!confirm(`Cambiar la cuenta conectada de "${account.ad_account_id}" a "${newAdAccount}"?\n\nSe borrarán todas las campañas/métricas/asociaciones de la cuenta actual y arrancará un backfill nuevo de 90d.`)) return;
+    if (!confirm(`Cambiar esta cuenta de "${account.ad_account_id}" a "${newAdAccount}"?\n\nSe borrarán las campañas/métricas/asociaciones SOLO de esta cuenta. Las demás cuentas del proyecto no se tocan.`)) return;
     setSaving(true);
     try {
-      // Disconnect explícito borra todo, luego connect crea desde cero
-      await metaApi.disconnect(projectId);
+      // Borra esta cuenta concreta (con sus campañas/daily) y crea la nueva al mismo proyecto.
+      await metaApi.disconnect(account.id);
       await metaApi.connect({ project_id: projectId, ad_account_id: newAdAccount.trim(), access_token: newToken.trim() });
       toast({ title: 'Cuenta cambiada', description: 'Backfill de 90 días iniciado en background.' });
       setReconnectOpen(false);

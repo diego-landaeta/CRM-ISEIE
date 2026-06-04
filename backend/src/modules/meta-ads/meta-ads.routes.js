@@ -7,13 +7,15 @@ router.use(verifyToken);
 // Toda configuración + lectura es admin/superadmin (publicidad es operativo, no del gestor).
 router.use(roleGuard('admin', 'superadmin'));
 
+// Multi-cuenta: el proyecto puede tener N cuentas. /accounts devuelve lista.
+router.get('/accounts', ctrl.listAccounts);
+// Legacy 1:1 — devuelve la primera, mantenido por retro-compat.
 router.get('/account', ctrl.getAccount);
 router.post('/connect', ctrl.connect);
-router.patch('/token', ctrl.updateToken);
-router.delete('/disconnect', ctrl.disconnect);
-
-router.post('/sync', ctrl.syncNow);
-router.post('/backfill', ctrl.backfill);
+router.patch('/accounts/:accountId/token', ctrl.updateToken);
+router.delete('/accounts/:accountId', ctrl.disconnect);
+router.post('/accounts/:accountId/sync', ctrl.syncNow);
+router.post('/accounts/:accountId/backfill', ctrl.backfill);
 
 router.get('/campaigns', ctrl.listCampaigns);
 router.get('/campaigns/:campaignId', ctrl.campaignDetail);
