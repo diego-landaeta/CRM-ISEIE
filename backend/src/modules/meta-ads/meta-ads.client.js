@@ -9,8 +9,19 @@ const SAFE_DELAY_MS = 30_000;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Si `path` empieza con http(s) lo tratamos como URL absoluta — Meta a veces devuelve
+// paging.next con versión distinta (v20 vs v19), si limpiamos por prefijo se rompe.
+function buildUrl(path, accessToken) {
+  const isAbs = /^https?:\/\//i.test(path);
+  const base = isAbs ? path : `${META_API_BASE}${path}`;
+  const sep = base.includes('?') ? '&' : '?';
+  // Si ya trae access_token (paging.next a veces lo conserva), no lo dupliques.
+  if (/[?&]access_token=/.test(base)) return base;
+  return `${base}${sep}access_token=${encodeURIComponent(accessToken)}`;
+}
+
 async function metaFetch(path, accessToken, { method = 'GET' } = {}) {
-  const url = `${META_API_BASE}${path}${path.includes('?') ? '&' : '?'}access_token=${encodeURIComponent(accessToken)}`;
+  const url = buildUrl(path, accessToken);
   const res = await fetch(url, { method });
   const data = await res.json();
   // Rate limit headers
@@ -75,7 +86,7 @@ export async function listCampaigns({ adAccountId, accessToken, effectiveStatuse
   while (next) {
     const data = await metaFetch(next, accessToken);
     out.push(...(data.data || []));
-    next = data.paging?.next ? data.paging.next.replace(META_API_BASE, '').replace(/&?access_token=[^&]+/, '') : null;
+    next = data.paging?.next || null;
     if (!next) break;
     await sleep(1000); // pequeña pausa entre páginas
   }
@@ -93,7 +104,7 @@ export async function listAdSets({ adAccountId, accessToken, limit = 500 }) {
   while (next) {
     const data = await metaFetch(next, accessToken);
     out.push(...(data.data || []));
-    next = data.paging?.next ? data.paging.next.replace(META_API_BASE, '').replace(/&?access_token=[^&]+/, '') : null;
+    next = data.paging?.next || null;
     if (!next) break;
     await sleep(1000);
   }
@@ -111,7 +122,7 @@ export async function listAds({ adAccountId, accessToken, limit = 500 }) {
   while (next) {
     const data = await metaFetch(next, accessToken);
     out.push(...(data.data || []));
-    next = data.paging?.next ? data.paging.next.replace(META_API_BASE, '').replace(/&?access_token=[^&]+/, '') : null;
+    next = data.paging?.next || null;
     if (!next) break;
     await sleep(1000);
   }
@@ -152,7 +163,7 @@ export async function fetchDailyInsights({ adAccountId, accessToken, since, unti
         leads: Number(leads),
       });
     }
-    next = data.paging?.next ? data.paging.next.replace(META_API_BASE, '').replace(/&?access_token=[^&]+/, '') : null;
+    next = data.paging?.next || null;
     if (!next) break;
     await sleep(2000);
   }
