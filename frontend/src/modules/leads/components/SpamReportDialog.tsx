@@ -17,11 +17,13 @@ export default function SpamReportDialog({ open, onClose, leadId, leadNombre, on
 
   if (!open) return null;
 
+  const canSubmit = !!leadId && motivo.trim().length >= 3 && !submitting;
+
   async function handleSubmit() {
-    if (!leadId) return;
+    if (!leadId || motivo.trim().length < 3) return;
     setSubmitting(true);
     try {
-      await client.post(`/leads/${leadId}/report-spam`, { motivo: motivo.trim() || null });
+      await client.post(`/leads/${leadId}/report-spam`, { motivo: motivo.trim() });
       toast({
         title: 'Reporte enviado',
         description: 'Un superadmin revisará el caso y decidirá si confirma el spam o lo descarta.',
@@ -67,7 +69,7 @@ export default function SpamReportDialog({ open, onClose, leadId, leadNombre, on
 
           <div>
             <label className="block text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5">
-              Motivo (opcional)
+              Motivo <span className="text-red-600 normal-case font-semibold">(obligatorio)</span>
             </label>
             <textarea
               rows={3}
@@ -90,7 +92,7 @@ export default function SpamReportDialog({ open, onClose, leadId, leadNombre, on
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={submitting || !leadId}
+            disabled={!canSubmit}
             className="h-9 px-4 rounded-md bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold transition-colors disabled:opacity-50"
           >
             {submitting ? 'Enviando…' : 'Reportar spam'}

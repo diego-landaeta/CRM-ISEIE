@@ -3,8 +3,10 @@ import { query } from '../../shared/config/db.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import * as leadService from './lead.service.js';
 
+// Motivo OBLIGATORIO (min 3 chars). El equipo necesita trazabilidad del por qué
+// se reportó como spam — no debería poder reportarse en blanco.
 const reportSchema = z.object({
-  motivo: z.string().max(500).optional().nullable(),
+  motivo: z.string().trim().min(3, 'Motivo requerido (mínimo 3 caracteres)').max(500),
 });
 
 const resolveSchema = z.object({
@@ -32,8 +34,16 @@ export async function reportSpam(req, res, next) {
         `INSERT INTO lead_spam_reports (lead_id, project_id, reported_by, motivo)
          VALUES ($1, $2, $3, $4)
          RETURNING id, lead_id, motivo, status, created_at`,
-        [leadId, leadRows[0].project_id, req.user.userId, parsed.data.motivo || null]
+        [leadId, leadRows[0].project_id, req.user.userId, parsed.data.motivo]
       );
+      // Registrar también como interacción para trazabilidad en el feed del lead.
+      try {
+        await query(
+          `INSERT INTO lead_interactions (lead_id, tipo, nota, created_by, fecha)
+           VALUES ($1, 'nota', $2, $3, NOW())`,
+          [leadId, `🛑 Reportado como spam · ${parsed.data.motivo}`, req.user.userId]
+        );
+      } catch (_) { /* no crítico, el reporte ya está */ }
       res.status(201).json({ success: true, data: rows[0] });
     } catch (err) {
       if (err.code === '23505') {

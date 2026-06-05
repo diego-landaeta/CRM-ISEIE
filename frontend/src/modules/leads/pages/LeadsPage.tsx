@@ -47,6 +47,7 @@ const SpamReportDialog = lazy(() => import('../components/SpamReportDialog'));
 const ExportDialog = lazy(() => import('@/shared/components/export/ExportDialog'));
 const WasapiExportDialog = lazy(() => import('../components/WasapiExportDialog'));
 import StatusBadge, { STATUS_LABELS } from '@/shared/components/ui/StatusBadge';
+import QuickStatusChange from '../components/QuickStatusChange';
 import ChannelBadge from '@/shared/components/ui/ChannelBadge';
 import SearchableSelect from '@/shared/components/ui/SearchableSelect';
 import MultiProjectPicker from '@/shared/components/ui/MultiProjectPicker';
@@ -863,7 +864,12 @@ export default function LeadsPage() {
                     <ChannelBadge channel={lead.origen} />
                   </td>
                   <td className="px-5 py-3.5">
-                    <StatusBadge status={lead.estado} />
+                    <QuickStatusChange
+                      leadId={lead.id}
+                      currentStatus={lead.estado}
+                      responsableId={lead.responsable_id}
+                      onChanged={() => refetch?.()}
+                    />
                   </td>
                   <td className="px-5 py-3.5 text-xs">
                     {lead.created_at ? (

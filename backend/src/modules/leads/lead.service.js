@@ -273,6 +273,16 @@ export async function softDelete(leadId, { reason, motivo, userId }) {
   const result = await leadModel.softDeleteLead(leadId, { reason, motivo, userId });
   if (!result) throw new AppError('Lead no encontrado o ya eliminado', 404, 'LEAD_NOT_FOUND');
 
+  // Registrar como interacción para trazabilidad en el feed (aparte de notif).
+  // Iconos varían según reason — facilitan lectura rápida del timeline.
+  if (motivo && motivo.trim()) {
+    const icon = reason === 'spam' ? '🛑' : reason === 'duplicado_manual' ? '🔁' : reason === 'test' ? '🧪' : '🗑️';
+    const label = reason === 'spam' ? 'Marcado spam' : reason === 'duplicado_manual' ? 'Duplicado manual' : reason === 'test' ? 'Lead de prueba' : 'Eliminado';
+    try {
+      await leadModel.createInteraction(leadId, 'nota', `${icon} ${label} · ${motivo.trim()}`, userId, null);
+    } catch (_) { /* no crítico */ }
+  }
+
   // Notif admin/superadmin (#16)
   notifyAdmins({
     type: 'lead_deleted',
@@ -388,6 +398,17 @@ export async function changeStatus(leadId, newStatus, motivo, userId) {
   if (lead.status === newStatus) throw new AppError('El lead ya tiene ese status', 400, 'SAME_STATUS');
 
   await leadModel.updateStatus(leadId, newStatus, lead.status, userId);
+
+  // Cuando se marca como NO INTERESADO con motivo: guardar también una nota
+  // en interacciones para que el motivo quede en el feed del lead (no solo en
+  // status_history). El equipo necesita trazabilidad rápida del por qué.
+  if (newStatus === 'no_interesado' && motivo && motivo.trim()) {
+    try {
+      await leadModel.createInteraction(leadId, 'nota', `❌ No interesado · ${motivo.trim()}`, userId, null);
+    } catch (err) {
+      logger.warn({ err: err.message, leadId }, 'No se pudo registrar interaction de no_interesado');
+    }
+  }
 
   // Disparar email sequences con trigger status_changed (async)
   triggerSequences('status_changed', leadId, lead.project_id);
