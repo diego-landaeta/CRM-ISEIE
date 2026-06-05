@@ -4,7 +4,7 @@ import { webhookLeadSchema, listLeadsSchema, updateStatusSchema, createInteracti
 import * as dupQueue from './dup-queue.service.js';
 import * as leadProducts from './lead-products.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
-import { leadsToWasapiCsv, detectCountry } from '../../shared/utils/wasapiCsv.js';
+import { leadsToWasapiCsv, leadsToWasapiXlsx, detectCountry } from '../../shared/utils/wasapiCsv.js';
 
 // ============================================================
 // WEBHOOK (publico, autenticado por API key en header)
@@ -114,10 +114,18 @@ export async function exportWasapi(req, res, next) {
       leads = leads.filter((l) => (detectCountry(l.telefono) || '').toLowerCase() === paisFilter);
     }
 
+    const format = String(req.query.format || 'csv').toLowerCase();
+    const baseName = `wasapi-leads-${new Date().toISOString().slice(0, 10)}`;
+    if (format === 'xlsx' || format === 'xls') {
+      const buf = await leadsToWasapiXlsx(leads);
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="${baseName}.xlsx"`);
+      res.send(buf);
+      return;
+    }
     const csv = leadsToWasapiCsv(leads, { withHeader: req.query.header !== 'false' });
-    const filename = `wasapi-leads-${new Date().toISOString().slice(0, 10)}.csv`;
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${baseName}.csv"`);
     res.send(csv);
   } catch (err) { next(err); }
 }

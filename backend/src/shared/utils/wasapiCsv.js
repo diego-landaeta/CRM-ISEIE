@@ -86,6 +86,30 @@ function csvCell(v) {
 }
 
 /**
+ * Mapea un lead a la fila Wasapi (los 8 valores en orden A-H).
+ */
+export function leadToWasapiRow(l) {
+  const prodNombre = l.producto_nombre || '';
+  const tipo = detectTipo(prodNombre);
+  const producto = stripTipo(prodNombre);
+  const estado = STATUS_LABEL[l.status] || l.status || '';
+  const combinado = prodNombre || (tipo !== 'Sin especificar' ? tipo : '');
+  const pais = detectCountry(l.telefono);
+  return {
+    nombre: l.nombre || '',
+    email: l.email || '',
+    telefono: l.telefono || '',
+    tipo,
+    producto,
+    estado,
+    combinado,
+    pais,
+  };
+}
+
+export const WASAPI_HEADERS = ['Nombre', 'Email', 'Teléfono', 'Tipo', 'Producto', 'Estado', 'Tipo + Producto', 'País'];
+
+/**
  * Convierte un array de leads (con join a products) en un CSV Wasapi listo
  * para descargar. Incluye BOM UTF-8 para que Excel lo abra bien.
  *
@@ -119,4 +143,42 @@ export function leadsToWasapiCsv(leads, { withHeader = true } = {}) {
   }
   // BOM para que Excel detecte UTF-8 al abrir sin importar.
   return '﻿' + rows.join('\r\n') + '\r\n';
+}
+
+/**
+ * Genera un Buffer XLSX (Excel) con el mismo formato Wasapi.
+ * El teléfono va como TEXTO para evitar que Excel lo convierta a notación
+ * científica (5.93e+11) y rompa el número.
+ *
+ * Carga exceljs dinámicamente — la lib es ~2MB, no la importamos al boot.
+ *
+ * @returns {Promise<Buffer>} Buffer del archivo .xlsx
+ */
+export async function leadsToWasapiXlsx(leads) {
+  const { default: ExcelJS } = await import('exceljs');
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'CRM Wasapi Export';
+  wb.created = new Date();
+  const ws = wb.addWorksheet('Leads', {
+    views: [{ state: 'frozen', ySplit: 1 }],
+  });
+
+  // Header
+  ws.columns = WASAPI_HEADERS.map((name, i) => ({
+    header: name,
+    key: ['nombre', 'email', 'telefono', 'tipo', 'producto', 'estado', 'combinado', 'pais'][i],
+    width: [24, 28, 18, 14, 32, 14, 40, 14][i],
+  }));
+  ws.getRow(1).font = { bold: true };
+  ws.getRow(1).alignment = { vertical: 'middle' };
+
+  // Forzar la columna C (teléfono) como TEXTO para que Excel no la convierta a número
+  ws.getColumn('telefono').numFmt = '@';
+
+  // Filas
+  for (const l of leads) {
+    ws.addRow(leadToWasapiRow(l));
+  }
+
+  return wb.xlsx.writeBuffer().then((b) => Buffer.from(b));
 }

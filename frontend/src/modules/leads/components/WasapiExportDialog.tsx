@@ -53,6 +53,7 @@ export default function WasapiExportDialog({ open, projectId, onClose }: Props) 
   const [pais, setPais] = useState<string>('');
   const [onlyWithPhone, setOnlyWithPhone] = useState(true);
   const [includeConverted, setIncludeConverted] = useState(false);
+  const [format, setFormat] = useState<'csv' | 'xlsx'>('xlsx');
 
   useEffect(() => {
     if (!open || !projectId) return;
@@ -81,6 +82,7 @@ export default function WasapiExportDialog({ open, projectId, onClose }: Props) 
       if (pais) params.set('pais', pais);
       if (onlyWithPhone) params.set('onlyWithPhone', 'true');
       if (includeConverted) params.set('includeConverted', 'true');
+      params.set('format', format);
 
       // Fetch directo porque client.get parsea como JSON y queremos un blob CSV.
       // Reusamos accessToken y baseURL del wrapper para mantener auth/refresh.
@@ -97,7 +99,7 @@ export default function WasapiExportDialog({ open, projectId, onClose }: Props) 
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `wasapi-leads-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.download = `wasapi-leads-${new Date().toISOString().slice(0, 10)}.${format}`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -185,6 +187,22 @@ export default function WasapiExportDialog({ open, projectId, onClose }: Props) 
               </Field>
             </div>
 
+            <div className="pt-3 border-t border-border">
+              <label className="text-[11px] font-semibold text-muted-foreground mb-1.5 block">Formato del archivo</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button type="button" onClick={() => setFormat('xlsx')}
+                  className={`p-2.5 rounded-md border-2 text-left transition ${format === 'xlsx' ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30' : 'border-border hover:border-muted-foreground/40'}`}>
+                  <p className="text-sm font-semibold">Excel (.xlsx)</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Recomendado. Teléfonos preservados, acentos OK.</p>
+                </button>
+                <button type="button" onClick={() => setFormat('csv')}
+                  className={`p-2.5 rounded-md border-2 text-left transition ${format === 'csv' ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30' : 'border-border hover:border-muted-foreground/40'}`}>
+                  <p className="text-sm font-semibold">CSV (.csv)</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Más liviano. Cuidado al abrirlo en Excel (puede romper teléfonos).</p>
+                </button>
+              </div>
+            </div>
+
             <div className="space-y-2 pt-2 border-t border-border">
               <label className="flex items-center gap-2 text-sm cursor-pointer">
                 <input type="checkbox" checked={onlyWithPhone} onChange={(e) => setOnlyWithPhone(e.target.checked)}
@@ -217,7 +235,7 @@ export default function WasapiExportDialog({ open, projectId, onClose }: Props) 
             <button onClick={handleDownload} disabled={loading}
               className="h-9 px-4 rounded-md bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50 inline-flex items-center gap-1.5">
               <DownloadSimple size={14} weight="bold" />
-              {loading ? 'Generando…' : 'Descargar CSV'}
+              {loading ? 'Generando…' : `Descargar ${format.toUpperCase()}`}
             </button>
           </div>
         </div>
