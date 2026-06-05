@@ -336,7 +336,7 @@ export default function MetaAdsPage() {
               <MetaSettingsPanel
                 projectId={projectId}
                 account={account}
-                onChanged={() => { loadAccount(); loadData(); }}
+                onChanged={() => { loadAccounts(); loadData(); }}
                 onDisconnect={handleDisconnect}
               />
             </Suspense>
