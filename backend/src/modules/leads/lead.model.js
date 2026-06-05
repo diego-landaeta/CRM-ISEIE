@@ -168,8 +168,20 @@ export async function mergeLeads({ winnerId, loserId, comment, userId }) {
       'conversions', 'matriculas',
       'email_sequence_runs', 'lead_emails',
     ];
+    // Tablas 1-1 con UNIQUE(lead_id): si el winner ya tiene fila, el UPDATE
+    // del loser viola la constraint. Política: el del winner gana, el del loser
+    // se descarta (típicamente UTMs del primer toque del original son los buenos).
+    const oneToOneTables = new Set(['lead_utms']);
     for (const t of moveTables) {
       try {
+        if (oneToOneTables.has(t)) {
+          const w = await c.query(`SELECT 1 FROM ${t} WHERE lead_id = $1 LIMIT 1`, [winnerId]);
+          if (w.rowCount > 0) {
+            const d = await c.query(`DELETE FROM ${t} WHERE lead_id = $1`, [loserId]);
+            counts[t] = `discarded ${d.rowCount}`;
+            continue;
+          }
+        }
         const r = await c.query(`UPDATE ${t} SET lead_id = $1 WHERE lead_id = $2`, [winnerId, loserId]);
         counts[t] = r.rowCount;
       } catch (err) {

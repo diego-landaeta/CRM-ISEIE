@@ -60,26 +60,32 @@ export default function DupReviewQueuePage() {
   useEffect(() => { load(); }, [projectId, statusFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function approve(it: QueueItem) {
+    console.log('[dup-review] approve click', { queueId: it.id, leadId: it.lead_id });
     setBusyId(it.id);
     try {
-      await client.post(`/leads/review-queue/${it.id}/decide`, { action: 'approve' });
+      const res = await client.post(`/leads/review-queue/${it.id}/decide`, { action: 'approve' });
+      console.log('[dup-review] approve OK', res);
       toast({ title: 'Aprobado', description: `Lead #${it.lead_id} validado y queda activo.` });
       load();
     } catch (err: any) {
-      toast({ title: 'Error', description: err?.data?.error || err?.message, variant: 'destructive' });
+      console.error('[dup-review] approve ERR', err);
+      toast({ title: 'Error al aprobar', description: err?.data?.error || err?.message || 'fallo desconocido', variant: 'destructive' });
     } finally { setBusyId(null); }
   }
 
   async function reject() {
-    if (!rejectFor) return;
+    if (!rejectFor) { console.warn('[dup-review] reject sin rejectFor'); return; }
+    console.log('[dup-review] reject click', { queueId: rejectFor.id, leadId: rejectFor.lead_id, notas: rejectNotas });
     setBusyId(rejectFor.id);
     try {
-      await client.post(`/leads/review-queue/${rejectFor.id}/decide`, { action: 'reject', notas: rejectNotas.trim() || null });
+      const res = await client.post(`/leads/review-queue/${rejectFor.id}/decide`, { action: 'reject', notas: rejectNotas.trim() || null });
+      console.log('[dup-review] reject OK', res);
       toast({ title: 'Descartado', description: `Lead #${rejectFor.lead_id} soft-deleted.` });
       setRejectFor(null); setRejectNotas('');
       load();
     } catch (err: any) {
-      toast({ title: 'Error', description: err?.data?.error || err?.message, variant: 'destructive' });
+      console.error('[dup-review] reject ERR', err);
+      toast({ title: 'Error al descartar', description: err?.data?.error || err?.message || 'fallo desconocido', variant: 'destructive' });
     } finally { setBusyId(null); }
   }
 
