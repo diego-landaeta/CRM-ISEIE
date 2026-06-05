@@ -65,10 +65,16 @@ export const checkDuplicateSchema = z.object({
   { message: 'Debes proporcionar email o teléfono', path: ['email'] }
 );
 
+// Motivo opcional para cambios "neutrales" (avanzar pipeline). Solo es
+// obligatorio cuando el destino es 'no_interesado' (que llega por LeadLossDialog
+// con motivo siempre rellenado). Refinement valida la combinación.
 export const updateStatusSchema = z.object({
   status: z.enum(['nuevo', 'por_contactar', 'contactado', 'en_seguimiento', 'convertido', 'no_interesado']),
-  motivo: z.string().min(1, 'Motivo requerido').max(500),
-});
+  motivo: z.string().max(500).optional().nullable(),
+}).refine(
+  (data) => data.status !== 'no_interesado' || (data.motivo && data.motivo.trim().length >= 1),
+  { message: 'Motivo requerido al marcar como no interesado', path: ['motivo'] }
+);
 
 export const createInteractionSchema = z.object({
   tipo: z.enum(['llamada', 'email', 'whatsapp', 'nota']),

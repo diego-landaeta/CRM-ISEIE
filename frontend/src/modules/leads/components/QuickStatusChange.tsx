@@ -7,6 +7,18 @@ import { useAuth } from '@/contexts/AuthContext';
 
 const LeadLossDialog = lazy(() => import('./lead-detail/LeadLossDialog'));
 
+// Colores sólidos para el dot del menú — tienen que ser opacos sobre fondo
+// blanco/negro para que el menú nunca se vea transparente como pasaba con
+// los badges semitransparentes anteriores.
+const STATUS_DOT_COLORS: Record<string, string> = {
+  nuevo: 'bg-blue-500',
+  por_contactar: 'bg-orange-500',
+  contactado: 'bg-emerald-500',
+  en_seguimiento: 'bg-amber-500',
+  convertido: 'bg-violet-500',
+  no_interesado: 'bg-red-500',
+};
+
 // Cambio rápido de estado de un lead desde la lista o pipeline, sin abrir la ficha.
 // - Click en el badge → popover con los estados disponibles
 // - Seleccionar uno → PATCH /leads/:id/status. Toast + onChanged() para refrescar
@@ -93,21 +105,23 @@ export default function QuickStatusChange({ leadId, currentStatus, responsableId
         {open && (
           <div
             role="menu"
-            className="absolute z-[60] left-0 top-full mt-1 min-w-[180px] bg-popover border border-border rounded-md shadow-xl py-1"
+            className="absolute z-[60] left-0 top-full mt-1 min-w-[200px] rounded-md shadow-2xl py-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700"
           >
             {STATUS_KEYS.map((s) => {
               const isCurrent = s === currentStatus;
+              const dotClass = STATUS_DOT_COLORS[s] || 'bg-zinc-400';
               return (
                 <button
                   key={s}
                   type="button"
                   role="menuitem"
                   onClick={() => handleSelect(s)}
-                  className={`w-full text-left px-3 py-1.5 text-xs flex items-center justify-between gap-2 hover:bg-muted ${isCurrent ? 'opacity-50 cursor-default' : ''}`}
+                  className={`w-full text-left px-3 py-1.5 text-xs flex items-center justify-between gap-2 transition-colors ${isCurrent ? 'opacity-50 cursor-default' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer'} text-zinc-900 dark:text-zinc-100`}
                   disabled={isCurrent}
                 >
-                  <span className={`inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded ${STATUS_STYLES[s]}`}>
-                    {STATUS_LABELS[s]}
+                  <span className="inline-flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full ${dotClass} flex-shrink-0`} />
+                    <span className="font-medium">{STATUS_LABELS[s]}</span>
                   </span>
                   {isCurrent && <CheckCircle size={12} weight="bold" className="text-emerald-600 flex-shrink-0" />}
                 </button>
