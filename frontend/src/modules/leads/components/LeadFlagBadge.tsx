@@ -6,7 +6,8 @@ export type LeadFlagKind =
   | 'duplicado'
   | 'propuesto'
   | 'spam_pending'
-  | 'inactivo';
+  | 'inactivo'
+  | 'sin_interaccion';
 
 interface FlagDef {
   label: string;
@@ -51,6 +52,12 @@ const FLAG_DEFS: Record<LeadFlagKind, FlagDef> = {
     badgeClass: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
     title: 'Lead inactivo',
     detail: 'Este lead lleva más días sin actividad de los configurados como límite en el proyecto. Considera contactarlo o cambiar su estado.',
+  },
+  sin_interaccion: {
+    label: 'Falta interacción',
+    badgeClass: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
+    title: 'Marcado contactado sin interacción registrada',
+    detail: 'Este lead está en estado "contactado" pero no tiene ninguna interacción (llamada, WhatsApp, email, nota) registrada en su ficha. Agrega la interacción que corresponda para que el seguimiento sea trazable.',
   },
 };
 

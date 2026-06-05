@@ -43,16 +43,46 @@ export async function findDuplicateByEmailOrPhone(email, telefono, projectId) {
   const cleanTel = (telefono && telefono.trim()) || null;
   if (!cleanEmail && !cleanTel) return null;
 
+  // Comparación canónica MX/AR: dos formas del mismo número (con/sin "1"/"9"
+  // de móvil) deben colapsar como duplicado. Generamos la forma canónica del
+  // teléfono entrante y la de cada candidato en SQL con CASE inline (sin
+  // función PG para no requerir migración).
+  const canonExpr = `
+    CASE
+      WHEN substring(replace(replace($3, '+', ''), ' ', '') from 1 for 3) = '521'
+           AND length(replace(replace($3, '+', ''), ' ', '')) = 13
+        THEN '+52' || substring(replace(replace($3, '+', ''), ' ', '') from 4)
+      WHEN substring(replace(replace($3, '+', ''), ' ', '') from 1 for 3) = '549'
+           AND length(replace(replace($3, '+', ''), ' ', '')) = 13
+        THEN '+54' || substring(replace(replace($3, '+', ''), ' ', '') from 4)
+      ELSE $3::text
+    END
+  `;
+  const candidateCanonExpr = `
+    CASE
+      WHEN substring(replace(l.telefono, '+', '') from 1 for 3) = '521'
+           AND length(replace(l.telefono, '+', '')) = 13
+        THEN '+52' || substring(replace(l.telefono, '+', '') from 4)
+      WHEN substring(replace(l.telefono, '+', '') from 1 for 3) = '549'
+           AND length(replace(l.telefono, '+', '')) = 13
+        THEN '+54' || substring(replace(l.telefono, '+', '') from 4)
+      ELSE l.telefono
+    END
+  `;
+
   const { rows } = await query(
     `SELECT l.id, l.nombre, l.email, l.telefono, l.status, l.producto_interes_id,
             l.responsable_id, l.created_at, l.fecha_solicitud,
             u.nombre AS responsable_nombre,
             ($2::text IS NOT NULL AND l.email = $2) AS match_by_email,
-            ($3::text IS NOT NULL AND l.telefono = $3) AS match_by_phone
+            ($3::text IS NOT NULL AND ${candidateCanonExpr} = ${canonExpr}) AS match_by_phone
      FROM leads l
      LEFT JOIN users u ON u.id = l.responsable_id
      WHERE l.project_id = $1 AND l.deleted_at IS NULL
-       AND (($2::text IS NOT NULL AND l.email = $2) OR ($3::text IS NOT NULL AND l.telefono = $3))
+       AND (
+         ($2::text IS NOT NULL AND l.email = $2)
+         OR ($3::text IS NOT NULL AND ${candidateCanonExpr} = ${canonExpr})
+       )
      ORDER BY ($2::text IS NOT NULL AND l.email = $2) DESC, l.created_at DESC
      LIMIT 1`,
     [projectId, cleanEmail, cleanTel]

@@ -801,6 +801,7 @@ export default function LeadsPage() {
                       {lead.es_propuesto && <LeadFlagBadge kind="propuesto" />}
                       {lead.has_pending_spam_report && user?.role === 'superadmin' && <LeadFlagBadge kind="spam_pending" />}
                       {!lead.reincidente && lead.lead_duplicado_de && <LeadFlagBadge kind="duplicado" />}
+                      {lead.estado === 'contactado' && !lead.last_interaction_at && <LeadFlagBadge kind="sin_interaccion" />}
                       {lead.dias_inactivo != null &&
                        lead.dias_alerta_inactividad != null &&
                        lead.dias_inactivo > lead.dias_alerta_inactividad &&
