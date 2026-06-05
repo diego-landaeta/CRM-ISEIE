@@ -780,12 +780,16 @@ export default function LeadsPage() {
               {filteredLeads.map((lead) => {
                 const priority = getLeadPriority(lead);
                 const pStyle = getPriorityStyle(priority);
+                // Resaltado para leads pendientes de primer contacto (default tras webhook
+                // o cuando un seguimiento se vence sin contactar). Hace que la fila
+                // "salte a la vista" en la tabla sin tapar el color de prioridad.
+                const isPorContactar = lead.estado === 'por_contactar' || lead.status === 'por_contactar';
                 return (
                 <tr
                   key={lead.id}
                   onClick={() => setDrawerLeadId(lead.id)}
-                  title={`Prioridad: ${pStyle.label}`}
-                  className={`border-b last:border-0 border-l-4 ${pStyle.borderClass} ${pStyle.rowBgClass} hover:bg-muted/50 transition-colors cursor-pointer`}
+                  title={isPorContactar ? 'Por contactar — pendiente de primer contacto' : `Prioridad: ${pStyle.label}`}
+                  className={`border-b last:border-0 border-l-4 ${pStyle.borderClass} ${pStyle.rowBgClass} hover:bg-muted/50 transition-colors cursor-pointer ${isPorContactar ? 'bg-orange-50/60 dark:bg-orange-950/20 ring-1 ring-orange-300/60 dark:ring-orange-800/60' : ''}`}
                 >
                   <td className="px-5 py-3.5">
                     <div className="flex items-center gap-2.5">
