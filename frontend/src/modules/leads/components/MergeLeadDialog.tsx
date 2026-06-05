@@ -69,17 +69,25 @@ export default function MergeLeadDialog({ open, winner, projectId, initialLoserI
   }, [search, runSearch]);
 
   async function handleMerge() {
-    if (!winner || !selected) return;
+    console.log('[merge] click', { winnerId: winner?.id, selected: selected?.id, comment, commentLen: comment.trim().length });
+    if (!winner || !selected) {
+      console.warn('[merge] abort: falta winner o selected', { winner, selected });
+      toast({ title: 'Selecciona el lead a fusionar', description: 'Busca y elige el duplicado en la lista de arriba.', variant: 'destructive' });
+      return;
+    }
     if (comment.trim().length < 3) {
+      console.warn('[merge] abort: comentario muy corto', comment);
       toast({ title: 'Comentario obligatorio', description: 'Mínimo 3 caracteres explicando por qué fusionas.', variant: 'destructive' });
       return;
     }
     setSaving(true);
     try {
+      console.log('[merge] POST', `/leads/${winner.id}/merge`, { loser_id: selected.id });
       const res = await client.post(`/leads/${winner.id}/merge`, {
         loser_id: selected.id,
         comment: comment.trim(),
       });
+      console.log('[merge] response', res);
       if (res.success) {
         toast({
           title: 'Leads fusionados',
@@ -87,9 +95,13 @@ export default function MergeLeadDialog({ open, winner, projectId, initialLoserI
         });
         onMerged?.(res.data);
         onClose();
+      } else {
+        console.error('[merge] success=false', res);
+        toast({ title: 'Error al fusionar', description: 'Respuesta inesperada del servidor', variant: 'destructive' });
       }
     } catch (err: any) {
-      toast({ title: 'Error al fusionar', description: err?.data?.error || err?.message, variant: 'destructive' });
+      console.error('[merge] EXCEPCION', err);
+      toast({ title: 'Error al fusionar', description: err?.data?.error || err?.message || 'fallo desconocido', variant: 'destructive' });
     } finally { setSaving(false); }
   }
 

@@ -478,8 +478,10 @@ export async function mergeLeads({ winnerId, loserId, comment, userId }) {
   }
   try {
     const result = await leadModel.mergeLeads({ winnerId, loserId, comment: comment.trim(), userId });
-    // Si el loser estaba en cola de revisión, marcarlo como merged
-    dupQueue.markMerged(loserId, userId);
+    // Si el loser estaba en cola de revisión, marcarlo como merged.
+    // CON AWAIT: sin él, el endpoint podía devolver respuesta antes de que la
+    // UPDATE corra, dejando la entrada como 'pending' aunque el merge se hizo.
+    await dupQueue.markMerged(loserId, userId);
     // Notif admin/superadmin (visibilidad operativa, como en softDelete)
     notifyAdmins({
       type: 'lead_merged',
