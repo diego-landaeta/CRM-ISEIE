@@ -18,6 +18,7 @@ router.use(verifyToken);
 
 // Listado y detalle
 router.get('/', leadController.list);
+router.get('/export/wasapi', leadController.exportWasapi);
 router.get('/stats', leadController.stats);
 router.get('/today', leadController.today);
 router.get('/dashboard-summary', leadController.dashboardSummary);

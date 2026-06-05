@@ -45,6 +45,7 @@ const ContactedDialog = lazy(() => import('../components/ContactedDialog'));
 const SoftDeleteDialog = lazy(() => import('../components/SoftDeleteDialog'));
 const SpamReportDialog = lazy(() => import('../components/SpamReportDialog'));
 const ExportDialog = lazy(() => import('@/shared/components/export/ExportDialog'));
+const WasapiExportDialog = lazy(() => import('../components/WasapiExportDialog'));
 import StatusBadge, { STATUS_LABELS } from '@/shared/components/ui/StatusBadge';
 import ChannelBadge from '@/shared/components/ui/ChannelBadge';
 import SearchableSelect from '@/shared/components/ui/SearchableSelect';
@@ -190,6 +191,7 @@ export default function LeadsPage() {
   const [deletingLead, setDeletingLead] = useState<any>(null);
   const [reportingSpamLead, setReportingSpamLead] = useState<any>(null);
   const [exportOpen, setExportOpen] = useState(false);
+  const [wasapiOpen, setWasapiOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]); // bulk actions
   const [bulkAction, setBulkAction] = useState(null); // null | 'reassign' | 'status' | 'export'
   const [bulkLoading, setBulkLoading] = useState(false);
@@ -487,6 +489,15 @@ export default function LeadsPage() {
               <span className="hidden md:inline">Exportar</span>
             </button>
           )}
+          <button
+            onClick={() => setWasapiOpen(true)}
+            title="Descargar plantilla Wasapi (CSV bulk WhatsApp)"
+            aria-label="Wasapi"
+            className="h-9 inline-flex items-center gap-1.5 px-2.5 sm:px-3 rounded-md border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 text-xs sm:text-sm font-medium hover:bg-emerald-100 dark:hover:bg-emerald-950/50 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400/40"
+          >
+            <WhatsappLogo size={14} weight="bold" />
+            <span className="hidden md:inline">Wasapi</span>
+          </button>
           {(user?.role === 'admin' || user?.role === 'superadmin') && (
             <div className="relative">
               <button
@@ -1092,6 +1103,16 @@ export default function LeadsPage() {
           columns={getLeadExportColumns()}
           rows={filteredLeads}
         />
+      </Suspense>
+
+      <Suspense fallback={null}>
+        {wasapiOpen && activeProject?.id && (
+          <WasapiExportDialog
+            open={wasapiOpen}
+            projectId={activeProject.id}
+            onClose={() => setWasapiOpen(false)}
+          />
+        )}
       </Suspense>
     </div>
   );

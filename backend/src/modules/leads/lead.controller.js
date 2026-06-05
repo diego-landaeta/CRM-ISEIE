@@ -4,6 +4,7 @@ import { webhookLeadSchema, listLeadsSchema, updateStatusSchema, createInteracti
 import * as dupQueue from './dup-queue.service.js';
 import * as leadProducts from './lead-products.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
+import { leadsToWasapiCsv, detectCountry } from '../../shared/utils/wasapiCsv.js';
 
 // ============================================================
 // WEBHOOK (publico, autenticado por API key en header)
@@ -58,6 +59,66 @@ export async function list(req, res, next) {
       data: result.leads,
       pagination: { total: result.total, page: result.page, limit: result.limit, totalPages: result.totalPages },
     });
+  } catch (err) { next(err); }
+}
+
+// GET /api/leads/export/wasapi?projectId=X&status=&responsableId=&dateFrom=&dateTo=&productId=&pais=&onlyWithPhone=
+// Descarga CSV con formato Wasapi (plantilla bulk WhatsApp).
+// Todos los filtros son opcionales — el único requisito real es `projectId`.
+// SEGURIDAD: si el rol es 'gestor', filtra automáticamente a sus propios leads
+// (ignora cualquier responsableId que venga por query).
+export async function exportWasapi(req, res, next) {
+  try {
+    const projectId = parseInt(req.query.projectId);
+    if (!projectId) throw new AppError('projectId requerido', 400, 'MISSING_PROJECT');
+
+    const filters = {
+      projectId,
+      status: req.query.status || null,
+      responsableId: req.query.responsableId ? parseInt(req.query.responsableId) : null,
+      unassigned: false,
+      canal: null,
+      productId: req.query.productId ? parseInt(req.query.productId) : null,
+      search: null,
+      page: 1,
+      limit: 10000, // tope defensivo — Wasapi en un envío típico nunca pasa de unos miles
+      includeConverted: req.query.includeConverted === 'true',
+      dateFrom: req.query.dateFrom || null,
+      dateTo: req.query.dateTo || null,
+      sort: 'fecha_desc',
+      archived: false,
+      duplicated: false,
+      reincidente: false,
+    };
+
+    // Gestor solo ve los suyos — bloqueamos cualquier override por query.
+    if (req.user.role === 'gestor') {
+      filters.responsableId = req.user.userId;
+    }
+
+    const result = await leadModel.findAll(filters);
+    let leads = result.leads.map((l) => ({
+      nombre: l.nombre,
+      email: l.email,
+      telefono: l.telefono,
+      status: l.status,
+      producto_nombre: l.producto_interes, // alias del findAll
+    }));
+
+    // Filtros aplicados POST-query (sobre el resultado, antes de generar CSV).
+    if (req.query.onlyWithPhone === 'true') {
+      leads = leads.filter((l) => l.telefono && String(l.telefono).replace(/[^\d]/g, '').length >= 7);
+    }
+    if (req.query.pais) {
+      const paisFilter = String(req.query.pais).toLowerCase();
+      leads = leads.filter((l) => (detectCountry(l.telefono) || '').toLowerCase() === paisFilter);
+    }
+
+    const csv = leadsToWasapiCsv(leads, { withHeader: req.query.header !== 'false' });
+    const filename = `wasapi-leads-${new Date().toISOString().slice(0, 10)}.csv`;
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(csv);
   } catch (err) { next(err); }
 }
 
