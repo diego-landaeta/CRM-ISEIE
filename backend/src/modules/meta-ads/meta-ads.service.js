@@ -242,6 +242,16 @@ export async function runBackfill(accountId, days = 90) {
   }
 }
 
+/**
+ * Resuelve un accountId interno a su ad_account_id de Meta.
+ * Devuelve null si no aplica (caller pidió todas las cuentas del proyecto).
+ */
+async function resolveAdAccountId(accountId) {
+  if (!accountId) return null;
+  const { rows } = await query(`SELECT ad_account_id FROM meta_ad_accounts WHERE id=$1`, [accountId]);
+  return rows[0]?.ad_account_id || null;
+}
+
 async function loadTokenById(accountId) {
   const { rows } = await query(`SELECT access_token_enc FROM meta_ad_accounts WHERE id=$1`, [accountId]);
   if (!rows[0]) throw new AppError('Cuenta no encontrada', 404, 'NOT_FOUND');
@@ -441,9 +451,11 @@ async function recalcCampaignTotals(projectId) {
 // ────────────────────────────────────────────────────────────
 // Lectura para UI
 
-export async function listCampaignsForUI({ projectId, status = null, dateFrom = null, dateTo = null }) {
+export async function listCampaignsForUI({ projectId, accountId = null, status = null, dateFrom = null, dateTo = null }) {
+  const adAccountId = await resolveAdAccountId(accountId);
   const params = [projectId];
   const where = ['mc.project_id = $1'];
+  if (adAccountId) { params.push(adAccountId); where.push(`mc.ad_account_id = $${params.length}`); }
   if (status) { params.push(status); where.push(`mc.status = $${params.length}`); }
   // Si hay rango de fechas, recalculamos métricas con SUM filtrado en la subquery.
   const useDaily = !!(dateFrom || dateTo);
@@ -566,19 +578,29 @@ export async function listAdsForUI({ projectId, adsetId, dateFrom = null, dateTo
   }));
 }
 
-export async function getDashboard({ projectId, dateFrom = null, dateTo = null }) {
+export async function getDashboard({ projectId, accountId = null, dateFrom = null, dateTo = null }) {
+  const adAccountId = await resolveAdAccountId(accountId);
   const params = [projectId];
-  const where = ['project_id = $1'];
-  if (dateFrom) { params.push(dateFrom); where.push(`date >= $${params.length}`); }
-  if (dateTo) { params.push(dateTo); where.push(`date <= $${params.length}`); }
+  const where = ['d.project_id = $1'];
+  if (dateFrom) { params.push(dateFrom); where.push(`d.date >= $${params.length}`); }
+  if (dateTo) { params.push(dateTo); where.push(`d.date <= $${params.length}`); }
+  // Filtro por cuenta: cuando hay accountId, joineamos con meta_campaigns para
+  // sacar las daily de campañas de esa cuenta concreta.
+  let joinClause = '';
+  if (adAccountId) {
+    params.push(adAccountId);
+    joinClause = `JOIN meta_campaigns mc ON mc.campaign_id = d.campaign_id AND mc.ad_account_id = $${params.length}`;
+  }
   const { rows } = await query(
-    `SELECT date,
-            SUM(spend)::numeric AS spend,
-            SUM(impressions)::bigint AS impressions,
-            SUM(clicks)::bigint AS clicks,
-            SUM(leads)::int AS leads
-     FROM meta_campaigns_daily WHERE ${where.join(' AND ')}
-     GROUP BY date ORDER BY date ASC`,
+    `SELECT d.date,
+            SUM(d.spend)::numeric AS spend,
+            SUM(d.impressions)::bigint AS impressions,
+            SUM(d.clicks)::bigint AS clicks,
+            SUM(d.leads)::int AS leads
+     FROM meta_campaigns_daily d
+     ${joinClause}
+     WHERE ${where.join(' AND ')}
+     GROUP BY d.date ORDER BY d.date ASC`,
     params
   );
   const totalSpend = rows.reduce((s, r) => s + Number(r.spend || 0), 0);

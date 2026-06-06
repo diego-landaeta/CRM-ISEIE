@@ -80,10 +80,20 @@ export async function backfill(req, res, next) {
   } catch (err) { next(err); }
 }
 
+// accountId opcional: si llega, filtra todas las vistas por esa cuenta.
+// Sin él, agrega todas las cuentas del proyecto (comportamiento anterior).
+function accId(req) {
+  const v = req.query.accountId;
+  if (!v) return null;
+  const n = parseInt(v);
+  return isNaN(n) ? null : n;
+}
+
 export async function listCampaigns(req, res, next) {
   try {
     const result = await service.listCampaignsForUI({
       projectId: pid(req),
+      accountId: accId(req),
       status: req.query.status || null,
       dateFrom: req.query.dateFrom || null,
       dateTo: req.query.dateTo || null,
@@ -96,6 +106,7 @@ export async function dashboard(req, res, next) {
   try {
     const result = await service.getDashboard({
       projectId: pid(req),
+      accountId: accId(req),
       dateFrom: req.query.dateFrom || null,
       dateTo: req.query.dateTo || null,
     });

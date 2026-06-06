@@ -110,7 +110,7 @@ export const metaApi = {
   backfill(accountId: number, days = 90) {
     return client.post(`/meta-ads/accounts/${accountId}/backfill`, { days });
   },
-  campaigns(projectId: number, opts: { status?: string; dateFrom?: string; dateTo?: string } = {}) {
+  campaigns(projectId: number, opts: { status?: string; dateFrom?: string; dateTo?: string; accountId?: number } = {}) {
     return client.get<MetaCampaign[]>(`/meta-ads/campaigns`, { params: { projectId, ...opts } });
   },
   adsets(projectId: number, campaignId: string, opts: { dateFrom?: string; dateTo?: string } = {}) {
@@ -119,7 +119,7 @@ export const metaApi = {
   ads(projectId: number, adsetId: string, opts: { dateFrom?: string; dateTo?: string } = {}) {
     return client.get<MetaAd[]>(`/meta-ads/adsets/${encodeURIComponent(adsetId)}/ads`, { params: { projectId, ...opts } });
   },
-  dashboard(projectId: number, opts: { dateFrom?: string; dateTo?: string } = {}) {
+  dashboard(projectId: number, opts: { dateFrom?: string; dateTo?: string; accountId?: number } = {}) {
     return client.get<MetaDashboard>(`/meta-ads/dashboard`, { params: { projectId, ...opts } });
   },
   associations(projectId: number, campaignId?: string) {

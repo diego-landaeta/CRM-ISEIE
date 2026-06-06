@@ -65,14 +65,16 @@ export default function MetaAdsPage() {
     // Dashboard y campaigns suman cross-cuentas del proyecto. Si el usuario selecciona
     // una cuenta concreta, el backend NO filtra por cuenta todavía — para esa vista
     // detallada hay que iterar por accountId. Por ahora mostramos siempre el agregado.
-    metaApi.dashboard(projectId, { dateFrom, dateTo }).then((r: any) => setDashboard(r?.data || null)).catch(() => setDashboard(null));
-    metaApi.campaigns(projectId, { dateFrom, dateTo }).then((r: any) => setCampaigns(r?.data || [])).catch(() => setCampaigns([]));
+    // Si filterAccountId está set, pasamos accountId para filtrar; si no, todas cuentas.
+    const accountId = filterAccountId || undefined;
+    metaApi.dashboard(projectId, { dateFrom, dateTo, accountId }).then((r: any) => setDashboard(r?.data || null)).catch(() => setDashboard(null));
+    metaApi.campaigns(projectId, { dateFrom, dateTo, accountId }).then((r: any) => setCampaigns(r?.data || [])).catch(() => setCampaigns([]));
     metaApi.roi(projectId, { dateFrom, dateTo }).then((r: any) => setRoi(r?.data || [])).catch(() => setRoi([]));
     metaApi.productsView(projectId, { dateFrom, dateTo }).then((r: any) => setProductsView(r?.data || [])).catch(() => setProductsView([]));
   }
 
   useEffect(() => { loadAccounts(); }, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { loadData(); }, [accounts.length, dateFrom, dateTo]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { loadData(); }, [accounts.length, dateFrom, dateTo, filterAccountId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Acciones por cuenta concreta (las del header actúan sobre la cuenta seleccionada).
   async function handleSync() {
@@ -160,11 +162,12 @@ export default function MetaAdsPage() {
             {accounts.length > 1 ? (
               <div className="relative inline-block">
                 <select
-                  value={account.id}
-                  onChange={(e) => setFilterAccountId(parseInt(e.target.value))}
+                  value={filterAccountId ?? 'all'}
+                  onChange={(e) => setFilterAccountId(e.target.value === 'all' ? null : parseInt(e.target.value))}
                   className="appearance-none h-7 pl-2 pr-6 rounded-md border border-border bg-card text-base font-bold tracking-tight max-w-md truncate cursor-pointer hover:bg-muted"
-                  title="Cambiar cuenta"
+                  title="Filtrar por cuenta — 'Todas' suma cross-cuentas"
                 >
+                  <option value="all">📊 Todas las cuentas ({accounts.length})</option>
                   {accounts.map((a) => (
                     <option key={a.id} value={a.id}>
                       {a.ad_account_nombre || a.ad_account_id}
@@ -177,13 +180,18 @@ export default function MetaAdsPage() {
               <h1 className="text-lg font-bold tracking-tight truncate">{account.ad_account_nombre || account.ad_account_id}</h1>
             )}
             <p className="text-xs text-muted-foreground">
-              {account.ad_account_id} · {account.currency || '—'} ·{' '}
-              Última sync: {fmtDate(account.last_synced_at)}{' '}
-              {account.last_sync_status === 'in_progress' && <span className="text-amber-600">(en progreso…)</span>}
-              {account.last_sync_status === 'error' && <span className="text-red-600">(error)</span>}
-              {accounts.length > 1 && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">{accounts.length} cuentas</span>}
+              {filterAccountId == null && accounts.length > 1 ? (
+                <>Vista consolidada · {account.currency || '—'} · {accounts.length} cuentas sumadas</>
+              ) : (
+                <>
+                  {account.ad_account_id} · {account.currency || '—'} ·{' '}
+                  Última sync: {fmtDate(account.last_synced_at)}{' '}
+                  {account.last_sync_status === 'in_progress' && <span className="text-amber-600">(en progreso…)</span>}
+                  {account.last_sync_status === 'error' && <span className="text-red-600">(error)</span>}
+                </>
+              )}
             </p>
-            {account.last_sync_error && (
+            {filterAccountId != null && account.last_sync_error && (
               <p className="text-[11px] text-red-600 mt-0.5 truncate" title={account.last_sync_error}>
                 <Warning size={11} className="inline mr-0.5" />
                 {account.last_sync_error}
@@ -192,13 +200,17 @@ export default function MetaAdsPage() {
           </div>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          <button onClick={handleSync} disabled={syncing || account.last_sync_status === 'in_progress'}
-            className="h-9 px-3 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted flex items-center gap-1.5 disabled:opacity-50">
+          <button onClick={handleSync}
+            disabled={syncing || account.last_sync_status === 'in_progress' || (filterAccountId == null && accounts.length > 1)}
+            title={filterAccountId == null && accounts.length > 1 ? 'Selecciona una cuenta concreta para sincronizar' : 'Sincronizar (último día)'}
+            className="h-9 px-3 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed">
             <ArrowsClockwise size={14} weight="bold" className={syncing ? 'animate-spin' : ''} />
             {syncing ? 'Sincronizando…' : 'Sincronizar ahora'}
           </button>
-          <button onClick={handleBackfill} title="Re-descargar últimos 90 días en background"
-            className="h-9 px-3 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted flex items-center gap-1.5">
+          <button onClick={handleBackfill}
+            disabled={filterAccountId == null && accounts.length > 1}
+            title={filterAccountId == null && accounts.length > 1 ? 'Selecciona una cuenta concreta para re-backfillear' : 'Re-descargar últimos 90 días en background'}
+            className="h-9 px-3 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed">
             <ArrowsClockwise size={14} /> 90d
           </button>
           <button onClick={() => setShowAddAccount(true)} title="Conectar otra cuenta publicitaria al mismo proyecto"
