@@ -9,20 +9,30 @@ import { toast } from '@/shared/hooks/useToast';
 // admin/PM/superadmin ven todas.
 export default function ChangeRequestsPage() {
   const navigate = useNavigate();
-  const { activeProject, user } = useAuth() as { activeProject: { id?: number } | null; user: { role: string } | null };
+  const { activeProject, user, projects } = useAuth() as { activeProject: { id?: number } | null; user: { role: string } | null; projects: Array<{ id: number; nombre: string }> };
   const [items, setItems] = useState<RfcSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [estadoFilter, setEstadoFilter] = useState<string>('');
   const [search, setSearch] = useState('');
   const [creating, setCreating] = useState(false);
   const [newTitle, setNewTitle] = useState('');
+  // Selector de proyecto al crear. null = "General" (cross-proyecto / plataforma).
+  // Default: el proyecto activo del header (lo más intuitivo); si no hay, "General".
+  const [newProjectId, setNewProjectId] = useState<number | null>(activeProject?.id ?? null);
+
+  // Cuando cambia el activeProject del header, actualizar el default del selector.
+  useEffect(() => {
+    if (activeProject?.id) setNewProjectId(activeProject.id);
+  }, [activeProject?.id]);
 
   const fullVisibility = ['superadmin', 'admin', 'project_manager'].includes(user?.role || '');
 
   function load() {
     setLoading(true);
+    // NO filtro por activeProject: la lista de solicitudes muestra TODAS las
+    // accesibles al user (suyas si es gestor; todas si es PM/admin/superadmin).
+    // Las RFC "General" siempre aparecen para los con visibilidad total.
     rfcApi.list({
-      projectId: activeProject?.id,
       estado: estadoFilter || undefined,
     })
       .then((r: any) => setItems(r?.data || []))
@@ -30,25 +40,21 @@ export default function ChangeRequestsPage() {
       .finally(() => setLoading(false));
   }
 
-  useEffect(() => { load(); }, [activeProject?.id, estadoFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [estadoFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleCreate() {
-    if (!activeProject?.id) {
-      toast({ title: 'Selecciona un proyecto', variant: 'destructive' });
-      return;
-    }
     if (newTitle.trim().length < 3) {
-      toast({ title: 'Título mínimo 3 caracteres', variant: 'destructive' });
+      toast({ title: 'Escribe un título', description: 'Mínimo 3 caracteres. Ej: "Cambiar el logo del formulario de contacto".', variant: 'destructive' });
       return;
     }
     setCreating(true);
     try {
-      const res = await rfcApi.create({ projectId: activeProject.id, titulo: newTitle.trim() });
+      const res = await rfcApi.create({ projectId: newProjectId ?? undefined, titulo: newTitle.trim() } as any);
       toast({ title: 'Solicitud creada', description: `Código: ${res.data?.codigo_rfc || ''}` });
       setNewTitle('');
       navigate(`/solicitudes-cambio/${res.data.id}`);
     } catch (err: any) {
-      toast({ title: 'Error', description: err?.data?.error || err?.message, variant: 'destructive' });
+      toast({ title: 'Error al crear', description: err?.data?.error || err?.message || 'fallo desconocido', variant: 'destructive' });
     } finally { setCreating(false); }
   }
 
@@ -70,27 +76,47 @@ export default function ChangeRequestsPage() {
       </div>
 
       {/* Crear nueva */}
-      <div className="bg-card border border-border rounded-lg p-4 flex gap-2 items-end">
-        <div className="flex-1">
-          <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5 block">
-            Nueva solicitud de cambio
-          </label>
+      <div className="bg-card border border-border rounded-lg p-4 space-y-3">
+        <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
+          Nueva solicitud de cambio
+        </label>
+        <div className="flex gap-2 items-stretch flex-wrap sm:flex-nowrap">
+          {/* Selector de proyecto: muestra siempre, default al proyecto activo.
+             "General" cuando el cambio no aplica a un proyecto concreto. */}
+          {(projects && projects.length > 0) && (
+            <select
+              value={newProjectId == null ? 'general' : String(newProjectId)}
+              onChange={(e) => setNewProjectId(e.target.value === 'general' ? null : parseInt(e.target.value))}
+              title="¿A qué proyecto va dirigida esta solicitud?"
+              className="h-10 px-2 rounded-md border border-border bg-card text-sm min-w-[140px]"
+            >
+              <option value="general">📊 General</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>{p.nombre}</option>
+              ))}
+            </select>
+          )}
           <input
             value={newTitle}
             onChange={(e) => setNewTitle(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') handleCreate(); }}
+            onKeyDown={(e) => { if (e.key === 'Enter' && newTitle.trim().length >= 3) handleCreate(); }}
             placeholder="Título del cambio (ej. 'Cambiar logo en formulario de contacto')"
-            className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm"
+            className="flex-1 h-10 px-3 rounded-md border border-border bg-card text-sm"
             maxLength={300}
           />
+          <button
+            onClick={handleCreate}
+            disabled={creating}
+            className="h-10 px-4 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 inline-flex items-center gap-1.5 whitespace-nowrap"
+          >
+            <Plus size={14} weight="bold" /> {creating ? 'Creando…' : 'Crear'}
+          </button>
         </div>
-        <button
-          onClick={handleCreate}
-          disabled={creating || !newTitle.trim()}
-          className="h-10 px-4 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 inline-flex items-center gap-1.5"
-        >
-          <Plus size={14} weight="bold" /> {creating ? 'Creando…' : 'Crear'}
-        </button>
+        <p className="text-[11px] text-muted-foreground">
+          {newProjectId == null
+            ? 'Solicitud "General": el cambio aplica a la plataforma o a varios proyectos.'
+            : `Esta solicitud quedará vinculada al proyecto seleccionado arriba.`}
+        </p>
       </div>
 
       {/* Filtros */}

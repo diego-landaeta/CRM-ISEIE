@@ -15,10 +15,11 @@ function canFillPM(role) { return PM_ROLES.includes(role); }
 function canFillCEO(role) { return CEO_ROLES.includes(role); }
 
 export async function create({ projectId, titulo, solicitanteUserId, ...payload }) {
-  if (!projectId) throw new AppError('projectId requerido', 400, 'MISSING_PROJECT');
+  // projectId opcional: null = solicitud "General" (cambios cross-proyecto o de plataforma).
   if (!titulo || titulo.trim().length < 3) throw new AppError('Título requerido (min 3 chars)', 400, 'INVALID_TITLE');
-  const codigoRfc = await model.getNextRfcCode(projectId);
-  const rfc = await model.create({ projectId, codigoRfc, titulo: titulo.trim(), solicitanteUserId, ...payload });
+  const cleanProjectId = projectId ? parseInt(projectId) : null;
+  const codigoRfc = await model.getNextRfcCode(cleanProjectId);
+  const rfc = await model.create({ projectId: cleanProjectId, codigoRfc, titulo: titulo.trim(), solicitanteUserId, ...payload });
 
   // Notif PM por email + notif in-app a admins
   notifyPmsOfNewRfc(rfc).catch((err) => logger.warn({ err: err.message, rfcId: rfc.id }, 'No se pudo notificar PM'));

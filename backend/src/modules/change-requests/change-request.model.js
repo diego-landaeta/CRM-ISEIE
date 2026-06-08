@@ -1,17 +1,23 @@
 import { query } from '../../shared/config/db.js';
 
 // Genera el siguiente código RFC-NNN para un proyecto (correlativo por proyecto).
+// Si projectId es null → RFC general con prefijo distinto (RFC-G-NNN) para
+// no chocar con los correlativos de proyectos.
 export async function getNextRfcCode(projectId) {
+  const isGeneral = projectId == null;
+  const pattern = isGeneral ? '^RFC-G-[0-9]+$' : '^RFC-[0-9]+$';
+  const prefix = isGeneral ? 'RFC-G-' : 'RFC-';
   const { rows } = await query(
     `SELECT codigo_rfc FROM change_requests
-     WHERE project_id = $1 AND codigo_rfc ~ '^RFC-[0-9]+$'
-     ORDER BY (substring(codigo_rfc from 'RFC-([0-9]+)'))::int DESC
+     WHERE ${isGeneral ? 'project_id IS NULL' : 'project_id = $1'}
+       AND codigo_rfc ~ $${isGeneral ? '1' : '2'}
+     ORDER BY (substring(codigo_rfc from '[0-9]+$'))::int DESC
      LIMIT 1`,
-    [projectId]
+    isGeneral ? [pattern] : [projectId, pattern]
   );
-  if (!rows[0]) return 'RFC-001';
-  const lastNum = parseInt(rows[0].codigo_rfc.replace('RFC-', ''), 10);
-  return `RFC-${String(lastNum + 1).padStart(3, '0')}`;
+  if (!rows[0]) return `${prefix}001`;
+  const lastNum = parseInt(rows[0].codigo_rfc.replace(prefix, ''), 10);
+  return `${prefix}${String(lastNum + 1).padStart(3, '0')}`;
 }
 
 export async function create({ projectId, codigoRfc, titulo, solicitanteUserId, descripcionResumida, objetivoIntencion, motivoNegocio, beneficiosKpi, beneficiosComercial, beneficiosOperacion, modificaAlcance, modificaCronograma, modificaCostos, modificaRiesgos }) {
