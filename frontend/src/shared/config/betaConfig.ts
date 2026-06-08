@@ -29,6 +29,7 @@ export const BETA_ROUTES: readonly string[] = [
   '/email-sequences',               // Email
   '/email-templates',
   '/documentos',                    // Documentos PDF
+  '/solicitudes-cambio',            // RFC — Solicitud de Cambio (todos los roles)
   '/notificaciones',
   '/preferences',
   '/profile',
