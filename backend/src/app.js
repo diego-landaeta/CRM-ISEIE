@@ -40,6 +40,7 @@ import credentialsModule from './modules/credentials/index.js';
 import dossiersModule from './modules/dossiers/index.js';
 import reportsModule from './modules/reports/index.js';
 import clientErrorsModule from './modules/client-errors/index.js';
+import changeRequestsModule from './modules/change-requests/index.js';
 import { startEmailSequenceScheduler } from './jobs/emailSequenceScheduler.js';
 import { startDocumentOrphanScheduler } from './jobs/documentOrphanScheduler.js';
 import { startGoogleAdsTokenScheduler } from './jobs/googleAdsTokenScheduler.js';
@@ -211,6 +212,7 @@ const MODULES = [
   dossiersModule,
   reportsModule,
   clientErrorsModule,
+  changeRequestsModule,
   statusModule,
 ];
 

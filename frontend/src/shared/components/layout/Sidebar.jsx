@@ -87,6 +87,7 @@ const NAV_SECTIONS = [
   {
     label: 'Sistema',
     items: [
+      { to: '/solicitudes-cambio', label: 'Solicitudes de cambio', icon: GitMerge },
       { to: '/notificaciones', label: 'Notificaciones',   icon: Bell },
       { to: '/preferences',    label: 'Mis preferencias', icon: Sliders },
       { to: '/soporte',        label: 'Soporte',          icon: Headset },

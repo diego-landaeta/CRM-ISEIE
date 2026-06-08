@@ -1,0 +1,185 @@
+import * as model from './change-request.model.js';
+import { AppError } from '../../shared/utils/AppError.js';
+import { logger } from '../../shared/utils/logger.js';
+import { sendEmail } from '../../shared/services/brevo.service.js';
+import { notifyAdmins } from '../notifications/notifications.service.js';
+import { query } from '../../shared/config/db.js';
+
+// Roles con visibilidad/edición total sobre los RFCs.
+const FULL_VISIBILITY = ['superadmin', 'admin', 'project_manager'];
+const PM_ROLES = ['project_manager', 'admin', 'superadmin']; // pueden rellenar la parte técnica
+const CEO_ROLES = ['superadmin']; // firma como CEO
+
+function canEditFull(role) { return FULL_VISIBILITY.includes(role); }
+function canFillPM(role) { return PM_ROLES.includes(role); }
+function canFillCEO(role) { return CEO_ROLES.includes(role); }
+
+export async function create({ projectId, titulo, solicitanteUserId, ...payload }) {
+  if (!projectId) throw new AppError('projectId requerido', 400, 'MISSING_PROJECT');
+  if (!titulo || titulo.trim().length < 3) throw new AppError('Título requerido (min 3 chars)', 400, 'INVALID_TITLE');
+  const codigoRfc = await model.getNextRfcCode(projectId);
+  const rfc = await model.create({ projectId, codigoRfc, titulo: titulo.trim(), solicitanteUserId, ...payload });
+
+  // Notif PM por email + notif in-app a admins
+  notifyPmsOfNewRfc(rfc).catch((err) => logger.warn({ err: err.message, rfcId: rfc.id }, 'No se pudo notificar PM'));
+  notifyAdmins({
+    type: 'rfc_created',
+    title: `Nueva solicitud de cambio: ${rfc.codigo_rfc}`,
+    message: `${rfc.titulo}`,
+    link_path: `/solicitudes-cambio/${rfc.id}`,
+    metadata: { rfc_id: rfc.id, project_id: projectId },
+    triggered_by_user_id: solicitanteUserId || null,
+  });
+
+  return rfc;
+}
+
+export async function list({ projectId, userId, role, estado }) {
+  return await model.listForUser({ projectId, userId, role, estado });
+}
+
+export async function getById(id, { userId, role }) {
+  const rfc = await model.getById(id);
+  if (!rfc) throw new AppError('RFC no encontrado', 404, 'NOT_FOUND');
+  if (!canEditFull(role) && rfc.solicitante_user_id !== userId) {
+    throw new AppError('Sin acceso a esta solicitud', 403, 'FORBIDDEN');
+  }
+  return rfc;
+}
+
+export async function update(id, patch, { userId, role }) {
+  const rfc = await model.getById(id);
+  if (!rfc) throw new AppError('RFC no encontrado', 404, 'NOT_FOUND');
+
+  // Reglas de qué campos puede tocar cada rol.
+  const isOwner = rfc.solicitante_user_id === userId;
+  if (!canFillPM(role) && !isOwner) {
+    throw new AppError('Sin permiso para editar este RFC', 403, 'FORBIDDEN');
+  }
+
+  // Campos de la parte técnica (PM): solo PM/admin/superadmin
+  const pmOnly = ['opciones_consideradas', 'impacto_alcance', 'impacto_tiempo', 'impacto_costo',
+                  'impacto_riesgos', 'recomendacion_decision', 'recomendacion_justif',
+                  'plan_alcance', 'plan_hitos', 'plan_responsables',
+                  'baseline_alcance', 'baseline_cronograma', 'baseline_costos', 'estado'];
+  if (!canFillPM(role)) {
+    for (const f of pmOnly) {
+      if (patch[f] !== undefined) {
+        throw new AppError(`Solo el PM puede editar "${f}"`, 403, 'FORBIDDEN_FIELD');
+      }
+    }
+  }
+
+  // Transición a "enviado_ceo" → notificar superadmins (CEO)
+  const wasNotSentToCeo = rfc.estado !== 'enviado_ceo' && rfc.estado !== 'aprobado' && rfc.estado !== 'rechazado';
+  const updated = await model.update(id, patch);
+  if (wasNotSentToCeo && patch.estado === 'enviado_ceo') {
+    notifyCeoOfRfc(updated).catch((err) => logger.warn({ err: err.message, rfcId: id }, 'No se pudo notificar CEO'));
+  }
+  return updated;
+}
+
+export async function approve(id, { rol, decision, firmaData, comentarios, userId, userRole }) {
+  if (!['ceo', 'pm', 'dev'].includes(rol)) throw new AppError('Rol inválido (ceo|pm|dev)', 400, 'INVALID_ROL');
+  if (!['a_favor', 'en_contra', 'diferir'].includes(decision)) throw new AppError('Decisión inválida', 400, 'INVALID_DECISION');
+
+  // Validar que el rol del user coincida con el slot.
+  if (rol === 'ceo' && !canFillCEO(userRole)) throw new AppError('Solo CEO/superadmin firma como CEO', 403, 'FORBIDDEN');
+  if (rol === 'pm' && !canFillPM(userRole)) throw new AppError('Solo PM/admin/superadmin firma como PM', 403, 'FORBIDDEN');
+  // DEV es libre: cualquier role autenticado puede firmar como DEV.
+
+  const rfc = await model.getById(id);
+  if (!rfc) throw new AppError('RFC no encontrado', 404, 'NOT_FOUND');
+
+  await model.setApproval({ rfcId: id, rol, userId, decision, firmaData, comentarios });
+
+  // Si firma CEO con a_favor → marcar como aprobado. en_contra → rechazado. diferir → diferido.
+  if (rol === 'ceo') {
+    const newStatus = decision === 'a_favor' ? 'aprobado' : decision === 'en_contra' ? 'rechazado' : 'diferido';
+    await query(`UPDATE change_requests SET estado=$1, updated_at=NOW() WHERE id=$2`, [newStatus, id]);
+  }
+
+  return await model.getById(id);
+}
+
+export async function getApprovalSignature(approvalId, { userId, role }) {
+  // Solo admin/PM/superadmin o el solicitante pueden ver las firmas
+  const { rows } = await query(
+    `SELECT a.firma_data, r.solicitante_user_id
+     FROM change_request_approvals a
+     JOIN change_requests r ON r.id = a.change_request_id
+     WHERE a.id = $1`,
+    [approvalId]
+  );
+  if (!rows[0]) throw new AppError('Firma no encontrada', 404, 'NOT_FOUND');
+  if (!canEditFull(role) && rows[0].solicitante_user_id !== userId) {
+    throw new AppError('Sin acceso', 403, 'FORBIDDEN');
+  }
+  return rows[0].firma_data;
+}
+
+export async function addAttachment(attachment, { userId }) {
+  return await model.addAttachment({ ...attachment, uploadedBy: userId });
+}
+
+export async function getAttachment(id) {
+  return await model.getAttachment(id);
+}
+
+export async function deleteAttachment(id) {
+  return await model.deleteAttachment(id);
+}
+
+export async function remove(id, { role }) {
+  if (!canEditFull(role)) throw new AppError('Solo admin/PM puede eliminar', 403, 'FORBIDDEN');
+  await model.remove(id);
+  return { deleted: true };
+}
+
+// ─── Notificaciones email ───────────────────────────────────────
+
+async function notifyPmsOfNewRfc(rfc) {
+  const pms = await model.listUsersByRole('project_manager');
+  // Si no hay PM dedicado, notificar a admins.
+  const recipients = pms.length > 0 ? pms : await model.listUsersByRole('admin');
+  if (recipients.length === 0) {
+    logger.info({ rfcId: rfc.id }, 'RFC: sin destinatarios PM/admin para notificar');
+    return;
+  }
+  const subject = `[RFC] Nueva solicitud de cambio: ${rfc.codigo_rfc} — ${rfc.titulo}`;
+  const html = `
+    <h2>Nueva solicitud de cambio</h2>
+    <p><strong>${rfc.codigo_rfc}</strong> — ${rfc.titulo}</p>
+    <p>Solicitante: ${rfc.solicitante_user_id || '—'}</p>
+    <p>Estado: ${rfc.estado}</p>
+    <p>Revisa la solicitud en el CRM para completar la parte técnica.</p>
+  `;
+  for (const r of recipients) {
+    if (!r.email) continue;
+    try {
+      await sendEmail({ to: [{ email: r.email, name: r.nombre }], subject, htmlContent: html, tags: ['rfc', 'created'] });
+    } catch (err) {
+      logger.warn({ err: err.message, to: r.email }, 'Brevo: fallo al notificar PM');
+    }
+  }
+}
+
+async function notifyCeoOfRfc(rfc) {
+  const ceos = await model.listUsersByRole('superadmin');
+  if (ceos.length === 0) return;
+  const subject = `[RFC] ${rfc.codigo_rfc} enviado para tu aprobación`;
+  const html = `
+    <h2>RFC pendiente de tu aprobación (CCB)</h2>
+    <p><strong>${rfc.codigo_rfc}</strong> — ${rfc.titulo}</p>
+    <p>Estado: enviado al CEO.</p>
+    <p>Entra al CRM, revisa la propuesta del PM y firma tu decisión.</p>
+  `;
+  for (const c of ceos) {
+    if (!c.email) continue;
+    try {
+      await sendEmail({ to: [{ email: c.email, name: c.nombre }], subject, htmlContent: html, tags: ['rfc', 'ceo_review'] });
+    } catch (err) {
+      logger.warn({ err: err.message, to: c.email }, 'Brevo: fallo al notificar CEO');
+    }
+  }
+}
