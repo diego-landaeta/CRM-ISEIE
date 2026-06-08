@@ -1,11 +1,12 @@
 import { useEffect, useState, useRef, lazy, Suspense } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, PaperPlaneTilt, FloppyDisk, FilePdf, Trash, PaperclipHorizontal, DownloadSimple, ArrowCounterClockwise } from '@phosphor-icons/react';
+import { ArrowLeft, PaperPlaneTilt, FloppyDisk, FilePdf, Trash, PaperclipHorizontal, DownloadSimple, ArrowCounterClockwise, CheckCircle, XCircle, ClockClockwise } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { rfcApi, RfcDetail, ESTADO_LABELS, ESTADO_COLORS } from '../api/changeRequests.api';
 import { toast } from '@/shared/hooks/useToast';
 
 const SignaturePad = lazy(() => import('../components/SignaturePad'));
+const RfcPrintTemplate = lazy(() => import('../components/RfcPrintTemplate'));
 
 const ROL_LABELS: Record<string, string> = { ceo: 'CEO / Sponsor', pm: 'Project Manager', dev: 'Desarrollador' };
 const DECISION_LABELS: Record<string, string> = { a_favor: 'A favor', en_contra: 'En contra', diferir: 'Diferir' };
@@ -61,6 +62,10 @@ export default function ChangeRequestDetailPage() {
 
   async function sendToCeo() {
     if (!rfc) return;
+    if (rfc.estado === 'enviado_ceo') {
+      toast({ title: 'Ya está enviado al CEO', description: 'El CEO ya recibió el aviso. Espera su firma o reenvíale el PDF.' });
+      return;
+    }
     if (!confirm(`Enviar ${rfc.codigo_rfc} al CEO para revisión? Cambiará el estado a "Enviado al CEO" y se enviará email.`)) return;
     setSaving(true);
     try {
@@ -108,8 +113,9 @@ export default function ChangeRequestDetailPage() {
   }
 
   function generatePdf() {
-    // Versión simple: usar window.print() con CSS @media print
-    window.print();
+    // Pequeño tick para que la plantilla termine de cargar firmas antes de abrir diálogo de impresión.
+    setTimeout(() => window.print(), 300);
+    toast({ title: 'Preparando PDF', description: 'Abriendo diálogo de impresión — elige "Guardar como PDF".' });
   }
 
   async function handleReopen() {
@@ -134,6 +140,23 @@ export default function ChangeRequestDetailPage() {
   if (!rfc) return <div className="h-40 bg-muted/40 rounded animate-pulse" />;
 
   const hasChanges = Object.keys(draft).length > 0;
+  const ceoApproval = rfc.approvals.find((a: any) => a.rol === 'ceo');
+  const ceoMustSign = isCeo && rfc.estado === 'enviado_ceo' && ceoApproval && !ceoApproval.decision;
+
+  function scrollToCeo() {
+    const el = document.getElementById('rfc-approvals-section');
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  async function ceoQuickDecide(decision: 'a_favor' | 'en_contra' | 'diferir') {
+    if (!rfc) return;
+    // Atajo: hace scroll y abre el formulario de firma del CEO con la decisión preseleccionada.
+    scrollToCeo();
+    setTimeout(() => {
+      // El ApprovalRow del CEO se identifica por data-rol="ceo"; lanzamos un evento custom.
+      window.dispatchEvent(new CustomEvent('rfc-prefill-decision', { detail: { rol: 'ceo', decision } }));
+    }, 400);
+  }
 
   return (
     <div className="space-y-5 pb-8 print:pb-0">
@@ -163,11 +186,16 @@ export default function ChangeRequestDetailPage() {
               <FloppyDisk size={14} weight="bold" /> {saving ? 'Guardando…' : 'Guardar cambios'}
             </button>
           )}
-          {isPm && rfc.estado !== 'aprobado' && rfc.estado !== 'rechazado' && rfc.estado !== 'diferido' && (
+          {isPm && !['aprobado','rechazado','diferido','enviado_ceo'].includes(rfc.estado) && (
             <button onClick={sendToCeo} disabled={saving}
               className="h-9 px-3 rounded-md bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-1.5">
               <PaperPlaneTilt size={14} weight="bold" /> Enviar al CEO
             </button>
+          )}
+          {isPm && rfc.estado === 'enviado_ceo' && (
+            <span className="h-9 px-3 rounded-md bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 text-sm font-semibold inline-flex items-center gap-1.5 border border-blue-200 dark:border-blue-800">
+              <PaperPlaneTilt size={14} weight="bold" /> Enviado al CEO — esperando firma
+            </span>
           )}
           {isPm && (rfc.estado === 'rechazado' || rfc.estado === 'diferido' || rfc.estado === 'aprobado') && (
             <button onClick={handleReopen} disabled={saving}
@@ -182,6 +210,37 @@ export default function ChangeRequestDetailPage() {
           </button>
         </div>
       </div>
+
+      {/* BANNER CEO — visible solo si soy CEO y el RFC está pendiente de mi firma.
+          Muestra botones grandes de decisión que hacen scroll a la sección de firma. */}
+      {ceoMustSign && (
+        <div className="print:hidden border-2 border-blue-500 bg-blue-50 dark:bg-blue-950/30 rounded-lg p-4">
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div className="min-w-0">
+              <h2 className="text-base font-bold text-blue-900 dark:text-blue-200 mb-1">
+                🖋️ Esta RFC espera tu firma como CEO
+              </h2>
+              <p className="text-sm text-blue-900/80 dark:text-blue-200/80">
+                Revisa el análisis del PM y la propuesta. Cuando firmes, el RFC queda <strong>Aprobado / Rechazado / Diferido</strong> según tu decisión.
+              </p>
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              <button onClick={() => ceoQuickDecide('a_favor')}
+                className="h-10 px-4 rounded-md bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 inline-flex items-center gap-1.5">
+                <CheckCircle size={16} weight="bold" /> A favor
+              </button>
+              <button onClick={() => ceoQuickDecide('en_contra')}
+                className="h-10 px-4 rounded-md bg-red-600 text-white text-sm font-semibold hover:bg-red-700 inline-flex items-center gap-1.5">
+                <XCircle size={16} weight="bold" /> Rechazar
+              </button>
+              <button onClick={() => ceoQuickDecide('diferir')}
+                className="h-10 px-4 rounded-md bg-amber-500 text-white text-sm font-semibold hover:bg-amber-600 inline-flex items-center gap-1.5">
+                <ClockClockwise size={16} weight="bold" /> Diferir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* SECCIÓN 1: Datos del solicitante */}
       <Card title="1. Descripción del cambio (solicitante)">
@@ -305,6 +364,7 @@ export default function ChangeRequestDetailPage() {
       </Card>
 
       {/* SECCIÓN 3: Aprobaciones CCB */}
+      <div id="rfc-approvals-section" />
       <Card title="3. Aprobaciones del CCB (firmas)">
         <p className="text-xs text-muted-foreground mb-3">
           Cada miembro del CCB firma su decisión. Cuando el CEO firma, el RFC pasa a su estado final (Aprobado / Rechazado / Diferido).
@@ -356,6 +416,11 @@ export default function ChangeRequestDetailPage() {
           </ul>
         )}
       </Card>
+
+      {/* Documento imprimible — invisible en pantalla, visible solo en @media print. */}
+      <Suspense fallback={null}>
+        <RfcPrintTemplate rfc={rfc} orgName="CRM ISEIE" />
+      </Suspense>
     </div>
   );
 }
@@ -456,6 +521,20 @@ function ApprovalRow({ approval, rfcId, canSignAs, onSigned }: {
       rfcApi.getSignature(approval.id).then((r: any) => setSavedSignature(r?.data?.firma_data || null)).catch(() => {});
     }
   }, [showForm, isSigned, approval.has_firma, approval.id, savedSignature]);
+
+  // El banner del CEO en la parte superior despacha 'rfc-prefill-decision' con
+  // {rol, decision}. Si el evento es para nuestro rol y aún no estamos firmados,
+  // abrimos el form y preseleccionamos la decisión.
+  useEffect(() => {
+    function handler(ev: any) {
+      const d = ev?.detail;
+      if (!d || d.rol !== approval.rol || isSigned || !canSignAs) return;
+      setDecision(d.decision);
+      setShowForm(true);
+    }
+    window.addEventListener('rfc-prefill-decision', handler as EventListener);
+    return () => window.removeEventListener('rfc-prefill-decision', handler as EventListener);
+  }, [approval.rol, isSigned, canSignAs]);
 
   return (
     <div className="border border-border rounded-md p-3 bg-muted/10">

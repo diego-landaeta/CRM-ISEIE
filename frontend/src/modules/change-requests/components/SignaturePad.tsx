@@ -1,8 +1,14 @@
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useLayoutEffect } from 'react';
 import { Trash } from '@phosphor-icons/react';
 
 // Canvas para firma digital. Devuelve la imagen como data URL (PNG base64)
-// cuando el user llama a `getDataUrl()` desde el padre vía ref.
+// al padre vía onChange cuando se suelta el lápiz.
+//
+// IMPORTANTE: el canvas tiene su propia resolución interna (width/height) y
+// un tamaño visual (CSS). Si NO coinciden, los píxeles del clientX/Y vienen
+// en escala visual pero al pintar en el canvas son tratados como pixels
+// internos → el trazo aparece desplazado / partido a la derecha. La fix:
+// reajustar width/height del canvas al tamaño real visible (con devicePixelRatio).
 
 interface Props {
   value?: string | null;
@@ -17,15 +23,48 @@ export default function SignaturePad({ value, onChange, height = 160, readOnly =
   const [empty, setEmpty] = useState(!value);
   const lastPoint = useRef<{ x: number; y: number } | null>(null);
 
-  // Cargar firma existente (value) en el canvas al montar / cuando cambia.
+  // Resync canvas internal resolution to its visual size whenever the layout
+  // changes (mount, resize, sidebar collapse, etc.). Without this, drawing
+  // lands in the wrong place.
+  useLayoutEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    function fit() {
+      if (!canvas) return;
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      const w = Math.max(1, Math.round(rect.width));
+      const h = Math.max(1, Math.round(rect.height));
+      // Save current content before resize (resize wipes the canvas).
+      const prev = empty ? null : canvas.toDataURL('image/png');
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      const ctx = canvas.getContext('2d');
+      if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      if (prev) {
+        const img = new Image();
+        img.onload = () => ctx?.drawImage(img, 0, 0, w, h);
+        img.src = prev;
+      }
+    }
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(canvas);
+    return () => ro.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Cargar firma existente al cambiar value.
   useEffect(() => {
     if (!value || !canvasRef.current) return;
-    const ctx = canvasRef.current.getContext('2d');
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
     if (!ctx) return;
     const img = new Image();
     img.onload = () => {
-      ctx.clearRect(0, 0, canvasRef.current!.width, canvasRef.current!.height);
-      ctx.drawImage(img, 0, 0, canvasRef.current!.width, canvasRef.current!.height);
+      const rect = canvas.getBoundingClientRect();
+      ctx.clearRect(0, 0, rect.width, rect.height);
+      ctx.drawImage(img, 0, 0, rect.width, rect.height);
       setEmpty(false);
     };
     img.src = value;
@@ -33,6 +72,7 @@ export default function SignaturePad({ value, onChange, height = 160, readOnly =
 
   function getPoint(e: React.PointerEvent<HTMLCanvasElement>) {
     const rect = canvasRef.current!.getBoundingClientRect();
+    // Coordenadas en píxeles CSS (porque el contexto ya está escalado por DPR).
     return { x: e.clientX - rect.left, y: e.clientY - rect.top };
   }
 
@@ -63,33 +103,32 @@ export default function SignaturePad({ value, onChange, height = 160, readOnly =
     if (!drawing) return;
     setDrawing(false);
     lastPoint.current = null;
-    // Notificar al padre con la data URL al soltar el lápiz.
     if (canvasRef.current && onChange) {
       onChange(canvasRef.current.toDataURL('image/png'));
     }
   }
 
   function clear() {
-    const ctx = canvasRef.current?.getContext('2d');
-    if (!ctx || !canvasRef.current) return;
-    ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!ctx || !canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    ctx.clearRect(0, 0, rect.width, rect.height);
     setEmpty(true);
     onChange?.(null);
   }
 
   return (
-    <div className="relative inline-block w-full">
+    <div className="relative w-full">
       <canvas
         ref={canvasRef}
-        width={600}
-        height={height}
         onPointerDown={start}
         onPointerMove={move}
         onPointerUp={end}
         onPointerCancel={end}
         onPointerLeave={end}
-        className={`w-full border-2 border-dashed rounded-md bg-white touch-none ${readOnly ? 'border-border cursor-default' : empty ? 'border-zinc-300 cursor-crosshair' : 'border-emerald-400 cursor-crosshair'}`}
-        style={{ height }}
+        className={`w-full block border-2 border-dashed rounded-md bg-white touch-none ${readOnly ? 'border-border cursor-default' : empty ? 'border-zinc-300 cursor-crosshair' : 'border-emerald-400 cursor-crosshair'}`}
+        style={{ height, width: '100%' }}
       />
       {empty && !readOnly && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-xs text-zinc-400">

@@ -115,3 +115,63 @@ input::-ms-clear { display: none; }
   *::-webkit-scrollbar-thumb:hover { background-color: hsl(var(--muted-foreground) / 0.6); }
   *::-webkit-scrollbar-corner { background: transparent; }
 }
+
+/* ─── RFC PrintTemplate ───────────────────────────────────────────────
+   Documento formal para imprimir / guardar como PDF la Solicitud de Cambio.
+   En pantalla se oculta (lo monta el detail page para que esté en el DOM
+   cuando se llama window.print()). En @media print ocultamos TODO el resto
+   de la app y dejamos solo el documento. */
+.rfc-print-doc { display: none; }
+
+@media print {
+  @page { size: A4; margin: 18mm 16mm 18mm 16mm; }
+  body * { visibility: hidden !important; }
+  .rfc-print-doc, .rfc-print-doc * { visibility: visible !important; }
+  .rfc-print-doc {
+    display: block !important;
+    position: absolute; left: 0; top: 0; width: 100%;
+    color: #000; background: #fff;
+    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    font-size: 11pt; line-height: 1.45;
+  }
+  .rfc-cover { page-break-after: always; min-height: 90vh; display: flex; flex-direction: column; }
+  .rfc-cover-top { display: flex; justify-content: space-between; padding-bottom: 12mm; border-bottom: 2px solid #002776; }
+  .rfc-org { font-size: 14pt; font-weight: 800; color: #002776; letter-spacing: 1px; }
+  .rfc-doctype { font-size: 10pt; font-weight: 700; color: #444; letter-spacing: 2px; }
+  .rfc-cover-mid { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 30mm 0; }
+  .rfc-code { font-size: 28pt; font-weight: 800; color: #002776; letter-spacing: 3px; margin-bottom: 6mm; }
+  .rfc-title { font-size: 22pt; font-weight: 700; margin: 0 0 8mm; max-width: 150mm; }
+  .rfc-status { font-size: 12pt; color: #444; }
+  .rfc-cover-meta table { width: 100%; border-collapse: collapse; }
+  .rfc-cover-meta td { padding: 4px 6px; border-bottom: 1px solid #ddd; font-size: 11pt; vertical-align: top; }
+  .rfc-cover-meta td:first-child { width: 45mm; color: #666; font-weight: 600; }
+  .rfc-cover-foot { margin-top: 10mm; text-align: center; font-size: 9pt; color: #888; border-top: 1px solid #ddd; padding-top: 4mm; }
+
+  .rfc-section { page-break-inside: auto; margin-bottom: 8mm; }
+  .rfc-section h2 { font-size: 14pt; color: #002776; border-bottom: 2px solid #002776; padding-bottom: 3px; margin: 6mm 0 4mm; page-break-after: avoid; }
+  .rfc-section h3 { font-size: 11pt; color: #333; margin: 5mm 0 2mm; page-break-after: avoid; }
+
+  .rfc-kv { width: 100%; border-collapse: collapse; }
+  .rfc-kv th, .rfc-kv td { border: 1px solid #ddd; padding: 4px 7px; text-align: left; vertical-align: top; font-size: 10pt; }
+  .rfc-kv th { background: #f3f4f7; width: 50mm; font-weight: 600; color: #444; }
+
+  .rfc-options { width: 100%; border-collapse: collapse; margin: 2mm 0 4mm; }
+  .rfc-options th, .rfc-options td { border: 1px solid #ddd; padding: 4px 6px; text-align: left; font-size: 9.5pt; vertical-align: top; }
+  .rfc-options th { background: #002776; color: #fff; font-weight: 600; }
+
+  .rfc-signatures-section { page-break-before: always; }
+  .rfc-signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 10mm; margin-top: 5mm; }
+  .rfc-sig-box { border: 1px solid #ccc; border-radius: 4px; padding: 5mm; page-break-inside: avoid; }
+  .rfc-sig-rol { font-weight: 700; color: #002776; font-size: 11pt; margin-bottom: 3mm; }
+  .rfc-sig-canvas { height: 35mm; border-bottom: 1px solid #999; display: flex; align-items: center; justify-content: center; margin-bottom: 3mm; }
+  .rfc-sig-canvas img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .rfc-sig-pending { color: #aaa; font-style: italic; font-size: 9pt; }
+  .rfc-sig-no-graphic { color: #777; font-style: italic; font-size: 9pt; }
+  .rfc-sig-meta { font-size: 9pt; color: #444; }
+  .rfc-sig-meta strong { color: #000; font-size: 10pt; }
+  .rfc-sig-decision { margin-top: 2mm; font-weight: 700; color: #002776; }
+  .rfc-sig-coment { margin-top: 1mm; font-style: italic; color: #555; }
+
+  .rfc-print-footer { margin-top: 8mm; padding-top: 3mm; border-top: 1px solid #ddd; font-size: 9pt; color: #888; text-align: center; }
+}
+
