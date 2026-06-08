@@ -13,6 +13,7 @@ router.post('/', ctrl.create);
 router.get('/:id', ctrl.getById);
 router.patch('/:id', ctrl.update);
 router.delete('/:id', roleGuard('admin', 'superadmin', 'project_manager'), ctrl.remove);
+router.post('/:id/reopen', roleGuard('admin', 'superadmin', 'project_manager'), ctrl.reopen);
 
 // Aprobaciones (firma CCB)
 router.post('/:id/approve', ctrl.approve);

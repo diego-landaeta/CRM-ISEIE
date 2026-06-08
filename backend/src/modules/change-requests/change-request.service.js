@@ -136,6 +136,42 @@ export async function remove(id, { role }) {
   return { deleted: true };
 }
 
+/**
+ * Reabre una RFC que estaba en estado terminal (rechazado / diferido / aprobado).
+ * Vuelve al estado 'en_analisis' y limpia la decisión + firma del CEO para que
+ * pueda volver a pasar por el flujo. Solo PM/admin/superadmin.
+ *
+ * Motivo: el solicitante quiere intentarlo de nuevo con ajustes, sin perder
+ * el histórico de las decisiones previas (las firmas de PM y DEV se conservan).
+ */
+export async function reopen(id, { userId, role, motivo }) {
+  if (!canEditFull(role)) throw new AppError('Solo PM/admin/superadmin puede reabrir', 403, 'FORBIDDEN');
+  const rfc = await model.getById(id);
+  if (!rfc) throw new AppError('RFC no encontrada', 404, 'NOT_FOUND');
+  const terminal = ['aprobado', 'rechazado', 'diferido'];
+  if (!terminal.includes(rfc.estado)) {
+    throw new AppError(`Solo se pueden reabrir RFCs ${terminal.join('/')}, no '${rfc.estado}'`, 400, 'INVALID_STATE');
+  }
+  if (!motivo || motivo.trim().length < 3) {
+    throw new AppError('Motivo de reapertura requerido (mín. 3 caracteres)', 400, 'MOTIVO_REQUIRED');
+  }
+  // Volver al estado de análisis del PM. La firma del CEO se borra (ya no es
+  // válida); las de PM y DEV se conservan como histórico — el PM puede ajustar.
+  await query(
+    `UPDATE change_requests SET estado='en_analisis', updated_at=NOW() WHERE id=$1`,
+    [id]
+  );
+  await query(
+    `UPDATE change_request_approvals
+     SET decision = NULL, firma_data = NULL, firma_at = NULL,
+         user_id = NULL,
+         comentarios = COALESCE(comentarios || E'\n', '') || '[Reabierta el ' || to_char(NOW(),'YYYY-MM-DD HH24:MI') || ': ' || $2 || ']'
+     WHERE change_request_id = $1 AND rol = 'ceo'`,
+    [id, motivo.trim()]
+  );
+  return await model.getById(id);
+}
+
 // ─── Notificaciones email ───────────────────────────────────────
 
 async function notifyPmsOfNewRfc(rfc) {

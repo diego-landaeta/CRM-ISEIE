@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, lazy, Suspense } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, PaperPlaneTilt, FloppyDisk, FilePdf, Trash, PaperclipHorizontal, DownloadSimple } from '@phosphor-icons/react';
+import { ArrowLeft, PaperPlaneTilt, FloppyDisk, FilePdf, Trash, PaperclipHorizontal, DownloadSimple, ArrowCounterClockwise } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { rfcApi, RfcDetail, ESTADO_LABELS, ESTADO_COLORS } from '../api/changeRequests.api';
 import { toast } from '@/shared/hooks/useToast';
@@ -112,6 +112,25 @@ export default function ChangeRequestDetailPage() {
     window.print();
   }
 
+  async function handleReopen() {
+    if (!rfc) return;
+    const motivo = window.prompt(
+      `Reabrir ${rfc.codigo_rfc}?\n\nMotivo (mínimo 3 caracteres). Se borra la firma del CEO y el RFC vuelve a "En análisis" para que el PM pueda ajustar y volver a enviar. Las firmas de PM y DEV se conservan en el historial.`
+    );
+    if (!motivo || motivo.trim().length < 3) {
+      if (motivo !== null) toast({ title: 'Motivo requerido', variant: 'destructive' });
+      return;
+    }
+    setSaving(true);
+    try {
+      const r = await rfcApi.reopen(rfc.id, motivo.trim());
+      setRfc(r.data);
+      toast({ title: 'RFC reabierta', description: 'Vuelve al estado "En análisis".' });
+    } catch (err: any) {
+      toast({ title: 'Error al reabrir', description: err?.data?.error || err?.message, variant: 'destructive' });
+    } finally { setSaving(false); }
+  }
+
   if (!rfc) return <div className="h-40 bg-muted/40 rounded animate-pulse" />;
 
   const hasChanges = Object.keys(draft).length > 0;
@@ -144,10 +163,17 @@ export default function ChangeRequestDetailPage() {
               <FloppyDisk size={14} weight="bold" /> {saving ? 'Guardando…' : 'Guardar cambios'}
             </button>
           )}
-          {isPm && rfc.estado !== 'aprobado' && rfc.estado !== 'rechazado' && (
+          {isPm && rfc.estado !== 'aprobado' && rfc.estado !== 'rechazado' && rfc.estado !== 'diferido' && (
             <button onClick={sendToCeo} disabled={saving}
               className="h-9 px-3 rounded-md bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-1.5">
               <PaperPlaneTilt size={14} weight="bold" /> Enviar al CEO
+            </button>
+          )}
+          {isPm && (rfc.estado === 'rechazado' || rfc.estado === 'diferido' || rfc.estado === 'aprobado') && (
+            <button onClick={handleReopen} disabled={saving}
+              title="Volver a abrir esta RFC para ajustar y reenviar al CEO"
+              className="h-9 px-3 rounded-md border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 text-sm font-semibold hover:bg-amber-100 dark:hover:bg-amber-950/50 disabled:opacity-50 inline-flex items-center gap-1.5">
+              <ArrowCounterClockwise size={14} weight="bold" /> Reabrir
             </button>
           )}
           <button onClick={generatePdf}

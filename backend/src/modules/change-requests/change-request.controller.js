@@ -99,6 +99,15 @@ export async function remove(req, res, next) {
   } catch (err) { next(err); }
 }
 
+export async function reopen(req, res, next) {
+  try {
+    const id = parseInt(req.params.id);
+    const { motivo } = req.body || {};
+    const result = await service.reopen(id, { userId: req.user.userId, role: req.user.role, motivo });
+    res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+}
+
 export async function uploadAttachment(req, res, next) {
   try {
     const rfcId = parseInt(req.params.id);

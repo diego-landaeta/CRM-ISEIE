@@ -82,6 +82,9 @@ export const rfcApi = {
   remove(id: number) {
     return client.delete(`/change-requests/${id}`);
   },
+  reopen(id: number, motivo: string) {
+    return client.post(`/change-requests/${id}/reopen`, { motivo });
+  },
   async uploadAttachment(id: number, file: File) {
     const formData = new FormData();
     formData.append('file', file);
