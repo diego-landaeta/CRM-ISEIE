@@ -31,7 +31,16 @@ export async function findAll({ active, role, projectId, page, limit }) {
                FROM user_projects up
                WHERE up.user_id = u.id AND up.active = true),
               '[]'::json
-            ) AS project_ids
+            ) AS project_ids,
+            COALESCE(
+              (SELECT json_agg(json_build_object(
+                 'projectId', up.project_id,
+                 'recibeLeads', up.recibe_leads
+               ) ORDER BY up.project_id)
+               FROM user_projects up
+               WHERE up.user_id = u.id AND up.active = true),
+              '[]'::json
+            ) AS projects
      FROM users u ${where}
      ORDER BY u.created_at DESC
      LIMIT $${paramIdx++} OFFSET $${paramIdx++}`,
@@ -66,7 +75,7 @@ export async function getUserProjects(userId) {
   return rows;
 }
 
-export async function create({ nombre, email, passwordHash, role, projectIds, setPasswordToken, setPasswordExpires }) {
+export async function create({ nombre, email, passwordHash, role, projectIds, projects, setPasswordToken, setPasswordExpires }) {
   const client = await getClient();
   try {
     await client.query('BEGIN');
@@ -78,11 +87,15 @@ export async function create({ nombre, email, passwordHash, role, projectIds, se
     );
     const user = rows[0];
 
-    for (const projectId of projectIds) {
+    const projectsList = Array.isArray(projects) && projects.length > 0
+      ? projects.map((p) => ({ projectId: p.projectId ?? p.project_id, recibeLeads: !!(p.recibeLeads ?? p.recibe_leads) }))
+      : (Array.isArray(projectIds) ? projectIds.map((pid) => ({ projectId: pid, recibeLeads: false })) : []);
+
+    for (const { projectId, recibeLeads } of projectsList) {
       await client.query(
-        `INSERT INTO user_projects (user_id, project_id, orden_cola)
-         VALUES ($1, $2, (SELECT COALESCE(MAX(orden_cola), 0) + 1 FROM user_projects WHERE project_id = $2))`,
-        [user.id, projectId]
+        `INSERT INTO user_projects (user_id, project_id, orden_cola, recibe_leads)
+         VALUES ($1, $2, (SELECT COALESCE(MAX(orden_cola), 0) + 1 FROM user_projects WHERE project_id = $2), $3)`,
+        [user.id, projectId, recibeLeads]
       );
     }
 
@@ -96,7 +109,7 @@ export async function create({ nombre, email, passwordHash, role, projectIds, se
   }
 }
 
-export async function update(id, { nombre, role, projectIds, avatar_url, avatar_key }) {
+export async function update(id, { nombre, role, projectIds, projects, avatar_url, avatar_key }) {
   const client = await getClient();
   try {
     await client.query('BEGIN');
@@ -116,14 +129,21 @@ export async function update(id, { nombre, role, projectIds, avatar_url, avatar_
       await client.query(`UPDATE users SET ${sets.join(', ')} WHERE id = $${paramIdx}`, params);
     }
 
-    if (projectIds) {
+    // Acepta el formato nuevo (projects: [{projectId, recibeLeads}]) o el
+    // legacy (projectIds: number[]) — este segundo deja recibe_leads en FALSE
+    // (comportamiento previo: solo gestores reciben leads).
+    const projectsList = Array.isArray(projects) && projects.length > 0
+      ? projects.map((p) => ({ projectId: p.projectId ?? p.project_id, recibeLeads: !!(p.recibeLeads ?? p.recibe_leads) }))
+      : (Array.isArray(projectIds) ? projectIds.map((pid) => ({ projectId: pid, recibeLeads: false })) : null);
+
+    if (projectsList) {
       await client.query(`UPDATE user_projects SET active = false WHERE user_id = $1`, [id]);
-      for (const projectId of projectIds) {
+      for (const { projectId, recibeLeads } of projectsList) {
         await client.query(
-          `INSERT INTO user_projects (user_id, project_id, orden_cola)
-           VALUES ($1, $2, (SELECT COALESCE(MAX(orden_cola), 0) + 1 FROM user_projects WHERE project_id = $2))
-           ON CONFLICT (user_id, project_id) DO UPDATE SET active = true`,
-          [id, projectId]
+          `INSERT INTO user_projects (user_id, project_id, orden_cola, recibe_leads)
+           VALUES ($1, $2, (SELECT COALESCE(MAX(orden_cola), 0) + 1 FROM user_projects WHERE project_id = $2), $3)
+           ON CONFLICT (user_id, project_id) DO UPDATE SET active = true, recibe_leads = EXCLUDED.recibe_leads`,
+          [id, projectId, recibeLeads]
         );
       }
     }
@@ -145,38 +165,4 @@ export async function deactivate(id) {
 
 export async function reactivate(id) {
   await query(`UPDATE users SET active = true, updated_at = NOW() WHERE id = $1`, [id]);
-}
-
-// Log de auditoría: paginado, opcionalmente filtrado por usuario y/o accion.
-// `action` admite prefijo via LIKE (ej. "lead.%" devuelve todos los eventos de leads).
-export async function listActivityLog({ userId = null, action = null, search = null, limit = 100, offset = 0 } = {}) {
-  const params = [];
-  const where = [];
-  let i = 1;
-  if (userId) { where.push(`a.user_id = $${i++}`); params.push(userId); }
-  if (action) {
-    if (action.includes('%')) { where.push(`a.action LIKE $${i++}`); params.push(action); }
-    else { where.push(`a.action = $${i++}`); params.push(action); }
-  }
-  if (search) {
-    where.push(`(u.nombre ILIKE $${i} OR u.email ILIKE $${i} OR a.action ILIKE $${i})`);
-    params.push(`%${search}%`); i++;
-  }
-  const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
-  params.push(limit, offset);
-  const { rows } = await query(
-    `SELECT a.id, a.user_id, a.action, a.details, a.ip_address, a.created_at,
-            u.nombre AS user_nombre, u.email AS user_email, u.role AS user_role
-       FROM user_activity_log a
-       LEFT JOIN users u ON u.id = a.user_id
-       ${whereSql}
-      ORDER BY a.created_at DESC
-      LIMIT $${i} OFFSET $${i + 1}`,
-    params
-  );
-  const { rows: countRows } = await query(
-    `SELECT COUNT(*)::int AS total FROM user_activity_log a LEFT JOIN users u ON u.id = a.user_id ${whereSql}`,
-    params.slice(0, params.length - 2)
-  );
-  return { items: rows, total: countRows[0]?.total || 0 };
 }

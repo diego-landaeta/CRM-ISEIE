@@ -1,15 +1,5 @@
 import { query, getClient } from '../../shared/config/db.js';
 
-// Columnas y tablas pendientes de portar desde el CRM hermano (v1):
-//   - leads.deleted_reason / leads.deleted_motivo / leads.deleted_by  (soft-delete con motivo)
-//   - leads.custom_fields JSONB
-//   - leads.reincidente, leads.es_propuesto, leads.propuesto_de
-//   - products.sku, products.precio, products.moneda, products.url_info
-//   - product_url_aliases (tabla)
-//   - lead_spam_reports (tabla)
-// Mientras no estén, las funciones afectadas son STUB (devuelven null/[]/no-op)
-// y el código de service consume los flags como opcionales.
-
 // ============================================================
 // WEBHOOK + ROUND-ROBIN
 // ============================================================
@@ -37,7 +27,6 @@ export async function findDuplicateByEmail(email, projectId) {
 
 // Detecta duplicado por email O por telefono (E.164). Cualquiera que matchee
 // se considera duplicado. Útil cuando el lead llega solo con tel (WhatsApp).
-// Prioriza el match por email si ambos coinciden con leads distintos.
 export async function findDuplicateByEmailOrPhone(email, telefono, projectId) {
   const cleanEmail = (email && email.trim()) || null;
   const cleanTel = (telefono && telefono.trim()) || null;
@@ -45,8 +34,7 @@ export async function findDuplicateByEmailOrPhone(email, telefono, projectId) {
 
   // Comparación canónica MX/AR: dos formas del mismo número (con/sin "1"/"9"
   // de móvil) deben colapsar como duplicado. Generamos la forma canónica del
-  // teléfono entrante y la de cada candidato en SQL con CASE inline (sin
-  // función PG para no requerir migración).
+  // teléfono entrante y de cada candidato con CASE inline en SQL.
   const canonExpr = `
     CASE
       WHEN substring(replace(replace($3, '+', ''), ' ', '') from 1 for 3) = '521'
@@ -120,23 +108,33 @@ export async function findPurchaseHistory(email, projectId) {
 }
 
 // Devuelve true si este email ya fue marcado como SPAM en este proyecto.
-// STUB v1 (depende de deleted_reason / deleted_motivo).
-export async function findSpamMatch(_email, _projectId) {
-  return null;
+// Si lo es, el webhook crea el nuevo lead pero lo deja ya marcado como spam
+// (no avanza round-robin, no notifica, ya queda fuera de listas).
+export async function findSpamMatch(email, projectId) {
+  if (!email) return null;
+  const { rows } = await query(
+    `SELECT id, deleted_at, deleted_motivo
+     FROM leads
+     WHERE email = $1 AND project_id = $2
+       AND deleted_at IS NOT NULL AND deleted_reason = 'spam'
+     ORDER BY deleted_at DESC LIMIT 1`,
+    [email, projectId]
+  );
+  return rows[0] || null;
 }
 
 // Soft delete (superadmin). No purga: deja en DB para auditoria.
-// v1: solo registramos deleted_at; el motivo se pierde hasta extender el schema.
 export async function softDeleteLead(leadId, { reason, motivo, userId }) {
-  // reason / motivo / userId aceptados pero ignorados en v1 (sin columnas que guardarlos)
-  void reason; void motivo; void userId;
   const { rows } = await query(
     `UPDATE leads
      SET deleted_at = NOW(),
+         deleted_reason = $1,
+         deleted_motivo = $2,
+         deleted_by = $3,
          updated_at = NOW()
-     WHERE id = $1 AND deleted_at IS NULL
-     RETURNING id, project_id, email`,
-    [leadId]
+     WHERE id = $4 AND deleted_at IS NULL
+     RETURNING id, project_id, email, deleted_reason`,
+    [reason, motivo || null, userId, leadId]
   );
   return rows[0] || null;
 }
@@ -145,6 +143,7 @@ export async function softDeleteLead(leadId, { reason, motivo, userId }) {
 // marca al loser como duplicado_de y lo soft-deletea con motivo=comentario.
 // Devuelve resumen { moved: {...counts}, winner_id, loser_id }.
 export async function mergeLeads({ winnerId, loserId, comment, userId }) {
+  const { getClient } = await import('../../shared/config/db.js');
   const c = await getClient();
   try {
     await c.query('BEGIN');
@@ -158,9 +157,6 @@ export async function mergeLeads({ winnerId, loserId, comment, userId }) {
     if (winnerId === loserId) throw new Error('No se puede fusionar un lead consigo mismo');
 
     // Mover hijos. Cada UPDATE devuelve count.
-    // En v1 solo movemos tablas existentes en 001. Las que no existen se ignoran
-    // gracias al catch de 42P01, así que el codigo sigue siendo identico al CRM hermano
-    // cuando se añadan matriculas / email_sequence_runs / lead_emails en futuras migraciones.
     const counts = {};
     const moveTables = [
       'lead_interactions', 'lead_reminders', 'lead_utms',
@@ -200,7 +196,7 @@ export async function mergeLeads({ winnerId, loserId, comment, userId }) {
        VALUES ($1, 'nota', $2, $3, NOW())`,
       [winnerId, `🔗 Fusionado con lead #${loserId} (${ll.rows[0].nombre || '—'}). Comentario: ${comment}`, userId]
     );
-    // Nota en el loser (queda en historial si se restaura desde papelera)
+    // Nota en el loser (queda si se restaura desde papelera)
     await c.query(
       `INSERT INTO lead_interactions (lead_id, tipo, nota, created_by, fecha)
        VALUES ($1, 'nota', $2, $3, NOW())`,
@@ -213,16 +209,16 @@ export async function mergeLeads({ winnerId, loserId, comment, userId }) {
       [winnerId, String(loserId), userId, loserId, String(winnerId)]
     );
 
-    // Soft-delete del loser con motivo 'duplicado_manual'
+    // Soft-delete del loser
     await c.query(
       `UPDATE leads
        SET deleted_at = NOW(),
            deleted_reason = 'duplicado_manual',
-           deleted_motivo = $2,
-           deleted_by = $3,
+           deleted_motivo = $1,
+           deleted_by = $2,
            updated_at = NOW()
-       WHERE id = $1`,
-      [loserId, `Fusionado en #${winnerId}: ${comment}`, userId]
+       WHERE id = $3`,
+      [`Fusionado en lead #${winnerId}. ${comment}`, userId, loserId]
     );
 
     await c.query('COMMIT');
@@ -238,7 +234,7 @@ export async function mergeLeads({ winnerId, loserId, comment, userId }) {
 export async function restoreLead(leadId) {
   const { rows } = await query(
     `UPDATE leads
-     SET deleted_at = NULL, updated_at = NOW()
+     SET deleted_at = NULL, deleted_reason = NULL, deleted_motivo = NULL, deleted_by = NULL, updated_at = NOW()
      WHERE id = $1
      RETURNING id`,
     [leadId]
@@ -247,44 +243,24 @@ export async function restoreLead(leadId) {
 }
 
 export async function findProductByName(name, projectId) {
-  if (!name) return null;
-  const clean = String(name).trim();
-  // 1) Match exacto ILIKE
-  let { rows } = await query(
+  const { rows } = await query(
     `SELECT id FROM products WHERE nombre ILIKE $1 AND project_id = $2 AND active = true LIMIT 1`,
-    [clean, projectId]
+    [name, projectId]
   );
-  if (rows[0]) return rows[0];
-  // 2) Match sin acentos (unaccent ambos lados). Si la extensión unaccent no
-  // existe, lo intentamos crear de forma idempotente; si tampoco se puede,
-  // hacemos fallback a normalización manual con regexp_replace.
-  try {
-    ({ rows } = await query(
-      `SELECT id FROM products
-       WHERE LOWER(unaccent(nombre)) = LOWER(unaccent($1))
-         AND project_id = $2 AND active = true LIMIT 1`,
-      [clean, projectId]
-    ));
-    if (rows[0]) return rows[0];
-  } catch (_) { /* unaccent no disponible — sigo */ }
-  // 3) Match fuzzy: ignorar prefijos típicos y comparar substring (LIKE %...%)
-  const stripped = clean
-    .replace(/^(curso|master|m[aá]ster|diplomado|seminario|maestria|maestr[ií]a)\s+(en|de|sobre)\s+/i, '')
-    .trim();
-  if (stripped && stripped !== clean) {
-    ({ rows } = await query(
-      `SELECT id FROM products WHERE nombre ILIKE $1 AND project_id = $2 AND active = true LIMIT 1`,
-      [`%${stripped}%`, projectId]
-    ));
-    if (rows[0]) return rows[0];
-  }
-  return null;
+  return rows[0] || null;
 }
 
 // Busca por SKU exacto (case-insensitive, trim). Útil para multi-sitio donde
-// los nombres difieren por idioma pero el SKU es el mismo. STUB v1.
-export async function findProductBySku(_sku, _projectId) {
-  return null;
+// los nombres difieren por idioma pero el SKU es el mismo.
+export async function findProductBySku(sku, projectId) {
+  if (!sku) return null;
+  const { rows } = await query(
+    `SELECT id FROM products
+     WHERE LOWER(TRIM(sku)) = LOWER(TRIM($1)) AND project_id = $2 AND active = true
+     LIMIT 1`,
+    [sku, projectId]
+  );
+  return rows[0] || null;
 }
 
 // Extrae el último segmento de una URL (slug del producto).
@@ -305,74 +281,71 @@ function urlHost(landingUrl) {
 // (subdominios o dominios distintos) que comparten estructura de URL:
 // https://es.foo.com/curso-x/  y  https://mx.foo.com/curso-x/
 // Mapea ambos al mismo producto del catálogo CRM por el último segmento.
-//
-// Estrategia:
-//   1) Tabla product_url_aliases (slugs aprendidos manualmente).
-//   2) products.url_info (slug nativo) si la columna existe.
+// También consulta la tabla product_url_aliases para slugs aprendidos.
 export async function findProductByLandingSlug(landingUrl, projectId) {
   const slug = urlSlug(landingUrl);
-  if (!slug || !projectId) return null;
+  if (!slug) return null;
 
+  // 1) Slug aprendido (tabla product_url_aliases)
   const aliasRes = await query(
-    `SELECT product_id FROM product_url_aliases
-      WHERE project_id = $1 AND url_slug = $2 LIMIT 1`,
+    `SELECT product_id FROM product_url_aliases WHERE project_id = $1 AND url_slug = $2 LIMIT 1`,
     [projectId, slug]
   );
   if (aliasRes.rows[0]) return { id: aliasRes.rows[0].product_id, _via: 'alias' };
 
-  // Fallback: si products tiene url_info, buscar por slug nativo.
-  // No es columna estándar en nuestro schema; se ignora silenciosamente si no existe.
-  try {
-    const { rows } = await query(
-      `SELECT id FROM products
-        WHERE project_id = $1 AND active = true
-          AND url_info ILIKE '%/' || $2
-        LIMIT 1`,
-      [projectId, slug]
-    );
-    return rows[0] || null;
-  } catch {
-    return null;
-  }
+  // 2) Slug nativo de algún producto (url_info termina con ese slug)
+  const { rows } = await query(
+    `SELECT id FROM products
+     WHERE project_id = $1 AND active = true
+       AND (
+         url_info ILIKE '%/' || $2 || '/' OR
+         url_info ILIKE '%/' || $2 OR
+         url_info = $2
+       )
+     LIMIT 1`,
+    [projectId, slug]
+  );
+  return rows[0] || null;
 }
 
 // Aprende: cuando un gestor vincula un lead a un producto, guardamos
 // el slug de la landing_url como alias. Los futuros leads desde esa
-// URL se vinculan automáticamente.
+// URL se vincularán automáticamente.
 export async function learnUrlAlias({ projectId, productId, landingUrl, userId }) {
   const slug = urlSlug(landingUrl);
-  if (!slug || !projectId || !productId) return null;
+  if (!slug) return null;
   const host = urlHost(landingUrl);
+  // Si el slug coincide con el url_info nativo del producto, no creamos alias
+  // (ya se resolverá vía findProductByLandingSlug paso 2).
+  const own = await query(
+    `SELECT id FROM products WHERE id = $1 AND (url_info ILIKE '%/' || $2 || '/' OR url_info ILIKE '%/' || $2)`,
+    [productId, slug]
+  );
+  if (own.rows.length > 0) return { skipped: true, reason: 'native_match' };
+  // Upsert por (project_id, url_slug)
   const { rows } = await query(
     `INSERT INTO product_url_aliases (project_id, product_id, url_slug, source_host, created_by)
      VALUES ($1, $2, $3, $4, $5)
      ON CONFLICT (project_id, url_slug) DO UPDATE
-       SET product_id = EXCLUDED.product_id,
-           source_host = EXCLUDED.source_host,
-           created_at = NOW()
+       SET product_id = EXCLUDED.product_id, source_host = EXCLUDED.source_host, created_at = NOW()
      RETURNING id, product_id, url_slug, source_host`,
-    [projectId, productId, slug, host, userId || null]
+    [projectId, productId, slug, host, userId]
   );
   return rows[0];
 }
 
+// Lista aliases por producto
 export async function listProductAliases(projectId, productId) {
   const { rows } = await query(
-    `SELECT id, url_slug, source_host, created_at
-       FROM product_url_aliases
-      WHERE project_id = $1 AND product_id = $2
-      ORDER BY created_at DESC`,
+    `SELECT id, url_slug, source_host, created_at FROM product_url_aliases
+     WHERE project_id = $1 AND product_id = $2 ORDER BY created_at DESC`,
     [projectId, productId]
   );
   return rows;
 }
 
 export async function deleteProductAlias(aliasId, projectId) {
-  const { rowCount } = await query(
-    `DELETE FROM product_url_aliases WHERE id = $1 AND project_id = $2`,
-    [aliasId, projectId]
-  );
-  return rowCount > 0;
+  await query(`DELETE FROM product_url_aliases WHERE id = $1 AND project_id = $2`, [aliasId, projectId]);
 }
 
 // Si forcedResponsableId viene, valida que el user tenga acceso al proyecto
@@ -410,7 +383,7 @@ export async function createLeadWithRoundRobin({ projectId, nombre, email, telef
        JOIN users u ON u.id = up.user_id
         AND u.active = true
         AND u.is_available = true
-        AND u.role IN ('gestor', 'admin')
+        AND (u.role = 'gestor' OR (u.role IN ('admin','superadmin') AND up.recibe_leads = TRUE))
        WHERE up.project_id = $1 AND up.active = true
          AND NOT EXISTS (
            SELECT 1 FROM user_availability_blocks ab
@@ -464,11 +437,13 @@ export async function createLeadWithRoundRobin({ projectId, nombre, email, telef
       );
     }
 
+    // Crear lead
     const { rows: leadRows } = await client.query(
-      `INSERT INTO leads (project_id, nombre, email, telefono, producto_interes_id, responsable_id, notas, landing_url, lead_duplicado_de, es_propuesto, propuesto_de, reincidente, custom_fields, idempotency_key)
+      `INSERT INTO leads (project_id, nombre, email, telefono, producto_interes_id, responsable_id, notas, landing_url, lead_duplicado_de, reincidente, es_propuesto, propuesto_de, custom_fields, idempotency_key)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-       RETURNING id, project_id, nombre, email, telefono, status, responsable_id, lead_duplicado_de, es_propuesto, propuesto_de, reincidente, fecha_solicitud, created_at`,
-      [projectId, nombre, email, telefono, productoInteresId, responsableId, notas, landingUrl, duplicadoDe, !!esPropuesto, propuestoDe || null, !!reincidente, customFields || {}, idempotencyKey]
+       RETURNING id, project_id, nombre, email, telefono, status, responsable_id, lead_duplicado_de, reincidente, es_propuesto, propuesto_de, fecha_solicitud, created_at`,
+      [projectId, nombre, email, telefono, productoInteresId, responsableId, notas, landingUrl, duplicadoDe, reincidente, esPropuesto, propuestoDe,
+       customFields ? JSON.stringify(customFields) : '{}', idempotencyKey]
     );
     const lead = leadRows[0];
 
@@ -550,32 +525,61 @@ export async function findLeadByIdempotencyKey(projectId, key) {
 // ============================================================
 
 // Calcula el ORDER BY segun la preferencia del usuario.
-// v1: products no tiene precio, asi que todos los modos degradan a 'recent'.
-function buildOrderBy(_sort) {
-  return `COALESCE(l.fecha_solicitud, l.created_at) DESC`;
+// - 'recent_value': agrupa por DIA mas reciente y dentro de cada día por precio DESC (DEFAULT)
+// - 'value':    precio DESC, fecha DESC (siempre los caros arriba aunque sean viejos)
+// - 'recent':   fecha DESC sin importar precio
+// - 'urgency':  score combinado: vencidos primero, luego valor*frescura exp
+function buildOrderBy(sort) {
+  if (sort === 'recent') {
+    return `COALESCE(l.fecha_solicitud, l.created_at) DESC`;
+  }
+  if (sort === 'value') {
+    return `COALESCE(prod.precio, 0) DESC NULLS LAST, COALESCE(l.fecha_solicitud, l.created_at) DESC`;
+  }
+  if (sort === 'urgency') {
+    // Score: precio * exp(-edad_dias / 7). Asi un lead de 100 hoy supera a uno
+    // de 300 de hace 14 dias. Tambien empuja los que tienen recordatorio vencido.
+    return `
+      (CASE WHEN EXISTS (SELECT 1 FROM lead_reminders r WHERE r.lead_id = l.id AND r.completado = false AND r.fecha_recordatorio < CURRENT_DATE) THEN 1 ELSE 0 END) DESC,
+      (COALESCE(prod.precio, 0) * EXP(-EXTRACT(EPOCH FROM (NOW() - COALESCE(l.fecha_solicitud, l.created_at))) / 604800)) DESC NULLS LAST,
+      COALESCE(l.fecha_solicitud, l.created_at) DESC
+    `;
+  }
+  // default 'recent_value' — los del DIA MAS RECIENTE arriba, dentro del dia los CAROS arriba.
+  // Trunca a fecha (sin hora) para que todos los leads del mismo dia compartan posición de "grupo".
+  return `
+    DATE(COALESCE(l.fecha_solicitud, l.created_at)) DESC,
+    COALESCE(prod.precio, 0) DESC NULLS LAST,
+    COALESCE(l.fecha_solicitud, l.created_at) DESC
+  `;
 }
 
-export async function findAll({ projectId, status, responsableId, unassigned, canal, productId, search, page, limit, includeConverted, dateFrom, dateTo, sort, archived, duplicated, reincidente }) {
+export async function findAll({ projectId, projectIds, status, responsableId, unassigned, canal, productId, search, page, limit, includeConverted, dateFrom, dateTo, sort, duplicated, reincidente }) {
   const conditions = [];
   const params = [];
   let paramIdx = 1;
 
-  if (!projectId) {
+  // Vista multi-proyecto: si llega projectIds (array) filtra por IN, sino por projectId único
+  if (Array.isArray(projectIds) && projectIds.length > 0) {
+    conditions.push(`l.project_id = ANY($${paramIdx++}::int[])`);
+    params.push(projectIds);
+  } else if (projectId) {
+    conditions.push(`l.project_id = $${paramIdx++}`);
+    params.push(projectId);
+  } else {
     // Sin filtro de proyecto no devolvemos nada (seguridad)
     return { leads: [], total: 0, page, limit, totalPages: 0 };
   }
-  conditions.push(`l.project_id = $${paramIdx++}`);
-  params.push(projectId);
 
-  // Soft-delete: por defecto excluir; con archived=true invertir el filtro.
-  conditions.push(archived ? `l.deleted_at IS NOT NULL` : `l.deleted_at IS NULL`);
+  // Excluir leads eliminados (soft delete)
+  conditions.push(`l.deleted_at IS NULL`);
 
   // Filtro duplicados (solo admin/superadmin a nivel ruta).
   if (duplicated) {
     conditions.push(`l.lead_duplicado_de IS NOT NULL`);
   }
 
-  // Filtro reincidentes — lead que repite consulta del mismo producto del proyecto.
+  // Filtro reincidentes — lead que repite consulta del mismo producto.
   if (reincidente) {
     conditions.push(`l.reincidente = TRUE`);
   }
@@ -623,13 +627,9 @@ export async function findAll({ projectId, status, responsableId, unassigned, ca
   const countResult = await query(`SELECT COUNT(*) FROM leads l ${where}`, params);
   const total = parseInt(countResult.rows[0].count);
 
-  // precio/moneda y has_pending_spam_report siguen NULL hasta portar esos joins.
   const { rows } = await query(
     `SELECT l.id, l.nombre, l.email, l.telefono, l.status, l.fecha_solicitud, l.dossier_enviado, l.lead_duplicado_de,
-            l.reincidente,
-            l.es_propuesto,
-            l.propuesto_de,
-            l.updated_at, l.created_at,
+            l.reincidente, l.es_propuesto, l.propuesto_de, l.updated_at, l.created_at,
             l.landing_url,
             l.project_id,
             proj.nombre AS proyecto_nombre,
@@ -638,13 +638,13 @@ export async function findAll({ projectId, status, responsableId, unassigned, ca
             lu.canal_detectado, lu.utm_source, lu.utm_campaign,
             prod.nombre as producto_interes,
             l.producto_interes_id,
-            NULL::numeric AS producto_precio,
-            NULL::text AS producto_moneda,
+            prod.precio as producto_precio,
+            prod.moneda as producto_moneda,
             (SELECT MAX(fecha) FROM lead_interactions WHERE lead_id = l.id) AS last_interaction_at,
             (SELECT MIN(fecha_recordatorio) FROM lead_reminders WHERE lead_id = l.id AND completado = false) AS next_reminder_at,
             p.dias_alerta_inactividad,
             EXTRACT(DAY FROM NOW() - GREATEST(l.updated_at, COALESCE((SELECT MAX(fecha) FROM lead_interactions WHERE lead_id = l.id), l.created_at)))::int AS dias_inactivo,
-            false AS has_pending_spam_report
+            EXISTS(SELECT 1 FROM lead_spam_reports sr WHERE sr.lead_id = l.id AND sr.status = 'pending') AS has_pending_spam_report
      FROM leads l
      LEFT JOIN users u ON u.id = l.responsable_id
      LEFT JOIN lead_utms lu ON lu.lead_id = l.id
@@ -661,15 +661,14 @@ export async function findAll({ projectId, status, responsableId, unassigned, ca
 }
 
 export async function findById(id) {
-  // v1: products minimal (sin precio/moneda) — devolvemos NULL.
   const { rows } = await query(
     `SELECT l.*,
             u.nombre as responsable_nombre, u.email as responsable_email,
             p.nombre as proyecto_nombre, p.slug as proyecto_slug,
             pr.nombre as producto_nombre,
             pr.nombre as producto_interes,
-            NULL::numeric as producto_precio,
-            NULL::text as producto_moneda
+            pr.precio as producto_precio,
+            pr.moneda as producto_moneda
      FROM leads l
      LEFT JOIN users u ON u.id = l.responsable_id
      LEFT JOIN projects p ON p.id = l.project_id
@@ -681,69 +680,67 @@ export async function findById(id) {
 
   const lead = rows[0];
 
-  const [utm, history, interactions, reminders, auditLog, secondaryProducts] = await Promise.all([
-    query(`SELECT * FROM lead_utms WHERE lead_id = $1`, [id]),
-    query(
-      `SELECT lsh.*, u.nombre as changed_by_nombre
-       FROM lead_status_history lsh
-       LEFT JOIN users u ON u.id = lsh.changed_by
-       WHERE lsh.lead_id = $1 ORDER BY lsh.changed_at DESC`,
-      [id]
-    ),
-    query(
-      `SELECT li.*, u.nombre as created_by_nombre
-       FROM lead_interactions li
-       LEFT JOIN users u ON u.id = li.created_by
-       WHERE li.lead_id = $1 ORDER BY li.fecha DESC`,
-      [id]
-    ),
-    query(
-      `SELECT lr.*, u.nombre as created_by_nombre
-       FROM lead_reminders lr
-       LEFT JOIN users u ON u.id = lr.created_by
-       WHERE lr.lead_id = $1 ORDER BY lr.fecha_recordatorio ASC`,
-      [id]
-    ),
-    query(
-      `SELECT la.id, la.field_name, la.old_value, la.new_value, la.changed_at,
-              la.changed_by_user_id, u.nombre as changed_by_nombre
-       FROM lead_audit_log la
-       LEFT JOIN users u ON u.id = la.changed_by_user_id
-       WHERE la.lead_id = $1 ORDER BY la.changed_at DESC`,
-      [id]
-    ),
-    query(
-      `SELECT lp.id, lp.product_id, p.nombre AS product_nombre,
-              lp.responsable_id, u.nombre AS responsable_nombre,
-              lp.status, lp.notas, lp.added_at, lp.added_via,
-              lp.added_by_user_id, au.nombre AS added_by_nombre
-       FROM lead_products lp
-       LEFT JOIN products p ON p.id = lp.product_id
-       LEFT JOIN users u ON u.id = lp.responsable_id
-       LEFT JOIN users au ON au.id = lp.added_by_user_id
-       WHERE lp.lead_id = $1 ORDER BY lp.added_at DESC`,
-      [id]
-    ),
-  ]);
+  // UTMs
+  const { rows: utmRows } = await query(`SELECT * FROM lead_utms WHERE lead_id = $1`, [id]);
+  lead.utms = utmRows[0] || null;
 
-  lead.utms = utm.rows[0] || null;
-  lead.statusHistory = history.rows;
-  lead.interactions = interactions.rows;
-  lead.reminders = reminders.rows;
-  lead.auditLog = auditLog.rows;
-  lead.secondaryProducts = secondaryProducts.rows;
-  return lead;
-}
-
-// Versión ligera para validaciones rápidas en operaciones (changeStatus,
-// addInteraction, addReminder, reassign) — evita las 5 queries del findById
-// completo cuando solo necesitamos validar existencia + leer status/project.
-export async function findByIdLight(id) {
-  const { rows } = await query(
-    `SELECT id, status, project_id, responsable_id FROM leads WHERE id = $1`,
+  // Status history
+  const { rows: historyRows } = await query(
+    `SELECT lsh.*, u.nombre as changed_by_nombre
+     FROM lead_status_history lsh
+     LEFT JOIN users u ON u.id = lsh.changed_by
+     WHERE lsh.lead_id = $1 ORDER BY lsh.changed_at DESC`,
     [id]
   );
-  return rows[0] || null;
+  lead.statusHistory = historyRows;
+
+  // Interactions
+  const { rows: interactionRows } = await query(
+    `SELECT li.*, u.nombre as created_by_nombre
+     FROM lead_interactions li
+     LEFT JOIN users u ON u.id = li.created_by
+     WHERE li.lead_id = $1 ORDER BY li.fecha DESC`,
+    [id]
+  );
+  lead.interactions = interactionRows;
+
+  // Reminders
+  const { rows: reminderRows } = await query(
+    `SELECT lr.*, u.nombre as created_by_nombre
+     FROM lead_reminders lr
+     LEFT JOIN users u ON u.id = lr.created_by
+     WHERE lr.lead_id = $1 ORDER BY lr.fecha_recordatorio ASC`,
+    [id]
+  );
+  lead.reminders = reminderRows;
+
+  // Audit log (cambios de campos editables)
+  const { rows: auditRows } = await query(
+    `SELECT la.id, la.field_name, la.old_value, la.new_value, la.changed_at,
+            la.changed_by_user_id, u.nombre as changed_by_nombre
+     FROM lead_audit_log la
+     LEFT JOIN users u ON u.id = la.changed_by_user_id
+     WHERE la.lead_id = $1 ORDER BY la.changed_at DESC`,
+    [id]
+  );
+  lead.auditLog = auditRows;
+
+  // Programas secundarios (#18 multi-cursos)
+  const { rows: spRows } = await query(
+    `SELECT lp.id, lp.product_id, p.nombre AS product_nombre,
+            lp.responsable_id, u.nombre AS responsable_nombre,
+            lp.status, lp.notas, lp.added_at, lp.added_via,
+            lp.added_by_user_id, au.nombre AS added_by_nombre
+     FROM lead_products lp
+     LEFT JOIN products p ON p.id = lp.product_id
+     LEFT JOIN users u ON u.id = lp.responsable_id
+     LEFT JOIN users au ON au.id = lp.added_by_user_id
+     WHERE lp.lead_id = $1 ORDER BY lp.added_at DESC`,
+    [id]
+  );
+  lead.secondaryProducts = spRows;
+
+  return lead;
 }
 
 // ============================================================
@@ -807,7 +804,7 @@ export async function reassignPendingRoundRobin(projectId) {
        JOIN users u ON u.id = up.user_id
         AND u.active = true
         AND u.is_available = true
-        AND u.role IN ('gestor', 'admin')
+        AND (u.role = 'gestor' OR (u.role IN ('admin','superadmin') AND up.recibe_leads = TRUE))
        WHERE up.project_id = $1 AND up.active = true
          AND NOT EXISTS (
            SELECT 1 FROM user_availability_blocks ab
@@ -881,11 +878,11 @@ export async function updateLead(id, fields) {
   const params = [];
   let idx = 1;
 
-  const allowed = ['nombre', 'email', 'telefono', 'notas', 'producto_interes_id'];
+  const allowed = ['nombre', 'email', 'telefono', 'notas', 'producto_interes_id', 'custom_fields'];
   for (const key of allowed) {
     if (Object.prototype.hasOwnProperty.call(fields, key)) {
       sets.push(`${key} = $${idx++}`);
-      params.push(fields[key]);
+      params.push(key === 'custom_fields' ? JSON.stringify(fields[key]) : fields[key]);
     }
   }
 
@@ -896,7 +893,7 @@ export async function updateLead(id, fields) {
 
   const { rows } = await query(
     `UPDATE leads SET ${sets.join(', ')} WHERE id = $${idx}
-     RETURNING id, nombre, email, telefono, notas, producto_interes_id, status, responsable_id, updated_at`,
+     RETURNING id, nombre, email, telefono, notas, producto_interes_id, custom_fields, status, responsable_id, updated_at`,
     params
   );
   return rows[0] || null;
@@ -1015,127 +1012,4 @@ export async function getStats(projectId, { responsableId = null } = {}) {
     params
   );
   return rows[0];
-}
-
-// Dashboard agregado: KPIs del periodo + comparacion vs periodo anterior + sparklines semanales.
-// Cubre 4 metricas: leads nuevos, conversiones cerradas, ingresos (sum payments), tasa conversion.
-export async function getDashboardSummary(projectId, { days = 30, responsableId = null } = {}) {
-  const isGestor = !!responsableId;
-  const respParam = isGestor ? ', $4::int' : '';
-  const respFilterLeads = isGestor ? 'AND l.responsable_id = $4::int' : '';
-  const respFilterConv  = isGestor ? `AND l.responsable_id = $4::int` : '';
-  // Filtro para sparkSql usa posición $2 (no $4) porque sparkParams es más chico
-  const respFilterSparkLeads = isGestor ? 'AND l.responsable_id = $2::int' : '';
-  const respFilterSparkConv  = isGestor ? `AND l.responsable_id = $2::int` : '';
-
-  // Periodo actual (ultimos N dias) y previo (N dias anteriores a esos).
-  const now = new Date();
-  const periodEnd = now.toISOString();
-  const periodStart = new Date(now.getTime() - days * 86400000).toISOString();
-  const prevStart   = new Date(now.getTime() - 2 * days * 86400000).toISOString();
-  const params = isGestor
-    ? [projectId, periodStart, periodEnd, responsableId, prevStart]
-    : [projectId, periodStart, periodEnd, prevStart];
-  const prevParamIdx = isGestor ? '$5' : '$4';
-
-  // KPIs del periodo actual vs previo.
-  const kpisSql = `
-    WITH cur_leads AS (
-      SELECT COUNT(*)::int AS n FROM leads l
-       WHERE l.project_id = $1 AND l.deleted_at IS NULL
-         AND l.created_at >= $2 AND l.created_at < $3 ${respFilterLeads}
-    ), prev_leads AS (
-      SELECT COUNT(*)::int AS n FROM leads l
-       WHERE l.project_id = $1 AND l.deleted_at IS NULL
-         AND l.created_at >= ${prevParamIdx} AND l.created_at < $2 ${respFilterLeads}
-    ), cur_conv AS (
-      SELECT COUNT(*)::int AS n,
-             COALESCE(SUM(c.importe_total), 0)::numeric AS ingresos
-        FROM conversions c
-        LEFT JOIN leads l ON l.id = c.lead_id
-       WHERE c.project_id = $1
-         AND c.created_at >= $2 AND c.created_at < $3 ${respFilterConv}
-    ), prev_conv AS (
-      SELECT COUNT(*)::int AS n,
-             COALESCE(SUM(c.importe_total), 0)::numeric AS ingresos
-        FROM conversions c
-        LEFT JOIN leads l ON l.id = c.lead_id
-       WHERE c.project_id = $1
-         AND c.created_at >= ${prevParamIdx} AND c.created_at < $2 ${respFilterConv}
-    )
-    SELECT
-      (SELECT n FROM cur_leads) AS leads_cur,
-      (SELECT n FROM prev_leads) AS leads_prev,
-      (SELECT n FROM cur_conv) AS conv_cur,
-      (SELECT n FROM prev_conv) AS conv_prev,
-      (SELECT ingresos FROM cur_conv) AS ingresos_cur,
-      (SELECT ingresos FROM prev_conv) AS ingresos_prev
-  `;
-  const { rows: kpisRows } = await query(kpisSql, params);
-  const k = kpisRows[0] || {};
-
-  // Sparkline semanal (8 semanas) — leads creados y conversiones.
-  const sparkSql = `
-    WITH weeks AS (
-      SELECT generate_series(0, 7) AS w
-    )
-    SELECT
-      w.w,
-      (SELECT COUNT(*)::int FROM leads l
-        WHERE l.project_id = $1 AND l.deleted_at IS NULL
-          AND l.created_at >= NOW() - ((w.w + 1) * INTERVAL '7 days')
-          AND l.created_at <  NOW() - (w.w * INTERVAL '7 days')
-          ${respFilterSparkLeads}
-      ) AS leads,
-      (SELECT COUNT(*)::int FROM conversions c LEFT JOIN leads l ON l.id = c.lead_id
-        WHERE c.project_id = $1
-          AND c.created_at >= NOW() - ((w.w + 1) * INTERVAL '7 days')
-          AND c.created_at <  NOW() - (w.w * INTERVAL '7 days')
-          ${respFilterSparkConv}
-      ) AS conversiones,
-      (SELECT COALESCE(SUM(c.importe_total), 0)::numeric FROM conversions c LEFT JOIN leads l ON l.id = c.lead_id
-        WHERE c.project_id = $1
-          AND c.created_at >= NOW() - ((w.w + 1) * INTERVAL '7 days')
-          AND c.created_at <  NOW() - (w.w * INTERVAL '7 days')
-          ${respFilterSparkConv}
-      ) AS ingresos
-    FROM weeks w
-    ORDER BY w.w DESC
-  `;
-  // sparkSql usa $1 (projectId) y, si es gestor, $2 (responsableId) — sin nulls intermedios
-  const sparkParams = isGestor ? [projectId, responsableId] : [projectId];
-  const { rows: weeksRows } = await query(sparkSql, sparkParams);
-
-  const leadsSpark = weeksRows.map((r) => Number(r.leads || 0));
-  const convSpark = weeksRows.map((r) => Number(r.conversiones || 0));
-  const ingresosSpark = weeksRows.map((r) => Number(r.ingresos || 0));
-  const convRateSpark = weeksRows.map((r) => {
-    const l = Number(r.leads || 0);
-    const c = Number(r.conversiones || 0);
-    return l > 0 ? Math.round((c / l) * 100) : 0;
-  });
-
-  const pct = (cur, prev) => {
-    const c = Number(cur || 0);
-    const p = Number(prev || 0);
-    if (p === 0) return c > 0 ? 100 : null;
-    return Math.round(((c - p) / p) * 1000) / 10;
-  };
-
-  const leadsCur = Number(k.leads_cur || 0);
-  const convCur = Number(k.conv_cur || 0);
-  const ingresosCur = Number(k.ingresos_cur || 0);
-  const ingresosPrev = Number(k.ingresos_prev || 0);
-  const rateCur = leadsCur > 0 ? Math.round((convCur / leadsCur) * 1000) / 10 : 0;
-  const leadsPrev = Number(k.leads_prev || 0);
-  const convPrev = Number(k.conv_prev || 0);
-  const ratePrev = leadsPrev > 0 ? Math.round((convPrev / leadsPrev) * 1000) / 10 : 0;
-
-  return {
-    days,
-    leads:       { value: leadsCur,    trend: pct(leadsCur, leadsPrev),     spark: leadsSpark },
-    conversiones:{ value: convCur,     trend: pct(convCur, convPrev),       spark: convSpark },
-    ingresos:    { value: ingresosCur, trend: pct(ingresosCur, ingresosPrev), spark: ingresosSpark },
-    tasa:        { value: rateCur,     trend: rateCur - ratePrev,           spark: convRateSpark },
-  };
 }
