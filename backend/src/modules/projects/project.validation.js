@@ -17,6 +17,7 @@ export const updateProjectSchema = z.object({
   nombre: z.string().min(1).max(200).optional(),
   type: z.enum(['crm', 'ia']).optional(),
   emoji: z.string().max(10).nullable().optional(),
+  logo_url: z.string().url('URL inválida').max(2000).nullable().optional(),
   meta_account_id: z.string().max(100).nullable().optional(),
   google_account_id: z.string().max(100).nullable().optional(),
   gsc_property: z.string().max(255).nullable().optional(),
