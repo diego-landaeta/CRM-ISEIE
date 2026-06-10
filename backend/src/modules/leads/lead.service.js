@@ -125,6 +125,33 @@ async function _createLeadCore(project, leadData) {
     duplicate.producto_interes_id === productoInteresId
   );
 
+  // Burst-merge: si el MISMO email/tel pide el MISMO producto en una ventana
+  // corta (default 2min), no creamos un lead nuevo — sumamos una interacción
+  // al lead original. Esto agrupa los rebotes de Make / form duplicados y
+  // mantiene limpia la cola del gestor.
+  const BURST_WINDOW_S = parseInt(process.env.LEAD_BURST_WINDOW_SECONDS || '120', 10);
+  if (duplicate && reincidente && BURST_WINDOW_S > 0) {
+    const dupAgeS = (Date.now() - new Date(duplicate.created_at).getTime()) / 1000;
+    if (dupAgeS <= BURST_WINDOW_S) {
+      const msg = leadData.notas || leadData.message || null;
+      const msgTag = msg ? ` — mensaje: "${String(msg).substring(0, 200)}"` : '';
+      const utmTag = leadData.utm_source ? ` · utm_source=${leadData.utm_source}` : '';
+      const text = `🔁 Re-envío del mismo formulario (mismo producto) detectado por webhook · hace ${Math.round(dupAgeS)}s${msgTag}${utmTag}`;
+      leadModel.createInteraction(duplicate.id, 'nota', text, null, null)
+        .catch((err) => logger.warn({ err: err.message, leadId: duplicate.id }, 'No se pudo registrar burst-merge interaction'));
+      logger.info({ leadId: duplicate.id, dupAgeS, window: BURST_WINDOW_S, project: project.id }, 'lead burst-merged into existing');
+      return {
+        lead_id: duplicate.id,
+        responsable_id: duplicate.responsable_id || null,
+        assignment_source: 'burst_merged',
+        duplicado: true,
+        reincidente: true,
+        burst_merged: true,
+        canal: canalDetectado,
+      };
+    }
+  }
+
   // Propuesto (cross-sell) = ya existe un lead CONVERTIDO del mismo email
   // y este nuevo pregunta por OTRO producto. Es una oportunidad calificada.
   const converted = leadData.email
