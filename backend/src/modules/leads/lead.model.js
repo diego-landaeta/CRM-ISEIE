@@ -665,6 +665,21 @@ export async function findAll({ projectId, projectIds, status, responsableId, un
   return { leads: rows, total, page, limit, totalPages: Math.ceil(total / limit) };
 }
 
+// Lookup mínimo para validar existencia + obtener campos clave (status,
+// project_id, responsable_id, nombre, email, telefono). Más barato que findById
+// (no hace los joins de producto/responsable/proyecto). Lo usan changeStatus,
+// addInteraction, addReminder, reassign, softDelete, etc.
+export async function findByIdLight(id) {
+  const { rows } = await query(
+    `SELECT id, status, project_id, responsable_id, nombre, email, telefono, deleted_at
+     FROM leads WHERE id = $1`,
+    [id]
+  );
+  const r = rows[0];
+  if (!r || r.deleted_at) return null;
+  return r;
+}
+
 export async function findById(id) {
   const { rows } = await query(
     `SELECT l.*,
@@ -1017,4 +1032,30 @@ export async function getStats(projectId, { responsableId = null } = {}) {
     params
   );
   return rows[0];
+}
+
+// Dashboard summary: igual que getStats pero ventana de N días + breakdown
+// de leads recientes. Usado por GET /api/leads/dashboard-summary.
+export async function getDashboardSummary(projectId, { days = 30, responsableId = null } = {}) {
+  const params = [projectId, days];
+  let respFilter = '';
+  if (responsableId) {
+    params.push(responsableId);
+    respFilter = ` AND responsable_id = $3`;
+  }
+  const { rows } = await query(
+    `SELECT
+       COUNT(*) as total,
+       COUNT(*) FILTER (WHERE created_at >= NOW() - ($2 || ' days')::interval) as leads_periodo,
+       COUNT(*) FILTER (WHERE status = 'nuevo') as nuevos,
+       COUNT(*) FILTER (WHERE status = 'por_contactar') as por_contactar,
+       COUNT(*) FILTER (WHERE status = 'contactado') as contactados,
+       COUNT(*) FILTER (WHERE status = 'en_seguimiento') as en_seguimiento,
+       COUNT(*) FILTER (WHERE status = 'convertido') as convertidos,
+       COUNT(*) FILTER (WHERE status = 'no_interesado') as no_interesados,
+       COUNT(*) FILTER (WHERE responsable_id IS NULL AND status NOT IN ('convertido','no_interesado')) as sin_asignar
+     FROM leads WHERE project_id = $1 AND deleted_at IS NULL${respFilter}`,
+    params
+  );
+  return { ...rows[0], days };
 }
