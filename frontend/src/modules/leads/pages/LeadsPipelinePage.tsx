@@ -42,35 +42,34 @@ function daysAgo(dateStr: string | null | undefined): string {
   return `hace ${diff}d`;
 }
 
-// Helpers para el chip de "próximo contacto" en cada card del pipeline.
-// Devuelve { label, classes } o null si no hay recordatorio.
-function nextContactInfo(dateStr: string | null | undefined) {
+// Parser robusto YYYY-MM-DD → fecha LOCAL del navegador (no UTC).
+// new Date("2026-06-11") devuelve UTC midnight; desde TZ negativas eso es ayer.
+function parseLocalDateOnly(dateStr: string | null | undefined): Date | null {
   if (!dateStr) return null;
-  // Comparación en Europe/Madrid: tomamos la fecha (YYYY-MM-DD) sin hora.
-  const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Madrid' }); // YYYY-MM-DD
-  const dateOnly = String(dateStr).slice(0, 10);
-  const today = new Date(todayStr + 'T00:00:00');
-  const target = new Date(dateOnly + 'T00:00:00');
+  const s = String(dateStr).slice(0, 10);
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  return new Date(parseInt(m[1]), parseInt(m[2]) - 1, parseInt(m[3]));
+}
+function todayLocal(): Date {
+  const n = new Date();
+  return new Date(n.getFullYear(), n.getMonth(), n.getDate());
+}
+
+// Helpers para el chip de "próximo contacto" en cada card del pipeline.
+function nextContactInfo(dateStr: string | null | undefined) {
+  const target = parseLocalDateOnly(dateStr);
+  if (!target) return null;
+  const today = todayLocal();
   const diffDays = Math.round((target.getTime() - today.getTime()) / 86400000);
   if (diffDays < 0) {
-    return {
-      label: `vencido ${Math.abs(diffDays)}d`,
-      classes: 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300',
-    };
+    return { label: `vencido ${Math.abs(diffDays)}d`, classes: 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300' };
   }
-  if (diffDays === 0) {
-    return { label: 'hoy', classes: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' };
-  }
-  if (diffDays === 1) {
-    return { label: 'mañana', classes: 'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300' };
-  }
-  if (diffDays <= 7) {
-    return { label: `en ${diffDays}d`, classes: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-300' };
-  }
-  // Más lejos: muestra la fecha formateada
-  const d = new Date(dateOnly);
+  if (diffDays === 0) return { label: 'hoy', classes: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' };
+  if (diffDays === 1) return { label: 'mañana', classes: 'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300' };
+  if (diffDays <= 7) return { label: `en ${diffDays}d`, classes: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-300' };
   return {
-    label: d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }),
+    label: target.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }),
     classes: 'bg-muted text-muted-foreground',
   };
 }
@@ -79,13 +78,10 @@ function nextContactInfo(dateStr: string | null | undefined) {
 type NextContactFilter = 'todos' | 'vencidos' | 'hoy' | 'manana' | 'semana' | 'sin';
 function matchesNextContactFilter(lead: PipelineLead, filter: NextContactFilter): boolean {
   if (filter === 'todos') return true;
-  const dateStr = (lead as any).next_reminder_at as string | null | undefined;
-  if (!dateStr) return filter === 'sin';
+  const target = parseLocalDateOnly((lead as any).next_reminder_at);
+  if (!target) return filter === 'sin';
   if (filter === 'sin') return false;
-  const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Madrid' });
-  const dateOnly = String(dateStr).slice(0, 10);
-  const today = new Date(todayStr + 'T00:00:00');
-  const target = new Date(dateOnly + 'T00:00:00');
+  const today = todayLocal();
   const diff = Math.round((target.getTime() - today.getTime()) / 86400000);
   if (filter === 'vencidos') return diff < 0;
   if (filter === 'hoy') return diff === 0;
