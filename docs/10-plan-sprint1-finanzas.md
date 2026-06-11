@@ -65,8 +65,9 @@ Todos los items de Finanzas marcados como **"PRÓX."** (no están en `BETA_ROUTE
 2. **Activar en BETA** los módulos que estén OK (quitar "PRÓX." del sidebar)
 3. **Completar** los módulos que están a medias
 4. **Conectar** los módulos entre sí: una conversión genera comisión automática; un periodo de nómina suma comisiones + ajustes
-5. **Dashboard financiero** (`/accounting`) con KPIs cruzados: ingresos, egresos, cuentas por cobrar, comisiones pendientes, margen, P&L mensual
-6. **Documentar** cada flujo para que Manuel pueda operar sin asistencia
+5. **Sincronizar Stripe** (transversal): cobros y reembolsos reales → conversiones + ingresos + comisiones se generan solos
+6. **Dashboard financiero** (`/accounting`) con KPIs cruzados: ingresos, egresos, cuentas por cobrar, comisiones pendientes, margen, P&L mensual
+7. **Documentar** cada flujo para que Manuel pueda operar sin asistencia
 
 ---
 
@@ -91,13 +92,53 @@ A.3. Quitar "PRÓX." del sidebar para los módulos que pasen A.1+A.2:
 
 ---
 
+### EPIC B0 — Stripe Sync (transversal, 4 días)
+**Objetivo**: que cada cobro/refund real en Stripe se refleje automáticamente como conversión + ingreso + comisión + (si aplica) gasto por fee. Esta épica es PREVIA a Egresos/Cuentas porque condiciona el modelo de datos.
+
+#### Configuración
+B0.1. Modelo `stripe_credentials` (uno por proyecto): `secret_key` (cifrada AES-256), `webhook_secret`, `account_id`, `active`, `mode (test|live)`, `last_event_at`, `last_event_id`.
+B0.2. UI superadmin: `/configuracion/stripe` por proyecto — pegar Secret Key, ver el endpoint a configurar en Stripe Dashboard, probar conexión (`balance.retrieve`).
+B0.3. Endpoint público webhook: `POST /api/webhooks/stripe/:projectId` (rate-limited, valida firma con `webhook_secret`).
+
+#### Catálogo de eventos a sincronizar
+| Evento Stripe | Acción en CRM |
+|---|---|
+| `charge.succeeded` / `payment_intent.succeeded` | Crear (o linkear) conversión + `conversion_payment` con `metodo_pago='stripe'` |
+| `charge.refunded` | Insertar `conversion_refund` por el importe reembolsado |
+| `charge.dispute.created` | Marcar conversión con flag `en_disputa` + notificar superadmin |
+| `payout.paid` | Registrar `income` real cobrado en la cuenta + `expense` por la `fees` del payout |
+| `invoice.payment_succeeded` (suscripciones) | Conversión recurrente — fuera de scope Sprint 1, solo loggear |
+
+#### Reconciliación
+B0.4. Job nocturno `stripeReconcile.js`: descarga `payouts.list({from: yesterday})` y los compara con `accounts_payable_payments` o `income` para detectar diferencias (debería ser cero si los webhooks llegan bien).
+B0.5. Mapeo automático Stripe → lead/cliente: por `customer.email` matchea contra `leads.email`; si no hay match, crea un cliente "fantasma" para reconciliar después.
+B0.6. Comisiones de Stripe (fee del 1.4% + 0.25€) se registran como **expense** con categoría `comision_pasarela_pago`, NO como descuento del ingreso. El CRM siempre muestra el bruto + el fee aparte.
+
+#### UI
+B0.7. Por cada conversión que provenga de Stripe: badge "Stripe" en el detalle + link al objeto en Stripe Dashboard (`https://dashboard.stripe.com/{mode}/payments/{charge_id}`).
+B0.8. `/stripe` (sidebar): vista de payouts recientes + balance disponible + últimos eventos del webhook (debug).
+
+#### Seguridad
+- Secret Key cifrada en DB (AES-256, master key en `.env STRIPE_MASTER_KEY`).
+- Verificación de firma del webhook obligatoria (`Stripe-Signature` header).
+- Tablas `stripe_events_log` con dedup por `event_id` (idempotencia).
+
+**Migraciones**: `XXX_stripe_credentials.sql`, `XXX_stripe_events_log.sql`, `ALTER conversion_payments ADD COLUMN stripe_charge_id, ALTER conversion_refunds ADD COLUMN stripe_refund_id`.
+
+**Dependencias externas**:
+- `stripe` (npm package) — backend
+- Cuenta Stripe del cliente activa
+- Webhook endpoint accesible (Nginx ya enruta `/api/webhooks/*`)
+
+---
+
 ### EPIC B — Egresos / Gastos (3 días)
 **Objetivo**: registrar gastos por proyecto/categoría con comprobante.
 
 B.1. Verificar schema `expenses`: campos (importe, categoria, descripcion, fecha, proyecto, comprobante_url, creado_por).
 B.2. Endpoint CRUD completo (`POST /expenses`, `GET /expenses?from=&to=&category=`, `PATCH`, `DELETE`).
 B.3. Upload de comprobante (PDF/JPG/PNG) — usar el patrón de `documents.service.localStorage`.
-B.4. Catálogo de **categorías de egreso** configurable (alquiler, sueldos, marketing, software, impuestos, otros).
+B.4. Catálogo de **categorías de egreso** configurable (alquiler, sueldos, marketing, software, impuestos, **comision_pasarela_pago**, otros). La categoría `comision_pasarela_pago` la usa B0 para registrar los fees de Stripe automáticos.
 B.5. UI: tabla con filtros (mes, categoría, proyecto), formulario de alta con drop de comprobante, edición inline del importe.
 B.6. Export CSV mensual.
 
@@ -119,10 +160,10 @@ C.5. Alertas: facturas que vencen en < 7 días (notificación a superadmin).
 ### EPIC D — Conversiones e Ingresos (2 días)
 **Objetivo**: completar lo que ya funciona en `conversions` con:
 
-D.1. **Ingresos** (`/accounting/income`): listado de pagos recibidos (suma de `conversion_payments`), con filtro de fechas, método de pago, gestor.
-D.2. **Cuentas por cobrar** (`/accounting/receivable`): conversiones con `importe_total > importe_pagado` (deuda activa) + recordatorios.
-D.3. **Refunds**: ya existe `refunds.controller.js`. Validar que funcione y registrar como egreso negativo en P&L.
-D.4. UI dashboard: ingresos del mes, cobrado vs pendiente, top gestores por facturación.
+D.1. **Ingresos** (`/accounting/income`): listado de pagos recibidos (suma de `conversion_payments`), con filtro de fechas, método de pago (efectivo / transferencia / **Stripe** / otros), gestor. Distinción visible entre "Cobrado en CRM" (manual) y "Cobrado por Stripe" (auto desde B0).
+D.2. **Cuentas por cobrar** (`/accounting/receivable`): conversiones con `importe_total > importe_pagado` (deuda activa) + recordatorios. Los pagos que entren por Stripe descuentan automáticamente esta deuda.
+D.3. **Refunds**: ya existe `refunds.controller.js`. Validar que funcione y registrar como egreso negativo en P&L. Stripe genera refunds vía webhook `charge.refunded` (ver B0).
+D.4. UI dashboard: ingresos del mes, cobrado vs pendiente, top gestores por facturación, **breakdown por canal de cobro** (Stripe / transferencia / efectivo).
 
 ---
 
@@ -130,7 +171,7 @@ D.4. UI dashboard: ingresos del mes, cobrado vs pendiente, top gestores por fact
 **Objetivo**: cuando un gestor cierra una venta → comisión automática según su regla.
 
 E.1. Modelo `commission_rules`: `user_id, project_id (nullable), tipo (porcentaje|fijo), valor, periodo_yyyymm_desde`.
-E.2. Calculadora: trigger al registrar `conversion_payment` → buscar regla aplicable → crear/actualizar `commissions(user_id, periodo_yyyymm, importe_calculado, importe_pagado, estado)`.
+E.2. Calculadora: trigger al registrar `conversion_payment` → buscar regla aplicable → crear/actualizar `commissions(user_id, periodo_yyyymm, importe_calculado, importe_pagado, estado)`. Funciona igual independientemente del origen del pago (Stripe, transferencia, efectivo). La base de comisión es el importe **bruto** cobrado, el fee de Stripe no la reduce.
 E.3. UI:
 - Tabla de reglas por gestor (CRUD superadmin).
 - Vista del gestor (`/commissions`): sus comisiones del mes (calculadas, pagadas, pendientes).
@@ -154,13 +195,14 @@ F.5. Export Excel con todos los recibos del mes para banco.
 **Objetivo**: vista consolidada para Manuel: P&L del mes en una pantalla.
 
 G.1. Endpoint `GET /accounting/dashboard?from=&to=` que agrega:
-- Ingresos (cobrado real del periodo)
-- Egresos (suma `expenses` del periodo + comisiones marcadas pagadas + nóminas pagadas)
+- Ingresos (cobrado real del periodo, **breakdown por canal**: Stripe / transferencia / efectivo / otros)
+- Egresos (suma `expenses` del periodo + comisiones marcadas pagadas + nóminas pagadas + **fees de Stripe del periodo**)
 - Pendientes de cobrar (`accounts receivable`)
 - Pendientes de pagar (`accounts payable`)
 - Margen (ingresos − egresos)
 - Top 5 categorías de gasto
 - Histórico mensual (12 meses): ingresos vs egresos en barras
+- **Stripe balance available + pending** (consultando API en tiempo real)
 
 G.2. UI con Recharts: barras + tarjetas KPI + drilldown.
 G.3. Export PDF para reuniones.
@@ -187,6 +229,13 @@ Solo si faltan en el schema actual:
 XXX_finance_expense_categories.sql
 XXX_finance_commission_rules_periodo.sql
 XXX_finance_dashboard_cache.sql  (opcional, si el dashboard tarda)
+
+# Stripe (EPIC B0)
+XXX_stripe_credentials.sql              -- por proyecto
+XXX_stripe_events_log.sql               -- idempotencia + audit
+XXX_alter_conversion_payments_stripe.sql  -- ADD stripe_charge_id, stripe_payment_intent_id
+XXX_alter_conversion_refunds_stripe.sql   -- ADD stripe_refund_id
+XXX_alter_expenses_stripe_payout.sql      -- ADD source_stripe_payout_id (para los fees)
 ```
 
 ---
@@ -205,11 +254,12 @@ XXX_finance_dashboard_cache.sql  (opcional, si el dashboard tarda)
 
 | Semana | Épicas |
 |---|---|
-| 1 | A (auditoría) + B (egresos) + C (cuentas por pagar) |
-| 2 | D (ingresos) + E (comisiones) |
-| 3 | F (nóminas) + G (dashboard) + QA |
+| 1 | A (auditoría, 2d) + **B0 (Stripe, 4d)** — Stripe primero porque condiciona modelos de B/D/E |
+| 2 | B (egresos, 3d) + C (cuentas por pagar, 3d) |
+| 3 | D (ingresos/cobrar, 2d) + E (comisiones, 3d) |
+| 4 | F (nóminas, 4d) + G (dashboard, 2d) + QA |
 
-**Total estimado**: 19 días-persona ≈ 3 semanas a 1 dev full-time.
+**Total estimado**: 23 días-persona ≈ 4 semanas a 1 dev full-time (era 19, suma +4 por Stripe).
 
 ---
 
@@ -222,6 +272,8 @@ Sprint 1 se considera cerrado cuando Manuel puede:
 4. Ver la comisión que generó cada gestor sin tocar SQL
 5. Generar el recibo de nómina de un gestor y descargarlo en PDF
 6. Ver el dashboard P&L con ingresos, egresos y margen del mes
+7. **Conectar la cuenta de Stripe** del proyecto en 1 minuto y ver que cada cobro nuevo aparece como conversión + ingreso + comisión sin intervención manual
+8. **Reconciliar payouts** semanales de Stripe contra los ingresos del CRM con un click
 
 ---
 
@@ -234,3 +286,4 @@ Empezar por **EPIC A — Auditoría** (2 días). Sin tocar código nuevo, solo v
 ## 10. Cambios en este documento
 
 - 2026-06-11 — Documento creado, plan inicial aprobado.
+- 2026-06-12 — Añadida **EPIC B0 Stripe Sync** transversal (4 días, anterior a egresos). Actualizado cronograma (3→4 semanas). Ajustadas épicas B/D/E/G para reflejar dependencia.
