@@ -47,9 +47,9 @@ const PERIODS: Record<string, { label: string; from: () => string | null; to: ()
 function fmt(n: number | string, currency = 'EUR'): string {
   const v = Number(n || 0);
   try {
-    return new Intl.NumberFormat('es-ES', { style: 'currency', currency, maximumFractionDigits: 0 }).format(v);
+    return new Intl.NumberFormat('es-ES', { style: 'currency', currency, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
   } catch {
-    return `${Math.round(v)} ${currency}`;
+    return `${v.toFixed(2)} ${currency}`;
   }
 }
 

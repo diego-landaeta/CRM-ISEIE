@@ -182,7 +182,10 @@ export async function createCommissionForConversion(conversionId) {
     const base = rule.base_calc === 'vendido'
       ? Number(cv.importe_total)
       : Number(cv.importe_pagado || 0);
-    const importe = Math.round(base * Number(rule.pct)) / 100;
+    // Cálculo de comisión: base * pct / 100. Cuantizamos al céntimo con
+    // half-away-from-zero (el átomo de EUR/USD; numeric(12,2) en la columna).
+    // No se redondea a euros ni a decenas — siempre 2 decimales.
+    const importe = Number((base * Number(rule.pct) / 100).toFixed(2));
 
     const { rows } = await c.query(
       `INSERT INTO commissions (conversion_id, rule_id, user_id, product_id, importe_base, pct, importe_comision, base_calc)

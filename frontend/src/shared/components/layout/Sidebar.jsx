@@ -164,6 +164,134 @@ function NavItem({ to, label, icon: Icon, end, comingSoon, statusTag, collapsed,
 }
 
 
+// Decide qué sección debe estar abierta por defecto: Principal (siempre) +
+// la que contenga la ruta actual. Devuelve un map { [section.label]: boolean }.
+function defaultOpenSections(sections, pathname) {
+  const out = {};
+  for (const s of sections) {
+    const containsActive = s.items.some((it) => {
+      if (pathname === it.to) return true;
+      if (it.sectionPrefixes?.some((p) => pathname === p || pathname.startsWith(p + '/'))) return true;
+      if (it.to && it.to !== '/' && pathname.startsWith(it.to + '/')) return true;
+      return false;
+    });
+    out[s.label] = s.label === 'Principal' || containsActive;
+  }
+  return out;
+}
+
+function CollapsibleNav({ sections, role, collapsed, onNavigate }) {
+  const location = useLocation();
+  const STORAGE_KEY = 'crm-sidebar-sections-v1';
+  const [openMap, setOpenMap] = useState(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) return { ...defaultOpenSections(sections, location.pathname), ...JSON.parse(stored) };
+    } catch { /* ignore */ }
+    return defaultOpenSections(sections, location.pathname);
+  });
+
+  // Cuando cambia la ruta, NO sobrescribimos las preferencias del usuario
+  // (esto sería molesto). Solo abrimos la sección activa si estaba cerrada.
+  useEffect(() => {
+    const auto = defaultOpenSections(sections, location.pathname);
+    setOpenMap((prev) => {
+      const next = { ...prev };
+      for (const k of Object.keys(auto)) {
+        if (auto[k] && !next[k]) next[k] = true;
+      }
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
+
+  function toggle(label) {
+    setOpenMap((prev) => {
+      const next = { ...prev, [label]: !prev[label] };
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  }
+
+  return (
+    <nav className="flex-1 overflow-y-auto -mx-2 px-2 space-y-2">
+      {sections.map((section) => {
+        const items = section.items
+          .map((it) => {
+            if (it.sectionPrefixes?.includes('/reports') && it.sectionPrefixes?.includes('/activity')) {
+              const isAdmin = role === 'admin' || role === 'superadmin' || role === 'soporte';
+              return { ...it, to: isAdmin ? '/reports' : '/activity' };
+            }
+            return it;
+          })
+          .filter((it) => canSeeItem(it, role))
+          .map((it) => ({ ...it, comingSoon: it.comingSoon || !isBetaAllowed(it.to) }));
+        if (!items.length) return null;
+
+        // En modo colapsado (sidebar mini) no mostramos headers ni colapso —
+        // todos los items se ven como iconos en línea.
+        if (collapsed) {
+          return (
+            <div key={section.label} className="space-y-0.5">
+              {items.map((item) => (
+                <NavItem
+                  key={item.to + '|' + item.label}
+                  to={item.to}
+                  label={item.label}
+                  icon={item.icon}
+                  end={item.end}
+                  comingSoon={item.comingSoon}
+                  statusTag={item.statusTag}
+                  collapsed={collapsed}
+                  onClick={onNavigate}
+                  sectionPrefixes={item.sectionPrefixes}
+                />
+              ))}
+            </div>
+          );
+        }
+
+        const open = !!openMap[section.label];
+        return (
+          <div key={section.label}>
+            <button
+              type="button"
+              onClick={() => toggle(section.label)}
+              aria-expanded={open}
+              className="w-full flex items-center justify-between px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 hover:text-foreground hover:bg-secondary/40 transition-colors select-none"
+            >
+              <span>{section.label}</span>
+              <CaretDown
+                size={10}
+                weight="bold"
+                className={cn('transition-transform duration-150', open ? '' : '-rotate-90')}
+              />
+            </button>
+            {open && (
+              <div className="space-y-0.5 mt-0.5 ml-1 pl-2 border-l border-border/50">
+                {items.map((item) => (
+                  <NavItem
+                    key={item.to + '|' + item.label}
+                    to={item.to}
+                    label={item.label}
+                    icon={item.icon}
+                    end={item.end}
+                    comingSoon={item.comingSoon}
+                    statusTag={item.statusTag}
+                    collapsed={collapsed}
+                    onClick={onNavigate}
+                    sectionPrefixes={item.sectionPrefixes}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </nav>
+  );
+}
+
 export default function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }) {
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
@@ -249,51 +377,16 @@ export default function Sidebar({ collapsed = false, onToggleCollapsed, onNaviga
         </button>
       )}
 
-      {/* Nav */}
-      <nav className="flex-1 overflow-y-auto -mx-2 px-2 space-y-3">
-        {NAV_SECTIONS.map((section) => {
-          const items = section.items
-            .map((it) => {
-              // Resuelve `to` por rol cuando hace falta — caso "Análisis":
-              // admin va a /reports, gestor va a /activity (no tiene reports).
-              if (it.sectionPrefixes?.includes('/reports') && it.sectionPrefixes?.includes('/activity')) {
-                const isAdmin = role === 'admin' || role === 'superadmin' || role === 'soporte';
-                return { ...it, to: isAdmin ? '/reports' : '/activity' };
-              }
-              return it;
-            })
-            .filter((it) => canSeeItem(it, role))
-            // Marcar como "Próximamente" los items cuya ruta NO está en BETA_ROUTES
-            // (sólo cuando VITE_BETA_MODE=true, definido en .env.production)
-            .map((it) => ({ ...it, comingSoon: it.comingSoon || !isBetaAllowed(it.to) }));
-          if (!items.length) return null;
-          return (
-            <div key={section.label}>
-              {!collapsed && (
-                <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 px-3 mb-1">
-                  {section.label}
-                </div>
-              )}
-              <div className="space-y-0.5">
-                {items.map((item) => (
-                  <NavItem
-                    key={item.to}
-                    to={item.to}
-                    label={item.label}
-                    icon={item.icon}
-                    end={item.end}
-                    comingSoon={item.comingSoon}
-                    statusTag={item.statusTag}
-                    collapsed={collapsed}
-                    onClick={onNavigate}
-                    sectionPrefixes={item.sectionPrefixes}
-                  />
-                ))}
-              </div>
-            </div>
-          );
-        })}
-      </nav>
+      {/* Nav — secciones colapsables. El estado se persiste en localStorage por
+          sección. Por defecto se abre la sección que contiene la ruta activa
+          (más "Principal" siempre como ancla). El usuario puede plegar/expandir
+          libremente con click en el header de sección. */}
+      <CollapsibleNav
+        sections={NAV_SECTIONS}
+        role={role}
+        collapsed={collapsed}
+        onNavigate={onNavigate}
+      />
 
       {/* User menu + notification bell */}
       <div className="mt-4 pt-4 border-t border-border relative" ref={userMenuRef}>

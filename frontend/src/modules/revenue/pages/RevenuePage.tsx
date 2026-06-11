@@ -77,7 +77,7 @@ export default function RevenuePage() {
     });
     const ingresosMes = estesMes.reduce((s, c) => s + Number(c.importe_total || 0), 0);
     const convertidoMes = estesMes.length;
-    const ticketMedio = convertidoMes > 0 ? Math.round(ingresosMes / convertidoMes) : 0;
+    const ticketMedio = convertidoMes > 0 ? ingresosMes / convertidoMes : 0;
     return { ingresosMes, convertidoMes, ticketMedio };
   }, [conversions]);
 

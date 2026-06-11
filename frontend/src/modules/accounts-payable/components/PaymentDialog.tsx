@@ -6,7 +6,7 @@ import { toast } from '@/shared/hooks/useToast';
 import { X } from '@phosphor-icons/react';
 
 function fmt(n: number | string | null | undefined): string {
-  return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(Number(n || 0));
+  return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n || 0));
 }
 
 interface Payable {

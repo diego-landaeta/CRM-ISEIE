@@ -28,9 +28,9 @@ const STATUS_BADGE = {
 function formatMoney(n, currency = 'EUR') {
   const value = Number(n || 0);
   try {
-    return new Intl.NumberFormat('es-ES', { style: 'currency', currency, maximumFractionDigits: 0 }).format(value);
+    return new Intl.NumberFormat('es-ES', { style: 'currency', currency, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
   } catch {
-    return `${Math.round(value)} ${currency}`;
+    return `${value.toFixed(2)} ${currency}`;
   }
 }
 
