@@ -47,6 +47,15 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
   const [metodo, setMetodo] = useState('transferencia');
   const [fecha, setFecha] = useState(today);
   const [notas, setNotas] = useState('');
+
+  // Pagos fraccionados (cuotas). Se activan al seleccionar metodo='fraccionado'.
+  // Por defecto generamos N cuotas mensuales desde la fecha de pago, distribuyendo
+  // el total a partes iguales (la última absorbe la diferencia para que sumen
+  // exactamente el importe_total — contablemente correcto).
+  const [numCuotas, setNumCuotas] = useState(3);
+  const [fechaPrimeraCuota, setFechaPrimeraCuota] = useState(today);
+  const [installments, setInstallments] = useState<Array<{ importe_previsto: string; fecha_vencimiento: string }>>([]);
+  const [installmentsDirty, setInstallmentsDirty] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -86,6 +95,45 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
     if (productoSel && !importeTotal && productoSel.precio) setImporteTotal(String(productoSel.precio));
   }, [productoSel?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Helpers para pagos fraccionados (cuotas)
+  function addMonths(isoDate: string, months: number): string {
+    const d = new Date(isoDate);
+    d.setMonth(d.getMonth() + months);
+    return d.toISOString().slice(0, 10);
+  }
+  function distributeInstallments(total: number, n: number, fechaInicio: string): Array<{ importe_previsto: string; fecha_vencimiento: string }> {
+    if (!isFinite(total) || total <= 0 || n < 2) return [];
+    const cuotaBase = Math.round((total / n) * 100) / 100;
+    const result = [];
+    for (let i = 0; i < n; i++) {
+      const importe = i === n - 1
+        ? Math.round((total - cuotaBase * (n - 1)) * 100) / 100
+        : cuotaBase;
+      result.push({ importe_previsto: String(importe), fecha_vencimiento: addMonths(fechaInicio, i) });
+    }
+    return result;
+  }
+  // Regenerar cuotas cuando cambien total / N / fecha inicio (si el user no las
+  // ha editado a mano).
+  useEffect(() => {
+    if (metodo !== 'fraccionado') return;
+    if (installmentsDirty) return;
+    const totalNum = parseFloat(importeTotal);
+    if (!totalNum || totalNum <= 0 || numCuotas < 2) { setInstallments([]); return; }
+    setInstallments(distributeInstallments(totalNum, numCuotas, fechaPrimeraCuota));
+  }, [metodo, importeTotal, numCuotas, fechaPrimeraCuota, installmentsDirty]);
+  // Si cambia metodo a fraccionado, inicializa la fecha de primera cuota con la fecha del pago.
+  useEffect(() => {
+    if (metodo === 'fraccionado') {
+      setFechaPrimeraCuota(fecha);
+      setInstallmentsDirty(false);
+    }
+  }, [metodo]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const installmentsSum = installments.reduce((acc, it) => acc + (parseFloat(it.importe_previsto) || 0), 0);
+  const installmentsMismatch = metodo === 'fraccionado' && installments.length > 0
+    && Math.abs(installmentsSum - parseFloat(importeTotal || '0')) > 0.01;
+
   if (!open) return null;
 
   const productosFiltrados = productSearch.trim()
@@ -124,6 +172,28 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
     if (pagadoNum < 0 || pagadoNum > totalNum) {
       toast({ title: 'Importe pagado inválido', description: 'Entre 0 y el total', variant: 'destructive' }); return;
     }
+    // Validación específica de cuotas
+    if (metodo === 'fraccionado') {
+      if (installments.length < 2) {
+        toast({ title: 'Cuotas requeridas', description: 'Configura al menos 2 cuotas o cambia el método.', variant: 'destructive' });
+        return;
+      }
+      if (installmentsMismatch) {
+        toast({ title: 'Las cuotas no suman el total', description: `Suma actual: ${installmentsSum.toFixed(2)} · Total: ${totalNum.toFixed(2)}`, variant: 'destructive' });
+        return;
+      }
+      for (const it of installments) {
+        const imp = parseFloat(it.importe_previsto);
+        if (!isFinite(imp) || imp <= 0) {
+          toast({ title: 'Cuota inválida', description: 'Todas las cuotas necesitan importe > 0', variant: 'destructive' });
+          return;
+        }
+        if (!it.fecha_vencimiento) {
+          toast({ title: 'Fecha de cuota faltante', variant: 'destructive' });
+          return;
+        }
+      }
+    }
 
     setSaving(true);
     try {
@@ -136,6 +206,12 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
         fecha_pago: fecha,
         notas: notas.trim() || null,
       };
+      if (metodo === 'fraccionado' && installments.length >= 2) {
+        body.installments = installments.map(it => ({
+          importe_previsto: parseFloat(it.importe_previsto),
+          fecha_vencimiento: it.fecha_vencimiento,
+        }));
+      }
       if (mode === 'existing' && selectedClient) {
         body.lead_id = selectedClient.id;
       } else {
@@ -328,6 +404,64 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
                     className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm" />
                 </div>
               </div>
+
+              {/* Cuotas — solo cuando método es fraccionado */}
+              {metodo === 'fraccionado' && (
+                <div className="space-y-3 p-3 rounded-md border border-border bg-muted/20">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Plan de cuotas</span>
+                    <button type="button"
+                      onClick={() => { setInstallmentsDirty(false); }}
+                      className="text-[10px] text-primary hover:underline">
+                      Auto-distribuir
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">N° de cuotas</label>
+                      <input type="number" min={2} max={36} value={numCuotas}
+                        onChange={(e) => { setNumCuotas(parseInt(e.target.value) || 2); setInstallmentsDirty(false); }}
+                        className="w-full h-9 px-3 rounded-md border border-border bg-card text-sm" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">1ª fecha de vencimiento</label>
+                      <input type="date" value={fechaPrimeraCuota}
+                        onChange={(e) => { setFechaPrimeraCuota(e.target.value); setInstallmentsDirty(false); }}
+                        className="w-full h-9 px-3 rounded-md border border-border bg-card text-sm" />
+                    </div>
+                  </div>
+                  {installments.length > 0 && (
+                    <div className="space-y-1.5">
+                      <div className="grid grid-cols-[40px_1fr_1fr] gap-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-1">
+                        <span>#</span><span>Vencimiento</span><span className="text-right">Importe €</span>
+                      </div>
+                      {installments.map((it, idx) => (
+                        <div key={idx} className="grid grid-cols-[40px_1fr_1fr] gap-2 items-center">
+                          <span className="text-xs text-muted-foreground px-1">{idx + 1}</span>
+                          <input type="date" value={it.fecha_vencimiento}
+                            onChange={(e) => {
+                              const next = [...installments];
+                              next[idx] = { ...next[idx], fecha_vencimiento: e.target.value };
+                              setInstallments(next); setInstallmentsDirty(true);
+                            }}
+                            className="h-8 px-2 rounded border border-border bg-card text-xs" />
+                          <input type="number" min="0" step="0.01" value={it.importe_previsto}
+                            onChange={(e) => {
+                              const next = [...installments];
+                              next[idx] = { ...next[idx], importe_previsto: e.target.value };
+                              setInstallments(next); setInstallmentsDirty(true);
+                            }}
+                            className="h-8 px-2 rounded border border-border bg-card text-xs text-right" />
+                        </div>
+                      ))}
+                      <div className={`text-[11px] text-right pt-1 ${installmentsMismatch ? 'text-red-600 font-semibold' : 'text-muted-foreground'}`}>
+                        Suma: {installmentsSum.toFixed(2)} € · Total: {(parseFloat(importeTotal) || 0).toFixed(2)} €
+                        {installmentsMismatch && ' ⚠ no coinciden'}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div>
                 <label className="text-xs text-muted-foreground mb-1 block">Notas (opcional)</label>

@@ -90,6 +90,35 @@ export async function createSale(data, requestUser) {
     requestUser?.userId || null
   );
 
+  // 4) Si es pago fraccionado, generar las cuotas previstas.
+  // El gestor envía un array `installments: [{importe_previsto, fecha_vencimiento}]`
+  // que ya viene validado en el frontend (suman el total, importes>0).
+  let installmentsCreated = 0;
+  if (data.metodo_pago === 'fraccionado' && Array.isArray(data.installments) && data.installments.length >= 2) {
+    try {
+      const installmentsModule = await import('../conversions/installments.model.js');
+      // installments.model.js expone createForConversion / generateFromList — usamos la lista provista.
+      if (typeof installmentsModule.createFromList === 'function') {
+        installmentsCreated = await installmentsModule.createFromList(conversion.id, data.installments);
+      } else {
+        // Fallback: INSERT directo. La lista ya viene validada del frontend.
+        for (let i = 0; i < data.installments.length; i++) {
+          const it = data.installments[i];
+          await query(
+            `INSERT INTO conversion_installments (conversion_id, numero, importe_previsto, fecha_vencimiento)
+             VALUES ($1, $2, $3, $4)`,
+            [conversion.id, i + 1, it.importe_previsto, it.fecha_vencimiento]
+          );
+        }
+        installmentsCreated = data.installments.length;
+      }
+      logger.info({ conversionId: conversion.id, installmentsCreated }, 'createSale: cuotas generadas');
+    } catch (err) {
+      // No rompemos la venta si fallan las cuotas — el gestor las puede crear luego.
+      logger.error({ err: err.message, conversionId: conversion.id }, 'createSale: error generando cuotas (no bloqueante)');
+    }
+  }
+
   return {
     sale_id: conversion.id,
     lead_id: leadId,
@@ -100,6 +129,7 @@ export async function createSale(data, requestUser) {
     fecha_pago: data.fecha_pago,
     importe_total: data.importe_total,
     importe_pagado: importePagado,
+    installments_created: installmentsCreated,
   };
 }
 
