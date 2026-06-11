@@ -25,24 +25,36 @@ export default function NotificationsBell({ collapsed = false, className = '' })
   const buttonRef = useRef(null);
   const popoverRef = useRef(null);
 
-  const canSee = user?.role === 'admin' || user?.role === 'superadmin';
+  // Cualquier user logueado ve la campana — gestores reciben notifs personales
+  // (recordatorios, lead asignado, etc.) vía target_user_ids del backend.
+  // Los EXTRAS (resumen del día, leads nuevos del proyecto) son admin-only:
+  // - /leads/today devuelve agregados que sólo tienen sentido para admins.
+  // - lista de "nuevos prospectos" del proyecto es admin.
+  const canSee = !!user?.role;
+  const isAdminLike = user?.role === 'admin' || user?.role === 'superadmin' || user?.role === 'soporte';
 
-  // Combina: notifs reales del backend (/api/notifications) + derivados de /leads/today.
-  // Polling cada 60s para mantener el badge fresco.
+  // Combina: notifs reales del backend (/api/notifications) + derivados admin-only
+  // si el user es admin. Polling cada 60s para mantener el badge fresco.
   useEffect(() => {
-    if (!canSee || !activeProject?.id) return;
+    if (!canSee) return;
     let cancelled = false;
     async function load() {
       try {
-        const [notifsRes, todayRes, leadsRes] = await Promise.all([
-          client.get(`/notifications`, { params: { limit: 20 } }).catch(() => ({ success: false, data: [] })),
-          client.get(`/leads/today`, { params: { projectId: activeProject.id } }).catch(() => ({ success: false, data: null })),
-          client.get(`/leads`, { params: { projectId: activeProject.id, status: 'nuevo', limit: 3 } }).catch(() => ({ success: false, data: [] })),
-        ]);
+        // 1) Notifs personales — TODOS los users (filtrado server-side por user_id).
+        const notifsRes = await client.get(`/notifications`, { params: { limit: 20 } }).catch(() => ({ success: false, data: [] }));
+        // 2) Resumen del día y leads nuevos — sólo admin/superadmin con proyecto activo.
+        let todayRes = { success: false, data: null };
+        let leadsRes = { success: false, data: [] };
+        if (isAdminLike && activeProject?.id) {
+          [todayRes, leadsRes] = await Promise.all([
+            client.get(`/leads/today`, { params: { projectId: activeProject.id } }).catch(() => ({ success: false, data: null })),
+            client.get(`/leads`, { params: { projectId: activeProject.id, status: 'nuevo', limit: 3 } }).catch(() => ({ success: false, data: [] })),
+          ]);
+        }
         if (cancelled) return;
         const list = [];
 
-        // 1) Notifs reales (lead_deleted, etc) — prioridad alta
+        // 1) Notifs reales (lead_reminder, lead_assigned, etc) — prioridad alta
         const notifs = Array.isArray(notifsRes?.data) ? notifsRes.data : [];
         for (const n of notifs.slice(0, 10)) {
           list.push({
@@ -57,6 +69,7 @@ export default function NotificationsBell({ collapsed = false, className = '' })
           });
         }
 
+        // Los siguientes bloques sólo aplican a admin/superadmin (datos agregados del proyecto)
         const today = todayRes.success ? todayRes.data : null;
         if (today?.reminders_pendientes) {
           for (const r of today.reminders_pendientes.filter((x) => x.vencido).slice(0, 3)) {
@@ -99,7 +112,7 @@ export default function NotificationsBell({ collapsed = false, className = '' })
     load();
     const interval = setInterval(load, 60000);
     return () => { cancelled = true; clearInterval(interval); };
-  }, [canSee, activeProject?.id]);
+  }, [canSee, isAdminLike, activeProject?.id]);
 
   async function handleItemClick(item) {
     if (item.notifId && !item.isRead) {
