@@ -31,20 +31,46 @@
 - Cumple con auto_email_documents=false como default
 - Si Brevo está caído, el documento se sigue generando — no bloquea el flujo
 
-### 1.2. Email de **lead asignado al gestor** → mover a campanita + digest
+### 1.2. Email de **lead asignado al gestor** → digest 30 min (solo si hay leads nuevos)
 - **Aplica a**: notificación al gestor cuando entra un lead por webhook y se le asigna.
 - **Antes**: cada lead = 1 email a la gestora correspondiente. ISEIE quemaba 80–160 emails/día solo por esto.
 - **Ahora**: 3 capas:
   1. **Campanita in-app SIEMPRE** (canal principal, sin coste, igual que recordatorios) — la gestora la ve al instante si está conectada
   2. **Toast/badge en el sidebar** si está dentro del CRM
-  3. **Email digest** opcional: 1 email cada **30 min** por gestora con todos los leads acumulados en ese intervalo (en vez de 1 por lead). Si en 30 min entran 20 leads → 1 email con 20. Si entra 1 → email con 1.
-     - Configurable: `EMAIL_DIGEST_INTERVAL_MIN=30` en `.env`
-     - Si se pone a `0` → desactiva email, solo campanita
+  3. **Email digest cada 30 min** por gestora con todos los leads acumulados en ese intervalo:
+     - Si en 30 min entran 20 leads → 1 email con 20
+     - Si entra 1 → 1 email con 1
+     - **⚠ Si NO entró ningún lead → NO se manda email** (cero spam de "no tienes nada")
+     - Configurable: `EMAIL_DIGEST_INTERVAL_MIN=30` en `.env` (poner `0` desactiva email, solo campanita)
+     - Origen filtro: solo leads con `source='webhook'` o `source='mailhook'` (web). Los manuales/import no disparan digest.
 
 **Estimación de ahorro con digest 30 min en ISEIE**:
 - Antes: 86 leads × 1 email = **86 emails/día**
-- Después: ~48 ventanas de 30min con actividad × N gestoras (~3–5 gestoras) = **~5–15 emails/día**
+- Después: ~48 ventanas de 30min × N gestoras (~3–5) × (~50% con actividad) = **~5–15 emails/día**
 - Ahorro: 80–95%
+
+### 1.3. **Recordatorio diario 24h antes** — "Mañana tienes pendientes"
+- **Objetivo**: la gestora abre su buzón por la mañana / al final del día y ve qué le toca mañana.
+- **Frecuencia**: 1 email/gestora/día a las **18:00 Madrid** con los recordatorios + leads cuya `fecha_recordatorio = mañana` (D+1).
+- **Contenido**: lista compacta:
+  ```
+  Hola Catherine,
+
+  Mañana 13-jun tienes 5 contactos pendientes:
+
+  • Daniela Cordero — Curso Logopedia
+    nota: "llamar después de las 17h"
+  • Pedro García — Diplomado RGPD
+  • Sofía Pérez — Máster Análisis IA
+    nota: "preguntó por descuento"
+  ...
+
+  Ver tu agenda completa: https://360crm.tech/crm/leads?filtro=manana
+  ```
+- **Filtro**: solo se manda si la gestora tiene **al menos 1 recordatorio** para mañana. Si no hay, no envía.
+- **Excluye**: leads en estado `convertido`, `no_interesado`, `descartado`, `deleted_at IS NOT NULL`.
+- **Implementación**: job nuevo `dailyAgendaScheduler.js` corre a las 18:00 (cron `0 18 * * *`). Por cada gestora activa: cuenta sus reminders de mañana → si > 0 → envía 1 email con la lista.
+- **Coste estimado**: 1 email × N gestoras × días con actividad. En ISEIE: ~5 gestoras × 22 días/mes = **~110 emails/mes**. Despreciable.
 
 ---
 
@@ -54,6 +80,7 @@
 |---|---|---|---|
 | Welcome al nuevo user (set-password) | Superadmin crea user | ~0–2/día | ✅ Sí, es 1 toque y el user lo necesita para entrar |
 | Recordatorios vencidos | Reminder scheduler | ~5–20/día | ⚠ Campanita ya cumple. Email solo si Brevo configurado, best-effort (no bloquea). |
+| **Agenda de mañana (digest diario 18h)** | dailyAgendaScheduler | ~3–5/día | ✅ Sí — 1 email/gestora/día con sus recordatorios de D+1, solo si tiene |
 | Documentos al cliente | Manual con preview (1.1) | ~10–30/día (matrículas, certs) | ✅ Sí, pero solo manual con preview |
 | Manual del gestor al lead | Gestor escribe email desde lead | ~5–15/día | ✅ Sí, lo escribe el humano |
 | Secuencias drip | emailSequenceScheduler | depende de campañas activas | ✅ Sí (es marketing programado, ya tiene caps) |
@@ -75,15 +102,23 @@ H.1. **Document email manual + preview** (ambos CRMs)
 - Frontend `DocumentEmailPreviewDialog.tsx`: dialog con asunto editable + cuerpo HTML + lista destinatarios + adjunto + botón "Confirmar"
 - Quitar la llamada auto del generador
 
-H.2. **Lead-asignado: campanita + digest** (ambos CRMs)
+H.2. **Lead-asignado: campanita + digest 30min (solo si hay)** (ambos CRMs)
 - Backend `lead.service.js`: cambiar `sendLeadAssignedEmail` por `notifyUsers({targetUserIds:[gestor.id], type:'lead_assigned', ...})` SIEMPRE
-- Nuevo `jobs/leadDigestScheduler.js`: cada 30 min, agrupar leads por gestor y enviar 1 email con resumen
-- Migración: tabla `lead_assigned_pending` (gestor_id, lead_id, created_at, notified_at) para el digest
+- Nuevo `jobs/leadDigestScheduler.js`: cada 30 min, agrupar leads por gestor con `source IN ('webhook','mailhook')` y `created_at > NOW() - 30min` y `digest_sent_at IS NULL`. **Si la lista está vacía para esa gestora → no envía nada.**
+- Migración: añadir `digest_sent_at TIMESTAMPTZ` a `leads` (default NULL) — se marca cuando entra al digest.
 
-H.3. **Documentar política en el `manual`** (ya está este `.md`).
+H.3. **Agenda de mañana: digest diario 18h** (ambos CRMs)
+- Nuevo `jobs/dailyAgendaScheduler.js`: corre a las 18:00 Europe/Madrid (cron `0 18 * * *` o `setInterval` con check horario).
+- Por cada gestora activa: query `SELECT * FROM lead_reminders r JOIN leads l ... WHERE l.responsable_id=$1 AND r.fecha_recordatorio = CURRENT_DATE + 1 AND r.completado=false AND l.deleted_at IS NULL AND l.status NOT IN ('convertido','no_interesado','descartado')`.
+- Si `count > 0` → enviar 1 email con la lista compacta + link al CRM con filtro "mañana".
+- Si `count = 0` → no enviar nada (sin spam).
+- Logging por gestora para auditoría.
+
+H.4. **Documentar política en el `manual`** (ya está este `.md`).
 
 ---
 
 ## 4. Cambios en este documento
 
 - 2026-06-12 — Documento creado. Decisiones 1.1 y 1.2 aprobadas en chat.
+- 2026-06-12 (b) — Añadidas: digest 30min NO envía si no hay leads. Nueva 1.3 "Agenda de mañana 18h" (recordatorio diario con los pendientes de D+1, solo si hay).
