@@ -4,7 +4,7 @@ import client from '@/shared/api/client';
 import LeadFormDialog from '../components/LeadFormDialog';
 import { getLeadPriority, getPriorityStyle } from '../lib/leadPriority';
 import { toast } from '@/shared/hooks/useToast';
-import { Plus, User, DotsSixVertical, Users } from '@phosphor-icons/react';
+import { Plus, User, DotsSixVertical, Users, CalendarBlank } from '@phosphor-icons/react';
 import ChannelBadge from '@/shared/components/ui/ChannelBadge';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import type { Lead, LeadStatus } from '@/shared/types';
@@ -40,6 +40,58 @@ function daysAgo(dateStr: string | null | undefined): string {
   if (diff <= 0) return 'hoy';
   if (diff === 1) return 'ayer';
   return `hace ${diff}d`;
+}
+
+// Helpers para el chip de "próximo contacto" en cada card del pipeline.
+// Devuelve { label, classes } o null si no hay recordatorio.
+function nextContactInfo(dateStr: string | null | undefined) {
+  if (!dateStr) return null;
+  // Comparación en Europe/Madrid: tomamos la fecha (YYYY-MM-DD) sin hora.
+  const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Madrid' }); // YYYY-MM-DD
+  const dateOnly = String(dateStr).slice(0, 10);
+  const today = new Date(todayStr + 'T00:00:00');
+  const target = new Date(dateOnly + 'T00:00:00');
+  const diffDays = Math.round((target.getTime() - today.getTime()) / 86400000);
+  if (diffDays < 0) {
+    return {
+      label: `vencido ${Math.abs(diffDays)}d`,
+      classes: 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300',
+    };
+  }
+  if (diffDays === 0) {
+    return { label: 'hoy', classes: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' };
+  }
+  if (diffDays === 1) {
+    return { label: 'mañana', classes: 'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300' };
+  }
+  if (diffDays <= 7) {
+    return { label: `en ${diffDays}d`, classes: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-300' };
+  }
+  // Más lejos: muestra la fecha formateada
+  const d = new Date(dateOnly);
+  return {
+    label: d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }),
+    classes: 'bg-muted text-muted-foreground',
+  };
+}
+
+// Filtros de "próximo contacto" para la cabecera del pipeline.
+type NextContactFilter = 'todos' | 'vencidos' | 'hoy' | 'manana' | 'semana' | 'sin';
+function matchesNextContactFilter(lead: PipelineLead, filter: NextContactFilter): boolean {
+  if (filter === 'todos') return true;
+  const dateStr = (lead as any).next_reminder_at as string | null | undefined;
+  if (!dateStr) return filter === 'sin';
+  if (filter === 'sin') return false;
+  const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Madrid' });
+  const dateOnly = String(dateStr).slice(0, 10);
+  const today = new Date(todayStr + 'T00:00:00');
+  const target = new Date(dateOnly + 'T00:00:00');
+  const diff = Math.round((target.getTime() - today.getTime()) / 86400000);
+  if (filter === 'vencidos') return diff < 0;
+  if (filter === 'hoy') return diff === 0;
+  if (filter === 'manana') return diff === 1;
+  if (filter === 'semana') return diff >= 0 && diff <= 7;
+  return true;
 }
 
 interface LeadCardProps {
@@ -83,6 +135,18 @@ function LeadCard({ lead, onClick, onDragStart, onDragEnd }: LeadCardProps) {
         </p>
       )}
 
+      {/* Próximo contacto programado (fecha del recordatorio activo más cercano) */}
+      {(() => {
+        const info = nextContactInfo((lead as any).next_reminder_at);
+        if (!info) return null;
+        return (
+          <div className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded ${info.classes}`}>
+            <CalendarBlank size={10} weight="bold" />
+            <span>Próx. {info.label}</span>
+          </div>
+        );
+      })()}
+
       <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
         {canal ? <ChannelBadge channel={canal} showIcon /> : <span />}
         <span className="flex items-center gap-1 flex-shrink-0">
@@ -112,6 +176,14 @@ export default function LeadsPipelinePage() {
   const [drawerLeadId, setDrawerLeadId] = useState<number | null>(null);
   const [dragLead, setDragLead] = useState<PipelineLead | null>(null);
   const [dragOverCol, setDragOverCol] = useState<LeadStatus | null>(null);
+  // Filtro de próximo contacto. Persistido en localStorage para no perderlo al recargar.
+  const [contactFilter, setContactFilter] = useState<NextContactFilter>(() => {
+    try { return (localStorage.getItem('pipeline-next-contact-filter') as NextContactFilter) || 'todos'; } catch { return 'todos'; }
+  });
+  function setFilter(f: NextContactFilter) {
+    setContactFilter(f);
+    try { localStorage.setItem('pipeline-next-contact-filter', f); } catch { /* ignore */ }
+  }
 
   const fetchAllLeads = useCallback(async () => {
     if (!pid) return;
@@ -137,16 +209,18 @@ export default function LeadsPipelinePage() {
     fetchAllLeads();
   }, [fetchAllLeads]);
 
-  // Agrupa leads por estado
+  // Agrupa leads por estado, aplicando el filtro de próximo contacto.
   const grouped: Record<string, PipelineLead[]> = {};
   for (const col of COLUMNS) {
     grouped[col.key] = [];
   }
   for (const lead of allLeads) {
+    if (!matchesNextContactFilter(lead, contactFilter)) continue;
     if (grouped[lead.estado]) {
       grouped[lead.estado].push(lead);
     }
   }
+  const filteredCount = Object.values(grouped).reduce((acc, arr) => acc + arr.length, 0);
 
   function handleDragStart(e: DragEvent<HTMLDivElement>, lead: PipelineLead) {
     setDragLead(lead);
@@ -274,6 +348,38 @@ export default function LeadsPipelinePage() {
           </>
         }
       />
+
+      {/* Filtros de próximo contacto. El conteo a la derecha refleja el total
+         visible tras aplicar el filtro (no el total absoluto). */}
+      <div className="flex items-center gap-2 flex-wrap bg-card border border-border rounded-lg p-2">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground px-2">
+          Próximo contacto:
+        </span>
+        {([
+          { k: 'todos', label: 'Todos' },
+          { k: 'vencidos', label: '🔴 Vencidos' },
+          { k: 'hoy', label: '🟢 Hoy' },
+          { k: 'manana', label: '🔵 Mañana' },
+          { k: 'semana', label: '📆 7 días' },
+          { k: 'sin', label: '⚪ Sin programar' },
+        ] as Array<{ k: NextContactFilter; label: string }>).map((f) => (
+          <button
+            key={f.k}
+            type="button"
+            onClick={() => setFilter(f.k)}
+            className={`h-7 px-2.5 rounded-md text-[12px] font-medium transition-colors ${
+              contactFilter === f.k
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-muted/50 hover:bg-muted text-muted-foreground'
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
+        <span className="ml-auto text-[11px] text-muted-foreground px-2">
+          {filteredCount} visibles
+        </span>
+      </div>
 
       <Suspense fallback={null}>
         <LeadDrawer
