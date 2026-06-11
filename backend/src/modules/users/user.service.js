@@ -48,7 +48,7 @@ export async function create({ nombre, email, role, projectIds, projects }) {
     setPasswordExpires: expires,
   });
 
-  const projects = await userModel.getUserProjects(user.id);
+  const userProjects = await userModel.getUserProjects(user.id);
 
   // Envio de email Brevo (async - no bloquea la respuesta)
   const baseUrl = process.env.CRM_BASE_URL || 'http://localhost:5173/crm';
@@ -60,7 +60,7 @@ export async function create({ nombre, email, role, projectIds, projects }) {
     .catch((err) => logger.error({ err: err.message, userId: user.id }, 'Welcome email error'));
 
   // Retorna el token raw en respuesta para test/desarrollo
-  return { ...user, projects, setPasswordToken: rawToken };
+  return { ...user, projects: userProjects, setPasswordToken: rawToken };
 }
 
 export async function update(id, data) {

@@ -610,14 +610,19 @@ export async function findAll({ projectId, projectIds, status, responsableId, un
     paramIdx++;
   }
 
-  // Filtro por rango de fechas (sobre fecha_solicitud, fallback created_at)
+  // Filtro por rango de fechas (sobre fecha_solicitud, fallback created_at).
+  // IMPORTANTE: fecha_solicitud/created_at son timestamptz. Si comparamos contra
+  // un date string 'YYYY-MM-DD' sin TZ, Postgres usa la TZ de sesión (UTC) y
+  // descuadra ±2h en Madrid (verano). Resultado: "Hoy" muestra leads de "Ayer"
+  // y viceversa. Forzamos interpretación en la TZ de la app.
+  const APP_TZ = process.env.APP_TIMEZONE || 'Europe/Madrid';
   if (dateFrom) {
-    conditions.push(`COALESCE(l.fecha_solicitud, l.created_at) >= $${paramIdx++}`);
+    conditions.push(`COALESCE(l.fecha_solicitud, l.created_at) >= ($${paramIdx++}::text || ' 00:00:00')::timestamp AT TIME ZONE '${APP_TZ}'`);
     params.push(dateFrom);
   }
   if (dateTo) {
-    // dateTo inclusivo: hasta el final del día
-    conditions.push(`COALESCE(l.fecha_solicitud, l.created_at) < ($${paramIdx++}::date + INTERVAL '1 day')`);
+    // dateTo inclusivo: hasta el final del día (en la TZ del usuario).
+    conditions.push(`COALESCE(l.fecha_solicitud, l.created_at) < (($${paramIdx++}::text || ' 00:00:00')::timestamp AT TIME ZONE '${APP_TZ}' + INTERVAL '1 day')`);
     params.push(dateTo);
   }
 
