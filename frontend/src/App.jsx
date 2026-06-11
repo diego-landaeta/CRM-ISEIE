@@ -175,6 +175,11 @@ function App() {
           <Route path="/forms" element={<FormsPage />} />
           <Route path="/make-webhooks" element={<MakeWebhooksPage />} />
           <Route path="/make-webhooks/:id" element={<MakeWebhookDetailPage />} />
+          {/* Alias: el sidebar y deep-links viejos apuntan a /webhooks pero en
+             ISEIE solo existe el módulo de Make-webhooks. Redirigimos para
+             evitar 404. */}
+          <Route path="/webhooks" element={<Navigate to="/make-webhooks" replace />} />
+          <Route path="/webhooks/:id" element={<Navigate to="/make-webhooks" replace />} />
           <Route path="/woocommerce" element={<WooCommercePage />} />
           <Route path="/email-sequences" element={<EmailSequencesPage />} />
           <Route path="/email-templates" element={<EmailTemplatesPage />} />
