@@ -250,16 +250,21 @@ XXX_alter_expenses_stripe_payout.sql      -- ADD source_stripe_payout_id (para l
 
 ---
 
-## 7. Cronograma estimado
+## 7. Cronograma estimado (re-ordenado 2026-06-12)
 
-| Semana | Épicas |
-|---|---|
-| 1 | A (auditoría, 2d) + **B0 (Stripe, 4d)** — Stripe primero porque condiciona modelos de B/D/E |
-| 2 | B (egresos, 3d) + C (cuentas por pagar, 3d) |
-| 3 | D (ingresos/cobrar, 2d) + E (comisiones, 3d) |
-| 4 | F (nóminas, 4d) + G (dashboard, 2d) + QA |
+**Principio rector**: avanzar por paneles sin romper los que ya funcionan. Email (EPIC H) y Stripe (B0) al final como integraciones — son ortogonales al esqueleto financiero y se enchufan cuando el resto está estable.
 
-**Total estimado**: 23 días-persona ≈ 4 semanas a 1 dev full-time (era 19, suma +4 por Stripe).
+| Semana | Épicas | Por qué este orden |
+|---|---|---|
+| 1 | **A (auditoría, 2d)** + B (egresos, 3d) | Auditar lo existente para no pisar nada al arrancar. Egresos es el módulo más independiente, sirve de calibración del workflow |
+| 2 | C (cuentas por pagar, 3d) + D (ingresos / cobrar, 2d) | C depende de Egresos (pagar cuenta = generar egreso). D refina lo que ya hay en conversions |
+| 3 | E (comisiones, 3d) + F (nóminas, 4d primer tramo) | E necesita D estable. F depende de E (nómina suma comisiones) |
+| 4 | F (cierre nóminas) + G (dashboard, 2d) | Dashboard agrega todos los módulos anteriores |
+| 5 | **H (política emails, 2d)** + **B0 (Stripe, 4d)** + QA | H y B0 al FINAL: son integraciones externas; no afectan a la consistencia interna del CRM si tardan |
+
+**Total estimado**: 27 días-persona ≈ 5 semanas.
+
+**Si Brevo / Stripe no entran en Sprint 1**: el CRM financiero **igual funciona end-to-end** internamente. Las integraciones quedan como Sprint 2.
 
 ---
 
@@ -287,3 +292,4 @@ Empezar por **EPIC A — Auditoría** (2 días). Sin tocar código nuevo, solo v
 
 - 2026-06-11 — Documento creado, plan inicial aprobado.
 - 2026-06-12 — Añadida **EPIC B0 Stripe Sync** transversal (4 días, anterior a egresos). Actualizado cronograma (3→4 semanas). Ajustadas épicas B/D/E/G para reflejar dependencia.
+- 2026-06-12 (b) — **Re-ordenado**: Stripe (B0) y Email policy (H) movidos al final. Principio: no tocar integraciones externas hasta tener el núcleo financiero estable. Cronograma 4→5 semanas con margen para QA.
