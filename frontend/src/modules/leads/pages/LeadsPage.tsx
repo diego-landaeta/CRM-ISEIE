@@ -223,14 +223,17 @@ export default function LeadsPage() {
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const tomorrow = new Date(today.getTime() + 86400000);
+    const inWeek = new Date(today.getTime() + 7 * 86400000);
     return leads.filter(l => {
       const next = l.next_reminder_at ? new Date(l.next_reminder_at) : null;
       const last = l.last_interaction_at ? new Date(l.last_interaction_at) : null;
       if (quickFilter === 'overdue') return next && next < now;
       if (quickFilter === 'today') return next && next >= today && next < tomorrow;
+      if (quickFilter === 'tomorrow') return next && next >= tomorrow && next < new Date(tomorrow.getTime() + 86400000);
+      if (quickFilter === 'week') return next && next >= today && next <= inWeek;
+      if (quickFilter === 'no-reminder') return !next;
       if (quickFilter === 'no-contact') return !last && ['nuevo', 'por_contactar'].includes(l.estado);
       if (quickFilter === 'urgent') {
-        // Vencidos + hoy + sin contacto en estado nuevo/por_contactar
         if (next && next < tomorrow) return true;
         if (!last && ['nuevo', 'por_contactar'].includes(l.estado)) return true;
         return false;
@@ -243,15 +246,19 @@ export default function LeadsPage() {
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const tomorrow = new Date(today.getTime() + 86400000);
-    let overdue = 0, todayCount = 0, noContact = 0;
+    const inWeek = new Date(today.getTime() + 7 * 86400000);
+    let overdue = 0, todayCount = 0, tomorrowCount = 0, weekCount = 0, noReminder = 0, noContact = 0;
     leads.forEach(l => {
       const next = l.next_reminder_at ? new Date(l.next_reminder_at) : null;
       const last = l.last_interaction_at ? new Date(l.last_interaction_at) : null;
       if (next && next < now) overdue++;
       if (next && next >= today && next < tomorrow) todayCount++;
+      if (next && next >= tomorrow && next < new Date(tomorrow.getTime() + 86400000)) tomorrowCount++;
+      if (next && next >= today && next <= inWeek) weekCount++;
+      if (!next) noReminder++;
       if (!last && ['nuevo', 'por_contactar'].includes(l.estado)) noContact++;
     });
-    return { overdue, today: todayCount, noContact, urgent: overdue + todayCount + noContact };
+    return { overdue, today: todayCount, tomorrow: tomorrowCount, week: weekCount, noReminder, noContact, urgent: overdue + todayCount + noContact };
   }, [leads]);
 
   // Cargar lista de responsables para el filtro (solo admin/superadmin)
@@ -702,6 +709,12 @@ export default function LeadsPage() {
           label="Vencidos" count={quickCounts.overdue} tone="danger" />
         <QuickChip active={quickFilter === 'today'} onClick={() => setQuickFilter('today')}
           label="Hoy" count={quickCounts.today} tone="warning" />
+        <QuickChip active={quickFilter === 'tomorrow'} onClick={() => setQuickFilter('tomorrow')}
+          label="Mañana" count={quickCounts.tomorrow} tone="default" />
+        <QuickChip active={quickFilter === 'week'} onClick={() => setQuickFilter('week')}
+          label="7 días" count={quickCounts.week} tone="default" />
+        <QuickChip active={quickFilter === 'no-reminder'} onClick={() => setQuickFilter('no-reminder')}
+          label="Sin programar" count={quickCounts.noReminder} tone="default" />
         <QuickChip active={quickFilter === 'no-contact'} onClick={() => setQuickFilter('no-contact')}
           label="Sin contacto" count={quickCounts.noContact} tone="default" />
         {(user?.role === 'admin' || user?.role === 'superadmin') && (
@@ -711,6 +724,14 @@ export default function LeadsPage() {
             <QuickChip active={filterReincidente} onClick={() => setFilterReincidente(!filterReincidente)}
               label="Reincidentes" tone="danger" />
           </>
+        )}
+        {/* Contador real al aplicar filtro client-side. La paginación de abajo
+           cuenta los del backend; este chip cuenta los visibles AHORA tras filtrar. */}
+        {quickFilter && (
+          <span className="ml-auto inline-flex items-center gap-1 text-[11px] text-muted-foreground bg-muted/40 px-2 py-1 rounded-md flex-shrink-0">
+            <strong className="text-foreground">{filteredLeads.length}</strong>
+            {' '}filtrados de <strong className="text-foreground">{leads.length}</strong> cargados
+          </span>
         )}
       </div>
 
@@ -896,13 +917,21 @@ export default function LeadsPage() {
                 </tr>
                 );
               })}
-              {!loading && leads.length === 0 && filteredLeads.length === 0 && !error && (
+              {!loading && filteredLeads.length === 0 && !error && (
                 <tr>
                   <td colSpan={showProjectColumn ? 13 : 12} className="px-5">
                     <EmptyState
                       icon={Users}
-                      title="No se encontraron prospectos"
-                      description="Ajusta los filtros o crea un nuevo prospecto manualmente."
+                      title={
+                        leads.length === 0
+                          ? 'No se encontraron prospectos'
+                          : `Sin resultados en esta página para el filtro "${quickFilter || ''}"`
+                      }
+                      description={
+                        leads.length === 0
+                          ? 'Ajusta los filtros o crea un nuevo prospecto manualmente.'
+                          : `Hay ${leads.length} leads cargados pero ninguno coincide con el filtro. Cambia el filtro o pasa a la siguiente página de resultados.`
+                      }
                     />
                   </td>
                 </tr>
