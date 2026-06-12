@@ -72,6 +72,17 @@ export async function createSale(data, requestUser) {
     }
   }
 
+  // 2b) Guardar identificación fiscal en el lead si vino con la venta (sirve para
+  //     cliente nuevo y para actualizar uno existente que no lo tenía).
+  if (data.identificacion_fiscal && String(data.identificacion_fiscal).trim()) {
+    try {
+      await query(`UPDATE leads SET identificacion_fiscal = $1 WHERE id = $2`,
+        [String(data.identificacion_fiscal).trim().slice(0, 50), leadId]);
+    } catch (err) {
+      logger.warn({ err: err.message, leadId }, 'createSale: no se pudo guardar identificacion_fiscal (no bloqueante)');
+    }
+  }
+
   // 3) Crear conversion
   // producto_contratado lo obtenemos pasando el id; conversion.service hace lookup del nombre.
   const conversion = await conversionService.create(
