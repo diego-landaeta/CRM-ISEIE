@@ -1,4 +1,5 @@
 import { query, getClient } from '../../shared/config/db.js';
+import { logger } from '../../shared/utils/logger.js';
 
 // ====== plans ======
 export async function listPlans(projectId) {
@@ -144,7 +145,39 @@ export async function closePeriod(id, userId) {
 }
 export async function payPeriod(id, fechaPago) {
   const { rows } = await query(`UPDATE payroll_periods SET estado = 'pagado', fecha_pago = $2, updated_at = NOW() WHERE id = $1 RETURNING *`, [id, fechaPago]);
-  return rows[0] || null;
+  const period = rows[0] || null;
+  if (!period) return null;
+
+  // Hook F↔B: al marcar nómina como pagada, generar Expense categoria='nomina'.
+  // Idempotente por concepto unique.
+  try {
+    const { rows: ctx } = await query(`SELECT u.nombre AS user_nombre FROM users u WHERE u.id = $1`, [period.user_id]);
+    if (ctx[0]) {
+      const concepto = `Nómina ${ctx[0].user_nombre} ${period.periodo_year}-${String(period.periodo_month).padStart(2, '0')}`;
+      const { rows: existing } = await query(
+        `SELECT id FROM expenses WHERE categoria = 'nomina' AND concepto = $1 LIMIT 1`,
+        [concepto]
+      );
+      if (!existing[0]) {
+        await query(
+          `INSERT INTO expenses (project_id, concepto, importe, fecha, categoria, notas)
+           VALUES ($1, $2, $3, COALESCE($4::date, CURRENT_DATE), 'nomina', $5)`,
+          [
+            period.project_id,
+            concepto,
+            Number(period.total),
+            fechaPago || null,
+            `Generado automáticamente al pagar período de nómina #${id}`,
+          ]
+        );
+        logger.info({ payrollPeriodId: id }, 'nómina pagada → expense generado');
+      }
+    }
+  } catch (hookErr) {
+    logger.warn({ err: hookErr.message, payrollPeriodId: id }, 'payPeriod: no se pudo crear expense (no bloqueante)');
+  }
+
+  return period;
 }
 
 // ====== adjustments ======
