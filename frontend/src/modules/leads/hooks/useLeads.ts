@@ -181,7 +181,17 @@ export function useLeads(): UseLeadsResult {
   const fetchStats = useCallback(async (): Promise<void> => {
     if (!pid) return;
     try {
-      const res = await client.get<Record<string, number>>(`/leads/stats?projectId=${pid}`);
+      // Mandamos los mismos filtros que el listado para que los chips reflejen
+      // el subconjunto filtrado, no el total global del proyecto.
+      const p = new URLSearchParams();
+      p.set('projectId', String(pid));
+      if (debouncedSearch) p.set('search', debouncedSearch);
+      if (filterOrigen) p.set('canal', filterOrigen);
+      if (filterResponsable && filterResponsable !== 'unassigned') p.set('responsableId', filterResponsable);
+      if (filterProducto) p.set('productId', filterProducto);
+      if (dateFrom) p.set('dateFrom', dateFrom);
+      if (dateTo) p.set('dateTo', dateTo);
+      const res = await client.get<Record<string, number>>(`/leads/stats?${p.toString()}`);
       if (!res.success) return;
       const merged = res.data || {};
       setStats({
@@ -196,7 +206,7 @@ export function useLeads(): UseLeadsResult {
     } catch {
       // Stats son secundarios, no bloquear UI
     }
-  }, [pid]);
+  }, [pid, debouncedSearch, filterOrigen, filterResponsable, filterProducto, dateFrom, dateTo]);
 
   useEffect(() => {
     fetchLeads();

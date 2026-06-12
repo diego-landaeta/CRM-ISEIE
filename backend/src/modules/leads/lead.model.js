@@ -1009,15 +1009,33 @@ export async function getTodaySummary({ userId, role, projectId }) {
   };
 }
 
-export async function getStats(projectId, { responsableId = null } = {}) {
-  // SEGURIDAD: si viene responsableId, las stats se calculan SOLO sobre
-  // los leads asignados a ese usuario (caso gestor).
+export async function getStats(projectId, { responsableId = null, dateFrom = null, dateTo = null, productId = null, canal = null, search = null } = {}) {
+  // Los chips de stats deben reflejar los mismos filtros que el listado, no el
+  // total global del proyecto. WHERE incremental igual que findAll.
   const params = [projectId];
-  let respFilter = '';
-  if (responsableId) {
-    params.push(responsableId);
-    respFilter = ` AND responsable_id = $2`;
+  let idx = 2;
+  const extra = [];
+  if (responsableId) { extra.push(`responsable_id = $${idx++}`); params.push(responsableId); }
+  if (productId)     { extra.push(`producto_interes_id = $${idx++}`); params.push(productId); }
+  const APP_TZ = process.env.APP_TIMEZONE || 'Europe/Madrid';
+  if (dateFrom) {
+    extra.push(`COALESCE(fecha_solicitud, created_at) >= ($${idx++}::text || ' 00:00:00')::timestamp AT TIME ZONE '${APP_TZ}'`);
+    params.push(dateFrom);
   }
+  if (dateTo) {
+    extra.push(`COALESCE(fecha_solicitud, created_at) < (($${idx++}::text || ' 00:00:00')::timestamp AT TIME ZONE '${APP_TZ}' + INTERVAL '1 day')`);
+    params.push(dateTo);
+  }
+  if (canal) {
+    extra.push(`EXISTS (SELECT 1 FROM lead_utms lu WHERE lu.lead_id = leads.id AND lu.canal_detectado = $${idx++})`);
+    params.push(canal);
+  }
+  if (search) {
+    extra.push(`(nombre ILIKE $${idx} OR email ILIKE $${idx} OR telefono ILIKE $${idx})`);
+    params.push(`%${search}%`);
+    idx++;
+  }
+  const where = extra.length ? ` AND ${extra.join(' AND ')}` : '';
   const { rows } = await query(
     `SELECT
        COUNT(*) as total,
@@ -1028,7 +1046,7 @@ export async function getStats(projectId, { responsableId = null } = {}) {
        COUNT(*) FILTER (WHERE status = 'convertido') as convertidos,
        COUNT(*) FILTER (WHERE status = 'no_interesado') as no_interesados,
        COUNT(*) FILTER (WHERE responsable_id IS NULL AND status NOT IN ('convertido','no_interesado')) as sin_asignar
-     FROM leads WHERE project_id = $1 AND deleted_at IS NULL${respFilter}`,
+     FROM leads WHERE project_id = $1 AND deleted_at IS NULL${where}`,
     params
   );
   return rows[0];

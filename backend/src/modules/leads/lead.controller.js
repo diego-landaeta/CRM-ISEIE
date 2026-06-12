@@ -186,7 +186,18 @@ export async function stats(req, res, next) {
   try {
     const projectId = parseInt(req.query.projectId);
     if (isNaN(projectId)) throw new AppError('projectId requerido', 400, 'MISSING_PROJECT');
-    const opts = req.user.role === 'gestor' ? { responsableId: req.user.userId } : {};
+    // Aceptamos los mismos filtros que el listado para que los chips de stats
+    // reflejen el subconjunto filtrado, no el total global.
+    const opts = {
+      responsableId: req.query.responsableId ? parseInt(req.query.responsableId) : null,
+      dateFrom: req.query.dateFrom || null,
+      dateTo: req.query.dateTo || null,
+      productId: req.query.productId ? parseInt(req.query.productId) : null,
+      canal: req.query.canal || null,
+      search: req.query.search || null,
+    };
+    // SEGURIDAD: gestor solo ve sus propios stats, ignoramos responsableId del query.
+    if (req.user.role === 'gestor') opts.responsableId = req.user.userId;
     const data = await leadService.getStats(projectId, opts);
     res.json({ success: true, data });
   } catch (err) { next(err); }
