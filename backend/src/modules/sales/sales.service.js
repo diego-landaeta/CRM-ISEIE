@@ -72,14 +72,28 @@ export async function createSale(data, requestUser) {
     }
   }
 
-  // 2b) Guardar identificación fiscal en el lead si vino con la venta (sirve para
-  //     cliente nuevo y para actualizar uno existente que no lo tenía).
-  if (data.identificacion_fiscal && String(data.identificacion_fiscal).trim()) {
+  // 2b) Guardar identificación fiscal y/o dirección fiscal en el lead si vinieron
+  //     con la venta. Sirve para cliente nuevo y para actualizar uno existente.
+  //     UPDATE conjunto para no hacer 2 queries.
+  const hasNif = data.identificacion_fiscal && String(data.identificacion_fiscal).trim();
+  const hasAddr = data.direccion_fiscal && String(data.direccion_fiscal).trim();
+  if (hasNif || hasAddr) {
     try {
-      await query(`UPDATE leads SET identificacion_fiscal = $1 WHERE id = $2`,
-        [String(data.identificacion_fiscal).trim().slice(0, 50), leadId]);
+      const sets = [];
+      const params = [];
+      let idx = 1;
+      if (hasNif) {
+        sets.push(`identificacion_fiscal = $${idx++}`);
+        params.push(String(data.identificacion_fiscal).trim().slice(0, 50));
+      }
+      if (hasAddr) {
+        sets.push(`direccion_fiscal = $${idx++}`);
+        params.push(String(data.direccion_fiscal).trim().slice(0, 500));
+      }
+      params.push(leadId);
+      await query(`UPDATE leads SET ${sets.join(', ')} WHERE id = $${idx}`, params);
     } catch (err) {
-      logger.warn({ err: err.message, leadId }, 'createSale: no se pudo guardar identificacion_fiscal (no bloqueante)');
+      logger.warn({ err: err.message, leadId }, 'createSale: no se pudieron guardar datos fiscales (no bloqueante)');
     }
   }
 

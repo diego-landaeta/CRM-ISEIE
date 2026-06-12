@@ -40,6 +40,7 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
 
   // Documento fiscal para factura (NIF/CIF/NIE/cédula/RFC) — opcional
   const [identificacionFiscal, setIdentificacionFiscal] = useState('');
+  const [direccionFiscal, setDireccionFiscal] = useState('');
 
   // Venta
   const [productoId, setProductoId] = useState<number | ''>('');
@@ -67,6 +68,7 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
     setNombre(''); setEmail(''); setTelefono('');
     setClientSearch(''); setClientResults([]); setSelectedClient(null);
     setIdentificacionFiscal('');
+    setDireccionFiscal('');
     setProductoId(''); setProductSearch('');
     setImporteTotal(''); setImportePagado(''); setMetodo('transferencia');
     setFecha(today); setNotas('');
@@ -226,6 +228,9 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
       if (identificacionFiscal.trim()) {
         body.identificacion_fiscal = identificacionFiscal.trim();
       }
+      if (direccionFiscal.trim()) {
+        body.direccion_fiscal = direccionFiscal.trim();
+      }
       const res = await client.post<{ sale_id: number; lead_id: number; retroactiva: boolean; duplicado: boolean }>('/sales', body);
       const data = res.data;
       const desc = mode === 'existing'
@@ -362,19 +367,34 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
               </div>
             )}
 
-            {/* Identificación fiscal (opcional, común a ambos modos) */}
-            <div>
-              <label className="text-xs text-muted-foreground mb-1 block">
-                Identificación fiscal <span className="text-muted-foreground/70">(opcional)</span>
-              </label>
-              <input
-                value={identificacionFiscal}
-                onChange={(e) => setIdentificacionFiscal(e.target.value)}
-                placeholder="NIF / CIF / NIE / Cédula / RFC…"
-                maxLength={50}
-                className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm"
-              />
-              <p className="text-[11px] text-muted-foreground mt-1">Para emitir factura. Si no la tienes, déjalo vacío.</p>
+            {/* Datos fiscales (opcionales, común a ambos modos) */}
+            <div className="space-y-2">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">
+                  Identificación fiscal <span className="text-muted-foreground/70">(opcional)</span>
+                </label>
+                <input
+                  value={identificacionFiscal}
+                  onChange={(e) => setIdentificacionFiscal(e.target.value)}
+                  placeholder="NIF / CIF / NIE / Cédula / RFC…"
+                  maxLength={50}
+                  className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">
+                  Dirección fiscal <span className="text-muted-foreground/70">(opcional)</span>
+                </label>
+                <textarea
+                  value={direccionFiscal}
+                  onChange={(e) => setDireccionFiscal(e.target.value)}
+                  placeholder="Calle, número, piso · Código postal · Ciudad · Provincia · País"
+                  maxLength={500}
+                  rows={2}
+                  className="w-full px-3 py-2 rounded-md border border-border bg-card text-sm resize-none"
+                />
+              </div>
+              <p className="text-[11px] text-muted-foreground">Para emitir factura. Si no los tienes, déjalos vacíos.</p>
             </div>
 
             {/* Producto + importes (común a ambos modos) */}

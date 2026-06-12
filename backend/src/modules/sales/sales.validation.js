@@ -16,6 +16,8 @@ export const createSaleSchema = z.object({
   telefono: z.string().max(50).optional().nullable().or(z.literal('')),
   // Documento fiscal para factura (NIF/CIF/NIE/cédula/RFC/etc) — opcional.
   identificacion_fiscal: z.string().max(50).optional().nullable().or(z.literal('')),
+  // Dirección fiscal — texto libre, opcional.
+  direccion_fiscal: z.string().max(500).optional().nullable().or(z.literal('')),
   producto_interes_id: z.number().int().positive('Producto requerido'),
   importe_total: z.number().positive('Importe debe ser positivo'),
   importe_pagado: z.number().min(0).optional(),
