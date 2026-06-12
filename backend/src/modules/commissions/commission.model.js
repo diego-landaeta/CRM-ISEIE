@@ -1,4 +1,5 @@
 import { query, getClient } from '../../shared/config/db.js';
+import { logger } from '../../shared/utils/logger.js';
 
 // ===== RULES =====
 
@@ -222,7 +223,51 @@ export async function payCommission(id, fechaPago, notas) {
      RETURNING *`,
     [fechaPago || null, notas || null, id]
   );
-  return rows[0];
+  const commission = rows[0];
+  if (!commission) return null;
+
+  // Hook E↔B: al pagar comisión, generar Expense categoria=comision_gestor.
+  // Idempotente: si ya existe expense para esta comisión (mismo source_payable_id),
+  // no se duplica. Reusamos source_payable_id con offset negativo para distinguir
+  // origen "commission" vs "payable" — NO ideal pero evita migration nueva.
+  // Mejor: añadir source_commission_id en próxima migration. Por ahora, marcamos
+  // el expense con concepto explícito + notas.
+  try {
+    const { rows: ctx } = await query(
+      `SELECT cv.project_id, u.nombre AS gestor_nombre
+       FROM commissions c
+       JOIN conversions cv ON cv.id = c.conversion_id
+       JOIN users u ON u.id = c.user_id
+       WHERE c.id = $1`,
+      [id]
+    );
+    if (ctx[0]) {
+      // Verificar idempotencia manual: ya existe un expense con este concepto/categoria/notas?
+      const concepto = `Comisión ${ctx[0].gestor_nombre} (id ${id})`;
+      const { rows: existing } = await query(
+        `SELECT id FROM expenses WHERE categoria = 'comision_gestor' AND concepto = $1 LIMIT 1`,
+        [concepto]
+      );
+      if (!existing[0]) {
+        await query(
+          `INSERT INTO expenses (project_id, concepto, importe, fecha, categoria, notas)
+           VALUES ($1, $2, $3, COALESCE($4::date, CURRENT_DATE), 'comision_gestor', $5)`,
+          [
+            ctx[0].project_id,
+            concepto,
+            Number(commission.importe_comision),
+            fechaPago || null,
+            `Generado automáticamente al pagar comisión #${id}`,
+          ]
+        );
+        logger.info({ commissionId: id }, 'comisión pagada → expense generado');
+      }
+    }
+  } catch (hookErr) {
+    logger.warn({ err: hookErr.message, commissionId: id }, 'payCommission: no se pudo crear expense (no bloqueante)');
+  }
+
+  return commission;
 }
 
 export async function getStats({ userId, projectId, from, to }) {

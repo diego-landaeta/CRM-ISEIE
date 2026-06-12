@@ -46,7 +46,7 @@ export async function listMine(req, res, next) {
   try {
     const { from, to, estado } = req.query;
     const rows = await model.listCommissions({
-      userId: req.user.id,
+      userId: req.user.userId,
       estado: estado || null,
       from: from || null,
       to: to || null,
@@ -73,7 +73,7 @@ export async function statsMine(req, res, next) {
   try {
     const { from, to } = req.query;
     const s = await model.getStats({
-      userId: req.user.id,
+      userId: req.user.userId,
       from: from || null,
       to: to || null,
     });
