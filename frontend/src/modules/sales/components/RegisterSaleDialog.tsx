@@ -38,6 +38,9 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
   const [searching, setSearching] = useState(false);
   const [selectedClient, setSelectedClient] = useState<LeadLite | null>(null);
 
+  // Documento fiscal para factura (NIF/CIF/NIE/cédula/RFC) — opcional
+  const [identificacionFiscal, setIdentificacionFiscal] = useState('');
+
   // Venta
   const [productoId, setProductoId] = useState<number | ''>('');
   const [productSearch, setProductSearch] = useState('');
@@ -54,6 +57,7 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
     setMode('existing');
     setNombre(''); setEmail(''); setTelefono('');
     setClientSearch(''); setClientResults([]); setSelectedClient(null);
+    setIdentificacionFiscal('');
     setProductoId(''); setProductSearch('');
     setImporteTotal(''); setImportePagado(''); setMetodo('transferencia');
     setFecha(today); setNotas('');
@@ -142,6 +146,9 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
         body.nombre = nombre.trim();
         body.email = email.trim() || null;
         body.telefono = telefono.trim() || null;
+      }
+      if (identificacionFiscal.trim()) {
+        body.identificacion_fiscal = identificacionFiscal.trim();
       }
       const res = await client.post<{ sale_id: number; lead_id: number; retroactiva: boolean; duplicado: boolean }>('/sales', body);
       const data = res.data;
@@ -278,6 +285,21 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
                 <p className="text-[11px] text-muted-foreground -mt-1">Requerido al menos uno de los dos.</p>
               </div>
             )}
+
+            {/* Identificación fiscal (opcional, común a ambos modos) */}
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">
+                Identificación fiscal <span className="text-muted-foreground/70">(opcional)</span>
+              </label>
+              <input
+                value={identificacionFiscal}
+                onChange={(e) => setIdentificacionFiscal(e.target.value)}
+                placeholder="NIF / CIF / NIE / Cédula / RFC…"
+                maxLength={50}
+                className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm"
+              />
+              <p className="text-[11px] text-muted-foreground mt-1">Para emitir factura. Si no la tienes, déjalo vacío.</p>
+            </div>
 
             {/* Producto + importes (común a ambos modos) */}
             <div className="border-t border-border pt-3 space-y-3">

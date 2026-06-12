@@ -14,6 +14,8 @@ export const createSaleSchema = z.object({
   nombre: z.string().min(1, 'Nombre requerido').max(200).optional(),
   email: z.string().email('Email inválido').transform((v) => v.toLowerCase().trim()).optional().nullable().or(z.literal('')),
   telefono: z.string().max(50).optional().nullable().or(z.literal('')),
+  // Documento fiscal para factura (NIF/CIF/NIE/cédula/RFC/etc) — opcional.
+  identificacion_fiscal: z.string().max(50).optional().nullable().or(z.literal('')),
   producto_interes_id: z.number().int().positive('Producto requerido'),
   importe_total: z.number().positive('Importe debe ser positivo'),
   importe_pagado: z.number().min(0).optional(),
