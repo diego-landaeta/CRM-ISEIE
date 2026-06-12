@@ -1,7 +1,8 @@
-import { useEffect, useState, lazy, Suspense } from 'react';
+import { useEffect, useState, useCallback, lazy, Suspense, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
+import useUrlFilters from '@/shared/hooks/useUrlFilters';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
@@ -109,71 +110,110 @@ export default function ClientsPage() {
   const { activeProject } = useProjectContext() as {
     activeProject: { id?: number | null; nombre?: string };
   };
+  // Filtros persistidos en URL para deep-linking + refresh-safe.
+  // Server-side: search, resp(id), prod(id), from, to. Client-side: estado_pago + sort.
+  const [urlFilters, setUrlFilters] = useUrlFilters({
+    q: '', resp: '', prod: '', estado_pago: '', from: '', to: '', sort: 'recent', page: 1,
+  });
+  const { q: search, resp: filterResp, prod: filterProducto, estado_pago: filterEstadoPago, from: dateFrom, to: dateTo, sort: sortBy, page } = urlFilters as {
+    q: string; resp: string; prod: string; estado_pago: string; from: string; to: string; sort: string; page: number;
+  };
+  const setSearch = useCallback((v: string) => setUrlFilters({ q: v, page: 1 }), [setUrlFilters]);
+  const setFilterResp = useCallback((v: string) => setUrlFilters({ resp: v, page: 1 }), [setUrlFilters]);
+  const setFilterProducto = useCallback((v: string) => setUrlFilters({ prod: v, page: 1 }), [setUrlFilters]);
+  const setFilterEstadoPago = useCallback((v: string) => setUrlFilters({ estado_pago: v, page: 1 }), [setUrlFilters]);
+  const setDateFrom = useCallback((v: string) => setUrlFilters({ from: v, page: 1 }), [setUrlFilters]);
+  const setDateTo = useCallback((v: string) => setUrlFilters({ to: v, page: 1 }), [setUrlFilters]);
+  const setSortBy = useCallback((v: string) => setUrlFilters({ sort: v, page: 1 }), [setUrlFilters]);
+  const setPage = useCallback((v: number) => setUrlFilters({ page: v }), [setUrlFilters]);
+
   const [clients, setClients] = useState<Client[]>([]);
+  const [totalBackend, setTotalBackend] = useState(0);
   const [loading, setLoading] = useState<boolean>(true);
-  const [search, setSearch] = useState<string>('');
-  const [filterResp, setFilterResp] = useState<string>('');
-  const [filterProducto, setFilterProducto] = useState<string>('');
-  const [filterEstadoPago, setFilterEstadoPago] = useState<string>('');
-  const [dateFrom, setDateFrom] = useState<string>('');
-  const [dateTo, setDateTo] = useState<string>('');
-  const [sortBy, setSortBy] = useState<string>('recent');
+  const [gestores, setGestores] = useState<Array<{ id: number; nombre: string }>>([]);
+  const [productos, setProductos] = useState<Array<{ id: number; nombre: string }>>([]);
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
   const [saleOpen, setSaleOpen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const PAGE_SIZE = 50;
 
+  // Debounce búsqueda 350ms
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => setDebouncedSearch(search), 350);
+    return () => { if (searchTimer.current) clearTimeout(searchTimer.current); };
+  }, [search]);
+
+  // Cargar gestores (solo admin/superadmin)
+  useEffect(() => {
+    if (user?.role !== 'superadmin' && user?.role !== 'admin') return;
+    client.get('/users?limit=200').then((r) => {
+      if (r.success) setGestores(((r.data as Array<{ id: number; nombre: string }>) || []));
+    }).catch(() => { /* ignore */ });
+  }, [user?.role]);
+
+  // Cargar productos del proyecto activo
+  useEffect(() => {
+    if (!activeProject?.id) { setProductos([]); return; }
+    client.get(`/products?projectId=${activeProject.id}&limit=500`).then((r) => {
+      if (r.success) setProductos(((r.data as Array<{ id: number; nombre: string }>) || []));
+    }).catch(() => setProductos([]));
+  }, [activeProject?.id]);
+
+  // Fetch principal con filtros server-side
+  const abortRef = useRef<AbortController | null>(null);
+  const fetchClients = useCallback(async () => {
     if (!activeProject?.id) return;
-    (async () => {
-      setLoading(true);
-      try {
-        const res = await client.get(`/leads?projectId=${activeProject.id}&status=convertido&limit=100`);
-        if (res.success) {
-          const enriched = await Promise.all((res.data || []).map(async (l) => {
-            try {
-              const cr = await client.get(`/conversions/by-lead/${l.id}`);
-              const convs = cr.success ? cr.data : [];
-              const total = convs.reduce((s, c) => s + Number(c.importe_total || 0), 0);
-              const pagado = convs.reduce((s, c) => s + Number(c.importe_pagado || 0), 0);
-              const lastConv = convs[0]?.fecha_compra || convs[0]?.created_at;
-              return {
-                ...l,
-                conversiones: convs.length,
-                total_compras: total,
-                total_pagado: pagado,
-                pendiente: total - pagado,
-                ultima_compra: lastConv,
-              };
-            } catch {
-              return { ...l, conversiones: 0, total_compras: 0, total_pagado: 0, pendiente: 0 };
-            }
-          }));
-          setClients(enriched);
-        }
-      } catch (err) {
-        toast({ title: 'Error', description: err.message, variant: 'destructive' });
-      } finally {
-        setLoading(false);
+    if (abortRef.current) abortRef.current.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      params.set('projectId', String(activeProject.id));
+      params.set('status', 'convertido');
+      params.set('page', String(page));
+      params.set('limit', String(PAGE_SIZE));
+      if (debouncedSearch) params.set('search', debouncedSearch);
+      if (filterResp === 'unassigned') params.set('unassigned', 'true');
+      else if (filterResp) params.set('responsableId', filterResp);
+      if (filterProducto) params.set('productId', filterProducto);
+      if (dateFrom) params.set('dateFrom', dateFrom);
+      if (dateTo) params.set('dateTo', dateTo);
+      const res = await client.get(`/leads?${params.toString()}`, { signal: controller.signal });
+      if (controller.signal.aborted) return;
+      if (res.success) {
+        setTotalBackend(Number((res as { pagination?: { total?: number } }).pagination?.total) || 0);
+        const enriched = await Promise.all(((res.data as Array<Client>) || []).map(async (l) => {
+          try {
+            const cr = await client.get(`/conversions/by-lead/${l.id}`);
+            const convs = cr.success ? (cr.data as Array<{ importe_total?: number; importe_pagado?: number; fecha_compra?: string; created_at?: string }>) : [];
+            const total = convs.reduce((s, c) => s + Number(c.importe_total || 0), 0);
+            const pagado = convs.reduce((s, c) => s + Number(c.importe_pagado || 0), 0);
+            const lastConv = convs[0]?.fecha_compra || convs[0]?.created_at;
+            return { ...l, conversiones: convs.length, total_compras: total, total_pagado: pagado, pendiente: total - pagado, ultima_compra: lastConv } as Client;
+          } catch {
+            return { ...l, conversiones: 0, total_compras: 0, total_pagado: 0, pendiente: 0 } as Client;
+          }
+        }));
+        setClients(enriched);
       }
-    })();
-  }, [activeProject?.id, reloadKey]);
+    } catch (err: unknown) {
+      const e = err as { name?: string; message?: string };
+      if (e?.name === 'AbortError') return;
+      toast({ title: 'Error', description: e?.message || 'No se pudieron cargar los clientes', variant: 'destructive' });
+    } finally {
+      if (!controller.signal.aborted) setLoading(false);
+    }
+  }, [activeProject?.id, page, debouncedSearch, filterResp, filterProducto, dateFrom, dateTo, reloadKey]);
 
-  // Listas únicas para los selects (gestores + productos a partir de los clientes cargados)
-  const gestoresUnicos = Array.from(new Set(clients.map((c: any) => c.responsable_nombre).filter(Boolean))) as string[];
-  const productosUnicos = Array.from(new Set(clients.map((c: any) => c.producto_interes || c.producto_nombre).filter(Boolean))) as string[];
+  useEffect(() => { fetchClients(); }, [fetchClients]);
 
-  let filtered: any[] = clients;
-  if (search.trim()) {
-    const q = search.toLowerCase();
-    filtered = filtered.filter((c: any) =>
-      (c.nombre || '').toLowerCase().includes(q) ||
-      (c.email || '').toLowerCase().includes(q) ||
-      (c.telefono || '').toLowerCase().includes(q)
-    );
-  }
-  if (filterResp) filtered = filtered.filter((c: any) => c.responsable_nombre === filterResp);
-  if (filterProducto) filtered = filtered.filter((c: any) => (c.producto_interes || c.producto_nombre) === filterProducto);
+  // Filtro estado_pago se aplica client-side (depende del enrichment de conversiones)
+  let filtered: Client[] = clients;
   if (filterEstadoPago) {
-    filtered = filtered.filter((c: any) => {
+    filtered = filtered.filter((c) => {
       const total = Number(c.total_compras) || 0;
       const pagado = Number(c.total_pagado) || 0;
       if (filterEstadoPago === 'pagado') return total > 0 && pagado >= total;
@@ -183,16 +223,7 @@ export default function ClientsPage() {
       return true;
     });
   }
-  if (dateFrom || dateTo) {
-    filtered = filtered.filter((c: any) => {
-      const ult = c.ultima_compra ? new Date(c.ultima_compra) : null;
-      if (!ult) return false;
-      if (dateFrom && ult < new Date(dateFrom)) return false;
-      if (dateTo && ult > new Date(dateTo + 'T23:59:59')) return false;
-      return true;
-    });
-  }
-  filtered = [...filtered].sort((a: any, b: any) => {
+  filtered = [...filtered].sort((a, b) => {
     if (sortBy === 'facturado') return (Number(b.total_compras) || 0) - (Number(a.total_compras) || 0);
     if (sortBy === 'cobrado') return (Number(b.total_pagado) || 0) - (Number(a.total_pagado) || 0);
     if (sortBy === 'pendiente') return (Number(b.pendiente) || 0) - (Number(a.pendiente) || 0);
@@ -203,9 +234,10 @@ export default function ClientsPage() {
   });
 
   const hasActiveFilters = !!(search.trim() || filterResp || filterProducto || filterEstadoPago || dateFrom || dateTo);
-  function clearAllFilters() {
-    setSearch(''); setFilterResp(''); setFilterProducto(''); setFilterEstadoPago(''); setDateFrom(''); setDateTo(''); setSortBy('recent');
-  }
+  const clearAllFilters = useCallback(() => {
+    (setUrlFilters as unknown as { reset: () => void }).reset();
+  }, [setUrlFilters]);
+  const totalPages = Math.max(1, Math.ceil(totalBackend / PAGE_SIZE));
 
   const totalFacturado = filtered.reduce((s, c) => s + Number(c.total_compras), 0);
   const totalCobrado = filtered.reduce((s, c) => s + Number(c.total_pagado), 0);
@@ -249,7 +281,7 @@ export default function ClientsPage() {
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <PageHeader
           title="Clientes"
-          subtitle={`Prospectos convertidos en ${activeProject?.nombre || 'todos los proyectos'} — ${filtered.length} clientes`}
+          subtitle={`Prospectos convertidos en ${activeProject?.nombre || 'todos los proyectos'} — ${hasActiveFilters ? `${filtered.length} de ${totalBackend} (filtrados)` : `${totalBackend} clientes`}`}
         />
         {activeProject?.id && (
           <button
@@ -320,15 +352,18 @@ export default function ClientsPage() {
           </div>
           {/* Fila 2: filtros + clear */}
           <div className="flex gap-2 flex-wrap items-center">
-            <select value={filterResp} onChange={(e) => setFilterResp(e.target.value)}
-              className="h-9 px-3 rounded-md border border-border bg-muted/50 text-sm min-w-[140px]">
-              <option value="">Todos los gestores</option>
-              {gestoresUnicos.map((g) => <option key={g} value={g}>{g}</option>)}
-            </select>
+            {(user?.role === 'superadmin' || user?.role === 'admin') && (
+              <select value={filterResp} onChange={(e) => setFilterResp(e.target.value)}
+                className="h-9 px-3 rounded-md border border-border bg-muted/50 text-sm min-w-[140px]">
+                <option value="">Todos los gestores</option>
+                <option value="unassigned">— Sin asignar —</option>
+                {gestores.map((g) => <option key={g.id} value={String(g.id)}>{g.nombre}</option>)}
+              </select>
+            )}
             <select value={filterProducto} onChange={(e) => setFilterProducto(e.target.value)}
               className="h-9 px-3 rounded-md border border-border bg-muted/50 text-sm min-w-[140px] max-w-[260px] truncate">
               <option value="">Todos los programas</option>
-              {productosUnicos.map((p) => <option key={p} value={p}>{p}</option>)}
+              {productos.map((p) => <option key={p.id} value={String(p.id)}>{p.nombre}</option>)}
             </select>
             <select value={filterEstadoPago} onChange={(e) => setFilterEstadoPago(e.target.value)}
               className="h-9 px-3 rounded-md border border-border bg-muted/50 text-sm">
@@ -446,6 +481,31 @@ export default function ClientsPage() {
               ))}
             </div>
           </>
+        )}
+
+        {/* Paginación server-side */}
+        {totalBackend > PAGE_SIZE && (
+          <div className="flex items-center justify-between gap-2 px-4 py-3 border-t border-border text-xs">
+            <span className="text-muted-foreground">
+              Página <strong className="text-foreground">{page}</strong> de <strong className="text-foreground">{totalPages}</strong> · {totalBackend} clientes en total
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setPage(Math.max(1, page - 1))}
+                disabled={page <= 1 || loading}
+                className="h-8 px-3 rounded-md border border-border bg-card hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed font-semibold"
+              >
+                ← Anterior
+              </button>
+              <button
+                onClick={() => setPage(Math.min(totalPages, page + 1))}
+                disabled={page >= totalPages || loading}
+                className="h-8 px-3 rounded-md border border-border bg-card hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed font-semibold"
+              >
+                Siguiente →
+              </button>
+            </div>
+          </div>
         )}
       </div>
 
