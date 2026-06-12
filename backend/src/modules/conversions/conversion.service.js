@@ -23,6 +23,36 @@ export async function create(data, userId) {
   const ok = await conversionModel.leadBelongsToProject(data.lead_id, data.project_id);
   if (!ok) throw new AppError('El lead no pertenece a este proyecto', 400, 'LEAD_PROJECT_MISMATCH');
 
+  // Auto-lookup de producto_contratado_id si llega el texto pero no el id.
+  // Evita el bug histórico de tener `producto_contratado` (varchar) sin FK al
+  // catálogo de products. Matching por nombre normalizado (sin acentos,
+  // lowercase). Solo aceptamos si el match es ÚNICO en el proyecto — si hay
+  // varios productos con el mismo nombre normalizado, dejamos NULL para no
+  // adivinar mal.
+  if (!data.producto_contratado_id && data.producto_contratado) {
+    try {
+      const { rows } = await query(
+        `WITH norm AS (
+           SELECT id FROM products
+           WHERE project_id = $1 AND active = TRUE
+             AND LOWER(TRANSLATE(nombre, 'áéíóúÁÉÍÓÚñÑ', 'aeiouAEIOUnN'))
+                 = LOWER(TRANSLATE($2::text, 'áéíóúÁÉÍÓÚñÑ', 'aeiouAEIOUnN'))
+         )
+         SELECT id FROM norm`,
+        [data.project_id, data.producto_contratado]
+      );
+      if (rows.length === 1) {
+        data.producto_contratado_id = rows[0].id;
+      } else if (rows.length > 1) {
+        logger.warn({ project: data.project_id, texto: data.producto_contratado, candidatos: rows.length },
+          'producto_contratado_id: lookup ambiguo, dejamos NULL');
+      }
+    } catch (err) {
+      // No bloqueamos la creación si el lookup falla — solo dejamos NULL y log.
+      logger.warn({ err: err.message }, 'auto-lookup producto_contratado_id falló (no bloqueante)');
+    }
+  }
+
   const conv = await conversionModel.create({ ...data, changed_by: userId });
 
   // Hook: crear comision automaticamente si hay regla

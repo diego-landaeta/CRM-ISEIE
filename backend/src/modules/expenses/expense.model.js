@@ -9,10 +9,18 @@ import { query } from '../../shared/config/db.js';
 
 export async function createExpense(data, userId) {
   const { rows } = await query(
-    `INSERT INTO expenses (project_id, concepto, importe, fecha, categoria, notas, registrado_por)
-     VALUES ($1, $2, $3, COALESCE($4, CURRENT_DATE), $5, $6, $7)
+    `INSERT INTO expenses (
+        project_id, concepto, importe, fecha, categoria, notas, registrado_por,
+        comprobante_url, comprobante_key, comprobante_mime, comprobante_size_bytes,
+        source_payable_id, source_stripe_payout_id
+     )
+     VALUES ($1, $2, $3, COALESCE($4, CURRENT_DATE), $5, $6, $7, $8, $9, $10, $11, $12, $13)
      RETURNING *`,
-    [data.project_id || null, data.concepto, data.importe, data.fecha, data.categoria, data.notas, userId]
+    [
+      data.project_id || null, data.concepto, data.importe, data.fecha, data.categoria, data.notas, userId,
+      data.comprobante_url || null, data.comprobante_key || null, data.comprobante_mime || null, data.comprobante_size_bytes || null,
+      data.source_payable_id || null, data.source_stripe_payout_id || null,
+    ]
   );
   return rows[0];
 }
@@ -60,7 +68,10 @@ export async function listExpenses({ projectId, categoria, from, to, page, limit
 }
 
 export async function updateExpense(id, fields) {
-  const allowed = ['project_id', 'concepto', 'importe', 'fecha', 'categoria', 'notas'];
+  const allowed = [
+    'project_id', 'concepto', 'importe', 'fecha', 'categoria', 'notas',
+    'comprobante_url', 'comprobante_key', 'comprobante_mime', 'comprobante_size_bytes',
+  ];
   const sets = [];
   const params = [];
   let idx = 1;
@@ -75,6 +86,19 @@ export async function updateExpense(id, fields) {
   params.push(id);
   const { rows } = await query(`UPDATE expenses SET ${sets.join(', ')} WHERE id = $${idx} RETURNING *`, params);
   return rows[0];
+}
+
+// Para detectar duplicados generados automáticamente por hooks (B0/C/F).
+// Si ya existe un expense con ese source_*_id, devuelve esa fila — el hook NO
+// crea uno nuevo. UNIQUE constraint en DB hace el check redundante pero la
+// app maneja mejor el caso devolviendo el existente vs lanzando excepción.
+export async function findBySourcePayableId(payableId) {
+  const { rows } = await query(`SELECT * FROM expenses WHERE source_payable_id = $1`, [payableId]);
+  return rows[0] || null;
+}
+export async function findBySourceStripePayoutId(payoutId) {
+  const { rows } = await query(`SELECT * FROM expenses WHERE source_stripe_payout_id = $1`, [payoutId]);
+  return rows[0] || null;
 }
 
 export async function deleteExpense(id) {

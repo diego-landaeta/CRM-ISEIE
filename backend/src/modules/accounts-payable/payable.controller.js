@@ -40,7 +40,7 @@ export async function create(req, res, next) {
   try {
     const parsed = createPayableSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError(parsed.error.issues[0]?.message || 'Datos invalidos', 400, 'VALIDATION_ERROR');
-    const p = await model.create(parsed.data, req.user.id);
+    const p = await model.create(parsed.data, req.user.userId);
     res.status(201).json({ success: true, data: p });
   } catch (err) { next(err); }
 }
@@ -66,7 +66,7 @@ export async function addPayment(req, res, next) {
   try {
     const parsed = paymentSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError(parsed.error.issues[0]?.message || 'Datos invalidos', 400, 'VALIDATION_ERROR');
-    const pay = await model.addPayment(Number(req.params.id), parsed.data, req.user.id);
+    const pay = await model.addPayment(Number(req.params.id), parsed.data, req.user.userId);
     if (!pay) throw new AppError('Factura no encontrada', 404, 'NOT_FOUND');
     res.status(201).json({ success: true, data: pay });
   } catch (err) {

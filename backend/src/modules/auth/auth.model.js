@@ -24,15 +24,11 @@ export async function findUserById(id) {
 }
 
 export async function getUserProjects(userId, role) {
-  // Superadmin/admin ven TODOS los proyectos activos automáticamente
-  // (sin necesidad de estar en user_projects). Esto evita que un proyecto
-  // recién creado no aparezca en el selector hasta asignarse manualmente.
-  //
-  // TODO: las columnas `shortcuts`, `external_panels`, `logo_url`, `auto_email_documents`
-  // aun no existen en 001_initial_schema.sql — se anadiran en migraciones posteriores
-  // (CRM hermano las creo en 008, 018, etc.). Hasta entonces solo seleccionamos
-  // las que existen en CRM-ISEIE.
-  if (role === 'superadmin' || role === 'admin') {
+  // SOLO superadmin ve todos los proyectos sin asignación manual (rol global).
+  // Para admin/gestor respetamos `user_projects` — un admin lo es de un
+  // proyecto concreto, no del CRM entero. (Antes admin caía en la rama de
+  // "todos" — bug histórico que rompía el aislamiento de proyectos.)
+  if (role === 'superadmin') {
     const { rows } = await query(
       `SELECT p.id, p.nombre, p.slug, p.emoji, p.type, p.webhook_api_key,
               p.modules, p.sidebar_labels, p.theme_color
