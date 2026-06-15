@@ -62,6 +62,8 @@ router.patch('/:id', leadController.update);
 // Operaciones sobre lead
 router.patch('/:id/status', leadController.changeStatus);
 router.post('/:id/interactions', leadController.addInteraction);
+router.patch('/:id/interactions/:interactionId', leadController.updateInteraction);
+router.delete('/:id/interactions/:interactionId', leadController.deleteInteraction);
 router.post('/:id/reminders', leadController.addReminder);
 router.patch('/reminders/:reminderId/complete', leadController.completeReminder);
 

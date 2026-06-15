@@ -1,6 +1,6 @@
 import * as leadService from './lead.service.js';
 import * as leadModel from './lead.model.js';
-import { webhookLeadSchema, listLeadsSchema, updateStatusSchema, createInteractionSchema, createReminderSchema, reassignSchema, updateLeadSchema, createLeadManualSchema } from './lead.validation.js';
+import { webhookLeadSchema, listLeadsSchema, updateStatusSchema, createInteractionSchema, updateInteractionSchema, createReminderSchema, reassignSchema, updateLeadSchema, createLeadManualSchema } from './lead.validation.js';
 import * as dupQueue from './dup-queue.service.js';
 import * as leadProducts from './lead-products.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
@@ -242,6 +242,28 @@ export async function addInteraction(req, res, next) {
     }
     const result = await leadService.addInteraction(id, parsed.data.tipo, parsed.data.nota, req.user.userId, parsed.data.fecha);
     res.status(201).json({ success: true, data: result });
+  } catch (err) { next(err); }
+}
+
+export async function updateInteraction(req, res, next) {
+  try {
+    const leadId = parseInt(req.params.id);
+    const interactionId = parseInt(req.params.interactionId);
+    if (isNaN(leadId) || isNaN(interactionId)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    const parsed = updateInteractionSchema.safeParse(req.body);
+    if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
+    const result = await leadService.updateInteractionFn(leadId, interactionId, parsed.data, req.user);
+    res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+}
+
+export async function deleteInteraction(req, res, next) {
+  try {
+    const leadId = parseInt(req.params.id);
+    const interactionId = parseInt(req.params.interactionId);
+    if (isNaN(leadId) || isNaN(interactionId)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    await leadService.deleteInteractionFn(leadId, interactionId, req.user);
+    res.json({ success: true });
   } catch (err) { next(err); }
 }
 

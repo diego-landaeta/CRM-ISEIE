@@ -82,6 +82,12 @@ export const createInteractionSchema = z.object({
   fecha: z.string().datetime().optional().or(z.string().regex(/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?/)).optional(),
 });
 
+export const updateInteractionSchema = z.object({
+  tipo: z.enum(['llamada', 'email', 'whatsapp', 'nota']).optional(),
+  nota: z.string().max(2000).optional(),
+  fecha: z.string().datetime().optional().or(z.string().regex(/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?/)).optional(),
+}).refine((d) => Object.keys(d).length > 0, { message: 'Al menos un campo a actualizar' });
+
 export const createReminderSchema = z.object({
   fecha_recordatorio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato fecha: YYYY-MM-DD'),
   nota: z.string().max(500).optional(),

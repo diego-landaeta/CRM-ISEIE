@@ -450,6 +450,32 @@ export async function addInteraction(leadId, tipo, nota, userId, fecha) {
   return await leadModel.createInteraction(leadId, tipo, nota, userId, fecha);
 }
 
+// Edición de una interacción existente. Gestor solo puede editar las suyas;
+// admin/superadmin pueden editar cualquiera. Útil para corregir notas/fecha
+// que se grabaron mal sin tener que borrar y re-crear.
+export async function updateInteractionFn(leadId, interactionId, fields, requestUser) {
+  const interaction = await leadModel.findInteractionById(interactionId);
+  if (!interaction) throw new AppError('Interacción no encontrada', 404, 'INTERACTION_NOT_FOUND');
+  if (interaction.lead_id !== leadId) throw new AppError('Interacción no pertenece al lead', 400, 'WRONG_LEAD');
+  if (requestUser?.role === 'gestor' && interaction.created_by !== requestUser.userId) {
+    throw new AppError('No tienes permiso para editar esta interacción', 403, 'FORBIDDEN');
+  }
+  const updated = await leadModel.updateInteraction(interactionId, fields);
+  if (!updated) throw new AppError('Sin cambios', 400, 'NO_FIELDS');
+  return updated;
+}
+
+export async function deleteInteractionFn(leadId, interactionId, requestUser) {
+  const interaction = await leadModel.findInteractionById(interactionId);
+  if (!interaction) throw new AppError('Interacción no encontrada', 404, 'INTERACTION_NOT_FOUND');
+  if (interaction.lead_id !== leadId) throw new AppError('Interacción no pertenece al lead', 400, 'WRONG_LEAD');
+  if (requestUser?.role === 'gestor' && interaction.created_by !== requestUser.userId) {
+    throw new AppError('No tienes permiso para eliminar esta interacción', 403, 'FORBIDDEN');
+  }
+  await leadModel.deleteInteraction(interactionId);
+  return { deleted: true };
+}
+
 export async function addReminder(leadId, fechaRecordatorio, nota, userId) {
   const lead = await leadModel.findByIdLight(leadId);
   if (!lead) throw new AppError('Lead no encontrado', 404, 'LEAD_NOT_FOUND');

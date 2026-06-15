@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   X, ArrowSquareOut, EnvelopeSimple, Phone, WhatsappLogo,
   CalendarCheck, ClockCounterClockwise, ChatCircleText, Plus, CheckCircle,
+  PencilSimple, Trash,
 } from '@phosphor-icons/react';
 import Portal from '@/shared/components/ui/portal';
 import Select from '@/shared/components/ui/Select';
@@ -280,6 +281,11 @@ function InteraccionesTab({ leadId, interacciones, onRefetch }) {
   const [tipo, setTipo] = useState('llamada');
   const [nota, setNota] = useState('');
   const [loading, setLoading] = useState(false);
+  // Edición inline: id de la interacción en modo edit + buffer de tipo/nota.
+  const [editingId, setEditingId] = useState(null);
+  const [editTipo, setEditTipo] = useState('llamada');
+  const [editNota, setEditNota] = useState('');
+  const [editLoading, setEditLoading] = useState(false);
 
   async function add(e) {
     e.preventDefault();
@@ -294,6 +300,42 @@ function InteraccionesTab({ leadId, interacciones, onRefetch }) {
       toast({ title: 'Error', description: err.message, variant: 'destructive' });
     } finally {
       setLoading(false);
+    }
+  }
+
+  function startEdit(it) {
+    setEditingId(it.id);
+    setEditTipo(it.tipo);
+    setEditNota(it.nota || '');
+  }
+  function cancelEdit() {
+    setEditingId(null);
+    setEditTipo('llamada');
+    setEditNota('');
+  }
+  async function saveEdit() {
+    if (!editingId) return;
+    if (!editNota.trim()) { toast({ title: 'La nota no puede estar vacía', variant: 'destructive' }); return; }
+    setEditLoading(true);
+    try {
+      await client.patch(`/leads/${leadId}/interactions/${editingId}`, { tipo: editTipo, nota: editNota });
+      toast({ title: 'Interacción actualizada' });
+      cancelEdit();
+      onRefetch();
+    } catch (err) {
+      toast({ title: 'Error', description: err?.data?.error || err.message, variant: 'destructive' });
+    } finally {
+      setEditLoading(false);
+    }
+  }
+  async function removeInteraction(id) {
+    if (!confirm('¿Eliminar esta interacción del historial?')) return;
+    try {
+      await client.delete(`/leads/${leadId}/interactions/${id}`);
+      toast({ title: 'Interacción eliminada' });
+      onRefetch();
+    } catch (err) {
+      toast({ title: 'Error', description: err?.data?.error || err.message, variant: 'destructive' });
     }
   }
 
@@ -333,15 +375,68 @@ function InteraccionesTab({ leadId, interacciones, onRefetch }) {
         <ol className="space-y-3">
           {interacciones.map((it) => {
             const Icon = ICON[it.tipo] || ChatCircleText;
+            const isEditing = editingId === it.id;
             return (
-              <li key={it.id} className="flex gap-3">
+              <li key={it.id} className="flex gap-3 group">
                 <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center text-muted-foreground flex-shrink-0">
                   <Icon size={12} weight="regular" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm">{it.nota}</p>
-                  <p className="text-xs text-muted-foreground">{fmtDateTime(it.fecha || it.created_at)} · {it.tipo}</p>
+                  {isEditing ? (
+                    <div className="space-y-2 p-2 rounded-md border border-primary/30 bg-muted/30">
+                      <div className="flex gap-2">
+                        <Select<string>
+                          value={editTipo}
+                          onChange={setEditTipo}
+                          options={[
+                            { value: 'llamada', label: 'Llamada' },
+                            { value: 'email', label: 'Email' },
+                            { value: 'whatsapp', label: 'WhatsApp' },
+                            { value: 'nota', label: 'Nota' },
+                          ]}
+                          ariaLabel="Tipo"
+                          size="sm"
+                          className="w-32"
+                        />
+                        <input
+                          value={editNota}
+                          onChange={(e) => setEditNota(e.target.value)}
+                          autoFocus
+                          className="flex-1 h-8 px-2 rounded border border-border bg-card text-xs"
+                        />
+                      </div>
+                      <div className="flex justify-end gap-1">
+                        <button onClick={cancelEdit} disabled={editLoading}
+                          className="h-7 px-2 rounded border border-border bg-card text-[11px] hover:bg-muted disabled:opacity-50">
+                          Cancelar
+                        </button>
+                        <button onClick={saveEdit} disabled={editLoading}
+                          className="h-7 px-2 rounded bg-primary text-primary-foreground text-[11px] font-semibold disabled:opacity-50">
+                          {editLoading ? 'Guardando…' : 'Guardar'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-sm">{it.nota}</p>
+                      <p className="text-xs text-muted-foreground">{fmtDateTime(it.fecha || it.created_at)} · {it.tipo}</p>
+                    </>
+                  )}
                 </div>
+                {!isEditing && (
+                  <div className="flex items-start gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button onClick={() => startEdit(it)} title="Editar"
+                      aria-label="Editar interacción"
+                      className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground">
+                      <PencilSimple size={12} weight="bold" />
+                    </button>
+                    <button onClick={() => removeInteraction(it.id)} title="Eliminar"
+                      aria-label="Eliminar interacción"
+                      className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-950/30 text-muted-foreground hover:text-red-600">
+                      <Trash size={12} weight="bold" />
+                    </button>
+                  </div>
+                )}
               </li>
             );
           })}

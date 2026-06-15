@@ -795,6 +795,38 @@ export async function createInteraction(leadId, tipo, nota, createdBy, fecha) {
   return rows[0];
 }
 
+// Devuelve la interacción si pertenece al lead indicado. Usado para checks de
+// autoría/pertenencia antes de update/delete.
+export async function findInteractionById(interactionId) {
+  const { rows } = await query(
+    `SELECT id, lead_id, tipo, nota, fecha, created_by
+     FROM lead_interactions WHERE id = $1`,
+    [interactionId]
+  );
+  return rows[0] || null;
+}
+
+export async function updateInteraction(interactionId, fields) {
+  const sets = [];
+  const params = [];
+  let idx = 1;
+  if (fields.tipo !== undefined) { sets.push(`tipo = $${idx++}`); params.push(fields.tipo); }
+  if (fields.nota !== undefined) { sets.push(`nota = $${idx++}`); params.push(fields.nota); }
+  if (fields.fecha !== undefined) { sets.push(`fecha = $${idx++}::timestamptz`); params.push(fields.fecha); }
+  if (!sets.length) return null;
+  params.push(interactionId);
+  const { rows } = await query(
+    `UPDATE lead_interactions SET ${sets.join(', ')} WHERE id = $${idx}
+     RETURNING id, lead_id, tipo, nota, fecha, created_by`,
+    params
+  );
+  return rows[0] || null;
+}
+
+export async function deleteInteraction(interactionId) {
+  await query(`DELETE FROM lead_interactions WHERE id = $1`, [interactionId]);
+}
+
 export async function createReminder(leadId, fechaRecordatorio, nota, createdBy) {
   const { rows } = await query(
     `INSERT INTO lead_reminders (lead_id, fecha_recordatorio, nota, created_by) VALUES ($1, $2, $3, $4)
