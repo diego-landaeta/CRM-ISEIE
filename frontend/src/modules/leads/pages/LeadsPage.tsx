@@ -55,6 +55,7 @@ import DateRangeFilter from '../components/DateRangeFilter';
 import LeadFlagBadge from '../components/LeadFlagBadge';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import LeadsViewToggle from '../components/LeadsViewToggle';
+import LeadsFiltersBar from '../components/LeadsFiltersBar';
 import QuickActions from '../components/QuickActions';
 import ReminderQuickDialog from '../components/ReminderQuickDialog';
 import BulkActionBar from '../components/BulkActionBar';
@@ -571,207 +572,45 @@ export default function LeadsPage() {
         </div>
       </div>
 
-      {/* Filters + Stats compactos */}
-      <div className="flex flex-col gap-2">
-        {/* Fila 1: search + filtros */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative flex-1 min-w-[180px] max-w-xs">
-            <MagnifyingGlass size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar por nombre o email..."
-              aria-label="Buscar prospectos"
-              className="w-full h-9 pl-9 pr-3 rounded-md border border-border bg-muted/40 text-sm outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20 focus:bg-card placeholder:text-muted-foreground"
-            />
-          </div>
-          <select
-            value={filterEstado}
-            onChange={(e) => { setFilterEstado(e.target.value); }}
-            aria-label="Filtrar por estado"
-            className="h-9 px-3 pr-8 rounded-md border border-border bg-muted/40 text-sm outline-none appearance-none cursor-pointer focus:border-primary focus:ring-2 focus:ring-primary/20"
-            style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center' }}
-          >
-            <option value="">Todos los estados</option>
-            {Object.entries(STATUS_LABELS).map(([k, v]) => (
-              <option key={k} value={k}>{v}</option>
-            ))}
-          </select>
-          <SearchableSelect
-            value={filterOrigen}
-            onChange={(v) => { setFilterOrigen(v); }}
-            options={[
-              { value: 'meta_ads', label: 'Meta Ads' },
-              { value: 'google_ads', label: 'Google Ads' },
-              { value: 'tiktok_ads', label: 'TikTok Ads' },
-              { value: 'whatsapp', label: 'WhatsApp' },
-              { value: 'organico', label: 'Orgánico' },
-              { value: 'chatgpt_ia', label: 'ChatGPT IA' },
-              { value: 'referido', label: 'Referido' },
-              { value: 'directo', label: 'Directo' },
-            ]}
-            placeholder="Buscar canal..."
-            allLabel="Todos los canales"
-            ariaLabel="Filtrar por canal"
-            maxWidth="180px"
-          />
-          {(user?.role === 'superadmin' || user?.role === 'admin') && (
-            <SearchableSelect
-              value={filterResponsable}
-              onChange={(v) => { setFilterResponsable(v); }}
-              options={[
-                { value: 'unassigned', label: '— Sin asignar —' },
-                ...gestores.map((g: any) => ({ value: String(g.id), label: g.nombre })),
-              ]}
-              placeholder="Buscar gestor..."
-              allLabel="Todos los gestores"
-              ariaLabel="Filtrar por gestor"
-              maxWidth="200px"
-            />
-          )}
-          <SearchableSelect
-            value={filterProducto}
-            onChange={(v) => { setFilterProducto(v); }}
-            options={(products || []).map((p: any) => ({ value: String(p.id), label: p.nombre }))}
-            placeholder="Buscar programa..."
-            allLabel="Todos los programas"
-            ariaLabel="Filtrar por programa"
-            maxWidth="220px"
-          />
-          {projects && projects.length > 1 && (
-            <MultiProjectPicker
-              projects={projects}
-              selected={selectedProjectIds}
-              onChange={(ids) => { setSelectedProjectIds(ids); }}
-              activeProjectId={activeProject?.id}
-            />
-          )}
-          <DateRangeFilter
-            from={dateFrom}
-            to={dateTo}
-            onChange={(f, t) => setDateRange(f, t)}
-          />
-          <select
-            value={sortMode}
-            onChange={(e) => setSortMode(e.target.value as 'value' | 'recent' | 'urgency' | 'recent_value')}
-            aria-label="Ordenar leads"
-            title="Orden de los leads en la tabla"
-            className="h-9 px-3 pr-8 rounded-md border border-border bg-muted/40 text-sm outline-none appearance-none cursor-pointer focus:border-primary focus:ring-2 focus:ring-primary/20"
-            style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center' }}
-          >
-            <option value="recent_value">📅 Día reciente · más valor (default)</option>
-            <option value="urgency">⚡ Urgencia (valor × frescura)</option>
-            <option value="value">💰 Más valor primero</option>
-            <option value="recent">🕒 Más recientes primero</option>
-          </select>
-          {(user?.role === 'superadmin' || user?.role === 'admin') && (stats?.sin_asignar > 0 || filterResponsable === 'unassigned') && activeProject?.id && activeProject.id > 0 && (
-            <button
-              onClick={async () => {
-                if (!activeProject?.id || activeProject.id < 0) return;
-                try {
-                  const res = await client.post(`/leads/reassign-pending?projectId=${activeProject.id}`);
-                  if (res.success) {
-                    const d = res.data as { reassigned: number; reason?: string };
-                    if (d.reason === 'NO_ACTIVE_GESTORES') {
-                      toast({ title: 'No hay gestores activos en este proyecto', description: 'Crea usuarios con rol "gestor" o "admin" y asígnalos al proyecto.', variant: 'destructive' });
-                    } else {
-                      toast({ title: `${d.reassigned} prospecto${d.reassigned !== 1 ? 's' : ''} asignado${d.reassigned !== 1 ? 's' : ''} equitativamente` });
-                      refetch?.();
-                    }
-                  }
-                } catch (err: any) {
-                  toast({ title: 'Error', description: err?.message, variant: 'destructive' });
-                }
-              }}
-              className="h-9 px-3 rounded-md bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold whitespace-nowrap inline-flex items-center gap-1.5"
-              title="Aplica round-robin a todos los prospectos sin responsable"
-            >
-              Asignar pendientes
-              {stats?.sin_asignar > 0 && (
-                <span className="bg-white text-amber-700 text-[10px] font-black px-1.5 py-0.5 rounded">
-                  {stats.sin_asignar}
-                </span>
-              )}
-            </button>
-          )}
-        </div>
-
-        {/* Stats compactos en una sola tira horizontal */}
-        {stats && (
-          <div className="flex flex-wrap items-stretch gap-1.5 bg-card border border-border rounded-md p-1.5 overflow-x-auto">
-            <StatPill label="Total" value={stats.total || 0} />
-            <StatPill label="Nuevos" value={stats.nuevo || 0} dot="#3b82f6" />
-            <StatPill label="Por contactar" value={stats.por_contactar || 0} dot="#f59e0b" />
-            <StatPill label="Contactados" value={stats.contactado || 0} dot="#10b981" />
-            <StatPill label="En seguimiento" value={stats.en_seguimiento || 0} dot="#eab308" />
-            <StatPill label="Convertidos" value={stats.convertido || 0} dot="#8b5cf6" />
-            <StatPill label="No interesado" value={stats.no_interesado || 0} dot="#ef4444" />
-          </div>
-        )}
-      </div>
-
-      {/* Filtros rapidos por accion (client-side) */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1">
-        <span className="text-xs text-muted-foreground flex-shrink-0">Mostrar</span>
-        <QuickChip active={!quickFilter} onClick={() => setQuickFilter('')} label="Todos" />
-        <QuickChip active={quickFilter === 'urgent'} onClick={() => setQuickFilter('urgent')}
-          label="Necesitan acción hoy" count={quickCounts.urgent} tone="danger" />
-        <QuickChip active={quickFilter === 'overdue'} onClick={() => setQuickFilter('overdue')}
-          label="Vencidos" count={quickCounts.overdue} tone="danger" />
-        <QuickChip active={quickFilter === 'today'} onClick={() => setQuickFilter('today')}
-          label="Hoy" count={quickCounts.today} tone="warning" />
-        <QuickChip active={quickFilter === 'tomorrow'} onClick={() => setQuickFilter('tomorrow')}
-          label="Mañana" count={quickCounts.tomorrow} tone="default" />
-        <QuickChip active={quickFilter === 'week'} onClick={() => setQuickFilter('week')}
-          label="7 días" count={quickCounts.week} tone="default" />
-        <QuickChip active={quickFilter === 'no-reminder'} onClick={() => setQuickFilter('no-reminder')}
-          label="Sin programar" count={quickCounts.noReminder} tone="default" />
-        <QuickChip active={quickFilter === 'no-contact'} onClick={() => setQuickFilter('no-contact')}
-          label="Sin contacto" count={quickCounts.noContact} tone="default" />
-        {(user?.role === 'admin' || user?.role === 'superadmin') && (
-          <>
-            <QuickChip active={filterDup} onClick={() => setFilterDup(!filterDup)}
-              label="Duplicados" tone="warning" />
-            <QuickChip active={filterReincidente} onClick={() => setFilterReincidente(!filterReincidente)}
-              label="Reincidentes" tone="danger" />
-          </>
-        )}
-        {/* Contador real al aplicar filtro client-side. La paginación de abajo
-           cuenta los del backend; este chip cuenta los visibles AHORA tras filtrar. */}
-        {quickFilter && (
-          <span className="ml-auto inline-flex items-center gap-1 text-[11px] text-muted-foreground bg-muted/40 px-2 py-1 rounded-md flex-shrink-0">
-            <strong className="text-foreground">{filteredLeads.length}</strong>
-            {' '}filtrados de <strong className="text-foreground">{leads.length}</strong> cargados
-          </span>
-        )}
-      </div>
-
-      {/* Leyenda de iconos de acción + badges */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-muted-foreground bg-muted/30 border border-border rounded-md px-3 py-1.5">
-        <span className="font-semibold text-foreground">Etiquetas:</span>
-        <LeadFlagBadge kind="reincidente" />
-        <LeadFlagBadge kind="duplicado" />
-        <LeadFlagBadge kind="propuesto" />
-        {user?.role === 'superadmin' && <LeadFlagBadge kind="spam_pending" pulse={false} />}
-        <span className="text-[10px] italic">(pasa el ratón sobre cada etiqueta para ver qué significa)</span>
-        <span className="border-l border-border h-3 mx-1" />
-        <span className="font-semibold text-foreground">Acciones rápidas:</span>
-        <span className="inline-flex items-center gap-1"><WhatsappLogo size={13} weight="regular" className="text-green-600" /> WhatsApp</span>
-        <span className="inline-flex items-center gap-1"><EnvelopeSimple size={13} weight="regular" /> Email + secuencia</span>
-        <span className="inline-flex items-center gap-1"><CalendarPlus size={13} weight="regular" /> Programar próximo contacto</span>
-        <span className="inline-flex items-center gap-1"><CheckCircle size={13} weight="regular" className="text-emerald-600" /> Marcar contactado</span>
-        <span className="inline-flex items-center gap-1"><Lightning size={13} weight="regular" className="text-amber-500" /> Convertir a cliente</span>
-        {(user?.role === 'admin' || user?.role === 'superadmin') && (
-          <>
-            <span className="inline-flex items-center gap-1"><Trash size={13} weight="regular" className="text-red-600" /> Eliminar (admin/superadmin)</span>
-            <span className="inline-flex items-center gap-1"><Flag size={13} weight="regular" className="text-orange-600" /> Reportar spam (admin/superadmin)</span>
-          </>
-        )}
-        {user?.role === 'superadmin' && (
-          <span className="inline-flex items-center gap-1"><Flag size={13} weight="fill" className="text-orange-600" /> Marcado para revisión = pendiente de spam-report</span>
-        )}
-      </div>
+      {/* v2 — UI limpia. TODOS los filtros viven dentro del dropdown "Filtros".
+              Arriba quedan solo el botón Filtros + las pildoras de filtros activos. */}
+      <LeadsFiltersBar
+        activeProject={activeProject}
+        gestores={gestores}
+        products={products}
+        user={user}
+        search={search} setSearch={setSearch}
+        filterEstado={filterEstado} setFilterEstado={setFilterEstado}
+        filterOrigen={filterOrigen} setFilterOrigen={setFilterOrigen}
+        filterResponsable={filterResponsable} setFilterResponsable={setFilterResponsable}
+        filterProducto={filterProducto} setFilterProducto={setFilterProducto}
+        dateFrom={dateFrom} dateTo={dateTo} setDateRange={setDateRange}
+        sortMode={sortMode} setSortMode={setSortMode}
+        quickFilter={quickFilter} setQuickFilter={setQuickFilter}
+        quickCounts={quickCounts}
+        filterDup={filterDup} setFilterDup={setFilterDup}
+        filterReincidente={filterReincidente} setFilterReincidente={setFilterReincidente}
+        stats={stats}
+        leadsCount={leads.length}
+        filteredCount={filteredLeads.length}
+        onAssignPending={async () => {
+          if (!activeProject?.id || activeProject.id < 0) return;
+          try {
+            const res = await client.post(`/leads/reassign-pending?projectId=${activeProject.id}`);
+            if (res.success) {
+              const d = res.data as { reassigned: number; reason?: string };
+              if (d.reason === 'NO_ACTIVE_GESTORES') {
+                toast({ title: 'No hay gestores activos en este proyecto', description: 'Crea usuarios con rol "gestor" o "admin" y asígnalos al proyecto.', variant: 'destructive' });
+              } else {
+                toast({ title: `${d.reassigned} prospecto${d.reassigned !== 1 ? 's' : ''} asignado${d.reassigned !== 1 ? 's' : ''} equitativamente` });
+                refetch?.();
+              }
+            }
+          } catch (err: any) {
+            toast({ title: 'Error', description: err?.message, variant: 'destructive' });
+          }
+        }}
+      />
 
       {/* Error state */}
       {error && (
