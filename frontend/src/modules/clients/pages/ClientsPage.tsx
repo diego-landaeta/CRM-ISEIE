@@ -6,6 +6,7 @@ import useUrlFilters from '@/shared/hooks/useUrlFilters';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
+import ClientsFiltersBar from '../components/ClientsFiltersBar';
 import {
   UserCheck, EnvelopeSimple, WhatsappLogo, ShoppingCart, DownloadSimple, Trash, Plus,
 } from '@phosphor-icons/react';
@@ -322,65 +323,29 @@ export default function ClientsPage() {
       <div className="bg-card border border-border rounded-lg overflow-hidden">
         <div className="p-3 border-b border-border flex flex-col gap-2">
           {/* Fila 1: búsqueda + sort + export */}
-          <div className="flex gap-2 flex-wrap">
-            <input
-              type="search"
-              placeholder="Buscar por nombre, email o teléfono…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              aria-label="Buscar clientes"
-              className="flex-1 min-w-[200px] h-9 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/40"
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <ClientsFiltersBar
+              user={user}
+              search={search} setSearch={setSearch}
+              filterResp={filterResp} setFilterResp={setFilterResp}
+              filterProducto={filterProducto} setFilterProducto={setFilterProducto}
+              filterEstadoPago={filterEstadoPago} setFilterEstadoPago={setFilterEstadoPago}
+              dateFrom={dateFrom} setDateFrom={setDateFrom}
+              dateTo={dateTo} setDateTo={setDateTo}
+              sortBy={sortBy} setSortBy={setSortBy}
+              gestores={gestores}
+              productos={productos}
+              totalBackend={totalBackend}
+              filteredCount={filtered.length}
             />
-            <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}
-              className="h-9 px-3 rounded-md border border-border bg-muted/50 text-sm">
-              <option value="recent">Más reciente</option>
-              <option value="facturado">Más facturado</option>
-              <option value="cobrado">Más cobrado</option>
-              <option value="pendiente">Más pendiente de cobro</option>
-              <option value="nombre">Nombre A→Z</option>
-            </select>
             {filtered.length > 0 && (
               <button
                 onClick={() => exportCSV(filtered, `clientes-${activeProject?.nombre || 'crm'}-${new Date().toISOString().slice(0,10)}.csv`)}
                 title="Exportar CSV"
                 aria-label="Exportar clientes a CSV"
-                className="h-9 px-3 rounded-md border border-border bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5 text-xs font-medium flex-shrink-0"
+                className="h-9 px-3 rounded-md border border-border bg-card hover:bg-muted text-muted-foreground hover:text-foreground flex items-center gap-1.5 text-xs font-medium flex-shrink-0"
               >
                 <DownloadSimple size={14} weight="bold" /> <span className="hidden sm:inline">CSV</span>
-              </button>
-            )}
-          </div>
-          {/* Fila 2: filtros + clear */}
-          <div className="flex gap-2 flex-wrap items-center">
-            {(user?.role === 'superadmin' || user?.role === 'admin') && (
-              <select value={filterResp} onChange={(e) => setFilterResp(e.target.value)}
-                className="h-9 px-3 rounded-md border border-border bg-muted/50 text-sm min-w-[140px]">
-                <option value="">Todos los gestores</option>
-                <option value="unassigned">— Sin asignar —</option>
-                {gestores.map((g) => <option key={g.id} value={String(g.id)}>{g.nombre}</option>)}
-              </select>
-            )}
-            <select value={filterProducto} onChange={(e) => setFilterProducto(e.target.value)}
-              className="h-9 px-3 rounded-md border border-border bg-muted/50 text-sm min-w-[140px] max-w-[260px] truncate">
-              <option value="">Todos los programas</option>
-              {productos.map((p) => <option key={p.id} value={String(p.id)}>{p.nombre}</option>)}
-            </select>
-            <select value={filterEstadoPago} onChange={(e) => setFilterEstadoPago(e.target.value)}
-              className="h-9 px-3 rounded-md border border-border bg-muted/50 text-sm">
-              <option value="">Cualquier estado de pago</option>
-              <option value="pagado">Pagados</option>
-              <option value="parcial">Pago parcial</option>
-              <option value="sin_pagar">Sin pagar</option>
-              <option value="sin_ventas">Sin compras registradas</option>
-            </select>
-            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} title="Última compra desde"
-              className="h-9 px-2 rounded-md border border-border bg-muted/50 text-sm" />
-            <span className="text-xs text-muted-foreground">—</span>
-            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} title="Última compra hasta"
-              className="h-9 px-2 rounded-md border border-border bg-muted/50 text-sm" />
-            {hasActiveFilters && (
-              <button onClick={clearAllFilters} className="h-9 px-3 text-xs text-primary font-semibold hover:underline">
-                Limpiar filtros
               </button>
             )}
           </div>
