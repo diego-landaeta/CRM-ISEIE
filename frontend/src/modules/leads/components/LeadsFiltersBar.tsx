@@ -24,6 +24,7 @@ const STATUS_LABELS: Record<string, string> = {
   en_seguimiento: 'En seguimiento',
   convertido: 'Convertido',
   no_interesado: 'No interesado',
+  proxima_convocatoria: 'Próxima convocatoria',
 };
 
 const ORIGEN_LABELS: Record<string, string> = {
