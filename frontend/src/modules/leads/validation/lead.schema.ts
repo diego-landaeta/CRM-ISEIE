@@ -11,7 +11,7 @@ export const leadSchema = z.object({
   origen: z.enum(['meta_ads', 'google_ads', 'tiktok_ads', 'organico', 'chatgpt_ia', 'whatsapp', 'referido', 'directo'], {
     required_error: 'Selecciona un origen',
   }),
-  estado: z.enum(['nuevo', 'por_contactar', 'contactado', 'en_seguimiento', 'convertido', 'no_interesado']).optional(),
+  estado: z.enum(['nuevo', 'por_contactar', 'contactado', 'en_seguimiento', 'convertido', 'no_interesado', 'proxima_convocatoria']).optional(),
   producto_interes: z.string().optional(),
   pais: z.string().optional(),
   notas: z.string().optional(),
@@ -54,4 +54,5 @@ export const ESTADO_OPTIONS: readonly OptionLabel<LeadEstadoSchema>[] = [
   { value: 'en_seguimiento', label: 'En seguimiento' },
   { value: 'convertido', label: 'Convertido' },
   { value: 'no_interesado', label: 'No interesado' },
+  { value: 'proxima_convocatoria', label: 'Próxima convocatoria' },
 ] as const;

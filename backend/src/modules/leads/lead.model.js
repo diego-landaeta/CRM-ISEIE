@@ -1077,6 +1077,7 @@ export async function getStats(projectId, { responsableId = null, dateFrom = nul
        COUNT(*) FILTER (WHERE status = 'en_seguimiento') as en_seguimiento,
        COUNT(*) FILTER (WHERE status = 'convertido') as convertidos,
        COUNT(*) FILTER (WHERE status = 'no_interesado') as no_interesados,
+       COUNT(*) FILTER (WHERE status = 'proxima_convocatoria') as proxima_convocatoria,
        COUNT(*) FILTER (WHERE responsable_id IS NULL AND status NOT IN ('convertido','no_interesado')) as sin_asignar
      FROM leads WHERE project_id = $1 AND deleted_at IS NULL${where}`,
     params
@@ -1103,6 +1104,7 @@ export async function getDashboardSummary(projectId, { days = 30, responsableId 
        COUNT(*) FILTER (WHERE status = 'en_seguimiento') as en_seguimiento,
        COUNT(*) FILTER (WHERE status = 'convertido') as convertidos,
        COUNT(*) FILTER (WHERE status = 'no_interesado') as no_interesados,
+       COUNT(*) FILTER (WHERE status = 'proxima_convocatoria') as proxima_convocatoria,
        COUNT(*) FILTER (WHERE responsable_id IS NULL AND status NOT IN ('convertido','no_interesado')) as sin_asignar
      FROM leads WHERE project_id = $1 AND deleted_at IS NULL${respFilter}`,
     params

@@ -69,6 +69,7 @@ const STATUS_LABELS_ES: Record<string, string> = {
   en_seguimiento: 'En seguimiento',
   convertido: 'Convertido',
   no_interesado: 'No interesado',
+  proxima_convocatoria: 'Próxima convocatoria',
 };
 
 // Columnas para el export universal (CRM-196). Usado por ExportDialog.

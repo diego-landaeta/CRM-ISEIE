@@ -17,6 +17,7 @@ const STATUS_OPTIONS = [
   { value: 'contactado',     label: 'Contactado' },
   { value: 'en_seguimiento', label: 'En seguimiento' },
   { value: 'no_interesado',  label: 'No interesado' },
+  { value: 'proxima_convocatoria', label: 'Próxima convocatoria' },
 ];
 
 export default function BulkActionBar({ selected, onClear, onRefresh, canDelete = false }: BulkActionBarProps) {

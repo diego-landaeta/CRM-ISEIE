@@ -5,6 +5,7 @@ import {
   ChartLineUp,
   CheckCircle,
   XCircle,
+  CalendarStar,
 } from '@phosphor-icons/react';
 import { cn } from '@/shared/lib/utils';
 
@@ -16,6 +17,7 @@ export const STATUS_STYLES = {
   en_seguimiento: 'bg-amber-50 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400',
   convertido: 'bg-violet-50 text-violet-600 dark:bg-violet-950/30 dark:text-violet-400',
   no_interesado: 'bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400',
+  proxima_convocatoria: 'bg-cyan-50 text-cyan-700 dark:bg-cyan-950/30 dark:text-cyan-400',
 };
 
 export const STATUS_LABELS = {
@@ -25,6 +27,7 @@ export const STATUS_LABELS = {
   en_seguimiento: 'En seguimiento',
   convertido: 'Convertido',
   no_interesado: 'No interesado',
+  proxima_convocatoria: 'Próxima convocatoria',
 };
 
 const STATUS_ICONS = {
@@ -34,6 +37,7 @@ const STATUS_ICONS = {
   en_seguimiento: ChartLineUp,
   convertido: CheckCircle,
   no_interesado: XCircle,
+  proxima_convocatoria: CalendarStar,
 };
 
 export const STATUS_KEYS = [
@@ -43,6 +47,7 @@ export const STATUS_KEYS = [
   'en_seguimiento',
   'convertido',
   'no_interesado',
+  'proxima_convocatoria',
 ];
 
 /**
