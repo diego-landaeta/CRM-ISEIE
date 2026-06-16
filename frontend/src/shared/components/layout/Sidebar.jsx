@@ -73,6 +73,7 @@ const NAV_SECTIONS = [
       { to: '/accounting/payable',   label: 'Cuentas por pagar',  icon: Wallet,     roles: ['admin', 'superadmin'] },
       { to: '/commissions',          label: 'Comisiones',         icon: Bank,  roles: ['admin', 'superadmin'] },
       { to: '/payroll',              label: 'Nóminas',            icon: Coins,      roles: ['admin', 'superadmin'] },
+      { to: '/accounting/integrations', label: 'Integraciones',   icon: PlugsConnected, roles: ['admin', 'superadmin'], statusTag: 'Pruebas' },
       { to: '/stripe',               label: 'Stripe',             icon: CreditCard, roles: ['admin', 'superadmin'], comingSoon: true, statusTag: 'Investigando' },
     ],
   },

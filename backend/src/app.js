@@ -19,6 +19,7 @@ import notificationsModule from './modules/notifications/index.js';
 import metaAdsModule from './modules/meta-ads/index.js';
 import commissionsModule from './modules/commissions/index.js';
 import accountingModule from './modules/accounting/index.js';
+import integrationsModule from './modules/integrations/index.js';
 import expensesModule from './modules/expenses/index.js';
 import accountsPayableModule from './modules/accounts-payable/index.js';
 import payrollModule from './modules/payroll/index.js';
@@ -192,6 +193,7 @@ const MODULES = [
   metaAdsModule,
   commissionsModule,
   accountingModule,
+  integrationsModule,
   expensesModule,
   accountsPayableModule,
   payrollModule,
