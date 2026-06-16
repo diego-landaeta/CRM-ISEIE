@@ -19,7 +19,10 @@ export const BETA_ROUTES: readonly string[] = [
   '/clients',                       // Clientes
   '/matriculas',                    // Matriculas
   '/sales',                         // Ventas (registro venta historica + listado conversiones)
-  '/accounting/integrations',       // Integraciones (Pruebas) — Stripe, Brevo
+  '/accounting',                    // Finanzas: dashboard, income, conversions, receivable, payable, integrations
+  '/expenses',                      // Egresos
+  '/commissions',                   // Comisiones
+  '/payroll',                       // Nóminas
   '/meta-ads',                      // Integracion Meta Ads (metricas campanas)
   '/products',                      // Productos (incluye /products/tree)
   '/woocommerce',                   // Importacion WordPress/WC
