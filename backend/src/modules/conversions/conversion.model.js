@@ -124,7 +124,7 @@ export async function findByLead(leadId) {
   return rows;
 }
 
-export async function findAll({ projectId, leadId, responsableId, pendiente, vencido, from, to, page, limit }) {
+export async function findAll({ projectId, leadId, responsableId, pendiente, vencido, pendingBilling, from, to, page, limit }) {
   const conditions = [];
   const params = [];
   let idx = 1;
@@ -136,6 +136,10 @@ export async function findAll({ projectId, leadId, responsableId, pendiente, ven
   if (pendiente === 'false') { conditions.push(`c.importe_pagado >= c.importe_total`); }
   if (vencido === 'true') {
     conditions.push(`c.fecha_compromiso_pago IS NOT NULL AND c.fecha_compromiso_pago < CURRENT_DATE AND c.importe_pagado < c.importe_total`);
+  }
+  // pendingBilling: conversion sin importe (backfill u otras a completar)
+  if (pendingBilling === 'true') {
+    conditions.push(`(c.importe_total = 0 OR c.notas_pago LIKE 'Backfill 2026-06-16%')`);
   }
   if (from) { conditions.push(`c.fecha_conversion >= $${idx++}`); params.push(from); }
   if (to) { conditions.push(`c.fecha_conversion <= $${idx++}`); params.push(to); }

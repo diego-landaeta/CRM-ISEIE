@@ -40,6 +40,9 @@ export const listConversionsSchema = z.object({
   responsableId: z.coerce.number().int().positive().optional(),
   pendiente: z.enum(['true', 'false']).optional(),
   vencido: z.enum(['true', 'false']).optional(),
+  // Conversions sin importe (importe_total = 0) — generalmente backfill que las
+  // gestoras deben completar con el importe real de la venta.
+  pendingBilling: z.enum(['true', 'false']).optional(),
   from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   page: z.coerce.number().int().positive().default(1),

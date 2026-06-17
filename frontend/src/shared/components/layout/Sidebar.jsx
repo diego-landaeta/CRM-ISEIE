@@ -5,7 +5,7 @@ import {
   Moon, Sun, CaretLeft, CaretRight, UserCircle,
   CaretUp, CaretDown, Bell, Pulse, Calculator, Envelope, Globe,
   FilePdf, ShieldCheck, MagnifyingGlass, Headset, BookOpen, Sliders,
-  Megaphone, Robot, Sparkle, PlugsConnected, CreditCard,
+  Megaphone, Robot, Sparkle, PlugsConnected, CreditCard, WarningCircle,
   Receipt, Coins, Wrench, ShoppingBag, ChatCircleText, Wallet, Bank, Clock, GitMerge,
 } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -73,6 +73,7 @@ const NAV_SECTIONS = [
       { to: '/accounting/payable',   label: 'Cuentas por pagar',  icon: Wallet,     roles: ['admin', 'superadmin'], statusTag: 'Pruebas' },
       { to: '/commissions',          label: 'Comisiones',         icon: Bank,  roles: ['admin', 'superadmin'], statusTag: 'Pruebas' },
       { to: '/payroll',              label: 'Nóminas',            icon: Coins,      roles: ['admin', 'superadmin'], statusTag: 'Pruebas' },
+      { to: '/accounting/pendiente-facturar', label: 'Pendientes de facturar', icon: WarningCircle, roles: ['admin', 'superadmin'], statusTag: 'Pruebas' },
       { to: '/accounting/integrations', label: 'Integraciones',   icon: PlugsConnected, roles: ['admin', 'superadmin'], statusTag: 'Pruebas' },
       { to: '/stripe',               label: 'Stripe',             icon: CreditCard, roles: ['admin', 'superadmin'], comingSoon: true, statusTag: 'Investigando' },
     ],

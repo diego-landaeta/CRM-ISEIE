@@ -27,6 +27,7 @@ const AccountingDashboardPage = lazy(() => import('./modules/accounting/pages/Ac
 const IncomePage = lazy(() => import('./modules/accounting/pages/IncomePage'));
 const ReceivablePage = lazy(() => import('./modules/accounting/pages/ReceivablePage'));
 const IntegrationsPage = lazy(() => import('./modules/accounting/pages/IntegrationsPage'));
+const PendienteFacturarPage = lazy(() => import('./modules/accounting/pages/PendienteFacturarPage'));
 const RevenuePage = lazy(() => import('./modules/revenue/pages/RevenuePage'));
 const ChannelsConfigPage = lazy(() => import('./modules/settings/pages/ChannelsConfigPage'));
 const ShortcutsConfigPage = lazy(() => import('./modules/settings/pages/ShortcutsConfigPage'));
@@ -75,6 +76,7 @@ const ROUTE_TITLES = {
   '/expenses':                        'Egresos',
   '/accounting/payable':              'Cuentas por pagar',
   '/accounting/integrations':         'Integraciones',
+  '/accounting/pendiente-facturar':   'Pendientes de facturar',
   '/payroll':                         'Nóminas',
   '/matriculas':                      'Matrículas',
   '/forms':                           'Formularios',
@@ -163,6 +165,7 @@ function App() {
           <Route path="/accounting/receivable" element={<ReceivablePage />} />
           <Route path="/accounting/payable" element={<AccountsPayablePage />} />
           <Route path="/accounting/integrations" element={<IntegrationsPage />} />
+          <Route path="/accounting/pendiente-facturar" element={<PendienteFacturarPage />} />
           <Route path="/revenue" element={<RevenuePage />} />
           <Route path="/clients" element={<ClientsPage />} />
           <Route path="/clients/:id" element={<ClientDetailPage />} />
