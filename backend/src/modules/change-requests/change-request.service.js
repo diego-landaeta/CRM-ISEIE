@@ -6,7 +6,7 @@ import { notifyAdmins } from '../notifications/notifications.service.js';
 import { query } from '../../shared/config/db.js';
 
 // Roles con visibilidad/edición total sobre los RFCs.
-const FULL_VISIBILITY = ['superadmin', 'admin', 'project_manager'];
+const FULL_VISIBILITY = ['superadmin', 'admin', 'project_manager', 'soporte'];
 const PM_ROLES = ['project_manager', 'admin', 'superadmin']; // pueden rellenar la parte técnica
 const CEO_ROLES = ['superadmin']; // firma como CEO
 

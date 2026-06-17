@@ -21,6 +21,13 @@ type Payment = {
   description: string | null;
   payment_method: string | null;
   disputed: boolean;
+  dispute_id: string | null;
+  dispute_status: string | null;
+  dispute_reason: string | null;
+  dispute_amount: number | null;
+  dispute_evidence_due_by: string | null;
+  dispute_my_decision: string | null;
+  dispute_notes: string | null;
   refunded: boolean;
   refunded_amount: number | null;
   conversion_id: number | null;
@@ -47,8 +54,9 @@ export default function StripePaymentsPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
-  const [filters, setFilters] = useState({ status: '', linked: '', search: '' });
+  const [filters, setFilters] = useState({ status: '', linked: '', search: '', from: '', to: '' });
   const [linkDialog, setLinkDialog] = useState<Payment | null>(null);
+  const [disputeDialog, setDisputeDialog] = useState<Payment | null>(null);
 
   const load = useCallback(async () => {
     if (!pid) return;
@@ -58,6 +66,8 @@ export default function StripePaymentsPage() {
       if (filters.status) qs.set('status', filters.status);
       if (filters.linked) qs.set('linked', filters.linked);
       if (filters.search) qs.set('search', filters.search);
+      if (filters.from) qs.set('from', new Date(filters.from).toISOString());
+      if (filters.to) qs.set('to', new Date(filters.to + 'T23:59:59').toISOString());
       const [r1, r2] = await Promise.all([
         client.get<Payment[]>(`/stripe-payments?${qs}`),
         client.get<Stats>(`/stripe-payments/stats?projectId=${pid}`),
@@ -153,6 +163,18 @@ export default function StripePaymentsPage() {
           <option value="yes">Asociados</option>
           <option value="no">Sin asociar</option>
         </select>
+        <div className="flex items-center gap-1 text-xs">
+          <label className="text-muted-foreground">Desde</label>
+          <input type="date" value={filters.from} onChange={(e) => setFilters(f => ({ ...f, from: e.target.value }))}
+            className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
+          <label className="text-muted-foreground ml-1">Hasta</label>
+          <input type="date" value={filters.to} onChange={(e) => setFilters(f => ({ ...f, to: e.target.value }))}
+            className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
+          {(filters.from || filters.to) && (
+            <button onClick={() => setFilters(f => ({ ...f, from: '', to: '' }))}
+              className="h-9 px-2 text-xs text-muted-foreground hover:text-foreground">×</button>
+          )}
+        </div>
       </div>
 
       {/* Tabla */}
@@ -193,7 +215,15 @@ export default function StripePaymentsPage() {
                     {p.refunded && <div className="text-[10px] text-red-600">Reembolsado {p.refunded_amount ? fmt(p.refunded_amount) : ''}</div>}
                   </td>
                   <td className="px-3 py-2">
-                    <StatusBadge status={p.status} disputed={p.disputed} refunded={p.refunded} />
+                    {p.disputed ? (
+                      <button onClick={() => setDisputeDialog(p)}
+                        className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 hover:bg-amber-200"
+                        title="Ver detalle de disputa">
+                        DISPUTA ↗
+                      </button>
+                    ) : (
+                      <StatusBadge status={p.status} disputed={false} refunded={p.refunded} />
+                    )}
                   </td>
                   <td className="px-3 py-2">
                     {p.conversion_id ? (
@@ -224,6 +254,157 @@ export default function StripePaymentsPage() {
       {linkDialog && (
         <LinkDialog payment={linkDialog} projectId={pid} onClose={() => setLinkDialog(null)} onLinked={() => { setLinkDialog(null); load(); }} />
       )}
+      {disputeDialog && (
+        <DisputeDialog payment={disputeDialog} onClose={() => setDisputeDialog(null)} onUpdated={() => { setDisputeDialog(null); load(); }} />
+      )}
+    </div>
+  );
+}
+
+const DISPUTE_REASON_LABELS: Record<string, string> = {
+  fraudulent: 'Fraude (cliente dice no autorizar)',
+  duplicate: 'Cargo duplicado',
+  product_not_received: 'Producto no recibido',
+  product_unacceptable: 'Producto no aceptable',
+  subscription_canceled: 'Suscripción cancelada',
+  unrecognized: 'No reconoce el cargo',
+  credit_not_processed: 'Reembolso no procesado',
+  general: 'General',
+  incorrect_account_details: 'Datos de cuenta incorrectos',
+  insufficient_funds: 'Fondos insuficientes',
+  bank_cannot_process: 'Banco no puede procesar',
+  debit_not_authorized: 'Débito no autorizado',
+  customer_initiated: 'Iniciada por cliente',
+};
+
+const DISPUTE_STATUS_LABELS: Record<string, string> = {
+  warning_needs_response: 'Aviso — necesita respuesta',
+  warning_under_review: 'Aviso — en revisión',
+  warning_closed: 'Aviso — cerrado',
+  needs_response: 'Necesita respuesta',
+  under_review: 'En revisión Stripe',
+  charge_refunded: 'Reembolsado (caso cerrado)',
+  won: 'Ganada',
+  lost: 'Perdida',
+};
+
+const MY_DECISION_OPTIONS = [
+  { value: 'pending', label: 'Pendiente de revisión', color: 'bg-amber-100 text-amber-800' },
+  { value: 'contest', label: 'Vamos a impugnarla (es inválida)', color: 'bg-blue-100 text-blue-800' },
+  { value: 'accept_refund', label: 'Aceptamos / reembolsamos', color: 'bg-purple-100 text-purple-800' },
+  { value: 'won', label: 'Ganada', color: 'bg-emerald-100 text-emerald-800' },
+  { value: 'lost', label: 'Perdida', color: 'bg-red-100 text-red-800' },
+  { value: 'closed', label: 'Cerrada', color: 'bg-zinc-200 text-zinc-700' },
+];
+
+function DisputeDialog({ payment, onClose, onUpdated }: { payment: Payment; onClose: () => void; onUpdated: () => void }) {
+  const [decision, setDecision] = useState(payment.dispute_my_decision || 'pending');
+  const [notes, setNotes] = useState(payment.dispute_notes || '');
+  const [saving, setSaving] = useState(false);
+
+  const dueBy = payment.dispute_evidence_due_by ? new Date(payment.dispute_evidence_due_by) : null;
+  const hoursLeft = dueBy ? Math.max(0, Math.floor((dueBy.getTime() - Date.now()) / 3600000)) : null;
+  const daysLeft = hoursLeft != null ? Math.floor(hoursLeft / 24) : null;
+  const overdue = dueBy && dueBy.getTime() < Date.now();
+
+  async function save() {
+    setSaving(true);
+    try {
+      const res = await client.patch(`/stripe-payments/${payment.id}/dispute`, { decision, notes });
+      if (res.success) {
+        toast({ title: '✓ Decisión guardada' });
+        onUpdated();
+      } else {
+        toast({ title: 'Error', description: (res as { error?: string }).error, variant: 'destructive' });
+      }
+    } catch (e: unknown) {
+      const err = e as { data?: { error?: string }; message?: string };
+      toast({ title: 'Error', description: err?.data?.error || err?.message, variant: 'destructive' });
+    } finally { setSaving(false); }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 overflow-y-auto" onClick={onClose}>
+      <div className="bg-card rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="p-4 border-b border-border flex items-start gap-3">
+          <div className="w-10 h-10 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center flex-shrink-0">
+            <WarningCircle size={22} weight="duotone" />
+          </div>
+          <div className="flex-1">
+            <h3 className="font-semibold text-base">Disputa — {fmt(payment.dispute_amount || payment.amount)}</h3>
+            <p className="text-xs text-muted-foreground">
+              {payment.customer_name || payment.customer_email} · Cobro original {fmt(payment.amount)} · {fmtDate(payment.stripe_created_at)}
+            </p>
+          </div>
+        </div>
+
+        <div className="p-4 space-y-4 text-sm">
+          {/* Banner deadline */}
+          {dueBy && (
+            <div className={`p-3 rounded-lg border ${overdue ? 'bg-red-50 border-red-300 text-red-900' : daysLeft! <= 2 ? 'bg-amber-50 border-amber-300 text-amber-900' : 'bg-blue-50 border-blue-200 text-blue-900'}`}>
+              <p className="font-semibold text-xs">⏰ Fecha límite para responder a Stripe:</p>
+              <p className="text-lg font-bold tabular-nums">{fmtDate(payment.dispute_evidence_due_by)}</p>
+              <p className="text-xs">{overdue ? 'VENCIDO — Stripe ya decidió o pronto lo hará' : `Quedan ${daysLeft} días (${hoursLeft}h)`}</p>
+            </div>
+          )}
+
+          {/* Info Stripe */}
+          <div className="grid grid-cols-2 gap-3 text-xs">
+            <div>
+              <p className="text-muted-foreground">Razón Stripe</p>
+              <p className="font-semibold">{DISPUTE_REASON_LABELS[payment.dispute_reason || ''] || payment.dispute_reason || '—'}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">Estado en Stripe</p>
+              <p className="font-semibold">{DISPUTE_STATUS_LABELS[payment.dispute_status || ''] || payment.dispute_status || '—'}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">Email cliente</p>
+              <p className="font-mono text-[11px]">{payment.customer_email || '—'}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">Asociado a lead</p>
+              <p>{payment.lead_nombre || <span className="text-amber-600">Sin asociar</span>}</p>
+            </div>
+          </div>
+
+          {/* Tu decisión */}
+          <div className="border-t border-border pt-3">
+            <label className="text-xs font-semibold uppercase text-muted-foreground">Tu decisión interna</label>
+            <div className="grid grid-cols-2 gap-2 mt-2">
+              {MY_DECISION_OPTIONS.map(opt => (
+                <button key={opt.value} onClick={() => setDecision(opt.value)}
+                  className={`text-left p-2 rounded-md border text-xs ${decision === opt.value ? 'border-primary ring-2 ring-primary/20 ' + opt.color : 'border-border bg-card hover:bg-muted/30'}`}>
+                  <div className="font-semibold">{opt.label}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold uppercase text-muted-foreground">Notas internas</label>
+            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3}
+              placeholder="Por qué decidiste eso, evidencia que vas a usar, etc."
+              className="w-full mt-1 px-3 py-2 rounded-md border border-border bg-background text-sm" />
+          </div>
+        </div>
+
+        <div className="p-3 border-t border-border flex flex-wrap justify-between gap-2 bg-muted/20">
+          {payment.dispute_id && (
+            <a href={`https://dashboard.stripe.com/disputes/${payment.dispute_id}`} target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted">
+              <ArrowSquareOut size={14} weight="bold" /> Responder en Stripe Dashboard
+            </a>
+          )}
+          <div className="flex gap-2 ml-auto">
+            <button onClick={onClose} className="h-9 px-3 rounded-md border border-border bg-card text-sm hover:bg-muted">Cerrar</button>
+            <button onClick={save} disabled={saving}
+              className="h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50">
+              {saving ? 'Guardando…' : 'Guardar decisión'}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

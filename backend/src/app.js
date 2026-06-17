@@ -48,6 +48,7 @@ import { startDocumentOrphanScheduler } from './jobs/documentOrphanScheduler.js'
 import { startGoogleAdsTokenScheduler } from './jobs/googleAdsTokenScheduler.js';
 import { startReminderScheduler } from './jobs/reminderScheduler.js';
 import { startWooCommerceSyncScheduler } from './jobs/wooCommerceSyncScheduler.js';
+import { startStripePaymentsSyncScheduler } from './jobs/stripePaymentsSyncScheduler.js';
 
 const app = express();
 const PORT = process.env.PORT || 3005;
@@ -273,6 +274,13 @@ if (process.env.NODE_ENV !== 'test') {
         logger.info('WooCommerce sync scheduler arrancado');
       } catch (err) {
         logger.error({ err }, 'WooCommerce sync scheduler fallo al arrancar');
+      }
+    }
+    if (process.env.STRIPE_SYNC_DISABLED !== '1') {
+      try {
+        startStripePaymentsSyncScheduler();
+      } catch (err) {
+        logger.error({ err }, 'Stripe sync scheduler fallo al arrancar');
       }
     }
   });

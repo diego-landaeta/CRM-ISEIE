@@ -50,7 +50,7 @@ export async function listForUser({ projectId = null, userId, role, estado = nul
   const params = [];
   if (projectId) { params.push(projectId); conditions.push(`r.project_id = $${params.length}`); }
   // Roles con visibilidad total
-  const fullVisibility = ['superadmin', 'admin', 'project_manager'];
+  const fullVisibility = ['superadmin', 'admin', 'project_manager', 'soporte'];
   if (!fullVisibility.includes(role)) {
     params.push(userId);
     conditions.push(`r.solicitante_user_id = $${params.length}`);

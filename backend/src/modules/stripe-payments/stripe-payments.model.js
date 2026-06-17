@@ -94,6 +94,25 @@ export async function listPayments({ projectId, status, linked, search, from, to
   return { rows, total: c[0].total };
 }
 
+export async function getById(id) {
+  const { rows } = await query(
+    `SELECT sp.*, l.nombre AS lead_nombre, l.email AS lead_email
+     FROM stripe_payments sp
+     LEFT JOIN leads l ON l.id = sp.lead_id
+     WHERE sp.id = $1`,
+    [id]
+  );
+  return rows[0] || null;
+}
+
+export async function listProjectsWithStripe() {
+  const { rows } = await query(
+    `SELECT DISTINCT project_id FROM project_integrations
+     WHERE provider = 'stripe' AND active = true AND encrypted_value IS NOT NULL`
+  );
+  return rows.map(r => r.project_id);
+}
+
 export async function getStats(projectId) {
   const { rows } = await query(
     `SELECT

@@ -1,6 +1,8 @@
+import crypto from 'crypto';
 import { logger } from '../../shared/utils/logger.js';
 import { decrypt } from '../../shared/utils/crypto.js';
 import * as integrationsModel from '../integrations/integrations.model.js';
+import { query } from '../../shared/config/db.js';
 import * as model from './stripe-payments.model.js';
 
 async function getStripeKey(projectId) {
@@ -11,11 +13,22 @@ async function getStripeKey(projectId) {
   return process.env.STRIPE_SECRET_KEY || null;
 }
 
+export async function getWebhookSecret(projectId) {
+  try {
+    const row = await integrationsModel.get(projectId, 'stripe');
+    const pub = row?.config_public || {};
+    if (pub.webhook_secret_encrypted && row.webhook_iv && row.webhook_auth_tag) {
+      return decrypt(pub.webhook_secret_encrypted, row.webhook_iv, row.webhook_auth_tag);
+    }
+    return pub.webhook_secret || null;
+  } catch (e) { return null; }
+}
+
 async function stripeGet(apiKey, path, params = {}) {
   const url = new URL(`https://api.stripe.com${path}`);
   for (const [k, v] of Object.entries(params)) if (v != null) url.searchParams.set(k, String(v));
   const r = await fetch(url, { headers: { Authorization: `Bearer ${apiKey}` } });
-  if (!r.ok) throw new Error(`Stripe ${path} HTTP ${r.status}: ${await r.text()}`);
+  if (!r.ok) throw new Error(`Stripe ${path} HTTP ${r.status}: ${(await r.text()).slice(0, 200)}`);
   return r.json();
 }
 
@@ -43,25 +56,46 @@ function chargeToPayment(charge, projectId) {
 }
 
 async function autoLinkIfPossible(projectId, payment, dbRow) {
-  if (dbRow.conversion_id) return; // ya linkeado
+  if (dbRow.conversion_id) return;
   if (payment.status !== 'succeeded' || !payment.customer_email) return;
   const lead = await model.findLeadByEmail(projectId, payment.customer_email);
   if (!lead) return;
-  // Solo auto-asociar si el lead está en status convertido (decision del usuario)
   if (lead.status !== 'convertido') {
-    await model.linkPayment(dbRow.id, { leadId: lead.id, conversionId: null, conversionPaymentId: null, userId: null, method: 'auto_email_match_pending' });
+    await model.linkPayment(dbRow.id, { leadId: lead.id, conversionId: null, conversionPaymentId: null, userId: null, method: 'auto_pending' });
     return;
   }
   const conv = await model.findConversionByLeadId(lead.id);
   if (!conv) {
-    await model.linkPayment(dbRow.id, { leadId: lead.id, conversionId: null, conversionPaymentId: null, userId: null, method: 'auto_email_match_pending' });
+    await model.linkPayment(dbRow.id, { leadId: lead.id, conversionId: null, conversionPaymentId: null, userId: null, method: 'auto_pending' });
     return;
   }
   const fecha = new Date(payment.stripe_created_at * 1000).toISOString().slice(0, 10);
-  const notas = `Auto-asociado desde Stripe ${payment.stripe_id}`;
-  const cpId = await model.createConversionPayment(conv.id, payment.amount, fecha, notas);
+  const cpId = await model.createConversionPayment(conv.id, payment.amount, fecha, `Auto-Stripe ${payment.stripe_id}`);
   await model.updateConversionPaid(conv.id, payment.amount);
-  await model.linkPayment(dbRow.id, { leadId: lead.id, conversionId: conv.id, conversionPaymentId: cpId, userId: null, method: 'auto_email_match' });
+  await model.linkPayment(dbRow.id, { leadId: lead.id, conversionId: conv.id, conversionPaymentId: cpId, userId: null, method: 'auto_email' });
+}
+
+// Trae detalle completo de dispute desde Stripe API (incluye evidence_due_by)
+async function fetchAndUpdateDispute(apiKey, projectId, charge) {
+  if (!charge.disputed) return;
+  try {
+    const data = await stripeGet(apiKey, '/v1/disputes', { 'charge': charge.id, limit: 1 });
+    const d = data.data?.[0];
+    if (!d) return;
+    await query(
+      `UPDATE stripe_payments SET
+         dispute_id = $1,
+         dispute_status = $2,
+         dispute_reason = $3,
+         dispute_amount = $4,
+         dispute_evidence_due_by = to_timestamp($5),
+         updated_at = NOW()
+       WHERE project_id = $6 AND stripe_id = $7`,
+      [d.id, d.status, d.reason, (d.amount || 0) / 100, d.evidence_details?.due_by || null, projectId, charge.id]
+    );
+  } catch (e) {
+    logger.warn({ chargeId: charge.id, err: e.message }, 'fetchDispute failed');
+  }
 }
 
 export async function syncStripePayments(projectId, { fullHistory = false } = {}) {
@@ -71,15 +105,15 @@ export async function syncStripePayments(projectId, { fullHistory = false } = {}
   const state = await model.getSyncState(projectId);
   let createdGte = null;
   if (!fullHistory && state?.last_synced_until) {
-    // sincronización incremental: desde la última fecha − 1 hora (overlap por si quedó algo)
     createdGte = Math.floor(new Date(state.last_synced_until).getTime() / 1000) - 3600;
   }
 
   let imported = 0;
+  let disputesFound = 0;
   let lastCreated = state?.last_synced_until ? Math.floor(new Date(state.last_synced_until).getTime() / 1000) : 0;
   let startingAfter = null;
   let pages = 0;
-  const MAX_PAGES = 200; // safety: 100/page * 200 = 20k pagos máx por sync
+  const MAX_PAGES = 200;
 
   while (pages < MAX_PAGES) {
     const params = { limit: 100 };
@@ -90,11 +124,20 @@ export async function syncStripePayments(projectId, { fullHistory = false } = {}
     if (!data.data?.length) break;
 
     for (const ch of data.data) {
-      const payment = chargeToPayment(ch, projectId);
-      const dbRow = await model.upsertPayment(payment);
-      await autoLinkIfPossible(projectId, payment, dbRow);
-      imported++;
-      if (ch.created > lastCreated) lastCreated = ch.created;
+      try {
+        const payment = chargeToPayment(ch, projectId);
+        const dbRow = await model.upsertPayment(payment);
+        try { await autoLinkIfPossible(projectId, payment, dbRow); }
+        catch (e) { logger.warn({ chargeId: ch.id, err: e.message }, 'autoLink fail'); }
+        if (ch.disputed) {
+          await fetchAndUpdateDispute(apiKey, projectId, ch);
+          disputesFound++;
+        }
+        imported++;
+        if (ch.created > lastCreated) lastCreated = ch.created;
+      } catch (e) {
+        logger.warn({ chargeId: ch.id, err: e.message }, 'Charge sync failed - continua');
+      }
     }
     if (!data.has_more) break;
     startingAfter = data.data[data.data.length - 1].id;
@@ -109,19 +152,104 @@ export async function syncStripePayments(projectId, { fullHistory = false } = {}
     last_error: null,
   });
 
-  return { imported, pages };
+  logger.info({ projectId, imported, disputesFound, pages }, 'Stripe sync OK');
+  return { imported, disputes: disputesFound, pages };
 }
 
 export async function manualLink(stripePaymentId, { leadId, conversionId, userId }) {
   const fecha = new Date().toISOString().slice(0, 10);
   let cpId = null;
   if (conversionId) {
-    const { rows } = await import('../../shared/config/db.js').then(m => m.query(`SELECT amount FROM stripe_payments WHERE id=$1`, [stripePaymentId]));
+    const { rows } = await query(`SELECT amount FROM stripe_payments WHERE id=$1`, [stripePaymentId]);
     const amount = Number(rows[0]?.amount || 0);
     if (amount > 0) {
-      cpId = await model.createConversionPayment(conversionId, amount, fecha, `Asociado manual desde Stripe payment #${stripePaymentId}`);
+      cpId = await model.createConversionPayment(conversionId, amount, fecha, `Manual Stripe #${stripePaymentId}`);
       await model.updateConversionPaid(conversionId, amount);
     }
   }
   await model.linkPayment(stripePaymentId, { leadId, conversionId, conversionPaymentId: cpId, userId, method: 'manual' });
+}
+
+export async function updateDisputeDecision(stripePaymentId, { decision, notes, userId }) {
+  await query(
+    `UPDATE stripe_payments SET
+       dispute_my_decision = $1,
+       dispute_notes = COALESCE($2, dispute_notes),
+       dispute_decided_at = NOW(),
+       dispute_decided_by = $3,
+       updated_at = NOW()
+     WHERE id = $4`,
+    [decision, notes || null, userId || null, stripePaymentId]
+  );
+}
+
+// ─── Webhook handler (Stripe → CRM en tiempo real) ───────────────────────────
+export function verifyStripeSignature(rawBody, sigHeader, secret) {
+  if (!sigHeader || !secret) return false;
+  const parts = {};
+  for (const p of sigHeader.split(',')) {
+    const [k, v] = p.split('=');
+    if (k && v) (parts[k] = parts[k] || []).push(v);
+  }
+  const t = parts.t?.[0];
+  const v1List = parts.v1 || [];
+  if (!t || !v1List.length) return false;
+  const payload = `${t}.${rawBody}`;
+  const expected = crypto.createHmac('sha256', secret).update(payload).digest('hex');
+  for (const v1 of v1List) {
+    if (v1.length === expected.length &&
+        crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(v1))) return true;
+  }
+  return false;
+}
+
+export async function handleWebhookEvent(projectId, event) {
+  const apiKey = await getStripeKey(projectId);
+  const obj = event.data?.object;
+  if (!obj) return { skipped: 'no data' };
+
+  switch (event.type) {
+    case 'charge.succeeded':
+    case 'charge.updated':
+    case 'charge.refunded':
+    case 'charge.failed': {
+      const payment = chargeToPayment(obj, projectId);
+      const dbRow = await model.upsertPayment(payment);
+      try { await autoLinkIfPossible(projectId, payment, dbRow); } catch (e) { logger.warn({ err: e.message }, 'autoLink wh fail'); }
+      if (obj.disputed && apiKey) await fetchAndUpdateDispute(apiKey, projectId, obj);
+      return { processed: event.type, stripeId: obj.id };
+    }
+    case 'charge.dispute.created':
+    case 'charge.dispute.updated':
+    case 'charge.dispute.closed': {
+      // obj is the dispute object
+      await query(
+        `UPDATE stripe_payments SET
+           disputed = true,
+           dispute_id = $1, dispute_status = $2, dispute_reason = $3,
+           dispute_amount = $4,
+           dispute_evidence_due_by = to_timestamp($5),
+           updated_at = NOW()
+         WHERE project_id = $6 AND stripe_id = $7`,
+        [obj.id, obj.status, obj.reason, (obj.amount || 0) / 100,
+         obj.evidence_details?.due_by || null, projectId, obj.charge]
+      );
+      return { processed: event.type, stripeId: obj.id };
+    }
+    case 'payment_intent.succeeded':
+    case 'payment_intent.payment_failed': {
+      // Fetch the charge via API for full info (PI no incluye billing_details completos)
+      if (apiKey && obj.latest_charge) {
+        try {
+          const ch = await stripeGet(apiKey, `/v1/charges/${obj.latest_charge}`);
+          const payment = chargeToPayment(ch, projectId);
+          const dbRow = await model.upsertPayment(payment);
+          try { await autoLinkIfPossible(projectId, payment, dbRow); } catch {}
+        } catch (e) { logger.warn({ err: e.message }, 'fetch charge from PI failed'); }
+      }
+      return { processed: event.type, stripeId: obj.id };
+    }
+    default:
+      return { skipped: event.type };
+  }
 }
