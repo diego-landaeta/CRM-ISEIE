@@ -49,12 +49,22 @@ export default function IntegrationsPage() {
         subtitle={`Configura conexiones externas (Stripe, Brevo) para ${activeProject?.nombre || 'el proyecto activo'}.`}
       />
 
-      <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 rounded-lg p-3 text-sm">
-        <p className="font-semibold text-amber-900 dark:text-amber-300 mb-1">⚠ Zona en pruebas</p>
-        <p className="text-amber-800 dark:text-amber-400 text-xs">
-          Estas integraciones aún no se usan en producción. Puedes guardar tus credenciales y probar la conexión;
-          la activación real (envío de emails / sync de pagos) se hará cuando lo confirmes.
+      <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 rounded-lg p-4 text-sm space-y-2">
+        <p className="font-semibold text-blue-900 dark:text-blue-300 flex items-center gap-1.5">
+          <Question size={14} weight="bold" /> Cómo funciona esta página
         </p>
+        <div className="text-blue-900/90 dark:text-blue-300/90 text-xs space-y-1.5">
+          <p><strong>1) Guardar credenciales</strong> — pegas la API key y se cifra en DB con AES-256. No se descarga ningún dato.</p>
+          <p><strong>2) Probar conexión</strong> — el CRM hace 1 request a la API del proveedor para validar la key. Si responde 200, queda <em>Conectado</em>.</p>
+          <p><strong>3) Uso real:</strong></p>
+          <ul className="list-disc list-inside pl-2 space-y-0.5">
+            <li><strong>Stripe:</strong> en proyectos IA, el dashboard hace live fetch de MRR / suscripciones / cobros fallidos. El webhook de pagos para crear conversions automáticas <em>está en desarrollo</em>.</li>
+            <li><strong>Brevo:</strong> envía emails transaccionales (lead asignado, recordatorios, confirmación de pago) usando el From email validado. La automatización de resúmenes diarios / SLA 30min está en desarrollo.</li>
+          </ul>
+          <p className="text-amber-700 dark:text-amber-400 pt-1">
+            <strong>⚠ Importante:</strong> cada proyecto tiene sus propias credenciales. Cambiá el proyecto en el sidebar antes de configurar para no mezclar cuentas.
+          </p>
+        </div>
       </div>
 
       {!pid ? (
@@ -166,21 +176,50 @@ function StripeCard({ projectId }: { projectId: number }) {
           <Question size={12} weight="bold" /> {showHelp ? 'Ocultar tutorial' : 'Cómo obtener mi API key de Stripe'}
         </button>
         {showHelp && (
-          <div className="rounded-md border border-border bg-muted/30 p-3 text-xs space-y-2">
-            <p className="font-semibold">Pasos para obtener tu API key:</p>
-            <ol className="list-decimal list-inside space-y-1 pl-1 text-muted-foreground">
-              <li>Entra a <a href="https://dashboard.stripe.com/apikeys" target="_blank" rel="noopener noreferrer" className="text-primary inline-flex items-center gap-0.5 hover:underline">dashboard.stripe.com/apikeys <ArrowSquareOut size={10} weight="bold" /></a></li>
-              <li>Para pruebas: arriba a la izquierda, activa <strong>"Modo prueba"</strong> y copia la "Secret key" (empieza por <code className="px-1 rounded bg-card">sk_test_...</code>).</li>
-              <li>Para producción: desactiva modo prueba y copia la "Secret key live" (<code className="px-1 rounded bg-card">sk_live_...</code>). <strong>Ojo:</strong> con esta tendrás acceso real a movimientos de dinero.</li>
-              <li>Pega la key abajo, guarda y pulsa <strong>"Probar conexión"</strong>. Si la cuenta responde, listo.</li>
-            </ol>
-            <p className="font-semibold pt-1">Webhook (opcional, para sync automático):</p>
-            <ol className="list-decimal list-inside space-y-1 pl-1 text-muted-foreground" start={5}>
-              <li>En Stripe → Developers → Webhooks → "Add endpoint".</li>
-              <li>URL del endpoint: <code className="px-1 rounded bg-card text-[10px] break-all">{window.location.origin}/api/integrations/stripe/webhook</code></li>
-              <li>Eventos a escuchar: <code className="px-1 rounded bg-card">payout.paid</code>, <code className="px-1 rounded bg-card">balance.available</code>.</li>
-              <li>Copia el <strong>"Signing secret"</strong> (empieza por <code className="px-1 rounded bg-card">whsec_...</code>) y pégalo abajo.</li>
-            </ol>
+          <div className="rounded-md border border-border bg-muted/30 p-3 text-xs space-y-3">
+            <div>
+              <p className="font-semibold mb-1">📋 Resumen — qué hace y qué no</p>
+              <ul className="list-disc list-inside space-y-0.5 pl-1 text-muted-foreground">
+                <li><strong>Al guardar:</strong> sólo se valida (1 request a <code className="px-1 rounded bg-card">/v1/balance</code>) y se cifra en DB. No baja datos.</li>
+                <li><strong>Proyectos IA:</strong> el dashboard hace live fetch de MRR, suscripciones, cobros fallidos.</li>
+                <li><strong>Webhook automático de pagos → conversiones:</strong> EN DESARROLLO (necesita endpoint que escuche <code className="px-1 rounded bg-card">checkout.session.completed</code> / <code className="px-1 rounded bg-card">invoice.paid</code>). Por ahora la URL es informativa.</li>
+              </ul>
+            </div>
+
+            <div>
+              <p className="font-semibold mb-1">🔑 Paso 1 — Obtener tu API key</p>
+              <ol className="list-decimal list-inside space-y-1 pl-1 text-muted-foreground">
+                <li>Entra a <a href="https://dashboard.stripe.com/apikeys" target="_blank" rel="noopener noreferrer" className="text-primary inline-flex items-center gap-0.5 hover:underline">dashboard.stripe.com/apikeys <ArrowSquareOut size={10} weight="bold" /></a></li>
+                <li><strong>Pruebas:</strong> arriba a la izquierda activa <strong>"Modo prueba"</strong> y copia la "Secret key" (empieza por <code className="px-1 rounded bg-card">sk_test_…</code>).</li>
+                <li><strong>Producción:</strong> desactiva modo prueba y copia la "Secret key live" (<code className="px-1 rounded bg-card">sk_live_…</code>). <span className="text-red-600 dark:text-red-400 font-semibold">Acceso real a movimientos de dinero.</span></li>
+                <li>Pégala abajo en <em>API Key</em>, pulsa <strong>Guardar</strong> y luego <strong>Probar conexión</strong>.</li>
+              </ol>
+            </div>
+
+            <div>
+              <p className="font-semibold mb-1">🔔 Paso 2 — Webhook (cuando esté listo el handler)</p>
+              <ol className="list-decimal list-inside space-y-1 pl-1 text-muted-foreground">
+                <li>En Stripe → <strong>Developers</strong> → <strong>Webhooks</strong> → <strong>"Add endpoint"</strong>.</li>
+                <li>URL del endpoint:<br/><code className="px-1 rounded bg-card text-[10px] break-all">{window.location.origin}/api/integrations/stripe/webhook</code></li>
+                <li>Eventos a escuchar: <code className="px-1 rounded bg-card">checkout.session.completed</code>, <code className="px-1 rounded bg-card">invoice.paid</code>, <code className="px-1 rounded bg-card">payment_intent.succeeded</code>, <code className="px-1 rounded bg-card">payout.paid</code>.</li>
+                <li>Copia el <strong>"Signing secret"</strong> (<code className="px-1 rounded bg-card">whsec_…</code>) y pégalo abajo en <em>Webhook Signing Secret</em>.</li>
+                <li>Verifica con Stripe CLI antes de poner live: <code className="px-1 rounded bg-card">stripe listen --forward-to {window.location.origin}/api/integrations/stripe/webhook</code></li>
+              </ol>
+            </div>
+
+            <div>
+              <p className="font-semibold mb-1">🔄 Paso 3 — Cómo se cruzan los datos con el CRM</p>
+              <ul className="list-disc list-inside space-y-0.5 pl-1 text-muted-foreground">
+                <li>Stripe envía evento → CRM verifica firma con el Signing Secret.</li>
+                <li>Busca el cliente por email en la tabla <code className="px-1 rounded bg-card">leads</code> del proyecto.</li>
+                <li>Si existe → crea/actualiza <code className="px-1 rounded bg-card">conversions</code> + <code className="px-1 rounded bg-card">conversion_payments</code>.</li>
+                <li>Si no existe → registra el pago como huérfano para que la gestora lo asocie manualmente.</li>
+              </ul>
+            </div>
+
+            <p className="text-amber-700 dark:text-amber-400 pt-1 border-t border-border/50">
+              <strong>⚠ Seguridad:</strong> nunca compartas la <code className="px-1 rounded bg-card">sk_live_…</code> por chat o email. Si se filtra, rotala desde el dashboard de Stripe.
+            </p>
           </div>
         )}
 
