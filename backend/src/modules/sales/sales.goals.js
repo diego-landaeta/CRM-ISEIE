@@ -14,21 +14,29 @@ function currentPeriodo() {
  * Devuelve también la meta cuando existe.
  */
 export async function getGestoresStats({ projectId = null, periodo = null } = {}) {
-  const per = periodo || currentPeriodo();
-  const params = [per];
+  // periodo='all' → todas las ventas (sin filtro de mes). Default = mes actual.
+  const allTime = periodo === 'all';
+  const per = allTime ? null : (periodo || currentPeriodo());
+  const params = allTime ? [] : [per];
+
   const projectFilter = projectId ? `AND c.project_id = $${params.push(projectId)}` : '';
   const projectGoalFilter = projectId ? `AND (g.project_id = $${params.length} OR g.project_id IS NULL)` : '';
+  const userProjectJoin = projectId
+    ? `JOIN user_projects up ON up.user_id = u.id AND up.project_id = $${params.length} AND up.active = TRUE`
+    : '';
 
-  // Stats agregados de conversiones del mes por responsable del lead.
+  const dateFilter = allTime ? '' : `AND TO_CHAR(c.fecha_conversion, 'YYYY-MM') = $1`;
+
   const { rows: stats } = await query(
     `SELECT u.id AS user_id, u.nombre, u.email, u.role, u.is_available,
             COUNT(c.id)::int AS ventas,
             COALESCE(SUM(c.importe_total), 0)::numeric AS facturado,
             COALESCE(SUM(c.importe_pagado), 0)::numeric AS cobrado
      FROM users u
+     ${userProjectJoin}
      LEFT JOIN leads l ON l.responsable_id = u.id
      LEFT JOIN conversions c ON c.lead_id = l.id
-       AND TO_CHAR(c.fecha_conversion, 'YYYY-MM') = $1
+       ${dateFilter}
        ${projectFilter}
      WHERE u.active = TRUE AND u.role IN ('gestor', 'admin', 'superadmin')
      GROUP BY u.id, u.nombre, u.email, u.role, u.is_available
@@ -36,17 +44,20 @@ export async function getGestoresStats({ projectId = null, periodo = null } = {}
     params
   );
 
-  // Metas del periodo
-  const goalsParams = [per];
-  const { rows: goals } = await query(
-    `SELECT g.user_id, g.meta_ventas, g.meta_facturacion, g.notas, g.set_by_user_id,
-            su.nombre AS set_by_nombre
-     FROM sales_goals g
-     LEFT JOIN users su ON su.id = g.set_by_user_id
-     WHERE g.periodo_yyyymm = $1 ${projectGoalFilter}`,
-    projectId ? [...goalsParams, projectId] : goalsParams
-  );
-  const goalByUser = Object.fromEntries(goals.map((g) => [g.user_id, g]));
+  // Metas: solo si NO es vista all-time (metas son siempre mensuales)
+  let goalByUser = {};
+  if (!allTime) {
+    const goalsParams = [per];
+    const { rows: goals } = await query(
+      `SELECT g.user_id, g.meta_ventas, g.meta_facturacion, g.notas, g.set_by_user_id,
+              su.nombre AS set_by_nombre
+       FROM sales_goals g
+       LEFT JOIN users su ON su.id = g.set_by_user_id
+       WHERE g.periodo_yyyymm = $1 ${projectGoalFilter}`,
+      projectId ? [...goalsParams, projectId] : goalsParams
+    );
+    goalByUser = Object.fromEntries(goals.map((g) => [g.user_id, g]));
+  }
 
   return {
     periodo: per,

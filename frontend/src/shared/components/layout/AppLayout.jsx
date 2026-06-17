@@ -8,6 +8,7 @@ import OfflineBanner from '@/shared/components/ui/OfflineBanner';
 import PwaInstallPrompt from '@/shared/components/ui/PwaInstallPrompt';
 import ShortcutsFAB from '@/shared/components/ui/ShortcutsFAB';
 import SectionTabs from './SectionTabs';
+import BetaDisclaimer from '@/shared/components/ui/BetaDisclaimer';
 
 const COLLAPSED_KEY = 'crm.sidebar.collapsed';
 
@@ -109,15 +110,13 @@ export default function AppLayout() {
         )}
       >
         <SectionTabs />
-        {/* Banner global "EN PRUEBAS" para todo el bloque de Finanzas. */}
+        {/* Banner + Popup "EN PRUEBAS" para todo el bloque de Finanzas. */}
         {/^\/(sales|expenses|accounting|commissions|payroll)(\/|$)/.test(pathname) && (
-          <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 rounded-md px-3 py-2 mb-4 flex items-center gap-2 text-xs">
-            <svg className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0" fill="currentColor" viewBox="0 0 256 256"><path d="M128 24a104 104 0 1 0 104 104A104.13 104.13 0 0 0 128 24Zm-8 56a8 8 0 0 1 16 0v56a8 8 0 0 1-16 0Zm8 128a12 12 0 1 1 12-12 12 12 0 0 1-12 12Z"/></svg>
-            <span className="font-semibold text-amber-900 dark:text-amber-300">EN PRUEBAS</span>
-            <span className="text-amber-800 dark:text-amber-400">
-              · Esta sección está en periodo de pruebas. Los datos son reales pero algunos automatismos están en validación.
-            </span>
-          </div>
+          <BetaDisclaimer
+            sectionKey="finanzas"
+            title="Finanzas — sección en pruebas"
+            description="Esta sección está en periodo de pruebas. Los datos son reales pero algunos automatismos están en validación."
+          />
         )}
         <Suspense fallback={
           <div className="flex items-center justify-center py-20">
