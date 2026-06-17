@@ -20,6 +20,7 @@ import metaAdsModule from './modules/meta-ads/index.js';
 import commissionsModule from './modules/commissions/index.js';
 import accountingModule from './modules/accounting/index.js';
 import integrationsModule from './modules/integrations/index.js';
+import stripePaymentsModule from './modules/stripe-payments/index.js';
 import expensesModule from './modules/expenses/index.js';
 import accountsPayableModule from './modules/accounts-payable/index.js';
 import payrollModule from './modules/payroll/index.js';
@@ -194,6 +195,7 @@ const MODULES = [
   commissionsModule,
   accountingModule,
   integrationsModule,
+  stripePaymentsModule,
   expensesModule,
   accountsPayableModule,
   payrollModule,

@@ -1,0 +1,129 @@
+import { query } from '../../shared/config/db.js';
+
+export async function upsertPayment(p) {
+  const { rows } = await query(
+    `INSERT INTO stripe_payments (
+       project_id, stripe_id, type, status, amount, currency,
+       customer_email, customer_name, customer_stripe_id,
+       description, metadata, payment_method,
+       disputed, dispute_status, dispute_reason,
+       refunded, refunded_amount, stripe_created_at, synced_at
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,to_timestamp($18),NOW())
+     ON CONFLICT (project_id, stripe_id) DO UPDATE SET
+       status=EXCLUDED.status, amount=EXCLUDED.amount,
+       customer_email=EXCLUDED.customer_email, customer_name=EXCLUDED.customer_name,
+       description=EXCLUDED.description, metadata=EXCLUDED.metadata,
+       payment_method=EXCLUDED.payment_method,
+       disputed=EXCLUDED.disputed, dispute_status=EXCLUDED.dispute_status,
+       dispute_reason=EXCLUDED.dispute_reason,
+       refunded=EXCLUDED.refunded, refunded_amount=EXCLUDED.refunded_amount,
+       synced_at=NOW(), updated_at=NOW()
+     RETURNING id, conversion_id`,
+    [
+      p.project_id, p.stripe_id, p.type, p.status, p.amount, p.currency,
+      p.customer_email, p.customer_name, p.customer_stripe_id,
+      p.description, p.metadata ? JSON.stringify(p.metadata) : null, p.payment_method,
+      !!p.disputed, p.dispute_status, p.dispute_reason,
+      !!p.refunded, p.refunded_amount, p.stripe_created_at,
+    ]
+  );
+  return rows[0];
+}
+
+export async function findLeadByEmail(projectId, email) {
+  if (!email) return null;
+  const { rows } = await query(
+    `SELECT id, status FROM leads WHERE project_id=$1 AND LOWER(email)=LOWER($2) AND deleted_at IS NULL ORDER BY id DESC LIMIT 1`,
+    [projectId, email]
+  );
+  return rows[0] || null;
+}
+
+export async function findConversionByLeadId(leadId) {
+  const { rows } = await query(`SELECT id, importe_total, importe_pagado FROM conversions WHERE lead_id=$1 ORDER BY id DESC LIMIT 1`, [leadId]);
+  return rows[0] || null;
+}
+
+export async function linkPayment(stripePaymentId, { leadId, conversionId, conversionPaymentId, userId, method }) {
+  await query(
+    `UPDATE stripe_payments SET
+       lead_id=$1, conversion_id=$2, conversion_payment_id=$3,
+       linked_by=$4, link_method=$5, linked_at=NOW(), updated_at=NOW()
+     WHERE id=$6`,
+    [leadId, conversionId, conversionPaymentId, userId, method, stripePaymentId]
+  );
+}
+
+export async function createConversionPayment(conversionId, amount, fecha, notas) {
+  const { rows } = await query(
+    `INSERT INTO conversion_payments (conversion_id, importe, fecha, notas) VALUES ($1,$2,$3,$4) RETURNING id`,
+    [conversionId, amount, fecha, notas]
+  );
+  return rows[0].id;
+}
+
+export async function updateConversionPaid(conversionId, addAmount) {
+  await query(
+    `UPDATE conversions SET importe_pagado = LEAST(importe_total, importe_pagado + $1), updated_at=NOW() WHERE id=$2`,
+    [addAmount, conversionId]
+  );
+}
+
+export async function listPayments({ projectId, status, linked, search, from, to, page = 1, limit = 50 }) {
+  const conds = ['sp.project_id = $1'];
+  const params = [projectId];
+  let i = 2;
+  if (status) { conds.push(`sp.status = $${i++}`); params.push(status); }
+  if (linked === 'yes') conds.push('sp.conversion_id IS NOT NULL');
+  if (linked === 'no')  conds.push('sp.conversion_id IS NULL');
+  if (search) { conds.push(`(LOWER(sp.customer_email) LIKE $${i} OR LOWER(sp.customer_name) LIKE $${i} OR sp.stripe_id LIKE $${i})`); params.push(`%${search.toLowerCase()}%`); i++; }
+  if (from) { conds.push(`sp.stripe_created_at >= $${i++}`); params.push(from); }
+  if (to)   { conds.push(`sp.stripe_created_at <= $${i++}`); params.push(to); }
+  const where = conds.join(' AND ');
+  const offset = (page - 1) * limit;
+  const { rows } = await query(
+    `SELECT sp.*, l.nombre AS lead_nombre
+     FROM stripe_payments sp
+     LEFT JOIN leads l ON l.id = sp.lead_id
+     WHERE ${where}
+     ORDER BY sp.stripe_created_at DESC
+     LIMIT ${limit} OFFSET ${offset}`,
+    params
+  );
+  const { rows: c } = await query(`SELECT COUNT(*)::int AS total FROM stripe_payments sp WHERE ${where}`, params);
+  return { rows, total: c[0].total };
+}
+
+export async function getStats(projectId) {
+  const { rows } = await query(
+    `SELECT
+       COUNT(*)::int AS total,
+       COUNT(*) FILTER (WHERE status='succeeded')::int AS succeeded,
+       COUNT(*) FILTER (WHERE status='failed')::int AS failed,
+       COUNT(*) FILTER (WHERE disputed=true)::int AS disputed,
+       COUNT(*) FILTER (WHERE refunded=true)::int AS refunded,
+       COUNT(*) FILTER (WHERE conversion_id IS NULL AND status='succeeded')::int AS unlinked,
+       COALESCE(SUM(amount) FILTER (WHERE status='succeeded'), 0) AS total_cobrado,
+       COALESCE(SUM(refunded_amount), 0) AS total_refunded
+     FROM stripe_payments WHERE project_id=$1`,
+    [projectId]
+  );
+  return rows[0];
+}
+
+export async function getSyncState(projectId) {
+  const { rows } = await query(`SELECT * FROM stripe_sync_state WHERE project_id=$1`, [projectId]);
+  return rows[0] || null;
+}
+
+export async function upsertSyncState(projectId, fields) {
+  const cols = ['project_id', ...Object.keys(fields)];
+  const vals = [projectId, ...Object.values(fields)];
+  const placeholders = cols.map((_, i) => `$${i + 1}`).join(',');
+  const updates = Object.keys(fields).map((k, i) => `${k}=$${i + 2}`).join(', ');
+  await query(
+    `INSERT INTO stripe_sync_state (${cols.join(',')}) VALUES (${placeholders})
+     ON CONFLICT (project_id) DO UPDATE SET ${updates}`,
+    vals
+  );
+}

@@ -60,6 +60,7 @@ export const SECTIONS = [
       { to: '/commissions',                   label: 'Comisiones',        icon: CurrencyEur },
       { to: '/payroll',                       label: 'Nóminas',           icon: ChartLineUp, roles: ['admin', 'superadmin'] },
       { to: '/accounting/pendiente-facturar', label: 'Pendientes facturar', icon: Calculator, roles: ['admin', 'superadmin'] },
+      { to: '/accounting/pagos-stripe',       label: 'Pagos Stripe',      icon: Calculator,  roles: ['admin', 'superadmin'] },
       { to: '/accounting/integrations',       label: 'Integraciones',     icon: Calculator,  roles: ['admin', 'superadmin'] },
     ],
   },

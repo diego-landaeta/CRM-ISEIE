@@ -31,7 +31,7 @@ export const BUNDLES = {
   accounting: {
     label: 'Contabilidad',
     description: 'Ingresos + egresos + cuentas por cobrar/pagar + integraciones (Stripe/Brevo)',
-    modules: ['accounting', 'accounts-payable', 'integrations'],
+    modules: ['accounting', 'accounts-payable', 'integrations', 'stripe-payments'],
     requires: ['core'],
   },
   payroll: {

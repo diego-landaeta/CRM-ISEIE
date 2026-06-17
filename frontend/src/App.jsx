@@ -28,6 +28,7 @@ const IncomePage = lazy(() => import('./modules/accounting/pages/IncomePage'));
 const ReceivablePage = lazy(() => import('./modules/accounting/pages/ReceivablePage'));
 const IntegrationsPage = lazy(() => import('./modules/accounting/pages/IntegrationsPage'));
 const PendienteFacturarPage = lazy(() => import('./modules/accounting/pages/PendienteFacturarPage'));
+const StripePaymentsPage = lazy(() => import('./modules/accounting/pages/StripePaymentsPage'));
 const RevenuePage = lazy(() => import('./modules/revenue/pages/RevenuePage'));
 const ChannelsConfigPage = lazy(() => import('./modules/settings/pages/ChannelsConfigPage'));
 const ShortcutsConfigPage = lazy(() => import('./modules/settings/pages/ShortcutsConfigPage'));
@@ -77,6 +78,7 @@ const ROUTE_TITLES = {
   '/accounting/payable':              'Cuentas por pagar',
   '/accounting/integrations':         'Integraciones',
   '/accounting/pendiente-facturar':   'Pendientes de facturar',
+  '/accounting/pagos-stripe':         'Pagos Stripe',
   '/payroll':                         'Nóminas',
   '/matriculas':                      'Matrículas',
   '/forms':                           'Formularios',
@@ -166,6 +168,7 @@ function App() {
           <Route path="/accounting/payable" element={<AccountsPayablePage />} />
           <Route path="/accounting/integrations" element={<IntegrationsPage />} />
           <Route path="/accounting/pendiente-facturar" element={<PendienteFacturarPage />} />
+          <Route path="/accounting/pagos-stripe" element={<StripePaymentsPage />} />
           <Route path="/revenue" element={<RevenuePage />} />
           <Route path="/clients" element={<ClientsPage />} />
           <Route path="/clients/:id" element={<ClientDetailPage />} />

@@ -1,7 +1,7 @@
 import { Outlet } from 'react-router-dom';
 import {
   Calculator, ChartBar, TrendUp, Receipt, TrendDown,
-  Wallet, HandCoins, CurrencyEur, PlugsConnected, WarningCircle,
+  Wallet, HandCoins, CurrencyEur, PlugsConnected, WarningCircle, CreditCard,
 } from '@phosphor-icons/react';
 import SubNav from '@/shared/components/ui/SubNav';
 
@@ -16,6 +16,7 @@ const TABS = [
   { label: 'Comisiones', to: '/finanzas/comisiones', icon: HandCoins },
   { label: 'Nóminas', to: '/finanzas/nominas', icon: Calculator },
   { label: 'Pendientes facturar', to: '/finanzas/pendiente-facturar', icon: WarningCircle },
+  { label: 'Pagos Stripe', to: '/finanzas/pagos-stripe', icon: CreditCard },
   { label: 'Integraciones', to: '/finanzas/integraciones', icon: PlugsConnected },
 ];
 
