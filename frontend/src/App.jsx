@@ -40,7 +40,7 @@ const CommissionsPage = lazy(() => import('./modules/commissions/pages/Commissio
 const ExpensesPage = lazy(() => import('./modules/expenses/pages/ExpensesPage'));
 const ProfilePage = lazy(() => import('./shared/pages/ProfilePage'));
 const SettingsPage = lazy(() => import('./shared/pages/SettingsPage'));
-const SalesPage = lazy(() => import('./shared/pages/SalesPage'));
+const SalesPage = lazy(() => import('./modules/sales/pages/SalesPage'));
 const MetaAdsPage = lazy(() => import('./modules/meta-ads/pages/MetaAdsPage'));
 const ChangeRequestsPage = lazy(() => import('./modules/change-requests/pages/ChangeRequestsPage'));
 const ChangeRequestDetailPage = lazy(() => import('./modules/change-requests/pages/ChangeRequestDetailPage'));
