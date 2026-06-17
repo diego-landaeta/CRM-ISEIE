@@ -25,8 +25,8 @@ export default function ChangeRequestDetailPage() {
   const [saving, setSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const isPm = ['project_manager', 'admin', 'superadmin'].includes(user?.role || '');
-  const isCeo = user?.role === 'superadmin';
+  const isPm = ['project_manager', 'admin', 'superadmin', 'soporte'].includes(user?.role || '');
+  const isCeo = user?.role === 'superadmin' || user?.role === 'soporte';
   const isOwner = rfc?.solicitante_user_id === user?.userId;
   const canEditSolicitante = isOwner || isPm;
   const canEditPM = isPm;
@@ -419,7 +419,7 @@ export default function ChangeRequestDetailPage() {
 
       {/* Documento imprimible — invisible en pantalla, visible solo en @media print. */}
       <Suspense fallback={null}>
-        <RfcPrintTemplate rfc={rfc} orgName="CRM ISEIE" />
+        <RfcPrintTemplate rfc={rfc} orgName="CRM 360" />
       </Suspense>
     </div>
   );

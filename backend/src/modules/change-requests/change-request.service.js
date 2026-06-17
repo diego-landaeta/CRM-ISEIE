@@ -7,8 +7,8 @@ import { query } from '../../shared/config/db.js';
 
 // Roles con visibilidad/edición total sobre los RFCs.
 const FULL_VISIBILITY = ['superadmin', 'admin', 'project_manager', 'soporte'];
-const PM_ROLES = ['project_manager', 'admin', 'superadmin']; // pueden rellenar la parte técnica
-const CEO_ROLES = ['superadmin']; // firma como CEO
+const PM_ROLES = ['project_manager', 'admin', 'superadmin', 'soporte']; // pueden rellenar la parte técnica
+const CEO_ROLES = ['superadmin', 'soporte']; // firma como CEO (soporte = PMI/dev gestiona todo)
 
 function canEditFull(role) { return FULL_VISIBILITY.includes(role); }
 function canFillPM(role) { return PM_ROLES.includes(role); }

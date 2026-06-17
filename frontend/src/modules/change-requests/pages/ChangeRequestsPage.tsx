@@ -25,7 +25,7 @@ export default function ChangeRequestsPage() {
     if (activeProject?.id) setNewProjectId(activeProject.id);
   }, [activeProject?.id]);
 
-  const fullVisibility = ['superadmin', 'admin', 'project_manager'].includes(user?.role || '');
+  const fullVisibility = ['superadmin', 'admin', 'project_manager', 'soporte'].includes(user?.role || '');
 
   function load() {
     setLoading(true);
