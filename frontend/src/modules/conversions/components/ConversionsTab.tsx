@@ -8,6 +8,7 @@ import InstallmentsDialog from './InstallmentsDialog';
 import EditConversionDialog from './EditConversionDialog';
 import { Plus, Receipt, CreditCard, Trash, WarningCircle, CheckCircle, ArrowCounterClockwise, Coins, PencilSimple } from '@phosphor-icons/react';
 import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
+import InvoiceButton from '@/modules/invoices/components/InvoiceButton';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { formatCurrency, formatDate } from '@/shared/lib/format';
 
@@ -209,6 +210,12 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
                           Abonar
                         </button>
                       )}
+                      <InvoiceButton
+                        projectId={projectId}
+                        leadId={lead.id}
+                        conversionId={c.id}
+                        items={[{ descripcion: c.producto_contratado || 'Servicio', cantidad: 1, precio_unitario: Number(c.importe_total) }]}
+                      />
                       <button
                         onClick={() => setEditDialogConv(c)}
                         className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-sky-100 text-sky-800 dark:bg-sky-950/40 dark:text-sky-300 text-xs font-semibold hover:bg-sky-200 dark:hover:bg-sky-950/60"

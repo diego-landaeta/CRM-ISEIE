@@ -61,7 +61,7 @@ export const SECTIONS = [
       { to: '/payroll',                       label: 'Nóminas',           icon: ChartLineUp, roles: ['admin', 'superadmin'] },
       { to: '/accounting/pendiente-facturar', label: 'Pendientes facturar', icon: Calculator, roles: ['admin', 'superadmin'] },
       { to: '/accounting/pagos-stripe',       label: 'Pagos Stripe',      icon: Calculator,  roles: ['admin', 'superadmin'] },
-      { to: '/accounting/facturas',           label: 'Facturas',          icon: Receipt,     roles: ['admin', 'superadmin'] },
+      { to: '/accounting/facturas',           label: 'Facturación',       icon: Receipt,     roles: ['admin', 'superadmin', 'soporte'] },
       { to: '/accounting/integrations',       label: 'Integraciones',     icon: Calculator,  roles: ['admin', 'superadmin'] },
     ],
   },
