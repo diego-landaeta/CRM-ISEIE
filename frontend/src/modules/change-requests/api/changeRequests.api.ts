@@ -73,7 +73,7 @@ export const rfcApi = {
   update(id: number, patch: Partial<RfcDetail>) {
     return client.patch(`/change-requests/${id}`, patch);
   },
-  approve(id: number, payload: { rol: 'ceo' | 'pm' | 'dev'; decision: 'a_favor' | 'en_contra' | 'diferir'; firmaData?: string; comentarios?: string }) {
+  approve(id: number, payload: { rol: 'ceo' | 'pm' | 'dev'; decision: 'a_favor' | 'en_contra' | 'diferir'; timing?: 'inmediato' | 'futuro'; firmaData?: string; comentarios?: string }) {
     return client.post(`/change-requests/${id}/approve`, payload);
   },
   getSignature(approvalId: number) {
@@ -111,6 +111,8 @@ export const ESTADO_LABELS: Record<string, string> = {
   en_analisis: 'En análisis',
   enviado_ceo: 'Enviado al CEO',
   aprobado: 'Aprobado',
+  aprobado_inmediato: 'Aprobado · realización inmediata',
+  aprobado_futuro: 'Aprobado · para realizar después',
   rechazado: 'Rechazado',
   diferido: 'Diferido',
 };
@@ -120,6 +122,8 @@ export const ESTADO_COLORS: Record<string, string> = {
   en_analisis: 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
   enviado_ceo: 'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300',
   aprobado: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
+  aprobado_inmediato: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200 ring-1 ring-emerald-500',
+  aprobado_futuro: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-950/40 dark:text-cyan-300',
   rechazado: 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300',
   diferido: 'bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300',
 };

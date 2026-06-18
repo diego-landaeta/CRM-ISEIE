@@ -194,3 +194,24 @@ Después de `POST /conversions/:id/payments`:
 ---
 
 **Estado**: aprobado el 2026-06-17. Listo para implementación.
+
+---
+
+## Nota sobre RFC-G-1 (Stripe Payment Links) — añadido 2026-06-18
+
+La RFC `RFC-G-1` quedó en estado **`aprobado_futuro`** (Aprobado · para realizar después).
+Significa: la integración Stripe Payment Links queda aprobada y firmada pero su
+implementación es para más adelante (no ahora). Cuando se retome se cambia a
+`aprobado_inmediato` y se arranca.
+
+Estados RFC actuales:
+- `propuesto` → recién creada
+- `en_analisis` → PM analizando
+- `enviado_ceo` → esperando firma CEO
+- `aprobado_inmediato` → APROBADO + arrancar YA
+- `aprobado_futuro` → APROBADO pero para hacer después (no urgente)
+- `aprobado` → legado (RFCs antiguas anteriores al split)
+- `rechazado` / `diferido` → estados terminales negativos
+
+Usuario único: `diego.landaeta.seo@gmail.com` con role `soporte` (cubre PM + CEO + soporte).
+

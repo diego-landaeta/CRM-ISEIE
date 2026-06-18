@@ -72,7 +72,8 @@ export async function update(id, patch, { userId, role }) {
   }
 
   // Transición a "enviado_ceo" → notificar superadmins (CEO)
-  const wasNotSentToCeo = rfc.estado !== 'enviado_ceo' && rfc.estado !== 'aprobado' && rfc.estado !== 'rechazado';
+  const terminalStates = ['aprobado', 'aprobado_inmediato', 'aprobado_futuro', 'rechazado', 'diferido'];
+  const wasNotSentToCeo = rfc.estado !== 'enviado_ceo' && !terminalStates.includes(rfc.estado);
   const updated = await model.update(id, patch);
   if (wasNotSentToCeo && patch.estado === 'enviado_ceo') {
     notifyCeoOfRfc(updated).catch((err) => logger.warn({ err: err.message, rfcId: id }, 'No se pudo notificar CEO'));
@@ -80,7 +81,7 @@ export async function update(id, patch, { userId, role }) {
   return updated;
 }
 
-export async function approve(id, { rol, decision, firmaData, comentarios, userId, userRole }) {
+export async function approve(id, { rol, decision, timing, firmaData, comentarios, userId, userRole }) {
   if (!['ceo', 'pm', 'dev'].includes(rol)) throw new AppError('Rol inválido (ceo|pm|dev)', 400, 'INVALID_ROL');
   if (!['a_favor', 'en_contra', 'diferir'].includes(decision)) throw new AppError('Decisión inválida', 400, 'INVALID_DECISION');
 
@@ -94,9 +95,17 @@ export async function approve(id, { rol, decision, firmaData, comentarios, userI
 
   await model.setApproval({ rfcId: id, rol, userId, decision, firmaData, comentarios });
 
-  // Si firma CEO con a_favor → marcar como aprobado. en_contra → rechazado. diferir → diferido.
+  // Si firma CEO con a_favor → aprobado_inmediato (default) o aprobado_futuro (si timing='futuro').
+  // en_contra → rechazado. diferir → diferido.
   if (rol === 'ceo') {
-    const newStatus = decision === 'a_favor' ? 'aprobado' : decision === 'en_contra' ? 'rechazado' : 'diferido';
+    let newStatus;
+    if (decision === 'a_favor') {
+      newStatus = timing === 'futuro' ? 'aprobado_futuro' : 'aprobado_inmediato';
+    } else if (decision === 'en_contra') {
+      newStatus = 'rechazado';
+    } else {
+      newStatus = 'diferido';
+    }
     await query(`UPDATE change_requests SET estado=$1, updated_at=NOW() WHERE id=$2`, [newStatus, id]);
   }
 
@@ -149,7 +158,7 @@ export async function reopen(id, { userId, role, motivo }) {
   if (!canEditFull(role)) throw new AppError('Solo PM/admin/superadmin puede reabrir', 403, 'FORBIDDEN');
   const rfc = await model.getById(id);
   if (!rfc) throw new AppError('RFC no encontrada', 404, 'NOT_FOUND');
-  const terminal = ['aprobado', 'rechazado', 'diferido'];
+  const terminal = ['aprobado', 'aprobado_inmediato', 'aprobado_futuro', 'rechazado', 'diferido'];
   if (!terminal.includes(rfc.estado)) {
     throw new AppError(`Solo se pueden reabrir RFCs ${terminal.join('/')}, no '${rfc.estado}'`, 400, 'INVALID_STATE');
   }

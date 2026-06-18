@@ -74,9 +74,9 @@ export async function update(req, res, next) {
 export async function approve(req, res, next) {
   try {
     const id = parseInt(req.params.id);
-    const { rol, decision, firmaData, comentarios } = req.body || {};
+    const { rol, decision, timing, firmaData, comentarios } = req.body || {};
     const result = await service.approve(id, {
-      rol, decision, firmaData, comentarios,
+      rol, decision, timing, firmaData, comentarios,
       userId: req.user.userId, userRole: req.user.role,
     });
     res.json({ success: true, data: result });

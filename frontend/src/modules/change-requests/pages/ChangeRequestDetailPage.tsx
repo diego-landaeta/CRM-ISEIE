@@ -78,12 +78,25 @@ export default function ChangeRequestDetailPage() {
     } finally { setSaving(false); }
   }
 
-  async function approveAs(rol: 'ceo' | 'pm' | 'dev', decision: 'a_favor' | 'en_contra' | 'diferir', firmaData?: string, comentarios?: string) {
+  async function approveAs(rol: 'ceo' | 'pm' | 'dev', decision: 'a_favor' | 'en_contra' | 'diferir', firmaData?: string, comentarios?: string, timing?: 'inmediato' | 'futuro') {
     if (!rfc) return;
+    // Si firma CEO con a_favor y no nos dijeron timing, preguntamos
+    let resolvedTiming = timing;
+    if (rol === 'ceo' && decision === 'a_favor' && !resolvedTiming) {
+      const choice = window.prompt(
+        '¿Cuándo se realiza?\n\n' +
+        '  1 = Inmediata (empezar ahora)\n' +
+        '  2 = Futura (queda aprobada para hacer después)\n\n' +
+        'Escribe 1 o 2',
+        '2'
+      );
+      if (choice === null) return; // cancelado
+      resolvedTiming = choice.trim() === '1' ? 'inmediato' : 'futuro';
+    }
     try {
-      const r = await rfcApi.approve(rfc.id, { rol, decision, firmaData, comentarios });
+      const r = await rfcApi.approve(rfc.id, { rol, decision, timing: resolvedTiming, firmaData, comentarios });
       setRfc(r.data);
-      toast({ title: 'Firma registrada', description: `${ROL_LABELS[rol]}: ${DECISION_LABELS[decision]}` });
+      toast({ title: 'Firma registrada', description: `${ROL_LABELS[rol]}: ${DECISION_LABELS[decision]}${resolvedTiming ? ` (${resolvedTiming})` : ''}` });
     } catch (err: any) {
       toast({ title: 'Error', description: err?.data?.error || err?.message, variant: 'destructive' });
     }
@@ -186,7 +199,7 @@ export default function ChangeRequestDetailPage() {
               <FloppyDisk size={14} weight="bold" /> {saving ? 'Guardando…' : 'Guardar cambios'}
             </button>
           )}
-          {isPm && !['aprobado','rechazado','diferido','enviado_ceo'].includes(rfc.estado) && (
+          {isPm && !['aprobado','aprobado_inmediato','aprobado_futuro','rechazado','diferido','enviado_ceo'].includes(rfc.estado) && (
             <button onClick={sendToCeo} disabled={saving}
               className="h-9 px-3 rounded-md bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-1.5">
               <PaperPlaneTilt size={14} weight="bold" /> Enviar al CEO
@@ -197,7 +210,7 @@ export default function ChangeRequestDetailPage() {
               <PaperPlaneTilt size={14} weight="bold" /> Enviado al CEO — esperando firma
             </span>
           )}
-          {isPm && (rfc.estado === 'rechazado' || rfc.estado === 'diferido' || rfc.estado === 'aprobado') && (
+          {isPm && ['rechazado','diferido','aprobado','aprobado_inmediato','aprobado_futuro'].includes(rfc.estado) && (
             <button onClick={handleReopen} disabled={saving}
               title="Volver a abrir esta RFC para ajustar y reenviar al CEO"
               className="h-9 px-3 rounded-md border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 text-sm font-semibold hover:bg-amber-100 dark:hover:bg-amber-950/50 disabled:opacity-50 inline-flex items-center gap-1.5">
