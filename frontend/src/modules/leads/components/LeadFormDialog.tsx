@@ -434,7 +434,7 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
               {!pendingDup.lead.masked && (
                 <button
                   type="button"
-                  onClick={() => { const id = pendingDup.lead.id; setPendingDup(null); onClose(); window.location.href = `/leads/${id}`; }}
+                  onClick={() => { const id = pendingDup.lead.id; setPendingDup(null); onClose(); const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, ''); window.location.href = `${base}/leads/${id}`; }}
                   className="h-9 px-4 rounded-md bg-primary text-white text-sm font-semibold hover:bg-primary/90"
                 >Ver lead existente</button>
               )}

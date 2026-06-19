@@ -187,7 +187,7 @@ export default function StripePaymentsPage() {
             <p className="font-semibold text-sm">Sin pagos sincronizados</p>
             <p className="text-xs text-muted-foreground">
               Pulsá <strong>Sincronizar</strong> para traer los últimos 30 días o <strong>Importar histórico completo</strong> para todo.
-              Requiere tener la API key de Stripe guardada en <a href="/finanzas/integraciones" className="text-primary hover:underline">Integraciones</a>.
+              Requiere tener la API key de Stripe guardada en <a href={`${(import.meta.env.BASE_URL || '/').replace(/\/$/, '')}/finanzas/integraciones`} className="text-primary hover:underline">Integraciones</a>.
             </p>
           </div>
         ) : (
