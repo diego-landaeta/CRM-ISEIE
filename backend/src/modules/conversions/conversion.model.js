@@ -24,19 +24,68 @@ export async function create(data) {
       fecha_compromiso_pago,
       fecha_conversion,
       notas_pago,
+      items,             // array opcional [{descripcion, cantidad, precio_unitario, product_id?}]
+      iva_pct,           // default 21
+      iva_incluido,      // default false (sumar IVA al subtotal)
+      iva_exento,        // default false
     } = data;
 
-    // INSERT conversion
+    // Computar base + IVA + total cuando hay items
+    let computed = { base_imponible: null, iva_importe: null, total: importe_total };
+    const ivaPctVal = Number(iva_pct ?? 21);
+    const isExento = !!iva_exento;
+    const isIncluido = !!iva_incluido;
+
+    if (Array.isArray(items) && items.length > 0) {
+      const subtotalItems = items.reduce(
+        (s, it) => s + Number(it.cantidad || 1) * Number(it.precio_unitario || 0), 0
+      );
+      if (isExento) {
+        computed = { base_imponible: Number(subtotalItems.toFixed(2)), iva_importe: 0, total: Number(subtotalItems.toFixed(2)) };
+      } else if (isIncluido) {
+        // El precio YA incluye IVA → desglosar
+        const total = subtotalItems;
+        const base = total / (1 + ivaPctVal / 100);
+        computed = { base_imponible: Number(base.toFixed(2)), iva_importe: Number((total - base).toFixed(2)), total: Number(total.toFixed(2)) };
+      } else {
+        const base = subtotalItems;
+        const iva = base * ivaPctVal / 100;
+        computed = { base_imponible: Number(base.toFixed(2)), iva_importe: Number(iva.toFixed(2)), total: Number((base + iva).toFixed(2)) };
+      }
+    }
+    const finalImporte = computed.total;
+
+    // INSERT conversion (con campos IVA)
     const { rows: convRows } = await client.query(
       `INSERT INTO conversions
         (lead_id, project_id, producto_contratado, producto_contratado_id, importe_total, importe_pagado,
-         metodo_pago, fecha_compromiso_pago, fecha_conversion, notas_pago)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, COALESCE($9, CURRENT_DATE), $10)
+         metodo_pago, fecha_compromiso_pago, fecha_conversion, notas_pago,
+         iva_pct, iva_incluido, iva_exento, base_imponible, iva_importe)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, COALESCE($9, CURRENT_DATE), $10,
+               $11, $12, $13, $14, $15)
        RETURNING *`,
       [lead_id, project_id, producto_contratado, producto_contratado_id || null,
-       importe_total, importe_pagado, metodo_pago, fecha_compromiso_pago, fecha_conversion, notas_pago]
+       finalImporte, importe_pagado, metodo_pago, fecha_compromiso_pago, fecha_conversion, notas_pago,
+       isExento ? 0 : ivaPctVal, isIncluido, isExento, computed.base_imponible, computed.iva_importe]
     );
     const conversion = convRows[0];
+
+    // INSERT items (si vienen)
+    if (Array.isArray(items) && items.length > 0) {
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i];
+        const cant = Number(it.cantidad || 1);
+        const precio = Number(it.precio_unitario || 0);
+        const subt = Number((cant * precio).toFixed(2));
+        await client.query(
+          `INSERT INTO conversion_items
+            (conversion_id, product_id, descripcion, cantidad, precio_unitario, subtotal, orden)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [conversion.id, it.product_id || null, it.descripcion || 'Item sin descripcion',
+           cant, precio, subt, i]
+        );
+      }
+    }
 
     // Si hay importe_pagado > 0, crear primer payment
     if (Number(importe_pagado) > 0) {
@@ -84,6 +133,16 @@ export async function findById(id) {
   );
   if (!rows[0]) return null;
   const conversion = rows[0];
+
+  // Items de la conversion (multi-product)
+  const { rows: items } = await query(
+    `SELECT id, product_id, descripcion, cantidad, precio_unitario, subtotal, orden
+     FROM conversion_items
+     WHERE conversion_id = $1
+     ORDER BY orden ASC`,
+    [id]
+  );
+  conversion.items = items;
 
   const { rows: payments } = await query(
     `SELECT id, importe, fecha, notas, created_at

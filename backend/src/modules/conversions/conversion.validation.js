@@ -2,6 +2,13 @@ import { z } from 'zod';
 
 const PAYMENT_METHODS = ['transferencia', 'tarjeta', 'efectivo', 'fraccionado'];
 
+const conversionItemSchema = z.object({
+  product_id: z.number().int().positive().optional().nullable(),
+  descripcion: z.string().min(1).max(500),
+  cantidad: z.number().int().positive().default(1),
+  precio_unitario: z.number().nonnegative(),
+});
+
 export const createConversionSchema = z.object({
   lead_id: z.number().int().positive('lead_id requerido'),
   project_id: z.number().int().positive('project_id requerido'),
@@ -13,6 +20,11 @@ export const createConversionSchema = z.object({
   fecha_compromiso_pago: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato fecha: YYYY-MM-DD').optional().nullable(),
   fecha_conversion: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato fecha: YYYY-MM-DD').optional(),
   notas_pago: z.string().max(2000).optional().nullable(),
+  // Multi-item + IVA
+  items: z.array(conversionItemSchema).optional(),
+  iva_pct: z.number().min(0).max(100).optional(),
+  iva_incluido: z.boolean().optional(),
+  iva_exento: z.boolean().optional(),
 }).refine((d) => d.importe_pagado <= d.importe_total, {
   message: 'importe_pagado no puede ser mayor que importe_total',
   path: ['importe_pagado'],
