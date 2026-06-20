@@ -29,8 +29,9 @@ export const SECTIONS = [
     icon: Globe,
     roles: ['admin', 'superadmin'],
     tabs: [
-      { to: '/forms',         label: 'Formularios',     icon: FileText },
-      { to: '/make-webhooks', label: 'Make / Webhooks', icon: WebhooksLogo },
+      { to: '/forms',                label: 'Formularios',     icon: FileText },
+      { to: '/make-webhooks',        label: 'Make / Webhooks', icon: WebhooksLogo },
+      { to: '/captacion/whatsapp',   label: 'Widget WhatsApp', icon: WebhooksLogo },
     ],
   },
   {
