@@ -240,9 +240,9 @@ fetch('${dataUrl}').then(function(r){return r.json()}).then(function(d){
           <table className="w-full text-sm">
             <thead className="bg-muted/50 border-b">
               <tr>
-                <th className="px-3 py-2 text-left text-[11px] text-muted-foreground">Gestora</th>
+                <th className="px-3 py-2 text-left text-[11px] text-muted-foreground">Gestora (interno)</th>
                 <th className="px-3 py-2 text-left text-[11px] text-muted-foreground">WhatsApp (sin +)</th>
-                <th className="px-3 py-2 text-left text-[11px] text-muted-foreground">Nombre alt</th>
+                <th className="px-3 py-2 text-left text-[11px] text-muted-foreground">Nombre visible en el botón ⭐</th>
                 <th className="px-3 py-2 text-center text-[11px] text-muted-foreground">En widget (todos proyectos)</th>
                 <th className="px-3 py-2 text-center text-[11px] text-muted-foreground">Excluir solo aquí</th>
               </tr>
@@ -271,8 +271,8 @@ fetch('${dataUrl}').then(function(r){return r.json()}).then(function(d){
                       <input value={u.whatsapp_display_name || ''}
                         onChange={e => setUsers(users.map(x => x.id === u.id ? { ...x, whatsapp_display_name: e.target.value } : x))}
                         onBlur={e => updateUser(u, { whatsapp_display_name: e.target.value || null })}
-                        placeholder="(igual al nombre)"
-                        className="h-8 px-2 rounded border border-border bg-background text-xs w-32" />
+                        placeholder="Ej: Diana"
+                        className="h-8 px-2 rounded border border-amber-300 bg-amber-50/50 dark:bg-amber-950/10 text-xs w-32 font-medium" />
                     </td>
                     <td className="px-3 py-2 text-center">
                       <input type="checkbox" checked={u.whatsapp_widget_active}

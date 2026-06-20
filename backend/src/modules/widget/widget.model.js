@@ -78,9 +78,12 @@ export async function listCandidateUsers(projectId) {
 }
 
 // Lista usuarios que SI entran al widget (publico)
+// display_name: si tiene "Nombre visible" usa ese; si no, usa solo el PRIMER
+// nombre del nombre completo (Diana ISEIE Comercial -> Diana).
 export async function listActiveWidgetUsers(projectId, excludedIds = []) {
   const { rows } = await query(
-    `SELECT u.id, u.nombre, COALESCE(u.whatsapp_display_name, u.nombre) AS display_name,
+    `SELECT u.id, u.nombre,
+            COALESCE(NULLIF(TRIM(u.whatsapp_display_name), ''), split_part(u.nombre, ' ', 1)) AS display_name,
             u.whatsapp_phone
      FROM users u
      JOIN user_projects up ON up.user_id = u.id AND up.project_id = $1 AND up.active = true
