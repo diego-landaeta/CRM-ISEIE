@@ -65,7 +65,12 @@ export default function WhatsappWidgetPage() {
 
   const baseUrl = window.location.origin + (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
   const embedSrc = `${baseUrl}/api/w/whatsapp/${pid}.js`;
-  const embedCode = `<script async src="${embedSrc}"></script>`;
+  // Atributos data-no-* protegen contra optimizadores agresivos:
+  // - data-no-optimize="1" → WP Rocket, Autoptimize
+  // - data-no-minify="1"   → LiteSpeed, WP Fastest Cache
+  // - data-no-defer="1"    → Hummingbird, NitroPack
+  // - data-cfasync="false" → Cloudflare Rocket Loader
+  const embedCode = `<script async src="${embedSrc}" data-no-optimize="1" data-no-minify="1" data-no-defer="1" data-cfasync="false"></script>`;
   const activeInWidget = users.filter(u => u.in_project && u.whatsapp_widget_active && u.whatsapp_phone && !config.excluded_user_ids.includes(u.id));
 
   function copyEmbed() {
