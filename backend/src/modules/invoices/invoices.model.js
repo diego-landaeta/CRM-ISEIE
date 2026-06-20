@@ -82,6 +82,63 @@ export async function findById(id) {
   return rows[0] || null;
 }
 
+// Crea una factura rectificativa (de abono) a partir de una factura original.
+// Importes negativos, serie 'R', referencia a la original.
+export async function createRectificativa(originalId, { motivo, userId, parcial = null }) {
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+    const { rows: origRows } = await client.query(`SELECT * FROM invoices WHERE id = $1 FOR UPDATE`, [originalId]);
+    const orig = origRows[0];
+    if (!orig) throw new Error('Factura original no encontrada');
+    if (orig.tipo === 'rectificativa') throw new Error('No se puede rectificar una rectificativa');
+
+    const ano = new Date().getFullYear();
+    const serie = 'R';
+    const numero = await nextNumero(client, orig.project_id, ano, serie);
+    const codigo = `R-${ano}/${String(numero).padStart(4, '0')}`;
+
+    // Importes negativos. Si parcial (monto), rectifica solo ese importe; si no, todo.
+    const factor = parcial != null ? -Math.abs(Number(parcial)) / Number(orig.total || 1) : -1;
+    const items = (Array.isArray(orig.items) ? orig.items : JSON.parse(orig.items || '[]')).map((it) => ({
+      ...it,
+      precio_unitario: -Math.abs(Number(it.precio_unitario)) * (parcial != null ? Math.abs(factor) : 1),
+      subtotal: -Math.abs(Number(it.subtotal || 0)) * (parcial != null ? Math.abs(factor) : 1),
+    }));
+    const base = -Math.abs(Number(orig.base_imponible || 0)) * (parcial != null ? Math.abs(factor) : 1);
+    const ivaImp = -Math.abs(Number(orig.iva_importe || 0)) * (parcial != null ? Math.abs(factor) : 1);
+    const total = parcial != null ? -Math.abs(Number(parcial)) : -Math.abs(Number(orig.total || 0));
+
+    const { rows } = await client.query(
+      `INSERT INTO invoices (
+         project_id, conversion_id, lead_id, serie, ano, numero, codigo, fecha_emision,
+         cliente_nombre, cliente_nif, cliente_direccion, cliente_ciudad, cliente_cp, cliente_pais,
+         cliente_email, cliente_telefono,
+         items, base_imponible, iva_pct, iva_importe, iva_incluido, total,
+         estado, notas, leyenda_iva, metodo_pago, pie_pago, created_by,
+         tipo, rectifica_id, rectifica_codigo, motivo_rectificacion
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,CURRENT_DATE,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,
+         'emitida',$22,$23,$24,$25,$26,'rectificativa',$27,$28,$29) RETURNING *`,
+      [
+        orig.project_id, orig.conversion_id, orig.lead_id, serie, ano, numero, codigo,
+        orig.cliente_nombre, orig.cliente_nif, orig.cliente_direccion, orig.cliente_ciudad, orig.cliente_cp, orig.cliente_pais,
+        orig.cliente_email, orig.cliente_telefono,
+        JSON.stringify(items), base, orig.iva_pct, ivaImp, orig.iva_incluido, total,
+        `Factura rectificativa de ${orig.codigo}. ${motivo || ''}`.trim(),
+        orig.leyenda_iva, orig.metodo_pago, orig.pie_pago, userId,
+        originalId, orig.codigo, motivo || 'Anulación',
+      ]
+    );
+    await client.query('COMMIT');
+    return rows[0];
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
 export async function findByConversion(conversionId) {
   const { rows } = await query(
     `SELECT * FROM invoices WHERE conversion_id = $1 ORDER BY id DESC LIMIT 1`,

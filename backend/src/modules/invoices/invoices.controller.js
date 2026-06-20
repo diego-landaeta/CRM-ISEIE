@@ -128,6 +128,22 @@ export async function cancel(req, res, next) {
   } catch (e) { next(e); }
 }
 
+export async function rectificar(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const { motivo, parcial } = req.body || {};
+    const rect = await model.createRectificativa(id, {
+      motivo,
+      parcial: parcial != null && parcial !== '' ? Number(parcial) : null,
+      userId: req.user?.id,
+    });
+    res.json({ success: true, data: rect });
+  } catch (e) {
+    logger.error({ e: e.message }, 'rectificar invoice failed');
+    next(e);
+  }
+}
+
 export async function listSequences(req, res, next) {
   try {
     const pid = projectId(req);

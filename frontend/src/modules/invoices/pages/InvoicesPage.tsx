@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Receipt, Eye, PaperPlaneTilt, CheckCircle, X, MagnifyingGlass } from '@phosphor-icons/react';
+import { Receipt, Eye, PaperPlaneTilt, CheckCircle, X, MagnifyingGlass, Gear, ArrowCounterClockwise } from '@phosphor-icons/react';
+import { Link } from 'react-router-dom';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import KpiCard from '@/shared/components/ui/KpiCard';
@@ -74,11 +75,42 @@ export default function InvoicesPage() {
     }
   }
 
+  async function rectificar(inv: Invoice) {
+    const motivo = prompt(
+      `Crear factura RECTIFICATIVA (de abono) de ${inv.codigo}.\n\n` +
+      `Generará una factura con importe NEGATIVO (-${fmt(Number(inv.total))}) que anula la original.\n\n` +
+      `Motivo (anulación / devolución / error importe):`,
+      'Anulación'
+    );
+    if (motivo === null) return;
+    try {
+      const res = await invoicesApi.rectificar(inv.id, { motivo: motivo || 'Anulación' });
+      if (res.success && res.data) {
+        toast({ title: '✓ Rectificativa creada', description: res.data.codigo });
+        await load();
+      } else {
+        toast({ title: 'Error', description: (res as { error?: string }).error, variant: 'destructive' });
+      }
+    } catch (e: unknown) {
+      const err = e as { data?: { error?: string }; message?: string };
+      toast({ title: 'Error', description: err?.data?.error || err?.message, variant: 'destructive' });
+    }
+  }
+
   if (!pid) return <div className="p-8 text-muted-foreground">Selecciona un proyecto.</div>;
 
   return (
     <div className="space-y-5 pb-8">
-      <PageHeader title="Facturas" subtitle={`Histórico fiscal — ${activeProject?.nombre || ''}`} />
+      <PageHeader
+        title="Facturas"
+        subtitle={`Histórico fiscal — ${activeProject?.nombre || ''}`}
+        actions={(
+          <Link to="configuracion"
+            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted">
+            <Gear size={14} weight="bold" /> Configuración
+          </Link>
+        )}
+      />
 
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -140,14 +172,22 @@ export default function InvoicesPage() {
             </thead>
             <tbody>
               {invoices.map((inv) => (
-                <tr key={inv.id} className="border-b last:border-0 hover:bg-muted/30">
-                  <td className="px-3 py-2 font-mono font-semibold">{inv.codigo}</td>
+                <tr key={inv.id} className={`border-b last:border-0 hover:bg-muted/30 ${inv.tipo === 'rectificativa' ? 'bg-rose-50/40 dark:bg-rose-950/10' : ''}`}>
+                  <td className="px-3 py-2 font-mono font-semibold">
+                    {inv.codigo}
+                    {inv.tipo === 'rectificativa' && (
+                      <span className="ml-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700">ABONO</span>
+                    )}
+                    {inv.rectifica_codigo && (
+                      <div className="text-[10px] text-muted-foreground font-normal">rectifica {inv.rectifica_codigo}</div>
+                    )}
+                  </td>
                   <td className="px-3 py-2">{fmtDate(inv.fecha_emision)}</td>
                   <td className="px-3 py-2">
                     <div className="font-medium">{inv.cliente_nombre}</div>
                     <div className="text-[11px] text-muted-foreground">{inv.cliente_nif}</div>
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums font-semibold">{fmt(Number(inv.total))}</td>
+                  <td className={`px-3 py-2 text-right tabular-nums font-semibold ${Number(inv.total) < 0 ? 'text-rose-600' : ''}`}>{fmt(Number(inv.total))}</td>
                   <td className="px-3 py-2">
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${ESTADO_BADGE[inv.estado] || 'bg-muted'}`}>
                       {inv.estado.toUpperCase()}
@@ -167,11 +207,18 @@ export default function InvoicesPage() {
                           <PaperPlaneTilt size={11} /> {sending === inv.id ? '…' : 'Email'}
                         </button>
                       )}
-                      {inv.estado !== 'pagada' && inv.estado !== 'cancelada' && (
+                      {inv.estado !== 'pagada' && inv.estado !== 'cancelada' && inv.tipo !== 'rectificativa' && (
                         <button onClick={() => markPaid(inv)}
                           title="Marcar pagada"
                           className="h-7 px-2 rounded border border-border text-[11px] hover:bg-muted inline-flex items-center gap-1">
                           <CheckCircle size={11} /> Pagada
+                        </button>
+                      )}
+                      {inv.tipo !== 'rectificativa' && (
+                        <button onClick={() => rectificar(inv)}
+                          title="Crear factura rectificativa (de abono)"
+                          className="h-7 px-2 rounded border border-rose-300 text-[11px] text-rose-600 hover:bg-rose-50 inline-flex items-center gap-1">
+                          <ArrowCounterClockwise size={11} /> Abono
                         </button>
                       )}
                     </div>

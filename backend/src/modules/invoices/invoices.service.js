@@ -72,10 +72,14 @@ export async function generatePDF(invoiceId) {
     y -= 12;
   }
 
-  // Codigo de factura (derecha)
-  page.drawText('FACTURA', { x: right - 100, y: 800, size: 16, font: bold, color: black });
-  page.drawText(`N.º ${inv.codigo}`, { x: right - 100, y: 780, size: 12, font: bold, color: black });
-  page.drawText(`Fecha: ${new Date(inv.fecha_emision).toLocaleDateString('es-ES')}`, { x: right - 100, y: 765, size: 10, font, color: gray });
+  // Codigo de factura (derecha) — distinto si es rectificativa
+  const esRect = inv.tipo === 'rectificativa';
+  page.drawText(esRect ? 'F. RECTIFICATIVA' : 'FACTURA', { x: right - (esRect ? 150 : 100), y: 800, size: esRect ? 13 : 16, font: bold, color: esRect ? rgb(0.7, 0.1, 0.1) : black });
+  page.drawText(`N.º ${inv.codigo}`, { x: right - 150, y: 780, size: 12, font: bold, color: black });
+  page.drawText(`Fecha: ${new Date(inv.fecha_emision).toLocaleDateString('es-ES')}`, { x: right - 150, y: 765, size: 10, font, color: gray });
+  if (esRect && inv.rectifica_codigo) {
+    page.drawText(`Rectifica a: ${inv.rectifica_codigo}`, { x: right - 150, y: 750, size: 9, font, color: gray });
+  }
 
   // Linea separadora
   y = 720;

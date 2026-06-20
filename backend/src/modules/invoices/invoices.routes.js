@@ -19,5 +19,6 @@ router.get('/:id/pdf',                ctrl.pdf);
 router.post('/:id/send',              ctrl.send);
 router.post('/:id/mark-paid',         ctrl.markPaid);
 router.post('/:id/cancel',            ctrl.cancel);
+router.post('/:id/rectificar',        ctrl.rectificar);
 
 export default router;

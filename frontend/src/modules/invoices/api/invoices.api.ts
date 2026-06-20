@@ -67,6 +67,10 @@ export interface Invoice {
   leyenda_iva?: string | null;
   items?: InvoiceItem[];
   conversion_id?: number | null;
+  tipo?: 'normal' | 'rectificativa';
+  rectifica_id?: number | null;
+  rectifica_codigo?: string | null;
+  motivo_rectificacion?: string | null;
 }
 
 export interface LeadFiscalData {
@@ -96,6 +100,7 @@ export const invoicesApi = {
   send: (id: number, email?: string) => client.post(`/invoices/${id}/send`, email ? { email } : {}),
   markPaid: (id: number, fechaPago?: string) => client.post(`/invoices/${id}/mark-paid`, fechaPago ? { fechaPago } : {}),
   cancel: (id: number) => client.post(`/invoices/${id}/cancel`, {}),
+  rectificar: (id: number, body: { motivo: string; parcial?: number | null }) => client.post<Invoice>(`/invoices/${id}/rectificar`, body),
   getConfig: (projectId: number) => client.get<ProjectInvoicingConfig>(`/invoices/config?projectId=${projectId}`),
   updateConfig: (body: { projectId: number; piePagoDefault?: string; serieDefault?: string; metodoDefault?: string }) => client.patch('/invoices/config', body),
   listSequences: (projectId: number) => client.get<InvoiceSequence[]>(`/invoices/sequences?projectId=${projectId}`),
