@@ -65,12 +65,11 @@ export default function WhatsappWidgetPage() {
 
   const baseUrl = window.location.origin + (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
   const embedSrc = `${baseUrl}/api/w/whatsapp/${pid}.js`;
-  // Atributos data-no-* protegen contra optimizadores agresivos:
-  // - data-no-optimize="1" → WP Rocket, Autoptimize
-  // - data-no-minify="1"   → LiteSpeed, WP Fastest Cache
-  // - data-no-defer="1"    → Hummingbird, NitroPack
-  // - data-cfasync="false" → Cloudflare Rocket Loader
-  const embedCode = `<script async src="${embedSrc}" data-no-optimize="1" data-no-minify="1" data-no-defer="1" data-cfasync="false"></script>`;
+  // Snippet "bulletproof": usa <img onload> + createElement('script') para
+  // bypassar WP Rocket Delay JS, LiteSpeed, Cloudflare Rocket Loader, etc.
+  // Estos optimizadores delayán <script src=""> pero NO eventos onload de <img>
+  // ni scripts creados dinámicamente via JS post-parseo del HTML.
+  const embedCode = `<!-- WhatsApp widget CRM360 -->\n<img alt="" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" style="position:absolute;width:0;height:0;opacity:0" onload="var s=document.createElement('script');s.async=true;s.src='${embedSrc}';document.head.appendChild(s);this.remove()">`;
   const activeInWidget = users.filter(u => u.in_project && u.whatsapp_widget_active && u.whatsapp_phone && !config.excluded_user_ids.includes(u.id));
 
   function copyEmbed() {
@@ -109,14 +108,17 @@ export default function WhatsappWidgetPage() {
           El widget rota entre las gestoras activas en cada visita.
         </p>
         <div className="flex gap-2 items-stretch">
-          <code className="flex-1 px-3 py-2 rounded-md bg-muted text-xs break-all font-mono">
-            {embedCode}
-          </code>
+          <pre className="flex-1 px-3 py-2 rounded-md bg-muted text-xs font-mono whitespace-pre-wrap break-all">
+{embedCode}
+          </pre>
           <button onClick={copyEmbed}
-            className="px-3 rounded-md border border-border hover:bg-muted inline-flex items-center gap-1.5 text-xs">
+            className="px-3 rounded-md border border-border hover:bg-muted inline-flex items-center gap-1.5 text-xs self-start">
             {copied ? <><CheckCircle size={14} weight="bold" className="text-emerald-600" /> Copiado</> : <><Copy size={14} weight="bold" /> Copiar</>}
           </button>
         </div>
+        <p className="text-[10px] text-muted-foreground">
+          Snippet bulletproof: bypassa WP Rocket / LiteSpeed / Cloudflare Rocket Loader sin tocar configuración.
+        </p>
         <a href={embedSrc} target="_blank" rel="noopener" className="text-[11px] text-primary hover:underline inline-flex items-center gap-1">
           Ver código generado <ArrowSquareOut size={11} />
         </a>
