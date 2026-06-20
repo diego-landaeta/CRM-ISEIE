@@ -12,7 +12,7 @@ export async function widgetScript(req, res, next) {
     const projectId = Number(m[1]);
     const js = await service.generateWidgetScript(projectId);
     res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
-    res.setHeader('Cache-Control', 'public, max-age=300');
+    res.setHeader('Cache-Control', 'public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400');
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.send(js);
   } catch (e) {

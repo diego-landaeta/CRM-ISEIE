@@ -81,6 +81,16 @@ export default function WhatsappWidgetPage() {
         subtitle={`Botón flotante rotativo para ${activeProject?.nombre}. Pegá el snippet en tu sitio web.`}
       />
 
+      <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 rounded-md p-3 flex items-start gap-2 text-xs">
+        <span className="text-amber-600 dark:text-amber-400 text-base leading-none mt-0.5">⏱</span>
+        <div>
+          <strong className="text-amber-900 dark:text-amber-300">Los cambios realizados se verán reflejados en una hora</strong>
+          <p className="text-amber-800 dark:text-amber-400 mt-0.5">
+            El widget se cachea 1 hora en CDN para máxima velocidad y mínimo impacto SEO en tu landing. Si activas/desactivas una gestora, o cambias el mensaje, los visitantes verán el cambio dentro de los próximos 60 minutos.
+          </p>
+        </div>
+      </div>
+
       {/* Embed snippet */}
       <div className="bg-card border border-border rounded-lg p-5 space-y-3">
         <div className="flex items-center justify-between">
@@ -253,7 +263,7 @@ export default function WhatsappWidgetPage() {
           <li>Solo aparecen los usuarios asignados a <strong>{config.project_nombre}</strong>. Si falta alguien, asignalo desde Configuración del proyecto.</li>
           <li><strong>"En widget"</strong> es global del usuario — si lo activás también la incluye en widgets de otros proyectos donde participe.</li>
           <li><strong>"Excluir solo aquí"</strong> la quita SOLO de este widget (sin tocar otros proyectos).</li>
-          <li>Cambios se propagan en máx 5 min (caché CDN). Cada proyecto = su propio URL/widget independiente.</li>
+          <li>Cada proyecto = su propio URL/widget independiente.</li>
         </ul>
       </div>
     </div>
