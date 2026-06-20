@@ -12,7 +12,9 @@ export async function widgetScript(req, res, next) {
     const projectId = Number(m[1]);
     const js = await service.generateWidgetScript(projectId);
     res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
-    res.setHeader('Cache-Control', 'public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400');
+    // Cache corto (60s): cambios casi instantáneos. Impacto SEO = 0 porque el
+    // script es async de ~3.6KB (lo que afecta SEO es bloquear render, no esto).
+    res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=300');
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.send(js);
   } catch (e) {

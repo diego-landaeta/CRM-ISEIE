@@ -88,9 +88,9 @@ export default function WhatsappWidgetPage() {
       <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 rounded-md p-3 flex items-start gap-2 text-xs">
         <span className="text-amber-600 dark:text-amber-400 text-base leading-none mt-0.5">⏱</span>
         <div>
-          <strong className="text-amber-900 dark:text-amber-300">Los cambios realizados se verán reflejados en una hora</strong>
+          <strong className="text-amber-900 dark:text-amber-300">Los cambios se reflejan en ~1 minuto</strong>
           <p className="text-amber-800 dark:text-amber-400 mt-0.5">
-            El widget se cachea 1 hora en CDN para máxima velocidad y mínimo impacto SEO en tu landing. Si activas/desactivas una gestora, o cambias el mensaje, los visitantes verán el cambio dentro de los próximos 60 minutos.
+            Si activas/desactivas una gestora o cambias el mensaje, los visitantes verán el cambio en menos de 1 minuto. El widget carga de forma asíncrona (impacto SEO cero).
           </p>
         </div>
       </div>
