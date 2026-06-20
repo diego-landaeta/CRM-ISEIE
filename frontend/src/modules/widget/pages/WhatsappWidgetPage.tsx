@@ -125,12 +125,36 @@ export default function WhatsappWidgetPage() {
 
         <div>
           <label className="text-xs font-semibold text-muted-foreground">Plantilla del mensaje</label>
+          <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 rounded-md p-2 mt-1 mb-2 text-[10px]">
+            <strong className="text-blue-900 dark:text-blue-300">Variables disponibles:</strong>
+            <div className="flex flex-wrap gap-2 mt-1">
+              <code className="bg-white dark:bg-slate-800 px-1.5 py-0.5 rounded">{'{{nombre}}'}</code>
+              <span className="text-muted-foreground">→ nombre de la gestora que sale en la rotación</span>
+            </div>
+            <div className="flex flex-wrap gap-2 mt-1">
+              <code className="bg-white dark:bg-slate-800 px-1.5 py-0.5 rounded">{'{{project}}'}</code>
+              <span className="text-muted-foreground">→ nombre del proyecto ({config.project_nombre})</span>
+            </div>
+            <div className="flex flex-wrap gap-2 mt-1">
+              <code className="bg-white dark:bg-slate-800 px-1.5 py-0.5 rounded">{'{{url}}'}</code>
+              <span className="text-muted-foreground">→ URL de la página donde está embebido el widget</span>
+            </div>
+          </div>
           <input value={config.message_template} onChange={e => setConfig({ ...config, message_template: e.target.value })}
-            placeholder="Hola {{project}}, quiero información sobre: {{url}}"
-            className="w-full h-9 px-3 mt-1 rounded-md border border-border bg-background text-sm font-mono" />
-          <p className="text-[10px] text-muted-foreground mt-1">
-            Variables: <code>{'{{project}}'}</code> (nombre proyecto), <code>{'{{url}}'}</code> (URL actual), <code>{'{{nombre}}'}</code> (gestora).
-          </p>
+            placeholder="Hola, soy {{nombre}} de {{project}}. Quiero información sobre: {{url}}"
+            className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono" />
+          {(() => {
+            const firstActive = users.find(u => u.in_project && u.whatsapp_widget_active && u.whatsapp_phone && !config.excluded_user_ids.includes(u.id));
+            const preview = (config.message_template || '')
+              .replace(/\{\{nombre\}\}/g, firstActive ? (firstActive.whatsapp_display_name || firstActive.nombre) : '(gestora)')
+              .replace(/\{\{project\}\}/g, config.project_nombre || '(proyecto)')
+              .replace(/\{\{url\}\}/g, 'https://tu-landing.com/curso-xyz');
+            return (
+              <p className="text-[11px] text-emerald-700 dark:text-emerald-400 mt-1 italic">
+                Vista previa: «{preview}»
+              </p>
+            );
+          })()}
         </div>
 
         <div className="grid grid-cols-2 gap-3">
@@ -155,72 +179,81 @@ export default function WhatsappWidgetPage() {
       {/* Gestoras */}
       <div className="bg-card border border-border rounded-lg overflow-hidden">
         <div className="p-4 border-b border-border">
-          <h3 className="font-semibold text-sm">Gestoras del proyecto</h3>
-          <p className="text-xs text-muted-foreground mt-0.5">Asigna número y activa/desactiva en la rotación.</p>
+          <h3 className="font-semibold text-sm">Gestoras de {config.project_nombre}</h3>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Solo aparecen las gestoras asignadas a este proyecto. Activa/desactiva la rotación con los checkboxes.
+          </p>
         </div>
-        <table className="w-full text-sm">
-          <thead className="bg-muted/50 border-b">
-            <tr>
-              <th className="px-3 py-2 text-left text-[11px] text-muted-foreground">Gestora</th>
-              <th className="px-3 py-2 text-left text-[11px] text-muted-foreground">WhatsApp (sin +)</th>
-              <th className="px-3 py-2 text-left text-[11px] text-muted-foreground">Nombre alt</th>
-              <th className="px-3 py-2 text-center text-[11px] text-muted-foreground">En widget</th>
-              <th className="px-3 py-2 text-center text-[11px] text-muted-foreground">En este proyecto</th>
-              <th className="px-3 py-2 text-center text-[11px] text-muted-foreground">Excluir solo aquí</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map(u => {
-              const excluded = config.excluded_user_ids.includes(u.id);
-              return (
-                <tr key={u.id} className="border-b last:border-0 hover:bg-muted/30">
-                  <td className="px-3 py-2">
-                    <div className="font-medium">{u.nombre}</div>
-                    <div className="text-[11px] text-muted-foreground">{u.role}</div>
-                  </td>
-                  <td className="px-3 py-2">
-                    <input value={u.whatsapp_phone || ''}
-                      onChange={e => setUsers(users.map(x => x.id === u.id ? { ...x, whatsapp_phone: e.target.value } : x))}
-                      onBlur={e => updateUser(u, { whatsapp_phone: e.target.value || null })}
-                      placeholder="34612345678"
-                      className="h-8 px-2 rounded border border-border bg-background text-xs font-mono w-36" />
-                  </td>
-                  <td className="px-3 py-2">
-                    <input value={u.whatsapp_display_name || ''}
-                      onChange={e => setUsers(users.map(x => x.id === u.id ? { ...x, whatsapp_display_name: e.target.value } : x))}
-                      onBlur={e => updateUser(u, { whatsapp_display_name: e.target.value || null })}
-                      placeholder="(igual al nombre)"
-                      className="h-8 px-2 rounded border border-border bg-background text-xs w-32" />
-                  </td>
-                  <td className="px-3 py-2 text-center">
-                    <input type="checkbox" checked={u.whatsapp_widget_active}
-                      onChange={e => updateUser(u, { whatsapp_widget_active: e.target.checked })} />
-                  </td>
-                  <td className="px-3 py-2 text-center">
-                    {u.in_project ? '✓' : <span className="text-muted-foreground">—</span>}
-                  </td>
-                  <td className="px-3 py-2 text-center">
-                    <input type="checkbox" checked={excluded}
-                      onChange={e => {
-                        const next = e.target.checked
-                          ? [...config.excluded_user_ids, u.id]
-                          : config.excluded_user_ids.filter(id => id !== u.id);
-                        setConfig({ ...config, excluded_user_ids: next });
-                      }} />
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        {users.length === 0 ? (
+          <div className="p-8 text-center text-sm text-muted-foreground">
+            Este proyecto no tiene usuarios asignados todavía.
+          </div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50 border-b">
+              <tr>
+                <th className="px-3 py-2 text-left text-[11px] text-muted-foreground">Gestora</th>
+                <th className="px-3 py-2 text-left text-[11px] text-muted-foreground">WhatsApp (sin +)</th>
+                <th className="px-3 py-2 text-left text-[11px] text-muted-foreground">Nombre alt</th>
+                <th className="px-3 py-2 text-center text-[11px] text-muted-foreground">En widget (todos proyectos)</th>
+                <th className="px-3 py-2 text-center text-[11px] text-muted-foreground">Excluir solo aquí</th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map(u => {
+                const excluded = config.excluded_user_ids.includes(u.id);
+                const inRotation = u.whatsapp_widget_active && !excluded && !!u.whatsapp_phone;
+                return (
+                  <tr key={u.id} className={`border-b last:border-0 hover:bg-muted/30 ${inRotation ? 'bg-emerald-50/50 dark:bg-emerald-950/10' : ''}`}>
+                    <td className="px-3 py-2">
+                      <div className="font-medium flex items-center gap-1.5">
+                        {u.nombre}
+                        {inRotation && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">EN WIDGET</span>}
+                      </div>
+                      <div className="text-[11px] text-muted-foreground">{u.role}</div>
+                    </td>
+                    <td className="px-3 py-2">
+                      <input value={u.whatsapp_phone || ''}
+                        onChange={e => setUsers(users.map(x => x.id === u.id ? { ...x, whatsapp_phone: e.target.value } : x))}
+                        onBlur={e => updateUser(u, { whatsapp_phone: e.target.value || null })}
+                        placeholder="34612345678"
+                        className="h-8 px-2 rounded border border-border bg-background text-xs font-mono w-36" />
+                    </td>
+                    <td className="px-3 py-2">
+                      <input value={u.whatsapp_display_name || ''}
+                        onChange={e => setUsers(users.map(x => x.id === u.id ? { ...x, whatsapp_display_name: e.target.value } : x))}
+                        onBlur={e => updateUser(u, { whatsapp_display_name: e.target.value || null })}
+                        placeholder="(igual al nombre)"
+                        className="h-8 px-2 rounded border border-border bg-background text-xs w-32" />
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      <input type="checkbox" checked={u.whatsapp_widget_active}
+                        onChange={e => updateUser(u, { whatsapp_widget_active: e.target.checked })} />
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      <input type="checkbox" checked={excluded}
+                        onChange={e => {
+                          const next = e.target.checked
+                            ? [...config.excluded_user_ids, u.id]
+                            : config.excluded_user_ids.filter(id => id !== u.id);
+                          setConfig({ ...config, excluded_user_ids: next });
+                        }} />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
       </div>
 
       <div className="text-xs text-muted-foreground bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 rounded-md p-3">
-        <strong>Regla global vs proyecto:</strong>
+        <strong>Cómo funciona:</strong>
         <ul className="list-disc list-inside mt-1 space-y-0.5">
-          <li><strong>"En widget"</strong> es global del usuario — afecta a TODOS los proyectos donde participa.</li>
-          <li><strong>"Excluir solo aquí"</strong> excluye al usuario sólo de este proyecto (útil si una gestora rota en otro CRM y no en este).</li>
-          <li>El cambio se cachea 5 minutos en el CDN. Si modificás, esperá un poco para ver el efecto en la landing.</li>
+          <li>Solo aparecen los usuarios asignados a <strong>{config.project_nombre}</strong>. Si falta alguien, asignalo desde Configuración del proyecto.</li>
+          <li><strong>"En widget"</strong> es global del usuario — si lo activás también la incluye en widgets de otros proyectos donde participe.</li>
+          <li><strong>"Excluir solo aquí"</strong> la quita SOLO de este widget (sin tocar otros proyectos).</li>
+          <li>Cambios se propagan en máx 5 min (caché CDN). Cada proyecto = su propio URL/widget independiente.</li>
         </ul>
       </div>
     </div>

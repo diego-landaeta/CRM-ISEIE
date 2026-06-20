@@ -3,7 +3,7 @@ import { query } from '../../shared/config/db.js';
 const DEFAULT_CONFIG = {
   enabled: true,
   welcome_text: '¡Hablamos? 👋',
-  message_template: 'Hola {{project}}, quiero información sobre: {{url}}',
+  message_template: 'Hola, soy {{nombre}} de {{project}}. Quiero información sobre: {{url}}',
   excluded_user_ids: [],
   show_bubble: true,
   bubble_delay_ms: 3000,
@@ -62,13 +62,14 @@ export async function upsertConfig(projectId, fields) {
   return await getConfig(projectId);
 }
 
-// Lista usuarios candidatos al widget (activos + con telefono) para que admin elija
+// Lista usuarios candidatos al widget = SOLO los del proyecto activos
 export async function listCandidateUsers(projectId) {
   const { rows } = await query(
     `SELECT u.id, u.nombre, u.email, u.role, u.active,
             u.whatsapp_phone, u.whatsapp_display_name, u.whatsapp_widget_active,
-            EXISTS (SELECT 1 FROM user_projects up WHERE up.user_id = u.id AND up.project_id = $1 AND up.active = true) AS in_project
+            true AS in_project
      FROM users u
+     JOIN user_projects up ON up.user_id = u.id AND up.project_id = $1 AND up.active = true
      WHERE u.active = true
      ORDER BY u.whatsapp_widget_active DESC, u.nombre ASC`,
     [projectId]

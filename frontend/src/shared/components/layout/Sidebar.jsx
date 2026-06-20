@@ -5,7 +5,7 @@ import {
   Moon, Sun, CaretLeft, CaretRight, UserCircle,
   CaretUp, CaretDown, Bell, Pulse, Calculator, Envelope, Globe,
   FilePdf, ShieldCheck, MagnifyingGlass, Headset, BookOpen, Sliders,
-  Megaphone, Robot, Sparkle, PlugsConnected, CreditCard, WarningCircle,
+  Megaphone, Robot, Sparkle, PlugsConnected, CreditCard, WarningCircle, WhatsappLogo,
   Receipt, Coins, Wrench, ShoppingBag, ChatCircleText, Wallet, Bank, Clock, GitMerge,
 } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -40,6 +40,7 @@ const NAV_SECTIONS = [
       { to: '/forms',           label: 'Formularios', icon: Globe,  roles: ['admin', 'superadmin'], sectionPrefixes: ['/forms'] },
       { to: '/make-webhooks',   label: 'Make',      icon: PlugsConnected, roles: ['admin', 'superadmin'] },
       { to: '/webhooks',        label: 'Webhooks',  icon: PlugsConnected, roles: ['admin', 'superadmin'] },
+      { to: '/captacion/whatsapp', label: 'WhatsApp', icon: WhatsappLogo, roles: ['admin', 'superadmin', 'soporte'] },
       { to: '/campaigns',       label: 'Campañas',  icon: Megaphone, roles: ['admin', 'superadmin'], sectionPrefixes: ['/campaigns'] },
       { to: '/seo',             label: 'Tráfico orgánico', icon: MagnifyingGlass, roles: ['admin', 'superadmin'] },
     ],
