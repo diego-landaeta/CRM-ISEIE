@@ -51,7 +51,7 @@ export async function generateWidgetScript(projectId) {
     bubble.innerHTML = '<strong>' + (pick[0]||'').replace(/</g,'&lt;') + '</strong>: ' + WELCOME.replace(/</g,'&lt;');
     wrap.appendChild(bubble);
     setTimeout(function(){bubble.style.display='block';}, BUBBLE_DELAY);
-    setTimeout(function(){bubble.style.display='none';}, BUBBLE_DELAY + 7000);
+    setTimeout(function(){bubble.style.display='none';}, BUBBLE_DELAY + 12000);
   }
 
   var a = document.createElement('a');
