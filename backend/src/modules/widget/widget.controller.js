@@ -23,6 +23,33 @@ export async function widgetScript(req, res, next) {
   }
 }
 
+// Endpoint PUBLICO JSON: GET /api/w/data/:projectId.json
+// Devuelve config + gestoras para que el snippet INLINE (ya pintado en el HTML)
+// rote y arme el href. El botón ya es visible sin esperar esto.
+export async function widgetData(req, res, next) {
+  try {
+    const raw = String(req.params.projectIdJson || '');
+    const m = raw.match(/^(\d+)(?:\.json)?$/);
+    if (!m) return res.status(400).json({ enabled: false });
+    const projectId = Number(m[1]);
+    const config = await model.getConfig(projectId);
+    res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    if (!config || !config.enabled) return res.json({ enabled: false });
+    const users = await model.listActiveWidgetUsers(projectId, config.excluded_user_ids || []);
+    res.json({
+      enabled: true,
+      project: config.project_nombre,
+      welcome: config.welcome_text,
+      template: config.message_template,
+      gestoras: users.map((u) => [u.display_name, u.whatsapp_phone]),
+    });
+  } catch (e) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.json({ enabled: false });
+  }
+}
+
 // Admin endpoints (con auth)
 export async function getConfig(req, res, next) {
   try {

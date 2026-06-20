@@ -64,12 +64,43 @@ export default function WhatsappWidgetPage() {
   if (loading || !config) return <div className="p-8 text-muted-foreground">Cargando…</div>;
 
   const baseUrl = window.location.origin + (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
-  const embedSrc = `${baseUrl}/api/w/whatsapp/${pid}.js`;
-  // Snippet "bulletproof": usa <img onload> + createElement('script') para
-  // bypassar WP Rocket Delay JS, LiteSpeed, Cloudflare Rocket Loader, etc.
-  // Estos optimizadores delayán <script src=""> pero NO eventos onload de <img>
-  // ni scripts creados dinámicamente via JS post-parseo del HTML.
-  const embedCode = `<!-- WhatsApp widget CRM360 -->\n<img alt="" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" style="position:absolute;width:0;height:0;opacity:0;pointer-events:none" onload="(function(i){if(i.__c3w)return;i.__c3w=1;var s=document.createElement('script');s.async=true;s.src='${embedSrc}';document.head.appendChild(s);})(this)" onerror="(function(i){if(i.__c3w)return;i.__c3w=1;var s=document.createElement('script');s.async=true;s.src='${embedSrc}';document.head.appendChild(s);})(this)">`;
+  const dataUrl = `${baseUrl}/api/w/data/${pid}.json`;
+  // Snippet INLINE (igual que psikoaprende/opynio): el botón es HTML puro pintado
+  // directo en la página → aparece SIEMPRE, fijo a la derecha, sin depender de
+  // cargar scripts externos (que WP Rocket/LiteSpeed delayán o matan).
+  // Un mini-script inline hace fetch al CRM para rotar gestora y armar el href.
+  const embedCode = `<!-- WhatsApp CRM360 -->
+<style>
+#c3w{position:fixed!important;bottom:20px!important;right:16px!important;z-index:2147483647!important;display:flex!important;flex-direction:column!important;align-items:flex-end!important;gap:8px!important;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif!important}
+#c3w-tag{display:none!important;background:#fff!important;color:#111!important;border-radius:14px!important;padding:8px 14px!important;box-shadow:0 3px 14px rgba(0,0,0,.15)!important;font-size:14px!important;white-space:nowrap!important;cursor:pointer!important;line-height:1.4!important}
+#c3w-tag.s{display:block!important}
+#c3w-tag b{color:#25D366!important;font-weight:700!important}
+#c3w-btn{width:58px!important;height:58px!important;background:#25D366!important;border:none!important;border-radius:50%!important;display:flex!important;align-items:center!important;justify-content:center!important;cursor:pointer!important;box-shadow:0 4px 16px rgba(37,211,102,.5)!important;padding:0!important;margin:0!important;transition:transform .2s!important}
+#c3w-btn:hover{transform:scale(1.08)!important}
+#c3w-btn svg{width:30px!important;height:30px!important;fill:#fff!important;display:block!important}
+</style>
+<div id="c3w" role="complementary">
+  <div id="c3w-tag"><b id="c3w-name"></b> <span id="c3w-msg"></span></div>
+  <button id="c3w-btn" aria-label="WhatsApp" type="button">
+    <svg viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
+  </button>
+</div>
+<script>
+(function(){if(window.__c3w)return;window.__c3w=1;
+var wa=null,btn=document.getElementById('c3w-btn'),tag=document.getElementById('c3w-tag'),nm=document.getElementById('c3w-name'),mg=document.getElementById('c3w-msg');
+function go(){if(wa)window.open(wa,'_blank')}
+btn.addEventListener('click',go);tag.addEventListener('click',go);
+fetch('${dataUrl}').then(function(r){return r.json()}).then(function(d){
+  if(!d.enabled||!d.gestoras||!d.gestoras.length){document.getElementById('c3w').style.display='none';return}
+  var p=d.gestoras[Math.floor(Math.random()*d.gestoras.length)];
+  var msg=(d.template||'Hola, quiero información: {{url}}').replace(/\\{\\{nombre\\}\\}/g,p[0]).replace(/\\{\\{project\\}\\}/g,d.project||'').replace(/\\{\\{url\\}\\}/g,location.href);
+  wa='https://wa.me/'+p[1]+'?text='+encodeURIComponent(msg);
+  nm.textContent=p[0];mg.textContent=d.welcome||'¿Hablamos? 👋';
+  setTimeout(function(){tag.className='s'},3000);
+  setTimeout(function(){tag.className=''},15000);
+}).catch(function(){document.getElementById('c3w').style.display='none'});
+})();
+</script>`;
   const activeInWidget = users.filter(u => u.in_project && u.whatsapp_widget_active && u.whatsapp_phone && !config.excluded_user_ids.includes(u.id));
 
   function copyEmbed() {
@@ -104,23 +135,23 @@ export default function WhatsappWidgetPage() {
           </span>
         </div>
         <p className="text-xs text-muted-foreground">
-          Copia este script y pégalo antes del <code className="px-1 bg-muted rounded text-[10px]">&lt;/body&gt;</code> de tu landing.
-          El widget rota entre las gestoras activas en cada visita.
+          Copia este código y pégalo antes del <code className="px-1 bg-muted rounded text-[10px]">&lt;/body&gt;</code> de tu landing
+          (en WordPress: Elementor → Configuración del sitio → Código personalizado → "End of body").
         </p>
         <div className="flex gap-2 items-stretch">
-          <pre className="flex-1 px-3 py-2 rounded-md bg-muted text-xs font-mono whitespace-pre-wrap break-all">
-{embedCode}
-          </pre>
+          <textarea readOnly value={embedCode} onClick={(e) => (e.target as HTMLTextAreaElement).select()}
+            className="flex-1 h-32 px-3 py-2 rounded-md bg-muted text-[10px] font-mono resize-none" />
           <button onClick={copyEmbed}
             className="px-3 rounded-md border border-border hover:bg-muted inline-flex items-center gap-1.5 text-xs self-start">
             {copied ? <><CheckCircle size={14} weight="bold" className="text-emerald-600" /> Copiado</> : <><Copy size={14} weight="bold" /> Copiar</>}
           </button>
         </div>
         <p className="text-[10px] text-muted-foreground">
-          Snippet bulletproof: bypassa WP Rocket / LiteSpeed / Cloudflare Rocket Loader sin tocar configuración.
+          El botón es HTML inline → aparece <strong>siempre</strong>, fijo abajo-derecha, sin que WP Rocket/LiteSpeed lo bloqueen.
+          La rotación de gestoras se actualiza desde el CRM automáticamente.
         </p>
-        <a href={embedSrc} target="_blank" rel="noopener" className="text-[11px] text-primary hover:underline inline-flex items-center gap-1">
-          Ver código generado <ArrowSquareOut size={11} />
+        <a href={dataUrl} target="_blank" rel="noopener" className="text-[11px] text-primary hover:underline inline-flex items-center gap-1">
+          Ver datos del widget <ArrowSquareOut size={11} />
         </a>
       </div>
 

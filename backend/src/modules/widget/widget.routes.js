@@ -12,6 +12,7 @@ router.patch('/users/:userId/phone', ctrl.updateUserPhone);
 // Router publico — endpoint del script
 const publicRouter = Router();
 publicRouter.get('/whatsapp/:projectIdJs', ctrl.widgetScript);
+publicRouter.get('/data/:projectIdJson', ctrl.widgetData);
 
 export default router;
 export { publicRouter };
