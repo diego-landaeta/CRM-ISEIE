@@ -69,7 +69,7 @@ export default function WhatsappWidgetPage() {
   // bypassar WP Rocket Delay JS, LiteSpeed, Cloudflare Rocket Loader, etc.
   // Estos optimizadores delayán <script src=""> pero NO eventos onload de <img>
   // ni scripts creados dinámicamente via JS post-parseo del HTML.
-  const embedCode = `<!-- WhatsApp widget CRM360 -->\n<img alt="" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" style="position:absolute;width:0;height:0;opacity:0" onload="var s=document.createElement('script');s.async=true;s.src='${embedSrc}';document.head.appendChild(s);this.remove()">`;
+  const embedCode = `<!-- WhatsApp widget CRM360 -->\n<img alt="" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" style="position:absolute;width:0;height:0;opacity:0;pointer-events:none" onload="(function(i){if(i.__c3w)return;i.__c3w=1;var s=document.createElement('script');s.async=true;s.src='${embedSrc}';document.head.appendChild(s);})(this)" onerror="(function(i){if(i.__c3w)return;i.__c3w=1;var s=document.createElement('script');s.async=true;s.src='${embedSrc}';document.head.appendChild(s);})(this)">`;
   const activeInWidget = users.filter(u => u.in_project && u.whatsapp_widget_active && u.whatsapp_phone && !config.excluded_user_ids.includes(u.id));
 
   function copyEmbed() {
