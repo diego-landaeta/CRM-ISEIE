@@ -30,6 +30,7 @@ export const BETA_ROUTES: readonly string[] = [
   '/forms',                         // Captacion (forms + make + webhooks)
   '/make-webhooks',                 // Captacion Make
   '/webhooks',                      // Webhooks entrantes
+  '/captacion/whatsapp',            // Widget WhatsApp rotativo
   '/email-sequences',               // Email
   '/email-templates',
   '/documentos',                    // Documentos PDF
