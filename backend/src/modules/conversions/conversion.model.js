@@ -28,45 +28,62 @@ export async function create(data) {
       iva_pct,           // default 21
       iva_incluido,      // default false (sumar IVA al subtotal)
       iva_exento,        // default false
+      descuento_tipo,    // 'none' | 'pct' | 'monto'
+      descuento_valor,   // % o monto fijo
+      subtotal_bruto,    // precio base antes de descuento/IVA (modo simple)
     } = data;
 
-    // Computar base + IVA + total cuando hay items
-    let computed = { base_imponible: null, iva_importe: null, total: importe_total };
     const ivaPctVal = Number(iva_pct ?? 21);
     const isExento = !!iva_exento;
     const isIncluido = !!iva_incluido;
+    const descTipo = ['pct', 'monto'].includes(descuento_tipo) ? descuento_tipo : 'none';
+    const descVal = Number(descuento_valor || 0);
 
-    if (Array.isArray(items) && items.length > 0) {
-      const subtotalItems = items.reduce(
-        (s, it) => s + Number(it.cantidad || 1) * Number(it.precio_unitario || 0), 0
-      );
-      if (isExento) {
-        computed = { base_imponible: Number(subtotalItems.toFixed(2)), iva_importe: 0, total: Number(subtotalItems.toFixed(2)) };
-      } else if (isIncluido) {
-        // El precio YA incluye IVA → desglosar
-        const total = subtotalItems;
-        const base = total / (1 + ivaPctVal / 100);
-        computed = { base_imponible: Number(base.toFixed(2)), iva_importe: Number((total - base).toFixed(2)), total: Number(total.toFixed(2)) };
-      } else {
-        const base = subtotalItems;
-        const iva = base * ivaPctVal / 100;
-        computed = { base_imponible: Number(base.toFixed(2)), iva_importe: Number(iva.toFixed(2)), total: Number((base + iva).toFixed(2)) };
-      }
+    // 1) Subtotal bruto: suma de items, o el importe_total ingresado (modo simple)
+    const hasItems = Array.isArray(items) && items.length > 0;
+    const subtotalBruto = hasItems
+      ? items.reduce((s, it) => s + Number(it.cantidad || 1) * Number(it.precio_unitario || 0), 0)
+      : Number(subtotal_bruto ?? importe_total ?? 0);
+
+    // 2) Descuento
+    let descImporte = 0;
+    if (descTipo === 'pct') descImporte = subtotalBruto * descVal / 100;
+    else if (descTipo === 'monto') descImporte = Math.min(descVal, subtotalBruto);
+    descImporte = Number(descImporte.toFixed(2));
+
+    // 3) Neto tras descuento
+    const neto = Number((subtotalBruto - descImporte).toFixed(2));
+
+    // 4) Base + IVA + total
+    let base, ivaImp, total;
+    if (isExento) {
+      base = neto; ivaImp = 0; total = neto;
+    } else if (isIncluido) {
+      total = neto;
+      base = neto / (1 + ivaPctVal / 100);
+      ivaImp = total - base;
+    } else {
+      base = neto;
+      ivaImp = base * ivaPctVal / 100;
+      total = base + ivaImp;
     }
-    const finalImporte = computed.total;
+    base = Number(base.toFixed(2)); ivaImp = Number(ivaImp.toFixed(2)); total = Number(total.toFixed(2));
+    const finalImporte = total;
 
-    // INSERT conversion (con campos IVA)
+    // INSERT conversion (IVA + descuento)
     const { rows: convRows } = await client.query(
       `INSERT INTO conversions
         (lead_id, project_id, producto_contratado, producto_contratado_id, importe_total, importe_pagado,
          metodo_pago, fecha_compromiso_pago, fecha_conversion, notas_pago,
-         iva_pct, iva_incluido, iva_exento, base_imponible, iva_importe)
+         iva_pct, iva_incluido, iva_exento, base_imponible, iva_importe,
+         subtotal_bruto, descuento_tipo, descuento_valor, descuento_importe)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, COALESCE($9, CURRENT_DATE), $10,
-               $11, $12, $13, $14, $15)
+               $11, $12, $13, $14, $15, $16, $17, $18, $19)
        RETURNING *`,
       [lead_id, project_id, producto_contratado, producto_contratado_id || null,
        finalImporte, importe_pagado, metodo_pago, fecha_compromiso_pago, fecha_conversion, notas_pago,
-       isExento ? 0 : ivaPctVal, isIncluido, isExento, computed.base_imponible, computed.iva_importe]
+       isExento ? 0 : ivaPctVal, isIncluido, isExento, base, ivaImp,
+       Number(subtotalBruto.toFixed(2)), descTipo, descVal, descImporte]
     );
     const conversion = convRows[0];
 

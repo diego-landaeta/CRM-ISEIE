@@ -23,6 +23,8 @@ interface ConversionForm {
   iva_pct: string;
   iva_incluido: boolean;
   iva_exento: boolean;
+  descuento_tipo: 'none' | 'pct' | 'monto';
+  descuento_valor: string;
 }
 
 interface SaleItem {
@@ -109,27 +111,35 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
     iva_pct: '21',
     iva_incluido: false,
     iva_exento: false,
+    descuento_tipo: 'none',
+    descuento_valor: '',
   });
   // Multi-item: si tiene >0 items se usan para calcular importe_total.
   // Si la lista está vacía → comportamiento legacy (1 producto, importe manual).
   const [items, setItems] = useState<SaleItem[]>([]);
   const useMultiItem = items.length > 0;
 
-  // Recalcular importe_total automaticamente cuando hay items o cambia IVA
-  useEffect(() => {
-    if (!useMultiItem) return;
-    const subtotal = items.reduce((s, it) => s + Number(it.cantidad || 1) * Number(it.precio_unitario || 0), 0);
+  // Desglose central: subtotal bruto → descuento → base → IVA → total.
+  // En modo simple el bruto es form.importe_total (lo que ingresa el usuario);
+  // en multi-item es la suma de los items.
+  const calc = useMemo(() => {
+    const bruto = useMultiItem
+      ? items.reduce((s, it) => s + Number(it.cantidad || 1) * Number(it.precio_unitario || 0), 0)
+      : Number(form.importe_total || 0);
+    let desc = 0;
+    if (form.descuento_tipo === 'pct') desc = bruto * Number(form.descuento_valor || 0) / 100;
+    else if (form.descuento_tipo === 'monto') desc = Math.min(Number(form.descuento_valor || 0), bruto);
+    const neto = Math.max(0, bruto - desc);
     const ivaPct = Number(form.iva_pct || 0);
-    let total = subtotal;
-    if (form.iva_exento) {
-      total = subtotal;
-    } else if (form.iva_incluido) {
-      total = subtotal; // ya incluye
-    } else {
-      total = subtotal + (subtotal * ivaPct / 100);
-    }
-    setForm(f => ({ ...f, importe_total: total.toFixed(2) }));
-  }, [items, form.iva_pct, form.iva_incluido, form.iva_exento, useMultiItem]);
+    let base: number, iva: number, total: number;
+    if (form.iva_exento) { base = neto; iva = 0; total = neto; }
+    else if (form.iva_incluido) { total = neto; base = neto / (1 + ivaPct / 100); iva = total - base; }
+    else { base = neto; iva = base * ivaPct / 100; total = base + iva; }
+    return {
+      bruto: Number(bruto.toFixed(2)), desc: Number(desc.toFixed(2)), neto: Number(neto.toFixed(2)),
+      base: Number(base.toFixed(2)), iva: Number(iva.toFixed(2)), total: Number(total.toFixed(2)),
+    };
+  }, [useMultiItem, items, form.importe_total, form.descuento_tipo, form.descuento_valor, form.iva_pct, form.iva_incluido, form.iva_exento]);
 
   // Producto seleccionado por nombre exacto (CRM-140) — para mostrar sus enlaces de pago
   const selectedProduct = useMemo(
@@ -212,13 +222,14 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
       toast({ title: 'Lead inválido', description: 'No se pudo identificar el lead asociado.', variant: 'destructive' });
       return;
     }
-    const importe = Number(form.importe_total);
-    if (!form.producto_contratado?.trim()) {
+    const importe = calc.total;  // total final con descuento + IVA
+    const prodOk = useMultiItem ? items.some(it => it.descripcion?.trim()) : form.producto_contratado?.trim();
+    if (!prodOk) {
       toast({ title: 'Producto requerido', variant: 'destructive' });
       return;
     }
-    if (!form.importe_total || isNaN(importe) || importe <= 0) {
-      toast({ title: 'Importe invalido', description: 'El importe debe ser mayor que 0', variant: 'destructive' });
+    if (isNaN(importe) || importe <= 0) {
+      toast({ title: 'Importe invalido', description: 'El total debe ser mayor que 0', variant: 'destructive' });
       return;
     }
     if (Number(form.importe_pagado || 0) > importe) {
@@ -250,7 +261,7 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
         producto_contratado: useMultiItem
           ? items.map(it => `${it.cantidad}x ${it.descripcion}`).join(' + ')
           : form.producto_contratado,
-        importe_total: Number(form.importe_total),
+        importe_total: calc.total,
         importe_pagado: Number(form.importe_pagado || 0),
         metodo_pago: form.metodo_pago,
         fecha_compromiso_pago: form.fecha_compromiso_pago || null,
@@ -265,6 +276,9 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
         iva_pct: form.iva_exento ? 0 : Number(form.iva_pct || 21),
         iva_incluido: form.iva_incluido && !form.iva_exento,
         iva_exento: form.iva_exento,
+        descuento_tipo: form.descuento_tipo,
+        descuento_valor: form.descuento_tipo === 'none' ? 0 : Number(form.descuento_valor || 0),
+        subtotal_bruto: calc.bruto,
       } as any);
       if (res.success && res.data) {
         // Si es fraccionado, genera las cuotas custom
@@ -398,6 +412,29 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
               </div>
             )}
 
+            {/* DESCUENTO */}
+            <div className="border border-border rounded-md p-3 space-y-2 bg-muted/10">
+              <label className="text-[11px] font-bold uppercase text-muted-foreground">Descuento</label>
+              <div className="flex flex-wrap items-center gap-3 text-xs">
+                <select value={form.descuento_tipo} onChange={e => update('descuento_tipo', e.target.value as any)}
+                  className="h-7 px-2 rounded border border-border bg-background text-sm">
+                  <option value="none">Sin descuento</option>
+                  <option value="pct">Porcentaje (%)</option>
+                  <option value="monto">Monto fijo (€)</option>
+                </select>
+                {form.descuento_tipo !== 'none' && (
+                  <div className="inline-flex items-center gap-1">
+                    <input type="number" min="0" step="0.01" value={form.descuento_valor}
+                      onChange={e => update('descuento_valor', e.target.value)}
+                      placeholder={form.descuento_tipo === 'pct' ? '10' : '50'}
+                      className="w-20 h-7 px-2 rounded border border-border bg-background text-sm" />
+                    <span>{form.descuento_tipo === 'pct' ? '%' : '€'}</span>
+                    {calc.desc > 0 && <span className="text-emerald-600 font-semibold ml-1">−{calc.desc.toFixed(2)} €</span>}
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* IVA */}
             <div className="border border-border rounded-md p-3 space-y-2 bg-muted/10">
               <label className="text-[11px] font-bold uppercase text-muted-foreground">IVA</label>
@@ -427,52 +464,49 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-[11px] font-medium text-muted-foreground mb-1 block">
-                  Importe total (EUR) *
-                  {useMultiItem && <span className="text-[10px] text-muted-foreground ml-1">(auto: subtotal + IVA)</span>}
+                  {useMultiItem ? 'Subtotal items (auto)' : 'Precio base (EUR) *'}
                 </label>
                 <input
-                  type="number" step="0.01" min="0.01"
-                  value={form.importe_total}
-                  onChange={e => { update('importe_total', e.target.value); if (selectedProduct && !aplicaDescuento) setAplicaDescuento(true); }}
-                  readOnly={useMultiItem || (!!selectedProduct && !aplicaDescuento)}
-                  className={inputClass + ((useMultiItem || (selectedProduct && !aplicaDescuento)) ? ' bg-muted text-muted-foreground cursor-not-allowed' : '')}
-                  required
+                  type="number" step="0.01" min="0"
+                  value={useMultiItem ? calc.bruto.toFixed(2) : form.importe_total}
+                  onChange={e => update('importe_total', e.target.value)}
+                  readOnly={useMultiItem}
+                  className={inputClass + (useMultiItem ? ' bg-muted text-muted-foreground cursor-not-allowed' : '')}
+                  required={!useMultiItem}
                 />
               </div>
               <div>
                 <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Importe pagado hoy</label>
                 <input type="number" step="0.01" min="0" value={form.importe_pagado} onChange={e => update('importe_pagado', e.target.value)} className={inputClass} />
+                <button type="button" onClick={() => update('importe_pagado', String(calc.total))}
+                  className="text-[10px] text-primary hover:underline mt-0.5">Pagó el total ({calc.total.toFixed(2)} €)</button>
               </div>
             </div>
 
-            {selectedProduct && (
-              <div className="space-y-1.5">
-                <label className="flex items-center gap-2 text-xs cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={aplicaDescuento}
-                    onChange={(e) => {
-                      setAplicaDescuento(e.target.checked);
-                      if (!e.target.checked && selectedProduct?.precio != null) {
-                        update('importe_total', String(selectedProduct.precio));
-                      }
-                    }}
-                  />
-                  <span>Aplicar descuento (editar importe manualmente)</span>
-                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 uppercase tracking-wide">Fase prueba</span>
-                  {!aplicaDescuento && selectedProduct.precio != null && (
-                    <span className="text-muted-foreground">— precio del catálogo: {selectedProduct.precio} EUR</span>
-                  )}
-                </label>
-                {aplicaDescuento && selectedProduct.precio != null && Number(form.importe_total) > 0 && (
-                  <p className="text-[11px] text-amber-700 dark:text-amber-400 pl-6">
-                    Descuento aplicado: {Number(selectedProduct.precio) - Number(form.importe_total) > 0
-                      ? `−${(Number(selectedProduct.precio) - Number(form.importe_total)).toFixed(2)} EUR (${(((Number(selectedProduct.precio) - Number(form.importe_total)) / Number(selectedProduct.precio)) * 100).toFixed(1)}%)`
-                      : 'sin descuento (mismo precio)'}
-                  </p>
-                )}
+            {/* DESGLOSE */}
+            <div className="border border-primary/30 rounded-md p-3 bg-primary/5 space-y-1 text-sm">
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>Subtotal</span><span className="tabular-nums">{calc.bruto.toFixed(2)} €</span>
               </div>
-            )}
+              {calc.desc > 0 && (
+                <div className="flex justify-between text-xs text-emerald-600">
+                  <span>Descuento {form.descuento_tipo === 'pct' ? `(${form.descuento_valor}%)` : ''}</span>
+                  <span className="tabular-nums">−{calc.desc.toFixed(2)} €</span>
+                </div>
+              )}
+              <div className="flex justify-between text-xs">
+                <span className="text-muted-foreground">Base imponible</span><span className="tabular-nums">{calc.base.toFixed(2)} €</span>
+              </div>
+              {!form.iva_exento && (
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>IVA ({form.iva_pct}%){form.iva_incluido ? ' incl.' : ''}</span><span className="tabular-nums">{calc.iva.toFixed(2)} €</span>
+                </div>
+              )}
+              {form.iva_exento && <div className="text-[10px] text-muted-foreground italic">Operación exenta de IVA</div>}
+              <div className="flex justify-between font-bold text-base border-t border-border pt-1 mt-1">
+                <span>TOTAL</span><span className="tabular-nums text-primary">{calc.total.toFixed(2)} €</span>
+              </div>
+            </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
