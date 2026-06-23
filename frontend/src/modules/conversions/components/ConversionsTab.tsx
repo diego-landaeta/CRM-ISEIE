@@ -10,6 +10,8 @@ import { Plus, Receipt, CreditCard, Trash, WarningCircle, CheckCircle, ArrowCoun
 import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import InvoiceButton from '@/modules/invoices/components/InvoiceButton';
+import { invoicesApi, type Invoice } from '@/modules/invoices/api/invoices.api';
+import SendInvoiceDialog from '@/modules/invoices/components/SendInvoiceDialog';
 import { formatCurrency, formatDate } from '@/shared/lib/format';
 
 interface ConversionsTabTarget {
@@ -37,6 +39,18 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
   const [deleteReason, setDeleteReason] = useState<string>('duplicada');
   const [deleteMotivo, setDeleteMotivo] = useState<string>('');
   const [refundsByConv, setRefundsByConv] = useState<Record<number, Refund[]>>({});
+  const [sendInvoiceDialog, setSendInvoiceDialog] = useState<Invoice | null>(null);
+
+  // Tras registrar un pago: si la conversion tiene factura emitida y aún no
+  // enviada, ofrecer enviarla por email (con confirmación, no automático).
+  async function checkInvoiceAfterPayment(conversionId: number): Promise<void> {
+    try {
+      const res = await invoicesApi.byConversion(conversionId);
+      if (res.success && res.data && res.data.estado === 'emitida' && res.data.cliente_email) {
+        setSendInvoiceDialog(res.data);
+      }
+    } catch { /* silencioso */ }
+  }
 
   async function loadRefunds(conversionId: number): Promise<void> {
     try {
@@ -366,8 +380,19 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
         open={!!paymentDialogConv}
         onClose={() => setPaymentDialogConv(null)}
         conversion={paymentDialogConv}
-        onPaid={() => load()}
+        onPaid={() => {
+          const convId = paymentDialogConv?.id;
+          load();
+          if (convId) checkInvoiceAfterPayment(convId);
+        }}
       />
+      {sendInvoiceDialog && (
+        <SendInvoiceDialog
+          invoice={sendInvoiceDialog}
+          onClose={() => setSendInvoiceDialog(null)}
+          onSent={() => setSendInvoiceDialog(null)}
+        />
+      )}
       <RefundDialog
         open={!!refundDialogConv}
         conversion={refundDialogConv}
