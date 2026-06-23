@@ -28,6 +28,27 @@ export interface Conversion {
   lead_nombre?: string;
   product_nombre?: string;
   created_at?: string;
+  // Multi-item + descuento + IVA
+  items?: ConversionItem[];
+  subtotal_bruto?: number | string | null;
+  descuento_tipo?: 'none' | 'pct' | 'monto';
+  descuento_valor?: number | string;
+  descuento_importe?: number | string;
+  base_imponible?: number | string | null;
+  iva_pct?: number | string;
+  iva_importe?: number | string | null;
+  iva_incluido?: boolean;
+  iva_exento?: boolean;
+}
+
+export interface ConversionItem {
+  id: number;
+  product_id?: number | null;
+  descripcion: string;
+  cantidad: number;
+  precio_unitario: number | string;
+  subtotal: number | string;
+  orden?: number;
 }
 
 export interface CreateConversionInput {

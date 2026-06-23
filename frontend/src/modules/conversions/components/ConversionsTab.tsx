@@ -8,8 +8,8 @@ import InstallmentsDialog from './InstallmentsDialog';
 import EditConversionDialog from './EditConversionDialog';
 import { Plus, Receipt, CreditCard, Trash, WarningCircle, CheckCircle, ArrowCounterClockwise, Coins, PencilSimple } from '@phosphor-icons/react';
 import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
-import InvoiceButton from '@/modules/invoices/components/InvoiceButton';
 import EmptyState from '@/shared/components/ui/EmptyState';
+import InvoiceButton from '@/modules/invoices/components/InvoiceButton';
 import { formatCurrency, formatDate } from '@/shared/lib/format';
 
 interface ConversionsTabTarget {
@@ -214,7 +214,9 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
                         projectId={projectId}
                         leadId={lead.id}
                         conversionId={c.id}
-                        items={[{ descripcion: c.producto_contratado || 'Servicio', cantidad: 1, precio_unitario: Number(c.importe_total) }]}
+                        items={(c.items && c.items.length > 0)
+                          ? c.items.map(it => ({ descripcion: it.descripcion, cantidad: it.cantidad, precio_unitario: Number(it.precio_unitario) }))
+                          : [{ descripcion: c.producto_contratado || 'Servicio', cantidad: 1, precio_unitario: Number(c.importe_total) }]}
                       />
                       <button
                         onClick={() => setEditDialogConv(c)}
@@ -253,6 +255,41 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
                     </div>
                   )}
                 </div>
+
+                {/* Items comprados (multi-producto) */}
+                {c.items && c.items.length > 0 && (
+                  <div className="mb-3 border border-border rounded-md divide-y divide-border">
+                    {c.items.map((it) => (
+                      <div key={it.id} className="flex items-center justify-between px-3 py-1.5 text-xs">
+                        <span className="flex items-center gap-2">
+                          <span className="inline-flex items-center justify-center min-w-[22px] h-[18px] px-1 rounded bg-primary/10 text-primary font-bold text-[10px]">{it.cantidad}×</span>
+                          {it.descripcion}
+                        </span>
+                        <span className="tabular-nums text-muted-foreground">
+                          {formatCurrency(Number(it.precio_unitario))} {it.cantidad > 1 && `· ${formatCurrency(Number(it.subtotal))}`}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Desglose descuento + IVA */}
+                {(c.descuento_tipo !== 'none' || Number(c.descuento_importe) > 0) && (
+                  <div className="mb-3 bg-emerald-50/50 dark:bg-emerald-950/10 border border-emerald-200 dark:border-emerald-900 rounded-md px-3 py-2 text-xs space-y-0.5">
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>Subtotal</span><span className="tabular-nums">{formatCurrency(Number(c.subtotal_bruto || c.importe_total))}</span>
+                    </div>
+                    <div className="flex justify-between text-emerald-700 dark:text-emerald-400 font-semibold">
+                      <span>Descuento {c.descuento_tipo === 'pct' ? `(${Number(c.descuento_valor)}%)` : '(monto)'}</span>
+                      <span className="tabular-nums">−{formatCurrency(Number(c.descuento_importe))}</span>
+                    </div>
+                    {!c.iva_exento && Number(c.iva_importe) > 0 && (
+                      <div className="flex justify-between text-muted-foreground">
+                        <span>IVA ({Number(c.iva_pct)}%){c.iva_incluido ? ' incl.' : ''}</span><span className="tabular-nums">{formatCurrency(Number(c.iva_importe))}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Importes */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">

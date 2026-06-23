@@ -177,6 +177,11 @@ export async function findByLead(leadId) {
   const { rows } = await query(
     `SELECT c.*,
             (c.importe_total - c.importe_pagado) AS importe_pendiente,
+            COALESCE((SELECT json_agg(ci_row ORDER BY ci_row.orden)
+                      FROM (
+                        SELECT id, product_id, descripcion, cantidad, precio_unitario, subtotal, orden
+                          FROM conversion_items WHERE conversion_id = c.id
+                      ) ci_row), '[]'::json) AS items,
             COALESCE((SELECT json_agg(cp_row ORDER BY cp_row.fecha DESC, cp_row.id DESC)
                       FROM (
                         SELECT id, importe, fecha, notas, created_at

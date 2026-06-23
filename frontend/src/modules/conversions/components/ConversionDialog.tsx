@@ -109,7 +109,7 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
     fecha_conversion: new Date().toISOString().slice(0, 10),
     notas_pago: '',
     iva_pct: '21',
-    iva_incluido: false,
+    iva_incluido: true,   // el precio del curso ya es el precio final (IVA incluido)
     iva_exento: false,
     descuento_tipo: 'none',
     descuento_valor: '',
