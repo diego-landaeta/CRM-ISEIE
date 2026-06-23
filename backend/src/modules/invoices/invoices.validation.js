@@ -27,6 +27,24 @@ export const createInvoiceSchema = z.object({
   leyendaIva: z.string().optional(),
   metodoPago: z.enum(['transferencia', 'tarjeta', 'tarjeta_stripe', 'efectivo', 'bizum', 'fraccionado', 'otro']),
   piePago: z.string().optional(),
+  issuerId: z.number().int().positive().optional(),
+});
+
+export const issuerSchema = z.object({
+  projectId: z.number().int().positive().optional().nullable(),
+  razonSocial: z.string().min(1, 'Razón social requerida'),
+  nif: z.string().min(1, 'NIF requerido'),
+  direccion: z.string().optional().nullable(),
+  ciudad: z.string().optional().nullable(),
+  cp: z.string().optional().nullable(),
+  pais: z.string().optional().nullable(),
+  email: z.string().email().optional().nullable().or(z.literal('')),
+  telefono: z.string().optional().nullable(),
+  iban: z.string().optional().nullable(),
+  logoUrl: z.string().optional().nullable(),
+  pieDefault: z.string().optional().nullable(),
+  esDefault: z.boolean().optional(),
+  activo: z.boolean().optional(),
 });
 
 export const setSequenceSchema = z.object({

@@ -3,7 +3,11 @@ import * as model from './invoices.model.js';
 import * as service from './invoices.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
-import { createInvoiceSchema, setSequenceSchema, updateConfigSchema } from './invoices.validation.js';
+import { createInvoiceSchema, setSequenceSchema, updateConfigSchema, issuerSchema } from './invoices.validation.js';
+
+function isAdmin(req) {
+  return ['admin', 'superadmin', 'soporte'].includes(req.user?.role);
+}
 
 function projectId(req) {
   const pid = Number(req.query.projectId || req.body?.projectId);
@@ -131,10 +135,11 @@ export async function cancel(req, res, next) {
 export async function rectificar(req, res, next) {
   try {
     const id = Number(req.params.id);
-    const { motivo, parcial } = req.body || {};
+    const { motivo, parcial, issuerId } = req.body || {};
     const rect = await model.createRectificativa(id, {
       motivo,
       parcial: parcial != null && parcial !== '' ? Number(parcial) : null,
+      overrideIssuerId: issuerId ? Number(issuerId) : null,
       userId: req.user?.id,
     });
     res.json({ success: true, data: rect });
@@ -142,6 +147,42 @@ export async function rectificar(req, res, next) {
     logger.error({ e: e.message }, 'rectificar invoice failed');
     next(e);
   }
+}
+
+// ─── Emisores (multi-empresa) — solo admin gestiona ──────────────────────────
+export async function listIssuers(req, res, next) {
+  try {
+    const pid = Number(req.query.projectId) || null;
+    res.json({ success: true, data: await model.listIssuers(pid) });
+  } catch (e) { next(e); }
+}
+
+export async function createIssuer(req, res, next) {
+  try {
+    if (!isAdmin(req)) throw new AppError('Solo administradoras pueden añadir empresas', 403, 'FORBIDDEN');
+    const parsed = issuerSchema.safeParse(req.body);
+    if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'BAD_REQUEST');
+    const iss = await model.createIssuer(parsed.data, req.user?.id);
+    res.json({ success: true, data: iss });
+  } catch (e) { next(e); }
+}
+
+export async function updateIssuer(req, res, next) {
+  try {
+    if (!isAdmin(req)) throw new AppError('Solo administradoras', 403, 'FORBIDDEN');
+    const parsed = issuerSchema.partial().safeParse(req.body);
+    if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'BAD_REQUEST');
+    const iss = await model.updateIssuer(Number(req.params.id), parsed.data);
+    res.json({ success: true, data: iss });
+  } catch (e) { next(e); }
+}
+
+export async function deleteIssuer(req, res, next) {
+  try {
+    if (!isAdmin(req)) throw new AppError('Solo administradoras', 403, 'FORBIDDEN');
+    await model.deleteIssuer(Number(req.params.id));
+    res.json({ success: true });
+  } catch (e) { next(e); }
 }
 
 export async function listSequences(req, res, next) {

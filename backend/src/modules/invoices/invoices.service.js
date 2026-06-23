@@ -55,22 +55,23 @@ export async function generatePDF(invoiceId) {
   const left = 50;
   const right = 545;
 
-  // Cabecera proyecto
-  page.drawText(project?.nombre || 'CRM', { x: left, y, size: 18, font: bold, color: black });
-  y -= 24;
+  // Cabecera EMISOR: usa el snapshot del emisor (multi-empresa) si existe,
+  // si no cae al datos_fiscales del proyecto (compat con facturas viejas).
   const datosFiscalesProyecto = project?.datos_fiscales || {};
-  if (datosFiscalesProyecto.razon_social) {
-    page.drawText(datosFiscalesProyecto.razon_social, { x: left, y, size: 10, font, color: gray });
-    y -= 12;
-  }
-  if (datosFiscalesProyecto.nif) {
-    page.drawText(`NIF: ${datosFiscalesProyecto.nif}`, { x: left, y, size: 10, font, color: gray });
-    y -= 12;
-  }
-  if (datosFiscalesProyecto.direccion) {
-    page.drawText(datosFiscalesProyecto.direccion, { x: left, y, size: 10, font, color: gray });
-    y -= 12;
-  }
+  const emisorNombre = inv.issuer_razon_social || datosFiscalesProyecto.razon_social || project?.nombre || 'CRM';
+  const emisorNif = inv.issuer_nif || datosFiscalesProyecto.nif;
+  const emisorDir = inv.issuer_direccion || datosFiscalesProyecto.direccion;
+  const emisorCiudad = [inv.issuer_cp, inv.issuer_ciudad].filter(Boolean).join(' ');
+  const emisorEmail = inv.issuer_email;
+  const emisorTel = inv.issuer_telefono;
+
+  page.drawText(emisorNombre, { x: left, y, size: 16, font: bold, color: black });
+  y -= 20;
+  if (emisorNif) { page.drawText(`NIF/CIF: ${emisorNif}`, { x: left, y, size: 10, font, color: gray }); y -= 12; }
+  if (emisorDir) { page.drawText(emisorDir, { x: left, y, size: 10, font, color: gray }); y -= 12; }
+  if (emisorCiudad) { page.drawText(`${emisorCiudad}${inv.issuer_pais ? ', ' + inv.issuer_pais : ''}`, { x: left, y, size: 10, font, color: gray }); y -= 12; }
+  if (emisorEmail) { page.drawText(emisorEmail, { x: left, y, size: 10, font, color: gray }); y -= 12; }
+  if (emisorTel) { page.drawText(`Tel: ${emisorTel}`, { x: left, y, size: 10, font, color: gray }); y -= 12; }
 
   // Codigo de factura (derecha) — distinto si es rectificativa
   const esRect = inv.tipo === 'rectificativa';

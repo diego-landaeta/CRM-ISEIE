@@ -37,6 +37,9 @@ export default function FiscalDataDialog({ projectId, leadId, conversionId, defa
   // Método y pie
   const [metodoPago, setMetodoPago] = useState<'transferencia' | 'tarjeta' | 'tarjeta_stripe' | 'efectivo' | 'bizum' | 'fraccionado' | 'otro'>('transferencia');
   const [piePago, setPiePago] = useState('');
+  // Emisor (multi-empresa)
+  const [issuers, setIssuers] = useState<import('../api/invoices.api').Issuer[]>([]);
+  const [issuerId, setIssuerId] = useState<number | null>(null);
 
   useEffect(() => {
     // Cargar config del proyecto (pie default + metodo default)
@@ -44,6 +47,14 @@ export default function FiscalDataDialog({ projectId, leadId, conversionId, defa
       if (res.success && res.data) {
         if (res.data.factura_pie_default) setPiePago(res.data.factura_pie_default);
         if (res.data.factura_metodo_default) setMetodoPago(res.data.factura_metodo_default as 'transferencia');
+      }
+    }).catch(() => {});
+    // Cargar empresas emisoras
+    invoicesApi.listIssuers(projectId).then((res) => {
+      if (res.success && res.data) {
+        setIssuers(res.data);
+        const def = res.data.find(i => i.es_default) || res.data[0];
+        if (def) setIssuerId(def.id);
       }
     }).catch(() => {});
   }, [projectId]);
@@ -89,6 +100,7 @@ export default function FiscalDataDialog({ projectId, leadId, conversionId, defa
     try {
       const res = await invoicesApi.create({
         projectId, leadId, conversionId,
+        issuerId: issuerId || undefined,
         clienteNombre: nombre.trim(),
         clienteNif: nif.trim(),
         clienteDireccion: direccion.trim(),
@@ -131,6 +143,17 @@ export default function FiscalDataDialog({ projectId, leadId, conversionId, defa
           <div className="p-8 text-center text-sm text-muted-foreground">Cargando datos del cliente…</div>
         ) : (
           <div className="p-4 space-y-3 text-sm">
+            {issuers.length > 0 && (
+              <Section title="Empresa que emite">
+                <select value={issuerId ?? ''} onChange={e => setIssuerId(Number(e.target.value))}
+                  className="w-full h-9 px-2 rounded border border-primary/40 bg-primary/5 text-sm font-medium">
+                  {issuers.map(iss => (
+                    <option key={iss.id} value={iss.id}>{iss.razon_social} — {iss.nif}{iss.es_default ? ' (por defecto)' : ''}</option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-muted-foreground mt-1">Esta factura se emite desde esta empresa. Solo las administradoras gestionan el listado en Configuración.</p>
+              </Section>
+            )}
             <Section title="Cliente">
               <Field label="Nombre" value={nombre} onChange={setNombre} required />
               <div className="grid grid-cols-2 gap-3">

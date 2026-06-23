@@ -5,7 +5,7 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import KpiCard from '@/shared/components/ui/KpiCard';
 import { invoicesApi } from '../api/invoices.api';
-import type { Invoice } from '../api/invoices.api';
+import type { Invoice, Issuer } from '../api/invoices.api';
 import { toast } from '@/shared/hooks/useToast';
 
 const fmt = (n: number) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(Number(n || 0));
@@ -28,17 +28,20 @@ export default function InvoicesPage() {
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({ search: '', estado: '', from: '', to: '' });
   const [sending, setSending] = useState<number | null>(null);
+  const [issuers, setIssuers] = useState<Issuer[]>([]);
 
   const load = useCallback(async () => {
     if (!pid) return;
     setLoading(true);
     try {
-      const [r1, r2] = await Promise.all([
+      const [r1, r2, r3] = await Promise.all([
         invoicesApi.list({ projectId: pid, ...filters, limit: 100 }),
         invoicesApi.stats(pid),
+        invoicesApi.listIssuers(pid).catch(() => ({ success: false, data: [] as Issuer[] })),
       ]);
       if (r1.success) setInvoices(r1.data || []);
       if (r2.success) setStats(r2.data || null);
+      if (r3.success) setIssuers(r3.data || []);
     } finally { setLoading(false); }
   }, [pid, filters]);
   useEffect(() => { load(); }, [load]);
@@ -83,8 +86,22 @@ export default function InvoicesPage() {
       'Anulación'
     );
     if (motivo === null) return;
+    // Override opcional de empresa emisora (por defecto hereda la de la factura original)
+    let issuerId: number | undefined;
+    if (issuers.length > 1) {
+      const opciones = issuers.map((i, idx) => `${idx + 1}. ${i.razon_social}${i.es_default ? ' (default)' : ''}`).join('\n');
+      const sel = prompt(
+        `Empresa que emite la rectificativa.\n` +
+        `Dejá vacío para usar la misma de la factura original.\n\n${opciones}\n\nNº de empresa (o vacío):`,
+        ''
+      );
+      if (sel && sel.trim()) {
+        const n = parseInt(sel.trim(), 10);
+        if (n >= 1 && n <= issuers.length) issuerId = issuers[n - 1].id;
+      }
+    }
     try {
-      const res = await invoicesApi.rectificar(inv.id, { motivo: motivo || 'Anulación' });
+      const res = await invoicesApi.rectificar(inv.id, { motivo: motivo || 'Anulación', issuerId });
       if (res.success && res.data) {
         toast({ title: '✓ Rectificativa creada', description: res.data.codigo });
         await load();

@@ -6,10 +6,29 @@ export interface InvoiceItem {
   precio_unitario: number;
 }
 
+export interface Issuer {
+  id: number;
+  project_id: number | null;
+  razon_social: string;
+  nif: string;
+  direccion: string | null;
+  ciudad: string | null;
+  cp: string | null;
+  pais: string | null;
+  email: string | null;
+  telefono: string | null;
+  iban: string | null;
+  logo_url: string | null;
+  pie_default: string | null;
+  activo: boolean;
+  es_default: boolean;
+}
+
 export interface CreateInvoiceBody {
   projectId: number;
   conversionId?: number;
   leadId?: number;
+  issuerId?: number;
   clienteNombre: string;
   clienteNif: string;
   clienteDireccion: string;
@@ -100,7 +119,11 @@ export const invoicesApi = {
   send: (id: number, email?: string) => client.post(`/invoices/${id}/send`, email ? { email } : {}),
   markPaid: (id: number, fechaPago?: string) => client.post(`/invoices/${id}/mark-paid`, fechaPago ? { fechaPago } : {}),
   cancel: (id: number) => client.post(`/invoices/${id}/cancel`, {}),
-  rectificar: (id: number, body: { motivo: string; parcial?: number | null }) => client.post<Invoice>(`/invoices/${id}/rectificar`, body),
+  rectificar: (id: number, body: { motivo: string; parcial?: number | null; issuerId?: number }) => client.post<Invoice>(`/invoices/${id}/rectificar`, body),
+  listIssuers: (projectId: number) => client.get<Issuer[]>(`/invoices/issuers?projectId=${projectId}`),
+  createIssuer: (body: Partial<Issuer> & { razonSocial: string; nif: string; projectId?: number | null }) => client.post<Issuer>('/invoices/issuers', body),
+  updateIssuer: (id: number, body: Record<string, unknown>) => client.patch<Issuer>(`/invoices/issuers/${id}`, body),
+  deleteIssuer: (id: number) => client.delete(`/invoices/issuers/${id}`),
   getConfig: (projectId: number) => client.get<ProjectInvoicingConfig>(`/invoices/config?projectId=${projectId}`),
   updateConfig: (body: { projectId: number; piePagoDefault?: string; serieDefault?: string; metodoDefault?: string }) => client.patch('/invoices/config', body),
   listSequences: (projectId: number) => client.get<InvoiceSequence[]>(`/invoices/sequences?projectId=${projectId}`),

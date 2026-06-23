@@ -22,6 +22,19 @@ export async function create(data, userId) {
     const numero = await nextNumero(client, data.projectId, ano, serie);
     const codigo = `${ano}/${String(numero).padStart(4, '0')}`;
 
+    // Resolver emisor (multi-empresa). Si no se eligió, usa el default del proyecto.
+    let iss = null;
+    if (data.issuerId) {
+      const r = await client.query(`SELECT * FROM invoice_issuers WHERE id = $1`, [data.issuerId]);
+      iss = r.rows[0] || null;
+    }
+    if (!iss) {
+      const r = await client.query(
+        `SELECT * FROM invoice_issuers WHERE activo = true AND (project_id IS NULL OR project_id = $1)
+         ORDER BY es_default DESC, id ASC LIMIT 1`, [data.projectId]);
+      iss = r.rows[0] || null;
+    }
+
     const { rows } = await client.query(
       `INSERT INTO invoices (
          project_id, conversion_id, lead_id, serie, ano, numero, codigo,
@@ -29,9 +42,12 @@ export async function create(data, userId) {
          cliente_nombre, cliente_nif, cliente_direccion, cliente_ciudad, cliente_cp, cliente_pais,
          cliente_email, cliente_telefono,
          items, base_imponible, iva_pct, iva_importe, iva_incluido, total,
-         estado, notas, leyenda_iva, metodo_pago, pie_pago, created_by
+         estado, notas, leyenda_iva, metodo_pago, pie_pago, created_by,
+         issuer_id, issuer_razon_social, issuer_nif, issuer_direccion, issuer_ciudad,
+         issuer_cp, issuer_pais, issuer_email, issuer_telefono, issuer_iban, issuer_logo_url
        ) VALUES (
-         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28
+         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,
+         $29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39
        ) RETURNING *`,
       [
         data.projectId, data.conversionId || null, data.leadId || null,
@@ -42,7 +58,9 @@ export async function create(data, userId) {
         JSON.stringify(data.items),
         data.baseImponible, data.ivaPct, data.ivaImporte, !!data.ivaIncluido, data.total,
         data.estado || 'emitida', data.notas || null, data.leyendaIva || null,
-        data.metodoPago, data.piePago || null, userId,
+        data.metodoPago, (data.piePago || iss?.pie_default || null), userId,
+        iss?.id || null, iss?.razon_social || null, iss?.nif || null, iss?.direccion || null, iss?.ciudad || null,
+        iss?.cp || null, iss?.pais || null, iss?.email || null, iss?.telefono || null, iss?.iban || null, iss?.logo_url || null,
       ]
     );
 
@@ -84,7 +102,7 @@ export async function findById(id) {
 
 // Crea una factura rectificativa (de abono) a partir de una factura original.
 // Importes negativos, serie 'R', referencia a la original.
-export async function createRectificativa(originalId, { motivo, userId, parcial = null }) {
+export async function createRectificativa(originalId, { motivo, userId, parcial = null, overrideIssuerId = null }) {
   const client = await getClient();
   try {
     await client.query('BEGIN');
@@ -109,6 +127,26 @@ export async function createRectificativa(originalId, { motivo, userId, parcial 
     const ivaImp = -Math.abs(Number(orig.iva_importe || 0)) * (parcial != null ? Math.abs(factor) : 1);
     const total = parcial != null ? -Math.abs(Number(parcial)) : -Math.abs(Number(orig.total || 0));
 
+    // Permite cambiar el emisor de la rectificativa; si no, hereda el de la original
+    let issObj = null;
+    if (overrideIssuerId) {
+      const r = await client.query(`SELECT * FROM invoice_issuers WHERE id = $1`, [overrideIssuerId]);
+      issObj = r.rows[0] || null;
+    }
+    const iss = {
+      id: issObj?.id || orig.issuer_id,
+      razon_social: issObj?.razon_social ?? orig.issuer_razon_social,
+      nif: issObj?.nif ?? orig.issuer_nif,
+      direccion: issObj?.direccion ?? orig.issuer_direccion,
+      ciudad: issObj?.ciudad ?? orig.issuer_ciudad,
+      cp: issObj?.cp ?? orig.issuer_cp,
+      pais: issObj?.pais ?? orig.issuer_pais,
+      email: issObj?.email ?? orig.issuer_email,
+      telefono: issObj?.telefono ?? orig.issuer_telefono,
+      iban: issObj?.iban ?? orig.issuer_iban,
+      logo_url: issObj?.logo_url ?? orig.issuer_logo_url,
+    };
+
     const { rows } = await client.query(
       `INSERT INTO invoices (
          project_id, conversion_id, lead_id, serie, ano, numero, codigo, fecha_emision,
@@ -116,9 +154,12 @@ export async function createRectificativa(originalId, { motivo, userId, parcial 
          cliente_email, cliente_telefono,
          items, base_imponible, iva_pct, iva_importe, iva_incluido, total,
          estado, notas, leyenda_iva, metodo_pago, pie_pago, created_by,
-         tipo, rectifica_id, rectifica_codigo, motivo_rectificacion
+         tipo, rectifica_id, rectifica_codigo, motivo_rectificacion,
+         issuer_id, issuer_razon_social, issuer_nif, issuer_direccion, issuer_ciudad,
+         issuer_cp, issuer_pais, issuer_email, issuer_telefono, issuer_iban, issuer_logo_url
        ) VALUES ($1,$2,$3,$4,$5,$6,$7,CURRENT_DATE,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,
-         'emitida',$22,$23,$24,$25,$26,'rectificativa',$27,$28,$29) RETURNING *`,
+         'emitida',$22,$23,$24,$25,$26,'rectificativa',$27,$28,$29,
+         $30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40) RETURNING *`,
       [
         orig.project_id, orig.conversion_id, orig.lead_id, serie, ano, numero, codigo,
         orig.cliente_nombre, orig.cliente_nif, orig.cliente_direccion, orig.cliente_ciudad, orig.cliente_cp, orig.cliente_pais,
@@ -127,6 +168,8 @@ export async function createRectificativa(originalId, { motivo, userId, parcial 
         `Factura rectificativa de ${orig.codigo}. ${motivo || ''}`.trim(),
         orig.leyenda_iva, orig.metodo_pago, orig.pie_pago, userId,
         originalId, orig.codigo, motivo || 'Anulación',
+        iss.id || null, iss.razon_social, iss.nif, iss.direccion, iss.ciudad,
+        iss.cp, iss.pais, iss.email, iss.telefono, iss.iban, iss.logo_url,
       ]
     );
     await client.query('COMMIT');
@@ -218,6 +261,63 @@ export async function getLeadFiscalData(leadId) {
     [leadId]
   );
   return rows[0] || null;
+}
+
+// ─── Emisores (multi-empresa) ────────────────────────────────────────────────
+export async function listIssuers(projectId) {
+  const { rows } = await query(
+    `SELECT * FROM invoice_issuers
+     WHERE activo = true AND (project_id IS NULL OR project_id = $1)
+     ORDER BY es_default DESC, razon_social ASC`,
+    [projectId]
+  );
+  return rows;
+}
+
+export async function getIssuer(id) {
+  const { rows } = await query(`SELECT * FROM invoice_issuers WHERE id = $1`, [id]);
+  return rows[0] || null;
+}
+
+export async function getDefaultIssuer(projectId) {
+  const { rows } = await query(
+    `SELECT * FROM invoice_issuers
+     WHERE activo = true AND (project_id IS NULL OR project_id = $1)
+     ORDER BY es_default DESC, id ASC LIMIT 1`,
+    [projectId]
+  );
+  return rows[0] || null;
+}
+
+export async function createIssuer(d, userId) {
+  const { rows } = await query(
+    `INSERT INTO invoice_issuers
+       (project_id, razon_social, nif, direccion, ciudad, cp, pais, email, telefono, iban, logo_url, pie_default, es_default, created_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
+    [d.projectId || null, d.razonSocial, d.nif, d.direccion || null, d.ciudad || null, d.cp || null,
+     d.pais || 'España', d.email || null, d.telefono || null, d.iban || null, d.logoUrl || null,
+     d.pieDefault || null, !!d.esDefault, userId]
+  );
+  return rows[0];
+}
+
+export async function updateIssuer(id, d) {
+  const { rows } = await query(
+    `UPDATE invoice_issuers SET
+       razon_social = COALESCE($2, razon_social), nif = COALESCE($3, nif),
+       direccion = $4, ciudad = $5, cp = $6, pais = COALESCE($7, pais),
+       email = $8, telefono = $9, iban = $10, logo_url = $11, pie_default = $12,
+       es_default = COALESCE($13, es_default), activo = COALESCE($14, activo), updated_at = NOW()
+     WHERE id = $1 RETURNING *`,
+    [id, d.razonSocial ?? null, d.nif ?? null, d.direccion ?? null, d.ciudad ?? null, d.cp ?? null,
+     d.pais ?? null, d.email ?? null, d.telefono ?? null, d.iban ?? null, d.logoUrl ?? null,
+     d.pieDefault ?? null, d.esDefault ?? null, d.activo ?? null]
+  );
+  return rows[0];
+}
+
+export async function deleteIssuer(id) {
+  await query(`UPDATE invoice_issuers SET activo = false, updated_at = NOW() WHERE id = $1`, [id]);
 }
 
 export async function getProjectInvoicerData(projectId) {

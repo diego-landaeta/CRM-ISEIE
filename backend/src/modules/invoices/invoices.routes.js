@@ -7,6 +7,10 @@ router.use(verifyToken);
 
 router.get('/',                       ctrl.list);
 router.get('/stats',                  ctrl.stats);
+router.get('/issuers',                ctrl.listIssuers);
+router.post('/issuers',               ctrl.createIssuer);
+router.patch('/issuers/:id',          ctrl.updateIssuer);
+router.delete('/issuers/:id',         ctrl.deleteIssuer);
 router.get('/config',                 ctrl.getConfig);
 router.patch('/config',               ctrl.updateConfig);
 router.get('/sequences',              ctrl.listSequences);

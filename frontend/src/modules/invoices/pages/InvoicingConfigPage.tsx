@@ -4,7 +4,7 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import { invoicesApi } from '../api/invoices.api';
-import type { InvoiceSequence } from '../api/invoices.api';
+import type { InvoiceSequence, Issuer } from '../api/invoices.api';
 import { toast } from '@/shared/hooks/useToast';
 
 export default function InvoicingConfigPage() {
@@ -18,6 +18,8 @@ export default function InvoicingConfigPage() {
   const [metodoDefault, setMetodoDefault] = useState('transferencia');
   const [sequences, setSequences] = useState<InvoiceSequence[]>([]);
   const [saving, setSaving] = useState(false);
+  const [issuers, setIssuers] = useState<Issuer[]>([]);
+  const [editingIssuer, setEditingIssuer] = useState<Partial<Issuer> | null>(null);
 
   // Reset secuencia
   const [resetAno, setResetAno] = useState(new Date().getFullYear());
@@ -27,9 +29,10 @@ export default function InvoicingConfigPage() {
 
   const load = useCallback(async () => {
     if (!pid) return;
-    const [cfg, seqs] = await Promise.all([
+    const [cfg, seqs, iss] = await Promise.all([
       invoicesApi.getConfig(pid),
       invoicesApi.listSequences(pid),
+      invoicesApi.listIssuers(pid),
     ]);
     if (cfg.success && cfg.data) {
       setPiePagoDefault(cfg.data.factura_pie_default || '');
@@ -37,7 +40,48 @@ export default function InvoicingConfigPage() {
       setMetodoDefault(cfg.data.factura_metodo_default || 'transferencia');
     }
     if (seqs.success) setSequences(seqs.data || []);
+    if (iss.success) setIssuers(iss.data || []);
   }, [pid]);
+
+  async function saveIssuer() {
+    if (!editingIssuer) return;
+    if (!editingIssuer.razon_social?.trim() || !editingIssuer.nif?.trim()) {
+      toast({ title: 'Faltan datos', description: 'Razón social y NIF son obligatorios', variant: 'destructive' });
+      return;
+    }
+    try {
+      const body = {
+        razonSocial: editingIssuer.razon_social, nif: editingIssuer.nif,
+        direccion: editingIssuer.direccion, ciudad: editingIssuer.ciudad, cp: editingIssuer.cp,
+        pais: editingIssuer.pais || 'España', email: editingIssuer.email, telefono: editingIssuer.telefono,
+        iban: editingIssuer.iban, pieDefault: editingIssuer.pie_default, esDefault: editingIssuer.es_default,
+        projectId: pid,
+      };
+      const res = editingIssuer.id
+        ? await invoicesApi.updateIssuer(editingIssuer.id, body)
+        : await invoicesApi.createIssuer(body);
+      if (res.success) {
+        toast({ title: editingIssuer.id ? '✓ Empresa actualizada' : '✓ Empresa añadida' });
+        setEditingIssuer(null);
+        await load();
+      } else {
+        toast({ title: 'Error', description: (res as { error?: string }).error, variant: 'destructive' });
+      }
+    } catch (e: any) {
+      toast({ title: 'Error', description: e?.data?.error || e?.message, variant: 'destructive' });
+    }
+  }
+
+  async function removeIssuer(id: number) {
+    if (!confirm('¿Eliminar esta empresa emisora? Las facturas ya emitidas conservan sus datos.')) return;
+    try {
+      await invoicesApi.deleteIssuer(id);
+      toast({ title: 'Empresa eliminada' });
+      await load();
+    } catch (e: any) {
+      toast({ title: 'Error', description: e?.message, variant: 'destructive' });
+    }
+  }
   useEffect(() => { load(); }, [load]);
 
   async function saveConfig() {
@@ -113,6 +157,68 @@ export default function InvoicingConfigPage() {
           className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50">
           <FloppyDisk size={14} weight="bold" /> {saving ? 'Guardando…' : 'Guardar defaults'}
         </button>
+      </div>
+
+      {/* EMPRESAS EMISORAS (multi-emisor) */}
+      <div className="bg-card border border-border rounded-lg p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-semibold text-sm">Empresas emisoras</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">Empresas desde las que se pueden emitir facturas. Al crear una factura se elige cuál usar.</p>
+          </div>
+          <button onClick={() => setEditingIssuer({ pais: 'España', es_default: issuers.length === 0 })}
+            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90">
+            + Añadir empresa
+          </button>
+        </div>
+
+        {issuers.length === 0 ? (
+          <p className="text-xs text-muted-foreground italic">Aún no hay empresas. Añadí al menos una para poder elegir el emisor al facturar.</p>
+        ) : (
+          <div className="space-y-2">
+            {issuers.map(iss => (
+              <div key={iss.id} className="flex items-center justify-between border border-border rounded-md px-3 py-2">
+                <div>
+                  <div className="text-sm font-medium flex items-center gap-2">
+                    {iss.razon_social}
+                    {iss.es_default && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">DEFAULT</span>}
+                  </div>
+                  <div className="text-[11px] text-muted-foreground">{iss.nif}{iss.ciudad ? ` · ${iss.ciudad}` : ''}{iss.iban ? ` · ${iss.iban}` : ''}</div>
+                </div>
+                <div className="flex gap-1">
+                  <button onClick={() => setEditingIssuer(iss)} className="h-7 px-2 rounded border border-border text-[11px] hover:bg-muted">Editar</button>
+                  <button onClick={() => removeIssuer(iss.id)} className="h-7 px-2 rounded border border-red-300 text-[11px] text-red-600 hover:bg-red-50">Eliminar</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {editingIssuer && (
+          <div className="border border-primary/40 rounded-md p-4 space-y-2 bg-primary/5">
+            <h4 className="text-xs font-bold uppercase text-muted-foreground">{editingIssuer.id ? 'Editar empresa' : 'Nueva empresa'}</h4>
+            <div className="grid grid-cols-2 gap-2">
+              <input placeholder="Razón social *" value={editingIssuer.razon_social || ''} onChange={e => setEditingIssuer({ ...editingIssuer, razon_social: e.target.value })} className="h-9 px-2 rounded border border-border bg-background text-sm" />
+              <input placeholder="NIF / CIF *" value={editingIssuer.nif || ''} onChange={e => setEditingIssuer({ ...editingIssuer, nif: e.target.value })} className="h-9 px-2 rounded border border-border bg-background text-sm" />
+              <input placeholder="Dirección" value={editingIssuer.direccion || ''} onChange={e => setEditingIssuer({ ...editingIssuer, direccion: e.target.value })} className="h-9 px-2 rounded border border-border bg-background text-sm col-span-2" />
+              <input placeholder="Ciudad" value={editingIssuer.ciudad || ''} onChange={e => setEditingIssuer({ ...editingIssuer, ciudad: e.target.value })} className="h-9 px-2 rounded border border-border bg-background text-sm" />
+              <input placeholder="Código postal" value={editingIssuer.cp || ''} onChange={e => setEditingIssuer({ ...editingIssuer, cp: e.target.value })} className="h-9 px-2 rounded border border-border bg-background text-sm" />
+              <input placeholder="País" value={editingIssuer.pais || ''} onChange={e => setEditingIssuer({ ...editingIssuer, pais: e.target.value })} className="h-9 px-2 rounded border border-border bg-background text-sm" />
+              <input placeholder="Email" value={editingIssuer.email || ''} onChange={e => setEditingIssuer({ ...editingIssuer, email: e.target.value })} className="h-9 px-2 rounded border border-border bg-background text-sm" />
+              <input placeholder="Teléfono" value={editingIssuer.telefono || ''} onChange={e => setEditingIssuer({ ...editingIssuer, telefono: e.target.value })} className="h-9 px-2 rounded border border-border bg-background text-sm" />
+              <input placeholder="IBAN" value={editingIssuer.iban || ''} onChange={e => setEditingIssuer({ ...editingIssuer, iban: e.target.value })} className="h-9 px-2 rounded border border-border bg-background text-sm" />
+            </div>
+            <textarea placeholder="Pie de página por defecto (instrucciones de pago, etc.)" value={editingIssuer.pie_default || ''} onChange={e => setEditingIssuer({ ...editingIssuer, pie_default: e.target.value })} rows={2} className="w-full px-2 py-1.5 rounded border border-border bg-background text-sm" />
+            <label className="flex items-center gap-2 text-xs">
+              <input type="checkbox" checked={!!editingIssuer.es_default} onChange={e => setEditingIssuer({ ...editingIssuer, es_default: e.target.checked })} />
+              Empresa por defecto (se preselecciona al facturar)
+            </label>
+            <div className="flex gap-2">
+              <button onClick={saveIssuer} className="h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90">Guardar</button>
+              <button onClick={() => setEditingIssuer(null)} className="h-9 px-3 rounded-md border border-border text-sm hover:bg-muted">Cancelar</button>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="bg-card border border-border rounded-lg p-5 space-y-4">
