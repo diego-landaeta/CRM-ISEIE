@@ -233,10 +233,10 @@ export async function runBackfill(accountId, days = 90) {
     logger.info({ account_id: accountId, project_id: projectId, rows: { campaign: campRows.length, adset: adsetRows.length, ad: adRows.length } }, 'Meta backfill completo');
     return { rows: total, days, breakdown: { campaign: campRows.length, adset: adsetRows.length, ad: adRows.length } };
   } catch (err) {
-    logger.error({ err: err.message, project_id: projectId }, 'Meta backfill error');
+    logger.error({ err: err.message, account_id: accountId, project_id: projectId }, 'Meta backfill error');
     await query(
-      `UPDATE meta_ad_accounts SET last_sync_status='error', last_sync_error=$2 WHERE project_id=$1`,
-      [projectId, err.message]
+      `UPDATE meta_ad_accounts SET last_sync_status='error', last_sync_error=$2 WHERE id=$1`,
+      [accountId, err.message]
     );
     throw err;
   }

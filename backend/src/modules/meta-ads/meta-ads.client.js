@@ -20,38 +20,55 @@ function buildUrl(path, accessToken) {
   return `${base}${sep}access_token=${encodeURIComponent(accessToken)}`;
 }
 
+// Códigos/subcódigos transitorios: la petición es válida pero Meta la rechaza por
+// carga temporal ("Please reduce the amount of data..."). Reintentar suele resolverlo.
+const RATE_LIMIT_CODES = new Set([17, 4, 32, 613]);
+const TRANSIENT_SUBCODES = new Set([1504018, 1504033, 99]); // 1504018 = data too large / temporal
+const TRANSIENT_CODES = new Set([1, 2]); // 1=unknown, 2=service temporarily unavailable
+
+function metaErrorMessage(err) {
+  // error_user_msg trae el detalle legible cuando existe; si no, el message genérico.
+  const detail = err.error_user_msg || err.message || 'Error desconocido';
+  return `Meta API: ${detail} (code ${err.code}${err.error_subcode ? `/${err.error_subcode}` : ''})`;
+}
+
 async function metaFetch(path, accessToken, { method = 'GET' } = {}) {
   const url = buildUrl(path, accessToken);
-  const res = await fetch(url, { method });
-  const data = await res.json();
-  // Rate limit headers
-  const usage = res.headers.get('x-business-use-case-usage');
-  const adUsage = res.headers.get('x-ad-account-usage');
-  if (usage || adUsage) {
-    try {
-      const parsed = JSON.parse(usage || adUsage);
-      const peak = Object.values(parsed).flat().reduce((m, v) => Math.max(m, v.call_count || 0, v.total_cputime || 0, v.total_time || 0), 0);
-      if (peak >= 75) {
-        logger.warn({ peak, usage, adUsage }, 'Meta rate limit alto, pausando 90s');
-        await sleep(90_000);
-      }
-    } catch { /* header malformado, ignorar */ }
-  }
-  if (data?.error) {
+  const MAX_RETRIES = 3;
+  let attempt = 0;
+  while (true) {
+    const res = await fetch(url, { method });
+    const data = await res.json();
+    // Rate limit headers
+    const usage = res.headers.get('x-business-use-case-usage');
+    const adUsage = res.headers.get('x-ad-account-usage');
+    if (usage || adUsage) {
+      try {
+        const parsed = JSON.parse(usage || adUsage);
+        const peak = Object.values(parsed).flat().reduce((m, v) => Math.max(m, v.call_count || 0, v.total_cputime || 0, v.total_time || 0), 0);
+        if (peak >= 75) {
+          logger.warn({ peak, usage, adUsage }, 'Meta rate limit alto, pausando 90s');
+          await sleep(90_000);
+        }
+      } catch { /* header malformado, ignorar */ }
+    }
+    if (!data?.error) return data;
+
     const code = data.error.code;
     const subcode = data.error.error_subcode;
-    // Rate limit / throttle: backoff y reintentar 1 vez
-    if (code === 17 || code === 4 || code === 32 || code === 613) {
-      logger.warn({ code, subcode, message: data.error.message }, 'Meta rate limit, esperando 120s y reintentando');
-      await sleep(120_000);
-      const retryRes = await fetch(url, { method });
-      const retryData = await retryRes.json();
-      if (retryData?.error) throw new Error(`Meta API: ${retryData.error.message} (code ${retryData.error.code})`);
-      return retryData;
+    const isRateLimit = RATE_LIMIT_CODES.has(code);
+    const isTransient = TRANSIENT_CODES.has(code) || TRANSIENT_SUBCODES.has(subcode);
+
+    if ((isRateLimit || isTransient) && attempt < MAX_RETRIES) {
+      attempt++;
+      // Rate limit: esperas largas. Transitorio: backoff creciente más corto.
+      const waitMs = isRateLimit ? 120_000 : 15_000 * attempt;
+      logger.warn({ code, subcode, attempt, waitMs, message: data.error.message }, 'Meta error reintentable, esperando y reintentando');
+      await sleep(waitMs);
+      continue;
     }
-    throw new Error(`Meta API: ${data.error.message} (code ${code}${subcode ? `/${subcode}` : ''})`);
+    throw new Error(metaErrorMessage(data.error));
   }
-  return data;
 }
 
 /**

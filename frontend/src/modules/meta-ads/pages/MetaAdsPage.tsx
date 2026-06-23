@@ -191,10 +191,10 @@ export default function MetaAdsPage() {
                 </>
               )}
             </p>
-            {filterAccountId != null && account.last_sync_error && (
-              <p className="text-[11px] text-red-600 mt-0.5 truncate" title={account.last_sync_error}>
+            {!(filterAccountId == null && accounts.length > 1) && account.last_sync_error && (
+              <p className="text-[11px] text-red-600 mt-0.5" title={account.last_sync_error}>
                 <Warning size={11} className="inline mr-0.5" />
-                {account.last_sync_error}
+                Motivo: {account.last_sync_error}
               </p>
             )}
           </div>
