@@ -48,6 +48,7 @@ import changeRequestsModule from './modules/change-requests/index.js';
 import { startEmailSequenceScheduler } from './jobs/emailSequenceScheduler.js';
 import { startDocumentOrphanScheduler } from './jobs/documentOrphanScheduler.js';
 import { startGoogleAdsTokenScheduler } from './jobs/googleAdsTokenScheduler.js';
+import { startMetaAdsSyncScheduler } from './jobs/metaAdsSyncScheduler.js';
 import { startReminderScheduler } from './jobs/reminderScheduler.js';
 import { startWooCommerceSyncScheduler } from './jobs/wooCommerceSyncScheduler.js';
 import { startStripePaymentsSyncScheduler } from './jobs/stripePaymentsSyncScheduler.js';
@@ -262,6 +263,14 @@ if (process.env.NODE_ENV !== 'test') {
         logger.info('Google Ads token scheduler arrancado');
       } catch (err) {
         logger.error({ err }, 'Google Ads token scheduler fallo al arrancar');
+      }
+    }
+    if (process.env.META_SYNC_DISABLED !== '1') {
+      try {
+        startMetaAdsSyncScheduler();
+        logger.info('Meta Ads sync scheduler arrancado');
+      } catch (err) {
+        logger.error({ err }, 'Meta Ads sync scheduler fallo al arrancar');
       }
     }
     if (process.env.REMINDER_DISABLED !== '1') {

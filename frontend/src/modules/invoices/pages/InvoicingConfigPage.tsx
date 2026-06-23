@@ -55,7 +55,7 @@ export default function InvoicingConfigPage() {
         direccion: editingIssuer.direccion, ciudad: editingIssuer.ciudad, cp: editingIssuer.cp,
         pais: editingIssuer.pais || 'España', email: editingIssuer.email, telefono: editingIssuer.telefono,
         iban: editingIssuer.iban, pieDefault: editingIssuer.pie_default, esDefault: editingIssuer.es_default,
-        projectId: pid,
+        logoUrl: editingIssuer.logo_url, projectId: pid,
       };
       const res = editingIssuer.id
         ? await invoicesApi.updateIssuer(editingIssuer.id, body)
@@ -207,7 +207,14 @@ export default function InvoicingConfigPage() {
               <input placeholder="Email" value={editingIssuer.email || ''} onChange={e => setEditingIssuer({ ...editingIssuer, email: e.target.value })} className="h-9 px-2 rounded border border-border bg-background text-sm" />
               <input placeholder="Teléfono" value={editingIssuer.telefono || ''} onChange={e => setEditingIssuer({ ...editingIssuer, telefono: e.target.value })} className="h-9 px-2 rounded border border-border bg-background text-sm" />
               <input placeholder="IBAN" value={editingIssuer.iban || ''} onChange={e => setEditingIssuer({ ...editingIssuer, iban: e.target.value })} className="h-9 px-2 rounded border border-border bg-background text-sm" />
+              <input placeholder="Logo (URL de la imagen)" value={editingIssuer.logo_url || ''} onChange={e => setEditingIssuer({ ...editingIssuer, logo_url: e.target.value })} className="h-9 px-2 rounded border border-border bg-background text-sm col-span-2" />
             </div>
+            {editingIssuer.logo_url && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>Vista previa logo:</span>
+                <img src={editingIssuer.logo_url} alt="logo" className="h-10 max-w-[160px] object-contain border border-border rounded bg-white" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+              </div>
+            )}
             <textarea placeholder="Pie de página por defecto (instrucciones de pago, etc.)" value={editingIssuer.pie_default || ''} onChange={e => setEditingIssuer({ ...editingIssuer, pie_default: e.target.value })} rows={2} className="w-full px-2 py-1.5 rounded border border-border bg-background text-sm" />
             <label className="flex items-center gap-2 text-xs">
               <input type="checkbox" checked={!!editingIssuer.es_default} onChange={e => setEditingIssuer({ ...editingIssuer, es_default: e.target.checked })} />
