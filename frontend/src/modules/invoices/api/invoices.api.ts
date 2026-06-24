@@ -124,6 +124,12 @@ export const invoicesApi = {
   createIssuer: (body: Partial<Issuer> & { razonSocial: string; nif: string; projectId?: number | null }) => client.post<Issuer>('/invoices/issuers', body),
   updateIssuer: (id: number, body: Record<string, unknown>) => client.patch<Issuer>(`/invoices/issuers/${id}`, body),
   deleteIssuer: (id: number) => client.delete(`/invoices/issuers/${id}`),
+  uploadIssuerLogo: (id: number, file: File) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return client.post<Issuer>(`/invoices/issuers/${id}/logo`, fd);
+  },
+  deleteIssuerLogo: (id: number) => client.delete<Issuer>(`/invoices/issuers/${id}/logo`),
   getConfig: (projectId: number) => client.get<ProjectInvoicingConfig>(`/invoices/config?projectId=${projectId}`),
   updateConfig: (body: { projectId: number; piePagoDefault?: string; serieDefault?: string; metodoDefault?: string }) => client.patch('/invoices/config', body),
   listSequences: (projectId: number) => client.get<InvoiceSequence[]>(`/invoices/sequences?projectId=${projectId}`),

@@ -302,16 +302,26 @@ export async function createIssuer(d, userId) {
 }
 
 export async function updateIssuer(id, d) {
+  // Update parcial: solo toca los campos presentes en `d` (no pisa el resto con null).
+  const COLS = {
+    razonSocial: 'razon_social', nif: 'nif', direccion: 'direccion', ciudad: 'ciudad',
+    cp: 'cp', pais: 'pais', email: 'email', telefono: 'telefono', iban: 'iban',
+    logoUrl: 'logo_url', logoKey: 'logo_key', pieDefault: 'pie_default',
+    esDefault: 'es_default', activo: 'activo',
+  };
+  const sets = [];
+  const params = [id];
+  for (const [key, col] of Object.entries(COLS)) {
+    if (Object.prototype.hasOwnProperty.call(d, key)) {
+      params.push(d[key]);
+      sets.push(`${col} = $${params.length}`);
+    }
+  }
+  if (!sets.length) return getIssuer(id);
+  sets.push('updated_at = NOW()');
   const { rows } = await query(
-    `UPDATE invoice_issuers SET
-       razon_social = COALESCE($2, razon_social), nif = COALESCE($3, nif),
-       direccion = $4, ciudad = $5, cp = $6, pais = COALESCE($7, pais),
-       email = $8, telefono = $9, iban = $10, logo_url = $11, pie_default = $12,
-       es_default = COALESCE($13, es_default), activo = COALESCE($14, activo), updated_at = NOW()
-     WHERE id = $1 RETURNING *`,
-    [id, d.razonSocial ?? null, d.nif ?? null, d.direccion ?? null, d.ciudad ?? null, d.cp ?? null,
-     d.pais ?? null, d.email ?? null, d.telefono ?? null, d.iban ?? null, d.logoUrl ?? null,
-     d.pieDefault ?? null, d.esDefault ?? null, d.activo ?? null]
+    `UPDATE invoice_issuers SET ${sets.join(', ')} WHERE id = $1 RETURNING *`,
+    params
   );
   return rows[0];
 }

@@ -1,8 +1,13 @@
 import { Router } from 'express';
 import { verifyToken } from '../../shared/middleware/auth.js';
+import { uploadImage } from '../../shared/middleware/upload.js';
 import * as ctrl from './invoices.controller.js';
 
 const router = Router();
+
+// Público (sin auth) para que el logo cargue en <img src> y en el PDF.
+router.get('/issuers/:id/logo',       ctrl.getIssuerLogo);
+
 router.use(verifyToken);
 
 router.get('/',                       ctrl.list);
@@ -11,6 +16,8 @@ router.get('/issuers',                ctrl.listIssuers);
 router.post('/issuers',               ctrl.createIssuer);
 router.patch('/issuers/:id',          ctrl.updateIssuer);
 router.delete('/issuers/:id',         ctrl.deleteIssuer);
+router.post('/issuers/:id/logo',      uploadImage, ctrl.uploadIssuerLogo);
+router.delete('/issuers/:id/logo',    ctrl.deleteIssuerLogo);
 router.get('/config',                 ctrl.getConfig);
 router.patch('/config',               ctrl.updateConfig);
 router.get('/sequences',              ctrl.listSequences);

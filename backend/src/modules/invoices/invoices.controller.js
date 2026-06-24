@@ -1,9 +1,24 @@
 import fs from 'fs/promises';
+import crypto from 'crypto';
 import * as model from './invoices.model.js';
 import * as service from './invoices.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
+import { saveLocal, getLocal, deleteLocal } from '../../shared/services/localStorage.service.js';
 import { createInvoiceSchema, setSequenceSchema, updateConfigSchema, issuerSchema } from './invoices.validation.js';
+
+function logoExt(mime) {
+  if (mime === 'image/png') return 'png';
+  if (mime === 'image/webp') return 'webp';
+  if (mime === 'image/svg+xml') return 'svg';
+  return 'jpg';
+}
+function logoMime(ext) {
+  if (ext === 'png') return 'image/png';
+  if (ext === 'webp') return 'image/webp';
+  if (ext === 'svg') return 'image/svg+xml';
+  return 'image/jpeg';
+}
 
 function isAdmin(req) {
   return ['admin', 'superadmin', 'soporte'].includes(req.user?.role);
@@ -182,6 +197,55 @@ export async function deleteIssuer(req, res, next) {
     if (!isAdmin(req)) throw new AppError('Solo administradoras', 403, 'FORBIDDEN');
     await model.deleteIssuer(Number(req.params.id));
     res.json({ success: true });
+  } catch (e) { next(e); }
+}
+
+// Subir logo de empresa emisora al servidor (no solo URL).
+export async function uploadIssuerLogo(req, res, next) {
+  try {
+    if (!isAdmin(req)) throw new AppError('Solo administradoras', 403, 'FORBIDDEN');
+    const id = Number(req.params.id);
+    if (!id) throw new AppError('ID inválido', 400, 'INVALID_ID');
+    if (!req.file) throw new AppError('Imagen requerida (campo file)', 400, 'FILE_REQUIRED');
+    const iss = await model.getIssuer(id);
+    if (!iss) throw new AppError('Empresa no encontrada', 404, 'NOT_FOUND');
+    if (iss.logo_key) { try { await deleteLocal(iss.logo_key); } catch {} }
+
+    const ext = logoExt(req.file.mimetype);
+    const key = `logos/issuer-${id}-${crypto.randomBytes(8).toString('hex')}.${ext}`;
+    await saveLocal(key, req.file.buffer);
+    const logoUrl = `/api/invoices/issuers/${id}/logo?v=${Date.now()}`;
+    const updated = await model.updateIssuer(id, { logoUrl, logoKey: key });
+    res.json({ success: true, data: updated });
+  } catch (e) { next(e); }
+}
+
+export async function getIssuerLogo(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    if (!id) throw new AppError('ID inválido', 400, 'INVALID_ID');
+    const iss = await model.getIssuer(id);
+    if (!iss?.logo_key) return res.status(404).end();
+    const ext = iss.logo_key.split('.').pop();
+    let buffer, size;
+    try { ({ buffer, size } = await getLocal(iss.logo_key)); }
+    catch (e) { if (e.code === 'ENOENT') return res.status(404).end(); throw e; }
+    res.setHeader('Content-Type', logoMime(ext));
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.setHeader('Content-Length', size);
+    res.end(buffer);
+  } catch (e) { next(e); }
+}
+
+export async function deleteIssuerLogo(req, res, next) {
+  try {
+    if (!isAdmin(req)) throw new AppError('Solo administradoras', 403, 'FORBIDDEN');
+    const id = Number(req.params.id);
+    const iss = await model.getIssuer(id);
+    if (!iss) throw new AppError('Empresa no encontrada', 404, 'NOT_FOUND');
+    if (iss.logo_key) { try { await deleteLocal(iss.logo_key); } catch {} }
+    const updated = await model.updateIssuer(id, { logoUrl: null, logoKey: null });
+    res.json({ success: true, data: updated });
   } catch (e) { next(e); }
 }
 

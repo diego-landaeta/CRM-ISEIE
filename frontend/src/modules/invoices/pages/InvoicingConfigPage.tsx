@@ -20,6 +20,8 @@ export default function InvoicingConfigPage() {
   const [saving, setSaving] = useState(false);
   const [issuers, setIssuers] = useState<Issuer[]>([]);
   const [editingIssuer, setEditingIssuer] = useState<Partial<Issuer> | null>(null);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
 
   // Reset secuencia
   const [resetAno, setResetAno] = useState(new Date().getFullYear());
@@ -60,13 +62,24 @@ export default function InvoicingConfigPage() {
       const res = editingIssuer.id
         ? await invoicesApi.updateIssuer(editingIssuer.id, body)
         : await invoicesApi.createIssuer(body);
-      if (res.success) {
-        toast({ title: editingIssuer.id ? '✓ Empresa actualizada' : '✓ Empresa añadida' });
-        setEditingIssuer(null);
-        await load();
-      } else {
+      if (!res.success) {
         toast({ title: 'Error', description: (res as { error?: string }).error, variant: 'destructive' });
+        return;
       }
+      // Si hay un archivo de logo seleccionado, subirlo al servidor usando el id resultante.
+      const savedId = res.data?.id ?? editingIssuer.id;
+      if (logoFile && savedId) {
+        setUploadingLogo(true);
+        try {
+          await invoicesApi.uploadIssuerLogo(savedId, logoFile);
+        } catch (e: any) {
+          toast({ title: 'Logo no subido', description: e?.data?.error || e?.message, variant: 'destructive' });
+        } finally { setUploadingLogo(false); }
+      }
+      toast({ title: editingIssuer.id ? '✓ Empresa actualizada' : '✓ Empresa añadida' });
+      setEditingIssuer(null);
+      setLogoFile(null);
+      await load();
     } catch (e: any) {
       toast({ title: 'Error', description: e?.data?.error || e?.message, variant: 'destructive' });
     }
@@ -166,7 +179,7 @@ export default function InvoicingConfigPage() {
             <h3 className="font-semibold text-sm">Empresas emisoras</h3>
             <p className="text-xs text-muted-foreground mt-0.5">Empresas desde las que se pueden emitir facturas. Al crear una factura se elige cuál usar.</p>
           </div>
-          <button onClick={() => setEditingIssuer({ pais: 'España', es_default: issuers.length === 0 })}
+          <button onClick={() => { setLogoFile(null); setEditingIssuer({ pais: 'España', es_default: issuers.length === 0 }); }}
             className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90">
             + Añadir empresa
           </button>
@@ -186,7 +199,7 @@ export default function InvoicingConfigPage() {
                   <div className="text-[11px] text-muted-foreground">{iss.nif}{iss.ciudad ? ` · ${iss.ciudad}` : ''}{iss.iban ? ` · ${iss.iban}` : ''}</div>
                 </div>
                 <div className="flex gap-1">
-                  <button onClick={() => setEditingIssuer(iss)} className="h-7 px-2 rounded border border-border text-[11px] hover:bg-muted">Editar</button>
+                  <button onClick={() => { setLogoFile(null); setEditingIssuer(iss); }} className="h-7 px-2 rounded border border-border text-[11px] hover:bg-muted">Editar</button>
                   <button onClick={() => removeIssuer(iss.id)} className="h-7 px-2 rounded border border-red-300 text-[11px] text-red-600 hover:bg-red-50">Eliminar</button>
                 </div>
               </div>
@@ -207,22 +220,32 @@ export default function InvoicingConfigPage() {
               <input placeholder="Email" value={editingIssuer.email || ''} onChange={e => setEditingIssuer({ ...editingIssuer, email: e.target.value })} className="h-9 px-2 rounded border border-border bg-background text-sm" />
               <input placeholder="Teléfono" value={editingIssuer.telefono || ''} onChange={e => setEditingIssuer({ ...editingIssuer, telefono: e.target.value })} className="h-9 px-2 rounded border border-border bg-background text-sm" />
               <input placeholder="IBAN" value={editingIssuer.iban || ''} onChange={e => setEditingIssuer({ ...editingIssuer, iban: e.target.value })} className="h-9 px-2 rounded border border-border bg-background text-sm" />
-              <input placeholder="Logo (URL de la imagen)" value={editingIssuer.logo_url || ''} onChange={e => setEditingIssuer({ ...editingIssuer, logo_url: e.target.value })} className="h-9 px-2 rounded border border-border bg-background text-sm col-span-2" />
+              <input placeholder="Logo (URL de la imagen)" value={editingIssuer.logo_url || ''} onChange={e => { setEditingIssuer({ ...editingIssuer, logo_url: e.target.value }); setLogoFile(null); }} className="h-9 px-2 rounded border border-border bg-background text-sm col-span-2" />
             </div>
-            {editingIssuer.logo_url && (
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <span>Vista previa logo:</span>
-                <img src={editingIssuer.logo_url} alt="logo" className="h-10 max-w-[160px] object-contain border border-border rounded bg-white" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-              </div>
-            )}
+            <div className="flex items-center gap-3 flex-wrap">
+              <label className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border text-sm cursor-pointer hover:bg-muted">
+                Subir logo del servidor
+                <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="hidden"
+                  onChange={e => { const f = e.target.files?.[0] || null; setLogoFile(f); }} />
+              </label>
+              <span className="text-xs text-muted-foreground">{logoFile ? `Archivo: ${logoFile.name}` : 'O pegá una URL arriba'}</span>
+              {(logoFile || editingIssuer.logo_url) && (
+                <img
+                  src={logoFile ? URL.createObjectURL(logoFile) : (editingIssuer.logo_url as string)}
+                  alt="logo"
+                  className="h-10 max-w-[160px] object-contain border border-border rounded bg-white"
+                  onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                />
+              )}
+            </div>
             <textarea placeholder="Pie de página por defecto (instrucciones de pago, etc.)" value={editingIssuer.pie_default || ''} onChange={e => setEditingIssuer({ ...editingIssuer, pie_default: e.target.value })} rows={2} className="w-full px-2 py-1.5 rounded border border-border bg-background text-sm" />
             <label className="flex items-center gap-2 text-xs">
               <input type="checkbox" checked={!!editingIssuer.es_default} onChange={e => setEditingIssuer({ ...editingIssuer, es_default: e.target.checked })} />
               Empresa por defecto (se preselecciona al facturar)
             </label>
             <div className="flex gap-2">
-              <button onClick={saveIssuer} className="h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90">Guardar</button>
-              <button onClick={() => setEditingIssuer(null)} className="h-9 px-3 rounded-md border border-border text-sm hover:bg-muted">Cancelar</button>
+              <button onClick={saveIssuer} disabled={uploadingLogo} className="h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50">{uploadingLogo ? 'Subiendo logo…' : 'Guardar'}</button>
+              <button onClick={() => { setEditingIssuer(null); setLogoFile(null); }} className="h-9 px-3 rounded-md border border-border text-sm hover:bg-muted">Cancelar</button>
             </div>
           </div>
         )}
