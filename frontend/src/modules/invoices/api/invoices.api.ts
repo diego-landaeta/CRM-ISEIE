@@ -104,6 +104,16 @@ export interface LeadFiscalData {
   pais_fiscal: string | null;
 }
 
+export interface VentaSinFactura {
+  conversion_id: number;
+  lead_id: number;
+  cliente_nombre: string;
+  producto_contratado: string | null;
+  importe_total: number;
+  fecha_conversion: string | null;
+  metodo_pago: string | null;
+}
+
 export const invoicesApi = {
   list: (params: { projectId: number; estado?: string; search?: string; from?: string; to?: string; page?: number; limit?: number }) => {
     const qs = new URLSearchParams();
@@ -111,6 +121,7 @@ export const invoicesApi = {
     return client.get<Invoice[]>(`/invoices?${qs}`);
   },
   stats: (projectId: number) => client.get<{ total: number; emitidas: number; enviadas: number; pagadas: number; canceladas: number; total_facturado: number; total_cobrado: number; total_iva: number }>(`/invoices/stats?projectId=${projectId}`),
+  ventasSinFactura: (projectId: number) => client.get<VentaSinFactura[]>(`/invoices/ventas-sin-factura?projectId=${projectId}`),
   get: (id: number) => client.get<Invoice>(`/invoices/${id}`),
   byConversion: (conversionId: number) => client.get<Invoice | null>(`/invoices/by-conversion/${conversionId}`),
   leadFiscalData: (leadId: number) => client.get<LeadFiscalData>(`/invoices/lead-fiscal/${leadId}`),

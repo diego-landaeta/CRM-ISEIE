@@ -249,6 +249,13 @@ export async function deleteIssuerLogo(req, res, next) {
   } catch (e) { next(e); }
 }
 
+export async function ventasSinFactura(req, res, next) {
+  try {
+    const pid = projectId(req);
+    res.json({ success: true, data: await model.listVentasSinFactura(pid) });
+  } catch (e) { next(e); }
+}
+
 export async function listSequences(req, res, next) {
   try {
     const pid = projectId(req);

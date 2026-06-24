@@ -27,7 +27,6 @@ const NAV_SECTIONS = [
     items: [
       { to: '/dashboard',  label: 'Dashboard',  icon: SquaresFour, end: true },
       { to: '/leads',      label: 'Prospectos', icon: Users,       sectionPrefixes: ['/leads'] },
-      { to: '/leads/audiences', label: 'Audiencias Meta', icon: Megaphone, roles: ['admin', 'superadmin'] },
       { to: '/leads/revision-duplicados', label: 'Revisión duplicados', icon: GitMerge, roles: ['admin', 'superadmin'] },
       { to: '/clients',    label: 'Clientes',   icon: UserCheck,   sectionPrefixes: ['/clients'] },
       { to: '/matriculas', label: 'Matrículas', icon: UserCheck },

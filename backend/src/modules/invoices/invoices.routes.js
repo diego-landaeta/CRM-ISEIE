@@ -12,6 +12,7 @@ router.use(verifyToken);
 
 router.get('/',                       ctrl.list);
 router.get('/stats',                  ctrl.stats);
+router.get('/ventas-sin-factura',     ctrl.ventasSinFactura);
 router.get('/issuers',                ctrl.listIssuers);
 router.post('/issuers',               ctrl.createIssuer);
 router.patch('/issuers/:id',          ctrl.updateIssuer);

@@ -12,6 +12,7 @@ interface Props {
   conversionId: number;
   items: InvoiceItem[];
   size?: 'sm' | 'md';
+  onInvoiced?: () => void;
 }
 
 // Boton "Ver factura" que aparece en la conversion.
@@ -19,7 +20,7 @@ interface Props {
 // - Si NO existe: chequea datos fiscales del lead.
 //   - Si todos los obligatorios estan completos: emite directo y abre PDF
 //   - Si faltan: abre modal de datos fiscales
-export default function InvoiceButton({ projectId, leadId, conversionId, items, size = 'sm' }: Props) {
+export default function InvoiceButton({ projectId, leadId, conversionId, items, size = 'sm', onInvoiced }: Props) {
   const [existingId, setExistingId] = useState<number | null>(null);
   const [showDialog, setShowDialog] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -72,6 +73,7 @@ export default function InvoiceButton({ projectId, leadId, conversionId, items, 
           toast({ title: '✓ Factura emitida', description: res.data.codigo });
           setExistingId(res.data.id);
           window.open(invoicesApi.pdfUrl(res.data.id), '_blank');
+          onInvoiced?.();
         } else {
           toast({ title: 'Error', description: (res as { error?: string }).error, variant: 'destructive' });
         }
@@ -103,6 +105,7 @@ export default function InvoiceButton({ projectId, leadId, conversionId, items, 
               setShowDialog(false);
               setExistingId(id);
               window.open(invoicesApi.pdfUrl(id), '_blank');
+              onInvoiced?.();
             }}
           />
         </Suspense>

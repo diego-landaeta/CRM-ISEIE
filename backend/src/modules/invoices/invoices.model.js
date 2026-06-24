@@ -330,6 +330,23 @@ export async function deleteIssuer(id) {
   await query(`UPDATE invoice_issuers SET activo = false, updated_at = NOW() WHERE id = $1`, [id]);
 }
 
+// Ventas (conversiones) con importe > 0 que aún NO tienen factura emitida (no cancelada).
+export async function listVentasSinFactura(projectId) {
+  const { rows } = await query(
+    `SELECT c.id AS conversion_id, c.lead_id, l.nombre AS cliente_nombre,
+            c.producto_contratado, c.importe_total, c.fecha_conversion, c.metodo_pago
+       FROM conversions c
+       JOIN leads l ON l.id = c.lead_id
+       LEFT JOIN invoices i ON i.conversion_id = c.id AND i.estado <> 'cancelada'
+      WHERE c.project_id = $1
+        AND COALESCE(c.importe_total, 0) > 0
+        AND i.id IS NULL
+      ORDER BY c.fecha_conversion DESC NULLS LAST`,
+    [projectId]
+  );
+  return rows;
+}
+
 export async function getProjectInvoicerData(projectId) {
   const { rows } = await query(
     `SELECT id, nombre, slug, logo_url, datos_fiscales,

@@ -5,7 +5,8 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import KpiCard from '@/shared/components/ui/KpiCard';
 import { invoicesApi } from '../api/invoices.api';
-import type { Invoice, Issuer } from '../api/invoices.api';
+import type { Invoice, Issuer, VentaSinFactura } from '../api/invoices.api';
+import InvoiceButton from '../components/InvoiceButton';
 import { toast } from '@/shared/hooks/useToast';
 
 const fmt = (n: number) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(Number(n || 0));
@@ -29,19 +30,22 @@ export default function InvoicesPage() {
   const [filters, setFilters] = useState({ search: '', estado: '', from: '', to: '' });
   const [sending, setSending] = useState<number | null>(null);
   const [issuers, setIssuers] = useState<Issuer[]>([]);
+  const [ventasSinFactura, setVentasSinFactura] = useState<VentaSinFactura[]>([]);
 
   const load = useCallback(async () => {
     if (!pid) return;
     setLoading(true);
     try {
-      const [r1, r2, r3] = await Promise.all([
+      const [r1, r2, r3, r4] = await Promise.all([
         invoicesApi.list({ projectId: pid, ...filters, limit: 100 }),
         invoicesApi.stats(pid),
         invoicesApi.listIssuers(pid).catch(() => ({ success: false, data: [] as Issuer[] })),
+        invoicesApi.ventasSinFactura(pid).catch(() => ({ success: false, data: [] as VentaSinFactura[] })),
       ]);
       if (r1.success) setInvoices(r1.data || []);
       if (r2.success) setStats(r2.data || null);
       if (r3.success) setIssuers(r3.data || []);
+      if (r4.success) setVentasSinFactura(r4.data || []);
     } finally { setLoading(false); }
   }, [pid, filters]);
   useEffect(() => { load(); }, [load]);
@@ -165,6 +169,48 @@ export default function InvoicesPage() {
             className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
         </div>
       </div>
+
+      {ventasSinFactura.length > 0 && (
+        <div className="bg-amber-50/60 dark:bg-amber-950/10 border border-amber-200 dark:border-amber-900/40 rounded-lg overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-amber-200 dark:border-amber-900/40 flex items-center gap-2">
+            <Receipt size={15} weight="bold" className="text-amber-600" />
+            <span className="font-semibold text-sm">Ventas sin factura</span>
+            <span className="text-[11px] text-muted-foreground">· {ventasSinFactura.length} venta{ventasSinFactura.length !== 1 ? 's' : ''} registrada{ventasSinFactura.length !== 1 ? 's' : ''} sin factura emitida</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-[13px]">
+              <thead className="bg-amber-100/40 dark:bg-amber-950/20 border-b border-amber-200 dark:border-amber-900/40">
+                <tr>
+                  <th className="px-3 py-2 text-left text-xs text-muted-foreground">Fecha</th>
+                  <th className="px-3 py-2 text-left text-xs text-muted-foreground">Cliente</th>
+                  <th className="px-3 py-2 text-left text-xs text-muted-foreground">Producto</th>
+                  <th className="px-3 py-2 text-right text-xs text-muted-foreground">Importe</th>
+                  <th className="px-3 py-2 text-right text-xs text-muted-foreground">Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ventasSinFactura.map((v) => (
+                  <tr key={v.conversion_id} className="border-b border-amber-100 dark:border-amber-900/20 last:border-0">
+                    <td className="px-3 py-2">{fmtDate(v.fecha_conversion)}</td>
+                    <td className="px-3 py-2 font-medium">{v.cliente_nombre}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{v.producto_contratado || '—'}</td>
+                    <td className="px-3 py-2 text-right tabular-nums font-semibold">{fmt(Number(v.importe_total))}</td>
+                    <td className="px-3 py-2 text-right">
+                      <InvoiceButton
+                        projectId={pid}
+                        leadId={v.lead_id}
+                        conversionId={v.conversion_id}
+                        items={[{ descripcion: v.producto_contratado || 'Servicio', cantidad: 1, precio_unitario: Number(v.importe_total) }]}
+                        onInvoiced={load}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <div className="bg-card border border-border rounded-lg overflow-x-auto">
         {loading ? (
