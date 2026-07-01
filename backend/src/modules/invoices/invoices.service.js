@@ -3,6 +3,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { logger } from '../../shared/utils/logger.js';
 import { decrypt } from '../../shared/utils/crypto.js';
+import { getLocal } from '../../shared/services/localStorage.service.js';
 import * as integrationsModel from '../integrations/integrations.model.js';
 import * as model from './invoices.model.js';
 
@@ -51,6 +52,20 @@ export async function generatePDF(invoiceId) {
   const gray = rgb(0.4, 0.4, 0.4);
   const lightGray = rgb(0.92, 0.92, 0.92);
 
+  // Plantilla del editor visual (Canva). Si la factura tiene una, se dibuja por
+  // posiciones libres; si no, se usa el layout fijo (fallback). Vale igual para
+  // factura normal y rectificativa (de abono).
+  let template = null;
+  try {
+    template = inv.template_id
+      ? await model.getTemplate(inv.template_id)
+      : await model.getTemplateForIssuer(inv.issuer_id, inv.project_id);
+  } catch { template = null; }
+  const tplLayout = Array.isArray(template?.layout) ? template.layout : [];
+
+  if (tplLayout.length) {
+    await renderFromTemplate({ pdfDoc, page, font, bold, inv, layout: tplLayout });
+  } else {
   let y = 800;
   const left = 50;
   const right = 545;
@@ -171,6 +186,7 @@ export async function generatePDF(invoiceId) {
   // Footer
   page.drawText(`Factura ${inv.codigo} generada el ${new Date().toLocaleDateString('es-ES')}`,
     { x: left, y: 30, size: 8, font, color: gray });
+  } // fin fallback (layout fijo)
 
   const pdfBytes = await pdfDoc.save();
 
@@ -183,6 +199,155 @@ export async function generatePDF(invoiceId) {
   await model.setPdfPath(inv.id, fullPath);
 
   return { path: fullPath, bytes: pdfBytes, filename };
+}
+
+const METODO_LABELS = {
+  transferencia: 'Transferencia bancaria', tarjeta: 'Tarjeta', tarjeta_stripe: 'Tarjeta (Stripe)',
+  efectivo: 'Efectivo', bizum: 'Bizum', fraccionado: 'Pago fraccionado', otro: 'Otro',
+};
+
+// Dibuja la factura usando la plantilla del editor visual (bloques posicionados).
+// Convierte coords del editor (A4 794x1123 px, origen arriba-izq) a pdf-lib (595x842 pt, origen abajo-izq).
+async function renderFromTemplate({ pdfDoc, page, font, bold, inv, layout }) {
+  const SX = 595 / 794, SY = 842 / 1123;
+  const X = (px) => px * SX;
+  const TOP = (py) => 842 - py * SY; // borde superior del bloque en coords pdf
+  const black = rgb(0, 0, 0), gray = rgb(0.4, 0.4, 0.4), red = rgb(0.7, 0.1, 0.1);
+  const hexColor = (c) => {
+    const m = /^#?([0-9a-f]{6})$/i.exec(c || '');
+    if (!m) return null;
+    const n = parseInt(m[1], 16);
+    return rgb(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255);
+  };
+  const esRect = inv.tipo === 'rectificativa';
+  const items = Array.isArray(inv.items) ? inv.items : (typeof inv.items === 'string' ? (() => { try { return JSON.parse(inv.items); } catch { return []; } })() : []);
+
+  // Dibuja un conjunto de líneas dentro del bloque, respetando alineación/color/negrita.
+  function drawLines(b, lines) {
+    const baseSize = (b.fontSize || 12) * SY;
+    const bx = X(b.x), bw = X(b.w);
+    const blockColor = hexColor(b.color) || black;
+    let baseline = TOP(b.y) - baseSize;
+    const bottom = TOP(b.y + b.h);
+    for (const ln of lines) {
+      if (!ln || ln.text == null || ln.text === '') continue;
+      if (baseline < bottom - 2) break; // no desbordar el bloque
+      const f = (ln.bold ?? b.bold) ? bold : font;
+      const s = (ln.size ? ln.size : (b.fontSize || 12)) * SY;
+      const col = ln.color || blockColor;
+      const align = ln.align || b.align || 'left';
+      const text = String(ln.text);
+      const w = f.widthOfTextAtSize(text, s);
+      const x = align === 'right' ? bx + bw - w : align === 'center' ? bx + (bw - w) / 2 : bx;
+      page.drawText(text, { x, y: baseline, size: s, font: f, color: col });
+      baseline -= s * 1.35;
+    }
+  }
+
+  for (const b of layout) {
+    try {
+      switch (b.type) {
+        case 'logo': {
+          if (!inv.issuer_id) break;
+          const iss = await model.getIssuer(inv.issuer_id);
+          if (!iss?.logo_key) break;
+          const { buffer } = await getLocal(iss.logo_key);
+          const ext = String(iss.logo_key).split('.').pop().toLowerCase();
+          let img = null;
+          if (ext === 'png') img = await pdfDoc.embedPng(buffer);
+          else if (ext === 'jpg' || ext === 'jpeg') img = await pdfDoc.embedJpg(buffer);
+          if (!img) break;
+          const bw = X(b.w), bh = b.h * SY;
+          const sc = Math.min(bw / img.width, bh / img.height);
+          const w = img.width * sc, h = img.height * sc;
+          page.drawImage(img, { x: X(b.x), y: TOP(b.y) - h, width: w, height: h });
+          break;
+        }
+        case 'emisor':
+          drawLines(b, [
+            { text: inv.issuer_razon_social, bold: true, size: (b.fontSize || 12) + 3 },
+            { text: inv.issuer_nif ? `NIF/CIF: ${inv.issuer_nif}` : '' },
+            { text: inv.issuer_direccion },
+            { text: [inv.issuer_cp, inv.issuer_ciudad].filter(Boolean).join(' ') + (inv.issuer_pais ? `, ${inv.issuer_pais}` : '') },
+            { text: inv.issuer_email },
+            { text: inv.issuer_telefono ? `Tel: ${inv.issuer_telefono}` : '' },
+            { text: inv.issuer_iban ? `IBAN: ${inv.issuer_iban}` : '' },
+          ]);
+          break;
+        case 'cliente':
+          drawLines(b, [
+            { text: 'Facturar a:', bold: true, color: gray, size: (b.fontSize || 11) - 1 },
+            { text: inv.cliente_nombre, bold: true },
+            { text: inv.cliente_nif ? `NIF/CIF: ${inv.cliente_nif}` : '' },
+            { text: inv.cliente_direccion },
+            { text: [inv.cliente_cp, inv.cliente_ciudad].filter(Boolean).join(' ') + (inv.cliente_pais ? `, ${inv.cliente_pais}` : '') },
+            { text: inv.cliente_email },
+            { text: inv.cliente_telefono ? `Tel: ${inv.cliente_telefono}` : '' },
+          ]);
+          break;
+        case 'meta':
+          drawLines(b, [
+            { text: esRect ? 'FACTURA RECTIFICATIVA' : 'FACTURA', bold: true, size: (b.fontSize || 12) + 2, color: esRect ? red : black },
+            { text: `N.º ${inv.codigo}`, bold: true },
+            { text: `Fecha: ${new Date(inv.fecha_emision).toLocaleDateString('es-ES')}` },
+            { text: esRect && inv.rectifica_codigo ? `Rectifica a: ${inv.rectifica_codigo}` : '', color: gray, size: (b.fontSize || 12) - 2 },
+          ]);
+          break;
+        case 'totales':
+          drawLines(b, [
+            { text: `Base imponible: ${fmtEUR(inv.base_imponible)}` },
+            { text: `IVA (${inv.iva_pct}%): ${fmtEUR(inv.iva_importe)}` },
+            { text: inv.leyenda_iva || '', size: (b.fontSize || 12) - 2, color: gray },
+            { text: `TOTAL: ${fmtEUR(inv.total)}`, bold: true, size: (b.fontSize || 12) + 2 },
+          ]);
+          break;
+        case 'pie':
+          drawLines(b, [
+            { text: `Forma de pago: ${METODO_LABELS[inv.metodo_pago] || inv.metodo_pago || '—'}`, bold: true },
+            ...String(inv.pie_pago || '').split('\n').map((t) => ({ text: t })),
+          ]);
+          break;
+        case 'texto':
+          drawLines(b, String(b.text || '').split('\n').map((t) => ({ text: t })));
+          break;
+        case 'items': {
+          const size = (b.fontSize || 11) * SY;
+          const bx = X(b.x), bw = X(b.w);
+          const colDesc = bx, colCant = bx + bw * 0.60, colPrec = bx + bw * 0.74, colTot = bx + bw - font.widthOfTextAtSize('0000,00 €', size);
+          let yy = TOP(b.y) - size;
+          const bottom = TOP(b.y + b.h);
+          // Cabecera
+          page.drawText('Descripción', { x: colDesc, y: yy, size, font: bold, color: black });
+          page.drawText('Cant.', { x: colCant, y: yy, size, font: bold, color: black });
+          page.drawText('Precio', { x: colPrec, y: yy, size, font: bold, color: black });
+          page.drawText('Total', { x: colTot, y: yy, size, font: bold, color: black });
+          yy -= size * 0.6;
+          page.drawRectangle({ x: bx, y: yy, width: bw, height: 0.8, color: gray });
+          yy -= size * 1.4;
+          for (const it of items) {
+            if (yy < bottom) break;
+            const cant = Number(it.cantidad || 1);
+            const precio = Number(it.precio_unitario || 0);
+            const subt = cant * precio;
+            const desc = String(it.descripcion || '').slice(0, 55);
+            page.drawText(desc, { x: colDesc, y: yy, size, font, color: black });
+            page.drawText(String(cant), { x: colCant, y: yy, size, font, color: black });
+            page.drawText(fmtEUR(precio), { x: colPrec, y: yy, size, font, color: black });
+            page.drawText(fmtEUR(subt), { x: colTot, y: yy, size, font, color: black });
+            yy -= size * 1.5;
+          }
+          break;
+        }
+        default: break;
+      }
+    } catch (e) {
+      logger.warn({ err: e.message, block: b.type }, 'Fallo dibujando bloque de plantilla');
+    }
+  }
+
+  // Pie fijo de trazabilidad
+  page.drawText(`Factura ${inv.codigo} · ${new Date().toLocaleDateString('es-ES')}`,
+    { x: 50, y: 25, size: 7, font, color: rgb(0.6, 0.6, 0.6) });
 }
 
 // Envío Brevo
