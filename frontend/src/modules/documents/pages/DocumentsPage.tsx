@@ -16,7 +16,6 @@ type TabKey = 'list' | 'invoice' | 'certificate';
 
 const TABS: ReadonlyArray<{ key: TabKey; label: string }> = [
   { key: 'list', label: 'Historial' },
-  { key: 'invoice', label: 'Nueva Factura' },
   { key: 'certificate', label: 'Nuevo Certificado' },
 ];
 
@@ -259,17 +258,10 @@ export default function DocumentsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Documentos"
-        subtitle={`Facturas y certificados de ${activeProject?.nombre || ''}`}
+        title="Certificados"
+        subtitle={`Certificados y diplomas de ${activeProject?.nombre || ''}. Las facturas se emiten en Finanzas → Facturación.`}
         actions={
           <>
-            <button
-              type="button"
-              onClick={() => setTab('invoice')}
-              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
-            >
-              <Receipt size={15} /> <span className="hidden sm:inline">Nueva</span> Factura
-            </button>
             <button
               type="button"
               onClick={() => setTab('certificate')}
