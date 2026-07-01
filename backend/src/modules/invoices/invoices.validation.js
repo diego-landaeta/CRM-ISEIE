@@ -41,6 +41,7 @@ export const issuerSchema = z.object({
   email: z.string().email().optional().nullable().or(z.literal('')),
   telefono: z.string().optional().nullable(),
   iban: z.string().optional().nullable(),
+  serie: z.string().max(10).optional().nullable(),
   logoUrl: z.string().optional().nullable(),
   pieDefault: z.string().optional().nullable(),
   esDefault: z.boolean().optional(),

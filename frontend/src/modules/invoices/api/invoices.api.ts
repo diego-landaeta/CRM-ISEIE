@@ -18,6 +18,7 @@ export interface Issuer {
   email: string | null;
   telefono: string | null;
   iban: string | null;
+  serie: string | null;
   logo_url: string | null;
   pie_default: string | null;
   activo: boolean;

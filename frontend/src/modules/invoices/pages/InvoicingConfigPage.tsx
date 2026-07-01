@@ -25,6 +25,7 @@ export default function InvoicingConfigPage() {
   const [editingIssuer, setEditingIssuer] = useState<Partial<Issuer> | null>(null);
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [issuerNumInicial, setIssuerNumInicial] = useState('');
 
   // Reset secuencia
   const [resetAno, setResetAno] = useState(new Date().getFullYear());
@@ -60,7 +61,7 @@ export default function InvoicingConfigPage() {
         direccion: editingIssuer.direccion, ciudad: editingIssuer.ciudad, cp: editingIssuer.cp,
         pais: editingIssuer.pais || 'España', email: editingIssuer.email, telefono: editingIssuer.telefono,
         iban: editingIssuer.iban, pieDefault: editingIssuer.pie_default, esDefault: editingIssuer.es_default,
-        logoUrl: editingIssuer.logo_url, projectId: pid,
+        serie: editingIssuer.serie, logoUrl: editingIssuer.logo_url, projectId: pid,
       };
       const res = editingIssuer.id
         ? await invoicesApi.updateIssuer(editingIssuer.id, body)
@@ -79,9 +80,21 @@ export default function InvoicingConfigPage() {
           toast({ title: 'Logo no subido', description: e?.data?.error || e?.message, variant: 'destructive' });
         } finally { setUploadingLogo(false); }
       }
+      // Si se indicó "número inicial" y la empresa tiene serie, sembramos la
+      // secuencia de esa serie para que la próxima factura arranque desde ahí.
+      const serie = (editingIssuer.serie || '').trim();
+      const numIni = parseInt(issuerNumInicial, 10);
+      if (serie && Number.isFinite(numIni) && numIni >= 0) {
+        try {
+          await invoicesApi.setSequence({ projectId: pid, ano: new Date().getFullYear(), serie, ultimoNumero: numIni });
+        } catch (e: any) {
+          toast({ title: 'Serie guardada, pero no pude fijar el número', description: e?.data?.error || e?.message, variant: 'destructive' });
+        }
+      }
       toast({ title: editingIssuer.id ? '✓ Empresa actualizada' : '✓ Empresa añadida' });
       setEditingIssuer(null);
       setLogoFile(null);
+      setIssuerNumInicial('');
       await load();
     } catch (e: any) {
       toast({ title: 'Error', description: e?.data?.error || e?.message, variant: 'destructive' });
@@ -232,6 +245,17 @@ export default function InvoicingConfigPage() {
               <input placeholder="Teléfono" value={editingIssuer.telefono || ''} onChange={e => setEditingIssuer({ ...editingIssuer, telefono: e.target.value })} className="h-9 px-2 rounded border border-border bg-background text-sm" />
               <input placeholder="IBAN" value={editingIssuer.iban || ''} onChange={e => setEditingIssuer({ ...editingIssuer, iban: e.target.value })} className="h-9 px-2 rounded border border-border bg-background text-sm" />
               <input placeholder="Logo (URL de la imagen)" value={editingIssuer.logo_url || ''} onChange={e => { setEditingIssuer({ ...editingIssuer, logo_url: e.target.value }); setLogoFile(null); }} className="h-9 px-2 rounded border border-border bg-background text-sm col-span-2" />
+            </div>
+            {/* Numeración propia de esta empresa emisora */}
+            <div className="border-t border-border/60 pt-2 mt-1">
+              <p className="text-[11px] font-semibold text-muted-foreground mb-1">Numeración de facturas de esta empresa</p>
+              <div className="grid grid-cols-2 gap-2">
+                <input placeholder="Serie (ej: A, FAC, 2026)" value={editingIssuer.serie || ''} maxLength={10} onChange={e => setEditingIssuer({ ...editingIssuer, serie: e.target.value })} className="h-9 px-2 rounded border border-border bg-background text-sm" />
+                <input placeholder="Nº desde el que arranca (último emitido)" type="number" min={0} value={issuerNumInicial} onChange={e => setIssuerNumInicial(e.target.value)} className="h-9 px-2 rounded border border-border bg-background text-sm" />
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                Cada empresa lleva su propia serie/correlativo. Ej: si en tu sistema anterior ibas por la <b>200</b>, poné serie <code className="px-1 bg-muted rounded">A</code> y número <code className="px-1 bg-muted rounded">200</code> → la próxima será <code className="px-1 bg-muted rounded">A 0201</code>. Los abonos usan serie <code className="px-1 bg-muted rounded">R{(editingIssuer.serie || 'A').trim() || 'A'}</code>.
+              </p>
             </div>
             <div className="flex items-center gap-3 flex-wrap">
               <label className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border text-sm cursor-pointer hover:bg-muted">

@@ -1,0 +1,1 @@
+ALTER TABLE invoice_issuers ADD COLUMN IF NOT EXISTS serie VARCHAR(10);

@@ -18,11 +18,9 @@ export async function create(data, userId) {
   try {
     await client.query('BEGIN');
     const ano = data.ano || new Date().getFullYear();
-    const serie = data.serie || 'A';
-    const numero = await nextNumero(client, data.projectId, ano, serie);
-    const codigo = `${ano}/${String(numero).padStart(4, '0')}`;
 
-    // Resolver emisor (multi-empresa). Si no se eligió, usa el default del proyecto.
+    // Resolver emisor (multi-empresa) ANTES de la serie: cada empresa lleva su
+    // propia serie/correlativo. Si no se eligió, usa el default del proyecto.
     let iss = null;
     if (data.issuerId) {
       const r = await client.query(`SELECT * FROM invoice_issuers WHERE id = $1`, [data.issuerId]);
@@ -34,6 +32,11 @@ export async function create(data, userId) {
          ORDER BY es_default DESC, id ASC LIMIT 1`, [data.projectId]);
       iss = r.rows[0] || null;
     }
+
+    // Serie: la de la empresa emisora manda; si no tiene, la del request o 'A'.
+    const serie = (iss?.serie && iss.serie.trim()) || data.serie || 'A';
+    const numero = await nextNumero(client, data.projectId, ano, serie);
+    const codigo = `${ano}/${String(numero).padStart(4, '0')}`;
 
     const { rows } = await client.query(
       `INSERT INTO invoices (
@@ -112,7 +115,10 @@ export async function createRectificativa(originalId, { motivo, userId, parcial 
     if (orig.tipo === 'rectificativa') throw new Error('No se puede rectificar una rectificativa');
 
     const ano = new Date().getFullYear();
-    const serie = 'R';
+    // Serie de abono propia por empresa: deriva de la serie de la factura original
+    // (que ya es la de su empresa emisora). Ej: serie 'A' -> abonos 'RA'.
+    const baseSerie = String(orig.serie || '').trim();
+    const serie = baseSerie ? `R${baseSerie}` : 'R';
     const numero = await nextNumero(client, orig.project_id, ano, serie);
     const codigo = `R-${ano}/${String(numero).padStart(4, '0')}`;
 
@@ -292,11 +298,11 @@ export async function getDefaultIssuer(projectId) {
 export async function createIssuer(d, userId) {
   const { rows } = await query(
     `INSERT INTO invoice_issuers
-       (project_id, razon_social, nif, direccion, ciudad, cp, pais, email, telefono, iban, logo_url, pie_default, es_default, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
+       (project_id, razon_social, nif, direccion, ciudad, cp, pais, email, telefono, iban, logo_url, pie_default, es_default, serie, created_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
     [d.projectId || null, d.razonSocial, d.nif, d.direccion || null, d.ciudad || null, d.cp || null,
      d.pais || 'España', d.email || null, d.telefono || null, d.iban || null, d.logoUrl || null,
-     d.pieDefault || null, !!d.esDefault, userId]
+     d.pieDefault || null, !!d.esDefault, (d.serie && d.serie.trim()) || null, userId]
   );
   return rows[0];
 }
@@ -307,7 +313,7 @@ export async function updateIssuer(id, d) {
     razonSocial: 'razon_social', nif: 'nif', direccion: 'direccion', ciudad: 'ciudad',
     cp: 'cp', pais: 'pais', email: 'email', telefono: 'telefono', iban: 'iban',
     logoUrl: 'logo_url', logoKey: 'logo_key', pieDefault: 'pie_default',
-    esDefault: 'es_default', activo: 'activo',
+    esDefault: 'es_default', activo: 'activo', serie: 'serie',
   };
   const sets = [];
   const params = [id];
