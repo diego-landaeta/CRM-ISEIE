@@ -188,10 +188,16 @@ export default function InvoiceForm({ onGenerated, initialValues }: InvoiceFormP
   const invalidFields = touched ? new Set(getMissingFields(watch())) : new Set<string>();
 
   function handleClientPick(c: ClientPick) {
+    // Trae del lead todos los datos disponibles; los que falten quedan para completar
+    // (getMissingFields resalta/bloquea los obligatorios que sigan vacíos).
     setValue('cliente_nombre', c.nombre, { shouldDirty: true });
     if (c.dni) setValue('cliente_dni', c.dni, { shouldDirty: true });
     if (c.direccion) setValue('cliente_direccion', c.direccion, { shouldDirty: true });
     if (c.email) setValue('cliente_email', c.email, { shouldDirty: true });
+    if (c.telefono) setValue('cliente_telefono', c.telefono, { shouldDirty: true });
+    // Tipo empresa: reutiliza nombre/DNI como razón social/NIF de partida.
+    setValue('cliente_razon_social', c.nombre, { shouldDirty: true });
+    if (c.dni) setValue('cliente_nif', c.dni, { shouldDirty: true });
   }
 
   function handleSaveDefaults() {
