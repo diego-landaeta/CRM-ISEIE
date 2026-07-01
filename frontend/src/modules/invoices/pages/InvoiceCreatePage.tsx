@@ -1,0 +1,263 @@
+import { useEffect, useRef, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { ArrowLeft, FloppyDisk, MagnifyingGlass, User, Buildings, Money } from '@phosphor-icons/react';
+import { useProjectContext } from '@/contexts/ProjectContext';
+import PageHeader from '@/shared/components/ui/PageHeader';
+import client from '@/shared/api/client';
+import { invoicesApi } from '../api/invoices.api';
+import type { Issuer, InvoiceItem } from '../api/invoices.api';
+import { toast } from '@/shared/hooks/useToast';
+
+type Tipo = 'persona' | 'empresa' | 'contado';
+interface LeadHit { id: number; nombre: string; email?: string | null; telefono?: string | null }
+
+export default function InvoiceCreatePage() {
+  const { activeProject } = useProjectContext() as { activeProject: { id?: number; nombre?: string } };
+  const pid = activeProject?.id;
+  const navigate = useNavigate();
+  const invBase = useLocation().pathname.split('/facturas')[0];
+
+  const [tipo, setTipo] = useState<Tipo>('persona');
+  const [leadId, setLeadId] = useState<number | null>(null);
+
+  // Buscador de cliente
+  const [search, setSearch] = useState('');
+  const [hits, setHits] = useState<LeadHit[]>([]);
+  const [openHits, setOpenHits] = useState(false);
+  const searchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Datos cliente
+  const [nombre, setNombre] = useState('');
+  const [nif, setNif] = useState('');
+  const [direccion, setDireccion] = useState('');
+  const [ciudad, setCiudad] = useState('');
+  const [cp, setCp] = useState('');
+  const [pais, setPais] = useState('España');
+  const [email, setEmail] = useState('');
+  const [telefono, setTelefono] = useState('');
+
+  // IVA / conceptos / pago / emisor
+  const [llevaIva, setLlevaIva] = useState(true);
+  const [ivaIncluido, setIvaIncluido] = useState(false);
+  const [items, setItems] = useState<InvoiceItem[]>([{ descripcion: '', cantidad: 1, precio_unitario: 0 }]);
+  const [metodoPago, setMetodoPago] = useState<'transferencia' | 'tarjeta' | 'tarjeta_stripe' | 'efectivo' | 'bizum' | 'fraccionado' | 'otro'>('transferencia');
+  const [piePago, setPiePago] = useState('');
+  const [notas, setNotas] = useState('');
+  const [issuers, setIssuers] = useState<Issuer[]>([]);
+  const [issuerId, setIssuerId] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!pid) return;
+    invoicesApi.getConfig(pid).then((res) => {
+      if (res.success && res.data) {
+        if (res.data.factura_pie_default) setPiePago(res.data.factura_pie_default);
+        if (res.data.factura_metodo_default) setMetodoPago(res.data.factura_metodo_default as 'transferencia');
+      }
+    }).catch(() => {});
+    invoicesApi.listIssuers(pid).then((res) => {
+      if (res.success && res.data) {
+        setIssuers(res.data);
+        const def = res.data.find((i) => i.es_default) || res.data[0];
+        if (def) setIssuerId(def.id);
+      }
+    }).catch(() => {});
+  }, [pid]);
+
+  // Buscar leads (debounce)
+  useEffect(() => {
+    if (searchRef.current) clearTimeout(searchRef.current);
+    if (!pid || search.trim().length < 2) { setHits([]); return; }
+    searchRef.current = setTimeout(async () => {
+      try {
+        const res = await client.get<LeadHit[]>(`/leads?projectId=${pid}&search=${encodeURIComponent(search.trim())}&limit=8`);
+        if (res.success) { setHits(res.data || []); setOpenHits(true); }
+      } catch { /* ignore */ }
+    }, 250);
+  }, [search, pid]);
+
+  async function pickLead(l: LeadHit) {
+    setLeadId(l.id);
+    setNombre(l.nombre);
+    setSearch(l.nombre);
+    setOpenHits(false);
+    // Traer datos fiscales completos del lead
+    try {
+      const res = await invoicesApi.leadFiscalData(l.id);
+      if (res.success && res.data) {
+        const d = res.data;
+        setNif(d.identificacion_fiscal || '');
+        setDireccion(d.direccion_fiscal || '');
+        setCiudad(d.ciudad_fiscal || '');
+        setCp(d.codigo_postal_fiscal || '');
+        setPais(d.pais_fiscal || 'España');
+        setEmail(d.email || '');
+        setTelefono(d.telefono || '');
+        if (d.pais_fiscal && !d.pais_fiscal.toLowerCase().match(/españa|espana|spain|^es$/)) setLlevaIva(false);
+      }
+    } catch { /* ignore */ }
+  }
+
+  const missing: string[] = [];
+  if (tipo !== 'contado') {
+    if (!nombre.trim()) missing.push(tipo === 'empresa' ? 'Razón social' : 'Nombre');
+    if (!nif.trim()) missing.push(tipo === 'empresa' ? 'NIF/CIF' : 'DNI/NIF');
+  }
+  if (!items.some((it) => it.descripcion.trim() && Number(it.precio_unitario) > 0)) missing.push('Al menos un concepto con precio');
+
+  async function generar() {
+    if (!pid) return;
+    if (missing.length) { toast({ title: 'Faltan datos', description: missing.join(' · '), variant: 'destructive' }); return; }
+    setSaving(true);
+    try {
+      const cNombre = tipo === 'contado' ? (nombre.trim() || 'Consumidor final') : nombre.trim();
+      const cNif = tipo === 'contado' ? (nif.trim() || '—') : nif.trim();
+      const res = await invoicesApi.create({
+        projectId: pid, leadId: leadId || undefined, issuerId: issuerId || undefined,
+        clienteNombre: cNombre, clienteNif: cNif,
+        clienteDireccion: direccion.trim(), clienteCiudad: ciudad.trim(), clienteCp: cp.trim(), clientePais: pais.trim() || 'España',
+        clienteEmail: email.trim() || null, clienteTelefono: telefono.trim() || null,
+        items: items.filter((it) => it.descripcion.trim()),
+        ivaPct: llevaIva ? 21 : 0, ivaIncluido: ivaIncluido && llevaIva,
+        notas: notas.trim() || undefined, metodoPago, piePago: piePago.trim() || undefined,
+      });
+      if (res.success && res.data) {
+        toast({ title: '✓ Factura emitida', description: res.data.codigo });
+        window.open(invoicesApi.pdfUrl(res.data.id), '_blank');
+        navigate(`${invBase}/facturas`);
+      } else {
+        toast({ title: 'Error', description: (res as { error?: string }).error, variant: 'destructive' });
+      }
+    } catch (e: any) {
+      toast({ title: 'Error', description: e?.data?.error || e?.message, variant: 'destructive' });
+    } finally { setSaving(false); }
+  }
+
+  if (!pid) return <div className="p-8 text-muted-foreground">Selecciona un proyecto.</div>;
+
+  const TIPOS: { key: Tipo; label: string; desc: string; icon: any }[] = [
+    { key: 'persona', label: 'Persona física', desc: 'Cliente individual con DNI', icon: User },
+    { key: 'empresa', label: 'Empresa', desc: 'Razón social + NIF', icon: Buildings },
+    { key: 'contado', label: 'Contado', desc: 'Sin datos de cliente', icon: Money },
+  ];
+
+  return (
+    <div className="space-y-4 pb-8 max-w-4xl">
+      <PageHeader title="Nueva factura" subtitle={activeProject?.nombre || ''}
+        actions={(
+          <Link to={`${invBase}/facturas`} className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted">
+            <ArrowLeft size={14} weight="bold" /> Volver
+          </Link>
+        )}
+      />
+
+      {/* Emisor */}
+      {issuers.length > 0 && (
+        <div className="bg-card border border-border rounded-lg p-4">
+          <label className="text-xs font-bold uppercase text-muted-foreground">Empresa que emite</label>
+          <select value={issuerId ?? ''} onChange={(e) => setIssuerId(Number(e.target.value))}
+            className="w-full h-9 px-2 mt-1 rounded border border-primary/40 bg-primary/5 text-sm font-medium">
+            {issuers.map((iss) => <option key={iss.id} value={iss.id}>{iss.razon_social} — {iss.nif}{iss.serie ? ` · serie ${iss.serie}` : ''}{iss.es_default ? ' (por defecto)' : ''}</option>)}
+          </select>
+        </div>
+      )}
+
+      {/* Tipo */}
+      <div className="grid grid-cols-3 gap-3">
+        {TIPOS.map((t) => {
+          const Icon = t.icon;
+          return (
+            <button key={t.key} onClick={() => setTipo(t.key)}
+              className={`text-left border rounded-lg p-3 transition ${tipo === t.key ? 'border-primary ring-2 ring-primary/20 bg-primary/5' : 'border-border hover:bg-muted'}`}>
+              <Icon size={18} weight="bold" className={tipo === t.key ? 'text-primary' : 'text-muted-foreground'} />
+              <div className="font-semibold text-sm mt-1">{t.label}</div>
+              <div className="text-[11px] text-muted-foreground">{t.desc}</div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Cliente */}
+      {tipo !== 'contado' && (
+        <div className="bg-card border border-border rounded-lg p-4 space-y-3">
+          <div>
+            <label className="text-xs font-bold uppercase text-muted-foreground">Cliente</label>
+            <p className="text-[11px] text-muted-foreground">Buscá por nombre/email para traer sus datos; lo que falte lo completás abajo.</p>
+            <div className="relative mt-1">
+              <MagnifyingGlass size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <input value={search} onChange={(e) => { setSearch(e.target.value); setLeadId(null); }} onFocus={() => hits.length && setOpenHits(true)}
+                placeholder="Buscar cliente o escribir nombre nuevo…" className="w-full h-9 pl-8 pr-3 rounded border border-border bg-background text-sm" />
+              {openHits && hits.length > 0 && (
+                <div className="absolute z-10 mt-1 w-full bg-card border border-border rounded-md shadow-lg max-h-56 overflow-auto">
+                  {hits.map((h) => (
+                    <button key={h.id} onClick={() => pickLead(h)} className="block w-full text-left px-3 py-2 text-sm hover:bg-muted">
+                      {h.nombre}{h.email ? <span className="text-muted-foreground"> · {h.email}</span> : ''}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label={tipo === 'empresa' ? 'Razón social' : 'Nombre y apellido'} value={nombre} onChange={(v) => { setNombre(v); if (v !== search) setSearch(v); }} required />
+            <Field label={tipo === 'empresa' ? 'NIF / CIF' : 'DNI / NIF'} value={nif} onChange={setNif} required />
+            <Field label="Dirección" value={direccion} onChange={setDireccion} full />
+            <Field label="Ciudad" value={ciudad} onChange={setCiudad} />
+            <Field label="Código postal" value={cp} onChange={setCp} />
+            <Field label="País" value={pais} onChange={(v) => { setPais(v); setLlevaIva(!!v.toLowerCase().match(/españa|espana|spain|^es$/)); }} />
+            <Field label="Email (opcional)" value={email} onChange={setEmail} />
+            <Field label="Teléfono (opcional)" value={telefono} onChange={setTelefono} />
+          </div>
+        </div>
+      )}
+
+      {/* Conceptos */}
+      <div className="bg-card border border-border rounded-lg p-4 space-y-2">
+        <label className="text-xs font-bold uppercase text-muted-foreground">Conceptos</label>
+        {items.map((it, idx) => (
+          <div key={idx} className="grid grid-cols-12 gap-2 items-center">
+            <input value={it.descripcion} onChange={(e) => setItems(items.map((x, i) => i === idx ? { ...x, descripcion: e.target.value } : x))} placeholder="Descripción" className="col-span-7 h-9 px-2 rounded border border-border bg-background text-sm" />
+            <input type="number" value={it.cantidad} onChange={(e) => setItems(items.map((x, i) => i === idx ? { ...x, cantidad: Number(e.target.value) } : x))} placeholder="Cant" className="col-span-2 h-9 px-2 rounded border border-border bg-background text-sm" />
+            <input type="number" step="0.01" value={it.precio_unitario} onChange={(e) => setItems(items.map((x, i) => i === idx ? { ...x, precio_unitario: Number(e.target.value) } : x))} placeholder="€" className="col-span-2 h-9 px-2 rounded border border-border bg-background text-sm" />
+            <button onClick={() => setItems(items.length > 1 ? items.filter((_, i) => i !== idx) : items)} className="col-span-1 text-muted-foreground hover:text-red-500 text-xs">×</button>
+          </div>
+        ))}
+        <button onClick={() => setItems([...items, { descripcion: '', cantidad: 1, precio_unitario: 0 }])} className="text-xs text-primary hover:underline">+ añadir concepto</button>
+      </div>
+
+      {/* IVA + Pago */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-card border border-border rounded-lg p-4 space-y-2">
+          <label className="text-xs font-bold uppercase text-muted-foreground">IVA</label>
+          <label className="flex items-center gap-1.5 text-xs"><input type="checkbox" checked={llevaIva} onChange={(e) => setLlevaIva(e.target.checked)} /> Lleva IVA (21%)</label>
+          {llevaIva && <label className="flex items-center gap-1.5 text-xs"><input type="checkbox" checked={ivaIncluido} onChange={(e) => setIvaIncluido(e.target.checked)} /> El precio ya incluye IVA</label>}
+          {!llevaIva && <p className="text-[11px] text-muted-foreground">Operación exenta de IVA.</p>}
+        </div>
+        <div className="bg-card border border-border rounded-lg p-4 space-y-2">
+          <label className="text-xs font-bold uppercase text-muted-foreground">Pago</label>
+          <select value={metodoPago} onChange={(e) => setMetodoPago(e.target.value as 'transferencia')} className="w-full h-9 px-2 rounded border border-border bg-background text-sm">
+            <option value="transferencia">Transferencia bancaria</option><option value="tarjeta">Tarjeta</option><option value="tarjeta_stripe">Tarjeta (Stripe)</option>
+            <option value="efectivo">Efectivo</option><option value="bizum">Bizum</option><option value="fraccionado">Fraccionado</option><option value="otro">Otro</option>
+          </select>
+          <textarea value={piePago} onChange={(e) => setPiePago(e.target.value)} rows={2} placeholder="Pie de pago (IBAN, vencimiento…)" className="w-full px-2 py-1.5 rounded border border-border bg-background text-sm" />
+        </div>
+      </div>
+
+      <div className="flex justify-end gap-2">
+        <Link to={`${invBase}/facturas`} className="h-10 px-4 rounded-md border border-border bg-card text-sm inline-flex items-center">Cancelar</Link>
+        <button onClick={generar} disabled={saving} className="h-10 px-5 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 inline-flex items-center gap-1.5">
+          <FloppyDisk size={15} weight="bold" /> {saving ? 'Emitiendo…' : 'Generar factura'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, value, onChange, required, full }: { label: string; value: string; onChange: (v: string) => void; required?: boolean; full?: boolean }) {
+  return (
+    <div className={full ? 'col-span-2' : ''}>
+      <label className="text-[11px] text-muted-foreground">{label}{required && <span className="text-red-500"> *</span>}</label>
+      <input value={value} onChange={(e) => onChange(e.target.value)} className={`w-full h-9 px-2 rounded border bg-background text-sm ${required && !value ? 'border-red-300' : 'border-border'}`} />
+    </div>
+  );
+}

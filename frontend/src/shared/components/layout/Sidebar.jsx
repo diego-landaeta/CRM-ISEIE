@@ -58,6 +58,7 @@ const NAV_SECTIONS = [
       { to: '/products/pending', label: 'Cursos pendientes', icon: Clock, roles: ['admin', 'superadmin'] },
       { to: '/woocommerce', label: 'WooCommerce', icon: ShoppingBag, roles: ['admin', 'superadmin'] },
       { to: '/configuracion/categorias-arbol', label: 'Árbol de categorías', icon: Sliders, roles: ['admin', 'superadmin'] },
+      { to: '/documentos', label: 'Certificados', icon: FilePdf, roles: ['admin', 'superadmin'], sectionPrefixes: ['/documentos'] },
     ],
   },
   {
@@ -73,7 +74,7 @@ const NAV_SECTIONS = [
       { to: '/commissions',          label: 'Comisiones',         icon: Bank,  roles: ['admin', 'superadmin'], statusTag: 'Pruebas' },
       { to: '/payroll',              label: 'Nóminas',            icon: Coins,      roles: ['admin', 'superadmin'], statusTag: 'Pruebas' },
       { to: '/accounting/pendiente-facturar', label: 'Pendientes de facturar', icon: WarningCircle, roles: ['admin', 'superadmin'], statusTag: 'Pruebas' },
-      { to: '/documentos', label: 'Facturas y documentos', icon: FilePdf, roles: ['admin', 'superadmin'], sectionPrefixes: ['/documentos'] },
+      { to: '/accounting/facturas', label: 'Facturación', icon: FilePdf, roles: ['admin', 'superadmin', 'soporte'], sectionPrefixes: ['/accounting/facturas'] },
       { to: '/accounting/integrations', label: 'Integraciones',   icon: PlugsConnected, roles: ['admin', 'superadmin'], statusTag: 'Pruebas' },
     ],
   },

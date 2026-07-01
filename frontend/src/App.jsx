@@ -33,6 +33,7 @@ const WhatsappWidgetPage = lazy(() => import('./modules/widget/pages/WhatsappWid
 const InvoicesPage = lazy(() => import('./modules/invoices/pages/InvoicesPage'));
 const InvoicingConfigPage = lazy(() => import('./modules/invoices/pages/InvoicingConfigPage'));
 const InvoiceTemplateEditorPage = lazy(() => import('./modules/invoices/pages/InvoiceTemplateEditorPage'));
+const InvoiceCreatePage = lazy(() => import('./modules/invoices/pages/InvoiceCreatePage'));
 const RevenuePage = lazy(() => import('./modules/revenue/pages/RevenuePage'));
 const ChannelsConfigPage = lazy(() => import('./modules/settings/pages/ChannelsConfigPage'));
 const ShortcutsConfigPage = lazy(() => import('./modules/settings/pages/ShortcutsConfigPage'));
@@ -176,6 +177,7 @@ function App() {
           <Route path="/accounting/pendiente-facturar" element={<PendienteFacturarPage />} />
           <Route path="/accounting/pagos-stripe" element={<StripePaymentsPage />} />
           <Route path="/accounting/facturas" element={<InvoicesPage />} />
+          <Route path="/accounting/facturas/nueva" element={<InvoiceCreatePage />} />
           <Route path="/accounting/facturas/configuracion" element={<InvoicingConfigPage />} />
           <Route path="/accounting/facturas/plantillas" element={<InvoiceTemplateEditorPage />} />
           <Route path="/revenue" element={<RevenuePage />} />

@@ -126,10 +126,16 @@ export default function InvoicesPage() {
         title="Facturas"
         subtitle={`Histórico fiscal — ${activeProject?.nombre || ''}`}
         actions={(
-          <Link to="configuracion"
-            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted">
-            <Gear size={14} weight="bold" /> Configuración
-          </Link>
+          <div className="flex gap-2">
+            <Link to="nueva"
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90">
+              <Receipt size={14} weight="bold" /> Nueva factura
+            </Link>
+            <Link to="configuracion"
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted">
+              <Gear size={14} weight="bold" /> Configuración
+            </Link>
+          </div>
         )}
       />
 
