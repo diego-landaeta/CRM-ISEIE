@@ -127,6 +127,7 @@ export interface InvoiceTemplate {
   layout: TemplateBlock[];
   es_default: boolean;
   activo: boolean;
+  condicion_pais: string | null; // null/'todos' | 'espana' | 'extranjero'
 }
 
 export interface VentaSinFactura {
@@ -168,7 +169,7 @@ export const invoicesApi = {
   deleteIssuerLogo: (id: number) => client.delete<Issuer>(`/invoices/issuers/${id}/logo`),
   listTemplates: (projectId: number) => client.get<InvoiceTemplate[]>(`/invoices/templates?projectId=${projectId}`),
   getTemplate: (id: number) => client.get<InvoiceTemplate>(`/invoices/templates/${id}`),
-  createTemplate: (body: { projectId?: number | null; issuerId?: number | null; nombre?: string; pageSize?: string; layout?: TemplateBlock[]; esDefault?: boolean }) => client.post<InvoiceTemplate>('/invoices/templates', body),
+  createTemplate: (body: { projectId?: number | null; issuerId?: number | null; nombre?: string; pageSize?: string; layout?: TemplateBlock[]; esDefault?: boolean; condicionPais?: string | null }) => client.post<InvoiceTemplate>('/invoices/templates', body),
   updateTemplate: (id: number, body: Record<string, unknown>) => client.patch<InvoiceTemplate>(`/invoices/templates/${id}`, body),
   deleteTemplate: (id: number) => client.delete(`/invoices/templates/${id}`),
   getConfig: (projectId: number) => client.get<ProjectInvoicingConfig>(`/invoices/config?projectId=${projectId}`),

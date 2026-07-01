@@ -361,16 +361,35 @@ export async function getTemplateForIssuer(issuerId, projectId) {
      ORDER BY es_default DESC, id ASC LIMIT 1`, [projectId]);
   return d.rows[0] || null;
 }
+// Elige la plantilla según la condición por país del cliente. Prioridad:
+// 1) plantilla del emisor que matchee el país (espana/extranjero)
+// 2) plantilla del emisor sin condición (todos)
+// 3) plantilla default del proyecto
+export async function getTemplateForInvoice(issuerId, projectId, clientePais) {
+  const isSpain = /españa|espana|spain|^es$/i.test(String(clientePais || '').trim());
+  const wanted = isSpain ? 'espana' : 'extranjero';
+  const { rows } = await query(
+    `SELECT * FROM invoice_templates
+      WHERE activo = true
+        AND (issuer_id = $1 OR issuer_id IS NULL)
+        AND (project_id IS NULL OR project_id = $2)
+      ORDER BY (issuer_id = $1) DESC NULLS LAST, es_default DESC, id ASC`,
+    [issuerId || null, projectId]);
+  if (!rows.length) return null;
+  return rows.find((t) => t.condicion_pais === wanted)
+      || rows.find((t) => !t.condicion_pais || t.condicion_pais === 'todos')
+      || rows[0];
+}
 export async function createTemplate(d, userId) {
   const { rows } = await query(
-    `INSERT INTO invoice_templates (project_id, issuer_id, nombre, page_size, layout, es_default, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+    `INSERT INTO invoice_templates (project_id, issuer_id, nombre, page_size, layout, es_default, condicion_pais, created_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
     [d.projectId || null, d.issuerId || null, d.nombre || 'Plantilla', d.pageSize || 'A4',
-     JSON.stringify(d.layout || []), !!d.esDefault, userId]);
+     JSON.stringify(d.layout || []), !!d.esDefault, d.condicionPais || null, userId]);
   return rows[0];
 }
 export async function updateTemplate(id, d) {
-  const COLS = { nombre: 'nombre', pageSize: 'page_size', issuerId: 'issuer_id', esDefault: 'es_default', activo: 'activo' };
+  const COLS = { nombre: 'nombre', pageSize: 'page_size', issuerId: 'issuer_id', esDefault: 'es_default', activo: 'activo', condicionPais: 'condicion_pais' };
   const sets = []; const params = [id];
   for (const [k, col] of Object.entries(COLS)) {
     if (Object.prototype.hasOwnProperty.call(d, k)) { params.push(d[k]); sets.push(`${col} = $${params.length}`); }

@@ -24,7 +24,8 @@ const SECTIONS = [
   { id: 'seo',          label: 'Tráfico orgánico', icon: MagnifyingGlass },
   { id: 'ia',           label: 'IA y Reportes', icon: Robot },
   { id: 'contabilidad', label: 'Contabilidad', icon: Calculator },
-  { id: 'documentos',   label: 'Documentos',   icon: Receipt },
+  { id: 'facturacion',  label: 'Facturación',  icon: Receipt },
+  { id: 'documentos',   label: 'Certificados', icon: Receipt },
   { id: 'configuracion',label: 'Configuración',icon: Gear },
   { id: 'integraciones',label: 'Integraciones (Make)', icon: PlugsConnected },
   { id: 'disponibilidad',label: 'Disponibilidad',icon: CalendarBlank },
@@ -201,7 +202,7 @@ export default function ManualPage() {
     { label: 'Empezar',    ids: ['introduccion', 'dashboard', 'atajos'] },
     { label: 'Operación',  ids: ['prospectos', 'clientes', 'productos', 'matriculas'] },
     { label: 'Análisis',   ids: ['campanas', 'seo', 'ia'] },
-    { label: 'Sistema',    ids: ['contabilidad', 'documentos', 'configuracion'] },
+    { label: 'Sistema',    ids: ['contabilidad', 'facturacion', 'documentos', 'configuracion'] },
   ];
 
   return (
@@ -630,9 +631,61 @@ export default function ManualPage() {
           No necesitas duplicar el trabajo — solo registra la conversión desde la ficha del prospecto.
         </Callout>
 
-        {/* ── DOCUMENTOS ── */}
-        <SectionHeader id="documentos" icon={Receipt} label="Documentos" color="rose"
-          description="Facturas y certificados emitidos en PDF, pixel-perfect del template original" />
+        {/* ── FACTURACIÓN ── */}
+        <SectionHeader id="facturacion" icon={Receipt} label="Facturación" color="blue"
+          description="Facturas fiscales con multi-emisor, editor visual (Canva) y numeración por empresa" />
+        <P>
+          La facturación vive en <b>Finanzas → Facturación</b>. Emite facturas y rectificativas (de abono),
+          con datos fiscales del cliente, IVA/descuentos, y un diseño de PDF totalmente personalizable.
+          Los certificados/diplomas están aparte, en <b>Catálogo → Certificados</b>.
+        </P>
+
+        <SubHeader>Empresas emisoras (multi-emisor)</SubHeader>
+        <P>
+          En <b>Configuración de facturación</b> das de alta las empresas desde las que facturás
+          (razón social, NIF, dirección, IBAN, logo por URL o subido al servidor). Solo las
+          administradoras las gestionan. Al emitir, elegís con cuál empresa se factura.
+        </P>
+
+        <SubHeader>Numeración por empresa</SubHeader>
+        <Steps items={[
+          { title: 'Cada empresa lleva su propia serie', desc: 'En el alta de la empresa definís su Serie (ej: A, FAC, 2026). El correlativo es independiente por empresa — nunca se mezclan dos NIF.' },
+          { title: 'Migrar desde un sistema anterior', desc: 'Poné el «Nº desde el que arranca» (el último que emitiste). Ej: serie A y número 200 → la próxima factura será 2026/0201.' },
+          { title: 'Los abonos tienen su serie', desc: 'Las rectificativas usan la serie R+serie de la empresa (ej: serie A → abonos RA), con su propio correlativo e importe negativo.' },
+          { title: 'La plantilla NO afecta la numeración', desc: 'Podés cambiar de diseño/plantilla sin romper el correlativo: la numeración depende solo de la empresa emisora, no del diseño.' },
+        ]} />
+
+        <SubHeader>Emitir una factura</SubHeader>
+        <Steps items={[
+          { title: 'Nueva factura', desc: 'Botón «Nueva factura». Elegí la empresa emisora y el tipo (persona física / empresa / contado).' },
+          { title: 'Buscar cliente', desc: 'Buscá por nombre o email: trae DNI/NIF, dirección, ciudad, CP, país, email y teléfono del prospecto. Lo que falte lo completás; los obligatorios se marcan en rojo.' },
+          { title: 'Conceptos, IVA y pago', desc: 'Añadí líneas (descripción, cantidad, precio), definí IVA (21%, incluido o exento) y el método/pie de pago.' },
+          { title: 'Generar', desc: 'Se emite con el correlativo de la empresa y se abre el PDF con tu diseño.' },
+        ]} />
+
+        <SubHeader>Editor visual de facturas (Canva)</SubHeader>
+        <P>
+          Desde Configuración → <b>Diseñador de facturas</b> armás el PDF arrastrando bloques en una hoja A4:
+          logo, datos emisor, datos cliente, Nº/fecha, tabla de ítems, totales/IVA, pie y texto libre.
+          Cada bloque se mueve, redimensiona y se le ajusta fuente, alineación, color. Los <b>encabezados de
+          la tabla</b> (Descripción, Cant., Precio, Total) son editables — por ejemplo, escribí «Precio unitario».
+        </P>
+
+        <SubHeader>Plantillas condicionales por país</SubHeader>
+        <Steps items={[
+          { title: 'Varias plantillas', desc: 'Podés crear varias (Estándar España, Cliente extranjero, Minimalista) y guardarlas por empresa emisora.' },
+          { title: 'Condición por cliente', desc: 'Cada plantilla se marca para «Todos», «Clientes de España» o «Clientes extranjeros».' },
+          { title: 'Selección automática', desc: 'Al emitir, el sistema elige la plantilla que corresponde según el país del cliente (España vs extranjero). Si no hay match, usa la de «Todos» o la marcada por defecto (★).' },
+        ]} />
+        <Callout type="tip">
+          Para clientes extranjeros conviene una plantilla con la leyenda de operación exenta / inversión del
+          sujeto pasivo. La numeración sigue siendo la de la empresa emisora — cambiar de plantilla no
+          altera el correlativo.
+        </Callout>
+
+        {/* ── CERTIFICADOS (ex Documentos) ── */}
+        <SectionHeader id="documentos" icon={Receipt} label="Certificados" color="rose"
+          description="Certificados y diplomas en PDF. Las facturas ahora se emiten en Finanzas → Facturación." />
         <P>
           Genera facturas y certificados en PDF directamente desde el CRM, sin depender de Canva o
           herramientas externas. Cada documento se numera secuencialmente por proyecto y queda

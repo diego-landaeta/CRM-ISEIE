@@ -59,7 +59,7 @@ export async function generatePDF(invoiceId) {
   try {
     template = inv.template_id
       ? await model.getTemplate(inv.template_id)
-      : await model.getTemplateForIssuer(inv.issuer_id, inv.project_id);
+      : await model.getTemplateForInvoice(inv.issuer_id, inv.project_id, inv.cliente_pais);
   } catch { template = null; }
   const tplLayout = Array.isArray(template?.layout) ? template.layout : [];
 

@@ -18,6 +18,10 @@ const BLOCK_LABELS: Record<TemplateBlock['type'], string> = {
 
 const PALETTE: TemplateBlock['type'][] = ['logo', 'emisor', 'cliente', 'meta', 'items', 'totales', 'pie', 'texto'];
 
+const CONDICION_LABEL: Record<string, string> = {
+  todos: 'Todos los clientes', espana: 'Clientes de España', extranjero: 'Clientes extranjeros',
+};
+
 const uid = () => `b${Math.random().toString(36).slice(2, 9)}`;
 
 function seedLayout(): TemplateBlock[] {
@@ -28,6 +32,31 @@ function seedLayout(): TemplateBlock[] {
     { id: uid(), type: 'cliente', x: 40, y: 160, w: 380, h: 110, fontSize: 11 },
     { id: uid(), type: 'items', x: 40, y: 300, w: 714, h: 320, fontSize: 11 },
     { id: uid(), type: 'totales', x: 470, y: 640, w: 284, h: 120, align: 'right', fontSize: 12 },
+    { id: uid(), type: 'pie', x: 40, y: 800, w: 714, h: 140, fontSize: 10, color: '#666666' },
+  ];
+}
+
+// Preset minimalista: menos bloques, más limpio.
+function seedMinimal(): TemplateBlock[] {
+  return [
+    { id: uid(), type: 'emisor', x: 40, y: 40, w: 360, h: 90, fontSize: 11, bold: true },
+    { id: uid(), type: 'meta', x: 470, y: 40, w: 284, h: 55, align: 'right', fontSize: 12, bold: true },
+    { id: uid(), type: 'cliente', x: 40, y: 170, w: 380, h: 100, fontSize: 11 },
+    { id: uid(), type: 'items', x: 40, y: 300, w: 714, h: 320, fontSize: 11 },
+    { id: uid(), type: 'totales', x: 470, y: 640, w: 284, h: 110, align: 'right', fontSize: 12 },
+  ];
+}
+
+// Preset para cliente extranjero: incluye un texto de leyenda (inversión del sujeto pasivo / exenta).
+function seedExtranjero(): TemplateBlock[] {
+  return [
+    { id: uid(), type: 'logo', x: 40, y: 40, w: 180, h: 70 },
+    { id: uid(), type: 'emisor', x: 470, y: 40, w: 284, h: 100, align: 'right', fontSize: 11 },
+    { id: uid(), type: 'meta', x: 470, y: 155, w: 284, h: 55, align: 'right', fontSize: 12, bold: true },
+    { id: uid(), type: 'cliente', x: 40, y: 160, w: 380, h: 110, fontSize: 11 },
+    { id: uid(), type: 'items', x: 40, y: 300, w: 714, h: 300, fontSize: 11 },
+    { id: uid(), type: 'totales', x: 470, y: 620, w: 284, h: 110, align: 'right', fontSize: 12 },
+    { id: uid(), type: 'texto', x: 40, y: 620, w: 380, h: 80, fontSize: 9, color: '#666666', text: 'Operación no sujeta / exenta de IVA español. Inversión del sujeto pasivo (art. 84 LIVA) cuando proceda.' },
     { id: uid(), type: 'pie', x: 40, y: 800, w: 714, h: 140, fontSize: 10, color: '#666666' },
   ];
 }
@@ -75,6 +104,7 @@ export default function InvoiceTemplateEditorPage() {
   const [nombre, setNombre] = useState('Plantilla');
   const [issuerId, setIssuerId] = useState<number | null>(null);
   const [esDefault, setEsDefault] = useState(false);
+  const [condicion, setCondicion] = useState<'todos' | 'espana' | 'extranjero'>('todos');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -99,12 +129,15 @@ export default function InvoiceTemplateEditorPage() {
   }, [pid]);
   useEffect(() => { load(); }, [load]);
 
-  function newTemplate() {
-    setCurrent(null); setNombre('Plantilla'); setIssuerId(null); setEsDefault(false);
-    setLayout(seedLayout()); setSelectedId(null);
+  function newTemplate(preset: 'estandar' | 'extranjero' | 'minimal' = 'estandar') {
+    setCurrent(null); setIssuerId(null); setEsDefault(false); setSelectedId(null);
+    if (preset === 'minimal') { setNombre('Minimalista'); setCondicion('todos'); setLayout(seedMinimal()); }
+    else if (preset === 'extranjero') { setNombre('Cliente extranjero'); setCondicion('extranjero'); setLayout(seedExtranjero()); }
+    else { setNombre('Estándar España'); setCondicion('espana'); setLayout(seedLayout()); }
   }
   function editTemplate(t: InvoiceTemplate) {
     setCurrent(t); setNombre(t.nombre); setIssuerId(t.issuer_id); setEsDefault(t.es_default);
+    setCondicion((t.condicion_pais as 'todos' | 'espana' | 'extranjero') || 'todos');
     setLayout(Array.isArray(t.layout) ? t.layout : []); setSelectedId(null);
   }
 
@@ -139,7 +172,7 @@ export default function InvoiceTemplateEditorPage() {
     if (!pid) return;
     setSaving(true);
     try {
-      const body = { projectId: pid, issuerId: issuerId || null, nombre, pageSize: 'A4', layout, esDefault };
+      const body = { projectId: pid, issuerId: issuerId || null, nombre, pageSize: 'A4', layout, esDefault, condicionPais: condicion === 'todos' ? null : condicion };
       const res = current
         ? await invoicesApi.updateTemplate(current.id, body)
         : await invoicesApi.createTemplate(body);
@@ -181,20 +214,26 @@ export default function InvoiceTemplateEditorPage() {
         {/* Panel izquierdo: plantillas + paleta + propiedades */}
         <div className="w-64 shrink-0 space-y-3">
           <div className="bg-card border border-border rounded-lg p-3">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-xs font-bold uppercase text-muted-foreground">Plantillas</h3>
-              <button onClick={newTemplate} className="inline-flex items-center gap-1 h-7 px-2 rounded bg-primary text-primary-foreground text-[11px] font-semibold"><Plus size={12} weight="bold"/>Nueva</button>
-            </div>
-            <div className="space-y-1">
-              {templates.length === 0 && <p className="text-[11px] text-muted-foreground italic">Sin plantillas. Creá una nueva.</p>}
+            <h3 className="text-xs font-bold uppercase text-muted-foreground mb-2">Plantillas</h3>
+            <div className="space-y-1 mb-2">
+              {templates.length === 0 && <p className="text-[11px] text-muted-foreground italic">Sin plantillas. Creá una nueva abajo.</p>}
               {templates.map((t) => (
                 <div key={t.id} className={`flex items-center justify-between rounded px-2 py-1 text-xs cursor-pointer ${current?.id === t.id ? 'bg-primary/10 text-primary' : 'hover:bg-muted'}`}>
                   <button className="flex-1 text-left truncate" onClick={() => editTemplate(t)}>
-                    {t.nombre}{t.es_default ? ' ★' : ''}<span className="block text-[9px] text-muted-foreground">{t.issuer_nombre || 'Todas las empresas'}</span>
+                    {t.nombre}{t.es_default ? ' ★' : ''}
+                    <span className="block text-[9px] text-muted-foreground">
+                      {t.issuer_nombre || 'Todas las empresas'} · {CONDICION_LABEL[t.condicion_pais || 'todos']}
+                    </span>
                   </button>
                   <button onClick={() => removeTemplate(t.id)} className="text-red-500 hover:text-red-600"><Trash size={12}/></button>
                 </div>
               ))}
+            </div>
+            <p className="text-[10px] font-semibold uppercase text-muted-foreground mb-1">Nueva desde…</p>
+            <div className="grid grid-cols-1 gap-1">
+              <button onClick={() => newTemplate('estandar')} className="inline-flex items-center gap-1 h-7 px-2 rounded bg-primary text-primary-foreground text-[11px] font-semibold justify-center"><Plus size={12} weight="bold"/>Estándar (España)</button>
+              <button onClick={() => newTemplate('extranjero')} className="h-7 px-2 rounded border border-border text-[11px] hover:bg-muted">Cliente extranjero</button>
+              <button onClick={() => newTemplate('minimal')} className="h-7 px-2 rounded border border-border text-[11px] hover:bg-muted">Minimalista</button>
             </div>
           </div>
 
@@ -247,6 +286,11 @@ export default function InvoiceTemplateEditorPage() {
         <div className="flex-1 min-w-0 overflow-auto">
           <div className="mb-3 flex flex-wrap items-center gap-2 bg-card border border-border rounded-lg p-3">
             <input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Nombre de la plantilla" className="h-9 px-2 rounded border border-border bg-background text-sm w-48" />
+            <select value={condicion} onChange={(e) => setCondicion(e.target.value as 'todos')} title="¿A qué clientes se aplica esta plantilla?" className="h-9 px-2 rounded border border-border bg-card text-sm">
+              <option value="todos">Todos los clientes</option>
+              <option value="espana">Clientes de España</option>
+              <option value="extranjero">Clientes extranjeros</option>
+            </select>
             <select value={issuerId ?? ''} onChange={(e) => setIssuerId(e.target.value ? Number(e.target.value) : null)} className="h-9 px-2 rounded border border-border bg-card text-sm">
               <option value="">Todas las empresas</option>
               {issuers.map((i) => <option key={i.id} value={i.id}>{i.razon_social}</option>)}
