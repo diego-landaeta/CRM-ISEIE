@@ -51,7 +51,7 @@ function BlockPreview({ b }: { b: TemplateBlock }) {
       <div style={style}>
         <table className="w-full border-collapse" style={{ fontSize: b.fontSize || 11 }}>
           <thead><tr className="border-b border-slate-400 text-left">
-            <th className="py-0.5">Descripción</th><th className="text-center">Cant.</th><th className="text-right">Precio</th><th className="text-right">Total</th>
+            <th className="py-0.5">{b.cols?.desc || 'Descripción'}</th><th className="text-center">{b.cols?.cant || 'Cant.'}</th><th className="text-right">{b.cols?.precio || 'Precio'}</th><th className="text-right">{b.cols?.total || 'Total'}</th>
           </tr></thead>
           <tbody>
             <tr className="border-b border-slate-200"><td>Curso ejemplo</td><td className="text-center">1</td><td className="text-right">100,00</td><td className="text-right">100,00</td></tr>
@@ -226,6 +226,18 @@ export default function InvoiceTemplateEditorPage() {
               </div>
               {selected.type === 'texto' && (
                 <textarea value={selected.text || ''} onChange={(e) => patch(selected.id, { text: e.target.value })} rows={3} placeholder="Texto…" className="w-full px-2 py-1 rounded border border-border bg-background text-sm" />
+              )}
+              {selected.type === 'items' && (
+                <div className="space-y-1.5 border-t border-border/60 pt-2">
+                  <p className="text-[10px] font-semibold uppercase text-muted-foreground">Encabezados de columna</p>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <input value={selected.cols?.desc ?? ''} onChange={(e) => patch(selected.id, { cols: { ...selected.cols, desc: e.target.value } })} placeholder="Descripción" className="h-8 px-2 rounded border border-border bg-background text-xs" />
+                    <input value={selected.cols?.cant ?? ''} onChange={(e) => patch(selected.id, { cols: { ...selected.cols, cant: e.target.value } })} placeholder="Cant." className="h-8 px-2 rounded border border-border bg-background text-xs" />
+                    <input value={selected.cols?.precio ?? ''} onChange={(e) => patch(selected.id, { cols: { ...selected.cols, precio: e.target.value } })} placeholder="Precio" className="h-8 px-2 rounded border border-border bg-background text-xs" />
+                    <input value={selected.cols?.total ?? ''} onChange={(e) => patch(selected.id, { cols: { ...selected.cols, total: e.target.value } })} placeholder="Total" className="h-8 px-2 rounded border border-border bg-background text-xs" />
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">Dejá vacío para el nombre por defecto (ej. escribí "Precio unitario").</p>
+                </div>
               )}
             </div>
           )}

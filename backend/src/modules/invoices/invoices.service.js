@@ -316,11 +316,15 @@ async function renderFromTemplate({ pdfDoc, page, font, bold, inv, layout }) {
           const colDesc = bx, colCant = bx + bw * 0.60, colPrec = bx + bw * 0.74, colTot = bx + bw - font.widthOfTextAtSize('0000,00 €', size);
           let yy = TOP(b.y) - size;
           const bottom = TOP(b.y + b.h);
-          // Cabecera
-          page.drawText('Descripción', { x: colDesc, y: yy, size, font: bold, color: black });
-          page.drawText('Cant.', { x: colCant, y: yy, size, font: bold, color: black });
-          page.drawText('Precio', { x: colPrec, y: yy, size, font: bold, color: black });
-          page.drawText('Total', { x: colTot, y: yy, size, font: bold, color: black });
+          // Cabecera (encabezados personalizables desde el editor)
+          const hDesc = (b.cols?.desc && b.cols.desc.trim()) || 'Descripción';
+          const hCant = (b.cols?.cant && b.cols.cant.trim()) || 'Cant.';
+          const hPrec = (b.cols?.precio && b.cols.precio.trim()) || 'Precio';
+          const hTot = (b.cols?.total && b.cols.total.trim()) || 'Total';
+          page.drawText(hDesc, { x: colDesc, y: yy, size, font: bold, color: black });
+          page.drawText(hCant, { x: colCant, y: yy, size, font: bold, color: black });
+          page.drawText(hPrec, { x: colPrec, y: yy, size, font: bold, color: black });
+          page.drawText(hTot, { x: colTot, y: yy, size, font: bold, color: black });
           yy -= size * 0.6;
           page.drawRectangle({ x: bx, y: yy, width: bw, height: 0.8, color: gray });
           yy -= size * 1.4;

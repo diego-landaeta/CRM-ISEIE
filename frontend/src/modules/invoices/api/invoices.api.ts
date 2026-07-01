@@ -114,6 +114,8 @@ export interface TemplateBlock {
   bold?: boolean;
   color?: string;
   text?: string;
+  // Encabezados editables de la tabla de ítems (bloque 'items').
+  cols?: { desc?: string; cant?: string; precio?: string; total?: string };
 }
 export interface InvoiceTemplate {
   id: number;
