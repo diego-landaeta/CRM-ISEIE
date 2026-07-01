@@ -3,7 +3,7 @@
 // `useState<...>(...)` arriba, pero el archivo consume varios componentes UI
 // que aún están en .jsx con tipos inferidos demasiado estrictos. La
 // migración completa de los componentes UI compartidos es follow-up.
-import { useState, useEffect, lazy, Suspense } from 'react';
+import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import type { Lead, Conversion } from '@/shared/types';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import client from '@/shared/api/client';
@@ -108,23 +108,31 @@ export default function ClientDetailPage() {
     || user?.role === 'superadmin'
     || (user?.role === 'gestor' && lead?.responsable_id === user?.id);
 
+  // Token de request: evita que la respuesta lenta de un cliente anterior pise
+  // los datos del cliente actual al navegar rápido entre fichas.
+  const reqIdRef = useRef(0);
+
   async function load() {
+    const myReq = ++reqIdRef.current;
     setLoading(true);
     try {
       const [leadRes, convRes] = await Promise.all([
         client.get(`/leads/${id}`),
         conversionsApi.byLead(id),
       ]);
+      if (reqIdRef.current !== myReq) return; // respuesta obsoleta: ignorar
       if (leadRes.success) setLead(leadRes.data);
       if (convRes.success) setConversions(convRes.data || []);
     } catch (err) {
+      if (reqIdRef.current !== myReq) return;
       toast({ title: 'Error', description: err.message, variant: 'destructive' });
     } finally {
-      setLoading(false);
+      if (reqIdRef.current === myReq) setLoading(false);
     }
   }
 
-  useEffect(() => { load(); }, [id]);
+  // Limpiamos el cliente anterior al cambiar de id.
+  useEffect(() => { setLead(null); setConversions([]); load(); }, [id]);
 
   if (loading) {
     return (
