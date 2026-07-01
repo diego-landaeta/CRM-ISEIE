@@ -397,8 +397,11 @@ export async function listVentasSinFactura(projectId) {
 }
 
 export async function getProjectInvoicerData(projectId) {
+  // Nota: el emisor real viene del snapshot multi-empresa (issuer_*); esta función
+  // solo aporta nombre/defaults del proyecto. No se referencia datos_fiscales
+  // porque esa columna no existe en todas las instancias.
   const { rows } = await query(
-    `SELECT id, nombre, slug, logo_url, datos_fiscales,
+    `SELECT id, nombre, slug, logo_url,
             factura_pie_default, factura_serie_default, factura_metodo_default
      FROM projects WHERE id = $1`,
     [projectId]
