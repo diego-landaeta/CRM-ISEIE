@@ -249,6 +249,37 @@ export async function deleteIssuerLogo(req, res, next) {
   } catch (e) { next(e); }
 }
 
+// ── Plantillas (editor Canva) ──────────────────────────────────────────────
+export async function listTemplates(req, res, next) {
+  try {
+    const pid = Number(req.query.projectId) || null;
+    res.json({ success: true, data: await model.listTemplates(pid) });
+  } catch (e) { next(e); }
+}
+export async function getTemplate(req, res, next) {
+  try { res.json({ success: true, data: await model.getTemplate(Number(req.params.id)) }); }
+  catch (e) { next(e); }
+}
+export async function createTemplate(req, res, next) {
+  try {
+    if (!isAdmin(req)) throw new AppError('Solo administradoras', 403, 'FORBIDDEN');
+    res.json({ success: true, data: await model.createTemplate(req.body, req.user?.id) });
+  } catch (e) { next(e); }
+}
+export async function updateTemplate(req, res, next) {
+  try {
+    if (!isAdmin(req)) throw new AppError('Solo administradoras', 403, 'FORBIDDEN');
+    res.json({ success: true, data: await model.updateTemplate(Number(req.params.id), req.body) });
+  } catch (e) { next(e); }
+}
+export async function deleteTemplate(req, res, next) {
+  try {
+    if (!isAdmin(req)) throw new AppError('Solo administradoras', 403, 'FORBIDDEN');
+    await model.deleteTemplate(Number(req.params.id));
+    res.json({ success: true });
+  } catch (e) { next(e); }
+}
+
 export async function ventasSinFactura(req, res, next) {
   try {
     const pid = projectId(req);

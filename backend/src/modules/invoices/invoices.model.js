@@ -330,6 +330,55 @@ export async function deleteIssuer(id) {
   await query(`UPDATE invoice_issuers SET activo = false, updated_at = NOW() WHERE id = $1`, [id]);
 }
 
+// ── Plantillas visuales (editor Canva) ──────────────────────────────────────
+export async function listTemplates(projectId) {
+  const { rows } = await query(
+    `SELECT t.*, i.razon_social AS issuer_nombre
+       FROM invoice_templates t
+       LEFT JOIN invoice_issuers i ON i.id = t.issuer_id
+      WHERE t.activo = true AND (t.project_id IS NULL OR t.project_id = $1)
+      ORDER BY t.es_default DESC, t.id ASC`, [projectId]);
+  return rows;
+}
+export async function getTemplate(id) {
+  const { rows } = await query(`SELECT * FROM invoice_templates WHERE id = $1`, [id]);
+  return rows[0] || null;
+}
+// Devuelve la plantilla del emisor; si no tiene, la default del proyecto (o null).
+export async function getTemplateForIssuer(issuerId, projectId) {
+  if (issuerId) {
+    const r = await query(`SELECT * FROM invoice_templates WHERE activo=true AND issuer_id=$1 ORDER BY es_default DESC, id ASC LIMIT 1`, [issuerId]);
+    if (r.rows[0]) return r.rows[0];
+  }
+  const d = await query(
+    `SELECT * FROM invoice_templates WHERE activo=true AND (project_id IS NULL OR project_id=$1)
+     ORDER BY es_default DESC, id ASC LIMIT 1`, [projectId]);
+  return d.rows[0] || null;
+}
+export async function createTemplate(d, userId) {
+  const { rows } = await query(
+    `INSERT INTO invoice_templates (project_id, issuer_id, nombre, page_size, layout, es_default, created_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+    [d.projectId || null, d.issuerId || null, d.nombre || 'Plantilla', d.pageSize || 'A4',
+     JSON.stringify(d.layout || []), !!d.esDefault, userId]);
+  return rows[0];
+}
+export async function updateTemplate(id, d) {
+  const COLS = { nombre: 'nombre', pageSize: 'page_size', issuerId: 'issuer_id', esDefault: 'es_default', activo: 'activo' };
+  const sets = []; const params = [id];
+  for (const [k, col] of Object.entries(COLS)) {
+    if (Object.prototype.hasOwnProperty.call(d, k)) { params.push(d[k]); sets.push(`${col} = $${params.length}`); }
+  }
+  if (Object.prototype.hasOwnProperty.call(d, 'layout')) { params.push(JSON.stringify(d.layout)); sets.push(`layout = $${params.length}`); }
+  if (!sets.length) return getTemplate(id);
+  sets.push('updated_at = NOW()');
+  const { rows } = await query(`UPDATE invoice_templates SET ${sets.join(', ')} WHERE id = $1 RETURNING *`, params);
+  return rows[0];
+}
+export async function deleteTemplate(id) {
+  await query(`UPDATE invoice_templates SET activo=false, updated_at=NOW() WHERE id=$1`, [id]);
+}
+
 // Ventas (conversiones) con importe > 0 que aún NO tienen factura emitida (no cancelada).
 export async function listVentasSinFactura(projectId) {
   const { rows } = await query(

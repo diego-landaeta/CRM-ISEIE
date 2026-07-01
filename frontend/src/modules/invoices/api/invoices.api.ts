@@ -104,6 +104,28 @@ export interface LeadFiscalData {
   pais_fiscal: string | null;
 }
 
+export interface TemplateBlock {
+  id: string;
+  type: 'logo' | 'emisor' | 'cliente' | 'meta' | 'items' | 'totales' | 'pie' | 'texto';
+  x: number; y: number; w: number; h: number;
+  fontSize?: number;
+  align?: 'left' | 'center' | 'right';
+  bold?: boolean;
+  color?: string;
+  text?: string;
+}
+export interface InvoiceTemplate {
+  id: number;
+  project_id: number | null;
+  issuer_id: number | null;
+  issuer_nombre?: string | null;
+  nombre: string;
+  page_size: string;
+  layout: TemplateBlock[];
+  es_default: boolean;
+  activo: boolean;
+}
+
 export interface VentaSinFactura {
   conversion_id: number;
   lead_id: number;
@@ -141,6 +163,11 @@ export const invoicesApi = {
     return client.post<Issuer>(`/invoices/issuers/${id}/logo`, fd);
   },
   deleteIssuerLogo: (id: number) => client.delete<Issuer>(`/invoices/issuers/${id}/logo`),
+  listTemplates: (projectId: number) => client.get<InvoiceTemplate[]>(`/invoices/templates?projectId=${projectId}`),
+  getTemplate: (id: number) => client.get<InvoiceTemplate>(`/invoices/templates/${id}`),
+  createTemplate: (body: { projectId?: number | null; issuerId?: number | null; nombre?: string; pageSize?: string; layout?: TemplateBlock[]; esDefault?: boolean }) => client.post<InvoiceTemplate>('/invoices/templates', body),
+  updateTemplate: (id: number, body: Record<string, unknown>) => client.patch<InvoiceTemplate>(`/invoices/templates/${id}`, body),
+  deleteTemplate: (id: number) => client.delete(`/invoices/templates/${id}`),
   getConfig: (projectId: number) => client.get<ProjectInvoicingConfig>(`/invoices/config?projectId=${projectId}`),
   updateConfig: (body: { projectId: number; piePagoDefault?: string; serieDefault?: string; metodoDefault?: string }) => client.patch('/invoices/config', body),
   listSequences: (projectId: number) => client.get<InvoiceSequence[]>(`/invoices/sequences?projectId=${projectId}`),

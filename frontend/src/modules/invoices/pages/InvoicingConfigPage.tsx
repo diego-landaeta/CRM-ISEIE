@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { FloppyDisk, ArrowsClockwise } from '@phosphor-icons/react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -11,6 +12,8 @@ export default function InvoicingConfigPage() {
   const { activeProject } = useProjectContext() as { activeProject: { id?: number | null; nombre?: string } };
   const { user } = useAuth() as { user: { role?: string } | null };
   const pid = activeProject?.id;
+  // Base de facturación (/finanzas en ISEIH, /accounting en ISEIE).
+  const invBase = useLocation().pathname.split('/facturas')[0];
   const canEdit = ['admin', 'superadmin', 'soporte'].includes(user?.role || '');
 
   const [piePagoDefault, setPiePagoDefault] = useState('');
@@ -132,7 +135,15 @@ export default function InvoicingConfigPage() {
 
   return (
     <div className="space-y-5 pb-8">
-      <PageHeader title="Configuración de facturación" subtitle={`Defaults y numeración correlativa — ${activeProject?.nombre || ''}`} />
+      <PageHeader
+        title="Configuración de facturación"
+        subtitle={`Defaults y numeración correlativa — ${activeProject?.nombre || ''}`}
+        actions={(
+          <Link to={`${invBase}/facturas/plantillas`} className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90">
+            🎨 Diseñador de facturas
+          </Link>
+        )}
+      />
 
       <div className="bg-card border border-border rounded-lg p-5 space-y-4">
         <h3 className="font-semibold text-sm">Defaults por proyecto</h3>
