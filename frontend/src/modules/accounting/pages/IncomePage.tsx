@@ -56,6 +56,8 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
 
   const totalFacturado = items.reduce((s, r) => s + Number(r.importe_total || 0), 0);
   const totalCobrado = items.reduce((s, r) => s + Number(r.importe_pagado || 0), 0);
+  // IVA aproximado: usa el iva_importe de la conversión si existe; si no, estima 21% (IVA incluido).
+  const ivaAprox = items.reduce((s, r) => s + (Number(r.iva_importe) || (Number(r.importe_total || 0) * 0.21 / 1.21)), 0);
 
   return (
     <div className="space-y-5 pb-8">
@@ -108,11 +110,11 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
         </div>
       )}
 
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <KpiCard
           icon={Receipt}
           iconBg="bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400"
-          label="Ventas"
+          label="Conversiones"
           numericValue={items.length}
         />
         <KpiCard
@@ -127,6 +129,13 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
           iconBg="bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400"
           label="Cobrado"
           numericValue={totalCobrado}
+          format={fmt}
+        />
+        <KpiCard
+          icon={Receipt}
+          iconBg="bg-amber-50 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400"
+          label="IVA aprox."
+          numericValue={ivaAprox}
           format={fmt}
         />
       </div>
