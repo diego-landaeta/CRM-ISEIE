@@ -169,7 +169,7 @@ export default function InvoiceCreatePage() {
         <div className="bg-card border border-border rounded-lg p-4">
           <label className="text-xs font-bold uppercase text-muted-foreground">Empresa que emite</label>
           <select value={issuerId ?? ''} onChange={(e) => setIssuerId(Number(e.target.value))}
-            className="w-full h-9 px-2 mt-1 rounded border border-primary/40 bg-primary/5 text-sm font-medium">
+            className="w-full h-9 px-2 mt-1 rounded border border-primary/40 bg-background text-foreground text-sm font-medium [&>option]:bg-background [&>option]:text-foreground">
             {issuers.map((iss) => <option key={iss.id} value={iss.id}>{iss.razon_social} — {iss.nif}{iss.serie ? ` · serie ${iss.serie}` : ''}{iss.es_default ? ' (por defecto)' : ''}</option>)}
           </select>
         </div>
@@ -244,7 +244,7 @@ export default function InvoiceCreatePage() {
           <label className="text-xs font-bold uppercase text-muted-foreground">IVA / Régimen fiscal</label>
           {regimenes.length > 0 && (
             <select value={regimenId ?? ''} onChange={(e) => pickRegimen(e.target.value ? Number(e.target.value) : null)}
-              className="w-full h-9 px-2 rounded border border-border bg-background text-sm">
+              className="w-full h-9 px-2 rounded border border-border bg-background text-foreground text-sm [&>option]:bg-background [&>option]:text-foreground">
               <option value="">Manual (elegir IVA abajo)</option>
               {regimenes.map((r) => <option key={r.id} value={r.id}>{r.nombre} — {r.aplica_iva ? `${Number(r.iva_pct)}% IVA` : 'sin IVA'}</option>)}
             </select>

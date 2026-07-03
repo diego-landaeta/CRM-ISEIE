@@ -146,7 +146,7 @@ export default function FiscalDataDialog({ projectId, leadId, conversionId, defa
             {issuers.length > 0 && (
               <Section title="Empresa que emite">
                 <select value={issuerId ?? ''} onChange={e => setIssuerId(Number(e.target.value))}
-                  className="w-full h-9 px-2 rounded border border-primary/40 bg-primary/5 text-sm font-medium">
+                  className="w-full h-9 px-2 rounded border border-primary/40 bg-background text-foreground text-sm font-medium [&>option]:bg-background [&>option]:text-foreground">
                   {issuers.map(iss => (
                     <option key={iss.id} value={iss.id}>{iss.razon_social} — {iss.nif}{iss.es_default ? ' (por defecto)' : ''}</option>
                   ))}
