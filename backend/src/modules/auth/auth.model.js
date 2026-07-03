@@ -31,20 +31,24 @@ export async function getUserProjects(userId, role) {
   if (role === 'superadmin') {
     const { rows } = await query(
       `SELECT p.id, p.nombre, p.slug, p.emoji, p.type, p.webhook_api_key,
-              p.modules, p.sidebar_labels, p.theme_color
+              p.modules, p.sidebar_labels, p.theme_color,
+              p.sociedad_emisora_id, s.razon_social AS sociedad_nombre
        FROM projects p
+       LEFT JOIN invoice_issuers s ON s.id = p.sociedad_emisora_id
        WHERE p.active = true
-       ORDER BY p.nombre`
+       ORDER BY s.razon_social NULLS LAST, p.nombre`
     );
     return rows;
   }
   const { rows } = await query(
     `SELECT p.id, p.nombre, p.slug, p.emoji, p.type, p.webhook_api_key,
-            p.modules, p.sidebar_labels, p.theme_color
+            p.modules, p.sidebar_labels, p.theme_color,
+            p.sociedad_emisora_id, s.razon_social AS sociedad_nombre
      FROM user_projects up
      JOIN projects p ON p.id = up.project_id
+     LEFT JOIN invoice_issuers s ON s.id = p.sociedad_emisora_id
      WHERE up.user_id = $1 AND up.active = true AND p.active = true
-     ORDER BY p.nombre`,
+     ORDER BY s.razon_social NULLS LAST, p.nombre`,
     [userId]
   );
   return rows;
