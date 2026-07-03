@@ -11,6 +11,7 @@ export const createProjectSchema = z.object({
   dias_alerta_inactividad: z.number().int().min(1).max(365).default(3),
   producto_label: z.string().max(50).optional(),
   producto_label_plural: z.string().max(50).optional(),
+  sociedad_emisora_id: z.number().int().positive().optional().nullable(),
 });
 
 export const updateProjectSchema = z.object({
@@ -45,4 +46,12 @@ export const updateProjectSchema = z.object({
   sidebar_labels: z.record(z.string().min(1).max(80), z.string().min(1).max(80)).optional(),
   theme_color: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Hex inválido (#rrggbb)').nullable().optional(),
   auto_email_documents: z.boolean().optional(),
+  sociedad_emisora_id: z.number().int().positive().nullable().optional(),
 }).refine(d => Object.keys(d).length > 0, { message: 'Al menos un campo' });
+
+export const createSociedadSchema = z.object({
+  razon_social: z.string().min(1).max(200),
+  serie: z.string().max(20).optional().nullable(),
+  nif: z.string().max(30).optional().nullable(),
+  pais: z.string().max(60).optional().nullable(),
+});

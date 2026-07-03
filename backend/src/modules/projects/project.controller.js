@@ -1,5 +1,5 @@
 import * as model from './project.model.js';
-import { createProjectSchema, updateProjectSchema } from './project.validation.js';
+import { createProjectSchema, updateProjectSchema, createSociedadSchema } from './project.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
 
 export async function list(req, res, next) {
@@ -39,6 +39,22 @@ export async function update(req, res, next) {
     const updated = await model.update(id, parsed.data);
     if (!updated) throw new AppError('No se actualizo', 400, 'NO_FIELDS');
     res.json({ success: true, data: updated });
+  } catch (err) { next(err); }
+}
+
+export async function listSociedades(req, res, next) {
+  try {
+    const rows = await model.listSociedades();
+    res.json({ success: true, data: rows });
+  } catch (err) { next(err); }
+}
+
+export async function createSociedad(req, res, next) {
+  try {
+    const parsed = createSociedadSchema.safeParse(req.body);
+    if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
+    const soc = await model.createSociedad(parsed.data);
+    res.status(201).json({ success: true, data: soc });
   } catch (err) { next(err); }
 }
 

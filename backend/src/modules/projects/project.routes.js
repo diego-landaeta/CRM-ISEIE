@@ -10,6 +10,10 @@ router.use(verifyToken);
 // Atajos — catálogo (cualquier autenticado)
 router.get('/shortcuts/catalog', shortcutsCtrl.getCatalog);
 
+// Sociedades emisoras (para el selector al crear/editar proyecto). Antes de '/:id'.
+router.get('/sociedades', ctrl.listSociedades);
+router.post('/sociedades', roleGuard('superadmin'), ctrl.createSociedad);
+
 // Lectura: cualquier user autenticado
 router.get('/', ctrl.list);
 router.get('/:id', ctrl.getById);

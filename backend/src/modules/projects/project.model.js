@@ -54,11 +54,11 @@ export async function create(data) {
   const webhookKey = `whk_${data.slug.replace(/-/g, '')}_${crypto.randomUUID()}`;
   const { rows } = await query(
     `INSERT INTO projects (nombre, slug, type, emoji, webhook_api_key, meta_account_id,
-                           google_account_id, gsc_property, dias_alerta_inactividad)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                           google_account_id, gsc_property, dias_alerta_inactividad, sociedad_emisora_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
      RETURNING *`,
     [data.nombre, data.slug, data.type, data.emoji, webhookKey, data.meta_account_id,
-     data.google_account_id, data.gsc_property, data.dias_alerta_inactividad]
+     data.google_account_id, data.gsc_property, data.dias_alerta_inactividad, data.sociedad_emisora_id ?? null]
   );
 
   // Inicializar round-robin queue si es CRM
@@ -80,7 +80,7 @@ export async function update(id, fields) {
   // 'auto_email_documents'.
   const allowed = ['nombre', 'type', 'emoji', 'meta_account_id', 'google_account_id',
                    'gsc_property', 'dias_alerta_inactividad', 'active',
-                   'modules', 'sidebar_labels', 'theme_color'];
+                   'modules', 'sidebar_labels', 'theme_color', 'sociedad_emisora_id'];
   const sets = [];
   const params = [];
   let idx = 1;
@@ -97,6 +97,27 @@ export async function update(id, fields) {
   sets.push(`updated_at = NOW()`);
   params.push(id);
   const { rows } = await query(`UPDATE projects SET ${sets.join(', ')} WHERE id = $${idx} RETURNING *`, params);
+  return rows[0];
+}
+
+// --- Sociedades emisoras (globales, project_id NULL) para el selector de proyecto ---
+export async function listSociedades() {
+  const { rows } = await query(
+    `SELECT id, razon_social, nif, serie, pais
+     FROM invoice_issuers
+     WHERE project_id IS NULL AND activo = true
+     ORDER BY razon_social ASC`
+  );
+  return rows;
+}
+
+export async function createSociedad({ razon_social, serie, nif, pais }) {
+  const { rows } = await query(
+    `INSERT INTO invoice_issuers (project_id, razon_social, nif, pais, serie, es_default, activo)
+     VALUES (NULL, $1, $2, $3, $4, false, true)
+     RETURNING id, razon_social, nif, serie, pais`,
+    [razon_social, nif || `PENDIENTE-CIF-${(serie || 'X').toUpperCase()}`, pais || 'España', serie || null]
+  );
   return rows[0];
 }
 
