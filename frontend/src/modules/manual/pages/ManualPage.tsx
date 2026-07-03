@@ -683,6 +683,22 @@ export default function ManualPage() {
           altera el correlativo.
         </Callout>
 
+        <SubHeader>Regímenes fiscales y coletillas</SubHeader>
+        <P>
+          La <b>coletilla</b> es la frase legal que se imprime en la factura para justificar por qué no lleva el
+          21% de IVA (o por qué aplica un régimen especial). En España, si emitís sin IVA, la ley obliga a citar
+          el artículo correspondiente. El CRM ya trae los textos borrador cargados y <b>editables</b>.
+        </P>
+        <Steps items={[
+          { title: 'Dónde se editan', desc: 'Configuración de facturación → "Regímenes fiscales y coletillas". Cada régimen (España 21%, España exento, Canarias, UE B2B, UE B2C, fuera UE) tiene su % de IVA y su coletilla editable. Solo admin/superadmin.' },
+          { title: 'Validar con la asesoría', desc: 'Los textos vienen como borrador (art. 20.Uno.9º LIVA para formación exenta, inversión del sujeto pasivo para UE B2B, etc.). Validalos con tu asesor y ajustá el texto en el panel — no hace falta tocar código.' },
+          { title: 'Al facturar', desc: 'En "Nueva factura", en la tarjeta "IVA / Régimen fiscal", elegís el régimen. La factura aplica automáticamente el IVA correspondiente y estampa su coletilla legal en el PDF.' },
+        ]} />
+        <Callout type="warn">
+          Los textos por defecto son un <b>borrador</b>. El tratamiento fiscal exacto de cada producto (exento vs
+          21%) y el régimen B2C en la UE deben confirmarse con la asesoría antes de usarlos en producción.
+        </Callout>
+
         {/* ── CERTIFICADOS (ex Documentos) ── */}
         <SectionHeader id="documentos" icon={Receipt} label="Certificados" color="rose"
           description="Certificados y diplomas en PDF. Las facturas ahora se emiten en Finanzas → Facturación." />
