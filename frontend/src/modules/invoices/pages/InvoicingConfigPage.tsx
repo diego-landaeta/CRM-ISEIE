@@ -26,6 +26,8 @@ export default function InvoicingConfigPage() {
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [issuerNumInicial, setIssuerNumInicial] = useState('');
+  const [regimenes, setRegimenes] = useState<import('../api/invoices.api').FiscalRegimen[]>([]);
+  const [savingRegimen, setSavingRegimen] = useState<number | null>(null);
 
   // Reset secuencia
   const [resetAno, setResetAno] = useState(new Date().getFullYear());
@@ -35,10 +37,11 @@ export default function InvoicingConfigPage() {
 
   const load = useCallback(async () => {
     if (!pid) return;
-    const [cfg, seqs, iss] = await Promise.all([
+    const [cfg, seqs, iss, regs] = await Promise.all([
       invoicesApi.getConfig(pid),
       invoicesApi.listSequences(pid),
       invoicesApi.listIssuers(pid),
+      invoicesApi.listRegimenes(pid).catch(() => ({ success: false, data: [] as import('../api/invoices.api').FiscalRegimen[] })),
     ]);
     if (cfg.success && cfg.data) {
       setPiePagoDefault(cfg.data.factura_pie_default || '');
@@ -47,7 +50,21 @@ export default function InvoicingConfigPage() {
     }
     if (seqs.success) setSequences(seqs.data || []);
     if (iss.success) setIssuers(iss.data || []);
+    if (regs.success) setRegimenes(regs.data || []);
   }, [pid]);
+
+  function patchRegimen(id: number, p: Partial<import('../api/invoices.api').FiscalRegimen>) {
+    setRegimenes((rs) => rs.map((r) => (r.id === id ? { ...r, ...p } : r)));
+  }
+  async function saveRegimen(r: import('../api/invoices.api').FiscalRegimen) {
+    setSavingRegimen(r.id);
+    try {
+      await invoicesApi.updateRegimen(r.id, { nombre: r.nombre, aplicaIva: r.aplica_iva, ivaPct: Number(r.iva_pct), coletilla: r.coletilla });
+      toast({ title: '✓ Régimen guardado' });
+    } catch (e: any) {
+      toast({ title: 'Error', description: e?.data?.error || e?.message, variant: 'destructive' });
+    } finally { setSavingRegimen(null); }
+  }
 
   async function saveIssuer() {
     if (!editingIssuer) return;
@@ -282,6 +299,43 @@ export default function InvoicingConfigPage() {
               <button onClick={saveIssuer} disabled={uploadingLogo} className="h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50">{uploadingLogo ? 'Subiendo logo…' : 'Guardar'}</button>
               <button onClick={() => { setEditingIssuer(null); setLogoFile(null); }} className="h-9 px-3 rounded-md border border-border text-sm hover:bg-muted">Cancelar</button>
             </div>
+          </div>
+        )}
+      </div>
+
+      {/* REGÍMENES FISCALES + COLETILLAS */}
+      <div className="bg-card border border-border rounded-lg p-5 space-y-3">
+        <div>
+          <h3 className="font-semibold text-sm">Regímenes fiscales y coletillas</h3>
+          <p className="text-xs text-muted-foreground mt-0.5">Textos legales que se imprimen en la factura según el caso (España exento, Canarias, UE B2B, fuera UE…). Editables — validá los textos con tu asesoría.</p>
+        </div>
+        {regimenes.length === 0 ? (
+          <p className="text-xs text-muted-foreground italic">Sin regímenes cargados.</p>
+        ) : (
+          <div className="space-y-2">
+            {regimenes.map((r) => (
+              <div key={r.id} className="border border-border rounded-md p-3 space-y-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <input value={r.nombre} onChange={(e) => patchRegimen(r.id, { nombre: e.target.value })} disabled={!canEdit}
+                    className="flex-1 min-w-[180px] h-8 px-2 rounded border border-border bg-background text-sm font-medium" />
+                  <label className="flex items-center gap-1 text-[11px]">
+                    <input type="checkbox" checked={r.aplica_iva} onChange={(e) => patchRegimen(r.id, { aplica_iva: e.target.checked })} disabled={!canEdit} /> Lleva IVA
+                  </label>
+                  <input type="number" min={0} max={21} value={Number(r.iva_pct)} onChange={(e) => patchRegimen(r.id, { iva_pct: Number(e.target.value) })} disabled={!canEdit}
+                    className="w-16 h-8 px-2 rounded border border-border bg-background text-sm" title="% IVA" />
+                  <span className="text-[10px] text-muted-foreground">% IVA</span>
+                  {canEdit && (
+                    <button onClick={() => saveRegimen(r)} disabled={savingRegimen === r.id}
+                      className="ml-auto h-8 px-3 rounded-md bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 disabled:opacity-50">
+                      {savingRegimen === r.id ? '…' : 'Guardar'}
+                    </button>
+                  )}
+                </div>
+                <textarea value={r.coletilla || ''} onChange={(e) => patchRegimen(r.id, { coletilla: e.target.value })} disabled={!canEdit}
+                  rows={2} placeholder="Coletilla legal (déjala vacía si no aplica, ej. 21% España)"
+                  className="w-full px-2 py-1.5 rounded border border-border bg-background text-xs" />
+              </div>
+            ))}
           </div>
         )}
       </div>

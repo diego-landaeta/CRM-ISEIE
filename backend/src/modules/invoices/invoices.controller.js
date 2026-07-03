@@ -249,6 +249,33 @@ export async function deleteIssuerLogo(req, res, next) {
   } catch (e) { next(e); }
 }
 
+// ── Regímenes fiscales + coletillas ────────────────────────────────────────
+export async function listRegimenes(req, res, next) {
+  try {
+    const pid = Number(req.query.projectId) || null;
+    res.json({ success: true, data: await model.listRegimenes(pid) });
+  } catch (e) { next(e); }
+}
+export async function createRegimen(req, res, next) {
+  try {
+    if (!isAdmin(req)) throw new AppError('Solo administradoras', 403, 'FORBIDDEN');
+    res.json({ success: true, data: await model.createRegimen(req.body) });
+  } catch (e) { next(e); }
+}
+export async function updateRegimen(req, res, next) {
+  try {
+    if (!isAdmin(req)) throw new AppError('Solo administradoras', 403, 'FORBIDDEN');
+    res.json({ success: true, data: await model.updateRegimen(Number(req.params.id), req.body) });
+  } catch (e) { next(e); }
+}
+export async function deleteRegimen(req, res, next) {
+  try {
+    if (!isAdmin(req)) throw new AppError('Solo administradoras', 403, 'FORBIDDEN');
+    await model.deleteRegimen(Number(req.params.id));
+    res.json({ success: true });
+  } catch (e) { next(e); }
+}
+
 // ── Plantillas (editor Canva) ──────────────────────────────────────────────
 export async function listTemplates(req, res, next) {
   try {

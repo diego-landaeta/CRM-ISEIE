@@ -41,6 +41,7 @@ export interface CreateInvoiceBody {
   items: InvoiceItem[];
   ivaPct?: number;
   ivaIncluido?: boolean;
+  leyendaIva?: string | null;
   notas?: string;
   metodoPago: 'transferencia' | 'tarjeta' | 'tarjeta_stripe' | 'efectivo' | 'bizum' | 'fraccionado' | 'otro';
   piePago?: string;
@@ -105,6 +106,18 @@ export interface LeadFiscalData {
   pais_fiscal: string | null;
 }
 
+export interface FiscalRegimen {
+  id: number;
+  project_id: number | null;
+  clave: string | null;
+  nombre: string;
+  aplica_iva: boolean;
+  iva_pct: number;
+  coletilla: string | null;
+  orden: number;
+  activo: boolean;
+}
+
 export interface TemplateBlock {
   id: string;
   type: 'logo' | 'emisor' | 'cliente' | 'meta' | 'items' | 'totales' | 'pie' | 'texto';
@@ -167,6 +180,10 @@ export const invoicesApi = {
     return client.post<Issuer>(`/invoices/issuers/${id}/logo`, fd);
   },
   deleteIssuerLogo: (id: number) => client.delete<Issuer>(`/invoices/issuers/${id}/logo`),
+  listRegimenes: (projectId: number) => client.get<FiscalRegimen[]>(`/invoices/regimenes?projectId=${projectId}`),
+  createRegimen: (body: Partial<FiscalRegimen> & { nombre: string }) => client.post<FiscalRegimen>('/invoices/regimenes', body),
+  updateRegimen: (id: number, body: Record<string, unknown>) => client.patch<FiscalRegimen>(`/invoices/regimenes/${id}`, body),
+  deleteRegimen: (id: number) => client.delete(`/invoices/regimenes/${id}`),
   listTemplates: (projectId: number) => client.get<InvoiceTemplate[]>(`/invoices/templates?projectId=${projectId}`),
   getTemplate: (id: number) => client.get<InvoiceTemplate>(`/invoices/templates/${id}`),
   createTemplate: (body: { projectId?: number | null; issuerId?: number | null; nombre?: string; pageSize?: string; layout?: TemplateBlock[]; esDefault?: boolean; condicionPais?: string | null }) => client.post<InvoiceTemplate>('/invoices/templates', body),

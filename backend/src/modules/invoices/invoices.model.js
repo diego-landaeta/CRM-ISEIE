@@ -336,6 +336,35 @@ export async function deleteIssuer(id) {
   await query(`UPDATE invoice_issuers SET activo = false, updated_at = NOW() WHERE id = $1`, [id]);
 }
 
+// ── Regímenes fiscales + coletillas parametrizadas (editables desde panel) ───
+export async function listRegimenes(projectId) {
+  const { rows } = await query(
+    `SELECT * FROM fiscal_regimenes WHERE activo = true AND (project_id IS NULL OR project_id = $1)
+     ORDER BY orden ASC, id ASC`, [projectId]);
+  return rows;
+}
+export async function updateRegimen(id, d) {
+  const COLS = { nombre: 'nombre', aplicaIva: 'aplica_iva', ivaPct: 'iva_pct', coletilla: 'coletilla', orden: 'orden', activo: 'activo' };
+  const sets = []; const params = [id];
+  for (const [k, col] of Object.entries(COLS)) {
+    if (Object.prototype.hasOwnProperty.call(d, k)) { params.push(d[k]); sets.push(`${col} = $${params.length}`); }
+  }
+  if (!sets.length) { const r = await query(`SELECT * FROM fiscal_regimenes WHERE id=$1`, [id]); return r.rows[0]; }
+  sets.push('updated_at = NOW()');
+  const { rows } = await query(`UPDATE fiscal_regimenes SET ${sets.join(', ')} WHERE id = $1 RETURNING *`, params);
+  return rows[0];
+}
+export async function createRegimen(d) {
+  const { rows } = await query(
+    `INSERT INTO fiscal_regimenes (project_id, clave, nombre, aplica_iva, iva_pct, coletilla, orden)
+     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+    [d.projectId || null, d.clave || null, d.nombre || 'Régimen', !!d.aplicaIva, Number(d.ivaPct) || 0, d.coletilla || null, Number(d.orden) || 99]);
+  return rows[0];
+}
+export async function deleteRegimen(id) {
+  await query(`UPDATE fiscal_regimenes SET activo=false, updated_at=NOW() WHERE id=$1`, [id]);
+}
+
 // ── Plantillas visuales (editor Canva) ──────────────────────────────────────
 export async function listTemplates(projectId) {
   const { rows } = await query(

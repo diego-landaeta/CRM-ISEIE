@@ -45,6 +45,8 @@ export default function InvoiceCreatePage() {
   const [notas, setNotas] = useState('');
   const [issuers, setIssuers] = useState<Issuer[]>([]);
   const [issuerId, setIssuerId] = useState<number | null>(null);
+  const [regimenes, setRegimenes] = useState<import('../api/invoices.api').FiscalRegimen[]>([]);
+  const [regimenId, setRegimenId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -62,7 +64,16 @@ export default function InvoiceCreatePage() {
         if (def) setIssuerId(def.id);
       }
     }).catch(() => {});
+    invoicesApi.listRegimenes(pid).then((res) => { if (res.success) setRegimenes(res.data || []); }).catch(() => {});
   }, [pid]);
+
+  const regimenSel = regimenes.find((r) => r.id === regimenId) || null;
+  // Al elegir régimen: fija si lleva IVA (el % y la coletilla salen del régimen).
+  function pickRegimen(id: number | null) {
+    setRegimenId(id);
+    const r = regimenes.find((x) => x.id === id);
+    if (r) setLlevaIva(r.aplica_iva);
+  }
 
   // Buscar leads (debounce)
   useEffect(() => {
@@ -118,7 +129,9 @@ export default function InvoiceCreatePage() {
         clienteDireccion: direccion.trim(), clienteCiudad: ciudad.trim(), clienteCp: cp.trim(), clientePais: pais.trim() || 'España',
         clienteEmail: email.trim() || null, clienteTelefono: telefono.trim() || null,
         items: items.filter((it) => it.descripcion.trim()),
-        ivaPct: llevaIva ? 21 : 0, ivaIncluido: ivaIncluido && llevaIva,
+        ivaPct: regimenSel ? Number(regimenSel.iva_pct) : (llevaIva ? 21 : 0),
+        ivaIncluido: ivaIncluido && llevaIva,
+        leyendaIva: regimenSel?.coletilla || null,
         notas: notas.trim() || undefined, metodoPago, piePago: piePago.trim() || undefined,
       });
       if (res.success && res.data) {
@@ -228,10 +241,22 @@ export default function InvoiceCreatePage() {
       {/* IVA + Pago */}
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-card border border-border rounded-lg p-4 space-y-2">
-          <label className="text-xs font-bold uppercase text-muted-foreground">IVA</label>
-          <label className="flex items-center gap-1.5 text-xs"><input type="checkbox" checked={llevaIva} onChange={(e) => setLlevaIva(e.target.checked)} /> Lleva IVA (21%)</label>
+          <label className="text-xs font-bold uppercase text-muted-foreground">IVA / Régimen fiscal</label>
+          {regimenes.length > 0 && (
+            <select value={regimenId ?? ''} onChange={(e) => pickRegimen(e.target.value ? Number(e.target.value) : null)}
+              className="w-full h-9 px-2 rounded border border-border bg-background text-sm">
+              <option value="">Manual (elegir IVA abajo)</option>
+              {regimenes.map((r) => <option key={r.id} value={r.id}>{r.nombre} — {r.aplica_iva ? `${Number(r.iva_pct)}% IVA` : 'sin IVA'}</option>)}
+            </select>
+          )}
+          {!regimenSel && (
+            <>
+              <label className="flex items-center gap-1.5 text-xs"><input type="checkbox" checked={llevaIva} onChange={(e) => setLlevaIva(e.target.checked)} /> Lleva IVA (21%)</label>
+              {!llevaIva && <p className="text-[11px] text-muted-foreground">Operación exenta de IVA.</p>}
+            </>
+          )}
           {llevaIva && <label className="flex items-center gap-1.5 text-xs"><input type="checkbox" checked={ivaIncluido} onChange={(e) => setIvaIncluido(e.target.checked)} /> El precio ya incluye IVA</label>}
-          {!llevaIva && <p className="text-[11px] text-muted-foreground">Operación exenta de IVA.</p>}
+          {regimenSel?.coletilla && <p className="text-[10px] text-muted-foreground border-t border-border/60 pt-1 mt-1">📎 Coletilla: <i>{regimenSel.coletilla}</i></p>}
         </div>
         <div className="bg-card border border-border rounded-lg p-4 space-y-2">
           <label className="text-xs font-bold uppercase text-muted-foreground">Pago</label>
