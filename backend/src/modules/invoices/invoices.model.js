@@ -27,9 +27,13 @@ export async function create(data, userId) {
       iss = r.rows[0] || null;
     }
     if (!iss) {
+      // Emisor por defecto = la sociedad asignada al proyecto (o una emisora propia del proyecto).
       const r = await client.query(
-        `SELECT * FROM invoice_issuers WHERE activo = true AND (project_id IS NULL OR project_id = $1)
-         ORDER BY es_default DESC, id ASC LIMIT 1`, [data.projectId]);
+        `SELECT * FROM invoice_issuers i
+          WHERE i.activo = true
+            AND ( i.id = (SELECT sociedad_emisora_id FROM projects WHERE id = $1) OR i.project_id = $1 )
+          ORDER BY (i.id = (SELECT sociedad_emisora_id FROM projects WHERE id = $1)) DESC, es_default DESC, id ASC
+          LIMIT 1`, [data.projectId]);
       iss = r.rows[0] || null;
     }
 
@@ -272,9 +276,11 @@ export async function getLeadFiscalData(leadId) {
 // ─── Emisores (multi-empresa) ────────────────────────────────────────────────
 export async function listIssuers(projectId) {
   const { rows } = await query(
-    `SELECT * FROM invoice_issuers
-     WHERE activo = true AND (project_id IS NULL OR project_id = $1)
-     ORDER BY es_default DESC, razon_social ASC`,
+    `SELECT * FROM invoice_issuers i
+      WHERE i.activo = true
+        AND ( i.project_id = $1
+              OR i.id = (SELECT sociedad_emisora_id FROM projects WHERE id = $1) )
+      ORDER BY es_default DESC, razon_social ASC`,
     [projectId]
   );
   return rows;
@@ -286,10 +292,13 @@ export async function getIssuer(id) {
 }
 
 export async function getDefaultIssuer(projectId) {
+  // La sociedad del proyecto es su emisor por defecto (spec: cada proyecto factura por su sociedad).
   const { rows } = await query(
-    `SELECT * FROM invoice_issuers
-     WHERE activo = true AND (project_id IS NULL OR project_id = $1)
-     ORDER BY es_default DESC, id ASC LIMIT 1`,
+    `SELECT * FROM invoice_issuers i
+      WHERE i.activo = true
+        AND ( i.id = (SELECT sociedad_emisora_id FROM projects WHERE id = $1) OR i.project_id = $1 )
+      ORDER BY (i.id = (SELECT sociedad_emisora_id FROM projects WHERE id = $1)) DESC, es_default DESC, id ASC
+      LIMIT 1`,
     [projectId]
   );
   return rows[0] || null;
