@@ -297,9 +297,11 @@ async function renderFromTemplate({ pdfDoc, page, font, bold, inv, layout }) {
           drawLines(b, [
             { text: `Base imponible: ${fmtEUR(inv.base_imponible)}` },
             { text: `IVA (${inv.iva_pct}%): ${fmtEUR(inv.iva_importe)}` },
-            { text: inv.leyenda_iva || '', size: (b.fontSize || 12) - 2, color: gray },
             { text: `TOTAL: ${fmtEUR(inv.total)}`, bold: true, size: (b.fontSize || 12) + 2 },
           ]);
+          break;
+        case 'coletilla':
+          if (inv.leyenda_iva) drawLines(b, String(inv.leyenda_iva).split('\n').map((t) => ({ text: t })));
           break;
         case 'pie':
           drawLines(b, [
@@ -347,6 +349,14 @@ async function renderFromTemplate({ pdfDoc, page, font, bold, inv, layout }) {
     } catch (e) {
       logger.warn({ err: e.message, block: b.type }, 'Fallo dibujando bloque de plantilla');
     }
+  }
+
+  // Fallback: si la plantilla no tiene bloque de coletilla pero la factura tiene
+  // leyenda legal, la imprimimos igual (bajo los totales) para no perderla.
+  if (inv.leyenda_iva && !layout.some((b) => b.type === 'coletilla')) {
+    const lines = String(inv.leyenda_iva).split('\n');
+    let yy = 90;
+    for (const ln of lines) { page.drawText(ln.slice(0, 110), { x: 50, y: yy, size: 8, font, color: gray }); yy -= 11; }
   }
 
   // Pie fijo de trazabilidad

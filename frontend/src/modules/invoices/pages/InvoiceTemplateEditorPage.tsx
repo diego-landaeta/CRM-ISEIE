@@ -14,9 +14,10 @@ const A4_H = 1123;
 const BLOCK_LABELS: Record<TemplateBlock['type'], string> = {
   logo: 'Logo', emisor: 'Datos emisor', cliente: 'Datos cliente', meta: 'Nº / Fecha',
   items: 'Tabla de ítems', totales: 'Totales / IVA', pie: 'Pie de pago', texto: 'Texto libre',
+  coletilla: 'Coletilla legal',
 };
 
-const PALETTE: TemplateBlock['type'][] = ['logo', 'emisor', 'cliente', 'meta', 'items', 'totales', 'pie', 'texto'];
+const PALETTE: TemplateBlock['type'][] = ['logo', 'emisor', 'cliente', 'meta', 'items', 'totales', 'coletilla', 'pie', 'texto'];
 
 const CONDICION_LABEL: Record<string, string> = {
   todos: 'Todos los clientes', espana: 'Clientes de España', extranjero: 'Clientes extranjeros',
@@ -32,6 +33,7 @@ function seedLayout(): TemplateBlock[] {
     { id: uid(), type: 'cliente', x: 40, y: 160, w: 380, h: 110, fontSize: 11 },
     { id: uid(), type: 'items', x: 40, y: 300, w: 714, h: 320, fontSize: 11 },
     { id: uid(), type: 'totales', x: 470, y: 640, w: 284, h: 120, align: 'right', fontSize: 12 },
+    { id: uid(), type: 'coletilla', x: 40, y: 640, w: 400, h: 60, fontSize: 9, color: '#666666' },
     { id: uid(), type: 'pie', x: 40, y: 800, w: 714, h: 140, fontSize: 10, color: '#666666' },
   ];
 }
@@ -76,6 +78,7 @@ function BlockPreview({ b }: { b: TemplateBlock }) {
     case 'totales': return <div style={style}>Base imponible: 100,00 €<br/>IVA (21%): 21,00 €<br/><b>TOTAL: 121,00 €</b></div>;
     case 'pie': return <div style={style}>Forma de pago: transferencia<br/>IBAN ES00 0000 0000 0000<br/>Vencimiento: 30 días</div>;
     case 'texto': return <div style={style}>{b.text || 'Texto libre…'}</div>;
+    case 'coletilla': return <div style={{ ...style, fontStyle: 'italic' }} className="border border-dashed border-amber-300 bg-amber-50/50 rounded px-1">Operación exenta de IVA conforme al art. 20.Uno.9º… <span className="not-italic text-amber-600">(coletilla legal según el régimen)</span></div>;
     case 'items': return (
       <div style={style}>
         <table className="w-full border-collapse" style={{ fontSize: b.fontSize || 11 }}>

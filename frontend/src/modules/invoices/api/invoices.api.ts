@@ -120,7 +120,7 @@ export interface FiscalRegimen {
 
 export interface TemplateBlock {
   id: string;
-  type: 'logo' | 'emisor' | 'cliente' | 'meta' | 'items' | 'totales' | 'pie' | 'texto';
+  type: 'logo' | 'emisor' | 'cliente' | 'meta' | 'items' | 'totales' | 'pie' | 'texto' | 'coletilla';
   x: number; y: number; w: number; h: number;
   fontSize?: number;
   align?: 'left' | 'center' | 'right';
