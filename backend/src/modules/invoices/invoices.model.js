@@ -1,7 +1,37 @@
 import { query, getClient } from '../../shared/config/db.js';
 
-// Numeración correlativa atómica: UPSERT con +1 garantiza serie consecutiva.
-export async function nextNumero(client, projectId, ano, serie) {
+// Sociedad emisora de un proyecto (null si no tiene). Helper para numeración.
+async function issuerOfProject(exec, projectId) {
+  const { rows } = await exec(
+    `SELECT sociedad_emisora_id AS id FROM projects WHERE id = $1`,
+    [projectId]
+  );
+  return rows[0]?.id || null;
+}
+
+// Numeración correlativa atómica POR SOCIEDAD (spec REQ-NUM-01): todas las facturas
+// de una misma sociedad comparten contador por serie+año, aunque sean de proyectos
+// distintos. Si el proyecto no tiene sociedad (issuerId null) cae al contador por
+// proyecto (legacy). Atómico dentro de la transacción vía FOR UPDATE / índice único.
+export async function nextNumero(client, projectId, issuerId, ano, serie) {
+  if (issuerId) {
+    const sel = await client.query(
+      `SELECT ctid, ultimo_numero FROM invoice_sequences
+        WHERE issuer_id = $1 AND ano = $2 AND serie = $3 FOR UPDATE`,
+      [issuerId, ano, serie]
+    );
+    if (sel.rows.length) {
+      const n = sel.rows[0].ultimo_numero + 1;
+      await client.query(`UPDATE invoice_sequences SET ultimo_numero = $1 WHERE ctid = $2`, [n, sel.rows[0].ctid]);
+      return n;
+    }
+    await client.query(
+      `INSERT INTO invoice_sequences (project_id, issuer_id, ano, serie, ultimo_numero)
+       VALUES ($1, $2, $3, $4, 1)`,
+      [projectId, issuerId, ano, serie]
+    );
+    return 1;
+  }
   const { rows } = await client.query(
     `INSERT INTO invoice_sequences (project_id, ano, serie, ultimo_numero)
      VALUES ($1, $2, $3, 1)
@@ -39,7 +69,7 @@ export async function create(data, userId) {
 
     // Serie: la de la empresa emisora manda; si no tiene, la del request o 'A'.
     const serie = (iss?.serie && iss.serie.trim()) || data.serie || 'A';
-    const numero = await nextNumero(client, data.projectId, ano, serie);
+    const numero = await nextNumero(client, data.projectId, iss?.id || null, ano, serie);
     const codigo = `${ano}/${String(numero).padStart(4, '0')}`;
 
     const { rows } = await client.query(
@@ -123,7 +153,7 @@ export async function createRectificativa(originalId, { motivo, userId, parcial 
     // (que ya es la de su empresa emisora). Ej: serie 'A' -> abonos 'RA'.
     const baseSerie = String(orig.serie || '').trim();
     const serie = baseSerie ? `R${baseSerie}` : 'R';
-    const numero = await nextNumero(client, orig.project_id, ano, serie);
+    const numero = await nextNumero(client, orig.project_id, orig.issuer_id || null, ano, serie);
     const codigo = `R-${ano}/${String(numero).padStart(4, '0')}`;
 
     // Importes negativos. Si parcial (monto), rectifica solo ese importe; si no, todo.
@@ -473,6 +503,20 @@ export async function getProjectInvoicerData(projectId) {
 }
 
 export async function setSequence(projectId, ano, serie, ultimoNumero) {
+  const issuerId = await issuerOfProject(query, projectId);
+  if (issuerId) {
+    const upd = await query(
+      `UPDATE invoice_sequences SET ultimo_numero = $1 WHERE issuer_id = $2 AND ano = $3 AND serie = $4`,
+      [ultimoNumero, issuerId, ano, serie]
+    );
+    if (upd.rowCount === 0) {
+      await query(
+        `INSERT INTO invoice_sequences (project_id, issuer_id, ano, serie, ultimo_numero) VALUES ($1, $2, $3, $4, $5)`,
+        [projectId, issuerId, ano, serie, ultimoNumero]
+      );
+    }
+    return;
+  }
   await query(
     `INSERT INTO invoice_sequences (project_id, ano, serie, ultimo_numero)
      VALUES ($1, $2, $3, $4)
@@ -482,18 +526,18 @@ export async function setSequence(projectId, ano, serie, ultimoNumero) {
 }
 
 export async function getSequence(projectId, ano, serie) {
-  const { rows } = await query(
-    `SELECT ultimo_numero FROM invoice_sequences WHERE project_id=$1 AND ano=$2 AND serie=$3`,
-    [projectId, ano, serie]
-  );
+  const issuerId = await issuerOfProject(query, projectId);
+  const { rows } = issuerId
+    ? await query(`SELECT ultimo_numero FROM invoice_sequences WHERE issuer_id=$1 AND ano=$2 AND serie=$3`, [issuerId, ano, serie])
+    : await query(`SELECT ultimo_numero FROM invoice_sequences WHERE project_id=$1 AND ano=$2 AND serie=$3`, [projectId, ano, serie]);
   return rows[0]?.ultimo_numero || 0;
 }
 
 export async function listSequences(projectId) {
-  const { rows } = await query(
-    `SELECT ano, serie, ultimo_numero FROM invoice_sequences WHERE project_id=$1 ORDER BY ano DESC, serie`,
-    [projectId]
-  );
+  const issuerId = await issuerOfProject(query, projectId);
+  const { rows } = issuerId
+    ? await query(`SELECT ano, serie, ultimo_numero FROM invoice_sequences WHERE issuer_id=$1 ORDER BY ano DESC, serie`, [issuerId])
+    : await query(`SELECT ano, serie, ultimo_numero FROM invoice_sequences WHERE project_id=$1 ORDER BY ano DESC, serie`, [projectId]);
   return rows;
 }
 
