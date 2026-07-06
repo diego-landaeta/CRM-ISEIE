@@ -227,7 +227,12 @@ export async function upsertProductFromWc({ projectId, wcId, data }) {
   if (existing) {
     const { rows } = await query(
       `UPDATE products
-       SET nombre=$1, precio=$2, descripcion=$3, sku=$4,
+       SET nombre=$1,
+           -- Precio "pegajoso": si la fuente no trae precio (0/null) NO pisamos el
+           -- que ya haya (puesto a mano o de un scrape anterior). Sostenible:
+           -- pones el precio del Máster una vez y el sync no lo borra nunca.
+           precio = COALESCE(NULLIF($2, 0), precio),
+           descripcion=$3, sku=$4,
            categoria_id=$5, subcategoria_id=$6, wc_meta=$7,
            duracion = COALESCE($9, duracion),
            horas = COALESCE($10, horas),

@@ -484,6 +484,27 @@ export async function scrapeProductPage(url, sectionKeywords = {}, opts = {}) {
     }
   } catch (_) { /* opcional */ }
 
+  // Fallback de PRECIO: muchos diseños (p. ej. los Másters) muestran "Precio 4000 €"
+  // fuera del icon-box, así que extractMetaBox no lo capta y quedan en 0. Si no hay
+  // precio válido en el meta_box, lo buscamos en el texto global de la página.
+  try {
+    if (!result.meta_box) result.meta_box = {};
+    const cur = result.meta_box.precio;
+    const hasPrecio = cur && cur.value != null && Number(cur.value) > 0;
+    if (!hasPrecio) {
+      const text = htmlToText(html);
+      // "Precio 4000 €", "Precio: 4.000€", "Precio 4000 EUR"; o "€ 4000"
+      let m = text.match(/precio\s*:?\s*([\d][\d.,\s]{0,9})\s*(?:€|eur\b)/i)
+           || text.match(/(?:€|eur)\s*([\d][\d.,\s]{0,9})/i);
+      if (m) {
+        const num = parsePriceNumber(String(m[1]).replace(/\s/g, ''));
+        if (num && num > 0) {
+          result.meta_box.precio = { text: m[0].trim(), value: num, unit: 'EUR', type: 'currency' };
+        }
+      }
+    }
+  } catch (_) { /* opcional */ }
+
   // Para cada seccion logica configurada, extraer TODOS los slices que matchean.
   // - sections.{key}                 -> primer slice (compat)
   // - sections.{key}_2, _3, ...      -> slices adicionales (separados por heading)
