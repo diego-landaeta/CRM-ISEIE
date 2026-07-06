@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Receipt, Eye, PaperPlaneTilt, CheckCircle, X, MagnifyingGlass, Gear, ArrowCounterClockwise } from '@phosphor-icons/react';
-import { Link } from 'react-router-dom';
+import { Receipt, Eye, PaperPlaneTilt, CheckCircle, X, MagnifyingGlass, Gear, ArrowCounterClockwise, FileText } from '@phosphor-icons/react';
+import { Link, useLocation } from 'react-router-dom';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import KpiCard from '@/shared/components/ui/KpiCard';
@@ -24,6 +24,11 @@ type Stats = { total: number; emitidas: number; enviadas: number; pagadas: numbe
 export default function InvoicesPage() {
   const { activeProject } = useProjectContext() as { activeProject: { id?: number | null; nombre?: string } };
   const pid = activeProject?.id;
+  const loc = useLocation();
+  const [tab, setTab] = useState<'facturas' | 'proformas'>(
+    new URLSearchParams(loc.search).get('tab') === 'proformas' ? 'proformas' : 'facturas'
+  );
+  const esProformas = tab === 'proformas';
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -37,7 +42,7 @@ export default function InvoicesPage() {
     setLoading(true);
     try {
       const [r1, r2, r3, r4] = await Promise.all([
-        invoicesApi.list({ projectId: pid, ...filters, limit: 100 }),
+        invoicesApi.list({ projectId: pid, ...filters, tipo: esProformas ? 'proforma' : undefined, limit: 100 }),
         invoicesApi.stats(pid),
         invoicesApi.listIssuers(pid).catch(() => ({ success: false, data: [] as Issuer[] })),
         invoicesApi.ventasSinFactura(pid).catch(() => ({ success: false, data: [] as VentaSinFactura[] })),
@@ -47,7 +52,7 @@ export default function InvoicesPage() {
       if (r3.success) setIssuers(r3.data || []);
       if (r4.success) setVentasSinFactura(r4.data || []);
     } finally { setLoading(false); }
-  }, [pid, filters]);
+  }, [pid, filters, esProformas]);
   useEffect(() => { load(); }, [load]);
 
   async function send(inv: Invoice) {
@@ -127,9 +132,10 @@ export default function InvoicesPage() {
         subtitle={`Histórico fiscal — ${activeProject?.nombre || ''}`}
         actions={(
           <div className="flex gap-2">
-            <Link to="nueva"
+            <Link to={esProformas ? 'nueva?tipo=proforma' : 'nueva'}
               className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90">
-              <Receipt size={14} weight="bold" /> Nueva factura
+              {esProformas ? <FileText size={14} weight="bold" /> : <Receipt size={14} weight="bold" />}
+              {esProformas ? 'Nueva proforma' : 'Nueva factura'}
             </Link>
             <Link to="configuracion"
               className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted">
@@ -139,7 +145,17 @@ export default function InvoicesPage() {
         )}
       />
 
-      {stats && (
+      {/* Pestañas: facturas fiscales vs proformas (presupuestos) */}
+      <div className="inline-flex rounded-lg border border-border bg-muted/30 p-1 text-sm font-semibold">
+        {([['facturas', 'Facturas', Receipt], ['proformas', 'Proformas', FileText]] as const).map(([k, label, Icon]) => (
+          <button key={k} type="button" onClick={() => setTab(k)}
+            className={`inline-flex items-center gap-1.5 px-4 h-8 rounded-md transition ${tab === k ? 'bg-primary text-primary-foreground shadow' : 'text-muted-foreground hover:text-foreground'}`}>
+            <Icon size={14} weight="bold" /> {label}
+          </button>
+        ))}
+      </div>
+
+      {!esProformas && stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <KpiCard icon={Receipt} iconBg="bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400"
             label="Total facturas" numericValue={stats.total} />
@@ -176,7 +192,7 @@ export default function InvoicesPage() {
         </div>
       </div>
 
-      {ventasSinFactura.length > 0 && (
+      {!esProformas && ventasSinFactura.length > 0 && (
         <div className="bg-amber-50/60 dark:bg-amber-950/10 border border-amber-200 dark:border-amber-900/40 rounded-lg overflow-hidden">
           <div className="px-4 py-2.5 border-b border-amber-200 dark:border-amber-900/40 flex items-center gap-2">
             <Receipt size={15} weight="bold" className="text-amber-600" />
@@ -224,8 +240,8 @@ export default function InvoicesPage() {
         ) : invoices.length === 0 ? (
           <div className="p-12 text-center space-y-2">
             <Receipt size={32} className="text-muted-foreground mx-auto" weight="duotone" />
-            <p className="font-semibold text-sm">Sin facturas todavía</p>
-            <p className="text-xs text-muted-foreground">Cuando emitas una factura desde una conversión aparecerá aquí.</p>
+            <p className="font-semibold text-sm">{esProformas ? 'Sin proformas todavía' : 'Sin facturas todavía'}</p>
+            <p className="text-xs text-muted-foreground">{esProformas ? 'Genera un presupuesto con “Nueva proforma”.' : 'Cuando emitas una factura desde una conversión aparecerá aquí.'}</p>
           </div>
         ) : (
           <table className="w-full text-[13px]">
@@ -241,11 +257,14 @@ export default function InvoicesPage() {
             </thead>
             <tbody>
               {invoices.map((inv) => (
-                <tr key={inv.id} className={`border-b last:border-0 hover:bg-muted/30 ${inv.tipo === 'rectificativa' ? 'bg-rose-50/40 dark:bg-rose-950/10' : ''}`}>
+                <tr key={inv.id} className={`border-b last:border-0 hover:bg-muted/30 ${inv.tipo === 'rectificativa' ? 'bg-rose-50/40 dark:bg-rose-950/10' : inv.tipo === 'proforma' ? 'bg-slate-50/60 dark:bg-slate-900/20' : ''}`}>
                   <td className="px-3 py-2 font-mono font-semibold">
                     {inv.codigo}
                     {inv.tipo === 'rectificativa' && (
                       <span className="ml-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700">ABONO</span>
+                    )}
+                    {inv.tipo === 'proforma' && (
+                      <span className="ml-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-200 text-slate-700">PROFORMA</span>
                     )}
                     {inv.rectifica_codigo && (
                       <div className="text-[10px] text-muted-foreground font-normal">rectifica {inv.rectifica_codigo}</div>
@@ -276,14 +295,14 @@ export default function InvoicesPage() {
                           <PaperPlaneTilt size={11} /> {sending === inv.id ? '…' : 'Email'}
                         </button>
                       )}
-                      {inv.estado !== 'pagada' && inv.estado !== 'cancelada' && inv.tipo !== 'rectificativa' && (
+                      {inv.estado !== 'pagada' && inv.estado !== 'cancelada' && inv.tipo !== 'rectificativa' && inv.tipo !== 'proforma' && (
                         <button onClick={() => markPaid(inv)}
                           title="Marcar pagada"
                           className="h-7 px-2 rounded border border-border text-[11px] hover:bg-muted inline-flex items-center gap-1">
                           <CheckCircle size={11} /> Pagada
                         </button>
                       )}
-                      {inv.tipo !== 'rectificativa' && (
+                      {inv.tipo !== 'rectificativa' && inv.tipo !== 'proforma' && (
                         <button onClick={() => rectificar(inv)}
                           title="Crear factura rectificativa (de abono)"
                           className="h-7 px-2 rounded border border-rose-300 text-[11px] text-rose-600 hover:bg-rose-50 inline-flex items-center gap-1">

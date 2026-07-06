@@ -34,6 +34,7 @@ export const createProductSchema = z.object({
   descripcion: z.string().max(2000).optional(),
   categoria_id: z.number().int().positive().nullable().optional(),
   subcategoria_id: z.number().int().positive().nullable().optional(),
+  regimen_fiscal_id: z.number().int().positive().nullable().optional(),
   ...pricingFields,
 });
 
@@ -42,6 +43,7 @@ export const updateProductSchema = z.object({
   descripcion: z.string().max(2000).optional(),
   categoria_id: z.number().int().positive().nullable().optional(),
   subcategoria_id: z.number().int().positive().nullable().optional(),
+  regimen_fiscal_id: z.number().int().positive().nullable().optional(),
   ...pricingFields,
   ...richFields,
 }).refine((data) => Object.keys(data).length > 0, {

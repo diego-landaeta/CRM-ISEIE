@@ -15,7 +15,14 @@ export default function InvoiceCreatePage() {
   const { activeProject } = useProjectContext() as { activeProject: { id?: number; nombre?: string } };
   const pid = activeProject?.id;
   const navigate = useNavigate();
-  const invBase = useLocation().pathname.split('/facturas')[0];
+  const loc = useLocation();
+  const invBase = loc.pathname.split('/facturas')[0];
+
+  // Documento: factura (fiscal) o proforma (presupuesto). Deep-link ?tipo=proforma.
+  const [docTipo, setDocTipo] = useState<'factura' | 'proforma'>(
+    new URLSearchParams(loc.search).get('tipo') === 'proforma' ? 'proforma' : 'factura'
+  );
+  const esProforma = docTipo === 'proforma';
 
   const [tipo, setTipo] = useState<Tipo>('persona');
   const [leadId, setLeadId] = useState<number | null>(null);
@@ -35,6 +42,9 @@ export default function InvoiceCreatePage() {
   const [pais, setPais] = useState('España');
   const [email, setEmail] = useState('');
   const [telefono, setTelefono] = useState('');
+  // VIES: para empresa de la UE (no España), marca si su NIF-IVA está validado en VIES
+  // → el motor fiscal aplica exención intracomunitaria (B2B, IVA 0%).
+  const [viesOk, setViesOk] = useState(false);
 
   // IVA / conceptos / pago / emisor
   const [llevaIva, setLlevaIva] = useState(true);
@@ -84,14 +94,14 @@ export default function InvoiceCreatePage() {
     if (!pid || !regimenAuto || regimenes.length === 0) return;
     const clienteTipo = tipo === 'empresa' ? 'empresa' : 'particular';
     let cancel = false;
-    invoicesApi.resolveRegimen(pid, { pais, cp, tipo: clienteTipo }).then((res) => {
+    invoicesApi.resolveRegimen(pid, { pais, cp, tipo: clienteTipo, vies: viesOk }).then((res) => {
       if (cancel || !res.success || !res.data?.regimen) return;
       const r = regimenes.find((x) => x.id === res.data.regimen!.id) || res.data.regimen!;
       setRegimenId(r.id);
       setLlevaIva(r.aplica_iva);
     }).catch(() => {});
     return () => { cancel = true; };
-  }, [pid, pais, cp, tipo, regimenes, regimenAuto]);
+  }, [pid, pais, cp, tipo, regimenes, regimenAuto, viesOk]);
 
   // Buscar leads (debounce)
   useEffect(() => {
@@ -130,7 +140,8 @@ export default function InvoiceCreatePage() {
   const missing: string[] = [];
   if (tipo !== 'contado') {
     if (!nombre.trim()) missing.push(tipo === 'empresa' ? 'Razón social' : 'Nombre');
-    if (!nif.trim()) missing.push(tipo === 'empresa' ? 'NIF/CIF' : 'DNI/NIF');
+    // En proforma (presupuesto) el NIF/DNI no es obligatorio.
+    if (!esProforma && !nif.trim()) missing.push(tipo === 'empresa' ? 'NIF/CIF' : 'DNI/NIF');
   }
   if (!items.some((it) => it.descripcion.trim() && Number(it.precio_unitario) > 0)) missing.push('Al menos un concepto con precio');
 
@@ -140,9 +151,11 @@ export default function InvoiceCreatePage() {
     setSaving(true);
     try {
       const cNombre = tipo === 'contado' ? (nombre.trim() || 'Consumidor final') : nombre.trim();
-      const cNif = tipo === 'contado' ? (nif.trim() || '—') : nif.trim();
+      // Proforma: NIF opcional (no forzamos placeholder, el back rellena si falta).
+      const cNif = tipo === 'contado' ? (nif.trim() || '—') : (nif.trim() || (esProforma ? '' : '—'));
       const res = await invoicesApi.create({
         projectId: pid, leadId: leadId || undefined, issuerId: issuerId || undefined,
+        tipo: esProforma ? 'proforma' : undefined,
         clienteNombre: cNombre, clienteNif: cNif,
         clienteDireccion: direccion.trim(), clienteCiudad: ciudad.trim(), clienteCp: cp.trim(), clientePais: pais.trim() || 'España',
         clienteEmail: email.trim() || null, clienteTelefono: telefono.trim() || null,
@@ -153,9 +166,9 @@ export default function InvoiceCreatePage() {
         notas: notas.trim() || undefined, metodoPago, piePago: piePago.trim() || undefined,
       });
       if (res.success && res.data) {
-        toast({ title: '✓ Factura emitida', description: res.data.codigo });
+        toast({ title: esProforma ? '✓ Proforma generada' : '✓ Factura emitida', description: res.data.codigo });
         window.open(invoicesApi.pdfUrl(res.data.id), '_blank');
-        navigate(`${invBase}/facturas`);
+        navigate(`${invBase}/facturas${esProforma ? '?tab=proformas' : ''}`);
       } else {
         toast({ title: 'Error', description: (res as { error?: string }).error, variant: 'destructive' });
       }
@@ -181,13 +194,26 @@ export default function InvoiceCreatePage() {
 
   return (
     <div className="space-y-4 pb-8 max-w-4xl">
-      <PageHeader title="Nueva factura" subtitle={activeProject?.nombre || ''}
+      <PageHeader title={esProforma ? 'Nueva proforma' : 'Nueva factura'} subtitle={activeProject?.nombre || ''}
         actions={(
           <Link to={`${invBase}/facturas`} className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted">
             <ArrowLeft size={14} weight="bold" /> Volver
           </Link>
         )}
       />
+
+      {/* Tipo de documento: factura fiscal vs proforma (presupuesto) */}
+      <div className="inline-flex rounded-lg border border-border bg-muted/30 p-1 text-sm font-semibold">
+        {([['factura', 'Factura'], ['proforma', 'Proforma']] as const).map(([k, label]) => (
+          <button key={k} type="button" onClick={() => setDocTipo(k)}
+            className={`px-4 h-8 rounded-md transition ${docTipo === k ? 'bg-primary text-primary-foreground shadow' : 'text-muted-foreground hover:text-foreground'}`}>
+            {label}
+          </button>
+        ))}
+        <span className="self-center pl-3 pr-1 text-[11px] font-normal text-muted-foreground">
+          {esProforma ? 'Presupuesto sin validez fiscal · serie propia (PRO)' : 'Documento fiscal con numeración correlativa'}
+        </span>
+      </div>
 
       {/* Emisor */}
       {issuers.length > 0 && (
@@ -197,7 +223,7 @@ export default function InvoiceCreatePage() {
             className="w-full h-9 px-2 mt-1 rounded border border-primary/40 bg-background text-foreground text-sm font-medium [&>option]:bg-background [&>option]:text-foreground">
             {issuers.map((iss) => <option key={iss.id} value={iss.id}>{iss.razon_social} — {iss.nif}{iss.serie ? ` · serie ${iss.serie}` : ''}{iss.es_default ? ' (por defecto)' : ''}</option>)}
           </select>
-          {fiscalMissing && (
+          {fiscalMissing && !esProforma && (
             <div className={`mt-2 flex items-start gap-2 rounded-md px-3 py-2 text-xs border ${fiscalBlock ? 'bg-red-500/10 border-red-500/30 text-red-700 dark:text-red-400' : 'bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-400'}`}>
               <span className="font-bold">{fiscalBlock ? '⛔' : '⚠'}</span>
               {fiscalBlock ? (
@@ -256,6 +282,16 @@ export default function InvoiceCreatePage() {
             <Field label="Email (opcional)" value={email} onChange={setEmail} />
             <Field label="Teléfono (opcional)" value={telefono} onChange={setTelefono} />
           </div>
+          {tipo === 'empresa' && !pais.toLowerCase().match(/españa|espana|spain|^es$/) && (
+            <label className="flex items-start gap-2 mt-3 p-2.5 rounded-md border border-border bg-muted/20 cursor-pointer">
+              <input type="checkbox" checked={viesOk} onChange={(e) => setViesOk(e.target.checked)} className="mt-0.5" />
+              <span className="text-xs text-muted-foreground">
+                <b className="text-foreground">NIF-IVA validado en VIES</b> — empresa intracomunitaria con VAT válido.
+                Aplica <b>exención intracomunitaria (IVA 0%)</b>. Marca solo si has verificado el NIF-IVA en VIES;
+                si no, se factura como B2C con IVA.
+              </span>
+            </label>
+          )}
         </div>
       )}
 
@@ -312,8 +348,8 @@ export default function InvoiceCreatePage() {
 
       <div className="flex justify-end gap-2">
         <Link to={`${invBase}/facturas`} className="h-10 px-4 rounded-md border border-border bg-card text-sm inline-flex items-center">Cancelar</Link>
-        <button onClick={generar} disabled={saving || fiscalBlock} title={fiscalBlock ? 'El CIF/NIF de la sociedad no es válido' : undefined} className="h-10 px-5 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1.5">
-          <FloppyDisk size={15} weight="bold" /> {saving ? 'Emitiendo…' : 'Generar factura'}
+        <button onClick={generar} disabled={saving || (!esProforma && fiscalBlock)} title={!esProforma && fiscalBlock ? 'El CIF/NIF de la sociedad no es válido' : undefined} className="h-10 px-5 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1.5">
+          <FloppyDisk size={15} weight="bold" /> {saving ? (esProforma ? 'Generando…' : 'Emitiendo…') : (esProforma ? 'Generar proforma' : 'Generar factura')}
         </button>
       </div>
     </div>

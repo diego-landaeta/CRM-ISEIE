@@ -10,13 +10,17 @@ export const createInvoiceSchema = z.object({
   projectId: z.number().int().positive(),
   conversionId: z.number().int().positive().optional(),
   leadId: z.number().int().positive().optional(),
+  // 'proforma' = presupuesto no fiscal. 'normal' = factura. (rectificativa va por su ruta)
+  tipo: z.enum(['normal', 'proforma']).optional(),
   serie: z.string().max(10).optional(),
   fechaEmision: z.string().optional(),
   clienteNombre: z.string().min(1, 'Nombre cliente requerido'),
-  clienteNif: z.string().min(1, 'NIF/CIF requerido'),
-  clienteDireccion: z.string().min(1, 'Dirección requerida'),
-  clienteCiudad: z.string().min(1, 'Ciudad requerida'),
-  clienteCp: z.string().min(1, 'Código postal requerido'),
+  // En proforma los datos fiscales del cliente son opcionales (un presupuesto no
+  // exige NIF ni dirección). En factura se exigen vía superRefine (abajo).
+  clienteNif: z.string().optional().nullable(),
+  clienteDireccion: z.string().optional().nullable(),
+  clienteCiudad: z.string().optional().nullable(),
+  clienteCp: z.string().optional().nullable(),
   clientePais: z.string().min(1, 'País requerido'),
   clienteEmail: z.string().email().optional().nullable(),
   clienteTelefono: z.string().optional().nullable(),
@@ -28,6 +32,18 @@ export const createInvoiceSchema = z.object({
   metodoPago: z.enum(['transferencia', 'tarjeta', 'tarjeta_stripe', 'efectivo', 'bizum', 'fraccionado', 'otro']),
   piePago: z.string().optional(),
   issuerId: z.number().int().positive().optional(),
+}).superRefine((d, ctx) => {
+  if (d.tipo === 'proforma') return; // presupuesto: datos fiscales opcionales
+  for (const [field, msg] of [
+    ['clienteNif', 'NIF/CIF requerido'],
+    ['clienteDireccion', 'Dirección requerida'],
+    ['clienteCiudad', 'Ciudad requerida'],
+    ['clienteCp', 'Código postal requerido'],
+  ]) {
+    if (!d[field] || !String(d[field]).trim()) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: [field], message: msg });
+    }
+  }
 });
 
 export const issuerSchema = z.object({

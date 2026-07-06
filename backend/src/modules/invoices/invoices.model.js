@@ -70,11 +70,16 @@ export async function create(data, userId) {
       iss = r.rows[0] || null;
     }
 
+    // Proforma = presupuesto NO fiscal. No consume el correlativo 'A', usa su
+    // propia serie (issuer.serie_proforma, def 'PRO') y NO pasa por el gating fiscal.
+    const isProforma = data.tipo === 'proforma';
+
     // GATING FISCAL (España): se PERMITE emitir aunque falte el NIF. Solo se
     // bloquea si el CIF/NIF puesto es INVÁLIDO (typo/formato) — así no se emite
     // con un identificador fiscal erróneo. No rompe el flujo del CRM.
+    // Las proformas se saltan el gating (no son documento fiscal).
     const fiscal = issuerFiscalStatus(iss);
-    if (!fiscal.ready) {
+    if (!isProforma && !fiscal.ready) {
       // El try/catch de create() hace ROLLBACK + release; aquí solo lanzamos.
       throw new AppError(
         `No se puede emitir: el CIF/NIF de la sociedad "${iss?.razon_social || 'sin asignar'}" no tiene formato válido para España. Corrígelo en Configuración → Empresas emisoras.`,
@@ -90,10 +95,16 @@ export async function create(data, userId) {
     const issuerNifSnap = (iss?.nif && !String(iss.nif).toUpperCase().startsWith('PENDIENTE'))
       ? iss.nif : null;
 
-    // Serie: la de la empresa emisora manda; si no tiene, la del request o 'A'.
-    const serie = (iss?.serie && iss.serie.trim()) || data.serie || 'A';
+    // Serie: para proforma, la serie_proforma de la empresa (def 'PRO'); para
+    // factura, la de la empresa emisora, si no la del request o 'A'. El contador
+    // es por serie, así que las proformas nunca tocan el correlativo fiscal.
+    const serie = isProforma
+      ? ((iss?.serie_proforma && iss.serie_proforma.trim()) || 'PRO')
+      : ((iss?.serie && iss.serie.trim()) || data.serie || 'A');
     const numero = await nextNumero(client, data.projectId, iss?.id || null, ano, serie);
-    const codigo = `${ano}/${String(numero).padStart(4, '0')}`;
+    const codigo = isProforma
+      ? `${serie}-${ano}/${String(numero).padStart(4, '0')}`
+      : `${ano}/${String(numero).padStart(4, '0')}`;
 
     const { rows } = await client.query(
       `INSERT INTO invoices (
@@ -102,29 +113,31 @@ export async function create(data, userId) {
          cliente_nombre, cliente_nif, cliente_direccion, cliente_ciudad, cliente_cp, cliente_pais,
          cliente_email, cliente_telefono,
          items, base_imponible, iva_pct, iva_importe, iva_incluido, total,
-         estado, notas, leyenda_iva, metodo_pago, pie_pago, created_by,
+         estado, notas, leyenda_iva, metodo_pago, pie_pago, created_by, tipo,
          issuer_id, issuer_razon_social, issuer_nif, issuer_direccion, issuer_ciudad,
          issuer_cp, issuer_pais, issuer_email, issuer_telefono, issuer_iban, issuer_logo_url
        ) VALUES (
-         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,
-         $29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39
+         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,
+         $30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40
        ) RETURNING *`,
       [
         data.projectId, data.conversionId || null, data.leadId || null,
         serie, ano, numero, codigo, data.fechaEmision || new Date(),
-        data.clienteNombre, data.clienteNif, data.clienteDireccion,
-        data.clienteCiudad, data.clienteCp, data.clientePais,
+        // Columnas cliente_* son NOT NULL: en proforma pueden faltar → fallback '—'.
+        data.clienteNombre, data.clienteNif || '—', data.clienteDireccion || '—',
+        data.clienteCiudad || '—', data.clienteCp || '—', data.clientePais,
         data.clienteEmail || null, data.clienteTelefono || null,
         JSON.stringify(data.items),
         data.baseImponible, data.ivaPct, data.ivaImporte, !!data.ivaIncluido, data.total,
         data.estado || 'emitida', data.notas || null, data.leyendaIva || null,
         data.metodoPago, (data.piePago || iss?.pie_default || null), userId,
+        isProforma ? 'proforma' : 'normal',
         iss?.id || null, iss?.razon_social || null, issuerNifSnap, iss?.direccion || null, iss?.ciudad || null,
         iss?.cp || null, iss?.pais || null, iss?.email || null, iss?.telefono || null, iss?.iban || null, iss?.logo_url || null,
       ]
     );
 
-    if (data.leadId) {
+    if (data.leadId && !isProforma) {
       await client.query(
         `UPDATE leads SET
            identificacion_fiscal  = COALESCE($1, identificacion_fiscal),
@@ -247,16 +260,20 @@ export async function createRectificativa(originalId, { motivo, userId, parcial 
 
 export async function findByConversion(conversionId) {
   const { rows } = await query(
-    `SELECT * FROM invoices WHERE conversion_id = $1 ORDER BY id DESC LIMIT 1`,
+    `SELECT * FROM invoices WHERE conversion_id = $1 AND tipo <> 'proforma' ORDER BY id DESC LIMIT 1`,
     [conversionId]
   );
   return rows[0] || null;
 }
 
-export async function list({ projectId, estado, search, from, to, page = 1, limit = 50 }) {
+export async function list({ projectId, estado, search, from, to, tipo, page = 1, limit = 50 }) {
   const conds = ['project_id = $1'];
   const params = [projectId];
   let i = 2;
+  // tipo='proforma' → solo proformas; cualquier otro / ausente → solo facturas
+  // (normal + rectificativa), para que las proformas no ensucien el histórico fiscal.
+  if (tipo === 'proforma') conds.push(`tipo = 'proforma'`);
+  else conds.push(`tipo <> 'proforma'`);
   if (estado) { conds.push(`estado = $${i++}`); params.push(estado); }
   if (search) { conds.push(`(LOWER(cliente_nombre) LIKE $${i} OR LOWER(cliente_nif) LIKE $${i} OR codigo LIKE $${i})`); params.push(`%${search.toLowerCase()}%`); i++; }
   if (from) { conds.push(`fecha_emision >= $${i++}`); params.push(from); }
@@ -265,7 +282,7 @@ export async function list({ projectId, estado, search, from, to, page = 1, limi
   const offset = (page - 1) * limit;
   const { rows } = await query(
     `SELECT id, codigo, ano, numero, fecha_emision, fecha_pago,
-            cliente_nombre, cliente_nif, total, iva_pct, estado, sent_at
+            cliente_nombre, cliente_nif, total, iva_pct, estado, sent_at, tipo
      FROM invoices WHERE ${where}
      ORDER BY ano DESC, numero DESC LIMIT ${limit} OFFSET ${offset}`,
     params
@@ -285,7 +302,7 @@ export async function getStats(projectId) {
        COALESCE(SUM(total),0)                       AS total_facturado,
        COALESCE(SUM(total) FILTER (WHERE estado = 'pagada'),0) AS total_cobrado,
        COALESCE(SUM(iva_importe),0)                 AS total_iva
-     FROM invoices WHERE project_id = $1`,
+     FROM invoices WHERE project_id = $1 AND tipo <> 'proforma'`,
     [projectId]
   );
   return rows[0];
@@ -525,7 +542,7 @@ export async function listVentasSinFactura(projectId) {
             c.producto_contratado, c.importe_total, c.fecha_conversion, c.metodo_pago
        FROM conversions c
        JOIN leads l ON l.id = c.lead_id
-       LEFT JOIN invoices i ON i.conversion_id = c.id AND i.estado <> 'cancelada'
+       LEFT JOIN invoices i ON i.conversion_id = c.id AND i.estado <> 'cancelada' AND i.tipo <> 'proforma'
       WHERE c.project_id = $1
         AND COALESCE(c.importe_total, 0) > 0
         AND i.id IS NULL

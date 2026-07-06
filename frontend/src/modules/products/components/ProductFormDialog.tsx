@@ -5,6 +5,7 @@ import { productSchema } from '../validation/product.schema';
 import { X, CurrencyEur, Image as ImageIcon, UploadSimple, Trash } from '@phosphor-icons/react';
 import Portal from '@/shared/components/ui/portal';
 import Select from '@/shared/components/ui/Select';
+import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
 import { uploadProductImage, deleteProductImage, getProductImageUrl } from '../api/products.api';
@@ -42,6 +43,8 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }: 
   const [imageUploading, setImageUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const confirm = useConfirm();
+  const [regimenes, setRegimenes] = useState<any[]>([]);
+  const [regimenSel, setRegimenSel] = useState('');
 
   const {
     register,
@@ -60,8 +63,20 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }: 
     } as any,
   });
 
+  // Cargar régimenes fiscales disponibles (para el selector de régimen por producto).
+  useEffect(() => {
+    if (!open || !activeProject?.id) return;
+    (async () => {
+      try {
+        const rr = await client.get(`/invoices/regimenes?projectId=${activeProject.id}`);
+        if (rr.success) setRegimenes(rr.data || []);
+      } catch {}
+    })();
+  }, [open, activeProject?.id]);
+
   useEffect(() => {
     if (open) {
+      setRegimenSel(product?.regimen_fiscal_id ? String(product.regimen_fiscal_id) : '');
       reset(product ? {
         nombre: product.nombre || '',
         descripcion: product.descripcion || '',
@@ -156,6 +171,7 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }: 
     const payload = {
       ...data,
       precio: data.precio === '' || data.precio === null || Number.isNaN(data.precio) ? null : Number(data.precio),
+      regimen_fiscal_id: regimenSel ? Number(regimenSel) : null,
     };
     // Normalizar vacios a null
     ['stripe_link', 'sku', 'duracion', 'url_info'].forEach(k => { if (!payload[k]) payload[k] = null; });
@@ -294,6 +310,17 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }: 
             </Field>
             <Field label="Enlace de pago Stripe (opcional)" error={(errors as any).stripe_link?.message as any}>
               <input {...register('stripe_link')} placeholder="https://buy.stripe.com/..." className={smallInput + ' font-mono text-xs'} />
+            </Field>
+            <Field label="Régimen fiscal (IVA)" hint="Déjalo por defecto salvo que el producto tenga un régimen fijo (p. ej. formación exenta de IVA).">
+              <Select<string>
+                value={regimenSel}
+                onChange={setRegimenSel}
+                options={[
+                  { value: '', label: 'Por defecto (según ubicación del cliente)' },
+                  ...regimenes.map((r: any) => ({ value: String(r.id), label: r.nombre })),
+                ]}
+                ariaLabel="Régimen fiscal"
+              />
             </Field>
           </div>
 

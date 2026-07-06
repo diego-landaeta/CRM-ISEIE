@@ -33,8 +33,8 @@ function projectId(req) {
 export async function list(req, res, next) {
   try {
     const pid = projectId(req);
-    const { estado, search, from, to, page, limit } = req.query;
-    const data = await model.list({ projectId: pid, estado, search, from, to,
+    const { estado, search, from, to, tipo, page, limit } = req.query;
+    const data = await model.list({ projectId: pid, estado, search, from, to, tipo,
       page: Number(page) || 1, limit: Math.min(Number(limit) || 50, 200) });
     res.json({ success: true, data: data.rows, pagination: { total: data.total, page: Number(page) || 1, limit: Number(limit) || 50 } });
   } catch (e) { next(e); }

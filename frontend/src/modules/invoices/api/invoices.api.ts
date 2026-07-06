@@ -46,6 +46,7 @@ export interface CreateInvoiceBody {
   notas?: string;
   metodoPago: 'transferencia' | 'tarjeta' | 'tarjeta_stripe' | 'efectivo' | 'bizum' | 'fraccionado' | 'otro';
   piePago?: string;
+  tipo?: 'normal' | 'proforma';
 }
 
 export interface ProjectInvoicingConfig {
@@ -89,7 +90,7 @@ export interface Invoice {
   leyenda_iva?: string | null;
   items?: InvoiceItem[];
   conversion_id?: number | null;
-  tipo?: 'normal' | 'rectificativa';
+  tipo?: 'normal' | 'rectificativa' | 'proforma';
   rectifica_id?: number | null;
   rectifica_codigo?: string | null;
   motivo_rectificacion?: string | null;
@@ -155,7 +156,7 @@ export interface VentaSinFactura {
 }
 
 export const invoicesApi = {
-  list: (params: { projectId: number; estado?: string; search?: string; from?: string; to?: string; page?: number; limit?: number }) => {
+  list: (params: { projectId: number; estado?: string; search?: string; from?: string; to?: string; tipo?: string; page?: number; limit?: number }) => {
     const qs = new URLSearchParams();
     Object.entries(params).forEach(([k, v]) => v != null && qs.set(k, String(v)));
     return client.get<Invoice[]>(`/invoices?${qs}`);
