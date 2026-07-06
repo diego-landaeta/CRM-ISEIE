@@ -3,11 +3,11 @@ import { z } from 'zod';
 const pricingFields = {
   precio: z.number().nonnegative().nullable().optional(),
   moneda: z.string().max(10).optional(),
-  stripe_link: z.string().url().max(500).nullable().optional().or(z.literal('')),
-  brochure_url: z.string().url().max(500).nullable().optional().or(z.literal('')),
+  stripe_link: z.string().max(500).nullable().optional().or(z.literal('')),
+  brochure_url: z.string().max(500).nullable().optional().or(z.literal('')),
   sku: z.string().max(100).nullable().optional().or(z.literal('')),
   duracion: z.string().max(100).nullable().optional().or(z.literal('')),
-  url_info: z.string().url().max(500).nullable().optional().or(z.literal('')),
+  url_info: z.string().max(500).nullable().optional().or(z.literal('')),
 };
 
 // Campos extraídos por el scraper / ACF (texto libre, todos opcionales)

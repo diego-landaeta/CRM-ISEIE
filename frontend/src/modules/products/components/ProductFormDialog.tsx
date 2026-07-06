@@ -178,7 +178,11 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }: 
           </button>
         </div>
 
-        <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-3">
+        <form onSubmit={handleSubmit(handleFormSubmit, (errs) => {
+          // No fallar en silencio: si la validación bloquea el submit, avisar qué campo.
+          const msgs = Object.values(errs).map((e: any) => e?.message).filter(Boolean);
+          toast({ title: 'Revisa el formulario', description: msgs.join(' · ') || 'Hay campos inválidos', variant: 'destructive' });
+        })} className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <Field label="Nombre *" error={(errors as any).nombre?.message as any}>
               <input {...register('nombre')} placeholder={`Nombre del ${productoLabel.toLowerCase()}`} className={inputClass} />
