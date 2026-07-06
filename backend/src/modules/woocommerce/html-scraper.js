@@ -484,23 +484,33 @@ export async function scrapeProductPage(url, sectionKeywords = {}, opts = {}) {
     }
   } catch (_) { /* opcional */ }
 
-  // Fallback de PRECIO: muchos diseños (p. ej. los Másters) muestran "Precio 4000 €"
-  // fuera del icon-box, así que extractMetaBox no lo capta y quedan en 0. Si no hay
-  // precio válido en el meta_box, lo buscamos en el texto global de la página.
+  // Fallback de PRECIO: la mayoría de páginas (Másters incluidos) muestran el
+  // importe como "4.200 €" / "3.500 €" (número ANTES del símbolo), fuera del
+  // icon-box que capta extractMetaBox → quedaban en 0. Si no hay precio válido
+  // en el meta_box, lo recuperamos del texto global de la página.
   try {
     if (!result.meta_box) result.meta_box = {};
     const cur = result.meta_box.precio;
     const hasPrecio = cur && cur.value != null && Number(cur.value) > 0;
     if (!hasPrecio) {
       const text = htmlToText(html);
-      // "Precio 4000 €", "Precio: 4.000€", "Precio 4000 EUR"; o "€ 4000"
-      let m = text.match(/precio\s*:?\s*([\d][\d.,\s]{0,9})\s*(?:€|eur\b)/i)
-           || text.match(/(?:€|eur)\s*([\d][\d.,\s]{0,9})/i);
-      if (m) {
-        const num = parsePriceNumber(String(m[1]).replace(/\s/g, ''));
-        if (num && num > 0) {
-          result.meta_box.precio = { text: m[0].trim(), value: num, unit: 'EUR', type: 'currency' };
-        }
+      const candidatos = [];
+      // (a) "Precio: 4.200" / "Precio 4200 €" (número justo tras la palabra precio)
+      const mp = text.match(/precio\s*:?\s*([\d][\d.,]{1,9})/i);
+      if (mp) { const n = parsePriceNumber(mp[1]); if (Number.isFinite(n)) candidatos.push(n); }
+      // (b) TODOS los importes "NÚMERO €" / "NÚMERO EUR" de la página.
+      //     Excluimos los que son cuota mensual ("… €/mes", "… € al mes").
+      for (const mm of text.matchAll(/([\d][\d.,]{2,7})\s*(?:€|eur\b)(\s*\/?\s*(?:mes|mensual|al mes|cuota))?/gi)) {
+        if (mm[2]) continue; // es una cuota, no el precio total
+        const n = parsePriceNumber(mm[1]);
+        if (Number.isFinite(n)) candidatos.push(n);
+      }
+      // Nos quedamos con el importe más alto dentro de un rango plausible de programa
+      // (el total suele ser el mayor; las cuotas/becas son menores).
+      const validos = candidatos.filter((n) => n >= 200 && n <= 50000);
+      if (validos.length) {
+        const val = Math.max(...validos);
+        result.meta_box.precio = { text: `${val} €`, value: val, unit: 'EUR', type: 'currency' };
       }
     }
   } catch (_) { /* opcional */ }
