@@ -165,6 +165,66 @@ export async function fetchWpPagesByParents(baseUrl, parentIds, opts = {}) {
   return all;
 }
 
+// Detecta si el título de una página es un PROGRAMA individual (no una categoría
+// plural tipo "Maestrías de X" ni una página institucional). Programas: "Máster
+// en X", "Diplomado en X", "Curso en/de X", "Experto en X", etc. (singular).
+// singular + límite de palabra: matchea "Máster en X", "Curso de X", "Máster
+// Ejecutivo en X"; NO matchea plurales de categoría ("Maestrías", "Cursos",
+// "Diplomados") ni institucionales ("Facultad", "Gracias", "Transparencia").
+const PROGRAM_TITLE_RE = /^\s*(m[aá]ster|maestr[ií]a|diplomado|curso|experto|especializaci[oó]n|certificaci[oó]n|t[eé]cnico|postgrado|posgrado|fellowship)\b/i;
+
+/**
+ * Descubre TODAS las páginas de programa del sitio por patrón de título,
+ * sin depender de una lista fija de padres. Así, cuando la web añade un
+ * programa bajo una categoría nueva, entra solo (no hay que reconfigurar).
+ * Devuelve el mismo shape que fetchWpPagesByParents.
+ */
+export async function fetchProgramPagesByTitle(baseUrl, opts = {}) {
+  const { perPage = 100, maxPages = 50 } = opts;
+  const base = `${baseUrl.replace(/\/$/, '')}/wp-json/wp/v2/pages`;
+  const all = [];
+  const seen = new Set();
+  for (let page = 1; page <= maxPages; page++) {
+    const url = `${base}?per_page=${perPage}&page=${page}&status=publish&_fields=id,slug,link,title,excerpt,content,parent,date,modified`;
+    let items;
+    try {
+      items = await getJson(url, null, 25000);
+    } catch (err) {
+      logger.warn({ page, err: err.message }, 'WP REST program-pages: error de paginación, corto');
+      break;
+    }
+    if (!Array.isArray(items) || items.length === 0) break;
+    for (const it of items) {
+      if (seen.has(it.id)) continue;
+      const title = it.title?.rendered || it.slug || '';
+      // Quitar tags HTML del título antes de testear el patrón.
+      const clean = String(title).replace(/<[^>]+>/g, '').trim();
+      if (!PROGRAM_TITLE_RE.test(clean)) continue;
+      seen.add(it.id);
+      all.push({
+        id: it.id,
+        name: clean,
+        slug: it.slug,
+        permalink: it.link,
+        short_description: it.excerpt?.rendered || '',
+        description: it.content?.rendered || '',
+        price: '0',
+        sku: null,
+        status: 'publish',
+        type: 'wp_page',
+        categories: [],
+        meta_data: [
+          { key: '_wp_page_parent', value: it.parent },
+          { key: '_wp_page_modified', value: it.modified },
+        ],
+        _wp_raw: { id: it.id, parent: it.parent, modified: it.modified },
+      });
+    }
+    if (items.length < perPage) break;
+  }
+  return all;
+}
+
 /** Resuelve un termino de taxonomia custom (devuelve {name, slug, parent}). */
 const _termCache = new Map();
 export async function resolveTaxonomyTerm(baseUrl, taxSlug, termId, user, pass) {

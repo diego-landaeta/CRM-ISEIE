@@ -412,19 +412,24 @@ export async function runFullImport(creds, projectId, runId) {
         // 2. Descargar productos / páginas según fuente
         let wcProducts;
         if (creds.source_strategy === 'wp_pages') {
-          // ISEIE-style: cada página bajo los parent IDs configurados es un producto.
-          // cpt_endpoints se reusa como array de parent IDs (numbers o strings convertibles).
+          // ISEIE-style: cada página de programa es un producto. UNIÓN de dos fuentes:
+          //  (a) descubrimiento por TÍTULO en todo el sitio (Máster/Diplomado/Curso…):
+          //      así, cuando la web crea una categoría nueva, el programa entra solo
+          //      sin reconfigurar nada — "que no se repita".
+          //  (b) hijos de los parent IDs configurados en cpt_endpoints (preserva lo
+          //      actual, sin regresión). Dedupe por id.
           const parentIds = (Array.isArray(creds.cpt_endpoints) ? creds.cpt_endpoints : [])
             .map((x) => Number(x)).filter(Number.isFinite);
-          if (parentIds.length === 0) {
-            logger.warn({ projectId }, 'WP-PAGES: cpt_endpoints vacío — nada que importar');
-            wcProducts = [];
-          } else {
-            const { fetchWpPagesByParents } = await import('./wp-rest.js');
-            logger.info({ projectId, parentIds }, 'WP-PAGES: descargando páginas');
-            wcProducts = await fetchWpPagesByParents(creds.store_url, parentIds);
-            logger.info({ projectId, count: wcProducts.length }, 'WP-PAGES: páginas descargadas');
-          }
+          const { fetchWpPagesByParents, fetchProgramPagesByTitle } = await import('./wp-rest.js');
+          logger.info({ projectId, parentIds }, 'WP-PAGES: descubriendo programas (título + padres)');
+          const [byTitle, byParents] = await Promise.all([
+            fetchProgramPagesByTitle(creds.store_url).catch((e) => { logger.warn({ err: e.message }, 'WP-PAGES: fallo descubrimiento por título'); return []; }),
+            parentIds.length ? fetchWpPagesByParents(creds.store_url, parentIds).catch(() => []) : Promise.resolve([]),
+          ]);
+          const byId = new Map();
+          for (const p of [...byParents, ...byTitle]) byId.set(p.id, p);
+          wcProducts = [...byId.values()];
+          logger.info({ projectId, byTitle: byTitle.length, byParents: byParents.length, total: wcProducts.length }, 'WP-PAGES: programas descubiertos');
         } else {
           logger.info({ projectId }, 'WC: descargando productos (paginado)');
           wcProducts = await fetchWcProducts(creds);
