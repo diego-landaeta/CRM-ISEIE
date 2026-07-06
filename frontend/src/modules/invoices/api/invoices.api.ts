@@ -182,6 +182,16 @@ export const invoicesApi = {
   },
   deleteIssuerLogo: (id: number) => client.delete<Issuer>(`/invoices/issuers/${id}/logo`),
   listRegimenes: (projectId: number) => client.get<FiscalRegimen[]>(`/invoices/regimenes?projectId=${projectId}`),
+  resolveRegimen: (projectId: number, p: { productId?: number | null; pais?: string; cp?: string; provincia?: string; tipo?: string; vies?: boolean }) => {
+    const q = new URLSearchParams({ projectId: String(projectId) });
+    if (p.productId) q.set('productId', String(p.productId));
+    if (p.pais) q.set('pais', p.pais);
+    if (p.cp) q.set('cp', p.cp);
+    if (p.provincia) q.set('provincia', p.provincia);
+    if (p.tipo) q.set('tipo', p.tipo);
+    if (p.vies) q.set('vies', 'true');
+    return client.get<{ clave: string; regimen: FiscalRegimen | null }>(`/invoices/resolve-regimen?${q.toString()}`);
+  },
   createRegimen: (body: Partial<FiscalRegimen> & { nombre: string }) => client.post<FiscalRegimen>('/invoices/regimenes', body),
   updateRegimen: (id: number, body: Record<string, unknown>) => client.patch<FiscalRegimen>(`/invoices/regimenes/${id}`, body),
   deleteRegimen: (id: number) => client.delete(`/invoices/regimenes/${id}`),

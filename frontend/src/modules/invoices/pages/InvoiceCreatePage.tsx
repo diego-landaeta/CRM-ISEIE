@@ -68,12 +68,30 @@ export default function InvoiceCreatePage() {
   }, [pid]);
 
   const regimenSel = regimenes.find((r) => r.id === regimenId) || null;
-  // Al elegir régimen: fija si lleva IVA (el % y la coletilla salen del régimen).
+  const [regimenAuto, setRegimenAuto] = useState(true);
+  // Al elegir régimen A MANO: fija si lleva IVA y desactiva el motor automático.
   function pickRegimen(id: number | null) {
     setRegimenId(id);
+    setRegimenAuto(false);
     const r = regimenes.find((x) => x.id === id);
     if (r) setLlevaIva(r.aplica_iva);
   }
+
+  // MOTOR FISCAL (REQ-FIS-02): al cambiar país / CP / tipo de cliente, resuelve el
+  // régimen aplicable (Canarias / UE B2B-VIES / B2C / fuera UE / España) y lo
+  // autoselecciona — salvo que el usuario lo haya elegido a mano.
+  useEffect(() => {
+    if (!pid || !regimenAuto || regimenes.length === 0) return;
+    const clienteTipo = tipo === 'empresa' ? 'empresa' : 'particular';
+    let cancel = false;
+    invoicesApi.resolveRegimen(pid, { pais, cp, tipo: clienteTipo }).then((res) => {
+      if (cancel || !res.success || !res.data?.regimen) return;
+      const r = regimenes.find((x) => x.id === res.data.regimen!.id) || res.data.regimen!;
+      setRegimenId(r.id);
+      setLlevaIva(r.aplica_iva);
+    }).catch(() => {});
+    return () => { cancel = true; };
+  }, [pid, pais, cp, tipo, regimenes, regimenAuto]);
 
   // Buscar leads (debounce)
   useEffect(() => {
@@ -258,7 +276,14 @@ export default function InvoiceCreatePage() {
       {/* IVA + Pago */}
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-card border border-border rounded-lg p-4 space-y-2">
-          <label className="text-xs font-bold uppercase text-muted-foreground">IVA / Régimen fiscal</label>
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-bold uppercase text-muted-foreground">IVA / Régimen fiscal</label>
+            {regimenSel && (
+              regimenAuto
+                ? <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-primary/10 text-primary" title="Resuelto por el motor fiscal según país, CP y tipo de cliente">🤖 automático</span>
+                : <button type="button" onClick={() => setRegimenAuto(true)} className="text-[10px] font-semibold text-primary hover:underline">↺ automático</button>
+            )}
+          </div>
           {regimenes.length > 0 && (
             <select value={regimenId ?? ''} onChange={(e) => pickRegimen(e.target.value ? Number(e.target.value) : null)}
               className="w-full h-9 px-2 rounded border border-border bg-background text-foreground text-sm [&>option]:bg-background [&>option]:text-foreground">

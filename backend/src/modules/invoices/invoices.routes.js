@@ -14,6 +14,7 @@ router.get('/',                       ctrl.list);
 router.get('/stats',                  ctrl.stats);
 router.get('/ventas-sin-factura',     ctrl.ventasSinFactura);
 router.get('/regimenes',              ctrl.listRegimenes);
+router.get('/resolve-regimen',        ctrl.resolveRegimen);
 router.post('/regimenes',             ctrl.createRegimen);
 router.patch('/regimenes/:id',        ctrl.updateRegimen);
 router.delete('/regimenes/:id',       ctrl.deleteRegimen);

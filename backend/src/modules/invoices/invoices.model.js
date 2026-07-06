@@ -1,6 +1,7 @@
 import { query, getClient } from '../../shared/config/db.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { issuerFiscalStatus } from '../../shared/utils/spanishTaxId.js';
+import { resolveRegimenClave } from './fiscal-engine.js';
 
 // Sociedad emisora de un proyecto (null si no tiene). Helper para numeración.
 async function issuerOfProject(exec, projectId) {
@@ -318,7 +319,8 @@ export async function getLeadFiscalData(leadId) {
   const { rows } = await query(
     `SELECT id, nombre, email, telefono,
             identificacion_fiscal, direccion_fiscal,
-            ciudad_fiscal, codigo_postal_fiscal, pais_fiscal
+            ciudad_fiscal, codigo_postal_fiscal, pais_fiscal,
+            cliente_tipo, nif_iva_vies, vies_validado
      FROM leads WHERE id = $1 AND deleted_at IS NULL`,
     [leadId]
   );
@@ -404,6 +406,27 @@ export async function listRegimenes(projectId) {
     `SELECT * FROM fiscal_regimenes WHERE activo = true AND (project_id IS NULL OR project_id = $1)
      ORDER BY orden ASC, id ASC`, [projectId]);
   return rows;
+}
+
+// Motor fiscal (REQ-FIS-02): resuelve el régimen aplicable según producto + cliente.
+// Devuelve { clave, regimen } — `regimen` trae iva_pct + coletilla parametrizados.
+export async function resolveRegimen(projectId, { productId, pais, cp, provincia, tipo, viesValido } = {}) {
+  // ¿El producto tiene un régimen exento (formación exenta en España)?
+  let productoExento = false;
+  if (productId) {
+    const { rows } = await query(
+      `SELECT fr.aplica_iva FROM products p
+        LEFT JOIN fiscal_regimenes fr ON fr.id = p.regimen_fiscal_id
+        WHERE p.id = $1`, [productId]);
+    if (rows[0] && rows[0].aplica_iva === false) productoExento = true;
+  }
+  const clave = resolveRegimenClave({ productoExento, pais, cp, provincia, tipo, viesValido: !!viesValido });
+  // Régimen del proyecto si existe, si no el global.
+  const { rows } = await query(
+    `SELECT * FROM fiscal_regimenes
+      WHERE clave = $1 AND activo = true AND (project_id = $2 OR project_id IS NULL)
+      ORDER BY (project_id = $2) DESC NULLS LAST LIMIT 1`, [clave, projectId]);
+  return { clave, regimen: rows[0] || null };
 }
 export async function updateRegimen(id, d) {
   const COLS = { nombre: 'nombre', aplicaIva: 'aplica_iva', ivaPct: 'iva_pct', coletilla: 'coletilla', orden: 'orden', activo: 'activo' };

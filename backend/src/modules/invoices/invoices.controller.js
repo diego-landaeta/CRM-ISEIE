@@ -256,6 +256,20 @@ export async function listRegimenes(req, res, next) {
     res.json({ success: true, data: await model.listRegimenes(pid) });
   } catch (e) { next(e); }
 }
+
+// Motor fiscal: resuelve el régimen aplicable (IVA + coletilla) según producto + cliente.
+export async function resolveRegimen(req, res, next) {
+  try {
+    const pid = projectId(req);
+    const { productId, pais, cp, provincia, tipo, vies } = req.query;
+    const out = await model.resolveRegimen(pid, {
+      productId: productId ? Number(productId) : null,
+      pais, cp, provincia, tipo,
+      viesValido: vies === 'true' || vies === '1',
+    });
+    res.json({ success: true, data: out });
+  } catch (e) { next(e); }
+}
 export async function createRegimen(req, res, next) {
   try {
     if (!isAdmin(req)) throw new AppError('Solo administradoras', 403, 'FORBIDDEN');
