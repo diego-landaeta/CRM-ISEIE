@@ -23,6 +23,7 @@ export interface Issuer {
   pie_default: string | null;
   activo: boolean;
   es_default: boolean;
+  fiscal_status?: { ready: boolean; missing: string[] };
 }
 
 export interface CreateInvoiceBody {
