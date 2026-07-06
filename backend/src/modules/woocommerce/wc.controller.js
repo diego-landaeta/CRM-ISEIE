@@ -421,15 +421,21 @@ export async function runFullImport(creds, projectId, runId) {
           const parentIds = (Array.isArray(creds.cpt_endpoints) ? creds.cpt_endpoints : [])
             .map((x) => Number(x)).filter(Number.isFinite);
           const { fetchWpPagesByParents, fetchProgramPagesByTitle } = await import('./wp-rest.js');
-          logger.info({ projectId, parentIds }, 'WP-PAGES: descubriendo programas (título + padres)');
-          const [byTitle, byParents] = await Promise.all([
-            fetchProgramPagesByTitle(creds.store_url).catch((e) => { logger.warn({ err: e.message }, 'WP-PAGES: fallo descubrimiento por título'); return []; }),
-            parentIds.length ? fetchWpPagesByParents(creds.store_url, parentIds).catch(() => []) : Promise.resolve([]),
-          ]);
-          const byId = new Map();
-          for (const p of [...byParents, ...byTitle]) byId.set(p.id, p);
-          wcProducts = [...byId.values()];
-          logger.info({ projectId, byTitle: byTitle.length, byParents: byParents.length, total: wcProducts.length }, 'WP-PAGES: programas descubiertos');
+          // Descubrimiento por TÍTULO en todo el sitio: coge todos los programas
+          // (Máster/Diplomado/Curso… en singular) esté donde esté la página, y
+          // EXCLUYE las páginas de categoría plural ("Cursos de X", "Maestrías de X")
+          // que antes se colaban como productos basura con precio 0.
+          logger.info({ projectId }, 'WP-PAGES: descubriendo programas por título');
+          wcProducts = await fetchProgramPagesByTitle(creds.store_url).catch((e) => {
+            logger.warn({ err: e.message }, 'WP-PAGES: fallo descubrimiento por título'); return [];
+          });
+          // Fallback de seguridad: si el descubrimiento por título falla/vacía,
+          // usamos los padres configurados para no quedarnos sin catálogo.
+          if (wcProducts.length === 0 && parentIds.length) {
+            logger.warn({ projectId }, 'WP-PAGES: título vacío, fallback a padres configurados');
+            wcProducts = await fetchWpPagesByParents(creds.store_url, parentIds).catch(() => []);
+          }
+          logger.info({ projectId, total: wcProducts.length }, 'WP-PAGES: programas descubiertos');
         } else {
           logger.info({ projectId }, 'WC: descargando productos (paginado)');
           wcProducts = await fetchWcProducts(creds);
