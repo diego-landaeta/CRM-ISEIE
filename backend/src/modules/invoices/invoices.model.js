@@ -1,4 +1,6 @@
 import { query, getClient } from '../../shared/config/db.js';
+import { AppError } from '../../shared/utils/AppError.js';
+import { issuerFiscalStatus } from '../../shared/utils/spanishTaxId.js';
 
 // Sociedad emisora de un proyecto (null si no tiene). Helper para numeración.
 async function issuerOfProject(exec, projectId) {
@@ -65,6 +67,19 @@ export async function create(data, userId) {
           ORDER BY (i.id = (SELECT sociedad_emisora_id FROM projects WHERE id = $1)) DESC, es_default DESC, id ASC
           LIMIT 1`, [data.projectId]);
       iss = r.rows[0] || null;
+    }
+
+    // GATING FISCAL (España): no se emite hasta que la sociedad tenga CIF/NIF
+    // válido y datos obligatorios completos. No rompe el flujo del CRM: solo
+    // bloquea la creación de la factura con un mensaje claro de qué falta.
+    const fiscal = issuerFiscalStatus(iss);
+    if (!fiscal.ready) {
+      // El try/catch de create() hace ROLLBACK + release; aquí solo lanzamos.
+      throw new AppError(
+        `No se puede emitir factura: la sociedad "${iss?.razon_social || 'sin asignar'}" tiene datos fiscales incompletos (falta: ${fiscal.missing.join(', ')}). Complétalos en Configuración → Empresas emisoras.`,
+        400,
+        'ISSUER_FISCAL_INCOMPLETE',
+      );
     }
 
     // Serie: la de la empresa emisora manda; si no tiene, la del request o 'A'.
@@ -313,7 +328,8 @@ export async function listIssuers(projectId) {
       ORDER BY es_default DESC, razon_social ASC`,
     [projectId]
   );
-  return rows;
+  // Enriquecemos con el estado fiscal (gating España): ready + qué falta.
+  return rows.map((r) => ({ ...r, fiscal_status: issuerFiscalStatus(r) }));
 }
 
 export async function getIssuer(id) {
