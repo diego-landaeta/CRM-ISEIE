@@ -3,6 +3,7 @@ import { X, PencilSimple } from '@phosphor-icons/react';
 import { conversionsApi, type Conversion } from '../api/conversions.api';
 import { toast } from '@/shared/hooks/useToast';
 import { formatCurrency } from '@/shared/lib/format';
+import { useProducts } from '@/modules/products/hooks/useProducts';
 
 interface Props {
   conversion: Conversion | null;
@@ -29,6 +30,8 @@ export default function EditConversionDialog({ conversion, onClose, onSaved }: P
   const [fechaCompromiso, setFechaCompromiso] = useState('');
   const [notas, setNotas] = useState('');
   const [saving, setSaving] = useState(false);
+  // Catálogo del proyecto para resolver el FK del programa por nombre.
+  const { products } = useProducts((conversion as any)?.project_id, true);
 
   useEffect(() => {
     if (!conversion) return;
@@ -69,6 +72,10 @@ export default function EditConversionDialog({ conversion, onClose, onSaved }: P
         metodo_pago: metodoPago || null,
         fecha_compromiso_pago: fechaCompromiso || null,
       };
+      // Si el nombre coincide con un programa del catálogo, vincula el FK (bug:
+      // antes solo se guardaba el texto y el vínculo quedaba NULL).
+      const matched = products.find((p) => (p.nombre || '').trim().toLowerCase() === producto.trim().toLowerCase());
+      if (matched) patch.producto_contratado_id = matched.id;
       if (fechaConversion) patch.fecha_conversion = fechaConversion;
       await conversionsApi.update(conversion.id, patch);
       toast({ title: 'Conversión actualizada' });

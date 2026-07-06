@@ -32,7 +32,7 @@ export default function ProductsPage() {
     if (!projectId) return;
     let cancelled = false;
     setLoading(true);
-    client.get('/products', { params: { projectId, limit: 200 } })
+    client.get('/products', { params: { projectId, limit: 200, includeInactive: true } })
       .then((r: any) => { if (!cancelled) setProducts(Array.isArray(r?.data) ? r.data : (r?.data?.data || [])); })
       .catch(() => { if (!cancelled) setProducts([]); })
       .finally(() => { if (!cancelled) setLoading(false); });

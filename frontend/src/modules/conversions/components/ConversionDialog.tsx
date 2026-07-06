@@ -261,6 +261,9 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
         producto_contratado: useMultiItem
           ? items.map(it => `${it.cantidad}x ${it.descripcion}`).join(' + ')
           : form.producto_contratado,
+        // FK al programa del catálogo (bug: antes solo se guardaba el nombre en
+        // texto y el vínculo quedaba NULL → el reporting no cruzaba la venta).
+        producto_contratado_id: useMultiItem ? null : (selectedProduct?.id ?? null),
         importe_total: calc.total,
         importe_pagado: Number(form.importe_pagado || 0),
         metodo_pago: form.metodo_pago,

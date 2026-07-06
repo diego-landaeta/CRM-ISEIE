@@ -12,7 +12,7 @@ export interface UseProductsResult {
   deactivate: (id: number) => Promise<Product | null>;
 }
 
-export function useProducts(projectId: number | null | undefined): UseProductsResult {
+export function useProducts(projectId: number | null | undefined, includeInactive = false): UseProductsResult {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -22,7 +22,7 @@ export function useProducts(projectId: number | null | undefined): UseProductsRe
     setLoading(true);
     setError(null);
     try {
-      const res = await client.get(`/products?projectId=${projectId}`);
+      const res = await client.get(`/products?projectId=${projectId}${includeInactive ? '&includeInactive=true' : ''}`);
       if (res.success) {
         setProducts((res.data as Product[]) || []);
       }
@@ -32,7 +32,7 @@ export function useProducts(projectId: number | null | undefined): UseProductsRe
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, includeInactive]);
 
   useEffect(() => {
     fetchProducts();

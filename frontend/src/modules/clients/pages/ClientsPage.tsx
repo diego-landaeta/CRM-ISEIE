@@ -198,6 +198,10 @@ export default function ClientsPage() {
             return { ...l, conversiones: 0, total_compras: 0, total_pagado: 0, pendiente: 0 } as Client;
           }
         }));
+        // El enriquecimiento es async y no lleva signal: si el proyecto cambió
+        // mientras tanto, no pisar la lista del proyecto activo (bug: cargaba
+        // clientes de otro proyecto).
+        if (controller.signal.aborted) return;
         setClients(enriched);
       }
     } catch (err: unknown) {
