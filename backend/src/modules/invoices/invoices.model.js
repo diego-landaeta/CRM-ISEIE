@@ -69,18 +69,25 @@ export async function create(data, userId) {
       iss = r.rows[0] || null;
     }
 
-    // GATING FISCAL (España): no se emite hasta que la sociedad tenga CIF/NIF
-    // válido y datos obligatorios completos. No rompe el flujo del CRM: solo
-    // bloquea la creación de la factura con un mensaje claro de qué falta.
+    // GATING FISCAL (España): se PERMITE emitir aunque falte el NIF. Solo se
+    // bloquea si el CIF/NIF puesto es INVÁLIDO (typo/formato) — así no se emite
+    // con un identificador fiscal erróneo. No rompe el flujo del CRM.
     const fiscal = issuerFiscalStatus(iss);
     if (!fiscal.ready) {
       // El try/catch de create() hace ROLLBACK + release; aquí solo lanzamos.
       throw new AppError(
-        `No se puede emitir factura: la sociedad "${iss?.razon_social || 'sin asignar'}" tiene datos fiscales incompletos (falta: ${fiscal.missing.join(', ')}). Complétalos en Configuración → Empresas emisoras.`,
+        `No se puede emitir: el CIF/NIF de la sociedad "${iss?.razon_social || 'sin asignar'}" no tiene formato válido para España. Corrígelo en Configuración → Empresas emisoras.`,
         400,
-        'ISSUER_FISCAL_INCOMPLETE',
+        'ISSUER_NIF_INVALID',
       );
     }
+
+    // Snapshot del NIF: si la sociedad aún no tiene NIF (placeholder), la factura
+    // lo guarda EN BLANCO (no el texto "PENDIENTE-..."). Cada factura conserva su
+    // copia: poner el NIF más adelante NO cambia las facturas ya emitidas, solo
+    // afecta a las nuevas.
+    const issuerNifSnap = (iss?.nif && !String(iss.nif).toUpperCase().startsWith('PENDIENTE'))
+      ? iss.nif : null;
 
     // Serie: la de la empresa emisora manda; si no tiene, la del request o 'A'.
     const serie = (iss?.serie && iss.serie.trim()) || data.serie || 'A';
@@ -111,7 +118,7 @@ export async function create(data, userId) {
         data.baseImponible, data.ivaPct, data.ivaImporte, !!data.ivaIncluido, data.total,
         data.estado || 'emitida', data.notas || null, data.leyendaIva || null,
         data.metodoPago, (data.piePago || iss?.pie_default || null), userId,
-        iss?.id || null, iss?.razon_social || null, iss?.nif || null, iss?.direccion || null, iss?.ciudad || null,
+        iss?.id || null, iss?.razon_social || null, issuerNifSnap, iss?.direccion || null, iss?.ciudad || null,
         iss?.cp || null, iss?.pais || null, iss?.email || null, iss?.telefono || null, iss?.iban || null, iss?.logo_url || null,
       ]
     );

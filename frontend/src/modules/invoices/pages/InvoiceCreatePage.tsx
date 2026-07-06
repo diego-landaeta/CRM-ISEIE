@@ -154,12 +154,12 @@ export default function InvoiceCreatePage() {
     { key: 'contado', label: 'Contado', desc: 'Sin datos de cliente', icon: Money },
   ];
 
-  // Gating fiscal España: si la sociedad emisora seleccionada no tiene los datos
-  // fiscales completos (CIF/NIF válido + domicilio…), no se puede emitir.
+  // Gating fiscal España: se PERMITE emitir aunque falte el NIF/datos (aviso
+  // informativo). SOLO se bloquea si el CIF/NIF puesto es inválido (typo).
   const selectedIssuer = issuers.find((i) => i.id === issuerId);
-  const fiscalMissing = selectedIssuer?.fiscal_status && !selectedIssuer.fiscal_status.ready
-    ? selectedIssuer.fiscal_status.missing
-    : null;
+  const fs = selectedIssuer?.fiscal_status;
+  const fiscalBlock = fs ? !fs.ready : false;
+  const fiscalMissing = fs && fs.missing.length ? fs.missing : null;
 
   return (
     <div className="space-y-4 pb-8 max-w-4xl">
@@ -180,9 +180,13 @@ export default function InvoiceCreatePage() {
             {issuers.map((iss) => <option key={iss.id} value={iss.id}>{iss.razon_social} — {iss.nif}{iss.serie ? ` · serie ${iss.serie}` : ''}{iss.es_default ? ' (por defecto)' : ''}</option>)}
           </select>
           {fiscalMissing && (
-            <div className="mt-2 flex items-start gap-2 rounded-md bg-amber-500/10 border border-amber-500/30 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
-              <span className="font-bold">⚠</span>
-              <span><b>No se puede emitir</b> con esta sociedad: faltan datos fiscales ({fiscalMissing.join(', ')}). Complétalos en <b>Configuración → Empresas emisoras</b>.</span>
+            <div className={`mt-2 flex items-start gap-2 rounded-md px-3 py-2 text-xs border ${fiscalBlock ? 'bg-red-500/10 border-red-500/30 text-red-700 dark:text-red-400' : 'bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-400'}`}>
+              <span className="font-bold">{fiscalBlock ? '⛔' : '⚠'}</span>
+              {fiscalBlock ? (
+                <span><b>No se puede emitir</b>: el CIF/NIF de la sociedad no tiene formato válido para España. Corrígelo en <b>Empresas emisoras</b>.</span>
+              ) : (
+                <span>Aviso: faltan datos ({fiscalMissing.join(', ')}). <b>Se puede emitir igual</b>; en esta factura se guardarán en blanco. Al ponerlos luego, las facturas ya emitidas no cambian.</span>
+              )}
             </div>
           )}
         </div>
@@ -283,7 +287,7 @@ export default function InvoiceCreatePage() {
 
       <div className="flex justify-end gap-2">
         <Link to={`${invBase}/facturas`} className="h-10 px-4 rounded-md border border-border bg-card text-sm inline-flex items-center">Cancelar</Link>
-        <button onClick={generar} disabled={saving || !!fiscalMissing} title={fiscalMissing ? `Faltan datos fiscales: ${fiscalMissing.join(', ')}` : undefined} className="h-10 px-5 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1.5">
+        <button onClick={generar} disabled={saving || fiscalBlock} title={fiscalBlock ? 'El CIF/NIF de la sociedad no es válido' : undefined} className="h-10 px-5 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1.5">
           <FloppyDisk size={15} weight="bold" /> {saving ? 'Emitiendo…' : 'Generar factura'}
         </button>
       </div>

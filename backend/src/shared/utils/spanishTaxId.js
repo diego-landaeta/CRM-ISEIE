@@ -66,17 +66,28 @@ export function isValidSpanishTaxId(id) {
 }
 
 /**
- * Estado fiscal de una sociedad emisora para poder emitir en España.
- * Devuelve { ready, missing } — `missing` lista los campos que faltan/inválidos.
+ * Estado fiscal de una sociedad emisora.
+ * Regla de negocio: se PERMITE emitir aunque falte el NIF u otros datos (para no
+ * bloquear el negocio). SOLO se bloquea si el NIF está puesto pero es INVÁLIDO
+ * (un error de formato/typo, que sí hay que atajar antes de emitir en España).
+ * Devuelve:
+ *   - ready   → true salvo que el NIF puesto sea inválido (controla el bloqueo).
+ *   - missing → lista informativa de lo que falta/está mal (para avisar en UI).
  */
 export function issuerFiscalStatus(issuer) {
   const missing = [];
   if (!issuer) return { ready: false, missing: ['sociedad'] };
   const nif = clean(issuer.nif);
-  if (!nif || nif.startsWith('PENDIENTE') || !isValidSpanishTaxId(nif)) missing.push('CIF/NIF válido');
+  const nifPresent = !!nif && !nif.startsWith('PENDIENTE');
+  const invalidNif = nifPresent && !isValidSpanishTaxId(nif);
+
+  if (!nifPresent) missing.push('NIF (pendiente)');
+  if (invalidNif) missing.push('CIF/NIF con formato válido para España');
   if (!String(issuer.razon_social || '').trim()) missing.push('razón social');
   if (!String(issuer.direccion || '').trim()) missing.push('domicilio');
   if (!String(issuer.cp || '').trim()) missing.push('código postal');
   if (!String(issuer.ciudad || '').trim()) missing.push('ciudad');
-  return { ready: missing.length === 0, missing };
+
+  // Solo un NIF puesto-pero-inválido impide emitir. Falta de NIF/datos = permitido.
+  return { ready: !invalidNif, missing };
 }
