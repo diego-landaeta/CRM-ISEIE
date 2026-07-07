@@ -58,6 +58,8 @@ export default function InvoiceCreatePage() {
   const [regimenes, setRegimenes] = useState<import('../api/invoices.api').FiscalRegimen[]>([]);
   const [regimenId, setRegimenId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
+  // Catálogo de cursos/productos para el selector de conceptos (facturamos cursos).
+  const [products, setProducts] = useState<Array<{ id: number; nombre: string; precio: number | string | null }>>([]);
 
   useEffect(() => {
     if (!pid) return;
@@ -75,6 +77,9 @@ export default function InvoiceCreatePage() {
       }
     }).catch(() => {});
     invoicesApi.listRegimenes(pid).then((res) => { if (res.success) setRegimenes(res.data || []); }).catch(() => {});
+    // Catálogo de cursos del proyecto para el selector de conceptos.
+    client.get<Array<{ id: number; nombre: string; precio: number | string | null }>>(`/products?projectId=${pid}&limit=1000`)
+      .then((res) => { if (res.success) setProducts(res.data || []); }).catch(() => {});
   }, [pid]);
 
   const regimenSel = regimenes.find((r) => r.id === regimenId) || null;
@@ -133,6 +138,18 @@ export default function InvoiceCreatePage() {
         setEmail(d.email || '');
         setTelefono(d.telefono || '');
         if (d.pais_fiscal && !d.pais_fiscal.toLowerCase().match(/españa|espana|spain|^es$/)) setLlevaIva(false);
+        // Traer los cursos contratados (conversiones) como conceptos + importe.
+        const convs = d.conversiones || [];
+        if (convs.length) {
+          setItems(convs.map((c) => ({
+            descripcion: c.producto_contratado || c.producto_nombre || 'Curso',
+            cantidad: 1,
+            precio_unitario: Number(c.importe_total ?? c.producto_precio ?? 0) || 0,
+          })));
+          const MP = ['transferencia', 'tarjeta', 'tarjeta_stripe', 'efectivo', 'bizum', 'fraccionado', 'otro'];
+          const mp = convs[0]?.metodo_pago;
+          if (mp && MP.includes(mp)) setMetodoPago(mp as typeof metodoPago);
+        }
       }
     } catch { /* ignore */ }
   }
@@ -306,7 +323,31 @@ export default function InvoiceCreatePage() {
             <button onClick={() => setItems(items.length > 1 ? items.filter((_, i) => i !== idx) : items)} className="col-span-1 text-muted-foreground hover:text-red-500 text-xs">×</button>
           </div>
         ))}
-        <button onClick={() => setItems([...items, { descripcion: '', cantidad: 1, precio_unitario: 0 }])} className="text-xs text-primary hover:underline">+ añadir concepto</button>
+        <div className="flex flex-wrap items-center gap-3 pt-1">
+          <button onClick={() => setItems([...items, { descripcion: '', cantidad: 1, precio_unitario: 0 }])} className="text-xs text-primary hover:underline">+ añadir concepto</button>
+          {products.length > 0 && (
+            <div className="flex items-center gap-1.5 text-xs">
+              <span className="text-muted-foreground">o añade un curso:</span>
+              <select
+                value=""
+                onChange={(e) => {
+                  const p = products.find((x) => String(x.id) === e.target.value);
+                  if (!p) return;
+                  const line = { descripcion: p.nombre, cantidad: 1, precio_unitario: Number(p.precio ?? 0) || 0 };
+                  setItems((prev) => (prev.length === 1 && !prev[0].descripcion.trim() && !Number(prev[0].precio_unitario))
+                    ? [line] : [...prev, line]);
+                  e.target.value = '';
+                }}
+                className="h-8 px-2 rounded border border-border bg-background text-xs max-w-[280px]"
+              >
+                <option value="">— elegir del catálogo —</option>
+                {products.map((p) => (
+                  <option key={p.id} value={p.id}>{p.nombre}{p.precio ? ` · ${Number(p.precio)}€` : ''}</option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* IVA + Pago */}

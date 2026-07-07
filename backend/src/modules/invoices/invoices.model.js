@@ -332,6 +332,22 @@ export async function cancel(id) {
   await query(`UPDATE invoices SET estado = 'cancelada', updated_at = NOW() WHERE id = $1`, [id]);
 }
 
+// Conversiones (cursos contratados) de un lead → para pre-rellenar conceptos de
+// la factura/presupuesto. Trae el curso, el importe y el precio de catálogo.
+export async function getLeadConversions(leadId) {
+  const { rows } = await query(
+    `SELECT c.id, c.producto_contratado, c.producto_contratado_id,
+            c.importe_total, c.importe_pagado, c.metodo_pago, c.fecha_conversion,
+            p.nombre AS producto_nombre, p.precio AS producto_precio
+       FROM conversions c
+       LEFT JOIN products p ON p.id = c.producto_contratado_id
+      WHERE c.lead_id = $1
+      ORDER BY c.fecha_conversion DESC NULLS LAST, c.id DESC`,
+    [leadId]
+  );
+  return rows;
+}
+
 export async function getLeadFiscalData(leadId) {
   const { rows } = await query(
     `SELECT id, nombre, email, telefono,

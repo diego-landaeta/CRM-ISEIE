@@ -70,7 +70,8 @@ export async function leadFiscalData(req, res, next) {
     const leadId = Number(req.params.leadId);
     const lead = await model.getLeadFiscalData(leadId);
     if (!lead) throw new AppError('Lead no encontrado', 404, 'NOT_FOUND');
-    res.json({ success: true, data: lead });
+    const conversiones = await model.getLeadConversions(leadId);
+    res.json({ success: true, data: { ...lead, conversiones } });
   } catch (e) { next(e); }
 }
 

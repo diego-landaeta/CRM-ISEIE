@@ -96,6 +96,18 @@ export interface Invoice {
   motivo_rectificacion?: string | null;
 }
 
+export interface LeadConversion {
+  id: number;
+  producto_contratado: string | null;
+  producto_contratado_id: number | null;
+  importe_total: number | string | null;
+  importe_pagado: number | string | null;
+  metodo_pago: string | null;
+  fecha_conversion: string | null;
+  producto_nombre: string | null;
+  producto_precio: number | string | null;
+}
+
 export interface LeadFiscalData {
   id: number;
   nombre: string;
@@ -106,6 +118,7 @@ export interface LeadFiscalData {
   ciudad_fiscal: string | null;
   codigo_postal_fiscal: string | null;
   pais_fiscal: string | null;
+  conversiones?: LeadConversion[];
 }
 
 export interface FiscalRegimen {
