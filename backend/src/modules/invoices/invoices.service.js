@@ -91,7 +91,7 @@ export async function generatePDF(invoiceId) {
   // Codigo (derecha) — distinto si es rectificativa o proforma
   const esRect = inv.tipo === 'rectificativa';
   const esProforma = inv.tipo === 'proforma';
-  const tituloDoc = esRect ? 'F. RECTIFICATIVA' : esProforma ? 'PROFORMA' : 'FACTURA';
+  const tituloDoc = esRect ? 'F. RECTIFICATIVA' : esProforma ? 'PRESUPUESTO' : 'FACTURA';
   const tituloColor = esRect ? rgb(0.7, 0.1, 0.1) : esProforma ? rgb(0.35, 0.35, 0.45) : black;
   page.drawText(tituloDoc, { x: right - (esRect ? 150 : esProforma ? 120 : 100), y: 800, size: esRect ? 13 : esProforma ? 14 : 16, font: bold, color: tituloColor });
   page.drawText(`N.º ${inv.codigo}`, { x: right - 150, y: 780, size: 12, font: bold, color: black });
@@ -190,7 +190,7 @@ export async function generatePDF(invoiceId) {
   }
 
   // Footer
-  page.drawText(`${esProforma ? 'Proforma' : 'Factura'} ${inv.codigo} generada el ${new Date().toLocaleDateString('es-ES')}`,
+  page.drawText(`${esProforma ? 'Presupuesto' : 'Factura'} ${inv.codigo} generada el ${new Date().toLocaleDateString('es-ES')}`,
     { x: left, y: 30, size: 8, font, color: gray });
   } // fin fallback (layout fijo)
 
@@ -294,7 +294,7 @@ async function renderFromTemplate({ pdfDoc, page, font, bold, inv, layout }) {
           break;
         case 'meta':
           drawLines(b, [
-            { text: esRect ? 'FACTURA RECTIFICATIVA' : esProforma ? 'PROFORMA' : 'FACTURA', bold: true, size: (b.fontSize || 12) + 2, color: esRect ? red : black },
+            { text: esRect ? 'FACTURA RECTIFICATIVA' : esProforma ? 'PRESUPUESTO' : 'FACTURA', bold: true, size: (b.fontSize || 12) + 2, color: esRect ? red : black },
             { text: `N.º ${inv.codigo}`, bold: true },
             { text: `Fecha: ${new Date(inv.fecha_emision).toLocaleDateString('es-ES')}` },
             { text: esRect && inv.rectifica_codigo ? `Rectifica a: ${inv.rectifica_codigo}` : '', color: gray, size: (b.fontSize || 12) - 2 },
@@ -368,7 +368,7 @@ async function renderFromTemplate({ pdfDoc, page, font, bold, inv, layout }) {
   }
 
   // Pie fijo de trazabilidad
-  page.drawText(`${esProforma ? 'Proforma' : 'Factura'} ${inv.codigo} · ${new Date().toLocaleDateString('es-ES')}`,
+  page.drawText(`${esProforma ? 'Presupuesto' : 'Factura'} ${inv.codigo} · ${new Date().toLocaleDateString('es-ES')}`,
     { x: 50, y: 25, size: 7, font, color: rgb(0.6, 0.6, 0.6) });
 }
 
@@ -397,8 +397,8 @@ export async function sendByEmail(invoiceId, customEmail = null) {
   const pdfB64 = Buffer.from(pdfBytes).toString('base64');
 
   const project = await model.getProjectInvoicerData(inv.project_id);
-  const docLabel = inv.tipo === 'proforma' ? 'Proforma' : 'Factura';
-  const docLabelLc = inv.tipo === 'proforma' ? 'proforma' : 'factura';
+  const docLabel = inv.tipo === 'proforma' ? 'Presupuesto' : 'Factura';
+  const docLabelLc = inv.tipo === 'proforma' ? 'presupuesto' : 'factura';
   const subject = `${docLabel} ${inv.codigo} - ${project?.nombre || 'CRM'}`;
   const html = `
     <p>Hola ${inv.cliente_nombre},</p>

@@ -166,7 +166,7 @@ export default function InvoiceCreatePage() {
         notas: notas.trim() || undefined, metodoPago, piePago: piePago.trim() || undefined,
       });
       if (res.success && res.data) {
-        toast({ title: esProforma ? '✓ Proforma generada' : '✓ Factura emitida', description: res.data.codigo });
+        toast({ title: esProforma ? '✓ Presupuesto generado' : '✓ Factura emitida', description: res.data.codigo });
         window.open(invoicesApi.pdfUrl(res.data.id), '_blank');
         navigate(`${invBase}/facturas${esProforma ? '?tab=proformas' : ''}`);
       } else {
@@ -194,7 +194,7 @@ export default function InvoiceCreatePage() {
 
   return (
     <div className="space-y-4 pb-8 max-w-4xl">
-      <PageHeader title={esProforma ? 'Nueva proforma' : 'Nueva factura'} subtitle={activeProject?.nombre || ''}
+      <PageHeader title={esProforma ? 'Nuevo presupuesto' : 'Nueva factura'} subtitle={activeProject?.nombre || ''}
         actions={(
           <Link to={`${invBase}/facturas`} className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted">
             <ArrowLeft size={14} weight="bold" /> Volver
@@ -204,7 +204,7 @@ export default function InvoiceCreatePage() {
 
       {/* Tipo de documento: factura fiscal vs proforma (presupuesto) */}
       <div className="inline-flex rounded-lg border border-border bg-muted/30 p-1 text-sm font-semibold">
-        {([['factura', 'Factura'], ['proforma', 'Proforma']] as const).map(([k, label]) => (
+        {([['factura', 'Factura'], ['proforma', 'Presupuesto']] as const).map(([k, label]) => (
           <button key={k} type="button" onClick={() => setDocTipo(k)}
             className={`px-4 h-8 rounded-md transition ${docTipo === k ? 'bg-primary text-primary-foreground shadow' : 'text-muted-foreground hover:text-foreground'}`}>
             {label}
@@ -349,7 +349,7 @@ export default function InvoiceCreatePage() {
       <div className="flex justify-end gap-2">
         <Link to={`${invBase}/facturas`} className="h-10 px-4 rounded-md border border-border bg-card text-sm inline-flex items-center">Cancelar</Link>
         <button onClick={generar} disabled={saving || (!esProforma && fiscalBlock)} title={!esProforma && fiscalBlock ? 'El CIF/NIF de la sociedad no es válido' : undefined} className="h-10 px-5 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1.5">
-          <FloppyDisk size={15} weight="bold" /> {saving ? (esProforma ? 'Generando…' : 'Emitiendo…') : (esProforma ? 'Generar proforma' : 'Generar factura')}
+          <FloppyDisk size={15} weight="bold" /> {saving ? (esProforma ? 'Generando…' : 'Emitiendo…') : (esProforma ? 'Generar presupuesto' : 'Generar factura')}
         </button>
       </div>
     </div>
