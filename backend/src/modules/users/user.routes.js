@@ -35,6 +35,7 @@ router.post('/', userController.create);
 router.patch('/:id', userController.update);
 router.delete('/:id', userController.deactivate);
 router.patch('/:id/reactivate', userController.reactivate);
+router.patch('/:id/password', userController.setPassword);
 router.patch('/:id/availability',                 availabilityController.setAvailability);
 router.get('/:id/availability-blocks',            availabilityController.listBlocks);
 router.post('/:id/availability-blocks',           availabilityController.createBlock);

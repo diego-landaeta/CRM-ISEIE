@@ -76,6 +76,19 @@ export async function update(id, data) {
   return { ...updated, projects };
 }
 
+export async function setPassword(id, password) {
+  const user = await userModel.findById(id);
+  if (!user) throw new AppError('Usuario no encontrado', 404, 'USER_NOT_FOUND');
+  if (user.role === 'superadmin') {
+    throw new AppError('No se puede cambiar la contraseña de un superadmin', 403, 'CANNOT_EDIT_SUPERADMIN');
+  }
+  const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+  await userModel.setPasswordHash(id, passwordHash);
+  // Cierra sesiones activas: obliga a entrar con la nueva contraseña.
+  await revokeAllUserTokens(id);
+  return { id };
+}
+
 export async function deactivate(id) {
   const user = await userModel.findById(id);
   if (!user) throw new AppError('Usuario no encontrado', 404, 'USER_NOT_FOUND');

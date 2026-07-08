@@ -1,6 +1,6 @@
 import * as userService from './user.service.js';
 import * as userModel from './user.model.js';
-import { createUserSchema, updateUserSchema, listUsersSchema } from './user.validation.js';
+import { createUserSchema, updateUserSchema, listUsersSchema, adminSetPasswordSchema } from './user.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { saveLocal, getLocal, deleteLocal } from '../../shared/services/localStorage.service.js';
 import { mimeToExt, extToMime } from '../../shared/utils/mime.js';
@@ -85,6 +85,21 @@ export async function reactivate(req, res, next) {
     if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
     const result = await userService.reactivate(id);
     res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+}
+
+// Reset de contraseña de otro usuario (solo superadmin).
+export async function setPassword(req, res, next) {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    if (req.user?.role !== 'superadmin') {
+      throw new AppError('Solo un superadmin puede cambiar la contraseña de otro usuario', 403, 'FORBIDDEN');
+    }
+    const parsed = adminSetPasswordSchema.safeParse(req.body);
+    if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
+    await userService.setPassword(id, parsed.data.password);
+    res.json({ success: true });
   } catch (err) { next(err); }
 }
 

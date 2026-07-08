@@ -20,6 +20,14 @@ export const updateUserSchema = z.object({
   role: z.enum(['admin', 'gestor', 'soporte']).optional(),
   projectIds: z.array(z.number().int().positive()).optional(),
   projects: z.array(projectAssignmentSchema).optional(),
+  // Teléfono del gestor (WhatsApp): usado por el widget y para contacto.
+  whatsapp_phone: z.string().max(30).nullable().optional().or(z.literal('')),
+  whatsapp_display_name: z.string().max(120).nullable().optional().or(z.literal('')),
+});
+
+// Reset de contraseña por un superadmin (no requiere la contraseña actual).
+export const adminSetPasswordSchema = z.object({
+  password: z.string().min(8, 'La contraseña debe tener al menos 8 caracteres').max(200),
 });
 
 export const listUsersSchema = z.object({

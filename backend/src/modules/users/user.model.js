@@ -26,6 +26,7 @@ export async function findAll({ active, role, projectId, page, limit }) {
 
   const { rows } = await query(
     `SELECT u.id, u.nombre, u.email, u.role, u.active, u.last_login_at, u.created_at, u.avatar_url, u.avatar_key,
+            u.whatsapp_phone, u.whatsapp_display_name,
             COALESCE(
               (SELECT json_agg(up.project_id ORDER BY up.project_id)
                FROM user_projects up
@@ -109,7 +110,7 @@ export async function create({ nombre, email, passwordHash, role, projectIds, pr
   }
 }
 
-export async function update(id, { nombre, role, projectIds, projects, avatar_url, avatar_key }) {
+export async function update(id, { nombre, role, projectIds, projects, avatar_url, avatar_key, whatsapp_phone, whatsapp_display_name }) {
   const client = await getClient();
   try {
     await client.query('BEGIN');
@@ -122,6 +123,9 @@ export async function update(id, { nombre, role, projectIds, projects, avatar_ur
     if (role) { sets.push(`role = $${paramIdx++}`); params.push(role); }
     if (avatar_url !== undefined) { sets.push(`avatar_url = $${paramIdx++}`); params.push(avatar_url); }
     if (avatar_key !== undefined) { sets.push(`avatar_key = $${paramIdx++}`); params.push(avatar_key); }
+    // Teléfono WhatsApp del gestor (cadena vacía → NULL para limpiar).
+    if (whatsapp_phone !== undefined) { sets.push(`whatsapp_phone = $${paramIdx++}`); params.push(whatsapp_phone || null); }
+    if (whatsapp_display_name !== undefined) { sets.push(`whatsapp_display_name = $${paramIdx++}`); params.push(whatsapp_display_name || null); }
 
     if (sets.length > 0) {
       sets.push(`updated_at = NOW()`);
@@ -161,6 +165,15 @@ export async function update(id, { nombre, role, projectIds, projects, avatar_ur
 
 export async function deactivate(id) {
   await query(`UPDATE users SET active = false, updated_at = NOW() WHERE id = $1`, [id]);
+}
+
+// Reset de contraseña por admin: fija el hash y anula cualquier token pendiente.
+export async function setPasswordHash(id, passwordHash) {
+  await query(
+    `UPDATE users SET password_hash = $2, set_password_token = NULL, set_password_expires = NULL, updated_at = NOW()
+     WHERE id = $1`,
+    [id, passwordHash]
+  );
 }
 
 export async function reactivate(id) {

@@ -157,6 +157,7 @@ function UsersSection({ isAdmin }) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showInvite, setShowInvite] = useState(false);
+  const [editingUser, setEditingUser] = useState(null);
 
   async function load() {
     setLoading(true);
@@ -255,10 +256,16 @@ function UsersSection({ isAdmin }) {
                   {isAdmin && (
                     <td className="px-4 py-3 text-right">
                       {u.role !== 'superadmin' && (
-                        <button onClick={() => toggleActive(u)}
-                          className="text-xs font-medium px-2.5 py-1 rounded border border-border hover:bg-muted">
-                          {u.active ? 'Desactivar' : 'Reactivar'}
-                        </button>
+                        <div className="inline-flex gap-1.5">
+                          <button onClick={() => setEditingUser(u)}
+                            className="text-xs font-medium px-2.5 py-1 rounded border border-border hover:bg-muted">
+                            Editar
+                          </button>
+                          <button onClick={() => toggleActive(u)}
+                            className="text-xs font-medium px-2.5 py-1 rounded border border-border hover:bg-muted">
+                            {u.active ? 'Desactivar' : 'Reactivar'}
+                          </button>
+                        </div>
                       )}
                     </td>
                   )}
@@ -276,7 +283,143 @@ function UsersSection({ isAdmin }) {
           onCreated={() => { setShowInvite(false); load(); }}
         />
       )}
+      {editingUser && (
+        <EditUserModal
+          user={editingUser}
+          projects={projects || []}
+          onClose={() => setEditingUser(null)}
+          onSaved={() => { setEditingUser(null); load(); }}
+        />
+      )}
     </section>
+  );
+}
+
+function EditUserModal({ user, projects, onClose, onSaved }) {
+  const { user: me } = useAuth();
+  const isSuperadmin = me?.role === 'superadmin';
+  const [nombre, setNombre] = useState(user.nombre || '');
+  const [role, setRole] = useState(user.role || 'gestor');
+  const [phone, setPhone] = useState(user.whatsapp_phone || '');
+  const [assigned, setAssigned] = useState(() => {
+    const m = {};
+    (user.projects || []).forEach((p) => { m[p.projectId ?? p.project_id] = !!(p.recibeLeads ?? p.recibe_leads); });
+    return m;
+  });
+  const [newPass, setNewPass] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [savingPass, setSavingPass] = useState(false);
+
+  function toggleProject(pid) {
+    setAssigned((a) => {
+      const next = { ...a };
+      if (pid in next) delete next[pid]; else next[pid] = false;
+      return next;
+    });
+  }
+
+  async function save() {
+    if (nombre.trim().length < 2) { toast({ title: 'Nombre inválido', variant: 'destructive' }); return; }
+    const projList = Object.entries(assigned).map(([projectId, recibeLeads]) => ({ projectId: Number(projectId), recibeLeads: !!recibeLeads }));
+    setSaving(true);
+    try {
+      await client.patch(`/users/${user.id}`, { nombre: nombre.trim(), role, projects: projList, whatsapp_phone: phone.trim() });
+      toast({ title: '✓ Guardado' });
+      onSaved();
+    } catch (e) {
+      toast({ title: 'Error', description: e?.data?.error || e?.message, variant: 'destructive' });
+    } finally { setSaving(false); }
+  }
+
+  async function changePassword() {
+    if (newPass.length < 8) { toast({ title: 'Contraseña muy corta', description: 'Mínimo 8 caracteres', variant: 'destructive' }); return; }
+    setSavingPass(true);
+    try {
+      await client.patch(`/users/${user.id}/password`, { password: newPass });
+      toast({ title: '✓ Contraseña actualizada', description: `${user.nombre} deberá entrar con la nueva contraseña.` });
+      setNewPass('');
+    } catch (e) {
+      toast({ title: 'Error', description: e?.data?.error || e?.message, variant: 'destructive' });
+    } finally { setSavingPass(false); }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-card rounded-xl border border-border w-full max-w-md p-5 space-y-4 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-semibold">Editar usuario</h3>
+            <p className="text-xs text-muted-foreground">{user.email}</p>
+          </div>
+          <button onClick={onClose} className="p-1 rounded hover:bg-muted"><X size={16} weight="bold" /></button>
+        </div>
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">Nombre</label>
+            <input value={nombre} onChange={(e) => setNombre(e.target.value)} className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm" />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">Rol</label>
+            <select value={role} onChange={(e) => setRole(e.target.value)} className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm">
+              <option value="gestor">Gestor</option>
+              <option value="admin">Admin</option>
+              <option value="soporte">Soporte</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">Teléfono (WhatsApp)</label>
+            <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+34 600 000 000" className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm" />
+            <p className="text-[10px] text-muted-foreground mt-1">Se usa para el widget de WhatsApp y el contacto del gestor.</p>
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">Proyectos asignados</label>
+            {projects.length === 0 ? (
+              <p className="text-xs text-muted-foreground italic">No hay proyectos disponibles.</p>
+            ) : (
+              <div className="space-y-1.5 max-h-40 overflow-y-auto border border-border rounded-md p-2">
+                {projects.map((p) => {
+                  const checked = p.id in assigned;
+                  return (
+                    <div key={p.id} className="flex items-center justify-between gap-2">
+                      <label className="flex items-center gap-2 text-sm cursor-pointer">
+                        <input type="checkbox" checked={checked} onChange={() => toggleProject(p.id)} />
+                        {p.nombre}
+                      </label>
+                      {checked && role === 'gestor' && (
+                        <label className="flex items-center gap-1 text-[11px] text-muted-foreground cursor-pointer">
+                          <input type="checkbox" checked={!!assigned[p.id]} onChange={(e) => setAssigned((a) => ({ ...a, [p.id]: e.target.checked }))} />
+                          recibe leads
+                        </label>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose} className="h-9 px-4 rounded-md border border-border text-sm font-medium hover:bg-muted">Cancelar</button>
+          <button onClick={save} disabled={saving} className="h-9 px-4 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50">
+            {saving ? 'Guardando…' : 'Guardar'}
+          </button>
+        </div>
+
+        {isSuperadmin && (
+          <div className="border-t border-border pt-4 space-y-2">
+            <label className="text-xs font-semibold flex items-center gap-1.5"><Key size={12} weight="bold" /> Cambiar contraseña</label>
+            <div className="flex gap-2">
+              <input type="text" value={newPass} onChange={(e) => setNewPass(e.target.value)} placeholder="Nueva contraseña (mín. 8)" className="flex-1 h-9 px-3 rounded-md border border-border bg-background text-sm font-mono" />
+              <button onClick={changePassword} disabled={savingPass} className="h-9 px-3 rounded-md border border-border text-sm font-medium hover:bg-muted disabled:opacity-50 whitespace-nowrap">
+                {savingPass ? '…' : 'Cambiar'}
+              </button>
+            </div>
+            <p className="text-[10px] text-muted-foreground">Se la comunicas tú al usuario. Al cambiarla, se cierran sus sesiones activas.</p>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
