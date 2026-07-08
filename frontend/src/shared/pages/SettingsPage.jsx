@@ -144,7 +144,49 @@ function SectionHeader({ title, subtitle, action }) {
   );
 }
 
+const ROLE_BADGE = {
+  superadmin: 'bg-violet-100 text-violet-800 dark:bg-violet-950/40 dark:text-violet-300',
+  admin: 'bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-300',
+  gestor: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300',
+  soporte: 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300',
+};
+
 function UsersSection({ isAdmin }) {
+  const { projects } = useAuth();
+  const confirm = useConfirm();
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showInvite, setShowInvite] = useState(false);
+
+  async function load() {
+    setLoading(true);
+    try {
+      const res = await client.get('/users?limit=100');
+      setUsers(res?.data || []);
+    } catch (e) {
+      toast({ title: 'Error', description: e?.data?.error || 'No se pudieron cargar los usuarios', variant: 'destructive' });
+    } finally { setLoading(false); }
+  }
+  useEffect(() => { load(); }, []);
+
+  async function toggleActive(u) {
+    const activar = !u.active;
+    if (!(await confirm({
+      title: activar ? 'Reactivar usuario' : 'Desactivar usuario',
+      message: `¿${activar ? 'Reactivar' : 'Desactivar'} a ${u.nombre}? ${activar ? '' : 'No podrá iniciar sesión ni recibir leads.'}`,
+      tone: activar ? 'default' : 'destructive',
+      confirmLabel: activar ? 'Reactivar' : 'Desactivar',
+    }))) return;
+    try {
+      if (activar) await client.patch(`/users/${u.id}/reactivate`, {});
+      else await client.delete(`/users/${u.id}`);
+      toast({ title: activar ? '✓ Reactivado' : '✓ Desactivado' });
+      await load();
+    } catch (e) {
+      toast({ title: 'Error', description: e?.data?.error || e?.message, variant: 'destructive' });
+    }
+  }
+
   return (
     <section className="space-y-4">
       <SectionHeader
@@ -152,7 +194,9 @@ function UsersSection({ isAdmin }) {
         subtitle="Invita gestores, admins y soporte. Cada uno con su rol y disponibilidad."
         action={
           <button
+            onClick={() => setShowInvite(true)}
             disabled={!isAdmin}
+            title={!isAdmin ? 'Necesitas rol admin' : undefined}
             className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Plus size={14} weight="bold" />
@@ -161,24 +205,170 @@ function UsersSection({ isAdmin }) {
         }
       />
 
-      <div className="rounded-2xl border border-border bg-card p-10 text-center">
-        <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center mx-auto mb-3">
-          <Users size={22} weight="duotone" className="text-muted-foreground" />
+      {loading ? (
+        <div className="rounded-2xl border border-border bg-card p-10 text-center text-sm text-muted-foreground">Cargando…</div>
+      ) : users.length === 0 ? (
+        <div className="rounded-2xl border border-border bg-card p-10 text-center">
+          <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center mx-auto mb-3">
+            <Users size={22} weight="duotone" className="text-muted-foreground" />
+          </div>
+          <h3 className="font-semibold mb-1">Sin usuarios todavía</h3>
+          <p className="text-sm text-muted-foreground max-w-sm mx-auto mb-4">
+            Cuando invites usuarios aparecerán aquí con su rol y disponibilidad.
+          </p>
         </div>
-        <h3 className="font-semibold mb-1">Sin usuarios todavía</h3>
-        <p className="text-sm text-muted-foreground max-w-sm mx-auto mb-4">
-          Cuando invites usuarios aparecerán aquí con su rol y disponibilidad.
-        </p>
-        <div className="flex flex-wrap items-center justify-center gap-2 text-[11px]">
-          {['superadmin', 'admin', 'gestor', 'soporte'].map((r) => (
-            <span key={r} className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-muted text-muted-foreground border border-border">
-              <ShieldCheck size={10} weight="bold" />
-              {r}
-            </span>
-          ))}
+      ) : (
+        <div className="rounded-2xl border border-border bg-card overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50 border-b border-border">
+              <tr>
+                <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">Usuario</th>
+                <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">Rol</th>
+                <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">Estado</th>
+                {isAdmin && <th className="px-4 py-2.5 text-right text-xs font-medium text-muted-foreground">Acciones</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((u) => (
+                <tr key={u.id} className={`border-b border-border last:border-0 ${!u.active ? 'opacity-50' : ''}`}>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold shrink-0">
+                        {String(u.nombre || '?').trim().charAt(0).toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-medium truncate">{u.nombre}</div>
+                        <div className="text-xs text-muted-foreground truncate">{u.email}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${ROLE_BADGE[u.role] || 'bg-muted'}`}>
+                      <ShieldCheck size={10} weight="bold" /> {u.role}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`text-[11px] font-semibold ${u.active ? 'text-emerald-600' : 'text-muted-foreground'}`}>
+                      {u.active ? 'Activo' : 'Inactivo'}
+                    </span>
+                  </td>
+                  {isAdmin && (
+                    <td className="px-4 py-3 text-right">
+                      {u.role !== 'superadmin' && (
+                        <button onClick={() => toggleActive(u)}
+                          className="text-xs font-medium px-2.5 py-1 rounded border border-border hover:bg-muted">
+                          {u.active ? 'Desactivar' : 'Reactivar'}
+                        </button>
+                      )}
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {showInvite && (
+        <InviteUserModal
+          projects={projects || []}
+          onClose={() => setShowInvite(false)}
+          onCreated={() => { setShowInvite(false); load(); }}
+        />
+      )}
+    </section>
+  );
+}
+
+function InviteUserModal({ projects, onClose, onCreated }) {
+  const [nombre, setNombre] = useState('');
+  const [email, setEmail] = useState('');
+  const [role, setRole] = useState('gestor');
+  const [assigned, setAssigned] = useState({}); // { [projectId]: recibeLeads }
+  const [saving, setSaving] = useState(false);
+
+  function toggleProject(pid) {
+    setAssigned((a) => {
+      const next = { ...a };
+      if (pid in next) delete next[pid]; else next[pid] = false;
+      return next;
+    });
+  }
+
+  async function submit() {
+    if (nombre.trim().length < 2) { toast({ title: 'Nombre inválido', description: 'Mínimo 2 caracteres', variant: 'destructive' }); return; }
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) { toast({ title: 'Email inválido', variant: 'destructive' }); return; }
+    const projList = Object.entries(assigned).map(([projectId, recibeLeads]) => ({ projectId: Number(projectId), recibeLeads: !!recibeLeads }));
+    setSaving(true);
+    try {
+      await client.post('/users', { nombre: nombre.trim(), email: email.trim().toLowerCase(), role, projects: projList });
+      toast({ title: '✓ Usuario invitado', description: 'Se le envió un email para crear su contraseña.' });
+      onCreated();
+    } catch (e) {
+      toast({ title: 'Error', description: e?.data?.error || e?.message || 'No se pudo crear el usuario', variant: 'destructive' });
+    } finally { setSaving(false); }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-card rounded-xl border border-border w-full max-w-md p-5 space-y-4 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold">Invitar usuario</h3>
+          <button onClick={onClose} className="p-1 rounded hover:bg-muted"><X size={16} weight="bold" /></button>
+        </div>
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">Nombre y apellido *</label>
+            <input value={nombre} onChange={(e) => setNombre(e.target.value)} className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm" placeholder="Ej: Fabiola Comercial" />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">Email *</label>
+            <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm" placeholder="persona@empresa.com" />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">Rol *</label>
+            <select value={role} onChange={(e) => setRole(e.target.value)} className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm">
+              <option value="gestor">Gestor — solo sus proyectos y leads</option>
+              <option value="admin">Admin — acceso operativo completo</option>
+              <option value="soporte">Soporte — tickets y consultas</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">Proyectos asignados</label>
+            {projects.length === 0 ? (
+              <p className="text-xs text-muted-foreground italic">No hay proyectos disponibles.</p>
+            ) : (
+              <div className="space-y-1.5 max-h-40 overflow-y-auto border border-border rounded-md p-2">
+                {projects.map((p) => {
+                  const checked = p.id in assigned;
+                  return (
+                    <div key={p.id} className="flex items-center justify-between gap-2">
+                      <label className="flex items-center gap-2 text-sm cursor-pointer">
+                        <input type="checkbox" checked={checked} onChange={() => toggleProject(p.id)} />
+                        {p.nombre}
+                      </label>
+                      {checked && role === 'gestor' && (
+                        <label className="flex items-center gap-1 text-[11px] text-muted-foreground cursor-pointer">
+                          <input type="checkbox" checked={!!assigned[p.id]} onChange={(e) => setAssigned((a) => ({ ...a, [p.id]: e.target.checked }))} />
+                          recibe leads
+                        </label>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 pt-1">
+          <button onClick={onClose} className="h-9 px-4 rounded-md border border-border text-sm font-medium hover:bg-muted">Cancelar</button>
+          <button onClick={submit} disabled={saving} className="h-9 px-4 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50">
+            {saving ? 'Invitando…' : 'Invitar'}
+          </button>
         </div>
       </div>
-    </section>
+    </div>
   );
 }
 
