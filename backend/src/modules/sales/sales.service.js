@@ -163,12 +163,15 @@ export async function createSale(data, requestUser) {
  * @param {{ projectId?: number|null, limit?: number, days?: number|null }} opts
  *   days=null → all-time. days=30 → últimos 30 días.
  */
-export async function getTopProducts({ projectId, limit = 10, days = null, responsableId = null } = {}) {
+export async function getTopProducts({ projectId, limit = 10, days = null, from = null, to = null, responsableId = null } = {}) {
   const params = [];
   const where = [];
   if (projectId) { params.push(projectId); where.push(`c.project_id = $${params.length}`); }
   if (responsableId) { params.push(responsableId); where.push(`l.responsable_id = $${params.length}`); }
   if (days) { params.push(days); where.push(`c.fecha_conversion >= (CURRENT_DATE - ($${params.length}::int))`); }
+  // Rango de fechas explícito (tiene prioridad de uso desde el frontend: hoy/semana/mes/personalizado).
+  if (from) { params.push(from); where.push(`c.fecha_conversion >= $${params.length}::date`); }
+  if (to) { params.push(to); where.push(`c.fecha_conversion <= $${params.length}::date`); }
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
   const needsLeadJoin = !!responsableId;
   params.push(limit);

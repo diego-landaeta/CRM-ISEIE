@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 
 const RegisterSaleDialog = lazy(() => import('../components/RegisterSaleDialog'));
 const TopProductsCard = lazy(() => import('../components/TopProductsCard'));
+const CursosVendidosCard = lazy(() => import('../components/CursosVendidosCard'));
 const MyGoalCard = lazy(() => import('../components/MyGoalCard'));
 const GestoresStatsTable = lazy(() => import('../components/GestoresStatsTable'));
 
@@ -51,6 +52,10 @@ export default function SalesPage() {
         </div>
       ) : (
         <>
+          <Suspense fallback={null}>
+            <CursosVendidosCard projectId={projectIdParam} />
+          </Suspense>
+
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Suspense fallback={null}>
               <MyGoalCard projectId={projectIdParam} />

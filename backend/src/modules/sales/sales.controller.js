@@ -19,10 +19,14 @@ export async function topProducts(req, res, next) {
     const projectId = req.query.projectId ? parseInt(req.query.projectId) : null;
     const limit = Math.min(parseInt(req.query.limit) || 10, 50);
     const days = req.query.days ? parseInt(req.query.days) : null; // null = all-time
+    // Rango de fechas explícito YYYY-MM-DD (hoy/semana/mes/personalizado). Se ignora si el formato no es válido.
+    const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+    const from = dateRe.test(req.query.from || '') ? req.query.from : null;
+    const to = dateRe.test(req.query.to || '') ? req.query.to : null;
     let responsableId = req.query.responsableId ? parseInt(req.query.responsableId) : null;
     // Gestor: forzar su propio responsableId (no puede consultar el de otros)
     if (req.user.role === 'gestor') responsableId = req.user.userId;
-    const result = await salesService.getTopProducts({ projectId, limit, days, responsableId });
+    const result = await salesService.getTopProducts({ projectId, limit, days, from, to, responsableId });
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
 }

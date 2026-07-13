@@ -32,6 +32,7 @@ import SkeletonTable, { SkeletonCard } from '@/shared/components/ui/SkeletonTabl
 import ConversionFunnel from '@/shared/components/dashboard/ConversionFunnel';
 import PerformanceInsights from '@/shared/components/dashboard/PerformanceInsights';
 const TopProductsCard = lazy(() => import('@/modules/sales/components/TopProductsCard'));
+const CursosVendidosCard = lazy(() => import('@/modules/sales/components/CursosVendidosCard'));
 
 const STATUS_BAR_COLORS = {
   nuevo: '#3b82f6',
@@ -379,10 +380,15 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Programas más vendidos */}
-      <Suspense fallback={null}>
-        <TopProductsCard projectId={activeProject?.id} days={null} limit={5} />
-      </Suspense>
+      {/* Cursos vendidos (hoy / semana / mes / personalizado) + Programas más vendidos */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Suspense fallback={null}>
+          <CursosVendidosCard projectId={activeProject?.id} />
+        </Suspense>
+        <Suspense fallback={null}>
+          <TopProductsCard projectId={activeProject?.id} days={null} limit={5} />
+        </Suspense>
+      </div>
 
       {/* Monitor SaaS — solo proyectos IA */}
       {activeProject?.type === 'ia' && <SaasMonitor projectId={activeProject.id} />}
