@@ -10,11 +10,20 @@ interface Props {
   conversionId?: number;
   defaultItems: InvoiceItem[];
   defaultNotas?: string;
+  /** 'factura' (por defecto) o 'proforma' → presupuesto (no fiscal). */
+  docTipo?: 'factura' | 'proforma';
+  /** IVA heredado de la conversión, para que el documento coincida con la venta. */
+  defaultIvaExento?: boolean;
+  defaultIvaPct?: number;
+  defaultIvaIncluido?: boolean;
   onClose: () => void;
   onCreated: (invoiceId: number) => void;
 }
 
-export default function FiscalDataDialog({ projectId, leadId, conversionId, defaultItems, defaultNotas, onClose, onCreated }: Props) {
+export default function FiscalDataDialog({ projectId, leadId, conversionId, defaultItems, defaultNotas, docTipo = 'factura', defaultIvaExento, defaultIvaPct, defaultIvaIncluido, onClose, onCreated }: Props) {
+  const isProforma = docTipo === 'proforma';
+  const docCap = isProforma ? 'Presupuesto' : 'Factura';       // 'Presupuesto'
+  const docLower = isProforma ? 'presupuesto' : 'factura';     // 'presupuesto'
   const [lead, setLead] = useState<LeadFiscalData | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -29,9 +38,10 @@ export default function FiscalDataDialog({ projectId, leadId, conversionId, defa
   const [email, setEmail] = useState('');
   const [telefono, setTelefono] = useState('');
 
-  // IVA
-  const [llevaIva, setLlevaIva] = useState(true);
-  const [ivaIncluido, setIvaIncluido] = useState(false);
+  // IVA (hereda de la conversión si se pasó; si no, 21% por defecto)
+  const [llevaIva, setLlevaIva] = useState(defaultIvaExento ? false : true);
+  const [ivaIncluido, setIvaIncluido] = useState(!!defaultIvaIncluido);
+  const ivaPct = defaultIvaPct && defaultIvaPct > 0 ? defaultIvaPct : 21;
   const [items, setItems] = useState<InvoiceItem[]>(defaultItems);
   const [notas, setNotas] = useState(defaultNotas || '');
   // Método y pie
@@ -86,14 +96,17 @@ export default function FiscalDataDialog({ projectId, leadId, conversionId, defa
 
   function ivaPctDefault() {
     if (!llevaIva) return 0;
-    return 21;
+    return ivaPct;
   }
 
-  const required = nombre.trim() && nif.trim() && direccion.trim() && ciudad.trim() && cp.trim() && pais.trim() && metodoPago;
+  // El presupuesto (proforma) NO es fiscal: solo exige nombre. La factura exige datos fiscales completos.
+  const required = isProforma
+    ? (nombre.trim() && metodoPago)
+    : (nombre.trim() && nif.trim() && direccion.trim() && ciudad.trim() && cp.trim() && pais.trim() && metodoPago);
 
   async function save() {
     if (!required) {
-      toast({ title: 'Faltan datos', description: 'Completa nombre, NIF, dirección, ciudad, CP y país.', variant: 'destructive' });
+      toast({ title: 'Faltan datos', description: isProforma ? 'Completa al menos el nombre del cliente.' : 'Completa nombre, NIF, dirección, ciudad, CP y país.', variant: 'destructive' });
       return;
     }
     setSaving(true);
@@ -101,6 +114,7 @@ export default function FiscalDataDialog({ projectId, leadId, conversionId, defa
       const res = await invoicesApi.create({
         projectId, leadId, conversionId,
         issuerId: issuerId || undefined,
+        tipo: isProforma ? 'proforma' : undefined,
         clienteNombre: nombre.trim(),
         clienteNif: nif.trim(),
         clienteDireccion: direccion.trim(),
@@ -117,10 +131,10 @@ export default function FiscalDataDialog({ projectId, leadId, conversionId, defa
         piePago: piePago.trim() || undefined,
       });
       if (res.success && res.data) {
-        toast({ title: '✓ Factura emitida', description: res.data.codigo });
+        toast({ title: `✓ ${docCap} ${isProforma ? 'generado' : 'emitida'}`, description: res.data.codigo });
         onCreated(res.data.id);
       } else {
-        toast({ title: 'Error', description: (res as { error?: string }).error || 'No se pudo emitir', variant: 'destructive' });
+        toast({ title: 'Error', description: (res as { error?: string }).error || 'No se pudo generar', variant: 'destructive' });
       }
     } catch (e: unknown) {
       const err = e as { data?: { error?: string }; message?: string };
@@ -133,8 +147,8 @@ export default function FiscalDataDialog({ projectId, leadId, conversionId, defa
       <div className="bg-card rounded-lg shadow-xl w-full max-w-2xl max-h-[95vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="p-4 border-b border-border flex items-start justify-between">
           <div>
-            <h3 className="font-semibold text-base">Datos fiscales para la factura</h3>
-            <p className="text-xs text-muted-foreground">Se guardarán en el cliente para próximas facturas</p>
+            <h3 className="font-semibold text-base">{isProforma ? 'Datos para el presupuesto' : 'Datos fiscales para la factura'}</h3>
+            <p className="text-xs text-muted-foreground">{isProforma ? 'El presupuesto no es un documento fiscal (sin valor contable)' : 'Se guardarán en el cliente para próximas facturas'}</p>
           </div>
           <button onClick={onClose} className="p-1 text-muted-foreground hover:text-foreground"><X size={16} /></button>
         </div>
@@ -157,13 +171,13 @@ export default function FiscalDataDialog({ projectId, leadId, conversionId, defa
             <Section title="Cliente">
               <Field label="Nombre" value={nombre} onChange={setNombre} required />
               <div className="grid grid-cols-2 gap-3">
-                <Field label="NIF / DNI / CIF" value={nif} onChange={setNif} required />
-                <Field label="Código postal" value={cp} onChange={setCp} required />
+                <Field label="NIF / DNI / CIF" value={nif} onChange={setNif} required={!isProforma} />
+                <Field label="Código postal" value={cp} onChange={setCp} required={!isProforma} />
               </div>
-              <Field label="Dirección fiscal" value={direccion} onChange={setDireccion} required />
+              <Field label="Dirección fiscal" value={direccion} onChange={setDireccion} required={!isProforma} />
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Ciudad" value={ciudad} onChange={setCiudad} required />
-                <Field label="País" value={pais} onChange={(v) => { setPais(v); setLlevaIva(!!v.toLowerCase().match(/españa|espana|spain|^es$/)); }} required />
+                <Field label="Ciudad" value={ciudad} onChange={setCiudad} required={!isProforma} />
+                <Field label="País" value={pais} onChange={(v) => { setPais(v); setLlevaIva(!!v.toLowerCase().match(/españa|espana|spain|^es$/)); }} required={!isProforma} />
               </div>
               {/* Email y teléfono SOLO si el lead los tiene */}
               {lead?.email && <Field label="Email (opcional)" value={email} onChange={setEmail} />}
@@ -235,7 +249,7 @@ export default function FiscalDataDialog({ projectId, leadId, conversionId, defa
           <button onClick={onClose} className="h-9 px-3 rounded-md border border-border bg-card text-sm">Cancelar</button>
           <button onClick={save} disabled={saving || !required}
             className="h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 inline-flex items-center gap-1.5">
-            <FloppyDisk size={14} weight="bold" /> {saving ? 'Emitiendo…' : 'Emitir factura'}
+            <FloppyDisk size={14} weight="bold" /> {saving ? (isProforma ? 'Generando…' : 'Emitiendo…') : (isProforma ? 'Generar presupuesto' : 'Emitir factura')}
           </button>
         </div>
       </div>

@@ -1,11 +1,22 @@
-import { useState, useEffect, useMemo, useRef, type FormEvent } from 'react';
+import { useState, useEffect, useMemo, useRef, lazy, Suspense, type FormEvent } from 'react';
 import Portal from '@/shared/components/ui/portal';
 import Select from '@/shared/components/ui/Select';
-import { X, Link as LinkIcon, Copy, CheckCircle } from '@phosphor-icons/react';
+import { X, Link as LinkIcon, Copy, CheckCircle, Receipt, FileText } from '@phosphor-icons/react';
 import { conversionsApi, type Conversion, type MetodoPago } from '../api/conversions.api';
 import { useProducts } from '@/modules/products/hooks/useProducts';
+import { invoicesApi, type InvoiceItem } from '@/modules/invoices/api/invoices.api';
 import { toast } from '@/shared/hooks/useToast';
 import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
+
+const FiscalDataDialog = lazy(() => import('@/modules/invoices/components/FiscalDataDialog'));
+
+// Construye los conceptos del documento a partir de la conversión creada.
+function buildDocItems(c: Conversion): InvoiceItem[] {
+  if (c.items && c.items.length > 0) {
+    return c.items.map(it => ({ descripcion: it.descripcion, cantidad: it.cantidad, precio_unitario: Number(it.precio_unitario) }));
+  }
+  return [{ descripcion: c.producto_contratado || 'Servicio', cantidad: 1, precio_unitario: Number(c.importe_total) }];
+}
 interface PaymentLink {
   label: string;
   url: string;
@@ -84,9 +95,18 @@ const METODOS: ReadonlyArray<{ value: MetodoPago; label: string }> = [
 ];
 
 export default function ConversionDialog({ open, onClose, lead, projectId, onCreated }: ConversionDialogProps) {
-  useEscapeKey(onClose, open);
   const { products } = useProducts(projectId);
   const [saving, setSaving] = useState(false);
+  // Paso post-venta: tras registrar la conversión, ofrecer generar Presupuesto/Factura + PDF.
+  const [created, setCreated] = useState<Conversion | null>(null);
+  const [docPhase, setDocPhase] = useState<'idle' | 'choose' | 'factura' | 'proforma'>('idle');
+  const notifiedRef = useRef(false);
+  // Notifica al padre (refresca su lista) UNA sola vez y cierra. Se usa en X, backdrop, Esc y "Ahora no".
+  const finishAndClose = () => {
+    if (created && !notifiedRef.current) { notifiedRef.current = true; onCreated?.(created); }
+    onClose();
+  };
+  useEscapeKey(finishAndClose, open);
   const [selectedLinkIdx, setSelectedLinkIdx] = useState<string>('-1'); // '-1' = sin link, 'X' = índice, 'custom' = personalizado
   const [customLink, setCustomLink] = useState('');
   const [linkCopied, setLinkCopied] = useState(false);
@@ -100,6 +120,10 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
   useEffect(() => () => {
     if (copiedTimeoutRef.current) clearTimeout(copiedTimeoutRef.current);
   }, []);
+  // Al cerrar, resetea el paso de documento para que una próxima apertura arranque limpia.
+  useEffect(() => {
+    if (!open) { setDocPhase('idle'); setCreated(null); notifiedRef.current = false; }
+  }, [open]);
   const [form, setForm] = useState<ConversionForm>({
     producto_contratado: '',
     importe_total: '',
@@ -213,6 +237,27 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
 
   if (!open) return null;
 
+  // Paso 2b: documento fiscal (Factura o Presupuesto) — reemplaza por completo el modal de conversión.
+  if ((docPhase === 'factura' || docPhase === 'proforma') && created) {
+    return (
+      <Suspense fallback={null}>
+        <FiscalDataDialog
+          projectId={projectId}
+          leadId={lead?.id ?? created.lead_id ?? 0}
+          conversionId={created.id}
+          docTipo={docPhase}
+          defaultItems={buildDocItems(created)}
+          defaultNotas={created.notas_pago || undefined}
+          defaultIvaExento={created.iva_exento}
+          defaultIvaPct={created.iva_pct != null ? Number(created.iva_pct) : undefined}
+          defaultIvaIncluido={created.iva_incluido}
+          onClose={finishAndClose}
+          onCreated={(id) => { window.open(invoicesApi.pdfUrl(id), '_blank'); finishAndClose(); }}
+        />
+      </Suspense>
+    );
+  }
+
   const update = <K extends keyof ConversionForm>(k: K, v: ConversionForm[K]): void =>
     setForm(f => ({ ...f, [k]: v }));
 
@@ -298,8 +343,10 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
           }
         }
         toast({ title: 'Conversion registrada', description: `${form.producto_contratado} - ${form.importe_total}EUR` });
-        onCreated?.(res.data);
-        onClose();
+        // No cerramos aún: ofrecemos generar un documento (Presupuesto/Factura) + PDF.
+        // onCreated (refresco del padre) se dispara en finishAndClose, al terminar u omitir.
+        setCreated(res.data);
+        setDocPhase('choose');
       }
     } catch (err: any) {
       toast({
@@ -317,18 +364,44 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
   return (
     <Portal>
       <div role="dialog" className="fixed inset-0 !m-0 z-[70] flex items-center justify-center sm:p-4">
-        <div className="fixed inset-0 !m-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+        <div className="fixed inset-0 !m-0 bg-black/50 backdrop-blur-sm" onClick={finishAndClose} />
         <div className="relative bg-card rounded-lg border border-border w-full max-w-lg mx-4 p-6 overflow-y-auto max-h-[90vh]">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-lg font-semibold">Registrar Conversion</h2>
+              <h2 className="text-lg font-semibold">{docPhase === 'choose' ? 'Documento de la venta' : 'Registrar Conversion'}</h2>
               <p className="text-xs text-muted-foreground mt-0.5">Lead: {lead?.nombre}</p>
             </div>
-            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted">
+            <button onClick={finishAndClose} className="p-1.5 rounded-lg hover:bg-muted">
               <X size={18} weight="bold" />
             </button>
           </div>
 
+          {docPhase === 'choose' && created ? (
+            <div className="py-4 text-center space-y-5">
+              <div className="mx-auto w-12 h-12 rounded-full bg-emerald-100 dark:bg-emerald-950/40 flex items-center justify-center">
+                <CheckCircle size={28} weight="fill" className="text-emerald-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-base">Venta registrada</h3>
+                <p className="text-sm text-muted-foreground mt-1">¿Generar un documento para el cliente y descargar el PDF?</p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <button type="button" onClick={() => setDocPhase('proforma')}
+                  className="flex flex-col items-center gap-2 p-4 rounded-lg border border-border bg-card hover:border-primary hover:bg-muted/50 transition">
+                  <FileText size={24} weight="duotone" className="text-primary" />
+                  <span className="text-sm font-semibold">Presupuesto</span>
+                  <span className="text-[10px] text-muted-foreground">Sin valor fiscal</span>
+                </button>
+                <button type="button" onClick={() => setDocPhase('factura')}
+                  className="flex flex-col items-center gap-2 p-4 rounded-lg border border-border bg-card hover:border-primary hover:bg-muted/50 transition">
+                  <Receipt size={24} weight="duotone" className="text-primary" />
+                  <span className="text-sm font-semibold">Factura</span>
+                  <span className="text-[10px] text-muted-foreground">Documento fiscal</span>
+                </button>
+              </div>
+              <button type="button" onClick={finishAndClose} className="text-xs text-muted-foreground hover:underline">Ahora no</button>
+            </div>
+          ) : (
           <form onSubmit={handleSubmit} className="space-y-3">
             {/* MODO 1: Producto único (legacy) */}
             {!useMultiItem && (
@@ -684,6 +757,7 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
               </button>
             </div>
           </form>
+          )}
         </div>
       </div>
     </Portal>
