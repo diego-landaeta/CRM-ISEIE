@@ -386,11 +386,15 @@ function EditUserModal({ user, projects, onClose, onSaved }) {
                         <input type="checkbox" checked={checked} onChange={() => toggleProject(p.id)} />
                         {p.nombre}
                       </label>
-                      {checked && role === 'gestor' && (
-                        <label className="flex items-center gap-1 text-[11px] text-muted-foreground cursor-pointer">
-                          <input type="checkbox" checked={!!assigned[p.id]} onChange={(e) => setAssigned((a) => ({ ...a, [p.id]: e.target.checked }))} />
-                          recibe leads
-                        </label>
+                      {checked && (
+                        (role === 'admin' || role === 'superadmin') ? (
+                          <label className="flex items-center gap-1 text-[11px] text-muted-foreground cursor-pointer">
+                            <input type="checkbox" checked={!!assigned[p.id]} onChange={(e) => setAssigned((a) => ({ ...a, [p.id]: e.target.checked }))} />
+                            recibe leads
+                          </label>
+                        ) : role === 'gestor' ? (
+                          <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded">recibe leads</span>
+                        ) : null
                       )}
                     </div>
                   );
@@ -491,11 +495,15 @@ function InviteUserModal({ projects, onClose, onCreated }) {
                         <input type="checkbox" checked={checked} onChange={() => toggleProject(p.id)} />
                         {p.nombre}
                       </label>
-                      {checked && role === 'gestor' && (
-                        <label className="flex items-center gap-1 text-[11px] text-muted-foreground cursor-pointer">
-                          <input type="checkbox" checked={!!assigned[p.id]} onChange={(e) => setAssigned((a) => ({ ...a, [p.id]: e.target.checked }))} />
-                          recibe leads
-                        </label>
+                      {checked && (
+                        (role === 'admin' || role === 'superadmin') ? (
+                          <label className="flex items-center gap-1 text-[11px] text-muted-foreground cursor-pointer">
+                            <input type="checkbox" checked={!!assigned[p.id]} onChange={(e) => setAssigned((a) => ({ ...a, [p.id]: e.target.checked }))} />
+                            recibe leads
+                          </label>
+                        ) : role === 'gestor' ? (
+                          <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded">recibe leads</span>
+                        ) : null
                       )}
                     </div>
                   );
