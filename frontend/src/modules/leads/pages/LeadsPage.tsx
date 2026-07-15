@@ -274,15 +274,17 @@ export default function LeadsPage() {
     return { overdue, today: todayCount, tomorrow: tomorrowCount, week: weekCount, noReminder, noContact, urgent: overdue + todayCount + noContact };
   }, [leads]);
 
-  // Cargar lista de responsables para el filtro (solo admin/superadmin)
+  // Cargar lista de responsables para el filtro (solo admin/superadmin).
+  // Con un proyecto activo, solo los gestores de ESE proyecto.
   useEffect(() => {
     if (user?.role !== 'superadmin' && user?.role !== 'admin') return;
-    client.get('/users?limit=100')
+    const pidParam = activeProject?.id && activeProject.id > 0 ? `&projectId=${activeProject.id}` : '';
+    client.get(`/users?limit=100${pidParam}`)
       .then((res) => {
         if (res.success) setGestores(res.data || []);
       })
       .catch(() => {});
-  }, [user?.role]);
+  }, [user?.role, activeProject?.id]);
 
   function handleMarkContacted(lead) {
     setConfirmingContact(lead);
