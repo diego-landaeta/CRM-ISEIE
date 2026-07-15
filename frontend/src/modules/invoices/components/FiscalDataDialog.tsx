@@ -104,9 +104,12 @@ export default function FiscalDataDialog({ projectId, leadId, conversionId, defa
     ? (nombre.trim() && metodoPago)
     : (nombre.trim() && nif.trim() && direccion.trim() && ciudad.trim() && cp.trim() && pais.trim() && metodoPago);
 
-  async function save() {
-    if (!required) {
-      toast({ title: 'Faltan datos', description: isProforma ? 'Completa al menos el nombre del cliente.' : 'Completa nombre, NIF, dirección, ciudad, CP y país.', variant: 'destructive' });
+  // asDraft=true → guarda la factura como BORRADOR (sin número fiscal) aunque
+  // falten datos; solo exige el nombre. Se completa y emite desde Facturación.
+  async function save(asDraft = false) {
+    const draftOk = nombre.trim() && metodoPago;
+    if (asDraft ? !draftOk : !required) {
+      toast({ title: 'Faltan datos', description: (isProforma || asDraft) ? 'Completa al menos el nombre del cliente.' : 'Completa nombre, NIF, dirección, ciudad, CP y país.', variant: 'destructive' });
       return;
     }
     setSaving(true);
@@ -115,6 +118,7 @@ export default function FiscalDataDialog({ projectId, leadId, conversionId, defa
         projectId, leadId, conversionId,
         issuerId: issuerId || undefined,
         tipo: isProforma ? 'proforma' : undefined,
+        borrador: !isProforma && asDraft ? true : undefined,
         clienteNombre: nombre.trim(),
         clienteNif: nif.trim(),
         clienteDireccion: direccion.trim(),
@@ -131,7 +135,10 @@ export default function FiscalDataDialog({ projectId, leadId, conversionId, defa
         piePago: piePago.trim() || undefined,
       });
       if (res.success && res.data) {
-        toast({ title: `✓ ${docCap} ${isProforma ? 'generado' : 'emitida'}`, description: res.data.codigo });
+        toast({
+          title: asDraft ? '✓ Borrador guardado' : `✓ ${docCap} ${isProforma ? 'generado' : 'emitida'}`,
+          description: asDraft ? 'Sin número fiscal: complétala y emítela desde Facturación.' : (res.data.codigo || undefined),
+        });
         onCreated(res.data.id);
       } else {
         toast({ title: 'Error', description: (res as { error?: string }).error || 'No se pudo generar', variant: 'destructive' });
@@ -247,7 +254,14 @@ export default function FiscalDataDialog({ projectId, leadId, conversionId, defa
 
         <div className="p-3 border-t border-border flex justify-end gap-2 bg-muted/20">
           <button onClick={onClose} className="h-9 px-3 rounded-md border border-border bg-card text-sm">Cancelar</button>
-          <button onClick={save} disabled={saving || !required}
+          {!isProforma && (
+            <button onClick={() => save(true)} disabled={saving || !nombre.trim()}
+              title="Guarda la factura como borrador (sin número fiscal) aunque falten datos; se completa y emite desde Facturación"
+              className="h-9 px-3 rounded-md border border-amber-400 text-amber-700 dark:text-amber-400 bg-card text-sm font-semibold hover:bg-amber-50 dark:hover:bg-amber-950/30 disabled:opacity-50">
+              {saving ? '…' : 'Guardar borrador'}
+            </button>
+          )}
+          <button onClick={() => save(false)} disabled={saving || !required}
             className="h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 inline-flex items-center gap-1.5">
             <FloppyDisk size={14} weight="bold" /> {saving ? (isProforma ? 'Generando…' : 'Emitiendo…') : (isProforma ? 'Generar presupuesto' : 'Emitir factura')}
           </button>

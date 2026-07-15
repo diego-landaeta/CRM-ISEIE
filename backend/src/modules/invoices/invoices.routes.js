@@ -42,5 +42,6 @@ router.post('/:id/send',              ctrl.send);
 router.post('/:id/mark-paid',         ctrl.markPaid);
 router.post('/:id/cancel',            ctrl.cancel);
 router.post('/:id/rectificar',        ctrl.rectificar);
+router.post('/:id/emitir',            ctrl.emitir);
 
 export default router;

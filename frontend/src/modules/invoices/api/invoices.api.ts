@@ -47,6 +47,8 @@ export interface CreateInvoiceBody {
   metodoPago: 'transferencia' | 'tarjeta' | 'tarjeta_stripe' | 'efectivo' | 'bizum' | 'fraccionado' | 'otro';
   piePago?: string;
   tipo?: 'normal' | 'proforma';
+  /** true = crear como BORRADOR (sin numero fiscal, datos fiscales opcionales) */
+  borrador?: boolean;
 }
 
 export interface ProjectInvoicingConfig {
@@ -66,9 +68,9 @@ export interface InvoiceSequence {
 
 export interface Invoice {
   id: number;
-  codigo: string;
+  codigo: string | null;
   ano: number;
-  numero: number;
+  numero: number | null;
   fecha_emision: string;
   fecha_pago: string | null;
   cliente_nombre: string;
@@ -84,7 +86,9 @@ export interface Invoice {
   iva_pct: number;
   iva_importe?: number;
   iva_incluido?: boolean;
-  estado: 'emitida' | 'enviada' | 'pagada' | 'cancelada';
+  estado: 'borrador' | 'emitida' | 'enviada' | 'pagada' | 'cancelada';
+  /** Solo en GET /:id de un borrador: qué falta para poder emitir. */
+  faltantes?: string[];
   sent_at: string | null;
   notas?: string | null;
   leyenda_iva?: string | null;
@@ -185,6 +189,9 @@ export const invoicesApi = {
   markPaid: (id: number, fechaPago?: string) => client.post(`/invoices/${id}/mark-paid`, fechaPago ? { fechaPago } : {}),
   cancel: (id: number) => client.post(`/invoices/${id}/cancel`, {}),
   rectificar: (id: number, body: { motivo: string; parcial?: number | null; issuerId?: number }) => client.post<Invoice>(`/invoices/${id}/rectificar`, body),
+  /** Validar y emitir un borrador (opcionalmente completando datos del cliente). */
+  emitir: (id: number, patch?: Partial<{ clienteNombre: string; clienteNif: string; clienteDireccion: string; clienteCiudad: string; clienteCp: string; clientePais: string; clienteEmail: string | null; clienteTelefono: string | null }>) => client.post<Invoice>(`/invoices/${id}/emitir`, patch || {}),
+  getOne: (id: number) => client.get<Invoice>(`/invoices/${id}`),
   listIssuers: (projectId: number) => client.get<Issuer[]>(`/invoices/issuers?projectId=${projectId}`),
   createIssuer: (body: Partial<Issuer> & { razonSocial: string; nif: string; projectId?: number | null }) => client.post<Issuer>('/invoices/issuers', body),
   updateIssuer: (id: number, body: Record<string, unknown>) => client.patch<Issuer>(`/invoices/issuers/${id}`, body),

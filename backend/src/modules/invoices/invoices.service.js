@@ -1,4 +1,4 @@
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { PDFDocument, StandardFonts, rgb, degrees } from 'pdf-lib';
 import fs from 'fs/promises';
 import path from 'path';
 import { logger } from '../../shared/utils/logger.js';
@@ -88,19 +88,24 @@ export async function generatePDF(invoiceId) {
   if (emisorEmail) { page.drawText(emisorEmail, { x: left, y, size: 10, font, color: gray }); y -= 12; }
   if (emisorTel) { page.drawText(`Tel: ${emisorTel}`, { x: left, y, size: 10, font, color: gray }); y -= 12; }
 
-  // Codigo (derecha) — distinto si es rectificativa o proforma
+  // Codigo (derecha) — distinto si es rectificativa, proforma o borrador
   const esRect = inv.tipo === 'rectificativa';
   const esProforma = inv.tipo === 'proforma';
+  const esBorrador = inv.estado === 'borrador';
   const tituloDoc = esRect ? 'F. RECTIFICATIVA' : esProforma ? 'PRESUPUESTO' : 'FACTURA';
   const tituloColor = esRect ? rgb(0.7, 0.1, 0.1) : esProforma ? rgb(0.35, 0.35, 0.45) : black;
   page.drawText(tituloDoc, { x: right - (esRect ? 150 : esProforma ? 120 : 100), y: 800, size: esRect ? 13 : esProforma ? 14 : 16, font: bold, color: tituloColor });
-  page.drawText(`N.º ${inv.codigo}`, { x: right - 150, y: 780, size: 12, font: bold, color: black });
+  // Borrador: aún no tiene número fiscal (se asigna al validar y emitir).
+  page.drawText(`N.º ${inv.codigo || '(sin numerar)'}`, { x: right - 150, y: 780, size: 12, font: bold, color: black });
   page.drawText(`Fecha: ${new Date(inv.fecha_emision).toLocaleDateString('es-ES')}`, { x: right - 150, y: 765, size: 10, font, color: gray });
   if (esRect && inv.rectifica_codigo) {
     page.drawText(`Rectifica a: ${inv.rectifica_codigo}`, { x: right - 150, y: 750, size: 9, font, color: gray });
   }
   if (esProforma) {
     page.drawText('Documento sin validez fiscal', { x: right - 150, y: 750, size: 8, font, color: gray });
+  }
+  if (esBorrador) {
+    page.drawText('BORRADOR — pendiente de validar y emitir', { x: right - 150, y: 750, size: 8, font: bold, color: rgb(0.7, 0.45, 0.05) });
   }
 
   // Linea separadora
@@ -190,13 +195,32 @@ export async function generatePDF(invoiceId) {
   }
 
   // Footer
-  page.drawText(`${esProforma ? 'Presupuesto' : 'Factura'} ${inv.codigo} generada el ${new Date().toLocaleDateString('es-ES')}`,
+  page.drawText(`${esProforma ? 'Presupuesto' : 'Factura'} ${inv.codigo || '(borrador)'} generada el ${new Date().toLocaleDateString('es-ES')}`,
     { x: left, y: 30, size: 8, font, color: gray });
   } // fin fallback (layout fijo)
 
+  // Marca de agua BORRADOR (diagonal, en todas las páginas) — el preliminar se
+  // puede ver/compartir pero queda claro que no tiene validez fiscal.
+  if (inv.estado === 'borrador') {
+    for (const p of pdfDoc.getPages()) {
+      p.drawText('BORRADOR', {
+        x: 90, y: 260, size: 96, font: bold,
+        color: rgb(0.85, 0.55, 0.1), opacity: 0.16, rotate: degrees(45),
+      });
+      p.drawText('SIN VALIDEZ FISCAL', {
+        x: 150, y: 235, size: 30, font: bold,
+        color: rgb(0.85, 0.55, 0.1), opacity: 0.16, rotate: degrees(45),
+      });
+    }
+  }
+
   const pdfBytes = await pdfDoc.save();
 
-  // Persist
+  // Persist — el borrador NO se cachea en disco: su contenido cambia al
+  // completar datos/emitir y no debe quedar un PDF viejo con marca de agua.
+  if (inv.estado === 'borrador') {
+    return { path: null, bytes: pdfBytes, filename: `BORRADOR-${inv.id}.pdf` };
+  }
   const dir = path.join(PDF_DIR, String(inv.project_id), String(inv.ano));
   await fs.mkdir(dir, { recursive: true });
   const filename = `${inv.codigo.replace('/', '-')}.pdf`;
@@ -295,7 +319,7 @@ async function renderFromTemplate({ pdfDoc, page, font, bold, inv, layout }) {
         case 'meta':
           drawLines(b, [
             { text: esRect ? 'FACTURA RECTIFICATIVA' : esProforma ? 'PRESUPUESTO' : 'FACTURA', bold: true, size: (b.fontSize || 12) + 2, color: esRect ? red : black },
-            { text: `N.º ${inv.codigo}`, bold: true },
+            { text: `N.º ${inv.codigo || '(sin numerar)'}`, bold: true },
             { text: `Fecha: ${new Date(inv.fecha_emision).toLocaleDateString('es-ES')}` },
             { text: esRect && inv.rectifica_codigo ? `Rectifica a: ${inv.rectifica_codigo}` : '', color: gray, size: (b.fontSize || 12) - 2 },
             { text: esProforma ? 'Documento sin validez fiscal' : '', color: gray, size: (b.fontSize || 12) - 2 },
@@ -368,7 +392,7 @@ async function renderFromTemplate({ pdfDoc, page, font, bold, inv, layout }) {
   }
 
   // Pie fijo de trazabilidad
-  page.drawText(`${esProforma ? 'Presupuesto' : 'Factura'} ${inv.codigo} · ${new Date().toLocaleDateString('es-ES')}`,
+  page.drawText(`${esProforma ? 'Presupuesto' : 'Factura'} ${inv.codigo || '(borrador)'} · ${new Date().toLocaleDateString('es-ES')}`,
     { x: 50, y: 25, size: 7, font, color: rgb(0.6, 0.6, 0.6) });
 }
 

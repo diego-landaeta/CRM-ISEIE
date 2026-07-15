@@ -51,8 +51,23 @@ export async function getOne(req, res, next) {
   try {
     const inv = await model.findById(Number(req.params.id));
     if (!inv) throw new AppError('Factura no encontrada', 404, 'NOT_FOUND');
-    res.json({ success: true, data: inv });
+    // Borrador: informar qué falta para poder emitir ("Falta: ...").
+    const faltantes = inv.estado === 'borrador' ? model.invoiceFaltantes(inv) : [];
+    res.json({ success: true, data: { ...inv, faltantes } });
   } catch (e) { next(e); }
+}
+
+// POST /:id/emitir — valida el borrador (con datos opcionales para completar)
+// y le asigna número fiscal. Devuelve la factura ya emitida.
+export async function emitir(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const inv = await model.emitirBorrador(id, req.body || {});
+    res.json({ success: true, data: inv });
+  } catch (e) {
+    logger.error({ e: e.message }, 'emitir borrador failed');
+    next(e);
+  }
 }
 
 // GET preview por conversion - si existe la factura la devuelve
@@ -116,7 +131,9 @@ export async function pdf(req, res, next) {
       bytes = gen.bytes;
     }
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="${inv.codigo.replace('/', '-')}.pdf"`);
+    // Borrador: no tiene código fiscal todavía.
+    const fname = inv.codigo ? inv.codigo.replace('/', '-') : `BORRADOR-${inv.id}`;
+    res.setHeader('Content-Disposition', `inline; filename="${fname}.pdf"`);
     res.send(Buffer.from(bytes));
   } catch (e) { next(e); }
 }
@@ -124,6 +141,14 @@ export async function pdf(req, res, next) {
 export async function send(req, res, next) {
   try {
     const id = Number(req.params.id);
+    const inv = await model.findById(id);
+    if (!inv) throw new AppError('Factura no encontrada', 404, 'NOT_FOUND');
+    if (inv.estado === 'borrador') {
+      const faltan = model.invoiceFaltantes(inv);
+      throw new AppError(
+        `Es un borrador sin validez fiscal: no se puede enviar.${faltan.length ? ` Falta: ${faltan.join(', ')}.` : ''} Usa "Validar y emitir" primero.`,
+        400, 'DRAFT_CANNOT_SEND');
+    }
     const { email } = req.body || {};
     const result = await service.sendByEmail(id, email);
     res.json({ success: true, data: result });
@@ -136,6 +161,10 @@ export async function send(req, res, next) {
 export async function markPaid(req, res, next) {
   try {
     const id = Number(req.params.id);
+    const inv = await model.findById(id);
+    if (inv?.estado === 'borrador') {
+      throw new AppError('Un borrador no puede marcarse pagado: primero "Validar y emitir".', 400, 'DRAFT_CANNOT_PAY');
+    }
     await model.markPaid(id, req.body?.fechaPago);
     res.json({ success: true });
   } catch (e) { next(e); }

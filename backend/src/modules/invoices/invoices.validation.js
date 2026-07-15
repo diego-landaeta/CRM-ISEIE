@@ -12,6 +12,8 @@ export const createInvoiceSchema = z.object({
   leadId: z.number().int().positive().optional(),
   // 'proforma' = presupuesto no fiscal. 'normal' = factura. (rectificativa va por su ruta)
   tipo: z.enum(['normal', 'proforma']).optional(),
+  // true = factura BORRADOR (preliminar sin numero fiscal; datos fiscales opcionales)
+  borrador: z.boolean().optional(),
   serie: z.string().max(10).optional(),
   fechaEmision: z.string().optional(),
   clienteNombre: z.string().min(1, 'Nombre cliente requerido'),
@@ -34,6 +36,7 @@ export const createInvoiceSchema = z.object({
   issuerId: z.number().int().positive().optional(),
 }).superRefine((d, ctx) => {
   if (d.tipo === 'proforma') return; // presupuesto: datos fiscales opcionales
+  if (d.borrador === true) return;   // borrador: se completa antes de emitir
   for (const [field, msg] of [
     ['clienteNif', 'NIF/CIF requerido'],
     ['clienteDireccion', 'Dirección requerida'],

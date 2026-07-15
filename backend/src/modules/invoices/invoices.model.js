@@ -73,13 +73,17 @@ export async function create(data, userId) {
     // Proforma = presupuesto NO fiscal. No consume el correlativo 'A', usa su
     // propia serie (issuer.serie_proforma, def 'PRO') y NO pasa por el gating fiscal.
     const isProforma = data.tipo === 'proforma';
+    // Borrador = factura preliminar (al convertir): se guarda aunque falten datos
+    // fiscales, SIN numero/codigo (no consume correlativo) y sin gating. Se
+    // numera al validar y emitir (emitirBorrador). Solo aplica a tipo normal.
+    const isBorrador = !isProforma && data.borrador === true;
 
     // GATING FISCAL (España): se PERMITE emitir aunque falte el NIF. Solo se
     // bloquea si el CIF/NIF puesto es INVÁLIDO (typo/formato) — así no se emite
     // con un identificador fiscal erróneo. No rompe el flujo del CRM.
     // Las proformas se saltan el gating (no son documento fiscal).
     const fiscal = issuerFiscalStatus(iss);
-    if (!isProforma && !fiscal.ready) {
+    if (!isProforma && !isBorrador && !fiscal.ready) {
       // El try/catch de create() hace ROLLBACK + release; aquí solo lanzamos.
       throw new AppError(
         `No se puede emitir: el CIF/NIF de la sociedad "${iss?.razon_social || 'sin asignar'}" no tiene formato válido para España. Corrígelo en Configuración → Empresas emisoras.`,
@@ -101,10 +105,11 @@ export async function create(data, userId) {
     const serie = isProforma
       ? ((iss?.serie_proforma && iss.serie_proforma.trim()) || 'PRO')
       : ((iss?.serie && iss.serie.trim()) || data.serie || 'A');
-    const numero = await nextNumero(client, data.projectId, iss?.id || null, ano, serie);
-    const codigo = isProforma
+    // Borrador: NO consume correlativo. numero/codigo quedan NULL hasta emitir.
+    const numero = isBorrador ? null : await nextNumero(client, data.projectId, iss?.id || null, ano, serie);
+    const codigo = isBorrador ? null : (isProforma
       ? `${serie}-${ano}/${String(numero).padStart(4, '0')}`
-      : `${ano}/${String(numero).padStart(4, '0')}`;
+      : `${ano}/${String(numero).padStart(4, '0')}`);
 
     const { rows } = await client.query(
       `INSERT INTO invoices (
@@ -123,13 +128,13 @@ export async function create(data, userId) {
       [
         data.projectId, data.conversionId || null, data.leadId || null,
         serie, ano, numero, codigo, data.fechaEmision || new Date(),
-        // Columnas cliente_* son NOT NULL: en proforma pueden faltar → fallback '—'.
+        // Columnas cliente_* son NOT NULL: en proforma/borrador pueden faltar → fallback '—'.
         data.clienteNombre, data.clienteNif || '—', data.clienteDireccion || '—',
-        data.clienteCiudad || '—', data.clienteCp || '—', data.clientePais,
+        data.clienteCiudad || '—', data.clienteCp || '—', data.clientePais || '—',
         data.clienteEmail || null, data.clienteTelefono || null,
         JSON.stringify(data.items),
         data.baseImponible, data.ivaPct, data.ivaImporte, !!data.ivaIncluido, data.total,
-        data.estado || 'emitida', data.notas || null, data.leyendaIva || null,
+        isBorrador ? 'borrador' : (data.estado || 'emitida'), data.notas || null, data.leyendaIva || null,
         data.metodoPago, (data.piePago || iss?.pie_default || null), userId,
         isProforma ? 'proforma' : 'normal',
         iss?.id || null, iss?.razon_social || null, issuerNifSnap, iss?.direccion || null, iss?.ciudad || null,
@@ -183,6 +188,7 @@ export async function createRectificativa(originalId, { motivo, userId, parcial 
     const orig = origRows[0];
     if (!orig) throw new Error('Factura original no encontrada');
     if (orig.tipo === 'rectificativa') throw new Error('No se puede rectificar una rectificativa');
+    if (orig.estado === 'borrador') throw new AppError('Un borrador no se rectifica: edítalo o anúlalo.', 400, 'DRAFT_CANNOT_RECTIFY');
 
     const ano = new Date().getFullYear();
     // Serie de abono propia por empresa: deriva de la serie de la factura original
@@ -294,14 +300,15 @@ export async function list({ projectId, estado, search, from, to, tipo, page = 1
 export async function getStats(projectId) {
   const { rows } = await query(
     `SELECT
-       COUNT(*)::int AS total,
+       COUNT(*) FILTER (WHERE estado <> 'borrador')::int AS total,
+       COUNT(*) FILTER (WHERE estado = 'borrador')::int AS borradores,
        COUNT(*) FILTER (WHERE estado = 'emitida')::int AS emitidas,
        COUNT(*) FILTER (WHERE estado = 'enviada')::int AS enviadas,
        COUNT(*) FILTER (WHERE estado = 'pagada')::int  AS pagadas,
        COUNT(*) FILTER (WHERE estado = 'cancelada')::int AS canceladas,
-       COALESCE(SUM(total),0)                       AS total_facturado,
+       COALESCE(SUM(total) FILTER (WHERE estado <> 'borrador'),0) AS total_facturado,
        COALESCE(SUM(total) FILTER (WHERE estado = 'pagada'),0) AS total_cobrado,
-       COALESCE(SUM(iva_importe),0)                 AS total_iva
+       COALESCE(SUM(iva_importe) FILTER (WHERE estado <> 'borrador'),0) AS total_iva
      FROM invoices WHERE project_id = $1 AND tipo <> 'proforma'`,
     [projectId]
   );
@@ -330,6 +337,107 @@ export async function setPdfPath(id, path) {
 
 export async function cancel(id) {
   await query(`UPDATE invoices SET estado = 'cancelada', updated_at = NOW() WHERE id = $1`, [id]);
+}
+
+// ===== BORRADORES =====
+
+// Qué le falta a una factura (borrador) para poder emitirse. Los campos
+// cliente_* NOT NULL usan '—' como placeholder → cuenta como "falta".
+const vacio = (v) => !v || String(v).trim() === '' || String(v).trim() === '—';
+export function invoiceFaltantes(inv) {
+  const faltan = [];
+  if (vacio(inv.cliente_nombre)) faltan.push('nombre del cliente');
+  if (vacio(inv.cliente_nif)) faltan.push('NIF/DNI del cliente');
+  if (vacio(inv.cliente_direccion)) faltan.push('dirección fiscal');
+  if (vacio(inv.cliente_ciudad)) faltan.push('ciudad');
+  if (vacio(inv.cliente_cp)) faltan.push('código postal');
+  if (vacio(inv.cliente_pais)) faltan.push('país');
+  if (!Array.isArray(inv.items) || inv.items.length === 0) faltan.push('conceptos');
+  return faltan;
+}
+
+// Validar y emitir un borrador: completa datos del cliente (si vienen), exige
+// que no falte nada, y RECIÉN AHÍ asigna numero/codigo (correlativo fiscal).
+export async function emitirBorrador(id, patch = {}) {
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+    const { rows: sel } = await client.query(`SELECT * FROM invoices WHERE id = $1 FOR UPDATE`, [id]);
+    const inv = sel[0];
+    if (!inv) throw new AppError('Factura no encontrada', 404, 'INVOICE_NOT_FOUND');
+    if (inv.estado !== 'borrador') throw new AppError('Solo un borrador se puede emitir', 400, 'NOT_DRAFT');
+
+    // Completar datos del cliente que vengan en el patch (camelCase del frontend).
+    const merged = {
+      cliente_nombre: patch.clienteNombre ?? inv.cliente_nombre,
+      cliente_nif: patch.clienteNif ?? inv.cliente_nif,
+      cliente_direccion: patch.clienteDireccion ?? inv.cliente_direccion,
+      cliente_ciudad: patch.clienteCiudad ?? inv.cliente_ciudad,
+      cliente_cp: patch.clienteCp ?? inv.cliente_cp,
+      cliente_pais: patch.clientePais ?? inv.cliente_pais,
+      cliente_email: patch.clienteEmail ?? inv.cliente_email,
+      cliente_telefono: patch.clienteTelefono ?? inv.cliente_telefono,
+    };
+    const faltan = invoiceFaltantes({ ...inv, ...merged });
+    if (faltan.length > 0) {
+      throw new AppError(`No se puede emitir. Falta: ${faltan.join(', ')}.`, 400, 'DRAFT_INCOMPLETE');
+    }
+
+    // Gating fiscal del emisor (igual que en create): NIF inválido bloquea.
+    if (inv.issuer_id) {
+      const r = await client.query(`SELECT * FROM invoice_issuers WHERE id = $1`, [inv.issuer_id]);
+      const fiscal = issuerFiscalStatus(r.rows[0]);
+      if (!fiscal.ready) {
+        throw new AppError(
+          `No se puede emitir: el CIF/NIF de la sociedad emisora no tiene formato válido. Corrígelo en Configuración → Empresas emisoras.`,
+          400, 'ISSUER_NIF_INVALID');
+      }
+    }
+
+    // Numeración fiscal AHORA (el borrador nunca consumió número).
+    const ano = new Date().getFullYear();
+    const serie = (inv.serie && inv.serie.trim()) || 'A';
+    const numero = await nextNumero(client, inv.project_id, inv.issuer_id || null, ano, serie);
+    const codigo = `${ano}/${String(numero).padStart(4, '0')}`;
+
+    const { rows } = await client.query(
+      `UPDATE invoices SET
+         cliente_nombre = $2, cliente_nif = $3, cliente_direccion = $4,
+         cliente_ciudad = $5, cliente_cp = $6, cliente_pais = $7,
+         cliente_email = $8, cliente_telefono = $9,
+         ano = $10, numero = $11, codigo = $12,
+         fecha_emision = CURRENT_DATE, estado = 'emitida', updated_at = NOW()
+       WHERE id = $1 RETURNING *`,
+      [id, merged.cliente_nombre, merged.cliente_nif, merged.cliente_direccion,
+       merged.cliente_ciudad, merged.cliente_cp, merged.cliente_pais,
+       merged.cliente_email, merged.cliente_telefono,
+       ano, numero, codigo]
+    );
+
+    // Persistir datos fiscales en el lead para próximas facturas.
+    if (inv.lead_id) {
+      await client.query(
+        `UPDATE leads SET
+           identificacion_fiscal = COALESCE(NULLIF($1,'—'), identificacion_fiscal),
+           direccion_fiscal      = COALESCE(NULLIF($2,'—'), direccion_fiscal),
+           ciudad_fiscal         = COALESCE(NULLIF($3,'—'), ciudad_fiscal),
+           codigo_postal_fiscal  = COALESCE(NULLIF($4,'—'), codigo_postal_fiscal),
+           pais_fiscal           = COALESCE(NULLIF($5,'—'), pais_fiscal),
+           updated_at = NOW()
+         WHERE id = $6`,
+        [merged.cliente_nif, merged.cliente_direccion, merged.cliente_ciudad,
+         merged.cliente_cp, merged.cliente_pais, inv.lead_id]
+      );
+    }
+
+    await client.query('COMMIT');
+    return rows[0];
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
 }
 
 // Conversiones (cursos contratados) de un lead → para pre-rellenar conceptos de
