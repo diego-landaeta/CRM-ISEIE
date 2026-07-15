@@ -111,6 +111,9 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
   const [customLink, setCustomLink] = useState('');
   const [linkCopied, setLinkCopied] = useState(false);
   const [aplicaDescuento, setAplicaDescuento] = useState(false);
+  // Estado del pago: 'total' SIEMPRE manda calc.total al registrar (no se queda
+  // con un valor viejo si cambias el precio después), 'parcial' usa el input, 'none' = 0.
+  const [pagoMode, setPagoMode] = useState<'none' | 'parcial' | 'total'>('none');
   const [numCuotas, setNumCuotas] = useState(3);
   const [fechaPrimeraCuota, setFechaPrimeraCuota] = useState<string>(new Date().toISOString().slice(0, 10));
   const [installments, setInstallments] = useState<Installment[]>([]);
@@ -268,6 +271,8 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
       return;
     }
     const importe = calc.total;  // total final con descuento + IVA
+    // Pago según el modo elegido (evita el bug de "Pagó el total" con valor viejo).
+    const pagado = pagoMode === 'total' ? calc.total : pagoMode === 'parcial' ? Number(form.importe_pagado || 0) : 0;
     const prodOk = useMultiItem ? items.some(it => it.descripcion?.trim()) : form.producto_contratado?.trim();
     if (!prodOk) {
       toast({ title: 'Producto requerido', variant: 'destructive' });
@@ -277,7 +282,7 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
       toast({ title: 'Importe invalido', description: 'El total debe ser mayor que 0', variant: 'destructive' });
       return;
     }
-    if (Number(form.importe_pagado || 0) > importe) {
+    if (pagado > importe) {
       toast({ title: 'Importe pagado invalido', description: 'No puede superar el total', variant: 'destructive' });
       return;
     }
@@ -310,7 +315,7 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
         // texto y el vínculo quedaba NULL → el reporting no cruzaba la venta).
         producto_contratado_id: useMultiItem ? null : (selectedProduct?.id ?? null),
         importe_total: calc.total,
-        importe_pagado: Number(form.importe_pagado || 0),
+        importe_pagado: pagado,
         metodo_pago: form.metodo_pago,
         fecha_compromiso_pago: form.fecha_compromiso_pago || null,
         fecha_conversion: form.fecha_conversion,
@@ -552,10 +557,22 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
                 />
               </div>
               <div>
-                <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Importe pagado hoy</label>
-                <input type="number" step="0.01" min="0" value={form.importe_pagado} onChange={e => update('importe_pagado', e.target.value)} className={inputClass} />
-                <button type="button" onClick={() => update('importe_pagado', String(calc.total))}
-                  className="text-[10px] text-primary hover:underline mt-0.5">Pagó el total ({calc.total.toFixed(2)} €)</button>
+                <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Pago recibido hoy</label>
+                <div className="flex rounded-lg border border-border overflow-hidden text-xs font-semibold">
+                  <button type="button" onClick={() => setPagoMode('none')}
+                    className={`flex-1 h-9 ${pagoMode === 'none' ? 'bg-muted text-foreground' : 'bg-card text-muted-foreground hover:bg-muted/50'}`}>Sin pago</button>
+                  <button type="button" onClick={() => setPagoMode('parcial')}
+                    className={`flex-1 h-9 border-x border-border ${pagoMode === 'parcial' ? 'bg-amber-100 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300' : 'bg-card text-muted-foreground hover:bg-muted/50'}`}>Parcial</button>
+                  <button type="button" onClick={() => setPagoMode('total')}
+                    className={`flex-1 h-9 ${pagoMode === 'total' ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300' : 'bg-card text-muted-foreground hover:bg-muted/50'}`}>Pagó TODO</button>
+                </div>
+                {pagoMode === 'parcial' && (
+                  <input type="number" step="0.01" min="0" value={form.importe_pagado} onChange={e => update('importe_pagado', e.target.value)}
+                    placeholder="¿Cuánto pagó?" className={inputClass + ' mt-1.5'} autoFocus />
+                )}
+                {pagoMode === 'total' && (
+                  <p className="text-[10px] text-emerald-700 dark:text-emerald-400 mt-1 font-medium">Se registrará el pago completo: {calc.total.toFixed(2)} €</p>
+                )}
               </div>
             </div>
 

@@ -1,10 +1,10 @@
 import { lazy, Suspense, useState, useCallback, useEffect } from 'react';
-import { Receipt } from '@phosphor-icons/react';
+import { Receipt, Warning } from '@phosphor-icons/react';
 import { invoicesApi } from '../api/invoices.api';
-import type { InvoiceItem } from '../api/invoices.api';
+import type { Invoice, InvoiceItem } from '../api/invoices.api';
 import { toast } from '@/shared/hooks/useToast';
 
-const FiscalDataDialog = lazy(() => import('./FiscalDataDialog'));
+const EmitirBorradorDialog = lazy(() => import('./EmitirBorradorDialog'));
 
 interface Props {
   projectId: number;
@@ -15,14 +15,15 @@ interface Props {
   onInvoiced?: () => void;
 }
 
-// Boton "Ver factura" que aparece en la conversion.
-// - Si ya existe factura: abre PDF en otra pestaña
-// - Si NO existe: chequea datos fiscales del lead.
-//   - Si todos los obligatorios estan completos: emite directo y abre PDF
-//   - Si faltan: abre modal de datos fiscales
+// Botón de factura de una conversión:
+// - Sin factura → "Emitir factura": si el cliente tiene los datos fiscales completos
+//   emite directo (con número); si faltan, crea un BORRADOR y abre la alerta
+//   "debes rellenar estos datos" (Validar y emitir).
+// - Con BORRADOR → muestra "BORRADOR" y al clicar abre la alerta para completar y emitir.
+// - Emitida → muestra el Nº de factura y abre el PDF.
 export default function InvoiceButton({ projectId, leadId, conversionId, items, size = 'sm', onInvoiced }: Props) {
-  const [existingId, setExistingId] = useState<number | null>(null);
-  const [showDialog, setShowDialog] = useState(false);
+  const [existing, setExisting] = useState<Invoice | null>(null);
+  const [emitOpen, setEmitOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
 
@@ -30,14 +31,15 @@ export default function InvoiceButton({ projectId, leadId, conversionId, items, 
     setLoading(true);
     try {
       const res = await invoicesApi.byConversion(conversionId);
-      setExistingId(res.success && res.data ? res.data.id : null);
+      setExisting(res.success && res.data ? res.data : null);
     } finally { setLoading(false); }
   }, [conversionId]);
   useEffect(() => { refresh(); }, [refresh]);
 
   async function onClick() {
-    if (existingId) {
-      window.open(invoicesApi.pdfUrl(existingId), '_blank');
+    if (existing) {
+      if (existing.estado === 'borrador') { setEmitOpen(true); return; }
+      window.open(invoicesApi.pdfUrl(existing.id), '_blank');
       return;
     }
     setWorking(true);
@@ -48,63 +50,71 @@ export default function InvoiceButton({ projectId, leadId, conversionId, items, 
         return;
       }
       const d = lead.data;
+      const cfg = await invoicesApi.getConfig(projectId);
+      const metodoDefault = (cfg.success && cfg.data?.factura_metodo_default) || 'transferencia';
+      const pieDefault = cfg.success ? (cfg.data?.factura_pie_default || undefined) : undefined;
       const complete = d.nombre && d.identificacion_fiscal && d.direccion_fiscal && d.ciudad_fiscal && d.codigo_postal_fiscal && d.pais_fiscal;
-      if (complete) {
-        // Cargar config del proyecto para defaults
-        const cfg = await invoicesApi.getConfig(projectId);
-        const metodoDefault = (cfg.success && cfg.data?.factura_metodo_default) || 'transferencia';
-        const pieDefault = cfg.success ? (cfg.data?.factura_pie_default || undefined) : undefined;
-        // Emitir directo
-        const res = await invoicesApi.create({
-          projectId, leadId, conversionId,
-          clienteNombre: d.nombre,
-          clienteNif: d.identificacion_fiscal!,
-          clienteDireccion: d.direccion_fiscal!,
-          clienteCiudad: d.ciudad_fiscal!,
-          clienteCp: d.codigo_postal_fiscal!,
-          clientePais: d.pais_fiscal!,
-          clienteEmail: d.email,
-          clienteTelefono: d.telefono,
-          items,
-          metodoPago: metodoDefault as 'transferencia',
-          piePago: pieDefault,
-        });
-        if (res.success && res.data) {
-          toast({ title: '✓ Factura emitida', description: res.data.codigo });
-          setExistingId(res.data.id);
+
+      const res = await invoicesApi.create({
+        projectId, leadId, conversionId,
+        // Datos completos → factura emitida directa. Incompletos → BORRADOR
+        // (sin número fiscal) que se completa con "Validar y emitir".
+        borrador: complete ? undefined : true,
+        clienteNombre: d.nombre,
+        clienteNif: d.identificacion_fiscal || undefined,
+        clienteDireccion: d.direccion_fiscal || undefined,
+        clienteCiudad: d.ciudad_fiscal || undefined,
+        clienteCp: d.codigo_postal_fiscal || undefined,
+        clientePais: d.pais_fiscal || 'España',
+        clienteEmail: d.email,
+        clienteTelefono: d.telefono,
+        items,
+        metodoPago: metodoDefault as 'transferencia',
+        piePago: pieDefault,
+      });
+      if (res.success && res.data) {
+        setExisting(res.data);
+        if (res.data.estado === 'borrador') {
+          toast({ title: 'Factura en borrador', description: 'Faltan datos fiscales: complétalos para emitirla con número.' });
+          setEmitOpen(true);
+        } else {
+          toast({ title: '✓ Factura emitida', description: res.data.codigo || undefined });
           window.open(invoicesApi.pdfUrl(res.data.id), '_blank');
           onInvoiced?.();
-        } else {
-          toast({ title: 'Error', description: (res as { error?: string }).error, variant: 'destructive' });
         }
       } else {
-        setShowDialog(true);
+        toast({ title: 'Error', description: (res as { error?: string }).error, variant: 'destructive' });
       }
     } finally { setWorking(false); }
   }
 
   const cls = size === 'md'
-    ? 'inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted'
-    : 'inline-flex items-center gap-1 h-7 px-2 rounded text-[11px] font-semibold border border-border bg-card hover:bg-muted';
+    ? 'inline-flex items-center gap-1.5 h-9 px-3 rounded-md border text-sm font-semibold'
+    : 'inline-flex items-center gap-1 h-7 px-2 rounded text-[11px] font-semibold border';
+  const isDraft = existing?.estado === 'borrador';
+  const skin = isDraft
+    ? 'border-amber-400 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:bg-amber-950/30 dark:text-amber-300'
+    : 'border-border bg-card hover:bg-muted';
 
   return (
     <>
-      <button onClick={onClick} disabled={loading || working} className={`${cls} disabled:opacity-50`}>
-        <Receipt size={size === 'md' ? 14 : 12} weight="bold" />
-        {existingId ? 'Ver factura' : 'Emitir factura'}
+      <button onClick={onClick} disabled={loading || working} className={`${cls} ${skin} disabled:opacity-50`}
+        title={isDraft ? 'Factura en borrador (sin número): rellena los datos y emítela' : existing ? `Ver factura ${existing.codigo || ''}` : 'Emitir factura'}>
+        {isDraft ? <Warning size={size === 'md' ? 14 : 12} weight="bold" /> : <Receipt size={size === 'md' ? 14 : 12} weight="bold" />}
+        {existing
+          ? (isDraft ? 'BORRADOR — emitir' : `Nº ${existing.codigo}`)
+          : 'Emitir factura'}
       </button>
-      {showDialog && (
+      {emitOpen && existing && existing.estado === 'borrador' && (
         <Suspense fallback={null}>
-          <FiscalDataDialog
-            projectId={projectId}
-            leadId={leadId}
-            conversionId={conversionId}
-            defaultItems={items}
-            onClose={() => setShowDialog(false)}
-            onCreated={(id) => {
-              setShowDialog(false);
-              setExistingId(id);
+          <EmitirBorradorDialog
+            invoice={existing}
+            onClose={() => setEmitOpen(false)}
+            onEmitted={(codigo, id) => {
+              setEmitOpen(false);
+              toast({ title: '✓ Factura emitida', description: codigo });
               window.open(invoicesApi.pdfUrl(id), '_blank');
+              refresh();
               onInvoiced?.();
             }}
           />
