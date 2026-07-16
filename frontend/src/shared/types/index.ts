@@ -90,6 +90,12 @@ export interface Lead {
   responsable_id?: number | null;
   responsable_nombre?: string | null;
   pais?: string | null;
+  // Datos fiscales (globales del cliente; se rellenan al completar una factura).
+  identificacion_fiscal?: string | null;
+  direccion_fiscal?: string | null;
+  ciudad_fiscal?: string | null;
+  codigo_postal_fiscal?: string | null;
+  pais_fiscal?: string | null;
   fecha_solicitud?: string | null;
   created_at: string;
   updated_at?: string;

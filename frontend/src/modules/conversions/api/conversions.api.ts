@@ -141,7 +141,7 @@ export const conversionsApi = {
     client.get(`/conversions/${id}/installments`),
   payInstallment: (
     instId: number,
-    data: { importe_cobrado: number; fecha_cobro?: string; metodo_pago?: string | null; notas?: string | null },
+    data: { importe_cobrado: number; fecha_cobro?: string; metodo?: string | null; notas?: string | null },
   ): Promise<ApiResponse<any>> =>
     client.post(`/conversions/installments/${instId}/pay`, data),
   updateInstallment: (

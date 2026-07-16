@@ -11,6 +11,7 @@ interface Installment {
   fecha_vencimiento: string;
   fecha_cobro?: string | null;
   importe_cobrado?: number | null;
+  metodo?: string | null;
   metodo_pago?: string | null;
 }
 
@@ -39,6 +40,7 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
   const [payMode, setPayMode] = useState<'new' | 'edit'>('new');
   const [payImporte, setPayImporte] = useState<string>('');
   const [payFecha, setPayFecha] = useState<string>('');
+  const [payMetodo, setPayMetodo] = useState<string>('transferencia');
   const [payingNow, setPayingNow] = useState(false);
 
   async function load() {
@@ -157,6 +159,7 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
     setPayMode('new');
     setPayImporte(String(inst.importe_previsto));
     setPayFecha(new Date().toISOString().slice(0, 10));
+    setPayMetodo(inst.metodo || 'transferencia');
   }
 
   function handleEditPaid(inst: Installment) {
@@ -165,6 +168,7 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
     setPayMode('edit');
     setPayImporte(String(inst.importe_cobrado || inst.importe_previsto));
     setPayFecha((inst.fecha_cobro || '').slice(0, 10));
+    setPayMetodo(inst.metodo || 'transferencia');
   }
 
   async function handleUnpay(inst: Installment) {
@@ -197,7 +201,7 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
         await conversionsApi.editPaidInstallment(payingInst.id, { importe_cobrado: importe, fecha_cobro: payFecha });
         toast({ title: 'Pago actualizado', description: `${importe}€ el ${payFecha}` });
       } else {
-        await conversionsApi.payInstallment(payingInst.id, { importe_cobrado: importe, fecha_cobro: payFecha });
+        await conversionsApi.payInstallment(payingInst.id, { importe_cobrado: importe, fecha_cobro: payFecha, metodo: payMetodo });
         toast({ title: 'Cuota cobrada', description: `${importe}€ el ${payFecha}` });
       }
       setPayingInst(null);
@@ -424,6 +428,21 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
                   className="w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm"
                 />
                 <p className="text-[10px] text-muted-foreground mt-1">Por defecto hoy. Cámbialo si registras un pago pasado.</p>
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold text-muted-foreground mb-1 block">Método de pago de esta cuota</label>
+                <select
+                  value={payMetodo}
+                  onChange={(e) => setPayMetodo(e.target.value)}
+                  className="w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm"
+                >
+                  <option value="transferencia">Transferencia bancaria</option>
+                  <option value="tarjeta">Tarjeta</option>
+                  <option value="tarjeta_stripe">Tarjeta (Stripe)</option>
+                  <option value="efectivo">Efectivo</option>
+                  <option value="bizum">Bizum</option>
+                  <option value="otro">Otro</option>
+                </select>
               </div>
             </div>
             <div className="flex justify-end gap-2 mt-5">

@@ -610,7 +610,13 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
                 <div className="flex rounded-lg border border-border overflow-hidden text-xs font-semibold">
                   <button type="button" onClick={() => setPagoMode('none')}
                     className={`flex-1 h-9 ${pagoMode === 'none' ? 'bg-muted text-foreground' : 'bg-card text-muted-foreground hover:bg-muted/50'}`}>Sin pago</button>
-                  <button type="button" onClick={() => setPagoMode('parcial')}
+                  <button type="button" onClick={() => {
+                      setPagoMode('parcial');
+                      // Pago parcial ⇒ el resto se cobra a plazos: método = fraccionado
+                      // (muestra el plan de cuotas). El método real de cada abono se
+                      // indica al registrar cada cuota.
+                      update('metodo_pago', 'fraccionado');
+                    }}
                     className={`flex-1 h-9 border-x border-border ${pagoMode === 'parcial' ? 'bg-amber-100 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300' : 'bg-card text-muted-foreground hover:bg-muted/50'}`}>Parcial</button>
                   <button type="button" onClick={() => setPagoMode('total')}
                     className={`flex-1 h-9 ${pagoMode === 'total' ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300' : 'bg-card text-muted-foreground hover:bg-muted/50'}`}>Pagó TODO</button>

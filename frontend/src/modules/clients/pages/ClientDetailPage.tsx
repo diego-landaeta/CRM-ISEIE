@@ -419,6 +419,38 @@ export default function ClientDetailPage() {
             </div>
           </div>
 
+          {/* Datos fiscales del cliente (se rellenan al completar una factura y
+              quedan globales; sirven para futuras facturas). */}
+          <div className="bg-card border border-border rounded-xl p-4 space-y-3">
+            <h3 className="text-sm font-bold text-foreground">Datos fiscales</h3>
+            {(lead.identificacion_fiscal || lead.direccion_fiscal || lead.ciudad_fiscal || lead.codigo_postal_fiscal || lead.pais_fiscal) ? (
+              <div className="space-y-3 divide-y divide-border/60">
+                <InfoRow label="NIF / DNI / CIF">
+                  {lead.identificacion_fiscal || <span className="text-muted-foreground">—</span>}
+                </InfoRow>
+                <div className="pt-3">
+                  <InfoRow label="Dirección fiscal">
+                    {lead.direccion_fiscal || <span className="text-muted-foreground">—</span>}
+                  </InfoRow>
+                </div>
+                <div className="pt-3">
+                  <InfoRow label="Ciudad / CP">
+                    {[lead.ciudad_fiscal, lead.codigo_postal_fiscal].filter(Boolean).join(' · ') || <span className="text-muted-foreground">—</span>}
+                  </InfoRow>
+                </div>
+                <div className="pt-3">
+                  <InfoRow label="País">
+                    {lead.pais_fiscal || <span className="text-muted-foreground">—</span>}
+                  </InfoRow>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Sin datos fiscales. Se rellenan al completar una factura del cliente y quedan guardados aquí para las siguientes.
+              </p>
+            )}
+          </div>
+
           {/* Fechas clave */}
           <div className="bg-card border border-border rounded-xl p-4 space-y-3">
             <h3 className="text-sm font-bold text-foreground">Fechas clave</h3>
