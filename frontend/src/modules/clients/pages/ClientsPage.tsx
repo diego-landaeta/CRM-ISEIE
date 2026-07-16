@@ -18,12 +18,13 @@ import { useAuth } from '@/contexts/AuthContext';
 function exportCSV(clients: Client[], filename: string): void {
   const fmtNum = (n: number | string) => Number(n || 0).toFixed(2);
   const rows = [
-    ['Nombre', 'Email', 'Teléfono', 'Responsable', 'Compras', 'Facturado (€)', 'Cobrado (€)', 'Pendiente (€)', 'Última compra', 'Último contacto'],
+    ['Nombre', 'Email', 'Teléfono', 'Responsable', 'Curso / Programa', 'Compras', 'Facturado (€)', 'Cobrado (€)', 'Pendiente (€)', 'Última compra', 'Último contacto'],
     ...clients.map(c => [
       c.nombre || '',
       c.email || '',
       c.telefono || '',
       c.responsable_nombre || '',
+      (c.cursos || []).join(' · '),
       c.conversiones,
       fmtNum(c.total_compras),
       fmtNum(c.total_pagado),
@@ -189,11 +190,12 @@ export default function ClientsPage() {
         const enriched = await Promise.all(((res.data as Array<Client>) || []).map(async (l) => {
           try {
             const cr = await client.get(`/conversions/by-lead/${l.id}`);
-            const convs = cr.success ? (cr.data as Array<{ importe_total?: number; importe_pagado?: number; fecha_compra?: string; created_at?: string }>) : [];
+            const convs = cr.success ? (cr.data as Array<{ importe_total?: number; importe_pagado?: number; fecha_compra?: string; created_at?: string; producto_contratado?: string }>) : [];
             const total = convs.reduce((s, c) => s + Number(c.importe_total || 0), 0);
             const pagado = convs.reduce((s, c) => s + Number(c.importe_pagado || 0), 0);
             const lastConv = convs[0]?.fecha_compra || convs[0]?.created_at;
-            return { ...l, conversiones: convs.length, total_compras: total, total_pagado: pagado, pendiente: total - pagado, ultima_compra: lastConv } as Client;
+            const cursos = [...new Set(convs.map((c) => (c.producto_contratado || '').trim()).filter(Boolean))];
+            return { ...l, conversiones: convs.length, total_compras: total, total_pagado: pagado, pendiente: total - pagado, ultima_compra: lastConv, cursos } as Client;
           } catch {
             return { ...l, conversiones: 0, total_compras: 0, total_pagado: 0, pendiente: 0 } as Client;
           }
@@ -373,6 +375,7 @@ export default function ClientsPage() {
                     <th className="text-left px-4 py-2.5 font-bold">Cliente</th>
                     <th className="text-left px-4 py-2.5 font-bold">Email</th>
                     <th className="text-left px-4 py-2.5 font-bold">Teléfono</th>
+                    <th className="text-left px-4 py-2.5 font-bold">Curso / Programa</th>
                     <th className="text-center px-4 py-2.5 font-bold">Compras</th>
                     <th className="text-right px-4 py-2.5 font-bold">Facturado</th>
                     <th className="text-right px-4 py-2.5 font-bold">Pendiente</th>
@@ -390,6 +393,16 @@ export default function ClientsPage() {
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">{c.email}</td>
                       <td className="px-4 py-3 text-xs text-muted-foreground font-mono">{c.telefono || '—'}</td>
+                      <td className="px-4 py-3">
+                        {c.cursos && c.cursos.length > 0 ? (
+                          <div className="flex flex-col gap-0.5 max-w-[220px]">
+                            <span className="text-xs font-medium text-foreground truncate" title={c.cursos.join(' · ')}>{c.cursos[0]}</span>
+                            {c.cursos.length > 1 && (
+                              <span className="text-[10px] text-muted-foreground">+{c.cursos.length - 1} más</span>
+                            )}
+                          </div>
+                        ) : <span className="text-xs text-muted-foreground/60">—</span>}
+                      </td>
                       <td className="px-4 py-3 text-center">
                         <span className="px-2 py-0.5 rounded bg-primary/10 text-primary text-xs font-semibold">{c.conversiones}</span>
                       </td>
@@ -429,6 +442,12 @@ export default function ClientsPage() {
                       {c.conversiones} {c.conversiones === 1 ? 'compra' : 'compras'}
                     </span>
                   </div>
+                  {c.cursos && c.cursos.length > 0 && (
+                    <div className="text-xs text-foreground">
+                      <span className="text-muted-foreground">Curso: </span>
+                      {c.cursos[0]}{c.cursos.length > 1 ? ` +${c.cursos.length - 1}` : ''}
+                    </div>
+                  )}
                   <div className="grid grid-cols-2 gap-2 text-sm">
                     <div>
                       <div className="text-xs text-muted-foreground">Facturado</div>

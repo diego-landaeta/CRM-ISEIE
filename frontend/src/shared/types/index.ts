@@ -141,6 +141,7 @@ export interface Client {
   last_interaction_at?: string | null;
   origen?: LeadOrigen | null;
   notas?: string | null;
+  cursos?: string[];
 }
 
 export type ConversionEstado = 'pagado' | 'pendiente' | 'parcial' | 'reembolsado';
