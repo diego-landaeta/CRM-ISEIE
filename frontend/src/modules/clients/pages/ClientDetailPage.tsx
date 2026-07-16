@@ -10,7 +10,6 @@ import client from '@/shared/api/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { conversionsApi } from '@/modules/conversions/api/conversions.api';
-import ConversionsTab from '@/modules/conversions/components/ConversionsTab';
 import { toast } from '@/shared/hooks/useToast';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import EmptyState from '@/shared/components/ui/EmptyState';
@@ -100,7 +99,7 @@ export default function ClientDetailPage() {
   const [editOpen, setEditOpen] = useState<boolean>(false);
   const [deleteOpen, setDeleteOpen] = useState<boolean>(false);
   const [mergeOpen, setMergeOpen] = useState<boolean>(false);
-  const [tab, setTab] = useState<'compras' | 'interacciones' | 'recordatorios'>('compras');
+  const [tab, setTab] = useState<'interacciones' | 'recordatorios'>('interacciones');
 
   // El gestor puede gestionar sus propios clientes (registrar pagos, fraccionar,
   // devoluciones). Admin/superadmin siempre. Otros gestores no ven los botones.
@@ -308,7 +307,8 @@ export default function ClientDetailPage() {
           <div className="bg-card border border-border rounded-xl overflow-hidden">
             <div className="flex border-b border-border px-4">
               {[
-                { id: 'compras', label: 'Compras', icon: ShoppingCart },
+                // La ficha del cliente es para ver DATOS/contacto, no ventas: el
+                // historial de compras se consulta en la sección Ventas.
                 { id: 'interacciones', label: `Interacciones${interacciones.length > 0 ? ` (${interacciones.length})` : ''}`, icon: ChatCircleDots },
               ].map(t => {
                 const Icon = t.icon;
@@ -331,14 +331,6 @@ export default function ClientDetailPage() {
             </div>
 
             <div className="p-4">
-              {tab === 'compras' && (
-                <ConversionsTab
-                  lead={lead}
-                  projectId={activeProject?.id || lead.project_id}
-                  canManage={canManage}
-                />
-              )}
-
               {tab === 'interacciones' && (
                 <div>
                   {interacciones.length === 0 ? (

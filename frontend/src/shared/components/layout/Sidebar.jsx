@@ -28,8 +28,9 @@ const NAV_SECTIONS = [
       { to: '/dashboard',  label: 'Dashboard',  icon: SquaresFour, end: true },
       { to: '/leads',      label: 'Prospectos', icon: Users,       sectionPrefixes: ['/leads'] },
       { to: '/leads/revision-duplicados', label: 'Revisión duplicados', icon: GitMerge, roles: ['admin', 'superadmin'] },
-      { to: '/clients',    label: 'Clientes',   icon: UserCheck,   sectionPrefixes: ['/clients'] },
-      { to: '/matriculas', label: 'Matrículas', icon: UserCheck },
+      // Ventas vive en Principal (flujo diario) y también en Finanzas. Clientes
+      // pasa a su propia sección al final (es consulta de datos, no ventas).
+      { to: '/sales',      label: 'Ventas',     icon: Receipt },
     ],
   },
   {
@@ -84,6 +85,14 @@ const NAV_SECTIONS = [
       { to: '/reports',     label: 'Reportes',      icon: ChartLineUp, sectionPrefixes: ['/reports', '/activity'] },
       { to: '/reports/ia',  label: 'Análisis IA',   icon: Sparkle,     roles: ['admin', 'superadmin'] },
       { to: '/ai-chat',     label: 'Chat IA',       icon: ChatCircleText, roles: ['admin', 'superadmin'] },
+    ],
+  },
+  {
+    // Clientes = consulta de datos de clientes (no ventas). Va al final.
+    label: 'Clientes',
+    items: [
+      { to: '/clients',    label: 'Clientes',   icon: UserCheck, sectionPrefixes: ['/clients'] },
+      { to: '/matriculas', label: 'Matrículas', icon: UserCheck },
     ],
   },
   {

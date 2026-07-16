@@ -190,7 +190,9 @@ export default function LeadsFiltersBar(props: Props) {
                     className="w-full h-9 px-3 rounded-md border border-border bg-muted/40 text-sm"
                   >
                     <option value="">Todos los estados</option>
-                    {Object.entries(STATUS_LABELS).map(([k, v]) => (
+                    {/* "Convertido" NO se filtra aquí: los convertidos se ven en
+                        Clientes/Ventas, no en Prospectos. */}
+                    {Object.entries(STATUS_LABELS).filter(([k]) => k !== 'convertido').map(([k, v]) => (
                       <option key={k} value={k}>{v}</option>
                     ))}
                   </select>
