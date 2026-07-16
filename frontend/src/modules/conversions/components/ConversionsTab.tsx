@@ -6,10 +6,11 @@ import PaymentDialog from './PaymentDialog';
 import RefundDialog from './RefundDialog';
 import InstallmentsDialog from './InstallmentsDialog';
 import EditConversionDialog from './EditConversionDialog';
-import { Plus, Receipt, CreditCard, Trash, WarningCircle, CheckCircle, ArrowCounterClockwise, Coins, PencilSimple } from '@phosphor-icons/react';
+import { Plus, Receipt, CreditCard, Trash, WarningCircle, CheckCircle, ArrowCounterClockwise, Coins, PencilSimple, Warning } from '@phosphor-icons/react';
 import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import InvoiceButton from '@/modules/invoices/components/InvoiceButton';
+import EmitirBorradorDialog from '@/modules/invoices/components/EmitirBorradorDialog';
 import { invoicesApi, type Invoice } from '@/modules/invoices/api/invoices.api';
 import SendInvoiceDialog from '@/modules/invoices/components/SendInvoiceDialog';
 import { formatCurrency, formatDate } from '@/shared/lib/format';
@@ -224,14 +225,19 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
                           Abonar
                         </button>
                       )}
-                      <InvoiceButton
-                        projectId={projectId}
-                        leadId={lead.id}
-                        conversionId={c.id}
-                        items={(c.items && c.items.length > 0)
-                          ? c.items.map(it => ({ descripcion: it.descripcion, cantidad: it.cantidad, precio_unitario: Number(it.precio_unitario) }))
-                          : [{ descripcion: c.producto_contratado || 'Servicio', cantidad: 1, precio_unitario: Number(c.importe_total) }]}
-                      />
+                      {/* Factura "general" de la conversión SOLO si aún no hay pagos
+                          (emisión manual). Con pagos, cada pago lleva su propia
+                          factura (se ve en la lista de pagos). */}
+                      {(Number(c.payments_count) || 0) === 0 && (
+                        <InvoiceButton
+                          projectId={projectId}
+                          leadId={lead.id}
+                          conversionId={c.id}
+                          items={(c.items && c.items.length > 0)
+                            ? c.items.map(it => ({ descripcion: it.descripcion, cantidad: it.cantidad, precio_unitario: Number(it.precio_unitario) }))
+                            : [{ descripcion: c.producto_contratado || 'Servicio', cantidad: 1, precio_unitario: Number(c.importe_total) }]}
+                        />
+                      )}
                       <button
                         onClick={() => setEditDialogConv(c)}
                         className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-sky-100 text-sky-800 dark:bg-sky-950/40 dark:text-sky-300 text-xs font-semibold hover:bg-sky-200 dark:hover:bg-sky-950/60"
@@ -479,30 +485,92 @@ interface PaymentsListProps {
 function PaymentsList({ conversionId, onDelete, canManage }: PaymentsListProps) {
   const [payments, setPayments] = useState<Payment[] | null>(null);
 
-  useEffect(() => {
+  const reload = () => {
     conversionsApi.getById(conversionId).then(res => {
       if (res.success && res.data) setPayments(res.data.payments || []);
     });
-  }, [conversionId]);
+  };
+  useEffect(reload, [conversionId]);
 
   if (!payments) return <div className="mt-2 text-muted-foreground">Cargando…</div>;
 
   return (
     <ul className="mt-2 space-y-1">
       {payments.map(p => (
-        <li key={p.id} className="flex items-center justify-between bg-muted/30 rounded px-2 py-1.5">
-          <div>
+        <li key={p.id} className="flex items-center justify-between gap-2 bg-muted/30 rounded px-2 py-1.5">
+          <div className="min-w-0">
             <span className="font-semibold tabular-nums">{formatCurrency(p.importe)}</span>
             <span className="text-muted-foreground ml-2">{formatDate(p.fecha)}</span>
             {p.notas && <span className="text-muted-foreground ml-2">• {p.notas}</span>}
           </div>
-          {canManage && (
-            <button onClick={() => onDelete(p.id)} className="text-muted-foreground hover:text-red-600 p-0.5" title="Eliminar pago">
-              <Trash size={12} weight="bold" />
-            </button>
-          )}
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            {/* Factura de ESTE pago */}
+            <PaymentInvoiceCell payment={p} onChanged={reload} />
+            {canManage && (
+              <button onClick={() => onDelete(p.id)} className="text-muted-foreground hover:text-red-600 p-0.5" title="Eliminar pago">
+                <Trash size={12} weight="bold" />
+              </button>
+            )}
+          </div>
         </li>
       ))}
     </ul>
+  );
+}
+
+// Muestra la factura correspondiente a un pago concreto:
+// - completa → "Nº X" abre el PDF.
+// - con datos faltantes → "Nº X · faltan datos" abre el diálogo para completarlos.
+// - sin factura (pagos antiguos) → nada.
+function PaymentInvoiceCell({ payment, onChanged }: { payment: Payment; onChanged: () => void }) {
+  const [emitOpen, setEmitOpen] = useState(false);
+  const [inv, setInv] = useState<Invoice | null>(null);
+
+  if (!payment.factura_id) return null;
+  const isProforma = payment.factura_tipo === 'proforma';
+  const isDraft = payment.factura_estado === 'borrador';
+  const noVal = (v?: string | null) => !v || String(v).trim() === '' || String(v).trim() === '—';
+  const faltan = isProforma ? [] : [
+    ['NIF', payment.cliente_nif], ['dirección', payment.cliente_direccion],
+    ['ciudad', payment.cliente_ciudad], ['CP', payment.cliente_cp], ['país', payment.cliente_pais],
+  ].filter(([, v]) => noVal(v as string)).map(([k]) => k);
+  const incompleta = !isDraft && faltan.length > 0;
+  const warn = isDraft || incompleta;
+
+  async function onClick() {
+    if (warn) {
+      const res = await invoicesApi.getOne(payment.factura_id!);
+      if (res.success && res.data) { setInv(res.data); setEmitOpen(true); }
+      return;
+    }
+    invoicesApi.openPdf(payment.factura_id!).catch((e: unknown) =>
+      toast({ title: 'No se pudo abrir el PDF', description: (e as { message?: string })?.message, variant: 'destructive' }));
+  }
+
+  return (
+    <>
+      <button
+        onClick={onClick}
+        title={warn ? 'Faltan datos: complétalos para descargar/enviar' : `Ver factura ${payment.factura_codigo || ''}`}
+        className={`inline-flex items-center gap-1 h-6 px-2 rounded text-[10px] font-semibold border ${
+          warn ? 'border-amber-400 bg-amber-50 text-amber-800 dark:bg-amber-950/30 dark:text-amber-300'
+               : 'border-border bg-card hover:bg-muted'}`}
+      >
+        {warn ? <Warning size={11} weight="bold" /> : <Receipt size={11} weight="bold" />}
+        {isDraft ? 'BORRADOR' : `Nº ${payment.factura_codigo || ''}`}{incompleta ? ' · faltan datos' : ''}
+      </button>
+      {emitOpen && inv && (
+        <EmitirBorradorDialog
+          invoice={inv}
+          onClose={() => setEmitOpen(false)}
+          onEmitted={(codigo, id) => {
+            setEmitOpen(false);
+            toast({ title: '✓ Factura lista', description: codigo });
+            invoicesApi.openPdf(id).catch(() => {});
+            onChanged();
+          }}
+        />
+      )}
+    </>
   );
 }

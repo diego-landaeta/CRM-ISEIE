@@ -164,11 +164,17 @@ export async function findById(id) {
   );
   conversion.items = items;
 
+  // Cada pago trae SU factura (una factura por pago). Enlazamos por payment_id
+  // e incluimos los datos de cliente para que el front sepa si faltan datos.
   const { rows: payments } = await query(
-    `SELECT id, importe, fecha, notas, created_at
-     FROM conversion_payments
-     WHERE conversion_id = $1
-     ORDER BY fecha DESC, id DESC`,
+    `SELECT cp.id, cp.importe, cp.fecha, cp.notas, cp.created_at,
+            i.id  AS factura_id, i.codigo AS factura_codigo, i.estado AS factura_estado,
+            i.tipo AS factura_tipo, i.cliente_nif, i.cliente_direccion, i.cliente_ciudad,
+            i.cliente_cp, i.cliente_pais, i.items AS factura_items
+       FROM conversion_payments cp
+       LEFT JOIN invoices i ON i.payment_id = cp.id AND i.estado <> 'cancelada'
+      WHERE cp.conversion_id = $1
+      ORDER BY cp.fecha DESC, cp.id DESC`,
     [id]
   );
   conversion.payments = payments;

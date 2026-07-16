@@ -10,6 +10,17 @@ export interface Payment {
   fecha: string;
   notas?: string | null;
   created_at?: string;
+  // Factura de ESTE pago (una factura por pago). Null si aún no tiene.
+  factura_id?: number | null;
+  factura_codigo?: string | null;
+  factura_estado?: string | null;
+  factura_tipo?: string | null;
+  cliente_nif?: string | null;
+  cliente_direccion?: string | null;
+  cliente_ciudad?: string | null;
+  cliente_cp?: string | null;
+  cliente_pais?: string | null;
+  factura_items?: unknown;
 }
 
 export interface Conversion {

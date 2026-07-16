@@ -27,9 +27,8 @@ const NAV_SECTIONS = [
     items: [
       { to: '/dashboard',  label: 'Dashboard',  icon: SquaresFour, end: true },
       { to: '/leads',      label: 'Prospectos', icon: Users,       sectionPrefixes: ['/leads'] },
-      { to: '/leads/revision-duplicados', label: 'Revisión duplicados', icon: GitMerge, roles: ['admin', 'superadmin'] },
       // Ventas vive en Principal (flujo diario) y también en Finanzas. Clientes
-      // pasa a su propia sección al final (es consulta de datos, no ventas).
+      // y Revisión duplicados pasan a la sección Clientes al final.
       { to: '/sales',      label: 'Ventas',     icon: Receipt },
     ],
   },
@@ -92,6 +91,7 @@ const NAV_SECTIONS = [
     label: 'Clientes',
     items: [
       { to: '/clients',    label: 'Clientes',   icon: UserCheck, sectionPrefixes: ['/clients'] },
+      { to: '/leads/revision-duplicados', label: 'Revisión duplicados', icon: GitMerge, roles: ['admin', 'superadmin'] },
       { to: '/matriculas', label: 'Matrículas', icon: UserCheck },
     ],
   },
