@@ -104,13 +104,16 @@ export async function create(data) {
       }
     }
 
-    // Si hay importe_pagado > 0, crear primer payment
+    // Si hay importe_pagado > 0, crear primer payment. Guardamos su id en la
+    // conversión devuelta para que el servicio pueda facturar ESE abono inicial.
     if (Number(importe_pagado) > 0) {
-      await client.query(
+      const { rows: firstPay } = await client.query(
         `INSERT INTO conversion_payments (conversion_id, importe, fecha, notas)
-         VALUES ($1, $2, COALESCE($3, CURRENT_DATE), $4)`,
+         VALUES ($1, $2, COALESCE($3, CURRENT_DATE), $4) RETURNING id, importe`,
         [conversion.id, importe_pagado, fecha_conversion, 'Pago inicial']
       );
+      conversion._initial_payment_id = firstPay[0].id;
+      conversion._initial_payment_importe = Number(firstPay[0].importe);
     }
 
     // Cambiar status del lead a convertido

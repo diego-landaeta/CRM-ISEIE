@@ -63,19 +63,25 @@ export async function create(data, userId) {
   // Hook: disparar email sequences con trigger conversion_created
   triggerSequences('conversion_created', data.lead_id, data.project_id);
 
-  // Auto-factura: si la venta entra YA con pago, se emite factura numerada.
-  if (Number(data.importe_pagado || 0) > 0) autoInvoice(conv.id, userId);
+  // Auto-factura del abono inicial: factura SOLO el monto pagado (no el total).
+  if (conv._initial_payment_id) {
+    autoInvoice(conv.id, userId, { paymentId: conv._initial_payment_id, importe: conv._initial_payment_importe });
+  }
 
   return conv;
 }
 
-// Auto-emisión de factura al registrar un pago (spec owner 2026-07-15): en
-// cuanto entra un pago, la conversión debe quedar con factura EMITIDA y su
-// correlativo. No bloqueante: si falla se loguea y el pago sigue su curso.
-export function autoInvoice(conversionId, userId = null) {
+// Auto-emisión de factura POR PAGO (spec owner 2026-07-16): cada abono genera
+// su propia factura por el monto pagado; el resto queda pendiente. No bloqueante:
+// si falla se loguea y el pago sigue su curso.
+// - Con paymentInfo {paymentId, importe} → factura por ese abono.
+// - Sin paymentInfo (legacy) → factura por el total de la conversión.
+export function autoInvoice(conversionId, userId = null, paymentInfo = null) {
   import('../invoices/invoices.model.js')
-    .then((m) => m.autoEmitirPorPago(conversionId, userId))
-    .then((inv) => { if (inv?.codigo) logger.info({ conversionId, invoiceId: inv.id, codigo: inv.codigo }, 'auto-factura por pago'); })
+    .then((m) => (paymentInfo?.paymentId
+      ? m.emitirFacturaDePago(conversionId, paymentInfo, userId)
+      : m.autoEmitirPorPago(conversionId, userId)))
+    .then((inv) => { if (inv?.codigo) logger.info({ conversionId, paymentId: paymentInfo?.paymentId, invoiceId: inv.id, codigo: inv.codigo }, 'auto-factura por pago'); })
     .catch((err) => logger.warn({ err: err.message, conversionId }, 'auto-factura por pago falló (no bloqueante)'));
 }
 
@@ -115,8 +121,10 @@ export async function addPayment(conversionId, data) {
   commissionModel.recalculateCommission(conversionId).catch(err =>
     logger.warn({ err: err.message, conversionId }, 'recalculateCommission failed (non-blocking)')
   );
-  // Auto-factura al registrar el abono (si aún no existe, se emite numerada).
-  autoInvoice(conversionId);
+  // Auto-factura al registrar el abono: una factura por ESTE pago (su monto).
+  if (result.payment?.id) {
+    autoInvoice(conversionId, null, { paymentId: result.payment.id, importe: Number(result.payment.importe) });
+  }
   return result;
 }
 

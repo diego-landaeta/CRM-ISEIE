@@ -113,7 +113,7 @@ export async function create(data, userId) {
 
     const { rows } = await client.query(
       `INSERT INTO invoices (
-         project_id, conversion_id, lead_id, serie, ano, numero, codigo,
+         project_id, conversion_id, lead_id, payment_id, serie, ano, numero, codigo,
          fecha_emision,
          cliente_nombre, cliente_nif, cliente_direccion, cliente_ciudad, cliente_cp, cliente_pais,
          cliente_email, cliente_telefono,
@@ -123,10 +123,10 @@ export async function create(data, userId) {
          issuer_cp, issuer_pais, issuer_email, issuer_telefono, issuer_iban, issuer_logo_url
        ) VALUES (
          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,
-         $30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40
+         $30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41
        ) RETURNING *`,
       [
-        data.projectId, data.conversionId || null, data.leadId || null,
+        data.projectId, data.conversionId || null, data.leadId || null, data.paymentId || null,
         serie, ano, numero, codigo, data.fechaEmision || new Date(),
         // Columnas cliente_* son NOT NULL: en proforma/borrador pueden faltar → fallback '—'.
         data.clienteNombre, data.clienteNif || '—', data.clienteDireccion || '—',
@@ -392,6 +392,66 @@ async function numerarBorrador(invoiceId) {
 // Si había borrador → se numera tal cual. Si no había factura → se crea emitida
 // con los datos de la conversión + lo que el lead tenga (faltantes = '—').
 // Los datos incompletos NO bloquean la numeración, solo enviar/descargar.
+const METODOS_PAGO_VALIDOS = ['transferencia', 'tarjeta', 'tarjeta_stripe', 'efectivo', 'bizum', 'fraccionado', 'otro'];
+
+// Datos fiscales del cliente + snapshot de la conversión, para armar la factura.
+async function _convDataParaFactura(conversionId) {
+  const { rows } = await query(
+    `SELECT c.*, l.nombre AS lead_nombre, l.email AS lead_email, l.telefono AS lead_telefono,
+            l.identificacion_fiscal, l.direccion_fiscal, l.ciudad_fiscal, l.codigo_postal_fiscal, l.pais_fiscal
+       FROM conversions c LEFT JOIN leads l ON l.id = c.lead_id
+      WHERE c.id = $1`, [conversionId]);
+  return rows[0] || null;
+}
+
+// FACTURA POR PAGO (spec owner 2026-07-16): cada abono genera su propia factura
+// por el MONTO PAGADO (no por el total del programa). El importe del pago se
+// trata como BRUTO (IVA incluido); se desglosa base + IVA. Dedup por payment_id
+// (índice único parcial) → reintentos/reejecuciones no duplican.
+export async function emitirFacturaDePago(conversionId, { paymentId, importe }, userId = null) {
+  if (!conversionId || !paymentId) return null;
+  const monto = Number(importe) || 0;
+  if (monto <= 0) return null;
+
+  const { rows: dup } = await query(
+    `SELECT * FROM invoices WHERE payment_id = $1 AND estado <> 'cancelada' LIMIT 1`, [paymentId]);
+  if (dup[0]) return dup[0];
+
+  const conv = await _convDataParaFactura(conversionId);
+  if (!conv) return null;
+
+  const ivaPct = conv.iva_exento ? 0 : Number(conv.iva_pct ?? 21);
+  // El pago es bruto (lo que entró en caja). Base = monto / (1+IVA); IVA = resto.
+  const base = ivaPct > 0 ? Number((monto / (1 + ivaPct / 100)).toFixed(2)) : monto;
+  const ivaImporte = Number((monto - base).toFixed(2));
+  const prod = conv.producto_contratado || 'Servicio';
+
+  return await create({
+    projectId: conv.project_id,
+    conversionId,
+    paymentId,
+    leadId: conv.lead_id,
+    clienteNombre: conv.lead_nombre || 'Cliente',
+    clienteNif: conv.identificacion_fiscal || undefined,
+    clienteDireccion: conv.direccion_fiscal || undefined,
+    clienteCiudad: conv.ciudad_fiscal || undefined,
+    clienteCp: conv.codigo_postal_fiscal || undefined,
+    clientePais: conv.pais_fiscal || 'España',
+    clienteEmail: conv.lead_email || null,
+    clienteTelefono: conv.lead_telefono || null,
+    items: [{ descripcion: `${prod} — pago a cuenta`, cantidad: 1, precio_unitario: base }],
+    baseImponible: base,
+    ivaPct,
+    ivaImporte,
+    ivaIncluido: true,
+    total: monto,
+    leyendaIva: ivaPct === 0 ? 'Operación exenta de IVA conforme a la normativa aplicable.' : null,
+    metodoPago: METODOS_PAGO_VALIDOS.includes(conv.metodo_pago) ? conv.metodo_pago : 'otro',
+  }, userId);
+}
+
+// LEGACY (compat): auto-emisión "1 factura por conversión al total". Se conserva
+// para llamadas sin info de pago. El flujo nuevo usa emitirFacturaDePago.
 export async function autoEmitirPorPago(conversionId, userId = null) {
   if (!conversionId) return null;
   const existing = await findByConversion(conversionId);
@@ -399,12 +459,7 @@ export async function autoEmitirPorPago(conversionId, userId = null) {
     if (existing.estado === 'borrador') return await numerarBorrador(existing.id);
     return existing; // ya numerada
   }
-  const { rows: convRows } = await query(
-    `SELECT c.*, l.nombre AS lead_nombre, l.email AS lead_email, l.telefono AS lead_telefono,
-            l.identificacion_fiscal, l.direccion_fiscal, l.ciudad_fiscal, l.codigo_postal_fiscal, l.pais_fiscal
-       FROM conversions c LEFT JOIN leads l ON l.id = c.lead_id
-      WHERE c.id = $1`, [conversionId]);
-  const conv = convRows[0];
+  const conv = await _convDataParaFactura(conversionId);
   if (!conv) return null;
 
   const { rows: itemRows } = await query(
@@ -415,8 +470,6 @@ export async function autoEmitirPorPago(conversionId, userId = null) {
     : [{ descripcion: conv.producto_contratado || 'Servicio', cantidad: 1, precio_unitario: Number(conv.importe_total) || 0 }];
 
   const ivaPct = conv.iva_exento ? 0 : Number(conv.iva_pct ?? 21);
-  const metodosValidos = ['transferencia', 'tarjeta', 'tarjeta_stripe', 'efectivo', 'bizum', 'fraccionado', 'otro'];
-
   return await create({
     projectId: conv.project_id,
     conversionId,
@@ -436,7 +489,7 @@ export async function autoEmitirPorPago(conversionId, userId = null) {
     ivaIncluido: !!conv.iva_incluido,
     total: Number(conv.importe_total) || 0,
     leyendaIva: ivaPct === 0 ? 'Operación exenta de IVA conforme a la normativa aplicable.' : null,
-    metodoPago: metodosValidos.includes(conv.metodo_pago) ? conv.metodo_pago : 'otro',
+    metodoPago: METODOS_PAGO_VALIDOS.includes(conv.metodo_pago) ? conv.metodo_pago : 'otro',
   }, userId);
 }
 

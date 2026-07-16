@@ -104,6 +104,10 @@ export async function generatePDF(invoiceId) {
   const drawRight = (text, xr, yy, size, f, color) =>
     page.drawText(text, { x: xr - f.widthOfTextAtSize(String(text), size), y: yy, size, font: f, color });
   const noVal = (v) => !v || String(v).trim() === '' || String(v).trim() === '—';
+  // Colapsa saltos de línea / espacios múltiples a UNA sola línea. pdf-lib pinta
+  // los '\n' como varias líneas dentro del hueco de un campo → el texto se
+  // "montaba" sobre la línea siguiente. Con esto cada campo ocupa una fila.
+  const oneLine = (v, max = 95) => String(v ?? '').replace(/[\r\n\t]+/g, ' ').replace(/\s{2,}/g, ' ').trim().slice(0, max);
 
   // Emisor (snapshot multi-empresa; fallback a datos del proyecto).
   const datosFiscalesProyecto = project?.datos_fiscales || {};
@@ -124,12 +128,12 @@ export async function generatePDF(invoiceId) {
   }
 
   // ── Datos EMISOR ──
-  page.drawText(emisorNombre, { x: left, y: ey, size: 11, font: bold, color: black }); ey -= 13;
-  if (emisorNif)          { page.drawText(`NIF: ${emisorNif}`, { x: left, y: ey, size: 9, font, color: gray }); ey -= 11; }
-  if (emisorDir)          { page.drawText(emisorDir, { x: left, y: ey, size: 9, font, color: gray }); ey -= 11; }
-  if (emisorCiudad)       { page.drawText(`${emisorCiudad}${inv.issuer_pais ? ', ' + inv.issuer_pais : ''}`, { x: left, y: ey, size: 9, font, color: gray }); ey -= 11; }
-  if (inv.issuer_email)   { page.drawText(inv.issuer_email, { x: left, y: ey, size: 9, font, color: gray }); ey -= 11; }
-  if (inv.issuer_telefono){ page.drawText(inv.issuer_telefono, { x: left, y: ey, size: 9, font, color: gray }); ey -= 11; }
+  page.drawText(oneLine(emisorNombre, 70), { x: left, y: ey, size: 11, font: bold, color: black }); ey -= 13;
+  if (emisorNif)          { page.drawText(oneLine(`NIF: ${emisorNif}`, 50), { x: left, y: ey, size: 9, font, color: gray }); ey -= 11; }
+  if (emisorDir)          { page.drawText(oneLine(emisorDir, 80), { x: left, y: ey, size: 9, font, color: gray }); ey -= 11; }
+  if (emisorCiudad)       { page.drawText(oneLine(`${emisorCiudad}${inv.issuer_pais ? ', ' + inv.issuer_pais : ''}`, 80), { x: left, y: ey, size: 9, font, color: gray }); ey -= 11; }
+  if (inv.issuer_email)   { page.drawText(oneLine(inv.issuer_email, 70), { x: left, y: ey, size: 9, font, color: gray }); ey -= 11; }
+  if (inv.issuer_telefono){ page.drawText(oneLine(inv.issuer_telefono, 40), { x: left, y: ey, size: 9, font, color: gray }); ey -= 11; }
 
   // ── TÍTULO + Nº + Fecha (derecha) ──
   const tituloDoc = esRect ? 'FACTURA RECTIFICATIVA' : esProforma ? 'PRESUPUESTO' : 'FACTURA';
@@ -144,13 +148,13 @@ export async function generatePDF(invoiceId) {
   let y = Math.min(ey, 772) - 20;
   page.drawRectangle({ x: left, y: y + 10, width: right - left, height: 0.8, color: gray });
   page.drawText('DATOS CLIENTE', { x: left, y, size: 9, font: bold, color: gray }); y -= 15;
-  page.drawText(inv.cliente_nombre, { x: left, y, size: 11, font: bold, color: black }); y -= 13;
-  if (!noVal(inv.cliente_nif))       { page.drawText(`NIF/DNI: ${inv.cliente_nif}`, { x: left, y, size: 10, font, color: black }); y -= 13; }
-  if (!noVal(inv.cliente_direccion)) { page.drawText(inv.cliente_direccion, { x: left, y, size: 10, font, color: black }); y -= 13; }
+  page.drawText(oneLine(inv.cliente_nombre, 60), { x: left, y, size: 11, font: bold, color: black }); y -= 13;
+  if (!noVal(inv.cliente_nif))       { page.drawText(oneLine(`NIF/DNI: ${inv.cliente_nif}`, 60), { x: left, y, size: 10, font, color: black }); y -= 13; }
+  if (!noVal(inv.cliente_direccion)) { page.drawText(oneLine(inv.cliente_direccion, 80), { x: left, y, size: 10, font, color: black }); y -= 13; }
   const cliLoc = [inv.cliente_cp, inv.cliente_ciudad].filter((x) => !noVal(x)).join(' ');
-  if (cliLoc || !noVal(inv.cliente_pais)) { page.drawText(`${cliLoc}${!noVal(inv.cliente_pais) ? (cliLoc ? ', ' : '') + inv.cliente_pais : ''}`, { x: left, y, size: 10, font, color: black }); y -= 13; }
-  if (inv.cliente_email)    { page.drawText(inv.cliente_email, { x: left, y, size: 10, font, color: black }); y -= 13; }
-  if (inv.cliente_telefono) { page.drawText(`Tel: ${inv.cliente_telefono}`, { x: left, y, size: 10, font, color: black }); y -= 13; }
+  if (cliLoc || !noVal(inv.cliente_pais)) { page.drawText(oneLine(`${cliLoc}${!noVal(inv.cliente_pais) ? (cliLoc ? ', ' : '') + inv.cliente_pais : ''}`, 80), { x: left, y, size: 10, font, color: black }); y -= 13; }
+  if (!noVal(inv.cliente_email))    { page.drawText(oneLine(inv.cliente_email, 70), { x: left, y, size: 10, font, color: black }); y -= 13; }
+  if (!noVal(inv.cliente_telefono)) { page.drawText(oneLine(`Tel: ${inv.cliente_telefono}`, 40), { x: left, y, size: 10, font, color: black }); y -= 13; }
 
   // Tabla items
   y -= 30;
