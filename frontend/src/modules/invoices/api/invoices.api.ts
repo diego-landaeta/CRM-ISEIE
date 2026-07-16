@@ -184,7 +184,9 @@ export const invoicesApi = {
   byConversion: (conversionId: number) => client.get<Invoice | null>(`/invoices/by-conversion/${conversionId}`),
   leadFiscalData: (leadId: number) => client.get<LeadFiscalData>(`/invoices/lead-fiscal/${leadId}`),
   create: (body: CreateInvoiceBody) => client.post<Invoice>('/invoices', body),
-  pdfUrl: (id: number) => `/api/invoices/${id}/pdf`,
+  // Ruta absoluta para <a>/window.open: incluye el base path del deploy
+  // (/crm/ en prod, /testeo/ en staging, / en ISEIE) — si no, nginx da 404.
+  pdfUrl: (id: number) => `${(import.meta.env.BASE_URL || '/').replace(/\/$/, '')}/api/invoices/${id}/pdf`,
   send: (id: number, email?: string) => client.post(`/invoices/${id}/send`, email ? { email } : {}),
   markPaid: (id: number, fechaPago?: string) => client.post(`/invoices/${id}/mark-paid`, fechaPago ? { fechaPago } : {}),
   cancel: (id: number) => client.post(`/invoices/${id}/cancel`, {}),
