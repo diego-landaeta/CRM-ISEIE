@@ -262,7 +262,7 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
       if (inv) {
         if (inv.estado === 'borrador' || invoiceFaltantes(inv).length > 0) { setEmitInv(inv); return; }
         toast({ title: `✓ Factura ${inv.codigo}`, description: 'Emitida automáticamente al registrar el pago.' });
-        window.open(invoicesApi.pdfUrl(inv.id), '_blank');
+        invoicesApi.openPdf(inv.id).catch((e: unknown) => toast({ title: 'No se pudo abrir el PDF', description: (e as { message?: string })?.message, variant: 'destructive' }));
         finishAndClose();
         return;
       }
@@ -278,7 +278,7 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
         <EmitirBorradorDialog
           invoice={emitInv}
           onClose={() => { setEmitInv(null); finishAndClose(); }}
-          onEmitted={(_codigo, id) => { window.open(invoicesApi.pdfUrl(id), '_blank'); setEmitInv(null); finishAndClose(); }}
+          onEmitted={(_codigo, id) => { invoicesApi.openPdf(id).catch((e: unknown) => toast({ title: 'No se pudo abrir el PDF', description: (e as { message?: string })?.message, variant: 'destructive' })); setEmitInv(null); finishAndClose(); }}
         />
       </Suspense>
     );
@@ -299,7 +299,7 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
           defaultIvaPct={created.iva_pct != null ? Number(created.iva_pct) : undefined}
           defaultIvaIncluido={created.iva_incluido}
           onClose={finishAndClose}
-          onCreated={(id) => { window.open(invoicesApi.pdfUrl(id), '_blank'); finishAndClose(); }}
+          onCreated={(id) => { invoicesApi.openPdf(id).catch((e: unknown) => toast({ title: 'No se pudo abrir el PDF', description: (e as { message?: string })?.message, variant: 'destructive' })); finishAndClose(); }}
         />
       </Suspense>
     );

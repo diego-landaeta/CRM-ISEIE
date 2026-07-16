@@ -287,7 +287,7 @@ export default function InvoicesPage() {
                   </td>
                   <td className="px-3 py-2 text-right">
                     <div className="inline-flex gap-1">
-                      <button onClick={() => window.open(invoicesApi.pdfUrl(inv.id), '_blank')}
+                      <button onClick={() => invoicesApi.openPdf(inv.id).catch((e: unknown) => toast({ title: 'No se pudo abrir el PDF', description: (e as { message?: string })?.message, variant: 'destructive' }))}
                         title="Ver PDF"
                         className="h-7 px-2 rounded border border-border text-[11px] hover:bg-muted inline-flex items-center gap-1">
                         <Eye size={11} /> PDF

@@ -1,4 +1,4 @@
-import client from '@/shared/api/client';
+import client, { getAccessToken } from '@/shared/api/client';
 
 export interface InvoiceItem {
   descripcion: string;
@@ -187,6 +187,26 @@ export const invoicesApi = {
   // Ruta absoluta para <a>/window.open: incluye el base path del deploy
   // (/crm/ en prod, /testeo/ en staging, / en ISEIE) — si no, nginx da 404.
   pdfUrl: (id: number) => `${(import.meta.env.BASE_URL || '/').replace(/\/$/, '')}/api/invoices/${id}/pdf`,
+  // Abre el PDF descargandolo CON el token (una navegacion normal de pestana NO
+  // manda el header Authorization -> daria 401). Lo abre como blob URL.
+  openPdf: async (id: number): Promise<void> => {
+    const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
+    const tok = getAccessToken();
+    const res = await fetch(`${base}/api/invoices/${id}/pdf`, {
+      headers: tok ? { Authorization: `Bearer ${tok}` } : {},
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      let msg = 'No se pudo abrir el PDF';
+      try { const j = await res.json(); msg = j.error || msg; } catch { /* noop */ }
+      throw new Error(msg);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const w = window.open(url, '_blank');
+    if (!w) { const a = document.createElement('a'); a.href = url; a.target = '_blank'; a.rel = 'noopener'; a.click(); }
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  },
   send: (id: number, email?: string) => client.post(`/invoices/${id}/send`, email ? { email } : {}),
   markPaid: (id: number, fechaPago?: string) => client.post(`/invoices/${id}/mark-paid`, fechaPago ? { fechaPago } : {}),
   cancel: (id: number) => client.post(`/invoices/${id}/cancel`, {}),

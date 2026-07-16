@@ -50,7 +50,7 @@ export default function InvoiceButton({ projectId, leadId, conversionId, items, 
   async function onClick() {
     if (existing) {
       if (isDraft || incompleta) { setEmitOpen(true); return; }
-      window.open(invoicesApi.pdfUrl(existing.id), '_blank');
+      invoicesApi.openPdf(existing.id).catch((e: unknown) => toast({ title: 'No se pudo abrir el PDF', description: (e as { message?: string })?.message, variant: 'destructive' }));
       return;
     }
     setWorking(true);
@@ -94,7 +94,7 @@ export default function InvoiceButton({ projectId, leadId, conversionId, items, 
           setEmitOpen(true);
         } else {
           toast({ title: '✓ Factura emitida', description: res.data.codigo || undefined });
-          window.open(invoicesApi.pdfUrl(res.data.id), '_blank');
+          invoicesApi.openPdf(res.data.id).catch((e: unknown) => toast({ title: 'No se pudo abrir el PDF', description: (e as { message?: string })?.message, variant: 'destructive' }));
           onInvoiced?.();
         }
       } else {
@@ -129,7 +129,7 @@ export default function InvoiceButton({ projectId, leadId, conversionId, items, 
             onEmitted={(codigo, id) => {
               setEmitOpen(false);
               toast({ title: '✓ Factura lista', description: codigo });
-              window.open(invoicesApi.pdfUrl(id), '_blank');
+              invoicesApi.openPdf(id).catch((e: unknown) => toast({ title: 'No se pudo abrir el PDF', description: (e as { message?: string })?.message, variant: 'destructive' }));
               refresh();
               onInvoiced?.();
             }}
@@ -146,7 +146,7 @@ export default function InvoiceButton({ projectId, leadId, conversionId, items, 
             onClose={() => setFiscalOpen(false)}
             onCreated={(id) => {
               setFiscalOpen(false);
-              window.open(invoicesApi.pdfUrl(id), '_blank');
+              invoicesApi.openPdf(id).catch((e: unknown) => toast({ title: 'No se pudo abrir el PDF', description: (e as { message?: string })?.message, variant: 'destructive' }));
               refresh();
               onInvoiced?.();
             }}

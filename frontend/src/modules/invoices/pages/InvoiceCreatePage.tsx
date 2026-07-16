@@ -146,6 +146,7 @@ export default function InvoiceCreatePage() {
             cantidad: 1,
             precio_unitario: Number(c.importe_total ?? c.producto_precio ?? 0) || 0,
           })));
+          // Método de pago de la conversión, si encaja con los válidos de factura.
           const MP = ['transferencia', 'tarjeta', 'tarjeta_stripe', 'efectivo', 'bizum', 'fraccionado', 'otro'];
           const mp = convs[0]?.metodo_pago;
           if (mp && MP.includes(mp)) setMetodoPago(mp as typeof metodoPago);
@@ -184,7 +185,7 @@ export default function InvoiceCreatePage() {
       });
       if (res.success && res.data) {
         toast({ title: esProforma ? '✓ Presupuesto generado' : '✓ Factura emitida', description: res.data.codigo });
-        window.open(invoicesApi.pdfUrl(res.data.id), '_blank');
+        invoicesApi.openPdf(res.data.id).catch((e: unknown) => toast({ title: 'No se pudo abrir el PDF', description: (e as { message?: string })?.message, variant: 'destructive' }));
         navigate(`${invBase}/facturas${esProforma ? '?tab=proformas' : ''}`);
       } else {
         toast({ title: 'Error', description: (res as { error?: string }).error, variant: 'destructive' });
@@ -334,6 +335,7 @@ export default function InvoiceCreatePage() {
                   const p = products.find((x) => String(x.id) === e.target.value);
                   if (!p) return;
                   const line = { descripcion: p.nombre, cantidad: 1, precio_unitario: Number(p.precio ?? 0) || 0 };
+                  // Si la única fila está vacía, la reemplaza; si no, añade.
                   setItems((prev) => (prev.length === 1 && !prev[0].descripcion.trim() && !Number(prev[0].precio_unitario))
                     ? [line] : [...prev, line]);
                   e.target.value = '';
