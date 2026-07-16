@@ -70,6 +70,19 @@ export async function emitir(req, res, next) {
   }
 }
 
+// POST /:id/completar-datos — rellena los datos fiscales del cliente en una
+// factura YA emitida (auto-emitida al pagar). Desbloquea descargar/enviar.
+export async function completarDatos(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const inv = await model.completarDatosCliente(id, req.body || {});
+    res.json({ success: true, data: { ...inv, faltantes: model.invoiceFaltantes(inv) } });
+  } catch (e) {
+    logger.error({ e: e.message }, 'completar datos failed');
+    next(e);
+  }
+}
+
 // GET preview por conversion - si existe la factura la devuelve
 export async function byConversion(req, res, next) {
   try {
@@ -122,6 +135,15 @@ export async function pdf(req, res, next) {
     const id = Number(req.params.id);
     const inv = await model.findById(id);
     if (!inv) throw new AppError('Factura no encontrada', 404, 'NOT_FOUND');
+    // Factura EMITIDA con datos incompletos (auto-emitida al pagar): tiene su
+    // número, pero NO se descarga hasta rellenar los datos del cliente.
+    // (El borrador sí se previsualiza — lleva marca de agua.)
+    if (inv.tipo !== 'proforma' && inv.estado !== 'borrador') {
+      const faltan = model.invoiceFaltantes(inv);
+      if (faltan.length > 0) {
+        throw new AppError(`Para descargar la factura ${inv.codigo || ''} debes rellenar: ${faltan.join(', ')}.`, 400, 'INVOICE_INCOMPLETE');
+      }
+    }
     let bytes;
     if (inv.pdf_path) {
       try { bytes = await fs.readFile(inv.pdf_path); } catch { bytes = null; }
@@ -148,6 +170,14 @@ export async function send(req, res, next) {
       throw new AppError(
         `Es un borrador sin validez fiscal: no se puede enviar.${faltan.length ? ` Falta: ${faltan.join(', ')}.` : ''} Usa "Validar y emitir" primero.`,
         400, 'DRAFT_CANNOT_SEND');
+    }
+    // Emitida pero con datos incompletos (auto-emitida al pagar): no se envía
+    // hasta rellenar los datos del cliente.
+    if (inv.tipo !== 'proforma') {
+      const faltan = model.invoiceFaltantes(inv);
+      if (faltan.length > 0) {
+        throw new AppError(`Para enviar la factura ${inv.codigo || ''} debes rellenar: ${faltan.join(', ')}.`, 400, 'INVOICE_INCOMPLETE');
+      }
     }
     const { email } = req.body || {};
     const result = await service.sendByEmail(id, email);

@@ -288,7 +288,8 @@ export async function list({ projectId, estado, search, from, to, tipo, page = 1
   const offset = (page - 1) * limit;
   const { rows } = await query(
     `SELECT id, codigo, ano, numero, fecha_emision, fecha_pago,
-            cliente_nombre, cliente_nif, total, iva_pct, estado, sent_at, tipo
+            cliente_nombre, cliente_nif, cliente_direccion, cliente_ciudad, cliente_cp, cliente_pais,
+            cliente_email, total, iva_pct, estado, sent_at, tipo
      FROM invoices WHERE ${where}
      ORDER BY ano DESC, numero DESC LIMIT ${limit} OFFSET ${offset}`,
     params
@@ -354,6 +355,129 @@ export function invoiceFaltantes(inv) {
   if (vacio(inv.cliente_pais)) faltan.push('país');
   if (!Array.isArray(inv.items) || inv.items.length === 0) faltan.push('conceptos');
   return faltan;
+}
+
+// Numeración de un borrador SIN exigir completitud (uso interno del auto-emit
+// por pago: el número se asigna igual; los datos que falten solo bloquean
+// enviar/descargar la factura).
+async function numerarBorrador(invoiceId) {
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+    const { rows: sel } = await client.query(`SELECT * FROM invoices WHERE id = $1 FOR UPDATE`, [invoiceId]);
+    const inv = sel[0];
+    if (!inv || inv.estado !== 'borrador') { await client.query('COMMIT'); return inv || null; }
+    const ano = new Date().getFullYear();
+    const serie = (inv.serie && inv.serie.trim()) || 'A';
+    const numero = await nextNumero(client, inv.project_id, inv.issuer_id || null, ano, serie);
+    const codigo = `${ano}/${String(numero).padStart(4, '0')}`;
+    const { rows } = await client.query(
+      `UPDATE invoices SET ano = $2, numero = $3, codigo = $4,
+         fecha_emision = CURRENT_DATE, estado = 'emitida', updated_at = NOW()
+       WHERE id = $1 RETURNING *`,
+      [invoiceId, ano, numero, codigo]
+    );
+    await client.query('COMMIT');
+    return rows[0];
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+// AUTO-EMISIÓN AL REGISTRAR UN PAGO (spec owner 2026-07-15): en cuanto entra un
+// pago, la conversión debe tener factura EMITIDA con su correlativo, guardada.
+// Si había borrador → se numera tal cual. Si no había factura → se crea emitida
+// con los datos de la conversión + lo que el lead tenga (faltantes = '—').
+// Los datos incompletos NO bloquean la numeración, solo enviar/descargar.
+export async function autoEmitirPorPago(conversionId, userId = null) {
+  if (!conversionId) return null;
+  const existing = await findByConversion(conversionId);
+  if (existing && existing.estado !== 'cancelada') {
+    if (existing.estado === 'borrador') return await numerarBorrador(existing.id);
+    return existing; // ya numerada
+  }
+  const { rows: convRows } = await query(
+    `SELECT c.*, l.nombre AS lead_nombre, l.email AS lead_email, l.telefono AS lead_telefono,
+            l.identificacion_fiscal, l.direccion_fiscal, l.ciudad_fiscal, l.codigo_postal_fiscal, l.pais_fiscal
+       FROM conversions c LEFT JOIN leads l ON l.id = c.lead_id
+      WHERE c.id = $1`, [conversionId]);
+  const conv = convRows[0];
+  if (!conv) return null;
+
+  const { rows: itemRows } = await query(
+    `SELECT descripcion, cantidad, precio_unitario FROM conversion_items WHERE conversion_id = $1 ORDER BY orden`,
+    [conversionId]);
+  const items = itemRows.length
+    ? itemRows.map((it) => ({ descripcion: it.descripcion, cantidad: Number(it.cantidad) || 1, precio_unitario: Number(it.precio_unitario) || 0 }))
+    : [{ descripcion: conv.producto_contratado || 'Servicio', cantidad: 1, precio_unitario: Number(conv.importe_total) || 0 }];
+
+  const ivaPct = conv.iva_exento ? 0 : Number(conv.iva_pct ?? 21);
+  const metodosValidos = ['transferencia', 'tarjeta', 'tarjeta_stripe', 'efectivo', 'bizum', 'fraccionado', 'otro'];
+
+  return await create({
+    projectId: conv.project_id,
+    conversionId,
+    leadId: conv.lead_id,
+    clienteNombre: conv.lead_nombre || 'Cliente',
+    clienteNif: conv.identificacion_fiscal || undefined,
+    clienteDireccion: conv.direccion_fiscal || undefined,
+    clienteCiudad: conv.ciudad_fiscal || undefined,
+    clienteCp: conv.codigo_postal_fiscal || undefined,
+    clientePais: conv.pais_fiscal || 'España',
+    clienteEmail: conv.lead_email || null,
+    clienteTelefono: conv.lead_telefono || null,
+    items,
+    baseImponible: Number(conv.base_imponible ?? conv.importe_total) || 0,
+    ivaPct,
+    ivaImporte: Number(conv.iva_importe ?? 0) || 0,
+    ivaIncluido: !!conv.iva_incluido,
+    total: Number(conv.importe_total) || 0,
+    leyendaIva: ivaPct === 0 ? 'Operación exenta de IVA conforme a la normativa aplicable.' : null,
+    metodoPago: metodosValidos.includes(conv.metodo_pago) ? conv.metodo_pago : 'otro',
+  }, userId);
+}
+
+// Completar datos fiscales del cliente en una factura YA emitida (que salió
+// numerada con datos incompletos por el auto-emit). No toca la numeración.
+export async function completarDatosCliente(id, patch = {}) {
+  const inv = await findById(id);
+  if (!inv) throw new AppError('Factura no encontrada', 404, 'INVOICE_NOT_FOUND');
+  if (inv.estado === 'cancelada') throw new AppError('La factura está cancelada', 400, 'INVOICE_CANCELLED');
+  const merged = {
+    cliente_nombre: patch.clienteNombre ?? inv.cliente_nombre,
+    cliente_nif: patch.clienteNif ?? inv.cliente_nif,
+    cliente_direccion: patch.clienteDireccion ?? inv.cliente_direccion,
+    cliente_ciudad: patch.clienteCiudad ?? inv.cliente_ciudad,
+    cliente_cp: patch.clienteCp ?? inv.cliente_cp,
+    cliente_pais: patch.clientePais ?? inv.cliente_pais,
+    cliente_email: patch.clienteEmail ?? inv.cliente_email,
+    cliente_telefono: patch.clienteTelefono ?? inv.cliente_telefono,
+  };
+  const { rows } = await query(
+    `UPDATE invoices SET cliente_nombre=$2, cliente_nif=$3, cliente_direccion=$4, cliente_ciudad=$5,
+        cliente_cp=$6, cliente_pais=$7, cliente_email=$8, cliente_telefono=$9,
+        pdf_path = NULL, updated_at = NOW()
+      WHERE id = $1 RETURNING *`,
+    [id, merged.cliente_nombre, merged.cliente_nif, merged.cliente_direccion, merged.cliente_ciudad,
+     merged.cliente_cp, merged.cliente_pais, merged.cliente_email, merged.cliente_telefono]
+  );
+  if (inv.lead_id) {
+    await query(
+      `UPDATE leads SET
+         identificacion_fiscal = COALESCE(NULLIF($1,'—'), identificacion_fiscal),
+         direccion_fiscal      = COALESCE(NULLIF($2,'—'), direccion_fiscal),
+         ciudad_fiscal         = COALESCE(NULLIF($3,'—'), ciudad_fiscal),
+         codigo_postal_fiscal  = COALESCE(NULLIF($4,'—'), codigo_postal_fiscal),
+         pais_fiscal           = COALESCE(NULLIF($5,'—'), pais_fiscal),
+         updated_at = NOW()
+       WHERE id = $6`,
+      [merged.cliente_nif, merged.cliente_direccion, merged.cliente_ciudad, merged.cliente_cp, merged.cliente_pais, inv.lead_id]
+    );
+  }
+  return rows[0];
 }
 
 // Validar y emitir un borrador: completa datos del cliente (si vienen), exige

@@ -4,7 +4,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import KpiCard from '@/shared/components/ui/KpiCard';
-import { invoicesApi } from '../api/invoices.api';
+import { invoicesApi, invoiceFaltantes } from '../api/invoices.api';
 import type { Invoice, Issuer, VentaSinFactura } from '../api/invoices.api';
 import InvoiceButton from '../components/InvoiceButton';
 import EmitirBorradorDialog from '../components/EmitirBorradorDialog';
@@ -299,7 +299,14 @@ export default function InvoicesPage() {
                           <CheckCircle size={11} weight="bold" /> Validar y emitir
                         </button>
                       )}
-                      {inv.estado !== 'borrador' && inv.estado !== 'pagada' && inv.estado !== 'cancelada' && inv.cliente_email && (
+                      {inv.estado !== 'borrador' && inv.estado !== 'cancelada' && inv.tipo !== 'proforma' && invoiceFaltantes(inv).length > 0 && (
+                        <button onClick={() => setEmittingInv(inv)}
+                          title={`Para descargar/enviar debes rellenar: ${invoiceFaltantes(inv).join(', ')}`}
+                          className="h-7 px-2 rounded bg-amber-500 text-white text-[11px] font-semibold hover:bg-amber-600 inline-flex items-center gap-1">
+                          <CheckCircle size={11} weight="bold" /> Completar datos
+                        </button>
+                      )}
+                      {inv.estado !== 'borrador' && inv.estado !== 'pagada' && inv.estado !== 'cancelada' && inv.cliente_email && invoiceFaltantes(inv).length === 0 && (
                         <button onClick={() => send(inv)} disabled={sending === inv.id}
                           title="Enviar por email"
                           className="h-7 px-2 rounded border border-border text-[11px] hover:bg-muted inline-flex items-center gap-1 disabled:opacity-50">

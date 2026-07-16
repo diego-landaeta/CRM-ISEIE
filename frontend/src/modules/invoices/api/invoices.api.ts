@@ -192,6 +192,8 @@ export const invoicesApi = {
   /** Validar y emitir un borrador (opcionalmente completando datos del cliente). */
   emitir: (id: number, patch?: Partial<{ clienteNombre: string; clienteNif: string; clienteDireccion: string; clienteCiudad: string; clienteCp: string; clientePais: string; clienteEmail: string | null; clienteTelefono: string | null }>) => client.post<Invoice>(`/invoices/${id}/emitir`, patch || {}),
   getOne: (id: number) => client.get<Invoice>(`/invoices/${id}`),
+  /** Completar datos fiscales del cliente en una factura YA emitida (auto-emitida al pagar). */
+  completarDatos: (id: number, patch: Partial<{ clienteNombre: string; clienteNif: string; clienteDireccion: string; clienteCiudad: string; clienteCp: string; clientePais: string; clienteEmail: string | null; clienteTelefono: string | null }>) => client.post<Invoice>(`/invoices/${id}/completar-datos`, patch),
   listIssuers: (projectId: number) => client.get<Issuer[]>(`/invoices/issuers?projectId=${projectId}`),
   createIssuer: (body: Partial<Issuer> & { razonSocial: string; nif: string; projectId?: number | null }) => client.post<Issuer>('/invoices/issuers', body),
   updateIssuer: (id: number, body: Record<string, unknown>) => client.patch<Issuer>(`/invoices/issuers/${id}`, body),
@@ -226,3 +228,17 @@ export const invoicesApi = {
   listSequences: (projectId: number) => client.get<InvoiceSequence[]>(`/invoices/sequences?projectId=${projectId}`),
   setSequence: (body: { projectId: number; ano: number; serie: string; ultimoNumero: number }) => client.post('/invoices/sequences', body),
 };
+
+// Helper (frontend): campos fiscales del cliente que faltan en una factura.
+// Espeja invoiceFaltantes del backend ('—' = placeholder de vacio).
+export function invoiceFaltantes(inv: Partial<Invoice>): string[] {
+  const vacio = (v?: string | null) => !v || String(v).trim() === '' || String(v).trim() === '—';
+  const faltan: string[] = [];
+  if (vacio(inv.cliente_nombre)) faltan.push('nombre');
+  if (vacio(inv.cliente_nif)) faltan.push('NIF/DNI');
+  if (vacio(inv.cliente_direccion)) faltan.push('dirección');
+  if (vacio(inv.cliente_ciudad)) faltan.push('ciudad');
+  if (vacio(inv.cliente_cp)) faltan.push('código postal');
+  if (vacio(inv.cliente_pais)) faltan.push('país');
+  return faltan;
+}

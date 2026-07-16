@@ -43,5 +43,6 @@ router.post('/:id/mark-paid',         ctrl.markPaid);
 router.post('/:id/cancel',            ctrl.cancel);
 router.post('/:id/rectificar',        ctrl.rectificar);
 router.post('/:id/emitir',            ctrl.emitir);
+router.post('/:id/completar-datos',   ctrl.completarDatos);
 
 export default router;

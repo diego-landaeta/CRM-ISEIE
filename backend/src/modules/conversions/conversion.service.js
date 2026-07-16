@@ -63,7 +63,20 @@ export async function create(data, userId) {
   // Hook: disparar email sequences con trigger conversion_created
   triggerSequences('conversion_created', data.lead_id, data.project_id);
 
+  // Auto-factura: si la venta entra YA con pago, se emite factura numerada.
+  if (Number(data.importe_pagado || 0) > 0) autoInvoice(conv.id, userId);
+
   return conv;
+}
+
+// Auto-emisión de factura al registrar un pago (spec owner 2026-07-15): en
+// cuanto entra un pago, la conversión debe quedar con factura EMITIDA y su
+// correlativo. No bloqueante: si falla se loguea y el pago sigue su curso.
+export function autoInvoice(conversionId, userId = null) {
+  import('../invoices/invoices.model.js')
+    .then((m) => m.autoEmitirPorPago(conversionId, userId))
+    .then((inv) => { if (inv?.codigo) logger.info({ conversionId, invoiceId: inv.id, codigo: inv.codigo }, 'auto-factura por pago'); })
+    .catch((err) => logger.warn({ err: err.message, conversionId }, 'auto-factura por pago falló (no bloqueante)'));
 }
 
 export async function getById(id) {
@@ -102,6 +115,8 @@ export async function addPayment(conversionId, data) {
   commissionModel.recalculateCommission(conversionId).catch(err =>
     logger.warn({ err: err.message, conversionId }, 'recalculateCommission failed (non-blocking)')
   );
+  // Auto-factura al registrar el abono (si aún no existe, se emite numerada).
+  autoInvoice(conversionId);
   return result;
 }
 

@@ -4,11 +4,17 @@ import Select from '@/shared/components/ui/Select';
 import { X, Link as LinkIcon, Copy, CheckCircle, Receipt, FileText } from '@phosphor-icons/react';
 import { conversionsApi, type Conversion, type MetodoPago } from '../api/conversions.api';
 import { useProducts } from '@/modules/products/hooks/useProducts';
-import { invoicesApi, type InvoiceItem } from '@/modules/invoices/api/invoices.api';
+import { invoicesApi, invoiceFaltantes, type Invoice, type InvoiceItem } from '@/modules/invoices/api/invoices.api';
 import { toast } from '@/shared/hooks/useToast';
 import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
 
 const FiscalDataDialog = lazy(() => import('@/modules/invoices/components/FiscalDataDialog'));
+const EmitirBorradorDialog = lazy(() => import('@/modules/invoices/components/EmitirBorradorDialog'));
+
+// Flujo nuevo de facturación (ventana Presupuesto/Factura + auto-emisión al
+// pagar) SOLO en entornos con VITE_FACTURACION_V2=true (staging). En producción
+// la conversión se registra y cierra como siempre, sin ventana.
+const FACT_V2 = String(import.meta.env.VITE_FACTURACION_V2 || '') === 'true';
 
 // Construye los conceptos del documento a partir de la conversión creada.
 function buildDocItems(c: Conversion): InvoiceItem[] {
@@ -100,6 +106,8 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
   // Paso post-venta: tras registrar la conversión, ofrecer generar Presupuesto/Factura + PDF.
   const [created, setCreated] = useState<Conversion | null>(null);
   const [docPhase, setDocPhase] = useState<'idle' | 'choose' | 'factura' | 'proforma'>('idle');
+  // Factura ya emitida automáticamente por el pago → diálogo de completar datos.
+  const [emitInv, setEmitInv] = useState<Invoice | null>(null);
   const notifiedRef = useRef(false);
   // Notifica al padre (refresca su lista) UNA sola vez y cierra. Se usa en X, backdrop, Esc y "Ahora no".
   const finishAndClose = () => {
@@ -125,7 +133,7 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
   }, []);
   // Al cerrar, resetea el paso de documento para que una próxima apertura arranque limpia.
   useEffect(() => {
-    if (!open) { setDocPhase('idle'); setCreated(null); notifiedRef.current = false; }
+    if (!open) { setDocPhase('idle'); setCreated(null); setEmitInv(null); notifiedRef.current = false; }
   }, [open]);
   const [form, setForm] = useState<ConversionForm>({
     producto_contratado: '',
@@ -240,6 +248,42 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
 
   if (!open) return null;
 
+  // Elegir "Factura" en el paso post-venta: si el pago YA generó la factura
+  // automática (con número), no se crea otra — se completa/descarga esa.
+  async function handleFacturaChoice() {
+    if (!created) { setDocPhase('factura'); return; }
+    try {
+      let inv = (await invoicesApi.byConversion(created.id)).data || null;
+      if (!inv && pagoMode !== 'none') {
+        // la auto-emisión corre asíncrona en el server: pequeño reintento
+        await new Promise((r) => setTimeout(r, 900));
+        inv = (await invoicesApi.byConversion(created.id)).data || null;
+      }
+      if (inv) {
+        if (inv.estado === 'borrador' || invoiceFaltantes(inv).length > 0) { setEmitInv(inv); return; }
+        toast({ title: `✓ Factura ${inv.codigo}`, description: 'Emitida automáticamente al registrar el pago.' });
+        window.open(invoicesApi.pdfUrl(inv.id), '_blank');
+        finishAndClose();
+        return;
+      }
+    } catch { /* si falla la consulta, seguimos al modal normal */ }
+    setDocPhase('factura');
+  }
+
+  // Paso 2c: la factura ya existe (auto-emitida al pagar) pero le faltan datos →
+  // alerta para completarlos (desbloquea descargar/enviar).
+  if (emitInv) {
+    return (
+      <Suspense fallback={null}>
+        <EmitirBorradorDialog
+          invoice={emitInv}
+          onClose={() => { setEmitInv(null); finishAndClose(); }}
+          onEmitted={(_codigo, id) => { window.open(invoicesApi.pdfUrl(id), '_blank'); setEmitInv(null); finishAndClose(); }}
+        />
+      </Suspense>
+    );
+  }
+
   // Paso 2b: documento fiscal (Factura o Presupuesto) — reemplaza por completo el modal de conversión.
   if ((docPhase === 'factura' || docPhase === 'proforma') && created) {
     return (
@@ -348,10 +392,15 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
           }
         }
         toast({ title: 'Conversion registrada', description: `${form.producto_contratado} - ${form.importe_total}EUR` });
-        // No cerramos aún: ofrecemos generar un documento (Presupuesto/Factura) + PDF.
-        // onCreated (refresco del padre) se dispara en finishAndClose, al terminar u omitir.
-        setCreated(res.data);
-        setDocPhase('choose');
+        if (!FACT_V2) {
+          // Producción (flujo clásico): registrar y cerrar, sin ventana de documento.
+          onCreated?.(res.data);
+          onClose();
+        } else {
+          // Staging (flujo nuevo): ofrecer Presupuesto/Factura + PDF.
+          setCreated(res.data);
+          setDocPhase('choose');
+        }
       }
     } catch (err: any) {
       toast({
@@ -397,7 +446,7 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
                   <span className="text-sm font-semibold">Presupuesto</span>
                   <span className="text-[10px] text-muted-foreground">Sin valor fiscal</span>
                 </button>
-                <button type="button" onClick={() => setDocPhase('factura')}
+                <button type="button" onClick={handleFacturaChoice}
                   className="flex flex-col items-center gap-2 p-4 rounded-lg border border-border bg-card hover:border-primary hover:bg-muted/50 transition">
                   <Receipt size={24} weight="duotone" className="text-primary" />
                   <span className="text-sm font-semibold">Factura</span>

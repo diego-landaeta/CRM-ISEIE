@@ -17,9 +17,12 @@ function F({ label, value, onChange }: { label: string; value: string; onChange:
   );
 }
 
-// Diálogo "Validar y emitir": alerta de qué falta, permite completar los datos
-// fiscales del cliente y emite (asigna número fiscal correlativo).
+// Diálogo doble uso:
+// - BORRADOR → "Validar y emitir" (asigna número fiscal correlativo).
+// - EMITIDA con datos incompletos (auto-emitida al pagar) → "Completar datos"
+//   (la factura YA tiene número; esto desbloquea descargar/enviar).
 export default function EmitirBorradorDialog({ invoice, onClose, onEmitted }: { invoice: Invoice; onClose: () => void; onEmitted: (codigo: string, id: number) => void }) {
+  const esBorrador = invoice.estado === 'borrador';
   const limpio = (v?: string | null) => (!v || String(v).trim() === '—' ? '' : String(v));
   const [nombre, setNombre] = useState(limpio(invoice.cliente_nombre));
   const [nif, setNif] = useState(limpio(invoice.cliente_nif));
@@ -38,10 +41,13 @@ export default function EmitirBorradorDialog({ invoice, onClose, onEmitted }: { 
     }
     setWorking(true);
     try {
-      const res = await invoicesApi.emitir(invoice.id, {
+      const payload = {
         clienteNombre: nombre.trim(), clienteNif: nif.trim(), clienteDireccion: direccion.trim(),
         clienteCiudad: ciudad.trim(), clienteCp: cp.trim(), clientePais: pais.trim(),
-      });
+      };
+      const res = esBorrador
+        ? await invoicesApi.emitir(invoice.id, payload)
+        : await invoicesApi.completarDatos(invoice.id, payload);
       if (res.success && res.data) onEmitted(res.data.codigo || '', invoice.id);
       else toast({ title: 'Error', description: (res as { error?: string }).error || 'No se pudo emitir', variant: 'destructive' });
     } catch (e: unknown) {
@@ -54,15 +60,17 @@ export default function EmitirBorradorDialog({ invoice, onClose, onEmitted }: { 
     <div className="fixed inset-0 z-[80] bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-card rounded-lg shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="p-4 border-b border-border">
-          <h3 className="font-semibold text-base">Validar y emitir factura</h3>
+          <h3 className="font-semibold text-base">{esBorrador ? 'Validar y emitir factura' : `Completar datos — Factura Nº ${invoice.codigo || ''}`}</h3>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Borrador de <strong>{limpio(invoice.cliente_nombre) || 'cliente'}</strong> · {fmt(Number(invoice.total))}. Al emitir se asigna el número fiscal.
+            {esBorrador
+              ? <>Borrador de <strong>{limpio(invoice.cliente_nombre) || 'cliente'}</strong> · {fmt(Number(invoice.total))}. Al emitir se asigna el número fiscal.</>
+              : <>La factura ya tiene su número. Rellena los datos del cliente para poder <strong>descargarla o enviarla</strong>.</>}
           </p>
         </div>
         <div className="p-4 space-y-3 text-sm">
           {!completo && (
             <div className="text-[11px] rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 px-3 py-2">
-              ⚠️ Para emitir la factura debes rellenar estos datos (marcados en ámbar).
+              ⚠️ Para {esBorrador ? 'emitir' : 'descargar o enviar'} la factura debes rellenar estos datos (marcados en ámbar).
             </div>
           )}
           <F label="Nombre" value={nombre} onChange={setNombre} />
@@ -80,7 +88,7 @@ export default function EmitirBorradorDialog({ invoice, onClose, onEmitted }: { 
           <button onClick={onClose} className="h-9 px-3 rounded-md border border-border bg-card text-sm">Cancelar</button>
           <button onClick={emitir} disabled={working || !completo}
             className="h-9 px-3 rounded-md bg-amber-500 text-white text-sm font-semibold hover:bg-amber-600 disabled:opacity-50 inline-flex items-center gap-1.5">
-            <CheckCircle size={14} weight="bold" /> {working ? 'Emitiendo…' : 'Validar y emitir'}
+            <CheckCircle size={14} weight="bold" /> {working ? 'Guardando…' : (esBorrador ? 'Validar y emitir' : 'Guardar y desbloquear')}
           </button>
         </div>
       </div>
