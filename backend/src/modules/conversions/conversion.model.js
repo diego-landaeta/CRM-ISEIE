@@ -178,6 +178,21 @@ export async function findById(id) {
     [id]
   );
   conversion.payments = payments;
+
+  // Cuotas (plan de pago fraccionado) con la factura de la cuota ya cobrada.
+  const { rows: installments } = await query(
+    `SELECT ci.id, ci.numero, ci.importe_previsto, ci.fecha_vencimiento,
+            ci.fecha_cobro, ci.importe_cobrado, ci.metodo, ci.payment_id,
+            i.id AS factura_id, i.codigo AS factura_codigo, i.estado AS factura_estado,
+            i.tipo AS factura_tipo, i.cliente_nif, i.cliente_direccion, i.cliente_ciudad,
+            i.cliente_cp, i.cliente_pais
+       FROM conversion_installments ci
+       LEFT JOIN invoices i ON i.payment_id = ci.payment_id AND i.estado <> 'cancelada'
+      WHERE ci.conversion_id = $1
+      ORDER BY ci.numero ASC`,
+    [id]
+  );
+  conversion.installments = installments;
   return conversion;
 }
 

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { conversionsApi, type Conversion, type Payment, type Refund } from '../api/conversions.api';
+import { conversionsApi, type Conversion, type Payment, type Refund, type Installment } from '../api/conversions.api';
 import { toast } from '@/shared/hooks/useToast';
 import ConversionDialog from './ConversionDialog';
 import PaymentDialog from './PaymentDialog';
@@ -41,6 +41,7 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
   const [deleteMotivo, setDeleteMotivo] = useState<string>('');
   const [refundsByConv, setRefundsByConv] = useState<Record<number, Refund[]>>({});
   const [sendInvoiceDialog, setSendInvoiceDialog] = useState<Invoice | null>(null);
+  const [installmentsReload, setInstallmentsReload] = useState(0);
 
   // Tras registrar un pago: si la conversion tiene factura emitida y aún no
   // enviada, ofrecer enviarla por email (con confirmación, no automático).
@@ -327,8 +328,16 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
                   </div>
                 </div>
 
-                {/* Pagos */}
-                {c.payments_count > 0 && (
+                {/* Fraccionado → plan de cuotas (vencimientos + factura por cuota).
+                    Resto → lista de pagos registrados con su factura. */}
+                {c.metodo_pago === 'fraccionado' ? (
+                  <CuotasInline
+                    conversionId={c.id}
+                    canManage={canManage}
+                    refreshKey={installmentsReload}
+                    onManage={() => setInstallmentsDialogConv(c)}
+                  />
+                ) : c.payments_count > 0 && (
                   <details className="text-xs">
                     <summary className="cursor-pointer text-muted-foreground hover:text-foreground font-semibold">
                       Ver {c.payments_count} pago{c.payments_count !== 1 ? 's' : ''} registrado{c.payments_count !== 1 ? 's' : ''}
@@ -465,7 +474,7 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
       <InstallmentsDialog
         conversion={installmentsDialogConv}
         onClose={() => setInstallmentsDialogConv(null)}
-        onSaved={() => load()}
+        onSaved={() => { load(); setInstallmentsReload((k) => k + 1); }}
       />
       <EditConversionDialog
         conversion={editDialogConv}
@@ -505,7 +514,7 @@ function PaymentsList({ conversionId, onDelete, canManage }: PaymentsListProps) 
           </div>
           <div className="flex items-center gap-1.5 flex-shrink-0">
             {/* Factura de ESTE pago */}
-            <PaymentInvoiceCell payment={p} onChanged={reload} />
+            <PaymentInvoiceCell src={p} onChanged={reload} />
             {canManage && (
               <button onClick={() => onDelete(p.id)} className="text-muted-foreground hover:text-red-600 p-0.5" title="Eliminar pago">
                 <Trash size={12} weight="bold" />
@@ -518,32 +527,45 @@ function PaymentsList({ conversionId, onDelete, canManage }: PaymentsListProps) 
   );
 }
 
-// Muestra la factura correspondiente a un pago concreto:
+// Campos de factura que trae tanto un pago como una cuota cobrada.
+interface FacturaSrc {
+  factura_id?: number | null;
+  factura_codigo?: string | null;
+  factura_estado?: string | null;
+  factura_tipo?: string | null;
+  cliente_nif?: string | null;
+  cliente_direccion?: string | null;
+  cliente_ciudad?: string | null;
+  cliente_cp?: string | null;
+  cliente_pais?: string | null;
+}
+
+// Muestra la factura correspondiente a un pago/cuota concreto:
 // - completa → "Nº X" abre el PDF.
 // - con datos faltantes → "Nº X · faltan datos" abre el diálogo para completarlos.
-// - sin factura (pagos antiguos) → nada.
-function PaymentInvoiceCell({ payment, onChanged }: { payment: Payment; onChanged: () => void }) {
+// - sin factura → nada.
+function PaymentInvoiceCell({ src, onChanged }: { src: FacturaSrc; onChanged: () => void }) {
   const [emitOpen, setEmitOpen] = useState(false);
   const [inv, setInv] = useState<Invoice | null>(null);
 
-  if (!payment.factura_id) return null;
-  const isProforma = payment.factura_tipo === 'proforma';
-  const isDraft = payment.factura_estado === 'borrador';
+  if (!src.factura_id) return null;
+  const isProforma = src.factura_tipo === 'proforma';
+  const isDraft = src.factura_estado === 'borrador';
   const noVal = (v?: string | null) => !v || String(v).trim() === '' || String(v).trim() === '—';
   const faltan = isProforma ? [] : [
-    ['NIF', payment.cliente_nif], ['dirección', payment.cliente_direccion],
-    ['ciudad', payment.cliente_ciudad], ['CP', payment.cliente_cp], ['país', payment.cliente_pais],
+    ['NIF', src.cliente_nif], ['dirección', src.cliente_direccion],
+    ['ciudad', src.cliente_ciudad], ['CP', src.cliente_cp], ['país', src.cliente_pais],
   ].filter(([, v]) => noVal(v as string)).map(([k]) => k);
   const incompleta = !isDraft && faltan.length > 0;
   const warn = isDraft || incompleta;
 
   async function onClick() {
     if (warn) {
-      const res = await invoicesApi.getOne(payment.factura_id!);
+      const res = await invoicesApi.getOne(src.factura_id!);
       if (res.success && res.data) { setInv(res.data); setEmitOpen(true); }
       return;
     }
-    invoicesApi.openPdf(payment.factura_id!).catch((e: unknown) =>
+    invoicesApi.openPdf(src.factura_id!).catch((e: unknown) =>
       toast({ title: 'No se pudo abrir el PDF', description: (e as { message?: string })?.message, variant: 'destructive' }));
   }
 
@@ -551,13 +573,13 @@ function PaymentInvoiceCell({ payment, onChanged }: { payment: Payment; onChange
     <>
       <button
         onClick={onClick}
-        title={warn ? 'Faltan datos: complétalos para descargar/enviar' : `Ver factura ${payment.factura_codigo || ''}`}
+        title={warn ? 'Faltan datos: complétalos para descargar/enviar' : `Ver factura ${src.factura_codigo || ''}`}
         className={`inline-flex items-center gap-1 h-6 px-2 rounded text-[10px] font-semibold border ${
           warn ? 'border-amber-400 bg-amber-50 text-amber-800 dark:bg-amber-950/30 dark:text-amber-300'
                : 'border-border bg-card hover:bg-muted'}`}
       >
         {warn ? <Warning size={11} weight="bold" /> : <Receipt size={11} weight="bold" />}
-        {isDraft ? 'BORRADOR' : `Nº ${payment.factura_codigo || ''}`}{incompleta ? ' · faltan datos' : ''}
+        {isDraft ? 'BORRADOR' : `Nº ${src.factura_codigo || ''}`}{incompleta ? ' · faltan datos' : ''}
       </button>
       {emitOpen && inv && (
         <EmitirBorradorDialog
@@ -572,5 +594,72 @@ function PaymentInvoiceCell({ payment, onChanged }: { payment: Payment; onChange
         />
       )}
     </>
+  );
+}
+
+// Plan de cuotas de una conversión fraccionada. Muestra cada cuota con su
+// vencimiento; las pagadas muestran su factura (una por cuota); las pendientes
+// permiten registrar el pago (abre el diálogo de cuotas, que crea el pago +
+// su factura al cobrar). Los pagos pueden ir en cualquier orden.
+function CuotasInline({ conversionId, canManage, refreshKey, onManage }:
+  { conversionId: number; canManage?: boolean; refreshKey: number; onManage: () => void }) {
+  const [cuotas, setCuotas] = useState<Installment[] | null>(null);
+
+  const reload = () => conversionsApi.getById(conversionId).then((res) => {
+    if (res.success && res.data) setCuotas(res.data.installments || []);
+  });
+  useEffect(() => { reload(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [conversionId, refreshKey]);
+
+  if (!cuotas) return <div className="mt-3 text-xs text-muted-foreground">Cargando cuotas…</div>;
+  if (cuotas.length === 0) return null;
+
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+  const pagadas = cuotas.filter((q) => q.fecha_cobro).length;
+
+  return (
+    <div className="mt-3 border-t border-border pt-3">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-[10px] font-bold uppercase text-muted-foreground flex items-center gap-1">
+          <Coins size={12} weight="bold" /> Plan de cuotas — {pagadas}/{cuotas.length} pagadas
+        </span>
+        {canManage && (
+          <button onClick={onManage} className="text-[11px] text-primary hover:underline">Gestionar cuotas</button>
+        )}
+      </div>
+      <ul className="space-y-1">
+        {cuotas.map((q) => {
+          const pagada = !!q.fecha_cobro;
+          const vence = q.fecha_vencimiento ? new Date(q.fecha_vencimiento) : null;
+          const vencida = !pagada && vence !== null && vence < hoy;
+          return (
+            <li key={q.id} className="flex items-center justify-between gap-2 rounded px-2 py-1.5 text-xs bg-muted/30">
+              <div className="min-w-0 flex items-center gap-2 flex-wrap">
+                <span className="inline-flex items-center justify-center min-w-[22px] h-[18px] px-1 rounded bg-primary/10 text-primary font-bold text-[10px]">#{q.numero}</span>
+                <span className="font-semibold tabular-nums">{formatCurrency(Number(pagada ? (q.importe_cobrado ?? q.importe_previsto) : q.importe_previsto))}</span>
+                {pagada ? (
+                  <span className="text-green-600 dark:text-green-400 inline-flex items-center gap-1">
+                    <CheckCircle size={11} weight="fill" /> Pagada {formatDate(q.fecha_cobro!)}
+                  </span>
+                ) : (
+                  <span className={vencida ? 'text-red-600 dark:text-red-400 font-medium' : 'text-muted-foreground'}>
+                    Vence {formatDate(q.fecha_vencimiento)}{vencida ? ' · vencida' : ''}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                {pagada ? (
+                  <PaymentInvoiceCell src={q} onChanged={reload} />
+                ) : canManage && (
+                  <button onClick={onManage}
+                    className="inline-flex items-center gap-1 h-6 px-2 rounded text-[10px] font-semibold border border-primary/40 bg-primary/10 text-primary hover:bg-primary/20">
+                    <CreditCard size={11} weight="bold" /> Registrar pago
+                  </button>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }

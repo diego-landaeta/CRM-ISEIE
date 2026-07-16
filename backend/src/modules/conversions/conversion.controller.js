@@ -167,8 +167,12 @@ export async function payInstallment(req, res, next) {
     if (!fecha_cobro) throw new AppError('fecha_cobro requerida', 400, 'INVALID');
     const r = await installmentsModel.markPaid(instId, { fecha_cobro, importe_cobrado, metodo, notas });
     if (!r) throw new AppError('Cuota no encontrada', 404, 'NOT_FOUND');
-    // Auto-factura: cobrar una cuota también es un pago.
-    if (r.conversion_id) conversionService.autoInvoice(r.conversion_id, req.user?.userId || null);
+    // Auto-factura POR PAGO: cobrar una cuota genera su factura por el importe
+    // de ESA cuota (no una general por el total).
+    if (r.conversion_id && r.payment_id) {
+      conversionService.autoInvoice(r.conversion_id, req.user?.userId || null,
+        { paymentId: r.payment_id, importe: Number(r.importe_cobrado) });
+    }
     res.json({ success: true, data: r });
   } catch (err) {
     if (err.message === 'Cuota ya cobrada') return next(new AppError(err.message, 400, 'ALREADY_PAID'));

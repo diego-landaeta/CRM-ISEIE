@@ -36,6 +36,7 @@ export interface Conversion {
   notas_pago?: string | null;
   payments_count?: number;
   payments?: Payment[];
+  installments?: Installment[];
   lead_nombre?: string;
   product_nombre?: string;
   created_at?: string;
@@ -50,6 +51,28 @@ export interface Conversion {
   iva_importe?: number | string | null;
   iva_incluido?: boolean;
   iva_exento?: boolean;
+}
+
+// Cuota de un plan de pago fraccionado. Cuando se cobra, se enlaza a un pago
+// (payment_id) y ese pago genera su factura (factura_*).
+export interface Installment {
+  id: number;
+  numero: number;
+  importe_previsto: number | string;
+  fecha_vencimiento: string;
+  fecha_cobro?: string | null;
+  importe_cobrado?: number | string | null;
+  metodo?: string | null;
+  payment_id?: number | null;
+  factura_id?: number | null;
+  factura_codigo?: string | null;
+  factura_estado?: string | null;
+  factura_tipo?: string | null;
+  cliente_nif?: string | null;
+  cliente_direccion?: string | null;
+  cliente_ciudad?: string | null;
+  cliente_cp?: string | null;
+  cliente_pais?: string | null;
 }
 
 export interface ConversionItem {
