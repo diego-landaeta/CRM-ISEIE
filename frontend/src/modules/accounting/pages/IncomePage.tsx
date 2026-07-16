@@ -30,6 +30,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
   const [reloadKey, setReloadKey] = useState(0);
   const [viewUserId, setViewUserId] = useState('all');
   const [gestores, setGestores] = useState([]);
+  const [filterCurso, setFilterCurso] = useState('all');
   const effectiveResponsableId = isAdmin ? (viewUserId === 'all' ? null : Number(viewUserId)) : null;
 
   useEffect(() => {
@@ -54,10 +55,14 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
     })();
   }, [activeProject?.id, reloadKey, effectiveResponsableId]);
 
-  const totalFacturado = items.reduce((s, r) => s + Number(r.importe_total || 0), 0);
-  const totalCobrado = items.reduce((s, r) => s + Number(r.importe_pagado || 0), 0);
+  // Cursos únicos para el filtro por producto.
+  const cursos = [...new Set(items.map((r) => (r.producto_contratado || '').trim()).filter(Boolean))].sort();
+  const visibleItems = filterCurso === 'all' ? items : items.filter((r) => (r.producto_contratado || '').trim() === filterCurso);
+
+  const totalFacturado = visibleItems.reduce((s, r) => s + Number(r.importe_total || 0), 0);
+  const totalCobrado = visibleItems.reduce((s, r) => s + Number(r.importe_pagado || 0), 0);
   // IVA aproximado: usa el iva_importe de la conversión si existe; si no, estima 21% (IVA incluido).
-  const ivaAprox = items.reduce((s, r) => s + (Number(r.iva_importe) || (Number(r.importe_total || 0) * 0.21 / 1.21)), 0);
+  const ivaAprox = visibleItems.reduce((s, r) => s + (Number(r.iva_importe) || (Number(r.importe_total || 0) * 0.21 / 1.21)), 0);
 
   return (
     <div className="space-y-5 pb-8">
@@ -87,24 +92,41 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
         />
       </Suspense>
 
-      {isAdmin && gestores.length > 0 && (
+      {((isAdmin && gestores.length > 0) || cursos.length > 1) && (
         <div className="bg-card border border-border rounded-lg p-3 flex items-center gap-3 flex-wrap">
-          <label className="text-xs font-semibold text-muted-foreground">Ver ventas de:</label>
-          <select
-            value={viewUserId}
-            onChange={(e) => setViewUserId(e.target.value)}
-            className="h-9 px-3 rounded-md border border-border bg-card text-sm font-medium min-w-[200px]"
-          >
-            <option value="all">— Todas (vista general) —</option>
-            {gestores.map((g) => (
-              <option key={g.user_id} value={g.user_id}>
-                {g.nombre} · {g.role} ({g.ventas} venta{g.ventas === 1 ? '' : 's'})
-              </option>
-            ))}
-          </select>
-          {viewUserId !== 'all' && (
-            <button type="button" onClick={() => setViewUserId('all')} className="text-[11px] text-primary hover:underline">
-              Quitar filtro
+          {isAdmin && gestores.length > 0 && (
+            <>
+              <label className="text-xs font-semibold text-muted-foreground">Ver ventas de:</label>
+              <select
+                value={viewUserId}
+                onChange={(e) => setViewUserId(e.target.value)}
+                className="h-9 px-3 rounded-md border border-border bg-card text-sm font-medium min-w-[200px]"
+              >
+                <option value="all">— Todas (vista general) —</option>
+                {gestores.map((g) => (
+                  <option key={g.user_id} value={g.user_id}>
+                    {g.nombre} · {g.role} ({g.ventas} venta{g.ventas === 1 ? '' : 's'})
+                  </option>
+                ))}
+              </select>
+            </>
+          )}
+          {cursos.length > 1 && (
+            <>
+              <label className="text-xs font-semibold text-muted-foreground">Curso:</label>
+              <select
+                value={filterCurso}
+                onChange={(e) => setFilterCurso(e.target.value)}
+                className="h-9 px-3 rounded-md border border-border bg-card text-sm font-medium min-w-[200px] max-w-[320px]"
+              >
+                <option value="all">— Todos los cursos —</option>
+                {cursos.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </>
+          )}
+          {(viewUserId !== 'all' || filterCurso !== 'all') && (
+            <button type="button" onClick={() => { setViewUserId('all'); setFilterCurso('all'); }} className="text-[11px] text-primary hover:underline">
+              Quitar filtros
             </button>
           )}
         </div>
@@ -115,7 +137,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
           icon={Receipt}
           iconBg="bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400"
           label="Conversiones"
-          numericValue={items.length}
+          numericValue={visibleItems.length}
         />
         <KpiCard
           icon={CurrencyEur}
@@ -157,7 +179,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
 
       {loading ? (
         <SkeletonTable rows={5} columns={6} />
-      ) : items.length === 0 ? (
+      ) : visibleItems.length === 0 ? (
         <div className="bg-card border border-border rounded-lg overflow-hidden">
           <EmptyState icon={CurrencyEur} title="Sin ventas" description="Las conversiones aparecerán aquí cuando un lead compre" />
         </div>
@@ -178,9 +200,9 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
                 </tr>
               </thead>
               <tbody>
-                {items.map(r => (
+                {visibleItems.map(r => (
                   <tr key={r.id} className="border-b last:border-0 hover:bg-muted/30 cursor-pointer" onClick={() => navigate(`/prospectos/${r.lead_id}`)}>
-                    <td className="px-4 py-3 text-muted-foreground">{formatDate(r.fecha_compra)}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{formatDate(r.fecha_conversion || r.fecha_compra)}</td>
                     <td className="px-4 py-3 font-semibold">{r.lead_nombre}</td>
                     <td className="px-4 py-3">{r.producto_contratado}</td>
                     <td className="px-4 py-3 text-right tabular-nums">{fmt(r.importe_total)}</td>
@@ -201,7 +223,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
 
           {/* Mobile cards */}
           <div className="md:hidden divide-y divide-border">
-            {items.map(r => (
+            {visibleItems.map(r => (
               <button key={r.id} type="button" onClick={() => navigate(`/prospectos/${r.lead_id}`)} className="w-full text-left p-4 space-y-2 hover:bg-muted/30 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -215,7 +237,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
                   }`}>{r.estado_pago}</span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
-                  <div className="text-xs text-muted-foreground">{formatDate(r.fecha_compra)}</div>
+                  <div className="text-xs text-muted-foreground">{formatDate(r.fecha_conversion || r.fecha_compra)}</div>
                   <div className="flex items-center gap-3">
                     <span className="tabular-nums text-green-600 dark:text-green-400">{fmt(r.importe_pagado)}</span>
                     <span className="text-muted-foreground">/</span>
