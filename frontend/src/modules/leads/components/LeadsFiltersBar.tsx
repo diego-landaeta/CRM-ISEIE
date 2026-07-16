@@ -268,6 +268,14 @@ export default function LeadsFiltersBar(props: Props) {
                   <QuickChip active={quickFilter === 'no-contact'} onClick={() => setQuickFilter('no-contact')}
                     label="Sin contacto" count={quickCounts.noContact} tone="default" />
                 </div>
+                <p className="text-[10px] text-muted-foreground mt-1.5 px-0.5">
+                  Se aplican sobre los resultados ya cargados. «Necesitan acción hoy» y «Sin contacto» no se combinan con el filtro «Estado».
+                </p>
+                {(quickFilter === 'urgent' || quickFilter === 'no-contact') && filterEstado && (
+                  <div className="mt-1.5 text-[11px] rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 px-2.5 py-1.5">
+                    ⚠️ «{QUICK_LABELS[quickFilter] || quickFilter}» y «Estado» están activos a la vez y se contradicen — quita uno de los dos.
+                  </div>
+                )}
               </Section>
 
               {isAdmin && (

@@ -138,7 +138,6 @@ export default function LeadsPage() {
     filterOrigen, setFilterOrigen,
     filterResponsable, setFilterResponsable,
     filterProducto, setFilterProducto,
-    selectedProjectIds, setSelectedProjectIds,
     dateFrom, dateTo, setDateRange,
     sortMode, setSortMode,
     filterDup, setFilterDup,
@@ -200,12 +199,37 @@ export default function LeadsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [quickFilter, setQuickFilterState] = useState(searchParams.get('qf') || ''); // '' | 'urgent' | 'overdue' | 'today' | 'no-contact'
 
-  // Sincronizar filtro con URL para deep-linking desde el Dashboard
+  // Filtros rápidos que YA filtran por estado internamente → no se combinan
+  // con el filtro "Estado" (se desactiva el otro y se avisa).
+  const QF_INCOMPATIBLE_ESTADO = { urgent: 'Necesitan acción hoy', 'no-contact': 'Sin contacto' };
+
+  // Sincronizar filtro con URL para deep-linking desde el Dashboard.
+  // BUGFIX: antes hacía setSearchParams({qf}) y BORRABA el resto de filtros de
+  // la URL (estado, gestor, fechas, búsqueda...) — por eso "se mezclaban".
   function setQuickFilter(v) {
     setQuickFilterState(v);
     setSelectedIds([]);
-    if (v) setSearchParams({ qf: v }, { replace: true });
-    else setSearchParams({}, { replace: true });
+    const clearEstado = !!(v && QF_INCOMPATIBLE_ESTADO[v] && filterEstado);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (v) next.set('qf', v); else next.delete('qf');
+      if (clearEstado) next.delete('estado');
+      return next;
+    }, { replace: true, preventScrollReset: true });
+    if (clearEstado) {
+      toast({ title: 'Filtro "Estado" desactivado', description: `"${QF_INCOMPATIBLE_ESTADO[v]}" ya filtra por estado — no pueden estar activos a la vez.` });
+    }
+  }
+
+  // Al fijar "Estado" con un filtro rápido incompatible activo → se apaga el rápido y se avisa.
+  function setFilterEstadoSafe(v) {
+    if (v && QF_INCOMPATIBLE_ESTADO[quickFilter]) {
+      const label = QF_INCOMPATIBLE_ESTADO[quickFilter];
+      setQuickFilterState('');
+      setSearchParams((prev) => { const n = new URLSearchParams(prev); n.delete('qf'); return n; }, { replace: true, preventScrollReset: true });
+      toast({ title: `Filtro rápido "${label}" desactivado`, description: 'No puede estar activo junto al filtro "Estado".' });
+    }
+    setFilterEstado(v);
   }
 
   // CRM-147: quick-add via ?new=1 (lo dispara el FAB de atajos).
@@ -582,7 +606,7 @@ export default function LeadsPage() {
         products={products}
         user={user}
         search={search} setSearch={setSearch}
-        filterEstado={filterEstado} setFilterEstado={setFilterEstado}
+        filterEstado={filterEstado} setFilterEstado={setFilterEstadoSafe}
         filterOrigen={filterOrigen} setFilterOrigen={setFilterOrigen}
         filterResponsable={filterResponsable} setFilterResponsable={setFilterResponsable}
         filterProducto={filterProducto} setFilterProducto={setFilterProducto}
