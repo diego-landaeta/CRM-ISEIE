@@ -324,37 +324,37 @@ export default function ClientsPage() {
         </div>
       </div>
 
-      <div className="bg-card border border-border rounded-lg overflow-hidden">
-        <div className="p-3 border-b border-border flex flex-col gap-2">
-          {/* Fila 1: búsqueda + sort + export */}
-          <div className="flex items-center justify-between gap-2 flex-wrap">
-            <ClientsFiltersBar
-              user={user}
-              search={search} setSearch={setSearch}
-              filterResp={filterResp} setFilterResp={setFilterResp}
-              filterProducto={filterProducto} setFilterProducto={setFilterProducto}
-              filterEstadoPago={filterEstadoPago} setFilterEstadoPago={setFilterEstadoPago}
-              dateFrom={dateFrom} setDateFrom={setDateFrom}
-              dateTo={dateTo} setDateTo={setDateTo}
-              sortBy={sortBy} setSortBy={setSortBy}
-              gestores={gestores}
-              productos={productos}
-              totalBackend={totalBackend}
-              filteredCount={filtered.length}
-            />
-            {filtered.length > 0 && (
-              <button
-                onClick={() => exportCSV(filtered, `clientes-${activeProject?.nombre || 'crm'}-${new Date().toISOString().slice(0,10)}.csv`)}
-                title="Exportar CSV"
-                aria-label="Exportar clientes a CSV"
-                className="h-9 px-3 rounded-md border border-border bg-card hover:bg-muted text-muted-foreground hover:text-foreground flex items-center gap-1.5 text-xs font-medium flex-shrink-0"
-              >
-                <DownloadSimple size={14} weight="bold" /> <span className="hidden sm:inline">CSV</span>
-              </button>
-            )}
-          </div>
-        </div>
+      {/* Barra de filtros FUERA del card de la tabla: el card lleva overflow-hidden
+          (para recortar las esquinas de la tabla) y eso recortaba el popover de
+          "Filtros". Va como fila propia encima del card, igual que en Prospectos. */}
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <ClientsFiltersBar
+          user={user}
+          search={search} setSearch={setSearch}
+          filterResp={filterResp} setFilterResp={setFilterResp}
+          filterProducto={filterProducto} setFilterProducto={setFilterProducto}
+          filterEstadoPago={filterEstadoPago} setFilterEstadoPago={setFilterEstadoPago}
+          dateFrom={dateFrom} setDateFrom={setDateFrom}
+          dateTo={dateTo} setDateTo={setDateTo}
+          sortBy={sortBy} setSortBy={setSortBy}
+          gestores={gestores}
+          productos={productos}
+          totalBackend={totalBackend}
+          filteredCount={filtered.length}
+        />
+        {filtered.length > 0 && (
+          <button
+            onClick={() => exportCSV(filtered, `clientes-${activeProject?.nombre || 'crm'}-${new Date().toISOString().slice(0,10)}.csv`)}
+            title="Exportar CSV"
+            aria-label="Exportar clientes a CSV"
+            className="h-9 px-3 rounded-md border border-border bg-card hover:bg-muted text-muted-foreground hover:text-foreground flex items-center gap-1.5 text-xs font-medium flex-shrink-0"
+          >
+            <DownloadSimple size={14} weight="bold" /> <span className="hidden sm:inline">CSV</span>
+          </button>
+        )}
+      </div>
 
+      <div className="bg-card border border-border rounded-lg overflow-hidden">
         {loading ? (
           <SkeletonTable rows={5} columns={6} className="border-0 rounded-none" />
         ) : filtered.length === 0 ? (
