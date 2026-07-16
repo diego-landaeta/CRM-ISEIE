@@ -9,6 +9,34 @@ import * as model from './invoices.model.js';
 
 const PDF_DIR = process.env.INVOICES_PDF_DIR || path.join(process.cwd(), 'uploads', 'invoices');
 
+// Carga el logo del emisor para el PDF. Soporta: (1) archivo subido al CRM
+// (issuer.logo_key vía almacenamiento local) y (2) URL externa (issuer.logo_url
+// http/https) — así el logo se puede poner "por URL o subiendo la imagen".
+// Devuelve un PDFImage embebido o null si no hay/da error (no rompe el PDF).
+async function loadIssuerLogoImage(pdfDoc, inv) {
+  try {
+    let buffer = null, ext = null;
+    const iss = inv.issuer_id ? await model.getIssuer(inv.issuer_id) : null;
+    if (iss?.logo_key) {
+      try { ({ buffer } = await getLocal(iss.logo_key)); ext = String(iss.logo_key).split('.').pop(); } catch { /* sigue */ }
+    }
+    const urlCandidate = iss?.logo_url || inv.issuer_logo_url;
+    if (!buffer && urlCandidate && /^https?:\/\//i.test(urlCandidate)) {
+      // Timeout 6s: una URL lenta/caída nunca debe colgar la generación del PDF.
+      const r = await fetch(urlCandidate, { signal: AbortSignal.timeout(6000) });
+      if (r.ok) {
+        buffer = Buffer.from(await r.arrayBuffer());
+        const ct = (r.headers.get('content-type') || '').toLowerCase();
+        ext = ct.includes('jpeg') || ct.includes('jpg') ? 'jpg' : (urlCandidate.split('?')[0].split('.').pop() || 'png');
+      }
+    }
+    if (!buffer) return null;
+    const e = String(ext || '').toLowerCase().split('?')[0];
+    if (e === 'jpg' || e === 'jpeg') return await pdfDoc.embedJpg(buffer);
+    try { return await pdfDoc.embedPng(buffer); } catch { return await pdfDoc.embedJpg(buffer); }
+  } catch { return null; }
+}
+
 // IVA por defecto segun pais cliente
 export function getDefaultIvaPct(pais) {
   if (!pais) return 21;
@@ -66,65 +94,63 @@ export async function generatePDF(invoiceId) {
   if (tplLayout.length) {
     await renderFromTemplate({ pdfDoc, page, font, bold, inv, layout: tplLayout });
   } else {
-  let y = 800;
   const left = 50;
   const right = 545;
+  const esRect = inv.tipo === 'rectificativa';
+  const esProforma = inv.tipo === 'proforma';
+  const esBorrador = inv.estado === 'borrador';
 
-  // Cabecera EMISOR: usa el snapshot del emisor (multi-empresa) si existe,
-  // si no cae al datos_fiscales del proyecto (compat con facturas viejas).
+  // Texto alineado a la derecha terminando en xr.
+  const drawRight = (text, xr, yy, size, f, color) =>
+    page.drawText(text, { x: xr - f.widthOfTextAtSize(String(text), size), y: yy, size, font: f, color });
+  const noVal = (v) => !v || String(v).trim() === '' || String(v).trim() === '—';
+
+  // Emisor (snapshot multi-empresa; fallback a datos del proyecto).
   const datosFiscalesProyecto = project?.datos_fiscales || {};
   const emisorNombre = inv.issuer_razon_social || datosFiscalesProyecto.razon_social || project?.nombre || 'CRM';
   const emisorNif = inv.issuer_nif || datosFiscalesProyecto.nif;
   const emisorDir = inv.issuer_direccion || datosFiscalesProyecto.direccion;
   const emisorCiudad = [inv.issuer_cp, inv.issuer_ciudad].filter(Boolean).join(' ');
-  const emisorEmail = inv.issuer_email;
-  const emisorTel = inv.issuer_telefono;
 
-  page.drawText(emisorNombre, { x: left, y, size: 16, font: bold, color: black });
-  y -= 20;
-  if (emisorNif) { page.drawText(`NIF/CIF: ${emisorNif}`, { x: left, y, size: 10, font, color: gray }); y -= 12; }
-  if (emisorDir) { page.drawText(emisorDir, { x: left, y, size: 10, font, color: gray }); y -= 12; }
-  if (emisorCiudad) { page.drawText(`${emisorCiudad}${inv.issuer_pais ? ', ' + inv.issuer_pais : ''}`, { x: left, y, size: 10, font, color: gray }); y -= 12; }
-  if (emisorEmail) { page.drawText(emisorEmail, { x: left, y, size: 10, font, color: gray }); y -= 12; }
-  if (emisorTel) { page.drawText(`Tel: ${emisorTel}`, { x: left, y, size: 10, font, color: gray }); y -= 12; }
+  // ── LOGO del emisor (arriba-izquierda): archivo subido O url externa ──
+  const logoImg = await loadIssuerLogoImage(pdfDoc, inv);
+  let ey = 812;
+  if (logoImg) {
+    const maxW = 120, maxH = 66;
+    const sc = Math.min(maxW / logoImg.width, maxH / logoImg.height);
+    const lw = logoImg.width * sc, lh = logoImg.height * sc;
+    page.drawImage(logoImg, { x: left, y: 812 - lh, width: lw, height: lh });
+    ey = 812 - lh - 12;
+  }
 
-  // Codigo (derecha) — distinto si es rectificativa, proforma o borrador
-  const esRect = inv.tipo === 'rectificativa';
-  const esProforma = inv.tipo === 'proforma';
-  const esBorrador = inv.estado === 'borrador';
-  const tituloDoc = esRect ? 'F. RECTIFICATIVA' : esProforma ? 'PRESUPUESTO' : 'FACTURA';
+  // ── Datos EMISOR ──
+  page.drawText(emisorNombre, { x: left, y: ey, size: 11, font: bold, color: black }); ey -= 13;
+  if (emisorNif)          { page.drawText(`NIF: ${emisorNif}`, { x: left, y: ey, size: 9, font, color: gray }); ey -= 11; }
+  if (emisorDir)          { page.drawText(emisorDir, { x: left, y: ey, size: 9, font, color: gray }); ey -= 11; }
+  if (emisorCiudad)       { page.drawText(`${emisorCiudad}${inv.issuer_pais ? ', ' + inv.issuer_pais : ''}`, { x: left, y: ey, size: 9, font, color: gray }); ey -= 11; }
+  if (inv.issuer_email)   { page.drawText(inv.issuer_email, { x: left, y: ey, size: 9, font, color: gray }); ey -= 11; }
+  if (inv.issuer_telefono){ page.drawText(inv.issuer_telefono, { x: left, y: ey, size: 9, font, color: gray }); ey -= 11; }
+
+  // ── TÍTULO + Nº + Fecha (derecha) ──
+  const tituloDoc = esRect ? 'FACTURA RECTIFICATIVA' : esProforma ? 'PRESUPUESTO' : 'FACTURA';
   const tituloColor = esRect ? rgb(0.7, 0.1, 0.1) : esProforma ? rgb(0.35, 0.35, 0.45) : black;
-  page.drawText(tituloDoc, { x: right - (esRect ? 150 : esProforma ? 120 : 100), y: 800, size: esRect ? 13 : esProforma ? 14 : 16, font: bold, color: tituloColor });
-  // Borrador: aún no tiene número fiscal (se asigna al validar y emitir).
-  page.drawText(`N.º ${inv.codigo || '(sin numerar)'}`, { x: right - 150, y: 780, size: 12, font: bold, color: black });
-  page.drawText(`Fecha: ${new Date(inv.fecha_emision).toLocaleDateString('es-ES')}`, { x: right - 150, y: 765, size: 10, font, color: gray });
-  if (esRect && inv.rectifica_codigo) {
-    page.drawText(`Rectifica a: ${inv.rectifica_codigo}`, { x: right - 150, y: 750, size: 9, font, color: gray });
-  }
-  if (esProforma) {
-    page.drawText('Documento sin validez fiscal', { x: right - 150, y: 750, size: 8, font, color: gray });
-  }
-  if (esBorrador) {
-    page.drawText('BORRADOR — pendiente de validar y emitir', { x: right - 150, y: 750, size: 8, font: bold, color: rgb(0.7, 0.45, 0.05) });
-  }
+  drawRight(`${tituloDoc}${inv.codigo ? '  Nº ' + inv.codigo : ''}`, right, 806, 14, bold, tituloColor);
+  drawRight(`Fecha: ${new Date(inv.fecha_emision).toLocaleDateString('es-ES')}`, right, 790, 10, font, gray);
+  if (esRect && inv.rectifica_codigo) drawRight(`Rectifica a: ${inv.rectifica_codigo}`, right, 776, 9, font, gray);
+  if (esProforma) drawRight('Documento sin validez fiscal', right, 776, 8, font, gray);
+  if (esBorrador) drawRight('BORRADOR — sin validez fiscal', right, 776, 8, bold, rgb(0.7, 0.45, 0.05));
 
-  // Linea separadora
-  y = 720;
-  page.drawRectangle({ x: left, y, width: right - left, height: 1, color: gray });
-
-  // Cliente
-  y -= 25;
-  page.drawText('Facturar a:', { x: left, y, size: 11, font: bold, color: black });
-  y -= 16;
-  page.drawText(inv.cliente_nombre, { x: left, y, size: 11, font: bold, color: black });
-  y -= 13;
-  page.drawText(`NIF/CIF: ${inv.cliente_nif}`, { x: left, y, size: 10, font, color: black });
-  y -= 13;
-  page.drawText(inv.cliente_direccion, { x: left, y, size: 10, font, color: black });
-  y -= 13;
-  page.drawText(`${inv.cliente_cp} ${inv.cliente_ciudad}, ${inv.cliente_pais}`, { x: left, y, size: 10, font, color: black });
-  if (inv.cliente_email) { y -= 13; page.drawText(inv.cliente_email, { x: left, y, size: 10, font, color: black }); }
-  if (inv.cliente_telefono) { y -= 13; page.drawText(`Tel: ${inv.cliente_telefono}`, { x: left, y, size: 10, font, color: black }); }
+  // ── CLIENTE (bajo la cabecera, ancho completo) ──
+  let y = Math.min(ey, 772) - 20;
+  page.drawRectangle({ x: left, y: y + 10, width: right - left, height: 0.8, color: gray });
+  page.drawText('DATOS CLIENTE', { x: left, y, size: 9, font: bold, color: gray }); y -= 15;
+  page.drawText(inv.cliente_nombre, { x: left, y, size: 11, font: bold, color: black }); y -= 13;
+  if (!noVal(inv.cliente_nif))       { page.drawText(`NIF/DNI: ${inv.cliente_nif}`, { x: left, y, size: 10, font, color: black }); y -= 13; }
+  if (!noVal(inv.cliente_direccion)) { page.drawText(inv.cliente_direccion, { x: left, y, size: 10, font, color: black }); y -= 13; }
+  const cliLoc = [inv.cliente_cp, inv.cliente_ciudad].filter((x) => !noVal(x)).join(' ');
+  if (cliLoc || !noVal(inv.cliente_pais)) { page.drawText(`${cliLoc}${!noVal(inv.cliente_pais) ? (cliLoc ? ', ' : '') + inv.cliente_pais : ''}`, { x: left, y, size: 10, font, color: black }); y -= 13; }
+  if (inv.cliente_email)    { page.drawText(inv.cliente_email, { x: left, y, size: 10, font, color: black }); y -= 13; }
+  if (inv.cliente_telefono) { page.drawText(`Tel: ${inv.cliente_telefono}`, { x: left, y, size: 10, font, color: black }); y -= 13; }
 
   // Tabla items
   y -= 30;

@@ -55,3 +55,8 @@ backend/uploads/
 backups/
 *.dump
 
+
+# Datos exportados (no versionar)
+*.xlsx
+*.xls
+*.csv
