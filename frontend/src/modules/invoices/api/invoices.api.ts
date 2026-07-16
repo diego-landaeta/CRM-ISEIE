@@ -98,6 +98,11 @@ export interface Invoice {
   rectifica_id?: number | null;
   rectifica_codigo?: string | null;
   motivo_rectificacion?: string | null;
+  // Vista por sociedad
+  project_id?: number | null;
+  proyecto_nombre?: string | null;
+  issuer_id?: number | null;
+  issuer_razon_social?: string | null;
 }
 
 export interface LeadConversion {
@@ -173,9 +178,9 @@ export interface VentaSinFactura {
 }
 
 export const invoicesApi = {
-  list: (params: { projectId: number; estado?: string; search?: string; from?: string; to?: string; tipo?: string; page?: number; limit?: number }) => {
+  list: (params: { projectId?: number; issuerId?: number; estado?: string; search?: string; from?: string; to?: string; tipo?: string; page?: number; limit?: number }) => {
     const qs = new URLSearchParams();
-    Object.entries(params).forEach(([k, v]) => v != null && qs.set(k, String(v)));
+    Object.entries(params).forEach(([k, v]) => v != null && v !== '' && qs.set(k, String(v)));
     return client.get<Invoice[]>(`/invoices?${qs}`);
   },
   stats: (projectId: number) => client.get<{ total: number; emitidas: number; enviadas: number; pagadas: number; canceladas: number; total_facturado: number; total_cobrado: number; total_iva: number }>(`/invoices/stats?projectId=${projectId}`),
@@ -216,7 +221,7 @@ export const invoicesApi = {
   getOne: (id: number) => client.get<Invoice>(`/invoices/${id}`),
   /** Completar datos fiscales del cliente en una factura YA emitida (auto-emitida al pagar). */
   completarDatos: (id: number, patch: Partial<{ clienteNombre: string; clienteNif: string; clienteDireccion: string; clienteCiudad: string; clienteCp: string; clientePais: string; clienteEmail: string | null; clienteTelefono: string | null }>) => client.post<Invoice>(`/invoices/${id}/completar-datos`, patch),
-  listIssuers: (projectId: number) => client.get<Issuer[]>(`/invoices/issuers?projectId=${projectId}`),
+  listIssuers: (projectId?: number) => client.get<Issuer[]>(`/invoices/issuers${projectId ? `?projectId=${projectId}` : ''}`),
   createIssuer: (body: Partial<Issuer> & { razonSocial: string; nif: string; projectId?: number | null }) => client.post<Issuer>('/invoices/issuers', body),
   updateIssuer: (id: number, body: Record<string, unknown>) => client.patch<Issuer>(`/invoices/issuers/${id}`, body),
   deleteIssuer: (id: number) => client.delete(`/invoices/issuers/${id}`),

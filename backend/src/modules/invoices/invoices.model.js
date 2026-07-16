@@ -272,29 +272,39 @@ export async function findByConversion(conversionId) {
   return rows[0] || null;
 }
 
-export async function list({ projectId, estado, search, from, to, tipo, page = 1, limit = 50 }) {
-  const conds = ['project_id = $1'];
-  const params = [projectId];
-  let i = 2;
+// Listado de facturas. Ámbito:
+//  - por PROYECTO (projectId): el flujo normal.
+//  - por SOCIEDAD (issuerId, sin projectId): vista global de todas las facturas
+//    de esa empresa emisora entre todos los proyectos (correlativos en orden).
+//    Solo admin/superadmin (lo restringe el controller).
+export async function list({ projectId, issuerId, estado, search, from, to, tipo, page = 1, limit = 50 }) {
+  const conds = [];
+  const params = [];
+  let idx = 1;
+  if (issuerId)  { conds.push(`i.issuer_id = $${idx++}`); params.push(issuerId); }
+  if (projectId) { conds.push(`i.project_id = $${idx++}`); params.push(projectId); }
   // tipo='proforma' → solo proformas; cualquier otro / ausente → solo facturas
   // (normal + rectificativa), para que las proformas no ensucien el histórico fiscal.
-  if (tipo === 'proforma') conds.push(`tipo = 'proforma'`);
-  else conds.push(`tipo <> 'proforma'`);
-  if (estado) { conds.push(`estado = $${i++}`); params.push(estado); }
-  if (search) { conds.push(`(LOWER(cliente_nombre) LIKE $${i} OR LOWER(cliente_nif) LIKE $${i} OR codigo LIKE $${i})`); params.push(`%${search.toLowerCase()}%`); i++; }
-  if (from) { conds.push(`fecha_emision >= $${i++}`); params.push(from); }
-  if (to)   { conds.push(`fecha_emision <= $${i++}`); params.push(to); }
-  const where = conds.join(' AND ');
+  if (tipo === 'proforma') conds.push(`i.tipo = 'proforma'`);
+  else conds.push(`i.tipo <> 'proforma'`);
+  if (estado) { conds.push(`i.estado = $${idx++}`); params.push(estado); }
+  if (search) { conds.push(`(LOWER(i.cliente_nombre) LIKE $${idx} OR LOWER(i.cliente_nif) LIKE $${idx} OR i.codigo LIKE $${idx})`); params.push(`%${search.toLowerCase()}%`); idx++; }
+  if (from) { conds.push(`i.fecha_emision >= $${idx++}`); params.push(from); }
+  if (to)   { conds.push(`i.fecha_emision <= $${idx++}`); params.push(to); }
+  const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
   const offset = (page - 1) * limit;
   const { rows } = await query(
-    `SELECT id, codigo, ano, numero, fecha_emision, fecha_pago,
-            cliente_nombre, cliente_nif, cliente_direccion, cliente_ciudad, cliente_cp, cliente_pais,
-            cliente_email, total, iva_pct, estado, sent_at, tipo
-     FROM invoices WHERE ${where}
-     ORDER BY ano DESC, numero DESC LIMIT ${limit} OFFSET ${offset}`,
+    `SELECT i.id, i.codigo, i.ano, i.numero, i.fecha_emision, i.fecha_pago,
+            i.cliente_nombre, i.cliente_nif, i.cliente_direccion, i.cliente_ciudad, i.cliente_cp, i.cliente_pais,
+            i.cliente_email, i.total, i.iva_pct, i.estado, i.sent_at, i.tipo,
+            i.project_id, p.nombre AS proyecto_nombre,
+            i.issuer_id, i.issuer_razon_social
+     FROM invoices i LEFT JOIN projects p ON p.id = i.project_id
+     ${where}
+     ORDER BY i.ano DESC, i.numero DESC LIMIT ${limit} OFFSET ${offset}`,
     params
   );
-  const { rows: c } = await query(`SELECT COUNT(*)::int AS total FROM invoices WHERE ${where}`, params);
+  const { rows: c } = await query(`SELECT COUNT(*)::int AS total FROM invoices i ${where}`, params);
   return { rows, total: c[0].total };
 }
 
@@ -647,14 +657,17 @@ export async function getLeadFiscalData(leadId) {
 
 // ─── Emisores (multi-empresa) ────────────────────────────────────────────────
 export async function listIssuers(projectId) {
-  const { rows } = await query(
-    `SELECT * FROM invoice_issuers i
-      WHERE i.activo = true
-        AND ( i.project_id = $1
-              OR i.id = (SELECT sociedad_emisora_id FROM projects WHERE id = $1) )
-      ORDER BY es_default DESC, razon_social ASC`,
-    [projectId]
-  );
+  // Sin proyecto → TODAS las sociedades activas (para el filtro por sociedad, admin).
+  const { rows } = projectId
+    ? await query(
+        `SELECT * FROM invoice_issuers i
+          WHERE i.activo = true
+            AND ( i.project_id = $1
+                  OR i.id = (SELECT sociedad_emisora_id FROM projects WHERE id = $1) )
+          ORDER BY es_default DESC, razon_social ASC`,
+        [projectId])
+    : await query(
+        `SELECT * FROM invoice_issuers WHERE activo = true ORDER BY razon_social ASC`);
   // Enriquecemos con el estado fiscal (gating España): ready + qué falta.
   return rows.map((r) => ({ ...r, fiscal_status: issuerFiscalStatus(r) }));
 }

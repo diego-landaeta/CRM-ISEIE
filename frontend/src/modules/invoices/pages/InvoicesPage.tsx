@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Receipt, Eye, PaperPlaneTilt, CheckCircle, X, MagnifyingGlass, Gear, ArrowCounterClockwise, FileText } from '@phosphor-icons/react';
 import { Link, useLocation } from 'react-router-dom';
 import { useProjectContext } from '@/contexts/ProjectContext';
+import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import KpiCard from '@/shared/components/ui/KpiCard';
 import { invoicesApi, invoiceFaltantes } from '../api/invoices.api';
@@ -25,6 +26,8 @@ type Stats = { total: number; emitidas: number; enviadas: number; pagadas: numbe
 
 export default function InvoicesPage() {
   const { activeProject } = useProjectContext() as { activeProject: { id?: number | null; nombre?: string } };
+  const { user } = useAuth() as { user: { role?: string } | null };
+  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
   const pid = activeProject?.id;
   const loc = useLocation();
   const [tab, setTab] = useState<'facturas' | 'proformas'>(
@@ -37,6 +40,11 @@ export default function InvoicesPage() {
   const [filters, setFilters] = useState({ search: '', estado: '', from: '', to: '' });
   const [sending, setSending] = useState<number | null>(null);
   const [issuers, setIssuers] = useState<Issuer[]>([]);
+  // Vista por SOCIEDAD (admin): '' = por proyecto; id = todas las facturas de esa
+  // sociedad entre proyectos (global), con la columna Proyecto.
+  const [filterIssuer, setFilterIssuer] = useState<string>('');
+  const [allIssuers, setAllIssuers] = useState<Issuer[]>([]);
+  const porSociedad = isAdmin && !!filterIssuer;
   const [ventasSinFactura, setVentasSinFactura] = useState<VentaSinFactura[]>([]);
   // Borrador que se está validando/emitiendo (abre el diálogo de completar datos)
   const [emittingInv, setEmittingInv] = useState<Invoice | null>(null);
@@ -45,8 +53,13 @@ export default function InvoicesPage() {
     if (!pid) return;
     setLoading(true);
     try {
+      // Modo sociedad (admin): facturas globales de esa empresa emisora; el resto
+      // (stats, emisores, ventas sin factura) sigue por proyecto activo.
+      const listParams = porSociedad
+        ? { issuerId: Number(filterIssuer), ...filters, tipo: esProformas ? 'proforma' : undefined, limit: 200 }
+        : { projectId: pid, ...filters, tipo: esProformas ? 'proforma' : undefined, limit: 100 };
       const [r1, r2, r3, r4] = await Promise.all([
-        invoicesApi.list({ projectId: pid, ...filters, tipo: esProformas ? 'proforma' : undefined, limit: 100 }),
+        invoicesApi.list(listParams),
         invoicesApi.stats(pid),
         invoicesApi.listIssuers(pid).catch(() => ({ success: false, data: [] as Issuer[] })),
         invoicesApi.ventasSinFactura(pid).catch(() => ({ success: false, data: [] as VentaSinFactura[] })),
@@ -56,8 +69,14 @@ export default function InvoicesPage() {
       if (r3.success) setIssuers(r3.data || []);
       if (r4.success) setVentasSinFactura(r4.data || []);
     } finally { setLoading(false); }
-  }, [pid, filters, esProformas]);
+  }, [pid, filters, esProformas, porSociedad, filterIssuer]);
   useEffect(() => { load(); }, [load]);
+
+  // Todas las sociedades (para el filtro por sociedad). Solo admin.
+  useEffect(() => {
+    if (!isAdmin) return;
+    invoicesApi.listIssuers().then((r) => { if (r.success) setAllIssuers(r.data || []); }).catch(() => {});
+  }, [isAdmin]);
 
   async function send(inv: Invoice) {
     if (!inv.cliente_email) {
@@ -178,6 +197,14 @@ export default function InvoicesPage() {
           <input value={filters.search} onChange={(e) => setFilters(f => ({ ...f, search: e.target.value }))}
             placeholder="Cliente, NIF, código…" className="w-full h-9 pl-8 pr-3 rounded-md border border-border bg-background text-sm" />
         </div>
+        {isAdmin && (
+          <select value={filterIssuer} onChange={(e) => setFilterIssuer(e.target.value)}
+            title="Ver todas las facturas de una sociedad (global, entre proyectos)"
+            className={`h-9 px-2 rounded-md border text-sm ${filterIssuer ? 'border-primary/50 bg-primary/5 text-primary font-semibold' : 'border-border bg-card'}`}>
+            <option value="">Sociedad: por proyecto</option>
+            {allIssuers.map((i) => <option key={i.id} value={String(i.id)}>{i.razon_social}</option>)}
+          </select>
+        )}
         <select value={filters.estado} onChange={(e) => setFilters(f => ({ ...f, estado: e.target.value }))}
           className="h-9 px-2 rounded-md border border-border bg-card text-sm">
           <option value="">Todos los estados</option>
@@ -196,7 +223,13 @@ export default function InvoicesPage() {
         </div>
       </div>
 
-      {!esProformas && ventasSinFactura.length > 0 && (
+      {porSociedad && (
+        <div className="text-xs rounded-md border border-primary/30 bg-primary/5 text-primary px-3 py-2">
+          Mostrando <strong>todas las facturas</strong> de <strong>{allIssuers.find((i) => String(i.id) === filterIssuer)?.razon_social || 'la sociedad'}</strong> entre todos los proyectos (correlativo en orden). La columna <strong>Proyecto</strong> indica a quién pertenece cada factura.
+        </div>
+      )}
+
+      {!porSociedad && !esProformas && ventasSinFactura.length > 0 && (
         <div className="bg-amber-50/60 dark:bg-amber-950/10 border border-amber-200 dark:border-amber-900/40 rounded-lg overflow-hidden">
           <div className="px-4 py-2.5 border-b border-amber-200 dark:border-amber-900/40 flex items-center gap-2">
             <Receipt size={15} weight="bold" className="text-amber-600" />
@@ -254,6 +287,7 @@ export default function InvoicesPage() {
                 <th className="px-3 py-2 text-left text-xs text-muted-foreground">Código</th>
                 <th className="px-3 py-2 text-left text-xs text-muted-foreground">Fecha</th>
                 <th className="px-3 py-2 text-left text-xs text-muted-foreground">Cliente</th>
+                {porSociedad && <th className="px-3 py-2 text-left text-xs text-muted-foreground">Proyecto</th>}
                 <th className="px-3 py-2 text-right text-xs text-muted-foreground">Total</th>
                 <th className="px-3 py-2 text-left text-xs text-muted-foreground">Estado</th>
                 <th className="px-3 py-2 text-right text-xs text-muted-foreground">Acciones</th>
@@ -279,6 +313,9 @@ export default function InvoicesPage() {
                     <div className="font-medium">{inv.cliente_nombre}</div>
                     <div className="text-[11px] text-muted-foreground">{inv.cliente_nif}</div>
                   </td>
+                  {porSociedad && (
+                    <td className="px-3 py-2 text-xs text-muted-foreground">{inv.proyecto_nombre || '—'}</td>
+                  )}
                   <td className={`px-3 py-2 text-right tabular-nums font-semibold ${Number(inv.total) < 0 ? 'text-rose-600' : ''}`}>{fmt(Number(inv.total))}</td>
                   <td className="px-3 py-2">
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${ESTADO_BADGE[inv.estado] || 'bg-muted'}`}>
