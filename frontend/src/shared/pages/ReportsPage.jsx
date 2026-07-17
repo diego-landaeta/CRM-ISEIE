@@ -12,6 +12,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { useDashboardSummary } from '@/shared/hooks/useDashboardSummary';
 import client from '@/shared/api/client';
+import LeadsVentasDownload from '@/shared/components/LeadsVentasDownload';
 
 const REPORT_CATEGORIES = [
   {
@@ -419,6 +420,11 @@ export default function ReportsPage() {
           </>
         )}
       </div>
+
+      {/* Descargable combinado prospectos + ventas (para análisis del owner) */}
+      {isAdmin && (
+        <LeadsVentasDownload projectId={activeProject?.id} projectName={activeProject?.nombre} days={days} />
+      )}
 
       {/* Categorías de reportes */}
       <section className="space-y-3">

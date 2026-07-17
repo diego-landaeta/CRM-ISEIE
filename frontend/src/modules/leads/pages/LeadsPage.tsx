@@ -34,6 +34,7 @@ import {
   ArrowsClockwise,
   Trash,
   Flag,
+  ChartLineUp,
 } from '@phosphor-icons/react';
 
 const ProjectSettingsDialog = lazy(() => import('@/modules/settings/components/ProjectSettingsDialog'));
@@ -589,6 +590,17 @@ export default function LeadsPage() {
             >
               <DownloadSimple size={14} weight="bold" />
               <span className="hidden md:inline">Exportar</span>
+            </button>
+          )}
+          {(user?.role === 'admin' || user?.role === 'superadmin') && (
+            <button
+              onClick={() => navigate('/reports')}
+              title="Reporte Prospectos + Ventas (Análisis) — descarga combinada para análisis"
+              aria-label="Reporte prospectos y ventas"
+              className="h-9 inline-flex items-center gap-1.5 px-2.5 sm:px-3 rounded-md border border-border bg-card text-xs sm:text-sm font-medium hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
+            >
+              <ChartLineUp size={14} weight="bold" />
+              <span className="hidden md:inline">Reporte + ventas</span>
             </button>
           )}
           <button
