@@ -15,13 +15,12 @@ interface Producto { id: number; nombre: string }
 
 const ESTADOS: Array<{ value: string; label: string }> = [
   { value: 'nuevo', label: 'Nuevo' },
+  { value: 'por_contactar', label: 'Por contactar' },
   { value: 'contactado', label: 'Contactado' },
-  { value: 'en_proceso', label: 'En Proceso' },
-  { value: 'interesado', label: 'Interesado' },
-  { value: 'calificado', label: 'Calificado' },
+  { value: 'en_seguimiento', label: 'En seguimiento' },
   { value: 'convertido', label: 'Convertido' },
   { value: 'no_interesado', label: 'No interesado' },
-  { value: 'perdido', label: 'Perdido' },
+  { value: 'proxima_convocatoria', label: 'Próxima convocatoria' },
 ];
 
 const PAISES = [
