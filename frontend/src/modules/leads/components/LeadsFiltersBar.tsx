@@ -15,7 +15,7 @@ import {
 } from '@phosphor-icons/react';
 import SearchableSelect from '@/shared/components/ui/SearchableSelect';
 import DateRangeFilter from './DateRangeFilter';
-import MultiProjectPicker from '@/shared/components/ui/MultiProjectPicker';
+// ISEIE es single-project: NO usamos MultiProjectPicker (no aplica).
 
 const STATUS_LABELS: Record<string, string> = {
   nuevo: 'Nuevo',
@@ -57,10 +57,7 @@ const SORT_LABELS: Record<string, string> = {
 
 interface Props {
   activeProject: { id?: number | null; nombre?: string };
-  projects: Array<{ id: number; nombre?: string }>;
-  selectedProjectIds: number[];
-  setSelectedProjectIds: (ids: number[]) => void;
-  gestores: Array<{ id: number; nombre: string; project_ids?: number[] }>;
+  gestores: Array<{ id: number; nombre: string }>;
   products: Array<{ id: number; nombre: string }>;
   user: { role?: string } | null;
   search: string; setSearch: (v: string) => void;
@@ -83,7 +80,7 @@ interface Props {
 
 export default function LeadsFiltersBar(props: Props) {
   const {
-    activeProject, projects, selectedProjectIds, setSelectedProjectIds,
+    activeProject,
     gestores, products, user,
     search, setSearch, filterEstado, setFilterEstado,
     filterOrigen, setFilterOrigen, filterResponsable, setFilterResponsable,
@@ -94,21 +91,6 @@ export default function LeadsFiltersBar(props: Props) {
   } = props;
 
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
-
-  // Cruce Gestor ↔ Proyecto:
-  // - Con proyectos seleccionados en el picker → solo gestores de esos proyectos.
-  // - Con una gestora filtrada → el picker solo muestra SUS proyectos.
-  const gestoresFiltrados = selectedProjectIds.length > 0
-    ? gestores.filter((g) => !Array.isArray(g.project_ids) || g.project_ids.some((pid) => selectedProjectIds.includes(pid)))
-    : gestores;
-  const gestorSeleccionado = filterResponsable && filterResponsable !== 'unassigned'
-    ? gestores.find((g) => String(g.id) === filterResponsable)
-    : null;
-  const projectsDelGestor = gestorSeleccionado && Array.isArray(gestorSeleccionado.project_ids) && gestorSeleccionado.project_ids.length > 0
-    ? projects.filter((p) => gestorSeleccionado.project_ids!.includes(p.id))
-    : projects;
-  // Programa: solo hay catálogo con proyecto concreto activo o con UN proyecto elegido en el picker.
-  const programasDisponibles = (activeProject?.id && activeProject.id > 0) || selectedProjectIds.length === 1;
   const [open, setOpen] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
 
@@ -234,7 +216,7 @@ export default function LeadsFiltersBar(props: Props) {
                       onChange={(v) => setFilterResponsable(v)}
                       options={[
                         { value: 'unassigned', label: '— Sin asignar —' },
-                        ...gestoresFiltrados.map((g) => ({ value: String(g.id), label: g.nombre })),
+                        ...gestores.map((g) => ({ value: String(g.id), label: g.nombre })),
                       ]}
                       placeholder="Buscar gestor…"
                       allLabel="Todos los gestores"
@@ -244,32 +226,16 @@ export default function LeadsFiltersBar(props: Props) {
                   </Row>
                 )}
                 <Row label="Programa">
-                  {programasDisponibles ? (
-                    <SearchableSelect
-                      value={filterProducto}
-                      onChange={(v) => setFilterProducto(v)}
-                      options={(products || []).map((p) => ({ value: String(p.id), label: p.nombre }))}
-                      placeholder="Buscar programa…"
-                      allLabel="Todos los programas"
-                      ariaLabel="Programa"
-                      maxWidth="100%"
-                    />
-                  ) : (
-                    <p className="text-[11px] text-muted-foreground italic px-1 py-2">
-                      Selecciona <strong>un</strong> proyecto (en el filtro Proyecto) para ver sus programas.
-                    </p>
-                  )}
+                  <SearchableSelect
+                    value={filterProducto}
+                    onChange={(v) => setFilterProducto(v)}
+                    options={(products || []).map((p) => ({ value: String(p.id), label: p.nombre }))}
+                    placeholder="Buscar programa…"
+                    allLabel="Todos los programas"
+                    ariaLabel="Programa"
+                    maxWidth="100%"
+                  />
                 </Row>
-                {projects && projects.length > 1 && (
-                  <Row label="Proyecto">
-                    <MultiProjectPicker
-                      projects={projectsDelGestor}
-                      selected={selectedProjectIds}
-                      onChange={(ids) => setSelectedProjectIds(ids)}
-                      activeProjectId={activeProject?.id}
-                    />
-                  </Row>
-                )}
                 <Row label="Fechas">
                   <DateRangeFilter from={dateFrom} to={dateTo} onChange={(f, t) => setDateRange(f, t)} />
                 </Row>
@@ -284,8 +250,7 @@ export default function LeadsFiltersBar(props: Props) {
                     ))}
                   </select>
                 </Row>
-                {/* Dirección del orden cronológico: descendente (más reciente
-                    primero, default) o ascendente (más antiguo primero). */}
+                {/* Dirección del orden cronológico. */}
                 <Row label="Dirección">
                   <div className="flex rounded-md border border-border overflow-hidden text-xs font-semibold">
                     <button type="button" onClick={() => setSortDir('desc')}
