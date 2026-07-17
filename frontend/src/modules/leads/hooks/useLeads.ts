@@ -74,6 +74,7 @@ export interface UseLeadsResult {
   loading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
+  fetchAllForExport: () => Promise<Lead[]>;
 }
 
 // Backend devuelve `status` y `canal_detectado`; UI usa `estado` y `origen`.
@@ -181,6 +182,46 @@ export function useLeads(): UseLeadsResult {
     }
   }, [pid, page, debouncedSearch, filterEstado, filterOrigen, filterResponsable, filterProducto, dateFrom, dateTo, sortMode, sortDir, filterDup, filterReincidente]);
 
+  // Trae TODOS los leads filtrados (sin paginar) para exportar. El listado va de
+  // 20 en 20; el export debe llevarse todo lo filtrado. El backend limita el
+  // page-size a 500 → paginamos en bucle.
+  const fetchAllForExport = useCallback(async (): Promise<Lead[]> => {
+    if (!pid) return [];
+    const baseParams = () => {
+      const p = new URLSearchParams();
+      p.set('projectId', String(pid));
+      if (debouncedSearch) p.set('search', debouncedSearch);
+      if (filterEstado) p.set('status', filterEstado);
+      if (filterOrigen) p.set('canal', filterOrigen);
+      if (filterResponsable === 'unassigned') p.set('unassigned', 'true');
+      else if (filterResponsable) p.set('responsableId', filterResponsable);
+      if (filterProducto) p.set('productId', filterProducto);
+      if (dateFrom) p.set('dateFrom', dateFrom);
+      if (dateTo) p.set('dateTo', dateTo);
+      if (sortMode) p.set('sort', sortMode);
+      if (sortDir) p.set('dir', sortDir);
+      if (filterDup === '1') p.set('duplicated', 'true');
+      if (filterReincidente === '1') p.set('reincidente', 'true');
+      return p;
+    };
+    const PAGE = 500;
+    const all: Lead[] = [];
+    let page = 1;
+    for (let guard = 0; guard < 100; guard++) {
+      const p = baseParams();
+      p.set('page', String(page));
+      p.set('limit', String(PAGE));
+      const res = await client.get(`/leads?${p.toString()}`);
+      if (!res.success) break;
+      const batch = ((res.data as Lead[]) || []).map(normalizeLead);
+      all.push(...batch);
+      const total = (res as { pagination?: { total?: number } }).pagination?.total ?? all.length;
+      if (batch.length < PAGE || all.length >= total) break;
+      page += 1;
+    }
+    return all;
+  }, [pid, debouncedSearch, filterEstado, filterOrigen, filterResponsable, filterProducto, dateFrom, dateTo, sortMode, sortDir, filterDup, filterReincidente]);
+
   useEffect(() => () => {
     if (abortRef.current) abortRef.current.abort();
   }, []);
@@ -254,6 +295,7 @@ export function useLeads(): UseLeadsResult {
     loading,
     error,
     refetch: fetchLeads,
+    fetchAllForExport,
   };
 }
 

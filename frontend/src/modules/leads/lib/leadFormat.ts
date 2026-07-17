@@ -85,6 +85,7 @@ const STATUS_LABELS_ES: Record<string, string> = {
 // Columnas para el export universal (CRM-196). Usado por ExportDialog.
 export function getLeadExportColumns(): ExportColumn<Lead>[] {
   return [
+    { key: 'proyecto', label: 'Proyecto', type: 'string', value: (l) => l.proyecto_nombre || '', width: 18 },
     { key: 'nombre', label: 'Nombre', type: 'string', value: (l) => l.nombre || '', width: 24 },
     { key: 'email', label: 'Email', type: 'string', value: (l) => l.email || '', width: 28 },
     { key: 'telefono', label: 'Teléfono', type: 'string', value: (l) => l.telefono || '', width: 16 },

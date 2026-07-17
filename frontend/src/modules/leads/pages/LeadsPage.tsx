@@ -142,6 +142,7 @@ export default function LeadsPage() {
     dateFrom, dateTo, setDateRange,
     sortMode, setSortMode,
     sortDir, setSortDir,
+    fetchAllForExport,
     filterDup, setFilterDup,
     filterReincidente, setFilterReincidente,
     loading, error, refetch,
@@ -194,6 +195,20 @@ export default function LeadsPage() {
   const [deletingLead, setDeletingLead] = useState<any>(null);
   const [reportingSpamLead, setReportingSpamLead] = useState<any>(null);
   const [exportOpen, setExportOpen] = useState(false);
+  // El listado va paginado; el export debe llevarse TODO lo filtrado.
+  const [exportRows, setExportRows] = useState([]);
+  const [exportLoading, setExportLoading] = useState(false);
+
+  async function abrirExport() {
+    setExportLoading(true);
+    try {
+      const todos = await fetchAllForExport();
+      setExportRows(aplicarQuickFilter(todos));
+      setExportOpen(true);
+    } catch (err) {
+      toast({ title: 'No se pudo preparar el export', description: err?.message, variant: 'destructive' });
+    } finally { setExportLoading(false); }
+  }
   const [wasapiOpen, setWasapiOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]); // bulk actions
   const [bulkAction, setBulkAction] = useState(null); // null | 'reassign' | 'status' | 'export'
@@ -257,6 +272,31 @@ export default function LeadsPage() {
   }
 
   // Filtros rapidos client-side (sobre los leads ya cargados)
+  // Filtros rápidos (client-side). Extraído para aplicarlo también al export.
+  function aplicarQuickFilter(lista) {
+    if (!quickFilter) return lista;
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const tomorrow = new Date(today.getTime() + 86400000);
+    const inWeek = new Date(today.getTime() + 7 * 86400000);
+    return lista.filter(l => {
+      const next = parseLocalDateOnly(l.next_reminder_at);
+      const last = l.last_interaction_at ? new Date(l.last_interaction_at) : null;
+      if (quickFilter === 'overdue') return next && next < today;
+      if (quickFilter === 'today') return next && next.getTime() === today.getTime();
+      if (quickFilter === 'tomorrow') return next && next.getTime() === tomorrow.getTime();
+      if (quickFilter === 'week') return next && next >= today && next <= inWeek;
+      if (quickFilter === 'no-reminder') return !next;
+      if (quickFilter === 'no-contact') return !last && ['nuevo', 'por_contactar'].includes(l.estado);
+      if (quickFilter === 'urgent') {
+        if (next && next <= today) return true;
+        if (!last && ['nuevo', 'por_contactar'].includes(l.estado)) return true;
+        return false;
+      }
+      return true;
+    });
+  }
+
   const filteredLeads = useMemo(() => {
     if (!quickFilter) return leads;
     const now = new Date();
@@ -529,7 +569,8 @@ export default function LeadsPage() {
           </button>
           {filteredLeads.length > 0 && can('leads.export') && (
             <button
-              onClick={() => setExportOpen(true)}
+              onClick={abrirExport}
+              disabled={exportLoading}
               title="Exportar (Excel/CSV/JSON)"
               aria-label="Exportar"
               className="h-9 inline-flex items-center gap-1.5 px-2.5 sm:px-3 rounded-md border border-border bg-card text-xs sm:text-sm font-medium hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
@@ -1019,7 +1060,7 @@ export default function LeadsPage() {
           title="Exportar prospectos"
           filename={`prospectos-${activeProject?.slug || activeProject?.nombre || 'crm'}-${new Date().toISOString().slice(0, 10)}`}
           columns={getLeadExportColumns()}
-          rows={filteredLeads}
+          rows={exportRows}
         />
       </Suspense>
 

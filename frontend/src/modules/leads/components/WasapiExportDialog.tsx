@@ -46,8 +46,7 @@ export default function WasapiExportDialog({ open, projectId, onClose }: Props) 
 
   // Filtros (todos opcionales; gestor solo puede tocar los suyos)
   const [responsableId, setResponsableId] = useState<string>('');
-  const [status, setStatus] = useState<string>('');
-  // Estados a EXCLUIR del envio (p.ej. no interesados).
+  // Estados a EXCLUIR del envio. Sustituye al antiguo filtro "Estado del lead".
   const [excludeStatus, setExcludeStatus] = useState<string[]>([]);
   const [dateFrom, setDateFrom] = useState<string>('');
   const [dateTo, setDateTo] = useState<string>('');
@@ -77,7 +76,6 @@ export default function WasapiExportDialog({ open, projectId, onClose }: Props) 
       // Construyo URL con filtros — el client.get(blob) no es estándar, así que uso fetch directo.
       const params = new URLSearchParams({ projectId: String(projectId) });
       if (responsableId) params.set('responsableId', responsableId);
-      if (status) params.set('status', status);
       if (excludeStatus.length) params.set('excludeStatus', excludeStatus.join(','));
       if (dateFrom) params.set('dateFrom', dateFrom);
       if (dateTo) params.set('dateTo', dateTo);
@@ -130,7 +128,7 @@ export default function WasapiExportDialog({ open, projectId, onClose }: Props) 
             <div className="min-w-0 flex-1">
               <h3 className="font-semibold text-base">Exportar plantilla Wasapi</h3>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Descarga CSV con formato listo para Wasapi.io. Todos los filtros son opcionales — sin filtros descarga todos los prospectos del proyecto.
+                Exporta los leads para enviarles WhatsApp desde Wasapi.io. Elige <strong>de qué fechas</strong> y marca <strong>a quién excluir</strong>. Todo es opcional: sin filtros se descargan todos los prospectos del proyecto.
               </p>
             </div>
             <button onClick={onClose} className="p-1 rounded hover:bg-muted text-muted-foreground"><X size={18} /></button>
@@ -154,14 +152,6 @@ export default function WasapiExportDialog({ open, projectId, onClose }: Props) 
                   </select>
                 </Field>
               )}
-
-              <Field label="Estado del lead">
-                <select value={status} onChange={(e) => setStatus(e.target.value)}
-                  className="w-full h-9 px-2 rounded-md border border-border bg-card text-sm">
-                  <option value="">Todos los estados</option>
-                  {ESTADOS.map((s) => (<option key={s.value} value={s.value}>{s.label}</option>))}
-                </select>
-              </Field>
 
               <Field label="Producto de interés">
                 <select value={productId} onChange={(e) => setProductId(e.target.value)}
@@ -206,33 +196,31 @@ export default function WasapiExportDialog({ open, projectId, onClose }: Props) 
               </div>
             </div>
 
-            {/* EXCLUIR estados: quita del envio los leads en esos estados. */}
+            {/* EXCLUIR estados: checklist. Quita del envio los leads marcados. */}
             <div className="pt-2 border-t border-border">
-              <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">
-                Excluir contactos por estado <span className="font-normal">(no se exportan los marcados)</span>
-              </label>
-              <div className="flex flex-wrap gap-1.5">
-                {ESTADOS.map((e) => {
-                  const activo = excludeStatus.includes(e.value);
-                  return (
-                    <button
-                      key={e.value}
-                      type="button"
-                      onClick={() => setExcludeStatus((prev) =>
+              <p className="text-sm font-semibold mb-0.5">Excluir estos leads del envío</p>
+              <p className="text-[11px] text-muted-foreground mb-2">
+                Marca los estados que <strong>NO</strong> quieres que reciban el WhatsApp. Si no marcas nada, se exportan todos.
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1.5">
+                {ESTADOS.map((e) => (
+                  <label key={e.value} className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={excludeStatus.includes(e.value)}
+                      onChange={() => setExcludeStatus((prev) =>
                         prev.includes(e.value) ? prev.filter((x) => x !== e.value) : [...prev, e.value])}
-                      className={`h-7 px-2.5 rounded-full border text-xs font-medium transition ${
-                        activo
-                          ? 'border-red-400 bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300'
-                          : 'border-border bg-card text-muted-foreground hover:bg-muted'}`}
-                    >
-                      {activo ? '✕ ' : ''}{e.label}
-                    </button>
-                  );
-                })}
+                      className="w-4 h-4 rounded border-border"
+                    />
+                    <span className={excludeStatus.includes(e.value) ? 'text-red-600 dark:text-red-400 font-medium' : ''}>
+                      {e.label}
+                    </span>
+                  </label>
+                ))}
               </div>
               {excludeStatus.length > 0 && (
-                <p className="text-[11px] text-red-600 dark:text-red-400 mt-1.5">
-                  Se excluiran {excludeStatus.length} estado{excludeStatus.length !== 1 ? 's' : ''}.{' '}
+                <p className="text-[11px] text-red-600 dark:text-red-400 mt-2">
+                  Se excluiran {excludeStatus.length} estado{excludeStatus.length !== 1 ? 's' : ''} del envio.{' '}
                   <button type="button" onClick={() => setExcludeStatus([])} className="underline hover:no-underline">Quitar exclusiones</button>
                 </p>
               )}
