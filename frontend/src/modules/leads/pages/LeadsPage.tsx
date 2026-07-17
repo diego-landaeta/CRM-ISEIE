@@ -48,6 +48,7 @@ const SoftDeleteDialog = lazy(() => import('../components/SoftDeleteDialog'));
 const SpamReportDialog = lazy(() => import('../components/SpamReportDialog'));
 const ExportDialog = lazy(() => import('@/shared/components/export/ExportDialog'));
 const WasapiExportDialog = lazy(() => import('../components/WasapiExportDialog'));
+const ReportDownloadDialog = lazy(() => import('@/shared/components/ReportDownloadDialog'));
 import StatusBadge, { STATUS_LABELS } from '@/shared/components/ui/StatusBadge';
 import QuickStatusChange from '../components/QuickStatusChange';
 import ChannelBadge from '@/shared/components/ui/ChannelBadge';
@@ -65,7 +66,6 @@ import WhatsappTemplatesDialog from '../components/WhatsappTemplatesDialog';
 import usePermission from '@/shared/hooks/usePermission';
 import { getLeadPriority, getPriorityStyle } from '../lib/leadPriority';
 import { getLeadExportColumns } from '../lib/leadFormat';
-import { downloadVentasReport } from '@/shared/lib/leadsReport';
 import {
   getInitials,
   getAvatarColor,
@@ -188,7 +188,7 @@ export default function LeadsPage() {
   const [configTab, setConfigTab] = useState(null); // 'campos' | 'webhook' | null
   const [moreOpen, setMoreOpen] = useState(false);
   const [reportsMenuOpen, setReportsMenuOpen] = useState(false);
-  const [ventasReportBusy, setVentasReportBusy] = useState(false);
+  const [reportDialogMode, setReportDialogMode] = useState<'leads' | 'ventas' | null>(null);
   const [gestores, setGestores] = useState([]);
   const [convertingLead, setConvertingLead] = useState(null);
   const [confirmingContact, setConfirmingContact] = useState(null);
@@ -613,28 +613,16 @@ export default function LeadsPage() {
               {reportsMenuOpen && (
                 <div className="absolute right-0 top-full mt-1 bg-card border border-border rounded-lg shadow-lg z-30 w-max py-1">
                   <button
-                    onClick={() => { setReportsMenuOpen(false); navigate('/reports'); }}
+                    onClick={() => { setReportsMenuOpen(false); setReportDialogMode('leads'); }}
                     className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted flex items-center gap-2 whitespace-nowrap"
                   >
                     <ChartLineUp size={13} weight="regular" className="flex-shrink-0" /> Reporte (prospectos + ventas)
                   </button>
                   <button
-                    disabled={ventasReportBusy}
-                    onClick={async () => {
-                      setReportsMenuOpen(false);
-                      setVentasReportBusy(true);
-                      try {
-                        const n = await downloadVentasReport({ projectId: activeProject?.id });
-                        toast({ title: 'Reporte de ventas listo', description: `${n} venta${n === 1 ? '' : 's'} exportada${n === 1 ? '' : 's'}.` });
-                      } catch (err) {
-                        toast({ title: 'No se pudo generar el reporte de ventas', description: (err as { message?: string })?.message, variant: 'destructive' });
-                      } finally {
-                        setVentasReportBusy(false);
-                      }
-                    }}
-                    className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted flex items-center gap-2 whitespace-nowrap disabled:opacity-60"
+                    onClick={() => { setReportsMenuOpen(false); setReportDialogMode('ventas'); }}
+                    className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted flex items-center gap-2 whitespace-nowrap"
                   >
-                    <Receipt size={13} weight="regular" className="flex-shrink-0" /> {ventasReportBusy ? 'Generando ventas…' : 'Reporte de ventas'}
+                    <Receipt size={13} weight="regular" className="flex-shrink-0" /> Reporte de ventas
                   </button>
                 </div>
               )}
@@ -1151,6 +1139,19 @@ export default function LeadsPage() {
             open={wasapiOpen}
             projectId={activeProject.id}
             onClose={() => setWasapiOpen(false)}
+          />
+        )}
+      </Suspense>
+
+      {/* Reportes (prospectos+ventas / ventas) con rango de fechas */}
+      <Suspense fallback={null}>
+        {reportDialogMode && (
+          <ReportDownloadDialog
+            open={reportDialogMode !== null}
+            mode={reportDialogMode}
+            projectId={activeProject?.id}
+            projectName={activeProject?.nombre}
+            onClose={() => setReportDialogMode(null)}
           />
         )}
       </Suspense>
