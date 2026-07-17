@@ -67,6 +67,72 @@ function toCsv(rows: Lead[], cols: ExportColumn<Lead>[]): string {
   return head + '\n' + body;
 }
 
+// ── Reporte de VENTAS (conversiones) ─────────────────────────────────────
+export interface ReportVentaFilters {
+  projectId?: number;
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+const VENTAS_COLS: { label: string; value: (r: Record<string, unknown>) => string }[] = [
+  { label: 'Cliente', value: (r) => (r.lead_nombre as string) || '' },
+  { label: 'Email', value: (r) => (r.lead_email as string) || '' },
+  { label: 'Producto', value: (r) => (r.producto_contratado as string) || '' },
+  { label: 'Importe total', value: (r) => String(Number(r.importe_total || 0)) },
+  { label: 'Pagado', value: (r) => String(Number(r.importe_pagado || 0)) },
+  { label: 'Pendiente', value: (r) => String(Number(r.importe_pendiente || 0)) },
+  { label: 'Método pago', value: (r) => (r.metodo_pago as string) || '' },
+  { label: 'Responsable', value: (r) => (r.responsable_nombre as string) || '' },
+  { label: 'Fecha venta', value: (r) => {
+    const v = r.fecha_conversion as string;
+    if (!v) return '';
+    const d = new Date(v);
+    return Number.isNaN(d.getTime()) ? v : d.toLocaleDateString('es-ES');
+  } },
+];
+
+/** Pagina /conversions (limit 500) hasta traer TODAS las ventas. */
+export async function fetchVentasForReport(f: ReportVentaFilters): Promise<Record<string, unknown>[]> {
+  const PAGE = 500;
+  const all: Record<string, unknown>[] = [];
+  let page = 1;
+  for (let guard = 0; guard < 100; guard++) {
+    const p = new URLSearchParams();
+    if (f.projectId) p.set('projectId', String(f.projectId));
+    if (f.dateFrom) p.set('from', f.dateFrom);
+    if (f.dateTo) p.set('to', f.dateTo);
+    p.set('page', String(page));
+    p.set('limit', String(PAGE));
+    const res = await client.get(`/conversions?${p.toString()}`);
+    if (!res.success) break;
+    const batch = (res.data as Record<string, unknown>[]) || [];
+    all.push(...batch);
+    const total = (res as { pagination?: { total?: number } }).pagination?.total ?? all.length;
+    if (batch.length < PAGE || all.length >= total) break;
+    page += 1;
+  }
+  return all;
+}
+
+/** Trae las ventas y dispara la descarga CSV. */
+export async function downloadVentasReport(
+  f: ReportVentaFilters,
+  opts: { filename?: string } = {},
+): Promise<number> {
+  const rows = await fetchVentasForReport(f);
+  const esc = (s: string) => `"${s.replace(/"/g, '""')}"`;
+  const head = VENTAS_COLS.map((c) => esc(c.label)).join(',');
+  const body = rows.map((r) => VENTAS_COLS.map((c) => esc(c.value(r))).join(',')).join('\n');
+  const blob = new Blob(['﻿' + head + '\n' + body], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${opts.filename || `ventas-${new Date().toISOString().slice(0, 10)}`}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  return rows.length;
+}
+
 /** Trae las filas y dispara la descarga CSV con las columnas del export universal. */
 export async function downloadLeadsReport(
   f: ReportLeadFilters,

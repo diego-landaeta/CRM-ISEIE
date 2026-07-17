@@ -65,6 +65,7 @@ import WhatsappTemplatesDialog from '../components/WhatsappTemplatesDialog';
 import usePermission from '@/shared/hooks/usePermission';
 import { getLeadPriority, getPriorityStyle } from '../lib/leadPriority';
 import { getLeadExportColumns } from '../lib/leadFormat';
+import { downloadVentasReport } from '@/shared/lib/leadsReport';
 import {
   getInitials,
   getAvatarColor,
@@ -187,6 +188,7 @@ export default function LeadsPage() {
   const [configTab, setConfigTab] = useState(null); // 'campos' | 'webhook' | null
   const [moreOpen, setMoreOpen] = useState(false);
   const [reportsMenuOpen, setReportsMenuOpen] = useState(false);
+  const [ventasReportBusy, setVentasReportBusy] = useState(false);
   const [gestores, setGestores] = useState([]);
   const [convertingLead, setConvertingLead] = useState(null);
   const [confirmingContact, setConfirmingContact] = useState(null);
@@ -614,13 +616,25 @@ export default function LeadsPage() {
                     onClick={() => { setReportsMenuOpen(false); navigate('/reports'); }}
                     className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted flex items-center gap-2 whitespace-nowrap"
                   >
-                    <ChartLineUp size={13} weight="regular" className="flex-shrink-0" /> Reporte
+                    <ChartLineUp size={13} weight="regular" className="flex-shrink-0" /> Reporte (prospectos + ventas)
                   </button>
                   <button
-                    onClick={() => { setReportsMenuOpen(false); navigate('/sales'); }}
-                    className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted flex items-center gap-2 whitespace-nowrap"
+                    disabled={ventasReportBusy}
+                    onClick={async () => {
+                      setReportsMenuOpen(false);
+                      setVentasReportBusy(true);
+                      try {
+                        const n = await downloadVentasReport({ projectId: activeProject?.id });
+                        toast({ title: 'Reporte de ventas listo', description: `${n} venta${n === 1 ? '' : 's'} exportada${n === 1 ? '' : 's'}.` });
+                      } catch (err) {
+                        toast({ title: 'No se pudo generar el reporte de ventas', description: (err as { message?: string })?.message, variant: 'destructive' });
+                      } finally {
+                        setVentasReportBusy(false);
+                      }
+                    }}
+                    className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted flex items-center gap-2 whitespace-nowrap disabled:opacity-60"
                   >
-                    <Receipt size={13} weight="regular" className="flex-shrink-0" /> Ventas
+                    <Receipt size={13} weight="regular" className="flex-shrink-0" /> {ventasReportBusy ? 'Generando ventas…' : 'Reporte de ventas'}
                   </button>
                 </div>
               )}
