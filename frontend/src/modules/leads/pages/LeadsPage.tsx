@@ -35,6 +35,7 @@ import {
   Trash,
   Flag,
   ChartLineUp,
+  Receipt,
 } from '@phosphor-icons/react';
 
 const ProjectSettingsDialog = lazy(() => import('@/modules/settings/components/ProjectSettingsDialog'));
@@ -185,6 +186,7 @@ export default function LeadsPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [configTab, setConfigTab] = useState(null); // 'campos' | 'webhook' | null
   const [moreOpen, setMoreOpen] = useState(false);
+  const [reportsMenuOpen, setReportsMenuOpen] = useState(false);
   const [gestores, setGestores] = useState([]);
   const [convertingLead, setConvertingLead] = useState(null);
   const [confirmingContact, setConfirmingContact] = useState(null);
@@ -593,15 +595,36 @@ export default function LeadsPage() {
             </button>
           )}
           {(user?.role === 'admin' || user?.role === 'superadmin') && (
-            <button
-              onClick={() => navigate('/reports')}
-              title="Reporte Prospectos + Ventas (Análisis) — descarga combinada para análisis"
-              aria-label="Reporte prospectos y ventas"
-              className="h-9 inline-flex items-center gap-1.5 px-2.5 sm:px-3 rounded-md border border-border bg-card text-xs sm:text-sm font-medium hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
-            >
-              <ChartLineUp size={14} weight="bold" />
-              <span className="hidden md:inline">Reporte + ventas</span>
-            </button>
+            <div className="relative">
+              <button
+                onClick={() => setReportsMenuOpen((v) => !v)}
+                onBlur={() => setTimeout(() => setReportsMenuOpen(false), 150)}
+                title="Reportes y ventas"
+                aria-label="Reportes"
+                aria-expanded={reportsMenuOpen}
+                className="h-9 inline-flex items-center gap-1.5 px-2.5 sm:px-3 rounded-md border border-border bg-card text-xs sm:text-sm font-medium hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
+              >
+                <ChartLineUp size={14} weight="bold" />
+                <span className="hidden md:inline">Reportes</span>
+                <CaretDown size={11} weight="bold" />
+              </button>
+              {reportsMenuOpen && (
+                <div className="absolute right-0 top-full mt-1 bg-card border border-border rounded-lg shadow-lg z-30 w-max py-1">
+                  <button
+                    onClick={() => { setReportsMenuOpen(false); navigate('/reports'); }}
+                    className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted flex items-center gap-2 whitespace-nowrap"
+                  >
+                    <ChartLineUp size={13} weight="regular" className="flex-shrink-0" /> Reporte
+                  </button>
+                  <button
+                    onClick={() => { setReportsMenuOpen(false); navigate('/sales'); }}
+                    className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted flex items-center gap-2 whitespace-nowrap"
+                  >
+                    <Receipt size={13} weight="regular" className="flex-shrink-0" /> Ventas
+                  </button>
+                </div>
+              )}
+            </div>
           )}
           <button
             onClick={() => setWasapiOpen(true)}
