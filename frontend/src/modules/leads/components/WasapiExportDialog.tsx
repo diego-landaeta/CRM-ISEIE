@@ -47,6 +47,8 @@ export default function WasapiExportDialog({ open, projectId, onClose }: Props) 
   // Filtros (todos opcionales; gestor solo puede tocar los suyos)
   const [responsableId, setResponsableId] = useState<string>('');
   const [status, setStatus] = useState<string>('');
+  // Estados a EXCLUIR del envio (p.ej. no interesados).
+  const [excludeStatus, setExcludeStatus] = useState<string[]>([]);
   const [dateFrom, setDateFrom] = useState<string>('');
   const [dateTo, setDateTo] = useState<string>('');
   const [productId, setProductId] = useState<string>('');
@@ -76,6 +78,7 @@ export default function WasapiExportDialog({ open, projectId, onClose }: Props) 
       const params = new URLSearchParams({ projectId: String(projectId) });
       if (responsableId) params.set('responsableId', responsableId);
       if (status) params.set('status', status);
+      if (excludeStatus.length) params.set('excludeStatus', excludeStatus.join(','));
       if (dateFrom) params.set('dateFrom', dateFrom);
       if (dateTo) params.set('dateTo', dateTo);
       if (productId) params.set('productId', productId);
@@ -201,6 +204,38 @@ export default function WasapiExportDialog({ open, projectId, onClose }: Props) 
                   <p className="text-[10px] text-muted-foreground mt-0.5">Más liviano. Cuidado al abrirlo en Excel (puede romper teléfonos).</p>
                 </button>
               </div>
+            </div>
+
+            {/* EXCLUIR estados: quita del envio los leads en esos estados. */}
+            <div className="pt-2 border-t border-border">
+              <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">
+                Excluir contactos por estado <span className="font-normal">(no se exportan los marcados)</span>
+              </label>
+              <div className="flex flex-wrap gap-1.5">
+                {ESTADOS.map((e) => {
+                  const activo = excludeStatus.includes(e.value);
+                  return (
+                    <button
+                      key={e.value}
+                      type="button"
+                      onClick={() => setExcludeStatus((prev) =>
+                        prev.includes(e.value) ? prev.filter((x) => x !== e.value) : [...prev, e.value])}
+                      className={`h-7 px-2.5 rounded-full border text-xs font-medium transition ${
+                        activo
+                          ? 'border-red-400 bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300'
+                          : 'border-border bg-card text-muted-foreground hover:bg-muted'}`}
+                    >
+                      {activo ? '✕ ' : ''}{e.label}
+                    </button>
+                  );
+                })}
+              </div>
+              {excludeStatus.length > 0 && (
+                <p className="text-[11px] text-red-600 dark:text-red-400 mt-1.5">
+                  Se excluiran {excludeStatus.length} estado{excludeStatus.length !== 1 ? 's' : ''}.{' '}
+                  <button type="button" onClick={() => setExcludeStatus([])} className="underline hover:no-underline">Quitar exclusiones</button>
+                </p>
+              )}
             </div>
 
             <div className="space-y-2 pt-2 border-t border-border">
