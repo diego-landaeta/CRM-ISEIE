@@ -525,36 +525,40 @@ export async function findLeadByIdempotencyKey(projectId, key) {
 // ============================================================
 
 // Calcula el ORDER BY segun la preferencia del usuario.
-// - 'recent_value': agrupa por DIA mas reciente y dentro de cada día por precio DESC (DEFAULT)
-// - 'value':    precio DESC, fecha DESC (siempre los caros arriba aunque sean viejos)
-// - 'recent':   fecha DESC sin importar precio
-// - 'urgency':  score combinado: vencidos primero, luego valor*frescura exp
-function buildOrderBy(sort) {
-  if (sort === 'recent') {
-    return `COALESCE(l.fecha_solicitud, l.created_at) DESC`;
-  }
+// DEFAULT = 'recent': orden CRONOLÓGICO puro (fecha), más reciente primero.
+// `dir` ('asc'|'desc', def 'desc') invierte el orden cronológico en todos los modos.
+// - 'recent':       fecha (cronológico puro) — DEFAULT
+// - 'value':        precio DESC, luego fecha
+// - 'recent_value': agrupa por DIA y dentro de cada día por precio DESC
+// - 'urgency':      score combinado: vencidos primero, luego valor*frescura exp
+function buildOrderBy(sort, dir = 'desc') {
+  const D = String(dir).toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+  const FECHA = `COALESCE(l.fecha_solicitud, l.created_at)`;
   if (sort === 'value') {
-    return `COALESCE(prod.precio, 0) DESC NULLS LAST, COALESCE(l.fecha_solicitud, l.created_at) DESC`;
+    return `COALESCE(prod.precio, 0) DESC NULLS LAST, ${FECHA} ${D}`;
   }
   if (sort === 'urgency') {
     // Score: precio * exp(-edad_dias / 7). Asi un lead de 100 hoy supera a uno
     // de 300 de hace 14 dias. Tambien empuja los que tienen recordatorio vencido.
     return `
       (CASE WHEN EXISTS (SELECT 1 FROM lead_reminders r WHERE r.lead_id = l.id AND r.completado = false AND r.fecha_recordatorio < CURRENT_DATE) THEN 1 ELSE 0 END) DESC,
-      (COALESCE(prod.precio, 0) * EXP(-EXTRACT(EPOCH FROM (NOW() - COALESCE(l.fecha_solicitud, l.created_at))) / 604800)) DESC NULLS LAST,
-      COALESCE(l.fecha_solicitud, l.created_at) DESC
+      (COALESCE(prod.precio, 0) * EXP(-EXTRACT(EPOCH FROM (NOW() - ${FECHA})) / 604800)) DESC NULLS LAST,
+      ${FECHA} ${D}
     `;
   }
-  // default 'recent_value' — los del DIA MAS RECIENTE arriba, dentro del dia los CAROS arriba.
-  // Trunca a fecha (sin hora) para que todos los leads del mismo dia compartan posición de "grupo".
-  return `
-    DATE(COALESCE(l.fecha_solicitud, l.created_at)) DESC,
-    COALESCE(prod.precio, 0) DESC NULLS LAST,
-    COALESCE(l.fecha_solicitud, l.created_at) DESC
-  `;
+  if (sort === 'recent_value') {
+    // Agrupa por DIA y dentro del día los caros arriba.
+    return `
+      DATE(${FECHA}) ${D},
+      COALESCE(prod.precio, 0) DESC NULLS LAST,
+      ${FECHA} ${D}
+    `;
+  }
+  // default 'recent' — CRONOLÓGICO puro. l.id como desempate estable.
+  return `${FECHA} ${D} NULLS LAST, l.id ${D}`;
 }
 
-export async function findAll({ projectId, projectIds, status, responsableId, unassigned, canal, productId, search, page, limit, includeConverted, dateFrom, dateTo, sort, duplicated, reincidente }) {
+export async function findAll({ projectId, projectIds, status, responsableId, unassigned, canal, productId, search, page, limit, includeConverted, dateFrom, dateTo, sort, dir, duplicated, reincidente }) {
   const conditions = [];
   const params = [];
   let paramIdx = 1;
@@ -657,27 +661,12 @@ export async function findAll({ projectId, projectIds, status, responsableId, un
      LEFT JOIN projects proj ON proj.id = l.project_id
      LEFT JOIN products prod ON prod.id = l.producto_interes_id
      ${where}
-     ORDER BY ${buildOrderBy(sort)}
+     ORDER BY ${buildOrderBy(sort, dir)}
      LIMIT $${paramIdx++} OFFSET $${paramIdx++}`,
     [...params, limit, offset]
   );
 
   return { leads: rows, total, page, limit, totalPages: Math.ceil(total / limit) };
-}
-
-// Lookup mínimo para validar existencia + obtener campos clave (status,
-// project_id, responsable_id, nombre, email, telefono). Más barato que findById
-// (no hace los joins de producto/responsable/proyecto). Lo usan changeStatus,
-// addInteraction, addReminder, reassign, softDelete, etc.
-export async function findByIdLight(id) {
-  const { rows } = await query(
-    `SELECT id, status, project_id, responsable_id, nombre, email, telefono, deleted_at
-     FROM leads WHERE id = $1`,
-    [id]
-  );
-  const r = rows[0];
-  if (!r || r.deleted_at) return null;
-  return r;
 }
 
 export async function findById(id) {
@@ -795,8 +784,6 @@ export async function createInteraction(leadId, tipo, nota, createdBy, fecha) {
   return rows[0];
 }
 
-// Devuelve la interacción si pertenece al lead indicado. Usado para checks de
-// autoría/pertenencia antes de update/delete.
 export async function findInteractionById(interactionId) {
   const { rows } = await query(
     `SELECT id, lead_id, tipo, nota, fecha, created_by
@@ -1083,31 +1070,4 @@ export async function getStats(projectId, { responsableId = null, dateFrom = nul
     params
   );
   return rows[0];
-}
-
-// Dashboard summary: igual que getStats pero ventana de N días + breakdown
-// de leads recientes. Usado por GET /api/leads/dashboard-summary.
-export async function getDashboardSummary(projectId, { days = 30, responsableId = null } = {}) {
-  const params = [projectId, days];
-  let respFilter = '';
-  if (responsableId) {
-    params.push(responsableId);
-    respFilter = ` AND responsable_id = $3`;
-  }
-  const { rows } = await query(
-    `SELECT
-       COUNT(*) as total,
-       COUNT(*) FILTER (WHERE created_at >= NOW() - ($2 || ' days')::interval) as leads_periodo,
-       COUNT(*) FILTER (WHERE status = 'nuevo') as nuevos,
-       COUNT(*) FILTER (WHERE status = 'por_contactar') as por_contactar,
-       COUNT(*) FILTER (WHERE status = 'contactado') as contactados,
-       COUNT(*) FILTER (WHERE status = 'en_seguimiento') as en_seguimiento,
-       COUNT(*) FILTER (WHERE status = 'convertido') as convertidos,
-       COUNT(*) FILTER (WHERE status = 'no_interesado') as no_interesados,
-       COUNT(*) FILTER (WHERE status = 'proxima_convocatoria') as proxima_convocatoria,
-       COUNT(*) FILTER (WHERE responsable_id IS NULL AND status NOT IN ('convertido','no_interesado')) as sin_asignar
-     FROM leads WHERE project_id = $1 AND deleted_at IS NULL${respFilter}`,
-    params
-  );
-  return { ...rows[0], days };
 }
