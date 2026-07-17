@@ -12,6 +12,7 @@ export interface ExportColumn {
 export interface ExportDialogProps {
   open: boolean;
   onClose: () => void;
+  scope?: React.ReactNode;
   title?: string;
   filename?: string;
   rows?: any[];
@@ -50,7 +51,7 @@ function toJson(rows: any[], cols: ExportColumn[]): string {
   );
 }
 
-export default function ExportDialog({ open, onClose, title = 'Exportar', filename = 'export', rows = [], columns = [] }: ExportDialogProps) {
+export default function ExportDialog({ open, onClose, scope, title = 'Exportar', filename = 'export', rows = [], columns = [] }: ExportDialogProps) {
   const [format, setFormat] = useState<Format>('csv');
   const [selected, setSelected] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(columns.map((c) => [c.key, c.default !== false]))
@@ -104,6 +105,7 @@ export default function ExportDialog({ open, onClose, title = 'Exportar', filena
         </div>
 
         <div className="px-5 py-4 space-y-4">
+          {scope}
           <div>
             <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-2">Formato</div>
             <div className="grid grid-cols-3 gap-2">

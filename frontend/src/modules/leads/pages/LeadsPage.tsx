@@ -198,17 +198,29 @@ export default function LeadsPage() {
   // El listado va paginado; el export debe llevarse TODO lo filtrado.
   const [exportRows, setExportRows] = useState([]);
   const [exportLoading, setExportLoading] = useState(false);
+  // Alcance del export: 'filtros' = lo que ves · 'todos' = todo sin filtros.
+  const [expScope, setExpScope] = useState('filtros');
 
-  async function abrirExport() {
+  // Token para que respuestas lentas no pisen a la última (no combinar datos).
+  const exportReqRef = useRef(0);
+  async function recomputeExport(scope) {
+    const myReq = ++exportReqRef.current;
     setExportLoading(true);
     try {
-      const todos = await fetchAllForExport();
-      setExportRows(aplicarQuickFilter(todos));
-      setExportOpen(true);
+      const ignoreFilters = scope === 'todos';
+      const todos = await fetchAllForExport({ ignoreFilters });
+      if (exportReqRef.current !== myReq) return;
+      setExportRows(ignoreFilters ? todos : aplicarQuickFilter(todos));
     } catch (err) {
-      toast({ title: 'No se pudo preparar el export', description: err?.message, variant: 'destructive' });
-    } finally { setExportLoading(false); }
+      if (exportReqRef.current === myReq) toast({ title: 'No se pudo preparar el export', description: err?.message, variant: 'destructive' });
+    } finally { if (exportReqRef.current === myReq) setExportLoading(false); }
   }
+  async function abrirExport() {
+    setExpScope('filtros');
+    setExportOpen(true);
+    await recomputeExport('filtros');
+  }
+  function setExportScope(scope) { setExpScope(scope); recomputeExport(scope); }
   const [wasapiOpen, setWasapiOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]); // bulk actions
   const [bulkAction, setBulkAction] = useState(null); // null | 'reassign' | 'status' | 'export'
@@ -1061,6 +1073,26 @@ export default function LeadsPage() {
           filename={`prospectos-${activeProject?.slug || activeProject?.nombre || 'crm'}-${new Date().toISOString().slice(0, 10)}`}
           columns={getLeadExportColumns()}
           rows={exportRows}
+          scope={
+            <section className="rounded-md border border-border bg-muted/20 p-3">
+              <p className="text-xs font-semibold text-foreground mb-1.5">¿Qué leads exportar?</p>
+              <div className="flex rounded-md border border-border overflow-hidden text-xs font-semibold">
+                <button type="button" onClick={() => setExportScope('filtros')}
+                  className={`flex-1 h-8 ${expScope === 'filtros' ? 'bg-primary/10 text-primary' : 'bg-card text-muted-foreground hover:bg-muted/50'}`}>
+                  Con los filtros activos
+                </button>
+                <button type="button" onClick={() => setExportScope('todos')}
+                  className={`flex-1 h-8 border-l border-border ${expScope === 'todos' ? 'bg-primary/10 text-primary' : 'bg-card text-muted-foreground hover:bg-muted/50'}`}>
+                  Todos (sin filtros)
+                </button>
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                {expScope === 'filtros'
+                  ? 'Exporta exactamente lo que ves ahora (estado, fechas, búsqueda…).'
+                  : 'Exporta todos los leads del proyecto, ignorando los filtros.'}
+              </p>
+            </section>
+          }
         />
       </Suspense>
 

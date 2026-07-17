@@ -74,7 +74,7 @@ export interface UseLeadsResult {
   loading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
-  fetchAllForExport: () => Promise<Lead[]>;
+  fetchAllForExport: (opts?: { ignoreFilters?: boolean }) => Promise<Lead[]>;
 }
 
 // Backend devuelve `status` y `canal_detectado`; UI usa `estado` y `origen`.
@@ -185,23 +185,27 @@ export function useLeads(): UseLeadsResult {
   // Trae TODOS los leads filtrados (sin paginar) para exportar. El listado va de
   // 20 en 20; el export debe llevarse todo lo filtrado. El backend limita el
   // page-size a 500 → paginamos en bucle.
-  const fetchAllForExport = useCallback(async (): Promise<Lead[]> => {
+  const fetchAllForExport = useCallback(async (opts?: { ignoreFilters?: boolean }): Promise<Lead[]> => {
     if (!pid) return [];
+    const ignoreFilters = !!opts?.ignoreFilters;
     const baseParams = () => {
       const p = new URLSearchParams();
       p.set('projectId', String(pid));
-      if (debouncedSearch) p.set('search', debouncedSearch);
-      if (filterEstado) p.set('status', filterEstado);
-      if (filterOrigen) p.set('canal', filterOrigen);
-      if (filterResponsable === 'unassigned') p.set('unassigned', 'true');
-      else if (filterResponsable) p.set('responsableId', filterResponsable);
-      if (filterProducto) p.set('productId', filterProducto);
-      if (dateFrom) p.set('dateFrom', dateFrom);
-      if (dateTo) p.set('dateTo', dateTo);
+      // "Todo sin filtros" ignora estado/fechas/búsqueda; solo respeta el proyecto.
+      if (!ignoreFilters) {
+        if (debouncedSearch) p.set('search', debouncedSearch);
+        if (filterEstado) p.set('status', filterEstado);
+        if (filterOrigen) p.set('canal', filterOrigen);
+        if (filterResponsable === 'unassigned') p.set('unassigned', 'true');
+        else if (filterResponsable) p.set('responsableId', filterResponsable);
+        if (filterProducto) p.set('productId', filterProducto);
+        if (dateFrom) p.set('dateFrom', dateFrom);
+        if (dateTo) p.set('dateTo', dateTo);
+        if (filterDup === '1') p.set('duplicated', 'true');
+        if (filterReincidente === '1') p.set('reincidente', 'true');
+      }
       if (sortMode) p.set('sort', sortMode);
       if (sortDir) p.set('dir', sortDir);
-      if (filterDup === '1') p.set('duplicated', 'true');
-      if (filterReincidente === '1') p.set('reincidente', 'true');
       return p;
     };
     const PAGE = 500;
