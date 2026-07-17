@@ -39,6 +39,16 @@ export function formatDate(dateStr: string | null | undefined): string {
   return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
 }
 
+// Fecha REAL (no relativa). En "Último contacto" el equipo necesita ver el día
+// exacto en que se registró el contacto, no "hoy"/"hace 3d".
+export function formatFecha(dateStr: string | null | undefined): string | null {
+  if (!dateStr) return null;
+  const m = typeof dateStr === 'string' ? dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/) : null;
+  const d = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: '2-digit' });
+}
+
 export function formatRelative(
   dateStr: string | null | undefined,
   { future = false }: { future?: boolean } = {},

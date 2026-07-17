@@ -63,6 +63,13 @@ function formatRelative(dateStr: string | null | undefined, { future = false }: 
   return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
 }
 
+// Fecha REAL (no relativa). En "Último contacto" el equipo necesita ver el día
+// exacto en que se registró el contacto, no "hoy"/"hace 3d".
+function fmtFecha(dateStr: string | null | undefined): string | null {
+  if (!dateStr) return null;
+  return new Date(dateStr).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: '2-digit' });
+}
+
 function cleanPhone(phone: string | null | undefined): string {
   return (phone || '').replace(/[^\d]/g, '');
 }
@@ -414,7 +421,7 @@ export default function ClientsPage() {
                         {c.ultima_compra ? formatRelative(c.ultima_compra) : '—'}
                       </td>
                       <td className="px-4 py-3 text-xs text-muted-foreground">
-                        {c.last_interaction_at ? formatRelative(c.last_interaction_at) : <span className="text-muted-foreground/60">Sin contacto</span>}
+                        {c.last_interaction_at ? fmtFecha(c.last_interaction_at) : <span className="text-muted-foreground/60">Sin contacto</span>}
                       </td>
                       <td className="px-4 py-3 text-right pr-3">
                         <QuickActions client={c} onUpsell={handleUpsell} onDelete={isSuperadmin ? handleDelete : undefined} />
@@ -461,7 +468,7 @@ export default function ClientsPage() {
                   <div className="flex items-center justify-between pt-1 border-t border-border/60">
                     <div className="flex flex-col gap-0.5 text-[11px]">
                       {c.ultima_compra && <span className="text-muted-foreground">Compra: <span className="text-foreground">{formatRelative(c.ultima_compra)}</span></span>}
-                      {c.last_interaction_at && <span className="text-muted-foreground">Contacto: <span className="text-foreground">{formatRelative(c.last_interaction_at)}</span></span>}
+                      {c.last_interaction_at && <span className="text-muted-foreground">Contacto: <span className="text-foreground">{fmtFecha(c.last_interaction_at)}</span></span>}
                     </div>
                     <QuickActions client={c} onUpsell={handleUpsell} onDelete={isSuperadmin ? handleDelete : undefined} />
                   </div>
