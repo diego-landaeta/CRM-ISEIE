@@ -658,7 +658,6 @@ export default function LeadsPage() {
               <tr>
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Nombre</th>
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Teléfono</th>
-                <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Teléfono</th>
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Programa</th>
                 <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Valor</th>
                 {showProjectColumn && (
@@ -712,7 +711,6 @@ export default function LeadsPage() {
                       )}
                     </div>
                   </td>
-                  <td className="px-5 py-3.5 text-muted-foreground whitespace-nowrap">{lead.telefono || <span className="text-muted-foreground/50">—</span>}</td>
                   <td className="px-5 py-3.5 text-xs text-muted-foreground font-mono">{lead.telefono || '—'}</td>
                   <td className="px-5 py-3.5 text-xs">
                     {lead.producto_interes ? (
