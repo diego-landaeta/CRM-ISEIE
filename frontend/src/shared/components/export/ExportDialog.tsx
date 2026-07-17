@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { X, Download, FileCsv, FileXls } from '@phosphor-icons/react';
 
 export interface ExportColumn {
@@ -57,6 +57,14 @@ export default function ExportDialog({ open, onClose, title = 'Exportar', filena
   );
 
   const cols = useMemo(() => columns.filter((c) => selected[c.key]), [columns, selected]);
+
+  // Bloquear scroll del fondo mientras el diálogo está abierto.
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [open]);
 
   if (!open) return null;
 
@@ -124,7 +132,7 @@ export default function ExportDialog({ open, onClose, title = 'Exportar', filena
                   <button onClick={() => setSelected(Object.fromEntries(columns.map((c) => [c.key, false])))} className="text-muted-foreground hover:text-foreground">Ninguna</button>
                 </div>
               </div>
-              <div className="max-h-48 overflow-y-auto rounded-lg border border-border divide-y divide-border">
+              <div className="max-h-48 overflow-y-auto overscroll-contain rounded-lg border border-border divide-y divide-border">
                 {columns.map((c) => (
                   <label key={c.key} className="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-muted/40 transition-colors">
                     <input
