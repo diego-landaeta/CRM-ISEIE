@@ -215,12 +215,13 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
     }
   }, [form.metodo_pago]);
 
-  // Recalcular cuotas si: estoy en fraccionado, las cuotas NO han sido editadas a mano
+  // Recalcular cuotas si: estoy en fraccionado, las cuotas NO han sido editadas a mano.
+  // Se reparte el TOTAL NETO (tras descuento + IVA), no el bruto: las cuotas deben
+  // sumar lo mismo que se registra (calc.total), no el precio de lista.
   useEffect(() => {
     if (form.metodo_pago !== 'fraccionado' || installmentsDirty) return;
-    const total = Number(form.importe_total);
-    setInstallments(distributeInstallments(total, numCuotas, fechaPrimeraCuota));
-  }, [form.metodo_pago, form.importe_total, numCuotas, fechaPrimeraCuota, installmentsDirty]);
+    setInstallments(distributeInstallments(calc.total, numCuotas, fechaPrimeraCuota));
+  }, [form.metodo_pago, calc.total, numCuotas, fechaPrimeraCuota, installmentsDirty]);
 
   const activeLink = selectedLinkIdx === 'custom'
     ? customLink
