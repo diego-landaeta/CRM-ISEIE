@@ -24,6 +24,7 @@ export const BETA_ROUTES: readonly string[] = [
   '/commissions',                   // Comisiones
   '/payroll',                       // Nóminas
   '/meta-ads',                      // Integracion Meta Ads (metricas campanas)
+  '/reports',                       // Analisis › Reportes (overview + descargables prospectos/ventas)
   '/products',                      // Productos (incluye /products/tree)
   '/woocommerce',                   // Importacion WordPress/WC
   '/configuracion/categorias-arbol',// Categorias
