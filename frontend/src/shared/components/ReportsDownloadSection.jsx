@@ -94,21 +94,24 @@ function downloadBlob(blob, name) {
 }
 
 export default function ReportsDownloadSection({ projectId, projectName }) {
-  const [from, setFrom] = useState('');
-  const [to, setTo] = useState('');
+  const [from, setFrom] = useState(() => `${new Date().getFullYear()}-01-01`);
+  const [to, setTo] = useState(() => new Date().toISOString().slice(0, 10));
   const [busy, setBusy] = useState(null);
   const ready = Boolean(from && to);
 
   async function run(report, format) {
     setBusy(`${report.key}:${format}`);
     try {
+      // Si el rango quedó invertido (Hasta < Desde), lo corregimos para no traer vacío.
+      const dFrom = from && to && from > to ? to : from;
+      const dTo = from && to && from > to ? from : to;
       const p = new URLSearchParams();
       if (projectId) p.set('projectId', String(projectId));
-      if (from) p.set('from', from);
-      if (to) p.set('to', to);
+      if (dFrom) p.set('from', dFrom);
+      if (dTo) p.set('to', dTo);
       const res = await client.get(`/reports/${report.key}?${p.toString()}`);
       const rows = res.data || [];
-      const sufijo = from || to ? `${from || 'inicio'}_${to || 'hoy'}` : 'todo';
+      const sufijo = dFrom || dTo ? `${dFrom || 'inicio'}_${dTo || 'hoy'}` : 'todo';
       const base = `${report.key}-${projectName || 'crm'}-${sufijo}`;
       if (!rows.length) { toast({ title: 'Sin datos en ese período', description: report.label }); return; }
       if (format === 'xlsx') {
@@ -151,13 +154,13 @@ export default function ReportsDownloadSection({ projectId, projectName }) {
           <label className="text-xs font-medium text-foreground">Desde
             <div className="mt-1 flex items-center gap-1 rounded-md border border-border bg-card px-2">
               <CalendarBlank size={14} className="text-muted-foreground" />
-              <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="h-9 bg-transparent text-sm focus:outline-none" />
+              <input type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} className="h-9 bg-transparent text-sm focus:outline-none" />
             </div>
           </label>
           <label className="text-xs font-medium text-foreground">Hasta
             <div className="mt-1 flex items-center gap-1 rounded-md border border-border bg-card px-2">
               <CalendarBlank size={14} className="text-muted-foreground" />
-              <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="h-9 bg-transparent text-sm focus:outline-none" />
+              <input type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} className="h-9 bg-transparent text-sm focus:outline-none" />
             </div>
           </label>
         </div>
