@@ -204,8 +204,12 @@ export async function ventasReport({ projectId, from, to }) {
     `SELECT cp.fecha AS fecha_pago,
             l.nombre AS cliente,
             c.producto_contratado AS formacion,
-            cp.importe AS cuota,
-            ci.numero AS num_cuota,
+            cp.importe AS importe,
+            CASE
+              WHEN plan.total = 0 THEN 'Pago único'
+              WHEN ci.numero IS NOT NULL THEN 'Cuota ' || ci.numero || ' de ' || plan.total || ' · faltan ' || GREATEST(plan.total - plan.pagadas, 0)
+              ELSE 'Abono (plan de ' || plan.total || ' cuotas) · faltan ' || GREATEST(plan.total - plan.pagadas, 0)
+            END AS plan_pago,
             to_char(date_trunc('month', c.fecha_conversion), 'YYYY-MM') AS mes_origen,
             ${PAIS} AS pais,
             (c.importe_total - c.importe_pagado) AS pendiente,
@@ -214,6 +218,11 @@ export async function ventasReport({ projectId, from, to }) {
      JOIN conversions c ON c.id = cp.conversion_id
      LEFT JOIN leads l ON l.id = c.lead_id
      LEFT JOIN conversion_installments ci ON ci.payment_id = cp.id
+     LEFT JOIN LATERAL (
+       SELECT COUNT(*)::int AS total,
+              COUNT(*) FILTER (WHERE fecha_cobro IS NOT NULL OR payment_id IS NOT NULL)::int AS pagadas
+       FROM conversion_installments cix WHERE cix.conversion_id = c.id
+     ) plan ON TRUE
      LEFT JOIN projects p ON p.id = c.project_id
      ${where}
      ORDER BY cp.fecha DESC, cp.id DESC`,
