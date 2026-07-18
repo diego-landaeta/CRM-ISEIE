@@ -48,7 +48,6 @@ const SoftDeleteDialog = lazy(() => import('../components/SoftDeleteDialog'));
 const SpamReportDialog = lazy(() => import('../components/SpamReportDialog'));
 const ExportDialog = lazy(() => import('@/shared/components/export/ExportDialog'));
 const WasapiExportDialog = lazy(() => import('../components/WasapiExportDialog'));
-const ReportDownloadDialog = lazy(() => import('@/shared/components/ReportDownloadDialog'));
 import StatusBadge, { STATUS_LABELS } from '@/shared/components/ui/StatusBadge';
 import QuickStatusChange from '../components/QuickStatusChange';
 import ChannelBadge from '@/shared/components/ui/ChannelBadge';
@@ -187,8 +186,6 @@ export default function LeadsPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [configTab, setConfigTab] = useState(null); // 'campos' | 'webhook' | null
   const [moreOpen, setMoreOpen] = useState(false);
-  const [reportsMenuOpen, setReportsMenuOpen] = useState(false);
-  const [reportDialogMode, setReportDialogMode] = useState<'leads' | 'ventas' | null>(null);
   const [gestores, setGestores] = useState([]);
   const [convertingLead, setConvertingLead] = useState(null);
   const [confirmingContact, setConfirmingContact] = useState(null);
@@ -597,36 +594,15 @@ export default function LeadsPage() {
             </button>
           )}
           {(user?.role === 'admin' || user?.role === 'superadmin') && (
-            <div className="relative">
-              <button
-                onClick={() => setReportsMenuOpen((v) => !v)}
-                onBlur={() => setTimeout(() => setReportsMenuOpen(false), 150)}
-                title="Reportes y ventas"
-                aria-label="Reportes"
-                aria-expanded={reportsMenuOpen}
-                className="h-9 inline-flex items-center gap-1.5 px-2.5 sm:px-3 rounded-md border border-border bg-card text-xs sm:text-sm font-medium hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
-              >
-                <ChartLineUp size={14} weight="bold" />
-                <span className="hidden md:inline">Reportes</span>
-                <CaretDown size={11} weight="bold" />
-              </button>
-              {reportsMenuOpen && (
-                <div className="absolute right-0 top-full mt-1 bg-card border border-border rounded-lg shadow-lg z-30 w-max py-1">
-                  <button
-                    onClick={() => { setReportsMenuOpen(false); setReportDialogMode('leads'); }}
-                    className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted flex items-center gap-2 whitespace-nowrap"
-                  >
-                    <ChartLineUp size={13} weight="regular" className="flex-shrink-0" /> Reporte (prospectos + ventas)
-                  </button>
-                  <button
-                    onClick={() => { setReportsMenuOpen(false); setReportDialogMode('ventas'); }}
-                    className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted flex items-center gap-2 whitespace-nowrap"
-                  >
-                    <Receipt size={13} weight="regular" className="flex-shrink-0" /> Reporte de ventas
-                  </button>
-                </div>
-              )}
-            </div>
+            <button
+              onClick={() => navigate('/reports')}
+              title="Ir a Reportes (descargables)"
+              aria-label="Reportes"
+              className="h-9 inline-flex items-center gap-1.5 px-2.5 sm:px-3 rounded-md border border-border bg-card text-xs sm:text-sm font-medium hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
+            >
+              <ChartLineUp size={14} weight="bold" />
+              <span className="hidden md:inline">Reportes</span>
+            </button>
           )}
           <button
             onClick={() => setWasapiOpen(true)}
@@ -1143,18 +1119,6 @@ export default function LeadsPage() {
         )}
       </Suspense>
 
-      {/* Reportes (prospectos+ventas / ventas) con rango de fechas */}
-      <Suspense fallback={null}>
-        {reportDialogMode && (
-          <ReportDownloadDialog
-            open={reportDialogMode !== null}
-            mode={reportDialogMode}
-            projectId={activeProject?.id}
-            projectName={activeProject?.nombre}
-            onClose={() => setReportDialogMode(null)}
-          />
-        )}
-      </Suspense>
     </div>
   );
 }
