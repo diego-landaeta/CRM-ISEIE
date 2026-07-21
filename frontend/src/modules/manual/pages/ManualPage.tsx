@@ -593,6 +593,32 @@ export default function ManualPage() {
           genera un informe formateado (header con branding, KPIs, tablas) listo para imprimir o enviar.
         </P>
 
+        <SubHeader>Reportes descargables (Excel/CSV, por rango de fechas)</SubHeader>
+        <P>
+          En la tarjeta <strong>«Reportes descargables»</strong> eliges un <strong>rango de fechas</strong>
+          (Desde / Hasta) y bajas cada reporte en <strong>Excel o CSV</strong>. Desde <strong>Prospectos</strong>
+          el botón <strong>Reportes</strong> te lleva directo a esta sección. Reportes disponibles:
+        </P>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 my-3">
+          {[
+            ['Resumen mensual', 'Por mes: prospectos entrados, convertidos, tasa, ventas y cobrado.'],
+            ['Prospectos', 'Por fecha de entrada, con el valor estimado del producto de interés.'],
+            ['Ventas (cobros)', 'Por fecha de PAGO: cada cuota donde cae, con mes de origen, país y pendiente de cobro.'],
+            ['General (todos los contactos)', 'Prospectos y convertidos juntos: estimado en prospectos, importe real en clientes.'],
+            ['General + Facturación', 'Lo mismo más lo facturado (nº de facturas e importe facturado).'],
+          ].map(([t, d]) => (
+            <div key={t} className="flex items-start gap-2 text-xs text-muted-foreground">
+              <CheckCircle size={13} className="text-emerald-500 flex-shrink-0 mt-0.5" weight="fill" />
+              <span><strong className="text-foreground">{t}:</strong> {d}</span>
+            </div>
+          ))}
+        </div>
+        <P>
+          Clave: el reporte de <strong>Ventas es por fecha de pago</strong>, así una cuota de un alumno
+          antiguo aparece en el mes en que pagó (con su «mes de origen»), sin contar como conversión nueva.
+          Las fechas se exportan como texto <code>dd/mm/aaaa</code> para que Excel no las reinterprete.
+        </P>
+
         <SubHeader>Reportes IA</SubHeader>
         <P>
           Genera informes mensuales de rendimiento con inteligencia artificial (Claude de Anthropic).

@@ -33,18 +33,30 @@ async function stripeGet(apiKey, path, params = {}) {
 }
 
 function chargeToPayment(charge, projectId) {
+  // Importe SIEMPRE en EUR: si el cargo entra en moneda extranjera, usamos el
+  // importe liquidado por Stripe en EUR (balance_transaction.amount), no el
+  // importe en la moneda del cargo. Así el CRM registra euros reales y no vuelve
+  // a pasar lo de las facturas en $/CRC/COP.
+  const bt = charge.balance_transaction; // objeto expandido (expand[]=data.balance_transaction)
+  const chargeCur = (charge.currency || 'eur').toLowerCase();
+  const foreign = chargeCur !== 'eur';
+  const settledEur = bt && typeof bt.amount === 'number' ? bt.amount / 100 : null;
+  const amountEur = foreign && settledEur != null ? settledEur : (charge.amount || 0) / 100;
   return {
     project_id: projectId,
     stripe_id: charge.id,
     type: 'charge',
     status: charge.status,
-    amount: (charge.amount || 0) / 100,
-    currency: (charge.currency || 'eur').toUpperCase(),
+    amount: amountEur,
+    currency: 'EUR',
     customer_email: charge.billing_details?.email || charge.receipt_email || null,
     customer_name: charge.billing_details?.name || null,
     customer_stripe_id: charge.customer || null,
     description: charge.description || null,
-    metadata: charge.metadata || {},
+    metadata: {
+      ...(charge.metadata || {}),
+      ...(foreign ? { original_amount: (charge.amount || 0) / 100, original_currency: chargeCur.toUpperCase(), stripe_exchange_rate: bt?.exchange_rate ?? null } : {}),
+    },
     payment_method: charge.payment_method_details?.type || null,
     disputed: !!charge.disputed,
     dispute_status: charge.dispute?.status || null,
@@ -116,7 +128,7 @@ export async function syncStripePayments(projectId, { fullHistory = false } = {}
   const MAX_PAGES = 200;
 
   while (pages < MAX_PAGES) {
-    const params = { limit: 100 };
+    const params = { limit: 100, 'expand[]': 'data.balance_transaction' };
     if (createdGte) params['created[gte]'] = createdGte;
     if (startingAfter) params.starting_after = startingAfter;
 
