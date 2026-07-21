@@ -1,7 +1,8 @@
-import { lazy, Suspense, useState } from 'react';
-import { Plus, Receipt } from '@phosphor-icons/react';
+import { lazy, Suspense, useState, useEffect } from 'react';
+import { Plus, Receipt, UsersThree } from '@phosphor-icons/react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useAuth } from '@/contexts/AuthContext';
+import client from '@/shared/api/client';
 
 const RegisterSaleDialog = lazy(() => import('../components/RegisterSaleDialog'));
 const TopProductsCard = lazy(() => import('../components/TopProductsCard'));
@@ -21,6 +22,16 @@ export default function SalesPage() {
   const allProjects = activeProject?.id === -1;
   const projectIdParam = hasActiveCtx && !allProjects ? activeProject!.id : null;
 
+  // Filtro por gestora/vendedora (solo admin/superadmin). Las tarjetas ya
+  // soportan responsableId; aquí solo lo elegimos.
+  const [gestores, setGestores] = useState<Array<{ id: number; nombre: string }>>([]);
+  const [responsableId, setResponsableId] = useState<number | null>(null);
+  useEffect(() => {
+    if (!isAdmin) return;
+    const pid = projectIdParam ? `&projectId=${projectIdParam}` : '';
+    client.get(`/users?limit=100${pid}`).then((r) => setGestores(r.success ? (r.data || []) : [])).catch(() => {});
+  }, [isAdmin, projectIdParam]);
+
   return (
     <div className="space-y-6">
       <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
@@ -34,16 +45,32 @@ export default function SalesPage() {
               : 'Registra ventas — del día o históricas. Crea cliente + conversión + pago en un solo paso.'}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          disabled={!hasActiveCtx || allProjects}
-          title={allProjects ? 'Selecciona un proyecto concreto para registrar una venta' : ''}
-          className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50"
-        >
-          <Plus size={14} weight="bold" />
-          Nueva venta
-        </button>
+        <div className="flex items-center gap-2">
+          {isAdmin && !allProjects && (
+            <div className="flex items-center gap-1.5 h-9 px-2.5 rounded-md border border-border bg-card text-sm">
+              <UsersThree size={14} className="text-muted-foreground" />
+              <select
+                value={responsableId ?? ''}
+                onChange={(e) => setResponsableId(e.target.value ? Number(e.target.value) : null)}
+                className="bg-transparent focus:outline-none max-w-[160px]"
+                title="Filtrar por gestora"
+              >
+                <option value="">Todas las gestoras</option>
+                {gestores.map((g) => <option key={g.id} value={g.id}>{g.nombre}</option>)}
+              </select>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            disabled={!hasActiveCtx || allProjects}
+            title={allProjects ? 'Selecciona un proyecto concreto para registrar una venta' : ''}
+            className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50"
+          >
+            <Plus size={14} weight="bold" />
+            Nueva venta
+          </button>
+        </div>
       </header>
 
       {!hasActiveCtx ? (
@@ -53,7 +80,7 @@ export default function SalesPage() {
       ) : (
         <>
           <Suspense fallback={null}>
-            <CursosVendidosCard projectId={projectIdParam} />
+            <CursosVendidosCard projectId={projectIdParam} responsableId={responsableId} />
           </Suspense>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -61,7 +88,7 @@ export default function SalesPage() {
               <MyGoalCard projectId={projectIdParam} />
             </Suspense>
             <Suspense fallback={null}>
-              <TopProductsCard projectId={projectIdParam} days={null} limit={5} title="Programas más vendidos" />
+              <TopProductsCard projectId={projectIdParam} responsableId={responsableId} days={null} limit={5} title="Programas más vendidos" />
             </Suspense>
           </div>
 
