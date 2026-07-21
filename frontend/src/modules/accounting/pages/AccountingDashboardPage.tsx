@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { accountingApi } from '../api/accounting.api';
+import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
 import useUrlFilters from '@/shared/hooks/useUrlFilters';
@@ -39,6 +40,17 @@ export default function AccountingDashboardPage() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [range, setRange] = useUrlFilters({ from: DEFAULT_FROM, to: DEFAULT_TO });
+  const [vend, setVend] = useState([]);
+
+  useEffect(() => {
+    const p = new URLSearchParams();
+    if (activeProject?.id) p.set('projectId', String(activeProject.id));
+    if (range.from) p.set('from', range.from);
+    if (range.to) p.set('to', range.to);
+    client.get(`/reports/ventas-vendedora?${p.toString()}`)
+      .then((r) => setVend(r.success ? (r.data || []) : []))
+      .catch(() => setVend([]));
+  }, [activeProject?.id, range.from, range.to]);
 
   useEffect(() => {
     async function load() {
@@ -182,6 +194,39 @@ export default function AccountingDashboardPage() {
             </ResponsiveContainer>
           )}
         </div>
+      </div>
+
+      {/* Ventas por vendedora */}
+      <div className="bg-card border border-border rounded-lg p-4">
+        <h3 className="font-semibold mb-3">Ventas por vendedora</h3>
+        {vend.length === 0 ? (
+          <EmptyState icon={CurrencyEur} title="Sin ventas" description="No hay ventas en este período" />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-muted-foreground border-b border-border">
+                  <th className="py-2 font-medium">Vendedora</th>
+                  <th className="py-2 font-medium text-right">Ventas</th>
+                  <th className="py-2 font-medium text-right">Clientes</th>
+                  <th className="py-2 font-medium text-right">Cobrado</th>
+                  <th className="py-2 font-medium text-right">Pendiente</th>
+                </tr>
+              </thead>
+              <tbody>
+                {vend.map((v) => (
+                  <tr key={v.vendedora} className="border-b border-border/50">
+                    <td className="py-2 font-medium text-foreground">{v.vendedora}</td>
+                    <td className="py-2 text-right tabular-nums">{v.ventas}</td>
+                    <td className="py-2 text-right tabular-nums">{v.clientes}</td>
+                    <td className="py-2 text-right tabular-nums font-semibold text-emerald-600 dark:text-emerald-400">{fmt(v.cobrado)}</td>
+                    <td className="py-2 text-right tabular-nums text-orange-600 dark:text-orange-400">{fmt(v.pendiente)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Cuentas por cobrar */}
