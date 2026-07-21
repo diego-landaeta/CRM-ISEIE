@@ -110,14 +110,6 @@ export default function AppLayout() {
         )}
       >
         <SectionTabs />
-        {/* Banner + Popup "EN PRUEBAS" para todo el bloque de Finanzas. */}
-        {/^\/(sales|expenses|accounting|commissions|payroll)(\/|$)/.test(pathname) && (
-          <BetaDisclaimer
-            sectionKey="finanzas"
-            title="Finanzas — sección en pruebas"
-            description="Esta sección está en periodo de pruebas. Los datos son reales pero algunos automatismos están en validación."
-          />
-        )}
         <Suspense fallback={
           <div className="flex items-center justify-center py-20">
             <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />

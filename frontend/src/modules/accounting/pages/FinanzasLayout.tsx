@@ -26,11 +26,6 @@ export default function FinanzasLayout() {
   return (
     <div className="flex flex-col h-full">
       <SubNav tabs={TABS} sectionLabel="Finanzas" sectionIcon={Calculator} />
-      <BetaDisclaimer
-        sectionKey="finanzas"
-        title="Finanzas — sección en pruebas"
-        description="Esta sección está en periodo de pruebas. Los datos son reales pero algunos automatismos están en validación."
-      />
       <div className="flex-1 overflow-y-auto">
         <Outlet />
       </div>
