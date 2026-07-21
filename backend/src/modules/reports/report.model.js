@@ -311,3 +311,25 @@ export async function cobrosMensuales({ projectId, from, to }) {
   );
   return rows;
 }
+
+// 7) VENTAS POR VENDEDORA: agrupa ventas por el responsable del lead (por fecha
+// de venta). "Sin asignar" cuando el lead no tiene responsable.
+export async function ventasVendedora({ projectId, from, to }) {
+  const { where, params } = buildFilter({ projectId, from, to }, 'c.fecha_conversion', 'c.project_id');
+  const { rows } = await query(
+    `SELECT COALESCE(u.nombre, 'Sin asignar') AS vendedora,
+            COUNT(*)::int AS ventas,
+            COUNT(DISTINCT c.lead_id)::int AS clientes,
+            COALESCE(SUM(c.importe_total), 0)::numeric AS total,
+            COALESCE(SUM(c.importe_pagado), 0)::numeric AS cobrado,
+            COALESCE(SUM(c.importe_total - c.importe_pagado), 0)::numeric AS pendiente
+     FROM conversions c
+     LEFT JOIN leads l ON l.id = c.lead_id
+     LEFT JOIN users u ON u.id = l.responsable_id
+     ${where}
+     GROUP BY 1
+     ORDER BY cobrado DESC`,
+    params
+  );
+  return rows;
+}

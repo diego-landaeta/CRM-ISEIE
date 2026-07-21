@@ -32,3 +32,4 @@ export const ventas = makeReport('ventasReport');
 export const general = makeReport('generalReport');
 export const generalFacturacion = makeReport('generalFacturacionReport');
 export const cobrosMensuales = makeReport('cobrosMensuales');
+export const ventasVendedora = makeReport('ventasVendedora');
