@@ -9,7 +9,8 @@
 // Cualquier modificación de filtros se notifica al padre via los setters; este
 // componente NO mantiene estado propio (salvo `open` del popover).
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Funnel, MagnifyingGlass, X, CaretDown, Lightning, WarningCircle,
 } from '@phosphor-icons/react';
@@ -92,15 +93,46 @@ export default function LeadsFiltersBar(props: Props) {
 
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
   const [open, setOpen] = useState(false);
-  const popoverRef = useRef<HTMLDivElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null); // wrapper del botón (ancla de posición)
+  const panelRef = useRef<HTMLDivElement>(null);   // panel renderizado en el portal
+  const [pos, setPos] = useState<{ top: number; left: number; width: number; maxH: number } | null>(null);
 
-  // Click fuera cierra el popover
+  // El panel se renderiza en un Portal (a <body>) con posición fija calculada desde
+  // el botón, para que NINGÚN contenedor con overflow/transform lo recorte (era el bug
+  // de "se parte la pantalla / se oculta abajo").
+  const updatePos = useCallback(() => {
+    const el = popoverRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const width = Math.min(560, window.innerWidth - 32);
+    let left = r.left;
+    if (left + width > window.innerWidth - 16) left = window.innerWidth - 16 - width;
+    if (left < 16) left = 16;
+    const top = r.bottom + 8;
+    const maxH = Math.max(220, window.innerHeight - top - 16);
+    setPos({ top, left, width, maxH });
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    updatePos();
+    const on = () => updatePos();
+    window.addEventListener('scroll', on, true);
+    window.addEventListener('resize', on);
+    return () => {
+      window.removeEventListener('scroll', on, true);
+      window.removeEventListener('resize', on);
+    };
+  }, [open, updatePos]);
+
+  // Click fuera (contando el panel del portal) cierra el popover
   useEffect(() => {
     if (!open) return;
     function onClick(e: MouseEvent) {
-      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+      const t = e.target as Node;
+      if (popoverRef.current?.contains(t)) return;
+      if (panelRef.current?.contains(t)) return;
+      setOpen(false);
     }
     document.addEventListener('mousedown', onClick);
     return () => document.removeEventListener('mousedown', onClick);
@@ -165,9 +197,13 @@ export default function LeadsFiltersBar(props: Props) {
           <CaretDown size={11} weight="bold" className={open ? 'rotate-180 transition-transform' : 'transition-transform'} />
         </button>
 
-        {open && (
-          <div className="absolute left-0 top-full mt-2 z-40 w-[min(560px,calc(100vw-2rem))] bg-card border border-border rounded-lg shadow-xl overflow-hidden">
-            <div className="max-h-[70vh] overflow-y-auto">
+        {open && pos && createPortal(
+          <div
+            ref={panelRef}
+            style={{ position: 'fixed', top: pos.top, left: pos.left, width: pos.width, zIndex: 1000 }}
+            className="bg-card border border-border rounded-lg shadow-xl overflow-hidden"
+          >
+            <div style={{ maxHeight: pos.maxH }} className="overflow-y-auto">
               {/* Búsqueda */}
               <Section title="Búsqueda">
                 <div className="relative">
@@ -342,7 +378,8 @@ export default function LeadsFiltersBar(props: Props) {
                 Aplicar
               </button>
             </div>
-          </div>
+          </div>,
+          document.body,
         )}
       </div>
 
