@@ -18,11 +18,14 @@ export default function InvoiceCreatePage() {
   const loc = useLocation();
   const invBase = loc.pathname.split('/facturas')[0];
 
-  // Documento: factura (fiscal) o proforma (presupuesto). Deep-link ?tipo=proforma.
-  const [docTipo, setDocTipo] = useState<'factura' | 'proforma'>(
-    new URLSearchParams(loc.search).get('tipo') === 'proforma' ? 'proforma' : 'factura'
+  // Documento: factura (fiscal), proforma (presupuesto) o rectificativa (abono).
+  // Deep-link ?tipo=proforma | ?tipo=rectificativa.
+  const initTipo = new URLSearchParams(loc.search).get('tipo');
+  const [docTipo, setDocTipo] = useState<'factura' | 'proforma' | 'rectificativa'>(
+    initTipo === 'proforma' ? 'proforma' : initTipo === 'rectificativa' ? 'rectificativa' : 'factura'
   );
   const esProforma = docTipo === 'proforma';
+  const esRect = docTipo === 'rectificativa';
 
   const [tipo, setTipo] = useState<Tipo>('persona');
   const [leadId, setLeadId] = useState<number | null>(null);
@@ -58,6 +61,11 @@ export default function InvoiceCreatePage() {
   const [regimenes, setRegimenes] = useState<import('../api/invoices.api').FiscalRegimen[]>([]);
   const [regimenId, setRegimenId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
+  // ── Abono / rectificativa: elegir factura original + motivo (+ importe parcial) ──
+  const [rectList, setRectList] = useState<import('../api/invoices.api').Invoice[]>([]);
+  const [rectOriginalId, setRectOriginalId] = useState<number | null>(null);
+  const [rectMotivo, setRectMotivo] = useState('');
+  const [rectParcial, setRectParcial] = useState('');
   // Catálogo de cursos/productos para el selector de conceptos (facturamos cursos).
   const [products, setProducts] = useState<Array<{ id: number; nombre: string; precio: number | string | null }>>([]);
 
@@ -195,6 +203,39 @@ export default function InvoiceCreatePage() {
     } finally { setSaving(false); }
   }
 
+  // Cargar facturas rectificables de la sociedad emisora (normales, ya emitidas).
+  useEffect(() => {
+    if (!esRect || !issuerId) { setRectList([]); return; }
+    invoicesApi.list({ issuerId, limit: 200 }).then((r) => {
+      if (r.success) setRectList((r.data || []).filter((i) =>
+        i.tipo !== 'rectificativa' && i.tipo !== 'proforma' && i.estado !== 'borrador' && i.estado !== 'cancelada'));
+    }).catch(() => {});
+  }, [esRect, issuerId]);
+
+  const rectOrig = rectList.find((i) => i.id === rectOriginalId) || null;
+
+  async function emitirAbono() {
+    if (!rectOriginalId) { toast({ title: 'Elige la factura a rectificar', variant: 'destructive' }); return; }
+    if (!rectMotivo.trim()) { toast({ title: 'Indica el motivo del abono', variant: 'destructive' }); return; }
+    const parcialNum = rectParcial.trim() ? Number(rectParcial) : null;
+    if (parcialNum != null && (!(parcialNum > 0) || (rectOrig && parcialNum > Number(rectOrig.total)))) {
+      toast({ title: 'Importe parcial inválido', description: 'Debe ser mayor que 0 y no superar el total de la factura.', variant: 'destructive' }); return;
+    }
+    setSaving(true);
+    try {
+      const res = await invoicesApi.rectificar(rectOriginalId, { motivo: rectMotivo.trim(), parcial: parcialNum, issuerId: issuerId || undefined });
+      if (res.success && res.data) {
+        toast({ title: '✓ Abono emitido', description: res.data.codigo });
+        invoicesApi.openPdf(res.data.id).catch((e: unknown) => toast({ title: 'No se pudo abrir el PDF', description: (e as { message?: string })?.message, variant: 'destructive' }));
+        navigate(`${invBase}/facturas`);
+      } else {
+        toast({ title: 'Error', description: (res as { error?: string }).error, variant: 'destructive' });
+      }
+    } catch (e: any) {
+      toast({ title: 'Error', description: e?.data?.error || e?.message, variant: 'destructive' });
+    } finally { setSaving(false); }
+  }
+
   if (!pid) return <div className="p-8 text-muted-foreground">Selecciona un proyecto.</div>;
 
   const TIPOS: { key: Tipo; label: string; desc: string; icon: any }[] = [
@@ -212,7 +253,7 @@ export default function InvoiceCreatePage() {
 
   return (
     <div className="space-y-4 pb-8 max-w-4xl">
-      <PageHeader title={esProforma ? 'Nuevo presupuesto' : 'Nueva factura'} subtitle={activeProject?.nombre || ''}
+      <PageHeader title={esRect ? 'Nuevo abono' : esProforma ? 'Nuevo presupuesto' : 'Nueva factura'} subtitle={activeProject?.nombre || ''}
         actions={(
           <Link to={`${invBase}/facturas`} className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted">
             <ArrowLeft size={14} weight="bold" /> Volver
@@ -222,14 +263,16 @@ export default function InvoiceCreatePage() {
 
       {/* Tipo de documento: factura fiscal vs proforma (presupuesto) */}
       <div className="inline-flex rounded-lg border border-border bg-muted/30 p-1 text-sm font-semibold">
-        {([['factura', 'Factura'], ['proforma', 'Presupuesto']] as const).map(([k, label]) => (
+        {([['factura', 'Factura'], ['proforma', 'Proforma'], ['rectificativa', 'Abono']] as const).map(([k, label]) => (
           <button key={k} type="button" onClick={() => setDocTipo(k)}
             className={`px-4 h-8 rounded-md transition ${docTipo === k ? 'bg-primary text-primary-foreground shadow' : 'text-muted-foreground hover:text-foreground'}`}>
             {label}
           </button>
         ))}
         <span className="self-center pl-3 pr-1 text-[11px] font-normal text-muted-foreground">
-          {esProforma ? 'Presupuesto sin validez fiscal · serie propia (PRO)' : 'Documento fiscal con numeración correlativa'}
+          {esRect ? 'Factura rectificativa (abono) · importe negativo · serie R'
+            : esProforma ? 'Proforma sin validez fiscal · serie propia (PRO)'
+            : 'Documento fiscal con numeración correlativa'}
         </span>
       </div>
 
@@ -254,7 +297,48 @@ export default function InvoiceCreatePage() {
         </div>
       )}
 
+      {/* ── ABONO / RECTIFICATIVA: elegir factura original + motivo ── */}
+      {esRect && (
+        <div className="bg-card border border-border rounded-lg p-4 space-y-3">
+          <div>
+            <label className="text-xs font-bold uppercase text-muted-foreground">Factura a rectificar</label>
+            <p className="text-[11px] text-muted-foreground">El abono copia los datos de la factura original en negativo. Elige de esta sociedad emisora.</p>
+            <select value={rectOriginalId ?? ''} onChange={(e) => setRectOriginalId(e.target.value ? Number(e.target.value) : null)}
+              className="w-full h-9 px-2 mt-1 rounded border border-primary/40 bg-background text-foreground text-sm [&>option]:bg-background [&>option]:text-foreground">
+              <option value="">— elegir factura —</option>
+              {rectList.map((i) => (
+                <option key={i.id} value={i.id}>
+                  {i.codigo} · {i.cliente_nombre} · {new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(Number(i.total))}
+                </option>
+              ))}
+            </select>
+            {rectList.length === 0 && <p className="text-[11px] text-amber-600 mt-1">No hay facturas rectificables en esta sociedad.</p>}
+          </div>
+          {rectOrig && (
+            <div className="text-xs rounded-md border border-border bg-muted/30 px-3 py-2">
+              Rectificando <strong>{rectOrig.codigo}</strong> — {rectOrig.cliente_nombre} · total {new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(Number(rectOrig.total))}
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <label className="text-[11px] text-muted-foreground">Motivo del abono <span className="text-red-500">*</span></label>
+              <textarea value={rectMotivo} onChange={(e) => setRectMotivo(e.target.value)} rows={2}
+                placeholder="Ej: anulación por error, devolución, corrección de importe…"
+                className={`w-full px-2 py-1.5 rounded border bg-background text-sm ${!rectMotivo.trim() ? 'border-red-300' : 'border-border'}`} />
+            </div>
+            <div>
+              <label className="text-[11px] text-muted-foreground">Importe a rectificar (opcional)</label>
+              <input type="number" step="0.01" value={rectParcial} onChange={(e) => setRectParcial(e.target.value)}
+                placeholder={rectOrig ? `Total: ${Number(rectOrig.total)}` : 'Vacío = total'}
+                className="w-full h-9 px-2 rounded border border-border bg-background text-sm" />
+              <p className="text-[10px] text-muted-foreground mt-0.5">Vacío = abono total. Rellena solo para un abono parcial.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Tipo */}
+      {!esRect && (<>
       <div className="grid grid-cols-3 gap-3">
         {TIPOS.map((t) => {
           const Icon = t.icon;
@@ -388,12 +472,19 @@ export default function InvoiceCreatePage() {
           <textarea value={piePago} onChange={(e) => setPiePago(e.target.value)} rows={2} placeholder="Pie de pago (IBAN, vencimiento…)" className="w-full px-2 py-1.5 rounded border border-border bg-background text-sm" />
         </div>
       </div>
+      </>)}
 
       <div className="flex justify-end gap-2">
         <Link to={`${invBase}/facturas`} className="h-10 px-4 rounded-md border border-border bg-card text-sm inline-flex items-center">Cancelar</Link>
-        <button onClick={generar} disabled={saving || (!esProforma && fiscalBlock)} title={!esProforma && fiscalBlock ? 'El CIF/NIF de la sociedad no es válido' : undefined} className="h-10 px-5 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1.5">
-          <FloppyDisk size={15} weight="bold" /> {saving ? (esProforma ? 'Generando…' : 'Emitiendo…') : (esProforma ? 'Generar presupuesto' : 'Generar factura')}
-        </button>
+        {esRect ? (
+          <button onClick={emitirAbono} disabled={saving || !rectOriginalId || !rectMotivo.trim()} className="h-10 px-5 rounded-md bg-rose-600 text-white text-sm font-semibold hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1.5">
+            <FloppyDisk size={15} weight="bold" /> {saving ? 'Emitiendo abono…' : 'Emitir abono'}
+          </button>
+        ) : (
+          <button onClick={generar} disabled={saving || (!esProforma && fiscalBlock)} title={!esProforma && fiscalBlock ? 'El CIF/NIF de la sociedad no es válido' : undefined} className="h-10 px-5 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1.5">
+            <FloppyDisk size={15} weight="bold" /> {saving ? (esProforma ? 'Generando…' : 'Emitiendo…') : (esProforma ? 'Generar presupuesto' : 'Generar factura')}
+          </button>
+        )}
       </div>
     </div>
   );
