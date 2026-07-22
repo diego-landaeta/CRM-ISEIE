@@ -214,22 +214,39 @@ export async function generatePDF(invoiceId, { preliminar = false } = {}) {
     page.drawText(inv.leyenda_iva, { x: left, y, size: 9, font, color: gray });
   }
 
-  // Pie de pago (instrucciones/IBAN/etc)
-  if (inv.pie_pago) {
-    y -= 22;
-    page.drawRectangle({ x: left, y: y - 4, width: right - left, height: 1, color: gray });
-    y -= 14;
-    const lines = String(inv.pie_pago).split('\n').slice(0, 8);
-    for (const ln of lines) {
-      page.drawText(ln.slice(0, 100), { x: left, y, size: 9, font, color: black });
-      y -= 12;
-    }
-  }
-
-  // Footer
+  // Footer (fecha de generación). La coletilla/pie legal se dibuja global abajo.
   page.drawText(`${esProforma ? 'Presupuesto' : 'Factura'} ${inv.codigo || '(borrador)'} generada el ${new Date().toLocaleDateString('es-ES')}`,
     { x: left, y: 30, size: 8, font, color: gray });
   } // fin fallback (layout fijo)
+
+  // ── COLETILLA / PIE LEGAL (issuer.pie_default → pie_pago) ──
+  // Va SIEMPRE al pie de página (todas las páginas), ajustada a varias líneas y
+  // sin recortar. Es el texto obligatorio que configura el gestor por emisor.
+  if (inv.pie_pago) {
+    const fsize = 8, fLeft = 50, fRight = 545, maxW = fRight - fLeft;
+    const wrap = (text) => {
+      const out = [];
+      for (const para of String(text).split('\n')) {
+        let line = '';
+        for (const word of para.split(/\s+/).filter(Boolean)) {
+          const t = line ? `${line} ${word}` : word;
+          if (font.widthOfTextAtSize(t, fsize) > maxW && line) { out.push(line); line = word; }
+          else line = t;
+        }
+        if (line) out.push(line);
+      }
+      return out.slice(0, 5);
+    };
+    const lines = wrap(inv.pie_pago);
+    for (const p of pdfDoc.getPages()) {
+      let fy = 44 + (lines.length - 1) * 10;
+      p.drawLine({ start: { x: fLeft, y: fy + 12 }, end: { x: fRight, y: fy + 12 }, thickness: 0.5, color: rgb(0.6, 0.6, 0.6) });
+      for (const ln of lines) {
+        p.drawText(ln, { x: fLeft, y: fy, size: fsize, font, color: rgb(0.35, 0.35, 0.35) });
+        fy -= 10;
+      }
+    }
+  }
 
   // Marca de agua diagonal (todas las páginas). Dos casos sin validez fiscal:
   //  · BORRADOR: aún no emitida.
