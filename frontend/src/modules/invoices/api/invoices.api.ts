@@ -183,7 +183,12 @@ export const invoicesApi = {
     Object.entries(params).forEach(([k, v]) => v != null && v !== '' && qs.set(k, String(v)));
     return client.get<Invoice[]>(`/invoices?${qs}`);
   },
-  stats: (projectId: number) => client.get<{ total: number; emitidas: number; enviadas: number; pagadas: number; canceladas: number; total_facturado: number; total_cobrado: number; total_iva: number }>(`/invoices/stats?projectId=${projectId}`),
+  stats: (params: { projectId?: number | null; issuerId?: number | null }) => {
+    const qs = new URLSearchParams();
+    if (params.projectId) qs.set('projectId', String(params.projectId));
+    if (params.issuerId) qs.set('issuerId', String(params.issuerId));
+    return client.get<{ total: number; emitidas: number; enviadas: number; pagadas: number; canceladas: number; total_facturado: number; total_cobrado: number; total_iva: number }>(`/invoices/stats?${qs}`);
+  },
   ventasSinFactura: (projectId: number) => client.get<VentaSinFactura[]>(`/invoices/ventas-sin-factura?projectId=${projectId}`),
   get: (id: number) => client.get<Invoice>(`/invoices/${id}`),
   byConversion: (conversionId: number) => client.get<Invoice | null>(`/invoices/by-conversion/${conversionId}`),

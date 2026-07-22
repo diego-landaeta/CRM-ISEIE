@@ -308,7 +308,14 @@ export async function list({ projectId, issuerId, estado, search, from, to, tipo
   return { rows, total: c[0].total };
 }
 
-export async function getStats(projectId) {
+// Stats de la MISMA vista que la lista: por proyecto o por sociedad (issuerId),
+// pudiendo acotar a un proyecto de esa sociedad. Así los KPIs cuadran con la tabla.
+export async function getStats({ projectId, issuerId } = {}) {
+  const conds = [`tipo <> 'proforma'`];
+  const params = [];
+  let idx = 1;
+  if (issuerId)  { conds.push(`issuer_id = $${idx++}`);  params.push(issuerId); }
+  if (projectId) { conds.push(`project_id = $${idx++}`); params.push(projectId); }
   const { rows } = await query(
     `SELECT
        COUNT(*) FILTER (WHERE estado <> 'borrador')::int AS total,
@@ -320,8 +327,8 @@ export async function getStats(projectId) {
        COALESCE(SUM(total) FILTER (WHERE estado <> 'borrador'),0) AS total_facturado,
        COALESCE(SUM(total) FILTER (WHERE estado = 'pagada'),0) AS total_cobrado,
        COALESCE(SUM(iva_importe) FILTER (WHERE estado <> 'borrador'),0) AS total_iva
-     FROM invoices WHERE project_id = $1 AND tipo <> 'proforma'`,
-    [projectId]
+     FROM invoices WHERE ${conds.join(' AND ')}`,
+    params
   );
   return rows[0];
 }

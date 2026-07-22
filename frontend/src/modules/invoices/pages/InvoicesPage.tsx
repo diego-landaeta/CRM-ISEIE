@@ -69,7 +69,9 @@ export default function InvoicesPage() {
         : { projectId: pid, ...filters, tipo: esProformas ? 'proforma' : undefined, limit: 100 };
       const [r1, r2, r3, r4] = await Promise.all([
         invoicesApi.list(listParams),
-        invoicesApi.stats(pid),
+        porSociedad
+          ? invoicesApi.stats({ issuerId: Number(filterIssuer), projectId: filterProject ? Number(filterProject) : null })
+          : invoicesApi.stats({ projectId: pid }),
         invoicesApi.listIssuers(pid).catch(() => ({ success: false, data: [] as Issuer[] })),
         invoicesApi.ventasSinFactura(pid).catch(() => ({ success: false, data: [] as VentaSinFactura[] })),
       ]);

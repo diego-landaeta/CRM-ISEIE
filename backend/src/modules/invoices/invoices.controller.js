@@ -52,8 +52,11 @@ export async function list(req, res, next) {
 
 export async function stats(req, res, next) {
   try {
-    const pid = projectId(req);
-    res.json({ success: true, data: await model.getStats(pid) });
+    const issuerId = req.query.issuerId ? Number(req.query.issuerId) : null;
+    // Con issuerId → stats de la sociedad (opcionalmente acotada a un proyecto).
+    // Sin issuerId → stats del proyecto activo (comportamiento clásico).
+    const pid = req.query.projectId ? Number(req.query.projectId) : (issuerId ? null : projectId(req));
+    res.json({ success: true, data: await model.getStats({ projectId: pid, issuerId }) });
   } catch (e) { next(e); }
 }
 
