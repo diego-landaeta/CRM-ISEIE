@@ -169,8 +169,10 @@ export async function generatePDF(invoiceId, { preliminar = false } = {}) {
   for (const it of items) {
     const desc = String(it.descripcion || '').slice(0, 60);
     const cant = Number(it.cantidad || 1);
-    const precio = Number(it.precio_unitario || 0);
-    const subt = cant * precio;
+    // Tolerante a distintas claves de precio (precio_unitario | precio) para no
+    // pintar 0,00 cuando el ítem viene de importaciones/otros orígenes.
+    const precio = Number(it.precio_unitario ?? it.precio ?? 0);
+    const subt = it.total != null ? Number(it.total) : cant * precio;
     page.drawText(desc, { x: left + 10, y, size: 10, font, color: black });
     page.drawText(String(cant), { x: 365, y, size: 10, font, color: black });
     page.drawText(fmtEUR(precio), { x: 410, y, size: 10, font, color: black });

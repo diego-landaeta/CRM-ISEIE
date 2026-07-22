@@ -25,7 +25,10 @@ const ESTADO_BADGE: Record<string, string> = {
 type Stats = { total: number; emitidas: number; enviadas: number; pagadas: number; canceladas: number; total_facturado: number; total_cobrado: number; total_iva: number };
 
 export default function InvoicesPage() {
-  const { activeProject } = useProjectContext() as { activeProject: { id?: number | null; nombre?: string } };
+  const { activeProject, projects } = useProjectContext() as {
+    activeProject: { id?: number | null; nombre?: string; sociedad_emisora_id?: number | null };
+    projects: Array<{ id: number; nombre: string; sociedad_emisora_id?: number | null }>;
+  };
   const { user } = useAuth() as { user: { role?: string } | null };
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
   const pid = activeProject?.id;
@@ -43,8 +46,14 @@ export default function InvoicesPage() {
   // Vista por SOCIEDAD (admin): '' = por proyecto; id = todas las facturas de esa
   // sociedad entre proyectos (global), con la columna Proyecto.
   const [filterIssuer, setFilterIssuer] = useState<string>('');
+  // Dentro de una sociedad: filtrar por uno de sus proyectos. '' = todos.
+  const [filterProject, setFilterProject] = useState<string>('');
   const [allIssuers, setAllIssuers] = useState<Issuer[]>([]);
   const porSociedad = isAdmin && !!filterIssuer;
+  // Proyectos que pertenecen a la sociedad seleccionada (para el filtro).
+  const sociedadProjects = porSociedad
+    ? (projects || []).filter((p) => p.sociedad_emisora_id != null && String(p.sociedad_emisora_id) === filterIssuer)
+    : [];
   const [ventasSinFactura, setVentasSinFactura] = useState<VentaSinFactura[]>([]);
   // Borrador que se está validando/emitiendo (abre el diálogo de completar datos)
   const [emittingInv, setEmittingInv] = useState<Invoice | null>(null);
@@ -56,7 +65,7 @@ export default function InvoicesPage() {
       // Modo sociedad (admin): facturas globales de esa empresa emisora; el resto
       // (stats, emisores, ventas sin factura) sigue por proyecto activo.
       const listParams = porSociedad
-        ? { issuerId: Number(filterIssuer), ...filters, tipo: esProformas ? 'proforma' : undefined, limit: 200 }
+        ? { issuerId: Number(filterIssuer), ...(filterProject ? { projectId: Number(filterProject) } : {}), ...filters, tipo: esProformas ? 'proforma' : undefined, limit: 200 }
         : { projectId: pid, ...filters, tipo: esProformas ? 'proforma' : undefined, limit: 100 };
       const [r1, r2, r3, r4] = await Promise.all([
         invoicesApi.list(listParams),
@@ -69,8 +78,11 @@ export default function InvoicesPage() {
       if (r3.success) setIssuers(r3.data || []);
       if (r4.success) setVentasSinFactura(r4.data || []);
     } finally { setLoading(false); }
-  }, [pid, filters, esProformas, porSociedad, filterIssuer]);
+  }, [pid, filters, esProformas, porSociedad, filterIssuer, filterProject]);
   useEffect(() => { load(); }, [load]);
+
+  // Al cambiar de sociedad, resetear el filtro de proyecto (los proyectos cambian).
+  useEffect(() => { setFilterProject(''); }, [filterIssuer]);
 
   // Todas las sociedades (para el filtro por sociedad). Solo admin.
   useEffect(() => {
@@ -82,9 +94,11 @@ export default function InvoicesPage() {
   // (cruzando todos los proyectos de esa empresa), no solo las del proyecto activo.
   useEffect(() => {
     if (!isAdmin || issuers.length === 0) return;
-    const def = issuers.find((i) => (i as { es_default?: boolean }).es_default) || issuers[0];
+    const soc = activeProject?.sociedad_emisora_id;
+    const match = soc != null ? issuers.find((i) => i.id === soc) : null;
+    const def = match || issuers.find((i) => (i as { es_default?: boolean }).es_default) || issuers[0];
     if (def) setFilterIssuer(String(def.id));
-  }, [isAdmin, issuers]);
+  }, [isAdmin, issuers, activeProject?.sociedad_emisora_id]);
 
   async function send(inv: Invoice) {
     if (!inv.cliente_email) {
@@ -213,6 +227,14 @@ export default function InvoicesPage() {
             {allIssuers.map((i) => <option key={i.id} value={String(i.id)}>{i.razon_social}</option>)}
           </select>
         )}
+        {porSociedad && sociedadProjects.length > 0 && (
+          <select value={filterProject} onChange={(e) => setFilterProject(e.target.value)}
+            title="Filtrar por un proyecto de esta sociedad"
+            className={`h-9 px-2 rounded-md border text-sm ${filterProject ? 'border-primary/50 bg-primary/5 text-primary font-semibold' : 'border-border bg-card'}`}>
+            <option value="">Todos los proyectos</option>
+            {sociedadProjects.map((p) => <option key={p.id} value={String(p.id)}>{p.nombre}</option>)}
+          </select>
+        )}
         <select value={filters.estado} onChange={(e) => setFilters(f => ({ ...f, estado: e.target.value }))}
           className="h-9 px-2 rounded-md border border-border bg-card text-sm">
           <option value="">Todos los estados</option>
@@ -233,7 +255,10 @@ export default function InvoicesPage() {
 
       {porSociedad && (
         <div className="text-xs rounded-md border border-primary/30 bg-primary/5 text-primary px-3 py-2">
-          Mostrando <strong>todas las facturas</strong> de <strong>{allIssuers.find((i) => String(i.id) === filterIssuer)?.razon_social || 'la sociedad'}</strong> entre todos los proyectos (correlativo en orden). La columna <strong>Proyecto</strong> indica a quién pertenece cada factura.
+          Mostrando facturas de <strong>{allIssuers.find((i) => String(i.id) === filterIssuer)?.razon_social || 'la sociedad'}</strong>
+          {filterProject
+            ? <> · proyecto <strong>{sociedadProjects.find((p) => String(p.id) === filterProject)?.nombre}</strong>.</>
+            : <> entre <strong>todos sus proyectos</strong> (correlativo en orden). La columna <strong>Proyecto</strong> indica a quién pertenece cada factura.</>}
         </div>
       )}
 
