@@ -78,6 +78,14 @@ export default function InvoicesPage() {
     invoicesApi.listIssuers().then((r) => { if (r.success) setAllIssuers(r.data || []); }).catch(() => {});
   }, [isAdmin]);
 
+  // Por defecto (admin): mostrar las facturas de la SOCIEDAD emisora del proyecto
+  // (cruzando todos los proyectos de esa empresa), no solo las del proyecto activo.
+  useEffect(() => {
+    if (!isAdmin || issuers.length === 0) return;
+    const def = issuers.find((i) => (i as { es_default?: boolean }).es_default) || issuers[0];
+    if (def) setFilterIssuer(String(def.id));
+  }, [isAdmin, issuers]);
+
   async function send(inv: Invoice) {
     if (!inv.cliente_email) {
       toast({ title: 'Sin email', description: 'La factura no tiene email del cliente', variant: 'destructive' });
