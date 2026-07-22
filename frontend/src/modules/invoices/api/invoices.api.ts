@@ -194,10 +194,10 @@ export const invoicesApi = {
   pdfUrl: (id: number) => `${(import.meta.env.BASE_URL || '/').replace(/\/$/, '')}/api/invoices/${id}/pdf`,
   // Abre el PDF descargandolo CON el token (una navegacion normal de pestana NO
   // manda el header Authorization -> daria 401). Lo abre como blob URL.
-  openPdf: async (id: number): Promise<void> => {
+  openPdf: async (id: number, preliminar = false): Promise<void> => {
     const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
     const tok = getAccessToken();
-    const res = await fetch(`${base}/api/invoices/${id}/pdf`, {
+    const res = await fetch(`${base}/api/invoices/${id}/pdf${preliminar ? '?preliminar=1' : ''}`, {
       headers: tok ? { Authorization: `Bearer ${tok}` } : {},
       credentials: 'include',
     });
@@ -210,6 +210,26 @@ export const invoicesApi = {
     const url = URL.createObjectURL(blob);
     const w = window.open(url, '_blank');
     if (!w) { const a = document.createElement('a'); a.href = url; a.target = '_blank'; a.rel = 'noopener'; a.click(); }
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  },
+  // Descarga el PDF como archivo (attachment). preliminar=true fuerza la vista
+  // previa con marca de agua (no exige datos completos del cliente).
+  downloadPdf: async (id: number, filename: string, preliminar = false): Promise<void> => {
+    const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
+    const tok = getAccessToken();
+    const res = await fetch(`${base}/api/invoices/${id}/pdf${preliminar ? '?preliminar=1' : ''}`, {
+      headers: tok ? { Authorization: `Bearer ${tok}` } : {},
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      let msg = 'No se pudo descargar el PDF';
+      try { const j = await res.json(); msg = j.error || msg; } catch { /* noop */ }
+      throw new Error(msg);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
     setTimeout(() => URL.revokeObjectURL(url), 60000);
   },
   send: (id: number, email?: string) => client.post(`/invoices/${id}/send`, email ? { email } : {}),

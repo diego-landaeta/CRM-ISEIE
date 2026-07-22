@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Receipt, Eye, PaperPlaneTilt, CheckCircle, X, MagnifyingGlass, Gear, ArrowCounterClockwise, FileText } from '@phosphor-icons/react';
+import { Receipt, Eye, PaperPlaneTilt, CheckCircle, X, MagnifyingGlass, Gear, ArrowCounterClockwise, FileText, DownloadSimple } from '@phosphor-icons/react';
 import { Link, useLocation } from 'react-router-dom';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -332,10 +332,22 @@ export default function InvoicesPage() {
                   </td>
                   <td className="px-3 py-2 text-right">
                     <div className="inline-flex gap-1">
-                      <button onClick={() => invoicesApi.openPdf(inv.id).catch((e: unknown) => toast({ title: 'No se pudo abrir el PDF', description: (e as { message?: string })?.message, variant: 'destructive' }))}
-                        title="Ver PDF"
+                      <button onClick={() => {
+                          const prelim = inv.estado !== 'borrador' && inv.tipo !== 'proforma' && invoiceFaltantes(inv).length > 0;
+                          invoicesApi.openPdf(inv.id, prelim).catch((e: unknown) => toast({ title: 'No se pudo abrir el PDF', description: (e as { message?: string })?.message, variant: 'destructive' }));
+                        }}
+                        title={inv.estado !== 'borrador' && inv.tipo !== 'proforma' && invoiceFaltantes(inv).length > 0 ? 'Ver vista preliminar (con marca de agua — faltan datos del cliente)' : 'Ver PDF'}
                         className="h-7 px-2 rounded border border-border text-[11px] hover:bg-muted inline-flex items-center gap-1">
-                        <Eye size={11} /> PDF
+                        <Eye size={11} /> Ver
+                      </button>
+                      <button onClick={() => {
+                          const prelim = inv.estado !== 'borrador' && inv.tipo !== 'proforma' && invoiceFaltantes(inv).length > 0;
+                          const fname = (prelim ? 'PRELIMINAR-' : '') + ((inv.codigo || `BORRADOR-${inv.id}`).replace('/', '-')) + '.pdf';
+                          invoicesApi.downloadPdf(inv.id, fname, prelim).catch((e: unknown) => toast({ title: 'No se pudo descargar el PDF', description: (e as { message?: string })?.message, variant: 'destructive' }));
+                        }}
+                        title="Descargar PDF"
+                        className="h-7 px-2 rounded border border-border text-[11px] hover:bg-muted inline-flex items-center gap-1">
+                        <DownloadSimple size={11} />
                       </button>
                       {inv.estado === 'borrador' && (
                         <button onClick={() => setEmittingInv(inv)}

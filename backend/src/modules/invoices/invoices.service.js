@@ -67,7 +67,7 @@ function fmtEUR(n) {
 }
 
 // Genera PDF de factura usando pdf-lib
-export async function generatePDF(invoiceId) {
+export async function generatePDF(invoiceId, { preliminar = false } = {}) {
   const inv = await model.findById(invoiceId);
   if (!inv) throw new Error('Factura no encontrada');
   const project = await model.getProjectInvoicerData(inv.project_id);
@@ -229,12 +229,17 @@ export async function generatePDF(invoiceId) {
     { x: left, y: 30, size: 8, font, color: gray });
   } // fin fallback (layout fijo)
 
-  // Marca de agua BORRADOR (diagonal, en todas las páginas) — el preliminar se
-  // puede ver/compartir pero queda claro que no tiene validez fiscal.
-  if (inv.estado === 'borrador') {
+  // Marca de agua diagonal (todas las páginas). Dos casos sin validez fiscal:
+  //  · BORRADOR: aún no emitida.
+  //  · PRELIMINAR: emitida (tiene número) pero con datos del cliente pendientes;
+  //    permite VERLA sin exigir rellenar NIF/dirección — sin descargarla como
+  //    definitiva.
+  const esBorradorWm = inv.estado === 'borrador';
+  if (esBorradorWm || preliminar) {
+    const etiqueta = esBorradorWm ? 'BORRADOR' : 'PRELIMINAR';
     for (const p of pdfDoc.getPages()) {
-      p.drawText('BORRADOR', {
-        x: 90, y: 260, size: 96, font: bold,
+      p.drawText(etiqueta, {
+        x: 90, y: 260, size: 90, font: bold,
         color: rgb(0.85, 0.55, 0.1), opacity: 0.16, rotate: degrees(45),
       });
       p.drawText('SIN VALIDEZ FISCAL', {
@@ -246,10 +251,12 @@ export async function generatePDF(invoiceId) {
 
   const pdfBytes = await pdfDoc.save();
 
-  // Persist — el borrador NO se cachea en disco: su contenido cambia al
-  // completar datos/emitir y no debe quedar un PDF viejo con marca de agua.
-  if (inv.estado === 'borrador') {
-    return { path: null, bytes: pdfBytes, filename: `BORRADOR-${inv.id}.pdf` };
+  // Persist — ni el borrador ni el preliminar se cachean en disco: su contenido
+  // cambia al completar datos/emitir y no debe quedar un PDF viejo con marca de
+  // agua ocupando el sitio de la factura definitiva.
+  if (esBorradorWm || preliminar) {
+    const pref = esBorradorWm ? 'BORRADOR' : 'PRELIMINAR';
+    return { path: null, bytes: pdfBytes, filename: `${pref}-${inv.id}.pdf` };
   }
   const dir = path.join(PDF_DIR, String(inv.project_id), String(inv.ano));
   await fs.mkdir(dir, { recursive: true });

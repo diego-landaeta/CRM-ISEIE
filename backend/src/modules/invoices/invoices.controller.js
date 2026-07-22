@@ -145,26 +145,32 @@ export async function pdf(req, res, next) {
     const id = Number(req.params.id);
     const inv = await model.findById(id);
     if (!inv) throw new AppError('Factura no encontrada', 404, 'NOT_FOUND');
+    // ?preliminar=1 → vista previa SIN exigir datos completos. Sale con marca de
+    // agua "PRELIMINAR / SIN VALIDEZ FISCAL". Sirve para ver la factura aunque
+    // falten NIF/dirección del cliente (p.ej. las importadas/auto-emitidas).
+    const preliminar = req.query.preliminar === '1' || req.query.preliminar === 'true';
     // Factura EMITIDA con datos incompletos (auto-emitida al pagar): tiene su
-    // número, pero NO se descarga hasta rellenar los datos del cliente.
-    // (El borrador sí se previsualiza — lleva marca de agua.)
-    if (inv.tipo !== 'proforma' && inv.estado !== 'borrador') {
+    // número, pero NO se descarga como DEFINITIVA hasta rellenar los datos del
+    // cliente. En modo preliminar sí se muestra (con marca de agua).
+    if (!preliminar && inv.tipo !== 'proforma' && inv.estado !== 'borrador') {
       const faltan = model.invoiceFaltantes(inv);
       if (faltan.length > 0) {
         throw new AppError(`Para descargar la factura ${inv.codigo || ''} debes rellenar: ${faltan.join(', ')}.`, 400, 'INVOICE_INCOMPLETE');
       }
     }
     let bytes;
-    if (inv.pdf_path) {
+    // El preliminar nunca usa el PDF cacheado (definitivo): siempre se regenera
+    // con la marca de agua.
+    if (inv.pdf_path && !preliminar) {
       try { bytes = await fs.readFile(inv.pdf_path); } catch { bytes = null; }
     }
     if (!bytes) {
-      const gen = await service.generatePDF(id);
+      const gen = await service.generatePDF(id, { preliminar });
       bytes = gen.bytes;
     }
     res.setHeader('Content-Type', 'application/pdf');
     // Borrador: no tiene código fiscal todavía.
-    const fname = inv.codigo ? inv.codigo.replace('/', '-') : `BORRADOR-${inv.id}`;
+    const fname = (preliminar ? 'PRELIMINAR-' : '') + (inv.codigo ? inv.codigo.replace('/', '-') : `BORRADOR-${inv.id}`);
     res.setHeader('Content-Disposition', `inline; filename="${fname}.pdf"`);
     res.send(Buffer.from(bytes));
   } catch (e) { next(e); }
