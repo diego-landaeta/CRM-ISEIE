@@ -860,6 +860,7 @@ export async function listVentasSinFactura(projectId) {
       WHERE c.project_id = $1
         AND COALESCE(c.importe_total, 0) > 0
         AND i.id IS NULL
+        AND c.factura_no_requerida IS NOT TRUE
       ORDER BY c.fecha_conversion DESC NULLS LAST`,
     [projectId]
   );
