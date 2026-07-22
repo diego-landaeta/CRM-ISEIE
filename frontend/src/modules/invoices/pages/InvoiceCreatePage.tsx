@@ -203,6 +203,19 @@ export default function InvoiceCreatePage() {
     } finally { setSaving(false); }
   }
 
+  // Prefill desde la ficha del prospecto: ?leadId=X (típicamente con ?tipo=proforma).
+  // Trae el cliente y sus cursos contratados como conceptos, listo para emitir.
+  const prefillLeadId = new URLSearchParams(loc.search).get('leadId');
+  useEffect(() => {
+    if (!pid || !prefillLeadId) return;
+    const lid = Number(prefillLeadId);
+    if (!lid) return;
+    invoicesApi.leadFiscalData(lid).then((res) => {
+      if (res.success && res.data) pickLead({ id: lid, nombre: res.data.nombre || '', email: res.data.email, telefono: res.data.telefono });
+    }).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pid, prefillLeadId]);
+
   // Cargar facturas rectificables de la sociedad emisora (normales, ya emitidas).
   useEffect(() => {
     if (!esRect || !issuerId) { setRectList([]); return; }

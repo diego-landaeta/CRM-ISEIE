@@ -182,7 +182,7 @@ export default function InvoicesPage() {
             <Link to={esProformas ? 'nueva?tipo=proforma' : 'nueva'}
               className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90">
               {esProformas ? <FileText size={14} weight="bold" /> : <Receipt size={14} weight="bold" />}
-              {esProformas ? 'Nuevo presupuesto' : 'Nueva factura'}
+              {esProformas ? 'Nueva proforma' : 'Nueva factura'}
             </Link>
             <Link to="configuracion"
               className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted">
@@ -194,7 +194,7 @@ export default function InvoicesPage() {
 
       {/* Pestañas: facturas fiscales vs proformas (presupuestos) */}
       <div className="inline-flex rounded-lg border border-border bg-muted/30 p-1 text-sm font-semibold">
-        {([['facturas', 'Facturas', Receipt], ['proformas', 'Presupuestos', FileText]] as const).map(([k, label, Icon]) => (
+        {([['facturas', 'Facturas', Receipt], ['proformas', 'Proformas', FileText]] as const).map(([k, label, Icon]) => (
           <button key={k} type="button" onClick={() => setTab(k)}
             className={`inline-flex items-center gap-1.5 px-4 h-8 rounded-md transition ${tab === k ? 'bg-primary text-primary-foreground shadow' : 'text-muted-foreground hover:text-foreground'}`}>
             <Icon size={14} weight="bold" /> {label}
@@ -312,8 +312,8 @@ export default function InvoicesPage() {
         ) : invoices.length === 0 ? (
           <div className="p-12 text-center space-y-2">
             <Receipt size={32} className="text-muted-foreground mx-auto" weight="duotone" />
-            <p className="font-semibold text-sm">{esProformas ? 'Sin presupuestos todavía' : 'Sin facturas todavía'}</p>
-            <p className="text-xs text-muted-foreground">{esProformas ? 'Genera uno con “Nuevo presupuesto”.' : 'Cuando emitas una factura desde una conversión aparecerá aquí.'}</p>
+            <p className="font-semibold text-sm">{esProformas ? 'Sin proformas todavía' : 'Sin facturas todavía'}</p>
+            <p className="text-xs text-muted-foreground">{esProformas ? 'Genera una con “Nueva proforma”.' : 'Cuando emitas una factura desde una conversión aparecerá aquí.'}</p>
           </div>
         ) : (
           <table className="w-full text-[13px]">
