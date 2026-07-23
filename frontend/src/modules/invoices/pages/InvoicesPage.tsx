@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import KpiCard from '@/shared/components/ui/KpiCard';
 import client from '@/shared/api/client';
+import { formatDateNumeric } from '@/shared/lib/format';
 import { invoicesApi, invoiceFaltantes } from '../api/invoices.api';
 import type { Invoice, Issuer, VentaSinFactura } from '../api/invoices.api';
 import InvoiceButton from '../components/InvoiceButton';
@@ -13,7 +14,10 @@ import EmitirBorradorDialog from '../components/EmitirBorradorDialog';
 import { toast } from '@/shared/hooks/useToast';
 
 const fmt = (n: number) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(Number(n || 0));
-const fmtDate = (s: string | null) => s ? new Date(s).toLocaleDateString('es-ES') : '—';
+// Usa el formateador compartido: parsea 'YYYY-MM-DD' como fecha LOCAL. Con
+// new Date(s) las fechas puras se leen como UTC y en husos negativos
+// (America/Caracas, Bogota…) se pintaban un dia antes.
+const fmtDate = (s: string | null) => s ? formatDateNumeric(s) : '—';
 
 const ESTADO_BADGE: Record<string, string> = {
   borrador: 'bg-amber-100 text-amber-800 border border-amber-300',
