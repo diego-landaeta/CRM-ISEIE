@@ -5,6 +5,7 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import KpiCard from '@/shared/components/ui/KpiCard';
+import client from '@/shared/api/client';
 import { invoicesApi, invoiceFaltantes } from '../api/invoices.api';
 import type { Invoice, Issuer, VentaSinFactura } from '../api/invoices.api';
 import InvoiceButton from '../components/InvoiceButton';
@@ -64,6 +65,9 @@ export default function InvoicesPage() {
   const sociedadesVisibles = allIssuers.filter((i) => misSociedadIds.has(i.id));
   const proyectosDeSociedad = (issuerId: number) => (projects || []).filter((p) => p.sociedad_emisora_id === issuerId);
   const [ventasSinFactura, setVentasSinFactura] = useState<VentaSinFactura[]>([]);
+  // Cobros de Stripe cobrados pero SIN cliente asociado: salen aqui igual que en
+  // Pagos Stripe, porque hasta asociarlos no generan factura.
+  const [stripeSinAsociar, setStripeSinAsociar] = useState<Array<{ id: number; customer_name: string | null; customer_email: string | null; amount: number; stripe_created_at: string }>>([]);
   // Borrador que se está validando/emitiendo (abre el diálogo de completar datos)
   const [emittingInv, setEmittingInv] = useState<Invoice | null>(null);
 
@@ -88,6 +92,10 @@ export default function InvoicesPage() {
       if (r2.success) setStats(r2.data || null);
       if (r3.success) setIssuers(r3.data || []);
       if (r4.success) setVentasSinFactura(r4.data || []);
+      // Cobros Stripe sin asociar del proyecto (no bloqueante).
+      client.get<typeof stripeSinAsociar>(`/stripe-payments?projectId=${pid}&linked=no&status=succeeded&limit=50`)
+        .then((r) => { if (r.success) setStripeSinAsociar(r.data || []); })
+        .catch(() => setStripeSinAsociar([]));
     } finally { setLoading(false); }
   }, [pid, filters, esProformas, porSociedad, filterIssuer, filterProject]);
   useEffect(() => { load(); }, [load]);
@@ -280,6 +288,48 @@ export default function InvoicesPage() {
           {filterProject
             ? <> · proyecto <strong>{sociedadProjects.find((p) => String(p.id) === filterProject)?.nombre}</strong>.</>
             : <> entre <strong>todos sus proyectos</strong> (correlativo en orden). La columna <strong>Proyecto</strong> indica a quién pertenece cada factura.</>}
+        </div>
+      )}
+
+      {/* Cobros de Stripe sin asociar - tambien visibles aqui, no solo en Pagos Stripe.
+          Hasta asociarlos a un cliente NO generan factura. */}
+      {!esProformas && stripeSinAsociar.length > 0 && (
+        <div className="bg-red-50/70 dark:bg-red-950/20 border border-red-300 dark:border-red-900/50 rounded-lg overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-red-200 dark:border-red-900/40 flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-2">
+              <X size={15} weight="bold" className="text-red-600" />
+              <span className="font-semibold text-sm text-red-800 dark:text-red-300">Cobros de Stripe sin asociar</span>
+              <span className="text-[11px] text-muted-foreground">
+                &middot; {stripeSinAsociar.length} cobro{stripeSinAsociar.length !== 1 ? 's' : ''} sin cliente &mdash; <strong>no generan factura</strong> hasta asociarlos
+              </span>
+            </div>
+            <Link to="/finanzas/pagos-stripe"
+              className="h-8 px-3 rounded-md bg-red-600 text-white text-[11px] font-semibold hover:bg-red-700 inline-flex items-center gap-1">
+              Asociar en Pagos Stripe &rarr;
+            </Link>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-[13px]">
+              <tbody>
+                {stripeSinAsociar.slice(0, 8).map((p) => (
+                  <tr key={p.id} className="border-b border-red-100 dark:border-red-900/20 last:border-0">
+                    <td className="px-3 py-2 whitespace-nowrap">{fmtDate(p.stripe_created_at)}</td>
+                    <td className="px-3 py-2 font-medium">{p.customer_name || '—'}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{p.customer_email || '—'}</td>
+                    <td className="px-3 py-2 text-right tabular-nums font-semibold">{fmt(Number(p.amount))}</td>
+                    <td className="px-3 py-2 text-right">
+                      <Link to="/finanzas/pagos-stripe" className="text-[11px] font-bold text-red-700 dark:text-red-400 hover:underline">
+                        NO ASOCIADO &middot; ASOCIAR
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {stripeSinAsociar.length > 8 && (
+              <div className="px-3 py-2 text-[11px] text-muted-foreground">y {stripeSinAsociar.length - 8} más…</div>
+            )}
+          </div>
         </div>
       )}
 
