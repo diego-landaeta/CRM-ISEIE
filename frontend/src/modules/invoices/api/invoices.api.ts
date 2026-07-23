@@ -108,6 +108,8 @@ export interface Invoice {
   /** Origen del cobro (p.ej. 'tarjeta_stripe' → factura generada por un pago Stripe). */
   metodo_pago?: string | null;
   moneda?: string | null;
+  /** Gestora responsable del lead de la factura. */
+  gestora_nombre?: string | null;
 }
 
 export interface LeadConversion {

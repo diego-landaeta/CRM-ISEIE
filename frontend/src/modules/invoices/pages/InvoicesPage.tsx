@@ -396,6 +396,7 @@ export default function InvoicesPage() {
                 <th className="px-3 py-2 text-left text-xs text-muted-foreground">Fecha</th>
                 <th className="px-3 py-2 text-left text-xs text-muted-foreground">Cliente</th>
                 {porSociedad && <th className="px-3 py-2 text-left text-xs text-muted-foreground">Proyecto</th>}
+                <th className="px-3 py-2 text-left text-xs text-muted-foreground">Gestora</th>
                 <th className="px-3 py-2 text-right text-xs text-muted-foreground">Total</th>
                 <th className="px-3 py-2 text-left text-xs text-muted-foreground">Estado</th>
                 <th className="px-3 py-2 text-right text-xs text-muted-foreground">Acciones</th>
@@ -431,6 +432,7 @@ export default function InvoicesPage() {
                   {porSociedad && (
                     <td className="px-3 py-2 text-xs text-muted-foreground">{inv.proyecto_nombre || '—'}</td>
                   )}
+                  <td className="px-3 py-2 text-xs text-muted-foreground">{inv.gestora_nombre || '—'}</td>
                   <td className={`px-3 py-2 text-right tabular-nums font-semibold ${Number(inv.total) < 0 ? 'text-rose-600' : ''}`}>{fmt(Number(inv.total))}</td>
                   <td className="px-3 py-2">
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${ESTADO_BADGE[inv.estado] || 'bg-muted'}`}>
