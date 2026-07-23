@@ -217,6 +217,13 @@ export async function generatePDF(invoiceId, { preliminar = false } = {}) {
   page.drawText('TOTAL:', { x: right - 200, y, size: 12, font: bold, color: black });
   page.drawText(fmtEUR(inv.total), { x: right - 70, y, size: 12, font: bold, color: black });
 
+  // Deja explícito si el IVA va INCLUIDO en el precio o AÑADIDO sobre la base.
+  if (Number(inv.iva_pct) > 0) {
+    y -= 13;
+    drawRight(inv.iva_incluido ? 'IVA incluido en el precio' : 'IVA añadido a la base imponible',
+      right, y, 8, font, gray);
+  }
+
   // Metodo de pago
   y -= 30;
   const metodoLabels = {
@@ -410,6 +417,7 @@ async function renderFromTemplate({ pdfDoc, page, font, bold, inv, layout }) {
             { text: `Base imponible: ${fmtEUR(inv.base_imponible)}` },
             { text: `IVA (${inv.iva_pct}%): ${fmtEUR(inv.iva_importe)}` },
             { text: `TOTAL: ${fmtEUR(inv.total)}`, bold: true, size: (b.fontSize || 12) + 2 },
+            { text: Number(inv.iva_pct) > 0 ? (inv.iva_incluido ? 'IVA incluido en el precio' : 'IVA añadido a la base imponible') : '', color: gray, size: (b.fontSize || 12) - 3 },
           ]);
           break;
         case 'coletilla':
