@@ -298,7 +298,8 @@ export async function list({ projectId, issuerId, estado, search, from, to, tipo
             i.cliente_nombre, i.cliente_nif, i.cliente_direccion, i.cliente_ciudad, i.cliente_cp, i.cliente_pais,
             i.cliente_email, i.total, i.iva_pct, i.estado, i.sent_at, i.tipo,
             i.project_id, p.nombre AS proyecto_nombre,
-            i.issuer_id, i.issuer_razon_social
+            i.issuer_id, i.issuer_razon_social,
+            i.metodo_pago, i.moneda
      FROM invoices i LEFT JOIN projects p ON p.id = i.project_id
      ${where}
      ORDER BY i.ano DESC, i.numero DESC LIMIT ${limit} OFFSET ${offset}`,

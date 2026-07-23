@@ -356,7 +356,14 @@ export default function InvoicesPage() {
                       <span className="ml-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700">ABONO</span>
                     )}
                     {inv.tipo === 'proforma' && (
-                      <span className="ml-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-200 text-slate-700">PRESUPUESTO</span>
+                      <span className="ml-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-200 text-slate-700">PROFORMA</span>
+                    )}
+                    {/* Origen del cobro: factura generada automáticamente por un pago Stripe */}
+                    {inv.metodo_pago === 'tarjeta_stripe' && (
+                      <span className="ml-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700" title="Factura generada por un pago de Stripe">STRIPE</span>
+                    )}
+                    {inv.moneda && inv.moneda !== 'EUR' && (
+                      <span className="ml-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800" title="Factura en moneda extranjera">{inv.moneda}</span>
                     )}
                     {inv.rectifica_codigo && (
                       <div className="text-[10px] text-muted-foreground font-normal">rectifica {inv.rectifica_codigo}</div>

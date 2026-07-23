@@ -105,6 +105,9 @@ export interface Invoice {
   proyecto_nombre?: string | null;
   issuer_id?: number | null;
   issuer_razon_social?: string | null;
+  /** Origen del cobro (p.ej. 'tarjeta_stripe' → factura generada por un pago Stripe). */
+  metodo_pago?: string | null;
+  moneda?: string | null;
 }
 
 export interface LeadConversion {

@@ -82,9 +82,15 @@ export async function listPayments({ projectId, status, linked, search, from, to
   const where = conds.join(' AND ');
   const offset = (page - 1) * limit;
   const { rows } = await query(
-    `SELECT sp.*, l.nombre AS lead_nombre
+    // Se añade a QUÉ pertenece el cobro: el curso/concepto de la conversión y la
+    // factura emitida por ese pago concreto (si ya existe).
+    `SELECT sp.*, l.nombre AS lead_nombre,
+            cv.producto_contratado,
+            f.codigo AS factura_codigo
      FROM stripe_payments sp
      LEFT JOIN leads l ON l.id = sp.lead_id
+     LEFT JOIN conversions cv ON cv.id = sp.conversion_id
+     LEFT JOIN invoices f ON f.payment_id = sp.conversion_payment_id AND f.tipo <> 'proforma'
      WHERE ${where}
      ORDER BY sp.stripe_created_at DESC
      LIMIT ${limit} OFFSET ${offset}`,

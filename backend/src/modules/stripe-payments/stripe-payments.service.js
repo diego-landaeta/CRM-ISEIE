@@ -85,6 +85,16 @@ async function autoLinkIfPossible(projectId, payment, dbRow) {
   const cpId = await model.createConversionPayment(conv.id, payment.amount, fecha, `Auto-Stripe ${payment.stripe_id}`);
   await model.updateConversionPaid(conv.id, payment.amount);
   await model.linkPayment(dbRow.id, { leadId: lead.id, conversionId: conv.id, conversionPaymentId: cpId, userId: null, method: 'auto_email' });
+  // Un pago de Stripe asociado genera SU factura, en el correlativo normal
+  // (igual que cualquier otro abono). No bloqueante.
+  autoInvoiceFromStripe(conv.id, null, cpId, payment.amount);
+}
+
+// Lanza la auto-factura por pago sin acoplar módulos en carga (import dinámico).
+function autoInvoiceFromStripe(conversionId, userId, paymentId, importe) {
+  import('../conversions/conversion.service.js')
+    .then((cs) => cs.autoInvoice(conversionId, userId, { paymentId, importe: Number(importe) }))
+    .catch(() => { /* no bloqueante: el pago sigue su curso */ });
 }
 
 // Trae detalle completo de dispute desde Stripe API (incluye evidence_due_by)
@@ -171,15 +181,19 @@ export async function syncStripePayments(projectId, { fullHistory = false } = {}
 export async function manualLink(stripePaymentId, { leadId, conversionId, userId }) {
   const fecha = new Date().toISOString().slice(0, 10);
   let cpId = null;
+  let importe = 0;
   if (conversionId) {
     const { rows } = await query(`SELECT amount FROM stripe_payments WHERE id=$1`, [stripePaymentId]);
     const amount = Number(rows[0]?.amount || 0);
     if (amount > 0) {
+      importe = amount;
       cpId = await model.createConversionPayment(conversionId, amount, fecha, `Manual Stripe #${stripePaymentId}`);
       await model.updateConversionPaid(conversionId, amount);
     }
   }
   await model.linkPayment(stripePaymentId, { leadId, conversionId, conversionPaymentId: cpId, userId, method: 'manual' });
+  // Al asociar a mano un pago de Stripe también se emite su factura.
+  if (cpId) autoInvoiceFromStripe(conversionId, userId, cpId, importe);
 }
 
 export async function updateDisputeDecision(stripePaymentId, { decision, notes, userId }) {

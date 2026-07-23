@@ -34,6 +34,9 @@ type Payment = {
   lead_id: number | null;
   lead_nombre: string | null;
   link_method: string | null;
+  /** A qué pertenece el cobro: curso de la conversión y factura emitida por él. */
+  producto_contratado?: string | null;
+  factura_codigo?: string | null;
   stripe_created_at: string;
 };
 
@@ -204,7 +207,11 @@ export default function StripePaymentsPage() {
             </thead>
             <tbody>
               {payments.map((p) => (
-                <tr key={p.id} className="border-b last:border-0 hover:bg-muted/30">
+                <tr key={p.id}
+                  className={`border-b last:border-0 hover:bg-muted/30 ${
+                    !p.conversion_id && p.status === 'succeeded'
+                      ? 'bg-red-50/70 dark:bg-red-950/20 border-l-2 border-l-red-500'
+                      : ''}`}>
                   <td className="px-3 py-2 whitespace-nowrap">{fmtDate(p.stripe_created_at)}</td>
                   <td className="px-3 py-2">
                     <div className="font-medium">{p.customer_name || '—'}</div>
@@ -227,14 +234,27 @@ export default function StripePaymentsPage() {
                   </td>
                   <td className="px-3 py-2">
                     {p.conversion_id ? (
-                      <span className="inline-flex items-center gap-1 text-[11px] text-emerald-700">
-                        <LinkIcon size={11} weight="bold" /> {p.lead_nombre || `Conv #${p.conversion_id}`}
-                        <span className="text-muted-foreground">({p.link_method === 'auto_email_match' ? 'auto' : 'manual'})</span>
-                      </span>
+                      <div className="text-[11px] leading-tight">
+                        <span className="inline-flex items-center gap-1 text-emerald-700 font-medium">
+                          <LinkIcon size={11} weight="bold" /> {p.lead_nombre || `Conv #${p.conversion_id}`}
+                          <span className="text-muted-foreground">({p.link_method?.startsWith('auto') ? 'auto' : 'manual'})</span>
+                        </span>
+                        {/* A qué pertenece: concepto/curso y su factura si ya se emitió */}
+                        {(p.producto_contratado || p.description) && (
+                          <div className="text-muted-foreground truncate max-w-[220px]" title={p.producto_contratado || p.description || ''}>
+                            {p.producto_contratado || p.description}
+                          </div>
+                        )}
+                        {p.factura_codigo && (
+                          <div className="text-[10px] text-primary font-semibold">Factura {p.factura_codigo}</div>
+                        )}
+                      </div>
                     ) : (
                       <button onClick={() => setLinkDialog(p)}
-                        className="text-[11px] text-primary hover:underline inline-flex items-center gap-1">
-                        <LinkIcon size={11} weight="bold" /> Asociar
+                        title="Este cobro no está asociado a ningún cliente: asócialo para que genere su factura"
+                        className="text-[11px] font-bold text-red-700 dark:text-red-400 hover:underline inline-flex items-center gap-1 text-left">
+                        <LinkIcon size={11} weight="bold" />
+                        NO ASOCIADO A UN CLIENTE · ASOCIAR
                       </button>
                     )}
                   </td>
