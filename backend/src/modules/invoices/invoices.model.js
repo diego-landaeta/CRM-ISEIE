@@ -438,13 +438,31 @@ export async function emitirFacturaDePago(conversionId, { paymentId, importe }, 
   const conv = await _convDataParaFactura(conversionId);
   if (!conv) return null;
 
+  // Fecha real del cobro → la factura sale PAGADA con esa fecha (el dinero ya entró).
+  const { rows: payRows } = await query(`SELECT fecha FROM conversion_payments WHERE id = $1`, [paymentId]);
+  const fechaPago = payRows[0]?.fecha || null;
+
+  // No auto-facturar pagos ANTERIORES al inicio de facturación de la sociedad (su
+  // primera factura emitida). Evita facturas retroactivas de cobros previos al
+  // arranque. Si la sociedad aún no factura, no bloquea (permite el primer arranque).
+  if (fechaPago) {
+    const { rows: chk } = await query(
+      `SELECT 1 FROM projects pr
+         JOIN invoices f ON f.issuer_id = pr.sociedad_emisora_id
+           AND f.tipo <> 'proforma' AND f.numero IS NOT NULL
+        WHERE pr.id = $1
+        GROUP BY pr.id
+       HAVING $2::date < MIN(f.fecha_emision)`, [conv.project_id, fechaPago]);
+    if (chk.length) return null;
+  }
+
   const ivaPct = conv.iva_exento ? 0 : Number(conv.iva_pct ?? 21);
   // El pago es bruto (lo que entró en caja). Base = monto / (1+IVA); IVA = resto.
   const base = ivaPct > 0 ? Number((monto / (1 + ivaPct / 100)).toFixed(2)) : monto;
   const ivaImporte = Number((monto - base).toFixed(2));
   const prod = conv.producto_contratado || 'Servicio';
 
-  return await create({
+  const inv = await create({
     projectId: conv.project_id,
     conversionId,
     paymentId,
@@ -466,6 +484,11 @@ export async function emitirFacturaDePago(conversionId, { paymentId, importe }, 
     leyendaIva: ivaPct === 0 ? 'Operación exenta de IVA conforme a la normativa aplicable.' : null,
     metodoPago: METODOS_PAGO_VALIDOS.includes(conv.metodo_pago) ? conv.metodo_pago : 'otro',
   }, userId);
+  // Un pago recibido → factura PAGADA (no 'emitida'), con la fecha del cobro.
+  if (inv?.id) {
+    try { await markPaid(inv.id, fechaPago); inv.estado = 'pagada'; inv.fecha_pago = fechaPago; } catch { /* no bloqueante */ }
+  }
+  return inv;
 }
 
 // LEGACY (compat): auto-emisión "1 factura por conversión al total". Se conserva

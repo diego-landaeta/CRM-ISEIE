@@ -337,6 +337,27 @@ export async function addPayment(conversionId, { importe, fecha, notas }) {
       [nuevoTotal, conversionId]
     );
 
+    // Si la venta es fraccionada, el abono SALDA las cuotas pendientes más
+    // antiguas (FIFO) — igual que "Registrar pago". Así "Abonar" y "Registrar
+    // pago" son el MISMO proceso: el importe resta cuotas y deja de estar vencida.
+    // El sobrante que no complete una cuota queda como abono a cuenta.
+    const { rows: cuotas } = await client.query(
+      `SELECT id, importe_previsto FROM conversion_installments
+        WHERE conversion_id = $1 AND fecha_cobro IS NULL
+        ORDER BY numero ASC FOR UPDATE`, [conversionId]);
+    let restante = Number(importe);
+    const fechaAbono = payRows[0].fecha;
+    for (const q of cuotas) {
+      const prev = Number(q.importe_previsto);
+      if (restante + 0.001 < prev) break; // no alcanza para saldar esta cuota entera
+      await client.query(
+        `UPDATE conversion_installments
+            SET fecha_cobro = $1, importe_cobrado = $2, payment_id = $3, updated_at = NOW()
+          WHERE id = $4`,
+        [fechaAbono, prev, payRows[0].id, q.id]);
+      restante = Number((restante - prev).toFixed(2));
+    }
+
     await client.query('COMMIT');
     return { payment: payRows[0], nuevoImportePagado: nuevoTotal };
   } catch (err) {
