@@ -12,9 +12,10 @@ function projectId(req) {
 export async function list(req, res, next) {
   try {
     const pid = projectId(req);
-    const { status, linked, search, from, to, page, limit } = req.query;
+    const { status, linked, search, from, to, page, limit, facturables } = req.query;
     const data = await model.listPayments({
       projectId: pid, status, linked, search, from, to,
+      facturables: facturables === '1' || facturables === 'true',
       page: Number(page) || 1,
       limit: Math.min(Number(limit) || 50, 200),
     });

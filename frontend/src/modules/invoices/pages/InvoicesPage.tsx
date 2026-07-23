@@ -93,7 +93,7 @@ export default function InvoicesPage() {
       if (r3.success) setIssuers(r3.data || []);
       if (r4.success) setVentasSinFactura(r4.data || []);
       // Cobros Stripe sin asociar del proyecto (no bloqueante).
-      client.get<typeof stripeSinAsociar>(`/stripe-payments?projectId=${pid}&linked=no&status=succeeded&limit=50`)
+      client.get<typeof stripeSinAsociar>(`/stripe-payments?projectId=${pid}&linked=no&status=succeeded&facturables=1&limit=50`)
         .then((r) => { if (r.success) setStripeSinAsociar(r.data || []); })
         .catch(() => setStripeSinAsociar([]));
     } finally { setLoading(false); }

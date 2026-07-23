@@ -69,13 +69,23 @@ export async function updateConversionPaid(conversionId, addAmount) {
   );
 }
 
-export async function listPayments({ projectId, status, linked, search, from, to, page = 1, limit = 50 }) {
+export async function listPayments({ projectId, status, linked, search, from, to, facturables, page = 1, limit = 50 }) {
   const conds = ['sp.project_id = $1'];
   const params = [projectId];
   let i = 2;
   if (status) { conds.push(`sp.status = $${i++}`); params.push(status); }
   if (linked === 'yes') conds.push('sp.conversion_id IS NOT NULL');
   if (linked === 'no')  conds.push('sp.conversion_id IS NULL');
+  // facturables=1 → solo cobros que REALMENTE tocaría facturar: los posteriores a
+  // la primera factura emitida por la sociedad del proyecto. Si esa sociedad aún
+  // no factura (o empezó después), no se marca nada. Se deriva del dato, así que
+  // no hay que configurar fechas de arranque a mano.
+  if (facturables) {
+    conds.push(`sp.stripe_created_at >= (
+      SELECT MIN(f.fecha_emision) FROM invoices f
+       WHERE f.issuer_id = (SELECT pr.sociedad_emisora_id FROM projects pr WHERE pr.id = sp.project_id)
+         AND f.tipo <> 'proforma' AND f.numero IS NOT NULL)`);
+  }
   if (search) { conds.push(`(LOWER(sp.customer_email) LIKE $${i} OR LOWER(sp.customer_name) LIKE $${i} OR sp.stripe_id LIKE $${i})`); params.push(`%${search.toLowerCase()}%`); i++; }
   if (from) { conds.push(`sp.stripe_created_at >= $${i++}`); params.push(from); }
   if (to)   { conds.push(`sp.stripe_created_at <= $${i++}`); params.push(to); }
