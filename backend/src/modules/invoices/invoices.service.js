@@ -75,6 +75,13 @@ function fmtMoney(n, moneda = 'EUR') {
 }
 function fmtEUR(n) { return fmtMoney(n, 'EUR'); }
 
+// Factor para pasar un precio de línea BRUTO a NETO cuando la factura es
+// "IVA incluido". Así las líneas suman la base imponible en vez del total.
+function netFactor(inv) {
+  const pct = Number(inv?.iva_pct || 0);
+  return (inv?.iva_incluido && pct > 0) ? 1 / (1 + pct / 100) : 1;
+}
+
 // Genera PDF de factura usando pdf-lib
 export async function generatePDF(invoiceId, { preliminar = false } = {}) {
   const inv = await model.findById(invoiceId);
@@ -178,13 +185,17 @@ export async function generatePDF(invoiceId, { preliminar = false } = {}) {
 
   y -= 22;
   const items = Array.isArray(inv.items) ? inv.items : (typeof inv.items === 'string' ? JSON.parse(inv.items) : []);
+  // Con IVA INCLUIDO los precios de línea vienen en BRUTO. En la factura las líneas
+  // se muestran NETAS para que su suma cuadre con la base imponible.
+  const netF = netFactor(inv);
   for (const it of items) {
     const desc = String(it.descripcion || '').slice(0, 60);
     const cant = Number(it.cantidad || 1);
     // Tolerante a distintas claves de precio (precio_unitario | precio) para no
     // pintar 0,00 cuando el ítem viene de importaciones/otros orígenes.
-    const precio = Number(it.precio_unitario ?? it.precio ?? 0);
-    const subt = it.total != null ? Number(it.total) : cant * precio;
+    const precioBruto = Number(it.precio_unitario ?? it.precio ?? 0);
+    const precio = precioBruto * netF;
+    const subt = (it.total != null ? Number(it.total) : cant * precioBruto) * netF;
     page.drawText(desc, { x: left + 10, y, size: 10, font, color: black });
     page.drawText(String(cant), { x: 365, y, size: 10, font, color: black });
     page.drawText(fmtEUR(precio), { x: 410, y, size: 10, font, color: black });
@@ -434,8 +445,11 @@ async function renderFromTemplate({ pdfDoc, page, font, bold, inv, layout }) {
           for (const it of items) {
             if (yy < bottom) break;
             const cant = Number(it.cantidad || 1);
-            const precio = Number(it.precio_unitario || 0);
-            const subt = cant * precio;
+            // Igual que en el layout fijo: con IVA incluido, líneas en NETO.
+            const nf = netFactor(inv);
+            const precioBruto = Number(it.precio_unitario ?? it.precio ?? 0);
+            const precio = precioBruto * nf;
+            const subt = (it.total != null ? Number(it.total) : cant * precioBruto) * nf;
             const desc = String(it.descripcion || '').slice(0, 55);
             page.drawText(desc, { x: colDesc, y: yy, size, font, color: black });
             page.drawText(String(cant), { x: colCant, y: yy, size, font, color: black });

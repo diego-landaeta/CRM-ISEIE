@@ -102,14 +102,12 @@ export async function create(data, userId) {
     // Serie: para proforma, la serie_proforma de la empresa (def 'PRO'); para
     // factura, la de la empresa emisora, si no la del request o 'A'. El contador
     // es por serie, así que las proformas nunca tocan el correlativo fiscal.
-    const serie = isProforma
-      ? ((iss?.serie_proforma && iss.serie_proforma.trim()) || 'PRO')
-      : ((iss?.serie && iss.serie.trim()) || data.serie || 'A');
+    // Decisión de negocio: las PROFORMAS comparten el MISMO correlativo que las
+    // facturas normales (misma serie y contador) y se numeran igual.
+    const serie = (iss?.serie && iss.serie.trim()) || data.serie || 'A';
     // Borrador: NO consume correlativo. numero/codigo quedan NULL hasta emitir.
     const numero = isBorrador ? null : await nextNumero(client, data.projectId, iss?.id || null, ano, serie);
-    const codigo = isBorrador ? null : (isProforma
-      ? `${serie}-${ano}/${String(numero).padStart(4, '0')}`
-      : `${ano}/${String(numero).padStart(4, '0')}`);
+    const codigo = isBorrador ? null : `${ano}/${String(numero).padStart(4, '0')}`;
 
     const { rows } = await client.query(
       `INSERT INTO invoices (

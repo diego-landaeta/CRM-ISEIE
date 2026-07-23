@@ -12,8 +12,22 @@ type Tipo = 'persona' | 'empresa' | 'contado';
 interface LeadHit { id: number; nombre: string; email?: string | null; telefono?: string | null }
 
 export default function InvoiceCreatePage() {
-  const { activeProject } = useProjectContext() as { activeProject: { id?: number; nombre?: string } };
-  const pid = activeProject?.id;
+  const { activeProject, projects } = useProjectContext() as {
+    activeProject: { id?: number; nombre?: string; sociedad_emisora_id?: number | null };
+    projects: Array<{ id: number; nombre: string; sociedad_emisora_id?: number | null }>;
+  };
+  // Proyecto de la factura: se puede cambiar aquí sin salir del formulario. Manda
+  // sobre TODO (cliente/leads, catálogo de cursos, emisores, régimen fiscal).
+  // Solo se ofrecen proyectos de la MISMA sociedad emisora (no se factura cruzado).
+  const [projectId, setProjectId] = useState<number | null>(null);
+  useEffect(() => {
+    if (activeProject?.id && activeProject.id !== -1) setProjectId((p) => p ?? activeProject.id!);
+  }, [activeProject?.id]);
+  const pid = projectId ?? undefined;
+  const socActual = (projects || []).find((p) => p.id === projectId)?.sociedad_emisora_id
+    ?? activeProject?.sociedad_emisora_id ?? null;
+  const projectOptions = (projects || []).filter((p) =>
+    socActual == null ? true : p.sociedad_emisora_id === socActual);
   const navigate = useNavigate();
   const loc = useLocation();
   const invBase = loc.pathname.split('/facturas')[0];
@@ -218,6 +232,15 @@ export default function InvoiceCreatePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pid, prefillLeadId]);
 
+  // Al cambiar de proyecto, el cliente elegido ya no aplica (pertenece a otro).
+  const prevPidRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (prevPidRef.current != null && prevPidRef.current !== projectId) {
+      setLeadId(null); setHits([]); setOpenHits(false);
+    }
+    prevPidRef.current = projectId;
+  }, [projectId]);
+
   // Cargar facturas rectificables de la sociedad emisora (normales, ya emitidas).
   useEffect(() => {
     if (!esRect || !issuerId) { setRectList([]); return; }
@@ -290,6 +313,21 @@ export default function InvoiceCreatePage() {
             : 'Documento fiscal con numeración correlativa'}
         </span>
       </div>
+
+      {/* Proyecto de la factura — manda sobre cliente/leads, cursos y emisores */}
+      {projectOptions.length > 0 && (
+        <div className="bg-card border border-border rounded-lg p-4">
+          <label className="text-xs font-bold uppercase text-muted-foreground">Proyecto</label>
+          <select value={projectId ?? ''} onChange={(e) => setProjectId(Number(e.target.value))}
+            className="w-full h-9 px-2 mt-1 rounded border border-primary/40 bg-background text-foreground text-sm font-medium [&>option]:bg-background [&>option]:text-foreground">
+            {projectOptions.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+          </select>
+          <p className="text-[10px] text-muted-foreground mt-1">
+            Los clientes, cursos y empresas emisoras se filtran por este proyecto. Solo se listan
+            proyectos de la misma sociedad (no se factura cruzado entre sociedades).
+          </p>
+        </div>
+      )}
 
       {/* Emisor */}
       {issuers.length > 0 && (

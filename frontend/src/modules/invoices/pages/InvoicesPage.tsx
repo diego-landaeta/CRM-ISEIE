@@ -25,10 +25,13 @@ const ESTADO_BADGE: Record<string, string> = {
 type Stats = { total: number; emitidas: number; enviadas: number; pagadas: number; canceladas: number; total_facturado: number; total_cobrado: number; total_iva: number };
 
 export default function InvoicesPage() {
-  const { activeProject, projects } = useProjectContext() as {
+  const { activeProject, projects, switchProject } = useProjectContext() as {
     activeProject: { id?: number | null; nombre?: string; sociedad_emisora_id?: number | null };
     projects: Array<{ id: number; nombre: string; sociedad_emisora_id?: number | null }>;
+    switchProject: (id: number) => void;
   };
+  // Sociedad a la que se pide saltar (abre el aviso "entra a este proyecto").
+  const [socPrompt, setSocPrompt] = useState<{ id: number; nombre: string } | null>(null);
   const { user } = useAuth() as { user: { role?: string } | null };
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
   const pid = activeProject?.id;
@@ -54,6 +57,12 @@ export default function InvoicesPage() {
   const sociedadProjects = porSociedad
     ? (projects || []).filter((p) => p.sociedad_emisora_id != null && String(p.sociedad_emisora_id) === filterIssuer)
     : [];
+  // Solo se ofrecen sociedades a las que el usuario tiene acceso — es decir, las
+  // que son sociedad emisora de alguno de SUS proyectos. Nunca se cruza la
+  // facturación entre sociedades: para ver otra hay que entrar a un proyecto suyo.
+  const misSociedadIds = new Set((projects || []).map((p) => p.sociedad_emisora_id).filter((x) => x != null));
+  const sociedadesVisibles = allIssuers.filter((i) => misSociedadIds.has(i.id));
+  const proyectosDeSociedad = (issuerId: number) => (projects || []).filter((p) => p.sociedad_emisora_id === issuerId);
   const [ventasSinFactura, setVentasSinFactura] = useState<VentaSinFactura[]>([]);
   // Borrador que se está validando/emitiendo (abre el diálogo de completar datos)
   const [emittingInv, setEmittingInv] = useState<Invoice | null>(null);
@@ -221,12 +230,22 @@ export default function InvoicesPage() {
           <input value={filters.search} onChange={(e) => setFilters(f => ({ ...f, search: e.target.value }))}
             placeholder="Cliente, NIF, código…" className="w-full h-9 pl-8 pr-3 rounded-md border border-border bg-background text-sm" />
         </div>
-        {isAdmin && (
-          <select value={filterIssuer} onChange={(e) => setFilterIssuer(e.target.value)}
-            title="Ver todas las facturas de una sociedad (global, entre proyectos)"
+        {isAdmin && sociedadesVisibles.length > 1 && (
+          <select value={filterIssuer}
+            onChange={(e) => {
+              const id = Number(e.target.value);
+              // No se cruza facturación entre sociedades: si piden otra, se avisa
+              // y se ofrece el atajo para entrar a uno de sus proyectos.
+              if (id && String(id) !== String(activeProject?.sociedad_emisora_id)) {
+                const soc = sociedadesVisibles.find((s) => s.id === id);
+                if (soc) setSocPrompt({ id, nombre: soc.razon_social });
+                return;
+              }
+              setFilterIssuer(e.target.value);
+            }}
+            title="La facturación se consulta dentro de su sociedad. Para ver otra, entra a uno de sus proyectos."
             className={`h-9 px-2 rounded-md border text-sm ${filterIssuer ? 'border-primary/50 bg-primary/5 text-primary font-semibold' : 'border-border bg-card'}`}>
-            <option value="">Sociedad: por proyecto</option>
-            {allIssuers.map((i) => <option key={i.id} value={String(i.id)}>{i.razon_social}</option>)}
+            {sociedadesVisibles.map((i) => <option key={i.id} value={String(i.id)}>{i.razon_social}</option>)}
           </select>
         )}
         {porSociedad && sociedadProjects.length > 0 && (
@@ -430,6 +449,36 @@ export default function InvoicesPage() {
             load();
           }}
         />
+      )}
+
+      {/* Aviso: la facturación NO se cruza entre sociedades. Para ver otra hay que
+          entrar a uno de sus proyectos — con atajo directo para cambiar. */}
+      {socPrompt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setSocPrompt(null)}>
+          <div className="bg-card border border-border rounded-lg shadow-xl max-w-md w-full p-5 space-y-3" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-semibold text-base">Entra a un proyecto de {socPrompt.nombre}</h3>
+            <p className="text-sm text-muted-foreground">
+              La facturación se consulta <strong>dentro de cada sociedad</strong>: no se mezclan facturas
+              de sociedades distintas. Para ver la de <strong>{socPrompt.nombre}</strong>, entra a uno de sus proyectos:
+            </p>
+            <div className="space-y-1.5 max-h-64 overflow-auto">
+              {proyectosDeSociedad(socPrompt.id).map((p) => (
+                <button key={p.id}
+                  onClick={() => { switchProject(p.id); setSocPrompt(null); }}
+                  className="w-full text-left px-3 py-2 rounded-md border border-border hover:bg-muted text-sm font-medium flex items-center justify-between">
+                  <span>{p.nombre}</span>
+                  <span className="text-[11px] text-primary font-semibold">Entrar →</span>
+                </button>
+              ))}
+              {proyectosDeSociedad(socPrompt.id).length === 0 && (
+                <p className="text-xs text-amber-600">No tienes proyectos asignados en esta sociedad.</p>
+              )}
+            </div>
+            <div className="flex justify-end">
+              <button onClick={() => setSocPrompt(null)} className="h-9 px-3 rounded-md border border-border bg-card text-sm">Cancelar</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
