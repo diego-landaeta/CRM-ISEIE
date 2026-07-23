@@ -120,10 +120,11 @@ export async function create(data, userId) {
          items, base_imponible, iva_pct, iva_importe, iva_incluido, total,
          estado, notas, leyenda_iva, metodo_pago, pie_pago, created_by, tipo,
          issuer_id, issuer_razon_social, issuer_nif, issuer_direccion, issuer_ciudad,
-         issuer_cp, issuer_pais, issuer_email, issuer_telefono, issuer_iban, issuer_logo_url
+         issuer_cp, issuer_pais, issuer_email, issuer_telefono, issuer_iban, issuer_logo_url,
+         moneda
        ) VALUES (
          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,
-         $30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41
+         $30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42
        ) RETURNING *`,
       [
         data.projectId, data.conversionId || null, data.leadId || null, data.paymentId || null,
@@ -139,6 +140,7 @@ export async function create(data, userId) {
         isProforma ? 'proforma' : 'normal',
         iss?.id || null, iss?.razon_social || null, issuerNifSnap, iss?.direccion || null, iss?.ciudad || null,
         iss?.cp || null, iss?.pais || null, iss?.email || null, iss?.telefono || null, iss?.iban || null, iss?.logo_url || null,
+        (data.moneda ? String(data.moneda).toUpperCase() : 'EUR'),
       ]
     );
 

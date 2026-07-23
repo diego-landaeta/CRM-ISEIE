@@ -34,6 +34,9 @@ export const createInvoiceSchema = z.object({
   metodoPago: z.enum(['transferencia', 'tarjeta', 'tarjeta_stripe', 'efectivo', 'bizum', 'fraccionado', 'otro']),
   piePago: z.string().optional(),
   issuerId: z.number().int().positive().optional(),
+  // Moneda de la factura (opcional). Importes manuales en esa divisa, SIN conversión
+  // automática. Por defecto EUR. Ej: 'USD', 'MXN', 'COP', 'CRC', 'ARS'.
+  moneda: z.string().trim().min(3).max(8).optional(),
 }).superRefine((d, ctx) => {
   if (d.tipo === 'proforma') return; // presupuesto: datos fiscales opcionales
   if (d.borrador === true) return;   // borrador: se completa antes de emitir

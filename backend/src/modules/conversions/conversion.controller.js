@@ -136,17 +136,17 @@ export async function listInstallments(req, res, next) {
 export async function generateInstallments(req, res, next) {
   try {
     const id = parseInt(req.params.id);
-    const { num_cuotas, importe_total, fecha_inicio, installments } = req.body;
+    const { num_cuotas, importe_total, fecha_inicio, installments, concepto } = req.body;
     // Modo "cuotas custom": cliente manda array completo con importe + fecha por cuota
     if (Array.isArray(installments) && installments.length > 0) {
-      const rows = await installmentsModel.generateInstallments(id, null, null, null, installments);
+      const rows = await installmentsModel.generateInstallments(id, null, null, null, installments, concepto);
       return res.json({ success: true, data: rows });
     }
     // Modo "auto": N cuotas iguales mensuales desde fecha_inicio
     if (!num_cuotas || num_cuotas < 2) throw new AppError('num_cuotas debe ser >= 2', 400, 'INVALID');
     if (!importe_total) throw new AppError('importe_total requerido', 400, 'INVALID');
     if (!fecha_inicio) throw new AppError('fecha_inicio requerida', 400, 'INVALID');
-    const rows = await installmentsModel.generateInstallments(id, Number(num_cuotas), Number(importe_total), fecha_inicio);
+    const rows = await installmentsModel.generateInstallments(id, Number(num_cuotas), Number(importe_total), fecha_inicio, null, concepto);
     res.json({ success: true, data: rows });
   } catch (err) { next(err); }
 }

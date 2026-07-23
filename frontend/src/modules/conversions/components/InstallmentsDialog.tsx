@@ -13,6 +13,7 @@ interface Installment {
   importe_cobrado?: number | null;
   metodo?: string | null;
   metodo_pago?: string | null;
+  concepto?: string | null;
 }
 
 interface Props {
@@ -29,6 +30,7 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<'view' | 'create'>('view');
   const [numCuotas, setNumCuotas] = useState(3);
+  const [concepto, setConcepto] = useState(''); // concepto de las cuotas (predefinidos + otros)
   const [fechaInicio, setFechaInicio] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [draftInstallments, setDraftInstallments] = useState<Installment[]>([]);
   // Editor de importe_total para aplicar descuentos/becas antes de fraccionar.
@@ -143,6 +145,7 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
           importe_previsto: Number(c.importe_previsto),
           fecha_vencimiento: c.fecha_vencimiento,
         })),
+        concepto: concepto.trim() || undefined,
       });
       await conversionsApi.update(conversion.id, { metodo_pago: 'fraccionado' } as any);
       toast({ title: 'Cuotas creadas', description: `${draftInstallments.length} cuotas programadas.` });
@@ -257,7 +260,7 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
                       <span className="font-bold text-muted-foreground w-8">#{inst.numero}</span>
                       <div className="flex-1 min-w-0">
                         <p className="font-semibold tabular-nums">{formatCurrency(inst.importe_previsto)}</p>
-                        <p className="text-[11px] text-muted-foreground">Vence {formatDate(inst.fecha_vencimiento)}</p>
+                        <p className="text-[11px] text-muted-foreground">Vence {formatDate(inst.fecha_vencimiento)}{inst.concepto ? ` · ${inst.concepto}` : ''}</p>
                       </div>
                       {pagada ? (
                         <>
@@ -339,6 +342,25 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
                   <input type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)}
                     className="w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm" />
                 </div>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold text-muted-foreground mb-1 block">Concepto de las cuotas (opcional)</label>
+                <input
+                  list="conceptos-cuota" value={concepto}
+                  onChange={(e) => setConcepto(e.target.value)}
+                  placeholder="Elige uno o escribe el tuyo (otros)…"
+                  className="w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm"
+                />
+                <datalist id="conceptos-cuota">
+                  <option value="Mensualidad" />
+                  <option value="Matrícula" />
+                  <option value="Cuota del curso" />
+                  <option value="Materiales" />
+                  <option value="Certificado" />
+                  <option value="Reserva de plaza" />
+                </datalist>
+                <p className="text-[10px] text-muted-foreground mt-0.5">Aparece en cada cuota. Predefinidos o texto libre.</p>
               </div>
 
               <div className="border border-border rounded-md divide-y divide-border">

@@ -62,14 +62,26 @@ export function calcularImportes({ items, ivaPct, ivaIncluido }) {
   return { baseImponible, ivaImporte, total };
 }
 
-function fmtEUR(n) {
-  return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(Number(n || 0));
+// Formatea un importe en la moneda de la factura (por defecto EUR). Los importes
+// son manuales en esa divisa (sin conversión). Si el código ISO no lo soporta
+// Intl, cae a "1.234,56 XXX".
+function fmtMoney(n, moneda = 'EUR') {
+  const cur = String(moneda || 'EUR').toUpperCase();
+  try {
+    return new Intl.NumberFormat('es-ES', { style: 'currency', currency: cur }).format(Number(n || 0));
+  } catch {
+    return `${new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n || 0))} ${cur}`;
+  }
 }
+function fmtEUR(n) { return fmtMoney(n, 'EUR'); }
 
 // Genera PDF de factura usando pdf-lib
 export async function generatePDF(invoiceId, { preliminar = false } = {}) {
   const inv = await model.findById(invoiceId);
   if (!inv) throw new Error('Factura no encontrada');
+  // Formateo en la moneda de la factura (fallback local que sombrea el fmtEUR de
+  // módulo dentro del layout fijo). El editor visual usa fmtMoney directamente.
+  const fmtEUR = (n) => fmtMoney(n, inv.moneda);
   const project = await model.getProjectInvoicerData(inv.project_id);
 
   const pdfDoc = await PDFDocument.create();
@@ -295,6 +307,7 @@ const METODO_LABELS = {
 // Dibuja la factura usando la plantilla del editor visual (bloques posicionados).
 // Convierte coords del editor (A4 794x1123 px, origen arriba-izq) a pdf-lib (595x842 pt, origen abajo-izq).
 async function renderFromTemplate({ pdfDoc, page, font, bold, inv, layout }) {
+  const fmtEUR = (n) => fmtMoney(n, inv.moneda); // formatea en la moneda de la factura
   const SX = 595 / 794, SY = 842 / 1123;
   const X = (px) => px * SX;
   const TOP = (py) => 842 - py * SY; // borde superior del bloque en coords pdf
@@ -482,7 +495,7 @@ export async function sendByEmail(invoiceId, customEmail = null) {
   const subject = `${docLabel} ${inv.codigo} - ${project?.nombre || 'CRM'}`;
   const html = `
     <p>Hola ${inv.cliente_nombre},</p>
-    <p>Adjuntamos tu ${docLabelLc} <strong>${inv.codigo}</strong> por importe de <strong>${fmtEUR(inv.total)}</strong>.</p>
+    <p>Adjuntamos tu ${docLabelLc} <strong>${inv.codigo}</strong> por importe de <strong>${fmtMoney(inv.total, inv.moneda)}</strong>.</p>
     <p>Si tienes cualquier duda, responde a este correo.</p>
     <p>Saludos,<br/>${project?.nombre || 'CRM'}</p>
   `;

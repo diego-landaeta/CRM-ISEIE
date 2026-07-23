@@ -135,6 +135,7 @@ export async function create(req, res, next) {
     const inv = await model.create({
       ...d,
       ivaPct, baseImponible, ivaImporte, total, leyendaIva,
+      moneda: d.moneda || 'EUR',
     }, req.user?.id);
     res.json({ success: true, data: inv });
   } catch (e) {

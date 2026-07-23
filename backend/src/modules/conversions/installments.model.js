@@ -8,7 +8,8 @@ export async function listByConversion(conversionId) {
   return rows;
 }
 
-export async function generateInstallments(conversionId, numCuotas, importeTotal, fechaInicio, customInstallments = null) {
+export async function generateInstallments(conversionId, numCuotas, importeTotal, fechaInicio, customInstallments = null, concepto = null) {
+  const conceptoVal = concepto && String(concepto).trim() ? String(concepto).trim().slice(0, 160) : null;
   // Si llega customInstallments, lo usa tal cual. Si no, distribuye N cuotas
   // iguales mensuales desde fechaInicio (comportamiento original).
   const c = await getClient();
@@ -25,9 +26,9 @@ export async function generateInstallments(conversionId, numCuotas, importeTotal
         if (!isFinite(importe) || importe <= 0) throw new Error(`Cuota ${i + 1}: importe inválido`);
         if (!fecha) throw new Error(`Cuota ${i + 1}: fecha de vencimiento requerida`);
         await c.query(
-          `INSERT INTO conversion_installments (conversion_id, numero, importe_previsto, fecha_vencimiento)
-           VALUES ($1, $2, $3, $4)`,
-          [conversionId, i + 1, importe, fecha]
+          `INSERT INTO conversion_installments (conversion_id, numero, importe_previsto, fecha_vencimiento, concepto)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [conversionId, i + 1, importe, fecha, conceptoVal]
         );
       }
     } else {
@@ -41,9 +42,9 @@ export async function generateInstallments(conversionId, numCuotas, importeTotal
           ? Math.round((Number(importeTotal) - importeCuota * (numCuotas - 1)) * 100) / 100
           : importeCuota;
         await c.query(
-          `INSERT INTO conversion_installments (conversion_id, numero, importe_previsto, fecha_vencimiento)
-           VALUES ($1, $2, $3, $4)`,
-          [conversionId, i + 1, importe, venc.toISOString().slice(0, 10)]
+          `INSERT INTO conversion_installments (conversion_id, numero, importe_previsto, fecha_vencimiento, concepto)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [conversionId, i + 1, importe, venc.toISOString().slice(0, 10), conceptoVal]
         );
       }
     }
@@ -58,7 +59,7 @@ export async function generateInstallments(conversionId, numCuotas, importeTotal
 }
 
 export async function update(id, data) {
-  const allowed = ['fecha_vencimiento', 'importe_previsto', 'enviar_email', 'notas'];
+  const allowed = ['fecha_vencimiento', 'importe_previsto', 'enviar_email', 'notas', 'concepto'];
   const sets = []; const params = []; let idx = 1;
   for (const k of allowed) {
     if (data[k] !== undefined) { sets.push(`${k} = $${idx++}`); params.push(data[k]); }

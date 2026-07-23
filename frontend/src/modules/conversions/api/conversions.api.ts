@@ -63,6 +63,7 @@ export interface Installment {
   fecha_cobro?: string | null;
   importe_cobrado?: number | string | null;
   metodo?: string | null;
+  concepto?: string | null;
   payment_id?: number | null;
   factura_id?: number | null;
   factura_codigo?: string | null;
@@ -134,6 +135,7 @@ export const conversionsApi = {
       importe_total?: number;
       fecha_inicio?: string;
       installments?: Array<{ importe_previsto: number; fecha_vencimiento: string }>;
+      concepto?: string;
     },
   ): Promise<ApiResponse<unknown>> =>
     client.post(`/conversions/${id}/installments/generate`, data),

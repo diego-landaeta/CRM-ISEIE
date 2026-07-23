@@ -46,6 +46,8 @@ export interface CreateInvoiceBody {
   notas?: string;
   metodoPago: 'transferencia' | 'tarjeta' | 'tarjeta_stripe' | 'efectivo' | 'bizum' | 'fraccionado' | 'otro';
   piePago?: string;
+  /** Moneda de la factura (ISO). Importes manuales en esa divisa, sin conversión. Default EUR. */
+  moneda?: string;
   tipo?: 'normal' | 'proforma';
   /** true = crear como BORRADOR (sin numero fiscal, datos fiscales opcionales) */
   borrador?: boolean;

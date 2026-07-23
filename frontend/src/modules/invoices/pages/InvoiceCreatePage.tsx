@@ -54,6 +54,7 @@ export default function InvoiceCreatePage() {
   const [ivaIncluido, setIvaIncluido] = useState(false);
   const [items, setItems] = useState<InvoiceItem[]>([{ descripcion: '', cantidad: 1, precio_unitario: 0 }]);
   const [metodoPago, setMetodoPago] = useState<'transferencia' | 'tarjeta' | 'tarjeta_stripe' | 'efectivo' | 'bizum' | 'fraccionado' | 'otro'>('transferencia');
+  const [moneda, setMoneda] = useState('EUR'); // divisa de la factura (importes manuales, sin conversión)
   const [piePago, setPiePago] = useState('');
   const [notas, setNotas] = useState('');
   const [issuers, setIssuers] = useState<Issuer[]>([]);
@@ -190,6 +191,7 @@ export default function InvoiceCreatePage() {
         ivaIncluido: ivaIncluido && llevaIva,
         leyendaIva: regimenSel?.coletilla || null,
         notas: notas.trim() || undefined, metodoPago, piePago: piePago.trim() || undefined,
+        moneda: moneda !== 'EUR' ? moneda : undefined,
       });
       if (res.success && res.data) {
         toast({ title: esProforma ? '✓ Presupuesto generado' : '✓ Factura emitida', description: res.data.codigo });
@@ -482,6 +484,13 @@ export default function InvoiceCreatePage() {
             <option value="transferencia">Transferencia bancaria</option><option value="tarjeta">Tarjeta</option><option value="tarjeta_stripe">Tarjeta (Stripe)</option>
             <option value="efectivo">Efectivo</option><option value="bizum">Bizum</option><option value="fraccionado">Fraccionado</option><option value="otro">Otro</option>
           </select>
+          <div>
+            <label className="text-[11px] text-muted-foreground">Moneda</label>
+            <select value={moneda} onChange={(e) => setMoneda(e.target.value)} className="w-full h-9 px-2 rounded border border-border bg-background text-sm">
+              {['EUR', 'USD', 'MXN', 'COP', 'ARS', 'CLP', 'PEN', 'CRC', 'GBP', 'BRL', 'DOP', 'GTQ', 'UYU'].map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+            {moneda !== 'EUR' && <p className="text-[10px] text-amber-600 mt-0.5">Importes manuales en {moneda} (sin conversión automática). El PDF saldrá en {moneda}.</p>}
+          </div>
           <textarea value={piePago} onChange={(e) => setPiePago(e.target.value)} rows={2} placeholder="Pie de pago (IBAN, vencimiento…)" className="w-full px-2 py-1.5 rounded border border-border bg-background text-sm" />
         </div>
       </div>
