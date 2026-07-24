@@ -362,6 +362,12 @@ export async function cancel(id) {
   await query(`UPDATE invoices SET estado = 'cancelada', updated_at = NOW() WHERE id = $1`, [id]);
 }
 
+// ¿La conversión no tiene ningún pago? → no puede emitir factura fiscal (solo proforma).
+export async function conversionSinPago(conversionId) {
+  const { rows } = await query(`SELECT COALESCE(importe_pagado, 0) AS pagado FROM conversions WHERE id = $1`, [conversionId]);
+  return rows[0] ? Number(rows[0].pagado) <= 0 : false;
+}
+
 // ===== BORRADORES =====
 
 // Qué le falta a una factura (borrador) para poder emitirse. Los campos

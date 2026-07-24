@@ -19,6 +19,8 @@ interface Props {
   items: InvoiceItem[];
   size?: 'sm' | 'md';
   onInvoiced?: () => void;
+  /** Importe ya pagado de la conversión. Si 0 → no se emite factura fiscal, solo PROFORMA. */
+  importePagado?: number;
 }
 
 // Botón de factura de una conversión:
@@ -28,7 +30,10 @@ interface Props {
 // - BORRADOR → "BORRADOR — emitir" (alerta Validar y emitir).
 // - Sin factura → "Emitir factura": completa→emite directo; incompleta→
 //   V2: crea borrador + alerta · clásico: abre el modal de datos fiscales.
-export default function InvoiceButton({ projectId, leadId, conversionId, items, size = 'sm', onInvoiced }: Props) {
+export default function InvoiceButton({ projectId, leadId, conversionId, items, size = 'sm', onInvoiced, importePagado }: Props) {
+  // Sin ningún pago no puede emitirse una factura fiscal: se emite PROFORMA
+  // (con su correlativo). Cuando entre un pago, ese pago genera su factura.
+  const sinPago = (Number(importePagado) || 0) <= 0;
   const [existing, setExisting] = useState<Invoice | null>(null);
   const [emitOpen, setEmitOpen] = useState(false);
   const [fiscalOpen, setFiscalOpen] = useState(false);
@@ -64,6 +69,32 @@ export default function InvoiceButton({ projectId, leadId, conversionId, items, 
       const cfg = await invoicesApi.getConfig(projectId);
       const metodoDefault = (cfg.success && cfg.data?.factura_metodo_default) || 'transferencia';
       const pieDefault = cfg.success ? (cfg.data?.factura_pie_default || undefined) : undefined;
+
+      // SIN NINGÚN PAGO → no se emite factura fiscal, se emite PROFORMA (con su
+      // correlativo). No exige datos fiscales completos.
+      if (sinPago) {
+        const res = await invoicesApi.create({
+          projectId, leadId, conversionId, tipo: 'proforma',
+          clienteNombre: d.nombre,
+          clienteNif: d.identificacion_fiscal || undefined,
+          clienteDireccion: d.direccion_fiscal || undefined,
+          clienteCiudad: d.ciudad_fiscal || undefined,
+          clienteCp: d.codigo_postal_fiscal || undefined,
+          clientePais: d.pais_fiscal || 'España',
+          clienteEmail: d.email, clienteTelefono: d.telefono,
+          items, metodoPago: metodoDefault as 'transferencia', piePago: pieDefault,
+        });
+        if (res.success && res.data) {
+          setExisting(res.data);
+          toast({ title: '✓ Proforma emitida', description: `Sin pago aún: se emitió la proforma ${res.data.codigo || ''}. Al registrar el pago se generará la factura.` });
+          invoicesApi.openPdf(res.data.id).catch(() => {});
+          onInvoiced?.();
+        } else {
+          toast({ title: 'Error', description: (res as { error?: string }).error, variant: 'destructive' });
+        }
+        return;
+      }
+
       const complete = d.nombre && d.identificacion_fiscal && d.direccion_fiscal && d.ciudad_fiscal && d.codigo_postal_fiscal && d.pais_fiscal;
 
       if (!complete && !FACT_V2) {
@@ -115,11 +146,13 @@ export default function InvoiceButton({ projectId, leadId, conversionId, items, 
       <button onClick={onClick} disabled={loading || working} className={`${cls} ${skin} disabled:opacity-50`}
         title={isDraft ? 'Factura en borrador (sin número): rellena los datos y emítela'
           : incompleta ? `Factura ${existing?.codigo || ''} emitida: rellena los datos para descargar/enviar`
-          : existing ? `Ver factura ${existing.codigo || ''}` : 'Emitir factura'}>
+          : existing ? `Ver ${existing.tipo === 'proforma' ? 'proforma' : 'factura'} ${existing.codigo || ''}`
+          : sinPago ? 'Sin pago aún: se emitirá una PROFORMA (no factura). Al registrar el pago se generará la factura.'
+          : 'Emitir factura'}>
         {(isDraft || incompleta) ? <Warning size={size === 'md' ? 14 : 12} weight="bold" /> : <Receipt size={size === 'md' ? 14 : 12} weight="bold" />}
         {existing
           ? (isDraft ? 'BORRADOR — emitir' : incompleta ? `Nº ${existing.codigo} — completar` : `Nº ${existing.codigo}`)
-          : 'Emitir factura'}
+          : sinPago ? 'Emitir proforma' : 'Emitir factura'}
       </button>
       {emitOpen && existing && (
         <Suspense fallback={null}>

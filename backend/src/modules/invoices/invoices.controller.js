@@ -122,6 +122,15 @@ export async function create(req, res, next) {
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'BAD_REQUEST');
     const d = parsed.data;
 
+    // REGLA: sin ningún pago no se puede emitir una FACTURA fiscal por la
+    // conversión — solo una proforma. Al registrar el pago, ese pago genera su
+    // factura. (No aplica a proforma ni borrador.)
+    if (d.conversionId && d.tipo !== 'proforma' && !d.borrador) {
+      if (await model.conversionSinPago(d.conversionId)) {
+        throw new AppError('Sin ningún pago no se puede emitir una factura. Emite una proforma; al registrar el pago se generará la factura.', 400, 'NO_PAYMENT');
+      }
+    }
+
     // Calcular importes server-side (no confiar en cliente)
     const ivaPct = d.ivaPct ?? service.getDefaultIvaPct(d.clientePais);
     const { baseImponible, ivaImporte, total } = service.calcularImportes({
