@@ -11,7 +11,6 @@ import { invoicesApi, invoiceFaltantes } from '../api/invoices.api';
 import type { Invoice, Issuer, VentaSinFactura } from '../api/invoices.api';
 import InvoiceButton from '../components/InvoiceButton';
 import EmitirBorradorDialog from '../components/EmitirBorradorDialog';
-import EditInvoiceDialog from '../components/EditInvoiceDialog';
 import TutorialButton from '../components/TutorialButton';
 import { toast } from '@/shared/hooks/useToast';
 
@@ -79,7 +78,6 @@ export default function InvoicesPage() {
   const [stripeSinAsociar, setStripeSinAsociar] = useState<Array<{ id: number; customer_name: string | null; customer_email: string | null; amount: number; stripe_created_at: string }>>([]);
   // Borrador que se está validando/emitiendo (abre el diálogo de completar datos)
   const [emittingInv, setEmittingInv] = useState<Invoice | null>(null);
-  const [editingInv, setEditingInv] = useState<Invoice | null>(null);
 
   const load = useCallback(async () => {
     if (!pid) return;
@@ -485,13 +483,14 @@ export default function InvoicesPage() {
                           <CheckCircle size={11} weight="bold" /> Validar y emitir
                         </button>
                       )}
-                      {/* Corregir una factura YA emitida/pagada (IVA, datos, concepto) — admin. */}
+                      {/* Corregir una factura YA emitida/pagada (IVA, datos, concepto) — admin.
+                          Usa el MISMO panel completo que crear/editar (?editId). */}
                       {inv.estado !== 'borrador' && inv.estado !== 'cancelada' && isAdmin && (
-                        <button onClick={() => setEditingInv(inv)}
+                        <Link to={`nueva?editId=${inv.id}`}
                           title="Editar IVA, datos del cliente o concepto (solo admin/superadmin)"
                           className="h-7 px-2 rounded border border-sky-300 text-sky-700 dark:text-sky-300 text-[11px] font-semibold hover:bg-sky-50 dark:hover:bg-sky-950/30 inline-flex items-center gap-1">
                           <Gear size={11} weight="bold" /> Editar
-                        </button>
+                        </Link>
                       )}
                       {inv.estado !== 'borrador' && inv.estado !== 'cancelada' && inv.tipo !== 'proforma' && invoiceFaltantes(inv).length > 0 && (
                         <button onClick={() => setEmittingInv(inv)}
@@ -539,14 +538,6 @@ export default function InvoicesPage() {
             toast({ title: '✓ Factura emitida', description: codigo });
             load();
           }}
-        />
-      )}
-
-      {editingInv && (
-        <EditInvoiceDialog
-          invoiceId={editingInv.id}
-          onClose={() => setEditingInv(null)}
-          onSaved={() => { setEditingInv(null); load(); }}
         />
       )}
 

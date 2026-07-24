@@ -40,8 +40,10 @@ export default function InvoiceCreatePage() {
   );
   const esProforma = docTipo === 'proforma';
   const esRect = docTipo === 'rectificativa';
-  // Modo EDICIÓN de un borrador (solo admin/superadmin): ?editId=X.
+  // Modo EDICIÓN (solo admin/superadmin): ?editId=X. Sirve tanto para borradores
+  // como para CORREGIR una factura ya emitida/pagada (IVA, datos, concepto).
   const editId = new URLSearchParams(loc.search).get('editId');
+  const [editEstado, setEditEstado] = useState<string | null>(null);
 
   const [tipo, setTipo] = useState<Tipo>('persona');
   const [leadId, setLeadId] = useState<number | null>(null);
@@ -209,10 +211,16 @@ export default function InvoiceCreatePage() {
         notas: notas.trim() || undefined, metodoPago, piePago: piePago.trim() || undefined,
         moneda: moneda !== 'EUR' ? moneda : undefined,
       };
-      // Edición de un borrador (admin/superadmin) → PATCH; si no, crear.
-      const res = editId ? await invoicesApi.update(Number(editId), body) : await invoicesApi.create(body);
+      // Edición (admin/superadmin): si la factura ya está emitida/pagada se CORRIGE
+      // (mantiene su número fiscal); si es borrador, PATCH normal; si no, crear.
+      const esCorreccion = !!editId && !!editEstado && editEstado !== 'borrador';
+      const res = editId
+        ? (esCorreccion
+            ? await invoicesApi.corregir(Number(editId), { ...body, exento: !llevaIva })
+            : await invoicesApi.update(Number(editId), body))
+        : await invoicesApi.create(body);
       if (res.success && res.data) {
-        toast({ title: editId ? '✓ Borrador guardado' : (esProforma ? '✓ Presupuesto generado' : '✓ Factura emitida'), description: res.data.codigo || '' });
+        toast({ title: esCorreccion ? '✓ Factura corregida' : editId ? '✓ Borrador guardado' : (esProforma ? '✓ Presupuesto generado' : '✓ Factura emitida'), description: res.data.codigo || '' });
         invoicesApi.openPdf(res.data.id, true).catch(() => {});
         navigate(`${invBase}/facturas${esProforma ? '?tab=proformas' : ''}`);
       } else {
@@ -251,6 +259,7 @@ export default function InvoiceCreatePage() {
     invoicesApi.getOne(Number(editId)).then((res) => {
       if (!res.success || !res.data) return;
       const f = res.data as import('../api/invoices.api').Invoice;
+      setEditEstado(f.estado || null);
       setDocTipo(f.tipo === 'proforma' ? 'proforma' : 'factura');
       const noVal = (v?: string | null) => !v || v === '—';
       setTipo(noVal(f.cliente_nombre) || f.cliente_nombre === '(por completar)' ? 'persona' : 'persona');
