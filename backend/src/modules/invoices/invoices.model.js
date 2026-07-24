@@ -286,7 +286,9 @@ export async function list({ projectId, issuerId, estado, search, from, to, tipo
   // tipo='proforma' → solo proformas; cualquier otro / ausente → solo facturas
   // (normal + rectificativa), para que las proformas no ensucien el histórico fiscal.
   if (tipo === 'proforma') conds.push(`i.tipo = 'proforma'`);
-  else conds.push(`i.tipo <> 'proforma'`);
+  else if (tipo === 'rectificativa') conds.push(`i.tipo = 'rectificativa'`);   // pestaña Abonos
+  else if (tipo === 'normal') conds.push(`i.tipo = 'normal'`);                 // pestaña Facturas
+  else conds.push(`i.tipo <> 'proforma'`);                                     // compat
   if (estado) { conds.push(`i.estado = $${idx++}`); params.push(estado); }
   if (search) { conds.push(`(LOWER(i.cliente_nombre) LIKE $${idx} OR LOWER(i.cliente_nif) LIKE $${idx} OR i.codigo LIKE $${idx})`); params.push(`%${search.toLowerCase()}%`); idx++; }
   if (from) { conds.push(`i.fecha_emision >= $${idx++}`); params.push(from); }
@@ -480,8 +482,9 @@ export async function emitirFacturaDePago(conversionId, { paymentId, importe }, 
   if (!conv) return null;
 
   // Fecha real del cobro → la factura sale PAGADA con esa fecha (el dinero ya entró).
-  const { rows: payRows } = await query(`SELECT fecha FROM conversion_payments WHERE id = $1`, [paymentId]);
+  const { rows: payRows } = await query(`SELECT fecha, metodo FROM conversion_payments WHERE id = $1`, [paymentId]);
   const fechaPago = payRows[0]?.fecha || null;
+  const metodoPago = payRows[0]?.metodo || null;
 
   // No auto-facturar pagos ANTERIORES al inicio de facturación de la sociedad (su
   // primera factura emitida). Evita facturas retroactivas de cobros previos al
@@ -542,9 +545,10 @@ export async function emitirFacturaDePago(conversionId, { paymentId, importe }, 
     ivaIncluido: true,
     total: monto,
     leyendaIva: ivaPct === 0 ? 'Operación exenta de IVA conforme a la normativa aplicable.' : null,
-    // 'fraccionado' es el PLAN de la venta, no el método de un pago concreto: la
-    // factura del pago usa el método real (por defecto Tarjeta en pagos online).
-    metodoPago: conv.metodo_pago === 'fraccionado' ? 'tarjeta'
+    // Método REAL del pago (el que eligió el usuario al cobrar). 'fraccionado' es
+    // el PLAN de la venta, no un método: si el pago no trae método, cae a Tarjeta.
+    metodoPago: (metodoPago && METODOS_PAGO_VALIDOS.includes(metodoPago)) ? metodoPago
+      : conv.metodo_pago === 'fraccionado' ? 'tarjeta'
       : (METODOS_PAGO_VALIDOS.includes(conv.metodo_pago) ? conv.metodo_pago : 'otro'),
   }, userId);
   // Un pago recibido → factura PAGADA (no 'emitida'), con la fecha del cobro.

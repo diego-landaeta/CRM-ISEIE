@@ -21,6 +21,7 @@ export async function create(data) {
       importe_total,
       importe_pagado,
       metodo_pago,
+      metodo_pago_inicial,   // método REAL del pago inicial (tarjeta, transferencia…)
       fecha_compromiso_pago,
       fecha_conversion,
       notas_pago,
@@ -108,9 +109,10 @@ export async function create(data) {
     // conversión devuelta para que el servicio pueda facturar ESE abono inicial.
     if (Number(importe_pagado) > 0) {
       const { rows: firstPay } = await client.query(
-        `INSERT INTO conversion_payments (conversion_id, importe, fecha, notas)
-         VALUES ($1, $2, COALESCE($3, CURRENT_DATE), $4) RETURNING id, importe`,
-        [conversion.id, importe_pagado, fecha_conversion, 'Pago inicial']
+        `INSERT INTO conversion_payments (conversion_id, importe, fecha, notas, metodo)
+         VALUES ($1, $2, COALESCE($3, CURRENT_DATE), $4, $5) RETURNING id, importe`,
+        [conversion.id, importe_pagado, fecha_conversion, 'Pago inicial',
+         (metodo_pago_inicial || (metodo_pago && metodo_pago !== 'fraccionado' ? metodo_pago : 'tarjeta'))]
       );
       conversion._initial_payment_id = firstPay[0].id;
       conversion._initial_payment_importe = Number(firstPay[0].importe);
@@ -302,7 +304,7 @@ export async function update(id, fields) {
   return rows[0];
 }
 
-export async function addPayment(conversionId, { importe, fecha, notas }) {
+export async function addPayment(conversionId, { importe, fecha, notas, metodo }) {
   const client = await getClient();
   try {
     await client.query('BEGIN');
@@ -325,10 +327,10 @@ export async function addPayment(conversionId, { importe, fecha, notas }) {
 
     // INSERT payment
     const { rows: payRows } = await client.query(
-      `INSERT INTO conversion_payments (conversion_id, importe, fecha, notas)
-       VALUES ($1, $2, COALESCE($3, CURRENT_DATE), $4)
+      `INSERT INTO conversion_payments (conversion_id, importe, fecha, notas, metodo)
+       VALUES ($1, $2, COALESCE($3, CURRENT_DATE), $4, $5)
        RETURNING *`,
-      [conversionId, importe, fecha, notas]
+      [conversionId, importe, fecha, notas, metodo || null]
     );
 
     // UPDATE conversion.importe_pagado

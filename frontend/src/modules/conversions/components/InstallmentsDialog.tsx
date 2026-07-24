@@ -14,6 +14,9 @@ interface Installment {
   metodo?: string | null;
   metodo_pago?: string | null;
   concepto?: string | null;
+  factura_id?: number | null;
+  factura_codigo?: string | null;
+  factura_estado?: string | null;
 }
 
 interface Props {
@@ -261,6 +264,14 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
                       <div className="flex-1 min-w-0">
                         <p className="font-semibold tabular-nums">{formatCurrency(inst.importe_previsto)}</p>
                         <p className="text-[11px] text-muted-foreground">Vence {formatDate(inst.fecha_vencimiento)}{inst.concepto ? ` · ${inst.concepto}` : ''}</p>
+                        {inst.factura_codigo && (
+                          <button
+                            onClick={async () => { const { invoicesApi } = await import('@/modules/invoices/api/invoices.api'); invoicesApi.openPdf(inst.factura_id!).catch(() => {}); }}
+                            className="text-[11px] font-semibold text-primary hover:underline inline-flex items-center gap-1 mt-0.5"
+                            title="Ver la factura de esta cuota">
+                            🧾 Factura {inst.factura_codigo}
+                          </button>
+                        )}
                       </div>
                       {pagada ? (
                         <>

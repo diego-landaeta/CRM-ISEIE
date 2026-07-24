@@ -41,10 +41,13 @@ export default function InvoicesPage() {
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
   const pid = activeProject?.id;
   const loc = useLocation();
-  const [tab, setTab] = useState<'facturas' | 'proformas'>(
-    new URLSearchParams(loc.search).get('tab') === 'proformas' ? 'proformas' : 'facturas'
-  );
+  const [tab, setTab] = useState<'facturas' | 'proformas' | 'abonos'>(() => {
+    const t = new URLSearchParams(loc.search).get('tab');
+    return t === 'proformas' ? 'proformas' : t === 'abonos' ? 'abonos' : 'facturas';
+  });
   const esProformas = tab === 'proformas';
+  const esAbonos = tab === 'abonos';
+  const tipoTab = tab === 'proformas' ? 'proforma' : tab === 'abonos' ? 'rectificativa' : 'normal';
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -82,8 +85,8 @@ export default function InvoicesPage() {
       // Modo sociedad (admin): facturas globales de esa empresa emisora; el resto
       // (stats, emisores, ventas sin factura) sigue por proyecto activo.
       const listParams = porSociedad
-        ? { issuerId: Number(filterIssuer), ...(filterProject ? { projectId: Number(filterProject) } : {}), ...filters, tipo: esProformas ? 'proforma' : undefined, limit: 200 }
-        : { projectId: pid, ...filters, tipo: esProformas ? 'proforma' : undefined, limit: 100 };
+        ? { issuerId: Number(filterIssuer), ...(filterProject ? { projectId: Number(filterProject) } : {}), ...filters, tipo: tipoTab, limit: 200 }
+        : { projectId: pid, ...filters, tipo: tipoTab, limit: 100 };
       const [r1, r2, r3, r4] = await Promise.all([
         invoicesApi.list(listParams),
         porSociedad
@@ -101,7 +104,7 @@ export default function InvoicesPage() {
         .then((r) => { if (r.success) setStripeSinAsociar(r.data || []); })
         .catch(() => setStripeSinAsociar([]));
     } finally { setLoading(false); }
-  }, [pid, filters, esProformas, porSociedad, filterIssuer, filterProject]);
+  }, [pid, filters, tipoTab, porSociedad, filterIssuer, filterProject]);
   useEffect(() => { load(); }, [load]);
 
   // Al cambiar de sociedad, resetear el filtro de proyecto (los proyectos cambian).
@@ -200,10 +203,10 @@ export default function InvoicesPage() {
         subtitle={`Histórico fiscal — ${activeProject?.nombre || ''}`}
         actions={(
           <div className="flex gap-2">
-            <Link to={esProformas ? 'nueva?tipo=proforma' : 'nueva'}
+            <Link to={esAbonos ? 'nueva?tipo=rectificativa' : esProformas ? 'nueva?tipo=proforma' : 'nueva'}
               className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90">
               {esProformas ? <FileText size={14} weight="bold" /> : <Receipt size={14} weight="bold" />}
-              {esProformas ? 'Nueva proforma' : 'Nueva factura'}
+              {esAbonos ? 'Nuevo abono' : esProformas ? 'Nueva proforma' : 'Nueva factura'}
             </Link>
             <Link to="configuracion"
               className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted">
@@ -215,7 +218,7 @@ export default function InvoicesPage() {
 
       {/* Pestañas: facturas fiscales vs proformas (presupuestos) */}
       <div className="inline-flex rounded-lg border border-border bg-muted/30 p-1 text-sm font-semibold">
-        {([['facturas', 'Facturas', Receipt], ['proformas', 'Proformas', FileText]] as const).map(([k, label, Icon]) => (
+        {([['facturas', 'Facturas', Receipt], ['proformas', 'Proformas', FileText], ['abonos', 'Abonos', ArrowCounterClockwise]] as const).map(([k, label, Icon]) => (
           <button key={k} type="button" onClick={() => setTab(k)}
             className={`inline-flex items-center gap-1.5 px-4 h-8 rounded-md transition ${tab === k ? 'bg-primary text-primary-foreground shadow' : 'text-muted-foreground hover:text-foreground'}`}>
             <Icon size={14} weight="bold" /> {label}
@@ -385,8 +388,8 @@ export default function InvoicesPage() {
         ) : invoices.length === 0 ? (
           <div className="p-12 text-center space-y-2">
             <Receipt size={32} className="text-muted-foreground mx-auto" weight="duotone" />
-            <p className="font-semibold text-sm">{esProformas ? 'Sin proformas todavía' : 'Sin facturas todavía'}</p>
-            <p className="text-xs text-muted-foreground">{esProformas ? 'Genera una con “Nueva proforma”.' : 'Cuando emitas una factura desde una conversión aparecerá aquí.'}</p>
+            <p className="font-semibold text-sm">{esAbonos ? 'Sin abonos todavía' : esProformas ? 'Sin proformas todavía' : 'Sin facturas todavía'}</p>
+            <p className="text-xs text-muted-foreground">{esAbonos ? 'Las facturas rectificativas (abono) que emitas aparecerán aquí.' : esProformas ? 'Genera una con “Nueva proforma”.' : 'Cuando emitas una factura desde una conversión aparecerá aquí.'}</p>
           </div>
         ) : (
           <table className="w-full text-[13px]">

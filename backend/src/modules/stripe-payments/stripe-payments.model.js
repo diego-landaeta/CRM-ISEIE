@@ -85,6 +85,14 @@ export async function listPayments({ projectId, status, linked, search, from, to
       SELECT MIN(f.fecha_emision) FROM invoices f
        WHERE f.issuer_id = (SELECT pr.sociedad_emisora_id FROM projects pr WHERE pr.id = sp.project_id)
          AND f.tipo <> 'proforma' AND f.numero IS NOT NULL)`);
+    // Y el cliente NO tiene ya una factura en la sociedad (por email o nombre):
+    // evita que aparezcan cobros de ventas ya facturadas manualmente.
+    conds.push(`NOT EXISTS (
+      SELECT 1 FROM invoices f
+       WHERE f.issuer_id = (SELECT pr2.sociedad_emisora_id FROM projects pr2 WHERE pr2.id = sp.project_id)
+         AND f.tipo <> 'proforma' AND f.estado <> 'cancelada'
+         AND ( (sp.customer_email IS NOT NULL AND LOWER(f.cliente_email) = LOWER(sp.customer_email))
+            OR (sp.customer_name  IS NOT NULL AND LOWER(f.cliente_nombre) = LOWER(sp.customer_name)) ))`);
   }
   if (search) { conds.push(`(LOWER(sp.customer_email) LIKE $${i} OR LOWER(sp.customer_name) LIKE $${i} OR sp.stripe_id LIKE $${i})`); params.push(`%${search.toLowerCase()}%`); i++; }
   if (from) { conds.push(`sp.stripe_created_at >= $${i++}`); params.push(from); }

@@ -122,6 +122,8 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
   // Estado del pago: 'total' SIEMPRE manda calc.total al registrar (no se queda
   // con un valor viejo si cambias el precio después), 'parcial' usa el input, 'none' = 0.
   const [pagoMode, setPagoMode] = useState<'none' | 'parcial' | 'total'>('none');
+  // Método REAL con el que se cobró la inicial cuando la venta es fraccionada.
+  const [metodoInicial, setMetodoInicial] = useState<MetodoPago>('tarjeta');
   const [numCuotas, setNumCuotas] = useState(3);
   const [fechaPrimeraCuota, setFechaPrimeraCuota] = useState<string>(new Date().toISOString().slice(0, 10));
   const [installments, setInstallments] = useState<Installment[]>([]);
@@ -370,6 +372,9 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
         importe_total: calc.total,
         importe_pagado: pagado,
         metodo_pago: form.metodo_pago,
+        // Método real del pago inicial: si la venta es fraccionada, el usuario
+        // elige con qué se cobró la inicial (no "fraccionado", que es el plan).
+        metodo_pago_inicial: form.metodo_pago === 'fraccionado' ? metodoInicial : form.metodo_pago,
         fecha_compromiso_pago: form.fecha_compromiso_pago || null,
         fecha_conversion: form.fecha_conversion,
         notas_pago: form.notas_pago || null,
@@ -636,6 +641,22 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
                 )}
                 {pagoMode === 'total' && (
                   <p className="text-[10px] text-emerald-700 dark:text-emerald-400 mt-1 font-medium">Se registrará el pago completo: {calc.total.toFixed(2)} €</p>
+                )}
+                {/* Con plan fraccionado, el pago inicial necesita su método real
+                    (la factura de ese pago lo usará; 'fraccionado' es el plan). */}
+                {pagoMode !== 'none' && form.metodo_pago === 'fraccionado' && (
+                  <div className="mt-1.5">
+                    <label className="text-[10px] text-muted-foreground">Método del pago inicial</label>
+                    <select value={metodoInicial} onChange={(e) => setMetodoInicial(e.target.value as MetodoPago)}
+                      className={inputClass}>
+                      <option value="tarjeta">Tarjeta</option>
+                      <option value="tarjeta_stripe">Tarjeta (Stripe)</option>
+                      <option value="transferencia">Transferencia</option>
+                      <option value="efectivo">Efectivo</option>
+                      <option value="bizum">Bizum</option>
+                      <option value="otro">Otro</option>
+                    </select>
+                  </div>
                 )}
               </div>
             </div>

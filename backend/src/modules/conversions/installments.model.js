@@ -1,8 +1,13 @@
 import { query, getClient } from '../../shared/config/db.js';
 
 export async function listByConversion(conversionId) {
+  // Se añade la factura emitida por el pago de cada cuota (por payment_id) para
+  // poder verla desde el plan de cuotas.
   const { rows } = await query(
-    `SELECT * FROM conversion_installments WHERE conversion_id = $1 ORDER BY numero ASC`,
+    `SELECT ci.*, f.id AS factura_id, f.codigo AS factura_codigo, f.estado AS factura_estado
+       FROM conversion_installments ci
+       LEFT JOIN invoices f ON f.payment_id = ci.payment_id AND f.tipo <> 'proforma' AND f.estado <> 'cancelada'
+      WHERE ci.conversion_id = $1 ORDER BY ci.numero ASC`,
     [conversionId]
   );
   return rows;
@@ -81,9 +86,9 @@ export async function markPaid(id, { fecha_cobro, importe_cobrado, metodo, notas
     if (inst.fecha_cobro) { await c.query('ROLLBACK'); throw new Error('Cuota ya cobrada'); }
     // Crear payment
     const { rows: payRows } = await c.query(
-      `INSERT INTO conversion_payments (conversion_id, importe, fecha, notas)
-       VALUES ($1, $2, $3, $4) RETURNING id`,
-      [inst.conversion_id, importe_cobrado || inst.importe_previsto, fecha_cobro, notas || `Cuota ${inst.numero}`]
+      `INSERT INTO conversion_payments (conversion_id, importe, fecha, notas, metodo)
+       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+      [inst.conversion_id, importe_cobrado || inst.importe_previsto, fecha_cobro, notas || `Cuota ${inst.numero}`, metodo || null]
     );
     // Actualizar conversion importe_pagado
     await c.query(
