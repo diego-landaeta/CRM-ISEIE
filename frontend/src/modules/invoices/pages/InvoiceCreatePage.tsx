@@ -496,14 +496,32 @@ export default function InvoiceCreatePage() {
       {/* Conceptos */}
       <div className="bg-card border border-border rounded-lg p-4 space-y-2">
         <label className="text-xs font-bold uppercase text-muted-foreground">Conceptos</label>
-        {items.map((it, idx) => (
+        {/* Cabecera de columnas para que se entienda qué es cada campo. */}
+        <div className="grid grid-cols-12 gap-2 items-center px-0.5">
+          <span className="col-span-6 text-[10px] font-semibold uppercase text-muted-foreground">Concepto</span>
+          <span className="col-span-2 text-[10px] font-semibold uppercase text-muted-foreground text-center">Cantidad</span>
+          <span className="col-span-2 text-[10px] font-semibold uppercase text-muted-foreground text-right">Precio unit.</span>
+          <span className="col-span-2 text-[10px] font-semibold uppercase text-muted-foreground text-right">Subtotal</span>
+        </div>
+        {items.map((it, idx) => {
+          const subtotal = (Number(it.cantidad) || 0) * (Number(it.precio_unitario) || 0);
+          return (
           <div key={idx} className="grid grid-cols-12 gap-2 items-center">
-            <input value={it.descripcion} onChange={(e) => setItems(items.map((x, i) => i === idx ? { ...x, descripcion: e.target.value } : x))} placeholder="Descripción" className="col-span-7 h-9 px-2 rounded border border-border bg-background text-sm" />
-            <input type="number" value={it.cantidad} onChange={(e) => setItems(items.map((x, i) => i === idx ? { ...x, cantidad: Number(e.target.value) } : x))} placeholder="Cant" className="col-span-2 h-9 px-2 rounded border border-border bg-background text-sm" />
-            <input type="number" step="0.01" value={it.precio_unitario} onChange={(e) => setItems(items.map((x, i) => i === idx ? { ...x, precio_unitario: Number(e.target.value) } : x))} placeholder="€" className="col-span-2 h-9 px-2 rounded border border-border bg-background text-sm" />
-            <button onClick={() => setItems(items.length > 1 ? items.filter((_, i) => i !== idx) : items)} className="col-span-1 text-muted-foreground hover:text-red-500 text-xs">×</button>
+            <input value={it.descripcion} onChange={(e) => setItems(items.map((x, i) => i === idx ? { ...x, descripcion: e.target.value } : x))} placeholder="Ej: Servicio académico: [programa]" className="col-span-6 h-9 px-2 rounded border border-border bg-background text-sm" />
+            <input type="number" min="1" value={it.cantidad} onChange={(e) => setItems(items.map((x, i) => i === idx ? { ...x, cantidad: Number(e.target.value) } : x))} placeholder="1" className="col-span-2 h-9 px-2 rounded border border-border bg-background text-sm text-center" />
+            <div className="col-span-2 relative">
+              <input type="number" step="0.01" min="0" value={it.precio_unitario} onChange={(e) => setItems(items.map((x, i) => i === idx ? { ...x, precio_unitario: Number(e.target.value) } : x))} placeholder="0,00" className="w-full h-9 pl-2 pr-5 rounded border border-border bg-background text-sm text-right" />
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">€</span>
+            </div>
+            <span className="col-span-1 text-sm text-right tabular-nums font-medium">{subtotal.toFixed(2)}&nbsp;€</span>
+            <button onClick={() => setItems(items.length > 1 ? items.filter((_, i) => i !== idx) : items)} title="Quitar línea" className="col-span-1 text-muted-foreground hover:text-red-500 text-lg leading-none">×</button>
           </div>
-        ))}
+          );
+        })}
+        {/* Total de conceptos (suma de subtotales). El IVA se aplica más abajo. */}
+        <div className="flex justify-end pt-1 border-t border-border mt-1">
+          <span className="text-sm font-bold tabular-nums">Total conceptos: {items.reduce((s, it) => s + (Number(it.cantidad) || 0) * (Number(it.precio_unitario) || 0), 0).toFixed(2)} €</span>
+        </div>
         <div className="flex flex-wrap items-center gap-3 pt-1">
           <button onClick={() => setItems([...items, { descripcion: '', cantidad: 1, precio_unitario: 0 }])} className="text-xs text-primary hover:underline">+ añadir concepto</button>
           {products.length > 0 && (
