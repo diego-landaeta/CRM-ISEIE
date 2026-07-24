@@ -342,16 +342,23 @@ export default function InvoiceCreatePage() {
         )}
       />
 
-      {/* Tipo de documento: factura fiscal vs proforma (presupuesto) */}
+      {/* Tipo de documento: factura fiscal vs proforma (presupuesto).
+          En EDICIÓN el tipo es FIJO (no se puede convertir una factura emitida en
+          proforma al editarla); solo se muestra como etiqueta. */}
       <div className="inline-flex rounded-lg border border-border bg-muted/30 p-1 text-sm font-semibold">
-        {([['factura', 'Factura'], ['proforma', 'Proforma'], ['rectificativa', 'Abono']] as const).map(([k, label]) => (
+        {editId ? (
+          <span className="px-4 h-8 inline-flex items-center rounded-md bg-primary text-primary-foreground shadow">
+            {esProforma ? 'Proforma' : esRect ? 'Abono' : 'Factura'}
+          </span>
+        ) : ([['factura', 'Factura'], ['proforma', 'Proforma'], ['rectificativa', 'Abono']] as const).map(([k, label]) => (
           <button key={k} type="button" onClick={() => setDocTipo(k)}
             className={`px-4 h-8 rounded-md transition ${docTipo === k ? 'bg-primary text-primary-foreground shadow' : 'text-muted-foreground hover:text-foreground'}`}>
             {label}
           </button>
         ))}
         <span className="self-center pl-3 pr-1 text-[11px] font-normal text-muted-foreground">
-          {esRect ? 'Factura rectificativa (abono) · importe negativo · serie R'
+          {editId ? 'El tipo no se cambia al editar una factura ya emitida'
+            : esRect ? 'Factura rectificativa (abono) · importe negativo · serie R'
             : esProforma ? 'Proforma sin validez fiscal · serie propia (PRO)'
             : 'Documento fiscal con numeración correlativa'}
         </span>
