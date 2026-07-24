@@ -109,7 +109,9 @@ export default function LeadsFiltersBar(props: Props) {
     if (left + width > window.innerWidth - 16) left = window.innerWidth - 16 - width;
     if (left < 16) left = 16;
     const top = r.bottom + 8;
-    const maxH = Math.max(220, window.innerHeight - top - 16);
+    // Reserva ~56px para el footer (botón Aplicar) para que NO quede cortado abajo:
+    // el maxH es solo del área scrollable, el footer va aparte.
+    const maxH = Math.max(200, window.innerHeight - top - 16 - 56);
     setPos({ top, left, width, maxH });
   }, []);
 

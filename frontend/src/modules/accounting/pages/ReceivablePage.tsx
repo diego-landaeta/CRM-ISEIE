@@ -57,8 +57,10 @@ export default function ReceivablePage() {
       const params: Record<string, string | number> = {};
       if (pid) params.projectId = Number(pid);
       if (gestoraId) params.responsableId = Number(gestoraId);
-      if (from) params.from = from;
-      if (to) params.to = to;
+      // El calendario SIEMPRE trae todas las cuotas (se navega por mes visualmente);
+      // el periodo Desde/Hasta solo aplica en la vista Lista.
+      if (view === 'lista' && from) params.from = from;
+      if (view === 'lista' && to) params.to = to;
       const res = await accountingApi.receivable(params);
       if (res.success && res.data) {
         setItems(res.data.items || []);
@@ -66,7 +68,7 @@ export default function ReceivablePage() {
         setResumen(res.data.resumen || null);
       }
     } finally { setLoading(false); }
-  }, [projectId, gestoraId, from, to, activeProject?.id]);
+  }, [projectId, gestoraId, from, to, view, activeProject?.id]);
   useEffect(() => { load(); }, [load]);
 
   const visibles = useMemo(() => soloVencidas ? items.filter(r => r.vencido) : items, [items, soloVencidas]);
@@ -101,12 +103,8 @@ export default function ReceivablePage() {
     setSelDay(null);
     setCal(prev => { const d = new Date(prev.y, prev.m + delta, 1); return { y: d.getFullYear(), m: d.getMonth() }; });
   }
-  // Al entrar a calendario, alinea el periodo con el mes mostrado.
-  function verMesEnCalendario() {
-    setView('calendario');
-    const f = new Date(cal.y, cal.m, 1); const t = new Date(cal.y, cal.m + 1, 0);
-    setFrom(ymd(f)); setTo(ymd(t));
-  }
+  // El calendario muestra TODAS las cuotas (no se ata al periodo Desde/Hasta).
+  function verMesEnCalendario() { setView('calendario'); }
 
   const totalPend = resumen?.total_pendiente ?? visibles.reduce((s, r) => s + r.importe, 0);
 
@@ -153,26 +151,33 @@ export default function ReceivablePage() {
             </select>
           </div>
         )}
-        <div className="flex flex-col gap-1">
-          <label className="text-[11px] font-medium text-muted-foreground">Desde</label>
-          <input type="date" value={from} onChange={e => setFrom(e.target.value)} className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-[11px] font-medium text-muted-foreground">Hasta</label>
-          <input type="date" value={to} onChange={e => setTo(e.target.value)} className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
-        </div>
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {[
-            { l: 'Este mes', f: () => { const d = new Date(); setFrom(ymd(new Date(d.getFullYear(), d.getMonth(), 1))); setTo(ymd(new Date(d.getFullYear(), d.getMonth() + 1, 0))); } },
-            { l: 'Próx. mes', f: () => { const d = new Date(); setFrom(ymd(new Date(d.getFullYear(), d.getMonth() + 1, 1))); setTo(ymd(new Date(d.getFullYear(), d.getMonth() + 2, 0))); } },
-            { l: 'Todas', f: () => { setFrom(''); setTo(''); } },
-          ].map(b => (
-            <button key={b.l} onClick={b.f} className="h-9 px-3 rounded-md border border-border bg-card text-xs font-medium hover:bg-muted">{b.l}</button>
-          ))}
-          <label className="inline-flex items-center gap-1.5 text-xs text-muted-foreground ml-1 h-9">
-            <input type="checkbox" checked={soloVencidas} onChange={e => setSoloVencidas(e.target.checked)} /> Solo vencidas
-          </label>
-        </div>
+        {view === 'lista' && (
+          <>
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-medium text-muted-foreground">Desde</label>
+              <input type="date" value={from} onChange={e => setFrom(e.target.value)} className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-medium text-muted-foreground">Hasta</label>
+              <input type="date" value={to} onChange={e => setTo(e.target.value)} className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
+            </div>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {[
+                { l: 'Este mes', f: () => { const d = new Date(); setFrom(ymd(new Date(d.getFullYear(), d.getMonth(), 1))); setTo(ymd(new Date(d.getFullYear(), d.getMonth() + 1, 0))); } },
+                { l: 'Próx. mes', f: () => { const d = new Date(); setFrom(ymd(new Date(d.getFullYear(), d.getMonth() + 1, 1))); setTo(ymd(new Date(d.getFullYear(), d.getMonth() + 2, 0))); } },
+                { l: 'Todas', f: () => { setFrom(''); setTo(''); } },
+              ].map(b => (
+                <button key={b.l} onClick={b.f} className="h-9 px-3 rounded-md border border-border bg-card text-xs font-medium hover:bg-muted">{b.l}</button>
+              ))}
+              <label className="inline-flex items-center gap-1.5 text-xs text-muted-foreground ml-1 h-9">
+                <input type="checkbox" checked={soloVencidas} onChange={e => setSoloVencidas(e.target.checked)} /> Solo vencidas
+              </label>
+            </div>
+          </>
+        )}
+        {view === 'calendario' && (
+          <p className="text-xs text-muted-foreground self-center">El calendario muestra todas las cuotas por su fecha de cobro. Usa ◀ ▶ para cambiar de mes.</p>
+        )}
       </div>
 
       {loading ? (
