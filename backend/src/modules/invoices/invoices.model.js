@@ -542,7 +542,10 @@ export async function emitirFacturaDePago(conversionId, { paymentId, importe }, 
     ivaIncluido: true,
     total: monto,
     leyendaIva: ivaPct === 0 ? 'Operación exenta de IVA conforme a la normativa aplicable.' : null,
-    metodoPago: METODOS_PAGO_VALIDOS.includes(conv.metodo_pago) ? conv.metodo_pago : 'otro',
+    // 'fraccionado' es el PLAN de la venta, no el método de un pago concreto: la
+    // factura del pago usa el método real (por defecto Tarjeta en pagos online).
+    metodoPago: conv.metodo_pago === 'fraccionado' ? 'tarjeta'
+      : (METODOS_PAGO_VALIDOS.includes(conv.metodo_pago) ? conv.metodo_pago : 'otro'),
   }, userId);
   // Un pago recibido → factura PAGADA (no 'emitida'), con la fecha del cobro.
   if (inv?.id) {
@@ -590,7 +593,10 @@ export async function autoEmitirPorPago(conversionId, userId = null) {
     ivaIncluido: !!conv.iva_incluido,
     total: Number(conv.importe_total) || 0,
     leyendaIva: ivaPct === 0 ? 'Operación exenta de IVA conforme a la normativa aplicable.' : null,
-    metodoPago: METODOS_PAGO_VALIDOS.includes(conv.metodo_pago) ? conv.metodo_pago : 'otro',
+    // 'fraccionado' es el PLAN de la venta, no el método de un pago concreto: la
+    // factura del pago usa el método real (por defecto Tarjeta en pagos online).
+    metodoPago: conv.metodo_pago === 'fraccionado' ? 'tarjeta'
+      : (METODOS_PAGO_VALIDOS.includes(conv.metodo_pago) ? conv.metodo_pago : 'otro'),
   }, userId);
 }
 
