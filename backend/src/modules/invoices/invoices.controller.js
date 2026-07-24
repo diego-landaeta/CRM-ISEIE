@@ -44,7 +44,7 @@ export async function list(req, res, next) {
       pid = projectId(req);
     }
     // Gestor: solo ve SUS facturas (las de sus leads). Admin/superadmin, todas.
-    const responsableId = req.user?.role === 'gestor' ? req.user.id : null;
+    const responsableId = req.user?.role === 'gestor' ? req.user.userId : null;
     const data = await model.list({ projectId: pid, issuerId: issuerId && isAdmin ? issuerId : null,
       estado, search, from, to, tipo, responsableId,
       page: Number(page) || 1, limit: Math.min(Number(limit) || 50, 200) });
@@ -164,7 +164,7 @@ export async function create(req, res, next) {
       ...d,
       ivaPct, baseImponible, ivaImporte, total, leyendaIva,
       moneda: d.moneda || 'EUR',
-    }, req.user?.id);
+    }, req.user?.userId);
     res.json({ success: true, data: inv });
   } catch (e) {
     logger.error({ e: e.message }, 'create invoice failed');
@@ -329,7 +329,7 @@ export async function rectificar(req, res, next) {
       motivo,
       parcial: parcial != null && parcial !== '' ? Number(parcial) : null,
       overrideIssuerId: issuerId ? Number(issuerId) : null,
-      userId: req.user?.id,
+      userId: req.user?.userId,
     });
     res.json({ success: true, data: rect });
   } catch (e) {

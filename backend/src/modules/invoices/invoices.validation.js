@@ -24,7 +24,16 @@ export const createInvoiceSchema = z.object({
   clienteCiudad: z.string().optional().nullable(),
   clienteCp: z.string().optional().nullable(),
   clientePais: z.string().min(1, 'País requerido'),
-  clienteEmail: z.string().email().optional().nullable(),
+  // Email tolerante: si viene vacío, '—' o con formato inválido → null (no bloquea
+  // la emisión de la factura/proforma; muchos clientes no tienen email cargado).
+  clienteEmail: z.preprocess(
+    (v) => {
+      if (typeof v !== 'string') return v ?? null;
+      const t = v.trim();
+      return (t && t.includes('@') && t.includes('.')) ? t : null;
+    },
+    z.string().optional().nullable(),
+  ),
   clienteTelefono: z.string().optional().nullable(),
   items: z.array(itemSchema).min(1, 'Al menos un item'),
   ivaPct: z.number().min(0).max(100).optional(),

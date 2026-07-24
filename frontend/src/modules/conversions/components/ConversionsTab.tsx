@@ -6,7 +6,7 @@ import PaymentDialog from './PaymentDialog';
 import RefundDialog from './RefundDialog';
 import InstallmentsDialog from './InstallmentsDialog';
 import EditConversionDialog from './EditConversionDialog';
-import { Plus, Receipt, CreditCard, Trash, WarningCircle, CheckCircle, ArrowCounterClockwise, Coins, PencilSimple, Warning } from '@phosphor-icons/react';
+import { Plus, Receipt, CreditCard, Trash, WarningCircle, CheckCircle, ArrowCounterClockwise, Coins, PencilSimple, Warning, FileText } from '@phosphor-icons/react';
 import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import InvoiceButton from '@/modules/invoices/components/InvoiceButton';
@@ -42,6 +42,44 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
   const [refundsByConv, setRefundsByConv] = useState<Record<number, Refund[]>>({});
   const [sendInvoiceDialog, setSendInvoiceDialog] = useState<Invoice | null>(null);
   const [installmentsReload, setInstallmentsReload] = useState(0);
+  const [emittingProf, setEmittingProf] = useState<number | null>(null);
+
+  // Emite una PROFORMA (presupuesto) de una venta AUNQUE ya tenga pagos. La usa el
+  // botón "Proforma" en ventas con pago (admin o gestora factura_manager).
+  async function emitProforma(c: Conversion): Promise<void> {
+    if (!lead?.id) return;
+    setEmittingProf(c.id);
+    try {
+      const leadRes = await invoicesApi.leadFiscalData(lead.id);
+      const d = leadRes.success ? leadRes.data : null;
+      const cfg = await invoicesApi.getConfig(projectId);
+      const metodoDefault = (cfg.success && cfg.data?.factura_metodo_default) || 'transferencia';
+      const pieDefault = cfg.success ? (cfg.data?.factura_pie_default || undefined) : undefined;
+      const items = (c.items && c.items.length > 0)
+        ? c.items.map(it => ({ descripcion: it.descripcion, cantidad: it.cantidad, precio_unitario: Number(it.precio_unitario) }))
+        : [{ descripcion: `Producto/servicio: servicio académico, ${c.producto_contratado || 'programa'}`, cantidad: 1, precio_unitario: Number(c.importe_total) }];
+      const res = await invoicesApi.create({
+        projectId, leadId: lead.id, conversionId: c.id, tipo: 'proforma',
+        clienteNombre: d?.nombre || c.producto_contratado || 'Cliente',
+        clienteNif: d?.identificacion_fiscal || undefined,
+        clienteDireccion: d?.direccion_fiscal || undefined,
+        clienteCiudad: d?.ciudad_fiscal || undefined,
+        clienteCp: d?.codigo_postal_fiscal || undefined,
+        clientePais: d?.pais_fiscal || 'España',
+        clienteEmail: d?.email, clienteTelefono: d?.telefono,
+        items, metodoPago: metodoDefault as 'transferencia', piePago: pieDefault,
+      });
+      if (res.success && res.data) {
+        toast({ title: '✓ Proforma emitida', description: res.data.codigo || undefined });
+        invoicesApi.openPdf(res.data.id).catch(() => {});
+        load();
+      } else {
+        toast({ title: 'Error', description: (res as { error?: string }).error, variant: 'destructive' });
+      }
+    } catch (e: any) {
+      toast({ title: 'Error', description: e?.data?.error || e?.message, variant: 'destructive' });
+    } finally { setEmittingProf(null); }
+  }
 
   // Tras registrar un pago: si la conversion tiene factura emitida y aún no
   // enviada, ofrecer enviarla por email (con confirmación, no automático).
@@ -239,6 +277,20 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
                             ? c.items.map(it => ({ descripcion: it.descripcion, cantidad: it.cantidad, precio_unitario: Number(it.precio_unitario) }))
                             : [{ descripcion: `Producto/servicio: servicio académico, ${c.producto_contratado || 'programa'}`, cantidad: 1, precio_unitario: Number(c.importe_total) }]}
                         />
+                      )}
+                      {/* Con pagos ya existe factura por cada pago; aun así se permite
+                          emitir una PROFORMA (presupuesto) de la venta — admin o gestora
+                          factura_manager (ej.: proforma del pago inicial). */}
+                      {(Number(c.payments_count) || 0) > 0 && canManage && (
+                        <button
+                          onClick={() => emitProforma(c)}
+                          disabled={emittingProf === c.id}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-900/40 disabled:opacity-50"
+                          title="Emitir una proforma (presupuesto) de esta venta"
+                        >
+                          <FileText size={14} weight="bold" />
+                          {emittingProf === c.id ? '…' : 'Proforma'}
+                        </button>
                       )}
                       <button
                         onClick={() => setEditDialogConv(c)}
