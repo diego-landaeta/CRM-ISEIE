@@ -343,8 +343,8 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
                 <div>
                   <label className="text-[11px] font-semibold text-muted-foreground mb-1 block">Nº de cuotas</label>
                   <input
-                    type="number" min={2} max={36} value={numCuotas}
-                    onChange={(e) => setNumCuotas(Math.max(2, Math.min(36, Number(e.target.value) || 2)))}
+                    type="number" min={1} max={36} value={numCuotas}
+                    onChange={(e) => setNumCuotas(Math.max(1, Math.min(36, Number(e.target.value) || 1)))}
                     className="w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm"
                   />
                 </div>

@@ -63,7 +63,7 @@ function addMonths(isoDate: string, months: number): string {
 }
 
 function distributeInstallments(total: number, n: number, fechaInicio: string): Installment[] {
-  if (!isFinite(total) || total <= 0 || n < 2) return [];
+  if (!isFinite(total) || total <= 0 || n < 1) return [];
   const cuotaBase = Math.round((total / n) * 100) / 100;
   const result: Installment[] = [];
   for (let i = 0; i < n; i++) {
@@ -344,8 +344,8 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
     }
     // Validar cuotas si es fraccionado
     if (form.metodo_pago === 'fraccionado') {
-      if (installments.length < 2) {
-        toast({ title: 'Al menos 2 cuotas requeridas', variant: 'destructive' });
+      if (installments.length < 1) {
+        toast({ title: 'Al menos 1 cuota requerida', variant: 'destructive' });
         return;
       }
       const sumaCuotas = installments.reduce((s, c) => s + Number(c.importe_previsto || 0), 0);
@@ -396,7 +396,7 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
       } as any);
       if (res.success && res.data) {
         // Si es fraccionado, genera las cuotas custom
-        if (form.metodo_pago === 'fraccionado' && installments.length >= 2) {
+        if (form.metodo_pago === 'fraccionado' && installments.length >= 1) {
           try {
             await conversionsApi.generateInstallments(res.data.id, {
               installments: installments.map(c => ({
@@ -726,9 +726,9 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
                   <div>
                     <label className="text-[10px] font-medium text-muted-foreground mb-1 block">Número de cuotas</label>
                     <input
-                      type="number" min="2" max="60"
+                      type="number" min="1" max="60"
                       value={numCuotas}
-                      onChange={e => { setNumCuotas(Math.max(2, Number(e.target.value) || 2)); setInstallmentsDirty(false); }}
+                      onChange={e => { setNumCuotas(Math.max(1, Number(e.target.value) || 1)); setInstallmentsDirty(false); }}
                       className={inputClass}
                     />
                   </div>

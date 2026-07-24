@@ -143,7 +143,7 @@ export async function generateInstallments(req, res, next) {
       return res.json({ success: true, data: rows });
     }
     // Modo "auto": N cuotas iguales mensuales desde fecha_inicio
-    if (!num_cuotas || num_cuotas < 2) throw new AppError('num_cuotas debe ser >= 2', 400, 'INVALID');
+    if (!num_cuotas || num_cuotas < 1) throw new AppError('num_cuotas debe ser >= 1', 400, 'INVALID');
     if (!importe_total) throw new AppError('importe_total requerido', 400, 'INVALID');
     if (!fecha_inicio) throw new AppError('fecha_inicio requerida', 400, 'INVALID');
     const rows = await installmentsModel.generateInstallments(id, Number(num_cuotas), Number(importe_total), fecha_inicio, null, concepto);
