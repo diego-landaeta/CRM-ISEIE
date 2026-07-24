@@ -488,10 +488,23 @@ const METODOS_PAGO_VALIDOS = ['transferencia', 'tarjeta', 'tarjeta_stripe', 'efe
 async function _convDataParaFactura(conversionId) {
   const { rows } = await query(
     `SELECT c.*, l.nombre AS lead_nombre, l.email AS lead_email, l.telefono AS lead_telefono,
-            l.identificacion_fiscal, l.direccion_fiscal, l.ciudad_fiscal, l.codigo_postal_fiscal, l.pais_fiscal
-       FROM conversions c LEFT JOIN leads l ON l.id = c.lead_id
+            l.identificacion_fiscal, l.direccion_fiscal, l.ciudad_fiscal, l.codigo_postal_fiscal, l.pais_fiscal,
+            pr.nombre AS producto_catalogo
+       FROM conversions c
+       LEFT JOIN leads l ON l.id = c.lead_id
+       LEFT JOIN products pr ON pr.id = c.producto_contratado_id
       WHERE c.id = $1`, [conversionId]);
   return rows[0] || null;
+}
+
+// Nombre del PROGRAMA para el concepto: prioriza el producto del catálogo
+// (producto_contratado_id) sobre el texto libre (que a veces trae mal cargado el
+// nombre del cliente).
+function nombrePrograma(conv) {
+  const cat = conv.producto_catalogo && String(conv.producto_catalogo).trim();
+  if (cat) return cat;
+  const txt = conv.producto_contratado && String(conv.producto_contratado).trim();
+  return txt || 'programa';
 }
 
 // PROFORMA → FACTURA: convierte una proforma (número fiscal ya reservado) en
@@ -503,9 +516,10 @@ async function _convertirProformaEnFactura(prof, conv, paymentId, fechaPago) {
   const ivaPct = conv.iva_exento ? 0 : Number(conv.iva_pct ?? 21);
   const base = ivaPct > 0 ? Number((total / (1 + ivaPct / 100)).toFixed(2)) : total;
   const ivaImp = Number((total - base).toFixed(2));
-  const prod = conv.producto_contratado || 'Servicio';
+  // Concepto con el formato fijo y el programa del catálogo (no el texto libre).
+  const concepto = `Producto/servicio: servicio académico, ${nombrePrograma(conv)}`;
   const saldada = pagado >= total - 0.01;
-  const items = JSON.stringify([{ descripcion: prod, cantidad: 1, precio_unitario: base }]);
+  const items = JSON.stringify([{ descripcion: concepto, cantidad: 1, precio_unitario: base }]);
   const { rows } = await query(
     `UPDATE invoices SET
        tipo = 'normal', estado = $2::text,
@@ -583,7 +597,7 @@ export async function emitirFacturaDePago(conversionId, { paymentId, importe }, 
   const ivaImporte = 0;
   // Concepto FIJO: "Producto/servicio: servicio académico, <programa>". Si el pago
   // es una cuota (notas "Cuota N") → "...mensualidad N de <programa>".
-  const prog = conv.producto_contratado || 'programa';
+  const prog = nombrePrograma(conv);
   const mCuota = /cuota\s*(\d+)/i.exec(String(notasPago || ''));
   const concepto = mCuota
     ? `Producto/servicio: servicio académico, mensualidad ${mCuota[1]} de ${prog}`
