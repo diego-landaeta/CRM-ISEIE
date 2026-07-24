@@ -81,6 +81,8 @@ export async function listPayments({ projectId, status, linked, search, from, to
   // no factura (o empezó después), no se marca nada. Se deriva del dato, así que
   // no hay que configurar fechas de arranque a mano.
   if (facturables) {
+    // Un cobro fallido/no cobrado nunca es facturable: solo los realmente cobrados.
+    conds.push(`sp.status = 'succeeded'`);
     conds.push(`sp.stripe_created_at >= (
       SELECT MIN(f.fecha_emision) FROM invoices f
        WHERE f.issuer_id = (SELECT pr.sociedad_emisora_id FROM projects pr WHERE pr.id = sp.project_id)
