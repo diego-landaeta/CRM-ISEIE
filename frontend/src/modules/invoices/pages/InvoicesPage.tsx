@@ -307,7 +307,7 @@ export default function InvoicesPage() {
                 &middot; {stripeSinAsociar.length} cobro{stripeSinAsociar.length !== 1 ? 's' : ''} sin cliente &mdash; <strong>no generan factura</strong> hasta asociarlos
               </span>
             </div>
-            <Link to="/finanzas/pagos-stripe"
+            <Link to="/accounting/pagos-stripe"
               className="h-8 px-3 rounded-md bg-red-600 text-white text-[11px] font-semibold hover:bg-red-700 inline-flex items-center gap-1">
               Asociar en Pagos Stripe &rarr;
             </Link>
@@ -322,7 +322,7 @@ export default function InvoicesPage() {
                     <td className="px-3 py-2 text-muted-foreground">{p.customer_email || '—'}</td>
                     <td className="px-3 py-2 text-right tabular-nums font-semibold">{fmt(Number(p.amount))}</td>
                     <td className="px-3 py-2 text-right">
-                      <Link to="/finanzas/pagos-stripe" className="text-[11px] font-bold text-red-700 dark:text-red-400 hover:underline">
+                      <Link to="/accounting/pagos-stripe" className="text-[11px] font-bold text-red-700 dark:text-red-400 hover:underline">
                         NO ASOCIADO &middot; ASOCIAR
                       </Link>
                     </td>

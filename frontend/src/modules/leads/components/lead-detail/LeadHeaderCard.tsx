@@ -66,7 +66,7 @@ export default function LeadHeaderCard({ lead, isAdmin, onReassign, onBack }: Le
               </button>
             )}
             <Link
-              to={`/finanzas/facturas/nueva?tipo=proforma&leadId=${lead.id}`}
+              to={`/accounting/facturas/nueva?tipo=proforma&leadId=${lead.id}`}
               aria-label="Emitir proforma"
               title="Emitir una proforma (presupuesto) para este prospecto, sin convertir"
               className="h-9 px-3 rounded-lg border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/30 text-sky-700 dark:text-sky-300 text-sm font-medium hover:bg-sky-100 dark:hover:bg-sky-950/50 transition-colors flex items-center gap-2"
