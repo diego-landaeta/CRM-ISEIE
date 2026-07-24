@@ -171,10 +171,13 @@ export async function pdf(req, res, next) {
     // agua "PRELIMINAR / SIN VALIDEZ FISCAL". Sirve para ver la factura aunque
     // falten NIF/dirección del cliente (p.ej. las importadas/auto-emitidas).
     const preliminar = req.query.preliminar === '1' || req.query.preliminar === 'true';
+    // ?forzar=1 → descarga la DEFINITIVA (sin marca de agua) aunque falten datos
+    // del cliente. Los campos vacíos salen en blanco. El usuario decide descargarla
+    // igual y completar luego.
+    const forzar = req.query.forzar === '1' || req.query.forzar === 'true';
     // Factura EMITIDA con datos incompletos (auto-emitida al pagar): tiene su
-    // número, pero NO se descarga como DEFINITIVA hasta rellenar los datos del
-    // cliente. En modo preliminar sí se muestra (con marca de agua).
-    if (!preliminar && inv.tipo !== 'proforma' && inv.estado !== 'borrador') {
+    // número. Por defecto exige datos, pero con ?forzar=1 se descarga igual.
+    if (!preliminar && !forzar && inv.tipo !== 'proforma' && inv.estado !== 'borrador') {
       const faltan = model.invoiceFaltantes(inv);
       if (faltan.length > 0) {
         throw new AppError(`Para descargar la factura ${inv.codigo || ''} debes rellenar: ${faltan.join(', ')}.`, 400, 'INVOICE_INCOMPLETE');
