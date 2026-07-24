@@ -18,6 +18,20 @@ export async function createExpense(req, res, next) {
   } catch (err) { next(err); }
 }
 
+// GET /accounting/receivable — cuentas por cobrar con filtros gestora/proyecto/periodo.
+// El gestor solo ve las suyas (se fuerza su responsableId).
+export async function receivable(req, res, next) {
+  try {
+    const projectId = req.query.projectId ? Number(req.query.projectId) : null;
+    let responsableId = req.query.responsableId ? Number(req.query.responsableId) : null;
+    if (req.user.role === 'gestor') responsableId = req.user.userId; // seguridad
+    const from = req.query.from || null;
+    const to = req.query.to || null;
+    const data = await model.getReceivable({ projectId, responsableId, from, to });
+    res.json({ success: true, data });
+  } catch (err) { next(err); }
+}
+
 export async function listExpenses(req, res, next) {
   try {
     const parsed = listExpensesSchema.safeParse(req.query);

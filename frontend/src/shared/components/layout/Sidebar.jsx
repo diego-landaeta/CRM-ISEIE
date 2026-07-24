@@ -69,7 +69,7 @@ const NAV_SECTIONS = [
       { to: '/accounting/income',    label: 'Ingresos',           icon: Coins,      roles: ['admin', 'superadmin'], statusTag: 'Pruebas' },
       { to: '/accounting/conversions', label: 'Conversiones',     icon: ChartLineUp, roles: ['admin', 'superadmin'], statusTag: 'Pruebas' },
       { to: '/expenses',             label: 'Egresos',            icon: Receipt,    roles: ['admin', 'superadmin'], statusTag: 'Pruebas' },
-      { to: '/accounting/receivable', label: 'Cuentas por cobrar', icon: Wallet,    roles: ['admin', 'superadmin'], statusTag: 'Pruebas' },
+      { to: '/accounting/receivable', label: 'Cuentas por cobrar', icon: Wallet,    roles: ['admin', 'superadmin', 'soporte', 'gestor'] },
       { to: '/accounting/payable',   label: 'Cuentas por pagar',  icon: Wallet,     roles: ['admin', 'superadmin'], statusTag: 'Pruebas' },
       { to: '/commissions',          label: 'Comisiones',         icon: Bank,  roles: ['admin', 'superadmin'], statusTag: 'Pruebas' },
       { to: '/payroll',              label: 'Nóminas',            icon: Coins,      roles: ['admin', 'superadmin'], statusTag: 'Pruebas' },

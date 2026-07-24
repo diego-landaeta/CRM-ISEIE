@@ -201,3 +201,80 @@ export async function getDashboardStats({ projectId, from, to }) {
     },
   };
 }
+
+// ============================================================
+// CUENTAS POR COBRAR (con filtros gestora / proyecto / periodo)
+// Unifica: cuotas pendientes (conversion_installments) + ventas pendientes sin
+// plan de cuotas (importe pendiente de la conversión). Cada fila trae su fecha de
+// vencimiento, cliente, producto, proyecto y gestora responsable.
+// ============================================================
+export async function getReceivable({ projectId = null, responsableId = null, from = null, to = null } = {}) {
+  const conds = [];
+  const params = [];
+  let i = 1;
+  if (projectId)     { conds.push(`c.project_id = $${i++}`); params.push(projectId); }
+  if (responsableId) { conds.push(`l.responsable_id = $${i++}`); params.push(responsableId); }
+  const extra = conds.length ? ' AND ' + conds.join(' AND ') : '';
+  const fromCond = from ? ` AND vence >= $${i++}` : '';
+  if (from) params.push(from);
+  const toCond = to ? ` AND vence <= $${i++}` : '';
+  if (to) params.push(to);
+
+  const sql = `
+    WITH filas AS (
+      SELECT 'cuota'::text AS tipo, ci.id AS ref_id, c.id AS conversion_id, c.lead_id,
+             l.nombre AS cliente, l.email AS cliente_email,
+             c.producto_contratado AS producto,
+             c.project_id, p.nombre AS proyecto_nombre,
+             l.responsable_id, u.nombre AS gestora_nombre,
+             ci.numero AS cuota_numero,
+             ci.importe_previsto::numeric AS importe,
+             ci.fecha_vencimiento AS vence
+        FROM conversion_installments ci
+        JOIN conversions c ON c.id = ci.conversion_id
+        LEFT JOIN leads l ON l.id = c.lead_id
+        LEFT JOIN projects p ON p.id = c.project_id
+        LEFT JOIN users u ON u.id = l.responsable_id
+       WHERE ci.fecha_cobro IS NULL${extra}
+      UNION ALL
+      SELECT 'venta'::text AS tipo, c.id AS ref_id, c.id AS conversion_id, c.lead_id,
+             l.nombre AS cliente, l.email AS cliente_email,
+             c.producto_contratado AS producto,
+             c.project_id, p.nombre AS proyecto_nombre,
+             l.responsable_id, u.nombre AS gestora_nombre,
+             NULL::int AS cuota_numero,
+             (c.importe_total - c.importe_pagado)::numeric AS importe,
+             c.fecha_compromiso_pago AS vence
+        FROM conversions c
+        LEFT JOIN leads l ON l.id = c.lead_id
+        LEFT JOIN projects p ON p.id = c.project_id
+        LEFT JOIN users u ON u.id = l.responsable_id
+       WHERE c.importe_pagado < c.importe_total
+         AND NOT EXISTS (SELECT 1 FROM conversion_installments ci2 WHERE ci2.conversion_id = c.id AND ci2.fecha_cobro IS NULL)${extra}
+    )
+    SELECT *, (vence IS NOT NULL AND vence < CURRENT_DATE) AS vencido
+      FROM filas
+     WHERE importe > 0${fromCond}${toCond}
+     ORDER BY vence ASC NULLS LAST, importe DESC`;
+
+  const { rows } = await query(sql, params);
+
+  const gestoras = [];
+  const seen = new Set();
+  for (const r of rows) {
+    if (r.responsable_id && !seen.has(r.responsable_id)) { seen.add(r.responsable_id); gestoras.push({ id: r.responsable_id, nombre: r.gestora_nombre || 'Sin asignar' }); }
+  }
+  const totalPendiente = rows.reduce((s, r) => s + Number(r.importe || 0), 0);
+  const totalVencido = rows.filter(r => r.vencido).reduce((s, r) => s + Number(r.importe || 0), 0);
+
+  return {
+    items: rows.map(r => ({ ...r, importe: Number(r.importe) })),
+    gestoras: gestoras.sort((a, b) => String(a.nombre).localeCompare(String(b.nombre))),
+    resumen: {
+      total_pendiente: totalPendiente,
+      total_vencido: totalVencido,
+      count: rows.length,
+      count_vencidas: rows.filter(r => r.vencido).length,
+    },
+  };
+}

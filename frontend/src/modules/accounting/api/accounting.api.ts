@@ -54,6 +54,9 @@ function qs(params: Params): string {
 export const accountingApi = {
   dashboard: (params: Params = {}): Promise<ApiResponse<AccountingDashboardData>> =>
     client.get(`/accounting/dashboard${qs(params)}`),
+  // Cuentas por cobrar con filtros gestora/proyecto/periodo.
+  receivable: (params: Params = {}): Promise<ApiResponse<any>> =>
+    client.get(`/accounting/receivable${qs(params)}`),
   listExpenses: (params: Params = {}): Promise<ApiResponse<Expense[]>> =>
     client.get(`/accounting/expenses${qs(params)}`),
   createExpense: (data: Partial<Expense>): Promise<ApiResponse<Expense>> =>
