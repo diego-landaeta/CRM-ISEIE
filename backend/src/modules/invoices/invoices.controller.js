@@ -124,10 +124,12 @@ export async function create(req, res, next) {
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'BAD_REQUEST');
     const d = parsed.data;
 
-    // Solo admin/superadmin pueden emitir facturas de abono (rectificativas).
+    // Facturas de abono (rectificativas): admin/superadmin o una gestora con permiso
+    // factura_manager (sobre sus propias ventas).
     const esAdmin = req.user?.role === 'admin' || req.user?.role === 'superadmin';
     if (d.tipo === 'rectificativa' && !esAdmin) {
-      throw new AppError('Solo un administrador puede emitir facturas de abono.', 403, 'FORBIDDEN');
+      const puede = req.user?.role === 'gestor' && await model.esFacturaManager(req.user.userId);
+      if (!puede) throw new AppError('No tienes permiso para emitir facturas de abono.', 403, 'FORBIDDEN');
     }
 
     // REGLA: sin ningún pago no se puede emitir una FACTURA fiscal por la
@@ -193,6 +195,9 @@ export async function update(req, res, next) {
 export async function corregir(req, res, next) {
   try {
     const id = Number(req.params.id);
+    if (!(await model.puedeGestionarFactura(req.user.userId, req.user.role, id))) {
+      throw new AppError('Solo puedes editar tus propias facturas.', 403, 'FORBIDDEN');
+    }
     const d = { ...(req.body || {}) };
     if (Array.isArray(d.items)) {
       const exento = d.exento === true || Number(d.ivaPct) === 0;
@@ -300,7 +305,11 @@ export async function cancel(req, res, next) {
 // Para errores de carga: la venta se mantiene y se puede volver a facturar.
 export async function destroy(req, res, next) {
   try {
-    const inv = await model.deleteInvoice(Number(req.params.id));
+    const id = Number(req.params.id);
+    if (!(await model.puedeGestionarFactura(req.user.userId, req.user.role, id))) {
+      throw new AppError('Solo puedes eliminar tus propias facturas.', 403, 'FORBIDDEN');
+    }
+    const inv = await model.deleteInvoice(id);
     if (!inv) throw new AppError('Factura no encontrada', 404, 'NOT_FOUND');
     res.json({ success: true, data: { id: inv.id, codigo: inv.codigo } });
   } catch (e) {
@@ -312,6 +321,9 @@ export async function destroy(req, res, next) {
 export async function rectificar(req, res, next) {
   try {
     const id = Number(req.params.id);
+    if (!(await model.puedeGestionarFactura(req.user.userId, req.user.role, id))) {
+      throw new AppError('Solo puedes emitir abonos de tus propias facturas.', 403, 'FORBIDDEN');
+    }
     const { motivo, parcial, issuerId } = req.body || {};
     const rect = await model.createRectificativa(id, {
       motivo,

@@ -180,6 +180,7 @@ export async function me(req, res, next) {
           avatar_url: user.avatar_url,
           custom_role_id: user.custom_role_id,
           custom_role_label: user.custom_role_label,
+          factura_manager: !!user.factura_manager,
         },
         permissions: {},
         view: {},

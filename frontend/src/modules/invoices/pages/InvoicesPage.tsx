@@ -38,8 +38,11 @@ export default function InvoicesPage() {
   };
   // Sociedad a la que se pide saltar (abre el aviso "entra a este proyecto").
   const [socPrompt, setSocPrompt] = useState<{ id: number; nombre: string } | null>(null);
-  const { user } = useAuth() as { user: { role?: string } | null };
+  const { user } = useAuth() as { user: { role?: string; factura_manager?: boolean } | null };
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
+  // Gestión de facturas (editar/eliminar/abonar): admin o gestora con permiso
+  // factura_manager (el backend valida además que sean SUS facturas).
+  const canManage = isAdmin || !!user?.factura_manager;
   const pid = activeProject?.id;
   const loc = useLocation();
   const [tab, setTab] = useState<'facturas' | 'proformas' | 'abonos'>(() => {
@@ -209,7 +212,7 @@ export default function InvoicesPage() {
             <TutorialButton />
             {/* Los abonos (rectificativas) solo los emite un administrador. Las
                 gestoras pueden ver la pestaña pero no crear abonos. */}
-            {!(esAbonos && !isAdmin) && (
+            {!(esAbonos && !canManage) && (
               <Link to={esAbonos ? 'nueva?tipo=rectificativa' : esProformas ? 'nueva?tipo=proforma' : 'nueva'}
                 className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90">
                 {esProformas ? <FileText size={14} weight="bold" /> : <Receipt size={14} weight="bold" />}
@@ -487,9 +490,9 @@ export default function InvoicesPage() {
                       )}
                       {/* Corregir una factura YA emitida/pagada (IVA, datos, concepto) — admin.
                           Usa el MISMO panel completo que crear/editar (?editId). */}
-                      {inv.estado !== 'borrador' && inv.estado !== 'cancelada' && isAdmin && (
+                      {inv.estado !== 'borrador' && inv.estado !== 'cancelada' && canManage && (
                         <Link to={`nueva?editId=${inv.id}`}
-                          title="Editar IVA, datos del cliente o concepto (solo admin/superadmin)"
+                          title="Editar IVA, datos del cliente o concepto"
                           className="h-7 px-2 rounded border border-sky-300 text-sky-700 dark:text-sky-300 text-[11px] font-semibold hover:bg-sky-50 dark:hover:bg-sky-950/30 inline-flex items-center gap-1">
                           <Gear size={11} weight="bold" /> Editar
                         </Link>
@@ -515,7 +518,7 @@ export default function InvoicesPage() {
                           <CheckCircle size={11} /> Pagada
                         </button>
                       )}
-                      {inv.estado !== 'borrador' && inv.tipo !== 'rectificativa' && inv.tipo !== 'proforma' && (
+                      {inv.estado !== 'borrador' && inv.tipo !== 'rectificativa' && inv.tipo !== 'proforma' && canManage && (
                         <button onClick={() => rectificar(inv)}
                           title="Crear factura rectificativa (de abono)"
                           className="h-7 px-2 rounded border border-rose-300 text-[11px] text-rose-600 hover:bg-rose-50 inline-flex items-center gap-1">
@@ -523,7 +526,7 @@ export default function InvoicesPage() {
                         </button>
                       )}
                       {/* Eliminar factura + liberar número (errores de carga) — admin. */}
-                      {isAdmin && inv.estado !== 'cancelada' && (
+                      {canManage && inv.estado !== 'cancelada' && (
                         <button onClick={() => setDeletingInv(inv)}
                           title="Eliminar la factura y liberar su número (se equivocaron al cargarla)"
                           className="h-7 px-2 rounded border border-red-300 text-[11px] text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 inline-flex items-center gap-1">

@@ -40,15 +40,15 @@ router.post('/',                      ctrl.create);
 // Editar una factura en borrador: SOLO admin/superadmin.
 router.patch('/:id',                  roleGuard('admin', 'superadmin'), ctrl.update);
 // Corregir una factura YA emitida/pagada (IVA, datos, concepto): SOLO admin/superadmin.
-router.patch('/:id/corregir',         roleGuard('admin', 'superadmin'), ctrl.corregir);
+router.patch('/:id/corregir',         roleGuard('admin', 'superadmin', 'gestor'), ctrl.corregir);
 router.get('/:id/pdf',                ctrl.pdf);
 router.post('/:id/send',              ctrl.send);
 router.post('/:id/mark-paid',         ctrl.markPaid);
 router.post('/:id/cancel',            ctrl.cancel);
 // Eliminar factura + liberar número (errores de carga): SOLO admin/superadmin.
-router.delete('/:id',                 roleGuard('admin', 'superadmin'), ctrl.destroy);
+router.delete('/:id',                 roleGuard('admin', 'superadmin', 'gestor'), ctrl.destroy);
 // Emitir factura de abono (rectificativa): SOLO admin/superadmin.
-router.post('/:id/rectificar',        roleGuard('admin', 'superadmin'), ctrl.rectificar);
+router.post('/:id/rectificar',        roleGuard('admin', 'superadmin', 'gestor'), ctrl.rectificar);
 router.post('/:id/emitir',            ctrl.emitir);
 router.post('/:id/completar-datos',   ctrl.completarDatos);
 

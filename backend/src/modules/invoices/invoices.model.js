@@ -415,6 +415,26 @@ export async function conversionSinPago(conversionId) {
   return rows[0] ? Number(rows[0].pagado) <= 0 : false;
 }
 
+// ¿El usuario tiene el permiso factura_manager? (gestora con poderes de factura).
+export async function esFacturaManager(userId) {
+  const { rows } = await query(`SELECT factura_manager FROM users WHERE id = $1`, [userId]);
+  return !!rows[0]?.factura_manager;
+}
+
+// ¿Puede este usuario gestionar (editar/corregir/eliminar/abonar) esta factura?
+// Admin/superadmin → cualquiera. Gestor → solo si es factura_manager Y la factura
+// es de un lead del que es responsable (sus propias facturas).
+export async function puedeGestionarFactura(userId, role, invoiceId) {
+  if (role === 'admin' || role === 'superadmin') return true;
+  if (role !== 'gestor') return false;
+  if (!(await esFacturaManager(userId))) return false;
+  const { rows } = await query(
+    `SELECT l.responsable_id FROM invoices i LEFT JOIN leads l ON l.id = i.lead_id WHERE i.id = $1`,
+    [invoiceId]
+  );
+  return !!rows[0] && rows[0].responsable_id === userId;
+}
+
 // Proforma activa (no cancelada) ya emitida para una conversión. Evita duplicar
 // proformas (y quemar correlativo fiscal) si se pulsa "Emitir proforma" dos veces.
 export async function proformaActivaDeConversion(conversionId) {
