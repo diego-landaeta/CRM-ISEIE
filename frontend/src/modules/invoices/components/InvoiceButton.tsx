@@ -39,6 +39,7 @@ export default function InvoiceButton({ projectId, leadId, conversionId, items, 
   const [fiscalOpen, setFiscalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
+  const [choiceOpen, setChoiceOpen] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -52,12 +53,20 @@ export default function InvoiceButton({ projectId, leadId, conversionId, items, 
   const isDraft = existing?.estado === 'borrador';
   const incompleta = !!existing && !isDraft && existing.tipo !== 'proforma' && invoiceFaltantes(existing).length > 0;
 
-  async function onClick() {
+  // Al pulsar: si ya hay documento, abrir/emitir; si no, preguntar qué emitir
+  // (proforma o factura) — así el usuario confirma la proforma y también puede
+  // emitir proforma aunque haya pago inicial.
+  function onClick() {
     if (existing) {
       if (isDraft || incompleta) { setEmitOpen(true); return; }
       invoicesApi.openPdf(existing.id).catch((e: unknown) => toast({ title: 'No se pudo abrir el PDF', description: (e as { message?: string })?.message, variant: 'destructive' }));
       return;
     }
+    setChoiceOpen(true);
+  }
+
+  async function doEmit(asProforma: boolean) {
+    setChoiceOpen(false);
     setWorking(true);
     try {
       const lead = await invoicesApi.leadFiscalData(leadId);
@@ -70,9 +79,9 @@ export default function InvoiceButton({ projectId, leadId, conversionId, items, 
       const metodoDefault = (cfg.success && cfg.data?.factura_metodo_default) || 'transferencia';
       const pieDefault = cfg.success ? (cfg.data?.factura_pie_default || undefined) : undefined;
 
-      // SIN NINGÚN PAGO → no se emite factura fiscal, se emite PROFORMA (con su
-      // correlativo). No exige datos fiscales completos.
-      if (sinPago) {
+      // PROFORMA (sin pago, o elegida con pago): reserva su correlativo y se
+      // convierte en factura al registrar el pago. No exige datos fiscales completos.
+      if (asProforma) {
         const res = await invoicesApi.create({
           projectId, leadId, conversionId, tipo: 'proforma',
           clienteNombre: d.nombre,
@@ -86,7 +95,7 @@ export default function InvoiceButton({ projectId, leadId, conversionId, items, 
         });
         if (res.success && res.data) {
           setExisting(res.data);
-          toast({ title: '✓ Proforma emitida', description: `Sin pago aún: se emitió la proforma ${res.data.codigo || ''}. Al registrar el pago se generará la factura.` });
+          toast({ title: '✓ Proforma emitida', description: `Se emitió la proforma ${res.data.codigo || ''}. Al registrar el pago se convertirá en factura.` });
           invoicesApi.openPdf(res.data.id).catch(() => {});
           onInvoiced?.();
         } else {
@@ -154,6 +163,40 @@ export default function InvoiceButton({ projectId, leadId, conversionId, items, 
           ? (isDraft ? 'BORRADOR — emitir' : incompleta ? `Nº ${existing.codigo} — completar` : `Nº ${existing.codigo}`)
           : sinPago ? 'Emitir proforma' : 'Emitir factura'}
       </button>
+
+      {/* Confirmación: proforma (sin pago) o elegir documento (con pago). */}
+      {choiceOpen && (
+        <div className="fixed inset-0 z-[85] flex items-center justify-center p-4" onClick={() => setChoiceOpen(false)}>
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
+          <div role="dialog" className="relative bg-card rounded-xl border border-border w-full max-w-sm p-5" onClick={e => e.stopPropagation()}>
+            {sinPago ? (
+              <>
+                <h3 className="font-semibold text-base mb-1">¿Emitir una proforma?</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Esta venta <b>no tiene ningún pago</b>. Se emitirá una <b>PROFORMA</b> (documento sin validez fiscal) que reserva el número y se <b>convertirá en factura</b> automáticamente cuando registres el pago.
+                </p>
+                <div className="flex justify-end gap-2">
+                  <button onClick={() => setChoiceOpen(false)} className="h-9 px-4 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted">No</button>
+                  <button onClick={() => doEmit(true)} className="h-9 px-4 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90">Sí, emitir proforma</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h3 className="font-semibold text-base mb-1">¿Qué documento emitir?</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Puedes emitir la <b>factura</b> directamente, o una <b>proforma</b> (p. ej. del pago inicial) que luego se convierte en factura.
+                </p>
+                <div className="flex justify-end gap-2 flex-wrap">
+                  <button onClick={() => setChoiceOpen(false)} className="h-9 px-4 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted">Cancelar</button>
+                  <button onClick={() => doEmit(true)} className="h-9 px-4 rounded-md border border-primary text-primary text-sm font-semibold hover:bg-primary/10">Proforma</button>
+                  <button onClick={() => doEmit(false)} className="h-9 px-4 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90">Factura</button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {emitOpen && existing && (
         <Suspense fallback={null}>
           <EmitirBorradorDialog

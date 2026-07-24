@@ -45,6 +45,8 @@ router.get('/:id/pdf',                ctrl.pdf);
 router.post('/:id/send',              ctrl.send);
 router.post('/:id/mark-paid',         ctrl.markPaid);
 router.post('/:id/cancel',            ctrl.cancel);
+// Eliminar factura + liberar número (errores de carga): SOLO admin/superadmin.
+router.delete('/:id',                 roleGuard('admin', 'superadmin'), ctrl.destroy);
 // Emitir factura de abono (rectificativa): SOLO admin/superadmin.
 router.post('/:id/rectificar',        roleGuard('admin', 'superadmin'), ctrl.rectificar);
 router.post('/:id/emitir',            ctrl.emitir);

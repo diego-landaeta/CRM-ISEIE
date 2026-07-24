@@ -250,6 +250,8 @@ export const invoicesApi = {
   send: (id: number, email?: string) => client.post(`/invoices/${id}/send`, email ? { email } : {}),
   markPaid: (id: number, fechaPago?: string) => client.post(`/invoices/${id}/mark-paid`, fechaPago ? { fechaPago } : {}),
   cancel: (id: number) => client.post(`/invoices/${id}/cancel`, {}),
+  // Eliminar factura + liberar su número (errores de carga) — admin/superadmin.
+  remove: (id: number) => client.delete<{ id: number; codigo: string | null }>(`/invoices/${id}`),
   rectificar: (id: number, body: { motivo: string; parcial?: number | null; issuerId?: number }) => client.post<Invoice>(`/invoices/${id}/rectificar`, body),
   // Corregir una factura ya emitida/pagada (IVA, datos, concepto) — admin only.
   corregir: (id: number, body: {

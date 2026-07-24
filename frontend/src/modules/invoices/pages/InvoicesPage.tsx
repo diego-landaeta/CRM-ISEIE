@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Receipt, Eye, PaperPlaneTilt, CheckCircle, X, MagnifyingGlass, Gear, ArrowCounterClockwise, FileText, DownloadSimple } from '@phosphor-icons/react';
+import { Receipt, Eye, PaperPlaneTilt, CheckCircle, X, MagnifyingGlass, Gear, ArrowCounterClockwise, FileText, DownloadSimple, Trash } from '@phosphor-icons/react';
 import { Link, useLocation } from 'react-router-dom';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -78,6 +78,8 @@ export default function InvoicesPage() {
   const [stripeSinAsociar, setStripeSinAsociar] = useState<Array<{ id: number; customer_name: string | null; customer_email: string | null; amount: number; stripe_created_at: string }>>([]);
   // Borrador que se está validando/emitiendo (abre el diálogo de completar datos)
   const [emittingInv, setEmittingInv] = useState<Invoice | null>(null);
+  const [deletingInv, setDeletingInv] = useState<Invoice | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async () => {
     if (!pid) return;
@@ -520,6 +522,14 @@ export default function InvoicesPage() {
                           <ArrowCounterClockwise size={11} /> Abono
                         </button>
                       )}
+                      {/* Eliminar factura + liberar número (errores de carga) — admin. */}
+                      {isAdmin && inv.estado !== 'cancelada' && (
+                        <button onClick={() => setDeletingInv(inv)}
+                          title="Eliminar la factura y liberar su número (se equivocaron al cargarla)"
+                          className="h-7 px-2 rounded border border-red-300 text-[11px] text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 inline-flex items-center gap-1">
+                          <Trash size={11} weight="bold" />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -539,6 +549,38 @@ export default function InvoicesPage() {
             load();
           }}
         />
+      )}
+
+      {/* Confirmación de borrado de factura (libera el número). */}
+      {deletingInv && (
+        <div className="fixed inset-0 z-[85] flex items-center justify-center p-4" onClick={() => !deleting && setDeletingInv(null)}>
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
+          <div role="dialog" className="relative bg-card rounded-xl border border-border w-full max-w-md p-5" onClick={e => e.stopPropagation()}>
+            <h3 className="font-semibold text-base mb-1 flex items-center gap-2 text-red-600"><Trash size={18} weight="bold" /> Eliminar factura</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Vas a eliminar <b>{deletingInv.tipo === 'proforma' ? 'la proforma' : 'la factura'} {deletingInv.codigo}</b> ({fmt(Number(deletingInv.total))}).
+              Se <b>liberará su número</b> si es el último de la serie. La venta se mantiene y podrás volver a facturarla. Esta acción no se puede deshacer.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setDeletingInv(null)} disabled={deleting}
+                className="h-9 px-4 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted disabled:opacity-50">Cancelar</button>
+              <button disabled={deleting}
+                onClick={async () => {
+                  setDeleting(true);
+                  try {
+                    const res = await invoicesApi.remove(deletingInv.id);
+                    if (res.success) { toast({ title: '✓ Factura eliminada', description: `${deletingInv.codigo} · número liberado` }); setDeletingInv(null); load(); }
+                    else toast({ title: 'Error', description: (res as { error?: string }).error, variant: 'destructive' });
+                  } catch (e: any) {
+                    toast({ title: 'Error', description: e?.data?.error || e?.message, variant: 'destructive' });
+                  } finally { setDeleting(false); }
+                }}
+                className="h-9 px-4 rounded-md bg-red-600 text-white text-sm font-semibold hover:bg-red-700 inline-flex items-center gap-1.5 disabled:opacity-50">
+                <Trash size={15} weight="bold" /> {deleting ? 'Eliminando…' : 'Eliminar y liberar número'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Aviso: la facturación NO se cruza entre sociedades. Para ver otra hay que

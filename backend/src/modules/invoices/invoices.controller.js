@@ -296,6 +296,19 @@ export async function cancel(req, res, next) {
   } catch (e) { next(e); }
 }
 
+// DELETE /:id — borra la factura y libera su número (solo admin/superadmin).
+// Para errores de carga: la venta se mantiene y se puede volver a facturar.
+export async function destroy(req, res, next) {
+  try {
+    const inv = await model.deleteInvoice(Number(req.params.id));
+    if (!inv) throw new AppError('Factura no encontrada', 404, 'NOT_FOUND');
+    res.json({ success: true, data: { id: inv.id, codigo: inv.codigo } });
+  } catch (e) {
+    logger.error({ e: e.message }, 'delete invoice failed');
+    next(e);
+  }
+}
+
 export async function rectificar(req, res, next) {
   try {
     const id = Number(req.params.id);

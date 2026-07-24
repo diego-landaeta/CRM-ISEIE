@@ -376,6 +376,39 @@ export async function cancel(id) {
   await query(`UPDATE invoices SET estado = 'cancelada', updated_at = NOW() WHERE id = $1`, [id]);
 }
 
+// Elimina una factura por completo y LIBERA su número: recalcula el contador de la
+// serie al mayor número restante, de modo que si se borran los últimos (errores) el
+// siguiente vuelve a reutilizarlos sin dejar huecos. Solo admin/superadmin.
+// No toca la conversión ni sus pagos (la venta sigue; se podrá re-facturar).
+export async function deleteInvoice(id) {
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+    const { rows: sel } = await client.query(`SELECT * FROM invoices WHERE id = $1 FOR UPDATE`, [id]);
+    const inv = sel[0];
+    if (!inv) { await client.query('ROLLBACK'); return null; }
+    await client.query(`DELETE FROM invoices WHERE id = $1`, [id]);
+    if (inv.issuer_id != null && inv.serie != null && inv.numero != null) {
+      const { rows: mx } = await client.query(
+        `SELECT COALESCE(MAX(numero), 0) AS m FROM invoices WHERE issuer_id = $1 AND ano = $2 AND serie = $3`,
+        [inv.issuer_id, inv.ano, inv.serie]
+      );
+      await client.query(
+        `UPDATE invoice_sequences SET ultimo_numero = $1
+          WHERE issuer_id = $2 AND ano = $3 AND serie = $4 AND ultimo_numero > $1`,
+        [mx[0].m, inv.issuer_id, inv.ano, inv.serie]
+      );
+    }
+    await client.query('COMMIT');
+    return inv;
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
 // ¿La conversión no tiene ningún pago? → no puede emitir factura fiscal (solo proforma).
 export async function conversionSinPago(conversionId) {
   const { rows } = await query(`SELECT COALESCE(importe_pagado, 0) AS pagado FROM conversions WHERE id = $1`, [conversionId]);
@@ -809,6 +842,21 @@ export async function updateBorrador(id, data, { soloBorrador = true } = {}) {
     if (!soloBorrador) {
       await client.query(`UPDATE invoices SET pdf_path = NULL WHERE id = $1`, [id]);
       rows[0].pdf_path = null;
+      // Si la factura corresponde a un pago concreto y cambió el importe, se sincroniza
+      // el pago, la cuota y el total pagado de la conversión → así en la ficha del
+      // cliente aparece el monto corregido (ej.: era 300 y se puso 250, se corrige).
+      const nuevoTotal = Number(rows[0].total);
+      const viejoTotal = Number(inv.total);
+      if (inv.payment_id && Number.isFinite(nuevoTotal) && Math.abs(nuevoTotal - viejoTotal) > 0.001) {
+        await client.query(`UPDATE conversion_payments SET importe = $1 WHERE id = $2`, [nuevoTotal, inv.payment_id]);
+        await client.query(`UPDATE conversion_installments SET importe_cobrado = $1 WHERE payment_id = $2 AND fecha_cobro IS NOT NULL`, [nuevoTotal, inv.payment_id]);
+        if (inv.conversion_id) {
+          await client.query(
+            `UPDATE conversions SET importe_pagado = GREATEST(0, importe_pagado + $1), updated_at = NOW() WHERE id = $2`,
+            [nuevoTotal - viejoTotal, inv.conversion_id]
+          );
+        }
+      }
     }
     await client.query('COMMIT');
     return rows[0];
