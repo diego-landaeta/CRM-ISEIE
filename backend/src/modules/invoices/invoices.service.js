@@ -159,12 +159,12 @@ export async function generatePDF(invoiceId, { preliminar = false } = {}) {
   if (inv.issuer_telefono){ page.drawText(oneLine(inv.issuer_telefono, 40), { x: left, y: ey, size: 9, font, color: gray }); ey -= 11; }
 
   // ── TÍTULO + Nº + Fecha (derecha) ──
-  const tituloDoc = esRect ? 'FACTURA RECTIFICATIVA' : esProforma ? 'PRESUPUESTO' : 'FACTURA';
+  const tituloDoc = esRect ? 'FACTURA RECTIFICATIVA' : 'FACTURA';
   const tituloColor = esRect ? rgb(0.7, 0.1, 0.1) : esProforma ? rgb(0.35, 0.35, 0.45) : black;
   drawRight(`${tituloDoc}${inv.codigo ? '  Nº ' + inv.codigo : ''}`, right, 806, 14, bold, tituloColor);
   drawRight(`Fecha: ${new Date(inv.fecha_emision).toLocaleDateString('es-ES')}`, right, 790, 10, font, gray);
   if (esRect && inv.rectifica_codigo) drawRight(`Rectifica a: ${inv.rectifica_codigo}`, right, 776, 9, font, gray);
-  if (esProforma) drawRight('Documento sin validez fiscal', right, 776, 8, font, gray);
+  if (esProforma) drawRight('PROFORMA — documento sin validez fiscal', right, 776, 8, bold, rgb(0.35, 0.35, 0.45));
   if (esBorrador) drawRight('BORRADOR — sin validez fiscal', right, 776, 8, bold, rgb(0.7, 0.45, 0.05));
 
   // ── CLIENTE (bajo la cabecera, ancho completo) ──
@@ -416,11 +416,11 @@ async function renderFromTemplate({ pdfDoc, page, font, bold, inv, layout }) {
           break;
         case 'meta':
           drawLines(b, [
-            { text: esRect ? 'FACTURA RECTIFICATIVA' : esProforma ? 'PRESUPUESTO' : 'FACTURA', bold: true, size: (b.fontSize || 12) + 2, color: esRect ? red : black },
+            { text: esRect ? 'FACTURA RECTIFICATIVA' : 'FACTURA', bold: true, size: (b.fontSize || 12) + 2, color: esRect ? red : black },
             { text: `N.º ${inv.codigo || '(sin numerar)'}`, bold: true },
             { text: `Fecha: ${new Date(inv.fecha_emision).toLocaleDateString('es-ES')}` },
             { text: esRect && inv.rectifica_codigo ? `Rectifica a: ${inv.rectifica_codigo}` : '', color: gray, size: (b.fontSize || 12) - 2 },
-            { text: esProforma ? 'Documento sin validez fiscal' : '', color: gray, size: (b.fontSize || 12) - 2 },
+            { text: esProforma ? 'PROFORMA — documento sin validez fiscal' : '', color: gray, size: (b.fontSize || 12) - 2 },
           ]);
           break;
         case 'totales':

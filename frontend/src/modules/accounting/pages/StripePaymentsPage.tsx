@@ -460,7 +460,7 @@ function LinkDialog({ payment, projectId, onClose, onLinked }: { payment: Paymen
     setLinking(leadId);
     try {
       const lead = results.find(l => l.id === leadId);
-      const conv = await client.get<Array<{ id: number }>>(`/conversions?projectId=${projectId}&leadId=${leadId}&limit=1`);
+      const conv = await client.get<Array<{ id: number }>>(`/conversions/by-lead/${leadId}`);
       const conversionId = conv.success && conv.data?.[0]?.id;
       const res = await client.post(`/stripe-payments/${payment.id}/link`, { projectId, leadId, conversionId: conversionId || undefined });
       if (res.success) {
