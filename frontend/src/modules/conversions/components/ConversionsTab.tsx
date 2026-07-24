@@ -237,7 +237,7 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
                           importePagado={Number(c.importe_pagado) || 0}
                           items={(c.items && c.items.length > 0)
                             ? c.items.map(it => ({ descripcion: it.descripcion, cantidad: it.cantidad, precio_unitario: Number(it.precio_unitario) }))
-                            : [{ descripcion: c.producto_contratado || 'Servicio', cantidad: 1, precio_unitario: Number(c.importe_total) }]}
+                            : [{ descripcion: `Producto/servicio: servicio académico, ${c.producto_contratado || 'programa'}`, cantidad: 1, precio_unitario: Number(c.importe_total) }]}
                         />
                       )}
                       <button

@@ -581,13 +581,13 @@ export async function emitirFacturaDePago(conversionId, { paymentId, importe }, 
   const ivaPct = 0;
   const base = monto;
   const ivaImporte = 0;
-  // Concepto estándar: "Servicio académico: <programa>". Si el pago es una cuota
-  // (notas "Cuota N"), se indica el abono de esa cuota.
+  // Concepto FIJO: "Producto/servicio: servicio académico, <programa>". Si el pago
+  // es una cuota (notas "Cuota N") → "...mensualidad N de <programa>".
   const prog = conv.producto_contratado || 'programa';
   const mCuota = /cuota\s*(\d+)/i.exec(String(notasPago || ''));
   const concepto = mCuota
-    ? `Servicio académico: abono de la cuota ${mCuota[1]} del programa ${prog}`
-    : `Servicio académico: ${prog}`;
+    ? `Producto/servicio: servicio académico, mensualidad ${mCuota[1]} de ${prog}`
+    : `Producto/servicio: servicio académico, ${prog}`;
 
   const inv = await create({
     projectId: conv.project_id,

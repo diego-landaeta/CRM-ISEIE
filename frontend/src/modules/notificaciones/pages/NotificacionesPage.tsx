@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { useState } from 'react';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import SpamReportsSection from '../components/SpamReportsSection';
+import NotificationsList from '../components/NotificationsList';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { toast } from '@/shared/hooks/useToast';
 import {
@@ -103,6 +104,9 @@ export default function NotificacionesPage() {
           </button>
         }
       />
+
+      {/* Listado completo de notificaciones (lo que abre "Ver todas"). */}
+      <NotificationsList />
 
       <SpamReportsSection />
 

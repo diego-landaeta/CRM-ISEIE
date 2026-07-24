@@ -169,7 +169,7 @@ export default function InvoiceCreatePage() {
         const convs = d.conversiones || [];
         if (convs.length) {
           setItems(convs.map((c) => ({
-            descripcion: c.producto_contratado || c.producto_nombre || 'Curso',
+            descripcion: `Producto/servicio: servicio académico, ${c.producto_contratado || c.producto_nombre || 'programa'}`,
             cantidad: 1,
             precio_unitario: Number(c.importe_total ?? c.producto_precio ?? 0) || 0,
           })));
@@ -507,7 +507,7 @@ export default function InvoiceCreatePage() {
           const subtotal = (Number(it.cantidad) || 0) * (Number(it.precio_unitario) || 0);
           return (
           <div key={idx} className="grid grid-cols-12 gap-2 items-center">
-            <input value={it.descripcion} onChange={(e) => setItems(items.map((x, i) => i === idx ? { ...x, descripcion: e.target.value } : x))} placeholder="Ej: Servicio académico: [programa]" className="col-span-6 h-9 px-2 rounded border border-border bg-background text-sm" />
+            <input value={it.descripcion} onChange={(e) => setItems(items.map((x, i) => i === idx ? { ...x, descripcion: e.target.value } : x))} placeholder="Ej: Producto/servicio: servicio académico, [programa]" className="col-span-6 h-9 px-2 rounded border border-border bg-background text-sm" />
             <input type="number" min="1" value={it.cantidad} onChange={(e) => setItems(items.map((x, i) => i === idx ? { ...x, cantidad: Number(e.target.value) } : x))} placeholder="1" className="col-span-2 h-9 px-2 rounded border border-border bg-background text-sm text-center" />
             <div className="col-span-2 relative">
               <input type="number" step="0.01" min="0" value={it.precio_unitario} onChange={(e) => setItems(items.map((x, i) => i === idx ? { ...x, precio_unitario: Number(e.target.value) } : x))} placeholder="0,00" className="w-full h-9 pl-2 pr-5 rounded border border-border bg-background text-sm text-right" />
@@ -532,7 +532,7 @@ export default function InvoiceCreatePage() {
                 onChange={(e) => {
                   const p = products.find((x) => String(x.id) === e.target.value);
                   if (!p) return;
-                  const line = { descripcion: p.nombre, cantidad: 1, precio_unitario: Number(p.precio ?? 0) || 0 };
+                  const line = { descripcion: `Producto/servicio: servicio académico, ${p.nombre}`, cantidad: 1, precio_unitario: Number(p.precio ?? 0) || 0 };
                   // Si la única fila está vacía, la reemplaza; si no, añade.
                   setItems((prev) => (prev.length === 1 && !prev[0].descripcion.trim() && !Number(prev[0].precio_unitario))
                     ? [line] : [...prev, line]);
