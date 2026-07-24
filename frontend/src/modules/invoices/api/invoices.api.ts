@@ -251,6 +251,14 @@ export const invoicesApi = {
   markPaid: (id: number, fechaPago?: string) => client.post(`/invoices/${id}/mark-paid`, fechaPago ? { fechaPago } : {}),
   cancel: (id: number) => client.post(`/invoices/${id}/cancel`, {}),
   rectificar: (id: number, body: { motivo: string; parcial?: number | null; issuerId?: number }) => client.post<Invoice>(`/invoices/${id}/rectificar`, body),
+  // Corregir una factura ya emitida/pagada (IVA, datos, concepto) — admin only.
+  corregir: (id: number, body: {
+    exento?: boolean; ivaPct?: number; ivaIncluido?: boolean;
+    items?: InvoiceItem[];
+    clienteNombre?: string; clienteNif?: string; clienteDireccion?: string;
+    clienteCiudad?: string; clienteCp?: string; clientePais?: string;
+    clienteEmail?: string; clienteTelefono?: string;
+  }) => client.patch<Invoice>(`/invoices/${id}/corregir`, body),
   /** Validar y emitir un borrador (opcionalmente completando datos del cliente). */
   emitir: (id: number, patch?: Partial<{ clienteNombre: string; clienteNif: string; clienteDireccion: string; clienteCiudad: string; clienteCp: string; clientePais: string; clienteEmail: string | null; clienteTelefono: string | null }>) => client.post<Invoice>(`/invoices/${id}/emitir`, patch || {}),
   getOne: (id: number) => client.get<Invoice>(`/invoices/${id}`),

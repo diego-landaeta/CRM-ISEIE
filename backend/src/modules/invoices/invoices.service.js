@@ -38,10 +38,10 @@ async function loadIssuerLogoImage(pdfDoc, inv) {
 }
 
 // IVA por defecto segun pais cliente
-export function getDefaultIvaPct(pais) {
-  if (!pais) return 21;
-  const normalized = pais.trim().toLowerCase();
-  if (normalized === 'españa' || normalized === 'espana' || normalized === 'spain' || normalized === 'es') return 21;
+export function getDefaultIvaPct(/* pais */) {
+  // Servicios académicos: exentos de IVA (art. 20 LIVA). Todas las facturas nuevas
+  // salen sin IVA por defecto; si algún caso puntual lo lleva, se ajusta desde el
+  // botón de editar factura.
   return 0;
 }
 
@@ -80,6 +80,31 @@ function fmtEUR(n) { return fmtMoney(n, 'EUR'); }
 function netFactor(inv) {
   const pct = Number(inv?.iva_pct || 0);
   return (inv?.iva_incluido && pct > 0) ? 1 / (1 + pct / 100) : 1;
+}
+
+// Parte una descripción larga en varias líneas que caben en maxWidth, para que
+// el nombre completo del programa NO se corte en el PDF (antes se hacía slice).
+function wrapToLines(font, text, size, maxWidth) {
+  const clean = String(text ?? '').replace(/[\r\n\t]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
+  if (!clean) return [''];
+  const words = clean.split(' ');
+  const lines = [];
+  let cur = '';
+  for (const w of words) {
+    const test = cur ? `${cur} ${w}` : w;
+    if (font.widthOfTextAtSize(test, size) <= maxWidth) { cur = test; continue; }
+    if (cur) lines.push(cur);
+    if (font.widthOfTextAtSize(w, size) > maxWidth) {
+      let chunk = '';
+      for (const ch of w) {
+        if (font.widthOfTextAtSize(chunk + ch, size) <= maxWidth) chunk += ch;
+        else { if (chunk) lines.push(chunk); chunk = ch; }
+      }
+      cur = chunk;
+    } else { cur = w; }
+  }
+  if (cur) lines.push(cur);
+  return lines.length ? lines : [''];
 }
 
 // Genera PDF de factura usando pdf-lib
@@ -193,18 +218,24 @@ export async function generatePDF(invoiceId, { preliminar = false } = {}) {
   // se muestran NETAS para que su suma cuadre con la base imponible.
   const netF = netFactor(inv);
   for (const it of items) {
-    const desc = String(it.descripcion || '').slice(0, 60);
     const cant = Number(it.cantidad || 1);
     // Tolerante a distintas claves de precio (precio_unitario | precio) para no
     // pintar 0,00 cuando el ítem viene de importaciones/otros orígenes.
     const precioBruto = Number(it.precio_unitario ?? it.precio ?? 0);
     const precio = precioBruto * netF;
     const subt = (it.total != null ? Number(it.total) : cant * precioBruto) * netF;
-    page.drawText(desc, { x: left + 10, y, size: 10, font, color: black });
+    // El concepto se envuelve en varias líneas para no cortar el nombre completo.
+    const descLines = wrapToLines(font, it.descripcion, 10, 340 - (left + 10));
+    page.drawText(descLines[0], { x: left + 10, y, size: 10, font, color: black });
     page.drawText(String(cant), { x: 365, y, size: 10, font, color: black });
     page.drawText(fmtEUR(precio), { x: 410, y, size: 10, font, color: black });
     page.drawText(fmtEUR(subt), { x: right - 70, y, size: 10, font, color: black });
-    y -= 18;
+    y -= 15;
+    for (let li = 1; li < descLines.length; li++) {
+      page.drawText(descLines[li], { x: left + 10, y, size: 10, font, color: black });
+      y -= 15;
+    }
+    y -= 3;
   }
 
   // Totales
@@ -469,12 +500,17 @@ async function renderFromTemplate({ pdfDoc, page, font, bold, inv, layout }) {
             const precioBruto = Number(it.precio_unitario ?? it.precio ?? 0);
             const precio = precioBruto * nf;
             const subt = (it.total != null ? Number(it.total) : cant * precioBruto) * nf;
-            const desc = String(it.descripcion || '').slice(0, 55);
-            page.drawText(desc, { x: colDesc, y: yy, size, font, color: black });
+            // Concepto envuelto (no cortar el nombre completo del programa).
+            const descLines = wrapToLines(font, it.descripcion, size, (colCant - colDesc) - size * 0.5);
+            page.drawText(descLines[0], { x: colDesc, y: yy, size, font, color: black });
             page.drawText(String(cant), { x: colCant, y: yy, size, font, color: black });
             page.drawText(fmtEUR(precio), { x: colPrec, y: yy, size, font, color: black });
             page.drawText(fmtEUR(subt), { x: colTot, y: yy, size, font, color: black });
-            yy -= size * 1.5;
+            yy -= size * 1.3;
+            for (let li = 1; li < descLines.length && yy >= bottom; li++) {
+              page.drawText(descLines[li], { x: colDesc, y: yy, size, font, color: black });
+              yy -= size * 1.3;
+            }
           }
           break;
         }

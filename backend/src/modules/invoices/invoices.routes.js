@@ -39,6 +39,8 @@ router.get('/:id',                    ctrl.getOne);
 router.post('/',                      ctrl.create);
 // Editar una factura en borrador: SOLO admin/superadmin.
 router.patch('/:id',                  roleGuard('admin', 'superadmin'), ctrl.update);
+// Corregir una factura YA emitida/pagada (IVA, datos, concepto): SOLO admin/superadmin.
+router.patch('/:id/corregir',         roleGuard('admin', 'superadmin'), ctrl.corregir);
 router.get('/:id/pdf',                ctrl.pdf);
 router.post('/:id/send',              ctrl.send);
 router.post('/:id/mark-paid',         ctrl.markPaid);

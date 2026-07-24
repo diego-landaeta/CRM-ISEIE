@@ -188,6 +188,28 @@ export async function update(req, res, next) {
   }
 }
 
+// PATCH /:id/corregir — corrección de una factura YA emitida/pagada (admin).
+// Permite enmendar IVA, datos del cliente y concepto manteniendo el número fiscal.
+export async function corregir(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const d = { ...(req.body || {}) };
+    if (Array.isArray(d.items)) {
+      const exento = d.exento === true || Number(d.ivaPct) === 0;
+      const ivaPct = exento ? 0 : (d.ivaPct ?? 0);
+      const { baseImponible, ivaImporte, total } = service.calcularImportes({ items: d.items, ivaPct, ivaIncluido: d.ivaIncluido });
+      d.baseImponible = baseImponible; d.ivaImporte = ivaImporte; d.total = total; d.ivaPct = ivaPct;
+      d.leyendaIva = exento ? (d.leyendaIva || 'Operación exenta de IVA conforme a la normativa aplicable.') : (ivaPct === 0 ? d.leyendaIva : null);
+    }
+    delete d.exento;
+    const inv = await model.updateBorrador(id, d, { soloBorrador: false });
+    res.json({ success: true, data: inv });
+  } catch (e) {
+    logger.error({ e: e.message }, 'corregir factura failed');
+    next(e);
+  }
+}
+
 export async function pdf(req, res, next) {
   try {
     const id = Number(req.params.id);

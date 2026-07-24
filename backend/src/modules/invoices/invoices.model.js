@@ -506,9 +506,10 @@ export async function emitirFacturaDePago(conversionId, { paymentId, importe }, 
   if (!conv) return null;
 
   // Fecha real del cobro → la factura sale PAGADA con esa fecha (el dinero ya entró).
-  const { rows: payRows } = await query(`SELECT fecha, metodo FROM conversion_payments WHERE id = $1`, [paymentId]);
+  const { rows: payRows } = await query(`SELECT fecha, metodo, notas FROM conversion_payments WHERE id = $1`, [paymentId]);
   const fechaPago = payRows[0]?.fecha || null;
   const metodoPago = payRows[0]?.metodo || null;
+  const notasPago = payRows[0]?.notas || null;
 
   // No auto-facturar pagos ANTERIORES al inicio de facturación de la sociedad (su
   // primera factura emitida). Evita facturas retroactivas de cobros previos al
@@ -543,11 +544,17 @@ export async function emitirFacturaDePago(conversionId, { paymentId, importe }, 
     return facTot[0];
   }
 
-  const ivaPct = conv.iva_exento ? 0 : Number(conv.iva_pct ?? 21);
-  // El pago es bruto (lo que entró en caja). Base = monto / (1+IVA); IVA = resto.
-  const base = ivaPct > 0 ? Number((monto / (1 + ivaPct / 100)).toFixed(2)) : monto;
-  const ivaImporte = Number((monto - base).toFixed(2));
-  const prod = conv.producto_contratado || 'Servicio';
+  // Servicios académicos: exentos de IVA. La factura sale sin IVA (base = monto).
+  const ivaPct = 0;
+  const base = monto;
+  const ivaImporte = 0;
+  // Concepto estándar: "Servicio académico: <programa>". Si el pago es una cuota
+  // (notas "Cuota N"), se indica el abono de esa cuota.
+  const prog = conv.producto_contratado || 'programa';
+  const mCuota = /cuota\s*(\d+)/i.exec(String(notasPago || ''));
+  const concepto = mCuota
+    ? `Servicio académico: abono de la cuota ${mCuota[1]} del programa ${prog}`
+    : `Servicio académico: ${prog}`;
 
   const inv = await create({
     projectId: conv.project_id,
@@ -562,13 +569,13 @@ export async function emitirFacturaDePago(conversionId, { paymentId, importe }, 
     clientePais: conv.pais_fiscal || 'España',
     clienteEmail: conv.lead_email || null,
     clienteTelefono: conv.lead_telefono || null,
-    items: [{ descripcion: `${prod} — pago a cuenta`, cantidad: 1, precio_unitario: base }],
+    items: [{ descripcion: concepto, cantidad: 1, precio_unitario: base }],
     baseImponible: base,
     ivaPct,
     ivaImporte,
-    ivaIncluido: true,
+    ivaIncluido: false,
     total: monto,
-    leyendaIva: ivaPct === 0 ? 'Operación exenta de IVA conforme a la normativa aplicable.' : null,
+    leyendaIva: 'Operación exenta de IVA conforme a la normativa aplicable.',
     // Método REAL del pago (el que eligió el usuario al cobrar). 'fraccionado' es
     // el PLAN de la venta, no un método: si el pago no trae método, cae a Tarjeta.
     metodoPago: (metodoPago && METODOS_PAGO_VALIDOS.includes(metodoPago)) ? metodoPago
@@ -760,14 +767,16 @@ export async function emitirBorrador(id, patch = {}) {
 // Permite cambiar cliente, conceptos, importes, fecha, emisor, moneda… Nunca toca
 // una factura ya emitida (fiscalmente inmutable). Los importes llegan ya
 // recalculados server-side desde el controller.
-export async function updateBorrador(id, data) {
+export async function updateBorrador(id, data, { soloBorrador = true } = {}) {
   const client = await getClient();
   try {
     await client.query('BEGIN');
     const { rows: sel } = await client.query(`SELECT * FROM invoices WHERE id = $1 FOR UPDATE`, [id]);
     const inv = sel[0];
     if (!inv) throw new AppError('Factura no encontrada', 404, 'INVOICE_NOT_FOUND');
-    if (inv.estado !== 'borrador') throw new AppError('Solo se pueden editar facturas en borrador (una factura emitida es inmutable).', 400, 'NOT_DRAFT');
+    // soloBorrador=false → corrección admin de una factura ya emitida/pagada
+    // (mantiene su número fiscal; se usa para enmendar datos/IVA/concepto).
+    if (soloBorrador && inv.estado !== 'borrador') throw new AppError('Solo se pueden editar facturas en borrador (una factura emitida es inmutable).', 400, 'NOT_DRAFT');
 
     // Snapshot del emisor si cambia; si no, conserva el actual.
     let iss = { id: inv.issuer_id, razon_social: inv.issuer_razon_social, nif: inv.issuer_nif, direccion: inv.issuer_direccion, ciudad: inv.issuer_ciudad, cp: inv.issuer_cp, pais: inv.issuer_pais };
@@ -795,6 +804,12 @@ export async function updateBorrador(id, data) {
        g('piePago', inv.pie_pago), g('leyendaIva', inv.leyenda_iva), g('moneda', inv.moneda),
        iss.id, iss.razon_social, iss.nif, iss.direccion, iss.ciudad, iss.cp, iss.pais,
        g('projectId', inv.project_id)]);
+    // Corrección de una emitida: invalida el PDF cacheado para que se regenere
+    // con los datos nuevos la próxima vez que se descargue.
+    if (!soloBorrador) {
+      await client.query(`UPDATE invoices SET pdf_path = NULL WHERE id = $1`, [id]);
+      rows[0].pdf_path = null;
+    }
     await client.query('COMMIT');
     return rows[0];
   } catch (e) {
