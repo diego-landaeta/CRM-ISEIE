@@ -215,13 +215,19 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
     }
   }, [form.metodo_pago]);
 
+  // Pago recibido HOY (parcial o total). El plan de cuotas reparte el PENDIENTE
+  // (total − pago inicial), NO el total: si pagas 500 de 1500, las cuotas suman
+  // 1000, no 1500. Así el inicial + cuotas = total del programa.
+  const pagadoInicial = pagoMode === 'total' ? calc.total : pagoMode === 'parcial' ? Number(form.importe_pagado || 0) : 0;
+  const pendienteFrac = Math.max(0, Number((calc.total - pagadoInicial).toFixed(2)));
+
   // Recalcular cuotas si: estoy en fraccionado, las cuotas NO han sido editadas a mano.
-  // Se reparte el TOTAL NETO (tras descuento + IVA), no el bruto: las cuotas deben
-  // sumar lo mismo que se registra (calc.total), no el precio de lista.
+  // Se reparte el PENDIENTE neto (total − pago inicial). Las cuotas deben sumar el
+  // pendiente, no el total del programa.
   useEffect(() => {
     if (form.metodo_pago !== 'fraccionado' || installmentsDirty) return;
-    setInstallments(distributeInstallments(calc.total, numCuotas, fechaPrimeraCuota));
-  }, [form.metodo_pago, calc.total, numCuotas, fechaPrimeraCuota, installmentsDirty]);
+    setInstallments(distributeInstallments(pendienteFrac, numCuotas, fechaPrimeraCuota));
+  }, [form.metodo_pago, pendienteFrac, numCuotas, fechaPrimeraCuota, installmentsDirty]);
 
   const activeLink = selectedLinkIdx === 'custom'
     ? customLink
@@ -338,9 +344,11 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
         return;
       }
       const sumaCuotas = installments.reduce((s, c) => s + Number(c.importe_previsto || 0), 0);
-      const diff = Math.abs(sumaCuotas - importe);
+      // Las cuotas deben cubrir el PENDIENTE (total − pago inicial), no el total.
+      const objetivo = Number((importe - pagado).toFixed(2));
+      const diff = Math.abs(sumaCuotas - objetivo);
       if (diff > 0.05) {
-        toast({ title: 'La suma de cuotas no coincide con el total', description: `Suma: ${sumaCuotas.toFixed(2)} EUR — Total: ${importe.toFixed(2)} EUR`, variant: 'destructive' });
+        toast({ title: 'La suma de cuotas no coincide con el pendiente', description: `Cuotas: ${sumaCuotas.toFixed(2)} € — Pendiente a fraccionar: ${objetivo.toFixed(2)} € (total ${importe.toFixed(2)} − ${pagado.toFixed(2)} pagado hoy)`, variant: 'destructive' });
         return;
       }
       if (installments.some(c => !c.fecha_vencimiento || Number(c.importe_previsto) <= 0)) {
@@ -747,13 +755,13 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
                     ))}
                     {(() => {
                       const suma = installments.reduce((s, c) => s + Number(c.importe_previsto || 0), 0);
-                      const total = Number(form.importe_total) || 0;
-                      const diff = Math.round((total - suma) * 100) / 100;
+                      const diff = Math.round((pendienteFrac - suma) * 100) / 100;
                       const ok = Math.abs(diff) <= 0.05;
                       return (
                         <div className={`text-[11px] font-medium pt-1 ${ok ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
-                          Suma cuotas: {suma.toFixed(2)} EUR — Total: {total.toFixed(2)} EUR
-                          {!ok && ` — Diferencia: ${diff.toFixed(2)} EUR`}
+                          Suma cuotas: {suma.toFixed(2)} € — Pendiente a fraccionar: {pendienteFrac.toFixed(2)} €
+                          {pagadoInicial > 0 && <span className="text-muted-foreground"> (total {calc.total.toFixed(2)} € − {pagadoInicial.toFixed(2)} € pagado hoy)</span>}
+                          {!ok && ` — Diferencia: ${diff.toFixed(2)} €`}
                         </div>
                       );
                     })()}

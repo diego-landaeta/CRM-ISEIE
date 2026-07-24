@@ -450,11 +450,13 @@ export default function InvoicesPage() {
                         <Eye size={11} /> Ver
                       </button>
                       <button onClick={() => {
-                          const prelim = inv.estado !== 'borrador' && inv.tipo !== 'proforma' && invoiceFaltantes(inv).length > 0;
-                          const fname = (prelim ? 'PRELIMINAR-' : '') + ((inv.codigo || `BORRADOR-${inv.id}`).replace('/', '-')) + '.pdf';
+                          // Descargar = factura DEFINITIVA (sin marca de agua). El preliminar
+                          // solo aplica a borradores (aún sin validez fiscal).
+                          const prelim = inv.estado === 'borrador';
+                          const fname = ((inv.codigo || `BORRADOR-${inv.id}`).replace('/', '-')) + '.pdf';
                           invoicesApi.downloadPdf(inv.id, fname, prelim).catch((e: unknown) => toast({ title: 'No se pudo descargar el PDF', description: (e as { message?: string })?.message, variant: 'destructive' }));
                         }}
-                        title="Descargar PDF"
+                        title="Descargar factura (PDF definitivo)"
                         className="h-7 px-2 rounded border border-border text-[11px] hover:bg-muted inline-flex items-center gap-1">
                         <DownloadSimple size={11} />
                       </button>

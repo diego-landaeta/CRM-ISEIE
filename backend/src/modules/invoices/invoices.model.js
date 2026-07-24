@@ -369,11 +369,14 @@ export async function cancel(id) {
 const vacio = (v) => !v || String(v).trim() === '' || String(v).trim() === '—';
 export function invoiceFaltantes(inv) {
   const faltan = [];
+  const esEspana = /españa|espana|spain|^es$/i.test(String(inv.cliente_pais || '').trim());
   if (vacio(inv.cliente_nombre)) faltan.push('nombre del cliente');
   if (vacio(inv.cliente_nif)) faltan.push('NIF/DNI del cliente');
   if (vacio(inv.cliente_direccion)) faltan.push('dirección fiscal');
   if (vacio(inv.cliente_ciudad)) faltan.push('ciudad');
-  if (vacio(inv.cliente_cp)) faltan.push('código postal');
+  // El código postal solo se exige a clientes de España (los extranjeros no usan
+  // el CP español; muchas facturas internacionales no lo llevan).
+  if (esEspana && vacio(inv.cliente_cp)) faltan.push('código postal');
   if (vacio(inv.cliente_pais)) faltan.push('país');
   if (!Array.isArray(inv.items) || inv.items.length === 0) faltan.push('conceptos');
   return faltan;

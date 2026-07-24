@@ -135,10 +135,14 @@ export async function generatePDF(invoiceId, { preliminar = false } = {}) {
   const emisorDir = inv.issuer_direccion || datosFiscalesProyecto.direccion;
   const emisorCiudad = [inv.issuer_cp, inv.issuer_ciudad].filter(Boolean).join(' ');
 
-  // ── LOGO del emisor (arriba-izquierda): archivo subido O url externa ──
+  // ── LOGO del emisor ──
+  // logo_en_pie=true (p.ej. ISEIE): el logo es un SELLO que va SOLO al pie
+  // (abajo-derecha), no arriba. Si es false: membrete arriba-izquierda (default).
+  const issuerData = inv.issuer_id ? await model.getIssuer(inv.issuer_id) : null;
+  const logoEnPie = !!issuerData?.logo_en_pie;
   const logoImg = await loadIssuerLogoImage(pdfDoc, inv);
   let ey = 812;
-  if (logoImg) {
+  if (logoImg && !logoEnPie) {
     const maxW = 120, maxH = 66;
     const sc = Math.min(maxW / logoImg.width, maxH / logoImg.height);
     const lw = logoImg.width * sc, lh = logoImg.height * sc;
@@ -242,6 +246,13 @@ export async function generatePDF(invoiceId, { preliminar = false } = {}) {
   if (inv.leyenda_iva) {
     y -= 18;
     page.drawText(inv.leyenda_iva, { x: left, y, size: 9, font, color: gray });
+  }
+
+  // Sello del emisor al pie (abajo-derecha) — SOLO si logo_en_pie (p.ej. ISEIE).
+  if (logoImg && logoEnPie) {
+    const sc = Math.min(90 / logoImg.width, 90 / logoImg.height);
+    const w = logoImg.width * sc, h = logoImg.height * sc;
+    page.drawImage(logoImg, { x: right - w, y: 70, width: w, height: h });
   }
 
   // Footer (fecha de generación). La coletilla/pie legal se dibuja global abajo.
