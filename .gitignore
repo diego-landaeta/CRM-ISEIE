@@ -60,3 +60,6 @@ backups/
 *.xlsx
 *.xls
 *.csv
+
+# Grabaciones fuente de tutoriales (se sube el mp4 comprimido, no el mkv)
+*.mkv

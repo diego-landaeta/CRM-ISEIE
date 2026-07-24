@@ -266,7 +266,14 @@ export async function createRectificativa(originalId, { motivo, userId, parcial 
 
 export async function findByConversion(conversionId) {
   const { rows } = await query(
-    `SELECT * FROM invoices WHERE conversion_id = $1 AND tipo <> 'proforma' ORDER BY id DESC LIMIT 1`,
+    // Devuelve el documento vigente de la conversión: prefiere la factura fiscal
+    // (tipo normal) y, si aún no existe, cae en la proforma activa. Así el botón de
+    // la conversión "ve" la proforma ya emitida y no deja emitir otra (bug: dejaba
+    // duplicar proforma porque este SELECT las excluía).
+    `SELECT * FROM invoices
+      WHERE conversion_id = $1 AND estado <> 'cancelada'
+      ORDER BY (tipo = 'proforma') ASC, id DESC
+      LIMIT 1`,
     [conversionId]
   );
   return rows[0] || null;
@@ -277,12 +284,14 @@ export async function findByConversion(conversionId) {
 //  - por SOCIEDAD (issuerId, sin projectId): vista global de todas las facturas
 //    de esa empresa emisora entre todos los proyectos (correlativos en orden).
 //    Solo admin/superadmin (lo restringe el controller).
-export async function list({ projectId, issuerId, estado, search, from, to, tipo, page = 1, limit = 50 }) {
+export async function list({ projectId, issuerId, estado, search, from, to, tipo, responsableId, page = 1, limit = 50 }) {
   const conds = [];
   const params = [];
   let idx = 1;
   if (issuerId)  { conds.push(`i.issuer_id = $${idx++}`); params.push(issuerId); }
   if (projectId) { conds.push(`i.project_id = $${idx++}`); params.push(projectId); }
+  // Gestor: solo ve las facturas de SUS leads (responsable). Admin/superadmin ven todas.
+  if (responsableId) { conds.push(`l.responsable_id = $${idx++}`); params.push(responsableId); }
   // tipo='proforma' → solo proformas; cualquier otro / ausente → solo facturas
   // (normal + rectificativa), para que las proformas no ensucien el histórico fiscal.
   if (tipo === 'proforma') conds.push(`i.tipo = 'proforma'`);
@@ -311,7 +320,10 @@ export async function list({ projectId, issuerId, estado, search, from, to, tipo
      ORDER BY i.ano DESC, i.numero DESC LIMIT ${limit} OFFSET ${offset}`,
     params
   );
-  const { rows: c } = await query(`SELECT COUNT(*)::int AS total FROM invoices i ${where}`, params);
+  const { rows: c } = await query(
+    `SELECT COUNT(*)::int AS total FROM invoices i LEFT JOIN leads l ON l.id = i.lead_id ${where}`,
+    params
+  );
   return { rows, total: c[0].total };
 }
 

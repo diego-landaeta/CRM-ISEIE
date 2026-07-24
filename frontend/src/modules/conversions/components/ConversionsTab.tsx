@@ -48,7 +48,7 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
   async function checkInvoiceAfterPayment(conversionId: number): Promise<void> {
     try {
       const res = await invoicesApi.byConversion(conversionId);
-      if (res.success && res.data && res.data.estado === 'emitida' && res.data.cliente_email) {
+      if (res.success && res.data && res.data.tipo !== 'proforma' && res.data.estado === 'emitida' && res.data.cliente_email) {
         setSendInvoiceDialog(res.data);
       }
     } catch { /* silencioso */ }

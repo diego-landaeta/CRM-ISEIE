@@ -22,6 +22,7 @@ import {
 import ChannelBadge from '@/shared/components/ui/ChannelBadge';
 
 const ConversionDialog = lazy(() => import('@/modules/conversions/components/ConversionDialog'));
+const ConversionsTab = lazy(() => import('@/modules/conversions/components/ConversionsTab'));
 const LeadFormDialog = lazy(() => import('@/modules/leads/components/LeadFormDialog'));
 const SoftDeleteDialog = lazy(() => import('@/modules/leads/components/SoftDeleteDialog'));
 const MergeLeadDialog = lazy(() => import('@/modules/leads/components/MergeLeadDialog'));
@@ -99,7 +100,7 @@ export default function ClientDetailPage() {
   const [editOpen, setEditOpen] = useState<boolean>(false);
   const [deleteOpen, setDeleteOpen] = useState<boolean>(false);
   const [mergeOpen, setMergeOpen] = useState<boolean>(false);
-  const [tab, setTab] = useState<'interacciones' | 'recordatorios'>('interacciones');
+  const [tab, setTab] = useState<'compras' | 'interacciones' | 'recordatorios'>('compras');
 
   // El gestor puede gestionar sus propios clientes (registrar pagos, fraccionar,
   // devoluciones). Admin/superadmin siempre. Otros gestores no ven los botones.
@@ -307,8 +308,10 @@ export default function ClientDetailPage() {
           <div className="bg-card border border-border rounded-xl overflow-hidden">
             <div className="flex border-b border-border px-4">
               {[
-                // La ficha del cliente es para ver DATOS/contacto, no ventas: el
-                // historial de compras se consulta en la sección Ventas.
+                // Compras y cobros: qué compró y qué debe (cuotas pendientes,
+                // facturas) se ve y gestiona aquí mismo, sin ir a la ficha de
+                // prospecto.
+                { id: 'compras', label: `Compras y cobros${conversions.length > 0 ? ` (${conversions.length})` : ''}`, icon: ShoppingCart },
                 { id: 'interacciones', label: `Interacciones${interacciones.length > 0 ? ` (${interacciones.length})` : ''}`, icon: ChatCircleDots },
               ].map(t => {
                 const Icon = t.icon;
@@ -331,6 +334,15 @@ export default function ClientDetailPage() {
             </div>
 
             <div className="p-4">
+              {tab === 'compras' && (
+                <Suspense fallback={<div className="text-sm text-muted-foreground">Cargando compras…</div>}>
+                  <ConversionsTab
+                    lead={lead}
+                    projectId={lead?.project_id || activeProject?.id}
+                    canManage={canManage}
+                  />
+                </Suspense>
+              )}
               {tab === 'interacciones' && (
                 <div>
                   {interacciones.length === 0 ? (

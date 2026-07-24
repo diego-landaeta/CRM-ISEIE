@@ -43,8 +43,10 @@ export async function list(req, res, next) {
     } else {
       pid = projectId(req);
     }
+    // Gestor: solo ve SUS facturas (las de sus leads). Admin/superadmin, todas.
+    const responsableId = req.user?.role === 'gestor' ? req.user.id : null;
     const data = await model.list({ projectId: pid, issuerId: issuerId && isAdmin ? issuerId : null,
-      estado, search, from, to, tipo,
+      estado, search, from, to, tipo, responsableId,
       page: Number(page) || 1, limit: Math.min(Number(limit) || 50, 200) });
     res.json({ success: true, data: data.rows, pagination: { total: data.total, page: Number(page) || 1, limit: Number(limit) || 50 } });
   } catch (e) { next(e); }
@@ -121,6 +123,12 @@ export async function create(req, res, next) {
     const parsed = createInvoiceSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'BAD_REQUEST');
     const d = parsed.data;
+
+    // Solo admin/superadmin pueden emitir facturas de abono (rectificativas).
+    const esAdmin = req.user?.role === 'admin' || req.user?.role === 'superadmin';
+    if (d.tipo === 'rectificativa' && !esAdmin) {
+      throw new AppError('Solo un administrador puede emitir facturas de abono.', 403, 'FORBIDDEN');
+    }
 
     // REGLA: sin ningún pago no se puede emitir una FACTURA fiscal por la
     // conversión — solo una proforma. Al registrar el pago, ese pago genera su

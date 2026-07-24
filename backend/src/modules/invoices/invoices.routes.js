@@ -43,7 +43,8 @@ router.get('/:id/pdf',                ctrl.pdf);
 router.post('/:id/send',              ctrl.send);
 router.post('/:id/mark-paid',         ctrl.markPaid);
 router.post('/:id/cancel',            ctrl.cancel);
-router.post('/:id/rectificar',        ctrl.rectificar);
+// Emitir factura de abono (rectificativa): SOLO admin/superadmin.
+router.post('/:id/rectificar',        roleGuard('admin', 'superadmin'), ctrl.rectificar);
 router.post('/:id/emitir',            ctrl.emitir);
 router.post('/:id/completar-datos',   ctrl.completarDatos);
 

@@ -11,6 +11,7 @@ import { invoicesApi, invoiceFaltantes } from '../api/invoices.api';
 import type { Invoice, Issuer, VentaSinFactura } from '../api/invoices.api';
 import InvoiceButton from '../components/InvoiceButton';
 import EmitirBorradorDialog from '../components/EmitirBorradorDialog';
+import TutorialButton from '../components/TutorialButton';
 import { toast } from '@/shared/hooks/useToast';
 
 const fmt = (n: number) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(Number(n || 0));
@@ -203,11 +204,16 @@ export default function InvoicesPage() {
         subtitle={`Histórico fiscal — ${activeProject?.nombre || ''}`}
         actions={(
           <div className="flex gap-2">
-            <Link to={esAbonos ? 'nueva?tipo=rectificativa' : esProformas ? 'nueva?tipo=proforma' : 'nueva'}
-              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90">
-              {esProformas ? <FileText size={14} weight="bold" /> : <Receipt size={14} weight="bold" />}
-              {esAbonos ? 'Nuevo abono' : esProformas ? 'Nueva proforma' : 'Nueva factura'}
-            </Link>
+            <TutorialButton />
+            {/* Los abonos (rectificativas) solo los emite un administrador. Las
+                gestoras pueden ver la pestaña pero no crear abonos. */}
+            {!(esAbonos && !isAdmin) && (
+              <Link to={esAbonos ? 'nueva?tipo=rectificativa' : esProformas ? 'nueva?tipo=proforma' : 'nueva'}
+                className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90">
+                {esProformas ? <FileText size={14} weight="bold" /> : <Receipt size={14} weight="bold" />}
+                {esAbonos ? 'Nuevo abono' : esProformas ? 'Nueva proforma' : 'Nueva factura'}
+              </Link>
+            )}
             <Link to="configuracion"
               className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted">
               <Gear size={14} weight="bold" /> Configuración
