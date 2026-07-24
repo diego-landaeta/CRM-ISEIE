@@ -201,6 +201,8 @@ export const invoicesApi = {
   byConversion: (conversionId: number) => client.get<Invoice | null>(`/invoices/by-conversion/${conversionId}`),
   leadFiscalData: (leadId: number) => client.get<LeadFiscalData>(`/invoices/lead-fiscal/${leadId}`),
   create: (body: CreateInvoiceBody) => client.post<Invoice>('/invoices', body),
+  /** Editar una factura en BORRADOR (solo admin/superadmin). */
+  update: (id: number, body: Partial<CreateInvoiceBody> & { fechaEmision?: string }) => client.patch<Invoice>(`/invoices/${id}`, body),
   // Ruta absoluta para <a>/window.open: incluye el base path del deploy
   // (/crm/ en prod, /testeo/ en staging, / en ISEIE) — si no, nginx da 404.
   pdfUrl: (id: number) => `${(import.meta.env.BASE_URL || '/').replace(/\/$/, '')}/api/invoices/${id}/pdf`,

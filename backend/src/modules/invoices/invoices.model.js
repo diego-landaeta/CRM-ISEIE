@@ -617,10 +617,14 @@ export async function emitirBorrador(id, patch = {}) {
     }
 
     // Numeración fiscal AHORA (el borrador nunca consumió número).
-    const ano = new Date().getFullYear();
+    // Respeta un número YA reservado (borrador con hueco reservado, p.ej. 0612);
+    // si no tenía, asigna el siguiente de la secuencia.
+    const ano = inv.numero != null ? inv.ano : new Date().getFullYear();
     const serie = (inv.serie && inv.serie.trim()) || 'A';
-    const numero = await nextNumero(client, inv.project_id, inv.issuer_id || null, ano, serie);
-    const codigo = `${ano}/${String(numero).padStart(4, '0')}`;
+    const numero = inv.numero != null ? inv.numero : await nextNumero(client, inv.project_id, inv.issuer_id || null, ano, serie);
+    const codigo = inv.codigo || `${ano}/${String(numero).padStart(4, '0')}`;
+    // Si ya tenía fecha propia (borrador reservado), la conserva; si no, hoy.
+    const fecha = inv.fecha_emision || new Date();
 
     const { rows } = await client.query(
       `UPDATE invoices SET
@@ -628,12 +632,12 @@ export async function emitirBorrador(id, patch = {}) {
          cliente_ciudad = $5, cliente_cp = $6, cliente_pais = $7,
          cliente_email = $8, cliente_telefono = $9,
          ano = $10, numero = $11, codigo = $12,
-         fecha_emision = CURRENT_DATE, estado = 'emitida', updated_at = NOW()
+         fecha_emision = $13, estado = 'emitida', updated_at = NOW()
        WHERE id = $1 RETURNING *`,
       [id, merged.cliente_nombre, merged.cliente_nif, merged.cliente_direccion,
        merged.cliente_ciudad, merged.cliente_cp, merged.cliente_pais,
        merged.cliente_email, merged.cliente_telefono,
-       ano, numero, codigo]
+       ano, numero, codigo, fecha]
     );
 
     // Persistir datos fiscales en el lead para próximas facturas.
@@ -652,6 +656,55 @@ export async function emitirBorrador(id, patch = {}) {
       );
     }
 
+    await client.query('COMMIT');
+    return rows[0];
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+// Edición COMPLETA de una factura en BORRADOR (solo admin/superadmin vía ruta).
+// Permite cambiar cliente, conceptos, importes, fecha, emisor, moneda… Nunca toca
+// una factura ya emitida (fiscalmente inmutable). Los importes llegan ya
+// recalculados server-side desde el controller.
+export async function updateBorrador(id, data) {
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+    const { rows: sel } = await client.query(`SELECT * FROM invoices WHERE id = $1 FOR UPDATE`, [id]);
+    const inv = sel[0];
+    if (!inv) throw new AppError('Factura no encontrada', 404, 'INVOICE_NOT_FOUND');
+    if (inv.estado !== 'borrador') throw new AppError('Solo se pueden editar facturas en borrador (una factura emitida es inmutable).', 400, 'NOT_DRAFT');
+
+    // Snapshot del emisor si cambia; si no, conserva el actual.
+    let iss = { id: inv.issuer_id, razon_social: inv.issuer_razon_social, nif: inv.issuer_nif, direccion: inv.issuer_direccion, ciudad: inv.issuer_ciudad, cp: inv.issuer_cp, pais: inv.issuer_pais };
+    if (data.issuerId && data.issuerId !== inv.issuer_id) {
+      const r = await client.query(`SELECT * FROM invoice_issuers WHERE id = $1`, [data.issuerId]);
+      if (r.rows[0]) { const e = r.rows[0]; iss = { id: e.id, razon_social: e.razon_social, nif: e.nif, direccion: e.direccion, ciudad: e.ciudad, cp: e.cp, pais: e.pais }; }
+    }
+    const g = (k, d) => (data[k] !== undefined ? data[k] : d);
+    const { rows } = await client.query(
+      `UPDATE invoices SET
+         cliente_nombre=$2, cliente_nif=$3, cliente_direccion=$4, cliente_ciudad=$5, cliente_cp=$6, cliente_pais=$7,
+         cliente_email=$8, cliente_telefono=$9,
+         items=$10, base_imponible=$11, iva_pct=$12, iva_importe=$13, iva_incluido=$14, total=$15,
+         fecha_emision=$16, notas=$17, metodo_pago=$18, pie_pago=$19, leyenda_iva=$20, moneda=$21,
+         issuer_id=$22, issuer_razon_social=$23, issuer_nif=$24, issuer_direccion=$25, issuer_ciudad=$26, issuer_cp=$27, issuer_pais=$28,
+         project_id=$29, updated_at=NOW()
+       WHERE id=$1 RETURNING *`,
+      [id,
+       g('clienteNombre', inv.cliente_nombre), g('clienteNif', inv.cliente_nif), g('clienteDireccion', inv.cliente_direccion),
+       g('clienteCiudad', inv.cliente_ciudad), g('clienteCp', inv.cliente_cp), g('clientePais', inv.cliente_pais),
+       g('clienteEmail', inv.cliente_email), g('clienteTelefono', inv.cliente_telefono),
+       JSON.stringify(g('items', inv.items)), g('baseImponible', inv.base_imponible), g('ivaPct', inv.iva_pct),
+       g('ivaImporte', inv.iva_importe), g('ivaIncluido', inv.iva_incluido), g('total', inv.total),
+       g('fechaEmision', inv.fecha_emision), g('notas', inv.notas), g('metodoPago', inv.metodo_pago),
+       g('piePago', inv.pie_pago), g('leyendaIva', inv.leyenda_iva), g('moneda', inv.moneda),
+       iss.id, iss.razon_social, iss.nif, iss.direccion, iss.ciudad, iss.cp, iss.pais,
+       g('projectId', inv.project_id)]);
     await client.query('COMMIT');
     return rows[0];
   } catch (e) {

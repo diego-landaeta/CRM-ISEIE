@@ -458,6 +458,13 @@ export default function InvoicesPage() {
                         className="h-7 px-2 rounded border border-border text-[11px] hover:bg-muted inline-flex items-center gap-1">
                         <DownloadSimple size={11} />
                       </button>
+                      {inv.estado === 'borrador' && isAdmin && (
+                        <Link to={`nueva?editId=${inv.id}`}
+                          title="Editar esta factura abierta (solo admin/superadmin)"
+                          className="h-7 px-2 rounded border border-sky-300 text-sky-700 dark:text-sky-300 text-[11px] font-semibold hover:bg-sky-50 dark:hover:bg-sky-950/30 inline-flex items-center gap-1">
+                          <Gear size={11} weight="bold" /> Editar
+                        </Link>
+                      )}
                       {inv.estado === 'borrador' && (
                         <button onClick={() => setEmittingInv(inv)}
                           title="Validar los datos y emitir la factura (asigna número fiscal)"

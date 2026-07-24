@@ -40,6 +40,8 @@ export default function InvoiceCreatePage() {
   );
   const esProforma = docTipo === 'proforma';
   const esRect = docTipo === 'rectificativa';
+  // Modo EDICIÓN de un borrador (solo admin/superadmin): ?editId=X.
+  const editId = new URLSearchParams(loc.search).get('editId');
 
   const [tipo, setTipo] = useState<Tipo>('persona');
   const [leadId, setLeadId] = useState<number | null>(null);
@@ -194,9 +196,9 @@ export default function InvoiceCreatePage() {
       const cNombre = tipo === 'contado' ? (nombre.trim() || 'Consumidor final') : nombre.trim();
       // Proforma: NIF opcional (no forzamos placeholder, el back rellena si falta).
       const cNif = tipo === 'contado' ? (nif.trim() || '—') : (nif.trim() || (esProforma ? '' : '—'));
-      const res = await invoicesApi.create({
+      const body = {
         projectId: pid, leadId: leadId || undefined, issuerId: issuerId || undefined,
-        tipo: esProforma ? 'proforma' : undefined,
+        tipo: esProforma ? ('proforma' as const) : undefined,
         clienteNombre: cNombre, clienteNif: cNif,
         clienteDireccion: direccion.trim(), clienteCiudad: ciudad.trim(), clienteCp: cp.trim(), clientePais: pais.trim() || 'España',
         clienteEmail: email.trim() || null, clienteTelefono: telefono.trim() || null,
@@ -206,10 +208,12 @@ export default function InvoiceCreatePage() {
         leyendaIva: regimenSel?.coletilla || null,
         notas: notas.trim() || undefined, metodoPago, piePago: piePago.trim() || undefined,
         moneda: moneda !== 'EUR' ? moneda : undefined,
-      });
+      };
+      // Edición de un borrador (admin/superadmin) → PATCH; si no, crear.
+      const res = editId ? await invoicesApi.update(Number(editId), body) : await invoicesApi.create(body);
       if (res.success && res.data) {
-        toast({ title: esProforma ? '✓ Presupuesto generado' : '✓ Factura emitida', description: res.data.codigo });
-        invoicesApi.openPdf(res.data.id).catch((e: unknown) => toast({ title: 'No se pudo abrir el PDF', description: (e as { message?: string })?.message, variant: 'destructive' }));
+        toast({ title: editId ? '✓ Borrador guardado' : (esProforma ? '✓ Presupuesto generado' : '✓ Factura emitida'), description: res.data.codigo || '' });
+        invoicesApi.openPdf(res.data.id, true).catch(() => {});
         navigate(`${invBase}/facturas${esProforma ? '?tab=proformas' : ''}`);
       } else {
         toast({ title: 'Error', description: (res as { error?: string }).error, variant: 'destructive' });
@@ -240,6 +244,36 @@ export default function InvoiceCreatePage() {
     }
     prevPidRef.current = projectId;
   }, [projectId]);
+
+  // Modo edición: cargar el borrador y precargar todos los campos del formulario.
+  useEffect(() => {
+    if (!editId) return;
+    invoicesApi.getOne(Number(editId)).then((res) => {
+      if (!res.success || !res.data) return;
+      const f = res.data as import('../api/invoices.api').Invoice;
+      setDocTipo(f.tipo === 'proforma' ? 'proforma' : 'factura');
+      const noVal = (v?: string | null) => !v || v === '—';
+      setTipo(noVal(f.cliente_nombre) || f.cliente_nombre === '(por completar)' ? 'persona' : 'persona');
+      setNombre(f.cliente_nombre === '(por completar)' ? '' : (f.cliente_nombre || ''));
+      setNif(noVal(f.cliente_nif) ? '' : (f.cliente_nif || ''));
+      setDireccion(noVal(f.cliente_direccion) ? '' : (f.cliente_direccion || ''));
+      setCiudad(noVal(f.cliente_ciudad) ? '' : (f.cliente_ciudad || ''));
+      setCp(noVal(f.cliente_cp) ? '' : (f.cliente_cp || ''));
+      setPais(f.cliente_pais || 'España');
+      setEmail(f.cliente_email || '');
+      setTelefono(f.cliente_telefono || '');
+      setLlevaIva(Number(f.iva_pct) > 0);
+      setIvaIncluido(!!f.iva_incluido);
+      if (Array.isArray(f.items) && f.items.length) setItems(f.items.map((it) => ({ descripcion: it.descripcion, cantidad: Number(it.cantidad) || 1, precio_unitario: Number(it.precio_unitario) || 0 })));
+      if (f.metodo_pago) setMetodoPago(f.metodo_pago as typeof metodoPago);
+      if (f.moneda) setMoneda(f.moneda);
+      if (f.notas) setNotas(f.notas);
+      if (f.issuer_id) setIssuerId(f.issuer_id);
+      if (f.project_id) setProjectId(f.project_id);
+      setRegimenAuto(false); // en edición no pisar el IVA con el motor automático
+    }).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editId]);
 
   // Cargar facturas rectificables de la sociedad emisora (normales, ya emitidas).
   useEffect(() => {
@@ -291,7 +325,7 @@ export default function InvoiceCreatePage() {
 
   return (
     <div className="space-y-4 pb-8 max-w-4xl">
-      <PageHeader title={esRect ? 'Nuevo abono' : esProforma ? 'Nuevo presupuesto' : 'Nueva factura'} subtitle={activeProject?.nombre || ''}
+      <PageHeader title={editId ? 'Editar factura' : esRect ? 'Nuevo abono' : esProforma ? 'Nuevo presupuesto' : 'Nueva factura'} subtitle={activeProject?.nombre || ''}
         actions={(
           <Link to={`${invBase}/facturas`} className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted">
             <ArrowLeft size={14} weight="bold" /> Volver
@@ -542,7 +576,7 @@ export default function InvoiceCreatePage() {
           </button>
         ) : (
           <button onClick={generar} disabled={saving || (!esProforma && fiscalBlock)} title={!esProforma && fiscalBlock ? 'El CIF/NIF de la sociedad no es válido' : undefined} className="h-10 px-5 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1.5">
-            <FloppyDisk size={15} weight="bold" /> {saving ? (esProforma ? 'Generando…' : 'Emitiendo…') : (esProforma ? 'Generar presupuesto' : 'Generar factura')}
+            <FloppyDisk size={15} weight="bold" /> {saving ? 'Guardando…' : editId ? 'Guardar cambios' : (esProforma ? 'Generar presupuesto' : 'Generar factura')}
           </button>
         )}
       </div>

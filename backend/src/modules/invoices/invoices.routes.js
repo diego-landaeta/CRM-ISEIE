@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { verifyToken } from '../../shared/middleware/auth.js';
+import { verifyToken, roleGuard } from '../../shared/middleware/auth.js';
 import { uploadImage } from '../../shared/middleware/upload.js';
 import * as ctrl from './invoices.controller.js';
 
@@ -37,6 +37,8 @@ router.get('/lead-fiscal/:leadId',    ctrl.leadFiscalData);
 router.get('/by-conversion/:conversionId', ctrl.byConversion);
 router.get('/:id',                    ctrl.getOne);
 router.post('/',                      ctrl.create);
+// Editar una factura en borrador: SOLO admin/superadmin.
+router.patch('/:id',                  roleGuard('admin', 'superadmin'), ctrl.update);
 router.get('/:id/pdf',                ctrl.pdf);
 router.post('/:id/send',              ctrl.send);
 router.post('/:id/mark-paid',         ctrl.markPaid);

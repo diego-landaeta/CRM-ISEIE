@@ -144,6 +144,24 @@ export async function create(req, res, next) {
   }
 }
 
+// PATCH /:id — edición COMPLETA de un borrador (solo admin/superadmin vía ruta).
+export async function update(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const d = { ...(req.body || {}) };
+    if (Array.isArray(d.items)) {
+      const ivaPct = d.ivaPct ?? 0;
+      const { baseImponible, ivaImporte, total } = service.calcularImportes({ items: d.items, ivaPct, ivaIncluido: d.ivaIncluido });
+      d.baseImponible = baseImponible; d.ivaImporte = ivaImporte; d.total = total; d.ivaPct = ivaPct;
+    }
+    const inv = await model.updateBorrador(id, d);
+    res.json({ success: true, data: inv });
+  } catch (e) {
+    logger.error({ e: e.message }, 'update borrador failed');
+    next(e);
+  }
+}
+
 export async function pdf(req, res, next) {
   try {
     const id = Number(req.params.id);
