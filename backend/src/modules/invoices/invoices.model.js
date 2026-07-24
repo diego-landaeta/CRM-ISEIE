@@ -370,6 +370,18 @@ export async function conversionSinPago(conversionId) {
   return rows[0] ? Number(rows[0].pagado) <= 0 : false;
 }
 
+// Proforma activa (no cancelada) ya emitida para una conversión. Evita duplicar
+// proformas (y quemar correlativo fiscal) si se pulsa "Emitir proforma" dos veces.
+export async function proformaActivaDeConversion(conversionId) {
+  const { rows } = await query(
+    `SELECT id, codigo FROM invoices
+      WHERE conversion_id = $1 AND tipo = 'proforma' AND estado <> 'cancelada'
+      ORDER BY id ASC LIMIT 1`,
+    [conversionId]
+  );
+  return rows[0] || null;
+}
+
 // ===== BORRADORES =====
 
 // Qué le falta a una factura (borrador) para poder emitirse. Los campos

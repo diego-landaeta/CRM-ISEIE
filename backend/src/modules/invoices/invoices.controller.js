@@ -131,6 +131,15 @@ export async function create(req, res, next) {
       }
     }
 
+    // REGLA: una conversión no puede tener dos proformas. Si ya existe una activa,
+    // se bloquea la segunda emisión (evita duplicados y quemar correlativo fiscal).
+    if (d.conversionId && d.tipo === 'proforma' && !d.borrador) {
+      const existente = await model.proformaActivaDeConversion(d.conversionId);
+      if (existente) {
+        throw new AppError(`Esta venta ya tiene la proforma ${existente.codigo}. Anúlala antes de emitir otra.`, 409, 'PROFORMA_DUPLICADA');
+      }
+    }
+
     // Calcular importes server-side (no confiar en cliente)
     const ivaPct = d.ivaPct ?? service.getDefaultIvaPct(d.clientePais);
     const { baseImponible, ivaImporte, total } = service.calcularImportes({

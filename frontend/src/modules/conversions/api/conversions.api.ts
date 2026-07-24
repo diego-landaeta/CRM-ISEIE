@@ -1,7 +1,7 @@
 import client from '@/shared/api/client';
 import type { ApiResponse } from '@/shared/types';
 
-export type MetodoPago = 'tarjeta' | 'transferencia' | 'efectivo' | 'fraccionado';
+export type MetodoPago = 'tarjeta' | 'tarjeta_stripe' | 'transferencia' | 'efectivo' | 'bizum' | 'fraccionado' | 'otro';
 
 export interface Payment {
   id: number;

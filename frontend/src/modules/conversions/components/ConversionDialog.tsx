@@ -95,9 +95,12 @@ interface ConversionDialogProps {
 
 const METODOS: ReadonlyArray<{ value: MetodoPago; label: string }> = [
   { value: 'tarjeta', label: 'Tarjeta' },
+  { value: 'tarjeta_stripe', label: 'Tarjeta (Stripe)' },
   { value: 'transferencia', label: 'Transferencia' },
   { value: 'efectivo', label: 'Efectivo' },
+  { value: 'bizum', label: 'Bizum' },
   { value: 'fraccionado', label: 'Fraccionado' },
+  { value: 'otro', label: 'Otro' },
 ];
 
 export default function ConversionDialog({ open, onClose, lead, projectId, onCreated }: ConversionDialogProps) {
