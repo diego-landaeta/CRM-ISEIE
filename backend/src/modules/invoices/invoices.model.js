@@ -435,10 +435,38 @@ async function _convDataParaFactura(conversionId) {
   return rows[0] || null;
 }
 
+// PROFORMA → FACTURA: convierte una proforma (número fiscal ya reservado) en
+// factura definitiva con ESE MISMO número, por el TOTAL de la conversión. Así el
+// correlativo fiscal queda continuo (el número reservado acaba siendo factura).
+async function _convertirProformaEnFactura(prof, conv, paymentId, fechaPago) {
+  const total = Number(conv.importe_total) || 0;
+  const pagado = Number(conv.importe_pagado) || 0;
+  const ivaPct = conv.iva_exento ? 0 : Number(conv.iva_pct ?? 21);
+  const base = ivaPct > 0 ? Number((total / (1 + ivaPct / 100)).toFixed(2)) : total;
+  const ivaImp = Number((total - base).toFixed(2));
+  const prod = conv.producto_contratado || 'Servicio';
+  const saldada = pagado >= total - 0.01;
+  const items = JSON.stringify([{ descripcion: prod, cantidad: 1, precio_unitario: base }]);
+  const { rows } = await query(
+    `UPDATE invoices SET
+       tipo = 'normal', estado = $2::text,
+       fecha_emision = COALESCE($3::date, fecha_emision),
+       fecha_pago = CASE WHEN $2::text = 'pagada' THEN $3::date ELSE NULL END,
+       payment_id = COALESCE(payment_id, $4::int),
+       items = $5::jsonb, base_imponible = $6::numeric, iva_pct = $7::numeric, iva_importe = $8::numeric,
+       iva_incluido = true, total = $9::numeric, leyenda_iva = $10, updated_at = NOW()
+     WHERE id = $1 RETURNING *`,
+    [prof.id, saldada ? 'pagada' : 'emitida', fechaPago, paymentId, items, base, ivaPct, ivaImp, total,
+     ivaPct === 0 ? 'Operación exenta de IVA conforme a la normativa aplicable.' : null]);
+  return rows[0];
+}
+
 // FACTURA POR PAGO (spec owner 2026-07-16): cada abono genera su propia factura
 // por el MONTO PAGADO (no por el total del programa). El importe del pago se
 // trata como BRUTO (IVA incluido); se desglosa base + IVA. Dedup por payment_id
 // (índice único parcial) → reintentos/reejecuciones no duplican.
+// EXCEPCIÓN: si la conversión tiene una PROFORMA (número reservado), el pago la
+// convierte en factura con ese número, en vez de crear una factura nueva.
 export async function emitirFacturaDePago(conversionId, { paymentId, importe }, userId = null) {
   if (!conversionId || !paymentId) return null;
   const monto = Number(importe) || 0;
@@ -467,6 +495,25 @@ export async function emitirFacturaDePago(conversionId, { paymentId, importe }, 
         GROUP BY pr.id
        HAVING $2::date < MIN(f.fecha_emision)`, [conv.project_id, fechaPago]);
     if (chk.length) return null;
+  }
+
+  // ¿La conversión tiene una PROFORMA? → convertirla en factura (por el total, con
+  // su número reservado). El correlativo fiscal queda continuo.
+  const { rows: prof } = await query(
+    `SELECT * FROM invoices WHERE conversion_id = $1 AND tipo = 'proforma' AND estado <> 'cancelada' ORDER BY id DESC LIMIT 1`,
+    [conversionId]);
+  if (prof[0]) return await _convertirProformaEnFactura(prof[0], conv, paymentId, fechaPago);
+
+  // ¿Ya hay una factura por el TOTAL de la conversión (ex-proforma o completa)?
+  // No se crea otra por pago: solo se marca pagada cuando la venta queda saldada.
+  const { rows: facTot } = await query(
+    `SELECT id, estado FROM invoices WHERE conversion_id = $1 AND tipo = 'normal' AND estado <> 'cancelada'
+       AND total >= (SELECT importe_total FROM conversions WHERE id = $1) - 0.01 ORDER BY id DESC LIMIT 1`,
+    [conversionId]);
+  if (facTot[0]) {
+    const saldada = Number(conv.importe_pagado) >= Number(conv.importe_total) - 0.01;
+    if (saldada && facTot[0].estado !== 'pagada') { try { await markPaid(facTot[0].id, fechaPago); } catch { /* noop */ } }
+    return facTot[0];
   }
 
   const ivaPct = conv.iva_exento ? 0 : Number(conv.iva_pct ?? 21);
