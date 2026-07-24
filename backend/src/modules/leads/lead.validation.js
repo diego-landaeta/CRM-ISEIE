@@ -55,6 +55,8 @@ export const listLeadsSchema = z.object({
   duplicated: z.coerce.boolean().optional(),
   // Filtro de reincidentes (reincidente = TRUE) — solo admin/superadmin.
   reincidente: z.coerce.boolean().optional(),
+  // "Clientes" = leads con al menos una venta (conversión).
+  conConversion: z.coerce.boolean().optional(),
 });
 
 export const checkDuplicateSchema = z.object({

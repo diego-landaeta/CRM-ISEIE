@@ -558,7 +558,7 @@ function buildOrderBy(sort, dir = 'desc') {
   return `${FECHA} ${D} NULLS LAST, l.id ${D}`;
 }
 
-export async function findAll({ projectId, projectIds, status, responsableId, unassigned, canal, productId, search, page, limit, includeConverted, dateFrom, dateTo, sort, dir, duplicated, reincidente }) {
+export async function findAll({ projectId, projectIds, status, responsableId, unassigned, canal, productId, search, page, limit, includeConverted, dateFrom, dateTo, sort, dir, duplicated, reincidente, conConversion }) {
   const conditions = [];
   const params = [];
   let paramIdx = 1;
@@ -588,10 +588,16 @@ export async function findAll({ projectId, projectIds, status, responsableId, un
     conditions.push(`l.reincidente = TRUE`);
   }
 
+  // "Clientes" = leads con AL MENOS UNA venta (conversión), sin importar su status
+  // (un cliente puede tener el lead en cualquier estado). Es el criterio correcto
+  // para la vista de Clientes, en vez de status='convertido'.
+  if (conConversion) {
+    conditions.push(`EXISTS (SELECT 1 FROM conversions c WHERE c.lead_id = l.id)`);
+  }
   if (status) {
     conditions.push(`l.status = $${paramIdx++}`);
     params.push(status);
-  } else if (!includeConverted) {
+  } else if (!includeConverted && !conConversion) {
     conditions.push(`l.status <> 'convertido'`);
   }
   if (unassigned) {

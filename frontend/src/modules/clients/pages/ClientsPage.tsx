@@ -181,7 +181,10 @@ export default function ClientsPage() {
     try {
       const params = new URLSearchParams();
       params.set('projectId', String(activeProject.id));
-      params.set('status', 'convertido');
+      // Cliente = lead con al menos una venta (conversión), sin importar su status.
+      // Antes usaba status='convertido', que dejaba fuera a clientes reales cuyo
+      // lead está en otro estado.
+      params.set('conConversion', 'true');
       params.set('page', String(page));
       params.set('limit', String(PAGE_SIZE));
       if (debouncedSearch) params.set('search', debouncedSearch);
