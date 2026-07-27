@@ -6,6 +6,7 @@ import PageHeader from '@/shared/components/ui/PageHeader';
 import client from '@/shared/api/client';
 import { invoicesApi } from '../api/invoices.api';
 import type { Issuer, InvoiceItem } from '../api/invoices.api';
+import { conversionsApi, type Conversion } from '@/modules/conversions/api/conversions.api';
 import { toast } from '@/shared/hooks/useToast';
 
 type Tipo = 'persona' | 'empresa' | 'contado';
@@ -47,6 +48,10 @@ export default function InvoiceCreatePage() {
 
   const [tipo, setTipo] = useState<Tipo>('persona');
   const [leadId, setLeadId] = useState<number | null>(null);
+  // Asociar el documento a una VENTA (conversión) del cliente — p. ej. una proforma
+  // de una conversión pendiente de pago inicial. La factura queda ligada a esa venta.
+  const [leadConvs, setLeadConvs] = useState<Conversion[]>([]);
+  const [assocConvId, setAssocConvId] = useState<number | ''>('');
 
   // Buscador de cliente
   const [search, setSearch] = useState('');
@@ -147,6 +152,21 @@ export default function InvoiceCreatePage() {
     }, 250);
   }, [search, pid]);
 
+  // Al elegir/prefijar un cliente, traer sus ventas (para poder asociar el documento).
+  useEffect(() => {
+    if (!leadId || editId) { setLeadConvs([]); setAssocConvId(''); return; }
+    let alive = true;
+    conversionsApi.byLead(leadId).then((r) => {
+      if (!alive) return;
+      const list = (r.success ? (r.data as Conversion[]) : []) || [];
+      setLeadConvs(list);
+      // Preselecciona automáticamente si solo hay una venta pendiente de pago.
+      const pend = list.filter((c) => Number(c.importe_pagado) < Number(c.importe_total));
+      setAssocConvId(pend.length === 1 ? pend[0].id : '');
+    }).catch(() => setLeadConvs([]));
+    return () => { alive = false; };
+  }, [leadId, editId]);
+
   async function pickLead(l: LeadHit) {
     setLeadId(l.id);
     setNombre(l.nombre);
@@ -200,6 +220,7 @@ export default function InvoiceCreatePage() {
       const cNif = tipo === 'contado' ? (nif.trim() || '—') : (nif.trim() || (esProforma ? '' : '—'));
       const body = {
         projectId: pid, leadId: leadId || undefined, issuerId: issuerId || undefined,
+        conversionId: assocConvId ? Number(assocConvId) : undefined,
         tipo: esProforma ? ('proforma' as const) : undefined,
         clienteNombre: cNombre, clienteNif: cNif,
         clienteDireccion: direccion.trim(), clienteCiudad: ciudad.trim(), clienteCp: cp.trim(), clientePais: pais.trim() || 'España',
@@ -477,6 +498,28 @@ export default function InvoiceCreatePage() {
               )}
             </div>
           </div>
+
+          {/* Asociar el documento a una venta del cliente (p. ej. proforma de una
+              conversión pendiente de pago). El concepto se escribe libre abajo. */}
+          {!editId && leadId && leadConvs.length > 0 && (
+            <div className="mb-3">
+              <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Asociar a venta del cliente (opcional)</label>
+              <select value={assocConvId} onChange={(e) => setAssocConvId(e.target.value ? Number(e.target.value) : '')}
+                className="w-full h-9 px-2 rounded border border-border bg-background text-sm">
+                <option value="">— Sin asociar (documento suelto) —</option>
+                {leadConvs.map((c) => {
+                  const pend = Number(c.importe_total) - Number(c.importe_pagado);
+                  return (
+                    <option key={c.id} value={c.id}>
+                      {c.producto_contratado} · pendiente {pend.toFixed(2)}€{Number(c.importe_pagado) <= 0 ? ' (sin pago)' : ''}
+                    </option>
+                  );
+                })}
+              </select>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Queda ligada a esa venta y sus pagos; el concepto de la factura puede ser distinto al del producto.</p>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3">
             <Field label={tipo === 'empresa' ? 'Razón social' : 'Nombre y apellido'} value={nombre} onChange={(v) => { setNombre(v); if (v !== search) setSearch(v); }} required />
             <Field label={tipo === 'empresa' ? 'NIF / CIF' : 'DNI / NIF'} value={nif} onChange={setNif} required />
