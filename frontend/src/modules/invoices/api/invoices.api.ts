@@ -96,6 +96,7 @@ export interface Invoice {
   leyenda_iva?: string | null;
   items?: InvoiceItem[];
   conversion_id?: number | null;
+  lead_id?: number | null;
   tipo?: 'normal' | 'rectificativa' | 'proforma';
   rectifica_id?: number | null;
   rectifica_codigo?: string | null;
@@ -261,6 +262,10 @@ export const invoicesApi = {
     clienteCiudad?: string; clienteCp?: string; clientePais?: string;
     clienteEmail?: string; clienteTelefono?: string;
   }) => client.patch<Invoice>(`/invoices/${id}/corregir`, body),
+  /** Cambiar SOLO las fechas (emisión y/o pago) de una factura — admin o permiso editar_fechas_factura. */
+  updateFechas: (id: number, body: { fechaEmision?: string; fechaPago?: string }) => client.patch<Invoice>(`/invoices/${id}/fechas`, body),
+  /** Asociar una factura existente a una venta (conversión) del cliente — Opción B. */
+  asociarVenta: (id: number, conversionId: number) => client.patch<Invoice>(`/invoices/${id}/asociar`, { conversionId }),
   /** Validar y emitir un borrador (opcionalmente completando datos del cliente). */
   emitir: (id: number, patch?: Partial<{ clienteNombre: string; clienteNif: string; clienteDireccion: string; clienteCiudad: string; clienteCp: string; clientePais: string; clienteEmail: string | null; clienteTelefono: string | null }>) => client.post<Invoice>(`/invoices/${id}/emitir`, patch || {}),
   getOne: (id: number) => client.get<Invoice>(`/invoices/${id}`),

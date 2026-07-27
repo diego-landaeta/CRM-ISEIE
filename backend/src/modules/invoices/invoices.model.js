@@ -308,6 +308,7 @@ export async function list({ projectId, issuerId, estado, search, from, to, tipo
     `SELECT i.id, i.codigo, i.ano, i.numero, i.fecha_emision, i.fecha_pago,
             i.cliente_nombre, i.cliente_nif, i.cliente_direccion, i.cliente_ciudad, i.cliente_cp, i.cliente_pais,
             i.cliente_email, i.total, i.iva_pct, i.estado, i.sent_at, i.tipo,
+            i.lead_id, i.conversion_id,
             i.project_id, p.nombre AS proyecto_nombre,
             i.issuer_id, i.issuer_razon_social,
             i.metodo_pago, i.moneda,
@@ -467,6 +468,23 @@ export async function updateFechas(id, { fechaEmision, fechaPago }) {
     [id, fechaEmision || null, fechaPago || null]
   );
   return rows[0];
+}
+
+// Opción B: asocia una factura YA existente a una venta (conversión) del mismo
+// proyecto. Reapunta también el lead de la factura al de la venta. Devuelve null
+// si la conversión no existe o es de otro proyecto.
+export async function asociarVenta(id, conversionId) {
+  const { rows } = await query(
+    `UPDATE invoices i
+        SET conversion_id = c.id,
+            lead_id = c.lead_id,
+            updated_at = NOW()
+       FROM conversions c
+      WHERE i.id = $1 AND c.id = $2 AND c.project_id = i.project_id
+      RETURNING i.*`,
+    [id, conversionId]
+  );
+  return rows[0] || null;
 }
 
 // Proforma activa (no cancelada) ya emitida para una conversión. Evita duplicar

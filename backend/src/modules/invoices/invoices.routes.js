@@ -44,6 +44,8 @@ router.patch('/:id/corregir',         roleGuard('admin', 'superadmin', 'gestor')
 // Cambiar solo fechas (emisión/pago). Sin roleGuard: el controller valida el permiso
 // editar_fechas_factura (admins y usuarios acotados a "solo fechas").
 router.patch('/:id/fechas',           ctrl.updateFechas);
+// Opción B: asociar una factura existente a una venta del cliente.
+router.patch('/:id/asociar',          roleGuard('admin', 'superadmin', 'gestor'), ctrl.asociarVenta);
 router.get('/:id/pdf',                ctrl.pdf);
 router.post('/:id/send',              ctrl.send);
 router.post('/:id/mark-paid',         ctrl.markPaid);

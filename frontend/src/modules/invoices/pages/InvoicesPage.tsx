@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Receipt, Eye, PaperPlaneTilt, CheckCircle, X, MagnifyingGlass, Gear, ArrowCounterClockwise, FileText, DownloadSimple, Trash } from '@phosphor-icons/react';
+import { Receipt, Eye, PaperPlaneTilt, CheckCircle, X, MagnifyingGlass, Gear, ArrowCounterClockwise, FileText, DownloadSimple, Trash, CalendarBlank, LinkSimple } from '@phosphor-icons/react';
 import { Link, useLocation } from 'react-router-dom';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -11,6 +11,8 @@ import { invoicesApi, invoiceFaltantes } from '../api/invoices.api';
 import type { Invoice, Issuer, VentaSinFactura } from '../api/invoices.api';
 import InvoiceButton from '../components/InvoiceButton';
 import EmitirBorradorDialog from '../components/EmitirBorradorDialog';
+import EditarFechasDialog from '../components/EditarFechasDialog';
+import AsociarVentaDialog from '../components/AsociarVentaDialog';
 import TutorialButton from '../components/TutorialButton';
 import { toast } from '@/shared/hooks/useToast';
 
@@ -38,11 +40,13 @@ export default function InvoicesPage() {
   };
   // Sociedad a la que se pide saltar (abre el aviso "entra a este proyecto").
   const [socPrompt, setSocPrompt] = useState<{ id: number; nombre: string } | null>(null);
-  const { user } = useAuth() as { user: { role?: string; factura_manager?: boolean } | null };
+  const { user } = useAuth() as { user: { role?: string; factura_manager?: boolean; editar_fechas_factura?: boolean } | null };
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
   // Gestión de facturas (editar/eliminar/abonar): admin o gestora con permiso
   // factura_manager (el backend valida además que sean SUS facturas).
   const canManage = isAdmin || !!user?.factura_manager;
+  // Permiso acotado: cambiar solo fechas de facturas (admins + editar_fechas_factura).
+  const canEditFechas = isAdmin || !!user?.editar_fechas_factura;
   const pid = activeProject?.id;
   const loc = useLocation();
   const [tab, setTab] = useState<'facturas' | 'proformas' | 'abonos'>(() => {
@@ -82,6 +86,8 @@ export default function InvoicesPage() {
   // Borrador que se está validando/emitiendo (abre el diálogo de completar datos)
   const [emittingInv, setEmittingInv] = useState<Invoice | null>(null);
   const [deletingInv, setDeletingInv] = useState<Invoice | null>(null);
+  const [fechasInv, setFechasInv] = useState<Invoice | null>(null);
+  const [asociarInv, setAsociarInv] = useState<Invoice | null>(null);
   const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async () => {
@@ -525,6 +531,22 @@ export default function InvoicesPage() {
                           <ArrowCounterClockwise size={11} /> Abono
                         </button>
                       )}
+                      {/* Cambiar solo fechas (emisión/pago) — admin o permiso editar_fechas_factura. */}
+                      {inv.estado !== 'cancelada' && canEditFechas && (
+                        <button onClick={() => setFechasInv(inv)}
+                          title="Cambiar la fecha de emisión y/o de pago"
+                          className="h-7 px-2 rounded border border-border text-[11px] hover:bg-muted inline-flex items-center gap-1">
+                          <CalendarBlank size={11} /> Fechas
+                        </button>
+                      )}
+                      {/* Asociar la factura a una venta del cliente — Opción B. */}
+                      {inv.estado !== 'cancelada' && canManage && (
+                        <button onClick={() => setAsociarInv(inv)}
+                          title="Asociar esta factura a una venta del cliente"
+                          className="h-7 px-2 rounded border border-border text-[11px] hover:bg-muted inline-flex items-center gap-1">
+                          <LinkSimple size={11} /> Venta
+                        </button>
+                      )}
                       {/* Eliminar factura + liberar número (errores de carga) — admin. */}
                       {canManage && inv.estado !== 'cancelada' && (
                         <button onClick={() => setDeletingInv(inv)}
@@ -552,6 +574,15 @@ export default function InvoicesPage() {
             load();
           }}
         />
+      )}
+
+      {fechasInv && (
+        <EditarFechasDialog invoice={fechasInv} onClose={() => setFechasInv(null)}
+          onSaved={() => { setFechasInv(null); load(); }} />
+      )}
+      {asociarInv && (
+        <AsociarVentaDialog invoice={asociarInv} onClose={() => setAsociarInv(null)}
+          onSaved={() => { setAsociarInv(null); load(); }} />
       )}
 
       {/* Confirmación de borrado de factura (libera el número). */}

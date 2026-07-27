@@ -242,6 +242,24 @@ export async function updateFechas(req, res, next) {
   }
 }
 
+// PATCH /:id/asociar — Opción B: asociar una factura existente a una venta del cliente.
+export async function asociarVenta(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    if (!(await model.puedeGestionarFactura(req.user.userId, req.user.role, id))) {
+      throw new AppError('No tienes permiso para gestionar esta factura.', 403, 'FORBIDDEN');
+    }
+    const conversionId = Number(req.body?.conversionId);
+    if (!conversionId) throw new AppError('Falta la venta a asociar.', 400, 'NO_CONVERSION');
+    const inv = await model.asociarVenta(id, conversionId);
+    if (!inv) throw new AppError('La venta no existe o es de otro proyecto.', 404, 'NOT_FOUND');
+    res.json({ success: true, data: inv });
+  } catch (e) {
+    logger.error({ e: e.message }, 'asociarVenta failed');
+    next(e);
+  }
+}
+
 export async function pdf(req, res, next) {
   try {
     const id = Number(req.params.id);
