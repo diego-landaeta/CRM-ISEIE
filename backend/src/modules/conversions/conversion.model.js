@@ -314,7 +314,10 @@ export async function update(id, fields) {
   return rows[0];
 }
 
-export async function addPayment(conversionId, { importe, fecha, notas, metodo }) {
+// opts.allowOverpay: permite registrar un cobro que supere el importe_total de la venta.
+// Lo usa el cobro automático de Stripe: el dinero entró de verdad, y cuando excede el total
+// lo que suele estar mal es el total previsto, no el cobro. El flujo manual sigue bloqueado.
+export async function addPayment(conversionId, { importe, fecha, notas, metodo }, opts = {}) {
   const client = await getClient();
   try {
     await client.query('BEGIN');
@@ -330,7 +333,7 @@ export async function addPayment(conversionId, { importe, fecha, notas, metodo }
     }
 
     const nuevoTotal = Number(convRows[0].importe_pagado) + Number(importe);
-    if (nuevoTotal > Number(convRows[0].importe_total)) {
+    if (!opts.allowOverpay && nuevoTotal > Number(convRows[0].importe_total)) {
       await client.query('ROLLBACK');
       return { error: 'OVERPAY' };
     }

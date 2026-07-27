@@ -440,31 +440,51 @@ function StatusBadge({ status, disputed, refunded }: { status: string; disputed:
   return <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${map[status] || 'bg-muted text-muted-foreground'}`}>{status.toUpperCase()}</span>;
 }
 
+interface LinkLead { id: number; nombre: string; email: string; status: string }
+interface LinkVenta {
+  id: number; producto_contratado: string | null; importe_total: number | string | null;
+  importe_pagado: number | string | null; fecha_conversion: string | null;
+}
+
+// Asociar un cobro de Stripe a un cliente/prospecto y, sobre todo, A QUÉ VENTA.
+// Paso 1: buscar (incluye clientes convertidos, no solo prospectos).
+// Paso 2: elegir la venta concreta — antes cogía siempre la más reciente a ciegas.
 function LinkDialog({ payment, projectId, onClose, onLinked }: { payment: Payment; projectId: number; onClose: () => void; onLinked: () => void }) {
   const [search, setSearch] = useState(payment.customer_email || '');
-  const [results, setResults] = useState<Array<{ id: number; nombre: string; email: string; status: string }>>([]);
+  const [results, setResults] = useState<LinkLead[]>([]);
+  const [sel, setSel] = useState<LinkLead | null>(null);
+  const [ventas, setVentas] = useState<LinkVenta[]>([]);
+  const [loadingVentas, setLoadingVentas] = useState(false);
   const [linking, setLinking] = useState<number | null>(null);
 
   useEffect(() => {
-    if (!search) { setResults([]); return; }
+    if (!search || sel) { if (!search) setResults([]); return; }
     const timer = setTimeout(async () => {
-      const res = await client.get<Array<{ id: number; nombre: string; email: string; status: string }>>(
-        `/leads?projectId=${projectId}&search=${encodeURIComponent(search)}&limit=10&page=1`
+      // includeConverted: sin esto el backend filtra status <> 'convertido' y los CLIENTES
+      // no aparecían nunca — solo prospectos.
+      const res = await client.get<LinkLead[]>(
+        `/leads?projectId=${projectId}&search=${encodeURIComponent(search)}&includeConverted=true&limit=10&page=1`
       );
       if (res.success) setResults(res.data || []);
     }, 300);
     return () => clearTimeout(timer);
-  }, [search, projectId]);
+  }, [search, projectId, sel]);
 
-  async function link(leadId: number) {
-    setLinking(leadId);
+  async function elegirLead(lead: LinkLead) {
+    setSel(lead); setLoadingVentas(true); setVentas([]);
     try {
-      const lead = results.find(l => l.id === leadId);
-      const conv = await client.get<Array<{ id: number }>>(`/conversions/by-lead/${leadId}`);
-      const conversionId = conv.success && conv.data?.[0]?.id;
-      const res = await client.post(`/stripe-payments/${payment.id}/link`, { projectId, leadId, conversionId: conversionId || undefined });
+      const res = await client.get<LinkVenta[]>(`/conversions/by-lead/${lead.id}`);
+      if (res.success) setVentas(res.data || []);
+    } catch { /* noop */ } finally { setLoadingVentas(false); }
+  }
+
+  async function link(conversionId?: number) {
+    if (!sel) return;
+    setLinking(conversionId || -1);
+    try {
+      const res = await client.post(`/stripe-payments/${payment.id}/link`, { projectId, leadId: sel.id, conversionId: conversionId || undefined });
       if (res.success) {
-        toast({ title: '✓ Asociado', description: `Pago ${fmt(payment.amount)} asociado a ${lead?.nombre}` });
+        toast({ title: '✓ Asociado', description: `Pago ${fmt(payment.amount)} asociado a ${sel.nombre}` });
         onLinked();
       } else {
         toast({ title: 'Error', description: (res as { error?: string }).error, variant: 'destructive' });
@@ -475,34 +495,82 @@ function LinkDialog({ payment, projectId, onClose, onLinked }: { payment: Paymen
     } finally { setLinking(null); }
   }
 
+  const num = (v: number | string | null) => Number(v || 0);
+
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-card rounded-lg shadow-xl w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
         <div className="p-4 border-b border-border">
-          <h3 className="font-semibold">Asociar pago a prospecto</h3>
+          <h3 className="font-semibold">{sel ? '¿A qué venta se asocia?' : 'Asociar pago a un cliente o prospecto'}</h3>
           <p className="text-xs text-muted-foreground">
             {fmt(payment.amount)} de {payment.customer_email || 'cliente sin email'} — Stripe {payment.stripe_id.slice(0, 14)}…
           </p>
         </div>
-        <div className="p-4 space-y-3">
-          <input value={search} onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar prospecto por nombre o email…"
-            className="w-full h-10 px-3 rounded-md border border-border bg-background text-sm" autoFocus />
-          <div className="max-h-72 overflow-y-auto space-y-1">
-            {results.length === 0 ? (
-              <p className="text-xs text-muted-foreground text-center py-4">{search ? 'Sin coincidencias' : 'Empezá a escribir…'}</p>
-            ) : results.map(l => (
-              <button key={l.id} onClick={() => link(l.id)} disabled={linking === l.id}
-                className="w-full text-left p-2 rounded-md hover:bg-muted/50 disabled:opacity-50 flex items-center justify-between">
-                <div>
-                  <div className="text-sm font-medium">{l.nombre}</div>
-                  <div className="text-xs text-muted-foreground">{l.email} · {l.status}</div>
-                </div>
-                <span className="text-[11px] text-primary">{linking === l.id ? 'Asociando…' : 'Asociar'}</span>
-              </button>
-            ))}
+
+        {!sel ? (
+          <div className="p-4 space-y-3">
+            <input value={search} onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar cliente o prospecto por nombre, email o teléfono…"
+              className="w-full h-10 px-3 rounded-md border border-border bg-background text-sm" autoFocus />
+            <div className="max-h-72 overflow-y-auto space-y-1">
+              {results.length === 0 ? (
+                <p className="text-xs text-muted-foreground text-center py-4">{search ? 'Sin coincidencias' : 'Empezá a escribir…'}</p>
+              ) : results.map(l => (
+                <button key={l.id} onClick={() => elegirLead(l)}
+                  className="w-full text-left p-2 rounded-md hover:bg-muted/50 flex items-center justify-between">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium truncate">{l.nombre}</div>
+                    <div className="text-xs text-muted-foreground truncate">{l.email || 'sin email'}</div>
+                  </div>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold shrink-0 ml-2 ${l.status === 'convertido' ? 'bg-emerald-500/15 text-emerald-600' : 'bg-muted text-muted-foreground'}`}>
+                    {l.status === 'convertido' ? 'CLIENTE' : 'PROSPECTO'}
+                  </span>
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="p-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium truncate">{sel.nombre}</p>
+              <button onClick={() => { setSel(null); setVentas([]); }} className="text-[11px] text-primary shrink-0 ml-2">← Cambiar</button>
+            </div>
+            {loadingVentas ? <p className="text-xs text-muted-foreground py-3">Cargando ventas…</p>
+              : ventas.length === 0 ? (
+                <div className="space-y-2">
+                  <p className="text-xs text-amber-600">Este cliente no tiene ventas registradas. Se puede asociar solo al cliente (sin importe ni factura).</p>
+                  <button onClick={() => link(undefined)} disabled={linking !== null}
+                    className="w-full h-9 rounded-md border border-border text-sm hover:bg-muted disabled:opacity-50">
+                    {linking !== null ? 'Asociando…' : 'Asociar solo al cliente'}
+                  </button>
+                </div>
+              ) : (
+                <div className="max-h-72 overflow-y-auto space-y-1">
+                  {ventas.map(v => {
+                    const pend = num(v.importe_total) - num(v.importe_pagado);
+                    return (
+                      <button key={v.id} onClick={() => link(v.id)} disabled={linking !== null}
+                        className="w-full text-left p-2 rounded-md border border-border hover:bg-muted/50 disabled:opacity-50">
+                        <div className="text-sm font-medium truncate">{v.producto_contratado || 'Venta'}</div>
+                        <div className="text-[11px] text-muted-foreground">
+                          {fmt(num(v.importe_total))} · cobrado {fmt(num(v.importe_pagado))} ·{' '}
+                          <span className={pend > 0.01 ? 'text-amber-600 font-semibold' : 'text-emerald-600'}>
+                            {pend > 0.01 ? `pendiente ${fmt(pend)}` : 'saldada'}
+                          </span>
+                          {v.fecha_conversion ? ` · ${String(v.fecha_conversion).slice(0, 10)}` : ''}
+                        </div>
+                        <div className="text-[11px] text-primary mt-0.5">{linking === v.id ? 'Asociando…' : 'Asociar a esta venta'}</div>
+                      </button>
+                    );
+                  })}
+                  <p className="text-[10px] text-muted-foreground pt-1">
+                    Si ese cobro ya estaba registrado o ya tiene factura, se vincula sin volver a sumarlo.
+                  </p>
+                </div>
+              )}
+          </div>
+        )}
+
         <div className="p-3 border-t border-border flex justify-end">
           <button onClick={onClose} className="h-9 px-3 rounded-md border border-border bg-card text-sm hover:bg-muted">Cerrar</button>
         </div>

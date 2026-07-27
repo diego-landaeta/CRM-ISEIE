@@ -82,20 +82,23 @@ async function autoLinkIfPossible(projectId, payment, dbRow) {
     return;
   }
   const fecha = new Date(payment.stripe_created_at * 1000).toISOString().slice(0, 10);
+  // ¿Es realmente un duplicado? Lo es cuando la asesora ya registró ESE MISMO cobro a mano:
+  // mismo importe y fecha muy próxima en la misma venta. No basta con que la venta esté
+  // saldada — hay ventas cuyo importe_total quedó corto y siguen recibiendo mensualidades
+  // legítimas, y bloquearlas dejaba el cobro sin factura.
+  const dup = await model.findPagoDuplicado(conv.id, payment.amount, fecha);
+  if (dup) {
+    // Se vincula al pago que ya existe (y a su factura, si la tiene) SIN volver a sumar.
+    await model.linkPayment(dbRow.id, { leadId: lead.id, conversionId: conv.id, conversionPaymentId: dup.id, userId: null, method: 'auto_dedup' });
+    return;
+  }
   // Registrar el cobro con la MISMA lógica que un pago manual (conversion.model.addPayment):
-  // salda la cuota pendiente más antigua (FIFO) y respeta el guard de sobrepago. Así el pago
-  // de Stripe (a) aparece en los pagos de cuotas/mensualidades y (b) NO se duplica si la venta
-  // ya está saldada — que era la causa de los pagos y facturas repetidas.
+  // salda la cuota pendiente más antigua (FIFO). allowOverpay: un cobro real de Stripe se
+  // registra aunque supere el total previsto de la venta (el total es lo que suele estar mal).
   const convModel = await import('../conversions/conversion.model.js');
   const res = await convModel.addPayment(conv.id, {
     importe: payment.amount, fecha, notas: `Auto-Stripe ${payment.stripe_id}`, metodo: 'tarjeta',
-  });
-  if (res?.error === 'OVERPAY') {
-    // La venta ya está saldada: este cobro de Stripe sería un duplicado. Se referencia el pago
-    // de Stripe a la conversión (para trazabilidad) pero NO se crea abono ni factura.
-    await model.linkPayment(dbRow.id, { leadId: lead.id, conversionId: conv.id, conversionPaymentId: null, userId: null, method: 'auto_overpaid' });
-    return;
-  }
+  }, { allowOverpay: true });
   if (res?.error || !res?.payment) return;
   const cpId = res.payment.id;
   await model.linkPayment(dbRow.id, { leadId: lead.id, conversionId: conv.id, conversionPaymentId: cpId, userId: null, method: 'auto_email' });
@@ -193,20 +196,40 @@ export async function syncStripePayments(projectId, { fullHistory = false } = {}
 }
 
 export async function manualLink(stripePaymentId, { leadId, conversionId, userId }) {
-  const fecha = new Date().toISOString().slice(0, 10);
   let cpId = null;
   let importe = 0;
+  let yaExistia = false;
   if (conversionId) {
-    const { rows } = await query(`SELECT amount FROM stripe_payments WHERE id=$1`, [stripePaymentId]);
+    const { rows } = await query(
+      `SELECT amount, stripe_id, stripe_created_at FROM stripe_payments WHERE id=$1`, [stripePaymentId]);
     const amount = Number(rows[0]?.amount || 0);
+    // Fecha REAL del cobro en Stripe (antes se guardaba la de hoy y la factura salía con
+    // fecha equivocada). Si faltara, se cae a hoy.
+    const fecha = rows[0]?.stripe_created_at
+      ? new Date(rows[0].stripe_created_at).toISOString().slice(0, 10)
+      : new Date().toISOString().slice(0, 10);
     if (amount > 0) {
       importe = amount;
-      cpId = await model.createConversionPayment(conversionId, amount, fecha, `Manual Stripe #${stripePaymentId}`);
-      await model.updateConversionPaid(conversionId, amount);
+      // Si la asesora ya registró ese mismo cobro a mano, se engancha al pago existente
+      // (y a su factura) en vez de crear otro: se vincula pero NO vuelve a sumar.
+      const dup = await model.findPagoDuplicado(conversionId, amount, fecha);
+      if (dup) {
+        cpId = dup.id;
+        yaExistia = true;
+      } else {
+        // Mismo camino que un pago manual: salda la cuota pendiente más antigua (FIFO)
+        // para que el cobro aparezca en las mensualidades de la venta.
+        const convModel = await import('../conversions/conversion.model.js');
+        const res = await convModel.addPayment(conversionId, {
+          importe: amount, fecha, notas: `Stripe ${rows[0]?.stripe_id || stripePaymentId}`, metodo: 'tarjeta',
+        }, { allowOverpay: true });
+        cpId = res?.payment?.id || null;
+      }
     }
   }
-  await model.linkPayment(stripePaymentId, { leadId, conversionId, conversionPaymentId: cpId, userId, method: 'manual' });
-  // Al asociar a mano un pago de Stripe también se emite su factura.
+  await model.linkPayment(stripePaymentId, { leadId, conversionId, conversionPaymentId: cpId, userId, method: yaExistia ? 'manual_dedup' : 'manual' });
+  // Al asociar a mano se emite su factura. Si el pago ya existía (o ya hay una factura
+  // de ese importe sin vincular), emitirFacturaDePago la reutiliza y no duplica.
   if (cpId) autoInvoiceFromStripe(conversionId, userId, cpId, importe);
 }
 

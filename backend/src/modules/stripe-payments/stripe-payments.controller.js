@@ -58,7 +58,7 @@ export async function link(req, res, next) {
     const id = Number(req.params.id);
     const { leadId, conversionId } = req.body || {};
     if (!leadId && !conversionId) throw new AppError('leadId o conversionId requerido', 400, 'BAD_REQUEST');
-    await service.manualLink(id, { leadId, conversionId, userId: req.user?.id });
+    await service.manualLink(id, { leadId, conversionId, userId: req.user?.userId });
     res.json({ success: true });
   } catch (e) { next(e); }
 }
@@ -66,7 +66,7 @@ export async function link(req, res, next) {
 export async function unlink(req, res, next) {
   try {
     const id = Number(req.params.id);
-    await model.linkPayment(id, { leadId: null, conversionId: null, conversionPaymentId: null, userId: req.user?.id, method: null });
+    await model.linkPayment(id, { leadId: null, conversionId: null, conversionPaymentId: null, userId: req.user?.userId, method: null });
     res.json({ success: true });
   } catch (e) { next(e); }
 }
@@ -77,7 +77,7 @@ export async function updateDispute(req, res, next) {
     const { decision, notes } = req.body || {};
     const allowed = ['pending', 'accept_refund', 'contest', 'won', 'lost', 'closed'];
     if (!allowed.includes(decision)) throw new AppError(`decision debe ser: ${allowed.join(', ')}`, 400, 'BAD_DECISION');
-    await service.updateDisputeDecision(id, { decision, notes, userId: req.user?.id });
+    await service.updateDisputeDecision(id, { decision, notes, userId: req.user?.userId });
     res.json({ success: true });
   } catch (e) { next(e); }
 }

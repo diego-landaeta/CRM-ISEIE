@@ -54,6 +54,23 @@ export async function linkPayment(stripePaymentId, { leadId, conversionId, conve
   );
 }
 
+// Detecta el duplicado REAL: el mismo cobro ya registrado a mano por la asesora
+// (mismo importe y fecha a menos de 4 días) en esa venta. Se ignoran los pagos que
+// ya vienen de Stripe para no confundir mensualidades iguales de meses distintos.
+export async function findPagoDuplicado(conversionId, importe, fecha) {
+  const { rows } = await query(
+    `SELECT cp.id
+       FROM conversion_payments cp
+      WHERE cp.conversion_id = $1
+        AND ROUND(cp.importe::numeric, 2) = ROUND($2::numeric, 2)
+        AND ABS(cp.fecha - $3::date) <= 3
+        AND NOT EXISTS (SELECT 1 FROM stripe_payments sp WHERE sp.conversion_payment_id = cp.id)
+      ORDER BY cp.id LIMIT 1`,
+    [conversionId, importe, fecha]
+  );
+  return rows[0] || null;
+}
+
 export async function createConversionPayment(conversionId, amount, fecha, notas) {
   const { rows } = await query(
     `INSERT INTO conversion_payments (conversion_id, importe, fecha, notas) VALUES ($1,$2,$3,$4) RETURNING id`,

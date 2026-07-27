@@ -639,6 +639,26 @@ export async function emitirFacturaDePago(conversionId, { paymentId, importe }, 
     `SELECT * FROM invoices WHERE payment_id = $1 AND estado <> 'cancelada' LIMIT 1`, [paymentId]);
   if (dup[0]) return dup[0];
 
+  // A veces la factura se crea ANTES de vincular el cobro (p. ej. la admin la emite a
+  // mano y luego se asocia el pago de Stripe). Si ya hay una factura de esta venta por
+  // ese mismo importe y sin pago vinculado, se le engancha este pago en vez de emitir
+  // otra: así queda vinculada y NO se duplica el importe facturado.
+  const { rows: huerfana } = await query(
+    `SELECT * FROM invoices
+      WHERE conversion_id = $1 AND payment_id IS NULL
+        AND tipo = 'normal' AND estado <> 'cancelada'
+        AND ABS(total - $2::numeric) < 0.01
+      ORDER BY id LIMIT 1`,
+    [conversionId, monto]
+  );
+  if (huerfana[0]) {
+    const { rows: upd } = await query(
+      `UPDATE invoices SET payment_id = $2, updated_at = NOW() WHERE id = $1 RETURNING *`,
+      [huerfana[0].id, paymentId]
+    );
+    return upd[0] || huerfana[0];
+  }
+
   const conv = await _convDataParaFactura(conversionId);
   if (!conv) return null;
 
