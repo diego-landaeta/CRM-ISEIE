@@ -1,7 +1,7 @@
 // Sección de reportes descargables. Rango de fechas + una tarjeta por reporte
 // con Excel/CSV. Pega a /reports/<key> y arma el archivo en el navegador.
 import { useState } from 'react';
-import { FileXls, FileCsv, CalendarBlank, ChartBar, UsersThree, Receipt, ListChecks, Invoice, Trophy } from '@phosphor-icons/react';
+import { FileXls, FileCsv, CalendarBlank, ChartBar, UsersThree, Receipt, ListChecks, Invoice, Trophy, Eye, X } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 
@@ -90,18 +90,31 @@ function fmtDate(v) {
 
 function scalar(c, row) {
   const v = row[c.k];
-  if (v == null || v === '') return null;
+  if (v == null || v === '') return SIN_ASIGNAR.has(c.k) ? 'Sin asignar' : null;
   if (c.t === 'number') { const n = Number(v); return Number.isNaN(n) ? null : n; }
   if (c.t === 'date') return fmtDate(v);
   if (c.t === 'estado') return ESTADO[v] || String(v);
   return String(v);
 }
 
+// Columnas donde un valor vacío significa "sin asignar" (responsable/vendedora).
+const SIN_ASIGNAR = new Set(['responsable', 'vendedora']);
+
 function csvCell(c, row) {
   const v = row[c.k];
-  if (v == null) return '';
+  if (v == null || v === '') return SIN_ASIGNAR.has(c.k) ? 'Sin asignar' : '';
   if (c.t === 'estado') return ESTADO[v] || String(v);
   if (c.t === 'date') return fmtDate(v) || '';
+  return String(v);
+}
+
+// Texto para mostrar en la vista previa (tabla en pantalla).
+function cellText(c, row) {
+  const v = row[c.k];
+  if (v == null || v === '') return SIN_ASIGNAR.has(c.k) ? 'Sin asignar' : '—';
+  if (c.t === 'estado') return ESTADO[v] || String(v);
+  if (c.t === 'date') return fmtDate(v) || '—';
+  if (c.t === 'number') { const n = Number(v); return Number.isNaN(n) ? String(v) : n.toLocaleString('es-ES'); }
   return String(v);
 }
 
@@ -116,22 +129,39 @@ export default function ReportsDownloadSection({ projectId, projectName }) {
   const [from, setFrom] = useState(() => `${new Date().getFullYear()}-01-01`);
   const [to, setTo] = useState(() => new Date().toISOString().slice(0, 10));
   const [busy, setBusy] = useState(null);
+  const [preview, setPreview] = useState(null); // { report, rows, base }
   const ready = Boolean(from && to);
 
-  async function run(report, format) {
+  // Trae las filas del reporte del backend (compartido por descarga y vista previa).
+  async function fetchRows(report) {
+    const dFrom = from && to && from > to ? to : from;
+    const dTo = from && to && from > to ? from : to;
+    const p = new URLSearchParams();
+    if (projectId) p.set('projectId', String(projectId));
+    if (dFrom) p.set('from', dFrom);
+    if (dTo) p.set('to', dTo);
+    const res = await client.get(`/reports/${report.key}?${p.toString()}`);
+    const rows = res.data || [];
+    const sufijo = dFrom || dTo ? `${dFrom || 'inicio'}_${dTo || 'hoy'}` : 'todo';
+    return { rows, base: `${report.key}-${projectName || 'crm'}-${sufijo}` };
+  }
+
+  async function openPreview(report) {
+    setBusy(`${report.key}:preview`);
+    try {
+      const { rows, base } = await fetchRows(report);
+      if (!rows.length) { toast({ title: 'Sin datos en ese período', description: report.label }); return; }
+      setPreview({ report, rows, base });
+    } catch (err) {
+      toast({ title: 'No se pudo cargar la vista previa', description: err?.message, variant: 'destructive' });
+    } finally { setBusy(null); }
+  }
+
+  // Descarga. Si ya hay filas (desde la vista previa) las reutiliza; si no, las trae.
+  async function run(report, format, preloaded) {
     setBusy(`${report.key}:${format}`);
     try {
-      // Si el rango quedó invertido (Hasta < Desde), lo corregimos para no traer vacío.
-      const dFrom = from && to && from > to ? to : from;
-      const dTo = from && to && from > to ? from : to;
-      const p = new URLSearchParams();
-      if (projectId) p.set('projectId', String(projectId));
-      if (dFrom) p.set('from', dFrom);
-      if (dTo) p.set('to', dTo);
-      const res = await client.get(`/reports/${report.key}?${p.toString()}`);
-      const rows = res.data || [];
-      const sufijo = dFrom || dTo ? `${dFrom || 'inicio'}_${dTo || 'hoy'}` : 'todo';
-      const base = `${report.key}-${projectName || 'crm'}-${sufijo}`;
+      const { rows, base } = preloaded || await fetchRows(report);
       if (!rows.length) { toast({ title: 'Sin datos en ese período', description: report.label }); return; }
       if (format === 'xlsx') {
         const writeXlsxFile = (await import('write-excel-file/browser')).default;
@@ -201,6 +231,10 @@ export default function ReportsDownloadSection({ projectId, projectName }) {
                 </div>
               </div>
               <div className="mt-3 flex items-center gap-2">
+                <button type="button" disabled={busy !== null || !ready} onClick={() => openPreview(r)}
+                  className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-border bg-card hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-60 text-xs font-medium">
+                  <Eye size={13} weight="bold" /> {busy === `${r.key}:preview` ? 'Cargando…' : 'Vista previa'}
+                </button>
                 <button type="button" disabled={busy !== null || !ready} onClick={() => run(r, 'xlsx')}
                   className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-60 text-xs font-semibold">
                   <FileXls size={13} weight="bold" /> {busy === `${r.key}:xlsx` ? 'Generando…' : 'Excel'}
@@ -214,6 +248,50 @@ export default function ReportsDownloadSection({ projectId, projectName }) {
           );
         })}
       </div>
+
+      {/* Vista previa del reporte (primeras filas) con descarga desde el modal. */}
+      {preview && (
+        <div className="fixed inset-0 z-[85] flex items-center justify-center p-4" onClick={() => setPreview(null)}>
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
+          <div role="dialog" className="relative bg-card rounded-xl border border-border w-full max-w-5xl max-h-[88vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 h-12 border-b border-border">
+              <div className="min-w-0">
+                <h3 className="text-sm font-bold truncate">{preview.report.label}</h3>
+                <p className="text-[11px] text-muted-foreground">{preview.rows.length} fila{preview.rows.length === 1 ? '' : 's'} · mostrando las primeras {Math.min(50, preview.rows.length)}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={() => run(preview.report, 'xlsx', preview)} disabled={busy !== null}
+                  className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-60 text-xs font-semibold">
+                  <FileXls size={13} weight="bold" /> Excel
+                </button>
+                <button onClick={() => run(preview.report, 'csv', preview)} disabled={busy !== null}
+                  className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-border bg-card hover:bg-muted text-xs font-medium">
+                  <FileCsv size={13} weight="bold" /> CSV
+                </button>
+                <button onClick={() => setPreview(null)} className="p-1 rounded hover:bg-muted text-muted-foreground"><X size={16} weight="bold" /></button>
+              </div>
+            </div>
+            <div className="overflow-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-muted/50 sticky top-0">
+                  <tr>{preview.report.cols.map((c) => <th key={c.k} className="text-left px-3 py-2 font-bold whitespace-nowrap">{c.h}</th>)}</tr>
+                </thead>
+                <tbody>
+                  {preview.rows.slice(0, 50).map((row, i) => (
+                    <tr key={i} className="border-b border-border last:border-0 hover:bg-muted/30">
+                      {preview.report.cols.map((c) => (
+                        <td key={c.k} className={`px-3 py-1.5 whitespace-nowrap ${c.t === 'number' ? 'text-right tabular-nums' : ''} ${SIN_ASIGNAR.has(c.k) && (row[c.k] == null || row[c.k] === '') ? 'text-amber-600 dark:text-amber-500 italic' : ''}`}>
+                          {cellText(c, row)}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
