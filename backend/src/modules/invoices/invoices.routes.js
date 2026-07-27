@@ -41,6 +41,9 @@ router.post('/',                      ctrl.create);
 router.patch('/:id',                  roleGuard('admin', 'superadmin'), ctrl.update);
 // Corregir una factura YA emitida/pagada (IVA, datos, concepto): SOLO admin/superadmin.
 router.patch('/:id/corregir',         roleGuard('admin', 'superadmin', 'gestor'), ctrl.corregir);
+// Cambiar solo fechas (emisión/pago). Sin roleGuard: el controller valida el permiso
+// editar_fechas_factura (admins y usuarios acotados a "solo fechas").
+router.patch('/:id/fechas',           ctrl.updateFechas);
 router.get('/:id/pdf',                ctrl.pdf);
 router.post('/:id/send',              ctrl.send);
 router.post('/:id/mark-paid',         ctrl.markPaid);

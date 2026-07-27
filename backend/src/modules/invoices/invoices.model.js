@@ -443,6 +443,32 @@ export async function puedeGestionarFactura(userId, role, invoiceId) {
   return !!rows[0] && rows[0].responsable_id === userId;
 }
 
+// Permiso acotado: usuario que SOLO puede cambiar las fechas (emisión y pago) de
+// las facturas, sin tocar importes/conceptos. Admin/superadmin siempre pueden.
+export async function esEditorFechas(userId) {
+  const { rows } = await query(`SELECT editar_fechas_factura FROM users WHERE id = $1`, [userId]);
+  return !!rows[0]?.editar_fechas_factura;
+}
+
+export async function puedeEditarFechas(userId, role) {
+  if (role === 'admin' || role === 'superadmin') return true;
+  return esEditorFechas(userId);
+}
+
+// Actualiza SOLO fecha_emision y/o fecha_pago. Regenera el PDF (pdf_path=NULL).
+export async function updateFechas(id, { fechaEmision, fechaPago }) {
+  const { rows } = await query(
+    `UPDATE invoices
+        SET fecha_emision = COALESCE($2::date, fecha_emision),
+            fecha_pago    = COALESCE($3::date, fecha_pago),
+            pdf_path = NULL, updated_at = NOW()
+      WHERE id = $1
+      RETURNING *`,
+    [id, fechaEmision || null, fechaPago || null]
+  );
+  return rows[0];
+}
+
 // Proforma activa (no cancelada) ya emitida para una conversión. Evita duplicar
 // proformas (y quemar correlativo fiscal) si se pulsa "Emitir proforma" dos veces.
 export async function proformaActivaDeConversion(conversionId) {

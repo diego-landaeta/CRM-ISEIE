@@ -218,6 +218,30 @@ export async function corregir(req, res, next) {
   }
 }
 
+// PATCH /:id/fechas — cambiar SOLO la fecha de emisión y/o de pago de una factura.
+// Para admins y para usuarios con el permiso editar_fechas_factura (que solo pueden eso).
+export async function updateFechas(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    if (!(await model.puedeEditarFechas(req.user.userId, req.user.role))) {
+      throw new AppError('No tienes permiso para cambiar fechas de facturas.', 403, 'FORBIDDEN');
+    }
+    const { fechaEmision = null, fechaPago = null } = req.body || {};
+    const okFecha = (v) => v == null || /^\d{4}-\d{2}-\d{2}$/.test(String(v));
+    if (!okFecha(fechaEmision) || !okFecha(fechaPago)) {
+      throw new AppError('Fecha inválida (formato YYYY-MM-DD).', 400, 'BAD_DATE');
+    }
+    if (fechaEmision == null && fechaPago == null) {
+      throw new AppError('Indica al menos una fecha.', 400, 'NO_DATE');
+    }
+    const inv = await model.updateFechas(id, { fechaEmision, fechaPago });
+    res.json({ success: true, data: inv });
+  } catch (e) {
+    logger.error({ e: e.message }, 'updateFechas failed');
+    next(e);
+  }
+}
+
 export async function pdf(req, res, next) {
   try {
     const id = Number(req.params.id);
