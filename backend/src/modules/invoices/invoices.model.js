@@ -119,10 +119,10 @@ export async function create(data, userId) {
          estado, notas, leyenda_iva, metodo_pago, pie_pago, created_by, tipo,
          issuer_id, issuer_razon_social, issuer_nif, issuer_direccion, issuer_ciudad,
          issuer_cp, issuer_pais, issuer_email, issuer_telefono, issuer_iban, issuer_logo_url,
-         moneda
+         moneda, total_divisa
        ) VALUES (
          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,
-         $30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42
+         $30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43
        ) RETURNING *`,
       [
         data.projectId, data.conversionId || null, data.leadId || null, data.paymentId || null,
@@ -139,6 +139,8 @@ export async function create(data, userId) {
         iss?.id || null, iss?.razon_social || null, issuerNifSnap, iss?.direccion || null, iss?.ciudad || null,
         iss?.cp || null, iss?.pais || null, iss?.email || null, iss?.telefono || null, iss?.iban || null, iss?.logo_url || null,
         (data.moneda ? String(data.moneda).toUpperCase() : 'EUR'),
+        // Importe en la divisa (solo presentación). total/base/IVA van SIEMPRE en euros.
+        (data.totalDivisa != null ? Number(data.totalDivisa) : null),
       ]
     );
 
@@ -311,7 +313,7 @@ export async function list({ projectId, issuerId, estado, search, from, to, tipo
             i.lead_id, i.conversion_id,
             i.project_id, p.nombre AS proyecto_nombre,
             i.issuer_id, i.issuer_razon_social,
-            i.metodo_pago, i.moneda,
+            i.metodo_pago, i.moneda, i.total_divisa,
             u.nombre AS gestora_nombre
      FROM invoices i
      LEFT JOIN projects p ON p.id = i.project_id
@@ -971,7 +973,7 @@ export async function updateBorrador(id, data, { soloBorrador = true } = {}) {
          items=$10, base_imponible=$11, iva_pct=$12, iva_importe=$13, iva_incluido=$14, total=$15,
          fecha_emision=$16, notas=$17, metodo_pago=$18, pie_pago=$19, leyenda_iva=$20, moneda=$21,
          issuer_id=$22, issuer_razon_social=$23, issuer_nif=$24, issuer_direccion=$25, issuer_ciudad=$26, issuer_cp=$27, issuer_pais=$28,
-         project_id=$29, updated_at=NOW()
+         project_id=$29, total_divisa=$30, updated_at=NOW()
        WHERE id=$1 RETURNING *`,
       [id,
        g('clienteNombre', inv.cliente_nombre), g('clienteNif', inv.cliente_nif), g('clienteDireccion', inv.cliente_direccion),
@@ -982,7 +984,8 @@ export async function updateBorrador(id, data, { soloBorrador = true } = {}) {
        g('fechaEmision', inv.fecha_emision), g('notas', inv.notas), g('metodoPago', inv.metodo_pago),
        g('piePago', inv.pie_pago), g('leyendaIva', inv.leyenda_iva), g('moneda', inv.moneda),
        iss.id, iss.razon_social, iss.nif, iss.direccion, iss.ciudad, iss.cp, iss.pais,
-       g('projectId', inv.project_id)]);
+       g('projectId', inv.project_id),
+       g('totalDivisa', inv.total_divisa)]);
     // Corrección de una emitida: invalida el PDF cacheado para que se regenere
     // con los datos nuevos la próxima vez que se descargue.
     if (!soloBorrador) {

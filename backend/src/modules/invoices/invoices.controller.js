@@ -163,10 +163,20 @@ export async function create(req, res, next) {
       ? (d.leyendaIva || 'Operación exenta de IVA conforme a la normativa aplicable.')
       : (d.leyendaIva || null);
 
+    // Doble moneda: los conceptos se teclean en la divisa, pero la contabilidad va en
+    // EUROS. El total calculado pasa a ser el importe en divisa (solo presentación) y
+    // el total/base/IVA se rehacen con el importe en euros que indicó la gestora.
+    const moneda = (d.moneda || 'EUR').toUpperCase();
+    const enDivisa = moneda !== 'EUR' && d.totalEur != null;
+    const eur = service.repartirEnEuros({ totalEur: d.totalEur, ivaPct, ivaIncluido: d.ivaIncluido });
+
     const inv = await model.create({
       ...d,
-      ivaPct, baseImponible, ivaImporte, total, leyendaIva,
-      moneda: d.moneda || 'EUR',
+      ivaPct, leyendaIva, moneda,
+      baseImponible: enDivisa ? eur.baseImponible : baseImponible,
+      ivaImporte:    enDivisa ? eur.ivaImporte    : ivaImporte,
+      total:         enDivisa ? eur.total         : total,
+      totalDivisa:   enDivisa ? total             : null,
     }, req.user?.userId);
     res.json({ success: true, data: inv });
   } catch (e) {
@@ -208,8 +218,17 @@ export async function corregir(req, res, next) {
       const { baseImponible, ivaImporte, total } = service.calcularImportes({ items: d.items, ivaPct, ivaIncluido: d.ivaIncluido });
       d.baseImponible = baseImponible; d.ivaImporte = ivaImporte; d.total = total; d.ivaPct = ivaPct;
       d.leyendaIva = exento ? (d.leyendaIva || 'Operación exenta de IVA conforme a la normativa aplicable.') : (ivaPct === 0 ? d.leyendaIva : null);
+      // Doble moneda: lo tecleado en la divisa va a total_divisa (presentación) y la
+      // contabilidad se rehace con el importe en euros indicado a mano.
+      if ((d.moneda || 'EUR').toUpperCase() !== 'EUR' && d.totalEur != null) {
+        const eur = service.repartirEnEuros({ totalEur: d.totalEur, ivaPct, ivaIncluido: d.ivaIncluido });
+        d.totalDivisa = total;
+        d.baseImponible = eur.baseImponible; d.ivaImporte = eur.ivaImporte; d.total = eur.total;
+      } else {
+        d.totalDivisa = null;
+      }
     }
-    delete d.exento;
+    delete d.exento; delete d.totalEur;
     const inv = await model.updateBorrador(id, d, { soloBorrador: false });
     res.json({ success: true, data: inv });
   } catch (e) {

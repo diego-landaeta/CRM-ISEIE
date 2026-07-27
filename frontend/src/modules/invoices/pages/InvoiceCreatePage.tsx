@@ -4,6 +4,7 @@ import { ArrowLeft, FloppyDisk, MagnifyingGlass, User, Buildings, Money } from '
 import { useProjectContext } from '@/contexts/ProjectContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import client from '@/shared/api/client';
+import { CURRENCIES } from '../currencies';
 import { invoicesApi } from '../api/invoices.api';
 import type { Issuer, InvoiceItem } from '../api/invoices.api';
 import { conversionsApi, type Conversion } from '@/modules/conversions/api/conversions.api';
@@ -77,7 +78,9 @@ export default function InvoiceCreatePage() {
   const [ivaIncluido, setIvaIncluido] = useState(false);
   const [items, setItems] = useState<InvoiceItem[]>([{ descripcion: '', cantidad: 1, precio_unitario: 0 }]);
   const [metodoPago, setMetodoPago] = useState<'transferencia' | 'tarjeta' | 'tarjeta_stripe' | 'efectivo' | 'bizum' | 'fraccionado' | 'otro'>('transferencia');
-  const [moneda, setMoneda] = useState('EUR'); // divisa de la factura (importes manuales, sin conversión)
+  const [moneda, setMoneda] = useState('EUR');
+  // Doble moneda: importe total en EUROS tecleado a mano (obligatorio si moneda != EUR).
+  const [totalEur, setTotalEur] = useState(''); // divisa de la factura (importes manuales, sin conversión)
   const [piePago, setPiePago] = useState('');
   const [notas, setNotas] = useState('');
   const [issuers, setIssuers] = useState<Issuer[]>([]);
@@ -210,7 +213,14 @@ export default function InvoiceCreatePage() {
   }
   if (!items.some((it) => it.descripcion.trim() && Number(it.precio_unitario) > 0)) missing.push('Al menos un concepto con precio');
 
+  // Suma de conceptos: en la divisa elegida (o en euros si la factura es en EUR).
+  const totalConceptos = items.reduce((sum, it) => sum + (Number(it.cantidad) || 0) * (Number(it.precio_unitario) || 0), 0);
+
   async function generar() {
+    if (moneda !== 'EUR' && !(Number(totalEur) > 0)) {
+      toast({ title: 'Falta el importe en euros', description: `La factura va en ${moneda}: indica el total en euros (es el que cuenta para la contabilidad).`, variant: 'destructive' });
+      return;
+    }
     if (!pid) return;
     if (missing.length) { toast({ title: 'Faltan datos', description: missing.join(' · '), variant: 'destructive' }); return; }
     setSaving(true);
@@ -231,6 +241,7 @@ export default function InvoiceCreatePage() {
         leyendaIva: regimenSel?.coletilla || null,
         notas: notas.trim() || undefined, metodoPago, piePago: piePago.trim() || undefined,
         moneda: moneda !== 'EUR' ? moneda : undefined,
+      totalEur: moneda !== 'EUR' ? Number(totalEur || 0) : undefined,
       };
       // Edición (admin/superadmin): si la factura ya está emitida/pagada se CORRIGE
       // (mantiene su número fiscal); si es borrador, PATCH normal; si no, crear.
@@ -297,6 +308,7 @@ export default function InvoiceCreatePage() {
       if (Array.isArray(f.items) && f.items.length) setItems(f.items.map((it) => ({ descripcion: it.descripcion, cantidad: Number(it.cantidad) || 1, precio_unitario: Number(it.precio_unitario) || 0 })));
       if (f.metodo_pago) setMetodoPago(f.metodo_pago as typeof metodoPago);
       if (f.moneda) setMoneda(f.moneda);
+        if (f.total_divisa != null) setTotalEur(String(f.total ?? ''));
       if (f.notas) setNotas(f.notas);
       if (f.issuer_id) setIssuerId(f.issuer_id);
       if (f.project_id) setProjectId(f.project_id);
@@ -636,10 +648,26 @@ export default function InvoiceCreatePage() {
           <div>
             <label className="text-[11px] text-muted-foreground">Moneda</label>
             <select value={moneda} onChange={(e) => setMoneda(e.target.value)} className="w-full h-9 px-2 rounded border border-border bg-background text-sm">
-              {['EUR', 'USD', 'MXN', 'COP', 'ARS', 'CLP', 'PEN', 'CRC', 'GBP', 'BRL', 'DOP', 'GTQ', 'UYU'].map((c) => <option key={c} value={c}>{c}</option>)}
+              {CURRENCIES.map((c) => <option key={c.code} value={c.code}>{c.code} · {c.label}</option>)}
             </select>
-            {moneda !== 'EUR' && <p className="text-[10px] text-amber-600 mt-0.5">Importes manuales en {moneda} (sin conversión automática). El PDF saldrá en {moneda}.</p>}
           </div>
+          {/* Doble moneda: al facturar en divisa, el importe en EUROS es obligatorio.
+              Es el que manda en la contabilidad; la divisa es solo lo que se muestra. */}
+          {moneda !== 'EUR' && (
+            <div className="p-2.5 rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 space-y-1.5">
+              <p className="text-[10px] text-amber-800 dark:text-amber-300">
+                Los conceptos van en <strong>{moneda}</strong> (importes manuales, sin conversión automática).
+                Indica también el total en euros: es el que cuenta para la contabilidad y los reportes.
+                En la factura saldrá <strong>{totalConceptos.toFixed(2)} {moneda} ({(Number(totalEur) || 0).toFixed(2)} €)</strong>.
+              </p>
+              <div>
+                <label className="text-[11px] text-muted-foreground">Total en euros <span className="text-red-500">*</span></label>
+                <input type="number" step="0.01" min="0" value={totalEur} onChange={(e) => setTotalEur(e.target.value)}
+                  placeholder="0.00"
+                  className={`w-full h-9 px-2 rounded border bg-background text-sm ${!totalEur ? 'border-amber-400' : 'border-border'}`} />
+              </div>
+            </div>
+          )}
           <textarea value={piePago} onChange={(e) => setPiePago(e.target.value)} rows={2} placeholder="Pie de pago (IBAN, vencimiento…)" className="w-full px-2 py-1.5 rounded border border-border bg-background text-sm" />
         </div>
       </div>

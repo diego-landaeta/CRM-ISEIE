@@ -7,6 +7,7 @@ import PageHeader from '@/shared/components/ui/PageHeader';
 import KpiCard from '@/shared/components/ui/KpiCard';
 import client from '@/shared/api/client';
 import { formatDateNumeric } from '@/shared/lib/format';
+import { fmtMoneda } from '../currencies';
 import { invoicesApi, invoiceFaltantes } from '../api/invoices.api';
 import type { Invoice, Issuer, VentaSinFactura } from '../api/invoices.api';
 import InvoiceButton from '../components/InvoiceButton';
@@ -453,7 +454,14 @@ export default function InvoicesPage() {
                     <td className="px-3 py-2 text-xs text-muted-foreground">{inv.proyecto_nombre || '—'}</td>
                   )}
                   <td className="px-3 py-2 text-xs text-muted-foreground">{inv.gestora_nombre || '—'}</td>
-                  <td className={`px-3 py-2 text-right tabular-nums font-semibold ${Number(inv.total) < 0 ? 'text-rose-600' : ''}`}>{fmt(Number(inv.total))}</td>
+                  <td className={`px-3 py-2 text-right tabular-nums font-semibold ${Number(inv.total) < 0 ? 'text-rose-600' : ''}`}>
+                    {inv.total_divisa != null && inv.moneda && inv.moneda !== 'EUR' ? (
+                      <>
+                        {fmtMoneda(inv.total_divisa, inv.moneda)}
+                        <span className="block text-[10px] font-normal text-muted-foreground">({fmt(Number(inv.total))})</span>
+                      </>
+                    ) : fmt(Number(inv.total))}
+                  </td>
                   <td className="px-3 py-2">
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${ESTADO_BADGE[inv.estado] || 'bg-muted'}`}>
                       {inv.estado.toUpperCase()}

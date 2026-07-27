@@ -46,7 +46,16 @@ export const createInvoiceSchema = z.object({
   // Moneda de la factura (opcional). Importes manuales en esa divisa, SIN conversión
   // automática. Por defecto EUR. Ej: 'USD', 'MXN', 'COP', 'CRC', 'ARS'.
   moneda: z.string().trim().min(3).max(8).optional(),
+  // Doble moneda MANUAL. Si la factura va en divisa distinta del euro, el importe en
+  // EUROS es obligatorio y es el que manda en la contabilidad (total). El importe en
+  // divisa se guarda aparte solo para mostrarlo: "1.000,00 USD (920,00 €)".
+  totalEur: z.number().nonnegative().optional().nullable(),
 }).superRefine((d, ctx) => {
+  const enDivisa = d.moneda && String(d.moneda).toUpperCase() !== 'EUR';
+  if (enDivisa && (d.totalEur === undefined || d.totalEur === null)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['totalEur'],
+      message: 'Indica el importe total en euros (obligatorio al facturar en otra divisa).' });
+  }
   if (d.tipo === 'proforma') return; // presupuesto: datos fiscales opcionales
   if (d.borrador === true) return;   // borrador: se completa antes de emitir
   for (const [field, msg] of [

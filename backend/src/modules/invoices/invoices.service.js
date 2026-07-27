@@ -62,6 +62,22 @@ export function calcularImportes({ items, ivaPct, ivaIncluido }) {
   return { baseImponible, ivaImporte, total };
 }
 
+// Doble moneda: la gestora teclea a mano el total en EUROS de una factura emitida en
+// otra divisa. Aquí se desglosa ese importe (base + IVA) para que la contabilidad en
+// euros cuadre. No hay conversión automática: el euro que entra es el que manda.
+export function repartirEnEuros({ totalEur, ivaPct, ivaIncluido }) {
+  const total = Number(totalEur || 0);
+  const pct = Number(ivaPct || 0);
+  if (pct === 0) return { baseImponible: Number(total.toFixed(2)), ivaImporte: 0, total: Number(total.toFixed(2)) };
+  if (ivaIncluido) {
+    const baseImponible = Number((total / (1 + pct / 100)).toFixed(2));
+    return { baseImponible, ivaImporte: Number((total - baseImponible).toFixed(2)), total: Number(total.toFixed(2)) };
+  }
+  // El importe tecleado se toma como TOTAL con IVA ya sumado (es lo que se cobró).
+  const baseImponible = Number((total / (1 + pct / 100)).toFixed(2));
+  return { baseImponible, ivaImporte: Number((total - baseImponible).toFixed(2)), total: Number(total.toFixed(2)) };
+}
+
 // Formatea un importe en la moneda de la factura (por defecto EUR). Los importes
 // son manuales en esa divisa (sin conversión). Si el código ISO no lo soporta
 // Intl, cae a "1.234,56 XXX".
@@ -242,15 +258,26 @@ export async function generatePDF(invoiceId, { preliminar = false } = {}) {
   y -= 20;
   page.drawRectangle({ x: right - 200, y: y - 4, width: 200, height: 1, color: gray });
   y -= 16;
+  // Doble moneda: base/IVA/total se guardan SIEMPRE en euros; total_divisa es el
+  // importe en la divisa internacional (manual). Si existe, manda él en el TOTAL y
+  // el euro va detrás entre paréntesis. Las facturas antiguas en divisa (sin
+  // total_divisa) conservan su comportamiento: todo formateado en esa divisa.
+  const enDivisa = String(inv.moneda || 'EUR').toUpperCase() !== 'EUR' && inv.total_divisa != null;
+  const fmtBase = (n) => (enDivisa ? fmtMoney(n, 'EUR') : fmtEUR(n));
   page.drawText('Base imponible:', { x: right - 200, y, size: 10, font, color: black });
-  page.drawText(fmtEUR(inv.base_imponible), { x: right - 70, y, size: 10, font, color: black });
+  page.drawText(fmtBase(inv.base_imponible), { x: right - 70, y, size: 10, font, color: black });
   y -= 16;
   page.drawText(`IVA (${inv.iva_pct}%):`, { x: right - 200, y, size: 10, font, color: black });
-  page.drawText(fmtEUR(inv.iva_importe), { x: right - 70, y, size: 10, font, color: black });
+  page.drawText(fmtBase(inv.iva_importe), { x: right - 70, y, size: 10, font, color: black });
   y -= 16;
   page.drawRectangle({ x: right - 200, y: y + 12, width: 200, height: 1, color: gray });
   page.drawText('TOTAL:', { x: right - 200, y, size: 12, font: bold, color: black });
-  page.drawText(fmtEUR(inv.total), { x: right - 70, y, size: 12, font: bold, color: black });
+  page.drawText(enDivisa ? fmtMoney(inv.total_divisa, inv.moneda) : fmtEUR(inv.total),
+    { x: right - 70, y, size: 12, font: bold, color: black });
+  if (enDivisa) {
+    y -= 13;
+    drawRight(`(${fmtMoney(inv.total, 'EUR')})`, right, y, 9, bold, black);
+  }
 
   // Deja explícito si el IVA va INCLUIDO en el precio o AÑADIDO sobre la base.
   if (Number(inv.iva_pct) > 0) {
@@ -454,14 +481,20 @@ async function renderFromTemplate({ pdfDoc, page, font, bold, inv, layout }) {
             { text: esProforma ? 'PROFORMA — documento sin validez fiscal' : '', color: gray, size: (b.fontSize || 12) - 2 },
           ]);
           break;
-        case 'totales':
+        case 'totales': {
+          // Ver nota en generatePDF: con divisa, el TOTAL va en ella y el euro detrás.
+          const enDiv = String(inv.moneda || 'EUR').toUpperCase() !== 'EUR' && inv.total_divisa != null;
+          const fBase = (n) => (enDiv ? fmtMoney(n, 'EUR') : fmtEUR(n));
           drawLines(b, [
-            { text: `Base imponible: ${fmtEUR(inv.base_imponible)}` },
-            { text: `IVA (${inv.iva_pct}%): ${fmtEUR(inv.iva_importe)}` },
-            { text: `TOTAL: ${fmtEUR(inv.total)}`, bold: true, size: (b.fontSize || 12) + 2 },
+            { text: `Base imponible: ${fBase(inv.base_imponible)}` },
+            { text: `IVA (${inv.iva_pct}%): ${fBase(inv.iva_importe)}` },
+            { text: enDiv
+                ? `TOTAL: ${fmtMoney(inv.total_divisa, inv.moneda)} (${fmtMoney(inv.total, 'EUR')})`
+                : `TOTAL: ${fmtEUR(inv.total)}`, bold: true, size: (b.fontSize || 12) + 2 },
             { text: Number(inv.iva_pct) > 0 ? (inv.iva_incluido ? 'IVA incluido en el precio' : 'IVA añadido a la base imponible') : '', color: gray, size: (b.fontSize || 12) - 3 },
           ]);
           break;
+        }
         case 'coletilla':
           if (inv.leyenda_iva) drawLines(b, String(inv.leyenda_iva).split('\n').map((t) => ({ text: t })));
           break;

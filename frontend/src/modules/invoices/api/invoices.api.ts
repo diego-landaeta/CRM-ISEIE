@@ -48,6 +48,8 @@ export interface CreateInvoiceBody {
   piePago?: string;
   /** Moneda de la factura (ISO). Importes manuales en esa divisa, sin conversión. Default EUR. */
   moneda?: string;
+  /** Obligatorio si moneda != EUR: importe total en euros (contabilidad). */
+  totalEur?: number | null;
   tipo?: 'normal' | 'proforma';
   /** true = crear como BORRADOR (sin numero fiscal, datos fiscales opcionales) */
   borrador?: boolean;
@@ -109,6 +111,8 @@ export interface Invoice {
   /** Origen del cobro (p.ej. 'tarjeta_stripe' → factura generada por un pago Stripe). */
   metodo_pago?: string | null;
   moneda?: string | null;
+  /** Importe en la divisa internacional (manual). El total va siempre en euros. */
+  total_divisa?: number | string | null;
   /** Gestora responsable del lead de la factura. */
   gestora_nombre?: string | null;
 }
