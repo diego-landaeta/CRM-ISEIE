@@ -588,11 +588,13 @@ export async function findAll({ projectId, projectIds, status, responsableId, un
     conditions.push(`l.reincidente = TRUE`);
   }
 
-  // "Clientes" = leads con AL MENOS UNA venta (conversión), sin importar su status
-  // (un cliente puede tener el lead en cualquier estado). Es el criterio correcto
-  // para la vista de Clientes, en vez de status='convertido'.
+  // "Clientes" incluye tanto los leads marcados como convertidos como aquellos
+  // que conservan una venta. Así, eliminar una conversión no oculta al cliente.
   if (conConversion) {
-    conditions.push(`EXISTS (SELECT 1 FROM conversions c WHERE c.lead_id = l.id)`);
+    conditions.push(`(
+      l.status = 'convertido'
+      OR EXISTS (SELECT 1 FROM conversions c WHERE c.lead_id = l.id)
+    )`);
   }
   if (conConversion && installmentStatus) {
     const hasInstallments = `EXISTS (
@@ -635,13 +637,20 @@ export async function findAll({ projectId, projectIds, status, responsableId, un
   }
   if (productId) {
     conditions.push(conConversion
-      ? `EXISTS (
-          SELECT 1 FROM conversions cprod
-          WHERE cprod.lead_id = l.id
-            AND (
-              cprod.producto_contratado_id = $${paramIdx}
-              OR (cprod.producto_contratado_id IS NULL AND l.producto_interes_id = $${paramIdx})
-            )
+      ? `(
+          EXISTS (
+            SELECT 1 FROM conversions cprod
+            WHERE cprod.lead_id = l.id
+              AND (
+                cprod.producto_contratado_id = $${paramIdx}
+                OR (cprod.producto_contratado_id IS NULL AND l.producto_interes_id = $${paramIdx})
+              )
+          )
+          OR (
+            l.status = 'convertido'
+            AND NOT EXISTS (SELECT 1 FROM conversions cprod_any WHERE cprod_any.lead_id = l.id)
+            AND l.producto_interes_id = $${paramIdx}
+          )
         )`
       : `l.producto_interes_id = $${paramIdx}`);
     paramIdx++;
@@ -710,6 +719,13 @@ export async function findAll({ projectId, projectIds, status, responsableId, un
                   LEFT JOIN products pcourse ON pcourse.id = ccourse.producto_contratado_id
                   LEFT JOIN products pcontact ON pcontact.id = l.producto_interes_id
                   WHERE ccourse.lead_id = l.id
+                  UNION ALL
+                  SELECT pcontact.nombre AS program_name
+                  FROM products pcontact
+                  WHERE pcontact.id = l.producto_interes_id
+                    AND NOT EXISTS (
+                      SELECT 1 FROM conversions ccourse_any WHERE ccourse_any.lead_id = l.id
+                    )
                 ) client_programs
                 WHERE program_name IS NOT NULL
                 ORDER BY program_name
