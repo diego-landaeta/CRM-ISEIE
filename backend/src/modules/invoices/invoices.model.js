@@ -539,7 +539,10 @@ async function _convertirProformaEnFactura(prof, conv, paymentId, fechaPago) {
   // Concepto con el formato fijo y el programa del catálogo (no el texto libre).
   const concepto = `Producto/servicio: servicio académico, ${nombrePrograma(conv)}`;
   const saldada = pagado >= total - 0.01;
-  const items = JSON.stringify([{ descripcion: concepto, cantidad: 1, precio_unitario: base }]);
+  // El ítem lleva el precio BRUTO (con IVA incluido); el PDF ya lo pasa a neto para
+  // que la línea cuadre con la base imponible (antes se guardaba el neto y el PDF lo
+  // volvía a dividir → subtotal ≠ base imponible).
+  const items = JSON.stringify([{ descripcion: concepto, cantidad: 1, precio_unitario: total }]);
   const { rows } = await query(
     `UPDATE invoices SET
        tipo = 'normal', estado = $2::text,
