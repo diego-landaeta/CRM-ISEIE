@@ -4,6 +4,7 @@ import StatusBadge, { STATUS_LABELS, STATUS_STYLES, STATUS_KEYS } from '@/shared
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 import { useAuth } from '@/contexts/AuthContext';
+import type { User } from '@/shared/types';
 
 const LeadLossDialog = lazy(() => import('./lead-detail/LeadLossDialog'));
 
@@ -34,14 +35,14 @@ interface Props {
 }
 
 export default function QuickStatusChange({ leadId, currentStatus, responsableId, onChanged }: Props) {
-  const { user } = useAuth() as { user: { userId: number; role: string } | null };
+  const { user } = useAuth() as { user: User | null };
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [lossOpen, setLossOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
-  const isOwner = responsableId === user?.userId;
+  const isOwner = responsableId === user?.id;
   const canEdit = isAdmin || isOwner;
 
   useEffect(() => {
