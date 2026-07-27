@@ -53,9 +53,7 @@ export default function InvoiceButton({ projectId, leadId, conversionId, items, 
   const isDraft = existing?.estado === 'borrador';
   const incompleta = !!existing && !isDraft && existing.tipo !== 'proforma' && invoiceFaltantes(existing).length > 0;
 
-  // Al pulsar: si ya hay documento, abrir/emitir; si no, preguntar qué emitir
-  // (proforma o factura) — así el usuario confirma la proforma y también puede
-  // emitir proforma aunque haya pago inicial.
+  // Al pulsar: sin pago se puede emitir proforma; con pagos, únicamente factura.
   function onClick() {
     if (existing) {
       if (isDraft || incompleta) { setEmitOpen(true); return; }
@@ -79,7 +77,7 @@ export default function InvoiceButton({ projectId, leadId, conversionId, items, 
       const metodoDefault = (cfg.success && cfg.data?.factura_metodo_default) || 'transferencia';
       const pieDefault = cfg.success ? (cfg.data?.factura_pie_default || undefined) : undefined;
 
-      // PROFORMA (sin pago, o elegida con pago): reserva su correlativo y se
+      // PROFORMA (únicamente sin pago): reserva su correlativo y se
       // convierte en factura al registrar el pago. No exige datos fiscales completos.
       if (asProforma) {
         const res = await invoicesApi.create({
@@ -164,7 +162,7 @@ export default function InvoiceButton({ projectId, leadId, conversionId, items, 
           : sinPago ? 'Emitir proforma' : 'Emitir factura'}
       </button>
 
-      {/* Confirmación: proforma (sin pago) o elegir documento (con pago). */}
+      {/* Confirmación: proforma sin pago o factura cuando ya existe un cobro. */}
       {choiceOpen && (
         <div className="fixed inset-0 z-[85] flex items-center justify-center p-4" onClick={() => setChoiceOpen(false)}>
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
@@ -182,14 +180,13 @@ export default function InvoiceButton({ projectId, leadId, conversionId, items, 
               </>
             ) : (
               <>
-                <h3 className="font-semibold text-base mb-1">¿Qué documento emitir?</h3>
+                <h3 className="font-semibold text-base mb-1">¿Emitir la factura?</h3>
                 <p className="text-sm text-muted-foreground mb-4">
-                  Puedes emitir la <b>factura</b> directamente, o una <b>proforma</b> (p. ej. del pago inicial) que luego se convierte en factura.
+                  Esta venta ya tiene pagos registrados. A partir del primer cobro no se pueden emitir proformas.
                 </p>
-                <div className="flex justify-end gap-2 flex-wrap">
+                <div className="flex justify-end gap-2">
                   <button onClick={() => setChoiceOpen(false)} className="h-9 px-4 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted">Cancelar</button>
-                  <button onClick={() => doEmit(true)} className="h-9 px-4 rounded-md border border-primary text-primary text-sm font-semibold hover:bg-primary/10">Proforma</button>
-                  <button onClick={() => doEmit(false)} className="h-9 px-4 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90">Factura</button>
+                  <button onClick={() => doEmit(false)} className="h-9 px-4 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90">Sí, emitir factura</button>
                 </div>
               </>
             )}

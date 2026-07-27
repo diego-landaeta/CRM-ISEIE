@@ -411,8 +411,16 @@ export async function deleteInvoice(id) {
 
 // ¿La conversión no tiene ningún pago? → no puede emitir factura fiscal (solo proforma).
 export async function conversionSinPago(conversionId) {
-  const { rows } = await query(`SELECT COALESCE(importe_pagado, 0) AS pagado FROM conversions WHERE id = $1`, [conversionId]);
-  return rows[0] ? Number(rows[0].pagado) <= 0 : false;
+  const { rows } = await query(
+    `SELECT COALESCE(c.importe_pagado, 0) AS pagado,
+            EXISTS (
+              SELECT 1 FROM conversion_payments cp WHERE cp.conversion_id = c.id
+            ) AS tiene_pagos
+       FROM conversions c
+      WHERE c.id = $1`,
+    [conversionId]
+  );
+  return rows[0] ? Number(rows[0].pagado) <= 0 && !rows[0].tiene_pagos : false;
 }
 
 // ¿El usuario tiene el permiso factura_manager? (gestora con poderes de factura).
@@ -508,8 +516,9 @@ const METODOS_PAGO_VALIDOS = ['transferencia', 'tarjeta', 'tarjeta_stripe', 'efe
 async function _convDataParaFactura(conversionId) {
   const { rows } = await query(
     `SELECT c.*, l.nombre AS lead_nombre, l.email AS lead_email, l.telefono AS lead_telefono,
-            l.identificacion_fiscal, l.direccion_fiscal, l.ciudad_fiscal, l.codigo_postal_fiscal, l.pais_fiscal,
-            pr.nombre AS producto_catalogo
+             l.identificacion_fiscal, l.direccion_fiscal, l.ciudad_fiscal, l.codigo_postal_fiscal, l.pais_fiscal,
+             l.cliente_tipo, l.custom_fields,
+             pr.nombre AS producto_catalogo
        FROM conversions c
        LEFT JOIN leads l ON l.id = c.lead_id
        LEFT JOIN products pr ON pr.id = c.producto_contratado_id
@@ -525,6 +534,20 @@ function nombrePrograma(conv) {
   if (cat) return cat;
   const txt = conv.producto_contratado && String(conv.producto_contratado).trim();
   return txt || 'programa';
+}
+
+function nombreClienteFactura(conv) {
+  const razonSocial = conv.cliente_tipo === 'empresa'
+    ? String(conv.custom_fields?.razon_social || '').trim()
+    : '';
+  return razonSocial || conv.lead_nombre || 'Cliente';
+}
+
+function telefonoClienteFactura(conv) {
+  const telefonoFiscal = conv.cliente_tipo === 'empresa'
+    ? String(conv.custom_fields?.telefono_facturacion || '').trim()
+    : '';
+  return telefonoFiscal || conv.lead_telefono || null;
 }
 
 // PROFORMA → FACTURA: convierte una proforma (número fiscal ya reservado) en
@@ -576,10 +599,26 @@ export async function emitirFacturaDePago(conversionId, { paymentId, importe }, 
   if (!conv) return null;
 
   // Fecha real del cobro → la factura sale PAGADA con esa fecha (el dinero ya entró).
-  const { rows: payRows } = await query(`SELECT fecha, metodo, notas FROM conversion_payments WHERE id = $1`, [paymentId]);
+  const { rows: payRows } = await query(
+    `SELECT cp.fecha, cp.metodo, cp.notas,
+            sp.metadata AS stripe_metadata
+       FROM conversion_payments cp
+       LEFT JOIN stripe_payments sp ON sp.conversion_payment_id = cp.id
+      WHERE cp.id = $1
+      ORDER BY sp.id DESC NULLS LAST
+      LIMIT 1`,
+    [paymentId]
+  );
   const fechaPago = payRows[0]?.fecha || null;
   const metodoPago = payRows[0]?.metodo || null;
   const notasPago = payRows[0]?.notas || null;
+  const stripeMeta = payRows[0]?.stripe_metadata || {};
+  const originalAmount = Number(stripeMeta.original_amount);
+  const originalCurrency = String(stripeMeta.original_currency || '').toUpperCase();
+  const foreignStripePayment = Number.isFinite(originalAmount)
+    && originalAmount > 0
+    && originalCurrency
+    && originalCurrency !== 'EUR';
 
   // No auto-facturar pagos ANTERIORES al inicio de facturación de la sociedad (su
   // primera factura emitida). Evita facturas retroactivas de cobros previos al
@@ -622,29 +661,35 @@ export async function emitirFacturaDePago(conversionId, { paymentId, importe }, 
   // es una cuota (notas "Cuota N") → "...mensualidad N de <programa>".
   const prog = nombrePrograma(conv);
   const mCuota = /cuota\s*(\d+)/i.exec(String(notasPago || ''));
-  const concepto = mCuota
+  const conceptoBase = mCuota
     ? `Producto/servicio: servicio académico, mensualidad ${mCuota[1]} de ${prog}`
     : `Producto/servicio: servicio académico, ${prog}`;
+  const concepto = foreignStripePayment
+    ? `${conceptoBase} (${originalAmount.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${originalCurrency}; liquidación neta Stripe: ${monto.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} EUR)`
+    : conceptoBase;
 
   const inv = await create({
     projectId: conv.project_id,
     conversionId,
     paymentId,
     leadId: conv.lead_id,
-    clienteNombre: conv.lead_nombre || 'Cliente',
+    clienteNombre: nombreClienteFactura(conv),
     clienteNif: conv.identificacion_fiscal || undefined,
     clienteDireccion: conv.direccion_fiscal || undefined,
     clienteCiudad: conv.ciudad_fiscal || undefined,
     clienteCp: conv.codigo_postal_fiscal || undefined,
     clientePais: conv.pais_fiscal || 'España',
     clienteEmail: conv.lead_email || null,
-    clienteTelefono: conv.lead_telefono || null,
+    clienteTelefono: telefonoClienteFactura(conv),
     items: [{ descripcion: concepto, cantidad: 1, precio_unitario: base }],
     baseImponible: base,
     ivaPct,
     ivaImporte,
     ivaIncluido: false,
     total: monto,
+    notas: foreignStripePayment
+      ? `Cobro internacional: ${originalAmount.toFixed(2)} ${originalCurrency}. Importe neto liquidado por Stripe: ${monto.toFixed(2)} EUR.`
+      : null,
     leyendaIva: 'Operación exenta de IVA conforme a la normativa aplicable.',
     // Método REAL del pago (el que eligió el usuario al cobrar). 'fraccionado' es
     // el PLAN de la venta, no un método: si el pago no trae método, cae a Tarjeta.
@@ -683,14 +728,14 @@ export async function autoEmitirPorPago(conversionId, userId = null) {
     projectId: conv.project_id,
     conversionId,
     leadId: conv.lead_id,
-    clienteNombre: conv.lead_nombre || 'Cliente',
+    clienteNombre: nombreClienteFactura(conv),
     clienteNif: conv.identificacion_fiscal || undefined,
     clienteDireccion: conv.direccion_fiscal || undefined,
     clienteCiudad: conv.ciudad_fiscal || undefined,
     clienteCp: conv.codigo_postal_fiscal || undefined,
     clientePais: conv.pais_fiscal || 'España',
     clienteEmail: conv.lead_email || null,
-    clienteTelefono: conv.lead_telefono || null,
+    clienteTelefono: telefonoClienteFactura(conv),
     items,
     baseImponible: Number(conv.base_imponible ?? conv.importe_total) || 0,
     ivaPct,

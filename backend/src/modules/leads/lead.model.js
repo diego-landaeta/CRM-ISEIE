@@ -558,7 +558,7 @@ function buildOrderBy(sort, dir = 'desc') {
   return `${FECHA} ${D} NULLS LAST, l.id ${D}`;
 }
 
-export async function findAll({ projectId, projectIds, status, responsableId, unassigned, canal, productId, search, page, limit, includeConverted, dateFrom, dateTo, sort, dir, duplicated, reincidente, conConversion }) {
+export async function findAll({ projectId, projectIds, status, responsableId, unassigned, canal, productId, search, page, limit, includeConverted, dateFrom, dateTo, sort, dir, duplicated, reincidente, conConversion, installmentStatus }) {
   const conditions = [];
   const params = [];
   let paramIdx = 1;
@@ -594,6 +594,29 @@ export async function findAll({ projectId, projectIds, status, responsableId, un
   if (conConversion) {
     conditions.push(`EXISTS (SELECT 1 FROM conversions c WHERE c.lead_id = l.id)`);
   }
+  if (conConversion && installmentStatus) {
+    const hasInstallments = `EXISTS (
+      SELECT 1
+      FROM conversion_installments ci_filter
+      JOIN conversions c_filter ON c_filter.id = ci_filter.conversion_id
+      WHERE c_filter.lead_id = l.id
+    )`;
+    const hasPendingInstallments = `EXISTS (
+      SELECT 1
+      FROM conversion_installments ci_filter
+      JOIN conversions c_filter ON c_filter.id = ci_filter.conversion_id
+      WHERE c_filter.lead_id = l.id
+        AND ci_filter.fecha_cobro IS NULL
+    )`;
+
+    if (installmentStatus === 'pending') {
+      conditions.push(hasPendingInstallments);
+    } else if (installmentStatus === 'completed') {
+      conditions.push(`${hasInstallments} AND NOT ${hasPendingInstallments}`);
+    } else if (installmentStatus === 'no_plan') {
+      conditions.push(`NOT ${hasInstallments}`);
+    }
+  }
   if (status) {
     conditions.push(`l.status = $${paramIdx++}`);
     params.push(status);
@@ -611,7 +634,17 @@ export async function findAll({ projectId, projectIds, status, responsableId, un
     params.push(canal);
   }
   if (productId) {
-    conditions.push(`l.producto_interes_id = $${paramIdx++}`);
+    conditions.push(conConversion
+      ? `EXISTS (
+          SELECT 1 FROM conversions cprod
+          WHERE cprod.lead_id = l.id
+            AND (
+              cprod.producto_contratado_id = $${paramIdx}
+              OR (cprod.producto_contratado_id IS NULL AND l.producto_interes_id = $${paramIdx})
+            )
+        )`
+      : `l.producto_interes_id = $${paramIdx}`);
+    paramIdx++;
     params.push(productId);
   }
   if (search) {
@@ -626,14 +659,28 @@ export async function findAll({ projectId, projectIds, status, responsableId, un
   // descuadra ±2h en Madrid (verano). Resultado: "Hoy" muestra leads de "Ayer"
   // y viceversa. Forzamos interpretación en la TZ de la app.
   const APP_TZ = process.env.APP_TIMEZONE || 'Europe/Madrid';
-  if (dateFrom) {
-    conditions.push(`COALESCE(l.fecha_solicitud, l.created_at) >= ($${paramIdx++}::text || ' 00:00:00')::timestamp AT TIME ZONE '${APP_TZ}'`);
-    params.push(dateFrom);
-  }
-  if (dateTo) {
-    // dateTo inclusivo: hasta el final del día (en la TZ del usuario).
-    conditions.push(`COALESCE(l.fecha_solicitud, l.created_at) < (($${paramIdx++}::text || ' 00:00:00')::timestamp AT TIME ZONE '${APP_TZ}' + INTERVAL '1 day')`);
-    params.push(dateTo);
+  if (conConversion) {
+    // En Clientes, el rango corresponde a la última compra, no a la fecha en
+    // que se creó/importó el lead.
+    const lastPurchase = `(SELECT MAX(cdate.fecha_conversion) FROM conversions cdate WHERE cdate.lead_id = l.id)`;
+    if (dateFrom) {
+      conditions.push(`${lastPurchase} >= $${paramIdx++}::date`);
+      params.push(dateFrom);
+    }
+    if (dateTo) {
+      conditions.push(`${lastPurchase} < ($${paramIdx++}::date + INTERVAL '1 day')`);
+      params.push(dateTo);
+    }
+  } else {
+    if (dateFrom) {
+      conditions.push(`COALESCE(l.fecha_solicitud, l.created_at) >= ($${paramIdx++}::text || ' 00:00:00')::timestamp AT TIME ZONE '${APP_TZ}'`);
+      params.push(dateFrom);
+    }
+    if (dateTo) {
+      // dateTo inclusivo: hasta el final del día (en la TZ del usuario).
+      conditions.push(`COALESCE(l.fecha_solicitud, l.created_at) < (($${paramIdx++}::text || ' 00:00:00')::timestamp AT TIME ZONE '${APP_TZ}' + INTERVAL '1 day')`);
+      params.push(dateTo);
+    }
   }
 
   const where = 'WHERE ' + conditions.join(' AND ');
@@ -642,11 +689,73 @@ export async function findAll({ projectId, projectIds, status, responsableId, un
   const countResult = await query(`SELECT COUNT(*) FROM leads l ${where}`, params);
   const total = parseInt(countResult.rows[0].count);
 
+  const clientStatsSelect = conConversion ? `,
+            client_stats.programas,
+            client_stats.total_cuotas,
+            client_stats.cuotas_pagadas,
+            client_stats.cuotas_pendientes,
+            client_stats.total_pagos,
+            client_stats.proximo_vencimiento` : '';
+  const clientStatsJoin = conConversion ? `
+     LEFT JOIN LATERAL (
+       SELECT ARRAY(
+                SELECT program_name
+                FROM (
+                  SELECT DISTINCT COALESCE(
+                    NULLIF(BTRIM(ccourse.producto_contratado), ''),
+                    pcourse.nombre,
+                    pcontact.nombre
+                  ) AS program_name
+                  FROM conversions ccourse
+                  LEFT JOIN products pcourse ON pcourse.id = ccourse.producto_contratado_id
+                  LEFT JOIN products pcontact ON pcontact.id = l.producto_interes_id
+                  WHERE ccourse.lead_id = l.id
+                ) client_programs
+                WHERE program_name IS NOT NULL
+                ORDER BY program_name
+              ) AS programas,
+              (
+                SELECT COUNT(*)::int
+                FROM conversion_installments ci
+                JOIN conversions ci_conv ON ci_conv.id = ci.conversion_id
+                WHERE ci_conv.lead_id = l.id
+              ) AS total_cuotas,
+              (
+                SELECT COUNT(*)::int
+                FROM conversion_installments ci
+                JOIN conversions ci_conv ON ci_conv.id = ci.conversion_id
+                WHERE ci_conv.lead_id = l.id
+                  AND ci.fecha_cobro IS NOT NULL
+              ) AS cuotas_pagadas,
+              (
+                SELECT COUNT(*)::int
+                FROM conversion_installments ci
+                JOIN conversions ci_conv ON ci_conv.id = ci.conversion_id
+                WHERE ci_conv.lead_id = l.id
+                  AND ci.fecha_cobro IS NULL
+              ) AS cuotas_pendientes,
+              (
+                SELECT COUNT(*)::int
+                FROM conversion_payments cp
+                JOIN conversions cp_conv ON cp_conv.id = cp.conversion_id
+                WHERE cp_conv.lead_id = l.id
+                  AND COALESCE(cp.notas, '') NOT ILIKE 'Backfill%'
+              ) AS total_pagos,
+              (
+                SELECT MIN(ci.fecha_vencimiento)
+                FROM conversion_installments ci
+                JOIN conversions ci_conv ON ci_conv.id = ci.conversion_id
+                WHERE ci_conv.lead_id = l.id
+                  AND ci.fecha_cobro IS NULL
+              ) AS proximo_vencimiento
+     ) client_stats ON TRUE` : '';
+
   const { rows } = await query(
     `SELECT l.id, l.nombre, l.email, l.telefono, l.status, l.fecha_solicitud, l.dossier_enviado, l.lead_duplicado_de,
             l.reincidente, l.es_propuesto, l.propuesto_de, l.updated_at, l.created_at,
             l.landing_url,
             l.project_id,
+            l.responsable_id,
             proj.nombre AS proyecto_nombre,
             proj.slug AS proyecto_slug,
             u.nombre as responsable_nombre,
@@ -660,12 +769,14 @@ export async function findAll({ projectId, projectIds, status, responsableId, un
             p.dias_alerta_inactividad,
             EXTRACT(DAY FROM NOW() - GREATEST(l.updated_at, COALESCE((SELECT MAX(fecha) FROM lead_interactions WHERE lead_id = l.id), l.created_at)))::int AS dias_inactivo,
             EXISTS(SELECT 1 FROM lead_spam_reports sr WHERE sr.lead_id = l.id AND sr.status = 'pending') AS has_pending_spam_report
+            ${clientStatsSelect}
      FROM leads l
      LEFT JOIN users u ON u.id = l.responsable_id
      LEFT JOIN lead_utms lu ON lu.lead_id = l.id
      LEFT JOIN projects p ON p.id = l.project_id
      LEFT JOIN projects proj ON proj.id = l.project_id
      LEFT JOIN products prod ON prod.id = l.producto_interes_id
+     ${clientStatsJoin}
      ${where}
      ORDER BY ${buildOrderBy(sort, dir)}
      LIMIT $${paramIdx++} OFFSET $${paramIdx++}`,

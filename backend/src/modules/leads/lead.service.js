@@ -717,7 +717,11 @@ export async function updateLead(leadId, data, opts = {}) {
 
   // Normalizar teléfono si viene en el update
   if (Object.prototype.hasOwnProperty.call(data, 'telefono')) {
-    data.telefono = normalizePhone(data.telefono);
+    const telefonoOriginal = data.telefono;
+    data.telefono = normalizePhone(telefonoOriginal);
+    if (telefonoOriginal && !data.telefono) {
+      throw new AppError('El teléfono no tiene un formato válido. Incluye el código de país y al menos 7 dígitos.', 400, 'INVALID_PHONE');
+    }
   }
   // Normalizar email vacío a null
   if (Object.prototype.hasOwnProperty.call(data, 'email') && (data.email === '' || !data.email)) {
@@ -745,7 +749,10 @@ export async function updateLead(leadId, data, opts = {}) {
     }
   }
 
-  const updated = await leadModel.updateLead(leadId, data);
+  // Un cambio exclusivo de canal no toca la tabla leads; aun así es válido.
+  const updated = Object.keys(data).length > 0
+    ? await leadModel.updateLead(leadId, data)
+    : lead;
 
   // UPDATE/INSERT lead_utms.canal_detectado si se cambió
   if (newCanal !== undefined) {

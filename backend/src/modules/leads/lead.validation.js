@@ -57,6 +57,8 @@ export const listLeadsSchema = z.object({
   reincidente: z.coerce.boolean().optional(),
   // "Clientes" = leads con al menos una venta (conversión).
   conConversion: z.coerce.boolean().optional(),
+  // Filtro operativo exclusivo de Clientes. No depende de importes de venta.
+  installmentStatus: z.enum(['pending', 'completed', 'no_plan']).optional(),
 });
 
 export const checkDuplicateSchema = z.object({

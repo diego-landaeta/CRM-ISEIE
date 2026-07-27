@@ -82,8 +82,22 @@ async function autoLinkIfPossible(projectId, payment, dbRow) {
     return;
   }
   const fecha = new Date(payment.stripe_created_at * 1000).toISOString().slice(0, 10);
-  const cpId = await model.createConversionPayment(conv.id, payment.amount, fecha, `Auto-Stripe ${payment.stripe_id}`);
-  await model.updateConversionPaid(conv.id, payment.amount);
+  // Registrar el cobro con la MISMA lógica que un pago manual (conversion.model.addPayment):
+  // salda la cuota pendiente más antigua (FIFO) y respeta el guard de sobrepago. Así el pago
+  // de Stripe (a) aparece en los pagos de cuotas/mensualidades y (b) NO se duplica si la venta
+  // ya está saldada — que era la causa de los pagos y facturas repetidas.
+  const convModel = await import('../conversions/conversion.model.js');
+  const res = await convModel.addPayment(conv.id, {
+    importe: payment.amount, fecha, notas: `Auto-Stripe ${payment.stripe_id}`, metodo: 'tarjeta',
+  });
+  if (res?.error === 'OVERPAY') {
+    // La venta ya está saldada: este cobro de Stripe sería un duplicado. Se referencia el pago
+    // de Stripe a la conversión (para trazabilidad) pero NO se crea abono ni factura.
+    await model.linkPayment(dbRow.id, { leadId: lead.id, conversionId: conv.id, conversionPaymentId: null, userId: null, method: 'auto_overpaid' });
+    return;
+  }
+  if (res?.error || !res?.payment) return;
+  const cpId = res.payment.id;
   await model.linkPayment(dbRow.id, { leadId: lead.id, conversionId: conv.id, conversionPaymentId: cpId, userId: null, method: 'auto_email' });
   // Un pago de Stripe asociado genera SU factura, en el correlativo normal
   // (igual que cualquier otro abono). No bloqueante.

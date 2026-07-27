@@ -462,21 +462,22 @@ export default function ManualPage() {
 
         {/* ── CLIENTES ── */}
         <SectionHeader id="clientes" icon={UserCheck} label="Clientes" color="sky"
-          description="Prospectos convertidos con historial de compras y estado de cobro" />
+          description="Listado operativo de clientes, programas, cuotas y pagos registrados" />
         <P>
-          Vista enriquecida de todos los prospectos con estado «Convertido» y al menos una compra registrada.
+          Muestra todos los contactos que tienen al menos un programa contratado, aunque el estado
+          actual del prospecto sea distinto de «Convertido».
         </P>
         <FeatureGrid>
-          <FeatureCard icon={CurrencyEur} title="Financiero" color="green">
-            Total facturado, total cobrado e importe pendiente por cliente.
+          <FeatureCard icon={UserCheck} title="Lista de clientes" color="sky">
+            Nombre, datos de contacto, programa y gestora responsable, con filtros para encontrarlos rápidamente.
           </FeatureCard>
-          <FeatureCard icon={Package} title="Historial de compras" color="blue">
-            Todos los productos comprados con fechas y método de pago.
+          <FeatureCard icon={Package} title="Cuotas y pagos" color="blue">
+            Cantidad de cuotas, pagadas, pendientes, pagos reales registrados y próximo vencimiento, sin mostrar importes.
           </FeatureCard>
         </FeatureGrid>
         <Callout type="tip">
-          Para editar datos del cliente (email, teléfono…) ve a su ficha en Prospectos.
-          Los clientes se sincronizan automáticamente con el prospecto.
+          Haz clic en una fila para abrir la ficha completa. La lista también puede filtrarse por
+          gestora, programa y estado del plan de cuotas.
         </Callout>
 
         {/* ── PRODUCTOS ── */}

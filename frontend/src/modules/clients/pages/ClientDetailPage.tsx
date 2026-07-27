@@ -545,12 +545,14 @@ export default function ClientDetailPage() {
           lead={lead}
           onSubmit={async (data) => {
             try {
-              await client.patch(`/leads/${lead.id}`, {
+              const res = await client.patch(`/leads/${lead.id}`, {
                 nombre: data.nombre,
-                telefono: data.telefono || null,
+                email: data.email?.trim() || null,
+                telefono: data.telefono?.trim() || null,
                 notas: data.notas || null,
                 custom_fields: data.custom_fields,
               });
+              if (!res?.success) throw new Error(res?.error || 'No se pudo guardar el cliente');
               toast({ title: 'Cliente actualizado' });
               await load();
             } catch (err) {

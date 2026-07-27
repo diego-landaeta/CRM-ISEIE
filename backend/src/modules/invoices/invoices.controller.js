@@ -144,6 +144,9 @@ export async function create(req, res, next) {
     // REGLA: una conversión no puede tener dos proformas. Si ya existe una activa,
     // se bloquea la segunda emisión (evita duplicados y quemar correlativo fiscal).
     if (d.conversionId && d.tipo === 'proforma' && !d.borrador) {
+      if (!(await model.conversionSinPago(d.conversionId))) {
+        throw new AppError('Esta venta ya tiene pagos registrados. No se puede emitir una proforma después del primer cobro.', 409, 'PROFORMA_WITH_PAYMENT');
+      }
       const existente = await model.proformaActivaDeConversion(d.conversionId);
       if (existente) {
         throw new AppError(`Esta venta ya tiene la proforma ${existente.codigo}. Anúlala antes de emitir otra.`, 409, 'PROFORMA_DUPLICADA');

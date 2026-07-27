@@ -121,7 +121,7 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
         origen: ((lead.origen as string)?.toLowerCase().replace(' ', '_') || 'directo') as LeadFormData['origen'],
         pais: lead.pais || '',
         producto_interes: lead.producto_interes || '',
-        notas: '',
+        notas: lead.notas || '',
       } : {
         nombre: '', email: '', telefono: '', origen: 'directo', producto_interes: '', notas: '',
       });

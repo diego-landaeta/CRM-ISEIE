@@ -139,15 +139,15 @@ export interface Client {
   telefono?: string | null;
   responsable_id?: number | null;
   responsable_nombre?: string | null;
-  conversiones: number;
-  total_compras: number | string;
-  total_pagado: number | string;
-  pendiente: number | string;
-  ultima_compra?: string | null;
+  programas?: string[];
+  total_cuotas: number;
+  cuotas_pagadas: number;
+  cuotas_pendientes: number;
+  total_pagos: number;
+  proximo_vencimiento?: string | null;
   last_interaction_at?: string | null;
   origen?: LeadOrigen | null;
   notas?: string | null;
-  cursos?: string[];
 }
 
 export type ConversionEstado = 'pagado' | 'pendiente' | 'parcial' | 'reembolsado';

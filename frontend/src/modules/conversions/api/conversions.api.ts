@@ -9,6 +9,9 @@ export interface Payment {
   importe: number | string;
   fecha: string;
   notas?: string | null;
+  metodo?: string | null;
+  cuota_numero?: number | null;
+  pagado_por_stripe?: boolean;
   created_at?: string;
   // Factura de ESTE pago (una factura por pago). Null si aún no tiene.
   factura_id?: number | null;
@@ -63,6 +66,7 @@ export interface Installment {
   fecha_cobro?: string | null;
   importe_cobrado?: number | string | null;
   metodo?: string | null;
+  pagado_por_stripe?: boolean;
   concepto?: string | null;
   payment_id?: number | null;
   factura_id?: number | null;

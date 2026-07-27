@@ -169,11 +169,17 @@ export async function findById(id) {
   // Cada pago trae SU factura (una factura por pago). Enlazamos por payment_id
   // e incluimos los datos de cliente para que el front sepa si faltan datos.
   const { rows: payments } = await query(
-    `SELECT cp.id, cp.importe, cp.fecha, cp.notas, cp.created_at,
+    `SELECT cp.id, cp.importe, cp.fecha, cp.notas, cp.metodo, cp.created_at,
+            ci.numero AS cuota_numero,
+            (cp.metodo = 'tarjeta_stripe' OR EXISTS (
+              SELECT 1 FROM stripe_payments sp
+               WHERE sp.conversion_payment_id = cp.id AND sp.status = 'succeeded'
+            )) AS pagado_por_stripe,
             i.id  AS factura_id, i.codigo AS factura_codigo, i.estado AS factura_estado,
             i.tipo AS factura_tipo, i.cliente_nif, i.cliente_direccion, i.cliente_ciudad,
             i.cliente_cp, i.cliente_pais, i.items AS factura_items
        FROM conversion_payments cp
+       LEFT JOIN conversion_installments ci ON ci.payment_id = cp.id
        LEFT JOIN invoices i ON i.payment_id = cp.id AND i.estado <> 'cancelada'
       WHERE cp.conversion_id = $1
       ORDER BY cp.fecha DESC, cp.id DESC`,
@@ -185,6 +191,10 @@ export async function findById(id) {
   const { rows: installments } = await query(
     `SELECT ci.id, ci.numero, ci.importe_previsto, ci.fecha_vencimiento,
             ci.fecha_cobro, ci.importe_cobrado, ci.metodo, ci.payment_id,
+            (ci.metodo = 'tarjeta_stripe' OR EXISTS (
+              SELECT 1 FROM stripe_payments sp
+               WHERE sp.conversion_payment_id = ci.payment_id AND sp.status = 'succeeded'
+            )) AS pagado_por_stripe,
             i.id AS factura_id, i.codigo AS factura_codigo, i.estado AS factura_estado,
             i.tipo AS factura_tipo, i.cliente_nif, i.cliente_direccion, i.cliente_ciudad,
             i.cliente_cp, i.cliente_pais

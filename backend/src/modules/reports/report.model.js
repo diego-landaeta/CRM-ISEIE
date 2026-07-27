@@ -124,6 +124,25 @@ function buildFilter({ projectId, from, to }, dateCol, projectCol = 'project_id'
 
 const ENTRY = 'COALESCE(l.fecha_solicitud, l.created_at)';
 
+// El reporte general mezcla dos hechos con fechas distintas:
+// - prospecto sin venta: fecha de entrada;
+// - cliente con venta: fecha de conversión.
+// Filtrar todo por la fecha de entrada hacía que una importación de ventas
+// históricas pareciera generar cientos de ventas el día de la importación.
+function buildGeneralFilter({ projectId, from, to }) {
+  const params = [];
+  const cond = [];
+  let idx = 1;
+  const reportDate = `(CASE
+    WHEN conv.id IS NOT NULL THEN conv.fecha_conversion::date
+    ELSE ${ENTRY}::date
+  END)`;
+  if (projectId) { cond.push(`l.project_id = $${idx++}`); params.push(projectId); }
+  if (from) { cond.push(`${reportDate} >= $${idx++}::date`); params.push(from); }
+  if (to) { cond.push(`${reportDate} <= $${idx++}::date`); params.push(to); }
+  return { where: cond.length ? 'WHERE ' + cond.join(' AND ') : '', params };
+}
+
 // País: leads no tiene columna 'pais'. pais_fiscal si existe, si no lo derivamos
 // del prefijo internacional del teléfono.
 const PAIS = `COALESCE(NULLIF(l.pais_fiscal, ''), CASE
@@ -196,36 +215,34 @@ export async function prospectosReport({ projectId, from, to }) {
   return rows;
 }
 
-// 3) VENTAS: por fecha de PAGO (cada cuota donde cae). Un lead de marzo que paga
-// una cuota en julio aparece en el reporte de julio, con mes de origen = marzo.
+// 3) VENTAS: una fila por conversión, filtrada por fecha de venta.
+// Los pagos/abonos pertenecen al reporte de cobros y no deben inflar ventas.
 export async function ventasReport({ projectId, from, to }) {
-  const { where, params } = buildFilter({ projectId, from, to }, 'cp.fecha', 'c.project_id');
+  const { where, params } = buildFilter({ projectId, from, to }, 'c.fecha_conversion', 'c.project_id');
   const { rows } = await query(
-    `SELECT cp.fecha AS fecha_pago,
+    `SELECT c.id AS venta_id,
+            c.fecha_conversion AS fecha_venta,
             l.nombre AS cliente,
             c.producto_contratado AS formacion,
-            cp.importe AS importe,
-            CASE
-              WHEN plan.total = 0 THEN 'Pago único'
-              WHEN ci.numero IS NOT NULL THEN 'Cuota ' || ci.numero || ' de ' || plan.total || ' · faltan ' || GREATEST(plan.total - plan.pagadas, 0)
-              ELSE 'Abono (plan de ' || plan.total || ' cuotas) · faltan ' || GREATEST(plan.total - plan.pagadas, 0)
-            END AS plan_pago,
-            to_char(date_trunc('month', c.fecha_conversion), 'YYYY-MM') AS mes_origen,
-            ${PAIS} AS pais,
+            c.importe_total AS venta_total,
+            c.importe_pagado AS cobrado,
             (c.importe_total - c.importe_pagado) AS pendiente,
-            c.metodo_pago, p.nombre AS proyecto
-     FROM conversion_payments cp
-     JOIN conversions c ON c.id = cp.conversion_id
+            CASE
+              WHEN c.importe_pagado >= c.importe_total THEN 'Pagada'
+              WHEN c.importe_pagado > 0 THEN 'Pago parcial'
+              ELSE 'Pendiente'
+            END AS estado_pago,
+            ${PAIS} AS pais,
+            c.metodo_pago,
+            l.status AS estado,
+            u.nombre AS responsable,
+            p.nombre AS proyecto
+     FROM conversions c
      LEFT JOIN leads l ON l.id = c.lead_id
-     LEFT JOIN conversion_installments ci ON ci.payment_id = cp.id
-     LEFT JOIN LATERAL (
-       SELECT COUNT(*)::int AS total,
-              COUNT(*) FILTER (WHERE fecha_cobro IS NOT NULL OR payment_id IS NOT NULL)::int AS pagadas
-       FROM conversion_installments cix WHERE cix.conversion_id = c.id
-     ) plan ON TRUE
+     LEFT JOIN users u ON u.id = l.responsable_id
      LEFT JOIN projects p ON p.id = c.project_id
      ${where}
-     ORDER BY cp.fecha DESC, cp.id DESC`,
+     ORDER BY c.fecha_conversion DESC, c.id DESC`,
     params
   );
   return rows;
@@ -233,7 +250,7 @@ export async function ventasReport({ projectId, from, to }) {
 
 // 4) GENERAL (prospectos + estimado + real)
 export async function generalReport({ projectId, from, to }) {
-  const { where, params } = buildFilter({ projectId, from, to }, ENTRY, 'l.project_id');
+  const { where, params } = buildGeneralFilter({ projectId, from, to });
   const { rows } = await query(
     `SELECT p.nombre AS proyecto, l.nombre, l.telefono, l.email, l.status AS estado,
             ${PAIS} AS pais,
@@ -260,7 +277,7 @@ export async function generalReport({ projectId, from, to }) {
 
 // 5) GENERAL + FACTURACIÓN
 export async function generalFacturacionReport({ projectId, from, to }) {
-  const { where, params } = buildFilter({ projectId, from, to }, ENTRY, 'l.project_id');
+  const { where, params } = buildGeneralFilter({ projectId, from, to });
   const { rows } = await query(
     `SELECT p.nombre AS proyecto, l.nombre, l.telefono, l.status AS estado,
             prod.nombre AS producto_interes, prod.precio AS valor_estimado,

@@ -6,7 +6,7 @@ import PaymentDialog from './PaymentDialog';
 import RefundDialog from './RefundDialog';
 import InstallmentsDialog from './InstallmentsDialog';
 import EditConversionDialog from './EditConversionDialog';
-import { Plus, Receipt, CreditCard, Trash, WarningCircle, CheckCircle, ArrowCounterClockwise, Coins, PencilSimple, Warning, FileText } from '@phosphor-icons/react';
+import { Plus, Receipt, CreditCard, Trash, WarningCircle, CheckCircle, ArrowCounterClockwise, Coins, PencilSimple, Warning } from '@phosphor-icons/react';
 import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import InvoiceButton from '@/modules/invoices/components/InvoiceButton';
@@ -42,44 +42,6 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
   const [refundsByConv, setRefundsByConv] = useState<Record<number, Refund[]>>({});
   const [sendInvoiceDialog, setSendInvoiceDialog] = useState<Invoice | null>(null);
   const [installmentsReload, setInstallmentsReload] = useState(0);
-  const [emittingProf, setEmittingProf] = useState<number | null>(null);
-
-  // Emite una PROFORMA (presupuesto) de una venta AUNQUE ya tenga pagos. La usa el
-  // botón "Proforma" en ventas con pago (admin o gestora factura_manager).
-  async function emitProforma(c: Conversion): Promise<void> {
-    if (!lead?.id) return;
-    setEmittingProf(c.id);
-    try {
-      const leadRes = await invoicesApi.leadFiscalData(lead.id);
-      const d = leadRes.success ? leadRes.data : null;
-      const cfg = await invoicesApi.getConfig(projectId);
-      const metodoDefault = (cfg.success && cfg.data?.factura_metodo_default) || 'transferencia';
-      const pieDefault = cfg.success ? (cfg.data?.factura_pie_default || undefined) : undefined;
-      const items = (c.items && c.items.length > 0)
-        ? c.items.map(it => ({ descripcion: it.descripcion, cantidad: it.cantidad, precio_unitario: Number(it.precio_unitario) }))
-        : [{ descripcion: `Producto/servicio: servicio académico, ${c.producto_contratado || 'programa'}`, cantidad: 1, precio_unitario: Number(c.importe_total) }];
-      const res = await invoicesApi.create({
-        projectId, leadId: lead.id, conversionId: c.id, tipo: 'proforma',
-        clienteNombre: d?.nombre || c.producto_contratado || 'Cliente',
-        clienteNif: d?.identificacion_fiscal || undefined,
-        clienteDireccion: d?.direccion_fiscal || undefined,
-        clienteCiudad: d?.ciudad_fiscal || undefined,
-        clienteCp: d?.codigo_postal_fiscal || undefined,
-        clientePais: d?.pais_fiscal || 'España',
-        clienteEmail: d?.email, clienteTelefono: d?.telefono,
-        items, metodoPago: metodoDefault as 'transferencia', piePago: pieDefault,
-      });
-      if (res.success && res.data) {
-        toast({ title: '✓ Proforma emitida', description: res.data.codigo || undefined });
-        invoicesApi.openPdf(res.data.id).catch(() => {});
-        load();
-      } else {
-        toast({ title: 'Error', description: (res as { error?: string }).error, variant: 'destructive' });
-      }
-    } catch (e: any) {
-      toast({ title: 'Error', description: e?.data?.error || e?.message, variant: 'destructive' });
-    } finally { setEmittingProf(null); }
-  }
 
   // Tras registrar un pago: si la conversion tiene factura emitida y aún no
   // enviada, ofrecer enviarla por email (con confirmación, no automático).
@@ -278,20 +240,6 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
                             : [{ descripcion: `Producto/servicio: servicio académico, ${c.producto_contratado || 'programa'}`, cantidad: 1, precio_unitario: Number(c.importe_total) }]}
                         />
                       )}
-                      {/* Con pagos ya existe factura por cada pago; aun así se permite
-                          emitir una PROFORMA (presupuesto) de la venta — admin o gestora
-                          factura_manager (ej.: proforma del pago inicial). */}
-                      {(Number(c.payments_count) || 0) > 0 && canManage && (
-                        <button
-                          onClick={() => emitProforma(c)}
-                          disabled={emittingProf === c.id}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-900/40 disabled:opacity-50"
-                          title="Emitir una proforma (presupuesto) de esta venta"
-                        >
-                          <FileText size={14} weight="bold" />
-                          {emittingProf === c.id ? '…' : 'Proforma'}
-                        </button>
-                      )}
                       <button
                         onClick={() => setEditDialogConv(c)}
                         className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-sky-100 text-sky-800 dark:bg-sky-950/40 dark:text-sky-300 text-xs font-semibold hover:bg-sky-200 dark:hover:bg-sky-950/60"
@@ -381,21 +329,28 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
                   </div>
                 </div>
 
-                {/* Fraccionado → plan de cuotas (vencimientos + factura por cuota).
-                    Resto → lista de pagos registrados con su factura. */}
-                {c.metodo_pago === 'fraccionado' ? (
+                {/* En ventas fraccionadas se muestran AMBAS cosas: el plan y el
+                    historial de cobros. Así la inicial no desaparece por no estar
+                    vinculada a una cuota del plan. */}
+                {c.metodo_pago === 'fraccionado' && (
                   <CuotasInline
                     conversionId={c.id}
                     canManage={canManage}
                     refreshKey={installmentsReload}
                     onManage={() => setInstallmentsDialogConv(c)}
                   />
-                ) : c.payments_count > 0 && (
-                  <details className="text-xs">
+                )}
+                {(Number(c.payments_count) || 0) > 0 && (
+                  <details open={c.metodo_pago === 'fraccionado'} className="text-xs mt-3">
                     <summary className="cursor-pointer text-muted-foreground hover:text-foreground font-semibold">
-                      Ver {c.payments_count} pago{c.payments_count !== 1 ? 's' : ''} registrado{c.payments_count !== 1 ? 's' : ''}
+                      Ver historial de {c.payments_count} pago{Number(c.payments_count) !== 1 ? 's' : ''}
                     </summary>
-                    <PaymentsList conversionId={c.id} onDelete={handleDeletePayment} canManage={canManage} />
+                    <PaymentsList
+                      conversionId={c.id}
+                      onDelete={handleDeletePayment}
+                      canManage={canManage}
+                      markInitial={c.metodo_pago === 'fraccionado'}
+                    />
                   </details>
                 )}
 
@@ -542,9 +497,10 @@ interface PaymentsListProps {
   conversionId: number;
   onDelete: (id: number) => void;
   canManage?: boolean;
+  markInitial?: boolean;
 }
 
-function PaymentsList({ conversionId, onDelete, canManage }: PaymentsListProps) {
+function PaymentsList({ conversionId, onDelete, canManage, markInitial }: PaymentsListProps) {
   const [payments, setPayments] = useState<Payment[] | null>(null);
 
   const reload = () => {
@@ -556,6 +512,10 @@ function PaymentsList({ conversionId, onDelete, canManage }: PaymentsListProps) 
 
   if (!payments) return <div className="mt-2 text-muted-foreground">Cargando…</div>;
 
+  const initialId = markInitial && payments.length > 0
+    ? [...payments].sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)) || a.id - b.id)[0].id
+    : null;
+
   return (
     <ul className="mt-2 space-y-1">
       {payments.map(p => (
@@ -563,6 +523,17 @@ function PaymentsList({ conversionId, onDelete, canManage }: PaymentsListProps) 
           <div className="min-w-0">
             <span className="font-semibold tabular-nums">{formatCurrency(p.importe)}</span>
             <span className="text-muted-foreground ml-2">{formatDate(p.fecha)}</span>
+            {p.id === initialId && (
+              <span className="ml-2 inline-flex items-center rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-bold text-violet-800 dark:bg-violet-950/50 dark:text-violet-300">
+                Inicial pagada
+              </span>
+            )}
+            {(p.pagado_por_stripe || p.metodo === 'tarjeta_stripe') && (
+              <span className="ml-2 inline-flex items-center rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold text-indigo-800 dark:bg-indigo-950/50 dark:text-indigo-300">
+                Pagado por Stripe
+              </span>
+            )}
+            {p.cuota_numero && <span className="text-muted-foreground ml-2">· Cuota {p.cuota_numero}</span>}
             {p.notas && <span className="text-muted-foreground ml-2">• {p.notas}</span>}
           </div>
           <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -696,6 +667,11 @@ function CuotasInline({ conversionId, canManage, refreshKey, onManage }:
                 ) : (
                   <span className={vencida ? 'text-red-600 dark:text-red-400 font-medium' : 'text-muted-foreground'}>
                     Vence {formatDate(q.fecha_vencimiento)}{vencida ? ' · vencida' : ''}
+                  </span>
+                )}
+                {pagada && (q.pagado_por_stripe || q.metodo === 'tarjeta_stripe') && (
+                  <span className="inline-flex items-center rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold text-indigo-800 dark:bg-indigo-950/50 dark:text-indigo-300">
+                    Pagado por Stripe
                   </span>
                 )}
               </div>
