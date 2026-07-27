@@ -239,7 +239,8 @@ export async function ventasReport({ projectId, from, to }) {
             p.nombre AS proyecto
      FROM conversions c
      LEFT JOIN leads l ON l.id = c.lead_id
-     LEFT JOIN users u ON u.id = l.responsable_id
+     -- Se atribuye a la vendedora de la VENTA; si no la tiene, al responsable del lead.
+     LEFT JOIN users u ON u.id = COALESCE(c.vendedora_id, l.responsable_id)
      LEFT JOIN projects p ON p.id = c.project_id
      ${where}
      ORDER BY c.fecha_conversion DESC, c.id DESC`,
@@ -259,7 +260,7 @@ export async function generalReport({ projectId, from, to }) {
             conv.importe_pagado AS venta_cobrado,
             (conv.importe_total - conv.importe_pagado) AS venta_pendiente,
             conv.metodo_pago, conv.fecha_conversion AS fecha_venta,
-            u.nombre AS responsable, ${ENTRY} AS fecha_entrada
+            COALESCE(uv.nombre, u.nombre) AS responsable, ${ENTRY} AS fecha_entrada
      FROM leads l
      LEFT JOIN products prod ON prod.id = l.producto_interes_id
      LEFT JOIN users u ON u.id = l.responsable_id
@@ -268,6 +269,8 @@ export async function generalReport({ projectId, from, to }) {
        SELECT * FROM conversions c WHERE c.lead_id = l.id
        ORDER BY c.fecha_conversion DESC LIMIT 1
      ) conv ON TRUE
+     -- Si la venta tiene vendedora propia, ella manda sobre el responsable del lead.
+     LEFT JOIN users uv ON uv.id = conv.vendedora_id
      ${where}
      ORDER BY fecha_entrada DESC`,
     params
@@ -288,7 +291,7 @@ export async function generalFacturacionReport({ projectId, from, to }) {
             COALESCE(fac.num_facturas, 0) AS num_facturas,
             COALESCE(fac.facturado, 0) AS facturado,
             fac.codigos AS facturas,
-            u.nombre AS responsable, ${ENTRY} AS fecha_entrada
+            COALESCE(uv.nombre, u.nombre) AS responsable, ${ENTRY} AS fecha_entrada
      FROM leads l
      LEFT JOIN products prod ON prod.id = l.producto_interes_id
      LEFT JOIN users u ON u.id = l.responsable_id
@@ -304,6 +307,8 @@ export async function generalFacturacionReport({ projectId, from, to }) {
        FROM invoices i
        WHERE i.conversion_id = conv.id AND i.estado <> 'cancelada' AND i.tipo = 'normal'
      ) fac ON TRUE
+     -- Si la venta tiene vendedora propia, ella manda sobre el responsable del lead.
+     LEFT JOIN users uv ON uv.id = conv.vendedora_id
      ${where}
      ORDER BY fecha_entrada DESC`,
     params
@@ -342,7 +347,9 @@ export async function ventasVendedora({ projectId, from, to }) {
             COALESCE(SUM(c.importe_total - c.importe_pagado), 0)::numeric AS pendiente
      FROM conversions c
      LEFT JOIN leads l ON l.id = c.lead_id
-     LEFT JOIN users u ON u.id = l.responsable_id
+     -- La venta manda: si tiene vendedora propia se atribuye a ella; si no, al
+     -- responsable del lead (ventas viejas sin vendedora informada).
+     LEFT JOIN users u ON u.id = COALESCE(c.vendedora_id, l.responsable_id)
      ${where}
      GROUP BY 1
      ORDER BY cobrado DESC`,
