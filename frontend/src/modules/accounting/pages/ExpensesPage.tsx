@@ -93,6 +93,12 @@ export default function ExpensesPage() {
   const [{ cat: filterCat }, setUrlFilter] = useUrlFilters({ cat: '' });
   const setFilterCat = (v) => setUrlFilter({ cat: v });
   const [pendingDelete, setPendingDelete] = useState(null);
+  // Paginacion: sin esto el backend devolvia 20 por defecto y el "Total" del
+  // encabezado se calculaba sobre esas 20, es decir mostraba una cifra falsa.
+  const PER_PAGE = 50;
+  const [page, setPage] = useState(1);
+  const [totalEgresos, setTotalEgresos] = useState(0);
+  const [sumaTotal, setSumaTotal] = useState(0);
 
   async function load() {
     setLoading(true);
@@ -109,7 +115,8 @@ export default function ExpensesPage() {
     }
   }
 
-  useEffect(() => { load(); }, [activeProject?.id, filterCat]);
+  useEffect(() => { load(); }, [activeProject?.id, filterCat, page]);
+  useEffect(() => { setPage(1); }, [activeProject?.id, filterCat]);
 
   async function handleExport() {
     try {
@@ -155,7 +162,7 @@ export default function ExpensesPage() {
     <div className="space-y-5">
       <PageHeader
         title="Egresos"
-        subtitle={`${expenses.length} registros • Total: ${fmt(total)}`}
+        subtitle={`${totalEgresos} registros • Total: ${fmt(sumaTotal)}`}
         actions={
           <div className="flex items-center gap-2">
             <button
@@ -248,11 +255,11 @@ export default function ExpensesPage() {
                     <td className="px-5 py-3 text-muted-foreground">{e.proyecto_nombre || <span className="italic">General</span>}</td>
                     <td className="px-2 py-3 text-center">
                       {e.comprobante_url ? (
-                        <a href={e.comprobante_url} target="_blank" rel="noopener noreferrer"
+                        <button type="button" onClick={() => accountingApi.openComprobante(e.comprobante_url!).catch((err) => toast({ title: 'No se pudo abrir el comprobante', description: (err as Error).message, variant: 'destructive' }))}
                           aria-label="Ver comprobante"
                           className="inline-flex items-center justify-center h-7 w-7 rounded hover:bg-muted text-primary">
                           <Paperclip size={14} weight="bold" />
-                        </a>
+                        </button>
                       ) : <span className="text-muted-foreground/40 text-xs">—</span>}
                     </td>
                     <td className="px-5 py-3 text-right tabular-nums font-bold">{fmt(e.importe)}</td>
@@ -299,10 +306,10 @@ export default function ExpensesPage() {
                       </span>
                     )}
                     {e.comprobante_url && (
-                      <a href={e.comprobante_url} target="_blank" rel="noopener noreferrer"
+                      <button type="button" onClick={() => accountingApi.openComprobante(e.comprobante_url!).catch((err) => toast({ title: 'No se pudo abrir el comprobante', description: (err as Error).message, variant: 'destructive' }))}
                         className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-primary/10 text-primary">
                         <Paperclip size={9} weight="bold" /> ver
-                      </a>
+                      </button>
                     )}
                     <span className="text-[11px] text-muted-foreground">{formatDate(e.fecha)}</span>
                   </div>
@@ -358,6 +365,23 @@ export default function ExpensesPage() {
           />
         </Suspense>
       )}
+
+      {/* Paginacion de egresos: antes solo se veian 20 y no habia forma de pasar. */}
+      {totalEgresos > PER_PAGE && (
+        <div className="flex items-center justify-between gap-2 px-1 mt-3">
+          <span className="text-xs text-muted-foreground">
+            Mostrando <strong>{expenses.length}</strong> de <strong>{totalEgresos}</strong> · página {page} de {Math.max(1, Math.ceil(totalEgresos / PER_PAGE))}
+          </span>
+          <div className="flex items-center gap-1">
+            <button onClick={() => setPage((x) => Math.max(1, x - 1))} disabled={page === 1 || loading}
+              className="h-8 px-2.5 rounded-md border border-border bg-card text-xs hover:bg-muted disabled:opacity-40">‹ Anterior</button>
+            <span className="px-2 text-xs tabular-nums">{page} / {Math.max(1, Math.ceil(totalEgresos / PER_PAGE))}</span>
+            <button onClick={() => setPage((x) => x + 1)} disabled={page >= Math.ceil(totalEgresos / PER_PAGE) || loading}
+              className="h-8 px-2.5 rounded-md border border-border bg-card text-xs hover:bg-muted disabled:opacity-40">Siguiente ›</button>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
@@ -527,10 +551,11 @@ function ExpenseDialog({ open, onClose, expense, activeProjectId, onSaved }) {
               {form.comprobante_url ? (
                 <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-muted/30 text-xs">
                   <Paperclip size={14} weight="bold" className="text-primary flex-shrink-0" />
-                  <a href={form.comprobante_url} target="_blank" rel="noopener noreferrer"
-                    className="flex-1 truncate text-primary hover:underline">
+                  <button type="button"
+                    onClick={() => accountingApi.openComprobante(form.comprobante_url!).catch((err) => toast({ title: 'No se pudo abrir el comprobante', description: (err as Error).message, variant: 'destructive' }))}
+                    className="flex-1 truncate text-left text-primary hover:underline">
                     {form.comprobante_key} {form.comprobante_size_bytes ? `· ${(form.comprobante_size_bytes / 1024).toFixed(0)} KB` : ''}
-                  </a>
+                  </button>
                   <button type="button" onClick={removeComprobante}
                     className="h-7 w-7 inline-flex items-center justify-center rounded hover:bg-muted text-muted-foreground hover:text-red-600">
                     <X size={13} weight="bold" />

@@ -1,4 +1,4 @@
-import client from '@/shared/api/client';
+import client, { getAccessToken } from '@/shared/api/client';
 import type { ApiResponse } from '@/shared/types';
 
 // Categorías declaradas en backend expense.validation.js + extensiones EPIC B (082).
@@ -106,6 +106,25 @@ export const accountingApi = {
     client.patch(`/accounting/expenses/${id}`, data),
   deleteExpense: (id: number): Promise<ApiResponse<void>> =>
     client.delete(`/accounting/expenses/${id}`),
+
+  /** Abre el comprobante de un gasto. Debe ir por fetch con el token: una navegacion
+   *  normal del navegador NO manda la cabecera Authorization y la ruta devolvia 401. */
+  openComprobante: async (url: string): Promise<void> => {
+    const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
+    const key = String(url).split('/comprobante/').pop() || '';
+    const tok = getAccessToken();
+    const res = await fetch(`${base}/api/accounting/expenses/comprobante/${key}`, {
+      headers: tok ? { Authorization: `Bearer ${tok}` } : {}, credentials: 'include',
+    });
+    if (!res.ok) throw new Error('No se pudo abrir el comprobante');
+    const blob = await res.blob();
+    const u = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = u; a.target = '_blank'; a.rel = 'noopener';
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { a.remove(); URL.revokeObjectURL(u); }, 60000);
+  },
+
   uploadComprobante: (file: File): Promise<ApiResponse<ComprobanteUploadResult>> => {
     const fd = new FormData();
     fd.append('file', file);
