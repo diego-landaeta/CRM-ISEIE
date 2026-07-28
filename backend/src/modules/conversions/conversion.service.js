@@ -114,6 +114,10 @@ export async function listByLead(leadId) {
   return await conversionModel.findByLead(leadId);
 }
 
+export async function listProductos(filters) {
+  return await conversionModel.listProductos(filters);
+}
+
 export async function list(filters) {
   return await conversionModel.findAll(filters);
 }

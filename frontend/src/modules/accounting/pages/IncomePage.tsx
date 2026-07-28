@@ -17,6 +17,8 @@ const GestoresStatsTable = lazy(() => import('@/modules/sales/components/Gestore
 function fmt(n) {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n || 0));
 }
+const PER_PAGE = 50;
+
 function formatDate(d) { return d ? new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }) : '--'; }
 
 export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas las ventas registradas' }) {
@@ -31,6 +33,11 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
   const [viewUserId, setViewUserId] = useState('all');
   const [gestores, setGestores] = useState([]);
   const [filterCurso, setFilterCurso] = useState('all');
+  const [cursos, setCursos] = useState([]);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [totales, setTotales] = useState({ importe: 0, pagado: 0, pendiente: 0, iva: 0 });
+  const [rango, setRango] = useState({ from: '', to: '' });
   const effectiveResponsableId = isAdmin ? (viewUserId === 'all' ? null : Number(viewUserId)) : null;
 
   useEffect(() => {
@@ -41,28 +48,43 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
   }, [activeProject?.id, isAdmin, reloadKey]);
 
   useEffect(() => {
+    const params: Record<string, any> = {};
+    if (activeProject?.id) params.projectId = activeProject.id;
+    if (effectiveResponsableId) params.responsableId = effectiveResponsableId;
+    client.get('/conversions/productos', { params })
+      .then((r) => setCursos(r?.data || []))
+      .catch(() => setCursos([]));
+  }, [activeProject?.id, effectiveResponsableId, reloadKey]);
+
+  // Cualquier cambio de filtro devuelve a la primera pagina.
+  useEffect(() => { setPage(1); }, [activeProject?.id, effectiveResponsableId, filterCurso, rango.from, rango.to]);
+
+  useEffect(() => {
     (async () => {
       setLoading(true);
       try {
-        const params = { limit: 100 };
+        const params: Record<string, any> = { page, limit: PER_PAGE };
         if (activeProject?.id) params.projectId = activeProject.id;
         if (effectiveResponsableId) params.responsableId = effectiveResponsableId;
+        if (filterCurso !== 'all') params.producto = filterCurso;
+        if (rango.from) params.from = rango.from;
+        if (rango.to) params.to = rango.to;
         const res = await client.get('/conversions', { params });
-        if (res.success) setItems(res.data || []);
+        if (res.success) {
+          setItems(res.data || []);
+          setTotal(res.pagination?.total ?? (res.data || []).length);
+          // Los totales vienen del servidor sobre TODO el filtro; antes se
+          // sumaban las filas cargadas y las tarjetas no cuadraban nunca.
+          setTotales(res.totales || { importe: 0, pagado: 0, pendiente: 0, iva: 0 });
+        }
       } catch {
-        setItems([]);
+        setItems([]); setTotal(0); setTotales({ importe: 0, pagado: 0, pendiente: 0, iva: 0 });
       } finally { setLoading(false); }
     })();
-  }, [activeProject?.id, reloadKey, effectiveResponsableId]);
+  }, [activeProject?.id, reloadKey, effectiveResponsableId, page, filterCurso, rango.from, rango.to]);
 
-  // Cursos únicos para el filtro por producto.
-  const cursos = [...new Set(items.map((r) => (r.producto_contratado || '').trim()).filter(Boolean))].sort();
-  const visibleItems = filterCurso === 'all' ? items : items.filter((r) => (r.producto_contratado || '').trim() === filterCurso);
-
-  const totalFacturado = visibleItems.reduce((s, r) => s + Number(r.importe_total || 0), 0);
-  const totalCobrado = visibleItems.reduce((s, r) => s + Number(r.importe_pagado || 0), 0);
-  // IVA aproximado: usa el iva_importe de la conversión si existe; si no, estima 21% (IVA incluido).
-  const ivaAprox = visibleItems.reduce((s, r) => s + (Number(r.iva_importe) || (Number(r.importe_total || 0) * 0.21 / 1.21)), 0);
+  const visibleItems = items;
+  const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
 
   return (
     <div className="space-y-5 pb-8">
@@ -92,7 +114,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
         />
       </Suspense>
 
-      {((isAdmin && gestores.length > 0) || cursos.length > 1) && (
+      {(
         <div className="bg-card border border-border rounded-lg p-3 flex items-center gap-3 flex-wrap">
           {isAdmin && gestores.length > 0 && (
             <>
@@ -124,8 +146,14 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
               </select>
             </>
           )}
-          {(viewUserId !== 'all' || filterCurso !== 'all') && (
-            <button type="button" onClick={() => { setViewUserId('all'); setFilterCurso('all'); }} className="text-[11px] text-primary hover:underline">
+          <label className="text-xs font-semibold text-muted-foreground">Desde:</label>
+          <input type="date" value={rango.from} onChange={(e) => setRango((v) => ({ ...v, from: e.target.value }))}
+            className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
+          <label className="text-xs font-semibold text-muted-foreground">Hasta:</label>
+          <input type="date" value={rango.to} onChange={(e) => setRango((v) => ({ ...v, to: e.target.value }))}
+            className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
+          {(viewUserId !== 'all' || filterCurso !== 'all' || rango.from || rango.to) && (
+            <button type="button" onClick={() => { setViewUserId('all'); setFilterCurso('all'); setRango({ from: '', to: '' }); }} className="text-[11px] text-primary hover:underline">
               Quitar filtros
             </button>
           )}
@@ -137,27 +165,27 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
           icon={Receipt}
           iconBg="bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400"
           label="Conversiones"
-          numericValue={visibleItems.length}
+          numericValue={total}
         />
         <KpiCard
           icon={CurrencyEur}
           iconBg="bg-violet-50 text-violet-600 dark:bg-violet-950/30 dark:text-violet-400"
           label="Facturado"
-          numericValue={totalFacturado}
+          numericValue={totales.importe}
           format={fmt}
         />
         <KpiCard
           icon={CheckCircle}
           iconBg="bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400"
           label="Cobrado"
-          numericValue={totalCobrado}
+          numericValue={totales.pagado}
           format={fmt}
         />
         <KpiCard
           icon={Receipt}
           iconBg="bg-amber-50 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400"
           label="IVA aprox."
-          numericValue={ivaAprox}
+          numericValue={totales.iva}
           format={fmt}
         />
       </div>
@@ -247,6 +275,21 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
               </button>
             ))}
           </div>
+
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between gap-3 px-4 py-3 border-t border-border text-sm">
+              <span className="text-muted-foreground">
+                {(page - 1) * PER_PAGE + 1}–{Math.min(page * PER_PAGE, total)} de {total}
+              </span>
+              <div className="flex items-center gap-2">
+                <button type="button" disabled={page <= 1} onClick={() => setPage((v) => Math.max(1, v - 1))}
+                  className="h-8 px-3 rounded-md border border-border disabled:opacity-40 hover:bg-muted">Anterior</button>
+                <span className="text-muted-foreground tabular-nums">{page} / {totalPages}</span>
+                <button type="button" disabled={page >= totalPages} onClick={() => setPage((v) => Math.min(totalPages, v + 1))}
+                  className="h-8 px-3 rounded-md border border-border disabled:opacity-40 hover:bg-muted">Siguiente</button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

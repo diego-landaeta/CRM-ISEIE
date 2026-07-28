@@ -62,6 +62,9 @@ export const listConversionsSchema = z.object({
   pendingBilling: z.enum(['true', 'false']).optional(),
   from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  // Filtro por producto: hasta ahora se hacia en el navegador sobre las filas
+  // cargadas, asi que con paginacion dejaba fuera el resto.
+  producto: z.string().max(255).optional(),
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(100).default(20),
 });

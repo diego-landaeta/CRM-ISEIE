@@ -30,6 +30,7 @@ export async function list(req, res, next) {
     res.json({
       success: true,
       data: result.conversions,
+      totales: result.totales,
       pagination: { total: result.total, page: result.page, limit: result.limit, totalPages: result.totalPages },
     });
   } catch (err) { next(err); }
@@ -218,4 +219,14 @@ export async function unpayInstallment(req, res, next) {
     if (err.message === 'Cuota no estaba pagada') return next(new AppError(err.message, 400, 'NOT_PAID'));
     next(err);
   }
+}
+
+export async function listProductos(req, res, next) {
+  try {
+    const projectId = req.query.projectId ? parseInt(req.query.projectId) : null;
+    let responsableId = req.query.responsableId ? parseInt(req.query.responsableId) : null;
+    if (req.user.role === 'gestor') responsableId = req.user.userId;
+    const data = await conversionService.listProductos({ projectId, responsableId });
+    res.json({ success: true, data });
+  } catch (err) { next(err); }
 }

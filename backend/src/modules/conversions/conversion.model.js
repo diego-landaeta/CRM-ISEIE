@@ -241,14 +241,14 @@ export async function findByLead(leadId) {
   return rows;
 }
 
-export async function findAll({ projectId, leadId, responsableId, pendiente, vencido, pendingBilling, from, to, page, limit }) {
+export async function findAll({ projectId, leadId, responsableId, pendiente, vencido, pendingBilling, producto, from, to, page, limit }) {
   const conditions = [];
   const params = [];
   let idx = 1;
 
   if (projectId) { conditions.push(`c.project_id = $${idx++}`); params.push(projectId); }
   if (leadId) { conditions.push(`c.lead_id = $${idx++}`); params.push(leadId); }
-  if (responsableId) { conditions.push(`l.responsable_id = $${idx++}`); params.push(responsableId); }
+  if (responsableId) { conditions.push(`COALESCE(c.vendedora_id, l.responsable_id) = $${idx++}`); params.push(responsableId); }
   if (pendiente === 'true') { conditions.push(`c.importe_pagado < c.importe_total`); }
   if (pendiente === 'false') { conditions.push(`c.importe_pagado >= c.importe_total`); }
   if (vencido === 'true') {
@@ -258,6 +258,7 @@ export async function findAll({ projectId, leadId, responsableId, pendiente, ven
   if (pendingBilling === 'true') {
     conditions.push(`(c.importe_total = 0 OR c.notas_pago LIKE 'Backfill 2026-06-16%')`);
   }
+  if (producto) { conditions.push(`TRIM(c.producto_contratado) = $${idx++}`); params.push(String(producto).trim()); }
   if (from) { conditions.push(`c.fecha_conversion >= $${idx++}`); params.push(from); }
   if (to) { conditions.push(`c.fecha_conversion <= $${idx++}`); params.push(to); }
 
@@ -265,9 +266,25 @@ export async function findAll({ projectId, leadId, responsableId, pendiente, ven
   const offset = (page - 1) * limit;
 
   // JOIN a leads necesario si filtramos por l.responsable_id
-  const countJoin = responsableId ? 'LEFT JOIN leads l ON l.id = c.lead_id' : '';
-  const { rows: countRows } = await query(`SELECT COUNT(*) FROM conversions c ${countJoin} ${where}`, params);
+  const countJoin = 'LEFT JOIN leads l ON l.id = c.lead_id';
+  // Totales sobre TODO el filtro, no sobre la pagina: las tarjetas de arriba
+  // sumaban solo las filas visibles y por eso no cuadraban nunca.
+  const { rows: countRows } = await query(
+    `SELECT COUNT(*) AS count,
+            COALESCE(SUM(c.importe_total), 0) AS total_importe,
+            COALESCE(SUM(c.importe_pagado), 0) AS total_pagado,
+            COALESCE(SUM(c.importe_total - c.importe_pagado), 0) AS total_pendiente,
+            COALESCE(SUM(COALESCE(c.iva_importe, c.importe_total * 0.21 / 1.21)), 0) AS total_iva
+       FROM conversions c ${countJoin} ${where}`,
+    params
+  );
   const total = parseInt(countRows[0].count);
+  const totales = {
+    importe: Number(countRows[0].total_importe),
+    pagado: Number(countRows[0].total_pagado),
+    pendiente: Number(countRows[0].total_pendiente),
+    iva: Number(countRows[0].total_iva),
+  };
 
   const { rows } = await query(
     `SELECT c.id, c.lead_id, c.project_id, c.producto_contratado,
@@ -276,11 +293,13 @@ export async function findAll({ projectId, leadId, responsableId, pendiente, ven
             c.fecha_compromiso_pago, c.metodo_pago,
             c.fecha_conversion, c.created_at,
             l.nombre as lead_nombre, l.email as lead_email,
-            l.responsable_id, u.nombre as responsable_nombre,
+            COALESCE(c.vendedora_id, l.responsable_id) AS responsable_id,
+            COALESCE(uv.nombre, u.nombre) AS responsable_nombre,
             p.nombre as proyecto_nombre
      FROM conversions c
      LEFT JOIN leads l ON l.id = c.lead_id
      LEFT JOIN users u ON u.id = l.responsable_id
+     LEFT JOIN users uv ON uv.id = c.vendedora_id
      LEFT JOIN projects p ON p.id = c.project_id
      ${where}
      ORDER BY c.fecha_conversion DESC, c.id DESC
@@ -288,7 +307,7 @@ export async function findAll({ projectId, leadId, responsableId, pendiente, ven
     [...params, limit, offset]
   );
 
-  return { conversions: rows, total, page, limit, totalPages: Math.ceil(total / limit) };
+  return { conversions: rows, total, totales, page, limit, totalPages: Math.ceil(total / limit) };
 }
 
 export async function update(id, fields) {
@@ -429,4 +448,23 @@ export async function deletePayment(paymentId) {
 
 export async function deleteConversion(id) {
   await query(`DELETE FROM conversions WHERE id = $1`, [id]);
+}
+
+// Valores distintos de producto para el desplegable de filtros. Va aparte de
+// findAll porque el listado esta paginado y no ve el catalogo completo.
+export async function listProductos({ projectId, responsableId }) {
+  const cond = ["TRIM(COALESCE(c.producto_contratado, '')) <> ''"];
+  const params = [];
+  let idx = 1;
+  if (projectId) { cond.push(`c.project_id = $${idx++}`); params.push(projectId); }
+  if (responsableId) { cond.push(`COALESCE(c.vendedora_id, l.responsable_id) = $${idx++}`); params.push(responsableId); }
+  const { rows } = await query(
+    `SELECT DISTINCT TRIM(c.producto_contratado) AS producto
+       FROM conversions c
+       LEFT JOIN leads l ON l.id = c.lead_id
+      WHERE ${cond.join(' AND ')}
+      ORDER BY 1`,
+    params
+  );
+  return rows.map(r => r.producto);
 }
