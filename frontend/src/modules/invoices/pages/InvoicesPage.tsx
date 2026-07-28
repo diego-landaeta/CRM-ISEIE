@@ -94,8 +94,12 @@ export default function InvoicesPage() {
   function descargar(inv: Invoice, vista?: 'gestor') {
     const prelim = inv.estado === 'borrador';
     const fname = (vista === 'gestor' ? 'NETO-' : '') + ((inv.codigo || `BORRADOR-${inv.id}`).replace('/', '-')) + '.pdf';
+    // Se avisa siempre del resultado: antes, si el navegador ignoraba la descarga,
+    // el botón parecía no hacer nada y no había forma de saber qué pasaba.
+    toast({ title: 'Preparando el PDF…', description: fname });
     invoicesApi.downloadPdf(inv.id, fname, prelim, !prelim, vista)
-      .catch((e: unknown) => toast({ title: 'No se pudo descargar el PDF', description: (e as { message?: string })?.message, variant: 'destructive' }));
+      .then(() => toast({ title: '✓ Descargado', description: fname }))
+      .catch((e: unknown) => toast({ title: 'No se pudo descargar el PDF', description: (e as { message?: string })?.message || 'Error desconocido', variant: 'destructive' }));
   }
 
   const load = useCallback(async () => {

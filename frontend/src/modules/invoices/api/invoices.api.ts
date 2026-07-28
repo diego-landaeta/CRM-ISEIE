@@ -249,10 +249,16 @@ export const invoicesApi = {
       throw new Error(msg);
     }
     const blob = await res.blob();
+    if (!blob || blob.size === 0) throw new Error('El PDF llegó vacío. Vuelve a intentarlo.');
     const url = URL.createObjectURL(blob);
+    // El enlace DEBE estar en el documento: si se hace click sobre un <a> suelto,
+    // algunos navegadores lo ignoran en silencio y la descarga "no hace nada".
     const a = document.createElement('a');
-    a.href = url; a.download = filename; a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    a.href = url; a.download = filename; a.rel = 'noopener';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 60000);
   },
   send: (id: number, email?: string) => client.post(`/invoices/${id}/send`, email ? { email } : {}),
   markPaid: (id: number, fechaPago?: string) => client.post(`/invoices/${id}/mark-paid`, fechaPago ? { fechaPago } : {}),
