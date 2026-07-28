@@ -68,7 +68,8 @@ export async function overview({ projectId, from, to }) {
 
   // Top productos por ingresos
   const { rows: topProductos } = await query(
-    `SELECT producto_contratado as producto,
+    `SELECT COALESCE((SELECT pr.nombre FROM products pr WHERE pr.id = conversions.producto_contratado_id),
+                    NULLIF(TRIM(regexp_replace(regexp_replace(regexp_replace(producto_contratado, '^[[:space:]]*Producto/servicio:[[:space:]]*servicio[[:space:]]+acad[eé]mico[,;]?[[:space:]]*', '', 'i'), '^[[:space:]]*pago[[:space:]]+(de[[:space:]]+)?(la[[:space:]]+)?(mensualidad|cuota|matr[ií]cula)[^,]*[,]?[[:space:]]*', '', 'i'), '^[[:space:]]*servicio[[:space:]]+acad[eé]mico[[:space:]]*$', '', 'i')), ''), '— sin producto —') as producto,
             COUNT(*)::int as ventas,
             COALESCE(SUM(importe_total), 0)::numeric as total,
             COALESCE(SUM(importe_pagado), 0)::numeric as cobrado
@@ -76,7 +77,8 @@ export async function overview({ projectId, from, to }) {
      WHERE 1=1 ${pFilter}
        AND (${fromParam}::date IS NULL OR fecha_conversion >= ${fromParam}::date)
        AND (${toParam}::date IS NULL OR fecha_conversion <= ${toParam}::date)
-     GROUP BY producto_contratado
+     GROUP BY COALESCE((SELECT pr.nombre FROM products pr WHERE pr.id = conversions.producto_contratado_id),
+                       NULLIF(TRIM(regexp_replace(regexp_replace(regexp_replace(producto_contratado, '^[[:space:]]*Producto/servicio:[[:space:]]*servicio[[:space:]]+acad[eé]mico[,;]?[[:space:]]*', '', 'i'), '^[[:space:]]*pago[[:space:]]+(de[[:space:]]+)?(la[[:space:]]+)?(mensualidad|cuota|matr[ií]cula)[^,]*[,]?[[:space:]]*', '', 'i'), '^[[:space:]]*servicio[[:space:]]+acad[eé]mico[[:space:]]*$', '', 'i')), ''), '— sin producto —')
      ORDER BY total DESC LIMIT 10`,
     params
   );

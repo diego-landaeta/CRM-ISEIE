@@ -178,7 +178,11 @@ export async function getTopProducts({ projectId, limit = 10, days = null, from 
   const { rows } = await query(
     `SELECT
        c.producto_contratado_id AS product_id,
-       COALESCE(p.nombre, c.producto_contratado, '— sin producto —') AS producto,
+       -- Manda el producto del CATALOGO. Si no lo tiene, se usa el texto libre LIMPIO:
+       -- sin el prefijo "Producto/servicio: servicio academico," ni el "pago mensualidad N",
+       -- que hacian que ese texto saliera como el producto mas vendido y fragmentaban
+       -- un mismo curso en varias filas.
+       COALESCE(p.nombre, NULLIF(TRIM(regexp_replace(regexp_replace(regexp_replace(c.producto_contratado, '^[[:space:]]*Producto/servicio:[[:space:]]*servicio[[:space:]]+acad[eé]mico[,;]?[[:space:]]*', '', 'i'), '^[[:space:]]*pago[[:space:]]+(de[[:space:]]+)?(la[[:space:]]+)?(mensualidad|cuota|matr[ií]cula)[^,]*[,]?[[:space:]]*', '', 'i'), '^[[:space:]]*servicio[[:space:]]+acad[eé]mico[[:space:]]*$', '', 'i')), ''), '— sin producto —') AS producto,
        COUNT(*)::int AS ventas,
        COALESCE(SUM(c.importe_total), 0)::numeric AS facturado,
        COALESCE(SUM(c.importe_pagado), 0)::numeric AS cobrado,
@@ -187,7 +191,7 @@ export async function getTopProducts({ projectId, limit = 10, days = null, from 
      LEFT JOIN products p ON p.id = c.producto_contratado_id
      ${needsLeadJoin ? 'LEFT JOIN leads l ON l.id = c.lead_id' : ''}
      ${whereSql}
-     GROUP BY c.producto_contratado_id, p.nombre, c.producto_contratado
+     GROUP BY COALESCE(p.nombre, NULLIF(TRIM(regexp_replace(regexp_replace(regexp_replace(c.producto_contratado, '^[[:space:]]*Producto/servicio:[[:space:]]*servicio[[:space:]]+acad[eé]mico[,;]?[[:space:]]*', '', 'i'), '^[[:space:]]*pago[[:space:]]+(de[[:space:]]+)?(la[[:space:]]+)?(mensualidad|cuota|matr[ií]cula)[^,]*[,]?[[:space:]]*', '', 'i'), '^[[:space:]]*servicio[[:space:]]+acad[eé]mico[[:space:]]*$', '', 'i')), ''), '— sin producto —'), c.producto_contratado_id, p.nombre
      ORDER BY ventas DESC, facturado DESC
      LIMIT $${params.length}`,
     params
