@@ -134,6 +134,21 @@ export async function getDashboardStats({ projectId, from, to }) {
     params
   );
 
+  // Facturado de verdad: lo que se ha emitido con numero fiscal en el rango.
+  // (lo de arriba es lo CONTRATADO, que casi nunca coincide con lo facturado)
+  const invProjFilter = projectId ? 'AND i.project_id = $1' : '';
+  const { rows: emitidoRows } = await query(
+    `SELECT
+       COALESCE(SUM(i.total), 0) AS total_emitido,
+       COUNT(*) AS num_facturas,
+       COUNT(*) FILTER (WHERE i.tipo = 'proforma') AS num_proformas,
+       COALESCE(SUM(i.total) FILTER (WHERE i.tipo = 'proforma'), 0) AS total_proformas
+     FROM invoices i
+     WHERE i.estado NOT IN ('borrador', 'cancelada')
+       AND i.fecha_emision BETWEEN $${fromIdx} AND $${toIdx} ${invProjFilter}`,
+    params
+  );
+
   // Egresos
   const expProjFilter = projectId ? 'AND (e.project_id = $1 OR e.project_id IS NULL)' : '';
   const { rows: egresosRows } = await query(
@@ -167,6 +182,21 @@ export async function getDashboardStats({ projectId, from, to }) {
     projectId ? [projectId] : []
   );
 
+  // Totales REALES de por cobrar: el listado de arriba va con LIMIT 50, asi que
+  // contar sobre el sale mal en cuanto hay mas de 50 pendientes.
+  const { rows: recTotals } = await query(
+    `SELECT COUNT(*)::int AS num,
+            COALESCE(SUM(c.importe_total - c.importe_pagado), 0) AS total,
+            COALESCE(SUM(CASE WHEN c.fecha_compromiso_pago IS NOT NULL
+                               AND c.fecha_compromiso_pago < CURRENT_DATE
+                              THEN c.importe_total - c.importe_pagado ELSE 0 END), 0) AS total_vencido,
+            COUNT(*) FILTER (WHERE c.fecha_compromiso_pago IS NOT NULL
+                               AND c.fecha_compromiso_pago < CURRENT_DATE)::int AS num_vencido
+     FROM conversions c
+     WHERE c.importe_pagado < c.importe_total ${convProjFilter}`,
+    projectId ? [projectId] : []
+  );
+
   // Evolucion mensual ultimos 12 meses
   const trendProjFilter = projectId ? 'AND project_id = $1' : '';
   const trendParams = projectId ? [projectId] : [];
@@ -184,7 +214,7 @@ export async function getDashboardStats({ projectId, from, to }) {
     `SELECT to_char(date_trunc('month', fecha), 'YYYY-MM') AS mes,
             COALESCE(SUM(importe), 0) AS total
      FROM expenses
-     WHERE fecha >= CURRENT_DATE - INTERVAL '12 months' ${trendProjFilter.replace('project_id', 'expenses.project_id')}
+     WHERE fecha >= CURRENT_DATE - INTERVAL '12 months' ${projectId ? 'AND (expenses.project_id = $1 OR expenses.project_id IS NULL)' : ''}
      GROUP BY 1
      ORDER BY 1`,
     trendParams
@@ -207,6 +237,10 @@ export async function getDashboardStats({ projectId, from, to }) {
       total_pendiente: Number(facturadoRows[0].total_pendiente),
       num_pagos: parseInt(ingresosRows[0].num_pagos),
       num_conversiones: parseInt(facturadoRows[0].num_conversiones),
+      total_emitido: Number(emitidoRows[0].total_emitido),
+      num_facturas: parseInt(emitidoRows[0].num_facturas),
+      num_proformas: parseInt(emitidoRows[0].num_proformas),
+      total_proformas: Number(emitidoRows[0].total_proformas),
     },
     egresos: {
       total: Number(egresosRows[0].total_egresos),
@@ -215,6 +249,12 @@ export async function getDashboardStats({ projectId, from, to }) {
     },
     balance: Number(ingresosRows[0].total_cobrado) - Number(egresosRows[0].total_egresos),
     cuentas_por_cobrar: receivables.map(r => ({ ...r, importe_pendiente: Number(r.importe_pendiente) })),
+    cuentas_por_cobrar_resumen: {
+      num: recTotals[0].num,
+      total: Number(recTotals[0].total),
+      num_vencido: recTotals[0].num_vencido,
+      total_vencido: Number(recTotals[0].total_vencido),
+    },
     trend: {
       ingresos: ingresosTrend.map(r => ({ mes: r.mes, total: Number(r.total) })),
       egresos: egresosTrend.map(r => ({ mes: r.mes, total: Number(r.total) })),
