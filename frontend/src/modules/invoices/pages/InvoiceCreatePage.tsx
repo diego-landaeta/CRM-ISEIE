@@ -62,6 +62,9 @@ export default function InvoiceCreatePage() {
   // de una conversión pendiente de pago inicial. La factura queda ligada a esa venta.
   const [leadConvs, setLeadConvs] = useState<Conversion[]>([]);
   const [assocConvId, setAssocConvId] = useState<number | ''>('');
+  // Aviso antes de emitir un documento SIN venta asociada: si no, nacia suelto y no
+  // aparecia en la ficha del cliente (el panel busca los documentos DE la venta).
+  const [avisoVenta, setAvisoVenta] = useState(false);
 
   // Buscador de cliente
   const [search, setSearch] = useState('');
@@ -228,7 +231,9 @@ export default function InvoiceCreatePage() {
   const simboloMoneda = (CURRENCIES.find((x) => x.code === moneda)?.symbol) || moneda;
   const totalConceptos = items.reduce((sum, it) => sum + (Number(it.cantidad) || 0) * (Number(it.precio_unitario) || 0), 0);
 
-  async function generar() {
+  async function generar(saltarAvisoVenta = false) {
+    // Documento nuevo para un cliente pero sin venta elegida -> se avisa primero.
+    if (!saltarAvisoVenta && !editId && leadId && !assocConvId) { setAvisoVenta(true); return; }
     if (moneda !== 'EUR' && !(Number(totalEur) > 0)) {
       toast({ title: 'Falta el importe en euros', description: `La factura va en ${moneda}: indica el total en euros (es el que cuenta para la contabilidad).`, variant: 'destructive' });
       return;
@@ -722,11 +727,51 @@ export default function InvoiceCreatePage() {
             <FloppyDisk size={15} weight="bold" /> {saving ? 'Emitiendo abono…' : 'Emitir abono'}
           </button>
         ) : (
-          <button onClick={generar} disabled={saving || (!esProforma && fiscalBlock)} title={!esProforma && fiscalBlock ? 'El CIF/NIF de la sociedad no es válido' : undefined} className="h-10 px-5 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1.5">
+          <button onClick={() => generar()} disabled={saving || (!esProforma && fiscalBlock)} title={!esProforma && fiscalBlock ? 'El CIF/NIF de la sociedad no es válido' : undefined} className="h-10 px-5 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1.5">
             <FloppyDisk size={15} weight="bold" /> {saving ? 'Guardando…' : editId ? 'Guardar cambios' : (esProforma ? 'Generar presupuesto' : 'Generar factura')}
           </button>
         )}
       </div>
+
+      {/* Aviso: se va a emitir sin asociar a una venta. */}
+      {avisoVenta && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center p-4" onClick={() => setAvisoVenta(false)}>
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
+          <div role="dialog" className="relative bg-card rounded-xl border border-border w-full max-w-md p-5" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-semibold text-base mb-1">Este documento no está asociado a ninguna venta</h3>
+            {leadConvs.length > 0 ? (
+              <>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Si lo emites así <b>no aparecerá en la ficha del cliente</b>. Elige a qué venta pertenece:
+                </p>
+                <div className="space-y-1.5 max-h-56 overflow-y-auto">
+                  {leadConvs.map((c) => (
+                    <button key={c.id} onClick={() => { setAssocConvId(c.id); setAvisoVenta(false); }}
+                      className="w-full text-left p-2.5 rounded-md border border-border hover:bg-muted/50">
+                      <div className="text-sm font-medium truncate">{c.producto_contratado || 'Venta'}</div>
+                      <div className="text-[11px] text-muted-foreground">
+                        {Number(c.importe_total || 0).toFixed(2)} € · cobrado {Number(c.importe_pagado || 0).toFixed(2)} €
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground mb-3">
+                Este cliente <b>todavía no tiene ninguna venta registrada</b>. Puedes emitirlo igualmente:
+                cuando crees la venta, el documento <b>se asociará solo</b>.
+              </p>
+            )}
+            <div className="flex justify-end gap-2 mt-4">
+              <button onClick={() => setAvisoVenta(false)} className="h-9 px-3 rounded-md border border-border bg-card text-sm">Cancelar</button>
+              <button onClick={() => { setAvisoVenta(false); generar(true); }}
+                className="h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90">
+                Emitir sin asociar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -736,6 +781,8 @@ function Field({ label, value, onChange, required, full }: { label: string; valu
     <div className={full ? 'col-span-2' : ''}>
       <label className="text-[11px] text-muted-foreground">{label}{required && <span className="text-red-500"> *</span>}</label>
       <input value={value} onChange={(e) => onChange(e.target.value)} className={`w-full h-9 px-2 rounded border bg-background text-sm ${required && !value ? 'border-red-300' : 'border-border'}`} />
+
+
     </div>
   );
 }
