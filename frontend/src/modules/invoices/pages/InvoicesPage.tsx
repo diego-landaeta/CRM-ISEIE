@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Receipt, Eye, PaperPlaneTilt, CheckCircle, X, MagnifyingGlass, Gear, ArrowCounterClockwise, FileText, DownloadSimple, Trash, CalendarBlank, LinkSimple } from '@phosphor-icons/react';
+import { Receipt, Eye, PaperPlaneTilt, CheckCircle, X, MagnifyingGlass, Gear, ArrowCounterClockwise, FileText, DownloadSimple, Trash, LinkSimple } from '@phosphor-icons/react';
 import { Link, useLocation } from 'react-router-dom';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -12,7 +12,6 @@ import { invoicesApi, invoiceFaltantes } from '../api/invoices.api';
 import type { Invoice, Issuer, VentaSinFactura } from '../api/invoices.api';
 import InvoiceButton from '../components/InvoiceButton';
 import EmitirBorradorDialog from '../components/EmitirBorradorDialog';
-import EditarFechasDialog from '../components/EditarFechasDialog';
 import AsociarVentaDialog from '../components/AsociarVentaDialog';
 import TutorialButton from '../components/TutorialButton';
 import { toast } from '@/shared/hooks/useToast';
@@ -46,8 +45,6 @@ export default function InvoicesPage() {
   // Gestión de facturas (editar/eliminar/abonar): admin o gestora con permiso
   // factura_manager (el backend valida además que sean SUS facturas).
   const canManage = isAdmin || !!user?.factura_manager;
-  // Permiso acotado: cambiar solo fechas de facturas (admins + editar_fechas_factura).
-  const canEditFechas = isAdmin || !!user?.editar_fechas_factura;
   const pid = activeProject?.id;
   const loc = useLocation();
   const [tab, setTab] = useState<'facturas' | 'proformas' | 'abonos'>(() => {
@@ -87,9 +84,19 @@ export default function InvoicesPage() {
   // Borrador que se está validando/emitiendo (abre el diálogo de completar datos)
   const [emittingInv, setEmittingInv] = useState<Invoice | null>(null);
   const [deletingInv, setDeletingInv] = useState<Invoice | null>(null);
-  const [fechasInv, setFechasInv] = useState<Invoice | null>(null);
   const [asociarInv, setAsociarInv] = useState<Invoice | null>(null);
+  // Cobro por Stripe: al descargar se elige entre la factura del alumno (bruto)
+  // y la copia de gestión (neto liquidado).
+  const [descargarInv, setDescargarInv] = useState<Invoice | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // Descarga el PDF. vista='gestor' baja la copia por el neto de Stripe.
+  function descargar(inv: Invoice, vista?: 'gestor') {
+    const prelim = inv.estado === 'borrador';
+    const fname = (vista === 'gestor' ? 'NETO-' : '') + ((inv.codigo || `BORRADOR-${inv.id}`).replace('/', '-')) + '.pdf';
+    invoicesApi.downloadPdf(inv.id, fname, prelim, !prelim, vista)
+      .catch((e: unknown) => toast({ title: 'No se pudo descargar el PDF', description: (e as { message?: string })?.message, variant: 'destructive' }));
+  }
 
   const load = useCallback(async () => {
     if (!pid) return;
@@ -478,11 +485,13 @@ export default function InvoicesPage() {
                         <Eye size={11} /> Ver
                       </button>
                       <button onClick={() => {
-                          // Descargar = factura DEFINITIVA (sin marca de agua) SIEMPRE, aunque
-                          // falten datos (forzar). El borrador sí baja como preliminar.
-                          const prelim = inv.estado === 'borrador';
-                          const fname = ((inv.codigo || `BORRADOR-${inv.id}`).replace('/', '-')) + '.pdf';
-                          invoicesApi.downloadPdf(inv.id, fname, prelim, !prelim).catch((e: unknown) => toast({ title: 'No se pudo descargar el PDF', description: (e as { message?: string })?.message, variant: 'destructive' }));
+                          // Cobro por Stripe: hay dos versiones (alumno=bruto / gestión=neto),
+                          // así que se pregunta cuál. En el resto se descarga directamente.
+                          if (inv.tipo === 'normal' && inv.metodo_pago === 'tarjeta_stripe' && inv.estado !== 'borrador' && canManage) {
+                            setDescargarInv(inv);
+                            return;
+                          }
+                          descargar(inv);
                         }}
                         title="Descargar factura (PDF definitivo)"
                         className="h-7 px-2 rounded border border-border text-[11px] hover:bg-muted inline-flex items-center gap-1">
@@ -539,23 +548,6 @@ export default function InvoicesPage() {
                           <ArrowCounterClockwise size={11} /> Abono
                         </button>
                       )}
-                      {/* Cobro por Stripe: además de la factura del alumno (bruto) se
-                          puede descargar la COPIA DE GESTIÓN por el neto liquidado. */}
-                      {inv.tipo === 'normal' && inv.metodo_pago === 'tarjeta_stripe' && inv.estado !== 'borrador' && canManage && (
-                        <button onClick={() => invoicesApi.openPdf(inv.id, false, 'gestor').catch((e) => toast({ title: 'No se pudo abrir', description: (e as Error).message, variant: 'destructive' }))}
-                          title="Copia de gestión: importe NETO liquidado por Stripe (la del alumno va por el bruto)"
-                          className="h-7 px-2 rounded border border-violet-300 text-[11px] text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-950/30 inline-flex items-center gap-1">
-                          <FileText size={11} /> Neto
-                        </button>
-                      )}
-                      {/* Cambiar solo fechas (emisión/pago) — admin o permiso editar_fechas_factura. */}
-                      {inv.estado !== 'cancelada' && canEditFechas && (
-                        <button onClick={() => setFechasInv(inv)}
-                          title="Cambiar la fecha de emisión y/o de pago"
-                          className="h-7 px-2 rounded border border-border text-[11px] hover:bg-muted inline-flex items-center gap-1">
-                          <CalendarBlank size={11} /> Fechas
-                        </button>
-                      )}
                       {/* Asociar la factura a una venta del cliente — Opción B. */}
                       {inv.estado !== 'cancelada' && canManage && (
                         <button onClick={() => setAsociarInv(inv)}
@@ -593,9 +585,30 @@ export default function InvoicesPage() {
         />
       )}
 
-      {fechasInv && (
-        <EditarFechasDialog invoice={fechasInv} onClose={() => setFechasInv(null)}
-          onSaved={() => { setFechasInv(null); load(); }} />
+      {/* ¿Qué PDF? Solo se pregunta en cobros por Stripe. */}
+      {descargarInv && (
+        <div className="fixed inset-0 z-[85] flex items-center justify-center p-4" onClick={() => setDescargarInv(null)}>
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
+          <div role="dialog" className="relative bg-card rounded-xl border border-border w-full max-w-md p-5" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-semibold text-base mb-1">Descargar {descargarInv.codigo}</h3>
+            <p className="text-xs text-muted-foreground mb-4">Este cobro entró por Stripe: elige qué versión necesitas.</p>
+            <div className="space-y-2">
+              <button onClick={() => { descargar(descargarInv); setDescargarInv(null); }}
+                className="w-full text-left p-3 rounded-md border border-border hover:bg-muted/50">
+                <div className="text-sm font-semibold">Factura del alumno</div>
+                <div className="text-[11px] text-muted-foreground">Importe bruto: {fmt(Number(descargarInv.total))} — lo que pagó el alumno. Es la factura fiscal.</div>
+              </button>
+              <button onClick={() => { descargar(descargarInv, 'gestor'); setDescargarInv(null); }}
+                className="w-full text-left p-3 rounded-md border border-violet-300 hover:bg-violet-50 dark:hover:bg-violet-950/30">
+                <div className="text-sm font-semibold text-violet-700 dark:text-violet-300">Copia de gestión</div>
+                <div className="text-[11px] text-muted-foreground">Importe neto liquidado por Stripe (descontada su comisión). Uso interno.</div>
+              </button>
+            </div>
+            <div className="flex justify-end mt-4">
+              <button onClick={() => setDescargarInv(null)} className="h-9 px-3 rounded-md border border-border bg-card text-sm">Cancelar</button>
+            </div>
+          </div>
+        </div>
       )}
       {asociarInv && (
         <AsociarVentaDialog invoice={asociarInv} onClose={() => setAsociarInv(null)}

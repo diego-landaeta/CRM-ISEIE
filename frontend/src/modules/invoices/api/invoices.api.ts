@@ -235,10 +235,10 @@ export const invoicesApi = {
   },
   // Descarga el PDF como archivo (attachment). preliminar=true fuerza la vista
   // previa con marca de agua (no exige datos completos del cliente).
-  downloadPdf: async (id: number, filename: string, preliminar = false, forzar = false): Promise<void> => {
+  downloadPdf: async (id: number, filename: string, preliminar = false, forzar = false, vista?: 'gestor'): Promise<void> => {
     const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
     const tok = getAccessToken();
-    const qs = preliminar ? '?preliminar=1' : forzar ? '?forzar=1' : '';
+    const qs = preliminar ? '?preliminar=1' : (vista === 'gestor' ? (forzar ? '?vista=gestor&forzar=1' : '?vista=gestor') : (forzar ? '?forzar=1' : ''));
     const res = await fetch(`${base}/api/invoices/${id}/pdf${qs}`, {
       headers: tok ? { Authorization: `Bearer ${tok}` } : {},
       credentials: 'include',

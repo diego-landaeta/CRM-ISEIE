@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, FloppyDisk, MagnifyingGlass, User, Buildings, Money } from '@phosphor-icons/react';
 import { useProjectContext } from '@/contexts/ProjectContext';
+import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import client from '@/shared/api/client';
 import { CURRENCIES } from '../currencies';
@@ -30,6 +31,9 @@ export default function InvoiceCreatePage() {
     ?? activeProject?.sociedad_emisora_id ?? null;
   const projectOptions = (projects || []).filter((p) =>
     socActual == null ? true : p.sociedad_emisora_id === socActual);
+  const { user } = useAuth() as { user: { role?: string; editar_fechas_factura?: boolean } | null };
+  // Cambiar fechas de la factura: admins o permiso acotado editar_fechas_factura.
+  const puedeFechas = user?.role === 'admin' || user?.role === 'superadmin' || !!user?.editar_fechas_factura;
   const navigate = useNavigate();
   const loc = useLocation();
   const invBase = loc.pathname.split('/facturas')[0];
@@ -46,6 +50,11 @@ export default function InvoiceCreatePage() {
   // como para CORREGIR una factura ya emitida/pagada (IVA, datos, concepto).
   const editId = new URLSearchParams(loc.search).get('editId');
   const [editEstado, setEditEstado] = useState<string | null>(null);
+  // Fechas de la factura (emisión y pago). Se editan aquí mismo, en el panel.
+  // Solo para admins o usuarias con el permiso editar_fechas_factura.
+  const [fechaEmision, setFechaEmision] = useState('');
+  const [fechaPago, setFechaPago] = useState('');
+  const [fechasIniciales, setFechasIniciales] = useState({ emision: '', pago: '' });
 
   const [tipo, setTipo] = useState<Tipo>('persona');
   const [leadId, setLeadId] = useState<number | null>(null);
@@ -251,6 +260,17 @@ export default function InvoiceCreatePage() {
             ? await invoicesApi.corregir(Number(editId), { ...body, exento: !llevaIva })
             : await invoicesApi.update(Number(editId), body))
         : await invoicesApi.create(body);
+      // Fechas: van por su endpoint (respeta el permiso editar_fechas_factura) y
+      // solo si de verdad cambiaron.
+      if (res.success && editId && puedeFechas
+          && (fechaEmision !== fechasIniciales.emision || fechaPago !== fechasIniciales.pago)) {
+        try {
+          await invoicesApi.updateFechas(Number(editId), {
+            ...(fechaEmision && fechaEmision !== fechasIniciales.emision ? { fechaEmision } : {}),
+            ...(fechaPago && fechaPago !== fechasIniciales.pago ? { fechaPago } : {}),
+          });
+        } catch { toast({ title: 'La factura se guardó, pero no se pudieron cambiar las fechas', variant: 'destructive' }); }
+      }
       if (res.success && res.data) {
         toast({ title: esCorreccion ? '✓ Factura corregida' : editId ? '✓ Borrador guardado' : (esProforma ? '✓ Presupuesto generado' : '✓ Factura emitida'), description: res.data.codigo || '' });
         invoicesApi.openPdf(res.data.id, true).catch(() => {});
@@ -292,6 +312,10 @@ export default function InvoiceCreatePage() {
       if (!res.success || !res.data) return;
       const f = res.data as import('../api/invoices.api').Invoice;
       setEditEstado(f.estado || null);
+        const d10 = (v?: string | null) => (v ? String(v).slice(0, 10) : '');
+        setFechaEmision(d10(f.fecha_emision));
+        setFechaPago(d10(f.fecha_pago));
+        setFechasIniciales({ emision: d10(f.fecha_emision), pago: d10(f.fecha_pago) });
       setDocTipo(f.tipo === 'proforma' ? 'proforma' : 'factura');
       const noVal = (v?: string | null) => !v || v === '—';
       setTipo(noVal(f.cliente_nombre) || f.cliente_nombre === '(por completar)' ? 'persona' : 'persona');
@@ -665,6 +689,21 @@ export default function InvoiceCreatePage() {
                 <input type="number" step="0.01" min="0" value={totalEur} onChange={(e) => setTotalEur(e.target.value)}
                   placeholder="0.00"
                   className={`w-full h-9 px-2 rounded border bg-background text-sm ${!totalEur ? 'border-amber-400' : 'border-border'}`} />
+              </div>
+            </div>
+          )}
+          {/* Fechas de la factura: se editan aquí, en el panel (antes había un botón aparte). */}
+          {editId && puedeFechas && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[11px] text-muted-foreground">Fecha de emisión</label>
+                <input type="date" value={fechaEmision} onChange={(e) => setFechaEmision(e.target.value)}
+                  className="w-full h-9 px-2 rounded border border-border bg-background text-sm" />
+              </div>
+              <div>
+                <label className="text-[11px] text-muted-foreground">Fecha de pago</label>
+                <input type="date" value={fechaPago} onChange={(e) => setFechaPago(e.target.value)}
+                  className="w-full h-9 px-2 rounded border border-border bg-background text-sm" />
               </div>
             </div>
           )}
