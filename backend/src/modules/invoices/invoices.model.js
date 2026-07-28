@@ -301,7 +301,8 @@ export async function list({ projectId, issuerId, estado, search, from, to, tipo
   else if (tipo === 'normal') conds.push(`i.tipo = 'normal'`);                 // pestaña Facturas
   else conds.push(`i.tipo <> 'proforma'`);                                     // compat
   if (estado) { conds.push(`i.estado = $${idx++}`); params.push(estado); }
-  if (search) { conds.push(`(LOWER(i.cliente_nombre) LIKE $${idx} OR LOWER(i.cliente_nif) LIKE $${idx} OR i.codigo LIKE $${idx})`); params.push(`%${search.toLowerCase()}%`); idx++; }
+  // Busca por nombre, NIF, codigo y tambien por NUMERO de factura (escribir "641").
+  if (search) { conds.push(`(LOWER(i.cliente_nombre) LIKE $${idx} OR LOWER(i.cliente_nif) LIKE $${idx} OR i.codigo LIKE $${idx} OR i.numero::text LIKE $${idx})`); params.push(`%${search.toLowerCase()}%`); idx++; }
   if (from) { conds.push(`i.fecha_emision >= $${idx++}`); params.push(from); }
   if (to)   { conds.push(`i.fecha_emision <= $${idx++}`); params.push(to); }
   const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';

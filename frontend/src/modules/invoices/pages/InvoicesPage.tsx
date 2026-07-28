@@ -58,6 +58,10 @@ export default function InvoicesPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({ search: '', estado: '', from: '', to: '' });
+  // Paginacion: con cientos de facturas ya no cabian todas de una tacada.
+  const PER_PAGE = 50;
+  const [page, setPage] = useState(1);
+  const [totalFacturas, setTotalFacturas] = useState(0);
   const [sending, setSending] = useState<number | null>(null);
   const [issuers, setIssuers] = useState<Issuer[]>([]);
   // Vista por SOCIEDAD (admin): '' = por proyecto; id = todas las facturas de esa
@@ -109,8 +113,8 @@ export default function InvoicesPage() {
       // Modo sociedad (admin): facturas globales de esa empresa emisora; el resto
       // (stats, emisores, ventas sin factura) sigue por proyecto activo.
       const listParams = porSociedad
-        ? { issuerId: Number(filterIssuer), ...(filterProject ? { projectId: Number(filterProject) } : {}), ...filters, tipo: tipoTab, limit: 200 }
-        : { projectId: pid, ...filters, tipo: tipoTab, limit: 100 };
+        ? { issuerId: Number(filterIssuer), ...(filterProject ? { projectId: Number(filterProject) } : {}), ...filters, tipo: tipoTab, page, limit: PER_PAGE }
+        : { projectId: pid, ...filters, tipo: tipoTab, page, limit: PER_PAGE };
       const [r1, r2, r3, r4] = await Promise.all([
         invoicesApi.list(listParams),
         porSociedad
@@ -119,7 +123,11 @@ export default function InvoicesPage() {
         invoicesApi.listIssuers(pid).catch(() => ({ success: false, data: [] as Issuer[] })),
         invoicesApi.ventasSinFactura(pid).catch(() => ({ success: false, data: [] as VentaSinFactura[] })),
       ]);
-      if (r1.success) setInvoices(r1.data || []);
+      if (r1.success) {
+        setInvoices(r1.data || []);
+        const pg = (r1 as { pagination?: { total?: number } }).pagination;
+        setTotalFacturas(pg?.total ?? (r1.data || []).length);
+      }
       if (r2.success) setStats(r2.data || null);
       if (r3.success) setIssuers(r3.data || []);
       if (r4.success) setVentasSinFactura(r4.data || []);
@@ -128,8 +136,10 @@ export default function InvoicesPage() {
         .then((r) => { if (r.success) setStripeSinAsociar(r.data || []); })
         .catch(() => setStripeSinAsociar([]));
     } finally { setLoading(false); }
-  }, [pid, filters, tipoTab, porSociedad, filterIssuer, filterProject]);
+  }, [pid, filters, tipoTab, porSociedad, filterIssuer, filterProject, page]);
   useEffect(() => { load(); }, [load]);
+  // Cualquier cambio de filtro o de pestaña devuelve a la primera pagina.
+  useEffect(() => { setPage(1); }, [filters, tipoTab, pid, filterIssuer, filterProject]);
 
   // Al cambiar de sociedad, resetear el filtro de proyecto (los proyectos cambian).
   useEffect(() => { setFilterProject(''); }, [filterIssuer]);
@@ -272,7 +282,7 @@ export default function InvoicesPage() {
         <div className="relative flex-1 min-w-[200px]">
           <MagnifyingGlass size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <input value={filters.search} onChange={(e) => setFilters(f => ({ ...f, search: e.target.value }))}
-            placeholder="Cliente, NIF, código…" className="w-full h-9 pl-8 pr-3 rounded-md border border-border bg-background text-sm" />
+            placeholder="Buscar por nº de factura, cliente o NIF…" className="w-full h-9 pl-8 pr-3 rounded-md border border-border bg-background text-sm" />
         </div>
         {isAdmin && sociedadesVisibles.length > 1 && (
           <select value={filterIssuer}
