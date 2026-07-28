@@ -39,6 +39,7 @@ export default function AccountsPayablePage() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [filterEstado, setFilterEstado] = useState('');
+  const [rango, setRango] = useState({ from: '', to: '' });
   const [dialog, setDialog] = useState(null); // 'new' | { type: 'pay', payable }
   const [pendingDelete, setPendingDelete] = useState(null);
   const projId = activeProject?.id;
@@ -49,9 +50,16 @@ export default function AccountsPayablePage() {
       const params: Record<string, string | number> = {};
       if (projId) params.projectId = projId;
       if (filterEstado) params.estado = filterEstado;
+      if (rango.from) params.from = rango.from;
+      if (rango.to) params.to = rango.to;
+      // Las tarjetas de arriba respetan el mismo rango que el listado.
+      const statsParams: Record<string, string | number> = {};
+      if (projId) statsParams.projectId = projId;
+      if (rango.from) statsParams.from = rango.from;
+      if (rango.to) statsParams.to = rango.to;
       const [listRes, statsRes] = await Promise.all([
         payableApi.list(params),
-        payableApi.stats(projId ? { projectId: projId } : {}),
+        payableApi.stats(statsParams),
       ]);
       if (listRes.success) setItems(listRes.data);
       if (statsRes.success) setStats(statsRes.data);
@@ -62,7 +70,7 @@ export default function AccountsPayablePage() {
     }
   }
 
-  useEffect(() => { load();   }, [projId, filterEstado]);
+  useEffect(() => { load();   }, [projId, filterEstado, rango.from, rango.to]);
 
   function handleDelete(id) { setPendingDelete(id); }
   async function doDelete() {
@@ -133,6 +141,17 @@ export default function AccountsPayablePage() {
                 {e.label}
               </button>
             ))}
+            <span className="w-px h-6 bg-border mx-1" />
+            <label className="text-xs font-semibold text-muted-foreground whitespace-nowrap">Desde</label>
+            <input type="date" value={rango.from} onChange={(e) => setRango((v) => ({ ...v, from: e.target.value }))}
+              className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
+            <label className="text-xs font-semibold text-muted-foreground whitespace-nowrap">Hasta</label>
+            <input type="date" value={rango.to} onChange={(e) => setRango((v) => ({ ...v, to: e.target.value }))}
+              className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
+            {(rango.from || rango.to) && (
+              <button type="button" onClick={() => setRango({ from: '', to: '' })}
+                className="text-[11px] text-primary hover:underline whitespace-nowrap">Quitar fechas</button>
+            )}
           </div>
         </div>
 

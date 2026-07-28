@@ -45,6 +45,8 @@ function fmtDate(d?: string | null): string {
   return new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
+const PER_PAGE = 50;
+
 export default function PendienteFacturarPage() {
   const { activeProject } = useProjectContext() as { activeProject: { id?: number | null; nombre?: string } };
   const navigate = useNavigate();
@@ -52,12 +54,16 @@ export default function PendienteFacturarPage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Conversion | null>(null);
+  const [page, setPage] = useState(1);
 
   const load = useCallback(async () => {
     if (!activeProject?.id) return;
     setLoading(true);
     try {
-      const res = await client.get<Conversion[]>(`/conversions?projectId=${activeProject.id}&pendingBilling=true&limit=100`);
+      // Paginado: antes pedia 100 y el contador mentia en cuanto habia mas.
+      const res = await client.get<Conversion[]>(
+        `/conversions?projectId=${activeProject.id}&pendingBilling=true&page=${page}&limit=${PER_PAGE}`
+      );
       if (res.success) {
         setItems(res.data || []);
         setTotal(((res as { pagination?: { total?: number } }).pagination?.total) ?? (res.data?.length || 0));
@@ -66,9 +72,12 @@ export default function PendienteFacturarPage() {
       const e = err as { message?: string };
       toast({ title: 'Error', description: e?.message || 'No se pudo cargar la lista', variant: 'destructive' });
     } finally { setLoading(false); }
-  }, [activeProject?.id]);
+  }, [activeProject?.id, page]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { setPage(1); }, [activeProject?.id]);
+
+  const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
 
   return (
     <div className="space-y-5 pb-8">
@@ -161,6 +170,21 @@ export default function PendienteFacturarPage() {
               </div>
             ))}
           </div>
+
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between gap-3 pt-1 text-sm">
+              <span className="text-muted-foreground">
+                {(page - 1) * PER_PAGE + 1}–{Math.min(page * PER_PAGE, total)} de {total}
+              </span>
+              <div className="flex items-center gap-2">
+                <button type="button" disabled={page <= 1} onClick={() => setPage((v) => Math.max(1, v - 1))}
+                  className="h-8 px-3 rounded-md border border-border disabled:opacity-40 hover:bg-muted">Anterior</button>
+                <span className="text-muted-foreground tabular-nums">{page} / {totalPages}</span>
+                <button type="button" disabled={page >= totalPages} onClick={() => setPage((v) => Math.min(totalPages, v + 1))}
+                  className="h-8 px-3 rounded-md border border-border disabled:opacity-40 hover:bg-muted">Siguiente</button>
+              </div>
+            </div>
+          )}
         </>
       )}
 
