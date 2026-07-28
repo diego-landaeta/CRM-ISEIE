@@ -92,7 +92,17 @@ const SIMBOLOS_NO_WINANSI = {
 function winAnsi(t) {
   let out = String(t ?? '');
   for (const [sym, iso] of Object.entries(SIMBOLOS_NO_WINANSI)) out = out.split(sym).join(iso);
-  return out.replace(/[^-ÿ]/g, '');
+  // OJO: WinAnsi (CP1252) SI admite caracteres fuera de Latin-1 — el euro entre
+  // ellos. Filtrar solo por Latin-1 se cargaba el simbolo de TODOS los importes.
+  const EXTRAS = new Set([0x20AC,0x201A,0x0192,0x201E,0x2026,0x2020,0x2021,0x02C6,
+    0x2030,0x0160,0x2039,0x0152,0x017D,0x2018,0x2019,0x201C,0x201D,0x2022,0x2013,
+    0x2014,0x02DC,0x2122,0x0161,0x203A,0x0153,0x017E,0x0178]);
+  let res = '';
+  for (const ch of out) {
+    const cp = ch.codePointAt(0);
+    if (cp <= 0xFF || EXTRAS.has(cp)) res += ch;
+  }
+  return res;
 }
 
 // Formatea un importe en la moneda de la factura (por defecto EUR). Los importes
