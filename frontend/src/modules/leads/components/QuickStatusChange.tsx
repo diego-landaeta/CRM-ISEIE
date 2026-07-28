@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, lazy, Suspense } from 'react';
+import { createPortal } from 'react-dom';
 import { CaretDown, CheckCircle } from '@phosphor-icons/react';
 import StatusBadge, { STATUS_LABELS, STATUS_STYLES, STATUS_KEYS } from '@/shared/components/ui/StatusBadge';
 import client from '@/shared/api/client';
@@ -37,6 +38,19 @@ interface Props {
 export default function QuickStatusChange({ leadId, currentStatus, responsableId, onChanged }: Props) {
   const { user } = useAuth() as { user: User | null };
   const [open, setOpen] = useState(false);
+  // El menu se pinta en un portal con posicion fija: dentro de la tabla quedaba
+  // recortado por el contenedor con overflow y no se veia al desplegarlo.
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
+  const btnRef = useRef<HTMLButtonElement | null>(null);
+  function abrir() {
+    const r = btnRef.current?.getBoundingClientRect();
+    if (r) {
+      const alto = 260; // alto aproximado del menu
+      const abajo = window.innerHeight - r.bottom;
+      setMenuPos({ top: abajo < alto ? Math.max(8, r.top - alto) : r.bottom + 4, left: r.left });
+    }
+    setOpen((v) => !v);
+  }
   const [saving, setSaving] = useState(false);
   const [lossOpen, setLossOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -94,7 +108,8 @@ export default function QuickStatusChange({ leadId, currentStatus, responsableId
       <div ref={ref} className="relative inline-block" onClick={(e) => e.stopPropagation()}>
         <button
           type="button"
-          onClick={() => setOpen((v) => !v)}
+          ref={btnRef}
+          onClick={abrir}
           disabled={saving}
           title="Cambiar estado"
           className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium cursor-pointer transition-all hover:ring-2 hover:ring-primary/40 ${STATUS_STYLES[currentStatus] || 'bg-muted text-muted-foreground'} ${saving ? 'opacity-50' : ''}`}
@@ -103,10 +118,11 @@ export default function QuickStatusChange({ leadId, currentStatus, responsableId
           <CaretDown size={10} weight="bold" className="opacity-70" />
         </button>
 
-        {open && (
+        {open && menuPos && createPortal(
           <div
             role="menu"
-            className="absolute z-[60] left-0 top-full mt-1 min-w-[200px] rounded-md shadow-2xl py-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700"
+            style={{ position: 'fixed', top: menuPos.top, left: menuPos.left }}
+            className="z-[100] min-w-[200px] rounded-md shadow-2xl py-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700"
           >
             {STATUS_KEYS.map((s) => {
               const isCurrent = s === currentStatus;
@@ -128,7 +144,8 @@ export default function QuickStatusChange({ leadId, currentStatus, responsableId
                 </button>
               );
             })}
-          </div>
+          </div>,
+          document.body
         )}
       </div>
 
