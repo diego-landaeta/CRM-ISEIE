@@ -93,6 +93,14 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
           title={title}
           subtitle={`${subtitlePrefix}${activeProject ? ' en ' + activeProject.nombre : ''}`}
         />
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+        <button
+          type="button"
+          onClick={() => navigate('/sales/analisis')}
+          className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-md border border-border text-sm font-semibold hover:bg-muted"
+        >
+          Análisis
+        </button>
         {activeProject?.id && (
           <button
             type="button"
@@ -103,6 +111,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
             Nueva venta
           </button>
         )}
+        </div>
       </div>
 
       <Suspense fallback={null}>
@@ -242,7 +251,16 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
                         'bg-orange-100 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400'
                       }`}>{r.estado_pago}</span>
                     </td>
-                    <td className="px-4 py-3 text-right"><ArrowRight size={14} className="text-muted-foreground inline" /></td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); navigate(`/sales/${r.id}`); }}
+                        title="Ver detalle de la venta"
+                        className="text-muted-foreground hover:text-primary p-1 rounded focus:outline-none focus:ring-2 focus:ring-primary/40"
+                      >
+                        <ArrowRight size={14} />
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>

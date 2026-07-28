@@ -77,3 +77,46 @@ export async function deleteGoal(req, res, next) {
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
 }
+
+// --- Vistas agregadas de Ventas -------------------------------------------
+function filtrosDeQuery(req) {
+  const dateRe2 = /^\d{4}-\d{2}-\d{2}$/;
+  let responsableId = req.query.responsableId ? parseInt(req.query.responsableId) : null;
+  // Gestor: solo lo suyo, ignorando lo que pida por query.
+  if (req.user.role === 'gestor') responsableId = req.user.userId;
+  return {
+    projectId: req.query.projectId ? parseInt(req.query.projectId) : null,
+    from: dateRe2.test(req.query.from || '') ? req.query.from : null,
+    to: dateRe2.test(req.query.to || '') ? req.query.to : null,
+    responsableId,
+    search: (req.query.search || '').trim() || null,
+    page: req.query.page,
+    limit: req.query.limit,
+  };
+}
+
+// GET /api/sales/resumen
+export async function resumenVentas(req, res, next) {
+  try {
+    res.json({ success: true, data: await salesService.getResumenVentas(filtrosDeQuery(req)) });
+  } catch (err) { next(err); }
+}
+
+// GET /api/sales/por-asesora
+export async function ventasPorAsesora(req, res, next) {
+  try {
+    res.json({ success: true, data: await salesService.getVentasPorAsesora(filtrosDeQuery(req)) });
+  } catch (err) { next(err); }
+}
+
+// GET /api/sales/por-cliente
+export async function ventasPorCliente(req, res, next) {
+  try {
+    const r = await salesService.getVentasPorCliente(filtrosDeQuery(req));
+    res.json({
+      success: true,
+      data: r.clientes,
+      pagination: { total: r.total, page: r.page, limit: r.limit, totalPages: r.totalPages },
+    });
+  } catch (err) { next(err); }
+}

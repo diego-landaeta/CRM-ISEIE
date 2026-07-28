@@ -46,6 +46,8 @@ const CommissionsPage = lazy(() => import('./modules/commissions/pages/Commissio
 const ExpensesPage = lazy(() => import('./modules/expenses/pages/ExpensesPage'));
 const ProfilePage = lazy(() => import('./shared/pages/ProfilePage'));
 const SettingsPage = lazy(() => import('./shared/pages/SettingsPage'));
+const SalesAnalysisPage = lazy(() => import('./modules/sales/pages/SalesAnalysisPage'));
+const SaleDetailPage = lazy(() => import('./modules/sales/pages/SaleDetailPage'));
 const SalesPage = lazy(() => import('./modules/sales/pages/SalesPage'));
 const MetaAdsPage = lazy(() => import('./modules/meta-ads/pages/MetaAdsPage'));
 const ChangeRequestsPage = lazy(() => import('./modules/change-requests/pages/ChangeRequestsPage'));
@@ -77,6 +79,7 @@ const ROUTE_TITLES = {
   '/dashboard':                       'Dashboard',
   '/leads':                           'Prospectos',
   '/products':                        'Productos',
+  '/sales/analisis':                  'Análisis de ventas',
   '/sales':                           'Ventas',
   '/commissions':                     'Comisiones',
   '/expenses':                        'Egresos',
@@ -164,6 +167,8 @@ function App() {
           <Route path="/products/pending" element={<CoursesPendingPage />} />
           <Route path="/products/tree" element={<ProductsTreePage />} />
           <Route path="/products/:id" element={<ProductDetailPage />} />
+          <Route path="/sales/analisis" element={<SalesAnalysisPage />} />
+          <Route path="/sales/:id" element={<SaleDetailPage />} />
           <Route path="/sales" element={<SalesPage />} />
           <Route path="/meta-ads" element={<MetaAdsPage />} />
           <Route path="/leads/revision-duplicados" element={<DupReviewQueuePage />} />

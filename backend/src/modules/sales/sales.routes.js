@@ -9,6 +9,9 @@ router.use(verifyToken);
 router.post('/', roleGuard('gestor', 'admin', 'superadmin'), salesController.create);
 
 // GET /api/sales/top-products — ranking de programas más vendidos para dashboards.
+router.get('/resumen', salesController.resumenVentas);
+router.get('/por-asesora', salesController.ventasPorAsesora);
+router.get('/por-cliente', salesController.ventasPorCliente);
 router.get('/top-products', salesController.topProducts);
 
 // GET /api/sales/gestores-stats — ventas + metas por gestor del periodo

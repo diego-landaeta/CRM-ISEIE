@@ -205,3 +205,182 @@ export async function getTopProducts({ projectId, limit = 10, days = null, from 
     ultima_venta: r.ultima_venta,
   }));
 }
+
+// ---------------------------------------------------------------------------
+// Vistas agregadas de Ventas (Finanzas). Las tres comparten el mismo criterio
+// de vendedora: la de la venta si la tiene, si no la gestora del lead.
+// ---------------------------------------------------------------------------
+const VENDEDORA = 'COALESCE(cv.vendedora_id, l.responsable_id)';
+
+function filtrosVentas({ projectId, from, to, responsableId, search }, startIdx = 1) {
+  const cond = [];
+  const params = [];
+  let idx = startIdx;
+  if (projectId) { cond.push(`cv.project_id = $${idx++}`); params.push(projectId); }
+  if (from) { cond.push(`cv.fecha_conversion >= $${idx++}`); params.push(from); }
+  if (to) { cond.push(`cv.fecha_conversion <= $${idx++}`); params.push(to); }
+  if (responsableId) { cond.push(`${VENDEDORA} = $${idx++}`); params.push(responsableId); }
+  if (search) {
+    cond.push(`(l.nombre ILIKE $${idx} OR l.email ILIKE $${idx} OR cv.producto_contratado ILIKE $${idx})`);
+    params.push(`%${search}%`); idx++;
+  }
+  return { where: cond.length ? 'WHERE ' + cond.join(' AND ') : '', params, idx };
+}
+
+// Resumen consolidado que acompana a la vista general de Ventas.
+export async function getResumenVentas(filtros = {}) {
+  const { where, params } = filtrosVentas(filtros);
+  const { rows } = await query(
+    `SELECT COUNT(*)::int AS ventas,
+            COUNT(DISTINCT cv.lead_id)::int AS clientes,
+            COUNT(DISTINCT ${VENDEDORA})::int AS asesoras,
+            COALESCE(SUM(cv.importe_total), 0) AS importe,
+            COALESCE(SUM(cv.importe_pagado), 0) AS cobrado,
+            COALESCE(SUM(cv.importe_total - cv.importe_pagado), 0) AS pendiente,
+            COUNT(*) FILTER (WHERE cv.importe_pagado >= cv.importe_total)::int AS liquidadas,
+            COUNT(*) FILTER (WHERE cv.importe_pagado < cv.importe_total)::int AS con_saldo,
+            COALESCE(AVG(cv.importe_total), 0) AS ticket_medio
+       FROM conversions cv
+       LEFT JOIN leads l ON l.id = cv.lead_id
+       ${where}`,
+    params
+  );
+  const r = rows[0];
+
+  // Cuotas: cuantas ventas van fraccionadas y como va el cobro de ese plan.
+  const { rows: cuotas } = await query(
+    `SELECT COUNT(DISTINCT ci.conversion_id)::int AS ventas_con_plan,
+            COUNT(*)::int AS cuotas,
+            COUNT(*) FILTER (WHERE ci.fecha_cobro IS NOT NULL)::int AS cuotas_cobradas,
+            COUNT(*) FILTER (WHERE ci.fecha_cobro IS NULL)::int AS cuotas_pendientes,
+            COUNT(*) FILTER (WHERE ci.fecha_cobro IS NULL AND ci.fecha_vencimiento < CURRENT_DATE)::int AS cuotas_vencidas,
+            COALESCE(SUM(ci.importe_previsto) FILTER (WHERE ci.fecha_cobro IS NULL), 0) AS importe_pendiente,
+            COALESCE(SUM(ci.importe_previsto) FILTER (WHERE ci.fecha_cobro IS NULL AND ci.fecha_vencimiento < CURRENT_DATE), 0) AS importe_vencido
+       FROM conversion_installments ci
+       JOIN conversions cv ON cv.id = ci.conversion_id
+       LEFT JOIN leads l ON l.id = cv.lead_id
+       ${where}`,
+    params
+  );
+
+  return {
+    ventas: r.ventas,
+    clientes: r.clientes,
+    asesoras: r.asesoras,
+    importe: Number(r.importe),
+    cobrado: Number(r.cobrado),
+    pendiente: Number(r.pendiente),
+    liquidadas: r.liquidadas,
+    con_saldo: r.con_saldo,
+    ticket_medio: Number(r.ticket_medio),
+    cuotas: {
+      ventas_con_plan: cuotas[0].ventas_con_plan,
+      total: cuotas[0].cuotas,
+      cobradas: cuotas[0].cuotas_cobradas,
+      pendientes: cuotas[0].cuotas_pendientes,
+      vencidas: cuotas[0].cuotas_vencidas,
+      importe_pendiente: Number(cuotas[0].importe_pendiente),
+      importe_vencido: Number(cuotas[0].importe_vencido),
+    },
+  };
+}
+
+// Ventas agrupadas por asesora.
+export async function getVentasPorAsesora(filtros = {}) {
+  const { where, params } = filtrosVentas(filtros);
+  const { rows } = await query(
+    `SELECT ${VENDEDORA} AS user_id,
+            COALESCE(u.nombre, '— sin asignar —') AS nombre,
+            u.email, u.role,
+            COUNT(*)::int AS ventas,
+            COUNT(DISTINCT cv.lead_id)::int AS clientes,
+            COALESCE(SUM(cv.importe_total), 0) AS importe,
+            COALESCE(SUM(cv.importe_pagado), 0) AS cobrado,
+            COALESCE(SUM(cv.importe_total - cv.importe_pagado), 0) AS pendiente,
+            COALESCE(AVG(cv.importe_total), 0) AS ticket_medio,
+            MAX(cv.fecha_conversion) AS ultima_venta
+       FROM conversions cv
+       LEFT JOIN leads l ON l.id = cv.lead_id
+       LEFT JOIN users u ON u.id = COALESCE(cv.vendedora_id, l.responsable_id)
+       ${where}
+      GROUP BY 1, u.nombre, u.email, u.role
+      ORDER BY importe DESC`,
+    params
+  );
+  return rows.map((r) => ({
+    ...r,
+    importe: Number(r.importe),
+    cobrado: Number(r.cobrado),
+    pendiente: Number(r.pendiente),
+    ticket_medio: Number(r.ticket_medio),
+  }));
+}
+
+// Ventas agrupadas por cliente. Paginado: hay muchos mas clientes que asesoras.
+export async function getVentasPorCliente(filtros = {}) {
+  const page = Math.max(1, parseInt(filtros.page) || 1);
+  const limit = Math.min(200, Math.max(1, parseInt(filtros.limit) || 50));
+  const { where, params, idx } = filtrosVentas(filtros);
+
+  // Las ventas del filtro se aislan en una CTE para poder contar sus cuotas
+  // por cliente sin meter agregados dentro de subconsultas.
+  const CTE = `WITH v AS (
+      SELECT cv.id, cv.lead_id, cv.importe_total, cv.importe_pagado, cv.fecha_conversion,
+             l.nombre AS cliente, l.email, l.telefono,
+             u.nombre AS asesora
+        FROM conversions cv
+        LEFT JOIN leads l ON l.id = cv.lead_id
+        LEFT JOIN users u ON u.id = COALESCE(cv.vendedora_id, l.responsable_id)
+        ${where}
+    ),
+    cu AS (
+      SELECT v.lead_id,
+             COUNT(*) FILTER (WHERE ci.fecha_cobro IS NULL)::int AS cuotas_pendientes,
+             COUNT(*) FILTER (WHERE ci.fecha_cobro IS NULL AND ci.fecha_vencimiento < CURRENT_DATE)::int AS cuotas_vencidas,
+             COALESCE(SUM(ci.importe_previsto) FILTER (WHERE ci.fecha_cobro IS NULL), 0) AS cuotas_importe_pendiente
+        FROM conversion_installments ci
+        JOIN v ON v.id = ci.conversion_id
+       GROUP BY v.lead_id
+    )`;
+
+  const { rows: countRows } = await query(
+    `${CTE} SELECT COUNT(DISTINCT v.lead_id)::int AS total FROM v`,
+    params
+  );
+  const { rows } = await query(
+    `${CTE}
+     SELECT v.lead_id,
+            MAX(v.cliente) AS cliente,
+            MAX(v.email) AS email,
+            MAX(v.telefono) AS telefono,
+            COUNT(*)::int AS ventas,
+            COALESCE(SUM(v.importe_total), 0) AS importe,
+            COALESCE(SUM(v.importe_pagado), 0) AS cobrado,
+            COALESCE(SUM(v.importe_total - v.importe_pagado), 0) AS pendiente,
+            MIN(v.fecha_conversion) AS primera_venta,
+            MAX(v.fecha_conversion) AS ultima_venta,
+            COALESCE(MAX(cu.cuotas_pendientes), 0) AS cuotas_pendientes,
+            COALESCE(MAX(cu.cuotas_vencidas), 0) AS cuotas_vencidas,
+            COALESCE(MAX(cu.cuotas_importe_pendiente), 0) AS cuotas_importe_pendiente,
+            STRING_AGG(DISTINCT v.asesora, ', ') AS asesoras
+       FROM v
+       LEFT JOIN cu ON cu.lead_id = v.lead_id
+      GROUP BY v.lead_id
+      ORDER BY importe DESC
+      LIMIT $${idx} OFFSET $${idx + 1}`,
+    [...params, limit, (page - 1) * limit]
+  );
+  return {
+    clientes: rows.map((r) => ({
+      ...r,
+      importe: Number(r.importe),
+      cobrado: Number(r.cobrado),
+      pendiente: Number(r.pendiente),
+      cuotas_importe_pendiente: Number(r.cuotas_importe_pendiente),
+    })),
+    total: countRows[0].total,
+    page,
+    limit,
+    totalPages: Math.max(1, Math.ceil(countRows[0].total / limit)),
+  };
+}
