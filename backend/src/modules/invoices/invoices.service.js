@@ -79,15 +79,31 @@ export function repartirEnEuros({ totalEur, ivaPct, ivaIncluido }) {
   return { baseImponible, ivaImporte: Number((total - baseImponible).toFixed(2)), total: Number(total.toFixed(2)) };
 }
 
+// La fuente estándar del PDF (WinAnsi) no sabe dibujar símbolos como ₡ (colón) o
+// ₲ (guaraní). Si uno aparecía en un concepto, la generación reventaba y esa
+// factura NO se podía descargar. Se cambian por su código ISO y se descarta
+// cualquier otro carácter fuera de Latin-1 antes que romper el PDF.
+const SIMBOLOS_NO_WINANSI = {
+  '₡': 'CRC ', '₲': 'PYG ', '₴': 'UAH ', '₹': 'INR ',
+  '₩': 'KRW ', '₦': 'NGN ', '₪': 'ILS ', '₫': 'VND ',
+  '₱': 'PHP ', '฿': 'THB ', '₺': 'TRY ', '₽': 'RUB ',
+  '₿': 'BTC ', '₵': 'GHS ', '₾': 'GEL ',
+};
+function winAnsi(t) {
+  let out = String(t ?? '');
+  for (const [sym, iso] of Object.entries(SIMBOLOS_NO_WINANSI)) out = out.split(sym).join(iso);
+  return out.replace(/[^-ÿ]/g, '');
+}
+
 // Formatea un importe en la moneda de la factura (por defecto EUR). Los importes
 // son manuales en esa divisa (sin conversión). Si el código ISO no lo soporta
 // Intl, cae a "1.234,56 XXX".
 function fmtMoney(n, moneda = 'EUR') {
   const cur = String(moneda || 'EUR').toUpperCase();
   try {
-    return new Intl.NumberFormat('es-ES', { style: 'currency', currency: cur }).format(Number(n || 0));
+    return winAnsi(new Intl.NumberFormat('es-ES', { style: 'currency', currency: cur }).format(Number(n || 0)));
   } catch {
-    return `${new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n || 0))} ${cur}`;
+    return winAnsi(`${new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n || 0))} ${cur}`);
   }
 }
 function fmtEUR(n) { return fmtMoney(n, 'EUR'); }
@@ -102,7 +118,7 @@ function netFactor(inv) {
 // Parte una descripción larga en varias líneas que caben en maxWidth, para que
 // el nombre completo del programa NO se corte en el PDF (antes se hacía slice).
 function wrapToLines(font, text, size, maxWidth) {
-  const clean = String(text ?? '').replace(/[\r\n\t]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
+  const clean = winAnsi(text).replace(/[\r\n\t]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
   if (!clean) return [''];
   const words = clean.split(' ');
   const lines = [];
@@ -180,8 +196,12 @@ export async function generatePDF(invoiceId, { preliminar = false, vistaGestor =
   const esBorrador = inv.estado === 'borrador';
 
   // Texto alineado a la derecha terminando en xr.
-  const drawRight = (text, xr, yy, size, f, color) =>
-    page.drawText(text, { x: xr - f.widthOfTextAtSize(String(text), size), y: yy, size, font: f, color });
+  const drawRight = (rawText, xr, yy, size, f, color) => {
+    // Se limpia antes de medir y dibujar: un símbolo que la fuente no soporte
+    // (₡, ₲…) rompía la generación entera del PDF.
+    const text = winAnsi(rawText);
+    page.drawText(text, { x: xr - f.widthOfTextAtSize(text, size), y: yy, size, font: f, color });
+  };
   const noVal = (v) => !v || String(v).trim() === '' || String(v).trim() === '—';
   // Colapsa saltos de línea / espacios múltiples a UNA sola línea. pdf-lib pinta
   // los '\n' como varias líneas dentro del hueco de un campo → el texto se
