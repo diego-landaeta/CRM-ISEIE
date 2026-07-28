@@ -6,12 +6,29 @@ import { query } from '../../shared/config/db.js';
 
 export async function createExpense(data, userId) {
   const { rows } = await query(
-    `INSERT INTO expenses (project_id, concepto, importe, fecha, categoria, notas, registrado_por)
-     VALUES ($1, $2, $3, COALESCE($4, CURRENT_DATE), $5, $6, $7)
+    `INSERT INTO expenses (
+        project_id, concepto, importe, fecha, categoria, notas, registrado_por,
+        comprobante_url, comprobante_key, comprobante_mime, comprobante_size_bytes,
+        source_payable_id, source_stripe_payout_id
+     )
+     VALUES ($1, $2, $3, COALESCE($4, CURRENT_DATE), $5, $6, $7, $8, $9, $10, $11, $12, $13)
      RETURNING *`,
-    [data.project_id || null, data.concepto, data.importe, data.fecha, data.categoria, data.notas, userId]
+    [
+      data.project_id || null, data.concepto, data.importe, data.fecha, data.categoria, data.notas, userId,
+      data.comprobante_url || null, data.comprobante_key || null, data.comprobante_mime || null, data.comprobante_size_bytes || null,
+      data.source_payable_id || null, data.source_stripe_payout_id || null,
+    ]
   );
   return rows[0];
+}
+
+export async function findBySourcePayableId(payableId) {
+  const { rows } = await query(`SELECT * FROM expenses WHERE source_payable_id = $1`, [payableId]);
+  return rows[0] || null;
+}
+export async function findBySourceStripePayoutId(payoutId) {
+  const { rows } = await query(`SELECT * FROM expenses WHERE source_stripe_payout_id = $1`, [payoutId]);
+  return rows[0] || null;
 }
 
 export async function findExpenseById(id) {
@@ -57,7 +74,10 @@ export async function listExpenses({ projectId, categoria, from, to, page, limit
 }
 
 export async function updateExpense(id, fields) {
-  const allowed = ['project_id', 'concepto', 'importe', 'fecha', 'categoria', 'notas'];
+  const allowed = [
+    'project_id', 'concepto', 'importe', 'fecha', 'categoria', 'notas',
+    'comprobante_url', 'comprobante_key', 'comprobante_mime', 'comprobante_size_bytes',
+  ];
   const sets = [];
   const params = [];
   let idx = 1;
@@ -215,6 +235,7 @@ export async function getReceivable({ projectId = null, responsableId = null, fr
   if (projectId)     { conds.push(`c.project_id = $${i++}`); params.push(projectId); }
   if (responsableId) { conds.push(`l.responsable_id = $${i++}`); params.push(responsableId); }
   const extra = conds.length ? ' AND ' + conds.join(' AND ') : '';
+  // Rango de vencimiento (opcional). Se aplica a la fecha de cada fila (vence).
   const fromCond = from ? ` AND vence >= $${i++}` : '';
   if (from) params.push(from);
   const toCond = to ? ` AND vence <= $${i++}` : '';
@@ -222,6 +243,7 @@ export async function getReceivable({ projectId = null, responsableId = null, fr
 
   const sql = `
     WITH filas AS (
+      -- Cuotas pendientes
       SELECT 'cuota'::text AS tipo, ci.id AS ref_id, c.id AS conversion_id, c.lead_id,
              l.nombre AS cliente, l.email AS cliente_email,
              c.producto_contratado AS producto,
@@ -237,6 +259,7 @@ export async function getReceivable({ projectId = null, responsableId = null, fr
         LEFT JOIN users u ON u.id = l.responsable_id
        WHERE ci.fecha_cobro IS NULL${extra}
       UNION ALL
+      -- Ventas pendientes SIN cuotas pendientes (pago único / compromiso)
       SELECT 'venta'::text AS tipo, c.id AS ref_id, c.id AS conversion_id, c.lead_id,
              l.nombre AS cliente, l.email AS cliente_email,
              c.producto_contratado AS producto,
@@ -259,6 +282,7 @@ export async function getReceivable({ projectId = null, responsableId = null, fr
 
   const { rows } = await query(sql, params);
 
+  // Gestoras presentes en el resultado (para el filtro del panel admin).
   const gestoras = [];
   const seen = new Set();
   for (const r of rows) {

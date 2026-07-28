@@ -6,6 +6,18 @@ import {
   accountingDashboardSchema,
 } from './expense.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
+import { logger } from '../../shared/utils/logger.js';
+import { saveLocal, getLocal, deleteLocal } from '../../shared/services/localStorage.service.js';
+import crypto from 'crypto';
+
+const ALLOWED_COMPROBANTE_MIMES = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
+function extFromMime(mime) {
+  if (mime === 'application/pdf') return 'pdf';
+  if (mime === 'image/jpeg') return 'jpg';
+  if (mime === 'image/png') return 'png';
+  if (mime === 'image/webp') return 'webp';
+  return 'bin';
+}
 
 // ---------- EXPENSES ----------
 
@@ -71,8 +83,66 @@ export async function deleteExpense(req, res, next) {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    // Antes de borrar el expense, borrar el comprobante del disco si existe.
+    const existing = await model.findExpenseById(id);
+    if (existing?.comprobante_key) {
+      try { await deleteLocal(`expenses/${existing.comprobante_key}`); } catch (err) {
+        logger.warn({ err: err.message, key: existing.comprobante_key }, 'No se pudo borrar comprobante (no crítico)');
+      }
+    }
     await model.deleteExpense(id);
     res.json({ success: true, data: { message: 'Gasto eliminado' } });
+  } catch (err) { next(err); }
+}
+
+// ---------- COMPROBANTE ----------
+
+export async function uploadComprobante(req, res, next) {
+  try {
+    if (!req.file) throw new AppError('Archivo requerido (campo "file")', 400, 'FILE_REQUIRED');
+    if (!ALLOWED_COMPROBANTE_MIMES.has(req.file.mimetype)) {
+      throw new AppError('Formato no permitido. Solo PDF, JPG, PNG, WEBP.', 400, 'INVALID_MIME');
+    }
+    const ext = extFromMime(req.file.mimetype);
+    const hash = crypto.randomBytes(8).toString('hex');
+    const key = `${Date.now()}-${hash}.${ext}`;
+    await saveLocal(`expenses/${key}`, req.file.buffer);
+    const baseUrl = process.env.API_PUBLIC_BASE_URL || '';
+    res.status(201).json({
+      success: true,
+      data: {
+        comprobante_url: `${baseUrl}/api/accounting/expenses/comprobante/${key}`,
+        comprobante_key: key,
+        comprobante_mime: req.file.mimetype,
+        comprobante_size_bytes: req.file.size,
+      },
+    });
+  } catch (err) { next(err); }
+}
+
+export async function downloadComprobante(req, res, next) {
+  try {
+    const key = req.params.key || '';
+    if (!key || key.includes('/') || key.includes('..') || key.includes('\\')) {
+      throw new AppError('Key inválida', 400, 'INVALID_KEY');
+    }
+    let buffer;
+    try {
+      const r = await getLocal(`expenses/${key}`);
+      buffer = r.buffer;
+    } catch (err) {
+      if (err.code === 'ENOENT') throw new AppError('Comprobante no encontrado', 404, 'NOT_FOUND');
+      throw err;
+    }
+    const ext = key.split('.').pop()?.toLowerCase();
+    const ctype = ext === 'pdf' ? 'application/pdf'
+      : ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg'
+      : ext === 'png' ? 'image/png'
+      : ext === 'webp' ? 'image/webp'
+      : 'application/octet-stream';
+    res.setHeader('Content-Type', ctype);
+    res.setHeader('Content-Disposition', `inline; filename="${key}"`);
+    res.send(buffer);
   } catch (err) { next(err); }
 }
 
