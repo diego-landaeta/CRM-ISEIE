@@ -55,6 +55,25 @@ export async function create(data, userId) {
 
   const conv = await conversionModel.create({ ...data, changed_by: userId });
 
+  // Si al cliente ya se le habia emitido una PROFORMA antes de registrar la venta,
+  // se engancha ahora. Sin esto la proforma quedaba suelta y no aparecia en su ficha
+  // (el panel busca los documentos DE la venta), aunque estuviera en el cliente correcto.
+  // Solo se hace si hay UNA sola proforma suelta: con varias no se adivina cual es.
+  try {
+    const { query } = await import('../../shared/config/db.js');
+    const { rows } = await query(
+      `SELECT id FROM invoices
+        WHERE lead_id = $1 AND tipo = 'proforma' AND conversion_id IS NULL AND estado <> 'cancelada'`,
+      [data.lead_id]
+    );
+    if (rows.length === 1) {
+      await query(`UPDATE invoices SET conversion_id = $2, updated_at = NOW() WHERE id = $1`, [rows[0].id, conv.id]);
+      logger.info({ conversionId: conv.id, invoiceId: rows[0].id }, 'proforma suelta enganchada a la venta nueva');
+    }
+  } catch (err) {
+    logger.warn({ err: err.message }, 'enganche de proforma suelta fallo (no bloqueante)');
+  }
+
   // Hook: crear comision automaticamente si hay regla
   commissionModel.createCommissionForConversion(conv.id).catch(err =>
     logger.warn({ err: err.message, conversionId: conv.id }, 'createCommission failed (non-blocking)')
