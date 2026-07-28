@@ -7,8 +7,8 @@ export async function upsertPayment(p) {
        customer_email, customer_name, customer_stripe_id,
        description, metadata, payment_method,
        disputed, dispute_status, dispute_reason,
-       refunded, refunded_amount, stripe_created_at, synced_at
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,to_timestamp($18),NOW())
+       refunded, refunded_amount, stripe_created_at, synced_at, fee_amount, net_amount
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,to_timestamp($18),NOW(),$19,$20)
      ON CONFLICT (project_id, stripe_id) DO UPDATE SET
        status=EXCLUDED.status, amount=EXCLUDED.amount,
        customer_email=EXCLUDED.customer_email, customer_name=EXCLUDED.customer_name,
@@ -17,6 +17,8 @@ export async function upsertPayment(p) {
        disputed=EXCLUDED.disputed, dispute_status=EXCLUDED.dispute_status,
        dispute_reason=EXCLUDED.dispute_reason,
        refunded=EXCLUDED.refunded, refunded_amount=EXCLUDED.refunded_amount,
+       fee_amount=COALESCE(EXCLUDED.fee_amount, stripe_payments.fee_amount),
+       net_amount=COALESCE(EXCLUDED.net_amount, stripe_payments.net_amount),
        synced_at=NOW(), updated_at=NOW()
      RETURNING id, conversion_id`,
     [
@@ -25,6 +27,7 @@ export async function upsertPayment(p) {
       p.description, p.metadata ? JSON.stringify(p.metadata) : null, p.payment_method,
       !!p.disputed, p.dispute_status, p.dispute_reason,
       !!p.refunded, p.refunded_amount, p.stripe_created_at,
+      p.fee_amount ?? null, p.net_amount ?? null,
     ]
   );
   return rows[0];

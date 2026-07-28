@@ -300,19 +300,22 @@ export async function pdf(req, res, next) {
         throw new AppError(`Para descargar la factura ${inv.codigo || ''} debes rellenar: ${faltan.join(', ')}.`, 400, 'INVOICE_INCOMPLETE');
       }
     }
+    // ?vista=gestor → COPIA DE GESTIÓN de un cobro por Stripe: mismo documento pero
+    // por el importe NETO liquidado (bruto menos la comisión de Stripe). La factura
+    // del alumno siempre va por el bruto. Solo aplica a facturas normales.
+    const vistaGestor = req.query.vista === 'gestor' && inv.tipo !== 'proforma' && inv.tipo !== 'rectificativa';
     let bytes;
-    // El preliminar nunca usa el PDF cacheado (definitivo): siempre se regenera
-    // con la marca de agua.
-    if (inv.pdf_path && !preliminar) {
+    // El preliminar y la copia de gestión nunca usan el PDF cacheado (definitivo).
+    if (inv.pdf_path && !preliminar && !vistaGestor) {
       try { bytes = await fs.readFile(inv.pdf_path); } catch { bytes = null; }
     }
     if (!bytes) {
-      const gen = await service.generatePDF(id, { preliminar });
+      const gen = await service.generatePDF(id, { preliminar, vistaGestor });
       bytes = gen.bytes;
     }
     res.setHeader('Content-Type', 'application/pdf');
     // Borrador: no tiene código fiscal todavía.
-    const fname = (preliminar ? 'PRELIMINAR-' : '') + (inv.codigo ? inv.codigo.replace('/', '-') : `BORRADOR-${inv.id}`);
+    const fname = (preliminar ? 'PRELIMINAR-' : '') + (vistaGestor ? 'NETO-' : '') + (inv.codigo ? inv.codigo.replace('/', '-') : `BORRADOR-${inv.id}`);
     res.setHeader('Content-Disposition', `inline; filename="${fname}.pdf"`);
     res.send(Buffer.from(bytes));
   } catch (e) { next(e); }

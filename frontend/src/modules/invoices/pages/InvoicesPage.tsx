@@ -539,6 +539,15 @@ export default function InvoicesPage() {
                           <ArrowCounterClockwise size={11} /> Abono
                         </button>
                       )}
+                      {/* Cobro por Stripe: además de la factura del alumno (bruto) se
+                          puede descargar la COPIA DE GESTIÓN por el neto liquidado. */}
+                      {inv.tipo === 'normal' && inv.metodo_pago === 'tarjeta_stripe' && inv.estado !== 'borrador' && canManage && (
+                        <button onClick={() => invoicesApi.openPdf(inv.id, false, 'gestor').catch((e) => toast({ title: 'No se pudo abrir', description: (e as Error).message, variant: 'destructive' }))}
+                          title="Copia de gestión: importe NETO liquidado por Stripe (la del alumno va por el bruto)"
+                          className="h-7 px-2 rounded border border-violet-300 text-[11px] text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-950/30 inline-flex items-center gap-1">
+                          <FileText size={11} /> Neto
+                        </button>
+                      )}
                       {/* Cambiar solo fechas (emisión/pago) — admin o permiso editar_fechas_factura. */}
                       {inv.estado !== 'cancelada' && canEditFechas && (
                         <button onClick={() => setFechasInv(inv)}

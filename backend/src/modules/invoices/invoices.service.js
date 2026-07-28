@@ -6,6 +6,7 @@ import { decrypt } from '../../shared/utils/crypto.js';
 import { getLocal } from '../../shared/services/localStorage.service.js';
 import * as integrationsModel from '../integrations/integrations.model.js';
 import * as model from './invoices.model.js';
+import { query } from '../../shared/config/db.js';
 
 const PDF_DIR = process.env.INVOICES_PDF_DIR || path.join(process.cwd(), 'uploads', 'invoices');
 
@@ -124,9 +125,27 @@ function wrapToLines(font, text, size, maxWidth) {
 }
 
 // Genera PDF de factura usando pdf-lib
-export async function generatePDF(invoiceId, { preliminar = false } = {}) {
+export async function generatePDF(invoiceId, { preliminar = false, vistaGestor = false } = {}) {
   const inv = await model.findById(invoiceId);
   if (!inv) throw new Error('Factura no encontrada');
+  // COPIA DE GESTIÓN de un cobro por Stripe: el alumno recibe la factura por el
+  // BRUTO (lo que pagó) y gestión necesita el NETO liquidado (bruto − comisión).
+  // Se sustituyen los importes solo para este PDF; en la base de datos no se toca
+  // nada. Si el cobro no es de Stripe o no consta la comisión, no se altera.
+  let neto = null;
+  if (vistaGestor && inv.payment_id) {
+    const { rows } = await query(
+      `SELECT net_amount, fee_amount FROM stripe_payments
+        WHERE conversion_payment_id = $1 AND net_amount IS NOT NULL LIMIT 1`, [inv.payment_id]);
+    if (rows[0]) {
+      neto = { net: Number(rows[0].net_amount), fee: Number(rows[0].fee_amount || 0) };
+      const factor = Number(inv.total) > 0 ? neto.net / Number(inv.total) : 1;
+      inv.total = neto.net;
+      inv.base_imponible = Number((Number(inv.base_imponible || 0) * factor).toFixed(2));
+      inv.iva_importe = Number((Number(inv.iva_importe || 0) * factor).toFixed(2));
+      if (inv.total_divisa != null) inv.total_divisa = null; // el neto siempre en euros
+    }
+  }
   // Formateo en la moneda de la factura (fallback local que sombrea el fmtEUR de
   // módulo dentro del layout fijo). El editor visual usa fmtMoney directamente.
   const fmtEUR = (n) => fmtMoney(n, inv.moneda);
@@ -277,6 +296,11 @@ export async function generatePDF(invoiceId, { preliminar = false } = {}) {
   if (enDivisa) {
     y -= 13;
     drawRight(`(${fmtMoney(inv.total, 'EUR')})`, right, y, 9, bold, black);
+  }
+  // Copia de gestión: deja claro que este documento NO es el del alumno.
+  if (neto) {
+    y -= 13;
+    drawRight(`COPIA DE GESTIÓN · neto Stripe (comisión ${fmtMoney(neto.fee, 'EUR')})`, right, y, 8, font, gray);
   }
 
   // Deja explícito si el IVA va INCLUIDO en el precio o AÑADIDO sobre la base.

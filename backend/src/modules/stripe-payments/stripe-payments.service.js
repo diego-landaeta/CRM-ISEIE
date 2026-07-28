@@ -49,6 +49,10 @@ function chargeToPayment(charge, projectId) {
     status: charge.status,
     amount: amountEur,
     currency: 'EUR',
+    // Comisión de Stripe y neto realmente liquidado (para la copia de gestión).
+    // La factura del alumno siempre va por el bruto (amount).
+    fee_amount: bt && typeof bt.fee === 'number' ? bt.fee / 100 : null,
+    net_amount: bt && typeof bt.net === 'number' ? bt.net / 100 : null,
     customer_email: charge.billing_details?.email || charge.receipt_email || null,
     customer_name: charge.billing_details?.name || null,
     customer_stripe_id: charge.customer || null,
