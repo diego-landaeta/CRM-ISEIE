@@ -158,12 +158,12 @@ function HeroChart({ heroActive, heroSerie, setHeroSerie, HERO_SERIES, heroData,
               <span className={`inline-flex items-center gap-0.5 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${deltaCls}`}>
                 <TrendIcon size={11} weight="bold" />
                 {heroDelta >= 0 ? '+' : ''}{heroDelta}%
-                <span className="opacity-60 ml-1">vs semana ant.</span>
+                <span className="opacity-60 ml-1">vs anterior</span>
               </span>
             )}
           </div>
           <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-            <span>Total 8 sem: <strong className="text-foreground tabular-nums">{heroActive.fmt(heroTotal)}</strong></span>
+            <span>Total del rango: <strong className="text-foreground tabular-nums">{heroActive.fmt(heroTotal)}</strong></span>
             <span className="opacity-40">·</span>
             <span>Media: <strong className="text-foreground tabular-nums">{heroActive.fmt(Math.round(heroAvg))}</strong></span>
             <span className="opacity-40">·</span>
@@ -350,31 +350,26 @@ export default function ReportsPage() {
 
   const [heroSerie, setHeroSerie] = useState('ingresos');
   const HERO_SERIES = {
-    leads:        { label: 'Prospectos', spark: leads.spark,        color: 'hsl(199 89% 48%)',  fmt: (v) => fmt(v) },
-    conversiones: { label: 'Ventas',     spark: conversiones.spark, color: 'hsl(160 84% 39%)',  fmt: (v) => fmt(v) },
-    ingresos:     { label: 'Ingresos',   spark: ingresos.spark,     color: 'hsl(258 90% 66%)',  fmt: (v) => fmtMoney(v) },
-    tasa:         { label: 'Tasa conv.', spark: tasa.spark,         color: 'hsl(43 96% 56%)',   fmt: (v) => `${Math.round(v)}%` },
+    leads:        { label: 'Prospectos', campo: 'prospectos', spark: leads.spark,        color: 'hsl(199 89% 48%)',  fmt: (v) => fmt(v) },
+    conversiones: { label: 'Ventas',     campo: 'ventas',     spark: conversiones.spark, color: 'hsl(160 84% 39%)',  fmt: (v) => fmt(v) },
+    ingresos:     { label: 'Ingresos',   campo: 'ingresos',   spark: ingresos.spark,     color: 'hsl(258 90% 66%)',  fmt: (v) => fmtMoney(v) },
+    tasa:         { label: 'Tasa conv.', campo: 'tasa',       spark: tasa.spark,         color: 'hsl(43 96% 56%)',   fmt: (v) => `${Math.round(v)}%` },
   };
   const heroActive = HERO_SERIES[heroSerie] || HERO_SERIES.ingresos;
+  const heroCampo = heroActive.campo;
 
-  // Backend devuelve 8 semanas ordenadas más antigua → más reciente.
-  // Etiquetamos con la fecha de inicio de cada semana.
+  // Cada punto trae su fecha real y su granularidad: no se inventan semanas.
   const heroData = useMemo(() => {
-    const arr = heroActive.spark || [];
-    if (arr.length === 0) return [];
-    const out = [];
-    const now = new Date();
-    for (let i = 0; i < arr.length; i++) {
-      const weeksAgo = arr.length - 1 - i;
-      const d = new Date(now);
-      d.setDate(d.getDate() - weeksAgo * 7);
-      out.push({
-        label: d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }),
-        value: Number(arr[i] || 0),
-      });
-    }
-    return out;
-  }, [heroActive]);
+    const grano = panel?.rango?.grano || 'day';
+    return serie.map((x) => {
+      const d = new Date(`${x.periodo}T00:00:00`);
+      const label = grano === 'month'
+        ? d.toLocaleDateString('es-ES', { month: 'short', year: '2-digit' })
+        : d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
+      return { label, value: Number(x[heroCampo] || 0) };
+    });
+  }, [serie, heroCampo, panel?.rango?.grano]);
+
 
   const heroTotal = heroData.reduce((s, d) => s + d.value, 0);
   const heroHasData = heroData.some((d) => d.value > 0);
@@ -383,6 +378,59 @@ export default function ReportsPage() {
   const heroDelta = heroPrev > 0 ? Math.round(((heroLast - heroPrev) / heroPrev) * 100) : heroLast > 0 ? 100 : 0;
   const heroMax = Math.max(...heroData.map((d) => d.value), 0);
   const heroAvg = heroData.length > 0 ? heroTotal / heroData.length : 0;
+
+
+  // Se baja en Excel exactamente lo que se ve arriba: el resumen comparado, la
+  // serie de la grafica y el detalle por asesora. Tres hojas en un solo archivo.
+  const [bajando, setBajando] = useState(false);
+  async function descargarPanel() {
+    if (!panel) return;
+    setBajando(true);
+    try {
+      const q = new URLSearchParams();
+      if (activeProject?.id) q.set('projectId', String(activeProject.id));
+      if (rango.from) q.set('from', rango.from);
+      if (rango.to) q.set('to', rango.to);
+      const ase = await client.get(`/reports/asesoras-mes?${q.toString()}`).catch(() => null);
+
+      const writeXlsxFile = (await import('write-excel-file/browser')).default;
+      const cab = (t) => ({ value: t, fontWeight: 'bold' });
+
+      const hojaResumen = [
+        [cab('Metrica'), cab('Periodo actual'), cab('Periodo anterior'), cab('Variacion %')],
+        ...Object.entries(panel.kpis).map(([k, v]) => [
+          { value: k }, { value: Number(v.value) },
+          { value: Number(v.prev) }, { value: v.trend == null ? null : Number(v.trend) },
+        ]),
+      ];
+      const hojaSerie = [
+        [cab('Periodo'), cab('Prospectos'), cab('Ventas'), cab('Vendido EUR'), cab('Ingresos EUR'), cab('Tasa %')],
+        ...(panel.serie || []).map((x) => [
+          { value: x.periodo }, { value: Number(x.prospectos) }, { value: Number(x.ventas) },
+          { value: Number(x.vendido) }, { value: Number(x.ingresos) }, { value: Number(x.tasa) },
+        ]),
+      ];
+      const filasAse = (ase?.data || []);
+      const hojaAsesoras = [
+        [cab('Mes'), cab('Asesora'), cab('Leads'), cab('Ventas'), cab('Clientes'),
+         cab('Tasa %'), cab('Vendido EUR'), cab('Cobrado EUR'), cab('Ticket medio EUR')],
+        ...filasAse.map((r) => [
+          { value: r.mes }, { value: r.asesora }, { value: Number(r.leads) },
+          { value: Number(r.ventas) }, { value: Number(r.clientes) }, { value: Number(r.tasa_conversion) },
+          { value: Number(r.vendido) }, { value: Number(r.cobrado) }, { value: Number(r.ticket_medio) },
+        ]),
+      ];
+
+      const nombre = `reportes-${activeProject?.nombre || 'crm'}-${rango.from}_${rango.to}.xlsx`
+        .replace(/\s+/g, '-');
+      await writeXlsxFile([hojaResumen, hojaSerie, hojaAsesoras], {
+        sheets: ['Resumen', 'Evolucion', 'Asesoras'],
+      }).toFile(nombre);
+      toast({ title: 'Excel descargado', description: `${(panel.serie || []).length} periodos y ${filasAse.length} filas de asesoras.` });
+    } catch (err) {
+      toast({ title: 'No se pudo generar el Excel', description: err?.message, variant: 'destructive' });
+    } finally { setBajando(false); }
+  }
 
   return (
     <div className="space-y-6">
@@ -419,6 +467,16 @@ export default function ReportsPage() {
             className="h-9 px-2 rounded-md bg-card border border-border text-sm"
             aria-label="Hasta"
           />
+          <button
+            type="button"
+            onClick={descargarPanel}
+            disabled={bajando || !panel}
+            title="Descarga en Excel el resumen, la evolucion y el detalle por asesora"
+            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-40"
+          >
+            <Download size={14} weight="bold" />
+            {bajando ? 'Generando…' : 'Descargar Excel'}
+          </button>
           <button
             type="button"
             onClick={() => window.print()}
