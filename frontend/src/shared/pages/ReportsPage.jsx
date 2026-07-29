@@ -127,9 +127,9 @@ function HeroTooltip({ active, payload, label, fmt, color, prevValue }) {
   );
 }
 
-function HeroChart({ heroActive, heroSerie, setHeroSerie, HERO_SERIES, heroData, heroHasData, heroTotal, heroLast, heroDelta, heroAvg, heroMax, unidad = 'periodo' }) {
-  const TrendIcon = heroDelta >= 0 ? TrendUp : TrendDown;
-  const deltaCls = heroDelta >= 0
+function HeroChart({ heroActive, heroSerie, setHeroSerie, HERO_SERIES, heroData, heroHasData, heroTotal, heroLast, heroDelta, heroAvg, heroMax, unidad = 'periodo', heroRango = 0, trendRango = null, etiquetaRango = 'periodo' }) {
+  const TrendIcon = (trendRango ?? 0) >= 0 ? TrendUp : TrendDown;
+  const deltaCls = (trendRango ?? 0) >= 0
     ? 'text-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200/60 dark:border-emerald-900/60'
     : 'text-rose-700 bg-rose-50 dark:bg-rose-950/40 dark:text-rose-300 border-rose-200/60 dark:border-rose-900/60';
 
@@ -144,28 +144,29 @@ function HeroChart({ heroActive, heroSerie, setHeroSerie, HERO_SERIES, heroData,
               style={{ background: heroActive.color, boxShadow: `0 0 12px ${heroActive.color}` }}
             />
             <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-              {heroActive.label} · último {unidad}
+              {heroActive.label} · {etiquetaRango}
             </span>
           </div>
           <div className="flex items-baseline gap-3 flex-wrap">
+            {/* Manda lo filtrado, no el ultimo punto de la serie. */}
             <span
               className="text-3xl sm:text-4xl font-bold tabular-nums tracking-tight"
               style={{ color: heroActive.color }}
             >
-              {heroActive.fmt(heroLast)}
+              {heroActive.fmt(heroRango)}
             </span>
-            {heroHasData && (
+            {trendRango != null && (
               <span className={`inline-flex items-center gap-0.5 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${deltaCls}`}>
                 <TrendIcon size={11} weight="bold" />
-                {heroDelta >= 0 ? '+' : ''}{heroDelta}%
-                <span className="opacity-60 ml-1">vs anterior</span>
+                {trendRango >= 0 ? '+' : ''}{trendRango}%
+                <span className="opacity-60 ml-1">vs periodo anterior</span>
               </span>
             )}
           </div>
-          <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-            <span>Total del rango: <strong className="text-foreground tabular-nums">{heroActive.fmt(heroTotal)}</strong></span>
+          <div className="flex items-center gap-3 text-[11px] text-muted-foreground flex-wrap">
+            <span>Último {unidad}: <strong className="text-foreground tabular-nums">{heroActive.fmt(heroLast)}</strong></span>
             <span className="opacity-40">·</span>
-            <span>Media: <strong className="text-foreground tabular-nums">{heroActive.fmt(Math.round(heroAvg))}</strong></span>
+            <span>Media por {unidad}: <strong className="text-foreground tabular-nums">{heroActive.fmt(Math.round(heroAvg))}</strong></span>
             <span className="opacity-40">·</span>
             <span>Pico: <strong className="text-foreground tabular-nums">{heroActive.fmt(heroMax)}</strong></span>
           </div>
@@ -359,6 +360,14 @@ export default function ReportsPage() {
   const heroCampo = heroActive.campo;
   // Como se llama cada punto de la serie, para no decir 'semana' cuando es un mes.
   const unidad = { day: 'día', week: 'semana', month: 'mes' }[panel?.rango?.grano || 'day'];
+  // Lo que se ve en grande es lo del rango filtrado; para la tasa no se suma,
+  // se usa el porcentaje del periodo que ya calcula el backend.
+  const heroKpiKey = { leads: 'prospectos', conversiones: 'ventas', ingresos: 'ingresos', tasa: 'tasa' }[heroSerie] || 'ingresos';
+  const heroRango = Number(panel?.kpis?.[heroKpiKey]?.value || 0);
+  const trendRango = panel?.kpis?.[heroKpiKey]?.trend ?? null;
+  const etiquetaRango = rango.from && rango.to
+    ? `${new Date(`${rango.from}T00:00:00`).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })} – ${new Date(`${rango.to}T00:00:00`).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: '2-digit' })}`
+    : 'periodo';
 
   // Cada punto trae su fecha real y su granularidad: no se inventan semanas.
   const heroData = useMemo(() => {
@@ -531,6 +540,9 @@ export default function ReportsPage() {
               heroAvg={heroAvg}
               heroMax={heroMax}
             unidad={unidad}
+            heroRango={heroRango}
+            trendRango={trendRango}
+            etiquetaRango={etiquetaRango}
           />
           </>
         )}
