@@ -212,6 +212,12 @@ export async function getTopProducts({ projectId, limit = 10, days = null, from 
 // ---------------------------------------------------------------------------
 const VENDEDORA = 'COALESCE(cv.vendedora_id, l.responsable_id)';
 
+// Quita tildes en SQL. Se usa en la busqueda para que "Barbara" encuentre a "Barbara".
+const SIN_TILDES = (expr) =>
+  `translate(${expr}, 'áàäâãéèëêíìïîóòöôõúùüûñÁÀÄÂÃÉÈËÊÍÌÏÎÓÒÖÔÕÚÙÜÛÑçÇ',
+                      'aaaaaeeeeiiiiooooouuuunAAAAAEEEEIIIIOOOOOUUUUNcC')`;
+
+
 function filtrosVentas({ projectId, from, to, responsableId, search }, startIdx = 1) {
   const cond = [];
   const params = [];
@@ -221,7 +227,11 @@ function filtrosVentas({ projectId, from, to, responsableId, search }, startIdx 
   if (to) { cond.push(`cv.fecha_conversion <= $${idx++}`); params.push(to); }
   if (responsableId) { cond.push(`${VENDEDORA} = $${idx++}`); params.push(responsableId); }
   if (search) {
-    cond.push(`(l.nombre ILIKE $${idx} OR l.email ILIKE $${idx} OR cv.producto_contratado ILIKE $${idx})`);
+    // Busqueda insensible a tildes sin depender de la extension unaccent,
+    // que esta en un CRM pero no en el otro.
+    cond.push(`(${SIN_TILDES('l.nombre')} ILIKE ${SIN_TILDES('$' + idx)}
+                OR l.email ILIKE $${idx}
+                OR ${SIN_TILDES('cv.producto_contratado')} ILIKE ${SIN_TILDES('$' + idx)})`);
     params.push(`%${search}%`); idx++;
   }
   return { where: cond.length ? 'WHERE ' + cond.join(' AND ') : '', params, idx };
