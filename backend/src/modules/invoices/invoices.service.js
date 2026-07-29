@@ -375,10 +375,8 @@ export async function generatePDF(invoiceId, { preliminar = false, vistaGestor =
     page.drawImage(logoImg, { x: right - w, y: 70, width: w, height: h });
   }
 
-  // Footer: solo la referencia del documento. La fecha de generacion NO va: es
-  // el dia en que se imprimio el PDF, no la de la factura, y confundia.
-  page.drawText(`${esProforma ? 'Presupuesto' : 'Factura'} ${inv.codigo || '(borrador)'}`,
-    { x: left, y: 30, size: 8, font, color: gray });
+  // Sin pie de referencia: el numero y la fecha ya van en la cabecera, y la
+  // fecha de generacion (el dia de impresion del PDF) confundia.
   } // fin fallback (layout fijo)
 
   // ── COLETILLA / PIE LEGAL (issuer.pie_default → pie_pago) ──
@@ -628,8 +626,6 @@ async function renderFromTemplate({ pdfDoc, page, font, bold, inv, layout }) {
   }
 
   // Pie fijo de trazabilidad
-  page.drawText(`${esProforma ? 'Presupuesto' : 'Factura'} ${inv.codigo || '(borrador)'}`,
-    { x: 50, y: 25, size: 7, font, color: rgb(0.6, 0.6, 0.6) });
 }
 
 // Envío Brevo

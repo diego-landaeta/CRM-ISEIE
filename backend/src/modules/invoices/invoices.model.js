@@ -1378,6 +1378,11 @@ export async function listPagosSinFactura(projectId, hasta = null) {
   const params = [projectId];
   let filtroFecha = '';
   if (hasta) { params.push(hasta); filtroFecha = 'AND cp.fecha <= $2'; }
+  // Los cobros anteriores al ejercicio que se esta facturando no entran en la
+  // cola: son de la facturacion anterior y aqui no van a llevar factura nunca.
+  const desdeEjercicio = `AND cp.fecha >= make_date(
+      (SELECT COALESCE(MAX(sq.ano), EXTRACT(YEAR FROM CURRENT_DATE)::int)
+         FROM invoice_sequences sq WHERE sq.project_id = $1), 1, 1)`;
   const { rows } = await query(
     `SELECT cp.id AS payment_id, cp.conversion_id, cp.importe, cp.fecha,
             l.nombre AS cliente, c.producto_contratado
@@ -1386,6 +1391,7 @@ export async function listPagosSinFactura(projectId, hasta = null) {
        LEFT JOIN leads l ON l.id = c.lead_id
       WHERE c.project_id = $1
         ${filtroFecha}
+        ${desdeEjercicio}
         AND NOT EXISTS (SELECT 1 FROM invoices i
                          WHERE i.payment_id = cp.id AND i.estado <> 'cancelada')
       ORDER BY cp.fecha ASC, cp.id ASC`,
