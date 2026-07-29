@@ -13,6 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useDashboardSummary } from '@/shared/hooks/useDashboardSummary';
 import client from '@/shared/api/client';
 import ReportsDownloadSection from '@/shared/components/ReportsDownloadSection';
+import AsesorasPanel from '@/shared/components/AsesorasPanel';
 
 const REPORT_CATEGORIES = [
   {
@@ -423,7 +424,12 @@ export default function ReportsPage() {
 
       {/* Reportes descargables (varios, con rango de fechas) */}
       {isAdmin && (
-        <ReportsDownloadSection projectId={activeProject?.id} projectName={activeProject?.nombre} />
+        <>
+          {/* Los numeros por asesora. El detalle se baja en la seccion de abajo. */}
+          <AsesorasPanel from={`${new Date().getFullYear()}-01-01`} to={new Date().toISOString().slice(0, 10)} />
+
+          <ReportsDownloadSection projectId={activeProject?.id} projectName={activeProject?.nombre} />
+        </>
       )}
 
       {/* Categorías de reportes */}

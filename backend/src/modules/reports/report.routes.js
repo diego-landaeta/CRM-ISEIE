@@ -16,5 +16,7 @@ router.get('/general', ctrl.general);
 router.get('/general-facturacion', ctrl.generalFacturacion);
 router.get('/cobros-mensuales', ctrl.cobrosMensuales);
 router.get('/ventas-vendedora', ctrl.ventasVendedora);
+router.get('/ventas-asesora', ctrl.ventasAsesora);
+router.get('/asesoras-mes', ctrl.asesorasMes);
 
 export default router;

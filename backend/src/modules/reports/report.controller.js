@@ -33,3 +33,30 @@ export const general = makeReport('generalReport');
 export const generalFacturacion = makeReport('generalFacturacionReport');
 export const cobrosMensuales = makeReport('cobrosMensuales');
 export const ventasVendedora = makeReport('ventasVendedora');
+
+// Rango y proyecto tal y como llegan por query. Desde 2026 hacia adelante: lo
+// anterior es de la facturacion vieja y no se reporta aqui.
+const INICIO_DATOS = '2026-01-01';
+function rangoDeQuery(req) {
+  const re = /^\d{4}-\d{2}-\d{2}$/;
+  const from = re.test(req.query.from || '') ? req.query.from : INICIO_DATOS;
+  return {
+    projectId: req.query.projectId ? parseInt(req.query.projectId) : null,
+    from: from < INICIO_DATOS ? INICIO_DATOS : from,
+    to: re.test(req.query.to || '') ? req.query.to : null,
+  };
+}
+
+// GET /api/reports/ventas-asesora  -> detalle de ventas con su asesora
+export async function ventasAsesora(req, res, next) {
+  try {
+    res.json({ success: true, data: await model.ventasPorAsesoraReport(rangoDeQuery(req)) });
+  } catch (err) { next(err); }
+}
+
+// GET /api/reports/asesoras-mes  -> por asesora y mes: leads, ventas y cobrado
+export async function asesorasMes(req, res, next) {
+  try {
+    res.json({ success: true, data: await model.asesorasPorMes(rangoDeQuery(req)) });
+  } catch (err) { next(err); }
+}

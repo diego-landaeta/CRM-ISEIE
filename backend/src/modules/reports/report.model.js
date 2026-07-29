@@ -385,3 +385,114 @@ export async function ventasVendedora({ projectId, from, to }) {
   return rows;
 }
 
+// La venta se atribuye a su vendedora; si no la tiene, al responsable del lead.
+const ASESORA = 'COALESCE(c.vendedora_id, l.responsable_id)';
+
+// DETALLE: una fila por venta, para descargar.
+export async function ventasPorAsesoraReport({ projectId, from, to }) {
+  const { where, params } = buildFilter({ projectId, from, to }, 'c.fecha_conversion', 'c.project_id');
+  const { rows } = await query(
+    `SELECT COALESCE(u.nombre, '— sin asesora —') AS asesora,
+            c.fecha_conversion AS fecha_venta,
+            l.nombre AS cliente,
+            l.email AS cliente_email,
+            l.telefono AS cliente_telefono,
+            ${PAIS} AS pais,
+            c.producto_contratado AS formacion,
+            c.importe_total AS venta_total,
+            c.importe_pagado AS cobrado,
+            (c.importe_total - c.importe_pagado) AS pendiente,
+            CASE
+              WHEN c.importe_pagado >= c.importe_total THEN 'Pagada'
+              WHEN c.importe_pagado > 0 THEN 'Pago parcial'
+              ELSE 'Pendiente'
+            END AS estado_pago,
+            c.metodo_pago,
+            (SELECT COUNT(*) FROM conversion_payments cp WHERE cp.conversion_id = c.id)::int AS num_cobros,
+            (SELECT COUNT(*) FROM conversion_installments ci
+              WHERE ci.conversion_id = c.id AND ci.fecha_cobro IS NULL)::int AS cuotas_pendientes,
+            (SELECT COUNT(*) FROM invoices i
+              WHERE i.conversion_id = c.id AND i.estado NOT IN ('cancelada','borrador'))::int AS facturas,
+            l.status AS estado_lead,
+            l.created_at::date AS fecha_entrada,
+            p.nombre AS proyecto
+       FROM conversions c
+       LEFT JOIN leads l ON l.id = c.lead_id
+       LEFT JOIN users u ON u.id = COALESCE(c.vendedora_id, l.responsable_id)
+       LEFT JOIN projects p ON p.id = c.project_id
+       ${where}
+      ORDER BY COALESCE(u.nombre, 'zzz') ASC, c.fecha_conversion DESC, c.id DESC`,
+    params
+  );
+  return rows;
+}
+
+// AGREGADO: por asesora y mes. Es lo que se ve en el panel.
+export async function asesorasPorMes({ projectId, from, to }) {
+  // Tres cosas distintas con tres fechas distintas: los leads por su fecha de
+  // entrada, las ventas por su fecha de venta y los cobros por su fecha de cobro.
+  const fl = buildFilter({ projectId, from, to }, 'l.created_at', 'l.project_id');
+  const fv = buildFilter({ projectId, from, to }, 'c.fecha_conversion', 'c.project_id');
+  const fc = buildFilter({ projectId, from, to }, 'cp.fecha', 'c.project_id');
+  const off1 = fl.params.length;
+  const off2 = off1 + fv.params.length;
+  const wv = fv.where.replace(/\$(\d+)/g, (_, n) => '$' + (Number(n) + off1));
+  const wc = fc.where.replace(/\$(\d+)/g, (_, n) => '$' + (Number(n) + off2));
+
+  const { rows } = await query(
+    `WITH leads_mes AS (
+       SELECT to_char(date_trunc('month', l.created_at), 'YYYY-MM') AS mes,
+              l.responsable_id AS uid,
+              COUNT(*)::int AS leads,
+              COUNT(*) FILTER (WHERE l.status = 'convertido')::int AS leads_convertidos
+         FROM leads l ${fl.where}
+        GROUP BY 1, 2
+     ),
+     ventas_mes AS (
+       SELECT to_char(date_trunc('month', c.fecha_conversion), 'YYYY-MM') AS mes,
+              ${ASESORA} AS uid,
+              COUNT(*)::int AS ventas,
+              COUNT(DISTINCT c.lead_id)::int AS clientes,
+              COALESCE(SUM(c.importe_total), 0) AS vendido
+         FROM conversions c
+         LEFT JOIN leads l ON l.id = c.lead_id
+         ${wv}
+        GROUP BY 1, 2
+     ),
+     cobros_mes AS (
+       SELECT to_char(date_trunc('month', cp.fecha), 'YYYY-MM') AS mes,
+              ${ASESORA} AS uid,
+              COALESCE(SUM(cp.importe), 0) AS cobrado
+         FROM conversion_payments cp
+         JOIN conversions c ON c.id = cp.conversion_id
+         LEFT JOIN leads l ON l.id = c.lead_id
+         ${wc}
+        GROUP BY 1, 2
+     ),
+     todo AS (
+       SELECT mes, uid FROM leads_mes
+       UNION SELECT mes, uid FROM ventas_mes
+       UNION SELECT mes, uid FROM cobros_mes
+     )
+     SELECT t.mes,
+            COALESCE(u.nombre, '— sin asesora —') AS asesora,
+            COALESCE(lm.leads, 0) AS leads,
+            COALESCE(vm.ventas, 0) AS ventas,
+            COALESCE(vm.clientes, 0) AS clientes,
+            CASE WHEN COALESCE(lm.leads, 0) > 0
+                 THEN ROUND(COALESCE(vm.ventas, 0)::numeric * 100 / lm.leads, 1)
+                 ELSE 0 END AS tasa_conversion,
+            ROUND(COALESCE(vm.vendido, 0), 2) AS vendido,
+            ROUND(COALESCE(cm.cobrado, 0), 2) AS cobrado,
+            ROUND(CASE WHEN COALESCE(vm.ventas, 0) > 0
+                       THEN COALESCE(vm.vendido, 0) / vm.ventas ELSE 0 END, 2) AS ticket_medio
+       FROM todo t
+       LEFT JOIN leads_mes  lm ON lm.mes = t.mes AND lm.uid IS NOT DISTINCT FROM t.uid
+       LEFT JOIN ventas_mes vm ON vm.mes = t.mes AND vm.uid IS NOT DISTINCT FROM t.uid
+       LEFT JOIN cobros_mes cm ON cm.mes = t.mes AND cm.uid IS NOT DISTINCT FROM t.uid
+       LEFT JOIN users u ON u.id = t.uid
+      ORDER BY t.mes DESC, cobrado DESC`,
+    [...fl.params, ...fv.params, ...fc.params]
+  );
+  return rows;
+}

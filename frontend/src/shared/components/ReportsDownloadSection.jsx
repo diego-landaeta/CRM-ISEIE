@@ -67,6 +67,35 @@ const REPORTS = [
     ],
   },
   {
+    key: 'ventas-asesora', label: 'Ventas por asesora (detalle)', icon: Trophy,
+    desc: 'Una fila por venta con su asesora, la fecha, el cliente y sus datos de contacto, el importe y como va el cobro.',
+    cols: [
+      { h: 'Asesora', k: 'asesora' }, { h: 'Fecha venta', k: 'fecha_venta', t: 'date' },
+      { h: 'Cliente', k: 'cliente' }, { h: 'Email', k: 'cliente_email' },
+      { h: 'Telefono', k: 'cliente_telefono' }, { h: 'Pais', k: 'pais' },
+      { h: 'Formacion', k: 'formacion' }, { h: 'Venta total EUR', k: 'venta_total', t: 'number' },
+      { h: 'Cobrado EUR', k: 'cobrado', t: 'number' }, { h: 'Pendiente EUR', k: 'pendiente', t: 'number' },
+      { h: 'Estado pago', k: 'estado_pago' }, { h: 'Metodo', k: 'metodo_pago' },
+      { h: 'N cobros', k: 'num_cobros', t: 'number' },
+      { h: 'Cuotas pendientes', k: 'cuotas_pendientes', t: 'number' },
+      { h: 'N facturas', k: 'facturas', t: 'number' },
+      { h: 'Estado lead', k: 'estado_lead', t: 'estado' },
+      { h: 'Fecha entrada', k: 'fecha_entrada', t: 'date' }, { h: 'Proyecto', k: 'proyecto' },
+    ],
+  },
+  {
+    key: 'asesoras-mes', label: 'Asesoras por mes', icon: UsersThree,
+    desc: 'Por asesora y mes: leads que le entraron, ventas cerradas, tasa de conversion, lo vendido y lo cobrado ese mes.',
+    cols: [
+      { h: 'Mes', k: 'mes' }, { h: 'Asesora', k: 'asesora' },
+      { h: 'Leads', k: 'leads', t: 'number' }, { h: 'Ventas', k: 'ventas', t: 'number' },
+      { h: 'Clientes', k: 'clientes', t: 'number' },
+      { h: 'Tasa conversion %', k: 'tasa_conversion', t: 'number' },
+      { h: 'Vendido EUR', k: 'vendido', t: 'number' }, { h: 'Cobrado EUR', k: 'cobrado', t: 'number' },
+      { h: 'Ticket medio EUR', k: 'ticket_medio', t: 'number' },
+    ],
+  },
+  {
     key: 'general-facturacion', label: 'General + Facturación', icon: Invoice,
     desc: 'Lo mismo que el general, más lo facturado (nº de facturas e importe facturado).',
     cols: [
