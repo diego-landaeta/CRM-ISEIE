@@ -1321,3 +1321,55 @@ export async function updateProjectFacturacionConfig(projectId, { piePagoDefault
   params.push(projectId);
   await query(`UPDATE projects SET ${sets.join(', ')}, updated_at = NOW() WHERE id = $${i}`, params);
 }
+
+// ---------------------------------------------------------------------------
+// Corte de facturacion: hasta que dia esta puesta al dia.
+// Un cobro se asocia siempre, pero su factura solo sale si la fecha del cobro
+// no pasa del corte. Asi la numeracion no se adelanta a quien esta facturando.
+// ---------------------------------------------------------------------------
+export async function getFacturacionAlDia(projectId) {
+  const { rows } = await query(
+    `SELECT s.project_id, s.al_dia_hasta, s.updated_at, s.updated_by, u.nombre AS updated_by_nombre
+       FROM invoicing_status s
+       LEFT JOIN users u ON u.id = s.updated_by
+      WHERE s.project_id = $1`,
+    [projectId]
+  );
+  return rows[0] || { project_id: projectId, al_dia_hasta: null, updated_at: null, updated_by: null };
+}
+
+export async function setFacturacionAlDia(projectId, alDiaHasta, userId) {
+  const { rows } = await query(
+    `INSERT INTO invoicing_status (project_id, al_dia_hasta, updated_by, updated_at)
+     VALUES ($1, $2, $3, NOW())
+     ON CONFLICT (project_id) DO UPDATE
+        SET al_dia_hasta = EXCLUDED.al_dia_hasta,
+            updated_by   = EXCLUDED.updated_by,
+            updated_at   = NOW()
+     RETURNING *`,
+    [projectId, alDiaHasta, userId]
+  );
+  return rows[0];
+}
+
+// Cobros que estan esperando factura. Si se pasa hasta, solo los que ya entran
+// dentro del corte; sin hasta, todos los que no tienen factura.
+export async function listPagosSinFactura(projectId, hasta = null) {
+  const params = [projectId];
+  let filtroFecha = '';
+  if (hasta) { params.push(hasta); filtroFecha = 'AND cp.fecha <= $2'; }
+  const { rows } = await query(
+    `SELECT cp.id AS payment_id, cp.conversion_id, cp.importe, cp.fecha,
+            l.nombre AS cliente, c.producto_contratado
+       FROM conversion_payments cp
+       JOIN conversions c ON c.id = cp.conversion_id
+       LEFT JOIN leads l ON l.id = c.lead_id
+      WHERE c.project_id = $1
+        ${filtroFecha}
+        AND NOT EXISTS (SELECT 1 FROM invoices i
+                         WHERE i.payment_id = cp.id AND i.estado <> 'cancelada')
+      ORDER BY cp.fecha ASC, cp.id ASC`,
+    params
+  );
+  return rows;
+}

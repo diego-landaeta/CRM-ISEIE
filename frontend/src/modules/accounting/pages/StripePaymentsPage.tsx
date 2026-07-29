@@ -131,9 +131,13 @@ export default function StripePaymentsPage() {
 
       {/* KPIs */}
       {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <KpiCard icon={CheckCircle} iconBg="bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400"
-            label="Cobrado" numericValue={Number(stats.total_cobrado)} format={(n) => fmt(Number(n))} />
+        <div className={`grid grid-cols-2 gap-3 ${puedeAsociar ? 'md:grid-cols-4' : 'md:grid-cols-3'}`}>
+          {/* El importe global de la pasarela es informacion de direccion:
+              la gestora ve sus cobros en la ficha de cada cliente, no el total. */}
+          {puedeAsociar && (
+            <KpiCard icon={CheckCircle} iconBg="bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400"
+              label="Cobrado" numericValue={Number(stats.total_cobrado)} format={(n) => fmt(Number(n))} />
+          )}
           <KpiCard icon={XCircle} iconBg="bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400"
             label="Fallidos" numericValue={stats.failed} />
           <KpiCard icon={WarningCircle} iconBg="bg-amber-50 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400"

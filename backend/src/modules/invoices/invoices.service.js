@@ -676,3 +676,54 @@ export async function sendByEmail(invoiceId, customEmail = null) {
   await model.markSent(inv.id, email);
   return { sent: true, to: email };
 }
+
+// ---------------------------------------------------------------------------
+// Corte de facturacion
+// ---------------------------------------------------------------------------
+export async function getFacturacionAlDia(projectId) {
+  const estado = await model.getFacturacionAlDia(projectId);
+  const esperando = await model.listPagosSinFactura(projectId);
+  const dentroDelCorte = estado.al_dia_hasta
+    ? esperando.filter((p) => String(p.fecha).slice(0, 10) <= String(estado.al_dia_hasta).slice(0, 10))
+    : [];
+  return {
+    ...estado,
+    pagos_sin_factura: esperando.length,
+    importe_sin_factura: esperando.reduce((s, p) => s + Number(p.importe || 0), 0),
+    listos_para_emitir: dentroDelCorte.length,
+  };
+}
+
+// Mueve el corte y, a continuacion, emite en orden de fecha las facturas que
+// estaban esperando y ya entran dentro. Se emiten de una en una y en orden
+// para que la numeracion salga correlativa.
+export async function setFacturacionAlDia(projectId, alDiaHasta, userId) {
+  const guardado = await model.setFacturacionAlDia(projectId, alDiaHasta, userId);
+  const pendientes = await model.listPagosSinFactura(projectId, alDiaHasta);
+  const emitidas = [];
+  const fallidas = [];
+  for (const pg of pendientes) {
+    try {
+      const inv = await model.emitirFacturaDePago(
+        pg.conversion_id, { paymentId: pg.payment_id, importe: Number(pg.importe) }, userId
+      );
+      if (inv?.codigo) emitidas.push({ payment_id: pg.payment_id, codigo: inv.codigo, cliente: pg.cliente });
+    } catch (err) {
+      fallidas.push({ payment_id: pg.payment_id, cliente: pg.cliente, error: err.message });
+      logger.warn({ paymentId: pg.payment_id, err: err.message }, 'no se pudo emitir la factura en espera');
+    }
+  }
+  return { ...guardado, emitidas: emitidas.length, detalle: emitidas, fallidas };
+}
+
+// Se llama antes de emitir una factura automatica: dice si toca ya o si espera.
+export async function puedeFacturarAhora(projectId, fechaPago) {
+  if (!projectId || !fechaPago) return true;
+  try {
+    const { al_dia_hasta } = await model.getFacturacionAlDia(projectId);
+    if (!al_dia_hasta) return true;   // sin corte configurado, se factura como siempre
+    return String(fechaPago).slice(0, 10) <= String(al_dia_hasta).slice(0, 10);
+  } catch {
+    return true;   // ante la duda, no bloquear la facturacion
+  }
+}

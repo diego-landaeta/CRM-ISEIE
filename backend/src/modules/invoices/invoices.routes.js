@@ -10,6 +10,10 @@ router.get('/issuers/:id/logo',       ctrl.getIssuerLogo);
 
 router.use(verifyToken);
 
+// Corte de facturacion: hasta que dia esta al dia. Consultarlo lo puede
+// cualquiera; moverlo solo quien gestiona la facturacion (se comprueba dentro).
+router.get('/facturacion-al-dia',     ctrl.facturacionAlDia);
+router.put('/facturacion-al-dia',     ctrl.setFacturacionAlDia);
 router.get('/',                       ctrl.list);
 router.get('/stats',                  ctrl.stats);
 router.get('/ventas-sin-factura',     ctrl.ventasSinFactura);

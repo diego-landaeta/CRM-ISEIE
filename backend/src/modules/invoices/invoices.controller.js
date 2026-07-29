@@ -607,3 +607,33 @@ export async function updateConfig(req, res, next) {
     res.json({ success: true });
   } catch (e) { next(e); }
 }
+
+// GET /api/invoices/facturacion-al-dia?projectId=N
+export async function facturacionAlDia(req, res, next) {
+  try {
+    const projectId = parseInt(req.query.projectId);
+    if (!projectId) throw new AppError('projectId requerido', 400, 'MISSING_PROJECT');
+    res.json({ success: true, data: await service.getFacturacionAlDia(projectId) });
+  } catch (err) { next(err); }
+}
+
+// PUT /api/invoices/facturacion-al-dia  { projectId, alDiaHasta }
+export async function setFacturacionAlDia(req, res, next) {
+  try {
+    const projectId = parseInt(req.body?.projectId);
+    const alDiaHasta = req.body?.alDiaHasta || null;
+    if (!projectId) throw new AppError('projectId requerido', 400, 'MISSING_PROJECT');
+    if (alDiaHasta && !/^\d{4}-\d{2}-\d{2}$/.test(alDiaHasta)) {
+      throw new AppError('Formato de fecha: YYYY-MM-DD', 400, 'BAD_DATE');
+    }
+    // Solo quien lleva la facturacion mueve el corte. El superadmin siempre puede.
+    // El flag no viaja en el token, asi que se consulta en la base de datos.
+    if (req.user?.role !== 'superadmin') {
+      if (!(await model.esFacturaManager(req.user?.userId))) {
+        throw new AppError('Solo quien gestiona la facturacion puede mover esta fecha', 403, 'FORBIDDEN');
+      }
+    }
+    const r = await service.setFacturacionAlDia(projectId, alDiaHasta, req.user.userId);
+    res.json({ success: true, data: r });
+  } catch (err) { next(err); }
+}

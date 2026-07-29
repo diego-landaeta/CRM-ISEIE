@@ -4,6 +4,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
+import FacturacionAlDiaCard from '../components/FacturacionAlDiaCard';
 import KpiCard from '@/shared/components/ui/KpiCard';
 import client from '@/shared/api/client';
 import { formatDateNumeric } from '@/shared/lib/format';
@@ -254,6 +255,9 @@ export default function InvoicesPage() {
           </div>
         )}
       />
+
+      {/* Solo sale en el listado normal: es el estado de la facturacion, no de las proformas. */}
+      {!esProformas && !esAbonos && <FacturacionAlDiaCard projectId={activeProject?.id} />}
 
       {/* Pestañas: facturas fiscales vs proformas (presupuestos) */}
       <div className="inline-flex rounded-lg border border-border bg-muted/30 p-1 text-sm font-semibold">

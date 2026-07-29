@@ -96,12 +96,42 @@ export async function create(data, userId) {
 // - Con paymentInfo {paymentId, importe} → factura por ese abono.
 // - Sin paymentInfo (legacy) → factura por el total de la conversión.
 export function autoInvoice(conversionId, userId = null, paymentInfo = null) {
-  import('../invoices/invoices.model.js')
-    .then((m) => (paymentInfo?.paymentId
-      ? m.emitirFacturaDePago(conversionId, paymentInfo, userId)
-      : m.autoEmitirPorPago(conversionId, userId)))
-    .then((inv) => { if (inv?.codigo) logger.info({ conversionId, paymentId: paymentInfo?.paymentId, invoiceId: inv.id, codigo: inv.codigo }, 'auto-factura por pago'); })
-    .catch((err) => logger.warn({ err: err.message, conversionId }, 'auto-factura por pago falló (no bloqueante)'));
+  (async () => {
+    // El cobro se asocia siempre, pero la factura espera a que la facturacion
+    // este al dia hasta esa fecha. Si no, la numeracion se adelantaria a quien
+    // esta facturando a mano y ya no habria forma de recolocarla.
+    if (paymentInfo?.paymentId) {
+      try {
+        const { rows } = await query(
+          `SELECT cp.fecha::text AS fecha, c.project_id
+             FROM conversion_payments cp
+             JOIN conversions c ON c.id = cp.conversion_id
+            WHERE cp.id = $1`,
+          [paymentInfo.paymentId]
+        );
+        const pg = rows[0];
+        if (pg) {
+          const invSrv = await import('../invoices/invoices.service.js');
+          const ok = await invSrv.puedeFacturarAhora(pg.project_id, pg.fecha);
+          if (!ok) {
+            logger.info({ conversionId, paymentId: paymentInfo.paymentId, fecha: pg.fecha },
+              'factura en espera: la facturacion aun no esta al dia hasta esa fecha');
+            return;
+          }
+        }
+      } catch (err) {
+        logger.warn({ err: err.message }, 'no se pudo comprobar el corte de facturacion, se factura igual');
+      }
+    }
+    const m = await import('../invoices/invoices.model.js');
+    const inv = paymentInfo?.paymentId
+      ? await m.emitirFacturaDePago(conversionId, paymentInfo, userId)
+      : await m.autoEmitirPorPago(conversionId, userId);
+    if (inv?.codigo) {
+      logger.info({ conversionId, paymentId: paymentInfo?.paymentId, invoiceId: inv.id, codigo: inv.codigo },
+        'auto-factura por pago');
+    }
+  })().catch((err) => logger.warn({ err: err.message, conversionId }, 'auto-factura por pago fallo (no bloqueante)'));
 }
 
 export async function getById(id) {
