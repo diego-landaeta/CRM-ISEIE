@@ -779,7 +779,10 @@ export async function detalleMetrica({ projectId, from, to, tipo, asesoraId, mes
               c.fecha_conversion AS fecha,
               ${FORMACION} AS formacion,
               ROUND(c.importe_total, 2) AS importe,
-              ROUND(c.importe_pagado, 2) AS cobrado,
+              -- De los cobros reales, NO de c.importe_pagado: ese campo declara
+              -- 240.502,95 EUR de mas en 2026 y enseñaba cobros donde no los hay.
+              ROUND(COALESCE((SELECT SUM(cp2.importe) FROM conversion_payments cp2
+                               WHERE cp2.conversion_id = c.id), 0), 2) AS cobrado,
               COALESCE(u.nombre, '— sin asesora —') AS asesora,
               (SELECT COUNT(*) FROM conversion_payments cp WHERE cp.conversion_id = c.id)::int AS cobros,
               (SELECT COUNT(*) FROM conversions c0 WHERE c0.lead_id = c.lead_id
