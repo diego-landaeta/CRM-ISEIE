@@ -336,26 +336,52 @@ export async function cobrosMensuales({ projectId, from, to }) {
   return rows;
 }
 
-// 7) VENTAS POR VENDEDORA: agrupa ventas por el responsable del lead (por fecha
-// de venta). "Sin asignar" cuando el lead no tiene responsable.
+// 7) VENTAS POR VENDEDORA. Ojo con las dos fechas: lo VENDIDO se cuenta por la
+// fecha de la venta, pero lo COBRADO se cuenta por la fecha de cada pago. Antes
+// se sumaba el importe_pagado de las ventas del rango, que mete en el periodo
+// dinero cobrado en otros meses (y deja fuera lo que se cobra ahora de ventas
+// antiguas). "Sin asignar" cuando la venta no tiene vendedora ni el lead gestora.
 export async function ventasVendedora({ projectId, from, to }) {
-  const { where, params } = buildFilter({ projectId, from, to }, 'c.fecha_conversion', 'c.project_id');
+  const v = buildFilter({ projectId, from, to }, 'c.fecha_conversion', 'c.project_id');
+  const pgo = buildFilter({ projectId, from, to }, 'cp.fecha', 'c.project_id');
+  // El segundo bloque de parametros va detras del primero.
+  const off = v.params.length;
+  const wherePago = pgo.where.replace(/\$(\d+)/g, (_, n) => '$' + (Number(n) + off));
+
   const { rows } = await query(
-    `SELECT COALESCE(u.nombre, 'Sin asignar') AS vendedora,
-            COUNT(*)::int AS ventas,
-            COUNT(DISTINCT c.lead_id)::int AS clientes,
-            COALESCE(SUM(c.importe_total), 0)::numeric AS total,
-            COALESCE(SUM(c.importe_pagado), 0)::numeric AS cobrado,
-            COALESCE(SUM(c.importe_total - c.importe_pagado), 0)::numeric AS pendiente
-     FROM conversions c
-     LEFT JOIN leads l ON l.id = c.lead_id
-     -- La venta manda: si tiene vendedora propia se atribuye a ella; si no, al
-     -- responsable del lead (ventas viejas sin vendedora informada).
-     LEFT JOIN users u ON u.id = COALESCE(c.vendedora_id, l.responsable_id)
-     ${where}
-     GROUP BY 1
-     ORDER BY cobrado DESC`,
-    params
+    `WITH ventas AS (
+       SELECT COALESCE(c.vendedora_id, l.responsable_id) AS uid,
+              COUNT(*)::int AS ventas,
+              COUNT(DISTINCT c.lead_id)::int AS clientes,
+              COALESCE(SUM(c.importe_total), 0)::numeric AS total,
+              COALESCE(SUM(c.importe_total - c.importe_pagado), 0)::numeric AS pendiente
+         FROM conversions c
+         LEFT JOIN leads l ON l.id = c.lead_id
+         ${v.where}
+        GROUP BY 1
+     ),
+     cobros AS (
+       SELECT COALESCE(c.vendedora_id, l.responsable_id) AS uid,
+              COALESCE(SUM(cp.importe), 0)::numeric AS cobrado
+         FROM conversion_payments cp
+         JOIN conversions c ON c.id = cp.conversion_id
+         LEFT JOIN leads l ON l.id = c.lead_id
+         ${wherePago}
+        GROUP BY 1
+     )
+     SELECT COALESCE(u.nombre, 'Sin asignar') AS vendedora,
+            COALESCE(v.ventas, 0) AS ventas,
+            COALESCE(v.clientes, 0) AS clientes,
+            COALESCE(v.total, 0) AS total,
+            COALESCE(cb.cobrado, 0) AS cobrado,
+            COALESCE(v.pendiente, 0) AS pendiente
+       FROM ventas v
+       -- -1 hace de clave para las ventas sin vendedora: NULL nunca casa con NULL
+       FULL OUTER JOIN cobros cb ON COALESCE(cb.uid, -1) = COALESCE(v.uid, -1)
+       LEFT JOIN users u ON u.id = COALESCE(v.uid, cb.uid)
+      ORDER BY cobrado DESC`,
+    [...v.params, ...pgo.params]
   );
   return rows;
 }
+
