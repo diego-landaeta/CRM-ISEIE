@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
+import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import KpiCard from '@/shared/components/ui/KpiCard';
 import { toast } from '@/shared/hooks/useToast';
@@ -50,6 +51,11 @@ const fmt = (n: number) => new Intl.NumberFormat('es-ES', { style: 'currency', c
 const fmtDate = (s: string | null) => s ? new Date(s).toLocaleString('es-ES', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
 
 export default function StripePaymentsPage() {
+  const { user } = useAuth();
+  // Asociar a mano mueve dinero y emite factura: solo admin y superadmin.
+  // La gestora ve el correo del cobro, lo pone en la ficha del cliente y
+  // sincroniza; el match se hace solo.
+  const puedeAsociar = user?.role === 'admin' || user?.role === 'superadmin';
   const { activeProject } = useProjectContext() as { activeProject: { id?: number | null; nombre?: string } };
   const pid = activeProject?.id;
 
@@ -250,12 +256,21 @@ export default function StripePaymentsPage() {
                         )}
                       </div>
                     ) : (
+                      puedeAsociar ? (
                       <button onClick={() => setLinkDialog(p)}
                         title="Este cobro no está asociado a ningún cliente: asócialo para que genere su factura"
                         className="text-[11px] font-bold text-red-700 dark:text-red-400 hover:underline inline-flex items-center gap-1 text-left">
                         <LinkIcon size={11} weight="bold" />
                         NO ASOCIADO A UN CLIENTE · ASOCIAR
                       </button>
+                      ) : (
+                      <span
+                        title={`Pon el correo ${p.customer_email || 'del cobro'} en la ficha del cliente y pulsa Sincronizar: se asocia solo`}
+                        className="text-[11px] font-bold text-red-700 dark:text-red-400 inline-flex items-center gap-1 text-left">
+                        <LinkIcon size={11} weight="bold" />
+                        NO ASOCIADO · pon el correo en la ficha y sincroniza
+                      </span>
+                      )
                     )}
                   </td>
                   <td className="px-3 py-2">
