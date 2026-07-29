@@ -11,7 +11,7 @@ import { useEffect, useState, useCallback } from 'react';
 import client from '@/shared/api/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/shared/hooks/useToast';
-import { CalendarCheck, CreditCard, User, FloppyDisk, Receipt } from '@phosphor-icons/react';
+import { CreditCard, User, Receipt, CheckCircle } from '@phosphor-icons/react';
 
 type ColaItem = {
   payment_id: number; conversion_id: number; fecha: string; importe: number;
@@ -45,8 +45,6 @@ export default function FacturacionAlDiaCard({ projectId }: { projectId?: number
   const { user } = useAuth() as { user?: { role?: string; factura_manager?: boolean } };
   const puedeFacturar = !!user?.factura_manager || user?.role === 'superadmin';
   const [estado, setEstado] = useState<Estado | null>(null);
-  const [valor, setValor] = useState('');
-  const [guardando, setGuardando] = useState(false);
   const [generando, setGenerando] = useState<number | null>(null);
   const [aprobando, setAprobando] = useState<number | null>(null);
 
@@ -56,30 +54,12 @@ export default function FacturacionAlDiaCard({ projectId }: { projectId?: number
       const r = await client.get<Estado>(`/invoices/facturacion-al-dia?projectId=${projectId}`);
       if (r.success) {
         setEstado(r.data);
-        setValor(r.data.al_dia_hasta ? String(r.data.al_dia_hasta).slice(0, 10) : '');
       }
     } catch { /* si falla, la tarjeta simplemente no se muestra */ }
   }, [projectId]);
 
   useEffect(() => { cargar(); }, [cargar]);
 
-  async function guardarAlDia() {
-    if (!projectId || !valor) return;
-    setGuardando(true);
-    try {
-      const r = await client.put('/invoices/facturacion-al-dia', { projectId, alDiaHasta: valor });
-      if (r.success) {
-        toast({ title: `Ya facturado hasta ${fecha(valor)}`, description: 'Los cobros anteriores salen de la cola.' });
-        cargar();
-      }
-    } catch (err) {
-      toast({
-        title: 'No se pudo guardar',
-        description: (err as { data?: { error?: string } })?.data?.error || 'Error desconocido',
-        variant: 'destructive',
-      });
-    } finally { setGuardando(false); }
-  }
 
   async function generar(paymentId: number, forzar = false) {
     if (!projectId) return;
@@ -142,15 +122,6 @@ export default function FacturacionAlDiaCard({ projectId }: { projectId?: number
             se descoloque.
           </p>
         </div>
-        <div className="text-right">
-          <p className="text-[11px] text-muted-foreground">Ya facturado hasta</p>
-          <p className="text-lg font-bold tabular-nums">{fecha(estado.al_dia_hasta)}</p>
-          {estado.updated_at && (
-            <p className="text-[10px] text-muted-foreground">
-              {estado.updated_by_nombre ? `${estado.updated_by_nombre} · ` : ''}{fecha(estado.updated_at)}
-            </p>
-          )}
-        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 mt-4 text-sm">
@@ -163,6 +134,13 @@ export default function FacturacionAlDiaCard({ projectId }: { projectId?: number
           <p className="font-bold tabular-nums mt-0.5">{fmt(estado.importe_sin_factura)}</p>
         </div>
       </div>
+
+      {estado.pagos_sin_factura === 0 && (estado.proformas_pendientes?.length || 0) === 0 && (
+        <div className="mt-4 flex items-center gap-2 text-[12px] text-emerald-600 dark:text-emerald-400">
+          <CheckCircle size={16} weight="fill" />
+          Todo facturado: no queda ningún cobro por generar.
+        </div>
+      )}
 
       {(estado.por_dia?.length || 0) > 0 && (
         <div className="mt-4">
@@ -283,34 +261,6 @@ export default function FacturacionAlDiaCard({ projectId }: { projectId?: number
         </div>
       )}
 
-      {puedeFacturar && (
-        <div className="flex items-end gap-2 mt-4 pt-4 border-t border-border flex-wrap">
-          <div>
-            <label className="text-[11px] font-semibold text-muted-foreground mb-1 flex items-center gap-1">
-              <CalendarCheck size={12} weight="bold" /> Ya está facturado hasta
-            </label>
-            <input
-              type="date"
-              value={valor}
-              onChange={(e) => setValor(e.target.value)}
-              className="h-9 px-2 rounded-md border border-border bg-card text-sm"
-            />
-          </div>
-          <button
-            type="button"
-            onClick={guardarAlDia}
-            disabled={guardando || !valor || valor === (estado.al_dia_hasta || '').slice(0, 10)}
-            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-40"
-          >
-            <FloppyDisk size={14} weight="bold" />
-            {guardando ? 'Guardando…' : 'Guardar'}
-          </button>
-          <p className="text-[11px] text-muted-foreground w-full">
-            Los cobros anteriores a esa fecha desaparecen de la cola y dejan de contar:
-            se dan por facturados fuera del CRM.
-          </p>
-        </div>
-      )}
     </div>
   );
 }
