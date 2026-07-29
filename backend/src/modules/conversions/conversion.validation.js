@@ -49,6 +49,8 @@ export const createPaymentSchema = z.object({
   fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato fecha: YYYY-MM-DD').optional(),
   notas: z.string().max(500).optional().nullable(),
   metodo: z.enum(PAYMENT_METHODS).optional().nullable(),
+  // Confirmacion explicita cuando de verdad son dos cobros iguales seguidos.
+  permitir_duplicado: z.boolean().optional(),
 });
 
 export const listConversionsSchema = z.object({

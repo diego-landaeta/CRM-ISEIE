@@ -357,6 +357,24 @@ export async function addPayment(conversionId, { importe, fecha, notas, metodo }
       return { error: 'OVERPAY' };
     }
 
+    // Anti-duplicado: el mismo importe en la misma venta con menos de 3 dias
+    // de diferencia es casi siempre el mismo cobro metido dos veces (a mano y
+    // por la sincronizacion de Stripe). Se puede forzar con allowDuplicate.
+    if (!opts.allowDuplicate) {
+      const { rows: dup } = await client.query(
+        `SELECT id, importe, fecha, notas, metodo FROM conversion_payments
+          WHERE conversion_id = $1
+            AND ABS(importe - $2::numeric) < 0.01
+            AND ABS(fecha - COALESCE($3::date, CURRENT_DATE)) <= 3
+          ORDER BY id LIMIT 1`,
+        [conversionId, importe, fecha]
+      );
+      if (dup[0]) {
+        await client.query('ROLLBACK');
+        return { error: 'DUPLICATE', existing: dup[0] };
+      }
+    }
+
     // INSERT payment
     const { rows: payRows } = await client.query(
       `INSERT INTO conversion_payments (conversion_id, importe, fecha, notas, metodo)

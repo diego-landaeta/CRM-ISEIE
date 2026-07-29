@@ -102,7 +102,7 @@ async function autoLinkIfPossible(projectId, payment, dbRow) {
   const convModel = await import('../conversions/conversion.model.js');
   const res = await convModel.addPayment(conv.id, {
     importe: payment.amount, fecha, notas: `Auto-Stripe ${payment.stripe_id}`, metodo: 'tarjeta',
-  }, { allowOverpay: true });
+  }, { allowOverpay: true, allowDuplicate: true });
   if (res?.error || !res?.payment) return;
   const cpId = res.payment.id;
   await model.linkPayment(dbRow.id, { leadId: lead.id, conversionId: conv.id, conversionPaymentId: cpId, userId: null, method: 'auto_email' });
@@ -226,7 +226,7 @@ export async function manualLink(stripePaymentId, { leadId, conversionId, userId
         const convModel = await import('../conversions/conversion.model.js');
         const res = await convModel.addPayment(conversionId, {
           importe: amount, fecha, notas: `Stripe ${rows[0]?.stripe_id || stripePaymentId}`, metodo: 'tarjeta',
-        }, { allowOverpay: true });
+        }, { allowOverpay: true, allowDuplicate: true });
         cpId = res?.payment?.id || null;
       }
     }

@@ -106,6 +106,8 @@ export interface AddPaymentInput {
   importe: number;
   fecha: string;
   notas?: string | null;
+  // Solo cuando el usuario confirma que son dos cobros iguales de verdad.
+  permitir_duplicado?: boolean;
 }
 
 type ListParams = Record<string, string | number | undefined> | undefined;

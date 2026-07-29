@@ -51,12 +51,28 @@ export default function PaymentDialog({ open, onClose, conversion, onPaid }: Pay
       return;
     }
     setSaving(true);
-    try {
-      const res = await conversionsApi.addPayment(conversion.id, {
+    async function enviar(permitirDuplicado: boolean) {
+      return conversionsApi.addPayment(conversion!.id, {
         importe,
         fecha: form.fecha,
         notas: form.notas || null,
+        ...(permitirDuplicado ? { permitir_duplicado: true } : {}),
       });
+    }
+    try {
+      let res;
+      try {
+        res = await enviar(false);
+      } catch (err: any) {
+        // El servidor ha visto un cobro igual muy cerca en el tiempo. Preguntamos
+        // en vez de crear el duplicado a ciegas.
+        if (err?.data?.code !== 'DUPLICATE_PAYMENT') throw err;
+        const seguir = window.confirm(
+          `${err.data.error}\n\n¿Seguro que quieres registrarlo igualmente?`,
+        );
+        if (!seguir) { setSaving(false); return; }
+        res = await enviar(true);
+      }
       if (res.success) {
         toast({ title: 'Pago registrado', description: formatCurrency(importe) });
         onPaid?.();

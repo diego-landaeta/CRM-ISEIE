@@ -137,9 +137,18 @@ export async function update(id, fields) {
 }
 
 export async function addPayment(conversionId, data) {
-  const result = await conversionModel.addPayment(conversionId, data);
+  const { permitir_duplicado, ...pago } = data || {};
+  const result = await conversionModel.addPayment(conversionId, pago,
+    { allowDuplicate: !!permitir_duplicado });
   if (result.error === 'NOT_FOUND') throw new AppError('Conversion no encontrada', 404, 'CONVERSION_NOT_FOUND');
   if (result.error === 'OVERPAY') throw new AppError('El importe excede el pendiente', 400, 'OVERPAY');
+  if (result.error === 'DUPLICATE') {
+    const d = result.existing;
+    throw new AppError(
+      `Ya hay un pago de ${Number(d.importe).toFixed(2)} EUR el ${String(d.fecha).slice(0, 10)} en esta venta. `
+      + 'Si de verdad son dos cobros distintos, marca la casilla de duplicado permitido.',
+      409, 'DUPLICATE_PAYMENT');
+  }
   // Recalcular comision en cada pago (importe_base = importe_pagado actualizado)
   commissionModel.recalculateCommission(conversionId).catch(err =>
     logger.warn({ err: err.message, conversionId }, 'recalculateCommission failed (non-blocking)')
