@@ -645,34 +645,57 @@ export async function panelReportes({ projectId, from, to }) {
 // 'España' por defecto en casi todos los registros, asi que daria 99,9% España
 // mientras los telefonos son latinoamericanos.
 const PAIS_TEL = `CASE
-    WHEN tel LIKE '34%'  THEN 'España'
-    WHEN tel LIKE '52%'  THEN 'México'
-    WHEN tel LIKE '57%'  THEN 'Colombia'
-    WHEN tel LIKE '593%' THEN 'Ecuador'
-    WHEN tel LIKE '51%'  THEN 'Perú'
-    WHEN tel LIKE '506%' THEN 'Costa Rica'
-    WHEN tel LIKE '507%' THEN 'Panamá'
-    WHEN tel LIKE '56%'  THEN 'Chile'
-    WHEN tel LIKE '54%'  THEN 'Argentina'
-    WHEN tel LIKE '58%'  THEN 'Venezuela'
-    WHEN tel LIKE '502%' THEN 'Guatemala'
-    WHEN tel LIKE '503%' THEN 'El Salvador'
-    WHEN tel LIKE '504%' THEN 'Honduras'
-    WHEN tel LIKE '505%' THEN 'Nicaragua'
-    WHEN tel LIKE '509%' THEN 'Haití'
-    WHEN tel LIKE '55%'  THEN 'Brasil'
-    WHEN tel LIKE '591%' THEN 'Bolivia'
-    WHEN tel LIKE '595%' THEN 'Paraguay'
-    WHEN tel LIKE '598%' THEN 'Uruguay'
-    WHEN tel LIKE '1%'   THEN 'EE.UU. / Canadá'
-    WHEN tel LIKE '39%'  THEN 'Italia'
-    WHEN tel LIKE '33%'  THEN 'Francia'
-    WHEN tel LIKE '351%' THEN 'Portugal'
-    WHEN tel LIKE '44%'  THEN 'Reino Unido'
-    WHEN tel LIKE '49%'  THEN 'Alemania'
-    WHEN tel LIKE '212%' THEN 'Marruecos'
     WHEN tel = '' OR tel IS NULL THEN '— sin teléfono —'
-    ELSE '— otro (+' || LEFT(tel, 3) || ') —'
+    -- Norteamérica y Caribe comparten el +1: manda el código de área.
+    WHEN tel ~ '^1(809|829|849)[0-9]{7}$' THEN 'República Dominicana'
+    WHEN tel ~ '^1868[0-9]{7}$'           THEN 'Trinidad y Tobago'
+    WHEN tel ~ '^1(787|939)[0-9]{7}$'     THEN 'Puerto Rico'
+    WHEN tel ~ '^1[2-9][0-9]{9}$'         THEN 'EE.UU. / Canadá'
+    -- Móviles que llevan un dígito extra tras el prefijo: México el 1, Argentina el 9.
+    WHEN tel ~ '^521[0-9]{10}$'      THEN 'México'
+    WHEN tel ~ '^52[0-9]{10,11}$'    THEN 'México'
+    WHEN tel ~ '^549[0-9]{10,11}$'   THEN 'Argentina'
+    WHEN tel ~ '^54[0-9]{10,11}$'    THEN 'Argentina'
+    -- Con prefijo internacional y longitud correcta.
+    WHEN tel ~ '^34[6-9][0-9]{8}$'   THEN 'España'
+    WHEN tel ~ '^57[0-9]{10}$'       THEN 'Colombia'
+    WHEN tel ~ '^593[0-9]{8,10}$'    THEN 'Ecuador'
+    WHEN tel ~ '^51[0-9]{9}$'        THEN 'Perú'
+    WHEN tel ~ '^506[0-9]{8}$'       THEN 'Costa Rica'
+    WHEN tel ~ '^507[0-9]{7,11}$'    THEN 'Panamá'
+    WHEN tel ~ '^56[0-9]{8,9}$'      THEN 'Chile'
+    WHEN tel ~ '^58[0-9]{10}$'       THEN 'Venezuela'
+    WHEN tel ~ '^502[0-9]{8}$'       THEN 'Guatemala'
+    WHEN tel ~ '^503[0-9]{8}$'       THEN 'El Salvador'
+    WHEN tel ~ '^504[0-9]{8}$'       THEN 'Honduras'
+    WHEN tel ~ '^505[0-9]{8}$'       THEN 'Nicaragua'
+    WHEN tel ~ '^509[0-9]{8}$'       THEN 'Haití'
+    WHEN tel ~ '^55[0-9]{10,11}$'    THEN 'Brasil'
+    WHEN tel ~ '^591[0-9]{8}$'       THEN 'Bolivia'
+    WHEN tel ~ '^595[0-9]{8,9}$'     THEN 'Paraguay'
+    WHEN tel ~ '^598[0-9]{8}$'       THEN 'Uruguay'
+    WHEN tel ~ '^240[0-9]{9}$'       THEN 'Guinea Ecuatorial'
+    WHEN tel ~ '^41[0-9]{9}$'        THEN 'Suiza'
+    WHEN tel ~ '^31[0-9]{9}$'        THEN 'Países Bajos'
+    WHEN tel ~ '^39[0-9]{9,10}$'     THEN 'Italia'
+    WHEN tel ~ '^33[1-9][0-9]{8}$'   THEN 'Francia'
+    WHEN tel ~ '^351[0-9]{9}$'       THEN 'Portugal'
+    WHEN tel ~ '^44[0-9]{10}$'       THEN 'Reino Unido'
+    WHEN tel ~ '^49[0-9]{10,11}$'    THEN 'Alemania'
+    WHEN tel ~ '^212[0-9]{9}$'       THEN 'Marruecos'
+    -- Guardados sin prefijo internacional. Aquí manda la longitud: un número
+    -- nacional mexicano tiene 10 dígitos, uno peruano o chileno tiene 9.
+    WHEN tel ~ '^[67][0-9]{8}$'      THEN 'España'    -- móvil español
+    WHEN tel ~ '^9[0-9]{8}$'         THEN '— 9 dígitos sin prefijo (Perú o Chile) —'
+    WHEN tel ~ '^9[89][0-9]{8}$'     THEN 'México'    -- LADA 98x/99x: Cancún, Playa, Mérida
+    WHEN tel ~ '^33[0-9]{8}$'        THEN 'México'    -- LADA 33 Guadalajara
+    WHEN tel ~ '^55[0-9]{8}$'        THEN 'México'    -- LADA 55 CDMX
+    WHEN tel ~ '^81[0-9]{8}$'        THEN 'México'    -- LADA 81 Monterrey
+    WHEN tel ~ '^11[0-9]{8}$'        THEN 'Argentina' -- Buenos Aires
+    WHEN tel ~ '^3[0-2][0-9]{8}$'    THEN 'Colombia'  -- móvil 30x/31x/32x
+    WHEN tel ~ '^41[24][0-9]{7}$'    THEN 'Venezuela' -- 0412 / 0414 sin el cero
+    -- Lo que no se puede decidir se deja a la vista, no se reparte.
+    ELSE '— sin prefijo — revisar'
   END`;
 
 export async function paisesMasVendidos({ projectId, from, to }) {
@@ -687,7 +710,7 @@ export async function paisesMasVendidos({ projectId, from, to }) {
   const { rows } = await query(
     `WITH v AS (
        SELECT c.id, c.importe_total, c.lead_id,
-              regexp_replace(COALESCE(l.telefono, ''), '[^0-9]', '', 'g') AS tel
+              (CASE WHEN LENGTH(regexp_replace(regexp_replace(COALESCE(l.telefono, ''), '[^0-9]', '', 'g'), '^00', '')) > 15 THEN LEFT(regexp_replace(regexp_replace(COALESCE(l.telefono, ''), '[^0-9]', '', 'g'), '^00', ''), 11) ELSE regexp_replace(regexp_replace(COALESCE(l.telefono, ''), '[^0-9]', '', 'g'), '^00', '') END) AS tel
          FROM conversions c
          LEFT JOIN leads l ON l.id = c.lead_id
          ${fv.where}
@@ -703,7 +726,7 @@ export async function paisesMasVendidos({ projectId, from, to }) {
          FROM v GROUP BY 1
      ),
      le AS (
-       SELECT regexp_replace(COALESCE(l.telefono, ''), '[^0-9]', '', 'g') AS tel,
+       SELECT (CASE WHEN LENGTH(regexp_replace(regexp_replace(COALESCE(l.telefono, ''), '[^0-9]', '', 'g'), '^00', '')) > 15 THEN LEFT(regexp_replace(regexp_replace(COALESCE(l.telefono, ''), '[^0-9]', '', 'g'), '^00', ''), 11) ELSE regexp_replace(regexp_replace(COALESCE(l.telefono, ''), '[^0-9]', '', 'g'), '^00', '') END) AS tel,
               EXISTS (SELECT 1 FROM conversions cvx
                        WHERE cvx.lead_id = l.id
                          AND cvx.fecha_conversion >= ${ENTRY}::date) AS convirtio
@@ -770,7 +793,9 @@ export async function formacionesMasVendidas({ projectId, from, to }) {
 
 // Detras de cada numero del panel, las filas que lo componen. Es lo que abre el
 // popup al pulsar un importe o un contador.
-export async function detalleMetrica({ projectId, from, to, tipo, asesoraId, mes, pais, formacion }) {
+export async function detalleMetrica({ projectId, from, to, tipo, asesoraId, mes, pais, formacion, limite }) {
+  // El popup se conforma con 500; una descarga quiere todas las filas.
+  const TOPE = Math.min(Math.max(Number(limite) || 500, 1), 20000);
   const cond = [];
   const params = [];
   let idx = 1;
@@ -798,12 +823,15 @@ export async function detalleMetrica({ projectId, from, to, tipo, asesoraId, mes
       `SELECT l.id, l.nombre AS cliente, l.email, l.telefono, l.status AS estado,
               ${ENTRY}::date AS fecha,
               COALESCE(u.nombre, '— sin asesora —') AS asesora,
+              (SELECT ${PAIS_TEL} FROM (SELECT (CASE WHEN LENGTH(regexp_replace(regexp_replace(COALESCE(l.telefono, ''), '[^0-9]', '', 'g'), '^00', '')) > 15 THEN LEFT(regexp_replace(regexp_replace(COALESCE(l.telefono, ''), '[^0-9]', '', 'g'), '^00', ''), 11) ELSE regexp_replace(regexp_replace(COALESCE(l.telefono, ''), '[^0-9]', '', 'g'), '^00', '') END) AS tel) _t) AS pais,
+              EXISTS (SELECT 1 FROM conversions cvx WHERE cvx.lead_id = l.id
+                       AND cvx.fecha_conversion >= ${ENTRY}::date) AS convirtio,
               (SELECT COUNT(*) FROM conversions cv WHERE cv.lead_id = l.id)::int AS ventas
          FROM leads l
          LEFT JOIN users u ON u.id = l.responsable_id
         WHERE ${cond.join(' AND ')}
         ORDER BY fecha DESC, l.id DESC
-        LIMIT 500`, params);
+        LIMIT ${TOPE}`, params);
     return rows;
   }
 
@@ -821,7 +849,7 @@ export async function detalleMetrica({ projectId, from, to, tipo, asesoraId, mes
     // espera una columna 'tel', asi que se la damos con una subconsulta en vez
     // de reescribir el SQL a mano.
     if (pais) {
-      cond.push(`(SELECT ${PAIS_TEL} FROM (SELECT regexp_replace(COALESCE(l.telefono, ''), '[^0-9]', '', 'g') AS tel) _t) = $${idx++}`);
+      cond.push(`(SELECT ${PAIS_TEL} FROM (SELECT (CASE WHEN LENGTH(regexp_replace(regexp_replace(COALESCE(l.telefono, ''), '[^0-9]', '', 'g'), '^00', '')) > 15 THEN LEFT(regexp_replace(regexp_replace(COALESCE(l.telefono, ''), '[^0-9]', '', 'g'), '^00', ''), 11) ELSE regexp_replace(regexp_replace(COALESCE(l.telefono, ''), '[^0-9]', '', 'g'), '^00', '') END) AS tel) _t) = $${idx++}`);
       params.push(pais);
     }
     const { rows } = await query(
@@ -835,6 +863,7 @@ export async function detalleMetrica({ projectId, from, to, tipo, asesoraId, mes
               ROUND(COALESCE((SELECT SUM(cp2.importe) FROM conversion_payments cp2
                                WHERE cp2.conversion_id = c.id), 0), 2) AS cobrado,
               COALESCE(u.nombre, '— sin asesora —') AS asesora,
+              (SELECT ${PAIS_TEL} FROM (SELECT (CASE WHEN LENGTH(regexp_replace(regexp_replace(COALESCE(l.telefono, ''), '[^0-9]', '', 'g'), '^00', '')) > 15 THEN LEFT(regexp_replace(regexp_replace(COALESCE(l.telefono, ''), '[^0-9]', '', 'g'), '^00', ''), 11) ELSE regexp_replace(regexp_replace(COALESCE(l.telefono, ''), '[^0-9]', '', 'g'), '^00', '') END) AS tel) _t) AS pais,
               (SELECT COUNT(*) FROM conversion_payments cp WHERE cp.conversion_id = c.id)::int AS cobros,
               (SELECT COUNT(*) FROM conversions c0 WHERE c0.lead_id = c.lead_id
                  AND c0.fecha_conversion < c.fecha_conversion)::int AS ventas_previas,
@@ -849,7 +878,7 @@ export async function detalleMetrica({ projectId, from, to, tipo, asesoraId, mes
               AND LOWER(TRIM(pnom.nombre)) = LOWER(TRIM(c.producto_contratado))
         WHERE ${cond.join(' AND ')}
         ORDER BY c.fecha_conversion DESC, c.id DESC
-        LIMIT 500`, params);
+        LIMIT ${TOPE}`, params);
     return rows;
   }
 
@@ -883,7 +912,7 @@ export async function detalleMetrica({ projectId, from, to, tipo, asesoraId, mes
        LEFT JOIN users u ON u.id = COALESCE(c.vendedora_id, l.responsable_id)
       WHERE ${cond.join(' AND ')}
       ORDER BY cp.fecha DESC, cp.id DESC
-      LIMIT 500`, params);
+      LIMIT ${TOPE}`, params);
   return rows;
 }
 

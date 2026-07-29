@@ -418,53 +418,19 @@ export default function ReportsPage() {
     } finally { setBajandoPdf(false); }
   }
 
+  // Una sola descarga para toda la pantalla. Antes esto armaba su propio Excel
+  // con columnas que ya no existen (la de clientes) y tasas viejas, asi que
+  // enseñaba numeros distintos a los de la pagina.
   async function descargarPanel() {
-    if (!panel) return;
     setBajando(true);
     try {
-      const q = new URLSearchParams();
-      if (activeProject?.id) q.set('projectId', String(activeProject.id));
-      if (rango.from) q.set('from', rango.from);
-      if (rango.to) q.set('to', rango.to);
-      const ase = await client.get(`/reports/asesoras-mes?${q.toString()}`).catch(() => null);
-
-      const writeXlsxFile = (await import('write-excel-file/browser')).default;
-      const cab = (t) => ({ value: t, fontWeight: 'bold' });
-
-      const hojaResumen = [
-        [cab('Metrica'), cab('Periodo actual'), cab('Periodo anterior'), cab('Variacion %')],
-        ...Object.entries(panel.kpis).map(([k, v]) => [
-          { value: k }, { value: Number(v.value) },
-          { value: Number(v.prev) }, { value: v.trend == null ? null : Number(v.trend) },
-        ]),
-      ];
-      const hojaSerie = [
-        [cab('Periodo'), cab('Prospectos'), cab('Ventas'), cab('Vendido EUR'), cab('Ingresos EUR'), cab('Tasa %')],
-        ...(panel.serie || []).map((x) => [
-          { value: x.periodo }, { value: Number(x.prospectos) }, { value: Number(x.ventas) },
-          { value: Number(x.vendido) }, { value: Number(x.ingresos) }, { value: Number(x.tasa) },
-        ]),
-      ];
-      const filasAse = (ase?.data || []);
-      const hojaAsesoras = [
-        [cab('Mes'), cab('Asesora'), cab('Leads'), cab('Ventas'), cab('Clientes'),
-         cab('Tasa %'), cab('Vendido EUR'), cab('Cobrado EUR'), cab('Ticket medio EUR')],
-        ...filasAse.map((r) => [
-          { value: r.mes }, { value: r.asesora }, { value: Number(r.leads) },
-          { value: Number(r.ventas) }, { value: Number(r.clientes) }, { value: Number(r.tasa_conversion) },
-          { value: Number(r.vendido) }, { value: Number(r.cobrado) }, { value: Number(r.ticket_medio) },
-        ]),
-      ];
-
-      const nombre = `reportes-${activeProject?.nombre || 'crm'}-${rango.from}_${rango.to}.xlsx`
-        .replace(/\s+/g, '-');
-      // Multi-hoja: la libreria espera [{ sheet, data }], no [data] con {sheets}.
-      await writeXlsxFile([
-        { sheet: 'Resumen', data: hojaResumen },
-        { sheet: 'Evolucion', data: hojaSerie },
-        { sheet: 'Asesoras', data: hojaAsesoras },
-      ]).toFile(nombre);
-      toast({ title: 'Excel descargado', description: `${(panel.serie || []).length} periodos y ${filasAse.length} filas de asesoras.` });
+      const { descargarReportePrincipal } = await import('@/shared/lib/reportePrincipal');
+      const r = await descargarReportePrincipal({
+        projectId: activeProject?.id, projectName: activeProject?.nombre,
+        from: rango.from, to: rango.to,
+      });
+      if (!r.nombre) { toast({ title: 'Sin datos en ese período' }); return; }
+      toast({ title: 'Excel descargado', description: `${r.hojas} hojas · ${r.nombre}` });
     } catch (err) {
       console.error('descargarPanel', err);
       toast({ title: 'No se pudo generar el Excel', description: String(err?.message || err), variant: 'destructive' });

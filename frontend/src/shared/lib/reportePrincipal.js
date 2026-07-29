@@ -136,6 +136,64 @@ export async function descargarReportePrincipal({ projectId, projectName, from, 
     });
   }
 
+  // Y ahora el grano fino: registro a registro. Es lo que se pide cuando los
+  // totales no cuadran y hay que ir a mirar de donde sale cada euro.
+  const filas = (tipo) => {
+    const q2 = new URLSearchParams(q);
+    q2.set('tipo', tipo);
+    q2.set('limite', '20000');
+    return client.get(`/reports/detalle?${q2.toString()}`).then((r) => r?.data || []).catch(() => []);
+  };
+  const [leads, ventas, cobros] = await Promise.all([
+    filas('leads'), filas('ventas'), filas('cobros'),
+  ]);
+
+  if (leads.length) {
+    hojas.push({
+      sheet: 'Leads (uno a uno)',
+      data: [
+        [cab('Entrada'), cab('Nombre'), cab('Email'), cab('Teléfono'), cab('País'),
+         cab('Estado'), cab('Asesora'), cab('Convirtió'), cab('Ventas')],
+        ...leads.map((r) => [
+          txt(r.fecha), txt(r.cliente), txt(r.email), txt(r.telefono), txt(r.pais),
+          txt(r.estado), txt(r.asesora), txt(r.convirtio ? 'sí' : 'no'), num(r.ventas),
+        ]),
+      ],
+    });
+  }
+
+  if (ventas.length) {
+    hojas.push({
+      sheet: 'Ventas (una a una)',
+      data: [
+        [cab('Fecha'), cab('Cliente'), cab('Email'), cab('Teléfono'), cab('País'),
+         cab('Tipo'), cab('Formación'), cab('Importe EUR'), cab('Cobrado EUR'),
+         cab('Nº cobros'), cab('Compras antes'), cab('Asesora'), cab('Facturas')],
+        ...ventas.map((r) => [
+          txt(r.fecha), txt(r.cliente), txt(r.email), txt(r.telefono), txt(r.pais),
+          txt(r.es_mensualidad ? 'mensualidad' : 'venta nueva'), txt(r.formacion),
+          num(r.importe), num(r.cobrado), num(r.cobros), num(r.ventas_previas),
+          txt(r.asesora), txt(r.facturas),
+        ]),
+      ],
+    });
+  }
+
+  if (cobros.length) {
+    hojas.push({
+      sheet: 'Cobros (uno a uno)',
+      data: [
+        [cab('Fecha'), cab('Cliente'), cab('Importe EUR'), cab('Tipo'), cab('Cuota nº'),
+         cab('Formación'), cab('Factura'), cab('Asesora'), cab('Venta de')],
+        ...cobros.map((r) => [
+          txt(r.fecha), txt(r.cliente), num(r.importe),
+          txt(r.es_primer_cobro ? 'cobro de la venta' : 'mensualidad'),
+          num(r.cuota), txt(r.formacion), txt(r.factura), txt(r.asesora), txt(r.fecha_venta),
+        ]),
+      ],
+    });
+  }
+
   if (!hojas.length) return { nombre: null, hojas: 0 };
 
   const writeXlsxFile = (await import('write-excel-file/browser')).default;

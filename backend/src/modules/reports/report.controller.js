@@ -93,6 +93,7 @@ export async function detalle(req, res, next) {
       mes: /^\d{4}-\d{2}$/.test(req.query.mes || '') ? req.query.mes : null,
       pais: req.query.pais || null,
       formacion: req.query.formacion || null,
+      limite: req.query.limite || null,
     }) });
   } catch (err) { next(err); }
 }
