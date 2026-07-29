@@ -29,6 +29,13 @@ export default function AsesorasPanel({ from, to }) {
   const [filas, setFilas] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [abierto, setAbierto] = useState(null);
+  // Este panel es 'mes a mes': si sigue el filtro de arriba y ese filtro es una
+  // semana, solo se ve un mes. Por eso trae su propio ambito, y por defecto
+  // enseña el año entero.
+  const [ambito, setAmbito] = useState('anio');
+  const anio = new Date().getFullYear();
+  const desde = ambito === 'anio' ? `${anio}-01-01` : from;
+  const hasta = ambito === 'anio' ? new Date().toISOString().slice(0, 10) : to;
 
   useEffect(() => {
     let vivo = true;
@@ -37,8 +44,8 @@ export default function AsesorasPanel({ from, to }) {
       try {
         const p = new URLSearchParams();
         if (activeProject?.id) p.set('projectId', String(activeProject.id));
-        if (from) p.set('from', from);
-        if (to) p.set('to', to);
+        if (desde) p.set('from', desde);
+        if (hasta) p.set('to', hasta);
         const r = await client.get(`/reports/asesoras-mes?${p.toString()}`);
         if (vivo) setFilas(r.success ? (r.data || []) : []);
       } catch {
@@ -46,7 +53,7 @@ export default function AsesorasPanel({ from, to }) {
       } finally { if (vivo) setCargando(false); }
     })();
     return () => { vivo = false; };
-  }, [activeProject?.id, from, to]);
+  }, [activeProject?.id, desde, hasta]);
 
   // Agrupado por mes, con el total del mes calculado sobre sus asesoras.
   const meses = useMemo(() => {
@@ -93,6 +100,20 @@ export default function AsesorasPanel({ from, to }) {
           Leads que le entraron, ventas cerradas y dinero cobrado. Los leads cuentan por
           fecha de entrada, las ventas por fecha de venta y los cobros por fecha de cobro.
         </p>
+        <div className="mt-2 inline-flex rounded-md border border-border overflow-hidden">
+          {[['anio', `Todo ${anio}`], ['rango', 'Solo el rango de arriba']].map(([k, etiqueta]) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => { setAmbito(k); setAbierto(null); }}
+              className={`px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                ambito === k ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+              }`}
+            >
+              {etiqueta}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="space-y-2">
