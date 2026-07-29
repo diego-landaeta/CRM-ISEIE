@@ -444,7 +444,13 @@ export async function asesorasPorMes({ projectId, from, to }) {
   const { rows } = await query(
     `WITH leads_mes AS (
        SELECT to_char(date_trunc('month', ${ENTRY}), 'YYYY-MM') AS mes,
-              l.responsable_id AS uid,
+              -- Si el lead no tiene responsable pero acabo comprando, cuenta para
+              -- la vendedora de su venta: si no, sale como '— sin asesora —' con
+              -- ventas que si tienen dueña.
+              COALESCE(l.responsable_id, (
+                SELECT cv.vendedora_id FROM conversions cv
+                 WHERE cv.lead_id = l.id AND cv.vendedora_id IS NOT NULL
+                 ORDER BY cv.fecha_conversion LIMIT 1)) AS uid,
               COUNT(*)::int AS leads,
               COUNT(*) FILTER (WHERE l.status = 'convertido')::int AS leads_convertidos
          FROM leads l ${fl.where}

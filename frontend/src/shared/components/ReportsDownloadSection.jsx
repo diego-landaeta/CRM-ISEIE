@@ -99,6 +99,26 @@ const REPORTS = [
     ],
   },
   {
+    key: 'paises', label: 'Países', icon: ChartBar,
+    desc: 'Ventas por país, deducido del prefijo del teléfono. La columna de país fiscal no sirve: casi todos los leads tienen España por defecto.',
+    cols: [
+      { h: 'País', k: 'pais' }, { h: 'Ventas', k: 'ventas', t: 'number' },
+      { h: 'Clientes', k: 'clientes', t: 'number' },
+      { h: 'Vendido EUR', k: 'vendido', t: 'number' },
+      { h: 'Cobrado EUR', k: 'cobrado', t: 'number' },
+    ],
+  },
+  {
+    key: 'formaciones', label: 'Formaciones más vendidas', icon: ListChecks,
+    desc: 'Ranking de formaciones. Cada fila dice si viene del catálogo o de texto tecleado a mano.',
+    cols: [
+      { h: 'Formación', k: 'formacion' }, { h: 'Origen del dato', k: 'origen' },
+      { h: 'Ventas', k: 'ventas', t: 'number' }, { h: 'Clientes', k: 'clientes', t: 'number' },
+      { h: 'Vendido EUR', k: 'vendido', t: 'number' },
+      { h: 'Ticket medio EUR', k: 'ticket_medio', t: 'number' },
+    ],
+  },
+  {
     key: 'general-facturacion', label: 'General + Facturación', icon: Invoice,
     desc: 'Lo mismo que el general, más lo facturado (nº de facturas e importe facturado).',
     cols: [
@@ -162,13 +182,11 @@ function downloadBlob(blob, name) {
 }
 
 export default function ReportsDownloadSection({ projectId, projectName, from: desdeArriba, to: hastaArriba }) {
-  const [from, setFrom] = useState(() => desdeArriba || `${new Date().getFullYear()}-01-01`);
-  const [to, setTo] = useState(() => hastaArriba || new Date().toISOString().slice(0, 10));
+  // El rango lo manda la cabecera de la pagina: aqui no se elige aparte.
+  const from = desdeArriba || '';
+  const to = hastaArriba || '';
   const [busy, setBusy] = useState(null);
   const [preview, setPreview] = useState(null); // { report, rows, base }
-  // Si cambia el rango de la cabecera, esta seccion lo sigue.
-  useEffect(() => { if (desdeArriba) setFrom(desdeArriba); }, [desdeArriba]);
-  useEffect(() => { if (hastaArriba) setTo(hastaArriba); }, [hastaArriba]);
   const ready = Boolean(from && to);
 
   // Trae las filas del reporte del backend (compartido por descarga y vista previa).
@@ -234,24 +252,8 @@ export default function ReportsDownloadSection({ projectId, projectName, from: d
         <div>
           <h2 className="text-base font-semibold text-foreground">Reportes descargables</h2>
           <p className="text-xs text-muted-foreground">
-            Elige el rango de fechas (Desde y Hasta) y descarga en Excel o CSV.
-            {!ready && <span className="text-amber-600 dark:text-amber-500"> Selecciona ambas fechas para habilitar la descarga.</span>}
+            Usan el mismo rango de fechas que has elegido arriba. Descarga en Excel o CSV.
           </p>
-        </div>
-        <div className="flex items-end gap-2 rounded-lg border-2 border-primary/40 bg-primary/5 px-3 py-2">
-          <span className="hidden lg:block self-center text-xs font-semibold text-primary">Fechas del<br />reporte</span>
-          <label className="text-xs font-medium text-foreground">Desde
-            <div className="mt-1 flex items-center gap-1 rounded-md border border-border bg-card px-2">
-              <CalendarBlank size={14} className="text-muted-foreground" />
-              <input type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} className="h-9 bg-transparent text-sm focus:outline-none" />
-            </div>
-          </label>
-          <label className="text-xs font-medium text-foreground">Hasta
-            <div className="mt-1 flex items-center gap-1 rounded-md border border-border bg-card px-2">
-              <CalendarBlank size={14} className="text-muted-foreground" />
-              <input type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} className="h-9 bg-transparent text-sm focus:outline-none" />
-            </div>
-          </label>
         </div>
       </div>
 

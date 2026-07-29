@@ -13,8 +13,10 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import { UsersThree, CaretDown, CaretRight } from '@phosphor-icons/react';
 
 function fmtMoney(n) {
+  // Con decimales: sin ellos los importes no cuadraban con las facturas.
   return new Intl.NumberFormat('es-ES', {
-    style: 'currency', currency: 'EUR', maximumFractionDigits: 0,
+    style: 'currency', currency: 'EUR',
+    minimumFractionDigits: 2, maximumFractionDigits: 2,
   }).format(Number(n || 0));
 }
 function nombreMes(mes) {
