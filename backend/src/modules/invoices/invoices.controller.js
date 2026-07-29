@@ -127,6 +127,12 @@ export async function create(req, res, next) {
     // Facturas de abono (rectificativas): admin/superadmin o una gestora con permiso
     // factura_manager (sobre sus propias ventas).
     const esAdmin = req.user?.role === 'admin' || req.user?.role === 'superadmin';
+    // Proforma de una gestora: se queda esperando el visto bueno de quien
+    // lleva la facturacion. No gasta numero mientras tanto.
+    if (d.tipo === 'proforma' && !esAdmin) {
+      const mandaEllaMisma = await model.esFacturaManager(req.user?.userId);
+      if (!mandaEllaMisma) d.requiereAprobacion = true;
+    }
     if (d.tipo === 'rectificativa' && !esAdmin) {
       const puede = req.user?.role === 'gestor' && await model.esFacturaManager(req.user.userId);
       if (!puede) throw new AppError('No tienes permiso para emitir facturas de abono.', 403, 'FORBIDDEN');
@@ -633,7 +639,7 @@ export async function setFacturacionAlDia(req, res, next) {
         throw new AppError('Solo quien gestiona la facturacion puede mover esta fecha', 403, 'FORBIDDEN');
       }
     }
-    const r = await service.setFacturacionAlDia(projectId, alDiaHasta, req.user.userId);
+    const r = await service.setFacturacionAlDia(projectId, alDiaHasta, req.user.userId, req.body?.stripeOkHasta || null);
     res.json({ success: true, data: r });
   } catch (err) { next(err); }
 }

@@ -76,7 +76,9 @@ export async function create(data, userId) {
     // Borrador = factura preliminar (al convertir): se guarda aunque falten datos
     // fiscales, SIN numero/codigo (no consume correlativo) y sin gating. Se
     // numera al validar y emitir (emitirBorrador). Solo aplica a tipo normal.
-    const isBorrador = !isProforma && data.borrador === true;
+    // Una proforma emitida por una gestora queda pendiente de aprobacion:
+    // se guarda como borrador y NO gasta correlativo hasta que la aprueban.
+    const isBorrador = data.borrador === true || (isProforma && data.requiereAprobacion === true);
 
     // GATING FISCAL (España): se PERMITE emitir aunque falte el NIF. Solo se
     // bloquea si el CIF/NIF puesto es INVÁLIDO (typo/formato) — así no se emite
@@ -294,12 +296,14 @@ export async function list({ projectId, issuerId, estado, search, from, to, tipo
   if (projectId) { conds.push(`i.project_id = $${idx++}`); params.push(projectId); }
   // Gestor: solo ve las facturas de SUS leads (responsable). Admin/superadmin ven todas.
   if (responsableId) { conds.push(`l.responsable_id = $${idx++}`); params.push(responsableId); }
-  // tipo='proforma' → solo proformas; cualquier otro / ausente → solo facturas
-  // (normal + rectificativa), para que las proformas no ensucien el histórico fiscal.
+  // La pestana Facturas muestra tambien las PROFORMAS. Comparten el mismo
+  // correlativo que las facturas normales, asi que si se ocultan parece que
+  // falta un numero: la 642 se veia como un salto cuando en realidad la tenia
+  // la proforma de Arclad. Van marcadas para no confundirlas con una factura.
   if (tipo === 'proforma') conds.push(`i.tipo = 'proforma'`);
   else if (tipo === 'rectificativa') conds.push(`i.tipo = 'rectificativa'`);   // pestaña Abonos
-  else if (tipo === 'normal') conds.push(`i.tipo = 'normal'`);                 // pestaña Facturas
-  else conds.push(`i.tipo <> 'proforma'`);                                     // compat
+  else if (tipo === 'normal') conds.push(`i.tipo IN ('normal', 'proforma')`);  // pestaña Facturas
+  else conds.push(`i.tipo <> 'rectificativa'`);                                // compat
   if (estado) { conds.push(`i.estado = $${idx++}`); params.push(estado); }
   // Busca por nombre, NIF, codigo y tambien por NUMERO de factura (escribir "641").
   if (search) { conds.push(`(LOWER(i.cliente_nombre) LIKE $${idx} OR LOWER(i.cliente_nif) LIKE $${idx} OR i.codigo LIKE $${idx} OR i.numero::text LIKE $${idx})`); params.push(`%${search.toLowerCase()}%`); idx++; }
@@ -1329,27 +1333,43 @@ export async function updateProjectFacturacionConfig(projectId, { piePagoDefault
 // ---------------------------------------------------------------------------
 export async function getFacturacionAlDia(projectId) {
   const { rows } = await query(
-    `SELECT s.project_id, s.al_dia_hasta, s.updated_at, s.updated_by, u.nombre AS updated_by_nombre
+    `SELECT s.project_id, s.al_dia_hasta, s.stripe_ok_hasta, s.updated_at, s.updated_by, u.nombre AS updated_by_nombre
        FROM invoicing_status s
        LEFT JOIN users u ON u.id = s.updated_by
       WHERE s.project_id = $1`,
     [projectId]
   );
-  return rows[0] || { project_id: projectId, al_dia_hasta: null, updated_at: null, updated_by: null };
+  return rows[0] || { project_id: projectId, al_dia_hasta: null, stripe_ok_hasta: null, updated_at: null, updated_by: null };
 }
 
-export async function setFacturacionAlDia(projectId, alDiaHasta, userId) {
+export async function setFacturacionAlDia(projectId, alDiaHasta, userId, stripeOkHasta = undefined) {
   const { rows } = await query(
-    `INSERT INTO invoicing_status (project_id, al_dia_hasta, updated_by, updated_at)
-     VALUES ($1, $2, $3, NOW())
+    `INSERT INTO invoicing_status (project_id, al_dia_hasta, stripe_ok_hasta, updated_by, updated_at)
+     VALUES ($1, $2, $3, $4, NOW())
      ON CONFLICT (project_id) DO UPDATE
-        SET al_dia_hasta = EXCLUDED.al_dia_hasta,
-            updated_by   = EXCLUDED.updated_by,
-            updated_at   = NOW()
+        SET al_dia_hasta    = COALESCE(EXCLUDED.al_dia_hasta, invoicing_status.al_dia_hasta),
+            stripe_ok_hasta = COALESCE(EXCLUDED.stripe_ok_hasta, invoicing_status.stripe_ok_hasta),
+            updated_by      = EXCLUDED.updated_by,
+            updated_at      = NOW()
      RETURNING *`,
-    [projectId, alDiaHasta, userId]
+    [projectId, alDiaHasta, stripeOkHasta ?? null, userId]
   );
   return rows[0];
+}
+
+// Proformas que una gestora dejo esperando el visto bueno.
+export async function listProformasPendientes(projectId) {
+  const { rows } = await query(
+    `SELECT i.id, i.total, i.fecha_emision, i.created_at, i.conversion_id,
+            i.cliente_nombre, u.nombre AS creada_por
+       FROM invoices i
+       LEFT JOIN users u ON u.id = i.created_by
+      WHERE i.project_id = $1 AND i.tipo = 'proforma'
+        AND i.estado = 'borrador' AND i.numero IS NULL
+      ORDER BY i.created_at ASC`,
+    [projectId]
+  );
+  return rows;
 }
 
 // Cobros que estan esperando factura. Si se pasa hasta, solo los que ya entran

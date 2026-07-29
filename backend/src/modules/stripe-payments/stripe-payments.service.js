@@ -74,6 +74,15 @@ function chargeToPayment(charge, projectId) {
 async function autoLinkIfPossible(projectId, payment, dbRow) {
   if (dbRow.conversion_id) return;
   if (payment.status !== 'succeeded' || !payment.customer_email) return;
+  // Un cargo en otra moneda solo vale si su importe ya viene liquidado en euros.
+  // Los importados sin el balance_transaction guardaron el importe en la moneda
+  // del cargo: asociarlos meteria 270.000 pesos colombianos como 270.000 euros.
+  const moneda = String(payment.currency || dbRow.currency || 'EUR').toUpperCase();
+  if (moneda !== 'EUR') {
+    logger.warn({ stripeId: payment.stripe_id, moneda, importe: payment.amount },
+      'cargo en moneda extranjera sin convertir a euros: no se asocia');
+    return;
+  }
   const lead = await model.findLeadByEmail(projectId, payment.customer_email);
   if (!lead) return;
   if (lead.status !== 'convertido') {
@@ -206,6 +215,7 @@ export async function syncStripePayments(projectId, { fullHistory = false, retry
           status: row.status,
           amount: Number(row.amount),
           customer_email: row.customer_email,
+          currency: row.currency,
           stripe_created_at: Number(row.stripe_created_at),
           stripe_id: row.stripe_id,
         }, row);

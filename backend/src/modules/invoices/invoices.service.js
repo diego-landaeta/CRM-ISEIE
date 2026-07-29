@@ -691,14 +691,36 @@ export async function getFacturacionAlDia(projectId) {
     pagos_sin_factura: esperando.length,
     importe_sin_factura: esperando.reduce((s, p) => s + Number(p.importe || 0), 0),
     listos_para_emitir: dentroDelCorte.length,
+    // La cola en si, por orden de fecha: es lo que hay que ir facturando.
+    cola: esperando.slice(0, 60).map((p) => ({
+      payment_id: p.payment_id,
+      conversion_id: p.conversion_id,
+      fecha: p.fecha,
+      importe: Number(p.importe || 0),
+      cliente: p.cliente,
+      producto: p.producto_contratado,
+      dentro_del_corte: !!estado.al_dia_hasta
+        && String(p.fecha).slice(0, 10) <= String(estado.al_dia_hasta).slice(0, 10),
+    })),
+    // Proformas que dejo una gestora esperando el visto bueno.
+    proformas_pendientes: await model.listProformasPendientes(projectId),
+    // Cuantos cobros esperan por cada dia, para ver de un vistazo que dias faltan.
+    por_dia: Object.entries(esperando.reduce((acc, p) => {
+      const d = String(p.fecha).slice(0, 10);
+      acc[d] = acc[d] || { dia: d, cobros: 0, importe: 0 };
+      acc[d].cobros += 1;
+      acc[d].importe += Number(p.importe || 0);
+      return acc;
+    }, {})).map(([, v]) => v).sort((a, b) => a.dia.localeCompare(b.dia)),
   };
 }
 
 // Mueve el corte y, a continuacion, emite en orden de fecha las facturas que
 // estaban esperando y ya entran dentro. Se emiten de una en una y en orden
 // para que la numeracion salga correlativa.
-export async function setFacturacionAlDia(projectId, alDiaHasta, userId) {
-  const guardado = await model.setFacturacionAlDia(projectId, alDiaHasta, userId);
+export async function setFacturacionAlDia(projectId, alDiaHasta, userId, stripeOkHasta) {
+  const guardado = await model.setFacturacionAlDia(projectId, alDiaHasta, userId, stripeOkHasta);
+  if (!alDiaHasta) return { ...guardado, emitidas: 0, detalle: [], fallidas: [] };
   const pendientes = await model.listPagosSinFactura(projectId, alDiaHasta);
   const emitidas = [];
   const fallidas = [];

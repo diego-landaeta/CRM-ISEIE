@@ -198,7 +198,7 @@ export async function upsertSyncState(projectId, fields) {
 // deshizo una asociacion, en el siguiente Sincronizar se vuelven a enganchar.
 export async function listPendientesDeAsociar(projectId, limit = 500) {
   const { rows } = await query(
-    `SELECT id, project_id, stripe_id, status, amount, customer_email, customer_name,
+    `SELECT id, project_id, stripe_id, status, amount, currency, customer_email, customer_name,
             EXTRACT(EPOCH FROM stripe_created_at)::bigint AS stripe_created_at,
             conversion_id, conversion_payment_id, lead_id
        FROM stripe_payments
@@ -207,6 +207,15 @@ export async function listPendientesDeAsociar(projectId, limit = 500) {
         AND COALESCE(refunded, false) = false
         AND conversion_payment_id IS NULL
         AND conversion_id IS NULL
+        -- los de otra moneda hay que reconvertir antes: si no, entran
+        -- pesos o colones como si fueran euros
+        AND UPPER(COALESCE(currency, 'EUR')) = 'EUR'
+        -- Los anteriores a la fecha de revision ya se miraron uno a uno:
+        -- lo que quedo sin cliente se dejo asi a proposito.
+        AND (
+          (SELECT s.stripe_ok_hasta FROM invoicing_status s WHERE s.project_id = $1) IS NULL
+          OR stripe_created_at::date > (SELECT s.stripe_ok_hasta FROM invoicing_status s WHERE s.project_id = $1)
+        )
       ORDER BY stripe_created_at DESC
       LIMIT $2`,
     [projectId, limit]
