@@ -462,7 +462,11 @@ export async function asesorasPorMes({ projectId, from, to }) {
      cobros_mes AS (
        SELECT to_char(date_trunc('month', cp.fecha), 'YYYY-MM') AS mes,
               ${ASESORA} AS uid,
-              COALESCE(SUM(cp.importe), 0) AS cobrado
+              COALESCE(SUM(cp.importe), 0) AS cobrado,
+              -- Un cobro es cuota si salda alguna cuota del plan. Con EXISTS y no
+              -- con JOIN: un mismo pago puede saldar varias y se contaria dos veces.
+              COALESCE(SUM(cp.importe) FILTER (WHERE NOT EXISTS (SELECT 1 FROM conversion_installments ci2 WHERE ci2.payment_id = cp.id)), 0) AS cobrado_venta,
+              COALESCE(SUM(cp.importe) FILTER (WHERE EXISTS (SELECT 1 FROM conversion_installments ci2 WHERE ci2.payment_id = cp.id)), 0) AS cobrado_cuotas
          FROM conversion_payments cp
          JOIN conversions c ON c.id = cp.conversion_id
          LEFT JOIN leads l ON l.id = c.lead_id
@@ -484,6 +488,8 @@ export async function asesorasPorMes({ projectId, from, to }) {
                  ELSE 0 END AS tasa_conversion,
             ROUND(COALESCE(vm.vendido, 0), 2) AS vendido,
             ROUND(COALESCE(cm.cobrado, 0), 2) AS cobrado,
+            ROUND(COALESCE(cm.cobrado_venta, 0), 2) AS cobrado_venta,
+            ROUND(COALESCE(cm.cobrado_cuotas, 0), 2) AS cobrado_cuotas,
             ROUND(CASE WHEN COALESCE(vm.ventas, 0) > 0
                        THEN COALESCE(vm.vendido, 0) / vm.ventas ELSE 0 END, 2) AS ticket_medio
        FROM todo t
@@ -521,7 +527,9 @@ export async function panelReportes({ projectId, from, to }) {
       `SELECT COUNT(*)::int AS n, COALESCE(SUM(c.importe_total), 0) AS vendido
          FROM conversions c WHERE c.fecha_conversion BETWEEN $1 AND $2 ${pc}`, par(d, h));
     const { rows: co } = await query(
-      `SELECT COALESCE(SUM(cp.importe), 0) AS cobrado
+      `SELECT COALESCE(SUM(cp.importe), 0) AS cobrado,
+              COALESCE(SUM(cp.importe) FILTER (WHERE NOT EXISTS (SELECT 1 FROM conversion_installments ci2 WHERE ci2.payment_id = cp.id)), 0) AS de_venta,
+              COALESCE(SUM(cp.importe) FILTER (WHERE EXISTS (SELECT 1 FROM conversion_installments ci2 WHERE ci2.payment_id = cp.id)), 0) AS de_cuotas
          FROM conversion_payments cp JOIN conversions c ON c.id = cp.conversion_id
         WHERE cp.fecha BETWEEN $1 AND $2 ${pc}`, par(d, h));
     const prospectos = le[0].n;
@@ -531,6 +539,8 @@ export async function panelReportes({ projectId, from, to }) {
       ventas,
       vendido: Number(ve[0].vendido),
       ingresos: Number(co[0].cobrado),
+      ingresos_venta: Number(co[0].de_venta),
+      ingresos_cuotas: Number(co[0].de_cuotas),
       tasa: prospectos > 0 ? Number((ventas * 100 / prospectos).toFixed(1)) : 0,
     };
   }
@@ -560,7 +570,9 @@ export async function panelReportes({ projectId, from, to }) {
          FROM conversions c WHERE c.fecha_conversion BETWEEN $1 AND $2 ${pc} GROUP BY 1
      ),
      co AS (
-       SELECT date_trunc('${grano}', cp.fecha)::date AS p, COALESCE(SUM(cp.importe), 0) AS cobrado
+       SELECT date_trunc('${grano}', cp.fecha)::date AS p, COALESCE(SUM(cp.importe), 0) AS cobrado,
+              COALESCE(SUM(cp.importe) FILTER (WHERE NOT EXISTS (SELECT 1 FROM conversion_installments ci2 WHERE ci2.payment_id = cp.id)), 0) AS de_venta,
+              COALESCE(SUM(cp.importe) FILTER (WHERE EXISTS (SELECT 1 FROM conversion_installments ci2 WHERE ci2.payment_id = cp.id)), 0) AS de_cuotas
          FROM conversion_payments cp JOIN conversions c ON c.id = cp.conversion_id
         WHERE cp.fecha BETWEEN $1 AND $2 ${pc} GROUP BY 1
      )
@@ -569,6 +581,8 @@ export async function panelReportes({ projectId, from, to }) {
             COALESCE(ve.n, 0) AS ventas,
             ROUND(COALESCE(ve.vendido, 0), 2) AS vendido,
             ROUND(COALESCE(co.cobrado, 0), 2) AS ingresos,
+            ROUND(COALESCE(co.de_venta, 0), 2) AS ingresos_venta,
+            ROUND(COALESCE(co.de_cuotas, 0), 2) AS ingresos_cuotas,
             CASE WHEN COALESCE(le.n, 0) > 0
                  THEN ROUND(COALESCE(ve.n, 0)::numeric * 100 / le.n, 1) ELSE 0 END AS tasa
        FROM periodos
@@ -586,6 +600,8 @@ export async function panelReportes({ projectId, from, to }) {
       ventas:     { value: actual.ventas,     prev: previo.ventas,     trend: variacion(actual.ventas, previo.ventas) },
       vendido:    { value: actual.vendido,    prev: previo.vendido,    trend: variacion(actual.vendido, previo.vendido) },
       ingresos:   { value: actual.ingresos,   prev: previo.ingresos,   trend: variacion(actual.ingresos, previo.ingresos) },
+      ingresos_venta:  { value: actual.ingresos_venta,  prev: previo.ingresos_venta,  trend: variacion(actual.ingresos_venta, previo.ingresos_venta) },
+      ingresos_cuotas: { value: actual.ingresos_cuotas, prev: previo.ingresos_cuotas, trend: variacion(actual.ingresos_cuotas, previo.ingresos_cuotas) },
       tasa:       { value: actual.tasa,       prev: previo.tasa,       trend: variacion(actual.tasa, previo.tasa) },
     },
     serie: serie.map((r) => ({
@@ -594,6 +610,8 @@ export async function panelReportes({ projectId, from, to }) {
       ventas: Number(r.ventas),
       vendido: Number(r.vendido),
       ingresos: Number(r.ingresos),
+      ingresos_venta: Number(r.ingresos_venta),
+      ingresos_cuotas: Number(r.ingresos_cuotas),
       tasa: Number(r.tasa),
     })),
   };

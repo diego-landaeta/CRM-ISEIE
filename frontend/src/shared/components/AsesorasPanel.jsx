@@ -59,12 +59,14 @@ export default function AsesorasPanel({ from, to }) {
   const meses = useMemo(() => {
     const acc = {};
     for (const f of filas) {
-      acc[f.mes] = acc[f.mes] || { mes: f.mes, asesoras: [], leads: 0, ventas: 0, vendido: 0, cobrado: 0 };
+      acc[f.mes] = acc[f.mes] || { mes: f.mes, asesoras: [], leads: 0, ventas: 0, vendido: 0, cobrado: 0, cobradoVenta: 0, cobradoCuotas: 0 };
       acc[f.mes].asesoras.push(f);
       acc[f.mes].leads += Number(f.leads || 0);
       acc[f.mes].ventas += Number(f.ventas || 0);
       acc[f.mes].vendido += Number(f.vendido || 0);
       acc[f.mes].cobrado += Number(f.cobrado || 0);
+      acc[f.mes].cobradoVenta += Number(f.cobrado_venta || 0);
+      acc[f.mes].cobradoCuotas += Number(f.cobrado_cuotas || 0);
     }
     return Object.values(acc).sort((a, b) => b.mes.localeCompare(a.mes));
   }, [filas]);
@@ -100,6 +102,10 @@ export default function AsesorasPanel({ from, to }) {
           Leads que le entraron, ventas cerradas y dinero cobrado. Los leads cuentan por
           fecha de entrada, las ventas por fecha de venta y los cobros por fecha de cobro.
         </p>
+        <div className="mt-1.5 flex items-center gap-3 text-[10px] text-muted-foreground">
+          <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-emerald-500" /> cobro de la venta</span>
+          <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-sky-500" /> cuota del plan de pago</span>
+        </div>
         <div className="mt-2 inline-flex rounded-md border border-border overflow-hidden">
           {[['anio', `Todo ${anio}`], ['rango', 'Solo el rango de arriba']].map(([k, etiqueta]) => (
             <button
@@ -134,6 +140,14 @@ export default function AsesorasPanel({ from, to }) {
                 </span>
                 <span className="text-[11px] text-muted-foreground">{m.ventas} ventas</span>
                 <span className="text-[11px] text-muted-foreground tabular-nums">{tasa.toFixed(1)}%</span>
+                {/* Reparto del cobro del mes: ventas nuevas vs cuotas del plan. */}
+                {m.cobrado > 0 && (
+                  <span className="hidden md:flex h-2 w-28 rounded-full overflow-hidden bg-muted"
+                    title={`${fmtMoney(m.cobradoVenta)} de ventas · ${fmtMoney(m.cobradoCuotas)} de cuotas`}>
+                    <span className="bg-emerald-500" style={{ width: `${(m.cobradoVenta / m.cobrado) * 100}%` }} />
+                    <span className="bg-sky-500" style={{ width: `${(m.cobradoCuotas / m.cobrado) * 100}%` }} />
+                  </span>
+                )}
                 <span className="text-sm font-bold tabular-nums text-emerald-600 dark:text-emerald-400 w-24 text-right">
                   {fmtMoney(m.cobrado)}
                 </span>
@@ -151,6 +165,8 @@ export default function AsesorasPanel({ from, to }) {
                         <th className="text-right px-3 py-2 font-bold">Tasa</th>
                         <th className="text-right px-3 py-2 font-bold">Vendido</th>
                         <th className="text-right px-3 py-2 font-bold">Cobrado</th>
+                        <th className="text-right px-3 py-2 font-bold">· de ventas</th>
+                        <th className="text-right px-3 py-2 font-bold">· de cuotas</th>
                         <th className="text-right px-3 py-2 font-bold">Ticket medio</th>
                       </tr>
                     </thead>
@@ -166,6 +182,8 @@ export default function AsesorasPanel({ from, to }) {
                           <td className="px-3 py-2 text-right tabular-nums font-semibold text-emerald-600 dark:text-emerald-400">
                             {fmtMoney(a.cobrado)}
                           </td>
+                          <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{fmtMoney(a.cobrado_venta)}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-sky-600 dark:text-sky-400">{fmtMoney(a.cobrado_cuotas)}</td>
                           <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{fmtMoney(a.ticket_medio)}</td>
                         </tr>
                       ))}
@@ -179,6 +197,8 @@ export default function AsesorasPanel({ from, to }) {
                         <td className="px-3 py-2 text-right tabular-nums text-emerald-600 dark:text-emerald-400">
                           {fmtMoney(m.cobrado)}
                         </td>
+                        <td className="px-3 py-2 text-right tabular-nums">{fmtMoney(m.cobradoVenta)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-sky-600 dark:text-sky-400">{fmtMoney(m.cobradoCuotas)}</td>
                         <td className="px-3 py-2"></td>
                       </tr>
                     </tbody>

@@ -92,6 +92,8 @@ const REPORTS = [
       { h: 'Clientes', k: 'clientes', t: 'number' },
       { h: 'Tasa conversion %', k: 'tasa_conversion', t: 'number' },
       { h: 'Vendido EUR', k: 'vendido', t: 'number' }, { h: 'Cobrado EUR', k: 'cobrado', t: 'number' },
+      { h: 'Cobrado de ventas EUR', k: 'cobrado_venta', t: 'number' },
+      { h: 'Cobrado de cuotas EUR', k: 'cobrado_cuotas', t: 'number' },
       { h: 'Ticket medio EUR', k: 'ticket_medio', t: 'number' },
     ],
   },
