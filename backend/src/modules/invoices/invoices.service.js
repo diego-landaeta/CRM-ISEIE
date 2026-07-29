@@ -312,7 +312,15 @@ export async function generatePDF(invoiceId, { preliminar = false, vistaGestor =
   // el euro va detrás entre paréntesis. Las facturas antiguas en divisa (sin
   // total_divisa) conservan su comportamiento: todo formateado en esa divisa.
   const enDivisa = String(inv.moneda || 'EUR').toUpperCase() !== 'EUR' && inv.total_divisa != null;
-  const fmtBase = (n) => (enDivisa ? fmtMoney(n, 'EUR') : fmtEUR(n));
+  // Base e IVA se guardan en euros, pero el documento va en la divisa: se
+  // muestran en ella, con el mismo cambio que el total. El euro aparece una
+  // sola vez, entre parentesis debajo del TOTAL.
+  const cambio = enDivisa && Number(inv.total)
+    ? Number(inv.total_divisa) / Number(inv.total)
+    : 1;
+  const fmtBase = (n) => (enDivisa
+    ? fmtMoney(Number(n || 0) * cambio, inv.moneda)
+    : fmtEUR(n));
   page.drawText('Base imponible:', { x: right - 200, y, size: 10, font, color: black });
   page.drawText(fmtBase(inv.base_imponible), { x: right - 70, y, size: 10, font, color: black });
   y -= 16;
@@ -367,8 +375,9 @@ export async function generatePDF(invoiceId, { preliminar = false, vistaGestor =
     page.drawImage(logoImg, { x: right - w, y: 70, width: w, height: h });
   }
 
-  // Footer (fecha de generación). La coletilla/pie legal se dibuja global abajo.
-  page.drawText(`${esProforma ? 'Presupuesto' : 'Factura'} ${inv.codigo || '(borrador)'} generada el ${new Date().toLocaleDateString('es-ES')}`,
+  // Footer: solo la referencia del documento. La fecha de generacion NO va: es
+  // el dia en que se imprimio el PDF, no la de la factura, y confundia.
+  page.drawText(`${esProforma ? 'Presupuesto' : 'Factura'} ${inv.codigo || '(borrador)'}`,
     { x: left, y: 30, size: 8, font, color: gray });
   } // fin fallback (layout fijo)
 
@@ -538,7 +547,9 @@ async function renderFromTemplate({ pdfDoc, page, font, bold, inv, layout }) {
         case 'totales': {
           // Ver nota en generatePDF: con divisa, el TOTAL va en ella y el euro detrás.
           const enDiv = String(inv.moneda || 'EUR').toUpperCase() !== 'EUR' && inv.total_divisa != null;
-          const fBase = (n) => (enDiv ? fmtMoney(n, 'EUR') : fmtEUR(n));
+          // Igual que en generatePDF: base e IVA en la divisa del documento.
+          const camb = enDiv && Number(inv.total) ? Number(inv.total_divisa) / Number(inv.total) : 1;
+          const fBase = (n) => (enDiv ? fmtMoney(Number(n || 0) * camb, inv.moneda) : fmtEUR(n));
           drawLines(b, [
             { text: `Base imponible: ${fBase(inv.base_imponible)}` },
             { text: `IVA (${inv.iva_pct}%): ${fBase(inv.iva_importe)}` },
@@ -617,7 +628,7 @@ async function renderFromTemplate({ pdfDoc, page, font, bold, inv, layout }) {
   }
 
   // Pie fijo de trazabilidad
-  page.drawText(`${esProforma ? 'Presupuesto' : 'Factura'} ${inv.codigo || '(borrador)'} · ${new Date().toLocaleDateString('es-ES')}`,
+  page.drawText(`${esProforma ? 'Presupuesto' : 'Factura'} ${inv.codigo || '(borrador)'}`,
     { x: 50, y: 25, size: 7, font, color: rgb(0.6, 0.6, 0.6) });
 }
 
