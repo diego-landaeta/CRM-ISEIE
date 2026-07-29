@@ -59,7 +59,7 @@ export default function AsesorasPanel({ from, to }) {
   const meses = useMemo(() => {
     const acc = {};
     for (const f of filas) {
-      acc[f.mes] = acc[f.mes] || { mes: f.mes, asesoras: [], leads: 0, ventas: 0, vendido: 0, cobrado: 0, cobradoVenta: 0, cobradoCuotas: 0 };
+      acc[f.mes] = acc[f.mes] || { mes: f.mes, asesoras: [], leads: 0, ventas: 0, vendido: 0, cobrado: 0, cobradoVenta: 0, cobradoCuotas: 0, mensualidades: 0 };
       acc[f.mes].asesoras.push(f);
       acc[f.mes].leads += Number(f.leads || 0);
       acc[f.mes].ventas += Number(f.ventas || 0);
@@ -67,6 +67,7 @@ export default function AsesorasPanel({ from, to }) {
       acc[f.mes].cobrado += Number(f.cobrado || 0);
       acc[f.mes].cobradoVenta += Number(f.cobrado_venta || 0);
       acc[f.mes].cobradoCuotas += Number(f.cobrado_cuotas || 0);
+      acc[f.mes].mensualidades += Number(f.mensualidades || 0);
     }
     return Object.values(acc).sort((a, b) => b.mes.localeCompare(a.mes));
   }, [filas]);
@@ -101,6 +102,7 @@ export default function AsesorasPanel({ from, to }) {
         <p className="text-xs text-muted-foreground">
           Leads que le entraron, ventas cerradas y dinero cobrado. Los leads cuentan por
           fecha de entrada, las ventas por fecha de venta y los cobros por fecha de cobro.
+          La tasa es ventas nuevas sobre leads entrados: las mensualidades no cuentan como conversión.
         </p>
         <div className="mt-1.5 flex items-center gap-3 text-[10px] text-muted-foreground">
           <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-emerald-500" /> cobro de la venta</span>
@@ -139,6 +141,7 @@ export default function AsesorasPanel({ from, to }) {
                   {m.leads.toLocaleString('es-ES')} leads
                 </span>
                 <span className="text-[11px] text-muted-foreground">{m.ventas} ventas</span>
+                <span className="text-[11px] text-sky-600 dark:text-sky-400">{m.mensualidades} mensual.</span>
                 <span className="text-[11px] text-muted-foreground tabular-nums">{tasa.toFixed(1)}%</span>
                 {/* Reparto del cobro del mes: ventas nuevas vs cuotas del plan. */}
                 {m.cobrado > 0 && (
@@ -161,6 +164,7 @@ export default function AsesorasPanel({ from, to }) {
                         <th className="text-left px-3 py-2 font-bold">Asesora</th>
                         <th className="text-right px-3 py-2 font-bold">Leads</th>
                         <th className="text-right px-3 py-2 font-bold">Ventas</th>
+                        <th className="text-right px-3 py-2 font-bold">Mensualidades</th>
                         <th className="text-right px-3 py-2 font-bold">Clientes</th>
                         <th className="text-right px-3 py-2 font-bold">Tasa</th>
                         <th className="text-right px-3 py-2 font-bold">Vendido</th>
@@ -176,6 +180,7 @@ export default function AsesorasPanel({ from, to }) {
                           <td className="px-3 py-2 font-medium">{a.asesora}</td>
                           <td className="px-3 py-2 text-right tabular-nums">{Number(a.leads).toLocaleString('es-ES')}</td>
                           <td className="px-3 py-2 text-right tabular-nums font-semibold">{a.ventas}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-sky-600 dark:text-sky-400">{a.mensualidades}</td>
                           <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{a.clientes}</td>
                           <td className="px-3 py-2 text-right tabular-nums">{Number(a.tasa_conversion).toFixed(1)}%</td>
                           <td className="px-3 py-2 text-right tabular-nums">{fmtMoney(a.vendido)}</td>
@@ -191,6 +196,7 @@ export default function AsesorasPanel({ from, to }) {
                         <td className="px-3 py-2">Total del mes</td>
                         <td className="px-3 py-2 text-right tabular-nums">{m.leads.toLocaleString('es-ES')}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{m.ventas}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-sky-600 dark:text-sky-400">{m.mensualidades}</td>
                         <td className="px-3 py-2"></td>
                         <td className="px-3 py-2 text-right tabular-nums">{tasa.toFixed(1)}%</td>
                         <td className="px-3 py-2 text-right tabular-nums">{fmtMoney(m.vendido)}</td>

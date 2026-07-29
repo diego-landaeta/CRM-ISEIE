@@ -89,6 +89,7 @@ const REPORTS = [
     cols: [
       { h: 'Mes', k: 'mes' }, { h: 'Asesora', k: 'asesora' },
       { h: 'Leads', k: 'leads', t: 'number' }, { h: 'Ventas', k: 'ventas', t: 'number' },
+      { h: 'Mensualidades cobradas', k: 'mensualidades', t: 'number' },
       { h: 'Clientes', k: 'clientes', t: 'number' },
       { h: 'Tasa conversion %', k: 'tasa_conversion', t: 'number' },
       { h: 'Vendido EUR', k: 'vendido', t: 'number' }, { h: 'Cobrado EUR', k: 'cobrado', t: 'number' },

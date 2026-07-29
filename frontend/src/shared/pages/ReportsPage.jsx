@@ -394,6 +394,29 @@ export default function ReportsPage() {
   // Se baja en Excel exactamente lo que se ve arriba: el resumen comparado, la
   // serie de la grafica y el detalle por asesora. Tres hojas en un solo archivo.
   const [bajando, setBajando] = useState(false);
+  const [bajandoPdf, setBajandoPdf] = useState(false);
+  // El PDF se descarga directo, sin diálogo de impresión. Lleva lo mismo que
+  // el Excel: resumen, evolución y asesoras.
+  async function descargarPdf() {
+    if (!panel) return;
+    setBajandoPdf(true);
+    try {
+      const q = new URLSearchParams();
+      if (activeProject?.id) q.set('projectId', String(activeProject.id));
+      if (rango.from) q.set('from', rango.from);
+      if (rango.to) q.set('to', rango.to);
+      const ase = await client.get(`/reports/asesoras-mes?${q.toString()}`).catch(() => null);
+      const { exportPanelPDF } = await import('@/shared/lib/exportPanelPdf');
+      const nombre = await exportPanelPDF({
+        panel, asesoras: ase?.data || [], proyecto: activeProject?.nombre, rango,
+      });
+      toast({ title: 'PDF descargado', description: nombre });
+    } catch (err) {
+      console.error('descargarPdf', err);
+      toast({ title: 'No se pudo generar el PDF', description: String(err?.message || err), variant: 'destructive' });
+    } finally { setBajandoPdf(false); }
+  }
+
   async function descargarPanel() {
     if (!panel) return;
     setBajando(true);
@@ -434,12 +457,16 @@ export default function ReportsPage() {
 
       const nombre = `reportes-${activeProject?.nombre || 'crm'}-${rango.from}_${rango.to}.xlsx`
         .replace(/\s+/g, '-');
-      await writeXlsxFile([hojaResumen, hojaSerie, hojaAsesoras], {
-        sheets: ['Resumen', 'Evolucion', 'Asesoras'],
-      }).toFile(nombre);
+      // Multi-hoja: la libreria espera [{ sheet, data }], no [data] con {sheets}.
+      await writeXlsxFile([
+        { sheet: 'Resumen', data: hojaResumen },
+        { sheet: 'Evolucion', data: hojaSerie },
+        { sheet: 'Asesoras', data: hojaAsesoras },
+      ]).toFile(nombre);
       toast({ title: 'Excel descargado', description: `${(panel.serie || []).length} periodos y ${filasAse.length} filas de asesoras.` });
     } catch (err) {
-      toast({ title: 'No se pudo generar el Excel', description: err?.message, variant: 'destructive' });
+      console.error('descargarPanel', err);
+      toast({ title: 'No se pudo generar el Excel', description: String(err?.message || err), variant: 'destructive' });
     } finally { setBajando(false); }
   }
 
@@ -490,12 +517,13 @@ export default function ReportsPage() {
           </button>
           <button
             type="button"
-            onClick={() => window.print()}
-            title="Imprime o guarda como PDF (Ctrl+P)"
+            onClick={descargarPdf}
+            disabled={bajandoPdf || !panel}
+            title="Descarga el resumen, la evolución y las asesoras en PDF"
             className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-card border border-border text-sm font-medium hover:bg-muted transition-colors text-foreground"
           >
             <Download size={14} weight="bold" />
-            Exportar PDF
+            {bajandoPdf ? 'Generando…' : 'Descargar PDF'}
           </button>
         </div>
       </header>
