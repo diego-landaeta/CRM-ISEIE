@@ -81,3 +81,18 @@ export async function formaciones(req, res, next) {
     res.json({ success: true, data: await model.formacionesMasVendidas(rangoDeQuery(req)) });
   } catch (err) { next(err); }
 }
+
+// GET /api/reports/detalle -> las filas que hay detras de un numero del panel
+export async function detalle(req, res, next) {
+  try {
+    const r = rangoDeQuery(req);
+    res.json({ success: true, data: await model.detalleMetrica({
+      ...r,
+      tipo: String(req.query.tipo || 'ventas'),
+      asesoraId: req.query.asesoraId || null,
+      mes: /^\d{4}-\d{2}$/.test(req.query.mes || '') ? req.query.mes : null,
+      pais: req.query.pais || null,
+      formacion: req.query.formacion || null,
+    }) });
+  } catch (err) { next(err); }
+}

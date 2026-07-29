@@ -21,5 +21,6 @@ router.get('/asesoras-mes', ctrl.asesorasMes);
 router.get('/panel', ctrl.panel);
 router.get('/paises', ctrl.paises);
 router.get('/formaciones', ctrl.formaciones);
+router.get('/detalle', ctrl.detalle);
 
 export default router;

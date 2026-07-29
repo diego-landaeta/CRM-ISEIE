@@ -487,7 +487,7 @@ export async function asesorasPorMes({ projectId, from, to }) {
        UNION SELECT mes, uid FROM ventas_mes
        UNION SELECT mes, uid FROM cobros_mes
      )
-     SELECT t.mes,
+     SELECT t.mes, t.uid AS asesora_id,
             COALESCE(u.nombre, '— sin asesora —') AS asesora,
             COALESCE(lm.leads, 0) AS leads,
             COALESCE(vm.ventas, 0) AS ventas,
@@ -721,5 +721,114 @@ export async function formacionesMasVendidas({ projectId, from, to }) {
       ORDER BY vendido DESC`,
     params
   );
+  return rows;
+}
+
+// Detras de cada numero del panel, las filas que lo componen. Es lo que abre el
+// popup al pulsar un importe o un contador.
+export async function detalleMetrica({ projectId, from, to, tipo, asesoraId, mes, pais, formacion }) {
+  const cond = [];
+  const params = [];
+  let idx = 1;
+  const add = (sql, val) => { cond.push(sql.replace('?', `$${idx++}`)); params.push(val); };
+
+  // El mes acota por encima del rango: es el que se pulsa en la tabla.
+  const desde = mes ? `${mes}-01` : (from || '2026-01-01');
+  const hasta = mes ? `${mes}-01` : (to || new Date().toISOString().slice(0, 10));
+  const finMes = mes ? `(DATE '${mes}-01' + INTERVAL '1 month' - INTERVAL '1 day')::date` : null;
+
+  if (tipo === 'leads') {
+    if (projectId) add('l.project_id = ?', projectId);
+    add(`${ENTRY}::date >= ?`, desde);
+    cond.push(finMes ? `${ENTRY}::date <= ${finMes}` : `${ENTRY}::date <= $${idx++}`);
+    if (!finMes) params.push(hasta);
+    if (asesoraId === 'sin') cond.push('l.responsable_id IS NULL');
+    else if (asesoraId) add('COALESCE(l.responsable_id, (SELECT cv.vendedora_id FROM conversions cv WHERE cv.lead_id = l.id AND cv.vendedora_id IS NOT NULL ORDER BY cv.fecha_conversion LIMIT 1)) = ?', Number(asesoraId));
+    const { rows } = await query(
+      `SELECT l.id, l.nombre AS cliente, l.email, l.telefono, l.status AS estado,
+              ${ENTRY}::date AS fecha,
+              COALESCE(u.nombre, '— sin asesora —') AS asesora,
+              (SELECT COUNT(*) FROM conversions cv WHERE cv.lead_id = l.id)::int AS ventas
+         FROM leads l
+         LEFT JOIN users u ON u.id = l.responsable_id
+        WHERE ${cond.join(' AND ')}
+        ORDER BY fecha DESC, l.id DESC
+        LIMIT 500`, params);
+    return rows;
+  }
+
+  if (tipo === 'ventas') {
+    if (projectId) add('c.project_id = ?', projectId);
+    add('c.fecha_conversion >= ?', desde);
+    cond.push(finMes ? `c.fecha_conversion <= ${finMes}` : `c.fecha_conversion <= $${idx++}`);
+    if (!finMes) params.push(hasta);
+    if (asesoraId === 'sin') cond.push('COALESCE(c.vendedora_id, l.responsable_id) IS NULL');
+    else if (asesoraId) add('COALESCE(c.vendedora_id, l.responsable_id) = ?', Number(asesoraId));
+    // Placeholder explicito: FORMACION lleva '?' dentro de sus regex y add()
+    // sustituiria el primero, que no es el nuestro.
+    if (formacion) { cond.push(`${FORMACION} = $${idx++}`); params.push(formacion); }
+    // El pais sale del prefijo del telefono, igual que en el ranking. PAIS_TEL
+    // espera una columna 'tel', asi que se la damos con una subconsulta en vez
+    // de reescribir el SQL a mano.
+    if (pais) {
+      cond.push(`(SELECT ${PAIS_TEL} FROM (SELECT regexp_replace(COALESCE(l.telefono, ''), '[^0-9]', '', 'g') AS tel) _t) = $${idx++}`);
+      params.push(pais);
+    }
+    const { rows } = await query(
+      `SELECT c.id, l.nombre AS cliente, l.email, l.telefono,
+              c.fecha_conversion AS fecha,
+              ${FORMACION} AS formacion,
+              ROUND(c.importe_total, 2) AS importe,
+              ROUND(c.importe_pagado, 2) AS cobrado,
+              COALESCE(u.nombre, '— sin asesora —') AS asesora,
+              (SELECT COUNT(*) FROM conversion_payments cp WHERE cp.conversion_id = c.id)::int AS cobros,
+              (SELECT COUNT(*) FROM conversions c0 WHERE c0.lead_id = c.lead_id
+                 AND c0.fecha_conversion < c.fecha_conversion)::int AS ventas_previas,
+              (SELECT string_agg(i.codigo, ', ' ORDER BY i.numero) FROM invoices i
+                WHERE i.conversion_id = c.id AND i.estado <> 'cancelada') AS facturas
+         FROM conversions c
+         LEFT JOIN leads l ON l.id = c.lead_id
+         LEFT JOIN users u ON u.id = COALESCE(c.vendedora_id, l.responsable_id)
+         LEFT JOIN products pcat ON pcat.id = c.producto_contratado_id
+         LEFT JOIN products pnom ON pnom.project_id = c.project_id
+              AND c.producto_contratado_id IS NULL
+              AND LOWER(TRIM(pnom.nombre)) = LOWER(TRIM(c.producto_contratado))
+        WHERE ${cond.join(' AND ')}
+        ORDER BY c.fecha_conversion DESC, c.id DESC
+        LIMIT 500`, params);
+    return rows;
+  }
+
+  // cobros y mensualidades comparten consulta; cambia el filtro.
+  if (projectId) add('c.project_id = ?', projectId);
+  add('cp.fecha >= ?', desde);
+  cond.push(finMes ? `cp.fecha <= ${finMes}` : `cp.fecha <= $${idx++}`);
+  if (!finMes) params.push(hasta);
+  if (asesoraId === 'sin') cond.push('COALESCE(c.vendedora_id, l.responsable_id) IS NULL');
+  else if (asesoraId) add('COALESCE(c.vendedora_id, l.responsable_id) = ?', Number(asesoraId));
+  const ES_PRIMERO = `NOT EXISTS (SELECT 1 FROM conversion_payments p0
+      WHERE p0.conversion_id = cp.conversion_id
+        AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id)))`;
+  if (tipo === 'mensualidades') cond.push(`NOT (${ES_PRIMERO})`);
+  if (tipo === 'cobros-venta') cond.push(ES_PRIMERO);
+
+  const { rows } = await query(
+    `SELECT cp.id, l.nombre AS cliente, l.email, cp.fecha,
+            ROUND(cp.importe, 2) AS importe,
+            COALESCE(cp.metodo, '—') AS metodo,
+            LEFT(COALESCE(cp.notas, ''), 60) AS notas,
+            COALESCE(u.nombre, '— sin asesora —') AS asesora,
+            c.id AS venta, c.fecha_conversion AS fecha_venta,
+            LEFT(COALESCE(c.producto_contratado, ''), 46) AS formacion,
+            (SELECT ci.numero FROM conversion_installments ci WHERE ci.payment_id = cp.id LIMIT 1) AS cuota,
+            (SELECT i.codigo FROM invoices i WHERE i.payment_id = cp.id AND i.estado <> 'cancelada' LIMIT 1) AS factura,
+            (${ES_PRIMERO}) AS es_primer_cobro
+       FROM conversion_payments cp
+       JOIN conversions c ON c.id = cp.conversion_id
+       LEFT JOIN leads l ON l.id = c.lead_id
+       LEFT JOIN users u ON u.id = COALESCE(c.vendedora_id, l.responsable_id)
+      WHERE ${cond.join(' AND ')}
+      ORDER BY cp.fecha DESC, cp.id DESC
+      LIMIT 500`, params);
   return rows;
 }

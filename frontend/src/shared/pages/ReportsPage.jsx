@@ -14,6 +14,7 @@ import { useDashboardSummary } from '@/shared/hooks/useDashboardSummary';
 import client from '@/shared/api/client';
 import ReportsDownloadSection from '@/shared/components/ReportsDownloadSection';
 import AsesorasPanel from '@/shared/components/AsesorasPanel';
+import RankingsPanel from '@/shared/components/RankingsPanel';
 
 const REPORT_CATEGORIES = [
   {
@@ -581,6 +582,9 @@ export default function ReportsPage() {
         <>
           {/* Los numeros por asesora. El detalle se baja en la seccion de abajo. */}
           <AsesorasPanel from={rango.from} to={rango.to} />
+
+          {/* Paises y formaciones: en pantalla, no solo descargables. */}
+          <RankingsPanel from={rango.from} to={rango.to} />
 
           <ReportsDownloadSection projectId={activeProject?.id} projectName={activeProject?.nombre} from={rango.from} to={rango.to} />
         </>
