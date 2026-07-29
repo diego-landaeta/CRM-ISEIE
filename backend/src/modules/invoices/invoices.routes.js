@@ -14,6 +14,8 @@ router.use(verifyToken);
 // cualquiera; moverlo solo quien gestiona la facturacion (se comprueba dentro).
 router.get('/facturacion-al-dia',     ctrl.facturacionAlDia);
 router.put('/facturacion-al-dia',     ctrl.setFacturacionAlDia);
+router.post('/cola/generar',          ctrl.generarDeCola);
+router.post('/cola/emitir-hasta',     ctrl.emitirColaHasta);
 router.get('/',                       ctrl.list);
 router.get('/stats',                  ctrl.stats);
 router.get('/ventas-sin-factura',     ctrl.ventasSinFactura);

@@ -1,6 +1,7 @@
 import { PDFDocument, StandardFonts, rgb, degrees } from 'pdf-lib';
 import fs from 'fs/promises';
 import path from 'path';
+import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import { decrypt } from '../../shared/utils/crypto.js';
 import { getLocal } from '../../shared/services/localStorage.service.js';
@@ -375,8 +376,10 @@ export async function generatePDF(invoiceId, { preliminar = false, vistaGestor =
     page.drawImage(logoImg, { x: right - w, y: 70, width: w, height: h });
   }
 
-  // Sin pie de referencia: el numero y la fecha ya van en la cabecera, y la
-  // fecha de generacion (el dia de impresion del PDF) confundia.
+  // Pie con la referencia del documento. SIN la fecha de generacion: era el dia
+  // en que se imprimia el PDF, no el de la factura, y se prestaba a confusion.
+  page.drawText(`${esProforma ? 'Presupuesto' : 'Factura'} ${inv.codigo || '(borrador)'}`,
+    { x: left, y: 30, size: 8, font, color: gray });
   } // fin fallback (layout fijo)
 
   // ── COLETILLA / PIE LEGAL (issuer.pie_default → pie_pago) ──
@@ -689,46 +692,66 @@ export async function sendByEmail(invoiceId, customEmail = null) {
 // ---------------------------------------------------------------------------
 export async function getFacturacionAlDia(projectId) {
   const estado = await model.getFacturacionAlDia(projectId);
-  const esperando = await model.listPagosSinFactura(projectId);
-  const dentroDelCorte = estado.al_dia_hasta
-    ? esperando.filter((p) => String(p.fecha).slice(0, 10) <= String(estado.al_dia_hasta).slice(0, 10))
-    : [];
+  // La cola: todo cobro posterior a lo ya hecho que aun no tiene factura.
+  const cola = await model.listPagosSinFactura(projectId);
   return {
     ...estado,
-    pagos_sin_factura: esperando.length,
-    importe_sin_factura: esperando.reduce((s, p) => s + Number(p.importe || 0), 0),
-    listos_para_emitir: dentroDelCorte.length,
-    // La cola en si, por orden de fecha: es lo que hay que ir facturando.
-    cola: esperando.slice(0, 60).map((p) => ({
+    pagos_sin_factura: cola.length,
+    importe_sin_factura: cola.reduce((s, p) => s + Number(p.importe || 0), 0),
+    // El primero de la cola es el unico que puede emitirse sin saltarse a nadie.
+    listos_para_emitir: cola.length ? 1 : 0,
+    proformas_pendientes: await model.listProformasPendientes(projectId),
+    cola: cola.slice(0, 200).map((p, i) => ({
       payment_id: p.payment_id,
       conversion_id: p.conversion_id,
       fecha: p.fecha,
       importe: Number(p.importe || 0),
       cliente: p.cliente,
       producto: p.producto_contratado,
-      dentro_del_corte: !!estado.al_dia_hasta
-        && String(p.fecha).slice(0, 10) <= String(estado.al_dia_hasta).slice(0, 10),
+      gestora: p.gestora,
+      origen: p.de_stripe ? 'stripe' : 'manual',
+      // El primero es el que toca; los demas esperan a que salgan los anteriores.
+      es_el_siguiente: i === 0,
     })),
-    // Proformas que dejo una gestora esperando el visto bueno.
-    proformas_pendientes: await model.listProformasPendientes(projectId),
-    // Cuantos cobros esperan por cada dia, para ver de un vistazo que dias faltan.
-    por_dia: Object.entries(esperando.reduce((acc, p) => {
+    por_dia: Object.values(cola.reduce((acc, p) => {
       const d = String(p.fecha).slice(0, 10);
       acc[d] = acc[d] || { dia: d, cobros: 0, importe: 0 };
       acc[d].cobros += 1;
       acc[d].importe += Number(p.importe || 0);
       return acc;
-    }, {})).map(([, v]) => v).sort((a, b) => a.dia.localeCompare(b.dia)),
+    }, {})).sort((a, b) => a.dia.localeCompare(b.dia)),
   };
 }
 
-// Mueve el corte y, a continuacion, emite en orden de fecha las facturas que
-// estaban esperando y ya entran dentro. Se emiten de una en una y en orden
-// para que la numeracion salga correlativa.
+// Mueve la marca de "ya facturado hasta". Lo anterior desaparece de la cola.
 export async function setFacturacionAlDia(projectId, alDiaHasta, userId, stripeOkHasta) {
   const guardado = await model.setFacturacionAlDia(projectId, alDiaHasta, userId, stripeOkHasta);
-  if (!alDiaHasta) return { ...guardado, emitidas: 0, detalle: [], fallidas: [] };
-  const pendientes = await model.listPagosSinFactura(projectId, alDiaHasta);
+  return { ...guardado, emitidas: 0, detalle: [], fallidas: [] };
+}
+
+// Genera la factura de UN cobro concreto de la cola. Solo si no queda nada mas
+// antiguo pendiente, para que la numeracion salga en orden. forzar lo salta.
+export async function generarFacturaDePago(projectId, paymentId, userId, { forzar = false } = {}) {
+  const cola = await model.listPagosSinFactura(projectId);
+  const pg = cola.find((x) => Number(x.payment_id) === Number(paymentId));
+  if (!pg) {
+    throw new AppError('Ese cobro ya no está en la cola: o ya tiene factura, o queda fuera del periodo.',
+      404, 'NOT_IN_QUEUE');
+  }
+  if (!forzar && await model.hayPendientesAnteriores(projectId, pg.fecha, pg.payment_id)) {
+    throw new AppError(
+      'Hay cobros anteriores sin facturar. Se emiten por orden de fecha para que la numeración no se descoloque.',
+      409, 'HAY_ANTERIORES');
+  }
+  const inv = await model.emitirFacturaDePago(
+    pg.conversion_id, { paymentId: pg.payment_id, importe: Number(pg.importe) }, userId
+  );
+  return inv;
+}
+
+// Emite de golpe, en orden de fecha, todo lo que quede en la cola hasta esa fecha.
+export async function emitirColaHasta(projectId, hasta, userId) {
+  const pendientes = await model.listPagosSinFactura(projectId, hasta);
   const emitidas = [];
   const fallidas = [];
   for (const pg of pendientes) {
@@ -739,19 +762,22 @@ export async function setFacturacionAlDia(projectId, alDiaHasta, userId, stripeO
       if (inv?.codigo) emitidas.push({ payment_id: pg.payment_id, codigo: inv.codigo, cliente: pg.cliente });
     } catch (err) {
       fallidas.push({ payment_id: pg.payment_id, cliente: pg.cliente, error: err.message });
-      logger.warn({ paymentId: pg.payment_id, err: err.message }, 'no se pudo emitir la factura en espera');
+      logger.warn({ paymentId: pg.payment_id, err: err.message }, 'no se pudo emitir la factura de la cola');
     }
   }
-  return { ...guardado, emitidas: emitidas.length, detalle: emitidas, fallidas };
+  return { emitidas: emitidas.length, detalle: emitidas, fallidas };
 }
 
-// Se llama antes de emitir una factura automatica: dice si toca ya o si espera.
-export async function puedeFacturarAhora(projectId, fechaPago) {
+// Se llama antes de emitir una factura automatica. Solo sale sola si es la
+// primera de la cola: si hay algo anterior esperando, esta espera tambien.
+export async function puedeFacturarAhora(projectId, fechaPago, paymentId = null) {
   if (!projectId || !fechaPago) return true;
   try {
     const { al_dia_hasta } = await model.getFacturacionAlDia(projectId);
-    if (!al_dia_hasta) return true;   // sin corte configurado, se factura como siempre
-    return String(fechaPago).slice(0, 10) <= String(al_dia_hasta).slice(0, 10);
+    // Sin marca de "al dia", se comporta como siempre: factura al momento.
+    if (!al_dia_hasta) return true;
+    if (String(fechaPago).slice(0, 10) <= String(al_dia_hasta).slice(0, 10)) return false;
+    return !(await model.hayPendientesAnteriores(projectId, fechaPago, paymentId));
   } catch {
     return true;   // ante la duda, no bloquear la facturacion
   }

@@ -643,3 +643,31 @@ export async function setFacturacionAlDia(req, res, next) {
     res.json({ success: true, data: r });
   } catch (err) { next(err); }
 }
+
+// POST /api/invoices/cola/generar  { projectId, paymentId, forzar }
+export async function generarDeCola(req, res, next) {
+  try {
+    const projectId = parseInt(req.body?.projectId);
+    const paymentId = parseInt(req.body?.paymentId);
+    if (!projectId || !paymentId) throw new AppError('projectId y paymentId requeridos', 400, 'BAD_REQUEST');
+    if (req.user?.role !== 'superadmin' && !(await model.esFacturaManager(req.user?.userId))) {
+      throw new AppError('Solo quien gestiona la facturacion puede emitir desde la cola', 403, 'FORBIDDEN');
+    }
+    const inv = await service.generarFacturaDePago(projectId, paymentId, req.user.userId,
+      { forzar: req.body?.forzar === true });
+    res.json({ success: true, data: inv });
+  } catch (err) { next(err); }
+}
+
+// POST /api/invoices/cola/emitir-hasta  { projectId, hasta }
+export async function emitirColaHasta(req, res, next) {
+  try {
+    const projectId = parseInt(req.body?.projectId);
+    const hasta = req.body?.hasta;
+    if (!projectId || !hasta) throw new AppError('projectId y hasta requeridos', 400, 'BAD_REQUEST');
+    if (req.user?.role !== 'superadmin' && !(await model.esFacturaManager(req.user?.userId))) {
+      throw new AppError('Solo quien gestiona la facturacion puede emitir desde la cola', 403, 'FORBIDDEN');
+    }
+    res.json({ success: true, data: await service.emitirColaHasta(projectId, hasta, req.user.userId) });
+  } catch (err) { next(err); }
+}

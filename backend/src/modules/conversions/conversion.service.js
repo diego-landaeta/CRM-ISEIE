@@ -112,10 +112,10 @@ export function autoInvoice(conversionId, userId = null, paymentInfo = null) {
         const pg = rows[0];
         if (pg) {
           const invSrv = await import('../invoices/invoices.service.js');
-          const ok = await invSrv.puedeFacturarAhora(pg.project_id, pg.fecha);
+          const ok = await invSrv.puedeFacturarAhora(pg.project_id, pg.fecha, paymentInfo.paymentId);
           if (!ok) {
             logger.info({ conversionId, paymentId: paymentInfo.paymentId, fecha: pg.fecha },
-              'factura en espera: la facturacion aun no esta al dia hasta esa fecha');
+              'factura en espera: va a la cola, hay cobros anteriores sin facturar');
             return;
           }
         }

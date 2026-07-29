@@ -1383,19 +1383,56 @@ export async function listPagosSinFactura(projectId, hasta = null) {
   const desdeEjercicio = `AND cp.fecha >= make_date(
       (SELECT COALESCE(MAX(sq.ano), EXTRACT(YEAR FROM CURRENT_DATE)::int)
          FROM invoice_sequences sq WHERE sq.project_id = $1), 1, 1)`;
+  // Y tampoco los que ya estan facturados fuera del CRM: al_dia_hasta marca
+  // hasta donde esta hecho el trabajo.
+  const yaHecho = `AND cp.fecha > COALESCE(
+      (SELECT st.al_dia_hasta FROM invoicing_status st WHERE st.project_id = $1),
+      DATE '1900-01-01')`;
   const { rows } = await query(
     `SELECT cp.id AS payment_id, cp.conversion_id, cp.importe, cp.fecha,
-            l.nombre AS cliente, c.producto_contratado
+            cp.notas,
+            l.nombre AS cliente, c.producto_contratado,
+            COALESCE(uv.nombre, u.nombre) AS gestora,
+            EXISTS (SELECT 1 FROM stripe_payments sp
+                     WHERE sp.conversion_payment_id = cp.id) AS de_stripe
        FROM conversion_payments cp
        JOIN conversions c ON c.id = cp.conversion_id
        LEFT JOIN leads l ON l.id = c.lead_id
+       LEFT JOIN users u ON u.id = l.responsable_id
+       LEFT JOIN users uv ON uv.id = c.vendedora_id
       WHERE c.project_id = $1
         ${filtroFecha}
         ${desdeEjercicio}
+        ${yaHecho}
         AND NOT EXISTS (SELECT 1 FROM invoices i
                          WHERE i.payment_id = cp.id AND i.estado <> 'cancelada')
       ORDER BY cp.fecha ASC, cp.id ASC`,
     params
   );
   return rows;
+}
+
+// ¿Queda algun cobro pendiente de facturar ANTERIOR a este? Si lo hay, este no
+// puede emitir todavia: la numeracion tiene que salir en orden de fecha.
+export async function hayPendientesAnteriores(projectId, fecha, paymentId) {
+  const { rows } = await query(
+    `SELECT EXISTS (
+       SELECT 1
+         FROM conversion_payments cp
+         JOIN conversions c ON c.id = cp.conversion_id
+        WHERE c.project_id = $1
+          AND cp.id <> $3
+          AND (cp.fecha < $2::date OR (cp.fecha = $2::date AND cp.id < $3))
+          AND cp.fecha > COALESCE(
+                (SELECT st.al_dia_hasta FROM invoicing_status st WHERE st.project_id = $1),
+                DATE '1900-01-01')
+          AND cp.fecha >= make_date(
+                (SELECT COALESCE(MAX(sq.ano), EXTRACT(YEAR FROM CURRENT_DATE)::int)
+                   FROM invoice_sequences sq WHERE sq.project_id = $1), 1, 1)
+          AND NOT EXISTS (SELECT 1 FROM invoices i
+                           WHERE i.payment_id = cp.id AND i.estado <> 'cancelada')
+     ) AS hay`,
+    [projectId, fecha, paymentId || 0]
+  );
+  return !!rows[0]?.hay;
 }
