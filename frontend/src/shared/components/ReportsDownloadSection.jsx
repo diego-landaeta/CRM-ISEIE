@@ -1,6 +1,6 @@
 // Sección de reportes descargables. Rango de fechas + una tarjeta por reporte
 // con Excel/CSV. Pega a /reports/<key> y arma el archivo en el navegador.
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { FileXls, FileCsv, CalendarBlank, ChartBar, UsersThree, Receipt, ListChecks, Invoice, Trophy, Eye, X } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
@@ -158,11 +158,14 @@ function downloadBlob(blob, name) {
   URL.revokeObjectURL(url);
 }
 
-export default function ReportsDownloadSection({ projectId, projectName }) {
-  const [from, setFrom] = useState(() => `${new Date().getFullYear()}-01-01`);
-  const [to, setTo] = useState(() => new Date().toISOString().slice(0, 10));
+export default function ReportsDownloadSection({ projectId, projectName, from: desdeArriba, to: hastaArriba }) {
+  const [from, setFrom] = useState(() => desdeArriba || `${new Date().getFullYear()}-01-01`);
+  const [to, setTo] = useState(() => hastaArriba || new Date().toISOString().slice(0, 10));
   const [busy, setBusy] = useState(null);
   const [preview, setPreview] = useState(null); // { report, rows, base }
+  // Si cambia el rango de la cabecera, esta seccion lo sigue.
+  useEffect(() => { if (desdeArriba) setFrom(desdeArriba); }, [desdeArriba]);
+  useEffect(() => { if (hastaArriba) setTo(hastaArriba); }, [hastaArriba]);
   const ready = Boolean(from && to);
 
   // Trae las filas del reporte del backend (compartido por descarga y vista previa).

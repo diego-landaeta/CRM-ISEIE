@@ -496,3 +496,102 @@ export async function asesorasPorMes({ projectId, from, to }) {
   );
   return rows;
 }
+
+// Panel de Reportes: KPIs comparados con el periodo anterior + serie temporal.
+export async function panelReportes({ projectId, from, to }) {
+  const desde = from || '2026-01-01';
+  const hasta = to || new Date().toISOString().slice(0, 10);
+  const dias = Math.max(1, Math.round((new Date(hasta) - new Date(desde)) / 86400000) + 1);
+  // Periodo anterior de la misma longitud, justo antes.
+  const finPrev = new Date(new Date(desde).getTime() - 86400000).toISOString().slice(0, 10);
+  const iniPrev = new Date(new Date(desde).getTime() - dias * 86400000).toISOString().slice(0, 10);
+
+  // Granularidad: en rangos cortos por dia, luego por semana y al final por mes.
+  const grano = dias <= 45 ? 'day' : (dias <= 200 ? 'week' : 'month');
+
+  const pl = projectId ? 'AND l.project_id = $3' : '';
+  const pc = projectId ? 'AND c.project_id = $3' : '';
+  const par = (a, b) => (projectId ? [a, b, projectId] : [a, b]);
+
+  async function bloque(d, h) {
+    const { rows: le } = await query(
+      `SELECT COUNT(*)::int AS n FROM leads l
+        WHERE l.created_at::date BETWEEN $1 AND $2 ${pl}`, par(d, h));
+    const { rows: ve } = await query(
+      `SELECT COUNT(*)::int AS n, COALESCE(SUM(c.importe_total), 0) AS vendido
+         FROM conversions c WHERE c.fecha_conversion BETWEEN $1 AND $2 ${pc}`, par(d, h));
+    const { rows: co } = await query(
+      `SELECT COALESCE(SUM(cp.importe), 0) AS cobrado
+         FROM conversion_payments cp JOIN conversions c ON c.id = cp.conversion_id
+        WHERE cp.fecha BETWEEN $1 AND $2 ${pc}`, par(d, h));
+    const prospectos = le[0].n;
+    const ventas = ve[0].n;
+    return {
+      prospectos,
+      ventas,
+      vendido: Number(ve[0].vendido),
+      ingresos: Number(co[0].cobrado),
+      tasa: prospectos > 0 ? Number((ventas * 100 / prospectos).toFixed(1)) : 0,
+    };
+  }
+
+  const actual = await bloque(desde, hasta);
+  const previo = await bloque(iniPrev, finPrev);
+  const variacion = (a, b) => (b > 0 ? Number((((a - b) / b) * 100).toFixed(1)) : null);
+
+  // Serie temporal, con los huecos rellenos a cero para que la grafica no mienta.
+  const { rows: serie } = await query(
+    `WITH periodos AS (
+       SELECT generate_series(
+                date_trunc('${grano}', $1::date),
+                date_trunc('${grano}', $2::date),
+                ('1 ${grano}')::interval)::date AS p
+     ),
+     le AS (
+       SELECT date_trunc('${grano}', l.created_at)::date AS p, COUNT(*)::int AS n
+         FROM leads l WHERE l.created_at::date BETWEEN $1 AND $2 ${pl} GROUP BY 1
+     ),
+     ve AS (
+       SELECT date_trunc('${grano}', c.fecha_conversion)::date AS p, COUNT(*)::int AS n,
+              COALESCE(SUM(c.importe_total), 0) AS vendido
+         FROM conversions c WHERE c.fecha_conversion BETWEEN $1 AND $2 ${pc} GROUP BY 1
+     ),
+     co AS (
+       SELECT date_trunc('${grano}', cp.fecha)::date AS p, COALESCE(SUM(cp.importe), 0) AS cobrado
+         FROM conversion_payments cp JOIN conversions c ON c.id = cp.conversion_id
+        WHERE cp.fecha BETWEEN $1 AND $2 ${pc} GROUP BY 1
+     )
+     SELECT periodos.p::text AS periodo,
+            COALESCE(le.n, 0) AS prospectos,
+            COALESCE(ve.n, 0) AS ventas,
+            ROUND(COALESCE(ve.vendido, 0), 2) AS vendido,
+            ROUND(COALESCE(co.cobrado, 0), 2) AS ingresos,
+            CASE WHEN COALESCE(le.n, 0) > 0
+                 THEN ROUND(COALESCE(ve.n, 0)::numeric * 100 / le.n, 1) ELSE 0 END AS tasa
+       FROM periodos
+       LEFT JOIN le ON le.p = periodos.p
+       LEFT JOIN ve ON ve.p = periodos.p
+       LEFT JOIN co ON co.p = periodos.p
+      ORDER BY periodos.p`,
+    par(desde, hasta)
+  );
+
+  return {
+    rango: { from: desde, to: hasta, dias, grano },
+    kpis: {
+      prospectos: { value: actual.prospectos, prev: previo.prospectos, trend: variacion(actual.prospectos, previo.prospectos) },
+      ventas:     { value: actual.ventas,     prev: previo.ventas,     trend: variacion(actual.ventas, previo.ventas) },
+      vendido:    { value: actual.vendido,    prev: previo.vendido,    trend: variacion(actual.vendido, previo.vendido) },
+      ingresos:   { value: actual.ingresos,   prev: previo.ingresos,   trend: variacion(actual.ingresos, previo.ingresos) },
+      tasa:       { value: actual.tasa,       prev: previo.tasa,       trend: variacion(actual.tasa, previo.tasa) },
+    },
+    serie: serie.map((r) => ({
+      periodo: r.periodo,
+      prospectos: Number(r.prospectos),
+      ventas: Number(r.ventas),
+      vendido: Number(r.vendido),
+      ingresos: Number(r.ingresos),
+      tasa: Number(r.tasa),
+    })),
+  };
+}

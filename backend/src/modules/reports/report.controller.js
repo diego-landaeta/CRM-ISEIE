@@ -60,3 +60,10 @@ export async function asesorasMes(req, res, next) {
     res.json({ success: true, data: await model.asesorasPorMes(rangoDeQuery(req)) });
   } catch (err) { next(err); }
 }
+
+// GET /api/reports/panel -> KPIs con comparativa y serie para la grafica
+export async function panel(req, res, next) {
+  try {
+    res.json({ success: true, data: await model.panelReportes(rangoDeQuery(req)) });
+  } catch (err) { next(err); }
+}

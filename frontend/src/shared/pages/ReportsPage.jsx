@@ -57,6 +57,18 @@ const ACCENT = {
   amber:   { bg: 'bg-amber-50 dark:bg-amber-950/30',     text: 'text-amber-600 dark:text-amber-400' },
 };
 
+// Rango de fechas del panel. Los presets solo rellenan las dos fechas, para que
+// se pueda afinar a mano sin perder los atajos.
+function rangoDePreset(key) {
+  const hoy = new Date();
+  const iso = (d) => d.toISOString().slice(0, 10);
+  const haceDias = (n) => iso(new Date(hoy.getTime() - n * 86400000));
+  if (key === 'ytd') return { from: `${hoy.getFullYear()}-01-01`, to: iso(hoy) };
+  if (key === 'all') return { from: '2026-01-01', to: iso(hoy) };
+  const dias = { '7d': 7, '30d': 30, '90d': 90 }[key] || 30;
+  return { from: haceDias(dias), to: iso(hoy) };
+}
+
 const PERIODS = {
   '7d':  { label: 'Últimos 7 días',   days: 7 },
   '30d': { label: 'Últimos 30 días',  days: 30 },
@@ -291,6 +303,22 @@ function Kpi({ icon: Icon, label, value, trend, spark, accent = 'sky' }) {
 export default function ReportsPage() {
   const { activeProject, user } = useAuth();
   const [periodKey, setPeriodKey] = useState('30d');
+  const [rango, setRango] = useState(() => rangoDePreset('30d'));
+  const [panel, setPanel] = useState(null);
+
+  // El resumen sale de /reports/panel: KPIs comparados con el periodo
+  // anterior y la serie de la grafica, todo con el rango de arriba.
+  useEffect(() => {
+    let vivo = true;
+    const q = new URLSearchParams();
+    if (activeProject?.id) q.set('projectId', String(activeProject.id));
+    if (rango.from) q.set('from', rango.from);
+    if (rango.to) q.set('to', rango.to);
+    client.get(`/reports/panel?${q.toString()}`)
+      .then((r) => { if (vivo) setPanel(r.success ? r.data : null); })
+      .catch(() => { if (vivo) setPanel(null); });
+    return () => { vivo = false; };
+  }, [activeProject?.id, rango.from, rango.to]);
   const days = PERIODS[periodKey].days;
   const { data: summary, loading } = useDashboardSummary(activeProject?.id, days);
   const [iaModal, setIaModal] = useState(false);
@@ -307,10 +335,18 @@ export default function ReportsPage() {
       .catch(() => {});
   }, [isAdmin]);
 
-  const leads        = summary?.leads        || { value: 0, trend: null, spark: [] };
-  const conversiones = summary?.conversiones || { value: 0, trend: null, spark: [] };
-  const ingresos     = summary?.ingresos     || { value: 0, trend: null, spark: [] };
-  const tasa         = summary?.tasa         || { value: 0, trend: null, spark: [] };
+  // La serie del panel alimenta tanto los KPI como la grafica.
+  const serie = panel?.serie || [];
+  const chispa = (k) => serie.map((x) => Number(x[k] || 0));
+  const kpi = (k, campo) => ({
+    value: Number(panel?.kpis?.[k]?.value || 0),
+    trend: panel?.kpis?.[k]?.trend ?? null,
+    spark: chispa(campo),
+  });
+  const leads        = kpi('prospectos', 'prospectos');
+  const conversiones = kpi('ventas', 'ventas');
+  const ingresos     = kpi('ingresos', 'ingresos');
+  const tasa         = kpi('tasa', 'tasa');
 
   const [heroSerie, setHeroSerie] = useState('ingresos');
   const HERO_SERIES = {
@@ -361,11 +397,28 @@ export default function ReportsPage() {
         <div className="flex items-center gap-2">
           <select
             value={periodKey}
-            onChange={(e) => setPeriodKey(e.target.value)}
+            onChange={(e) => { setPeriodKey(e.target.value); setRango(rangoDePreset(e.target.value)); }}
             className="h-9 px-3 rounded-md bg-card border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
           >
             {Object.entries(PERIODS).map(([k, p]) => <option key={k} value={k}>{p.label}</option>)}
           </select>
+          {/* Las fechas mandan: los presets solo las rellenan. */}
+          <input
+            type="date"
+            value={rango.from}
+            max={rango.to || undefined}
+            onChange={(e) => setRango((v) => ({ ...v, from: e.target.value }))}
+            className="h-9 px-2 rounded-md bg-card border border-border text-sm"
+            aria-label="Desde"
+          />
+          <input
+            type="date"
+            value={rango.to}
+            min={rango.from || undefined}
+            onChange={(e) => setRango((v) => ({ ...v, to: e.target.value }))}
+            className="h-9 px-2 rounded-md bg-card border border-border text-sm"
+            aria-label="Hasta"
+          />
           <button
             type="button"
             onClick={() => window.print()}
@@ -426,9 +479,9 @@ export default function ReportsPage() {
       {isAdmin && (
         <>
           {/* Los numeros por asesora. El detalle se baja en la seccion de abajo. */}
-          <AsesorasPanel from={`${new Date().getFullYear()}-01-01`} to={new Date().toISOString().slice(0, 10)} />
+          <AsesorasPanel from={rango.from} to={rango.to} />
 
-          <ReportsDownloadSection projectId={activeProject?.id} projectName={activeProject?.nombre} />
+          <ReportsDownloadSection projectId={activeProject?.id} projectName={activeProject?.nombre} from={rango.from} to={rango.to} />
         </>
       )}
 
