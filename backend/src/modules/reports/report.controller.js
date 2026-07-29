@@ -67,3 +67,17 @@ export async function panel(req, res, next) {
     res.json({ success: true, data: await model.panelReportes(rangoDeQuery(req)) });
   } catch (err) { next(err); }
 }
+
+// GET /api/reports/paises  -> ranking de paises, deducido del prefijo telefonico
+export async function paises(req, res, next) {
+  try {
+    res.json({ success: true, data: await model.paisesMasVendidos(rangoDeQuery(req)) });
+  } catch (err) { next(err); }
+}
+
+// GET /api/reports/formaciones  -> ranking de formaciones
+export async function formaciones(req, res, next) {
+  try {
+    res.json({ success: true, data: await model.formacionesMasVendidas(rangoDeQuery(req)) });
+  } catch (err) { next(err); }
+}

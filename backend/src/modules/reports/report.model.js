@@ -623,3 +623,97 @@ export async function panelReportes({ projectId, from, to }) {
     })),
   };
 }
+
+// Pais a partir del prefijo del telefono. leads.pais_fiscal no sirve: tiene
+// 'España' por defecto en casi todos los registros, asi que daria 99,9% España
+// mientras los telefonos son latinoamericanos.
+const PAIS_TEL = `CASE
+    WHEN tel LIKE '34%'  THEN 'España'
+    WHEN tel LIKE '52%'  THEN 'México'
+    WHEN tel LIKE '57%'  THEN 'Colombia'
+    WHEN tel LIKE '593%' THEN 'Ecuador'
+    WHEN tel LIKE '51%'  THEN 'Perú'
+    WHEN tel LIKE '506%' THEN 'Costa Rica'
+    WHEN tel LIKE '507%' THEN 'Panamá'
+    WHEN tel LIKE '56%'  THEN 'Chile'
+    WHEN tel LIKE '54%'  THEN 'Argentina'
+    WHEN tel LIKE '58%'  THEN 'Venezuela'
+    WHEN tel LIKE '502%' THEN 'Guatemala'
+    WHEN tel LIKE '503%' THEN 'El Salvador'
+    WHEN tel LIKE '504%' THEN 'Honduras'
+    WHEN tel LIKE '505%' THEN 'Nicaragua'
+    WHEN tel LIKE '509%' THEN 'Haití'
+    WHEN tel LIKE '55%'  THEN 'Brasil'
+    WHEN tel LIKE '591%' THEN 'Bolivia'
+    WHEN tel LIKE '595%' THEN 'Paraguay'
+    WHEN tel LIKE '598%' THEN 'Uruguay'
+    WHEN tel LIKE '1%'   THEN 'EE.UU. / Canadá'
+    WHEN tel LIKE '39%'  THEN 'Italia'
+    WHEN tel LIKE '33%'  THEN 'Francia'
+    WHEN tel LIKE '351%' THEN 'Portugal'
+    WHEN tel LIKE '44%'  THEN 'Reino Unido'
+    WHEN tel LIKE '49%'  THEN 'Alemania'
+    WHEN tel LIKE '212%' THEN 'Marruecos'
+    WHEN tel = '' OR tel IS NULL THEN '— sin teléfono —'
+    ELSE '— otro (+' || LEFT(tel, 3) || ') —'
+  END`;
+
+export async function paisesMasVendidos({ projectId, from, to }) {
+  const { where, params } = buildFilter({ projectId, from, to }, 'c.fecha_conversion', 'c.project_id');
+  const { rows } = await query(
+    `WITH v AS (
+       SELECT c.id, c.importe_total, c.lead_id,
+              regexp_replace(COALESCE(l.telefono, ''), '[^0-9]', '', 'g') AS tel
+         FROM conversions c
+         LEFT JOIN leads l ON l.id = c.lead_id
+         ${where}
+     )
+     SELECT ${PAIS_TEL} AS pais,
+            COUNT(*)::int AS ventas,
+            COUNT(DISTINCT v.lead_id)::int AS clientes,
+            ROUND(COALESCE(SUM(v.importe_total), 0), 2) AS vendido,
+            ROUND(COALESCE(SUM(
+              (SELECT COALESCE(SUM(cp.importe), 0)
+                 FROM conversion_payments cp WHERE cp.conversion_id = v.id)), 0), 2) AS cobrado
+       FROM v
+      GROUP BY 1
+      ORDER BY vendido DESC`,
+    params
+  );
+  return rows;
+}
+
+// Formacion de una venta, en tres niveles. El texto libre viene sucio: se le
+// quitan los prefijos de 'servicio academico' y de 'pago de mensualidad'.
+const FORMACION = `COALESCE(
+    pcat.nombre,
+    pnom.nombre,
+    NULLIF(TRIM(regexp_replace(regexp_replace(regexp_replace(c.producto_contratado,
+      '^[[:space:]]*Producto/servicio:[[:space:]]*servicio[[:space:]]+acad[eé]mico[,;]?[[:space:]]*', '', 'i'),
+      '^[[:space:]]*pago[[:space:]]+(de[[:space:]]+)?(la[[:space:]]+)?(mensualidad|cuota|matr[ií]cula)[^,]*[,]?[[:space:]]*', '', 'i'),
+      '^[[:space:]]*servicio[[:space:]]+acad[eé]mico[[:space:]]*$', '', 'i')), ''),
+    '— sin formación —')`;
+
+export async function formacionesMasVendidas({ projectId, from, to }) {
+  const { where, params } = buildFilter({ projectId, from, to }, 'c.fecha_conversion', 'c.project_id');
+  const { rows } = await query(
+    `SELECT ${FORMACION} AS formacion,
+            CASE WHEN pcat.id IS NOT NULL THEN 'catálogo'
+                 WHEN pnom.id IS NOT NULL THEN 'catálogo (por nombre)'
+                 ELSE 'texto libre' END AS origen,
+            COUNT(*)::int AS ventas,
+            COUNT(DISTINCT c.lead_id)::int AS clientes,
+            ROUND(COALESCE(SUM(c.importe_total), 0), 2) AS vendido,
+            ROUND(COALESCE(AVG(c.importe_total), 0), 2) AS ticket_medio
+       FROM conversions c
+       LEFT JOIN products pcat ON pcat.id = c.producto_contratado_id
+       LEFT JOIN products pnom ON pnom.project_id = c.project_id
+            AND c.producto_contratado_id IS NULL
+            AND LOWER(TRIM(pnom.nombre)) = LOWER(TRIM(c.producto_contratado))
+       ${where}
+      GROUP BY 1, 2
+      ORDER BY vendido DESC`,
+    params
+  );
+  return rows;
+}

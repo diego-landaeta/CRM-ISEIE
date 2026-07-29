@@ -19,5 +19,7 @@ router.get('/ventas-vendedora', ctrl.ventasVendedora);
 router.get('/ventas-asesora', ctrl.ventasAsesora);
 router.get('/asesoras-mes', ctrl.asesorasMes);
 router.get('/panel', ctrl.panel);
+router.get('/paises', ctrl.paises);
+router.get('/formaciones', ctrl.formaciones);
 
 export default router;
