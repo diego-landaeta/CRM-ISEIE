@@ -537,7 +537,10 @@ export async function panelReportes({ projectId, from, to }) {
 
   const actual = await bloque(desde, hasta);
   const previo = await bloque(iniPrev, finPrev);
-  const variacion = (a, b) => (b > 0 ? Number((((a - b) / b) * 100).toFixed(1)) : null);
+  // Si el periodo anterior cae antes de que empiecen los datos, la comparativa
+  // no dice nada: salen porcentajes de 4000% contra cuatro registros sueltos.
+  const comparable = iniPrev >= '2026-01-01';
+  const variacion = (a, b) => (comparable && b > 0 ? Number((((a - b) / b) * 100).toFixed(1)) : null);
 
   // Serie temporal, con los huecos rellenos a cero para que la grafica no mienta.
   const { rows: serie } = await query(
@@ -577,7 +580,7 @@ export async function panelReportes({ projectId, from, to }) {
   );
 
   return {
-    rango: { from: desde, to: hasta, dias, grano },
+    rango: { from: desde, to: hasta, dias, grano, comparable },
     kpis: {
       prospectos: { value: actual.prospectos, prev: previo.prospectos, trend: variacion(actual.prospectos, previo.prospectos) },
       ventas:     { value: actual.ventas,     prev: previo.ventas,     trend: variacion(actual.ventas, previo.ventas) },

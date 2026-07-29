@@ -127,7 +127,7 @@ function HeroTooltip({ active, payload, label, fmt, color, prevValue }) {
   );
 }
 
-function HeroChart({ heroActive, heroSerie, setHeroSerie, HERO_SERIES, heroData, heroHasData, heroTotal, heroLast, heroDelta, heroAvg, heroMax }) {
+function HeroChart({ heroActive, heroSerie, setHeroSerie, HERO_SERIES, heroData, heroHasData, heroTotal, heroLast, heroDelta, heroAvg, heroMax, unidad = 'periodo' }) {
   const TrendIcon = heroDelta >= 0 ? TrendUp : TrendDown;
   const deltaCls = heroDelta >= 0
     ? 'text-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200/60 dark:border-emerald-900/60'
@@ -144,7 +144,7 @@ function HeroChart({ heroActive, heroSerie, setHeroSerie, HERO_SERIES, heroData,
               style={{ background: heroActive.color, boxShadow: `0 0 12px ${heroActive.color}` }}
             />
             <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-              {heroActive.label} · última semana
+              {heroActive.label} · último {unidad}
             </span>
           </div>
           <div className="flex items-baseline gap-3 flex-wrap">
@@ -357,6 +357,8 @@ export default function ReportsPage() {
   };
   const heroActive = HERO_SERIES[heroSerie] || HERO_SERIES.ingresos;
   const heroCampo = heroActive.campo;
+  // Como se llama cada punto de la serie, para no decir 'semana' cuando es un mes.
+  const unidad = { day: 'día', week: 'semana', month: 'mes' }[panel?.rango?.grano || 'day'];
 
   // Cada punto trae su fecha real y su granularidad: no se inventan semanas.
   const heroData = useMemo(() => {
@@ -528,7 +530,8 @@ export default function ReportsPage() {
               heroDelta={heroDelta}
               heroAvg={heroAvg}
               heroMax={heroMax}
-            />
+            unidad={unidad}
+          />
           </>
         )}
       </div>
