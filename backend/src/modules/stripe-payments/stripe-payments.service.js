@@ -141,7 +141,7 @@ async function fetchAndUpdateDispute(apiKey, projectId, charge) {
   }
 }
 
-export async function syncStripePayments(projectId, { fullHistory = false } = {}) {
+export async function syncStripePayments(projectId, { fullHistory = false, retryPending = false } = {}) {
   const apiKey = await getStripeKey(projectId);
   if (!apiKey) throw new Error('Stripe API key no configurada para este proyecto');
 
@@ -187,6 +187,38 @@ export async function syncStripePayments(projectId, { fullHistory = false } = {}
     pages++;
   }
 
+
+  // Segunda pasada: los cargos que ya estaban importados y siguen sin asociar.
+  // Stripe solo devuelve los cargos nuevos, asi que sin esto un cobro cuya
+  // asociacion se deshizo no se volveria a enganchar nunca por mucho que se
+  // pulse Sincronizar.
+  //
+  // Solo se hace cuando alguien pulsa Sincronizar a mano (retryPending). El cron
+  // de cada 5 min no lo dispara: reasociar en masa es una decision del usuario,
+  // no algo que deba pasar solo de madrugada.
+  let reasociados = 0;
+  if (retryPending) try {
+    const pendientes = await model.listPendientesDeAsociar(projectId, 5000);
+    for (const row of pendientes) {
+      try {
+        const antes = row.conversion_payment_id;
+        await autoLinkIfPossible(projectId, {
+          status: row.status,
+          amount: Number(row.amount),
+          customer_email: row.customer_email,
+          stripe_created_at: Number(row.stripe_created_at),
+          stripe_id: row.stripe_id,
+        }, row);
+        const despues = await model.getById(row.id);
+        if (!antes && despues?.conversion_payment_id) reasociados++;
+      } catch (e) {
+        logger.warn({ stripeId: row.stripe_id, err: e.message }, 'reintento de asociacion fallido');
+      }
+    }
+  } catch (e) {
+    logger.warn({ err: e.message }, 'no se pudo reintentar la asociacion de pendientes');
+  }
+
   await model.upsertSyncState(projectId, {
     last_sync_at: new Date().toISOString(),
     last_full_sync_at: fullHistory ? new Date().toISOString() : (state?.last_full_sync_at || null),
@@ -195,8 +227,8 @@ export async function syncStripePayments(projectId, { fullHistory = false } = {}
     last_error: null,
   });
 
-  logger.info({ projectId, imported, disputesFound, pages }, 'Stripe sync OK');
-  return { imported, disputes: disputesFound, pages };
+  logger.info({ projectId, imported, disputesFound, pages, reasociados }, 'Stripe sync OK');
+  return { imported, disputes: disputesFound, pages, reasociados };
 }
 
 export async function manualLink(stripePaymentId, { leadId, conversionId, userId }) {

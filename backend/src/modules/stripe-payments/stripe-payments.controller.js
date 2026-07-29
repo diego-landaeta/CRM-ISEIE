@@ -36,7 +36,8 @@ export async function sync(req, res, next) {
   try {
     const pid = projectId(req);
     const fullHistory = req.body?.fullHistory === true || req.query?.fullHistory === 'true';
-    const result = await service.syncStripePayments(pid, { fullHistory });
+    // Sincronizar a mano reintenta ademas los cargos que quedaron sin asociar.
+    const result = await service.syncStripePayments(pid, { fullHistory, retryPending: true });
     res.json({ success: true, data: result });
   } catch (e) {
     logger.error({ e: e.message }, 'sync stripe failed');
