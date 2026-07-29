@@ -29,6 +29,7 @@ const COLUMNAS = {
   ],
   ventas: [
     { k: 'fecha', h: 'Fecha', t: 'date' }, { k: 'cliente', h: 'Cliente' },
+    { k: 'es_mensualidad', h: 'Tipo', t: 'esmens' },
     { k: 'formacion', h: 'Formación' }, { k: 'importe', h: 'Importe', t: 'eur' },
     { k: 'cobrado', h: 'Cobrado', t: 'eur' }, { k: 'cobros', h: 'Nº cobros', t: 'num' },
     { k: 'ventas_previas', h: 'Compras antes', t: 'num' },
@@ -49,9 +50,11 @@ const COLUMNAS = {
   ],
 };
 COLUMNAS['cobros-venta'] = COLUMNAS.cobros;
+COLUMNAS['leads-convertidos'] = COLUMNAS.leads;
 
 const TITULOS = {
   leads: 'Leads entrados',
+  'leads-convertidos': 'Leads del periodo que compraron',
   ventas: 'Ventas cerradas',
   mensualidades: 'Mensualidades cobradas',
   cobros: 'Cobros',
@@ -64,6 +67,8 @@ function celda(col, fila) {
   if (col.t === 'date') return fecha(v);
   if (col.t === 'num') return v == null ? '—' : String(v);
   if (col.t === 'tipo') return v ? 'venta' : 'mensualidad';
+  // Al reves que 'tipo': aqui el true es el caso malo, el que no deberia estar.
+  if (col.t === 'esmens') return v ? 'mensualidad' : 'venta nueva';
   return v == null || v === '' ? '—' : String(v);
 }
 
@@ -187,7 +192,7 @@ export default function DetalleMetricaDialog({ abierto, onClose, consulta, subti
                   <tr key={f.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30">
                     {cols.map((c) => (
                       <td key={c.k}
-                        className={`px-3 py-1.5 ${c.t === 'eur' || c.t === 'num' ? 'text-right tabular-nums' : ''} ${c.t === 'eur' ? 'font-semibold' : ''}`}>
+                        className={`px-3 py-1.5 ${c.t === 'eur' || c.t === 'num' ? 'text-right tabular-nums' : ''} ${c.t === 'eur' ? 'font-semibold' : ''} ${c.t === 'esmens' && f[c.k] ? 'text-amber-600 dark:text-amber-500 font-semibold' : ''}`}>
                         <span className="block max-w-[240px] truncate" title={String(f[c.k] ?? '')}>
                           {celda(c, f)}
                         </span>

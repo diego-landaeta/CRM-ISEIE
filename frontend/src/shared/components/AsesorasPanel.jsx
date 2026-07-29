@@ -66,9 +66,10 @@ export default function AsesorasPanel({ from, to }) {
   const meses = useMemo(() => {
     const acc = {};
     for (const f of filas) {
-      acc[f.mes] = acc[f.mes] || { mes: f.mes, asesoras: [], leads: 0, ventas: 0, vendido: 0, cobrado: 0, cobradoVenta: 0, cobradoCuotas: 0, mensualidades: 0 };
+      acc[f.mes] = acc[f.mes] || { mes: f.mes, asesoras: [], leads: 0, convertidos: 0, ventas: 0, vendido: 0, cobrado: 0, cobradoVenta: 0, cobradoCuotas: 0, mensualidades: 0 };
       acc[f.mes].asesoras.push(f);
       acc[f.mes].leads += Number(f.leads || 0);
+      acc[f.mes].convertidos += Number(f.leads_convertidos || 0);
       acc[f.mes].ventas += Number(f.ventas || 0);
       acc[f.mes].vendido += Number(f.vendido || 0);
       acc[f.mes].cobrado += Number(f.cobrado || 0);
@@ -136,7 +137,8 @@ export default function AsesorasPanel({ from, to }) {
         <p className="text-xs text-muted-foreground">
           Leads que le entraron, ventas cerradas y dinero cobrado. Los leads cuentan por
           fecha de entrada, las ventas por fecha de venta y los cobros por fecha de cobro.
-          La tasa es ventas nuevas sobre leads entrados: las mensualidades no cuentan como conversión.
+          La tasa es leads convertidos sobre leads recibidos, ambos del periodo: quien solo
+          pagó una mensualidad no cuenta como conversión.
         </p>
         <p className="text-xs text-primary font-medium mt-1">
           Pulsa cualquier número para ver los registros que hay detrás, con buscador.
@@ -164,7 +166,9 @@ export default function AsesorasPanel({ from, to }) {
       <div className="space-y-2">
         {meses.map((m) => {
           const open = abierto === m.mes;
-          const tasa = m.leads > 0 ? (m.ventas * 100 / m.leads) : 0;
+          // Tasa = de los leads que entraron ese mes, cuantos convirtieron.
+          // No se divide por ventas: ahi se colaba quien solo pago una mensualidad.
+          const tasa = m.leads > 0 ? (m.convertidos * 100 / m.leads) : 0;
           return (
             <div key={m.mes} className="rounded-lg border border-border overflow-hidden">
               {/* La cabecera es pulsable para plegar; los números de dentro
@@ -207,10 +211,10 @@ export default function AsesorasPanel({ from, to }) {
                     <thead className="bg-muted/50 text-muted-foreground">
                       <tr>
                         <th className="text-left px-3 py-2 font-bold">Asesora</th>
-                        <th className="text-right px-3 py-2 font-bold">Leads</th>
+                        <th className="text-right px-3 py-2 font-bold">Leads recibidos</th>
+                        <th className="text-right px-3 py-2 font-bold">Convertidos</th>
                         <th className="text-right px-3 py-2 font-bold">Ventas</th>
                         <th className="text-right px-3 py-2 font-bold">Mensualidades</th>
-                        <th className="text-right px-3 py-2 font-bold">Clientes</th>
                         <th className="text-right px-3 py-2 font-bold">Tasa</th>
                         <th className="text-right px-3 py-2 font-bold">Vendido</th>
                         <th className="text-right px-3 py-2 font-bold">Cobrado</th>
@@ -226,13 +230,15 @@ export default function AsesorasPanel({ from, to }) {
                           <td className="px-3 py-2 text-right">
                             <Num tipo="leads" mes={m.mes} asesora={a}>{Number(a.leads).toLocaleString('es-ES')}</Num>
                           </td>
+                          <td className="px-3 py-2 text-right text-emerald-600 dark:text-emerald-400">
+                            <Num tipo="leads-convertidos" mes={m.mes} asesora={a}>{Number(a.leads_convertidos || 0).toLocaleString('es-ES')}</Num>
+                          </td>
                           <td className="px-3 py-2 text-right font-semibold">
                             <Num tipo="ventas" mes={m.mes} asesora={a}>{a.ventas}</Num>
                           </td>
                           <td className="px-3 py-2 text-right text-sky-600 dark:text-sky-400">
                             <Num tipo="mensualidades" mes={m.mes} asesora={a}>{a.mensualidades}</Num>
                           </td>
-                          <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{a.clientes}</td>
                           <td className="px-3 py-2 text-right tabular-nums">{Number(a.tasa_conversion).toFixed(1)}%</td>
                           <td className="px-3 py-2 text-right">
                             <Num tipo="ventas" mes={m.mes} asesora={a}>{fmtMoney(a.vendido)}</Num>
@@ -254,13 +260,15 @@ export default function AsesorasPanel({ from, to }) {
                         <td className="px-3 py-2 text-right">
                           <Num tipo="leads" mes={m.mes}>{m.leads.toLocaleString('es-ES')}</Num>
                         </td>
+                        <td className="px-3 py-2 text-right text-emerald-600 dark:text-emerald-400">
+                          <Num tipo="leads-convertidos" mes={m.mes}>{m.convertidos.toLocaleString('es-ES')}</Num>
+                        </td>
                         <td className="px-3 py-2 text-right">
                           <Num tipo="ventas" mes={m.mes}>{m.ventas}</Num>
                         </td>
                         <td className="px-3 py-2 text-right text-sky-600 dark:text-sky-400">
                           <Num tipo="mensualidades" mes={m.mes}>{m.mensualidades}</Num>
                         </td>
-                        <td className="px-3 py-2"></td>
                         <td className="px-3 py-2 text-right tabular-nums">{tasa.toFixed(1)}%</td>
                         <td className="px-3 py-2 text-right">
                           <Num tipo="ventas" mes={m.mes}>{fmtMoney(m.vendido)}</Num>

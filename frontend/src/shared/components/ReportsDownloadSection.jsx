@@ -1,7 +1,7 @@
 // Sección de reportes descargables. Rango de fechas + una tarjeta por reporte
 // con Excel/CSV. Pega a /reports/<key> y arma el archivo en el navegador.
 import { useState, useEffect } from 'react';
-import { FileXls, FileCsv, CalendarBlank, ChartBar, UsersThree, Receipt, ListChecks, Invoice, Trophy, Eye, X } from '@phosphor-icons/react';
+import { DownloadSimple, FileXls, FileCsv, CalendarBlank, ChartBar, UsersThree, Receipt, ListChecks, Invoice, Trophy, Eye, X } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 
@@ -187,6 +187,21 @@ export default function ReportsDownloadSection({ projectId, projectName, from: d
   const to = hastaArriba || '';
   const [busy, setBusy] = useState(null);
   const [preview, setPreview] = useState(null); // { report, rows, base }
+  const [bajandoTodo, setBajandoTodo] = useState(false);
+
+  // Todo junto, una hoja por bloque. Es lo que se pide cuando alguien quiere
+  // mirar los numeros fuera del CRM sin ir juntando ficheros sueltos.
+  async function bajarTodo() {
+    setBajandoTodo(true);
+    try {
+      const { descargarReportePrincipal } = await import('@/shared/lib/reportePrincipal');
+      const r = await descargarReportePrincipal({ projectId, projectName, from, to });
+      if (!r.nombre) { toast({ title: 'Sin datos en ese período' }); return; }
+      toast({ title: 'Reporte principal descargado', description: `${r.hojas} hojas · ${r.nombre}` });
+    } catch (err) {
+      toast({ title: 'No se pudo generar el reporte', description: err?.message, variant: 'destructive' });
+    } finally { setBajandoTodo(false); }
+  }
   const ready = Boolean(from && to);
 
   // Trae las filas del reporte del backend (compartido por descarga y vista previa).
@@ -255,6 +270,16 @@ export default function ReportsDownloadSection({ projectId, projectName, from: d
             Usan el mismo rango de fechas que has elegido arriba. Descarga en Excel o CSV.
           </p>
         </div>
+        <button
+          type="button"
+          onClick={bajarTodo}
+          disabled={bajandoTodo}
+          className="inline-flex items-center gap-2 h-10 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 disabled:opacity-50"
+          title="Un solo Excel con resumen, evolución, asesoras, países, formaciones y el detalle de ventas"
+        >
+          <DownloadSimple size={16} weight="bold" />
+          {bajandoTodo ? 'Generando…' : 'Descargar reporte principal'}
+        </button>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
