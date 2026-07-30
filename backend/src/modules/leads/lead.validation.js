@@ -26,7 +26,10 @@ export const webhookLeadSchema = z.object({
   // Idempotency: si Make reintenta, no duplicamos.
   idempotency_key: z.string().min(1).max(200).optional(),
   // Campos custom libres (objeto JSON). Se guardan en leads.custom_fields.
-  custom_fields: z.record(z.string(), z.any()).optional(),
+  // Tolerante al null: si la ficha no tiene campos propios, alguna pantalla
+  // manda custom_fields = null y eso tumbaba el guardado ENTERO — telefono
+  // incluido — con un "Expected object, received null" que no decia nada.
+  custom_fields: z.record(z.string(), z.any()).nullable().optional(),
 }).refine(
   (d) => (d.email && d.email.length > 0) || (d.telefono && d.telefono.length > 0),
   { message: 'Debes proporcionar al menos email o teléfono', path: ['email'] }
@@ -111,7 +114,10 @@ export const createLeadManualSchema = z.object({
   producto_interes_id: z.number().int().positive().optional().nullable(),
   canal: z.enum(['directo', 'referido', 'meta_ads', 'google_ads', 'tiktok_ads', 'organico', 'chatgpt_ia', 'whatsapp']).default('directo'),
   notas: z.string().max(2000).optional().or(z.literal('')),
-  custom_fields: z.record(z.string(), z.any()).optional(),
+  // Tolerante al null: si la ficha no tiene campos propios, alguna pantalla
+  // manda custom_fields = null y eso tumbaba el guardado ENTERO — telefono
+  // incluido — con un "Expected object, received null" que no decia nada.
+  custom_fields: z.record(z.string(), z.any()).nullable().optional(),
 }).refine(
   (data) => (data.email && data.email.length > 0) || (data.telefono && data.telefono.length > 0),
   { message: 'Debes proporcionar al menos email o teléfono', path: ['email'] }
@@ -124,7 +130,10 @@ export const updateLeadSchema = z.object({
   notas: z.string().max(2000).nullable().optional(),
   producto_interes_id: z.number().int().positive().nullable().optional(),
   canal: z.enum(['meta_ads', 'google_ads', 'tiktok_ads', 'organico', 'chatgpt_ia', 'directo', 'referido', 'whatsapp']).optional(),
-  custom_fields: z.record(z.string(), z.any()).optional(),
+  // Tolerante al null: si la ficha no tiene campos propios, alguna pantalla
+  // manda custom_fields = null y eso tumbaba el guardado ENTERO — telefono
+  // incluido — con un "Expected object, received null" que no decia nada.
+  custom_fields: z.record(z.string(), z.any()).nullable().optional(),
 }).refine((data) => Object.keys(data).length > 0, {
   message: 'Al menos un campo debe ser proporcionado',
 });
