@@ -24,7 +24,7 @@ Arreglar primero, y en los dos.
 | `FinanzasLayout.tsx` no está enrutado | ISEIE | Código muerto con 13 entradas de menú apuntando a rutas que no existen |
 | Menú: «Conversiones» → `/accounting/conversions` y «Análisis IA» → `/reports/ia` | ISEIE | Enlaces pulsables que no llevan a ninguna parte. La página de Conversiones sí existe: está en `/revenue` |
 | **Pagos Stripe no está en el menú** | ISEIE | La página existe y la ruta `/accounting/pagos-stripe` funciona, pero **ninguna entrada del menú lleva a ella**: solo se llega escribiendo la URL. En ISEIH sí está, dentro de Finanzas. Es donde se asocian los 50 cobros de Stripe sin cliente, así que quien no sepa la URL no puede hacer ese trabajo |
-| 7 rutas `/prueba_ui*` y `/dev/components` | ISEIH | Maquetas accesibles en producción para quien conozca la URL |
+| Chunks de las maquetas en el build de producción | ISEIH | **No es un agujero**: las rutas `/prueba_ui*` están detrás de `UI_PREVIEW_ENABLED`, que en el build de producción vale `false` (la base es `/crm/`, no `/testeo/`), así que no se registran. Lo que sí viaja son los ficheros JS huérfanos y sus títulos en el mapa de páginas. Cosmético, no urgente |
 | 12 tablas `_bak_*` | ISEIE | Redes de seguridad de las correcciones de datos de esta semana. Se pueden tirar cuando el owner dé por buenos los cambios |
 
 ---
