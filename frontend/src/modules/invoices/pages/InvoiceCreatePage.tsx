@@ -250,6 +250,9 @@ export default function InvoiceCreatePage() {
         conversionId: assocConvId ? Number(assocConvId) : undefined,
         tipo: esProforma ? ('proforma' as const) : undefined,
         clienteNombre: cNombre, clienteNif: cNif,
+        // Empresa o persona: decide el rotulo del PDF ("RAZON SOCIAL" o
+        // "NOMBRE Y APELLIDO"). Al contado se factura a un particular.
+        clienteTipo: tipo === 'empresa' ? 'empresa' : 'particular',
         clienteDireccion: direccion.trim(), clienteCiudad: ciudad.trim(), clienteCp: cp.trim(), clientePais: pais.trim() || 'España',
         clienteEmail: email.trim() || null, clienteTelefono: telefono.trim() || null,
         items: items.filter((it) => it.descripcion.trim()),
@@ -326,7 +329,7 @@ export default function InvoiceCreatePage() {
         setFechasIniciales({ emision: d10(f.fecha_emision), pago: d10(f.fecha_pago) });
       setDocTipo(f.tipo === 'proforma' ? 'proforma' : 'factura');
       const noVal = (v?: string | null) => !v || v === '—';
-      setTipo(noVal(f.cliente_nombre) || f.cliente_nombre === '(por completar)' ? 'persona' : 'persona');
+      setTipo(f.cliente_tipo === 'empresa' ? 'empresa' : 'persona');
       setNombre(f.cliente_nombre === '(por completar)' ? '' : (f.cliente_nombre || ''));
       setNif(noVal(f.cliente_nif) ? '' : (f.cliente_nif || ''));
       setDireccion(noVal(f.cliente_direccion) ? '' : (f.cliente_direccion || ''));

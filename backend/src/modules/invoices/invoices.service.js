@@ -262,13 +262,16 @@ export async function generatePDF(invoiceId, { preliminar = false, vistaGestor =
   let y = Math.min(ey, 772) - 20;
   page.drawRectangle({ x: left, y: y + 10, width: right - left, height: 0.8, color: gray });
   page.drawText('DATOS CLIENTE', { x: left, y, size: 9, font: bold, color: gray }); y -= 15;
-  page.drawText(oneLine(inv.cliente_nombre, 60), { x: left, y, size: 11, font: bold, color: black }); y -= 13;
-  if (!noVal(inv.cliente_nif))       { page.drawText(oneLine(`NIF/DNI: ${inv.cliente_nif}`, 60), { x: left, y, size: 10, font, color: black }); y -= 13; }
-  if (!noVal(inv.cliente_direccion)) { page.drawText(oneLine(inv.cliente_direccion, 80), { x: left, y, size: 10, font, color: black }); y -= 13; }
+  // Delante del nombre va su rótulo: una empresa tiene razón social, una persona
+  // nombre y apellidos. El ancho útil son 495 pt, así que el valor se recorta
+  // contando ya lo que ocupa el rótulo.
+  page.drawText(oneLine(`${rotuloNombreCliente(inv)}: ${inv.cliente_nombre}`, 74), { x: left, y, size: 11, font: bold, color: black }); y -= 13;
+  if (!noVal(inv.cliente_direccion)) { page.drawText(oneLine(`DIRECCIÓN: ${inv.cliente_direccion}`, 88), { x: left, y, size: 10, font, color: black }); y -= 13; }
   const cliLoc = [inv.cliente_cp, inv.cliente_ciudad].filter((x) => !noVal(x)).join(' ');
-  if (cliLoc || !noVal(inv.cliente_pais)) { page.drawText(oneLine(`${cliLoc}${!noVal(inv.cliente_pais) ? (cliLoc ? ', ' : '') + inv.cliente_pais : ''}`, 80), { x: left, y, size: 10, font, color: black }); y -= 13; }
-  if (!noVal(inv.cliente_email))    { page.drawText(oneLine(inv.cliente_email, 70), { x: left, y, size: 10, font, color: black }); y -= 13; }
-  if (!noVal(inv.cliente_telefono)) { page.drawText(oneLine(`Tel: ${inv.cliente_telefono}`, 40), { x: left, y, size: 10, font, color: black }); y -= 13; }
+  if (cliLoc || !noVal(inv.cliente_pais)) { page.drawText(oneLine(`${cliLoc}${!noVal(inv.cliente_pais) ? (cliLoc ? ', ' : '') + inv.cliente_pais : ''}`, 88), { x: left, y, size: 10, font, color: black }); y -= 13; }
+  if (!noVal(inv.cliente_telefono)) { page.drawText(oneLine(`NÚMERO TELEFÓNICO: ${inv.cliente_telefono}`, 58), { x: left, y, size: 10, font, color: black }); y -= 13; }
+  if (!noVal(inv.cliente_nif))       { page.drawText(oneLine(`NIF: ${inv.cliente_nif}`, 60), { x: left, y, size: 10, font, color: black }); y -= 13; }
+  if (!noVal(inv.cliente_email))    { page.drawText(oneLine(`CORREO: ${inv.cliente_email}`, 78), { x: left, y, size: 10, font, color: black }); y -= 13; }
 
   // Tabla items
   y -= 30;
@@ -449,6 +452,14 @@ export async function generatePDF(invoiceId, { preliminar = false, vistaGestor =
   return { path: fullPath, bytes: pdfBytes, filename };
 }
 
+// Rótulo que va delante del nombre del cliente en la factura. Una empresa se
+// identifica por su razón social; una persona, por su nombre y apellidos.
+// invoices.cliente_tipo es una copia de leads.cliente_tipo hecha al emitir; si
+// no está puesto se asume persona, que es el caso normal.
+export function rotuloNombreCliente(inv) {
+  return inv?.cliente_tipo === 'empresa' ? 'RAZÓN SOCIAL' : 'NOMBRE Y APELLIDO';
+}
+
 const METODO_LABELS = {
   transferencia: 'Transferencia bancaria', tarjeta: 'Tarjeta', tarjeta_stripe: 'Tarjeta',
   efectivo: 'Efectivo', bizum: 'Bizum', paypal: 'PayPal', fraccionado: 'Pago fraccionado', otro: 'Otro',
@@ -527,12 +538,12 @@ async function renderFromTemplate({ pdfDoc, page, font, bold, inv, layout }) {
         case 'cliente':
           drawLines(b, [
             { text: 'Facturar a:', bold: true, color: gray, size: (b.fontSize || 11) - 1 },
-            { text: inv.cliente_nombre, bold: true },
-            { text: inv.cliente_nif ? `NIF/CIF: ${inv.cliente_nif}` : '' },
-            { text: inv.cliente_direccion },
+            { text: `${rotuloNombreCliente(inv)}: ${inv.cliente_nombre}`, bold: true },
+            { text: inv.cliente_direccion ? `DIRECCIÓN: ${inv.cliente_direccion}` : '' },
             { text: [inv.cliente_cp, inv.cliente_ciudad].filter(Boolean).join(' ') + (inv.cliente_pais ? `, ${inv.cliente_pais}` : '') },
-            { text: inv.cliente_email },
-            { text: inv.cliente_telefono ? `Tel: ${inv.cliente_telefono}` : '' },
+            { text: inv.cliente_telefono ? `NÚMERO TELEFÓNICO: ${inv.cliente_telefono}` : '' },
+            { text: inv.cliente_nif ? `NIF: ${inv.cliente_nif}` : '' },
+            { text: inv.cliente_email ? `CORREO: ${inv.cliente_email}` : '' },
           ]);
           break;
         case 'meta':

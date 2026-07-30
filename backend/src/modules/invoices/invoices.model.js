@@ -121,10 +121,10 @@ export async function create(data, userId) {
          estado, notas, leyenda_iva, metodo_pago, pie_pago, created_by, tipo,
          issuer_id, issuer_razon_social, issuer_nif, issuer_direccion, issuer_ciudad,
          issuer_cp, issuer_pais, issuer_email, issuer_telefono, issuer_iban, issuer_logo_url,
-         moneda, total_divisa
+         moneda, total_divisa, cliente_tipo
        ) VALUES (
          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,
-         $30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43
+         $30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44
        ) RETURNING *`,
       [
         data.projectId, data.conversionId || null, data.leadId || null, data.paymentId || null,
@@ -143,6 +143,10 @@ export async function create(data, userId) {
         (data.moneda ? String(data.moneda).toUpperCase() : 'EUR'),
         // Importe en la divisa (solo presentación). total/base/IVA van SIEMPRE en euros.
         (data.totalDivisa != null ? Number(data.totalDivisa) : null),
+        // Empresa o persona: decide el rótulo del PDF ("RAZÓN SOCIAL" o
+        // "NOMBRE Y APELLIDO"). Se copia aquí para que editar la ficha después
+        // no cambie una factura ya emitida.
+        data.clienteTipo || null,
       ]
     );
 
@@ -242,10 +246,11 @@ export async function createRectificativa(originalId, { motivo, userId, parcial 
          estado, notas, leyenda_iva, metodo_pago, pie_pago, created_by,
          tipo, rectifica_id, rectifica_codigo, motivo_rectificacion,
          issuer_id, issuer_razon_social, issuer_nif, issuer_direccion, issuer_ciudad,
-         issuer_cp, issuer_pais, issuer_email, issuer_telefono, issuer_iban, issuer_logo_url
+         issuer_cp, issuer_pais, issuer_email, issuer_telefono, issuer_iban, issuer_logo_url,
+         cliente_tipo
        ) VALUES ($1,$2,$3,$4,$5,$6,$7,CURRENT_DATE,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,
          'emitida',$22,$23,$24,$25,$26,'rectificativa',$27,$28,$29,
-         $30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40) RETURNING *`,
+         $30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41) RETURNING *`,
       [
         orig.project_id, orig.conversion_id, orig.lead_id, serie, ano, numero, codigo,
         orig.cliente_nombre, orig.cliente_nif, orig.cliente_direccion, orig.cliente_ciudad, orig.cliente_cp, orig.cliente_pais,
@@ -767,6 +772,7 @@ export async function emitirFacturaDePago(conversionId, { paymentId, importe }, 
     paymentId,
     leadId: conv.lead_id,
     clienteNombre: nombreClienteFactura(conv),
+    clienteTipo: conv.cliente_tipo || null,
     clienteNif: conv.identificacion_fiscal || undefined,
     clienteDireccion: conv.direccion_fiscal || undefined,
     clienteCiudad: conv.ciudad_fiscal || undefined,
@@ -822,6 +828,7 @@ export async function autoEmitirPorPago(conversionId, userId = null) {
     conversionId,
     leadId: conv.lead_id,
     clienteNombre: nombreClienteFactura(conv),
+    clienteTipo: conv.cliente_tipo || null,
     clienteNif: conv.identificacion_fiscal || undefined,
     clienteDireccion: conv.direccion_fiscal || undefined,
     clienteCiudad: conv.ciudad_fiscal || undefined,

@@ -45,6 +45,8 @@ export interface CreateInvoiceBody {
   leyendaIva?: string | null;
   notas?: string;
   metodoPago: 'transferencia' | 'tarjeta' | 'tarjeta_stripe' | 'efectivo' | 'bizum' | 'paypal' | 'fraccionado' | 'otro';
+  /** Empresa o particular. Decide el rótulo del cliente en el PDF. */
+  clienteTipo?: 'empresa' | 'particular';
   piePago?: string;
   /** Moneda de la factura (ISO). Importes manuales en esa divisa, sin conversión. Default EUR. */
   moneda?: string;
@@ -78,6 +80,8 @@ export interface Invoice {
   fecha_emision: string;
   fecha_pago: string | null;
   cliente_nombre: string;
+  /** 'empresa' o 'particular'. Decide el rótulo del cliente en el PDF. */
+  cliente_tipo?: string | null;
   cliente_nif: string;
   cliente_direccion?: string;
   cliente_ciudad?: string;
@@ -183,6 +187,8 @@ export interface VentaSinFactura {
   conversion_id: number;
   lead_id: number;
   cliente_nombre: string;
+  /** 'empresa' o 'particular'. Decide el rótulo del cliente en el PDF. */
+  cliente_tipo?: string | null;
   producto_contratado: string | null;
   importe_total: number;
   fecha_conversion: string | null;

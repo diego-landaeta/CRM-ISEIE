@@ -35,6 +35,8 @@ export const createInvoiceSchema = z.object({
     z.string().optional().nullable(),
   ),
   clienteTelefono: z.string().optional().nullable(),
+  // Empresa o particular: decide el rótulo del cliente en el PDF.
+  clienteTipo: z.enum(['empresa', 'particular']).optional().nullable(),
   items: z.array(itemSchema).min(1, 'Al menos un item'),
   ivaPct: z.number().min(0).max(100).optional(),
   ivaIncluido: z.boolean().optional(),
