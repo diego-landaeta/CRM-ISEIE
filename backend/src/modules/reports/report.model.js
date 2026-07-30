@@ -472,6 +472,8 @@ export async function asesorasPorMes({ projectId, from, to }) {
          FROM conversions c
          LEFT JOIN leads l ON l.id = c.lead_id
          ${wv}
+          -- Una ficha marcada como mensualidad no es una venta nueva.
+          AND NOT c.es_mensualidad
         GROUP BY 1, 2
      ),
      cobros_mes AS (
@@ -480,9 +482,9 @@ export async function asesorasPorMes({ projectId, from, to }) {
               COALESCE(SUM(cp.importe), 0) AS cobrado,
               -- Un cobro es cuota si salda alguna cuota del plan. Con EXISTS y no
               -- con JOIN: un mismo pago puede saldar varias y se contaria dos veces.
-              COALESCE(SUM(cp.importe) FILTER (WHERE NOT EXISTS (SELECT 1 FROM conversion_payments p0 WHERE p0.conversion_id = cp.conversion_id AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id)))), 0) AS cobrado_venta,
-              COALESCE(SUM(cp.importe) FILTER (WHERE NOT NOT EXISTS (SELECT 1 FROM conversion_payments p0 WHERE p0.conversion_id = cp.conversion_id AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id)))), 0) AS cobrado_cuotas,
-              COUNT(*) FILTER (WHERE NOT NOT EXISTS (SELECT 1 FROM conversion_payments p0 WHERE p0.conversion_id = cp.conversion_id AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id))))::int AS mensualidades
+              COALESCE(SUM(cp.importe) FILTER (WHERE (NOT c.es_mensualidad AND NOT EXISTS (SELECT 1 FROM conversion_payments p0 WHERE p0.conversion_id = cp.conversion_id AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id))))), 0) AS cobrado_venta,
+              COALESCE(SUM(cp.importe) FILTER (WHERE (c.es_mensualidad OR EXISTS (SELECT 1 FROM conversion_payments p0 WHERE p0.conversion_id = cp.conversion_id AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id))))), 0) AS cobrado_cuotas,
+              COUNT(*) FILTER (WHERE (c.es_mensualidad OR EXISTS (SELECT 1 FROM conversion_payments p0 WHERE p0.conversion_id = cp.conversion_id AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id)))))::int AS mensualidades
          FROM conversion_payments cp
          JOIN conversions c ON c.id = cp.conversion_id
          LEFT JOIN leads l ON l.id = c.lead_id
@@ -549,9 +551,9 @@ export async function panelReportes({ projectId, from, to }) {
          FROM conversions c WHERE c.fecha_conversion BETWEEN $1 AND $2 ${pc}`, par(d, h));
     const { rows: co } = await query(
       `SELECT COALESCE(SUM(cp.importe), 0) AS cobrado,
-              COALESCE(SUM(cp.importe) FILTER (WHERE NOT EXISTS (SELECT 1 FROM conversion_payments p0 WHERE p0.conversion_id = cp.conversion_id AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id)))), 0) AS de_venta,
-              COALESCE(SUM(cp.importe) FILTER (WHERE NOT NOT EXISTS (SELECT 1 FROM conversion_payments p0 WHERE p0.conversion_id = cp.conversion_id AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id)))), 0) AS de_cuotas,
-              COUNT(*) FILTER (WHERE NOT NOT EXISTS (SELECT 1 FROM conversion_payments p0 WHERE p0.conversion_id = cp.conversion_id AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id))))::int AS n_cuotas
+              COALESCE(SUM(cp.importe) FILTER (WHERE (NOT c.es_mensualidad AND NOT EXISTS (SELECT 1 FROM conversion_payments p0 WHERE p0.conversion_id = cp.conversion_id AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id))))), 0) AS de_venta,
+              COALESCE(SUM(cp.importe) FILTER (WHERE (c.es_mensualidad OR EXISTS (SELECT 1 FROM conversion_payments p0 WHERE p0.conversion_id = cp.conversion_id AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id))))), 0) AS de_cuotas,
+              COUNT(*) FILTER (WHERE (c.es_mensualidad OR EXISTS (SELECT 1 FROM conversion_payments p0 WHERE p0.conversion_id = cp.conversion_id AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id)))))::int AS n_cuotas
          FROM conversion_payments cp JOIN conversions c ON c.id = cp.conversion_id
         WHERE cp.fecha BETWEEN $1 AND $2 ${pc}`, par(d, h));
     const prospectos = le[0].n;
@@ -594,8 +596,8 @@ export async function panelReportes({ projectId, from, to }) {
      ),
      co AS (
        SELECT date_trunc('${grano}', cp.fecha)::date AS p, COALESCE(SUM(cp.importe), 0) AS cobrado,
-              COALESCE(SUM(cp.importe) FILTER (WHERE NOT EXISTS (SELECT 1 FROM conversion_payments p0 WHERE p0.conversion_id = cp.conversion_id AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id)))), 0) AS de_venta,
-              COALESCE(SUM(cp.importe) FILTER (WHERE NOT NOT EXISTS (SELECT 1 FROM conversion_payments p0 WHERE p0.conversion_id = cp.conversion_id AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id)))), 0) AS de_cuotas
+              COALESCE(SUM(cp.importe) FILTER (WHERE (NOT c.es_mensualidad AND NOT EXISTS (SELECT 1 FROM conversion_payments p0 WHERE p0.conversion_id = cp.conversion_id AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id))))), 0) AS de_venta,
+              COALESCE(SUM(cp.importe) FILTER (WHERE (c.es_mensualidad OR EXISTS (SELECT 1 FROM conversion_payments p0 WHERE p0.conversion_id = cp.conversion_id AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id))))), 0) AS de_cuotas
          FROM conversion_payments cp JOIN conversions c ON c.id = cp.conversion_id
         WHERE cp.fecha BETWEEN $1 AND $2 ${pc} GROUP BY 1
      )
@@ -714,7 +716,9 @@ export async function paisesMasVendidos({ projectId, from, to }) {
          FROM conversions c
          LEFT JOIN leads l ON l.id = c.lead_id
          ${fv.where}
+          AND NOT c.es_mensualidad
      ),
+
      ventas AS (
        SELECT ${PAIS_TEL} AS pais,
               COUNT(*)::int AS ventas,
@@ -784,6 +788,8 @@ export async function formacionesMasVendidas({ projectId, from, to }) {
             AND c.producto_contratado_id IS NULL
             AND LOWER(TRIM(pnom.nombre)) = LOWER(TRIM(c.producto_contratado))
        ${where}
+          AND NOT c.es_mensualidad
+
       GROUP BY 1, 2
       ORDER BY vendido DESC`,
     params
@@ -845,6 +851,9 @@ export async function detalleMetrica({ projectId, from, to, tipo, asesoraId, mes
     // Placeholder explicito: FORMACION lleva '?' dentro de sus regex y add()
     // sustituiria el primero, que no es el nuestro.
     if (formacion) { cond.push(`${FORMACION} = $${idx++}`); params.push(formacion); }
+    // Las marcadas como mensualidad no salen aqui: el popup tiene que cuadrar
+    // con el numero de ventas del panel, que tampoco las cuenta.
+    cond.push('NOT c.es_mensualidad');
     // El pais sale del prefijo del telefono, igual que en el ranking. PAIS_TEL
     // espera una columna 'tel', asi que se la damos con una subconsulta en vez
     // de reescribir el SQL a mano.
@@ -889,7 +898,10 @@ export async function detalleMetrica({ projectId, from, to, tipo, asesoraId, mes
   if (!finMes) params.push(hasta);
   if (asesoraId === 'sin') cond.push('COALESCE(c.vendedora_id, l.responsable_id) IS NULL');
   else if (asesoraId) add('COALESCE(c.vendedora_id, l.responsable_id) = ?', Number(asesoraId));
-  const ES_PRIMERO = `NOT EXISTS (SELECT 1 FROM conversion_payments p0
+  // Un cobro es "de la venta" si es el primero Y su ficha es una venta de
+  // verdad: en una marcada como mensualidad no hay venta que cobrar, así que
+  // todos sus cobros son cuota.
+  const ES_PRIMERO = `NOT c.es_mensualidad AND NOT EXISTS (SELECT 1 FROM conversion_payments p0
       WHERE p0.conversion_id = cp.conversion_id
         AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id)))`;
   if (tipo === 'mensualidades') cond.push(`NOT (${ES_PRIMERO})`);
