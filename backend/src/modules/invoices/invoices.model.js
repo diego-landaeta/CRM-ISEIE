@@ -295,7 +295,8 @@ export async function list({ projectId, issuerId, estado, search, from, to, tipo
   if (issuerId)  { conds.push(`i.issuer_id = $${idx++}`); params.push(issuerId); }
   if (projectId) { conds.push(`i.project_id = $${idx++}`); params.push(projectId); }
   // Gestor: solo ve las facturas de SUS leads (responsable). Admin/superadmin ven todas.
-  if (responsableId) { conds.push(`l.responsable_id = $${idx++}`); params.push(responsableId); }
+  // Quien vendio, no de quien es la ficha: es el criterio del resto del CRM.
+  if (responsableId) { conds.push(`COALESCE(cv.vendedora_id, l.responsable_id) = $${idx++}`); params.push(responsableId); }
   // La pestana Facturas muestra tambien las PROFORMAS. Comparten el mismo
   // correlativo que las facturas normales, asi que si se ocultan parece que
   // falta un numero: la 642 se veia como un salto cuando en realidad la tenia
@@ -322,14 +323,19 @@ export async function list({ projectId, issuerId, estado, search, from, to, tipo
             u.nombre AS gestora_nombre
      FROM invoices i
      LEFT JOIN projects p ON p.id = i.project_id
-     LEFT JOIN leads l ON l.id = i.lead_id
-     LEFT JOIN users u ON u.id = l.responsable_id
+     -- La gestora sale de la VENTA. invoices.lead_id esta vacio en toda la carga
+     -- historica (596 de 653), asi que mirarlo a el dejaba la columna en blanco.
+     LEFT JOIN conversions cv ON cv.id = i.conversion_id
+     LEFT JOIN leads l ON l.id = COALESCE(i.lead_id, cv.lead_id)
+     LEFT JOIN users u ON u.id = COALESCE(cv.vendedora_id, l.responsable_id)
      ${where}
      ORDER BY i.ano DESC, i.numero DESC LIMIT ${limit} OFFSET ${offset}`,
     params
   );
   const { rows: c } = await query(
-    `SELECT COUNT(*)::int AS total FROM invoices i LEFT JOIN leads l ON l.id = i.lead_id ${where}`,
+    `SELECT COUNT(*)::int AS total FROM invoices i
+       LEFT JOIN conversions cv ON cv.id = i.conversion_id
+       LEFT JOIN leads l ON l.id = COALESCE(i.lead_id, cv.lead_id) ${where}`,
     params
   );
   return { rows, total: c[0].total };
