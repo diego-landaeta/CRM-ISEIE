@@ -156,6 +156,18 @@ export function autoInvoice(conversionId, userId = null, paymentInfo = null) {
       }
     }
     const m = await import('../invoices/invoices.model.js');
+
+    // Quien registra la venta no siempre pone los numeros. Si no puede, el cobro
+    // se queda en la cola: asi la gestora completa los datos fiscales del cliente
+    // con calma y quien factura emite despues, ya con los datos buenos. Antes se
+    // emitia en el acto y salian facturas numeradas a nombre del relleno con el
+    // que se crea el lead desde WhatsApp.
+    if (!(await m.puedeEmitirFactura(userId))) {
+      logger.info({ conversionId, userId, paymentId: paymentInfo?.paymentId },
+        'factura no emitida: quien registro la venta no pone numeros; el cobro queda en la cola');
+      return;
+    }
+
     const inv = paymentInfo?.paymentId
       ? await m.emitirFacturaDePago(conversionId, paymentInfo, userId)
       : await m.autoEmitirPorPago(conversionId, userId);

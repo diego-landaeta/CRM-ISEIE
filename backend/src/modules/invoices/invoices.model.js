@@ -443,6 +443,22 @@ export async function esFacturaManager(userId) {
   return !!rows[0]?.factura_manager;
 }
 
+// ¿Puede este usuario poner NUMERO a una factura?
+// Admin y superadmin siempre. Una gestora, solo si tiene factura_manager.
+// Sin usuario (sincronía de Stripe, cron) se deja pasar: no hay nadie a quien
+// pedirle los datos, y el cobro ya viene de una pasarela.
+export async function puedeEmitirFactura(userId) {
+  if (!userId) return true;
+  const { rows } = await query(
+    `SELECT role, COALESCE(factura_manager, false) AS factura_manager
+       FROM users WHERE id = $1`,
+    [userId]
+  );
+  const u = rows[0];
+  if (!u) return false;
+  return u.role === 'admin' || u.role === 'superadmin' || u.factura_manager === true;
+}
+
 // ¿Puede este usuario gestionar (editar/corregir/eliminar/abonar) esta factura?
 // Admin/superadmin → cualquiera. Gestor → solo si es factura_manager Y la factura
 // es de un lead del que es responsable (sus propias facturas).
