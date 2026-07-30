@@ -501,12 +501,14 @@ export async function asesorasPorMes({ projectId, from, to }) {
             COALESCE(lm.leads, 0) AS leads,
             COALESCE(vm.ventas, 0) AS ventas,
             COALESCE(vm.clientes, 0) AS clientes,
-            COALESCE(lm.leads_convertidos, 0) AS leads_convertidos,
-            -- La tasa va sobre los leads: de los que entraron ese mes, cuantos
-            -- acabaron convertidos. Antes se dividia por ventas del mes, y ahi
-            -- se colaba quien solo pago una mensualidad.
+            -- Convertidos = clientes distintos de las ventas de ESE mes. Coincide
+            -- con la columna de ventas salvo si alguien compra dos veces. Antes
+            -- contaba los leads entrados en el mes que acabaron comprando, que
+            -- es otra cosa y no cuadraba nunca: una venta de julio suele venir
+            -- de un lead de mayo.
+            COALESCE(vm.clientes, 0) AS leads_convertidos,
             CASE WHEN COALESCE(lm.leads, 0) > 0
-                 THEN ROUND(COALESCE(lm.leads_convertidos, 0)::numeric * 100 / lm.leads, 1)
+                 THEN ROUND(COALESCE(vm.clientes, 0)::numeric * 100 / lm.leads, 1)
                  ELSE 0 END AS tasa_conversion,
             ROUND(COALESCE(vm.vendido, 0), 2) AS vendido,
             ROUND(COALESCE(cm.cobrado, 0), 2) AS cobrado,

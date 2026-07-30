@@ -18,10 +18,42 @@ async function triggerSequences(triggerEvent, leadId, projectId) {
   }
 }
 
+
+// Un lead no puede comprar antes de existir. Si la fecha de la venta es la
+// buena, entonces la que esta mal es la de entrada, y esa no la arregla quien
+// registra la venta: por eso el mensaje manda a soporte en vez de dejar pasar
+// el dato o pedir que lo cambie por su cuenta.
+async function validarFechaNoAnteriorAlLead(leadId, fechaConversion) {
+  if (!leadId || !fechaConversion) return;
+  const { rows } = await query(
+    `SELECT COALESCE(fecha_solicitud, created_at)::date AS entrada FROM leads WHERE id = $1`,
+    [leadId]
+  );
+  const entrada = rows[0]?.entrada;
+  if (!entrada) return;
+  const venta = new Date(fechaConversion);
+  const alta = new Date(entrada);
+  if (Number.isNaN(venta.getTime())) return;
+  if (venta < alta) {
+    const dia = (d) => new Date(d).toLocaleDateString('es-ES');
+    throw new AppError(
+      `La fecha de la venta (${dia(venta)}) es anterior a la fecha de entrada del prospecto ` +
+      `(${dia(alta)}). Revisa la fecha del pago. Si la correcta es la de la venta, ` +
+      `la que esta mal es la de entrada: avisa a soporte para que la corrijan.`,
+      400, 'FECHA_ANTERIOR_AL_LEAD'
+    );
+  }
+}
+
 export async function create(data, userId) {
   // Validar que el lead pertenece al project_id
   const ok = await conversionModel.leadBelongsToProject(data.lead_id, data.project_id);
   if (!ok) throw new AppError('El lead no pertenece a este proyecto', 400, 'LEAD_PROJECT_MISMATCH');
+
+  // Un lead no puede comprar antes de llegar. Sin esto se colaban ventas con
+  // fecha anterior a la entrada y las tasas de conversion salian sin sentido:
+  // 220 fichas acabaron asi, con entrada de julio y venta de junio.
+  await validarFechaNoAnteriorAlLead(data.lead_id, data.fecha_conversion);
 
   // Auto-lookup de producto_contratado_id si llega el texto pero no el id.
   // Evita el bug histórico de tener `producto_contratado` (varchar) sin FK al
