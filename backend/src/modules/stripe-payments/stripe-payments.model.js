@@ -103,10 +103,18 @@ export async function listPayments({ projectId, status, linked, search, from, to
   if (facturables) {
     // Un cobro fallido/no cobrado nunca es facturable: solo los realmente cobrados.
     conds.push(`sp.status = 'succeeded'`);
-    conds.push(`sp.stripe_created_at >= (
-      SELECT MIN(f.fecha_emision) FROM invoices f
-       WHERE f.issuer_id = (SELECT pr.sociedad_emisora_id FROM projects pr WHERE pr.id = sp.project_id)
-         AND f.tipo <> 'proforma' AND f.numero IS NOT NULL)`);
+    // El corte es el de la cola de facturacion: lo anterior ya se facturo fuera
+    // del CRM y no hay que asociarlo. Antes se usaba la fecha de la PRIMERA
+    // factura de la sociedad, que en ISEIE es de enero: colaba casi trescientos
+    // cobros ya resueltos y la pantalla enseñaba los primeros cincuenta.
+    // Si el proyecto no tiene corte puesto, se cae a la primera factura, que era
+    // el comportamiento de antes.
+    conds.push(`sp.stripe_created_at::date > COALESCE(
+      (SELECT st.al_dia_hasta FROM invoicing_status st WHERE st.project_id = sp.project_id),
+      (SELECT MIN(f.fecha_emision) FROM invoices f
+        WHERE f.issuer_id = (SELECT pr.sociedad_emisora_id FROM projects pr WHERE pr.id = sp.project_id)
+          AND f.tipo <> 'proforma' AND f.numero IS NOT NULL),
+      DATE '1900-01-01')`);
     // Y el cliente NO tiene ya una factura en la sociedad (por email o nombre):
     // evita que aparezcan cobros de ventas ya facturadas manualmente.
     conds.push(`NOT EXISTS (
