@@ -40,7 +40,7 @@ export const createInvoiceSchema = z.object({
   ivaIncluido: z.boolean().optional(),
   notas: z.string().optional(),
   leyendaIva: z.string().optional(),
-  metodoPago: z.enum(['transferencia', 'tarjeta', 'tarjeta_stripe', 'efectivo', 'bizum', 'fraccionado', 'otro']),
+  metodoPago: z.enum(['transferencia', 'tarjeta', 'tarjeta_stripe', 'efectivo', 'bizum', 'paypal', 'fraccionado', 'otro']),
   piePago: z.string().optional(),
   issuerId: z.number().int().positive().optional(),
   // Moneda de la factura (opcional). Importes manuales en esa divisa, SIN conversión
@@ -99,5 +99,5 @@ export const updateConfigSchema = z.object({
   projectId: z.number().int().positive(),
   piePagoDefault: z.string().optional(),
   serieDefault: z.string().max(10).optional(),
-  metodoDefault: z.enum(['transferencia', 'tarjeta', 'tarjeta_stripe', 'efectivo', 'bizum', 'fraccionado', 'otro']).optional(),
+  metodoDefault: z.enum(['transferencia', 'tarjeta', 'tarjeta_stripe', 'efectivo', 'bizum', 'paypal', 'fraccionado', 'otro']).optional(),
 });

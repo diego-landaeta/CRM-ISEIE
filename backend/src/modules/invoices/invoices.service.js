@@ -357,6 +357,7 @@ export async function generatePDF(invoiceId, { preliminar = false, vistaGestor =
     tarjeta_stripe: 'Tarjeta',   // forma de pago = Tarjeta; Stripe es el ORIGEN, no el método
     efectivo: 'Efectivo',
     bizum: 'Bizum',
+    paypal: 'PayPal',
     fraccionado: 'Pago fraccionado',
     otro: 'Otro',
   };
@@ -450,7 +451,7 @@ export async function generatePDF(invoiceId, { preliminar = false, vistaGestor =
 
 const METODO_LABELS = {
   transferencia: 'Transferencia bancaria', tarjeta: 'Tarjeta', tarjeta_stripe: 'Tarjeta',
-  efectivo: 'Efectivo', bizum: 'Bizum', fraccionado: 'Pago fraccionado', otro: 'Otro',
+  efectivo: 'Efectivo', bizum: 'Bizum', paypal: 'PayPal', fraccionado: 'Pago fraccionado', otro: 'Otro',
 };
 
 // Dibuja la factura usando la plantilla del editor visual (bloques posicionados).

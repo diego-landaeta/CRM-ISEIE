@@ -44,7 +44,7 @@ export interface CreateInvoiceBody {
   ivaIncluido?: boolean;
   leyendaIva?: string | null;
   notas?: string;
-  metodoPago: 'transferencia' | 'tarjeta' | 'tarjeta_stripe' | 'efectivo' | 'bizum' | 'fraccionado' | 'otro';
+  metodoPago: 'transferencia' | 'tarjeta' | 'tarjeta_stripe' | 'efectivo' | 'bizum' | 'paypal' | 'fraccionado' | 'otro';
   piePago?: string;
   /** Moneda de la factura (ISO). Importes manuales en esa divisa, sin conversión. Default EUR. */
   moneda?: string;

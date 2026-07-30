@@ -45,7 +45,7 @@ export default function FiscalDataDialog({ projectId, leadId, conversionId, defa
   const [items, setItems] = useState<InvoiceItem[]>(defaultItems);
   const [notas, setNotas] = useState(defaultNotas || '');
   // Método y pie
-  const [metodoPago, setMetodoPago] = useState<'transferencia' | 'tarjeta' | 'tarjeta_stripe' | 'efectivo' | 'bizum' | 'fraccionado' | 'otro'>('transferencia');
+  const [metodoPago, setMetodoPago] = useState<'transferencia' | 'tarjeta' | 'tarjeta_stripe' | 'efectivo' | 'bizum' | 'paypal' | 'fraccionado' | 'otro'>('transferencia');
   const [piePago, setPiePago] = useState('');
   // Emisor (multi-empresa)
   const [issuers, setIssuers] = useState<import('../api/invoices.api').Issuer[]>([]);
@@ -235,6 +235,7 @@ export default function FiscalDataDialog({ projectId, leadId, conversionId, defa
                   <option value="tarjeta_stripe">Tarjeta (Stripe)</option>
                   <option value="efectivo">Efectivo</option>
                   <option value="bizum">Bizum</option>
+                  <option value="paypal">PayPal</option>
                   <option value="fraccionado">Pago fraccionado</option>
                   <option value="otro">Otro</option>
                 </select>

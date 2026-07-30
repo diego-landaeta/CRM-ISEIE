@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-const PAYMENT_METHODS = ['transferencia', 'tarjeta', 'efectivo', 'fraccionado'];
+const PAYMENT_METHODS = ['transferencia', 'tarjeta', 'efectivo', 'paypal', 'fraccionado'];
 
 // POST /api/sales — registro de venta histórica o del día.
 // Por la fecha (< hoy o = hoy) el backend infiere si es retroactiva (etiqueta interna).

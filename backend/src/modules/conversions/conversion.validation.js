@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-const PAYMENT_METHODS = ['transferencia', 'tarjeta', 'tarjeta_stripe', 'efectivo', 'bizum', 'fraccionado', 'otro'];
+const PAYMENT_METHODS = ['transferencia', 'tarjeta', 'tarjeta_stripe', 'efectivo', 'bizum', 'paypal', 'fraccionado', 'otro'];
 
 const conversionItemSchema = z.object({
   product_id: z.number().int().positive().optional().nullable(),

@@ -99,6 +99,7 @@ const METODOS: ReadonlyArray<{ value: MetodoPago; label: string }> = [
   { value: 'transferencia', label: 'Transferencia' },
   { value: 'efectivo', label: 'Efectivo' },
   { value: 'bizum', label: 'Bizum' },
+  { value: 'paypal', label: 'PayPal' },
   { value: 'fraccionado', label: 'Fraccionado' },
   { value: 'otro', label: 'Otro' },
 ];
@@ -657,6 +658,7 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
                       <option value="transferencia">Transferencia</option>
                       <option value="efectivo">Efectivo</option>
                       <option value="bizum">Bizum</option>
+                      <option value="paypal">PayPal</option>
                       <option value="otro">Otro</option>
                     </select>
                   </div>
