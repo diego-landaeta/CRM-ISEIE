@@ -171,10 +171,9 @@ export async function getById(req, res, next) {
     const id = parseInt(req.params.id);
     if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
     const lead = await leadService.getById(id);
-    // SEGURIDAD: el rol 'gestor' SOLO puede ver leads asignados a él.
-    if (req.user.role === 'gestor' && lead && lead.responsable_id !== req.user.userId) {
-      throw new AppError('No tienes acceso a este lead', 403, 'FORBIDDEN_LEAD');
-    }
+    // Las gestoras tienen el mismo permiso entre ellas: si llegan a una ficha,
+    // pueden trabajarla. Antes esto devolvia 403 y la pantalla no cargaba, asi
+    // que tampoco se le podia cambiar el estado ni guardar el telefono.
     res.json({ success: true, data: lead });
   } catch (err) { next(err); }
 }
@@ -393,13 +392,8 @@ export async function mergeLeads(req, res, next) {
     if (isNaN(winnerId) || isNaN(loserId)) throw new AppError('IDs invalidos', 400, 'INVALID_ID');
     if (!comment || comment.length < 3) throw new AppError('Comentario obligatorio (mínimo 3 caracteres)', 400, 'COMMENT_REQUIRED');
 
-    // Si el solicitante es gestor, debe ser dueño del winner
-    if (req.user.role === 'gestor') {
-      const w = await leadService.getById(winnerId);
-      if (!w || w.responsable_id !== req.user.userId) {
-        throw new AppError('Solo puedes fusionar leads asignados a ti', 403, 'FORBIDDEN_LEAD');
-      }
-    }
+    // Cualquiera puede fusionar: los duplicados suelen caer en carteras
+    // distintas y exigir ser la dueña dejaba la fusion sin hacer.
     const result = await leadService.mergeLeads({ winnerId, loserId, comment, userId: req.user.userId });
     res.json({ success: true, data: result });
   } catch (err) { next(err); }

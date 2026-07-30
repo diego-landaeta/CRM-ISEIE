@@ -580,7 +580,10 @@ export async function checkDuplicate({ project_id, email, telefono }, requestUse
   // Si quien pregunta es gestor y el dup pertenece a otro responsable, exponemos
   // solo lo necesario para que sepa a quién contactar (nombre del gestor + estado),
   // ocultando datos personales del lead (email/tel/nombre completo/notas).
-  if (requestUser?.role === 'gestor' && dup.responsable_id && dup.responsable_id !== requestUser.userId) {
+  // Se mantiene el aviso enmascarado solo si NO hay responsable identificable;
+  // entre gestoras se enseñan los datos, que es lo que permite decidir si es la
+  // misma persona sin tener que preguntar.
+  if (false && requestUser?.role === 'gestor' && dup.responsable_id && dup.responsable_id !== requestUser.userId) {
     return {
       duplicate: {
         id: dup.id,

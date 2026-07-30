@@ -46,6 +46,9 @@ export default function InvoicesPage() {
   // Gestión de facturas (editar/eliminar/abonar): admin o gestora con permiso
   // factura_manager (el backend valida además que sean SUS facturas).
   const canManage = isAdmin || !!user?.factura_manager;
+  // Quien factura de verdad. Los totales de la sociedad, las ventas sin
+  // factura y los cobros sueltos son trabajo suyo, no de cada gestora.
+  const puedeFacturar = user?.role === 'superadmin' || !!user?.factura_manager;
   const pid = activeProject?.id;
   const loc = useLocation();
   const [tab, setTab] = useState<'facturas' | 'proformas' | 'abonos'>(() => {
@@ -269,7 +272,7 @@ export default function InvoicesPage() {
         ))}
       </div>
 
-      {!esProformas && stats && (
+      {!esProformas && stats && puedeFacturar && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <KpiCard icon={Receipt} iconBg="bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400"
             label="Total facturas" numericValue={stats.total} />
@@ -343,7 +346,7 @@ export default function InvoicesPage() {
 
       {/* Cobros de Stripe sin asociar - tambien visibles aqui, no solo en Pagos Stripe.
           Hasta asociarlos a un cliente NO generan factura. */}
-      {!esProformas && stripeSinAsociar.length > 0 && (
+      {!esProformas && puedeFacturar && stripeSinAsociar.length > 0 && (
         <div className="bg-red-50/70 dark:bg-red-950/20 border border-red-300 dark:border-red-900/50 rounded-lg overflow-hidden">
           <div className="px-4 py-2.5 border-b border-red-200 dark:border-red-900/40 flex items-center justify-between gap-2 flex-wrap">
             <div className="flex items-center gap-2">
@@ -383,7 +386,7 @@ export default function InvoicesPage() {
         </div>
       )}
 
-      {!porSociedad && !esProformas && ventasSinFactura.length > 0 && (
+      {!porSociedad && !esProformas && puedeFacturar && ventasSinFactura.length > 0 && (
         <div className="bg-amber-50/60 dark:bg-amber-950/10 border border-amber-200 dark:border-amber-900/40 rounded-lg overflow-hidden">
           <div className="px-4 py-2.5 border-b border-amber-200 dark:border-amber-900/40 flex items-center gap-2">
             <Receipt size={15} weight="bold" className="text-amber-600" />
