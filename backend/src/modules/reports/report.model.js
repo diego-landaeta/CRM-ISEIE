@@ -501,6 +501,9 @@ export async function asesorasPorMes({ projectId, from, to, asesoraId }) {
          ${wv}
           -- Una ficha marcada como mensualidad no es una venta nueva.
           AND NOT c.es_mensualidad
+          -- Y una venta sin NINGUN cobro tampoco: es una proforma que el cliente
+          -- no llego a pagar. Sin esto se colaban en el recuento del mes.
+          AND EXISTS (SELECT 1 FROM conversion_payments cpx WHERE cpx.conversion_id = c.id)
         GROUP BY 1, 2
      ),
      cobros_mes AS (
