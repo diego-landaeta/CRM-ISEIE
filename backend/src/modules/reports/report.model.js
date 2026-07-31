@@ -139,7 +139,12 @@ function buildFilter({ projectId, from, to, asesoraId }, dateCol, projectCol = '
   return { where: cond.length ? 'WHERE ' + cond.join(' AND ') : '', params };
 }
 
-const ENTRY = 'COALESCE(l.fecha_solicitud, l.created_at)';
+// La zona de la aplicacion, la misma que usa el listado de prospectos. Sin
+// esto el informe partia el dia a medianoche UTC y los listados a medianoche
+// de Madrid: un lead de las 22:50 del dia 30 caia en meses distintos segun
+// quien preguntara, y la tabla no cuadraba con la descarga.
+const TZ = process.env.APP_TIMEZONE || 'Europe/Madrid';
+const ENTRY = `(COALESCE(l.fecha_solicitud, l.created_at) AT TIME ZONE '${TZ}')`;
 
 // El reporte general mezcla dos hechos con fechas distintas:
 // - prospecto sin venta: fecha de entrada;
