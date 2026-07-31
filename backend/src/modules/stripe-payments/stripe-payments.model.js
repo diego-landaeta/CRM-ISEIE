@@ -105,7 +105,10 @@ export async function updateConversionPaid(conversionId, addAmount) {
   );
 }
 
-export async function listPayments({ projectId, status, linked, search, from, to, facturables, page = 1, limit = 50 }) {
+// Las condiciones del listado, en un solo sitio: las usan tanto listPayments
+// como getStats. Antes getStats solo miraba el proyecto, asi que los totales de
+// arriba ignoraban el rango de fechas y el resto de filtros de abajo.
+function construirFiltro({ projectId, status, linked, search, from, to, facturables }) {
   const conds = ['sp.project_id = $1'];
   const params = [projectId];
   let i = 2;
@@ -143,7 +146,11 @@ export async function listPayments({ projectId, status, linked, search, from, to
   if (search) { conds.push(`(LOWER(sp.customer_email) LIKE $${i} OR LOWER(sp.customer_name) LIKE $${i} OR sp.stripe_id LIKE $${i})`); params.push(`%${search.toLowerCase()}%`); i++; }
   if (from) { conds.push(`sp.stripe_created_at >= $${i++}`); params.push(from); }
   if (to)   { conds.push(`sp.stripe_created_at <= $${i++}`); params.push(to); }
-  const where = conds.join(' AND ');
+  return { where: conds.join(' AND '), params };
+}
+
+export async function listPayments({ projectId, status, linked, search, from, to, facturables, page = 1, limit = 50 }) {
+  const { where, params } = construirFiltro({ projectId, status, linked, search, from, to, facturables });
   const offset = (page - 1) * limit;
   const { rows } = await query(
     // Se añade a QUÉ pertenece el cobro: el curso/concepto de la conversión y la
@@ -183,19 +190,23 @@ export async function listProjectsWithStripe() {
   return rows.map(r => r.project_id);
 }
 
-export async function getStats(projectId) {
+// Los totales de la cabecera responden al MISMO filtro que el listado: si
+// arriba pone un rango de fechas, las cifras son de ese rango. Antes eran
+// siempre las del historico completo y no cuadraban con lo que se veia debajo.
+export async function getStats({ projectId, status, linked, search, from, to, facturables }) {
+  const { where, params } = construirFiltro({ projectId, status, linked, search, from, to, facturables });
   const { rows } = await query(
     `SELECT
        COUNT(*)::int AS total,
-       COUNT(*) FILTER (WHERE status='succeeded')::int AS succeeded,
-       COUNT(*) FILTER (WHERE status='failed')::int AS failed,
-       COUNT(*) FILTER (WHERE disputed=true)::int AS disputed,
-       COUNT(*) FILTER (WHERE refunded=true)::int AS refunded,
-       COUNT(*) FILTER (WHERE conversion_id IS NULL AND status='succeeded')::int AS unlinked,
-       COALESCE(SUM(amount) FILTER (WHERE status='succeeded'), 0) AS total_cobrado,
-       COALESCE(SUM(refunded_amount), 0) AS total_refunded
-     FROM stripe_payments WHERE project_id=$1`,
-    [projectId]
+       COUNT(*) FILTER (WHERE sp.status='succeeded')::int AS succeeded,
+       COUNT(*) FILTER (WHERE sp.status='failed')::int AS failed,
+       COUNT(*) FILTER (WHERE sp.disputed=true)::int AS disputed,
+       COUNT(*) FILTER (WHERE sp.refunded=true)::int AS refunded,
+       COUNT(*) FILTER (WHERE sp.conversion_id IS NULL AND sp.status='succeeded')::int AS unlinked,
+       COALESCE(SUM(sp.amount) FILTER (WHERE sp.status='succeeded'), 0) AS total_cobrado,
+       COALESCE(SUM(sp.refunded_amount), 0) AS total_refunded
+     FROM stripe_payments sp WHERE ${where}`,
+    params
   );
   return rows[0];
 }

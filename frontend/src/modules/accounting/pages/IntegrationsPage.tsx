@@ -23,8 +23,11 @@ interface Integration {
   last_test_at: string | null;
 }
 
+// Nace activa: no hay interruptor en pantalla, asi que guardar una clave
+// significa querer usarla. Con active:false la fila quedaba inactiva y el
+// sincronizador de Stripe no la veia.
 const EMPTY = (provider: Provider): Integration => ({
-  provider, active: false, has_secret: false, secret_preview: null,
+  provider, active: true, has_secret: false, secret_preview: null,
   config_public: {}, last_test_status: null, last_test_message: null, last_test_at: null,
 });
 
@@ -109,7 +112,10 @@ function StripeCard({ projectId }: { projectId: number }) {
     try {
       const body: Record<string, unknown> = {
         projectId, provider: 'stripe',
-        active: data?.active ?? true,
+        // Siempre activa: no hay interruptor en pantalla, guardar una clave es
+        // querer usarla. Con el valor anterior la fila se quedaba apagada y el
+        // sincronizador de Stripe no la encontraba.
+        active: true,
         config_public: {
           ...(data?.config_public || {}),
           webhook_url: window.location.origin + '/api/integrations/stripe/webhook',  // URL final (informativo)
@@ -310,7 +316,10 @@ function BrevoCard({ projectId }: { projectId: number }) {
     try {
       const body: Record<string, unknown> = {
         projectId, provider: 'brevo',
-        active: data?.active ?? true,
+        // Siempre activa: no hay interruptor en pantalla, guardar una clave es
+        // querer usarla. Con el valor anterior la fila se quedaba apagada y el
+        // sincronizador de Stripe no la encontraba.
+        active: true,
         config_public: {
           from_email: fromEmail.trim() || null,
           from_name: fromName.trim() || null,

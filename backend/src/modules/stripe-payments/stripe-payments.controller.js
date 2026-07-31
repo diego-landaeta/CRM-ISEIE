@@ -26,7 +26,13 @@ export async function list(req, res, next) {
 export async function stats(req, res, next) {
   try {
     const pid = projectId(req);
-    const s = await model.getStats(pid);
+    const { status, linked, search, from, to, facturables } = req.query;
+    // Los mismos filtros que el listado: si no, la cabecera cuenta una cosa y la
+    // tabla de debajo otra.
+    const s = await model.getStats({
+      projectId: pid, status, linked, search, from, to,
+      facturables: facturables === '1' || facturables === 'true',
+    });
     const sync = await model.getSyncState(pid);
     res.json({ success: true, data: { ...s, sync } });
   } catch (e) { next(e); }
