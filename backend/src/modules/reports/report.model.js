@@ -22,7 +22,7 @@ export async function overview({ projectId, from, to }) {
        COUNT(*) FILTER (WHERE status = 'convertido') as convertido,
        COUNT(*) FILTER (WHERE status = 'no_interesado') as no_interesado
      FROM leads
-     WHERE 1=1 ${pFilter}
+     WHERE deleted_at IS NULL ${pFilter}
        AND (${fromParam}::date IS NULL OR created_at >= ${fromParam}::date)
        AND (${toParam}::date IS NULL OR created_at <= ${toParam}::date + INTERVAL '1 day')`,
     params
@@ -30,7 +30,7 @@ export async function overview({ projectId, from, to }) {
 
   const { rows: byCanal } = await query(
     `SELECT COALESCE(lu.canal_detectado::text, 'sin_canal') as canal, COUNT(*)::int as total
-     FROM leads l
+     FROM (SELECT * FROM leads WHERE deleted_at IS NULL) l
      LEFT JOIN lead_utms lu ON lu.lead_id = l.id
      WHERE 1=1 ${pFilter.replace('project_id', 'l.project_id')}
        AND (${fromParam}::date IS NULL OR l.created_at >= ${fromParam}::date)
@@ -43,7 +43,7 @@ export async function overview({ projectId, from, to }) {
     `SELECT COALESCE(u.nombre, 'Sin asignar') as gestor,
             COUNT(l.id)::int as total,
             COUNT(l.id) FILTER (WHERE l.status = 'convertido')::int as convertidos
-     FROM leads l
+     FROM (SELECT * FROM leads WHERE deleted_at IS NULL) l
      LEFT JOIN users u ON u.id = l.responsable_id
      WHERE 1=1 ${pFilter.replace('project_id', 'l.project_id')}
        AND (${fromParam}::date IS NULL OR l.created_at >= ${fromParam}::date)
@@ -176,7 +176,7 @@ export async function resumenMensual({ projectId, from, to }) {
   const { rows } = await query(
     `WITH entrados AS (
        SELECT to_char(date_trunc('month', ${ENTRY}), 'YYYY-MM') AS mes, COUNT(*)::int AS prospectos
-       FROM leads l ${e.where} GROUP BY 1
+       FROM (SELECT * FROM leads WHERE deleted_at IS NULL) l ${e.where} GROUP BY 1
      ), convertidos AS (
        SELECT to_char(date_trunc('month', fecha_conversion), 'YYYY-MM') AS mes,
               COUNT(*)::int AS convertidos,
@@ -206,7 +206,7 @@ export async function prospectosReport({ projectId, from, to }) {
     `SELECT p.nombre AS proyecto, l.nombre, l.telefono, l.email, l.status AS estado,
             prod.nombre AS producto, prod.precio AS valor_estimado, prod.moneda,
             u.nombre AS responsable, ${ENTRY} AS fecha_entrada
-     FROM leads l
+     FROM (SELECT * FROM leads WHERE deleted_at IS NULL) l
      LEFT JOIN products prod ON prod.id = l.producto_interes_id
      LEFT JOIN users u ON u.id = l.responsable_id
      LEFT JOIN projects p ON p.id = l.project_id
@@ -263,7 +263,7 @@ export async function generalReport({ projectId, from, to }) {
             (conv.importe_total - conv.importe_pagado) AS venta_pendiente,
             conv.metodo_pago, conv.fecha_conversion AS fecha_venta,
             COALESCE(uv.nombre, u.nombre) AS responsable, ${ENTRY} AS fecha_entrada
-     FROM leads l
+     FROM (SELECT * FROM leads WHERE deleted_at IS NULL) l
      LEFT JOIN products prod ON prod.id = l.producto_interes_id
      LEFT JOIN users u ON u.id = l.responsable_id
      LEFT JOIN projects p ON p.id = l.project_id
@@ -294,7 +294,7 @@ export async function generalFacturacionReport({ projectId, from, to }) {
             COALESCE(fac.facturado, 0) AS facturado,
             fac.codigos AS facturas,
             COALESCE(uv.nombre, u.nombre) AS responsable, ${ENTRY} AS fecha_entrada
-     FROM leads l
+     FROM (SELECT * FROM leads WHERE deleted_at IS NULL) l
      LEFT JOIN products prod ON prod.id = l.producto_interes_id
      LEFT JOIN users u ON u.id = l.responsable_id
      LEFT JOIN projects p ON p.id = l.project_id
@@ -460,7 +460,7 @@ export async function asesorasPorMes({ projectId, from, to }) {
                 SELECT 1 FROM conversions cvx
                  WHERE cvx.lead_id = l.id
                    AND cvx.fecha_conversion >= ${ENTRY}::date))::int AS leads_convertidos
-         FROM leads l ${fl.where}
+         FROM (SELECT * FROM leads WHERE deleted_at IS NULL) l ${fl.where}
         GROUP BY 1, 2
      ),
      ventas_mes AS (
@@ -546,7 +546,7 @@ export async function panelReportes({ projectId, from, to }) {
 
   async function bloque(d, h) {
     const { rows: le } = await query(
-      `SELECT COUNT(*)::int AS n FROM leads l
+      `SELECT COUNT(*)::int AS n FROM (SELECT * FROM leads WHERE deleted_at IS NULL) l
         WHERE ${ENTRY}::date BETWEEN $1 AND $2 ${pl}`, par(d, h));
     const { rows: ve } = await query(
       `SELECT COUNT(*)::int AS n, COALESCE(SUM(c.importe_total), 0) AS vendido
@@ -589,7 +589,7 @@ export async function panelReportes({ projectId, from, to }) {
      ),
      le AS (
        SELECT date_trunc('${grano}', ${ENTRY})::date AS p, COUNT(*)::int AS n
-         FROM leads l WHERE ${ENTRY}::date BETWEEN $1 AND $2 ${pl} GROUP BY 1
+         FROM (SELECT * FROM leads WHERE deleted_at IS NULL) l WHERE ${ENTRY}::date BETWEEN $1 AND $2 ${pl} GROUP BY 1
      ),
      ve AS (
        SELECT date_trunc('${grano}', c.fecha_conversion)::date AS p, COUNT(*)::int AS n,
@@ -736,7 +736,7 @@ export async function paisesMasVendidos({ projectId, from, to }) {
               EXISTS (SELECT 1 FROM conversions cvx
                        WHERE cvx.lead_id = l.id
                          AND cvx.fecha_conversion >= ${ENTRY}::date) AS convirtio
-         FROM leads l ${wl}
+         FROM (SELECT * FROM leads WHERE deleted_at IS NULL) l ${wl}
      ),
      lds AS (
        SELECT ${PAIS_TEL} AS pais,
@@ -835,7 +835,7 @@ export async function detalleMetrica({ projectId, from, to, tipo, asesoraId, mes
               EXISTS (SELECT 1 FROM conversions cvx WHERE cvx.lead_id = l.id
                        AND cvx.fecha_conversion >= ${ENTRY}::date) AS convirtio,
               (SELECT COUNT(*) FROM conversions cv WHERE cv.lead_id = l.id)::int AS ventas
-         FROM leads l
+         FROM (SELECT * FROM leads WHERE deleted_at IS NULL) l
          LEFT JOIN users u ON u.id = l.responsable_id
         WHERE ${cond.join(' AND ')}
         ORDER BY fecha DESC, l.id DESC
