@@ -221,7 +221,7 @@ export default function AsesorasPanel({ from, to }) {
                 <span className="text-[11px] text-sky-600 dark:text-sky-400">
                   <Num tipo="mensualidades" mes={m.mes}>{m.mensualidades}</Num> mensual.
                 </span>
-                <span className="text-[11px] text-muted-foreground tabular-nums">{tasa.toFixed(1)}%</span>
+                <span className="text-[11px] text-muted-foreground tabular-nums">{tasa.toFixed(2)}%</span>
                 {/* Reparto del cobro del mes: ventas nuevas vs cuotas del plan. */}
                 {m.cobrado > 0 && (
                   <span className="hidden md:flex h-2 w-28 rounded-full overflow-hidden bg-muted"
@@ -269,7 +269,7 @@ export default function AsesorasPanel({ from, to }) {
                           <td className="px-3 py-2 text-right text-sky-600 dark:text-sky-400">
                             <Num tipo="mensualidades" mes={m.mes} asesora={a}>{a.mensualidades}</Num>
                           </td>
-                          <td className="px-3 py-2 text-right tabular-nums">{Number(a.tasa_conversion).toFixed(1)}%</td>
+                          <td className="px-3 py-2 text-right tabular-nums">{Number(a.tasa_conversion).toFixed(2)}%</td>
                           <td className="px-3 py-2 text-right">
                             <Num tipo="ventas" mes={m.mes} asesora={a}>{fmtMoney(a.vendido)}</Num>
                           </td>
@@ -299,7 +299,7 @@ export default function AsesorasPanel({ from, to }) {
                         <td className="px-3 py-2 text-right text-sky-600 dark:text-sky-400">
                           <Num tipo="mensualidades" mes={m.mes}>{m.mensualidades}</Num>
                         </td>
-                        <td className="px-3 py-2 text-right tabular-nums">{tasa.toFixed(1)}%</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{tasa.toFixed(2)}%</td>
                         <td className="px-3 py-2 text-right">
                           <Num tipo="ventas" mes={m.mes}>{fmtMoney(m.vendido)}</Num>
                         </td>

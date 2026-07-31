@@ -576,8 +576,11 @@ export async function asesorasPorMes({ projectId, from, to, asesoraId, base }) {
             -- con la 606 y la 616, Andrea Varela con la 574 y la 599). Antes
             -- contaba clientes distintos y esas filas salian con uno de menos.
             COALESCE(vm.ventas, 0) AS leads_convertidos,
+            -- Exactamente Convertidos / Leads de esta misma fila. Antes usaba
+            -- clientes distintos mientras la columna contaba ventas, y la
+            -- division no cuadraba a mano: Diana enseñaba 10 y 3,3 % (9/273).
             CASE WHEN COALESCE(lm.leads, 0) > 0
-                 THEN ROUND(COALESCE(vm.clientes, 0)::numeric * 100 / lm.leads, 1)
+                 THEN ROUND(COALESCE(vm.ventas, 0)::numeric * 100 / lm.leads, 2)
                  ELSE 0 END AS tasa_conversion,
             ROUND(COALESCE(vm.vendido, 0), 2) AS vendido,
             ROUND(COALESCE(cm.cobrado, 0), 2) AS cobrado,
