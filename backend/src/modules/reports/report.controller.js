@@ -59,9 +59,11 @@ function rangoDeQuery(req) {
     // Por aqui pasan el panel del Resumen, los rankings y el detalle. Sin esto
     // una gestora veia los numeros de todos.
     asesoraId: asesoraDelInforme(req),
-    // Base de conteo: 'cobro' (cuanto entro) o 'factura' (que se emitio). Por
-    // defecto cobro, que es como venia funcionando el panel.
-    base: req.query.base === 'factura' ? 'factura' : 'cobro',
+    // Base de conteo: 'factura' (que se emitio este mes) o 'cobro' (cuanto
+    // dinero entro). Por defecto factura, que es como cuenta la contabilidad;
+    // con cobro se caian del mes las facturas emitidas en un mes y cobradas en
+    // el anterior.
+    base: req.query.base === 'cobro' ? 'cobro' : 'factura',
   };
 }
 

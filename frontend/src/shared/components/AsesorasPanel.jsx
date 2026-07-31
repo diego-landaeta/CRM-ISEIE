@@ -41,8 +41,9 @@ export default function AsesorasPanel({ from, to }) {
   // enseña el año entero.
   const [ambito, setAmbito] = useState('anio');
   // El mismo pago cae en meses distintos segun por donde se mire, asi que hay que
-  // poder elegir: 'cobro' es el criterio de siempre, 'factura' el de contabilidad.
-  const [base, setBase] = useState('cobro');
+  // poder elegir: 'factura' es el de contabilidad y el que manda; 'cobro'
+  // responde a cuanto dinero entro, que es otra pregunta.
+  const [base, setBase] = useState('factura');
   const anio = new Date().getFullYear();
   const desde = ambito === 'anio' ? `${anio}-01-01` : from;
   const hasta = ambito === 'anio' ? new Date().toISOString().slice(0, 10) : to;
@@ -56,9 +57,8 @@ export default function AsesorasPanel({ from, to }) {
         if (activeProject?.id) p.set('projectId', String(activeProject.id));
         if (desde) p.set('from', desde);
         if (hasta) p.set('to', hasta);
-        // Solo se manda cuando no es el criterio por defecto, para no cambiar las
-        // llamadas de siempre.
-        if (base === 'factura') p.set('base', 'factura');
+        // Solo se manda cuando no es el criterio por defecto.
+        if (base === 'cobro') p.set('base', 'cobro');
         const r = await client.get(`/reports/asesoras-mes?${p.toString()}`);
         if (vivo) setFilas(r.success ? (r.data || []) : []);
       } catch {

@@ -952,6 +952,12 @@ export async function detalleMetrica({ projectId, from, to, tipo, asesoraId, mes
               -- 240.502,95 EUR de mas en 2026 y enseñaba cobros donde no los hay.
               ROUND(COALESCE((SELECT SUM(cp2.importe) FROM conversion_payments cp2
                                WHERE cp2.conversion_id = c.id), 0), 2) AS cobrado,
+              -- Lo que cuenta COMO VENTA: el cobro que abre la ficha. Los
+              -- siguientes son mensualidades y se cuentan en su metrica. Sin
+              -- esta columna la fila solo enseñaba el precio del curso entero.
+              ROUND(COALESCE((SELECT cp3.importe FROM conversion_payments cp3
+                               WHERE cp3.conversion_id = c.id
+                               ORDER BY cp3.fecha, cp3.id LIMIT 1), 0), 2) AS como_venta,
               COALESCE(u.nombre, '— sin asesora —') AS asesora,
               (SELECT ${PAIS_TEL} FROM (SELECT (CASE WHEN LENGTH(regexp_replace(regexp_replace(COALESCE(l.telefono, ''), '[^0-9]', '', 'g'), '^00', '')) > 15 THEN LEFT(regexp_replace(regexp_replace(COALESCE(l.telefono, ''), '[^0-9]', '', 'g'), '^00', ''), 11) ELSE regexp_replace(regexp_replace(COALESCE(l.telefono, ''), '[^0-9]', '', 'g'), '^00', '') END) AS tel) _t) AS pais,
               (SELECT COUNT(*) FROM conversion_payments cp WHERE cp.conversion_id = c.id)::int AS cobros,

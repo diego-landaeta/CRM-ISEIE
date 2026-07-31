@@ -33,6 +33,9 @@ const COLUMNAS = {
     // 'Venta total' y no 'Importe': es el precio de la venta entera, que se leía
     // como si fuera el cobro de ese mes y no cuadraba con la columna de al lado.
     { k: 'formacion', h: 'Formación' }, { k: 'importe', h: 'Venta total', t: 'eur' },
+    // 'Venta total' es el precio del curso; 'Como venta' es lo que cuenta este
+    // mes en la metrica de ventas, que es el cobro que la abre.
+    { k: 'como_venta', h: 'Como venta', t: 'eur' },
     { k: 'cobrado', h: 'Cobrado', t: 'eur' }, { k: 'cobros', h: 'Nº cobros', t: 'pagos' },
     { k: 'ventas_previas', h: 'Compras antes', t: 'num' },
     { k: 'asesora', h: 'Asesora' }, { k: 'facturas', h: 'Facturas' },
