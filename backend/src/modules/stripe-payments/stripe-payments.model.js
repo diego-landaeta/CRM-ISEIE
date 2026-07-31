@@ -60,7 +60,23 @@ export async function linkPayment(stripePaymentId, { leadId, conversionId, conve
 // Detecta el duplicado REAL: el mismo cobro ya registrado a mano por la asesora
 // (mismo importe y fecha a menos de 4 días) en esa venta. Se ignoran los pagos que
 // ya vienen de Stripe para no confundir mensualidades iguales de meses distintos.
-export async function findPagoDuplicado(conversionId, importe, fecha) {
+export async function findPagoDuplicado(conversionId, importe, fecha, stripeId = null) {
+  // Primero, el criterio fuerte: el MISMO cargo ya registrado. Un id de Stripe no
+  // se repite jamas, asi que si ya aparece en las notas de un cobro, ese cobro es
+  // este — da igual que la venta se haya reorganizado despues o que la fecha no
+  // cuadre. Sin esto, reorganizar una venta o perder el enlace hacia que el
+  // reintento de "cargos sin asociar" registrara el cobro por segunda vez.
+  if (stripeId) {
+    const { rows: porId } = await query(
+      `SELECT cp.id FROM conversion_payments cp
+        WHERE cp.notas LIKE '%' || $1 || '%'
+        ORDER BY cp.id LIMIT 1`,
+      [stripeId]
+    );
+    if (porId[0]) return porId[0];
+  }
+  // Y si no, el de siempre: lo registro una persona a mano, con el mismo importe
+  // y una fecha muy proxima en la misma venta.
   const { rows } = await query(
     `SELECT cp.id
        FROM conversion_payments cp

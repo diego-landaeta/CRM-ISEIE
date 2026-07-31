@@ -99,7 +99,7 @@ async function autoLinkIfPossible(projectId, payment, dbRow) {
   // mismo importe y fecha muy próxima en la misma venta. No basta con que la venta esté
   // saldada — hay ventas cuyo importe_total quedó corto y siguen recibiendo mensualidades
   // legítimas, y bloquearlas dejaba el cobro sin factura.
-  const dup = await model.findPagoDuplicado(conv.id, payment.amount, fecha);
+  const dup = await model.findPagoDuplicado(conv.id, payment.amount, fecha, payment.stripe_id);
   if (dup) {
     // Se vincula al pago que ya existe (y a su factura, si la tiene) SIN volver a sumar.
     await model.linkPayment(dbRow.id, { leadId: lead.id, conversionId: conv.id, conversionPaymentId: dup.id, userId: null, method: 'auto_dedup' });
@@ -115,16 +115,12 @@ async function autoLinkIfPossible(projectId, payment, dbRow) {
   if (res?.error || !res?.payment) return;
   const cpId = res.payment.id;
   await model.linkPayment(dbRow.id, { leadId: lead.id, conversionId: conv.id, conversionPaymentId: cpId, userId: null, method: 'auto_email' });
-  // Un pago de Stripe asociado genera SU factura, en el correlativo normal
-  // (igual que cualquier otro abono). No bloqueante.
-  autoInvoiceFromStripe(conv.id, null, cpId, payment.amount);
-}
-
-// Lanza la auto-factura por pago sin acoplar módulos en carga (import dinámico).
-function autoInvoiceFromStripe(conversionId, userId, paymentId, importe) {
-  import('../conversions/conversion.service.js')
-    .then((cs) => cs.autoInvoice(conversionId, userId, { paymentId, importe: Number(importe) }))
-    .catch(() => { /* no bloqueante: el pago sigue su curso */ });
+  // El cobro queda registrado en la venta y espera EN LA COLA de facturacion.
+  // La factura NO sale sola: la emite una persona cuando comprueba que los datos
+  // del cliente estan bien. Antes se emitia aqui mismo, y salian facturas
+  // numeradas con lo que hubiera en la ficha en ese momento.
+  logger.info({ conversionId: conv.id, paymentId: cpId, stripeId: payment.stripe_id },
+    'cobro de Stripe registrado; queda en la cola de facturacion');
 }
 
 // Trae detalle completo de dispute desde Stripe API (incluye evidence_due_by)
@@ -258,7 +254,7 @@ export async function manualLink(stripePaymentId, { leadId, conversionId, userId
       importe = amount;
       // Si la asesora ya registró ese mismo cobro a mano, se engancha al pago existente
       // (y a su factura) en vez de crear otro: se vincula pero NO vuelve a sumar.
-      const dup = await model.findPagoDuplicado(conversionId, amount, fecha);
+      const dup = await model.findPagoDuplicado(conversionId, amount, fecha, rows[0]?.stripe_id);
       if (dup) {
         cpId = dup.id;
         yaExistia = true;
@@ -274,9 +270,13 @@ export async function manualLink(stripePaymentId, { leadId, conversionId, userId
     }
   }
   await model.linkPayment(stripePaymentId, { leadId, conversionId, conversionPaymentId: cpId, userId, method: yaExistia ? 'manual_dedup' : 'manual' });
-  // Al asociar a mano se emite su factura. Si el pago ya existía (o ya hay una factura
-  // de ese importe sin vincular), emitirFacturaDePago la reutiliza y no duplica.
-  if (cpId) autoInvoiceFromStripe(conversionId, userId, cpId, importe);
+  // Asociar el cargo NO emite la factura: el cobro queda registrado en la venta y
+  // espera en la cola. La emite una persona cuando comprueba que los datos del
+  // cliente estan bien.
+  if (cpId) {
+    logger.info({ conversionId, paymentId: cpId, stripePaymentId },
+      'cargo de Stripe asociado a mano; queda en la cola de facturacion');
+  }
 }
 
 export async function updateDisputeDecision(stripePaymentId, { decision, notes, userId }) {
