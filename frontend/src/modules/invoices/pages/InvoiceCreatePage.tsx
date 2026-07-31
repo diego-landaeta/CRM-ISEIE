@@ -678,7 +678,7 @@ export default function InvoiceCreatePage() {
           <label className="text-xs font-bold uppercase text-muted-foreground">Pago</label>
           <select value={metodoPago} onChange={(e) => setMetodoPago(e.target.value as 'transferencia')} className="w-full h-9 px-2 rounded border border-border bg-background text-sm">
             <option value="transferencia">Transferencia bancaria</option><option value="tarjeta">Tarjeta</option><option value="tarjeta_stripe">Tarjeta (Stripe)</option>
-            <option value="efectivo">Efectivo</option><option value="bizum">Bizum</option><option value="fraccionado">Fraccionado</option><option value="otro">Otro</option>
+            <option value="efectivo">Efectivo</option><option value="bizum">Bizum</option><option value="paypal">PayPal</option><option value="fraccionado">Fraccionado</option><option value="otro">Otro</option>
           </select>
           <div>
             <label className="text-[11px] text-muted-foreground">Moneda</label>
