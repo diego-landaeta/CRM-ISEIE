@@ -345,12 +345,8 @@ export async function generatePDF(invoiceId, { preliminar = false, vistaGestor =
     drawRight(`COPIA DE GESTIÓN · neto Stripe (comisión ${fmtMoney(neto.fee, 'EUR')})`, right, y, 8, font, gray);
   }
 
-  // Deja explícito si el IVA va INCLUIDO en el precio o AÑADIDO sobre la base.
-  if (Number(inv.iva_pct) > 0) {
-    y -= 13;
-    drawRight(inv.iva_incluido ? 'IVA incluido en el precio' : 'IVA añadido a la base imponible',
-      right, y, 8, font, gray);
-  }
+  // La factura no lleva coletillas de IVA: ni "incluido en el precio" ni
+  // "añadido a la base". Van la base, el IVA cuando corresponde y el total.
 
   // Metodo de pago
   y -= 30;
@@ -366,12 +362,6 @@ export async function generatePDF(invoiceId, { preliminar = false, vistaGestor =
   };
   page.drawText(`Forma de pago: ${metodoLabels[inv.metodo_pago] || inv.metodo_pago || '—'}`,
     { x: left, y, size: 10, font: bold, color: black });
-
-  // Leyenda IVA
-  if (inv.leyenda_iva) {
-    y -= 18;
-    page.drawText(inv.leyenda_iva, { x: left, y, size: 9, font, color: gray });
-  }
 
   // Sello del emisor al pie (abajo-derecha) — SOLO si logo_en_pie (p.ej. ISEIE).
   if (logoImg && logoEnPie) {
@@ -567,12 +557,12 @@ async function renderFromTemplate({ pdfDoc, page, font, bold, inv, layout }) {
             { text: enDiv
                 ? `TOTAL: ${fmtMoney(inv.total_divisa, inv.moneda)} (${fmtMoney(inv.total, 'EUR')})`
                 : `TOTAL: ${fmtEUR(inv.total)}`, bold: true, size: (b.fontSize || 12) + 2 },
-            { text: Number(inv.iva_pct) > 0 ? (inv.iva_incluido ? 'IVA incluido en el precio' : 'IVA añadido a la base imponible') : '', color: gray, size: (b.fontSize || 12) - 3 },
           ]);
           break;
         }
         case 'coletilla':
-          if (inv.leyenda_iva) drawLines(b, String(inv.leyenda_iva).split('\n').map((t) => ({ text: t })));
+          // Las plantillas antiguas pueden seguir teniendo este bloque, pero ya
+          // no imprime nada: las facturas no llevan coletilla de IVA.
           break;
         case 'pie':
           drawLines(b, [
@@ -628,14 +618,6 @@ async function renderFromTemplate({ pdfDoc, page, font, bold, inv, layout }) {
     } catch (e) {
       logger.warn({ err: e.message, block: b.type }, 'Fallo dibujando bloque de plantilla');
     }
-  }
-
-  // Fallback: si la plantilla no tiene bloque de coletilla pero la factura tiene
-  // leyenda legal, la imprimimos igual (bajo los totales) para no perderla.
-  if (inv.leyenda_iva && !layout.some((b) => b.type === 'coletilla')) {
-    const lines = String(inv.leyenda_iva).split('\n');
-    let yy = 90;
-    for (const ln of lines) { page.drawText(ln.slice(0, 110), { x: 50, y: yy, size: 8, font, color: gray }); yy -= 11; }
   }
 
   // Pie fijo de trazabilidad
