@@ -60,11 +60,11 @@ const COLUMNAS = {
   ],
 };
 COLUMNAS['cobros-venta'] = COLUMNAS.cobros;
-COLUMNAS['leads-convertidos'] = COLUMNAS.leads;
+COLUMNAS['leads-convertidos'] = COLUMNAS.ventas;
 
 const TITULOS = {
   leads: 'Leads entrados',
-  'leads-convertidos': 'Leads del periodo que compraron',
+  'leads-convertidos': 'Ventas cerradas (convertidos)',
   ventas: 'Ventas cerradas',
   mensualidades: 'Mensualidades cobradas',
   cobros: 'Cobros',

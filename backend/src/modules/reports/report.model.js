@@ -570,12 +570,12 @@ export async function asesorasPorMes({ projectId, from, to, asesoraId, base }) {
             COALESCE(lm.leads, 0) AS leads,
             COALESCE(vm.ventas, 0) AS ventas,
             COALESCE(vm.clientes, 0) AS clientes,
-            -- Convertidos = clientes distintos de las ventas de ESE mes. Coincide
-            -- con la columna de ventas salvo si alguien compra dos veces. Antes
-            -- contaba los leads entrados en el mes que acabaron comprando, que
-            -- es otra cosa y no cuadraba nunca: una venta de julio suele venir
-            -- de un lead de mayo.
-            COALESCE(vm.clientes, 0) AS leads_convertidos,
+            -- Convertidos = las ventas cerradas ese mes. Si un cliente compra dos
+            -- veces son dos conversiones: es la regla del owner y es coherente
+            -- con dejar visibles por separado las ventas partidas (Jorge Ortiz
+            -- con la 606 y la 616, Andrea Varela con la 574 y la 599). Antes
+            -- contaba clientes distintos y esas filas salian con uno de menos.
+            COALESCE(vm.ventas, 0) AS leads_convertidos,
             CASE WHEN COALESCE(lm.leads, 0) > 0
                  THEN ROUND(COALESCE(vm.clientes, 0)::numeric * 100 / lm.leads, 1)
                  ELSE 0 END AS tasa_conversion,
@@ -893,7 +893,7 @@ export async function detalleMetrica({ projectId, from, to, tipo, asesoraId, mes
   const hasta = mes ? `${mes}-01` : (to || new Date().toISOString().slice(0, 10));
   const finMes = mes ? `(DATE '${mes}-01' + INTERVAL '1 month' - INTERVAL '1 day')::date` : null;
 
-  if (tipo === 'leads' || tipo === 'leads-convertidos') {
+  if (tipo === 'leads') {
     if (projectId) add('l.project_id = ?', projectId);
     // 'convertidos' son los leads DE ESE PERIODO que acabaron comprando; no la
     // gente que ese mes pago una mensualidad de algo que compro antes.
@@ -922,7 +922,10 @@ export async function detalleMetrica({ projectId, from, to, tipo, asesoraId, mes
     return rows;
   }
 
-  if (tipo === 'ventas') {
+  // 'leads-convertidos' es la columna Convertidos: las mismas ventas del mes que
+  // cuenta la tabla. Antes listaba los leads entrados en el mes que acabaron
+  // comprando, que es otra pregunta y daba otro numero.
+  if (tipo === 'ventas' || tipo === 'leads-convertidos') {
     if (projectId) add('c.project_id = ?', projectId);
     const DV = porFactura ? FEC_VENTA : 'c.fecha_conversion';
     add(`${DV} >= ?`, desde);
