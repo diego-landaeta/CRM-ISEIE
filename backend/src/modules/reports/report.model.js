@@ -455,6 +455,22 @@ export async function ventasPorAsesoraReport({ projectId, from, to, asesoraId })
 }
 
 // AGREGADO: por asesora y mes. Es lo que se ve en el panel.
+// Fecha de emision de la factura de un cobro, y la de la factura que ABRE una
+// venta (la de su primer cobro). Se usan cuando el informe cuenta «por factura»
+// en vez de «por cobro». Las proformas no cuentan: no son factura, y un cobro
+// sin facturar queda NULL y se cae del recuento.
+//
+// Estan aqui fuera a proposito: el panel y el popup del detalle tienen que usar
+// la MISMA definicion. Cuando cada uno tenia la suya, la tabla decia 18
+// mensualidades y al entrar salian 16.
+const FEC_COBRO = `(SELECT i.fecha_emision FROM invoices i
+                     WHERE i.payment_id = cp.id AND i.tipo <> 'proforma'
+                     ORDER BY i.fecha_emision, i.id LIMIT 1)`;
+const FEC_VENTA = `(SELECT i.fecha_emision FROM invoices i
+                     JOIN conversion_payments cpf ON cpf.id = i.payment_id
+                    WHERE cpf.conversion_id = c.id AND i.tipo <> 'proforma'
+                    ORDER BY cpf.fecha, cpf.id, i.fecha_emision, i.id LIMIT 1)`;
+
 export async function asesorasPorMes({ projectId, from, to, asesoraId, base }) {
   // Tres cosas distintas con tres fechas distintas: los leads por su fecha de
   // entrada, las ventas por su fecha de venta y los cobros por su fecha de cobro.
@@ -467,17 +483,6 @@ export async function asesorasPorMes({ projectId, from, to, asesoraId, base }) {
   // Los dos no cuadran (julio 2026: 5/16 por cobro y 5/18 por factura) porque un
   // cobro de junio se puede facturar en julio y al reves.
   const porFactura = base === 'factura';
-
-  // Fecha de emision de la factura del cobro. Las proformas no cuentan: no son
-  // factura. Un cobro sin facturar queda NULL y se cae del recuento por factura.
-  const FEC_COBRO = `(SELECT i.fecha_emision FROM invoices i
-                       WHERE i.payment_id = cp.id AND i.tipo <> 'proforma'
-                       ORDER BY i.fecha_emision, i.id LIMIT 1)`;
-  // Y la venta va con la factura de su PRIMER cobro (el que la abre).
-  const FEC_VENTA = `(SELECT i.fecha_emision FROM invoices i
-                       JOIN conversion_payments cpf ON cpf.id = i.payment_id
-                      WHERE cpf.conversion_id = c.id AND i.tipo <> 'proforma'
-                      ORDER BY cpf.fecha, cpf.id, i.fecha_emision, i.id LIMIT 1)`;
 
   const DV = porFactura ? FEC_VENTA : 'c.fecha_conversion';
   const DC = porFactura ? FEC_COBRO : 'cp.fecha';
@@ -867,9 +872,12 @@ export async function formacionesMasVendidas({ projectId, from, to, asesoraId })
 
 // Detras de cada numero del panel, las filas que lo componen. Es lo que abre el
 // popup al pulsar un importe o un contador.
-export async function detalleMetrica({ projectId, from, to, tipo, asesoraId, mes, pais, formacion, limite }) {
+export async function detalleMetrica({ projectId, from, to, tipo, asesoraId, mes, pais, formacion, limite, base }) {
   // El popup se conforma con 500; una descarga quiere todas las filas.
   const TOPE = Math.min(Math.max(Number(limite) || 500, 1), 20000);
+  // El mismo criterio que la tabla de la que se ha pulsado el numero. Si no, el
+  // de fuera y el de dentro cuentan cosas distintas.
+  const porFactura = base === 'factura';
   const cond = [];
   const params = [];
   let idx = 1;
@@ -911,8 +919,9 @@ export async function detalleMetrica({ projectId, from, to, tipo, asesoraId, mes
 
   if (tipo === 'ventas') {
     if (projectId) add('c.project_id = ?', projectId);
-    add('c.fecha_conversion >= ?', desde);
-    cond.push(finMes ? `c.fecha_conversion <= ${finMes}` : `c.fecha_conversion <= $${idx++}`);
+    const DV = porFactura ? FEC_VENTA : 'c.fecha_conversion';
+    add(`${DV} >= ?`, desde);
+    cond.push(finMes ? `${DV} <= ${finMes}` : `${DV} <= $${idx++}`);
     if (!finMes) params.push(hasta);
     if (asesoraId === 'sin') cond.push('COALESCE(c.vendedora_id, l.responsable_id) IS NULL');
     else if (asesoraId) add('COALESCE(c.vendedora_id, l.responsable_id) = ?', Number(asesoraId));
@@ -965,8 +974,9 @@ export async function detalleMetrica({ projectId, from, to, tipo, asesoraId, mes
 
   // cobros y mensualidades comparten consulta; cambia el filtro.
   if (projectId) add('c.project_id = ?', projectId);
-  add('cp.fecha >= ?', desde);
-  cond.push(finMes ? `cp.fecha <= ${finMes}` : `cp.fecha <= $${idx++}`);
+  const DC = porFactura ? FEC_COBRO : 'cp.fecha';
+  add(`${DC} >= ?`, desde);
+  cond.push(finMes ? `${DC} <= ${finMes}` : `${DC} <= $${idx++}`);
   if (!finMes) params.push(hasta);
   if (asesoraId === 'sin') cond.push('COALESCE(c.vendedora_id, l.responsable_id) IS NULL');
   else if (asesoraId) add('COALESCE(c.vendedora_id, l.responsable_id) = ?', Number(asesoraId));
@@ -989,6 +999,9 @@ export async function detalleMetrica({ projectId, from, to, tipo, asesoraId, mes
             LEFT(COALESCE(c.producto_contratado, ''), 46) AS formacion,
             (SELECT ci.numero FROM conversion_installments ci WHERE ci.payment_id = cp.id LIMIT 1) AS cuota,
             (SELECT i.codigo FROM invoices i WHERE i.payment_id = cp.id AND i.estado <> 'cancelada' LIMIT 1) AS factura,
+            -- Cuando se cuenta por factura, esta es la fecha que manda: sin ella
+            -- un cobro de junio aparece en julio sin explicacion visible.
+            ${FEC_COBRO}::date AS emitida,
             (${ES_PRIMERO}) AS es_primer_cobro
        FROM conversion_payments cp
        JOIN conversions c ON c.id = cp.conversion_id

@@ -41,13 +41,18 @@ const COLUMNAS = {
     { k: 'fecha', h: 'Cobro', t: 'date' }, { k: 'cliente', h: 'Cliente' },
     { k: 'importe', h: 'Importe', t: 'eur' }, { k: 'cuota', h: 'Cuota', t: 'num' },
     { k: 'formacion', h: 'Formación' }, { k: 'fecha_venta', h: 'Venta de', t: 'date' },
-    { k: 'factura', h: 'Factura' }, { k: 'asesora', h: 'Asesora' },
+    // Cobro y factura no siempre caen en el mismo mes: se cobra el 25 de junio y
+    // se factura el 26 de julio. Con las dos fechas a la vista se entiende en
+    // que mes cuenta la fila segun el criterio elegido arriba.
+    { k: 'factura', h: 'Factura' }, { k: 'emitida', h: 'Facturada', t: 'date' },
+    { k: 'asesora', h: 'Asesora' },
   ],
   cobros: [
     { k: 'fecha', h: 'Cobro', t: 'date' }, { k: 'cliente', h: 'Cliente' },
     { k: 'importe', h: 'Importe', t: 'eur' },
     { k: 'es_primer_cobro', h: 'Tipo', t: 'tipo' },
     { k: 'formacion', h: 'Formación' }, { k: 'factura', h: 'Factura' },
+    { k: 'emitida', h: 'Facturada', t: 'date' },
     { k: 'asesora', h: 'Asesora' },
   ],
 };

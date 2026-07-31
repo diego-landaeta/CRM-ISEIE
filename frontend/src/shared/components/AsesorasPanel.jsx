@@ -99,6 +99,9 @@ export default function AsesorasPanel({ from, to }) {
         mes,
         projectId: activeProject?.id || '',
         asesoraId: asesora ? (asesora.asesora_id ?? 'sin') : '',
+        // El popup cuenta con el mismo criterio que la tabla: si no, se ve 18
+        // fuera y 16 dentro.
+        base,
       },
       subtitulo: `${nombreMes(mes)} · ${asesora ? asesora.asesora : 'todas las asesoras'}`,
     });

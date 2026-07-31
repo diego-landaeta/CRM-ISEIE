@@ -77,9 +77,12 @@ export default function StripePaymentsPage() {
       if (filters.search) qs.set('search', filters.search);
       if (filters.from) qs.set('from', new Date(filters.from).toISOString());
       if (filters.to) qs.set('to', new Date(filters.to + 'T23:59:59').toISOString());
+      // Las cifras de arriba salen del MISMO filtro que la tabla de abajo: si se
+      // acota un rango de fechas, el cobrado es el de ese rango. Antes la
+      // cabecera pedia siempre el historico entero y no cuadraba con la lista.
       const [r1, r2] = await Promise.all([
         client.get<Payment[]>(`/stripe-payments?${qs}`),
-        client.get<Stats>(`/stripe-payments/stats?projectId=${pid}`),
+        client.get<Stats>(`/stripe-payments/stats?${qs}`),
       ]);
       if (r1.success) setPayments(r1.data || []);
       if (r2.success) setStats(r2.data || null);
