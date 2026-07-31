@@ -893,6 +893,10 @@ export async function detalleMetrica({ projectId, from, to, tipo, asesoraId, mes
     // Las marcadas como mensualidad no salen aqui: el popup tiene que cuadrar
     // con el numero de ventas del panel, que tampoco las cuenta.
     cond.push('NOT c.es_mensualidad');
+    // Y por lo mismo, una venta sin ningun cobro tampoco: es una proforma que el
+    // cliente no pago. El panel ya la excluye; sin esto el popup enseñaba una fila
+    // de mas y el numero de fuera no cuadraba con las filas de dentro.
+    cond.push('EXISTS (SELECT 1 FROM conversion_payments cpx WHERE cpx.conversion_id = c.id)');
     // El pais sale del prefijo del telefono, igual que en el ranking. PAIS_TEL
     // espera una columna 'tel', asi que se la damos con una subconsulta en vez
     // de reescribir el SQL a mano.
