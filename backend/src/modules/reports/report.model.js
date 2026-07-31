@@ -455,18 +455,47 @@ export async function ventasPorAsesoraReport({ projectId, from, to, asesoraId })
 }
 
 // AGREGADO: por asesora y mes. Es lo que se ve en el panel.
-export async function asesorasPorMes({ projectId, from, to, asesoraId }) {
+export async function asesorasPorMes({ projectId, from, to, asesoraId, base }) {
   // Tres cosas distintas con tres fechas distintas: los leads por su fecha de
   // entrada, las ventas por su fecha de venta y los cobros por su fecha de cobro.
   // Los leads van por su FECHA DE SOLICITUD, no por cuando se metieron en el CRM:
   // con created_at, enero-abril salian con 0 leads y mayo con 11.892 (la carga masiva).
+  //
+  // base = 'cobro' (por defecto) responde "cuanto dinero entro este mes".
+  // base = 'factura' responde "que facture este mes", que es como cuenta el Excel
+  // de contabilidad: por fecha de emision de la factura, no por fecha de cobro.
+  // Los dos no cuadran (julio 2026: 5/16 por cobro y 5/18 por factura) porque un
+  // cobro de junio se puede facturar en julio y al reves.
+  const porFactura = base === 'factura';
+
+  // Fecha de emision de la factura del cobro. Las proformas no cuentan: no son
+  // factura. Un cobro sin facturar queda NULL y se cae del recuento por factura.
+  const FEC_COBRO = `(SELECT i.fecha_emision FROM invoices i
+                       WHERE i.payment_id = cp.id AND i.tipo <> 'proforma'
+                       ORDER BY i.fecha_emision, i.id LIMIT 1)`;
+  // Y la venta va con la factura de su PRIMER cobro (el que la abre).
+  const FEC_VENTA = `(SELECT i.fecha_emision FROM invoices i
+                       JOIN conversion_payments cpf ON cpf.id = i.payment_id
+                      WHERE cpf.conversion_id = c.id AND i.tipo <> 'proforma'
+                      ORDER BY cpf.fecha, cpf.id, i.fecha_emision, i.id LIMIT 1)`;
+
+  const DV = porFactura ? FEC_VENTA : 'c.fecha_conversion';
+  const DC = porFactura ? FEC_COBRO : 'cp.fecha';
+
+  // Los leads NO cambian nunca de base: siempre por fecha de entrada.
   const fl = buildFilter({ projectId, from, to, asesoraId }, ENTRY, 'l.project_id');
-  const fv = buildFilter({ projectId, from, to, asesoraId }, 'c.fecha_conversion', 'c.project_id');
-  const fc = buildFilter({ projectId, from, to, asesoraId }, 'cp.fecha', 'c.project_id');
+  const fv = buildFilter({ projectId, from, to, asesoraId }, DV, 'c.project_id');
+  const fc = buildFilter({ projectId, from, to, asesoraId }, DC, 'c.project_id');
   const off1 = fl.params.length;
   const off2 = off1 + fv.params.length;
-  const wv = fv.where.replace(/\$(\d+)/g, (_, n) => '$' + (Number(n) + off1));
-  const wc = fc.where.replace(/\$(\d+)/g, (_, n) => '$' + (Number(n) + off2));
+  let wv = fv.where.replace(/\$(\d+)/g, (_, n) => '$' + (Number(n) + off1));
+  let wc = fc.where.replace(/\$(\d+)/g, (_, n) => '$' + (Number(n) + off2));
+  // Sin rango de fechas la subconsulta puede dar NULL y saldria una fila de mes
+  // vacio; con rango ya se filtra sola.
+  if (porFactura) {
+    wv = wv ? `${wv} AND ${DV} IS NOT NULL` : `WHERE ${DV} IS NOT NULL`;
+    wc = wc ? `${wc} AND ${DC} IS NOT NULL` : `WHERE ${DC} IS NOT NULL`;
+  }
 
   const { rows } = await query(
     `WITH leads_mes AS (
@@ -491,7 +520,7 @@ export async function asesorasPorMes({ projectId, from, to, asesoraId }) {
         GROUP BY 1, 2
      ),
      ventas_mes AS (
-       SELECT to_char(date_trunc('month', c.fecha_conversion), 'YYYY-MM') AS mes,
+       SELECT to_char(date_trunc('month', ${DV}), 'YYYY-MM') AS mes,
               ${ASESORA} AS uid,
               COUNT(*)::int AS ventas,
               COUNT(DISTINCT c.lead_id)::int AS clientes,
@@ -507,7 +536,7 @@ export async function asesorasPorMes({ projectId, from, to, asesoraId }) {
         GROUP BY 1, 2
      ),
      cobros_mes AS (
-       SELECT to_char(date_trunc('month', cp.fecha), 'YYYY-MM') AS mes,
+       SELECT to_char(date_trunc('month', ${DC}), 'YYYY-MM') AS mes,
               ${ASESORA} AS uid,
               COALESCE(SUM(cp.importe), 0) AS cobrado,
               -- Un cobro es cuota si salda alguna cuota del plan. Con EXISTS y no

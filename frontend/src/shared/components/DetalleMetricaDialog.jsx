@@ -30,8 +30,10 @@ const COLUMNAS = {
   ventas: [
     { k: 'fecha', h: 'Fecha', t: 'date' }, { k: 'cliente', h: 'Cliente' },
     { k: 'es_mensualidad', h: 'Tipo', t: 'esmens' },
-    { k: 'formacion', h: 'Formación' }, { k: 'importe', h: 'Importe', t: 'eur' },
-    { k: 'cobrado', h: 'Cobrado', t: 'eur' }, { k: 'cobros', h: 'Nº cobros', t: 'num' },
+    // 'Venta total' y no 'Importe': es el precio de la venta entera, que se leía
+    // como si fuera el cobro de ese mes y no cuadraba con la columna de al lado.
+    { k: 'formacion', h: 'Formación' }, { k: 'importe', h: 'Venta total', t: 'eur' },
+    { k: 'cobrado', h: 'Cobrado', t: 'eur' }, { k: 'cobros', h: 'Nº cobros', t: 'pagos' },
     { k: 'ventas_previas', h: 'Compras antes', t: 'num' },
     { k: 'asesora', h: 'Asesora' }, { k: 'facturas', h: 'Facturas' },
   ],
@@ -61,15 +63,35 @@ const TITULOS = {
   'cobros-venta': 'Cobros de venta nueva',
 };
 
+// Las cifras van a la derecha; el resto, a la izquierda.
+const ES_CIFRA = new Set(['eur', 'num', 'pagos']);
+
 function celda(col, fila) {
   const v = fila[col.k];
   if (col.t === 'eur') return fmtEur(v);
   if (col.t === 'date') return fecha(v);
   if (col.t === 'num') return v == null ? '—' : String(v);
+  // En palabras y en plural: una venta con un segundo pago (un complemento) se
+  // veía como un '2' suelto y nadie caía en que ahí había dos cobros. Va también
+  // al CSV, que es donde más se pierde el matiz.
+  if (col.t === 'pagos') {
+    const n = Number(v || 0);
+    if (!n) return '—';
+    return n === 1 ? '1 pago' : `${n} pagos`;
+  }
   if (col.t === 'tipo') return v ? 'venta' : 'mensualidad';
   // Al reves que 'tipo': aqui el true es el caso malo, el que no deberia estar.
   if (col.t === 'esmens') return v ? 'mensualidad' : 'venta nueva';
   return v == null || v === '' ? '—' : String(v);
+}
+
+// El title por defecto es el valor crudo. En las dos columnas que cuentan juntas
+// la historia del cobro fraccionado se explica con palabras.
+function titulo(col, fila) {
+  const n = Number(fila.cobros || 0);
+  if (n > 1 && col.t === 'pagos') return `Esta venta se ha cobrado en ${n} veces`;
+  if (n > 1 && col.k === 'cobrado') return `Suma de los ${n} cobros de esta venta`;
+  return String(fila[col.k] ?? '');
 }
 
 export default function DetalleMetricaDialog({ abierto, onClose, consulta, subtitulo }) {
@@ -181,7 +203,7 @@ export default function DetalleMetricaDialog({ abierto, onClose, consulta, subti
                 <tr>
                   {cols.map((c) => (
                     <th key={c.k}
-                      className={`px-3 py-2 font-bold whitespace-nowrap ${c.t === 'eur' || c.t === 'num' ? 'text-right' : 'text-left'}`}>
+                      className={`px-3 py-2 font-bold whitespace-nowrap ${ES_CIFRA.has(c.t) ? 'text-right' : 'text-left'}`}>
                       {c.h}
                     </th>
                   ))}
@@ -192,8 +214,8 @@ export default function DetalleMetricaDialog({ abierto, onClose, consulta, subti
                   <tr key={f.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30">
                     {cols.map((c) => (
                       <td key={c.k}
-                        className={`px-3 py-1.5 ${c.t === 'eur' || c.t === 'num' ? 'text-right tabular-nums' : ''} ${c.t === 'eur' ? 'font-semibold' : ''} ${c.t === 'esmens' && f[c.k] ? 'text-amber-600 dark:text-amber-500 font-semibold' : ''}`}>
-                        <span className="block max-w-[240px] truncate" title={String(f[c.k] ?? '')}>
+                        className={`px-3 py-1.5 ${ES_CIFRA.has(c.t) ? 'text-right tabular-nums' : ''} ${c.t === 'eur' ? 'font-semibold' : ''} ${c.t === 'esmens' && f[c.k] ? 'text-amber-600 dark:text-amber-500 font-semibold' : ''} ${c.t === 'pagos' && Number(f[c.k] || 0) > 1 ? 'text-sky-600 dark:text-sky-400 font-semibold' : ''}`}>
+                        <span className="block max-w-[240px] truncate" title={titulo(c, f)}>
                           {celda(c, f)}
                         </span>
                       </td>

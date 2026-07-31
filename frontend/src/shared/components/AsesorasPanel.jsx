@@ -40,6 +40,9 @@ export default function AsesorasPanel({ from, to }) {
   // semana, solo se ve un mes. Por eso trae su propio ambito, y por defecto
   // enseña el año entero.
   const [ambito, setAmbito] = useState('anio');
+  // El mismo pago cae en meses distintos segun por donde se mire, asi que hay que
+  // poder elegir: 'cobro' es el criterio de siempre, 'factura' el de contabilidad.
+  const [base, setBase] = useState('cobro');
   const anio = new Date().getFullYear();
   const desde = ambito === 'anio' ? `${anio}-01-01` : from;
   const hasta = ambito === 'anio' ? new Date().toISOString().slice(0, 10) : to;
@@ -53,6 +56,9 @@ export default function AsesorasPanel({ from, to }) {
         if (activeProject?.id) p.set('projectId', String(activeProject.id));
         if (desde) p.set('from', desde);
         if (hasta) p.set('to', hasta);
+        // Solo se manda cuando no es el criterio por defecto, para no cambiar las
+        // llamadas de siempre.
+        if (base === 'factura') p.set('base', 'factura');
         const r = await client.get(`/reports/asesoras-mes?${p.toString()}`);
         if (vivo) setFilas(r.success ? (r.data || []) : []);
       } catch {
@@ -60,7 +66,7 @@ export default function AsesorasPanel({ from, to }) {
       } finally { if (vivo) setCargando(false); }
     })();
     return () => { vivo = false; };
-  }, [activeProject?.id, desde, hasta]);
+  }, [activeProject?.id, desde, hasta, base]);
 
   // Agrupado por mes, con el total del mes calculado sobre sus asesoras.
   const meses = useMemo(() => {
@@ -147,20 +153,41 @@ export default function AsesorasPanel({ from, to }) {
           <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-emerald-500" /> cobro de la venta</span>
           <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-sky-500" /> cuota del plan de pago</span>
         </div>
-        <div className="mt-2 inline-flex rounded-md border border-border overflow-hidden">
-          {[['anio', `Todo ${anio}`], ['rango', 'Solo el rango de arriba']].map(([k, etiqueta]) => (
-            <button
-              key={k}
-              type="button"
-              onClick={() => { setAmbito(k); setAbierto(null); }}
-              className={`px-2.5 py-1 text-[11px] font-semibold transition-colors ${
-                ambito === k ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
-              }`}
-            >
-              {etiqueta}
-            </button>
-          ))}
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <div className="inline-flex rounded-md border border-border overflow-hidden">
+            {[['anio', `Todo ${anio}`], ['rango', 'Solo el rango de arriba']].map(([k, etiqueta]) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => { setAmbito(k); setAbierto(null); }}
+                className={`px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                  ambito === k ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+                }`}
+              >
+                {etiqueta}
+              </button>
+            ))}
+          </div>
+          <div className="inline-flex rounded-md border border-border overflow-hidden">
+            {[['cobro', 'Por cobro'], ['factura', 'Por factura']].map(([k, etiqueta]) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => { setBase(k); setAbierto(null); }}
+                className={`px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                  base === k ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+                }`}
+              >
+                {etiqueta}
+              </button>
+            ))}
+          </div>
         </div>
+        <p className="text-[10px] text-muted-foreground mt-1.5">
+          «Por cobro» cuenta el dinero en el mes en que entró. «Por factura», en el mes en que
+          se emitió la factura, que es como cuadra contabilidad. Un mismo pago puede caer en un
+          mes o en otro según cuál mires.
+        </p>
       </div>
 
       <div className="space-y-2">
