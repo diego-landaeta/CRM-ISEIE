@@ -135,10 +135,17 @@ function buildGeneralFilter({ projectId, from, to }) {
   const params = [];
   const cond = [];
   let idx = 1;
-  const reportDate = `(CASE
-    WHEN conv.id IS NOT NULL THEN conv.fecha_conversion::date
-    ELSE ${ENTRY}::date
-  END)`;
+  // Estos dos informes son de LEADS: una fila por contacto. Se filtran por fecha
+  // de ENTRADA, la misma regla que anuncia el panel, para que el numero de filas
+  // sea exactamente el de "leads recibidos" y los dos cuadren.
+  //
+  // Antes se usaba una fecha mixta —la de la venta si el lead habia comprado, la
+  // de entrada si no— y colaba leads antiguos que compraron dentro del rango: en
+  // julio de 2026 el panel decia 1.638 y la descarga traia 1.649.
+  //
+  // Esas ventas no se pierden: salen en los informes de ventas, que filtran por
+  // fecha de venta.
+  const reportDate = `${ENTRY}::date`;
   if (projectId) { cond.push(`l.project_id = $${idx++}`); params.push(projectId); }
   if (from) { cond.push(`${reportDate} >= $${idx++}::date`); params.push(from); }
   if (to) { cond.push(`${reportDate} <= $${idx++}::date`); params.push(to); }
