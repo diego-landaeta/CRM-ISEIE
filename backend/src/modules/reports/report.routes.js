@@ -4,9 +4,13 @@ import * as ctrl from './report.controller.js';
 
 const router = Router();
 router.use(verifyToken);
-router.use(roleGuard('admin', 'superadmin'));
 
-router.get('/overview', ctrl.overview);
+// Una gestora puede entrar en Reportes: el controlador le recorta cada informe a
+// sus leads, sus ventas y sus cobros. Antes recibia un 403 y la pantalla le
+// pintaba todo a cero.
+// El overview se queda solo para admin: arma su filtro por separado y la
+// pantalla de gestora no lo usa.
+router.get('/overview', roleGuard('admin', 'superadmin'), ctrl.overview);
 
 // Reportes descargables
 router.get('/resumen-mensual', ctrl.resumenMensual);

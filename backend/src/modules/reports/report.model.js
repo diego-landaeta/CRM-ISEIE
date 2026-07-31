@@ -1,7 +1,7 @@
 import { query } from '../../shared/config/db.js';
 
 // Overview por proyecto + rango fechas
-export async function overview({ projectId, from, to }) {
+export async function overview({ projectId, from, to, asesoraId }) {
   const params = [];
   let idx = 1;
   const pFilter = projectId ? `AND project_id = $${idx++}` : '';
@@ -114,13 +114,28 @@ export async function overview({ projectId, from, to }) {
 }
 
 // ── Helpers de filtro para los reportes descargables ─────────────────────
-function buildFilter({ projectId, from, to }, dateCol, projectCol = 'project_id') {
+// De quien es cada fila, para cuando una gestora mira sus propios informes.
+// En las consultas de leads manda el responsable; en las de ventas y cobros, la
+// vendedora de la venta y, si no tiene, el responsable del lead — el mismo
+// criterio que usa el panel de asesoras.
+// Se resuelve con subconsulta al lead y no con el alias `l` porque hay consultas
+// (resumenMensual, formacionesMasVendidas) que no lo tienen en el FROM.
+function columnaAsesora(projectCol) {
+  if (projectCol.startsWith('l.')) return 'l.responsable_id';
+  const c = projectCol.startsWith('c.') ? 'c.' : '';
+  return `COALESCE(${c}vendedora_id, (SELECT responsable_id FROM leads WHERE id = ${c}lead_id))`;
+}
+
+function buildFilter({ projectId, from, to, asesoraId }, dateCol, projectCol = 'project_id') {
   const params = [];
   const cond = [];
   let idx = 1;
   if (projectId) { cond.push(`${projectCol} = $${idx++}`); params.push(projectId); }
   if (from) { cond.push(`${dateCol}::date >= $${idx++}::date`); params.push(from); }
   if (to) { cond.push(`${dateCol}::date <= $${idx++}::date`); params.push(to); }
+  // Si viene asesora, el informe se recorta a lo suyo. Lo impone el controlador
+  // cuando quien pregunta es una gestora, asi que no puede pedir lo de otra.
+  if (asesoraId) { cond.push(`${columnaAsesora(projectCol)} = $${idx++}`); params.push(asesoraId); }
   return { where: cond.length ? 'WHERE ' + cond.join(' AND ') : '', params };
 }
 
@@ -131,7 +146,7 @@ const ENTRY = 'COALESCE(l.fecha_solicitud, l.created_at)';
 // - cliente con venta: fecha de conversión.
 // Filtrar todo por la fecha de entrada hacía que una importación de ventas
 // históricas pareciera generar cientos de ventas el día de la importación.
-function buildGeneralFilter({ projectId, from, to }) {
+function buildGeneralFilter({ projectId, from, to, asesoraId }) {
   const params = [];
   const cond = [];
   let idx = 1;
@@ -147,6 +162,11 @@ function buildGeneralFilter({ projectId, from, to }) {
   // fecha de venta.
   const reportDate = `${ENTRY}::date`;
   if (projectId) { cond.push(`l.project_id = $${idx++}`); params.push(projectId); }
+  // Una gestora solo ve sus contactos: los suyos o los de sus ventas.
+  if (asesoraId) {
+    cond.push(`COALESCE(conv.vendedora_id, l.responsable_id) = $${idx++}`);
+    params.push(asesoraId);
+  }
   if (from) { cond.push(`${reportDate} >= $${idx++}::date`); params.push(from); }
   if (to) { cond.push(`${reportDate} <= $${idx++}::date`); params.push(to); }
   return { where: cond.length ? 'WHERE ' + cond.join(' AND ') : '', params };
@@ -176,9 +196,9 @@ const PAIS = `COALESCE(NULLIF(l.pais_fiscal, ''), CASE
     ELSE NULL END)`;
 
 // 1) RESUMEN MENSUAL
-export async function resumenMensual({ projectId, from, to }) {
-  const e = buildFilter({ projectId, from, to }, ENTRY, 'l.project_id');
-  const c = buildFilter({ projectId, from, to }, 'fecha_conversion', 'project_id');
+export async function resumenMensual({ projectId, from, to, asesoraId }) {
+  const e = buildFilter({ projectId, from, to, asesoraId }, ENTRY, 'l.project_id');
+  const c = buildFilter({ projectId, from, to, asesoraId }, 'fecha_conversion', 'project_id');
   const cSql = c.where.replace(/\$(\d+)/g, (_, n) => `$${Number(n) + e.params.length}`);
   const { rows } = await query(
     `WITH entrados AS (
@@ -207,8 +227,8 @@ export async function resumenMensual({ projectId, from, to }) {
 }
 
 // 2) PROSPECTOS (por entrada, con valor estimado)
-export async function prospectosReport({ projectId, from, to }) {
-  const { where, params } = buildFilter({ projectId, from, to }, ENTRY, 'l.project_id');
+export async function prospectosReport({ projectId, from, to, asesoraId }) {
+  const { where, params } = buildFilter({ projectId, from, to, asesoraId }, ENTRY, 'l.project_id');
   const { rows } = await query(
     `SELECT p.nombre AS proyecto, l.nombre, l.telefono, l.email, l.status AS estado,
             prod.nombre AS producto, prod.precio AS valor_estimado, prod.moneda,
@@ -226,8 +246,8 @@ export async function prospectosReport({ projectId, from, to }) {
 
 // 3) VENTAS: una fila por conversión, filtrada por fecha de venta.
 // Los pagos/abonos pertenecen al reporte de cobros y no deben inflar ventas.
-export async function ventasReport({ projectId, from, to }) {
-  const { where, params } = buildFilter({ projectId, from, to }, 'c.fecha_conversion', 'c.project_id');
+export async function ventasReport({ projectId, from, to, asesoraId }) {
+  const { where, params } = buildFilter({ projectId, from, to, asesoraId }, 'c.fecha_conversion', 'c.project_id');
   const { rows } = await query(
     `SELECT c.id AS venta_id,
             c.fecha_conversion AS fecha_venta,
@@ -259,8 +279,8 @@ export async function ventasReport({ projectId, from, to }) {
 }
 
 // 4) GENERAL (prospectos + estimado + real)
-export async function generalReport({ projectId, from, to }) {
-  const { where, params } = buildGeneralFilter({ projectId, from, to });
+export async function generalReport({ projectId, from, to, asesoraId }) {
+  const { where, params } = buildGeneralFilter({ projectId, from, to, asesoraId });
   const { rows } = await query(
     `SELECT p.nombre AS proyecto, l.nombre, l.telefono, l.email, l.status AS estado,
             ${PAIS} AS pais,
@@ -288,8 +308,8 @@ export async function generalReport({ projectId, from, to }) {
 }
 
 // 5) GENERAL + FACTURACIÓN
-export async function generalFacturacionReport({ projectId, from, to }) {
-  const { where, params } = buildGeneralFilter({ projectId, from, to });
+export async function generalFacturacionReport({ projectId, from, to, asesoraId }) {
+  const { where, params } = buildGeneralFilter({ projectId, from, to, asesoraId });
   const { rows } = await query(
     `SELECT p.nombre AS proyecto, l.nombre, l.telefono, l.status AS estado,
             prod.nombre AS producto_interes, prod.precio AS valor_estimado,
@@ -326,8 +346,8 @@ export async function generalFacturacionReport({ projectId, from, to }) {
 }
 
 // 6) COBROS POR MES (cuotas)
-export async function cobrosMensuales({ projectId, from, to }) {
-  const { where, params } = buildFilter({ projectId, from, to }, 'cp.fecha', 'c.project_id');
+export async function cobrosMensuales({ projectId, from, to, asesoraId }) {
+  const { where, params } = buildFilter({ projectId, from, to, asesoraId }, 'cp.fecha', 'c.project_id');
   const { rows } = await query(
     `SELECT to_char(date_trunc('month', cp.fecha), 'YYYY-MM') AS mes,
             cp.fecha, l.nombre AS cliente, c.producto_contratado AS producto,
@@ -348,9 +368,9 @@ export async function cobrosMensuales({ projectId, from, to }) {
 // se sumaba el importe_pagado de las ventas del rango, que mete en el periodo
 // dinero cobrado en otros meses (y deja fuera lo que se cobra ahora de ventas
 // antiguas). "Sin asignar" cuando la venta no tiene vendedora ni el lead gestora.
-export async function ventasVendedora({ projectId, from, to }) {
-  const v = buildFilter({ projectId, from, to }, 'c.fecha_conversion', 'c.project_id');
-  const pgo = buildFilter({ projectId, from, to }, 'cp.fecha', 'c.project_id');
+export async function ventasVendedora({ projectId, from, to, asesoraId }) {
+  const v = buildFilter({ projectId, from, to, asesoraId }, 'c.fecha_conversion', 'c.project_id');
+  const pgo = buildFilter({ projectId, from, to, asesoraId }, 'cp.fecha', 'c.project_id');
   // El segundo bloque de parametros va detras del primero.
   const off = v.params.length;
   const wherePago = pgo.where.replace(/\$(\d+)/g, (_, n) => '$' + (Number(n) + off));
@@ -396,8 +416,8 @@ export async function ventasVendedora({ projectId, from, to }) {
 const ASESORA = 'COALESCE(c.vendedora_id, l.responsable_id)';
 
 // DETALLE: una fila por venta, para descargar.
-export async function ventasPorAsesoraReport({ projectId, from, to }) {
-  const { where, params } = buildFilter({ projectId, from, to }, 'c.fecha_conversion', 'c.project_id');
+export async function ventasPorAsesoraReport({ projectId, from, to, asesoraId }) {
+  const { where, params } = buildFilter({ projectId, from, to, asesoraId }, 'c.fecha_conversion', 'c.project_id');
   const { rows } = await query(
     `SELECT COALESCE(u.nombre, '— sin asesora —') AS asesora,
             c.fecha_conversion AS fecha_venta,
@@ -435,14 +455,14 @@ export async function ventasPorAsesoraReport({ projectId, from, to }) {
 }
 
 // AGREGADO: por asesora y mes. Es lo que se ve en el panel.
-export async function asesorasPorMes({ projectId, from, to }) {
+export async function asesorasPorMes({ projectId, from, to, asesoraId }) {
   // Tres cosas distintas con tres fechas distintas: los leads por su fecha de
   // entrada, las ventas por su fecha de venta y los cobros por su fecha de cobro.
   // Los leads van por su FECHA DE SOLICITUD, no por cuando se metieron en el CRM:
   // con created_at, enero-abril salian con 0 leads y mayo con 11.892 (la carga masiva).
-  const fl = buildFilter({ projectId, from, to }, ENTRY, 'l.project_id');
-  const fv = buildFilter({ projectId, from, to }, 'c.fecha_conversion', 'c.project_id');
-  const fc = buildFilter({ projectId, from, to }, 'cp.fecha', 'c.project_id');
+  const fl = buildFilter({ projectId, from, to, asesoraId }, ENTRY, 'l.project_id');
+  const fv = buildFilter({ projectId, from, to, asesoraId }, 'c.fecha_conversion', 'c.project_id');
+  const fc = buildFilter({ projectId, from, to, asesoraId }, 'cp.fecha', 'c.project_id');
   const off1 = fl.params.length;
   const off2 = off1 + fv.params.length;
   const wv = fv.where.replace(/\$(\d+)/g, (_, n) => '$' + (Number(n) + off1));
@@ -536,7 +556,7 @@ export async function asesorasPorMes({ projectId, from, to }) {
 }
 
 // Panel de Reportes: KPIs comparados con el periodo anterior + serie temporal.
-export async function panelReportes({ projectId, from, to }) {
+export async function panelReportes({ projectId, from, to, asesoraId }) {
   const desde = from || '2026-01-01';
   const hasta = to || new Date().toISOString().slice(0, 10);
   const dias = Math.max(1, Math.round((new Date(hasta) - new Date(desde)) / 86400000) + 1);
@@ -547,9 +567,16 @@ export async function panelReportes({ projectId, from, to }) {
   // Granularidad: en rangos cortos por dia, luego por semana y al final por mes.
   const grano = dias <= 45 ? 'day' : (dias <= 200 ? 'week' : 'month');
 
-  const pl = projectId ? 'AND l.project_id = $3' : '';
-  const pc = projectId ? 'AND c.project_id = $3' : '';
-  const par = (a, b) => (projectId ? [a, b, projectId] : [a, b]);
+  // Mismo recorte por asesora que el resto de informes. El numero de parametro
+  // depende de si ademas viene proyecto.
+  const iAs = projectId ? 4 : 3;
+  const al = asesoraId ? ` AND l.responsable_id = $${iAs}` : '';
+  const ac = asesoraId
+    ? ` AND COALESCE(c.vendedora_id, (SELECT responsable_id FROM leads WHERE id = c.lead_id)) = $${iAs}`
+    : '';
+  const pl = (projectId ? 'AND l.project_id = $3' : '') + al;
+  const pc = (projectId ? 'AND c.project_id = $3' : '') + ac;
+  const par = (a, b) => [a, b, ...(projectId ? [projectId] : []), ...(asesoraId ? [asesoraId] : [])];
 
   async function bloque(d, h) {
     const { rows: le } = await query(
@@ -709,12 +736,12 @@ const PAIS_TEL = `CASE
     ELSE '— sin prefijo — revisar'
   END`;
 
-export async function paisesMasVendidos({ projectId, from, to }) {
+export async function paisesMasVendidos({ projectId, from, to, asesoraId }) {
   // Dos fechas distintas otra vez: las ventas por fecha de venta y los leads por
   // fecha de entrada. Se juntan por pais con FULL OUTER JOIN porque hay paises
   // que mandan leads y no compran, y al reves (clientes cargados sin lead).
-  const fv = buildFilter({ projectId, from, to }, 'c.fecha_conversion', 'c.project_id');
-  const fl = buildFilter({ projectId, from, to }, ENTRY, 'l.project_id');
+  const fv = buildFilter({ projectId, from, to, asesoraId }, 'c.fecha_conversion', 'c.project_id');
+  const fl = buildFilter({ projectId, from, to, asesoraId }, ENTRY, 'l.project_id');
   const off = fv.params.length;
   const wl = fl.where.replace(/\$(\d+)/g, (_, n) => '$' + (Number(n) + off));
 
@@ -780,8 +807,8 @@ const FORMACION = `COALESCE(
       '^[[:space:]]*servicio[[:space:]]+acad[eé]mico[[:space:]]*$', '', 'i')), ''),
     '— sin formación —')`;
 
-export async function formacionesMasVendidas({ projectId, from, to }) {
-  const { where, params } = buildFilter({ projectId, from, to }, 'c.fecha_conversion', 'c.project_id');
+export async function formacionesMasVendidas({ projectId, from, to, asesoraId }) {
+  const { where, params } = buildFilter({ projectId, from, to, asesoraId }, 'c.fecha_conversion', 'c.project_id');
   const { rows } = await query(
     `SELECT ${FORMACION} AS formacion,
             CASE WHEN pcat.id IS NOT NULL THEN 'catálogo'
