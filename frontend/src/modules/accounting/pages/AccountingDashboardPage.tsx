@@ -20,15 +20,12 @@ import {
   Plus,
 } from '@phosphor-icons/react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid, Legend } from 'recharts';
+import { formatDate } from '@/shared/lib/format';
 
 function fmt(n) {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n || 0));
 }
 
-function formatDate(d) {
-  if (!d) return '--';
-  return new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
-}
 
 // Defaults para filtros persistidos en URL (refresh-safe + compartible)
 const DEFAULT_FROM = new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0, 10);

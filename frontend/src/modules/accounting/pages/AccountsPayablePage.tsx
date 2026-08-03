@@ -6,6 +6,7 @@ import KpiCard from '@/shared/components/ui/KpiCard';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import { toast } from '@/shared/hooks/useToast';
+import { formatDate } from '@/shared/lib/format';
 import {
   CurrencyEur,
   Wallet,
@@ -31,7 +32,6 @@ const ESTADOS = [
 function fmt(n) {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n || 0));
 }
-function formatDate(d) { return d ? new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }) : '--'; }
 
 export default function AccountsPayablePage() {
   const { activeProject } = useProjectContext();

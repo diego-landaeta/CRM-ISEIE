@@ -10,6 +10,7 @@ import Portal from '@/shared/components/ui/portal';
 import Select from '@/shared/components/ui/Select';
 import { Plus, X, Receipt, Trash, PencilSimple, Paperclip, UploadSimple, Lightning, DownloadSimple } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
+import { formatDate } from '@/shared/lib/format';
 
 const ConfirmDialog = lazy(() => import('@/shared/components/ui/ConfirmDialog'));
 
@@ -78,10 +79,6 @@ function downloadBlob(content, filename, mime = 'text/csv;charset=utf-8') {
 
 function fmt(n) {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(Number(n || 0));
-}
-function formatDate(d) {
-  if (!d) return '--';
-  return new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
 export default function ExpensesPage() {
