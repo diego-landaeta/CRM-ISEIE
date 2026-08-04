@@ -234,8 +234,19 @@ function filtrosVentas({ projectId, from, to, responsableId, search }, startIdx 
                 OR ${SIN_TILDES('cv.producto_contratado')} ILIKE ${SIN_TILDES('$' + idx)})`);
     params.push(`%${search}%`); idx++;
   }
-  return { where: cond.length ? 'WHERE ' + cond.join(' AND ') : '', params, idx };
+  // Las dos reglas que definen que es una venta, iguales que en los informes:
+  // una ficha marcada como mensualidad no es una venta nueva, y una venta sin
+  // ningun cobro es una proforma que el cliente no llego a pagar.
+  cond.push('NOT cv.es_mensualidad');
+  cond.push('EXISTS (SELECT 1 FROM conversion_payments cpx WHERE cpx.conversion_id = cv.id)');
+  return { where: 'WHERE ' + cond.join(' AND '), params, idx };
 }
+
+// Lo cobrado de una venta, sumando sus apuntes. NO se usa cv.importe_pagado:
+// ese campo declara 213.680 EUR de mas en ISEIE y hacia que la pantalla
+// enseñara un cobrado que los cobros no respaldan.
+const COBRADO_REAL = `(SELECT COALESCE(SUM(cp.importe), 0)
+                         FROM conversion_payments cp WHERE cp.conversion_id = cv.id)`;
 
 // Resumen consolidado que acompana a la vista general de Ventas.
 export async function getResumenVentas(filtros = {}) {
@@ -245,10 +256,10 @@ export async function getResumenVentas(filtros = {}) {
             COUNT(DISTINCT cv.lead_id)::int AS clientes,
             COUNT(DISTINCT ${VENDEDORA})::int AS asesoras,
             COALESCE(SUM(cv.importe_total), 0) AS importe,
-            COALESCE(SUM(cv.importe_pagado), 0) AS cobrado,
-            COALESCE(SUM(cv.importe_total - cv.importe_pagado), 0) AS pendiente,
-            COUNT(*) FILTER (WHERE cv.importe_pagado >= cv.importe_total)::int AS liquidadas,
-            COUNT(*) FILTER (WHERE cv.importe_pagado < cv.importe_total)::int AS con_saldo,
+            COALESCE(SUM(${COBRADO_REAL}), 0) AS cobrado,
+            COALESCE(SUM(cv.importe_total - ${COBRADO_REAL}), 0) AS pendiente,
+            COUNT(*) FILTER (WHERE ${COBRADO_REAL} >= cv.importe_total)::int AS liquidadas,
+            COUNT(*) FILTER (WHERE ${COBRADO_REAL} <  cv.importe_total)::int AS con_saldo,
             COALESCE(AVG(cv.importe_total), 0) AS ticket_medio
        FROM conversions cv
        LEFT JOIN leads l ON l.id = cv.lead_id
@@ -463,6 +474,167 @@ export async function getDesglose({ projectId = null, from = null, to = null } =
       vendido: Math.round(totalVendido * 100) / 100,
       cobrado: Math.round(totalCobrado * 100) / 100,
       ticket: totalVentas ? Math.round((totalVendido / totalVentas) * 100) / 100 : 0,
+    },
+  };
+}
+
+// ── Serie de ventas, con comparación e historial ──────────────────────────
+//
+// Responde «cuánto y cuándo», y sobre todo «mejor o peor que antes». Devuelve
+// tres cosas del mismo tiro:
+//   · serie      — el periodo elegido, por dia o por mes segun su tamaño
+//   · anterior   — el periodo justo anterior del MISMO tamaño, para comparar
+//   · meses      — el historial mes a mes desde que hay datos
+//
+// La zona horaria es la de la aplicacion, igual que en los informes: sin esto
+// un lead de las 22:50 cae en un dia distinto segun quien pregunte.
+const TZ_VENTAS = process.env.APP_TIMEZONE || 'Europe/Madrid';
+const ENTRADA_LEAD = `(COALESCE(l.fecha_solicitud, l.created_at) AT TIME ZONE '${TZ_VENTAS}')`;
+
+function diasEntre(from, to) {
+  return Math.max(1, Math.round((new Date(to) - new Date(from)) / 86400000) + 1);
+}
+
+function restarDias(fecha, dias) {
+  const d = new Date(fecha);
+  d.setDate(d.getDate() - dias);
+  return d.toISOString().slice(0, 10);
+}
+
+// Un tramo: ventas, dinero y leads agrupados por dia o por mes.
+async function tramo({ projectId, from, to, responsableId, porMes }) {
+  const corte = porMes ? "to_char(date_trunc('month', %s), 'YYYY-MM')"
+    : "to_char(%s, 'YYYY-MM-DD')";
+
+  const pv = [];
+  const wv = ['NOT c.es_mensualidad',
+    // Una venta sin ningun cobro es una proforma que no se pago.
+    'EXISTS (SELECT 1 FROM conversion_payments cpx WHERE cpx.conversion_id = c.id)'];
+  if (projectId) { pv.push(projectId); wv.push(`c.project_id = $${pv.length}`); }
+  if (responsableId) {
+    pv.push(responsableId);
+    wv.push(`COALESCE(c.vendedora_id, (SELECT responsable_id FROM leads WHERE id = c.lead_id)) = $${pv.length}`);
+  }
+  pv.push(from); const iFrom = pv.length;
+  pv.push(to); const iTo = pv.length;
+
+  const { rows: ventas } = await query(
+    `SELECT ${corte.replace('%s', 'c.fecha_conversion')} AS punto,
+            COUNT(*)::int AS ventas,
+            ROUND(COALESCE(SUM(c.importe_total), 0), 2)::float8 AS vendido
+       FROM conversions c
+      WHERE ${wv.join(' AND ')}
+        AND c.fecha_conversion >= $${iFrom}::date AND c.fecha_conversion <= $${iTo}::date
+      GROUP BY 1 ORDER BY 1`, pv);
+
+  const pc = [];
+  const wc = [];
+  if (projectId) { pc.push(projectId); wc.push(`c.project_id = $${pc.length}`); }
+  if (responsableId) {
+    pc.push(responsableId);
+    wc.push(`COALESCE(c.vendedora_id, (SELECT responsable_id FROM leads WHERE id = c.lead_id)) = $${pc.length}`);
+  }
+  pc.push(from); const cFrom = pc.length;
+  pc.push(to); const cTo = pc.length;
+  const { rows: cobros } = await query(
+    `SELECT ${corte.replace('%s', 'cp.fecha')} AS punto,
+            ROUND(COALESCE(SUM(cp.importe), 0), 2)::float8 AS cobrado
+       FROM conversion_payments cp
+       JOIN conversions c ON c.id = cp.conversion_id
+      WHERE ${wc.length ? wc.join(' AND ') + ' AND ' : ''}
+            cp.fecha >= $${cFrom}::date AND cp.fecha <= $${cTo}::date
+      GROUP BY 1 ORDER BY 1`, pc);
+
+  const pl = [];
+  const wl = ['l.deleted_at IS NULL'];
+  if (projectId) { pl.push(projectId); wl.push(`l.project_id = $${pl.length}`); }
+  if (responsableId) { pl.push(responsableId); wl.push(`l.responsable_id = $${pl.length}`); }
+  pl.push(from); const lFrom = pl.length;
+  pl.push(to); const lTo = pl.length;
+  const { rows: leads } = await query(
+    `SELECT ${corte.replace('%s', ENTRADA_LEAD)} AS punto, COUNT(*)::int AS leads
+       FROM leads l
+      WHERE ${wl.join(' AND ')}
+        AND ${ENTRADA_LEAD}::date >= $${lFrom}::date
+        AND ${ENTRADA_LEAD}::date <= $${lTo}::date
+      GROUP BY 1 ORDER BY 1`, pl);
+
+  const por = new Map();
+  const meter = (fila, campo) => {
+    const p = por.get(fila.punto) || { punto: fila.punto, ventas: 0, vendido: 0, cobrado: 0, leads: 0 };
+    p[campo] = fila[campo];
+    if (campo === 'ventas') { p.ventas = fila.ventas; p.vendido = fila.vendido; }
+    por.set(fila.punto, p);
+  };
+  ventas.forEach((f) => meter(f, 'ventas'));
+  cobros.forEach((f) => meter(f, 'cobrado'));
+  leads.forEach((f) => meter(f, 'leads'));
+
+  const serie = [...por.values()].sort((a, b) => a.punto.localeCompare(b.punto));
+  const tot = serie.reduce((a, p) => ({
+    ventas: a.ventas + p.ventas,
+    vendido: a.vendido + p.vendido,
+    cobrado: a.cobrado + p.cobrado,
+    leads: a.leads + p.leads,
+  }), { ventas: 0, vendido: 0, cobrado: 0, leads: 0 });
+
+  // La MISMA definicion de tasa que los informes: ventas del periodo sobre
+  // leads recibidos en el periodo. Si aqui se calculara de otra forma,
+  // tendriamos dos numeros para lo mismo, que es lo que veniamos arreglando.
+  const conTasa = serie.map((p) => ({
+    ...p,
+    vendido: Math.round(p.vendido * 100) / 100,
+    cobrado: Math.round(p.cobrado * 100) / 100,
+    tasa: p.leads ? Math.round((p.ventas * 10000) / p.leads) / 100 : 0,
+  }));
+
+  return {
+    serie: conTasa,
+    totales: {
+      ventas: tot.ventas,
+      vendido: Math.round(tot.vendido * 100) / 100,
+      cobrado: Math.round(tot.cobrado * 100) / 100,
+      leads: tot.leads,
+      tasa: tot.leads ? Math.round((tot.ventas * 10000) / tot.leads) / 100 : 0,
+    },
+  };
+}
+
+export async function getSerieVentas({ projectId = null, from = null, to = null, responsableId = null } = {}) {
+  const hoy = new Date().toISOString().slice(0, 10);
+  const desde = from || `${new Date().getFullYear()}-01-01`;
+  const hasta = to || hoy;
+  const dias = diasEntre(desde, hasta);
+  // Hasta dos meses se ve por dias; a partir de ahi, por meses.
+  const porMes = dias > 62;
+
+  const actual = await tramo({ projectId, from: desde, to: hasta, responsableId, porMes });
+
+  // El periodo justo anterior, del mismo tamaño.
+  const finAnterior = restarDias(desde, 1);
+  const iniAnterior = restarDias(desde, dias);
+  const previo = await tramo({ projectId, from: iniAnterior, to: finAnterior, responsableId, porMes });
+
+  // Y el historial completo mes a mes, desde que hay datos.
+  const historial = await tramo({ projectId, from: '2026-01-01', to: hoy, responsableId, porMes: true });
+
+  const varia = (a, b) => (b ? Math.round(((a - b) / b) * 1000) / 10 : (a ? 100 : 0));
+
+  return {
+    granularidad: porMes ? 'mes' : 'dia',
+    rango: { from: desde, to: hasta },
+    rangoAnterior: { from: iniAnterior, to: finAnterior },
+    serie: actual.serie,
+    anterior: previo.serie,
+    meses: historial.serie,
+    totales: actual.totales,
+    totalesAnterior: previo.totales,
+    variacion: {
+      ventas: varia(actual.totales.ventas, previo.totales.ventas),
+      vendido: varia(actual.totales.vendido, previo.totales.vendido),
+      cobrado: varia(actual.totales.cobrado, previo.totales.cobrado),
+      leads: varia(actual.totales.leads, previo.totales.leads),
+      tasa: Math.round((actual.totales.tasa - previo.totales.tasa) * 100) / 100,
     },
   };
 }

@@ -133,3 +133,12 @@ export async function desglose(req, res, next) {
     res.json({ success: true, data });
   } catch (err) { next(err); }
 }
+
+// GET /api/sales/serie?projectId&from&to — serie del periodo, el anterior para
+// comparar, y el historial mes a mes. Una gestora solo ve lo suyo: el recorte
+// lo pone filtrosDeQuery, no el cliente.
+export async function serieVentas(req, res, next) {
+  try {
+    res.json({ success: true, data: await salesService.getSerieVentas(filtrosDeQuery(req)) });
+  } catch (err) { next(err); }
+}

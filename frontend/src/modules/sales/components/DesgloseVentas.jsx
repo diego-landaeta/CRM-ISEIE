@@ -143,7 +143,7 @@ export default function DesgloseVentas({ projectId, from, to }) {
       ) : (
         <div className="flex flex-wrap gap-6">
           <Tarta titulo="Qué se vende" datos={formacion} colores={colores} campoN="n" />
-          <Tarta titulo="De dónde viene el dinero" datos={cobro} colores={colores} campoN="n" />
+          <Tarta titulo="De dónde viene el dinero que entró" datos={cobro} colores={colores} campoN="n" />
         </div>
       )}
     </div>

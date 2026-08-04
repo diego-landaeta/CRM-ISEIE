@@ -62,7 +62,10 @@ export default function ResumenVentas({ projectId, from, to, responsableId = nul
         pie={`${num(d.clientes)} ${d.clientes === 1 ? 'cliente' : 'clientes'}`} />
       <Cifra icon={CurrencyEur} etiqueta="Vendido" valor={eur(d.importe)}
         pie={`ticket medio ${eur(d.ticket_medio)}`} />
-      <Cifra icon={CheckCircle} etiqueta="Cobrado" valor={eur(d.cobrado)}
+      {/* Cobrado DE ESAS VENTAS, aunque el pago entrara despues del periodo.
+          La tarta de abajo cuenta otra cosa: el dinero que entro EN el periodo,
+          venga de una venta de ahora o de una de hace meses. */}
+      <Cifra icon={CheckCircle} etiqueta="Cobrado de esas ventas" valor={eur(d.cobrado)}
         pie={`${num(d.liquidadas)} ${d.liquidadas === 1 ? 'venta saldada' : 'ventas saldadas'}`} />
       <Cifra icon={Clock} etiqueta="Pendiente" valor={eur(d.pendiente)}
         pie={`${num(d.con_saldo)} con saldo`} />

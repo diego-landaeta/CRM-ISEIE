@@ -23,6 +23,9 @@ router.get('/top-products', salesController.topProducts);
 router.get('/gestores-stats', roleGuard('admin', 'superadmin'), salesController.gestoresStats);
 // De que se compone lo vendido: por tipo de formacion y por tipo de cobro.
 router.get('/desglose', roleGuard('admin', 'superadmin'), salesController.desglose);
+// Serie con comparacion e historial. SIN roleGuard a proposito: una gestora
+// tiene que poder ver la suya, y el controlador ya la recorta a lo suyo.
+router.get('/serie', salesController.serieVentas);
 
 // GET /api/sales/my-stats — el gestor consulta sus ventas+meta del periodo
 router.get('/my-stats', salesController.myStats);
