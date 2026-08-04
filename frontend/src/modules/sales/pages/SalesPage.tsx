@@ -100,9 +100,13 @@ export default function SalesPage() {
           </Suspense>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <Suspense fallback={null}>
-              <MyGoalCard projectId={projectIdParam} periodo={mes} />
-            </Suspense>
+            {/* «Mi meta» es de quien vende. Un admin o superadmin no tiene
+                ventas propias y la tarjeta le salia siempre a cero. */}
+            {!isAdmin && (
+              <Suspense fallback={null}>
+                <MyGoalCard projectId={projectIdParam} periodo={mes} />
+              </Suspense>
+            )}
             <Suspense fallback={null}>
               <TopProductsCard projectId={projectIdParam} responsableId={responsableId} from={rango.from} to={rango.to} days={null} limit={5} title="Programas más vendidos" />
             </Suspense>
