@@ -453,7 +453,10 @@ export default function InvoiceCreatePage() {
           <label className="text-xs font-bold uppercase text-muted-foreground">Empresa que emite</label>
           <select value={issuerId ?? ''} onChange={(e) => setIssuerId(Number(e.target.value))}
             className="w-full h-9 px-2 mt-1 rounded border border-primary/40 bg-background text-foreground text-sm font-medium [&>option]:bg-background [&>option]:text-foreground">
-            {issuers.map((iss) => <option key={iss.id} value={iss.id}>{iss.razon_social} — {iss.nif}{iss.serie ? ` · serie ${iss.serie}` : ''}{iss.es_default ? ' (por defecto)' : ''}</option>)}
+            {/* Con alias se enseña el alias: dos emisoras pueden compartir razón
+                social y NIF —misma sociedad, distinto logo— y así se distinguen.
+                En la factura siempre sale la razón social real. */}
+            {issuers.map((iss) => <option key={iss.id} value={iss.id}>{iss.alias || iss.razon_social} — {iss.nif}{iss.serie ? ` · serie ${iss.serie}` : ''}{iss.es_default ? ' (por defecto)' : ''}</option>)}
           </select>
           {fiscalMissing && !esProforma && (
             <div className={`mt-2 flex items-start gap-2 rounded-md px-3 py-2 text-xs border ${fiscalBlock ? 'bg-red-500/10 border-red-500/30 text-red-700 dark:text-red-400' : 'bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-400'}`}>

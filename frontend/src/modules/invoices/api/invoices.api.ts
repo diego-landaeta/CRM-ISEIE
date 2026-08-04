@@ -10,6 +10,9 @@ export interface Issuer {
   id: number;
   project_id: number | null;
   razon_social: string;
+  // Nombre corto para el selector cuando dos emisoras comparten razón social
+  // (misma sociedad, distinto logo). No se imprime en la factura.
+  alias?: string | null;
   nif: string;
   direccion: string | null;
   ciudad: string | null;
