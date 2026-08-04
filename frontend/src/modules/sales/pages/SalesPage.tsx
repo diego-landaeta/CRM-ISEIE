@@ -9,6 +9,7 @@ const TopProductsCard = lazy(() => import('../components/TopProductsCard'));
 const CursosVendidosCard = lazy(() => import('../components/CursosVendidosCard'));
 const MyGoalCard = lazy(() => import('../components/MyGoalCard'));
 const GestoresStatsTable = lazy(() => import('../components/GestoresStatsTable'));
+const VentasAnalisis = lazy(() => import('../components/VentasAnalisis'));
 
 export default function SalesPage() {
   const { activeProject } = useProjectContext() as { activeProject: { id: number; nombre?: string } | null };
@@ -104,6 +105,19 @@ export default function SalesPage() {
               Pulsa <strong>+ Nueva venta</strong> para registrar una sobre un cliente nuevo o existente.
               <p className="text-xs mt-1 opacity-70">Por la fecha indicada se marca como histórica (anterior a hoy) o del día.</p>
             </div>
+          )}
+
+          {/* Los números de Análisis · Reportes, aquí abajo: se mira Ventas a
+              diario y no debería hacer falta cambiar de sección para saber
+              cómo va el mes. Son los mismos paneles, no una copia. */}
+          {isAdmin && !allProjects && (
+            <Suspense fallback={null}>
+              <VentasAnalisis
+                projectId={projectIdParam}
+                projectName={activeProject?.nombre}
+                reportesUrl="/reports"
+              />
+            </Suspense>
           )}
         </>
       )}
