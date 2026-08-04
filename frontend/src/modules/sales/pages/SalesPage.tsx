@@ -5,12 +5,11 @@ import { useAuth } from '@/contexts/AuthContext';
 import client from '@/shared/api/client';
 
 const RegisterSaleDialog = lazy(() => import('../components/RegisterSaleDialog'));
-const TopProductsCard = lazy(() => import('../components/TopProductsCard'));
 const CursosVendidosCard = lazy(() => import('../components/CursosVendidosCard'));
 const MyGoalCard = lazy(() => import('../components/MyGoalCard'));
 const GestoresStatsTable = lazy(() => import('../components/GestoresStatsTable'));
-const VentasAnalisis = lazy(() => import('../components/VentasAnalisis'));
 const DesgloseVentas = lazy(() => import('../components/DesgloseVentas'));
+const ResumenVentas = lazy(() => import('../components/ResumenVentas'));
 import FiltroPeriodo, { useEstadoPeriodo } from '../components/FiltroPeriodo';
 
 export default function SalesPage() {
@@ -97,6 +96,10 @@ export default function SalesPage() {
       ) : (
         <>
           <Suspense fallback={null}>
+            <ResumenVentas projectId={projectIdParam} from={rango.from} to={rango.to} responsableId={responsableId} />
+          </Suspense>
+
+          <Suspense fallback={null}>
             <CursosVendidosCard projectId={projectIdParam} responsableId={responsableId} from={rango.from} to={rango.to} />
           </Suspense>
 
@@ -108,9 +111,6 @@ export default function SalesPage() {
                 <MyGoalCard projectId={projectIdParam} periodo={mes} />
               </Suspense>
             )}
-            <Suspense fallback={null}>
-              <TopProductsCard projectId={projectIdParam} responsableId={responsableId} from={rango.from} to={rango.to} days={null} limit={5} title="Programas más vendidos" />
-            </Suspense>
           </div>
 
           {isAdmin && !allProjects && (
@@ -136,17 +136,6 @@ export default function SalesPage() {
           {/* Los números de Análisis · Reportes, aquí abajo: se mira Ventas a
               diario y no debería hacer falta cambiar de sección para saber
               cómo va el mes. Son los mismos paneles, no una copia. */}
-          {isAdmin && !allProjects && (
-            <Suspense fallback={null}>
-              <VentasAnalisis
-                projectId={projectIdParam}
-                projectName={activeProject?.nombre}
-                from={rango.from}
-                to={rango.to}
-                reportesUrl="/reports"
-              />
-            </Suspense>
-          )}
         </>
       )}
 
