@@ -10,6 +10,7 @@ const CursosVendidosCard = lazy(() => import('../components/CursosVendidosCard')
 const MyGoalCard = lazy(() => import('../components/MyGoalCard'));
 const GestoresStatsTable = lazy(() => import('../components/GestoresStatsTable'));
 const VentasAnalisis = lazy(() => import('../components/VentasAnalisis'));
+const DesgloseVentas = lazy(() => import('../components/DesgloseVentas'));
 import FiltroPeriodo, { useEstadoPeriodo } from '../components/FiltroPeriodo';
 
 export default function SalesPage() {
@@ -111,6 +112,12 @@ export default function SalesPage() {
               <TopProductsCard projectId={projectIdParam} responsableId={responsableId} from={rango.from} to={rango.to} days={null} limit={5} title="Programas más vendidos" />
             </Suspense>
           </div>
+
+          {isAdmin && !allProjects && (
+            <Suspense fallback={null}>
+              <DesgloseVentas projectId={projectIdParam} from={rango.from} to={rango.to} />
+            </Suspense>
+          )}
 
           {isAdmin && (
             <Suspense fallback={null}>

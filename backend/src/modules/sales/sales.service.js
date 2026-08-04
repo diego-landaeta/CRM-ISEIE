@@ -394,3 +394,75 @@ export async function getVentasPorCliente(filtros = {}) {
     totalPages: Math.max(1, Math.ceil(countRows[0].total / limit)),
   };
 }
+
+// ── Desglose de lo vendido ────────────────────────────────────────────────
+// Dos repartos del mismo periodo: por tipo de formacion (que se vende) y por
+// tipo de cobro (matricula o cuota). Comparten el mismo filtro de fechas que
+// el resto de la pantalla de Ventas.
+const TIPO_FORMACION = `CASE
+    WHEN c.producto_contratado IS NULL OR BTRIM(c.producto_contratado) = '' THEN 'Sin programa'
+    WHEN c.producto_contratado ILIKE '%servicio%'                          THEN 'Servicio académico'
+    WHEN c.producto_contratado ILIKE '%pendiente%'                         THEN 'Pendiente de registrar'
+    WHEN c.producto_contratado ILIKE '%master%'
+      OR c.producto_contratado ILIKE '%máster%'
+      OR c.producto_contratado ILIKE '%maestr%'                            THEN 'Máster'
+    WHEN c.producto_contratado ILIKE '%diplomado%'                         THEN 'Diplomado'
+    WHEN c.producto_contratado ILIKE '%curso%'                             THEN 'Curso'
+    ELSE 'Otros' END`;
+
+// Un cobro es MATRICULA si es el que abre la venta; el resto son cuotas del
+// plan. Es la misma regla que usan los informes, para que no digan cosas
+// distintas.
+const ES_MATRICULA = `(NOT c.es_mensualidad AND NOT EXISTS (
+    SELECT 1 FROM conversion_payments p0
+     WHERE p0.conversion_id = cp.conversion_id
+       AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id))))`;
+
+export async function getDesglose({ projectId = null, from = null, to = null } = {}) {
+  const pv = [];
+  const wv = [];
+  if (projectId) { pv.push(projectId); wv.push(`c.project_id = $${pv.length}`); }
+  if (from) { pv.push(from); wv.push(`c.fecha_conversion >= $${pv.length}::date`); }
+  if (to) { pv.push(to); wv.push(`c.fecha_conversion <= $${pv.length}::date`); }
+  wv.push('NOT c.es_mensualidad');
+  // Una venta sin ningun cobro es una proforma que no se pago: no cuenta.
+  wv.push('EXISTS (SELECT 1 FROM conversion_payments cpx WHERE cpx.conversion_id = c.id)');
+
+  const { rows: porFormacion } = await query(
+    `SELECT ${TIPO_FORMACION} AS tipo,
+            COUNT(*)::int AS ventas,
+            ROUND(COALESCE(SUM(c.importe_total), 0), 2)::float8 AS importe
+       FROM conversions c
+      WHERE ${wv.join(' AND ')}
+      GROUP BY 1 ORDER BY 3 DESC`, pv);
+
+  const pc = [];
+  const wc = [];
+  if (projectId) { pc.push(projectId); wc.push(`c.project_id = $${pc.length}`); }
+  if (from) { pc.push(from); wc.push(`cp.fecha >= $${pc.length}::date`); }
+  if (to) { pc.push(to); wc.push(`cp.fecha <= $${pc.length}::date`); }
+
+  const { rows: porCobro } = await query(
+    `SELECT CASE WHEN ${ES_MATRICULA} THEN 'Matrícula / primer pago' ELSE 'Cuota del plan' END AS tipo,
+            COUNT(*)::int AS cobros,
+            ROUND(COALESCE(SUM(cp.importe), 0), 2)::float8 AS importe
+       FROM conversion_payments cp
+       JOIN conversions c ON c.id = cp.conversion_id
+      ${wc.length ? 'WHERE ' + wc.join(' AND ') : ''}
+      GROUP BY 1 ORDER BY 3 DESC`, pc);
+
+  const totalVentas = porFormacion.reduce((a, r) => a + r.ventas, 0);
+  const totalVendido = porFormacion.reduce((a, r) => a + r.importe, 0);
+  const totalCobrado = porCobro.reduce((a, r) => a + r.importe, 0);
+
+  return {
+    porFormacion,
+    porCobro,
+    totales: {
+      ventas: totalVentas,
+      vendido: Math.round(totalVendido * 100) / 100,
+      cobrado: Math.round(totalCobrado * 100) / 100,
+      ticket: totalVentas ? Math.round((totalVendido / totalVentas) * 100) / 100 : 0,
+    },
+  };
+}

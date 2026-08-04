@@ -120,3 +120,16 @@ export async function ventasPorCliente(req, res, next) {
     });
   } catch (err) { next(err); }
 }
+
+// GET /api/sales/desglose?projectId&from&to — de que se compone lo vendido.
+export async function desglose(req, res, next) {
+  try {
+    const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+    const data = await salesService.getDesglose({
+      projectId: req.query.projectId ? parseInt(req.query.projectId) : null,
+      from: dateRe.test(req.query.from || '') ? req.query.from : null,
+      to: dateRe.test(req.query.to || '') ? req.query.to : null,
+    });
+    res.json({ success: true, data });
+  } catch (err) { next(err); }
+}
