@@ -40,8 +40,10 @@ export function rangoDe(clave) {
 // mes en curso, que es lo unico que tiene sentido para una meta.
 export function mesDe(from, to) {
   if (from && to && from.slice(0, 7) === to.slice(0, 7)) return from.slice(0, 7);
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  // Si el rango cruza varios meses no hay «un» mes: el equipo pasa a histórico
+  // en vez de enseñar el mes en curso, que no tiene nada que ver con lo que se
+  // está mirando arriba.
+  return 'all';
 }
 
 export default function FiltroPeriodo({ valor, onChange, desde, hasta, onFechas }) {

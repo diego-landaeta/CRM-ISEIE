@@ -51,13 +51,16 @@ export default function GestoresStatsTable({ projectId, className = '', canEdit 
     setLoading(true);
     const params: Record<string, string | number> = {};
     if (projectId) params.projectId = projectId;
+    // El periodo NO se enviaba: la tabla pedia siempre el valor por defecto del
+    // backend y salia todo a cero aunque arriba se estuviera mirando el año.
+    if (periodo) params.periodo = periodo;
     client.get<{ gestores: GestorRow[] }>('/sales/gestores-stats', { params })
       .then((r) => { setRows(r?.data?.gestores || []); })
       .catch(() => setRows([]))
       .finally(() => setLoading(false));
   }
 
-  useEffect(() => { load(); }, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [projectId, periodo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function startEdit(row: GestorRow) {
     setEditingId(row.user_id);
@@ -91,7 +94,7 @@ export default function GestoresStatsTable({ projectId, className = '', canEdit 
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold flex items-center gap-2">
           <Users size={16} weight="duotone" className="text-blue-600" />
-          Equipo de ventas — {periodo}
+          Equipo de ventas — {periodo === 'all' ? 'histórico' : periodo}
         </h3>
         <span className="text-[11px] text-muted-foreground">{rows.length} {rows.length === 1 ? 'gestor' : 'gestores'}</span>
       </div>

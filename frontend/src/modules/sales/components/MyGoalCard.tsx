@@ -39,8 +39,9 @@ export default function MyGoalCard({ projectId, className = '', periodo: periodo
   const [metaVentas, setMetaVentas] = useState('');
   const [metaFact, setMetaFact] = useState('');
   const [saving, setSaving] = useState(false);
-  // El mes que diga el filtro de arriba; si no viene, el actual.
-  const periodo = periodoProp || currentPeriodo();
+  // El mes que diga el filtro de arriba; si el rango cruza varios meses
+  // ('all') se queda en el actual, porque una meta siempre es de un mes.
+  const periodo = periodoProp && periodoProp !== 'all' ? periodoProp : currentPeriodo();
 
   function load() {
     setLoading(true);

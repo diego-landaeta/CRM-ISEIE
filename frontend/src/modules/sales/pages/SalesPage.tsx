@@ -27,7 +27,9 @@ export default function SalesPage() {
   // El periodo de la pantalla, elegido UNA vez: antes cada tarjeta traía el
   // suyo y en la misma vista convivían cuatro criterios distintos, así que los
   // números no se podían comparar entre sí.
-  const { periodo, setPeriodo, desde, hasta, onFechas, rango, mes } = useEstadoPeriodo('mes');
+  // Arranca en el año en curso: un mes recién empezado sale en blanco —ISEIE
+  // no tiene ventas en agosto— y la pantalla parecía rota. «Mes» está a un clic.
+  const { periodo, setPeriodo, desde, hasta, onFechas, rango, mes } = useEstadoPeriodo('ytd');
 
   // Filtro por gestora/vendedora (solo admin/superadmin). Las tarjetas ya
   // soportan responsableId; aquí solo lo elegimos.
