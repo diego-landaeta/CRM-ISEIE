@@ -61,7 +61,10 @@ const PERIODS: ReadonlyArray<{ key: Period; label: string }> = [
 ];
 
 export default function CursosVendidosCard({ projectId, responsableId = null, className = '', title = 'Cursos vendidos' }: Props) {
-  const [period, setPeriod] = useState<Period>('hoy');
+  // Arranca en el mes: al entrar interesa como va el mes, no si se ha vendido
+  // algo en las ultimas horas. Con 'hoy' la tarjeta salia en blanco casi
+  // siempre y parecia que el CRM no traia datos.
+  const [period, setPeriod] = useState<Period>('mes');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
   const [rows, setRows] = useState<Row[]>([]);
