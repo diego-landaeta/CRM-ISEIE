@@ -24,6 +24,8 @@ interface Props {
   className?: string;
   /** Si false, no muestra columna de acciones (modo solo lectura) */
   canEdit?: boolean;
+  /** Mes (YYYY-MM) que manda desde la pantalla. */
+  periodo?: string;
 }
 
 function fmt(n: number) {
@@ -35,14 +37,15 @@ function currentPeriodo() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-export default function GestoresStatsTable({ projectId, className = '', canEdit = true }: Props) {
+export default function GestoresStatsTable({ projectId, className = '', canEdit = true, periodo: periodoProp }: Props) {
   const [rows, setRows] = useState<GestorRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editVentas, setEditVentas] = useState('');
   const [editFact, setEditFact] = useState('');
   const [saving, setSaving] = useState(false);
-  const periodo = currentPeriodo();
+  // El mes que diga el filtro de arriba; si no viene, el actual.
+  const periodo = periodoProp || currentPeriodo();
 
   function load() {
     setLoading(true);

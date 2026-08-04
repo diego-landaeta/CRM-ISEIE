@@ -32,14 +32,15 @@ function currentPeriodo() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-export default function MyGoalCard({ projectId, className = '' }: Props) {
+export default function MyGoalCard({ projectId, className = '', periodo: periodoProp }: Props) {
   const [stats, setStats] = useState<MyStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [metaVentas, setMetaVentas] = useState('');
   const [metaFact, setMetaFact] = useState('');
   const [saving, setSaving] = useState(false);
-  const periodo = currentPeriodo();
+  // El mes que diga el filtro de arriba; si no viene, el actual.
+  const periodo = periodoProp || currentPeriodo();
 
   function load() {
     setLoading(true);

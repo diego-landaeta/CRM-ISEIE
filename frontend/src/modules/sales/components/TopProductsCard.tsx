@@ -16,6 +16,9 @@ interface Props {
   responsableId?: number | null;
   /** null = all-time, número = últimos N días */
   days?: number | null;
+  /** Rango que manda desde la pantalla; tiene prioridad sobre days. */
+  from?: string | null;
+  to?: string | null;
   limit?: number;
   title?: string;
   className?: string;
@@ -34,7 +37,7 @@ export default function TopProductsCard({ projectId, responsableId = null, days 
     setLoading(true);
     const params: Record<string, string | number> = { limit };
     if (projectId) params.projectId = projectId;
-    if (days) params.days = days;
+    if (from && to) { params.from = from; params.to = to; } else if (days) params.days = days;
     if (responsableId) params.responsableId = responsableId;
     client.get<Row[]>('/sales/top-products', { params })
       .then((r) => { if (!cancelled) setRows(Array.isArray(r?.data) ? r.data : []); })

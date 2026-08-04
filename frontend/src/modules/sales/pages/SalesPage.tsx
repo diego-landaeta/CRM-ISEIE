@@ -10,6 +10,7 @@ const CursosVendidosCard = lazy(() => import('../components/CursosVendidosCard')
 const MyGoalCard = lazy(() => import('../components/MyGoalCard'));
 const GestoresStatsTable = lazy(() => import('../components/GestoresStatsTable'));
 const VentasAnalisis = lazy(() => import('../components/VentasAnalisis'));
+import FiltroPeriodo, { useEstadoPeriodo } from '../components/FiltroPeriodo';
 
 export default function SalesPage() {
   const { activeProject } = useProjectContext() as { activeProject: { id: number; nombre?: string } | null };
@@ -22,6 +23,11 @@ export default function SalesPage() {
   const hasActiveCtx = !!activeProject?.id;
   const allProjects = activeProject?.id === -1;
   const projectIdParam = hasActiveCtx && !allProjects ? activeProject!.id : null;
+
+  // El periodo de la pantalla, elegido UNA vez: antes cada tarjeta traía el
+  // suyo y en la misma vista convivían cuatro criterios distintos, así que los
+  // números no se podían comparar entre sí.
+  const { periodo, setPeriodo, desde, hasta, onFechas, rango, mes } = useEstadoPeriodo('mes');
 
   // Filtro por gestora/vendedora (solo admin/superadmin). Las tarjetas ya
   // soportan responsableId; aquí solo lo elegimos.
@@ -74,6 +80,13 @@ export default function SalesPage() {
         </div>
       </header>
 
+      {hasActiveCtx && !allProjects && (
+        <FiltroPeriodo
+          valor={periodo} onChange={setPeriodo}
+          desde={desde} hasta={hasta} onFechas={onFechas}
+        />
+      )}
+
       {!hasActiveCtx ? (
         <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-lg p-6 text-center text-sm text-amber-800 dark:text-amber-300">
           Cargando proyectos…
@@ -81,21 +94,21 @@ export default function SalesPage() {
       ) : (
         <>
           <Suspense fallback={null}>
-            <CursosVendidosCard projectId={projectIdParam} responsableId={responsableId} />
+            <CursosVendidosCard projectId={projectIdParam} responsableId={responsableId} from={rango.from} to={rango.to} />
           </Suspense>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Suspense fallback={null}>
-              <MyGoalCard projectId={projectIdParam} />
+              <MyGoalCard projectId={projectIdParam} periodo={mes} />
             </Suspense>
             <Suspense fallback={null}>
-              <TopProductsCard projectId={projectIdParam} responsableId={responsableId} days={null} limit={5} title="Programas más vendidos" />
+              <TopProductsCard projectId={projectIdParam} responsableId={responsableId} from={rango.from} to={rango.to} days={null} limit={5} title="Programas más vendidos" />
             </Suspense>
           </div>
 
           {isAdmin && (
             <Suspense fallback={null}>
-              <GestoresStatsTable projectId={projectIdParam} canEdit={!allProjects} />
+              <GestoresStatsTable projectId={projectIdParam} canEdit={!allProjects} periodo={mes} />
             </Suspense>
           )}
 
@@ -115,6 +128,8 @@ export default function SalesPage() {
               <VentasAnalisis
                 projectId={projectIdParam}
                 projectName={activeProject?.nombre}
+                from={rango.from}
+                to={rango.to}
                 reportesUrl="/reports"
               />
             </Suspense>
