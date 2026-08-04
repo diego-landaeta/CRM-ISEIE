@@ -28,7 +28,7 @@ function fmt(n: number) {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0);
 }
 
-export default function TopProductsCard({ projectId, responsableId = null, days = null, limit = 5, title = 'Programas más vendidos', className = '' }: Props) {
+export default function TopProductsCard({ projectId, responsableId = null, days = null, from = null, to = null, limit = 5, title = 'Programas más vendidos', className = '' }: Props) {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -44,7 +44,7 @@ export default function TopProductsCard({ projectId, responsableId = null, days 
       .catch(() => { if (!cancelled) setRows([]); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [projectId, responsableId, days, limit]);
+  }, [projectId, responsableId, days, limit, from, to]);
 
   return (
     <div className={`bg-card border border-border rounded-lg p-4 ${className}`}>
