@@ -21,6 +21,8 @@ interface MyStats {
 interface Props {
   projectId?: number | null;
   className?: string;
+  /** Mes 'YYYY-MM' que manda el filtro de la pantalla. 'all' = rango que cruza meses. */
+  periodo?: string | null;
 }
 
 function fmt(n: number) {
@@ -47,13 +49,14 @@ export default function MyGoalCard({ projectId, className = '', periodo: periodo
     setLoading(true);
     const params: Record<string, string | number> = {};
     if (projectId) params.projectId = projectId;
+    params.periodo = periodo;
     client.get<MyStats>('/sales/my-stats', { params })
       .then((r) => { setStats(r?.data || null); })
       .catch(() => setStats(null))
       .finally(() => setLoading(false));
   }
 
-  useEffect(() => { load(); }, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [projectId, periodo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (editing && stats) {

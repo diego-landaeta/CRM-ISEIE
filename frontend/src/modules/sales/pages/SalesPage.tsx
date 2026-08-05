@@ -10,6 +10,8 @@ const MyGoalCard = lazy(() => import('../components/MyGoalCard'));
 const GestoresStatsTable = lazy(() => import('../components/GestoresStatsTable'));
 const DesgloseVentas = lazy(() => import('../components/DesgloseVentas'));
 const ResumenVentas = lazy(() => import('../components/ResumenVentas'));
+const EvolucionVentas = lazy(() => import('../components/EvolucionVentas'));
+const VentasPorPais = lazy(() => import('../components/VentasPorPais'));
 import FiltroPeriodo, { useEstadoPeriodo } from '../components/FiltroPeriodo';
 
 export default function SalesPage() {
@@ -113,9 +115,23 @@ export default function SalesPage() {
             )}
           </div>
 
-          {isAdmin && !allProjects && (
+          {/* Cómo va contra el periodo anterior, y el año mes a mes. Lo ve
+              también la gestora: el servidor le devuelve solo lo suyo. */}
+          {!allProjects && (
             <Suspense fallback={null}>
-              <DesgloseVentas projectId={projectIdParam} from={rango.from} to={rango.to} />
+              <EvolucionVentas projectId={projectIdParam} from={rango.from} to={rango.to} responsableId={responsableId} />
+            </Suspense>
+          )}
+
+          {!allProjects && (
+            <Suspense fallback={null}>
+              <DesgloseVentas projectId={projectIdParam} from={rango.from} to={rango.to} responsableId={responsableId} />
+            </Suspense>
+          )}
+
+          {!allProjects && (
+            <Suspense fallback={null}>
+              <VentasPorPais projectId={projectIdParam} from={rango.from} to={rango.to} responsableId={responsableId} />
             </Suspense>
           )}
 

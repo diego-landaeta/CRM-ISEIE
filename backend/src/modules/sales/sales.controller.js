@@ -1,4 +1,5 @@
 import * as salesService from './sales.service.js';
+import * as reportModel from '../reports/report.model.js';
 import * as goalsService from './sales.goals.js';
 import { createSaleSchema } from './sales.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
@@ -129,6 +130,26 @@ export async function desglose(req, res, next) {
       projectId: req.query.projectId ? parseInt(req.query.projectId) : null,
       from: dateRe.test(req.query.from || '') ? req.query.from : null,
       to: dateRe.test(req.query.to || '') ? req.query.to : null,
+      // Una gestora ve su propio reparto, no el del proyecto entero.
+      responsableId: req.user.role === 'gestor' ? req.user.userId
+        : (req.query.responsableId ? parseInt(req.query.responsableId) : null),
+    });
+    res.json({ success: true, data });
+  } catch (err) { next(err); }
+}
+
+// GET /api/sales/paises — de donde vienen las ventas y los leads.
+// Se reusa el ranking de los informes en vez de escribir aqui otra definicion
+// de pais: es la que ya esta verificada y la que salta de prefijo telefonico.
+export async function paises(req, res, next) {
+  try {
+    const f = filtrosDeQuery(req);
+    const hoy = new Date().toISOString().slice(0, 10);
+    const data = await reportModel.paisesMasVendidos({
+      projectId: f.projectId,
+      from: f.from || `${new Date().getFullYear()}-01-01`,
+      to: f.to || hoy,
+      asesoraId: f.responsableId,
     });
     res.json({ success: true, data });
   } catch (err) { next(err); }

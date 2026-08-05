@@ -211,6 +211,8 @@ export async function getTopProducts({ projectId, limit = 10, days = null, from 
 // de vendedora: la de la venta si la tiene, si no la gestora del lead.
 // ---------------------------------------------------------------------------
 const VENDEDORA = 'COALESCE(cv.vendedora_id, l.responsable_id)';
+// Lo mismo donde la consulta no trae unido leads y la conversion se llama 'c'.
+const VENDEDORA_C = 'COALESCE(c.vendedora_id, (SELECT responsable_id FROM leads WHERE id = c.lead_id))';
 
 // Quita tildes en SQL. Se usa en la busqueda para que "Barbara" encuentre a "Barbara".
 const SIN_TILDES = (expr) =>
@@ -429,10 +431,11 @@ const ES_MATRICULA = `(NOT c.es_mensualidad AND NOT EXISTS (
      WHERE p0.conversion_id = cp.conversion_id
        AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id))))`;
 
-export async function getDesglose({ projectId = null, from = null, to = null } = {}) {
+export async function getDesglose({ projectId = null, from = null, to = null, responsableId = null } = {}) {
   const pv = [];
   const wv = [];
   if (projectId) { pv.push(projectId); wv.push(`c.project_id = $${pv.length}`); }
+  if (responsableId) { pv.push(responsableId); wv.push(`${VENDEDORA_C} = $${pv.length}`); }
   if (from) { pv.push(from); wv.push(`c.fecha_conversion >= $${pv.length}::date`); }
   if (to) { pv.push(to); wv.push(`c.fecha_conversion <= $${pv.length}::date`); }
   wv.push('NOT c.es_mensualidad');
@@ -450,6 +453,7 @@ export async function getDesglose({ projectId = null, from = null, to = null } =
   const pc = [];
   const wc = [];
   if (projectId) { pc.push(projectId); wc.push(`c.project_id = $${pc.length}`); }
+  if (responsableId) { pc.push(responsableId); wc.push(`${VENDEDORA_C} = $${pc.length}`); }
   if (from) { pc.push(from); wc.push(`cp.fecha >= $${pc.length}::date`); }
   if (to) { pc.push(to); wc.push(`cp.fecha <= $${pc.length}::date`); }
 

@@ -22,7 +22,10 @@ router.get('/top-products', salesController.topProducts);
 // Solo admin: son las cifras y las metas de TODO el equipo.
 router.get('/gestores-stats', roleGuard('admin', 'superadmin'), salesController.gestoresStats);
 // De que se compone lo vendido: por tipo de formacion y por tipo de cobro.
-router.get('/desglose', roleGuard('admin', 'superadmin'), salesController.desglose);
+// El desglose y los paises se quedan abiertos a proposito: el controlador ya
+// recorta a la gestora a lo suyo, y son su vista de «mi trabajo».
+router.get('/desglose', salesController.desglose);
+router.get('/paises', salesController.paises);
 // Serie con comparacion e historial. SIN roleGuard a proposito: una gestora
 // tiene que poder ver la suya, y el controlador ya la recorta a lo suyo.
 router.get('/serie', salesController.serieVentas);
