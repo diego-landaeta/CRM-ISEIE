@@ -348,7 +348,8 @@ export async function getVentasPorCliente(filtros = {}) {
   // Las ventas del filtro se aislan en una CTE para poder contar sus cuotas
   // por cliente sin meter agregados dentro de subconsultas.
   const CTE = `WITH v AS (
-      SELECT cv.id, cv.lead_id, cv.importe_total, cv.importe_pagado, cv.fecha_conversion,
+      SELECT cv.id, cv.lead_id, cv.importe_total, cv.fecha_conversion,
+             ${COBRADO_REAL} AS importe_pagado,
              l.nombre AS cliente, l.email, l.telefono,
              u.nombre AS asesora
         FROM conversions cv

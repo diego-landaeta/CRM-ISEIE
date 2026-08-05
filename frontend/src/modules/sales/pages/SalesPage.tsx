@@ -12,6 +12,7 @@ const DesgloseVentas = lazy(() => import('../components/DesgloseVentas'));
 const ResumenVentas = lazy(() => import('../components/ResumenVentas'));
 const EvolucionVentas = lazy(() => import('../components/EvolucionVentas'));
 const VentasPorPais = lazy(() => import('../components/VentasPorPais'));
+const ClientesVentas = lazy(() => import('../components/ClientesVentas'));
 import FiltroPeriodo, { useEstadoPeriodo } from '../components/FiltroPeriodo';
 
 export default function SalesPage() {
@@ -132,6 +133,12 @@ export default function SalesPage() {
           {!allProjects && (
             <Suspense fallback={null}>
               <VentasPorPais projectId={projectIdParam} from={rango.from} to={rango.to} responsableId={responsableId} />
+            </Suspense>
+          )}
+
+          {!allProjects && (
+            <Suspense fallback={null}>
+              <ClientesVentas projectId={projectIdParam} from={rango.from} to={rango.to} responsableId={responsableId} />
             </Suspense>
           )}
 

@@ -14,7 +14,8 @@ router.post('/', roleGuard('gestor', 'admin', 'superadmin'), salesController.cre
 // pedirlos por API aunque la pantalla se los escondiera.
 router.get('/resumen', roleGuard('admin', 'superadmin'), salesController.resumenVentas);
 router.get('/por-asesora', roleGuard('admin', 'superadmin'), salesController.ventasPorAsesora);
-router.get('/por-cliente', roleGuard('admin', 'superadmin'), salesController.ventasPorCliente);
+// Sin roleGuard: filtrosDeQuery ya recorta a la gestora a sus propios clientes.
+router.get('/por-cliente', salesController.ventasPorCliente);
 // Este se queda abierto: lo pinta el dashboard de todos los roles.
 router.get('/top-products', salesController.topProducts);
 
