@@ -7,6 +7,7 @@ import { abrirWhatsapp } from '@/shared/lib/telefono';
 import client from '@/shared/api/client';
 import { whatsappApi, type PlantillaWhatsapp, type ProspectoCola } from '../api/whatsapp.api';
 import { rellenar, diasSinContacto } from '../lib/plantilla';
+import AvisoUso from '../components/AvisoUso';
 
 // La pantalla está pensada para ocupar MEDIA pantalla, con WhatsApp Web al
 // lado. Por eso no hay diálogos ni tablas anchas: todo cabe en una columna
@@ -118,6 +119,8 @@ export default function WhatsappPage() {
 
   return (
     <div className="space-y-4">
+      <AvisoUso />
+
       <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
