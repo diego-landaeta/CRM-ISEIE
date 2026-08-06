@@ -101,12 +101,22 @@ export async function webhook(req, res, next) {
       return res.status(400).send('rawBody requerido');
     }
     const secret = await service.getWebhookSecret(pid);
-    // Si no hay secret configurado, aceptar pero loggear warning (modo permisivo)
-    if (secret) {
-      const ok = service.verifyStripeSignature(rawBody, sigHeader, secret);
-      if (!ok) return res.status(400).send('Firma invalida');
-    } else {
-      logger.warn({ projectId: pid }, 'Webhook sin secret configurado - aceptando sin verificar');
+    // Sin secreto NO se acepta. Antes se dejaba pasar «en modo permisivo», y eso
+    // convertia la URL en un formulario publico para inventar cobros: quien la
+    // conociera podia mandar un charge.succeeded y crear un pago en el CRM.
+    //
+    // Cerrarlo no pierde cobros: el sondeo de stripePaymentsSyncScheduler los
+    // recoge igual cada 5 minutos. Solo se pierde la inmediatez, hasta que se
+    // configure el secreto en Integraciones.
+    if (!secret) {
+      logger.error({ projectId: pid },
+        'Webhook de Stripe RECHAZADO: el proyecto no tiene secreto configurado. ' +
+        'Ponlo en Integraciones; mientras tanto los cobros entran por el sondeo.');
+      return res.status(400).send('webhook secret no configurado para este proyecto');
+    }
+    if (!service.verifyStripeSignature(rawBody, sigHeader, secret)) {
+      logger.warn({ projectId: pid }, 'Webhook de Stripe con firma invalida');
+      return res.status(400).send('Firma invalida');
     }
     const event = JSON.parse(rawBody);
     const result = await service.handleWebhookEvent(pid, event);

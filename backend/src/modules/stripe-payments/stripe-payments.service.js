@@ -17,8 +17,12 @@ export async function getWebhookSecret(projectId) {
   try {
     const row = await integrationsModel.get(projectId, 'stripe');
     const pub = row?.config_public || {};
-    if (pub.webhook_secret_encrypted && row.webhook_iv && row.webhook_auth_tag) {
-      return decrypt(pub.webhook_secret_encrypted, row.webhook_iv, row.webhook_auth_tag);
+    // Las columnas row.webhook_iv y row.webhook_auth_tag NUNCA han existido en
+    // project_integrations —son iv y auth_tag, y pertenecen a la clave de API—,
+    // asi que esta rama estaba muerta y siempre se caia al texto plano. El
+    // secreto guarda ahora su propio iv y su etiqueta dentro de config_public.
+    if (pub.webhook_secret_encrypted && pub.webhook_secret_iv && pub.webhook_secret_auth_tag) {
+      return decrypt(pub.webhook_secret_encrypted, pub.webhook_secret_iv, pub.webhook_secret_auth_tag);
     }
     return pub.webhook_secret || null;
   } catch (e) { return null; }
@@ -303,6 +307,11 @@ export function verifyStripeSignature(rawBody, sigHeader, secret) {
   const t = parts.t?.[0];
   const v1List = parts.v1 || [];
   if (!t || !v1List.length) return false;
+  // La firma incluye la marca de tiempo, pero de nada sirve si no se comprueba:
+  // sin esto, quien capture una peticion valida puede reenviarla mañana y el
+  // cobro se duplica. Cinco minutos, la misma ventana que recomienda Stripe.
+  const edadSegundos = Math.abs(Math.floor(Date.now() / 1000) - Number(t));
+  if (!Number.isFinite(edadSegundos) || edadSegundos > 300) return false;
   const payload = `${t}.${rawBody}`;
   const expected = crypto.createHmac('sha256', secret).update(payload).digest('hex');
   for (const v1 of v1List) {

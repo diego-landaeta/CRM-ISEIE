@@ -26,6 +26,17 @@ interface Integration {
 // Nace activa: no hay interruptor en pantalla, asi que guardar una clave
 // significa querer usarla. Con active:false la fila quedaba inactiva y el
 // sincronizador de Stripe no la veia.
+// La direccion real del webhook. La pantalla enseñaba
+// /api/integrations/stripe/webhook, que no existe en ningun sitio: la ruta
+// buena es /api/stripe-webhook/<projectId>, montada aparte por ser publica.
+// Quien copiara la anterior a Stripe la configuro contra la nada.
+function urlWebhook(projectId: number | null | undefined): string {
+  const base = (import.meta.env.VITE_API_URL as string | undefined)
+    || `${window.location.origin}/api`;
+  const raiz = base.replace(/\/+$/, '');
+  return `${raiz}/stripe-webhook/${projectId ?? ''}`;
+}
+
 const EMPTY = (provider: Provider): Integration => ({
   provider, active: true, has_secret: false, secret_preview: null,
   config_public: {}, last_test_status: null, last_test_message: null, last_test_at: null,
@@ -92,6 +103,10 @@ function StripeCard({ projectId }: { projectId: number }) {
   const [apiKey, setApiKey] = useState('');
   const [showKey, setShowKey] = useState(false);
   const [webhookSecret, setWebhookSecret] = useState('');
+  // Lo que ya habia guardado, enmascarado. Sirve para distinguir «no lo ha
+  // tocado» de «ha escrito uno nuevo»: sin esto se reenviaria el enmascarado
+  // como si fuera el secreto de verdad.
+  const [webhookPrevio, setWebhookPrevio] = useState('');
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
 
@@ -101,7 +116,9 @@ function StripeCard({ projectId }: { projectId: number }) {
       const res = await client.get<Integration>(`/integrations/stripe?projectId=${projectId}`);
       if (res.success) {
         setData(res.data || EMPTY('stripe'));
-        setWebhookSecret((res.data?.config_public?.webhook_secret_preview as string) || '');
+        const previo = (res.data?.config_public?.webhook_secret_preview as string) || '';
+        setWebhookSecret(previo);
+        setWebhookPrevio(previo);
       }
     } catch {/* ignore */} finally { setLoading(false); }
   }, [projectId]);
@@ -118,10 +135,14 @@ function StripeCard({ projectId }: { projectId: number }) {
         active: true,
         config_public: {
           ...(data?.config_public || {}),
-          webhook_url: window.location.origin + '/api/integrations/stripe/webhook',  // URL final (informativo)
+          webhook_url: urlWebhook(projectId),
         },
       };
       if (apiKey.trim()) body.api_key = apiKey.trim();
+      // Solo si ha escrito uno nuevo: si sigue el enmascarado, no se toca.
+      if (webhookSecret.trim() && webhookSecret.trim() !== webhookPrevio) {
+        body.webhook_secret = webhookSecret.trim();
+      }
       const res = await client.put<Integration>('/integrations', body);
       if (res.success) {
         setData(res.data);
@@ -250,7 +271,7 @@ function StripeCard({ projectId }: { projectId: number }) {
 
         <div>
           <label className="text-[11px] font-semibold text-muted-foreground mb-1 block">
-            Webhook Signing Secret <span className="text-muted-foreground/60 font-normal">(opcional)</span>
+            Secreto de firma del webhook
           </label>
           <input
             value={webhookSecret}
@@ -258,6 +279,18 @@ function StripeCard({ projectId }: { projectId: number }) {
             placeholder="whsec_..."
             className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm font-mono"
           />
+          <p className="text-[11px] text-muted-foreground mt-1.5">
+            Sin este secreto <strong>el webhook se rechaza</strong>: sin el no hay forma de
+            saber si un aviso viene de Stripe o de cualquiera que conozca la direccion.
+            Mientras falte, los cobros siguen entrando por la sincronizacion, con
+            hasta cinco minutos de retraso.
+          </p>
+          <label className="text-[11px] font-semibold text-muted-foreground mt-3 mb-1 block">
+            Direccion que hay que pegar en Stripe
+          </label>
+          <code className="block w-full px-3 py-2 rounded-md border border-border bg-muted/40 text-xs font-mono break-all">
+            {urlWebhook(projectId)}
+          </code>
         </div>
 
         <TestStatus data={data} />

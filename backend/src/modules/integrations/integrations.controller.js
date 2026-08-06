@@ -14,6 +14,9 @@ const upsertSchema = z.object({
   provider: z.enum(SUPPORTED),
   active: z.boolean().optional(),
   api_key: z.string().min(8).max(500).optional().nullable(),  // si null/undefined, no se cambia
+  // Secreto de firma del webhook (el whsec_... que da Stripe). Igual que la
+  // api_key: si no viene, no se toca el que hubiera.
+  webhook_secret: z.string().min(8).max(500).optional().nullable(),
   config_public: z.record(z.string(), z.any()).optional(),
 });
 
@@ -81,13 +84,34 @@ export async function upsert(req, res, next) {
   try {
     const parsed = upsertSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
-    const { projectId: pid, provider, active, api_key, config_public } = parsed.data;
+    const { projectId: pid, provider, active, api_key, webhook_secret, config_public } = parsed.data;
     let encryptedFields = {};
     if (api_key && api_key.trim()) {
       const enc = encrypt(api_key.trim());
       encryptedFields = { encrypted_value: enc.encrypted, iv: enc.iv, auth_tag: enc.authTag };
     }
-    const row = await model.upsert({ projectId: pid, provider, active, config_public, ...encryptedFields });
+
+    // El secreto del webhook va cifrado DENTRO de config_public, con su propio
+    // iv y su etiqueta: las columnas iv/auth_tag de la fila son de la api_key y
+    // reutilizarlas romperia una de las dos.
+    //
+    // Y se parte de la config guardada, no de la que manda el navegador: si no,
+    // guardar cualquier otra cosa borraria el secreto sin que nadie se entere.
+    const anterior = await model.get(pid, provider);
+    let config = { ...(anterior?.config_public || {}), ...(config_public || {}) };
+    if (webhook_secret && webhook_secret.trim()) {
+      const w = encrypt(webhook_secret.trim());
+      config = {
+        ...config,
+        webhook_secret_encrypted: w.encrypted,
+        webhook_secret_iv: w.iv,
+        webhook_secret_auth_tag: w.authTag,
+        webhook_secret_preview: maskSecret(webhook_secret.trim()),
+      };
+      delete config.webhook_secret;  // nunca dejarlo en claro
+    }
+
+    const row = await model.upsert({ projectId: pid, provider, active, config_public: config, ...encryptedFields });
     res.json({ success: true, data: sanitize(row) });
   } catch (err) { next(err); }
 }
