@@ -10,8 +10,10 @@ router.get('/:id/doc/:tipo', ctrl.getDoc);
 
 router.use(verifyToken);
 
-router.get('/', ctrl.list);
-router.get('/:id', ctrl.getById);
+// Los mismos que pueden crearlas. No cambia nada para quien trabaja hoy;
+// cierra la puerta a cualquier rol que se añada mañana.
+router.get('/', roleGuard('admin', 'superadmin', 'gestor'), ctrl.list);
+router.get('/:id', roleGuard('admin', 'superadmin', 'gestor'), ctrl.getById);
 router.post('/', roleGuard('admin', 'superadmin', 'gestor'), ctrl.create);
 router.patch('/:id', roleGuard('admin', 'superadmin', 'gestor'), ctrl.update);
 router.delete('/:id', roleGuard('admin', 'superadmin'), ctrl.remove);
