@@ -14,5 +14,6 @@ router.patch('/templates/:id', ctrl.updateTemplate);
 router.delete('/templates/:id', ctrl.deleteTemplate);
 
 router.get('/cola', ctrl.cola);
+router.get('/sala', ctrl.sala);
 
 export default router;

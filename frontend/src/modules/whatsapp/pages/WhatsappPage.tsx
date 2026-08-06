@@ -29,6 +29,15 @@ export default function WhatsappPage() {
   const [responsableId, setResponsableId] = useState<number | null>(null);
   const [gestoras, setGestoras] = useState<Array<{ id: number; nombre: string }>>([]);
   const [copiada, setCopiada] = useState<number | null>(null);
+  const [sala, setSala] = useState<{ configurada: boolean; url?: string; motivo?: string } | null>(null);
+
+  // Donde vive el WhatsApp Web de esta persona. Lo dice el servidor: asi la
+  // direccion se cambia en el .env sin reconstruir el frontal.
+  useEffect(() => {
+    client.get(`/whatsapp/sala${responsableId ? `?userId=${responsableId}` : ''}`)
+      .then((r) => setSala(r.success ? r.data : { configurada: false }))
+      .catch(() => setSala({ configurada: false }));
+  }, [responsableId]);
 
   useEffect(() => {
     if (!esAdmin || !projectId) return;
@@ -148,7 +157,11 @@ export default function WhatsappPage() {
         </span>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)] gap-4">
+      <div className={`grid grid-cols-1 gap-4 ${
+        sala?.configurada
+          ? 'xl:grid-cols-[minmax(0,280px)_minmax(0,1fr)_minmax(0,1.2fr)]'
+          : 'lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)]'
+      }`}>
         {/* La cola */}
         <div className="bg-card border border-border rounded-lg overflow-hidden">
           <div className="max-h-[62vh] overflow-y-auto divide-y divide-border">
@@ -245,6 +258,41 @@ export default function WhatsappPage() {
             </>
           )}
         </div>
+
+        {/* WhatsApp Web, empotrado. Es un navegador de verdad corriendo en el
+            servidor y transmitido aqui: la sesion es de esta gestora y se
+            vincula una sola vez con el codigo o el QR. */}
+        {sala?.configurada ? (
+          <div className="bg-card border border-border rounded-lg overflow-hidden flex flex-col min-h-[62vh]">
+            <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-border">
+              <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                WhatsApp Web
+              </span>
+              <a href={sala.url} target="_blank" rel="noreferrer"
+                className="text-[11px] text-muted-foreground hover:text-foreground underline">
+                abrir aparte
+              </a>
+            </div>
+            <iframe
+              src={sala.url}
+              title="WhatsApp Web"
+              className="flex-1 w-full bg-black"
+              allow="clipboard-read; clipboard-write; autoplay"
+            />
+          </div>
+        ) : (
+          <div className="hidden xl:flex bg-card border border-dashed border-border rounded-lg p-6 items-center justify-center">
+            <div className="text-center max-w-xs">
+              <WhatsappLogo size={34} weight="duotone" className="mx-auto mb-2 text-muted-foreground/40" />
+              <p className="text-sm font-semibold mb-1">WhatsApp Web todavía no está aquí</p>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                {sala?.motivo || 'Falta el navegador remoto.'} Mientras tanto, «Copiar y abrir»
+                lleva el mensaje a tu WhatsApp Web en una ventana aparte, y la reutiliza
+                para que no se te llene el navegador de pestañas.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

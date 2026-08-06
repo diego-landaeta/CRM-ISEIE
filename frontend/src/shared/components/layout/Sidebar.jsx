@@ -6,6 +6,7 @@ import {
   CaretUp, CaretDown, Bell, Pulse, Calculator, Envelope, Globe,
   FilePdf, ShieldCheck, MagnifyingGlass, Headset, BookOpen, Sliders,
   Megaphone, Robot, Sparkle, PlugsConnected, CreditCard, WarningCircle, WhatsappLogo,
+  ChatText,
   Receipt, Coins, Wrench, ShoppingBag, ChatCircleText, Wallet, Bank, Clock, GitMerge,
 } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -28,6 +29,7 @@ const NAV_SECTIONS = [
       { to: '/dashboard',  label: 'Dashboard',  icon: SquaresFour, end: true },
       { to: '/leads',      label: 'Prospectos', icon: Users,       sectionPrefixes: ['/leads'] },
       { to: '/whatsapp',   label: 'WhatsApp',   icon: WhatsappLogo, sectionPrefixes: ['/whatsapp'] },
+      { to: '/whatsapp/plantillas', label: 'Plantillas', icon: ChatText },
       // Ventas vive en Principal (flujo diario) y también en Finanzas. Clientes
       // y Revisión duplicados pasan a la sección Clientes al final.
       { to: '/sales',      label: 'Ventas',     icon: Receipt },

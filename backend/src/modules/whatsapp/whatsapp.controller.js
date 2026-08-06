@@ -86,3 +86,31 @@ export async function cola(req, res, next) {
     })});
   } catch (err) { next(err); }
 }
+
+// GET /api/whatsapp/sala?userId=  — donde vive el WhatsApp Web de esta persona.
+//
+// La direccion base sale de WHATSAPP_NEKO_BASE, en el .env del servidor: asi se
+// cambia sin reconstruir el frontal. Cada gestora tiene su propia sala, que es
+// lo que permite varias sesiones a la vez sin que se pisen, y que un admin
+// pueda entrar en la de cualquiera.
+export async function sala(req, res, next) {
+  try {
+    const base = (process.env.WHATSAPP_NEKO_BASE || '').replace(/\/+$/, '');
+    // Una gestora solo la suya. Un admin puede pedir la de quien quiera.
+    const userId = req.user.role === 'gestor'
+      ? req.user.userId
+      : (req.query.userId ? parseInt(req.query.userId) : req.user.userId);
+
+    if (!base) {
+      return res.json({ success: true, data: {
+        configurada: false,
+        motivo: 'Falta WHATSAPP_NEKO_BASE en el servidor: no hay navegador remoto todavia.',
+      }});
+    }
+    res.json({ success: true, data: {
+      configurada: true,
+      userId,
+      url: `${base}/?room=wa-${userId}`,
+    }});
+  } catch (err) { next(err); }
+}
