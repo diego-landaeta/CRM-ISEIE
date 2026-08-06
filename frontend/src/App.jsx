@@ -30,6 +30,7 @@ const IntegrationsPage = lazy(() => import('./modules/accounting/pages/Integrati
 const PendienteFacturarPage = lazy(() => import('./modules/accounting/pages/PendienteFacturarPage'));
 const StripePaymentsPage = lazy(() => import('./modules/accounting/pages/StripePaymentsPage'));
 const WhatsappWidgetPage = lazy(() => import('./modules/widget/pages/WhatsappWidgetPage'));
+const WhatsappPage = lazy(() => import('./modules/whatsapp/pages/WhatsappPage'));
 const InvoicesPage = lazy(() => import('./modules/invoices/pages/InvoicesPage'));
 const InvoicingConfigPage = lazy(() => import('./modules/invoices/pages/InvoicingConfigPage'));
 const InvoiceTemplateEditorPage = lazy(() => import('./modules/invoices/pages/InvoiceTemplateEditorPage'));
@@ -77,7 +78,8 @@ const WooCommercePage = lazy(() => import('./modules/woocommerce/pages/WooCommer
 
 const ROUTE_TITLES = {
   '/dashboard':                       'Dashboard',
-  '/leads':                           'Prospectos',
+  '/leads':                           'Prospectos',
+  '/whatsapp': 'WhatsApp',
   '/products':                        'Productos',
   '/sales/analisis':                  'Análisis de ventas',
   '/sales':                           'Ventas',
@@ -199,6 +201,7 @@ function App() {
           <Route path="/matriculas" element={<MatriculasPage />} />
           <Route path="/forms" element={<FormsPage />} />
           <Route path="/captacion/whatsapp" element={<WhatsappWidgetPage />} />
+          <Route path="/whatsapp" element={<WhatsappPage />} />
           <Route path="/make-webhooks" element={<MakeWebhooksPage />} />
           <Route path="/make-webhooks/:id" element={<MakeWebhookDetailPage />} />
           {/* Alias: el sidebar y deep-links viejos apuntan a /webhooks pero en

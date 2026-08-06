@@ -27,6 +27,7 @@ const NAV_SECTIONS = [
     items: [
       { to: '/dashboard',  label: 'Dashboard',  icon: SquaresFour, end: true },
       { to: '/leads',      label: 'Prospectos', icon: Users,       sectionPrefixes: ['/leads'] },
+      { to: '/whatsapp',   label: 'WhatsApp',   icon: WhatsappLogo, sectionPrefixes: ['/whatsapp'] },
       // Ventas vive en Principal (flujo diario) y también en Finanzas. Clientes
       // y Revisión duplicados pasan a la sección Clientes al final.
       { to: '/sales',      label: 'Ventas',     icon: Receipt },
@@ -39,7 +40,7 @@ const NAV_SECTIONS = [
       { to: '/forms',           label: 'Formularios', icon: Globe,  roles: ['admin', 'superadmin'], sectionPrefixes: ['/forms'] },
       { to: '/make-webhooks',   label: 'Make',      icon: PlugsConnected, roles: ['admin', 'superadmin'] },
       { to: '/webhooks',        label: 'Webhooks',  icon: PlugsConnected, roles: ['admin', 'superadmin'] },
-      { to: '/captacion/whatsapp', label: 'WhatsApp', icon: WhatsappLogo, roles: ['admin', 'superadmin', 'soporte'] },
+      { to: '/captacion/whatsapp', label: 'Widget web', icon: WhatsappLogo, roles: ['admin', 'superadmin', 'soporte'] },
       { to: '/campaigns',       label: 'Campañas',  icon: Megaphone, roles: ['admin', 'superadmin'], sectionPrefixes: ['/campaigns'] },
       { to: '/seo',             label: 'Tráfico orgánico', icon: MagnifyingGlass, roles: ['admin', 'superadmin'] },
     ],
