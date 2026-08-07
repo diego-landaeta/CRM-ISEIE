@@ -61,7 +61,6 @@ import LeadsFiltersBar from '../components/LeadsFiltersBar';
 import QuickActions from '../components/QuickActions';
 import ReminderQuickDialog from '../components/ReminderQuickDialog';
 import BulkActionBar from '../components/BulkActionBar';
-import WhatsappTemplatesDialog from '../components/WhatsappTemplatesDialog';
 import usePermission from '@/shared/hooks/usePermission';
 import { getLeadPriority, getPriorityStyle } from '../lib/leadPriority';
 import { getLeadExportColumns } from '../lib/leadFormat';
@@ -155,7 +154,7 @@ export default function LeadsPage() {
   // (no solo en modo multi). Util para saber a qué proyecto pertenece cada lead.
   const showProjectColumn = (projects?.length || 0) > 1;
   const { products } = useProducts(activeProject?.id);
-  const { templates: waTemplates, save: saveWaTemplates, reset: resetWaTemplates } = useWhatsappTemplates(activeProject?.id);
+  const { templates: waTemplates } = useWhatsappTemplates(activeProject?.id);
 
   // Auto-polling de leads nuevos cada 30s + detección de nuevos por id
   const lastSeenIdsRef = useRef<Set<number>>(new Set());
@@ -191,7 +190,6 @@ export default function LeadsPage() {
   const [confirmingContact, setConfirmingContact] = useState(null);
   const [reminderLead, setReminderLead] = useState(null);
   const [csvImportOpen, setCsvImportOpen] = useState(false);
-  const [waTemplatesOpen, setWaTemplatesOpen] = useState(false);
   const [drawerLeadId, setDrawerLeadId] = useState(null);
   const [enrollLeadId, setEnrollLeadId] = useState(null);
   const [deletingLead, setDeletingLead] = useState<any>(null);
@@ -646,7 +644,7 @@ export default function LeadsPage() {
                     <PlugsConnected size={13} weight="regular" className="flex-shrink-0" /> Webhook de captura
                   </button>
                   <button
-                    onClick={() => { setWaTemplatesOpen(true); setMoreOpen(false); }}
+                    onClick={() => { navigate('/whatsapp/plantillas'); setMoreOpen(false); }}
                     className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted flex items-center gap-2 whitespace-nowrap"
                   >
                     <ChatCircleText size={13} weight="regular" className="flex-shrink-0" /> Plantillas de WhatsApp
@@ -856,7 +854,7 @@ export default function LeadsPage() {
                   </td>
                   <td className="px-5 py-3.5 text-muted-foreground">{lead.responsable_nombre || lead.gestor || 'Sin asignar'}</td>
                   <td className="px-5 py-3.5 text-right pr-3">
-                    <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} onEnrollSequence={(l) => setEnrollLeadId(l.id)} onSoftDelete={(user?.role === 'superadmin' || user?.role === 'admin') ? (l) => setDeletingLead(l) : undefined} onReportSpam={(user?.role === 'superadmin' || user?.role === 'admin') ? (l) => setReportingSpamLead(l) : undefined} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => setWaTemplatesOpen(true)} />
+                    <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} onEnrollSequence={(l) => setEnrollLeadId(l.id)} onSoftDelete={(user?.role === 'superadmin' || user?.role === 'admin') ? (l) => setDeletingLead(l) : undefined} onReportSpam={(user?.role === 'superadmin' || user?.role === 'admin') ? (l) => setReportingSpamLead(l) : undefined} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => navigate('/whatsapp/plantillas')} />
                   </td>
                 </tr>
                 );
@@ -920,7 +918,7 @@ export default function LeadsPage() {
               </div>
               <div className="flex items-center justify-between pt-1 border-t border-border/60">
                 <span className="text-[11px] text-muted-foreground">{lead.responsable_nombre || 'Sin asignar'}</span>
-                <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} onEnrollSequence={(l) => setEnrollLeadId(l.id)} onSoftDelete={(user?.role === 'superadmin' || user?.role === 'admin') ? (l) => setDeletingLead(l) : undefined} onReportSpam={(user?.role === 'superadmin' || user?.role === 'admin') ? (l) => setReportingSpamLead(l) : undefined} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => setWaTemplatesOpen(true)} />
+                <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} onEnrollSequence={(l) => setEnrollLeadId(l.id)} onSoftDelete={(user?.role === 'superadmin' || user?.role === 'admin') ? (l) => setDeletingLead(l) : undefined} onReportSpam={(user?.role === 'superadmin' || user?.role === 'admin') ? (l) => setReportingSpamLead(l) : undefined} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => navigate('/whatsapp/plantillas')} />
               </div>
             </div>
           ))}
@@ -1067,14 +1065,7 @@ export default function LeadsPage() {
       </Suspense>
 
       {/* Plantillas WhatsApp por proyecto */}
-      <WhatsappTemplatesDialog
-        open={waTemplatesOpen}
-        onClose={() => setWaTemplatesOpen(false)}
-        templates={waTemplates}
-        onSave={saveWaTemplates}
-        onReset={resetWaTemplates}
-        projectName={activeProject?.nombre}
-      />
+      
 
       {/* Export universal (CRM-196) */}
       <Suspense fallback={null}>
