@@ -17,33 +17,56 @@ async function issuerOfProject(exec, projectId) {
 // distintos. Si el proyecto no tiene sociedad (issuerId null) cae al contador por
 // proyecto (legacy). Atómico dentro de la transacción vía FOR UPDATE / índice único.
 export async function nextNumero(client, projectId, issuerId, ano, serie) {
-  if (issuerId) {
-    const sel = await client.query(
-      `SELECT ctid, ultimo_numero FROM invoice_sequences
-        WHERE issuer_id = $1 AND ano = $2 AND serie = $3 FOR UPDATE`,
-      [issuerId, ano, serie]
-    );
-    if (sel.rows.length) {
-      const n = sel.rows[0].ultimo_numero + 1;
-      await client.query(`UPDATE invoice_sequences SET ultimo_numero = $1 WHERE ctid = $2`, [n, sel.rows[0].ctid]);
-      return n;
-    }
-    await client.query(
-      `INSERT INTO invoice_sequences (project_id, issuer_id, ano, serie, ultimo_numero)
-       VALUES ($1, $2, $3, $4, 1)`,
-      [projectId, issuerId, ano, serie]
-    );
-    return 1;
-  }
-  const { rows } = await client.query(
-    `INSERT INTO invoice_sequences (project_id, ano, serie, ultimo_numero)
-     VALUES ($1, $2, $3, 1)
-     ON CONFLICT (project_id, ano, serie) DO UPDATE
-       SET ultimo_numero = invoice_sequences.ultimo_numero + 1
-     RETURNING ultimo_numero`,
+  // El numero se reserva por SERIE, no por sociedad emisora.
+  //
+  // La clave primaria de invoice_sequences es (project_id, ano, serie) y el
+  // indice unico de facturas es (project_id, ano, serie, numero): los dos
+  // ignoran la emisora. Pero el codigo buscaba el contador por
+  // (issuer_id, ano, serie), asi que con una emisora nueva que comparte serie
+  // —Solvenic e Ictess usan las dos ICTESS— no encontraba nada e intentaba
+  // insertar una fila que chocaba con la que ya existia. Error 23505, y la
+  // gestora solo veia «error del sistema».
+  //
+  // El cerrojo es de transaccion: sin el, dos emisiones a la vez leerian el
+  // mismo maximo y pedirian el mismo numero.
+  await client.query(
+    `SELECT pg_advisory_xact_lock(hashtext($1))`,
+    [`invoice_serie:${projectId}:${ano}:${serie}`]
+  );
+
+  // El mayor entre el contador y lo que hay de verdad en facturas. Lo segundo
+  // importa: si alguien numera a mano o se restaura una copia, el contador se
+  // queda corto y volveriamos a chocar.
+  const { rows: [tope] } = await client.query(
+    `SELECT GREATEST(
+              COALESCE((SELECT ultimo_numero FROM invoice_sequences
+                         WHERE project_id = $1 AND ano = $2 AND serie = $3), 0),
+              COALESCE((SELECT MAX(numero) FROM invoices
+                         WHERE project_id = $1 AND ano = $2 AND serie = $3
+                           AND numero IS NOT NULL), 0)
+            ) AS usado`,
     [projectId, ano, serie]
   );
-  return rows[0].ultimo_numero;
+  const n = Number(tope.usado) + 1;
+
+  // La emisora solo se anota si no hay ya otra fila con esa (emisora, año,
+  // serie): existe un unico parcial sobre eso y saltaria si dos proyectos
+  // compartieran emisora y serie.
+  const { rows: [ocupada] } = await client.query(
+    `SELECT 1 AS si FROM invoice_sequences
+      WHERE issuer_id = $1 AND ano = $2 AND serie = $3
+        AND NOT (project_id = $4 AND ano = $2 AND serie = $3) LIMIT 1`,
+    [issuerId || null, ano, serie, projectId]
+  );
+
+  await client.query(
+    `INSERT INTO invoice_sequences (project_id, ano, serie, ultimo_numero, issuer_id)
+     VALUES ($1, $2, $3, $4, $5)
+     ON CONFLICT (project_id, ano, serie)
+       DO UPDATE SET ultimo_numero = EXCLUDED.ultimo_numero`,
+    [projectId, ano, serie, n, ocupada ? null : (issuerId || null)]
+  );
+  return n;
 }
 
 export async function create(data, userId) {
