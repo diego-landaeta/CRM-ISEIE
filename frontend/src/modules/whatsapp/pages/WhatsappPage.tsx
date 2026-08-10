@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { WhatsappLogo, Copy, CheckCircle, ArrowRight, Warning, X, ChatText, ArrowSquareOut } from '@phosphor-icons/react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { WhatsappLogo, Copy, CheckCircle, ArrowRight, Warning, X, ChatText, ArrowSquareOut,
+  CornersOut, List } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
@@ -9,11 +10,21 @@ import { whatsappApi, type PlantillaWhatsapp, type ProspectoCola } from '../api/
 import { rellenar, diasSinContacto } from '../lib/plantilla';
 import AvisoUso from '../components/AvisoUso';
 
-// WhatsApp Web es el protagonista y ocupa casi toda la pantalla. A la izquierda,
-// una tira estrecha con a quién toca escribir. Las plantillas no ocupan sitio
-// fijo: salen en un popup al elegir a alguien, se copia y se cierra.
+// WhatsApp Web ocupa la pantalla ENTERA. Nada le roba ancho de forma
+// permanente: los contactos son un cajón lateral que se abre, se elige a
+// alguien y se cierra solo, y las plantillas salen en un popup encima.
+//
+// La primera versión ponía los contactos en una columna fija de 300 px. Se veía
+// bien en la maqueta y apretado en uso real: al chat le quedaban unos 1.000 px
+// y WhatsApp reparte ese ancho entre su lista de conversaciones y el mensaje,
+// así que el texto acababa en una franja estrecha.
 
 const ESTADOS = ['por_contactar', 'contactado', 'en_seguimiento', 'proxima_convocatoria'];
+
+// Todo el alto que queda por debajo de la cabecera del CRM. Antes se restaban
+// 230 px por el aviso desplegado; ahora el aviso vive plegado y esos píxeles
+// son para el chat, que es lo que se estaba viendo pequeño.
+const ALTO = 'h-[calc(100vh-170px)] min-h-[420px]';
 
 export default function WhatsappPage() {
   const { user } = useAuth() as { user: { role?: string } | null };
@@ -32,6 +43,9 @@ export default function WhatsappPage() {
   const [gestoras, setGestoras] = useState<Array<{ id: number; nombre: string }>>([]);
   const [copiada, setCopiada] = useState<number | null>(null);
   const [sala, setSala] = useState<{ configurada: boolean; url?: string; motivo?: string } | null>(null);
+  // Cerrado de entrada: lo que la gestora quiere ver al entrar es el chat.
+  const [colaVisible, setColaVisible] = useState(false);
+  const marco = useRef<HTMLDivElement>(null);
 
   // Dónde vive el WhatsApp Web de esta persona. Lo dice el servidor: así la
   // dirección se cambia en el .env sin reconstruir el frontal.
@@ -105,7 +119,18 @@ export default function WhatsappPage() {
     setPopup(false);
   }
 
-  function elegir(p: ProspectoCola) { setElegido(p); setPopup(true); }
+  function elegir(p: ProspectoCola) { setElegido(p); setPopup(true); setColaVisible(false); }
+
+  // Pantalla completa de verdad, la del navegador: WhatsApp pasa a ocupar el
+  // monitor entero. Se sale con Esc, como en cualquier vídeo.
+  function pantallaCompleta() {
+    const el = marco.current;
+    if (!el) return;
+    if (document.fullscreenElement) { document.exitFullscreen?.(); return; }
+    el.requestFullscreen?.().catch(() => {
+      toast({ title: 'Tu navegador no deja poner esto a pantalla completa' });
+    });
+  }
 
   function siguiente() {
     const i = cola.findIndex((x) => x.id === elegido?.id);
@@ -122,7 +147,7 @@ export default function WhatsappPage() {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       <AvisoUso />
 
       <div className="flex flex-wrap items-center gap-2">
@@ -151,12 +176,42 @@ export default function WhatsappPage() {
         <span className="text-xs text-muted-foreground ml-auto tabular-nums">
           {cargando ? 'cargando…' : `${cola.length} en la cola`}
         </span>
+        <button type="button" onClick={() => setColaVisible((v) => !v)}
+          className="h-8 px-2.5 rounded-md text-xs font-semibold border border-border text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5"
+          title="Abrir la lista de contactos">
+          <List size={14} weight="bold" /> Contactos
+        </button>
+        <button type="button" onClick={pantallaCompleta}
+          className="h-8 px-2.5 rounded-md text-xs font-semibold border border-border text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5"
+          title="WhatsApp a pantalla completa (Esc para salir)">
+          <CornersOut size={14} weight="bold" /> Pantalla completa
+        </button>
       </div>
 
-      {/* Tira de prospectos a la izquierda · WhatsApp Web ocupando el resto */}
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,300px)_minmax(0,1fr)] gap-3 items-start">
-        <div className="bg-card border border-border rounded-lg overflow-hidden">
-          <div className="h-[calc(100vh-230px)] min-h-[380px] overflow-y-auto divide-y divide-border">
+      {/* WhatsApp ocupa SIEMPRE todo el ancho. Los contactos son un cajon que
+          se desliza por encima desde la izquierda: se abre, se elige a alguien
+          y se cierra solo. Antes vivian en una columna fija que le robaba 300
+          px al chat de forma permanente, y ahi es donde se veia apretado. */}
+      <div className="relative">
+        {colaVisible && (
+          <button type="button" aria-label="Cerrar contactos"
+            onClick={() => setColaVisible(false)}
+            className="absolute inset-0 z-20 bg-black/40 rounded-lg" />
+        )}
+        <aside className={`absolute left-0 top-0 z-30 w-[300px] max-w-[85%] ${ALTO}
+          bg-card border border-border rounded-lg shadow-2xl flex flex-col
+          transition-transform duration-200 ${colaVisible ? 'translate-x-0' : '-translate-x-[110%] pointer-events-none'}`}>
+          <div className="px-3 py-2 border-b border-border flex items-center justify-between gap-2 shrink-0">
+            <span className="text-sm font-bold">Contactos</span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground tabular-nums">{cola.length}</span>
+              <button type="button" onClick={() => setColaVisible(false)}
+                className="text-muted-foreground hover:text-foreground" aria-label="Cerrar">
+                <X size={16} weight="bold" />
+              </button>
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto divide-y divide-border">
             {cola.length === 0 && !cargando && (
               <p className="p-6 text-sm text-muted-foreground text-center">Nadie pendiente con estos filtros.</p>
             )}
@@ -181,12 +236,13 @@ export default function WhatsappPage() {
               );
             })}
           </div>
-        </div>
+        </aside>
 
-        <div className="bg-card border border-border rounded-lg overflow-hidden flex flex-col h-[calc(100vh-230px)] min-h-[380px]">
+        <div ref={marco}
+          className={`bg-card border border-border rounded-lg overflow-hidden flex flex-col ${ALTO}`}>
           {sala?.configurada ? (
             <iframe src={sala.url} title="WhatsApp Web" className="flex-1 w-full bg-black"
-              allow="clipboard-read; clipboard-write; autoplay" />
+              allow="clipboard-read; clipboard-write; autoplay; fullscreen" />
           ) : (
             // Sin navegador remoto todavía. No se deja un rectángulo en blanco
             // —el fallo de los «paneles externos» que ya están en el repo—: se

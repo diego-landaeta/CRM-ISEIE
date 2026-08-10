@@ -8,6 +8,7 @@ import {
   Megaphone, Robot, Sparkle, PlugsConnected, CreditCard, WarningCircle, WhatsappLogo,
   ChatText,
   Receipt, Coins, Wrench, ShoppingBag, ChatCircleText, Wallet, Bank, Clock, GitMerge,
+  UsersThree,
 } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -30,6 +31,8 @@ const NAV_SECTIONS = [
       { to: '/leads',      label: 'Prospectos', icon: Users,       sectionPrefixes: ['/leads'] },
       { to: '/whatsapp',   label: 'WhatsApp',   icon: WhatsappLogo, sectionPrefixes: ['/whatsapp'] },
       { to: '/whatsapp/plantillas', label: 'Plantillas', icon: ChatText },
+      // Solo para quien manda: entrar en el WhatsApp de cada gestora.
+      { to: '/whatsapp/equipo', label: 'WhatsApp · Equipo', icon: UsersThree, roles: ['superadmin', 'admin'] },
       // Ventas vive en Principal (flujo diario) y también en Finanzas. Clientes
       // y Revisión duplicados pasan a la sección Clientes al final.
       { to: '/sales',      label: 'Ventas',     icon: Receipt },

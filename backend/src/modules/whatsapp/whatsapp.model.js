@@ -103,3 +103,32 @@ export async function cola({ projectId, responsableId, estado, productoId, soloS
   );
   return rows;
 }
+
+// ── Sala ─────────────────────────────────────────────────────────────────────
+
+// El nombre con el que se entra al navegador remoto. Importa porque es lo que
+// ve el resto en la sala: si entra un admin a ayudar, la gestora tiene que
+// saber quien es y no un «usuario-14».
+export async function nombreDe(userId) {
+  const { rows: [u] } = await query('SELECT nombre, email FROM users WHERE id = $1', [userId]);
+  return u?.nombre || u?.email?.split('@')[0] || `usuario-${userId}`;
+}
+
+// Quien tiene sala propia. Las gestoras siempre; los admin solo si trabajan
+// leads (recibe_leads), porque un admin que solo supervisa no necesita un
+// numero propio: entra en el de otra. Es el mismo criterio del reparto de
+// leads, para que las dos listas no se contradigan.
+export async function equipo(projectId) {
+  const { rows } = await query(
+    `SELECT DISTINCT u.id, u.nombre, u.email, u.role, u.last_login_at,
+            COALESCE(u.is_available, TRUE) AS disponible
+       FROM users u
+       JOIN user_projects up ON up.user_id = u.id
+      WHERE u.active = TRUE
+        AND up.project_id = $1
+        AND (u.role = 'gestor' OR (u.role IN ('admin','superadmin') AND up.recibe_leads = TRUE))
+      ORDER BY u.nombre`,
+    [projectId]
+  );
+  return rows;
+}

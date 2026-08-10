@@ -16,4 +16,10 @@ router.delete('/templates/:id', ctrl.deleteTemplate);
 router.get('/cola', ctrl.cola);
 router.get('/sala', ctrl.sala);
 
+// El panel del equipo. El recorte va en el controlador —solo admin— igual que
+// el resto del modulo.
+router.get('/equipo', ctrl.equipo);
+router.post('/equipo/:userId/abrir', ctrl.abrirSala);
+router.post('/equipo/:userId/latido', ctrl.latido);
+
 export default router;
