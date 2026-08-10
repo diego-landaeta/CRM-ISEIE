@@ -100,13 +100,16 @@ const SALAS_TOKEN = process.env.WHATSAPP_SALAS_TOKEN || '';
 const CRM = process.env.WHATSAPP_CRM || 'crm';
 const clave = (userId) => `${CRM}-${userId}`;
 
-async function pedirSalas(ruta, metodo = 'GET') {
+// Encender una sala tarda ~20 s y el gestor espera hasta 45 a que conteste,
+// asi que la espera de aqui tiene que ser mayor o el CRM se rendiria antes de
+// tiempo y diria que fallo algo que en realidad estaba arrancando bien.
+async function pedirSalas(ruta, metodo = 'GET', esperaMs = 20000) {
   if (!SALAS || !SALAS_TOKEN) return null;
   try {
     const r = await fetch(`${SALAS}${ruta}`, {
       method: metodo,
       headers: { 'x-salas-token': SALAS_TOKEN },
-      signal: AbortSignal.timeout(20000),
+      signal: AbortSignal.timeout(esperaMs),
     });
     return r.ok ? await r.json() : null;
   } catch { return null; }
@@ -146,8 +149,14 @@ export async function abrirSala(req, res, next) {
     if (!userId) throw new AppError('userId invalido', 400, 'BAD_REQUEST');
     if (!SALAS || !SALAS_TOKEN) throw new AppError('No hay gestor de salas configurado en el servidor', 503, 'NO_SALAS');
 
-    const r = await pedirSalas(`/sala?clave=${clave(userId)}`, 'POST');
+    const r = await pedirSalas(`/sala?clave=${clave(userId)}`, 'POST', 60000);
     if (!r || r.ranura === undefined) throw new AppError('El gestor de salas no ha podido abrirla', 502, 'SALAS_ERROR');
+    // El gestor espera a que la sala conteste antes de responder. Si aun asi no
+    // esta lista, es que algo va mal: mejor decirlo que enseñar un marco con
+    // «conexion rechazada», que parece que la herramienta esta rota.
+    if (r.lista === false) {
+      throw new AppError('La sala no ha arrancado a tiempo. Vuelve a intentarlo en un momento.', 504, 'SALA_LENTA');
+    }
 
     res.json({ success: true, data: {
       userId,

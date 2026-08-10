@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { WhatsappLogo, ArrowsClockwise, CornersOut, X, Info } from '@phosphor-icons/react';
+import { WhatsappLogo, ArrowsClockwise, CornersOut, ArrowLeft, Info } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
@@ -132,6 +132,39 @@ export default function EquipoWhatsappPage() {
     );
   }
 
+  // Dentro de una sala, la pantalla es SOLO la sala.
+  //
+  // La primera version la ponia debajo de las tarjetas, y entre la cabecera del
+  // CRM y una fila de tarjetas le quedaban unos 500 px de alto: WhatsApp ahi
+  // dentro se lee fatal. Trabajar en el WhatsApp de alguien y elegir a quien
+  // entrar son dos momentos distintos, y no tienen por que compartir pantalla.
+  if (dentro) {
+    return (
+      <div ref={marco} className="bg-card border border-border rounded-lg overflow-hidden flex flex-col h-[calc(100vh-118px)] min-h-[460px]">
+        <div className="px-3 py-2 border-b border-border flex items-center gap-3 shrink-0">
+          <button type="button" onClick={() => setDentro(null)}
+            className="h-8 px-2.5 rounded-md text-xs font-semibold border border-border text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5">
+            <ArrowLeft size={14} weight="bold" /> Equipo
+          </button>
+          <div className="min-w-0">
+            <p className="text-sm font-bold truncate leading-tight">WhatsApp de {dentro.nombre}</p>
+            <p className="text-[11px] text-muted-foreground leading-tight">
+              entras como administrador · puedes tomar el control
+            </p>
+          </div>
+          <button type="button" onClick={pantallaCompleta}
+            className="ml-auto h-8 px-2.5 rounded-md text-xs font-semibold border border-border text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 shrink-0"
+            title="Ocupar el monitor entero (Esc para salir)">
+            <CornersOut size={14} weight="bold" /> Pantalla completa
+          </button>
+        </div>
+        <iframe src={dentro.url} title={`WhatsApp de ${dentro.nombre}`}
+          className="flex-1 w-full bg-black"
+          allow="clipboard-read; clipboard-write; autoplay; fullscreen" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -184,31 +217,6 @@ export default function EquipoWhatsappPage() {
         )}
       </div>
 
-      {dentro && (
-        <div ref={marco} className="bg-card border border-border rounded-lg overflow-hidden flex flex-col h-[calc(100vh-260px)] min-h-[420px]">
-          <div className="px-3 py-2 border-b border-border flex items-center justify-between gap-2 shrink-0">
-            <p className="text-sm font-bold truncate">
-              WhatsApp de {dentro.nombre}
-              <span className="ml-2 font-normal text-xs text-muted-foreground">
-                entras como administrador · puedes tomar el control
-              </span>
-            </p>
-            <div className="flex items-center gap-2 shrink-0">
-              <button type="button" onClick={pantallaCompleta}
-                className="text-muted-foreground hover:text-foreground" title="Pantalla completa">
-                <CornersOut size={16} weight="bold" />
-              </button>
-              <button type="button" onClick={() => setDentro(null)}
-                className="text-muted-foreground hover:text-foreground" title="Salir de su sala">
-                <X size={16} weight="bold" />
-              </button>
-            </div>
-          </div>
-          <iframe src={dentro.url} title={`WhatsApp de ${dentro.nombre}`}
-            className="flex-1 w-full bg-black"
-            allow="clipboard-read; clipboard-write; autoplay; fullscreen" />
-        </div>
-      )}
     </div>
   );
 }

@@ -1,0 +1,118 @@
+-- Tutores y colaboraciones · las tablas
+--
+-- El documento pedia cinco tablas; tres de ellas ya existian con otro nombre
+-- (conversion_payments, conversions, products), asi que aqui solo van las que
+-- de verdad faltan.
+--
+-- Lo que NO se reutiliza es `commissions`, la de las gestoras: tiene
+-- UNIQUE (conversion_id), o sea UNA comision por venta. Aqui hace falta una por
+-- CADA PAGO, porque el tutor cobra segun se va cobrando, no de golpe.
+
+BEGIN;
+
+-- ── Datos del tutor ─────────────────────────────────────────────────────────
+-- Aparte de `users` porque son datos fiscales y bancarios: no tienen por que
+-- estar en la tabla que se lee en cada peticion para comprobar permisos.
+CREATE TABLE IF NOT EXISTS tutor_profiles (
+  user_id     INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  dni_nif     VARCHAR(32),
+  iban        VARCHAR(40),
+  telefono    VARCHAR(32),
+  notas       TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ── Que formaciones lleva cada tutor, y a que porcentaje ────────────────────
+-- El porcentaje vive AQUI, no en el tutor: el mismo puede estar al 10% en una
+-- formacion y al 50% en otra, tal como pide el documento.
+--
+-- Y con vigencias, que es lo unico que permite aplicar «el % que regia el dia
+-- del cobro» cuando un pago se registra con retraso. En este CRM eso pasa
+-- constantemente: se cobra un dia y se apunta tres semanas despues.
+CREATE TABLE IF NOT EXISTS tutor_collaborations (
+  id             SERIAL PRIMARY KEY,
+  tutor_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  product_id     INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  pct            NUMERIC(5,2) NOT NULL DEFAULT 10.00
+                   CHECK (pct >= 0 AND pct <= 100),
+  vigente_desde  DATE NOT NULL DEFAULT CURRENT_DATE,
+  vigente_hasta  DATE,
+  activa         BOOLEAN NOT NULL DEFAULT TRUE,
+  notas          TEXT,
+  created_by     INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CHECK (vigente_hasta IS NULL OR vigente_hasta >= vigente_desde)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tc_tutor    ON tutor_collaborations (tutor_id, activa);
+CREATE INDEX IF NOT EXISTS idx_tc_producto ON tutor_collaborations (product_id, activa);
+
+-- Dos colaboraciones del mismo tutor y formacion no pueden solaparse en el
+-- tiempo: si lo hicieran, no habria forma de saber que % aplicar a un pago.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_tc_vigente
+  ON tutor_collaborations (tutor_id, product_id, vigente_desde);
+
+-- ── La comision, una por cada pago ──────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS tutor_commissions (
+  id                SERIAL PRIMARY KEY,
+  payment_id        INTEGER NOT NULL REFERENCES conversion_payments(id) ON DELETE CASCADE,
+  tutor_id          INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  collaboration_id  INTEGER REFERENCES tutor_collaborations(id) ON DELETE SET NULL,
+  product_id        INTEGER REFERENCES products(id) ON DELETE SET NULL,
+  -- Se guarda aunque hoy sea siempre igual al importe del pago: permite
+  -- auditar años despues con que cifra se calculo, sin depender de que el pago
+  -- no se haya tocado desde entonces.
+  base_calculo      NUMERIC(12,2) NOT NULL,
+  pct               NUMERIC(5,2) NOT NULL,
+  importe           NUMERIC(12,2) NOT NULL,
+  estado            VARCHAR(16) NOT NULL DEFAULT 'pendiente'
+                      CHECK (estado IN ('pendiente','pagada','revertida')),
+  periodo           CHAR(7) NOT NULL,          -- 'YYYY-MM', el mes que se liquida
+  fecha_liquidacion DATE,
+  liquidada_por     INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  notas             TEXT,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- LA PIEZA IMPORTANTE de todo esto.
+--
+-- La idempotencia vive en la BASE DE DATOS, no en el codigo: es lo que impide
+-- que un reintento de Stripe, una resincronizacion o una doble ejecucion del
+-- job dupliquen dinero a pagar. El modulo de facturas aprendio esto por las
+-- malas —una factura duplicada salio de un pago repetido— y aqui se evita por
+-- construccion.
+--
+-- La clave es (pago, tutor) y no solo (pago) para que varios tutores puedan
+-- cobrar del mismo pago, que es justo lo que pide el documento.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_tcom_pago_tutor
+  ON tutor_commissions (payment_id, tutor_id);
+
+CREATE INDEX IF NOT EXISTS idx_tcom_tutor_periodo ON tutor_commissions (tutor_id, periodo);
+CREATE INDEX IF NOT EXISTS idx_tcom_estado        ON tutor_commissions (estado, periodo);
+
+-- ── Ajustes de la instalacion ───────────────────────────────────────────────
+-- Una sola fila. `aplica_desde` es MOVIBLE a proposito: se arranca en julio de
+-- 2026 y los meses anteriores se iran incorporando segun se cuadren, asi que
+-- no puede ser una constante en el codigo.
+CREATE TABLE IF NOT EXISTS tutor_settings (
+  id               BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (id),
+  aplica_desde     DATE NOT NULL DEFAULT DATE '2026-07-01',
+  pct_por_defecto  NUMERIC(5,2) NOT NULL DEFAULT 10.00,
+  updated_by       INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+INSERT INTO tutor_settings (id) VALUES (TRUE) ON CONFLICT (id) DO NOTHING;
+
+-- ── Quien puede gestionar colaboraciones ────────────────────────────────────
+-- Una casilla, no un rol nuevo. Es el mismo patron que `factura_manager`, que
+-- en este repositorio SI funciona; el sistema de roles personalizados ya tiene
+-- un caso a medias (project_manager) y no conviene repetirlo.
+--
+-- Da de alta tutores y edita porcentajes. NO marca liquidaciones: eso mueve
+-- dinero y se queda en manos de un administrador.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS gestor_colaboraciones BOOLEAN NOT NULL DEFAULT FALSE;
+
+COMMIT;
