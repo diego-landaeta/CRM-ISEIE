@@ -23,13 +23,18 @@ CREATE TABLE IF NOT EXISTS tutor_profiles (
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- ── Que formaciones lleva cada tutor, y a que porcentaje ────────────────────
+-- ── Que formaciones lleva cada tutor, desde cuando, y a que porcentaje ──────
 -- El porcentaje vive AQUI, no en el tutor: el mismo puede estar al 10% en una
 -- formacion y al 50% en otra, tal como pide el documento.
 --
--- Y con vigencias, que es lo unico que permite aplicar «el % que regia el dia
--- del cobro» cuando un pago se registra con retraso. En este CRM eso pasa
--- constantemente: se cobra un dia y se apunta tres semanas despues.
+-- Y `vigente_desde` es LA FECHA EN QUE ESE TUTOR EMPEZO con esa formacion. No
+-- todos entran el mismo dia, asi que no puede haber una sola fecha global: el
+-- que se incorpora a mitad de mes cobra desde su dia, no desde el uno.
+--
+-- Las vigencias sirven ademas para otra cosa: aplicar «el % que regia el dia
+-- del cobro» cuando un pago se apunta con retraso. En este CRM eso pasa
+-- constantemente —se cobra un dia y se registra tres semanas despues— y sin
+-- fechas el tutor cobraria al porcentaje de hoy por trabajo de hace un mes.
 CREATE TABLE IF NOT EXISTS tutor_collaborations (
   id             SERIAL PRIMARY KEY,
   tutor_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -94,12 +99,26 @@ CREATE INDEX IF NOT EXISTS idx_tcom_tutor_periodo ON tutor_commissions (tutor_id
 CREATE INDEX IF NOT EXISTS idx_tcom_estado        ON tutor_commissions (estado, periodo);
 
 -- ── Ajustes de la instalacion ───────────────────────────────────────────────
--- Una sola fila. `aplica_desde` es MOVIBLE a proposito: se arranca en julio de
--- 2026 y los meses anteriores se iran incorporando segun se cuadren, asi que
--- no puede ser una constante en el codigo.
+-- Una sola fila. `aplica_desde` es el SUELO de todo el modulo: por debajo de esa
+-- fecha no se genera comision a nadie, pase lo que pase. Arranca en agosto de
+-- 2026, que es cuando se empieza a pagar.
+--
+-- Es movible a proposito: si mañana se decide incorporar julio, se cambia aqui
+-- y el job de reconciliacion rellena solo. Por eso no es una constante en el
+-- codigo.
+--
+-- OJO a como se combina con las fechas de cada tutor. Son DOS cosas distintas:
+--
+--   aplica_desde                → desde cuando paga la empresa (agosto)
+--   colaboracion.vigente_desde  → desde cuando trabaja ESE tutor en ESA
+--                                 formacion
+--
+-- La que manda es la MAS TARDIA de las dos. Un tutor que entro el 20 de agosto
+-- no cobra los cobros del 5, aunque la empresa ya pagara comisiones ese dia. Y
+-- uno que lleva desde junio tampoco cobra junio, porque el suelo es agosto.
 CREATE TABLE IF NOT EXISTS tutor_settings (
   id               BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (id),
-  aplica_desde     DATE NOT NULL DEFAULT DATE '2026-07-01',
+  aplica_desde     DATE NOT NULL DEFAULT DATE '2026-08-01',
   pct_por_defecto  NUMERIC(5,2) NOT NULL DEFAULT 10.00,
   updated_by       INTEGER REFERENCES users(id) ON DELETE SET NULL,
   updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
