@@ -134,4 +134,33 @@ INSERT INTO tutor_settings (id) VALUES (TRUE) ON CONFLICT (id) DO NOTHING;
 -- dinero y se queda en manos de un administrador.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS gestor_colaboraciones BOOLEAN NOT NULL DEFAULT FALSE;
 
+-- ── Quien es el dueño de estas tablas ───────────────────────────────────────
+-- Sin esto, una migracion aplicada con `sudo -u postgres` deja las tablas a
+-- nombre de postgres y la API —que entra con otro usuario— se estrella con
+-- «permission denied for table tutor_profiles». Ya paso con whatsapp_templates.
+--
+-- El dueño se saca del DUEÑO DE LA BASE, no se escribe a mano: en un CRM es
+-- crm_user y en el otro crm_iseie_user, y un nombre fijo romperia uno de los
+-- dos. Asi la misma migracion vale para ambos.
+DO $$
+DECLARE
+  duenyo TEXT;
+  t      TEXT;
+BEGIN
+  SELECT pg_get_userbyid(datdba) INTO duenyo
+    FROM pg_database WHERE datname = current_database();
+
+  FOREACH t IN ARRAY ARRAY['tutor_profiles','tutor_collaborations','tutor_commissions','tutor_settings']
+  LOOP
+    EXECUTE format('ALTER TABLE %I OWNER TO %I', t, duenyo);
+  END LOOP;
+
+  -- Las secuencias de los SERIAL van aparte: cambiar el dueño de la tabla no
+  -- cambia el de su secuencia, y un INSERT necesita las dos.
+  FOREACH t IN ARRAY ARRAY['tutor_collaborations_id_seq','tutor_commissions_id_seq']
+  LOOP
+    EXECUTE format('ALTER SEQUENCE %I OWNER TO %I', t, duenyo);
+  END LOOP;
+END $$;
+
 COMMIT;

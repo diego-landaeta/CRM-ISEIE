@@ -9,6 +9,7 @@ import {
   ChatText,
   Receipt, Coins, Wrench, ShoppingBag, ChatCircleText, Wallet, Bank, Clock, GitMerge,
   UsersThree,
+  GraduationCap,
 } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -17,7 +18,7 @@ import client from '@/shared/api/client';
 import NotificationsBell from './NotificationsBell';
 import { isBetaAllowed, BETA_MODE } from '@/shared/config/betaConfig';
 
-const ROLE_LABELS = { superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor', soporte: 'Soporte' };
+const ROLE_LABELS = { superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor', soporte: 'Soporte', tutor: 'Tutor' };
 
 // NAV_SECTIONS: agrupaciones del sidebar. Las "secciones" (Prospectos,
 // Captación, Productos, Contabilidad) son ahora una sola entrada en el
@@ -31,6 +32,9 @@ const NAV_SECTIONS = [
       { to: '/leads',      label: 'Prospectos', icon: Users,       sectionPrefixes: ['/leads'] },
       { to: '/whatsapp',   label: 'WhatsApp',   icon: WhatsappLogo, sectionPrefixes: ['/whatsapp'] },
       { to: '/whatsapp/plantillas', label: 'Plantillas', icon: ChatText },
+      // Tutores colaboradores: solo para quien gestiona colaboraciones.
+      { to: '/tutores', label: 'Tutores', icon: GraduationCap, roles: ['superadmin', 'admin'] },
+      { to: '/tutores/comisiones', label: 'Comisiones tutores', icon: Coins, roles: ['superadmin', 'admin'] },
       // Solo para quien manda: entrar en el WhatsApp de cada gestora.
       { to: '/whatsapp/equipo', label: 'WhatsApp · Equipo', icon: UsersThree, roles: ['superadmin', 'admin'] },
       // Ventas vive en Principal (flujo diario) y también en Finanzas. Clientes

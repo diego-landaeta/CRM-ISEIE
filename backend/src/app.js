@@ -16,6 +16,7 @@ import productsModule from './modules/products/index.js';
 import conversionsModule from './modules/conversions/index.js';
 import salesModule from './modules/sales/index.js';
 import whatsappModule from './modules/whatsapp/index.js';
+import tutoresModule from './modules/tutores/index.js';
 import notificationsModule from './modules/notifications/index.js';
 import metaAdsModule from './modules/meta-ads/index.js';
 import commissionsModule from './modules/commissions/index.js';
@@ -189,6 +190,7 @@ app.get('/api/health/detailed', async (_req, res) => {
 const MODULES = [
   authModule,
   whatsappModule,
+  tutoresModule,
   usersModule,
   projectsModule,
   leadsModule,

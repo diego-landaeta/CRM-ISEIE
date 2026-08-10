@@ -224,29 +224,31 @@ export async function sala(req, res, next) {
       }});
     }
 
-    const mandaAqui = esAdmin(req);
-    const clave = mandaAqui
-      ? (process.env.WHATSAPP_NEKO_ADMIN_PASSWORD || process.env.WHATSAPP_NEKO_USER_PASSWORD || '')
-      : (process.env.WHATSAPP_NEKO_USER_PASSWORD || '');
-
-    // embed=1 quita la barra y el menu de Neko: dentro del CRM solo debe verse
-    // el WhatsApp. show_side y mute_chat apagan su chat interno, que aqui no
-    // pinta nada y solo confunde.
-    const p = new URLSearchParams({
-      // El nombre es el de QUIEN ENTRA, no el de la sala: si un admin se mete
-      // en la sala de una gestora, ella tiene que ver quien esta con ella.
-      usr: await model.nombreDe(req.user.userId),
-      embed: '1',
-      show_side: '0',
-      mute_chat: '1',
-    });
-    if (clave) p.set('pwd', clave);
+    // Su sala, no una compartida. Se enciende al pedirla —el gestor espera a
+    // que responda antes de contestar— porque para una gestora esta pantalla es
+    // su herramienta del dia: llegar y tener que pulsar «encender» sobra.
+    //
+    // Si no hay gestor de salas configurado se cae a la sala unica de las
+    // pruebas, que es lo que habia antes de que existieran las salas por
+    // persona. Asi un servidor a medio montar enseña algo en vez de un error.
+    let ranura = null;
+    if (SALAS && SALAS_TOKEN) {
+      const r = await pedirSalas(`/sala?clave=${clave(userId)}`, 'POST', 60000);
+      if (!r || r.ranura === undefined) {
+        return res.json({ success: true, data: {
+          configurada: false,
+          motivo: 'Tu WhatsApp no ha podido arrancar. Vuelve a entrar en un momento.',
+        }});
+      }
+      ranura = r.ranura;
+    }
 
     res.json({ success: true, data: {
       configurada: true,
       userId,
-      mandaAqui,
-      url: `${base}/?${p.toString()}`,
+      ranura,
+      mandaAqui: esAdmin(req),
+      url: await direccionSala(req, ranura, esAdmin(req)),
     }});
   } catch (err) { next(err); }
 }
