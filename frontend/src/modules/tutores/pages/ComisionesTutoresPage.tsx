@@ -2,6 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Coins, ArrowsClockwise, Warning, Info } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/shared/hooks/useToast';
+import PageHeader from '@/shared/components/ui/PageHeader';
+import KpiCard from '@/shared/components/ui/KpiCard';
+import EmptyState from '@/shared/components/ui/EmptyState';
+import { Button } from '@/shared/components/ui/button';
 import { tutoresApi, type LineaSimulacion, type AjustesTutores } from '../api/tutores.api';
 
 // Lo que se le pagaria a cada tutor en un mes.
@@ -91,20 +95,30 @@ export default function ComisionesTutoresPage() {
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <h1 className="text-xl font-bold tracking-tight flex items-center gap-2 mr-2">
-          <Coins size={22} weight="duotone" className="text-violet-600" />
-          Comisiones de tutores
-        </h1>
-        <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)}
-          className="h-8 px-2 rounded-md border border-border bg-card text-sm" />
-        <span className="text-xs text-muted-foreground">a</span>
-        <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)}
-          className="h-8 px-2 rounded-md border border-border bg-card text-sm" />
-        <button type="button" onClick={cargar}
-          className="h-8 px-2.5 rounded-md text-xs font-semibold border border-border text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5">
-          <ArrowsClockwise size={14} weight="bold" /> Actualizar
-        </button>
+      <PageHeader
+        title="Comisiones de tutores"
+        subtitle="Lo que se pagaría en el periodo elegido, con las colaboraciones de hoy"
+        actions={(
+          <>
+            <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)}
+              className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
+            <span className="text-xs text-muted-foreground">a</span>
+            <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)}
+              className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
+            <Button variant="outline" size="sm" onClick={cargar}>
+              <ArrowsClockwise size={14} weight="bold" className="mr-1.5" /> Actualizar
+            </Button>
+          </>
+        )}
+      />
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <KpiCard icon={Coins} iconBg="bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300"
+          label="A pagar en el periodo" value={euros(total)} />
+        <KpiCard icon={Coins} iconBg="bg-sky-100 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300"
+          label="Tutores con comisión" value={String(porTutor.length)} />
+        <KpiCard icon={Coins} iconBg="bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+          label="Base sobre la que se calcula" value={euros(porTutor.reduce((s, t) => s + t.base, 0))} />
       </div>
 
       <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 rounded-lg p-3 text-sm">
@@ -145,16 +159,8 @@ export default function ComisionesTutoresPage() {
         </div>
 
         {!cargando && porTutor.length === 0 ? (
-          <div className="p-8 text-center">
-            <p className="text-sm text-muted-foreground">
-              Ninguna comisión en estas fechas.
-            </p>
-            <p className="text-xs text-muted-foreground mt-2 max-w-md mx-auto leading-relaxed">
-              Puede ser que no haya tutores con formaciones asignadas, que sus fechas de inicio sean
-              posteriores, o que los cobros de esas formaciones no estén atados al catálogo — sin esa
-              atadura no se sabe de qué formación es un pago, y no genera comisión.
-            </p>
-          </div>
+          <EmptyState icon={Coins} title="Ninguna comisión en estas fechas"
+            description="Puede ser que no haya tutores con formaciones asignadas, que sus fechas de inicio sean posteriores, o que los cobros de esas formaciones no estén atados al catálogo — sin esa atadura no se sabe de qué formación es un pago, y no genera comisión." />
         ) : (
           <div className="divide-y divide-border">
             {porTutor.map((t) => (

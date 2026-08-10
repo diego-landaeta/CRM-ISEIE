@@ -55,7 +55,9 @@ export const tutoresApi = {
   alta: (datos: {
     nombre: string; email: string; projectIds: number[];
     dniNif?: string; iban?: string; telefono?: string; notas?: string;
-  }) => client.post('/tutores', datos) as Promise<ApiResponse<Tutor>>,
+    /** Si viene, el tutor entra ya. Si no, se le manda el correo de Brevo. */
+    password?: string;
+  }) => client.post('/tutores', datos) as Promise<ApiResponse<Tutor & { entraYa?: boolean }>>,
 
   guardarPerfil: (id: number, datos: Record<string, string | null>) =>
     client.patch(`/tutores/${id}/perfil`, datos) as Promise<ApiResponse<unknown>>,

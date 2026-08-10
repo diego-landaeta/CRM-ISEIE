@@ -69,8 +69,17 @@ export async function alta(req, res, next) {
       projectIds: d.projectIds,
     });
 
+    // Si el alta trae contraseña, se le pone y se anula el token del correo:
+    // asi puede entrar ya, sin depender de que Brevo este configurado.
+    if (d.password) await model.ponerContrasena(usuario.id, d.password);
+
     const perfil = await model.guardarPerfil(usuario.id, d);
-    res.status(201).json({ success: true, data: { ...usuario, perfil } });
+    res.status(201).json({ success: true, data: {
+      ...usuario,
+      perfil,
+      // Que el frontal sepa si hay que enseñar el aviso del correo o no.
+      entraYa: Boolean(d.password),
+    }});
   } catch (err) { next(err); }
 }
 

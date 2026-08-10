@@ -9,6 +9,13 @@ export const altaTutorSchema = z.object({
   nombre: z.string().min(2, 'El nombre es obligatorio'),
   email: z.string().email('Correo no valido'),
   projectIds: z.array(z.number().int()).min(1, 'Elige al menos un proyecto'),
+  // Opcional. Si viene, se le pone esa contraseña y entra ya; si no, se le
+  // manda el correo de siempre con el enlace para ponersela el.
+  //
+  // Existe porque en staging no hay Brevo configurado: sin esto, el correo no
+  // sale, nadie recibe el enlace y el tutor no puede entrar nunca — asi que no
+  // habria forma de probar el modulo.
+  password: z.string().min(8, 'Al menos 8 caracteres').optional().nullable(),
   dniNif: z.string().max(32).optional().nullable(),
   iban: z.string().max(40).optional().nullable(),
   telefono: z.string().max(32).optional().nullable(),

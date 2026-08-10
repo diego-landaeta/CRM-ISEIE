@@ -4,6 +4,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
 import client from '@/shared/api/client';
+import PageHeader from '@/shared/components/ui/PageHeader';
+import EmptyState from '@/shared/components/ui/EmptyState';
+import { Button } from '@/shared/components/ui/button';
 import { tutoresApi, type Tutor, type Colaboracion } from '../api/tutores.api';
 
 // Tutores y sus colaboraciones.
@@ -70,11 +73,14 @@ export default function TutoresPage() {
         dniNif: String(f.get('dniNif') || '') || undefined,
         iban: String(f.get('iban') || '') || undefined,
         telefono: String(f.get('telefono') || '') || undefined,
+        password: String(f.get('password') || '') || undefined,
       });
       if (!r.success) throw new Error(r.error || 'no se pudo');
       toast({
         title: 'Tutor dado de alta',
-        description: 'Le llega un correo con el enlace para poner su contraseña. Caduca en 24 horas.',
+        description: r.data?.entraYa
+          ? 'Ya puede entrar con el correo y la contraseña que le has puesto.'
+          : 'Le llega un correo con el enlace para poner su contraseña. Caduca en 24 horas.',
       });
       setPopupAlta(false);
       cargar();
@@ -137,27 +143,22 @@ export default function TutoresPage() {
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <h1 className="text-xl font-bold tracking-tight flex items-center gap-2 mr-2">
-          <GraduationCap size={22} weight="duotone" className="text-violet-600" />
-          Tutores
-        </h1>
-        <button type="button" onClick={() => setPopupAlta(true)}
-          className="h-8 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold inline-flex items-center gap-1.5">
-          <Plus size={14} weight="bold" /> Nuevo tutor
-        </button>
-        <span className="text-xs text-muted-foreground ml-auto tabular-nums">
-          {cargando ? 'cargando…' : `${tutores.length} tutores`}
-        </span>
-      </div>
+      <PageHeader
+        title="Tutores"
+        subtitle={cargando ? 'cargando…' : `${tutores.length} ${tutores.length === 1 ? 'tutor' : 'tutores'} · cobran un porcentaje de lo que se cobra de sus formaciones`}
+        actions={(
+          <Button onClick={() => setPopupAlta(true)}>
+            <Plus size={15} weight="bold" className="mr-1.5" /> Nuevo tutor
+          </Button>
+        )}
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)] gap-3 items-start">
         <div className="bg-card border border-border rounded-lg overflow-hidden">
           <div className="max-h-[calc(100vh-230px)] overflow-y-auto divide-y divide-border">
             {!cargando && tutores.length === 0 && (
-              <p className="p-6 text-sm text-muted-foreground text-center">
-                Todavía no hay tutores. Da de alta el primero.
-              </p>
+              <EmptyState icon={GraduationCap} title="Sin tutores todavía"
+                description="Da de alta el primero para asignarle formaciones." />
             )}
             {tutores.map((t) => (
               <button key={t.id} type="button" onClick={() => elegir(t)}
@@ -183,9 +184,8 @@ export default function TutoresPage() {
 
         <div className="bg-card border border-border rounded-lg p-4">
           {!elegido ? (
-            <p className="text-sm text-muted-foreground text-center py-10">
-              Elige un tutor para ver sus formaciones.
-            </p>
+            <EmptyState icon={GraduationCap} title="Elige un tutor"
+              description="Verás sus formaciones, con el porcentaje y desde cuándo cobra cada una." />
           ) : (
             <>
               <div className="flex flex-wrap items-center gap-2 mb-3">
@@ -195,16 +195,15 @@ export default function TutoresPage() {
                     {elegido.email}{elegido.dni_nif ? ` · ${elegido.dni_nif}` : ''}
                   </p>
                 </div>
-                <button type="button" onClick={() => setPopupColab(true)}
-                  className="ml-auto h-8 px-3 rounded-md border border-border text-sm font-semibold inline-flex items-center gap-1.5 hover:bg-muted/50">
-                  <Plus size={14} weight="bold" /> Añadir formación
-                </button>
+                <Button variant="outline" size="sm" className="ml-auto" onClick={() => setPopupColab(true)}>
+                  <Plus size={14} weight="bold" className="mr-1.5" /> Añadir formación
+                </Button>
               </div>
 
               {colabs.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-8 text-center">
-                  Sin formaciones asignadas. Mientras no tenga ninguna, no genera comisión.
-                </p>
+                <EmptyState icon={Warning} title="Sin formaciones asignadas"
+                  description="Mientras no tenga ninguna, no genera comisión."
+                  action={<Button variant="outline" onClick={() => setPopupColab(true)}>Añadir la primera</Button>} />
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
@@ -270,7 +269,8 @@ export default function TutoresPage() {
               </button>
             </div>
             <p className="text-xs text-muted-foreground">
-              Se le manda un correo con el enlace para poner su contraseña. Caduca en 24 horas.
+              Si le pones contraseña, entra ya. Si lo dejas en blanco, se le manda un correo
+              con el enlace para ponérsela él — y eso necesita que Brevo esté configurado.
             </p>
             <input name="nombre" required placeholder="Nombre y apellidos"
               className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm" />
@@ -284,10 +284,17 @@ export default function TutoresPage() {
             </div>
             <input name="iban" placeholder="IBAN (para pagarle)"
               className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm" />
-            <button type="submit" disabled={guardando}
-              className="w-full h-9 rounded-md bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-60">
+            <div>
+              <input name="password" type="text" minLength={8} autoComplete="new-password"
+                placeholder="Contraseña (opcional, mínimo 8)"
+                className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm" />
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Se la tendrás que decir tú. Si la dejas vacía, la pone él desde el correo.
+              </p>
+            </div>
+            <Button type="submit" disabled={guardando} className="w-full">
               {guardando ? 'Dando de alta…' : 'Dar de alta'}
-            </button>
+            </Button>
           </form>
         </div>
       )}
@@ -335,10 +342,9 @@ export default function TutoresPage() {
               </span>
             </p>
 
-            <button type="submit" disabled={guardando}
-              className="w-full h-9 rounded-md bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-60">
+            <Button type="submit" disabled={guardando} className="w-full">
               {guardando ? 'Guardando…' : 'Añadir'}
-            </button>
+            </Button>
           </form>
         </div>
       )}

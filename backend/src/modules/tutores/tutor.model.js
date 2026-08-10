@@ -1,3 +1,4 @@
+import bcrypt from 'bcrypt';
 import { query } from '../../shared/config/db.js';
 
 // Tutores y colaboraciones.
@@ -37,6 +38,26 @@ export async function ficha(tutorId) {
     [tutorId]
   );
   return t || null;
+}
+
+// Le pone una contraseña y jubila el token del correo: si se dejara vivo, el
+// enlace de «pon tu contraseña» seguiria funcionando y cualquiera que lo tuviera
+// podria cambiarsela.
+//
+// Coste 12, el mismo que usa el resto del CRM. Bajarlo aqui haria que las
+// contraseñas de los tutores fueran mas faciles de romper que las de todos los
+// demas, y nadie se enteraria.
+export async function ponerContrasena(userId, password) {
+  const hash = await bcrypt.hash(password, 12);
+  await query(
+    `UPDATE users
+        SET password_hash = $2,
+            set_password_token = NULL,
+            set_password_expires = NULL,
+            updated_at = NOW()
+      WHERE id = $1`,
+    [userId, hash]
+  );
 }
 
 export async function guardarPerfil(tutorId, { dniNif, iban, telefono, notas }) {
