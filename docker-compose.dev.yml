@@ -1,0 +1,40 @@
+# Base de datos local para desarrollo y tests.
+#
+# Existe para que nadie necesite tocar la base del servidor. Antes,
+# `backend/tests/setup.js` abria un tunel SSH contra staging de produccion: para
+# lanzar los tests habia que tener acceso al servidor, y dos personas
+# ejecutandolos a la vez se pisaban los datos.
+#
+# Esta es desechable. Se rompe, se borra y se levanta otra:
+#
+#   docker compose -f docker-compose.dev.yml up -d
+#   npm --prefix backend run db:preparar     # migraciones + datos de ejemplo
+#   npm --prefix backend test
+#
+# Y para empezar de cero:
+#   docker compose -f docker-compose.dev.yml down -v
+#
+# El puerto 15432 es el mismo que usaba el tunel, asi que quien ya tuviera algo
+# apuntando ahi no nota el cambio.
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: crm-db-local
+    environment:
+      POSTGRES_USER: crm_user
+      POSTGRES_PASSWORD: crm_local
+      POSTGRES_DB: crm_dev
+    ports:
+      - "127.0.0.1:15432:5432"
+    volumes:
+      - crm_db_local:/var/lib/postgresql/data
+    # Sin esto, las migraciones arrancan antes de que Postgres acepte conexiones
+    # y fallan con un error que no dice nada util.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crm_user -d crm_dev"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  crm_db_local:

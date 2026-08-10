@@ -63,3 +63,20 @@ backups/
 
 # Grabaciones fuente de tutoriales (se sube el mp4 comprimido, no el mkv)
 *.mkv
+
+# ── Datos que no deben viajar en el repositorio ──────────────────────────────
+# Facturas, audios, documentos de clientes y volcados de trabajo. Se anotan aqui
+# porque ya pasaron una vez: habia audios de WhatsApp del personal commiteados.
+*.zip
+*.mkv
+*.ogg
+*.docx
+*.xlsx
+/*.pdf
+/*.PDF
+/*.sql
+/*.py
+/*.sh
+/outputs/
+/Claude/
+*-handoff.md

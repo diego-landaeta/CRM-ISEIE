@@ -1,0 +1,106 @@
+# Lo que se comprueba en cada pull request.
+#
+# Antes no habia nada: un PR no ejecutaba ni lint, ni tipos, ni build, ni tests,
+# aunque los cuatro existan como script de npm. Con dos personas trabajando por
+# ramas, revisarlo a mano no escala.
+#
+# La base de datos la levanta el propio GitHub como servicio y se prepara con
+# las migraciones del repositorio. No se toca ninguna base real: es la misma
+# receta que en local.
+name: CI
+
+on:
+  pull_request:
+    branches: [staging, main]
+  push:
+    branches: [staging, main]
+
+jobs:
+  backend:
+    name: Backend · lint y tests
+    runs-on: ubuntu-latest
+
+    services:
+      db:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: crm_user
+          POSTGRES_PASSWORD: crm_local
+          POSTGRES_DB: crm_dev
+        ports:
+          - 15432:5432
+        # Sin esto los pasos arrancan antes de que Postgres acepte conexiones.
+        options: >-
+          --health-cmd "pg_isready -U crm_user -d crm_dev"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      DATABASE_URL: postgresql://crm_user:crm_local@127.0.0.1:15432/crm_dev
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - run: npm ci
+        working-directory: backend
+
+      - name: Preparar la base con las migraciones
+        run: npm run db:preparar -- --datos
+        working-directory: backend
+
+      - run: npm run lint
+        working-directory: backend
+
+      - run: npm test
+        working-directory: backend
+
+  frontend:
+    name: Frontend · lint, tipos y build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+        working-directory: frontend
+
+      - run: npm run lint
+        working-directory: frontend
+
+      - run: npm run typecheck
+        working-directory: frontend
+
+      # El build es la comprobacion que mas fallos reales pilla: un icono sin
+      # importar o una ruta mal puesta no los ve el linter y tumban la pantalla.
+      - run: npm run build
+        working-directory: frontend
+
+  paridad:
+    name: Paridad entre los dos CRMs
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      # No puede comprobar el otro repositorio, pero si recordarlo cuando el
+      # cambio toca sitios que SIEMPRE van en los dos.
+      - name: Avisar si el cambio deberia ir tambien en el otro CRM
+        run: |
+          base="origin/${{ github.base_ref }}"
+          git fetch origin "${{ github.base_ref }}" --depth=1 || true
+          tocados=$(git diff --name-only "$base"...HEAD || true)
+          if echo "$tocados" | grep -qE '^backend/(migrations|src/modules)/'; then
+            echo "::warning::Este PR toca migraciones o modulos del backend."
+            echo "::warning::Recuerda: el mismo cambio va en el OTRO CRM. Ver docs/PARIDAD-ENTRE-CRMS.md"
+          fi

@@ -17,7 +17,10 @@
     "db:seed": "docker exec -i crm-iseie-postgres psql -U crm_iseie_user -d crm_iseie < seeds/001_first_project.sql",
     "db:reset": "docker compose -f ../docker-compose.yml down -v && npm run db:up",
     "test:integration": "node ../scripts/run-integration-tests.mjs",
-    "seed:test": "node seeds/003_test_data.js"
+    "seed:test": "node seeds/003_test_data.js",
+    "db:preparar": "node scripts/db-preparar.mjs",
+    "db:arriba": "docker compose -f ../docker-compose.dev.yml up -d",
+    "db:abajo": "docker compose -f ../docker-compose.dev.yml down -v"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.700.0",
