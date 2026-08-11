@@ -124,7 +124,8 @@ const NAV_SECTIONS = [
     items: [
       { to: '/solicitudes-cambio', label: 'Solicitudes de cambio', icon: GitMerge },
       { to: '/notificaciones', label: 'Notificaciones',   icon: Bell },
-      { to: '/preferences',    label: 'Mis preferencias', icon: Sliders },
+      // El tutor entra aqui: es donde cambia su contraseña.
+      { to: '/preferences',    label: 'Mis preferencias', icon: Sliders, roles: ['superadmin', 'admin', 'gestor', 'tutor'] },
       { to: '/soporte',        label: 'Soporte',          icon: Headset },
       { to: '/manual',         label: 'Manual del CRM',   icon: BookOpen },
       { to: '/status',         label: 'Status',           icon: Pulse },
@@ -133,6 +134,10 @@ const NAV_SECTIONS = [
 ];
 
 function canSeeItem(item, role) {
+  // Un tutor solo ve lo suyo: lo que no le nombre expresamente queda fuera.
+  // Al reves —listar lo prohibido— se olvida siempre algo, y lo que se olvida
+  // es un tutor paseandose por Prospectos o por Finanzas.
+  if (role === 'tutor') return Array.isArray(item.roles) && item.roles.includes('tutor');
   if (!item.roles) return true;
   if (role === 'superadmin' || role === 'soporte') return true;
   return item.roles.includes(role);

@@ -5,8 +5,21 @@ import { useAuth } from '@/contexts/AuthContext';
 // Solo para validar UI/menus en local sin backend. NUNCA activar en producción.
 const BYPASS = String(import.meta.env.VITE_DEV_BYPASS_AUTH || '').toLowerCase() === 'true';
 
+// Lo unico que un tutor puede abrir. Se declara lo permitido y no lo prohibido:
+// enumerar lo prohibido deja fuera siempre alguna pantalla nueva, y esa pantalla
+// es la que acaba enseñandole las ventas de todos.
+//
+// Esto es el recorte de la barra de direcciones. El de verdad esta en el
+// servidor, que le fuerza su propio identificador; aqui solo se evita que vea
+// pantallas que no son suyas.
+const RUTAS_DEL_TUTOR = ['/mis-cursos', '/preferences', '/profile', '/set-password'];
+
+function tutorPuede(pathname) {
+  return RUTAS_DEL_TUTOR.some((p) => pathname === p || pathname.startsWith(p + '/'));
+}
+
 export default function ProtectedRoute({ children }) {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, user } = useAuth();
   const location = useLocation();
   if (BYPASS) return children;
 
@@ -23,6 +36,12 @@ export default function ProtectedRoute({ children }) {
 
   if (!isAuthenticated) {
     return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  // Un tutor que entra por cualquier otro sitio —al iniciar sesion cae en la
+  // portada, que no es suya— acaba en sus cursos.
+  if (user?.role === 'tutor' && !tutorPuede(location.pathname)) {
+    return <Navigate to="/mis-cursos" replace />;
   }
 
   return children;
