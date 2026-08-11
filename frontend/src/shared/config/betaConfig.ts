@@ -32,6 +32,9 @@ export const BETA_ROUTES: readonly string[] = [
   '/make-webhooks',                 // Captacion Make
   '/webhooks',                      // Webhooks entrantes
   '/captacion/whatsapp',            // Widget WhatsApp rotativo
+  '/whatsapp',                      // WhatsApp: cola, plantillas y el panel del equipo
+  '/tutores',                       // Tutores: alta, colaboraciones y comisiones
+  '/mis-cursos',                    // La pantalla del propio tutor
   '/email-sequences',               // Email
   '/email-templates',
   '/documentos',                    // Documentos PDF

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { WhatsappLogo, Copy, CheckCircle, ArrowRight, Warning, X, ChatText, ArrowSquareOut,
-  CornersOut, List } from '@phosphor-icons/react';
+  CornersOut, List, UsersThree } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
@@ -149,6 +150,24 @@ export default function WhatsappPage() {
   return (
     <div className="space-y-2">
       <AvisoUso />
+
+      {/* Un admin que llega aqui esta en la pantalla equivocada: esta es la de
+          trabajo de UNA gestora —su cola y su WhatsApp—, no la de supervisar.
+          Se dice y se le lleva al sitio bueno, en vez de dejar que se pregunte
+          por que ve una cola que no es suya. */}
+      {esAdmin && (
+        <div className="bg-card border border-border rounded-lg px-3 py-2 flex flex-wrap items-center gap-2 text-sm">
+          <UsersThree size={16} weight="fill" className="text-muted-foreground shrink-0" />
+          <span className="text-muted-foreground">
+            Esta es la pantalla de trabajo de una gestora: su cola y <strong>su</strong> WhatsApp.
+            Para ver el de todo el equipo y entrar en el de cualquiera:
+          </span>
+          <Link to="/whatsapp/equipo"
+            className="ml-auto h-8 px-2.5 rounded-md border border-border text-xs font-semibold inline-flex items-center gap-1.5 hover:bg-muted/50">
+            <UsersThree size={14} weight="bold" /> WhatsApp · Equipo
+          </Link>
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-2">
         <h1 className="text-xl font-bold tracking-tight flex items-center gap-2 mr-2">

@@ -35,6 +35,10 @@ export default function TutoresPage() {
   const [popupColab, setPopupColab] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [borrando, setBorrando] = useState<number | null>(null);
+  // Cursos que se le asignan EN EL ALTA. Crear al tutor y luego entrar a
+  // añadirle cursos son dos pasos para una sola decision: cuando das de alta a
+  // alguien ya sabes que imparte.
+  const [cursosAlta, setCursosAlta] = useState<Array<{ productId: number; pct: number }>>([]);
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -76,6 +80,20 @@ export default function TutoresPage() {
         password: String(f.get('password') || '') || undefined,
       });
       if (!r.success) throw new Error(r.error || 'no se pudo');
+
+      // Sus cursos, con la fecha de alta como inicio. Si alguno falla se dice
+      // cual: el tutor ya existe y no tiene sentido deshacerlo por eso.
+      const fallidos: string[] = [];
+      for (const c of cursosAlta) {
+        const rc = await tutoresApi.crearColaboracion({
+          tutorId: r.data!.id, productId: c.productId, pct: c.pct, desde: String(f.get('desde') || hoy()),
+        });
+        if (!rc.success) fallidos.push(formaciones.find((x) => x.id === c.productId)?.nombre || String(c.productId));
+      }
+      if (fallidos.length) {
+        toast({ title: 'Algún curso no se ha podido asignar', description: fallidos.join(', '), variant: 'destructive' });
+      }
+
       toast({
         title: 'Tutor dado de alta',
         description: r.data?.entraYa
@@ -83,6 +101,7 @@ export default function TutoresPage() {
           : 'Le llega un correo con el enlace para poner su contraseña. Caduca en 24 horas.',
       });
       setPopupAlta(false);
+      setCursosAlta([]);
       cargar();
     } catch (err) {
       toast({ title: 'No se ha podido dar de alta', description: err instanceof Error ? err.message : '', variant: 'destructive' });
@@ -292,6 +311,55 @@ export default function TutoresPage() {
                 Se la tendrás que decir tú. Si la dejas vacía, la pone él desde el correo.
               </p>
             </div>
+            <div className="border-t border-border pt-3">
+              <p className="text-sm font-semibold mb-1">Sus cursos</p>
+              <p className="text-xs text-muted-foreground mb-2">
+                Puedes asignárselos ahora. Cobra desde la fecha de inicio que pongas abajo.
+              </p>
+
+              <div className="flex gap-2 mb-2">
+                <select id="curso-alta" className="flex-1 h-9 px-2 rounded-md border border-border bg-background text-sm">
+                  <option value="">Elige un curso…</option>
+                  {formaciones
+                    .filter((fo) => !cursosAlta.some((c) => c.productId === fo.id))
+                    .map((fo) => <option key={fo.id} value={fo.id}>{fo.nombre}</option>)}
+                </select>
+                <input id="pct-alta" type="number" step="0.5" min="0" max="100" defaultValue="10"
+                  className="w-20 h-9 px-2 rounded-md border border-border bg-background text-sm" />
+                <Button type="button" variant="outline" size="sm" onClick={() => {
+                  const sel = document.getElementById('curso-alta') as HTMLSelectElement | null;
+                  const pc = document.getElementById('pct-alta') as HTMLInputElement | null;
+                  const id = Number(sel?.value);
+                  if (!id) return;
+                  setCursosAlta((prev) => [...prev, { productId: id, pct: Number(pc?.value || 10) }]);
+                  if (sel) sel.value = '';
+                }}>
+                  <Plus size={14} weight="bold" />
+                </Button>
+              </div>
+
+              {cursosAlta.length > 0 && (
+                <ul className="space-y-1 mb-2">
+                  {cursosAlta.map((c) => (
+                    <li key={c.productId} className="flex items-center gap-2 text-xs bg-muted/40 rounded px-2 py-1.5">
+                      <span className="flex-1 truncate">{formaciones.find((fo) => fo.id === c.productId)?.nombre}</span>
+                      <span className="tabular-nums font-semibold shrink-0">{c.pct} %</span>
+                      <button type="button" className="text-muted-foreground hover:text-foreground shrink-0"
+                        onClick={() => setCursosAlta((prev) => prev.filter((x) => x.productId !== c.productId))}>
+                        <X size={13} weight="bold" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              <label className="text-xs text-muted-foreground">
+                Empieza a cobrar el
+                <input name="desde" type="date" defaultValue={hoy()}
+                  className="mt-1 w-full h-9 px-2 rounded-md border border-border bg-background text-sm" />
+              </label>
+            </div>
+
             <Button type="submit" disabled={guardando} className="w-full">
               {guardando ? 'Dando de alta…' : 'Dar de alta'}
             </Button>

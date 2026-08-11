@@ -30,10 +30,18 @@ const NAV_SECTIONS = [
     items: [
       { to: '/dashboard',  label: 'Dashboard',  icon: SquaresFour, end: true },
       { to: '/leads',      label: 'Prospectos', icon: Users,       sectionPrefixes: ['/leads'] },
-      { to: '/whatsapp',   label: 'WhatsApp',   icon: WhatsappLogo, sectionPrefixes: ['/whatsapp'] },
-      { to: '/whatsapp/plantillas', label: 'Plantillas', icon: ChatText },
-      // Solo para quien manda: entrar en el WhatsApp de cada gestora.
-      { to: '/whatsapp/equipo', label: 'WhatsApp · Equipo', icon: UsersThree, roles: ['superadmin', 'admin'] },
+      // WhatsApp cuelga de su propia entrada, con lo suyo escalonado debajo: son
+      // tres pantallas del mismo sitio, no tres apartados sueltos del menu.
+      {
+        label: 'WhatsApp',
+        icon: WhatsappLogo,
+        children: [
+          { to: '/whatsapp', label: 'Mi WhatsApp', end: true },
+          { to: '/whatsapp/plantillas', label: 'Plantillas' },
+          // Solo para quien manda: entrar en el WhatsApp de cada gestora.
+          { to: '/whatsapp/equipo', label: 'WhatsApp del equipo', roles: ['superadmin', 'admin'] },
+        ],
+      },
       // Ventas vive en Principal (flujo diario) y también en Finanzas. Clientes
       // y Revisión duplicados pasan a la sección Clientes al final.
       { to: '/sales',      label: 'Ventas',     icon: Receipt },
@@ -72,6 +80,8 @@ const NAV_SECTIONS = [
     label: 'Tutores',
     items: [
       { to: '/tutores', label: 'Tutores', icon: GraduationCap, roles: ['admin', 'superadmin'], sectionPrefixes: ['/tutores'] },
+      // Lo unico que ve un tutor: sus cursos y lo que le corresponde.
+      { to: '/mis-cursos', label: 'Mis cursos', icon: GraduationCap, roles: ['tutor'] },
       { to: '/tutores/comisiones', label: 'Comisiones', icon: Coins, roles: ['admin', 'superadmin'] },
     ],
   },
@@ -189,12 +199,87 @@ function NavItem({ to, label, icon: Icon, end, comingSoon, statusTag, collapsed,
 }
 
 
+// Una entrada con lo suyo escalonado debajo. Se abre y se cierra, y lo de
+// dentro se sangra con una guia a la izquierda para que se vea de un vistazo
+// que pertenece a ella.
+function NavGroup({ label, icon: Icon, items, role, collapsed, onNavigate, onExpandSidebar }) {
+  const location = useLocation();
+  const visible = items
+    .filter((c) => canSeeItem(c, role))
+    .map((c) => ({ ...c, comingSoon: c.comingSoon || !isBetaAllowed(c.to) }));
+  const hasActiveChild = visible.some(
+    (c) => !c.comingSoon && (location.pathname === c.to || location.pathname.startsWith(c.to + '/'))
+  );
+  const [open, setOpen] = useState(hasActiveChild);
+  // Si se llega desde fuera a una pantalla de dentro, el grupo se abre solo:
+  // si no, el apartado marcado como activo quedaria escondido.
+  useEffect(() => { if (hasActiveChild) setOpen(true); }, [hasActiveChild]);
+  if (!visible.length) return null;
+
+  // Colapsado (sidebar mini) solo cabe el icono: al pulsarlo se despliega la
+  // barra y se abre el grupo, en vez de dejar al usuario sin salida.
+  if (collapsed) {
+    return (
+      <button
+        type="button"
+        onClick={() => { onExpandSidebar?.(); setOpen(true); }}
+        title={label}
+        aria-label={label}
+        className={cn(
+          'w-full flex items-center justify-center h-10 rounded-md transition-colors',
+          hasActiveChild ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
+        )}
+      >
+        <Icon size={18} weight={hasActiveChild ? 'duotone' : 'regular'} />
+      </button>
+    );
+  }
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        className={cn(
+          'w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] transition-colors',
+          hasActiveChild ? 'text-foreground font-semibold' : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
+        )}
+      >
+        <Icon size={18} weight={hasActiveChild ? 'duotone' : 'regular'} />
+        <span className="truncate">{label}</span>
+        <CaretRight size={12} weight="bold" className={cn('ml-auto transition-transform', open && 'rotate-90')} />
+      </button>
+      {open && (
+        <div className="ml-4 mt-0.5 pl-3 border-l border-border/60 space-y-0.5">
+          {visible.map((child) => (
+            <NavItem
+              key={child.to}
+              to={child.to}
+              label={child.label}
+              icon={child.icon || Icon}
+              end={child.end}
+              comingSoon={child.comingSoon}
+              statusTag={child.statusTag}
+              onClick={onNavigate}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Decide qué sección debe estar abierta por defecto: Principal (siempre) +
 // la que contenga la ruta actual. Devuelve un map { [section.label]: boolean }.
 function defaultOpenSections(sections, pathname) {
   const out = {};
   for (const s of sections) {
     const containsActive = s.items.some((it) => {
+      // Una entrada con hijos no tiene ruta propia: cuenta lo de dentro.
+      if (it.children) {
+        return it.children.some((c) => pathname === c.to || (c.to && pathname.startsWith(c.to + '/')));
+      }
       if (pathname === it.to) return true;
       if (it.sectionPrefixes?.some((p) => pathname === p || pathname.startsWith(p + '/'))) return true;
       if (it.to && it.to !== '/' && pathname.startsWith(it.to + '/')) return true;
@@ -205,7 +290,7 @@ function defaultOpenSections(sections, pathname) {
   return out;
 }
 
-function CollapsibleNav({ sections, role, collapsed, onNavigate }) {
+function CollapsibleNav({ sections, role, collapsed, onNavigate, onExpandSidebar }) {
   const location = useLocation();
   const STORAGE_KEY = 'crm-sidebar-sections-v1';
   const [openMap, setOpenMap] = useState(() => {
@@ -250,28 +335,43 @@ function CollapsibleNav({ sections, role, collapsed, onNavigate }) {
             return it;
           })
           .filter((it) => canSeeItem(it, role))
-          .map((it) => ({ ...it, comingSoon: it.comingSoon || !isBetaAllowed(it.to) }));
+          // Una entrada con hijos no tiene ruta que mirar: lo de BETA lo decide
+          // cada hijo por su cuenta, dentro de NavGroup.
+          .map((it) => (it.children ? it : { ...it, comingSoon: it.comingSoon || !isBetaAllowed(it.to) }));
         if (!items.length) return null;
+
+        const pintar = (item) => (item.children ? (
+          <NavGroup
+            key={'g|' + item.label}
+            label={item.label}
+            icon={item.icon}
+            items={item.children}
+            role={role}
+            collapsed={collapsed}
+            onNavigate={onNavigate}
+            onExpandSidebar={onExpandSidebar}
+          />
+        ) : (
+          <NavItem
+            key={item.to + '|' + item.label}
+            to={item.to}
+            label={item.label}
+            icon={item.icon}
+            end={item.end}
+            comingSoon={item.comingSoon}
+            statusTag={item.statusTag}
+            collapsed={collapsed}
+            onClick={onNavigate}
+            sectionPrefixes={item.sectionPrefixes}
+          />
+        ));
 
         // En modo colapsado (sidebar mini) no mostramos headers ni colapso —
         // todos los items se ven como iconos en línea.
         if (collapsed) {
           return (
             <div key={section.label} className="space-y-0.5">
-              {items.map((item) => (
-                <NavItem
-                  key={item.to + '|' + item.label}
-                  to={item.to}
-                  label={item.label}
-                  icon={item.icon}
-                  end={item.end}
-                  comingSoon={item.comingSoon}
-                  statusTag={item.statusTag}
-                  collapsed={collapsed}
-                  onClick={onNavigate}
-                  sectionPrefixes={item.sectionPrefixes}
-                />
-              ))}
+              {items.map(pintar)}
             </div>
           );
         }
@@ -294,20 +394,7 @@ function CollapsibleNav({ sections, role, collapsed, onNavigate }) {
             </button>
             {open && (
               <div className="space-y-0.5 mt-0.5 ml-1 pl-2 border-l border-border/50">
-                {items.map((item) => (
-                  <NavItem
-                    key={item.to + '|' + item.label}
-                    to={item.to}
-                    label={item.label}
-                    icon={item.icon}
-                    end={item.end}
-                    comingSoon={item.comingSoon}
-                    statusTag={item.statusTag}
-                    collapsed={collapsed}
-                    onClick={onNavigate}
-                    sectionPrefixes={item.sectionPrefixes}
-                  />
-                ))}
+                {items.map(pintar)}
               </div>
             )}
           </div>
@@ -411,6 +498,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapsed, onNaviga
         role={role}
         collapsed={collapsed}
         onNavigate={onNavigate}
+        onExpandSidebar={onToggleCollapsed}
       />
 
       {/* User menu + notification bell */}
