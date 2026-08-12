@@ -35,6 +35,7 @@ const NAV_SECTIONS = [
       {
         label: 'WhatsApp',
         icon: WhatsappLogo,
+        apagable: 'whatsapp',
         children: [
           { to: '/whatsapp', label: 'Mi WhatsApp', end: true },
           { to: '/whatsapp/plantillas', label: 'Plantillas' },
@@ -133,7 +134,14 @@ const NAV_SECTIONS = [
   },
 ];
 
+// Interruptor de compilacion para dejar una parte fuera de una instalacion sin
+// borrar su codigo. Se usa con WhatsApp, que en produccion todavia no se enciende
+// —esta en revision— pero viaja en el mismo build que el resto.
+const APAGADOS = String(import.meta.env.VITE_MODULOS_APAGADOS || '')
+  .split(',').map((s) => s.trim()).filter(Boolean);
+
 function canSeeItem(item, role) {
+  if (item.apagable && APAGADOS.includes(item.apagable)) return false;
   // Un tutor solo ve lo suyo: lo que no le nombre expresamente queda fuera.
   // Al reves —listar lo prohibido— se olvida siempre algo, y lo que se olvida
   // es un tutor paseandose por Prospectos o por Finanzas.
