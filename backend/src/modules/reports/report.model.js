@@ -146,6 +146,110 @@ function buildFilter({ projectId, from, to, asesoraId }, dateCol, projectCol = '
 const TZ = process.env.APP_TIMEZONE || 'Europe/Madrid';
 const ENTRY = `(COALESCE(l.fecha_solicitud, l.created_at) AT TIME ZONE '${TZ}')`;
 
+// ── LA TASA DE CIERRE ───────────────────────────────────────────────────────
+//
+// De los prospectos que ENTRARON en el periodo, cuantos han comprado.
+//
+// Se escribe UNA vez y de aqui la usan todas las pantallas. Antes habia cinco
+// definiciones distintas y sobre el mismo periodo (enero→11 de agosto de 2026)
+// daban desde 10,75 % hasta 15,40 %, asi que la gestora veia dos porcentajes
+// distintos de lo mismo en la misma pantalla y no se creia ninguno.
+//
+// Las tres decisiones que la definen, y por que:
+//
+// · El numerador esta DENTRO del denominador. Tres de las cinco dividian las
+//   ventas del periodo entre los leads del periodo, que son dos grupos
+//   distintos de gente: 10 ventas de 2026 son de leads entrados antes. Eso no
+//   es un porcentaje —con la captacion parada y ventas de cartera vieja puede
+//   pasar del 100 %—. Aqui se cuentan leads contra leads.
+//
+// · Vale la VENTA, no el estado del lead. El estado 'convertido' se pone a mano
+//   y se queda: 297 leads lo tienen, pero solo 256 tienen venta con cobro.
+//
+// · La venta tiene que tener algun cobro y no ser una mensualidad. 52
+//   conversiones del periodo no tienen ni un euro cobrado: son proformas que el
+//   cliente no llego a pagar, y contarlas como cierres es contar humo.
+//
+// La venta ademas ha de ser POSTERIOR a la entrada del lead. Sin eso, la carga
+// masiva de clientes viejos —metidos con fecha de julio y venta de enero—
+// aparecia como si hubieran comprado nada mas llegar.
+const VENTA_CERRADA = (entry) => `EXISTS (
+  SELECT 1 FROM conversions cv
+   WHERE cv.lead_id = l.id
+     AND cv.fecha_conversion >= ${entry}::date
+     AND NOT cv.es_mensualidad
+     AND EXISTS (SELECT 1 FROM conversion_payments p WHERE p.conversion_id = cv.id))`;
+
+// Ojo con el mes en curso: el 84 % de los que compran lo hacen en la misma
+// semana de entrar y el 95 % dentro del mes, asi que un mes cerrado ya no se
+// mueve — pero el que esta corriendo SIEMPRE sale bajo. Por eso cada fila dice
+// si esta madura o no, y quien pinte un baremo no debe puntuar las que no lo
+// esten: seria empezar el mes en rojo por definicion.
+const DIAS_PARA_MADURAR = 30;
+
+// Una fila por mes de ENTRADA + el total. No hace medias de medias: el total
+// se calcula sobre la suma, que no es lo mismo cuando los meses son desiguales.
+export async function tasaDeCierre({ projectId, from, to, asesoraId }) {
+  const f = buildFilter({ projectId, from, to, asesoraId }, ENTRY, 'l.project_id');
+  const { rows } = await query(
+    `SELECT to_char(date_trunc('month', ${ENTRY}), 'YYYY-MM') AS mes,
+            COUNT(*)::int AS leads,
+            COUNT(*) FILTER (WHERE ${VENTA_CERRADA(ENTRY)})::int AS cerrados,
+            -- Madura = ha pasado un mes desde que se cerro el mes de entrada.
+            (date_trunc('month', ${ENTRY}) + INTERVAL '1 month'
+               + INTERVAL '${DIAS_PARA_MADURAR} days' <= NOW()) AS madura
+       FROM (SELECT * FROM leads WHERE deleted_at IS NULL) l
+       ${f.where}
+      GROUP BY 1, 4
+      ORDER BY 1`,
+    f.params
+  );
+
+  const meses = rows.map((r) => ({
+    mes: r.mes,
+    leads: r.leads,
+    cerrados: r.cerrados,
+    tasa: r.leads > 0 ? Math.round((r.cerrados * 10000) / r.leads) / 100 : 0,
+    madura: r.madura,
+  }));
+
+  const leads = meses.reduce((s, m) => s + m.leads, 0);
+  const cerrados = meses.reduce((s, m) => s + m.cerrados, 0);
+  return {
+    leads,
+    cerrados,
+    tasa: leads > 0 ? Math.round((cerrados * 10000) / leads) / 100 : 0,
+    meses,
+    // Para que la pantalla pueda explicar el numero sin repetir la regla.
+    definicion: 'De los prospectos que entraron en el periodo, los que han comprado: '
+      + 'venta con algún cobro, posterior a su entrada y sin contar mensualidades.',
+  };
+}
+
+// Los dos sumandos, uno a uno, para el «¿de dónde sale?». `lado` dice cual:
+// 'cerrados' son los que compraron y 'todos' el total de entrados.
+export async function detalleTasaDeCierre({ projectId, from, to, asesoraId, lado = 'cerrados', limit = 500 }) {
+  const f = buildFilter({ projectId, from, to, asesoraId }, ENTRY, 'l.project_id');
+  const soloCerrados = lado === 'cerrados' ? `AND ${VENTA_CERRADA(ENTRY)}` : '';
+  const where = f.where ? `${f.where} ${soloCerrados}` : (soloCerrados ? `WHERE ${soloCerrados.slice(4)}` : '');
+  const { rows } = await query(
+    `SELECT l.id, l.nombre, l.email, l.telefono,
+            ${ENTRY}::date AS entrada,
+            u.nombre AS gestora,
+            (SELECT MIN(cv.fecha_conversion) FROM conversions cv
+              WHERE cv.lead_id = l.id AND cv.fecha_conversion >= ${ENTRY}::date
+                AND NOT cv.es_mensualidad
+                AND EXISTS (SELECT 1 FROM conversion_payments p WHERE p.conversion_id = cv.id)) AS fecha_venta
+       FROM (SELECT * FROM leads WHERE deleted_at IS NULL) l
+       LEFT JOIN users u ON u.id = l.responsable_id
+       ${where}
+      ORDER BY entrada DESC, l.id DESC
+      LIMIT ${Number(limit) || 500}`,
+    f.params
+  );
+  return rows;
+}
+
 // El reporte general mezcla dos hechos con fechas distintas:
 // - prospecto sin venta: fecha de entrada;
 // - cliente con venta: fecha de conversión.

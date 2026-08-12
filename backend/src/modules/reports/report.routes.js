@@ -27,4 +27,8 @@ router.get('/paises', ctrl.paises);
 router.get('/formaciones', ctrl.formaciones);
 router.get('/detalle', ctrl.detalle);
 
+// La tasa de cierre, con una sola definicion para todo el CRM.
+router.get('/tasa-cierre', ctrl.tasaCierre);
+router.get('/tasa-cierre/detalle', ctrl.tasaCierreDetalle);
+
 export default router;

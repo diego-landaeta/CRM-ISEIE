@@ -118,3 +118,22 @@ export async function detalle(req, res, next) {
     }) });
   } catch (err) { next(err); }
 }
+
+// GET /api/reports/tasa-cierre -> el numero unico, con su desglose por meses.
+export async function tasaCierre(req, res, next) {
+  try {
+    res.json({ success: true, data: await model.tasaDeCierre(rangoDeQuery(req)) });
+  } catch (err) { next(err); }
+}
+
+// GET /api/reports/tasa-cierre/detalle?lado=cerrados|todos
+// Las personas que hay detras de cada sumando, para el «¿de donde sale?».
+export async function tasaCierreDetalle(req, res, next) {
+  try {
+    res.json({ success: true, data: await model.detalleTasaDeCierre({
+      ...rangoDeQuery(req),
+      lado: req.query.lado === 'todos' ? 'todos' : 'cerrados',
+      limit: Math.min(2000, Number(req.query.limite) || 500),
+    }) });
+  } catch (err) { next(err); }
+}
