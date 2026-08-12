@@ -189,9 +189,71 @@ flowchart TD
 
 ---
 
+## Media pantalla: lo que se ve pero no funciona
+
+Son las peores, porque **nadie las reporta como error**: se usan, parece que van,
+y no hacen nada. Todas comparten la misma causa — el frontal guarda en el
+navegador de cada persona porque el backend no existe.
+
+```mermaid
+flowchart LR
+  subgraph S["Soporte"]
+    S1["La gestora abre un ticket"] --> S2["Se guarda en SU navegador"]
+    S2 --> S3["No le llega a nadie<br/>ni sale un correo"]
+  end
+  subgraph W["Plantillas de WhatsApp"]
+    W1["Escribe una plantilla"] --> W2["Solo la ve ella"]
+    W2 --> W3["Nadie puede revisarlas<br/>ni compartirlas"]
+  end
+
+  classDef ve fill:#fef3c7,stroke:#d97706,color:#78350f
+  classDef roto fill:#fee2e2,stroke:#dc2626,color:#7f1d1d
+  class S1,S2,W1,W2 ve
+  class S3,W3 roto
+```
+
+**Soporte** tiene 836 líneas de pantalla —formulario, lanzador, listado— y
+**ningún módulo en el backend**. Su propio código lo dice: «cuando exista
+`/api/tickets`…». Falta: tabla, endpoints, envío por Brevo al correo de destino,
+adjuntos, y las métricas de cuánto se tarda en responder y en cerrar.
+
+Las **plantillas de WhatsApp** ya están resueltas en la migración 122, pero esa
+migración **no se ha aplicado en producción** porque WhatsApp está en espera.
+
+---
+
+## Automatismos de correo · nada de esto existe
+
+Hay siete tareas programadas —Meta, Stripe, WooCommerce, secuencias,
+recordatorios…— pero **ninguna de aviso interno**:
+
+| Qué | A quién | Cuándo |
+|---|---|---|
+| Resumen del día | Gestora y administración | Al cerrar el día |
+| Resumen semanal | Dirección | Lunes |
+| Aviso de lead sin contactar | Gestora | A los 30 minutos |
+| Plan de mañana | Gestora | Por la noche |
+
+Se apoyan en Brevo, que ya está montado en los dos CRMs.
+
+---
+
+## Lo que quedó a medias
+
+| Qué | Estado real |
+|---|---|
+| **Filtros en Clientes y Matrículas** | Prospectos guarda sus filtros en la URL; Clientes y Matrículas **no tienen ninguno**. Hay que replicar el juego entero |
+| **Proformas: asociar a una venta ya creada** | Se puede elegir al emitir; falta el botón para las que ya existen |
+| **Menú de Finanzas** | Plan aprobado y sin ejecutar: fusionar Ventas e Ingresos, y Conversiones como pestaña de Análisis |
+| **Documento al convertir** | En pruebas de ISEIE; falta validarlo y subirlo a producción en los dos |
+| **Modo BETA de ISEIE** | Aplicar el mismo corte al menú cuando se conecte WordPress |
+| **Certificados de matrícula** | Usar los textos importados de los productos (módulos, profesores, horas) para el PDF |
+
+---
+
 ## La cola larga
 
-Cosas medidas y anotadas, ninguna urgente:
+Medido, anotado y sin urgencia:
 
 | Qué | Cuánto |
 |---|---|
@@ -202,6 +264,34 @@ Cosas medidas y anotadas, ninguna urgente:
 | Segundas cuotas registradas como venta nueva | por barrer |
 | Proformas de ICTESS que consumen número de serie | por revisar |
 | Tests que fallan por datos de ejemplo | 10 de 180 |
+| Carlos no entra desde su WiFi fija | probar por IP directa |
+
+---
+
+## Por dónde seguir
+
+Ordenado por lo que más duele, no por lo que más cuesta:
+
+```mermaid
+flowchart TB
+  A["1 · Repositorios en privado<br/>y rotar las claves"] --> B["2 · Soporte de verdad<br/>hoy los tickets no le llegan a nadie"]
+  B --> C["3 · Tutores: encender el cálculo<br/>y poder liquidar"]
+  C --> D["4 · Tasa de cierre en pantalla<br/>y el baremo de Carlos"]
+  D --> E["5 · Avisos por correo<br/>resumen del día y SLA"]
+  E --> F["6 · Filtros en Clientes<br/>y lo que quedó a medias"]
+
+  classDef urge fill:#fee2e2,stroke:#dc2626,color:#7f1d1d
+  classDef pronto fill:#fef3c7,stroke:#d97706,color:#78350f
+  classDef luego fill:#e0e7ff,stroke:#4f46e5,color:#312e81
+  class A,B urge
+  class C,D pronto
+  class E,F luego
+```
+
+**Por qué en ese orden.** Lo primero no es negociable y no es código. Lo segundo
+es lo único que hoy **engaña a quien lo usa**: una gestora escribe un ticket,
+ve que se guarda, y no llega a ningún sitio. Lo tercero mueve dinero. Lo demás
+mejora, pero nada de lo que hay hoy miente.
 
 ---
 
