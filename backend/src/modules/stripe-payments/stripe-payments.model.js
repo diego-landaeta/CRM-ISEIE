@@ -126,13 +126,23 @@ function construirFiltro({ projectId, status, linked, search, from, to, facturab
     // del CRM y no hay que asociarlo. Antes se usaba la fecha de la PRIMERA
     // factura de la sociedad, que en ISEIE es de enero: colaba casi trescientos
     // cobros ya resueltos y la pantalla enseñaba los primeros cincuenta.
-    // Si el proyecto no tiene corte puesto, se cae a la primera factura, que era
-    // el comportamiento de antes.
+    // Si el proyecto no tiene corte puesto, se cae a la primera factura, y si
+    // tampoco la hay, AL DIA EN QUE EL PROYECTO ENTRO AL CRM.
+    //
+    // Ese ultimo escalon es la regla: un proyecto factura desde que esta en el
+    // CRM, no desde antes. Lo de antes se llevo fuera y ya esta resuelto; que
+    // reaparezca aqui solo sirve para volver a facturarlo. El suelo era 1900,
+    // y con el se colaban 576 cobros anteriores al alta de su proyecto —514
+    // solo de Psiko Aprende, con el primero de enero de 2025—.
+    //
+    // Sigue mandando el corte puesto a mano: si alguien necesita recuperar algo
+    // anterior, mueve `al_dia_hasta` hacia atras y aparece.
     conds.push(`sp.stripe_created_at::date > COALESCE(
       (SELECT st.al_dia_hasta FROM invoicing_status st WHERE st.project_id = sp.project_id),
       (SELECT MIN(f.fecha_emision) FROM invoices f
         WHERE f.issuer_id = (SELECT pr.sociedad_emisora_id FROM projects pr WHERE pr.id = sp.project_id)
           AND f.tipo <> 'proforma' AND f.numero IS NOT NULL),
+      (SELECT pr3.created_at::date FROM projects pr3 WHERE pr3.id = sp.project_id),
       DATE '1900-01-01')`);
     // Y el cliente NO tiene ya una factura en la sociedad (por email o nombre):
     // evita que aparezcan cobros de ventas ya facturadas manualmente.
@@ -246,11 +256,14 @@ export async function listPendientesDeAsociar(projectId, limit = 500) {
         -- pesos o colones como si fueran euros
         AND UPPER(COALESCE(currency, 'EUR')) = 'EUR'
         -- Los anteriores a la fecha de revision ya se miraron uno a uno:
-        -- lo que quedo sin cliente se dejo asi a proposito.
-        AND (
-          (SELECT s.stripe_ok_hasta FROM invoicing_status s WHERE s.project_id = $1) IS NULL
-          OR stripe_created_at::date > (SELECT s.stripe_ok_hasta FROM invoicing_status s WHERE s.project_id = $1)
-        )
+        -- lo que quedo sin cliente se dejo asi a proposito. Y si nadie ha
+        -- puesto esa fecha, el suelo es el dia que el proyecto entro al CRM:
+        -- misma regla que la cola de facturables, para que las dos pantallas
+        -- no digan cosas distintas del mismo cobro.
+        AND stripe_created_at::date > COALESCE(
+          (SELECT s.stripe_ok_hasta FROM invoicing_status s WHERE s.project_id = $1),
+          (SELECT pr.created_at::date FROM projects pr WHERE pr.id = $1),
+          DATE '1900-01-01')
       ORDER BY stripe_created_at DESC
       LIMIT $2`,
     [projectId, limit]
