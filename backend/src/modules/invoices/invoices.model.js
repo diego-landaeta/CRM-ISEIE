@@ -284,6 +284,10 @@ export async function createRectificativa(originalId, { motivo, userId, parcial 
         originalId, orig.codigo, motivo || 'Anulación',
         iss.id || null, iss.razon_social, iss.nif, iss.direccion, iss.ciudad,
         iss.cp, iss.pais, iss.email, iss.telefono, iss.iban, iss.logo_url,
+        // $41. Faltaba: el SQL pedia 41 parametros y se pasaban 40, asi que
+        // PostgreSQL rechazaba la consulta entera y NINGUN abono se podia
+        // emitir. El abono hereda el tipo de cliente de la factura que rectifica.
+        orig.cliente_tipo,
       ]
     );
     await client.query('COMMIT');
@@ -353,9 +357,14 @@ export async function list({ projectId, issuerId, estado, search, from, to, tipo
      LEFT JOIN projects p ON p.id = i.project_id
      -- La gestora sale de la VENTA. invoices.lead_id esta vacio en toda la carga
      -- historica (596 de 653), asi que mirarlo a el dejaba la columna en blanco.
+     --
+     -- Y si la factura no cuelga de ninguna venta —una proforma suelta, que es
+     -- justo lo que hace una gestora para pasar un presupuesto— se cae a QUIEN LA
+     -- ESCRIBIO. Antes esas salian con un guion, como si no las hubiera hecho
+     -- nadie, y no habia forma de saber a quien preguntarle.
      LEFT JOIN conversions cv ON cv.id = i.conversion_id
      LEFT JOIN leads l ON l.id = COALESCE(i.lead_id, cv.lead_id)
-     LEFT JOIN users u ON u.id = COALESCE(cv.vendedora_id, l.responsable_id)
+     LEFT JOIN users u ON u.id = COALESCE(cv.vendedora_id, l.responsable_id, i.created_by)
      ${where}
      ORDER BY i.ano DESC, i.numero DESC LIMIT ${limit} OFFSET ${offset}`,
     params
@@ -1030,7 +1039,11 @@ export async function updateBorrador(id, data, { soloBorrador = true } = {}) {
          items=$10, base_imponible=$11, iva_pct=$12, iva_importe=$13, iva_incluido=$14, total=$15,
          fecha_emision=$16, notas=$17, metodo_pago=$18, pie_pago=$19, leyenda_iva=$20, moneda=$21,
          issuer_id=$22, issuer_razon_social=$23, issuer_nif=$24, issuer_direccion=$25, issuer_ciudad=$26, issuer_cp=$27, issuer_pais=$28,
-         project_id=$29, total_divisa=$30, updated_at=NOW()
+         project_id=$29, total_divisa=$30,
+         -- Faltaba, y era invisible: cambiar de persona fisica a empresa se
+         -- guardaba en la pantalla pero no en la factura, asi que el PDF seguia
+         -- saliendo con nombre y apellidos.
+         cliente_tipo=$31, updated_at=NOW()
        WHERE id=$1 RETURNING *`,
       [id,
        g('clienteNombre', inv.cliente_nombre), g('clienteNif', inv.cliente_nif), g('clienteDireccion', inv.cliente_direccion),
@@ -1042,7 +1055,8 @@ export async function updateBorrador(id, data, { soloBorrador = true } = {}) {
        g('piePago', inv.pie_pago), g('leyendaIva', inv.leyenda_iva), g('moneda', inv.moneda),
        iss.id, iss.razon_social, iss.nif, iss.direccion, iss.ciudad, iss.cp, iss.pais,
        g('projectId', inv.project_id),
-       g('totalDivisa', inv.total_divisa)]);
+       g('totalDivisa', inv.total_divisa),
+       g('clienteTipo', inv.cliente_tipo)]);
     // Corrección de una emitida: invalida el PDF cacheado para que se regenere
     // con los datos nuevos la próxima vez que se descargue.
     if (!soloBorrador) {
