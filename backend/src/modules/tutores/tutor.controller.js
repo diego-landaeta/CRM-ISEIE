@@ -3,7 +3,7 @@ import * as userService from '../users/user.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import {
   altaTutorSchema, perfilSchema, colaboracionSchema,
-  editarColaboracionSchema, ajustesSchema,
+  editarColaboracionSchema, ajustesSchema, calcularSchema, liquidarSchema,
 } from './tutor.validation.js';
 
 // Quien manda aqui.
@@ -225,6 +225,102 @@ export async function simulacion(req, res, next) {
       // El tutor no filtra: el ve sus cursos, esten donde esten. Lo suyo es
       // suyo aunque esté repartido entre dos marcas.
       projectId: esTutor ? null : (req.query.projectId ? parseInt(req.query.projectId) : null),
+    })});
+  } catch (err) { next(err); }
+}
+
+// ── Comisiones de verdad ────────────────────────────────────────────────────
+
+// POST /api/tutores/comisiones/calcular
+// Crea las comisiones que falten. Se puede pulsar las veces que haga falta: el
+// indice unico de la base impide que se duplique nada.
+export async function calcular(req, res, next) {
+  try {
+    exigirGestion(req);
+    const d = valida(calcularSchema, req.body || {});
+    const r = await model.reconciliar({
+      desde: d.desde || null,
+      hasta: d.hasta || null,
+      projectId: d.projectId || null,
+    });
+    res.json({ success: true, data: r });
+  } catch (err) { next(err); }
+}
+
+// GET /api/tutores/comisiones?periodo=&tutorId=&estado=&projectId=
+export async function listarComisiones(req, res, next) {
+  try {
+    // Un tutor ve las SUYAS y nada mas: se le fuerza su identificador y se
+    // ignora lo que pida por la URL.
+    const esTutor = req.user.role === 'tutor';
+    if (!esTutor) exigirGestion(req);
+    res.json({ success: true, data: await model.comisiones({
+      periodo: /^\d{4}-\d{2}$/.test(req.query.periodo || '') ? req.query.periodo : null,
+      tutorId: esTutor ? req.user.userId : (req.query.tutorId ? parseInt(req.query.tutorId) : null),
+      estado: ['pendiente', 'pagada', 'revertida'].includes(req.query.estado) ? req.query.estado : null,
+      projectId: esTutor ? null : (req.query.projectId ? parseInt(req.query.projectId) : null),
+    })});
+  } catch (err) { next(err); }
+}
+
+// GET /api/tutores/comisiones/resumen — una fila por tutor y mes.
+export async function resumenComisiones(req, res, next) {
+  try {
+    const esTutor = req.user.role === 'tutor';
+    if (!esTutor) exigirGestion(req);
+    res.json({ success: true, data: await model.resumenComisiones({
+      periodo: /^\d{4}-\d{2}$/.test(req.query.periodo || '') ? req.query.periodo : null,
+      tutorId: esTutor ? req.user.userId : (req.query.tutorId ? parseInt(req.query.tutorId) : null),
+      projectId: esTutor ? null : (req.query.projectId ? parseInt(req.query.projectId) : null),
+    })});
+  } catch (err) { next(err); }
+}
+
+// POST /api/tutores/comisiones/liquidar
+//
+// Liquidar mueve dinero, asi que NO basta con gestionar colaboraciones: lo hace
+// un administrador. Es la misma linea que separa organizar de pagar.
+export async function liquidar(req, res, next) {
+  try {
+    if (!['admin', 'superadmin'].includes(req.user.role)) {
+      throw new AppError('Solo un administrador marca comisiones como pagadas', 403, 'FORBIDDEN');
+    }
+    const d = valida(liquidarSchema, req.body || {});
+    if (!d.ids?.length && !(d.periodo && d.tutorId)) {
+      throw new AppError('Dime qué liquidar: unas líneas concretas, o un tutor y un mes.', 400, 'NADA_QUE_LIQUIDAR');
+    }
+    const r = await model.liquidar({
+      ids: d.ids || null, periodo: d.periodo || null, tutorId: d.tutorId || null, userId: req.user.userId,
+    });
+    res.json({ success: true, data: r });
+  } catch (err) { next(err); }
+}
+
+// POST /api/tutores/comisiones/:id/revertir
+export async function revertirComision(req, res, next) {
+  try {
+    if (!['admin', 'superadmin'].includes(req.user.role)) {
+      throw new AppError('Solo un administrador revierte una comisión', 403, 'FORBIDDEN');
+    }
+    const c = await model.revertirComision(parseInt(req.params.id), {
+      userId: req.user.userId, motivo: String(req.body?.motivo || '').slice(0, 200),
+    });
+    if (!c) throw new AppError('Esa comisión no existe', 404, 'NOT_FOUND');
+    res.json({ success: true, data: c });
+  } catch (err) { next(err); }
+}
+
+// GET /api/tutores/pagos-sin-formacion?desde=&hasta=
+// El dinero que no se puede atribuir a ningun tutor porque su venta no dice de
+// que formacion es. Se enseña en vez de esconderse.
+export async function pagosSinFormacion(req, res, next) {
+  try {
+    exigirGestion(req);
+    const hoy = new Date().toISOString().slice(0, 10);
+    res.json({ success: true, data: await model.pagosSinFormacion({
+      desde: /^\d{4}-\d{2}-\d{2}$/.test(req.query.desde || '') ? req.query.desde : hoy.slice(0, 8) + '01',
+      hasta: /^\d{4}-\d{2}-\d{2}$/.test(req.query.hasta || '') ? req.query.hasta : hoy,
+      projectId: req.query.projectId ? parseInt(req.query.projectId) : null,
     })});
   } catch (err) { next(err); }
 }

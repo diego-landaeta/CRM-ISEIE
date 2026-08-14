@@ -54,6 +54,7 @@ import { startMetaAdsSyncScheduler } from './jobs/metaAdsSyncScheduler.js';
 import { startReminderScheduler } from './jobs/reminderScheduler.js';
 import { startWooCommerceSyncScheduler } from './jobs/wooCommerceSyncScheduler.js';
 import { startStripePaymentsSyncScheduler } from './jobs/stripePaymentsSyncScheduler.js';
+import { startTutorCommissionsScheduler } from './jobs/tutorCommissionsScheduler.js';
 
 const app = express();
 const PORT = process.env.PORT || 3005;
@@ -296,6 +297,7 @@ if (process.env.NODE_ENV !== 'test') {
     if (process.env.STRIPE_SYNC_DISABLED !== '1') {
       try {
         startStripePaymentsSyncScheduler();
+        startTutorCommissionsScheduler();
       } catch (err) {
         logger.error({ err }, 'Stripe sync scheduler fallo al arrancar');
       }

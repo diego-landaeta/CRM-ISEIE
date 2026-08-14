@@ -59,6 +59,50 @@ export interface AjustesTutores {
   updated_at: string;
 }
 
+
+/** Una comision ya creada: esto YA es dinero, no una simulacion. */
+export interface ComisionReal {
+  id: number;
+  periodo: string;
+  estado: 'pendiente' | 'pagada' | 'revertida';
+  base_calculo: string;
+  pct: string;
+  importe: string;
+  fecha_liquidacion: string | null;
+  tutor_id: number;
+  tutor: string;
+  product_id: number | null;
+  formacion: string | null;
+  project_id: number | null;
+  proyecto: string | null;
+  fecha_cobro: string | null;
+  cobro: string | null;
+  alumno: string;
+  liquidada_por_nombre: string | null;
+}
+
+export interface ResumenComision {
+  periodo: string;
+  tutor_id: number;
+  tutor: string;
+  lineas: number;
+  base: string;
+  pendiente: string;
+  pagada: string;
+  revertida: string;
+  ultima_liquidacion: string | null;
+}
+
+export interface PagoSinFormacion {
+  id: number;
+  fecha: string;
+  importe: string;
+  venta: number;
+  alumno: string;
+  dice: string;
+  proyecto: string | null;
+}
+
 export const tutoresApi = {
   listar: (projectId?: number | null) =>
     client.get(`/tutores${projectId ? `?projectId=${projectId}` : ''}`) as Promise<ApiResponse<Tutor[]>>,
@@ -94,4 +138,31 @@ export const tutoresApi = {
   simulacion: (desde: string, hasta: string, tutorId?: number | null, projectId?: number | null) =>
     client.get(`/tutores/simulacion?desde=${desde}&hasta=${hasta}`
       + `${tutorId ? `&tutorId=${tutorId}` : ''}${projectId ? `&projectId=${projectId}` : ''}`) as Promise<ApiResponse<LineaSimulacion[]>>,
+
+  /** Crea las comisiones que falten. Pulsarlo dos veces no duplica nada. */
+  calcularComisiones: (datos: { desde?: string | null; hasta?: string | null; projectId?: number | null }) =>
+    client.post('/tutores/comisiones/calcular', datos) as Promise<ApiResponse<{
+      creadas: number; importe: number; tutores: number; periodos: string[];
+    }>>,
+
+  comisiones: (q: { periodo?: string | null; tutorId?: number | null; estado?: string | null; projectId?: number | null }) =>
+    client.get('/tutores/comisiones?' + new URLSearchParams(
+      Object.entries(q).filter(([, v]) => v != null && v !== '').map(([k, v]) => [k, String(v)])
+    ).toString()) as Promise<ApiResponse<ComisionReal[]>>,
+
+  resumenComisiones: (q: { periodo?: string | null; tutorId?: number | null; projectId?: number | null }) =>
+    client.get('/tutores/comisiones/resumen?' + new URLSearchParams(
+      Object.entries(q).filter(([, v]) => v != null && v !== '').map(([k, v]) => [k, String(v)])
+    ).toString()) as Promise<ApiResponse<ResumenComision[]>>,
+
+  /** Marcar como pagadas. Solo un administrador. */
+  liquidar: (datos: { ids?: number[]; periodo?: string; tutorId?: number }) =>
+    client.post('/tutores/comisiones/liquidar', datos) as Promise<ApiResponse<{ liquidadas: number; importe: number }>>,
+
+  revertirComision: (id: number, motivo: string) =>
+    client.post(`/tutores/comisiones/${id}/revertir`, { motivo }) as Promise<ApiResponse<ComisionReal>>,
+
+  pagosSinFormacion: (desde: string, hasta: string, projectId?: number | null) =>
+    client.get(`/tutores/pagos-sin-formacion?desde=${desde}&hasta=${hasta}`
+      + (projectId ? `&projectId=${projectId}` : '')) as Promise<ApiResponse<PagoSinFormacion[]>>,
 };

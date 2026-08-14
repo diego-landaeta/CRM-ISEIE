@@ -22,6 +22,15 @@ router.patch('/ajustes', ctrl.guardarAjustes);
 
 router.get('/simulacion', ctrl.simulacion);
 
+// El dinero. Calcular y consultar lo puede hacer quien gestiona; liquidar y
+// revertir, solo un administrador — el recorte esta en el controlador.
+router.post('/comisiones/calcular', ctrl.calcular);
+router.get('/comisiones/resumen', ctrl.resumenComisiones);
+router.get('/comisiones', ctrl.listarComisiones);
+router.post('/comisiones/liquidar', ctrl.liquidar);
+router.post('/comisiones/:id/revertir', ctrl.revertirComision);
+router.get('/pagos-sin-formacion', ctrl.pagosSinFormacion);
+
 router.get('/', ctrl.listar);
 router.post('/', ctrl.alta);
 router.get('/:id', ctrl.ficha);

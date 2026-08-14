@@ -284,3 +284,173 @@ export async function formacionEsDeSuProyecto(tutorId, productId) {
   );
   return { ok: rows[0]?.ok === true, proyecto: rows[0]?.proyecto || null };
 }
+
+// ── El dinero de verdad ─────────────────────────────────────────────────────
+//
+// Hasta aqui todo era simulacion. De aqui abajo se ESCRIBEN comisiones, y eso
+// cambia las reglas del juego.
+//
+// Se hace RECONCILIANDO y no al vuelo: se recorren los cobros que todavia no
+// tienen comision y se crean las que falten. Pasar dos veces no cuesta nada
+// porque el indice unico (payment_id, tutor_id) lo impide en la BASE DE DATOS,
+// no en el codigo. Es lo que hace que un reintento de Stripe, una
+// resincronizacion o dos ejecuciones a la vez no puedan duplicar dinero.
+//
+// La alternativa —crear la comision en el momento del cobro— ya se probo en el
+// modulo de las gestoras: se pierde los cobros de Stripe, los de cuotas y los
+// borrados, y cuando falla, falla en silencio.
+
+// Crea las comisiones que falten. Devuelve cuantas y cuanto suman.
+//
+// Una comision ya creada NO se toca aunque despues cambie el porcentaje de la
+// colaboracion: lo devengado, devengado esta. Para rehacerla hay que revertirla
+// a mano, y eso deja rastro.
+export async function reconciliar({ desde = null, hasta = null, projectId = null } = {}) {
+  const { rows } = await query(
+    `INSERT INTO tutor_commissions
+       (payment_id, tutor_id, collaboration_id, product_id, base_calculo, pct, importe, periodo)
+     SELECT cp.id, c.tutor_id, c.id, c.product_id,
+            cp.importe,
+            c.pct,
+            ROUND(cp.importe * c.pct / 100, 2),
+            to_char(cp.fecha, 'YYYY-MM')
+       FROM conversion_payments cp
+       JOIN conversions cv ON cv.id = cp.conversion_id
+       JOIN tutor_collaborations c ON c.product_id = cv.producto_contratado_id
+       JOIN products p ON p.id = c.product_id
+       CROSS JOIN tutor_settings s
+      WHERE c.activa
+        -- Nunca antes del arranque del modulo ni de la fecha del tutor: quien
+        -- empezo en septiembre no cobra de lo cobrado en agosto.
+        AND cp.fecha >= GREATEST(s.aplica_desde, c.vigente_desde)
+        AND (c.vigente_hasta IS NULL OR cp.fecha <= c.vigente_hasta)
+        AND ($1::date IS NULL OR cp.fecha >= $1::date)
+        AND ($2::date IS NULL OR cp.fecha <= $2::date)
+        AND ($3::int  IS NULL OR p.project_id = $3)
+     ON CONFLICT (payment_id, tutor_id) DO NOTHING
+     RETURNING id, importe, tutor_id, periodo`,
+    [desde, hasta, projectId]
+  );
+
+  return {
+    creadas: rows.length,
+    importe: rows.reduce((s, r) => s + Number(r.importe), 0),
+    tutores: new Set(rows.map((r) => r.tutor_id)).size,
+    periodos: [...new Set(rows.map((r) => r.periodo))].sort(),
+  };
+}
+
+// Las comisiones ya creadas, con lo que hace falta para entender cada una.
+export async function comisiones({ periodo = null, tutorId = null, estado = null, projectId = null, limit = 1000 }) {
+  const { rows } = await query(
+    `SELECT tc.id, tc.periodo, tc.estado, tc.base_calculo, tc.pct, tc.importe,
+            tc.fecha_liquidacion, tc.created_at,
+            tc.tutor_id, u.nombre AS tutor,
+            tc.product_id, p.nombre AS formacion, p.project_id, pr.nombre AS proyecto,
+            cp.fecha AS fecha_cobro, cp.importe AS cobro,
+            COALESCE(l.nombre, '—') AS alumno,
+            liq.nombre AS liquidada_por_nombre
+       FROM tutor_commissions tc
+       JOIN users u ON u.id = tc.tutor_id
+       LEFT JOIN products p ON p.id = tc.product_id
+       LEFT JOIN projects pr ON pr.id = p.project_id
+       LEFT JOIN conversion_payments cp ON cp.id = tc.payment_id
+       LEFT JOIN conversions cv ON cv.id = cp.conversion_id
+       LEFT JOIN leads l ON l.id = cv.lead_id
+       LEFT JOIN users liq ON liq.id = tc.liquidada_por
+      WHERE ($1::char(7) IS NULL OR tc.periodo = $1)
+        AND ($2::int IS NULL OR tc.tutor_id = $2)
+        AND ($3::text IS NULL OR tc.estado = $3)
+        AND ($4::int IS NULL OR p.project_id = $4)
+      ORDER BY tc.periodo DESC, u.nombre, cp.fecha
+      LIMIT ${Number(limit) || 1000}`,
+    [periodo, tutorId, estado, projectId]
+  );
+  return rows;
+}
+
+// Una fila por tutor y mes: lo que hay que pagarle y lo que ya se le pago.
+export async function resumenComisiones({ periodo = null, tutorId = null, projectId = null }) {
+  const { rows } = await query(
+    `SELECT tc.periodo, tc.tutor_id, u.nombre AS tutor,
+            COUNT(*)::int AS lineas,
+            COALESCE(SUM(tc.base_calculo), 0) AS base,
+            COALESCE(SUM(tc.importe) FILTER (WHERE tc.estado = 'pendiente'), 0) AS pendiente,
+            COALESCE(SUM(tc.importe) FILTER (WHERE tc.estado = 'pagada'), 0) AS pagada,
+            COALESCE(SUM(tc.importe) FILTER (WHERE tc.estado = 'revertida'), 0) AS revertida,
+            MAX(tc.fecha_liquidacion) AS ultima_liquidacion
+       FROM tutor_commissions tc
+       JOIN users u ON u.id = tc.tutor_id
+       LEFT JOIN products p ON p.id = tc.product_id
+      WHERE ($1::char(7) IS NULL OR tc.periodo = $1)
+        AND ($2::int IS NULL OR tc.tutor_id = $2)
+        AND ($3::int IS NULL OR p.project_id = $3)
+      GROUP BY tc.periodo, tc.tutor_id, u.nombre
+      ORDER BY tc.periodo DESC, u.nombre`,
+    [periodo, tutorId, projectId]
+  );
+  return rows;
+}
+
+// Marcar como pagadas. Por lista de identificadores o por tutor y mes entero,
+// que es como se paga de verdad: una transferencia por persona.
+//
+// Solo pasan de 'pendiente' a 'pagada'. Una revertida no se paga por descuido, y
+// una ya pagada no se paga dos veces aunque se pulse el boton dos veces.
+export async function liquidar({ ids = null, periodo = null, tutorId = null, userId }) {
+  const { rows } = await query(
+    `UPDATE tutor_commissions
+        SET estado = 'pagada',
+            fecha_liquidacion = CURRENT_DATE,
+            liquidada_por = $1,
+            updated_at = NOW()
+      WHERE estado = 'pendiente'
+        AND ($2::int[] IS NULL OR id = ANY($2))
+        AND ($3::char(7) IS NULL OR periodo = $3)
+        AND ($4::int IS NULL OR tutor_id = $4)
+      RETURNING id, importe, tutor_id`,
+    [userId, ids && ids.length ? ids : null, periodo, tutorId]
+  );
+  return { liquidadas: rows.length, importe: rows.reduce((s, r) => s + Number(r.importe), 0) };
+}
+
+// Deshacer una liquidacion o anular una comision. Queda escrito quien y por que:
+// esto mueve dinero y no puede pasar sin dejar rastro.
+export async function revertirComision(id, { userId, motivo }) {
+  const { rows: [c] } = await query(
+    `UPDATE tutor_commissions
+        SET estado = 'revertida',
+            notas = TRIM(COALESCE(notas, '') || ' · revertida el ' || CURRENT_DATE || ': ' || $2),
+            liquidada_por = $3,
+            updated_at = NOW()
+      WHERE id = $1
+      RETURNING *`,
+    [id, motivo || 'sin motivo', userId]
+  );
+  return c || null;
+}
+
+// Los cobros que NO generan comision porque su venta no dice de que formacion es.
+//
+// Salen a la vista a proposito: si desaparecieran, el total del mes pareceria
+// cuadrado cuando en realidad hay dinero sin atribuir y un tutor sin cobrar.
+export async function pagosSinFormacion({ desde, hasta, projectId = null }) {
+  const { rows } = await query(
+    `SELECT cp.id, cp.fecha, cp.importe,
+            cv.id AS venta, COALESCE(l.nombre, '—') AS alumno,
+            COALESCE(NULLIF(cv.producto_contratado, ''), '— en blanco —') AS dice,
+            pr.nombre AS proyecto
+       FROM conversion_payments cp
+       JOIN conversions cv ON cv.id = cp.conversion_id
+       LEFT JOIN leads l ON l.id = cv.lead_id
+       LEFT JOIN projects pr ON pr.id = cv.project_id
+       CROSS JOIN tutor_settings s
+      WHERE cv.producto_contratado_id IS NULL
+        AND cp.fecha >= GREATEST($1::date, s.aplica_desde)
+        AND cp.fecha <= $2::date
+        AND ($3::int IS NULL OR cv.project_id = $3)
+      ORDER BY cp.fecha DESC, cp.importe DESC`,
+    [desde, hasta, projectId]
+  );
+  return rows;
+}

@@ -56,3 +56,17 @@ export const ajustesSchema = z.object({
   aplicaDesde: fecha.optional(),
   pctPorDefecto: z.number().min(0).max(100).optional(),
 });
+
+// Recalcular es inofensivo —no puede duplicar— pero se acota igual: pedirlo sin
+// fechas repasa TODO el historico y en una base grande eso es un rato de disco.
+export const calcularSchema = z.object({
+  desde: fecha.optional().nullable(),
+  hasta: fecha.optional().nullable(),
+  projectId: z.number().int().optional().nullable(),
+});
+
+export const liquidarSchema = z.object({
+  ids: z.array(z.number().int()).optional().nullable(),
+  periodo: z.string().regex(/^\d{4}-\d{2}$/, 'Periodo en formato AAAA-MM').optional().nullable(),
+  tutorId: z.number().int().optional().nullable(),
+});
