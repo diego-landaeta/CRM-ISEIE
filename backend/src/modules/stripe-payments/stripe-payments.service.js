@@ -4,6 +4,7 @@ import { decrypt } from '../../shared/utils/crypto.js';
 import * as integrationsModel from '../integrations/integrations.model.js';
 import { query } from '../../shared/config/db.js';
 import * as model from './stripe-payments.model.js';
+import * as tutores from '../tutores/tutor.model.js';
 
 async function getStripeKey(projectId) {
   try {
@@ -321,6 +322,58 @@ export function verifyStripeSignature(rawBody, sigHeader, secret) {
   return false;
 }
 
+
+// Un reembolso de Stripe, llevado hasta el final: devolucion en la venta y
+// comision del tutor revertida.
+//
+// Stripe manda un evento por CADA reembolso, con su propio identificador
+// (re_...). Ese identificador es lo que impide registrarlo dos veces si el
+// evento se reintenta o si alguien resincroniza: la devolucion se guarda con el,
+// y hay un indice unico detras.
+//
+// Si el cobro de Stripe no esta atado a ningun cobro del CRM no se inventa nada:
+// se avisa en el registro y alguien lo mira. Adivinar aqui es adivinar sobre
+// dinero devuelto.
+async function propagarReembolso(charge, projectId) {
+  const { rows } = await query(
+    `SELECT sp.conversion_id, sp.conversion_payment_id
+       FROM stripe_payments sp
+      WHERE sp.project_id = $1 AND sp.stripe_id = $2`,
+    [projectId, charge.id]);
+  const enlace = rows[0];
+  if (!enlace?.conversion_id) {
+    logger.warn({ charge: charge.id }, 'reembolso de un cobro que no esta atado a ninguna venta');
+    return;
+  }
+
+  // Stripe manda todos los reembolsos del cargo; se procesan uno a uno porque
+  // un cargo puede devolverse en partes.
+  const lista = charge.refunds?.data?.length
+    ? charge.refunds.data
+    : [{ id: `${charge.id}_ref`, amount: charge.amount_refunded, reason: null, created: charge.created }];
+
+  for (const r of lista) {
+    const importe = Number(r.amount || 0) / 100;
+    if (!(importe > 0)) continue;
+    const resultado = await tutores.registrarDevolucion({
+      conversionId: enlace.conversion_id,
+      paymentId: enlace.conversion_payment_id || null,
+      importe,
+      fecha: r.created ? new Date(r.created * 1000).toISOString().slice(0, 10) : null,
+      motivo: r.reason || 'Reembolso de Stripe',
+      stripeRefundId: r.id,
+      origen: 'stripe',
+      userId: null,
+    });
+    if (resultado.repetida) continue;
+    logger.info({
+      charge: charge.id, refund: r.id, importe,
+      comisionesRevertidas: resultado.comisionesRevertidas,
+      sinCobroConcreto: resultado.sinCobroConcreto,
+    }, 'reembolso registrado');
+  }
+}
+
 export async function handleWebhookEvent(projectId, event) {
   const apiKey = await getStripeKey(projectId);
   const obj = event.data?.object;
@@ -335,6 +388,13 @@ export async function handleWebhookEvent(projectId, event) {
       const dbRow = await model.upsertPayment(payment);
       try { await autoLinkIfPossible(projectId, payment, dbRow); } catch (e) { logger.warn({ err: e.message }, 'autoLink wh fail'); }
       if (obj.disputed && apiKey) await fetchAndUpdateDispute(apiKey, projectId, obj);
+      // Un reembolso no acaba en stripe_payments: si el alumno recupera su
+      // dinero, hay que registrar la devolucion en su venta y deshacer la
+      // comision del tutor. Antes se quedaba aqui y el tutor cobraba igual.
+      if (event.type === 'charge.refunded') {
+        try { await propagarReembolso(obj, projectId); }
+        catch (e) { logger.error({ err: e.message, charge: obj.id }, 'reembolso: no se pudo propagar'); }
+      }
       return { processed: event.type, stripeId: obj.id };
     }
     case 'charge.dispute.created':

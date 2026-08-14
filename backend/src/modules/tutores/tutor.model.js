@@ -1,5 +1,5 @@
 import bcrypt from 'bcrypt';
-import { query } from '../../shared/config/db.js';
+import { query, getClient } from '../../shared/config/db.js';
 
 // Tutores y colaboraciones.
 //
@@ -452,5 +452,91 @@ export async function pagosSinFormacion({ desde, hasta, projectId = null }) {
       ORDER BY cp.fecha DESC, cp.importe DESC`,
     [desde, hasta, projectId]
   );
+  return rows;
+}
+
+// ── Reembolsos ──────────────────────────────────────────────────────────────
+//
+// Si a un alumno se le devuelve el dinero, el tutor no puede cobrar comision de
+// ese cobro. Hasta ahora era imposible saberlo: la devolucion apuntaba a la
+// VENTA y no al COBRO, asi que con una venta pagada en tres plazos no habia
+// forma de saber cual se devolvio.
+
+// Registra una devolucion y revierte de paso las comisiones de ESE cobro.
+//
+// Las dos cosas van en la MISMA transaccion a proposito: si se registrara la
+// devolucion y fallara la reversion, el alumno tendria su dinero de vuelta y el
+// tutor seguiria cobrando por el. Ese descuadre no se ve hasta que llega el
+// banco, y para entonces ya se pago.
+export async function registrarDevolucion({
+  conversionId, paymentId = null, importe, fecha = null, motivo = null,
+  stripeRefundId = null, origen = 'manual', userId = null,
+}) {
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+
+    // Si viene de Stripe y ya estaba registrada, no se hace nada: ni una
+    // devolucion duplicada ni una comision revertida dos veces. Lo garantiza
+    // ademas el indice unico, pero se comprueba antes para poder decirlo.
+    if (stripeRefundId) {
+      const { rows: ya } = await client.query(
+        'SELECT id FROM conversion_refunds WHERE stripe_refund_id = $1', [stripeRefundId]);
+      if (ya.length) {
+        await client.query('COMMIT');
+        return { devolucion: ya[0], comisionesRevertidas: 0, repetida: true };
+      }
+    }
+
+    const { rows: [dev] } = await client.query(
+      `INSERT INTO conversion_refunds
+         (conversion_id, payment_id, importe, fecha, motivo, stripe_refund_id, origen, created_by)
+       VALUES ($1, $2, $3, COALESCE($4::date, CURRENT_DATE), $5, $6, $7, $8)
+       RETURNING *`,
+      [conversionId, paymentId, importe, fecha, motivo, stripeRefundId, origen, userId]);
+
+    // Solo se revierten las comisiones DE ESE COBRO. Si no se sabe cual es, no
+    // se toca ninguna: es preferible que alguien lo revise a mano a revertir la
+    // que no era y dejar a un tutor sin cobrar algo que si le corresponde.
+    let revertidas = { rowCount: 0 };
+    if (paymentId) {
+      revertidas = await client.query(
+        `UPDATE tutor_commissions
+            SET estado = 'revertida',
+                refund_id = $2,
+                notas = TRIM(COALESCE(notas, '') || ' · revertida por la devolución del ' || CURRENT_DATE),
+                updated_at = NOW()
+          WHERE payment_id = $1
+            AND estado <> 'revertida'
+          RETURNING id`,
+        [paymentId, dev.id]);
+    }
+
+    await client.query('COMMIT');
+    return {
+      devolucion: dev,
+      comisionesRevertidas: revertidas.rowCount || 0,
+      sinCobroConcreto: !paymentId,
+    };
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+// Devoluciones de una venta, con el cobro al que corresponde cada una.
+export async function devoluciones(conversionId) {
+  const { rows } = await query(
+    `SELECT r.*, cp.fecha AS fecha_cobro, cp.importe AS importe_cobro,
+            u.nombre AS registrada_por,
+            (SELECT COUNT(*) FROM tutor_commissions tc WHERE tc.refund_id = r.id)::int AS comisiones_revertidas
+       FROM conversion_refunds r
+       LEFT JOIN conversion_payments cp ON cp.id = r.payment_id
+       LEFT JOIN users u ON u.id = r.created_by
+      WHERE r.conversion_id = $1
+      ORDER BY r.fecha DESC, r.id DESC`,
+    [conversionId]);
   return rows;
 }
