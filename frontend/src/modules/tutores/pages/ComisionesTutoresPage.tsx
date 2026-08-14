@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Coins, ArrowsClockwise, Warning, Info } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import KpiCard from '@/shared/components/ui/KpiCard';
@@ -31,6 +32,11 @@ function mesActual() {
 
 export default function ComisionesTutoresPage() {
   const { user } = useAuth() as { user: { role?: string; gestor_colaboraciones?: boolean } | null };
+  // Un profesor puede dar clase en varias marcas. Con una elegida arriba se ve
+  // solo lo suyo de esa marca; en «todos los proyectos», todo junto y con la
+  // marca al lado de cada curso.
+  const { activeProject } = useProjectContext() as { activeProject: { id: number; nombre?: string } | null };
+  const projectId = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
   const esAdmin = ['admin', 'superadmin'].includes(user?.role || '');
   const puede = esAdmin || user?.gestor_colaboraciones === true;
 
@@ -45,11 +51,11 @@ export default function ComisionesTutoresPage() {
   const cargar = useCallback(async () => {
     setCargando(true);
     try {
-      const [s, a] = await Promise.all([tutoresApi.simulacion(desde, hasta), tutoresApi.ajustes()]);
+      const [s, a] = await Promise.all([tutoresApi.simulacion(desde, hasta, null, projectId), tutoresApi.ajustes()]);
       setLineas(s.success ? (s.data || []) : []);
       setAjustes(a.success ? a.data : null);
     } finally { setCargando(false); }
-  }, [desde, hasta]);
+  }, [desde, hasta, projectId]);
 
   useEffect(() => { if (puede) cargar(); }, [cargar, puede]);
 
@@ -97,7 +103,9 @@ export default function ComisionesTutoresPage() {
     <div className="space-y-3">
       <PageHeader
         title="Comisiones de tutores"
-        subtitle="Lo que se pagaría en el periodo elegido, con las colaboraciones de hoy"
+        subtitle={projectId
+          ? `Lo que se pagaría en ${activeProject?.nombre || 'este proyecto'}, con las colaboraciones de hoy`
+          : 'Lo que se pagaría en el periodo elegido — todos los proyectos'}
         actions={(
           <>
             <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)}
@@ -177,7 +185,14 @@ export default function ComisionesTutoresPage() {
                 <div className="mt-2 space-y-1">
                   {t.lineas.map((l) => (
                     <div key={`${l.tutor_id}-${l.product_id}`} className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-                      <span className="truncate">{l.formacion}</span>
+                      <span className="truncate">
+                        {l.formacion}
+                        {!projectId && l.proyecto && (
+                          <span className="ml-1.5 text-[10px] uppercase tracking-wide bg-muted px-1.5 py-0.5 rounded">
+                            {l.proyecto}
+                          </span>
+                        )}
+                      </span>
                       <span className="shrink-0 tabular-nums">
                         {l.pagos} × · {euros(l.base)} · {Number(l.pct)} % = <strong className="text-foreground">{euros(l.comision)}</strong>
                       </span>

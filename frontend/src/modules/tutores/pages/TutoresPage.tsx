@@ -42,7 +42,10 @@ function generarContrasena() {
 
 export default function TutoresPage() {
   const { user } = useAuth() as { user: { role?: string; gestor_colaboraciones?: boolean } | null };
-  const { activeProject } = useProjectContext() as { activeProject: { id: number } | null };
+  const { activeProject, projects } = useProjectContext() as {
+    activeProject: { id: number } | null;
+    projects: Array<{ id: number; nombre: string }>;
+  };
   const puede = ['admin', 'superadmin'].includes(user?.role || '') || user?.gestor_colaboraciones === true;
   const projectId = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
 
@@ -66,6 +69,10 @@ export default function TutoresPage() {
   const [ajustes, setAjustes] = useState<AjustesTutores | null>(null);
   const [contrasena, setContrasena] = useState('');
   const [copiada, setCopiada] = useState(false);
+  // En que marcas da clase. Un profesor puede estar en varias —Filtracion en
+  // ICTESS y Logopedia en Fono Aprende— y solo puede cobrar de cursos de las
+  // marcas en las que este dado de alta.
+  const [marcas, setMarcas] = useState<number[]>([]);
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -120,6 +127,7 @@ export default function TutoresPage() {
     setNuevoPct(String(ajustes?.pct_por_defecto ?? 10));
     setContrasena('');
     setCopiada(false);
+    setMarcas(projectId ? [projectId] : []);
     setPopupAlta(true);
   }
 
@@ -130,6 +138,31 @@ export default function TutoresPage() {
 
   function elegir(t: Tutor) { setElegido(t); cargarColabs(t); }
 
+  // Una fila de la lista. Se saca aparte porque se pinta en dos grupos: los de
+  // este proyecto y los de las marcas hermanas.
+  const fila = (t: Tutor) => (
+    <button key={t.id} type="button" onClick={() => elegir(t)}
+      className={`w-full text-left px-3 py-2.5 transition-colors border-l-2 ${
+        t.id === elegido?.id ? 'bg-primary/10 border-l-primary' : 'hover:bg-muted/50 border-l-transparent'
+      }`}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-medium text-sm truncate">{t.nombre}</span>
+        <span className="text-[11px] text-muted-foreground shrink-0 tabular-nums">
+          {t.formaciones} {t.formaciones === 1 ? 'curso' : 'cursos'}
+        </span>
+      </div>
+      <div className="text-xs text-muted-foreground truncate">{t.email}</div>
+      {t.marcas && (
+        <div className="text-[11px] text-muted-foreground/80 truncate mt-0.5">{t.marcas}</div>
+      )}
+      {t.pendiente_de_entrar && (
+        <div className="text-[11px] text-amber-700 dark:text-amber-400 font-semibold mt-0.5">
+          aún no ha entrado
+        </div>
+      )}
+    </button>
+  );
+
   async function altaTutor(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!projectId) return;
@@ -139,7 +172,7 @@ export default function TutoresPage() {
       const r = await tutoresApi.alta({
         nombre: String(f.get('nombre') || ''),
         email: String(f.get('email') || ''),
-        projectIds: [projectId],
+        projectIds: marcas.length ? marcas : [projectId],
         dniNif: String(f.get('dniNif') || '') || undefined,
         iban: String(f.get('iban') || '') || undefined,
         telefono: String(f.get('telefono') || '') || undefined,
@@ -250,25 +283,27 @@ export default function TutoresPage() {
               <EmptyState icon={GraduationCap} title="Sin tutores todavía"
                 description="Da de alta el primero para asignarle formaciones." />
             )}
-            {tutores.map((t) => (
-              <button key={t.id} type="button" onClick={() => elegir(t)}
-                className={`w-full text-left px-3 py-2.5 transition-colors border-l-2 ${
-                  t.id === elegido?.id ? 'bg-primary/10 border-l-primary' : 'hover:bg-muted/50 border-l-transparent'
-                }`}>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-medium text-sm truncate">{t.nombre}</span>
-                  <span className="text-[11px] text-muted-foreground shrink-0 tabular-nums">
-                    {t.formaciones} {t.formaciones === 1 ? 'formación' : 'formaciones'}
-                  </span>
-                </div>
-                <div className="text-xs text-muted-foreground truncate">{t.email}</div>
-                {t.pendiente_de_entrar && (
-                  <div className="text-[11px] text-amber-700 dark:text-amber-400 font-semibold mt-0.5">
-                    aún no ha entrado
-                  </div>
-                )}
-              </button>
-            ))}
+            {(() => {
+              const deAqui = tutores.filter((t) => t.es_de_este_proyecto);
+              const hermanos = tutores.filter((t) => !t.es_de_este_proyecto);
+              return (
+                <>
+                  {hermanos.length > 0 && deAqui.length > 0 && (
+                    <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground bg-muted/40">
+                      De este proyecto
+                    </div>
+                  )}
+                  {deAqui.map(fila)}
+                  {hermanos.length > 0 && (
+                    <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground bg-muted/40">
+                      Otras marcas de la misma sociedad
+                    </div>
+                  )}
+                  {hermanos.map(fila)}
+                </>
+              );
+            })()}
+
           </div>
         </div>
 
@@ -300,6 +335,7 @@ export default function TutoresPage() {
                     <thead>
                       <tr className="text-left text-[11px] uppercase tracking-wide text-muted-foreground border-b border-border">
                         <th className="py-2 pr-3 font-semibold">Formación</th>
+                        <th className="py-2 px-3 font-semibold">Proyecto</th>
                         <th className="py-2 px-3 font-semibold text-right">%</th>
                         <th className="py-2 px-3 font-semibold">Desde</th>
                         <th className="py-2 px-3 font-semibold">Hasta</th>
@@ -311,6 +347,7 @@ export default function TutoresPage() {
                       {colabs.map((c) => (
                         <tr key={c.id}>
                           <td className="py-2 pr-3">{c.formacion}</td>
+                          <td className="py-2 px-3 text-muted-foreground">{c.proyecto}</td>
                           <td className="py-2 px-3 text-right tabular-nums font-semibold">{Number(c.pct)} %</td>
                           <td className="py-2 px-3 tabular-nums">{soloFecha(c.vigente_desde)}</td>
                           <td className="py-2 px-3 tabular-nums text-muted-foreground">
@@ -425,6 +462,33 @@ export default function TutoresPage() {
                     : 'Si la dejas vacía se le manda un correo para que la ponga él, y eso necesita que Brevo esté configurado. Con contraseña entra al momento.'}
                 </p>
               </section>
+
+              {projects.length > 1 && (
+                <section className="space-y-2 border-t border-border pt-4">
+                  <h3 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                    En qué marcas da clase
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    Solo podrá cobrar de cursos de las marcas que marques aquí.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {projects.map((p) => {
+                      const puesta = marcas.includes(p.id);
+                      return (
+                        <button key={p.id} type="button"
+                          onClick={() => setMarcas((prev) => puesta ? prev.filter((x) => x !== p.id) : [...prev, p.id])}
+                          className={`px-2.5 h-8 rounded-md border text-xs transition-colors ${
+                            puesta
+                              ? 'border-primary bg-primary/10 text-primary font-semibold'
+                              : 'border-border text-muted-foreground hover:bg-muted/50'
+                          }`}>
+                          {p.nombre}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+              )}
 
               <section className="space-y-2 border-t border-border pt-4">
                 <div className="flex items-baseline justify-between gap-2">

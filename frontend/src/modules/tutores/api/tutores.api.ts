@@ -13,6 +13,12 @@ export interface Tutor {
   telefono: string | null;
   notas: string | null;
   formaciones: number;
+  /** En cuantas marcas da clase. Solo el MultiCRM tiene mas de una. */
+  proyectos: number;
+  /** Los nombres de sus marcas, separados por punto medio. */
+  marcas: string | null;
+  /** Si es de la marca elegida arriba o de una hermana de la misma sociedad. */
+  es_de_este_proyecto: boolean;
 }
 
 export interface Colaboracion {
@@ -27,6 +33,8 @@ export interface Colaboracion {
   tutor: string;
   formacion: string;
   precio: string;
+  project_id: number;
+  proyecto: string;
   /** Marcada activa Y con las fechas de hoy dentro. Son dos cosas distintas. */
   rige_hoy: boolean;
 }
@@ -36,6 +44,9 @@ export interface LineaSimulacion {
   tutor: string;
   product_id: number;
   formacion: string;
+  /** De que marca es el curso: un profesor puede dar clase en varias. */
+  project_id: number;
+  proyecto: string;
   pct: string;
   pagos: number;
   base: string;
@@ -80,6 +91,7 @@ export const tutoresApi = {
     client.patch('/tutores/ajustes', datos) as Promise<ApiResponse<AjustesTutores>>,
 
   /** Lo que se pagaria si el calculo estuviera encendido. No crea nada. */
-  simulacion: (desde: string, hasta: string, tutorId?: number | null) =>
-    client.get(`/tutores/simulacion?desde=${desde}&hasta=${hasta}${tutorId ? `&tutorId=${tutorId}` : ''}`) as Promise<ApiResponse<LineaSimulacion[]>>,
+  simulacion: (desde: string, hasta: string, tutorId?: number | null, projectId?: number | null) =>
+    client.get(`/tutores/simulacion?desde=${desde}&hasta=${hasta}`
+      + `${tutorId ? `&tutorId=${tutorId}` : ''}${projectId ? `&projectId=${projectId}` : ''}`) as Promise<ApiResponse<LineaSimulacion[]>>,
 };

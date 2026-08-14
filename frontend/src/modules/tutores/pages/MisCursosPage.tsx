@@ -120,6 +120,7 @@ export default function MisCursosPage() {
                   <div className="min-w-0 flex-1">
                     <p className="font-semibold truncate">{c.formacion}</p>
                     <p className="text-xs text-muted-foreground tabular-nums">
+                      {c.proyecto ? <span className="not-tabular-nums">{c.proyecto} · </span> : null}
                       {Number(c.pct)} % · desde el {soloFecha(c.vigente_desde)}
                       {c.vigente_hasta ? ` hasta el ${soloFecha(c.vigente_hasta)}` : ''}
                       {!c.rige_hoy && ' · no vigente'}

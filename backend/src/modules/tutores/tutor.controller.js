@@ -115,6 +115,18 @@ export async function crearColaboracion(req, res, next) {
     exigirGestion(req);
     const d = valida(colaboracionSchema, req.body);
 
+    // La formacion tiene que ser de una marca en la que el profesor da clase.
+    // Puede estar en varias —eso es lo normal en el MultiCRM— pero no en una
+    // que no es suya: cobraria de un proyecto donde no ha dado ni una clase.
+    const suyo = await model.formacionEsDeSuProyecto(d.tutorId, d.productId);
+    if (!suyo.ok) {
+      throw new AppError(
+        `Esa formacion es de ${suyo.proyecto || 'otro proyecto'} y el tutor no está dado de alta ahí.`
+        + ' Añádelo a ese proyecto primero.',
+        409, 'OTRO_PROYECTO'
+      );
+    }
+
     // Dos tramos del mismo tutor y formacion no pueden solaparse: no habria
     // forma de saber que porcentaje aplicar a un pago de esas fechas.
     const choques = await model.haySolape(d);
@@ -206,6 +218,13 @@ export async function simulacion(req, res, next) {
       desde: req.query.desde || hoy.slice(0, 8) + '01',
       hasta: req.query.hasta || hoy,
       tutorId: esTutor ? req.user.userId : (req.query.tutorId ? parseInt(req.query.tutorId) : null),
+      // Un profesor puede dar clase en varias marcas. Con un proyecto elegido
+      // arriba se ve SOLO lo de esa marca; en «todos los proyectos» sale todo,
+      // y cada linea dice de cual es.
+      //
+      // El tutor no filtra: el ve sus cursos, esten donde esten. Lo suyo es
+      // suyo aunque esté repartido entre dos marcas.
+      projectId: esTutor ? null : (req.query.projectId ? parseInt(req.query.projectId) : null),
     })});
   } catch (err) { next(err); }
 }
