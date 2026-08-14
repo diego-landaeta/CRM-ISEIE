@@ -540,3 +540,34 @@ export async function devoluciones(conversionId) {
     [conversionId]);
   return rows;
 }
+
+// La ficha del curso tal como se publica, para que el profesor la vea.
+//
+// Es SOLO LECTURA a proposito: el profesor tiene que poder consultar el temario,
+// los objetivos y a quien va dirigido —es lo que imparte— pero el catalogo lo
+// lleva el equipo. Aqui no hay forma de escribir nada.
+export async function cursoDetalle(productId) {
+  const { rows: [p] } = await query(
+    `SELECT p.id, p.nombre, p.precio, p.project_id, pr.nombre AS proyecto,
+            p.fecha_inicio_texto, p.presentacion_texto, p.objetivos_texto,
+            p.beneficios_texto, p.dirigido_a_texto, p.para_que_te_prepara_texto,
+            p.por_que_estudiar_texto, p.modulos_texto, p.metodologia_texto, p.faqs_texto
+       FROM products p
+       LEFT JOIN projects pr ON pr.id = p.project_id
+      WHERE p.id = $1`,
+    [productId]
+  );
+  return p || null;
+}
+
+// ¿Este profesor imparte este curso? Es lo que decide si puede ver su ficha.
+// Se mira la colaboracion, no el proyecto: estar en la marca no basta para ver
+// el temario de un curso que no da.
+export async function imparteEsteCurso(tutorId, productId) {
+  const { rows } = await query(
+    `SELECT EXISTS (SELECT 1 FROM tutor_collaborations
+                     WHERE tutor_id = $1 AND product_id = $2) AS ok`,
+    [tutorId, productId]
+  );
+  return rows[0]?.ok === true;
+}

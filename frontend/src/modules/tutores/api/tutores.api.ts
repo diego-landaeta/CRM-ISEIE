@@ -103,6 +103,26 @@ export interface PagoSinFormacion {
   proyecto: string | null;
 }
 
+
+/** La ficha del curso tal como se publica. Solo lectura para el profesor. */
+export interface CursoFicha {
+  id: number;
+  nombre: string;
+  precio: string;
+  project_id: number;
+  proyecto: string | null;
+  fecha_inicio_texto: string | null;
+  presentacion_texto: string | null;
+  objetivos_texto: string | null;
+  beneficios_texto: string | null;
+  dirigido_a_texto: string | null;
+  para_que_te_prepara_texto: string | null;
+  por_que_estudiar_texto: string | null;
+  modulos_texto: string | null;
+  metodologia_texto: string | null;
+  faqs_texto: string | null;
+}
+
 export const tutoresApi = {
   listar: (projectId?: number | null) =>
     client.get(`/tutores${projectId ? `?projectId=${projectId}` : ''}`) as Promise<ApiResponse<Tutor[]>>,
@@ -165,4 +185,8 @@ export const tutoresApi = {
   pagosSinFormacion: (desde: string, hasta: string, projectId?: number | null) =>
     client.get(`/tutores/pagos-sin-formacion?desde=${desde}&hasta=${hasta}`
       + (projectId ? `&projectId=${projectId}` : '')) as Promise<ApiResponse<PagoSinFormacion[]>>,
+
+  /** La ficha del curso que imparte. El servidor comprueba que sea suyo. */
+  curso: (productId: number) =>
+    client.get(`/tutores/curso/${productId}`) as Promise<ApiResponse<CursoFicha>>,
 };

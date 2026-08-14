@@ -31,6 +31,9 @@ router.post('/comisiones/liquidar', ctrl.liquidar);
 router.post('/comisiones/:id/revertir', ctrl.revertirComision);
 router.get('/pagos-sin-formacion', ctrl.pagosSinFormacion);
 
+// La ficha del curso que imparte, sin poder tocarla.
+router.get('/curso/:productId', ctrl.cursoDetalle);
+
 router.get('/', ctrl.listar);
 router.post('/', ctrl.alta);
 router.get('/:id', ctrl.ficha);

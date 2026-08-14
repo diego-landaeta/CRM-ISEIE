@@ -324,3 +324,22 @@ export async function pagosSinFormacion(req, res, next) {
     })});
   } catch (err) { next(err); }
 }
+
+// GET /api/tutores/curso/:productId — la ficha del curso, en solo lectura.
+export async function cursoDetalle(req, res, next) {
+  try {
+    const productId = parseInt(req.params.productId);
+    // Un profesor solo ve la ficha de lo que IMPARTE. Estar en la marca no
+    // basta: el temario de un curso que no da no es asunto suyo.
+    if (req.user.role === 'tutor') {
+      if (!(await model.imparteEsteCurso(req.user.userId, productId))) {
+        throw new AppError('Ese curso no es tuyo', 403, 'FORBIDDEN');
+      }
+    } else {
+      exigirGestion(req);
+    }
+    const c = await model.cursoDetalle(productId);
+    if (!c) throw new AppError('Curso no encontrado', 404, 'NOT_FOUND');
+    res.json({ success: true, data: c });
+  } catch (err) { next(err); }
+}
