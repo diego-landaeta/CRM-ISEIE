@@ -209,6 +209,43 @@ no es lo que ve un superadministrador.
 
 ---
 
+# Compartida · Ángel y Fabián
+
+## Sincronizar los proyectos de IA con el CRM
+
+Psicólogo IA, Nutricionista IA y Tarot IA tienen que quedar dentro del CRM como
+cualquier otra marca: sus ventas, sus cobros y sus clientes.
+
+**La hacen los dos, y lo primero es sentarse media hora a repartírsela.** La
+mitad del servidor y la de la pantalla se tocan constantemente; si cada uno
+decide por su lado sale un panel que no cuadra con los datos.
+
+**Cómo se hace, decidido por Diego:** con las **claves secretas de Stripe de cada
+proyecto** y **una API que los conecte**. Nada a mano, nada de subir un Excel.
+
+Lo que eso obliga:
+
+- **Una clave por proyecto**, nunca la compartida — así se puede cortar uno solo.
+- **Cifradas en la base** (`api_credentials`, AES-256), donde ya viven las demás.
+  Nunca en el repositorio ni en el frontal.
+- **Su secreto de webhook, uno por proyecto.** Hoy no lo tiene ninguno, y el
+  webhook acepta eventos sin firma cuando falta: quien sepa la dirección puede
+  inventarse un cobro. Con dinero automático detrás, eso es fabricar ingresos.
+- **Token propio para la API** — el CRM ya tiene esa pieza (`webhook-tokens`).
+
+**La regla que no se negocia:** cada proyecto **factura desde el día que entra al
+CRM, no desde antes**. Si lleva meses cobrando, ese histórico no se importa:
+entraría como ventas de este mes e inflaría las cifras y las comisiones.
+
+Lo que tienen que decidir ellos antes de escribir código: **hacia dónde va la
+API** —si el CRM pregunta cada X tiempo o si cada plataforma avisa al CRM—, qué
+se trae además de los cobros, y cada cuánto.
+
+**Terminada cuando** se cobra algo de verdad en un proyecto de IA, aparece solo
+en el CRM una vez, y el total del mes sube exactamente ese importe.
+
+---
+
 # Diego
 
 ## D1 · Proceso de ventas, y que sea editable
