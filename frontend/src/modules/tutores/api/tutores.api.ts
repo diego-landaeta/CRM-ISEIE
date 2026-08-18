@@ -126,8 +126,16 @@ export interface CursoFicha {
 }
 
 export const tutoresApi = {
-  listar: (projectId?: number | null) =>
-    client.get(`/tutores${projectId ? `?projectId=${projectId}` : ''}`) as Promise<ApiResponse<Tutor[]>>,
+  /** Por defecto solo los que dan clase hoy. Con `incluirRetirados` salen
+   *  tambien los que se dieron de baja — es la unica forma de volver a
+   *  activar a alguien, porque retirado desaparece de la lista. */
+  listar: (projectId?: number | null, incluirRetirados = false) => {
+    const q = new URLSearchParams();
+    if (projectId) q.set('projectId', String(projectId));
+    if (incluirRetirados) q.set('activos', '0');
+    const cola = q.toString();
+    return client.get(`/tutores${cola ? `?${cola}` : ''}`) as Promise<ApiResponse<Tutor[]>>;
+  },
 
   alta: (datos: {
     nombre: string; email: string; projectIds: number[];
@@ -196,5 +204,27 @@ export const tutoresApi = {
   brochureDelCurso: (productId: number) =>
     client.get(`/tutores/curso/${productId}/brochure`) as Promise<ApiResponse<{
       url: string; filename: string; version: number;
+    }>>,
+  /** Le pone otra contraseña. Solo vale sobre TUTORES: el servidor rechaza
+   *  cualquier otro rol aunque se pruebe con su identificador. */
+  cambiarContrasena: (id: number, password: string) =>
+    client.post(`/tutores/${id}/contrasena`, { password }) as Promise<ApiResponse<{
+      id: number; nombre: string; email: string;
+    }>>,
+
+  /** Retirar a un profesor. NO lo borra —sus comisiones son dinero devengado y
+   *  quedarian colgando— : lo desactiva y cierra sus cursos hoy. Devuelve lo
+   *  que le quede pendiente de pagar, para no retirar a nadie a ciegas. */
+  retirar: (id: number) =>
+    client.delete(`/tutores/${id}`) as Promise<ApiResponse<{
+      id: number; nombre: string; email: string;
+      cursosCerrados: number; pendienteDePagar: number;
+    }>>,
+
+  /** Volver a darle de alta. Los cursos hay que reabrirlos a mano: cerrarlos
+   *  fue una decision con fecha y no se deshace sola. */
+  reactivar: (id: number) =>
+    client.post(`/tutores/${id}/reactivar`, {}) as Promise<ApiResponse<{
+      id: number; nombre: string; email: string;
     }>>,
 };

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { GraduationCap, Plus, X, Warning, Trash, CheckCircle, Copy, ArrowsClockwise } from '@phosphor-icons/react';
+import { GraduationCap, Plus, X, Warning, Trash, CheckCircle, Copy, ArrowsClockwise, Key, UserMinus } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
@@ -76,13 +76,22 @@ export default function TutoresPage() {
   // marcas en las que este dado de alta.
   const [marcas, setMarcas] = useState<number[]>([]);
 
+  // Retirados: no salen por defecto. Se pueden enseñar porque, si no, retirar a
+  // alguien por error no tendria vuelta atras desde esta pantalla.
+  const [verRetirados, setVerRetirados] = useState(false);
+  const [popupClave, setPopupClave] = useState(false);
+  const [claveNueva, setClaveNueva] = useState('');
+  const [claveCopiada, setClaveCopiada] = useState(false);
+  const [popupRetiro, setPopupRetiro] = useState(false);
+  const [procesando, setProcesando] = useState(false);
+
   const cargar = useCallback(async () => {
     setCargando(true);
     try {
-      const r = await tutoresApi.listar(projectId);
+      const r = await tutoresApi.listar(projectId, verRetirados);
       setTutores(r.success ? (r.data || []) : []);
     } finally { setCargando(false); }
-  }, [projectId]);
+  }, [projectId, verRetirados]);
 
   useEffect(() => { if (puede) cargar(); }, [cargar, puede]);
 
@@ -142,6 +151,68 @@ export default function TutoresPage() {
 
   function abrirColab() { setCursoColab(null); setPopupColab(true); }
 
+  function abrirClave() {
+    setClaveNueva(generarContrasena());
+    setClaveCopiada(false);
+    setPopupClave(true);
+  }
+
+  // Se le cambia la clave y se enseña en pantalla: el profesor la recibe por
+  // donde ya hable con el —telefono, correo— y entra con ella. No se le manda
+  // nada automatico porque quien la cambia suele estar hablando con el.
+  async function guardarClave() {
+    if (!elegido) return;
+    setProcesando(true);
+    try {
+      const r = await tutoresApi.cambiarContrasena(elegido.id, claveNueva);
+      if (!r.success) throw new Error(r.error || 'no se pudo');
+      toast({ title: 'Contraseña cambiada', description: `${elegido.nombre} ya puede entrar con ella.` });
+      setPopupClave(false);
+      cargar();
+    } catch (err) {
+      toast({ title: 'No se ha podido cambiar', description: (err as Error).message, variant: 'destructive' });
+    } finally { setProcesando(false); }
+  }
+
+  // Retirar NO borra: sus comisiones son dinero devengado. Si le queda algo por
+  // pagar se dice con todas las letras, porque es justo lo que se olvida.
+  async function retirar() {
+    if (!elegido) return;
+    setProcesando(true);
+    try {
+      const r = await tutoresApi.retirar(elegido.id);
+      if (!r.success) throw new Error(r.error || 'no se pudo');
+      const { cursosCerrados, pendienteDePagar } = r.data!;
+      toast({
+        title: `${elegido.nombre} queda retirado`,
+        description: pendienteDePagar > 0
+          ? `Se han cerrado ${cursosCerrados} cursos. OJO: le quedan ${pendienteDePagar.toLocaleString('es-ES', { minimumFractionDigits: 2 })} € pendientes de pagar.`
+          : `Se han cerrado ${cursosCerrados} cursos. No le queda nada pendiente de pagar.`,
+        variant: pendienteDePagar > 0 ? 'destructive' : undefined,
+      });
+      setPopupRetiro(false);
+      setElegido(null);
+      cargar();
+    } catch (err) {
+      toast({ title: 'No se ha podido retirar', description: (err as Error).message, variant: 'destructive' });
+    } finally { setProcesando(false); }
+  }
+
+  async function reactivar(t: Tutor) {
+    setProcesando(true);
+    try {
+      const r = await tutoresApi.reactivar(t.id);
+      if (!r.success) throw new Error(r.error || 'no se pudo');
+      toast({
+        title: `${t.nombre} vuelve a estar activo`,
+        description: 'Sus cursos siguen cerrados: hay que volver a asignárselos con la fecha desde la que cobra.',
+      });
+      cargar();
+    } catch (err) {
+      toast({ title: 'No se ha podido reactivar', description: (err as Error).message, variant: 'destructive' });
+    } finally { setProcesando(false); }
+  }
+
   // Una fila de la lista. Se saca aparte porque se pinta en dos grupos: los de
   // este proyecto y los de las marcas hermanas.
   const fila = (t: Tutor) => (
@@ -158,6 +229,9 @@ export default function TutoresPage() {
       <div className="text-xs text-muted-foreground truncate">{t.email}</div>
       {t.marcas && (
         <div className="text-[11px] text-muted-foreground/80 truncate mt-0.5">{t.marcas}</div>
+      )}
+      {t.active === false && (
+        <div className="text-[11px] text-muted-foreground font-semibold mt-0.5">retirado</div>
       )}
       {t.pendiente_de_entrar && (
         <div className="text-[11px] text-amber-700 dark:text-amber-400 font-semibold mt-0.5">
@@ -282,7 +356,12 @@ export default function TutoresPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)] gap-3 items-start">
         <div className="bg-card border border-border rounded-lg overflow-hidden">
-          <div className="max-h-[calc(100vh-230px)] overflow-y-auto divide-y divide-border">
+          <label className="flex items-center gap-2 px-3 py-2 border-b border-border text-xs text-muted-foreground cursor-pointer">
+            <input type="checkbox" checked={verRetirados} className="accent-primary"
+              onChange={(e) => { setVerRetirados(e.target.checked); setElegido(null); }} />
+            Ver también los retirados
+          </label>
+          <div className="max-h-[calc(100vh-268px)] overflow-y-auto divide-y divide-border">
             {!cargando && tutores.length === 0 && (
               <EmptyState icon={GraduationCap} title="Sin tutores todavía"
                 description="Da de alta el primero para asignarle formaciones." />
@@ -324,9 +403,28 @@ export default function TutoresPage() {
                     {elegido.email}{elegido.dni_nif ? ` · ${elegido.dni_nif}` : ''}
                   </p>
                 </div>
-                <Button variant="outline" size="sm" className="ml-auto" onClick={abrirColab}>
-                  <Plus size={14} weight="bold" className="mr-1.5" /> Añadir formación
-                </Button>
+                <div className="ml-auto flex flex-wrap items-center gap-2">
+                  {elegido.active === false ? (
+                    <Button variant="outline" size="sm" disabled={procesando}
+                      onClick={() => reactivar(elegido)}>
+                      <ArrowsClockwise size={14} weight="bold" className="mr-1.5" /> Reactivar
+                    </Button>
+                  ) : (
+                    <>
+                      <Button variant="outline" size="sm" onClick={abrirClave}>
+                        <Key size={14} weight="bold" className="mr-1.5" /> Cambiar contraseña
+                      </Button>
+                      <Button variant="outline" size="sm"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => setPopupRetiro(true)}>
+                        <UserMinus size={14} weight="bold" className="mr-1.5" /> Retirar
+                      </Button>
+                    </>
+                  )}
+                  <Button variant="outline" size="sm" onClick={abrirColab}>
+                    <Plus size={14} weight="bold" className="mr-1.5" /> Añadir formación
+                  </Button>
+                </div>
               </div>
 
               {colabs.length === 0 ? (
@@ -636,6 +734,75 @@ export default function TutoresPage() {
               {guardando ? 'Guardando…' : 'Añadir'}
             </Button>
           </form>
+        </div>
+      )}
+
+      {popupClave && elegido && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+          onClick={() => setPopupClave(false)}>
+          <div className="bg-card border border-border rounded-lg w-full max-w-sm p-4 space-y-3"
+            onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="font-bold">Nueva contraseña</h3>
+              <button type="button" onClick={() => setPopupClave(false)} aria-label="Cerrar"
+                className="text-muted-foreground hover:text-foreground">
+                <X size={16} weight="bold" />
+              </button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Para <strong>{elegido.nombre}</strong>. Cópiala y pásasela: no se le manda ningún correo.
+            </p>
+            <div className="flex gap-1.5">
+              <input value={claveNueva} onChange={(e) => { setClaveNueva(e.target.value); setClaveCopiada(false); }}
+                className="flex-1 h-9 px-3 rounded-md border border-border bg-background text-sm font-mono min-w-0" />
+              <Button type="button" variant="outline" size="sm" aria-label="Generar otra"
+                onClick={() => { setClaveNueva(generarContrasena()); setClaveCopiada(false); }}>
+                <ArrowsClockwise size={14} weight="bold" />
+              </Button>
+              <Button type="button" variant="outline" size="sm" aria-label="Copiar"
+                onClick={() => { navigator.clipboard?.writeText(claveNueva); setClaveCopiada(true); }}>
+                {claveCopiada ? <CheckCircle size={14} weight="fill" className="text-green-600" /> : <Copy size={14} weight="bold" />}
+              </Button>
+            </div>
+            {claveNueva.length < 8 && (
+              <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                Necesita al menos 8 caracteres.
+              </p>
+            )}
+            <Button className="w-full" disabled={procesando || claveNueva.length < 8} onClick={guardarClave}>
+              {procesando ? 'Cambiando…' : 'Cambiar la contraseña'}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {popupRetiro && elegido && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+          onClick={() => setPopupRetiro(false)}>
+          <div className="bg-card border border-border rounded-lg w-full max-w-sm p-4 space-y-3"
+            onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="font-bold">Retirar a {elegido.nombre}</h3>
+              <button type="button" onClick={() => setPopupRetiro(false)} aria-label="Cerrar"
+                className="text-muted-foreground hover:text-foreground">
+                <X size={16} weight="bold" />
+              </button>
+            </div>
+            {/* Se dice lo que pasa de verdad. «Retirar» suena a borrar, y no lo
+                es: lo que se borrase dejaria sus comisiones sin dueño. */}
+            <ul className="text-xs text-muted-foreground space-y-1.5 list-disc pl-4">
+              <li>Deja de poder entrar en el CRM.</li>
+              <li>Sus {elegido.formaciones} {elegido.formaciones === 1 ? 'curso se cierra' : 'cursos se cierran'} con la fecha de hoy, así que no genera más comisión.</li>
+              <li><strong>Lo que ya devengó se queda</strong>: si le debes algo, sigue debiéndoselo y te lo diremos al retirarlo.</li>
+              <li>Se puede deshacer desde «ver también los retirados».</li>
+            </ul>
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1" onClick={() => setPopupRetiro(false)}>Cancelar</Button>
+              <Button variant="destructive" className="flex-1" disabled={procesando} onClick={retirar}>
+                {procesando ? 'Retirando…' : 'Retirar'}
+              </Button>
+            </div>
+          </div>
         </div>
       )}
     </div>
