@@ -14,14 +14,20 @@ hacerlo. Una tarea sin criterio de terminada se da por hecha tres veces.
 3. **Se trabaja sobre MultiCRM y yo lo replico a ISEIE.** Los dos CRMs tienen
    que acabar iguales salvo la marca, pero duplicar a mano mientras se
    desarrolla es lo que los desincroniza.
-4. **Cada uno en su rama.** Nada va directo a `main` ni a `staging`.
+4. **Cada uno en su rama, con su nombre.** A `main` no se empuja: se pide
+   y Diego aprueba. GitHub lo impide, no es un acuerdo de palabra.
 
 | | Rama |
 |---|---|
 | Ángel | `feat/angel` |
-| Fabián | `feat/rediseno` |
-| Diego | `feat/ventas` |
+| Fabián | `feat/fabian` |
+| Diego | `feat/diego` |
 | Yo | la que toque, por tarea |
+
+**Nada llega a `main` sin que Diego lo apruebe.** `main` es lo que está aprobado:
+no se puede empujar a ella directamente ni con prisa. Se abre una petición de
+cambios desde tu rama, él la mira y la aprueba. Es el único camino, y vale
+también para mí.
 
 ---
 
