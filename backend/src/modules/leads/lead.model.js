@@ -384,6 +384,11 @@ export async function createLeadWithRoundRobin({ projectId, nombre, email, telef
         AND u.active = true
         AND u.is_available = true
         AND (u.role = 'gestor' OR (u.role IN ('admin','superadmin') AND up.recibe_leads = TRUE))
+        -- Quien lleva las colaboraciones de los profesores NO vende: da de alta
+        -- tutores y les toca el porcentaje. Estaba entrando en el reparto solo
+        -- por tener rol de gestora, y un lead que le cae a ella es un lead que
+        -- nadie llama — no es su trabajo ni mira esa bandeja.
+        AND NOT COALESCE(u.gestor_colaboraciones, false)
        WHERE up.project_id = $1 AND up.active = true
          AND NOT EXISTS (
            SELECT 1 FROM user_availability_blocks ab
@@ -994,6 +999,11 @@ export async function reassignPendingRoundRobin(projectId) {
         AND u.active = true
         AND u.is_available = true
         AND (u.role = 'gestor' OR (u.role IN ('admin','superadmin') AND up.recibe_leads = TRUE))
+        -- Quien lleva las colaboraciones de los profesores NO vende: da de alta
+        -- tutores y les toca el porcentaje. Estaba entrando en el reparto solo
+        -- por tener rol de gestora, y un lead que le cae a ella es un lead que
+        -- nadie llama — no es su trabajo ni mira esa bandeja.
+        AND NOT COALESCE(u.gestor_colaboraciones, false)
        WHERE up.project_id = $1 AND up.active = true
          AND NOT EXISTS (
            SELECT 1 FROM user_availability_blocks ab
