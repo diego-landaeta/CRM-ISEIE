@@ -261,15 +261,20 @@ Con su desglose «¿de dónde sale este número?». Y hay que **unificar la tarj
 conversión** que hoy usa otra fórmula: dos porcentajes distintos en la misma
 pantalla es exactamente lo que hace que no se crea ninguno.
 
-## C5 · Limpieza de datos
+## C5 · Datos que no cuadran
 
-| Qué | Cuánto |
-|---|---|
-| Cargos de Stripe de 2026 sin enlazar | 501 · 152.098 € |
-| Enlazables por importe y fecha | 241 |
-| Teléfonos que `normalizePhone` estropea | 188 |
-| Leads de CETLAT sin cruzar con su programa | 382 |
-| Segundas cuotas registradas como venta nueva | por barrer |
+Contado el 18/08 en las dos bases. **Los cargos de Stripe sin enlazar quedan
+fuera por decisión del owner**, y lo de Carlos y su WiFi está resuelto con
+Cloudflare.
+
+| Qué | Cuánto | Qué es |
+|---|---|---|
+| **Ventas sin formación identificada** | 321 | Cobradas, pero sin curso del catálogo detrás: **ningún profesor cobra comisión** por ellas y en los informes salen como «servicio académico». 272 en ISEIE, 49 en MultiCRM |
+| **Leads que no dicen qué curso quieren** | 3.369 | En MultiCRM son 1.301 de 2.245 — más de la mitad. De aquí salen las ventas de arriba; se arregla en el origen, con lo de Make |
+| Alumnos con más de una venta | 7 | Puede ser que compraran dos cursos, o que la segunda cuota se metiera como venta nueva. Eso infla las ventas y parte el plan de pago |
+| Proformas que gastaron número | 7 | Un presupuesto se llevó un número de la serie: la numeración queda con huecos |
+| Teléfonos inservibles | 12 | Guardados a medias (`+340`, `+5823232`): el enlace de WhatsApp abre un chat que no existe |
+| Comprobaciones en rojo | 10 de 180 | Fallan por datos de ejemplo. Con diez siempre rojas, nadie mira el día que se pone roja la once |
 
 ## C6 · Lo que quedó a medias
 
