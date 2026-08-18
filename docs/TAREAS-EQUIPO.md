@@ -294,9 +294,27 @@ detrás se hace dos veces**.
 
 ## Lo que hace falta antes de arrancar
 
+> ### ⚠️ El correo no funciona en producción. En ninguno de los dos.
+>
+> Comprobado en los registros el 18/08: **0 correos enviados**, 2.513 perdidos en
+> ISEIE y 620 en MultiCRM. El último se perdió **hoy a las 15:51** — «Nuevo lead
+> asignado: Nerea». La clave de Brevo está vacía en ISEIE y en MultiCRM ni
+> siquiera existe la línea.
+>
+> Lo que se está perdiendo, hoy y desde hace meses:
+>
+> - **«Nuevo lead asignado»** a la gestora. Nadie ha recibido uno nunca.
+> - **«Recordatorio vencido»**.
+> - **«Bienvenido al CRM · establece tu contraseña»** — por eso hay usuarios
+>   que se quedaron sin poder entrar.
+>
+> Esto **bloquea A3, A4 y A5 enteras**: no tiene sentido programar un reporte
+> semanal por correo mientras el correo no sale. Es lo primero que hay que
+> arreglar, y es poner una clave.
+
 | Quién | Qué necesita | De quién |
 |---|---|---|
-| Ángel | Clave de Brevo del CRM de pruebas | Diego |
+| Ángel | Clave de Brevo — en pruebas **y en producción** | Diego |
 | Ángel | Clave de la API de IA y un tope de gasto | Diego |
 | Fabián | Usuario en el CRM de pruebas | Diego |
 | Todos | Que las migraciones se apliquen | Diego |
