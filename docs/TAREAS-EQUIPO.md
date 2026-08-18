@@ -294,23 +294,25 @@ detrás se hace dos veces**.
 
 ## Lo que hace falta antes de arrancar
 
-> ### ⚠️ El correo no funciona en producción. En ninguno de los dos.
+> ### ⚠️ El CRM no puede mandar correo. Hoy lo tapa Make.
 >
-> Comprobado en los registros el 18/08: **0 correos enviados**, 2.513 perdidos en
-> ISEIE y 620 en MultiCRM. El último se perdió **hoy a las 15:51** — «Nuevo lead
-> asignado: Nerea». La clave de Brevo está vacía en ISEIE y en MultiCRM ni
-> siquiera existe la línea.
+> Comprobado el 18/08 en los registros y en la base: **el CRM no ha enviado ni un
+> correo nunca** —2.513 intentos fallidos en ISEIE, 620 en MultiCRM— porque **no
+> tiene clave de Brevo en ninguna parte**: ni en el `.env` ni en
+> `api_credentials`, que está vacía en los dos.
 >
-> Lo que se está perdiendo, hoy y desde hace meses:
+> **Los leads no se pierden y las gestoras sí se enteran**: el aviso lo manda
+> Make, por su lado. Eso funciona y no se toca.
 >
-> - **«Nuevo lead asignado»** a la gestora. Nadie ha recibido uno nunca.
-> - **«Recordatorio vencido»**.
-> - **«Bienvenido al CRM · establece tu contraseña»** — por eso hay usuarios
->   que se quedaron sin poder entrar.
+> Lo que sí se pierde es lo que solo puede mandar el CRM:
 >
-> Esto **bloquea A3, A4 y A5 enteras**: no tiene sentido programar un reporte
-> semanal por correo mientras el correo no sale. Es lo primero que hay que
-> arreglar, y es poner una clave.
+> - **«Bienvenido al CRM · establece tu contraseña»** — por eso hay usuarios que
+>   se quedaron sin poder entrar.
+> - **«Recordatorio vencido»** de la ficha del lead.
+>
+> Y sobre todo: **bloquea A3, A4 y A5**. El reporte semanal, los recordatorios y
+> el análisis por correo salen del CRM, no de Make. Mientras no haya clave, se
+> pueden programar pero no llegan a nadie. Es lo primero, y es poner una clave.
 
 | Quién | Qué necesita | De quién |
 |---|---|---|
