@@ -215,7 +215,21 @@ export async function revisarCatalogoYDinero() {
 
     // Solo se avisa si hay algo. Un aviso diario diciendo «todo bien» se ignora
     // a la semana, y entonces tampoco se lee el que importa.
+    //
+    // Y solo UNA vez al dia de verdad: la primera pasada sale cinco minutos
+    // despues de arrancar, asi que cada reinicio del backend repetia el mismo
+    // aviso. Un dia de despliegues lo mandaba cinco veces —y cinco avisos
+    // identicos son un aviso que ya nadie abre—.
+    let yaAvisadoHoy = false;
     if (avisos.length) {
+      const { rows: previos } = await query(
+        `SELECT 1 FROM admin_notifications
+          WHERE type = 'catalogo_revision' AND created_at > NOW() - INTERVAL '20 hours'
+          LIMIT 1`);
+      yaAvisadoHoy = previos.length > 0;
+      if (yaAvisadoHoy) logger.info('Vigilante: ya se aviso hoy, no se repite');
+    }
+    if (avisos.length && !yaAvisadoHoy) {
       await notifyAdmins({
         type: 'catalogo_revision',
         title: 'Revisión diaria: hay cosas sin atar',
