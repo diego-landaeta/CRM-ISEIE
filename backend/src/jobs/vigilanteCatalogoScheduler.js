@@ -40,6 +40,10 @@ let corriendo = false;
 // ruido, nadie lee el que importa — y el de Cintia era justo uno de los buenos.
 const SECCION_FORMACION = /\/(cursos|masters|m[aá]sters|diplomados|maestrias|maestr[ií]as|expertos|programas)\//i;
 const EMPIEZA_POR_CURSO = /^(curso|diplomado|master|maestria|maestr[ií]a|experto|especializacion|especializaci[oó]n)[-_](de|en|para)?[-_]?[a-z0-9]/i;
+// WordPress separa sus mapas por tipo: «...posts-post-N.xml» son las entradas
+// del blog y «...posts-page-N.xml» o los de producto son las paginas de verdad.
+const ES_MAPA_DE_ENTRADAS = /(posts?-post-|post-sitemap|\/blog-)/i;
+
 const SOLO_SECCION = /\/(cursos|masters|m[aá]sters|diplomados|maestrias|expertos|programas)\/?$/i;
 
 function pareceFichaDeCurso(url) {
@@ -61,6 +65,15 @@ async function cursosDeLaWeb(base) {
       // Un indice de mapas apunta a otros mapas: se sigue un nivel.
       const hijos = locs.filter((u) => /\.xml$/i.test(u)).slice(0, 12);
       for (const h of hijos) {
+        // El mapa de ENTRADAS DEL BLOG se salta entero. Es la unica senal
+        // fiable que distingue «Curso de Microblading Profesional: Tecnicas y
+        // Certificacion en 2025» —un articulo escrito para posicionar— de una
+        // ficha de curso: por el nombre no hay forma, empiezan igual.
+        //
+        // Sin esto, ISEIE avisaba de 7 articulos como si fueran cursos que
+        // faltan. Todos los dias. Y un aviso diario que es ruido se deja de
+        // leer, con lo que tampoco se lee el que importa.
+        if (ES_MAPA_DE_ENTRADAS.test(h)) continue;
         try {
           const rh = await fetch(h, { signal: AbortSignal.timeout(15000) });
           if (!rh.ok) continue;
