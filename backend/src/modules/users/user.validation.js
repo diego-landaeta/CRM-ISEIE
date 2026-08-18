@@ -37,5 +37,5 @@ export const listUsersSchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(100).default(20),
   // La pantalla de Usuarios los pide expresamente; el resto de listas no.
-  incluirTutores: z.enum(['true', 'false']).optional().transform((v) => v === 'true'),
+  incluirTodos: z.enum(['true', 'false']).optional().transform((v) => v === 'true'),
 });

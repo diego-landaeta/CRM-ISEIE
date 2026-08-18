@@ -1,13 +1,22 @@
 import { query, getClient } from '../../shared/config/db.js';
 
-// Los profesores NO son personal del CRM: no llevan prospectos, no reciben leads
-// y no deben aparecer donde se elige una gestora. Como son usuarios, salian en
-// todas esas listas —el filtro de Prospectos, el de asignar responsable— y
-// cualquiera podia asignarle un lead a un profesor.
+// Esta lista es «quien puede llevar un prospecto», porque es para lo que la usa
+// casi todo el CRM: el filtro de Prospectos, asignar responsable, la exportacion
+// a Wasapi, el desplegable de gestora en Clientes y en Ventas.
 //
-// Se quedan fuera salvo que se pidan expresamente: con role='tutor' o con
-// incluirTutores. Se gestionan en su propia pantalla, la de Tutores.
-export async function findAll({ active, role, projectId, page, limit, incluirTutores = false }) {
+// Por eso se quedan fuera dos grupos, aunque sean usuarios:
+//
+//  · Los PROFESORES. No venden ni atienden a nadie; tienen su propia pantalla.
+//  · Quien lleva las COLABORACIONES —Vanessa, Jonathan—. Da de alta profesores y
+//    les toca el porcentaje. Tiene rol de gestora porque es el unico que la
+//    limita a ver solo lo suyo, pero no es una gestora: salia en esos
+//    desplegables y se le podia asignar un prospecto a mano. Un prospecto en su
+//    bandeja es un prospecto que no llama nadie.
+//
+// Quien necesita a TODO el personal —la pantalla de Usuarios, las nominas— lo
+// pide con incluirTodos. Es al reves de como estaba: lo seguro es lo de por
+// defecto, y ver a todos es lo que hay que pedir.
+export async function findAll({ active, role, projectId, page, limit, incluirTodos = false }) {
   const conditions = [];
   const params = [];
   let paramIdx = 1;
@@ -16,8 +25,12 @@ export async function findAll({ active, role, projectId, page, limit, incluirTut
     conditions.push(`u.active = $${paramIdx++}`);
     params.push(active === 'true');
   }
-  if (!role && !incluirTutores) {
-    conditions.push(`u.role <> 'tutor'`);
+  if (!incluirTodos) {
+    // Con role='tutor' se piden profesores a proposito: ahi si salen.
+    if (role !== 'tutor') conditions.push(`u.role <> 'tutor'`);
+    // Los de colaboraciones no salen NUNCA por aqui, ni pidiendo role='gestor'
+    // —que es justo como los pide quien busca una gestora—.
+    conditions.push(`NOT COALESCE(u.gestor_colaboraciones, false)`);
   }
   if (role) {
     conditions.push(`u.role = $${paramIdx++}`);

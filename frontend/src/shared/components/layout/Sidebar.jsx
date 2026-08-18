@@ -447,7 +447,9 @@ export default function Sidebar({ collapsed = false, onToggleCollapsed, onNaviga
 
   const role = user?.role || 'gestor';
   const initials = user?.nombre?.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2) || '??';
-  const rolLabel = ROLE_LABELS[role] || '';
+  // Quien lleva las colaboraciones no es una gestora: se la llama por su trabajo,
+  // que es dar de alta profesores y ajustarles el porcentaje.
+  const rolLabel = user?.gestor_colaboraciones ? 'Colaboraciones' : (ROLE_LABELS[role] || '');
 
   return (
     <aside

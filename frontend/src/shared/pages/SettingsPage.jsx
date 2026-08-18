@@ -41,6 +41,13 @@ const INTEGRATIONS = [
   { id: 'claude',     name: 'Anthropic Claude', desc: 'Reportes generados con IA',                                label: 'API Key (sk-ant-…)' },
 ];
 
+// Como se llama cada quien en la lista. Quien lleva las colaboraciones tiene rol
+// de gestora por dentro —es el unico que la limita a ver solo lo suyo— pero
+// llamarla «gestora» en pantalla es lo que hace que se le asignen prospectos.
+// Se la llama por lo que hace.
+const comoSeLlama = (u) =>
+  (u?.gestor_colaboraciones ? 'colaboraciones' : u?.role);
+
 export default function SettingsPage() {
   const { user } = useAuth();
   const [tab, setTab] = useState('users');
@@ -162,7 +169,7 @@ function UsersSection({ isAdmin }) {
   async function load() {
     setLoading(true);
     try {
-      const res = await client.get('/users?limit=100');
+      const res = await client.get('/users?limit=100&incluirTodos=true');
       setUsers(res?.data || []);
     } catch (e) {
       toast({ title: 'Error', description: e?.data?.error || 'No se pudieron cargar los usuarios', variant: 'destructive' });
@@ -245,7 +252,7 @@ function UsersSection({ isAdmin }) {
                   </td>
                   <td className="px-4 py-3">
                     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${ROLE_BADGE[u.role] || 'bg-muted'}`}>
-                      <ShieldCheck size={10} weight="bold" /> {u.role}
+                      <ShieldCheck size={10} weight="bold" /> {comoSeLlama(u)}
                     </span>
                   </td>
                   <td className="px-4 py-3">

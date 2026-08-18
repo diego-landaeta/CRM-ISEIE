@@ -410,7 +410,8 @@ export async function createLeadWithRoundRobin({ projectId, nombre, email, telef
       const { rows: access } = await client.query(
         `SELECT u.id FROM users u
          JOIN user_projects up ON up.user_id = u.id AND up.project_id = $1 AND up.active = true
-         WHERE u.id = $2 AND u.active = true AND u.role IN ('admin', 'gestor', 'superadmin')`,
+         WHERE u.id = $2 AND u.active = true AND u.role IN ('admin', 'gestor', 'superadmin')
+           AND NOT COALESCE(u.gestor_colaboraciones, false)`,
         [projectId, forcedResponsableId]
       );
       if (access.length > 0) {

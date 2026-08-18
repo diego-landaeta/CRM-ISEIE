@@ -98,7 +98,7 @@ function PlansTab({ project }: TabProps) {
     try {
       const [pl, us] = await Promise.all([
         client.get(`/payroll/plans?projectId=${project.id}`),
-        client.get(`/users`),
+        client.get(`/users?incluirTodos=true`),
       ]);
       if (pl.success) setPlans(Array.isArray(pl.data) ? (pl.data as PayrollPlan[]) : []);
       if (us.success) setUsers(Array.isArray(us.data) ? (us.data as User[]) : []);

@@ -492,6 +492,21 @@ export async function reassign(leadId, newResponsableId, userId) {
   const lead = await leadModel.findByIdLight(leadId);
   if (!lead) throw new AppError('Lead no encontrado', 404, 'LEAD_NOT_FOUND');
 
+  // Ni profesores ni quien lleva las colaboraciones. Se comprueba AQUI y no solo
+  // escondiendolos del desplegable: quien no sale en una lista sigue teniendo un
+  // numero, y basta con mandarlo a mano para colarlo. Y un prospecto en la
+  // bandeja de alguien que no atiende prospectos no lo llama nadie.
+  const { rows: destino } = await query(
+    `SELECT nombre, role, COALESCE(gestor_colaboraciones, false) AS colaboraciones
+       FROM users WHERE id = $1 AND active = true`, [newResponsableId]);
+  if (!destino.length) throw new AppError('Esa persona no existe o está desactivada', 400, 'DESTINO_INVALIDO');
+  if (destino[0].role === 'tutor') {
+    throw new AppError(`${destino[0].nombre} es profesor: no lleva prospectos`, 400, 'NO_ATIENDE_PROSPECTOS');
+  }
+  if (destino[0].colaboraciones) {
+    throw new AppError(`${destino[0].nombre} lleva las colaboraciones de los profesores: no atiende prospectos`, 400, 'NO_ATIENDE_PROSPECTOS');
+  }
+
   const prevResponsableId = lead.responsable_id || null;
   await leadModel.reassignLead(leadId, newResponsableId);
   await leadModel.updateStatus(leadId, lead.status, lead.status, userId);
