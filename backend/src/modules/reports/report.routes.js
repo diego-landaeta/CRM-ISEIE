@@ -28,6 +28,7 @@ router.get('/formaciones', ctrl.formaciones);
 router.get('/detalle', ctrl.detalle);
 
 // La tasa de cierre, con una sola definicion para todo el CRM.
+router.get('/aviso-sin-factura', ctrl.avisoSinFactura);
 router.get('/tasa-cierre', ctrl.tasaCierre);
 router.get('/tasa-cierre/detalle', ctrl.tasaCierreDetalle);
 

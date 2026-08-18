@@ -1172,3 +1172,39 @@ const ES_MENSUALIDAD = `(
       AND NOT EXISTS (SELECT 1 FROM conversion_installments ci WHERE ci.conversion_id = c.id)
       AND (SELECT COUNT(*) FROM conversion_payments cpm WHERE cpm.conversion_id = c.id) <= 1
     ))`;
+
+// Lo que un informe «por factura» va a dejar fuera.
+//
+// Ese informe cuenta por la fecha de la FACTURA, asi que una venta cobrada pero
+// aun sin facturar no tiene fecha por la que contar y no aparece. Es correcto
+// —responde a «que facture»— pero quien descarga no tiene por que saberlo, y se
+// lleva un total mas bajo sin enterarse.
+//
+// Esto lo devuelve para poder avisarle ANTES de descargar.
+export async function ventasSinFacturaEnRango({ projectId, from, to }) {
+  const { rows } = await query(
+    `SELECT cv.id, COALESCE(l.nombre, '—') AS cliente,
+            SUM(cp.importe) AS cobrado,
+            MAX(cp.fecha)::date AS ultimo_cobro,
+            COALESCE(NULLIF(cv.producto_contratado, ''), '—') AS curso
+       FROM conversion_payments cp
+       JOIN conversions cv ON cv.id = cp.conversion_id
+       LEFT JOIN leads l ON l.id = cv.lead_id
+      WHERE ($1::int IS NULL OR cv.project_id = $1)
+        AND ($2::date IS NULL OR cp.fecha >= $2::date)
+        AND ($3::date IS NULL OR cp.fecha <= $3::date)
+        -- La factura puede colgar de la venta o del cobro: se miran las dos.
+        AND NOT EXISTS (
+          SELECT 1 FROM invoices i
+           WHERE i.tipo <> 'proforma' AND i.estado <> 'cancelada'
+             AND (i.conversion_id = cv.id OR i.payment_id = cp.id))
+      GROUP BY cv.id, l.nombre, cv.producto_contratado
+      ORDER BY ultimo_cobro DESC, cobrado DESC`,
+    [projectId || null, from || null, to || null]
+  );
+  return {
+    ventas: rows.length,
+    importe: rows.reduce((s, r) => s + Number(r.cobrado), 0),
+    detalle: rows.slice(0, 50),
+  };
+}

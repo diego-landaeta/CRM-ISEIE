@@ -137,3 +137,13 @@ export async function tasaCierreDetalle(req, res, next) {
     }) });
   } catch (err) { next(err); }
 }
+
+// GET /api/reports/aviso-sin-factura — que se va a quedar fuera del informe.
+export async function avisoSinFactura(req, res, next) {
+  try {
+    const r = rangoDeQuery(req);
+    res.json({ success: true, data: await model.ventasSinFacturaEnRango({
+      projectId: r.projectId, from: r.from, to: r.to,
+    })});
+  } catch (err) { next(err); }
+}

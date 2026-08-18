@@ -1,6 +1,13 @@
 import { query, getClient } from '../../shared/config/db.js';
 
-export async function findAll({ active, role, projectId, page, limit }) {
+// Los profesores NO son personal del CRM: no llevan prospectos, no reciben leads
+// y no deben aparecer donde se elige una gestora. Como son usuarios, salian en
+// todas esas listas —el filtro de Prospectos, el de asignar responsable— y
+// cualquiera podia asignarle un lead a un profesor.
+//
+// Se quedan fuera salvo que se pidan expresamente: con role='tutor' o con
+// incluirTutores. Se gestionan en su propia pantalla, la de Tutores.
+export async function findAll({ active, role, projectId, page, limit, incluirTutores = false }) {
   const conditions = [];
   const params = [];
   let paramIdx = 1;
@@ -8,6 +15,9 @@ export async function findAll({ active, role, projectId, page, limit }) {
   if (active !== undefined) {
     conditions.push(`u.active = $${paramIdx++}`);
     params.push(active === 'true');
+  }
+  if (!role && !incluirTutores) {
+    conditions.push(`u.role <> 'tutor'`);
   }
   if (role) {
     conditions.push(`u.role = $${paramIdx++}`);

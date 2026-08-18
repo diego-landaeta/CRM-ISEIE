@@ -140,12 +140,19 @@ const NAV_SECTIONS = [
 const APAGADOS = String(import.meta.env.VITE_MODULOS_APAGADOS || '')
   .split(',').map((s) => s.trim()).filter(Boolean);
 
-function canSeeItem(item, role) {
+function canSeeItem(item, role, soloColaboraciones) {
   if (item.apagable && APAGADOS.includes(item.apagable)) return false;
   // Un tutor solo ve lo suyo: lo que no le nombre expresamente queda fuera.
   // Al reves —listar lo prohibido— se olvida siempre algo, y lo que se olvida
   // es un tutor paseandose por Prospectos o por Finanzas.
   if (role === 'tutor') return Array.isArray(item.roles) && item.roles.includes('tutor');
+  // Un gestor de colaboraciones se dedica SOLO a los tutores: no lleva
+  // prospectos, ni ventas, ni finanzas. Se declara lo que puede ver, igual que
+  // con el tutor — enumerar lo prohibido deja fuera siempre la pantalla nueva.
+  if (soloColaboraciones) {
+    return ['/tutores', '/tutores/comisiones', '/preferences'].includes(item.to);
+  }
+
   if (!item.roles) return true;
   if (role === 'superadmin' || role === 'soporte') return true;
   return item.roles.includes(role);
@@ -215,10 +222,10 @@ function NavItem({ to, label, icon: Icon, end, comingSoon, statusTag, collapsed,
 // Una entrada con lo suyo escalonado debajo. Se abre y se cierra, y lo de
 // dentro se sangra con una guia a la izquierda para que se vea de un vistazo
 // que pertenece a ella.
-function NavGroup({ label, icon: Icon, items, role, collapsed, onNavigate, onExpandSidebar }) {
+function NavGroup({ label, icon: Icon, items, role, soloColab, collapsed, onNavigate, onExpandSidebar }) {
   const location = useLocation();
   const visible = items
-    .filter((c) => canSeeItem(c, role))
+    .filter((c) => canSeeItem(c, role, soloColab))
     .map((c) => ({ ...c, comingSoon: c.comingSoon || !isBetaAllowed(c.to) }));
   const hasActiveChild = visible.some(
     (c) => !c.comingSoon && (location.pathname === c.to || location.pathname.startsWith(c.to + '/'))
@@ -303,7 +310,7 @@ function defaultOpenSections(sections, pathname) {
   return out;
 }
 
-function CollapsibleNav({ sections, role, collapsed, onNavigate, onExpandSidebar }) {
+function CollapsibleNav({ sections, role, soloColab, collapsed, onNavigate, onExpandSidebar }) {
   const location = useLocation();
   const STORAGE_KEY = 'crm-sidebar-sections-v1';
   const [openMap, setOpenMap] = useState(() => {
@@ -347,7 +354,7 @@ function CollapsibleNav({ sections, role, collapsed, onNavigate, onExpandSidebar
             }
             return it;
           })
-          .filter((it) => canSeeItem(it, role))
+          .filter((it) => canSeeItem(it, role, soloColab))
           // Una entrada con hijos no tiene ruta que mirar: lo de BETA lo decide
           // cada hijo por su cuenta, dentro de NavGroup.
           .map((it) => (it.children ? it : { ...it, comingSoon: it.comingSoon || !isBetaAllowed(it.to) }));
@@ -359,6 +366,7 @@ function CollapsibleNav({ sections, role, collapsed, onNavigate, onExpandSidebar
             label={item.label}
             icon={item.icon}
             items={item.children}
+            soloColab={soloColab}
             role={role}
             collapsed={collapsed}
             onNavigate={onNavigate}
@@ -509,6 +517,8 @@ export default function Sidebar({ collapsed = false, onToggleCollapsed, onNaviga
       <CollapsibleNav
         sections={NAV_SECTIONS}
         role={role}
+        soloColab={user?.gestor_colaboraciones === true
+          && !['superadmin', 'admin', 'soporte'].includes(role)}
         collapsed={collapsed}
         onNavigate={onNavigate}
         onExpandSidebar={onToggleCollapsed}

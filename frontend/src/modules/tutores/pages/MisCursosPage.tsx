@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { GraduationCap, Coins, Info, TrendUp, CaretRight, X } from '@phosphor-icons/react';
+import { GraduationCap, Coins, Info, TrendUp, CaretRight, X, FilePdf, DownloadSimple } from '@phosphor-icons/react';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell, LabelList,
 } from 'recharts';
@@ -51,6 +51,15 @@ export default function MisCursosPage() {
   const [elegido, setElegido] = useState<number | null>(null);
   const [ficha, setFicha] = useState<CursoFicha | null>(null);
   const [cargandoFicha, setCargandoFicha] = useState(false);
+  const [bajando, setBajando] = useState(false);
+
+  async function abrirBrochure(productId: number) {
+    setBajando(true);
+    try {
+      const r = await tutoresApi.brochureDelCurso(productId);
+      if (r.success && r.data?.url) window.open(r.data.url, '_blank', 'noopener');
+    } finally { setBajando(false); }
+  }
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -297,16 +306,35 @@ export default function MisCursosPage() {
                 </button>
               </div>
 
+              {ficha.brochure ? (
+                <button type="button" disabled={bajando} onClick={() => abrirBrochure(ficha.id)}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md border border-border hover:bg-muted/50 transition-colors text-left">
+                  <FilePdf size={20} weight="fill" className="text-red-600 shrink-0" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-medium truncate">{ficha.brochure.filename_original}</span>
+                    <span className="block text-[11px] text-muted-foreground">
+                      Brochure del curso · versión {ficha.brochure.version}
+                      {ficha.brochure.size_bytes ? ` · ${Math.round(ficha.brochure.size_bytes / 1024)} KB` : ''}
+                    </span>
+                  </span>
+                  <DownloadSimple size={16} weight="bold" className="text-muted-foreground shrink-0" />
+                </button>
+              ) : (
+                <p className="text-[11px] text-muted-foreground border border-dashed border-border rounded-md px-3 py-2">
+                  Este curso todavía no tiene brochure subido.
+                </p>
+              )}
+
               <p className="text-[11px] text-muted-foreground border border-dashed border-border rounded-md px-3 py-2">
                 Esto es la ficha del curso tal como se publica. Es solo para consultarla: el catálogo lo
                 lleva el equipo del centro.
               </p>
 
               {[
+                ['Temario', ficha.modulos_texto],
                 ['Presentación', ficha.presentacion_texto],
                 ['A quién va dirigido', ficha.dirigido_a_texto],
                 ['Objetivos', ficha.objetivos_texto],
-                ['Temario', ficha.modulos_texto],
                 ['Metodología', ficha.metodologia_texto],
                 ['Para qué te prepara', ficha.para_que_te_prepara_texto],
                 ['Beneficios', ficha.beneficios_texto],

@@ -683,7 +683,12 @@ async function _convertirProformaEnFactura(prof, conv, paymentId, fechaPago) {
        fecha_pago = CASE WHEN $2::text = 'pagada' THEN $3::date ELSE NULL END,
        payment_id = COALESCE(payment_id, $4::int),
        items = $5::jsonb, base_imponible = $6::numeric, iva_pct = $7::numeric, iva_importe = $8::numeric,
-       iva_incluido = true, total = $9::numeric, leyenda_iva = $10, updated_at = NOW()
+       iva_incluido = true, total = $9::numeric, leyenda_iva = $10,
+       -- El PDF guardado es el de la PROFORMA, con su sello de «documento sin
+       -- validez fiscal». Si no se invalida aqui, el documento pasa a ser una
+       -- factura de verdad pero quien lo descargue se lleva el papel viejo.
+       pdf_path = NULL,
+       updated_at = NOW()
      WHERE id = $1 RETURNING *`,
     [prof.id, saldada ? 'pagada' : 'emitida', fechaPago, paymentId, items, base, ivaPct, ivaImp, total,
      ivaPct === 0 ? 'Operación exenta de IVA conforme a la normativa aplicable.' : null]);

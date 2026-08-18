@@ -571,3 +571,70 @@ export async function imparteEsteCurso(tutorId, productId) {
   );
   return rows[0]?.ok === true;
 }
+
+// El brochure del curso: el PDF que se le manda al alumno.
+//
+// Vive en el modulo de dossiers y esta versionado —la version anterior no se
+// borra, se marca inactiva—. Al profesor se le enseña SOLO la vigente: el
+// historial de versiones es cosa de quien lleva el catalogo.
+export async function brochureDelCurso(productId) {
+  const { rows: [d] } = await query(
+    `SELECT id, filename_original, version, size_bytes, created_at
+       FROM dossiers
+      WHERE product_id = $1 AND active
+      ORDER BY version DESC
+      LIMIT 1`,
+    [productId]
+  );
+  return d || null;
+}
+
+// ¿Tiene la casilla de gestor de colaboraciones?
+//
+// Se consulta la BASE y no el token. El token dura quince minutos y lleva solo
+// el rol; si la casilla viajara ahi, quitarle el permiso a alguien no surtiria
+// efecto hasta que caducara su sesion. Es el mismo criterio que usa
+// esFacturaManager en el modulo de facturas.
+export async function esGestorColaboraciones(userId) {
+  if (!userId) return false;
+  const { rows } = await query('SELECT gestor_colaboraciones FROM users WHERE id = $1', [userId]);
+  return rows[0]?.gestor_colaboraciones === true;
+}
+
+// Retirar a un profesor.
+//
+// NO se borra la fila: sus comisiones y sus colaboraciones apuntan a el, y
+// borrarlo dejaria dinero pagado colgando de un usuario que ya no existe. Se
+// desactiva —deja de entrar y desaparece de las listas— y se cierran sus
+// colaboraciones a dia de hoy, para que no siga devengando comisiones.
+export async function retirarTutor(tutorId) {
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+    const { rows: [t] } = await client.query(
+      `UPDATE users SET active = false, updated_at = NOW()
+        WHERE id = $1 AND role = 'tutor' RETURNING id, nombre, email`, [tutorId]);
+    if (!t) { await client.query('ROLLBACK'); return null; }
+    const { rowCount } = await client.query(
+      `UPDATE tutor_collaborations
+          SET activa = false,
+              vigente_hasta = COALESCE(vigente_hasta, CURRENT_DATE),
+              updated_at = NOW()
+        WHERE tutor_id = $1 AND activa`, [tutorId]);
+    const { rows: [pend] } = await client.query(
+      `SELECT COALESCE(SUM(importe), 0) AS pendiente
+         FROM tutor_commissions WHERE tutor_id = $1 AND estado = 'pendiente'`, [tutorId]);
+    await client.query('COMMIT');
+    return { ...t, cursosCerrados: rowCount, pendienteDePagar: Number(pend.pendiente) };
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally { client.release(); }
+}
+
+export async function reactivarTutor(tutorId) {
+  const { rows: [t] } = await query(
+    `UPDATE users SET active = true, updated_at = NOW()
+      WHERE id = $1 AND role = 'tutor' RETURNING id, nombre, email`, [tutorId]);
+  return t || null;
+}

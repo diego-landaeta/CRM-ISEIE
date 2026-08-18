@@ -3,9 +3,13 @@ import { query } from '../../shared/config/db.js';
 export async function findUserByEmail(email) {
   const { rows } = await query(
     `SELECT u.id, u.nombre, u.email, u.password_hash, u.role, u.active, u.avatar_url,
-            u.custom_role_id, u.factura_manager, u.editar_fechas_factura, u.set_password_token, u.set_password_expires
+            u.custom_role_id, u.factura_manager, u.editar_fechas_factura, u.gestor_colaboraciones, u.set_password_token, u.set_password_expires
      FROM users u
-     WHERE u.email = $1`,
+     -- Sin distinguir mayusculas: el formulario de entrada pasa el correo a
+     -- minusculas, asi que comparar exacto dejaba FUERA a cualquiera dado de
+     -- alta con una mayuscula en su direccion. No podia entrar nunca, y el
+     -- mensaje decia «credenciales incorrectas», que no ayuda a descubrirlo.
+     WHERE LOWER(u.email) = LOWER($1)`,
     [email]
   );
   return rows[0] || null;
@@ -14,7 +18,7 @@ export async function findUserByEmail(email) {
 export async function findUserById(id) {
   const { rows } = await query(
     `SELECT u.id, u.nombre, u.email, u.role, u.active, u.avatar_url, u.custom_role_id,
-            u.factura_manager, u.editar_fechas_factura,
+            u.factura_manager, u.editar_fechas_factura, u.gestor_colaboraciones,
             cr.label AS custom_role_label
      FROM users u
      LEFT JOIN custom_roles cr ON cr.id = u.custom_role_id

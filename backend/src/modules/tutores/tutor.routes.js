@@ -33,10 +33,15 @@ router.get('/pagos-sin-formacion', ctrl.pagosSinFormacion);
 
 // La ficha del curso que imparte, sin poder tocarla.
 router.get('/curso/:productId', ctrl.cursoDetalle);
+router.get('/curso/:productId/brochure', ctrl.brochureDelCurso);
 
 router.get('/', ctrl.listar);
 router.post('/', ctrl.alta);
 router.get('/:id', ctrl.ficha);
 router.patch('/:id/perfil', ctrl.guardarPerfil);
+// Quien lleva las colaboraciones tambien resuelve las claves y las bajas.
+router.post('/:id/contrasena', ctrl.cambiarContrasena);
+router.post('/:id/reactivar', ctrl.reactivarTutor);
+router.delete('/:id', ctrl.retirarTutor);
 
 export default router;

@@ -7,6 +7,7 @@ import client from '@/shared/api/client';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { Button } from '@/shared/components/ui/button';
+import BuscadorCurso from '../components/BuscadorCurso';
 import { tutoresApi, type Tutor, type Colaboracion, type AjustesTutores } from '../api/tutores.api';
 
 // Tutores y sus colaboraciones.
@@ -56,6 +57,7 @@ export default function TutoresPage() {
   const [cargando, setCargando] = useState(true);
   const [popupAlta, setPopupAlta] = useState(false);
   const [popupColab, setPopupColab] = useState(false);
+  const [cursoColab, setCursoColab] = useState<number | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [borrando, setBorrando] = useState<number | null>(null);
   // Cursos que se le asignan EN EL ALTA. Crear al tutor y luego entrar a
@@ -137,6 +139,8 @@ export default function TutoresPage() {
   }, []);
 
   function elegir(t: Tutor) { setElegido(t); cargarColabs(t); }
+
+  function abrirColab() { setCursoColab(null); setPopupColab(true); }
 
   // Una fila de la lista. Se saca aparte porque se pinta en dos grupos: los de
   // este proyecto y los de las marcas hermanas.
@@ -320,7 +324,7 @@ export default function TutoresPage() {
                     {elegido.email}{elegido.dni_nif ? ` · ${elegido.dni_nif}` : ''}
                   </p>
                 </div>
-                <Button variant="outline" size="sm" className="ml-auto" onClick={() => setPopupColab(true)}>
+                <Button variant="outline" size="sm" className="ml-auto" onClick={abrirColab}>
                   <Plus size={14} weight="bold" className="mr-1.5" /> Añadir formación
                 </Button>
               </div>
@@ -328,7 +332,7 @@ export default function TutoresPage() {
               {colabs.length === 0 ? (
                 <EmptyState icon={Warning} title="Sin formaciones asignadas"
                   description="Mientras no tenga ninguna, no genera comisión."
-                  action={<Button variant="outline" onClick={() => setPopupColab(true)}>Añadir la primera</Button>} />
+                  action={<Button variant="outline" onClick={abrirColab}>Añadir la primera</Button>} />
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
@@ -506,13 +510,14 @@ export default function TutoresPage() {
                 <div className="grid grid-cols-[minmax(0,1fr)_5rem_9.5rem_auto] gap-2 items-end">
                   <label className="text-[11px] text-muted-foreground min-w-0">
                     Curso
-                    <select value={nuevoCurso} onChange={(e) => setNuevoCurso(e.target.value)}
-                      className="mt-1 w-full h-9 px-2 rounded-md border border-border bg-background text-sm text-foreground">
-                      <option value="">Elige uno…</option>
-                      {formaciones
-                        .filter((fo) => !cursosAlta.some((c) => c.productId === fo.id))
-                        .map((fo) => <option key={fo.id} value={fo.id}>{fo.nombre}</option>)}
-                    </select>
+                    <div className="mt-1">
+                      <BuscadorCurso
+                        cursos={formaciones}
+                        valor={nuevoCurso ? Number(nuevoCurso) : null}
+                        onElegir={(id) => setNuevoCurso(id ? String(id) : '')}
+                        excluir={cursosAlta.map((c) => c.productId)}
+                      />
+                    </div>
                   </label>
                   <label className="text-[11px] text-muted-foreground">
                     %
@@ -591,10 +596,15 @@ export default function TutoresPage() {
               </button>
             </div>
 
-            <select name="productId" required className="w-full h-9 px-2 rounded-md border border-border bg-background text-sm">
-              <option value="">Elige la formación…</option>
-              {formaciones.map((f) => <option key={f.id} value={f.id}>{f.nombre}</option>)}
-            </select>
+            {/* Con cientos de cursos, un desplegable no vale: hay que poder escribir. */}
+            <BuscadorCurso
+              cursos={formaciones}
+              valor={cursoColab}
+              onElegir={setCursoColab}
+              excluir={colabs.map((c) => c.product_id)}
+              autoFocus
+            />
+            <input type="hidden" name="productId" value={cursoColab ?? ''} />
 
             <div className="grid grid-cols-3 gap-2">
               <label className="text-xs text-muted-foreground">

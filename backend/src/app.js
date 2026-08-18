@@ -55,6 +55,7 @@ import { startReminderScheduler } from './jobs/reminderScheduler.js';
 import { startWooCommerceSyncScheduler } from './jobs/wooCommerceSyncScheduler.js';
 import { startStripePaymentsSyncScheduler } from './jobs/stripePaymentsSyncScheduler.js';
 import { startTutorCommissionsScheduler } from './jobs/tutorCommissionsScheduler.js';
+import { startVigilanteCatalogoScheduler } from './jobs/vigilanteCatalogoScheduler.js';
 
 const app = express();
 const PORT = process.env.PORT || 3005;
@@ -298,6 +299,7 @@ if (process.env.NODE_ENV !== 'test') {
       try {
         startStripePaymentsSyncScheduler();
         startTutorCommissionsScheduler();
+        startVigilanteCatalogoScheduler();
       } catch (err) {
         logger.error({ err }, 'Stripe sync scheduler fallo al arrancar');
       }

@@ -121,6 +121,8 @@ export interface CursoFicha {
   modulos_texto: string | null;
   metodologia_texto: string | null;
   faqs_texto: string | null;
+  /** El PDF vigente del curso, si lo hay. El enlace se pide aparte. */
+  brochure: { id: number; filename_original: string; version: number; size_bytes: number | null } | null;
 }
 
 export const tutoresApi = {
@@ -189,4 +191,10 @@ export const tutoresApi = {
   /** La ficha del curso que imparte. El servidor comprueba que sea suyo. */
   curso: (productId: number) =>
     client.get(`/tutores/curso/${productId}`) as Promise<ApiResponse<CursoFicha>>,
+
+  /** Enlace temporal al brochure. Caduca: no es una direccion permanente. */
+  brochureDelCurso: (productId: number) =>
+    client.get(`/tutores/curso/${productId}/brochure`) as Promise<ApiResponse<{
+      url: string; filename: string; version: number;
+    }>>,
 };
