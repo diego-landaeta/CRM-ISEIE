@@ -27,8 +27,13 @@ async function sendEmail({ to, subject, htmlContent, textContent, tags = [], fro
     subject,
     htmlContent,
     textContent,
-    tags,
   };
+  // Las etiquetas solo si las hay. Mandar la lista vacia hace que Brevo
+  // conteste «400 · tags is blank» y NO envie el correo — y como casi ninguna
+  // llamada pasa etiquetas, eso era todos los correos del CRM.
+  if (Array.isArray(tags) && tags.length > 0) {
+    payload.tags = tags;
+  }
   // Brevo acepta `attachment: [{ name, content }]` con content en base64.
   // PDFs de facturas/certs estan muy por debajo del limite de 10MB.
   if (Array.isArray(attachment) && attachment.length > 0) {
