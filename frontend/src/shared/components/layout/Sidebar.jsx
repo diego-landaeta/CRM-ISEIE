@@ -44,7 +44,9 @@ const NAV_SECTIONS = [
           { to: '/whatsapp/conexion', label: 'Conexión' },
           { to: '/whatsapp/plantillas', label: 'Plantillas' },
           // Solo para quien manda: entrar en el WhatsApp de cada gestora.
-          { to: '/whatsapp/equipo', label: 'WhatsApp del equipo', roles: ['superadmin', 'admin'] },
+          // Fuera del menu: usaba el navegador remoto, que se ha retirado.
+          // Vuelve cuando se rehaga sobre el chat nuevo.
+          // { to: '/whatsapp/equipo', label: 'WhatsApp del equipo', roles: ['superadmin', 'admin'] },
         ],
       },
       // Ventas vive en Principal (flujo diario) y también en Finanzas. Clientes
