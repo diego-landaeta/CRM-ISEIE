@@ -34,6 +34,19 @@ export function errorHandler(err, req, res, _next) {
 
   if (!err.isOperational) {
     logger.error({ err, path: req.path, method: req.method }, 'Unhandled error');
+  } else if (statusCode >= 400 && statusCode < 500) {
+    // Los rechazos tambien se escriben. Antes solo se guardaban los 5xx, y por
+    // eso el dia que doce gestoras no pudieron crear un prospecto no habia ni
+    // una linea que lo dijera: el servidor contestaba «falta el telefono» y
+    // nadie podia verlo desde fuera. Sin datos personales: ruta, motivo y quien.
+    logger.warn({
+      path: req.path,
+      method: req.method,
+      status: statusCode,
+      code: err.code || null,
+      motivo: err.message,
+      userId: req.user?.userId || null,
+    }, 'Peticion rechazada');
   }
 
   // Guardar errores 5xx en status_errors para el panel de soporte

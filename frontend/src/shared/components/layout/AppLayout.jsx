@@ -1,6 +1,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
+import Toaster from './Toaster';
 import { List, X } from '@phosphor-icons/react';
 import { cn } from '@/shared/lib/utils';
 import CommandPalette from '@/shared/components/ui/CommandPalette';
@@ -120,6 +121,12 @@ export default function AppLayout() {
           </div>
         </Suspense>
       </main>
+
+      {/* Los avisos del CRM. Sin esto, `toast(...)` no pinta nada: el aviso se
+          manda y no lo ve nadie. Estuvo asi hasta el 19/08 y por eso «guardar
+          un prospecto no hacia nada» — el servidor devolvia el motivo del
+          rechazo y la pantalla se lo callaba. */}
+      <Toaster />
     </div>
   );
 }
