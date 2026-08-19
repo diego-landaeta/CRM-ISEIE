@@ -1,0 +1,418 @@
+/* El aspecto de WhatsApp Web.
+ *
+ * Nada de esto es diseño inventado. Son tres piezas encontradas:
+ *
+ *   · La estructura la pone @chatscope/chat-ui-kit-react (MIT): burbujas con
+ *     cola, agrupado de mensajes seguidos, separadores y lista de chats.
+ *   · El fondo de patron sale de yuvraj24/WhatsApp-Clone (MIT) — ver
+ *     assets/CREDITOS.md.
+ *   · Los colores son los del WhatsApp Web actual en modo oscuro.
+ *
+ * Aqui solo se reapuntan las variables del kit a esos colores.
+ */
+
+:root {
+  /* La paleta del WhatsApp Web oscuro. */
+  --wa-fondo:        #0b141a;  /* el area del hilo */
+  --wa-panel:        #111b21;  /* lista de chats */
+  --wa-cabecera:     #202c33;  /* cabeceras y barra de escritura */
+  --wa-mia:          #005c4b;  /* burbuja propia, verde oscuro */
+  --wa-suya:         #202c33;  /* burbuja del otro */
+  --wa-texto:        #e9edef;
+  --wa-apagado:      #8696a0;  /* horas, subtitulos */
+  --wa-borde:        #222d34;
+  --wa-hover:        #2a3942;
+  --wa-tic-azul:     #53bdeb;
+  --wa-verde:        #00a884;  /* acentos, badge de no leidos */
+}
+
+.wa-marco {
+  position: relative;
+  /* El alto lo pone JavaScript midiendo: aqui solo el minimo. Un numero fijo
+     dejaba media pantalla sin usar segun el ancho y segun si habia barra de
+     estado arriba. */
+  min-height: 420px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--wa-borde);
+}
+
+/* La lista de chats ocupa lo que necesita; el hilo, todo lo demas. */
+.wa-marco .cs-sidebar { flex: 0 0 340px; max-width: 340px; }
+.wa-marco .cs-chat-container { flex: 1 1 auto; }
+
+/* ── Contenedores ────────────────────────────────────────────────────────── */
+
+.wa-marco .cs-main-container,
+.wa-marco .cs-chat-container {
+  background-color: var(--wa-fondo);
+  border: 0;
+}
+
+.wa-marco .cs-sidebar,
+.wa-marco .cs-conversation-list {
+  background-color: var(--wa-panel);
+  border-right: 1px solid var(--wa-borde);
+}
+
+.wa-marco .cs-conversation-header,
+.wa-marco .cs-message-input,
+.wa-marco .cs-message-input__content-editor-wrapper,
+.wa-marco .cs-message-input__content-editor,
+.wa-marco .cs-message-input__tools {
+  background-color: var(--wa-cabecera);
+  color: var(--wa-texto);
+  border-color: var(--wa-borde);
+}
+.wa-marco .cs-message-input__content-editor:empty::before { color: var(--wa-apagado); }
+
+/* El fondo de patron del hilo, que es lo que mas hace que «se vea WhatsApp». */
+.wa-marco .cs-message-list {
+  background-color: var(--wa-fondo);
+  background-image: url('../assets/fondo-whatsapp.png');
+  background-repeat: repeat;
+  background-size: 412px;
+  background-blend-mode: overlay;
+}
+
+/* ── Lista de chats ──────────────────────────────────────────────────────── */
+
+.wa-marco .cs-conversation {
+  background-color: transparent;
+  border-bottom: 1px solid var(--wa-borde);
+}
+.wa-marco .cs-conversation:hover,
+.wa-marco .cs-conversation.cs-conversation--active { background-color: var(--wa-hover); }
+.wa-marco .cs-conversation__name,
+.wa-marco .cs-conversation-header__user-name { color: var(--wa-texto); background: transparent; }
+.wa-marco .cs-conversation__info,
+.wa-marco .cs-conversation-header__info { color: var(--wa-apagado); background: transparent; }
+
+.wa-marco .cs-conversation__unread {
+  background-color: var(--wa-verde);
+  color: #0b141a;
+  font-weight: 700;
+}
+
+.wa-marco .cs-search,
+.wa-marco .cs-search__input {
+  background-color: var(--wa-hover);
+  color: var(--wa-texto);
+  border-radius: 8px;
+}
+.wa-marco .cs-search__input::placeholder { color: var(--wa-apagado); }
+.wa-marco .cs-search__search-icon { color: var(--wa-apagado); }
+
+/* ── Burbujas ────────────────────────────────────────────────────────────── */
+
+/* Ojo con el peso de los selectores.
+ *
+ * El kit trae reglas propias con TRES clases para el primer mensaje de cada
+ * tanda —.cs-message.cs-message--outgoing.cs-message--first— y para el ultimo y
+ * el suelto. Las de aqui llevaban dos y perdian: el primer mensaje de cada
+ * tanda salia con el azul de fabrica del kit en medio de las burbujas verdes.
+ * Por eso se nombra tambien .cs-message y se repiten los estados uno a uno. */
+.wa-marco .cs-message.cs-message--outgoing .cs-message__content,
+.wa-marco .cs-message.cs-message--outgoing.cs-message--first .cs-message__content,
+.wa-marco .cs-message.cs-message--outgoing.cs-message--normal .cs-message__content,
+.wa-marco .cs-message.cs-message--outgoing.cs-message--last .cs-message__content,
+.wa-marco .cs-message.cs-message--outgoing.cs-message--single .cs-message__content {
+  background-color: var(--wa-mia);
+  color: var(--wa-texto);
+}
+.wa-marco .cs-message.cs-message--incoming .cs-message__content,
+.wa-marco .cs-message.cs-message--incoming.cs-message--first .cs-message__content,
+.wa-marco .cs-message.cs-message--incoming.cs-message--normal .cs-message__content,
+.wa-marco .cs-message.cs-message--incoming.cs-message--last .cs-message__content,
+.wa-marco .cs-message.cs-message--incoming.cs-message--single .cs-message__content {
+  background-color: var(--wa-suya);
+  color: var(--wa-texto);
+}
+
+/* La forma. En WhatsApp solo se corta UNA esquina: la de arriba del primer
+   mensaje de cada tanda, del lado de quien escribe. El resto van redondeados.
+   El kit corta esquinas distintas en el ultimo y en el suelto, asi que hay que
+   redondearlas de vuelta con el mismo peso. */
+.wa-marco .cs-message.cs-message--incoming .cs-message__content,
+.wa-marco .cs-message.cs-message--incoming.cs-message--normal .cs-message__content,
+.wa-marco .cs-message.cs-message--incoming.cs-message--last .cs-message__content,
+.wa-marco .cs-message.cs-message--outgoing .cs-message__content,
+.wa-marco .cs-message.cs-message--outgoing.cs-message--normal .cs-message__content,
+.wa-marco .cs-message.cs-message--outgoing.cs-message--last .cs-message__content {
+  border-radius: 8px;
+}
+.wa-marco .cs-message.cs-message--outgoing.cs-message--single .cs-message__content,
+.wa-marco .cs-message.cs-message--outgoing.cs-message--first .cs-message__content {
+  border-radius: 8px;
+  border-top-right-radius: 0;
+}
+.wa-marco .cs-message.cs-message--incoming.cs-message--single .cs-message__content,
+.wa-marco .cs-message.cs-message--incoming.cs-message--first .cs-message__content {
+  border-radius: 8px;
+  border-top-left-radius: 0;
+}
+
+.wa-marco .cs-message-separator {
+  background-color: rgba(11, 20, 26, 0.75);
+  color: var(--wa-apagado);
+  border: 0;
+  border-radius: 8px;
+  font-size: 12px;
+  padding: 5px 12px;
+  width: fit-content;
+  margin: 12px auto;
+}
+/* El kit le pinta una raya a cada lado. La pildora de WhatsApp no las lleva. */
+.wa-marco .cs-message-separator::before,
+.wa-marco .cs-message-separator::after { display: none; }
+
+.wa-texto { white-space: pre-wrap; word-break: break-word; font-size: 14px; }
+
+/* La hora y los tics, abajo a la derecha dentro de la burbuja. */
+.wa-meta {
+  display: block;
+  text-align: right;
+  font-size: 11px;
+  color: var(--wa-apagado);
+  margin-top: 2px;
+  line-height: 1;
+}
+.cs-message--outgoing .wa-meta { color: rgba(233, 237, 239, 0.6); }
+.cs-message--outgoing .wa-meta.wa-leido { color: var(--wa-tic-azul); }
+
+/* ── Adjuntos ────────────────────────────────────────────────────────────── */
+
+.wa-adjunto { margin-bottom: 4px; }
+.wa-imagen { border-radius: 6px; max-width: 260px; max-height: 280px; display: block; }
+
+/* Los stickers van sueltos sobre el fondo, sin burbuja y pequeños. Hay que
+   repetir el estado —first, last, single— porque si no ganan las reglas de
+   color de mas arriba, que llevan las mismas clases y llegaron antes. */
+.wa-sticker { max-width: 130px; max-height: 130px; display: block; }
+.wa-marco .cs-message.wa-msg-sticker.cs-message--incoming .cs-message__content,
+.wa-marco .cs-message.wa-msg-sticker.cs-message--incoming.cs-message--first .cs-message__content,
+.wa-marco .cs-message.wa-msg-sticker.cs-message--incoming.cs-message--normal .cs-message__content,
+.wa-marco .cs-message.wa-msg-sticker.cs-message--incoming.cs-message--last .cs-message__content,
+.wa-marco .cs-message.wa-msg-sticker.cs-message--incoming.cs-message--single .cs-message__content,
+.wa-marco .cs-message.wa-msg-sticker.cs-message--outgoing .cs-message__content,
+.wa-marco .cs-message.wa-msg-sticker.cs-message--outgoing.cs-message--first .cs-message__content,
+.wa-marco .cs-message.wa-msg-sticker.cs-message--outgoing.cs-message--normal .cs-message__content,
+.wa-marco .cs-message.wa-msg-sticker.cs-message--outgoing.cs-message--last .cs-message__content,
+.wa-marco .cs-message.wa-msg-sticker.cs-message--outgoing.cs-message--single .cs-message__content {
+  background-color: transparent;
+  padding: 0;
+  border-radius: 0;
+}
+/* Sin burbuja detras, la hora en gris claro se pierde sobre el fondo. */
+.wa-msg-sticker .wa-meta { color: var(--wa-apagado); }
+.wa-audio { max-width: 250px; height: 40px; }
+.wa-doc { color: var(--wa-texto); text-decoration: underline; text-underline-offset: 2px; font-size: 13px; }
+.wa-sin-archivo { font-size: 12px; color: var(--wa-apagado); }
+
+/* ── Piezas que el kit no trae ───────────────────────────────────────────── */
+
+.wa-foto {
+  width: 100%; height: 100%;
+  border-radius: 9999px;
+  object-fit: cover;
+}
+
+.wa-inicial {
+  width: 100%; height: 100%;
+  display: grid; place-items: center;
+  border-radius: 9999px;
+  background: #6a7175;
+  color: #cfd9de;
+  font-size: 14px; font-weight: 600;
+}
+
+.wa-barra-lista {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px;
+  background-color: var(--wa-cabecera);
+  border-bottom: 1px solid var(--wa-borde);
+}
+.wa-barra-lista .cs-search { flex: 1; }
+
+.wa-btn-nuevo, .wa-btn-prohibir, .wa-btn-micro {
+  display: grid; place-items: center;
+  width: 34px; height: 34px;
+  border-radius: 9999px;
+  border: 0; cursor: pointer;
+  background: transparent;
+  color: var(--wa-apagado);
+}
+.wa-btn-nuevo:hover, .wa-btn-prohibir:hover, .wa-btn-micro:hover {
+  background: var(--wa-hover); color: var(--wa-texto);
+}
+.wa-btn-prohibir:hover { color: #f15c6d; }
+
+/* El microfono va flotando sobre la barra de escritura: el kit no lo trae. */
+.wa-btn-micro { position: absolute; right: 60px; bottom: 13px; z-index: 5; }
+.wa-btn-micro.wa-grabando {
+  background: #f15c6d; color: #fff;
+  animation: wa-latido 1s ease-in-out infinite;
+}
+@keyframes wa-latido { 50% { opacity: 0.5; } }
+
+.wa-bloqueado {
+  display: flex; align-items: center; gap: 8px;
+  padding: 14px;
+  background: var(--wa-cabecera);
+  border-top: 1px solid var(--wa-borde);
+  color: #f15c6d;
+  font-size: 13px;
+}
+
+.wa-vacio {
+  display: grid; place-items: center; height: 100%;
+  color: var(--wa-apagado); font-size: 14px; text-align: center;
+}
+
+/* El kit pinta iconos propios en la barra; se apagan para no duplicar. */
+.wa-marco .cs-button--attachment { color: var(--wa-apagado); }
+.wa-marco .cs-button--send { color: var(--wa-apagado); }
+.wa-marco .cs-button--attachment:hover,
+.wa-marco .cs-button--send:hover { color: var(--wa-texto); }
+
+/* ── Carga ───────────────────────────────────────────────────────────────── */
+
+.wa-cargando {
+  display: grid; place-items: center;
+  padding: 28px 12px;
+}
+.wa-cargando .cs-loader { color: var(--wa-apagado); }
+.wa-cargando .cs-loader::before { border-color: var(--wa-verde) transparent var(--wa-verde) transparent; }
+
+/* Al emparejar, WhatsApp manda el historial en tandas y la lista crece durante
+   un minuto largo. Sin este aviso parece que faltan conversaciones. */
+.wa-sincronizando {
+  padding: 6px 10px;
+  background: rgba(0, 168, 132, 0.12);
+  color: var(--wa-verde);
+  font-size: 12px;
+  text-align: center;
+  border-bottom: 1px solid var(--wa-borde);
+}
+
+.wa-girando { animation: wa-vuelta 1.1s linear infinite; color: var(--wa-verde); }
+@keyframes wa-vuelta { to { transform: rotate(360deg); } }
+
+.wa-marco .cs-message-separator.wa-ver-mas {
+  cursor: pointer;
+  background: var(--wa-cabecera);
+  border: 1px solid var(--wa-borde);
+}
+.wa-marco .cs-message-separator.wa-ver-mas:hover { color: var(--wa-texto); }
+
+/* ── Paneles ─────────────────────────────────────────────────────────────────
+ *
+ * Todo lo que antes era window.prompt o window.confirm vive aqui. Esas
+ * ventanas las pinta el sistema operativo: salen fuera del chat, con la fuente
+ * y los botones del navegador, y no hay forma de darles estilo. Encima algunos
+ * navegadores las bloquean sin avisar y la accion se pierde en silencio.
+ */
+
+.wa-velo {
+  position: fixed; inset: 0; z-index: 50;
+  display: grid; place-items: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.wa-panel {
+  width: 100%; max-width: 420px;
+  background: var(--wa-panel);
+  border: 1px solid var(--wa-borde);
+  border-radius: 10px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+  color: var(--wa-texto);
+}
+
+.wa-panel-cabecera {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px;
+  padding: 13px 16px;
+  background: var(--wa-cabecera);
+  border-bottom: 1px solid var(--wa-borde);
+  font-size: 14px; font-weight: 600;
+}
+
+.wa-panel-cerrar {
+  display: grid; place-items: center;
+  width: 26px; height: 26px;
+  border: 0; border-radius: 9999px;
+  background: transparent; color: var(--wa-apagado); cursor: pointer;
+}
+.wa-panel-cerrar:hover { background: var(--wa-hover); color: var(--wa-texto); }
+
+.wa-panel-cuerpo { padding: 16px; display: grid; gap: 10px; }
+.wa-panel-nota { font-size: 12.5px; color: var(--wa-apagado); line-height: 1.5; margin: 0; }
+.wa-panel-nota strong { color: var(--wa-texto); }
+
+.wa-campo {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--wa-borde);
+  border-radius: 8px;
+  background: var(--wa-hover);
+  color: var(--wa-texto);
+  font-size: 14px;
+  outline: none;
+}
+.wa-campo::placeholder { color: var(--wa-apagado); }
+.wa-campo:focus { border-color: var(--wa-verde); }
+.wa-campo-lupa { padding-left: 32px; }
+.wa-lupa {
+  position: absolute; left: 10px; top: 50%;
+  transform: translateY(-50%);
+  color: var(--wa-apagado);
+  pointer-events: none;
+}
+
+.wa-panel-pie {
+  display: flex; justify-content: flex-end; gap: 8px;
+  padding: 12px 16px;
+  background: var(--wa-cabecera);
+  border-top: 1px solid var(--wa-borde);
+}
+
+.wa-btn-verde, .wa-btn-rojo, .wa-btn-suave {
+  padding: 8px 16px;
+  border: 0; border-radius: 8px;
+  font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.wa-btn-verde { background: var(--wa-verde); color: #0b141a; }
+.wa-btn-verde:hover { filter: brightness(1.1); }
+.wa-btn-rojo { background: #f15c6d; color: #0b141a; }
+.wa-btn-rojo:hover { filter: brightness(1.1); }
+.wa-btn-suave { background: transparent; color: var(--wa-apagado); }
+.wa-btn-suave:hover { background: var(--wa-hover); color: var(--wa-texto); }
+
+.wa-lista-panel { max-height: 300px; overflow-y: auto; }
+
+.wa-fila {
+  display: block; width: 100%; text-align: left;
+  padding: 10px 16px;
+  border: 0; border-top: 1px solid var(--wa-borde);
+  background: transparent; cursor: pointer;
+}
+.wa-fila:hover { background: var(--wa-hover); }
+.wa-fila-accion { color: var(--wa-verde); font-size: 13px; font-weight: 600; }
+.wa-fila-nombre { color: var(--wa-texto); font-size: 14px; font-weight: 600; }
+.wa-fila-dato { color: var(--wa-apagado); font-size: 12px; margin-top: 1px; }
+
+/* El adjunto que todavia no se ha bajado. No es un error: del historial viejo
+   solo se descarga lo reciente, y el resto se pide con un clic. */
+.wa-pedir {
+  display: inline-block;
+  padding: 5px 11px;
+  border: 1px solid var(--wa-borde);
+  border-radius: 9999px;
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--wa-apagado);
+  font-size: 12px;
+  cursor: pointer;
+}
+.wa-pedir:hover { color: var(--wa-texto); border-color: var(--wa-verde); }

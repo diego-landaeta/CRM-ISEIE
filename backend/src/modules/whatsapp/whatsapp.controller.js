@@ -147,6 +147,12 @@ export async function abrirSala(req, res, next) {
     if (!esAdmin(req)) throw new AppError('Solo un administrador entra en la sala de otra persona', 403, 'FORBIDDEN');
     const userId = parseInt(req.params.userId);
     if (!userId) throw new AppError('userId invalido', 400, 'BAD_REQUEST');
+    // El panel solo lista a quien tiene derecho, pero la ruta acepta cualquier
+    // userId: sin esto, un userId escrito a mano abre una sala que luego no
+    // sale en ese mismo panel.
+    if (!await model.tieneSalaPropia(userId)) {
+      throw new AppError('Esa persona no tiene WhatsApp propio', 400, 'SIN_SALA_PROPIA');
+    }
     if (!SALAS || !SALAS_TOKEN) throw new AppError('No hay gestor de salas configurado en el servidor', 503, 'NO_SALAS');
 
     const r = await pedirSalas(`/sala?clave=${clave(userId)}`, 'POST', 60000);
@@ -224,6 +230,17 @@ export async function sala(req, res, next) {
       }});
     }
 
+    // Sin derecho a sala no se enciende ninguna. Antes se encendia igual, y
+    // como equipo() no lista a un admin que no trabaja leads, esa sala no
+    // aparecia en ningun panel: nadie podia verla ni apagarla, y se quedaba
+    // ocupando una ranura con sus pestañas dentro.
+    if (!await model.tieneSalaPropia(userId)) {
+      return res.json({ success: true, data: {
+        configurada: false,
+        motivo: 'No tienes WhatsApp propio. Entra en el de una gestora desde WhatsApp · Equipo.',
+      }});
+    }
+
     // Su sala, no una compartida. Se enciende al pedirla —el gestor espera a
     // que responda antes de contestar— porque para una gestora esta pantalla es
     // su herramienta del dia: llegar y tener que pulsar «encender» sobra.
@@ -243,12 +260,20 @@ export async function sala(req, res, next) {
       ranura = r.ranura;
     }
 
+    // La clave viaja DENTRO de la direccion del marco, asi que acaba en la
+    // consola del navegador de quien abre la pantalla. Aqui va siempre la de
+    // usuario, nunca la de admin: esta es tu propia sala y no hay a quien
+    // quitarle el mando. La de admin —la unica que permite echar a otro— sale
+    // solo por abrirSala(), cuando alguien entra a proposito en la sala ajena.
+    //
+    // Antes se entregaba la de admin a cualquier administrador que se limitara
+    // a abrir su pantalla, y esa es la llave de TODAS las salas.
     res.json({ success: true, data: {
       configurada: true,
       userId,
       ranura,
-      mandaAqui: esAdmin(req),
-      url: await direccionSala(req, ranura, esAdmin(req)),
+      mandaAqui: false,
+      url: await direccionSala(req, ranura, false),
     }});
   } catch (err) { next(err); }
 }

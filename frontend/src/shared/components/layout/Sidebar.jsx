@@ -37,7 +37,11 @@ const NAV_SECTIONS = [
         icon: WhatsappLogo,
         apagable: 'whatsapp',
         children: [
+          { to: '/whatsapp/chat', label: 'Chat' },
           { to: '/whatsapp', label: 'Mi WhatsApp', end: true },
+          // Sin recorte por rol: cada gestora enlaza SU numero, y el servidor solo
+          // la deja tocar el suyo.
+          { to: '/whatsapp/conexion', label: 'Conexión' },
           { to: '/whatsapp/plantillas', label: 'Plantillas' },
           // Solo para quien manda: entrar en el WhatsApp de cada gestora.
           { to: '/whatsapp/equipo', label: 'WhatsApp del equipo', roles: ['superadmin', 'admin'] },

@@ -33,6 +33,9 @@ const WhatsappWidgetPage = lazy(() => import('./modules/widget/pages/WhatsappWid
 const WhatsappPage = lazy(() => import('./modules/whatsapp/pages/WhatsappPage'));
 const PlantillasWhatsappPage = lazy(() => import('./modules/whatsapp/pages/PlantillasPage'));
 const EquipoWhatsappPage = lazy(() => import('./modules/whatsapp/pages/EquipoPage'));
+// El chat de verdad: las conversaciones viven en el CRM, no en un navegador remoto.
+const ChatWhatsappPage = lazy(() => import('./modules/whatsapp/pages/ChatPage'));
+const ConexionWhatsappPage = lazy(() => import('./modules/whatsapp/pages/ConexionPage'));
 const TutoresPage = lazy(() => import('./modules/tutores/pages/TutoresPage'));
 const ComisionesTutoresPage = lazy(() => import('./modules/tutores/pages/ComisionesTutoresPage'));
 const MisCursosPage = lazy(() => import('./modules/tutores/pages/MisCursosPage'));
@@ -86,6 +89,8 @@ const ROUTE_TITLES = {
   '/leads':                           'Prospectos',
 
   '/whatsapp': 'WhatsApp',
+  '/whatsapp/chat': 'Chat de WhatsApp',
+  '/whatsapp/conexion': 'Conexión de WhatsApp',
   '/products':                        'Productos',
   '/sales/analisis':                  'Análisis de ventas',
   '/sales':                           'Ventas',
@@ -208,6 +213,8 @@ function App() {
           <Route path="/forms" element={<FormsPage />} />
           <Route path="/captacion/whatsapp" element={<WhatsappWidgetPage />} />
           <Route path="/whatsapp" element={<WhatsappPage />} />
+          <Route path="/whatsapp/chat" element={<ChatWhatsappPage />} />
+          <Route path="/whatsapp/conexion" element={<ConexionWhatsappPage />} />
           <Route path="/whatsapp/plantillas" element={<PlantillasWhatsappPage />} />
           <Route path="/whatsapp/equipo" element={<EquipoWhatsappPage />} />
           <Route path="/tutores" element={<TutoresPage />} />

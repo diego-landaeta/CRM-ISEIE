@@ -23,6 +23,9 @@ export interface ProspectoCola {
   gestora: string | null;
   ultimo_contacto: string | null;
   contactos: number;
+  /** Cuantos cumplen el filtro en total, no cuantos se han traido. Igual en
+   *  todas las filas: el servidor lo calcula antes de aplicar el tope. */
+  total?: number;
 }
 
 type Params = Record<string, string | number | null | undefined> | undefined;
@@ -67,3 +70,107 @@ export const whatsappApi = {
       tipo: 'whatsapp', nota, fecha: new Date().toISOString(),
     }),
 };
+
+// ── El chat ──────────────────────────────────────────────────────────────────
+// Las conversaciones viven ahora en el CRM. Antes se veian en un navegador
+// remoto y no se guardaban en ninguna parte.
+
+export interface ChatWhatsapp {
+  id: number;
+  instancia: string;
+  jid: string;
+  telefono: string;
+  nombre_push: string | null;
+  avatar_url: string | null;
+  lead_id: number | null;
+  lead_nombre: string | null;
+  lead_status: string | null;
+  project_id: number | null;
+  es_grupo: boolean;
+  no_escribir: boolean;
+  motivo_no_escribir: string | null;
+  ultimo_at: string | null;
+  no_leidos: number;
+  ultimo_texto: string | null;
+}
+
+export interface MensajeWhatsapp {
+  id: number;
+  wa_id: string | null;
+  direccion: 'entrante' | 'saliente';
+  tipo: string;
+  texto: string | null;
+  media_url: string | null;
+  media_mime: string | null;
+  nombre_archivo: string | null;
+  /** El permiso para pedir el adjunto: «?c=...&f=...». Un <img> no puede
+   *  mandar cabeceras, asi que lo que autoriza es esta firma temporal. Se pega
+   *  detras de urlMedia(id) — la direccion la arma el frontend, que es quien
+   *  sabe si el CRM cuelga de /crm/ o de /testeo/. */
+  media_firma: string | null;
+  estado: 'enviado' | 'entregado' | 'leido' | 'fallido' | null;
+  enviado_por: number | null;
+  ts: string;
+}
+
+export interface ConexionWhatsapp {
+  configurado: boolean;
+  motivo?: string;
+  instancia?: string;
+  numero?: string | null;
+  nombre?: string | null;
+  conectado?: boolean;
+  estado?: string | null;
+}
+
+export const chatApi = {
+  /** Pide el adjunto de un mensaje que no se bajo en su momento. */
+  descargarAdjunto: (mensajeId: number): Promise<ApiResponse<{ enCola?: boolean; yaEstaba?: boolean }>> =>
+    client.post(`/whatsapp/mensajes/${mensajeId}/descargar`, {}),
+
+  lista: (projectId?: number | null): Promise<ApiResponse<ChatWhatsapp[]>> =>
+    client.get(`/whatsapp/chats${qs({ projectId })}`),
+
+  hilo: (id: number, limite = 100): Promise<ApiResponse<{ conversacion: ChatWhatsapp; mensajes: MensajeWhatsapp[] }>> =>
+    client.get(`/whatsapp/chats/${id}${qs({ limite })}`),
+
+  enviar: (id: number, texto: string): Promise<ApiResponse<MensajeWhatsapp>> =>
+    client.post(`/whatsapp/chats/${id}/enviar`, { texto }),
+
+  noEscribir: (id: number, motivo: string): Promise<ApiResponse<null>> =>
+    client.post(`/whatsapp/chats/${id}/no-escribir`, { motivo }),
+
+  // Abrir un chat nuevo partiendo de un prospecto. Se parte de la base y no de
+  // un numero suelto: quien esta ahi dejo su telefono en un formulario nuestro.
+  abrir: (leadId: number): Promise<ApiResponse<ChatWhatsapp>> =>
+    client.post('/whatsapp/chats', { leadId }),
+
+  // Abrir con un contacto de WhatsApp que no es prospecto. El freno de
+  // consentimiento sigue vigente: si nunca ha escrito, no se le puede escribir.
+  abrirPorTelefono: (telefono: string): Promise<ApiResponse<ChatWhatsapp>> =>
+    client.post('/whatsapp/chats', { telefono }),
+
+  // Prospectos con telefono, para elegir a quien escribir.
+  buscarProspectos: (projectId: number | null, texto: string): Promise<ApiResponse<Array<{ id: number; nombre: string; telefono: string | null; status: string }>>> =>
+    client.get(`/leads${qs({ projectId, search: texto || undefined, limit: 15 })}`),
+
+  // ¿Sigue entrando historial? Al emparejar tarda varios minutos.
+  sincronizacion: (): Promise<ApiResponse<{ conversaciones: number; mensajes: number; entrando: boolean; haceSegundos: number | null; adjuntosPendientes: number }>> =>
+    client.get('/whatsapp/sincronizacion'),
+
+  conexion: (): Promise<ApiResponse<ConexionWhatsapp>> =>
+    client.get('/whatsapp/conexion'),
+
+  // El adjunto va en multipart, no en JSON: el cliente de axios ya pone el
+  // Content-Type con su boundary si se le pasa un FormData.
+  adjunto: (id: number, archivo: File, pie?: string): Promise<ApiResponse<MensajeWhatsapp>> => {
+    const fd = new FormData();
+    fd.append('archivo', archivo);
+    if (pie) fd.append('pie', pie);
+    return client.post(`/whatsapp/chats/${id}/adjunto`, fd);
+  },
+};
+
+/** La direccion desde la que se ve un adjunto ya descargado. */
+export const urlMedia = (mensajeId: number) =>
+  `${(import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '')}/api/whatsapp/media/${mensajeId}`;

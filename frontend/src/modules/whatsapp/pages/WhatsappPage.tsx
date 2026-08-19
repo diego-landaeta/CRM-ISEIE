@@ -22,10 +22,17 @@ import AvisoUso from '../components/AvisoUso';
 
 const ESTADOS = ['por_contactar', 'contactado', 'en_seguimiento', 'proxima_convocatoria'];
 
-// Todo el alto que queda por debajo de la cabecera del CRM. Antes se restaban
-// 230 px por el aviso desplegado; ahora el aviso vive plegado y esos píxeles
-// son para el chat, que es lo que se estaba viendo pequeño.
-const ALTO = 'h-[calc(100vh-170px)] min-h-[420px]';
+// El chat nunca debe salirse de la pantalla: si se sale, lo que queda debajo
+// del pliegue es justo donde se escribe.
+//
+// Antes esto era `h-[calc(100vh-170px)]`, un número fijo, y no podía funcionar:
+// encima del marco hay un aviso que se pliega y despliega, un banner que solo
+// ve un administrador, y el relleno de la página cambia con el ancho (72 px en
+// móvil, 24 en pantalla grande). Medido en una ventana de 780 px, el marco
+// acababa 358 px por debajo del borde inferior.
+//
+// Así que no se adivina: se mide dónde empieza el marco y se le da el resto.
+const ALTO_MINIMO = 420;
 
 export default function WhatsappPage() {
   const { user } = useAuth() as { user: { role?: string } | null };
@@ -47,6 +54,26 @@ export default function WhatsappPage() {
   // Cerrado de entrada: lo que la gestora quiere ver al entrar es el chat.
   const [colaVisible, setColaVisible] = useState(false);
   const marco = useRef<HTMLDivElement>(null);
+  const caja = useRef<HTMLDivElement>(null);
+  const [alto, setAlto] = useState(ALTO_MINIMO);
+
+  // Se recalcula al plegar el aviso, al cambiar el tamaño de la ventana y
+  // cuando aparece o desaparece cualquier cosa de arriba. El ResizeObserver
+  // sobre el body es lo que cubre ese último caso: sin él, plegar el aviso
+  // dejaría un hueco muerto debajo del chat.
+  useEffect(() => {
+    const medir = () => {
+      const arriba = caja.current?.getBoundingClientRect().top;
+      if (arriba === undefined) return;
+      // El 16 es el respiro de abajo, para que el marco no quede pegado al borde.
+      setAlto(Math.max(ALTO_MINIMO, Math.round(window.innerHeight - arriba - 16)));
+    };
+    medir();
+    const ro = new ResizeObserver(medir);
+    if (document.body) ro.observe(document.body);
+    window.addEventListener('resize', medir);
+    return () => { ro.disconnect(); window.removeEventListener('resize', medir); };
+  }, []);
 
   // Dónde vive el WhatsApp Web de esta persona. Lo dice el servidor: así la
   // dirección se cambia en el .env sin reconstruir el frontal.
@@ -85,6 +112,9 @@ export default function WhatsappPage() {
     window.addEventListener('keydown', cerrar);
     return () => window.removeEventListener('keydown', cerrar);
   }, [popup]);
+
+  // Todas las filas traen el mismo total, asi que basta con mirar la primera.
+  const total = cola[0]?.total ?? cola.length;
 
   const textos = useMemo(
     () => (elegido ? plantillas.map((t) => ({ ...t, texto: rellenar(t.body, elegido, activeProject?.nombre) })) : []),
@@ -192,8 +222,16 @@ export default function WhatsappPage() {
             {gestoras.map((g) => <option key={g.id} value={g.id}>{g.nombre}</option>)}
           </select>
         )}
-        <span className="text-xs text-muted-foreground ml-auto tabular-nums">
-          {cargando ? 'cargando…' : `${cola.length} en la cola`}
+        {/* El tope son 100. Decir «100 en la cola» cuando hay 340 hace que la
+            gestora crea que ha terminado, asi que se dice cuantos hay de
+            verdad. */}
+        <span className="text-xs text-muted-foreground ml-auto tabular-nums"
+          title={total > cola.length ? `Se muestran los ${cola.length} mas urgentes de ${total}` : undefined}>
+          {cargando
+            ? 'cargando…'
+            : total > cola.length
+              ? `${cola.length} de ${total} en la cola`
+              : `${cola.length} en la cola`}
         </span>
         <button type="button" onClick={() => setColaVisible((v) => !v)}
           className="h-8 px-2.5 rounded-md text-xs font-semibold border border-border text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5"
@@ -211,13 +249,13 @@ export default function WhatsappPage() {
           se desliza por encima desde la izquierda: se abre, se elige a alguien
           y se cierra solo. Antes vivian en una columna fija que le robaba 300
           px al chat de forma permanente, y ahi es donde se veia apretado. */}
-      <div className="relative">
+      <div ref={caja} className="relative" style={{ height: alto }}>
         {colaVisible && (
           <button type="button" aria-label="Cerrar contactos"
             onClick={() => setColaVisible(false)}
             className="absolute inset-0 z-20 bg-black/40 rounded-lg" />
         )}
-        <aside className={`absolute left-0 top-0 z-30 w-[300px] max-w-[85%] ${ALTO}
+        <aside className={`absolute left-0 top-0 z-30 w-[300px] max-w-[85%] h-full
           bg-card border border-border rounded-lg shadow-2xl flex flex-col
           transition-transform duration-200 ${colaVisible ? 'translate-x-0' : '-translate-x-[110%] pointer-events-none'}`}>
           <div className="px-3 py-2 border-b border-border flex items-center justify-between gap-2 shrink-0">
@@ -258,7 +296,7 @@ export default function WhatsappPage() {
         </aside>
 
         <div ref={marco}
-          className={`bg-card border border-border rounded-lg overflow-hidden flex flex-col ${ALTO}`}>
+          className="bg-card border border-border rounded-lg overflow-hidden flex flex-col h-full">
           {sala?.configurada ? (
             <iframe src={sala.url} title="WhatsApp Web" className="flex-1 w-full bg-black"
               allow="clipboard-read; clipboard-write; autoplay; fullscreen" />

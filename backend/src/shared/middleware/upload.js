@@ -60,3 +60,17 @@ export function validatePdfMagicBytes(req, _res, next) {
 
   next();
 }
+
+// Adjuntos de WhatsApp. Se acepta lo mismo que acepta WhatsApp: audio (notas de
+// voz), imagen, video y documento. El limite de 16 MB es el suyo, no nuestro:
+// mandar mas grande lo rechaza el propio WhatsApp.
+export const uploadWhatsapp = multer({
+  storage,
+  limits: { fileSize: 16 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const ok = /^(audio|image|video)\//.test(file.mimetype)
+      || /^application\/(pdf|msword|vnd\.|zip)/.test(file.mimetype)
+      || file.mimetype === 'text/plain';
+    cb(ok ? null : new Error('Tipo de archivo no admitido por WhatsApp'), ok);
+  },
+});

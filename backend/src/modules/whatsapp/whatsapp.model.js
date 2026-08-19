@@ -90,7 +90,13 @@ export async function cola({ projectId, responsableId, estado, productoId, soloS
             (SELECT MAX(i.fecha) FROM lead_interactions i
               WHERE i.lead_id = l.id AND i.tipo <> 'nota') AS ultimo_contacto,
             (SELECT COUNT(*)::int FROM lead_interactions i
-              WHERE i.lead_id = l.id AND i.tipo <> 'nota') AS contactos
+              WHERE i.lead_id = l.id AND i.tipo <> 'nota') AS contactos,
+            -- Cuantos hay en total, no cuantos caben. La ventana se calcula
+            -- sobre el resultado filtrado y ANTES del LIMIT, asi que da el
+            -- total de verdad sin una segunda consulta. Viene en cada fila
+            -- —es el precio de no cambiar la forma de la respuesta— y el
+            -- frontal solo mira la primera.
+            (COUNT(*) OVER())::int AS total
        FROM leads l
        LEFT JOIN products p ON p.id = l.producto_interes_id
        LEFT JOIN users u ON u.id = l.responsable_id
@@ -112,6 +118,32 @@ export async function cola({ projectId, responsableId, estado, productoId, soloS
 export async function nombreDe(userId) {
   const { rows: [u] } = await query('SELECT nombre, email FROM users WHERE id = $1', [userId]);
   return u?.nombre || u?.email?.split('@')[0] || `usuario-${userId}`;
+}
+
+// El mismo criterio de equipo(), pero para una sola persona y sin mirar
+// proyecto: la clave de la sala es `crm-<userId>`, una por persona y no una por
+// proyecto, asi que el derecho a tenerla tampoco depende del proyecto abierto.
+//
+// Existe porque las dos listas SI se contradecian: equipo() solo enseña a las
+// gestoras y a los admin que trabajan leads, pero sala() le daba sala a
+// cualquiera que abriera la pantalla. Esas salas no salian en ningun panel, y
+// lo que no se ve no se apaga: quedaban encendidas con sus pestañas dentro.
+export async function tieneSalaPropia(userId) {
+  // sala() saca el userId de la query con parseInt, asi que un valor con letras
+  // llega aqui como NaN. Sin esto, Postgres rechaza el parametro y la pantalla
+  // responde 500 en vez de decir simplemente que no hay sala.
+  if (!Number.isInteger(userId)) return false;
+  const { rows } = await query(
+    `SELECT 1
+       FROM users u
+       JOIN user_projects up ON up.user_id = u.id
+      WHERE u.id = $1
+        AND u.active = TRUE
+        AND (u.role = 'gestor' OR (u.role IN ('admin','superadmin') AND up.recibe_leads = TRUE))
+      LIMIT 1`,
+    [userId]
+  );
+  return rows.length > 0;
 }
 
 // Quien tiene sala propia. Las gestoras siempre; los admin solo si trabajan
