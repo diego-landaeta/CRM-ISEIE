@@ -37,15 +37,14 @@ const NAV_SECTIONS = [
         icon: WhatsappLogo,
         apagable: 'whatsapp',
         children: [
-          // Solo administradores POR AHORA. Enlazar un numero por esta via puede
-          // acabar con el bloqueado por WhatsApp, y quien lo paga es la gestora con
-          // su telefono. Se abre a todo el mundo cuando este el aviso previo (#45).
-          { to: '/whatsapp/chat', label: 'Chat', roles: ['superadmin', 'admin'] },
-          { to: '/whatsapp', label: 'Mi WhatsApp', end: true, roles: ['superadmin', 'admin'] },
+          // Abierto a todo el equipo por decision del owner. El aviso previo —lo
+          // que puede pasarle a su numero -- sigue pendiente en la tarea #45.
+          { to: '/whatsapp/chat', label: 'Chat' },
+          { to: '/whatsapp', label: 'Mi WhatsApp', end: true },
           // Sin recorte por rol: cada gestora enlaza SU numero, y el servidor solo
           // la deja tocar el suyo.
-          { to: '/whatsapp/conexion', label: 'Conexión', roles: ['superadmin', 'admin'] },
-          { to: '/whatsapp/plantillas', label: 'Plantillas', roles: ['superadmin', 'admin'] },
+          { to: '/whatsapp/conexion', label: 'Conexión' },
+          { to: '/whatsapp/plantillas', label: 'Plantillas' },
           // Solo para quien manda: entrar en el WhatsApp de cada gestora.
           // Fuera del menu: usaba el navegador remoto, que se ha retirado.
           // Vuelve cuando se rehaga sobre el chat nuevo.
