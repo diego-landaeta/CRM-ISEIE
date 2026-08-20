@@ -212,6 +212,10 @@ function App() {
           <Route path="/matriculas" element={<MatriculasPage />} />
           <Route path="/forms" element={<FormsPage />} />
           <Route path="/captacion/whatsapp" element={<WhatsappWidgetPage />} />
+          <Route path="/whatsapp" element={<ChatWhatsappPage />} />
+          <Route path="/whatsapp/chat" element={<ChatWhatsappPage />} />
+          <Route path="/whatsapp/conexion" element={<ConexionWhatsappPage />} />
+          <Route path="/whatsapp/plantillas" element={<PlantillasWhatsappPage />} />
           <Route path="/tutores" element={<TutoresPage />} />
           <Route path="/tutores/comisiones" element={<ComisionesTutoresPage />} />
           <Route path="/mis-cursos" element={<MisCursosPage />} />
