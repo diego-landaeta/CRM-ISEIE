@@ -416,3 +416,11 @@
   cursor: pointer;
 }
 .wa-pedir:hover { color: var(--wa-texto); border-color: var(--wa-verde); }
+
+/* La barra que dice de quien es el WhatsApp que se esta viendo. Solo aparece
+   para quien puede ver el de mas de una persona; a una gestora no le sale. */
+.wa-barra-sesion {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+  background: var(--card, #fff);
+}

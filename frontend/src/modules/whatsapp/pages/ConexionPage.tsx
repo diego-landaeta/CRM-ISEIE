@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import SelectorDeSesion, { type SesionElegida } from '../components/SelectorDeSesion';
 import { Link } from 'react-router-dom';
 import {
   WhatsappLogo, QrCode, CheckCircle, WarningCircle, ArrowClockwise,
@@ -42,17 +43,23 @@ export default function ConexionPage() {
   // buen rato en estar usable, que es justo la queja de siempre.
   const [modo, setModo] = useState<'cero' | 'rapido' | 'todo'>('rapido');
   const [sync, setSync] = useState<{ conversaciones: number; mensajes: number; entrando: boolean; adjuntosPendientes: number } | null>(null);
+  // De quien es la sesion que se esta viendo. Para una gestora siempre la suya
+  // —el selector ni se pinta—; quien manda puede enlazar la de otra persona
+  // teniendola al lado con su movil, que es mas rapido que explicarselo.
+  const [sesion, setSesion] = useState<SesionElegida>({ usuarioId: null, nombre: '', esMia: true });
+  const deQuien = sesion.usuarioId;
+
   const buscandoQR = useRef(false);
 
   const mirar = useCallback(async () => {
     try {
-      const r = await chatApi.conexion();
+      const r = await chatApi.conexion(deQuien);
       if (r.success) {
         setEstado(r.data);
         if (r.data.conectado) { setQr(null); buscandoQR.current = false; }
       }
     } catch { /* la pantalla ya dice que no hay conexion */ }
-  }, []);
+  }, [deQuien]);
 
   useEffect(() => {
     mirar();
@@ -60,14 +67,23 @@ export default function ConexionPage() {
     return () => clearInterval(t);
   }, [mirar, qr]);
 
+  // Al cambiar de persona se tira lo que hubiera en pantalla: ensenar el codigo
+  // de una junto al numero de otra es como se enlaza el telefono equivocado.
+  useEffect(() => {
+    setQr(null);
+    setEstado(null);
+    setSync(null);
+    buscandoQR.current = false;
+  }, [deQuien]);
+
   // Mientras esta conectado, se vigila cuanto lleva entrando.
   useEffect(() => {
     if (!estado?.conectado) return undefined;
-    const leer = () => chatApi.sincronizacion().then((r) => { if (r.success) setSync(r.data); }).catch(() => {});
+    const leer = () => chatApi.sincronizacion(deQuien).then((r) => { if (r.success) setSync(r.data); }).catch(() => {});
     leer();
     const t = setInterval(leer, 4000);
     return () => clearInterval(t);
-  }, [estado?.conectado]);
+  }, [estado?.conectado, deQuien]);
 
   // Pedir el codigo, insistiendo.
   //
@@ -83,7 +99,7 @@ export default function ConexionPage() {
     try {
       for (let n = 1; n <= INTENTOS; n++) {
         try {
-          const r = await client.post('/whatsapp/emparejar', { modo });
+          const r = await client.post('/whatsapp/emparejar', { modo, usuarioId: deQuien });
           if (!r.success) throw new Error(r.error || 'No se pudo pedir el codigo');
           if (r.data?.qr) { setQr(r.data.qr); buscandoQR.current = true; return; }
           await mirar();
@@ -113,7 +129,7 @@ export default function ConexionPage() {
     setConfirmando(false);
     setCerrando(true);
     try {
-      const r = await client.post('/whatsapp/desconectar', {});
+      const r = await client.post('/whatsapp/desconectar', { usuarioId: deQuien });
       // Si ya no habia sesion, el resultado es el que se buscaba: no es un
       // fallo que haya que enseñar en rojo.
       if (!r.success && !/no.*sesion|sin sesion|not.*connect/i.test(r.error || '')) {
@@ -135,12 +151,16 @@ export default function ConexionPage() {
         <div className="flex items-start gap-3">
           <WhatsappLogo size={32} weight="duotone" className="text-emerald-600 shrink-0" />
           <div className="flex-1 min-w-0">
-            <h1 className="text-lg font-bold">Tu WhatsApp</h1>
+            <h1 className="text-lg font-bold">
+              {sesion.esMia ? 'Tu WhatsApp' : `WhatsApp de ${sesion.nombre}`}
+            </h1>
             <p className="text-sm text-muted-foreground">
-              Tu numero, tus conversaciones. Cada persona del equipo enlaza el suyo
-              y nadie mas ve lo tuyo.
+              {sesion.esMia
+                ? 'Tu numero, tus conversaciones. Cada persona del equipo enlaza el suyo y nadie mas ve lo tuyo.'
+                : `Estas enlazando el numero de ${sesion.nombre}. Necesitas su movil delante para meter el codigo.`}
             </p>
           </div>
+          <SelectorDeSesion valor={sesion} onCambiar={setSesion} />
           <button type="button" onClick={mirar} title="Comprobar ahora"
             className="p-2 rounded-md hover:bg-muted text-muted-foreground">
             <ArrowClockwise size={16} />

@@ -38,6 +38,10 @@ router.post('/equipo/:userId/latido', ctrl.latido);
 // ── El chat ──────────────────────────────────────────────────────────────────
 // Las conversaciones ahora viven en el CRM, no en un navegador remoto: por eso
 // se pueden listar, buscar y atar a la ficha del lead.
+// De quien puedo ver el WhatsApp. Para una gestora devuelve solo a ella misma:
+// el recorte lo hace el controlador, no la pantalla.
+router.get('/usuarios', chat.usuarios);
+
 router.get('/chats', chat.chats);
 router.post('/chats', chat.abrirChat);
 router.get('/chats/:id', chat.chat);

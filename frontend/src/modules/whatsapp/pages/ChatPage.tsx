@@ -13,6 +13,7 @@ import {
   chatApi, urlMedia,
   type ChatWhatsapp, type MensajeWhatsapp, type ConexionWhatsapp,
 } from '../api/whatsapp.api';
+import SelectorDeSesion, { type SesionElegida } from '../components/SelectorDeSesion';
 import './chat.css';
 
 // El chat de WhatsApp dentro del CRM.
@@ -103,6 +104,11 @@ export default function ChatPage() {
   const { activeProject } = useProjectContext() as { activeProject: { id: number } | null };
   const projectId = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
 
+  // De quien es el WhatsApp que se esta viendo. Una gestora solo tiene el suyo
+  // y el selector ni aparece; quien manda puede abrir el de otra persona.
+  const [sesion, setSesion] = useState<SesionElegida>({ usuarioId: null, nombre: '', esMia: true });
+  const deQuien = sesion.usuarioId;
+
   const [chats, setChats] = useState<ChatWhatsapp[]>([]);
   const [abierto, setAbierto] = useState<number | null>(null);
   const [conv, setConv] = useState<ChatWhatsapp | null>(null);
@@ -113,6 +119,7 @@ export default function ChatPage() {
   const [enviando, setEnviando] = useState(false);
   const [conexion, setConexion] = useState<ConexionWhatsapp | null>(null);
   const [filtro, setFiltro] = useState('');
+
   // Dos estados distintos, y la diferencia importa:
   //   · `cargando`  — todavia no ha vuelto la primera peticion.
   //   · `llegando`  — ya hay conversaciones, pero siguen entrando. Al emparejar,
@@ -149,9 +156,20 @@ export default function ChatPage() {
     return () => clearInterval(t);
   }, []);
 
+  // Cambiar de persona vacia la pantalla antes de traer lo suyo. Sin esto se
+  // quedan a la vista los chats de la anterior mientras carga, y basta un
+  // segundo de confusion para escribirle a quien no era.
+  useEffect(() => {
+    setChats([]);
+    setAbierto(null);
+    setConv(null);
+    setMensajes([]);
+    setCargando(true);
+  }, [deQuien]);
+
   const cargarLista = useCallback(async () => {
     try {
-      const r = await chatApi.lista(projectId);
+      const r = await chatApi.lista(projectId, deQuien);
       if (!r.success) return;
       const lista = r.data || [];
       // Si han aparecido conversaciones desde la ultima vuelta, el historial
@@ -161,14 +179,14 @@ export default function ChatPage() {
     } finally {
       setCargando(false);
     }
-  }, [projectId]);
+  }, [projectId, deQuien]);
 
   const cargarHilo = useCallback(async (id: number, limite = cuantos) => {
-    const r = await chatApi.hilo(id, limite);
+    const r = await chatApi.hilo(id, limite, deQuien);
     if (!r.success) return;
     setConv(r.data.conversacion);
     setMensajes(r.data.mensajes || []);
-  }, [cuantos]);
+  }, [cuantos, deQuien]);
 
   useEffect(() => {
     cargarLista();
@@ -206,7 +224,7 @@ export default function ChatPage() {
   // pausas largas en medio, y por el tamaño de la lista parecia que se habia
   // parado cuando no.
   useEffect(() => {
-    const mirar = () => chatApi.sincronizacion()
+    const mirar = () => chatApi.sincronizacion(deQuien)
       .then((r) => { if (r.success) setSync(r.data); })
       .catch(() => {});
     mirar();
@@ -234,7 +252,7 @@ export default function ChatPage() {
     if (!t || !abierto || enviando) return;
     setEnviando(true);
     try {
-      const r = await chatApi.enviar(abierto, t);
+      const r = await chatApi.enviar(abierto, t, deQuien);
       if (!r.success) throw new Error(r.error || 'No se pudo enviar');
       await cargarHilo(abierto); cargarLista();
     } catch (e) { fallo(e); } finally { setEnviando(false); }
@@ -376,6 +394,9 @@ export default function ChatPage() {
       <div ref={marco} className="wa-marco" style={{ height: alto }}>
         <MainContainer responsive>
           <Sidebar position="left" scrollable>
+            <div className="wa-barra-sesion">
+              <SelectorDeSesion valor={sesion} onCambiar={setSesion} compacto />
+            </div>
             <div className="wa-barra-lista">
               <Search placeholder="Buscar un chat" value={filtro}
                 onChange={(v: string) => setFiltro(v)} onClearClick={() => setFiltro('')} />

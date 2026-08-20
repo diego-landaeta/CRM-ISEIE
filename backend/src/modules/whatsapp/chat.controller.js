@@ -5,17 +5,54 @@ import * as media from './media.service.js';
 import * as firma from './media.firma.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
+import { query } from '../../shared/config/db.js';
 
 const esAdmin = (req) => ['admin', 'superadmin', 'soporte'].includes(req.user.role);
 
 /**
- * La sesion de WhatsApp de quien esta pidiendo. Una por usuario del CRM.
+ * De quien es la sesion sobre la que se esta trabajando.
  *
- * Este es el eje del modulo entero: cada persona enlaza SU numero y solo ve sus
- * conversaciones. Antes habia una unica instancia compartida, asi que cualquier
- * usuario leia los chats privados de quien la hubiera enlazado.
+ * Cada persona tiene la suya —una instancia por usuario del CRM— y por defecto
+ * se trabaja sobre la propia. Quien manda puede ademas trabajar sobre la de
+ * otra persona pasando `usuarioId`:
+ *
+ *   · superadmin: cualquiera.
+ *   · admin:      solo quien comparta proyecto con el. Un administrador de una
+ *                 marca no tiene por que leer los mensajes de la gestora de
+ *                 otra; eso no es supervision, es curiosear.
+ *   · el resto:   su propia sesion y punto. Si mandan un `usuarioId` que no es
+ *                 el suyo, se rechaza — no se ignora en silencio, porque
+ *                 ignorarlo esconde un intento que conviene ver.
+ *
+ * El recorte vive AQUI y no en cada endpoint: asi lo que se anada manana nace
+ * con el candado puesto en vez de heredarlo si alguien se acuerda.
  */
-const miInstancia = (req) => evolution.instanciaDe(req.user.userId);
+async function usuarioObjetivo(req) {
+  const propio = req.user.userId;
+  const pedido = parseInt(req.query?.usuarioId ?? req.body?.usuarioId ?? '', 10);
+  if (!Number.isInteger(pedido) || pedido === propio) return propio;
+
+  if (!['admin', 'superadmin'].includes(req.user.role)) {
+    throw new AppError('Solo puedes trabajar con tu propio WhatsApp', 403, 'SOLO_EL_TUYO');
+  }
+
+  const { rows } = await query(
+    `SELECT u.id, u.nombre, u.active,
+            EXISTS (
+              SELECT 1 FROM user_projects a
+              JOIN user_projects b ON b.project_id = a.project_id AND b.active
+              WHERE a.user_id = $1 AND a.active AND b.user_id = $2
+            ) AS comparten
+       FROM users u WHERE u.id = $2`, [propio, pedido]);
+  const u = rows[0];
+  if (!u || !u.active) throw new AppError('Esa persona no existe o esta desactivada', 404, 'NO_EXISTE');
+  if (req.user.role !== 'superadmin' && !u.comparten) {
+    throw new AppError('Esa persona no esta en tus proyectos', 403, 'FUERA_DE_TUS_PROYECTOS');
+  }
+  return pedido;
+}
+
+const instanciaObjetivo = async (req) => evolution.instanciaDe(await usuarioObjetivo(req));
 
 /**
  * Trae una conversacion comprobando que es de quien la pide.
@@ -27,7 +64,7 @@ const miInstancia = (req) => evolution.instanciaDe(req.user.userId);
 async function miConversacion(req, id) {
   if (!Number.isInteger(id)) throw new AppError('Conversacion no encontrada', 404, 'NOT_FOUND');
   const conv = await model.porId(id);
-  if (!conv || conv.instancia !== miInstancia(req)) {
+  if (!conv || conv.instancia !== await instanciaObjetivo(req)) {
     throw new AppError('Conversacion no encontrada', 404, 'NOT_FOUND');
   }
   return conv;
@@ -37,7 +74,7 @@ async function miConversacion(req, id) {
 export async function chats(req, res, next) {
   try {
     res.json({ success: true, data: await model.listar({
-      instancia: miInstancia(req),
+      instancia: await instanciaObjetivo(req),
       projectId: req.query.projectId ? parseInt(req.query.projectId) : null,
       limite: parseInt(req.query.limite) || 50,
     })});
@@ -101,7 +138,7 @@ export async function abrirChat(req, res, next) {
     if (digitos.length < 9) throw new AppError('Ese telefono no es valido', 400, 'TELEFONO_INVALIDO');
 
     const conv = await model.conversacionDe({
-      instancia: miInstancia(req),
+      instancia: await instanciaObjetivo(req),
       jid: `${digitos}@s.whatsapp.net`,
       nombrePush: null,
     });
@@ -168,7 +205,7 @@ export async function descargarAdjunto(req, res, next) {
     const m = await model.mensajePorId(id);
     // Se comprueba que ese mensaje es de una conversacion tuya, igual que al
     // abrir el hilo: si no, valdria con acertar el numero.
-    if (!m || m.instancia !== miInstancia(req)) {
+    if (!m || m.instancia !== await instanciaObjetivo(req)) {
       throw new AppError('Mensaje no encontrado', 404, 'NOT_FOUND');
     }
     if (m.media_url) return res.json({ success: true, data: { yaEstaba: true } });
@@ -215,7 +252,7 @@ export async function noEscribir(req, res, next) {
  */
 export async function sincronizacion(req, res, next) {
   try {
-    const instancia = miInstancia(req);
+    const instancia = await instanciaObjetivo(req);
     const d = await model.actividad(instancia);
     res.json({ success: true, data: {
       conversaciones: d.conversaciones,
@@ -233,7 +270,7 @@ export async function reintentarArchivos(req, res, next) {
   try {
     // Son los archivos de TU sesion: no hace falta ser administrador para
     // volver a pedir lo tuyo.
-    const n = await media.reencolarPendientes(miInstancia(req));
+    const n = await media.reencolarPendientes(await instanciaObjetivo(req));
     res.json({ success: true, data: { reencolados: n } });
   } catch (err) { next(err); }
 }
@@ -249,7 +286,7 @@ export async function desconectar(req, res, next) {
   try {
     // Cada uno desvincula el suyo. Un administrador no necesita poder tirar la
     // sesion de otro desde aqui: eso es el WhatsApp personal de esa persona.
-    const r = await evolution.cerrarSesion(miInstancia(req));
+    const r = await evolution.cerrarSesion(await instanciaObjetivo(req));
     if (!r.ok) throw new AppError('No se pudo cerrar la sesion en WhatsApp', 502, 'SIN_CERRAR');
     res.json({ success: true, data: { cerrada: true } });
   } catch (err) { next(err); }
@@ -261,7 +298,7 @@ export async function conexion(req, res, next) {
     if (!evolution.configurado()) {
       return res.json({ success: true, data: { configurado: false, motivo: 'Falta EVOLUTION_URL o EVOLUTION_API_KEY' } });
     }
-    const instancia = miInstancia(req);
+    const instancia = await instanciaObjetivo(req);
     const [est, inst] = await Promise.all([evolution.estado(instancia), evolution.instancias()]);
     const lista = Array.isArray(inst.datos) ? inst.datos : (inst.datos?.instances || []);
     // La MIA por nombre, y punto. Antes caia a `lista[0]` cuando no la
@@ -291,9 +328,10 @@ export async function conexion(req, res, next) {
  */
 export async function emparejar(req, res, next) {
   try {
-    // Sin recorte por rol: cada persona enlaza SU numero. Solo puede tocar el
-    // suyo, porque la instancia sale de su sesion y no de nada que ella mande.
-    const instancia = miInstancia(req);
+    // Quien no manda solo puede enlazar el suyo: usuarioObjetivo lo impone. Un
+    // administrador si puede enlazar el de una gestora —tenerla al lado con su
+    // movil y hacerlo desde aqui es mas rapido que explicarselo por telefono—.
+    const instancia = await instanciaObjetivo(req);
     // Cuanto historial quiere quien enlaza. Si manda cualquier otra cosa, lo
     // rapido: es lo que deja la pantalla usable en segundos.
     const modo = ['cero', 'rapido', 'todo'].includes(req.body?.modo) ? req.body.modo : 'rapido';
@@ -381,4 +419,64 @@ export async function webhook(req, res) {
     return res.status(merecePenaReintentar ? 503 : 200)
       .json({ success: false, error: err.message });
   }
+}
+
+/**
+ * GET /api/whatsapp/usuarios — de quien puedo ver el WhatsApp.
+ *
+ * Devuelve la lista con la que se pinta el selector del panel. Para quien no
+ * manda es siempre una sola persona: ella misma. Asi la pantalla no tiene que
+ * saber de roles — pregunta y pinta lo que le devuelvan.
+ */
+export async function usuarios(req, res, next) {
+  try {
+    const yo = req.user.userId;
+    const soloMio = !['admin', 'superadmin'].includes(req.user.role);
+
+    const { rows } = await query(
+      soloMio
+        ? `SELECT id, nombre, email, role FROM users WHERE id = $1`
+        : (req.user.role === 'superadmin'
+            ? `SELECT id, nombre, email, role FROM users
+                WHERE active AND role IN ('superadmin','admin','gestor','soporte')
+                  AND NOT COALESCE(gestor_colaboraciones, false)
+                ORDER BY (id = $1) DESC, nombre`
+            : `SELECT DISTINCT u.id, u.nombre, u.email, u.role FROM users u
+                 JOIN user_projects b ON b.user_id = u.id AND b.active
+                 JOIN user_projects a ON a.project_id = b.project_id AND a.active AND a.user_id = $1
+                WHERE u.active AND u.role IN ('superadmin','admin','gestor','soporte')
+                  AND NOT COALESCE(u.gestor_colaboraciones, false)
+                ORDER BY (u.id = $1) DESC, u.nombre`),
+      [yo]);
+
+    // El estado de cada sesion se pregunta UNA vez a Evolution y se reparte:
+    // preguntar una por una son diez llamadas para pintar un desplegable.
+    let porInstancia = new Map();
+    if (evolution.configurado()) {
+      try {
+        const inst = await evolution.instancias();
+        const lista = Array.isArray(inst.datos) ? inst.datos : (inst.datos?.instances || []);
+        porInstancia = new Map(lista.map((i) => [
+          i?.name || i?.instance?.instanceName,
+          {
+            conectado: (i?.connectionStatus || i?.instance?.status) === 'open',
+            numero: i?.ownerJid?.split('@')[0] || i?.number || null,
+          },
+        ]));
+      } catch (err) {
+        logger.warn({ err: err.message }, 'WhatsApp: no se pudo leer el estado de las sesiones');
+      }
+    }
+
+    res.json({ success: true, data: rows.map((u) => {
+      const instancia = evolution.instanciaDe(u.id);
+      const est = porInstancia.get(instancia) || {};
+      return {
+        id: u.id, nombre: u.nombre, email: u.email, role: u.role,
+        soyYo: u.id === yo,
+        conectado: Boolean(est.conectado),
+        numero: est.numero || null,
+      };
+    })});
+  } catch (err) { next(err); }
 }

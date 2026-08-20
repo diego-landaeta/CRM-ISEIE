@@ -128,14 +128,14 @@ export const chatApi = {
   descargarAdjunto: (mensajeId: number): Promise<ApiResponse<{ enCola?: boolean; yaEstaba?: boolean }>> =>
     client.post(`/whatsapp/mensajes/${mensajeId}/descargar`, {}),
 
-  lista: (projectId?: number | null): Promise<ApiResponse<ChatWhatsapp[]>> =>
-    client.get(`/whatsapp/chats${qs({ projectId })}`),
+  lista: (projectId?: number | null, usuarioId?: number | null): Promise<ApiResponse<ChatWhatsapp[]>> =>
+    client.get(`/whatsapp/chats${qs({ projectId, usuarioId })}`),
 
-  hilo: (id: number, limite = 100): Promise<ApiResponse<{ conversacion: ChatWhatsapp; mensajes: MensajeWhatsapp[] }>> =>
-    client.get(`/whatsapp/chats/${id}${qs({ limite })}`),
+  hilo: (id: number, limite = 100, usuarioId?: number | null): Promise<ApiResponse<{ conversacion: ChatWhatsapp; mensajes: MensajeWhatsapp[] }>> =>
+    client.get(`/whatsapp/chats/${id}${qs({ limite, usuarioId })}`),
 
-  enviar: (id: number, texto: string): Promise<ApiResponse<MensajeWhatsapp>> =>
-    client.post(`/whatsapp/chats/${id}/enviar`, { texto }),
+  enviar: (id: number, texto: string, usuarioId?: number | null): Promise<ApiResponse<MensajeWhatsapp>> =>
+    client.post(`/whatsapp/chats/${id}/enviar`, { texto, usuarioId }),
 
   noEscribir: (id: number, motivo: string): Promise<ApiResponse<null>> =>
     client.post(`/whatsapp/chats/${id}/no-escribir`, { motivo }),
@@ -155,11 +155,11 @@ export const chatApi = {
     client.get(`/leads${qs({ projectId, search: texto || undefined, limit: 15 })}`),
 
   // ¿Sigue entrando historial? Al emparejar tarda varios minutos.
-  sincronizacion: (): Promise<ApiResponse<{ conversaciones: number; mensajes: number; entrando: boolean; haceSegundos: number | null; adjuntosPendientes: number }>> =>
-    client.get('/whatsapp/sincronizacion'),
+  sincronizacion: (usuarioId?: number | null): Promise<ApiResponse<{ conversaciones: number; mensajes: number; entrando: boolean; haceSegundos: number | null; adjuntosPendientes: number }>> =>
+    client.get(`/whatsapp/sincronizacion${qs({ usuarioId })}`),
 
-  conexion: (): Promise<ApiResponse<ConexionWhatsapp>> =>
-    client.get('/whatsapp/conexion'),
+  conexion: (usuarioId?: number | null): Promise<ApiResponse<ConexionWhatsapp>> =>
+    client.get(`/whatsapp/conexion${qs({ usuarioId })}`),
 
   // El adjunto va en multipart, no en JSON: el cliente de axios ya pone el
   // Content-Type con su boundary si se le pasa un FormData.
@@ -174,3 +174,23 @@ export const chatApi = {
 /** La direccion desde la que se ve un adjunto ya descargado. */
 export const urlMedia = (mensajeId: number) =>
   `${(import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '')}/api/whatsapp/media/${mensajeId}`;
+
+/** Alguien de quien se puede abrir el WhatsApp. Para una gestora, solo ella. */
+export interface UsuarioWhatsapp {
+  id: number;
+  nombre: string;
+  email: string;
+  role: string;
+  soyYo: boolean;
+  conectado: boolean;
+  numero: string | null;
+}
+
+/**
+ * De quien puedo ver el WhatsApp.
+ *
+ * La pantalla no decide nada: pregunta y pinta. Si el servidor devuelve una
+ * sola persona —el caso de una gestora— el selector ni se enseña.
+ */
+export const usuariosWhatsapp = (): Promise<ApiResponse<UsuarioWhatsapp[]>> =>
+  client.get('/whatsapp/usuarios');
