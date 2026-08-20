@@ -78,6 +78,36 @@ una tarea y media. Si se hacen por separado, son tres veces el mismo trabajo.
 
 ---
 
+## Cómo tiene que verse esto
+
+La referencia es **SuiteDash y Zoho CRM**: sobrio, denso, con jerarquía clara.
+No hay que inventar nada — mirar cómo resuelven ellos una pantalla de
+administración y hacer eso.
+
+**Tipografía.** Una sola familia para la interfaz, **Inter**, con tres pesos:
+400 normal, 500 etiquetas y cabeceras, 600 títulos. Y **números de ancho fijo**
+(`tabular-nums`) en toda columna de dinero, fecha o cantidad: sin eso las cifras
+bailan de fila en fila y no se pueden comparar de un vistazo, que es justo para
+lo que se miran. Los códigos —números de factura, NIF, identificadores— en
+monoespaciada: un `2026/0695` así se lee de un golpe.
+
+> Hoy hay un fallo ahí: `tailwind.config.js` declara «Plus Jakarta Sans» y
+> **nadie la carga**, así que cae a la fuente del sistema y el CRM se ve
+> distinto en cada ordenador. Se arregla en la tarea #50.
+
+**Iconos: Phosphor, nunca emojis.** Un emoji cambia de dibujo según el sistema,
+no se puede colorear ni alinear con el texto, y delante de un cliente hace que
+el CRM parezca un chat. Mismo grosor y mismo tamaño por contexto.
+
+**Los estados, con punto de color _y_ palabra.** Nunca solo color: quien no
+distingue rojo de verde se queda sin la mitad de la información.
+
+**Quién hace qué.** La estructura —rutas, layout, navegación— la llevamos
+nosotros. El aspecto lo lleva Fabián. Así no se pisan: uno mueve dónde están las
+cosas, el otro cómo se ven.
+
+---
+
 # Ángel
 
 ## A1 · Terminar WhatsApp
