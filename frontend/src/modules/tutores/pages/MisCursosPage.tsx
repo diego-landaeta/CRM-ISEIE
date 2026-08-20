@@ -28,6 +28,21 @@ const VIOLETA_SUAVE = '#c4b5fd';
 const euros = (n: number | string) =>
   Number(n || 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
 
+// Fecha corta: en una tabla de cobros lo que importa es el dia, no la hora.
+const fecha = (f: string | null | undefined) => {
+  if (!f) return '—';
+  const [a, m, d] = String(f).slice(0, 10).split('-');
+  return d && m && a ? `${d}/${m}/${a.slice(2)}` : String(f).slice(0, 10);
+};
+
+// Solo el nombre de pila del alumno. El tutor necesita reconocer de quien es el
+// pago; no necesita —ni debe tener— la lista de contactos de la escuela.
+const primerNombre = (nombre: string | null | undefined) => {
+  const limpio = String(nombre || '').trim();
+  if (!limpio || limpio === '—') return '—';
+  return limpio.split(/\s+/)[0];
+};
+
 const soloFecha = (f: string | null) => (f ? String(f).slice(0, 10) : null);
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
@@ -46,6 +61,10 @@ export default function MisCursosPage() {
   const [cursos, setCursos] = useState<Colaboracion[]>([]);
   const [comisiones, setComisiones] = useState<ComisionReal[]>([]);
   const [historico, setHistorico] = useState<ResumenComision[]>([]);
+  // El historial completo: cada cobro de sus cursos desde que empezo. Es lo que
+  // permite comprobar una cifra en vez de creersela — sin esto, el tutor ve un
+  // total del mes y tiene que fiarse.
+  const [ventas, setVentas] = useState<ComisionReal[]>([]);
   const [cargando, setCargando] = useState(true);
   // La ficha del curso elegido, tal como se publica. Solo para mirarla.
   const [elegido, setElegido] = useState<number | null>(null);
@@ -64,18 +83,35 @@ export default function MisCursosPage() {
   const cargar = useCallback(async () => {
     setCargando(true);
     try {
-      const [c, m, h] = await Promise.all([
+      const [c, m, h, todo] = await Promise.all([
         tutoresApi.colaboraciones(),                 // sin id: el servidor pone el suyo
         tutoresApi.comisiones({ periodo }),
         tutoresApi.resumenComisiones({}),            // todos los meses, para la evolucion
+        tutoresApi.comisiones({}),                   // sin periodo: TODO su historial
       ]);
       setCursos(c.success ? (c.data || []) : []);
       setComisiones(m.success ? (m.data || []) : []);
       setHistorico(h.success ? (h.data || []) : []);
+      setVentas(todo.success ? (todo.data || []) : []);
     } finally { setCargando(false); }
   }, [periodo]);
 
   useEffect(() => { cargar(); }, [cargar]);
+
+  // Si hay una ficha abierta, el historial se recorta a ese curso: es lo que se
+  // espera al estar mirandolo. Si no, todos, del mas reciente al mas antiguo.
+  const ventasVisibles = useMemo(() => {
+    const lista = elegido ? ventas.filter((v) => v.product_id === elegido) : ventas;
+    return [...lista].sort((a, b) => String(b.fecha_cobro || '').localeCompare(String(a.fecha_cobro || '')));
+  }, [ventas, elegido]);
+
+  // Lo devuelto no cuenta: ese dinero se reembolso al alumno.
+  const totalHistorial = useMemo(
+    () => ventasVisibles
+      .filter((v) => v.estado !== 'revertida')
+      .reduce((suma, v) => suma + Number(v.importe || 0), 0),
+    [ventasVisibles],
+  );
 
   useEffect(() => {
     if (elegido == null) { setFicha(null); return; }
@@ -351,6 +387,86 @@ export default function MisCursosPage() {
           )}
         </div>
       </div>
+
+      {/* ─── Historial de ventas ───────────────────────────────────────────
+          Cada cobro de sus cursos, con lo que le correspondio. Va DESPUES de
+          las graficas a proposito: primero el resumen, y quien quiera
+          comprobarlo tiene aqui el detalle, cobro a cobro. */}
+      <div className="bg-card border border-border rounded-lg overflow-hidden">
+        <div className="px-4 py-3 border-b border-border flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h2 className="font-bold">Historial de ventas</h2>
+          <p className="text-xs text-muted-foreground flex-1">
+            {elegido
+              ? 'Solo del curso que tienes abierto. Cierra la ficha para verlos todos.'
+              : 'Todos tus cursos, del cobro más reciente al más antiguo.'}
+          </p>
+          {ventasVisibles.length > 0 && (
+            <p className="text-xs tabular-nums text-muted-foreground">
+              {ventasVisibles.length} {ventasVisibles.length === 1 ? 'cobro' : 'cobros'} ·{' '}
+              <strong className="text-foreground">{euros(totalHistorial)}</strong> para ti
+            </p>
+          )}
+        </div>
+
+        {ventasVisibles.length === 0 ? (
+          <p className="px-4 py-8 text-sm text-muted-foreground text-center">
+            Todavía no se ha cobrado nada de tus cursos. Cuando un alumno pague, aparece aquí.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-[11px] uppercase tracking-wide text-muted-foreground border-b border-border">
+                  <th className="py-2 px-4 font-semibold">Fecha</th>
+                  <th className="py-2 px-3 font-semibold">Curso</th>
+                  <th className="py-2 px-3 font-semibold">Alumno</th>
+                  <th className="py-2 px-3 font-semibold text-right">Se cobró</th>
+                  <th className="py-2 px-3 font-semibold text-right">Tu %</th>
+                  <th className="py-2 px-3 font-semibold text-right">Para ti</th>
+                  <th className="py-2 px-4 font-semibold">Estado</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {ventasVisibles.map((v) => (
+                  <tr key={v.id} className={v.estado === 'revertida' ? 'opacity-60' : undefined}>
+                    <td className="py-2 px-4 tabular-nums whitespace-nowrap">{fecha(v.fecha_cobro)}</td>
+                    <td className="py-2 px-3">
+                      <span className="block truncate max-w-[22rem]" title={v.formacion || ''}>
+                        {v.formacion || '—'}
+                      </span>
+                    </td>
+                    {/* Solo el nombre de pila: basta para reconocer al alumno y no
+                        convierte esta pantalla en una lista de contactos. */}
+                    <td className="py-2 px-3 text-muted-foreground">{primerNombre(v.alumno)}</td>
+                    <td className="py-2 px-3 text-right tabular-nums">{euros(Number(v.cobro ?? v.base_calculo))}</td>
+                    <td className="py-2 px-3 text-right tabular-nums text-muted-foreground">{Number(v.pct)}%</td>
+                    <td className="py-2 px-3 text-right tabular-nums font-semibold">{euros(Number(v.importe))}</td>
+                    <td className="py-2 px-4">
+                      <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${
+                        v.estado === 'pagada'
+                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+                          : v.estado === 'revertida'
+                            ? 'bg-muted text-muted-foreground'
+                            : 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
+                      }`}>
+                        {v.estado === 'pagada' ? 'pagada' : v.estado === 'revertida' ? 'devuelta' : 'pendiente'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {ventasVisibles.some((v) => v.estado === 'revertida') && (
+          <p className="px-4 py-2.5 text-[11px] text-muted-foreground border-t border-border">
+            Una línea <strong>devuelta</strong> es un alumno al que se le devolvió el dinero: esa
+            comisión se descuenta, porque el cobro dejó de existir.
+          </p>
+        )}
+      </div>
+
     </div>
   );
 }
