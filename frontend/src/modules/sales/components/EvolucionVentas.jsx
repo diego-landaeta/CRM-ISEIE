@@ -110,7 +110,7 @@ export default function EvolucionVentas({ projectId = null, from = null, to = nu
     if (projectId) params.projectId = projectId;
     if (from && to) { params.from = from; params.to = to; }
     if (responsableId) params.responsableId = responsableId;
-    client.get('/sales/serie', { params })
+    client.get('/ventas/serie', { params })
       .then((r) => { if (vivo) setDatos(r.success ? r.data : null); })
       .catch((e) => { if (vivo) setError(e?.message || 'No se pudo cargar la evolución'); })
       .finally(() => { if (vivo) setCargando(false); });

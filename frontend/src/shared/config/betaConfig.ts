@@ -18,13 +18,13 @@ export const BETA_ROUTES: readonly string[] = [
   '/leads',                         // Prospectos (incluye /leads/revision-duplicados)
   '/clients',                       // Clientes
   '/matriculas',                    // Matriculas
-  '/sales',                         // Ventas (registro venta historica + listado conversiones)
+  '/ventas',                         // Ventas (registro venta historica + listado conversiones)
   '/accounting',                    // Finanzas: dashboard, income, conversions, receivable, payable, integrations
   '/expenses',                      // Egresos
   '/commissions',                   // Comisiones
   '/payroll',                       // Nóminas
   '/meta-ads',                      // Integracion Meta Ads (metricas campanas)
-  '/reports',                       // Analisis › Reportes (overview + descargables prospectos/ventas)
+  '/informes',                       // Analisis › Reportes (overview + descargables prospectos/ventas)
   '/products',                      // Productos (incluye /products/tree)
   '/woocommerce',                   // Importacion WordPress/WC
   '/configuracion/categorias-arbol',// Categorias
@@ -35,14 +35,14 @@ export const BETA_ROUTES: readonly string[] = [
   '/whatsapp',                      // WhatsApp: cola, plantillas y el panel del equipo
   '/tutores',                       // Tutores: alta, colaboraciones y comisiones
   '/mis-cursos',                    // La pantalla del propio tutor
-  '/email-sequences',               // Email
+  '/secuencias-email',               // Email
   '/email-templates',
   '/documentos',                    // Documentos PDF
   '/solicitudes-cambio',            // RFC — Solicitud de Cambio (todos los roles)
   '/notificaciones',
-  '/preferences',
-  '/profile',
-  '/settings',
+  '/preferencias',
+  '/perfil',
+  '/configuracion',
   '/status',
   '/set-password',
   '/manual',

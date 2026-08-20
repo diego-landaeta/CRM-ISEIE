@@ -17,7 +17,7 @@ const fmtNum = (n) => new Intl.NumberFormat('es-ES').format(Number(n || 0));
 
 const VISTAS = {
   paises: {
-    etiqueta: 'Países', icon: GlobeHemisphereWest, endpoint: '/reports/paises', clave: 'pais',
+    etiqueta: 'Países', icon: GlobeHemisphereWest, endpoint: '/informes/paises', clave: 'pais',
     ayuda: 'Deducido del prefijo del teléfono del cliente. Los que no tienen teléfono quedan aparte, no repartidos.',
     cols: [
       { k: 'pais', h: 'País' },
@@ -28,7 +28,7 @@ const VISTAS = {
     ],
   },
   formaciones: {
-    etiqueta: 'Formaciones', icon: ListChecks, endpoint: '/reports/formaciones', clave: 'formacion',
+    etiqueta: 'Formaciones', icon: ListChecks, endpoint: '/informes/formaciones', clave: 'formacion',
     ayuda: 'La columna «origen» dice si la formación viene del catálogo o de texto tecleado a mano en la venta.',
     cols: [
       { k: 'formacion', h: 'Formación' },

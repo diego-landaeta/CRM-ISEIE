@@ -50,7 +50,7 @@ export default function MyGoalCard({ projectId, className = '', periodo: periodo
     const params: Record<string, string | number> = {};
     if (projectId) params.projectId = projectId;
     params.periodo = periodo;
-    client.get<MyStats>('/sales/my-stats', { params })
+    client.get<MyStats>('/ventas/my-stats', { params })
       .then((r) => { setStats(r?.data || null); })
       .catch(() => setStats(null))
       .finally(() => setLoading(false));
@@ -69,7 +69,7 @@ export default function MyGoalCard({ projectId, className = '', periodo: periodo
     if (!stats?.user_id) return;
     setSaving(true);
     try {
-      await client.post('/sales/goals', {
+      await client.post('/ventas/goals', {
         user_id: stats.user_id,
         project_id: projectId || null,
         periodo_yyyymm: periodo,

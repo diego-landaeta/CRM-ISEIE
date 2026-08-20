@@ -39,7 +39,7 @@ export default function TopProductsCard({ projectId, responsableId = null, days 
     if (projectId) params.projectId = projectId;
     if (from && to) { params.from = from; params.to = to; } else if (days) params.days = days;
     if (responsableId) params.responsableId = responsableId;
-    client.get<Row[]>('/sales/top-products', { params })
+    client.get<Row[]>('/ventas/top-products', { params })
       .then((r) => { if (!cancelled) setRows(Array.isArray(r?.data) ? r.data : []); })
       .catch(() => { if (!cancelled) setRows([]); })
       .finally(() => { if (!cancelled) setLoading(false); });

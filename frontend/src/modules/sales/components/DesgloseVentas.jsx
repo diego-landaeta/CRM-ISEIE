@@ -111,7 +111,7 @@ export default function DesgloseVentas({ projectId, from, to, responsableId = nu
     if (from) p.set('from', from);
     if (to) p.set('to', to);
     if (responsableId) p.set('responsableId', String(responsableId));
-    client.get(`/sales/desglose?${p}`)
+    client.get(`/ventas/desglose?${p}`)
       .then((r) => { if (vivo) setData(r.success ? r.data : null); })
       .catch(() => { if (vivo) setData(null); })
       .finally(() => { if (vivo) setCargando(false); });

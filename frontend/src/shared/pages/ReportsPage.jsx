@@ -316,7 +316,7 @@ export default function ReportsPage() {
     if (activeProject?.id) q.set('projectId', String(activeProject.id));
     if (rango.from) q.set('from', rango.from);
     if (rango.to) q.set('to', rango.to);
-    client.get(`/reports/panel?${q.toString()}`)
+    client.get(`/informes/panel?${q.toString()}`)
       .then((r) => { if (vivo) setPanel(r.success ? r.data : null); })
       .catch(() => { if (vivo) setPanel(null); });
     return () => { vivo = false; };
@@ -406,7 +406,7 @@ export default function ReportsPage() {
       if (activeProject?.id) q.set('projectId', String(activeProject.id));
       if (rango.from) q.set('from', rango.from);
       if (rango.to) q.set('to', rango.to);
-      const ase = await client.get(`/reports/asesoras-mes?${q.toString()}`).catch(() => null);
+      const ase = await client.get(`/informes/asesoras-mes?${q.toString()}`).catch(() => null);
       const { exportPanelPDF } = await import('@/shared/lib/exportPanelPdf');
       const nombre = await exportPanelPDF({
         panel, asesoras: ase?.data || [], proyecto: activeProject?.nombre, rango,
@@ -681,7 +681,7 @@ export default function ReportsPage() {
                 </ol>
                 {isAdmin ? (
                   <Link
-                    to="/settings"
+                    to="/configuracion"
                     onClick={() => setIaModal(false)}
                     className="inline-flex items-center justify-center w-full gap-1.5 h-10 px-4 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors"
                   >

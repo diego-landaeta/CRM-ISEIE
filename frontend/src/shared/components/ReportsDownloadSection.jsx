@@ -212,7 +212,7 @@ export default function ReportsDownloadSection({ projectId, projectName, from: d
     if (projectId) p.set('projectId', String(projectId));
     if (dFrom) p.set('from', dFrom);
     if (dTo) p.set('to', dTo);
-    const res = await client.get(`/reports/${report.key}?${p.toString()}`);
+    const res = await client.get(`/informes/${report.key}?${p.toString()}`);
     const rows = res.data || [];
     const sufijo = dFrom || dTo ? `${dFrom || 'inicio'}_${dTo || 'hoy'}` : 'todo';
     return { rows, base: `${report.key}-${projectName || 'crm'}-${sufijo}` };

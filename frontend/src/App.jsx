@@ -92,8 +92,8 @@ const ROUTE_TITLES = {
   '/whatsapp/chat': 'Chat de WhatsApp',
   '/whatsapp/conexion': 'Conexión de WhatsApp',
   '/products':                        'Productos',
-  '/sales/analisis':                  'Análisis de ventas',
-  '/sales':                           'Ventas',
+  '/ventas/analisis':                  'Análisis de ventas',
+  '/ventas':                           'Ventas',
   '/commissions':                     'Comisiones',
   '/expenses':                        'Egresos',
   '/accounting/payable':              'Cuentas por pagar',
@@ -107,18 +107,18 @@ const ROUTE_TITLES = {
   '/forms':                           'Formularios',
   '/make-webhooks':                   'Make / Webhooks',
   '/woocommerce':                     'WooCommerce',
-  '/email-sequences':                 'Secuencias de email',
+  '/secuencias-email':                 'Secuencias de email',
   '/email-templates':                 'Plantillas de email',
   '/documentos':                      'Documentos',
   '/configuracion/categorias-arbol':  'Categorías',
   '/configuracion/campos':            'Campos personalizados',
   '/roles':                           'Roles',
   '/status':                          'Status',
-  '/reports':                         'Reportes',
+  '/informes':                         'Reportes',
   '/notificaciones':                  'Notificaciones',
   '/activity':                        'Actividad',
-  '/profile':                         'Mi cuenta',
-  '/settings':                        'Configuración',
+  '/perfil':                         'Mi cuenta',
+  '/configuracion':                        'Configuración',
   '/login':                           'Iniciar sesión',
   '/set-password':                    'Establecer contraseña',
 };
@@ -180,9 +180,9 @@ function App() {
           <Route path="/products/pending" element={<CoursesPendingPage />} />
           <Route path="/products/tree" element={<ProductsTreePage />} />
           <Route path="/products/:id" element={<ProductDetailPage />} />
-          <Route path="/sales/analisis" element={<SalesAnalysisPage />} />
-          <Route path="/sales/:id" element={<SaleDetailPage />} />
-          <Route path="/sales" element={<SalesPage />} />
+          <Route path="/ventas/analisis" element={<SalesAnalysisPage />} />
+          <Route path="/ventas/:id" element={<SaleDetailPage />} />
+          <Route path="/ventas" element={<SalesPage />} />
           <Route path="/meta-ads" element={<MetaAdsPage />} />
           <Route path="/leads/revision-duplicados" element={<DupReviewQueuePage />} />
           <Route path="/commissions" element={<CommissionsPage />} />
@@ -205,7 +205,7 @@ function App() {
           <Route path="/configuracion/atajos" element={<ShortcutsConfigPage />} />
           <Route path="/external-panels/:id" element={<ExternalPanelPage />} />
           <Route path="/manual" element={<ManualPage />} />
-          <Route path="/preferences" element={<PreferencesPage />} />
+          <Route path="/preferencias" element={<PreferencesPage />} />
           <Route path="/seo" element={<SeoPage />} />
           <Route path="/soporte" element={<SoportePage />} />
           <Route path="/payroll" element={<PayrollPage />} />
@@ -227,26 +227,38 @@ function App() {
           <Route path="/webhooks" element={<Navigate to="/make-webhooks" replace />} />
           <Route path="/webhooks/:id" element={<Navigate to="/make-webhooks" replace />} />
           <Route path="/woocommerce" element={<WooCommercePage />} />
-          <Route path="/email-sequences" element={<EmailSequencesPage />} />
+          <Route path="/secuencias-email" element={<EmailSequencesPage />} />
           <Route path="/email-templates" element={<EmailTemplatesPage />} />
           <Route path="/documentos" element={<DocumentsPage />} />
           <Route path="/documentos/config" element={<DocumentsConfigPage />} />
           <Route path="/configuracion/categorias-arbol" element={<CategoriesTreePage />} />
           <Route path="/configuracion/campos" element={<FieldDefinitionsPage />} />
           <Route path="/roles" element={<RolesPage />} />
-          <Route path="/reports" element={<ReportsPage />} />
+          <Route path="/informes" element={<ReportsPage />} />
           <Route path="/notificaciones" element={<NotificacionesPage />} />
           <Route path="/notifications" element={<Navigate to="/notificaciones" replace />} />
           <Route path="/activity" element={<ActivityPage />} />
           <Route path="/status" element={<StatusPage />} />
           <Route path="/solicitudes-cambio" element={<ChangeRequestsPage />} />
           <Route path="/solicitudes-cambio/:id" element={<ChangeRequestDetailPage />} />
-          <Route path="/profile" element={<ProfilePage />} />
-          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/perfil" element={<ProfilePage />} />
+          <Route path="/configuracion" element={<SettingsPage />} />
         </Route>
 
         {/* Entrada y catch-all */}
         <Route path="/" element={<RootRedirect />} />
+        {/* Las direcciones de antes, en ingles, siguen funcionando: si no,
+            se rompen los favoritos del equipo y los enlaces ya enviados. */}
+        <Route path="/settings" element={<Navigate to="/configuracion" replace />} />
+        <Route path="/reports/ia" element={<Navigate to="/informes/ia" replace />} />
+        <Route path="/reports" element={<Navigate to="/informes" replace />} />
+        <Route path="/sales" element={<Navigate to="/ventas" replace />} />
+        <Route path="/profile" element={<Navigate to="/perfil" replace />} />
+        <Route path="/preferences" element={<Navigate to="/preferencias" replace />} />
+        <Route path="/messages" element={<Navigate to="/mensajes" replace />} />
+        <Route path="/email-sequences" element={<Navigate to="/secuencias-email" replace />} />
+        <Route path="/ai-chat" element={<Navigate to="/chat-ia" replace />} />
+        <Route path="/configuracion/email-templates" element={<Navigate to="/configuracion/plantillas-email" replace />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </Suspense>

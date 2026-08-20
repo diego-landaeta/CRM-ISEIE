@@ -98,7 +98,7 @@ export default function PanelResumen({ projectId, projectName, from, to }) {
     if (projectId) q.set('projectId', String(projectId));
     if (from) q.set('from', from);
     if (to) q.set('to', to);
-    client.get(`/reports/panel?${q.toString()}`)
+    client.get(`/informes/panel?${q.toString()}`)
       .then((r) => { if (vivo) setPanel(r?.success ? r.data : null); })
       .catch(() => { if (vivo) setPanel(null); })
       .finally(() => { if (vivo) setCargando(false); });

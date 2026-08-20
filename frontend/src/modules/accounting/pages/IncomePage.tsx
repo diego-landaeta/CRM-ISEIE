@@ -42,7 +42,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
 
   useEffect(() => {
     if (!activeProject?.id || !isAdmin) return;
-    client.get('/sales/gestores-stats', { params: { projectId: activeProject.id, periodo: 'all' } })
+    client.get('/ventas/gestores-stats', { params: { projectId: activeProject.id, periodo: 'all' } })
       .then((r) => setGestores(r?.data?.gestores || []))
       .catch(() => setGestores([]));
   }, [activeProject?.id, isAdmin, reloadKey]);
@@ -96,7 +96,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
         <div className="flex items-center gap-2 self-start sm:self-auto">
         <button
           type="button"
-          onClick={() => navigate('/sales/analisis')}
+          onClick={() => navigate('/ventas/analisis')}
           className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-md border border-border text-sm font-semibold hover:bg-muted"
         >
           Análisis
@@ -254,7 +254,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
                     <td className="px-4 py-3 text-right">
                       <button
                         type="button"
-                        onClick={(e) => { e.stopPropagation(); navigate(`/sales/${r.id}`); }}
+                        onClick={(e) => { e.stopPropagation(); navigate(`/ventas/${r.id}`); }}
                         title="Ver detalle de la venta"
                         className="text-muted-foreground hover:text-primary p-1 rounded focus:outline-none focus:ring-2 focus:ring-primary/40"
                       >

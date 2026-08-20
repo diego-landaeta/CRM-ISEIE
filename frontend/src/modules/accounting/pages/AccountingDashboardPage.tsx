@@ -44,7 +44,7 @@ export default function AccountingDashboardPage() {
     if (activeProject?.id) p.set('projectId', String(activeProject.id));
     if (range.from) p.set('from', range.from);
     if (range.to) p.set('to', range.to);
-    client.get(`/reports/ventas-vendedora?${p.toString()}`)
+    client.get(`/informes/ventas-vendedora?${p.toString()}`)
       .then((r) => setVend(r.success ? (r.data || []) : []))
       .catch(() => setVend([]));
   }, [activeProject?.id, range.from, range.to]);

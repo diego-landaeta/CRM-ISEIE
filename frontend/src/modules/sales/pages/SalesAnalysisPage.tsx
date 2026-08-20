@@ -81,13 +81,13 @@ export default function SalesAnalysisPage() {
       setLoading(true);
       try {
         if (tab === 'resumen') {
-          const r = await client.get<Resumen>('/sales/resumen', { params });
+          const r = await client.get<Resumen>('/ventas/resumen', { params });
           if (vivo && r.success) setResumen(r.data);
         } else if (tab === 'asesora') {
-          const r = await client.get<Asesora[]>('/sales/por-asesora', { params });
+          const r = await client.get<Asesora[]>('/ventas/por-asesora', { params });
           if (vivo && r.success) setAsesoras(r.data || []);
         } else {
-          const r = await client.get<Cliente[]>('/sales/por-cliente', { params: { ...params, page, limit: PER_PAGE } });
+          const r = await client.get<Cliente[]>('/ventas/por-cliente', { params: { ...params, page, limit: PER_PAGE } });
           if (vivo && r.success) {
             setClientes(r.data || []);
             setTotalClientes((r as { pagination?: { total?: number } }).pagination?.total ?? (r.data || []).length);

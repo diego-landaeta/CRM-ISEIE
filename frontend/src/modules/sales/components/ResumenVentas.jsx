@@ -38,7 +38,7 @@ export default function ResumenVentas({ projectId, from, to, responsableId = nul
     if (from) p.set('from', from);
     if (to) p.set('to', to);
     if (responsableId) p.set('responsableId', String(responsableId));
-    client.get(`/sales/resumen?${p}`)
+    client.get(`/ventas/resumen?${p}`)
       .then((r) => { if (vivo) setD(r.success ? r.data : null); })
       .catch(() => { if (vivo) setD(null); })
       .finally(() => { if (vivo) setCargando(false); });

@@ -37,11 +37,11 @@ export async function descargarReportePrincipal({ projectId, projectName, from, 
   // que le falte una hoja que ningún Excel.
   const pide = (ruta) => client.get(`${ruta}?${qs}`).then((r) => r?.data || []).catch(() => []);
   const [panel, asesoras, paises, formaciones, detalle] = await Promise.all([
-    client.get(`/reports/panel?${qs}`).then((r) => r?.data || null).catch(() => null),
-    pide('/reports/asesoras-mes'),
-    pide('/reports/paises'),
-    pide('/reports/formaciones'),
-    pide('/reports/ventas-asesora'),
+    client.get(`/informes/panel?${qs}`).then((r) => r?.data || null).catch(() => null),
+    pide('/informes/asesoras-mes'),
+    pide('/informes/paises'),
+    pide('/informes/formaciones'),
+    pide('/informes/ventas-asesora'),
   ]);
 
   const hojas = [];
@@ -142,7 +142,7 @@ export async function descargarReportePrincipal({ projectId, projectName, from, 
     const q2 = new URLSearchParams(q);
     q2.set('tipo', tipo);
     q2.set('limite', '20000');
-    return client.get(`/reports/detalle?${q2.toString()}`).then((r) => r?.data || []).catch(() => []);
+    return client.get(`/informes/detalle?${q2.toString()}`).then((r) => r?.data || []).catch(() => []);
   };
   const [leads, ventas, cobros] = await Promise.all([
     filas('leads'), filas('ventas'), filas('cobros'),

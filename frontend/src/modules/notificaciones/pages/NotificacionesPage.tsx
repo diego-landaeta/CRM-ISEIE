@@ -291,7 +291,7 @@ export default function NotificacionesPage() {
               </li>
               <li>
                 <strong>Email:</strong> pendiente. El backend tiene Brevo configurado (
-                <Link to="/email-sequences" className="text-primary font-medium hover:underline">secuencias</Link>) pero
+                <Link to="/secuencias-email" className="text-primary font-medium hover:underline">secuencias</Link>) pero
                 aún no hay templates para notificaciones por evento.
               </li>
             </ul>

@@ -52,7 +52,7 @@ export default function EmailSequencesPage() {
     if (!activeProject?.id) return;
     setLoading(true);
     try {
-      const res = await client.get(`/email-sequences?projectId=${activeProject.id}`);
+      const res = await client.get(`/secuencias-email?projectId=${activeProject.id}`);
       if (res.success) setSequences((res.data as EmailSequence[]) || []);
     } catch (err: any) {
       toast({ title: 'Error cargando secuencias', description: err?.data?.error || err.message, variant: 'destructive' });
@@ -64,21 +64,21 @@ export default function EmailSequencesPage() {
   async function handleSave(seq: EmailSequence): Promise<void> {
     if (!activeProject?.id) return;
     try {
-      if (seq.id) await client.patch(`/email-sequences/${seq.id}`, seq);
-      else await client.post('/email-sequences', { ...seq, project_id: activeProject.id });
+      if (seq.id) await client.patch(`/secuencias-email/${seq.id}`, seq);
+      else await client.post('/secuencias-email', { ...seq, project_id: activeProject.id });
       toast({ title: 'Guardado' });
       setEditing(null);
       load();
     } catch (err: any) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
   }
   async function handleToggle(s: EmailSequence): Promise<void> {
-    try { await client.patch(`/email-sequences/${s.id}`, { active: !s.active }); load(); }
+    try { await client.patch(`/secuencias-email/${s.id}`, { active: !s.active }); load(); }
     catch (err: any) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
   }
   function handleDelete(s: EmailSequence): void { setPendingDelete(s); }
   async function doDelete(): Promise<void> {
     if (!pendingDelete) return;
-    try { await client.delete(`/email-sequences/${pendingDelete.id}`); load(); }
+    try { await client.delete(`/secuencias-email/${pendingDelete.id}`); load(); }
     catch { /* silencioso */ }
     finally { setPendingDelete(null); }
   }

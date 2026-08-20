@@ -593,7 +593,7 @@ export default function LeadsPage() {
           )}
           {(user?.role === 'admin' || user?.role === 'superadmin') && (
             <button
-              onClick={() => navigate('/reports')}
+              onClick={() => navigate('/informes')}
               title="Ir a Reportes (descargables)"
               aria-label="Reportes"
               className="h-9 inline-flex items-center gap-1.5 px-2.5 sm:px-3 rounded-md border border-border bg-card text-xs sm:text-sm font-medium hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"

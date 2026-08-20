@@ -114,7 +114,7 @@ export default function DetalleMetricaDialog({ abierto, onClose, consulta, subti
     setBusca('');
     const q = new URLSearchParams();
     Object.entries(consulta).forEach(([k, v]) => { if (v != null && v !== '') q.set(k, String(v)); });
-    client.get(`/reports/detalle?${q.toString()}`)
+    client.get(`/informes/detalle?${q.toString()}`)
       .then((r) => { if (vivo) setFilas(r.success ? (r.data || []) : []); })
       .catch(() => { if (vivo) setFilas([]); })
       .finally(() => { if (vivo) setCargando(false); });

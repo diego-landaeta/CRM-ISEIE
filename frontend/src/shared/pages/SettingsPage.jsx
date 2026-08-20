@@ -23,7 +23,7 @@ const NAV = [
   { label: 'Canales',              icon: Megaphone,      to: '/configuracion/canales' },
   { label: 'Formularios',          icon: FileText,       to: '/forms' },
   { label: 'Webhooks',             icon: PlugsConnected, to: '/make-webhooks' },
-  { label: 'Email seguimiento',    icon: Envelope,       to: '/email-sequences' },
+  { label: 'Email seguimiento',    icon: Envelope,       to: '/secuencias-email' },
   { label: 'Plantillas email',     icon: EnvelopeOpen,   to: '/email-templates' },
   { label: 'Atajos rápidos',       icon: Lightning,      to: '/configuracion/atajos' },
   { label: 'Numeración docs',      icon: ListNumbers,    to: '/documentos/config' },

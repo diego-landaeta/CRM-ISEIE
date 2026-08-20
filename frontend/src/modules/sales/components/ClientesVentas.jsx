@@ -37,7 +37,7 @@ export default function ClientesVentas({ projectId = null, from = null, to = nul
     if (projectId) params.projectId = projectId;
     if (from && to) { params.from = from; params.to = to; }
     if (responsableId) params.responsableId = responsableId;
-    client.get('/sales/por-cliente', { params })
+    client.get('/ventas/por-cliente', { params })
       .then((r) => {
         if (!vivo) return;
         setFilas(r.success ? (r.data || []) : []);

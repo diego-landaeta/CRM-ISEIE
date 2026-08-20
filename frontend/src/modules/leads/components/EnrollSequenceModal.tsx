@@ -43,7 +43,7 @@ export default function EnrollSequenceModal({ leadId, open, onClose, onEnrolled 
           if (leadRes.success) pid = leadRes.data?.project_id;
         }
         if (!pid) { setLoading(false); return; }
-        const res = await client.get(`/email-sequences?projectId=${pid}`);
+        const res = await client.get(`/secuencias-email?projectId=${pid}`);
         if (!cancelled && res.success) {
           setSequences((res.data || []).filter((s) => s.active));
         }
@@ -67,7 +67,7 @@ export default function EnrollSequenceModal({ leadId, open, onClose, onEnrolled 
     if (!selected) return;
     setEnrolling(true);
     try {
-      const res = await client.post('/email-sequences/runs/start', {
+      const res = await client.post('/secuencias-email/runs/start', {
         sequence_id: selected,
         lead_id: leadId,
       });

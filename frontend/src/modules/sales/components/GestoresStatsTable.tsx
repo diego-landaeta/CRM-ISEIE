@@ -54,7 +54,7 @@ export default function GestoresStatsTable({ projectId, className = '', canEdit 
     // El periodo NO se enviaba: la tabla pedia siempre el valor por defecto del
     // backend y salia todo a cero aunque arriba se estuviera mirando el año.
     if (periodo) params.periodo = periodo;
-    client.get<{ gestores: GestorRow[] }>('/sales/gestores-stats', { params })
+    client.get<{ gestores: GestorRow[] }>('/ventas/gestores-stats', { params })
       .then((r) => { setRows(r?.data?.gestores || []); })
       .catch(() => setRows([]))
       .finally(() => setLoading(false));
@@ -71,7 +71,7 @@ export default function GestoresStatsTable({ projectId, className = '', canEdit 
   async function saveEdit(row: GestorRow) {
     setSaving(true);
     try {
-      await client.post('/sales/goals', {
+      await client.post('/ventas/goals', {
         user_id: row.user_id,
         project_id: projectId || null,
         periodo_yyyymm: periodo,

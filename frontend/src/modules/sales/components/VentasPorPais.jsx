@@ -66,7 +66,7 @@ export default function VentasPorPais({ projectId = null, from = null, to = null
     if (projectId) params.projectId = projectId;
     if (from && to) { params.from = from; params.to = to; }
     if (responsableId) params.responsableId = responsableId;
-    client.get('/sales/paises', { params })
+    client.get('/ventas/paises', { params })
       .then((r) => { if (vivo) setFilas(r.success ? (r.data || []) : []); })
       .catch((e) => { if (vivo) setError(e?.message || 'No se pudieron cargar los países'); })
       .finally(() => { if (vivo) setCargando(false); });

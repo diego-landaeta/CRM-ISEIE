@@ -54,13 +54,13 @@ const NAV_SECTIONS = [
       },
       // Ventas vive en Principal (flujo diario) y también en Finanzas. Clientes
       // y Revisión duplicados pasan a la sección Clientes al final.
-      { to: '/sales',      label: 'Ventas',     icon: Receipt },
+      { to: '/ventas',      label: 'Ventas',     icon: Receipt },
     ],
   },
   {
     label: 'Captación',
     items: [
-      { to: '/email-sequences', label: 'Email',     icon: Envelope, roles: ['admin', 'superadmin'], sectionPrefixes: ['/email-sequences', '/email-templates'] },
+      { to: '/secuencias-email', label: 'Email',     icon: Envelope, roles: ['admin', 'superadmin'], sectionPrefixes: ['/secuencias-email', '/email-templates'] },
       { to: '/forms',           label: 'Formularios', icon: Globe,  roles: ['admin', 'superadmin'], sectionPrefixes: ['/forms'] },
       { to: '/make-webhooks',   label: 'Make',      icon: PlugsConnected, roles: ['admin', 'superadmin'] },
       { to: '/webhooks',        label: 'Webhooks',  icon: PlugsConnected, roles: ['admin', 'superadmin'] },
@@ -98,8 +98,8 @@ const NAV_SECTIONS = [
   {
     label: 'Finanzas',
     items: [
-      { to: '/sales',                label: 'Dashboard',          icon: Calculator, roles: ['admin', 'superadmin'], statusTag: 'Pruebas' },
-      { to: '/sales',                label: 'Ventas',             icon: Receipt, statusTag: 'Pruebas' },
+      { to: '/ventas',                label: 'Dashboard',          icon: Calculator, roles: ['admin', 'superadmin'], statusTag: 'Pruebas' },
+      { to: '/ventas',                label: 'Ventas',             icon: Receipt, statusTag: 'Pruebas' },
       { to: '/accounting/income',    label: 'Ingresos',           icon: Coins,      roles: ['admin', 'superadmin'], statusTag: 'Pruebas' },
       { to: '/revenue',              label: 'Conversiones',       icon: ChartLineUp, roles: ['admin', 'superadmin'], statusTag: 'Pruebas' },
       { to: '/expenses',             label: 'Egresos',            icon: Receipt,    roles: ['admin', 'superadmin'], statusTag: 'Pruebas' },
@@ -116,8 +116,8 @@ const NAV_SECTIONS = [
   {
     label: 'Análisis',
     items: [
-      { to: '/reports',     label: 'Reportes',      icon: ChartLineUp, sectionPrefixes: ['/reports', '/activity'] },
-      { to: '/ai-chat',     label: 'Chat IA',       icon: ChatCircleText, roles: ['admin', 'superadmin'] },
+      { to: '/informes',     label: 'Reportes',      icon: ChartLineUp, sectionPrefixes: ['/informes', '/activity'] },
+      { to: '/chat-ia',     label: 'Chat IA',       icon: ChatCircleText, roles: ['admin', 'superadmin'] },
     ],
   },
   {
@@ -135,7 +135,7 @@ const NAV_SECTIONS = [
       { to: '/solicitudes-cambio', label: 'Solicitudes de cambio', icon: GitMerge },
       { to: '/notificaciones', label: 'Notificaciones',   icon: Bell },
       // El tutor entra aqui: es donde cambia su contraseña.
-      { to: '/preferences',    label: 'Mis preferencias', icon: Sliders, roles: ['superadmin', 'admin', 'gestor', 'tutor'] },
+      { to: '/preferencias',    label: 'Mis preferencias', icon: Sliders, roles: ['superadmin', 'admin', 'gestor', 'tutor'] },
       { to: '/soporte',        label: 'Soporte',          icon: Headset },
       { to: '/manual',         label: 'Manual del CRM',   icon: BookOpen },
       { to: '/status',         label: 'Status',           icon: Pulse },
@@ -159,7 +159,7 @@ function canSeeItem(item, role, soloColaboraciones) {
   // prospectos, ni ventas, ni finanzas. Se declara lo que puede ver, igual que
   // con el tutor — enumerar lo prohibido deja fuera siempre la pantalla nueva.
   if (soloColaboraciones) {
-    return ['/tutores', '/tutores/comisiones', '/preferences'].includes(item.to);
+    return ['/tutores', '/tutores/comisiones', '/preferencias'].includes(item.to);
   }
 
   if (!item.roles) return true;
@@ -357,9 +357,9 @@ function CollapsibleNav({ sections, role, soloColab, collapsed, onNavigate, onEx
       {sections.map((section) => {
         const items = section.items
           .map((it) => {
-            if (it.sectionPrefixes?.includes('/reports') && it.sectionPrefixes?.includes('/activity')) {
+            if (it.sectionPrefixes?.includes('/informes') && it.sectionPrefixes?.includes('/activity')) {
               const isAdmin = role === 'admin' || role === 'superadmin' || role === 'soporte';
-              return { ...it, to: isAdmin ? '/reports' : '/activity' };
+              return { ...it, to: isAdmin ? '/informes' : '/activity' };
             }
             return it;
           })
@@ -567,14 +567,14 @@ export default function Sidebar({ collapsed = false, onToggleCollapsed, onNaviga
             collapsed ? 'left-full ml-2 w-48' : 'left-0 right-0'
           )}>
             <button
-              onClick={() => { setUserMenuOpen(false); navigate('/profile'); }}
+              onClick={() => { setUserMenuOpen(false); navigate('/perfil'); }}
               className="w-full flex items-center gap-2.5 px-3 py-2 text-[13px] hover:bg-secondary/60 text-foreground"
             >
               <UserCircle size={15} />
               Mi cuenta
             </button>
             <button
-              onClick={() => { setUserMenuOpen(false); navigate('/settings'); }}
+              onClick={() => { setUserMenuOpen(false); navigate('/configuracion'); }}
               className="w-full flex items-center gap-2.5 px-3 py-2 text-[13px] hover:bg-secondary/60 text-foreground"
             >
               <Gear size={15} />

@@ -59,7 +59,7 @@ export default function AsesorasPanel({ from, to }) {
         if (hasta) p.set('to', hasta);
         // Solo se manda cuando no es el criterio por defecto.
         if (base === 'cobro') p.set('base', 'cobro');
-        const r = await client.get(`/reports/asesoras-mes?${p.toString()}`);
+        const r = await client.get(`/informes/asesoras-mes?${p.toString()}`);
         if (vivo) setFilas(r.success ? (r.data || []) : []);
       } catch {
         if (vivo) setFilas([]);

@@ -86,7 +86,7 @@ export default function CursosVendidosCard({ projectId, responsableId = null, cl
     const params: Record<string, string | number> = { from, to, limit: 100 };
     if (projectId) params.projectId = projectId;
     if (responsableId) params.responsableId = responsableId;
-    client.get<Row[]>('/sales/top-products', { params })
+    client.get<Row[]>('/ventas/top-products', { params })
       .then((r) => { if (!cancelled) setRows(Array.isArray(r?.data) ? r.data : []); })
       .catch(() => { if (!cancelled) setRows([]); })
       .finally(() => { if (!cancelled) setLoading(false); });
