@@ -343,7 +343,17 @@ export async function webhook(req, res) {
     // asi que cualquiera que supiera la direccion podia meter mensajes
     // inventados en la conversacion de una gestora, o marcarlos como enviados.
     // Es el mismo agujero que ya tuvimos con el webhook de Stripe.
+    // El secreto puede llegar de dos formas, y hacen falta las dos.
+    //
+    // Lo natural es la cabecera. Pero el webhook GLOBAL de Evolution —el que se
+    // configura por variable de entorno, que es como esta montado— no permite
+    // mandar cabeceras propias: solo una direccion. Asi que se acepta tambien
+    // como parte de la direccion, que es lo unico que ese modo deja controlar.
+    //
+    // No es peor: esa llamada va del contenedor al CRM por la red interna de la
+    // maquina, no sale a internet. Y sigue siendo obligatorio.
     const secreto = process.env.EVOLUTION_WEBHOOK_SECRET;
+    const recibido = req.get('x-webhook-secret') || req.query?.s || '';
     if (!secreto) {
       if (process.env.NODE_ENV === 'production') {
         logger.error('WhatsApp: falta EVOLUTION_WEBHOOK_SECRET — se rechaza el webhook');
@@ -351,7 +361,7 @@ export async function webhook(req, res) {
       }
       logger.warn('WhatsApp: webhook SIN secreto (solo aceptable fuera de produccion)');
     }
-    if (secreto && req.get('x-webhook-secret') !== secreto) {
+    if (secreto && recibido !== secreto) {
       logger.warn({ ip: req.ip }, 'WhatsApp: webhook con secreto incorrecto');
       return res.status(401).json({ success: false });
     }
