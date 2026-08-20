@@ -14,7 +14,7 @@ const DEFAULT_FAVICON = `${APP_BASE_URL}/iseie-icon-192.png`;
 //
 // 1 · Apuntaba a /api/projects/:id/logo. El navegador pide el favicon SIN
 //     cabeceras de sesion, asi que esa direccion nunca le va a contestar: pide
-//     autenticacion. Se usa el logo_url publico del proyecto.
+//     autenticacion. Hoy da igual: el icono es fijo, el del CRM.
 // 2 · Si la imagen no cargaba —404, borrada, sin internet— el navegador se
 //     quedaba sin icono. Ahora se prueba ANTES y solo se cambia si carga.
 // 3 · El <link> del index declara type="image/svg+xml"; al meterle un PNG, el
@@ -70,25 +70,15 @@ export function ProjectProvider({ children }) {
   const { activeProject, projects } = useAuth();
   const { theme } = useTheme();
 
-  // Favicon dinamico: si el proyecto activo tiene logo, usarlo. Si no, default.
+  // El icono de la pestaña es SIEMPRE el del CRM.
+  //
+  // Antes cambiaba al logo de la marca activa, y con nueve marcas y varias
+  // pestañas abiertas dejaba de saberse cual era el CRM: parecian nueve
+  // aplicaciones distintas. El icono identifica la herramienta; la marca en la
+  // que trabajas la dice el menu, que es donde se mira.
   useEffect(() => {
-    // El title lo construye App.jsx (ruta + proyecto + CRM ISEIE) — aquí solo favicon.
-    if (activeProject?.logo_url) {
-      // El logo puede ser una direccion de la web del proyecto o un fichero
-      // subido al CRM. En el primer caso se usa tal cual; en el segundo hay que
-      // pasar por el endpoint, con la base delante —si no, en /crm o /testeo se
-      // resolveria contra la raiz del dominio y no lo encontraria—.
-      const esExterna = /^https?:\/\//i.test(activeProject.logo_url);
-      setFavicon(
-        esExterna
-          ? activeProject.logo_url
-          : `${APP_BASE_URL}/api/projects/${activeProject.id}/logo`,
-        DEFAULT_FAVICON,
-      );
-    } else {
-      setFavicon(DEFAULT_FAVICON, DEFAULT_FAVICON);
-    }
-  }, [activeProject?.id, activeProject?.logo_url]);
+    setFavicon(DEFAULT_FAVICON, DEFAULT_FAVICON);
+  }, []);
 
   // Branding por proyecto (CRM-191): inyecta --primary/--ring del activeProject.
   // En dark mode aclara automaticamente colores oscuros para mantener legibilidad.
