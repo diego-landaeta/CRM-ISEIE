@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   MainContainer, ChatContainer, MessageList, Message, MessageInput,
   ConversationList, Conversation, Avatar, Sidebar, Search, ConversationHeader,
@@ -109,6 +109,11 @@ export default function ChatPage() {
   const [sesion, setSesion] = useState<SesionElegida>({ usuarioId: null, nombre: '', esMia: true });
   const deQuien = sesion.usuarioId;
 
+  // Se puede llegar aqui desde la ficha de un prospecto o desde Clientes, con
+  // la conversacion ya en la direccion. Antes esos botones abrian WhatsApp Web
+  // en otra pestaña: se salia del CRM y no quedaba registro de nada.
+  const [params, setParams] = useSearchParams();
+
   const [chats, setChats] = useState<ChatWhatsapp[]>([]);
   const [abierto, setAbierto] = useState<number | null>(null);
   const [conv, setConv] = useState<ChatWhatsapp | null>(null);
@@ -166,6 +171,16 @@ export default function ChatPage() {
     setMensajes([]);
     setCargando(true);
   }, [deQuien]);
+
+  // Abrir la que venga en la direccion, una sola vez: despues se quita de la
+  // barra para que al recargar no vuelva a saltar a ella.
+  useEffect(() => {
+    const pedida = parseInt(params.get('conv') || '', 10);
+    if (!Number.isInteger(pedida)) return;
+    setAbierto(pedida);
+    params.delete('conv');
+    setParams(params, { replace: true });
+  }, [params, setParams]);
 
   const cargarLista = useCallback(async () => {
     try {

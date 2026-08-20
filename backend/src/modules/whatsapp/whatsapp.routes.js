@@ -27,13 +27,13 @@ router.patch('/templates/:id', ctrl.updateTemplate);
 router.delete('/templates/:id', ctrl.deleteTemplate);
 
 router.get('/cola', ctrl.cola);
-router.get('/sala', ctrl.sala);
 
-// El panel del equipo. El recorte va en el controlador —solo admin— igual que
-// el resto del modulo.
-router.get('/equipo', ctrl.equipo);
-router.post('/equipo/:userId/abrir', ctrl.abrirSala);
-router.post('/equipo/:userId/latido', ctrl.latido);
+// Aqui vivian /sala y /equipo: el panel que abria la sesion de cada gestora en
+// un navegador remoto. Ese metodo se retiro —contenedores borrados y servicio
+// apagado— y la pantalla seguia existiendo, asi que quien llegaba a ella veia
+// «no hay gestor de salas configurado» y creia que el modulo estaba roto.
+// Ahora todo pasa por Evolution: para ver el WhatsApp de otra persona esta el
+// selector del Chat, que pregunta por usuarioId.
 
 // ── El chat ──────────────────────────────────────────────────────────────────
 // Las conversaciones ahora viven en el CRM, no en un navegador remoto: por eso

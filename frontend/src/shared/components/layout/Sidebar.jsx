@@ -37,10 +37,12 @@ const NAV_SECTIONS = [
         icon: WhatsappLogo,
         apagable: 'whatsapp',
         children: [
+          // Un solo sitio: el Chat. «Mi WhatsApp» y el panel del equipo eran del
+          // metodo viejo —cada gestora en un navegador remoto— y tener los dos a la
+          // vez es lo que confunde: dos pantallas que parecen lo mismo y no lo son.
           // Abierto a todo el equipo por decision del owner. El aviso previo —lo
           // que puede pasarle a su numero -- sigue pendiente en la tarea #45.
           { to: '/whatsapp/chat', label: 'Chat' },
-          { to: '/whatsapp', label: 'Mi WhatsApp', end: true },
           // Sin recorte por rol: cada gestora enlaza SU numero, y el servidor solo
           // la deja tocar el suyo.
           { to: '/whatsapp/conexion', label: 'Conexión' },
@@ -48,7 +50,6 @@ const NAV_SECTIONS = [
           // Solo para quien manda: entrar en el WhatsApp de cada gestora.
           // Fuera del menu: usaba el navegador remoto, que se ha retirado.
           // Vuelve cuando se rehaga sobre el chat nuevo.
-          // { to: '/whatsapp/equipo', label: 'WhatsApp del equipo', roles: ['superadmin', 'admin'] },
         ],
       },
       // Ventas vive en Principal (flujo diario) y también en Finanzas. Clientes

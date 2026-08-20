@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { abrirChatCrm } from '@/shared/lib/abrirChatCrm';
 import {
   DownloadSimple,
   EnvelopeSimple,
@@ -80,20 +81,36 @@ interface QuickActionsProps {
 }
 
 function QuickActions({ client: item, onDelete }: QuickActionsProps) {
+  const irA = useNavigate();
+
+  // El chat se abre DENTRO del CRM: antes esto salia a wa.me en otra pestaña y
+  // no quedaba registro de que se hubiera escrito.
+  async function abrirAqui() {
+    const destino = await abrirChatCrm({ leadId: item.id, telefono: item.telefono });
+    if (!destino) {
+      toast({
+        title: 'No se ha podido abrir el chat',
+        description: 'Comprueba en WhatsApp / Conexion que tu numero sigue enlazado.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    irA(destino);
+  }
+
   const whatsapp = item.telefono ? cleanPhone(item.telefono) : null;
   return (
     <div className="flex items-center justify-end gap-0.5" onClick={(event) => event.stopPropagation()}>
       {whatsapp && (
-        <a
-          href={`https://wa.me/${whatsapp}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          title="WhatsApp"
-          aria-label="Abrir WhatsApp"
+        <button
+          type="button"
+          onClick={abrirAqui}
+          title="Abrir el chat en el CRM"
+          aria-label="Abrir el chat en el CRM"
           className="p-1.5 rounded hover:bg-green-100 dark:hover:bg-green-950/40 text-muted-foreground hover:text-green-700 dark:hover:text-green-400 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
         >
           <WhatsappLogo size={14} />
-        </a>
+        </button>
       )}
       {item.email && (
         <a

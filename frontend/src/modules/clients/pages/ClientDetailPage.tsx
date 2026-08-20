@@ -6,6 +6,7 @@
 import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import type { Lead, Conversion } from '@/shared/types';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import { abrirChatCrm } from '@/shared/lib/abrirChatCrm';
 import client from '@/shared/api/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
@@ -90,6 +91,21 @@ function InfoRow({ label, children }) {
 export default function ClientDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+
+  // El chat se abre DENTRO del CRM, no en WhatsApp Web: asi queda registro y no
+  // se abre por error la sesion personal del navegador.
+  async function abrirChatAqui() {
+    const destino = await abrirChatCrm({ leadId: lead?.id, telefono: lead?.telefono });
+    if (!destino) {
+      toast({
+        title: 'No se ha podido abrir el chat',
+        description: 'Comprueba en WhatsApp / Conexion que tu numero sigue enlazado.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    navigate(destino);
+  }
   const { user } = useAuth();
   const { activeProject } = useProjectContext();
 
@@ -224,11 +240,11 @@ export default function ClientDetailPage() {
         {/* Actions */}
         <div className="flex items-center gap-2 flex-shrink-0">
           {waPhone && (
-            <a href={`https://wa.me/${waPhone}`} target="_blank" rel="noopener noreferrer" aria-label="Abrir WhatsApp"
+            <button type="button" onClick={abrirChatAqui} aria-label="Abrir el chat en el CRM"
               className="h-9 px-3 rounded-lg border border-border bg-card hover:bg-green-50 dark:hover:bg-green-950/30 text-muted-foreground hover:text-green-700 dark:hover:text-green-400 transition-colors flex items-center gap-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40">
               <WhatsappLogo size={15} weight="regular" />
               <span className="hidden sm:inline">WhatsApp</span>
-            </a>
+            </button>
           )}
           {lead.email && (
             <a href={`mailto:${lead.email}`} aria-label="Enviar email"
