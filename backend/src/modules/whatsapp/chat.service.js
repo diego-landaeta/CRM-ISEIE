@@ -54,10 +54,20 @@ async function permitirEnvio(conversacionId) {
   // 2. Escribir a quien no pidio informacion es lo que acaba en bloqueos. Si
   //    el numero no esta atado a ningun lead y nunca nos ha escrito, no salio
   //    de un formulario nuestro.
-  // Se puede escribir a cualquiera. Decision del owner, y con motivo: un
-  // numero puede ser el de un antiguo alumno, el de una madre que llama por su
-  // hijo o el de un prospecto de otra gestora que aun no esta en el CRM, y
-  // negarse a escribirle deja a la gestora sin poder trabajar.
+  // NO VOLVER A BLOQUEAR ESTO. Decision de Diego, 21/08/2026.
+  //
+  // Aqui habia un freno que impedia el primer mensaje a un numero que no fuera
+  // prospecto y que nunca hubiera escrito. Parecia proteger la linea y hacia lo
+  // contrario: ese numero puede ser un antiguo alumno, una madre preguntando
+  // por su hijo, o un prospecto de otra gestora que aun no esta en el CRM.
+  //
+  // Y cuando el CRM se negaba, la gestora no dejaba de escribir: escribia desde
+  // su movil. O sea que el mensaje salia igual, pero SIN registro, SIN plantilla
+  // y SIN los topes de ritmo. El freno no evitaba nada; solo sacaba el trabajo
+  // fuera del CRM, que es donde no se puede vigilar.
+  //
+  // Si aparece la tentacion de devolverlo, hablarlo antes con Diego: existe
+  // WA_BLOQUEO_DESCONOCIDOS=true para encenderlo sin tocar el codigo.
   //
   // Se puede volver a frenar con WA_BLOQUEO_DESCONOCIDOS=true, pero por defecto
   // NO se bloquea: solo se deja apuntado en el registro. Escribir a quien no

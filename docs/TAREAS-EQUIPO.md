@@ -108,6 +108,28 @@ cosas, el otro cómo se ven.
 
 ---
 
+## Decisiones que ya se tomaron
+
+Están aquí para no volver a discutirlas cada vez que alguien las encuentra en el
+código. Si una deja de tener sentido, se habla con Diego **antes** de cambiarla.
+
+**WhatsApp · se puede escribir a cualquier número** *(21/08/2026)*. Había un
+freno que impedía el primer mensaje a quien no fuera prospecto y nunca hubiera
+escrito. Parecía proteger la línea y hacía lo contrario: cuando el CRM se
+negaba, la gestora escribía **desde su móvil** — el mensaje salía igual, pero
+sin registro, sin plantilla y sin los topes de ritmo. Queda apagado y solo se
+apunta en el registro. Se puede reactivar con `WA_BLOQUEO_DESCONOCIDOS=true`.
+
+**Lo que sí sigue frenando, y no se toca:** «no escribir» —si alguien lo pide,
+no se le escribe ni con plantilla— y los topes de ritmo: 6 por minuto, 60 por
+hora, 300 al día, por número.
+
+**Las tareas del CRM las lleva Diego.** Cualquiera comenta en ellas; crear,
+cerrar y asignar lo hace él. Es acuerdo, no candado: GitHub no sabe separar
+«subir código» de «gestionar tareas».
+
+---
+
 # Ángel
 
 ## A1 · Terminar WhatsApp
