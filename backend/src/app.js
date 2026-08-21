@@ -70,6 +70,19 @@ app.use(cors({
   origin: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:5173'],
   credentials: true,
 }));
+// El webhook de WhatsApp entra por su propia puerta, mas ancha.
+//
+// Evolution manda la foto o el audio dentro del propio aviso, en base64, y eso
+// abulta un tercio mas que el archivo. Con el tope general de 5 MB, Express
+// rechazaba el aviso ENTERO con «request entity too large»: no es que llegara el
+// mensaje sin la foto, es que se perdia el mensaje. Paso el 21/08/2026.
+//
+// Se abre solo esta ruta y no el tope general: 25 MB en todos los endpoints es
+// una invitacion a tumbar el servidor mandando cuerpos enormes. Los 25 MB son
+// los mismos que deja pasar Nginx, para que no se rechace en dos sitios
+// distintos con dos mensajes distintos.
+app.use('/api/whatsapp/webhook', express.json({ limit: '25mb' }));
+
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 app.use(cookieParser());
