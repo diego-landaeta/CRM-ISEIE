@@ -375,6 +375,46 @@ Copias de seguridad antes de tocar: `crm_prod_db` 9,6 MB y `crm_iseie` 7,7 MB en
 `/var/backups/crm/`. Las conversaciones que ya habia siguen ahi, y la sesion
 conectada de ISEIE (`crm-u16`) aguanto el reinicio.
 
+### El atasco de Evolution en ISEIE — 21/08/2026
+
+Sintoma: se enlazo el numero de una gestora, se veia «conectado», y no salia ni
+entraba nada. El CRM decia «enviado» y el mensaje no llegaba a ningun sitio.
+
+**Evolution llevaba parado desde las 09:06 de esa manana.** Su propia base no
+guardo ni un mensaje en todo el dia. La traza:
+
+    await _o.emit -> retryWebhookRequest -> AxiosError: timeout of 60000ms
+    url: http://172.17.0.1:3005/api/whatsapp/webhook
+
+Evolution **espera** a que su aviso llegue antes de seguir con el evento. Como el
+aviso no llegaba, cada uno se comia 60 segundos y luego reintentaba: 109 en 12
+minutos. La cola entera parada. Por eso no salian los mensajes ni entraban los
+que escribian.
+
+**La causa: ufw esta activo en esta maquina** —en la de MultiCRM no— y cortaba
+lo que venia del contenedor. Y el detalle que costo encontrar: **el contenedor no
+esta en `docker0` (172.17.0.1) sino en su propia red de compose,
+`whatsapp_default` (172.18.0.0/16, puente `br-7ff3422bc513`)**. La primera regla
+se puso sobre docker0 y no sirvio de nada.
+
+La regla buena, por subred y no por nombre de puente —si se recrea la red, el
+puente cambia de nombre y la regla dejaria de valer sin que nadie se entere—:
+
+    ufw allow from 172.16.0.0/12 to any port 3005 proto tcp
+
+Solo abre el puerto del CRM a la red privada de docker. No expone nada a
+internet, no toca los 8 sitios de terceros de la maquina y se deshace con
+`ufw delete`. No hizo falta reiniciar el contenedor ni volver a enlazar ningun
+numero.
+
+En cuanto entro, la cola se vacio sola: Evolution paso de las 09:06 a la hora
+real y el CRM de 4 mensajes a 35.
+
+**Como reconocerlo la proxima vez:** si el numero sale «conectado» pero no se
+mueve nada, mirar `docker logs crm-whatsapp | grep 'timeout of 60000ms'`. Si hay
+tiempos agotados, el problema no es WhatsApp ni el CRM: es que Evolution no
+alcanza al CRM.
+
 ### Lo que falta
 
 - **ISEIE pruebas no tiene Evolution configurado** en su `.env`, asi que alli el
