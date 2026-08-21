@@ -32,7 +32,7 @@ const PASOS: Paso[] = [
   {
     donde: '.wa-btn-nuevo',
     titulo: 'Escribir a alguien nuevo',
-    texto: 'Busca al prospecto y abre su chat. Si nunca te ha escrito y no esta en la base, el CRM se negara a enviar: es lo que evita que bloqueen tu numero.',
+    texto: 'Busca al prospecto y abre su chat. Tambien puedes escribir a un numero suelto que no este en la base. Con cabeza: a quien no pidio informacion es mas facil que te reporte, y eso es lo que tumba un numero.',
   },
   {
     donde: '.cs-message-input',

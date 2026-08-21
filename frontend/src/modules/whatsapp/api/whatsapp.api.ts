@@ -131,9 +131,15 @@ export interface ConexionWhatsapp {
 }
 
 export const chatApi = {
+  // OJO al `usuarioId` que llevan casi todas estas llamadas: es de quien es el
+  // WhatsApp que se esta mirando, no quien lo mira. Un admin puede tener abierta
+  // la sesion de una gestora, y si una sola llamada se olvida de mandarlo, el
+  // servidor usa la del propio admin —que igual ni esta enlazada— y lo que sale
+  // es un 404 raro. Paso el 21/08/2026 con las cinco de abajo.
+
   /** Pide el adjunto de un mensaje que no se bajo en su momento. */
-  descargarAdjunto: (mensajeId: number): Promise<ApiResponse<{ enCola?: boolean; yaEstaba?: boolean }>> =>
-    client.post(`/whatsapp/mensajes/${mensajeId}/descargar`, {}),
+  descargarAdjunto: (mensajeId: number, usuarioId?: number | null): Promise<ApiResponse<{ enCola?: boolean; yaEstaba?: boolean }>> =>
+    client.post(`/whatsapp/mensajes/${mensajeId}/descargar${qs({ usuarioId })}`, {}),
 
   lista: (projectId?: number | null, usuarioId?: number | null): Promise<ApiResponse<ChatWhatsapp[]>> =>
     client.get(`/whatsapp/chats${qs({ projectId, usuarioId })}`),
@@ -146,18 +152,18 @@ export const chatApi = {
   enviar: (id: number, texto: string, citarId?: number | null, usuarioId?: number | null): Promise<ApiResponse<MensajeWhatsapp>> =>
     client.post(`/whatsapp/chats/${id}/enviar`, { texto, citarId, usuarioId }),
 
-  noEscribir: (id: number, motivo: string): Promise<ApiResponse<null>> =>
-    client.post(`/whatsapp/chats/${id}/no-escribir`, { motivo }),
+  noEscribir: (id: number, motivo: string, usuarioId?: number | null): Promise<ApiResponse<null>> =>
+    client.post(`/whatsapp/chats/${id}/no-escribir${qs({ usuarioId })}`, { motivo }),
 
   // Abrir un chat nuevo partiendo de un prospecto. Se parte de la base y no de
   // un numero suelto: quien esta ahi dejo su telefono en un formulario nuestro.
-  abrir: (leadId: number): Promise<ApiResponse<ChatWhatsapp>> =>
-    client.post('/whatsapp/chats', { leadId }),
+  abrir: (leadId: number, usuarioId?: number | null): Promise<ApiResponse<ChatWhatsapp>> =>
+    client.post('/whatsapp/chats', { leadId, usuarioId }),
 
-  // Abrir con un contacto de WhatsApp que no es prospecto. El freno de
-  // consentimiento sigue vigente: si nunca ha escrito, no se le puede escribir.
-  abrirPorTelefono: (telefono: string): Promise<ApiResponse<ChatWhatsapp>> =>
-    client.post('/whatsapp/chats', { telefono }),
+  // Abrir con un contacto de WhatsApp que no es prospecto. Se puede: el freno
+  // se apago el 21/08/2026. Queda apuntado en el registro del servidor, nada mas.
+  abrirPorTelefono: (telefono: string, usuarioId?: number | null): Promise<ApiResponse<ChatWhatsapp>> =>
+    client.post('/whatsapp/chats', { telefono, usuarioId }),
 
   // Prospectos con telefono, para elegir a quien escribir.
   buscarProspectos: (projectId: number | null, texto: string): Promise<ApiResponse<Array<{ id: number; nombre: string; telefono: string | null; status: string }>>> =>
@@ -172,11 +178,13 @@ export const chatApi = {
 
   // El adjunto va en multipart, no en JSON: el cliente de axios ya pone el
   // Content-Type con su boundary si se le pasa un FormData.
-  adjunto: (id: number, archivo: File, pie?: string): Promise<ApiResponse<MensajeWhatsapp>> => {
+  adjunto: (id: number, archivo: File, pie?: string, usuarioId?: number | null): Promise<ApiResponse<MensajeWhatsapp>> => {
     const fd = new FormData();
     fd.append('archivo', archivo);
     if (pie) fd.append('pie', pie);
-    return client.post(`/whatsapp/chats/${id}/adjunto`, fd);
+    // Va en la direccion y no dentro del formulario: asi vale igual aqui que en
+    // las llamadas normales, sin depender de como lea el servidor el multipart.
+    return client.post(`/whatsapp/chats/${id}/adjunto${qs({ usuarioId })}`, fd);
   },
 };
 

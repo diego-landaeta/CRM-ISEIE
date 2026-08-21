@@ -354,7 +354,7 @@ export default function ChatPage() {
     if (!abierto) return;
     setEnviando(true);
     try {
-      const r = await chatApi.adjunto(abierto, f);
+      const r = await chatApi.adjunto(abierto, f, undefined, deQuien);
       if (!r.success) throw new Error(r.error || 'No se pudo enviar');
       await cargarHilo(abierto); cargarLista();
     } catch (e) { fallo(e); } finally { setEnviando(false); }
@@ -429,21 +429,21 @@ export default function ChatPage() {
       return;
     }
     try {
-      const r = await chatApi.abrirPorTelefono(t);
+      const r = await chatApi.abrirPorTelefono(t, deQuien);
       if (!r.success) throw new Error(r.error || 'No se pudo abrir');
       setPidiendoTelefono(false); setTelefonoNuevo('');
       setNuevoAbierto(false); setBusca('');
       await cargarLista(); setAbierto(r.data.id);
       toast({
         title: 'Chat abierto',
-        description: 'Si nunca te ha escrito y no es prospecto, el CRM se negara a enviar.',
+        description: 'Escribe con cabeza: a quien no pidio informacion es mas facil que te reporte.',
       });
     } catch (e) { fallo(e); }
   }
 
   async function abrirCon(leadId: number) {
     try {
-      const r = await chatApi.abrir(leadId);
+      const r = await chatApi.abrir(leadId, deQuien);
       if (!r.success) throw new Error(r.error || 'No se pudo abrir');
       setNuevoAbierto(false); setBusca('');
       await cargarLista(); setAbierto(r.data.id);
@@ -454,7 +454,7 @@ export default function ChatPage() {
   async function pedirAdjunto(mensajeId: number) {
     try {
       setBajando((b) => [...b, mensajeId]);
-      const r = await chatApi.descargarAdjunto(mensajeId);
+      const r = await chatApi.descargarAdjunto(mensajeId, deQuien);
       if (!r.success) throw new Error(r.error || 'No se pudo pedir');
       if (abierto) await cargarHilo(abierto);
     } catch (e) {
@@ -468,7 +468,7 @@ export default function ChatPage() {
 
   async function marcarNoEscribir() {
     if (!abierto) return;
-    const r = await chatApi.noEscribir(abierto, motivoNuevo.trim());
+    const r = await chatApi.noEscribir(abierto, motivoNuevo.trim(), deQuien);
     setPidiendoMotivo(false); setMotivoNuevo('');
     if (r.success) {
       toast({ title: 'Marcado', description: 'El CRM no volvera a escribir a este numero.' });
@@ -828,8 +828,8 @@ export default function ChatPage() {
                 onChange={(e) => setTelefonoNuevo(e.target.value)}
                 placeholder="34600111222" className="wa-campo" />
               <p className="wa-panel-nota">
-                Con prefijo de pais y sin signos. Si esa persona no es prospecto y nunca
-                te ha escrito, el CRM se negara a enviarle nada.
+                Con prefijo de pais y sin signos. Vale cualquier numero, sea prospecto
+                o no; queda apuntado a quien se escribe.
               </p>
             </div>
             <div className="wa-panel-pie">
