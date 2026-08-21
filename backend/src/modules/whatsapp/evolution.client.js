@@ -21,6 +21,11 @@ const API_KEY = process.env.EVOLUTION_API_KEY || '';
 // `instancia` que ya existia en wa_conversaciones sirve tal cual.
 export const PREFIJO = process.env.EVOLUTION_INSTANCIA || 'crm';
 
+// Si esta puesta, cada sesion creada avisara AQUI en vez de al webhook global
+// del contenedor. Es lo que permite que pruebas y produccion compartan Evolution
+// sin mezclarse.
+const WEBHOOK_PROPIO = process.env.EVOLUTION_WEBHOOK_URL || '';
+
 /** La instancia de WhatsApp de una persona. */
 export const instanciaDe = (userId) => `${PREFIJO}-u${parseInt(userId, 10)}`;
 
@@ -85,6 +90,15 @@ export async function crearInstancia(nombre = INSTANCIA, modo = 'rapido') {
       readMessages: false,
       readStatus: false,
       syncFullHistory: false,
+      // A donde avisa Evolution cuando entra un mensaje de ESTA sesion.
+      //
+      // Sin esto se usa el webhook global del contenedor, que apunta a un solo
+      // sitio. Con pruebas y produccion contra el mismo Evolution, eso hacia
+      // que los mensajes de una sesion de pruebas aterrizaran en la base de
+      // PRODUCCION: conversaciones apareciendo de la nada que nadie sabria de
+      // donde salieron. Cada instancia avisa a quien la creo.
+      ...(WEBHOOK_PROPIO ? { webhook: { url: WEBHOOK_PROPIO, byEvents: false,
+        events: ['MESSAGES_UPSERT', 'MESSAGES_UPDATE', 'CONNECTION_UPDATE'] } } : {}),
     },
     esperaMs: 30000,
   });
