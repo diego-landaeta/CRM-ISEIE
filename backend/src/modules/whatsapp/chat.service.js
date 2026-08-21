@@ -4,6 +4,10 @@ import * as media from './media.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 
+// Frenar los mensajes a numeros desconocidos. Apagado por defecto.
+const BLOQUEAR_DESCONOCIDOS = process.env.WA_BLOQUEO_DESCONOCIDOS === 'true';
+
+
 // Los frenos. Esto es lo que de verdad protege el numero.
 //
 // Lo que hace que WhatsApp suspenda una linea no es tanto detectar el cliente
@@ -50,12 +54,26 @@ async function permitirEnvio(conversacionId) {
   // 2. Escribir a quien no pidio informacion es lo que acaba en bloqueos. Si
   //    el numero no esta atado a ningun lead y nunca nos ha escrito, no salio
   //    de un formulario nuestro.
+  // Se puede escribir a cualquiera. Decision del owner, y con motivo: un
+  // numero puede ser el de un antiguo alumno, el de una madre que llama por su
+  // hijo o el de un prospecto de otra gestora que aun no esta en el CRM, y
+  // negarse a escribirle deja a la gestora sin poder trabajar.
+  //
+  // Se puede volver a frenar con WA_BLOQUEO_DESCONOCIDOS=true, pero por defecto
+  // NO se bloquea: solo se deja apuntado en el registro. Escribir a quien no
+  // pidio informacion sigue siendo lo que hace que reporten un numero — el
+  // freno ahora es saberlo, no impedirlo.
   const yaHablamos = (await model.mensajes(conversacionId, 1)).length > 0;
-  if (!conv.lead_id && !yaHablamos) {
-    throw new AppError(
-      'Este numero no es de ningun prospecto y nunca ha escrito. Escribir a quien no pidio informacion es lo que hace que suspendan el numero.',
-      409, 'SIN_CONSENTIMIENTO'
-    );
+  const desconocido = !conv.lead_id && !yaHablamos;
+  if (desconocido) {
+    if (BLOQUEAR_DESCONOCIDOS) {
+      throw new AppError(
+        'Ese numero no esta en el CRM y nunca ha escrito. Se puede permitir con WA_BLOQUEO_DESCONOCIDOS=false.',
+        409, 'SIN_CONSENTIMIENTO',
+      );
+    }
+    logger.warn({ conversacionId, instancia: conv.instancia, telefono: conv.telefono },
+      'WhatsApp: primer mensaje a un numero que no es prospecto y nunca escribio');
   }
 
   // 3. Ritmo.
