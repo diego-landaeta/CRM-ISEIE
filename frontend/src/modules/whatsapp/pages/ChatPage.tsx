@@ -173,13 +173,19 @@ export default function ChatPage() {
   const trozos = useRef<Blob[]>([]);
 
   useEffect(() => {
-    const leer = () => chatApi.conexion().then((r) => setConexion(r.success ? r.data : null)).catch(() => {});
+    // La conexion que importa es la de la sesion ABIERTA, no la de quien mira.
+    // Sin el `deQuien`, un admin con la sesion de una gestora delante veia su
+    // propio estado: el chat decia «no se puede enviar» aunque el numero de ella
+    // estuviera perfectamente conectado.
+    setConexion(null);
+    const leer = () => chatApi.conexion(deQuien)
+      .then((r) => setConexion(r.success ? r.data : null)).catch(() => {});
     leer();
     // La sesion se cae sola si el movil se queda sin internet. Se vigila para
     // que la gestora se entere en vez de escribir contra el vacio.
     const t = setInterval(leer, 30000);
     return () => clearInterval(t);
-  }, []);
+  }, [deQuien]);
 
   // Cambiar de persona vacia la pantalla antes de traer lo suyo. Sin esto se
   // quedan a la vista los chats de la anterior mientras carga, y basta un
@@ -344,7 +350,7 @@ export default function ChatPage() {
     if (!abierto || !m.texto) return;
     setReintentando(m.id);
     try {
-      const r = await chatApi.enviar(abierto, m.texto);
+      const r = await chatApi.enviar(abierto, m.texto, null, deQuien);
       if (!r.success) throw new Error(r.error || 'No se pudo enviar');
       await cargarHilo(abierto); cargarLista();
     } catch (e) { fallo(e); } finally { setReintentando(null); }
@@ -480,7 +486,9 @@ export default function ChatPage() {
     // El chat de uno consigo mismo. WhatsApp no manda nombre para el —manda el
     // numero, y encima enmascarado— asi que salia un telefono donde deberia
     // decir lo que es.
-    const mio = (conexion?.numero || '').replace(/[^0-9]/g, '');
+    // Solo cuando miras TU sesion: en la de otra persona, ese numero es el
+    // suyo, no el tuyo, y poner «Tu» ahi seria mentir.
+    const mio = sesion.esMia ? (conexion?.numero || '').replace(/[^0-9]/g, '') : '';
     if (mio && c.telefono?.replace(/[^0-9]/g, '') === mio) return 'Tu (mensajes contigo mismo)';
     return c.lead_nombre || c.nombre_push || (c.es_grupo ? 'Grupo sin nombre' : c.telefono);
   };
@@ -546,12 +554,14 @@ export default function ChatPage() {
         <span className={`w-2 h-2 rounded-full ${conexion?.conectado ? 'bg-emerald-500' : 'bg-amber-500'}`} />
         {conexion?.conectado
           ? <span className="text-muted-foreground">
-              Tu WhatsApp: <strong className="text-foreground">
+              {sesion.esMia ? 'Tu WhatsApp' : `WhatsApp de ${sesion.nombre}`}: <strong className="text-foreground">
                 {conexion.nombre || (conexion.numero ? `+${conexion.numero}` : conexion.instancia)}
               </strong>
             </span>
           : <span className="text-amber-700 dark:text-amber-400">
-              No tienes WhatsApp enlazado — <Link to="/whatsapp/conexion" className="underline">enlazar mi numero</Link>
+              {sesion.esMia
+                ? <>No tienes WhatsApp enlazado — <Link to="/whatsapp/conexion" className="underline">enlazar mi numero</Link></>
+                : `El WhatsApp de ${sesion.nombre} no esta enlazado`}
             </span>}
         {/* La pantalla donde se enlaza o se desvincula el numero. Estaba solo en
             el menu lateral y desde el chat no habia forma de llegar. */}
