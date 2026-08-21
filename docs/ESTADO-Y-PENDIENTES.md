@@ -300,3 +300,30 @@ mejora, pero nada de lo que hay hoy miente.
 - [`tutores-pendiente.md`](tutores-pendiente.md) — el detalle del módulo
 - [`tarea-stripe-proyectos-ia.md`](tarea-stripe-proyectos-ia.md) — la tarea de Ángel
 - [`PARIDAD-ENTRE-CRMS.md`](PARIDAD-ENTRE-CRMS.md) — qué se copia y qué no
+
+---
+
+## Dónde nos quedamos · 21 de agosto, noche
+
+**En producción, funcionando:** WhatsApp unificado con el panel del admin,
+historial de ventas del tutor, rutas en español con redirección, el menú nuevo,
+los profesores de Psiko dados de alta con sus comisiones de agosto, y tres
+ventas duplicadas de ISEIE cuadradas.
+
+**En pruebas, esperando visto bueno:** el trabajo de Fabián (#31) y el de Ángel
+(#45), fusionados sin conflictos. `/testeo` tiene además su propio WhatsApp, con
+sesiones `testeo-uN` que no pueden tocar las de producción.
+
+**Esperando a Diego:**
+- Las migraciones **129 y 130** en producción. Aplicadas solo en pruebas.
+- Las peticiones de cambios **#51** (Ángel) y **#52** (nuestra) contra `main`.
+- Qué se hace con `main`, que en MultiCRM quedó adelantada y en ISEIE no.
+
+**Corrige Ángel, no nosotros** — todo anotado en la #45: el aviso que nombra
+variables de entorno, el recorrido que llega tarde y no salta pasos, la imagen
+que se manda sin vista previa, la nota de voz sin aviso de envío y con la
+duración equivocada.
+
+**Lo nuestro, por orden:** recuperar contraseña (#37), Soporte de verdad (#38),
+tasa de cierre de Carlos (#39), filtros en Clientes (#40) y la limpieza de datos
+(#41, #42).
