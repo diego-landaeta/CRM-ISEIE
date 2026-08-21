@@ -267,10 +267,18 @@ export async function recibir(cuerpo) {
     logger.warn({ jid: key.remoteJid }, 'WhatsApp: aviso sin instancia, no se sabe de quien es');
     return { ignorado: 'sin instancia' };
   }
+  // El nombre SOLO se coge de lo que ENTRA.
+  //
+  // `pushName` es el nombre de quien escribe. En un mensaje que sale, quien
+  // escribe eres tu, asi que guardarlo aqui le pone TU nombre al chat del otro:
+  // en cuanto la gestora escribia a alguien que no tenia guardado, esa
+  // conversacion pasaba a llamarse «Iseie Innovation School». Y como el nombre
+  // se conserva cuando el nuevo llega vacio, se quedaba puesto para siempre.
+  const deMi = key.fromMe === true;
   const conv = await model.conversacionDe({
     instancia, jid: key.remoteJid,
-    nombrePush: datos?.pushName,
-    avatarUrl: datos?.avatar || null,
+    nombrePush: deMi ? null : datos?.pushName,
+    avatarUrl: deMi ? null : (datos?.avatar || null),
   });
 
   const m = datos?.message || {};
