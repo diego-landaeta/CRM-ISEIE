@@ -334,7 +334,7 @@ tasa de cierre de Carlos (#39), filtros en Clientes (#40) y la limpieza de datos
 
 ## Todas las tareas abiertas
 
-Sacado de GitHub, no escrito a mano: **50 abiertas**. Para volver a
+Sacado de GitHub, no escrito a mano: **44 abiertas**. Para volver a
 generarlo, `scripts/indice_tareas.py`.
 
 ### Fase 1 · Desbloquear · 5
@@ -372,10 +372,16 @@ generarlo, `scripts/indice_tareas.py`.
 | [#48](https://github.com/diego-landaeta/CRM/issues/48) | Recibir el origen de los leads (ChatGPT incluido) y categorizarlo | Diego |  |
 | [#50](https://github.com/diego-landaeta/CRM/issues/50) | Tipografía e iconos del apartado de administración (estilo formal) | Fabián |  |
 
-### Fase 3 · Cerrar · 5
+### Fase 3 · Cerrar · 11
 
 | | Qué | Quién | |
 |---|---|---|---|
+| [#2](https://github.com/diego-landaeta/CRM/issues/2) | Frontend: Dropdown categorías searchable + niveles separados cascade | Ángel |  |
+| [#6](https://github.com/diego-landaeta/CRM/issues/6) | Frontend: Panel UI de conectores con preview + mapping visual | Fabián |  |
+| [#11](https://github.com/diego-landaeta/CRM/issues/11) | Frontend: Panel 'próximo gestor' en /leads — visualizar round-robin | Fabián |  |
+| [#13](https://github.com/diego-landaeta/CRM/issues/13) | Backend: Activity feed (tabla + endpoint para 'qué pasó hoy') | Diego |  |
+| [#14](https://github.com/diego-landaeta/CRM/issues/14) | Backend: WooCommerce orders sync + cron flexible (manual/diario/semanal) | Diego |  |
+| [#15](https://github.com/diego-landaeta/CRM/issues/15) | Backend: Project types extension (educacion/ecommerce/servicios/inmobiliaria) | Ángel |  |
 | [#40](https://github.com/diego-landaeta/CRM/issues/40) | Filtros en Clientes y Matrículas | Yo |  |
 | [#41](https://github.com/diego-landaeta/CRM/issues/41) | Ventas sin formación identificada · 321 | Yo |  |
 | [#42](https://github.com/diego-landaeta/CRM/issues/42) | Los otros datos que no cuadran | Yo |  |
@@ -392,25 +398,13 @@ generarlo, `scripts/indice_tareas.py`.
 | [#56](https://github.com/diego-landaeta/CRM/issues/56) | Panel de canales: dónde poner el dinero | Yo |  |
 | [#57](https://github.com/diego-landaeta/CRM/issues/57) | Pedirle a Daniela sus reportes de publicidad y ventas | Diego |  |
 
-### sin fase · 15
+### sin fase · 3
 
 | | Qué | Quién | |
 |---|---|---|---|
-| [#2](https://github.com/diego-landaeta/CRM/issues/2) | Frontend: Dropdown categorías searchable + niveles separados cascade | molinangel |  |
-| [#3](https://github.com/diego-landaeta/CRM/issues/3) | Frontend: Sidebar por secciones colapsables con persistencia | molinangel |  |
 | [#4](https://github.com/diego-landaeta/CRM/issues/4) | Frontend: Documentos/Certificados — selectores de programa, alumno y módulos auto | molinangel |  |
-| [#5](https://github.com/diego-landaeta/CRM/issues/5) | BUG: Dock flotante perdió el botón de Chat IA | molinangel |  |
-| [#6](https://github.com/diego-landaeta/CRM/issues/6) | Frontend: Panel UI de conectores con preview + mapping visual | molinangel |  |
 | [#7](https://github.com/diego-landaeta/CRM/issues/7) | Frontend: Sistema completo de vistas por rol (sidebar dinámico + landing por rol) | molinangel |  |
 | [#8](https://github.com/diego-landaeta/CRM/issues/8) | Frontend: Settings — separar Categorías/Campos/Columnas por entidad (Leads/Clientes/Productos) | molinangel |  |
-| [#9](https://github.com/diego-landaeta/CRM/issues/9) | Frontend: Pipeline Kanban arrastrable en /leads | molinangel |  |
-| [#10](https://github.com/diego-landaeta/CRM/issues/10) | Frontend: Settings — completar TODOS los paneles faltantes | molinangel |  |
-| [#11](https://github.com/diego-landaeta/CRM/issues/11) | Frontend: Panel 'próximo gestor' en /leads — visualizar round-robin | molinangel |  |
-| [#12](https://github.com/diego-landaeta/CRM/issues/12) | Frontend: LeadDrawer popup mejorado + enrolar en secuencia desde lista | molinangel |  |
-| [#13](https://github.com/diego-landaeta/CRM/issues/13) | Backend: Activity feed (tabla + endpoint para 'qué pasó hoy') | esos2dev-oss |  |
-| [#14](https://github.com/diego-landaeta/CRM/issues/14) | Backend: WooCommerce orders sync + cron flexible (manual/diario/semanal) | esos2dev-oss |  |
-| [#15](https://github.com/diego-landaeta/CRM/issues/15) | Backend: Project types extension (educacion/ecommerce/servicios/inmobiliaria) | esos2dev-oss |  |
-| [#18](https://github.com/diego-landaeta/CRM/issues/18) | Frontend: Selector 'Webhook JSON / Mailhook email / Ambos' al crear webhook | molinangel |  |
 
 > Las mismas tareas existen en el repositorio de ISEIE, bloqueadas con la
 > etiqueta `espera-multicrm`: se hacen aquí primero y se replican cuando Diego
