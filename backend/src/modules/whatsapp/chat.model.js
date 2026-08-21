@@ -48,10 +48,16 @@ export async function leadPorTelefono(telefono, projectId = null) {
 /** La conversacion de este numero, creandola si es la primera vez. */
 export async function conversacionDe({ instancia, jid, nombrePush, avatarUrl }) {
   const esGrupo = String(jid).endsWith('@g.us');
+  // Un `@lid` no es un telefono: es un identificador de WhatsApp. Buscar un
+  // prospecto con ese numero no encontraria nada y ademas podria cruzarse con
+  // el telefono de otra persona por casualidad.
+  const esIdentificador = String(jid).endsWith('@lid');
   // En un grupo el identificador no es un telefono, asi que no se normaliza ni
   // se busca prospecto: no hay una persona detras a la que atarlo.
-  const telefono = esGrupo ? String(jid).split('@')[0] : (jidATelefono(jid) || jid);
-  const lead = esGrupo ? null : await leadPorTelefono(telefono);
+  const telefono = (esGrupo || esIdentificador)
+    ? String(jid).split('@')[0]
+    : (jidATelefono(jid) || jid);
+  const lead = (esGrupo || esIdentificador) ? null : await leadPorTelefono(telefono);
 
   const { rows } = await query(
     `INSERT INTO wa_conversaciones (instancia, jid, telefono, nombre_push, avatar_url, lead_id, project_id, ultimo_at)
@@ -78,16 +84,20 @@ export async function conversacionDe({ instancia, jid, nombrePush, avatarUrl }) 
  * Evolution reintenta el webhook cuando el CRM tarda en contestar, y sin esto
  * el mismo mensaje saldria dos veces en el chat.
  */
-export async function guardarMensaje({ conversacionId, waId, direccion, tipo, texto, mediaUrl, mediaMime, nombreArchivo, estado, enviadoPor, ts }) {
+export async function guardarMensaje({ conversacionId, waId, direccion, tipo, texto, mediaUrl, mediaMime, nombreArchivo, estado, enviadoPor, ts, respondeA }) {
+  // La columna de la cita solo entra si la migracion 130 esta aplicada. Si no,
+  // el mensaje se guarda igual y lo unico que se pierde es saber a que
+  // contestaba — perderlo entero seria mucho peor.
+  const conCita = respondeA && await puedeGuardarCita();
   const { rows } = await query(
     `INSERT INTO wa_mensajes
-       (conversacion_id, wa_id, direccion, tipo, texto, media_url, media_mime, nombre_archivo, estado, enviado_por, ts)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       (conversacion_id, wa_id, direccion, tipo, texto, media_url, media_mime, nombre_archivo, estado, enviado_por, ts${conCita ? ', responde_a' : ''})
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11${conCita ? ', $12' : ''})
      ON CONFLICT (wa_id) WHERE wa_id IS NOT NULL DO NOTHING
      RETURNING *`,
     [conversacionId, waId || null, direccion, tipo || 'texto', texto || null,
      mediaUrl || null, mediaMime || null, nombreArchivo || null, estado || null,
-     enviadoPor || null, ts || new Date()]
+     enviadoPor || null, ts || new Date(), ...(conCita ? [respondeA] : [])]
   );
   const fila = rows[0] || null;
   if (fila) {
@@ -116,8 +126,13 @@ export async function listar({ instancia, projectId = null, limite = 50 }) {
   const { rows } = await query(
     `SELECT c.*, l.nombre AS lead_nombre, l.status AS lead_status,
             (c.jid LIKE '%@g.us') AS es_grupo,
+            -- El ultimo mensaje, con su tipo: si fue una foto o un audio no hay
+            -- texto que ensenar, y la lista caia a pintar el telefono — o el
+            -- identificador del grupo, que son 18 cifras sin ningun sentido.
             (SELECT m.texto FROM wa_mensajes m
-              WHERE m.conversacion_id = c.id ORDER BY m.ts DESC LIMIT 1) AS ultimo_texto
+              WHERE m.conversacion_id = c.id ORDER BY m.ts DESC, m.id DESC LIMIT 1) AS ultimo_texto,
+            (SELECT m.tipo FROM wa_mensajes m
+              WHERE m.conversacion_id = c.id ORDER BY m.ts DESC, m.id DESC LIMIT 1) AS ultimo_tipo
        FROM wa_conversaciones c
        LEFT JOIN leads l ON l.id = c.lead_id
       WHERE c.instancia = $1 ${filtro}
@@ -129,20 +144,46 @@ export async function listar({ instancia, projectId = null, limite = 50 }) {
 }
 
 export async function mensajes(conversacionId, limite = 100) {
+  // La cita se resuelve aqui: se busca el mensaje citado por su wa_id DENTRO de
+  // la misma conversacion. Puede no estar —alguien responde a algo de antes de
+  // enlazar— y entonces se pinta sin cita, que es mejor que no pintar nada.
+  //
+  // Las columnas de la cita solo se piden si la migracion 130 esta aplicada;
+  // pedirlas sin estarlo tumbaria el hilo entero.
+  const conCita = await puedeGuardarCita();
+  const columnasCita = conCita ? `,
+            m.responde_a,
+            (SELECT q.texto FROM wa_mensajes q
+              WHERE q.wa_id = m.responde_a AND q.conversacion_id = m.conversacion_id
+              LIMIT 1) AS citado_texto,
+            (SELECT q.tipo FROM wa_mensajes q
+              WHERE q.wa_id = m.responde_a AND q.conversacion_id = m.conversacion_id
+              LIMIT 1) AS citado_tipo,
+            (SELECT q.direccion FROM wa_mensajes q
+              WHERE q.wa_id = m.responde_a AND q.conversacion_id = m.conversacion_id
+              LIMIT 1) AS citado_direccion` : '';
+
   const { rows } = await query(
-    `SELECT id, wa_id, direccion, tipo, texto, media_url, media_mime, nombre_archivo,
-            estado, enviado_por, ts
-       FROM wa_mensajes WHERE conversacion_id = $1
+    `SELECT m.id, m.wa_id, m.direccion, m.tipo, m.texto, m.media_url, m.media_mime,
+            m.nombre_archivo, m.estado, m.enviado_por, m.ts${columnasCita}
+       FROM wa_mensajes m
+      WHERE m.conversacion_id = $1
       -- Se desempata por id porque WhatsApp da la hora en SEGUNDOS: tres
       -- mensajes seguidos comparten marca y sin esto salen en cualquier orden.
-      ORDER BY ts DESC, id DESC LIMIT $2`,
+      ORDER BY m.ts DESC, m.id DESC LIMIT $2`,
     [conversacionId, Math.min(500, limite)]
   );
   return rows.reverse();
 }
 
 export const porId = async (id) =>
-  (await query('SELECT * FROM wa_conversaciones WHERE id = $1', [id])).rows[0] || null;
+  // es_grupo hace falta AQUI tambien, no solo en la lista: la cabecera del chat
+  // lo usa para decidir que ensena debajo del nombre, y sin el pintaba el
+  // identificador del grupo —un numero de 18 cifras— como si fuera un telefono.
+  (await query(
+    `SELECT c.*, (c.jid LIKE '%@g.us') AS es_grupo
+       FROM wa_conversaciones c WHERE c.id = $1`, [id]
+  )).rows[0] || null;
 
 export const marcarLeida = (id) =>
   query('UPDATE wa_conversaciones SET no_leidos = 0 WHERE id = $1', [id]);
@@ -207,6 +248,148 @@ export async function mensajeConAdjunto(id) {
     [id]
   );
   return rows[0] || null;
+}
+
+/**
+ * Deja escrito que se acepto enlazar un numero.
+ *
+ * `userId` es de quien es la linea; `aceptadoPor`, quien pulso. Casi siempre el
+ * mismo — pero un administrador puede enlazar el numero de una gestora que
+ * tiene al lado, y entonces ella NO leyo el aviso. Esa diferencia es justo lo
+ * que hay que poder ver despues.
+ *
+ * No revienta si la tabla no existe todavia: la migracion 129 la aplica Diego, y
+ * hasta entonces el aviso con casilla ya funciona. Lo que falta es el registro,
+ * no la advertencia — y dejar WhatsApp inservible por eso seria peor.
+ */
+export async function apuntarConsentimiento({ userId, aceptadoPor, instancia, versionAviso = 1, ip, navegador }) {
+  try {
+    await query(
+      `INSERT INTO wa_consentimientos
+         (user_id, aceptado_por, instancia, version_aviso, ip, navegador)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [userId, aceptadoPor, instancia, versionAviso, ip || null, navegador || null]
+    );
+    return true;
+  } catch (err) {
+    if (err.code === '42P01') return false;   // la tabla aun no esta
+    throw err;
+  }
+}
+
+/** ¿Cuando acepto esta persona por ultima vez, y quien pulso? */
+export async function ultimoConsentimiento(userId) {
+  try {
+    const { rows } = await query(
+      `SELECT c.aceptado_at, c.version_aviso, c.aceptado_por, u.nombre AS acepto_nombre
+         FROM wa_consentimientos c
+         LEFT JOIN users u ON u.id = c.aceptado_por
+        WHERE c.user_id = $1
+        ORDER BY c.aceptado_at DESC LIMIT 1`,
+      [userId]
+    );
+    return rows[0] || null;
+  } catch (err) {
+    if (err.code === '42P01') return null;
+    throw err;
+  }
+}
+
+/**
+ * Quita de las conversaciones el nombre del duenno de la sesion.
+ *
+ * `pushName` es el nombre de QUIEN ESCRIBE, y en un mensaje que mandas tu ese
+ * eres tu: a cualquier contacto que no estuviera en tu agenda se le ponia tu
+ * propio nombre en cuanto le escribias. Ya no se guarda asi, pero lo que quedo
+ * mal no se arregla solo — el nombre se conserva cuando el nuevo llega vacio,
+ * que es justo lo que pasa ahora.
+ *
+ * Se respeta el chat de uno consigo mismo, donde ese nombre SI es el correcto.
+ */
+export async function limpiarNombrePropio(instancia, miNombre, miNumero) {
+  if (!miNombre) return 0;
+  const { rowCount } = await query(
+    `UPDATE wa_conversaciones
+        SET nombre_push = NULL
+      WHERE instancia = $1
+        AND lower(btrim(nombre_push)) = lower(btrim($2))
+        AND jid NOT LIKE $3`,
+    [instancia, miNombre, `${String(miNumero || '').replace(/[^0-9]/g, '')}@%`]
+  );
+  return rowCount || 0;
+}
+
+/**
+ * Pone al dia los nombres desde la agenda de WhatsApp.
+ *
+ * La agenda es la fuente buena: son tus contactos y los nombres reales de los
+ * grupos. Lo guardado puede estar mal —un grupo con el nombre del ultimo que
+ * escribio, por ejemplo— y eso no se arregla solo, porque al guardar se
+ * conserva lo viejo cuando lo nuevo llega vacio.
+ *
+ * Solo toca lo que NO coincide, asi que casi siempre no escribe nada.
+ */
+export async function refrescarNombres(instancia, pares) {
+  if (!pares?.length) return 0;
+  const jids = pares.map((p) => p.jid);
+  const nombres = pares.map((p) => p.nombre);
+  const { rowCount } = await query(
+    `UPDATE wa_conversaciones c
+        SET nombre_push = n.nombre
+       FROM (SELECT unnest($2::text[]) AS jid, unnest($3::text[]) AS nombre) n
+      WHERE c.instancia = $1
+        AND c.jid = n.jid
+        AND n.nombre <> ''
+        AND c.nombre_push IS DISTINCT FROM n.nombre`,
+    [instancia, jids, nombres]
+  );
+  return rowCount || 0;
+}
+
+/**
+ * ¿Esta aplicada la migracion 130?
+ *
+ * Se pregunta UNA vez y se recuerda. Meter la columna en el INSERT sin
+ * comprobarlo reventaria el guardado de TODOS los mensajes mientras la
+ * migracion no este aplicada — y esa la aprueba Diego, no yo. Vale mas perder
+ * la cita que perder los mensajes.
+ */
+let hayColumnaResponde = null;
+export async function puedeGuardarCita() {
+  if (hayColumnaResponde !== null) return hayColumnaResponde;
+  try {
+    const { rows } = await query(
+      `SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'wa_mensajes' AND column_name = 'responde_a'`
+    );
+    hayColumnaResponde = rows.length > 0;
+  } catch {
+    hayColumnaResponde = false;
+  }
+  return hayColumnaResponde;
+}
+
+/**
+ * Borra las conversaciones guardadas de una sesion.
+ *
+ * Desvincular solo cerraba la sesion en WhatsApp; lo que el CRM ya tenia se
+ * quedaba. Asi que enlazar de nuevo con «empezar de cero» devolvia los chats
+ * de siempre, y quien lo hacia esperando empezar limpio no entendia nada:
+ * «cero» era cero para WhatsApp, no para el CRM.
+ *
+ * Devuelve las rutas de los adjuntos para poder borrarlos tambien del disco:
+ * si se dejan, quedan ficheros de conversaciones que ya no existen.
+ */
+export async function borrarConversaciones(instancia) {
+  const { rows: archivos } = await query(
+    `SELECT m.media_url FROM wa_mensajes m
+       JOIN wa_conversaciones c ON c.id = m.conversacion_id
+      WHERE c.instancia = $1 AND m.media_url IS NOT NULL`,
+    [instancia]
+  );
+  // Los mensajes se van con la conversacion: la clave ajena es ON DELETE CASCADE.
+  const { rowCount } = await query('DELETE FROM wa_conversaciones WHERE instancia = $1', [instancia]);
+  return { conversaciones: rowCount || 0, archivos: archivos.map((a) => a.media_url) };
 }
 
 /** Apunta el archivo que se acaba de bajar para un mensaje. */

@@ -247,8 +247,23 @@
 }
 .wa-btn-prohibir:hover { color: #f15c6d; }
 
-/* El microfono va flotando sobre la barra de escritura: el kit no lo trae. */
-.wa-btn-micro { position: absolute; right: 60px; bottom: 13px; z-index: 5; }
+/* El microfono flota sobre la barra: el kit no trae boton de nota de voz.
+ *
+ * Las medidas NO son a ojo, y no se tocan sin volver a medir. El kit pinta sus
+ * botones —el clip y el avion— de 36 px de alto con 5 px de aire por debajo, y
+ * la barra de escribir es el ultimo elemento del marco. Igualando eso, los tres
+ * iconos quedan centrados en la misma linea. Con los valores de antes el
+ * microfono salia 7 px mas alto que los otros dos.
+ *
+ * A la derecha se deja el ancho del boton de enviar (46) mas un respiro. */
+.wa-btn-micro {
+  position: absolute;
+  right: 56px;
+  bottom: 5px;
+  width: 36px;
+  height: 36px;
+  z-index: 5;
+}
 .wa-btn-micro.wa-grabando {
   background: #f15c6d; color: #fff;
   animation: wa-latido 1s ease-in-out infinite;
@@ -424,3 +439,292 @@
   border-bottom: 1px solid var(--border, #e5e7eb);
   background: var(--card, #fff);
 }
+
+/* ── El selector de sesion ───────────────────────────────────────────────────
+ *
+ * Viene pintado con los colores del CRM —bg-card, border-border— y va DENTRO
+ * del marco de WhatsApp, que tiene su propia paleta oscura. El resultado era un
+ * recuadro claro flotando sobre el panel oscuro, que es justo lo que canta.
+ *
+ * Es el mismo fallo que ya tenian los dialogos: un componente del CRM metido en
+ * una pantalla que no usa los colores del CRM. Aqui se reapunta, sin tocar el
+ * componente — que fuera del marco tiene que seguir viendose como el resto.
+ */
+
+.wa-marco .wa-barra-sesion > div > button {
+  background: var(--wa-hover);
+  border-color: var(--wa-borde);
+  color: var(--wa-texto);
+}
+.wa-marco .wa-barra-sesion > div > button:hover { background: var(--wa-cabecera); }
+.wa-marco .wa-barra-sesion svg { color: var(--wa-verde); }
+
+/* El desplegable sale por encima del marco, asi que se apunta por su sitio. */
+.wa-marco .wa-barra-sesion [class*="absolute"] {
+  background: var(--wa-panel);
+  border-color: var(--wa-borde);
+  color: var(--wa-texto);
+}
+.wa-marco .wa-barra-sesion [class*="absolute"] p { color: var(--wa-apagado); border-color: var(--wa-borde); }
+.wa-marco .wa-barra-sesion [class*="absolute"] button:hover { background: var(--wa-hover); }
+
+/* Red de seguridad: nada dentro de la caja de escribir puede desbordarla.
+ *
+ * Es un contenteditable: si algo se cuela pegado —una imagen, una tabla— el
+ * navegador lo pinta a tamano real y se come la pantalla. Pegar una foto ya se
+ * intercepta y se envia, pero esto cubre lo que no se haya previsto. */
+.wa-marco .cs-message-input img,
+.wa-marco .cs-message-input__content-editor img {
+  max-width: 120px;
+  max-height: 60px;
+  object-fit: contain;
+}
+.wa-marco .cs-message-input__content-editor { max-height: 140px; overflow-y: auto; }
+
+/* Reintentar lo que no salio. Va dentro de la burbuja, debajo de la hora. */
+.wa-reintentar {
+  display: block;
+  margin-top: 4px;
+  padding: 3px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--wa-texto);
+  font-size: 11px;
+  cursor: pointer;
+}
+.wa-reintentar:hover { background: rgba(255, 255, 255, 0.12); }
+.wa-reintentar:disabled { opacity: 0.6; cursor: default; }
+
+/* «escribiendo…», debajo del nombre. En verde, como en WhatsApp. */
+.wa-escribiendo { color: var(--wa-verde); font-style: italic; }
+
+/* Responder a un mensaje: sale al pasar por encima de la burbuja. */
+.wa-responder {
+  position: absolute; top: 2px; right: 4px;
+  display: grid; place-items: center;
+  width: 20px; height: 20px;
+  border: 0; border-radius: 9999px;
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--wa-apagado);
+  cursor: pointer; opacity: 0;
+  transition: opacity 0.12s;
+}
+.wa-marco .cs-message__content { position: relative; }
+.wa-marco .cs-message:hover .wa-responder { opacity: 1; }
+.wa-responder:hover { color: var(--wa-texto); }
+
+/* La cita, encima de la caja de escribir.
+ *
+ * El kit pinta el InputToolbox DEBAJO del campo (header, lista, campo,
+ * toolbox). El contenedor es flex en columna, asi que se les cambia el orden
+ * en vez de pelearse con la estructura del kit. */
+.wa-marco .cs-chat-container .cs-input-toolbox { order: 3; }
+.wa-marco .cs-chat-container .cs-message-input { order: 4; }
+
+.wa-citando {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px;
+  background: var(--wa-cabecera);
+  border-top: 1px solid var(--wa-borde);
+  border-left: 3px solid var(--wa-verde);
+}
+.wa-citando-texto { flex: 1; min-width: 0; }
+.wa-citando-quien { display: block; font-size: 12px; font-weight: 600; color: var(--wa-verde); }
+.wa-citando-que {
+  display: block; font-size: 12.5px; color: var(--wa-apagado);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* El toolbox comparte hueco: aviso de bloqueo, cita, o nada.
+ *
+ * Ojo con el peso otra vez: el kit trae «.cs-chat-container .cs-input-toolbox»
+ * —dos clases— con fondo BLANCO y texto negro, pensado para su tema claro. Las
+ * reglas de la cita llevaban una sola clase y perdian: la barra de responder
+ * salia blanca en medio del chat oscuro, con el texto en negro y pegado a la
+ * derecha. Aqui van con tres, que es lo que hace falta para ganar. */
+.wa-marco .cs-chat-container .cs-input-toolbox.wa-toolbox-vacia { display: none; }
+
+.wa-marco .cs-chat-container .cs-input-toolbox.wa-citando,
+.wa-marco .cs-chat-container .cs-input-toolbox.wa-bloqueado {
+  justify-content: flex-start;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 12px;
+  color: var(--wa-texto);
+  background-color: var(--wa-cabecera);
+}
+.wa-marco .cs-chat-container .cs-input-toolbox.wa-citando {
+  border-top: 1px solid var(--wa-borde);
+  border-left: 3px solid var(--wa-verde);
+}
+.wa-marco .cs-chat-container .cs-input-toolbox.wa-bloqueado {
+  border-top: 1px solid var(--wa-borde);
+  color: #f15c6d;
+  font-size: 13px;
+}
+/* La X de quitar la cita, a la derecha del todo. */
+.wa-marco .cs-input-toolbox.wa-citando .wa-panel-cerrar { margin-left: auto; }
+
+/* La cita dentro de la burbuja: a que mensaje se esta respondiendo. */
+.wa-cita {
+  display: block;
+  margin-bottom: 4px;
+  padding: 5px 8px;
+  border-left: 3px solid var(--wa-verde);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.22);
+}
+.wa-cita-quien { display: block; font-size: 11.5px; font-weight: 600; color: var(--wa-verde); }
+.wa-cita-texto {
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 12.5px; color: var(--wa-apagado);
+}
+
+/* ── El recorrido guiado ─────────────────────────────────────────────────────
+ *
+ * Seis pasos señalando lo que ya tiene delante, la primera vez que entra. La
+ * guia escrita esta bien, pero nadie la lee antes de empezar. */
+
+.wa-tour { position: fixed; inset: 0; z-index: 60; background: rgba(0, 0, 0, 0.55); }
+
+/* El recuadro de lo que se explica: se ve a traves del velo. */
+.wa-tour-foco {
+  position: fixed;
+  border: 2px solid var(--wa-verde);
+  border-radius: 8px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+  transition: all 0.18s ease;
+}
+
+.wa-tour-cartel {
+  position: fixed;
+  width: 300px;
+  background: var(--wa-panel);
+  border: 1px solid var(--wa-borde);
+  border-radius: 10px;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5);
+  color: var(--wa-texto);
+  overflow: hidden;
+}
+.wa-tour-cabecera {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 11px 14px;
+  background: var(--wa-cabecera);
+  border-bottom: 1px solid var(--wa-borde);
+  font-size: 14px; font-weight: 600;
+}
+.wa-tour-texto {
+  margin: 0; padding: 13px 14px;
+  font-size: 13px; line-height: 1.55;
+  color: var(--wa-apagado);
+}
+.wa-tour-pie {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 10px 14px;
+  background: var(--wa-cabecera);
+  border-top: 1px solid var(--wa-borde);
+}
+.wa-tour-cuenta { font-size: 11.5px; color: var(--wa-apagado); }
+.wa-tour-botones { display: flex; gap: 6px; }
+.wa-tour-botones button { display: inline-flex; align-items: center; gap: 4px; }
+
+/* ── Solo el chat ────────────────────────────────────────────────────────────
+ *
+ * Para cuando se pasa la mañana aqui: el menu lateral, la cabecera y el
+ * selector de proyecto no pintan nada. Se sale con Escape o con el boton.
+ *
+ * Va con position fixed sobre todo lo demas en vez de tocar el layout del CRM:
+ * asi no hay que cambiar nada de la pantalla que lo contiene, que es de otros. */
+.wa-completa {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  padding: 8px;
+  background: var(--wa-fondo);
+}
+.wa-completa .wa-marco { border-radius: 6px; }
+
+/* La barra de estado, mas discreta cuando se ocupa la pantalla entera. */
+.wa-completa > div:first-child {
+  background: var(--wa-cabecera) !important;
+  border-color: var(--wa-borde) !important;
+  color: var(--wa-texto);
+}
+
+/* ── En movil ────────────────────────────────────────────────────────────────
+ *
+ * La lista tiene 340 px fijos, que en un telefono se come casi toda la
+ * pantalla y deja el chat en una rendija. Por debajo de 900 px la lista pasa a
+ * ocupar todo el ancho, y al abrir una conversacion el kit —que ya viene
+ * preparado, con `responsive`— enseña solo el hilo. */
+@media (max-width: 900px) {
+  .wa-marco .cs-sidebar { flex: 1 1 100%; max-width: 100%; }
+  .wa-marco .cs-chat-container { flex: 1 1 100%; }
+  /* La flecha de volver a la lista. El kit la esconde en su modo estrecho, que
+     es justo cuando hace falta. */
+  .wa-marco .cs-conversation-header__back { display: flex; }
+  .wa-marco .wa-imagen, .wa-marco .wa-audio { max-width: 62vw; }
+  .wa-btn-micro { right: 48px; }
+  /* Los paneles, a lo ancho: 420 px fijos se salen de un telefono. */
+  .wa-panel { max-width: calc(100vw - 24px); }
+}
+
+/* Volver a la lista, en pantallas estrechas. */
+.wa-volver {
+  display: grid; place-items: center;
+  width: 38px; height: 38px;
+  margin-right: 2px;
+  border: 0; border-radius: 9999px;
+  background: transparent;
+  color: var(--wa-texto);
+  cursor: pointer;
+}
+.wa-volver:hover { background: var(--wa-hover); }
+.wa-marco .cs-conversation-header__back { padding: 0; margin: 0; }
+
+/* ── La nota de voz ──────────────────────────────────────────────────────────
+ *
+ * Reproductor propio: el <audio controls> del navegador es un control del
+ * sistema —blanco, de 250 px, con sus botones— que no se puede pintar de otro
+ * color. En medio de un chat oscuro cantaba muchisimo. */
+
+.wa-voz {
+  display: flex; align-items: center; gap: 9px;
+  min-width: 190px; max-width: 240px;
+  padding: 2px 0;
+}
+.wa-voz-boton {
+  display: grid; place-items: center;
+  width: 30px; height: 30px; flex-shrink: 0;
+  border: 0; border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.16);
+  color: var(--wa-texto);
+  cursor: pointer;
+}
+.wa-voz-boton:hover { background: rgba(255, 255, 255, 0.26); }
+
+.wa-voz-barra {
+  position: relative; flex: 1;
+  height: 3px; border-radius: 3px;
+  background: rgba(255, 255, 255, 0.24);
+  cursor: pointer;
+}
+.wa-voz-hecho {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  border-radius: 3px;
+  background: var(--wa-apagado);
+}
+.wa-voz-mia .wa-voz-hecho { background: #a7d6c8; }
+.wa-voz-punto {
+  position: absolute; top: 50%;
+  width: 9px; height: 9px; margin-left: -4px;
+  transform: translateY(-50%);
+  border-radius: 9999px;
+  background: var(--wa-texto);
+}
+.wa-voz-tiempo { font-size: 11px; color: var(--wa-apagado); flex-shrink: 0; min-width: 30px; }
+.wa-voz-mia .wa-voz-tiempo { color: rgba(233, 237, 239, 0.65); }

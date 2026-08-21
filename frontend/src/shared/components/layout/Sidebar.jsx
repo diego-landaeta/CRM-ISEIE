@@ -47,6 +47,7 @@ const NAV_SECTIONS = [
           // la deja tocar el suyo.
           { to: '/whatsapp/conexion', label: 'Conexión' },
           { to: '/whatsapp/plantillas', label: 'Plantillas' },
+          { to: '/whatsapp/ayuda', label: 'Cómo se usa' },
           // Solo para quien manda: entrar en el WhatsApp de cada gestora.
           // Fuera del menu: usaba el navegador remoto, que se ha retirado.
           // Vuelve cuando se rehaga sobre el chat nuevo.

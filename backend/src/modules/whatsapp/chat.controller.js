@@ -9,6 +9,11 @@ import { query } from '../../shared/config/db.js';
 
 const esAdmin = (req) => ['admin', 'superadmin', 'soporte'].includes(req.user.role);
 
+// Version del aviso que se acepta al enlazar. Se sube al cambiar el TEXTO, no
+// al mover un boton: sirve para saber que leyo cada persona el dia que haga
+// falta demostrarlo.
+const VERSION_AVISO = 1;
+
 /**
  * De quien es la sesion sobre la que se esta trabajando.
  *
@@ -94,9 +99,16 @@ export async function chat(req, res, next) {
       ...m,
       media_firma: m.media_url ? firma.firma(m.id) : null,
     }));
+    // Quien esta escribiendo viaja con el hilo: la pantalla ya lo pide cada
+    // pocos segundos, asi que no hace falta otra ronda de peticiones.
+    const escribiendo = evolution.configurado()
+      ? await evolution.quienEscribe(conv.jid, conv.instancia).catch(() => null)
+      : null;
+
     // Marca leido tambien EN WhatsApp: al otro lado le sale el doble tic azul.
-    await servicio.marcarLeida(id).catch(() => {});
-    res.json({ success: true, data: { conversacion: conv, mensajes: msgs } });
+    // Se le pasa lo que ya sabemos, para que no haga nada si no hay sin leer.
+    await servicio.marcarLeida(id, conv.no_leidos).catch(() => {});
+    res.json({ success: true, data: { conversacion: conv, mensajes: msgs, escribiendo } });
   } catch (err) { next(err); }
 }
 
@@ -107,8 +119,15 @@ export async function enviar(req, res, next) {
     if (!texto) throw new AppError('El mensaje esta vacio', 400, 'VACIO');
     if (texto.length > 4000) throw new AppError('El mensaje es demasiado largo', 400, 'MUY_LARGO');
     const conv = await miConversacion(req, parseInt(req.params.id));
+    // A que mensaje se responde. Se comprueba que es de ESTA conversacion: sin
+    // eso se podria citar el mensaje de otra persona en un chat ajeno.
+    let citarWaId = null;
+    if (req.body?.citarId) {
+      const original = await model.mensajePorId(parseInt(req.body.citarId));
+      if (original && original.jid === conv.jid) citarWaId = original.wa_id;
+    }
     const fila = await servicio.enviar({
-      conversacionId: conv.id, texto, usuarioId: req.user.userId,
+      conversacionId: conv.id, texto, usuarioId: req.user.userId, citarWaId,
     });
     res.status(201).json({ success: true, data: fila });
   } catch (err) { next(err); }
@@ -137,9 +156,32 @@ export async function abrirChat(req, res, next) {
     const digitos = String(tel).replace(/[^0-9]/g, '');
     if (digitos.length < 9) throw new AppError('Ese telefono no es valido', 400, 'TELEFONO_INVALIDO');
 
+    const instancia = await instanciaObjetivo(req);
+
+    // Se le pregunta a WhatsApp cual es la direccion buena de ese numero.
+    //
+    // Tecleando a mano es facil colar el cero de tronco nacional —«0412...» en
+    // Venezuela, «06...» en Italia— y con el delante WhatsApp no conoce a
+    // nadie: se abria una conversacion muerta contra un numero con ese cero
+    // metido en medio, y al escribir salia un error que no explicaba nada.
+    //
+    // Se pregunta en vez de adivinar. Ir anadiendo reglas pais por pais es una
+    // carrera que no se gana: quien sabe si ese numero existe es WhatsApp.
+    let jid = `${digitos}@s.whatsapp.net`;
+    const { existe, jid: jidBueno } = await evolution.comprobarNumero(digitos, instancia);
+    if (existe === false) {
+      throw new AppError(
+        `No hay ninguna cuenta de WhatsApp con el numero ${digitos}. Revisa el prefijo del pais: si tu pais usa un 0 delante al marcar dentro, ese 0 no va.`,
+        404, 'NO_ESTA_EN_WHATSAPP'
+      );
+    }
+    // Con `existe: null` no se pudo comprobar —sesion caida—: se sigue con lo
+    // tecleado en vez de bloquear, porque no saber no es lo mismo que no estar.
+    if (jidBueno) jid = jidBueno;
+
     const conv = await model.conversacionDe({
-      instancia: await instanciaObjetivo(req),
-      jid: `${digitos}@s.whatsapp.net`,
+      instancia,
+      jid,
       nombrePush: null,
     });
     res.status(201).json({ success: true, data: conv });
@@ -250,16 +292,46 @@ export async function noEscribir(req, res, next) {
  * esto la pantalla no sabe si sigue trabajando o se quedo parada, que es
  * exactamente lo que no se podia distinguir.
  */
+// Los recuentos, guardados un rato.
+//
+// Contar 380.000 mensajes cada cuatro segundos por pantalla abierta es tirar la
+// maquina para pintar un numero que ademas nadie mira al detalle: es un
+// indicador de avance, no una cuenta contable. Se guarda el resultado un rato y
+// todas las pestanas de esa persona comparten el mismo.
+//
+// El plazo se adapta: mientras entra historial se refresca a menudo, porque ahi
+// el numero SI cambia y es lo unico que dice que la cosa avanza. Cuando ya no
+// entra nada, cada medio minuto sobra.
+const recuentos = new Map();   // instancia -> { hasta, datos }
+
+async function recuentoDe(instancia, entrando) {
+  const guardado = recuentos.get(instancia);
+  if (guardado && guardado.hasta > Date.now()) return guardado.datos;
+  const datos = await model.actividad(instancia);
+  recuentos.set(instancia, { hasta: Date.now() + (entrando ? 3000 : 30000), datos });
+  return datos;
+}
+
 export async function sincronizacion(req, res, next) {
   try {
     const instancia = await instanciaObjetivo(req);
-    const d = await model.actividad(instancia);
+
+    // Quien sabe si sigue entrando historial es el webhook, que es por donde
+    // entra. Se pregunta a la memoria, no a la base: contestarlo contando la
+    // tabla entera costaba un escaneo de 380.000 filas cada cuatro segundos por
+    // cada pantalla abierta.
+    const latido = servicio.ultimoLatido(instancia);
+    const haceSegundos = latido ? Math.round((Date.now() - latido) / 1000) : null;
+    const entrando = haceSegundos !== null && haceSegundos < 30;
+
+    const d = await recuentoDe(instancia, entrando);
     res.json({ success: true, data: {
       conversaciones: d.conversaciones,
       mensajes: d.mensajes,
-      // Si entro algo en el ultimo medio minuto, sigue llegando.
-      entrando: d.hace_segundos !== null && d.hace_segundos < 30,
-      haceSegundos: d.hace_segundos,
+      entrando,
+      // Si el servidor acaba de arrancar no hay latido en memoria; entonces vale
+      // lo que sepa la base, que para eso ya se ha consultado.
+      haceSegundos: haceSegundos ?? d.hace_segundos,
       adjuntosPendientes: media.pendientes(instancia),
     }});
   } catch (err) { next(err); }
@@ -286,10 +358,49 @@ export async function desconectar(req, res, next) {
   try {
     // Cada uno desvincula el suyo. Un administrador no necesita poder tirar la
     // sesion de otro desde aqui: eso es el WhatsApp personal de esa persona.
-    const r = await evolution.cerrarSesion(await instanciaObjetivo(req));
+    const instancia = await instanciaObjetivo(req);
+    const r = await evolution.cerrarSesion(instancia);
     if (!r.ok) throw new AppError('No se pudo cerrar la sesion en WhatsApp', 502, 'SIN_CERRAR');
-    res.json({ success: true, data: { cerrada: true } });
+
+    // Y lo guardado en el CRM, solo si se pide.
+    //
+    // Nunca por defecto: son conversaciones con clientes y borrarlas de mas es
+    // irreversible. Pero tampoco se puede no ofrecerlo — desvincular y volver a
+    // enlazar «desde cero» devolvia los chats de siempre, porque «cero» era
+    // cero para WhatsApp y no para la base.
+    let borradas = null;
+    if (req.body?.borrarConversaciones === true) {
+      const { conversaciones, archivos } = await model.borrarConversaciones(instancia);
+      // Los ficheros tambien: si no, quedan adjuntos de conversaciones que ya
+      // no existen ocupando disco y sin forma de llegar a ellos.
+      const { deleteLocal } = await import('../../shared/services/localStorage.service.js');
+      let ficheros = 0;
+      for (const ruta of archivos) {
+        try { await deleteLocal(ruta); ficheros++; } catch { /* ya no estaba */ }
+      }
+      borradas = { conversaciones, ficheros };
+      logger.info({ instancia, ...borradas }, 'WhatsApp: conversaciones borradas al desvincular');
+    }
+    res.json({ success: true, data: { cerrada: true, borradas } });
   } catch (err) { next(err); }
+}
+
+// Cuando se refrescaron por ultima vez los nombres de cada sesion.
+const nombresRefrescados = new Map();
+const CADA_CUANTO_NOMBRES = 15 * 60 * 1000;
+
+async function refrescarNombresSiToca(instancia) {
+  const ultima = nombresRefrescados.get(instancia) || 0;
+  if (Date.now() - ultima < CADA_CUANTO_NOMBRES) return;
+  nombresRefrescados.set(instancia, Date.now());
+  const contactos = await evolution.agenda(instancia);
+  const pares = (contactos || [])
+    .filter((c) => c?.jid && c?.nombre)
+    .map((c) => ({ jid: c.jid, nombre: String(c.nombre) }));
+  const puestos = await model.refrescarNombres(instancia, pares);
+  if (puestos) {
+    logger.info({ instancia, puestos, deLaAgenda: pares.length }, 'WhatsApp: nombres puestos al dia');
+  }
 }
 
 // GET /api/whatsapp/conexion — ¿esta emparejado el numero?
@@ -305,6 +416,25 @@ export async function conexion(req, res, next) {
     // encontraba, y con varias sesiones eso es ensenar el numero de otro.
     const mia = lista.find((i) => (i?.name || i?.instance?.instanceName) === instancia) || null;
     const crudo = est.datos?.instance?.state || est.datos?.state || null;
+
+    // Aprovechando que aqui se sabe quien eres, se quita tu nombre de las
+    // conversaciones de otros. Es barato —una consulta que casi siempre no
+    // toca nada— y arregla lo que quedo mal antes del cerrojo.
+    const miNumero = mia?.ownerJid?.split('@')[0] || mia?.number || null;
+    if (crudo === 'open' && mia?.profileName) {
+      const limpiadas = await model.limpiarNombrePropio(instancia, mia.profileName, miNumero)
+        .catch(() => 0);
+      if (limpiadas) {
+        logger.info({ instancia, limpiadas }, 'WhatsApp: quitado el nombre propio de conversaciones ajenas');
+      }
+      // Y se ponen al dia los nombres desde la agenda de WhatsApp, que es la
+      // fuente buena: tus contactos y los nombres REALES de los grupos.
+      //
+      // De vez en cuando, no en cada consulta: la pantalla pregunta por la
+      // conexion cada treinta segundos y traerse la agenda entera cada vez
+      // seria absurdo. Un cuarto de hora basta — los nombres no cambian tanto.
+      await refrescarNombresSiToca(instancia).catch(() => {});
+    }
     res.json({ success: true, data: {
       configurado: true,
       instancia,
@@ -335,6 +465,31 @@ export async function emparejar(req, res, next) {
     // Cuanto historial quiere quien enlaza. Si manda cualquier otra cosa, lo
     // rapido: es lo que deja la pantalla usable en segundos.
     const modo = ['cero', 'rapido', 'todo'].includes(req.body?.modo) ? req.body.modo : 'rapido';
+
+    // El aviso se acepta ANTES de que salga el codigo, y queda escrito.
+    //
+    // Sin esto la casilla de la pantalla no vale nada: bastaria con llamar al
+    // endpoint a mano. Y hace falta guardarlo porque el numero es de una
+    // persona — si WhatsApp se lo bloquea, tiene que poder verse que se le
+    // advirtio, cuando, y con que texto.
+    if (req.body?.enterado !== true) {
+      throw new AppError(
+        'Hay que leer y aceptar el aviso antes de enlazar un numero',
+        400, 'FALTA_CONSENTIMIENTO'
+      );
+    }
+    const objetivo = await usuarioObjetivo(req);
+    const apuntado = await model.apuntarConsentimiento({
+      userId: objetivo,
+      aceptadoPor: req.user.userId,
+      instancia,
+      versionAviso: VERSION_AVISO,
+      ip: req.ip,
+      navegador: req.get('user-agent'),
+    });
+    if (!apuntado) {
+      logger.warn({ instancia }, 'WhatsApp: falta la migracion 129, el consentimiento no queda registrado');
+    }
 
     let r = null;
     let ultimo = '';
@@ -404,6 +559,22 @@ export async function webhook(req, res) {
       return res.status(401).json({ success: false });
     }
     const r = await servicio.recibir(req.body);
+    // Cada mensaje deja rastro de en que acabo.
+    //
+    // Antes no se registraba nada: buscando por que no llegaba un audio no
+    // habia forma de saber si el aviso ni siquiera llego, si se descarto por
+    // algo, o si se guardo y el fallo estaba en la pantalla. Se registra el
+    // TIPO y el resultado, nunca el contenido: son conversaciones de clientes.
+    if (r?.ignorado) {
+      logger.info({ instancia: req.body?.instance, motivo: r.ignorado }, 'WhatsApp: aviso descartado');
+    } else if (r?.duplicado) {
+      logger.debug({ instancia: req.body?.instance, tipo: r.tipo }, 'WhatsApp: mensaje repetido');
+    } else if (r?.guardado) {
+      logger.info({
+        instancia: req.body?.instance, tipo: r.tipo,
+        conversacion: r.conversacionId, adjuntoEnCola: r.enCola,
+      }, 'WhatsApp: mensaje guardado');
+    }
     return res.json({ success: true, data: r });
   } catch (err) {
     logger.error({ err: err.message }, 'WhatsApp: fallo procesando el webhook');

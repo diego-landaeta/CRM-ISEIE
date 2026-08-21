@@ -3,10 +3,10 @@ import { Link, useSearchParams } from 'react-router-dom';
 import {
   MainContainer, ChatContainer, MessageList, Message, MessageInput,
   ConversationList, Conversation, Avatar, Sidebar, Search, ConversationHeader,
-  MessageSeparator, InfoButton, Loader,
+  MessageSeparator, InfoButton, Loader, InputToolbox,
 } from '@chatscope/chat-ui-kit-react';
 import '@chatscope/chat-ui-kit-styles/dist/default/styles.min.css';
-import { Prohibit, PencilSimpleLine, X, MagnifyingGlass, Microphone, Stop, UsersThree, PlugsConnected } from '@phosphor-icons/react';
+import { Prohibit, PencilSimpleLine, X, MagnifyingGlass, Microphone, Stop, UsersThree, PlugsConnected, WarningCircle, ArrowBendUpLeft, ArrowsOut, ArrowsIn, CaretLeft } from '@phosphor-icons/react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
 import {
@@ -14,6 +14,8 @@ import {
   type ChatWhatsapp, type MensajeWhatsapp, type ConexionWhatsapp,
 } from '../api/whatsapp.api';
 import SelectorDeSesion, { type SesionElegida } from '../components/SelectorDeSesion';
+import Tour, { tourPendiente } from '../components/Tour';
+import NotaDeVoz from '../components/NotaDeVoz';
 import './chat.css';
 
 // El chat de WhatsApp dentro del CRM.
@@ -77,7 +79,9 @@ function Adjunto({ m, alPedir, bajando }: { m: MensajeWhatsapp; alPedir: (id: nu
       </button>
     );
   }
-  if (m.tipo === 'audio') return <audio controls preload="none" src={url} className="wa-audio" />;
+  // La nota de voz, con reproductor propio. El <audio controls> del navegador
+  // es un pastillon blanco que no se puede pintar de otro color.
+  if (m.tipo === 'audio') return <NotaDeVoz src={url} mia={m.direccion === 'saliente'} />;
   // El sticker no lleva burbuja ni ocupa como una foto: en WhatsApp va suelto
   // sobre el fondo y es pequeño. Salia a 512 px dentro de un recuadro verde.
   if (m.tipo === 'sticker') {
@@ -143,6 +147,22 @@ export default function ChatPage() {
   const [pidiendoMotivo, setPidiendoMotivo] = useState(false);
   // Los adjuntos que se estan pidiendo ahora mismo, para que el boton lo diga.
   const [bajando, setBajando] = useState<number[]>([]);
+  // El mensaje fallido que se esta reintentando ahora mismo.
+  const [reintentando, setReintentando] = useState<number | null>(null);
+  // El mensaje al que se esta respondiendo, si hay alguno.
+  const [citando, setCitando] = useState<MensajeWhatsapp | null>(null);
+  // El tour, solo la primera vez y solo cuando ya hay algo que enseñar: sobre
+  // una pantalla vacia no señala nada y no se entiende.
+  const [tour, setTour] = useState(false);
+  // Solo el chat, sin el resto del CRM alrededor. Para cuando se pasa la
+  // mañana aqui: el menu, la cabecera y el selector de proyecto no pintan nada.
+  const [aPantalla, setAPantalla] = useState(false);
+  // En un telefono no caben la lista y el hilo a la vez: o una u otro, como en
+  // WhatsApp. Se mide el ancho de verdad en vez de suponerlo.
+  const [estrecho, setEstrecho] = useState(() => window.innerWidth < 900);
+  // Quien esta escribiendo al otro lado. En un grupo dice ademas QUIEN de
+  // todos: «Maria escribiendo…», que es lo unico que sirve cuando son quince.
+  const [escribiendo, setEscribiendo] = useState<{ quien: string; que: string } | null>(null);
   const [motivoNuevo, setMotivoNuevo] = useState('');
   const [busca, setBusca] = useState('');
   const [candidatos, setCandidatos] = useState<Array<{ id: number; nombre: string; telefono: string | null; status: string }>>([]);
@@ -201,6 +221,7 @@ export default function ChatPage() {
     if (!r.success) return;
     setConv(r.data.conversacion);
     setMensajes(r.data.mensajes || []);
+    setEscribiendo(r.data.escribiendo || null);
   }, [cuantos, deQuien]);
 
   useEffect(() => {
@@ -212,7 +233,26 @@ export default function ChatPage() {
     return () => clearInterval(t);
   }, [cargarLista, cargarHilo, abierto]);
 
-  useEffect(() => { setCuantos(100); }, [abierto]);
+  useEffect(() => { setCuantos(100); setCitando(null); }, [abierto]);
+
+  // Escape para salir. Es lo que todo el mundo intenta primero, y sin esto hay
+  // que buscar el boton con el raton.
+  useEffect(() => {
+    if (!aPantalla) return undefined;
+    const alPulsar = (e: KeyboardEvent) => { if (e.key === 'Escape') setAPantalla(false); };
+    window.addEventListener('keydown', alPulsar);
+    // Se bloquea el desplazamiento de la pagina de detras mientras tanto.
+    const antes = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', alPulsar);
+      document.body.style.overflow = antes;
+    };
+  }, [aPantalla]);
+
+  useEffect(() => {
+    if (chats.length && conv && tourPendiente()) setTour(true);
+  }, [chats.length, conv]);
   useEffect(() => { if (abierto) cargarHilo(abierto); }, [abierto, cargarHilo]);
 
   // El alto se MIDE, no se adivina.
@@ -221,17 +261,42 @@ export default function ChatPage() {
   // marco anterior: encima hay una barra de estado que aparece y desaparece, y
   // el relleno de la pagina cambia con el ancho. Sobraba media pantalla sin
   // usar. Se mide donde empieza el marco y se le da todo lo que queda.
+  // Lo que ocupa el relleno de la pagina POR DEBAJO del marco.
+  //
+  // Se descubre midiendo, no se adivina. Restaba 16 px a ojo y la pagina
+  // desbordaba justo 16: el contenedor de la pantalla anade su propio relleno
+  // abajo, y eso saca una barra de desplazamiento en el navegador ademas de la
+  // del chat. Dos barras, y la de fuera mueve todo.
+  //
+  // Se apunta una sola vez y se reutiliza: recalcularlo en cada medicion
+  // encogeria el marco un poco mas cada vuelta, porque cambiar su alto vuelve a
+  // disparar la medicion.
+  const sobra = useRef(0);
+
   useEffect(() => {
     const medir = () => {
       const arriba = marco.current?.getBoundingClientRect().top;
       if (arriba === undefined) return;
-      setAlto(Math.max(420, Math.round(window.innerHeight - arriba - 16)));
+      setAlto(Math.max(420, Math.round(window.innerHeight - arriba - sobra.current)));
     };
+    const mirarAncho = () => setEstrecho(window.innerWidth < 900);
+    mirarAncho();
+    window.addEventListener('resize', mirarAncho);
     medir();
+    // Tras pintar: si la pagina desborda, ese sobrante es el relleno de abajo.
+    const t = setTimeout(() => {
+      const raiz = document.documentElement;
+      const extra = raiz.scrollHeight - raiz.clientHeight;
+      if (extra > 2) { sobra.current += extra; medir(); }
+    }, 120);
     const ro = new ResizeObserver(medir);
     if (document.body) ro.observe(document.body);
     window.addEventListener('resize', medir);
-    return () => { ro.disconnect(); window.removeEventListener('resize', medir); };
+    return () => {
+      clearTimeout(t); ro.disconnect();
+      window.removeEventListener('resize', medir);
+      window.removeEventListener('resize', mirarAncho);
+    };
   }, []);
 
   // Se pregunta al servidor si sigue entrando historial, en vez de adivinarlo
@@ -267,10 +332,22 @@ export default function ChatPage() {
     if (!t || !abierto || enviando) return;
     setEnviando(true);
     try {
-      const r = await chatApi.enviar(abierto, t, deQuien);
+      const r = await chatApi.enviar(abierto, t, citando?.id ?? null, deQuien);
       if (!r.success) throw new Error(r.error || 'No se pudo enviar');
+      setCitando(null);
       await cargarHilo(abierto); cargarLista();
     } catch (e) { fallo(e); } finally { setEnviando(false); }
+  }
+
+  /** Vuelve a enviar un mensaje que no salio, con su mismo texto. */
+  async function reintentar(m: MensajeWhatsapp) {
+    if (!abierto || !m.texto) return;
+    setReintentando(m.id);
+    try {
+      const r = await chatApi.enviar(abierto, m.texto);
+      if (!r.success) throw new Error(r.error || 'No se pudo enviar');
+      await cargarHilo(abierto); cargarLista();
+    } catch (e) { fallo(e); } finally { setReintentando(null); }
   }
 
   async function mandarArchivo(f: File) {
@@ -281,6 +358,41 @@ export default function ChatPage() {
       if (!r.success) throw new Error(r.error || 'No se pudo enviar');
       await cargarHilo(abierto); cargarLista();
     } catch (e) { fallo(e); } finally { setEnviando(false); }
+  }
+
+  /**
+   * Pegar o arrastrar una imagen manda la imagen.
+   *
+   * La caja de escribir es un contenteditable, asi que al pegar una foto el
+   * navegador la mete DENTRO como <img> a tamano real: se comia la barra
+   * entera y tapaba media pantalla. Y al darle a enviar no salia nada, porque
+   * el texto se limpia de etiquetas antes de mandarlo — la foto desaparecia sin
+   * decir por que.
+   *
+   * En WhatsApp Web pegar una foto la envia. Aqui igual.
+   */
+  function archivosDe(dt: DataTransfer | null): File[] {
+    if (!dt) return [];
+    const items = [...(dt.files || [])];
+    if (items.length) return items;
+    return [...(dt.items || [])]
+      .filter((i) => i.kind === 'file')
+      .map((i) => i.getAsFile())
+      .filter((f): f is File => Boolean(f));
+  }
+
+  async function pegarOSoltar(e: React.ClipboardEvent | React.DragEvent) {
+    const dt = 'clipboardData' in e ? e.clipboardData : e.dataTransfer;
+    const archivos = archivosDe(dt);
+    if (!archivos.length) return;          // texto normal: que siga su camino
+    e.preventDefault();
+    e.stopPropagation();
+    if (!abierto) {
+      toast({ title: 'Elige una conversacion antes', variant: 'destructive' });
+      return;
+    }
+    // De uno en uno: cada envio pasa por los frenos y por su pausa.
+    for (const f of archivos) await mandarArchivo(f);
   }
 
   async function alternarGrabacion() {
@@ -364,8 +476,33 @@ export default function ChatPage() {
     }
   }
 
-  const nombreDe = (c: ChatWhatsapp) =>
-    c.lead_nombre || c.nombre_push || (c.es_grupo ? 'Grupo sin nombre' : c.telefono);
+  const nombreDe = (c: ChatWhatsapp) => {
+    // El chat de uno consigo mismo. WhatsApp no manda nombre para el —manda el
+    // numero, y encima enmascarado— asi que salia un telefono donde deberia
+    // decir lo que es.
+    const mio = (conexion?.numero || '').replace(/[^0-9]/g, '');
+    if (mio && c.telefono?.replace(/[^0-9]/g, '') === mio) return 'Tu (mensajes contigo mismo)';
+    return c.lead_nombre || c.nombre_push || (c.es_grupo ? 'Grupo sin nombre' : c.telefono);
+  };
+
+  // Lo que se ensena debajo del nombre.
+  //
+  // Antes: el ultimo texto, y si no habia, el telefono. Pero un grupo no tiene
+  // telefono: tiene un identificador de 18 cifras, y eso es lo que salia
+  // pintado —dieciocho cifras seguidas— cada vez que el ultimo mensaje era una foto
+  // o un sticker. Ahora se dice QUE fue, como en WhatsApp.
+  const ADELANTO: Record<string, string> = {
+    imagen: '📷 Foto', video: '🎥 Video', audio: '🎤 Nota de voz',
+    documento: '📄 Documento', sticker: 'Sticker',
+  };
+  const adelantoDe = (c: ChatWhatsapp) => {
+    if (c.no_escribir) return 'no escribir';
+    if (c.ultimo_texto) return c.ultimo_texto;
+    if (c.ultimo_tipo && ADELANTO[c.ultimo_tipo]) return ADELANTO[c.ultimo_tipo];
+    // Sin nada que adelantar: el telefono si es una persona, y para un grupo
+    // nada — su identificador no le dice nada a nadie.
+    return c.es_grupo ? 'Grupo' : c.telefono;
+  };
   const visibles = filtro
     ? chats.filter((c) => `${nombreDe(c)} ${c.telefono}`.toLowerCase().includes(filtro.toLowerCase()))
     : chats;
@@ -382,10 +519,29 @@ export default function ChatPage() {
     );
   }
 
+  // Por que no se puede escribir ahora mismo, si es que no se puede.
+  //
+  // Antes la caja seguia activa con WhatsApp caido: se escribia el mensaje
+  // entero, se le daba a enviar, y el error salia DESPUES con el texto ya
+  // perdido. Peor todavia con el movil sin cobertura, que es cuando mas pasa.
+  const bloqueo = conexion && !conexion.conectado
+    ? {
+        icono: <WarningCircle size={15} weight="fill" />,
+        texto: 'WhatsApp no esta conectado, no se puede enviar.',
+        marcador: 'Sin conexion con WhatsApp',
+      }
+    : conv?.no_escribir
+    ? {
+        icono: <Prohibit size={15} weight="bold" />,
+        texto: `Esta persona pidio que no se le escriba.${conv.motivo_no_escribir ? ` (${conv.motivo_no_escribir})` : ''}`,
+        marcador: 'No se escribe a este numero',
+      }
+    : null;
+
   let ultimoDia = '';
 
   return (
-    <div className="space-y-2">
+    <div className={`space-y-2 ${aPantalla ? 'wa-completa' : ''}`}>
       <div className="flex items-center gap-2 text-xs bg-card border border-border rounded-lg px-3 py-1.5">
         <span className={`w-2 h-2 rounded-full ${conexion?.conectado ? 'bg-emerald-500' : 'bg-amber-500'}`} />
         {conexion?.conectado
@@ -399,15 +555,31 @@ export default function ChatPage() {
             </span>}
         {/* La pantalla donde se enlaza o se desvincula el numero. Estaba solo en
             el menu lateral y desde el chat no habia forma de llegar. */}
-        <Link to="/whatsapp/conexion" title="Conectar o desvincular el numero"
+        <button type="button" onClick={() => setAPantalla((v) => !v)}
+          title={aPantalla ? 'Salir de pantalla completa (Esc)' : 'Ver solo el chat'}
           className="ml-auto inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
+          {aPantalla ? <ArrowsIn size={14} weight="bold" /> : <ArrowsOut size={14} weight="bold" />}
+          <span className="font-medium">{aPantalla ? 'Salir' : 'Ampliar'}</span>
+        </button>
+        <Link to="/whatsapp/conexion" title="Conectar o desvincular el numero"
+          className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
           <PlugsConnected size={14} weight="bold" />
           <span className="font-medium">Conexion</span>
         </Link>
       </div>
 
-      <div ref={marco} className="wa-marco" style={{ height: alto }}>
-        <MainContainer responsive>
+      <div ref={marco} className="wa-marco" style={{ height: alto }}
+        onPaste={pegarOSoltar}
+        onDrop={pegarOSoltar}
+        onDragOver={(e) => { if (e.dataTransfer?.types?.includes('Files')) e.preventDefault(); }}>
+        {/* Sin `responsive`: ese modo del kit no es para telefonos —encoge la
+            lista a iconos, esconde el buscador y anula la flecha de volver—.
+            Lo estrecho se resuelve aqui, enseñando la lista o el hilo. */}
+        <MainContainer>
+          {/* En un telefono se enseña una cosa u otra. Con las dos, el kit
+              tapaba la lista en cuanto habia un hilo abierto —aunque estuviera
+              vacio— y la pantalla arrancaba en blanco. */}
+          {(!estrecho || !conv) && (
           <Sidebar position="left" scrollable>
             <div className="wa-barra-sesion">
               <SelectorDeSesion valor={sesion} onCambiar={setSesion} compacto />
@@ -434,7 +606,7 @@ export default function ChatPage() {
             <ConversationList>
               {visibles.map((c) => (
                 <Conversation key={c.id} name={nombreDe(c)}
-                  info={c.no_escribir ? 'no escribir' : (c.ultimo_texto || c.telefono)}
+                  info={adelantoDe(c)}
                   active={abierto === c.id}
                   unreadCnt={c.no_leidos || undefined}
                   onClick={() => setAbierto(c.id)}>
@@ -443,13 +615,34 @@ export default function ChatPage() {
               ))}
             </ConversationList>
           </Sidebar>
+          )}
 
           {conv ? (
             <ChatContainer>
               <ConversationHeader>
                 <Avatar name={nombreDe(conv)}><Foto nombre={nombreDe(conv)} url={conv.avatar_url} grupo={conv.es_grupo} /></Avatar>
+                {estrecho && (
+                  /* Con su propio boton dentro, no con el que trae el kit.
+                     El kit pinta un <div> vacio y le cuelga el clic a una
+                     flechita minuscula de dentro: el div —que es lo que se ve y
+                     lo que uno pulsa— no hace nada. Ademas es diminuta. */
+                  <ConversationHeader.Back>
+                    <button type="button" className="wa-volver" title="Ver todos los chats"
+                      onClick={() => { setAbierto(null); setConv(null); }}>
+                      <CaretLeft size={20} weight="bold" />
+                    </button>
+                  </ConversationHeader.Back>
+                )}
                 <ConversationHeader.Content userName={nombreDe(conv)}
-                  info={conv.es_grupo ? 'Grupo'
+                  info={escribiendo
+                    // Debajo del nombre, como en WhatsApp. En un grupo, con el
+                    // nombre de quien escribe: sin eso no sirve de nada.
+                    ? <span className="wa-escribiendo">
+                        {conv.es_grupo
+                          ? `${escribiendo.quien} esta ${escribiendo.que}…`
+                          : `${escribiendo.que}…`}
+                      </span>
+                    : conv.es_grupo ? 'Grupo'
                     : conv.lead_id ? `${conv.telefono} · prospecto`
                     : `${conv.telefono} · sin prospecto`} />
                 <ConversationHeader.Actions>
@@ -502,33 +695,94 @@ export default function ChatPage() {
                         type: 'custom',
                       }}>
                       <Message.CustomContent>
+                        {/* A que contestaba. Sin esto la respuesta salia suelta
+                            y en una conversacion movida eso es la mitad de la
+                            informacion: se veia el «si» sin la pregunta. */}
+                        {m.responde_a && (m.citado_texto || m.citado_tipo) && (
+                          <div className="wa-cita">
+                            <span className="wa-cita-quien">
+                              {m.citado_direccion === 'saliente' ? 'Tu' : nombreDe(conv)}
+                            </span>
+                            <span className="wa-cita-texto">
+                              {m.citado_texto || ADELANTO[m.citado_tipo || ''] || `(${m.citado_tipo})`}
+                            </span>
+                          </div>
+                        )}
                         {m.tipo !== 'texto' && <div className="wa-adjunto"><Adjunto m={m} alPedir={pedirAdjunto} bajando={bajando.includes(m.id)} /></div>}
                         {m.texto && <div className="wa-texto">{m.texto}</div>}
                         <span className={`wa-meta ${m.estado === 'leido' ? 'wa-leido' : ''}`}>
                           {hora(m.ts)}{mia && m.estado ? ` ${TIC[m.estado]}` : ''}
                         </span>
+                        {/* Un mensaje que no salio se quedaba con su ⚠ y ahi
+                            moria: habia que copiarlo a mano y volver a
+                            escribirlo. Ahora se reintenta con el texto que ya
+                            estaba guardado. */}
+                        {/* Responder a ESTE mensaje. Aparece al pasar por
+                            encima, como en WhatsApp: siempre visible seria
+                            ruido en cada burbuja. */}
+                        <button type="button" className="wa-responder"
+                          title="Responder a este mensaje"
+                          onClick={() => setCitando(m)}>
+                          <ArrowBendUpLeft size={13} weight="bold" />
+                        </button>
+                        {m.estado === 'fallido' && m.texto && (
+                          <button type="button" className="wa-reintentar"
+                            disabled={reintentando === m.id}
+                            onClick={() => reintentar(m)}>
+                            {reintentando === m.id ? 'Enviando…' : '↻ Reintentar'}
+                          </button>
+                        )}
                       </Message.CustomContent>
                     </Message>,
                   ].filter(Boolean);
                 })}
               </MessageList>
 
-              {conv.no_escribir ? (
-                <div className="wa-bloqueado">
-                  <Prohibit size={15} weight="bold" />
-                  <span>
-                    Esta persona pidio que no se le escriba.
-                    {conv.motivo_no_escribir ? ` (${conv.motivo_no_escribir})` : ''}
-                  </span>
-                </div>
-              ) : (
-                <MessageInput placeholder={grabando ? 'Grabando nota de voz…' : 'Escribe un mensaje'}
-                  onSend={enviar} disabled={enviando} attachButton
-                  onAttachClick={() => ficheroRef.current?.click()}
-                  sendDisabled={enviando} />
-              )}
+              {/* Un solo InputToolbox, y el campo SIEMPRE presente.
+                  ChatContainer elige a sus hijos por TIPO —cabecera, lista,
+                  campo y toolbox— y descarta lo demas sin decir nada. Los
+                  avisos iban en un <div> suelto, asi que no se pintaban nunca.
+                  Y solo cuenta el PRIMER toolbox, de ahi que aviso y cita
+                  compartan hueco.
+
+                  El campo no se quita cuando no se puede escribir: se
+                  desactiva. Quitarlo mueve la pantalla entera de sitio cada vez
+                  que la sesion parpadea. */}
+              <InputToolbox className={bloqueo ? 'wa-bloqueado' : citando ? 'wa-citando' : 'wa-toolbox-vacia'}>
+                {bloqueo ? (
+                  <>
+                    {bloqueo.icono}
+                    <span>{bloqueo.texto}</span>
+                  </>
+                ) : citando ? (
+                  <>
+                    <div className="wa-citando-texto">
+                      <span className="wa-citando-quien">
+                        {citando.direccion === 'saliente' ? 'Tu' : nombreDe(conv)}
+                      </span>
+                      <span className="wa-citando-que">
+                        {citando.texto || `(${citando.tipo})`}
+                      </span>
+                    </div>
+                    <button type="button" onClick={() => setCitando(null)}
+                      className="wa-panel-cerrar" title="Quitar la cita">
+                      <X size={14} />
+                    </button>
+                  </>
+                ) : null}
+              </InputToolbox>
+
+              <MessageInput
+                placeholder={
+                  bloqueo ? bloqueo.marcador
+                  : grabando ? 'Grabando nota de voz…'
+                  : 'Escribe un mensaje'
+                }
+                onSend={enviar} disabled={enviando || Boolean(bloqueo)} attachButton
+                onAttachClick={() => ficheroRef.current?.click()}
+                sendDisabled={enviando || Boolean(bloqueo)} />
             </ChatContainer>
-          ) : (
+          ) : estrecho ? null : (
             <ChatContainer>
               <MessageList>
                 <MessageList.Content className="wa-vacio">
@@ -550,6 +804,8 @@ export default function ChatPage() {
           </button>
         )}
       </div>
+
+      {tour && <Tour alCerrar={() => setTour(false)} />}
 
       <input ref={ficheroRef} type="file" className="hidden"
         accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.zip,.txt"

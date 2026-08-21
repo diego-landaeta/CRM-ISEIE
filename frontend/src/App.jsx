@@ -36,6 +36,9 @@ const WhatsappWidgetPage = lazy(() => import('./modules/widget/pages/WhatsappWid
 const ChatWhatsappPage = lazy(() => import('./modules/whatsapp/pages/ChatPage'));
 const ConexionWhatsappPage = lazy(() => import('./modules/whatsapp/pages/ConexionPage'));
 const PlantillasWhatsappPage = lazy(() => import('./modules/whatsapp/pages/PlantillasPage'));
+// La guia para quien usa el chat, dentro del CRM: docs/10-whatsapp.md esta
+// bien para nosotros, pero a una gestora no se le manda a un repositorio.
+const AyudaWhatsappPage = lazy(() => import('./modules/whatsapp/pages/AyudaPage'));
 const TutoresPage = lazy(() => import('./modules/tutores/pages/TutoresPage'));
 const ComisionesTutoresPage = lazy(() => import('./modules/tutores/pages/ComisionesTutoresPage'));
 const MisCursosPage = lazy(() => import('./modules/tutores/pages/MisCursosPage'));
@@ -91,6 +94,7 @@ const ROUTE_TITLES = {
   '/whatsapp': 'Chat de WhatsApp',
   '/whatsapp/chat': 'Chat de WhatsApp',
   '/whatsapp/conexion': 'Conexión de WhatsApp',
+  '/whatsapp/ayuda': 'Cómo se usa WhatsApp',
   '/products':                        'Productos',
   '/ventas/analisis':                  'Análisis de ventas',
   '/ventas':                           'Ventas',
@@ -216,6 +220,7 @@ function App() {
           <Route path="/whatsapp/chat" element={<ChatWhatsappPage />} />
           <Route path="/whatsapp/conexion" element={<ConexionWhatsappPage />} />
           <Route path="/whatsapp/plantillas" element={<PlantillasWhatsappPage />} />
+          <Route path="/whatsapp/ayuda" element={<AyudaWhatsappPage />} />
           <Route path="/tutores" element={<TutoresPage />} />
           <Route path="/tutores/comisiones" element={<ComisionesTutoresPage />} />
           <Route path="/mis-cursos" element={<MisCursosPage />} />

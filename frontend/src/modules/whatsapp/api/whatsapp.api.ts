@@ -92,6 +92,8 @@ export interface ChatWhatsapp {
   ultimo_at: string | null;
   no_leidos: number;
   ultimo_texto: string | null;
+  /** De que tipo fue el ultimo mensaje: si fue foto o audio no hay texto. */
+  ultimo_tipo?: string | null;
 }
 
 export interface MensajeWhatsapp {
@@ -108,6 +110,11 @@ export interface MensajeWhatsapp {
    *  detras de urlMedia(id) — la direccion la arma el frontend, que es quien
    *  sabe si el CRM cuelga de /crm/ o de /testeo/. */
   media_firma: string | null;
+  /** A que mensaje responde este, y un adelanto del citado para pintarlo. */
+  responde_a?: string | null;
+  citado_texto?: string | null;
+  citado_tipo?: string | null;
+  citado_direccion?: 'entrante' | 'saliente' | null;
   estado: 'enviado' | 'entregado' | 'leido' | 'fallido' | null;
   enviado_por: number | null;
   ts: string;
@@ -131,11 +138,13 @@ export const chatApi = {
   lista: (projectId?: number | null, usuarioId?: number | null): Promise<ApiResponse<ChatWhatsapp[]>> =>
     client.get(`/whatsapp/chats${qs({ projectId, usuarioId })}`),
 
-  hilo: (id: number, limite = 100, usuarioId?: number | null): Promise<ApiResponse<{ conversacion: ChatWhatsapp; mensajes: MensajeWhatsapp[] }>> =>
+  /** Quien esta escribiendo ahora mismo en la conversacion abierta. */
+  hilo: (id: number, limite = 100, usuarioId?: number | null): Promise<ApiResponse<{ conversacion: ChatWhatsapp; mensajes: MensajeWhatsapp[]; escribiendo: { quien: string; que: string } | null }>> =>
     client.get(`/whatsapp/chats/${id}${qs({ limite, usuarioId })}`),
 
-  enviar: (id: number, texto: string, usuarioId?: number | null): Promise<ApiResponse<MensajeWhatsapp>> =>
-    client.post(`/whatsapp/chats/${id}/enviar`, { texto, usuarioId }),
+  /** `citarId` es el mensaje al que se responde: sale con la cita encima. */
+  enviar: (id: number, texto: string, citarId?: number | null, usuarioId?: number | null): Promise<ApiResponse<MensajeWhatsapp>> =>
+    client.post(`/whatsapp/chats/${id}/enviar`, { texto, citarId, usuarioId }),
 
   noEscribir: (id: number, motivo: string): Promise<ApiResponse<null>> =>
     client.post(`/whatsapp/chats/${id}/no-escribir`, { motivo }),
