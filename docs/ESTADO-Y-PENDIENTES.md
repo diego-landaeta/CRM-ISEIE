@@ -327,3 +327,93 @@ duración equivocada.
 **Lo nuestro, por orden:** recuperar contraseña (#37), Soporte de verdad (#38),
 tasa de cierre de Carlos (#39), filtros en Clientes (#40) y la limpieza de datos
 (#41, #42).
+
+---
+
+<!-- INDICE-TAREAS -->
+
+## Todas las tareas abiertas
+
+Sacado de GitHub, no escrito a mano: **50 abiertas**. Para volver a
+generarlo, `scripts/indice_tareas.py`.
+
+### Fase 1 · Desbloquear · 5
+
+| | Qué | Quién | |
+|---|---|---|---|
+| [#20](https://github.com/diego-landaeta/CRM/issues/20) | Mandar el origen del lead desde Make | Diego | **bloquea a otros** |
+| [#21](https://github.com/diego-landaeta/CRM/issues/21) | Aplicar la migración 122 (plantillas de WhatsApp) | Diego | **bloquea a otros** · lleva SQL |
+| [#22](https://github.com/diego-landaeta/CRM/issues/22) | Clave de IA y tope de gasto | Diego | **bloquea a otros** |
+| [#23](https://github.com/diego-landaeta/CRM/issues/23) | Usuario del CRM de pruebas para Fabián | Diego | **bloquea a otros** |
+| [#24](https://github.com/diego-landaeta/CRM/issues/24) | Decidir qué pasa con main | Diego |  |
+
+### Fase 2 · Construir · 20
+
+| | Qué | Quién | |
+|---|---|---|---|
+| [#25](https://github.com/diego-landaeta/CRM/issues/25) | WhatsApp · plantillas compartidas y registro del contacto | Ángel |  |
+| [#26](https://github.com/diego-landaeta/CRM/issues/26) | Página de estado del sistema | Ángel |  |
+| [#27](https://github.com/diego-landaeta/CRM/issues/27) | El envío de correo del CRM · la tubería | Ángel |  |
+| [#28](https://github.com/diego-landaeta/CRM/issues/28) | Recordatorios por correo | Ángel |  |
+| [#29](https://github.com/diego-landaeta/CRM/issues/29) | Reporte semanal por correo | Ángel |  |
+| [#30](https://github.com/diego-landaeta/CRM/issues/30) | Análisis de datos con IA | Ángel |  |
+| [#31](https://github.com/diego-landaeta/CRM/issues/31) | Terminar la administración de usuarios | Fabián |  |
+| [#32](https://github.com/diego-landaeta/CRM/issues/32) | Rediseño · tokens y primitivas | Fabián |  |
+| [#33](https://github.com/diego-landaeta/CRM/issues/33) | Rediseño · el marco: menú, cabecera y estructura | Fabián |  |
+| [#34](https://github.com/diego-landaeta/CRM/issues/34) | Rediseño · las 82 pantallas, por bloques | Fabián |  |
+| [#35](https://github.com/diego-landaeta/CRM/issues/35) | Proceso de ventas editable | Diego | lleva SQL |
+| [#36](https://github.com/diego-landaeta/CRM/issues/36) | Search Console | Diego |  |
+| [#37](https://github.com/diego-landaeta/CRM/issues/37) | Recuperar la contraseña por correo | Yo |  |
+| [#38](https://github.com/diego-landaeta/CRM/issues/38) | Soporte de verdad | Yo | lleva SQL |
+| [#39](https://github.com/diego-landaeta/CRM/issues/39) | Tasa de cierre y baremo · lo de Carlos | Yo |  |
+| [#44](https://github.com/diego-landaeta/CRM/issues/44) | Sincronizar los proyectos de IA con el CRM · Ángel y Fabián | Ángel | compartida |
+| [#45](https://github.com/diego-landaeta/CRM/issues/45) | WhatsApp · el aviso, el tutorial y pulir lo que falta | Ángel |  |
+| [#47](https://github.com/diego-landaeta/CRM/issues/47) | WhatsApp · llamadas: registrarlas, y el manual | Ángel |  |
+| [#48](https://github.com/diego-landaeta/CRM/issues/48) | Recibir el origen de los leads (ChatGPT incluido) y categorizarlo | Diego |  |
+| [#50](https://github.com/diego-landaeta/CRM/issues/50) | Tipografía e iconos del apartado de administración (estilo formal) | Fabián |  |
+
+### Fase 3 · Cerrar · 5
+
+| | Qué | Quién | |
+|---|---|---|---|
+| [#40](https://github.com/diego-landaeta/CRM/issues/40) | Filtros en Clientes y Matrículas | Yo |  |
+| [#41](https://github.com/diego-landaeta/CRM/issues/41) | Ventas sin formación identificada · 321 | Yo |  |
+| [#42](https://github.com/diego-landaeta/CRM/issues/42) | Los otros datos que no cuadran | Yo |  |
+| [#43](https://github.com/diego-landaeta/CRM/issues/43) | Lo que quedó a medias | Yo |  |
+| [#49](https://github.com/diego-landaeta/CRM/issues/49) | Rutas en español, con redirección desde las viejas | Yo |  |
+
+### Fase 4 · Medir · 5
+
+| | Qué | Quién | |
+|---|---|---|---|
+| [#53](https://github.com/diego-landaeta/CRM/issues/53) | Meta Ads: del gasto a la venta, no al lead | Diego |  |
+| [#54](https://github.com/diego-landaeta/CRM/issues/54) | Google Ads: traer campañas y gasto al CRM | Diego |  |
+| [#55](https://github.com/diego-landaeta/CRM/issues/55) | Google Analytics: lo que pasa antes del lead | Diego |  |
+| [#56](https://github.com/diego-landaeta/CRM/issues/56) | Panel de canales: dónde poner el dinero | Yo |  |
+| [#57](https://github.com/diego-landaeta/CRM/issues/57) | Pedirle a Daniela sus reportes de publicidad y ventas | Diego |  |
+
+### sin fase · 15
+
+| | Qué | Quién | |
+|---|---|---|---|
+| [#2](https://github.com/diego-landaeta/CRM/issues/2) | Frontend: Dropdown categorías searchable + niveles separados cascade | molinangel |  |
+| [#3](https://github.com/diego-landaeta/CRM/issues/3) | Frontend: Sidebar por secciones colapsables con persistencia | molinangel |  |
+| [#4](https://github.com/diego-landaeta/CRM/issues/4) | Frontend: Documentos/Certificados — selectores de programa, alumno y módulos auto | molinangel |  |
+| [#5](https://github.com/diego-landaeta/CRM/issues/5) | BUG: Dock flotante perdió el botón de Chat IA | molinangel |  |
+| [#6](https://github.com/diego-landaeta/CRM/issues/6) | Frontend: Panel UI de conectores con preview + mapping visual | molinangel |  |
+| [#7](https://github.com/diego-landaeta/CRM/issues/7) | Frontend: Sistema completo de vistas por rol (sidebar dinámico + landing por rol) | molinangel |  |
+| [#8](https://github.com/diego-landaeta/CRM/issues/8) | Frontend: Settings — separar Categorías/Campos/Columnas por entidad (Leads/Clientes/Productos) | molinangel |  |
+| [#9](https://github.com/diego-landaeta/CRM/issues/9) | Frontend: Pipeline Kanban arrastrable en /leads | molinangel |  |
+| [#10](https://github.com/diego-landaeta/CRM/issues/10) | Frontend: Settings — completar TODOS los paneles faltantes | molinangel |  |
+| [#11](https://github.com/diego-landaeta/CRM/issues/11) | Frontend: Panel 'próximo gestor' en /leads — visualizar round-robin | molinangel |  |
+| [#12](https://github.com/diego-landaeta/CRM/issues/12) | Frontend: LeadDrawer popup mejorado + enrolar en secuencia desde lista | molinangel |  |
+| [#13](https://github.com/diego-landaeta/CRM/issues/13) | Backend: Activity feed (tabla + endpoint para 'qué pasó hoy') | esos2dev-oss |  |
+| [#14](https://github.com/diego-landaeta/CRM/issues/14) | Backend: WooCommerce orders sync + cron flexible (manual/diario/semanal) | esos2dev-oss |  |
+| [#15](https://github.com/diego-landaeta/CRM/issues/15) | Backend: Project types extension (educacion/ecommerce/servicios/inmobiliaria) | esos2dev-oss |  |
+| [#18](https://github.com/diego-landaeta/CRM/issues/18) | Frontend: Selector 'Webhook JSON / Mailhook email / Ambos' al crear webhook | molinangel |  |
+
+> Las mismas tareas existen en el repositorio de ISEIE, bloqueadas con la
+> etiqueta `espera-multicrm`: se hacen aquí primero y se replican cuando Diego
+> las aprueba.
+
+<!-- FIN-INDICE-TAREAS -->
