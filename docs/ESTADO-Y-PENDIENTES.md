@@ -330,6 +330,64 @@ tasa de cierre de Carlos (#39), filtros en Clientes (#40) y la limpieza de datos
 
 ---
 
+---
+
+## WhatsApp en produccion — 21/08/2026
+
+Lo que se probaba en pruebas ya corre en **los dos CRMs en produccion**: el chat
+con las conversaciones dentro del CRM, una sesion por gestora, el admin viendo y
+enlazando la de cada una, plantillas compartidas, notas de voz, responder a un
+mensaje concreto, el recorrido guiado y la pagina de ayuda.
+
+**El freno de escribir a desconocidos viene apagado.** Decision de Diego. Queda
+apuntado en el registro quien escribe a un numero que no es prospecto, pero no se
+impide: cuando el CRM se negaba, la gestora escribia desde su movil igual — sin
+registro, sin plantilla y sin los topes de ritmo.
+
+### Lo que hubo que arreglar para poder subirlo
+
+Lo que corria en pruebas **no estaba en ninguna rama entera**: era el trabajo de
+Angel con tres cambios nuestros copiados a mano encima. Al juntarlo salieron dos
+cosas:
+
+- **El freno tenia dos nombres con significados opuestos** —el suyo encendia, el
+  nuestro apagaba—. Queda uno solo, `WA_BLOQUEO_DESCONOCIDOS`, apagado. Si algun
+  `.env` conserva el viejo `WA_EXIGIR_CONSENTIMIENTO`, el servidor lo ignora y lo
+  avisa al arrancar en vez de obedecerlo en silencio.
+- **Una funcion rota en los dos entornos de pruebas.** `chat.controller.js`
+  llamaba a `ultimoLatido`, que `chat.service.js` ya no exportaba: lo pise al
+  copiar ese fichero suelto. `/api/whatsapp/sincronizacion` —lo que pregunta si
+  sigue entrando historial— reventaba. Arreglado en los cuatro entornos.
+
+Esa es la moraleja: **copiar ficheros sueltos a un servidor rompe cosas en
+silencio**. Lo que se sube, se sube desde una rama.
+
+### Como quedo cada sitio
+
+| | Migraciones 129 y 130 | Modulo | Frontal |
+|---|---|---|---|
+| MultiCRM produccion | aplicadas | 11 ficheros | publicado, ayuda incluida |
+| ISEIE produccion | aplicadas | 11 ficheros | publicado, ayuda incluida |
+| MultiCRM pruebas | ya estaban | al dia | sin tocar |
+| ISEIE pruebas | pendiente | al dia | sin tocar |
+
+Copias de seguridad antes de tocar: `crm_prod_db` 9,6 MB y `crm_iseie` 7,7 MB en
+`/var/backups/crm/`. Las conversaciones que ya habia siguen ahi, y la sesion
+conectada de ISEIE (`crm-u16`) aguanto el reinicio.
+
+### Lo que falta
+
+- **ISEIE pruebas no tiene Evolution configurado** en su `.env`, asi que alli el
+  WhatsApp no se puede probar. Si se quiere, hay que darle su propio prefijo de
+  sesion y su webhook, como se hizo con MultiCRM pruebas.
+- **Lo de Angel de la tarea #45** sigue como estaba: el aviso de configuracion
+  que se le ensena a la gestora, la vista previa de la imagen antes de mandarla,
+  el estado de «enviando» del audio y su duracion.
+- **Paridad de rutas**: en ISEIE `/leads` y `/clients` siguen en ingles; en
+  MultiCRM ya son `/prospectos` y `/clientes`. El resto de rutas si coinciden.
+
+---
+
 <!-- INDICE-TAREAS -->
 
 ## Todas las tareas abiertas
