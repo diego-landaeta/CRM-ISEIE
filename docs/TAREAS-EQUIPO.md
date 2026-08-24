@@ -108,6 +108,50 @@ cosas, el otro cómo se ven.
 
 ---
 
+## El aspecto que buscamos: SuiteDash y Zoho CRM
+
+**No es «que quede bonito». Hay una referencia concreta y está en el repo.**
+
+La maqueta que hizo Diego vive en `frontend/src/modules/suitedash-preview/` —1.347
+lineas— y se puede abrir en **https://360crm.tech/testeo2/suite-dash**. Eso es el
+patron a seguir, no una inspiracion vaga.
+
+Lo que hay que mirar de ella:
+
+- **Tarjetas planas con borde suave**, no cajas con sombra fuerte: 38 usos de
+  `rounded-md`, `shadow-sm`, y bordes de un solo tono.
+- **Bloques con titulo y subtitulo**: «Salud comercial · Estados y canales de los
+  contactos visibles». Cada bloque dice que es y para que sirve.
+- **Iconos en todo**, nunca emojis, y del mismo grosor.
+- **Cifras grandes arriba** —contactos, valor de la cartera, seguimientos
+  vencidos, automatizaciones— y el detalle debajo.
+- **Menu lateral con dos lineas por entrada**: el nombre y, mas pequeño, que hay
+  dentro. «Prospectos · Listado, pipeline y audiencias».
+- **Accesos clave** a la derecha, para no obligar a volver al menu.
+
+De **Zoho CRM** se toma la densidad: mucha informacion por pantalla sin que
+parezca apretada.
+
+### Lo que NO es
+
+No es un tema oscuro con degradados, ni tarjetas flotando con sombras grandes, ni
+colores de marca por todas partes. Es **formal y limpio**: se entiende de un
+vistazo y no cansa despues de ocho horas.
+
+`docs/COMPARATIVA-SUITEDASH.md` tiene el analisis de que cogemos de ellos y que
+no. La maqueta es el como; ese documento es el que.
+
+## Todo funciona en `/testeo` antes de pasar a produccion
+
+**Regla de Diego, 24/08/2026. Sin excepcion.**
+
+Produccion no es donde se prueba. Si algo no se ha visto funcionar en `/testeo`,
+no sube — da igual quien lo haya hecho ni lo pequeño que parezca.
+
+Esto vale tambien para nosotros: hoy se han subido arreglos directamente a
+produccion porque estaban rotas pantallas enteras, y aun asi cada uno se comprobo
+antes en pruebas. Ese es el orden.
+
 ## Una tarea no está hecha hasta que se ve
 
 **Regla de Diego, 24/08/2026. No es una preferencia.**
