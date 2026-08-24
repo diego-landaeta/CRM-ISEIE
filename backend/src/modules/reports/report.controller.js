@@ -67,42 +67,42 @@ function rangoDeQuery(req) {
   };
 }
 
-// GET /api/reports/ventas-asesora  -> detalle de ventas con su asesora
+// GET /api/informes/ventas-asesora  -> detalle de ventas con su asesora
 export async function ventasAsesora(req, res, next) {
   try {
     res.json({ success: true, data: await model.ventasPorAsesoraReport(rangoDeQuery(req)) });
   } catch (err) { next(err); }
 }
 
-// GET /api/reports/asesoras-mes  -> por asesora y mes: leads, ventas y cobrado
+// GET /api/informes/asesoras-mes  -> por asesora y mes: leads, ventas y cobrado
 export async function asesorasMes(req, res, next) {
   try {
     res.json({ success: true, data: await model.asesorasPorMes(rangoDeQuery(req)) });
   } catch (err) { next(err); }
 }
 
-// GET /api/reports/panel -> KPIs con comparativa y serie para la grafica
+// GET /api/informes/panel -> KPIs con comparativa y serie para la grafica
 export async function panel(req, res, next) {
   try {
     res.json({ success: true, data: await model.panelReportes(rangoDeQuery(req)) });
   } catch (err) { next(err); }
 }
 
-// GET /api/reports/paises  -> ranking de paises, deducido del prefijo telefonico
+// GET /api/informes/paises  -> ranking de paises, deducido del prefijo telefonico
 export async function paises(req, res, next) {
   try {
     res.json({ success: true, data: await model.paisesMasVendidos(rangoDeQuery(req)) });
   } catch (err) { next(err); }
 }
 
-// GET /api/reports/formaciones  -> ranking de formaciones
+// GET /api/informes/formaciones  -> ranking de formaciones
 export async function formaciones(req, res, next) {
   try {
     res.json({ success: true, data: await model.formacionesMasVendidas(rangoDeQuery(req)) });
   } catch (err) { next(err); }
 }
 
-// GET /api/reports/detalle -> las filas que hay detras de un numero del panel
+// GET /api/informes/detalle -> las filas que hay detras de un numero del panel
 export async function detalle(req, res, next) {
   try {
     const r = rangoDeQuery(req);
@@ -119,14 +119,14 @@ export async function detalle(req, res, next) {
   } catch (err) { next(err); }
 }
 
-// GET /api/reports/tasa-cierre -> el numero unico, con su desglose por meses.
+// GET /api/informes/tasa-cierre -> el numero unico, con su desglose por meses.
 export async function tasaCierre(req, res, next) {
   try {
     res.json({ success: true, data: await model.tasaDeCierre(rangoDeQuery(req)) });
   } catch (err) { next(err); }
 }
 
-// GET /api/reports/tasa-cierre/detalle?lado=cerrados|todos
+// GET /api/informes/tasa-cierre/detalle?lado=cerrados|todos
 // Las personas que hay detras de cada sumando, para el «¿de donde sale?».
 export async function tasaCierreDetalle(req, res, next) {
   try {
@@ -138,7 +138,7 @@ export async function tasaCierreDetalle(req, res, next) {
   } catch (err) { next(err); }
 }
 
-// GET /api/reports/aviso-sin-factura — que se va a quedar fuera del informe.
+// GET /api/informes/aviso-sin-factura — que se va a quedar fuera del informe.
 export async function avisoSinFactura(req, res, next) {
   try {
     const r = rangoDeQuery(req);

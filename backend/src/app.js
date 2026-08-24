@@ -125,7 +125,7 @@ app.get('/api', (_req, res) => {
         installation: '/api/installation',
         credentials: '/api/credentials',
         dossiers: '/api/dossiers',
-        reports: '/api/reports',
+        informes: '/api/informes',
         status: '/api/status',
       },
     },
