@@ -108,6 +108,41 @@ cosas, el otro cómo se ven.
 
 ---
 
+## Una tarea no está hecha hasta que se ve
+
+**Regla de Diego, 24/08/2026. No es una preferencia.**
+
+Da igual cuántas líneas tenga el PR: si al abrir `/testeo` no se aprecia la
+diferencia, la tarea **no está terminada**. Ni «a medias», ni «el cimiento está
+puesto»: no está.
+
+Esto salió de un caso concreto. Se entregaron cuatro PRs, 118 ficheros y más de
+3.900 líneas, y al abrir el CRM la respuesta fue: *«lo veo casi todo igual»*.
+Y era cierto — el trabajo estaba en tokens, tipografía y una pestaña de
+Configuración. Todo correcto, todo invisible.
+
+### Qué se entrega con cada tarea
+
+1. **Dónde mirarlo**: el enlace exacto de `/testeo`, no «en Configuración».
+2. **Qué se ve distinto**, en una frase que pueda comprobar quien no escribió el
+   código.
+3. **Una captura de antes y otra de después.** Si no se distinguen, la tarea
+   sigue abierta.
+
+### Por qué, y no es capricho
+
+Quien revisa no lee el código: **abre el CRM**. Si la diferencia no se ve, no se
+puede aprobar, ni corregir, ni saber si vamos bien. Un cimiento invisible puede
+ser necesario —los tokens lo eran— pero entonces **va dentro de la tarea que sí
+se ve**, no como entrega propia.
+
+### La trampa que hay que evitar
+
+Un PR puede decir `Closes #33` sin haber hecho la #33. Pasó: la tarea del marco
+—menú, cabecera, selector de proyecto— se dio por cerrada en un PR que no toca
+`Sidebar.jsx`, `AppLayout.jsx` ni `Navbar.jsx`. **Antes de cerrar una tarea, se
+comprueba en pantalla.**
+
 ## Decisiones que ya se tomaron
 
 Están aquí para no volver a discutirlas cada vez que alguien las encuentra en el
