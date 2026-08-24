@@ -415,6 +415,36 @@ mueve nada, mirar `docker logs crm-whatsapp | grep 'timeout of 60000ms'`. Si hay
 tiempos agotados, el problema no es WhatsApp ni el CRM: es que Evolution no
 alcanza al CRM.
 
+### Evolution tiene que guardar los mensajes — 24/08/2026
+
+Los dos contenedores venian con `DATABASE_SAVE_DATA_NEW_MESSAGE: "false"` y
+`DATABASE_SAVE_MESSAGE_UPDATE: "false"`. Suena razonable —el CRM ya guarda su
+copia, para que duplicar— hasta que alguien pulsa **«Descargar audio»**: el CRM le
+pide el fichero a Evolution por el identificador del mensaje y Evolution contesta
+`Message not found`, porque nunca lo guardo. De ahi el «este archivo ya no se
+puede recuperar».
+
+Y lo segundo, menos visible: sin `SAVE_MESSAGE_UPDATE` **los tics no avanzan
+nunca**. Los acuses de WhatsApp llegan, pero Evolution no puede emparejarlos con
+un mensaje que no tiene, asi que todo se queda en un tic aunque este entregado.
+
+Las dos encendidas en los dos servidores. Recrear el contenedor **no desenlaza
+nada**: la sesion vive en su base de datos y vuelve sola en unos segundos —
+comprobado dos veces, con una gestora trabajando.
+
+### Los sintomas que confunden
+
+Merece la pena tenerlos juntos, porque los tres se parecen y son cosas distintas:
+
+| Lo que se ve | Que es |
+|---|---|
+| «Conectado» pero no se mueve nada | Evolution no alcanza al CRM. Mirar los tiempos agotados |
+| Un tic que nunca avanza | Evolution no guarda las actualizaciones |
+| «El archivo ya no se puede recuperar» | Evolution no guarda los mensajes |
+| El chat con el nombre de la gestora | `pushName` guardado en un mensaje que sale |
+
+Ninguno es que WhatsApp haya tumbado el numero, que es lo primero que uno teme.
+
 ### Lo que falta
 
 - **ISEIE pruebas no tiene Evolution configurado** en su `.env`, asi que alli el
