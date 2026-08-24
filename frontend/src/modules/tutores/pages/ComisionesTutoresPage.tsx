@@ -230,27 +230,32 @@ export default function ComisionesTutoresPage() {
                           {Number(r.pagada) > 0 && ` · ${euros(r.pagada)} ya pagados`}
                           {Number(r.revertida) > 0 && ` · ${euros(r.revertida)} revertidos`}
                         </span>
-                        {/* El correo y la cuenta, aqui mismo. Para pagarle a alguien habia que
-                            abrir su ficha, copiar el IBAN y volver — uno por uno. */}
-                        <span className="text-xs text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 mt-0.5">
-                          {r.tutor_email
-                            ? <span className="inline-flex items-center gap-1 min-w-0">
-                                <Envelope size={12} weight="bold" className="shrink-0 opacity-70" />
-                                <span className="truncate">{r.tutor_email}</span>
-                              </span>
-                            : <span className="italic opacity-70">sin correo</span>}
-                          {r.tutor_iban
-                            ? <button type="button" title="Copiar el IBAN"
-                                onClick={(e) => { e.stopPropagation(); copiarIban(r.tutor_iban!); }}
-                                className="inline-flex items-center gap-1 min-w-0 hover:text-foreground">
-                                <Bank size={12} weight="bold" className="shrink-0 opacity-70" />
-                                <span className="font-mono tabular-nums truncate">{r.tutor_iban}</span>
-                                <Copy size={11} weight="bold" className="shrink-0 opacity-50" />
-                              </button>
-                            : <span className="italic opacity-70">sin IBAN</span>}
-                        </span>
                       </span>
                     </button>
+
+                    {/* El correo y la cuenta, en su propio hueco de la fila.
+                        Van FUERA del boton que despliega: dentro, copiar el IBAN
+                        abriria y cerraria el detalle de paso. */}
+                    <span className="hidden md:flex items-center gap-1.5 min-w-0 basis-64 text-xs text-muted-foreground">
+                      {r.tutor_email
+                        ? <>
+                            <Envelope size={13} weight="bold" className="shrink-0 opacity-70" />
+                            <span className="truncate" title={r.tutor_email}>{r.tutor_email}</span>
+                          </>
+                        : <span className="italic opacity-60">sin correo</span>}
+                    </span>
+
+                    <span className="hidden md:flex items-center gap-1.5 min-w-0 basis-56 text-xs text-muted-foreground">
+                      {r.tutor_iban
+                        ? <button type="button" title="Copiar el IBAN"
+                            onClick={(e) => { e.stopPropagation(); copiarIban(r.tutor_iban!); }}
+                            className="inline-flex items-center gap-1.5 min-w-0 hover:text-foreground">
+                            <Bank size={13} weight="bold" className="shrink-0 opacity-70" />
+                            <span className="font-mono tabular-nums truncate">{r.tutor_iban}</span>
+                            <Copy size={11} weight="bold" className="shrink-0 opacity-50" />
+                          </button>
+                        : <span className="italic opacity-60">sin IBAN</span>}
+                    </span>
 
                     <span className="text-base font-bold tabular-nums shrink-0">{euros(r.pendiente)}</span>
 
