@@ -463,9 +463,9 @@ Ninguno es que WhatsApp haya tumbado el numero, que es lo primero que uno teme.
 ## Todas las tareas abiertas
 
 Sacado de GitHub, no escrito a mano: **44 abiertas**. Para volver a
-generarlo, `scripts/indice_tareas.py`.
+generarlo, `scratchpad/indice_tareas.py`.
 
-### Fase 1 · Desbloquear · 5
+### Fase 1 · Desbloquear · 7
 
 | | Qué | Quién | |
 |---|---|---|---|
@@ -474,12 +474,13 @@ generarlo, `scripts/indice_tareas.py`.
 | [#22](https://github.com/diego-landaeta/CRM/issues/22) | Clave de IA y tope de gasto | Diego | **bloquea a otros** |
 | [#23](https://github.com/diego-landaeta/CRM/issues/23) | Usuario del CRM de pruebas para Fabián | Diego | **bloquea a otros** |
 | [#24](https://github.com/diego-landaeta/CRM/issues/24) | Decidir qué pasa con main | Diego |  |
+| [#62](https://github.com/diego-landaeta/CRM/issues/62) | WhatsApp: responder a un mensaje falla — la cita va como texto y Evolution espera un objeto | Ángel |  |
+| [#63](https://github.com/diego-landaeta/CRM/issues/63) | WhatsApp: dos endpoints que solo existen en el puente de Baileys, no en Evolution | Ángel |  |
 
-### Fase 2 · Construir · 20
+### Fase 2 · Construir · 18
 
 | | Qué | Quién | |
 |---|---|---|---|
-| [#25](https://github.com/diego-landaeta/CRM/issues/25) | WhatsApp · plantillas compartidas y registro del contacto | Ángel |  |
 | [#26](https://github.com/diego-landaeta/CRM/issues/26) | Página de estado del sistema | Ángel |  |
 | [#27](https://github.com/diego-landaeta/CRM/issues/27) | El envío de correo del CRM · la tubería | Ángel |  |
 | [#28](https://github.com/diego-landaeta/CRM/issues/28) | Recordatorios por correo | Ángel |  |
@@ -495,10 +496,9 @@ generarlo, `scripts/indice_tareas.py`.
 | [#38](https://github.com/diego-landaeta/CRM/issues/38) | Soporte de verdad | Yo | lleva SQL |
 | [#39](https://github.com/diego-landaeta/CRM/issues/39) | Tasa de cierre y baremo · lo de Carlos | Yo |  |
 | [#44](https://github.com/diego-landaeta/CRM/issues/44) | Sincronizar los proyectos de IA con el CRM · Ángel y Fabián | Ángel | compartida |
-| [#45](https://github.com/diego-landaeta/CRM/issues/45) | WhatsApp · el aviso, el tutorial y pulir lo que falta | Ángel |  |
-| [#47](https://github.com/diego-landaeta/CRM/issues/47) | WhatsApp · llamadas: registrarlas, y el manual | Ángel |  |
 | [#48](https://github.com/diego-landaeta/CRM/issues/48) | Recibir el origen de los leads (ChatGPT incluido) y categorizarlo | Diego |  |
 | [#50](https://github.com/diego-landaeta/CRM/issues/50) | Tipografía e iconos del apartado de administración (estilo formal) | Fabián |  |
+| [#64](https://github.com/diego-landaeta/CRM/issues/64) | WhatsApp: la ficha del prospecto en un popup, y que expandir no recargue el chat | Ángel |  |
 
 ### Fase 3 · Cerrar · 11
 
