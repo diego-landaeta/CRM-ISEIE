@@ -86,6 +86,8 @@ export interface ChatWhatsapp {
   lead_nombre: string | null;
   lead_status: string | null;
   project_id: number | null;
+  /** De que proyecto es el prospecto, si lo tiene. Para decirlo en la lista. */
+  proyecto_nombre?: string | null;
   es_grupo: boolean;
   no_escribir: boolean;
   motivo_no_escribir: string | null;

@@ -210,7 +210,16 @@ export default function ChatPage() {
 
   const cargarLista = useCallback(async () => {
     try {
-      const r = await chatApi.lista(projectId, deQuien);
+      // La lista NO se filtra por proyecto, a proposito.
+      //
+      // El WhatsApp de una gestora es UNA bandeja: sus conversaciones son de los
+      // proyectos que sean, y muchas de nadie todavia. Filtrando por el proyecto
+      // elegido se veian 6 de 28 — y lo peor no era no verlas: era mandar un
+      // mensaje, no encontrarlo en la lista y pensar que el CRM no lo habia
+      // guardado. Estaba guardado; estaba escondido.
+      //
+      // De que proyecto es cada una se dice en la propia fila.
+      const r = await chatApi.lista(null, deQuien);
       if (!r.success) return;
       const lista = r.data || [];
       // Si han aparecido conversaciones desde la ultima vuelta, el historial
@@ -503,7 +512,18 @@ export default function ChatPage() {
     imagen: '📷 Foto', video: '🎥 Video', audio: '🎤 Nota de voz',
     documento: '📄 Documento', sticker: 'Sticker',
   };
-  const adelantoDe = (c: ChatWhatsapp) => {
+  // De que proyecto es cada chat, dicho SIEMPRE.
+  //
+  // La lista ya no filtra por el proyecto elegido —el WhatsApp de una gestora es
+  // una sola bandeja— asi que hace falta decir de donde viene cada conversacion.
+  // Y las que no son de ningun proyecto tambien lo dicen: son las de alguien que
+  // aun no esta en el CRM, y saber eso de un vistazo es justo lo util.
+  const etiquetaDe = (c: ChatWhatsapp) =>
+    c.proyecto_nombre || (c.lead_id ? 'sin proyecto' : 'no es prospecto');
+
+  const adelantoDe = (c: ChatWhatsapp) => `${etiquetaDe(c)} · ${adelantoBase(c)}`;
+
+  const adelantoBase = (c: ChatWhatsapp) => {
     if (c.no_escribir) return 'no escribir';
     if (c.ultimo_texto) return c.ultimo_texto;
     if (c.ultimo_tipo && ADELANTO[c.ultimo_tipo]) return ADELANTO[c.ultimo_tipo];
