@@ -521,7 +521,6 @@ export default function ChatPage() {
   const etiquetaDe = (c: ChatWhatsapp) =>
     c.proyecto_nombre || (c.lead_id ? 'sin proyecto' : 'no es prospecto');
 
-  const adelantoDe = (c: ChatWhatsapp) => `${etiquetaDe(c)} · ${adelantoBase(c)}`;
 
   const adelantoBase = (c: ChatWhatsapp) => {
     if (c.no_escribir) return 'no escribir';
@@ -635,12 +634,25 @@ export default function ChatPage() {
             )}
             <ConversationList>
               {visibles.map((c) => (
-                <Conversation key={c.id} name={nombreDe(c)}
-                  info={adelantoDe(c)}
+                <Conversation key={c.id}
                   active={abierto === c.id}
                   unreadCnt={c.no_leidos || undefined}
                   onClick={() => setAbierto(c.id)}>
                   <Avatar name={nombreDe(c)}><Foto nombre={nombreDe(c)} url={c.avatar_url} grupo={c.es_grupo} /></Avatar>
+                  {/* Se pinta el contenido a mano en vez de pasar `name` e `info`,
+                      para poder poner la etiqueta del proyecto ARRIBA, al lado
+                      del nombre. Abajo, en el adelanto, se confundia con el
+                      texto del ultimo mensaje. Se conservan las clases del kit
+                      para no perder su estilo. */}
+                  <Conversation.Content>
+                    <div className="cs-conversation__name wa-fila-nombre">
+                      <span className="wa-fila-quien">{nombreDe(c)}</span>
+                      <span className={`wa-etiqueta${c.proyecto_nombre ? '' : ' wa-etiqueta--suelta'}`}>
+                        {etiquetaDe(c)}
+                      </span>
+                    </div>
+                    <div className="cs-conversation__info">{adelantoBase(c)}</div>
+                  </Conversation.Content>
                 </Conversation>
               ))}
             </ConversationList>

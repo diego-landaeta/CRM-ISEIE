@@ -728,3 +728,39 @@
 }
 .wa-voz-tiempo { font-size: 11px; color: var(--wa-apagado); flex-shrink: 0; min-width: 30px; }
 .wa-voz-mia .wa-voz-tiempo { color: rgba(233, 237, 239, 0.65); }
+
+/* La etiqueta del proyecto, al lado del nombre en la lista de chats.
+   Estaba abajo, en el adelanto del ultimo mensaje, y se confundia con el
+   propio mensaje. Arriba se lee de un vistazo y no roba sitio al texto. */
+.wa-fila-nombre {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  min-width: 0;
+}
+.wa-fila-quien {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wa-etiqueta {
+  flex: 0 0 auto;
+  font-size: .625rem;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: .02em;
+  padding: .18rem .38rem;
+  border-radius: .3rem;
+  background: hsl(var(--primary) / .14);
+  color: hsl(var(--primary));
+  white-space: nowrap;
+  max-width: 9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Sin proyecto: gris, para que no compita con las que si lo tienen. */
+.wa-etiqueta--suelta {
+  background: hsl(var(--muted-foreground) / .14);
+  color: hsl(var(--muted-foreground));
+  font-weight: 500;
+}

@@ -373,6 +373,7 @@ export async function comisiones({ periodo = null, tutorId = null, estado = null
 export async function resumenComisiones({ periodo = null, tutorId = null, projectId = null }) {
   const { rows } = await query(
     `SELECT tc.periodo, tc.tutor_id, u.nombre AS tutor,
+            u.email AS tutor_email, perfil.iban AS tutor_iban,
             COUNT(*)::int AS lineas,
             COALESCE(SUM(tc.base_calculo), 0) AS base,
             COALESCE(SUM(tc.importe) FILTER (WHERE tc.estado = 'pendiente'), 0) AS pendiente,
@@ -381,11 +382,14 @@ export async function resumenComisiones({ periodo = null, tutorId = null, projec
             MAX(tc.fecha_liquidacion) AS ultima_liquidacion
        FROM tutor_commissions tc
        JOIN users u ON u.id = tc.tutor_id
+       -- El IBAN y el correo viajan con el resumen: pagar a un profesor
+       -- obligaba a abrir su ficha aparte para copiar la cuenta, una a una.
+       LEFT JOIN tutor_profiles perfil ON perfil.user_id = tc.tutor_id
        LEFT JOIN products p ON p.id = tc.product_id
       WHERE ($1::char(7) IS NULL OR tc.periodo = $1)
         AND ($2::int IS NULL OR tc.tutor_id = $2)
         AND ($3::int IS NULL OR p.project_id = $3)
-      GROUP BY tc.periodo, tc.tutor_id, u.nombre
+      GROUP BY tc.periodo, tc.tutor_id, u.nombre, u.email, perfil.iban
       ORDER BY tc.periodo DESC, u.nombre`,
     [periodo, tutorId, projectId]
   );
