@@ -33,11 +33,56 @@ function detectChannel(utmSource, utmMedium) {
   return 'directo';
 }
 
+/**
+ * Saca las UTM de dentro de la propia direccion.
+ *
+ * Make manda la pagina donde la persona dejo sus datos, y esa direccion YA trae
+ * las UTM pegadas — es como llegan de Meta:
+ *
+ *   .../curso-de-coaching-familiar/?fbclid=...&utm_source=fb&utm_medium=paid
+ *      &utm_campaign=120244428100730715&utm_content=...&utm_term=...
+ *
+ * El CRM guardaba esa direccion entera y no la leia, asi que un lead de Meta se
+ * quedaba en «directo» teniendo `utm_source=fb` delante. Pedirle a Make que las
+ * mande otra vez aparte seria mandar dos veces el mismo dato y confiar en que
+ * nadie se olvide de una.
+ *
+ * Lo que venga suelto en el cuerpo MANDA sobre lo que diga la direccion: si
+ * alguien se molesto en mapearlo a mano, sabra por que.
+ */
+function utmsDeLaUrl(url) {
+  if (!url || typeof url !== 'string') return {};
+  let params;
+  try {
+    params = new URL(url).searchParams;
+  } catch {
+    return {};   // no es una direccion valida: no se inventa nada
+  }
+  const sacar = (clave) => {
+    const v = params.get(clave);
+    return v && v.trim() ? v.trim() : undefined;
+  };
+  return {
+    utm_source: sacar('utm_source'),
+    utm_medium: sacar('utm_medium'),
+    utm_campaign: sacar('utm_campaign'),
+    utm_content: sacar('utm_content'),
+    utm_term: sacar('utm_term'),
+  };
+}
+
 // ============================================================
 // WEBHOOK (publico, autenticado por API key)
 // ============================================================
 
 export async function processWebhook(slug, apiKey, leadData) {
+  // Antes de nada: si la direccion trae UTM y no vinieron sueltas, se usan.
+  {
+    const deLaUrl = utmsDeLaUrl(leadData?.landing_url);
+    for (const k of ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term']) {
+      if (!leadData[k] && deLaUrl[k]) leadData[k] = deLaUrl[k];
+    }
+  }
   const project = await leadModel.findProjectBySlug(slug);
   if (!project) throw new AppError('Proyecto no encontrado', 404, 'PROJECT_NOT_FOUND');
   if (project.webhook_api_key !== apiKey) throw new AppError('API key invalida', 401, 'INVALID_API_KEY');
