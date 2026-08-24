@@ -445,6 +445,38 @@ Merece la pena tenerlos juntos, porque los tres se parecen y son cosas distintas
 
 Ninguno es que WhatsApp haya tumbado el numero, que es lo primero que uno teme.
 
+### Las rutas del frontal contra las del servidor — 24/08/2026
+
+Tres veces el mismo fallo en un dia: al pasar las rutas a español se renombraron
+las llamadas del frontal y **no** los prefijos del servidor. Pantallas enteras
+pidiendo a una direccion que no contestaba, sin que nadie lo notara hasta que
+alguien abria esa pantalla.
+
+| Modulo | El frontal pide | El servidor servia |
+|---|---|---|
+| Informes | `/api/informes` | `/api/reports` |
+| Ventas | `/api/ventas` | `/api/sales` |
+| Secuencias de email | `/api/secuencias-email` | `/api/email-sequences` |
+| Mensajes (MultiCRM) | `/api/mensajes` | `/api/messages` |
+
+Los cuatro pasan a su nombre en español y **conservan el viejo con `alias`**, que
+no cuesta nada y evita romper integraciones o pestañas abiertas.
+
+**Para que no haya una quinta vez:** `scripts/auditoria_rutas.py`. Saca los
+prefijos y rutas de cada modulo del servidor, las llamadas del frontal con su
+fichero y su linea, y las cruza. Se corre sin tocar ningun servidor:
+
+    python scripts/auditoria_rutas.py
+
+Antes de esto: **21 llamadas huerfanas en MultiCRM y 14 en ISEIE**. Despues:
+ninguna en los dos. Conviene pasarlo antes de cada despliegue grande, y
+obligatoriamente despues de renombrar cualquier ruta.
+
+Ojo con leerlo mal: se compara **por prefijo**, no por camino exacto. Una llamada
+como `/leads/${id}` llega al analisis como `/api/leads`, asi que lo que se
+detecta es que el servidor no tenga NADA colgando de ahi — que es justo el fallo
+del renombrado.
+
 ### Lo que falta
 
 - **ISEIE pruebas no tiene Evolution configurado** en su `.env`, asi que alli el
