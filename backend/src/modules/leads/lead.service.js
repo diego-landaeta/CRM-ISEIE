@@ -76,13 +76,6 @@ function utmsDeLaUrl(url) {
 // ============================================================
 
 export async function processWebhook(slug, apiKey, leadData) {
-  // Antes de nada: si la direccion trae UTM y no vinieron sueltas, se usan.
-  {
-    const deLaUrl = utmsDeLaUrl(leadData?.landing_url);
-    for (const k of ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term']) {
-      if (!leadData[k] && deLaUrl[k]) leadData[k] = deLaUrl[k];
-    }
-  }
   const project = await leadModel.findProjectBySlug(slug);
   if (!project) throw new AppError('Proyecto no encontrado', 404, 'PROJECT_NOT_FOUND');
   if (project.webhook_api_key !== apiKey) throw new AppError('API key invalida', 401, 'INVALID_API_KEY');
@@ -103,6 +96,20 @@ export async function createFromExternalWebhook(projectId, leadData, _opts = {})
 }
 
 async function _createLeadCore(project, leadData) {
+  // Las UTM, sacadas de la propia direccion si no vinieron sueltas.
+  //
+  // Va AQUI y no en processWebhook porque hay dos puertas de entrada y por la
+  // otra —la de Make, `createFromExternalWebhook`— entran casi todos. Ponerlo en
+  // una sola dejaba fuera justo el camino que importa: el lead #3417 de ISAEG
+  // llego con `utm_source=fb` dentro de la direccion y se guardo como «directo».
+  //
+  // Este es el sitio por el que pasan las dos.
+  for (const k of ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term']) {
+    if (!leadData[k]) {
+      const deLaUrl = utmsDeLaUrl(leadData?.landing_url);
+      if (deLaUrl[k]) leadData[k] = deLaUrl[k];
+    }
+  }
   // Idempotency: si Make reintenta con el mismo key dentro de 24h, devolvemos
   // el lead que ya creamos en lugar de duplicar.
   if (leadData.idempotency_key) {
