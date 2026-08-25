@@ -205,6 +205,43 @@
 }
 /* Sin burbuja detras, la hora en gris claro se pierde sobre el fondo. */
 .wa-msg-sticker .wa-meta { color: var(--wa-apagado); }
+
+/* ── La llamada en el hilo ───────────────────────────────────────────────────
+ *
+ * Ni burbuja ni lado: una llamada no la escribio nadie, es algo que paso. Va
+ * centrada y con su propia pastilla, como el separador de fecha.
+ *
+ * Las diez reglas son porque el kit pinta el fondo con `--incoming` mas la
+ * clase de posicion (`--single`, `--first`...), y esa combinacion de cuatro
+ * clases gana a cualquier regla de tres. Es la misma pelea que con el sticker;
+ * se resuelve igual, nombrandolas todas.
+ */
+.wa-marco .cs-message.wa-msg-llamada { justify-content: center; }
+.wa-marco .cs-message.wa-msg-llamada .cs-message__content-wrapper { max-width: none; }
+.wa-marco .cs-message.wa-msg-llamada.cs-message--incoming .cs-message__content,
+.wa-marco .cs-message.wa-msg-llamada.cs-message--incoming.cs-message--first .cs-message__content,
+.wa-marco .cs-message.wa-msg-llamada.cs-message--incoming.cs-message--normal .cs-message__content,
+.wa-marco .cs-message.wa-msg-llamada.cs-message--incoming.cs-message--last .cs-message__content,
+.wa-marco .cs-message.wa-msg-llamada.cs-message--incoming.cs-message--single .cs-message__content {
+  background-color: transparent;
+  padding: 0;
+  border-radius: 0;
+}
+
+.wa-llamada {
+  display: inline-flex; align-items: center; gap: 7px;
+  margin: 2px auto;
+  padding: 5px 12px;
+  border-radius: 9999px;
+  background: var(--wa-cabecera);
+  color: var(--wa-apagado);
+  font-size: 12.5px;
+  box-shadow: 0 1px 1px rgba(0, 0, 0, .13);
+}
+/* La perdida es la unica que la gestora tiene que ATENDER: si no destaca, se
+ * pierde entre los mensajes y el ticket entero no habria servido de nada. */
+.wa-llamada-perdida { color: #f15c6d; }
+.wa-llamada-hora { opacity: .75; font-size: 11px; }
 .wa-audio { max-width: 250px; height: 40px; }
 .wa-doc { color: var(--wa-texto); text-decoration: underline; text-underline-offset: 2px; font-size: 13px; }
 .wa-sin-archivo { font-size: 12px; color: var(--wa-apagado); }
@@ -234,7 +271,7 @@
 }
 .wa-barra-lista .cs-search { flex: 1; }
 
-.wa-btn-nuevo, .wa-btn-prohibir, .wa-btn-micro {
+.wa-btn-nuevo, .wa-btn-prohibir, .wa-btn-ayuda, .wa-btn-llamar, .wa-btn-micro {
   display: grid; place-items: center;
   width: 34px; height: 34px;
   border-radius: 9999px;
@@ -242,10 +279,24 @@
   background: transparent;
   color: var(--wa-apagado);
 }
-.wa-btn-nuevo:hover, .wa-btn-prohibir:hover, .wa-btn-micro:hover {
+.wa-btn-nuevo:hover, .wa-btn-prohibir:hover, .wa-btn-ayuda:hover, .wa-btn-llamar:hover, .wa-btn-micro:hover {
   background: var(--wa-hover); color: var(--wa-texto);
 }
 .wa-btn-prohibir:hover { color: #f15c6d; }
+.wa-btn-ayuda:hover { color: var(--wa-verde); }
+
+/* El «?» de la barra de arriba. Va con el mismo aspecto que «Ampliar» y
+ * «Conexion», que son sus vecinos: son tres accesos de la misma fila. */
+.wa-btn-tour {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 0; background: transparent; cursor: pointer;
+  color: var(--wa-apagado);
+  font-size: inherit;
+}
+.wa-btn-tour:hover { background: var(--wa-hover); color: var(--wa-texto); }
+.wa-btn-llamar:hover { color: var(--wa-verde); }
 
 /* El microfono flota sobre la barra: el kit no trae boton de nota de voz.
  *
@@ -595,14 +646,21 @@
   position: fixed;
   border: 2px solid var(--wa-verde);
   border-radius: 8px;
-  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55);
+  /* El velo se pinta AQUI, con la sombra: por eso lo de dentro del recuadro se
+     ve claro y el resto oscuro, sin recortar nada. El halo verde de fuera es
+     para que el recuadro se encuentre de un vistazo en una pantalla grande. */
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55),
+              0 0 0 4px rgba(0, 168, 132, 0.35);
   pointer-events: none;
   transition: all 0.18s ease;
 }
 
 .wa-tour-cartel {
   position: fixed;
-  width: 300px;
+  /* En un movil de 320 px, 300 fijos mas los margenes se salen por un lado. El
+     componente sigue calculando con 300 para colocarlo; esto solo lo encoge
+     cuando no cabe, que es justo lo que hacia falta. */
+  width: min(300px, calc(100vw - 24px));
   background: var(--wa-panel);
   border: 1px solid var(--wa-borde);
   border-radius: 10px;
@@ -621,6 +679,16 @@
   margin: 0; padding: 13px 14px;
   font-size: 13px; line-height: 1.55;
   color: var(--wa-apagado);
+  /* Alto minimo para que el pie no baile.
+   *
+   * Cada paso tiene un texto de distinto largo, asi que el cartel cambiaba de
+   * alto y «Siguiente» aparecia a distinta altura en cada uno: se pulsa nueve
+   * veces seguidas y hay que ir persiguiendolo con el raton. Con un minimo que
+   * cubre los textos normales, el pie cae en el mismo sitio; los dos o tres
+   * pasos mas largos lo empujan un poco y no hay mas remedio, pero el salto
+   * pasa de constante a excepcional. */
+  min-height: 161px;
+  box-sizing: content-box;
 }
 .wa-tour-pie {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
@@ -628,7 +696,49 @@
   background: var(--wa-cabecera);
   border-top: 1px solid var(--wa-borde);
 }
-.wa-tour-cuenta { font-size: 11.5px; color: var(--wa-apagado); }
+/* El pie no se parte.
+ *
+ * Con la cuenta y dos botones en 300 px, el navegador partia las palabras: «2 de
+ * 9» en tres lineas y «Enlazar mi numero» en otras tres. Los botones no rompen
+ * texto, la cuenta no se encoge por debajo de lo que ocupa, y si aun asi no
+ * cabe, el pie pasa a dos filas en vez de deformarse. */
+.wa-tour-pie { flex-wrap: wrap; row-gap: 8px; }
+.wa-tour-cuenta {
+  font-size: 11.5px; color: var(--wa-apagado);
+  white-space: nowrap; flex: 0 0 auto;
+}
+.wa-tour-botones { flex-wrap: wrap; justify-content: flex-end; }
+.wa-tour-botones button { white-space: nowrap; }
+
+/* Cuando el paso LLEVA a algun sitio, ese boton ocupa su propia fila entera.
+ *
+ * «Atras» + «Enlazar mi numero» + la cuenta no caben en 300 px: se iban a una
+ * segunda fila igualmente, pero descolgados a la derecha y con el conjunto
+ * desequilibrado. Puesto a proposito y a todo lo ancho se lee como lo que es:
+ * lo que hay que pulsar. */
+.wa-tour-pie.wa-tour-con-accion { flex-wrap: wrap; }
+.wa-tour-pie.wa-tour-con-accion .wa-tour-accion {
+  flex: 1 0 100%;
+  /* La alineacion, aqui: al sacar el boton de `.wa-tour-botones` dejo de
+     heredar el `inline-flex` de aquel grupo, y el texto y la flecha se
+     apilaban en dos lineas con la flecha suelta debajo, a la izquierda. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+/* Cuanto queda, sin tener que leerlo. Va pegada al borde de arriba del pie. */
+.wa-tour-avance {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  height: 2px;
+  background: var(--wa-borde);
+}
+.wa-tour-avance span {
+  display: block; height: 100%;
+  background: var(--wa-verde);
+  transition: width 0.2s ease;
+}
 .wa-tour-botones { display: flex; gap: 6px; }
 .wa-tour-botones button { display: inline-flex; align-items: center; gap: 4px; }
 
@@ -691,6 +801,20 @@
  * Reproductor propio: el <audio controls> del navegador es un control del
  * sistema —blanco, de 250 px, con sus botones— que no se puede pintar de otro
  * color. En medio de un chat oscuro cantaba muchisimo. */
+
+/* La nota que este navegador no sabe reproducir.
+   Sale como enlace y no como un reproductor muerto: pulsar un boton que no
+   hace nada es peor que no tener boton. Lo unico que se puede hacer con ella
+   es bajarla y oirla con otra cosa, asi que es lo que se ofrece. */
+.wa-voz-rota { min-width: 0; padding: 2px 0; }
+.wa-voz-descargar {
+  font-size: 12px;
+  line-height: 1.4;
+  text-decoration: underline;
+  opacity: .85;
+  cursor: pointer;
+}
+.wa-voz-descargar:hover { opacity: 1; }
 
 .wa-voz {
   display: flex; align-items: center; gap: 9px;
@@ -763,4 +887,80 @@
   background: hsl(var(--muted-foreground) / .14);
   color: hsl(var(--muted-foreground));
   font-weight: 500;
+}
+
+/* ── Ver lo que vas a mandar, antes de mandarlo ──────────────────────────── */
+
+.wa-previa { max-width: 460px; }
+
+.wa-previa-lienzo {
+  display: flex; flex-wrap: wrap; gap: 10px;
+  justify-content: center;
+  padding: 14px;
+  max-height: 46vh; overflow-y: auto;
+  background: var(--wa-fondo);
+  border-bottom: 1px solid var(--wa-borde);
+}
+.wa-previa-uno {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  max-width: 190px;
+}
+.wa-previa-img {
+  max-width: 190px; max-height: 200px;
+  border-radius: 6px;
+  object-fit: contain;
+}
+.wa-previa-doc {
+  display: grid; place-items: center;
+  width: 90px; height: 90px;
+  border-radius: 6px;
+  background: var(--wa-hover);
+  color: var(--wa-apagado);
+}
+.wa-previa-nombre {
+  max-width: 190px;
+  font-size: 12px; color: var(--wa-texto);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.wa-previa-peso { font-size: 11px; color: var(--wa-apagado); }
+
+/* La nota de voz mientras sale: en gris, sin poder tocarla. */
+.wa-voz-saliendo { opacity: 0.6; pointer-events: none; }
+.wa-voz-saliendo .wa-voz-barra { animation: wa-latido 1.2s ease-in-out infinite; }
+
+
+/* ── La barra de arriba del chat, en movil ───────────────────────────────────
+ *
+ * Cuatro cosas en 393 px —el estado de la conexion, «Ampliar», «Como va esto» y
+ * «Conexion»— no caben, y el navegador las apretaba: «No tienes WhatsApp
+ * enlazado» salia partido en cinco lineas y «Como va esto» en tres.
+ *
+ * En pantalla estrecha el estado ocupa su fila y los tres accesos van debajo,
+ * en la suya. Y sin sus etiquetas: el icono basta, y con el `title` puesto
+ * quien dude lo tiene. */
+@media (max-width: 640px) {
+  .wa-barra-superior { flex-wrap: wrap; row-gap: 6px; }
+  /* El estado ocupa su fila entera. El puntito NO: es un circulo de 8 px y
+     estirarlo lo convertia en una barra naranja de lado a lado. */
+  .wa-barra-superior > span:not(.wa-punto-estado) { flex: 1 1 auto; }
+  .wa-barra-superior > .wa-punto-estado { flex: 0 0 auto; }
+  .wa-barra-superior > .wa-btn-ampliar { margin-left: 0; }
+  /* Solo los iconos: las tres etiquetas juntas no caben en una fila. */
+  .wa-barra-superior .wa-btn-ampliar span,
+  .wa-barra-superior .wa-btn-tour span,
+  .wa-barra-superior a span { display: none; }
+}
+
+
+/* ── La nota de voz, antes de mandarla ───────────────────────────────────────
+ *
+ * Parar dejo de ser enviar: se escucha y se decide. Ocupa la barra de escribir,
+ * igual que la cita, porque mientras hay una nota pendiente no se escribe. */
+.wa-marco .cs-input-toolbox.wa-voz-revisar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px;
+}
+.wa-voz-revisar-audio {
+  flex: 1 1 auto; min-width: 0;
+  height: 34px;
 }

@@ -38,14 +38,94 @@ if (process.env.WA_EXIGIR_CONSENTIMIENTO !== undefined) {
  */
 const pulso = new Map();   // instancia -> milisegundos del ultimo mensaje
 
+// Y el del HISTORIAL, aparte.
+//
+// «Sincronizando…» no se iba nunca. Miraba el pulso general, que se actualiza
+// con CUALQUIER mensaje — incluidos los que manda una misma, que vuelven por el
+// webhook como salientes. O sea que mientras estabas chateando, la pantalla
+// creia que seguia entrando historial y dejaba el aviso puesto para siempre.
+//
+// El historial es lo unico que hay que esperar; una conversacion normal no.
+const pulsoHistorial = new Map();
+
 export const ultimoLatido = (instancia) => pulso.get(instancia) || null;
+export const ultimoDelHistorial = (instancia) => pulsoHistorial.get(instancia) || null;
+
+/**
+ * Quien esta llamando AHORA MISMO.
+ *
+ * Lo de guardar solo el desenlace vale para el historial, pero llega tarde para
+ * avisar: cuando entra el `timeout` la llamada ya se perdio. Para dar el aviso
+ * mientras suena hace falta el `offer`, que no se guarda en la base —no es un
+ * hecho todavia, es algo que esta pasando— y vive aqui mientras dura.
+ *
+ * En memoria como el pulso: si el servidor se reinicia se pierde un aviso, y el
+ * peor caso es que la gestora vea la llamada perdida en el chat medio minuto
+ * despues. No merece una tabla.
+ */
+const sonando = new Map();   // instancia -> { id, telefono, nombre, conversacionId, esVideo, desde }
+
+// WhatsApp deja de llamar sobre los 30 segundos. Se da margen hasta 45 por si
+// el aviso de que termino no llega nunca —un webhook que se pierde, el
+// contenedor reiniciandose—: sin esto el cartel se quedaria puesto para siempre
+// y habria que recargar la pagina para quitarlo.
+const SUENA_MAX_MS = 45000;
+
+/**
+ * ¿Tiene WhatsApp enlazado? — para decidir cada cuanto pregunta la pantalla.
+ *
+ * El pulso vale cuando hay trafico, pero no basta: una gestora enlazada y
+ * tranquila no tiene pulso ninguno despues de reiniciar el servidor, y entonces
+ * la pantalla se pondria a preguntar cada minuto. Una llamada dura treinta
+ * segundos: el aviso no llegaria nunca, que es justo lo que se venia a resolver.
+ *
+ * Asi que cuando no hay pulso se mira la base UNA vez y se guarda el resultado
+ * cinco minutos. Es una consulta por persona cada cinco minutos, y ademas un
+ * EXISTS; lo que no puede es ir una por vuelta, porque esto lo pregunta cada
+ * pestaña abierta del CRM cada pocos segundos.
+ */
+const SESION_TTL_MS = 300000;
+const sesionConocida = new Map();   // instancia -> { hay, hasta }
+
+export async function tieneSesion(instancia) {
+  if (pulso.get(instancia)) return true;
+  const guardado = sesionConocida.get(instancia);
+  if (guardado && guardado.hasta > Date.now()) return guardado.hay;
+  try {
+    const hay = await model.hayConversaciones(instancia);
+    sesionConocida.set(instancia, { hay, hasta: Date.now() + SESION_TTL_MS });
+    return hay;
+  } catch (err) {
+    // Que esto falle NO puede tumbar la peticion.
+    //
+    // Lo pregunta cada pestaña abierta del CRM cada pocos segundos, y el
+    // manejador de errores escribe cada 5xx en la tabla de errores. Un mal
+    // momento de la base se convertiria en una inundacion de escrituras a esa
+    // misma base — el fallo alimentandose a si mismo.
+    //
+    // Se contesta que no hay sesion, que como mucho hace que la pantalla
+    // pregunte mas despacio hasta que se recupere. Y se guarda medio minuto
+    // para no repetir la consulta rota en cada vuelta.
+    logger.warn({ instancia, err: err.message }, 'WhatsApp: no se pudo mirar si hay sesion');
+    sesionConocida.set(instancia, { hay: false, hasta: Date.now() + 30000 });
+    return false;
+  }
+}
+
+/** La llamada en curso de esta sesion, o null. Se cae sola al caducar. */
+export function llamadaSonando(instancia) {
+  const l = sonando.get(instancia);
+  if (!l) return null;
+  if (Date.now() - l.desde > SUENA_MAX_MS) { sonando.delete(instancia); return null; }
+  return l;
+}
 
 // Los frenos. Esto es lo que de verdad protege el numero.
 //
 // Lo que hace que WhatsApp suspenda una linea no es tanto detectar el cliente
 // como que la gente la bloquee y la reporte. Por eso aqui no hay trucos para
-// esconderse: hay limites de ritmo y una negativa a escribir a quien no lo
-// pidio. Es menos vistoso y funciona mucho mejor.
+// esconderse: hay limites de ritmo y la negativa a escribir a quien pidio que
+// no le escriban. Es menos vistoso y funciona mucho mejor.
 
 // Ritmo humano. Una persona no manda 40 mensajes en un minuto, y un numero
 // nuevo que lo hace el primer dia es la señal mas clara que existe.
@@ -56,18 +136,6 @@ const TOPE_POR_DIA = Number(process.env.WA_TOPE_DIA || 300);
 // Espera entre mensajes seguidos, para que no salgan todos de golpe.
 const PAUSA_MS = Number(process.env.WA_PAUSA_MS || 1500);
 
-// El freno de «solo a quien lo pidio». Encendido salvo que se apague a mano.
-//
-// Se apaga para probar: al probar se escribe al numero de uno mismo, que ni es
-// prospecto ni ha escrito nunca, asi que el freno salta con razon y no deja
-// hacer nada. En produccion va encendido y no se toca.
-const EXIGIR_CONSENTIMIENTO = process.env.WA_EXIGIR_CONSENTIMIENTO !== 'false';
-if (!EXIGIR_CONSENTIMIENTO) {
-  logger.warn(
-    'WhatsApp: FRENO DE CONSENTIMIENTO APAGADO (WA_EXIGIR_CONSENTIMIENTO=false). '
-    + 'Se puede escribir a cualquiera. Esto es para probar: en produccion no puede quedarse asi.'
-  );
-}
 let ultimoEnvio = 0;
 
 async function limites(instancia) {
@@ -155,7 +223,20 @@ export async function enviar({ conversacionId, texto, usuarioId, citarWaId = nul
   // contesta al instante y sin escribir parece exactamente lo que es.
   await evolution.presencia(numeroDe(conv), 'composing', conv.instancia).catch(() => {});
 
-  const r = await evolution.enviarTexto(numeroDe(conv), texto, conv.instancia, citarWaId);
+  // Para citar hace falta mas que el identificador: Evolution quiere el jid de
+  // la conversacion y si el mensaje citado era nuestro. Los dos estan guardados.
+  let cita = null;
+  if (citarWaId) {
+    const citado = await model.mensajePorWaId(citarWaId).catch(() => null);
+    cita = {
+      waId: citarWaId,
+      jid: conv.jid,
+      mio: citado?.direccion === 'saliente',
+      texto: citado?.texto || '',
+    };
+  }
+
+  const r = await evolution.enviarTexto(numeroDe(conv), texto, conv.instancia, cita);
   const fila = await model.guardarMensaje({
     conversacionId, waId: r.waId, direccion: 'saliente', tipo: 'texto',
     texto, estado: r.ok ? 'enviado' : 'fallido', enviadoPor: usuarioId, ts: new Date(),
@@ -175,13 +256,55 @@ export async function enviar({ conversacionId, texto, usuarioId, citarWaId = nul
  * de reproducir—, que es como trabajan las gestoras; mandarlo como fichero
  * adjunto seria inutil.
  */
-export async function enviarAdjunto({ conversacionId, buffer, mimetype, nombreArchivo, pie, usuarioId }) {
+export async function enviarAdjunto({ conversacionId, buffer, mimetype, nombreArchivo, pie, usuarioId, segundos = null }) {
   const conv = await permitirEnvio(conversacionId);
   const numero = numeroDe(conv);
-  const base64 = buffer.toString('base64');
-  const esAudio = /^audio\//.test(mimetype || '');
+  let esAudio = /^audio\//.test(mimetype || '');
 
-  await evolution.presencia(numero, esAudio ? 'recording' : 'composing', conv.instancia).catch(() => {});
+  // La nota de voz se convierte AQUI, antes de mandarla.
+  //
+  // Lo que graba el navegador es webm, porque Chrome no sabe grabar otra cosa.
+  // Mandandolo tal cual, la nota llegaba muda al movil; mandando el MISMO audio
+  // ya convertido a ogg, se oia. Comprobado con la misma grabacion por los dos
+  // caminos, con identica duracion y onda: lo unico distinto era quien convertia.
+  //
+  // Convirtiendo aqui sale lo mismo desde produccion y desde local, en vez de
+  // depender de los ajustes de Evolution en un sitio y del puente en el otro.
+  if (esAudio) {
+    const { aNotaDeVoz } = await import('./audio.service.js');
+    const ogg = await aNotaDeVoz(buffer);
+    if (ogg) {
+      buffer = ogg;
+      mimetype = 'audio/ogg; codecs=opus';
+      nombreArchivo = 'nota-de-voz.ogg';
+    } else {
+      // Sin conversion NO se manda como nota de voz: llegaria muda y en el chat
+      // parece enviada. Mejor que salga como fichero adjunto, que se puede
+      // descargar y abrir, y que quede dicho en el registro.
+      logger.warn({ conversacionId }, 'WhatsApp: nota de voz sin convertir, va como adjunto');
+      esAudio = false;
+    }
+  }
+
+  const base64 = buffer.toString('base64');
+
+  // El «grabando audio…» NO se manda antes de una nota de voz.
+  //
+  // Es la unica cosa que hacia el camino del CRM y no hacia el envio directo al
+  // puente — y en las pruebas todo lo que salio por aqui llego mudo al movil
+  // («este audio ya no esta disponible») mientras que lo mismo, byte por byte,
+  // enviado sin esta linea, sonaba. La presencia abre un aviso de estado sobre
+  // el mismo chat y programa su apagado a los ~1,2 s, que cae justo encima de
+  // la subida del audio.
+  //
+  // Ademas no aporta nada: la nota YA esta grabada cuando se llama, asi que el
+  // aviso dura un suspiro y acto seguido aparece el audio. Es decorado.
+  //
+  // Para lo demas —imagenes, documentos— se mantiene: ahi si tiene sentido y
+  // ahi nunca ha dado problema.
+  if (!esAudio) {
+    await evolution.presencia(numero, 'composing', conv.instancia).catch(() => {});
+  }
 
   const r = esAudio
     ? await evolution.enviarAudio(numero, base64, conv.instancia)
@@ -192,15 +315,48 @@ export async function enviarAdjunto({ conversacionId, buffer, mimetype, nombreAr
 
   // Se guarda una copia nuestra: WhatsApp no deja recuperar despues lo que se
   // mando, y sin esto el chat del CRM enseñaria un hueco.
+  //
+  // OJO CON LAS NOTAS DE VOZ. Lo que graba el navegador es **webm**, porque
+  // Chrome no sabe grabar otra cosa. A WhatsApp le llega convertido a ogg/opus
+  // —lo hace Evolution—, pero la copia que se guardaba aqui era el webm crudo,
+  // y esa es la que reproduce el CRM.
+  //
+  // Resultado: la nota se oye en el navegador de un ordenador y NO se oye en el
+  // movil. Safari de iOS no reproduce webm, ni en audio ni en video, y ahi no
+  // hay apaño de reproductor que valga. Se veia como «el audio ya no esta
+  // disponible» y parecia un fallo del envio, cuando el envio estaba bien.
+  //
+  // Asi que para el audio la copia NO es lo que subio el navegador: se pide de
+  // vuelta el fichero ya convertido, el mismo que tiene quien lo recibe. Un
+  // viaje mas, solo al mandar una nota de voz, y queda igual en local y en
+  // produccion — el camino de bajada ya existe y es el que usa «descargar».
   let guardado = null;
-  try {
-    const ext = (nombreArchivo || '').split('.').pop() || 'bin';
-    const ruta = `whatsapp/${conv.instancia}/env-${Date.now()}-${Math.random().toString(16).slice(2, 10)}.${ext}`;
-    const { saveLocal } = await import('../../shared/services/localStorage.service.js');
-    await saveLocal(ruta, buffer);
-    guardado = ruta;
-  } catch (err) {
-    logger.warn({ err: err.message }, 'WhatsApp: no se pudo guardar copia del adjunto enviado');
+  let mimeGuardado = mimetype;
+  if (esAudio && r.ok && r.waId) {
+    const media = await import('./media.service.js');
+    const bajado = await media.bajarYGuardar({
+      key: { remoteJid: conv.jid, fromMe: true, id: r.waId },
+      message: null,
+      instancia: conv.instancia,
+    }).catch(() => null);
+    if (bajado?.ruta) {
+      guardado = bajado.ruta;
+      mimeGuardado = bajado.mime || 'audio/ogg; codecs=opus';
+    }
+  }
+
+  // Para todo lo demas —y si lo de arriba no salio— se guarda lo que subio el
+  // navegador, que es exactamente lo que se mando.
+  if (!guardado) {
+    try {
+      const ext = (nombreArchivo || '').split('.').pop() || 'bin';
+      const ruta = `whatsapp/${conv.instancia}/env-${Date.now()}-${Math.random().toString(16).slice(2, 10)}.${ext}`;
+      const { saveLocal } = await import('../../shared/services/localStorage.service.js');
+      await saveLocal(ruta, buffer);
+      guardado = ruta;
+    } catch (err) {
+      logger.warn({ err: err.message }, 'WhatsApp: no se pudo guardar copia del adjunto enviado');
+    }
   }
 
   const fila = await model.guardarMensaje({
@@ -208,7 +364,7 @@ export async function enviarAdjunto({ conversacionId, buffer, mimetype, nombreAr
     direccion: 'saliente',
     tipo: esAudio ? 'audio' : /^image\//.test(mimetype) ? 'imagen' : /^video\//.test(mimetype) ? 'video' : 'documento',
     texto: pie || null,
-    mediaUrl: guardado, mediaMime: mimetype,
+    mediaUrl: guardado, mediaMime: mimeGuardado,
     nombreArchivo,
     estado: r.ok ? 'enviado' : 'fallido', enviadoPor: usuarioId, ts: new Date(),
   });
@@ -228,6 +384,8 @@ export async function recibir(cuerpo) {
 
   // Acuses de entrega y lectura: es lo que pinta el doble tic.
   if (/messages[._]update/i.test(evento)) return acuse(cuerpo);
+  // Llamadas. Van por su propio evento, no por messages.upsert.
+  if (/^call$/i.test(evento)) return llamada(cuerpo);
   if (evento && !/messages[._]upsert/i.test(evento)) return { ignorado: evento };
 
   const datos = cuerpo?.data || cuerpo;
@@ -323,6 +481,9 @@ export async function recibir(cuerpo) {
   pulso.set(instancia, Date.now());
 
   const esHistorial = Boolean(cuerpo?.historial);
+  // Solo lo viejo cuenta como «sigue entrando historial». Lo de ahora es
+  // conversacion, y no hay nada que esperar.
+  if (esHistorial) pulsoHistorial.set(instancia, Date.now());
   let enCola = false;
   if (fila && tipo !== 'texto' && tipo !== 'otro') {
     if (media.mereceDescarga({ tipo, ts: fila.ts, esHistorial })) {
@@ -332,6 +493,145 @@ export async function recibir(cuerpo) {
   }
 
   return { conversacionId: conv.id, guardado: Boolean(fila), duplicado: !fila, tipo, enCola };
+}
+
+/**
+ * Cuando paso, venga como venga.
+ *
+ * Baileys manda un Date y al pasar por JSON llega como texto ISO, que es lo
+ * normal. Pero no se puede dar por hecho: si llegara en segundos —como hace
+ * `messageTimestamp` en los mensajes— saldria una llamada fechada en 1970, y si
+ * llegara rota, `new Date()` daria «Invalid Date», Postgres rechazaria la fila y
+ * la llamada se perderia entera sin que nadie se entere.
+ *
+ * Ante la duda, la hora de ahora: una llamada fechada con un segundo de
+ * diferencia sigue siendo util; una llamada que no se guarda, no.
+ */
+function cuandoFue(valor) {
+  if (valor == null) return new Date();
+  // Un numero es marca de tiempo. Por debajo de 10^11 son segundos: en
+  // milisegundos esa cifra seria 1973, y no hay llamadas de WhatsApp de 1973.
+  if (typeof valor === 'number' || /^\d+$/.test(String(valor))) {
+    const n = Number(valor);
+    const d = new Date(n < 1e11 ? n * 1000 : n);
+    return Number.isNaN(d.getTime()) ? new Date() : d;
+  }
+  const d = new Date(valor);
+  return Number.isNaN(d.getTime()) ? new Date() : d;
+}
+
+/**
+ * call: alguien ha llamado.
+ *
+ * Hoy una llamada perdida no dejaba rastro en ningun sitio — ni la gestora sabia
+ * que la habian llamado ni el CRM se enteraba. Se apunta como una linea mas del
+ * hilo, que es donde se mira.
+ *
+ * Evolution manda un aviso por CADA cambio de estado de la misma llamada
+ * (`offer`, `ringing`, `timeout`...), asi que si se guardaran todos saldrian
+ * cinco lineas por una sola llamada. Se guarda solo el desenlace, y ademas el
+ * identificador va como `call:<id>`: el indice unico de `wa_id` remata el
+ * duplicado aunque el aviso se reintente.
+ *
+ * No hace falta migracion: `tipo` no tiene lista cerrada de valores.
+ */
+async function llamada(cuerpo) {
+  const datos = cuerpo?.data || cuerpo;
+  const instancia = cuerpo?.instance || cuerpo?.instanceName || null;
+  if (!instancia) return { ignorado: 'llamada sin instancia' };
+
+  const id = datos?.id;
+  if (!id) return { ignorado: 'llamada sin id' };
+
+  const estado = String(datos?.status || '').toLowerCase();
+  // Solo el desenlace se GUARDA. Lo de en medio no es un hecho todavia.
+  const COMO_ACABO = { timeout: 'perdida', reject: 'rechazada', accept: 'contestada' };
+  const desenlace = COMO_ACABO[estado];
+
+  // `from` puede venir como `@lid`, que identifica a la persona sin dar su
+  // numero. Baileys manda el telefono aparte en `callerPn` cuando lo sabe.
+  const quienLlama = datos?.callerPn || datos?.from;
+  if (!quienLlama) return { ignorado: 'llamada sin origen' };
+  // En grupo, la conversacion es el grupo; en persona, quien llama.
+  const jid = datos?.isGroup ? (datos?.chatId || datos?.groupJid || quienLlama) : quienLlama;
+
+  // `terminate` dice que la llamada acabo, pero no COMO: llega detras de un
+  // accept o un reject que ya se guardaron. No se guarda nada —seria adivinar—
+  // pero si se apaga el cartel. Sin esto se quedaria puesto hasta caducar solo,
+  // y son 45 segundos avisando de una llamada que ya no existe.
+  if (estado === 'terminate') {
+    sonando.delete(instancia);
+    return { ignorado: 'llamada terminada' };
+  }
+  // Ni `offer` ni el desenlace: son estados intermedios del protocolo.
+  if (!desenlace && estado !== 'offer') return { ignorado: `llamada en curso (${estado})` };
+
+  const conv = await model.conversacionDe({ instancia, jid });
+
+  // Esta sonando. Se apunta en memoria para que la pantalla lo cante, se busca
+  // el nombre AQUI —una vez, y es un aviso raro— y no en cada consulta de la
+  // pantalla, que se repite cada pocos segundos y seria una consulta por vuelta.
+  if (!desenlace) {
+    sonando.set(instancia, {
+      id: datos.id,
+      telefono: conv.telefono,
+      nombre: conv.nombre_push || null,
+      conversacionId: conv.id,
+      esVideo: Boolean(datos?.isVideo),
+      esGrupo: Boolean(datos?.isGroup),
+      desde: Date.now(),
+    });
+    return { conversacionId: conv.id, sonando: true, tipo: 'llamada' };
+  }
+
+  // Ya no suena: se quita el cartel. Da igual como acabara — contestada en el
+  // movil, rechazada o perdida—, lo que no puede es seguir avisando.
+  sonando.delete(instancia);
+  const fila = await model.guardarMensaje({
+    conversacionId: conv.id,
+    waId: `call:${id}`,
+    direccion: 'entrante',
+    tipo: 'llamada',
+    // El desenlace en seco, no la frase. La pantalla decide como se dice, y asi
+    // se puede filtrar por «perdidas» sin buscar dentro de un texto.
+    texto: desenlace,
+    // Para una llamada, «de que tipo de medio es» si significa algo.
+    mediaMime: datos?.isVideo ? 'video' : 'audio',
+    ts: cuandoFue(datos?.date),
+  });
+
+  // Y en la ficha del prospecto, que es donde mira quien no entra en WhatsApp.
+  //
+  // Solo si el mensaje se guardo de verdad: cuando `fila` viene vacia es que ese
+  // aviso ya habia entrado —Evolution reintenta— y sin esta condicion la misma
+  // llamada saldria dos y tres veces en el historial de contactos.
+  if (fila && conv.lead_id) {
+    // Escritas enteras, las dos formas. Pegar «Video» delante daba
+    // «VideoLlamada rechazada», con la ele en mayuscula en mitad de la palabra.
+    const COMO_SE_CUENTA = {
+      perdida:    { voz: 'Llamada perdida por WhatsApp',    video: 'Videollamada perdida por WhatsApp' },
+      rechazada:  { voz: 'Llamada rechazada por WhatsApp',  video: 'Videollamada rechazada por WhatsApp' },
+      contestada: { voz: 'Llamada contestada por WhatsApp', video: 'Videollamada contestada por WhatsApp' },
+    };
+    const comoSeCuenta = COMO_SE_CUENTA[desenlace];
+    try {
+      await model.apuntarInteraccion({
+        leadId: conv.lead_id,
+        nota: comoSeCuenta
+          ? (datos?.isVideo ? comoSeCuenta.video : comoSeCuenta.voz)
+          : 'Llamada por WhatsApp',
+        userId: evolution.usuarioDeInstancia(instancia),
+        fecha: fila.ts,
+      });
+    } catch (err) {
+      // Que no se apunte en la ficha no puede tirar el webhook: la llamada YA
+      // esta guardada en el chat, que es lo que no se puede perder.
+      logger.warn({ instancia, err: err.message }, 'WhatsApp: llamada guardada pero no apuntada en la ficha');
+    }
+  }
+
+  pulso.set(instancia, Date.now());
+  return { conversacionId: conv.id, guardado: Boolean(fila), duplicado: !fila, tipo: 'llamada', desenlace };
 }
 
 /** messages.update: WhatsApp dice que un mensaje nuestro llego o se leyo. */

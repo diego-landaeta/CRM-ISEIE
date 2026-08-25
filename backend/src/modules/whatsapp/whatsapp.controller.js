@@ -12,6 +12,27 @@ function proyecto(req) {
 const esAdmin = (req) => ['admin', 'superadmin', 'soporte'].includes(req.user.role);
 
 // GET /api/whatsapp/templates?projectId=N
+/**
+ * Convierte «esa tabla no existe» en algo que se entienda.
+ *
+ * Leer sin la migracion 122 devuelve lista vacia y ya esta. Pero escribir SI
+ * tiene que decir algo: con un 500 la pantalla pone «error del sistema» y quien
+ * intenta guardar una plantilla no sabe si es culpa suya, si se ha perdido el
+ * texto, ni a quien preguntar.
+ *
+ * 409 y no 5xx a proposito: el manejador tapa los 5xx con un mensaje generico,
+ * y este mensaje concreto es justo lo unico util que se puede decir.
+ */
+function siFaltaLaTabla(err) {
+  if (err?.code === '42P01') {
+    return new AppError(
+      'Las plantillas todavia no estan disponibles: falta un paso de instalacion en el servidor. Avisa a quien lleve el CRM.',
+      409, 'FALTA_MIGRACION',
+    );
+  }
+  return err;
+}
+
 export async function listTemplates(req, res, next) {
   try {
     res.json({ success: true, data: await model.listTemplates({
@@ -36,7 +57,7 @@ export async function createTemplate(req, res, next) {
       ownerId: req.user.userId, createdBy: req.user.userId,
     });
     res.status(201).json({ success: true, data: row });
-  } catch (err) { next(err); }
+  } catch (err) { next(siFaltaLaTabla(err)); }
 }
 
 // Quien puede tocar esta plantilla: la suya siempre; las compartidas, solo admin.
@@ -55,7 +76,7 @@ export async function updateTemplate(req, res, next) {
     const parsed = updateSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError(parsed.error.issues[0]?.message || 'Datos invalidos', 400, 'VALIDATION_ERROR');
     res.json({ success: true, data: await model.updateTemplate(parseInt(req.params.id), parsed.data) });
-  } catch (err) { next(err); }
+  } catch (err) { next(siFaltaLaTabla(err)); }
 }
 
 // DELETE /api/whatsapp/templates/:id
@@ -64,7 +85,7 @@ export async function deleteTemplate(req, res, next) {
     await permitida(req, parseInt(req.params.id));
     await model.deleteTemplate(parseInt(req.params.id));
     res.json({ success: true });
-  } catch (err) { next(err); }
+  } catch (err) { next(siFaltaLaTabla(err)); }
 }
 
 // GET /api/whatsapp/cola?projectId=N&responsableId=&estado=&productoId=&sinContactar=
@@ -103,177 +124,18 @@ const clave = (userId) => `${CRM}-${userId}`;
 // Encender una sala tarda ~20 s y el gestor espera hasta 45 a que conteste,
 // asi que la espera de aqui tiene que ser mayor o el CRM se rendiria antes de
 // tiempo y diria que fallo algo que en realidad estaba arrancando bien.
-async function pedirSalas(ruta, metodo = 'GET', esperaMs = 20000) {
-  if (!SALAS || !SALAS_TOKEN) return null;
-  try {
-    const r = await fetch(`${SALAS}${ruta}`, {
-      method: metodo,
-      headers: { 'x-salas-token': SALAS_TOKEN },
-      signal: AbortSignal.timeout(esperaMs),
-    });
-    return r.ok ? await r.json() : null;
-  } catch { return null; }
-}
-
-// GET /api/whatsapp/equipo?projectId=N  — el panel del admin.
-export async function equipo(req, res, next) {
-  try {
-    if (!esAdmin(req)) throw new AppError('Solo un administrador ve el equipo', 403, 'FORBIDDEN');
-    const gente = await model.equipo(proyecto(req));
-    const salas = (await pedirSalas('/salas'))?.salas || [];
-    const porClave = new Map(salas.map((s) => [s.clave, s]));
-
-    res.json({ success: true, data: {
-      // Si no hay gestor de salas configurado se dice, en vez de pintar a todo
-      // el mundo como «sin vincular», que seria mentir.
-      configurado: Boolean(SALAS && SALAS_TOKEN),
-      gente: gente.map((u) => {
-        const s = porClave.get(clave(u.id));
-        return {
-          id: u.id, nombre: u.nombre, email: u.email, role: u.role,
-          disponible: u.disponible, ultimoAcceso: u.last_login_at,
-          // «creada» significa que ya tiene sala; si ademas esta encendida, hay
-          // alguien dentro o la ha usado hace poco.
-          creada: Boolean(s), encendida: Boolean(s?.encendida), desde: s?.desde || null,
-        };
-      }),
-    }});
-  } catch (err) { next(err); }
-}
-
-// POST /api/whatsapp/equipo/:userId/abrir  — enciende su sala y da la direccion.
-export async function abrirSala(req, res, next) {
-  try {
-    if (!esAdmin(req)) throw new AppError('Solo un administrador entra en la sala de otra persona', 403, 'FORBIDDEN');
-    const userId = parseInt(req.params.userId);
-    if (!userId) throw new AppError('userId invalido', 400, 'BAD_REQUEST');
-    // El panel solo lista a quien tiene derecho, pero la ruta acepta cualquier
-    // userId: sin esto, un userId escrito a mano abre una sala que luego no
-    // sale en ese mismo panel.
-    if (!await model.tieneSalaPropia(userId)) {
-      throw new AppError('Esa persona no tiene WhatsApp propio', 400, 'SIN_SALA_PROPIA');
-    }
-    if (!SALAS || !SALAS_TOKEN) throw new AppError('No hay gestor de salas configurado en el servidor', 503, 'NO_SALAS');
-
-    const r = await pedirSalas(`/sala?clave=${clave(userId)}`, 'POST', 60000);
-    if (!r || r.ranura === undefined) throw new AppError('El gestor de salas no ha podido abrirla', 502, 'SALAS_ERROR');
-    // El gestor espera a que la sala conteste antes de responder. Si aun asi no
-    // esta lista, es que algo va mal: mejor decirlo que enseñar un marco con
-    // «conexion rechazada», que parece que la herramienta esta rota.
-    if (r.lista === false) {
-      throw new AppError('La sala no ha arrancado a tiempo. Vuelve a intentarlo en un momento.', 504, 'SALA_LENTA');
-    }
-
-    res.json({ success: true, data: {
-      userId,
-      ranura: r.ranura,
-      nueva: Boolean(r.nueva),
-      url: await direccionSala(req, r.ranura, true),
-    }});
-  } catch (err) { next(err); }
-}
-
-// POST /api/whatsapp/equipo/:userId/latido — «sigo mirando, no la apagues».
-export async function latido(req, res, next) {
-  try {
-    const userId = req.user.role === 'gestor' ? req.user.userId : parseInt(req.params.userId);
-    await pedirSalas(`/latido?clave=${clave(userId)}`, 'POST');
-    res.json({ success: true, data: { ok: true } });
-  } catch (err) { next(err); }
-}
-
-// La direccion completa de una sala, con la sesion ya dentro.
-async function direccionSala(req, ranura, mandaAqui) {
-  const base = (process.env.WHATSAPP_NEKO_BASE || '').replace(/\/+$/, '');
-  const raiz = ranura === null || ranura === undefined
-    ? base                       // la sala unica de las pruebas
-    : `${base.replace(/\/wa$/, '')}/wa/s${ranura}`;
-  const cl = mandaAqui
-    ? (process.env.WHATSAPP_NEKO_ADMIN_PASSWORD || process.env.WHATSAPP_NEKO_USER_PASSWORD || '')
-    : (process.env.WHATSAPP_NEKO_USER_PASSWORD || '');
-  const p = new URLSearchParams({
-    usr: await model.nombreDe(req.user.userId),
-    embed: '1', show_side: '0', mute_chat: '1',
-  });
-  if (cl) p.set('pwd', cl);
-  return `${raiz}/?${p.toString()}`;
-}
-
-// GET /api/whatsapp/sala?userId=  — donde vive el WhatsApp Web de esta persona.
+// Aqui vivian el gestor de salas y el panel del equipo: pedirSalas, equipo,
+// abrirSala, latido, direccionSala y sala.
 //
-// La direccion base sale de WHATSAPP_NEKO_BASE, en el .env del servidor: asi se
-// cambia sin reconstruir el frontal. Cada gestora tiene su propia sala, que es
-// lo que permite varias sesiones a la vez sin que se pisen, y que un admin
-// pueda entrar en la de cualquiera.
+// Eran del metodo viejo —cada gestora trabajando en un navegador remoto—, que
+// se retiro: el servicio de salas esta parado y sus contenedores borrados. Las
+// rutas /sala y /equipo se quitaron con el, asi que estas funciones llevaban
+// dias sin que nadie pudiera llamarlas.
 //
-// La contraseña de la sala la pone el SERVIDOR y viaja ya dentro de la
-// direccion. Es deliberado: quien llega aqui ya ha pasado por el login del CRM,
-// y encontrarse un segundo usuario y contraseña para «entrar otra vez» es la
-// forma mas rapida de que una gestora abandone la herramienta. El navegador
-// remoto no es un sitio aparte al que haya que acceder: es una pieza de esta
-// pantalla.
+// Se borran en vez de dejarlas ahi. Codigo al que no se puede llegar solo sirve
+// para que alguien lo lea y crea que hace algo — y una de ellas ademas enseñaba
+// un aviso nombrando WHATSAPP_NEKO_BASE, que es justo lo que no tiene que leer
+// una gestora.
 //
-// La clave de admin —la unica que permite quitarle el mando a otro— no se le
-// entrega jamas a una gestora: se elige aqui segun el rol, no en el frontal.
-export async function sala(req, res, next) {
-  try {
-    const base = (process.env.WHATSAPP_NEKO_BASE || '').replace(/\/+$/, '');
-    // Una gestora solo la suya. Un admin puede pedir la de quien quiera.
-    const userId = req.user.role === 'gestor'
-      ? req.user.userId
-      : (req.query.userId ? parseInt(req.query.userId) : req.user.userId);
-
-    if (!base) {
-      return res.json({ success: true, data: {
-        configurada: false,
-        motivo: 'Falta WHATSAPP_NEKO_BASE en el servidor: no hay navegador remoto todavia.',
-      }});
-    }
-
-    // Sin derecho a sala no se enciende ninguna. Antes se encendia igual, y
-    // como equipo() no lista a un admin que no trabaja leads, esa sala no
-    // aparecia en ningun panel: nadie podia verla ni apagarla, y se quedaba
-    // ocupando una ranura con sus pestañas dentro.
-    if (!await model.tieneSalaPropia(userId)) {
-      return res.json({ success: true, data: {
-        configurada: false,
-        motivo: 'No tienes WhatsApp propio. Entra en el de una gestora desde WhatsApp · Equipo.',
-      }});
-    }
-
-    // Su sala, no una compartida. Se enciende al pedirla —el gestor espera a
-    // que responda antes de contestar— porque para una gestora esta pantalla es
-    // su herramienta del dia: llegar y tener que pulsar «encender» sobra.
-    //
-    // Si no hay gestor de salas configurado se cae a la sala unica de las
-    // pruebas, que es lo que habia antes de que existieran las salas por
-    // persona. Asi un servidor a medio montar enseña algo en vez de un error.
-    let ranura = null;
-    if (SALAS && SALAS_TOKEN) {
-      const r = await pedirSalas(`/sala?clave=${clave(userId)}`, 'POST', 60000);
-      if (!r || r.ranura === undefined) {
-        return res.json({ success: true, data: {
-          configurada: false,
-          motivo: 'Tu WhatsApp no ha podido arrancar. Vuelve a entrar en un momento.',
-        }});
-      }
-      ranura = r.ranura;
-    }
-
-    // La clave viaja DENTRO de la direccion del marco, asi que acaba en la
-    // consola del navegador de quien abre la pantalla. Aqui va siempre la de
-    // usuario, nunca la de admin: esta es tu propia sala y no hay a quien
-    // quitarle el mando. La de admin —la unica que permite echar a otro— sale
-    // solo por abrirSala(), cuando alguien entra a proposito en la sala ajena.
-    //
-    // Antes se entregaba la de admin a cualquier administrador que se limitara
-    // a abrir su pantalla, y esa es la llave de TODAS las salas.
-    res.json({ success: true, data: {
-      configurada: true,
-      userId,
-      ranura,
-      mandaAqui: false,
-      url: await direccionSala(req, ranura, false),
-    }});
-  } catch (err) { next(err); }
-}
+// Lo que vuelva del panel del equipo se rehara sobre el chat nuevo, que ya
+// guarda las conversaciones: sera leerlas, no meterse en la sesion de nadie.

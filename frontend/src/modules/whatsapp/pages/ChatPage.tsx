@@ -3,10 +3,10 @@ import { Link, useSearchParams } from 'react-router-dom';
 import {
   MainContainer, ChatContainer, MessageList, Message, MessageInput,
   ConversationList, Conversation, Avatar, Sidebar, Search, ConversationHeader,
-  MessageSeparator, InfoButton, Loader, InputToolbox,
+  MessageSeparator, InfoButton, InputToolbox,
 } from '@chatscope/chat-ui-kit-react';
 import '@chatscope/chat-ui-kit-styles/dist/default/styles.min.css';
-import { Prohibit, PencilSimpleLine, X, MagnifyingGlass, Microphone, Stop, UsersThree, PlugsConnected, WarningCircle, ArrowBendUpLeft, ArrowsOut, ArrowsIn, CaretLeft } from '@phosphor-icons/react';
+import { Prohibit, PencilSimpleLine, X, MagnifyingGlass, Microphone, Stop, UsersThree, PlugsConnected, WarningCircle, ArrowBendUpLeft, ArrowsOut, ArrowsIn, CaretLeft, Question, PhoneX, PhoneCall, VideoCamera, Trash, PaperPlaneRight } from '@phosphor-icons/react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
 import {
@@ -14,8 +14,9 @@ import {
   type ChatWhatsapp, type MensajeWhatsapp, type ConexionWhatsapp,
 } from '../api/whatsapp.api';
 import SelectorDeSesion, { type SesionElegida } from '../components/SelectorDeSesion';
-import Tour, { tourPendiente } from '../components/Tour';
+import Tour, { tourPendiente, hayQueSeñalar } from '../components/Tour';
 import NotaDeVoz from '../components/NotaDeVoz';
+import VistaPreviaAdjunto from '../components/VistaPreviaAdjunto';
 import './chat.css';
 
 // El chat de WhatsApp dentro del CRM.
@@ -104,6 +105,43 @@ function Adjunto({ m, alPedir, bajando }: { m: MensajeWhatsapp; alPedir: (id: nu
 
 const TIC = { enviado: '✓', entregado: '✓✓', leido: '✓✓', fallido: '⚠' } as const;
 
+/**
+ * Como se cuenta una llamada.
+ *
+ * En la base solo se guarda el desenlace en seco («perdida»), no la frase: asi
+ * se puede filtrar por llamadas perdidas sin buscar dentro de un texto, y la
+ * forma de decirlo se cambia aqui sin tocar ni un registro.
+ */
+const LLAMADA = {
+  perdida:    { texto: 'Llamada perdida',    video: 'Videollamada perdida',    grave: true },
+  rechazada:  { texto: 'Llamada rechazada',  video: 'Videollamada rechazada',  grave: false },
+  contestada: { texto: 'Llamada contestada', video: 'Videollamada contestada', grave: false },
+  // La que sale del boton. Se dice «desde el movil» a proposito: el CRM apunta
+  // que se marco, no sabe si descolgaron. Prometer mas seria mentir.
+  intento:    { texto: 'Llamaste desde el móvil', video: 'Llamaste desde el móvil', grave: false },
+} as const;
+
+/**
+ * Una llamada en el hilo.
+ *
+ * No lleva burbuja: no es algo que nadie escribiera. Va centrada, como el
+ * separador de fecha, porque es un hecho de la conversacion y no un mensaje.
+ * Tiene que ir dentro de un <Message>: el kit descarta los hijos de MessageList
+ * que no reconoce, asi que un <div> suelto no se pintaria.
+ */
+function Llamada({ m }: { m: MensajeWhatsapp }) {
+  const cual = LLAMADA[(m.texto || 'perdida') as keyof typeof LLAMADA] || LLAMADA.perdida;
+  const esVideo = m.media_mime === 'video';
+  const Icono = esVideo ? VideoCamera : cual.grave ? PhoneX : PhoneCall;
+  return (
+    <div className={`wa-llamada ${cual.grave ? 'wa-llamada-perdida' : ''}`}>
+      <Icono size={15} weight="fill" />
+      <span>{esVideo ? cual.video : cual.texto}</span>
+      <span className="wa-llamada-hora">{hora(m.ts)}</span>
+    </div>
+  );
+}
+
 export default function ChatPage() {
   const { activeProject } = useProjectContext() as { activeProject: { id: number } | null };
   const projectId = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
@@ -157,6 +195,18 @@ export default function ChatPage() {
   // Solo el chat, sin el resto del CRM alrededor. Para cuando se pasa la
   // mañana aqui: el menu, la cabecera y el selector de proyecto no pintan nada.
   const [aPantalla, setAPantalla] = useState(false);
+  // Lo que se va a mandar, esperando confirmacion. Antes se enviaba directo al
+  // elegir el fichero y no habia forma de ver que era hasta despues — y en
+  // WhatsApp un mensaje no se recoge pasados unos minutos.
+  const [porEnviar, setPorEnviar] = useState<File[]>([]);
+  // Mientras se abre el microfono. Son decimas, pero sin decirlo el usuario ya
+  // esta hablando contra un boton que todavia no graba.
+  const [abriendoMicro, setAbriendoMicro] = useState(false);
+  // La nota de voz que esta saliendo, para pintarla en el hilo mientras va.
+  const [vozSaliendo, setVozSaliendo] = useState<number | null>(null);
+  // La nota grabada esperando a que se decida: enviarla o tirarla.
+  const [vozGrabada, setVozGrabada] = useState<
+    { blob: Blob; ext: string; segundos: number; url: string } | null>(null);
   // En un telefono no caben la lista y el hilo a la vez: o una u otro, como en
   // WhatsApp. Se mide el ancho de verdad en vez de suponerlo.
   const [estrecho, setEstrecho] = useState(() => window.innerWidth < 900);
@@ -170,6 +220,8 @@ export default function ChatPage() {
   const [alto, setAlto] = useState(520);
   const ficheroRef = useRef<HTMLInputElement>(null);
   const grabadora = useRef<MediaRecorder | null>(null);
+  // El microfono, abierto de antemano. Ver prepararMicro().
+  const micro = useRef<MediaStream | null>(null);
   const trozos = useRef<Blob[]>([]);
 
   useEffect(() => {
@@ -250,6 +302,13 @@ export default function ChatPage() {
 
   useEffect(() => { setCuantos(100); setCitando(null); }, [abierto]);
 
+  // Al salir de la pantalla se suelta el microfono. Dejarlo abierto mantiene el
+  // punto rojo del navegador encendido, y eso inquieta con razon.
+  useEffect(() => () => {
+    micro.current?.getTracks().forEach((t) => t.stop());
+    micro.current = null;
+  }, []);
+
   // Escape para salir. Es lo que todo el mundo intenta primero, y sin esto hay
   // que buscar el boton con el raton.
   useEffect(() => {
@@ -265,9 +324,22 @@ export default function ChatPage() {
     };
   }, [aPantalla]);
 
+  // El recorrido, AL ENTRAR.
+  //
+  // Antes esperaba a `chats.length && conv`: a que hubiera conversaciones Y una
+  // abierta. Quien acababa de enlazar no tenia ninguna, asi que el recorrido
+  // saltaba cuando ya llevaba un rato trabajando — «medio ano despues me sale
+  // el tutorial», textual. Justo cuando ya no hace falta.
+  //
+  // Ahora basta con que haya algo que señalar. Los pasos que apunten a cosas
+  // que aun no existen se saltan solos.
   useEffect(() => {
-    if (chats.length && conv && tourPendiente()) setTour(true);
-  }, [chats.length, conv]);
+    if (!tourPendiente() || cargando) return undefined;
+    // Un respiro para que la pantalla acabe de pintarse: medir antes de que
+    // exista la lista daria «no hay nada que señalar» siempre.
+    const t = setTimeout(() => { if (hayQueSeñalar()) setTour(true); }, 700);
+    return () => clearTimeout(t);
+  }, [cargando]);
   useEffect(() => { if (abierto) cargarHilo(abierto); }, [abierto, cargarHilo]);
 
   // El alto se MIDE, no se adivina.
@@ -318,6 +390,11 @@ export default function ChatPage() {
   // mirando si la lista crece: al emparejar hay tandas de varios minutos con
   // pausas largas en medio, y por el tamaño de la lista parecia que se habia
   // parado cuando no.
+  //
+  // Y depende de `deQuien`: sin eso se quedaba preguntando por la sesion con la
+  // que se abrio la pantalla. Un administrador que cambiaba a la sesion de otra
+  // gestora seguia viendo el avance de la anterior, y ni el numero ni el «esta
+  // entrando historial» eran de quien creia estar mirando.
   useEffect(() => {
     const mirar = () => chatApi.sincronizacion(deQuien)
       .then((r) => { if (r.success) setSync(r.data); })
@@ -325,7 +402,7 @@ export default function ChatPage() {
     mirar();
     const t = setInterval(mirar, 4000);
     return () => clearInterval(t);
-  }, []);
+  }, [deQuien]);
 
   useEffect(() => {
     if (!nuevoAbierto) return undefined;
@@ -365,14 +442,79 @@ export default function ChatPage() {
     } catch (e) { fallo(e); } finally { setReintentando(null); }
   }
 
-  async function mandarArchivo(f: File) {
-    if (!abierto) return;
+  /**
+   * Llamar: lo apunta el CRM, lo marca el telefono.
+   *
+   * Por esta via WhatsApp no da canal de audio —no es que sea dificil, es que
+   * no existe—, asi que la llamada la hace el movil de la gestora. Lo que se
+   * arregla aqui es el otro problema: hoy una llamada que sale no aparece en
+   * ningun historial, y media conversacion con un prospecto se pierde.
+   *
+   * El registro va PRIMERO y el marcado despues. Al reves, `tel:` cambia de
+   * aplicacion y en un movil eso puede congelar la pestaña antes de que salga
+   * el aviso: se llamaria sin que quedara constancia, que es justo lo que se
+   * viene a resolver.
+   */
+  async function llamar(c: ChatWhatsapp) {
+    try {
+      // Tambien aqui: si un admin llama desde la sesion de una gestora, la
+      // llamada se apunta en la conversacion de ella, no en la suya.
+      await chatApi.apuntarLlamada(c.id, deQuien);
+      await cargarHilo(c.id);
+      cargarLista();
+    } catch {
+      // Que no quede apuntado no puede impedir llamar: el trabajo es hablar con
+      // la persona, no alimentar el historial.
+      toast({ title: 'No se pudo apuntar la llamada', description: 'Se marca igual.' });
+    }
+    window.location.href = `tel:+${String(c.telefono).replace(/[^0-9]/g, '')}`;
+  }
+
+  /** Los pone en la vista previa. No envia nada todavia. */
+  function proponerArchivos(fs: File[]) {
+    if (!abierto) {
+      toast({ title: 'Elige una conversacion antes', variant: 'destructive' });
+      return;
+    }
+    if (fs.length) setPorEnviar(fs);
+  }
+
+  /** Ahora si: manda lo que hay en la vista previa, con su pie. */
+  async function enviarLoPropuesto(pie: string) {
+    if (!abierto || !porEnviar.length) return;
     setEnviando(true);
     try {
-      const r = await chatApi.adjunto(abierto, f, undefined, deQuien);
-      if (!r.success) throw new Error(r.error || 'No se pudo enviar');
+      // De uno en uno: cada envio pasa por sus frenos y por su pausa. El pie
+      // va solo en el primero, que es lo que hace WhatsApp — repetirlo en cada
+      // uno seria mandar el mismo texto tres veces.
+      //
+      // `deQuien` dice de quien es el WhatsApp: sin el, un admin mirando la
+      // sesion de una gestora adjuntaria desde la suya.
+      for (const [i, f] of porEnviar.entries()) {
+        const r = await chatApi.adjunto(abierto, f, i === 0 ? pie : '', undefined, deQuien);
+        if (!r.success) throw new Error(r.error || 'No se pudo enviar');
+      }
+      setPorEnviar([]);
       await cargarHilo(abierto); cargarLista();
     } catch (e) { fallo(e); } finally { setEnviando(false); }
+  }
+
+  async function mandarArchivo(f: File, extra?: { segundos?: number }) {
+    if (!abierto) return;
+    setEnviando(true);
+    // Una nota de voz se manda sin vista previa —ya la has grabado tu— pero
+    // tiene que verse que esta saliendo: antes se soltaba el boton y no pasaba
+    // nada visible hasta que aparecia en el hilo. Con la red lenta, quien graba
+    // no sabe si salio y vuelve a grabar.
+    if (extra?.segundos) setVozSaliendo(extra.segundos);
+    try {
+      // `deQuien` tambien aqui: sin el, el servidor busca la conversacion en la
+      // sesion de quien mira y no en la que se esta viendo — y contesta
+      // «Conversacion no encontrada». Es la unica llamada que se quedo sin el.
+      const r = await chatApi.adjunto(abierto, f, '', extra?.segundos, deQuien);
+      if (!r.success) throw new Error(r.error || 'No se pudo enviar');
+      await cargarHilo(abierto); cargarLista();
+    } catch (e) { fallo(e); } finally { setEnviando(false); setVozSaliendo(null); }
   }
 
   /**
@@ -402,45 +544,97 @@ export default function ChatPage() {
     if (!archivos.length) return;          // texto normal: que siga su camino
     e.preventDefault();
     e.stopPropagation();
-    if (!abierto) {
-      toast({ title: 'Elige una conversacion antes', variant: 'destructive' });
-      return;
+    // Tambien por la vista previa. Este es el camino donde mas facil es mandar
+    // lo que no era: se pega una captura sin mirar.
+    proponerArchivos(archivos);
+  }
+
+  /**
+   * Abre el microfono y lo deja abierto.
+   *
+   * Pedirlo tarda entre dos y ocho decimas —mas la primera vez, que hay que dar
+   * permiso—. Si se pide al pulsar, se pierde el principio: o sale «grabando»
+   * cuando ya has dicho media palabra, o empiezas a hablar antes de que el
+   * microfono este abierto y esa parte no se graba.
+   *
+   * Se pide al pasar por encima del boton, que es medio segundo antes de
+   * pulsarlo. Cuando llega el clic, ya esta listo.
+   */
+  async function prepararMicro() {
+    if (micro.current) return micro.current;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      micro.current = stream;
+      return stream;
+    } catch {
+      return null;
     }
-    // De uno en uno: cada envio pasa por los frenos y por su pausa.
-    for (const f of archivos) await mandarArchivo(f);
   }
 
   async function alternarGrabacion() {
     if (grabando) { grabadora.current?.stop(); return; }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      // WhatsApp espera opus. Chrome graba en webm y Firefox puede en ogg, pero
-      // el codec de dentro es opus en los dos: se pide ogg primero porque es lo
-      // que WhatsApp entiende sin convertir, y si no se puede, webm con opus.
-      const formatos = ['audio/ogg;codecs=opus', 'audio/webm;codecs=opus', 'audio/webm'];
-      const formato = formatos.find((f) => MediaRecorder.isTypeSupported(f));
-      const mr = new MediaRecorder(stream, formato ? { mimeType: formato } : undefined);
-      trozos.current = [];
-      mr.ondataavailable = (e) => { if (e.data.size) trozos.current.push(e.data); };
-      mr.onstop = async () => {
-        stream.getTracks().forEach((t) => t.stop());
-        setGrabando(false);
-        const blob = new Blob(trozos.current, { type: mr.mimeType || 'audio/webm' });
-        const ext = (mr.mimeType || '').includes('ogg') ? 'ogg' : 'webm';
-        if (blob.size > 800) {
-          await mandarArchivo(new File([blob], `nota-de-voz.${ext}`, { type: blob.type }));
-        }
-      };
-      mr.start(); grabadora.current = mr; setGrabando(true);
-    } catch {
-      toast({ title: 'Sin microfono', description: 'El navegador no dio permiso para grabar.', variant: 'destructive' });
+
+    // Si el microfono aun no esta abierto se dice, en vez de dejar al usuario
+    // hablando contra un boton que todavia no graba.
+    let stream = micro.current;
+    if (!stream) {
+      setAbriendoMicro(true);
+      stream = await prepararMicro();
+      setAbriendoMicro(false);
     }
+    if (!stream) {
+      toast({ title: 'Sin micrófono', description: 'El navegador no dio permiso para grabar.', variant: 'destructive' });
+      return;
+    }
+
+    // WhatsApp espera opus. Chrome NO graba ogg aunque se le pida —
+    // isTypeSupported('audio/ogg;codecs=opus') devuelve false— y cae a webm.
+    // El codec de dentro es opus igualmente, asi que WhatsApp lo entiende.
+    const formatos = ['audio/ogg;codecs=opus', 'audio/webm;codecs=opus', 'audio/webm'];
+    const formato = formatos.find((f) => MediaRecorder.isTypeSupported(f));
+    const mr = new MediaRecorder(stream, formato ? { mimeType: formato } : undefined);
+    trozos.current = [];
+    const empezo = Date.now();
+
+    mr.ondataavailable = (e) => { if (e.data.size) trozos.current.push(e.data); };
+    mr.onstop = async () => {
+      setGrabando(false);
+      const blob = new Blob(trozos.current, { type: mr.mimeType || 'audio/webm' });
+      const ext = (mr.mimeType || '').includes('ogg') ? 'ogg' : 'webm';
+      if (blob.size <= 800) return;   // un toque sin querer, no una nota
+
+      // La duracion MEDIDA, no la del fichero.
+      //
+      // Lo que graba Chrome es webm, y ese contenedor sale sin duracion en la
+      // cabecera porque es un flujo en vivo. WhatsApp entonces enseña una
+      // duracion rara, casi siempre mas larga que la real: eso era «el retraso
+      // que se envia». Se le manda cuanto duro de verdad.
+      const segundos = Math.max(1, Math.round((Date.now() - empezo) / 1000));
+
+      // PARAR NO ES ENVIAR.
+      //
+      // Antes se soltaba el boton y la nota salia disparada: sin oirla, sin
+      // poder arrepentirse, y en WhatsApp un audio no se recoge pasados unos
+      // minutos. Cualquiera que se equivoque de palabra o le entre un ruido de
+      // fondo se queda con eso mandado.
+      //
+      // Ahora se para, se escucha si se quiere, y se decide. Es lo mismo que ya
+      // se hace con las imagenes desde la tarea #45.
+      // Aqui se acaba: lo manda el boton «Enviar» de la barra de revision.
+      setVozGrabada({ blob, ext, segundos, url: URL.createObjectURL(blob) });
+    };
+
+    // El estado se pone cuando el MediaRecorder esta DE VERDAD en marcha, no
+    // antes: asi lo que ve el usuario coincide con lo que se esta grabando.
+    mr.onstart = () => setGrabando(true);
+    mr.start();
+    grabadora.current = mr;
   }
 
   async function abrirPorTelefono() {
     const t = telefonoNuevo.replace(/[^0-9]/g, '');
     if (t.length < 9) {
-      toast({ title: 'Ese telefono no vale', description: 'Ponlo con prefijo de pais y sin signos.', variant: 'destructive' });
+      toast({ title: 'Ese teléfono no vale', description: 'Ponlo con prefijo de pais y sin signos.', variant: 'destructive' });
       return;
     }
     try {
@@ -451,7 +645,7 @@ export default function ChatPage() {
       await cargarLista(); setAbierto(r.data.id);
       toast({
         title: 'Chat abierto',
-        description: 'Escribe con cabeza: a quien no pidio informacion es mas facil que te reporte.',
+        description: 'Si no es prospecto y nunca te ha escrito, se puede escribir igual — pero queda anotado.',
       });
     } catch (e) { fallo(e); }
   }
@@ -486,7 +680,7 @@ export default function ChatPage() {
     const r = await chatApi.noEscribir(abierto, motivoNuevo.trim(), deQuien);
     setPidiendoMotivo(false); setMotivoNuevo('');
     if (r.success) {
-      toast({ title: 'Marcado', description: 'El CRM no volvera a escribir a este numero.' });
+      toast({ title: 'Marcado', description: 'El CRM no volvera a escribir a este número.' });
       cargarHilo(abierto); cargarLista();
     }
   }
@@ -510,7 +704,7 @@ export default function ChatPage() {
   // o un sticker. Ahora se dice QUE fue, como en WhatsApp.
   const ADELANTO: Record<string, string> = {
     imagen: '📷 Foto', video: '🎥 Video', audio: '🎤 Nota de voz',
-    documento: '📄 Documento', sticker: 'Sticker',
+    documento: '📄 Documento', sticker: 'Sticker', llamada: '📞 Llamada',
   };
   // De que proyecto es cada chat, dicho SIEMPRE.
   //
@@ -524,6 +718,13 @@ export default function ChatPage() {
 
   const adelantoBase = (c: ChatWhatsapp) => {
     if (c.no_escribir) return 'no escribir';
+    // La llamada va ANTES de `ultimo_texto`: en una llamada ese campo guarda el
+    // desenlace en seco, asi que la lista ponia «perdida» a secas, sin decir de
+    // que. Se mira el tipo primero y se dice la frase entera.
+    if (c.ultimo_tipo === 'llamada') {
+      const cual = LLAMADA[(c.ultimo_texto || 'perdida') as keyof typeof LLAMADA];
+      return `📞 ${cual ? cual.texto : 'Llamada'}`;
+    }
     if (c.ultimo_texto) return c.ultimo_texto;
     if (c.ultimo_tipo && ADELANTO[c.ultimo_tipo]) return ADELANTO[c.ultimo_tipo];
     // Sin nada que adelantar: el telefono si es una persona, y para un grupo
@@ -540,7 +741,7 @@ export default function ChatPage() {
         <p className="font-semibold mb-1">WhatsApp no esta conectado</p>
         <p className="text-sm text-muted-foreground max-w-md mx-auto">{conexion.motivo}</p>
         <Link to="/whatsapp/conexion" className="text-sm text-primary hover:underline mt-3 inline-block">
-          Ir a conectar el numero
+          Ir a conectar el número
         </Link>
       </div>
     );
@@ -555,13 +756,13 @@ export default function ChatPage() {
     ? {
         icono: <WarningCircle size={15} weight="fill" />,
         texto: 'WhatsApp no esta conectado, no se puede enviar.',
-        marcador: 'Sin conexion con WhatsApp',
+        marcador: 'Sin conexión con WhatsApp',
       }
     : conv?.no_escribir
     ? {
         icono: <Prohibit size={15} weight="bold" />,
-        texto: `Esta persona pidio que no se le escriba.${conv.motivo_no_escribir ? ` (${conv.motivo_no_escribir})` : ''}`,
-        marcador: 'No se escribe a este numero',
+        texto: `Esta persona pidió que no se le escriba.${conv.motivo_no_escribir ? ` (${conv.motivo_no_escribir})` : ''}`,
+        marcador: 'No se escribe a este número',
       }
     : null;
 
@@ -569,31 +770,46 @@ export default function ChatPage() {
 
   return (
     <div className={`space-y-2 ${aPantalla ? 'wa-completa' : ''}`}>
-      <div className="flex items-center gap-2 text-xs bg-card border border-border rounded-lg px-3 py-1.5">
-        <span className={`w-2 h-2 rounded-full ${conexion?.conectado ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+      <div className="wa-barra-superior flex items-center gap-2 text-xs bg-card border border-border rounded-lg px-3 py-1.5">
+        <span className={`wa-punto-estado w-2 h-2 rounded-full ${conexion?.conectado ? 'bg-emerald-500' : 'bg-amber-500'}`} />
         {conexion?.conectado
           ? <span className="text-muted-foreground">
               {sesion.esMia ? 'Tu WhatsApp' : `WhatsApp de ${sesion.nombre}`}: <strong className="text-foreground">
                 {conexion.nombre || (conexion.numero ? `+${conexion.numero}` : conexion.instancia)}
               </strong>
             </span>
-          : <span className="text-amber-700 dark:text-amber-400">
+          : <span className="wa-sin-enlazar text-amber-700 dark:text-amber-400">
+              {/* Si miras la sesion de otra persona, «no tienes WhatsApp
+                  enlazado» es mentira: la que no lo tiene es ella. */}
               {sesion.esMia
-                ? <>No tienes WhatsApp enlazado — <Link to="/whatsapp/conexion" className="underline">enlazar mi numero</Link></>
-                : `El WhatsApp de ${sesion.nombre} no esta enlazado`}
+                ? <>No tienes WhatsApp enlazado — <Link to="/whatsapp/conexion" className="underline">enlazar mi número</Link></>
+                : `El WhatsApp de ${sesion.nombre} no está enlazado`}
             </span>}
         {/* La pantalla donde se enlaza o se desvincula el numero. Estaba solo en
             el menu lateral y desde el chat no habia forma de llegar. */}
         <button type="button" onClick={() => setAPantalla((v) => !v)}
+          aria-label={aPantalla ? 'Salir' : 'Ampliar'}
           title={aPantalla ? 'Salir de pantalla completa (Esc)' : 'Ver solo el chat'}
-          className="ml-auto inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
+          className="wa-btn-ampliar ml-auto inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
           {aPantalla ? <ArrowsIn size={14} weight="bold" /> : <ArrowsOut size={14} weight="bold" />}
           <span className="font-medium">{aPantalla ? 'Salir' : 'Ampliar'}</span>
         </button>
-        <Link to="/whatsapp/conexion" title="Conectar o desvincular el numero"
+        {/* El recorrido, aqui y no en la cabecera del chat.
+
+            Estaba dentro de <ConversationHeader>, que solo se pinta cuando hay
+            una conversacion abierta. Quien acababa de llegar y no tenia ninguna
+            no podia volver a verlo de ninguna manera — y es exactamente quien lo
+            necesita, porque el recorrido salta solo una vez por navegador. */}
+        <button type="button" onClick={() => setTour(true)} className="wa-btn-tour"
+          aria-label="Cómo va esto"
+          title="Ver el recorrido por esta pantalla">
+          <Question size={14} weight="bold" />
+          <span className="font-medium">Cómo va esto</span>
+        </button>
+        <Link to="/whatsapp/conexion" aria-label="Conexión" title="Conectar o desvincular el número"
           className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
           <PlugsConnected size={14} weight="bold" />
-          <span className="font-medium">Conexion</span>
+          <span className="font-medium">Conexión</span>
         </Link>
       </div>
 
@@ -693,8 +909,18 @@ export default function ChatPage() {
                       <InfoButton />
                     </Link>
                   )}
+                  {/* Llamar. El CRM prepara, el telefono llama.
+                      Solo en conversaciones de una persona: a un grupo no se
+                      puede llamar desde un enlace `tel:`, y ofrecerlo seria
+                      prometer algo que no va a pasar. */}
+                  {!conv.es_grupo && (
+                    <button type="button" onClick={() => llamar(conv)} className="wa-btn-llamar"
+                      title={`Llamar a ${conv.telefono} desde el móvil`}>
+                      <PhoneCall size={17} />
+                    </button>
+                  )}
                   <button type="button" onClick={() => setPidiendoMotivo(true)} className="wa-btn-prohibir"
-                    title="No volver a escribir a este numero">
+                    title="No volver a escribir a este número">
                     <Prohibit size={17} />
                   </button>
                 </ConversationHeader.Actions>
@@ -718,18 +944,29 @@ export default function ChatPage() {
                     y envolver cada mensaje en un <div> para colgarle el
                     separador del dia le rompia la estructura. Van sueltos. */}
                 {mensajes.flatMap((m, i) => {
-                  const dia = diaDe(m.ts);
-                  const nuevoDia = dia !== ultimoDia;
-                  if (nuevoDia) ultimoDia = dia;
+                  const día = diaDe(m.ts);
+                  const nuevoDia = día !== ultimoDia;
+                  if (nuevoDia) ultimoDia = día;
                   const prev = mensajes[i - 1];
                   const sig = mensajes[i + 1];
                   const mismoQuePrev = !nuevoDia && prev?.direccion === m.direccion;
-                  const mismoQueSig = sig?.direccion === m.direccion && diaDe(sig.ts) === dia;
+                  const mismoQueSig = sig?.direccion === m.direccion && diaDe(sig.ts) === día;
                   const posicion = mismoQuePrev && mismoQueSig ? 'normal'
                     : mismoQuePrev ? 'last' : mismoQueSig ? 'first' : 'single';
                   const mia = m.direccion === 'saliente';
+                  // Una llamada no es un mensaje: no tiene burbuja, ni autor,
+                  // ni se puede responder ni reintentar. Sale antes de todo eso.
+                  if (m.tipo === 'llamada') {
+                    return [
+                      nuevoDia ? <MessageSeparator key={`d${m.id}`} content={día} /> : null,
+                      <Message key={m.id} className="wa-msg-llamada"
+                        model={{ direction: 'incoming', position: 'single', type: 'custom' }}>
+                        <Message.CustomContent><Llamada m={m} /></Message.CustomContent>
+                      </Message>,
+                    ].filter(Boolean);
+                  }
                   return [
-                    nuevoDia ? <MessageSeparator key={`d${m.id}`} content={dia} /> : null,
+                    nuevoDia ? <MessageSeparator key={`d${m.id}`} content={día} /> : null,
                     <Message key={m.id} className={m.tipo === 'sticker' ? 'wa-msg-sticker' : undefined}
                       model={{
                         direction: mia ? 'outgoing' : 'incoming',
@@ -778,6 +1015,28 @@ export default function ChatPage() {
                     </Message>,
                   ].filter(Boolean);
                 })}
+
+                {/* La nota de voz, mientras sale.
+                    Aparece en cuanto se suelta el boton y se confirma cuando
+                    contesta el servidor — es lo mismo que hace WhatsApp. Antes
+                    no pasaba nada visible hasta que el audio estaba en el hilo,
+                    asi que con la red lenta quien grababa no sabia si habia
+                    salido y volvia a grabar. Si el envio falla, desaparece y el
+                    aviso dice por que. */}
+                {vozSaliendo !== null && (
+                  <Message model={{ direction: 'outgoing', position: 'single', type: 'custom' }}>
+                    <Message.CustomContent>
+                      <div className="wa-voz wa-voz-mia wa-voz-saliendo">
+                        <span className="wa-voz-boton"><Microphone size={15} weight="fill" /></span>
+                        <div className="wa-voz-barra"><span className="wa-voz-hecho" style={{ width: '100%' }} /></div>
+                        <span className="wa-voz-tiempo">
+                          {Math.floor(vozSaliendo / 60)}:{String(vozSaliendo % 60).padStart(2, '0')}
+                        </span>
+                      </div>
+                      <span className="wa-meta">enviando…</span>
+                    </Message.CustomContent>
+                  </Message>
+                )}
               </MessageList>
 
               {/* Un solo InputToolbox, y el campo SIEMPRE presente.
@@ -790,8 +1049,36 @@ export default function ChatPage() {
                   El campo no se quita cuando no se puede escribir: se
                   desactiva. Quitarlo mueve la pantalla entera de sitio cada vez
                   que la sesion parpadea. */}
-              <InputToolbox className={bloqueo ? 'wa-bloqueado' : citando ? 'wa-citando' : 'wa-toolbox-vacia'}>
-                {bloqueo ? (
+                <InputToolbox className={
+                  bloqueo ? 'wa-bloqueado'
+                    : vozGrabada ? 'wa-citando wa-voz-revisar'
+                      : citando ? 'wa-citando' : 'wa-toolbox-vacia'}>
+                  {vozGrabada ? (
+                    <>
+                      {/* Grabada y esperando. Se escucha y se decide: parar no
+                          es enviar. Antes salia disparada al soltar el boton, sin
+                          poder oirla ni arrepentirse — y en WhatsApp un audio no
+                          se recoge pasados unos minutos. */}
+                      <audio src={vozGrabada.url} controls className="wa-voz-revisar-audio" />
+                      <button type="button" className="wa-btn-suave"
+                        onClick={() => { URL.revokeObjectURL(vozGrabada.url); setVozGrabada(null); }}
+                        title="Tirar esta nota y no enviarla">
+                        <Trash size={14} /> Borrar
+                      </button>
+                      <button type="button" className="wa-btn-verde" disabled={enviando}
+                        onClick={async () => {
+                          const v = vozGrabada;
+                          URL.revokeObjectURL(v.url);
+                          setVozGrabada(null);
+                          await mandarArchivo(
+                            new File([v.blob], `nota-de-voz.${v.ext}`, { type: v.blob.type }),
+                            { segundos: v.segundos },
+                          );
+                        }}>
+                        {enviando ? 'Enviando…' : <>Enviar <PaperPlaneRight size={13} weight="fill" /></>}
+                      </button>
+                    </>
+                  ) : bloqueo ? (
                   <>
                     {bloqueo.icono}
                     <span>{bloqueo.texto}</span>
@@ -817,7 +1104,7 @@ export default function ChatPage() {
               <MessageInput
                 placeholder={
                   bloqueo ? bloqueo.marcador
-                  : grabando ? 'Grabando nota de voz…'
+                  : grabando ? 'Grabando… pulsa ■ para terminar (no se envía todavía)'
                   : 'Escribe un mensaje'
                 }
                 onSend={enviar} disabled={enviando || Boolean(bloqueo)} attachButton
@@ -829,7 +1116,7 @@ export default function ChatPage() {
               <MessageList>
                 <MessageList.Content className="wa-vacio">
                   {chats.length === 0 && !cargando
-                    ? 'Aqui apareceran tus conversaciones en cuanto enlaces tu numero.'
+                    ? 'Aquí aparecerán tus conversaciones en cuanto enlaces tu número.'
                     : 'Elige una conversacion, o escribe a un prospecto con el lapiz de la izquierda.'}
                 </MessageList.Content>
               </MessageList>
@@ -840,18 +1127,29 @@ export default function ChatPage() {
         {/* El microfono va aparte: el kit no trae boton de nota de voz. */}
         {conv && !conv.no_escribir && (
           <button type="button" onClick={alternarGrabacion} disabled={enviando}
-            title={grabando ? 'Parar y enviar la nota de voz' : 'Grabar una nota de voz'}
-            className={`wa-btn-micro ${grabando ? 'wa-grabando' : ''}`}>
+            onMouseEnter={prepararMicro} onFocus={prepararMicro}
+            title={grabando ? 'Terminar la nota — luego la escuchas antes de enviarla'
+              : abriendoMicro ? 'Abriendo el micrófono…' : 'Grabar una nota de voz'}
+            aria-label={grabando ? 'Terminar la nota de voz' : 'Grabar una nota de voz'}
+            className={`wa-btn-micro ${grabando ? 'wa-grabando' : ''} ${abriendoMicro ? 'wa-abriendo' : ''}`}>
             {grabando ? <Stop size={17} weight="fill" /> : <Microphone size={18} />}
           </button>
         )}
       </div>
 
+      <VistaPreviaAdjunto
+        archivos={porEnviar}
+        enviando={enviando}
+        alEnviar={enviarLoPropuesto}
+        alCancelar={() => setPorEnviar([])}
+        alAnadir={(fs) => setPorEnviar((p) => [...p, ...fs])} />
+
       {tour && <Tour alCerrar={() => setTour(false)} />}
 
       <input ref={ficheroRef} type="file" className="hidden"
         accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.zip,.txt"
-        onChange={(e) => { const f = e.target.files?.[0]; if (f) mandarArchivo(f); e.target.value = ''; }} />
+        multiple
+        onChange={(e) => { proponerArchivos([...(e.target.files || [])]); e.target.value = ''; }} />
 
       {/* Escribir a un numero suelto. Antes era un window.prompt del navegador:
           una caja gris del sistema encima del chat, imposible de dar estilo. */}
@@ -860,7 +1158,7 @@ export default function ChatPage() {
           <form className="wa-panel" onClick={(e) => e.stopPropagation()}
             onSubmit={(e) => { e.preventDefault(); abrirPorTelefono(); }}>
             <div className="wa-panel-cabecera">
-              <span>Escribir a un numero</span>
+              <span>Escribir a un número</span>
               <button type="button" onClick={() => setPidiendoTelefono(false)} className="wa-panel-cerrar">
                 <X size={15} />
               </button>
@@ -870,8 +1168,8 @@ export default function ChatPage() {
                 onChange={(e) => setTelefonoNuevo(e.target.value)}
                 placeholder="34600111222" className="wa-campo" />
               <p className="wa-panel-nota">
-                Con prefijo de pais y sin signos. Vale cualquier numero, sea prospecto
-                o no; queda apuntado a quien se escribe.
+                Con prefijo de pais y sin signos. Si esa persona no es prospecto y nunca
+                te ha escrito, queda anotado quien fue el primero en escribir.
               </p>
             </div>
             <div className="wa-panel-pie">
@@ -896,10 +1194,10 @@ export default function ChatPage() {
             <div className="wa-panel-cuerpo">
               <p className="wa-panel-nota">
                 El CRM no le enviara nada mas a <strong>{conv ? nombreDe(conv) : ''}</strong>,
-                ni con plantilla ni «solo una ultima vez». Se puede quitar despues.
+                ni con plantilla ni «solo una última vez». Se puede quitar después.
               </p>
               <input autoFocus value={motivoNuevo} onChange={(e) => setMotivoNuevo(e.target.value)}
-                placeholder="Motivo (opcional): pidio que no le escribieran…" className="wa-campo" />
+                placeholder="Motivo (opcional): pidió que no le escribieran…" className="wa-campo" />
             </div>
             <div className="wa-panel-pie">
               <button type="button" onClick={() => setPidiendoMotivo(false)} className="wa-btn-suave">Cancelar</button>
@@ -925,17 +1223,17 @@ export default function ChatPage() {
               <div className="relative">
                 <MagnifyingGlass size={14} className="wa-lupa" />
                 <input autoFocus value={busca} onChange={(e) => setBusca(e.target.value)}
-                  placeholder="Nombre, email o telefono…" className="wa-campo wa-campo-lupa" />
+                  placeholder="Nombre, email o teléfono…" className="wa-campo wa-campo-lupa" />
               </div>
             </div>
             <div className="wa-lista-panel">
               <button type="button" onClick={() => { setPidiendoTelefono(true); setNuevoAbierto(false); }}
                 className="wa-fila wa-fila-accion">
-                + Escribir a un numero que no esta en la base
+                + Escribir a un número que no esta en la base
               </button>
               {candidatos.length === 0 && (
                 <p className="wa-panel-nota" style={{ padding: '14px', textAlign: 'center' }}>
-                  Sin prospectos con telefono. Solo se puede escribir a quien dejo el suyo.
+                  Sin prospectos con teléfono. Solo se puede escribir a quien dejo el suyo.
                 </p>
               )}
               {candidatos.map((l) => (

@@ -157,6 +157,12 @@ export const chatApi = {
   noEscribir: (id: number, motivo: string, usuarioId?: number | null): Promise<ApiResponse<null>> =>
     client.post(`/whatsapp/chats/${id}/no-escribir${qs({ usuarioId })}`, { motivo }),
 
+  // Apunta que se ha llamado. La llamada la hace el movil, no el CRM: por esta
+  // via WhatsApp no da canal de audio. Aqui solo queda el registro, que es lo
+  // que hoy se pierde de todas las llamadas que salen.
+  apuntarLlamada: (id: number, usuarioId?: number | null): Promise<ApiResponse<{ telefono: string }>> =>
+    client.post(`/whatsapp/chats/${id}/llamada${qs({ usuarioId })}`),
+
   // Abrir un chat nuevo partiendo de un prospecto. Se parte de la base y no de
   // un numero suelto: quien esta ahi dejo su telefono en un formulario nuestro.
   abrir: (leadId: number, usuarioId?: number | null): Promise<ApiResponse<ChatWhatsapp>> =>
@@ -180,12 +186,20 @@ export const chatApi = {
 
   // El adjunto va en multipart, no en JSON: el cliente de axios ya pone el
   // Content-Type con su boundary si se le pasa un FormData.
-  adjunto: (id: number, archivo: File, pie?: string, usuarioId?: number | null): Promise<ApiResponse<MensajeWhatsapp>> => {
+  /**
+   * `segundos` solo para las notas de voz: es la duracion MEDIDA al grabar.
+   * Lo que graba Chrome es webm y ese contenedor no la lleva en la cabecera,
+   * asi que WhatsApp enseñaba una duracion inventada, mas larga que la real.
+   *
+   * `usuarioId` es de quien es el WhatsApp que se esta mirando. Va en la
+   * direccion y no dentro del formulario: asi vale igual aqui que en las
+   * llamadas normales, sin depender de como lea el servidor el multipart.
+   */
+  adjunto: (id: number, archivo: File, pie?: string, segundos?: number, usuarioId?: number | null): Promise<ApiResponse<MensajeWhatsapp>> => {
     const fd = new FormData();
     fd.append('archivo', archivo);
     if (pie) fd.append('pie', pie);
-    // Va en la direccion y no dentro del formulario: asi vale igual aqui que en
-    // las llamadas normales, sin depender de como lea el servidor el multipart.
+    if (segundos) fd.append('segundos', String(segundos));
     return client.post(`/whatsapp/chats/${id}/adjunto${qs({ usuarioId })}`, fd);
   },
 };

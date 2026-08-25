@@ -24,6 +24,9 @@ vi.mock('../src/shared/config/db.js', () => ({
 vi.mock('../src/modules/whatsapp/chat.model.js', () => ({
   listar: vi.fn(async ({ instancia }) => [{ instancia }]),
   porId: vi.fn(), mensajes: vi.fn(), actividad: vi.fn(),
+  // Queda escrito quien entra a mirar la sesion de otra persona. Lo que se
+  // prueba aqui es QUIEN puede entrar; que se apunte tiene su propio fichero.
+  apuntarMirada: vi.fn(async () => true),
 }));
 vi.mock('../src/modules/whatsapp/chat.service.js', () => ({}));
 vi.mock('../src/modules/whatsapp/media.service.js', () => ({}));
@@ -35,6 +38,7 @@ vi.mock('../src/modules/whatsapp/evolution.client.js', () => ({
 }));
 
 const { chats, usuarios } = await import('../src/modules/whatsapp/chat.controller.js');
+const modelo = await import('../src/modules/whatsapp/chat.model.js');
 
 function pedir(user, query = {}) {
   const req = { user, query, body: {} };
@@ -87,6 +91,27 @@ describe('de quien es la sesion que se abre', () => {
     const { req, res, next } = pedir({ userId: 9, role: 'admin' }, { usuarioId: '77' });
     await chats(req, res, next);
     expect(next.mock.calls[0][0].code).toBe('FUERA_DE_TUS_PROYECTOS');
+  });
+
+  it('un intento RECHAZADO no queda como que entro a mirar', async () => {
+    // Se apunta DESPUES de comprobar los permisos, no antes. Si no, en el
+    // registro saldria «entro a ver a Fulana» de alguien a quien se le nego el
+    // paso — y eso es peor que no tener registro: acusa de algo que no paso.
+    modelo.apuntarMirada.mockClear();
+    const { req, res, next } = pedir({ userId: 9, role: 'admin' }, { usuarioId: '77' });
+    await chats(req, res, next);
+    expect(next.mock.calls[0][0].code).toBe('FUERA_DE_TUS_PROYECTOS');
+    expect(modelo.apuntarMirada).not.toHaveBeenCalled();
+  });
+
+  it('pero una mirada permitida SI queda', async () => {
+    modelo.apuntarMirada.mockClear();
+    const { req, res, next } = pedir({ userId: 1, role: 'superadmin' }, { usuarioId: '7' });
+    await chats(req, res, next);
+    expect(next).not.toHaveBeenCalled();
+    expect(modelo.apuntarMirada).toHaveBeenCalledWith(
+      expect.objectContaining({ quienMira: 1, aQuien: 7 }),
+    );
   });
 
   it('ni la de alguien que no existe o esta desactivado', async () => {

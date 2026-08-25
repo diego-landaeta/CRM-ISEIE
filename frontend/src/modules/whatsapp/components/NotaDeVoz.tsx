@@ -17,6 +17,11 @@ const mmss = (s: number) => {
 export default function NotaDeVoz({ src, mia }: { src: string; mia: boolean }) {
   const audio = useRef<HTMLAudioElement>(null);
   const [sonando, setSonando] = useState(false);
+  // Si el navegador no sabe con este audio. Antes fallaba EN SILENCIO: se
+  // pulsaba reproducir, la promesa se rechazaba, se apagaba el boton y ya. Sin
+  // aviso, sin motivo y sin salida — y eso es exactamente lo que se ve cuando
+  // el formato no entra: parece que la nota se envio rota.
+  const [noPuede, setNoPuede] = useState(false);
   const [voy, setVoy] = useState(0);
   const [total, setTotal] = useState(0);
 
@@ -37,14 +42,19 @@ export default function NotaDeVoz({ src, mia }: { src: string; mia: boolean }) {
       a.currentTime = 1e6;
     };
     const alAvanzar = () => setVoy(a.currentTime);
+    // El navegador avisa por aqui cuando no puede con el formato. Es la unica
+    // forma de enterarse antes de que alguien pulse.
+    const alFallar = () => { setNoPuede(true); setSonando(false); };
     const alTerminar = () => { setSonando(false); setVoy(0); };
     a.addEventListener('loadedmetadata', alCargar);
     a.addEventListener('timeupdate', alAvanzar);
     a.addEventListener('ended', alTerminar);
+    a.addEventListener('error', alFallar);
     return () => {
       a.removeEventListener('loadedmetadata', alCargar);
       a.removeEventListener('timeupdate', alAvanzar);
       a.removeEventListener('ended', alTerminar);
+      a.removeEventListener('error', alFallar);
     };
   }, [src]);
 
@@ -54,13 +64,25 @@ export default function NotaDeVoz({ src, mia }: { src: string; mia: boolean }) {
     if (a.paused) {
       // Se paran las demas: dos notas de voz a la vez no se entienden.
       document.querySelectorAll('audio').forEach((o) => { if (o !== a) o.pause(); });
-      a.play().then(() => setSonando(true)).catch(() => setSonando(false));
+      a.play().then(() => setSonando(true)).catch(() => { setSonando(false); setNoPuede(true); });
     } else {
       a.pause(); setSonando(false);
     }
   }
 
   const avance = total > 0 ? (voy / total) * 100 : 0;
+
+  // Cuando no se puede reproducir aqui, se DICE y se ofrece la salida. Un boton
+  // que no hace nada al pulsarlo es peor que no tener boton.
+  if (noPuede) {
+    return (
+      <div className={`wa-voz wa-voz-rota ${mia ? 'wa-voz-mia' : ''}`}>
+        <a href={src} download className="wa-voz-descargar">
+          ⬇ Este navegador no reproduce la nota — descárgala
+        </a>
+      </div>
+    );
+  }
 
   return (
     <div className={`wa-voz ${mia ? 'wa-voz-mia' : ''}`}>

@@ -6,6 +6,7 @@ import * as firma from './media.firma.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import { query } from '../../shared/config/db.js';
+import { respuestaLlamadaSchema } from './whatsapp.validation.js';
 
 const esAdmin = (req) => ['admin', 'superadmin', 'soporte'].includes(req.user.role);
 
@@ -54,6 +55,21 @@ async function usuarioObjetivo(req) {
   if (req.user.role !== 'superadmin' && !u.comparten) {
     throw new AppError('Esa persona no esta en tus proyectos', 403, 'FUERA_DE_TUS_PROYECTOS');
   }
+
+  // Queda escrito que ha entrado a mirar. AQUI, cuando ya se sabe que puede: un
+  // intento rechazado no es una mirada, y apuntarlo antes dejaria en el registro
+  // «entro a ver a Fulana» de alguien a quien se le nego el paso.
+  //
+  // Puede hacerlo, y hace falta: para ayudar a una gestora y para supervisar.
+  // Pero son sus conversaciones con clientes, y algunas seran personales — que
+  // se pueda mirar sin dejar rastro es lo que convierte esto en vigilancia.
+  //
+  // No se espera al resultado: apuntarlo no puede retrasar la pantalla, y si
+  // falla ya se avisa por dentro. Una cada media hora por pareja, que esto se
+  // llama en cada vuelta del chat.
+  model.apuntarMirada?.({ quienMira: propio, aQuien: pedido, ip: req.ip })
+    ?.catch(() => { /* ya se registra dentro */ });
+
   return pedido;
 }
 
@@ -99,11 +115,17 @@ export async function chat(req, res, next) {
       ...m,
       media_firma: m.media_url ? firma.firma(m.id) : null,
     }));
-    // Quien esta escribiendo viaja con el hilo: la pantalla ya lo pide cada
-    // pocos segundos, asi que no hace falta otra ronda de peticiones.
-    const escribiendo = evolution.configurado()
-      ? await evolution.quienEscribe(conv.jid, conv.instancia).catch(() => null)
-      : null;
+      // Quien esta escribiendo: de momento, nadie.
+      //
+      // Evolution no deja preguntarlo —solo mandar la presencia propia— y el
+      // endpoint que se usaba era del puente de Baileys: en produccion daba 404
+      // cada cinco segundos por cada chat abierto, 136 en diez minutos. Eso
+      // enterraba los errores de verdad (tarea #63).
+      //
+      // Se deja el campo en la respuesta para que la pantalla no cambie: cuando
+      // se encienda el evento `presence.update` del webhook volvera a llenarse
+      // sin tocar el frontal.
+      const escribiendo = null;
 
     // Marca leido tambien EN WhatsApp: al otro lado le sale el doble tic azul.
     // Se le pasa lo que ya sabemos, para que no haga nada si no hay sin leer.
@@ -182,7 +204,17 @@ export async function abrirChat(req, res, next) {
     const conv = await model.conversacionDe({
       instancia,
       jid,
-      nombrePush: null,
+      // El nombre, de TU agenda y no del perfil de esa persona.
+      //
+      // Aqui iba `null`, asi que la conversacion nacia sin nombre y se quedaba
+      // con el primero que llegara — que es el `pushName`, o sea como se llama
+      // esa persona en WhatsApp. Si la tienes guardada como «Diego fontanero» y
+      // ella se puso «Dieguis», veias «Dieguis»: y el nombre con el que TU la
+      // tienes agendada es el unico que te dice quien es.
+      //
+      // Solo al ABRIR un chat nuevo, que es raro. El resto del tiempo los
+      // nombres se ponen al dia en bloque cada cuarto de hora.
+      nombrePush: await nombreEnLaAgenda(instancia, jid).catch(() => null),
     });
     res.status(201).json({ success: true, data: conv });
   } catch (err) { next(err); }
@@ -199,6 +231,8 @@ export async function adjunto(req, res, next) {
       mimetype: req.file.mimetype,
       nombreArchivo: req.file.originalname,
       pie: req.body?.pie || null,
+      // La duracion medida al grabar, para las notas de voz.
+      segundos: parseInt(req.body?.segundos, 10) || null,
       usuarioId: req.user.userId,
     });
     res.status(201).json({ success: true, data: fila });
@@ -286,6 +320,165 @@ export async function noEscribir(req, res, next) {
 }
 
 /**
+ * POST /api/whatsapp/chats/:id/llamada — apunta que se ha llamado.
+ *
+ * Llamar no se puede hacer desde aqui: WhatsApp no deja: no hay canal de audio
+ * por esta via. Lo que hace el boton es abrir la llamada en el movil de la
+ * gestora, y lo que hace el CRM es apuntar que se intento.
+ *
+ * Sin esto, la mitad de las llamadas seguirian sin aparecer en el historial:
+ * quedan las que entran —esas si las cuenta WhatsApp— y se pierden todas las
+ * que salen, que suelen ser las que importan para saber si se atendio a alguien.
+ *
+ * El identificador lleva el minuto dentro a proposito. Pulsar dos veces porque
+ * no dio tono, o que la pantalla mande el aviso otra vez, no son dos llamadas:
+ * el indice unico de `wa_id` los junta en una sola.
+ */
+export async function registrarLlamada(req, res, next) {
+  try {
+    const conv = await miConversacion(req, parseInt(req.params.id));
+    const minuto = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '');
+    const fila = await model.guardarMensaje({
+      conversacionId: conv.id,
+      waId: `try:${conv.id}:${minuto}`,
+      direccion: 'saliente',
+      tipo: 'llamada',
+      texto: 'intento',
+      mediaMime: 'audio',
+      enviadoPor: req.user.userId,
+      ts: new Date(),
+    });
+
+    // Y en la ficha del prospecto. Solo si el mensaje entro: `fila` vacia
+    // significa que ya se habia apuntado este minuto —doble clic porque no dio
+    // tono— y no son dos llamadas.
+    if (fila && conv.lead_id) {
+      try {
+        await model.apuntarInteraccion({
+          leadId: conv.lead_id,
+          nota: 'Llamada desde el movil (marcada desde el CRM)',
+          userId: req.user.userId,
+          fecha: fila.ts,
+        });
+      } catch (err) {
+        // Que no quede en la ficha no puede impedir llamar: el trabajo es hablar
+        // con la persona.
+        logger.warn({ conv: conv.id, err: err.message }, 'WhatsApp: llamada no apuntada en la ficha');
+      }
+    }
+    res.json({ success: true, data: { telefono: conv.telefono } });
+  } catch (err) { next(err); }
+}
+
+/**
+ * GET /api/whatsapp/sonando — ¿te estan llamando ahora mismo?
+ *
+ * Lo consulta TODO el CRM, no solo la pantalla de WhatsApp: la gracia es
+ * enterarse estando en Prospectos o en Facturacion, que es donde se pierde una
+ * llamada porque el movil esta en el bolso.
+ *
+ * Por eso no toca la base. Ni una consulta: el nombre y el telefono ya se
+ * buscaron una vez cuando entro el aviso, y aqui solo se lee un Map. Con diez
+ * gestoras y una vuelta cada pocos segundos, cualquier consulta aqui se
+ * multiplica por todas las pestañas abiertas del dia.
+ *
+ * Y es SIEMPRE la sesion de uno mismo, nunca la de otro: un administrador que
+ * esta mirando el WhatsApp de una gestora no tiene por que saltar cuando a ella
+ * la llaman, ni interrumpir lo que este haciendo.
+ */
+export async function sonando(req, res, next) {
+  try {
+    const instancia = evolution.instanciaDe(req.user.userId);
+    const l = servicio.llamadaSonando(instancia);
+    res.json({
+      success: true,
+      data: {
+        sonando: l
+          ? {
+              id: l.id,
+              telefono: l.telefono,
+              nombre: l.nombre,
+              conversacionId: l.conversacionId,
+              esVideo: l.esVideo,
+              esGrupo: l.esGrupo,
+              // Cuanto lleva sonando, para que la pantalla cuente los segundos
+              // sin depender de que el reloj del navegador vaya igual que el
+              // del servidor.
+              segundos: Math.round((Date.now() - l.desde) / 1000),
+            }
+          : null,
+        // Si esta sesion nunca ha dado señales, la pantalla espacia las
+        // vueltas: no tiene sentido preguntar cada tres segundos por un
+        // WhatsApp que no esta enlazado, y la mayoria del CRM no lo tiene.
+        enlazada: await servicio.tieneSesion(instancia),
+      },
+    });
+  } catch (err) { next(err); }
+}
+
+/**
+ * GET /api/whatsapp/respuesta-llamada — que se contesta a quien llama.
+ *
+ * Va por sesion, no global: no todas la quieren. Una gestora que si coge el
+ * telefono no debe rechazar automaticamente a nadie.
+ */
+export async function respuestaLlamada(req, res, next) {
+  try {
+    const instancia = await instanciaObjetivo(req);
+    const a = await evolution.ajustes(instancia);
+    if (a === null) {
+      // Que no se puedan leer no es un error de la pantalla: es que la sesion
+      // no esta levantada. Se dice y se ensena apagada, no se rompe.
+      return res.json({ success: true, data: { activa: false, texto: '', disponible: false } });
+    }
+    res.json({
+      success: true,
+      data: { activa: Boolean(a.rejectCall), texto: a.msgCall || '', disponible: true },
+    });
+  } catch (err) { next(err); }
+}
+
+/**
+ * POST /api/whatsapp/respuesta-llamada — cambiarla.
+ *
+ * Rechaza la llamada y contesta con un texto. Es lo unico que se puede hacer:
+ * por esta via WhatsApp no da canal de audio, asi que coger la llamada desde el
+ * CRM no existe. Al menos quien llama recibe una respuesta en vez de silencio.
+ */
+export async function guardarRespuestaLlamada(req, res, next) {
+  try {
+    // safeParse y no parse: un ZodError suelto no lleva statusCode, asi que el
+    // manejador lo toma por fallo interno y contesta «error del sistema» — que
+    // es justo lo contrario de lo que pasa, porque el usuario SI puede
+    // arreglarlo. Es el patron que ya usan los demas modulos.
+    const v = respuestaLlamadaSchema.safeParse(req.body || {});
+    if (!v.success) {
+      throw new AppError(v.error.issues[0]?.message || 'Datos invalidos', 400, 'VALIDATION_ERROR');
+    }
+    const datos = v.data;
+    const instancia = await instanciaObjetivo(req);
+    const r = await evolution.guardarAjustes(instancia, {
+      rejectCall: datos.activa,
+      // Al apagarla se vacia el texto: dejarlo puesto haria que Evolution
+      // siguiera contestando aunque la casilla se vea desmarcada.
+      msgCall: datos.activa ? datos.texto : '',
+    });
+    // 409 y no 502: que la sesion no este levantada no es una averia del
+    // servidor, es un estado que la gestora puede resolver enlazando. Con 5xx
+    // el manejador tapa el motivo con «error del sistema» y no se entera de
+    // que lo que falta es conectar su WhatsApp.
+    if (!r.ok) {
+      throw new AppError(
+        'Tu WhatsApp no esta conectado ahora mismo, asi que esto no se puede cambiar. Enlazalo y vuelve a intentarlo.',
+        409, 'WHATSAPP_DESCONECTADO',
+      );
+    }
+    logger.info({ instancia, activa: datos.activa }, 'WhatsApp: respuesta a llamadas cambiada');
+    res.json({ success: true, data: { activa: datos.activa, texto: datos.activa ? datos.texto : '' } });
+  } catch (err) { next(err); }
+}
+
+/**
  * GET /api/whatsapp/sincronizacion — ¿sigue entrando historial?
  *
  * Al emparejar, WhatsApp manda miles de mensajes durante varios minutos. Sin
@@ -320,7 +513,10 @@ export async function sincronizacion(req, res, next) {
     // entra. Se pregunta a la memoria, no a la base: contestarlo contando la
     // tabla entera costaba un escaneo de 380.000 filas cada cuatro segundos por
     // cada pantalla abierta.
-    const latido = servicio.ultimoLatido(instancia);
+    // «Sigue entrando» se mide con el latido del HISTORIAL, no con el general:
+    // ese se actualiza con cada mensaje normal y dejaba el aviso de
+    // «Sincronizando…» puesto mientras la gestora chateaba.
+    const latido = servicio.ultimoDelHistorial(instancia);
     const haceSegundos = latido ? Math.round((Date.now() - latido) / 1000) : null;
     const entrando = haceSegundos !== null && haceSegundos < 30;
 
@@ -389,6 +585,24 @@ export async function desconectar(req, res, next) {
 const nombresRefrescados = new Map();
 const CADA_CUANTO_NOMBRES = 15 * 60 * 1000;
 
+/**
+ * Como tienes guardada a esa persona en TU agenda.
+ *
+ * Devuelve null si no esta —un numero suelto que nunca guardaste— y entonces
+ * vale lo que WhatsApp diga de ella.
+ */
+async function nombreEnLaAgenda(instancia, jid) {
+  const contactos = await evolution.agenda(instancia);
+  const numero = String(jid).split('@')[0];
+  const suyo = (contactos || []).find((c) => {
+    if (!c?.jid || !c?.nombre) return false;
+    // Por numero y no por jid entero: la agenda puede traerlo con `@lid` o con
+    // `@s.whatsapp.net` segun de donde venga, y es la misma persona.
+    return String(c.jid).split('@')[0] === numero;
+  });
+  return suyo?.nombre ? String(suyo.nombre) : null;
+}
+
 async function refrescarNombresSiToca(instancia) {
   const ultima = nombresRefrescados.get(instancia) || 0;
   if (Date.now() - ultima < CADA_CUANTO_NOMBRES) return;
@@ -407,7 +621,22 @@ async function refrescarNombresSiToca(instancia) {
 export async function conexion(req, res, next) {
   try {
     if (!evolution.configurado()) {
-      return res.json({ success: true, data: { configurado: false, motivo: 'Falta EVOLUTION_URL o EVOLUTION_API_KEY' } });
+      // Los nombres de las variables van al REGISTRO, no a la pantalla.
+      //
+      // Aqui ponia «Falta EVOLUTION_URL o EVOLUTION_API_KEY». No era falso,
+      // pero le hablaba al programador delante de la gestora: dos nombres de
+      // variables de entorno de los que ella no sabe nada y con los que no
+      // puede hacer nada. Lo unico que entendia es que algo estaba roto.
+      //
+      // Y en pruebas no es que este roto: es que ahi no hay WhatsApp montado.
+      // Decirlo cambia por completo lo que entiende quien lo lee.
+      logger.warn('WhatsApp sin configurar: faltan EVOLUTION_URL o EVOLUTION_API_KEY');
+      return res.json({ success: true, data: {
+        configurado: false,
+        motivo: process.env.NODE_ENV === 'production'
+          ? 'WhatsApp no esta disponible ahora mismo. Avisa a quien lleva el CRM.'
+          : 'WhatsApp todavia no esta disponible en este entorno de pruebas. En produccion funciona con normalidad.',
+      }});
     }
     const instancia = await instanciaObjetivo(req);
     const [est, inst] = await Promise.all([evolution.estado(instancia), evolution.instancias()]);
@@ -612,11 +841,26 @@ export async function usuarios(req, res, next) {
                 WHERE active AND role IN ('superadmin','admin','gestor','soporte')
                   AND NOT COALESCE(gestor_colaboraciones, false)
                 ORDER BY (id = $1) DESC, nombre`
-            : `SELECT DISTINCT u.id, u.nombre, u.email, u.role FROM users u
-                 JOIN user_projects b ON b.user_id = u.id AND b.active
-                 JOIN user_projects a ON a.project_id = b.project_id AND a.active AND a.user_id = $1
+            // EXISTS y no DISTINCT con dos JOIN.
+            //
+            // Tal como estaba, Postgres rechazaba la consulta entera: «for
+            // SELECT DISTINCT, ORDER BY expressions must appear in select
+            // list», porque `(u.id = $1)` no esta en la lista de campos. O sea
+            // que CUALQUIER admin que abriera el selector de sesion recibia un
+            // 500. Un superadmin no lo veia nunca, porque va por la rama de
+            // arriba — por eso podia estar roto sin que nadie se enterara.
+            //
+            // Con EXISTS no hacen falta ni el DISTINCT ni la deduplicacion: se
+            // pregunta si comparte algun proyecto y se para en el primero.
+            : `SELECT u.id, u.nombre, u.email, u.role FROM users u
                 WHERE u.active AND u.role IN ('superadmin','admin','gestor','soporte')
                   AND NOT COALESCE(u.gestor_colaboraciones, false)
+                  AND EXISTS (
+                    SELECT 1 FROM user_projects b
+                      JOIN user_projects a ON a.project_id = b.project_id
+                                          AND a.active AND a.user_id = $1
+                     WHERE b.user_id = u.id AND b.active
+                  )
                 ORDER BY (u.id = $1) DESC, u.nombre`),
       [yo]);
 

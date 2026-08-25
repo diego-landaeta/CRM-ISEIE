@@ -1,21 +1,48 @@
 import { query } from '../../shared/config/db.js';
+import { logger } from '../../shared/utils/logger.js';
+import { AppError } from '../../shared/utils/AppError.js';
+
+// Postgres: «relation does not exist». Es lo que contesta mientras la migracion
+// 122 no este aplicada, y esa la aprueba Diego (tarea #21), no yo.
+const TABLA_QUE_NO_ESTA = '42P01';
 
 // ── Plantillas ───────────────────────────────────────────────────────────────
 // Se ven las compartidas del proyecto mas las personales de quien pregunta.
 // Nunca las personales de otra persona, ni siquiera siendo admin: son suyas.
 
+/**
+ * Sin la 122 aplicada devuelve la lista vacia, no un error.
+ *
+ * Esto se pide en CADA carga del listado de prospectos, para llenar el
+ * desplegable de plantillas. Si la tabla no esta y se deja subir el error, cada
+ * una de esas cargas contesta 500 — y el manejador de errores escribe todos los
+ * 5xx en la tabla de errores. O sea: una migracion sin aplicar llenaria el panel
+ * de soporte de ruido, en vez de que simplemente no haya plantillas todavia.
+ *
+ * Se avisa al registro del servidor UNA vez, que es donde sirve.
+ */
+let avisadoSinTabla = false;
 export async function listTemplates({ projectId, userId }) {
-  const { rows } = await query(
-    `SELECT t.id, t.project_id, t.label, t.body, t.ambito, t.owner_id, t.orden,
-            u.nombre AS creada_por
-       FROM whatsapp_templates t
-       LEFT JOIN users u ON u.id = t.created_by
-      WHERE t.project_id = $1 AND t.active
-        AND (t.ambito = 'compartida' OR t.owner_id = $2)
-      ORDER BY t.ambito DESC, t.orden, t.id`,
-    [projectId, userId]
-  );
-  return rows;
+  try {
+    const { rows } = await query(
+      `SELECT t.id, t.project_id, t.label, t.body, t.ambito, t.owner_id, t.orden,
+              u.nombre AS creada_por
+         FROM whatsapp_templates t
+         LEFT JOIN users u ON u.id = t.created_by
+        WHERE t.project_id = $1 AND t.active
+          AND (t.ambito = 'compartida' OR t.owner_id = $2)
+        ORDER BY t.ambito DESC, t.orden, t.id`,
+      [projectId, userId]
+    );
+    return rows;
+  } catch (err) {
+    if (err.code !== TABLA_QUE_NO_ESTA) throw err;
+    if (!avisadoSinTabla) {
+      avisadoSinTabla = true;
+      logger.warn('WhatsApp: falta la migracion 122, no hay plantillas todavia');
+    }
+    return [];
+  }
 }
 
 export async function getTemplate(id) {
@@ -110,57 +137,8 @@ export async function cola({ projectId, responsableId, estado, productoId, soloS
   return rows;
 }
 
-// ── Sala ─────────────────────────────────────────────────────────────────────
-
-// El nombre con el que se entra al navegador remoto. Importa porque es lo que
-// ve el resto en la sala: si entra un admin a ayudar, la gestora tiene que
-// saber quien es y no un «usuario-14».
-export async function nombreDe(userId) {
-  const { rows: [u] } = await query('SELECT nombre, email FROM users WHERE id = $1', [userId]);
-  return u?.nombre || u?.email?.split('@')[0] || `usuario-${userId}`;
-}
-
-// El mismo criterio de equipo(), pero para una sola persona y sin mirar
-// proyecto: la clave de la sala es `crm-<userId>`, una por persona y no una por
-// proyecto, asi que el derecho a tenerla tampoco depende del proyecto abierto.
+// Aqui vivia la seccion Sala: nombreDe, tieneSalaPropia y equipo.
 //
-// Existe porque las dos listas SI se contradecian: equipo() solo enseña a las
-// gestoras y a los admin que trabajan leads, pero sala() le daba sala a
-// cualquiera que abriera la pantalla. Esas salas no salian en ningun panel, y
-// lo que no se ve no se apaga: quedaban encendidas con sus pestañas dentro.
-export async function tieneSalaPropia(userId) {
-  // sala() saca el userId de la query con parseInt, asi que un valor con letras
-  // llega aqui como NaN. Sin esto, Postgres rechaza el parametro y la pantalla
-  // responde 500 en vez de decir simplemente que no hay sala.
-  if (!Number.isInteger(userId)) return false;
-  const { rows } = await query(
-    `SELECT 1
-       FROM users u
-       JOIN user_projects up ON up.user_id = u.id
-      WHERE u.id = $1
-        AND u.active = TRUE
-        AND (u.role = 'gestor' OR (u.role IN ('admin','superadmin') AND up.recibe_leads = TRUE))
-      LIMIT 1`,
-    [userId]
-  );
-  return rows.length > 0;
-}
-
-// Quien tiene sala propia. Las gestoras siempre; los admin solo si trabajan
-// leads (recibe_leads), porque un admin que solo supervisa no necesita un
-// numero propio: entra en el de otra. Es el mismo criterio del reparto de
-// leads, para que las dos listas no se contradigan.
-export async function equipo(projectId) {
-  const { rows } = await query(
-    `SELECT DISTINCT u.id, u.nombre, u.email, u.role, u.last_login_at,
-            COALESCE(u.is_available, TRUE) AS disponible
-       FROM users u
-       JOIN user_projects up ON up.user_id = u.id
-      WHERE u.active = TRUE
-        AND up.project_id = $1
-        AND (u.role = 'gestor' OR (u.role IN ('admin','superadmin') AND up.recibe_leads = TRUE))
-      ORDER BY u.nombre`,
-    [projectId]
-  );
-  return rows;
-}
+// Se van con las funciones del controlador que las llamaban. Nadie mas las
+// usaba: el reparto de leads tiene su propio criterio, y el chat nuevo no
+// necesita saber quien tiene navegador remoto porque ya no hay ninguno.

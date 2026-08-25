@@ -9,7 +9,7 @@ import { whatsappApi, type PlantillaWhatsapp } from '../api/whatsapp.api';
 // gestora tenía las suyas en su equipo, nadie podía revisarlas y si cambiaba de
 // ordenador las perdía. Ahora están en la base de datos.
 
-const VARIABLES = ['{nombre}', '{nombreCompleto}', '{producto}', '{proyecto}', '{email}', '{telefono}'];
+const VARIABLES = ['{nombre}', '{nombreCompleto}', '{producto}', '{proyecto}', '{email}', '{teléfono}'];
 
 export default function PlantillasWhatsappPage() {
   const { user } = useAuth() as { user: { role?: string } | null };

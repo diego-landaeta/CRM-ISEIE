@@ -1,5 +1,6 @@
 import { query } from '../../shared/config/db.js';
 import { normalizePhone, phoneCanonical } from '../../shared/utils/normalizePhone.js';
+import { logger } from '../../shared/utils/logger.js';
 
 // Las conversaciones de WhatsApp. Antes esto no existia: se veian en el
 // navegador remoto y se perdian. Ahora viven aqui, y por eso se pueden buscar,
@@ -93,7 +94,26 @@ export async function guardarMensaje({ conversacionId, waId, direccion, tipo, te
     `INSERT INTO wa_mensajes
        (conversacion_id, wa_id, direccion, tipo, texto, media_url, media_mime, nombre_archivo, estado, enviado_por, ts${conCita ? ', responde_a' : ''})
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11${conCita ? ', $12' : ''})
-     ON CONFLICT (wa_id) WHERE wa_id IS NOT NULL DO NOTHING
+     ON CONFLICT (wa_id) WHERE wa_id IS NOT NULL DO UPDATE SET
+       -- Se COMPLETA la fila, no se pisa.
+       --
+       -- Un mensaje que sale llega por dos sitios casi a la vez: lo guarda el
+       -- propio envio y lo guarda el aviso que devuelve WhatsApp. Ganaba el
+       -- aviso por unas decimas y el envio se quedaba sin fila —«DO NOTHING»—,
+       -- asi que la pantalla no recibia fila y el mensaje recien mandado
+       -- no aparecia hasta la siguiente vuelta.
+       --
+       -- Y lo que traia el envio no lo sabe el aviso: QUIEN lo mando, la copia
+       -- del adjunto y a que mensaje contestaba. Con COALESCE se rellena lo que
+       -- falte sin tocar lo que ya tenga valor, venga por donde venga.
+       enviado_por    = COALESCE(wa_mensajes.enviado_por, EXCLUDED.enviado_por),
+       media_url      = COALESCE(wa_mensajes.media_url, EXCLUDED.media_url),
+       media_mime     = COALESCE(wa_mensajes.media_mime, EXCLUDED.media_mime),
+       nombre_archivo = COALESCE(wa_mensajes.nombre_archivo, EXCLUDED.nombre_archivo),
+       texto          = COALESCE(wa_mensajes.texto, EXCLUDED.texto),
+       -- El estado si avanza: «enviado» pisa a un hueco, y los acuses posteriores
+       -- lo mueven a entregado o leido por su propio camino.
+       estado         = COALESCE(EXCLUDED.estado, wa_mensajes.estado)
      RETURNING *`,
     [conversacionId, waId || null, direccion, tipo || 'texto', texto || null,
      mediaUrl || null, mediaMime || null, nombreArchivo || null, estado || null,
@@ -402,6 +422,102 @@ export async function guardarAdjunto(id, { ruta, mime, nombreArchivo }) {
       WHERE id = $1`,
     [id, ruta, mime, nombreArchivo]
   );
+}
+
+/**
+ * Deja escrito que alguien entro a mirar el WhatsApp de otra persona.
+ *
+ * Un administrador puede abrir la sesion de una gestora — hace falta para
+ * ayudarla y para supervisar. Pero son sus conversaciones con clientes, y
+ * algunas seran personales: que se pueda mirar sin dejar rastro es lo que
+ * convierte una herramienta de trabajo en una de vigilancia.
+ *
+ * Va a `user_activity_log`, que ya existe y ya usa auth. No hace falta tabla
+ * nueva ni migracion — o sea que esto funciona esté como esté la base.
+ *
+ * SE LIMITA A UNA CADA MEDIA HORA por pareja (quien mira, a quien mira). La
+ * pantalla del chat pregunta cada pocos segundos: sin el freno, una tarde
+ * mirando dejaria miles de filas y el registro no serviria para leerlo, que es
+ * justo para lo que esta.
+ */
+const MIRADAS_TTL_MS = 1800000;
+const miradas = new Map();   // "quien>aquien" -> milisegundos de la ultima apuntada
+
+export async function apuntarMirada({ quienMira, aQuien, ip }) {
+  if (!quienMira || !aQuien || quienMira === aQuien) return false;
+  const clave = `${quienMira}>${aQuien}`;
+  const ultima = miradas.get(clave);
+  if (ultima && Date.now() - ultima < MIRADAS_TTL_MS) return false;
+  miradas.set(clave, Date.now());
+  try {
+    await query(
+      `INSERT INTO user_activity_log (user_id, action, details, ip_address)
+       VALUES ($1, 'whatsapp.mirar_sesion', $2, $3)`,
+      [quienMira, JSON.stringify({ gestora: aQuien }), ip || null]
+    );
+    return true;
+  } catch (err) {
+    // Que no se pueda apuntar no puede dejar sin trabajar a quien esta
+    // ayudando a una gestora. Se avisa al registro del servidor y se sigue.
+    logger.warn({ quienMira, aQuien, err: err.message }, 'WhatsApp: no se pudo apuntar quien miro la sesion');
+    return false;
+  }
+}
+
+/**
+ * Apunta la llamada en la ficha del prospecto.
+ *
+ * El chat guarda la conversacion; la ficha guarda el HISTORIAL DE CONTACTO, y
+ * son cosas distintas. Quien abre a un prospecto para ver por donde va no entra
+ * en WhatsApp: mira su lista de contactos, y hasta ahora las llamadas no
+ * estaban ahi — ni las que entraban ni las que salian.
+ *
+ * `created_by` es NOT NULL y en una llamada entrante no hay ningun usuario del
+ * CRM detras. Se apunta a nombre de la gestora cuya linea la recibio, que es
+ * quien de verdad tuvo el contacto.
+ *
+ * SQL directo y no un import del modulo de leads: este modulo ya consulta la
+ * tabla de leads por su cuenta (ver leadPorTelefono) y atarlos crearia una
+ * dependencia entre modulos que hoy no existe.
+ */
+export async function apuntarInteraccion({ leadId, nota, userId, fecha }) {
+  if (!leadId || !userId) return null;
+  const { rows } = await query(
+    `INSERT INTO lead_interactions (lead_id, tipo, nota, created_by, fecha)
+     VALUES ($1, 'llamada', $2, $3, COALESCE($4::timestamptz, NOW()))
+     RETURNING id`,
+    [leadId, nota, userId, fecha || null]
+  );
+  return rows[0] || null;
+}
+
+/**
+ * ¿Esta sesion ha llegado a enlazarse alguna vez?
+ *
+ * `EXISTS` y no `COUNT`: para saber si hay alguna, Postgres para en la primera
+ * que encuentra en vez de recorrerlas todas. Con sesiones de 380.000 mensajes
+ * la diferencia no es teorica.
+ */
+export async function hayConversaciones(instancia) {
+  const { rows } = await query(
+    'SELECT EXISTS (SELECT 1 FROM wa_conversaciones WHERE instancia = $1) AS hay',
+    [instancia]
+  );
+  return Boolean(rows[0]?.hay);
+}
+
+/**
+ * Un mensaje por su identificador de WhatsApp.
+ *
+ * Hace falta al responder citando: Evolution quiere saber si el mensaje citado
+ * era nuestro y que decia, no solo su identificador.
+ */
+export async function mensajePorWaId(waId) {
+  const { rows } = await query(
+    `SELECT id, wa_id, direccion, tipo, texto FROM wa_mensajes WHERE wa_id = $1 LIMIT 1`,
+    [waId]
+  );
+  return rows[0] || null;
 }
 
 /** Un mensaje con lo justo para volver a pedirle el adjunto a WhatsApp. */
