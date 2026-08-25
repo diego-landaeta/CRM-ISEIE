@@ -8,6 +8,9 @@ export const leadSchema = z.object({
   // Email opcional: si viene, debe ser válido; vacío también acepta
   email: z.string().email('Email no valido').optional().or(z.literal('')),
   telefono: z.string().optional().or(z.literal('')),
+  // Quien se contacta por usuario y no da numero. No sustituye al
+  // telefono: mucha gente tiene los dos.
+  whatsapp_usuario: z.string().max(120).optional().or(z.literal('')),
   origen: z.enum(['meta_ads', 'google_ads', 'tiktok_ads', 'organico', 'chatgpt_ia', 'whatsapp', 'referido', 'directo'], {
     required_error: 'Selecciona un origen',
   }),
@@ -16,8 +19,16 @@ export const leadSchema = z.object({
   pais: z.string().optional(),
   notas: z.string().optional(),
 }).refine(
-  (data) => (data.email && data.email.length > 0) || (data.telefono && data.telefono.length > 0),
-  { message: 'Debes poner al menos email o teléfono (uno de los dos)', path: ['email'] }
+  // Hace falta ALGUNA forma de contacto, no una en concreto.
+  //
+  // El aviso ya no va sobre el correo. Iba en `path: ['email']`, asi que
+  // faltando las tres se pintaba en rojo debajo del correo y parecia que el
+  // obligatorio era ese: se avisaba del problema correcto en el sitio
+  // equivocado, y por eso se creia que el correo era obligatorio.
+  (data) => Boolean((data.email && data.email.length > 0)
+    || (data.telefono && data.telefono.length > 0)
+    || (data.whatsapp_usuario && data.whatsapp_usuario.length > 0)),
+  { message: 'Hace falta al menos una forma de contacto: correo, teléfono o usuario de WhatsApp' }
 );
 
 export type LeadFormData = z.infer<typeof leadSchema>;

@@ -229,6 +229,7 @@ async function _createLeadCore(project, leadData) {
     nombre: leadData.nombre,
     email: leadData.email || null,
     telefono: normalizePhone(leadData.telefono),
+    whatsappUsuario: leadData.whatsapp_usuario || null,
     productoInteresId,
     notas: leadData.notas || null,
     landingUrl: leadData.landing_url || null,
@@ -665,7 +666,7 @@ export async function checkDuplicate({ project_id, email, telefono }, requestUse
   return { duplicate: dup };
 }
 
-export async function createManualLead({ project_id, nombre, email, telefono, producto_interes_id, canal, notas, custom_fields }, opts = {}) {
+export async function createManualLead({ project_id, nombre, email, telefono, whatsapp_usuario, producto_interes_id, canal, notas, custom_fields }, opts = {}) {
   const creatorUser = opts.creatorUser || null;
   // Detectar duplicado por email O por teléfono normalizado (cualquiera basta).
   const telNorm = normalizePhone(telefono);
@@ -718,6 +719,7 @@ export async function createManualLead({ project_id, nombre, email, telefono, pr
     nombre,
     email,
     telefono: normalizePhone(telefono),
+    whatsappUsuario: whatsapp_usuario || null,
     productoInteresId: producto_interes_id || null,
     notas: notas || null,
     landingUrl: null,

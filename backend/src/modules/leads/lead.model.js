@@ -59,7 +59,7 @@ export async function findDuplicateByEmailOrPhone(email, telefono, projectId) {
   `;
 
   const { rows } = await query(
-    `SELECT l.id, l.nombre, l.email, l.telefono, l.status, l.producto_interes_id,
+    `SELECT l.id, l.nombre, l.email, l.telefono, l.whatsapp_usuario, l.status, l.producto_interes_id,
             l.responsable_id, l.created_at, l.fecha_solicitud,
             u.nombre AS responsable_nombre,
             ($2::text IS NOT NULL AND l.email = $2) AS match_by_email,
@@ -351,7 +351,7 @@ export async function deleteProductAlias(aliasId, projectId) {
 // Si forcedResponsableId viene, valida que el user tenga acceso al proyecto
 // y está disponible; si todo OK, salta el round-robin y le asigna directo.
 // Si no viene, ejecuta round-robin tradicional.
-export async function createLeadWithRoundRobin({ projectId, nombre, email, telefono, productoInteresId, notas, landingUrl, duplicadoDe, reincidente = false, esPropuesto = false, propuestoDe = null, utms, customFields, forcedResponsableId = null, skipRoundRobin = false, advanceRoundRobinAnyway = false, idempotencyKey = null }) {
+export async function createLeadWithRoundRobin({ projectId, nombre, email, telefono, whatsappUsuario = null, productoInteresId, notas, landingUrl, duplicadoDe, reincidente = false, esPropuesto = false, propuestoDe = null, utms, customFields, forcedResponsableId = null, skipRoundRobin = false, advanceRoundRobinAnyway = false, idempotencyKey = null }) {
   const client = await getClient();
   try {
     await client.query('BEGIN');
@@ -445,10 +445,10 @@ export async function createLeadWithRoundRobin({ projectId, nombre, email, telef
 
     // Crear lead
     const { rows: leadRows } = await client.query(
-      `INSERT INTO leads (project_id, nombre, email, telefono, producto_interes_id, responsable_id, notas, landing_url, lead_duplicado_de, reincidente, es_propuesto, propuesto_de, custom_fields, idempotency_key)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-       RETURNING id, project_id, nombre, email, telefono, status, responsable_id, lead_duplicado_de, reincidente, es_propuesto, propuesto_de, fecha_solicitud, created_at`,
-      [projectId, nombre, email, telefono, productoInteresId, responsableId, notas, landingUrl, duplicadoDe, reincidente, esPropuesto, propuestoDe,
+      `INSERT INTO leads (project_id, nombre, email, telefono, whatsapp_usuario, producto_interes_id, responsable_id, notas, landing_url, lead_duplicado_de, reincidente, es_propuesto, propuesto_de, custom_fields, idempotency_key)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+       RETURNING id, project_id, nombre, email, telefono, whatsapp_usuario, status, responsable_id, lead_duplicado_de, reincidente, es_propuesto, propuesto_de, fecha_solicitud, created_at`,
+      [projectId, nombre, email, telefono, whatsappUsuario || null, productoInteresId, responsableId, notas, landingUrl, duplicadoDe, reincidente, esPropuesto, propuestoDe,
        customFields ? JSON.stringify(customFields) : '{}', idempotencyKey]
     );
     const lead = leadRows[0];
@@ -663,7 +663,7 @@ export async function findAll({ projectId, projectIds, status, responsableId, un
     params.push(productId);
   }
   if (search) {
-    conditions.push(`(l.nombre ILIKE $${paramIdx} OR l.email ILIKE $${paramIdx} OR l.telefono ILIKE $${paramIdx})`);
+    conditions.push(`(l.nombre ILIKE $${paramIdx} OR l.email ILIKE $${paramIdx} OR l.telefono ILIKE $${paramIdx} OR l.whatsapp_usuario ILIKE $${paramIdx})`);
     params.push(`%${search}%`);
     paramIdx++;
   }
@@ -773,7 +773,7 @@ export async function findAll({ projectId, projectIds, status, responsableId, un
      ) client_stats ON TRUE` : '';
 
   const { rows } = await query(
-    `SELECT l.id, l.nombre, l.email, l.telefono, l.status, l.fecha_solicitud, l.dossier_enviado, l.lead_duplicado_de,
+    `SELECT l.id, l.nombre, l.email, l.telefono, l.whatsapp_usuario, l.status, l.fecha_solicitud, l.dossier_enviado, l.lead_duplicado_de,
             l.reincidente, l.es_propuesto, l.propuesto_de, l.updated_at, l.created_at,
             l.landing_url,
             l.project_id,
@@ -1078,7 +1078,7 @@ export async function updateLead(id, fields) {
   const params = [];
   let idx = 1;
 
-  const allowed = ['nombre', 'email', 'telefono', 'notas', 'producto_interes_id', 'custom_fields'];
+  const allowed = ['nombre', 'email', 'telefono', 'whatsapp_usuario', 'notas', 'producto_interes_id', 'custom_fields'];
   for (const key of allowed) {
     if (Object.prototype.hasOwnProperty.call(fields, key)) {
       sets.push(`${key} = $${idx++}`);
