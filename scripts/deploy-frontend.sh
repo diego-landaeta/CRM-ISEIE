@@ -54,6 +54,23 @@ if [ -d "$LIVE" ]; then
 fi
 mv "$STAGING" "$LIVE"
 
+# Los trozos del build anterior se quedan una semana al lado de los nuevos.
+#
+# Sin esto, la pestaña que alguien tenga abierta sigue pidiendo los ficheros del
+# build viejo, que ya no estan. Las pantallas que cargan en diferido —Reportes,
+# Clientes, la ficha del lead— revientan con «Failed to fetch dynamically
+# imported module» hasta que el navegador recarga a fondo. Nadie sabe que tiene
+# que recargar: lo que ve es que el CRM se ha roto.
+#
+# --preserve=timestamps es lo que hace que el borrado por antiguedad funcione:
+# sin eso los ficheros copiados estrenarian fecha y no caducarian nunca.
+if [ -d "$BACKUP/assets" ]; then
+  cp -rn --preserve=timestamps "$BACKUP/assets/." "$LIVE/assets/" 2>/dev/null || true
+  find "$LIVE/assets" -type f -mtime +7 -delete 2>/dev/null || true
+  chown -R www-data:www-data "$LIVE"
+  echo "  ✓ Trozos conservados del build anterior: $(ls $LIVE/assets | wc -l) en total"
+fi
+
 echo "  ✓ Bundle live: $(ls $LIVE/assets/index-*.js 2>/dev/null | head -1)"
 echo "  ✓ Tamaño: $(du -sh $LIVE | cut -f1)"
 echo "  ✓ Backup previo: $BACKUP"
