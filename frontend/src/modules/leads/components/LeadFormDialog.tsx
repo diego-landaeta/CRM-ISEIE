@@ -135,7 +135,7 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
       });
       // Si ya tiene usuario, el desplegable se pone solo donde toca: nadie
       // tiene que acordarse de cambiarlo para ver lo que ya estaba guardado.
-      setModoContacto(lead.whatsapp_usuario
+      setModoContacto(lead?.whatsapp_usuario
         ? (lead.telefono ? 'ambos' : 'usuario')
         : 'numero');
       setCustomValues((lead?.custom_fields as Record<string, unknown>) || {});
