@@ -736,8 +736,24 @@ export async function generarFacturaDePago(projectId, paymentId, userId, { forza
       409, 'HAY_ANTERIORES');
   }
   const inv = await model.emitirFacturaDePago(
-    pg.conversion_id, { paymentId: pg.payment_id, importe: Number(pg.importe) }, userId
+    pg.conversion_id, { paymentId: pg.payment_id, importe: Number(pg.importe), saltarTotal: forzar }, userId
   );
+  // Que no diga "generada" si no se genero nada.
+  //
+  // El modelo devuelve la factura que ya existia en varios casos legitimos (el
+  // cobro ya la tenia, o se engancha a una huerfana): ahi el pago coincide. Si
+  // vuelve otra distinta, o no vuelve nada, lo que hubo fue un choque, y quien
+  // factura tiene que enterarse en vez de ver un aviso de exito falso.
+  if (!inv) {
+    throw new AppError(
+      'No se emitio ninguna factura: el cobro es anterior a la primera factura de la sociedad.',
+      409, 'ANTES_DEL_ARRANQUE');
+  }
+  if (inv.payment_id != null && Number(inv.payment_id) !== Number(pg.payment_id)) {
+    throw new AppError(
+      `Ese cobro sigue sin factura: el CRM devolvio la nº ${inv.numero}, que es de otro pago de la misma venta.`,
+      409, 'NO_EMITIDA');
+  }
   return inv;
 }
 

@@ -701,7 +701,7 @@ async function _convertirProformaEnFactura(prof, conv, paymentId, fechaPago) {
 // (índice único parcial) → reintentos/reejecuciones no duplican.
 // EXCEPCIÓN: si la conversión tiene una PROFORMA (número reservado), el pago la
 // convierte en factura con ese número, en vez de crear una factura nueva.
-export async function emitirFacturaDePago(conversionId, { paymentId, importe }, userId = null) {
+export async function emitirFacturaDePago(conversionId, { paymentId, importe, saltarTotal = false }, userId = null) {
   if (!conversionId || !paymentId) return null;
   const monto = Number(importe) || 0;
   if (monto <= 0) return null;
@@ -779,13 +779,40 @@ export async function emitirFacturaDePago(conversionId, { paymentId, importe }, 
   // ¿Ya hay una factura por el TOTAL de la conversión (ex-proforma o completa)?
   // No se crea otra por pago: solo se marca pagada cuando la venta queda saldada.
   const { rows: facTot } = await query(
-    `SELECT id, estado FROM invoices WHERE conversion_id = $1 AND tipo = 'normal' AND estado <> 'cancelada'
+    `SELECT id, numero, estado FROM invoices WHERE conversion_id = $1 AND tipo = 'normal' AND estado <> 'cancelada'
        AND total >= (SELECT importe_total FROM conversions WHERE id = $1) - 0.01 ORDER BY id DESC LIMIT 1`,
     [conversionId]);
   if (facTot[0]) {
-    const saldada = Number(conv.importe_pagado) >= Number(conv.importe_total) - 0.01;
-    if (saldada && facTot[0].estado !== 'pagada') { try { await markPaid(facTot[0].id, fechaPago); } catch { /* noop */ } }
-    return facTot[0];
+    // Pero solo si lo ya facturado cubre lo realmente cobrado.
+    //
+    // Si el total apuntado en la venta se quedo corto, esa primera factura pasa
+    // el listón y toda cuota posterior se da por facturada sin estarlo: el cobro
+    // se queda en la cola para siempre y quien pulsa "generar factura" recibe de
+    // vuelta la factura vieja, con lo que la pantalla dice que se genero una que
+    // no existe.
+    const { rows: [cuadre] } = await query(
+      `SELECT (SELECT COALESCE(sum(total), 0) FROM invoices
+                WHERE conversion_id = $1 AND tipo = 'normal' AND estado <> 'cancelada') AS facturado,
+              (SELECT COALESCE(sum(importe), 0) FROM conversion_payments
+                WHERE conversion_id = $1) AS cobrado`,
+      [conversionId]);
+    const cubierto = Number(cuadre.facturado) + 0.01 >= Number(cuadre.cobrado);
+    if (cubierto) {
+      const saldada = Number(conv.importe_pagado) >= Number(conv.importe_total) - 0.01;
+      if (saldada && facTot[0].estado !== 'pagada') { try { await markPaid(facTot[0].id, fechaPago); } catch { /* noop */ } }
+      return facTot[0];
+    }
+    // Hay dinero cobrado que ninguna factura recoge. No se emite a ciegas: puede
+    // ser que el total de la venta este corto, o que el cobro este duplicado.
+    // Se dice cual es el descuadre y se deja decidir a quien factura (`saltarTotal`).
+    if (!saltarTotal) {
+      throw new AppError(
+        `Esta venta ya tiene la factura nº ${facTot[0].numero} y entre todas suman `
+        + `${Number(cuadre.facturado).toFixed(2)} €, pero lleva cobrados `
+        + `${Number(cuadre.cobrado).toFixed(2)} €. O el total de la venta se quedo corto, `
+        + `o ese cobro esta duplicado. Revisalo antes de facturar.`,
+        409, 'TOTAL_CORTO');
+    }
   }
 
   // Servicios académicos: exentos de IVA. La factura sale sin IVA (base = monto).
