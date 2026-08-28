@@ -41,6 +41,22 @@ function generarContrasena() {
   return `${de(mayus, 1)}${de(letras, 5)}${de(numeros, 3)}`;
 }
 
+// Que le falta a un tutor para poder cobrar.
+//
+// Sin IBAN no se le puede pagar, y sin DNI no se puede justificar el pago. El
+// correo cuenta como «falta» cuando es uno construido con el dominio de la
+// marca: esos no existen, y por eso ninguno de sus dueños ha entrado nunca.
+const CORREO_DE_LA_CASA = /@(iseie|psikoaprende|iseih|fonoaprende|ictess)\.(com|es)$/i;
+
+function loQueFalta(t: Tutor): string[] {
+  const falta: string[] = [];
+  if (!t.iban) falta.push('IBAN');
+  if (!t.dni_nif) falta.push('DNI');
+  if (!t.telefono) falta.push('teléfono');
+  if (!t.email || CORREO_DE_LA_CASA.test(t.email)) falta.push('correo');
+  return falta;
+}
+
 export default function TutoresPage() {
   const { user } = useAuth() as { user: { role?: string; gestor_colaboraciones?: boolean } | null };
   const { activeProject, projects } = useProjectContext() as {
@@ -274,6 +290,23 @@ export default function TutoresPage() {
         </span>
       </div>
       <div className="text-xs text-muted-foreground truncate">{t.email}</div>
+      {/* Lo que le falta para poder cobrar. Va en la lista y no solo en la
+          ficha: asi se ve de un vistazo a quien hay que perseguir, sin abrir
+          uno por uno los cuarenta y cinco. */}
+      {(() => {
+        const falta = loQueFalta(t);
+        return falta.length > 0 ? (
+          <div className="flex flex-wrap gap-1 mt-1">
+            {falta.map((q) => (
+              <span key={q}
+                className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium
+                  bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                falta {q}
+              </span>
+            ))}
+          </div>
+        ) : null;
+      })()}
       {t.marcas && (
         <div className="text-[11px] text-muted-foreground/80 truncate mt-0.5">{t.marcas}</div>
       )}

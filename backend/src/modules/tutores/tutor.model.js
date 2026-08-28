@@ -470,6 +470,10 @@ export async function pagosSinFormacion({ desde, hasta, projectId = null }) {
  * el catalogo entero y no serviria para nada. Asi salen solo las que ya estan
  * generando dinero y no tienen a quien pagarle.
  *
+ * Solo cuenta los cobros desde `tutor_settings.aplica_desde`, que es el
+ * arranque de las comisiones. Una venta de abril pudo tener tutor entonces y
+ * no tenerlo ahora: sacarla aqui seria acusar de un agujero que no existe.
+ *
  * Cuenta los pagos, no las ventas: una venta a plazos con seis cobros ya lleva
  * seis comisiones sin dueño, y eso es lo que mide el agujero de verdad.
  */
@@ -486,10 +490,17 @@ export async function formacionesSinTutor({ projectId = null } = {}) {
        JOIN conversions cv ON cv.producto_contratado_id = p.id
        JOIN conversion_payments cp ON cp.conversion_id = cv.id
        LEFT JOIN projects pr ON pr.id = p.project_id
+       CROSS JOIN tutor_settings s
       WHERE NOT EXISTS (
               SELECT 1 FROM tutor_collaborations tc
                WHERE tc.product_id = p.id AND tc.activa
             )
+        -- Solo los cobros desde que las comisiones aplican.
+        --
+        -- Antes de esa fecha no se genera comision de todos modos, y una venta
+        -- de abril pudo tener tutor entonces y no tenerlo ahora: sacarla aqui
+        -- seria acusar de un agujero que no existe.
+        AND cp.fecha >= s.aplica_desde
         AND ($1::int IS NULL OR p.project_id = $1)
       GROUP BY p.id, p.nombre, p.precio, pr.nombre, p.project_id
      HAVING count(cp.id) >= 1 AND count(DISTINCT cv.lead_id) >= 1

@@ -62,7 +62,7 @@ export default function FormacionesSinTutorPage() {
     <div className="space-y-4">
       <PageHeader
         title="Formaciones sin tutor"
-        subtitle="Ya han vendido y no tienen a quien pagarle la comisión"
+        subtitle="Ya han vendido desde que las comisiones aplican, y no tienen a quien pagarle"
       />
 
       {/* El titular, antes de la lista: es la cifra que decide si esto urge. */}
@@ -77,6 +77,8 @@ export default function FormacionesSinTutorPage() {
             {total.pagos} {total.pagos === 1 ? 'cobro' : 'cobros'} de {total.alumnos}{' '}
             {total.alumnos === 1 ? 'alumno' : 'alumnos'}. Nadie cobra comisión por ellos.
             Se arregla asignándole un tutor a cada formación.
+            {' '}Solo se cuentan los cobros desde que las comisiones aplican: los de antes
+            pudieron tener tutor entonces.
           </p>
         </div>
       )}
