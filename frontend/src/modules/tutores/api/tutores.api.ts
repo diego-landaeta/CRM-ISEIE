@@ -10,6 +10,7 @@ export interface Tutor {
   pendiente_de_entrar: boolean;
   dni_nif: string | null;
   iban: string | null;
+  banco: string | null;
   telefono: string | null;
   notas: string | null;
   formaciones: number;

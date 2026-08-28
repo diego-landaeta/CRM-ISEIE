@@ -51,6 +51,7 @@ const CORREO_DE_LA_CASA = /@(iseie|psikoaprende|iseih|fonoaprende|ictess)\.(com|
 function loQueFalta(t: Tutor): string[] {
   const falta: string[] = [];
   if (!t.iban) falta.push('IBAN');
+  if (!t.banco) falta.push('banco');
   if (!t.dni_nif) falta.push('DNI');
   if (!t.telefono) falta.push('teléfono');
   if (!t.email || CORREO_DE_LA_CASA.test(t.email)) falta.push('correo');
@@ -101,7 +102,7 @@ export default function TutoresPage() {
   // y no lo llamaba nadie: el formulario era solo de alta, asi que el IBAN se
   // ponia una vez y despues no habia forma de verlo ni de cambiarlo.
   const [popupDatos, setPopupDatos] = useState(false);
-  const [datos, setDatos] = useState({ nombre: '', dniNif: '', telefono: '', iban: '', email: '', reenviar: true });
+  const [datos, setDatos] = useState({ nombre: '', dniNif: '', telefono: '', iban: '', banco: '', email: '', reenviar: true });
   const [claveNueva, setClaveNueva] = useState('');
   const [claveCopiada, setClaveCopiada] = useState(false);
   const [popupRetiro, setPopupRetiro] = useState(false);
@@ -182,6 +183,7 @@ export default function TutoresPage() {
       dniNif: elegido.dni_nif || '',
       telefono: elegido.telefono || '',
       iban: elegido.iban || '',
+      banco: elegido.banco || '',
       email: elegido.email || '',
       reenviar: true,
     });
@@ -196,6 +198,7 @@ export default function TutoresPage() {
         dniNif: datos.dniNif.trim() || null,
         telefono: datos.telefono.trim() || null,
         iban: datos.iban.replace(/\s+/g, '').toUpperCase() || null,
+        banco: datos.banco.trim() || null,
         ...(datos.email.trim().toLowerCase() !== (elegido.email || '').toLowerCase()
           ? { email: datos.email.trim(), reenviarEnlace: datos.reenviar }
           : {}),
@@ -868,6 +871,16 @@ export default function TutoresPage() {
               <span className="block text-[11px] text-muted-foreground font-normal mt-1">
                 Donde se le paga. Los espacios se quitan solos.
               </span>
+            </label>
+
+            {/* El banco, suelto y no deducido del IBAN: hay tutores fuera de
+                Europa, y ahi el numero de cuenta no lleva codigo de entidad. */}
+            <label className="block text-xs font-medium">
+              Banco
+              <input value={datos.banco}
+                onChange={(e) => setDatos({ ...datos, banco: e.target.value })}
+                placeholder="BBVA, Santander, Galicia…"
+                className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-normal" />
             </label>
 
             {/* El correo es la CREDENCIAL, no un dato de contacto: al cambiarlo,

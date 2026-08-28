@@ -31,7 +31,7 @@ export async function listar({ projectId, activos = true }) {
      )
      SELECT u.id, u.nombre, u.email, u.active, u.last_login_at,
             u.set_password_token IS NOT NULL AS pendiente_de_entrar,
-            perfil.dni_nif, perfil.iban, perfil.telefono, perfil.notas,
+            perfil.dni_nif, perfil.iban, perfil.banco, perfil.telefono, perfil.notas,
             -- Sus cursos dentro del alcance: los de fuera no son asunto de esta pantalla.
             (SELECT count(*) FROM tutor_collaborations c
                JOIN products pp ON pp.id = c.product_id
@@ -63,7 +63,7 @@ export async function listar({ projectId, activos = true }) {
 export async function ficha(tutorId) {
   const { rows: [t] } = await query(
     `SELECT u.id, u.nombre, u.email, u.active, u.last_login_at,
-            p.dni_nif, p.iban, p.telefono, p.notas
+            p.dni_nif, p.iban, p.banco, p.telefono, p.notas
        FROM users u
        LEFT JOIN tutor_profiles p ON p.user_id = u.id
       WHERE u.id = $1 AND u.role = 'tutor'`,
@@ -92,18 +92,19 @@ export async function ponerContrasena(userId, password) {
   );
 }
 
-export async function guardarPerfil(tutorId, { dniNif, iban, telefono, notas }) {
+export async function guardarPerfil(tutorId, { dniNif, iban, banco, telefono, notas }) {
   const { rows: [p] } = await query(
-    `INSERT INTO tutor_profiles (user_id, dni_nif, iban, telefono, notas)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO tutor_profiles (user_id, dni_nif, iban, banco, telefono, notas)
+     VALUES ($1, $2, $3, $4, $5, $6)
      ON CONFLICT (user_id) DO UPDATE
        SET dni_nif = EXCLUDED.dni_nif,
            iban = EXCLUDED.iban,
+           banco = EXCLUDED.banco,
            telefono = EXCLUDED.telefono,
            notas = EXCLUDED.notas,
            updated_at = NOW()
      RETURNING *`,
-    [tutorId, dniNif || null, iban || null, telefono || null, notas || null]
+    [tutorId, dniNif || null, iban || null, banco || null, telefono || null, notas || null]
   );
   return p;
 }
