@@ -85,7 +85,7 @@ export default function TutoresPage() {
   // y no lo llamaba nadie: el formulario era solo de alta, asi que el IBAN se
   // ponia una vez y despues no habia forma de verlo ni de cambiarlo.
   const [popupDatos, setPopupDatos] = useState(false);
-  const [datos, setDatos] = useState({ nombre: '', dniNif: '', telefono: '', iban: '' });
+  const [datos, setDatos] = useState({ nombre: '', dniNif: '', telefono: '', iban: '', email: '', reenviar: true });
   const [claveNueva, setClaveNueva] = useState('');
   const [claveCopiada, setClaveCopiada] = useState(false);
   const [popupRetiro, setPopupRetiro] = useState(false);
@@ -166,6 +166,8 @@ export default function TutoresPage() {
       dniNif: elegido.dni_nif || '',
       telefono: elegido.telefono || '',
       iban: elegido.iban || '',
+      email: elegido.email || '',
+      reenviar: true,
     });
     setPopupDatos(true);
   }
@@ -178,6 +180,9 @@ export default function TutoresPage() {
         dniNif: datos.dniNif.trim() || null,
         telefono: datos.telefono.trim() || null,
         iban: datos.iban.replace(/\s+/g, '').toUpperCase() || null,
+        ...(datos.email.trim().toLowerCase() !== (elegido.email || '').toLowerCase()
+          ? { email: datos.email.trim(), reenviarEnlace: datos.reenviar }
+          : {}),
       });
       if (!r.success) throw new Error((r as { error?: string }).error || 'no se pudo');
       // El nombre vive en users, no en el perfil, y va por otra puerta.
@@ -832,17 +837,31 @@ export default function TutoresPage() {
               </span>
             </label>
 
-            {/* El correo no se toca desde aqui: es con lo que entra al CRM.
-                Cambiarlo exige reenviarle el enlace de contraseña, o se queda
-                fuera. */}
-            <div className="rounded-md bg-muted/50 px-3 py-2">
-              <p className="text-[11px] text-muted-foreground">
-                Correo: <strong className="text-foreground">{elegido.email}</strong>
-              </p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">
-                No se cambia aqui: es con lo que entra al CRM.
-              </p>
-            </div>
+            {/* El correo es la CREDENCIAL, no un dato de contacto: al cambiarlo,
+                con el viejo ya no se entra. De ahi la casilla de reenviar. */}
+            <label className="block text-xs font-medium">
+              Correo
+              <input type="email" value={datos.email}
+                onChange={(e) => setDatos({ ...datos, email: e.target.value })}
+                className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-normal" />
+            </label>
+
+            {datos.email.trim().toLowerCase() !== (elegido.email || '').toLowerCase() && (
+              <div className="rounded-md border border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40 px-3 py-2 space-y-2">
+                <p className="text-[11px] text-amber-800 dark:text-amber-300">
+                  El correo es con lo que entra al CRM. Al cambiarlo se cierran sus
+                  sesiones y con el anterior ya no podra entrar.
+                </p>
+                <label className="flex items-start gap-2 text-[11px] text-amber-900 dark:text-amber-200">
+                  <input type="checkbox" checked={datos.reenviar} className="mt-0.5"
+                    onChange={(e) => setDatos({ ...datos, reenviar: e.target.checked })} />
+                  <span>
+                    Mandarle el enlace para poner contraseña a la direccion nueva.
+                    Sin esto se queda sin poder entrar.
+                  </span>
+                </label>
+              </div>
+            )}
 
             <Button className="w-full" disabled={procesando} onClick={guardarDatos}>
               {procesando ? 'Guardando…' : 'Guardar'}

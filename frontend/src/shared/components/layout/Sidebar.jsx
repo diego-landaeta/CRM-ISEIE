@@ -9,8 +9,7 @@ import {
   ChatText,
   Receipt, Coins, Wrench, ShoppingBag, ChatCircleText, Wallet, Bank, Clock, GitMerge,
   UsersThree,
-  GraduationCap,
-} from '@phosphor-icons/react';
+  GraduationCap, Warning } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { cn } from '@/shared/lib/utils';
@@ -93,6 +92,7 @@ const NAV_SECTIONS = [
       { to: '/tutores', label: 'Tutores', icon: GraduationCap, roles: ['admin', 'superadmin'], sectionPrefixes: ['/tutores'] },
       // Lo unico que ve un tutor: sus cursos y lo que le corresponde.
       { to: '/mis-cursos', label: 'Mis cursos', icon: GraduationCap, roles: ['tutor'] },
+      { to: '/tutores/sin-tutor', label: 'Sin tutor', icon: Warning, roles: ['admin', 'superadmin'] },
       { to: '/tutores/comisiones', label: 'Comisiones', icon: Coins, roles: ['admin', 'superadmin'] },
     ],
   },

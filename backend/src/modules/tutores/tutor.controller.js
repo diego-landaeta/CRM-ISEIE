@@ -96,7 +96,17 @@ export async function guardarPerfil(req, res, next) {
     const id = parseInt(req.params.id);
     if (req.user.userId !== id) await exigirGestion(req);
     const d = valida(perfilSchema, req.body);
-    res.json({ success: true, data: await model.guardarPerfil(id, d) });
+
+    // El correo, si viene y es otro. Va antes que el perfil: si el correo choca
+    // con el de otro usuario, no se guarda nada — mejor que dejar el IBAN
+    // puesto y el correo no, que es como se pierde la pista de lo que paso.
+    let correo = null;
+    if (d.email) correo = await userService.cambiarCorreo(id, d.email, {
+      reenviarEnlace: d.reenviarEnlace === true,
+    });
+
+    const perfil = await model.guardarPerfil(id, d);
+    res.json({ success: true, data: { ...perfil, correo } });
   } catch (err) { next(err); }
 }
 
@@ -314,6 +324,18 @@ export async function revertirComision(req, res, next) {
     });
     if (!c) throw new AppError('Esa comisión no existe', 404, 'NOT_FOUND');
     res.json({ success: true, data: c });
+  } catch (err) { next(err); }
+}
+
+// GET /api/tutores/formaciones-sin-tutor?projectId=
+//
+// Las que ya venden y no tienen a quien pagarle. Lo mira quien gestiona las
+// colaboraciones: es su lista de trabajo, no un informe.
+export async function formacionesSinTutor(req, res, next) {
+  try {
+    await exigirGestion(req);
+    const projectId = req.query.projectId ? parseInt(req.query.projectId) : null;
+    res.json({ success: true, data: await model.formacionesSinTutor({ projectId }) });
   } catch (err) { next(err); }
 }
 

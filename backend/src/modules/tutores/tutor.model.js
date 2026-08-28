@@ -459,6 +459,46 @@ export async function pagosSinFormacion({ desde, hasta, projectId = null }) {
   return rows;
 }
 
+/**
+ * Formaciones que ya han vendido pero no tienen tutor.
+ *
+ * La pide Carlos: «dentro del catalogo de formaciones, tiene que existir al
+ * menos 1 pago / 1 alumno y que no tenga relacionado un tutor».
+ *
+ * El filtro de «al menos un pago» no es un detalle: el catalogo tiene miles de
+ * formaciones y casi ninguna se ha vendido nunca. Sin ese corte, la lista seria
+ * el catalogo entero y no serviria para nada. Asi salen solo las que ya estan
+ * generando dinero y no tienen a quien pagarle.
+ *
+ * Cuenta los pagos, no las ventas: una venta a plazos con seis cobros ya lleva
+ * seis comisiones sin dueño, y eso es lo que mide el agujero de verdad.
+ */
+export async function formacionesSinTutor({ projectId = null } = {}) {
+  const { rows } = await query(
+    `SELECT p.id, p.nombre, p.precio, pr.nombre AS proyecto, p.project_id,
+            count(DISTINCT cv.id)::int  AS ventas,
+            count(DISTINCT cv.lead_id)::int AS alumnos,
+            count(cp.id)::int           AS pagos,
+            COALESCE(sum(cp.importe), 0) AS cobrado,
+            min(cp.fecha) AS primer_cobro,
+            max(cp.fecha) AS ultimo_cobro
+       FROM products p
+       JOIN conversions cv ON cv.producto_contratado_id = p.id
+       JOIN conversion_payments cp ON cp.conversion_id = cv.id
+       LEFT JOIN projects pr ON pr.id = p.project_id
+      WHERE NOT EXISTS (
+              SELECT 1 FROM tutor_collaborations tc
+               WHERE tc.product_id = p.id AND tc.activa
+            )
+        AND ($1::int IS NULL OR p.project_id = $1)
+      GROUP BY p.id, p.nombre, p.precio, pr.nombre, p.project_id
+     HAVING count(cp.id) >= 1 AND count(DISTINCT cv.lead_id) >= 1
+      ORDER BY sum(cp.importe) DESC`,
+    [projectId]
+  );
+  return rows;
+}
+
 // ── Reembolsos ──────────────────────────────────────────────────────────────
 //
 // Si a un alumno se le devuelve el dinero, el tutor no puede cobrar comision de
