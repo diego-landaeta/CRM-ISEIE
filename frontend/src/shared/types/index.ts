@@ -72,6 +72,8 @@ export interface Lead {
   nombre: string;
   email: string;
   telefono?: string | null;
+  /** El usuario de WhatsApp, cuando no hay numero o ademas del numero. */
+  whatsapp_usuario?: string | null;
   estado: LeadStatus;
   status?: LeadStatus;
   origen?: LeadOrigen | null;

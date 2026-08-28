@@ -85,6 +85,11 @@ export interface ResumenComision {
   periodo: string;
   tutor_id: number;
   tutor: string;
+  /** El correo y la cuenta salen en la fila: son lo que hace falta para pagar.
+      Los devuelve la consulta del resumen (tutor.model.js:376) y no estaban
+      declarados aqui, asi que la pantalla los pintaba a ciegas. */
+  tutor_email: string | null;
+  tutor_iban: string | null;
   lineas: number;
   base: string;
   pendiente: string;

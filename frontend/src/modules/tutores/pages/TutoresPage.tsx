@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { GraduationCap, Plus, X, Warning, Trash, CheckCircle, Copy, ArrowsClockwise, Key, UserMinus } from '@phosphor-icons/react';
+import { GraduationCap, Plus, X, Warning, Trash, CheckCircle, Copy, ArrowsClockwise, Key, UserMinus, PencilSimple } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
@@ -80,6 +80,12 @@ export default function TutoresPage() {
   // alguien por error no tendria vuelta atras desde esta pantalla.
   const [verRetirados, setVerRetirados] = useState(false);
   const [popupClave, setPopupClave] = useState(false);
+
+  // Editar los datos del tutor. Existia el endpoint (PATCH /tutores/:id/perfil)
+  // y no lo llamaba nadie: el formulario era solo de alta, asi que el IBAN se
+  // ponia una vez y despues no habia forma de verlo ni de cambiarlo.
+  const [popupDatos, setPopupDatos] = useState(false);
+  const [datos, setDatos] = useState({ nombre: '', dniNif: '', telefono: '', iban: '' });
   const [claveNueva, setClaveNueva] = useState('');
   const [claveCopiada, setClaveCopiada] = useState(false);
   const [popupRetiro, setPopupRetiro] = useState(false);
@@ -150,6 +156,42 @@ export default function TutoresPage() {
   function elegir(t: Tutor) { setElegido(t); cargarColabs(t); }
 
   function abrirColab() { setCursoColab(null); setPopupColab(true); }
+
+  // Se rellena con lo que YA tiene. Es lo que evita el estropicio de guardar
+  // con los campos en blanco y borrarle el telefono al tutor.
+  function abrirDatos() {
+    if (!elegido) return;
+    setDatos({
+      nombre: elegido.nombre || '',
+      dniNif: elegido.dni_nif || '',
+      telefono: elegido.telefono || '',
+      iban: elegido.iban || '',
+    });
+    setPopupDatos(true);
+  }
+
+  async function guardarDatos() {
+    if (!elegido) return;
+    setProcesando(true);
+    try {
+      const r = await tutoresApi.guardarPerfil(elegido.id, {
+        dniNif: datos.dniNif.trim() || null,
+        telefono: datos.telefono.trim() || null,
+        iban: datos.iban.replace(/\s+/g, '').toUpperCase() || null,
+      });
+      if (!r.success) throw new Error((r as { error?: string }).error || 'no se pudo');
+      // El nombre vive en users, no en el perfil, y va por otra puerta.
+      if (datos.nombre.trim() && datos.nombre.trim() !== elegido.nombre) {
+        await client.patch(`/users/${elegido.id}`, { nombre: datos.nombre.trim() });
+      }
+      toast({ title: 'Datos guardados' });
+      setPopupDatos(false);
+      await cargar();
+    } catch (e) {
+      toast({ title: 'No se pudo guardar',
+        description: (e as Error).message, variant: 'destructive' });
+    } finally { setProcesando(false); }
+  }
 
   function abrirClave() {
     setClaveNueva(generarContrasena());
@@ -411,6 +453,9 @@ export default function TutoresPage() {
                     </Button>
                   ) : (
                     <>
+                      <Button variant="outline" size="sm" onClick={abrirDatos}>
+                        <PencilSimple size={14} weight="bold" className="mr-1.5" /> Editar datos
+                      </Button>
                       <Button variant="outline" size="sm" onClick={abrirClave}>
                         <Key size={14} weight="bold" className="mr-1.5" /> Cambiar contraseña
                       </Button>
@@ -734,6 +779,75 @@ export default function TutoresPage() {
               {guardando ? 'Guardando…' : 'Añadir'}
             </Button>
           </form>
+        </div>
+      )}
+
+      {/* Editar los datos del tutor.
+          Se abre con lo que ya tiene relleno, a proposito: `guardarPerfil`
+          escribe `iban || null`, asi que un formulario en blanco le borraria el
+          telefono y el DNI a quien ya los tenia. */}
+      {popupDatos && elegido && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+          onClick={() => setPopupDatos(false)}>
+          <div className="bg-card border border-border rounded-lg w-full max-w-md p-4 space-y-3"
+            onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="font-bold">Datos de {elegido.nombre}</h3>
+              <button type="button" onClick={() => setPopupDatos(false)} aria-label="Cerrar"
+                className="text-muted-foreground hover:text-foreground">
+                <X size={16} weight="bold" />
+              </button>
+            </div>
+
+            <label className="block text-xs font-medium">
+              Nombre
+              <input value={datos.nombre}
+                onChange={(e) => setDatos({ ...datos, nombre: e.target.value })}
+                className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-normal" />
+            </label>
+
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block text-xs font-medium">
+                DNI / NIF
+                <input value={datos.dniNif}
+                  onChange={(e) => setDatos({ ...datos, dniNif: e.target.value })}
+                  className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-normal" />
+              </label>
+              <label className="block text-xs font-medium">
+                Telefono
+                <input value={datos.telefono}
+                  onChange={(e) => setDatos({ ...datos, telefono: e.target.value })}
+                  className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-normal" />
+              </label>
+            </div>
+
+            <label className="block text-xs font-medium">
+              IBAN
+              <input value={datos.iban}
+                onChange={(e) => setDatos({ ...datos, iban: e.target.value })}
+                placeholder="ES00 0000 0000 0000 0000 0000"
+                className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-normal tabular-nums" />
+              <span className="block text-[11px] text-muted-foreground font-normal mt-1">
+                Donde se le paga. Los espacios se quitan solos.
+              </span>
+            </label>
+
+            {/* El correo no se toca desde aqui: es con lo que entra al CRM.
+                Cambiarlo exige reenviarle el enlace de contraseña, o se queda
+                fuera. */}
+            <div className="rounded-md bg-muted/50 px-3 py-2">
+              <p className="text-[11px] text-muted-foreground">
+                Correo: <strong className="text-foreground">{elegido.email}</strong>
+              </p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                No se cambia aqui: es con lo que entra al CRM.
+              </p>
+            </div>
+
+            <Button className="w-full" disabled={procesando} onClick={guardarDatos}>
+              {procesando ? 'Guardando…' : 'Guardar'}
+            </Button>
+          </div>
         </div>
       )}
 

@@ -124,7 +124,6 @@ export default function ComisionesTutoresPage() {
     else toast({ title: 'No se ha podido revertir', description: r.error || '', variant: 'destructive' });
   }
 
-  if (!puede) {
   // Copiar el IBAN sin abrir nada. Se avisa de que se copio: si no, nadie sabe
   // si el clic hizo algo y acaba copiandolo a mano igualmente.
   async function copiarIban(iban: string) {
@@ -136,6 +135,7 @@ export default function ComisionesTutoresPage() {
     }
   }
 
+  if (!puede) {
     return (
       <div className="bg-card border border-border rounded-lg p-6 text-center text-sm text-muted-foreground">
         Esta pantalla es para administradores y gestores de colaboraciones.
