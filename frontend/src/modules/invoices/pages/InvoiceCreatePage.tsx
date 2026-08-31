@@ -357,7 +357,11 @@ export default function InvoiceCreatePage() {
     if (!esRect || !issuerId) { setRectList([]); return; }
     invoicesApi.list({ issuerId, limit: 200 }).then((r) => {
       if (r.success) setRectList((r.data || []).filter((i) =>
-        i.tipo !== 'rectificativa' && i.tipo !== 'proforma' && i.estado !== 'borrador' && i.estado !== 'cancelada'));
+      // Las proformas TAMBIEN se rectifican: llevan numero y salen emitidas, asi
+      // que si una se manda mal hay que poder abonarla. Solo quedan fuera las
+      // rectificativas —no se rectifica un abono— y lo que aun es borrador o ya
+      // esta cancelado.
+        i.tipo !== 'rectificativa' && i.estado !== 'borrador' && i.estado !== 'cancelada'));
     }).catch(() => {});
   }, [esRect, issuerId]);
 
