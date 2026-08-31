@@ -49,7 +49,10 @@ export function getDefaultIvaPct(/* pais */) {
 
 // Calcula importes con o sin IVA incluido
 export function calcularImportes({ items, ivaPct, ivaIncluido }) {
-  const subtotal = items.reduce((s, it) => s + Number(it.cantidad || 1) * Number(it.precio_unitario || 0), 0);
+  // Las dos claves, como en el PDF. Con solo `precio_unitario`, unos conceptos
+  // guardados a la antigua daban subtotal 0 y la factura se guardaba en cero sin
+  // avisar de nada — un cero silencioso es peor que un error.
+  const subtotal = items.reduce((s, it) => s + Number(it.cantidad || 1) * Number(it.precio_unitario ?? it.precio ?? 0), 0);
   let baseImponible, ivaImporte, total;
   if (ivaIncluido) {
     // El total ya incluye IVA → desglosar

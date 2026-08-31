@@ -32,8 +32,13 @@ export function errorHandler(err, req, res, _next) {
   const message = err.isOperational ? err.message : 'Error interno del servidor';
   const errorType = classifyError(err, statusCode);
 
+  // Una referencia corta por cada fallo interno. Va al registro Y a la pantalla,
+  // asi que cuando alguien dice «no me deja guardar» trae consigo el dato con el
+  // que encontrar su error exacto, en vez de una frase que le vale a todos.
+  const ref = statusCode >= 500 ? Math.random().toString(36).slice(2, 8).toUpperCase() : null;
+
   if (!err.isOperational) {
-    logger.error({ err, path: req.path, method: req.method }, 'Unhandled error');
+    logger.error({ err, ref, path: req.path, method: req.method }, 'Unhandled error');
   } else if (statusCode >= 400 && statusCode < 500) {
     // Los rechazos tambien se escriben. Antes solo se guardaban los 5xx, y por
     // eso el dia que doce gestoras no pudieron crear un prospecto no habia ni
@@ -55,7 +60,7 @@ export function errorHandler(err, req, res, _next) {
       method: req.method,
       path: req.path,
       status_code: statusCode,
-      message: err.message,
+      message: ref ? `[${ref}] ${err.message}` : err.message,
       stack: err.stack,
       user_id: req.user?.userId || null,
     }).catch(() => {}); // silencioso — no bloquear la respuesta
@@ -67,7 +72,14 @@ export function errorHandler(err, req, res, _next) {
   if (errorType === 'validation') {
     displayMessage = message; // ya viene descriptivo de Zod
   } else if (errorType === 'system') {
-    displayMessage = 'Error del sistema. El equipo técnico ha sido notificado. Reintenta en unos segundos.';
+    // A quien administra se le dice QUE ha fallado. Es informacion tecnica, pero
+    // se la damos a quien puede hacer algo con ella: si no, un fallo de la base
+    // llega como «reintenta en unos segundos» y se reintenta para siempre.
+    // Al resto, la referencia — con eso se encuentra el error entero.
+    const mandaAqui = req.user?.role === 'admin' || req.user?.role === 'superadmin';
+    displayMessage = mandaAqui
+      ? `${err.message} (ref ${ref})`
+      : `Error del sistema. Pasa esta referencia a soporte: ${ref}.`;
   }
 
   res.status(statusCode).json({
@@ -75,5 +87,6 @@ export function errorHandler(err, req, res, _next) {
     error: displayMessage,
     error_type: errorType, // 'validation' | 'auth' | 'not_found' | 'business' | 'system'
     ...(err.code && { code: err.code }),
+    ...(ref && { ref }),
   });
 }
