@@ -222,20 +222,44 @@ export async function createRectificativa(originalId, { motivo, userId, parcial 
     if (orig.estado === 'borrador') throw new AppError('Un borrador no se rectifica: edítalo o anúlalo.', 400, 'DRAFT_CANNOT_RECTIFY');
 
     const ano = new Date().getFullYear();
-    // Serie de abono propia por empresa: deriva de la serie de la factura original
-    // (que ya es la de su empresa emisora). Ej: serie 'A' -> abonos 'RA'.
+    // La serie del abono se CONTINUA, no se estrena.
+    //
+    // Antes se derivaba de la original: serie 'A' -> abonos 'RA'. En ISEIE ya
+    // habia seis abonos en la serie «R» (2026/R-1 … 2026/R-6), y al rectificar
+    // una factura de la serie «ISEIE» salia «RISEIE» empezando otra vez en 1.
+    // Dos series de abonos en paralelo es justo lo que no puede pasar en una
+    // numeracion fiscal.
+    //
+    // Asi que si esta empresa ya emitio abonos este año, se sigue por esa serie.
+    const { rows: previos } = await client.query(
+      `SELECT serie, codigo FROM invoices
+        WHERE tipo = 'rectificativa' AND project_id = $1 AND ano = $2
+          AND COALESCE(issuer_id, -1) = COALESCE($3, -1)
+        ORDER BY numero DESC LIMIT 1`,
+      [orig.project_id, ano, orig.issuer_id || null]
+    );
     const baseSerie = String(orig.serie || '').trim();
-    const serie = baseSerie ? `R${baseSerie}` : 'R';
+    const serie = previos[0]?.serie || (baseSerie ? `R${baseSerie}` : 'R');
     const numero = await nextNumero(client, orig.project_id, orig.issuer_id || null, ano, serie);
-    const codigo = `R-${ano}/${String(numero).padStart(4, '0')}`;
+    // Y el codigo se escribe como el del abono anterior, para que la serie se
+    // lea igual de arriba abajo en vez de cambiar de forma a mitad.
+    const codigo = /^\d{4}\/R-\d+$/.test(String(previos[0]?.codigo || ''))
+      ? `${ano}/R-${numero}`
+      : `R-${ano}/${String(numero).padStart(4, '0')}`;
 
     // Importes negativos. Si parcial (monto), rectifica solo ese importe; si no, todo.
     const factor = parcial != null ? -Math.abs(Number(parcial)) / Number(orig.total || 1) : -1;
-    const items = (Array.isArray(orig.items) ? orig.items : JSON.parse(orig.items || '[]')).map((it) => ({
-      ...it,
-      precio_unitario: -Math.abs(Number(it.precio_unitario)) * (parcial != null ? Math.abs(factor) : 1),
-      subtotal: -Math.abs(Number(it.subtotal || 0)) * (parcial != null ? Math.abs(factor) : 1),
-    }));
+    const items = (Array.isArray(orig.items) ? orig.items : JSON.parse(orig.items || '[]')).map((it) => {
+      const prop = parcial != null ? Math.abs(factor) : 1;
+      const precio = -Math.abs(Number(it.precio_unitario || 0)) * prop;
+      // El subtotal se RECALCULA cuando la linea no lo trae. Muchas facturas lo
+      // guardan sin el, y leerlo a secas dejaba la linea del abono en 0 con un
+      // total distinto debajo: el documento no cuadraba consigo mismo.
+      const sub = (it.subtotal != null && it.subtotal !== '')
+        ? -Math.abs(Number(it.subtotal)) * prop
+        : precio * (Number(it.cantidad) || 1);
+      return { ...it, precio_unitario: precio, subtotal: sub };
+    });
     const base = -Math.abs(Number(orig.base_imponible || 0)) * (parcial != null ? Math.abs(factor) : 1);
     const ivaImp = -Math.abs(Number(orig.iva_importe || 0)) * (parcial != null ? Math.abs(factor) : 1);
     const total = parcial != null ? -Math.abs(Number(parcial)) : -Math.abs(Number(orig.total || 0));
@@ -270,10 +294,13 @@ export async function createRectificativa(originalId, { motivo, userId, parcial 
          tipo, rectifica_id, rectifica_codigo, motivo_rectificacion,
          issuer_id, issuer_razon_social, issuer_nif, issuer_direccion, issuer_ciudad,
          issuer_cp, issuer_pais, issuer_email, issuer_telefono, issuer_iban, issuer_logo_url,
-         cliente_tipo
+         cliente_tipo,
+         -- La moneda viaja con el abono. Sin esto, el de una factura en dolares
+         -- salia como si fuera en euros y la linea no cuadraba con el total.
+         moneda, total_divisa, tipo_cambio
        ) VALUES ($1,$2,$3,$4,$5,$6,$7,CURRENT_DATE,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,
          'emitida',$22,$23,$24,$25,$26,'rectificativa',$27,$28,$29,
-         $30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41) RETURNING *`,
+         $30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44) RETURNING *`,
       [
         orig.project_id, orig.conversion_id, orig.lead_id, serie, ano, numero, codigo,
         orig.cliente_nombre, orig.cliente_nif, orig.cliente_direccion, orig.cliente_ciudad, orig.cliente_cp, orig.cliente_pais,
@@ -288,6 +315,17 @@ export async function createRectificativa(originalId, { motivo, userId, parcial 
         // PostgreSQL rechazaba la consulta entera y NINGUN abono se podia
         // emitir. El abono hereda el tipo de cliente de la factura que rectifica.
         orig.cliente_tipo,
+        // $42-$44. La moneda del abono es la de la factura que rectifica, y el
+        // importe en divisa va en negativo como el resto. Sin esto, el abono de
+        // una proforma en dolares salia sin moneda: la linea decia 324 (USD) y
+        // el total -285 (EUR), y el documento no cuadraba consigo mismo.
+        orig.moneda || null,
+        orig.total_divisa != null
+          ? (parcial != null
+              ? -Math.abs(Number(orig.total_divisa)) * Math.abs(factor)
+              : -Math.abs(Number(orig.total_divisa)))
+          : null,
+        orig.tipo_cambio || null,
       ]
     );
     await client.query('COMMIT');
