@@ -45,7 +45,11 @@ export default function SelectorDeSesion({
     setAbierto(false);
   };
 
-  const enlazadas = gente.filter((u) => u.conectado).length;
+  // Solo cuenta a quien PUEDE tener WhatsApp. Desde que los que no pueden
+  // aparecen en la lista, contarlos diria «1 de 6» incluyendo a un tutor que
+  // nunca va a enlazar nada — un objetivo imposible de cumplir.
+  const conDerecho = gente.filter((u) => u.puede !== false);
+  const enlazadas = conDerecho.filter((u) => u.conectado).length;
 
   return (
     <div className="relative">
@@ -69,7 +73,7 @@ export default function SelectorDeSesion({
           <div className="fixed inset-0 z-40" onClick={() => setAbierto(false)} />
           <div className="absolute z-50 mt-1 w-72 max-h-80 overflow-y-auto rounded-md border border-border bg-card shadow-lg">
             <p className="px-3 py-2 text-[11px] text-muted-foreground border-b border-border">
-              {enlazadas} de {gente.length} tienen su número enlazado
+              {enlazadas} de {conDerecho.length} tienen su número enlazado
             </p>
             {gente.map((u) => {
               const puesta = u.soyYo ? valor.esMia : valor.usuarioId === u.id;
@@ -77,25 +81,45 @@ export default function SelectorDeSesion({
                 <button
                   key={u.id}
                   type="button"
+                  // `puede === false` viene del servidor con su motivo. Se pinta
+                  // apagada en vez de esconderla: no salir es la peor forma de
+                  // negar algo. Ver la tarea #68.
+                  disabled={u.puede === false}
                   onClick={() => elegir(u)}
-                  className={`w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-muted/50 ${
-                    puesta ? 'bg-primary/10' : ''
+                  title={u.motivo || undefined}
+                  className={`w-full text-left px-3 py-2 flex items-center gap-2.5 ${
+                    u.puede === false
+                      ? 'opacity-60 cursor-not-allowed'
+                      : `hover:bg-muted/50 ${puesta ? 'bg-primary/10' : ''}`
                   }`}
                 >
                   <span
-                    className={`w-2 h-2 rounded-full shrink-0 ${u.conectado ? 'bg-emerald-500' : 'bg-muted-foreground/40'}`}
-                    title={u.conectado ? 'enlazado' : 'sin enlazar'}
+                    className={`w-2 h-2 rounded-full shrink-0 ${
+                      u.puede === false ? 'bg-muted-foreground/30'
+                      : u.conectado ? 'bg-emerald-500' : 'bg-muted-foreground/40'
+                    }`}
+                    title={u.puede === false ? 'sin WhatsApp' : (u.conectado ? 'enlazado' : 'sin enlazar')}
                   />
                   <span className="flex-1 min-w-0">
                     <span className="block text-sm truncate">
                       {u.soyYo ? 'Mi WhatsApp' : u.nombre}
                     </span>
-                    <span className="block text-[11px] text-muted-foreground truncate">
-                      {u.conectado ? (u.numero ? `+${u.numero}` : 'enlazado') : 'sin enlazar'}
-                      {!u.soyYo && ` · ${u.role}`}
+                    {/* El motivo entero, no cortado: es lo unico que evita que
+                        alguien pierda la tarde preguntandose por que no sale. */}
+                    <span className={`block text-[11px] ${
+                      u.puede === false ? 'text-muted-foreground' : 'text-muted-foreground truncate'
+                    }`}>
+                      {u.puede === false
+                        ? u.motivo
+                        : <>
+                            {u.conectado ? (u.numero ? `+${u.numero}` : 'enlazado') : 'sin enlazar'}
+                            {!u.soyYo && ` · ${u.role}`}
+                          </>}
                     </span>
                   </span>
-                  {puesta && <Check size={14} weight="bold" className="text-primary shrink-0" />}
+                  {puesta && u.puede !== false && (
+                    <Check size={14} weight="bold" className="text-primary shrink-0" />
+                  )}
                 </button>
               );
             })}

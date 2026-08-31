@@ -2,6 +2,7 @@ import { statSync, existsSync } from 'fs';
 import { logger } from '../shared/utils/logger.js';
 import { query } from '../shared/config/db.js';
 import { notifyAdmins } from '../modules/notifications/notifications.service.js';
+import { vigilar } from './latido.js';
 
 // El vigilante de los agujeros que no dan la cara.
 //
@@ -260,6 +261,6 @@ export function startVigilanteCatalogoScheduler() {
   // Cinco minutos despues de arrancar, para no cargar el arranque; y luego una
   // vez al dia. Leer los mapas del sitio es lo mas lento y no urge.
   setTimeout(revisarCatalogoYDinero, 5 * 60 * 1000);
-  setInterval(revisarCatalogoYDinero, TICK_MS);
+  vigilar('vigilante_catalogo', 'Vigilante del catálogo', revisarCatalogoYDinero, TICK_MS);
   logger.info({ tickMs: TICK_MS }, 'Vigilante de catálogo iniciado');
 }

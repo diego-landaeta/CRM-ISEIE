@@ -2,6 +2,7 @@ import * as model from './stripe-payments.model.js';
 import * as service from './stripe-payments.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
+import { anotaWebhook } from '../status/webhooks.js';
 
 function projectId(req) {
   const pid = Number(req.query.projectId || req.body?.projectId);
@@ -112,17 +113,21 @@ export async function webhook(req, res, next) {
       logger.error({ projectId: pid },
         'Webhook de Stripe RECHAZADO: el proyecto no tiene secreto configurado. ' +
         'Ponlo en Integraciones; mientras tanto los cobros entran por el sondeo.');
+      anotaWebhook('stripe', 'rechazado', 'el proyecto no tiene el secreto configurado');
       return res.status(400).send('webhook secret no configurado para este proyecto');
     }
     if (!service.verifyStripeSignature(rawBody, sigHeader, secret)) {
       logger.warn({ projectId: pid }, 'Webhook de Stripe con firma invalida');
+      anotaWebhook('stripe', 'rechazado', 'firma invalida');
       return res.status(400).send('Firma invalida');
     }
     const event = JSON.parse(rawBody);
     const result = await service.handleWebhookEvent(pid, event);
+    anotaWebhook('stripe', 'aceptado');
     res.json({ received: true, ...result });
   } catch (e) {
     logger.error({ e: e.message }, 'webhook stripe failed');
+    anotaWebhook('stripe', 'error', e.message);
     res.status(500).send(`Error: ${e.message}`);
   }
 }

@@ -167,6 +167,17 @@
 .wa-marco .cs-message-separator::after { display: none; }
 
 .wa-texto { white-space: pre-wrap; word-break: break-word; font-size: 14px; }
+/* El formato de WhatsApp dentro de la burbuja. La negrita y la cursiva las pone
+   el navegador; el monoespaciado necesita fondo para distinguirse, y hereda el
+   tamaño para no romper el renglon. */
+.wa-texto code.wa-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.92em;
+  background: rgb(0 0 0 / 0.06);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+.dark .wa-texto code.wa-mono { background: rgb(255 255 255 / 0.10); }
 
 /* La hora y los tics, abajo a la derecha dentro de la burbuja. */
 .wa-meta {
@@ -628,6 +639,37 @@
   background: rgba(0, 0, 0, 0.22);
 }
 .wa-cita-quien { display: block; font-size: 11.5px; font-weight: 600; color: var(--wa-verde); }
+
+/* Quien escribio, en un grupo (#74).
+ *
+ * Va ENCIMA del texto y en su mismo hueco, como en WhatsApp: leerlo tiene que
+ * costar cero, porque en un grupo movido se lee un autor por burbuja. Mas
+ * pequeño y en verde para que sea la etiqueta y no el mensaje.
+ *
+ * Solo aparece en lo que ENTRA: en lo que sales tu, el autor eres tu. */
+.wa-autor {
+  display: flex; align-items: center; gap: 5px;
+  margin-bottom: 3px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--wa-verde);
+  max-width: 100%;
+}
+
+/* El nombre se recorta; el avatar nunca, para que no se deforme. */
+.wa-autor-nombre { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.wa-autor-avatar {
+  flex: 0 0 auto;
+  width: 18px; height: 18px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 9px; font-weight: 700; letter-spacing: .2px;
+  color: #fff;
+}
+
+/* «Grupos» no es un estado de prospecto, asi que no lleva su paleta: gris
+ * neutro para que se lea como lo que es, un filtro de otra clase. */
+.wa-et-grupos { background: rgba(148, 163, 184, .18); color: #cbd5e1; }
 .wa-cita-texto {
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
   overflow: hidden;
@@ -806,6 +848,155 @@
    Sale como enlace y no como un reproductor muerto: pulsar un boton que no
    hace nada es peor que no tener boton. Lo unico que se puede hacer con ella
    es bajarla y oirla con otra cosa, asi que es lo que se ofrece. */
+/* El boton ⓘ de la cabecera. Era un enlace y ahora es un boton, asi que hay
+   que devolverle el aspecto: el navegador le pone borde y fondo propios. */
+/* El panel de plantillas se posiciona respecto al contenedor del chat, asi que
+   este tiene que estar posicionado. Sin esto se colocaria respecto a la pagina
+   entera y aparaceria en una esquina. */
+.wa-marco .cs-chat-container { position: relative; }
+
+/* El selector de plantillas, encima del campo de escribir.
+   Va por encima del hilo y no dentro, para que no empuje los mensajes al
+   abrirse: si el hilo se mueve, se pierde de vista lo que se estaba leyendo. */
+.wa-plantillas {
+  position: absolute;
+  bottom: 100%;
+  left: 8px;
+  right: 8px;
+  max-width: 460px;
+  z-index: 20;
+  margin-bottom: 6px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px;
+  background: hsl(var(--background));
+  box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
+  overflow: hidden;
+}
+.wa-plantillas-cabecera {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid hsl(var(--border));
+}
+.wa-plantillas-busca {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: 0;
+  outline: none;
+  font-size: 13px;
+  color: hsl(var(--foreground));
+}
+.wa-plantillas-cerrar {
+  color: hsl(var(--muted-foreground));
+  display: inline-flex;
+  border-radius: 4px;
+}
+.wa-plantillas-cerrar:hover { color: hsl(var(--foreground)); }
+.wa-plantillas-cerrar:focus-visible,
+.wa-plantilla:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: -2px;
+}
+
+/* Se limita el alto y scrollea DENTRO: con cuarenta plantillas, sin esto el
+   panel taparia el chat entero. */
+.wa-plantillas-lista { max-height: 46vh; overflow-y: auto; }
+
+.wa-plantilla {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid hsl(var(--border));
+  cursor: pointer;
+}
+.wa-plantilla:last-child { border-bottom: 0; }
+.wa-plantilla:hover { background: hsl(var(--muted)); }
+.wa-plantilla-nombre {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+}
+.wa-plantilla-etiqueta {
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+}
+/* Dos lineas y corta: es un adelanto para reconocerla, no para leerla entera. */
+.wa-plantilla-cuerpo {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1.45;
+  color: hsl(var(--muted-foreground));
+  margin-top: 2px;
+  white-space: pre-wrap;
+}
+.wa-plantilla-hueco {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  font-size: 11px;
+  color: rgb(180 83 9);
+}
+.dark .wa-plantilla-hueco { color: rgb(251 191 36); }
+
+.wa-plantillas-aviso {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 10px;
+  font-size: 13px;
+  color: hsl(var(--muted-foreground));
+}
+.wa-plantillas-vacio { flex-direction: column; text-align: center; gap: 6px; }
+
+/* El boton que lo abre, en la barra del campo de escribir. */
+.wa-btn-plantillas {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+}
+.wa-btn-plantillas:hover { background: hsl(var(--muted)); color: hsl(var(--foreground)); }
+.wa-btn-plantillas:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 2px; }
+
+/* En movil ocupa todo el ancho: 460 px no caben en 375. */
+@media (max-width: 640px) {
+  .wa-plantillas { left: 4px; right: 4px; max-width: none; }
+  .wa-plantillas-lista { max-height: 40vh; }
+}
+
+.wa-btn-ficha {
+  background: none;
+  border: 0;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+.wa-btn-ficha:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
 .wa-voz-rota { min-width: 0; padding: 2px 0; }
 .wa-voz-descargar {
   font-size: 12px;
@@ -963,4 +1154,224 @@
 .wa-voz-revisar-audio {
   flex: 1 1 auto; min-width: 0;
   height: 34px;
+}
+
+/* Buscar y no encontrar nada: los dos motivos, dichos (#73 y #74). */
+.wa-sin-resultados {
+  padding: 16px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted-foreground, #6b7280);
+  border-top: 1px solid var(--border, #e5e7eb);
+}
+.wa-sin-resultados p + p { margin-top: 8px; }
+
+/* Las «etiquetas» de la lista (#72). Son los estados del prospecto, y los
+   colores salen de STATUS_STYLES —las clases de Tailwind que ya usa el resto
+   del CRM—, asi que traen su propia variante oscura y no hay una paleta nueva
+   que se desincronice con el Dashboard. Aqui solo va la forma. */
+.wa-etiquetas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 10px 10px;
+}
+.wa-etiqueta {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 5px 9px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: opacity .12s, border-color .12s;
+  opacity: .75;
+}
+.wa-etiqueta:hover { opacity: 1; }
+/* La puesta se marca con el BORDE y opacidad plena, no cambiando el fondo: el
+   fondo es lo que identifica al estado y cambiarlo lo haria irreconocible. */
+.wa-etiqueta-puesta {
+  opacity: 1;
+  border-color: currentColor;
+}
+.wa-etiqueta-quitar {
+  background: transparent;
+  color: var(--muted-foreground, #6b7280);
+  border-color: var(--border, #e5e7eb);
+  opacity: 1;
+}
+
+/* La fila del chat, con su etiqueta al lado del nombre. */
+.wa-fila-nombre {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+/* Los colores salen de la paleta del PANEL, no de la de la aplicacion.
+   Al pasar a Conversation.Content se perdio el estilo del kit y se puso
+   --muted-foreground, que es una variable del CRM: sobre este fondo oscuro
+   (#111b21) queda casi negro y el telefono no se distinguia. El kit usaba
+   --wa-apagado, que es lo correcto aqui. */
+.wa-fila-quien {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--wa-texto);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* No se encoge y no parte el nombre: con la lista estrecha, lo que cede es el
+   nombre con sus puntos suspensivos, no la etiqueta. */
+.wa-fila-etiqueta {
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 3px 7px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.wa-fila-adelanto {
+  font-size: 13px;
+  color: var(--wa-apagado);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Los colores de las etiquetas, propios y NO de Tailwind.
+
+   Se probo primero con STATUS_STYLES, que es lo que usa el resto del CRM. No
+   vale aqui, y se vio en pantalla: esas clases llevan variante `dark:` y esa
+   variante sigue el tema de la APLICACION — pero este panel tiene su propia
+   paleta fija (--wa-panel: #111b21) y es oscuro en los dos temas. Resultado:
+   en modo oscuro salia un bg-*-950/30 sobre un fondo ya oscuro y no se leia
+   nada; en claro se leia por casualidad.
+
+   Mismos tonos que el resto del CRM —naranja, ambar, violeta, rojo, azul,
+   esmeralda— pero calibrados para ese fondo, y sin depender del tema, igual
+   que no depende el panel. */
+/* La reserva va DELANTE de las de color, no detras: con la misma
+   especificidad gana la ultima, y puesta al final dejaba TODAS las etiquetas
+   grises. Se vio en la captura, no leyendo. Sirve para un estado que aparezca
+   mañana y no este aqui: gris legible, no un hueco sin texto. */
+.wa-fila-etiqueta, .wa-etiqueta { background: rgba(255,255,255,.10); color: var(--wa-apagado); }
+
+.wa-et-nuevo          { background: rgba( 59,130,246,.16); color: #93c5fd; }
+.wa-et-por_contactar  { background: rgba(249,115, 22,.16); color: #fdba74; }
+.wa-et-contactado     { background: rgba( 16,185,129,.16); color: #6ee7b7; }
+.wa-et-en_seguimiento { background: rgba(245,158, 11,.16); color: #fcd34d; }
+.wa-et-convertido     { background: rgba(139, 92,246,.20); color: #c4b5fd; }
+.wa-et-no_interesado  { background: rgba(239, 68, 68,.16); color: #fca5a5; }
+.wa-et-proxima_convocatoria { background: rgba(6,182,212,.16); color: #67e8f9; }
+
+/* Un mensaje de un tipo que el CRM no sabe leer. No es un archivo: ofrecer
+   «Descargar» era un boton que no podia funcionar nunca. */
+.wa-no-legible {
+  display: inline-block;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--wa-apagado);
+  padding: 2px 0;
+}
+
+/* Abrir un chat viejo sin tener que escribirle antes (#73). */
+.wa-abrir-buscado {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--wa-verde);
+  color: #0b141a;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.wa-abrir-buscado:hover { filter: brightness(1.08); }
+
+/* Corregir un mensaje ya enviado (#75). Discreto: solo aparece durante los
+   15 minutos que WhatsApp deja, y no compite con el texto. */
+.wa-corregir {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--wa-apagado);
+  cursor: pointer;
+  opacity: .8;
+}
+.wa-corregir:hover { opacity: 1; color: var(--wa-texto); }
+.wa-corregir:disabled { cursor: default; opacity: .5; }
+
+/* Corregir DENTRO de la burbuja (#75). Antes esto era un window.prompt: un
+   cartel del sistema con «localhost dice» encima del CRM, sin estilo, sin
+   tema y bloqueando la pestaña entera. */
+.wa-editando textarea {
+  width: 100%;
+  min-width: 220px;
+  background: rgb(0 0 0 / 0.25);
+  border: 1px solid rgb(255 255 255 / 0.18);
+  border-radius: 8px;
+  color: var(--wa-texto);
+  font: inherit;
+  font-size: 14px;
+  padding: 6px 8px;
+  resize: vertical;
+}
+.wa-editando textarea:focus { outline: none; border-color: var(--wa-verde); }
+.wa-editando-botones {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 6px;
+}
+.wa-editando-botones button {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  color: var(--wa-apagado);
+  cursor: pointer;
+}
+.wa-editando-botones button:hover { color: var(--wa-texto); }
+.wa-editando-guardar {
+  background: var(--wa-verde);
+  color: #0b141a !important;
+}
+.wa-editando-guardar:disabled { opacity: .5; cursor: default; }
+
+/* Los dos claros que se colaban del kit.
+
+   El kit trae su propia paleta y esta pensada para fondo blanco. Aqui el panel
+   es oscuro, y estos dos se habian quedado sin pisar:
+
+     .cs-sidebar--left               border-right: rgb(209, 219, 227)
+     .cs-message-input__content-editor  background: rgb(198, 227, 250)
+
+   El primero es la raya vertical entre la lista y el hilo. El segundo es peor:
+   es un AZUL CLARO de fondo en la caja de escribir, que sobre el panel oscuro
+   se ve como una banda blanca cruzando toda la parte de abajo.
+
+   No se veian buscando fondos claros porque uno es un borde; ni buscando
+   bordes, porque el otro es un fondo. Hay que mirar las dos cosas. */
+/* La especificidad importa, y aqui costo dos intentos.
+
+   El kit lo pinta con:
+     .cs-main-container > .cs-sidebar.cs-sidebar--left   -> 0,3,0
+   y el primer intento fue:
+     .wa-marco .cs-sidebar--left                         -> 0,2,0   pierde
+
+   Estar mas abajo en el fichero no salva a una regla menos especifica. Se
+   copia la forma del kit y se le antepone el marco: 0,4,0. */
+.wa-marco .cs-main-container > .cs-sidebar.cs-sidebar--left {
+  border-right-color: var(--wa-borde);
+}
+/* La caja de escribir, por la misma razon. El kit le pone un azul claro que
+   sobre el panel oscuro se ve como una banda blanca cruzando todo el ancho. */
+.wa-marco .cs-message-input .cs-message-input__content-editor-container,
+.wa-marco .cs-message-input .cs-message-input__content-editor-wrapper,
+.wa-marco .cs-message-input .cs-message-input__content-editor {
+  background-color: var(--wa-cabecera);
+  color: var(--wa-texto);
 }

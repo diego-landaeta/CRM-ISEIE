@@ -1,5 +1,6 @@
 import { logger } from '../shared/utils/logger.js';
 import * as tutores from '../modules/tutores/tutor.model.js';
+import { vigilar } from './latido.js';
 
 // Las comisiones de los tutores, calculadas solas.
 //
@@ -65,6 +66,6 @@ export function startTutorCommissionsScheduler() {
   // seguidas —un despliegue, por ejemplo— no se dispara una consulta pesada en
   // cada arranque.
   setTimeout(calcularComisionesTutores, 60 * 1000);
-  setInterval(calcularComisionesTutores, TICK_MS);
+  vigilar('comisiones_tutores', 'Comisiones de tutores', calcularComisionesTutores, TICK_MS);
   logger.info({ tickMs: TICK_MS, mesesAtras: MESES_ATRAS }, 'Comisiones de tutores: scheduler iniciado');
 }

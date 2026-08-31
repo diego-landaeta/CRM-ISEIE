@@ -56,6 +56,9 @@ import { startWooCommerceSyncScheduler } from './jobs/wooCommerceSyncScheduler.j
 import { startStripePaymentsSyncScheduler } from './jobs/stripePaymentsSyncScheduler.js';
 import { startTutorCommissionsScheduler } from './jobs/tutorCommissionsScheduler.js';
 import { startVigilanteCatalogoScheduler } from './jobs/vigilanteCatalogoScheduler.js';
+import { startLeadSinTocarScheduler } from './jobs/leadSinTocarScheduler.js';
+import { startResumenDiarioScheduler } from './jobs/resumenDiarioScheduler.js';
+import { startReporteSemanalScheduler } from './jobs/reporteSemanalScheduler.js';
 
 const app = express();
 const PORT = process.env.PORT || 3005;
@@ -319,6 +322,9 @@ if (process.env.NODE_ENV !== 'test') {
         startStripePaymentsSyncScheduler();
         startTutorCommissionsScheduler();
         startVigilanteCatalogoScheduler();
+        startLeadSinTocarScheduler();
+        startResumenDiarioScheduler();
+        startReporteSemanalScheduler();
       } catch (err) {
         logger.error({ err }, 'Stripe sync scheduler fallo al arrancar');
       }

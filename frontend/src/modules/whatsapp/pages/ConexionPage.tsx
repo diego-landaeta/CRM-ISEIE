@@ -63,7 +63,11 @@ export default function ConexionPage() {
   // primero y sin marcarlo no sale el codigo. El servidor lo exige tambien, que
   // si no bastaria con llamar al endpoint a mano.
   const [enterado, setEnterado] = useState(false);
-  const [sync, setSync] = useState<{ conversaciones: number; mensajes: number; entrando: boolean; adjuntosPendientes: number } | null>(null);
+  const [sync, setSync] = useState<{
+    conversaciones: number; mensajes: number; entrando: boolean; adjuntosPendientes: number;
+    /** De 0 a 100, el que manda Baileys. Null si nadie lo dice: entonces no hay barra. */
+    progreso?: number | null;
+  } | null>(null);
   // De quien es la sesion que se esta viendo. Para una gestora siempre la suya
   // —el selector ni se pinta—; quien manda puede enlazar la de otra persona
   // teniendola al lado con su movil, que es mas rapido que explicarselo.
@@ -414,6 +418,27 @@ export default function ConexionPage() {
                 <ArrowsClockwise size={16} className="animate-spin text-emerald-600" />
                 Trayendo las conversaciones…
               </p>
+              {/* El porcentaje es el que manda Baileys en cada tanda, no uno
+                  calculado por nosotros: WhatsApp no dice cuantos mensajes va a
+                  mandar en total, asi que cualquier cuenta nuestra seria inventada.
+
+                  Y por eso puede no venir. Si no viene, se enseña lo de siempre —
+                  los contadores— en vez de una barra a ojo. */}
+              {typeof sync.progreso === 'number' && (
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">Historial</span>
+                    <span className="font-semibold tabular-nums">{sync.progreso} %</span>
+                  </div>
+                  <div className="h-2 rounded-full bg-muted overflow-hidden"
+                    role="progressbar" aria-valuenow={sync.progreso}
+                    aria-valuemin={0} aria-valuemax={100}
+                    aria-label="Historial traido">
+                    <div className="h-full bg-emerald-600 transition-[width] duration-500"
+                      style={{ width: `${sync.progreso}%` }} />
+                  </div>
+                </div>
+              )}
               <p className="text-muted-foreground">
                 {sync.conversaciones} chats y {sync.mensajes} mensajes hasta ahora.
                 WhatsApp los manda por tandas: puede tardar unos minutos.

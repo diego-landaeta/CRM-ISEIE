@@ -6,7 +6,7 @@ import {
   MessageSeparator, InfoButton, InputToolbox,
 } from '@chatscope/chat-ui-kit-react';
 import '@chatscope/chat-ui-kit-styles/dist/default/styles.min.css';
-import { Prohibit, PencilSimpleLine, X, MagnifyingGlass, Microphone, Stop, UsersThree, PlugsConnected, WarningCircle, ArrowBendUpLeft, ArrowsOut, ArrowsIn, CaretLeft, Question, PhoneX, PhoneCall, VideoCamera, Trash, PaperPlaneRight } from '@phosphor-icons/react';
+import { Prohibit, PencilSimpleLine, X, MagnifyingGlass, Microphone, Stop, UsersThree, PlugsConnected, WarningCircle, ArrowBendUpLeft, ArrowsOut, ArrowsIn, CaretLeft, Question, PhoneX, PhoneCall, VideoCamera, Trash, PaperPlaneRight, FileText } from '@phosphor-icons/react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
 import {
@@ -17,7 +17,14 @@ import SelectorDeSesion, { type SesionElegida } from '../components/SelectorDeSe
 import Tour, { tourPendiente, hayQueSeñalar } from '../components/Tour';
 import NotaDeVoz from '../components/NotaDeVoz';
 import VistaPreviaAdjunto from '../components/VistaPreviaAdjunto';
+import FichaProspecto from '../components/FichaProspecto';
+import AvisoAlSalir from '../components/AvisoAlSalir';
+import SelectorPlantillas from '../components/SelectorPlantillas';
+import Llamar from '../components/Llamar';
+import type { DatosParaRellenar } from '../lib/plantilla';
 import './chat.css';
+import TextoDeWhatsapp from '../components/TextoDeWhatsapp';
+import { STATUS_LABELS } from '@/shared/components/ui/StatusBadge';
 
 // El chat de WhatsApp dentro del CRM.
 //
@@ -42,6 +49,23 @@ function diaDe(iso: string) {
 
 const iniciales = (n: string) =>
   n.split(' ').filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || '?';
+
+/**
+ * Un color estable a partir del nombre.
+ *
+ * La gracia es que sea SIEMPRE el mismo para la misma persona: en un grupo
+ * movido se reconoce quién habla por el color antes de leer el nombre. Al azar
+ * cambiaría en cada recarga, y por posición se movería según quién más hubiera
+ * escrito, que es justo lo contrario de reconocible.
+ *
+ * Tonos oscuros a propósito: el texto encima es blanco y este panel es oscuro
+ * en los dos temas de la aplicación.
+ */
+function colorDeNombre(nombre: string) {
+  let n = 0;
+  for (let i = 0; i < nombre.length; i++) n = (n * 31 + nombre.charCodeAt(i)) % 360;
+  return `hsl(${n} 45% 32%)`;
+}
 
 /**
  * La foto de perfil de WhatsApp, con las iniciales de recurso.
@@ -73,6 +97,20 @@ function Adjunto({ m, alPedir, bajando }: { m: MensajeWhatsapp; alPedir: (id: nu
   // esperando detras. Lo que se deja fuera se pide aqui, de uno en uno y
   // saltandose la cola. Antes ponia «no se pudo descargar», que ademas era
   // mentira: no habia fallado nada, es que no le tocaba.
+  // Un «otro» NO tiene archivo que bajar, y ofrecerlo es un boton que no puede
+  // funcionar nunca. Asi se ve hoy en produccion el numero por el que entran los
+  // leads: una fila tras otra de «⬇ Descargar otro» y ni una palabra.
+  //
+  // «otro» quiere decir que el CRM no supo leer ese tipo de mensaje. Se dice, y
+  // se dice que el movil si lo enseña — que es lo unico util que se le puede
+  // contar a la gestora mientras se arregla.
+  if (m.tipo === 'otro') {
+    return (
+      <span className="wa-no-legible" title="El CRM no reconoce este tipo de mensaje">
+        Mensaje que el CRM aún no sabe mostrar — míralo en el móvil
+      </span>
+    );
+  }
   if (!m.media_url) {
     return (
       <button type="button" className="wa-pedir" onClick={() => alPedir(m.id)} disabled={bajando}>
@@ -142,9 +180,53 @@ function Llamada({ m }: { m: MensajeWhatsapp }) {
   );
 }
 
+/**
+ * Lo que de verdad acepta el servidor para un adjunto.
+ *
+ * NO es el limite de la aplicacion: multer deja pasar 16 MB. Es el de Nginx,
+ * cuyo `client_max_body_size` por defecto es 1 MB, y por eso un dossier de
+ * 1,4 MB devolvia «Error 413» sin llegar a tocar Node.
+ *
+ * Va aqui como constante y no adivinado, porque adivinarlo seria peor: avisar
+ * de un tope que no es el real deja pasar ficheros que despues fallan. Cuando
+ * se suba el de Nginx, se sube este a la vez — o se pone VITE_WHATSAPP_TOPE_MB.
+ */
+/**
+ * Mientras el servidor no diga el suyo. En cuanto contesta `/conexion`, manda
+ * el de verdad: el numero no se adivina desde aqui.
+ */
+const TOPE_POR_DEFECTO = 16 * 1024 * 1024;
+
+/** Lo que WhatsApp deja para corregir un mensaje ya enviado (#75). */
+const VENTANA_EDICION_MS = 15 * 60 * 1000;
+
+/**
+ * Las «etiquetas» de la lista de chats (#72).
+ *
+ * No son etiquetas nuevas: son los estados del prospecto, que ya existen en el
+ * CRM. El ticket sugeria «reutilizar el sistema de etiquetas para prospectos»,
+ * pero ese sistema no existe — en las migraciones solo hay etiquetas del menu
+ * lateral y tags de cifrado.
+ *
+ * Y estos encajan literalmente con lo que pidio: «pendiente de contestar»,
+ * «ya vendido», «no interesado». Ademas viajan con la PERSONA y no con el chat,
+ * que es lo que el propio ticket dice que probablemente se quiere.
+ *
+ * Se dejan fuera «nuevo» y «contactado» a proposito: con siete pastillas no se
+ * filtra, se busca entre pastillas.
+ */
+const ETIQUETAS = ['por_contactar', 'en_seguimiento', 'convertido', 'no_interesado', 'grupos'] as const;
+
+/** «Grupos» no es un estado de prospecto, así que su nombre no sale de STATUS_LABELS. */
+const ETIQUETA_GRUPOS = 'grupos';
+
 export default function ChatPage() {
-  const { activeProject } = useProjectContext() as { activeProject: { id: number } | null };
+  const { activeProject } = useProjectContext() as {
+    activeProject: { id: number; nombre?: string } | null;
+  };
   const projectId = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
+  // Para el hueco {proyecto} de las plantillas.
+  const nombreProyecto = activeProject?.nombre ?? null;
 
   // De quien es el WhatsApp que se esta viendo. Una gestora solo tiene el suyo
   // y el selector ni aparece; quien manda puede abrir el de otra persona.
@@ -166,6 +248,15 @@ export default function ChatPage() {
   const [enviando, setEnviando] = useState(false);
   const [conexion, setConexion] = useState<ConexionWhatsapp | null>(null);
   const [filtro, setFiltro] = useState('');
+  // Lo que se le pide al servidor para filtrar la LISTA de chats. Va detras del
+  // filtro con un respiro para no mandar una consulta por tecla. Ojo, no
+  // confundir con `busca`, que es el buscador de prospectos del chat nuevo.
+  const [buscaChats, setBuscaChats] = useState('');
+  // La «etiqueta» por la que se filtra (#72). Es el estado del prospecto: no
+  // hay sistema de etiquetas en el CRM, y este encaja con lo que pidio —
+  // «pendiente de contestar / ya vendido / no interesado»— y viaja con la
+  // persona en vez de con el chat.
+  const [etiqueta, setEtiqueta] = useState<string | null>(null);
 
   // Dos estados distintos, y la diferencia importa:
   //   · `cargando`  — todavia no ha vuelto la primera peticion.
@@ -175,6 +266,14 @@ export default function ChatPage() {
   const [cargando, setCargando] = useState(true);
   const [sync, setSync] = useState<{ entrando: boolean; mensajes: number; conversaciones: number; adjuntosPendientes: number } | null>(null);
   const cuantasAntes = useRef(0);
+  // Buscar es cosa de Postgres, no del navegador: con el tope de 50 chats,
+  // filtrar lo ya cargado dejaba fuera cualquier seguimiento de hace semanas.
+  // Lo reporto una gestora — buscaba por nombre y por numero y no salia nada, y
+  // en cuanto le mandaba un mensaje, aparecia.
+  useEffect(() => {
+    const t = setTimeout(() => setBuscaChats(filtro.trim()), 300);
+    return () => clearTimeout(t);
+  }, [filtro]);
   const [grabando, setGrabando] = useState(false);
   const [nuevoAbierto, setNuevoAbierto] = useState(false);
   // Los dos paneles que antes eran ventanas del navegador. window.prompt y
@@ -187,6 +286,9 @@ export default function ChatPage() {
   const [bajando, setBajando] = useState<number[]>([]);
   // El mensaje fallido que se esta reintentando ahora mismo.
   const [reintentando, setReintentando] = useState<number | null>(null);
+  const [corrigiendo, setCorrigiendo] = useState<number | null>(null);
+  const [editando, setEditando] = useState<number | null>(null);
+  const [textoEditado, setTextoEditado] = useState('');
   // El mensaje al que se esta respondiendo, si hay alguno.
   const [citando, setCitando] = useState<MensajeWhatsapp | null>(null);
   // El tour, solo la primera vez y solo cuando ya hay algo que enseñar: sobre
@@ -195,6 +297,21 @@ export default function ChatPage() {
   // Solo el chat, sin el resto del CRM alrededor. Para cuando se pasa la
   // mañana aqui: el menu, la cabecera y el selector de proyecto no pintan nada.
   const [aPantalla, setAPantalla] = useState(false);
+  // Que conversacion tiene la ficha abierta. Se guarda el id y no el objeto:
+  // asi el popup se pide sus datos y no depende de lo que ya hubiera cargado la
+  // lista, que trae menos campos.
+  const [fichaDe, setFichaDe] = useState<number | null>(null);
+  // El campo de escribir pasa a estar CONTROLADO. Antes no lo estaba y por eso
+  // no habia forma de meterle texto: elegir una plantilla no podia hacer nada.
+  const [borrador, setBorrador] = useState('');
+  const [plantillasAbiertas, setPlantillasAbiertas] = useState(false);
+  // Los datos con los que se rellenan los huecos de la plantilla. Se piden al
+  // abrir el selector y no antes: la mayoria de los mensajes no usan plantilla.
+  const [datosPlantilla, setDatosPlantilla] = useState<DatosParaRellenar>({});
+  // A quien se va a llamar, y si el intento quedo apuntado.
+  const [llamando, setLlamando] = useState<
+    { telefono: string; nombre: string | null; apuntada: boolean } | null
+  >(null);
   // Lo que se va a mandar, esperando confirmacion. Antes se enviaba directo al
   // elegir el fichero y no habia forma de ver que era hasta despues — y en
   // WhatsApp un mensaje no se recoge pasados unos minutos.
@@ -225,18 +342,21 @@ export default function ChatPage() {
   const trozos = useRef<Blob[]>([]);
 
   useEffect(() => {
-    // La conexion que importa es la de la sesion ABIERTA, no la de quien mira.
-    // Sin el `deQuien`, un admin con la sesion de una gestora delante veia su
-    // propio estado: el chat decia «no se puede enviar» aunque el numero de ella
-    // estuviera perfectamente conectado.
-    setConexion(null);
-    const leer = () => chatApi.conexion(deQuien)
-      .then((r) => setConexion(r.success ? r.data : null)).catch(() => {});
+    // `deQuien` NO es opcional aqui. Sin el, un administrador que abre el
+    // WhatsApp de una gestora ve el estado de SU PROPIA conexion: si el tiene el
+    // numero enlazado, la pantalla dice «conectado» aunque el de ella este
+    // caido — y al reves, sale «no tienes WhatsApp enlazado» sobre una sesion
+    // que funciona. Es el mismo descuido que ya aparecio en otras llamadas de
+    // esta pantalla, y Diego lo arreglo en integracion/todo (cb3dc57).
+    const leer = () => chatApi.conexion(deQuien).then((r) => setConexion(r.success ? r.data : null)).catch(() => {});
     leer();
     // La sesion se cae sola si el movil se queda sin internet. Se vigila para
     // que la gestora se entere en vez de escribir contra el vacio.
     const t = setInterval(leer, 30000);
     return () => clearInterval(t);
+      // Depende de `deQuien`: al cambiar de sesion hay que volver a preguntar.
+    // Con [] se quedaba con la sesion con la que se abrio la pantalla y
+    // seguia enseñando el estado de la anterior.
   }, [deQuien]);
 
   // Cambiar de persona vacia la pantalla antes de traer lo suyo. Sin esto se
@@ -262,26 +382,31 @@ export default function ChatPage() {
 
   const cargarLista = useCallback(async () => {
     try {
-      // La lista NO se filtra por proyecto, a proposito.
+      // La lista NO se filtra por proyecto, a proposito. Es lo mismo que hizo
+      // Diego en `integracion/todo` (33101c8) y que esta rama no tenia:
       //
-      // El WhatsApp de una gestora es UNA bandeja: sus conversaciones son de los
-      // proyectos que sean, y muchas de nadie todavia. Filtrando por el proyecto
-      // elegido se veian 6 de 28 — y lo peor no era no verlas: era mandar un
-      // mensaje, no encontrarlo en la lista y pensar que el CRM no lo habia
-      // guardado. Estaba guardado; estaba escondido.
+      //   El WhatsApp de una gestora es UNA bandeja. Sus conversaciones son de
+      //   los proyectos que sean, y muchas de nadie todavia. Filtrando por el
+      //   proyecto elegido se veian 6 de 28 — y lo peor no era no verlas: era
+      //   mandar un mensaje, no encontrarlo en la lista y pensar que el CRM no
+      //   lo habia guardado. Estaba guardado; estaba escondido.
       //
-      // De que proyecto es cada una se dice en la propia fila.
-      const r = await chatApi.lista(null, deQuien);
+      // Se vio otra vez al probar las etiquetas: seis conversaciones en la base
+      // y una sola en pantalla.
+      const r = await chatApi.lista(null, deQuien, buscaChats, etiqueta);
       if (!r.success) return;
       const lista = r.data || [];
       // Si han aparecido conversaciones desde la ultima vuelta, el historial
       // sigue entrando. Se apaga solo cuando deja de crecer.
-      cuantasAntes.current = lista.length;
+      //
+      // Pero buscando NO: la lista encoge y crece segun lo que se teclea, y ese
+      // vaiven diria «sincronizando…» sin que este entrando nada.
+      if (!buscaChats) cuantasAntes.current = lista.length;
       setChats(lista);
     } finally {
       setCargando(false);
     }
-  }, [projectId, deQuien]);
+  }, [deQuien, buscaChats, etiqueta]);
 
   const cargarHilo = useCallback(async (id: number, limite = cuantos) => {
     const r = await chatApi.hilo(id, limite, deQuien);
@@ -416,7 +541,18 @@ export default function ChatPage() {
   function fallo(e: unknown) {
     // Aqui contestan los frenos: ritmo, «no me escribas» y sin consentimiento.
     // El texto del servidor se enseña tal cual: esta escrito para una gestora.
-    toast({ title: 'No se ha enviado', description: (e as Error).message, variant: 'destructive' });
+    // Un 413 en crudo no le dice nada a nadie. Puede llegar aqui aunque se
+    // avise antes: si el tope de Nginx cambia y este no, o si el pie del
+    // mensaje engorda la peticion por encima del limite.
+    const bruto = (e as Error).message || '';
+    const esDemasiadoGrande = /(^|[^0-9])413([^0-9]|$)|too large|entity too large/i.test(bruto);
+    toast({
+      title: esDemasiadoGrande ? 'El archivo pesa demasiado' : 'No se ha enviado',
+      description: esDemasiadoGrande
+        ? 'El servidor lo ha rechazado por tamaño. Mandalo comprimido, o por otra via.'
+        : bruto,
+      variant: 'destructive',
+    });
   }
 
   async function enviar(texto: string) {
@@ -427,8 +563,55 @@ export default function ChatPage() {
       const r = await chatApi.enviar(abierto, t, citando?.id ?? null, deQuien);
       if (!r.success) throw new Error(r.error || 'No se pudo enviar');
       setCitando(null);
+      setBorrador('');
       await cargarHilo(abierto); cargarLista();
     } catch (e) { fallo(e); } finally { setEnviando(false); }
+  }
+
+  /**
+   * Corrige un mensaje ya enviado.
+   *
+   * «Se siguen enviando y no permite corregir desde la app» (#75). Hasta ahora
+   * un error de dedo en un mensaje a un prospecto se quedaba ahi para siempre.
+   *
+   * El boton solo sale donde WhatsApp lo permite —propio, texto y menos de 15
+   * minutos—, asi que quien lo ve puede usarlo. Ofrecerlo siempre y contestar
+   * «fuera de plazo» al pulsarlo es peor que no ofrecerlo.
+   */
+  function sePuedeCorregir(m: MensajeWhatsapp) {
+    // Lo primero, si este WhatsApp lo permite. El servidor lo pone en falso en
+    // cuanto un 404 le dice que esta versión no trae la función: sin esto, el
+    // botón se seguía ofreciendo en cada mensaje y fallaba siempre igual.
+    if (conexion?.puedeCorregir === false) return false;
+    return m.direccion === 'saliente' && m.tipo === 'texto' && Boolean(m.texto) && Boolean(m.wa_id)
+      && m.estado !== 'fallido'
+      && (Date.now() - new Date(m.ts).getTime()) < VENTANA_EDICION_MS;
+  }
+
+  /**
+   * Se corrige DENTRO de la burbuja, no en un dialogo del navegador.
+   *
+   * Aqui habia un `window.prompt`. Funcionaba y estaba mal: sale un cartel del
+   * sistema con «localhost:5173 dice» encima del CRM, no se puede dar estilo, no
+   * respeta el tema y rompe la sensacion de estar en una aplicacion. Ademas
+   * bloquea la pestaña entera mientras esta abierto.
+   */
+  function empezarACorregir(m: MensajeWhatsapp) {
+    setEditando(m.id);
+    setTextoEditado(m.texto || '');
+  }
+
+  async function guardarCorreccion(m: MensajeWhatsapp) {
+    const limpio = textoEditado.trim();
+    if (!abierto || !limpio || limpio === m.texto) { setEditando(null); return; }
+    setCorrigiendo(m.id);
+    try {
+      const r = await chatApi.editarMensaje(m.id, abierto, limpio, deQuien);
+      if (!r.success) throw new Error(r.error || 'No se pudo corregir');
+      setEditando(null);
+      await cargarHilo(abierto); cargarLista();
+      toast({ title: 'Corregido', description: 'Al otro lado se ve el texto nuevo, con la marca de editado.' });
+    } catch (e) { fallo(e); } finally { setCorrigiendo(null); }
   }
 
   /** Vuelve a enviar un mensaje que no salio, con su mismo texto. */
@@ -436,6 +619,10 @@ export default function ChatPage() {
     if (!abierto || !m.texto) return;
     setReintentando(m.id);
     try {
+      // Con `deQuien`: reintentar tiene que salir por la MISMA linea por la que
+      // se intento. Sin el, un administrador que reintenta un mensaje fallido de
+      // una gestora lo manda desde su propio numero — y el prospecto recibe a un
+      // desconocido en mitad de una conversacion.
       const r = await chatApi.enviar(abierto, m.texto, null, deQuien);
       if (!r.success) throw new Error(r.error || 'No se pudo enviar');
       await cargarHilo(abierto); cargarLista();
@@ -456,24 +643,63 @@ export default function ChatPage() {
    * viene a resolver.
    */
   async function llamar(c: ChatWhatsapp) {
+    let apuntada = false;
     try {
-      // Tambien aqui: si un admin llama desde la sesion de una gestora, la
-      // llamada se apunta en la conversacion de ella, no en la suya.
-      await chatApi.apuntarLlamada(c.id, deQuien);
+      // `deQuien` NO es opcional: sin el, con la sesion de otra persona elegida
+      // el servidor busca en la del propio administrador y contesta que la
+      // conversacion no existe. Por eso en pruebas habia CERO llamadas
+      // apuntadas mientras el boton parecia funcionar (tarea #67). Es la
+      // septima llamada de esta pantalla donde faltaba lo mismo.
+      const r = await chatApi.apuntarLlamada(c.id, deQuien);
+      apuntada = Boolean(r?.success);
       await cargarHilo(c.id);
       cargarLista();
     } catch {
       // Que no quede apuntado no puede impedir llamar: el trabajo es hablar con
-      // la persona, no alimentar el historial.
-      toast({ title: 'No se pudo apuntar la llamada', description: 'Se marca igual.' });
+      // la persona, no alimentar el historial. Pero se DICE, en el propio
+      // dialogo, en vez de con un aviso que se va solo.
+      apuntada = false;
     }
-    window.location.href = `tel:+${String(c.telefono).replace(/[^0-9]/g, '')}`;
+    // Y NO se navega a `tel:` a ciegas: en un ordenador eso no hace nada y el
+    // navegador lo ignora en silencio. Se enseña el numero con sus dos salidas.
+    setLlamando({ telefono: String(c.telefono || ''), nombre: c.lead_nombre || c.nombre_push || null, apuntada });
   }
 
   /** Los pone en la vista previa. No envia nada todavia. */
   function proponerArchivos(fs: File[]) {
-    if (!abierto) {
+    // El destino sale de lo que se está VIENDO, no solo de `abierto`.
+    //
+    // Con el chat abierto en pantalla, soltar un archivo contestaba «Elige una
+    // conversación antes». `conv` es la conversación que la cabecera está
+    // pintando: si hay cabecera, hay destino, y no puede desajustarse con lo
+    // que el usuario ve. `abierto` va primero porque es quien manda cuando los
+    // dos están puestos.
+    const destino = abierto ?? conv?.id ?? null;
+    if (!destino) {
       toast({ title: 'Elige una conversacion antes', variant: 'destructive' });
+      return;
+    }
+    // Y si se cayó el desajuste, se recupera: sin esto el archivo se quedaría
+    // en la vista previa y al enviar volvería a fallar por lo mismo.
+    if (!abierto) setAbierto(destino);
+    // Se avisa AQUI, antes de subir nada. Lo que pasaba: se elegia el dossier,
+    // se pulsaba enviar, se esperaba, y salia «Error 413» — que no le dice nada
+    // a nadie. Ese 413 no es de la aplicacion (multer acepta 16 MB): lo corta
+    // Nginx, cuyo client_max_body_size por defecto es 1 MB. Mientras no se
+    // suba en el servidor, al menos que se sepa antes y en cristiano.
+    const tope = conexion?.topeAdjuntoBytes || TOPE_POR_DEFECTO;
+    const pesados = fs.filter((f) => f.size > tope);
+    if (pesados.length) {
+      const cual = pesados[0];
+      toast({
+        title: 'El archivo pesa demasiado',
+        description: `«${cual.name}» ocupa ${(cual.size / 1024 / 1024).toFixed(1)} MB y el servidor `
+          + `solo acepta ${(tope / 1024 / 1024).toFixed(0)} MB. Mandalo comprimido, o por otra via.`,
+        variant: 'destructive',
+      });
+      const caben = fs.filter((f) => f.size <= tope);
+      if (!caben.length) return;
+      setPorEnviar(caben);
       return;
     }
     if (fs.length) setPorEnviar(fs);
@@ -508,9 +734,6 @@ export default function ChatPage() {
     // no sabe si salio y vuelve a grabar.
     if (extra?.segundos) setVozSaliendo(extra.segundos);
     try {
-      // `deQuien` tambien aqui: sin el, el servidor busca la conversacion en la
-      // sesion de quien mira y no en la que se esta viendo — y contesta
-      // «Conversacion no encontrada». Es la unica llamada que se quedo sin el.
       const r = await chatApi.adjunto(abierto, f, '', extra?.segundos, deQuien);
       if (!r.success) throw new Error(r.error || 'No se pudo enviar');
       await cargarHilo(abierto); cargarLista();
@@ -650,6 +873,28 @@ export default function ChatPage() {
     } catch (e) { fallo(e); }
   }
 
+  /**
+   * Abre el chat del numero que se acaba de buscar, sin mandarle nada.
+   *
+   * Es la salida del #73. El chat no esta en la base hasta que pasa un mensaje
+   * por el CRM —`syncFullHistory` esta en false y esa conversacion es anterior
+   * a enlazar el numero—, asi que ella tenia que ESCRIBIRLE para que apareciera:
+   * «una vez se envia el mensaje desde la app, aparece el chat». Escribir a
+   * alguien solo para poder verlo no es una forma de trabajar.
+   *
+   * `abrirChat` crea la conversacion y no manda nada. Un clic y esta ahi.
+   */
+  async function abrirLoBuscado() {
+    const t = buscaChats.replace(/[^0-9]/g, '');
+    if (t.length < 9) return;
+    try {
+      const r = await chatApi.abrirPorTelefono(t);
+      if (!r.success) throw new Error(r.error || 'No se pudo abrir');
+      setFiltro(''); setBuscaChats('');
+      await cargarLista(); setAbierto(r.data.id);
+    } catch (e) { fallo(e); }
+  }
+
   async function abrirCon(leadId: number) {
     try {
       const r = await chatApi.abrir(leadId, deQuien);
@@ -716,7 +961,7 @@ export default function ChatPage() {
     c.proyecto_nombre || (c.lead_id ? 'sin proyecto' : 'no es prospecto');
 
 
-  const adelantoBase = (c: ChatWhatsapp) => {
+  const adelantoDe = (c: ChatWhatsapp) => {
     if (c.no_escribir) return 'no escribir';
     // La llamada va ANTES de `ultimo_texto`: en una llamada ese campo guarda el
     // desenlace en seco, asi que la lista ponia «perdida» a secas, sin decir de
@@ -731,9 +976,9 @@ export default function ChatPage() {
     // nada — su identificador no le dice nada a nadie.
     return c.es_grupo ? 'Grupo' : c.telefono;
   };
-  const visibles = filtro
-    ? chats.filter((c) => `${nombreDe(c)} ${c.telefono}`.toLowerCase().includes(filtro.toLowerCase()))
-    : chats;
+  // Ya vienen filtrados del servidor. Antes se filtraba aqui, sobre las 50
+  // cargadas, y por eso no aparecia nada de mas atras.
+  const visibles = chats;
 
   if (conexion && !conexion.configurado) {
     return (
@@ -837,6 +1082,26 @@ export default function ChatPage() {
                 <PencilSimpleLine size={16} weight="bold" />
               </button>
             </div>
+
+            {/* Las «etiquetas» de #72. Filtran en el servidor, no aqui: con el
+                tope de 50 chats, filtrar lo ya cargado dejaria fuera justo lo
+                que se busca — el mismo fallo que tenia el buscador. */}
+            <div className="wa-etiquetas" role="group" aria-label="Filtrar por estado">
+              {ETIQUETAS.map((e) => (
+                <button
+                  key={e}
+                  type="button"
+                  aria-pressed={etiqueta === e}
+                  onClick={() => setEtiqueta(etiqueta === e ? null : e)}
+                  className={`wa-etiqueta wa-et-${e} ${etiqueta === e ? "wa-etiqueta-puesta" : ""}`}>
+                  {e === ETIQUETA_GRUPOS ? 'Grupos' : (STATUS_LABELS[e] || e)}
+                </button>
+              ))}
+              {etiqueta && (
+                <button type="button" onClick={() => setEtiqueta(null)}
+                  className="wa-etiqueta wa-etiqueta-quitar">Quitar filtro</button>
+              )}
+            </div>
             {sync?.entrando && (
               <div className="wa-sincronizando">
                 Sincronizando… {sync.conversaciones} chats · {sync.mensajes} mensajes
@@ -855,23 +1120,63 @@ export default function ChatPage() {
                   unreadCnt={c.no_leidos || undefined}
                   onClick={() => setAbierto(c.id)}>
                   <Avatar name={nombreDe(c)}><Foto nombre={nombreDe(c)} url={c.avatar_url} grupo={c.es_grupo} /></Avatar>
-                  {/* Se pinta el contenido a mano en vez de pasar `name` e `info`,
-                      para poder poner la etiqueta del proyecto ARRIBA, al lado
-                      del nombre. Abajo, en el adelanto, se confundia con el
-                      texto del ultimo mensaje. Se conservan las clases del kit
-                      para no perder su estilo. */}
+                  {/* Con Conversation.Content y no con las props `name`/`info`:
+                      hace falta meter la etiqueta AL LADO del nombre, y por prop
+                      solo cabe texto plano. */}
                   <Conversation.Content>
-                    <div className="cs-conversation__name wa-fila-nombre">
+                    <div className="wa-fila-nombre">
                       <span className="wa-fila-quien">{nombreDe(c)}</span>
-                      <span className={`wa-etiqueta${c.proyecto_nombre ? '' : ' wa-etiqueta--suelta'}`}>
-                        {etiquetaDe(c)}
-                      </span>
+                      {c.lead_status && (
+                        <span className={`wa-fila-etiqueta wa-et-${c.lead_status}`}>
+                          {STATUS_LABELS[c.lead_status] || c.lead_status}
+                        </span>
+                      )}
                     </div>
-                    <div className="cs-conversation__info">{adelantoBase(c)}</div>
+                    <div className="wa-fila-adelanto">{adelantoDe(c)}</div>
                   </Conversation.Content>
                 </Conversation>
               ))}
             </ConversationList>
+
+            {/* Buscar y no encontrar nada tiene DOS motivos, y ninguno se veia.
+                La gestora reporto los dos como si fueran fallos del buscador:
+                «no aparecen los seguimientos de tiempo atras» (#73) y «no me
+                aparece el chat del grupo de Psiko» (#74).
+
+                Lo del grupo NO es un fallo: los grupos estan apagados a
+                proposito en `groupsIgnore`, para no darle a Meta motivos de
+                suspender el numero. Que ella lo sepa cuesta dos lineas, y le
+                ahorra volver a reportarlo — y a nosotros, buscar un fallo que
+                no existe. */}
+            {buscaChats && !visibles.length && (
+              <div className="wa-sin-resultados">
+                <p className="font-medium text-foreground">Sin resultados para «{buscaChats}»</p>
+                <p>
+                  Los chats aparecen aquí <strong>cuando pasa un mensaje por el CRM</strong>.
+                  Una conversación anterior a enlazar el número puede seguir en tu móvil y
+                  no estar todavía aquí.
+                </p>
+                {/* Y aqui se abre, sin tener que escribirle. Antes la unica forma
+                    de que un chat viejo apareciera era mandarle un mensaje. */}
+                {buscaChats.replace(/[^0-9]/g, '').length >= 9 && (
+                  <button type="button" onClick={abrirLoBuscado} className="wa-abrir-buscado">
+                    Abrir el chat con {buscaChats.trim()}
+                  </button>
+                )}
+                {/* Esto lo dice ahora el servidor, no la pantalla.
+                    Antes se afirmaba siempre «los grupos no se muestran», y era
+                    falso: sí se muestran. Se le pedía a Evolution que los
+                    ignorara y no lo hacía, así que la pantalla estaba dando por
+                    buena una regla que nadie cumplía (#74). */}
+                {conexion?.grupos === false && (
+                  <p>
+                    Y los <strong>grupos no se muestran</strong>, a propósito: este número es
+                    para escribir a prospectos, y entrar en grupos suma para que WhatsApp lo
+                    suspenda. No es un fallo.
+                  </p>
+                )}
+              </div>
+            )}
           </Sidebar>
           )}
 
@@ -904,11 +1209,21 @@ export default function ChatPage() {
                     : conv.lead_id ? `${conv.telefono} · prospecto`
                     : `${conv.telefono} · sin prospecto`} />
                 <ConversationHeader.Actions>
-                  {conv.lead_id && (
-                    <Link to={`/prospectos/${conv.lead_id}`} title="Ver la ficha del prospecto">
-                      <InfoButton />
-                    </Link>
-                  )}
+                  {/* La ficha, en un popup y SIN salir de aqui.
+                      Antes era un enlace a /prospectos/:id que navegaba en esta
+                      misma pestaña: al volver se recargaban las conversaciones,
+                      los mensajes del hilo y las firmas de los adjuntos. Varios
+                      segundos, y una gestora entra y sale cada dos mensajes.
+                      Es el motivo de la tarea #64.
+
+                      Y sale SIEMPRE, no solo con prospecto: la conversacion sin
+                      ficha es justo la que hay que poder convertir en una. */}
+                  <button type="button" onClick={() => setFichaDe(conv.id)}
+                    className="wa-btn-ficha"
+                    aria-label={conv.lead_id ? 'Ver la ficha del prospecto' : 'Ver quién es'}
+                    title={conv.lead_id ? 'Ver la ficha del prospecto' : 'Ver quién es'}>
+                    <InfoButton />
+                  </button>
                   {/* Llamar. El CRM prepara, el telefono llama.
                       Solo en conversaciones de una persona: a un grupo no se
                       puede llamar desde un enlace `tel:`, y ofrecerlo seria
@@ -927,6 +1242,22 @@ export default function ChatPage() {
               </ConversationHeader>
 
               <MessageList>
+                {/* Un chat abierto y en blanco no puede quedarse en blanco (#76).
+                    La gestora lo conto asi: «en el chat con el bot no me aparece
+                    nada, NO SE SI DEBO ESCRIBIRLE AL PROSPECTO DESDE OTRO LUGAR».
+                    Esa segunda parte es lo grave: no sabe si el CRM sirve para
+                    esto o tiene que irse a otro sitio. Aunque el historial tarde
+                    en entrar, la pantalla tiene que decirle que pasa.
+
+                    Va como separador por lo mismo que el «ver mas» de abajo:
+                    MessageList solo admite sus propios hijos. */}
+                {!mensajes.length && (
+                  <MessageSeparator
+                    className="wa-vacio"
+                    content={sync?.entrando
+                      ? 'Todavía no ha entrado el historial de esta conversación'
+                      : 'Aquí no hay nada guardado todavía — escribe para empezar'} />
+                )}
                 {/* Va como separador y no como <div> ni como MessageList.Content:
                     el primero no es un hijo que MessageList admita, y el segundo
                     es EXCLUYENTE —si aparece, el kit descarta todos los demas
@@ -974,6 +1305,31 @@ export default function ChatPage() {
                         type: 'custom',
                       }}>
                       <Message.CustomContent>
+                        {/* QUIEN escribio. Solo en grupos, y solo en lo que
+                            entra: lo que sale es tuyo y ponerte tu propio
+                            nombre en cada burbuja seria ruido.
+
+                            Sin esto, un grupo era una lista de mensajes sin
+                            autor —todos iguales— y no se podia saber quien
+                            había dicho qué, que es media razón para abrir un
+                            grupo. En un chat de una persona sobra: la
+                            conversación YA es ella. */}
+                        {conv?.es_grupo && !mia && (m.participante_nombre || m.participante) && (() => {
+                          const quien = m.participante_nombre
+                            || `+${String(m.participante).split('@')[0]}`;
+                          return (
+                            <div className="wa-autor">
+                              {/* Iniciales y no la foto real: la de WhatsApp
+                                  caduca, así que guardar su dirección en cada
+                                  mensaje llenaría el histórico de huecos rotos. */}
+                              <span className="wa-autor-avatar" aria-hidden="true"
+                                style={{ background: colorDeNombre(quien) }}>
+                                {iniciales(quien)}
+                              </span>
+                              <span className="wa-autor-nombre">{quien}</span>
+                            </div>
+                          );
+                        })()}
                         {/* A que contestaba. Sin esto la respuesta salia suelta
                             y en una conversacion movida eso es la mitad de la
                             informacion: se veia el «si» sin la pregunta. */}
@@ -988,7 +1344,30 @@ export default function ChatPage() {
                           </div>
                         )}
                         {m.tipo !== 'texto' && <div className="wa-adjunto"><Adjunto m={m} alPedir={pedirAdjunto} bajando={bajando.includes(m.id)} /></div>}
-                        {m.texto && <div className="wa-texto">{m.texto}</div>}
+                        {editando === m.id ? (
+                          <div className="wa-editando">
+                            <textarea
+                              autoFocus
+                              value={textoEditado}
+                              onChange={(e) => setTextoEditado(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Escape') { setEditando(null); }
+                                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); guardarCorreccion(m); }
+                              }}
+                              rows={Math.max(2, Math.min(6, textoEditado.split(String.fromCharCode(10)).length))}
+                              aria-label="Corrige el mensaje" />
+                            <div className="wa-editando-botones">
+                              <button type="button" onClick={() => setEditando(null)}>Cancelar</button>
+                              <button type="button" className="wa-editando-guardar"
+                                disabled={corrigiendo === m.id || !textoEditado.trim()}
+                                onClick={() => guardarCorreccion(m)}>
+                                {corrigiendo === m.id ? 'Guardando…' : 'Guardar'}
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          m.texto && <div className="wa-texto"><TextoDeWhatsapp texto={m.texto} /></div>
+                        )}
                         <span className={`wa-meta ${m.estado === 'leido' ? 'wa-leido' : ''}`}>
                           {hora(m.ts)}{mia && m.estado ? ` ${TIC[m.estado]}` : ''}
                         </span>
@@ -1009,6 +1388,14 @@ export default function ChatPage() {
                             disabled={reintentando === m.id}
                             onClick={() => reintentar(m)}>
                             {reintentando === m.id ? 'Enviando…' : '↻ Reintentar'}
+                          </button>
+                        )}
+                        {sePuedeCorregir(m) && editando !== m.id && (
+                          <button type="button" className="wa-corregir"
+                            disabled={corrigiendo === m.id}
+                            title="WhatsApp deja corregir durante 15 minutos"
+                            onClick={() => empezarACorregir(m)}>
+                            {corrigiendo === m.id ? 'Corrigiendo…' : '✎ Corregir'}
                           </button>
                         )}
                       </Message.CustomContent>
@@ -1099,7 +1486,44 @@ export default function ChatPage() {
                     </button>
                   </>
                 ) : null}
+                {/* Las plantillas, AQUI. Estaban solo en su pantalla, asi que
+                    habia que salir del chat, copiar a mano y volver — con lo
+                    cual no ahorraban nada. */}
+                {!bloqueo && projectId && (
+                  <button type="button" className="wa-btn-plantillas"
+                    aria-label="Usar una plantilla"
+                    title="Usar una plantilla"
+                    aria-expanded={plantillasAbiertas}
+                    onClick={() => {
+                      setPlantillasAbiertas((v) => !v);
+                      // Los datos para los huecos se piden al abrir, no antes.
+                      if (!plantillasAbiertas && abierto) {
+                        chatApi.ficha(abierto, deQuien)
+                          .then((r) => {
+                            if (!r.success) return;
+                            const p = r.data.prospecto;
+                            setDatosPlantilla(p
+                              ? { nombre: p.nombre, email: p.email, telefono: p.telefono, producto: p.producto }
+                              : { telefono: r.data.telefono, nombre: r.data.nombre });
+                          })
+                          .catch(() => setDatosPlantilla({}));
+                      }
+                    }}>
+                    <FileText size={15} />
+                    <span>Plantillas</span>
+                  </button>
+                )}
               </InputToolbox>
+
+              {plantillasAbiertas && projectId && (
+                <SelectorPlantillas
+                  projectId={projectId}
+                  datos={datosPlantilla}
+                  nombreProyecto={nombreProyecto}
+                  alElegir={(texto) => setBorrador(texto)}
+                  alCerrar={() => setPlantillasAbiertas(false)}
+                />
+              )}
 
               <MessageInput
                 placeholder={
@@ -1107,6 +1531,8 @@ export default function ChatPage() {
                   : grabando ? 'Grabando… pulsa ■ para terminar (no se envía todavía)'
                   : 'Escribe un mensaje'
                 }
+                value={borrador}
+                onChange={(_html, texto) => setBorrador(texto)}
                 onSend={enviar} disabled={enviando || Boolean(bloqueo)} attachButton
                 onAttachClick={() => ficheroRef.current?.click()}
                 sendDisabled={enviando || Boolean(bloqueo)} />
@@ -1145,6 +1571,40 @@ export default function ChatPage() {
         alAnadir={(fs) => setPorEnviar((p) => [...p, ...fs])} />
 
       {tour && <Tour alCerrar={() => setTour(false)} />}
+
+      {llamando && (
+        <Llamar
+          telefono={llamando.telefono}
+          nombre={llamando.nombre}
+          apuntada={llamando.apuntada}
+          onCerrar={() => setLlamando(null)}
+        />
+      )}
+
+      {/* Avisa antes de que un enlace se lleve la pestaña fuera del chat. No
+          salta al moverse por dentro —cambiar de conversacion, plantillas— ni
+          con lo que ya abre pestaña nueva. Se apaga mientras hay un dialogo
+          abierto: dos ventanas encima de otra son un laberinto. */}
+      <AvisoAlSalir activo={fichaDe === null && !tour} />
+
+      {/* La ficha del prospecto. Crear una nueva SI saca del chat, pero es una
+          accion deliberada y con destino: se va a Prospectos con el telefono ya
+          puesto, en vez de dejar a la gestora copiandolo a mano. */}
+      {fichaDe !== null && (
+        <FichaProspecto
+          conversacionId={fichaDe}
+          deQuien={deQuien}
+          onCerrar={() => setFichaDe(null)}
+          onCrearProspecto={(telefono, nombre) => {
+            setFichaDe(null);
+            const q = new URLSearchParams();
+            if (telefono) q.set('telefono', telefono);
+            if (nombre) q.set('nombre', nombre);
+            window.open(`${import.meta.env.BASE_URL}prospectos?nuevo=1&${q}`.replace(/\/{2,}/g, '/'),
+              '_blank', 'noopener');
+          }}
+        />
+      )}
 
       <input ref={ficheroRef} type="file" className="hidden"
         accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.zip,.txt"

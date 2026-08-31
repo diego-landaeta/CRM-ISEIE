@@ -1,6 +1,7 @@
 import * as model from './chat.model.js';
 import * as evolution from './evolution.client.js';
 import * as media from './media.service.js';
+import * as politica from './politica.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 
@@ -48,7 +49,12 @@ const pulso = new Map();   // instancia -> milisegundos del ultimo mensaje
 // El historial es lo unico que hay que esperar; una conversacion normal no.
 const pulsoHistorial = new Map();
 
+// El pulso general. Ya no lo lee ningun endpoint —«Sincronizando…» mira el del
+// historial— pero el mapa sigue vivo por dentro y esto es por donde se
+// comprueba. Se quedaba sin llamadas en `src/`, lo quite por muerto, y reventó
+// cuatro pruebas: el barrido no habia mirado en `tests/`.
 export const ultimoLatido = (instancia) => pulso.get(instancia) || null;
+
 export const ultimoDelHistorial = (instancia) => pulsoHistorial.get(instancia) || null;
 
 /**
@@ -213,7 +219,30 @@ async function permitirEnvio(conversacionId) {
   return conv;
 }
 
-const numeroDe = (conv) => String(conv.jid).split('@')[0];
+/**
+ * A donde se manda. NO siempre son las cifras del jid.
+ *
+ * Esto era `String(conv.jid).split('@')[0]` a secas, y con eso:
+ *
+ *   · A un GRUPO no llegaba nada. Su jid es `1203634...@g.us`, y quitandole el
+ *     sufijo queda un numero de 18 cifras que al otro lado se reconstruye como
+ *     `...@s.whatsapp.net` — un telefono que no existe. Los grupos se veian en
+ *     la lista y no se podia contestar en ellos, que es justo lo que hace falta
+ *     que funcione en la #74.
+ *
+ *   · Con un `@lid` era peor que no llegar: ese identificador oculta el
+ *     telefono de una persona, asi que sus cifras NO son un numero suyo. Tomarlo
+ *     por telefono es mandarle el mensaje a quien tenga esa linea — un
+ *     desconocido leyendo una conversacion con un prospecto.
+ *
+ * En los dos casos hay que mandar el jid ENTERO y dejar que el otro lado lo
+ * resuelva. Solo se pelan las cifras cuando de verdad es un telefono.
+ */
+const numeroDe = (conv) => {
+  const jid = String(conv.jid);
+  if (jid.endsWith('@g.us') || jid.endsWith('@lid')) return jid;
+  return jid.split('@')[0];
+};
 
 /** Manda un texto. */
 export async function enviar({ conversacionId, texto, usuarioId, citarWaId = null }) {
@@ -386,6 +415,10 @@ export async function recibir(cuerpo) {
   if (/messages[._]update/i.test(evento)) return acuse(cuerpo);
   // Llamadas. Van por su propio evento, no por messages.upsert.
   if (/^call$/i.test(evento)) return llamada(cuerpo);
+  // Cuanto lleva del historial. Es el UNICO numero real que hay: WhatsApp no
+  // dice cuantos mensajes va a mandar en total, asi que un porcentaje calculado
+  // por nosotros seria inventado. Baileys lo manda en cada tanda.
+  if (/history[._]progress/i.test(evento)) return anotarProgreso(cuerpo);
   if (evento && !/messages[._]upsert/i.test(evento)) return { ignorado: evento };
 
   const datos = cuerpo?.data || cuerpo;
@@ -405,6 +438,15 @@ export async function recibir(cuerpo) {
   const esPersona = destino.endsWith('@s.whatsapp.net') || destino.endsWith('@lid');
   if (!esGrupo && !esPersona) {
     return { ignorado: `ni persona ni grupo (${destino.split('@')[1] || destino})` };
+  }
+  // Y si los grupos no entran, aqui se paran DE VERDAD.
+  //
+  // Antes esta linea no existia: se le pedia `groupsIgnore: true` a Evolution y
+  // se daba por hecho. En la base de pruebas habia 2 grupos de 5 conversaciones,
+  // con mensajes del mismo dia — entraban en vivo. Delegar una decision propia
+  // en un servicio de terceros no es aplicarla. Es la #74.
+  if (politica.sobraPorSerGrupo(destino)) {
+    return { ignorado: 'los grupos no entran (WHATSAPP_GRUPOS=no)' };
   }
   // «0@s.whatsapp.net» y similares: WhatsApp cuela identificadores basura que
   // aparecian en la lista como una conversacion mas.
@@ -442,10 +484,16 @@ export async function recibir(cuerpo) {
   const m = datos?.message || {};
   const { tipo } = media.tipoDeMensaje(m);
   if (tipo === 'otro') {
-    logger.warn(
-      { instancia, claves: Object.keys(m).join(','), jid: destino.split('@')[0] },
-      'WhatsApp: tipo de mensaje que no se sabe leer — se guarda igual, pero revisar'
-    );
+    // Este aviso ya estaba, y es el que va a resolver de verdad lo que se ve en
+    // produccion: el numero de los leads enseña una fila tras otra de
+    // «Descargar otro» y ni una palabra. Desde aqui no se puede saber que tipo
+    // es —hay medio centenar de clases de mensaje— y adivinar seria eso,
+    // adivinar. Una linea de este registro lo dice.
+    //
+    // Ahora apunta tambien las claves de DENTRO del sobre: si el mensaje venia
+    // envuelto, con las de fuera solo se veia «ephemeralMessage» y no lo que
+    // llevaba dentro, que es lo que hace falta saber.
+    media.apuntarDesconocido(m, { instancia, jid: destino.split('@')[0] });
   }
 
   // El adjunto NO se baja aqui. Se apunta en la cola y se descarga despues.
@@ -456,6 +504,23 @@ export async function recibir(cuerpo) {
   // mandando. Miles de peticiones cruzadas en los dos sentidos a la vez: se
   // saturo la cola de conexiones y se perdieron 2.463 mensajes con «fetch
   // failed». El webhook tiene que contestar rapido y soltar.
+  // messageTimestamp viene en segundos.
+  const cuando = datos?.messageTimestamp
+    ? new Date(Number(datos.messageTimestamp) * 1000)
+    : new Date();
+
+  // «El ultimo mes» tiene que ser un mes (#73).
+  //
+  // El recorte vivia solo en el puente de Baileys, asi que en produccion no
+  // existia. Se hace ANTES de crear nada: descartarlo despues de guardar la
+  // conversacion dejaria chats vacios en la lista, que es peor que no tenerlos.
+  //
+  // Solo puede saltar con el modo «rapido» apuntado y una fecha de hace mas de
+  // 30 dias, y un mensaje en vivo nunca cumple lo segundo.
+  if (politica.sobraDelHistorial(instancia, cuando)) {
+    return { ignorado: 'mas viejo que el mes que se pidio' };
+  }
+
   const fila = await model.guardarMensaje({
     conversacionId: conv.id,
     waId: key.id,
@@ -467,8 +532,11 @@ export async function recibir(cuerpo) {
     nombreArchivo: m.documentMessage?.fileName || null,
     // A que mensaje responde, si responde a alguno. Lo manda el puente.
     respondeA: datos?.respondeA || null,
-    // messageTimestamp viene en segundos.
-    ts: datos?.messageTimestamp ? new Date(Number(datos.messageTimestamp) * 1000) : new Date(),
+    // Quien escribio, en un grupo. Sin esto todos los mensajes de un grupo
+    // salen iguales y no se sabe quien dijo que.
+    participante: datos?.participante || null,
+    participanteNombre: datos?.participanteNombre || null,
+    ts: cuando,
   });
 
   // Lo de AHORA se baja delante de todo; lo viejo del historial, con criterio.
@@ -663,7 +731,110 @@ export async function marcarLeida(conversacionId, noLeidos = null) {
   const ultimo = (await model.ultimoEntranteSinLeer(conversacionId));
   if (conv && ultimo?.wa_id && evolution.configurado()) {
     await evolution.marcarLeido(
-      { remoteJid: conv.jid, fromMe: false, id: ultimo.wa_id }, conv.instancia
+      {
+        remoteJid: conv.jid,
+        fromMe: false,
+        id: ultimo.wa_id,
+        // En un grupo, sin `participant` WhatsApp no sabe QUE mensaje marcar:
+        // la terna es (remoteJid, participant, id). Se manda solo cuando lo hay
+        // — en un chat de una persona el campo sobra y algunos servidores lo
+        // rechazan si viene vacio.
+        ...(ultimo.participante ? { participant: ultimo.participante } : {}),
+      },
+      conv.instancia
     ).catch(() => {});
   }
 }
+
+/**
+ * Corrige un mensaje ya enviado. Tarea #75.
+ *
+ * Las tres condiciones no son nuestras, son de WhatsApp, y por eso se comprueban
+ * ANTES de molestar a Evolution: solo se puede editar lo que uno mismo mando, y
+ * solo texto, y solo durante 15 minutos. Preguntar sabiendo que va a decir que
+ * no es tirar una peticion y ensuciar el registro.
+ */
+export const VENTANA_EDICION_MS = 15 * 60 * 1000;
+
+export async function editarMensaje({ mensajeId, conversacion, texto, instancia }) {
+  const m = await model.mensajePorId(mensajeId);
+  if (!m || m.conversacion_id !== conversacion.id) {
+    throw new AppError('Mensaje no encontrado', 404, 'NOT_FOUND');
+  }
+  if (m.direccion !== 'saliente') {
+    throw new AppError('Solo se pueden corregir los mensajes que has mandado tu', 400, 'NO_ES_TUYO');
+  }
+  if (m.tipo !== 'texto') {
+    throw new AppError('Solo se puede corregir el texto, no un archivo', 400, 'NO_ES_TEXTO');
+  }
+  if (!m.wa_id) {
+    // Sin identificador de WhatsApp no hay a que apuntar. Pasa con los que
+    // fallaron al salir: nunca llegaron, asi que no hay nada que corregir.
+    throw new AppError('Ese mensaje no llego a salir; vuelve a mandarlo', 400, 'SIN_WA_ID');
+  }
+  const edad = Date.now() - new Date(m.ts).getTime();
+  if (edad > VENTANA_EDICION_MS) {
+    throw new AppError('WhatsApp solo deja corregir durante los primeros 15 minutos', 400, 'FUERA_DE_PLAZO');
+  }
+
+  const r = await evolution.editarTexto(
+    // `telefono` y no el jid tenia el mismo fallo que `numeroDe`: en un grupo
+    // son 18 cifras que no son un telefono de nadie.
+    numeroDe(conversacion),
+    { waId: m.wa_id, jid: conversacion.jid, mio: true },
+    texto,
+    instancia
+  );
+  if (!r.ok) {
+    if (r.error === 'NO_SOPORTADO') {
+      throw new AppError('Este WhatsApp no permite corregir mensajes', 400, 'NO_SOPORTADO');
+    }
+    throw new AppError('No se pudo corregir el mensaje', 502, 'EVOLUTION_ERROR');
+  }
+
+  // Se guarda el texto nuevo. El viejo NO se conserva: en WhatsApp una edicion
+  // sustituye al mensaje y quien lo recibio ve el corregido; guardar aqui una
+  // version que el prospecto ya no ve solo serviria para confundir a quien lea
+  // el chat despues.
+  return model.corregirTexto(mensajeId, texto);
+}
+
+/**
+ * Cuanto lleva traido del historial, de 0 a 100.
+ *
+ * En memoria y por instancia. No lleva tabla a proposito: es un dato que solo
+ * vale mientras dura la sincronizacion y que se puede perder sin consecuencias
+ * — si se reinicia a mitad, la pantalla vuelve a enseñar los contadores de
+ * siempre en vez de un porcentaje parado que ya no avanza.
+ *
+ * Puede no llegar nunca: depende de que quien manda los avisos lo incluya. Por
+ * eso la pantalla lo enseña SOLO si existe, y si no, sigue con «1 chats y 4
+ * mensajes hasta ahora» como hasta hoy. Nunca se inventa.
+ */
+const progresoHistorial = new Map();
+
+function anotarProgreso(cuerpo) {
+  const instancia = cuerpo?.instance || cuerpo?.instancia;
+  const pct = Number(cuerpo?.data?.progress);
+  if (!instancia || !Number.isFinite(pct)) return { ignorado: true };
+  const ultimo = Boolean(cuerpo?.data?.isLatest);
+  progresoHistorial.set(instancia, {
+    pct: Math.max(0, Math.min(100, Math.round(pct))),
+    ultimo,
+    cuando: Date.now(),
+  });
+  return { progreso: pct };
+}
+
+/** El progreso de esta instancia, o null si nadie lo ha mandado. */
+export function progresoDe(instancia) {
+  const p = progresoHistorial.get(instancia);
+  if (!p) return null;
+  // Si lleva mas de dos minutos sin moverse, deja de contar: una barra parada
+  // en el 40 % es peor que no tener barra.
+  if (Date.now() - p.cuando > 120000) return null;
+  return p.pct;
+}
+
+/** Para las pruebas. */
+export const _progreso = progresoHistorial;

@@ -114,6 +114,9 @@ export interface MensajeWhatsapp {
   media_firma: string | null;
   /** A que mensaje responde este, y un adelanto del citado para pintarlo. */
   responde_a?: string | null;
+  /** Quien escribio, SOLO en grupos (#74). Null en chats de una persona. */
+  participante?: string | null;
+  participante_nombre?: string | null;
   citado_texto?: string | null;
   citado_tipo?: string | null;
   citado_direccion?: 'entrante' | 'saliente' | null;
@@ -130,21 +133,94 @@ export interface ConexionWhatsapp {
   nombre?: string | null;
   conectado?: boolean;
   estado?: string | null;
+  /** Lo que de verdad acepta un adjunto. Lo dice el servidor, no se adivina. */
+  topeAdjuntoBytes?: number;
+  /** Si entran los grupos. Lo decide el servidor (#74); la pantalla solo lo dice. */
+  grupos?: boolean;
+  /** Si este WhatsApp deja corregir mensajes. Falso en cuanto se sabe que no (#75). */
+  puedeCorregir?: boolean;
+}
+
+/** La ficha del prospecto que se ve en el popup del chat (tarea #64). */
+export interface FichaProspecto {
+  id: number;
+  nombre: string;
+  email: string | null;
+  telefono: string | null;
+  status: string;
+  notas: string | null;
+  fecha_solicitud: string | null;
+  created_at: string;
+  reincidente: boolean | null;
+  lead_duplicado_de: number | null;
+  proyecto: string | null;
+  responsable: string | null;
+  producto: string | null;
+}
+
+export interface InteraccionProspecto {
+  id: number;
+  tipo: string;
+  nota: string | null;
+  fecha: string | null;
+  quien: string | null;
+}
+
+/**
+ * Lo que devuelve la ficha. `prospecto` en null NO es un error: son las
+ * conversaciones de gente que escribe y todavia no esta en el CRM, que son
+ * muchas. En ese caso vienen el telefono y el nombre para poder crearla.
+ */
+export interface RespuestaFicha {
+  prospecto: FichaProspecto | null;
+  interacciones?: InteraccionProspecto[];
+  telefono: string | null;
+  nombre?: string | null;
+  esGrupo?: boolean;
 }
 
 export const chatApi = {
-  // OJO al `usuarioId` que llevan casi todas estas llamadas: es de quien es el
-  // WhatsApp que se esta mirando, no quien lo mira. Un admin puede tener abierta
-  // la sesion de una gestora, y si una sola llamada se olvida de mandarlo, el
-  // servidor usa la del propio admin —que igual ni esta enlazada— y lo que sale
-  // es un 404 raro. Paso el 21/08/2026 con las cinco de abajo.
+  /**
+   * La ficha del prospecto de una conversacion, para el popup del chat.
+   *
+   * `usuarioId` NO es opcional de verdad: sin el, con la sesion de otra persona
+   * elegida el servidor busca en la del propio administrador y contesta que la
+   * conversacion no existe. Es el mismo descuido que ya aparecio en otras cinco
+   * llamadas de esta pantalla, y la tarea #64 pide justo lo contrario: que el
+   * popup funcione igual cuando un admin mira el WhatsApp de una gestora.
+   */
+  ficha: (conversacionId: number, usuarioId?: number | null): Promise<ApiResponse<RespuestaFicha>> =>
+    client.get(`/whatsapp/chats/${conversacionId}/ficha${qs({ usuarioId })}`),
+
+  /**
+   * Corrige un mensaje ya enviado (#75). WhatsApp deja 15 minutos, y solo con
+   * los propios y de texto — lo comprueba el servidor antes de intentarlo.
+   */
+  editarMensaje: (mensajeId: number, conversacionId: number, texto: string, usuarioId?: number | null):
+    Promise<ApiResponse<MensajeWhatsapp>> =>
+    client.patch(`/whatsapp/mensajes/${mensajeId}${qs({ usuarioId })}`, { conversacionId, texto }),
 
   /** Pide el adjunto de un mensaje que no se bajo en su momento. */
   descargarAdjunto: (mensajeId: number, usuarioId?: number | null): Promise<ApiResponse<{ enCola?: boolean; yaEstaba?: boolean }>> =>
     client.post(`/whatsapp/mensajes/${mensajeId}/descargar${qs({ usuarioId })}`, {}),
 
-  lista: (projectId?: number | null, usuarioId?: number | null): Promise<ApiResponse<ChatWhatsapp[]>> =>
-    client.get(`/whatsapp/chats${qs({ projectId, usuarioId })}`),
+  /**
+   * La lista de chats. Con `busca`, filtra Postgres sobre TODAS y no el
+   * navegador sobre las 50 cargadas — que era lo que dejaba fuera cualquier
+   * seguimiento de hace semanas.
+   */
+  lista: (
+    projectId?: number | null,
+    usuarioId?: number | null,
+    busca?: string | null,
+    /** El estado del prospecto, que es lo que hace de etiqueta (#72). */
+    estado?: string | null,
+  ): Promise<ApiResponse<ChatWhatsapp[]>> =>
+    client.get(`/whatsapp/chats${qs({
+      projectId, usuarioId,
+      busca: busca || undefined,
+      estado: estado || undefined,
+    })}`),
 
   /** Quien esta escribiendo ahora mismo en la conversacion abierta. */
   hilo: (id: number, limite = 100, usuarioId?: number | null): Promise<ApiResponse<{ conversacion: ChatWhatsapp; mensajes: MensajeWhatsapp[]; escribiendo: { quien: string; que: string } | null }>> =>
@@ -161,7 +237,7 @@ export const chatApi = {
   // via WhatsApp no da canal de audio. Aqui solo queda el registro, que es lo
   // que hoy se pierde de todas las llamadas que salen.
   apuntarLlamada: (id: number, usuarioId?: number | null): Promise<ApiResponse<{ telefono: string }>> =>
-    client.post(`/whatsapp/chats/${id}/llamada${qs({ usuarioId })}`),
+    client.post(`/whatsapp/chats/${id}/llamada`, { usuarioId }),
 
   // Abrir un chat nuevo partiendo de un prospecto. Se parte de la base y no de
   // un numero suelto: quien esta ahi dejo su telefono en un formulario nuestro.
@@ -178,7 +254,7 @@ export const chatApi = {
     client.get(`/leads${qs({ projectId, search: texto || undefined, limit: 15 })}`),
 
   // ¿Sigue entrando historial? Al emparejar tarda varios minutos.
-  sincronizacion: (usuarioId?: number | null): Promise<ApiResponse<{ conversaciones: number; mensajes: number; entrando: boolean; haceSegundos: number | null; adjuntosPendientes: number }>> =>
+  sincronizacion: (usuarioId?: number | null): Promise<ApiResponse<{ conversaciones: number; mensajes: number; entrando: boolean; haceSegundos: number | null; adjuntosPendientes: number; progreso: number | null }>> =>
     client.get(`/whatsapp/sincronizacion${qs({ usuarioId })}`),
 
   conexion: (usuarioId?: number | null): Promise<ApiResponse<ConexionWhatsapp>> =>
@@ -200,7 +276,12 @@ export const chatApi = {
     fd.append('archivo', archivo);
     if (pie) fd.append('pie', pie);
     if (segundos) fd.append('segundos', String(segundos));
-    return client.post(`/whatsapp/chats/${id}/adjunto${qs({ usuarioId })}`, fd);
+    // Va en el formulario y no en la direccion porque esto es multipart. Sin el,
+    // con la sesion de otra persona elegida el servidor busca en la del propio
+    // administrador: la octava vez que aparece lo mismo, y la encontro sola la
+    // prueba de `whatsappUsuarioId.test.js`.
+    if (usuarioId) fd.append('usuarioId', String(usuarioId));
+    return client.post(`/whatsapp/chats/${id}/adjunto`, fd);
   },
 };
 
@@ -217,6 +298,15 @@ export interface UsuarioWhatsapp {
   soyYo: boolean;
   conectado: boolean;
   numero: string | null;
+  /**
+   * Si esta persona puede tener WhatsApp del CRM.
+   *
+   * Antes quien no podia NO SALIA en la lista, y nadie sabia por que — hoy los
+   * tutores. No aparecer es la peor forma de negar algo: parece un fallo y se
+   * pierde el rato buscandolo. Ahora sale, apagada y con su motivo.
+   */
+  puede: boolean;
+  motivo: string | null;
 }
 
 /**

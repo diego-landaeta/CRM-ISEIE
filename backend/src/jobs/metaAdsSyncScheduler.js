@@ -1,6 +1,7 @@
 import { logger } from '../shared/utils/logger.js';
 import { query } from '../shared/config/db.js';
 import { syncIncremental, runBackfill } from '../modules/meta-ads/meta-ads.service.js';
+import { vigilar } from './latido.js';
 
 // Sync automático de Meta Ads. Antes solo había sync manual (botón en UI), por lo
 // que los datos quedaban congelados entre clicks. Esta cron mantiene cada cuenta al día.
@@ -57,6 +58,6 @@ async function tick() {
 
 export function startMetaAdsSyncScheduler() {
   setTimeout(tick, 60_000); // primera corrida 1 min después del boot
-  setInterval(tick, TICK_MS);
+  vigilar('meta_ads', 'Sincronización de Meta Ads', tick, TICK_MS);
   logger.info({ tickMs: TICK_MS }, 'Meta Ads sync scheduler iniciado');
 }

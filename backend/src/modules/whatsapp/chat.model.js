@@ -1,4 +1,5 @@
 import { query } from '../../shared/config/db.js';
+import { seAceptanGrupos } from './politica.js';
 import { normalizePhone, phoneCanonical } from '../../shared/utils/normalizePhone.js';
 import { logger } from '../../shared/utils/logger.js';
 
@@ -85,16 +86,24 @@ export async function conversacionDe({ instancia, jid, nombrePush, avatarUrl }) 
  * Evolution reintenta el webhook cuando el CRM tarda en contestar, y sin esto
  * el mismo mensaje saldria dos veces en el chat.
  */
-export async function guardarMensaje({ conversacionId, waId, direccion, tipo, texto, mediaUrl, mediaMime, nombreArchivo, estado, enviadoPor, ts, respondeA }) {
+export async function guardarMensaje({ conversacionId, waId, direccion, tipo, texto, mediaUrl, mediaMime, nombreArchivo, estado, enviadoPor, ts, respondeA, participante, participanteNombre }) {
   // La columna de la cita solo entra si la migracion 130 esta aplicada. Si no,
   // el mensaje se guarda igual y lo unico que se pierde es saber a que
   // contestaba — perderlo entero seria mucho peor.
   const conCita = respondeA && await puedeGuardarCita();
+  // Quien escribio, solo en grupos y solo si la 133 esta aplicada.
+  const conQuien = participante && await puedeGuardarParticipante();
   const { rows } = await query(
     `INSERT INTO wa_mensajes
-       (conversacion_id, wa_id, direccion, tipo, texto, media_url, media_mime, nombre_archivo, estado, enviado_por, ts${conCita ? ', responde_a' : ''})
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11${conCita ? ', $12' : ''})
-     ON CONFLICT (wa_id) WHERE wa_id IS NOT NULL DO UPDATE SET
+       (conversacion_id, wa_id, direccion, tipo, texto, media_url, media_mime, nombre_archivo, estado, enviado_por, ts${conCita ? ', responde_a' : ''}${conQuien ? ', participante, participante_nombre' : ''})
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11${conCita ? `, $${12}` : ''}${conQuien ? `, $${conCita ? 13 : 12}, $${conCita ? 14 : 13}` : ''})
+     -- Por CONVERSACION y no solo por wa_id (migracion 134).
+     --
+     -- Con el conflicto global, el mismo mensaje visto por dos sesiones —dos
+     -- gestoras en el mismo grupo— se guardaba en UNA sola: en la pantalla de
+     -- la otra ese mensaje no existia. Aqui hay que nombrar las mismas columnas
+     -- que el indice, o Postgres no encuentra a que conflicto se refiere.
+     ON CONFLICT (conversacion_id, wa_id) WHERE wa_id IS NOT NULL DO UPDATE SET
        -- Se COMPLETA la fila, no se pisa.
        --
        -- Un mensaje que sale llega por dos sitios casi a la vez: lo guarda el
@@ -113,11 +122,14 @@ export async function guardarMensaje({ conversacionId, waId, direccion, tipo, te
        texto          = COALESCE(wa_mensajes.texto, EXCLUDED.texto),
        -- El estado si avanza: «enviado» pisa a un hueco, y los acuses posteriores
        -- lo mueven a entregado o leido por su propio camino.
-       estado         = COALESCE(EXCLUDED.estado, wa_mensajes.estado)
+       estado         = COALESCE(EXCLUDED.estado, wa_mensajes.estado)${conQuien ? `,
+       participante        = COALESCE(wa_mensajes.participante, EXCLUDED.participante),
+       participante_nombre = COALESCE(wa_mensajes.participante_nombre, EXCLUDED.participante_nombre)` : ''}
      RETURNING *`,
     [conversacionId, waId || null, direccion, tipo || 'texto', texto || null,
      mediaUrl || null, mediaMime || null, nombreArchivo || null, estado || null,
-     enviadoPor || null, ts || new Date(), ...(conCita ? [respondeA] : [])]
+     enviadoPor || null, ts || new Date(), ...(conCita ? [respondeA] : []),
+     ...(conQuien ? [participante, participanteNombre || null] : [])]
   );
   const fila = rows[0] || null;
   if (fila) {
@@ -138,10 +150,92 @@ export async function guardarMensaje({ conversacionId, waId, direccion, tipo, te
   return fila;
 }
 
-export async function listar({ instancia, projectId = null, limite = 50 }) {
+/**
+ * Las conversaciones, y —si se busca— buscando en TODAS, no en las 50 primeras.
+ *
+ * Reportado por una gestora: «no aparecen los números de los seguimientos de
+ * tiempo atrás a pesar de buscar con nombre y número; una vez se envía el
+ * mensaje desde la app, aparece el chat».
+ *
+ * No era la búsqueda: era el tope. La lista traía las 50 más recientes y el
+ * filtro se aplicaba en el navegador sobre esas 50. Un seguimiento de hace
+ * semanas es la número 80, así que no estaba cargado y buscarlo no encontraba
+ * nada. Al mandarle un mensaje, `ultimo_at` sube al presente, entra en las 50 y
+ * aparece — que es exactamente lo que ella describía. Al grupo callado le
+ * pasaba lo mismo.
+ *
+ * Con `busca`, el tope deja de importar: filtra Postgres sobre la tabla entera.
+ */
+export async function listar({ instancia, projectId = null, limite = 50, busca = null, estado = null }) {
   const params = [instancia];
   let filtro = '';
   if (projectId) { params.push(projectId); filtro = `AND (c.project_id = $${params.length} OR c.project_id IS NULL)`; }
+
+  // Si los grupos no entran, tampoco se ensenan los que ya estan guardados.
+  //
+  // Hace falta porque la base arrastra lo de antes: al apagar los grupos, los
+  // que se colaron mientras `groupsIgnore` no se cumplia seguirian en la lista.
+  // Filtrar solo la entrada dejaria la pantalla contradiciendo al ajuste (#74).
+  if (!seAceptanGrupos()) filtro += " AND c.jid NOT LIKE '%@g.us'";
+
+  // Filtrar por el estado del prospecto (#72, «poner etiquetas a los chats»).
+  //
+  // El ticket sugeria reutilizar «el sistema de etiquetas para prospectos»,
+  // pero ese sistema NO existe: en las migraciones solo hay etiquetas del menu
+  // lateral y tags de cifrado. Lo que si existe —y encaja con lo que ella pide
+  // literalmente, «pendiente de contestar / ya vendido / no interesado»— es el
+  // estado del prospecto, que ademas ya viajaba en esta misma consulta como
+  // `lead_status` sin que nadie lo usara.
+  //
+  // Y viaja con la PERSONA, no con el chat, que es lo que el propio ticket
+  // dice que probablemente se quiere. Sin tabla nueva y sin migracion, que hoy
+  // ademas estan bloqueadas (#71).
+  if (estado === 'grupos') {
+    // «Grupos» es una etiqueta mas, y hace falta que exista.
+    //
+    // Las otras filtran por el estado del PROSPECTO, y un grupo no tiene: con
+    // el LEFT JOIN, `l.status` es NULL y la comparacion lo tira. Asi que al
+    // pulsar cualquier etiqueta DESAPARECIAN todos los grupos, sin decir por
+    // que — parece que se han perdido. Y no habia forma de pedir «enseñame solo
+    // los grupos», que con la lista llena es justo lo que hace falta.
+    filtro += " AND c.jid LIKE '%@g.us'";
+  } else if (estado) {
+    params.push(estado);
+    // Los grupos no se esconden al filtrar por estado, pero tampoco se cuelan:
+    // se quedan fuera porque no son un prospecto, y para verlos esta su propia
+    // etiqueta. Se dice aqui para que no parezca un descuido.
+    filtro += ` AND l.status = $${params.length}`;
+  }
+
+  const texto = String(busca ?? '').trim();
+  if (texto) {
+    params.push(`%${texto}%`);
+    const like = `$${params.length}`;
+    const condiciones = [
+      `c.nombre_push ILIKE ${like}`,
+      `l.nombre    ILIKE ${like}`,
+      `l.email     ILIKE ${like}`,
+    ];
+
+    // El telefono se compara SOLO con cifras. Buscar «+34 612 34 56 78» contra
+    // un «34612345678» guardado no casaba por culpa del mas y los espacios: es
+    // el mismo fallo que el de los duplicados por telefono de #65.
+    //
+    // Y solo si quedan cifras. Buscando «psiko» el resultado seria la cadena
+    // vacia, y un LIKE '%%' casa con TODAS las conversaciones — una busqueda
+    // que devuelve la lista entera parece que funciona y es lo contrario.
+    const cifras = texto.replace(/\D/g, '');
+    if (cifras) {
+      params.push(`%${cifras}%`);
+      const soloCifras = `$${params.length}`;
+      condiciones.push(
+        `regexp_replace(COALESCE(c.telefono, ''), '[^0-9]', '', 'g') LIKE ${soloCifras}`,
+        `regexp_replace(COALESCE(l.telefono, ''), '[^0-9]', '', 'g') LIKE ${soloCifras}`,
+      );
+    }
+    filtro += `\n      AND (${condiciones.join('\n        OR ')})`;
+  }
+
   params.push(Math.min(200, limite));
   const { rows } = await query(
     `SELECT c.*, l.nombre AS lead_nombre, l.status AS lead_status,
@@ -184,9 +278,15 @@ export async function mensajes(conversacionId, limite = 100) {
               WHERE q.wa_id = m.responde_a AND q.conversacion_id = m.conversacion_id
               LIMIT 1) AS citado_direccion` : '';
 
+  // Quien escribio cada mensaje, en grupos (#74). Misma guarda que la cita: si
+  // la 133 no esta aplicada se pide igual el resto y no se enseña autor.
+  const columnasQuien = (await puedeGuardarParticipante())
+    ? ', m.participante, m.participante_nombre'
+    : '';
+
   const { rows } = await query(
     `SELECT m.id, m.wa_id, m.direccion, m.tipo, m.texto, m.media_url, m.media_mime,
-            m.nombre_archivo, m.estado, m.enviado_por, m.ts${columnasCita}
+            m.nombre_archivo, m.estado, m.enviado_por, m.ts${columnasCita}${columnasQuien}
        FROM wa_mensajes m
       WHERE m.conversacion_id = $1
       -- Se desempata por id porque WhatsApp da la hora en SEGUNDOS: tres
@@ -195,6 +295,53 @@ export async function mensajes(conversacionId, limite = 100) {
     [conversacionId, Math.min(500, limite)]
   );
   return rows.reverse();
+}
+
+/**
+ * La ficha del prospecto de una conversacion, resumida.
+ *
+ * Es para el popup del chat: lo justo para no tener que irse a Prospectos y
+ * volver — porque volver recarga el chat entero y con el la sesion de WhatsApp.
+ *
+ * Devuelve null si esa conversacion no tiene prospecto, que pasa mucho: gente
+ * que escribe y todavia no esta en el CRM. Quien llama distingue ese caso del
+ * de una conversacion que no existe.
+ */
+export async function fichaDeConversacion(conversacionId) {
+  const { rows } = await query(
+    `SELECT l.id, l.nombre, l.email, l.telefono, l.status, l.notas,
+            l.fecha_solicitud, l.created_at, l.reincidente, l.lead_duplicado_de,
+            p.nombre  AS proyecto,
+            u.nombre  AS responsable,
+            pr.nombre AS producto
+       FROM wa_conversaciones c
+       JOIN leads l          ON l.id = c.lead_id AND l.deleted_at IS NULL
+       LEFT JOIN projects p  ON p.id = l.project_id
+       LEFT JOIN users u     ON u.id = l.responsable_id
+       LEFT JOIN products pr ON pr.id = l.producto_interes_id
+      WHERE c.id = $1`,
+    [conversacionId]
+  );
+  return rows[0] || null;
+}
+
+/**
+ * Las ultimas anotaciones del prospecto, para el mismo popup.
+ *
+ * Cinco y no mas: esto es un vistazo, no el historial. Quien quiera el resto
+ * abre la ficha completa, que para eso esta el enlace.
+ */
+export async function ultimasInteracciones(leadId, cuantas = 5) {
+  const { rows } = await query(
+    `SELECT i.id, i.tipo, i.nota, i.fecha, u.nombre AS quien
+       FROM lead_interactions i
+       LEFT JOIN users u ON u.id = i.created_by
+      WHERE i.lead_id = $1
+      ORDER BY i.fecha DESC NULLS LAST, i.id DESC
+      LIMIT $2`,
+    [leadId, cuantas]
+  );
+  return rows;
 }
 
 export const porId = async (id) =>
@@ -251,8 +398,15 @@ export async function actualizarEstado(waId, estado) {
 
 /** El ultimo entrante, para decirle a WhatsApp que ya se leyo. */
 export async function ultimoEntranteSinLeer(conversacionId) {
+  // En un grupo hace falta el PARTICIPANTE, no solo el wa_id.
+  //
+  // WhatsApp identifica un mensaje de grupo por la terna (remoteJid,
+  // participant, id): sin el participante no sabe cual marcar y el doble tic
+  // azul no llega nunca. En un chat de una persona sobra, y por eso el fallo no
+  // se veia hasta que entro el primer grupo (#74).
+  const conParticipante = await puedeGuardarParticipante();
   const { rows } = await query(
-    `SELECT wa_id FROM wa_mensajes
+    `SELECT wa_id${conParticipante ? ', participante' : ''} FROM wa_mensajes
       WHERE conversacion_id = $1 AND direccion = 'entrante' AND wa_id IS NOT NULL
       ORDER BY ts DESC LIMIT 1`,
     [conversacionId]
@@ -376,6 +530,29 @@ export async function refrescarNombres(instancia, pares) {
  * la cita que perder los mensajes.
  */
 let hayColumnaResponde = null;
+let hayColumnaParticipante = null;
+
+/**
+ * ¿Esta aplicada la migracion 133?
+ *
+ * Mismo patron que la cita: pedir una columna que no existe tumba el INSERT
+ * entero, y perder el mensaje por no poder guardar QUIEN lo escribio seria un
+ * mal cambio. Sin la migracion se guarda igual, solo que sin autor.
+ */
+export async function puedeGuardarParticipante() {
+  if (hayColumnaParticipante !== null) return hayColumnaParticipante;
+  try {
+    const { rows } = await query(
+      `SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'wa_mensajes' AND column_name = 'participante'`
+    );
+    hayColumnaParticipante = rows.length > 0;
+  } catch {
+    hayColumnaParticipante = false;
+  }
+  return hayColumnaParticipante;
+}
+
 export async function puedeGuardarCita() {
   if (hayColumnaResponde !== null) return hayColumnaResponde;
   try {
@@ -523,7 +700,12 @@ export async function mensajePorWaId(waId) {
 /** Un mensaje con lo justo para volver a pedirle el adjunto a WhatsApp. */
 export async function mensajePorId(id) {
   const { rows } = await query(
-    `SELECT m.id, m.wa_id, m.direccion, m.tipo, m.media_url, c.jid, c.instancia
+    // `conversacion_id`, `texto` y `ts` hacen falta para corregir un mensaje
+    // (#75): comprobar que es de ESTA conversacion, y si esta dentro de los 15
+    // minutos que deja WhatsApp. Sin la primera, la comparacion era contra
+    // `undefined` y el endpoint contestaba «Mensaje no encontrado» SIEMPRE.
+    `SELECT m.id, m.conversacion_id, m.wa_id, m.direccion, m.tipo, m.texto,
+            m.media_url, m.ts, c.jid, c.instancia
        FROM wa_mensajes m JOIN wa_conversaciones c ON c.id = m.conversacion_id
       WHERE m.id = $1`,
     [id]
@@ -550,4 +732,84 @@ export async function actividad(instancia) {
     [instancia]
   );
   return rows[0];
+}
+
+/**
+ * Lo que ha entrado y nadie ha leido todavia.
+ *
+ * Para avisar de un mensaje nuevo desde cualquier pantalla del CRM. Hasta ahora
+ * no se avisaba de NADA: cuando entraba un WhatsApp el CRM no hacia ni un
+ * sonido, ni un aviso, ni cambiaba el titulo de la pestaña. La gestora solo se
+ * enteraba si tenia el chat abierto y miraba.
+ *
+ * Se apoya en `no_leidos`, que ya solo cuenta lo que llega DE VERDAD ahora
+ * —el propio UPDATE se lo salta si el mensaje es de hace mas de dos minutos—,
+ * asi que al emparejar un numero y entrar miles de mensajes viejos esto no
+ * dispara mil avisos.
+ *
+ * Barata a proposito: la pregunta se repite cada pocos segundos desde todas las
+ * pantallas del CRM.
+ */
+export async function sinLeer(instancia) {
+  // Los GRUPOS no cuentan para el aviso del sistema.
+  //
+  // Este numero dispara la notificacion del navegador y el contador de la
+  // pestaña. Contando grupos, un movil con 105 —los que tiene el numero de
+  // pruebas— avisa por cada cosa que diga cualquiera en cualquiera de ellos, y
+  // en dos dias la gestora apaga los avisos. Ahi se pierden tambien los de los
+  // prospectos, que son los que importan.
+  //
+  // No se ESCONDEN: la lista sigue enseñando su contador de no leidos, porque
+  // saber que hay mensajes nuevos en un grupo si es util. Lo que no hace es
+  // interrumpir.
+  const { rows } = await query(
+    `SELECT COALESCE(SUM(c.no_leidos), 0)::int AS total,
+            COUNT(*) FILTER (WHERE c.no_leidos > 0)::int AS conversaciones
+       FROM wa_conversaciones c
+      WHERE c.instancia = $1 AND c.no_leidos > 0
+        AND c.jid NOT LIKE '%@g.us'`,
+    [instancia]
+  );
+  const resumen = rows[0] || { total: 0, conversaciones: 0 };
+  if (!resumen.total) return { ...resumen, ultimo: null };
+
+  // El ultimo entrante, para poder decir de quien es sin abrir nada.
+  const { rows: ult } = await query(
+    `SELECT m.id, m.texto, m.tipo, m.ts,
+            c.id AS conversacion_id,
+            (c.jid LIKE '%@g.us') AS es_grupo,
+            COALESCE(l.nombre, c.nombre_push, c.telefono) AS quien
+       FROM wa_mensajes m
+       JOIN wa_conversaciones c ON c.id = m.conversacion_id
+       LEFT JOIN leads l ON l.id = c.lead_id
+      WHERE c.instancia = $1 AND m.direccion = 'entrante' AND c.no_leidos > 0
+        AND c.jid NOT LIKE '%@g.us'
+      ORDER BY m.ts DESC, m.id DESC
+      LIMIT 1`,
+    [instancia]
+  );
+  const u = ult[0];
+  return {
+    ...resumen,
+    ultimo: u ? {
+      id: u.id,
+      conversacionId: u.conversacion_id,
+      quien: u.quien,
+      esGrupo: Boolean(u.es_grupo),
+      tipo: u.tipo,
+      // Recortado: esto va a un aviso del sistema, no a la pantalla del chat.
+      texto: u.texto ? String(u.texto).slice(0, 140) : null,
+      ts: u.ts,
+    } : null,
+  };
+}
+
+
+/** Cambia el texto de un mensaje ya enviado, tras corregirlo en WhatsApp (#75). */
+export async function corregirTexto(id, texto) {
+  const { rows } = await query(
+    `UPDATE wa_mensajes SET texto = $2 WHERE id = $1 RETURNING *`,
+    [id, texto]
+  );
+  return rows[0] || null;
 }

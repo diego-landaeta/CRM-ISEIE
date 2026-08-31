@@ -71,15 +71,27 @@ export function useNotifications(): UseNotificationsResult {
       setPermission(next as PermissionState);
       if (next !== 'granted') return false;
     }
+    // NO se marca como suscrita. Lo que habia aqui antes escribia un marcador en
+    // el navegador y le decia a la gestora que estaba suscrita. No lo estaba:
+    // `/api/push-subscriptions` no existe, no hay claves VAPID en ninguna parte y
+    // nunca se registro nada en el servidor. Una pantalla que dice «activado»
+    // sobre algo apagado es peor que una que dice «todavia no»: con la primera
+    // nadie lo arregla, porque nadie sabe que esta roto.
+    //
+    // El permiso SI se pide arriba y SI sirve: con el CRM abierto, el aviso de un
+    // mensaje de WhatsApp ya llega — lo hace AvisoDeMensaje, en el layout. Lo que
+    // falta es el aviso con el CRM cerrado.
+    //
+    // Cuando exista el endpoint, aqui va:
+    //   const reg = await navigator.serviceWorker.ready;
+    //   const sub = await reg.pushManager.subscribe({
+    //     userVisibleOnly: true, applicationServerKey: VAPID_PUBLIC_KEY });
+    //   await client.post('/push-subscriptions', sub);
+    //   setIsSubscribed(true); return true;
     try {
-      const placeholder = {
-        endpoint: 'local-only',
-        createdAt: new Date().toISOString(),
-        userAgent: navigator.userAgent,
-      };
-      localStorage.setItem(SUBSCRIPTION_KEY, JSON.stringify(placeholder));
-      setIsSubscribed(true);
-      return true;
+      localStorage.removeItem(SUBSCRIPTION_KEY);
+      setIsSubscribed(false);
+      return false;
     } catch {
       return false;
     }

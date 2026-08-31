@@ -45,12 +45,15 @@ router.get('/usuarios', chat.usuarios);
 router.get('/chats', chat.chats);
 router.post('/chats', chat.abrirChat);
 router.get('/chats/:id', chat.chat);
+router.get('/chats/:id/ficha', chat.ficha);
 router.post('/chats/:id/enviar', chat.enviar);
 router.post('/chats/:id/adjunto', uploadWhatsapp.single('archivo'), chat.adjunto);
 router.post('/chats/:id/no-escribir', chat.noEscribir);
 // Llamar se hace desde el movil; el CRM solo lo apunta.
 router.post('/chats/:id/llamada', chat.registrarLlamada);
 router.post('/mensajes/:id/descargar', chat.descargarAdjunto);
+// Corregir un mensaje ya enviado. WhatsApp deja 15 minutos (#75).
+router.patch('/mensajes/:id', chat.editarMensaje);
 router.get('/conexion', chat.conexion);
 router.get('/sincronizacion', chat.sincronizacion);
 router.post('/reintentar-archivos', chat.reintentarArchivos);
@@ -59,6 +62,8 @@ router.post('/desconectar', chat.desconectar);
 // Que se le contesta a quien llama. Por sesion: no todas la quieren.
 // Lo consulta todo el CRM, no solo la pantalla de WhatsApp. No toca la base.
 router.get('/sonando', chat.sonando);
+// Lo que ha entrado y nadie ha leido, para avisar desde cualquier pantalla.
+router.get('/sin-leer', chat.sinLeer);
 router.get('/respuesta-llamada', chat.respuestaLlamada);
 router.post('/respuesta-llamada', chat.guardarRespuestaLlamada);
 

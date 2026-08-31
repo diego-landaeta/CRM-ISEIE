@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { saveLocal, getLocal } from '../../shared/services/localStorage.service.js';
 import { logger } from '../../shared/utils/logger.js';
 import * as evolution from './evolution.client.js';
+import { textoDeBot, esDeBot } from './mensajes-de-bot.js';
 
 // Los adjuntos de WhatsApp.
 //
@@ -35,6 +36,16 @@ const NO_ES_CONVERSACION = [
   'reactionMessage', 'pollUpdateMessage', 'pollCreationMessage',
   'ephemeralMessage', 'viewOnceMessage', 'call', 'callLogMesssage',
   'deviceSentMessage', 'keepInChatMessage', 'editedMessage',
+  // Sobres CIFRADOS: WhatsApp los usa para los votos de encuestas y para los
+  // eventos. Van cifrados con una clave que solo tienen quien los creo y quien
+  // participa, asi que aqui no hay nada que descifrar ni que enseñar — no es
+  // que no sepamos leerlos, es que no se pueden leer.
+  //
+  // Sin esto salia una burbuja «Mensaje que el CRM aun no sabe mostrar —
+  // miralo en el movil» que ademas mentia: en el movil tampoco se ve como
+  // mensaje, porque es la maquinaria de una encuesta y no una conversacion.
+  'secretEncryptedMessage', 'encReactionMessage', 'encEventUpdateMessage',
+  'pollResultSnapshotMessage', 'eventCoverImage',
 ];
 
 /** ¿Este mensaje es contenido de verdad, o ruido del protocolo? */
@@ -46,8 +57,42 @@ export function esRuido(message) {
   return claves.every((k) => NO_ES_CONVERSACION.includes(k));
 }
 
+/**
+ * Los sobres: mensajes que ENVUELVEN a otro mensaje.
+ *
+ * WhatsApp mete el mensaje de verdad dentro de otro cuando es temporal, de una
+ * sola vista, o un documento con pie. Sin abrirlos, el de dentro no se ve nunca
+ * y el mensaje entero acaba como «otro» sin texto — que es como se ven hoy en
+ * produccion los avisos que entran en el numero de los leads: una fila tras
+ * otra de «Descargar otro» y ni una palabra.
+ */
+const SOBRES = [
+  'ephemeralMessage', 'viewOnceMessage', 'viewOnceMessageV2',
+  'viewOnceMessageV2Extension', 'documentWithCaptionMessage', 'deviceSentMessage',
+  'editedMessage',
+];
+
+/**
+ * Abre los sobres hasta llegar al mensaje de verdad.
+ *
+ * Con tope de vueltas: un mensaje mal formado que se apunte a si mismo no puede
+ * dejar colgado el proceso que atiende el webhook.
+ */
+export function abrirSobres(message, vueltas = 0) {
+  if (!message || typeof message !== 'object' || vueltas > 5) return message;
+  for (const sobre of SOBRES) {
+    const dentro = message[sobre]?.message;
+    if (dentro) return abrirSobres(dentro, vueltas + 1);
+  }
+  return message;
+}
+
 /** Del tipo de mensaje de WhatsApp al tipo que guardamos. */
-export function tipoDeMensaje(message) {
+export function tipoDeMensaje(envuelto) {
+  if (!envuelto) return { tipo: 'texto', clave: null };
+  // Se abre el sobre ANTES de mirar. Sin esto, un documento con pie o un mensaje
+  // temporal caian en «otro» sin texto por no haber mirado dentro.
+  const message = abrirSobres(envuelto);
   if (!message) return { tipo: 'texto', clave: null };
   if (message.audioMessage) return { tipo: 'audio', clave: 'audioMessage' };
   if (message.imageMessage) return { tipo: 'imagen', clave: 'imageMessage' };
@@ -55,17 +100,52 @@ export function tipoDeMensaje(message) {
   if (message.documentMessage) return { tipo: 'documento', clave: 'documentMessage' };
   if (message.stickerMessage) return { tipo: 'sticker', clave: 'stickerMessage' };
   if (message.conversation || message.extendedTextMessage) return { tipo: 'texto', clave: null };
+  // Botones, menus, plantillas, sitios y contactos. No traen fichero que bajar,
+  // asi que van como texto: darles un tipo propio haria que la pantalla les
+  // pintara un adjunto que no existe. Antes caian en 'otro' y salian en blanco.
+  if (esDeBot(message)) return { tipo: 'texto', clave: null };
   return { tipo: 'otro', clave: null };
 }
 
-/** El texto que acompaña al adjunto, si lo hay. */
-export const textoDe = (m = {}) =>
+/** El texto que acompaña al adjunto, si lo hay. Abre el sobre primero. */
+export const textoDe = (envuelto = {}) => leerTexto(abrirSobres(envuelto) || {});
+
+const leerTexto = (m = {}) =>
   m.conversation
   || m.extendedTextMessage?.text
   || m.imageMessage?.caption
   || m.videoMessage?.caption
   || m.documentMessage?.caption
+  // Lo ultimo, para no pisar nunca un texto de verdad: solo entra cuando arriba
+  // no habia nada, que es justo cuando la burbuja salia vacia.
+  || textoDeBot(m)
   || null;
+
+/**
+ * Lo que WhatsApp mando y el CRM no supo leer.
+ *
+ * En produccion, el numero por el que entran los leads enseña una fila tras otra
+ * de «Descargar otro» y ni una palabra. Son mensajes que acaban en tipo «otro»
+ * sin texto, y desde aqui NO se puede saber de que tipo son: hay medio centenar
+ * de clases de mensaje y adivinar cual es seria justo eso, adivinar.
+ *
+ * Asi que se apuntan LAS CLAVES, que es el nombre del tipo —«listMessage»,
+ * «productMessage»...—. Nunca el contenido: son mensajes de personas.
+ *
+ * Con una linea de este registro en produccion se arregla de verdad y en cinco
+ * minutos, en vez de probar a ciegas contra un servidor al que no se llega.
+ */
+export function apuntarDesconocido(envuelto, contexto = {}) {
+  try {
+    const m = abrirSobres(envuelto);
+    logger.warn({
+      ...contexto,
+      claves: Object.keys(m || {}),
+      // Si venia envuelto, tambien de que sobre: puede ser el sobre lo que falta.
+      sobre: m === envuelto ? null : Object.keys(envuelto || {}),
+    }, 'WhatsApp: tipo de mensaje que el CRM no sabe leer');
+  } catch { /* apuntar no puede tumbar la entrada de un mensaje */ }
+}
 
 /**
  * Baja un adjunto entrante y lo deja en disco. Devuelve la clave con la que

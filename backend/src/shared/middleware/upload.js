@@ -64,9 +64,22 @@ export function validatePdfMagicBytes(req, _res, next) {
 // Adjuntos de WhatsApp. Se acepta lo mismo que acepta WhatsApp: audio (notas de
 // voz), imagen, video y documento. El limite de 16 MB es el suyo, no nuestro:
 // mandar mas grande lo rechaza el propio WhatsApp.
+/**
+ * El tope de un adjunto de WhatsApp, en un solo sitio.
+ *
+ * Se exporta porque la pantalla tiene que avisar ANTES de subir —si no, la
+ * gestora espera la subida entera para recibir un «Error 413»— y el numero no
+ * puede estar escrito a mano en el frontal: se desincroniza y acaba avisando de
+ * un tope que no es el real, que es peor que no avisar.
+ *
+ * Y para que este sea el que manda, `nginx/crm.conf` deja a Nginx por encima
+ * (20 MB). Si Nginx cortara primero, el 413 volveria a ser mudo.
+ */
+export const TOPE_WHATSAPP_BYTES = 16 * 1024 * 1024;
+
 export const uploadWhatsapp = multer({
   storage,
-  limits: { fileSize: 16 * 1024 * 1024 },
+  limits: { fileSize: TOPE_WHATSAPP_BYTES },
   fileFilter: (req, file, cb) => {
     const ok = /^(audio|image|video)\//.test(file.mimetype)
       || /^application\/(pdf|msword|vnd\.|zip)/.test(file.mimetype)

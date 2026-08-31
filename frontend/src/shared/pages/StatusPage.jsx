@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Pulse, CheckCircle, WarningCircle, XCircle, ArrowClockwise } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
+// Los dos bloques nuevos. Se AÑADEN a lo que esta pantalla ya tenia
+// —Componentes e Incidencias—; no lo sustituyen.
+import PiezasDelSistema from '@/modules/status/components/PiezasDelSistema';
+import CorreosEnviados from '@/modules/status/components/CorreosEnviados';
 
 const STATUS_META = {
   operational: { label: 'Operativo',    tone: 'green',  Icon: CheckCircle },
@@ -118,6 +122,9 @@ export default function StatusPage() {
           </div>
         </section>
       )}
+      <PiezasDelSistema />
+
+      <CorreosEnviados />
     </div>
   );
 }

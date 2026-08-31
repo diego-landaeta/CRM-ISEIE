@@ -1,5 +1,6 @@
 import * as model from './chat.model.js';
 import * as servicio from './chat.service.js';
+import * as politica from './politica.js';
 import * as evolution from './evolution.client.js';
 import * as media from './media.service.js';
 import * as firma from './media.firma.js';
@@ -7,6 +8,9 @@ import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import { query } from '../../shared/config/db.js';
 import { respuestaLlamadaSchema } from './whatsapp.validation.js';
+import { porQueNoPuede } from './roles.js';
+
+import { TOPE_WHATSAPP_BYTES } from '../../shared/middleware/upload.js';
 
 const esAdmin = (req) => ['admin', 'superadmin', 'soporte'].includes(req.user.role);
 
@@ -35,6 +39,19 @@ const VERSION_AVISO = 1;
  */
 async function usuarioObjetivo(req) {
   const propio = req.user.userId;
+
+  // Lo PRIMERO: si quien pregunta no puede tener WhatsApp, no lo tiene ni el
+  // suyo. Antes se devolvia la sesion propia antes de comprobar nada, asi que
+  // un tutor entraba a la suya aunque no saliera en ninguna lista.
+  //
+  // Se mira el rol del testigo de sesion y no la base: es lo que hace el resto
+  // del CRM, y consultar en cada peticion seria una consulta mas cada tres
+  // segundos con el chat abierto. La contrapartida es que un cambio de rol
+  // tarda en aplicarse lo que dure el testigo —quince minutos— y eso vale para
+  // quitar el acceso, no para darlo: quien lo gana entra en cuanto renueve.
+  const suyo = porQueNoPuede({ role: req.user.role, active: true });
+  if (suyo) throw new AppError(suyo, 403, 'SIN_WHATSAPP');
+
   const pedido = parseInt(req.query?.usuarioId ?? req.body?.usuarioId ?? '', 10);
   if (!Number.isInteger(pedido) || pedido === propio) return propio;
 
@@ -43,7 +60,7 @@ async function usuarioObjetivo(req) {
   }
 
   const { rows } = await query(
-    `SELECT u.id, u.nombre, u.active,
+    `SELECT u.id, u.nombre, u.active, u.role, u.gestor_colaboraciones,
             EXISTS (
               SELECT 1 FROM user_projects a
               JOIN user_projects b ON b.project_id = a.project_id AND b.active
@@ -55,6 +72,11 @@ async function usuarioObjetivo(req) {
   if (req.user.role !== 'superadmin' && !u.comparten) {
     throw new AppError('Esa persona no esta en tus proyectos', 403, 'FUERA_DE_TUS_PROYECTOS');
   }
+  // Y el candado del rol, AQUI tambien. Que la lista lo diga no basta: sin esto,
+  // quien acertara el `usuarioId` de un tutor trabajaria sobre su sesion aunque
+  // la pantalla no se la enseñara. La regla vive en `roles.js`, una sola vez.
+  const noPuede = porQueNoPuede(u);
+  if (noPuede) throw new AppError(noPuede, 403, 'SIN_WHATSAPP');
 
   // Queda escrito que ha entrado a mirar. AQUI, cuando ya se sabe que puede: un
   // intento rechazado no es una mirada, y apuntarlo antes dejaria en el registro
@@ -98,6 +120,11 @@ export async function chats(req, res, next) {
       instancia: await instanciaObjetivo(req),
       projectId: req.query.projectId ? parseInt(req.query.projectId) : null,
       limite: parseInt(req.query.limite) || 50,
+      // Buscar en la base y no en el navegador: con el tope de 50, filtrar lo
+      // ya cargado dejaba fuera cualquier seguimiento de hace semanas.
+      busca: req.query.busca || null,
+      // La «etiqueta»: el estado del prospecto (#72).
+      estado: req.query.estado || null,
     })});
   } catch (err) { next(err); }
 }
@@ -217,6 +244,43 @@ export async function abrirChat(req, res, next) {
       nombrePush: await nombreEnLaAgenda(instancia, jid).catch(() => null),
     });
     res.status(201).json({ success: true, data: conv });
+  } catch (err) { next(err); }
+}
+
+/**
+ * GET /api/whatsapp/chats/:id/ficha — el prospecto de esta conversacion.
+ *
+ * Lo justo para el popup del chat: quien es, en que estado esta, de quien es y
+ * sus ultimas anotaciones. El resto se ve en la ficha completa.
+ *
+ * OJO CON EL PERMISO, que aqui es facil equivocarse. No se usa el guardia de
+ * Prospectos —`exigirQueSeaSuyo`— porque comprueba que el prospecto sea de QUIEN
+ * PREGUNTA, y cuando un administrador esta mirando el WhatsApp de una gestora el
+ * prospecto es de ella: la ficha saldria vacia justo en el caso que hay que
+ * cubrir. El guardia bueno es el del propio chat: si puedes leer la
+ * conversacion, puedes ver de quien es. Lo pide asi la tarea #64.
+ *
+ * Una conversacion sin prospecto NO es un error: hay muchas, de gente que
+ * escribe y todavia no esta en el CRM. Se contesta con el telefono para que la
+ * pantalla ofrezca crearlo ya relleno.
+ */
+export async function ficha(req, res, next) {
+  try {
+    const conv = await miConversacion(req, parseInt(req.params.id));
+    const prospecto = await model.fichaDeConversacion(conv.id);
+    if (!prospecto) {
+      return res.json({
+        success: true,
+        data: {
+          prospecto: null,
+          telefono: conv.telefono,
+          nombre: conv.nombre_push || null,
+          esGrupo: Boolean(conv.es_grupo),
+        },
+      });
+    }
+    const interacciones = await model.ultimasInteracciones(prospecto.id).catch(() => []);
+    res.json({ success: true, data: { prospecto, interacciones, telefono: conv.telefono } });
   } catch (err) { next(err); }
 }
 
@@ -529,6 +593,14 @@ export async function sincronizacion(req, res, next) {
       // lo que sepa la base, que para eso ya se ha consultado.
       haceSegundos: haceSegundos ?? d.hace_segundos,
       adjuntosPendientes: media.pendientes(instancia),
+      // Cuanto lleva del historial, de 0 a 100. Es el numero REAL que manda
+      // Baileys en cada tanda; WhatsApp no dice cuantos mensajes va a mandar en
+      // total, asi que calcularlo por nuestra cuenta seria inventarselo.
+      //
+      // Puede venir null —si quien manda los avisos no lo incluye, o si lleva
+      // dos minutos sin moverse— y entonces la pantalla enseña los contadores
+      // de siempre. Una barra parada en el 40 % es peor que no tener barra.
+      progreso: servicio.progresoDe(instancia),
     }});
   } catch (err) { next(err); }
 }
@@ -633,6 +705,8 @@ export async function conexion(req, res, next) {
       logger.warn('WhatsApp sin configurar: faltan EVOLUTION_URL o EVOLUTION_API_KEY');
       return res.json({ success: true, data: {
         configurado: false,
+        topeAdjuntoBytes: TOPE_WHATSAPP_BYTES,
+        grupos: politica.seAceptanGrupos(),
         motivo: process.env.NODE_ENV === 'production'
           ? 'WhatsApp no esta disponible ahora mismo. Avisa a quien lleva el CRM.'
           : 'WhatsApp todavia no esta disponible en este entorno de pruebas. En produccion funciona con normalidad.',
@@ -673,6 +747,25 @@ export async function conexion(req, res, next) {
       nombre: mia?.profileName || mia?.profileName || null,
       conectado: crudo === 'open',
       estado: crudo,
+      // El tope real de un adjunto, dicho por quien lo sabe (#77).
+      //
+      // `TOPE_WHATSAPP_BYTES` se importaba aqui y no se usaba en ninguna linea,
+      // asi que la pantalla nunca recibia este campo y caia siempre a su
+      // constante escrita a mano — que es exactamente el numero desincronizado
+      // que se queria eliminar. Un import muerto no da error y no se ve.
+      topeAdjuntoBytes: TOPE_WHATSAPP_BYTES,
+      // Si este WhatsApp deja corregir mensajes (#75).
+      //
+      // `evolution.puedeEditar()` existia desde el primer dia y no lo llamaba
+      // NADIE: se apagaba la funcion por dentro tras un 404 y la pantalla
+      // seguia ofreciendo el boton en todos los mensajes. La gestora lo pulsaba
+      // una y otra vez y siempre fallaba igual — que es exactamente lo que se
+      // queria evitar apagandola.
+      puedeCorregir: evolution.puedeEditar(),
+      // Si entran los grupos o no. La pantalla lo dice al buscar sin resultados
+      // y hasta ahora lo afirmaba a ciegas: «los grupos no se muestran» era
+      // falso, porque si se muestran (#74).
+      grupos: politica.seAceptanGrupos(),
     }});
   } catch (err) { next(err); }
 }
@@ -693,7 +786,11 @@ export async function emparejar(req, res, next) {
     const instancia = await instanciaObjetivo(req);
     // Cuanto historial quiere quien enlaza. Si manda cualquier otra cosa, lo
     // rapido: es lo que deja la pantalla usable en segundos.
-    const modo = ['cero', 'rapido', 'todo'].includes(req.body?.modo) ? req.body.modo : 'rapido';
+    const modo = politica.MODOS.includes(req.body?.modo) ? req.body.modo : 'rapido';
+    // Se apunta para poder recortar lo que llegue (#73). El socket ya viene
+    // pidiendo todo el historial en «rapido» —si no, no habria nada que
+    // recortar—, asi que los 30 dias los aplica el CRM al recibir.
+    politica.apuntarModo(instancia, modo);
 
     // El aviso se acepta ANTES de que salga el codigo, y queda escrito.
     //
@@ -835,11 +932,19 @@ export async function usuarios(req, res, next) {
 
     const { rows } = await query(
       soloMio
-        ? `SELECT id, nombre, email, role FROM users WHERE id = $1`
+        ? `SELECT id, nombre, email, role, active, gestor_colaboraciones
+             FROM users WHERE id = $1`
         : (req.user.role === 'superadmin'
-            ? `SELECT id, nombre, email, role FROM users
-                WHERE active AND role IN ('superadmin','admin','gestor','soporte')
-                  AND NOT COALESCE(gestor_colaboraciones, false)
+            // NO se filtra por rol aqui.
+            //
+            // Antes la consulta llevaba `role IN (...)` y quien no estaba en esa
+            // lista simplemente NO APARECIA — hoy, los tutores. Nadie sabia por
+            // que, y no salir es la peor forma de negar algo: parece un fallo.
+            // Ahora salen todos y cada uno dice si puede tener WhatsApp y, si no,
+            // por que. Quien decide es `roles.js`, en un solo sitio.
+            ? `SELECT id, nombre, email, role, active, gestor_colaboraciones
+                 FROM users
+                WHERE active
                 ORDER BY (id = $1) DESC, nombre`
             // EXISTS y no DISTINCT con dos JOIN.
             //
@@ -852,9 +957,9 @@ export async function usuarios(req, res, next) {
             //
             // Con EXISTS no hacen falta ni el DISTINCT ni la deduplicacion: se
             // pregunta si comparte algun proyecto y se para en el primero.
-            : `SELECT u.id, u.nombre, u.email, u.role FROM users u
-                WHERE u.active AND u.role IN ('superadmin','admin','gestor','soporte')
-                  AND NOT COALESCE(u.gestor_colaboraciones, false)
+            : `SELECT u.id, u.nombre, u.email, u.role, u.active, u.gestor_colaboraciones
+                 FROM users u
+                WHERE u.active
                   AND EXISTS (
                     SELECT 1 FROM user_projects b
                       JOIN user_projects a ON a.project_id = b.project_id
@@ -886,12 +991,70 @@ export async function usuarios(req, res, next) {
     res.json({ success: true, data: rows.map((u) => {
       const instancia = evolution.instanciaDe(u.id);
       const est = porInstancia.get(instancia) || {};
+      // Se dice quien NO puede y por que, en vez de esconderlo. La pantalla lo
+      // enseña apagado con su motivo, que es lo que pide la tarea #68.
+      const motivo = porQueNoPuede(u);
       return {
         id: u.id, nombre: u.nombre, email: u.email, role: u.role,
         soyYo: u.id === yo,
         conectado: Boolean(est.conectado),
         numero: est.numero || null,
+        puede: motivo === null,
+        motivo,
       };
     })});
+  } catch (err) { next(err); }
+}
+
+/**
+ * GET /api/whatsapp/sin-leer — lo que ha entrado y nadie ha leido.
+ *
+ * Para avisar de un mensaje nuevo desde cualquier pantalla. Hasta ahora el CRM
+ * no avisaba de NADA: cuando entraba un WhatsApp no habia sonido, ni aviso, ni
+ * cambio en el titulo de la pestaña. La gestora solo se enteraba si tenia el
+ * chat abierto y estaba mirando.
+ *
+ * Mismo molde que `sonando`, que es lo que ya avisa de las llamadas: se
+ * pregunta cada pocos segundos desde el layout, y devuelve `enlazada` para que
+ * quien no tenga WhatsApp espacie las vueltas en vez de preguntar en balde toda
+ * la jornada.
+ */
+export async function sinLeer(req, res, next) {
+  try {
+    const instancia = await instanciaObjetivo(req);
+    const [datos, enlazada] = await Promise.all([
+      model.sinLeer(instancia),
+      servicio.tieneSesion(instancia),
+    ]);
+    res.json({ success: true, data: { ...datos, enlazada } });
+  } catch (err) { next(err); }
+}
+
+/**
+ * PATCH /api/whatsapp/mensajes/:id — corrige un mensaje ya enviado (#75).
+ *
+ * «Se siguen enviando y no permite corregir desde la app». Hasta ahora un error
+ * de dedo en un mensaje a un prospecto se quedaba ahi para siempre, y la unica
+ * salida era mandar otro pidiendo perdon.
+ *
+ * Pasa por `miConversacion`, asi que nadie puede corregir un mensaje de la
+ * conversacion de otra persona: contesta «no encontrada», que no confirma
+ * siquiera que exista.
+ */
+export async function editarMensaje(req, res, next) {
+  try {
+    const texto = String(req.body?.texto ?? '').trim();
+    if (!texto) throw new AppError('El mensaje no puede quedar vacio', 400, 'TEXTO_VACIO');
+    if (texto.length > 4096) throw new AppError('Ese texto es demasiado largo', 400, 'TEXTO_LARGO');
+
+    const conversacionId = parseInt(req.body?.conversacionId, 10);
+    const conv = await miConversacion(req, conversacionId);
+    const fila = await servicio.editarMensaje({
+      mensajeId: parseInt(req.params.id, 10),
+      conversacion: conv,
+      texto,
+      instancia: await instanciaObjetivo(req),
+    });
+    res.json({ success: true, data: fila });
   } catch (err) { next(err); }
 }
