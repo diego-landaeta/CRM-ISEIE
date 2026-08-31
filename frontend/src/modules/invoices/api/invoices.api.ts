@@ -222,11 +222,14 @@ export const invoicesApi = {
   pdfUrl: (id: number) => `${(import.meta.env.BASE_URL || '/').replace(/\/$/, '')}/api/invoices/${id}/pdf`,
   // Abre el PDF descargandolo CON el token (una navegacion normal de pestana NO
   // manda el header Authorization -> daria 401). Lo abre como blob URL.
-  /** vista='gestor' → copia con el importe NETO liquidado por Stripe (no la del alumno). */
-  openPdf: async (id: number, preliminar = false, vista?: 'gestor'): Promise<void> => {
+  /** vista='gestor' → copia con el importe NETO liquidado por Stripe (no la del alumno).
+   *  enEuros → la misma factura totalizada en euros, no en su divisa. */
+  openPdf: async (id: number, preliminar = false, vista?: 'gestor', enEuros = false): Promise<void> => {
     const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
     const tok = getAccessToken();
-    const qs = preliminar ? '?preliminar=1' : (vista === 'gestor' ? '?vista=gestor' : '');
+    const qs = preliminar ? '?preliminar=1'
+      : vista === 'gestor' ? '?vista=gestor'
+      : enEuros ? '?moneda=eur' : '';
     const res = await fetch(`${base}/api/invoices/${id}/pdf${qs}`, {
       headers: tok ? { Authorization: `Bearer ${tok}` } : {},
       credentials: 'include',

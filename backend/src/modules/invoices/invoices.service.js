@@ -152,7 +152,7 @@ function wrapToLines(font, text, size, maxWidth) {
 }
 
 // Genera PDF de factura usando pdf-lib
-export async function generatePDF(invoiceId, { preliminar = false, vistaGestor = false } = {}) {
+export async function generatePDF(invoiceId, { preliminar = false, vistaGestor = false, enEuros = false } = {}) {
   const inv = await model.findById(invoiceId);
   if (!inv) throw new Error('Factura no encontrada');
   // COPIA DE GESTIÓN de un cobro por Stripe: el alumno recibe la factura por el
@@ -173,9 +173,27 @@ export async function generatePDF(invoiceId, { preliminar = false, vistaGestor =
       if (inv.total_divisa != null) inv.total_divisa = null; // el neto siempre en euros
     }
   }
+  // En un ABONO los importes se guardan en negativo —asi restan en los informes,
+  // que es lo correcto— pero en el papel no se escribe el signo.
+  //
+  // El documento ya dice «FACTURA RECTIFICATIVA» arriba y describe lo que abona;
+  // el menos delante de cada cifra no aporta nada y se lee como un error de
+  // formato. Lo reporto el equipo comercial la primera vez que salio uno.
+  //
+  // Ojo: esto es SOLO como se escribe. El dato guardado no se toca.
+  const enPapel = (n) => (inv.tipo === 'rectificativa'
+    ? Math.abs(Number(n || 0))
+    : Number(n || 0));
+
   // Formateo en la moneda de la factura (fallback local que sombrea el fmtEUR de
   // módulo dentro del layout fijo). El editor visual usa fmtMoney directamente.
-  const fmtEUR = (n) => fmtMoney(n, inv.moneda);
+  // ?moneda=eur -> el documento entero en euros, no en la divisa.
+  //
+  // Una factura en dolares guarda base/IVA/total en EUROS y el importe en divisa
+  // aparte, asi que la version en euros ya esta en la base: lo unico que hay que
+  // convertir son las lineas, que si vienen en la divisa.
+  const monedaDoc = enEuros ? 'EUR' : inv.moneda;
+  const fmtEUR = (n) => fmtMoney(enPapel(n), monedaDoc);
   const project = await model.getProjectInvoicerData(inv.project_id);
 
   const pdfDoc = await PDFDocument.create();
@@ -286,13 +304,19 @@ export async function generatePDF(invoiceId, { preliminar = false, vistaGestor =
   // Con IVA INCLUIDO los precios de línea vienen en BRUTO. En la factura las líneas
   // se muestran NETAS para que su suma cuadre con la base imponible.
   const netF = netFactor(inv);
+  // Las lineas se teclean en la divisa del documento. Si se pide en euros, se
+  // pasan con el mismo cambio que ya relaciona el total en divisa con el total
+  // en euros — asi el detalle suma exactamente la base imponible.
+  const aEuros = (enEuros && Number(inv.total_divisa) && Number(inv.total))
+    ? Number(inv.total) / Number(inv.total_divisa)
+    : 1;
   for (const it of items) {
     const cant = Number(it.cantidad || 1);
     // Tolerante a distintas claves de precio (precio_unitario | precio) para no
     // pintar 0,00 cuando el ítem viene de importaciones/otros orígenes.
-    const precioBruto = Number(it.precio_unitario ?? it.precio ?? 0);
+    const precioBruto = Number(it.precio_unitario ?? it.precio ?? 0) * aEuros;
     const precio = precioBruto * netF;
-    const subt = (it.total != null ? Number(it.total) : cant * precioBruto) * netF;
+    const subt = (it.total != null ? Number(it.total) * aEuros : cant * precioBruto) * netF;
     // El concepto se envuelve en varias líneas para no cortar el nombre completo.
     const descLines = wrapToLines(font, it.descripcion, 10, 340 - (left + 10));
     page.drawText(descLines[0], { x: left + 10, y, size: 10, font, color: black });
@@ -315,7 +339,9 @@ export async function generatePDF(invoiceId, { preliminar = false, vistaGestor =
   // importe en la divisa internacional (manual). Si existe, manda él en el TOTAL y
   // el euro va detrás entre paréntesis. Las facturas antiguas en divisa (sin
   // total_divisa) conservan su comportamiento: todo formateado en esa divisa.
-  const enDivisa = String(inv.moneda || 'EUR').toUpperCase() !== 'EUR' && inv.total_divisa != null;
+  const enDivisa = !enEuros
+    && String(inv.moneda || 'EUR').toUpperCase() !== 'EUR'
+    && inv.total_divisa != null;
   // Base e IVA se guardan en euros, pero el documento va en la divisa: se
   // muestran en ella, con el mismo cambio que el total. El euro aparece una
   // sola vez, entre parentesis debajo del TOTAL.
@@ -323,7 +349,7 @@ export async function generatePDF(invoiceId, { preliminar = false, vistaGestor =
     ? Number(inv.total_divisa) / Number(inv.total)
     : 1;
   const fmtBase = (n) => (enDivisa
-    ? fmtMoney(Number(n || 0) * cambio, inv.moneda)
+    ? fmtMoney(enPapel(n) * cambio, inv.moneda)
     : fmtEUR(n));
   page.drawText('Base imponible:', { x: right - 200, y, size: 10, font, color: black });
   page.drawText(fmtBase(inv.base_imponible), { x: right - 70, y, size: 10, font, color: black });
@@ -333,11 +359,11 @@ export async function generatePDF(invoiceId, { preliminar = false, vistaGestor =
   y -= 16;
   page.drawRectangle({ x: right - 200, y: y + 12, width: 200, height: 1, color: gray });
   page.drawText('TOTAL:', { x: right - 200, y, size: 12, font: bold, color: black });
-  page.drawText(enDivisa ? fmtMoney(inv.total_divisa, inv.moneda) : fmtEUR(inv.total),
+  page.drawText(enDivisa ? fmtMoney(enPapel(inv.total_divisa), inv.moneda) : fmtEUR(inv.total),
     { x: right - 70, y, size: 12, font: bold, color: black });
   if (enDivisa) {
     y -= 13;
-    drawRight(`(${fmtMoney(inv.total, 'EUR')})`, right, y, 9, bold, black);
+    drawRight(`(${fmtMoney(enPapel(inv.total), 'EUR')})`, right, y, 9, bold, black);
   }
   // Copia de gestión: deja claro que este documento NO es el del alumno.
   if (neto) {
@@ -458,7 +484,12 @@ const METODO_LABELS = {
 // Dibuja la factura usando la plantilla del editor visual (bloques posicionados).
 // Convierte coords del editor (A4 794x1123 px, origen arriba-izq) a pdf-lib (595x842 pt, origen abajo-izq).
 async function renderFromTemplate({ pdfDoc, page, font, bold, inv, layout }) {
-  const fmtEUR = (n) => fmtMoney(n, inv.moneda); // formatea en la moneda de la factura
+  // Mismo criterio que en el layout fijo: en un abono, el papel va sin el signo
+  // menos. Ver la nota larga en generatePDF.
+  const enPapel = (n) => (inv.tipo === 'rectificativa'
+    ? Math.abs(Number(n || 0))
+    : Number(n || 0));
+  const fmtEUR = (n) => fmtMoney(enPapel(n), inv.moneda); // en la moneda de la factura
   const SX = 595 / 794, SY = 842 / 1123;
   const X = (px) => px * SX;
   const TOP = (py) => 842 - py * SY; // borde superior del bloque en coords pdf
@@ -550,12 +581,12 @@ async function renderFromTemplate({ pdfDoc, page, font, bold, inv, layout }) {
           const enDiv = String(inv.moneda || 'EUR').toUpperCase() !== 'EUR' && inv.total_divisa != null;
           // Igual que en generatePDF: base e IVA en la divisa del documento.
           const camb = enDiv && Number(inv.total) ? Number(inv.total_divisa) / Number(inv.total) : 1;
-          const fBase = (n) => (enDiv ? fmtMoney(Number(n || 0) * camb, inv.moneda) : fmtEUR(n));
+          const fBase = (n) => (enDiv ? fmtMoney(enPapel(n) * camb, inv.moneda) : fmtEUR(n));
           drawLines(b, [
             { text: `Base imponible: ${fBase(inv.base_imponible)}` },
             { text: `IVA (${inv.iva_pct}%): ${fBase(inv.iva_importe)}` },
             { text: enDiv
-                ? `TOTAL: ${fmtMoney(inv.total_divisa, inv.moneda)} (${fmtMoney(inv.total, 'EUR')})`
+                ? `TOTAL: ${fmtMoney(enPapel(inv.total_divisa), inv.moneda)} (${fmtMoney(enPapel(inv.total), 'EUR')})`
                 : `TOTAL: ${fmtEUR(inv.total)}`, bold: true, size: (b.fontSize || 12) + 2 },
           ]);
           break;

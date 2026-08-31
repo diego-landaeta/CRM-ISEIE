@@ -235,6 +235,28 @@ export async function corregir(req, res, next) {
       }
     }
     delete d.exento; delete d.totalEur;
+
+    // Un ABONO se guarda siempre en negativo, venga como venga.
+    //
+    // Quien corrige una rectificativa teclea importes en positivo —es lo natural,
+    // y es lo que se ve en el papel— pero el dato tiene que seguir restando en
+    // los informes. Se fuerza aqui y no en la pantalla: asi da igual desde donde
+    // llegue la correccion, el signo nunca depende de que el cliente acierte.
+    const actual = await model.findById(id);
+    if (actual?.tipo === 'rectificativa') {
+      const neg = (n) => -Math.abs(Number(n || 0));
+      if (Array.isArray(d.items)) {
+        d.items = d.items.map((it) => ({
+          ...it,
+          precio_unitario: neg(it.precio_unitario ?? it.precio ?? 0),
+          ...(it.subtotal != null ? { subtotal: neg(it.subtotal) } : {}),
+        }));
+      }
+      for (const k of ['baseImponible', 'ivaImporte', 'total', 'totalDivisa']) {
+        if (d[k] != null) d[k] = neg(d[k]);
+      }
+    }
+
     const inv = await model.updateBorrador(id, d, { soloBorrador: false });
     res.json({ success: true, data: inv });
   } catch (e) {
@@ -310,18 +332,23 @@ export async function pdf(req, res, next) {
     // por el importe NETO liquidado (bruto menos la comisión de Stripe). La factura
     // del alumno siempre va por el bruto. Solo aplica a facturas normales.
     const vistaGestor = req.query.vista === 'gestor' && inv.tipo !== 'proforma' && inv.tipo !== 'rectificativa';
+    // ?moneda=eur → la misma factura totalizada EN EUROS. Una factura en divisa
+    // sale por defecto en su moneda con el euro entre parentesis debajo; esta es
+    // la version para quien la necesita en euros de arriba abajo.
+    const enEuros = String(req.query.moneda || '').toLowerCase() === 'eur'
+      && String(inv.moneda || 'EUR').toUpperCase() !== 'EUR';
     let bytes;
     // El preliminar y la copia de gestión nunca usan el PDF cacheado (definitivo).
-    if (inv.pdf_path && !preliminar && !vistaGestor) {
+    if (inv.pdf_path && !preliminar && !vistaGestor && !enEuros) {
       try { bytes = await fs.readFile(inv.pdf_path); } catch { bytes = null; }
     }
     if (!bytes) {
-      const gen = await service.generatePDF(id, { preliminar, vistaGestor });
+      const gen = await service.generatePDF(id, { preliminar, vistaGestor, enEuros });
       bytes = gen.bytes;
     }
     res.setHeader('Content-Type', 'application/pdf');
     // Borrador: no tiene código fiscal todavía.
-    const fname = (preliminar ? 'PRELIMINAR-' : '') + (vistaGestor ? 'NETO-' : '') + (inv.codigo ? inv.codigo.replace('/', '-') : `BORRADOR-${inv.id}`);
+    const fname = (preliminar ? 'PRELIMINAR-' : '') + (vistaGestor ? 'NETO-' : '') + (enEuros ? 'EUR-' : '') + (inv.codigo ? inv.codigo.replace('/', '-') : `BORRADOR-${inv.id}`);
     res.setHeader('Content-Disposition', `inline; filename="${fname}.pdf"`);
     res.send(Buffer.from(bytes));
   } catch (e) { next(e); }

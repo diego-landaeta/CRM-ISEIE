@@ -50,6 +50,8 @@ export default function InvoiceCreatePage() {
   // como para CORREGIR una factura ya emitida/pagada (IVA, datos, concepto).
   const editId = new URLSearchParams(loc.search).get('editId');
   const [editEstado, setEditEstado] = useState<string | null>(null);
+  // Si lo que se esta corrigiendo es un abono: cambia el rotulo y el signo.
+  const [esAbono, setEsAbono] = useState(false);
   // Fechas de la factura (emisión y pago). Se editan aquí mismo, en el panel.
   // Solo para admins o usuarias con el permiso editar_fechas_factura.
   const [fechaEmision, setFechaEmision] = useState('');
@@ -340,7 +342,11 @@ export default function InvoiceCreatePage() {
       setTelefono(f.cliente_telefono || '');
       setLlevaIva(Number(f.iva_pct) > 0);
       setIvaIncluido(!!f.iva_incluido);
-      if (Array.isArray(f.items) && f.items.length) setItems(f.items.map((it) => ({ descripcion: it.descripcion, cantidad: Number(it.cantidad) || 1, precio_unitario: Number(it.precio_unitario) || 0 })));
+      // Un abono se guarda en negativo pero se EDITA en positivo: es como se
+      // lee en el papel y como lo piensa quien corrige. El signo lo vuelve a
+      // poner el servidor al guardar, asi que no depende de esta pantalla.
+      setEsAbono(f.tipo === 'rectificativa');
+      if (Array.isArray(f.items) && f.items.length) setItems(f.items.map((it) => ({ descripcion: it.descripcion, cantidad: Number(it.cantidad) || 1, precio_unitario: Math.abs(Number(it.precio_unitario) || 0) })));
       if (f.metodo_pago) setMetodoPago(f.metodo_pago as typeof metodoPago);
       if (f.moneda) setMoneda(f.moneda);
         if (f.total_divisa != null) setTotalEur(String(f.total ?? ''));
