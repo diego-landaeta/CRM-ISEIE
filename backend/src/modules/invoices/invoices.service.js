@@ -176,17 +176,18 @@ export async function generatePDF(invoiceId, { preliminar = false, vistaGestor =
       if (inv.total_divisa != null) inv.total_divisa = null; // el neto siempre en euros
     }
   }
-  // En un ABONO los importes se guardan en negativo —asi restan en los informes,
-  // que es lo correcto— pero en el papel no se escribe el signo.
+  // En un ABONO los importes van en NEGATIVO tambien en el papel.
   //
-  // El documento ya dice «FACTURA RECTIFICATIVA» arriba y describe lo que abona;
-  // el menos delante de cada cifra no aporta nada y se lee como un error de
-  // formato. Lo reporto el equipo comercial la primera vez que salio uno.
+  // Estuvieron un tiempo en positivo —se quitaba el signo al escribirlos— porque
+  // parecia un error de formato. Pero sin el signo el documento se lee como un
+  // cargo nuevo: pone «FACTURA RECTIFICATIVA» arriba y «por anulacion de
+  // servicio» en la linea, y debajo un TOTAL de 324,00 US$ que parece que se
+  // vuelven a cobrar. Un abono resta, y eso tiene que verse en la cifra.
   //
-  // Ojo: esto es SOLO como se escribe. El dato guardado no se toca.
-  const enPapel = (n) => (inv.tipo === 'rectificativa'
-    ? Math.abs(Number(n || 0))
-    : Number(n || 0));
+  // El dato guardado ya era negativo y no se toca: esto es solo como se escribe.
+  // Si algun dia se quiere volver a sin signo, se cambia aqui y en el otro
+  // `enPapel` de este mismo fichero (el del editor visual).
+  const enPapel = (n) => Number(n || 0);
 
   // Formateo en la moneda de la factura (fallback local que sombrea el fmtEUR de
   // módulo dentro del layout fijo). El editor visual usa fmtMoney directamente.
@@ -489,9 +490,9 @@ const METODO_LABELS = {
 async function renderFromTemplate({ pdfDoc, page, font, bold, inv, layout }) {
   // Mismo criterio que en el layout fijo: en un abono, el papel va sin el signo
   // menos. Ver la nota larga en generatePDF.
-  const enPapel = (n) => (inv.tipo === 'rectificativa'
-    ? Math.abs(Number(n || 0))
-    : Number(n || 0));
+  // El signo, igual que en el otro formato: un abono resta y se escribe con su
+  // menos delante. Ver la explicacion larga arriba.
+  const enPapel = (n) => Number(n || 0);
   const fmtEUR = (n) => fmtMoney(enPapel(n), inv.moneda); // en la moneda de la factura
   const SX = 595 / 794, SY = 842 / 1123;
   const X = (px) => px * SX;
