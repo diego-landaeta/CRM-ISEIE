@@ -248,8 +248,18 @@ export async function manualLink(stripePaymentId, { leadId, conversionId, userId
   let yaExistia = false;
   if (conversionId) {
     const { rows } = await query(
-      `SELECT amount, stripe_id, stripe_created_at FROM stripe_payments WHERE id=$1`, [stripePaymentId]);
-    const amount = Number(rows[0]?.amount || 0);
+      `SELECT amount, stripe_id, stripe_created_at, status FROM stripe_payments WHERE id=$1`, [stripePaymentId]);
+    // Un cargo que NO se cobro no registra pago. Nunca.
+    //
+    // Aqui no se miraba el estado: asociar un cargo fallido creaba un cobro por
+    // su importe, o sea dinero que no entro figurando como cobrado, y de ahi a
+    // una factura emitida por algo que nadie pago. Hoy hay 225 cargos fallidos
+    // en MultiCRM y 401 en ISEIE: cualquiera estaba a un clic.
+    //
+    // El enlace SI se hace —queda dicho de quien es el intento fallido, que
+    // sirve para perseguirlo— pero sin cobro detras.
+    const cobrado = rows[0]?.status === 'succeeded';
+    const amount = cobrado ? Number(rows[0]?.amount || 0) : 0;
     // Fecha REAL del cobro en Stripe (antes se guardaba la de hoy y la factura salía con
     // fecha equivocada). Si faltara, se cae a hoy.
     const fecha = rows[0]?.stripe_created_at
@@ -273,6 +283,10 @@ export async function manualLink(stripePaymentId, { leadId, conversionId, userId
         cpId = res?.payment?.id || null;
       }
     }
+  }
+  if (conversionId && !cpId) {
+    logger.warn({ stripePaymentId, conversionId },
+      'cargo asociado SIN registrar cobro: no consta como cobrado en Stripe');
   }
   await model.linkPayment(stripePaymentId, { leadId, conversionId, conversionPaymentId: cpId, userId, method: yaExistia ? 'manual_dedup' : 'manual' });
   // Asociar el cargo NO emite la factura: el cobro queda registrado en la venta y
