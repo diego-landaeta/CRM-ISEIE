@@ -110,7 +110,7 @@ const NAV_SECTIONS = [
       { to: '/payroll',              label: 'Nóminas',            icon: Coins,      roles: ['admin', 'superadmin'], statusTag: 'Pruebas' },
       { to: '/accounting/pendiente-facturar', label: 'Pendientes de facturar', icon: WarningCircle, roles: ['admin', 'superadmin'], statusTag: 'Pruebas' },
       { to: '/accounting/pagos-stripe', label: 'Pagos Stripe',    icon: PlugsConnected, roles: ['admin', 'superadmin'] },
-      { to: '/accounting/facturas', label: 'Facturación', icon: FilePdf, roles: ['admin', 'superadmin', 'soporte', 'gestor'], sectionPrefixes: ['/accounting/facturas'] },
+      { to: '/accounting/facturas', label: 'Facturación', icon: FilePdf, roles: ['admin', 'superadmin', 'soporte', 'gestor'], permiso: 'factura_manager', sectionPrefixes: ['/accounting/facturas'] },
       { to: '/accounting/integrations', label: 'Integraciones',   icon: PlugsConnected, roles: ['admin', 'superadmin'], statusTag: 'Pruebas' },
     ],
   },
@@ -150,7 +150,7 @@ const NAV_SECTIONS = [
 const APAGADOS = String(import.meta.env.VITE_MODULOS_APAGADOS || '')
   .split(',').map((s) => s.trim()).filter(Boolean);
 
-function canSeeItem(item, role, soloColaboraciones) {
+function canSeeItem(item, role, soloColaboraciones, permisos) {
   if (item.apagable && APAGADOS.includes(item.apagable)) return false;
   // Un tutor solo ve lo suyo: lo que no le nombre expresamente queda fuera.
   // Al reves —listar lo prohibido— se olvida siempre algo, y lo que se olvida
@@ -162,6 +162,17 @@ function canSeeItem(item, role, soloColaboraciones) {
   if (soloColaboraciones) {
     return ['/tutores', '/tutores/comisiones', '/preferencias'].includes(item.to);
   }
+
+  // Un permiso acotado manda sobre el rol.
+  //
+  // La entrada de Facturacion la ve quien PUEDE facturar, no todo el que sea
+  // gestor. En ISEIE ninguna gestora factura —lo hacen Adriana y Daniela, que
+  // son admin— y aun asi las doce veian el panel. En ISEIH lo veia Vanessa, que
+  // es «gestor» pero lleva tutores.
+  //
+  // Se comprueba solo para gestor: un admin puede facturar por su rol y no
+  // necesita el permiso, y a soporte ya se le deja pasar antes.
+  if (item.permiso && role === 'gestor' && !permisos?.[item.permiso]) return false;
 
   if (!item.roles) return true;
   if (role === 'superadmin' || role === 'soporte') return true;
@@ -232,10 +243,10 @@ function NavItem({ to, label, icon: Icon, end, comingSoon, statusTag, collapsed,
 // Una entrada con lo suyo escalonado debajo. Se abre y se cierra, y lo de
 // dentro se sangra con una guia a la izquierda para que se vea de un vistazo
 // que pertenece a ella.
-function NavGroup({ label, icon: Icon, items, role, soloColab, collapsed, onNavigate, onExpandSidebar }) {
+function NavGroup({ label, icon: Icon, items, role, soloColab, permisos, collapsed, onNavigate, onExpandSidebar }) {
   const location = useLocation();
   const visible = items
-    .filter((c) => canSeeItem(c, role, soloColab))
+    .filter((c) => canSeeItem(c, role, soloColab, permisos))
     .map((c) => ({ ...c, comingSoon: c.comingSoon || !isBetaAllowed(c.to) }));
   const hasActiveChild = visible.some(
     (c) => !c.comingSoon && (location.pathname === c.to || location.pathname.startsWith(c.to + '/'))
@@ -320,7 +331,7 @@ function defaultOpenSections(sections, pathname) {
   return out;
 }
 
-function CollapsibleNav({ sections, role, soloColab, collapsed, onNavigate, onExpandSidebar }) {
+function CollapsibleNav({ sections, role, soloColab, permisos, collapsed, onNavigate, onExpandSidebar }) {
   const location = useLocation();
   const STORAGE_KEY = 'crm-sidebar-sections-v1';
   const [openMap, setOpenMap] = useState(() => {
@@ -364,7 +375,7 @@ function CollapsibleNav({ sections, role, soloColab, collapsed, onNavigate, onEx
             }
             return it;
           })
-          .filter((it) => canSeeItem(it, role, soloColab))
+          .filter((it) => canSeeItem(it, role, soloColab, permisos))
           // Una entrada con hijos no tiene ruta que mirar: lo de BETA lo decide
           // cada hijo por su cuenta, dentro de NavGroup.
           .map((it) => (it.children ? it : { ...it, comingSoon: it.comingSoon || !isBetaAllowed(it.to) }));
@@ -377,6 +388,7 @@ function CollapsibleNav({ sections, role, soloColab, collapsed, onNavigate, onEx
             icon={item.icon}
             items={item.children}
             soloColab={soloColab}
+            permisos={permisos}
             role={role}
             collapsed={collapsed}
             onNavigate={onNavigate}
@@ -531,6 +543,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapsed, onNaviga
         role={role}
         soloColab={user?.gestor_colaboraciones === true
           && !['superadmin', 'admin', 'soporte'].includes(role)}
+        permisos={user}
         collapsed={collapsed}
         onNavigate={onNavigate}
         onExpandSidebar={onToggleCollapsed}
