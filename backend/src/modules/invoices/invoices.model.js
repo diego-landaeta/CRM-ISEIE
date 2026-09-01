@@ -17,21 +17,25 @@ async function issuerOfProject(exec, projectId) {
 // distintos. Si el proyecto no tiene sociedad (issuerId null) cae al contador por
 // proyecto (legacy). Atómico dentro de la transacción vía FOR UPDATE / índice único.
 export async function nextNumero(client, projectId, issuerId, ano, serie) {
-  // El numero se reserva por SERIE, no por sociedad emisora.
+  // El numero es unico por SERIE Y AÑO, mire desde el proyecto que mire.
   //
-  // La clave primaria de invoice_sequences es (project_id, ano, serie) y el
-  // indice unico de facturas es (project_id, ano, serie, numero): los dos
-  // ignoran la emisora. Pero el codigo buscaba el contador por
-  // (issuer_id, ano, serie), asi que con una emisora nueva que comparte serie
-  // —Solvenic e Ictess usan las dos ICTESS— no encontraba nada e intentaba
-  // insertar una fila que chocaba con la que ya existia. Error 23505, y la
-  // gestora solo veia «error del sistema».
+  // Iba por proyecto, y CEDIA factura desde CUATRO (1, 2, 3 y 6): cada uno
+  // llevaba su propia cuenta y repetia numeros. Salieron 23 numeros por
+  // duplicado —alguno tres veces—, como los dos «2026/0005» distintos que
+  // encontro Diego: uno de ISEIH de 140 € y otro de Fono Aprende de 765 €.
+  //
+  // La serie ya identifica a la sociedad —CEDIA, ICTESS, LATERAL—, asi que es
+  // ella la que manda. Dos emisoras que compartan serie comparten numeracion, y
+  // es lo correcto: son la misma empresa con dos fichas (Ictess y Solvenic).
+  //
+  // Lo otro que fallaba: aqui se reservaba por proyecto pero `getSequence` y
+  // `setSequence` leian y escribian por emisora. Ahora las tres van por serie.
   //
   // El cerrojo es de transaccion: sin el, dos emisiones a la vez leerian el
   // mismo maximo y pedirian el mismo numero.
   await client.query(
     `SELECT pg_advisory_xact_lock(hashtext($1))`,
-    [`invoice_serie:${projectId}:${ano}:${serie}`]
+    [`invoice_serie:${ano}:${serie}`]
   );
 
   // El mayor entre el contador y lo que hay de verdad en facturas. Lo segundo
@@ -39,15 +43,21 @@ export async function nextNumero(client, projectId, issuerId, ano, serie) {
   // queda corto y volveriamos a chocar.
   const { rows: [tope] } = await client.query(
     `SELECT GREATEST(
-              COALESCE((SELECT ultimo_numero FROM invoice_sequences
-                         WHERE project_id = $1 AND ano = $2 AND serie = $3), 0),
+              COALESCE((SELECT MAX(ultimo_numero) FROM invoice_sequences
+                         WHERE ano = $1 AND serie = $2), 0),
               COALESCE((SELECT MAX(numero) FROM invoices
-                         WHERE project_id = $1 AND ano = $2 AND serie = $3
-                           AND numero IS NOT NULL), 0)
+                         WHERE ano = $1 AND serie = $2 AND numero IS NOT NULL), 0)
             ) AS usado`,
-    [projectId, ano, serie]
+    [ano, serie]
   );
   const n = Number(tope.usado) + 1;
+
+  // Todas las filas de esa serie quedan al dia: la tabla sigue teniendo una por
+  // proyecto, pero logicamente son UN solo contador.
+  await client.query(
+    `UPDATE invoice_sequences SET ultimo_numero = $1 WHERE ano = $2 AND serie = $3`,
+    [n, ano, serie]
+  );
 
   // La emisora solo se anota si no hay ya otra fila con esa (emisora, año,
   // serie): existe un unico parcial sobre eso y saltaria si dos proyectos
@@ -1412,33 +1422,37 @@ export async function getProjectInvoicerData(projectId) {
 }
 
 export async function setSequence(projectId, ano, serie, ultimoNumero) {
-  const issuerId = await issuerOfProject(query, projectId);
-  if (issuerId) {
-    const upd = await query(
-      `UPDATE invoice_sequences SET ultimo_numero = $1 WHERE issuer_id = $2 AND ano = $3 AND serie = $4`,
-      [ultimoNumero, issuerId, ano, serie]
-    );
-    if (upd.rowCount === 0) {
-      await query(
-        `INSERT INTO invoice_sequences (project_id, issuer_id, ano, serie, ultimo_numero) VALUES ($1, $2, $3, $4, $5)`,
-        [projectId, issuerId, ano, serie, ultimoNumero]
-      );
-    }
-    return;
-  }
-  await query(
-    `INSERT INTO invoice_sequences (project_id, ano, serie, ultimo_numero)
-     VALUES ($1, $2, $3, $4)
-     ON CONFLICT (project_id, ano, serie) DO UPDATE SET ultimo_numero = EXCLUDED.ultimo_numero`,
-    [projectId, ano, serie, ultimoNumero]
+  // Por serie, no por emisora ni por proyecto: es UN contador. Se ponen al dia
+  // todas las filas de esa serie para que ninguna se quede atras y vuelva a
+  // repartir un numero ya usado.
+  const upd = await query(
+    `UPDATE invoice_sequences SET ultimo_numero = $1 WHERE ano = $2 AND serie = $3`,
+    [ultimoNumero, ano, serie]
   );
+  if (upd.rowCount === 0) {
+    const issuerId = await issuerOfProject(query, projectId);
+    await query(
+      `INSERT INTO invoice_sequences (project_id, issuer_id, ano, serie, ultimo_numero)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (project_id, ano, serie) DO UPDATE SET ultimo_numero = EXCLUDED.ultimo_numero`,
+      [projectId, issuerId || null, ano, serie, ultimoNumero]
+    );
+  }
 }
 
 export async function getSequence(projectId, ano, serie) {
-  const issuerId = await issuerOfProject(query, projectId);
-  const { rows } = issuerId
-    ? await query(`SELECT ultimo_numero FROM invoice_sequences WHERE issuer_id=$1 AND ano=$2 AND serie=$3`, [issuerId, ano, serie])
-    : await query(`SELECT ultimo_numero FROM invoice_sequences WHERE project_id=$1 AND ano=$2 AND serie=$3`, [projectId, ano, serie]);
+  // Lo mismo que reparte `nextNumero`: el mayor de la serie, contador o factura
+  // real. Antes leia la fila de la emisora y podia enseñar un numero por debajo
+  // del ultimo emitido de verdad.
+  const { rows } = await query(
+    `SELECT GREATEST(
+              COALESCE((SELECT MAX(ultimo_numero) FROM invoice_sequences
+                         WHERE ano = $1 AND serie = $2), 0),
+              COALESCE((SELECT MAX(numero) FROM invoices
+                         WHERE ano = $1 AND serie = $2 AND numero IS NOT NULL), 0)
+            ) AS ultimo_numero`,
+    [ano, serie]
+  );
   return rows[0]?.ultimo_numero || 0;
 }
 
