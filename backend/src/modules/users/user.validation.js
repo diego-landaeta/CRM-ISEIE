@@ -15,9 +15,21 @@ export const createUserSchema = z.object({
   projects: z.array(projectAssignmentSchema).optional(),
 });
 
+// Los permisos acotados de facturacion y colaboraciones.
+//
+// Existian en la base y se comprobaban en el codigo, pero NO se podian dar desde
+// ninguna pantalla: este esquema no los admitia. Por eso Ana Comercial llevaba
+// desde su alta sin poder cambiar la fecha de una factura — no fue una decision,
+// es que no habia forma de marcarselo ni de ver que le faltaba.
+//
+// Van aparte del rol a proposito: ser `gestor` no basta para decidir quien
+// factura. Vanessa lo es y no debe.
 export const updateUserSchema = z.object({
   nombre: z.string().min(2).max(200).optional(),
   role: z.enum(['admin', 'gestor', 'soporte', 'tutor']).optional(),
+  factura_manager: z.boolean().optional(),
+  editar_fechas_factura: z.boolean().optional(),
+  gestor_colaboraciones: z.boolean().optional(),
   projectIds: z.array(z.number().int().positive()).optional(),
   projects: z.array(projectAssignmentSchema).optional(),
   // Teléfono del gestor (WhatsApp): usado por el widget y para contacto.

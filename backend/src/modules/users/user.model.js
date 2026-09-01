@@ -50,6 +50,15 @@ export async function findAll({ active, role, projectId, page, limit, incluirTod
   const { rows } = await query(
     `SELECT u.id, u.nombre, u.email, u.role, u.active, u.last_login_at, u.created_at, u.avatar_url, u.avatar_key,
             u.whatsapp_phone, u.whatsapp_display_name,
+            -- Los permisos acotados viajan en el listado: sin esto la pantalla no
+            -- puede enseñar quien los tiene, que es como se paso por alto que a Ana
+            -- le faltaba uno. El de colaboraciones ya estaba anotado como pendiente
+            -- en el tipo del frontal.
+            -- (Sin comillas invertidas en este comentario: esto va dentro de una
+            --  plantilla de texto de JavaScript y cerrarian la cadena.)
+            COALESCE(u.factura_manager, false) AS factura_manager,
+            COALESCE(u.editar_fechas_factura, false) AS editar_fechas_factura,
+            COALESCE(u.gestor_colaboraciones, false) AS gestor_colaboraciones,
             COALESCE(
               (SELECT json_agg(up.project_id ORDER BY up.project_id)
                FROM user_projects up
@@ -133,7 +142,9 @@ export async function create({ nombre, email, passwordHash, role, projectIds, pr
   }
 }
 
-export async function update(id, { nombre, role, projectIds, projects, avatar_url, avatar_key, whatsapp_phone, whatsapp_display_name }) {
+export async function update(id, { nombre, role, projectIds, projects, avatar_url, avatar_key,
+  whatsapp_phone, whatsapp_display_name,
+  factura_manager, editar_fechas_factura, gestor_colaboraciones }) {
   const client = await getClient();
   try {
     await client.query('BEGIN');
@@ -149,6 +160,11 @@ export async function update(id, { nombre, role, projectIds, projects, avatar_ur
     // Teléfono WhatsApp del gestor (cadena vacía → NULL para limpiar).
     if (whatsapp_phone !== undefined) { sets.push(`whatsapp_phone = $${paramIdx++}`); params.push(whatsapp_phone || null); }
     if (whatsapp_display_name !== undefined) { sets.push(`whatsapp_display_name = $${paramIdx++}`); params.push(whatsapp_display_name || null); }
+    // Los permisos acotados. Se comparan con undefined y no por verdadero: si no,
+    // desmarcar una casilla no la apagaria nunca.
+    if (factura_manager !== undefined) { sets.push(`factura_manager = $${paramIdx++}`); params.push(!!factura_manager); }
+    if (editar_fechas_factura !== undefined) { sets.push(`editar_fechas_factura = $${paramIdx++}`); params.push(!!editar_fechas_factura); }
+    if (gestor_colaboraciones !== undefined) { sets.push(`gestor_colaboraciones = $${paramIdx++}`); params.push(!!gestor_colaboraciones); }
 
     if (sets.length > 0) {
       sets.push(`updated_at = NOW()`);

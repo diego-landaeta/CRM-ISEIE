@@ -307,6 +307,10 @@ function EditUserModal({ user, projects, onClose, onSaved }) {
   const isSuperadmin = me?.role === 'superadmin';
   const [nombre, setNombre] = useState(user.nombre || '');
   const [role, setRole] = useState(user.role || 'gestor');
+  // Los permisos acotados de facturacion. Aparte del rol a proposito: ser
+  // «gestor» no basta para decidir quien factura — Vanessa lo es y no debe.
+  const [facturaManager, setFacturaManager] = useState(!!user.factura_manager);
+  const [editarFechas, setEditarFechas] = useState(!!user.editar_fechas_factura);
   const [phone, setPhone] = useState(user.whatsapp_phone || '');
   const [assigned, setAssigned] = useState(() => {
     const m = {};
@@ -330,7 +334,13 @@ function EditUserModal({ user, projects, onClose, onSaved }) {
     const projList = Object.entries(assigned).map(([projectId, recibeLeads]) => ({ projectId: Number(projectId), recibeLeads: !!recibeLeads }));
     setSaving(true);
     try {
-      await client.patch(`/users/${user.id}`, { nombre: nombre.trim(), role, projects: projList, whatsapp_phone: phone.trim() });
+      await client.patch(`/users/${user.id}`, {
+        nombre: nombre.trim(), role, projects: projList, whatsapp_phone: phone.trim(),
+        factura_manager: facturaManager,
+        // Cambiar fechas sin poder facturar no sirve: esa pantalla se abre desde
+        // la factura. Si cae lo primero, cae lo segundo.
+        editar_fechas_factura: facturaManager && editarFechas,
+      });
       toast({ title: '✓ Guardado' });
       onSaved();
     } catch (e) {
@@ -410,6 +420,31 @@ function EditUserModal({ user, projects, onClose, onSaved }) {
             )}
           </div>
         </div>
+
+        {/* Facturacion. Un admin puede siempre por su rol, asi que para el estas
+            casillas no cambiarian nada y no se pintan. */}
+        {(role === 'gestor' || role === 'soporte') && (
+          <div className="rounded-lg border border-border p-3 space-y-2">
+            <p className="text-xs text-muted-foreground px-1">Facturación</p>
+            <label className="flex items-start gap-2 cursor-pointer px-1">
+              <input type="checkbox" checked={facturaManager}
+                onChange={(e) => setFacturaManager(e.target.checked)} className="mt-0.5" />
+              <span className="text-sm">
+                Puede emitir y corregir facturas
+                <span className="block text-xs text-muted-foreground">Solo las de sus propios prospectos.</span>
+              </span>
+            </label>
+            <label className={`flex items-start gap-2 px-1 ${facturaManager ? 'cursor-pointer' : 'opacity-50'}`}>
+              <input type="checkbox" checked={facturaManager && editarFechas} disabled={!facturaManager}
+                onChange={(e) => setEditarFechas(e.target.checked)} className="mt-0.5" />
+              <span className="text-sm">
+                Puede cambiar las fechas de emisión y de pago
+                <span className="block text-xs text-muted-foreground">Sin tocar importes ni conceptos.</span>
+              </span>
+            </label>
+          </div>
+        )}
+
         <div className="flex justify-end gap-2">
           <button onClick={onClose} className="h-9 px-4 rounded-md border border-border text-sm font-medium hover:bg-muted">Cancelar</button>
           <button onClick={save} disabled={saving} className="h-9 px-4 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50">
