@@ -77,14 +77,30 @@ export async function findPagoDuplicado(conversionId, importe, fecha, stripeId =
   }
   // Y si no, el de siempre: lo registro una persona a mano, con el mismo importe
   // y una fecha muy proxima en la misma venta.
+  //
+  // El importe se compara CON UN MARGEN DE UN EURO, no exacto.
+  //
+  // Exigirlo clavado dejaba cobros imposibles de asociar por unos centimos. El
+  // caso que lo destapo: Maria Fernanda Garces: Stripe cobro 284,58 € y la
+  // gestora lo habia apuntado como 284,50 —lo que decia su plan de cuotas—, ocho
+  // centimos de diferencia. Al asociarlo, el CRM no reconocia el cobro que ya
+  // estaba y creaba OTRO: la venta pasaba a contar 2.207,40 € cobrados en vez de
+  // 1.922,90. El sintoma que llega es «no me deja asociar»; el daño real es el
+  // dinero contado dos veces.
+  //
+  // Un euro es margen de sobra para un redondeo del plan de cuotas y demasiado
+  // poco para confundir dos cobros distintos, que en estas ventas se llevan
+  // mensualidades enteras. Y si hubiera varios candidatos, gana el mas parecido,
+  // no el de id mas bajo.
   const { rows } = await query(
     `SELECT cp.id
        FROM conversion_payments cp
       WHERE cp.conversion_id = $1
-        AND ROUND(cp.importe::numeric, 2) = ROUND($2::numeric, 2)
+        AND ABS(cp.importe::numeric - $2::numeric) <= 1.00
         AND ABS(cp.fecha - $3::date) <= 3
         AND NOT EXISTS (SELECT 1 FROM stripe_payments sp WHERE sp.conversion_payment_id = cp.id)
-      ORDER BY cp.id LIMIT 1`,
+      ORDER BY ABS(cp.importe::numeric - $2::numeric), cp.id
+      LIMIT 1`,
     [conversionId, importe, fecha]
   );
   return rows[0] || null;
