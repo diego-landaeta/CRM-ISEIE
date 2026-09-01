@@ -482,17 +482,19 @@ export default function InvoicesPage() {
                     <td className="px-3 py-2 text-xs text-muted-foreground">{inv.proyecto_nombre || '—'}</td>
                   )}
                   <td className="px-3 py-2 text-xs text-muted-foreground">{inv.gestora_nombre || '—'}</td>
-                  {/* Un abono se guarda en negativo, pero en pantalla va sin el
-                      signo: la fila ya sale en rojo y la columna Tipo dice
-                      «Abono». El menos delante se leia como un error. Es el
-                      mismo criterio que en el PDF. */}
+                  {/* Un abono se guarda en negativo y en la lista se enseña asi,
+                      con su signo. Estuvo un tiempo sin el —la fila ya sale en
+                      rojo y la columna Tipo dice «Abono»— pero entonces la
+                      columna Total no cuadraba con lo que suma la factura por
+                      debajo: se leian dos cobros donde hay un cobro y una
+                      devolucion. Mismo criterio que en el PDF. */}
                   <td className={`px-3 py-2 text-right tabular-nums font-semibold ${Number(inv.total) < 0 ? 'text-rose-600' : ''}`}>
                     {inv.total_divisa != null && inv.moneda && inv.moneda !== 'EUR' ? (
                       <>
-                        {fmtMoneda(Math.abs(Number(inv.total_divisa)), inv.moneda)}
-                        <span className="block text-[10px] font-normal text-muted-foreground">({fmt(Math.abs(Number(inv.total)))})</span>
+                        {fmtMoneda(Number(inv.total_divisa), inv.moneda)}
+                        <span className="block text-[10px] font-normal text-muted-foreground">({fmt(Number(inv.total))})</span>
                       </>
-                    ) : fmt(Math.abs(Number(inv.total)))}
+                    ) : fmt(Number(inv.total))}
                   </td>
                   <td className="px-3 py-2">
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${ESTADO_BADGE[inv.estado] || 'bg-muted'}`}>
