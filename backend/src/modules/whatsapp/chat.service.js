@@ -475,9 +475,16 @@ export async function recibir(cuerpo) {
   // conversacion pasaba a llamarse «Iseie Innovation School». Y como el nombre
   // se conserva cuando el nuevo llega vacio, se quedaba puesto para siempre.
   const deMi = key.fromMe === true;
+  // En un GRUPO, `pushName` es quien escribe, NO el grupo: usarlo aqui bautiza
+  // la conversacion con el nombre —o el numero— del ultimo que hablo, y va
+  // cambiando solo. El nombre de un grupo es su asunto, y viene aparte. Si no
+  // llega, mejor dejarlo vacio que ponerle el de una persona.
+  const nombreDelChat = esGrupo
+    ? (datos?.groupSubject || cuerpo?.groupSubject || datos?.subject || null)
+    : (deMi ? null : datos?.pushName);
   const conv = await model.conversacionDe({
     instancia, jid: key.remoteJid,
-    nombrePush: deMi ? null : datos?.pushName,
+    nombrePush: nombreDelChat,
     avatarUrl: deMi ? null : (datos?.avatar || null),
   });
 
@@ -534,8 +541,15 @@ export async function recibir(cuerpo) {
     respondeA: datos?.respondeA || null,
     // Quien escribio, en un grupo. Sin esto todos los mensajes de un grupo
     // salen iguales y no se sabe quien dijo que.
-    participante: datos?.participante || null,
-    participanteNombre: datos?.participanteNombre || null,
+    //
+    // Se mira en DOS sitios. `participante` lo manda el puente de Baileys ya
+    // traducido; pero produccion habla con Evolution DIRECTAMENTE, y Evolution
+    // lo pone en `key.participant`. Leyendo solo el primero, en produccion el
+    // autor quedaba siempre vacio — o sea que la mitad de para que sirve leer un
+    // grupo no funcionaba justo donde importa.
+    participante: datos?.participante || key?.participant || null,
+    participanteNombre: datos?.participanteNombre
+      || (esGrupo && !deMi ? datos?.pushName : null) || null,
     ts: cuando,
   });
 
