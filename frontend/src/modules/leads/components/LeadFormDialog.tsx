@@ -318,19 +318,33 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
                   reglas de un telefono lo rechazaria siempre. */}
               <Field label="Contacto de WhatsApp"
                 hint="Elige si tienes su número, su usuario, o los dos">
-                <div className="flex gap-2">
-                  <select
-                    value={modoContacto}
-                    onChange={(e) => setModoContacto(e.target.value as ModoContacto)}
-                    className={inputClass + ' w-40 flex-shrink-0'}>
-                    <option value="numero">Número</option>
-                    <option value="usuario">Usuario de WhatsApp</option>
-                    <option value="ambos">Ambos</option>
-                  </select>
+                {/* El ancho lo ponen las envolturas, NO las clases del campo.
+                    Antes el desplegable llevaba `w-40` encima de `inputClass`,
+                    que ya trae `w-full`: en la hoja de estilos gana `w-full`, el
+                    desplegable ocupaba la fila entera y empujaba el campo del
+                    usuario FUERA del dialogo. El campo existia —salia la barra de
+                    desplazamiento horizontal— pero no se podia ver ni rellenar,
+                    asi que eligiendo «Ambos» solo se podia poner el numero.
+
+                    `min-w-0` en el segundo hace falta: sin el, un elemento flex
+                    no baja de su contenido y vuelve a desbordar. */}
+                <div className="flex gap-2 items-start">
+                  <div className="w-40 flex-none">
+                    <select
+                      value={modoContacto}
+                      onChange={(e) => setModoContacto(e.target.value as ModoContacto)}
+                      className={inputClass}>
+                      <option value="numero">Número</option>
+                      <option value="usuario">Usuario de WhatsApp</option>
+                      <option value="ambos">Ambos</option>
+                    </select>
+                  </div>
                   {modoContacto !== 'numero' && (
-                    <input {...register('whatsapp_usuario')}
-                      placeholder="@usuario o como lo tengas guardado"
-                      className={inputClass} />
+                    <div className="flex-1 min-w-0">
+                      <input {...register('whatsapp_usuario')}
+                        placeholder="@usuario o como lo tengas guardado"
+                        className={inputClass} />
+                    </div>
                   )}
                 </div>
               </Field>
