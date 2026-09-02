@@ -408,15 +408,33 @@ export async function mergeLeads(req, res, next) {
   try {
     const winnerId = parseInt(req.params.id);
     await exigirQueSeaSuyo(req, winnerId);
-    const loserId = parseInt(req.body?.loser_id);
+    // Acepta una ficha (loser_id) o varias (loser_ids). De la misma persona
+    // llega a haber tres y cuatro, y de dos en dos no se acababa nunca (#102).
+    const brutos = Array.isArray(req.body?.loser_ids) && req.body.loser_ids.length
+      ? req.body.loser_ids
+      : [req.body?.loser_id];
+    const loserIds = [...new Set(
+      brutos.map((x) => parseInt(x, 10)).filter((x) => Number.isInteger(x))
+    )];
     const comment = (req.body?.comment || '').trim();
-    if (isNaN(winnerId) || isNaN(loserId)) throw new AppError('IDs invalidos', 400, 'INVALID_ID');
+    if (isNaN(winnerId) || !loserIds.length) throw new AppError('IDs invalidos', 400, 'INVALID_ID');
     if (!comment || comment.length < 3) throw new AppError('Comentario obligatorio (mínimo 3 caracteres)', 400, 'COMMENT_REQUIRED');
 
     // Cualquiera puede fusionar: los duplicados suelen caer en carteras
     // distintas y exigir ser la dueña dejaba la fusion sin hacer.
-    const result = await leadService.mergeLeads({ winnerId, loserId, comment, userId: req.user.userId });
+    const result = await leadService.mergeLeads({ winnerId, loserIds, comment, userId: req.user.userId });
     res.json({ success: true, data: result });
+  } catch (err) { next(err); }
+}
+
+// #102 - Las fichas repetidas que ya estan en la base de datos, agrupadas.
+// No es la cola de revision (#13), que solo recoge lo que llega por el webhook:
+// esto repasa TODO lo que hay, incluido lo que se completo a mano despues.
+export async function listDuplicateGroups(req, res, next) {
+  try {
+    const projectId = req.query.projectId ? parseInt(req.query.projectId) : null;
+    const { groups, total } = await leadService.listDuplicateGroups({ projectId });
+    res.json({ success: true, data: groups, total });
   } catch (err) { next(err); }
 }
 

@@ -39,6 +39,9 @@ router.patch('/spam-reports/:reportId',  roleGuard('superadmin'),          spamR
 
 // #13 Cola de revisión de duplicados — admin/superadmin
 router.get('/review-queue',              roleGuard('admin', 'superadmin'), leadController.listReviewQueue);
+// #102 - Repaso de duplicados sobre lo que YA hay guardado. Va antes de
+// '/:id' o Express se lo come como si 'duplicados' fuera un identificador.
+router.get('/duplicados',                roleGuard('admin', 'superadmin'), leadController.listDuplicateGroups);
 router.post('/review-queue/:id/decide',  roleGuard('admin', 'superadmin'), leadController.decideReviewQueue);
 
 // #18 Multi-cursos por lead

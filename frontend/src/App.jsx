@@ -66,6 +66,7 @@ const MetaAdsPage = lazy(() => import('./modules/meta-ads/pages/MetaAdsPage'));
 const ChangeRequestsPage = lazy(() => import('./modules/change-requests/pages/ChangeRequestsPage'));
 const ChangeRequestDetailPage = lazy(() => import('./modules/change-requests/pages/ChangeRequestDetailPage'));
 const DupReviewQueuePage = lazy(() => import('./modules/leads/pages/DupReviewQueuePage'));
+const DuplicatesPage = lazy(() => import('./modules/leads/pages/DuplicatesPage'));
 const ReportsPage = lazy(() => import('./shared/pages/ReportsPage'));
 const NotificacionesPage = lazy(() => import('./modules/notificaciones/pages/NotificacionesPage'));
 const ActivityPage = lazy(() => import('./shared/pages/ActivityPage'));
@@ -190,6 +191,7 @@ function App() {
           <Route path="/ventas" element={<SalesPage />} />
           <Route path="/meta-ads" element={<MetaAdsPage />} />
           <Route path="/leads/revision-duplicados" element={<DupReviewQueuePage />} />
+          <Route path="/leads/duplicados" element={<DuplicatesPage />} />
           <Route path="/commissions" element={<CommissionsPage />} />
           <Route path="/expenses" element={<ExpensesPage />} />
           <Route path="/accounting" element={<AccountingDashboardPage />} />

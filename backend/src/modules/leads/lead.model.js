@@ -25,57 +25,111 @@ export async function findDuplicateByEmail(email, projectId) {
   return rows[0] || null;
 }
 
-// Detecta duplicado por email O por telefono (E.164). Cualquiera que matchee
-// se considera duplicado. Útil cuando el lead llega solo con tel (WhatsApp).
-export async function findDuplicateByEmailOrPhone(email, telefono, projectId) {
-  const cleanEmail = (email && email.trim()) || null;
-  const cleanTel = (telefono && telefono.trim()) || null;
-  if (!cleanEmail && !cleanTel) return null;
+// Clave canonica de un telefono para poder compararlo con otro. Se queda solo
+// con los digitos —asi "+506 8319 8792", "50683198792" y "00506 83198792" son
+// el mismo numero, que es justo lo que se escapaba en el #65— y colapsa el "1"
+// de Mexico y el "9" de Argentina, que la gente escribe o no segun el dia.
+const claveTelefono = (col) => {
+  const d = `ltrim(regexp_replace(${col}, '[^0-9]', '', 'g'), '0')`;
+  return `CASE
+      WHEN length(${d}) < 7 THEN NULL
+      WHEN left(${d}, 3) = '521' AND length(${d}) = 13 THEN '52' || substring(${d} from 4)
+      WHEN left(${d}, 3) = '549' AND length(${d}) = 13 THEN '54' || substring(${d} from 4)
+      ELSE ${d}
+    END`;
+};
 
-  // Comparación canónica MX/AR: dos formas del mismo número (con/sin "1"/"9"
-  // de móvil) deben colapsar como duplicado. Generamos la forma canónica del
-  // teléfono entrante y de cada candidato con CASE inline en SQL.
-  const canonExpr = `
-    CASE
-      WHEN substring(replace(replace($3, '+', ''), ' ', '') from 1 for 3) = '521'
-           AND length(replace(replace($3, '+', ''), ' ', '')) = 13
-        THEN '+52' || substring(replace(replace($3, '+', ''), ' ', '') from 4)
-      WHEN substring(replace(replace($3, '+', ''), ' ', '') from 1 for 3) = '549'
-           AND length(replace(replace($3, '+', ''), ' ', '')) = 13
-        THEN '+54' || substring(replace(replace($3, '+', ''), ' ', '') from 4)
-      ELSE $3::text
-    END
-  `;
-  const candidateCanonExpr = `
-    CASE
-      WHEN substring(replace(l.telefono, '+', '') from 1 for 3) = '521'
-           AND length(replace(l.telefono, '+', '')) = 13
-        THEN '+52' || substring(replace(l.telefono, '+', '') from 4)
-      WHEN substring(replace(l.telefono, '+', '') from 1 for 3) = '549'
-           AND length(replace(l.telefono, '+', '')) = 13
-        THEN '+54' || substring(replace(l.telefono, '+', '') from 4)
-      ELSE l.telefono
-    END
-  `;
+// Detecta si esta ficha ya existe: por correo, por telefono O por usuario de
+// WhatsApp. Cualquiera de los tres vale, porque muchos prospectos entran sin
+// correo —los de WhatsApp casi todos— y ahi antes no habia deteccion ninguna.
+// `excludeId` sirve para preguntar por una ficha ya guardada sin que se
+// encuentre a si misma.
+export async function findDuplicateByEmailOrPhone(email, telefono, projectId, whatsappUsuario = null, excludeId = null) {
+  const cleanEmail = (email && String(email).trim().toLowerCase()) || null;
+  const cleanTel = (telefono && String(telefono).trim()) || null;
+  const cleanWa = (whatsappUsuario && String(whatsappUsuario).trim().replace(/^@+/, '').toLowerCase()) || null;
+  if (!cleanEmail && !cleanTel && !cleanWa) return null;
+
+  const claveEntrante = claveTelefono('$3::text');
+  const claveFicha = claveTelefono('l.telefono');
+  const porCorreo = `($2::text IS NOT NULL AND lower(l.email) = $2)`;
+  const porTelefono = `($3::text IS NOT NULL AND ${claveFicha} IS NOT NULL AND ${claveFicha} = ${claveEntrante})`;
+  const porWhatsapp = `($4::text IS NOT NULL AND lower(ltrim(l.whatsapp_usuario, '@')) = $4)`;
 
   const { rows } = await query(
     `SELECT l.id, l.nombre, l.email, l.telefono, l.whatsapp_usuario, l.status, l.producto_interes_id,
             l.responsable_id, l.created_at, l.fecha_solicitud,
             u.nombre AS responsable_nombre,
-            ($2::text IS NOT NULL AND l.email = $2) AS match_by_email,
-            ($3::text IS NOT NULL AND ${candidateCanonExpr} = ${canonExpr}) AS match_by_phone
+            ${porCorreo} AS match_by_email,
+            ${porTelefono} AS match_by_phone,
+            ${porWhatsapp} AS match_by_whatsapp
      FROM leads l
      LEFT JOIN users u ON u.id = l.responsable_id
      WHERE l.project_id = $1 AND l.deleted_at IS NULL
-       AND (
-         ($2::text IS NOT NULL AND l.email = $2)
-         OR ($3::text IS NOT NULL AND ${candidateCanonExpr} = ${canonExpr})
-       )
-     ORDER BY ($2::text IS NOT NULL AND l.email = $2) DESC, l.created_at DESC
+       AND ($5::int IS NULL OR l.id <> $5::int)
+       AND (${porCorreo} OR ${porTelefono} OR ${porWhatsapp})
+     ORDER BY ${porCorreo} DESC, l.created_at DESC
      LIMIT 1`,
-    [projectId, cleanEmail, cleanTel]
+    [projectId, cleanEmail, cleanTel, cleanWa, excludeId]
   );
   return rows[0] || null;
+}
+
+// #102 - Todas las fichas del proyecto que comparten correo, telefono o usuario
+// de WhatsApp con alguna otra. Devuelve una fila por ficha y clave compartida;
+// encadenar las que se tocan (A comparte el correo con B, B el telefono con C)
+// se hace en el servicio, que es donde se recorre un grafo con comodidad.
+export async function findDuplicateKeys(projectId) {
+  const { rows } = await query(
+    `WITH base AS (
+       SELECT l.id, l.email, l.telefono, l.whatsapp_usuario
+       FROM leads l
+       WHERE l.project_id = $1 AND l.deleted_at IS NULL
+     ),
+     claves AS (
+       SELECT id, 'correo' AS por, lower(trim(email)) AS clave
+         FROM base WHERE email IS NOT NULL AND trim(email) <> ''
+       UNION ALL
+       SELECT id, 'telefono' AS por, ${claveTelefono('telefono')} AS clave
+         FROM base WHERE telefono IS NOT NULL
+       UNION ALL
+       SELECT id, 'whatsapp' AS por, lower(ltrim(trim(whatsapp_usuario), '@')) AS clave
+         FROM base WHERE whatsapp_usuario IS NOT NULL AND trim(ltrim(whatsapp_usuario, '@')) <> ''
+     ),
+     repetidas AS (
+       SELECT por, clave FROM claves
+       WHERE clave IS NOT NULL AND clave <> ''
+       GROUP BY por, clave HAVING count(DISTINCT id) > 1
+     )
+     SELECT c.id, c.por, c.clave
+     FROM claves c
+     JOIN repetidas r ON r.por = c.por AND r.clave = c.clave
+     ORDER BY c.por, c.clave, c.id`,
+    [projectId]
+  );
+  return rows;
+}
+
+// Los datos de las fichas repetidas, con lo que hace falta para decidir cual se
+// queda: quien la lleva, cuanto historial tiene y —lo que mas pesa— si tiene
+// alguna venta colgando.
+export async function findLeadsForDuplicates(ids) {
+  if (!ids || !ids.length) return [];
+  const { rows } = await query(
+    `SELECT l.id, l.nombre, l.email, l.telefono, l.whatsapp_usuario, l.status::text AS status,
+            l.created_at, l.lead_duplicado_de, l.responsable_id, l.landing_url,
+            u.nombre AS responsable_nombre,
+            p.nombre AS producto_nombre,
+            (SELECT count(*) FROM lead_interactions i WHERE i.lead_id = l.id) AS n_interacciones,
+            (SELECT count(*) FROM conversions cv WHERE cv.lead_id = l.id) AS n_conversiones
+     FROM leads l
+     LEFT JOIN users u ON u.id = l.responsable_id
+     LEFT JOIN products p ON p.id = l.producto_interes_id
+     WHERE l.id = ANY($1::int[])
+     ORDER BY l.created_at ASC, l.id ASC`,
+    [ids]
+  );
+  return rows;
 }
 
 // Busca cualquier lead CONVERTIDO previo de este email en el proyecto.
@@ -139,90 +193,119 @@ export async function softDeleteLead(leadId, { reason, motivo, userId }) {
   return rows[0] || null;
 }
 
-// Fusiona dos leads: mueve TODO el historial del loser al winner,
-// marca al loser como duplicado_de y lo soft-deletea con motivo=comentario.
-// Devuelve resumen { moved: {...counts}, winner_id, loser_id }.
-export async function mergeLeads({ winnerId, loserId, comment, userId }) {
+// Fusiona una ficha con otra, o con VARIAS a la vez: mueve todo el historial de
+// las que se cierran a la que se queda, las marca como duplicadas de ella y las
+// deja en la papelera con el motivo. Antes solo se podia de dos en dos, y de la
+// misma persona llega a haber tres y cuatro fichas (#102).
+// Devuelve { winner_id, loser_ids, moved }.
+export async function mergeLeads({ winnerId, loserId, loserIds, comment, userId }) {
+  const perdedores = [...new Set(
+    (Array.isArray(loserIds) && loserIds.length ? loserIds : [loserId])
+      .map((x) => parseInt(x, 10))
+      .filter((x) => Number.isInteger(x))
+  )];
+  if (!perdedores.length) throw new Error('No hay ninguna ficha que fusionar');
+
   const { getClient } = await import('../../shared/config/db.js');
   const c = await getClient();
   try {
     await c.query('BEGIN');
 
-    // Verificar que ambos existen, mismo proyecto, y ninguno borrado
     const lw = await c.query(`SELECT id, project_id, deleted_at, nombre FROM leads WHERE id = $1`, [winnerId]);
-    const ll = await c.query(`SELECT id, project_id, deleted_at, nombre FROM leads WHERE id = $1`, [loserId]);
-    if (!lw.rows[0] || !ll.rows[0]) throw new Error('Lead no encontrado');
-    if (lw.rows[0].project_id !== ll.rows[0].project_id) throw new Error('Los leads pertenecen a proyectos distintos');
-    if (lw.rows[0].deleted_at || ll.rows[0].deleted_at) throw new Error('No se pueden fusionar leads eliminados');
-    if (winnerId === loserId) throw new Error('No se puede fusionar un lead consigo mismo');
+    if (!lw.rows[0]) throw new Error('Lead no encontrado');
+    if (lw.rows[0].deleted_at) throw new Error('No se pueden fusionar leads eliminados');
 
-    // Mover hijos. Cada UPDATE devuelve count.
-    const counts = {};
+    // Se comprueban TODAS antes de mover nada: o entran todas o no entra
+    // ninguna. Con varias fichas, quedarse a medias seria lo peor de todo.
+    const fichas = {};
+    for (const id of perdedores) {
+      if (id === winnerId) throw new Error('No se puede fusionar un lead consigo mismo');
+      const ll = await c.query(`SELECT id, project_id, deleted_at, nombre FROM leads WHERE id = $1`, [id]);
+      if (!ll.rows[0]) throw new Error(`Lead #${id} no encontrado`);
+      if (ll.rows[0].project_id !== lw.rows[0].project_id) throw new Error(`El lead #${id} es de otro proyecto`);
+      if (ll.rows[0].deleted_at) throw new Error(`El lead #${id} ya esta eliminado`);
+      fichas[id] = ll.rows[0];
+    }
+
     const moveTables = [
       'lead_interactions', 'lead_reminders', 'lead_utms',
       'lead_status_history', 'lead_audit_log',
       'conversions', 'matriculas',
       'email_sequence_runs', 'lead_emails',
+      // La conversacion de WhatsApp tambien es historial: si no se mueve, el
+      // chat se queda colgado de una ficha que esta en la papelera.
+      'wa_conversaciones',
     ];
-    // Tablas 1-1 con UNIQUE(lead_id): si el winner ya tiene fila, el UPDATE
-    // del loser viola la constraint. Política: el del winner gana, el del loser
-    // se descarta (típicamente UTMs del primer toque del original son los buenos).
+    // Tablas 1-1 con UNIQUE(lead_id): si la que se queda ya tiene fila, el
+    // UPDATE de la otra viola la constraint. Politica: gana la que se queda
+    // (los UTMs del primer toque del original son los buenos).
     const oneToOneTables = new Set(['lead_utms']);
-    for (const t of moveTables) {
-      try {
-        if (oneToOneTables.has(t)) {
-          const w = await c.query(`SELECT 1 FROM ${t} WHERE lead_id = $1 LIMIT 1`, [winnerId]);
-          if (w.rowCount > 0) {
-            const d = await c.query(`DELETE FROM ${t} WHERE lead_id = $1`, [loserId]);
-            counts[t] = `discarded ${d.rowCount}`;
-            continue;
+
+    const counts = {};
+    const suma = (t, n) => {
+      if (typeof n !== 'number') { counts[t] = counts[t] ?? n; return; }
+      counts[t] = (typeof counts[t] === 'number' ? counts[t] : 0) + n;
+    };
+
+    for (const id of perdedores) {
+      for (const t of moveTables) {
+        try {
+          if (oneToOneTables.has(t)) {
+            const w = await c.query(`SELECT 1 FROM ${t} WHERE lead_id = $1 LIMIT 1`, [winnerId]);
+            if (w.rowCount > 0) {
+              const d = await c.query(`DELETE FROM ${t} WHERE lead_id = $1`, [id]);
+              suma(t, `descartadas ${d.rowCount}`);
+              continue;
+            }
           }
+          const r = await c.query(`UPDATE ${t} SET lead_id = $1 WHERE lead_id = $2`, [winnerId, id]);
+          suma(t, r.rowCount);
+        } catch (err) {
+          // La tabla puede no existir en este entorno - se ignora.
+          if (err.code !== '42P01') throw err;
+          counts[t] = 'skipped';
         }
-        const r = await c.query(`UPDATE ${t} SET lead_id = $1 WHERE lead_id = $2`, [winnerId, loserId]);
-        counts[t] = r.rowCount;
-      } catch (err) {
-        // Tabla puede no existir en este entorno — ignoramos
-        if (err.code !== '42P01') throw err;
-        counts[t] = 'skipped';
       }
+
+      // La que se cierra apunta a la que se queda...
+      await c.query(`UPDATE leads SET lead_duplicado_de = $1 WHERE id = $2`, [winnerId, id]);
+      // ...y las que apuntaban a ella pasan a apuntar a la que se queda, para
+      // que la cadena no se rompa al fusionar tres o cuatro fichas seguidas.
+      await c.query(
+        `UPDATE leads SET lead_duplicado_de = $1 WHERE lead_duplicado_de = $2 AND id <> $1`,
+        [winnerId, id]
+      );
+
+      await c.query(
+        `INSERT INTO lead_interactions (lead_id, tipo, nota, created_by, fecha)
+         VALUES ($1, 'nota', $2, $3, NOW())`,
+        [winnerId, `\u{1F517} Fusionado con lead #${id} (${fichas[id].nombre || '\u2014'}). Comentario: ${comment}`, userId]
+      );
+      // Nota en la que se cierra (queda si se restaura desde papelera)
+      await c.query(
+        `INSERT INTO lead_interactions (lead_id, tipo, nota, created_by, fecha)
+         VALUES ($1, 'nota', $2, $3, NOW())`,
+        [id, `\u{274C} Fusionado en el lead #${winnerId} (${lw.rows[0].nombre || '\u2014'}). Lead cerrado por fusi\u00F3n. Comentario: ${comment}`, userId]
+      );
+      await c.query(
+        `INSERT INTO lead_audit_log (lead_id, field_name, old_value, new_value, changed_by_user_id)
+         VALUES ($1, 'fusion_winner', NULL, $2, $3), ($4, 'fusion_loser', NULL, $5, $3)`,
+        [winnerId, String(id), userId, id, String(winnerId)]
+      );
+      await c.query(
+        `UPDATE leads
+         SET deleted_at = NOW(),
+             deleted_reason = 'duplicado_manual',
+             deleted_motivo = $1,
+             deleted_by = $2,
+             updated_at = NOW()
+         WHERE id = $3`,
+        [`Fusionado en lead #${winnerId}. ${comment}`, userId, id]
+      );
     }
 
-    // Apuntar lead_duplicado_de del loser al winner (auditoría)
-    await c.query(`UPDATE leads SET lead_duplicado_de = $1 WHERE id = $2`, [winnerId, loserId]);
-
-    // Nota en el winner explicando la fusión
-    await c.query(
-      `INSERT INTO lead_interactions (lead_id, tipo, nota, created_by, fecha)
-       VALUES ($1, 'nota', $2, $3, NOW())`,
-      [winnerId, `🔗 Fusionado con lead #${loserId} (${ll.rows[0].nombre || '—'}). Comentario: ${comment}`, userId]
-    );
-    // Nota en el loser (queda si se restaura desde papelera)
-    await c.query(
-      `INSERT INTO lead_interactions (lead_id, tipo, nota, created_by, fecha)
-       VALUES ($1, 'nota', $2, $3, NOW())`,
-      [loserId, `❌ Fusionado en el lead #${winnerId} (${lw.rows[0].nombre || '—'}). Lead cerrado por fusión. Comentario: ${comment}`, userId]
-    );
-    // Audit log de la operación en ambos
-    await c.query(
-      `INSERT INTO lead_audit_log (lead_id, field_name, old_value, new_value, changed_by_user_id)
-       VALUES ($1, 'fusion_winner', NULL, $2, $3), ($4, 'fusion_loser', NULL, $5, $3)`,
-      [winnerId, String(loserId), userId, loserId, String(winnerId)]
-    );
-
-    // Soft-delete del loser
-    await c.query(
-      `UPDATE leads
-       SET deleted_at = NOW(),
-           deleted_reason = 'duplicado_manual',
-           deleted_motivo = $1,
-           deleted_by = $2,
-           updated_at = NOW()
-       WHERE id = $3`,
-      [`Fusionado en lead #${winnerId}. ${comment}`, userId, loserId]
-    );
-
     await c.query('COMMIT');
-    return { winner_id: winnerId, loser_id: loserId, moved: counts };
+    return { winner_id: winnerId, loser_id: perdedores[0], loser_ids: perdedores, moved: counts };
   } catch (err) {
     await c.query('ROLLBACK');
     throw err;

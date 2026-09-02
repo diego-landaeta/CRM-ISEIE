@@ -7,7 +7,7 @@ import {
   FilePdf, ShieldCheck, MagnifyingGlass, Headset, BookOpen, Sliders,
   Megaphone, Robot, Sparkle, PlugsConnected, CreditCard, WarningCircle, WhatsappLogo,
   ChatText,
-  Receipt, Coins, Wrench, ShoppingBag, ChatCircleText, Wallet, Bank, Clock, GitMerge,
+  Receipt, Coins, Wrench, ShoppingBag, ChatCircleText, Wallet, Bank, Clock, GitMerge, CopySimple,
   UsersThree,
   GraduationCap, Warning } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -127,6 +127,7 @@ const NAV_SECTIONS = [
     items: [
       { to: '/clients',    label: 'Clientes',   icon: UserCheck, sectionPrefixes: ['/clients'] },
       { to: '/leads/revision-duplicados', label: 'Revisión duplicados', icon: GitMerge, roles: ['admin', 'superadmin'] },
+      { to: '/leads/duplicados', label: 'Buscar duplicados', icon: CopySimple, roles: ['admin', 'superadmin'] },
       { to: '/matriculas', label: 'Matrículas', icon: UserCheck },
     ],
   },

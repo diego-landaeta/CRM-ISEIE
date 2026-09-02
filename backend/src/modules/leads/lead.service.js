@@ -165,8 +165,9 @@ async function _createLeadCore(project, leadData) {
 
   // Detectar duplicado por email O por teléfono normalizado (cualquiera basta).
   const telNormWebhook = normalizePhone(leadData.telefono);
-  const duplicate = (leadData.email || telNormWebhook)
-    ? await leadModel.findDuplicateByEmailOrPhone(leadData.email, telNormWebhook, project.id)
+  const duplicate = (leadData.email || telNormWebhook || leadData.whatsapp_usuario)
+    ? await leadModel.findDuplicateByEmailOrPhone(
+        leadData.email, telNormWebhook, project.id, leadData.whatsapp_usuario || null)
     : null;
   const duplicadoDe = duplicate ? duplicate.id : null;
 
@@ -593,29 +594,104 @@ export async function reassignPending(projectId) {
 }
 
 // Fusiona dos leads (winner + loser). Validaciones de negocio antes de llamar al model.
-export async function mergeLeads({ winnerId, loserId, comment, userId }) {
+export async function mergeLeads({ winnerId, loserId, loserIds, comment, userId }) {
   if (!comment || comment.trim().length < 3) {
     throw new AppError('Comentario obligatorio para auditoría', 400, 'COMMENT_REQUIRED');
   }
   try {
-    const result = await leadModel.mergeLeads({ winnerId, loserId, comment: comment.trim(), userId });
+    const result = await leadModel.mergeLeads({ winnerId, loserId, loserIds, comment: comment.trim(), userId });
     // Si el loser estaba en cola de revisión, marcarlo como merged.
     // CON AWAIT: sin él, el endpoint podía devolver respuesta antes de que la
     // UPDATE corra, dejando la entrada como 'pending' aunque el merge se hizo.
-    await dupQueue.markMerged(loserId, userId);
+    for (const id of result.loser_ids) {
+      await dupQueue.markMerged(id, userId);
+    }
+    const cuantas = result.loser_ids.length;
     // Notif admin/superadmin (visibilidad operativa, como en softDelete)
     notifyAdmins({
       type: 'lead_merged',
-      title: `Fusión: lead #${loserId} → #${winnerId}`,
+      title: cuantas > 1
+        ? `Fusión: ${cuantas} fichas → #${winnerId}`
+        : `Fusión: lead #${result.loser_ids[0]} → #${winnerId}`,
       message: comment.trim(),
       link_path: `/leads/${winnerId}`,
-      metadata: { winner_id: winnerId, loser_id: loserId },
+      metadata: { winner_id: winnerId, loser_id: result.loser_ids[0], loser_ids: result.loser_ids },
       triggered_by_user_id: userId || null,
     });
     return result;
   } catch (err) {
     throw new AppError(err.message || 'Error en fusión', 400, 'MERGE_FAILED');
   }
+}
+
+// #102 - Las fichas repetidas que YA estan en la base de datos.
+//
+// La deteccion de siempre corre solo en el instante de crear, con los datos que
+// hubiera en ese instante. Si una gestora completa el correo o el telefono
+// despues —que es lo normal— las dos fichas se quedan sueltas para siempre.
+// Eso paso el 02/09 con Magally Mora: la ficha original no tenia correo cuando
+// se creo la segunda, y una hora mas tarde se lo pusieron.
+//
+// Esto repasa lo que ya hay. Dos fichas caen en el mismo grupo si comparten
+// correo, telefono o usuario de WhatsApp, y el grupo se encadena: si A comparte
+// el correo con B y B el telefono con C, las tres son la misma persona. De ahi
+// salen los grupos de tres y cuatro que hay que poder fusionar de una vez.
+export async function listDuplicateGroups({ projectId }) {
+  if (!projectId) throw new AppError('project_id requerido', 400, 'MISSING_PROJECT');
+  const filas = await leadModel.findDuplicateKeys(projectId);
+  if (!filas.length) return { groups: [], total: 0 };
+
+  // Conjuntos disjuntos: cada clave compartida une a todas las fichas que la tienen.
+  const padre = new Map();
+  const raiz = (x) => {
+    while (padre.get(x) !== x) { padre.set(x, padre.get(padre.get(x))); x = padre.get(x); }
+    return x;
+  };
+  const unir = (a, b) => { const ra = raiz(a), rb = raiz(b); if (ra !== rb) padre.set(ra, rb); };
+  for (const f of filas) if (!padre.has(f.id)) padre.set(f.id, f.id);
+
+  const porClave = new Map();
+  const motivosDe = new Map();
+  for (const f of filas) {
+    const k = `${f.por}|${f.clave}`;
+    if (!porClave.has(k)) porClave.set(k, []);
+    porClave.get(k).push(f.id);
+    if (!motivosDe.has(f.id)) motivosDe.set(f.id, new Set());
+    motivosDe.get(f.id).add(f.por);
+  }
+  for (const ids of porClave.values()) {
+    for (let i = 1; i < ids.length; i++) unir(ids[0], ids[i]);
+  }
+
+  const componentes = new Map();
+  for (const id of padre.keys()) {
+    const r = raiz(id);
+    if (!componentes.has(r)) componentes.set(r, []);
+    componentes.get(r).push(id);
+  }
+
+  const conRepetidas = [...componentes.values()].filter((g) => g.length > 1);
+  const fichas = await leadModel.findLeadsForDuplicates(conRepetidas.flat());
+  const porId = new Map(fichas.map((l) => [l.id, l]));
+
+  const groups = [];
+  for (const ids of conRepetidas) {
+    const leads = ids.map((i) => porId.get(i)).filter(Boolean);
+    if (leads.length < 2) continue;
+    const motivos = new Set();
+    for (const i of ids) for (const m of (motivosDe.get(i) || [])) motivos.add(m);
+    groups.push({
+      key: `g${Math.min(...ids)}`,
+      motivos: [...motivos],
+      total: leads.length,
+      ya_marcado: leads.some((l) => l.lead_duplicado_de),
+      con_conversion: leads.filter((l) => Number(l.n_conversiones) > 0).length,
+      leads,
+    });
+  }
+  // Primero lo que nadie ha mirado, y dentro de eso los grupos mas grandes.
+  groups.sort((a, b) => (a.ya_marcado === b.ya_marcado ? b.total - a.total : (a.ya_marcado ? 1 : -1)));
+  return { groups, total: groups.length };
 }
 
 // Lookup público: devuelve leads con ese email en el proyecto, sólo metadata
@@ -638,12 +714,13 @@ export async function lookupByEmail(email, projectId) {
 
 // Comprueba duplicado SIN crear nada. Para el confirm dialog del frontend.
 // Si gestor consulta, solo busca dentro de leads asignados a él/su proyecto (delegamos seguridad a projectAccess).
-export async function checkDuplicate({ project_id, email, telefono }, requestUser) {
+export async function checkDuplicate({ project_id, email, telefono, whatsapp_usuario }, requestUser) {
   if (!project_id) throw new AppError('project_id requerido', 400, 'MISSING_PROJECT');
   const telNorm = normalizePhone(telefono);
   const cleanEmail = email ? String(email).toLowerCase().trim() : null;
-  if (!cleanEmail && !telNorm) return { duplicate: null };
-  const dup = await leadModel.findDuplicateByEmailOrPhone(cleanEmail, telNorm, project_id);
+  const cleanWa = whatsapp_usuario ? String(whatsapp_usuario).trim() : null;
+  if (!cleanEmail && !telNorm && !cleanWa) return { duplicate: null };
+  const dup = await leadModel.findDuplicateByEmailOrPhone(cleanEmail, telNorm, project_id, cleanWa);
   if (!dup) return { duplicate: null };
   // Si quien pregunta es gestor y el dup pertenece a otro responsable, exponemos
   // solo lo necesario para que sepa a quién contactar (nombre del gestor + estado),
@@ -670,7 +747,9 @@ export async function createManualLead({ project_id, nombre, email, telefono, wh
   const creatorUser = opts.creatorUser || null;
   // Detectar duplicado por email O por teléfono normalizado (cualquiera basta).
   const telNorm = normalizePhone(telefono);
-  const duplicate = (email || telNorm) ? await leadModel.findDuplicateByEmailOrPhone(email, telNorm, project_id) : null;
+  const duplicate = (email || telNorm || whatsapp_usuario)
+    ? await leadModel.findDuplicateByEmailOrPhone(email, telNorm, project_id, whatsapp_usuario || null)
+    : null;
 
   // Dedupe rapido: si el duplicado es del mismo nombre y fue creado en los ultimos 10s,
   // asumimos doble submit y devolvemos el lead existente en vez de crear otro
@@ -848,6 +927,52 @@ export async function updateLead(leadId, data, opts = {}) {
       );
     } catch (err) {
       logger.warn({ err: err.message, leadId, field }, 'audit log insert falló (no crítico)');
+    }
+  }
+
+  // Al COMPLETAR los datos de contacto se vuelve a mirar si esta ficha ya
+  // existia. Antes solo se miraba al crearla: si la gestora anadia el correo o
+  // el telefono despues, las dos fichas se quedaban sueltas para siempre (#102).
+  const camposContacto = ['email', 'telefono', 'whatsapp_usuario'];
+  const tocoContacto = camposContacto.some(
+    (f) => Object.prototype.hasOwnProperty.call(data, f) && data[f] !== lead[f]
+  );
+  if (tocoContacto && !lead.lead_duplicado_de) {
+    try {
+      const ficha = { ...lead, ...data };
+      const otra = await leadModel.findDuplicateByEmailOrPhone(
+        ficha.email, ficha.telefono, lead.project_id, ficha.whatsapp_usuario, leadId
+      );
+      if (otra) {
+        // Se marca la mas NUEVA como duplicada de la mas vieja, que es el
+        // criterio de siempre. Nada se borra ni se fusiona sola: solo queda
+        // avisado, y la fusion la decide una persona.
+        const yoSoyMasNueva = new Date(lead.created_at) > new Date(otra.created_at);
+        const nuevaId = yoSoyMasNueva ? leadId : otra.id;
+        const viejaId = yoSoyMasNueva ? otra.id : leadId;
+        const marcada = await query(
+          `UPDATE leads SET lead_duplicado_de = $1, updated_at = NOW()
+           WHERE id = $2 AND lead_duplicado_de IS NULL
+           RETURNING id`,
+          [viejaId, nuevaId]
+        );
+        if (marcada.rowCount) {
+          await query(
+            `INSERT INTO lead_interactions (lead_id, tipo, nota, created_by, fecha)
+             VALUES ($1, 'nota', $2, $3, NOW()), ($4, 'nota', $5, $3, NOW())`,
+            [
+              nuevaId,
+              `\u{1F501} Duplicado detectado al completar los datos: es la misma persona que el lead #${viejaId}.`,
+              userId,
+              viejaId,
+              `\u{1F501} Duplicado detectado al completar los datos: el lead #${nuevaId} es la misma persona.`,
+            ]
+          );
+          logger.info({ nuevaId, viejaId, leadId }, 'duplicado detectado al editar');
+        }
+      }
+    } catch (err) {
+      logger.warn({ err: err.message, leadId }, 'recheck de duplicado al editar falló (no crítico)');
     }
   }
 
