@@ -34,6 +34,11 @@ export const productSchema = z.object({
   num_modulos: z.union([z.coerce.number().int().nonnegative(), z.literal(''), z.nan()]).optional(),
   modalidad: z.string().optional().or(z.literal('')),
   fecha_inicio_texto: z.string().optional().or(z.literal('')),
+  // Convocatoria (#86). Aquí solo van los dos extremos: las ocupadas y las
+  // libres las cuenta el servidor desde las ventas y no se envían nunca.
+  plazas_totales: z.union([z.coerce.number().int().nonnegative(), z.literal(''), z.nan()]).optional(),
+  plazas_ocupadas_previas: z.union([z.coerce.number().int().nonnegative(), z.literal(''), z.nan()]).optional(),
+  fecha_cierre_convocatoria: z.string().optional().or(z.literal('')),
   presentacion_texto: z.string().optional().or(z.literal('')),
   objetivos_texto: z.string().optional().or(z.literal('')),
   beneficios_texto: z.string().optional().or(z.literal('')),
