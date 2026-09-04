@@ -102,6 +102,54 @@ Fuente de verdad del esquema. Cada archivo en `backend/migrations/` es un SQL ej
 | 096 | 096_invoice_templates.sql | Plantillas visuales de factura (editor tipo Canva). Cada plantilla guarda un |
 | 097 | 097_issuer_serie.sql | issuer_serie |
 | 098 | 098_template_condicion.sql | template_condicion |
+| 099 | 099_fiscal_regimenes.sql | Migración 101: Regímenes fiscales + coletillas parametrizadas (editables desde el panel) |
+| 100 | 100_sociedades.sql | Migración 102: Sociedades emisoras (agrupación de proyectos) + asignación proyecto→sociedad |
+| 101 | 101_facturacion_cimientos.sql | Cimientos de datos del módulo de facturación (spec v1.0, paso 1) |
+| 102 | 102_numeracion_por_sociedad.sql | Numeración por sociedad (spec REQ-NUM-01/02): el contador de facturas es por |
+| 103 | 103_proformas.sql | Migración 103: Proformas / presupuestos |
+| 104 | 104_invoices_borrador.sql | Migracion 104: Facturas en BORRADOR (preliminares) |
+| 107 | 107_invoice_per_payment.sql | 107_invoice_per_payment.sql |
+| 108 | 108_installment_concepto.sql | Concepto editable por cuota (mensualidades/fraccionados): predefinidos + otros |
+| 109 | 109_factura_manager.sql | Permiso factura_manager: gestora que puede gestionar (editar, corregir, abonar, |
+| 110 | 110_editar_fechas_factura.sql | Permiso acotado: usuario que SOLO puede cambiar las fechas (emisión y pago) de |
+| 111 | 111_conversion_vendedora.sql | Vendedora POR VENTA. El responsable del lead (leads.responsable_id) es quien |
+| 112 | 112_factura_equivalente_eur.sql | Doble moneda MANUAL en facturas y pagos |
+| 113 | 113_stripe_fee_neto.sql | Comisión y neto liquidado por Stripe en cada cobro |
+| 114 | 114_expenses_extensions.sql | Egresos: categorías auto-generadas + comprobante + origen automático |
+| 115 | 115_facturacion_al_dia.sql | Corte de facturacion: hasta que dia esta la facturacion puesta al dia |
+| 116 | 116_stripe_revisado_y_proforma_aprobacion.sql | 1) Hasta que fecha estan ya revisados los cobros de Stripe |
+| 117 | 117_conversion_es_mensualidad.sql | Marcar una venta como "esto en realidad es una mensualidad" |
+| 118 | 118_payment_method_valores_que_faltaban.sql | 118 · El enum payment_method se habia quedado corto |
+| 119 | 119_invoices_cliente_tipo.sql | 119 · La factura necesita saber si el cliente es empresa o persona |
+| 120 | 120_invoice_issuers_alias.sql | Un nombre corto para distinguir emisoras que comparten datos fiscales |
+| 121 | 121_conversion_payments_metodo.sql | Migracion 121: conversion_payments.metodo |
+| 122 | 122_whatsapp_templates.sql | Migracion 122: plantillas de WhatsApp en base de datos |
+| 123 | 123_tutores_rol.sql | Tutores · el rol nuevo |
+| 124 | 124_tutores.sql | Tutores y colaboraciones · las tablas |
+| 125 | 125_reembolsos_y_comisiones.sql | Reembolsos: de que pago son, y que pasa con la comision del tutor |
+| 126 | 126_gestor_colaboraciones.sql | Permiso gestor_colaboraciones: quien da de alta tutores y les asigna cursos, |
+| 127 | 127_registro_de_correos.sql | Migracion 127: registro de correos enviados |
+| 128 | 128_whatsapp_conversaciones.sql | Migracion 128: conversaciones y mensajes de WhatsApp |
+| 129 | 129_whatsapp_consentimiento.sql | Quien acepto enlazar un numero, y cuando |
+| 130 | 130_whatsapp_responde_a.sql | A que mensaje responde cada mensaje |
+| 131 | 131_lead_whatsapp_usuario.sql | El usuario de WhatsApp de un prospecto, además de su teléfono |
+| 132 | 132_avisos_por_correo.sql | Migracion 132: que cada persona pueda apagar sus avisos por correo |
+| 133 | 133_tutor_banco.sql | Migracion 133: el banco del tutor |
+| 134 | 134_whatsapp_participante.sql | Quien escribio cada mensaje de un grupo |
+| 135 | 135_wa_mensajes_unico_por_conversacion.sql | El identificador de WhatsApp es unico POR CONVERSACION, no en toda la tabla |
+| 136 | 136_numero_de_factura_unico_por_serie.sql | El numero de factura, unico por SERIE y AÑO. No por proyecto |
+
+> **Estado al 04/09/2026**, comprobado contra el catalogo de Postgres y no
+> contra la salida de ningun comando. Aplicadas **hasta la 136**, incluida la
+> del numero de factura unico por serie. La **132** no esta aplicada.
+>
+> De la 137 en adelante no existen aqui todavia: son del panel de claves (#80),
+> las columnas por entidad (#8) y los tipos de proyecto (#15), y ese trabajo
+> esta hecho en MultiCRM y falta portarlo. La paridad se cumple cuando llegue.
+>
+> Y ojo con el **#71**: el usuario del CRM no es dueño de varias tablas, asi que
+> `ALTER TABLE` falla con «must be owner of». Esas hay que pasarlas como
+> `postgres`.
 
 ---
 
