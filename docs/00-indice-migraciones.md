@@ -89,3 +89,18 @@ Fuente de verdad del esquema. Cada archivo en `backend/migrations/` es un SQL ej
 | 096 | 096_invoice_templates.sql | Plantillas visuales de factura (editor tipo Canva). Cada plantilla guarda un |
 | 097 | 097_issuer_serie.sql | issuer_serie |
 | 098 | 098_template_condicion.sql | template_condicion |
+| 099 | 099_fiscal_regimenes.sql | Migración 101: Regímenes fiscales + coletillas parametrizadas (editables desde el panel). |
+| 100 | 100_sociedades.sql | Migración 102: Sociedades emisoras (agrupación de proyectos) + asignación proyecto→sociedad. |
+| 101 | 101_facturacion_cimientos.sql | Cimientos de datos del módulo de facturación (spec v1.0, paso 1). |
+| 102 | 102_numeracion_por_sociedad.sql | Numeración por sociedad (spec REQ-NUM-01/02): el contador de facturas es por |
+| 103 | 103_proformas.sql | Migración 103: Proformas / presupuestos |
+| 104 | 104_invoices_borrador.sql | Migracion 104: Facturas en BORRADOR (preliminares) |
+| 105 | 105_claves_por_entorno.sql | Claves por entorno y los servicios que faltaban (#80, portado en #113). **Sin aplicar.** Sin ella el panel funciona y guarda produccion; guardar «pruebas» contesta 409 diciendo que falta esta migracion. |
+
+> Las 099-104 llevaban tiempo sin apuntar aqui: se añadieron al portar el panel
+> de claves (#113), leyendo el primer comentario de cada fichero, que es de
+> donde salen las filas de arriba.
+>
+> **La 105 no esta aplicada.** Es DDL sobre `api_credentials` y sobre el tipo
+> `api_service`, asi que hay que correrla con un rol que sea DUEÑO de los dos.
+> No lo puedo comprobar desde aqui: no toco el servidor.

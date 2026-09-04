@@ -36,6 +36,7 @@ const InvoiceTemplateEditorPage = lazy(() => import('./modules/invoices/pages/In
 const InvoiceCreatePage = lazy(() => import('./modules/invoices/pages/InvoiceCreatePage'));
 const RevenuePage = lazy(() => import('./modules/revenue/pages/RevenuePage'));
 const ChannelsConfigPage = lazy(() => import('./modules/settings/pages/ChannelsConfigPage'));
+const ClavesPage = lazy(() => import('./modules/settings/pages/ClavesPage'));
 const ShortcutsConfigPage = lazy(() => import('./modules/settings/pages/ShortcutsConfigPage'));
 const ExternalPanelPage = lazy(() => import('./modules/external-panels/pages/ExternalPanelPage'));
 const ManualPage = lazy(() => import('./modules/manual/pages/ManualPage'));
@@ -184,6 +185,7 @@ function App() {
           <Route path="/clients" element={<ClientsPage />} />
           <Route path="/clients/:id" element={<ClientDetailPage />} />
           <Route path="/configuracion/canales" element={<ChannelsConfigPage />} />
+          <Route path="/configuracion/claves" element={<ClavesPage />} />
           <Route path="/configuracion/atajos" element={<ShortcutsConfigPage />} />
           <Route path="/external-panels/:id" element={<ExternalPanelPage />} />
           <Route path="/manual" element={<ManualPage />} />

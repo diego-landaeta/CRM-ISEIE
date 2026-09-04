@@ -46,6 +46,8 @@ export default function SettingsPage() {
   const [tab, setTab] = useState('users');
 
   const isAdmin = user?.role === 'superadmin' || user?.role === 'admin';
+  // Quien puede con las credenciales, que no es lo mismo que admin.
+  const puedeVerClaves = user?.role === 'superadmin' || user?.role === 'soporte';
 
   const activeNav = NAV.find((n) => n.id === tab) || NAV[0];
 
@@ -121,7 +123,15 @@ export default function SettingsPage() {
             <AvailabilitySection />
           )}
           {tab === 'integrations' && (
-            <IntegrationsSection isAdmin={isAdmin} />
+            /* Las credenciales son de superadmin y soporte, no de admin.
+               Es lo que exige el servidor desde el panel de claves (#80,
+               portado en #113) con `soloRoles('soporte','superadmin')`.
+
+               Antes esto se abria a admin, y `loadCreds` se traga el 403 en
+               silencio: un admin veria las seis integraciones como «Sin
+               configurar» —cuando pueden estar puestas— y guardar fallaria sin
+               decir por que. Una pantalla que miente es peor que una cerrada. */
+            <IntegrationsSection isAdmin={puedeVerClaves} />
           )}
           {tab === 'security' && (
             <SecuritySection />

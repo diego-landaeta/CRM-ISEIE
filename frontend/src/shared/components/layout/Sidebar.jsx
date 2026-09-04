@@ -7,6 +7,7 @@ import {
   FilePdf, ShieldCheck, MagnifyingGlass, Headset, BookOpen, Sliders,
   Megaphone, Robot, Sparkle, PlugsConnected, CreditCard, WarningCircle, WhatsappLogo,
   Receipt, Coins, Wrench, ShoppingBag, ChatCircleText, Wallet, Bank, Clock, GitMerge,
+  Key,
 } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -94,6 +95,14 @@ const NAV_SECTIONS = [
       { to: '/preferences',    label: 'Mis preferencias', icon: Sliders },
       { to: '/soporte',        label: 'Soporte',          icon: Headset },
       { to: '/manual',         label: 'Manual del CRM',   icon: BookOpen },
+      // Claves y variables (#80, portado en #113). Los mismos roles que exige el
+      // servidor con `soloRoles('soporte','superadmin')`: ofrecer en el menu lo
+      // que la API va a negar es peor que no ofrecerlo.
+      //
+      // Y con puerta desde el primer dia: en MultiCRM la pantalla estuvo hecha
+      // y sin entrada en el menu, asi que solo se llegaba escribiendo la
+      // direccion y Diego no la vio nunca.
+      { to: '/configuracion/claves', label: 'Claves y variables', icon: Key, roles: ['superadmin', 'soporte'] },
       { to: '/status',         label: 'Status',           icon: Pulse },
     ],
   },
