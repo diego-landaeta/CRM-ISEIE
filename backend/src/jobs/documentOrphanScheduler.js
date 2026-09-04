@@ -7,6 +7,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { logger } from '../shared/utils/logger.js';
 import { query } from '../shared/config/db.js';
+import { vigilar } from './latido.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const UPLOAD_DIR = process.env.UPLOAD_DIR || path.resolve(__dirname, '../../uploads/documents');
@@ -89,6 +90,6 @@ export function startDocumentOrphanScheduler() {
   // Primer tick a los 5 min (esperamos a que la app este estable),
   // luego cada TICK_MS (default 24h).
   setTimeout(tick, 5 * 60 * 1000);
-  setInterval(tick, TICK_MS);
+  vigilar('documentos_huerfanos', 'Documentos huérfanos', tick, TICK_MS);
   logger.info({ tickMs: TICK_MS, dir: UPLOAD_DIR }, 'Document orphan scheduler iniciado');
 }

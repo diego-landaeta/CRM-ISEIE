@@ -81,6 +81,7 @@ const ALL_STATIC_ROUTES = [
   '/clients', '/clients/1',
   '/configuracion/canales', '/configuracion/atajos',
   '/configuracion/claves',
+  '/registro',
   '/configuracion/categorias-arbol', '/configuracion/campos',
   '/manual', '/preferences', '/seo', '/soporte',
   '/matriculas',

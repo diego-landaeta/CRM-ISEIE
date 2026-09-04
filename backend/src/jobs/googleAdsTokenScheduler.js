@@ -8,6 +8,7 @@ import { query } from '../shared/config/db.js';
 import { decrypt } from '../shared/utils/crypto.js';
 import { sendEmail } from '../shared/services/brevo.service.js';
 import { refreshGoogleAdsAccessToken } from '../shared/services/googleAds.service.js';
+import { vigilar } from './latido.js';
 
 const TICK_MS = parseInt(process.env.GOOGLE_TOKEN_TICK_MS || String(24 * 60 * 60 * 1000));
 
@@ -142,7 +143,7 @@ export function startGoogleAdsTokenScheduler() {
   // Primer tick a los 10 min (la app debe estar estable),
   // luego cada TICK_MS (default 24h).
   setTimeout(tick, 10 * 60 * 1000);
-  setInterval(tick, TICK_MS);
+  vigilar('token_google_ads', 'Token de Google Ads', tick, TICK_MS);
   logger.info({ tickMs: TICK_MS }, 'Google Ads token scheduler iniciado');
 }
 

@@ -2,6 +2,7 @@ import { logger } from '../shared/utils/logger.js';
 import { query } from '../shared/config/db.js';
 import * as wcModel from '../modules/woocommerce/wc.model.js';
 import { runFullImport } from '../modules/woocommerce/wc.controller.js';
+import { vigilar } from './latido.js';
 
 const TICK_MS = parseInt(process.env.WC_SYNC_TICK_MS || String(5 * 60 * 1000)); // 5 min default
 
@@ -43,6 +44,6 @@ export function startWooCommerceSyncScheduler() {
     logger.warn('WooCommerce sync scheduler deshabilitado por WC_SYNC_DISABLED=1');
     return;
   }
-  setInterval(tick, TICK_MS);
+  vigilar('woocommerce', 'Sincronización de WooCommerce', tick, TICK_MS);
   logger.info({ tickMs: TICK_MS }, 'WooCommerce sync scheduler iniciado');
 }

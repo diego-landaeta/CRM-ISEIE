@@ -8,6 +8,7 @@ import {
   Megaphone, Robot, Sparkle, PlugsConnected, CreditCard, WarningCircle, WhatsappLogo,
   Receipt, Coins, Wrench, ShoppingBag, ChatCircleText, Wallet, Bank, Clock, GitMerge,
   Key,
+  ClipboardText,
 } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -102,6 +103,11 @@ const NAV_SECTIONS = [
       // Y con puerta desde el primer dia: en MultiCRM la pantalla estuvo hecha
       // y sin entrada en el menu, asi que solo se llegaba escribiendo la
       // direccion y Diego no la vio nunca.
+      // El registro (#111). Los mismos roles que exige el servidor con
+      // `roleGuard('admin','superadmin')`: cruza todas las fichas y a todos los
+      // companeros, y ofrecerlo a quien la API va a negar es peor que no
+      // ofrecerlo.
+      { to: '/registro', label: 'Registro', icon: ClipboardText, roles: ['superadmin', 'admin'] },
       { to: '/configuracion/claves', label: 'Claves y variables', icon: Key, roles: ['superadmin', 'soporte'] },
       { to: '/status',         label: 'Status',           icon: Pulse },
     ],

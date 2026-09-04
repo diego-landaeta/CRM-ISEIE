@@ -11,6 +11,7 @@ import authModule from './modules/auth/index.js';
 import usersModule from './modules/users/index.js';
 import projectsModule from './modules/projects/index.js';
 import statusModule from './modules/status/index.js';
+import registroModule from './modules/registro/index.js';
 import leadsModule from './modules/leads/index.js';
 import productsModule from './modules/products/index.js';
 import conversionsModule from './modules/conversions/index.js';
@@ -224,6 +225,7 @@ const MODULES = [
   clientErrorsModule,
   changeRequestsModule,
   statusModule,
+  registroModule,
 ];
 
 for (const mod of MODULES) {

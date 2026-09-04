@@ -35,6 +35,18 @@ export interface ApiClient {
   upload<T = any>(url: string, file: File | Blob): Promise<ApiResponse<T>>;
 }
 
+/**
+ * Las dos direcciones base, que `client.js` exporta desde siempre y aqui no
+ * estaban declaradas.
+ *
+ * Por eso `changeRequests.api.ts` y `WasapiExportDialog.tsx` fallaban con
+ * «Module has no exported member 'API_BASE_URL'»: existen y funcionan en
+ * ejecucion, pero para TypeScript no existian. Las descargas de blob las
+ * necesitan — el cliente parsea JSON y un CSV no lo es.
+ */
+export const APP_BASE_URL: string;
+export const API_BASE_URL: string;
+
 export function setAccessToken(token: string | null): void;
 export function getAccessToken(): string | null;
 export function setOnAuthFailure(cb: (() => void) | null): void;

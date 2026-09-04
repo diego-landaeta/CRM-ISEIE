@@ -96,11 +96,14 @@ Fuente de verdad del esquema. Cada archivo en `backend/migrations/` es un SQL ej
 | 103 | 103_proformas.sql | Migración 103: Proformas / presupuestos |
 | 104 | 104_invoices_borrador.sql | Migracion 104: Facturas en BORRADOR (preliminares) |
 | 105 | 105_claves_por_entorno.sql | Claves por entorno y los servicios que faltaban (#80, portado en #113). **Sin aplicar.** Sin ella el panel funciona y guarda produccion; guardar «pruebas» contesta 409 diciendo que falta esta migracion. |
+| 106 | 106_registro_tareas.sql | El diario de las tareas programadas, para la pantalla de registro (#111). **Sin aplicar.** Sin ella el registro funciona igual: la fuente «Tareas» sale tachada y la pantalla avisa. |
 
 > Las 099-104 llevaban tiempo sin apuntar aqui: se añadieron al portar el panel
 > de claves (#113), leyendo el primer comentario de cada fichero, que es de
 > donde salen las filas de arriba.
 >
-> **La 105 no esta aplicada.** Es DDL sobre `api_credentials` y sobre el tipo
-> `api_service`, asi que hay que correrla con un rol que sea DUEÑO de los dos.
+> **Ni la 105 ni la 106 estan aplicadas.** La 105 es DDL sobre `api_credentials` y sobre el tipo `api_service`, asi que hay que
+> correrla con un rol que sea DUEÑO de los dos. La 106 solo crea una tabla
+> nueva, asi que no tiene ese problema.
+>
 > No lo puedo comprobar desde aqui: no toco el servidor.
