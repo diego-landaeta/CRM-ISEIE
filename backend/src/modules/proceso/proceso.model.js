@@ -40,8 +40,13 @@ export async function create(projectId, data) {
        (project_id, clave, nombre, orden, cuando, dia_desde, dia_hasta,
         canales, es_seguimiento, nota)
      VALUES ($1, $2, $3,
-             COALESCE($4, (SELECT COALESCE(MAX(orden), 0) + 1 FROM commercial_steps WHERE project_id = $1)),
-             $5, $6, $7, COALESCE($8, '{}'), COALESCE($9, false), $10)
+             COALESCE($4::integer, (SELECT COALESCE(MAX(orden), 0) + 1 FROM commercial_steps WHERE project_id = $1)),
+             $5, $6, $7,
+             -- El casteo NO es adorno: sin el, Postgres infiere el '{}' como
+             -- texto suelto y el COALESCE entero pasa a ser text, que no cabe
+             -- en una columna text[]. (Y ojo: aqui dentro NO caben comillas
+             -- invertidas, que esto es una plantilla de JS y la cortarian.)
+             COALESCE($8::text[], '{}'::text[]), COALESCE($9::boolean, false), $10)
      RETURNING ${COLS}`,
     [projectId, data.clave, data.nombre, data.orden ?? null, data.cuando ?? null,
      data.dia_desde ?? null, data.dia_hasta ?? null, data.canales ?? null,
