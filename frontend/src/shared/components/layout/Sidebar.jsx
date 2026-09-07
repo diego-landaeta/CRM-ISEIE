@@ -42,7 +42,10 @@ const NAV_SECTIONS = [
       { to: '/make-webhooks',   label: 'Make',      icon: PlugsConnected, roles: ['admin', 'superadmin'] },
       { to: '/webhooks',        label: 'Webhooks',  icon: PlugsConnected, roles: ['admin', 'superadmin'] },
       { to: '/captacion/whatsapp', label: 'WhatsApp', icon: WhatsappLogo, roles: ['admin', 'superadmin', 'soporte'] },
-      { to: '/campaigns',       label: 'Campañas',  icon: Megaphone, roles: ['admin', 'superadmin'], sectionPrefixes: ['/campaigns'] },
+      // «Campañas» apuntaba a /campaigns, que no esta montada en App.jsx: la
+      // pantalla existe y vive en /meta-ads. Era un 404 con la pantalla hecha al
+      // lado.
+      { to: '/meta-ads',        label: 'Campañas',  icon: Megaphone, roles: ['admin', 'superadmin'], sectionPrefixes: ['/meta-ads'] },
       { to: '/seo',             label: 'Tráfico orgánico', icon: MagnifyingGlass, roles: ['admin', 'superadmin'] },
     ],
   },
@@ -69,7 +72,9 @@ const NAV_SECTIONS = [
       { to: '/sales',                label: 'Dashboard',          icon: Calculator, roles: ['admin', 'superadmin'], statusTag: 'Pruebas' },
       { to: '/sales',                label: 'Ventas',             icon: Receipt, statusTag: 'Pruebas' },
       { to: '/accounting/income',    label: 'Ingresos',           icon: Coins,      roles: ['admin', 'superadmin'], statusTag: 'Pruebas' },
-      { to: '/accounting/conversions', label: 'Conversiones',     icon: ChartLineUp, roles: ['admin', 'superadmin'], statusTag: 'Pruebas' },
+      // No hay pantalla de conversiones en este repositorio, y ademas se ofrecia
+      // con la etiqueta «Pruebas», que hace pensar que existe y va a medias.
+      { to: '/accounting/conversions', label: 'Conversiones',     icon: ChartLineUp, roles: ['admin', 'superadmin'], comingSoon: true },
       { to: '/expenses',             label: 'Egresos',            icon: Receipt,    roles: ['admin', 'superadmin'], statusTag: 'Pruebas' },
       { to: '/accounting/receivable', label: 'Cuentas por cobrar', icon: Wallet,    roles: ['admin', 'superadmin'], statusTag: 'Pruebas' },
       { to: '/accounting/payable',   label: 'Cuentas por pagar',  icon: Wallet,     roles: ['admin', 'superadmin'], statusTag: 'Pruebas' },
@@ -84,8 +89,14 @@ const NAV_SECTIONS = [
     label: 'Análisis',
     items: [
       { to: '/reports',     label: 'Reportes',      icon: ChartLineUp, sectionPrefixes: ['/reports', '/activity'] },
-      { to: '/reports/ia',  label: 'Análisis IA',   icon: Sparkle,     roles: ['admin', 'superadmin'] },
-      { to: '/ai-chat',     label: 'Chat IA',       icon: ChatCircleText, roles: ['admin', 'superadmin'] },
+      // La pantalla EXISTE (`modules/ia-dashboard/pages/IADashboardPage.tsx`) pero
+      // no se puede montar: importa `MetricLabel` y `useCountUp`, que no estan en
+      // este repositorio — son dos de los errores de tipos que ya arrastra. Darle
+      // ruta hoy cambiaria un 404 por una pantalla rota.
+      { to: '/reports/ia',  label: 'Análisis IA',   icon: Sparkle,     roles: ['admin', 'superadmin'], comingSoon: true },
+      // Aqui no hay pantalla de Chat IA — es de MultiCRM y no se ha portado.
+      // Ofrecerla llevaba a la 404 (es el #32). Se marca como lo que es.
+      { to: '/ai-chat',     label: 'Chat IA',       icon: ChatCircleText, roles: ['admin', 'superadmin'], comingSoon: true },
     ],
   },
   {
