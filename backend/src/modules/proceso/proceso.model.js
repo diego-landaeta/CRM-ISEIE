@@ -192,8 +192,11 @@ export async function pasosDeLead(leadId) {
 export async function colaDelDia({ projectIds, asesoraId, hasta = null, limite = 200 }) {
   const par = [];
   let i = 1;
+  // Sin proyecto elegido, la cola es la del equipo: los de pruebas no
+  // entran. Elegido a dedo si, que para eso es su cola.
   const pProj = Array.isArray(projectIds) && projectIds.length
-    ? `AND ls.project_id = ANY($${i++}::int[])` : '';
+    ? `AND ls.project_id = ANY($${i++}::int[])`
+    : 'AND ls.project_id NOT IN (SELECT id FROM projects WHERE es_prueba)';
   if (pProj) par.push(projectIds.map(Number));
   const pAses = asesoraId ? `AND l.responsable_id = $${i++}` : '';
   if (asesoraId) par.push(asesoraId);
@@ -243,8 +246,11 @@ export async function colaDelDia({ projectIds, asesoraId, hasta = null, limite =
 export async function resumenDeLaCola({ projectIds, asesoraId }) {
   const par = [];
   let i = 1;
+  // Sin proyecto elegido, la cola es la del equipo: los de pruebas no
+  // entran. Elegido a dedo si, que para eso es su cola.
   const pProj = Array.isArray(projectIds) && projectIds.length
-    ? `AND ls.project_id = ANY($${i++}::int[])` : '';
+    ? `AND ls.project_id = ANY($${i++}::int[])`
+    : 'AND ls.project_id NOT IN (SELECT id FROM projects WHERE es_prueba)';
   if (pProj) par.push(projectIds.map(Number));
   const pAses = asesoraId ? `AND l.responsable_id = $${i++}` : '';
   if (asesoraId) par.push(asesoraId);

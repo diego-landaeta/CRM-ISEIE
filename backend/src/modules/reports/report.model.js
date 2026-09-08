@@ -23,12 +23,18 @@ function comoLista(projectId, projectIds) {
   return null;
 }
 
+// «Todos los proyectos» NO incluye los de pruebas: un curso inventado
+// con tres ventas falsas metido en el total es lo contrario de lo que
+// sirve un informe. Elegido a dedo, o por su sociedad, se ve entero.
+const SIN_PRUEBAS = (col = 'project_id') =>
+  `${col} NOT IN (SELECT id FROM projects WHERE es_prueba)`;
+
 // Overview por proyecto + rango fechas
 export async function overview({ projectId, projectIds, from, to, asesoraId }) {
   const params = [];
   let idx = 1;
   const lista = comoLista(projectId, projectIds);
-  const pFilter = lista ? `AND project_id = ANY($${idx++}::int[])` : '';
+  const pFilter = lista ? `AND project_id = ANY($${idx++}::int[])` : `AND ${SIN_PRUEBAS()}`;
   if (lista) params.push(lista);
   const fromParam = from ? `$${idx++}` : 'NULL';
   if (from) params.push(from);
@@ -109,7 +115,7 @@ export async function overview({ projectId, projectIds, from, to, asesoraId }) {
 
   // Trend mensual de ingresos cobrados (12 meses) - usa solo projectId
   const trendParams = lista ? [lista] : [];
-  const trendFilter = lista ? `AND c.project_id = ANY($1::int[])` : '';
+  const trendFilter = lista ? `AND c.project_id = ANY($1::int[])` : `AND ${SIN_PRUEBAS('c.project_id')}`;
   const { rows: trend } = await query(
     `SELECT to_char(date_trunc('month', fecha), 'YYYY-MM') as mes,
             COALESCE(SUM(importe), 0)::numeric as ingresos
@@ -152,7 +158,7 @@ export async function overview({ projectId, projectIds, from, to, asesoraId }) {
             AND (${fromParam}::date IS NULL OR fecha_conversion >= ${fromParam}::date)
             AND (${toParam}::date IS NULL OR fecha_conversion <= ${toParam}::date)
        ) cv ON TRUE
-      WHERE ${lista ? `p.id = ANY($1::int[])` : 'TRUE'}
+      WHERE ${lista ? `p.id = ANY($1::int[])` : SIN_PRUEBAS('p.id')}
       ORDER BY cv.cobrado DESC NULLS LAST, p.nombre`,
     // Se reusan los mismos parametros, en el mismo orden: la lista va primero
     // cuando la hay, y luego las dos fechas.
@@ -202,6 +208,7 @@ function buildFilter({ projectId, projectIds, from, to, asesoraId }, dateCol, pr
   let idx = 1;
   const lista = comoLista(projectId, projectIds);
   if (lista) { cond.push(`${projectCol} = ANY($${idx++}::int[])`); params.push(lista); }
+  else cond.push(SIN_PRUEBAS(projectCol));
   if (from) { cond.push(`${dateCol}::date >= $${idx++}::date`); params.push(from); }
   if (to) { cond.push(`${dateCol}::date <= $${idx++}::date`); params.push(to); }
   // Si viene asesora, el informe se recorta a lo suyo. Lo impone el controlador
@@ -239,7 +246,7 @@ export async function seguimientoYTiempos({ projectId, projectIds, from, to, ase
   const lista = comoLista(projectId, projectIds);
   const par = [];
   let i = 1;
-  const pProj = lista ? `AND l.project_id = ANY($${i++}::int[])` : '';
+  const pProj = lista ? `AND l.project_id = ANY($${i++}::int[])` : `AND ${SIN_PRUEBAS('l.project_id')}`;
   if (lista) par.push(lista);
   const pDesde = from ? `$${i++}` : null;
   if (from) par.push(from);
@@ -984,8 +991,8 @@ export async function panelReportes({ projectId, projectIds, from, to, asesoraId
   const ac = asesoraId
     ? ` AND COALESCE(c.vendedora_id, (SELECT responsable_id FROM leads WHERE id = c.lead_id)) = $${iAs}`
     : '';
-  const pl = (lista ? 'AND l.project_id = ANY($3::int[])' : '') + al;
-  const pc = (lista ? 'AND c.project_id = ANY($3::int[])' : '') + ac;
+  const pl = (lista ? 'AND l.project_id = ANY($3::int[])' : `AND ${SIN_PRUEBAS('l.project_id')}`) + al;
+  const pc = (lista ? 'AND c.project_id = ANY($3::int[])' : `AND ${SIN_PRUEBAS('c.project_id')}`) + ac;
   const par = (a, b) => [a, b, ...(lista ? [lista] : []), ...(asesoraId ? [asesoraId] : [])];
 
   async function bloque(d, h) {
