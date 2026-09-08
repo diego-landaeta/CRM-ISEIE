@@ -305,6 +305,56 @@ export async function seguimientoYTiempos({ projectId, projectIds, from, to, ase
     par
   );
 
+  // EL EMBUDO: cuantos llegan al seguimiento 1, al 2, al 3...
+  //
+  // Es lo que convierte «99 % con seguimiento» en algo accionable: enseña
+  // DONDE se cae la gente. Y de cada nivel, cuantos acabaron comprando y
+  // cuanto se tardo desde el toque anterior.
+  //
+  // Los niveles son ACUMULATIVOS: quien llega al 3 esta contado tambien en el
+  // 1 y en el 2, porque «llego al tercero» quiere decir que paso por los otros.
+  // Por eso la columna de compras baja sola segun se profundiza.
+  //
+  // El numero de seguimiento sale del ORDEN de los contactos, no del paso
+  // comercial: hoy el CRM no guarda a que paso corresponde cada toque. Cuando
+  // exista la agenda por persona (#89/#90) se podra atar cada contacto a su
+  // paso y esto dejara de ser una aproximacion.
+  const { rows: emb } = await query(
+    `WITH cohorte AS (
+       SELECT l.id, ${ENTRY} AS entro
+         FROM leads l
+        WHERE l.deleted_at IS NULL ${pProj} ${pAses} ${entre(`${ENTRY}::date`)}
+     ),
+     toques AS (
+       SELECT li.lead_id, (li.fecha AT TIME ZONE '${TZ}') AS cuando,
+              ROW_NUMBER() OVER (PARTITION BY li.lead_id ORDER BY li.fecha, li.id) AS n
+         FROM lead_interactions li JOIN cohorte co ON co.id = li.lead_id
+        WHERE li.tipo <> 'nota'
+     ),
+     compro AS (
+       SELECT DISTINCT cv.lead_id FROM conversions cv JOIN cohorte co ON co.id = cv.lead_id
+        WHERE cv.es_mensualidad IS NOT TRUE
+     ),
+     -- Cuanto se tardo desde el contacto anterior; para el primero, desde que
+     -- entro la persona.
+     hueco AS (
+       SELECT t.lead_id, t.n,
+              EXTRACT(EPOCH FROM (t.cuando - COALESCE(
+                LAG(t.cuando) OVER (PARTITION BY t.lead_id ORDER BY t.n), co.entro))) AS seg
+         FROM toques t JOIN cohorte co ON co.id = t.lead_id
+     )
+     SELECT t.n::int AS nivel,
+            count(DISTINCT t.lead_id)::int AS personas,
+            count(DISTINCT t.lead_id) FILTER (WHERE cp.lead_id IS NOT NULL)::int AS compraron,
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY h.seg) AS mediana_desde_anterior_seg
+       FROM toques t
+       LEFT JOIN compro cp ON cp.lead_id = t.lead_id
+       LEFT JOIN hueco h ON h.lead_id = t.lead_id AND h.n = t.n
+      WHERE t.n <= 6
+      GROUP BY t.n ORDER BY t.n`,
+    par
+  );
+
   const c0 = coh[0];
   const entraron = Number(c0.entraron);
   const pct = (n) => (entraron > 0 ? Math.round((Number(n) * 1000) / entraron) / 10 : 0);
@@ -322,6 +372,16 @@ export async function seguimientoYTiempos({ projectId, projectIds, from, to, ase
         ? null : Number(c0.mediana_primer_contacto_seg),
       mediana_dias_venta: c0.mediana_dias_venta == null
         ? null : Number(c0.mediana_dias_venta),
+      embudo: emb.map((r) => ({
+        nivel: Number(r.nivel),
+        personas: Number(r.personas),
+        compraron: Number(r.compraron),
+        pct: pct(r.personas),
+        tasa: Number(r.personas) > 0
+          ? Math.round((Number(r.compraron) * 1000) / Number(r.personas)) / 10 : 0,
+        mediana_desde_anterior_seg: r.mediana_desde_anterior_seg == null
+          ? null : Number(r.mediana_desde_anterior_seg),
+      })),
     },
     actividad: {
       toques: Number(act[0].toques),

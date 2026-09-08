@@ -96,6 +96,8 @@ export default function PanelSeguimiento({ projectId, issuerId, from, to }) {
   const primerContacto = comoSeDice(c.mediana_primer_contacto_seg);
   const hastaVenta = dias(c.mediana_dias_venta);
 
+  const embudo = datos.embudo || c.embudo || [];
+
   const CANALES = [
     { k: 'whatsapp', label: 'WhatsApp', icon: ChatCircleText },
     { k: 'llamada', label: 'llamadas', icon: Phone },
@@ -143,6 +145,47 @@ export default function PanelSeguimiento({ projectId, issuerId, from, to }) {
           pie={hastaVenta ? 'desde que entró la persona' : 'sin ventas de esta entrada'}
         />
       </div>
+
+      {/* El embudo por numero de seguimiento. Es lo que convierte «99 % con
+          seguimiento» en algo accionable: enseña DONDE se cae la gente. */}
+      {embudo.length > 0 && (
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Hasta qué seguimiento llega cada uno
+          </p>
+          <div className="mt-2 space-y-1">
+            {embudo.map((f) => {
+              const ancho = c.entraron > 0 ? Math.max(2, (f.personas * 100) / c.entraron) : 0;
+              return (
+                <div key={f.nivel} className="flex items-center gap-2 text-[11px]">
+                  <span className="w-14 shrink-0 font-semibold tabular-nums">{f.nivel}.º</span>
+                  <span className="w-12 shrink-0 text-right tabular-nums font-semibold">{f.personas}</span>
+                  <span className="h-3 min-w-0 flex-1 rounded-sm bg-muted overflow-hidden">
+                    <span className="block h-full rounded-sm bg-primary/70" style={{ width: `${ancho}%` }} />
+                  </span>
+                  <span className="w-10 shrink-0 text-right tabular-nums text-muted-foreground">{f.pct}%</span>
+                  <span className="w-28 shrink-0 text-right tabular-nums text-muted-foreground">
+                    {f.compraron} compraron
+                  </span>
+                  <span className="w-12 shrink-0 text-right tabular-nums text-muted-foreground">{f.tasa}%</span>
+                  <span className="w-20 shrink-0 text-right tabular-nums text-muted-foreground">
+                    {comoSeDice(f.mediana_desde_anterior_seg) || '—'}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          <p className="mt-1.5 text-[11px] text-muted-foreground">
+            Cuántos llegaron a cada contacto, cuántos de ellos compraron, y cuánto se tardó desde el anterior
+            (desde que entró, en el primero). Es <strong className="text-foreground">acumulativo</strong>: quien
+            llega al 3.º está contado también en el 1.º y el 2.º — por eso la columna de compras baja sola.
+          </p>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            El número sale del <strong className="text-foreground">orden</strong> de los contactos, no del paso
+            comercial: hoy el CRM no guarda a qué paso corresponde cada toque.
+          </p>
+        </div>
+      )}
 
       {/* La actividad es OTRA pregunta: lo que se hizo, entrara quien entrara.
           Va debajo y dicho aparte para que no se lea como parte de la cohorte. */}
