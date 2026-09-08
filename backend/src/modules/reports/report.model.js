@@ -121,6 +121,44 @@ export async function overview({ projectId, projectIds, from, to, asesoraId }) {
     trendParams
   );
 
+  // Cuanto pone cada campus (#120).
+  //
+  // Con una sociedad elegida, «145.221 EUR» no dice de donde salen. Aqui va el
+  // mismo periodo y el mismo filtro, partido por proyecto: las mismas cifras
+  // que los KPI de arriba, para que sumen y se pueda comprobar.
+  //
+  // Se sale de `projects` y no de `conversions` para que un campus SIN ventas
+  // en el periodo tambien salga, con ceros. Un campus que no aparece se lee
+  // como que no existe, y lo que pasa es que no vendio.
+  const { rows: porProyecto } = await query(
+    `SELECT p.id AS project_id, p.nombre,
+            COALESCE(l.total, 0)::int      AS leads,
+            COALESCE(cv.total, 0)::int     AS ventas,
+            COALESCE(cv.facturado, 0)::numeric AS facturado,
+            COALESCE(cv.cobrado, 0)::numeric   AS cobrado
+       FROM projects p
+       LEFT JOIN LATERAL (
+         SELECT COUNT(*)::int AS total FROM leads
+          WHERE deleted_at IS NULL AND project_id = p.id
+            AND (${fromParam}::date IS NULL OR created_at >= ${fromParam}::date)
+            AND (${toParam}::date IS NULL OR created_at <= ${toParam}::date + INTERVAL '1 day')
+       ) l ON TRUE
+       LEFT JOIN LATERAL (
+         SELECT COUNT(*)::int AS total,
+                SUM(importe_total)  AS facturado,
+                SUM(importe_pagado) AS cobrado
+           FROM conversions
+          WHERE project_id = p.id
+            AND (${fromParam}::date IS NULL OR fecha_conversion >= ${fromParam}::date)
+            AND (${toParam}::date IS NULL OR fecha_conversion <= ${toParam}::date)
+       ) cv ON TRUE
+      WHERE ${lista ? `p.id = ANY($1::int[])` : 'TRUE'}
+      ORDER BY cv.cobrado DESC NULLS LAST, p.nombre`,
+    // Se reusan los mismos parametros, en el mismo orden: la lista va primero
+    // cuando la hay, y luego las dos fechas.
+    params
+  );
+
   // Tasa conversion = convertidos / total leads
   const tl = Number(leadsKpi[0].total || 0);
   const conv = Number(leadsKpi[0].convertido || 0);
@@ -133,6 +171,7 @@ export async function overview({ projectId, projectIds, from, to, asesoraId }) {
     conversions: convKpi[0],
     top_productos: topProductos,
     ingresos_mensual: trend,
+    por_proyecto: porProyecto,
     tasa_conversion,
   };
 }

@@ -15,6 +15,7 @@ import client from '@/shared/api/client';
 import ReportsDownloadSection from '@/shared/components/ReportsDownloadSection';
 import AsesorasPanel from '@/shared/components/AsesorasPanel';
 import RankingsPanel from '@/shared/components/RankingsPanel';
+import { ATAJOS, rangoPorDefecto, atajoDe } from '@/shared/lib/rangosDeFecha';
 
 const REPORT_CATEGORIES = [
   {
@@ -58,25 +59,20 @@ const ACCENT = {
   amber:   { bg: 'bg-amber-50 dark:bg-amber-950/30',     text: 'text-amber-600 dark:text-amber-400' },
 };
 
-// Rango de fechas del panel. Los presets solo rellenan las dos fechas, para que
-// se pueda afinar a mano sin perder los atajos.
-function rangoDePreset(key) {
-  const hoy = new Date();
-  const iso = (d) => d.toISOString().slice(0, 10);
-  const haceDias = (n) => iso(new Date(hoy.getTime() - n * 86400000));
-  if (key === 'ytd') return { from: `${hoy.getFullYear()}-01-01`, to: iso(hoy) };
-  if (key === 'all') return { from: '2026-01-01', to: iso(hoy) };
-  const dias = { '7d': 7, '30d': 30, '90d': 90 }[key] || 30;
-  return { from: haceDias(dias), to: iso(hoy) };
-}
+// Los atajos van por CALENDARIO y viven en `rangosDeFecha`, el mismo fichero en
+// los dos CRMs. Antes eran dias rodantes —«ultimos 7 dias»—, que no es lo que
+// nadie pide: «la semana pasada» es de lunes a domingo, y pedida un martes esos
+// siete dias mezclan media semana con media de la otra.
+//
+// Los atajos solo rellenan las dos fechas: se puede seguir afinando a mano.
 
-const PERIODS = {
-  '7d':  { label: 'Últimos 7 días',   days: 7 },
-  '30d': { label: 'Últimos 30 días',  days: 30 },
-  '90d': { label: 'Últimos 90 días',  days: 90 },
-  'ytd': { label: 'Año en curso',     days: Math.max(1, Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 1).getTime()) / 86400000)) },
-  'all': { label: 'Todo',             days: 730 },
-};
+/** Cuantos dias cubre el rango, para el resumen que los pide contados. */
+function diasDelRango(rango) {
+  if (!rango?.from || !rango?.to) return 30;
+  const a = new Date(rango.from + 'T00:00:00');
+  const b = new Date(rango.to + 'T00:00:00');
+  return Math.max(1, Math.round((b - a) / 86400000) + 1);
+}
 
 function fmt(n) {
   return new Intl.NumberFormat('es-ES', { maximumFractionDigits: 0 }).format(Number(n || 0));
@@ -304,8 +300,9 @@ function Kpi({ icon: Icon, label, value, trend, spark, accent = 'sky' }) {
 
 export default function ReportsPage() {
   const { activeProject, user } = useAuth();
-  const [periodKey, setPeriodKey] = useState('30d');
-  const [rango, setRango] = useState(() => rangoDePreset('30d'));
+  // Arranca en el MES en curso, no en los ultimos 30 dias.
+  const [rango, setRango] = useState(() => rangoPorDefecto());
+  const atajoActivo = atajoDe(rango);
   const [panel, setPanel] = useState(null);
 
   // El resumen sale de /reports/panel: KPIs comparados con el periodo
@@ -321,7 +318,7 @@ export default function ReportsPage() {
       .catch(() => { if (vivo) setPanel(null); });
     return () => { vivo = false; };
   }, [activeProject?.id, rango.from, rango.to]);
-  const days = PERIODS[periodKey].days;
+  const days = diasDelRango(rango);
   const { data: summary, loading } = useDashboardSummary(activeProject?.id, days);
   const [iaModal, setIaModal] = useState(false);
   const [claudeConfigured, setClaudeConfigured] = useState(false);
@@ -447,14 +444,25 @@ export default function ReportsPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <select
-            value={periodKey}
-            onChange={(e) => { setPeriodKey(e.target.value); setRango(rangoDePreset(e.target.value)); }}
-            className="h-9 px-3 rounded-md bg-card border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-          >
-            {Object.entries(PERIODS).map(([k, p]) => <option key={k} value={k}>{p.label}</option>)}
-          </select>
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="inline-flex items-center gap-1 flex-wrap" role="group" aria-label="Periodos rápidos">
+            {ATAJOS.map((a) => (
+              <button
+                key={a.clave}
+                type="button"
+                onClick={() => setRango(a.calcular(new Date()))}
+                aria-pressed={atajoActivo === a.clave}
+                className={
+                  'h-8 px-2.5 rounded-md border text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40 ' +
+                  (atajoActivo === a.clave
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground')
+                }
+              >
+                {a.etiqueta}
+              </button>
+            ))}
+          </div>
           {/* Las fechas mandan: los presets solo las rellenan. */}
           <input
             type="date"
@@ -501,7 +509,9 @@ export default function ReportsPage() {
           <div>
             <h2 className="font-semibold tracking-tight">Resumen del periodo</h2>
             <p className="text-xs text-muted-foreground mt-0.5">
-              {PERIODS[periodKey].label}
+              {atajoActivo
+                ? ATAJOS.find((a) => a.clave === atajoActivo).etiqueta
+                : `${rango.from} – ${rango.to}`}
               {activeProject?.nombre ? ` · ${activeProject.nombre}` : ''}
             </p>
           </div>
