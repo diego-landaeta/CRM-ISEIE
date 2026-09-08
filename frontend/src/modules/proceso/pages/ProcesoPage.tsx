@@ -26,11 +26,20 @@ export function puedeEditar(rol: string | undefined): boolean {
 }
 
 /** «Días 0-1», «Día 4», «—». Lo que se lee de un vistazo en la lista. */
-export function textoDeDias(desde: number | null, hasta: number | null): string {
-  if (desde === null && hasta === null) return '—';
-  if (desde !== null && hasta !== null && desde !== hasta) return `Días ${desde}-${hasta}`;
-  const uno = desde ?? hasta;
-  return `Día ${uno}`;
+export function textoDeDias(desde: number | null, hasta: number | null): string | null {
+  // Sin ventana no hay nada que decir aquí: manda lo que ponga `cuando` —el
+  // seguimiento mensual es «Final de mes», que no se cuenta en días.
+  if (desde === null && hasta === null) return null;
+  const a = desde ?? hasta!;
+  const b = hasta ?? desde!;
+  if (a === 0 && b === 0) return 'El mismo día';
+  if (a === 0 && b === 1) return 'El mismo día o al siguiente';
+  if (a === 1 && b === 1) return 'Al día siguiente';
+  if (a === b) return `A los ${a} días`;
+  // «7 u 8», no «7 o 8»: delante de una palabra que empieza por o- la
+  // conjunción es «u», y ocho y once empiezan por o.
+  const conjuncion = b === 8 || b === 11 ? 'u' : 'o';
+  return `A los ${a} ${conjuncion} ${b} días`;
 }
 
 export default function ProcesoPage() {
@@ -239,8 +248,26 @@ export default function ProcesoPage() {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-secundario text-muted-foreground">
-                      <span className="tabular-nums">{textoDeDias(paso.dia_desde, paso.dia_hasta)}</span>
-                      {paso.cuando && <span>· {paso.cuando}</span>}
+                      {/* La ventana se DICE a partir de los números, no se escribe
+                          aparte. Antes había un campo de texto al lado —«Lunes o
+                          martes»— que repetía lo mismo y acabó contradiciéndolo:
+                          la pantalla avisaba de que no son días de la semana y
+                          justo debajo ponía uno. Un texto que repite lo que dice
+                          otro campo siempre termina discrepando. */}
+                      {(() => {
+                        const ventana = textoDeDias(paso.dia_desde, paso.dia_hasta);
+                        if (ventana) {
+                          return (
+                            <span title={paso.dia_desde === paso.dia_hasta
+                              ? `Día ${paso.dia_desde} desde que entra el prospecto`
+                              : `Días ${paso.dia_desde}-${paso.dia_hasta} desde que entra el prospecto`}>
+                              {ventana}
+                            </span>
+                          );
+                        }
+                        // Sin días, manda la etiqueta: «Final de mes».
+                        return paso.cuando ? <span>{paso.cuando}</span> : <span>—</span>;
+                      })()}
                     </div>
 
                     {paso.canales?.length > 0 && (

@@ -86,25 +86,33 @@ END $$;
 
 -- Los cinco del documento, para cada proyecto que aun no los tenga. Se cargan
 -- como DATOS: a partir de aqui se editan desde la pantalla, no desde aqui.
+-- `cuando` va a NULL en los que tienen ventana de dias: la frase —«a los
+-- 2 o 3 dias»— se DICE a partir de `dia_desde`/`dia_hasta`, no se escribe
+-- aparte. Antes se sembraba «Lunes o martes» copiado del documento, y la
+-- pantalla acababa avisando de que no son dias de la semana con un dia de
+-- la semana escrito justo debajo. Un texto que repite lo que dice otro
+-- campo siempre termina contradiciendolo.
+--
+-- Se queda para lo que NO tiene ventana, como «Final de mes».
 INSERT INTO commercial_steps
   (project_id, clave, nombre, orden, cuando, dia_desde, dia_hasta, canales, es_seguimiento, nota)
 SELECT p.id, d.clave, d.nombre, d.orden, d.cuando, d.dia_desde, d.dia_hasta,
        d.canales, d.es_seguimiento, d.nota
   FROM projects p
  CROSS JOIN (VALUES
-   ('paso_1', 'Primer contacto e información', 1, 'El mismo día o al siguiente',
+   ('paso_1', 'Primer contacto e información', 1, NULL,
     0, 1, ARRAY['whatsapp','email'], false,
     'Los pasos de admisión y el trámite: solo cuando confirme interés.'),
 
-   ('paso_2', 'Prueba social · Opiniones', 2, 'A los 2 o 3 días',
+   ('paso_2', 'Prueba social · Opiniones', 2, NULL,
     2, 3, ARRAY['llamada','whatsapp'], false,
     'Si no tiene opiniones: enviar captura de la vista general de Opynio y pedir internamente que se cree la opinión de ese curso.'),
 
-   ('paso_3', 'Última plaza y facilidades de pago', 3, 'A los 4 días',
+   ('paso_3', 'Última plaza y facilidades de pago', 3, NULL,
     4, 4, ARRAY['llamada','whatsapp','email'], false,
     'El 5 % solo aplica en máster y diplomado, y se ofrece aquí, no antes.'),
 
-   ('paso_4', 'Convocatoria de becas CETLAT', 4, 'A los 7 u 8 días',
+   ('paso_4', 'Convocatoria de becas CETLAT', 4, NULL,
     7, 8, ARRAY['llamada','whatsapp','email'], false,
     'Interno, no se comparte: formación nueva máx. 40 %; formación ya habilitada hasta 70 %, reservado para quien casi no ha respondido.'),
 
