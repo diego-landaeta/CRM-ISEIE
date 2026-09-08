@@ -169,16 +169,21 @@ export default function DialogoPaso({
             </Field>
           )}
 
+          {/* Este campo es para lo que NO se puede contar en días.
+              Con una ventana puesta abajo, la frase —«a los 2 o 3 días»— la
+              dice sola la pantalla, así que escribir aquí algo la duplica y
+              acaba contradiciéndola: es lo que pasó con «Lunes o martes».
+              Por eso el hueco sugiere «Final de mes» y no un día de la semana. */}
           <Field
-            label="Cuándo (la etiqueta del documento)"
+            label="Cuándo, dicho a mano"
             htmlFor="paso-cuando"
-            hint="Texto libre, tal y como está en el papel. No decide nada: lo que ordena el proceso son los días de abajo."
+            hint="Solo para lo que no se cuenta en días, como «Final de mes». Si el paso tiene ventana de días, déjalo vacío: la frase se escribe sola."
           >
             <input
               id="paso-cuando"
               value={datos.cuando}
               onChange={(e) => set('cuando', e.target.value)}
-              placeholder="Lunes o martes"
+              placeholder="Final de mes"
               className={inputClass}
             />
           </Field>

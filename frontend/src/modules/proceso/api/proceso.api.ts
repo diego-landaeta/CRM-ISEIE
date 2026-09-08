@@ -15,7 +15,8 @@ export interface Paso {
   clave: string;
   nombre: string;
   orden: number;
-  /** La etiqueta del documento —«Lunes o martes»—, texto libre. No manda. */
+  /** Solo para lo que no se cuenta en días, como «Final de mes». Con ventana
+   *  de días la frase se dice sola y esto va vacío. */
   cuando: string | null;
   /** Días desde que entró el prospecto. Null en el de seguimiento. */
   dia_desde: number | null;
