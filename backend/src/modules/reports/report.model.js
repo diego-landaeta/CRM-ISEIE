@@ -170,8 +170,15 @@ export async function overview({ projectId, projectIds, from, to, asesoraId }) {
     leads_por_gestor: byGestor,
     conversions: convKpi[0],
     top_productos: topProductos,
-    ingresos_mensual: trend,
-    por_proyecto: porProyecto,
+    // `pg` devuelve NUMERIC como CADENA, y Recharts entonces ordena el eje como
+    // texto: «9481.50» le sale mayor que «23076.96» y la linea se sale por
+    // arriba del recuadro. Se devuelven numeros, como ya hace la serie del panel.
+    ingresos_mensual: trend.map((r) => ({ mes: r.mes, ingresos: Number(r.ingresos) })),
+    por_proyecto: porProyecto.map((r) => ({
+      ...r,
+      facturado: Number(r.facturado),
+      cobrado: Number(r.cobrado),
+    })),
     tasa_conversion,
   };
 }

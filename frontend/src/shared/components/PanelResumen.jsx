@@ -116,6 +116,13 @@ export default function PanelResumen({ projectId, projectName, from, to }) {
   const ventas = kpi('ventas', 'ventas');
   const ingresos = kpi('ingresos', 'ingresos');
   const tasa = kpi('tasa', 'tasa');
+  // De donde sale el dinero que entro: primer cobro de una venta, o cuota de
+  // una venta anterior. Es la diferencia EXACTA entre este bloque y el KPI
+  // «Ventas cobradas» de arriba, y sin verla los dos numeros parecian
+  // contradecirse.
+  const deVentas = Number(panel?.kpis?.ingresos_venta?.value || 0);
+  const deCuotas = Number(panel?.kpis?.ingresos_cuotas?.value || 0);
+  const nCuotas = Number(panel?.kpis?.mensualidades?.value || 0);
 
   // Cada serie lleva escrito QUE cuenta. Sin eso, este bloque y los KPI de
   // arriba dan dos cifras distintas de «ingresos» sin decir por que: aquellos
@@ -204,6 +211,14 @@ export default function PanelResumen({ projectId, projectName, from, to }) {
                 </div>
                 {heroActive.nota && (
                   <p className="text-[11px] text-muted-foreground">{heroActive.nota}</p>
+                )}
+                {heroSerie === 'ingresos' && (deVentas > 0 || deCuotas > 0) && (
+                  <p className="text-[11px] text-muted-foreground">
+                    <strong className="text-foreground tabular-nums">{fmtMoney(deVentas)}</strong> de ventas
+                    <span className="opacity-40"> · </span>
+                    <strong className="text-foreground tabular-nums">{fmtMoney(deCuotas)}</strong> de cuotas
+                    {nCuotas > 0 && ` (${nCuotas} ${nCuotas === 1 ? 'cobro' : 'cobros'})`}
+                  </p>
                 )}
                 <div className="flex items-baseline gap-3 flex-wrap">
                   {/* Manda lo filtrado, no el último punto de la serie. */}
