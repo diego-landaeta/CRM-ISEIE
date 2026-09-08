@@ -783,14 +783,20 @@ export async function panelReportes({ projectId, projectIds, from, to, asesoraId
 
   // Mismo recorte por asesora que el resto de informes. El numero de parametro
   // depende de si ademas viene proyecto.
-  const iAs = projectId ? 4 : 3;
+  //
+  // El ambito puede ser un proyecto O una sociedad entera, y aqui se resuelve
+  // a lista igual que en el resto del modulo (#120). Antes solo se miraba
+  // `projectId`: con una sociedad elegida no llega ese campo sino la lista de
+  // sus campus, asi que no filtraba por NADA.
+  const lista = comoLista(projectId, projectIds);
+  const iAs = lista ? 4 : 3;
   const al = asesoraId ? ` AND l.responsable_id = $${iAs}` : '';
   const ac = asesoraId
     ? ` AND COALESCE(c.vendedora_id, (SELECT responsable_id FROM leads WHERE id = c.lead_id)) = $${iAs}`
     : '';
-  const pl = (projectId ? 'AND l.project_id = $3' : '') + al;
-  const pc = (projectId ? 'AND c.project_id = $3' : '') + ac;
-  const par = (a, b) => [a, b, ...(projectId ? [projectId] : []), ...(asesoraId ? [asesoraId] : [])];
+  const pl = (lista ? 'AND l.project_id = ANY($3::int[])' : '') + al;
+  const pc = (lista ? 'AND c.project_id = ANY($3::int[])' : '') + ac;
+  const par = (a, b) => [a, b, ...(lista ? [lista] : []), ...(asesoraId ? [asesoraId] : [])];
 
   async function bloque(d, h) {
     const { rows: le } = await query(
@@ -1066,7 +1072,8 @@ export async function detalleMetrica({ projectId, projectIds, from, to, tipo, as
   const finMes = mes ? `(DATE '${mes}-01' + INTERVAL '1 month' - INTERVAL '1 day')::date` : null;
 
   if (tipo === 'leads') {
-    if (projectId) add('l.project_id = ?', projectId);
+    { const lista = comoLista(projectId, projectIds);
+      if (lista) add('l.project_id = ANY(?::int[])', lista); }
     // 'convertidos' son los leads DE ESE PERIODO que acabaron comprando; no la
     // gente que ese mes pago una mensualidad de algo que compro antes.
     if (tipo === 'leads-convertidos') {
@@ -1098,7 +1105,8 @@ export async function detalleMetrica({ projectId, projectIds, from, to, tipo, as
   // cuenta la tabla. Antes listaba los leads entrados en el mes que acabaron
   // comprando, que es otra pregunta y daba otro numero.
   if (tipo === 'ventas' || tipo === 'leads-convertidos') {
-    if (projectId) add('c.project_id = ?', projectId);
+    { const lista = comoLista(projectId, projectIds);
+      if (lista) add('c.project_id = ANY(?::int[])', lista); }
     const DV = porFactura ? FEC_VENTA : 'c.fecha_conversion';
     add(`${DV} >= ?`, desde);
     cond.push(finMes ? `${DV} <= ${finMes}` : `${DV} <= $${idx++}`);
@@ -1159,7 +1167,8 @@ export async function detalleMetrica({ projectId, projectIds, from, to, tipo, as
   }
 
   // cobros y mensualidades comparten consulta; cambia el filtro.
-  if (projectId) add('c.project_id = ?', projectId);
+  { const lista = comoLista(projectId, projectIds);
+    if (lista) add('c.project_id = ANY(?::int[])', lista); }
   const DC = porFactura ? FEC_COBRO : 'cp.fecha';
   add(`${DC} >= ?`, desde);
   cond.push(finMes ? `${DC} <= ${finMes}` : `${DC} <= $${idx++}`);
@@ -1247,6 +1256,7 @@ const ES_MENSUALIDAD = `(
 //
 // Esto lo devuelve para poder avisarle ANTES de descargar.
 export async function ventasSinFacturaEnRango({ projectId, projectIds, from, to }) {
+  const lista = comoLista(projectId, projectIds);
   const { rows } = await query(
     `SELECT cv.id, COALESCE(l.nombre, '—') AS cliente,
             SUM(cp.importe) AS cobrado,
@@ -1255,7 +1265,7 @@ export async function ventasSinFacturaEnRango({ projectId, projectIds, from, to 
        FROM conversion_payments cp
        JOIN conversions cv ON cv.id = cp.conversion_id
        LEFT JOIN leads l ON l.id = cv.lead_id
-      WHERE ($1::int IS NULL OR cv.project_id = $1)
+      WHERE ($1::int[] IS NULL OR cv.project_id = ANY($1::int[]))
         AND ($2::date IS NULL OR cp.fecha >= $2::date)
         AND ($3::date IS NULL OR cp.fecha <= $3::date)
         -- La factura puede colgar de la venta o del cobro: se miran las dos.
@@ -1265,7 +1275,7 @@ export async function ventasSinFacturaEnRango({ projectId, projectIds, from, to 
              AND (i.conversion_id = cv.id OR i.payment_id = cp.id))
       GROUP BY cv.id, l.nombre, cv.producto_contratado
       ORDER BY ultimo_cobro DESC, cobrado DESC`,
-    [projectId || null, from || null, to || null]
+    [lista, from || null, to || null]
   );
   return {
     ventas: rows.length,

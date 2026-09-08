@@ -117,11 +117,18 @@ export default function PanelResumen({ projectId, projectName, from, to }) {
   const ingresos = kpi('ingresos', 'ingresos');
   const tasa = kpi('tasa', 'tasa');
 
+  // Cada serie lleva escrito QUE cuenta. Sin eso, este bloque y los KPI de
+  // arriba dan dos cifras distintas de «ingresos» sin decir por que: aquellos
+  // miran las ventas cerradas en el periodo, y este el dinero que entro.
   const HERO_SERIES = {
-    leads: { label: 'Prospectos', campo: 'prospectos', color: 'hsl(199 89% 48%)', fmt },
-    ventas: { label: 'Ventas', campo: 'ventas', color: 'hsl(160 84% 39%)', fmt },
-    ingresos: { label: 'Ingresos', campo: 'ingresos', color: 'hsl(258 90% 66%)', fmt: fmtMoney },
-    tasa: { label: 'Tasa conv.', campo: 'tasa', color: 'hsl(43 96% 56%)', fmt: (v) => `${Math.round(v)}%` },
+    leads: { label: 'Prospectos', campo: 'prospectos', color: 'hsl(199 89% 48%)', fmt,
+      nota: 'por su fecha de entrada' },
+    ventas: { label: 'Ventas', campo: 'ventas', color: 'hsl(160 84% 39%)', fmt,
+      nota: 'cerradas en el periodo, por fecha de venta' },
+    ingresos: { label: 'Ingresos', campo: 'ingresos', color: 'hsl(258 90% 66%)', fmt: fmtMoney,
+      nota: 'dinero que ENTRÓ en el periodo, incluidas cuotas de ventas anteriores' },
+    tasa: { label: 'Tasa conv.', campo: 'tasa', color: 'hsl(43 96% 56%)', fmt: (v) => `${Math.round(v)}%`,
+      nota: 'ventas del periodo sobre prospectos del periodo' },
   };
   const heroActive = HERO_SERIES[heroSerie] || HERO_SERIES.ingresos;
   const heroCampo = heroActive.campo;
@@ -195,6 +202,9 @@ export default function PanelResumen({ projectId, projectName, from, to }) {
                     {heroActive.label} · {etiquetaRango}
                   </span>
                 </div>
+                {heroActive.nota && (
+                  <p className="text-[11px] text-muted-foreground">{heroActive.nota}</p>
+                )}
                 <div className="flex items-baseline gap-3 flex-wrap">
                   {/* Manda lo filtrado, no el último punto de la serie. */}
                   <span className="text-3xl sm:text-4xl font-bold tabular-nums tracking-tight"
