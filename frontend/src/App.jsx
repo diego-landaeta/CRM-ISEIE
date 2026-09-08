@@ -88,6 +88,8 @@ const EmailTemplatesPage = lazy(() => import('./modules/email-templates/pages/Em
 const MakeWebhooksPage = lazy(() => import('./modules/make-webhooks/pages/MakeWebhooksPage'));
 const MakeWebhookDetailPage = lazy(() => import('./modules/make-webhooks/pages/MakeWebhookDetailPage'));
 const WooCommercePage = lazy(() => import('./modules/woocommerce/pages/WooCommercePage'));
+const ColaDelDiaPage = lazy(() => import('./modules/proceso/pages/ColaDelDiaPage'));
+const ProcesoPage = lazy(() => import('./modules/proceso/pages/ProcesoPage'));
 
 const ROUTE_TITLES = {
   '/dashboard':                       'Dashboard',
@@ -181,6 +183,9 @@ function App() {
           <Route path="/leads" element={<LeadsPage />} />
           <Route path="/leads/pipeline" element={<LeadsPipelinePage />} />
           <Route path="/leads/archived" element={<LeadsArchivedPage />} />
+          {/* Antes que `:id`, para que «cola» y «proceso» no se lean como ids. */}
+          <Route path="/leads/cola" element={<ColaDelDiaPage />} />
+          <Route path="/leads/proceso" element={<ProcesoPage />} />
           <Route path="/leads/:id" element={<LeadDetailPage />} />
           <Route path="/products" element={<ProductsPage />} />
           <Route path="/products/pending" element={<CoursesPendingPage />} />

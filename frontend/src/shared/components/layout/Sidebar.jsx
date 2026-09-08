@@ -28,7 +28,18 @@ const NAV_SECTIONS = [
     label: 'Principal',
     items: [
       { to: '/dashboard',  label: 'Dashboard',  icon: SquaresFour, end: true },
-      { to: '/leads',      label: 'Prospectos', icon: Users,       sectionPrefixes: ['/leads'] },
+      // Prospectos cuelga de si mismo, como WhatsApp: la lista, la cola del dia
+      // y el proceso que la cola aplica son el mismo sitio.
+      {
+        label: 'Prospectos',
+        icon: Users,
+        defaultOpen: true,
+        children: [
+          { to: '/leads', label: 'Lista', end: true, sectionPrefixes: ['/leads'] },
+          { to: '/leads/cola', label: 'La cola del día' },
+          { to: '/leads/proceso', label: 'Proceso comercial' },
+        ],
+      },
       // WhatsApp cuelga de su propia entrada, con lo suyo escalonado debajo: son
       // tres pantallas del mismo sitio, no tres apartados sueltos del menu.
       {
@@ -244,7 +255,7 @@ function NavItem({ to, label, icon: Icon, end, comingSoon, statusTag, collapsed,
 // Una entrada con lo suyo escalonado debajo. Se abre y se cierra, y lo de
 // dentro se sangra con una guia a la izquierda para que se vea de un vistazo
 // que pertenece a ella.
-function NavGroup({ label, icon: Icon, items, role, soloColab, permisos, collapsed, onNavigate, onExpandSidebar }) {
+function NavGroup({ label, icon: Icon, items, defaultOpen, role, soloColab, permisos, collapsed, onNavigate, onExpandSidebar }) {
   const location = useLocation();
   const visible = items
     .filter((c) => canSeeItem(c, role, soloColab, permisos))
@@ -252,7 +263,7 @@ function NavGroup({ label, icon: Icon, items, role, soloColab, permisos, collaps
   const hasActiveChild = visible.some(
     (c) => !c.comingSoon && (location.pathname === c.to || location.pathname.startsWith(c.to + '/'))
   );
-  const [open, setOpen] = useState(hasActiveChild);
+  const [open, setOpen] = useState(hasActiveChild || !!defaultOpen);
   // Si se llega desde fuera a una pantalla de dentro, el grupo se abre solo:
   // si no, el apartado marcado como activo quedaria escondido.
   useEffect(() => { if (hasActiveChild) setOpen(true); }, [hasActiveChild]);
@@ -388,6 +399,7 @@ function CollapsibleNav({ sections, role, soloColab, permisos, collapsed, onNavi
             label={item.label}
             icon={item.icon}
             items={item.children}
+            defaultOpen={item.defaultOpen}
             soloColab={soloColab}
             permisos={permisos}
             role={role}
