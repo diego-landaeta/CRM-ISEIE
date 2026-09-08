@@ -38,3 +38,27 @@ export async function desactivarPaso(id, projectId) {
   await suyoOFuera(id, projectId);
   return Pasos.deactivate(id);
 }
+
+// ── LA AGENDA DE CADA PROSPECTO (#89 · #90) ─────────────────────────────────
+
+export function planificarPasosDeLead(leadId) {
+  return Pasos.planificarPasosDeLead(leadId);
+}
+
+export function pasosDeLead(leadId) {
+  return Pasos.pasosDeLead(leadId);
+}
+
+export function colaDelDia(opciones) {
+  return Pasos.colaDelDia(opciones);
+}
+
+export function resumenDeLaCola(opciones) {
+  return Pasos.resumenDeLaCola(opciones);
+}
+
+export async function ajustarPaso(id, datos) {
+  const paso = await Pasos.ajustarPaso(id, datos);
+  if (!paso) throw new AppError('Ese paso no existe', 404);
+  return paso;
+}

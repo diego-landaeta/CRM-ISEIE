@@ -101,3 +101,186 @@ export async function deactivate(id) {
   );
   return rows[0];
 }
+
+// ── LA AGENDA DE CADA PROSPECTO (#89 · #90) ─────────────────────────────────
+//
+// `commercial_steps` dice el proceso en general; esto dice a QUIEN le toca QUE
+// y CUANDO. Se escribe al entrar la persona, no se calcula al vuelo: calcularlo
+// vale para leer, pero no para trabajar —no deja ver la agenda por delante ni
+// mover la fecha de alguien concreto—.
+//
+// SI UN PASO ESTA HECHO NO SE GUARDA: se deduce de los contactos reales. El
+// contacto n.º N cierra el paso n.º N, que es la misma regla del embudo de
+// Reportes, asi que los dos sitios cuentan igual. Un plan que hay que mantener
+// a mano acaba mintiendo.
+
+// La fecha de entrada manda, y es `fecha_solicitud`: dos tercios de los
+// prospectos cargados tienen la solicitud anterior al alta.
+const ENTRADA = `COALESCE(l.fecha_solicitud, l.created_at)`;
+
+// Cuantas veces se ha contactado DE VERDAD con esta persona. Una nota interna
+// no es contactar con nadie.
+const CONTACTOS = `(SELECT count(*) FROM lead_interactions li
+                     WHERE li.lead_id = l.id AND li.tipo <> 'nota')`;
+
+/**
+ * Escribe la agenda de un prospecto: un apunte por cada paso del proceso de su
+ * proyecto, con la fecha contada desde que entro.
+ *
+ * Es idempotente —`ON CONFLICT DO NOTHING` sobre (lead_id, clave)—, asi que se
+ * puede llamar dos veces sin duplicar, y volver a llamarla despues de anadir un
+ * paso nuevo rellena solo lo que falta.
+ *
+ * El seguimiento mensual NO entra: no es del recorrido de una persona sino de
+ * toda la base a fin de mes, y meterlo aqui llenaria la cola del dia con la
+ * base entera.
+ */
+export async function planificarPasosDeLead(leadId) {
+  const { rows } = await query(
+    `INSERT INTO lead_steps (lead_id, project_id, step_id, clave, orden, fecha_prevista)
+     SELECT l.id, l.project_id, s.id, s.clave, s.orden,
+            (${ENTRADA}::date + COALESCE(s.dia_desde, 0))
+       FROM leads l
+       JOIN commercial_steps s ON s.project_id = l.project_id
+      WHERE l.id = $1
+        AND l.deleted_at IS NULL
+        AND s.activo = true
+        AND s.es_seguimiento = false
+     ON CONFLICT (lead_id, clave) DO NOTHING
+     RETURNING id`,
+    [leadId]
+  );
+  return rows.length;
+}
+
+/**
+ * La agenda de una persona, para su ficha (#89).
+ *
+ * Devuelve TODOS sus pasos en orden, cada uno con si esta hecho, si se salto y
+ * cuantos dias lleva de retraso. El «siguiente» es el primero que no esta ni
+ * hecho ni saltado.
+ */
+export async function pasosDeLead(leadId) {
+  const { rows } = await query(
+    `SELECT ls.id, ls.clave, ls.orden, ls.fecha_prevista, ls.estado, ls.nota,
+            s.nombre, s.cuando, s.canales, s.nota AS nota_del_paso,
+            (${CONTACTOS}) >= ls.orden AS hecho,
+            (CURRENT_DATE - ls.fecha_prevista) AS dias_de_retraso
+       FROM lead_steps ls
+       JOIN leads l ON l.id = ls.lead_id
+       LEFT JOIN commercial_steps s ON s.id = ls.step_id
+      WHERE ls.lead_id = $1
+      ORDER BY ls.orden, ls.id`,
+    [leadId]
+  );
+  return rows.map((r) => ({
+    ...r,
+    dias_de_retraso: Number(r.dias_de_retraso),
+    // Un paso vence solo si no esta hecho ni saltado. Uno hecho tarde ya no
+    // urge: urge el siguiente.
+    vencido: !r.hecho && r.estado === 'pendiente' && Number(r.dias_de_retraso) > 0,
+  }));
+}
+
+/**
+ * La cola del dia (#90): a quien le toca hoy, y quien viene arrastrado.
+ *
+ * Devuelve UNA fila por persona —su paso mas urgente—, no una por paso: la
+ * gestora abre una ficha por persona, no una por apunte. Si alguien lleva tres
+ * pasos sin hacer, lo que necesita es que le llamen, no salir tres veces.
+ */
+export async function colaDelDia({ projectIds, asesoraId, hasta = null, limite = 200 }) {
+  const par = [];
+  let i = 1;
+  const pProj = Array.isArray(projectIds) && projectIds.length
+    ? `AND ls.project_id = ANY($${i++}::int[])` : '';
+  if (pProj) par.push(projectIds.map(Number));
+  const pAses = asesoraId ? `AND l.responsable_id = $${i++}` : '';
+  if (asesoraId) par.push(asesoraId);
+  const pHasta = hasta ? `$${i++}::date` : 'CURRENT_DATE';
+  if (hasta) par.push(hasta);
+  const pLimite = `$${i++}`;
+  par.push(Number(limite) || 200);
+
+  const { rows } = await query(
+    `WITH pendientes AS (
+       SELECT ls.*, l.responsable_id, l.nombre AS lead_nombre, l.status AS lead_estado,
+              ${CONTACTOS} AS contactos,
+              ROW_NUMBER() OVER (PARTITION BY ls.lead_id ORDER BY ls.orden) AS pos
+         FROM lead_steps ls
+         JOIN leads l ON l.id = ls.lead_id
+        WHERE l.deleted_at IS NULL
+          AND ls.estado = 'pendiente'
+          AND ls.fecha_prevista <= ${pHasta}
+          -- Quien ya compro o dijo que no, sale de la cola: seguir el proceso
+          -- con alguien que ya cerro es hacerle perder el tiempo a las dos.
+          AND l.status NOT IN ('convertido', 'no_interesado')
+          -- El paso ya hecho no se pide otra vez.
+          AND ${CONTACTOS} < ls.orden
+          ${pProj} ${pAses}
+     )
+     SELECT p.lead_id, p.lead_nombre, p.lead_estado, p.responsable_id,
+            p.clave, p.orden, p.fecha_prevista, p.contactos,
+            s.nombre AS paso_nombre, s.canales, s.nota AS paso_nota,
+            u.nombre AS gestora,
+            (CURRENT_DATE - p.fecha_prevista) AS dias_de_retraso
+       FROM pendientes p
+       LEFT JOIN commercial_steps s ON s.id = p.step_id
+       LEFT JOIN users u ON u.id = p.responsable_id
+      WHERE p.pos = 1
+      ORDER BY p.fecha_prevista, p.orden, p.lead_id
+      LIMIT ${pLimite}`,
+    par
+  );
+  return rows.map((r) => ({ ...r, dias_de_retraso: Number(r.dias_de_retraso) }));
+}
+
+/**
+ * Cuantos hay atrasados, para hoy, para manana y para la semana. Para la
+ * campana y el resumen: no hace falta traerse la lista entera para dar un
+ * numero.
+ */
+export async function resumenDeLaCola({ projectIds, asesoraId }) {
+  const par = [];
+  let i = 1;
+  const pProj = Array.isArray(projectIds) && projectIds.length
+    ? `AND ls.project_id = ANY($${i++}::int[])` : '';
+  if (pProj) par.push(projectIds.map(Number));
+  const pAses = asesoraId ? `AND l.responsable_id = $${i++}` : '';
+  if (asesoraId) par.push(asesoraId);
+
+  const { rows } = await query(
+    `WITH pendientes AS (
+       SELECT ls.lead_id, ls.fecha_prevista,
+              ROW_NUMBER() OVER (PARTITION BY ls.lead_id ORDER BY ls.orden) AS pos
+         FROM lead_steps ls
+         JOIN leads l ON l.id = ls.lead_id
+        WHERE l.deleted_at IS NULL AND ls.estado = 'pendiente'
+          AND l.status NOT IN ('convertido', 'no_interesado')
+          AND ${CONTACTOS} < ls.orden
+          ${pProj} ${pAses}
+     )
+     SELECT count(*) FILTER (WHERE fecha_prevista < CURRENT_DATE)::int      AS atrasados,
+            count(*) FILTER (WHERE fecha_prevista = CURRENT_DATE)::int      AS hoy,
+            count(*) FILTER (WHERE fecha_prevista = CURRENT_DATE + 1)::int  AS manana,
+            count(*) FILTER (WHERE fecha_prevista <= CURRENT_DATE + 7)::int AS esta_semana
+       FROM pendientes WHERE pos = 1`,
+    par
+  );
+  return rows[0];
+}
+
+/** Saltarse un paso o moverlo de fecha, a mano y con su porque. */
+export async function ajustarPaso(id, { estado, fecha_prevista, nota }) {
+  const { rows } = await query(
+    `UPDATE lead_steps
+        SET estado = COALESCE($2, estado),
+            fecha_prevista = COALESCE($3::date, fecha_prevista),
+            nota = COALESCE($4, nota),
+            updated_at = NOW()
+      WHERE id = $1
+      RETURNING id, lead_id, clave, orden, fecha_prevista, estado, nota`,
+    [id, estado || null, fecha_prevista || null, nota || null]
+  );
+  return rows[0] || null;
+}

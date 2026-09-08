@@ -47,3 +47,12 @@ export const editarPasoSchema = z.object({
 export const reordenarSchema = z.object({
   ids: z.array(z.coerce.number().int().positive()).min(1).max(50),
 });
+
+// Mover de fecha o saltarse un paso de la agenda de alguien (#89).
+export const ajustarPasoSchema = z.object({
+  estado: z.enum(['pendiente', 'saltado']).optional(),
+  fecha_prevista: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha va como AAAA-MM-DD').optional(),
+  nota: z.string().trim().max(500).optional(),
+}).refine((d) => d.estado || d.fecha_prevista || d.nota, {
+  message: 'Hay que cambiar algo: el estado, la fecha o la nota',
+});
