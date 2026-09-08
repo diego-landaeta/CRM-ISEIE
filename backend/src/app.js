@@ -49,6 +49,7 @@ import clientErrorsModule from './modules/client-errors/index.js';
 import changeRequestsModule from './modules/change-requests/index.js';
 // El proceso comercial (#87): los pasos, y de ahí la cola del día.
 import procesoModule from './modules/proceso/index.js';
+import convocatoriasModule from './modules/convocatorias/index.js';
 import { startEmailSequenceScheduler } from './jobs/emailSequenceScheduler.js';
 import { startDocumentOrphanScheduler } from './jobs/documentOrphanScheduler.js';
 import { startGoogleAdsTokenScheduler } from './jobs/googleAdsTokenScheduler.js';
@@ -249,6 +250,7 @@ const MODULES = [
   changeRequestsModule,
   statusModule,
   procesoModule,
+  convocatoriasModule,
 ];
 
 for (const mod of MODULES) {
