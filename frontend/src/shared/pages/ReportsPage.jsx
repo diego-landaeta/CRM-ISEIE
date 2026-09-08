@@ -303,6 +303,8 @@ export default function ReportsPage() {
   const { activeProject, user } = useAuth();
   // Arranca en el MES en curso, no en los ultimos 30 dias.
   const [rango, setRango] = useState(() => rangoPorDefecto());
+  // Lo que trae el panel de seguimiento, para que la descarga se lo lleve.
+  const [panelSeguimiento, setPanelSeguimiento] = useState(null);
   const atajoActivo = atajoDe(rango);
   const [panel, setPanel] = useState(null);
 
@@ -505,7 +507,8 @@ export default function ReportsPage() {
       </header>
 
       {/* Seguimiento y tiempos: el mismo bloque que el CRM hermano. */}
-      <PanelSeguimiento projectId={activeProject?.id} from={rango.from} to={rango.to} />
+      <PanelSeguimiento projectId={activeProject?.id} from={rango.from} to={rango.to}
+        onDatos={setPanelSeguimiento} />
 
       {/* Hero — Resumen del periodo cableado a /leads/dashboard-summary */}
       <div className="rounded-2xl border border-border bg-card p-5 sm:p-6">

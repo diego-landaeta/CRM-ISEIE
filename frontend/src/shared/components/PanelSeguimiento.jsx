@@ -58,7 +58,7 @@ function Dato({ icon: Icon, titulo, valor, pie }) {
   );
 }
 
-export default function PanelSeguimiento({ projectId, issuerId, from, to }) {
+export default function PanelSeguimiento({ projectId, issuerId, from, to , onDatos }) {
   const [datos, setDatos] = useState(null);
   const [cargando, setCargando] = useState(true);
 
@@ -75,6 +75,10 @@ export default function PanelSeguimiento({ projectId, issuerId, from, to }) {
       .finally(() => { if (vivo) setCargando(false); });
     return () => { vivo = false; };
   }, [projectId, issuerId, from, to]);
+
+  // La pagina necesita esto para la descarga: pedirlo otra vez desde
+  // arriba serian dos viajes para el mismo dato.
+  useEffect(() => { onDatos?.(datos); }, [datos]);
 
   if (cargando) {
     return (
