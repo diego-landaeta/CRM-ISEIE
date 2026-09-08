@@ -217,6 +217,129 @@ function buildFilter({ projectId, projectIds, from, to, asesoraId }, dateCol, pr
 const TZ = process.env.APP_TIMEZONE || 'Europe/Madrid';
 const ENTRY = `(COALESCE(l.fecha_solicitud, l.created_at) AT TIME ZONE '${TZ}')`;
 
+// ── SEGUIMIENTO Y TIEMPOS ───────────────────────────────────────────────────
+//
+// Dos preguntas distintas, y por eso van separadas en la respuesta:
+//
+//   LA COHORTE   de los que ENTRARON en el periodo: a cuantos se les hizo
+//                seguimiento, cuanto se tardo en tocarles y cuanto en venderles.
+//                Sigue a las MISMAS personas, asi que los porcentajes y los
+//                tiempos significan algo.
+//
+//   LA ACTIVIDAD lo que se hizo DURANTE el periodo, entrara quien entrara. Es
+//                el trabajo del mes, no el resultado de una cohorte.
+//
+// Mezclarlas es lo que hace que un panel diga «60 % contactados» y nadie sepa
+// si es de los que entraron o de los que se tocaron.
+//
+// Se usa la MEDIANA, no la media: el CRM se cargo con historico y hay leads de
+// hace un ano contactados ayer. Una sola fila asi se lleva la media al garete;
+// la mediana ni se entera.
+export async function seguimientoYTiempos({ projectId, projectIds, from, to, asesoraId }) {
+  const lista = comoLista(projectId, projectIds);
+  const par = [];
+  let i = 1;
+  const pProj = lista ? `AND l.project_id = ANY($${i++}::int[])` : '';
+  if (lista) par.push(lista);
+  const pDesde = from ? `$${i++}` : null;
+  if (from) par.push(from);
+  const pHasta = to ? `$${i++}` : null;
+  if (to) par.push(to);
+  const pAses = asesoraId ? `AND l.responsable_id = $${i++}` : '';
+  if (asesoraId) par.push(asesoraId);
+
+  const entre = (col) => [
+    pDesde ? `AND ${col} >= ${pDesde}::date` : '',
+    pHasta ? `AND ${col} <= ${pHasta}::date` : '',
+  ].join(' ');
+
+  const { rows: coh } = await query(
+    `WITH cohorte AS (
+       SELECT l.id, ${ENTRY} AS entro
+         FROM leads l
+        WHERE l.deleted_at IS NULL ${pProj} ${pAses} ${entre(`${ENTRY}::date`)}
+     ),
+     -- Una nota interna no es haber contactado a nadie: para el «tiempo hasta
+     -- el primer contacto» solo cuentan llamada, WhatsApp y correo.
+     primer AS (
+       SELECT li.lead_id, MIN(li.fecha AT TIME ZONE '${TZ}') AS primera
+         FROM lead_interactions li JOIN cohorte co ON co.id = li.lead_id
+        WHERE li.tipo <> 'nota' GROUP BY li.lead_id
+     ),
+     tocado AS (
+       SELECT DISTINCT li.lead_id FROM lead_interactions li JOIN cohorte co ON co.id = li.lead_id
+     ),
+     -- La primera venta de cada persona, sin contar mensualidades: pagar la
+     -- cuota de algo que ya compro no es convertirse otra vez.
+     venta AS (
+       SELECT cv.lead_id, MIN(cv.fecha_conversion) AS vendida
+         FROM conversions cv JOIN cohorte co ON co.id = cv.lead_id
+        WHERE cv.es_mensualidad IS NOT TRUE GROUP BY cv.lead_id
+     )
+     SELECT count(*)::int AS entraron,
+            count(t.lead_id)::int AS con_seguimiento,
+            count(p.lead_id)::int AS contactados,
+            count(v.lead_id)::int AS compraron,
+            percentile_cont(0.5) WITHIN GROUP (
+              ORDER BY EXTRACT(EPOCH FROM (p.primera - co.entro))) AS mediana_primer_contacto_seg,
+            percentile_cont(0.5) WITHIN GROUP (
+              ORDER BY (v.vendida - co.entro::date)) AS mediana_dias_venta
+       FROM cohorte co
+       LEFT JOIN primer p ON p.lead_id = co.id
+       LEFT JOIN tocado t ON t.lead_id = co.id
+       LEFT JOIN venta  v ON v.lead_id = co.id`,
+    par
+  );
+
+  const { rows: act } = await query(
+    `SELECT count(*)::int AS toques,
+            count(DISTINCT li.lead_id)::int AS personas,
+            count(*) FILTER (WHERE li.tipo = 'whatsapp')::int AS whatsapp,
+            count(*) FILTER (WHERE li.tipo = 'llamada')::int  AS llamada,
+            count(*) FILTER (WHERE li.tipo = 'email')::int    AS email,
+            count(*) FILTER (WHERE li.tipo = 'nota')::int     AS nota
+       FROM lead_interactions li
+       JOIN leads l ON l.id = li.lead_id
+      WHERE l.deleted_at IS NULL ${pProj} ${pAses}
+            ${entre(`(li.fecha AT TIME ZONE '${TZ}')::date`)}`,
+    par
+  );
+
+  const c0 = coh[0];
+  const entraron = Number(c0.entraron);
+  const pct = (n) => (entraron > 0 ? Math.round((Number(n) * 1000) / entraron) / 10 : 0);
+  return {
+    cohorte: {
+      entraron,
+      con_seguimiento: Number(c0.con_seguimiento),
+      contactados: Number(c0.contactados),
+      compraron: Number(c0.compraron),
+      pct_con_seguimiento: pct(c0.con_seguimiento),
+      pct_contactados: pct(c0.contactados),
+      pct_compraron: pct(c0.compraron),
+      // Segundos y dias, en numeros: la pantalla decide como se leen.
+      mediana_primer_contacto_seg: c0.mediana_primer_contacto_seg == null
+        ? null : Number(c0.mediana_primer_contacto_seg),
+      mediana_dias_venta: c0.mediana_dias_venta == null
+        ? null : Number(c0.mediana_dias_venta),
+    },
+    actividad: {
+      toques: Number(act[0].toques),
+      personas: Number(act[0].personas),
+      por_tipo: {
+        whatsapp: Number(act[0].whatsapp),
+        llamada: Number(act[0].llamada),
+        email: Number(act[0].email),
+        nota: Number(act[0].nota),
+      },
+      // Cuantas veces se toca a cada persona, de media. Aqui la media SI vale:
+      // no hay cola larga, y «2,3 toques por persona» se entiende solo.
+      toques_por_persona: Number(act[0].personas) > 0
+        ? Math.round((Number(act[0].toques) * 10) / Number(act[0].personas)) / 10 : 0,
+    },
+  };
+}
+
 // ── LA TASA DE CIERRE ───────────────────────────────────────────────────────
 //
 // De los prospectos que ENTRARON en el periodo, cuantos han comprado.

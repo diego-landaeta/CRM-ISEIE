@@ -116,6 +116,15 @@ export async function panel(req, res, next) {
   } catch (err) { next(err); }
 }
 
+// GET /api/informes/seguimiento -> a cuantos se les hizo seguimiento y cuanto
+// se tardo. Pasa por `rangoDeQuery`, asi que respeta la sociedad y el recorte
+// por asesora igual que el resto.
+export async function seguimiento(req, res, next) {
+  try {
+    res.json({ success: true, data: await model.seguimientoYTiempos(await rangoDeQuery(req)) });
+  } catch (err) { next(err); }
+}
+
 // GET /api/informes/paises  -> ranking de paises, deducido del prefijo telefonico
 export async function paises(req, res, next) {
   try {

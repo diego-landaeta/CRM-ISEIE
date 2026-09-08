@@ -16,6 +16,7 @@ import ReportsDownloadSection from '@/shared/components/ReportsDownloadSection';
 import AsesorasPanel from '@/shared/components/AsesorasPanel';
 import RankingsPanel from '@/shared/components/RankingsPanel';
 import { ATAJOS, rangoPorDefecto, atajoDe } from '@/shared/lib/rangosDeFecha';
+import PanelSeguimiento from '@/shared/components/PanelSeguimiento';
 
 const REPORT_CATEGORIES = [
   {
@@ -502,6 +503,9 @@ export default function ReportsPage() {
           </button>
         </div>
       </header>
+
+      {/* Seguimiento y tiempos: el mismo bloque que el CRM hermano. */}
+      <PanelSeguimiento projectId={activeProject?.id} from={rango.from} to={rango.to} />
 
       {/* Hero — Resumen del periodo cableado a /leads/dashboard-summary */}
       <div className="rounded-2xl border border-border bg-card p-5 sm:p-6">
