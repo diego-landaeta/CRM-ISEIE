@@ -39,7 +39,11 @@ export async function gestoresStats(req, res, next) {
   try {
     const projectId = req.query.projectId ? parseInt(req.query.projectId) : null;
     const periodo = req.query.periodo || null;
-    const result = await goalsService.getGestoresStats({ projectId, periodo });
+    // Las fechas mandan sobre el mes.
+    const re = /^\d{4}-\d{2}-\d{2}$/;
+    const from = re.test(req.query.from || '') ? req.query.from : null;
+    const to = re.test(req.query.to || '') ? req.query.to : null;
+    const result = await goalsService.getGestoresStats({ projectId, periodo, from, to });
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
 }

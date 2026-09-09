@@ -437,7 +437,8 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
               siempre el mes en curso: con el filtro en agosto decia
               «Equipo de ventas — 2026-09» y todos a cero (#100 · 4). */}
           <GestoresStatsTable projectId={activeProject?.id}
-            periodo={mesDe(rango.from, rango.to)} canEdit={true} />
+            periodo={mesDe(rango.from, rango.to)}
+            from={rango.from || null} to={rango.to || null} canEdit={true} />
         </Suspense>
       )}
 

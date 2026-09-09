@@ -13,19 +13,30 @@ function currentPeriodo() {
  * Si projectId, filtra a ese proyecto.
  * Devuelve también la meta cuando existe.
  */
-export async function getGestoresStats({ projectId = null, periodo = null } = {}) {
+export async function getGestoresStats({
+  projectId = null, periodo = null, from = null, to = null,
+} = {}) {
   // periodo='all' → todas las ventas (sin filtro de mes). Default = mes actual.
   const allTime = periodo === 'all';
   const per = allTime ? null : (periodo || currentPeriodo());
-  const params = allTime ? [] : [per];
+  // Las FECHAS mandan sobre el mes: si la pantalla mira un dia, la tabla tiene
+  // que enseñar ESE dia y no el mes entero. Las metas siguen siendo mensuales.
+  const porFechas = Boolean(from && to);
+  const params = [];
 
   const projectFilter = projectId ? `AND c.project_id = $${params.push(projectId)}` : '';
-  const projectGoalFilter = projectId ? `AND (g.project_id = $${params.length} OR g.project_id IS NULL)` : '';
+  const idxProyecto = projectId ? params.length : null;
   const userProjectJoin = projectId
-    ? `JOIN user_projects up ON up.user_id = u.id AND up.project_id = $${params.length} AND up.active = TRUE`
+    ? `JOIN user_projects up ON up.user_id = u.id AND up.project_id = $${idxProyecto} AND up.active = TRUE`
     : '';
 
-  const dateFilter = allTime ? '' : `AND TO_CHAR(c.fecha_conversion, 'YYYY-MM') = $1`;
+  let dateFilter = '';
+  if (porFechas) {
+    dateFilter = `AND c.fecha_conversion >= $${params.push(from)}`
+      + ` AND c.fecha_conversion <= $${params.push(to)}`;
+  } else if (!allTime) {
+    dateFilter = `AND TO_CHAR(c.fecha_conversion, 'YYYY-MM') = $${params.push(per)}`;
+  }
 
   const { rows: stats } = await query(
     `SELECT u.id AS user_id, u.nombre, u.email, u.role, u.is_available,
@@ -34,8 +45,16 @@ export async function getGestoresStats({ projectId = null, periodo = null } = {}
             COALESCE(SUM(c.importe_pagado), 0)::numeric AS cobrado
      FROM users u
      ${userProjectJoin}
-     LEFT JOIN leads l ON l.responsable_id = u.id
-     LEFT JOIN conversions c ON c.lead_id = l.id
+     -- La venta es de QUIEN LA VENDIO, no de quien lleva la ficha.
+     --
+     -- Iba por leads.responsable_id a secas, y eso ignora vendedora_id: una
+     -- venta que cerro otra persona se le apuntaba a la gestora del prospecto.
+     LEFT JOIN (
+       SELECT c.id, c.importe_total, c.importe_pagado, c.fecha_conversion, c.project_id,
+              COALESCE(c.vendedora_id, l.responsable_id) AS vendedora_id
+         FROM conversions c
+         LEFT JOIN leads l ON l.id = c.lead_id
+     ) c ON c.vendedora_id = u.id
        ${dateFilter}
        ${projectFilter}
      WHERE u.active = TRUE AND u.role IN ('gestor', 'admin', 'superadmin')
@@ -48,6 +67,8 @@ export async function getGestoresStats({ projectId = null, periodo = null } = {}
   let goalByUser = {};
   if (!allTime) {
     const goalsParams = [per];
+    const projectGoalFilter = projectId
+      ? `AND (g.project_id = $2 OR g.project_id IS NULL)` : '';
     const { rows: goals } = await query(
       `SELECT g.user_id, g.meta_ventas, g.meta_facturacion, g.notas, g.set_by_user_id,
               su.nombre AS set_by_nombre
@@ -61,6 +82,10 @@ export async function getGestoresStats({ projectId = null, periodo = null } = {}
 
   return {
     periodo: per,
+    // Lo que de verdad se ha contado, para que la pantalla no titule un mes
+    // cuando esta enseñando un dia.
+    desde: porFechas ? from : null,
+    hasta: porFechas ? to : null,
     project_id: projectId,
     gestores: stats.map((s) => {
       const g = goalByUser[s.user_id] || null;

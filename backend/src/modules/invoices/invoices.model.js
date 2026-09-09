@@ -400,7 +400,31 @@ export async function list({ projectId, issuerId, estado, search, from, to, tipo
             i.project_id, p.nombre AS proyecto_nombre,
             i.issuer_id, i.issuer_razon_social,
             i.metodo_pago, i.moneda, i.total_divisa,
-            u.nombre AS gestora_nombre
+            u.nombre AS gestora_nombre,
+            /*
+              Que es esta factura: una VENTA NUEVA o una CUOTA.
+
+              Diego: «veo todos los proyectos, esos pagos, y no se cuales son
+              cuotas o compras». Es lo que hacia que las cifras parecieran
+              contradecirse: en un dia con 7 facturas y 3 ventas, quien cuenta
+              filas ve siete ventas donde hay tres. Una venta a plazos emite una
+              factura por cada cobro.
+
+              Misma regla que en Ventas --el primer cobro es la matricula, el
+              resto son cuotas-- para que las dos pantallas no discrepen.
+            */
+            CASE
+              WHEN i.conversion_id IS NULL THEN 'suelta'
+              WHEN i.payment_id IS NULL THEN 'venta'
+              WHEN NOT EXISTS (
+                SELECT 1 FROM conversion_payments p0
+                 JOIN conversion_payments pi ON pi.id = i.payment_id
+                 WHERE p0.conversion_id = pi.conversion_id
+                   AND (p0.fecha < pi.fecha OR (p0.fecha = pi.fecha AND p0.id < pi.id))
+              ) THEN 'venta'
+              ELSE 'cuota'
+            END AS clase,
+            cv.fecha_conversion AS fecha_de_la_venta
      FROM invoices i
      LEFT JOIN projects p ON p.id = i.project_id
      -- La gestora sale de la VENTA. invoices.lead_id esta vacio en toda la carga

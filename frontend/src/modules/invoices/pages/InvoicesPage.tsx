@@ -472,6 +472,35 @@ export default function InvoicesPage() {
                     {inv.rectifica_codigo && (
                       <div className="text-[10px] text-muted-foreground font-normal">rectifica {inv.rectifica_codigo}</div>
                     )}
+                    {/*
+                      Venta nueva o cuota.
+
+                      Diego: «veo esos pagos y no sé cuáles son cuotas o
+                      compras». Sin esto, un día con 7 facturas y 3 ventas
+                      parece un día de 7 ventas: una venta a plazos emite una
+                      factura por cada cobro.
+                    */}
+                    {inv.tipo !== 'proforma' && inv.clase === 'cuota' && (
+                      <div className="mt-0.5">
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300"
+                          title={inv.fecha_de_la_venta ? `Cuota de una venta del ${fmtDate(inv.fecha_de_la_venta)}` : 'Cuota de una venta anterior'}>
+                          CUOTA
+                        </span>
+                        {inv.fecha_de_la_venta && (
+                          <span className="ml-1 text-[10px] text-muted-foreground font-normal">
+                            venta del {fmtDate(inv.fecha_de_la_venta)}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {inv.tipo !== 'proforma' && inv.clase === 'venta' && (
+                      <div className="mt-0.5">
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+                          title="Es la factura de una venta nueva">
+                          VENTA
+                        </span>
+                      </div>
+                    )}
                   </td>
                   <td className="px-3 py-2">{fmtDate(inv.fecha_emision)}</td>
                   <td className="px-3 py-2">

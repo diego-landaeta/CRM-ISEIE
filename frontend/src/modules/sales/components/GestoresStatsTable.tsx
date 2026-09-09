@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Users, PencilSimple, X, Check } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
+import { formatDate } from '@/shared/lib/format';
 
 interface GestorRow {
   user_id: number;
@@ -26,6 +27,9 @@ interface Props {
   canEdit?: boolean;
   /** Mes (YYYY-MM) que manda desde la pantalla. */
   periodo?: string;
+  /** Las fechas del filtro de la pantalla. Mandan sobre el mes. */
+  from?: string | null;
+  to?: string | null;
 }
 
 function fmt(n: number) {
@@ -37,7 +41,7 @@ function currentPeriodo() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-export default function GestoresStatsTable({ projectId, className = '', canEdit = true, periodo: periodoProp }: Props) {
+export default function GestoresStatsTable({ projectId, className = '', canEdit = true, periodo: periodoProp, from = null, to = null }: Props) {
   const [rows, setRows] = useState<GestorRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -54,13 +58,16 @@ export default function GestoresStatsTable({ projectId, className = '', canEdit 
     // El periodo NO se enviaba: la tabla pedia siempre el valor por defecto del
     // backend y salia todo a cero aunque arriba se estuviera mirando el año.
     if (periodo) params.periodo = periodo;
+    // Las fechas van SIEMPRE que las haya: sin ellas la tabla contaba el mes
+    // entero aunque arriba se estuviera mirando un solo dia.
+    if (from && to) { params.from = from; params.to = to; }
     client.get<{ gestores: GestorRow[] }>('/ventas/gestores-stats', { params })
       .then((r) => { setRows(r?.data?.gestores || []); })
       .catch(() => setRows([]))
       .finally(() => setLoading(false));
   }
 
-  useEffect(() => { load(); }, [projectId, periodo]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [projectId, periodo, from, to]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function startEdit(row: GestorRow) {
     setEditingId(row.user_id);
@@ -94,7 +101,10 @@ export default function GestoresStatsTable({ projectId, className = '', canEdit 
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold flex items-center gap-2">
           <Users size={16} weight="duotone" className="text-blue-600" />
-          Equipo de ventas — {periodo === 'all' ? 'histórico' : periodo}
+          {/* El titulo dice lo que de verdad se esta contando. */}
+          Equipo de ventas — {from && to
+            ? (from === to ? formatDate(from) : `${formatDate(from)} a ${formatDate(to)}`)
+            : periodo === 'all' ? 'histórico' : periodo}
         </h3>
         <span className="text-[11px] text-muted-foreground">{rows.length} {rows.length === 1 ? 'gestor' : 'gestores'}</span>
       </div>
