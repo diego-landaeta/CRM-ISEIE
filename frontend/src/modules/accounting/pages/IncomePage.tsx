@@ -20,6 +20,40 @@ function fmt(n) {
 }
 const PER_PAGE = 50;
 
+/*
+  Los atajos de fecha.
+
+  `toISOString()` NO sirve aqui: pasa a UTC, y en España a partir de las 22:00
+  «hoy» se convierte en mañana. Un atajo que enseña el dia equivocado por la
+  noche es peor que no tenerlo, asi que la fecha se arma con los numeros locales.
+*/
+const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const sumaDias = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+
+/* «Esta semana» empieza en LUNES, no en domingo: es la semana con la que se
+   trabaja aqui. getDay() da 0 para el domingo, de ahi el ajuste. */
+const lunesDe = (d) => sumaDias(d, -((d.getDay() + 6) % 7));
+
+function atajosDeFecha() {
+  const hoy = new Date();
+  const ayer = sumaDias(hoy, -1);
+  const lunes = lunesDe(hoy);
+  const lunesPasado = sumaDias(lunes, -7);
+  const primeroDeMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+  const finMesPasado = sumaDias(primeroDeMes, -1);
+  const primeroMesPasado = new Date(finMesPasado.getFullYear(), finMesPasado.getMonth(), 1);
+  return [
+    { id: 'hoy', texto: 'Hoy', from: iso(hoy), to: iso(hoy) },
+    { id: 'ayer', texto: 'Ayer', from: iso(ayer), to: iso(ayer) },
+    // De lunes a HOY, no a domingo: enseñar dias que aun no han pasado hace
+    // parecer que la semana va peor de lo que va.
+    { id: 'semana', texto: 'Esta semana', from: iso(lunes), to: iso(hoy) },
+    { id: 'semana_pasada', texto: 'Semana pasada', from: iso(lunesPasado), to: iso(sumaDias(lunes, -1)) },
+    { id: 'mes', texto: 'Este mes', from: iso(primeroDeMes), to: iso(hoy) },
+    { id: 'mes_pasado', texto: 'Mes pasado', from: iso(primeroMesPasado), to: iso(finMesPasado) },
+  ];
+}
+
 
 export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas las ventas registradas' }) {
   const navigate = useNavigate();
@@ -36,8 +70,12 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
   const [cursos, setCursos] = useState([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
-  const [totales, setTotales] = useState({ importe: 0, pagado: 0, pendiente: 0, iva: 0 });
+  const [totales, setTotales] = useState({
+    importe: 0, pagado: 0, pendiente: 0, iva: 0,
+    facturadas: 0, sinFactura: 0, facturasDeAntes: { n: 0, importe: 0 },
+  });
   const [rango, setRango] = useState({ from: '', to: '' });
+  const atajos = atajosDeFecha();
   const effectiveResponsableId = isAdmin ? (viewUserId === 'all' ? null : Number(viewUserId)) : null;
 
   useEffect(() => {
@@ -75,10 +113,10 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
           setTotal(res.pagination?.total ?? (res.data || []).length);
           // Los totales vienen del servidor sobre TODO el filtro; antes se
           // sumaban las filas cargadas y las tarjetas no cuadraban nunca.
-          setTotales(res.totales || { importe: 0, pagado: 0, pendiente: 0, iva: 0 });
+          setTotales(res.totales || { importe: 0, pagado: 0, pendiente: 0, iva: 0, facturadas: 0, sinFactura: 0, facturasDeAntes: { n: 0, importe: 0 } });
         }
       } catch {
-        setItems([]); setTotal(0); setTotales({ importe: 0, pagado: 0, pendiente: 0, iva: 0 });
+        setItems([]); setTotal(0); setTotales({ importe: 0, pagado: 0, pendiente: 0, iva: 0, facturadas: 0, sinFactura: 0, facturasDeAntes: { n: 0, importe: 0 } });
       } finally { setLoading(false); }
     })();
   }, [activeProject?.id, reloadKey, effectiveResponsableId, page, filterCurso, rango.from, rango.to]);
@@ -166,16 +204,52 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
               Quitar filtros
             </button>
           )}
+
+          {/* Atajos. Van en su propia fila y ocupando el ancho para que no
+              queden escondidos al final de una fila larga de filtros. */}
+          <div className="basis-full flex flex-wrap items-center gap-1.5 pt-1">
+            <span className="text-xs font-semibold text-muted-foreground mr-0.5">Rápido:</span>
+            {atajos.map((a) => {
+              const puesto = rango.from === a.from && rango.to === a.to;
+              return (
+                <button key={a.id} type="button"
+                  onClick={() => setRango(puesto ? { from: '', to: '' } : { from: a.from, to: a.to })}
+                  // Se dice el periodo exacto que coge: «Semana pasada» no
+                  // significa lo mismo para todo el mundo.
+                  title={`${a.from} → ${a.to}`}
+                  className={`h-7 px-2.5 rounded-md border text-xs font-medium transition-colors ${
+                    puesto
+                      ? 'border-primary bg-primary/10 text-primary'
+                      : 'border-border text-muted-foreground hover:bg-muted'}`}>
+                  {a.texto}
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
         <KpiCard
           icon={Receipt}
           iconBg="bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400"
           label="Conversiones"
           numericValue={total}
         />
+        {/* Ventas por facturas: cuantas de estas ventas tienen factura.
+            El detalle va en el texto que sale al pasar el raton, que es donde
+            lo pidio Diego — la tarjeta enseña la proporcion de un vistazo. */}
+        <div title={`${totales.facturadas} ventas facturadas · ${totales.sinFactura} ventas no facturadas`}>
+          <KpiCard
+            icon={Receipt}
+            iconBg="bg-teal-50 text-teal-600 dark:bg-teal-950/30 dark:text-teal-400"
+            label="Ventas por facturas"
+            value={`${totales.facturadas} / ${total}`}
+            badge={totales.sinFactura > 0 ? `${totales.sinFactura} sin factura` : null}
+            badgeColor="bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
+            trend="down"
+          />
+        </div>
         <KpiCard
           icon={CurrencyEur}
           iconBg="bg-violet-50 text-violet-600 dark:bg-violet-950/30 dark:text-violet-400"
@@ -198,6 +272,33 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
           format={fmt}
         />
       </div>
+
+      {/*
+        Por que Facturacion enseña mas filas que esta pantalla en el mismo dia.
+
+        Es la duda de Diego del 09/09 —«pongo ventas del 8 al 8 y sale 1»— y la
+        respuesta era que esa pantalla contaba bien: ese dia hubo una venta nueva
+        y dos facturas, porque la otra era una cuota de una venta de julio. Una
+        venta a plazos emite una factura por cada cobro, y esas facturas caen en
+        el mes en que se cobran, no en el que se vendio.
+
+        Solo sale cuando de verdad hay descuadre que explicar.
+      */}
+      {totales.facturasDeAntes?.n > 0 && (
+        <div className="rounded-lg border border-sky-200 dark:border-sky-900 bg-sky-50 dark:bg-sky-950/30 px-3 py-2.5">
+          <p className="text-sm text-sky-900 dark:text-sky-200">
+            <strong>{totales.facturasDeAntes.n}</strong>{' '}
+            {totales.facturasDeAntes.n === 1 ? 'factura de este periodo no es de una venta de este periodo' : 'facturas de este periodo no son de ventas de este periodo'}
+            {' '}({fmt(totales.facturasDeAntes.importe)}).
+          </p>
+          <p className="text-xs text-sky-800 dark:text-sky-300 mt-0.5 leading-relaxed">
+            Son cuotas de ventas anteriores: una venta a plazos emite una factura por
+            cada cobro, y esa factura cae en el mes en que se cobra. Por eso Facturación
+            enseña más filas que Ventas en las mismas fechas — aquí se cuentan
+            <strong> ventas</strong>, allí <strong>facturas</strong>. Las dos cifras son correctas.
+          </p>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Suspense fallback={null}>
