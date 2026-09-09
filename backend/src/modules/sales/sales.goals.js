@@ -26,8 +26,19 @@ export async function getGestoresStats({
 
   const projectFilter = projectId ? `AND c.project_id = $${params.push(projectId)}` : '';
   const idxProyecto = projectId ? params.length : null;
+  /*
+    Quien sale en la tabla: quien trabaja en ese proyecto.
+
+    CON *EXISTS* Y NO CON *JOIN*: un JOIN devuelve una fila por cada asignacion
+    y, al agrupar y sumar, cada venta se contaria tantas veces como asignaciones
+    tenga la persona. Aqui no se notaba porque solo hay un proyecto, pero en el
+    CRM hermano --con sociedades de siete campus-- las 2 ventas de una gestora
+    salian como 14. Se escribe igual en los dos para que no vuelva a pasar.
+  */
   const userProjectJoin = projectId
-    ? `JOIN user_projects up ON up.user_id = u.id AND up.project_id = $${idxProyecto} AND up.active = TRUE`
+    ? `AND EXISTS (SELECT 1 FROM user_projects up
+                    WHERE up.user_id = u.id AND up.active = TRUE
+                      AND up.project_id = $${idxProyecto})`
     : '';
 
   let dateFilter = '';
@@ -44,7 +55,6 @@ export async function getGestoresStats({
             COALESCE(SUM(c.importe_total), 0)::numeric AS facturado,
             COALESCE(SUM(c.importe_pagado), 0)::numeric AS cobrado
      FROM users u
-     ${userProjectJoin}
      -- La venta es de QUIEN LA VENDIO, no de quien lleva la ficha.
      --
      -- Iba por leads.responsable_id a secas, y eso ignora vendedora_id: una
@@ -58,6 +68,7 @@ export async function getGestoresStats({
        ${dateFilter}
        ${projectFilter}
      WHERE u.active = TRUE AND u.role IN ('gestor', 'admin', 'superadmin')
+       ${userProjectJoin}
      GROUP BY u.id, u.nombre, u.email, u.role, u.is_available
      ORDER BY ventas DESC, facturado DESC`,
     params
