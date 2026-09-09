@@ -598,7 +598,7 @@ export async function deleteTemplate(req, res, next) {
 export async function ventasSinFactura(req, res, next) {
   try {
     const pid = projectId(req);
-    res.json({ success: true, data: await model.listVentasSinFactura(pid) });
+    res.json({ success: true, data: await model.listVentasSinFactura({ projectId: pid }) });
   } catch (e) { next(e); }
 }
 

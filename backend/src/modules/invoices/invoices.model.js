@@ -2,6 +2,7 @@ import { query, getClient } from '../../shared/config/db.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { issuerFiscalStatus } from '../../shared/utils/spanishTaxId.js';
 import { resolveRegimenClave } from './fiscal-engine.js';
+import { comoLista } from '../../shared/utils/ambito.js';
 
 // Sociedad emisora de un proyecto (null si no tiene). Helper para numeración.
 async function issuerOfProject(exec, projectId) {
@@ -1432,19 +1433,28 @@ export async function deleteTemplate(id) {
 }
 
 // Ventas (conversiones) con importe > 0 que aún NO tienen factura emitida (no cancelada).
-export async function listVentasSinFactura(projectId) {
+export async function listVentasSinFactura({ projectId = null, projectIds = null } = {}) {
+  /*
+    La MISMA FIRMA que en el CRM hermano, aunque aqui solo haya un proyecto.
+
+    Alli acepta una sociedad entera --CEDIA y sus siete campus-- y aqui no hace
+    falta. Pero dos firmas distintas para la misma funcion es justo lo que hace
+    que al replicar un cambio de un repo al otro se pase un objeto donde se
+    esperaba un numero. Se escriben igual y se acabo.
+  */
+  const lista = comoLista(projectId, projectIds);
   const { rows } = await query(
     `SELECT c.id AS conversion_id, c.lead_id, l.nombre AS cliente_nombre,
             c.producto_contratado, c.importe_total, c.fecha_conversion, c.metodo_pago
        FROM conversions c
        JOIN leads l ON l.id = c.lead_id
        LEFT JOIN invoices i ON i.conversion_id = c.id AND i.estado <> 'cancelada' AND i.tipo <> 'proforma'
-      WHERE c.project_id = $1
+      WHERE ($1::int[] IS NULL OR c.project_id = ANY($1::int[]))
         AND COALESCE(c.importe_total, 0) > 0
         AND i.id IS NULL
         AND c.factura_no_requerida IS NOT TRUE
       ORDER BY c.fecha_conversion DESC NULLS LAST`,
-    [projectId]
+    [lista]
   );
   return rows;
 }
