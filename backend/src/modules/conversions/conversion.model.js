@@ -351,14 +351,20 @@ export async function findAll({ projectId, leadId, responsableId, pendiente, ven
     // factura: si se esta mirando una sociedad, sus facturas y no las demas.
     let alcance = 'TRUE';
     if (projectId) { args.push(projectId); alcance = `i.project_id = $3`; }
+    // Los mismos recortes que la lista y que «Por proyecto»: gestora y curso.
+    // Sin esto la tarjeta decia 3 cuotas y la lista enseñaba 1 al filtrar.
+    let porGestora = '', porProducto = '';
+    if (responsableId) { args.push(responsableId); porGestora = `AND COALESCE(cv.vendedora_id, l.responsable_id) = $${args.length}`; }
+    if (producto) { args.push(String(producto).trim()); porProducto = `AND TRIM(cv.producto_contratado) = $${args.length}`; }
     const { rows: [fa] } = await query(
       `WITH f AS (
          SELECT i.total, cv.id AS venta_id, cv.fecha_conversion, ${CLASE_FACTURA} AS clase
            FROM invoices i
            LEFT JOIN conversions cv ON cv.id = i.conversion_id
+           LEFT JOIN leads l ON l.id = cv.lead_id
           WHERE ${FACTURA_REAL}
             AND i.fecha_emision >= $1 AND i.fecha_emision <= $2
-            AND ${alcance}
+            AND ${alcance} ${porGestora} ${porProducto}
        )
        SELECT COUNT(*)::int AS n_todas,
               COALESCE(SUM(total), 0) AS importe_todas,
