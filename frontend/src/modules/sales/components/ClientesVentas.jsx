@@ -90,6 +90,14 @@ export default function ClientesVentas({ projectId = null, from = null, to = nul
             <p className="text-xs text-muted-foreground mt-0.5">
               {num(total)} en el periodo · {num(cuantosDeben)} con saldo por {eur(deudaTotal)}
             </p>
+            {/* Qué es cada columna, escrito. Diego: «en la parte de la lista no
+                se entiende qué significa cada elemento». */}
+            <p className="text-[11px] text-muted-foreground/80 mt-1">
+              <strong className="text-foreground">Comprado</strong> es lo que se le vendió;{' '}
+              <strong className="text-foreground">cobrado</strong>, lo que ya ha pagado de eso; y{' '}
+              <strong className="text-foreground">pendiente</strong>, lo que falta. El triángulo
+              avisa de cuotas vencidas.
+            </p>
           </div>
         </div>
         <div className="flex items-center gap-1">
@@ -122,11 +130,19 @@ export default function ClientesVentas({ projectId = null, from = null, to = nul
           <table className="w-full text-xs">
             <thead>
               <tr className="text-muted-foreground border-b border-border">
+                {/* Cada columna dice lo que es al pasar por encima. «Comprado» y
+                    «cobrado» se parecen demasiado como para dejarlos a que
+                    cada uno se los imagine: uno es lo que se le vendió y otro
+                    lo que ha pagado de eso. */}
                 <th className="text-left font-semibold py-1.5 pr-2">Cliente</th>
-                <th className="text-right font-semibold py-1.5 px-2">Ventas</th>
-                <th className="text-right font-semibold py-1.5 px-2">Comprado</th>
-                <th className="text-right font-semibold py-1.5 px-2">Cobrado</th>
-                <th className="text-right font-semibold py-1.5 pl-2">Pendiente</th>
+                <th className="text-right font-semibold py-1.5 px-2"
+                    title="Cuántas compras ha hecho en este periodo">Ventas</th>
+                <th className="text-right font-semibold py-1.5 px-2"
+                    title="La suma de esas compras: lo que se le ha vendido">Comprado</th>
+                <th className="text-right font-semibold py-1.5 px-2"
+                    title="Lo que ha pagado de esas compras, aunque pagara después del periodo">Cobrado</th>
+                <th className="text-right font-semibold py-1.5 pl-2"
+                    title="Lo que le falta por pagar: comprado menos cobrado">Pendiente</th>
               </tr>
             </thead>
             <tbody>
