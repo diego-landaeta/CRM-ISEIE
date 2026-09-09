@@ -493,6 +493,22 @@ export default function InvoicesPage() {
                         )}
                       </div>
                     )}
+                    {/* La misma venta partida en varias facturas: no es una
+                        venta nueva --contarla como tal daba 4 donde habia 3--
+                        ni es una cuota. */}
+                    {inv.tipo !== 'proforma' && inv.clase === 'parte' && (
+                      <div className="mt-0.5">
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                          title="Otra factura de una venta ya facturada. No cuenta como venta nueva.">
+                          MISMA VENTA
+                        </span>
+                        {inv.fecha_de_la_venta && (
+                          <span className="ml-1 text-[10px] text-muted-foreground font-normal">
+                            venta del {fmtDate(inv.fecha_de_la_venta)}
+                          </span>
+                        )}
+                      </div>
+                    )}
                     {inv.tipo !== 'proforma' && inv.clase === 'venta' && (
                       <div className="mt-0.5">
                         <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"

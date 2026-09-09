@@ -415,6 +415,23 @@ export async function list({ projectId, issuerId, estado, search, from, to, tipo
             */
             CASE
               WHEN i.conversion_id IS NULL THEN 'suelta'
+              /*
+                OTRA FACTURA DE UNA VENTA YA FACTURADA.
+
+                Diego: «veo 4 ventas hechas en facturas y en ventas muestra 3».
+                Una venta partida en dos facturas --la segunda sin cobro propio
+                apuntado-- caia en la rama de «venta» y se contaban cuatro donde
+                hay tres. No es una venta nueva ni una cuota: es la misma venta
+                en dos papeles.
+              */
+              WHEN i.payment_id IS NULL AND EXISTS (
+                SELECT 1 FROM invoices x
+                 WHERE x.conversion_id = i.conversion_id
+                   AND x.id <> i.id
+                   AND x.tipo <> 'proforma' AND x.estado <> 'cancelada'
+                   AND (x.fecha_emision < i.fecha_emision
+                        OR (x.fecha_emision = i.fecha_emision AND x.numero < i.numero))
+              ) THEN 'parte'
               WHEN i.payment_id IS NULL THEN 'venta'
               WHEN NOT EXISTS (
                 SELECT 1 FROM conversion_payments p0

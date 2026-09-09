@@ -111,7 +111,7 @@ export interface Invoice {
   rectifica_codigo?: string | null;
   /** Qué es la factura: la de una venta nueva, una cuota de una venta anterior,
    *  o una suelta que no cuelga de ninguna venta. */
-  clase?: 'venta' | 'cuota' | 'suelta';
+  clase?: 'venta' | 'cuota' | 'parte' | 'suelta';
   /** De cuándo es la venta, para poder decir «cuota de una venta del 6/7». */
   fecha_de_la_venta?: string | null;
   motivo_rectificacion?: string | null;
