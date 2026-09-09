@@ -80,6 +80,11 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
   });
   const [rango, setRango] = useState({ from: '', to: '' });
   const atajos = atajosDeFecha();
+  // El desglose de las cuotas: cuales son y con que factura. Se pide al abrirlo
+  // y no al cargar la pantalla, porque casi nunca hace falta.
+  const [cuotas, setCuotas] = useState([]);
+  const [verCuotas, setVerCuotas] = useState(false);
+  const [cargandoCuotas, setCargandoCuotas] = useState(false);
   const effectiveResponsableId = isAdmin ? (viewUserId === 'all' ? null : Number(viewUserId)) : null;
 
   useEffect(() => {
@@ -97,6 +102,10 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
       .then((r) => setCursos(r?.data || []))
       .catch(() => setCursos([]));
   }, [activeProject?.id, effectiveResponsableId, reloadKey]);
+
+  // Al cambiar de fechas, el desglose de cuotas de antes ya no vale.
+  useEffect(() => { setCuotas([]); setVerCuotas(false); },
+    [activeProject?.id, effectiveResponsableId, rango.from, rango.to]);
 
   // Cualquier cambio de filtro devuelve a la primera pagina.
   useEffect(() => { setPage(1); }, [activeProject?.id, effectiveResponsableId, filterCurso, rango.from, rango.to]);
@@ -124,6 +133,21 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
       } finally { setLoading(false); }
     })();
   }, [activeProject?.id, reloadKey, effectiveResponsableId, page, filterCurso, rango.from, rango.to]);
+
+  async function abrirCuotas() {
+    if (verCuotas) { setVerCuotas(false); return; }
+    setVerCuotas(true);
+    if (cuotas.length) return;
+    setCargandoCuotas(true);
+    try {
+      const params: Record<string, any> = { from: rango.from, to: rango.to };
+      if (activeProject?.id) params.projectId = activeProject.id;
+      if (effectiveResponsableId) params.responsableId = effectiveResponsableId;
+      const r = await client.get('/conversions/cuotas', { params });
+      setCuotas(r?.success ? (r.data || []) : []);
+    } catch { setCuotas([]); }
+    finally { setCargandoCuotas(false); }
+  }
 
   const visibleItems = items;
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
@@ -342,8 +366,56 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
               <strong>{fmt(totales.cobrosDelPeriodo.matricula.importe)}</strong> son de ventas
               nuevas y <strong>{fmt(totales.cobrosDelPeriodo.cuotas.importe)}</strong> son{' '}
               {totales.cobrosDelPeriodo.cuotas.n} {totales.cobrosDelPeriodo.cuotas.n === 1 ? 'cuota' : 'cuotas'}{' '}
-              de ventas anteriores.
+              de ventas anteriores.{' '}
+              <button type="button" onClick={abrirCuotas}
+                className="font-semibold underline hover:no-underline">
+                {verCuotas ? 'Ocultar el detalle' : 'Ver cuáles son'}
+              </button>
             </p>
+          )}
+
+          {verCuotas && (
+            <div className="mt-2 rounded-md border border-sky-200 dark:border-sky-900 bg-card overflow-x-auto">
+              {cargandoCuotas ? (
+                <p className="p-3 text-xs text-muted-foreground">cargando…</p>
+              ) : cuotas.length === 0 ? (
+                <p className="p-3 text-xs text-muted-foreground">No se pudo cargar el detalle.</p>
+              ) : (
+                <table className="w-full text-xs">
+                  <thead className="bg-muted/40 text-muted-foreground">
+                    <tr>
+                      <th className="text-left font-medium px-3 py-2">Cobrada</th>
+                      <th className="text-left font-medium px-3 py-2">Cliente</th>
+                      <th className="text-left font-medium px-3 py-2 hidden md:table-cell">Formación</th>
+                      <th className="text-left font-medium px-3 py-2 whitespace-nowrap">Venta de</th>
+                      <th className="text-right font-medium px-3 py-2">Importe</th>
+                      <th className="text-left font-medium px-3 py-2">Factura</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cuotas.map((q: any) => (
+                      <tr key={q.id} className="border-t border-border">
+                        <td className="px-3 py-1.5 whitespace-nowrap">{formatDate(q.fecha)}</td>
+                        <td className="px-3 py-1.5">{q.cliente || 'Sin nombre'}</td>
+                        <td className="px-3 py-1.5 hidden md:table-cell max-w-[280px] truncate"
+                          title={q.producto || ''}>{q.producto || '—'}</td>
+                        <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground">
+                          {formatDate(q.fecha_de_la_venta)}
+                        </td>
+                        <td className="px-3 py-1.5 text-right tabular-nums font-medium">{fmt(q.importe)}</td>
+                        <td className="px-3 py-1.5 whitespace-nowrap">
+                          {/* Sin factura NO es un hueco en blanco: es dinero
+                              cobrado que no se ha declarado, y se dice. */}
+                          {q.factura
+                            ? <span className="font-medium">{q.factura}</span>
+                            : <span className="text-amber-700 dark:text-amber-400 font-semibold">sin factura</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
           )}
         </div>
       )}

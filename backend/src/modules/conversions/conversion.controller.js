@@ -1,4 +1,5 @@
 import * as conversionService from './conversion.service.js';
+import * as conversionModel from './conversion.model.js';
 import * as installmentsModel from './installments.model.js';
 import {
   createConversionSchema,
@@ -33,6 +34,28 @@ export async function list(req, res, next) {
       totales: result.totales,
       pagination: { total: result.total, page: result.page, limit: result.limit, totalPages: result.totalPages },
     });
+  } catch (err) { next(err); }
+}
+
+// GET /api/conversions/cuotas?from=&to=&projectId=
+//
+// Las cuotas cobradas en ese periodo, una por una y con su factura. Un total sin
+// desglose no se puede comprobar, y sobre todo no dice QUE FALTA POR FACTURAR.
+export async function cuotas(req, res, next) {
+  try {
+    const fecha = /^\d{4}-\d{2}-\d{2}$/;
+    const from = fecha.test(req.query.from || '') ? req.query.from : null;
+    const to = fecha.test(req.query.to || '') ? req.query.to : null;
+    if (!from || !to) throw new AppError('Hacen falta las dos fechas', 400, 'VALIDATION_ERROR');
+
+    let responsableId = req.query.responsableId ? parseInt(req.query.responsableId, 10) : null;
+    if (req.user.role === 'gestor') responsableId = req.user.userId;
+
+    const data = await conversionModel.cuotasDelPeriodo({
+      projectId: req.query.projectId ? parseInt(req.query.projectId, 10) : null,
+      from, to, responsableId,
+    });
+    res.json({ success: true, data });
   } catch (err) { next(err); }
 }
 

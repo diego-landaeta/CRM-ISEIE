@@ -12,7 +12,7 @@
 // seis comisiones sin dueño, y eso es lo que mide el agujero de verdad.
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { GraduationCap, Warning, ArrowRight, MagnifyingGlass } from '@phosphor-icons/react';
+import { GraduationCap, Warning, ArrowRight, MagnifyingGlass, PencilSimple } from '@phosphor-icons/react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { tutoresApi, type AnuncioMeta, type FormacionSinTutor } from '../api/tutores.api';
 import DialogoBusquedaTutor from '../components/DialogoBusquedaTutor';
@@ -69,10 +69,18 @@ function Meta({ f }: { f: FormacionSinTutor }) {
   }
 
   if (f.buscando) {
+    // «buscando» a secas y no «buscando, sin anuncio».
+    //
+    // Diego: «no únicamente sin anuncios, luego lo estaremos vinculando por
+    // anuncio». Que todavía no haya anuncio enganchado no es un defecto de la
+    // búsqueda, es el estado normal al empezar. En el titular parecía que
+    // faltaba algo por arreglar cuando lo que falta es tiempo.
     return (
-      <span className={`${base} bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300`}
-        title="Se busca tutor, pero sin anuncio pagado enganchado">
-        buscando, sin anuncio
+      <span className="inline-flex flex-col items-start gap-0.5">
+        <span className={`${base} bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300`}>
+          buscando
+        </span>
+        <span className="text-[11px] text-muted-foreground">sin anuncio aún</span>
       </span>
     );
   }
@@ -239,10 +247,14 @@ export default function FormacionesSinTutorPage() {
                     <td className="px-4 py-2.5">
                       {/* Toda la celda abre el diálogo: el estado y el sitio
                           donde se cambia son la misma cosa. */}
+                      {/* Se pulsaba la celda entera, pero nada decia que fuera
+                          pulsable: parecia texto. Ahora es un boton con su
+                          borde y su lapiz. */}
                       <button type="button" onClick={() => abrirBusqueda(f)}
-                        className="rounded px-1 -mx-1 hover:bg-muted"
+                        className="inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 hover:bg-muted hover:border-foreground/30 transition-colors"
                         title="Decir si se busca tutor y con qué anuncio">
                         <Meta f={f} />
+                        <PencilSimple size={12} weight="bold" className="text-muted-foreground shrink-0" />
                       </button>
                     </td>
                     <td className="px-4 py-2.5 text-right">

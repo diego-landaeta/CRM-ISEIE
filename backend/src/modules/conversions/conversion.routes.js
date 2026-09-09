@@ -10,6 +10,8 @@ router.use(verifyToken);
 // Listado y detalle
 router.get('/', ctrl.list);
 router.get('/productos', ctrl.listProductos);
+// Antes de /:id, o Express intentaria leer «cuotas» como un identificador.
+router.get('/cuotas', ctrl.cuotas);
 router.get('/by-lead/:leadId', ctrl.listByLead);
 router.get('/:id', ctrl.getById);
 
