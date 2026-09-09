@@ -76,6 +76,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
     importe: 0, pagado: 0, pendiente: 0, iva: 0,
     facturadas: 0, sinFactura: 0, facturasDeAntes: { n: 0, importe: 0 },
     facturadoEnPeriodo: { n: 0, importe: 0 },
+    cobrosDelPeriodo: { matricula: { n: 0, importe: 0 }, cuotas: { n: 0, importe: 0 } },
   });
   const [rango, setRango] = useState({ from: '', to: '' });
   const atajos = atajosDeFecha();
@@ -116,10 +117,10 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
           setTotal(res.pagination?.total ?? (res.data || []).length);
           // Los totales vienen del servidor sobre TODO el filtro; antes se
           // sumaban las filas cargadas y las tarjetas no cuadraban nunca.
-          setTotales(res.totales || { importe: 0, pagado: 0, pendiente: 0, iva: 0, facturadas: 0, sinFactura: 0, facturasDeAntes: { n: 0, importe: 0 }, facturadoEnPeriodo: { n: 0, importe: 0 } });
+          setTotales(res.totales || { importe: 0, pagado: 0, pendiente: 0, iva: 0, facturadas: 0, sinFactura: 0, facturasDeAntes: { n: 0, importe: 0 }, facturadoEnPeriodo: { n: 0, importe: 0 }, cobrosDelPeriodo: { matricula: { n: 0, importe: 0 }, cuotas: { n: 0, importe: 0 } } });
         }
       } catch {
-        setItems([]); setTotal(0); setTotales({ importe: 0, pagado: 0, pendiente: 0, iva: 0, facturadas: 0, sinFactura: 0, facturasDeAntes: { n: 0, importe: 0 }, facturadoEnPeriodo: { n: 0, importe: 0 } });
+        setItems([]); setTotal(0); setTotales({ importe: 0, pagado: 0, pendiente: 0, iva: 0, facturadas: 0, sinFactura: 0, facturasDeAntes: { n: 0, importe: 0 }, facturadoEnPeriodo: { n: 0, importe: 0 }, cobrosDelPeriodo: { matricula: { n: 0, importe: 0 }, cuotas: { n: 0, importe: 0 } } });
       } finally { setLoading(false); }
     })();
   }, [activeProject?.id, reloadKey, effectiveResponsableId, page, filterCurso, rango.from, rango.to]);
@@ -232,13 +233,31 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
         </div>
       )}
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         <KpiCard
           icon={Receipt}
           iconBg="bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400"
-          label="Conversiones"
+          label="Ventas"
           numericValue={total}
         />
+        {/* Las mensualidades: dinero que entra este mes de algo que YA estaba
+            vendido, asi que no es una venta nueva y no puede sumarse con ellas.
+            Solo con un periodo elegido: sin fechas no significa nada. */}
+        {(rango.from && rango.to) && (
+          <div title={`En estas fechas entraron ${fmt(totales.cobrosDelPeriodo.matricula.importe)} de ventas nuevas y ${fmt(totales.cobrosDelPeriodo.cuotas.importe)} de cuotas de ventas anteriores`}>
+            <KpiCard
+              icon={Receipt}
+              iconBg="bg-sky-50 text-sky-600 dark:bg-sky-950/30 dark:text-sky-400"
+              label="Cuotas cobradas"
+              numericValue={totales.cobrosDelPeriodo.cuotas.importe}
+              format={fmt}
+              badge={totales.cobrosDelPeriodo.cuotas.n > 0
+                ? `${totales.cobrosDelPeriodo.cuotas.n} ${totales.cobrosDelPeriodo.cuotas.n === 1 ? 'cuota' : 'cuotas'}`
+                : null}
+              badgeColor="bg-sky-50 text-sky-700 dark:bg-sky-950/30 dark:text-sky-400"
+            />
+          </div>
+        )}
         {/* Ventas por facturas: cuantas de estas ventas tienen factura.
             El detalle va en el texto que sale al pasar el raton, que es donde
             lo pidio Diego — la tarjeta enseña la proporcion de un vistazo. */}
@@ -315,6 +334,15 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
               <strong>{fmt(totales.facturadoEnPeriodo.importe)}</strong>, y se vendieron{' '}
               <strong>{total}</strong> {total === 1 ? 'venta' : 'ventas'} por{' '}
               <strong>{fmt(totales.importe)}</strong>. No tienen por qué coincidir.
+            </p>
+          )}
+          {totales.cobrosDelPeriodo?.cuotas.n > 0 && (
+            <p className="text-xs text-sky-800 dark:text-sky-300 mt-1 leading-relaxed">
+              Del dinero que entró en estas fechas,{' '}
+              <strong>{fmt(totales.cobrosDelPeriodo.matricula.importe)}</strong> son de ventas
+              nuevas y <strong>{fmt(totales.cobrosDelPeriodo.cuotas.importe)}</strong> son{' '}
+              {totales.cobrosDelPeriodo.cuotas.n} {totales.cobrosDelPeriodo.cuotas.n === 1 ? 'cuota' : 'cuotas'}{' '}
+              de ventas anteriores.
             </p>
           )}
         </div>

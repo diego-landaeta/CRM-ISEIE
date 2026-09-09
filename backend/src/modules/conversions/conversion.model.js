@@ -337,6 +337,56 @@ export async function findAll({ projectId, leadId, responsableId, pendiente, ven
   totales.facturasDeAntes = facturasDeAntes;
   totales.facturadoEnPeriodo = facturadoEnPeriodo;
 
+  /*
+    El dinero que ENTRO en estas fechas, partido en dos.
+
+    Diego: «tienes que poner ventas, mensualidades cobradas o cuotas cobradas».
+    No se puede hacer por `es_mensualidad`: esa columna esta a false en todas las
+    ventas, nadie la marca nunca. Lo que si esta en los datos es cual fue el
+    PRIMER cobro de cada venta.
+
+      · matricula — el primer cobro de una venta. Dinero de una venta nueva.
+      · cuota     — cualquier cobro posterior. Una mensualidad de algo que ya
+                    estaba vendido, aunque entre este mes.
+
+    Es la misma regla que `ES_MATRICULA` de los informes, a proposito: otra
+    definicion aqui haria que las dos pantallas dieran cifras distintas para la
+    misma pregunta.
+  */
+  let cobrosDelPeriodo = {
+    matricula: { n: 0, importe: 0 },
+    cuotas: { n: 0, importe: 0 },
+  };
+  if (from && to) {
+    const args = [from, to];
+    let alcance = 'TRUE';
+    if (projectId) { args.push(projectId); alcance = 'c.project_id = $3'; }
+    const { rows: [cb] } = await query(
+      `WITH cobros AS (
+         SELECT cp.importe,
+                (NOT c.es_mensualidad AND NOT EXISTS (
+                   SELECT 1 FROM conversion_payments p0
+                    WHERE p0.conversion_id = cp.conversion_id
+                      AND (p0.fecha < cp.fecha
+                           OR (p0.fecha = cp.fecha AND p0.id < cp.id))
+                 )) AS es_matricula
+           FROM conversion_payments cp
+           JOIN conversions c ON c.id = cp.conversion_id
+          WHERE cp.fecha >= $1 AND cp.fecha <= $2 AND ${alcance}
+       )
+       SELECT COUNT(*) FILTER (WHERE es_matricula)::int AS n_matricula,
+              COALESCE(SUM(importe) FILTER (WHERE es_matricula), 0) AS importe_matricula,
+              COUNT(*) FILTER (WHERE NOT es_matricula)::int AS n_cuotas,
+              COALESCE(SUM(importe) FILTER (WHERE NOT es_matricula), 0) AS importe_cuotas
+         FROM cobros`,
+      args);
+    cobrosDelPeriodo = {
+      matricula: { n: Number(cb.n_matricula), importe: Number(cb.importe_matricula) },
+      cuotas: { n: Number(cb.n_cuotas), importe: Number(cb.importe_cuotas) },
+    };
+  }
+  totales.cobrosDelPeriodo = cobrosDelPeriodo;
+
   const { rows } = await query(
     `SELECT c.id, c.lead_id, c.project_id, c.producto_contratado,
             c.importe_total, c.importe_pagado,
