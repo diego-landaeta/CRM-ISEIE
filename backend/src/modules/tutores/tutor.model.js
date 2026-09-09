@@ -480,7 +480,8 @@ export async function pagosSinFormacion({ desde, hasta, projectId = null }) {
  */
 export async function formacionesSinTutor({ projectId = null } = {}) {
   const { rows } = await query(
-    `SELECT p.id, p.nombre, p.precio, pr.nombre AS proyecto, p.project_id,
+    `WITH sin_tutor AS (
+     SELECT p.id, p.nombre, p.precio, pr.nombre AS proyecto, p.project_id,
             count(DISTINCT cv.id)::int  AS ventas,
             count(DISTINCT cv.lead_id)::int AS alumnos,
             count(cp.id)::int           AS pagos,
@@ -505,9 +506,97 @@ export async function formacionesSinTutor({ projectId = null } = {}) {
         AND ($1::int IS NULL OR p.project_id = $1)
       GROUP BY p.id, p.nombre, p.precio, pr.nombre, p.project_id
      HAVING count(cp.id) >= 1 AND count(DISTINCT cv.lead_id) >= 1
-      ORDER BY sum(cp.importe) DESC`,
+    )
+    SELECT s.*,
+           COALESCE(b.buscando, false)                    AS buscando,
+           b.nota                                         AS busqueda_nota,
+           b.updated_at                                   AS busqueda_desde,
+           COALESCE(b.adset_id, b.campaign_id)            AS anuncio_id,
+           COALESCE(ads.nombre, cam.nombre)               AS anuncio_nombre,
+           COALESCE(ads.status, cam.status)               AS anuncio_estado,
+           COALESCE(ads.total_spend, cam.total_spend)     AS anuncio_gasto,
+           COALESCE(ads.total_leads, cam.total_leads)     AS anuncio_leads,
+           -- Se apunto un anuncio y en Meta ya no esta: archivado o borrado
+           -- alli. Se dice, no se calla: si no, el dia que alguien lo pause la
+           -- pantalla seguiria diciendo «buscando» sin que nadie pague nada.
+           (COALESCE(b.adset_id, b.campaign_id) IS NOT NULL
+            AND ads.adset_id IS NULL AND cam.campaign_id IS NULL) AS anuncio_desaparecido
+      FROM sin_tutor s
+      LEFT JOIN tutor_busquedas b ON b.product_id = s.id
+      LEFT JOIN meta_adsets   ads ON ads.adset_id = b.adset_id
+      -- La campana sale del conjunto elegido si lo hay; si se apunto la campana
+      -- entera --hay quien anuncia asi--, de ella misma.
+      LEFT JOIN meta_campaigns cam ON cam.campaign_id = COALESCE(ads.campaign_id, b.campaign_id)
+     ORDER BY s.cobrado DESC`,
     [projectId]
   );
+  return rows;
+}
+
+/**
+ * Decir que se busca --o que ya no-- tutor para una formacion.
+ *
+ * Es un upsert: la formacion tiene una respuesta o no la tiene, no un historial.
+ * Se guarda quien lo marco y cuando porque la pregunta que sigue siempre a esta
+ * pantalla es «y esto quien lo puso, y desde cuando».
+ */
+export async function marcarBusquedaDeTutor({
+  productId, buscando = true, campaignId = null, adsetId = null, nota = null, userId = null,
+}) {
+  // El proyecto NO viene de fuera: se lee del producto. Mandarlo desde la
+  // pantalla dejaria apuntar una formacion de un proyecto contra otro.
+  const { rows: [prod] } = await query(
+    'SELECT id, project_id FROM products WHERE id = $1', [productId]);
+  if (!prod) return null;
+
+  // Si se apunta un conjunto de anuncios, su campana se deduce: pedir las dos
+  // cosas a la pantalla es pedir que se contradigan.
+  let campana = campaignId;
+  if (adsetId) {
+    const { rows: [a] } = await query(
+      'SELECT campaign_id FROM meta_adsets WHERE adset_id = $1', [adsetId]);
+    campana = a?.campaign_id || campaignId;
+  }
+
+  const { rows } = await query(
+    `INSERT INTO tutor_busquedas
+       (product_id, project_id, buscando, campaign_id, adset_id, nota, marcada_por_user_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     ON CONFLICT (product_id) DO UPDATE
+        SET buscando = EXCLUDED.buscando,
+            campaign_id = EXCLUDED.campaign_id,
+            adset_id = EXCLUDED.adset_id,
+            nota = EXCLUDED.nota,
+            marcada_por_user_id = EXCLUDED.marcada_por_user_id,
+            updated_at = NOW()
+     RETURNING *`,
+    [productId, prod.project_id, buscando, campana, adsetId, nota, userId]);
+  return rows[0];
+}
+
+/**
+ * Los anuncios que se pueden enganchar a una formacion.
+ *
+ * Se devuelven TODOS los del ambito, no solo los que parecen de tutores: quien
+ * lleva esto sabe mejor que una expresion regular cual es cual, y esconderle los
+ * demas le obligaria a renombrar en Meta para poder elegir aqui. Lo que si se
+ * hace es ponerle delante los que se llaman como si buscaran tutores, que es lo
+ * que se busca el 95 % de las veces.
+ */
+export async function anunciosDeTutores({ projectId = null } = {}) {
+  const { rows } = await query(
+    `SELECT a.adset_id, a.nombre, a.status, a.total_spend, a.total_leads,
+            a.project_id, c.campaign_id, c.nombre AS campana, c.status AS campana_estado,
+            (c.nombre ~* '(tutor|docent|profesor)'
+             OR a.nombre ~* '(tutor|docent|profesor)') AS parece_de_tutores
+       FROM meta_adsets a
+       JOIN meta_campaigns c ON c.campaign_id = a.campaign_id
+      WHERE ($1::int IS NULL OR a.project_id = $1)
+      ORDER BY parece_de_tutores DESC,
+               (a.status = 'ACTIVE') DESC,
+               a.total_spend DESC NULLS LAST
+      LIMIT 300`,
+    [projectId]);
   return rows;
 }
 

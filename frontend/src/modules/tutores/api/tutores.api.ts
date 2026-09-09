@@ -111,6 +111,34 @@ export interface FormacionSinTutor {
   cobrado: string;
   primer_cobro: string | null;
   ultimo_cobro: string | null;
+  /* Si se esta buscando tutor, y con que anuncio de Meta. Lo marca una persona:
+     Meta no sabe a que formacion del catalogo apunta cada conjunto de anuncios. */
+  buscando: boolean;
+  busqueda_nota: string | null;
+  busqueda_desde: string | null;
+  anuncio_id: string | null;
+  anuncio_nombre: string | null;
+  /** Tal cual lo dice Meta: ACTIVE, PAUSED... */
+  anuncio_estado: string | null;
+  anuncio_gasto: string | null;
+  anuncio_leads: number | null;
+  /** Se apunto un anuncio y en Meta ya no esta. */
+  anuncio_desaparecido: boolean;
+}
+
+/** Un conjunto de anuncios de Meta, para engancharlo a una formacion. */
+export interface AnuncioMeta {
+  adset_id: string;
+  nombre: string;
+  status: string | null;
+  total_spend: string | null;
+  total_leads: number | null;
+  project_id: number;
+  campaign_id: string;
+  campana: string;
+  campana_estado: string | null;
+  /** Se llama como si buscara tutores. Solo ordena la lista, no decide nada. */
+  parece_de_tutores: boolean;
 }
 
 export interface PagoSinFormacion {
@@ -218,6 +246,18 @@ export const tutoresApi = {
   formacionesSinTutor: (projectId?: number | null) =>
     client.get('/tutores/formaciones-sin-tutor'
       + (projectId ? `?projectId=${projectId}` : '')) as Promise<ApiResponse<FormacionSinTutor[]>>,
+
+  /** «Se busca tutor para esta formacion», y con que anuncio si lo hay. */
+  marcarBusquedaTutor: (productId: number, datos: {
+    buscando: boolean; adsetId?: string | null; campaignId?: string | null; nota?: string | null;
+  }) => client.put(`/tutores/formaciones/${productId}/busqueda`, datos) as Promise<ApiResponse<{
+    id: number; product_id: number; buscando: boolean; adset_id: string | null;
+  }>>,
+
+  /** Los anuncios de Meta del ambito, para elegir uno. */
+  anunciosDeTutores: (projectId?: number | null) =>
+    client.get('/tutores/anuncios' + (projectId ? `?projectId=${projectId}` : '')) as
+      Promise<ApiResponse<AnuncioMeta[]>>,
 
   pagosSinFormacion: (desde: string, hasta: string, projectId?: number | null) =>
     client.get(`/tutores/pagos-sin-formacion?desde=${desde}&hasta=${hasta}`
