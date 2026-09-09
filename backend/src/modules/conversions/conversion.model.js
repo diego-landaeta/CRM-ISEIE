@@ -388,6 +388,57 @@ export async function findAll({ projectId, leadId, responsableId, pendiente, ven
   totales.facturasDeAntes = facturasDeAntes;
   totales.facturadoEnPeriodo = facturadoEnPeriodo;
   totales.facturasPorClase = facturasPorClase;
+  /*
+    POR PROYECTO, cuando se mira una empresa entera.
+
+    Diego: «si veo una empresa, ver cuales de esos proyectos se recibio ventas
+    y las cuotas». Con CEDIA elegida la tarjeta suma siete campus y no dice de
+    cual es cada euro. Se reparte con las MISMAS reglas que las tarjetas: las
+    ventas por fecha de venta, las cuotas por factura y clase compartida. Suma
+    de la columna = tarjeta, o es un fallo.
+  */
+  let porProyecto = [];
+  if (from && to) {
+    const args = [from, to];
+    let alcanceC = 'TRUE', alcanceI = 'TRUE';
+    if (projectId) { args.push(projectId); alcanceC = `c.project_id = $${args.length}`; alcanceI = `i.project_id = $${args.length}`; }
+    // Los MISMOS recortes que las tarjetas --gestora y curso--, o la columna no
+    // sumaria la tarjeta en cuanto se filtre. Salio en la revision.
+    let porGestora = '', porProducto = '';
+    if (responsableId) { args.push(responsableId); porGestora = `AND COALESCE(c.vendedora_id, l.responsable_id) = $${args.length}`; }
+    if (producto) { args.push(String(producto).trim()); porProducto = `AND TRIM(c.producto_contratado) = $${args.length}`; }
+    const { rows } = await query(
+      `WITH v AS (
+         SELECT c.project_id, COUNT(*)::int AS ventas, COALESCE(SUM(c.importe_total), 0) AS importe_ventas
+           FROM conversions c
+           LEFT JOIN leads l ON l.id = c.lead_id
+          WHERE c.fecha_conversion >= $1 AND c.fecha_conversion <= $2 AND ${alcanceC} ${porGestora} ${porProducto}
+          GROUP BY c.project_id),
+       q AS (
+         SELECT i.project_id, COUNT(*)::int AS cuotas, COALESCE(SUM(i.total), 0) AS importe_cuotas
+           FROM invoices i
+           JOIN conversions c ON c.id = i.conversion_id
+           LEFT JOIN leads l ON l.id = c.lead_id
+          WHERE ${FACTURA_REAL} AND i.fecha_emision >= $1 AND i.fecha_emision <= $2 AND ${alcanceI} ${porGestora} ${porProducto}
+            AND ${CLASE_FACTURA} = 'cuota'
+          GROUP BY i.project_id)
+       SELECT pr.id AS project_id, pr.nombre,
+              COALESCE(v.ventas, 0) AS ventas, COALESCE(v.importe_ventas, 0) AS importe_ventas,
+              COALESCE(q.cuotas, 0) AS cuotas, COALESCE(q.importe_cuotas, 0) AS importe_cuotas
+         FROM projects pr
+         LEFT JOIN v ON v.project_id = pr.id
+         LEFT JOIN q ON q.project_id = pr.id
+        WHERE (v.ventas IS NOT NULL OR q.cuotas IS NOT NULL)
+        ORDER BY COALESCE(v.importe_ventas, 0) + COALESCE(q.importe_cuotas, 0) DESC, pr.nombre`,
+      args);
+    porProyecto = rows.map((r) => ({
+      project_id: r.project_id, nombre: r.nombre,
+      ventas: { n: Number(r.ventas), importe: Number(r.importe_ventas) },
+      cuotas: { n: Number(r.cuotas), importe: Number(r.importe_cuotas) },
+    }));
+  }
+  totales.porProyecto = porProyecto;
+
 
   /*
     El dinero que ENTRO en estas fechas, partido en dos.
@@ -512,6 +563,89 @@ export async function cuotasDelPeriodo({
       LIMIT $${args.length}`,
     args);
   return rows;
+}
+
+/**
+ * La lista de Ventas con fechas puestas: ventas del periodo + cuotas facturadas
+ * del periodo, cada fila con su etiqueta.
+ *
+ * Diego: «ahi abajo debe de decirme cual es cuota y cual es venta». La lista
+ * eran solo ventas por fecha de venta, y el 8/9 salia UNA fila cuando
+ * Facturacion enseñaba dos: la venta de Maria Jose y la cuota de Mary Flor.
+ *
+ * Las cuotas salen de las FACTURAS --por fecha de emision y con la regla
+ * compartida de clase.sql.js--, no de los cobros: es lo que hace que esta lista
+ * y Facturacion tengan exactamente las mismas filas para las mismas fechas.
+ *
+ * Las facturas de clase «venta» NO se añaden: esa venta ya esta en la lista
+ * como venta. Las «suelta» tampoco: no cuelgan de ninguna venta y esta es la
+ * pantalla de ventas. Las «parte» si, marcadas: son papel de mas de una venta
+ * que ya se ve, y esconderlas volveria a descuadrar el recuento de facturas.
+ */
+export async function filasDelPeriodo({
+  projectId = null, from, to, responsableId = null, producto = null, page = 1, limit = 50,
+} = {}) {
+  if (!from || !to) return { filas: [], total: 0 };
+  const args = [from, to];
+  
+  let alcanceC = 'TRUE';
+  let alcanceI = 'TRUE';
+  if (projectId) { args.push(projectId); alcanceC = `c.project_id = $${args.length}`; alcanceI = `i.project_id = $${args.length}`; }
+  let porGestora = '';
+  if (responsableId) {
+    args.push(responsableId);
+    porGestora = `AND COALESCE(c.vendedora_id, l.responsable_id) = $${args.length}`;
+  }
+  let porProducto = '';
+  if (producto) {
+    args.push(String(producto).trim());
+    porProducto = `AND TRIM(c.producto_contratado) = $${args.length}`;
+  }
+  args.push(limit, (Math.max(1, page) - 1) * limit);
+
+  const { rows } = await query(
+    `WITH ventas AS (
+       SELECT 'venta'::text AS tipo, c.id AS venta_id, c.id AS clave_id, NULL::int AS factura_id,
+              c.fecha_conversion AS fecha, c.fecha_conversion AS fecha_de_la_venta,
+              c.lead_id, l.nombre::text AS cliente, c.producto_contratado::text AS producto,
+              c.importe_total AS total, c.importe_pagado AS pagado,
+              -- Todas sus facturas, para verlas en la fila de la venta.
+              (SELECT string_agg(x.codigo, ', ' ORDER BY x.numero) FROM invoices x
+                WHERE x.conversion_id = c.id AND x.tipo <> 'proforma' AND x.estado <> 'cancelada') AS factura,
+              COALESCE(c.factura_no_requerida, false) AS factura_no_requerida
+         FROM conversions c
+         LEFT JOIN leads l ON l.id = c.lead_id
+        WHERE c.fecha_conversion >= $1 AND c.fecha_conversion <= $2
+          AND ${alcanceC} ${porGestora} ${porProducto}
+     ),
+     facturas AS (
+       SELECT (${CLASE_FACTURA})::text AS tipo, c.id AS venta_id, i.id AS clave_id, i.id AS factura_id,
+              i.fecha_emision AS fecha, c.fecha_conversion AS fecha_de_la_venta,
+              c.lead_id, COALESCE(NULLIF(TRIM(i.cliente_nombre), ''), l.nombre)::text AS cliente,
+              COALESCE(p.nombre, NULLIF(TRIM(c.producto_contratado), ''))::text AS producto,
+              i.total AS total,
+              CASE WHEN i.estado = 'pagada' THEN i.total ELSE 0 END AS pagado,
+              i.codigo::text AS factura,
+              false AS factura_no_requerida
+         FROM invoices i
+         JOIN conversions c ON c.id = i.conversion_id
+         LEFT JOIN leads l ON l.id = c.lead_id
+         LEFT JOIN products p ON p.id = c.producto_contratado_id
+        WHERE ${FACTURA_REAL}
+          AND i.fecha_emision >= $1 AND i.fecha_emision <= $2
+          AND ${alcanceI} ${porGestora} ${porProducto}
+     ),
+     filas AS (
+       SELECT * FROM ventas
+       UNION ALL
+       SELECT * FROM facturas WHERE tipo IN ('cuota', 'parte')
+     )
+     SELECT *, COUNT(*) OVER () AS total_filas
+       FROM filas
+      ORDER BY fecha DESC, (tipo = 'venta') DESC, clave_id DESC
+      LIMIT $${args.length - 1} OFFSET $${args.length}`,
+    args);
+  return { filas: rows, total: rows.length ? Number(rows[0].total_filas) : 0 };
 }
 
 export async function update(id, fields) {

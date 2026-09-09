@@ -57,9 +57,32 @@ function atajosDeFecha() {
 }
 
 
+
+/*
+  El estado de pago de una fila, calculado.
+
+  `estado_pago` NO existe en el backend: la columna Estado salia como una
+  pastilla naranja vacia. Se calcula de lo pagado contra el total, que es lo
+  que significaba.
+*/
+function estadoDe(total: unknown, pagado: unknown): 'pagado' | 'parcial' | 'pendiente' {
+  const t = Number(total || 0), p = Number(pagado || 0);
+  if (t > 0 && p >= t - 0.005) return 'pagado';
+  if (p > 0) return 'parcial';
+  return 'pendiente';
+}
+
+/* La etiqueta de cada fila de la lista: lo que es, no solo lo que vale. */
+function Tipo({ tipo }: { tipo: string }) {
+  const base = 'inline-block px-1.5 py-0.5 rounded text-[9px] font-bold whitespace-nowrap';
+  if (tipo === 'cuota') return <span className={`${base} bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300`}>CUOTA</span>;
+  if (tipo === 'parte') return <span className={`${base} bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300`}>MISMA VENTA</span>;
+  return <span className={`${base} bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300`}>VENTA</span>;
+}
+
 export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas las ventas registradas' }) {
   const navigate = useNavigate();
-  const { activeProject } = useProjectContext();
+  const { activeProject, activeIssuer = null, switchProject = (_id: number) => {} } = useProjectContext() as any;
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
   const [items, setItems] = useState([]);
@@ -76,10 +99,18 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
     importe: 0, pagado: 0, pendiente: 0, iva: 0,
     facturadas: 0, sinFactura: 0, noRequiereFactura: 0, pendientesDeFacturar: 0, facturasDeAntes: { n: 0, importe: 0 },
     facturadoEnPeriodo: { n: 0, importe: 0 },
-    cobrosDelPeriodo: { matricula: { n: 0, importe: 0 }, cuotas: { n: 0, importe: 0 } }, facturasPorClase: { venta: { n: 0, importe: 0 }, cuota: { n: 0, importe: 0 }, parte: { n: 0, importe: 0 }, suelta: { n: 0, importe: 0 } },
+    cobrosDelPeriodo: { matricula: { n: 0, importe: 0 }, cuotas: { n: 0, importe: 0 } }, facturasPorClase: { venta: { n: 0, importe: 0 }, cuota: { n: 0, importe: 0 }, parte: { n: 0, importe: 0 }, suelta: { n: 0, importe: 0 } }, porProyecto: [],
   });
-  const [rango, setRango] = useState({ from: '', to: '' });
   const atajos = atajosDeFecha();
+  // Por defecto, ESTE MES. Diego: «por defecto es este mes». Sin fechas la
+  // lista era el historico entero, y la etiqueta venta/cuota solo tiene sentido
+  // con un periodo: asi la pantalla abre ya con la lista mezclada y etiquetada.
+  const esteMes = atajos.find((a) => a.id === 'mes') || { from: '', to: '' };
+  const [rango, setRango] = useState({ from: esteMes.from, to: esteMes.to });
+  // La lista de abajo con fechas puestas: ventas + cuotas facturadas, cada una
+  // con su etiqueta. Sin fechas, la lista sigue siendo la de ventas.
+  const [filas, setFilas] = useState<any[]>([]);
+  const [totalFilas, setTotalFilas] = useState(0);
   // El desglose de las cuotas: cuales son y con que factura. Se pide al abrirlo
   // y no al cargar la pantalla, porque casi nunca hace falta.
   const [cuotas, setCuotas] = useState([]);
@@ -121,15 +152,30 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
         if (rango.from) params.from = rango.from;
         if (rango.to) params.to = rango.to;
         const res = await client.get('/conversions', { params });
+        // Con fechas, la lista de abajo son ventas + cuotas facturadas del
+        // periodo. Se pide aparte porque une dos tablas y pagina sobre la union.
+        const conFechas = Boolean(rango.from && rango.to);
+        // Aislada: si /filas falla, las tarjetas que /conversions ya trajo bien
+        // se quedan; solo se vacia la lista. Antes un 500 aqui lo borraba todo.
+        const resFilas = conFechas
+          ? await client.get('/conversions/filas', { params }).catch(() => null) : null;
         if (res.success) {
           setItems(res.data || []);
           setTotal(res.pagination?.total ?? (res.data || []).length);
+          if (resFilas?.success) {
+            const lista = resFilas.data || [];
+            setFilas(lista);
+            setTotalFilas(resFilas.pagination?.total ?? lista.length);
+            // Pagina fuera de rango --se borro una fila y la lista bajo de 51 a 50
+            // estando en la 2--: COUNT(*) OVER() da 0. Se vuelve a la primera.
+            if (page > 1 && lista.length === 0) setPage(1);
+          } else { setFilas([]); setTotalFilas(0); }
           // Los totales vienen del servidor sobre TODO el filtro; antes se
           // sumaban las filas cargadas y las tarjetas no cuadraban nunca.
-          setTotales(res.totales || { importe: 0, pagado: 0, pendiente: 0, iva: 0, facturadas: 0, sinFactura: 0, noRequiereFactura: 0, pendientesDeFacturar: 0, facturasDeAntes: { n: 0, importe: 0 }, facturadoEnPeriodo: { n: 0, importe: 0 }, cobrosDelPeriodo: { matricula: { n: 0, importe: 0 }, cuotas: { n: 0, importe: 0 } }, facturasPorClase: { venta: { n: 0, importe: 0 }, cuota: { n: 0, importe: 0 }, parte: { n: 0, importe: 0 }, suelta: { n: 0, importe: 0 } } });
+          setTotales(res.totales || { importe: 0, pagado: 0, pendiente: 0, iva: 0, facturadas: 0, sinFactura: 0, noRequiereFactura: 0, pendientesDeFacturar: 0, facturasDeAntes: { n: 0, importe: 0 }, facturadoEnPeriodo: { n: 0, importe: 0 }, cobrosDelPeriodo: { matricula: { n: 0, importe: 0 }, cuotas: { n: 0, importe: 0 } }, facturasPorClase: { venta: { n: 0, importe: 0 }, cuota: { n: 0, importe: 0 }, parte: { n: 0, importe: 0 }, suelta: { n: 0, importe: 0 } }, porProyecto: [] });
         }
       } catch {
-        setItems([]); setTotal(0); setTotales({ importe: 0, pagado: 0, pendiente: 0, iva: 0, facturadas: 0, sinFactura: 0, noRequiereFactura: 0, pendientesDeFacturar: 0, facturasDeAntes: { n: 0, importe: 0 }, facturadoEnPeriodo: { n: 0, importe: 0 }, cobrosDelPeriodo: { matricula: { n: 0, importe: 0 }, cuotas: { n: 0, importe: 0 } }, facturasPorClase: { venta: { n: 0, importe: 0 }, cuota: { n: 0, importe: 0 }, parte: { n: 0, importe: 0 }, suelta: { n: 0, importe: 0 } } });
+        setItems([]); setTotal(0); setFilas([]); setTotalFilas(0); setTotales({ importe: 0, pagado: 0, pendiente: 0, iva: 0, facturadas: 0, sinFactura: 0, noRequiereFactura: 0, pendientesDeFacturar: 0, facturasDeAntes: { n: 0, importe: 0 }, facturadoEnPeriodo: { n: 0, importe: 0 }, cobrosDelPeriodo: { matricula: { n: 0, importe: 0 }, cuotas: { n: 0, importe: 0 } }, facturasPorClase: { venta: { n: 0, importe: 0 }, cuota: { n: 0, importe: 0 }, parte: { n: 0, importe: 0 }, suelta: { n: 0, importe: 0 } }, porProyecto: [] });
       } finally { setLoading(false); }
     })();
   }, [activeProject?.id, reloadKey, effectiveResponsableId, page, filterCurso, rango.from, rango.to]);
@@ -149,8 +195,23 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
     finally { setCargandoCuotas(false); }
   }
 
-  const visibleItems = items;
-  const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
+  const conFechas = Boolean(rango.from && rango.to);
+  // Una sola forma de fila, venga de la lista de ventas o de la mezclada.
+  const visibleItems = conFechas
+    ? filas.map((f: any) => ({
+        clave: `${f.tipo}-${f.clave_id}`, tipo: f.tipo, fecha: f.fecha, fecha_de_la_venta: f.fecha_de_la_venta,
+        lead_id: f.lead_id, venta_id: f.venta_id, cliente: f.cliente, producto: f.producto,
+        total: f.total, pagado: f.pagado, factura: f.factura, factura_no_requerida: f.factura_no_requerida,
+        estado: f.tipo === 'venta' ? estadoDe(f.total, f.pagado) : (Number(f.pagado) > 0 ? 'pagado' : 'pendiente'),
+      }))
+    : items.map((r: any) => ({
+        clave: `venta-${r.id}`, tipo: 'venta', fecha: r.fecha_conversion || r.fecha_compra, fecha_de_la_venta: r.fecha_conversion,
+        lead_id: r.lead_id, venta_id: r.id, cliente: r.lead_nombre, producto: r.producto_contratado,
+        total: r.importe_total, pagado: r.importe_pagado, factura: null, factura_no_requerida: false,
+        estado: estadoDe(r.importe_total, r.importe_pagado),
+      }));
+  const totalLista = conFechas ? totalFilas : total;
+  const totalPages = Math.max(1, Math.ceil(totalLista / PER_PAGE));
 
   return (
     <div className="space-y-5 pb-8">
@@ -227,8 +288,8 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
           <label className="text-xs font-semibold text-muted-foreground">Hasta:</label>
           <input type="date" value={rango.to} onChange={(e) => setRango((v) => ({ ...v, to: e.target.value }))}
             className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
-          {(viewUserId !== 'all' || filterCurso !== 'all' || rango.from || rango.to) && (
-            <button type="button" onClick={() => { setViewUserId('all'); setFilterCurso('all'); setRango({ from: '', to: '' }); }} className="text-[11px] text-primary hover:underline">
+          {(viewUserId !== 'all' || filterCurso !== 'all' || rango.from !== esteMes.from || rango.to !== esteMes.to) && (
+            <button type="button" onClick={() => { setViewUserId('all'); setFilterCurso('all'); setRango({ from: esteMes.from, to: esteMes.to }); }} className="text-[11px] text-primary hover:underline">
               Quitar filtros
             </button>
           )}
@@ -329,6 +390,52 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
         />
       </div>
 
+
+      {/* Con una empresa elegida: en que campus hubo ventas y cuotas. La suma
+          de cada columna es la tarjeta de arriba; si no, es un fallo. */}
+      {activeIssuer && (totales.porProyecto || []).length > 0 && (
+        <div className="bg-card border border-border rounded-lg overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-border flex items-center justify-between">
+            <span className="text-sm font-semibold">Por proyecto · {activeIssuer.nombre}</span>
+            <span className="text-[11px] text-muted-foreground">{totales.porProyecto.length} con movimiento</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/40 text-[11px] text-muted-foreground">
+                <tr>
+                  <th className="text-left px-4 py-2 font-bold">Proyecto</th>
+                  <th className="text-right px-4 py-2 font-bold">Ventas</th>
+                  <th className="text-right px-4 py-2 font-bold">Importe vendido</th>
+                  <th className="text-right px-4 py-2 font-bold">Cuotas facturadas</th>
+                  <th className="text-right px-4 py-2 font-bold">Importe cuotas</th>
+                </tr>
+              </thead>
+              <tbody>
+                {totales.porProyecto.map((p: any) => (
+                  <tr key={p.project_id} className="border-t border-border hover:bg-muted/30 cursor-pointer"
+                    title="Ver solo este proyecto" onClick={() => switchProject(p.project_id)}>
+                    <td className="px-4 py-2 font-medium">{p.nombre}</td>
+                    <td className="px-4 py-2 text-right tabular-nums">{p.ventas.n}</td>
+                    <td className="px-4 py-2 text-right tabular-nums">{fmt(p.ventas.importe)}</td>
+                    <td className="px-4 py-2 text-right tabular-nums">{p.cuotas.n}</td>
+                    <td className="px-4 py-2 text-right tabular-nums">{fmt(p.cuotas.importe)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="bg-muted/30 text-xs font-semibold">
+                <tr>
+                  <td className="px-4 py-2">Total</td>
+                  <td className="px-4 py-2 text-right tabular-nums">{totales.porProyecto.reduce((s: number, p: any) => s + p.ventas.n, 0)}</td>
+                  <td className="px-4 py-2 text-right tabular-nums">{fmt(totales.porProyecto.reduce((s: number, p: any) => s + p.ventas.importe, 0))}</td>
+                  <td className="px-4 py-2 text-right tabular-nums">{totales.porProyecto.reduce((s: number, p: any) => s + p.cuotas.n, 0)}</td>
+                  <td className="px-4 py-2 text-right tabular-nums">{fmt(totales.porProyecto.reduce((s: number, p: any) => s + p.cuotas.importe, 0))}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* Lo unico que hay que HACER: las ventas que esperan factura. */}
       {totales.pendientesDeFacturar > 0 && (
         <div className="rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-3 py-2.5 flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -339,7 +446,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
           <p className="text-xs text-amber-800 dark:text-amber-300">
             Las {totales.noRequiereFactura > 0 ? `otras ${totales.noRequiereFactura} sin factura están marcadas «no requiere factura»` : 'demás están facturadas'}.
           </p>
-          <button type="button" onClick={() => navigate('/finanzas/facturas')}
+          <button type="button" onClick={() => navigate('/accounting/facturas')}
             className="ml-auto text-xs font-semibold text-amber-900 dark:text-amber-200 underline hover:no-underline">
             Ir a facturarlas
           </button>
@@ -485,43 +592,60 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
         <SkeletonTable rows={5} columns={6} />
       ) : visibleItems.length === 0 ? (
         <div className="bg-card border border-border rounded-lg overflow-hidden">
-          <EmptyState icon={CurrencyEur} title="Sin ventas" description="Las conversiones aparecerán aquí cuando un lead compre" />
+          <EmptyState icon={CurrencyEur} title={conFechas ? 'Sin ventas ni cuotas en estas fechas' : 'Sin ventas'} description={conFechas ? 'Ni se vendió ni se facturó ninguna cuota en el periodo elegido' : 'Las conversiones aparecerán aquí cuando un lead compre'} />
         </div>
       ) : (
         <div className="bg-card border border-border rounded-lg overflow-hidden">
           {/* Desktop table */}
           <div className="hidden md:block overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="tabla-cifras w-full text-sm">
               <thead className="bg-muted/50 text-[11px] text-muted-foreground">
                 <tr>
                   <th className="text-left px-4 py-2.5 font-bold">Fecha</th>
+                  {/* Que es cada fila. Diego: «ahi abajo debe de decirme cual
+                      es cuota y cual es venta». */}
+                  <th className="text-left px-4 py-2.5 font-bold">Tipo</th>
                   <th className="text-left px-4 py-2.5 font-bold">Cliente</th>
                   <th className="text-left px-4 py-2.5 font-bold">Producto</th>
                   <th className="text-right px-4 py-2.5 font-bold">Total</th>
                   <th className="text-right px-4 py-2.5 font-bold">Pagado</th>
+                  <th className="text-left px-4 py-2.5 font-bold">Factura</th>
                   <th className="text-left px-4 py-2.5 font-bold">Estado</th>
                   <th className="px-4 py-2.5"></th>
                 </tr>
               </thead>
               <tbody>
-                {visibleItems.map(r => (
-                  <tr key={r.id} className="border-b last:border-0 hover:bg-muted/30 cursor-pointer" onClick={() => navigate(`/prospectos/${r.lead_id}`)}>
-                    <td className="px-4 py-3 text-muted-foreground">{formatDate(r.fecha_conversion || r.fecha_compra)}</td>
-                    <td className="px-4 py-3 font-semibold">{r.lead_nombre}</td>
-                    <td className="px-4 py-3">{r.producto_contratado}</td>
-                    <td className="px-4 py-3 text-right tabular-nums">{fmt(r.importe_total)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums text-green-600 dark:text-green-400">{fmt(r.importe_pagado)}</td>
+                {visibleItems.map((r: any) => (
+                  <tr key={r.clave} className="border-b last:border-0 hover:bg-muted/30 cursor-pointer" onClick={() => navigate(`/leads/${r.lead_id}`)}>
+                    <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{formatDate(r.fecha)}</td>
+                    <td className="px-4 py-3">
+                      <Tipo tipo={r.tipo} />
+                      {r.tipo !== 'venta' && r.fecha_de_la_venta && (
+                        <div className="text-[10px] text-muted-foreground whitespace-nowrap">venta del {formatDate(r.fecha_de_la_venta)}</div>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 font-semibold">{r.cliente || 'Sin nombre'}</td>
+                    <td className="px-4 py-3">{r.producto || '—'}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">{fmt(r.total)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums text-green-600 dark:text-green-400">{fmt(r.pagado)}</td>
+                    <td className="px-4 py-3 text-xs whitespace-nowrap">
+                      {r.factura
+                        ? <span className="font-mono">{r.factura}</span>
+                        : r.factura_no_requerida
+                          ? <span className="text-muted-foreground">no requiere</span>
+                          : <span className="text-amber-700 dark:text-amber-400 font-semibold">sin factura</span>}
+                    </td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${
-                        r.estado_pago === 'pagado' ? 'bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400' :
-                        r.estado_pago === 'parcial' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400' :
+                        r.estado === 'pagado' ? 'bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400' :
+                        r.estado === 'parcial' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400' :
                         'bg-orange-100 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400'
-                      }`}>{r.estado_pago}</span>
+                      }`}>{r.estado}</span>
                     </td>
                     <td className="px-4 py-3 text-right">
                       <button
                         type="button"
-                        onClick={(e) => { e.stopPropagation(); navigate(`/ventas/${r.id}`); }}
+                        onClick={(e) => { e.stopPropagation(); navigate(`/ventas/${r.venta_id}`); }}
                         title="Ver detalle de la venta"
                         className="text-muted-foreground hover:text-primary p-1 rounded focus:outline-none focus:ring-2 focus:ring-primary/40"
                       >
@@ -536,25 +660,25 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
 
           {/* Mobile cards */}
           <div className="md:hidden divide-y divide-border">
-            {visibleItems.map(r => (
-              <button key={r.id} type="button" onClick={() => navigate(`/prospectos/${r.lead_id}`)} className="w-full text-left p-4 space-y-2 hover:bg-muted/30 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40">
+            {visibleItems.map((r: any) => (
+              <button key={r.clave} type="button" onClick={() => navigate(`/leads/${r.lead_id}`)} className="w-full text-left p-4 space-y-2 hover:bg-muted/30 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="font-semibold truncate">{r.lead_nombre}</div>
-                    <div className="text-xs text-muted-foreground truncate">{r.producto_contratado}</div>
+                    <div className="flex items-center gap-2"><Tipo tipo={r.tipo} /><span className="font-semibold truncate">{r.cliente || 'Sin nombre'}</span></div>
+                    <div className="text-xs text-muted-foreground truncate">{r.producto || '—'}</div>
                   </div>
                   <span className={`px-2 py-0.5 rounded text-[10px] font-medium flex-shrink-0 ${
-                    r.estado_pago === 'pagado' ? 'bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400' :
-                    r.estado_pago === 'parcial' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400' :
+                    r.estado === 'pagado' ? 'bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400' :
+                    r.estado === 'parcial' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400' :
                     'bg-orange-100 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400'
-                  }`}>{r.estado_pago}</span>
+                  }`}>{r.estado}</span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
-                  <div className="text-xs text-muted-foreground">{formatDate(r.fecha_conversion || r.fecha_compra)}</div>
+                  <div className="text-xs text-muted-foreground">{formatDate(r.fecha)}{r.factura ? ` · ${r.factura}` : ''}</div>
                   <div className="flex items-center gap-3">
-                    <span className="tabular-nums text-green-600 dark:text-green-400">{fmt(r.importe_pagado)}</span>
+                    <span className="tabular-nums text-green-600 dark:text-green-400">{fmt(r.pagado)}</span>
                     <span className="text-muted-foreground">/</span>
-                    <span className="tabular-nums">{fmt(r.importe_total)}</span>
+                    <span className="tabular-nums">{fmt(r.total)}</span>
                   </div>
                 </div>
               </button>
@@ -564,7 +688,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
           {totalPages > 1 && (
             <div className="flex items-center justify-between gap-3 px-4 py-3 border-t border-border text-sm">
               <span className="text-muted-foreground">
-                {(page - 1) * PER_PAGE + 1}–{Math.min(page * PER_PAGE, total)} de {total}
+                {(page - 1) * PER_PAGE + 1}–{Math.min(page * PER_PAGE, totalLista)} de {totalLista}
               </span>
               <div className="flex items-center gap-2">
                 <button type="button" disabled={page <= 1} onClick={() => setPage((v) => Math.max(1, v - 1))}

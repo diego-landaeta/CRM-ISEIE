@@ -59,6 +59,30 @@ export async function cuotas(req, res, next) {
   } catch (err) { next(err); }
 }
 
+// GET /api/conversions/filas?from=&to=&projectId=&issuerId=&page=&limit=
+//
+// La lista de Ventas con fechas: ventas del periodo + cuotas facturadas del
+// periodo, cada fila etiquetada. Es lo que se ve abajo cuando hay filtro.
+export async function filas(req, res, next) {
+  try {
+    const fecha = /^\d{4}-\d{2}-\d{2}$/;
+    const from = fecha.test(req.query.from || '') ? req.query.from : null;
+    const to = fecha.test(req.query.to || '') ? req.query.to : null;
+    if (!from || !to) throw new AppError('Hacen falta las dos fechas', 400, 'VALIDATION_ERROR');
+    let responsableId = req.query.responsableId ? parseInt(req.query.responsableId, 10) : null;
+    // Igual que en el listado: una gestora ve lo suyo, escriba lo que escriba.
+    if (req.user.role === 'gestor') responsableId = req.user.userId;
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));
+    const r = await conversionModel.filasDelPeriodo({
+      projectId: req.query.projectId ? parseInt(req.query.projectId, 10) : null, from, to, responsableId,
+      producto: req.query.producto ? String(req.query.producto) : null, page, limit,
+    });
+    res.json({ success: true, data: r.filas,
+      pagination: { total: r.total, page, limit, totalPages: Math.max(1, Math.ceil(r.total / limit)) } });
+  } catch (err) { next(err); }
+}
+
 export async function getById(req, res, next) {
   try {
     const id = parseInt(req.params.id);
