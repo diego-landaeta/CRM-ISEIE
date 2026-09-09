@@ -28,7 +28,9 @@ export async function topProducts(req, res, next) {
     // Gestor: forzar su propio responsableId (no puede consultar el de otros)
     if (req.user.role === 'gestor') responsableId = req.user.userId;
     const result = await salesService.getTopProducts({ projectId, limit, days, from, to, responsableId });
-    res.json({ success: true, data: result });
+    // `data` sigue siendo la lista, como siempre: el panel de inicio la lee así
+    // y no tiene por qué enterarse. Lo que no es un programa va aparte.
+    res.json({ success: true, data: result.productos, sinAsignar: result.sinAsignar });
   } catch (err) { next(err); }
 }
 

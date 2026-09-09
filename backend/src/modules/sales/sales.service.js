@@ -158,6 +158,40 @@ export async function createSale(data, requestUser) {
   };
 }
 
+/*
+  El nombre del programa, limpio.
+
+  Estaba escrito tres veces en la misma consulta y era la línea más larga del
+  fichero. Sacarlo aquí no cambia lo que hace: permite preguntar por él sin
+  repetirlo una cuarta vez.
+
+  Quita el prefijo «Producto/servicio: servicio académico,» y el «pago
+  mensualidad N», que hacían que ese texto saliera como el producto más vendido
+  y partían un mismo curso en varias filas.
+*/
+const NOMBRE_LIMPIO = `NULLIF(TRIM(regexp_replace(regexp_replace(regexp_replace(c.producto_contratado, '^[[:space:]]*Producto/servicio:[[:space:]]*servicio[[:space:]]+acad[eé]mico[,;]?[[:space:]]*', '', 'i'), '^[[:space:]]*pago[[:space:]]+(de[[:space:]]+)?(la[[:space:]]+)?(mensualidad|cuota|matr[ií]cula)[^,]*[,]?[[:space:]]*', '', 'i'), '^[[:space:]]*servicio[[:space:]]+acad[eé]mico[[:space:]]*$', '', 'i')), '')`;
+
+const PRODUCTO = `COALESCE(p.nombre, ${NOMBRE_LIMPIO}, '— sin producto —')`;
+
+/*
+  Una ficha que NO dice qué se vendió.
+
+  Diego (#100): «el primer puesto de Programas más vendidos es "— Pendiente de
+  registrar —"». Y tenía razón en que eso no es un programa: es la ausencia de
+  uno. Un ranking cuyo número uno es «no lo sabemos» no dice nada.
+
+  OJO CON QUÉ SE DESCARTA. Solo el hueco: la etiqueta «pendiente de registrar» y
+  la ficha sin texto ninguno. Un nombre de curso escrito a mano SÍ cuenta aunque
+  no esté atado al catálogo, porque ahí sí se sabe qué se vendió. Descartarlas
+  todas por no tener `producto_contratado_id` escondería ventas reales, que es
+  el error contrario y peor.
+
+  No se tiran: se cuentan aparte y la pantalla las enseña como lo que son, un
+  agujero de registro que hay que rellenar (#41).
+*/
+const SIN_ASIGNAR = `(c.producto_contratado_id IS NULL
+    AND (${NOMBRE_LIMPIO} IS NULL OR ${NOMBRE_LIMPIO} ~* 'pendiente de registrar'))`;
+
 /**
  * Top programas vendidos — agrupado por producto. Usado en dashboards (inicial + finanzas).
  * @param {{ projectId?: number|null, limit?: number, days?: number|null }} opts
@@ -174,36 +208,54 @@ export async function getTopProducts({ projectId, limit = 10, days = null, from 
   if (to) { params.push(to); where.push(`c.fecha_conversion <= $${params.length}::date`); }
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
   const needsLeadJoin = !!responsableId;
+  const join = `FROM conversions c
+     LEFT JOIN products p ON p.id = c.producto_contratado_id
+     ${needsLeadJoin ? 'LEFT JOIN leads l ON l.id = c.lead_id' : ''}`;
+
+  // Las fichas sin programa se cuentan aparte y ANTES del LIMIT: si se filtraran
+  // despues, quitar la fila de «pendiente de registrar» dejaria el ranking con
+  // un puesto menos de los pedidos.
+  const { rows: [hueco] } = await query(
+    `SELECT COUNT(*)::int AS ventas,
+            COALESCE(SUM(c.importe_total), 0)::numeric AS facturado,
+            COALESCE(SUM(c.importe_pagado), 0)::numeric AS cobrado
+     ${join}
+     ${whereSql}${whereSql ? ' AND' : 'WHERE'} ${SIN_ASIGNAR}`,
+    params
+  );
+
   params.push(limit);
   const { rows } = await query(
     `SELECT
        c.producto_contratado_id AS product_id,
-       -- Manda el producto del CATALOGO. Si no lo tiene, se usa el texto libre LIMPIO:
-       -- sin el prefijo "Producto/servicio: servicio academico," ni el "pago mensualidad N",
-       -- que hacian que ese texto saliera como el producto mas vendido y fragmentaban
-       -- un mismo curso en varias filas.
-       COALESCE(p.nombre, NULLIF(TRIM(regexp_replace(regexp_replace(regexp_replace(c.producto_contratado, '^[[:space:]]*Producto/servicio:[[:space:]]*servicio[[:space:]]+acad[eé]mico[,;]?[[:space:]]*', '', 'i'), '^[[:space:]]*pago[[:space:]]+(de[[:space:]]+)?(la[[:space:]]+)?(mensualidad|cuota|matr[ií]cula)[^,]*[,]?[[:space:]]*', '', 'i'), '^[[:space:]]*servicio[[:space:]]+acad[eé]mico[[:space:]]*$', '', 'i')), ''), '— sin producto —') AS producto,
+       -- Manda el producto del CATALOGO; si no lo tiene, el texto libre limpio.
+       ${PRODUCTO} AS producto,
        COUNT(*)::int AS ventas,
        COALESCE(SUM(c.importe_total), 0)::numeric AS facturado,
        COALESCE(SUM(c.importe_pagado), 0)::numeric AS cobrado,
        MAX(c.fecha_conversion) AS ultima_venta
-     FROM conversions c
-     LEFT JOIN products p ON p.id = c.producto_contratado_id
-     ${needsLeadJoin ? 'LEFT JOIN leads l ON l.id = c.lead_id' : ''}
-     ${whereSql}
-     GROUP BY COALESCE(p.nombre, NULLIF(TRIM(regexp_replace(regexp_replace(regexp_replace(c.producto_contratado, '^[[:space:]]*Producto/servicio:[[:space:]]*servicio[[:space:]]+acad[eé]mico[,;]?[[:space:]]*', '', 'i'), '^[[:space:]]*pago[[:space:]]+(de[[:space:]]+)?(la[[:space:]]+)?(mensualidad|cuota|matr[ií]cula)[^,]*[,]?[[:space:]]*', '', 'i'), '^[[:space:]]*servicio[[:space:]]+acad[eé]mico[[:space:]]*$', '', 'i')), ''), '— sin producto —'), c.producto_contratado_id, p.nombre
+     ${join}
+     ${whereSql}${whereSql ? ' AND' : 'WHERE'} NOT ${SIN_ASIGNAR}
+     GROUP BY ${PRODUCTO}, c.producto_contratado_id, p.nombre
      ORDER BY ventas DESC, facturado DESC
      LIMIT $${params.length}`,
     params
   );
-  return rows.map((r) => ({
-    product_id: r.product_id,
-    producto: r.producto,
-    ventas: r.ventas,
-    facturado: Number(r.facturado),
-    cobrado: Number(r.cobrado),
-    ultima_venta: r.ultima_venta,
-  }));
+  return {
+    productos: rows.map((r) => ({
+      product_id: r.product_id,
+      producto: r.producto,
+      ventas: r.ventas,
+      facturado: Number(r.facturado),
+      cobrado: Number(r.cobrado),
+      ultima_venta: r.ultima_venta,
+    })),
+    sinAsignar: {
+      ventas: hueco.ventas,
+      facturado: Number(hueco.facturado),
+      cobrado: Number(hueco.cobrado),
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------

@@ -9,6 +9,8 @@ import EmptyState from '@/shared/components/ui/EmptyState';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import { CurrencyEur, ArrowRight, Receipt, CheckCircle, Plus } from '@phosphor-icons/react';
 import { formatDate } from '@/shared/lib/format';
+// Las metas son mensuales: el mes que toque segun el filtro de fechas.
+import { mesDe } from '@/modules/sales/components/FiltroPeriodo';
 
 const RegisterSaleDialog = lazy(() => import('@/modules/sales/components/RegisterSaleDialog'));
 const TopProductsCard = lazy(() => import('@/modules/sales/components/TopProductsCard'));
@@ -305,13 +307,19 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
           <MyGoalCard projectId={activeProject?.id} />
         </Suspense>
         <Suspense fallback={null}>
-          <TopProductsCard projectId={activeProject?.id} responsableId={effectiveResponsableId} days={null} limit={5} title={effectiveResponsableId ? `Programas vendidos por ${gestores.find(g => g.user_id === effectiveResponsableId)?.nombre || 'gestor'}` : 'Programas más vendidos'} />
+          <TopProductsCard projectId={activeProject?.id}
+            from={rango.from || null} to={rango.to || null}
+            responsableId={effectiveResponsableId} days={null} limit={5} title={effectiveResponsableId ? `Programas vendidos por ${gestores.find(g => g.user_id === effectiveResponsableId)?.nombre || 'gestor'}` : 'Programas más vendidos'} />
         </Suspense>
       </div>
 
       {isAdmin && (
         <Suspense fallback={null}>
-          <GestoresStatsTable projectId={activeProject?.id} canEdit={true} />
+          {/* El mes ES el del filtro de arriba. Sin pasarlo, la tabla cogia
+              siempre el mes en curso: con el filtro en agosto decia
+              «Equipo de ventas — 2026-09» y todos a cero (#100 · 4). */}
+          <GestoresStatsTable projectId={activeProject?.id}
+            periodo={mesDe(rango.from, rango.to)} canEdit={true} />
         </Suspense>
       )}
 
