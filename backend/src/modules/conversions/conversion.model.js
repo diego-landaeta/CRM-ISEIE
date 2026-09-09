@@ -1,4 +1,5 @@
 import { query, getClient } from '../../shared/config/db.js';
+import { CLASE_FACTURA, FACTURA_REAL } from '../invoices/clase.sql.js';
 
 const LEAD_EXISTS_SQL = `SELECT id, project_id FROM leads WHERE id = $1`;
 
@@ -327,33 +328,66 @@ export async function findAll({ projectId, leadId, responsableId, pendiente, ven
     anteriores, que son exactamente las que sobran al comparar.
   */
   let facturasDeAntes = { n: 0, importe: 0 };
-  // Lo que se facturo DE VERDAD en estas fechas. Es otra cifra que el importe
-  // de las ventas, y no estaba en ninguna parte de esta pantalla: la tarjeta se
-  // llamaba «Facturado» y enseñaba la suma de las ventas. De ahi que Ventas y
-  // Facturacion parecieran contradecirse.
   let facturadoEnPeriodo = { n: 0, importe: 0 };
+  /*
+    LAS FACTURAS DEL PERIODO, REPARTIDAS COMO LAS VE FACTURACION.
+
+    Diego: «dice que hay 1 venta y 2 cuotas en ISEIH y yo solo veo 1 y 1.
+    Necesito que eso use los datos de facturacion». Tenia razon: aqui se
+    contaban cuotas por fecha de COBRO y alli por fecha de FACTURA, y 52 de los
+    142 cobros facturados de 2026 llevan fechas distintas. Dos pantallas que
+    cuentan cosas distintas no coinciden nunca, y explicarlo no arregla nada.
+
+    Ahora se cuentan FACTURAS por fecha de emision, con la MISMA regla que el
+    listado de Facturacion --`CLASE_FACTURA`, en un fichero compartido--. Lo
+    que dice esta tarjeta es exactamente lo que se ve alli con las mismas
+    fechas: si no coincide, es un fallo, no una explicacion pendiente.
+  */
+  const vacio = () => ({ n: 0, importe: 0 });
+  let facturasPorClase = { venta: vacio(), cuota: vacio(), parte: vacio(), suelta: vacio() };
   if (from && to) {
     const args = [from, to];
+    // El mismo recorte de proyecto que el resto de la consulta, pero sobre la
+    // factura: si se esta mirando una sociedad, sus facturas y no las demas.
     let alcance = 'TRUE';
-    if (projectId) { args.push(projectId); alcance = 'i.project_id = $3'; }
+    if (projectId) { args.push(projectId); alcance = `i.project_id = $3`; }
     const { rows: [fa] } = await query(
-      `SELECT COUNT(*)::int AS n_todas,
-              COALESCE(SUM(i.total), 0) AS importe_todas,
+      `WITH f AS (
+         SELECT i.total, cv.id AS venta_id, cv.fecha_conversion, ${CLASE_FACTURA} AS clase
+           FROM invoices i
+           LEFT JOIN conversions cv ON cv.id = i.conversion_id
+          WHERE ${FACTURA_REAL}
+            AND i.fecha_emision >= $1 AND i.fecha_emision <= $2
+            AND ${alcance}
+       )
+       SELECT COUNT(*)::int AS n_todas,
+              COALESCE(SUM(total), 0) AS importe_todas,
               -- Las que no son de una venta de este periodo: cuotas de ventas
               -- anteriores, o facturas sueltas sin venta detras.
-              COUNT(*) FILTER (WHERE cv.id IS NULL OR cv.fecha_conversion < $1)::int AS n_de_antes,
-              COALESCE(SUM(i.total) FILTER (WHERE cv.id IS NULL OR cv.fecha_conversion < $1), 0) AS importe_de_antes
-         FROM invoices i
-         LEFT JOIN conversions cv ON cv.id = i.conversion_id
-        WHERE i.tipo <> 'proforma' AND i.estado <> 'cancelada'
-          AND i.fecha_emision >= $1 AND i.fecha_emision <= $2
-          AND ${alcance}`,
+              COUNT(*) FILTER (WHERE venta_id IS NULL OR fecha_conversion < $1)::int AS n_de_antes,
+              COALESCE(SUM(total) FILTER (WHERE venta_id IS NULL OR fecha_conversion < $1), 0) AS importe_de_antes,
+              COUNT(*) FILTER (WHERE clase = 'venta')::int  AS n_venta,
+              COALESCE(SUM(total) FILTER (WHERE clase = 'venta'), 0)  AS i_venta,
+              COUNT(*) FILTER (WHERE clase = 'cuota')::int  AS n_cuota,
+              COALESCE(SUM(total) FILTER (WHERE clase = 'cuota'), 0)  AS i_cuota,
+              COUNT(*) FILTER (WHERE clase = 'parte')::int  AS n_parte,
+              COALESCE(SUM(total) FILTER (WHERE clase = 'parte'), 0)  AS i_parte,
+              COUNT(*) FILTER (WHERE clase = 'suelta')::int AS n_suelta,
+              COALESCE(SUM(total) FILTER (WHERE clase = 'suelta'), 0) AS i_suelta
+         FROM f`,
       args);
     facturasDeAntes = { n: Number(fa.n_de_antes), importe: Number(fa.importe_de_antes) };
     facturadoEnPeriodo = { n: Number(fa.n_todas), importe: Number(fa.importe_todas) };
+    facturasPorClase = {
+      venta:  { n: Number(fa.n_venta),  importe: Number(fa.i_venta) },
+      cuota:  { n: Number(fa.n_cuota),  importe: Number(fa.i_cuota) },
+      parte:  { n: Number(fa.n_parte),  importe: Number(fa.i_parte) },
+      suelta: { n: Number(fa.n_suelta), importe: Number(fa.i_suelta) },
+    };
   }
   totales.facturasDeAntes = facturasDeAntes;
   totales.facturadoEnPeriodo = facturadoEnPeriodo;
+  totales.facturasPorClase = facturasPorClase;
 
   /*
     El dinero que ENTRO en estas fechas, partido en dos.
@@ -430,62 +464,51 @@ export async function findAll({ projectId, leadId, responsableId, pendiente, ven
 }
 
 /**
- * Las cuotas cobradas en un periodo, una por una y con su factura.
+ * Las cuotas FACTURADAS en un periodo, una por una.
  *
- * Diego: «tiene que decir cuáles son las cuotas y su número de factura, y si no
- * tiene número de factura poner: sin factura».
+ * Diego: «tiene que decir cuales son las cuotas y su numero de factura».
  *
- * Un total sin desglose no se puede comprobar. Con la lista delante se ve de qué
- * venta viene cada euro, y sobre todo QUÉ FALTA POR FACTURAR: un cobro sin
- * factura es dinero cobrado que no se ha declarado.
+ * Son facturas, no cobros: la misma lista, con la misma regla y las mismas
+ * fechas, que se ve en Facturacion con la etiqueta CUOTA. Antes listaba cobros
+ * por fecha de cobro y salian dos donde Facturacion enseñaba una --la de Laura
+ * Estrada: cobrada el 8, facturada el 9--. Ahora suma exactamente lo que dice la
+ * tarjeta, porque es la misma consulta.
+ *
+ * Se devuelve tambien el dia del cobro, por si no es el de la factura: es el
+ * dato que explica el desfase cuando alguien lo mira desde el otro lado.
  */
 export async function cuotasDelPeriodo({
-  projectId = null, from, to, responsableId = null, limit = 300,
+  projectId = null, projectIds = null, from, to, responsableId = null, limit = 300,
 } = {}) {
   if (!from || !to) return [];
   const args = [from, to];
+  
   let alcance = 'TRUE';
-  if (projectId) { args.push(projectId); alcance = `c.project_id = $${args.length}`; }
+  if (projectId) { args.push(projectId); alcance = `i.project_id = $${args.length}`; }
   let porGestora = '';
   if (responsableId) {
     args.push(responsableId);
-    porGestora = `AND COALESCE(c.vendedora_id, l0.responsable_id) = $${args.length}`;
+    porGestora = `AND COALESCE(c.vendedora_id, l.responsable_id) = $${args.length}`;
   }
   args.push(limit);
 
   const { rows } = await query(
-    `WITH cobros AS (
-       SELECT cp.id, cp.importe, cp.fecha, cp.conversion_id,
-              (NOT c.es_mensualidad AND NOT EXISTS (
-                 SELECT 1 FROM conversion_payments p0
-                  WHERE p0.conversion_id = cp.conversion_id
-                    AND (p0.fecha < cp.fecha
-                         OR (p0.fecha = cp.fecha AND p0.id < cp.id))
-               )) AS es_matricula
-         FROM conversion_payments cp
-         JOIN conversions c ON c.id = cp.conversion_id
-         LEFT JOIN leads l0 ON l0.id = c.lead_id
-        WHERE cp.fecha >= $1 AND cp.fecha <= $2 AND ${alcance} ${porGestora}
-     )
-     SELECT cb.id, cb.fecha, cb.importe,
+    `SELECT i.id AS factura_id, i.codigo AS factura, i.fecha_emision AS fecha, i.total AS importe,
             c.id AS venta_id, c.fecha_conversion AS fecha_de_la_venta,
-            l.nombre AS cliente,
+            COALESCE(NULLIF(TRIM(i.cliente_nombre), ''), l.nombre) AS cliente,
             COALESCE(p.nombre, NULLIF(TRIM(c.producto_contratado), '')) AS producto,
-            -- La factura de ESE cobro. Una proforma no cuenta: es un
-            -- presupuesto, no una factura. Una anulada, tampoco.
-            i.codigo AS factura, i.id AS factura_id,
-            -- Cuando se emitio esa factura. Casi nunca es el dia del cobro, y
-            -- sin decirlo Ventas y Facturacion cuentan cuotas distintas para el
-            -- mismo dia y parece un fallo cuando es la fecha de otra cosa.
-            i.fecha_emision AS factura_fecha
-       FROM cobros cb
-       JOIN conversions c ON c.id = cb.conversion_id
+            -- El dia del cobro, que casi nunca es el de la factura.
+            cp.fecha AS cobro_fecha
+       FROM invoices i
+       JOIN conversions c ON c.id = i.conversion_id
        LEFT JOIN leads l ON l.id = c.lead_id
        LEFT JOIN products p ON p.id = c.producto_contratado_id
-       LEFT JOIN invoices i ON i.payment_id = cb.id
-                           AND i.tipo <> 'proforma' AND i.estado <> 'cancelada'
-      WHERE NOT cb.es_matricula
-      ORDER BY cb.fecha DESC, cb.id DESC
+       LEFT JOIN conversion_payments cp ON cp.id = i.payment_id
+      WHERE ${FACTURA_REAL}
+        AND i.fecha_emision >= $1 AND i.fecha_emision <= $2
+        AND ${alcance} ${porGestora}
+        AND ${CLASE_FACTURA} = 'cuota'
+      ORDER BY i.fecha_emision DESC, i.numero DESC
       LIMIT $${args.length}`,
     args);
   return rows;

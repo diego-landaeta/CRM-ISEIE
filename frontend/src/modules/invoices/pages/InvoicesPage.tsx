@@ -496,6 +496,19 @@ export default function InvoicesPage() {
                     {/* La misma venta partida en varias facturas: no es una
                         venta nueva --contarla como tal daba 4 donde habia 3--
                         ni es una cuota. */}
+                    {/* Sin cobro propio, marcada como pagada, y la venta tiene
+                        mas facturado que cobrado: el dinero de esta factura no
+                        existe. Es la 2026/0102 de Flavia Gerez: 33 segundos
+                        despues de la 0101, mismo importe, un solo cargo en
+                        Stripe. */}
+                    {inv.tipo !== 'proforma' && inv.sospecha_duplicada && (
+                      <div className="mt-0.5">
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300"
+                          title="Marcada como pagada sin cobro propio, y la venta tiene más facturado que cobrado. Probablemente se emitió dos veces.">
+                          ¿REPETIDA?
+                        </span>
+                      </div>
+                    )}
                     {inv.tipo !== 'proforma' && inv.clase === 'parte' && (
                       <div className="mt-0.5">
                         <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300"

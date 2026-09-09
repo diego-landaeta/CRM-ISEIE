@@ -114,6 +114,9 @@ export interface Invoice {
   clase?: 'venta' | 'cuota' | 'parte' | 'suelta';
   /** De cuándo es la venta, para poder decir «cuota de una venta del 6/7». */
   fecha_de_la_venta?: string | null;
+  /** Sin cobro propio, marcada como pagada, y la venta tiene más facturado que
+   *  cobrado: el dinero de esta factura no existe. */
+  sospecha_duplicada?: boolean;
   motivo_rectificacion?: string | null;
   // Vista por sociedad
   project_id?: number | null;

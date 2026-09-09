@@ -76,7 +76,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
     importe: 0, pagado: 0, pendiente: 0, iva: 0,
     facturadas: 0, sinFactura: 0, noRequiereFactura: 0, pendientesDeFacturar: 0, facturasDeAntes: { n: 0, importe: 0 },
     facturadoEnPeriodo: { n: 0, importe: 0 },
-    cobrosDelPeriodo: { matricula: { n: 0, importe: 0 }, cuotas: { n: 0, importe: 0 } },
+    cobrosDelPeriodo: { matricula: { n: 0, importe: 0 }, cuotas: { n: 0, importe: 0 } }, facturasPorClase: { venta: { n: 0, importe: 0 }, cuota: { n: 0, importe: 0 }, parte: { n: 0, importe: 0 }, suelta: { n: 0, importe: 0 } },
   });
   const [rango, setRango] = useState({ from: '', to: '' });
   const atajos = atajosDeFecha();
@@ -126,10 +126,10 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
           setTotal(res.pagination?.total ?? (res.data || []).length);
           // Los totales vienen del servidor sobre TODO el filtro; antes se
           // sumaban las filas cargadas y las tarjetas no cuadraban nunca.
-          setTotales(res.totales || { importe: 0, pagado: 0, pendiente: 0, iva: 0, facturadas: 0, sinFactura: 0, noRequiereFactura: 0, pendientesDeFacturar: 0, facturasDeAntes: { n: 0, importe: 0 }, facturadoEnPeriodo: { n: 0, importe: 0 }, cobrosDelPeriodo: { matricula: { n: 0, importe: 0 }, cuotas: { n: 0, importe: 0 } } });
+          setTotales(res.totales || { importe: 0, pagado: 0, pendiente: 0, iva: 0, facturadas: 0, sinFactura: 0, noRequiereFactura: 0, pendientesDeFacturar: 0, facturasDeAntes: { n: 0, importe: 0 }, facturadoEnPeriodo: { n: 0, importe: 0 }, cobrosDelPeriodo: { matricula: { n: 0, importe: 0 }, cuotas: { n: 0, importe: 0 } }, facturasPorClase: { venta: { n: 0, importe: 0 }, cuota: { n: 0, importe: 0 }, parte: { n: 0, importe: 0 }, suelta: { n: 0, importe: 0 } } });
         }
       } catch {
-        setItems([]); setTotal(0); setTotales({ importe: 0, pagado: 0, pendiente: 0, iva: 0, facturadas: 0, sinFactura: 0, noRequiereFactura: 0, pendientesDeFacturar: 0, facturasDeAntes: { n: 0, importe: 0 }, facturadoEnPeriodo: { n: 0, importe: 0 }, cobrosDelPeriodo: { matricula: { n: 0, importe: 0 }, cuotas: { n: 0, importe: 0 } } });
+        setItems([]); setTotal(0); setTotales({ importe: 0, pagado: 0, pendiente: 0, iva: 0, facturadas: 0, sinFactura: 0, noRequiereFactura: 0, pendientesDeFacturar: 0, facturasDeAntes: { n: 0, importe: 0 }, facturadoEnPeriodo: { n: 0, importe: 0 }, cobrosDelPeriodo: { matricula: { n: 0, importe: 0 }, cuotas: { n: 0, importe: 0 } }, facturasPorClase: { venta: { n: 0, importe: 0 }, cuota: { n: 0, importe: 0 }, parte: { n: 0, importe: 0 }, suelta: { n: 0, importe: 0 } } });
       } finally { setLoading(false); }
     })();
   }, [activeProject?.id, reloadKey, effectiveResponsableId, page, filterCurso, rango.from, rango.to]);
@@ -268,15 +268,15 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
             vendido, asi que no es una venta nueva y no puede sumarse con ellas.
             Solo con un periodo elegido: sin fechas no significa nada. */}
         {(rango.from && rango.to) && (
-          <div title={`En estas fechas entraron ${fmt(totales.cobrosDelPeriodo.matricula.importe)} de ventas nuevas y ${fmt(totales.cobrosDelPeriodo.cuotas.importe)} de cuotas de ventas anteriores`}>
+          <div title={`Facturas con etiqueta CUOTA emitidas en estas fechas: las mismas que se ven en Facturación con este filtro`}>
             <KpiCard
               icon={Receipt}
               iconBg="bg-sky-50 text-sky-600 dark:bg-sky-950/30 dark:text-sky-400"
-              label="Cuotas cobradas"
-              numericValue={totales.cobrosDelPeriodo.cuotas.importe}
+              label="Cuotas facturadas"
+              numericValue={totales.facturasPorClase.cuota.importe}
               format={fmt}
-              badge={totales.cobrosDelPeriodo.cuotas.n > 0
-                ? `${totales.cobrosDelPeriodo.cuotas.n} ${totales.cobrosDelPeriodo.cuotas.n === 1 ? 'cuota' : 'cuotas'}`
+              badge={totales.facturasPorClase.cuota.n > 0
+                ? `${totales.facturasPorClase.cuota.n} ${totales.facturasPorClase.cuota.n === 1 ? 'cuota' : 'cuotas'}`
                 : null}
               badgeColor="bg-sky-50 text-sky-700 dark:bg-sky-950/30 dark:text-sky-400"
             />
@@ -370,17 +370,31 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
             enseña más filas que Ventas en las mismas fechas — aquí se cuentan
             <strong> ventas</strong>, allí <strong>facturas</strong>. Las dos cifras son correctas.
           </p>
-          {/* Las dos cifras juntas: es lo unico que zanja el «no me cuadra». */}
+          {/* El reparto de Facturacion, TAL CUAL: los mismos numeros que se ven
+              alli con este filtro. Si no coinciden, es un fallo. */}
           {totales.facturadoEnPeriodo?.n > 0 && (
             <p className="text-xs text-sky-900 dark:text-sky-200 mt-1.5 pt-1.5 border-t border-sky-200 dark:border-sky-900">
               En estas fechas se emitieron <strong>{totales.facturadoEnPeriodo.n}</strong>{' '}
               {totales.facturadoEnPeriodo.n === 1 ? 'factura' : 'facturas'} por{' '}
-              <strong>{fmt(totales.facturadoEnPeriodo.importe)}</strong>, y se vendieron{' '}
-              <strong>{total}</strong> {total === 1 ? 'venta' : 'ventas'} por{' '}
-              <strong>{fmt(totales.importe)}</strong>. No tienen por qué coincidir.
+              <strong>{fmt(totales.facturadoEnPeriodo.importe)}</strong>:{' '}
+              <strong>{totales.facturasPorClase.venta.n}</strong> de venta nueva,{' '}
+              <strong>{totales.facturasPorClase.cuota.n}</strong> {totales.facturasPorClase.cuota.n === 1 ? 'cuota' : 'cuotas'}
+              {totales.facturasPorClase.parte.n > 0 && <>, <strong>{totales.facturasPorClase.parte.n}</strong> de la misma venta</>}
+              {totales.facturasPorClase.suelta.n > 0 && <>, <strong>{totales.facturasPorClase.suelta.n}</strong> sin venta detrás</>}.
+              {' '}Y se vendieron <strong>{total}</strong> {total === 1 ? 'venta' : 'ventas'} por{' '}
+              <strong>{fmt(totales.importe)}</strong>.
+              {totales.facturasPorClase.cuota.n > 0 && (
+                <>
+                  {' '}
+                  <button type="button" onClick={abrirCuotas}
+                    className="font-semibold underline hover:no-underline">
+                    {verCuotas ? 'Ocultar las cuotas' : 'Ver las cuotas'}
+                  </button>
+                </>
+              )}
             </p>
           )}
-          {totales.cobrosDelPeriodo?.cuotas.n > 0 && (
+          {false && (
             <p className="text-xs text-sky-800 dark:text-sky-300 mt-1 leading-relaxed">
               Del dinero que entró en estas fechas,{' '}
               <strong>{fmt(totales.cobrosDelPeriodo.matricula.importe)}</strong> son de ventas
@@ -404,17 +418,19 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
                 <table className="w-full text-xs">
                   <thead className="bg-muted/40 text-muted-foreground">
                     <tr>
-                      <th className="text-left font-medium px-3 py-2">Cobrada</th>
+                      <th className="text-left font-medium px-3 py-2">Factura</th>
+                      <th className="text-left font-medium px-3 py-2">Emitida</th>
                       <th className="text-left font-medium px-3 py-2">Cliente</th>
                       <th className="text-left font-medium px-3 py-2 hidden md:table-cell">Formación</th>
                       <th className="text-left font-medium px-3 py-2 whitespace-nowrap">Venta de</th>
                       <th className="text-right font-medium px-3 py-2">Importe</th>
-                      <th className="text-left font-medium px-3 py-2">Factura</th>
+                      <th className="text-left font-medium px-3 py-2 whitespace-nowrap">Cobrada</th>
                     </tr>
                   </thead>
                   <tbody>
                     {cuotas.map((q: any) => (
-                      <tr key={q.id} className="border-t border-border">
+                      <tr key={q.factura_id} className="border-t border-border">
+                        <td className="px-3 py-1.5 font-medium whitespace-nowrap">{q.factura}</td>
                         <td className="px-3 py-1.5 whitespace-nowrap">{formatDate(q.fecha)}</td>
                         <td className="px-3 py-1.5">{q.cliente || 'Sin nombre'}</td>
                         <td className="px-3 py-1.5 hidden md:table-cell max-w-[280px] truncate"
@@ -423,25 +439,15 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
                           {formatDate(q.fecha_de_la_venta)}
                         </td>
                         <td className="px-3 py-1.5 text-right tabular-nums font-medium">{fmt(q.importe)}</td>
-                        <td className="px-3 py-1.5 whitespace-nowrap">
-                          {/* Sin factura NO es un hueco en blanco: es dinero
-                              cobrado que no se ha declarado, y se dice. */}
-                          {q.factura ? (
-                            <>
-                              <span className="font-medium">{q.factura}</span>
-                              {/* La fecha de la factura solo cuando NO es la del
-                                  cobro: es lo que explica que Ventas y
-                                  Facturacion cuenten cuotas distintas el mismo
-                                  dia. */}
-                              {q.factura_fecha && String(q.factura_fecha).slice(0, 10) !== String(q.fecha).slice(0, 10) && (
-                                <span className="ml-1 text-[10px] text-muted-foreground">
-                                  emitida {formatDate(q.factura_fecha)}
-                                </span>
-                              )}
-                            </>
-                          ) : (
-                            <span className="text-amber-700 dark:text-amber-400 font-semibold">sin factura</span>
-                          )}
+                        <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground">
+                          {/* El dia del cobro solo si no es el de la factura: es
+                              el dato que explica por que otra pantalla la
+                              contaria otro dia. */}
+                          {q.cobro_fecha
+                            ? (String(q.cobro_fecha).slice(0, 10) === String(q.fecha).slice(0, 10)
+                                ? 'el mismo día'
+                                : formatDate(q.cobro_fecha))
+                            : <span className="text-amber-700 dark:text-amber-400 font-semibold">sin cobro apuntado</span>}
                         </td>
                       </tr>
                     ))}
