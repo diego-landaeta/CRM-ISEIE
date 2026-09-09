@@ -172,7 +172,16 @@ function canSeeItem(item, role, soloColaboraciones, permisos) {
   // prospectos, ni ventas, ni finanzas. Se declara lo que puede ver, igual que
   // con el tutor — enumerar lo prohibido deja fuera siempre la pantalla nueva.
   if (soloColaboraciones) {
-    return ['/tutores', '/tutores/comisiones', '/preferencias'].includes(item.to);
+    // «Sin tutor» faltaba, y era un olvido de la lista, no una decisión: el
+    // servidor ya la dejaba entrar —`formacionesSinTutor` pasa por
+    // `exigirGestion`, que acepta la casilla de colaboraciones— y era la
+    // pantalla la que se la escondía. Y es justo la que dice qué formaciones
+    // están sin cubrir, o sea el trabajo de quien lleva las colaboraciones.
+    //
+    // Van las TRES del apartado. «Mis cursos» no: esa es la de un tutor
+    // mirando lo suyo, no la de quien los organiza.
+    return ['/tutores', '/tutores/sin-tutor', '/tutores/comisiones', '/preferencias']
+      .includes(item.to);
   }
 
   // Un permiso acotado manda sobre el rol.
