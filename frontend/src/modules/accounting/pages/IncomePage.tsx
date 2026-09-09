@@ -75,6 +75,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
   const [totales, setTotales] = useState({
     importe: 0, pagado: 0, pendiente: 0, iva: 0,
     facturadas: 0, sinFactura: 0, facturasDeAntes: { n: 0, importe: 0 },
+    facturadoEnPeriodo: { n: 0, importe: 0 },
   });
   const [rango, setRango] = useState({ from: '', to: '' });
   const atajos = atajosDeFecha();
@@ -115,10 +116,10 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
           setTotal(res.pagination?.total ?? (res.data || []).length);
           // Los totales vienen del servidor sobre TODO el filtro; antes se
           // sumaban las filas cargadas y las tarjetas no cuadraban nunca.
-          setTotales(res.totales || { importe: 0, pagado: 0, pendiente: 0, iva: 0, facturadas: 0, sinFactura: 0, facturasDeAntes: { n: 0, importe: 0 } });
+          setTotales(res.totales || { importe: 0, pagado: 0, pendiente: 0, iva: 0, facturadas: 0, sinFactura: 0, facturasDeAntes: { n: 0, importe: 0 }, facturadoEnPeriodo: { n: 0, importe: 0 } });
         }
       } catch {
-        setItems([]); setTotal(0); setTotales({ importe: 0, pagado: 0, pendiente: 0, iva: 0, facturadas: 0, sinFactura: 0, facturasDeAntes: { n: 0, importe: 0 } });
+        setItems([]); setTotal(0); setTotales({ importe: 0, pagado: 0, pendiente: 0, iva: 0, facturadas: 0, sinFactura: 0, facturasDeAntes: { n: 0, importe: 0 }, facturadoEnPeriodo: { n: 0, importe: 0 } });
       } finally { setLoading(false); }
     })();
   }, [activeProject?.id, reloadKey, effectiveResponsableId, page, filterCurso, rango.from, rango.to]);
@@ -252,20 +253,27 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
             trend="down"
           />
         </div>
-        <KpiCard
-          icon={CurrencyEur}
-          iconBg="bg-violet-50 text-violet-600 dark:bg-violet-950/30 dark:text-violet-400"
-          label="Facturado"
-          numericValue={totales.importe}
-          format={fmt}
-        />
-        <KpiCard
-          icon={CheckCircle}
-          iconBg="bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400"
-          label="Cobrado"
-          numericValue={totales.pagado}
-          format={fmt}
-        />
+        {/* Se llamaba «Facturado» y NO es lo facturado: es la suma del importe
+            de las ventas del periodo. Por eso Ventas y Facturacion parecian
+            contradecirse. Ahora dice lo que es. */}
+        <div title="Suma del importe de las ventas de estas fechas. No es lo que se facturó: una venta a plazos se factura por cobros, mes a mes.">
+          <KpiCard
+            icon={CurrencyEur}
+            iconBg="bg-violet-50 text-violet-600 dark:bg-violet-950/30 dark:text-violet-400"
+            label="Importe vendido"
+            numericValue={totales.importe}
+            format={fmt}
+          />
+        </div>
+        <div title="Lo pagado de esas ventas hasta hoy, no lo cobrado dentro de estas fechas. Una venta de julio que sigue pagando cuotas suma aquí entera.">
+          <KpiCard
+            icon={CheckCircle}
+            iconBg="bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400"
+            label="Cobrado de esas ventas"
+            numericValue={totales.pagado}
+            format={fmt}
+          />
+        </div>
         <KpiCard
           icon={Receipt}
           iconBg="bg-amber-50 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400"
@@ -299,6 +307,16 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
             enseña más filas que Ventas en las mismas fechas — aquí se cuentan
             <strong> ventas</strong>, allí <strong>facturas</strong>. Las dos cifras son correctas.
           </p>
+          {/* Las dos cifras juntas: es lo unico que zanja el «no me cuadra». */}
+          {totales.facturadoEnPeriodo?.n > 0 && (
+            <p className="text-xs text-sky-900 dark:text-sky-200 mt-1.5 pt-1.5 border-t border-sky-200 dark:border-sky-900">
+              En estas fechas se emitieron <strong>{totales.facturadoEnPeriodo.n}</strong>{' '}
+              {totales.facturadoEnPeriodo.n === 1 ? 'factura' : 'facturas'} por{' '}
+              <strong>{fmt(totales.facturadoEnPeriodo.importe)}</strong>, y se vendieron{' '}
+              <strong>{total}</strong> {total === 1 ? 'venta' : 'ventas'} por{' '}
+              <strong>{fmt(totales.importe)}</strong>. No tienen por qué coincidir.
+            </p>
+          )}
         </div>
       )}
 

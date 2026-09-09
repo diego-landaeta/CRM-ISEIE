@@ -309,23 +309,33 @@ export async function findAll({ projectId, leadId, responsableId, pendiente, ven
     anteriores, que son exactamente las que sobran al comparar.
   */
   let facturasDeAntes = { n: 0, importe: 0 };
+  // Lo que se facturo DE VERDAD en estas fechas. Es otra cifra que el importe
+  // de las ventas, y no estaba en ninguna parte de esta pantalla: la tarjeta se
+  // llamaba «Facturado» y enseñaba la suma de las ventas. De ahi que Ventas y
+  // Facturacion parecieran contradecirse.
+  let facturadoEnPeriodo = { n: 0, importe: 0 };
   if (from && to) {
     const args = [from, to];
     let alcance = 'TRUE';
     if (projectId) { args.push(projectId); alcance = 'i.project_id = $3'; }
     const { rows: [fa] } = await query(
-      `SELECT COUNT(*)::int AS n, COALESCE(SUM(i.total), 0) AS importe
+      `SELECT COUNT(*)::int AS n_todas,
+              COALESCE(SUM(i.total), 0) AS importe_todas,
+              -- Las que no son de una venta de este periodo: cuotas de ventas
+              -- anteriores, o facturas sueltas sin venta detras.
+              COUNT(*) FILTER (WHERE cv.id IS NULL OR cv.fecha_conversion < $1)::int AS n_de_antes,
+              COALESCE(SUM(i.total) FILTER (WHERE cv.id IS NULL OR cv.fecha_conversion < $1), 0) AS importe_de_antes
          FROM invoices i
          LEFT JOIN conversions cv ON cv.id = i.conversion_id
         WHERE i.tipo <> 'proforma' AND i.estado <> 'cancelada'
           AND i.fecha_emision >= $1 AND i.fecha_emision <= $2
-          -- La venta es anterior al periodo, o la factura no cuelga de ninguna.
-          AND (cv.id IS NULL OR cv.fecha_conversion < $1)
           AND ${alcance}`,
       args);
-    facturasDeAntes = { n: Number(fa.n), importe: Number(fa.importe) };
+    facturasDeAntes = { n: Number(fa.n_de_antes), importe: Number(fa.importe_de_antes) };
+    facturadoEnPeriodo = { n: Number(fa.n_todas), importe: Number(fa.importe_todas) };
   }
   totales.facturasDeAntes = facturasDeAntes;
+  totales.facturadoEnPeriodo = facturadoEnPeriodo;
 
   const { rows } = await query(
     `SELECT c.id, c.lead_id, c.project_id, c.producto_contratado,
