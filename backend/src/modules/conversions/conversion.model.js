@@ -1,4 +1,5 @@
 import { query, getClient } from '../../shared/config/db.js';
+import { AppError } from '../../shared/utils/AppError.js';
 import { CLASE_FACTURA, FACTURA_REAL } from '../invoices/clase.sql.js';
 
 const LEAD_EXISTS_SQL = `SELECT id, project_id FROM leads WHERE id = $1`;
@@ -782,6 +783,23 @@ export async function getPaymentOwnership(paymentId) {
   return rows[0] || null;
 }
 
+/**
+ * Borrar un cobro.
+ *
+ * Hacia solo la mitad: quitaba el pago y restaba el importe, pero dejaba la
+ * CUOTA marcada como cobrada y la FACTURA viva y en «pagada». Las claves
+ * ajenas son ON DELETE SET NULL, asi que el enlace se iba en silencio y lo
+ * demas se quedaba diciendo que ese dinero entro.
+ *
+ * Paso de verdad con las facturas 2026/0101 y 0102: se creo la venta a las
+ * 14:14:07, se cobro la cuota a las 14:14:40 y se borro el pago a las 14:15:30.
+ * La cuota siguio «cobrada» y la factura «pagada», de un dinero que ya no
+ * existia.
+ *
+ * Ahora hace lo mismo que `unpay`, que si lo hacia bien, y ademas NO deja
+ * borrar un cobro que ya tiene factura emitida: eso no se deshace borrando, se
+ * deshace con una rectificativa.
+ */
 export async function deletePayment(paymentId) {
   const client = await getClient();
   try {
@@ -796,9 +814,33 @@ export async function deletePayment(paymentId) {
       return null;
     }
 
+    // Una factura emitida no se borra por detras.
+    const { rows: fact } = await client.query(
+      `SELECT codigo FROM invoices
+        WHERE payment_id = $1 AND tipo <> 'proforma' AND estado <> 'cancelada'
+        LIMIT 1`,
+      [paymentId]
+    );
+    if (fact[0]) {
+      await client.query('ROLLBACK');
+      throw new AppError(
+        `Ese cobro tiene la factura ${fact[0].codigo}. Anulala o emite una rectificativa antes de borrarlo.`,
+        409, 'PAYMENT_HAS_INVOICE'
+      );
+    }
+
+    // La cuota vuelve a pendiente. Sin esto seguiria diciendo que se cobro.
+    await client.query(
+      `UPDATE conversion_installments
+          SET fecha_cobro = NULL, importe_cobrado = NULL, metodo = NULL,
+              payment_id = NULL, updated_at = NOW()
+        WHERE payment_id = $1`,
+      [paymentId]
+    );
+
     await client.query(`DELETE FROM conversion_payments WHERE id = $1`, [paymentId]);
     await client.query(
-      `UPDATE conversions SET importe_pagado = importe_pagado - $1, updated_at = NOW() WHERE id = $2`,
+      `UPDATE conversions SET importe_pagado = GREATEST(0, importe_pagado - $1), updated_at = NOW() WHERE id = $2`,
       [rows[0].importe, rows[0].conversion_id]
     );
 
