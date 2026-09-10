@@ -1,7 +1,8 @@
 import { Router } from 'express';
-import { verifyToken, roleGuard } from '../../shared/middleware/auth.js';
+import { verifyToken, roleGuard, soloRoles } from '../../shared/middleware/auth.js';
 import * as ctrl from './conversion.controller.js';
 import * as refundsCtrl from './refunds.controller.js';
+import * as repartoCtrl from './reparto.controller.js';
 
 const router = Router();
 
@@ -39,6 +40,16 @@ router.post('/installments/:instId/unpay', ctrl.unpayInstallment);
 router.delete('/installments/:instId', ctrl.deleteInstallment);
 
 // Devoluciones / refunds (fase de prueba)
+// Reparto de la venta entre gestoras.
+//
+// Verlo: cualquiera que entre al CRM — la gestora tiene derecho a saber como se
+// repartio su venta. Cambiarlo: SOLO admin y superadmin, y con `soloRoles` en
+// vez de `roleGuard` a proposito: `roleGuard` deja pasar a `soporte` por un
+// atajo interno, y esto mueve el merito de una persona a otra.
+router.get('/:id/reparto', repartoCtrl.get);
+router.put('/:id/reparto', soloRoles('admin', 'superadmin'), repartoCtrl.set);
+router.delete('/:id/reparto', soloRoles('admin', 'superadmin'), repartoCtrl.remove);
+
 router.get('/:id/refunds', refundsCtrl.list);
 router.post('/:id/refunds', roleGuard('admin', 'superadmin'), refundsCtrl.create);
 router.delete('/refunds/:refundId', roleGuard('admin', 'superadmin'), refundsCtrl.remove);

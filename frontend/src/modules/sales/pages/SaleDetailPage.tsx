@@ -9,6 +9,7 @@ import KpiCard from '@/shared/components/ui/KpiCard';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { SkeletonCard } from '@/shared/components/ui/SkeletonTable';
 import { toast } from '@/shared/hooks/useToast';
+import RepartoVentaCard from '../components/RepartoVentaCard';
 import {
   CurrencyEur, CheckCircle, Wallet, Receipt, ArrowLeft, User, Calendar,
   WarningCircle, CreditCard, ClockCounterClockwise,
@@ -137,6 +138,8 @@ export default function SaleDetailPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Primera columna: los datos y quien la vendio, uno debajo del otro. */}
+        <div className="space-y-4">
         <div className="bg-card border border-border rounded-lg p-4 space-y-2.5 text-sm">
           <h3 className="font-semibold mb-1">Datos de la venta</h3>
           <div className="flex justify-between gap-3">
@@ -166,6 +169,10 @@ export default function SaleDetailPage() {
           {venta.notas_pago && (
             <p className="pt-2 text-[11px] text-muted-foreground whitespace-pre-line border-t border-border">{venta.notas_pago}</p>
           )}
+        </div>
+
+        {/* Quien vendio, y si la venta esta repartida entre dos gestoras. */}
+        <RepartoVentaCard conversionId={venta.id} />
         </div>
 
         <div className="bg-card border border-border rounded-lg p-4 lg:col-span-2">

@@ -249,7 +249,7 @@ export async function findAll({ projectId, leadId, responsableId, pendiente, ven
 
   if (projectId) { conditions.push(`c.project_id = $${idx++}`); params.push(projectId); }
   if (leadId) { conditions.push(`c.lead_id = $${idx++}`); params.push(leadId); }
-  if (responsableId) { conditions.push(`COALESCE(c.vendedora_id, l.responsable_id) = $${idx++}`); params.push(responsableId); }
+  if (responsableId) { conditions.push(`EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id = $${idx++})`); params.push(responsableId); }
   if (pendiente === 'true') { conditions.push(`c.importe_pagado < c.importe_total`); }
   if (pendiente === 'false') { conditions.push(`c.importe_pagado >= c.importe_total`); }
   if (vencido === 'true') {
@@ -354,7 +354,7 @@ export async function findAll({ projectId, leadId, responsableId, pendiente, ven
     // Los mismos recortes que la lista y que «Por proyecto»: gestora y curso.
     // Sin esto la tarjeta decia 3 cuotas y la lista enseñaba 1 al filtrar.
     let porGestora = '', porProducto = '';
-    if (responsableId) { args.push(responsableId); porGestora = `AND COALESCE(cv.vendedora_id, l.responsable_id) = $${args.length}`; }
+    if (responsableId) { args.push(responsableId); porGestora = `AND EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = cv.id AND r.vendedora_id = $${args.length})`; }
     if (producto) { args.push(String(producto).trim()); porProducto = `AND TRIM(cv.producto_contratado) = $${args.length}`; }
     const { rows: [fa] } = await query(
       `WITH f AS (
@@ -411,7 +411,7 @@ export async function findAll({ projectId, leadId, responsableId, pendiente, ven
     // Los MISMOS recortes que las tarjetas --gestora y curso--, o la columna no
     // sumaria la tarjeta en cuanto se filtre. Salio en la revision.
     let porGestora = '', porProducto = '';
-    if (responsableId) { args.push(responsableId); porGestora = `AND COALESCE(c.vendedora_id, l.responsable_id) = $${args.length}`; }
+    if (responsableId) { args.push(responsableId); porGestora = `AND EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id = $${args.length})`; }
     if (producto) { args.push(String(producto).trim()); porProducto = `AND TRIM(c.producto_contratado) = $${args.length}`; }
     const { rows } = await query(
       `WITH v AS (
@@ -545,7 +545,7 @@ export async function cuotasDelPeriodo({
   let porGestora = '';
   if (responsableId) {
     args.push(responsableId);
-    porGestora = `AND COALESCE(c.vendedora_id, l.responsable_id) = $${args.length}`;
+    porGestora = `AND EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id = $${args.length})`;
   }
   args.push(limit);
 
@@ -600,7 +600,7 @@ export async function filasDelPeriodo({
   let porGestora = '';
   if (responsableId) {
     args.push(responsableId);
-    porGestora = `AND COALESCE(c.vendedora_id, l.responsable_id) = $${args.length}`;
+    porGestora = `AND EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id = $${args.length})`;
   }
   let porProducto = '';
   if (producto) {
@@ -618,7 +618,10 @@ export async function filasDelPeriodo({
               -- Todas sus facturas, para verlas en la fila de la venta.
               (SELECT string_agg(x.codigo, ', ' ORDER BY x.numero) FROM invoices x
                 WHERE x.conversion_id = c.id AND x.tipo <> 'proforma' AND x.estado <> 'cancelada') AS factura,
-              COALESCE(c.factura_no_requerida, false) AS factura_no_requerida
+              COALESCE(c.factura_no_requerida, false) AS factura_no_requerida,
+              -- Atendida entre dos gestoras. La fila lo dice para que no
+              -- parezca que la venta esta contada a medias por un error.
+              EXISTS (SELECT 1 FROM conversion_vendedoras cv WHERE cv.conversion_id = c.id) AS compartida
          FROM conversions c
          LEFT JOIN leads l ON l.id = c.lead_id
         WHERE c.fecha_conversion >= $1 AND c.fecha_conversion <= $2
@@ -632,7 +635,8 @@ export async function filasDelPeriodo({
               i.total AS total,
               CASE WHEN i.estado = 'pagada' THEN i.total ELSE 0 END AS pagado,
               i.codigo::text AS factura,
-              false AS factura_no_requerida
+              false AS factura_no_requerida,
+              EXISTS (SELECT 1 FROM conversion_vendedoras cv WHERE cv.conversion_id = c.id) AS compartida
          FROM invoices i
          JOIN conversions c ON c.id = i.conversion_id
          LEFT JOIN leads l ON l.id = c.lead_id
@@ -819,7 +823,7 @@ export async function listProductos({ projectId, responsableId }) {
   const params = [];
   let idx = 1;
   if (projectId) { cond.push(`c.project_id = $${idx++}`); params.push(projectId); }
-  if (responsableId) { cond.push(`COALESCE(c.vendedora_id, l.responsable_id) = $${idx++}`); params.push(responsableId); }
+  if (responsableId) { cond.push(`EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id = $${idx++})`); params.push(responsableId); }
   const { rows } = await query(
     `SELECT DISTINCT TRIM(c.producto_contratado) AS producto
        FROM conversions c

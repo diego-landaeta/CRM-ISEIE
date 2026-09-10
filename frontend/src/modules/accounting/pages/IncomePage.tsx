@@ -73,11 +73,27 @@ function estadoDe(total: unknown, pagado: unknown): 'pagado' | 'parcial' | 'pend
 }
 
 /* La etiqueta de cada fila de la lista: lo que es, no solo lo que vale. */
-function Tipo({ tipo }: { tipo: string }) {
+function Tipo({ tipo, compartida }: { tipo: string; compartida?: boolean }) {
   const base = 'inline-block px-1.5 py-0.5 rounded text-[9px] font-bold whitespace-nowrap';
-  if (tipo === 'cuota') return <span className={`${base} bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300`}>CUOTA</span>;
-  if (tipo === 'parte') return <span className={`${base} bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300`}>MISMA VENTA</span>;
-  return <span className={`${base} bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300`}>VENTA</span>;
+  const etiqueta = tipo === 'cuota'
+    ? <span className={`${base} bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300`}>CUOTA</span>
+    : tipo === 'parte'
+      ? <span className={`${base} bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300`}>MISMA VENTA</span>
+      : <span className={`${base} bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300`}>VENTA</span>;
+  if (!compartida) return etiqueta;
+  // Atendida entre dos gestoras: cada una cuenta su parte. Se dice aqui para
+  // que un 2,5 en el equipo no parezca un error de la pantalla.
+  return (
+    <span className="inline-flex items-center gap-1">
+      {etiqueta}
+      <span
+        className={`${base} bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300`}
+        title="Venta repartida entre dos gestoras. Cada una suma su parte."
+      >
+        A MEDIAS
+      </span>
+    </span>
+  );
 }
 
 export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas las ventas registradas' }) {
@@ -202,12 +218,14 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
         clave: `${f.tipo}-${f.clave_id}`, tipo: f.tipo, fecha: f.fecha, fecha_de_la_venta: f.fecha_de_la_venta,
         lead_id: f.lead_id, venta_id: f.venta_id, cliente: f.cliente, producto: f.producto,
         total: f.total, pagado: f.pagado, factura: f.factura, factura_no_requerida: f.factura_no_requerida,
+        compartida: Boolean(f.compartida),
         estado: f.tipo === 'venta' ? estadoDe(f.total, f.pagado) : (Number(f.pagado) > 0 ? 'pagado' : 'pendiente'),
       }))
     : items.map((r: any) => ({
         clave: `venta-${r.id}`, tipo: 'venta', fecha: r.fecha_conversion || r.fecha_compra, fecha_de_la_venta: r.fecha_conversion,
         lead_id: r.lead_id, venta_id: r.id, cliente: r.lead_nombre, producto: r.producto_contratado,
         total: r.importe_total, pagado: r.importe_pagado, factura: null, factura_no_requerida: false,
+        compartida: false,
         estado: estadoDe(r.importe_total, r.importe_pagado),
       }));
   const totalLista = conFechas ? totalFilas : total;
@@ -619,7 +637,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
                   <tr key={r.clave} className="border-b last:border-0 hover:bg-muted/30 cursor-pointer" onClick={() => navigate(`/leads/${r.lead_id}`)}>
                     <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{formatDate(r.fecha)}</td>
                     <td className="px-4 py-3">
-                      <Tipo tipo={r.tipo} />
+                      <Tipo tipo={r.tipo} compartida={r.compartida} />
                       {r.tipo !== 'venta' && r.fecha_de_la_venta && (
                         <div className="text-[10px] text-muted-foreground whitespace-nowrap">venta del {formatDate(r.fecha_de_la_venta)}</div>
                       )}
@@ -664,7 +682,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
               <button key={r.clave} type="button" onClick={() => navigate(`/leads/${r.lead_id}`)} className="w-full text-left p-4 space-y-2 hover:bg-muted/30 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2"><Tipo tipo={r.tipo} /><span className="font-semibold truncate">{r.cliente || 'Sin nombre'}</span></div>
+                    <div className="flex items-center gap-2"><Tipo tipo={r.tipo} compartida={r.compartida} /><span className="font-semibold truncate">{r.cliente || 'Sin nombre'}</span></div>
                     <div className="text-xs text-muted-foreground truncate">{r.producto || '—'}</div>
                   </div>
                   <span className={`px-2 py-0.5 rounded text-[10px] font-medium flex-shrink-0 ${

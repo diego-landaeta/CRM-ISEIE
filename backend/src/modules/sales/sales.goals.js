@@ -74,20 +74,24 @@ export async function getGestoresStats({
   const { rows: stats } = await query(
     `SELECT u.id AS user_id, u.nombre, u.email, u.role, u.is_available,
             ${RECIBE} AS recibe_leads,
-            COUNT(c.id)::int AS ventas,
-            COALESCE(SUM(c.importe_total), 0)::numeric AS facturado,
-            COALESCE(SUM(c.importe_pagado), 0)::numeric AS cobrado
+            -- SUM(peso) y no COUNT(*): una venta repartida entre dos vale media
+            -- para cada una. Asi la suma de la tabla sigue dando el total real
+            -- de la empresa en vez de contar la misma venta dos veces.
+            COALESCE(SUM(c.peso), 0)::numeric AS ventas,
+            COUNT(*) FILTER (WHERE c.compartida)::int AS compartidas,
+            COALESCE(SUM(c.importe_total * c.peso), 0)::numeric AS facturado,
+            COALESCE(SUM(c.importe_pagado * c.peso), 0)::numeric AS cobrado
      FROM users u
-     -- La venta es de QUIEN LA VENDIO, no de quien lleva la ficha.
+     -- La venta es de QUIEN LA VENDIO, no de quien lleva la ficha, y puede ser
+     -- de DOS personas a la vez.
      --
      -- Iba por leads.responsable_id a secas, y eso ignora vendedora_id: una
      -- venta que cerro otra persona se le apuntaba a la gestora del prospecto.
-     LEFT JOIN (
-       SELECT c.id, c.importe_total, c.importe_pagado, c.fecha_conversion, c.project_id,
-              COALESCE(c.vendedora_id, l.responsable_id) AS vendedora_id
-         FROM conversions c
-         LEFT JOIN leads l ON l.id = c.lead_id
-     ) c ON c.vendedora_id = u.id
+     -- Ese COALESCE estaba repetido por todo el CRM y de ahi venia que varias
+     -- pantallas dieran numeros distintos para la misma pregunta. Ahora la
+     -- regla vive UNA sola vez, en la vista conversion_reparto: una fila por
+     -- venta y gestora, con su peso, y SUM(peso)=1 por venta siempre.
+     LEFT JOIN conversion_reparto c ON c.vendedora_id = u.id
        ${dateFilter}
        ${projectFilter}
      WHERE u.active = TRUE AND u.role IN ('gestor', 'admin', 'superadmin')
@@ -134,7 +138,12 @@ export async function getGestoresStats({
         role: s.role,
         is_available: s.is_available,
         recibe_leads: Boolean(s.recibe_leads),
+        // Puede traer media venta (3,5) cuando alguna esta repartida. La
+        // pantalla solo enseña el decimal cuando lo hay.
         ventas,
+        // Cuantas de esas ventas comparte con otra persona. Es metrica de la
+        // gestora, no de la empresa: la venta sigue siendo una.
+        compartidas: Number(s.compartidas) || 0,
         facturado,
         cobrado: Number(s.cobrado),
         meta_ventas: g ? Number(g.meta_ventas) : null,
