@@ -497,12 +497,22 @@ export async function formacionesSinTutor({ projectId = null } = {}) {
               SELECT 1 FROM tutor_collaborations tc
                WHERE tc.product_id = p.id AND tc.activa
             )
-        -- Solo los cobros desde que las comisiones aplican.
+        -- El corte va sobre la fecha de la VENTA, no la del cobro.
         --
-        -- Antes de esa fecha no se genera comision de todos modos, y una venta
-        -- de abril pudo tener tutor entonces y no tenerlo ahora: sacarla aqui
-        -- seria acusar de un agujero que no existe.
-        AND cp.fecha >= s.aplica_desde
+        -- Diego: «recuerda que la sincronizacion es de las ventas de agosto
+        -- para aca, que son las que se estan viendo».
+        --
+        -- Iba por la fecha del pago, y eso metia en la lista ventas viejas que
+        -- siguen pagando cuotas. El «Master en Ginecologia y Obstetricia» es
+        -- una venta del 25 de febrero cuya alumna paga 95,17 EUR al mes: cada
+        -- mes volvia a asomar como formacion sin tutor. Eran 35 asi entre los
+        -- dos CRMs --15 en MultiCRM y 20 en ISEIE--, casi un tercio de la
+        -- lista, y buscar tutor para una matricula de febrero no tiene sentido.
+        --
+        -- Antes del corte tampoco se genera comision, y una venta de abril pudo
+        -- tener tutor entonces y no tenerlo ahora: sacarla aqui seria acusar de
+        -- un agujero que no existe.
+        AND cv.fecha_conversion >= s.aplica_desde
         AND ($1::int IS NULL OR p.project_id = $1)
       GROUP BY p.id, p.nombre, p.precio, pr.nombre, p.project_id
      HAVING count(cp.id) >= 1 AND count(DISTINCT cv.lead_id) >= 1
