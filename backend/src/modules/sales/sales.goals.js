@@ -1,6 +1,7 @@
 // Metas de venta + estadísticas por gestor.
 import { query } from '../../shared/config/db.js';
 import { AppError } from '../../shared/utils/AppError.js';
+import { SIN_PRUEBAS } from '../../shared/utils/ambito.js';
 
 function currentPeriodo() {
   // Server timezone — para CRM single-tenant es suficiente.
@@ -24,7 +25,12 @@ export async function getGestoresStats({
   const porFechas = Boolean(from && to);
   const params = [];
 
-  const projectFilter = projectId ? `AND c.project_id = $${params.push(projectId)}` : '';
+  const projectFilter = projectId
+    ? `AND c.project_id = $${params.push(projectId)}`
+    // Sin proyecto elegido, «todos» no incluye el de pruebas: ventas
+    // inventadas no pueden aparecer en el total de nadie. Hoy ISEIE no tiene
+    // ninguno, pero se escribe igual que en el CRM hermano.
+    : `AND ${SIN_PRUEBAS('c.project_id')}`;
   const idxProyecto = projectId ? params.length : null;
   /*
     Quien sale en la tabla: quien trabaja en ese proyecto.
@@ -62,7 +68,7 @@ export async function getGestoresStats({
         AND NOT COALESCE(u.gestor_colaboraciones, false)
         AND EXISTS (SELECT 1 FROM user_projects up
                      WHERE up.user_id = u.id AND up.active = TRUE
-                       AND ${idxProyecto ? `up.project_id = $${idxProyecto}` : 'TRUE'}
+                       AND ${idxProyecto ? `up.project_id = $${idxProyecto}` : SIN_PRUEBAS('up.project_id')}
                        AND (u.role = 'gestor' OR (u.role IN ('admin','superadmin') AND up.recibe_leads = TRUE))))`;
 
   const { rows: stats } = await query(
