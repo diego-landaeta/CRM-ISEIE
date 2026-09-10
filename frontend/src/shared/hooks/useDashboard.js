@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useProjectContext } from '@/contexts/ProjectContext';
+import { useIdsDelAmbito } from '@/shared/hooks/useAmbito';
 import client from '@/shared/api/client';
 
 // Suma campo a campo dos objetos de stats (raw, plurales del backend)
@@ -58,7 +59,9 @@ export function normalizeStats(raw) {
 export function useDashboard() {
   const { activeProject, projects, isAllProjects } = useProjectContext();
   const pid = activeProject?.id;
-  const allProjectsKey = isAllProjects ? (projects || []).map((p) => p.id).join(',') : '';
+  // Con una empresa elegida, «todos» son sus campus y ninguno mas.
+  const idsDelAmbito = useIdsDelAmbito();
+  const allProjectsKey = isAllProjects ? idsDelAmbito.join(',') : '';
 
   const [stats, setStats] = useState(null);
   const [recentLeads, setRecentLeads] = useState([]);
@@ -70,14 +73,14 @@ export function useDashboard() {
     if (isAllProjects) {
       // Modo "Todos los proyectos": agrega stats y today por cada proyecto.
       // Para leads recientes pide en multi con projectIds=csv.
-      if (!projects || projects.length === 0) {
+      if (idsDelAmbito.length === 0) {
         setLoading(false);
         return;
       }
       setLoading(true);
       setError(null);
       try {
-        const ids = projects.map((p) => p.id);
+        const ids = idsDelAmbito;
         const statsPromises = ids.map((id) => client.get(`/leads/stats?projectId=${id}`).catch(() => ({ success: false })));
         const todayPromises = ids.map((id) => client.get(`/leads/today?projectId=${id}`).catch(() => ({ success: false })));
         const leadsRes = await client.get(`/leads?projectIds=${ids.join(',')}&limit=10&page=1`).catch(() => ({ success: false }));
