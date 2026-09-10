@@ -13,6 +13,8 @@ interface GestorRow {
   ventas: number;
   facturado: number;
   cobrado: number;
+  /** Recibe leads en el ambito: si sale sin esto es porque vendio en el periodo. */
+  recibe_leads?: boolean;
   meta_ventas: number | null;
   meta_facturacion: number | null;
   meta_set_by?: string | null;
@@ -137,7 +139,7 @@ export default function GestoresStatsTable({ projectId, className = '', canEdit 
                       <p className="font-medium text-[13px] truncate" title={r.email}>{r.nombre}</p>
                       <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
                         <span className="capitalize">{r.role}</span>
-                        {!r.is_available && <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">No recibe leads</span>}
+                        {r.recibe_leads === false && <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">No recibe leads</span>}
                       </p>
                     </td>
                     <td className="py-2.5 text-right tabular-nums">

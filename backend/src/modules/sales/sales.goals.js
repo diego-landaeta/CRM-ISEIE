@@ -49,8 +49,25 @@ export async function getGestoresStats({
     dateFilter = `AND TO_CHAR(c.fecha_conversion, 'YYYY-MM') = $${params.push(per)}`;
   }
 
+  /*
+    Quien RECIBE LEADS en estos proyectos. Es la misma regla que el reparto
+    (lead.model.js): disponible, sin colaboraciones, y si es admin o superadmin
+    solo con `recibe_leads` marcado en el proyecto.
+
+    Diego: «solo los gestores que reciben leads en esos proyectos que aparezcan».
+    La tabla sacaba a todos los admins y superadmins a cero, y a quien lleva
+    colaboraciones: seis filas para dos personas que venden.
+  */
+  const RECIBE = `(u.is_available = TRUE
+        AND NOT COALESCE(u.gestor_colaboraciones, false)
+        AND EXISTS (SELECT 1 FROM user_projects up
+                     WHERE up.user_id = u.id AND up.active = TRUE
+                       AND ${idxProyecto ? `up.project_id = $${idxProyecto}` : 'TRUE'}
+                       AND (u.role = 'gestor' OR (u.role IN ('admin','superadmin') AND up.recibe_leads = TRUE))))`;
+
   const { rows: stats } = await query(
     `SELECT u.id AS user_id, u.nombre, u.email, u.role, u.is_available,
+            ${RECIBE} AS recibe_leads,
             COUNT(c.id)::int AS ventas,
             COALESCE(SUM(c.importe_total), 0)::numeric AS facturado,
             COALESCE(SUM(c.importe_pagado), 0)::numeric AS cobrado
@@ -69,7 +86,7 @@ export async function getGestoresStats({
        ${projectFilter}
      WHERE u.active = TRUE AND u.role IN ('gestor', 'admin', 'superadmin')
        ${userProjectJoin}
-     GROUP BY u.id, u.nombre, u.email, u.role, u.is_available
+     GROUP BY u.id, u.nombre, u.email, u.role, u.is_available, u.gestor_colaboraciones
      ORDER BY ventas DESC, facturado DESC`,
     params
   );
@@ -98,7 +115,9 @@ export async function getGestoresStats({
     desde: porFechas ? from : null,
     hasta: porFechas ? to : null,
     project_id: projectId,
-    gestores: stats.map((s) => {
+    // Quien no recibe leads aqui Y no vendio en el periodo, fuera. Quien vendio
+    // se queda aunque ya no reciba: su venta es real y no se esconde.
+    gestores: stats.filter((s) => s.recibe_leads || Number(s.ventas) > 0).map((s) => {
       const g = goalByUser[s.user_id] || null;
       const ventas = Number(s.ventas);
       const facturado = Number(s.facturado);
@@ -108,6 +127,7 @@ export async function getGestoresStats({
         email: s.email,
         role: s.role,
         is_available: s.is_available,
+        recibe_leads: Boolean(s.recibe_leads),
         ventas,
         facturado,
         cobrado: Number(s.cobrado),
