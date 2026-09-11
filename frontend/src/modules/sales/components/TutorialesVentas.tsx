@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react';
 import {
   X, UsersThree, Tag, CalendarBlank, Buildings, Receipt, ChartBar, CaretRight,
 } from '@phosphor-icons/react';
+// El tipo de los propios iconos. Escribirlo a mano salia mas estrecho que el
+// suyo --su `size` admite texto ademas de numero-- y TypeScript lo rechazaba.
+import type { Icon } from '@phosphor-icons/react';
 
 /**
  * Los tutoriales de la pantalla de Ventas.
@@ -19,7 +22,7 @@ interface Tutorial {
   id: string;
   titulo: string;
   resumen: string;
-  icono: React.ComponentType<{ size?: number; weight?: 'duotone' | 'bold'; className?: string }>;
+  icono: Icon;
   color: string;
   pasos: { que: string; detalle: string }[];
   ojo?: string;
