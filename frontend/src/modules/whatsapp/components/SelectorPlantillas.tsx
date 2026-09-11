@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { MagnifyingGlass, WarningCircle, X } from '@phosphor-icons/react';
+import { MagnifyingGlass, WarningCircle, X, ImageSquare } from '@phosphor-icons/react';
 import { whatsappApi, type PlantillaWhatsapp } from '../api/whatsapp.api';
 import { rellenar, huecosSinRellenar, type DatosParaRellenar } from '../lib/plantilla';
 
@@ -31,7 +31,7 @@ export default function SelectorPlantillas({
   /** De quien es la conversacion, para rellenar los huecos. */
   datos: DatosParaRellenar;
   nombreProyecto?: string | null;
-  alElegir: (texto: string) => void;
+  alElegir: (texto: string, plantilla?: PlantillaWhatsapp) => void;
   alCerrar: () => void;
 }) {
   const [plantillas, setPlantillas] = useState<PlantillaWhatsapp[] | null>(null);
@@ -73,7 +73,8 @@ export default function SelectorPlantillas({
   }, [plantillas, busca]);
 
   const elegir = (p: PlantillaWhatsapp) => {
-    alElegir(rellenar(p.body, datos, nombreProyecto));
+    // Se pasa la plantilla entera: el chat necesita saber si lleva imagen.
+    alElegir(rellenar(p.body, datos, nombreProyecto), p);
     alCerrar();
   };
 
@@ -143,6 +144,12 @@ export default function SelectorPlantillas({
                 )}
               </span>
               <span className="wa-plantilla-cuerpo">{rellenar(p.body, datos, nombreProyecto)}</span>
+              {(p.pista || p.pide_adjunto) && (
+                <span className="wa-plantilla-pista">
+                  {p.pide_adjunto && <ImageSquare size={11} weight="bold" />}
+                  {p.pista}
+                </span>
+              )}
               {/* El aviso va con icono ademas del color: un texto ambar a secas
                   no lo distingue quien no ve bien el color. */}
               {huecos.length > 0 && (

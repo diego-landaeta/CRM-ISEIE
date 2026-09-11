@@ -10,6 +10,10 @@ export interface PlantillaWhatsapp {
   owner_id: number | null;
   orden: number;
   creada_por?: string | null;
+  /** Esta plantilla va con una imagen detrás: al elegirla se abre el selector. */
+  pide_adjunto?: boolean;
+  /** Aviso para la gestora. NO se envía: es la letra pequeña del documento. */
+  pista?: string | null;
 }
 
 export interface ProspectoCola {

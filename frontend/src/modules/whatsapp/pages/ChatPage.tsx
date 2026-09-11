@@ -1520,7 +1520,15 @@ export default function ChatPage() {
                   projectId={projectId}
                   datos={datosPlantilla}
                   nombreProyecto={nombreProyecto}
-                  alElegir={(texto) => setBorrador(texto)}
+                  alElegir={(texto, plantilla) => {
+                    setBorrador(texto);
+                    // Dia 2 del documento: el mensaje anuncia la opinion y la
+                    // captura va justo despues. Acordarse del clip es lo que se
+                    // olvida con prisa.
+                    if (plantilla?.pide_adjunto) {
+                      setTimeout(() => ficheroRef.current?.click(), 120);
+                    }
+                  }}
                   alCerrar={() => setPlantillasAbiertas(false)}
                 />
               )}

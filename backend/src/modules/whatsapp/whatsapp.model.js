@@ -26,6 +26,9 @@ export async function listTemplates({ projectId, userId }) {
   try {
     const { rows } = await query(
       `SELECT t.id, t.project_id, t.label, t.body, t.ambito, t.owner_id, t.orden,
+              -- pide_adjunto abre el selector de archivos al elegirla;
+              -- pista es para la gestora y NO se envia.
+              t.pide_adjunto, t.pista,
               u.nombre AS creada_por
          FROM whatsapp_templates t
          LEFT JOIN users u ON u.id = t.created_by

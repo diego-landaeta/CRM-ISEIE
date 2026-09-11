@@ -1375,3 +1375,22 @@
   background-color: var(--wa-cabecera);
   color: var(--wa-texto);
 }
+
+/* La letra pequena del documento comercial: la lee la gestora mientras elige
+   una plantilla, y NO se envia. Va en ambar para que no se confunda con el
+   cuerpo del mensaje. */
+.wa-plantilla-pista {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: rgb(180 83 9);
+}
+/* El tema lo elige el usuario (data-theme) o el sistema. Los dos casos, y el
+   de la preferencia del sistema acotado para que la eleccion explicita gane. */
+:root[data-theme='dark'] .wa-plantilla-pista { color: rgb(252 211 77); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .wa-plantilla-pista { color: rgb(252 211 77); }
+}
