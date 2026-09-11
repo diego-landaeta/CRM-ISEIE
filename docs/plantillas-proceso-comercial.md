@@ -100,7 +100,15 @@ Te dejo por aquí el link para que puedas revisarlas todas:
 [enlace de opiniones]
 ```
 
-En ISEIE el enlace es `https://web.opynio.com/es/empresa/iseie`.
+En ISEIE el enlace ya viene escrito: `https://web.opynio.com/es/empresa/iseie`.
+En los demás proyectos se queda el hueco, porque poner el enlace de otra
+institución sería peor que no poner ninguno.
+
+**La reseña no la da el CRM.** Diego: «opynio lo tienen que sacar desde la página
+de Opynio de ISEIE, el CRM no te va a dar la reseña». La captura se hace allí. Lo
+único que hace el CRM es no obligar a buscar la dirección cada vez, y recordar en
+la nota del paso que si la formación no tiene opiniones publicadas hay que pedir
+que se cree la de ese curso.
 
 ## Día 2 · Opiniones · 3 de 3
 
@@ -155,16 +163,25 @@ hasta 70 %, reservado para quien casi no ha respondido.
 
 ## Día 4 · Descuento de última oportunidad · SOLO MULTICRM
 
-> **PENDIENTE DE TEXTO.** CETLAT es una alianza de ISEIE y en MultiCRM el paso 4
-> es un descuento, no una beca. El documento no trae plantilla para este caso, y
-> **no me invento las condiciones**. Falta que Diego diga el porcentaje, si tiene
-> fecha límite y con qué nombre se presenta.
+CETLAT es una alianza de ISEIE; en MultiCRM el paso 4 es un descuento directo.
+El contenido sale del mismo día 4 del documento: un porcentaje sobre el importe
+de la matrícula, como último recurso antes del cierre.
 
 ```
 Buenos días {nombre} 👋
 
-[pendiente de definir el texto del descuento de última oportunidad]
+Antes de que cierre la convocatoria de {producto} he podido conseguirte un
+descuento sobre el importe de la matrícula.
+
+En tu caso serían [nº] % menos, y el importe quedaría en [importe final].
+
+¿Te reservo la plaza con esas condiciones?
 ```
+
+**El techo es interno y no se comparte**, tal y como lo marca el documento:
+formación nueva **máx. 40 %**; formación ya habilitada **hasta 70 %**, reservado
+para quien casi no ha respondido. Por eso el porcentaje va como hueco y la regla
+está en la nota del paso, que lee la gestora y no el cliente.
 
 ## Día X · Seguimiento de fin de mes
 
