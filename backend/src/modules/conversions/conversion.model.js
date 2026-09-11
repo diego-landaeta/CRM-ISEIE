@@ -29,7 +29,7 @@ export async function create(data) {
       notas_pago,
       items,             // array opcional [{descripcion, cantidad, precio_unitario, product_id?}]
       iva_pct,           // default 21
-      iva_incluido,      // default false (sumar IVA al subtotal)
+      iva_incluido,      // si no viene: el precio YA lleva el IVA (ver abajo)
       iva_exento,        // default false
       descuento_tipo,    // 'none' | 'pct' | 'monto'
       descuento_valor,   // % o monto fijo
@@ -38,7 +38,24 @@ export async function create(data) {
 
     const ivaPctVal = Number(iva_pct ?? 21);
     const isExento = !!iva_exento;
-    const isIncluido = !!iva_incluido;
+    /*
+      Si nadie dice nada, el precio YA lleva el IVA.
+
+      Con `!!` un campo ausente valia «no incluido» y el CRM le sumaba el 21%
+      encima: la pantalla de Ventas crea la conversion SIN mandar este campo
+      --mira `sales.service.js`, en el objeto que le pasa a create()-- asi que
+      una venta de 1.000 EUR se guardaba como 1.210 y dejaba 210 EUR de deuda
+      que nadie debia. En el catalogo los precios son finales, con IVA dentro.
+
+      `=== false` explicito y no `!!`: hay que distinguir «me han dicho que no»
+      de «no me han dicho nada».
+
+      Viene del CRM hermano (MultiCRM, arreglo de Fabian del 04/09). Aqui
+      afectaba a 2 ventas, 81,90 EUR de mas.
+    */
+    const isIncluido = iva_incluido === undefined || iva_incluido === null
+      ? true
+      : iva_incluido !== false;
     const descTipo = ['pct', 'monto'].includes(descuento_tipo) ? descuento_tipo : 'none';
     const descVal = Number(descuento_valor || 0);
 
