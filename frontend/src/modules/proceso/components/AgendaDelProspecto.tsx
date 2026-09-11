@@ -92,6 +92,15 @@ export default function AgendaDelProspecto({ leadId }: { leadId: number }) {
               })}
             </ol>
           )}
+          {/* El mensaje de este paso dice cuantas plazas quedan, y ese numero
+              NO lo lleva el CRM: lo llevan en admisiones. Aqui solo se
+              recuerda, porque el documento pide comprobarlo antes de CADA
+              envio y no arrastrar el del mensaje anterior. */}
+          {siguiente.avisa_plazas && (
+            <p className="mt-1.5 rounded bg-amber-100 px-2 py-1 text-[11px] font-medium text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+              Comprueba cuántas plazas quedan antes de enviar. No las lleva el CRM.
+            </p>
+          )}
           {siguiente.nota_del_paso && (
             <p className="mt-1.5 text-[11px] text-muted-foreground">{siguiente.nota_del_paso}</p>
           )}

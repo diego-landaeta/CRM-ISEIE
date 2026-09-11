@@ -1,8 +1,20 @@
 import { query } from '../../shared/config/db.js';
-// El proceso pide las plazas libres en cuatro de sus cinco pasos. Se usa el
-// MISMO calculo que el catalogo, no una copia: si no, la cola y la ficha del
-// producto dirian numeros distintos de la misma convocatoria.
-import { PLAZAS_JOIN, PLAZAS_COLS } from '../products/plazas.sql.js';
+/*
+  LAS PLAZAS NO SE CUENTAN AQUI, y antes si.
+
+  Diego, 11/09/2026: «eso lo hacen ellas desde otro sistema, no en el CRM, pero
+  si es un paso a poner... que el CRM no lo recuerde, solamente sea que toca
+  mandar ese mensaje y como un disclaimer de verificar cuantas plazas quedan».
+
+  Tenia razon y el calculo se ha quitado: de dos contabilidades de las mismas
+  plazas solo una puede tener razon, y es la de admisiones. Un numero nuestro
+  que no cuadre con el suyo es PEOR que no dar numero, porque ese numero acaba
+  dentro de un mensaje que ya salio al cliente.
+
+  Lo que queda es `s.avisa_plazas`: el paso dice que su mensaje habla de
+  plazas, y la pantalla pone el aviso de ir a mirarlas. El calculo sigue vivo
+  en el catalogo (`products/plazas.sql.js`) para quien quiera llevarlo ahi.
+*/
 
 // Los pasos del proceso comercial (#87).
 //
@@ -11,7 +23,7 @@ import { PLAZAS_JOIN, PLAZAS_COLS } from '../products/plazas.sql.js';
 
 const COLS = `id, project_id, clave, nombre, orden, cuando,
               dia_desde, dia_hasta, canales, es_seguimiento, nota, activo,
-              created_at, updated_at`;
+              avisa_plazas, created_at, updated_at`;
 
 export async function listByProject(projectId, { includeInactive = false } = {}) {
   const { rows } = await query(
@@ -63,7 +75,7 @@ export async function update(id, data) {
   // `clave` NO esta en la lista a proposito: es por donde entra el codigo, y
   // dejar que se renombre desde la pantalla es exactamente como se rompe.
   const permitidos = ['nombre', 'orden', 'cuando', 'dia_desde', 'dia_hasta',
-                      'canales', 'es_seguimiento', 'nota', 'activo'];
+                      'canales', 'es_seguimiento', 'nota', 'activo', 'avisa_plazas'];
   const campos = [];
   const valores = [];
   let i = 1;
@@ -168,6 +180,7 @@ export async function pasosDeLead(leadId) {
   const { rows } = await query(
     `SELECT ls.id, ls.clave, ls.orden, ls.fecha_prevista, ls.estado, ls.nota,
             s.nombre, s.cuando, s.canales, s.nota AS nota_del_paso,
+            COALESCE(s.avisa_plazas, false) AS avisa_plazas,
             (${CONTACTOS}) >= ls.orden AS hecho,
             (CURRENT_DATE - ls.fecha_prevista) AS dias_de_retraso
        FROM lead_steps ls
@@ -236,17 +249,15 @@ export async function colaDelDia({ projectIds, asesoraId, hasta = null, limite =
             s.nombre AS paso_nombre, s.canales, s.nota AS paso_nota,
             u.nombre AS gestora,
             (CURRENT_DATE - q.fecha_prevista) AS dias_de_retraso,
-            -- Lo que el documento exige tener a mano en el paso: la formacion,
-            -- cuantas plazas quedan y cuanto falta para el cierre. Sin esto la
-            -- gestora tiene que salirse de la cola a buscarlo, y el documento
-            -- dice que se comprueba ANTES de cada envio.
+            -- La formacion, para saber de que se habla sin salirse de la cola.
+            -- Las plazas NO: solo la marca de que este paso las menciona y hay
+            -- que ir a comprobarlas fuera.
             p.nombre AS producto, p.precio AS producto_precio,
-            ${PLAZAS_COLS}
+            COALESCE(s.avisa_plazas, false) AS avisa_plazas
        FROM pendientes q
        LEFT JOIN commercial_steps s ON s.id = q.step_id
        LEFT JOIN users u ON u.id = q.responsable_id
        LEFT JOIN products p ON p.id = q.producto_interes_id
-       ${PLAZAS_JOIN}
       WHERE q.pos = 1
       ORDER BY q.fecha_prevista, q.orden, q.lead_id
       LIMIT ${pLimite}`,
@@ -255,10 +266,6 @@ export async function colaDelDia({ projectIds, asesoraId, hasta = null, limite =
   return rows.map((r) => ({
     ...r,
     dias_de_retraso: Number(r.dias_de_retraso),
-    // `plazas_libres` puede ser NEGATIVA —convocatoria sobrevendida— y se
-    // respeta: cortarla en cero aqui escondria el problema al administrador.
-    plazas_libres: r.plazas_libres === null ? null : Number(r.plazas_libres),
-    dias_para_cierre: r.dias_para_cierre === null ? null : Number(r.dias_para_cierre),
   }));
 }
 

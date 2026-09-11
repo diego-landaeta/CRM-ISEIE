@@ -21,15 +21,12 @@ export type PasoEnCola = {
   fecha_prevista: string;
   dias_de_retraso: number;
   contactos: number;
-  /** La formación por la que preguntó, y sus plazas. El documento pide el
-      número de plazas en cuatro de los cinco pasos, «comprobado antes de cada
-      envío»: si no está aquí, hay que salirse de la cola a buscarlo. */
+  /** La formación por la que preguntó. Las plazas NO vienen: no las lleva el
+      CRM, se miran en el sistema de admisiones. Solo viene la marca de que
+      este paso las menciona y hay que ir a comprobarlas. */
   producto: string | null;
   producto_precio: string | number | null;
-  plazas_ocupadas: number | null;
-  /** Puede ser NEGATIVA: convocatoria sobrevendida. */
-  plazas_libres: number | null;
-  dias_para_cierre: number | null;
+  avisa_plazas: boolean;
 };
 
 export type ResumenCola = {
@@ -53,6 +50,8 @@ export type PasoDeLead = {
   hecho: boolean;
   vencido: boolean;
   dias_de_retraso: number;
+  /** Su mensaje dice cuántas plazas quedan: hay que comprobarlo fuera. */
+  avisa_plazas: boolean;
 };
 
 function conAmbito(params: Record<string, string | number | undefined | null>) {

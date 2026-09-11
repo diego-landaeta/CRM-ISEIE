@@ -229,43 +229,25 @@ export default function ColaDelDiaPage() {
                       </ol>
                     )}
 
-                    {/* La formación y sus plazas. El documento pide el número
-                        de plazas en el día 1, el 3, el 4 y el mensual, y dice
-                        que «se comprueba antes de cada envío: nunca se arrastra
-                        el dato del mensaje anterior». Si no está aquí, hay que
-                        salirse de la cola a buscarlo — y entonces no se
-                        comprueba. */}
-                    {p.producto && (
+                    {/* La formación, y el aviso de las plazas cuando el paso
+                        las menciona. El número NO sale del CRM: lo llevan en
+                        admisiones, y el documento dice que se comprueba antes
+                        de cada envío y nunca se arrastra el del mensaje
+                        anterior. Aquí solo se recuerda. */}
+                    {(p.producto || p.avisa_plazas) && (
                       <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
-                        <span className="text-muted-foreground truncate max-w-[22rem]">{p.producto}</span>
-                        {p.plazas_libres === null ? (
-                          <span
-                            className="rounded bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
-                            title="Esta formación no tiene plazas configuradas, así que el CRM no puede decirte cuántas quedan. Se rellena en la ficha del producto."
-                          >
-                            sin plazas configuradas
-                          </span>
-                        ) : (
-                          <span className={
-                            'rounded px-1.5 py-0.5 font-semibold tabular-nums '
-                            + (p.plazas_libres <= 0
-                              ? 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300'
-                              : p.plazas_libres <= 3
-                                ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
-                                : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300')
-                          }>
-                            {p.plazas_libres <= 0
-                              ? 'sin plazas libres'
-                              : `${p.plazas_libres} ${p.plazas_libres === 1 ? 'plaza' : 'plazas'}`}
-                          </span>
+                        {p.producto && (
+                          <span className="text-muted-foreground truncate max-w-[22rem]">{p.producto}</span>
                         )}
-                        {p.dias_para_cierre !== null && p.dias_para_cierre <= 30 && (
-                          <span className="text-muted-foreground">
-                            {p.dias_para_cierre < 0
-                              ? 'convocatoria cerrada'
-                              : p.dias_para_cierre === 0
-                                ? 'cierra hoy'
-                                : `cierra en ${p.dias_para_cierre} días`}
+                        {/* El aviso no depende de que se sepa la formacion: el
+                            mensaje habla de plazas igual, y hay que ir a
+                            mirarlas igual. */}
+                        {p.avisa_plazas && (
+                          <span
+                            className="rounded bg-amber-100 px-1.5 py-0.5 font-medium text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
+                            title="Este mensaje dice cuántas plazas quedan. El número no lo lleva el CRM: compruébalo antes de enviar y no copies el del mensaje anterior."
+                          >
+                            comprueba las plazas
                           </span>
                         )}
                       </p>
