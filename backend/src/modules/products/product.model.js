@@ -1,40 +1,6 @@
 import { query } from '../../shared/config/db.js';
-
-// La tabla `product_categories` no existe en 001/002. Los JOINs al árbol de
-// categorías y el filtro por categoryId quedan inhabilitados hasta portar el
-// módulo product-categories.
-// Listado: NO trae campos _texto pesados (HTML grande). Solo lo necesario para
-// el catálogo / cards. Para ver el detalle completo, usar findById(id).
-// #86 · Las plazas ocupadas NO se guardan en ninguna columna: se cuentan aquí,
-// cada vez. Es lo que exige el proceso comercial —«se comprueba antes de cada
-// envío, nunca se arrastra el dato del mensaje anterior»— y lo único que evita
-// que la plantilla salga al cliente con la cifra de la semana pasada.
-//
-// Se cuentan LEADS distintos, no filas de venta: la misma persona puede tener
-// dos ventas del mismo producto (un plan que se partió, una cuota suelta) y
-// sigue ocupando una plaza. Por eso mismo `es_mensualidad` queda fuera: una
-// mensualidad no es una matrícula nueva.
-//
-// `plazas_ocupadas_previas` se suma porque hay matrículas anteriores al CRM que
-// ocupan plaza y de las que aquí no hay venta.
-const PLAZAS_JOIN = `
-  LEFT JOIN LATERAL (
-    SELECT COALESCE(p.plazas_ocupadas_previas, 0) + COUNT(DISTINCT cv.lead_id) AS ocupadas
-      FROM conversions cv
-     WHERE cv.producto_contratado_id = p.id
-       AND cv.es_mensualidad IS NOT TRUE
-  ) pl ON TRUE`;
-
-// `plazas_libres` puede salir NEGATIVA, y se deja así a propósito: significa que
-// la convocatoria está sobrevendida y el administrador tiene que verlo. Quien
-// pinte una plantilla de cara al cliente es el que corta en cero, no esto.
-const PLAZAS_COLS = `
-  pl.ocupadas AS plazas_ocupadas,
-  CASE WHEN p.plazas_totales IS NULL THEN NULL
-       ELSE p.plazas_totales - pl.ocupadas END AS plazas_libres,
-  CASE WHEN p.fecha_cierre_convocatoria IS NULL THEN NULL
-       ELSE (p.fecha_cierre_convocatoria - CURRENT_DATE) END AS dias_para_cierre`;
-
+// El calculo de plazas vive aparte: lo usa tambien la cola del dia.
+import { PLAZAS_JOIN, PLAZAS_COLS } from './plazas.sql.js';
 const LIST_COLS = [
   'id', 'project_id', 'nombre', 'sku', 'precio', 'moneda',
   'duracion', 'horas', 'modalidad', 'fecha_inicio_texto', 'num_modulos',

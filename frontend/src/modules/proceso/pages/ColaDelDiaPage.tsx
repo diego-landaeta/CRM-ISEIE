@@ -178,7 +178,7 @@ export default function ColaDelDiaPage() {
               <button
                 key={p.lead_id}
                 type="button"
-                onClick={() => navegar(`/leads/${p.lead_id}`)}
+                onClick={() => navegar(`/prospectos/${p.lead_id}`)}
                 className={
                   'w-full text-left rounded-lg border bg-card p-3 transition-colors hover:bg-muted/50 '
                   + 'focus:outline-none focus:ring-2 focus:ring-primary/40 '
@@ -186,14 +186,21 @@ export default function ColaDelDiaPage() {
                 }
               >
                 <div className="flex items-start gap-3">
-                  <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted text-xs font-bold tabular-nums text-muted-foreground">
-                    {p.orden}
+                  {/* Un «2» suelto no dice nada. Ahora dice de que va: es el
+                      seguimiento numero 2, y debajo cuantos lleva hechos.
+                      Diego: «esto no se entiende de los pasos · falta poner la
+                      cantidad de seguimiento que es». */}
+                  <span className="mt-0.5 flex shrink-0 flex-col items-center justify-center rounded-md bg-muted px-2 py-1 text-muted-foreground">
+                    <span className="text-[9px] font-semibold uppercase tracking-wide leading-none">Seg.</span>
+                    <span className="text-sm font-bold tabular-nums leading-tight">{p.orden}</span>
                   </span>
 
                   <div className="min-w-0 flex-1 space-y-1">
                     <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                       <span className="font-semibold truncate">{p.lead_nombre || 'Sin nombre'}</span>
-                      <span className="text-xs text-muted-foreground">{p.paso_nombre || p.clave}</span>
+                      <span className="text-xs text-muted-foreground">
+                        Seguimiento {p.orden} · {p.paso_nombre || p.clave}
+                      </span>
                       <span className={
                         'rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide '
                         + (c.urgente
@@ -222,6 +229,48 @@ export default function ColaDelDiaPage() {
                       </ol>
                     )}
 
+                    {/* La formación y sus plazas. El documento pide el número
+                        de plazas en el día 1, el 3, el 4 y el mensual, y dice
+                        que «se comprueba antes de cada envío: nunca se arrastra
+                        el dato del mensaje anterior». Si no está aquí, hay que
+                        salirse de la cola a buscarlo — y entonces no se
+                        comprueba. */}
+                    {p.producto && (
+                      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
+                        <span className="text-muted-foreground truncate max-w-[22rem]">{p.producto}</span>
+                        {p.plazas_libres === null ? (
+                          <span
+                            className="rounded bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
+                            title="Esta formación no tiene plazas configuradas, así que el CRM no puede decirte cuántas quedan. Se rellena en la ficha del producto."
+                          >
+                            sin plazas configuradas
+                          </span>
+                        ) : (
+                          <span className={
+                            'rounded px-1.5 py-0.5 font-semibold tabular-nums '
+                            + (p.plazas_libres <= 0
+                              ? 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300'
+                              : p.plazas_libres <= 3
+                                ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
+                                : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300')
+                          }>
+                            {p.plazas_libres <= 0
+                              ? 'sin plazas libres'
+                              : `${p.plazas_libres} ${p.plazas_libres === 1 ? 'plaza' : 'plazas'}`}
+                          </span>
+                        )}
+                        {p.dias_para_cierre !== null && p.dias_para_cierre <= 30 && (
+                          <span className="text-muted-foreground">
+                            {p.dias_para_cierre < 0
+                              ? 'convocatoria cerrada'
+                              : p.dias_para_cierre === 0
+                                ? 'cierra hoy'
+                                : `cierra en ${p.dias_para_cierre} días`}
+                          </span>
+                        )}
+                      </p>
+                    )}
+
                     {/* La chuleta. Va aquí y no escondida detrás de un clic:
                         es lo que hace falta MIENTRAS se escribe el mensaje. */}
                     {p.paso_nota && (
@@ -234,7 +283,9 @@ export default function ColaDelDiaPage() {
                       <div className="inline-flex items-center gap-1"><User size={11} />{p.gestora}</div>
                     )}
                     <div className="tabular-nums">
-                      {p.contactos} {p.contactos === 1 ? 'contacto' : 'contactos'}
+                      {p.contactos === 0
+                        ? 'sin contactar aún'
+                        : `${p.contactos} ${p.contactos === 1 ? 'contacto hecho' : 'contactos hechos'}`}
                     </div>
                   </div>
                 </div>

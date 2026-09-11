@@ -1,4 +1,8 @@
 import { query } from '../../shared/config/db.js';
+// El proceso pide las plazas libres en cuatro de sus cinco pasos. Se usa el
+// MISMO calculo que el catalogo, no una copia: si no, la cola y la ficha del
+// producto dirian numeros distintos de la misma convocatoria.
+import { PLAZAS_JOIN, PLAZAS_COLS } from '../products/plazas.sql.js';
 
 // Los pasos del proceso comercial (#87).
 //
@@ -197,7 +201,11 @@ export async function colaDelDia({ projectIds, asesoraId, hasta = null, limite =
   const pProj = Array.isArray(projectIds) && projectIds.length
     ? `AND ls.project_id = ANY($${i++}::int[])`
     : 'AND ls.project_id NOT IN (SELECT id FROM projects WHERE es_prueba)';
-  if (pProj) par.push(projectIds.map(Number));
+  // `if (pProj)` era SIEMPRE cierto —es una cadena no vacia en las dos ramas—
+  // asi que con la lista vacia se empujaba un parametro de mas y la consulta
+  // reventaba con «bind message supplies 2 parameters, but requires 1». No
+  // salto antes porque el controlador siempre manda una lista con algo.
+  if (Array.isArray(projectIds) && projectIds.length) par.push(projectIds.map(Number));
   const pAses = asesoraId ? `AND l.responsable_id = $${i++}` : '';
   if (asesoraId) par.push(asesoraId);
   const pHasta = hasta ? `$${i++}::date` : 'CURRENT_DATE';
@@ -208,6 +216,7 @@ export async function colaDelDia({ projectIds, asesoraId, hasta = null, limite =
   const { rows } = await query(
     `WITH pendientes AS (
        SELECT ls.*, l.responsable_id, l.nombre AS lead_nombre, l.status AS lead_estado,
+              l.producto_interes_id,
               ${CONTACTOS} AS contactos,
               ROW_NUMBER() OVER (PARTITION BY ls.lead_id ORDER BY ls.orden) AS pos
          FROM lead_steps ls
@@ -222,20 +231,35 @@ export async function colaDelDia({ projectIds, asesoraId, hasta = null, limite =
           AND ${CONTACTOS} < ls.orden
           ${pProj} ${pAses}
      )
-     SELECT p.lead_id, p.lead_nombre, p.lead_estado, p.responsable_id,
-            p.clave, p.orden, p.fecha_prevista, p.contactos,
+     SELECT q.lead_id, q.lead_nombre, q.lead_estado, q.responsable_id,
+            q.clave, q.orden, q.fecha_prevista, q.contactos,
             s.nombre AS paso_nombre, s.canales, s.nota AS paso_nota,
             u.nombre AS gestora,
-            (CURRENT_DATE - p.fecha_prevista) AS dias_de_retraso
-       FROM pendientes p
-       LEFT JOIN commercial_steps s ON s.id = p.step_id
-       LEFT JOIN users u ON u.id = p.responsable_id
-      WHERE p.pos = 1
-      ORDER BY p.fecha_prevista, p.orden, p.lead_id
+            (CURRENT_DATE - q.fecha_prevista) AS dias_de_retraso,
+            -- Lo que el documento exige tener a mano en el paso: la formacion,
+            -- cuantas plazas quedan y cuanto falta para el cierre. Sin esto la
+            -- gestora tiene que salirse de la cola a buscarlo, y el documento
+            -- dice que se comprueba ANTES de cada envio.
+            p.nombre AS producto, p.precio AS producto_precio,
+            ${PLAZAS_COLS}
+       FROM pendientes q
+       LEFT JOIN commercial_steps s ON s.id = q.step_id
+       LEFT JOIN users u ON u.id = q.responsable_id
+       LEFT JOIN products p ON p.id = q.producto_interes_id
+       ${PLAZAS_JOIN}
+      WHERE q.pos = 1
+      ORDER BY q.fecha_prevista, q.orden, q.lead_id
       LIMIT ${pLimite}`,
     par
   );
-  return rows.map((r) => ({ ...r, dias_de_retraso: Number(r.dias_de_retraso) }));
+  return rows.map((r) => ({
+    ...r,
+    dias_de_retraso: Number(r.dias_de_retraso),
+    // `plazas_libres` puede ser NEGATIVA —convocatoria sobrevendida— y se
+    // respeta: cortarla en cero aqui escondria el problema al administrador.
+    plazas_libres: r.plazas_libres === null ? null : Number(r.plazas_libres),
+    dias_para_cierre: r.dias_para_cierre === null ? null : Number(r.dias_para_cierre),
+  }));
 }
 
 /**
@@ -251,7 +275,11 @@ export async function resumenDeLaCola({ projectIds, asesoraId }) {
   const pProj = Array.isArray(projectIds) && projectIds.length
     ? `AND ls.project_id = ANY($${i++}::int[])`
     : 'AND ls.project_id NOT IN (SELECT id FROM projects WHERE es_prueba)';
-  if (pProj) par.push(projectIds.map(Number));
+  // `if (pProj)` era SIEMPRE cierto —es una cadena no vacia en las dos ramas—
+  // asi que con la lista vacia se empujaba un parametro de mas y la consulta
+  // reventaba con «bind message supplies 2 parameters, but requires 1». No
+  // salto antes porque el controlador siempre manda una lista con algo.
+  if (Array.isArray(projectIds) && projectIds.length) par.push(projectIds.map(Number));
   const pAses = asesoraId ? `AND l.responsable_id = $${i++}` : '';
   if (asesoraId) par.push(asesoraId);
 
