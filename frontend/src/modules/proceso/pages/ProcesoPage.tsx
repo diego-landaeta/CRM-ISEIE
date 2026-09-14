@@ -1,10 +1,11 @@
-import { useState, type DragEvent } from 'react';
+import { useEffect, useState, type DragEvent } from 'react';
 import { Plus, PencilSimple, EyeSlash, Eye, DotsSixVertical, Info, ArrowRight, ListChecks } from '@phosphor-icons/react';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import Card from '@/shared/components/ui/Card';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
+import { useProyectosDelAmbito } from '@/shared/hooks/useAmbito';
 import { toast } from '@/shared/hooks/useToast';
 import { cn } from '@/shared/lib/utils';
 import useProcesoPasos from '../hooks/useProcesoPasos';
@@ -44,11 +45,26 @@ export function textoDeDias(desde: number | null, hasta: number | null): string 
 
 export default function ProcesoPage() {
   const { user } = useAuth() as { user: { role?: string } | null };
-  const { activeProject } = useProjectContext() as { activeProject: { id?: number; nombre?: string } | null };
+  const { activeProject, activeIssuer } = useProjectContext() as {
+    activeProject: { id?: number; nombre?: string } | null;
+    activeIssuer: { id?: number; nombre?: string } | null;
+  };
   const admin = puedeEditar(user?.role);
 
+  // Los pasos son de UN proyecto: cada campus tiene los suyos y se editan por
+  // separado. Con una empresa elegida no se puede adivinar cual, pero tampoco
+  // hace falta echar a nadie: se elige aqui dentro, y solo entre SUS campus.
+  // Diego, 14/09: «si tengo que seleccionar un proyecto, tiene que ser por
+  // proyecto y por empresa».
+  const campus = useProyectosDelAmbito<{ id: number; nombre: string }>();
+  const [soloCampus, setSoloCampus] = useState<number | null>(null);
+  useEffect(() => { setSoloCampus(null); }, [activeIssuer?.id]);
+  const elegido = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
+  const projectId = elegido ?? soloCampus;
+  const deQuien = elegido ? activeProject?.nombre : campus.find((c) => c.id === projectId)?.nombre;
+
   const [verInactivos, setVerInactivos] = useState(false);
-  const { pasos, setPasos, cargando, error, recargar } = useProcesoPasos(activeProject?.id, verInactivos);
+  const { pasos, setPasos, cargando, error, recargar } = useProcesoPasos(projectId, verInactivos);
 
   const [editando, setEditando] = useState<Paso | null>(null);
   const [creando, setCreando] = useState(false);
@@ -72,7 +88,7 @@ export default function ProcesoPage() {
     };
     try {
       if (creando) {
-        await procesoApi.crear({ ...cuerpo, clave: datos.clave.trim(), projectId: activeProject?.id });
+        await procesoApi.crear({ ...cuerpo, clave: datos.clave.trim(), projectId });
         toast({ title: 'Paso creado' });
       } else if (editando) {
         await procesoApi.editar(editando.id, cuerpo);
@@ -161,9 +177,22 @@ export default function ProcesoPage() {
       </Card>
 
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <p className="text-secundario text-muted-foreground">
-          {activeProject?.nombre ? `Proceso de ${activeProject.nombre}` : 'Elige un proyecto'}
-        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-secundario text-muted-foreground">
+            {deQuien ? `Proceso de ${deQuien}` : activeIssuer ? 'Elige el campus' : 'Elige un proyecto'}
+          </p>
+          {activeIssuer && !elegido && campus.length > 0 && (
+            <select
+              value={soloCampus ?? ''}
+              onChange={(e) => setSoloCampus(e.target.value ? Number(e.target.value) : null)}
+              className="h-8 px-2 rounded-md border border-border bg-card text-normal focus:outline-none focus:ring-2 focus:ring-primary/40"
+              aria-label={`Campus de ${activeIssuer.nombre}`}
+            >
+              <option value="">Elige uno…</option>
+              {campus.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+            </select>
+          )}
+        </div>
         <label className="inline-flex items-center gap-2 text-normal">
           <input
             type="checkbox"
@@ -187,6 +216,16 @@ export default function ProcesoPage() {
             <li key={i} className="h-24 animate-pulse rounded-lg border border-border bg-muted/40" />
           ))}
         </ul>
+      ) : !projectId ? (
+        <EmptyState
+          icon={ListChecks}
+          title="Elige un campus"
+          description={
+            activeIssuer
+              ? `Cada campus de ${activeIssuer.nombre} lleva sus propios pasos. Elige uno arriba para ver los suyos.`
+              : 'Elige un proyecto en el selector de la cabecera.'
+          }
+        />
       ) : pasos.length === 0 ? (
         <EmptyState
           icon={ListChecks}

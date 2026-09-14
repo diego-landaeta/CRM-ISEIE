@@ -246,6 +246,10 @@ export async function colaDelDia({ projectIds, asesoraId, hasta = null, limite =
      )
      SELECT q.lead_id, q.lead_nombre, q.lead_estado, q.responsable_id,
             q.clave, q.orden, q.fecha_prevista, q.contactos,
+            -- De que campus es cada fila. Con una EMPRESA elegida la cola
+            -- junta los siete de CEDIA, y sin esto no se sabe a quien se
+            -- llama de parte de quien. Lo pidio Carlos el 11/09.
+            q.project_id, pr.nombre AS proyecto,
             s.nombre AS paso_nombre, s.canales, s.nota AS paso_nota,
             u.nombre AS gestora,
             (CURRENT_DATE - q.fecha_prevista) AS dias_de_retraso,
@@ -256,6 +260,7 @@ export async function colaDelDia({ projectIds, asesoraId, hasta = null, limite =
             COALESCE(s.avisa_plazas, false) AS avisa_plazas
        FROM pendientes q
        LEFT JOIN commercial_steps s ON s.id = q.step_id
+       LEFT JOIN projects pr ON pr.id = q.project_id
        LEFT JOIN users u ON u.id = q.responsable_id
        LEFT JOIN products p ON p.id = q.producto_interes_id
       WHERE q.pos = 1

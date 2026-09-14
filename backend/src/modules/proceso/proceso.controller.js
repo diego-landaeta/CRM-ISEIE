@@ -58,6 +58,13 @@ function deQuienEsLaCola(req) {
 // vista de «todos». No abre ninguna puerta: a una gestora la acota su propio
 // recorte, y quien no es gestora ya puede ver todos los proyectos.
 function proyectosDeLaCola(req) {
+  // Una EMPRESA manda varios proyectos a la vez (sus campus). Diego, 14/09:
+  // «estos procesos en empresas deben ser por empresa, no por proyecto».
+  // Antes solo se leia `projectId`, asi que con CEDIA elegida la cola
+  // enseñaba la de TODOS los proyectos --no la de sus siete campus--.
+  const varios = String(req.query.projectIds || '')
+    .split(',').map((x) => Number(x.trim())).filter((n) => Number.isInteger(n) && n > 0);
+  if (varios.length) return varios;
   const uno = Number(req.query.projectId);
   return Number.isInteger(uno) && uno > 0 ? [uno] : null;
 }
