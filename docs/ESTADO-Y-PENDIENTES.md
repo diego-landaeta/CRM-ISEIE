@@ -968,45 +968,89 @@ para saber qué ha entregado cada uno»*.
 
 ---
 
-## BUG · Meta Ads: ni conjuntos, ni leads, ni productos
+## BUG · Meta Ads: revisado el 14/09, y son tres cosas distintas
 
-Anotado el **14/09/2026**. Diego, sobre `/meta-ads` en ISAEG: «esta parte no
-anda bien». Sin investigar, como los demás de hoy.
+Diego, sobre `/meta-ads`: «esta parte no anda bien». Revisado contra la base de
+producción. **Ninguna de las tres es la que parecía.**
 
-Lo que se ve en pantalla, y son tres cosas distintas aunque parezcan una:
+### 1. «Sin conjuntos en este rango» — el mensaje miente
 
-1. **Sin conjuntos.** Al desplegar la campaña *Ventas* (OUTCOME_SALES, 209 €,
-   34.570 impresiones, 642 clics) dice:
-   *«Sin conjuntos en este rango (o backfill aún no incluye adsets).»*
-   El propio mensaje admite que no sabe si no hay datos o si la sincronización no
-   los ha traído — y esa duda es el problema: no se puede distinguir «Meta no
-   tiene nada» de «nosotros no lo hemos bajado».
+Los conjuntos **están**: 924 en total, con 18.441 días de datos. Ninguna de las
+32 campañas se ha quedado sin ellos. Lo que pasa es que `listAdSetsForUI` filtra
+por `ma.project_id`, y **sin proyecto elegido devuelve cero**:
 
-2. **Cero leads con 642 clics.** Las cuatro campañas marcan `Leads 0` y el CPL
-   sale en blanco. Con 246 € gastados y casi 100.000 impresiones, o no llega ni
-   un lead —posible, pero hay que verlo— o **no se está atando el lead a la
-   campaña**, que es lo que hace que la pantalla no sirva para nada.
+| lo que se pide | conjuntos |
+|---|---|
+| proyecto 6, cualquier rango de fechas | 17 |
+| sin proyecto (`null`) | **0** |
+| «Todos los proyectos» (`-1`) | **0** |
 
-3. **«Por producto (0)».** Cero. Ya está comprobado de antes: las tablas que
-   cruzan anuncio con producto **llevan vacías desde siempre**, así que nada que
-   mezcle publicidad y catálogo puede calcularse solo. El botón *Asociar* de cada
-   fila es justo lo que no se ha usado nunca.
+O sea que el aviso confunde dos cosas que no se parecen: «no hay datos» y «no me
+has dicho de qué proyecto». Y el texto se disculpa por el backfill, que no tiene
+nada que ver. La lista de campañas hace lo mismo —cero campañas sin proyecto—,
+así que la pantalla entera es por proyecto y no lo dice.
 
-### Al revisarlo, en este orden
+### 2. «Leads 0» — el CRM sí sabe de dónde vienen, pero no lo usa
 
-Primero **si el backfill trae adsets** (1), porque si no baja los conjuntos el
-resto no puede cuadrar. Luego **por dónde se pierde el lead** (2): si el webhook
-guarda el identificador de campaña o si se queda por el camino. Y lo de los
-productos (3) no es un fallo del código sino trabajo que nadie ha hecho, así que
-va aparte y probablemente es de negocio.
+La columna enseña **el número de Meta**, que solo cuenta los formularios de
+Meta. Las campañas que llevan a la web no le reportan nada. Mientras tanto el
+CRM guarda en `lead_utms.utm_campaign` **el identificador de campaña**, y en
+`utm_content`/`utm_term` el conjunto y el anuncio.
 
-Contexto que ya teníamos: el módulo se desplegó en etapas 1 y 2 y **nunca se
-validó con datos reales**. Esto es esa validación, llegando tarde.
+Cruzado a mano, con 21.204 € gastados:
 
-*Sin asignar. Pendiente de revisar.*
+| campaña | proyecto | gasto | leads Meta | **leads CRM** | ventas |
+|---|---|---:|---:|---:|---:|
+| VENTAS - Cursos destacados | Psiko Aprende | 3.168 € | 0 | **31** | 2 |
+| Ventas | Psiko Aprende | 3.419 € | 1 | **27** | 3 |
+| Ventas - Clientes potenciales | ISAEG | 181 € | 31 | 25 | 0 |
+| Ventas | ISAEG | 322 € | 23 | 21 | 1 |
+| Ventas | ISEIH | 1.971 € | 0 | **17** | 4 |
+| Ventas Cursos / Ventas | Fono Aprende | 1.125 € | 1 | 8 | 0 |
+| **Total** | | **21.204 €** | 336 | **129** | **10** |
+
+Hay **10 ventas** que se pueden atribuir a una campaña y que hoy no se ven en
+ninguna pantalla. El dato está; falta el cruce.
+
+Y al revés, un aviso: la campaña **Masterclass Melisa** (75 €) tiene **277 leads
+en Meta y 0 en el CRM**. Esos son formularios de Meta que **nunca entraron**.
+
+### 3. ICTESS y ACADEMIA IA: se pierde antes de llegar
+
+No es la pantalla. Es que sus leads llegan **sin la UTM de campaña**:
+
+| proyecto | leads desde junio | por webhook (`whk_…`) | con campaña de Meta |
+|---|---:|---:|---:|
+| ICTESS | 352 | 121 | **0** |
+| ACADEMIA IA | 75 | 32 | **0** |
+| Psiko Aprende | 541 | 0 | 56 |
+| ISAEG | 99 | 0 | 46 |
+| ISEIH | 169 | 0 | 14 |
+| Fono Aprende | 164 | 0 | 7 |
+
+ICTESS lleva **5.782 €** gastados y ACADEMIA IA **1.735 €**, y de los dos no se
+puede atribuir ni un lead. Se arregla en el formulario y en Make —que pasen las
+UTM—, no en el CRM.
+
+### Y lo de «Por producto (0)»
+
+Sigue igual: `meta_adset_products` y `meta_campaign_products` están **a cero**.
+Eso no es un fallo, es trabajo que nadie ha hecho: el botón *Asociar* de cada
+fila no se ha usado nunca. Ver [[project-meta-sin-asociar-productos]].
+
+### Qué haría, por orden
+
+1. **El mensaje y el filtro** (1). Barato: decir «elige un proyecto» cuando es
+   eso, y no hablar de backfill.
+2. **La columna de leads del CRM** (2). Es un `JOIN` con `lead_utms` — y trae
+   además las ventas, que es lo que de verdad se quiere ver.
+3. **Las UTM de ICTESS y ACADEMIA IA** (3). Fuera del CRM.
+4. Los 277 leads de Masterclass Melisa: mirar si se perdieron o entraron por
+   otro sitio.
+
+*Revisado. Falta decidir qué se hace; el 1 y el 2 son de aquí.*
 
 ---
-
 ## Los atajos de fecha: pedidos tres veces, hacerlos UNA
 
 Anotado el **14/09/2026**. Diego, otra vez: «aquí necesito opciones rápidas de
