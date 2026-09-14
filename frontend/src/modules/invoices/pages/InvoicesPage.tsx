@@ -287,63 +287,6 @@ export default function InvoicesPage() {
         </div>
       )}
 
-      <div className="bg-card border border-border rounded-md p-3 flex flex-wrap gap-2 items-center">
-        <div className="relative flex-1 min-w-[200px]">
-          <MagnifyingGlass size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <input value={filters.search} onChange={(e) => setFilters(f => ({ ...f, search: e.target.value }))}
-            placeholder="Buscar por nº de factura, cliente o NIF…" className="w-full h-9 pl-8 pr-3 rounded-md border border-border bg-background text-sm" />
-        </div>
-        {isAdmin && sociedadesVisibles.length > 1 && (
-          <select value={filterIssuer}
-            onChange={(e) => {
-              const id = Number(e.target.value);
-              // No se cruza facturación entre sociedades: si piden otra, se avisa
-              // y se ofrece el atajo para entrar a uno de sus proyectos.
-              if (id && String(id) !== String(activeProject?.sociedad_emisora_id)) {
-                const soc = sociedadesVisibles.find((s) => s.id === id);
-                if (soc) setSocPrompt({ id, nombre: soc.razon_social });
-                return;
-              }
-              setFilterIssuer(e.target.value);
-            }}
-            title="La facturación se consulta dentro de su sociedad. Para ver otra, entra a uno de sus proyectos."
-            className={`h-9 px-2 rounded-md border text-sm ${filterIssuer ? 'border-primary/50 bg-primary/5 text-primary font-semibold' : 'border-border bg-card'}`}>
-            {sociedadesVisibles.map((i) => <option key={i.id} value={String(i.id)}>{i.razon_social}</option>)}
-          </select>
-        )}
-        {porSociedad && sociedadProjects.length > 0 && (
-          <select value={filterProject} onChange={(e) => setFilterProject(e.target.value)}
-            title="Filtrar por un proyecto de esta sociedad"
-            className={`h-9 px-2 rounded-md border text-sm ${filterProject ? 'border-primary/50 bg-primary/5 text-primary font-semibold' : 'border-border bg-card'}`}>
-            <option value="">Todos los proyectos</option>
-            {sociedadProjects.map((p) => <option key={p.id} value={String(p.id)}>{p.nombre}</option>)}
-          </select>
-        )}
-        <select value={filters.estado} onChange={(e) => setFilters(f => ({ ...f, estado: e.target.value }))}
-          className="h-9 px-2 rounded-md border border-border bg-card text-sm">
-          <option value="">Todos los estados</option>
-          <option value="emitida">Emitida</option>
-          <option value="enviada">Enviada</option>
-          <option value="pagada">Pagada</option>
-          <option value="cancelada">Cancelada</option>
-        </select>
-        <div className="flex items-center gap-1 text-xs">
-          <label className="text-muted-foreground">Desde</label>
-          <input type="date" value={filters.from} onChange={(e) => setFilters(f => ({ ...f, from: e.target.value }))}
-            className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
-          <label className="text-muted-foreground ml-1">Hasta</label>
-          <input type="date" value={filters.to} onChange={(e) => setFilters(f => ({ ...f, to: e.target.value }))}
-            className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
-        </div>
-        {/* Los atajos van DESPUES de las casillas: escribir dos fechas sigue
-            siendo posible, y para los cinco de siempre ya no hace falta. */}
-        <RangoRapido
-          valor={{ from: filters.from, to: filters.to }}
-          alElegir={(r) => setFilters((f) => ({ ...f, from: r.from, to: r.to }))}
-          className="w-full sm:w-auto"
-        />
-      </div>
-
       {porSociedad && (
         <div className="text-xs rounded-md border border-primary/30 bg-primary/5 text-primary px-3 py-2">
           Mostrando facturas de <strong>{allIssuers.find((i) => String(i.id) === filterIssuer)?.razon_social || 'la sociedad'}</strong>
@@ -437,28 +380,65 @@ export default function InvoicesPage() {
         </div>
       )}
 
-      {/* EL BUSCADOR, OTRA VEZ, AQUI. El de arriba existe, pero queda por
-          encima de las tarjetas y de la tabla de ventas sin factura: cuando
-          bajas a la lista, que es donde se trabaja, ya no lo tienes. Es el
-          MISMO estado, no otro filtro. */}
-      {!loading && (invoices.length > 0 || filters.search) && (
-        <div className="relative">
+      {/* LOS FILTROS, AQUI Y NO ARRIBA. Diego: «hay dos buscadores, hay que
+          dejar uno». Se mueve el bloque entero a donde se usa, pegado a la
+          lista que filtra, en vez de duplicar el cuadro de buscar. */}
+      <div className="bg-card border border-border rounded-md p-3 flex flex-wrap gap-2 items-center">
+        <div className="relative flex-1 min-w-[200px]">
           <MagnifyingGlass size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <input
-            value={filters.search}
-            onChange={(e) => setFilters(f => ({ ...f, search: e.target.value }))}
-            placeholder="Buscar en la lista por nº, cliente o NIF…"
-            aria-label="Buscar facturas"
-            className="w-full h-9 pl-8 pr-8 rounded-md border border-border bg-card text-sm" />
-          {filters.search && (
-            <button type="button" onClick={() => setFilters(f => ({ ...f, search: '' }))}
-              aria-label="Quitar la búsqueda"
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-              <X size={13} weight="bold" />
-            </button>
-          )}
+          <input value={filters.search} onChange={(e) => setFilters(f => ({ ...f, search: e.target.value }))}
+            placeholder="Buscar por nº de factura, cliente o NIF…" className="w-full h-9 pl-8 pr-3 rounded-md border border-border bg-background text-sm" />
         </div>
-      )}
+        {isAdmin && sociedadesVisibles.length > 1 && (
+          <select value={filterIssuer}
+            onChange={(e) => {
+              const id = Number(e.target.value);
+              // No se cruza facturación entre sociedades: si piden otra, se avisa
+              // y se ofrece el atajo para entrar a uno de sus proyectos.
+              if (id && String(id) !== String(activeProject?.sociedad_emisora_id)) {
+                const soc = sociedadesVisibles.find((s) => s.id === id);
+                if (soc) setSocPrompt({ id, nombre: soc.razon_social });
+                return;
+              }
+              setFilterIssuer(e.target.value);
+            }}
+            title="La facturación se consulta dentro de su sociedad. Para ver otra, entra a uno de sus proyectos."
+            className={`h-9 px-2 rounded-md border text-sm ${filterIssuer ? 'border-primary/50 bg-primary/5 text-primary font-semibold' : 'border-border bg-card'}`}>
+            {sociedadesVisibles.map((i) => <option key={i.id} value={String(i.id)}>{i.razon_social}</option>)}
+          </select>
+        )}
+        {porSociedad && sociedadProjects.length > 0 && (
+          <select value={filterProject} onChange={(e) => setFilterProject(e.target.value)}
+            title="Filtrar por un proyecto de esta sociedad"
+            className={`h-9 px-2 rounded-md border text-sm ${filterProject ? 'border-primary/50 bg-primary/5 text-primary font-semibold' : 'border-border bg-card'}`}>
+            <option value="">Todos los proyectos</option>
+            {sociedadProjects.map((p) => <option key={p.id} value={String(p.id)}>{p.nombre}</option>)}
+          </select>
+        )}
+        <select value={filters.estado} onChange={(e) => setFilters(f => ({ ...f, estado: e.target.value }))}
+          className="h-9 px-2 rounded-md border border-border bg-card text-sm">
+          <option value="">Todos los estados</option>
+          <option value="emitida">Emitida</option>
+          <option value="enviada">Enviada</option>
+          <option value="pagada">Pagada</option>
+          <option value="cancelada">Cancelada</option>
+        </select>
+        <div className="flex items-center gap-1 text-xs">
+          <label className="text-muted-foreground">Desde</label>
+          <input type="date" value={filters.from} onChange={(e) => setFilters(f => ({ ...f, from: e.target.value }))}
+            className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
+          <label className="text-muted-foreground ml-1">Hasta</label>
+          <input type="date" value={filters.to} onChange={(e) => setFilters(f => ({ ...f, to: e.target.value }))}
+            className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
+        </div>
+        {/* Los atajos van DESPUES de las casillas: escribir dos fechas sigue
+            siendo posible, y para los cinco de siempre ya no hace falta. */}
+        <RangoRapido
+          valor={{ from: filters.from, to: filters.to }}
+          alElegir={(r) => setFilters((f) => ({ ...f, from: r.from, to: r.to }))}
+          className="w-full sm:w-auto"
+        />
+      </div>
 
       <div className="bg-card border border-border rounded-lg overflow-x-auto">
         {loading ? (
