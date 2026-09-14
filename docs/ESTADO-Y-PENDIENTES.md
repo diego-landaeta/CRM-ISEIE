@@ -850,3 +850,40 @@ es la asignación tutor–formación o el producto del catálogo— porque de es
 depende cuál de los tres es la causa y cuáles son consecuencia.
 
 *Sin asignar. Pendiente de revisar, junto con los otros dos de tutores.*
+
+---
+
+## Los 133,33 € sin formación: Diego ya sabe cuál es
+
+Anotado el **14/09/2026**. No es un fallo del CRM: es **el dato que faltaba**, y
+Diego lo ha dado.
+
+El aviso de `/tutores/comisiones` (septiembre 2026, Psiko Aprende) dice:
+
+> ⚠ **133,33 € cobrados sin saber de qué formación son.** 1 cobro de ventas que
+> no están atadas al catálogo. Nadie cobra comisión por ellos. Se arregla
+> eligiendo la formación en cada venta: **#177 Edwin Noguera**.
+
+Diego:
+
+> «Este pago es de la formación: **Diplomado en neurociencia aplicada al trauma y
+> plasticidad cerebral**. La tutora es **Alba Burundarena**.»
+
+### Qué hay que hacer
+
+1. En la venta **#177 (Edwin Noguera)**, elegir como formación el *Diplomado en
+   neurociencia aplicada al trauma y plasticidad cerebral*.
+2. Comprobar que **Alba Burundarena** consta como tutora de esa formación, con su
+   porcentaje y su fecha de inicio. En la lista de tutores aparece una **Alba**
+   (`alba@psikoaprende.com`) con 2 cursos — hay que confirmar que es la misma
+   persona antes de tocar nada.
+3. Volver a **Calcular** las comisiones de septiembre. Los 133,33 € deberían
+   dejar el aviso y pasar a la comisión de Alba.
+
+Ojo con el aviso de la propia pantalla: *«no se genera nada anterior al
+2026-08-01, ni anterior a la fecha de inicio de cada tutor»*. Si a Alba se le
+pone una fecha de inicio posterior al cobro, la comisión seguirá sin salir y
+parecerá que el arreglo no funcionó.
+
+*Sin asignar. Es dato, no código — pero conviene hacerlo con la pantalla
+delante para ver si el aviso desaparece.*
