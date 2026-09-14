@@ -713,3 +713,76 @@ para que las cuatro pantallas se parezcan. Y revisar de paso que el campo esté
 donde se mira, no encima del todo.
 
 *Sin asignar. Solo frontend, y es pequeño.*
+
+---
+
+## BUG · La lupa general no encuentra a ningún cliente
+
+Anotado el **14/09/2026**. Diego: «algo pasa con la lupa general, he buscado
+este cliente y no aparece... ni nombre ni correo».
+
+### Reproducido y con causa
+
+Buscando `garbitsu@gmail.com` en Psiko Aprende, la paleta dice «No hay
+resultados». Pero en la base **sí está**, dos veces:
+
+| lead | nombre | proyecto | estado |
+|---|---|---|---|
+| #855 | Garbiñe Pastor | 2 · Psiko Aprende | convertido, con factura |
+| #1868 | Garbiñe Pastor Narbaiza | 2 · Psiko Aprende | convertido, con factura |
+
+Proyecto correcto, correo correcto. **La causa es una palabra que falta**:
+
+```
+CommandPalette.jsx:176
+client.get(`/leads?projectId=${activeProject.id}&search=${q}&limit=5`)
+```
+
+Sin `includeConverted=1`. Y `lead.model.js` excluye a los convertidos cuando no
+se lo pides:
+
+```js
+} else if (!includeConverted && !conConversion) {
+  conditions.push(`l.status <> 'convertido'`);
+}
+```
+
+### Por qué importa más de lo que parece
+
+No falla la búsqueda por texto: **falla para todo el que ya compró**. O sea que
+la lupa general encuentra a quien todavía no es cliente y esconde justo a los
+que más se buscan — para cobrar, para facturar, para atender.
+
+### El arreglo
+
+Añadir `&includeConverted=1` a esa llamada. Es **una línea**. Conviene además
+que el resultado diga si esa persona ya es cliente, para no confundirla con un
+prospecto vivo.
+
+*Sin asignar, pero es de un minuto.*
+
+---
+
+## Tutores: que se puedan editar, y que se vea
+
+Anotado el **14/09/2026**. Diego: «necesitamos algo visible para poder editar
+tutores».
+
+En `/tutores`, al elegir uno salen cuatro botones —Datos de pago, Cambiar
+contraseña, Retirar, Añadir formación— y **ninguno edita al tutor**: ni el
+nombre, ni el correo, ni el porcentaje, ni las fechas de una formación ya
+puesta. Para cambiar un 10 % hay que quitar la formación y volver a añadirla.
+
+Qué hace falta:
+
+- **Editar la ficha**: nombre y correo.
+- **Editar una formación ya asignada**: el porcentaje y el «desde/hasta», sin
+  quitarla y rehacerla — quitarla borra el histórico de por qué se le pagó lo
+  que se le pagó.
+- Que el botón **se vea**, junto a los otros cuatro, no escondido.
+
+Ojo con el IBAN: la lista repite «sin IBAN · no se le puede pagar» en casi
+todos. Eso sí se edita, en «Datos de pago», pero desde la lista no hay forma de
+llegar; el aviso dice el problema y no lleva a la solución.
+
+*Sin asignar. Frontend, y backend si no existe el endpoint de editar.*
