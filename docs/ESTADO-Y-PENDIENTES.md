@@ -934,3 +934,37 @@ está publicado.
 
 *Sin asignar. Migración (columnas en la asignación tutor–formación) + la columna
 en la pantalla.*
+
+---
+
+## Comisiones: «Estado de la colaboración» en la fila del cobro
+
+Anotado el **14/09/2026**. Diego, señalando el hueco entre FORMACIÓN y BASE, al
+desplegar un tutor en `/tutores/comisiones`:
+
+> «En comisiones aparece un mensaje que es "Estado de la colaboración", y
+> aparece la información marcada antes.»
+
+Es **el mismo dato de la nota anterior** —foto corporativa, vídeo, 25/50/100 %
+de módulos— enseñado aquí. No es otra cosa que rellenar: se marca una vez en la
+ficha del tutor y se **lee** en las dos pantallas.
+
+### Por qué tiene sentido ponerlo justo ahí
+
+Esta es la pantalla donde se pulsa **Marcar pagado**. Ver en la misma fila que
+esa persona va al 25 % de los módulos es lo que evita pagar una colaboración
+que todavía no está entregada — y hoy, para saberlo, hay que salirse a
+`/tutores`, buscar a la persona y mirar su formación.
+
+Cabe en una columna estrecha si se pinta con iconos o siglas (📷 🎥 · 25 %) y el
+detalle al pasar por encima. En la fila del cobro hay sitio: el hueco que marcó
+Diego está vacío.
+
+### Lo que hay que decidir con la otra nota
+
+Las dos son la misma función vista en dos sitios, así que **se hacen juntas** y
+con la misma forma. La pregunta pendiente sigue siendo si son dos casillas más
+un selector de avance o seis marcas sueltas — ver la nota *«Tutores: una columna
+para saber qué ha entregado cada uno»*.
+
+*Sin asignar. Va con la anterior, no por separado.*
