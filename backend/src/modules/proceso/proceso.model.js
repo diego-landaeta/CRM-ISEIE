@@ -197,7 +197,10 @@ export async function colaDelDia({ projectIds, asesoraId, hasta = null, limite =
   const pProj = Array.isArray(projectIds) && projectIds.length
     ? `AND ls.project_id = ANY($${i++}::int[])`
     : 'AND ls.project_id NOT IN (SELECT id FROM projects WHERE es_prueba)';
-  if (pProj) par.push(projectIds.map(Number));
+  // `if (pProj)` era SIEMPRE cierto —es una cadena no vacia en las dos ramas—
+  // asi que sin proyecto («Todos») se empujaba `null.map` y la cola reventaba
+  // con un 500. Arreglado en los dos CRM el 14/09.
+  if (Array.isArray(projectIds) && projectIds.length) par.push(projectIds.map(Number));
   const pAses = asesoraId ? `AND l.responsable_id = $${i++}` : '';
   if (asesoraId) par.push(asesoraId);
   const pHasta = hasta ? `$${i++}::date` : 'CURRENT_DATE';
@@ -224,11 +227,16 @@ export async function colaDelDia({ projectIds, asesoraId, hasta = null, limite =
      )
      SELECT p.lead_id, p.lead_nombre, p.lead_estado, p.responsable_id,
             p.clave, p.orden, p.fecha_prevista, p.contactos,
+            -- De que campus es cada fila. Con una EMPRESA elegida la cola
+            -- junta varios campus y sin esto no se sabe de parte de quien
+            -- se llama. Lo pidio Carlos el 11/09.
+            p.project_id, pr.nombre AS proyecto,
             s.nombre AS paso_nombre, s.canales, s.nota AS paso_nota,
             u.nombre AS gestora,
             (CURRENT_DATE - p.fecha_prevista) AS dias_de_retraso
        FROM pendientes p
        LEFT JOIN commercial_steps s ON s.id = p.step_id
+       LEFT JOIN projects pr ON pr.id = p.project_id
        LEFT JOIN users u ON u.id = p.responsable_id
       WHERE p.pos = 1
       ORDER BY p.fecha_prevista, p.orden, p.lead_id
@@ -251,7 +259,10 @@ export async function resumenDeLaCola({ projectIds, asesoraId }) {
   const pProj = Array.isArray(projectIds) && projectIds.length
     ? `AND ls.project_id = ANY($${i++}::int[])`
     : 'AND ls.project_id NOT IN (SELECT id FROM projects WHERE es_prueba)';
-  if (pProj) par.push(projectIds.map(Number));
+  // `if (pProj)` era SIEMPRE cierto —es una cadena no vacia en las dos ramas—
+  // asi que sin proyecto («Todos») se empujaba `null.map` y la cola reventaba
+  // con un 500. Arreglado en los dos CRM el 14/09.
+  if (Array.isArray(projectIds) && projectIds.length) par.push(projectIds.map(Number));
   const pAses = asesoraId ? `AND l.responsable_id = $${i++}` : '';
   if (asesoraId) par.push(asesoraId);
 

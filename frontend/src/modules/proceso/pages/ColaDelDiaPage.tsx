@@ -14,11 +14,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  CalendarCheck, Warning, ArrowRight, CaretRight, User, ClockCounterClockwise,
+  CalendarCheck, Warning, ArrowRight, CaretRight, User, ClockCounterClockwise, Buildings,
 } from '@phosphor-icons/react';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { useProjectContext } from '@/contexts/ProjectContext';
+import { useProyectosDelAmbito } from '@/shared/hooks/useAmbito';
 import { useAuth } from '@/contexts/AuthContext';
 import client from '@/shared/api/client';
 import { traerCola, traerResumen, type PasoEnCola, type ResumenCola } from '../api/agenda.api';
@@ -56,7 +57,9 @@ function Contador({ icon: Icon, etiqueta, valor, tono, activo, onClick }: any) {
 }
 
 export default function ColaDelDiaPage() {
-  const { activeProject } = useProjectContext();
+  const { activeProject, activeIssuer } = useProjectContext();
+  // Los campus de la empresa elegida. Sin empresa, todos los del usuario.
+  const campus = useProyectosDelAmbito<{ id: number; nombre: string }>();
   const { user } = useAuth();
   const navegar = useNavigate();
   const esAdmin = user?.role === 'admin' || user?.role === 'superadmin';
@@ -70,7 +73,25 @@ export default function ColaDelDiaPage() {
   // que es con lo que se abre el día.
   const [tramo, setTramo] = useState<'pendiente' | 'atrasados' | 'hoy' | 'manana' | 'semana'>('pendiente');
 
-  const proyecto = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
+  // Dentro de una empresa se puede bajar a un campus concreto sin cambiar el
+  // selector de arriba: es el filtro que pidio Diego el 14/09 —«que tengan
+  // filtros si tengo que seleccionar un proyecto»—.
+  const [soloCampus, setSoloCampus] = useState<number | null>(null);
+  useEffect(() => { setSoloCampus(null); }, [activeIssuer?.id, activeProject?.id]);
+
+  const elegido = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
+  const proyecto = elegido ?? soloCampus;
+  // Con una EMPRESA puesta y sin campus concreto, la cola es la de TODOS sus
+  // campus. Antes salia el muro de «elige un campus» porque solo se sabia
+  // mandar un proyecto; el servidor ya sabia sumar varios.
+  const idsEmpresa = useMemo(
+    () => (activeIssuer && !proyecto ? campus.map((c) => c.id) : []),
+    [activeIssuer, proyecto, campus],
+  );
+  const projectIds = idsEmpresa.length ? idsEmpresa.join(',') : null;
+  // Si no hay un campus concreto, la lista mezcla varios y cada fila tiene que
+  // decir de cual es.
+  const mezcla = !proyecto;
 
   // Mañana y la semana piden un `hasta` más largo; lo demás se filtra encima.
   const hasta = useMemo(() => {
@@ -85,15 +106,15 @@ export default function ColaDelDiaPage() {
     let vivo = true;
     setCargando(true);
     Promise.all([
-      traerCola({ projectId: proyecto, gestoraId, hasta, limite: 300 }),
-      traerResumen({ projectId: proyecto, gestoraId }),
+      traerCola({ projectId: proyecto, projectIds, gestoraId, hasta, limite: 300 }),
+      traerResumen({ projectId: proyecto, projectIds, gestoraId }),
     ]).then(([c, r]) => {
       if (!vivo) return;
       setCola(c);
       setResumen(r);
     }).finally(() => { if (vivo) setCargando(false); });
     return () => { vivo = false; };
-  }, [proyecto, gestoraId, hasta]);
+  }, [proyecto, projectIds, gestoraId, hasta]);
 
   // La lista de gestoras, solo para quien puede filtrar por ellas.
   useEffect(() => {
@@ -116,22 +137,43 @@ export default function ColaDelDiaPage() {
   }, [cola, tramo]);
 
   const titulo = esAdmin && !gestoraId ? 'La cola del equipo' : 'Tu día';
+  // El filtro de campus solo tiene sentido con una empresa puesta y mas de uno.
+  const filtroCampus = Boolean(activeIssuer) && !elegido && campus.length > 1;
 
   return (
     <div className="space-y-5 pb-8">
       <PageHeader
         title={titulo}
-        subtitle="A quién le toca hoy, y quién viene arrastrado. Una fila por persona."
-        actions={esAdmin && gestoras.length > 0 ? (
-          <select
-            value={gestoraId ?? ''}
-            onChange={(e) => setGestoraId(e.target.value ? Number(e.target.value) : null)}
-            className="h-9 px-3 rounded-md border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
-            aria-label="Filtrar por gestora"
-          >
-            <option value="">Todo el equipo</option>
-            {gestoras.map((g) => <option key={g.id} value={g.id}>{g.nombre}</option>)}
-          </select>
+        subtitle={
+          activeIssuer && !proyecto
+            ? `Los ${campus.length} campus de ${activeIssuer.nombre}. A quién le toca hoy, y quién viene arrastrado.`
+            : 'A quién le toca hoy, y quién viene arrastrado. Una fila por persona.'
+        }
+        actions={filtroCampus || (esAdmin && gestoras.length > 0) ? (
+          <div className="flex flex-wrap items-center gap-2">
+            {filtroCampus && (
+              <select
+                value={soloCampus ?? ''}
+                onChange={(e) => setSoloCampus(e.target.value ? Number(e.target.value) : null)}
+                className="h-9 px-3 rounded-md border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+                aria-label="Filtrar por campus"
+              >
+                <option value="">Todos los campus</option>
+                {campus.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+              </select>
+            )}
+            {esAdmin && gestoras.length > 0 && (
+              <select
+                value={gestoraId ?? ''}
+                onChange={(e) => setGestoraId(e.target.value ? Number(e.target.value) : null)}
+                className="h-9 px-3 rounded-md border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+                aria-label="Filtrar por gestora"
+              >
+                <option value="">Todo el equipo</option>
+                {gestoras.map((g) => <option key={g.id} value={g.id}>{g.nombre}</option>)}
+              </select>
+            )}
+          </div>
         ) : null}
       />
 
@@ -230,6 +272,11 @@ export default function ColaDelDiaPage() {
                   </div>
 
                   <div className="shrink-0 text-right text-[11px] text-muted-foreground">
+                    {/* De que campus es. Solo cuando la lista mezcla varios:
+                        con un proyecto elegido lo dice ya la cabecera. */}
+                    {mezcla && p.proyecto && (
+                      <div className="inline-flex items-center gap-1"><Buildings size={11} />{p.proyecto}</div>
+                    )}
                     {esAdmin && !gestoraId && p.gestora && (
                       <div className="inline-flex items-center gap-1"><User size={11} />{p.gestora}</div>
                     )}

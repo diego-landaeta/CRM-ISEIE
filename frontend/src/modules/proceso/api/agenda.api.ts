@@ -21,6 +21,9 @@ export type PasoEnCola = {
   fecha_prevista: string;
   dias_de_retraso: number;
   contactos: number;
+  /** El campus. Solo importa cuando se mira una empresa entera. */
+  project_id: number;
+  proyecto: string | null;
 };
 
 export type ResumenCola = {
@@ -58,14 +61,14 @@ function conAmbito(params: Record<string, string | number | undefined | null>) {
 }
 
 export async function traerCola(opciones: {
-  projectId?: number | null; gestoraId?: number | null; hasta?: string | null; limite?: number;
+  projectId?: number | null; projectIds?: string | null; gestoraId?: number | null; hasta?: string | null; limite?: number;
 }): Promise<PasoEnCola[]> {
   const r = await client.get(`/proceso/cola?${conAmbito(opciones)}`);
   return r?.success ? r.data : [];
 }
 
 export async function traerResumen(opciones: {
-  projectId?: number | null; gestoraId?: number | null;
+  projectId?: number | null; projectIds?: string | null; gestoraId?: number | null;
 }): Promise<ResumenCola | null> {
   const r = await client.get(`/proceso/cola/resumen?${conAmbito(opciones)}`);
   return r?.success ? r.data : null;
