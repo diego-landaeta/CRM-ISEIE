@@ -47,18 +47,31 @@ export default function BuscadorCurso({
     return () => document.removeEventListener('mousedown', fuera);
   }, []);
 
-  const resultados = useMemo(() => {
-    const disponibles = cursos.filter((c) => !excluir.includes(c.id));
+  // La busqueda, suelta de la lista: se usa dos veces --sobre lo disponible y
+  // sobre lo excluido-- y repetirla era como se colaba la diferencia.
+  const casa = useMemo(() => {
     const t = sinAcentos(texto).trim();
-    if (!t) return disponibles.slice(0, 60);
-    const trozos = t.split(/\s+/);
-    return disponibles
-      .filter((c) => {
-        const n = sinAcentos(c.nombre);
-        return trozos.every((p) => n.includes(p));
-      })
-      .slice(0, 60);
-  }, [cursos, texto, excluir]);
+    const trozos = t ? t.split(/\s+/) : [];
+    return (c: { nombre: string }) => {
+      if (!trozos.length) return true;
+      const n = sinAcentos(c.nombre);
+      return trozos.every((p) => n.includes(p));
+    };
+  }, [texto]);
+
+  const resultados = useMemo(
+    () => cursos.filter((c) => !excluir.includes(c.id)).filter(casa).slice(0, 60),
+    [cursos, excluir, casa],
+  );
+
+  // Lo que casa pero esta fuera: si no queda nada que enseñar, el problema no
+  // es el nombre --es que ya lo tiene--. Decir «ningun curso con ese nombre»
+  // mientras la tabla lo esta enseñando manda a probar sinonimos de algo que
+  // esta ahi. Diego, 14/09, con un curso desactivado de Tatiana delante.
+  const excluidoQueCasa = useMemo(
+    () => (resultados.length ? null : cursos.filter((c) => excluir.includes(c.id)).find(casa) || null),
+    [cursos, excluir, casa, resultados.length],
+  );
 
   useEffect(() => { setResaltado(0); }, [texto]);
 
@@ -113,7 +126,9 @@ export default function BuscadorCurso({
         <div className="absolute z-50 mt-1 w-full max-h-60 overflow-y-auto bg-card border border-border rounded-md shadow-lg">
           {resultados.length === 0 ? (
             <p className="px-3 py-2.5 text-xs text-muted-foreground">
-              Ningún curso con «{texto}». Prueba con una palabra suelta.
+              {excluidoQueCasa
+                ? `«${excluidoQueCasa.nombre}» ya la tiene asignada. Si sale como desactivada, reactívala desde su tabla en vez de añadirla otra vez.`
+                : `Ningún curso con «${texto}». Prueba con una palabra suelta.`}
             </p>
           ) : (
             <>

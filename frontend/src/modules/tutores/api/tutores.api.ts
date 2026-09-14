@@ -38,6 +38,11 @@ export interface Colaboracion {
   proyecto: string;
   /** Marcada activa Y con las fechas de hoy dentro. Son dos cosas distintas. */
   rige_hoy: boolean;
+  /** Lo que ha entregado de esta formacion. Marcas, no archivos. */
+  entrego_foto: boolean;
+  entrego_video: boolean;
+  /** 0, 25, 50 o 100. */
+  modulos_pct: number;
 }
 
 export interface LineaSimulacion {
@@ -65,7 +70,9 @@ export interface AjustesTutores {
 export interface ComisionReal {
   id: number;
   periodo: string;
-  estado: 'pendiente' | 'pagada' | 'revertida';
+  /** `notificada` = ya se le pidio la factura. `falta_factura` = se le pidio y
+   *  no la ha mandado, que es distinto de que nadie le haya dicho nada. */
+  estado: 'pendiente' | 'notificada' | 'falta_factura' | 'pagada' | 'revertida';
   base_calculo: string;
   pct: string;
   importe: string;
@@ -80,6 +87,10 @@ export interface ComisionReal {
   cobro: string | null;
   alumno: string;
   liquidada_por_nombre: string | null;
+  /** Lo entregado de esa formacion, para no pagar a ciegas. */
+  entrego_foto?: boolean | null;
+  entrego_video?: boolean | null;
+  modulos_pct?: number | null;
 }
 
 export interface ResumenComision {
@@ -203,6 +214,11 @@ export const tutoresApi = {
   crearColaboracion: (datos: {
     tutorId: number; productId: number; pct: number; desde: string; hasta?: string | null; notas?: string;
   }) => client.post('/tutores/colaboraciones', datos) as Promise<ApiResponse<Colaboracion>>,
+
+  /** Mover una comision entre pendiente, notificada y falta_factura. Pagar y
+   *  revertir NO pasan por aqui: tienen su propia llamada porque mueven dinero. */
+  cambiarEstadoComision: (id: number, estado: string) =>
+    client.patch(`/tutores/comisiones/${id}/estado`, { estado }) as Promise<ApiResponse<ComisionReal>>,
 
   editarColaboracion: (id: number, datos: Record<string, unknown>) =>
     client.patch(`/tutores/colaboraciones/${id}`, datos) as Promise<ApiResponse<Colaboracion>>,

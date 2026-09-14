@@ -305,7 +305,12 @@ export default function MetaAdsPage() {
                     <th className="text-right px-3 py-2 font-medium">Gasto</th>
                     <th className="text-right px-3 py-2 font-medium">Impr.</th>
                     <th className="text-right px-3 py-2 font-medium">Clicks · CTR</th>
-                    <th className="text-right px-3 py-2 font-medium">Leads · CPL</th>
+                    <th className="text-right px-3 py-2 font-medium">Leads Meta</th>
+                    {/* Los del CRM van aparte y NO sustituyen a los de Meta: son
+                        dos cuentas distintas, y verlas juntas es lo que explica
+                        la diferencia. */}
+                    <th className="text-right px-3 py-2 font-medium">Leads CRM · CPL</th>
+                    <th className="text-right px-3 py-2 font-medium">Ventas</th>
                     <th className="text-right px-3 py-2 font-medium w-24">Productos</th>
                   </tr>
                 </thead>
@@ -479,8 +484,18 @@ function CampaignRow({ c, projectId, currency, dateFrom, dateTo, onAssociate, on
           <span className="text-muted-foreground">{c.ctr != null ? c.ctr.toFixed(2) + '%' : '—'}</span>
         </td>
         <td className="px-3 py-2.5 text-right tabular-nums text-xs">
-          <span className="font-semibold">{fmtNum(c.total_leads)}</span><br />
+          <span className={c.total_leads ? 'font-semibold' : 'text-muted-foreground'}>{fmtNum(c.total_leads)}</span><br />
           <span className="text-muted-foreground">{c.cpl != null ? fmtMoney(c.cpl, currency) : '—'}</span>
+        </td>
+        <td className="px-3 py-2.5 text-right tabular-nums text-xs"
+          title="Leads que entraron al CRM con la UTM de esta campaña. Meta solo cuenta los de su propio formulario.">
+          <span className={c.leads_crm ? 'font-semibold text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'}>
+            {fmtNum(c.leads_crm || 0)}
+          </span><br />
+          <span className="text-muted-foreground">{c.cpl_crm != null ? fmtMoney(c.cpl_crm, currency) : '—'}</span>
+        </td>
+        <td className="px-3 py-2.5 text-right tabular-nums text-xs">
+          <span className={c.ventas_crm ? 'font-semibold' : 'text-muted-foreground'}>{fmtNum(c.ventas_crm || 0)}</span>
         </td>
         <td className="px-3 py-2.5 text-right">
           <button onClick={onAssociate} className="text-[11px] text-primary hover:underline font-semibold">
@@ -490,11 +505,16 @@ function CampaignRow({ c, projectId, currency, dateFrom, dateTo, onAssociate, on
       </tr>
       {open && (
         <tr className="bg-muted/20">
-          <td colSpan={7} className="px-0 py-0">
+          <td colSpan={9} className="px-0 py-0">
             {loading ? (
               <div className="px-8 py-3 text-xs text-muted-foreground">Cargando conjuntos…</div>
             ) : adsets && adsets.length === 0 ? (
-              <div className="px-8 py-3 text-xs text-muted-foreground italic">Sin conjuntos en este rango (o backfill aún no incluye adsets).</div>
+              /* El mensaje de antes se disculpaba por el backfill, que no tenia
+                 nada que ver: lo que fallaba era el filtro por proyecto. */
+              <div className="px-8 py-3 text-xs text-muted-foreground italic">
+                Esta campaña no tiene conjuntos en el CRM. Si acabas de crearlos en Meta,
+                aparecerán tras la próxima sincronización.
+              </div>
             ) : (
               <table className="w-full text-xs">
                 <tbody>
@@ -567,7 +587,7 @@ function AdSetRow({ a, projectId, currency, dateFrom, dateTo, onAssociate }:
       </tr>
       {open && (
         <tr className="bg-muted/30">
-          <td colSpan={7} className="px-0 py-0">
+          <td colSpan={9} className="px-0 py-0">
             {loading ? (
               <div className="pl-14 py-2 text-xs text-muted-foreground">Cargando anuncios…</div>
             ) : ads && ads.length === 0 ? (

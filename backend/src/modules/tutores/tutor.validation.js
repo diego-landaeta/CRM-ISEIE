@@ -24,6 +24,11 @@ export const altaTutorSchema = z.object({
 });
 
 export const perfilSchema = z.object({
+  // El nombre vive en `users`, como el correo. Se edita desde aqui porque esta
+  // es la unica pantalla del tutor, y hasta hoy no se podia cambiar en ningun
+  // sitio: quien entraba mal escrito se quedaba mal escrito. Diego, 14/09:
+  // «necesitamos algo visible para poder editar tutores».
+  nombre: z.string().trim().min(2, 'El nombre es demasiado corto').max(120).optional(),
   dniNif: z.string().max(32).optional().nullable(),
   iban: z.string().max(40).optional().nullable(),
   banco: z.string().max(120).optional().nullable(),
@@ -60,6 +65,12 @@ export const editarColaboracionSchema = z.object({
   hasta: fecha.optional().nullable(),
   activa: z.boolean().optional(),
   notas: z.string().optional().nullable(),
+  // Lo que ha entregado de esa formacion. Son MARCAS, no archivos: el fichero
+  // vive donde viva y aqui solo se apunta que llego. Diego, 14/09.
+  entregoFoto: z.boolean().optional(),
+  entregoVideo: z.boolean().optional(),
+  // Los tramos son excluyentes: nadie esta al 25 y al 50 a la vez.
+  modulosPct: z.union([z.literal(0), z.literal(25), z.literal(50), z.literal(100)]).optional(),
 });
 
 export const ajustesSchema = z.object({

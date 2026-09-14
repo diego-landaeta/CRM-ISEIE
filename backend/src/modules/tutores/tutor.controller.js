@@ -106,6 +106,9 @@ export async function guardarPerfil(req, res, next) {
       reenviarEnlace: d.reenviarEnlace === true,
     });
 
+    // El nombre va aparte del perfil: es de `users`, no de `tutor_profiles`.
+    if (d.nombre) await model.renombrarTutor(id, d.nombre);
+
     const perfil = await model.guardarPerfil(id, d);
     res.json({ success: true, data: { ...perfil, correo } });
   } catch (err) { next(err); }
@@ -265,6 +268,24 @@ export async function calcular(req, res, next) {
   } catch (err) { next(err); }
 }
 
+// PATCH /api/tutores/comisiones/:id/estado
+// Solo entre pendiente, notificada y falta_factura: pagar y revertir tienen
+// sus propias puertas porque mueven dinero y dejan rastro.
+export async function cambiarEstadoComision(req, res, next) {
+  try {
+    await exigirGestion(req);
+    const estado = String(req.body?.estado || '');
+    const c = await model.cambiarEstadoComision(parseInt(req.params.id), estado);
+    if (!c) {
+      throw new AppError(
+        'Ese estado no vale aqui, o la comision ya esta pagada o revertida',
+        409, 'ESTADO_NO_PERMITIDO'
+      );
+    }
+    res.json({ success: true, data: c });
+  } catch (err) { next(err); }
+}
+
 // GET /api/tutores/comisiones?periodo=&tutorId=&estado=&projectId=
 export async function listarComisiones(req, res, next) {
   try {
@@ -275,7 +296,8 @@ export async function listarComisiones(req, res, next) {
     res.json({ success: true, data: await model.comisiones({
       periodo: /^\d{4}-\d{2}$/.test(req.query.periodo || '') ? req.query.periodo : null,
       tutorId: esTutor ? req.user.userId : (req.query.tutorId ? parseInt(req.query.tutorId) : null),
-      estado: ['pendiente', 'pagada', 'revertida'].includes(req.query.estado) ? req.query.estado : null,
+      estado: ['pendiente', 'notificada', 'falta_factura', 'pagada', 'revertida'].includes(req.query.estado)
+        ? req.query.estado : null,
       projectId: esTutor ? null : (req.query.projectId ? parseInt(req.query.projectId) : null),
     })});
   } catch (err) { next(err); }

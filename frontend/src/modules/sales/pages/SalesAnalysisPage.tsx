@@ -1,6 +1,7 @@
 // Ventas: resumen consolidado, por asesora y por cliente. Comparten filtros
 // (proyecto activo, rango de fechas y busqueda) para que los tres cuadren entre si.
 import { useEffect, useState } from 'react';
+import RangoRapido from '@/shared/components/ui/RangoRapido';
 import { useNavigate } from 'react-router-dom';
 import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
@@ -116,6 +117,9 @@ export default function SalesAnalysisPage() {
 
       {/* Filtros comunes a las tres vistas */}
       <div className="bg-card border border-border rounded-lg p-3 flex items-center gap-2 flex-wrap">
+        {/* Los mismos atajos que en Facturacion: un solo componente para que no
+            acaben comportandose distinto en cada pantalla. */}
+        <RangoRapido valor={rango} alElegir={(r) => setRango(r)} />
         <label className="text-xs font-semibold text-muted-foreground">Desde</label>
         <input type="date" value={rango.from} onChange={(e) => setRango((v) => ({ ...v, from: e.target.value }))}
           className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
