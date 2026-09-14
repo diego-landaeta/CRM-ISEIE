@@ -1,5 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Receipt, Eye, PaperPlaneTilt, CheckCircle, X, MagnifyingGlass, Gear, ArrowCounterClockwise, FileText, DownloadSimple, Trash, LinkSimple } from '@phosphor-icons/react';
+// Los atajos de fecha, el mismo componente que el CRM hermano.
+import RangoRapido from '@/shared/components/ui/RangoRapido';
 import { Link, useLocation } from 'react-router-dom';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -333,6 +335,13 @@ export default function InvoicesPage() {
           <input type="date" value={filters.to} onChange={(e) => setFilters(f => ({ ...f, to: e.target.value }))}
             className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
         </div>
+        {/* Los atajos van DESPUES de las casillas: escribir dos fechas sigue
+            siendo posible, y para los cinco de siempre ya no hace falta. */}
+        <RangoRapido
+          valor={{ from: filters.from, to: filters.to }}
+          alElegir={(r) => setFilters((f) => ({ ...f, from: r.from, to: r.to }))}
+          className="w-full sm:w-auto"
+        />
       </div>
 
       {porSociedad && (
@@ -425,6 +434,29 @@ export default function InvoicesPage() {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* EL BUSCADOR, OTRA VEZ, AQUI. El de arriba existe, pero queda por
+          encima de las tarjetas y de la tabla de ventas sin factura: cuando
+          bajas a la lista, que es donde se trabaja, ya no lo tienes. Es el
+          MISMO estado, no otro filtro. */}
+      {!loading && (invoices.length > 0 || filters.search) && (
+        <div className="relative">
+          <MagnifyingGlass size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <input
+            value={filters.search}
+            onChange={(e) => setFilters(f => ({ ...f, search: e.target.value }))}
+            placeholder="Buscar en la lista por nº, cliente o NIF…"
+            aria-label="Buscar facturas"
+            className="w-full h-9 pl-8 pr-8 rounded-md border border-border bg-card text-sm" />
+          {filters.search && (
+            <button type="button" onClick={() => setFilters(f => ({ ...f, search: '' }))}
+              aria-label="Quitar la búsqueda"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+              <X size={13} weight="bold" />
+            </button>
+          )}
         </div>
       )}
 

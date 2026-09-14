@@ -920,10 +920,12 @@ Los seis no parecen del mismo tipo:
 | **Foto y Vídeo** | si las dos de arriba son casillas, esta **sobra**: es las dos marcadas |
 | 25 % · 50 % · 100 % módulos | esto es **una escala**, no tres casillas: nadie está al 25 % y al 100 % a la vez |
 
-Lo más probable es que sean **dos casillas + un selector de avance**, y que «Foto
-y Vídeo» sea la forma de decirlo en corto. Pero eso hay que preguntárselo a
-Diego antes de hacerlo, porque cambia la columna entera y cambia cómo se filtra
-después.
+**DECIDIDO el 14/09**, Diego: «que sean casillas; fotos, vídeos, no una que sea
+foto y vídeo». O sea **casillas sueltas e independientes**, y la combinada se
+descarta: si alguien tiene las dos, se marcan las dos.
+
+Queda pendiente de confirmar si 25 / 50 / 100 % son tres casillas más o un solo
+selector de avance — pero por lo dicho, casillas.
 
 ### Para qué sirve de verdad
 
