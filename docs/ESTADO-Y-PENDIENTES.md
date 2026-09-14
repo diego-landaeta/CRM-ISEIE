@@ -968,3 +968,42 @@ un selector de avance o seis marcas sueltas — ver la nota *«Tutores: una colu
 para saber qué ha entregado cada uno»*.
 
 *Sin asignar. Va con la anterior, no por separado.*
+
+---
+
+## BUG · Meta Ads: ni conjuntos, ni leads, ni productos
+
+Anotado el **14/09/2026**. Diego, sobre `/meta-ads` en ISAEG: «esta parte no
+anda bien». Sin investigar, como los demás de hoy.
+
+Lo que se ve en pantalla, y son tres cosas distintas aunque parezcan una:
+
+1. **Sin conjuntos.** Al desplegar la campaña *Ventas* (OUTCOME_SALES, 209 €,
+   34.570 impresiones, 642 clics) dice:
+   *«Sin conjuntos en este rango (o backfill aún no incluye adsets).»*
+   El propio mensaje admite que no sabe si no hay datos o si la sincronización no
+   los ha traído — y esa duda es el problema: no se puede distinguir «Meta no
+   tiene nada» de «nosotros no lo hemos bajado».
+
+2. **Cero leads con 642 clics.** Las cuatro campañas marcan `Leads 0` y el CPL
+   sale en blanco. Con 246 € gastados y casi 100.000 impresiones, o no llega ni
+   un lead —posible, pero hay que verlo— o **no se está atando el lead a la
+   campaña**, que es lo que hace que la pantalla no sirva para nada.
+
+3. **«Por producto (0)».** Cero. Ya está comprobado de antes: las tablas que
+   cruzan anuncio con producto **llevan vacías desde siempre**, así que nada que
+   mezcle publicidad y catálogo puede calcularse solo. El botón *Asociar* de cada
+   fila es justo lo que no se ha usado nunca.
+
+### Al revisarlo, en este orden
+
+Primero **si el backfill trae adsets** (1), porque si no baja los conjuntos el
+resto no puede cuadrar. Luego **por dónde se pierde el lead** (2): si el webhook
+guarda el identificador de campaña o si se queda por el camino. Y lo de los
+productos (3) no es un fallo del código sino trabajo que nadie ha hecho, así que
+va aparte y probablemente es de negocio.
+
+Contexto que ya teníamos: el módulo se desplegó en etapas 1 y 2 y **nunca se
+validó con datos reales**. Esto es esa validación, llegando tarde.
+
+*Sin asignar. Pendiente de revisar.*
