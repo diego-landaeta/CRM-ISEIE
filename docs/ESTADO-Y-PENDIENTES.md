@@ -786,3 +786,36 @@ todos. Eso sí se edita, en «Datos de pago», pero desde la lista no hay forma 
 llegar; el aviso dice el problema y no lleva a la solución.
 
 *Sin asignar. Frontend, y backend si no existe el endpoint de editar.*
+
+---
+
+## BUG · No deja asignar una formación al tutor
+
+Anotado el **14/09/2026**. Diego: «no me deja asignar esta formación».
+
+**Sin investigar todavía** — Diego: «primero anota y luego nos ponemos a revisar
+todo». Queda descrito tal cual se ve, para mirarlo después.
+
+En `/tutores`, con Tatiana elegida, botón **Añadir formación**. Se escribe
+«Máster en Terapia de Pareja y Vínculos Afectivos» y el diálogo responde:
+
+> *Ningún curso con «Máster en Terapia de Pareja y Vínculos Afectivos». Prueba
+> con una palabra suelta.*
+
+Lo llamativo: **esa formación ya está en su tabla**, dos filas más arriba, con
+un 10 % desde el 2026-08-01 y el estado **desactivada**. O sea que el buscador
+del diálogo no encuentra algo que la propia pantalla está enseñando.
+
+Por dónde empezar cuando toque (a comprobar, no confirmado):
+
+- si el buscador del diálogo **descarta los productos inactivos** — encaja con
+  que la fila diga «desactivada»
+- si excluye los que **ya tiene asignados**, y entonces el mensaje es el
+  equivocado: no es «ninguno», es «ya lo tiene»
+- si busca por cadena entera en vez de por palabras, que es lo que sugiere su
+  propio consejo de «prueba con una palabra suelta»
+
+Sea cual sea, **el mensaje miente** y manda al usuario a probar cosas en vez de
+decirle qué pasa.
+
+*Sin asignar. Pendiente de revisar.*
