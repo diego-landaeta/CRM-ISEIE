@@ -1063,3 +1063,55 @@ proceso por empresa, Meta Ads y lo de facturación. Y para Ángel, además, sus
 seis de WhatsApp con Zadarma a la cabeza.
 
 **Nada de ramas nuevas ni de trabajo por fuera hasta cerrar esa lista.**
+
+---
+
+## Comisiones: el cálculo que el tutor tiene que facturar
+
+Anotado el **14/09/2026**. Diego, señalando el hueco bajo las filas de cobros de
+cada tutor en `/tutores/comisiones`:
+
+> «Aquí abajo de las comisiones necesito el cálculo que el profesional me tiene
+> que enviar, que sería la cantidad de 17,82 € + 21 % de 17,82 € (3,74 €) −
+> retención del 15 % (2,67 €) = **18,89 €**.»
+
+### La cuenta, comprobada
+
+La base **no es una fila, es el total del mes de ese tutor**. En el ejemplo,
+Lola Hernández: 6,40 € + 11,42 € = **17,82 €**.
+
+| | |
+|---|---|
+| Comisión | **17,82 €** |
+| + IVA 21 % | 3,74 € |
+| − retención IRPF 15 % | 2,67 € |
+| **Total a facturar** | **18,89 €** |
+
+Comprobado: `17,82 + 3,74 − 2,67 = 18,89`. Redondeo a dos decimales en cada
+línea, no al final — con `17,82 × 0,21 = 3,7422` y `× 0,15 = 2,673`, redondear al
+final daría un céntimo de diferencia y el tutor facturaría otra cosa.
+
+### El texto, literal
+
+Debajo del cálculo, tal y como lo escribió Diego:
+
+- Comisión sujeta a IVA (21 %).
+- Retención de IRPF orientativa: cada profesional aplica la suya; el 15 % es la
+  más común.
+
+Ese segundo punto es importante y no es relleno: el 15 % es **una suposición**.
+Hay profesionales con el 7 % de los primeros años y autónomos con otra
+retención. El número que enseña el CRM es una guía para que el tutor sepa qué
+mandar, **no la factura**. Por eso el texto tiene que salir siempre, no como
+nota al pie escondida.
+
+### Con qué enlaza
+
+Esto es exactamente lo que hay que meter en el correo de **«avisar al tutor»**
+que pidió Carlos: si el correo lleva la cuenta hecha, el tutor manda la factura
+correcta a la primera y se acaban las idas y venidas. Ver la tarea de Carlos y
+la de los estados de comisión —*Notificada* es el estado en que queda después de
+mandarlo.
+
+*Sin asignar. Es frontend puro: el dato ya está, solo hay que hacer las tres
+cuentas y pintarlas.*
