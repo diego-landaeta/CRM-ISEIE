@@ -571,3 +571,56 @@ generarlo, `scratchpad/indice_tareas.py`.
 > las aprueba.
 
 <!-- FIN-INDICE-TAREAS -->
+
+---
+
+## El proceso comercial, por empresa y no solo por proyecto
+
+Anotado el **14/09/2026**. Diego, con CEDIA elegida en producción:
+
+> «Estos procesos en empresas deben ser por empresa, no por proyecto, que tengan
+> filtros. Si tengo que seleccionar un proyecto, tiene que ser por proyecto y por
+> empresa; que al indicar eso, sea "selecciona una empresa".»
+
+### Qué pasa hoy
+
+Con **CEDIA (7 campus)** puesta en el selector, `/prospectos/proceso` no enseña
+nada: sale el muro de *«Selecciona un proyecto — tienes activa la vista Todos
+los proyectos»*. Con un proyecto suelto (ISEIH) la cola funciona: 22 atrasados,
+1 para hoy, 3 para mañana, 27 esta semana.
+
+Comprobado en el código, no supuesto:
+
+| | |
+|---|---|
+| `CON_SOCIEDAD_OK` (AppLayout) | **no** incluye `/prospectos/proceso` ni `/prospectos/cola` |
+| Módulo `proceso` (backend) | **cero** menciones a `issuer` o `sociedad`: solo entiende de `projectIds` |
+
+Y el aviso además **miente**: dice «tienes activa la vista Todos los proyectos»
+cuando lo que hay activo es una empresa. No es lo mismo, y por eso el texto no
+ayuda a salir del problema.
+
+### Qué habría que hacer
+
+1. **Las dos pantallas aceptan empresa.** Añadir `/prospectos/proceso` y
+   `/prospectos/cola` a `CON_SOCIEDAD_OK`. El backend ya recibe `projectIds`, así
+   que el ámbito se le pasa como la lista de campus — igual que hace Prospectos
+   desde el #103. No hace falta inventar un parámetro nuevo.
+2. **Filtro de proyecto dentro de la empresa.** Con CEDIA puesta, poder acotar a
+   uno de sus 7 campus sin cambiar el selector de arriba. Los dos ejes a la vez:
+   empresa y proyecto.
+3. **Que cada fila diga de qué proyecto es.** Con varios campus mezclados, una
+   cola sin esa columna no se puede repartir. Esto ya lo había pedido Carlos el
+   11/09 y sigue sin hacerse.
+4. **Arreglar el texto del muro.** Si hay una empresa elegida, el aviso tiene que
+   hablar de la empresa, no de «todos los proyectos».
+
+### Ojo con dónde está cada cosa
+
+Diego lo vio en **producción** (`/crm/`), y ahí no está ni siquiera el ámbito por
+empresa de Prospectos y Clientes: eso entró en `staging` el 11/09 y producción
+sigue sin recibirlo. Así que en producción el problema es más ancho de lo que se
+ve en esa pantalla.
+
+*Sin asignar. Toca frontend (AppLayout y las dos pantallas) y backend
+(`proceso.model.js`), y encaja con lo de Fabián en el #103.*
