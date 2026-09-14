@@ -1007,3 +1007,59 @@ Contexto que ya teníamos: el módulo se desplegó en etapas 1 y 2 y **nunca se
 validó con datos reales**. Esto es esa validación, llegando tarde.
 
 *Sin asignar. Pendiente de revisar.*
+
+---
+
+## Los atajos de fecha: pedidos tres veces, hacerlos UNA
+
+Anotado el **14/09/2026**. Diego, otra vez: «aquí necesito opciones rápidas de
+hoy, ayer, esta semana, este mes, mes pasado».
+
+**Es la tercera vez que se pide la misma cosa:**
+
+| Cuándo | Dónde |
+|---|---|
+| 11/09 | la cola de facturación (lo pidió Carlos) |
+| 14/09 | Facturación |
+| 14/09 | otra vez, sin decir la pantalla |
+
+Que se repita tres veces en cuatro días no significa que haya tres tareas:
+significa que **falta en todas partes**. Hoy cada pantalla con rango de fechas
+tiene dos casillas `desde`/`hasta` y nada más — teclear dos fechas para ver «lo
+de ayer» es justo lo que nadie hace.
+
+### Qué hacer
+
+**Un solo componente**, y se coloca en todas las pantallas que ya tienen
+`desde`/`hasta`:
+
+- Hoy · Ayer · Esta semana · Este mes · Mes pasado
+- Rellena los dos campos que ya existen: **no hace falta tocar backend**, todos
+  esos listados ya filtran por rango.
+- Y que se vea cuál está puesto, para poder quitarlo.
+
+Dónde va, como mínimo: Facturación, la cola de facturación, Ventas, Ingresos,
+Comisiones y Reportes. Si se hace uno por pantalla acabarán siendo cinco atajos
+distintos con cinco comportamientos.
+
+*Sin asignar. Solo frontend. Es de las que más se nota por lo poco que cuesta.*
+
+---
+
+## Orden de Diego al equipo: nada nuevo hasta cerrar lo enviado
+
+Anotado el **14/09/2026**. En el grupo *Programación Proyectos Carlos* (Ángel,
+Carlos, Fabián):
+
+> «Máxima prioridad a todo esto que he enviado desde la semana pasada. **Hasta
+> que no se complete eso no avancéis con nada más.**»
+
+Se apunta aquí porque cambia qué es prioritario para los tres, y porque dentro
+de un mes nadie se acordará de por qué se pararon las demás ramas.
+
+«Todo esto» es lo que hay anotado en este documento con fecha **11 y 14 de
+septiembre**: los bugs de tutores, las dos lupas, los atajos de fecha, el
+proceso por empresa, Meta Ads y lo de facturación. Y para Ángel, además, sus
+seis de WhatsApp con Zadarma a la cabeza.
+
+**Nada de ramas nuevas ni de trabajo por fuera hasta cerrar esa lista.**
