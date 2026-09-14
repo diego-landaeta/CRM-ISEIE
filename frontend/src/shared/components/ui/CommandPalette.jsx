@@ -8,6 +8,8 @@ import {
   Wallet, Question, Power, Command,
 } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useProjectContext } from '@/contexts/ProjectContext';
+import client from '@/shared/api/client';
 
 const ITEMS = [
   // Navegación principal
@@ -65,6 +67,35 @@ export default function CommandPalette() {
 
   const role = user?.role || 'gestor';
 
+  /*
+    BUSCAR PERSONAS, no solo secciones.
+
+    Esta paleta solo sabia navegar entre pantallas, asi que con 17.694
+    prospectos y 558 clientes en la base no encontraba a NADIE. El CRM hermano
+    si los busca; esto es ponerse a la par.
+
+    `includeConverted` no se puede quitar: sin el, /leads añade
+    «status <> convertido» y la busqueda esconde justo a quien ya compro --a
+    quien mas se busca, para cobrar o facturar--. Es el fallo que Diego
+    encontro el 14/09 en el otro CRM.
+  */
+  const { activeProject } = useProjectContext() || {};
+  const projectId = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
+  const [personas, setPersonas] = useState([]);
+
+  useEffect(() => {
+    const texto = q.trim();
+    if (!open || !projectId || texto.length < 2) { setPersonas([]); return undefined; }
+    let vivo = true;
+    // Se espera a que pare de teclear: sin esto seria una peticion por letra.
+    const t = setTimeout(() => {
+      client.get(`/leads?projectId=${projectId}&search=${encodeURIComponent(texto)}&limit=5&includeConverted=1`)
+        .then((r) => { if (vivo) setPersonas(r?.success ? (r.data || []) : []); })
+        .catch(() => { if (vivo) setPersonas([]); });
+    }, 250);
+    return () => { vivo = false; clearTimeout(t); };
+  }, [q, open, projectId]);
+
   // Atajo global Ctrl+K / Cmd+K
   useEffect(() => {
     function onKey(e) {
@@ -95,8 +126,21 @@ export default function CommandPalette() {
     ]);
     if (!q.trim()) return items;
     const needle = normalize(q);
-    return items.filter((it) => normalize(it.label).includes(needle) || normalize(it.group).includes(needle));
-  }, [q, role]);
+    const secciones = items.filter((it) => normalize(it.label).includes(needle) || normalize(it.group).includes(needle));
+    // Las personas van DELANTE: quien escribe un nombre o un correo busca a
+    // alguien, no una pantalla.
+    const gente = personas.map((l) => ({
+      id: 'lead-' + l.id,
+      label: l.nombre || ('#' + l.id),
+      // Se dice si ya compro: un cliente y un prospecto vivo no son lo mismo ni
+      // se les escribe igual.
+      sublabel: (l.email || l.telefono || ('#' + l.id)) + (l.status === 'convertido' ? ' · cliente' : ''),
+      to: '/leads/' + l.id,
+      icon: Users,
+      group: 'Personas',
+    }));
+    return gente.concat(secciones);
+  }, [q, role, personas]);
 
   const grouped = useMemo(() => {
     const map = new Map();
@@ -199,7 +243,17 @@ export default function CommandPalette() {
                       }`}
                     >
                       <Icon size={16} weight={isActive ? 'duotone' : 'regular'} className="flex-shrink-0" />
-                      <span className="flex-1 truncate">{it.label}</span>
+                      <span className="flex-1 min-w-0 truncate">
+                        {it.label}
+                        {/* El correo o el telefono debajo: con 17.694 personas en
+                            la base, dos «Maria Garcia» son indistinguibles sin
+                            esto. Las secciones no lo llevan y no pasa nada. */}
+                        {it.sublabel && (
+                          <span className="block truncate text-[11px] font-normal text-muted-foreground">
+                            {it.sublabel}
+                          </span>
+                        )}
+                      </span>
                       {isActive && (
                         <kbd className="text-[9px] font-mono font-semibold px-1 py-0.5 rounded border border-primary/30 bg-primary/10">
                           ↵
