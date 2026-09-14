@@ -887,3 +887,50 @@ parecerá que el arreglo no funcionó.
 
 *Sin asignar. Es dato, no código — pero conviene hacerlo con la pantalla
 delante para ver si el aviso desaparece.*
+
+---
+
+## Tutores: una columna para saber qué ha entregado cada uno
+
+Anotado el **14/09/2026**. Diego, señalando el hueco entre ESTADO y Quitar en la
+tabla de formaciones del tutor:
+
+> «Aquí en los tutores necesito una columna que sea: Foto corporativa, Vídeo,
+> Foto y Vídeo, 25 % módulos, 50 % módulos, 100 % completo. **Esto que sea como
+> un checkbox para no consumir espacio en subir archivos.**»
+
+### Lo importante: no se suben archivos
+
+El CRM **no guarda** la foto ni el vídeo ni los módulos: solo **marca** si están
+entregados. Los archivos viven donde ya vivan —Drive, la plataforma, donde
+sea— y aquí se apunta el estado. Eso es lo que evita el almacenamiento, y es la
+condición que puso Diego.
+
+Va **por formación**, no por tutor: el recuadro está dentro de la tabla de
+formaciones, y la misma persona puede tener el Curso de ludopatía entregado y el
+Diplomado a medias.
+
+### Una pregunta antes de construirlo
+
+Los seis no parecen del mismo tipo:
+
+| | |
+|---|---|
+| Foto corporativa · Vídeo | dos marcas sueltas, se tienen o no |
+| **Foto y Vídeo** | si las dos de arriba son casillas, esta **sobra**: es las dos marcadas |
+| 25 % · 50 % · 100 % módulos | esto es **una escala**, no tres casillas: nadie está al 25 % y al 100 % a la vez |
+
+Lo más probable es que sean **dos casillas + un selector de avance**, y que «Foto
+y Vídeo» sea la forma de decirlo en corto. Pero eso hay que preguntárselo a
+Diego antes de hacerlo, porque cambia la columna entera y cambia cómo se filtra
+después.
+
+### Para qué sirve de verdad
+
+Con esto se puede contestar «¿qué tutores están a medias?» sin ir uno por uno, y
+enlaza con lo de **Sin tutor** y con avisar al tutor: un 100 % completo es lo que
+permite cerrar una formación, y un 25 % en septiembre explica por qué algo no
+está publicado.
+
+*Sin asignar. Migración (columnas en la asignación tutor–formación) + la columna
+en la pantalla.*
