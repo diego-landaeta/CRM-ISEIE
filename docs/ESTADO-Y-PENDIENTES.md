@@ -574,56 +574,51 @@ generarlo, `scratchpad/indice_tareas.py`.
 
 ---
 
-## El proceso comercial, por empresa y no solo por proyecto
+## El proceso comercial, por empresa y no solo por proyecto — HECHO
 
-Anotado el **14/09/2026**. Diego, con CEDIA elegida en producción:
+Anotado y resuelto el **14/09/2026**. Diego, con CEDIA elegida en producción:
 
 > «Estos procesos en empresas deben ser por empresa, no por proyecto, que tengan
 > filtros. Si tengo que seleccionar un proyecto, tiene que ser por proyecto y por
 > empresa; que al indicar eso, sea "selecciona una empresa".»
 
-### Qué pasa hoy
+### Qué pasaba
 
-Con **CEDIA (7 campus)** puesta en el selector, `/prospectos/proceso` no enseña
-nada: sale el muro de *«Selecciona un proyecto — tienes activa la vista Todos
-los proyectos»*. Con un proyecto suelto (ISEIH) la cola funciona: 22 atrasados,
-1 para hoy, 3 para mañana, 27 esta semana.
+Con **CEDIA (7 campus)** puesta, `/prospectos/proceso` y `/prospectos/cola` no
+enseñaban nada: salía el muro de *«Selecciona un proyecto»*. El módulo sabía
+mandar **un** `projectId` y nada más, aunque el servidor —`colaDelDia`— ya
+recibía una lista.
 
-Comprobado en el código, no supuesto:
+### Qué se hizo
+
+1. **Las dos rutas aceptan empresa** (`CON_SOCIEDAD_OK`).
+2. **La cola suma los campus de la empresa**: el controlador lee `projectIds` y
+   la pantalla le pasa `useProyectosDelAmbito()`. Comprobado contra la base de
+   producción: **107 personas** en la cola de CEDIA, repartidas en Psiko Aprende
+   59, ISEIH 21, Fono Aprende 15, ISAEG 10, ISECD 1, ISEF 1.
+3. **Filtro de campus dentro de la empresa**, al lado del de gestora, sin tocar
+   el selector de arriba. Acotado a ISEIH: 21.
+4. **Cada fila dice de qué campus es** (lo pidió Carlos el 11/09).
+5. **Los pasos** siguen siendo de un proyecto —cada campus lleva los suyos—,
+   pero ya no echan a nadie: se elige cuál **entre los de esa empresa**.
+6. **El aviso ya no miente**: con una empresa puesta nombra la empresa y pide
+   elegir campus, en vez de hablar de «Todos los proyectos».
+
+De paso salió un fallo vivo: `if (pProj)` era siempre cierto, así que abrir la
+cola **sin proyecto** llamaba a `null.map()` y devolvía un 500. Estaba arreglado
+en testeo desde el 11/09 y en producción no. Ya está en las dos.
+
+### Dónde está
 
 | | |
 |---|---|
-| `CON_SOCIEDAD_OK` (AppLayout) | **no** incluye `/prospectos/proceso` ni `/prospectos/cola` |
-| Módulo `proceso` (backend) | **cero** menciones a `issuer` o `sociedad`: solo entiende de `projectIds` |
+| MultiCRM | producción (`/crm/`) y testeo |
+| ISEIE | staging entero; en producción **solo el backend** |
 
-Y el aviso además **miente**: dice «tienes activa la vista Todos los proyectos»
-cuando lo que hay activo es una empresa. No es lo mismo, y por eso el texto no
-ayuda a salir del problema.
-
-### Qué habría que hacer
-
-1. **Las dos pantallas aceptan empresa.** Añadir `/prospectos/proceso` y
-   `/prospectos/cola` a `CON_SOCIEDAD_OK`. El backend ya recibe `projectIds`, así
-   que el ámbito se le pasa como la lista de campus — igual que hace Prospectos
-   desde el #103. No hace falta inventar un parámetro nuevo.
-2. **Filtro de proyecto dentro de la empresa.** Con CEDIA puesta, poder acotar a
-   uno de sus 7 campus sin cambiar el selector de arriba. Los dos ejes a la vez:
-   empresa y proyecto.
-3. **Que cada fila diga de qué proyecto es.** Con varios campus mezclados, una
-   cola sin esa columna no se puede repartir. Esto ya lo había pedido Carlos el
-   11/09 y sigue sin hacerse.
-4. **Arreglar el texto del muro.** Si hay una empresa elegida, el aviso tiene que
-   hablar de la empresa, no de «todos los proyectos».
-
-### Ojo con dónde está cada cosa
-
-Diego lo vio en **producción** (`/crm/`), y ahí no está ni siquiera el ámbito por
-empresa de Prospectos y Clientes: eso entró en `staging` el 11/09 y producción
-sigue sin recibirlo. Así que en producción el problema es más ancho de lo que se
-ve en esa pantalla.
-
-*Sin asignar. Toca frontend (AppLayout y las dos pantallas) y backend
-(`proceso.model.js`), y encaja con lo de Fabián en el #103.*
+En ISEIE no hay sociedades en el selector —un único proyecto—, así que el filtro
+de campus no llega a aparecer. Su frontend de producción es del **10/09**:
+mandarle el paquete de la rama arrastraría cuatro días de cosas que no son esto,
+así que se dejó fuera a propósito. Ver [[project-produccion-sin-main]].
 
 ---
 
