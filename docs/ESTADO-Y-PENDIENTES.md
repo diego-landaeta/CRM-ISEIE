@@ -655,7 +655,7 @@ los atajos, **un solo componente** para las tres pantallas.
 
 ---
 
-## Tutores: los estados de la comisión
+## Tutores: los estados de la comisión — HECHO
 
 Anotado el **14/09/2026**. Diego, señalando la columna ESTADO de
 `/tutores/comisiones`:
@@ -688,6 +688,16 @@ explica por qué no se le paga todavía.
 
 *Sin asignar. Migración + backend + la columna en la pantalla.*
 
+
+**Hecho el 14/09 en los dos CRM (testeo).** Migración 156: el CHECK pasa a
+aceptar `notificada` y `falta_factura`. La columna es un selector con los tres
+de seguimiento; *pagada* y *revertida* no salen en la lista porque mueven
+dinero y tienen su propia puerta, con su rastro.
+
+Y una trampa que habría pasado desapercibida: «Por pagar» sumaba solo
+`estado = 'pendiente'`, así que marcar una comisión como notificada la habría
+**borrado del total** y el mes habría parecido cuadrado sin estarlo. Ahora
+cuenta todo lo que no está pagado ni revertido.
 ---
 
 ## La lupa en Tutores y en Clientes
@@ -758,7 +768,7 @@ prospecto vivo.
 
 ---
 
-## Tutores: que se puedan editar, y que se vea
+## Tutores: que se puedan editar, y que se vea — HECHO
 
 Anotado el **14/09/2026**. Diego: «necesitamos algo visible para poder editar
 tutores».
@@ -782,9 +792,16 @@ llegar; el aviso dice el problema y no lleva a la solución.
 
 *Sin asignar. Frontend, y backend si no existe el endpoint de editar.*
 
+
+**Hecho el 14/09.** En MultiCRM el botón «Datos de pago» pasa a ser **Editar
+tutor**, con nombre y correo arriba —el nombre no se podía cambiar en ninguna
+pantalla—. En ISEIE ya existía «Editar datos», así que ahí iba por delante.
+
+La formación ya asignada se edita desde su fila: porcentaje y fechas, sin
+quitarla y rehacerla.
 ---
 
-## BUG · No deja asignar una formación al tutor
+## BUG · No deja asignar una formación al tutor — RESUELTO
 
 Anotado el **14/09/2026**. Diego: «no me deja asignar esta formación».
 
@@ -815,9 +832,14 @@ decirle qué pasa.
 
 *Sin asignar. Pendiente de revisar.*
 
+
+**Era la tercera opción de la lista.** El buscador excluye los cursos que el
+tutor ya tiene —incluidos los desactivados— y luego decía «ningún curso con
+ese nombre», que es mentira. Ahora dice el motivo: *«X» ya la tiene asignada;
+si sale como desactivada, reactívala desde su tabla*.
 ---
 
-## BUG · Una formación desactivada por error no se puede recuperar
+## BUG · Una formación desactivada por error no se puede recuperar — RESUELTO
 
 Anotado el **14/09/2026**. Diego: «no deja editar: está aquí y ha sido
 desactivada por error». Sin investigar, como los dos de arriba.
@@ -846,9 +868,13 @@ depende cuál de los tres es la causa y cuáles son consecuencia.
 
 *Sin asignar. Pendiente de revisar, junto con los otros dos de tutores.*
 
+
+**Hecho el 14/09.** La fila tiene **Reactivar** y **Desactivar** además de
+Quitar. Nada de borrar para arreglar: borrar se lleva el histórico de por qué
+se le pagó lo que se le pagó.
 ---
 
-## Los 133,33 € sin formación: Diego ya sabe cuál es
+## Los 133,33 € sin formación: Diego ya sabe cuál es — HECHO
 
 Anotado el **14/09/2026**. No es un fallo del CRM: es **el dato que faltaba**, y
 Diego lo ha dado.
@@ -883,9 +909,17 @@ parecerá que el arreglo no funcionó.
 *Sin asignar. Es dato, no código — pero conviene hacerlo con la pantalla
 delante para ver si el aviso desaparece.*
 
+
+**Aplicado en producción el 14/09.** La venta #177 tenía el nombre de la
+formación como texto libre y `producto_contratado_id` a `NULL`: por eso salía
+«sin formación». Atada a la **#5670** (1.100 €, igual que el importe).
+
+Alba ya la tutorizaba al 10 % desde el 01/08, así que no hubo que crear nada.
+Al recalcular salieron **dos** comisiones de 13,33 €: la de septiembre y la de
+agosto, que es el mismo caso. El aviso de septiembre queda en **0 €**.
 ---
 
-## Tutores: una columna para saber qué ha entregado cada uno
+## Tutores: una columna para saber qué ha entregado cada uno — HECHO
 
 Anotado el **14/09/2026**. Diego, señalando el hueco entre ESTADO y Quitar en la
 tabla de formaciones del tutor:
@@ -932,9 +966,19 @@ está publicado.
 *Sin asignar. Migración (columnas en la asignación tutor–formación) + la columna
 en la pantalla.*
 
+
+**Hecho el 14/09.** Migración 157: `entrego_foto`, `entrego_video` y
+`modulos_pct` en la colaboración —van ahí y no en el tutor porque los módulos
+son de una formación concreta—.
+
+La pregunta que estaba abierta se resolvió así: **foto y vídeo son dos
+casillas** («Foto y Vídeo» es las dos marcadas, no una tercera opción) y
+**25/50/100 se pintan como casillas pero son un solo valor**, porque nadie
+está al 25 y al 50 a la vez; pulsar la que ya está puesta la quita. Si lo
+prefieres de otra forma, se cambia en un sitio.
 ---
 
-## Comisiones: «Estado de la colaboración» en la fila del cobro
+## Comisiones: «Estado de la colaboración» en la fila del cobro — HECHO
 
 Anotado el **14/09/2026**. Diego, señalando el hueco entre FORMACIÓN y BASE, al
 desplegar un tutor en `/tutores/comisiones`:
@@ -966,6 +1010,9 @@ para saber qué ha entregado cada uno»*.
 
 *Sin asignar. Va con la anterior, no por separado.*
 
+
+**Hecho el 14/09.** La misma marca, leída en la fila del cobro —que es donde
+se pulsa «Marcar pagado»—, sin tener que salirse a `/tutores` a comprobarlo.
 ---
 
 ## BUG · Meta Ads: revisado el 14/09, y son tres cosas distintas
@@ -1051,7 +1098,7 @@ fila no se ha usado nunca. Ver [[project-meta-sin-asociar-productos]].
 *Revisado. Falta decidir qué se hace; el 1 y el 2 son de aquí.*
 
 ---
-## Los atajos de fecha: pedidos tres veces, hacerlos UNA
+## Los atajos de fecha: pedidos tres veces, hacerlos UNA — HECHO
 
 Anotado el **14/09/2026**. Diego, otra vez: «aquí necesito opciones rápidas de
 hoy, ayer, esta semana, este mes, mes pasado».
@@ -1085,6 +1132,10 @@ distintos con cinco comportamientos.
 
 *Sin asignar. Solo frontend. Es de las que más se nota por lo poco que cuesta.*
 
+
+**Hecho el 14/09.** El mismo componente que en Facturación, ahora también en
+**Análisis de ventas, Ingresos y Reportes**. Comisiones no lo lleva: va por
+mes, y un selector de mes ya es el control correcto.
 ---
 
 ## Orden de Diego al equipo: nada nuevo hasta cerrar lo enviado
@@ -1107,7 +1158,7 @@ seis de WhatsApp con Zadarma a la cabeza.
 
 ---
 
-## Comisiones: el cálculo que el tutor tiene que facturar
+## Comisiones: el cálculo que el tutor tiene que facturar — HECHO
 
 Anotado el **14/09/2026**. Diego, señalando el hueco bajo las filas de cobros de
 cada tutor en `/tutores/comisiones`:
@@ -1157,6 +1208,10 @@ mandarlo.
 *Sin asignar. Es frontend puro: el dato ya está, solo hay que hacer las tres
 cuentas y pintarlas.*
 
+
+**Hecho el 14/09.** Debajo de las comisiones de cada tutor, con el total del
+mes como base y el redondeo línea a línea. Con 17,82 € da 18,89 €, como en tu
+ejemplo. Debajo, los dos puntos del texto tal cual.
 ---
 
 ## «Avisar tutor» · TAREA PARA ÁNGEL Y DIEGO
