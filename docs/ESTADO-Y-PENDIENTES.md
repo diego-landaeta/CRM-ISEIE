@@ -1115,3 +1115,71 @@ mandarlo.
 
 *Sin asignar. Es frontend puro: el dato ya está, solo hay que hacer las tres
 cuentas y pintarlas.*
+
+---
+
+## «Avisar tutor» · TAREA PARA ÁNGEL Y DIEGO
+
+Anotado el **14/09/2026**. Diego, con la especificación completa:
+
+> «En el apartado de comisiones necesito un apartado que sea "Avisar tutor", que
+> envíe un correo desde **facturacion@cediaidsl.com**. El punto es que yo de un
+> clic pueda avisar y cambie el status a **"avisado"**. La plantilla por definir
+> — **es decir que sea editable**.»
+
+### La plantilla que dio (borrador suyo, a afinar)
+
+```
+Hola NOMBRE,
+
+Durante el mes MES has generado un total de X €, de las formaciones:
+- FORMACIÓN 1
+- FORMACIÓN 2
+- ...
+
+Contesta a este mismo email con tu factura +IVA −Retención y con los datos:
+DATOS CEDIA
+
+Envía tu IBAN.
+
+Muchas gracias
+```
+
+Los huecos salen solos de lo que ya hay: nombre y correo del tutor, el mes
+elegido arriba, el total del mes y **la lista de sus formaciones de ese mes** —
+son las mismas filas que se ven al desplegarlo.
+
+### Cinco cosas que no se pueden pasar por alto
+
+1. **El remitente es nuevo.** `facturacion@cediaidsl.com` no es ninguno de los
+   que hay verificados en Brevo. **Hay que darlo de alta y verificarlo antes**, o
+   los correos no saldrán y no se sabrá por qué. Esto se comprueba el primer día,
+   no el último.
+
+2. **«Avisado» y «Notificada» son el mismo estado.** En la nota de los estados
+   Diego pidió *Pendiente · Notificada · Falta Factura*, y aquí lo llama
+   *avisado*. **Hay que elegir una palabra y usarla en los dos sitios**, o
+   acabarán siendo dos estados que significan lo mismo.
+
+3. **El correo tiene que llevar la cuenta hecha**, la de la otra nota: comisión
+   + IVA 21 % − retención 15 % = total. Decirle «mándame tu factura +IVA
+   −Retención» sin darle el número es justo lo que provoca las facturas mal
+   hechas que hay que devolver.
+
+4. **El IBAN no es un detalle.** Casi todos los tutores salen con *«sin IBAN · no
+   se le puede pagar»*. Por eso el correo lo pide — y por eso, cuando el tutor
+   conteste, tiene que haber dónde meterlo sin pelearse con la ficha.
+
+5. **Esto no reabre lo de mandar facturas a clientes.** Diego dijo «no enviemos
+   NADA por correo» y sigue en pie; esto es **otra cosa y la pide él
+   expresamente**: un correo interno a un colaborador, no una factura a un
+   alumno.
+
+### Editable quiere decir editable
+
+No vale con dejar el texto en el código. Tiene que poder cambiarse desde el CRM
+—como las plantillas de WhatsApp— porque «la plantilla por definir» significa
+que va a cambiar varias veces antes de quedarse quieta.
+
+*Asignada a **Ángel y Diego**. Backend (Brevo + el estado) y frontend (el botón,
+la vista previa y el editor de la plantilla).*
