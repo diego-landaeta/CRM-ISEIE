@@ -40,13 +40,23 @@ function calcular(clave: string): Rango {
     return { from: iso(a), to: iso(a) };
   }
 
-  if (clave === 'semana') {
-    // La semana empieza en LUNES: en España nadie cuenta de domingo a sabado,
-    // y getDay() devuelve 0 para el domingo, de ahi el ajuste.
-    const desde = new Date(hoy);
-    const dia = desde.getDay();
-    desde.setDate(desde.getDate() - (dia === 0 ? 6 : dia - 1));
-    return { from: iso(desde), to: iso(hoy) };
+  // El lunes de esta semana. La semana empieza en LUNES: en España nadie
+  // cuenta de domingo a sabado, y getDay() devuelve 0 para el domingo, de ahi
+  // el ajuste.
+  const lunes = new Date(hoy);
+  lunes.setDate(lunes.getDate() - (lunes.getDay() === 0 ? 6 : lunes.getDay() - 1));
+
+  if (clave === 'semana') return { from: iso(lunes), to: iso(hoy) };
+
+  if (clave === 'semana_pasada') {
+    // Diego: «semana pasada, que es LA SEMANA PASADA, no los 7 dias desde hoy».
+    // Es una semana CERRADA, de lunes a domingo, igual que «mes pasado» es un
+    // mes cerrado. Contar siete dias hacia atras mezclaria media semana de
+    // esta con media de la otra, y entonces el numero no es comparable con
+    // nada: ni con esta semana, ni con la misma semana del mes que viene.
+    const lunesPasado = new Date(lunes); lunesPasado.setDate(lunesPasado.getDate() - 7);
+    const domingoPasado = new Date(lunes); domingoPasado.setDate(domingoPasado.getDate() - 1);
+    return { from: iso(lunesPasado), to: iso(domingoPasado) };
   }
 
   if (clave === 'mes') {
@@ -64,6 +74,7 @@ const ATAJOS: { clave: string; texto: string }[] = [
   { clave: 'hoy', texto: 'Hoy' },
   { clave: 'ayer', texto: 'Ayer' },
   { clave: 'semana', texto: 'Esta semana' },
+  { clave: 'semana_pasada', texto: 'Semana pasada' },
   { clave: 'mes', texto: 'Este mes' },
   { clave: 'pasado', texto: 'Mes pasado' },
 ];
