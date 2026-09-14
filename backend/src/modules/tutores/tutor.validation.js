@@ -84,6 +84,10 @@ export const calcularSchema = z.object({
   desde: fecha.optional().nullable(),
   hasta: fecha.optional().nullable(),
   projectId: z.number().int().optional().nullable(),
+  // Calcular con una EMPRESA elegida: sus campus de una vez, sin entrar uno a
+  // uno. Diego, 14/09: «tenemos que tambien sea generar y poder filtrar por
+  // campus».
+  projectIds: z.array(z.number().int()).optional().nullable(),
 });
 
 export const liquidarSchema = z.object({

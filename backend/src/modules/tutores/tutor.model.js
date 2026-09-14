@@ -376,7 +376,7 @@ export async function formacionEsDeSuProyecto(tutorId, productId) {
 // Una comision ya creada NO se toca aunque despues cambie el porcentaje de la
 // colaboracion: lo devengado, devengado esta. Para rehacerla hay que revertirla
 // a mano, y eso deja rastro.
-export async function reconciliar({ desde = null, hasta = null, projectId = null } = {}) {
+export async function reconciliar({ desde = null, hasta = null, projectId = null, projectIds = null } = {}) {
   const { rows } = await query(
     `INSERT INTO tutor_commissions
        (payment_id, tutor_id, collaboration_id, product_id, base_calculo, pct, importe, periodo)
@@ -397,10 +397,14 @@ export async function reconciliar({ desde = null, hasta = null, projectId = null
         AND (c.vigente_hasta IS NULL OR cp.fecha <= c.vigente_hasta)
         AND ($1::date IS NULL OR cp.fecha >= $1::date)
         AND ($2::date IS NULL OR cp.fecha <= $2::date)
-        AND ($3::int  IS NULL OR p.project_id = $3)
+        -- Con una empresa elegida se calcula de todos sus campus de una vez,
+        -- que es lo que se pide al pulsar «Calcular» con CEDIA puesta.
+        AND ($4::int[] IS NOT NULL AND p.project_id = ANY($4::int[])
+             OR $4::int[] IS NULL AND ($3::int IS NULL OR p.project_id = $3))
      ON CONFLICT (payment_id, tutor_id) DO NOTHING
      RETURNING id, importe, tutor_id, periodo`,
-    [desde, hasta, projectId]
+    [desde, hasta, projectId,
+     (Array.isArray(projectIds) && projectIds.length) ? projectIds.map(Number) : null]
   );
 
   return {
@@ -445,7 +449,7 @@ export async function comisiones({ periodo = null, tutorId = null, estado = null
 }
 
 // Una fila por tutor y mes: lo que hay que pagarle y lo que ya se le pago.
-export async function resumenComisiones({ periodo = null, tutorId = null, projectId = null }) {
+export async function resumenComisiones({ periodo = null, tutorId = null, projectId = null, projectIds = null }) {
   const { rows } = await query(
     `SELECT tc.periodo, tc.tutor_id, u.nombre AS tutor,
             u.email AS tutor_email, perfil.iban AS tutor_iban,
@@ -466,10 +470,13 @@ export async function resumenComisiones({ periodo = null, tutorId = null, projec
        LEFT JOIN products p ON p.id = tc.product_id
       WHERE ($1::char(7) IS NULL OR tc.periodo = $1)
         AND ($2::int IS NULL OR tc.tutor_id = $2)
-        AND ($3::int IS NULL OR p.project_id = $3)
+        -- Una empresa manda sobre el proyecto: son sus campus, no «todos».
+        AND ($4::int[] IS NOT NULL AND p.project_id = ANY($4::int[])
+             OR $4::int[] IS NULL AND ($3::int IS NULL OR p.project_id = $3))
       GROUP BY tc.periodo, tc.tutor_id, u.nombre, u.email, perfil.iban
       ORDER BY tc.periodo DESC, u.nombre`,
-    [periodo, tutorId, projectId]
+    [periodo, tutorId, projectId,
+     (Array.isArray(projectIds) && projectIds.length) ? projectIds.map(Number) : null]
   );
   return rows;
 }
@@ -539,7 +546,7 @@ export async function revertirComision(id, { userId, motivo }) {
 //
 // Salen a la vista a proposito: si desaparecieran, el total del mes pareceria
 // cuadrado cuando en realidad hay dinero sin atribuir y un tutor sin cobrar.
-export async function pagosSinFormacion({ desde, hasta, projectId = null }) {
+export async function pagosSinFormacion({ desde, hasta, projectId = null, projectIds = null }) {
   const { rows } = await query(
     `SELECT cp.id, cp.fecha, cp.importe,
             cv.id AS venta, COALESCE(l.nombre, '—') AS alumno,
@@ -553,9 +560,11 @@ export async function pagosSinFormacion({ desde, hasta, projectId = null }) {
       WHERE cv.producto_contratado_id IS NULL
         AND cp.fecha >= GREATEST($1::date, s.aplica_desde)
         AND cp.fecha <= $2::date
-        AND ($3::int IS NULL OR cv.project_id = $3)
+        AND ($4::int[] IS NOT NULL AND cv.project_id = ANY($4::int[])
+             OR $4::int[] IS NULL AND ($3::int IS NULL OR cv.project_id = $3))
       ORDER BY cp.fecha DESC, cp.importe DESC`,
-    [desde, hasta, projectId]
+    [desde, hasta, projectId,
+     (Array.isArray(projectIds) && projectIds.length) ? projectIds.map(Number) : null]
   );
   return rows;
 }

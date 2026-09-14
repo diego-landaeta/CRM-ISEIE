@@ -574,6 +574,37 @@ generarlo, `scratchpad/indice_tareas.py`.
 
 ---
 
+## La cola del día necesita filtros de verdad
+
+Anotado el **14/09/2026**. Diego, con CEDIA puesta y **101 atrasados** delante:
+«poner mejores filtros en este apartado».
+
+Lo que hay hoy, y nada más: **campus**, **gestora** y los cuatro contadores de
+arriba (atrasados / hoy / mañana / esta semana), que hacen de filtro de fecha.
+Con 129 personas en la semana y 101 arrastradas, eso no alcanza para repartir el
+día: todo lo que se ve en la captura —paso, formación, canal, cuánto lleva
+esperando— está en la fila y **no se puede filtrar por ello**.
+
+Lo que pediría la pantalla, por orden de lo que más se nota:
+
+| Filtro | Por qué |
+|---|---|
+| **Cuánto lleva atrasado** | «más de 30 días» es otra conversación que «de ayer». En la captura hay gente de hace 33 días mezclada con la de hoy |
+| **Formación / producto** | el dato ya viaja en la fila; los del mismo curso llevan el mismo mensaje |
+| **Paso** | existe como botonera («Por paso») pero no se combina bien con lo demás |
+| **Canal** | quien va a hacer llamadas quiere solo las de llamada |
+| **Buscar por nombre** | para volver a alguien concreto sin bajar 129 filas |
+| **Ordenar** | hoy es fecha y paso, fijo. Debería poder ser por antigüedad o por formación |
+
+Y una decisión de fondo: **con 101 atrasados el problema no es solo filtrar**.
+Conviene decidir qué se hace con lo que lleva más de un mes sin tocar —cerrarlo,
+aparcarlo o repartirlo—, porque un filtro más bonito sobre una cola que nadie
+puede vaciar sigue siendo una cola que nadie puede vaciar.
+
+*Sin asignar. Solo frontend: el servidor ya devuelve todos esos campos.*
+
+---
+
 ## El proceso comercial, por empresa y no solo por proyecto — HECHO
 
 Anotado y resuelto el **14/09/2026**. Diego, con CEDIA elegida en producción:

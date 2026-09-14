@@ -8,6 +8,8 @@ import KpiCard from '@/shared/components/ui/KpiCard';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { Button } from '@/shared/components/ui/button';
 import Entregables from '../components/Entregables';
+import LoQueFactura from '../components/LoQueFactura';
+import { useProyectosDelAmbito } from '@/shared/hooks/useAmbito';
 import {
   tutoresApi,
   type ComisionReal, type ResumenComision, type AjustesTutores, type PagoSinFormacion,
@@ -36,26 +38,6 @@ const ETIQUETA_ESTADO: Record<string, string> = {
   revertida: 'Revertida',
 };
 
-/*
-  Lo que el tutor tiene que facturar.
-
-  Diego, 14/09: «necesito el cálculo que el profesional me tiene que enviar, que
-  sería la cantidad de 17,82 € + 21 % de 17,82 € (3,74 €) − retención del 15 %
-  (2,67 €) = 18,89 €».
-
-  Se redondea CADA LINEA a dos decimales, no el resultado: con 17,82 el IVA es
-  3,7422 y la retencion 2,673, y redondear al final da un centimo distinto del
-  que el tutor va a escribir en su factura.
-*/
-const IVA = 0.21;
-const IRPF = 0.15;
-const dos = (n: number) => Math.round(n * 100) / 100;
-
-function loQueFactura(base: number) {
-  const iva = dos(base * IVA);
-  const retencion = dos(base * IRPF);
-  return { base: dos(base), iva, retencion, total: dos(dos(base) + iva - retencion) };
-}
 
 function mesActual() {
   const h = new Date();
@@ -71,10 +53,22 @@ function mesLegible(p: string) {
 
 export default function ComisionesTutoresPage() {
   const { user } = useAuth() as { user: { role?: string; gestor_colaboraciones?: boolean } | null };
-  const { activeProject } = useProjectContext() as { activeProject: { id: number; nombre?: string } | null };
+  const { activeProject, activeIssuer, activeIssuerId } = useProjectContext() as {
+    activeProject: { id: number; nombre?: string } | null;
+    activeIssuer: { id?: number; nombre?: string } | null;
+    activeIssuerId: number | null;
+  };
+  // Los campus de la empresa elegida. Aqui no hay sociedades en el selector
+  // --un solo proyecto--, asi que no llega a aparecer; va igual para que los dos
+  // CRM lleven el mismo codigo.
+  const campus = useProyectosDelAmbito<{ id: number; nombre: string }>();
+  const [soloCampus, setSoloCampus] = useState<number | null>(null);
+  useEffect(() => { setSoloCampus(null); }, [activeIssuerId, activeProject?.id]);
   const esAdmin = ['admin', 'superadmin'].includes(user?.role || '');
   const puede = esAdmin || user?.gestor_colaboraciones === true;
-  const projectId = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
+  const elegido = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
+  const projectId = elegido ?? soloCampus;
+  const issuerId = !projectId ? activeIssuerId : null;
 
   const [periodo, setPeriodo] = useState(mesActual());
   const [resumen, setResumen] = useState<ResumenComision[]>([]);
@@ -92,17 +86,17 @@ export default function ComisionesTutoresPage() {
       const finDeMes = new Date(Number(periodo.slice(0, 4)), Number(periodo.slice(5, 7)), 0)
         .toISOString().slice(0, 10);
       const [r, l, a, sf] = await Promise.all([
-        tutoresApi.resumenComisiones({ periodo, projectId }),
-        tutoresApi.comisiones({ periodo, projectId }),
+        tutoresApi.resumenComisiones({ periodo, projectId, issuerId }),
+        tutoresApi.comisiones({ periodo, projectId, issuerId }),
         tutoresApi.ajustes(),
-        tutoresApi.pagosSinFormacion(`${periodo}-01`, finDeMes, projectId),
+        tutoresApi.pagosSinFormacion(`${periodo}-01`, finDeMes, projectId, issuerId),
       ]);
       setResumen(r.success ? (r.data || []) : []);
       setLineas(l.success ? (l.data || []) : []);
       setAjustes(a.success ? a.data : null);
       setSinFormacion(sf.success ? (sf.data || []) : []);
     } finally { setCargando(false); }
-  }, [periodo, projectId]);
+  }, [periodo, projectId, issuerId]);
 
   useEffect(() => { if (puede) cargar(); }, [cargar, puede]);
 
@@ -118,7 +112,10 @@ export default function ComisionesTutoresPage() {
     try {
       const finDeMes = new Date(Number(periodo.slice(0, 4)), Number(periodo.slice(5, 7)), 0)
         .toISOString().slice(0, 10);
-      const r = await tutoresApi.calcularComisiones({ desde: `${periodo}-01`, hasta: finDeMes, projectId });
+      const r = await tutoresApi.calcularComisiones({
+        desde: `${periodo}-01`, hasta: finDeMes, projectId,
+        projectIds: !projectId && activeIssuerId ? campus.map((c) => c.id) : null,
+      });
       if (!r.success) throw new Error(r.error || 'no se pudo');
       toast({
         title: r.data!.creadas > 0 ? `${r.data!.creadas} comisiones nuevas` : 'Nada nuevo que calcular',
@@ -197,10 +194,22 @@ export default function ComisionesTutoresPage() {
       <PageHeader
         title="Comisiones de tutores"
         subtitle={projectId
-          ? `${mesLegible(periodo)} · ${activeProject?.nombre || 'este proyecto'}`
+          ? `${mesLegible(periodo)} · ${elegido ? (activeProject?.nombre || 'este proyecto') : (campus.find((c) => c.id === projectId)?.nombre || 'este campus')}`
+          : activeIssuer
+          ? `${mesLegible(periodo)} · los ${campus.length} campus de ${activeIssuer.nombre}`
           : `${mesLegible(periodo)} · todos los proyectos`}
         actions={(
           <>
+            {activeIssuer && !elegido && campus.length > 1 && (
+              <select
+                value={soloCampus ?? ''}
+                onChange={(e) => setSoloCampus(e.target.value ? Number(e.target.value) : null)}
+                aria-label="Filtrar por campus"
+                className="h-9 px-2 rounded-md border border-border bg-card text-sm">
+                <option value="">Todos los campus</option>
+                {campus.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+              </select>
+            )}
             <input type="month" value={periodo} onChange={(e) => setPeriodo(e.target.value)}
               className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
             <Button variant="outline" size="sm" onClick={calcular} disabled={trabajando}>
@@ -402,49 +411,14 @@ export default function ComisionesTutoresPage() {
                         </tbody>
                       </table>
 
-                      {/* Lo que el profesional tiene que facturar. Va debajo de
-                          sus filas y no en un informe aparte: es la cuenta que
-                          hay que mandarle, y el total del mes --no una linea--
-                          es la base. Diego, 14/09. */}
-                      {(() => {
-                        const porFacturar = suyas
+                      {/* Lo que el profesional tiene que facturar. El mismo
+                          cuadro lo ve el tutor en «Mis cursos». */}
+                      <LoQueFactura
+                        className="mt-3"
+                        base={suyas
                           .filter((x) => x.estado !== 'revertida' && x.estado !== 'pagada')
-                          .reduce((a, x) => a + Number(x.importe), 0);
-                        if (porFacturar <= 0) return null;
-                        const f = loQueFactura(porFacturar);
-                        return (
-                          <div className="mt-3 rounded-md border border-border bg-muted/30 p-3">
-                            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2">
-                              Lo que tiene que facturar
-                            </p>
-                            <dl className="space-y-1 text-xs max-w-xs">
-                              <div className="flex justify-between gap-4">
-                                <dt className="text-muted-foreground">Comisión</dt>
-                                <dd className="tabular-nums font-semibold">{euros(f.base)}</dd>
-                              </div>
-                              <div className="flex justify-between gap-4">
-                                <dt className="text-muted-foreground">+ IVA (21 %)</dt>
-                                <dd className="tabular-nums">{euros(f.iva)}</dd>
-                              </div>
-                              <div className="flex justify-between gap-4">
-                                <dt className="text-muted-foreground">− retención IRPF (15 %)</dt>
-                                <dd className="tabular-nums">−{euros(f.retencion)}</dd>
-                              </div>
-                              <div className="flex justify-between gap-4 border-t border-border pt-1 mt-1">
-                                <dt className="font-semibold">Total a facturar</dt>
-                                <dd className="tabular-nums font-bold text-sm">{euros(f.total)}</dd>
-                              </div>
-                            </dl>
-                            <ul className="mt-2 space-y-0.5 text-[11px] text-muted-foreground">
-                              <li>— Comisión sujeta a IVA (21 %).</li>
-                              <li>
-                                — Retención de IRPF orientativa: cada profesional aplica la suya;
-                                el 15 % es la más común.
-                              </li>
-                            </ul>
-                          </div>
-                        );
-                      })()}
+                          .reduce((a, x) => a + Number(x.importe), 0)}
+                      />
                     </div>
                   )}
                 </div>

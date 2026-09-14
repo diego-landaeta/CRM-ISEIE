@@ -6,6 +6,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import KpiCard from '@/shared/components/ui/KpiCard';
+import LoQueFactura from '../components/LoQueFactura';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import {
   tutoresApi, type Colaboracion, type ResumenComision, type ComisionReal, type CursoFicha,
@@ -136,7 +137,12 @@ export default function MisCursosPage() {
     return m;
   }, [comisiones]);
 
-  const pendiente = comisiones.filter((c) => c.estado === 'pendiente').reduce((s, c) => s + Number(c.importe), 0);
+  // Todo lo que no esta pagado ni devuelto. Filtrar por 'pendiente' a secas
+  // hacia que, en cuanto se le marcaba como «notificada», el dinero
+  // desapareciera de SU pantalla --que es el peor sitio donde puede pasar eso--.
+  const pendiente = comisiones
+    .filter((c) => c.estado !== 'pagada' && c.estado !== 'revertida')
+    .reduce((s, c) => s + Number(c.importe), 0);
   const pagado = comisiones.filter((c) => c.estado === 'pagada').reduce((s, c) => s + Number(c.importe), 0);
   const base = comisiones.filter((c) => c.estado !== 'revertida').reduce((s, c) => s + Number(c.base_calculo), 0);
 
@@ -204,6 +210,11 @@ export default function MisCursosPage() {
         <KpiCard icon={TrendUp} iconBg="bg-sky-100 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300"
           label="Total acumulado" value={euros(totalHistorico)} />
       </div>
+
+      {/* La cuenta que tiene que hacer para facturar. Estaba solo en la pantalla
+          de quien paga, que es justo quien no la necesita. Diego, 14/09: «el
+          tutor debe ver ese cuadro de él y sus recaudos». */}
+      <LoQueFactura base={pendiente} titulo="Lo que tienes que facturar" />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         <div className="bg-card border border-border rounded-lg p-4">

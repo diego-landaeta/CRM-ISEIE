@@ -263,6 +263,7 @@ export async function calcular(req, res, next) {
       desde: d.desde || null,
       hasta: d.hasta || null,
       projectId: d.projectId || null,
+      projectIds: (d.projectIds && d.projectIds.length) ? d.projectIds : null,
     });
     res.json({ success: true, data: r });
   } catch (err) { next(err); }
@@ -311,7 +312,9 @@ export async function resumenComisiones(req, res, next) {
     res.json({ success: true, data: await model.resumenComisiones({
       periodo: /^\d{4}-\d{2}$/.test(req.query.periodo || '') ? req.query.periodo : null,
       tutorId: esTutor ? req.user.userId : (req.query.tutorId ? parseInt(req.query.tutorId) : null),
-      projectId: esTutor ? null : (req.query.projectId ? parseInt(req.query.projectId) : null),
+      // Con una EMPRESA elegida son SUS campus, no «todos». Diego, 14/09:
+      // «puse empresa y tuve que entrar a un campus si o si».
+      ...(esTutor ? { projectId: null, projectIds: null } : await proyectosDelAmbito(req)),
     })});
   } catch (err) { next(err); }
 }
@@ -408,7 +411,7 @@ export async function pagosSinFormacion(req, res, next) {
     res.json({ success: true, data: await model.pagosSinFormacion({
       desde: /^\d{4}-\d{2}-\d{2}$/.test(req.query.desde || '') ? req.query.desde : hoy.slice(0, 8) + '01',
       hasta: /^\d{4}-\d{2}-\d{2}$/.test(req.query.hasta || '') ? req.query.hasta : hoy,
-      projectId: req.query.projectId ? parseInt(req.query.projectId) : null,
+      ...(await proyectosDelAmbito(req)),
     })});
   } catch (err) { next(err); }
 }
