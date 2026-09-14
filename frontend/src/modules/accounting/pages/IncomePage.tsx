@@ -1,4 +1,5 @@
 import { useEffect, useState, lazy, Suspense } from 'react';
+import RangoRapido from '@/shared/components/ui/RangoRapido';
 import { useNavigate } from 'react-router-dom';
 import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
@@ -317,6 +318,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
               </select>
             </>
           )}
+          <RangoRapido valor={rango} alElegir={(r) => setRango(r)} />
           <label className="text-xs font-semibold text-muted-foreground">Desde:</label>
           <input type="date" value={rango.from} onChange={(e) => setRango((v) => ({ ...v, from: e.target.value }))}
             className="h-9 px-2 rounded-md border border-border bg-card text-sm" />

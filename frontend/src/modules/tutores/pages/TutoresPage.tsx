@@ -8,6 +8,7 @@ import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { Button } from '@/shared/components/ui/button';
 import BuscadorCurso from '../components/BuscadorCurso';
+import Entregables from '../components/Entregables';
 import { tutoresApi, type Tutor, type Colaboracion, type AjustesTutores } from '../api/tutores.api';
 
 // Tutores y sus colaboraciones.
@@ -108,6 +109,10 @@ export default function TutoresPage() {
   const [claveNueva, setClaveNueva] = useState('');
   const [claveCopiada, setClaveCopiada] = useState(false);
   const [popupRetiro, setPopupRetiro] = useState(false);
+  // La formacion que se esta editando. Hasta hoy la unica accion de la fila era
+  // «Quitar»: un 10 % mal puesto solo se arreglaba borrando la asignacion, y eso
+  // se lleva por delante el historico de por que se le pago lo que se le pago.
+  const [editColab, setEditColab] = useState<Colaboracion | null>(null);
   const [procesando, setProcesando] = useState(false);
 
   const cargar = useCallback(async () => {
@@ -397,6 +402,80 @@ export default function TutoresPage() {
     } finally { setGuardando(false); }
   }
 
+  /** Marcar lo que ha entregado de una formacion. Se guarda al pulsar: pedir
+   *  confirmacion para una casilla sobra. */
+  async function marcarEntregado(
+    c: Colaboracion,
+    cambio: { entregoFoto?: boolean; entregoVideo?: boolean; modulosPct?: number },
+  ) {
+    const antes = colabs;
+    setColabs((xs) => xs.map((x) => (x.id === c.id ? {
+      ...x,
+      entrego_foto: cambio.entregoFoto ?? x.entrego_foto,
+      entrego_video: cambio.entregoVideo ?? x.entrego_video,
+      modulos_pct: cambio.modulosPct ?? x.modulos_pct,
+    } : x)));
+    try {
+      const r = await tutoresApi.editarColaboracion(c.id, cambio);
+      if (!r?.success) throw new Error('no');
+    } catch (err) {
+      setColabs(antes);
+      toast({
+        title: 'No se ha podido marcar',
+        description: (err as { message?: string })?.message || 'Vuelve a intentarlo.',
+        variant: 'destructive',
+      });
+    }
+  }
+
+  /** Volver a activar una formacion desactivada, o desactivarla sin borrarla. */
+  async function alternarColab(c: Colaboracion) {
+    setProcesando(true);
+    try {
+      const r = await tutoresApi.editarColaboracion(c.id, { activa: !c.activa });
+      if (!r?.success) throw new Error('no');
+      toast({
+        title: c.activa ? 'Formación desactivada' : 'Formación reactivada',
+        description: c.activa
+          ? 'Deja de generar comisión nueva. Lo ya generado se queda.'
+          : 'Vuelve a generar comisión desde su fecha de inicio.',
+      });
+      if (elegido) { cargarColabs(elegido); cargar(); }
+    } catch (err) {
+      toast({
+        title: 'No se ha podido cambiar',
+        description: (err as { message?: string })?.message || 'Vuelve a intentarlo.',
+        variant: 'destructive',
+      });
+    } finally { setProcesando(false); }
+  }
+
+  /** El porcentaje y las fechas, sin quitar y rehacer. */
+  async function guardarEdicionColab(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!editColab) return;
+    const f = new FormData(e.currentTarget);
+    const hasta = String(f.get('hasta') || '').trim();
+    setProcesando(true);
+    try {
+      const r = await tutoresApi.editarColaboracion(editColab.id, {
+        pct: Number(f.get('pct')),
+        desde: String(f.get('desde') || ''),
+        hasta: hasta || null,
+      });
+      if (!r?.success) throw new Error('no');
+      toast({ title: 'Formación actualizada' });
+      setEditColab(null);
+      if (elegido) { cargarColabs(elegido); cargar(); }
+    } catch (err) {
+      toast({
+        title: 'No se ha podido guardar',
+        description: (err as { message?: string })?.message || 'Revisa las fechas: no pueden solaparse con otra del mismo curso.',
+        variant: 'destructive',
+      });
+    } finally { setProcesando(false); }
+  }
+
   async function quitar(c: Colaboracion) {
     // Dos toques: el primero avisa, el segundo hace. Sin dialogo aparte, que
     // los dos CRM tienen componentes distintos para eso.
@@ -553,6 +632,7 @@ export default function TutoresPage() {
                         <th className="py-2 px-3 font-semibold">Desde</th>
                         <th className="py-2 px-3 font-semibold">Hasta</th>
                         <th className="py-2 px-3 font-semibold">Estado</th>
+                        <th className="py-2 px-3 font-semibold">Entregado</th>
                         <th className="py-2 pl-3" />
                       </tr>
                     </thead>
@@ -577,14 +657,39 @@ export default function TutoresPage() {
                               </span>
                             )}
                           </td>
+                          <td className="py-2 px-3">
+                            {/* Marcas, no archivos: aqui se apunta que llego la
+                                foto, el video o los modulos. Se lee igual en la
+                                fila del cobro de Comisiones. */}
+                            <Entregables
+                              valor={c}
+                              ocupado={procesando}
+                              onCambiar={(cambio) => marcarEntregado(c, cambio)}
+                            />
+                          </td>
                           <td className="py-2 pl-3 text-right">
-                            <button type="button" onClick={() => quitar(c)}
-                              className={`text-xs font-semibold inline-flex items-center gap-1 ${
-                                borrando === c.id ? 'text-red-600' : 'text-muted-foreground hover:text-foreground'
-                              }`}>
-                              <Trash size={13} weight="bold" />
-                              {borrando === c.id ? '¿Seguro?' : 'Quitar'}
-                            </button>
+                            <div className="inline-flex items-center gap-3">
+                              <button type="button" onClick={() => setEditColab(c)}
+                                className="text-xs font-semibold inline-flex items-center gap-1 text-muted-foreground hover:text-foreground">
+                                <PencilSimple size={13} weight="bold" /> Editar
+                              </button>
+                              {/* Reactivar. Sin esto, una desactivada por error solo
+                                  se podia BORRAR --y borrarla se lleva el historico--. */}
+                              <button type="button" disabled={procesando} onClick={() => alternarColab(c)}
+                                className={`text-xs font-semibold inline-flex items-center gap-1 disabled:opacity-50 ${
+                                  c.activa ? 'text-muted-foreground hover:text-foreground' : 'text-emerald-600 hover:text-emerald-700'
+                                }`}>
+                                <ArrowsClockwise size={13} weight="bold" />
+                                {c.activa ? 'Desactivar' : 'Reactivar'}
+                              </button>
+                              <button type="button" onClick={() => quitar(c)}
+                                className={`text-xs font-semibold inline-flex items-center gap-1 ${
+                                  borrando === c.id ? 'text-red-600' : 'text-muted-foreground hover:text-foreground'
+                                }`}>
+                                <Trash size={13} weight="bold" />
+                                {borrando === c.id ? '¿Seguro?' : 'Quitar'}
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -938,6 +1043,64 @@ export default function TutoresPage() {
               {procesando ? 'Guardando…' : 'Guardar'}
             </Button>
           </div>
+        </div>
+      )}
+
+      {/* Editar una formación ya asignada: el porcentaje y las fechas.
+          Sin esto, cambiar un 10 % obligaba a quitarla y volver a ponerla, y
+          quitarla borra el rastro de por qué se le pagó lo que se le pagó. */}
+      {editColab && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setEditColab(null)}>
+          <form onSubmit={guardarEdicionColab} onClick={(e) => e.stopPropagation()}
+            className="bg-card border border-border rounded-lg shadow-2xl w-full max-w-md p-4 space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="font-bold">Editar formación</h2>
+                <p className="text-xs text-muted-foreground truncate">{editColab.formacion}</p>
+              </div>
+              <button type="button" onClick={() => setEditColab(null)} aria-label="Cerrar"
+                className="text-muted-foreground hover:text-foreground">
+                <X size={16} weight="bold" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              <label className="text-xs text-muted-foreground">
+                Porcentaje
+                <input name="pct" type="number" step="0.5" min="0" max="100" required
+                  defaultValue={Number(editColab.pct)}
+                  className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm tabular-nums" />
+              </label>
+              <label className="text-xs text-muted-foreground">
+                Desde
+                <input name="desde" type="date" required
+                  defaultValue={String(editColab.vigente_desde).slice(0, 10)}
+                  className="mt-1 w-full h-9 px-2 rounded-md border border-border bg-background text-sm" />
+              </label>
+              <label className="text-xs text-muted-foreground">
+                Hasta
+                <input name="hasta" type="date"
+                  defaultValue={editColab.vigente_hasta ? String(editColab.vigente_hasta).slice(0, 10) : ''}
+                  className="mt-1 w-full h-9 px-2 rounded-md border border-border bg-background text-sm" />
+              </label>
+            </div>
+
+            <p className="text-[11px] text-muted-foreground">
+              Dejar «hasta» en blanco es <strong>en adelante</strong>. Cambiar el porcentaje no rehace
+              las comisiones ya calculadas: solo manda de aquí en adelante.
+            </p>
+
+            {!editColab.activa && (
+              <p className="text-[11px] text-amber-700 dark:text-amber-300">
+                Está desactivada, así que no genera comisión aunque cambies las fechas. Reactívala desde su fila.
+              </p>
+            )}
+
+            <div className="flex justify-end gap-2 pt-1">
+              <Button type="button" variant="outline" onClick={() => setEditColab(null)}>Cancelar</Button>
+              <Button type="submit" disabled={procesando}>{procesando ? 'Guardando…' : 'Guardar'}</Button>
+            </div>
+          </form>
         </div>
       )}
 

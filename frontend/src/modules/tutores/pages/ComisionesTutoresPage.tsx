@@ -7,6 +7,7 @@ import PageHeader from '@/shared/components/ui/PageHeader';
 import KpiCard from '@/shared/components/ui/KpiCard';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { Button } from '@/shared/components/ui/button';
+import Entregables from '../components/Entregables';
 import {
   tutoresApi,
   type ComisionReal, type ResumenComision, type AjustesTutores, type PagoSinFormacion,
@@ -26,6 +27,35 @@ const euros = (n: number | string) =>
   Number(n || 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
 
 const soloFecha = (f: string | null) => (f ? String(f).slice(0, 10) : null);
+
+const ETIQUETA_ESTADO: Record<string, string> = {
+  pendiente: 'Pendiente',
+  notificada: 'Notificada',
+  falta_factura: 'Falta factura',
+  pagada: 'Pagada',
+  revertida: 'Revertida',
+};
+
+/*
+  Lo que el tutor tiene que facturar.
+
+  Diego, 14/09: «necesito el cálculo que el profesional me tiene que enviar, que
+  sería la cantidad de 17,82 € + 21 % de 17,82 € (3,74 €) − retención del 15 %
+  (2,67 €) = 18,89 €».
+
+  Se redondea CADA LINEA a dos decimales, no el resultado: con 17,82 el IVA es
+  3,7422 y la retencion 2,673, y redondear al final da un centimo distinto del
+  que el tutor va a escribir en su factura.
+*/
+const IVA = 0.21;
+const IRPF = 0.15;
+const dos = (n: number) => Math.round(n * 100) / 100;
+
+function loQueFactura(base: number) {
+  const iva = dos(base * IVA);
+  const retencion = dos(base * IRPF);
+  return { base: dos(base), iva, retencion, total: dos(dos(base) + iva - retencion) };
+}
 
 function mesActual() {
   const h = new Date();
@@ -54,6 +84,7 @@ export default function ComisionesTutoresPage() {
   const [abierto, setAbierto] = useState<number | null>(null);
   const [cargando, setCargando] = useState(true);
   const [trabajando, setTrabajando] = useState(false);
+  const [cambiando, setCambiando] = useState<number | null>(null);
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -114,6 +145,24 @@ export default function ComisionesTutoresPage() {
     } catch (e) {
       toast({ title: 'No se ha podido marcar', description: e instanceof Error ? e.message : '', variant: 'destructive' });
     } finally { setTrabajando(false); }
+  }
+
+  /** Pendiente ⇄ Notificada ⇄ Falta factura. Nada mas: pagar y revertir van por
+   *  su lado porque mueven dinero y dejan rastro de quien y cuando. */
+  async function cambiarEstado(c: ComisionReal, estado: string) {
+    setCambiando(c.id);
+    try {
+      const r = await tutoresApi.cambiarEstadoComision(c.id, estado);
+      if (!r?.success) throw new Error('no');
+      toast({ title: `Marcada como ${(ETIQUETA_ESTADO[estado] || estado).toLowerCase()}` });
+      await cargar();
+    } catch (err) {
+      toast({
+        title: 'No se ha podido cambiar',
+        description: (err as { message?: string })?.message || 'Vuelve a intentarlo.',
+        variant: 'destructive',
+      });
+    } finally { setCambiando(null); }
   }
 
   async function revertir(c: ComisionReal) {
@@ -283,6 +332,10 @@ export default function ComisionesTutoresPage() {
                             <th className="py-1.5 px-3 font-semibold text-right">Base</th>
                             <th className="py-1.5 px-3 font-semibold text-right">%</th>
                             <th className="py-1.5 px-3 font-semibold text-right">Comisión</th>
+                            {/* Lo que ha entregado de esa formacion. Diego lo
+                                pidio justo aqui: es la fila donde se pulsa
+                                «Marcar pagado». */}
+                            <th className="py-1.5 px-3 font-semibold">Entregado</th>
                             <th className="py-1.5 px-3 font-semibold">Estado</th>
                             <th className="py-1.5 pl-3" />
                           </tr>
@@ -298,14 +351,41 @@ export default function ComisionesTutoresPage() {
                               <td className="py-1.5 px-3 text-right tabular-nums">{Number(l.pct)} %</td>
                               <td className="py-1.5 px-3 text-right tabular-nums font-semibold">{euros(l.importe)}</td>
                               <td className="py-1.5 px-3">
+                                <Entregables valor={l} soloLectura />
+                              </td>
+                              <td className="py-1.5 px-3">
                                 {l.estado === 'pagada' ? (
                                   <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
                                     pagada {soloFecha(l.fecha_liquidacion)}
                                   </span>
                                 ) : l.estado === 'revertida' ? (
                                   <span className="text-muted-foreground">revertida</span>
+                                ) : puede ? (
+                                  // Los tres estados del seguimiento, editables aqui mismo.
+                                  // Pagada y revertida NO estan en la lista: esas dos mueven
+                                  // dinero y tienen su propio boton, con su rastro.
+                                  <select
+                                    value={l.estado}
+                                    disabled={cambiando === l.id}
+                                    onChange={(e) => cambiarEstado(l, e.target.value)}
+                                    aria-label={`Estado de la comisión de ${l.alumno}`}
+                                    className={`h-7 px-1.5 rounded border border-border bg-background text-xs font-semibold
+                                      focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-50 ${
+                                        l.estado === 'falta_factura'
+                                          ? 'text-red-600 dark:text-red-400'
+                                          : l.estado === 'notificada'
+                                            ? 'text-sky-600 dark:text-sky-400'
+                                            : 'text-amber-600 dark:text-amber-400'
+                                      }`}
+                                  >
+                                    <option value="pendiente">Pendiente</option>
+                                    <option value="notificada">Notificada</option>
+                                    <option value="falta_factura">Falta factura</option>
+                                  </select>
                                 ) : (
-                                  <span className="text-amber-600 dark:text-amber-400 font-semibold">pendiente</span>
+                                  <span className="text-amber-600 dark:text-amber-400 font-semibold">
+                                    {ETIQUETA_ESTADO[l.estado] || l.estado}
+                                  </span>
                                 )}
                               </td>
                               <td className="py-1.5 pl-3 text-right">
@@ -321,6 +401,50 @@ export default function ComisionesTutoresPage() {
                           ))}
                         </tbody>
                       </table>
+
+                      {/* Lo que el profesional tiene que facturar. Va debajo de
+                          sus filas y no en un informe aparte: es la cuenta que
+                          hay que mandarle, y el total del mes --no una linea--
+                          es la base. Diego, 14/09. */}
+                      {(() => {
+                        const porFacturar = suyas
+                          .filter((x) => x.estado !== 'revertida' && x.estado !== 'pagada')
+                          .reduce((a, x) => a + Number(x.importe), 0);
+                        if (porFacturar <= 0) return null;
+                        const f = loQueFactura(porFacturar);
+                        return (
+                          <div className="mt-3 rounded-md border border-border bg-muted/30 p-3">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2">
+                              Lo que tiene que facturar
+                            </p>
+                            <dl className="space-y-1 text-xs max-w-xs">
+                              <div className="flex justify-between gap-4">
+                                <dt className="text-muted-foreground">Comisión</dt>
+                                <dd className="tabular-nums font-semibold">{euros(f.base)}</dd>
+                              </div>
+                              <div className="flex justify-between gap-4">
+                                <dt className="text-muted-foreground">+ IVA (21 %)</dt>
+                                <dd className="tabular-nums">{euros(f.iva)}</dd>
+                              </div>
+                              <div className="flex justify-between gap-4">
+                                <dt className="text-muted-foreground">− retención IRPF (15 %)</dt>
+                                <dd className="tabular-nums">−{euros(f.retencion)}</dd>
+                              </div>
+                              <div className="flex justify-between gap-4 border-t border-border pt-1 mt-1">
+                                <dt className="font-semibold">Total a facturar</dt>
+                                <dd className="tabular-nums font-bold text-sm">{euros(f.total)}</dd>
+                              </div>
+                            </dl>
+                            <ul className="mt-2 space-y-0.5 text-[11px] text-muted-foreground">
+                              <li>— Comisión sujeta a IVA (21 %).</li>
+                              <li>
+                                — Retención de IRPF orientativa: cada profesional aplica la suya;
+                                el 15 % es la más común.
+                              </li>
+                            </ul>
+                          </div>
+                        );
+                      })()}
                     </div>
                   )}
                 </div>

@@ -92,19 +92,70 @@ export async function ponerContrasena(userId, password) {
   );
 }
 
-export async function guardarPerfil(tutorId, { dniNif, iban, banco, telefono, notas }) {
+/**
+ * Cambiar el nombre del tutor. Vive en `users` y solo se toca si es OTRO:
+ * un UPDATE que escribe lo mismo ensucia `updated_at` y no dice nada.
+ */
+export async function renombrarTutor(tutorId, nombre) {
+  const { rows } = await query(
+    `UPDATE users SET nombre = $2, updated_at = now()
+      WHERE id = $1 AND role = 'tutor' AND nombre IS DISTINCT FROM $2
+      RETURNING id, nombre`,
+    [tutorId, String(nombre).trim()]
+  );
+  return rows[0] || null;
+}
+
+export async function guardarPerfil(tutorId, datos = {}) {
+  // Lo que NO se manda no se toca.
+  //
+  // Antes esto escribia los cuatro campos siempre, con `|| null`. Como el alta
+  // es el unico sitio que los rellena y nadie puso el IBAN, cualquier guardado
+  // posterior que no los trajera los borraba — y lo unico que hay en esa tabla
+  // son los TELEFONOS: 16 de 16 en MultiCRM, con 1 DNI y 0 IBAN.
+  //
+  // O sea que conectar una pantalla de edicion sobre esto tal cual, con los
+  // campos en blanco, se llevaba por delante el unico dato bueno. Y no habria
+  // aviso: un UPDATE que pone null a algo que ya era null no se distingue del
+  // que borra.
+  //
+  // La regla, explicita:
+  //
+  //   campo ausente  → no se toca
+  //   null o vacio   → se borra, porque alguien lo ha vaciado a proposito
+  //
+  // Zod ya distingue las dos cosas: `optional()` deja el campo fuera del objeto
+  // y `nullable()` lo deja en null.
+  const COLUMNAS = { dniNif: 'dni_nif', iban: 'iban', banco: 'banco', telefono: 'telefono', notas: 'notas' };
+
+  const presentes = Object.keys(COLUMNAS).filter((k) => datos[k] !== undefined);
+  const valor = (k) => {
+    const v = datos[k];
+    return typeof v === 'string' ? (v.trim() || null) : (v ?? null);
+  };
+
+  // Sin nada que guardar no se escribe, pero SI se devuelve el perfil: quien
+  // llama espera una ficha, no un hueco.
+  if (!presentes.length) {
+    const { rows: [actual] } = await query(
+      'SELECT * FROM tutor_profiles WHERE user_id = $1', [tutorId]
+    );
+    return actual || null;
+  }
+
+  const columnas = presentes.map((k) => COLUMNAS[k]);
+  const valores = presentes.map(valor);
+  const huecos = columnas.map((_, i) => `$${i + 2}`);
+  const alActualizar = columnas.map((c, i) => `${c} = $${i + 2}`).join(', ');
+
   const { rows: [p] } = await query(
-    `INSERT INTO tutor_profiles (user_id, dni_nif, iban, banco, telefono, notas)
-     VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO tutor_profiles (user_id, ${columnas.join(', ')})
+     VALUES ($1, ${huecos.join(', ')})
      ON CONFLICT (user_id) DO UPDATE
-       SET dni_nif = EXCLUDED.dni_nif,
-           iban = EXCLUDED.iban,
-           banco = EXCLUDED.banco,
-           telefono = EXCLUDED.telefono,
-           notas = EXCLUDED.notas,
+       SET ${alActualizar},
            updated_at = NOW()
      RETURNING *`,
-    [tutorId, dniNif || null, iban || null, banco || null, telefono || null, notas || null]
+    [tutorId, ...valores]
   );
   return p;
 }
@@ -171,18 +222,37 @@ export async function crearColaboracion({ tutorId, productId, pct, desde, hasta,
   return c;
 }
 
-export async function actualizarColaboracion(id, { pct, desde, hasta, activa, notas }) {
+export async function actualizarColaboracion(id, datos = {}) {
+  // Lo que NO viene no se toca. Antes `vigente_hasta = $4` iba siempre, asi que
+  // una llamada que solo cambiaba el porcentaje --o ahora una casilla de
+  // entregables-- BORRABA la fecha de fin sin decirlo.
+  //
+  // `undefined` = ausente, no se toca. `null` = vaciar a proposito.
+  const COLUMNAS = {
+    pct: 'pct',
+    desde: 'vigente_desde',
+    hasta: 'vigente_hasta',
+    activa: 'activa',
+    notas: 'notas',
+    entregoFoto: 'entrego_foto',
+    entregoVideo: 'entrego_video',
+    modulosPct: 'modulos_pct',
+  };
+  const presentes = Object.keys(COLUMNAS).filter((k) => datos[k] !== undefined);
+  if (!presentes.length) return colaboracionPorId(id);
+
+  const params = [id];
+  const sets = presentes.map((k) => {
+    params.push(datos[k]);
+    return `${COLUMNAS[k]} = $${params.length}`;
+  });
+
   const { rows: [c] } = await query(
     `UPDATE tutor_collaborations
-        SET pct = COALESCE($2, pct),
-            vigente_desde = COALESCE($3, vigente_desde),
-            vigente_hasta = $4,
-            activa = COALESCE($5, activa),
-            notas = COALESCE($6, notas),
-            updated_at = NOW()
+        SET ${sets.join(', ')}, updated_at = NOW()
       WHERE id = $1
       RETURNING *`,
-    [id, pct ?? null, desde ?? null, hasta ?? null, activa ?? null, notas ?? null]
+    params
   );
   return c || null;
 }
@@ -349,6 +419,9 @@ export async function comisiones({ periodo = null, tutorId = null, estado = null
             tc.tutor_id, u.nombre AS tutor,
             tc.product_id, p.nombre AS formacion, p.project_id, pr.nombre AS proyecto,
             cp.fecha AS fecha_cobro, cp.importe AS cobro,
+            -- Que ha entregado de ESA formacion. Se lee aqui porque esta es la
+            -- pantalla donde se pulsa «Marcar pagado».
+            col.entrego_foto, col.entrego_video, col.modulos_pct,
             COALESCE(l.nombre, '—') AS alumno,
             liq.nombre AS liquidada_por_nombre
        FROM tutor_commissions tc
@@ -359,6 +432,7 @@ export async function comisiones({ periodo = null, tutorId = null, estado = null
        LEFT JOIN conversions cv ON cv.id = cp.conversion_id
        LEFT JOIN leads l ON l.id = cv.lead_id
        LEFT JOIN users liq ON liq.id = tc.liquidada_por
+       LEFT JOIN tutor_collaborations col ON col.id = tc.collaboration_id
       WHERE ($1::char(7) IS NULL OR tc.periodo = $1)
         AND ($2::int IS NULL OR tc.tutor_id = $2)
         AND ($3::text IS NULL OR tc.estado = $3)
@@ -377,7 +451,10 @@ export async function resumenComisiones({ periodo = null, tutorId = null, projec
             u.email AS tutor_email, perfil.iban AS tutor_iban,
             COUNT(*)::int AS lineas,
             COALESCE(SUM(tc.base_calculo), 0) AS base,
-            COALESCE(SUM(tc.importe) FILTER (WHERE tc.estado = 'pendiente'), 0) AS pendiente,
+            -- Por pagar = todo lo que no esta pagado ni revertido. Filtrar por
+            -- 'pendiente' a secas hacia que una comision marcada «notificada»
+            -- se cayera del total y el mes pareciera cuadrado sin estarlo.
+            COALESCE(SUM(tc.importe) FILTER (WHERE tc.estado NOT IN ('pagada', 'revertida')), 0) AS pendiente,
             COALESCE(SUM(tc.importe) FILTER (WHERE tc.estado = 'pagada'), 0) AS pagada,
             COALESCE(SUM(tc.importe) FILTER (WHERE tc.estado = 'revertida'), 0) AS revertida,
             MAX(tc.fecha_liquidacion) AS ultima_liquidacion
@@ -409,7 +486,9 @@ export async function liquidar({ ids = null, periodo = null, tutorId = null, use
             fecha_liquidacion = CURRENT_DATE,
             liquidada_por = $1,
             updated_at = NOW()
-      WHERE estado = 'pendiente'
+      -- Se paga lo que se debe, tambien si ya se le habia avisado o si faltaba
+      -- su factura: una revertida no, y una ya pagada tampoco dos veces.
+      WHERE estado IN ('pendiente', 'notificada', 'falta_factura')
         AND ($2::int[] IS NULL OR id = ANY($2))
         AND ($3::char(7) IS NULL OR periodo = $3)
         AND ($4::int IS NULL OR tutor_id = $4)
@@ -417,6 +496,27 @@ export async function liquidar({ ids = null, periodo = null, tutorId = null, use
     [userId, ids && ids.length ? ids : null, periodo, tutorId]
   );
   return { liquidadas: rows.length, importe: rows.reduce((s, r) => s + Number(r.importe), 0) };
+}
+
+/**
+ * Mover una comision entre los estados de SEGUIMIENTO: pendiente, notificada y
+ * falta_factura. Los otros dos no entran aqui a proposito:
+ *
+ *   `pagada` la pone `liquidar`, que ademas apunta la fecha y quien pago.
+ *   `revertida` la pone `revertirComision`, que exige un motivo.
+ */
+const ESTADOS_DE_SEGUIMIENTO = ['pendiente', 'notificada', 'falta_factura'];
+
+export async function cambiarEstadoComision(id, estado) {
+  if (!ESTADOS_DE_SEGUIMIENTO.includes(estado)) return null;
+  const { rows: [c] } = await query(
+    `UPDATE tutor_commissions
+        SET estado = $2, updated_at = NOW()
+      WHERE id = $1 AND estado = ANY($3::text[])
+      RETURNING *`,
+    [id, estado, ESTADOS_DE_SEGUIMIENTO]
+  );
+  return c || null;
 }
 
 // Deshacer una liquidacion o anular una comision. Queda escrito quien y por que:
