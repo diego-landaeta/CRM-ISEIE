@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { GraduationCap, Plus, X, Warning, Trash, CheckCircle, Copy, ArrowsClockwise, Key, UserMinus, PencilSimple } from '@phosphor-icons/react';
+import { GraduationCap, Plus, X, Warning, Trash, CheckCircle, Copy, ArrowsClockwise, Key, UserMinus, PencilSimple, MagnifyingGlass} from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
@@ -96,6 +96,8 @@ export default function TutoresPage() {
   // Retirados: no salen por defecto. Se pueden enseñar porque, si no, retirar a
   // alguien por error no tendria vuelta atras desde esta pantalla.
   const [verRetirados, setVerRetirados] = useState(false);
+  // Buscador de la lista (paridad con MultiCRM). No habia ninguno.
+  const [busca, setBusca] = useState('');
   const [popupClave, setPopupClave] = useState(false);
 
   // Editar los datos del tutor. Existia el endpoint (PATCH /tutores/:id/perfil)
@@ -439,6 +441,22 @@ export default function TutoresPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)] gap-3 items-start">
         <div className="bg-card border border-border rounded-lg overflow-hidden">
+          <div className="relative border-b border-border">
+            <MagnifyingGlass size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              placeholder="Buscar tutor por nombre o correo…"
+              aria-label="Buscar tutor"
+              className="w-full h-9 pl-9 pr-8 bg-transparent text-sm outline-none"
+            />
+            {busca && (
+              <button type="button" onClick={() => setBusca('')} aria-label="Quitar la búsqueda"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                <X size={13} weight="bold" />
+              </button>
+            )}
+          </div>
           <label className="flex items-center gap-2 px-3 py-2 border-b border-border text-xs text-muted-foreground cursor-pointer">
             <input type="checkbox" checked={verRetirados} className="accent-primary"
               onChange={(e) => { setVerRetirados(e.target.checked); setElegido(null); }} />
@@ -450,8 +468,15 @@ export default function TutoresPage() {
                 description="Da de alta el primero para asignarle formaciones." />
             )}
             {(() => {
-              const deAqui = tutores.filter((t) => t.es_de_este_proyecto);
-              const hermanos = tutores.filter((t) => !t.es_de_este_proyecto);
+              const plano = (x: string) => (x || '').toLowerCase()
+                .replace(/[áàä]/g, 'a').replace(/[éèë]/g, 'e').replace(/[íìï]/g, 'i')
+                .replace(/[óòö]/g, 'o').replace(/[úùü]/g, 'u').replace(/ñ/g, 'n');
+              const q = plano(busca.trim());
+              const visibles = q
+                ? tutores.filter((t) => plano(t.nombre || '').includes(q) || plano(t.email || '').includes(q))
+                : tutores;
+              const deAqui = visibles.filter((t) => t.es_de_este_proyecto);
+              const hermanos = visibles.filter((t) => !t.es_de_este_proyecto);
               return (
                 <>
                   {hermanos.length > 0 && deAqui.length > 0 && (
