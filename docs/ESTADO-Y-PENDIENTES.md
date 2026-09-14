@@ -571,3 +571,742 @@ generarlo, `scratchpad/indice_tareas.py`.
 > las aprueba.
 
 <!-- FIN-INDICE-TAREAS -->
+
+---
+
+## La cola del día necesita filtros de verdad
+
+Anotado el **14/09/2026**. Diego, con CEDIA puesta y **101 atrasados** delante:
+«poner mejores filtros en este apartado».
+
+Lo que hay hoy, y nada más: **campus**, **gestora** y los cuatro contadores de
+arriba (atrasados / hoy / mañana / esta semana), que hacen de filtro de fecha.
+Con 129 personas en la semana y 101 arrastradas, eso no alcanza para repartir el
+día: todo lo que se ve en la captura —paso, formación, canal, cuánto lleva
+esperando— está en la fila y **no se puede filtrar por ello**.
+
+Lo que pediría la pantalla, por orden de lo que más se nota:
+
+| Filtro | Por qué |
+|---|---|
+| **Cuánto lleva atrasado** | «más de 30 días» es otra conversación que «de ayer». En la captura hay gente de hace 33 días mezclada con la de hoy |
+| **Formación / producto** | el dato ya viaja en la fila; los del mismo curso llevan el mismo mensaje |
+| **Paso** | existe como botonera («Por paso») pero no se combina bien con lo demás |
+| **Canal** | quien va a hacer llamadas quiere solo las de llamada |
+| **Buscar por nombre** | para volver a alguien concreto sin bajar 129 filas |
+| **Ordenar** | hoy es fecha y paso, fijo. Debería poder ser por antigüedad o por formación |
+
+Y una decisión de fondo: **con 101 atrasados el problema no es solo filtrar**.
+Conviene decidir qué se hace con lo que lleva más de un mes sin tocar —cerrarlo,
+aparcarlo o repartirlo—, porque un filtro más bonito sobre una cola que nadie
+puede vaciar sigue siendo una cola que nadie puede vaciar.
+
+*Sin asignar. Solo frontend: el servidor ya devuelve todos esos campos.*
+
+---
+
+## El proceso comercial, por empresa y no solo por proyecto — HECHO
+
+Anotado y resuelto el **14/09/2026**. Diego, con CEDIA elegida en producción:
+
+> «Estos procesos en empresas deben ser por empresa, no por proyecto, que tengan
+> filtros. Si tengo que seleccionar un proyecto, tiene que ser por proyecto y por
+> empresa; que al indicar eso, sea "selecciona una empresa".»
+
+### Qué pasaba
+
+Con **CEDIA (7 campus)** puesta, `/prospectos/proceso` y `/prospectos/cola` no
+enseñaban nada: salía el muro de *«Selecciona un proyecto»*. El módulo sabía
+mandar **un** `projectId` y nada más, aunque el servidor —`colaDelDia`— ya
+recibía una lista.
+
+### Qué se hizo
+
+1. **Las dos rutas aceptan empresa** (`CON_SOCIEDAD_OK`).
+2. **La cola suma los campus de la empresa**: el controlador lee `projectIds` y
+   la pantalla le pasa `useProyectosDelAmbito()`. Comprobado contra la base de
+   producción: **107 personas** en la cola de CEDIA, repartidas en Psiko Aprende
+   59, ISEIH 21, Fono Aprende 15, ISAEG 10, ISECD 1, ISEF 1.
+3. **Filtro de campus dentro de la empresa**, al lado del de gestora, sin tocar
+   el selector de arriba. Acotado a ISEIH: 21.
+4. **Cada fila dice de qué campus es** (lo pidió Carlos el 11/09).
+5. **Los pasos** siguen siendo de un proyecto —cada campus lleva los suyos—,
+   pero ya no echan a nadie: se elige cuál **entre los de esa empresa**.
+6. **El aviso ya no miente**: con una empresa puesta nombra la empresa y pide
+   elegir campus, en vez de hablar de «Todos los proyectos».
+
+De paso salió un fallo vivo: `if (pProj)` era siempre cierto, así que abrir la
+cola **sin proyecto** llamaba a `null.map()` y devolvía un 500. Estaba arreglado
+en testeo desde el 11/09 y en producción no. Ya está en las dos.
+
+### Dónde está
+
+| | |
+|---|---|
+| MultiCRM | producción (`/crm/`) y testeo |
+| ISEIE | staging entero; en producción **solo el backend** |
+
+En ISEIE no hay sociedades en el selector —un único proyecto—, así que el filtro
+de campus no llega a aparecer. Su frontend de producción es del **10/09**:
+mandarle el paquete de la rama arrastraría cuatro días de cosas que no son esto,
+así que se dejó fuera a propósito. Ver [[project-produccion-sin-main]].
+
+---
+
+## Facturación: el buscador y los atajos de fecha, donde se usan
+
+Anotado el **14/09/2026**. Diego: «en facturación se necesita buscador de
+facturas por lupa, número, filtros rápidos como hoy, ayer y eso».
+
+**El buscador YA existe** — `InvoicesPage.tsx:309`, con lupa y «Buscar por nº de
+factura, cliente o NIF». No hay que construirlo. El problema es **dónde está**:
+
+1. las cuatro tarjetas de cifras
+2. el buscador y los filtros
+3. la tabla de ventas sin factura
+4. **la lista de facturas** ← donde se trabaja
+
+Para cuando bajas a la lista, el buscador lleva tres bloques fuera de pantalla.
+Un buscador que hay que ir a buscar no se usa: por eso se pide uno que no está,
+estando.
+
+**Los atajos de fecha sí faltan.** Solo hay dos casillas (`filters.from` /
+`filters.to`, líneas 349 y 352). No hay hoy, ayer, esta semana, este mes ni mes
+pasado.
+
+Qué hacer: que la barra se quede pegada al bajar o se repita junto a la cabecera
+de la tabla —donde Diego dibujó el recuadro—; los cinco atajos rellenando
+`from`/`to`, que el backend ya filtra por ese rango; y que buscar `110`
+encuentre la `2026/0110` sin teclear el año.
+
+Es la misma petición que Carlos hizo el 11/09 para las dos colas. Si se hacen
+los atajos, **un solo componente** para las tres pantallas.
+
+*Sin asignar. Solo frontend.*
+
+---
+
+## Tutores: los estados de la comisión — HECHO
+
+Anotado el **14/09/2026**. Diego, señalando la columna ESTADO de
+`/tutores/comisiones`:
+
+> «Ahí que pone pendiente deben aparecer los siguientes estados: Pendiente,
+> Notificada, Falta Factura. Si este estado se pone en septiembre, se mantiene
+> SOLO en ese mes, hasta que se modifique.»
+
+### Lo comprobado
+
+Las comisiones de tutores **no** viven en la tabla `commissions` (esa es la del
+equipo comercial), sino en `tutor_comisiones`, y esa tabla **ya tiene `periodo`**
+— `tutor.model.js:386`. Cada fila es de un mes concreto, así que lo de «se
+mantiene solo en ese mes» **ya está resuelto por estructura**: no hay que
+inventar nada, poner un estado en septiembre no puede tocar agosto.
+
+Los estados de hoy son tres: `pendiente`, `pagada`, `revertida`
+(`tutor.controller.js:282`).
+
+### Qué falta
+
+Añadir **`notificada`** y **`falta_factura`**, y que la columna deje elegirlos.
+Al tocar la restricción, mirar **si es un CHECK o un ENUM de Postgres**: si es
+ENUM hay que ampliarlo, y buscar solo el CHECK ya rompió las conversiones en los
+dos CRM una vez.
+
+Encaja con lo de Carlos de «avisar al tutor»: *notificada* es justo el estado en
+que queda una comisión después de mandarle el correo, y *falta factura* el que
+explica por qué no se le paga todavía.
+
+*Sin asignar. Migración + backend + la columna en la pantalla.*
+
+
+**Hecho el 14/09 en los dos CRM (testeo).** Migración 156: el CHECK pasa a
+aceptar `notificada` y `falta_factura`. La columna es un selector con los tres
+de seguimiento; *pagada* y *revertida* no salen en la lista porque mueven
+dinero y tienen su propia puerta, con su rastro.
+
+Y una trampa que habría pasado desapercibida: «Por pagar» sumaba solo
+`estado = 'pendiente'`, así que marcar una comisión como notificada la habría
+**borrado del total** y el mes habría parecido cuadrado sin estarlo. Ahora
+cuenta todo lo que no está pagado ni revertido.
+---
+
+## La lupa en Tutores y en Clientes
+
+Anotado el **14/09/2026**. Diego: «necesito una lupa en tutores y en clientes
+(filtros)».
+
+Comprobado: las dos pantallas **sí tienen campo de búsqueda** —`TutoresPage.tsx`
+y `ClientsPage.tsx` tienen su `placeholder` de buscar— pero **ninguna de las dos
+pinta el icono de lupa**: cero `MagnifyingGlass` en ambos ficheros.
+
+O sea que el campo está y no se lee como buscador. Es el mismo caso que
+Facturación pero al revés: allí la lupa está y el buscador queda lejos; aquí el
+buscador está y no parece uno.
+
+Qué hacer: poner la lupa dentro del campo, como en Facturación y en Prospectos,
+para que las cuatro pantallas se parezcan. Y revisar de paso que el campo esté
+donde se mira, no encima del todo.
+
+*Sin asignar. Solo frontend, y es pequeño.*
+
+---
+
+## BUG · La lupa general no encuentra a ningún cliente
+
+Anotado el **14/09/2026**. Diego: «algo pasa con la lupa general, he buscado
+este cliente y no aparece... ni nombre ni correo».
+
+### Reproducido y con causa
+
+Buscando `garbitsu@gmail.com` en Psiko Aprende, la paleta dice «No hay
+resultados». Pero en la base **sí está**, dos veces:
+
+| lead | nombre | proyecto | estado |
+|---|---|---|---|
+| #855 | Garbiñe Pastor | 2 · Psiko Aprende | convertido, con factura |
+| #1868 | Garbiñe Pastor Narbaiza | 2 · Psiko Aprende | convertido, con factura |
+
+Proyecto correcto, correo correcto. **La causa es una palabra que falta**:
+
+```
+CommandPalette.jsx:176
+client.get(`/leads?projectId=${activeProject.id}&search=${q}&limit=5`)
+```
+
+Sin `includeConverted=1`. Y `lead.model.js` excluye a los convertidos cuando no
+se lo pides:
+
+```js
+} else if (!includeConverted && !conConversion) {
+  conditions.push(`l.status <> 'convertido'`);
+}
+```
+
+### Por qué importa más de lo que parece
+
+No falla la búsqueda por texto: **falla para todo el que ya compró**. O sea que
+la lupa general encuentra a quien todavía no es cliente y esconde justo a los
+que más se buscan — para cobrar, para facturar, para atender.
+
+### El arreglo
+
+Añadir `&includeConverted=1` a esa llamada. Es **una línea**. Conviene además
+que el resultado diga si esa persona ya es cliente, para no confundirla con un
+prospecto vivo.
+
+*Sin asignar, pero es de un minuto.*
+
+---
+
+## Tutores: que se puedan editar, y que se vea — HECHO
+
+Anotado el **14/09/2026**. Diego: «necesitamos algo visible para poder editar
+tutores».
+
+En `/tutores`, al elegir uno salen cuatro botones —Datos de pago, Cambiar
+contraseña, Retirar, Añadir formación— y **ninguno edita al tutor**: ni el
+nombre, ni el correo, ni el porcentaje, ni las fechas de una formación ya
+puesta. Para cambiar un 10 % hay que quitar la formación y volver a añadirla.
+
+Qué hace falta:
+
+- **Editar la ficha**: nombre y correo.
+- **Editar una formación ya asignada**: el porcentaje y el «desde/hasta», sin
+  quitarla y rehacerla — quitarla borra el histórico de por qué se le pagó lo
+  que se le pagó.
+- Que el botón **se vea**, junto a los otros cuatro, no escondido.
+
+Ojo con el IBAN: la lista repite «sin IBAN · no se le puede pagar» en casi
+todos. Eso sí se edita, en «Datos de pago», pero desde la lista no hay forma de
+llegar; el aviso dice el problema y no lleva a la solución.
+
+*Sin asignar. Frontend, y backend si no existe el endpoint de editar.*
+
+
+**Hecho el 14/09.** En MultiCRM el botón «Datos de pago» pasa a ser **Editar
+tutor**, con nombre y correo arriba —el nombre no se podía cambiar en ninguna
+pantalla—. En ISEIE ya existía «Editar datos», así que ahí iba por delante.
+
+La formación ya asignada se edita desde su fila: porcentaje y fechas, sin
+quitarla y rehacerla.
+---
+
+## BUG · No deja asignar una formación al tutor — RESUELTO
+
+Anotado el **14/09/2026**. Diego: «no me deja asignar esta formación».
+
+**Sin investigar todavía** — Diego: «primero anota y luego nos ponemos a revisar
+todo». Queda descrito tal cual se ve, para mirarlo después.
+
+En `/tutores`, con Tatiana elegida, botón **Añadir formación**. Se escribe
+«Máster en Terapia de Pareja y Vínculos Afectivos» y el diálogo responde:
+
+> *Ningún curso con «Máster en Terapia de Pareja y Vínculos Afectivos». Prueba
+> con una palabra suelta.*
+
+Lo llamativo: **esa formación ya está en su tabla**, dos filas más arriba, con
+un 10 % desde el 2026-08-01 y el estado **desactivada**. O sea que el buscador
+del diálogo no encuentra algo que la propia pantalla está enseñando.
+
+Por dónde empezar cuando toque (a comprobar, no confirmado):
+
+- si el buscador del diálogo **descarta los productos inactivos** — encaja con
+  que la fila diga «desactivada»
+- si excluye los que **ya tiene asignados**, y entonces el mensaje es el
+  equivocado: no es «ninguno», es «ya lo tiene»
+- si busca por cadena entera en vez de por palabras, que es lo que sugiere su
+  propio consejo de «prueba con una palabra suelta»
+
+Sea cual sea, **el mensaje miente** y manda al usuario a probar cosas en vez de
+decirle qué pasa.
+
+*Sin asignar. Pendiente de revisar.*
+
+
+**Era la tercera opción de la lista.** El buscador excluye los cursos que el
+tutor ya tiene —incluidos los desactivados— y luego decía «ningún curso con
+ese nombre», que es mentira. Ahora dice el motivo: *«X» ya la tiene asignada;
+si sale como desactivada, reactívala desde su tabla*.
+---
+
+## BUG · Una formación desactivada por error no se puede recuperar — RESUELTO
+
+Anotado el **14/09/2026**. Diego: «no deja editar: está aquí y ha sido
+desactivada por error». Sin investigar, como los dos de arriba.
+
+La fila de Tatiana:
+
+> Máster en Terapia de Pareja y Vínculos Afectivos · Psiko Aprende · 10 % ·
+> 2026-08-01 · en adelante · **desactivada** · 🗑 **Quitar**
+
+La única acción es **Quitar**. No hay «reactivar» ni «editar»: una formación
+desactivada por error se queda desactivada, y lo único que se ofrece es borrarla
+—que es lo contrario de lo que hace falta, porque **se lleva por delante el
+histórico de por qué se le pagó lo que se le pagó**.
+
+### Los tres bugs de tutores son el mismo nudo
+
+1. Se desactiva una formación sin querer.
+2. No se puede reactivar ni editar: solo quitar *(este)*.
+3. Se intenta volver a añadirla y el diálogo dice que **no existe ningún curso
+   con ese nombre**, mientras la tabla lo está enseñando *(el anterior)*.
+
+Sin salida: ni se arregla, ni se rehace. Hay que resolverlos juntos, y lo
+primero que hay que entender es **qué significa «desactivada»** en esa fila —si
+es la asignación tutor–formación o el producto del catálogo— porque de eso
+depende cuál de los tres es la causa y cuáles son consecuencia.
+
+*Sin asignar. Pendiente de revisar, junto con los otros dos de tutores.*
+
+
+**Hecho el 14/09.** La fila tiene **Reactivar** y **Desactivar** además de
+Quitar. Nada de borrar para arreglar: borrar se lleva el histórico de por qué
+se le pagó lo que se le pagó.
+---
+
+## Los 133,33 € sin formación: Diego ya sabe cuál es — HECHO
+
+Anotado el **14/09/2026**. No es un fallo del CRM: es **el dato que faltaba**, y
+Diego lo ha dado.
+
+El aviso de `/tutores/comisiones` (septiembre 2026, Psiko Aprende) dice:
+
+> ⚠ **133,33 € cobrados sin saber de qué formación son.** 1 cobro de ventas que
+> no están atadas al catálogo. Nadie cobra comisión por ellos. Se arregla
+> eligiendo la formación en cada venta: **#177 Edwin Noguera**.
+
+Diego:
+
+> «Este pago es de la formación: **Diplomado en neurociencia aplicada al trauma y
+> plasticidad cerebral**. La tutora es **Alba Burundarena**.»
+
+### Qué hay que hacer
+
+1. En la venta **#177 (Edwin Noguera)**, elegir como formación el *Diplomado en
+   neurociencia aplicada al trauma y plasticidad cerebral*.
+2. Comprobar que **Alba Burundarena** consta como tutora de esa formación, con su
+   porcentaje y su fecha de inicio. En la lista de tutores aparece una **Alba**
+   (`alba@psikoaprende.com`) con 2 cursos — hay que confirmar que es la misma
+   persona antes de tocar nada.
+3. Volver a **Calcular** las comisiones de septiembre. Los 133,33 € deberían
+   dejar el aviso y pasar a la comisión de Alba.
+
+Ojo con el aviso de la propia pantalla: *«no se genera nada anterior al
+2026-08-01, ni anterior a la fecha de inicio de cada tutor»*. Si a Alba se le
+pone una fecha de inicio posterior al cobro, la comisión seguirá sin salir y
+parecerá que el arreglo no funcionó.
+
+*Sin asignar. Es dato, no código — pero conviene hacerlo con la pantalla
+delante para ver si el aviso desaparece.*
+
+
+**Aplicado en producción el 14/09.** La venta #177 tenía el nombre de la
+formación como texto libre y `producto_contratado_id` a `NULL`: por eso salía
+«sin formación». Atada a la **#5670** (1.100 €, igual que el importe).
+
+Alba ya la tutorizaba al 10 % desde el 01/08, así que no hubo que crear nada.
+Al recalcular salieron **dos** comisiones de 13,33 €: la de septiembre y la de
+agosto, que es el mismo caso. El aviso de septiembre queda en **0 €**.
+---
+
+## Tutores: una columna para saber qué ha entregado cada uno — HECHO
+
+Anotado el **14/09/2026**. Diego, señalando el hueco entre ESTADO y Quitar en la
+tabla de formaciones del tutor:
+
+> «Aquí en los tutores necesito una columna que sea: Foto corporativa, Vídeo,
+> Foto y Vídeo, 25 % módulos, 50 % módulos, 100 % completo. **Esto que sea como
+> un checkbox para no consumir espacio en subir archivos.**»
+
+### Lo importante: no se suben archivos
+
+El CRM **no guarda** la foto ni el vídeo ni los módulos: solo **marca** si están
+entregados. Los archivos viven donde ya vivan —Drive, la plataforma, donde
+sea— y aquí se apunta el estado. Eso es lo que evita el almacenamiento, y es la
+condición que puso Diego.
+
+Va **por formación**, no por tutor: el recuadro está dentro de la tabla de
+formaciones, y la misma persona puede tener el Curso de ludopatía entregado y el
+Diplomado a medias.
+
+### Una pregunta antes de construirlo
+
+Los seis no parecen del mismo tipo:
+
+| | |
+|---|---|
+| Foto corporativa · Vídeo | dos marcas sueltas, se tienen o no |
+| **Foto y Vídeo** | si las dos de arriba son casillas, esta **sobra**: es las dos marcadas |
+| 25 % · 50 % · 100 % módulos | esto es **una escala**, no tres casillas: nadie está al 25 % y al 100 % a la vez |
+
+**DECIDIDO el 14/09**, Diego: «que sean casillas; fotos, vídeos, no una que sea
+foto y vídeo». O sea **casillas sueltas e independientes**, y la combinada se
+descarta: si alguien tiene las dos, se marcan las dos.
+
+Queda pendiente de confirmar si 25 / 50 / 100 % son tres casillas más o un solo
+selector de avance — pero por lo dicho, casillas.
+
+### Para qué sirve de verdad
+
+Con esto se puede contestar «¿qué tutores están a medias?» sin ir uno por uno, y
+enlaza con lo de **Sin tutor** y con avisar al tutor: un 100 % completo es lo que
+permite cerrar una formación, y un 25 % en septiembre explica por qué algo no
+está publicado.
+
+*Sin asignar. Migración (columnas en la asignación tutor–formación) + la columna
+en la pantalla.*
+
+
+**Hecho el 14/09.** Migración 157: `entrego_foto`, `entrego_video` y
+`modulos_pct` en la colaboración —van ahí y no en el tutor porque los módulos
+son de una formación concreta—.
+
+La pregunta que estaba abierta se resolvió así: **foto y vídeo son dos
+casillas** («Foto y Vídeo» es las dos marcadas, no una tercera opción) y
+**25/50/100 se pintan como casillas pero son un solo valor**, porque nadie
+está al 25 y al 50 a la vez; pulsar la que ya está puesta la quita. Si lo
+prefieres de otra forma, se cambia en un sitio.
+---
+
+## Comisiones: «Estado de la colaboración» en la fila del cobro — HECHO
+
+Anotado el **14/09/2026**. Diego, señalando el hueco entre FORMACIÓN y BASE, al
+desplegar un tutor en `/tutores/comisiones`:
+
+> «En comisiones aparece un mensaje que es "Estado de la colaboración", y
+> aparece la información marcada antes.»
+
+Es **el mismo dato de la nota anterior** —foto corporativa, vídeo, 25/50/100 %
+de módulos— enseñado aquí. No es otra cosa que rellenar: se marca una vez en la
+ficha del tutor y se **lee** en las dos pantallas.
+
+### Por qué tiene sentido ponerlo justo ahí
+
+Esta es la pantalla donde se pulsa **Marcar pagado**. Ver en la misma fila que
+esa persona va al 25 % de los módulos es lo que evita pagar una colaboración
+que todavía no está entregada — y hoy, para saberlo, hay que salirse a
+`/tutores`, buscar a la persona y mirar su formación.
+
+Cabe en una columna estrecha si se pinta con iconos o siglas (📷 🎥 · 25 %) y el
+detalle al pasar por encima. En la fila del cobro hay sitio: el hueco que marcó
+Diego está vacío.
+
+### Lo que hay que decidir con la otra nota
+
+Las dos son la misma función vista en dos sitios, así que **se hacen juntas** y
+con la misma forma. La pregunta pendiente sigue siendo si son dos casillas más
+un selector de avance o seis marcas sueltas — ver la nota *«Tutores: una columna
+para saber qué ha entregado cada uno»*.
+
+*Sin asignar. Va con la anterior, no por separado.*
+
+
+**Hecho el 14/09.** La misma marca, leída en la fila del cobro —que es donde
+se pulsa «Marcar pagado»—, sin tener que salirse a `/tutores` a comprobarlo.
+---
+
+## BUG · Meta Ads: revisado el 14/09, y son tres cosas distintas
+
+Diego, sobre `/meta-ads`: «esta parte no anda bien». Revisado contra la base de
+producción. **Ninguna de las tres es la que parecía.**
+
+### 1. «Sin conjuntos en este rango» — el mensaje miente
+
+Los conjuntos **están**: 924 en total, con 18.441 días de datos. Ninguna de las
+32 campañas se ha quedado sin ellos. Lo que pasa es que `listAdSetsForUI` filtra
+por `ma.project_id`, y **sin proyecto elegido devuelve cero**:
+
+| lo que se pide | conjuntos |
+|---|---|
+| proyecto 6, cualquier rango de fechas | 17 |
+| sin proyecto (`null`) | **0** |
+| «Todos los proyectos» (`-1`) | **0** |
+
+O sea que el aviso confunde dos cosas que no se parecen: «no hay datos» y «no me
+has dicho de qué proyecto». Y el texto se disculpa por el backfill, que no tiene
+nada que ver. La lista de campañas hace lo mismo —cero campañas sin proyecto—,
+así que la pantalla entera es por proyecto y no lo dice.
+
+### 2. «Leads 0» — el CRM sí sabe de dónde vienen, pero no lo usa
+
+La columna enseña **el número de Meta**, que solo cuenta los formularios de
+Meta. Las campañas que llevan a la web no le reportan nada. Mientras tanto el
+CRM guarda en `lead_utms.utm_campaign` **el identificador de campaña**, y en
+`utm_content`/`utm_term` el conjunto y el anuncio.
+
+Cruzado a mano, con 21.204 € gastados:
+
+| campaña | proyecto | gasto | leads Meta | **leads CRM** | ventas |
+|---|---|---:|---:|---:|---:|
+| VENTAS - Cursos destacados | Psiko Aprende | 3.168 € | 0 | **31** | 2 |
+| Ventas | Psiko Aprende | 3.419 € | 1 | **27** | 3 |
+| Ventas - Clientes potenciales | ISAEG | 181 € | 31 | 25 | 0 |
+| Ventas | ISAEG | 322 € | 23 | 21 | 1 |
+| Ventas | ISEIH | 1.971 € | 0 | **17** | 4 |
+| Ventas Cursos / Ventas | Fono Aprende | 1.125 € | 1 | 8 | 0 |
+| **Total** | | **21.204 €** | 336 | **129** | **10** |
+
+Hay **10 ventas** que se pueden atribuir a una campaña y que hoy no se ven en
+ninguna pantalla. El dato está; falta el cruce.
+
+Y al revés, un aviso: la campaña **Masterclass Melisa** (75 €) tiene **277 leads
+en Meta y 0 en el CRM**. Esos son formularios de Meta que **nunca entraron**.
+
+### 3. ICTESS y ACADEMIA IA: se pierde antes de llegar
+
+No es la pantalla. Es que sus leads llegan **sin la UTM de campaña**:
+
+| proyecto | leads desde junio | por webhook (`whk_…`) | con campaña de Meta |
+|---|---:|---:|---:|
+| ICTESS | 352 | 121 | **0** |
+| ACADEMIA IA | 75 | 32 | **0** |
+| Psiko Aprende | 541 | 0 | 56 |
+| ISAEG | 99 | 0 | 46 |
+| ISEIH | 169 | 0 | 14 |
+| Fono Aprende | 164 | 0 | 7 |
+
+ICTESS lleva **5.782 €** gastados y ACADEMIA IA **1.735 €**, y de los dos no se
+puede atribuir ni un lead. Se arregla en el formulario y en Make —que pasen las
+UTM—, no en el CRM.
+
+### Y lo de «Por producto (0)»
+
+Sigue igual: `meta_adset_products` y `meta_campaign_products` están **a cero**.
+Eso no es un fallo, es trabajo que nadie ha hecho: el botón *Asociar* de cada
+fila no se ha usado nunca. Ver [[project-meta-sin-asociar-productos]].
+
+### Qué haría, por orden
+
+1. **El mensaje y el filtro** (1). Barato: decir «elige un proyecto» cuando es
+   eso, y no hablar de backfill.
+2. **La columna de leads del CRM** (2). Es un `JOIN` con `lead_utms` — y trae
+   además las ventas, que es lo que de verdad se quiere ver.
+3. **Las UTM de ICTESS y ACADEMIA IA** (3). Fuera del CRM.
+4. Los 277 leads de Masterclass Melisa: mirar si se perdieron o entraron por
+   otro sitio.
+
+*Revisado. Falta decidir qué se hace; el 1 y el 2 son de aquí.*
+
+---
+## Los atajos de fecha: pedidos tres veces, hacerlos UNA — HECHO
+
+Anotado el **14/09/2026**. Diego, otra vez: «aquí necesito opciones rápidas de
+hoy, ayer, esta semana, este mes, mes pasado».
+
+**Es la tercera vez que se pide la misma cosa:**
+
+| Cuándo | Dónde |
+|---|---|
+| 11/09 | la cola de facturación (lo pidió Carlos) |
+| 14/09 | Facturación |
+| 14/09 | otra vez, sin decir la pantalla |
+
+Que se repita tres veces en cuatro días no significa que haya tres tareas:
+significa que **falta en todas partes**. Hoy cada pantalla con rango de fechas
+tiene dos casillas `desde`/`hasta` y nada más — teclear dos fechas para ver «lo
+de ayer» es justo lo que nadie hace.
+
+### Qué hacer
+
+**Un solo componente**, y se coloca en todas las pantallas que ya tienen
+`desde`/`hasta`:
+
+- Hoy · Ayer · Esta semana · Este mes · Mes pasado
+- Rellena los dos campos que ya existen: **no hace falta tocar backend**, todos
+  esos listados ya filtran por rango.
+- Y que se vea cuál está puesto, para poder quitarlo.
+
+Dónde va, como mínimo: Facturación, la cola de facturación, Ventas, Ingresos,
+Comisiones y Reportes. Si se hace uno por pantalla acabarán siendo cinco atajos
+distintos con cinco comportamientos.
+
+*Sin asignar. Solo frontend. Es de las que más se nota por lo poco que cuesta.*
+
+
+**Hecho el 14/09.** El mismo componente que en Facturación, ahora también en
+**Análisis de ventas, Ingresos y Reportes**. Comisiones no lo lleva: va por
+mes, y un selector de mes ya es el control correcto.
+---
+
+## Orden de Diego al equipo: nada nuevo hasta cerrar lo enviado
+
+Anotado el **14/09/2026**. En el grupo *Programación Proyectos Carlos* (Ángel,
+Carlos, Fabián):
+
+> «Máxima prioridad a todo esto que he enviado desde la semana pasada. **Hasta
+> que no se complete eso no avancéis con nada más.**»
+
+Se apunta aquí porque cambia qué es prioritario para los tres, y porque dentro
+de un mes nadie se acordará de por qué se pararon las demás ramas.
+
+«Todo esto» es lo que hay anotado en este documento con fecha **11 y 14 de
+septiembre**: los bugs de tutores, las dos lupas, los atajos de fecha, el
+proceso por empresa, Meta Ads y lo de facturación. Y para Ángel, además, sus
+seis de WhatsApp con Zadarma a la cabeza.
+
+**Nada de ramas nuevas ni de trabajo por fuera hasta cerrar esa lista.**
+
+---
+
+## Comisiones: el cálculo que el tutor tiene que facturar — HECHO
+
+Anotado el **14/09/2026**. Diego, señalando el hueco bajo las filas de cobros de
+cada tutor en `/tutores/comisiones`:
+
+> «Aquí abajo de las comisiones necesito el cálculo que el profesional me tiene
+> que enviar, que sería la cantidad de 17,82 € + 21 % de 17,82 € (3,74 €) −
+> retención del 15 % (2,67 €) = **18,89 €**.»
+
+### La cuenta, comprobada
+
+La base **no es una fila, es el total del mes de ese tutor**. En el ejemplo,
+Lola Hernández: 6,40 € + 11,42 € = **17,82 €**.
+
+| | |
+|---|---|
+| Comisión | **17,82 €** |
+| + IVA 21 % | 3,74 € |
+| − retención IRPF 15 % | 2,67 € |
+| **Total a facturar** | **18,89 €** |
+
+Comprobado: `17,82 + 3,74 − 2,67 = 18,89`. Redondeo a dos decimales en cada
+línea, no al final — con `17,82 × 0,21 = 3,7422` y `× 0,15 = 2,673`, redondear al
+final daría un céntimo de diferencia y el tutor facturaría otra cosa.
+
+### El texto, literal
+
+Debajo del cálculo, tal y como lo escribió Diego:
+
+- Comisión sujeta a IVA (21 %).
+- Retención de IRPF orientativa: cada profesional aplica la suya; el 15 % es la
+  más común.
+
+Ese segundo punto es importante y no es relleno: el 15 % es **una suposición**.
+Hay profesionales con el 7 % de los primeros años y autónomos con otra
+retención. El número que enseña el CRM es una guía para que el tutor sepa qué
+mandar, **no la factura**. Por eso el texto tiene que salir siempre, no como
+nota al pie escondida.
+
+### Con qué enlaza
+
+Esto es exactamente lo que hay que meter en el correo de **«avisar al tutor»**
+que pidió Carlos: si el correo lleva la cuenta hecha, el tutor manda la factura
+correcta a la primera y se acaban las idas y venidas. Ver la tarea de Carlos y
+la de los estados de comisión —*Notificada* es el estado en que queda después de
+mandarlo.
+
+*Sin asignar. Es frontend puro: el dato ya está, solo hay que hacer las tres
+cuentas y pintarlas.*
+
+
+**Hecho el 14/09.** Debajo de las comisiones de cada tutor, con el total del
+mes como base y el redondeo línea a línea. Con 17,82 € da 18,89 €, como en tu
+ejemplo. Debajo, los dos puntos del texto tal cual.
+---
+
+## «Avisar tutor» · TAREA PARA ÁNGEL Y DIEGO
+
+Anotado el **14/09/2026**. Diego, con la especificación completa:
+
+> «En el apartado de comisiones necesito un apartado que sea "Avisar tutor", que
+> envíe un correo desde **facturacion@cediaidsl.com**. El punto es que yo de un
+> clic pueda avisar y cambie el status a **"avisado"**. La plantilla por definir
+> — **es decir que sea editable**.»
+
+### La plantilla que dio (borrador suyo, a afinar)
+
+```
+Hola NOMBRE,
+
+Durante el mes MES has generado un total de X €, de las formaciones:
+- FORMACIÓN 1
+- FORMACIÓN 2
+- ...
+
+Contesta a este mismo email con tu factura +IVA −Retención y con los datos:
+DATOS CEDIA
+
+Envía tu IBAN.
+
+Muchas gracias
+```
+
+Los huecos salen solos de lo que ya hay: nombre y correo del tutor, el mes
+elegido arriba, el total del mes y **la lista de sus formaciones de ese mes** —
+son las mismas filas que se ven al desplegarlo.
+
+### Cinco cosas que no se pueden pasar por alto
+
+1. **El remitente es nuevo.** `facturacion@cediaidsl.com` no es ninguno de los
+   que hay verificados en Brevo. **Hay que darlo de alta y verificarlo antes**, o
+   los correos no saldrán y no se sabrá por qué. Esto se comprueba el primer día,
+   no el último.
+
+2. **«Avisado» y «Notificada» son el mismo estado.** En la nota de los estados
+   Diego pidió *Pendiente · Notificada · Falta Factura*, y aquí lo llama
+   *avisado*. **Hay que elegir una palabra y usarla en los dos sitios**, o
+   acabarán siendo dos estados que significan lo mismo.
+
+3. **El correo tiene que llevar la cuenta hecha**, la de la otra nota: comisión
+   + IVA 21 % − retención 15 % = total. Decirle «mándame tu factura +IVA
+   −Retención» sin darle el número es justo lo que provoca las facturas mal
+   hechas que hay que devolver.
+
+4. **El IBAN no es un detalle.** Casi todos los tutores salen con *«sin IBAN · no
+   se le puede pagar»*. Por eso el correo lo pide — y por eso, cuando el tutor
+   conteste, tiene que haber dónde meterlo sin pelearse con la ficha.
+
+5. **Esto no reabre lo de mandar facturas a clientes.** Diego dijo «no enviemos
+   NADA por correo» y sigue en pie; esto es **otra cosa y la pide él
+   expresamente**: un correo interno a un colaborador, no una factura a un
+   alumno.
+
+### Editable quiere decir editable
+
+No vale con dejar el texto en el código. Tiene que poder cambiarse desde el CRM
+—como las plantillas de WhatsApp— porque «la plantilla por definir» significa
+que va a cambiar varias veces antes de quedarse quieta.
+
+*Asignada a **Ángel y Diego**. Backend (Brevo + el estado) y frontend (el botón,
+la vista previa y el editor de la plantilla).*

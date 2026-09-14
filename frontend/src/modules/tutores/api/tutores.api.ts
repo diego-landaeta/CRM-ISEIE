@@ -236,17 +236,29 @@ export const tutoresApi = {
       + `${tutorId ? `&tutorId=${tutorId}` : ''}${projectId ? `&projectId=${projectId}` : ''}`) as Promise<ApiResponse<LineaSimulacion[]>>,
 
   /** Crea las comisiones que falten. Pulsarlo dos veces no duplica nada. */
-  calcularComisiones: (datos: { desde?: string | null; hasta?: string | null; projectId?: number | null }) =>
+  calcularComisiones: (datos: {
+    desde?: string | null; hasta?: string | null; projectId?: number | null;
+    /** Los campus de la empresa, para calcularlos todos de una vez. */
+    projectIds?: number[] | null;
+  }) =>
     client.post('/tutores/comisiones/calcular', datos) as Promise<ApiResponse<{
       creadas: number; importe: number; tutores: number; periodos: string[];
     }>>,
 
-  comisiones: (q: { periodo?: string | null; tutorId?: number | null; estado?: string | null; projectId?: number | null }) =>
+  comisiones: (q: {
+    periodo?: string | null; tutorId?: number | null; estado?: string | null;
+    projectId?: number | null; issuerId?: number | null;
+  }) =>
     client.get('/tutores/comisiones?' + new URLSearchParams(
       Object.entries(q).filter(([, v]) => v != null && v !== '').map(([k, v]) => [k, String(v)])
     ).toString()) as Promise<ApiResponse<ComisionReal[]>>,
 
-  resumenComisiones: (q: { periodo?: string | null; tutorId?: number | null; projectId?: number | null }) =>
+  // `issuerId` manda sobre `projectId`: el servidor lo traduce a los campus
+  // de esa empresa, igual que en Ventas y en Reportes.
+  resumenComisiones: (q: {
+    periodo?: string | null; tutorId?: number | null;
+    projectId?: number | null; issuerId?: number | null;
+  }) =>
     client.get('/tutores/comisiones/resumen?' + new URLSearchParams(
       Object.entries(q).filter(([, v]) => v != null && v !== '').map(([k, v]) => [k, String(v)])
     ).toString()) as Promise<ApiResponse<ResumenComision[]>>,
@@ -275,9 +287,10 @@ export const tutoresApi = {
     client.get('/tutores/anuncios' + (projectId ? `?projectId=${projectId}` : '')) as
       Promise<ApiResponse<AnuncioMeta[]>>,
 
-  pagosSinFormacion: (desde: string, hasta: string, projectId?: number | null) =>
+  pagosSinFormacion: (desde: string, hasta: string, projectId?: number | null, issuerId?: number | null) =>
     client.get(`/tutores/pagos-sin-formacion?desde=${desde}&hasta=${hasta}`
-      + (projectId ? `&projectId=${projectId}` : '')) as Promise<ApiResponse<PagoSinFormacion[]>>,
+      + (projectId ? `&projectId=${projectId}` : '')
+      + (issuerId ? `&issuerId=${issuerId}` : '')) as Promise<ApiResponse<PagoSinFormacion[]>>,
 
   /** La ficha del curso que imparte. El servidor comprueba que sea suyo. */
   curso: (productId: number) =>
