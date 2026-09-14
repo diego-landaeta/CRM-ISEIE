@@ -624,3 +624,92 @@ ve en esa pantalla.
 
 *Sin asignar. Toca frontend (AppLayout y las dos pantallas) y backend
 (`proceso.model.js`), y encaja con lo de Fabián en el #103.*
+
+---
+
+## Facturación: el buscador y los atajos de fecha, donde se usan
+
+Anotado el **14/09/2026**. Diego: «en facturación se necesita buscador de
+facturas por lupa, número, filtros rápidos como hoy, ayer y eso».
+
+**El buscador YA existe** — `InvoicesPage.tsx:309`, con lupa y «Buscar por nº de
+factura, cliente o NIF». No hay que construirlo. El problema es **dónde está**:
+
+1. las cuatro tarjetas de cifras
+2. el buscador y los filtros
+3. la tabla de ventas sin factura
+4. **la lista de facturas** ← donde se trabaja
+
+Para cuando bajas a la lista, el buscador lleva tres bloques fuera de pantalla.
+Un buscador que hay que ir a buscar no se usa: por eso se pide uno que no está,
+estando.
+
+**Los atajos de fecha sí faltan.** Solo hay dos casillas (`filters.from` /
+`filters.to`, líneas 349 y 352). No hay hoy, ayer, esta semana, este mes ni mes
+pasado.
+
+Qué hacer: que la barra se quede pegada al bajar o se repita junto a la cabecera
+de la tabla —donde Diego dibujó el recuadro—; los cinco atajos rellenando
+`from`/`to`, que el backend ya filtra por ese rango; y que buscar `110`
+encuentre la `2026/0110` sin teclear el año.
+
+Es la misma petición que Carlos hizo el 11/09 para las dos colas. Si se hacen
+los atajos, **un solo componente** para las tres pantallas.
+
+*Sin asignar. Solo frontend.*
+
+---
+
+## Tutores: los estados de la comisión
+
+Anotado el **14/09/2026**. Diego, señalando la columna ESTADO de
+`/tutores/comisiones`:
+
+> «Ahí que pone pendiente deben aparecer los siguientes estados: Pendiente,
+> Notificada, Falta Factura. Si este estado se pone en septiembre, se mantiene
+> SOLO en ese mes, hasta que se modifique.»
+
+### Lo comprobado
+
+Las comisiones de tutores **no** viven en la tabla `commissions` (esa es la del
+equipo comercial), sino en `tutor_comisiones`, y esa tabla **ya tiene `periodo`**
+— `tutor.model.js:386`. Cada fila es de un mes concreto, así que lo de «se
+mantiene solo en ese mes» **ya está resuelto por estructura**: no hay que
+inventar nada, poner un estado en septiembre no puede tocar agosto.
+
+Los estados de hoy son tres: `pendiente`, `pagada`, `revertida`
+(`tutor.controller.js:282`).
+
+### Qué falta
+
+Añadir **`notificada`** y **`falta_factura`**, y que la columna deje elegirlos.
+Al tocar la restricción, mirar **si es un CHECK o un ENUM de Postgres**: si es
+ENUM hay que ampliarlo, y buscar solo el CHECK ya rompió las conversiones en los
+dos CRM una vez.
+
+Encaja con lo de Carlos de «avisar al tutor»: *notificada* es justo el estado en
+que queda una comisión después de mandarle el correo, y *falta factura* el que
+explica por qué no se le paga todavía.
+
+*Sin asignar. Migración + backend + la columna en la pantalla.*
+
+---
+
+## La lupa en Tutores y en Clientes
+
+Anotado el **14/09/2026**. Diego: «necesito una lupa en tutores y en clientes
+(filtros)».
+
+Comprobado: las dos pantallas **sí tienen campo de búsqueda** —`TutoresPage.tsx`
+y `ClientsPage.tsx` tienen su `placeholder` de buscar— pero **ninguna de las dos
+pinta el icono de lupa**: cero `MagnifyingGlass` en ambos ficheros.
+
+O sea que el campo está y no se lee como buscador. Es el mismo caso que
+Facturación pero al revés: allí la lupa está y el buscador queda lejos; aquí el
+buscador está y no parece uno.
+
+Qué hacer: poner la lupa dentro del campo, como en Facturación y en Prospectos,
+para que las cuatro pantallas se parezcan. Y revisar de paso que el campo esté
+donde se mira, no encima del todo.
+
+*Sin asignar. Solo frontend, y es pequeño.*
