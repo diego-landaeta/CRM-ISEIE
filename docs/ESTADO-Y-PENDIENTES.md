@@ -819,3 +819,34 @@ Sea cual sea, **el mensaje miente** y manda al usuario a probar cosas en vez de
 decirle qué pasa.
 
 *Sin asignar. Pendiente de revisar.*
+
+---
+
+## BUG · Una formación desactivada por error no se puede recuperar
+
+Anotado el **14/09/2026**. Diego: «no deja editar: está aquí y ha sido
+desactivada por error». Sin investigar, como los dos de arriba.
+
+La fila de Tatiana:
+
+> Máster en Terapia de Pareja y Vínculos Afectivos · Psiko Aprende · 10 % ·
+> 2026-08-01 · en adelante · **desactivada** · 🗑 **Quitar**
+
+La única acción es **Quitar**. No hay «reactivar» ni «editar»: una formación
+desactivada por error se queda desactivada, y lo único que se ofrece es borrarla
+—que es lo contrario de lo que hace falta, porque **se lleva por delante el
+histórico de por qué se le pagó lo que se le pagó**.
+
+### Los tres bugs de tutores son el mismo nudo
+
+1. Se desactiva una formación sin querer.
+2. No se puede reactivar ni editar: solo quitar *(este)*.
+3. Se intenta volver a añadirla y el diálogo dice que **no existe ningún curso
+   con ese nombre**, mientras la tabla lo está enseñando *(el anterior)*.
+
+Sin salida: ni se arregla, ni se rehace. Hay que resolverlos juntos, y lo
+primero que hay que entender es **qué significa «desactivada»** en esa fila —si
+es la asignación tutor–formación o el producto del catálogo— porque de eso
+depende cuál de los tres es la causa y cuáles son consecuencia.
+
+*Sin asignar. Pendiente de revisar, junto con los otros dos de tutores.*
