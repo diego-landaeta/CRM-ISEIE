@@ -105,8 +105,15 @@ export async function create(data, userId) {
       iss = r.rows[0] || null;
     }
 
-    // Proforma = presupuesto NO fiscal. No consume el correlativo 'A', usa su
-    // propia serie (issuer.serie_proforma, def 'PRO') y NO pasa por el gating fiscal.
+    // Proforma = presupuesto NO fiscal: no pasa por el gating fiscal.
+    //
+    // OJO, esto decia que usaba su propia serie (`issuer.serie_proforma`, 'PRO').
+    // Ya NO es asi y la columna no se lee en ningun sitio: desde el cambio de
+    // criterio, la proforma toma numero del MISMO correlativo que las facturas
+    // --misma serie y mismo contador-- y lo MANTIENE al convertirse en factura.
+    // El comentario viejo sobrevivio al cambio y decia lo contrario que el codigo
+    // de tres lineas mas abajo. Quedan 4 proformas antiguas con serie PRO, de
+    // abril a junio de 2026, sin venta asociada: son de entonces.
     const isProforma = data.tipo === 'proforma';
     // Borrador = factura preliminar (al convertir): se guarda aunque falten datos
     // fiscales, SIN numero/codigo (no consume correlativo) y sin gating. Se
@@ -136,7 +143,7 @@ export async function create(data, userId) {
     const issuerNifSnap = (iss?.nif && !String(iss.nif).toUpperCase().startsWith('PENDIENTE'))
       ? iss.nif : null;
 
-    // Serie: para proforma, la serie_proforma de la empresa (def 'PRO'); para
+    // Serie: la de la empresa emisora, tambien para las proformas. Para
     // factura, la de la empresa emisora, si no la del request o 'A'. El contador
     // es por serie, así que las proformas nunca tocan el correlativo fiscal.
     // Decisión de negocio: las PROFORMAS comparten el MISMO correlativo que las
