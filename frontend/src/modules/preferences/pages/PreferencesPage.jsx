@@ -2,6 +2,7 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import { usePreferences } from '../hooks/usePreferences';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import { Eye, Sliders } from '@phosphor-icons/react';
+import AvisosPorCorreo from '../components/AvisosPorCorreo';
 
 export default function PreferencesPage() {
   const { activeProject } = useProjectContext();
@@ -13,6 +14,11 @@ export default function PreferencesPage() {
         title="Mis preferencias"
         subtitle="Personaliza como ves el CRM. Solo afecta a tu cuenta."
       />
+
+        {/* Los avisos por correo van los PRIMEROS: es lo unico de esta
+            pantalla que cambia lo que le LLEGA a alguien, y por tanto lo
+            que de verdad se viene a buscar aqui. El resto es como se ve. */}
+        <AvisosPorCorreo />
 
       <div className="bg-card border border-border rounded-2xl p-5 space-y-4">
         <div className="flex items-center gap-2">

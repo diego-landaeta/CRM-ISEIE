@@ -27,7 +27,12 @@ export interface MetaCampaign {
   total_impressions: number;
   total_clicks: number;
   total_leads: number;
+  /** Los que entraron AL CRM por esta campaña. No son los de Meta: Meta solo
+      cuenta los de su propio formulario. */
+  leads_crm?: number;
+  ventas_crm?: number;
   cpl: number | null;
+  cpl_crm?: number | null;
   ctr: number | null;
 }
 

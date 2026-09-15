@@ -1,16 +1,19 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Receipt, Eye, PaperPlaneTilt, CheckCircle, X, MagnifyingGlass, Gear, ArrowCounterClockwise, FileText, DownloadSimple, Trash } from '@phosphor-icons/react';
+import { Receipt, Eye, PaperPlaneTilt, CheckCircle, X, MagnifyingGlass, Gear, ArrowCounterClockwise, FileText, DownloadSimple, Trash, LinkSimple } from '@phosphor-icons/react';
 import { Link, useLocation } from 'react-router-dom';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
+import FacturacionAlDiaCard from '../components/FacturacionAlDiaCard';
 import KpiCard from '@/shared/components/ui/KpiCard';
 import client from '@/shared/api/client';
 import { formatDateNumeric } from '@/shared/lib/format';
+import { fmtMoneda } from '../currencies';
 import { invoicesApi, invoiceFaltantes } from '../api/invoices.api';
 import type { Invoice, Issuer, VentaSinFactura } from '../api/invoices.api';
 import InvoiceButton from '../components/InvoiceButton';
 import EmitirBorradorDialog from '../components/EmitirBorradorDialog';
+import AsociarVentaDialog from '../components/AsociarVentaDialog';
 import TutorialButton from '../components/TutorialButton';
 import { toast } from '@/shared/hooks/useToast';
 
@@ -38,11 +41,14 @@ export default function InvoicesPage() {
   };
   // Sociedad a la que se pide saltar (abre el aviso "entra a este proyecto").
   const [socPrompt, setSocPrompt] = useState<{ id: number; nombre: string } | null>(null);
-  const { user } = useAuth() as { user: { role?: string; factura_manager?: boolean } | null };
+  const { user } = useAuth() as { user: { role?: string; factura_manager?: boolean; editar_fechas_factura?: boolean } | null };
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
   // Gestión de facturas (editar/eliminar/abonar): admin o gestora con permiso
   // factura_manager (el backend valida además que sean SUS facturas).
   const canManage = isAdmin || !!user?.factura_manager;
+  // Quien factura de verdad. Los totales de la sociedad, las ventas sin
+  // factura y los cobros sueltos son trabajo suyo, no de cada gestora.
+  const puedeFacturar = user?.role === 'superadmin' || !!user?.factura_manager;
   const pid = activeProject?.id;
   const loc = useLocation();
   const [tab, setTab] = useState<'facturas' | 'proformas' | 'abonos'>(() => {
@@ -56,6 +62,10 @@ export default function InvoicesPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({ search: '', estado: '', from: '', to: '' });
+  // Paginacion: con cientos de facturas ya no cabian todas de una tacada.
+  const PER_PAGE = 50;
+  const [page, setPage] = useState(1);
+  const [totalFacturas, setTotalFacturas] = useState(0);
   const [sending, setSending] = useState<number | null>(null);
   const [issuers, setIssuers] = useState<Issuer[]>([]);
   // Vista por SOCIEDAD (admin): '' = por proyecto; id = todas las facturas de esa
@@ -82,7 +92,23 @@ export default function InvoicesPage() {
   // Borrador que se está validando/emitiendo (abre el diálogo de completar datos)
   const [emittingInv, setEmittingInv] = useState<Invoice | null>(null);
   const [deletingInv, setDeletingInv] = useState<Invoice | null>(null);
+  const [asociarInv, setAsociarInv] = useState<Invoice | null>(null);
+  // Cobro por Stripe: al descargar se elige entre la factura del alumno (bruto)
+  // y la copia de gestión (neto liquidado).
+  const [descargarInv, setDescargarInv] = useState<Invoice | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // Descarga el PDF. vista='gestor' baja la copia por el neto de Stripe.
+  function descargar(inv: Invoice, vista?: 'gestor') {
+    const prelim = inv.estado === 'borrador';
+    const fname = (vista === 'gestor' ? 'NETO-' : '') + ((inv.codigo || `BORRADOR-${inv.id}`).replace('/', '-')) + '.pdf';
+    // Se avisa siempre del resultado: antes, si el navegador ignoraba la descarga,
+    // el botón parecía no hacer nada y no había forma de saber qué pasaba.
+    toast({ title: 'Preparando el PDF…', description: fname });
+    invoicesApi.downloadPdf(inv.id, fname, prelim, !prelim, vista)
+      .then(() => toast({ title: '✓ Descargado', description: fname }))
+      .catch((e: unknown) => toast({ title: 'No se pudo descargar el PDF', description: (e as { message?: string })?.message || 'Error desconocido', variant: 'destructive' }));
+  }
 
   const load = useCallback(async () => {
     if (!pid) return;
@@ -91,8 +117,8 @@ export default function InvoicesPage() {
       // Modo sociedad (admin): facturas globales de esa empresa emisora; el resto
       // (stats, emisores, ventas sin factura) sigue por proyecto activo.
       const listParams = porSociedad
-        ? { issuerId: Number(filterIssuer), ...(filterProject ? { projectId: Number(filterProject) } : {}), ...filters, tipo: tipoTab, limit: 200 }
-        : { projectId: pid, ...filters, tipo: tipoTab, limit: 100 };
+        ? { issuerId: Number(filterIssuer), ...(filterProject ? { projectId: Number(filterProject) } : {}), ...filters, tipo: tipoTab, page, limit: PER_PAGE }
+        : { projectId: pid, ...filters, tipo: tipoTab, page, limit: PER_PAGE };
       const [r1, r2, r3, r4] = await Promise.all([
         invoicesApi.list(listParams),
         porSociedad
@@ -101,7 +127,11 @@ export default function InvoicesPage() {
         invoicesApi.listIssuers(pid).catch(() => ({ success: false, data: [] as Issuer[] })),
         invoicesApi.ventasSinFactura(pid).catch(() => ({ success: false, data: [] as VentaSinFactura[] })),
       ]);
-      if (r1.success) setInvoices(r1.data || []);
+      if (r1.success) {
+        setInvoices(r1.data || []);
+        const pg = (r1 as { pagination?: { total?: number } }).pagination;
+        setTotalFacturas(pg?.total ?? (r1.data || []).length);
+      }
       if (r2.success) setStats(r2.data || null);
       if (r3.success) setIssuers(r3.data || []);
       if (r4.success) setVentasSinFactura(r4.data || []);
@@ -110,8 +140,10 @@ export default function InvoicesPage() {
         .then((r) => { if (r.success) setStripeSinAsociar(r.data || []); })
         .catch(() => setStripeSinAsociar([]));
     } finally { setLoading(false); }
-  }, [pid, filters, tipoTab, porSociedad, filterIssuer, filterProject]);
+  }, [pid, filters, tipoTab, porSociedad, filterIssuer, filterProject, page]);
   useEffect(() => { load(); }, [load]);
+  // Cualquier cambio de filtro o de pestaña devuelve a la primera pagina.
+  useEffect(() => { setPage(1); }, [filters, tipoTab, pid, filterIssuer, filterProject]);
 
   // Al cambiar de sociedad, resetear el filtro de proyecto (los proyectos cambian).
   useEffect(() => { setFilterProject(''); }, [filterIssuer]);
@@ -227,6 +259,9 @@ export default function InvoicesPage() {
         )}
       />
 
+      {/* Solo sale en el listado normal: es el estado de la facturacion, no de las proformas. */}
+      {!esProformas && !esAbonos && <FacturacionAlDiaCard projectId={activeProject?.id} />}
+
       {/* Pestañas: facturas fiscales vs proformas (presupuestos) */}
       <div className="inline-flex rounded-lg border border-border bg-muted/30 p-1 text-sm font-semibold">
         {([['facturas', 'Facturas', Receipt], ['proformas', 'Proformas', FileText], ['abonos', 'Abonos', ArrowCounterClockwise]] as const).map(([k, label, Icon]) => (
@@ -237,7 +272,7 @@ export default function InvoicesPage() {
         ))}
       </div>
 
-      {!esProformas && stats && (
+      {!esProformas && stats && puedeFacturar && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <KpiCard icon={Receipt} iconBg="bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400"
             label="Total facturas" numericValue={stats.total} />
@@ -254,7 +289,7 @@ export default function InvoicesPage() {
         <div className="relative flex-1 min-w-[200px]">
           <MagnifyingGlass size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <input value={filters.search} onChange={(e) => setFilters(f => ({ ...f, search: e.target.value }))}
-            placeholder="Cliente, NIF, código…" className="w-full h-9 pl-8 pr-3 rounded-md border border-border bg-background text-sm" />
+            placeholder="Buscar por nº de factura, cliente o NIF…" className="w-full h-9 pl-8 pr-3 rounded-md border border-border bg-background text-sm" />
         </div>
         {isAdmin && sociedadesVisibles.length > 1 && (
           <select value={filterIssuer}
@@ -311,7 +346,7 @@ export default function InvoicesPage() {
 
       {/* Cobros de Stripe sin asociar - tambien visibles aqui, no solo en Pagos Stripe.
           Hasta asociarlos a un cliente NO generan factura. */}
-      {!esProformas && stripeSinAsociar.length > 0 && (
+      {!esProformas && puedeFacturar && stripeSinAsociar.length > 0 && (
         <div className="bg-red-50/70 dark:bg-red-950/20 border border-red-300 dark:border-red-900/50 rounded-lg overflow-hidden">
           <div className="px-4 py-2.5 border-b border-red-200 dark:border-red-900/40 flex items-center justify-between gap-2 flex-wrap">
             <div className="flex items-center gap-2">
@@ -351,7 +386,7 @@ export default function InvoicesPage() {
         </div>
       )}
 
-      {!porSociedad && !esProformas && ventasSinFactura.length > 0 && (
+      {!porSociedad && !esProformas && puedeFacturar && ventasSinFactura.length > 0 && (
         <div className="bg-amber-50/60 dark:bg-amber-950/10 border border-amber-200 dark:border-amber-900/40 rounded-lg overflow-hidden">
           <div className="px-4 py-2.5 border-b border-amber-200 dark:border-amber-900/40 flex items-center gap-2">
             <Receipt size={15} weight="bold" className="text-amber-600" />
@@ -437,6 +472,64 @@ export default function InvoicesPage() {
                     {inv.rectifica_codigo && (
                       <div className="text-[10px] text-muted-foreground font-normal">rectifica {inv.rectifica_codigo}</div>
                     )}
+                    {/*
+                      Venta nueva o cuota.
+
+                      Diego: «veo esos pagos y no sé cuáles son cuotas o
+                      compras». Sin esto, un día con 7 facturas y 3 ventas
+                      parece un día de 7 ventas: una venta a plazos emite una
+                      factura por cada cobro.
+                    */}
+                    {inv.tipo !== 'proforma' && inv.clase === 'cuota' && (
+                      <div className="mt-0.5">
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300"
+                          title={inv.fecha_de_la_venta ? `Cuota de una venta del ${fmtDate(inv.fecha_de_la_venta)}` : 'Cuota de una venta anterior'}>
+                          CUOTA
+                        </span>
+                        {inv.fecha_de_la_venta && (
+                          <span className="ml-1 text-[10px] text-muted-foreground font-normal">
+                            venta del {fmtDate(inv.fecha_de_la_venta)}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {/* La misma venta partida en varias facturas: no es una
+                        venta nueva --contarla como tal daba 4 donde habia 3--
+                        ni es una cuota. */}
+                    {/* Sin cobro propio, marcada como pagada, y la venta tiene
+                        mas facturado que cobrado: el dinero de esta factura no
+                        existe. Es la 2026/0102 de Flavia Gerez: 33 segundos
+                        despues de la 0101, mismo importe, un solo cargo en
+                        Stripe. */}
+                    {inv.tipo !== 'proforma' && inv.sospecha_duplicada && (
+                      <div className="mt-0.5">
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300"
+                          title="Marcada como pagada sin cobro propio, y la venta tiene más facturado que cobrado. Probablemente se emitió dos veces.">
+                          ¿REPETIDA?
+                        </span>
+                      </div>
+                    )}
+                    {inv.tipo !== 'proforma' && inv.clase === 'parte' && (
+                      <div className="mt-0.5">
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                          title="Otra factura de una venta ya facturada. No cuenta como venta nueva.">
+                          MISMA VENTA
+                        </span>
+                        {inv.fecha_de_la_venta && (
+                          <span className="ml-1 text-[10px] text-muted-foreground font-normal">
+                            venta del {fmtDate(inv.fecha_de_la_venta)}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {inv.tipo !== 'proforma' && inv.clase === 'venta' && (
+                      <div className="mt-0.5">
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+                          title="Es la factura de una venta nueva">
+                          VENTA
+                        </span>
+                      </div>
+                    )}
                   </td>
                   <td className="px-3 py-2">{fmtDate(inv.fecha_emision)}</td>
                   <td className="px-3 py-2">
@@ -447,7 +540,20 @@ export default function InvoicesPage() {
                     <td className="px-3 py-2 text-xs text-muted-foreground">{inv.proyecto_nombre || '—'}</td>
                   )}
                   <td className="px-3 py-2 text-xs text-muted-foreground">{inv.gestora_nombre || '—'}</td>
-                  <td className={`px-3 py-2 text-right tabular-nums font-semibold ${Number(inv.total) < 0 ? 'text-rose-600' : ''}`}>{fmt(Number(inv.total))}</td>
+                  {/* Un abono se guarda en negativo y en la lista se enseña asi,
+                      con su signo. Estuvo un tiempo sin el —la fila ya sale en
+                      rojo y la columna Tipo dice «Abono»— pero entonces la
+                      columna Total no cuadraba con lo que suma la factura por
+                      debajo: se leian dos cobros donde hay un cobro y una
+                      devolucion. Mismo criterio que en el PDF. */}
+                  <td className={`px-3 py-2 text-right tabular-nums font-semibold ${Number(inv.total) < 0 ? 'text-rose-600' : ''}`}>
+                    {inv.total_divisa != null && inv.moneda && inv.moneda !== 'EUR' ? (
+                      <>
+                        {fmtMoneda(Number(inv.total_divisa), inv.moneda)}
+                        <span className="block text-[10px] font-normal text-muted-foreground">({fmt(Number(inv.total))})</span>
+                      </>
+                    ) : fmt(Number(inv.total))}
+                  </td>
                   <td className="px-3 py-2">
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${ESTADO_BADGE[inv.estado] || 'bg-muted'}`}>
                       {inv.estado.toUpperCase()}
@@ -463,12 +569,27 @@ export default function InvoicesPage() {
                         className="h-7 px-2 rounded border border-border text-[11px] hover:bg-muted inline-flex items-center gap-1">
                         <Eye size={11} /> Ver
                       </button>
+                      {/* Factura en divisa: ademas de la suya, la version en euros.
+                          La de la divisa lleva el euro entre parentesis debajo, pero
+                          a veces hace falta el documento entero en euros. */}
+                      {inv.moneda && inv.moneda !== 'EUR' && inv.total_divisa != null && (
+                        <button onClick={() => {
+                            invoicesApi.openPdf(inv.id, false, undefined, true)
+                              .catch((e: unknown) => toast({ title: 'No se pudo abrir en euros', description: (e as { message?: string })?.message, variant: 'destructive' }));
+                          }}
+                          title={`Ver la misma factura totalizada en euros (esta va en ${inv.moneda})`}
+                          className="h-7 px-2 rounded border border-border text-[11px] hover:bg-muted inline-flex items-center gap-1">
+                          <Eye size={11} /> € 
+                        </button>
+                      )}
                       <button onClick={() => {
-                          // Descargar = factura DEFINITIVA (sin marca de agua) SIEMPRE, aunque
-                          // falten datos (forzar). El borrador sí baja como preliminar.
-                          const prelim = inv.estado === 'borrador';
-                          const fname = ((inv.codigo || `BORRADOR-${inv.id}`).replace('/', '-')) + '.pdf';
-                          invoicesApi.downloadPdf(inv.id, fname, prelim, !prelim).catch((e: unknown) => toast({ title: 'No se pudo descargar el PDF', description: (e as { message?: string })?.message, variant: 'destructive' }));
+                          // Cobro por Stripe: hay dos versiones (alumno=bruto / gestión=neto),
+                          // así que se pregunta cuál. En el resto se descarga directamente.
+                          if (inv.tipo === 'normal' && inv.metodo_pago === 'tarjeta_stripe' && inv.estado !== 'borrador' && canManage) {
+                            setDescargarInv(inv);
+                            return;
+                          }
+                          descargar(inv);
                         }}
                         title="Descargar factura (PDF definitivo)"
                         className="h-7 px-2 rounded border border-border text-[11px] hover:bg-muted inline-flex items-center gap-1">
@@ -518,11 +639,19 @@ export default function InvoicesPage() {
                           <CheckCircle size={11} /> Pagada
                         </button>
                       )}
-                      {inv.estado !== 'borrador' && inv.tipo !== 'rectificativa' && inv.tipo !== 'proforma' && canManage && (
+                      {inv.estado !== 'borrador' && inv.tipo !== 'rectificativa' && canManage && (
                         <button onClick={() => rectificar(inv)}
                           title="Crear factura rectificativa (de abono)"
                           className="h-7 px-2 rounded border border-rose-300 text-[11px] text-rose-600 hover:bg-rose-50 inline-flex items-center gap-1">
                           <ArrowCounterClockwise size={11} /> Abono
+                        </button>
+                      )}
+                      {/* Asociar la factura a una venta del cliente — Opción B. */}
+                      {inv.estado !== 'cancelada' && canManage && (
+                        <button onClick={() => setAsociarInv(inv)}
+                          title="Asociar esta factura a una venta del cliente"
+                          className="h-7 px-2 rounded border border-border text-[11px] hover:bg-muted inline-flex items-center gap-1">
+                          <LinkSimple size={11} /> Venta
                         </button>
                       )}
                       {/* Eliminar factura + liberar número (errores de carga) — admin. */}
@@ -552,6 +681,36 @@ export default function InvoicesPage() {
             load();
           }}
         />
+      )}
+
+      {/* ¿Qué PDF? Solo se pregunta en cobros por Stripe. */}
+      {descargarInv && (
+        <div className="fixed inset-0 z-[85] flex items-center justify-center p-4" onClick={() => setDescargarInv(null)}>
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
+          <div role="dialog" className="relative bg-card rounded-xl border border-border w-full max-w-md p-5" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-semibold text-base mb-1">Descargar {descargarInv.codigo}</h3>
+            <p className="text-xs text-muted-foreground mb-4">Este cobro entró por Stripe: elige qué versión necesitas.</p>
+            <div className="space-y-2">
+              <button onClick={() => { descargar(descargarInv); setDescargarInv(null); }}
+                className="w-full text-left p-3 rounded-md border border-border hover:bg-muted/50">
+                <div className="text-sm font-semibold">Factura del alumno</div>
+                <div className="text-[11px] text-muted-foreground">Importe bruto: {fmt(Number(descargarInv.total))} — lo que pagó el alumno. Es la factura fiscal.</div>
+              </button>
+              <button onClick={() => { descargar(descargarInv, 'gestor'); setDescargarInv(null); }}
+                className="w-full text-left p-3 rounded-md border border-violet-300 hover:bg-violet-50 dark:hover:bg-violet-950/30">
+                <div className="text-sm font-semibold text-violet-700 dark:text-violet-300">Copia de gestión</div>
+                <div className="text-[11px] text-muted-foreground">Importe neto liquidado por Stripe (descontada su comisión). Uso interno.</div>
+              </button>
+            </div>
+            <div className="flex justify-end mt-4">
+              <button onClick={() => setDescargarInv(null)} className="h-9 px-3 rounded-md border border-border bg-card text-sm">Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {asociarInv && (
+        <AsociarVentaDialog invoice={asociarInv} onClose={() => setAsociarInv(null)}
+          onSaved={() => { setAsociarInv(null); load(); }} />
       )}
 
       {/* Confirmación de borrado de factura (libera el número). */}

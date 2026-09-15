@@ -5,10 +5,15 @@ import { useAuth } from '@/contexts/AuthContext';
 import client from '@/shared/api/client';
 
 const RegisterSaleDialog = lazy(() => import('../components/RegisterSaleDialog'));
-const TopProductsCard = lazy(() => import('../components/TopProductsCard'));
 const CursosVendidosCard = lazy(() => import('../components/CursosVendidosCard'));
 const MyGoalCard = lazy(() => import('../components/MyGoalCard'));
 const GestoresStatsTable = lazy(() => import('../components/GestoresStatsTable'));
+const DesgloseVentas = lazy(() => import('../components/DesgloseVentas'));
+const ResumenVentas = lazy(() => import('../components/ResumenVentas'));
+const EvolucionVentas = lazy(() => import('../components/EvolucionVentas'));
+const VentasPorPais = lazy(() => import('../components/VentasPorPais'));
+const ClientesVentas = lazy(() => import('../components/ClientesVentas'));
+import FiltroPeriodo, { useEstadoPeriodo } from '../components/FiltroPeriodo';
 
 export default function SalesPage() {
   const { activeProject } = useProjectContext() as { activeProject: { id: number; nombre?: string } | null };
@@ -21,6 +26,13 @@ export default function SalesPage() {
   const hasActiveCtx = !!activeProject?.id;
   const allProjects = activeProject?.id === -1;
   const projectIdParam = hasActiveCtx && !allProjects ? activeProject!.id : null;
+
+  // El periodo de la pantalla, elegido UNA vez: antes cada tarjeta traía el
+  // suyo y en la misma vista convivían cuatro criterios distintos, así que los
+  // números no se podían comparar entre sí.
+  // Arranca en el año en curso: un mes recién empezado sale en blanco —ISEIE
+  // no tiene ventas en agosto— y la pantalla parecía rota. «Mes» está a un clic.
+  const { periodo, setPeriodo, desde, hasta, onFechas, rango, mes } = useEstadoPeriodo('ytd');
 
   // Filtro por gestora/vendedora (solo admin/superadmin). Las tarjetas ya
   // soportan responsableId; aquí solo lo elegimos.
@@ -73,6 +85,13 @@ export default function SalesPage() {
         </div>
       </header>
 
+      {hasActiveCtx && !allProjects && (
+        <FiltroPeriodo
+          valor={periodo} onChange={setPeriodo}
+          desde={desde} hasta={hasta} onFechas={onFechas}
+        />
+      )}
+
       {!hasActiveCtx ? (
         <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-lg p-6 text-center text-sm text-amber-800 dark:text-amber-300">
           Cargando proyectos…
@@ -80,21 +99,52 @@ export default function SalesPage() {
       ) : (
         <>
           <Suspense fallback={null}>
-            <CursosVendidosCard projectId={projectIdParam} responsableId={responsableId} />
+            <ResumenVentas projectId={projectIdParam} from={rango.from} to={rango.to} responsableId={responsableId} />
+          </Suspense>
+
+          <Suspense fallback={null}>
+            <CursosVendidosCard projectId={projectIdParam} responsableId={responsableId} from={rango.from} to={rango.to} />
           </Suspense>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <Suspense fallback={null}>
-              <MyGoalCard projectId={projectIdParam} />
-            </Suspense>
-            <Suspense fallback={null}>
-              <TopProductsCard projectId={projectIdParam} responsableId={responsableId} days={null} limit={5} title="Programas más vendidos" />
-            </Suspense>
+            {/* «Mi meta» es de quien vende. Un admin o superadmin no tiene
+                ventas propias y la tarjeta le salia siempre a cero. */}
+            {!isAdmin && (
+              <Suspense fallback={null}>
+                <MyGoalCard projectId={projectIdParam} periodo={mes} />
+              </Suspense>
+            )}
           </div>
+
+          {/* Cómo va contra el periodo anterior, y el año mes a mes. Lo ve
+              también la gestora: el servidor le devuelve solo lo suyo. */}
+          {!allProjects && (
+            <Suspense fallback={null}>
+              <EvolucionVentas projectId={projectIdParam} from={rango.from} to={rango.to} responsableId={responsableId} />
+            </Suspense>
+          )}
+
+          {!allProjects && (
+            <Suspense fallback={null}>
+              <DesgloseVentas projectId={projectIdParam} from={rango.from} to={rango.to} responsableId={responsableId} />
+            </Suspense>
+          )}
+
+          {!allProjects && (
+            <Suspense fallback={null}>
+              <VentasPorPais projectId={projectIdParam} from={rango.from} to={rango.to} responsableId={responsableId} />
+            </Suspense>
+          )}
+
+          {!allProjects && (
+            <Suspense fallback={null}>
+              <ClientesVentas projectId={projectIdParam} from={rango.from} to={rango.to} responsableId={responsableId} />
+            </Suspense>
+          )}
 
           {isAdmin && (
             <Suspense fallback={null}>
-              <GestoresStatsTable projectId={projectIdParam} canEdit={!allProjects} />
+              <GestoresStatsTable projectId={projectIdParam} canEdit={!allProjects} periodo={mes} />
             </Suspense>
           )}
 
@@ -105,6 +155,10 @@ export default function SalesPage() {
               <p className="text-xs mt-1 opacity-70">Por la fecha indicada se marca como histórica (anterior a hoy) o del día.</p>
             </div>
           )}
+
+          {/* Los números de Análisis · Reportes, aquí abajo: se mira Ventas a
+              diario y no debería hacer falta cambiar de sección para saber
+              cómo va el mes. Son los mismos paneles, no una copia. */}
         </>
       )}
 

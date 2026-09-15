@@ -6,8 +6,10 @@ import {
   CaretUp, CaretDown, Bell, Pulse, Calculator, Envelope, Globe,
   FilePdf, ShieldCheck, MagnifyingGlass, Headset, BookOpen, Sliders,
   Megaphone, Robot, Sparkle, PlugsConnected, CreditCard, WarningCircle, WhatsappLogo,
-  Receipt, Coins, Wrench, ShoppingBag, ChatCircleText, Wallet, Bank, Clock, GitMerge,
-} from '@phosphor-icons/react';
+  ChatText,
+  Receipt, Coins, Wrench, ShoppingBag, ChatCircleText, Wallet, Bank, Clock, GitMerge, CopySimple,
+  UsersThree,
+  GraduationCap, Warning } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { cn } from '@/shared/lib/utils';
@@ -15,7 +17,7 @@ import client from '@/shared/api/client';
 import NotificationsBell from './NotificationsBell';
 import { isBetaAllowed, BETA_MODE } from '@/shared/config/betaConfig';
 
-const ROLE_LABELS = { superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor', soporte: 'Soporte' };
+const ROLE_LABELS = { superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor', soporte: 'Soporte', tutor: 'Tutor' };
 
 // NAV_SECTIONS: agrupaciones del sidebar. Las "secciones" (Prospectos,
 // Captación, Productos, Contabilidad) son ahora una sola entrada en el
@@ -26,20 +28,54 @@ const NAV_SECTIONS = [
     label: 'Principal',
     items: [
       { to: '/dashboard',  label: 'Dashboard',  icon: SquaresFour, end: true },
-      { to: '/leads',      label: 'Prospectos', icon: Users,       sectionPrefixes: ['/leads'] },
+      // Prospectos cuelga de si mismo, como WhatsApp: la lista, la cola del dia
+      // y el proceso que la cola aplica son el mismo sitio.
+      {
+        label: 'Prospectos',
+        icon: Users,
+        defaultOpen: true,
+        children: [
+          { to: '/leads', label: 'Lista', end: true, sectionPrefixes: ['/leads'] },
+          { to: '/leads/cola', label: 'La cola del día' },
+          { to: '/leads/proceso', label: 'Proceso comercial' },
+        ],
+      },
+      // WhatsApp cuelga de su propia entrada, con lo suyo escalonado debajo: son
+      // tres pantallas del mismo sitio, no tres apartados sueltos del menu.
+      {
+        label: 'WhatsApp',
+        icon: WhatsappLogo,
+        apagable: 'whatsapp',
+        children: [
+          // Un solo sitio: el Chat. «Mi WhatsApp» y el panel del equipo eran del
+          // metodo viejo —cada gestora en un navegador remoto— y tener los dos a la
+          // vez es lo que confunde: dos pantallas que parecen lo mismo y no lo son.
+          // Abierto a todo el equipo por decision del owner. El aviso previo —lo
+          // que puede pasarle a su numero -- sigue pendiente en la tarea #45.
+          { to: '/whatsapp/chat', label: 'Chat' },
+          // Sin recorte por rol: cada gestora enlaza SU numero, y el servidor solo
+          // la deja tocar el suyo.
+          { to: '/whatsapp/conexion', label: 'Conexión' },
+          { to: '/whatsapp/plantillas', label: 'Plantillas' },
+          { to: '/whatsapp/ayuda', label: 'Cómo se usa' },
+          // Solo para quien manda: entrar en el WhatsApp de cada gestora.
+          // Fuera del menu: usaba el navegador remoto, que se ha retirado.
+          // Vuelve cuando se rehaga sobre el chat nuevo.
+        ],
+      },
       // Ventas vive en Principal (flujo diario) y también en Finanzas. Clientes
       // y Revisión duplicados pasan a la sección Clientes al final.
-      { to: '/sales',      label: 'Ventas',     icon: Receipt },
+      { to: '/ventas',      label: 'Ventas',     icon: Receipt },
     ],
   },
   {
     label: 'Captación',
     items: [
-      { to: '/email-sequences', label: 'Email',     icon: Envelope, roles: ['admin', 'superadmin'], sectionPrefixes: ['/email-sequences', '/email-templates'] },
+      { to: '/secuencias-email', label: 'Email',     icon: Envelope, roles: ['admin', 'superadmin'], sectionPrefixes: ['/secuencias-email', '/email-templates'] },
       { to: '/forms',           label: 'Formularios', icon: Globe,  roles: ['admin', 'superadmin'], sectionPrefixes: ['/forms'] },
       { to: '/make-webhooks',   label: 'Make',      icon: PlugsConnected, roles: ['admin', 'superadmin'] },
       { to: '/webhooks',        label: 'Webhooks',  icon: PlugsConnected, roles: ['admin', 'superadmin'] },
-      { to: '/captacion/whatsapp', label: 'WhatsApp', icon: WhatsappLogo, roles: ['admin', 'superadmin', 'soporte'] },
+      { to: '/captacion/whatsapp', label: 'Widget web', icon: WhatsappLogo, roles: ['admin', 'superadmin', 'soporte'] },
       { to: '/campaigns',       label: 'Campañas',  icon: Megaphone, roles: ['admin', 'superadmin'], sectionPrefixes: ['/campaigns'] },
       { to: '/seo',             label: 'Tráfico orgánico', icon: MagnifyingGlass, roles: ['admin', 'superadmin'] },
     ],
@@ -62,28 +98,38 @@ const NAV_SECTIONS = [
     ],
   },
   {
+    label: 'Tutores',
+    items: [
+      { to: '/tutores', label: 'Tutores', icon: GraduationCap, roles: ['admin', 'superadmin'], sectionPrefixes: ['/tutores'] },
+      // Lo unico que ve un tutor: sus cursos y lo que le corresponde.
+      { to: '/mis-cursos', label: 'Mis cursos', icon: GraduationCap, roles: ['tutor'] },
+      { to: '/tutores/sin-tutor', label: 'Sin tutor', icon: Warning, roles: ['admin', 'superadmin'] },
+      { to: '/tutores/comisiones', label: 'Comisiones', icon: Coins, roles: ['admin', 'superadmin'] },
+    ],
+  },
+  {
     label: 'Finanzas',
     items: [
-      { to: '/sales',                label: 'Dashboard',          icon: Calculator, roles: ['admin', 'superadmin'], statusTag: 'Pruebas' },
-      { to: '/sales',                label: 'Ventas',             icon: Receipt, statusTag: 'Pruebas' },
+      { to: '/ventas',                label: 'Dashboard',          icon: Calculator, roles: ['admin', 'superadmin'], statusTag: 'Pruebas' },
+      { to: '/ventas',                label: 'Ventas',             icon: Receipt, statusTag: 'Pruebas' },
       { to: '/accounting/income',    label: 'Ingresos',           icon: Coins,      roles: ['admin', 'superadmin'], statusTag: 'Pruebas' },
-      { to: '/accounting/conversions', label: 'Conversiones',     icon: ChartLineUp, roles: ['admin', 'superadmin'], statusTag: 'Pruebas' },
+      { to: '/revenue',              label: 'Conversiones',       icon: ChartLineUp, roles: ['admin', 'superadmin'], statusTag: 'Pruebas' },
       { to: '/expenses',             label: 'Egresos',            icon: Receipt,    roles: ['admin', 'superadmin'], statusTag: 'Pruebas' },
       { to: '/accounting/receivable', label: 'Cuentas por cobrar', icon: Wallet,    roles: ['admin', 'superadmin', 'soporte', 'gestor'] },
       { to: '/accounting/payable',   label: 'Cuentas por pagar',  icon: Wallet,     roles: ['admin', 'superadmin'], statusTag: 'Pruebas' },
       { to: '/commissions',          label: 'Comisiones',         icon: Bank,  roles: ['admin', 'superadmin'], statusTag: 'Pruebas' },
       { to: '/payroll',              label: 'Nóminas',            icon: Coins,      roles: ['admin', 'superadmin'], statusTag: 'Pruebas' },
       { to: '/accounting/pendiente-facturar', label: 'Pendientes de facturar', icon: WarningCircle, roles: ['admin', 'superadmin'], statusTag: 'Pruebas' },
-      { to: '/accounting/facturas', label: 'Facturación', icon: FilePdf, roles: ['admin', 'superadmin', 'soporte', 'gestor'], sectionPrefixes: ['/accounting/facturas'] },
+      { to: '/accounting/pagos-stripe', label: 'Pagos Stripe',    icon: PlugsConnected, roles: ['admin', 'superadmin'] },
+      { to: '/accounting/facturas', label: 'Facturación', icon: FilePdf, roles: ['admin', 'superadmin', 'soporte', 'gestor'], permiso: 'factura_manager', sectionPrefixes: ['/accounting/facturas'] },
       { to: '/accounting/integrations', label: 'Integraciones',   icon: PlugsConnected, roles: ['admin', 'superadmin'], statusTag: 'Pruebas' },
     ],
   },
   {
     label: 'Análisis',
     items: [
-      { to: '/reports',     label: 'Reportes',      icon: ChartLineUp, sectionPrefixes: ['/reports', '/activity'] },
-      { to: '/reports/ia',  label: 'Análisis IA',   icon: Sparkle,     roles: ['admin', 'superadmin'] },
-      { to: '/ai-chat',     label: 'Chat IA',       icon: ChatCircleText, roles: ['admin', 'superadmin'] },
+      { to: '/informes',     label: 'Reportes',      icon: ChartLineUp, sectionPrefixes: ['/informes', '/activity'] },
+      { to: '/chat-ia',     label: 'Chat IA',       icon: ChatCircleText, roles: ['admin', 'superadmin'] },
     ],
   },
   {
@@ -92,6 +138,7 @@ const NAV_SECTIONS = [
     items: [
       { to: '/clients',    label: 'Clientes',   icon: UserCheck, sectionPrefixes: ['/clients'] },
       { to: '/leads/revision-duplicados', label: 'Revisión duplicados', icon: GitMerge, roles: ['admin', 'superadmin'] },
+      { to: '/leads/duplicados', label: 'Buscar duplicados', icon: CopySimple, roles: ['admin', 'superadmin'] },
       { to: '/matriculas', label: 'Matrículas', icon: UserCheck },
     ],
   },
@@ -100,7 +147,8 @@ const NAV_SECTIONS = [
     items: [
       { to: '/solicitudes-cambio', label: 'Solicitudes de cambio', icon: GitMerge },
       { to: '/notificaciones', label: 'Notificaciones',   icon: Bell },
-      { to: '/preferences',    label: 'Mis preferencias', icon: Sliders },
+      // El tutor entra aqui: es donde cambia su contraseña.
+      { to: '/preferencias',    label: 'Mis preferencias', icon: Sliders, roles: ['superadmin', 'admin', 'gestor', 'tutor'] },
       { to: '/soporte',        label: 'Soporte',          icon: Headset },
       { to: '/manual',         label: 'Manual del CRM',   icon: BookOpen },
       { to: '/status',         label: 'Status',           icon: Pulse },
@@ -108,7 +156,45 @@ const NAV_SECTIONS = [
   },
 ];
 
-function canSeeItem(item, role) {
+// Interruptor de compilacion para dejar una parte fuera de una instalacion sin
+// borrar su codigo. Se usa con WhatsApp, que en produccion todavia no se enciende
+// —esta en revision— pero viaja en el mismo build que el resto.
+const APAGADOS = String(import.meta.env.VITE_MODULOS_APAGADOS || '')
+  .split(',').map((s) => s.trim()).filter(Boolean);
+
+function canSeeItem(item, role, soloColaboraciones, permisos) {
+  if (item.apagable && APAGADOS.includes(item.apagable)) return false;
+  // Un tutor solo ve lo suyo: lo que no le nombre expresamente queda fuera.
+  // Al reves —listar lo prohibido— se olvida siempre algo, y lo que se olvida
+  // es un tutor paseandose por Prospectos o por Finanzas.
+  if (role === 'tutor') return Array.isArray(item.roles) && item.roles.includes('tutor');
+  // Un gestor de colaboraciones se dedica SOLO a los tutores: no lleva
+  // prospectos, ni ventas, ni finanzas. Se declara lo que puede ver, igual que
+  // con el tutor — enumerar lo prohibido deja fuera siempre la pantalla nueva.
+  if (soloColaboraciones) {
+    // «Sin tutor» faltaba, y era un olvido de la lista, no una decisión: el
+    // servidor ya la dejaba entrar —`formacionesSinTutor` pasa por
+    // `exigirGestion`, que acepta la casilla de colaboraciones— y era la
+    // pantalla la que se la escondía. Y es justo la que dice qué formaciones
+    // están sin cubrir, o sea el trabajo de quien lleva las colaboraciones.
+    //
+    // Van las TRES del apartado. «Mis cursos» no: esa es la de un tutor
+    // mirando lo suyo, no la de quien los organiza.
+    return ['/tutores', '/tutores/sin-tutor', '/tutores/comisiones', '/preferencias']
+      .includes(item.to);
+  }
+
+  // Un permiso acotado manda sobre el rol.
+  //
+  // La entrada de Facturacion la ve quien PUEDE facturar, no todo el que sea
+  // gestor. En ISEIE ninguna gestora factura —lo hacen Adriana y Daniela, que
+  // son admin— y aun asi las doce veian el panel. En ISEIH lo veia Vanessa, que
+  // es «gestor» pero lleva tutores.
+  //
+  // Se comprueba solo para gestor: un admin puede facturar por su rol y no
+  // necesita el permiso, y a soporte ya se le deja pasar antes.
+  if (item.permiso && role === 'gestor' && !permisos?.[item.permiso]) return false;
+
   if (!item.roles) return true;
   if (role === 'superadmin' || role === 'soporte') return true;
   return item.roles.includes(role);
@@ -175,12 +261,87 @@ function NavItem({ to, label, icon: Icon, end, comingSoon, statusTag, collapsed,
 }
 
 
+// Una entrada con lo suyo escalonado debajo. Se abre y se cierra, y lo de
+// dentro se sangra con una guia a la izquierda para que se vea de un vistazo
+// que pertenece a ella.
+function NavGroup({ label, icon: Icon, items, defaultOpen, role, soloColab, permisos, collapsed, onNavigate, onExpandSidebar }) {
+  const location = useLocation();
+  const visible = items
+    .filter((c) => canSeeItem(c, role, soloColab, permisos))
+    .map((c) => ({ ...c, comingSoon: c.comingSoon || !isBetaAllowed(c.to) }));
+  const hasActiveChild = visible.some(
+    (c) => !c.comingSoon && (location.pathname === c.to || location.pathname.startsWith(c.to + '/'))
+  );
+  const [open, setOpen] = useState(hasActiveChild || !!defaultOpen);
+  // Si se llega desde fuera a una pantalla de dentro, el grupo se abre solo:
+  // si no, el apartado marcado como activo quedaria escondido.
+  useEffect(() => { if (hasActiveChild) setOpen(true); }, [hasActiveChild]);
+  if (!visible.length) return null;
+
+  // Colapsado (sidebar mini) solo cabe el icono: al pulsarlo se despliega la
+  // barra y se abre el grupo, en vez de dejar al usuario sin salida.
+  if (collapsed) {
+    return (
+      <button
+        type="button"
+        onClick={() => { onExpandSidebar?.(); setOpen(true); }}
+        title={label}
+        aria-label={label}
+        className={cn(
+          'w-full flex items-center justify-center h-10 rounded-md transition-colors',
+          hasActiveChild ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
+        )}
+      >
+        <Icon size={18} weight={hasActiveChild ? 'duotone' : 'regular'} />
+      </button>
+    );
+  }
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        className={cn(
+          'w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] transition-colors',
+          hasActiveChild ? 'text-foreground font-semibold' : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
+        )}
+      >
+        <Icon size={18} weight={hasActiveChild ? 'duotone' : 'regular'} />
+        <span className="truncate">{label}</span>
+        <CaretRight size={12} weight="bold" className={cn('ml-auto transition-transform', open && 'rotate-90')} />
+      </button>
+      {open && (
+        <div className="ml-4 mt-0.5 pl-3 border-l border-border/60 space-y-0.5">
+          {visible.map((child) => (
+            <NavItem
+              key={child.to}
+              to={child.to}
+              label={child.label}
+              icon={child.icon || Icon}
+              end={child.end}
+              comingSoon={child.comingSoon}
+              statusTag={child.statusTag}
+              onClick={onNavigate}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Decide qué sección debe estar abierta por defecto: Principal (siempre) +
 // la que contenga la ruta actual. Devuelve un map { [section.label]: boolean }.
 function defaultOpenSections(sections, pathname) {
   const out = {};
   for (const s of sections) {
     const containsActive = s.items.some((it) => {
+      // Una entrada con hijos no tiene ruta propia: cuenta lo de dentro.
+      if (it.children) {
+        return it.children.some((c) => pathname === c.to || (c.to && pathname.startsWith(c.to + '/')));
+      }
       if (pathname === it.to) return true;
       if (it.sectionPrefixes?.some((p) => pathname === p || pathname.startsWith(p + '/'))) return true;
       if (it.to && it.to !== '/' && pathname.startsWith(it.to + '/')) return true;
@@ -191,7 +352,7 @@ function defaultOpenSections(sections, pathname) {
   return out;
 }
 
-function CollapsibleNav({ sections, role, collapsed, onNavigate }) {
+function CollapsibleNav({ sections, role, soloColab, permisos, collapsed, onNavigate, onExpandSidebar }) {
   const location = useLocation();
   const STORAGE_KEY = 'crm-sidebar-sections-v1';
   const [openMap, setOpenMap] = useState(() => {
@@ -229,35 +390,53 @@ function CollapsibleNav({ sections, role, collapsed, onNavigate }) {
       {sections.map((section) => {
         const items = section.items
           .map((it) => {
-            if (it.sectionPrefixes?.includes('/reports') && it.sectionPrefixes?.includes('/activity')) {
+            if (it.sectionPrefixes?.includes('/informes') && it.sectionPrefixes?.includes('/activity')) {
               const isAdmin = role === 'admin' || role === 'superadmin' || role === 'soporte';
-              return { ...it, to: isAdmin ? '/reports' : '/activity' };
+              return { ...it, to: isAdmin ? '/informes' : '/activity' };
             }
             return it;
           })
-          .filter((it) => canSeeItem(it, role))
-          .map((it) => ({ ...it, comingSoon: it.comingSoon || !isBetaAllowed(it.to) }));
+          .filter((it) => canSeeItem(it, role, soloColab, permisos))
+          // Una entrada con hijos no tiene ruta que mirar: lo de BETA lo decide
+          // cada hijo por su cuenta, dentro de NavGroup.
+          .map((it) => (it.children ? it : { ...it, comingSoon: it.comingSoon || !isBetaAllowed(it.to) }));
         if (!items.length) return null;
+
+        const pintar = (item) => (item.children ? (
+          <NavGroup
+            key={'g|' + item.label}
+            label={item.label}
+            icon={item.icon}
+            items={item.children}
+            defaultOpen={item.defaultOpen}
+            soloColab={soloColab}
+            permisos={permisos}
+            role={role}
+            collapsed={collapsed}
+            onNavigate={onNavigate}
+            onExpandSidebar={onExpandSidebar}
+          />
+        ) : (
+          <NavItem
+            key={item.to + '|' + item.label}
+            to={item.to}
+            label={item.label}
+            icon={item.icon}
+            end={item.end}
+            comingSoon={item.comingSoon}
+            statusTag={item.statusTag}
+            collapsed={collapsed}
+            onClick={onNavigate}
+            sectionPrefixes={item.sectionPrefixes}
+          />
+        ));
 
         // En modo colapsado (sidebar mini) no mostramos headers ni colapso —
         // todos los items se ven como iconos en línea.
         if (collapsed) {
           return (
             <div key={section.label} className="space-y-0.5">
-              {items.map((item) => (
-                <NavItem
-                  key={item.to + '|' + item.label}
-                  to={item.to}
-                  label={item.label}
-                  icon={item.icon}
-                  end={item.end}
-                  comingSoon={item.comingSoon}
-                  statusTag={item.statusTag}
-                  collapsed={collapsed}
-                  onClick={onNavigate}
-                  sectionPrefixes={item.sectionPrefixes}
-                />
-              ))}
+              {items.map(pintar)}
             </div>
           );
         }
@@ -280,20 +459,7 @@ function CollapsibleNav({ sections, role, collapsed, onNavigate }) {
             </button>
             {open && (
               <div className="space-y-0.5 mt-0.5 ml-1 pl-2 border-l border-border/50">
-                {items.map((item) => (
-                  <NavItem
-                    key={item.to + '|' + item.label}
-                    to={item.to}
-                    label={item.label}
-                    icon={item.icon}
-                    end={item.end}
-                    comingSoon={item.comingSoon}
-                    statusTag={item.statusTag}
-                    collapsed={collapsed}
-                    onClick={onNavigate}
-                    sectionPrefixes={item.sectionPrefixes}
-                  />
-                ))}
+                {items.map(pintar)}
               </div>
             )}
           </div>
@@ -325,7 +491,9 @@ export default function Sidebar({ collapsed = false, onToggleCollapsed, onNaviga
 
   const role = user?.role || 'gestor';
   const initials = user?.nombre?.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2) || '??';
-  const rolLabel = ROLE_LABELS[role] || '';
+  // Quien lleva las colaboraciones no es una gestora: se la llama por su trabajo,
+  // que es dar de alta profesores y ajustarles el porcentaje.
+  const rolLabel = user?.gestor_colaboraciones ? 'Colaboraciones' : (ROLE_LABELS[role] || '');
 
   return (
     <aside
@@ -395,8 +563,12 @@ export default function Sidebar({ collapsed = false, onToggleCollapsed, onNaviga
       <CollapsibleNav
         sections={NAV_SECTIONS}
         role={role}
+        soloColab={user?.gestor_colaboraciones === true
+          && !['superadmin', 'admin', 'soporte'].includes(role)}
+        permisos={user}
         collapsed={collapsed}
         onNavigate={onNavigate}
+        onExpandSidebar={onToggleCollapsed}
       />
 
       {/* User menu + notification bell */}
@@ -431,14 +603,14 @@ export default function Sidebar({ collapsed = false, onToggleCollapsed, onNaviga
             collapsed ? 'left-full ml-2 w-48' : 'left-0 right-0'
           )}>
             <button
-              onClick={() => { setUserMenuOpen(false); navigate('/profile'); }}
+              onClick={() => { setUserMenuOpen(false); navigate('/perfil'); }}
               className="w-full flex items-center gap-2.5 px-3 py-2 text-[13px] hover:bg-secondary/60 text-foreground"
             >
               <UserCircle size={15} />
               Mi cuenta
             </button>
             <button
-              onClick={() => { setUserMenuOpen(false); navigate('/settings'); }}
+              onClick={() => { setUserMenuOpen(false); navigate('/configuracion'); }}
               className="w-full flex items-center gap-2.5 px-3 py-2 text-[13px] hover:bg-secondary/60 text-foreground"
             >
               <Gear size={15} />

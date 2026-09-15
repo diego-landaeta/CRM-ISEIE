@@ -1,11 +1,13 @@
 import { PDFDocument, StandardFonts, rgb, degrees } from 'pdf-lib';
 import fs from 'fs/promises';
 import path from 'path';
+import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import { decrypt } from '../../shared/utils/crypto.js';
 import { getLocal } from '../../shared/services/localStorage.service.js';
 import * as integrationsModel from '../integrations/integrations.model.js';
 import * as model from './invoices.model.js';
+import { query } from '../../shared/config/db.js';
 
 const PDF_DIR = process.env.INVOICES_PDF_DIR || path.join(process.cwd(), 'uploads', 'invoices');
 
@@ -47,7 +49,10 @@ export function getDefaultIvaPct(/* pais */) {
 
 // Calcula importes con o sin IVA incluido
 export function calcularImportes({ items, ivaPct, ivaIncluido }) {
-  const subtotal = items.reduce((s, it) => s + Number(it.cantidad || 1) * Number(it.precio_unitario || 0), 0);
+  // Las dos claves, como en el PDF. Con solo `precio_unitario`, unos conceptos
+  // guardados a la antigua daban subtotal 0 y la factura se guardaba en cero sin
+  // avisar de nada — un cero silencioso es peor que un error.
+  const subtotal = items.reduce((s, it) => s + Number(it.cantidad || 1) * Number(it.precio_unitario ?? it.precio ?? 0), 0);
   let baseImponible, ivaImporte, total;
   if (ivaIncluido) {
     // El total ya incluye IVA → desglosar
@@ -62,15 +67,57 @@ export function calcularImportes({ items, ivaPct, ivaIncluido }) {
   return { baseImponible, ivaImporte, total };
 }
 
+// Doble moneda: la gestora teclea a mano el total en EUROS de una factura emitida en
+// otra divisa. Aquí se desglosa ese importe (base + IVA) para que la contabilidad en
+// euros cuadre. No hay conversión automática: el euro que entra es el que manda.
+export function repartirEnEuros({ totalEur, ivaPct, ivaIncluido }) {
+  const total = Number(totalEur || 0);
+  const pct = Number(ivaPct || 0);
+  if (pct === 0) return { baseImponible: Number(total.toFixed(2)), ivaImporte: 0, total: Number(total.toFixed(2)) };
+  if (ivaIncluido) {
+    const baseImponible = Number((total / (1 + pct / 100)).toFixed(2));
+    return { baseImponible, ivaImporte: Number((total - baseImponible).toFixed(2)), total: Number(total.toFixed(2)) };
+  }
+  // El importe tecleado se toma como TOTAL con IVA ya sumado (es lo que se cobró).
+  const baseImponible = Number((total / (1 + pct / 100)).toFixed(2));
+  return { baseImponible, ivaImporte: Number((total - baseImponible).toFixed(2)), total: Number(total.toFixed(2)) };
+}
+
+// La fuente estándar del PDF (WinAnsi) no sabe dibujar símbolos como ₡ (colón) o
+// ₲ (guaraní). Si uno aparecía en un concepto, la generación reventaba y esa
+// factura NO se podía descargar. Se cambian por su código ISO y se descarta
+// cualquier otro carácter fuera de Latin-1 antes que romper el PDF.
+const SIMBOLOS_NO_WINANSI = {
+  '₡': 'CRC ', '₲': 'PYG ', '₴': 'UAH ', '₹': 'INR ',
+  '₩': 'KRW ', '₦': 'NGN ', '₪': 'ILS ', '₫': 'VND ',
+  '₱': 'PHP ', '฿': 'THB ', '₺': 'TRY ', '₽': 'RUB ',
+  '₿': 'BTC ', '₵': 'GHS ', '₾': 'GEL ',
+};
+function winAnsi(t) {
+  let out = String(t ?? '');
+  for (const [sym, iso] of Object.entries(SIMBOLOS_NO_WINANSI)) out = out.split(sym).join(iso);
+  // OJO: WinAnsi (CP1252) SI admite caracteres fuera de Latin-1 — el euro entre
+  // ellos. Filtrar solo por Latin-1 se cargaba el simbolo de TODOS los importes.
+  const EXTRAS = new Set([0x20AC,0x201A,0x0192,0x201E,0x2026,0x2020,0x2021,0x02C6,
+    0x2030,0x0160,0x2039,0x0152,0x017D,0x2018,0x2019,0x201C,0x201D,0x2022,0x2013,
+    0x2014,0x02DC,0x2122,0x0161,0x203A,0x0153,0x017E,0x0178]);
+  let res = '';
+  for (const ch of out) {
+    const cp = ch.codePointAt(0);
+    if (cp <= 0xFF || EXTRAS.has(cp)) res += ch;
+  }
+  return res;
+}
+
 // Formatea un importe en la moneda de la factura (por defecto EUR). Los importes
 // son manuales en esa divisa (sin conversión). Si el código ISO no lo soporta
 // Intl, cae a "1.234,56 XXX".
 function fmtMoney(n, moneda = 'EUR') {
   const cur = String(moneda || 'EUR').toUpperCase();
   try {
-    return new Intl.NumberFormat('es-ES', { style: 'currency', currency: cur }).format(Number(n || 0));
+    return winAnsi(new Intl.NumberFormat('es-ES', { style: 'currency', currency: cur }).format(Number(n || 0)));
   } catch {
-    return `${new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n || 0))} ${cur}`;
+    return winAnsi(`${new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n || 0))} ${cur}`);
   }
 }
 function fmtEUR(n) { return fmtMoney(n, 'EUR'); }
@@ -85,7 +132,7 @@ function netFactor(inv) {
 // Parte una descripción larga en varias líneas que caben en maxWidth, para que
 // el nombre completo del programa NO se corte en el PDF (antes se hacía slice).
 function wrapToLines(font, text, size, maxWidth) {
-  const clean = String(text ?? '').replace(/[\r\n\t]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
+  const clean = winAnsi(text).replace(/[\r\n\t]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
   if (!clean) return [''];
   const words = clean.split(' ');
   const lines = [];
@@ -108,12 +155,49 @@ function wrapToLines(font, text, size, maxWidth) {
 }
 
 // Genera PDF de factura usando pdf-lib
-export async function generatePDF(invoiceId, { preliminar = false } = {}) {
+export async function generatePDF(invoiceId, { preliminar = false, vistaGestor = false, enEuros = false } = {}) {
   const inv = await model.findById(invoiceId);
   if (!inv) throw new Error('Factura no encontrada');
+  // COPIA DE GESTIÓN de un cobro por Stripe: el alumno recibe la factura por el
+  // BRUTO (lo que pagó) y gestión necesita el NETO liquidado (bruto − comisión).
+  // Se sustituyen los importes solo para este PDF; en la base de datos no se toca
+  // nada. Si el cobro no es de Stripe o no consta la comisión, no se altera.
+  let neto = null;
+  if (vistaGestor && inv.payment_id) {
+    const { rows } = await query(
+      `SELECT net_amount, fee_amount FROM stripe_payments
+        WHERE conversion_payment_id = $1 AND net_amount IS NOT NULL LIMIT 1`, [inv.payment_id]);
+    if (rows[0]) {
+      neto = { net: Number(rows[0].net_amount), fee: Number(rows[0].fee_amount || 0) };
+      const factor = Number(inv.total) > 0 ? neto.net / Number(inv.total) : 1;
+      inv.total = neto.net;
+      inv.base_imponible = Number((Number(inv.base_imponible || 0) * factor).toFixed(2));
+      inv.iva_importe = Number((Number(inv.iva_importe || 0) * factor).toFixed(2));
+      if (inv.total_divisa != null) inv.total_divisa = null; // el neto siempre en euros
+    }
+  }
+  // En un ABONO los importes van en NEGATIVO tambien en el papel.
+  //
+  // Estuvieron un tiempo en positivo —se quitaba el signo al escribirlos— porque
+  // parecia un error de formato. Pero sin el signo el documento se lee como un
+  // cargo nuevo: pone «FACTURA RECTIFICATIVA» arriba y «por anulacion de
+  // servicio» en la linea, y debajo un TOTAL de 324,00 US$ que parece que se
+  // vuelven a cobrar. Un abono resta, y eso tiene que verse en la cifra.
+  //
+  // El dato guardado ya era negativo y no se toca: esto es solo como se escribe.
+  // Si algun dia se quiere volver a sin signo, se cambia aqui y en el otro
+  // `enPapel` de este mismo fichero (el del editor visual).
+  const enPapel = (n) => Number(n || 0);
+
   // Formateo en la moneda de la factura (fallback local que sombrea el fmtEUR de
   // módulo dentro del layout fijo). El editor visual usa fmtMoney directamente.
-  const fmtEUR = (n) => fmtMoney(n, inv.moneda);
+  // ?moneda=eur -> el documento entero en euros, no en la divisa.
+  //
+  // Una factura en dolares guarda base/IVA/total en EUROS y el importe en divisa
+  // aparte, asi que la version en euros ya esta en la base: lo unico que hay que
+  // convertir son las lineas, que si vienen en la divisa.
+  const monedaDoc = enEuros ? 'EUR' : inv.moneda;
+  const fmtEUR = (n) => fmtMoney(enPapel(n), monedaDoc);
   const project = await model.getProjectInvoicerData(inv.project_id);
 
   const pdfDoc = await PDFDocument.create();
@@ -145,8 +229,12 @@ export async function generatePDF(invoiceId, { preliminar = false } = {}) {
   const esBorrador = inv.estado === 'borrador';
 
   // Texto alineado a la derecha terminando en xr.
-  const drawRight = (text, xr, yy, size, f, color) =>
-    page.drawText(text, { x: xr - f.widthOfTextAtSize(String(text), size), y: yy, size, font: f, color });
+  const drawRight = (rawText, xr, yy, size, f, color) => {
+    // Se limpia antes de medir y dibujar: un símbolo que la fuente no soporte
+    // (₡, ₲…) rompía la generación entera del PDF.
+    const text = winAnsi(rawText);
+    page.drawText(text, { x: xr - f.widthOfTextAtSize(text, size), y: yy, size, font: f, color });
+  };
   const noVal = (v) => !v || String(v).trim() === '' || String(v).trim() === '—';
   // Colapsa saltos de línea / espacios múltiples a UNA sola línea. pdf-lib pinta
   // los '\n' como varias líneas dentro del hueco de un campo → el texto se
@@ -196,13 +284,16 @@ export async function generatePDF(invoiceId, { preliminar = false } = {}) {
   let y = Math.min(ey, 772) - 20;
   page.drawRectangle({ x: left, y: y + 10, width: right - left, height: 0.8, color: gray });
   page.drawText('DATOS CLIENTE', { x: left, y, size: 9, font: bold, color: gray }); y -= 15;
-  page.drawText(oneLine(inv.cliente_nombre, 60), { x: left, y, size: 11, font: bold, color: black }); y -= 13;
-  if (!noVal(inv.cliente_nif))       { page.drawText(oneLine(`NIF/DNI: ${inv.cliente_nif}`, 60), { x: left, y, size: 10, font, color: black }); y -= 13; }
-  if (!noVal(inv.cliente_direccion)) { page.drawText(oneLine(inv.cliente_direccion, 80), { x: left, y, size: 10, font, color: black }); y -= 13; }
+  // Delante del nombre va su rótulo: una empresa tiene razón social, una persona
+  // nombre y apellidos. El ancho útil son 495 pt, así que el valor se recorta
+  // contando ya lo que ocupa el rótulo.
+  page.drawText(oneLine(`${rotuloNombreCliente(inv)}: ${inv.cliente_nombre}`, 74), { x: left, y, size: 11, font: bold, color: black }); y -= 13;
+  if (!noVal(inv.cliente_direccion)) { page.drawText(oneLine(`DIRECCIÓN: ${inv.cliente_direccion}`, 88), { x: left, y, size: 10, font, color: black }); y -= 13; }
   const cliLoc = [inv.cliente_cp, inv.cliente_ciudad].filter((x) => !noVal(x)).join(' ');
-  if (cliLoc || !noVal(inv.cliente_pais)) { page.drawText(oneLine(`${cliLoc}${!noVal(inv.cliente_pais) ? (cliLoc ? ', ' : '') + inv.cliente_pais : ''}`, 80), { x: left, y, size: 10, font, color: black }); y -= 13; }
-  if (!noVal(inv.cliente_email))    { page.drawText(oneLine(inv.cliente_email, 70), { x: left, y, size: 10, font, color: black }); y -= 13; }
-  if (!noVal(inv.cliente_telefono)) { page.drawText(oneLine(`Tel: ${inv.cliente_telefono}`, 40), { x: left, y, size: 10, font, color: black }); y -= 13; }
+  if (cliLoc || !noVal(inv.cliente_pais)) { page.drawText(oneLine(`${cliLoc}${!noVal(inv.cliente_pais) ? (cliLoc ? ', ' : '') + inv.cliente_pais : ''}`, 88), { x: left, y, size: 10, font, color: black }); y -= 13; }
+  if (!noVal(inv.cliente_telefono)) { page.drawText(oneLine(`NÚMERO TELEFÓNICO: ${inv.cliente_telefono}`, 58), { x: left, y, size: 10, font, color: black }); y -= 13; }
+  if (!noVal(inv.cliente_nif))       { page.drawText(oneLine(`NIF: ${inv.cliente_nif}`, 60), { x: left, y, size: 10, font, color: black }); y -= 13; }
+  if (!noVal(inv.cliente_email))    { page.drawText(oneLine(`CORREO: ${inv.cliente_email}`, 78), { x: left, y, size: 10, font, color: black }); y -= 13; }
 
   // Tabla items
   y -= 30;
@@ -217,13 +308,19 @@ export async function generatePDF(invoiceId, { preliminar = false } = {}) {
   // Con IVA INCLUIDO los precios de línea vienen en BRUTO. En la factura las líneas
   // se muestran NETAS para que su suma cuadre con la base imponible.
   const netF = netFactor(inv);
+  // Las lineas se teclean en la divisa del documento. Si se pide en euros, se
+  // pasan con el mismo cambio que ya relaciona el total en divisa con el total
+  // en euros — asi el detalle suma exactamente la base imponible.
+  const aEuros = (enEuros && Number(inv.total_divisa) && Number(inv.total))
+    ? Number(inv.total) / Number(inv.total_divisa)
+    : 1;
   for (const it of items) {
     const cant = Number(it.cantidad || 1);
     // Tolerante a distintas claves de precio (precio_unitario | precio) para no
     // pintar 0,00 cuando el ítem viene de importaciones/otros orígenes.
-    const precioBruto = Number(it.precio_unitario ?? it.precio ?? 0);
+    const precioBruto = Number(it.precio_unitario ?? it.precio ?? 0) * aEuros;
     const precio = precioBruto * netF;
-    const subt = (it.total != null ? Number(it.total) : cant * precioBruto) * netF;
+    const subt = (it.total != null ? Number(it.total) * aEuros : cant * precioBruto) * netF;
     // El concepto se envuelve en varias líneas para no cortar el nombre completo.
     const descLines = wrapToLines(font, it.descripcion, 10, 340 - (left + 10));
     page.drawText(descLines[0], { x: left + 10, y, size: 10, font, color: black });
@@ -242,22 +339,44 @@ export async function generatePDF(invoiceId, { preliminar = false } = {}) {
   y -= 20;
   page.drawRectangle({ x: right - 200, y: y - 4, width: 200, height: 1, color: gray });
   y -= 16;
+  // Doble moneda: base/IVA/total se guardan SIEMPRE en euros; total_divisa es el
+  // importe en la divisa internacional (manual). Si existe, manda él en el TOTAL y
+  // el euro va detrás entre paréntesis. Las facturas antiguas en divisa (sin
+  // total_divisa) conservan su comportamiento: todo formateado en esa divisa.
+  const enDivisa = !enEuros
+    && String(inv.moneda || 'EUR').toUpperCase() !== 'EUR'
+    && inv.total_divisa != null;
+  // Base e IVA se guardan en euros, pero el documento va en la divisa: se
+  // muestran en ella, con el mismo cambio que el total. El euro aparece una
+  // sola vez, entre parentesis debajo del TOTAL.
+  const cambio = enDivisa && Number(inv.total)
+    ? Number(inv.total_divisa) / Number(inv.total)
+    : 1;
+  const fmtBase = (n) => (enDivisa
+    ? fmtMoney(enPapel(n) * cambio, inv.moneda)
+    : fmtEUR(n));
   page.drawText('Base imponible:', { x: right - 200, y, size: 10, font, color: black });
-  page.drawText(fmtEUR(inv.base_imponible), { x: right - 70, y, size: 10, font, color: black });
+  page.drawText(fmtBase(inv.base_imponible), { x: right - 70, y, size: 10, font, color: black });
   y -= 16;
   page.drawText(`IVA (${inv.iva_pct}%):`, { x: right - 200, y, size: 10, font, color: black });
-  page.drawText(fmtEUR(inv.iva_importe), { x: right - 70, y, size: 10, font, color: black });
+  page.drawText(fmtBase(inv.iva_importe), { x: right - 70, y, size: 10, font, color: black });
   y -= 16;
   page.drawRectangle({ x: right - 200, y: y + 12, width: 200, height: 1, color: gray });
   page.drawText('TOTAL:', { x: right - 200, y, size: 12, font: bold, color: black });
-  page.drawText(fmtEUR(inv.total), { x: right - 70, y, size: 12, font: bold, color: black });
-
-  // Deja explícito si el IVA va INCLUIDO en el precio o AÑADIDO sobre la base.
-  if (Number(inv.iva_pct) > 0) {
+  page.drawText(enDivisa ? fmtMoney(enPapel(inv.total_divisa), inv.moneda) : fmtEUR(inv.total),
+    { x: right - 70, y, size: 12, font: bold, color: black });
+  if (enDivisa) {
     y -= 13;
-    drawRight(inv.iva_incluido ? 'IVA incluido en el precio' : 'IVA añadido a la base imponible',
-      right, y, 8, font, gray);
+    drawRight(`(${fmtMoney(enPapel(inv.total), 'EUR')})`, right, y, 9, bold, black);
   }
+  // Copia de gestión: deja claro que este documento NO es el del alumno.
+  if (neto) {
+    y -= 13;
+    drawRight(`COPIA DE GESTIÓN · neto Stripe (comisión ${fmtMoney(neto.fee, 'EUR')})`, right, y, 8, font, gray);
+  }
+
+  // La factura no lleva coletillas de IVA: ni "incluido en el precio" ni
+  // "añadido a la base". Van la base, el IVA cuando corresponde y el total.
 
   // Metodo de pago
   y -= 30;
@@ -267,17 +386,12 @@ export async function generatePDF(invoiceId, { preliminar = false } = {}) {
     tarjeta_stripe: 'Tarjeta',   // forma de pago = Tarjeta; Stripe es el ORIGEN, no el método
     efectivo: 'Efectivo',
     bizum: 'Bizum',
+    paypal: 'PayPal',
     fraccionado: 'Pago fraccionado',
     otro: 'Otro',
   };
   page.drawText(`Forma de pago: ${metodoLabels[inv.metodo_pago] || inv.metodo_pago || '—'}`,
     { x: left, y, size: 10, font: bold, color: black });
-
-  // Leyenda IVA
-  if (inv.leyenda_iva) {
-    y -= 18;
-    page.drawText(inv.leyenda_iva, { x: left, y, size: 9, font, color: gray });
-  }
 
   // Sello del emisor al pie (abajo-derecha) — SOLO si logo_en_pie (p.ej. ISEIE).
   if (logoImg && logoEnPie) {
@@ -286,9 +400,8 @@ export async function generatePDF(invoiceId, { preliminar = false } = {}) {
     page.drawImage(logoImg, { x: right - w, y: 70, width: w, height: h });
   }
 
-  // Footer (fecha de generación). La coletilla/pie legal se dibuja global abajo.
-  page.drawText(`${esProforma ? 'Presupuesto' : 'Factura'} ${inv.codigo || '(borrador)'} generada el ${new Date().toLocaleDateString('es-ES')}`,
-    { x: left, y: 30, size: 8, font, color: gray });
+  // Sin linea de referencia al pie: el numero y la fecha del documento ya van en
+  // la cabecera. Abajo solo queda el pie legal del emisor.
   } // fin fallback (layout fijo)
 
   // ── COLETILLA / PIE LEGAL (issuer.pie_default → pie_pago) ──
@@ -359,15 +472,28 @@ export async function generatePDF(invoiceId, { preliminar = false } = {}) {
   return { path: fullPath, bytes: pdfBytes, filename };
 }
 
+// Rótulo que va delante del nombre del cliente en la factura. Una empresa se
+// identifica por su razón social; una persona, por su nombre y apellidos.
+// invoices.cliente_tipo es una copia de leads.cliente_tipo hecha al emitir; si
+// no está puesto se asume persona, que es el caso normal.
+export function rotuloNombreCliente(inv) {
+  return inv?.cliente_tipo === 'empresa' ? 'RAZÓN SOCIAL' : 'NOMBRE Y APELLIDO';
+}
+
 const METODO_LABELS = {
   transferencia: 'Transferencia bancaria', tarjeta: 'Tarjeta', tarjeta_stripe: 'Tarjeta',
-  efectivo: 'Efectivo', bizum: 'Bizum', fraccionado: 'Pago fraccionado', otro: 'Otro',
+  efectivo: 'Efectivo', bizum: 'Bizum', paypal: 'PayPal', fraccionado: 'Pago fraccionado', otro: 'Otro',
 };
 
 // Dibuja la factura usando la plantilla del editor visual (bloques posicionados).
 // Convierte coords del editor (A4 794x1123 px, origen arriba-izq) a pdf-lib (595x842 pt, origen abajo-izq).
 async function renderFromTemplate({ pdfDoc, page, font, bold, inv, layout }) {
-  const fmtEUR = (n) => fmtMoney(n, inv.moneda); // formatea en la moneda de la factura
+  // Mismo criterio que en el layout fijo: en un abono, el papel va sin el signo
+  // menos. Ver la nota larga en generatePDF.
+  // El signo, igual que en el otro formato: un abono resta y se escribe con su
+  // menos delante. Ver la explicacion larga arriba.
+  const enPapel = (n) => Number(n || 0);
+  const fmtEUR = (n) => fmtMoney(enPapel(n), inv.moneda); // en la moneda de la factura
   const SX = 595 / 794, SY = 842 / 1123;
   const X = (px) => px * SX;
   const TOP = (py) => 842 - py * SY; // borde superior del bloque en coords pdf
@@ -437,12 +563,12 @@ async function renderFromTemplate({ pdfDoc, page, font, bold, inv, layout }) {
         case 'cliente':
           drawLines(b, [
             { text: 'Facturar a:', bold: true, color: gray, size: (b.fontSize || 11) - 1 },
-            { text: inv.cliente_nombre, bold: true },
-            { text: inv.cliente_nif ? `NIF/CIF: ${inv.cliente_nif}` : '' },
-            { text: inv.cliente_direccion },
+            { text: `${rotuloNombreCliente(inv)}: ${inv.cliente_nombre}`, bold: true },
+            { text: inv.cliente_direccion ? `DIRECCIÓN: ${inv.cliente_direccion}` : '' },
             { text: [inv.cliente_cp, inv.cliente_ciudad].filter(Boolean).join(' ') + (inv.cliente_pais ? `, ${inv.cliente_pais}` : '') },
-            { text: inv.cliente_email },
-            { text: inv.cliente_telefono ? `Tel: ${inv.cliente_telefono}` : '' },
+            { text: inv.cliente_telefono ? `NÚMERO TELEFÓNICO: ${inv.cliente_telefono}` : '' },
+            { text: inv.cliente_nif ? `NIF: ${inv.cliente_nif}` : '' },
+            { text: inv.cliente_email ? `CORREO: ${inv.cliente_email}` : '' },
           ]);
           break;
         case 'meta':
@@ -454,16 +580,24 @@ async function renderFromTemplate({ pdfDoc, page, font, bold, inv, layout }) {
             { text: esProforma ? 'PROFORMA — documento sin validez fiscal' : '', color: gray, size: (b.fontSize || 12) - 2 },
           ]);
           break;
-        case 'totales':
+        case 'totales': {
+          // Ver nota en generatePDF: con divisa, el TOTAL va en ella y el euro detrás.
+          const enDiv = String(inv.moneda || 'EUR').toUpperCase() !== 'EUR' && inv.total_divisa != null;
+          // Igual que en generatePDF: base e IVA en la divisa del documento.
+          const camb = enDiv && Number(inv.total) ? Number(inv.total_divisa) / Number(inv.total) : 1;
+          const fBase = (n) => (enDiv ? fmtMoney(enPapel(n) * camb, inv.moneda) : fmtEUR(n));
           drawLines(b, [
-            { text: `Base imponible: ${fmtEUR(inv.base_imponible)}` },
-            { text: `IVA (${inv.iva_pct}%): ${fmtEUR(inv.iva_importe)}` },
-            { text: `TOTAL: ${fmtEUR(inv.total)}`, bold: true, size: (b.fontSize || 12) + 2 },
-            { text: Number(inv.iva_pct) > 0 ? (inv.iva_incluido ? 'IVA incluido en el precio' : 'IVA añadido a la base imponible') : '', color: gray, size: (b.fontSize || 12) - 3 },
+            { text: `Base imponible: ${fBase(inv.base_imponible)}` },
+            { text: `IVA (${inv.iva_pct}%): ${fBase(inv.iva_importe)}` },
+            { text: enDiv
+                ? `TOTAL: ${fmtMoney(enPapel(inv.total_divisa), inv.moneda)} (${fmtMoney(enPapel(inv.total), 'EUR')})`
+                : `TOTAL: ${fmtEUR(inv.total)}`, bold: true, size: (b.fontSize || 12) + 2 },
           ]);
           break;
+        }
         case 'coletilla':
-          if (inv.leyenda_iva) drawLines(b, String(inv.leyenda_iva).split('\n').map((t) => ({ text: t })));
+          // Las plantillas antiguas pueden seguir teniendo este bloque, pero ya
+          // no imprime nada: las facturas no llevan coletilla de IVA.
           break;
         case 'pie':
           drawLines(b, [
@@ -521,17 +655,7 @@ async function renderFromTemplate({ pdfDoc, page, font, bold, inv, layout }) {
     }
   }
 
-  // Fallback: si la plantilla no tiene bloque de coletilla pero la factura tiene
-  // leyenda legal, la imprimimos igual (bajo los totales) para no perderla.
-  if (inv.leyenda_iva && !layout.some((b) => b.type === 'coletilla')) {
-    const lines = String(inv.leyenda_iva).split('\n');
-    let yy = 90;
-    for (const ln of lines) { page.drawText(ln.slice(0, 110), { x: 50, y: yy, size: 8, font, color: gray }); yy -= 11; }
-  }
-
   // Pie fijo de trazabilidad
-  page.drawText(`${esProforma ? 'Presupuesto' : 'Factura'} ${inv.codigo || '(borrador)'} · ${new Date().toLocaleDateString('es-ES')}`,
-    { x: 50, y: 25, size: 7, font, color: rgb(0.6, 0.6, 0.6) });
 }
 
 // Envío Brevo
@@ -588,4 +712,116 @@ export async function sendByEmail(invoiceId, customEmail = null) {
   }
   await model.markSent(inv.id, email);
   return { sent: true, to: email };
+}
+
+// ---------------------------------------------------------------------------
+// Corte de facturacion
+// ---------------------------------------------------------------------------
+export async function getFacturacionAlDia(projectId) {
+  const estado = await model.getFacturacionAlDia(projectId);
+  // La cola: todo cobro posterior a lo ya hecho que aun no tiene factura.
+  const cola = await model.listPagosSinFactura(projectId);
+  return {
+    ...estado,
+    pagos_sin_factura: cola.length,
+    importe_sin_factura: cola.reduce((s, p) => s + Number(p.importe || 0), 0),
+    // El primero de la cola es el unico que puede emitirse sin saltarse a nadie.
+    listos_para_emitir: cola.length ? 1 : 0,
+    proformas_pendientes: await model.listProformasPendientes(projectId),
+    cola: cola.slice(0, 200).map((p, i) => ({
+      payment_id: p.payment_id,
+      conversion_id: p.conversion_id,
+      fecha: p.fecha,
+      importe: Number(p.importe || 0),
+      cliente: p.cliente,
+      producto: p.producto_contratado,
+      gestora: p.gestora,
+      origen: p.de_stripe ? 'stripe' : 'manual',
+      // El primero es el que toca; los demas esperan a que salgan los anteriores.
+      es_el_siguiente: i === 0,
+    })),
+    por_dia: Object.values(cola.reduce((acc, p) => {
+      const d = String(p.fecha).slice(0, 10);
+      acc[d] = acc[d] || { dia: d, cobros: 0, importe: 0 };
+      acc[d].cobros += 1;
+      acc[d].importe += Number(p.importe || 0);
+      return acc;
+    }, {})).sort((a, b) => a.dia.localeCompare(b.dia)),
+  };
+}
+
+// Mueve la marca de "ya facturado hasta". Lo anterior desaparece de la cola.
+export async function setFacturacionAlDia(projectId, alDiaHasta, userId, stripeOkHasta) {
+  const guardado = await model.setFacturacionAlDia(projectId, alDiaHasta, userId, stripeOkHasta);
+  return { ...guardado, emitidas: 0, detalle: [], fallidas: [] };
+}
+
+// Genera la factura de UN cobro concreto de la cola. Solo si no queda nada mas
+// antiguo pendiente, para que la numeracion salga en orden. forzar lo salta.
+export async function generarFacturaDePago(projectId, paymentId, userId, { forzar = false } = {}) {
+  const cola = await model.listPagosSinFactura(projectId);
+  const pg = cola.find((x) => Number(x.payment_id) === Number(paymentId));
+  if (!pg) {
+    throw new AppError('Ese cobro ya no está en la cola: o ya tiene factura, o queda fuera del periodo.',
+      404, 'NOT_IN_QUEUE');
+  }
+  if (!forzar && await model.hayPendientesAnteriores(projectId, pg.fecha, pg.payment_id)) {
+    throw new AppError(
+      'Hay cobros anteriores sin facturar. Se emiten por orden de fecha para que la numeración no se descoloque.',
+      409, 'HAY_ANTERIORES');
+  }
+  const inv = await model.emitirFacturaDePago(
+    pg.conversion_id, { paymentId: pg.payment_id, importe: Number(pg.importe), saltarTotal: forzar }, userId
+  );
+  // Que no diga "generada" si no se genero nada.
+  //
+  // El modelo devuelve la factura que ya existia en varios casos legitimos (el
+  // cobro ya la tenia, o se engancha a una huerfana): ahi el pago coincide. Si
+  // vuelve otra distinta, o no vuelve nada, lo que hubo fue un choque, y quien
+  // factura tiene que enterarse en vez de ver un aviso de exito falso.
+  if (!inv) {
+    throw new AppError(
+      'No se emitio ninguna factura: el cobro es anterior a la primera factura de la sociedad.',
+      409, 'ANTES_DEL_ARRANQUE');
+  }
+  if (inv.payment_id != null && Number(inv.payment_id) !== Number(pg.payment_id)) {
+    throw new AppError(
+      `Ese cobro sigue sin factura: el CRM devolvio la nº ${inv.numero}, que es de otro pago de la misma venta.`,
+      409, 'NO_EMITIDA');
+  }
+  return inv;
+}
+
+// Emite de golpe, en orden de fecha, todo lo que quede en la cola hasta esa fecha.
+export async function emitirColaHasta(projectId, hasta, userId) {
+  const pendientes = await model.listPagosSinFactura(projectId, hasta);
+  const emitidas = [];
+  const fallidas = [];
+  for (const pg of pendientes) {
+    try {
+      const inv = await model.emitirFacturaDePago(
+        pg.conversion_id, { paymentId: pg.payment_id, importe: Number(pg.importe) }, userId
+      );
+      if (inv?.codigo) emitidas.push({ payment_id: pg.payment_id, codigo: inv.codigo, cliente: pg.cliente });
+    } catch (err) {
+      fallidas.push({ payment_id: pg.payment_id, cliente: pg.cliente, error: err.message });
+      logger.warn({ paymentId: pg.payment_id, err: err.message }, 'no se pudo emitir la factura de la cola');
+    }
+  }
+  return { emitidas: emitidas.length, detalle: emitidas, fallidas };
+}
+
+// Se llama antes de emitir una factura automatica. Solo sale sola si es la
+// primera de la cola: si hay algo anterior esperando, esta espera tambien.
+export async function puedeFacturarAhora(projectId, fechaPago, paymentId = null) {
+  if (!projectId || !fechaPago) return true;
+  try {
+    const { al_dia_hasta } = await model.getFacturacionAlDia(projectId);
+    // Sin marca de "al dia", se comporta como siempre: factura al momento.
+    if (!al_dia_hasta) return true;
+    if (String(fechaPago).slice(0, 10) <= String(al_dia_hasta).slice(0, 10)) return false;
+    return !(await model.hayPendientesAnteriores(projectId, fechaPago, paymentId));
+  } catch {
+    return true;   // ante la duda, no bloquear la facturacion
+  }
 }

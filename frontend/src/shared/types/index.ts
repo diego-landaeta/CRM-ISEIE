@@ -28,7 +28,7 @@ export type LeadOrigen =
   | 'chatgpt_ia'
   | 'otro';
 
-export type UserRole = 'superadmin' | 'admin' | 'gestor' | 'soporte';
+export type UserRole = 'superadmin' | 'admin' | 'gestor' | 'soporte' | 'tutor';
 
 export type ProjectType = 'crm' | 'ia';
 
@@ -72,6 +72,8 @@ export interface Lead {
   nombre: string;
   email: string;
   telefono?: string | null;
+  /** El usuario de WhatsApp, cuando no hay numero o ademas del numero. */
+  whatsapp_usuario?: string | null;
   estado: LeadStatus;
   status?: LeadStatus;
   origen?: LeadOrigen | null;
@@ -139,15 +141,15 @@ export interface Client {
   telefono?: string | null;
   responsable_id?: number | null;
   responsable_nombre?: string | null;
-  conversiones: number;
-  total_compras: number | string;
-  total_pagado: number | string;
-  pendiente: number | string;
-  ultima_compra?: string | null;
+  programas?: string[];
+  total_cuotas: number;
+  cuotas_pagadas: number;
+  cuotas_pendientes: number;
+  total_pagos: number;
+  proximo_vencimiento?: string | null;
   last_interaction_at?: string | null;
   origen?: LeadOrigen | null;
   notas?: string | null;
-  cursos?: string[];
 }
 
 export type ConversionEstado = 'pagado' | 'pendiente' | 'parcial' | 'reembolsado';

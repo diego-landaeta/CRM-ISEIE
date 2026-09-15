@@ -7,6 +7,7 @@ import { normalizePhone } from '../../shared/utils/normalizePhone.js';
 import { notifyAdmins } from '../notifications/notifications.service.js';
 import * as dupQueue from './dup-queue.service.js';
 import * as leadProducts from './lead-products.service.js';
+import { planificarPasosDeLead } from '../proceso/proceso.model.js';
 
 // Dispara secuencias de email activas. STUB v1 mientras email-sequences no este portado.
 async function triggerSequences(_triggerEvent, _leadId, _projectId) {
@@ -31,6 +32,44 @@ function detectChannel(utmSource, utmMedium) {
   if (medium === 'organic' || source.includes('google') || source.includes('bing')) return 'organico';
 
   return 'directo';
+}
+
+/**
+ * Saca las UTM de dentro de la propia direccion.
+ *
+ * Make manda la pagina donde la persona dejo sus datos, y esa direccion YA trae
+ * las UTM pegadas — es como llegan de Meta:
+ *
+ *   .../curso-de-coaching-familiar/?fbclid=...&utm_source=fb&utm_medium=paid
+ *      &utm_campaign=120244428100730715&utm_content=...&utm_term=...
+ *
+ * El CRM guardaba esa direccion entera y no la leia, asi que un lead de Meta se
+ * quedaba en «directo» teniendo `utm_source=fb` delante. Pedirle a Make que las
+ * mande otra vez aparte seria mandar dos veces el mismo dato y confiar en que
+ * nadie se olvide de una.
+ *
+ * Lo que venga suelto en el cuerpo MANDA sobre lo que diga la direccion: si
+ * alguien se molesto en mapearlo a mano, sabra por que.
+ */
+function utmsDeLaUrl(url) {
+  if (!url || typeof url !== 'string') return {};
+  let params;
+  try {
+    params = new URL(url).searchParams;
+  } catch {
+    return {};   // no es una direccion valida: no se inventa nada
+  }
+  const sacar = (clave) => {
+    const v = params.get(clave);
+    return v && v.trim() ? v.trim() : undefined;
+  };
+  return {
+    utm_source: sacar('utm_source'),
+    utm_medium: sacar('utm_medium'),
+    utm_campaign: sacar('utm_campaign'),
+    utm_content: sacar('utm_content'),
+    utm_term: sacar('utm_term'),
+  };
 }
 
 // ============================================================
@@ -58,6 +97,20 @@ export async function createFromExternalWebhook(projectId, leadData, _opts = {})
 }
 
 async function _createLeadCore(project, leadData) {
+  // Las UTM, sacadas de la propia direccion si no vinieron sueltas.
+  //
+  // Va AQUI y no en processWebhook porque hay dos puertas de entrada y por la
+  // otra —la de Make, `createFromExternalWebhook`— entran casi todos. Ponerlo en
+  // una sola dejaba fuera justo el camino que importa: el lead #3417 de ISAEG
+  // llego con `utm_source=fb` dentro de la direccion y se guardo como «directo».
+  //
+  // Este es el sitio por el que pasan las dos.
+  for (const k of ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term']) {
+    if (!leadData[k]) {
+      const deLaUrl = utmsDeLaUrl(leadData?.landing_url);
+      if (deLaUrl[k]) leadData[k] = deLaUrl[k];
+    }
+  }
   // Idempotency: si Make reintenta con el mismo key dentro de 24h, devolvemos
   // el lead que ya creamos en lugar de duplicar.
   if (leadData.idempotency_key) {
@@ -113,8 +166,9 @@ async function _createLeadCore(project, leadData) {
 
   // Detectar duplicado por email O por teléfono normalizado (cualquiera basta).
   const telNormWebhook = normalizePhone(leadData.telefono);
-  const duplicate = (leadData.email || telNormWebhook)
-    ? await leadModel.findDuplicateByEmailOrPhone(leadData.email, telNormWebhook, project.id)
+  const duplicate = (leadData.email || telNormWebhook || leadData.whatsapp_usuario)
+    ? await leadModel.findDuplicateByEmailOrPhone(
+        leadData.email, telNormWebhook, project.id, leadData.whatsapp_usuario || null)
     : null;
   const duplicadoDe = duplicate ? duplicate.id : null;
 
@@ -177,6 +231,7 @@ async function _createLeadCore(project, leadData) {
     nombre: leadData.nombre,
     email: leadData.email || null,
     telefono: normalizePhone(leadData.telefono),
+    whatsappUsuario: leadData.whatsapp_usuario || null,
     productoInteresId,
     notas: leadData.notas || null,
     landingUrl: leadData.landing_url || null,
@@ -217,6 +272,21 @@ async function _createLeadCore(project, leadData) {
       spam_previous_lead_id: spamHistory.id,
       canal: canalDetectado,
     };
+  }
+
+  // La agenda de esta persona: sus pasos del proceso comercial, con la fecha
+  // contada desde que entro (#89 · #90).
+  //
+  // Se AWAITA a proposito, no como el correo: son cuatro filas de una sola
+  // consulta, y si se dispara y se olvida, un fallo deja al prospecto sin
+  // agenda y nadie se entera hasta que no aparece en la cola de nadie.
+  //
+  // Y va envuelto: que la planificacion falle NO puede tumbar el alta de un
+  // lead. Sin agenda se puede trabajar —se replanifica—, sin lead no.
+  try {
+    await planificarPasosDeLead(lead.id);
+  } catch (err) {
+    logger.warn({ err: err.message, leadId: lead.id }, 'No se pudo planificar la agenda del prospecto');
   }
 
   // Disparar email sequences con trigger lead_created (async)
@@ -492,6 +562,21 @@ export async function reassign(leadId, newResponsableId, userId) {
   const lead = await leadModel.findByIdLight(leadId);
   if (!lead) throw new AppError('Lead no encontrado', 404, 'LEAD_NOT_FOUND');
 
+  // Ni profesores ni quien lleva las colaboraciones. Se comprueba AQUI y no solo
+  // escondiendolos del desplegable: quien no sale en una lista sigue teniendo un
+  // numero, y basta con mandarlo a mano para colarlo. Y un prospecto en la
+  // bandeja de alguien que no atiende prospectos no lo llama nadie.
+  const { rows: destino } = await query(
+    `SELECT nombre, role, COALESCE(gestor_colaboraciones, false) AS colaboraciones
+       FROM users WHERE id = $1 AND active = true`, [newResponsableId]);
+  if (!destino.length) throw new AppError('Esa persona no existe o está desactivada', 400, 'DESTINO_INVALIDO');
+  if (destino[0].role === 'tutor') {
+    throw new AppError(`${destino[0].nombre} es profesor: no lleva prospectos`, 400, 'NO_ATIENDE_PROSPECTOS');
+  }
+  if (destino[0].colaboraciones) {
+    throw new AppError(`${destino[0].nombre} lleva las colaboraciones de los profesores: no atiende prospectos`, 400, 'NO_ATIENDE_PROSPECTOS');
+  }
+
   const prevResponsableId = lead.responsable_id || null;
   await leadModel.reassignLead(leadId, newResponsableId);
   await leadModel.updateStatus(leadId, lead.status, lead.status, userId);
@@ -525,29 +610,104 @@ export async function reassignPending(projectId) {
 }
 
 // Fusiona dos leads (winner + loser). Validaciones de negocio antes de llamar al model.
-export async function mergeLeads({ winnerId, loserId, comment, userId }) {
+export async function mergeLeads({ winnerId, loserId, loserIds, comment, userId }) {
   if (!comment || comment.trim().length < 3) {
     throw new AppError('Comentario obligatorio para auditoría', 400, 'COMMENT_REQUIRED');
   }
   try {
-    const result = await leadModel.mergeLeads({ winnerId, loserId, comment: comment.trim(), userId });
+    const result = await leadModel.mergeLeads({ winnerId, loserId, loserIds, comment: comment.trim(), userId });
     // Si el loser estaba en cola de revisión, marcarlo como merged.
     // CON AWAIT: sin él, el endpoint podía devolver respuesta antes de que la
     // UPDATE corra, dejando la entrada como 'pending' aunque el merge se hizo.
-    await dupQueue.markMerged(loserId, userId);
+    for (const id of result.loser_ids) {
+      await dupQueue.markMerged(id, userId);
+    }
+    const cuantas = result.loser_ids.length;
     // Notif admin/superadmin (visibilidad operativa, como en softDelete)
     notifyAdmins({
       type: 'lead_merged',
-      title: `Fusión: lead #${loserId} → #${winnerId}`,
+      title: cuantas > 1
+        ? `Fusión: ${cuantas} fichas → #${winnerId}`
+        : `Fusión: lead #${result.loser_ids[0]} → #${winnerId}`,
       message: comment.trim(),
       link_path: `/leads/${winnerId}`,
-      metadata: { winner_id: winnerId, loser_id: loserId },
+      metadata: { winner_id: winnerId, loser_id: result.loser_ids[0], loser_ids: result.loser_ids },
       triggered_by_user_id: userId || null,
     });
     return result;
   } catch (err) {
     throw new AppError(err.message || 'Error en fusión', 400, 'MERGE_FAILED');
   }
+}
+
+// #102 - Las fichas repetidas que YA estan en la base de datos.
+//
+// La deteccion de siempre corre solo en el instante de crear, con los datos que
+// hubiera en ese instante. Si una gestora completa el correo o el telefono
+// despues —que es lo normal— las dos fichas se quedan sueltas para siempre.
+// Eso paso el 02/09 con Magally Mora: la ficha original no tenia correo cuando
+// se creo la segunda, y una hora mas tarde se lo pusieron.
+//
+// Esto repasa lo que ya hay. Dos fichas caen en el mismo grupo si comparten
+// correo, telefono o usuario de WhatsApp, y el grupo se encadena: si A comparte
+// el correo con B y B el telefono con C, las tres son la misma persona. De ahi
+// salen los grupos de tres y cuatro que hay que poder fusionar de una vez.
+export async function listDuplicateGroups({ projectId }) {
+  if (!projectId) throw new AppError('project_id requerido', 400, 'MISSING_PROJECT');
+  const filas = await leadModel.findDuplicateKeys(projectId);
+  if (!filas.length) return { groups: [], total: 0 };
+
+  // Conjuntos disjuntos: cada clave compartida une a todas las fichas que la tienen.
+  const padre = new Map();
+  const raiz = (x) => {
+    while (padre.get(x) !== x) { padre.set(x, padre.get(padre.get(x))); x = padre.get(x); }
+    return x;
+  };
+  const unir = (a, b) => { const ra = raiz(a), rb = raiz(b); if (ra !== rb) padre.set(ra, rb); };
+  for (const f of filas) if (!padre.has(f.id)) padre.set(f.id, f.id);
+
+  const porClave = new Map();
+  const motivosDe = new Map();
+  for (const f of filas) {
+    const k = `${f.por}|${f.clave}`;
+    if (!porClave.has(k)) porClave.set(k, []);
+    porClave.get(k).push(f.id);
+    if (!motivosDe.has(f.id)) motivosDe.set(f.id, new Set());
+    motivosDe.get(f.id).add(f.por);
+  }
+  for (const ids of porClave.values()) {
+    for (let i = 1; i < ids.length; i++) unir(ids[0], ids[i]);
+  }
+
+  const componentes = new Map();
+  for (const id of padre.keys()) {
+    const r = raiz(id);
+    if (!componentes.has(r)) componentes.set(r, []);
+    componentes.get(r).push(id);
+  }
+
+  const conRepetidas = [...componentes.values()].filter((g) => g.length > 1);
+  const fichas = await leadModel.findLeadsForDuplicates(conRepetidas.flat());
+  const porId = new Map(fichas.map((l) => [l.id, l]));
+
+  const groups = [];
+  for (const ids of conRepetidas) {
+    const leads = ids.map((i) => porId.get(i)).filter(Boolean);
+    if (leads.length < 2) continue;
+    const motivos = new Set();
+    for (const i of ids) for (const m of (motivosDe.get(i) || [])) motivos.add(m);
+    groups.push({
+      key: `g${Math.min(...ids)}`,
+      motivos: [...motivos],
+      total: leads.length,
+      ya_marcado: leads.some((l) => l.lead_duplicado_de),
+      con_conversion: leads.filter((l) => Number(l.n_conversiones) > 0).length,
+      leads,
+    });
+  }
+  // Primero lo que nadie ha mirado, y dentro de eso los grupos mas grandes.
+  groups.sort((a, b) => (a.ya_marcado === b.ya_marcado ? b.total - a.total : (a.ya_marcado ? 1 : -1)));
+  return { groups, total: groups.length };
 }
 
 // Lookup público: devuelve leads con ese email en el proyecto, sólo metadata
@@ -570,17 +730,21 @@ export async function lookupByEmail(email, projectId) {
 
 // Comprueba duplicado SIN crear nada. Para el confirm dialog del frontend.
 // Si gestor consulta, solo busca dentro de leads asignados a él/su proyecto (delegamos seguridad a projectAccess).
-export async function checkDuplicate({ project_id, email, telefono }, requestUser) {
+export async function checkDuplicate({ project_id, email, telefono, whatsapp_usuario }, requestUser) {
   if (!project_id) throw new AppError('project_id requerido', 400, 'MISSING_PROJECT');
   const telNorm = normalizePhone(telefono);
   const cleanEmail = email ? String(email).toLowerCase().trim() : null;
-  if (!cleanEmail && !telNorm) return { duplicate: null };
-  const dup = await leadModel.findDuplicateByEmailOrPhone(cleanEmail, telNorm, project_id);
+  const cleanWa = whatsapp_usuario ? String(whatsapp_usuario).trim() : null;
+  if (!cleanEmail && !telNorm && !cleanWa) return { duplicate: null };
+  const dup = await leadModel.findDuplicateByEmailOrPhone(cleanEmail, telNorm, project_id, cleanWa);
   if (!dup) return { duplicate: null };
   // Si quien pregunta es gestor y el dup pertenece a otro responsable, exponemos
   // solo lo necesario para que sepa a quién contactar (nombre del gestor + estado),
   // ocultando datos personales del lead (email/tel/nombre completo/notas).
-  if (requestUser?.role === 'gestor' && dup.responsable_id && dup.responsable_id !== requestUser.userId) {
+  // Se mantiene el aviso enmascarado solo si NO hay responsable identificable;
+  // entre gestoras se enseñan los datos, que es lo que permite decidir si es la
+  // misma persona sin tener que preguntar.
+  if (false && requestUser?.role === 'gestor' && dup.responsable_id && dup.responsable_id !== requestUser.userId) {
     return {
       duplicate: {
         id: dup.id,
@@ -595,11 +759,13 @@ export async function checkDuplicate({ project_id, email, telefono }, requestUse
   return { duplicate: dup };
 }
 
-export async function createManualLead({ project_id, nombre, email, telefono, producto_interes_id, canal, notas, custom_fields }, opts = {}) {
+export async function createManualLead({ project_id, nombre, email, telefono, whatsapp_usuario, producto_interes_id, canal, notas, custom_fields }, opts = {}) {
   const creatorUser = opts.creatorUser || null;
   // Detectar duplicado por email O por teléfono normalizado (cualquiera basta).
   const telNorm = normalizePhone(telefono);
-  const duplicate = (email || telNorm) ? await leadModel.findDuplicateByEmailOrPhone(email, telNorm, project_id) : null;
+  const duplicate = (email || telNorm || whatsapp_usuario)
+    ? await leadModel.findDuplicateByEmailOrPhone(email, telNorm, project_id, whatsapp_usuario || null)
+    : null;
 
   // Dedupe rapido: si el duplicado es del mismo nombre y fue creado en los ultimos 10s,
   // asumimos doble submit y devolvemos el lead existente en vez de crear otro
@@ -648,6 +814,7 @@ export async function createManualLead({ project_id, nombre, email, telefono, pr
     nombre,
     email,
     telefono: normalizePhone(telefono),
+    whatsappUsuario: whatsapp_usuario || null,
     productoInteresId: producto_interes_id || null,
     notas: notas || null,
     landingUrl: null,
@@ -717,7 +884,11 @@ export async function updateLead(leadId, data, opts = {}) {
 
   // Normalizar teléfono si viene en el update
   if (Object.prototype.hasOwnProperty.call(data, 'telefono')) {
-    data.telefono = normalizePhone(data.telefono);
+    const telefonoOriginal = data.telefono;
+    data.telefono = normalizePhone(telefonoOriginal);
+    if (telefonoOriginal && !data.telefono) {
+      throw new AppError('El teléfono no tiene un formato válido. Incluye el código de país y al menos 7 dígitos.', 400, 'INVALID_PHONE');
+    }
   }
   // Normalizar email vacío a null
   if (Object.prototype.hasOwnProperty.call(data, 'email') && (data.email === '' || !data.email)) {
@@ -745,7 +916,10 @@ export async function updateLead(leadId, data, opts = {}) {
     }
   }
 
-  const updated = await leadModel.updateLead(leadId, data);
+  // Un cambio exclusivo de canal no toca la tabla leads; aun así es válido.
+  const updated = Object.keys(data).length > 0
+    ? await leadModel.updateLead(leadId, data)
+    : lead;
 
   // UPDATE/INSERT lead_utms.canal_detectado si se cambió
   if (newCanal !== undefined) {
@@ -769,6 +943,52 @@ export async function updateLead(leadId, data, opts = {}) {
       );
     } catch (err) {
       logger.warn({ err: err.message, leadId, field }, 'audit log insert falló (no crítico)');
+    }
+  }
+
+  // Al COMPLETAR los datos de contacto se vuelve a mirar si esta ficha ya
+  // existia. Antes solo se miraba al crearla: si la gestora anadia el correo o
+  // el telefono despues, las dos fichas se quedaban sueltas para siempre (#102).
+  const camposContacto = ['email', 'telefono', 'whatsapp_usuario'];
+  const tocoContacto = camposContacto.some(
+    (f) => Object.prototype.hasOwnProperty.call(data, f) && data[f] !== lead[f]
+  );
+  if (tocoContacto && !lead.lead_duplicado_de) {
+    try {
+      const ficha = { ...lead, ...data };
+      const otra = await leadModel.findDuplicateByEmailOrPhone(
+        ficha.email, ficha.telefono, lead.project_id, ficha.whatsapp_usuario, leadId
+      );
+      if (otra) {
+        // Se marca la mas NUEVA como duplicada de la mas vieja, que es el
+        // criterio de siempre. Nada se borra ni se fusiona sola: solo queda
+        // avisado, y la fusion la decide una persona.
+        const yoSoyMasNueva = new Date(lead.created_at) > new Date(otra.created_at);
+        const nuevaId = yoSoyMasNueva ? leadId : otra.id;
+        const viejaId = yoSoyMasNueva ? otra.id : leadId;
+        const marcada = await query(
+          `UPDATE leads SET lead_duplicado_de = $1, updated_at = NOW()
+           WHERE id = $2 AND lead_duplicado_de IS NULL
+           RETURNING id`,
+          [viejaId, nuevaId]
+        );
+        if (marcada.rowCount) {
+          await query(
+            `INSERT INTO lead_interactions (lead_id, tipo, nota, created_by, fecha)
+             VALUES ($1, 'nota', $2, $3, NOW()), ($4, 'nota', $5, $3, NOW())`,
+            [
+              nuevaId,
+              `\u{1F501} Duplicado detectado al completar los datos: es la misma persona que el lead #${viejaId}.`,
+              userId,
+              viejaId,
+              `\u{1F501} Duplicado detectado al completar los datos: el lead #${nuevaId} es la misma persona.`,
+            ]
+          );
+          logger.info({ nuevaId, viejaId, leadId }, 'duplicado detectado al editar');
+        }
+      }
+    } catch (err) {
+      logger.warn({ err: err.message, leadId }, 'recheck de duplicado al editar falló (no crítico)');
     }
   }
 

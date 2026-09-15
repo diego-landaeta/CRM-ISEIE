@@ -16,6 +16,9 @@ interface Props {
   responsableId?: number | null;
   /** null = all-time, número = últimos N días */
   days?: number | null;
+  /** Rango que manda desde la pantalla; tiene prioridad sobre days. */
+  from?: string | null;
+  to?: string | null;
   limit?: number;
   title?: string;
   className?: string;
@@ -25,8 +28,14 @@ function fmt(n: number) {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0);
 }
 
-export default function TopProductsCard({ projectId, responsableId = null, days = null, limit = 5, title = 'Programas más vendidos', className = '' }: Props) {
+interface SinAsignar { ventas: number; facturado: number; cobrado: number }
+
+export default function TopProductsCard({ projectId, responsableId = null, days = null, from = null, to = null, limit = 5, title = 'Programas más vendidos', className = '' }: Props) {
   const [rows, setRows] = useState<Row[]>([]);
+  // Las ventas que no dicen qué se vendió. Ya no compiten en el ranking, pero
+  // tampoco se esconden: se enseñan debajo como lo que son, un agujero de
+  // registro.
+  const [sinAsignar, setSinAsignar] = useState<SinAsignar | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -34,14 +43,19 @@ export default function TopProductsCard({ projectId, responsableId = null, days 
     setLoading(true);
     const params: Record<string, string | number> = { limit };
     if (projectId) params.projectId = projectId;
-    if (days) params.days = days;
+    if (from && to) { params.from = from; params.to = to; } else if (days) params.days = days;
     if (responsableId) params.responsableId = responsableId;
-    client.get<Row[]>('/sales/top-products', { params })
-      .then((r) => { if (!cancelled) setRows(Array.isArray(r?.data) ? r.data : []); })
-      .catch(() => { if (!cancelled) setRows([]); })
+    client.get<Row[]>('/ventas/top-products', { params })
+      .then((r) => {
+        if (cancelled) return;
+        setRows(Array.isArray(r?.data) ? r.data : []);
+        const sa = (r as unknown as { sinAsignar?: SinAsignar })?.sinAsignar;
+        setSinAsignar(sa && sa.ventas > 0 ? sa : null);
+      })
+      .catch(() => { if (!cancelled) { setRows([]); setSinAsignar(null); } })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [projectId, responsableId, days, limit]);
+  }, [projectId, responsableId, days, limit, from, to]);
 
   return (
     <div className={`bg-card border border-border rounded-lg p-4 ${className}`}>
@@ -58,7 +72,7 @@ export default function TopProductsCard({ projectId, responsableId = null, days 
             <div key={i} className="h-9 bg-muted/40 rounded animate-pulse" />
           ))}
         </div>
-      ) : rows.length === 0 ? (
+      ) : rows.length === 0 && !sinAsignar ? (
         <p className="text-xs text-muted-foreground text-center py-4">Sin ventas registradas todavía.</p>
       ) : (
         <ul className="divide-y divide-border">
@@ -78,6 +92,16 @@ export default function TopProductsCard({ projectId, responsableId = null, days 
             </li>
           ))}
         </ul>
+      )}
+
+      {sinAsignar && (
+        <p className="mt-3 pt-2.5 border-t border-border text-[11px] text-amber-700 dark:text-amber-400 leading-relaxed">
+          <strong>{sinAsignar.ventas}</strong>{' '}
+          {sinAsignar.ventas === 1 ? 'venta no dice qué programa se vendió' : 'ventas no dicen qué programa se vendió'}
+          {' '}({fmt(sinAsignar.facturado)}). No entran en este ranking porque «pendiente
+          de registrar» no es un programa: hay que atarlas a una formación del catálogo
+          para que cuenten.
+        </p>
       )}
     </div>
   );

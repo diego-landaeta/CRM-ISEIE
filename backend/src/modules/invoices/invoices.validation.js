@@ -35,18 +35,29 @@ export const createInvoiceSchema = z.object({
     z.string().optional().nullable(),
   ),
   clienteTelefono: z.string().optional().nullable(),
+  // Empresa o particular: decide el rótulo del cliente en el PDF.
+  clienteTipo: z.enum(['empresa', 'particular']).optional().nullable(),
   items: z.array(itemSchema).min(1, 'Al menos un item'),
   ivaPct: z.number().min(0).max(100).optional(),
   ivaIncluido: z.boolean().optional(),
   notas: z.string().optional(),
   leyendaIva: z.string().optional(),
-  metodoPago: z.enum(['transferencia', 'tarjeta', 'tarjeta_stripe', 'efectivo', 'bizum', 'fraccionado', 'otro']),
+  metodoPago: z.enum(['transferencia', 'tarjeta', 'tarjeta_stripe', 'efectivo', 'bizum', 'paypal', 'fraccionado', 'otro']),
   piePago: z.string().optional(),
   issuerId: z.number().int().positive().optional(),
   // Moneda de la factura (opcional). Importes manuales en esa divisa, SIN conversión
   // automática. Por defecto EUR. Ej: 'USD', 'MXN', 'COP', 'CRC', 'ARS'.
   moneda: z.string().trim().min(3).max(8).optional(),
+  // Doble moneda MANUAL. Si la factura va en divisa distinta del euro, el importe en
+  // EUROS es obligatorio y es el que manda en la contabilidad (total). El importe en
+  // divisa se guarda aparte solo para mostrarlo: "1.000,00 USD (920,00 €)".
+  totalEur: z.number().nonnegative().optional().nullable(),
 }).superRefine((d, ctx) => {
+  const enDivisa = d.moneda && String(d.moneda).toUpperCase() !== 'EUR';
+  if (enDivisa && (d.totalEur === undefined || d.totalEur === null)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['totalEur'],
+      message: 'Indica el importe total en euros (obligatorio al facturar en otra divisa).' });
+  }
   if (d.tipo === 'proforma') return; // presupuesto: datos fiscales opcionales
   if (d.borrador === true) return;   // borrador: se completa antes de emitir
   for (const [field, msg] of [
@@ -90,5 +101,5 @@ export const updateConfigSchema = z.object({
   projectId: z.number().int().positive(),
   piePagoDefault: z.string().optional(),
   serieDefault: z.string().max(10).optional(),
-  metodoDefault: z.enum(['transferencia', 'tarjeta', 'tarjeta_stripe', 'efectivo', 'bizum', 'fraccionado', 'otro']).optional(),
+  metodoDefault: z.enum(['transferencia', 'tarjeta', 'tarjeta_stripe', 'efectivo', 'bizum', 'paypal', 'fraccionado', 'otro']).optional(),
 });

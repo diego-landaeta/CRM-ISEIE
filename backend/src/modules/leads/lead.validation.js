@@ -5,6 +5,8 @@ export const webhookLeadSchema = z.object({
   // Email opcional: Make ya filtra spam y a veces el lead llega sólo por WhatsApp/telefono
   email: z.string().email('Email invalido').transform((v) => v.toLowerCase().trim()).optional().or(z.literal('')),
   telefono: z.string().max(50).optional(),
+  // Quien se contacta por usuario y no da numero. Convive con el telefono.
+  whatsapp_usuario: z.string().max(120).optional().or(z.literal('')),
   producto_interes: z.string().max(255).optional(),
   producto_interes_id: z.coerce.number().int().positive().optional(),
   // SKU del producto (clave universal cuando hay multi-sitio con nombres distintos
@@ -26,10 +28,20 @@ export const webhookLeadSchema = z.object({
   // Idempotency: si Make reintenta, no duplicamos.
   idempotency_key: z.string().min(1).max(200).optional(),
   // Campos custom libres (objeto JSON). Se guardan en leads.custom_fields.
-  custom_fields: z.record(z.string(), z.any()).optional(),
+  // Tolerante al null: si la ficha no tiene campos propios, alguna pantalla
+  // manda custom_fields = null y eso tumbaba el guardado ENTERO — telefono
+  // incluido — con un "Expected object, received null" que no decia nada.
+  custom_fields: z.record(z.string(), z.any()).nullable().optional(),
 }).refine(
-  (d) => (d.email && d.email.length > 0) || (d.telefono && d.telefono.length > 0),
-  { message: 'Debes proporcionar al menos email o teléfono', path: ['email'] }
+// Un prospecto necesita ALGUNA forma de contacto, pero no una en concreto.
+//
+// El aviso NO va sobre el correo. Iba en `path: ['email']`, asi que faltando los
+// tres se pintaba en rojo debajo del correo y parecia que el obligatorio era
+// ese. Se avisaba del problema correcto en el sitio equivocado.
+  (d) => Boolean((d.email && d.email.length > 0)
+    || (d.telefono && d.telefono.length > 0)
+    || (d.whatsapp_usuario && d.whatsapp_usuario.length > 0)),
+  { message: 'Hace falta al menos una forma de contacto: correo, teléfono o usuario de WhatsApp' }
 );
 
 export const listLeadsSchema = z.object({
@@ -57,15 +69,25 @@ export const listLeadsSchema = z.object({
   reincidente: z.coerce.boolean().optional(),
   // "Clientes" = leads con al menos una venta (conversión).
   conConversion: z.coerce.boolean().optional(),
+  // Filtro operativo exclusivo de Clientes. No depende de importes de venta.
+  installmentStatus: z.enum(['pending', 'completed', 'no_plan']).optional(),
 });
 
 export const checkDuplicateSchema = z.object({
   project_id: z.number().int().positive(),
   email: z.string().email().optional().or(z.literal('')).or(z.null()),
   telefono: z.string().max(50).optional().or(z.literal('')).or(z.null()),
+  whatsapp_usuario: z.string().max(120).optional().or(z.literal('')).or(z.null()),
 }).refine(
-  (d) => (d.email && d.email.length > 0) || (d.telefono && d.telefono.length > 0),
-  { message: 'Debes proporcionar email o teléfono', path: ['email'] }
+// Un prospecto necesita ALGUNA forma de contacto, pero no una en concreto.
+//
+// El aviso NO va sobre el correo. Iba en `path: ['email']`, asi que faltando los
+// tres se pintaba en rojo debajo del correo y parecia que el obligatorio era
+// ese. Se avisaba del problema correcto en el sitio equivocado.
+  (d) => Boolean((d.email && d.email.length > 0)
+    || (d.telefono && d.telefono.length > 0)
+    || (d.whatsapp_usuario && d.whatsapp_usuario.length > 0)),
+  { message: 'Hace falta al menos una forma de contacto: correo, teléfono o usuario de WhatsApp' }
 );
 
 // Motivo opcional para cambios "neutrales" (avanzar pipeline). Solo es
@@ -106,13 +128,19 @@ export const createLeadManualSchema = z.object({
   // Email opcional ahora (un lead puede venir solo por WhatsApp con teléfono)
   email: z.string().email('Email invalido').transform((v) => v.toLowerCase().trim()).optional().nullable().or(z.literal('')),
   telefono: z.string().max(50).optional().nullable().or(z.literal('')),
+  whatsapp_usuario: z.string().max(120).optional().nullable().or(z.literal('')),
   producto_interes_id: z.number().int().positive().optional().nullable(),
   canal: z.enum(['directo', 'referido', 'meta_ads', 'google_ads', 'tiktok_ads', 'organico', 'chatgpt_ia', 'whatsapp']).default('directo'),
   notas: z.string().max(2000).optional().or(z.literal('')),
-  custom_fields: z.record(z.string(), z.any()).optional(),
+  // Tolerante al null: si la ficha no tiene campos propios, alguna pantalla
+  // manda custom_fields = null y eso tumbaba el guardado ENTERO — telefono
+  // incluido — con un "Expected object, received null" que no decia nada.
+  custom_fields: z.record(z.string(), z.any()).nullable().optional(),
 }).refine(
-  (data) => (data.email && data.email.length > 0) || (data.telefono && data.telefono.length > 0),
-  { message: 'Debes proporcionar al menos email o teléfono', path: ['email'] }
+  (d) => Boolean((d.email && d.email.length > 0)
+    || (d.telefono && d.telefono.length > 0)
+    || (d.whatsapp_usuario && d.whatsapp_usuario.length > 0)),
+  { message: 'Hace falta al menos una forma de contacto: correo, teléfono o usuario de WhatsApp' }
 );
 
 export const updateLeadSchema = z.object({
@@ -122,7 +150,10 @@ export const updateLeadSchema = z.object({
   notas: z.string().max(2000).nullable().optional(),
   producto_interes_id: z.number().int().positive().nullable().optional(),
   canal: z.enum(['meta_ads', 'google_ads', 'tiktok_ads', 'organico', 'chatgpt_ia', 'directo', 'referido', 'whatsapp']).optional(),
-  custom_fields: z.record(z.string(), z.any()).optional(),
+  // Tolerante al null: si la ficha no tiene campos propios, alguna pantalla
+  // manda custom_fields = null y eso tumbaba el guardado ENTERO — telefono
+  // incluido — con un "Expected object, received null" que no decia nada.
+  custom_fields: z.record(z.string(), z.any()).nullable().optional(),
 }).refine((data) => Object.keys(data).length > 0, {
   message: 'Al menos un campo debe ser proporcionado',
 });

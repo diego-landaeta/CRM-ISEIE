@@ -92,13 +92,20 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
   } = useForm<LeadFormData>({
     resolver: zodResolver(leadSchema),
     defaultValues: {
-      nombre: '', email: '', telefono: '',
+      nombre: '', email: '', telefono: '', whatsapp_usuario: '',
       origen: 'directo', producto_interes: '', pais: '', notas: '',
     },
   });
 
   const watchedEmail = watch('email');
   const watchedTelefono = watch('telefono');
+
+  // Que se esta escribiendo: el numero, el usuario, o los dos.
+  //
+  // Al abrir una ficha que ya tiene usuario se enseña solo, sin que nadie tenga
+  // que acordarse de cambiar el desplegable para verlo.
+  type ModoContacto = 'numero' | 'usuario' | 'ambos';
+  const [modoContacto, setModoContacto] = useState<ModoContacto>('numero');
 
   // Cargar custom fields al abrir dialog
   useEffect(() => {
@@ -118,13 +125,19 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
         nombre: lead.nombre || '',
         email: lead.email || '',
         telefono: lead.telefono || '',
+        whatsapp_usuario: lead.whatsapp_usuario || '',
         origen: ((lead.origen as string)?.toLowerCase().replace(' ', '_') || 'directo') as LeadFormData['origen'],
         pais: lead.pais || '',
         producto_interes: lead.producto_interes || '',
-        notas: '',
+        notas: lead.notas || '',
       } : {
-        nombre: '', email: '', telefono: '', origen: 'directo', producto_interes: '', notas: '',
+        nombre: '', email: '', telefono: '', whatsapp_usuario: '', origen: 'directo', producto_interes: '', notas: '',
       });
+      // Si ya tiene usuario, el desplegable se pone solo donde toca: nadie
+      // tiene que acordarse de cambiarlo para ver lo que ya estaba guardado.
+      setModoContacto(lead?.whatsapp_usuario
+        ? (lead.telefono ? 'ambos' : 'usuario')
+        : 'numero');
       setCustomValues((lead?.custom_fields as Record<string, unknown>) || {});
     }
   }, [open, lead, reset]);
@@ -165,6 +178,7 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
           project_id: effectiveProjectId,
           email: data.email || null,
           telefono: data.telefono || null,
+          whatsapp_usuario: data.whatsapp_usuario || null,
         }) as { success: boolean; data?: { duplicate: any } };
         if (res?.success && res.data?.duplicate) {
           setPendingDup({ lead: res.data.duplicate, formData: data, nombreFinal: nombre });
@@ -294,6 +308,46 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
                 />
               </Field>
             </div>
+              {/* Numero o usuario de WhatsApp.
+                  El desplegable elige QUE se esta escribiendo, no «uno u otro
+                  para siempre»: la misma persona puede tener los dos, y con
+                  «Ambos» se ven los dos campos a la vez.
+
+                  Se valida distinto segun el tipo: un numero lleva prefijo de
+                  pais y solo cifras; un usuario no. Validar un usuario con las
+                  reglas de un telefono lo rechazaria siempre. */}
+              <Field label="Contacto de WhatsApp"
+                hint="Elige si tienes su número, su usuario, o los dos">
+                {/* El ancho lo ponen las envolturas, NO las clases del campo.
+                    Antes el desplegable llevaba `w-40` encima de `inputClass`,
+                    que ya trae `w-full`: en la hoja de estilos gana `w-full`, el
+                    desplegable ocupaba la fila entera y empujaba el campo del
+                    usuario FUERA del dialogo. El campo existia —salia la barra de
+                    desplazamiento horizontal— pero no se podia ver ni rellenar,
+                    asi que eligiendo «Ambos» solo se podia poner el numero.
+
+                    `min-w-0` en el segundo hace falta: sin el, un elemento flex
+                    no baja de su contenido y vuelve a desbordar. */}
+                <div className="flex gap-2 items-start">
+                  <div className="w-40 flex-none">
+                    <select
+                      value={modoContacto}
+                      onChange={(e) => setModoContacto(e.target.value as ModoContacto)}
+                      className={inputClass}>
+                      <option value="numero">Número</option>
+                      <option value="usuario">Usuario de WhatsApp</option>
+                      <option value="ambos">Ambos</option>
+                    </select>
+                  </div>
+                  {modoContacto !== 'numero' && (
+                    <div className="flex-1 min-w-0">
+                      <input {...register('whatsapp_usuario')}
+                        placeholder="@usuario o como lo tengas guardado"
+                        className={inputClass} />
+                    </div>
+                  )}
+                </div>
+              </Field>
 
             <div className="grid grid-cols-2 gap-4">
               <Field label={`${productoLabel} de interes`}>

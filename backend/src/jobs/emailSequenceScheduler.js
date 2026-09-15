@@ -3,6 +3,7 @@ import { sendEmail } from '../shared/services/brevo.service.js';
 import { query } from '../shared/config/db.js';
 import * as model from '../modules/email-sequences/sequence.model.js';
 import { renderTemplate } from '../modules/email-templates/email-templates.service.js';
+import { vigilar } from './latido.js';
 
 const TICK_MS = parseInt(process.env.EMAIL_SEQ_TICK_MS || String(2 * 60 * 1000)); // 2 min default
 
@@ -93,6 +94,6 @@ export function startEmailSequenceScheduler() {
     logger.warn('Email sequence scheduler deshabilitado por EMAIL_SEQ_DISABLED=1');
     return;
   }
-  setInterval(tick, TICK_MS);
+  vigilar('secuencias_de_correo', 'Secuencias de correo', tick, TICK_MS);
   logger.info({ tickMs: TICK_MS }, 'Email sequence scheduler iniciado');
 }

@@ -20,15 +20,12 @@ import {
   Plus,
 } from '@phosphor-icons/react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid, Legend } from 'recharts';
+import { formatDate } from '@/shared/lib/format';
 
 function fmt(n) {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n || 0));
 }
 
-function formatDate(d) {
-  if (!d) return '--';
-  return new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
-}
 
 // Defaults para filtros persistidos en URL (refresh-safe + compartible)
 const DEFAULT_FROM = new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0, 10);
@@ -47,7 +44,7 @@ export default function AccountingDashboardPage() {
     if (activeProject?.id) p.set('projectId', String(activeProject.id));
     if (range.from) p.set('from', range.from);
     if (range.to) p.set('to', range.to);
-    client.get(`/reports/ventas-vendedora?${p.toString()}`)
+    client.get(`/informes/ventas-vendedora?${p.toString()}`)
       .then((r) => setVend(r.success ? (r.data || []) : []))
       .catch(() => setVend([]));
   }, [activeProject?.id, range.from, range.to]);
@@ -89,6 +86,14 @@ export default function AccountingDashboardPage() {
   const balance = Number(data.balance || 0);
   const cuentas_por_cobrar = data.cuentas_por_cobrar || [];
   const trend = data.trend || { ingresos: [], egresos: [] };
+
+  // El backend manda los totales reales; el listado viene con LIMIT 50.
+  const cxc = data.cuentas_por_cobrar_resumen || {
+    num: cuentas_por_cobrar.length,
+    total: cuentas_por_cobrar.reduce((s, r) => s + Number(r.importe_pendiente || 0), 0),
+    num_vencido: 0,
+    total_vencido: 0,
+  };
 
   const mesesSet = new Set([...(trend.ingresos || []).map(x => x.mes), ...(trend.egresos || []).map(x => x.mes)]);
   const meses = Array.from(mesesSet).sort();
@@ -132,7 +137,7 @@ export default function AccountingDashboardPage() {
       />
 
       {/* KPI Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-3">
         <KpiCard
           icon={CurrencyEur}
           iconBg="bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400"
@@ -140,10 +145,29 @@ export default function AccountingDashboardPage() {
           value={fmt(ingresos.total_cobrado)}
         />
         <KpiCard
+          icon={Receipt}
+          iconBg="bg-sky-50 text-sky-600 dark:bg-sky-950/30 dark:text-sky-400"
+          label="Facturado (emitido)"
+          value={fmt(ingresos.total_emitido || 0)}
+          badge={ingresos.num_facturas ? `${ingresos.num_facturas} facturas` : null}
+          badgeColor="bg-sky-50 text-sky-600 dark:bg-sky-950/30 dark:text-sky-400"
+        />
+        <KpiCard
           icon={Wallet}
           iconBg="bg-orange-50 text-orange-600 dark:bg-orange-950/30 dark:text-orange-400"
           label="Por cobrar"
-          value={fmt(ingresos.total_pendiente)}
+          value={fmt(cxc.total)}
+          badge={cxc.num ? `${cxc.num} ventas` : null}
+          badgeColor="bg-orange-50 text-orange-600 dark:bg-orange-950/30 dark:text-orange-400"
+        />
+        <KpiCard
+          icon={Wallet}
+          iconBg="bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400"
+          label="Vencido"
+          value={fmt(cxc.total_vencido)}
+          badge={cxc.num_vencido ? `${cxc.num_vencido} ventas` : null}
+          badgeColor="bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400"
+          trend="down"
         />
         <KpiCard
           icon={TrendDown}
@@ -232,10 +256,10 @@ export default function AccountingDashboardPage() {
       {/* Cuentas por cobrar */}
       <div className="bg-card border border-border rounded-lg p-4">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="font-semibold">Cuentas por cobrar ({cuentas_por_cobrar.length})</h3>
-          {cuentas_por_cobrar.length > 0 && (
+          <h3 className="font-semibold">Cuentas por cobrar ({cxc.num})</h3>
+          {cxc.num > 0 && (
             <div className="text-sm text-muted-foreground">
-              Total pendiente: <span className="font-bold tabular-nums text-orange-600 dark:text-orange-400">{fmt(cuentas_por_cobrar.reduce((s, r) => s + Number(r.importe_pendiente), 0))}</span>
+              Total pendiente: <span className="font-bold tabular-nums text-orange-600 dark:text-orange-400">{fmt(cxc.total)}</span>
             </div>
           )}
         </div>
@@ -318,6 +342,13 @@ export default function AccountingDashboardPage() {
                 </button>
               ))}
             </div>
+
+            {cxc.num > cuentas_por_cobrar.length && (
+              <p className="mt-3 text-[11px] text-muted-foreground">
+                Mostrando las {cuentas_por_cobrar.length} mas proximas a vencer de {cxc.num}.{' '}
+                <button type="button" onClick={() => navigate('/accounting/receivable')} className="text-primary hover:underline">Ver todas</button>
+              </p>
+            )}
           </>
         )}
       </div>

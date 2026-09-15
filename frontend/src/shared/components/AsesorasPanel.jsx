@@ -1,0 +1,339 @@
+// Panel de asesoras: los NÚMEROS, no el listado.
+//
+// Por asesora y mes: cuántos leads le entraron, cuántas ventas cerró, su tasa
+// de conversión, lo vendido y lo cobrado ESE mes.
+//
+// Cada número es pulsable: abre el detalle de los registros que lo componen,
+// con buscador. Nació de dudar de los datos ("¿Daniela tiene 9 ventas nuevas o
+// son cuotas?") — así se comprueba en el momento en vez de preguntar.
+//
+// Ojo con las tres fechas, que son distintas: los leads cuentan por su fecha de
+// entrada, las ventas por su fecha de venta y los cobros por su fecha de cobro.
+// Por eso una asesora puede cobrar en julio una venta que cerró en mayo.
+import { useEffect, useMemo, useState } from 'react';
+import client from '@/shared/api/client';
+import { useProjectContext } from '@/contexts/ProjectContext';
+import { UsersThree, CaretDown, CaretRight } from '@phosphor-icons/react';
+import DetalleMetricaDialog from '@/shared/components/DetalleMetricaDialog';
+
+function fmtMoney(n) {
+  // Con decimales: sin ellos los importes no cuadraban con las facturas.
+  return new Intl.NumberFormat('es-ES', {
+    style: 'currency', currency: 'EUR',
+    minimumFractionDigits: 2, maximumFractionDigits: 2,
+  }).format(Number(n || 0));
+}
+function nombreMes(mes) {
+  const [a, m] = String(mes).split('-');
+  const nombres = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+    'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+  return `${nombres[Number(m) - 1] || mes} ${a}`;
+}
+
+export default function AsesorasPanel({ from, to }) {
+  const { activeProject } = useProjectContext();
+  const [filas, setFilas] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [abierto, setAbierto] = useState(null);
+  const [detalle, setDetalle] = useState(null);
+  // Este panel es 'mes a mes': si sigue el filtro de arriba y ese filtro es una
+  // semana, solo se ve un mes. Por eso trae su propio ambito, y por defecto
+  // enseña el año entero.
+  const [ambito, setAmbito] = useState('anio');
+  // El mismo pago cae en meses distintos segun por donde se mire, asi que hay que
+  // poder elegir: 'factura' es el de contabilidad y el que manda; 'cobro'
+  // responde a cuanto dinero entro, que es otra pregunta.
+  const [base, setBase] = useState('factura');
+  const anio = new Date().getFullYear();
+  const desde = ambito === 'anio' ? `${anio}-01-01` : from;
+  const hasta = ambito === 'anio' ? new Date().toISOString().slice(0, 10) : to;
+
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      setCargando(true);
+      try {
+        const p = new URLSearchParams();
+        if (activeProject?.id) p.set('projectId', String(activeProject.id));
+        if (desde) p.set('from', desde);
+        if (hasta) p.set('to', hasta);
+        // Solo se manda cuando no es el criterio por defecto.
+        if (base === 'cobro') p.set('base', 'cobro');
+        const r = await client.get(`/informes/asesoras-mes?${p.toString()}`);
+        if (vivo) setFilas(r.success ? (r.data || []) : []);
+      } catch {
+        if (vivo) setFilas([]);
+      } finally { if (vivo) setCargando(false); }
+    })();
+    return () => { vivo = false; };
+  }, [activeProject?.id, desde, hasta, base]);
+
+  // Agrupado por mes, con el total del mes calculado sobre sus asesoras.
+  const meses = useMemo(() => {
+    const acc = {};
+    for (const f of filas) {
+      acc[f.mes] = acc[f.mes] || { mes: f.mes, asesoras: [], leads: 0, convertidos: 0, ventas: 0, vendido: 0, cobrado: 0, cobradoVenta: 0, cobradoCuotas: 0, mensualidades: 0 };
+      acc[f.mes].asesoras.push(f);
+      acc[f.mes].leads += Number(f.leads || 0);
+      acc[f.mes].convertidos += Number(f.leads_convertidos || 0);
+      acc[f.mes].ventas += Number(f.ventas || 0);
+      acc[f.mes].vendido += Number(f.vendido || 0);
+      acc[f.mes].cobrado += Number(f.cobrado || 0);
+      acc[f.mes].cobradoVenta += Number(f.cobrado_venta || 0);
+      acc[f.mes].cobradoCuotas += Number(f.cobrado_cuotas || 0);
+      acc[f.mes].mensualidades += Number(f.mensualidades || 0);
+    }
+    return Object.values(acc).sort((a, b) => b.mes.localeCompare(a.mes));
+  }, [filas]);
+
+  // El mes más reciente arranca desplegado: es el que se mira a diario.
+  useEffect(() => {
+    if (meses.length && abierto === null) setAbierto(meses[0].mes);
+  }, [meses, abierto]);
+
+  // asesora === null -> todas las del mes.
+  function abrir(tipo, mes, asesora) {
+    setDetalle({
+      consulta: {
+        tipo,
+        mes,
+        projectId: activeProject?.id || '',
+        asesoraId: asesora ? (asesora.asesora_id ?? 'sin') : '',
+        // El popup cuenta con el mismo criterio que la tabla: si no, se ve 18
+        // fuera y 16 dentro.
+        base,
+      },
+      subtitulo: `${nombreMes(mes)} · ${asesora ? asesora.asesora : 'todas las asesoras'}`,
+    });
+  }
+
+  // Número pulsable. Si vale 0 no abre nada: no hay nada que enseñar.
+  function Num({ tipo, mes, asesora, children, className = '' }) {
+    return (
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); abrir(tipo, mes, asesora); }}
+        className={`tabular-nums underline decoration-dotted decoration-muted-foreground/40 underline-offset-2 hover:decoration-primary hover:text-primary transition-colors ${className}`}
+        title="Ver los registros que hay detrás"
+      >
+        {children}
+      </button>
+    );
+  }
+
+  if (cargando) {
+    return (
+      <section className="rounded-xl border border-border bg-card p-4 sm:p-5">
+        <p className="text-sm text-muted-foreground">Cargando datos de asesoras…</p>
+      </section>
+    );
+  }
+  if (!meses.length) {
+    return (
+      <section className="rounded-xl border border-border bg-card p-4 sm:p-5">
+        <h2 className="text-base font-semibold">Asesoras</h2>
+        <p className="text-xs text-muted-foreground mt-1">No hay datos en el rango seleccionado.</p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="rounded-xl border border-border bg-card p-4 sm:p-5">
+      <div className="mb-3">
+        <h2 className="text-base font-semibold flex items-center gap-2">
+          <UsersThree size={18} weight="regular" /> Asesoras, mes a mes
+        </h2>
+        <p className="text-xs text-muted-foreground">
+          Leads que le entraron, ventas cerradas y dinero cobrado. Los leads cuentan por
+          fecha de entrada, las ventas por fecha de venta y los cobros por fecha de cobro.
+          La tasa es leads convertidos sobre leads recibidos, ambos del periodo: quien solo
+          pagó una mensualidad no cuenta como conversión.
+        </p>
+        <p className="text-xs text-primary font-medium mt-1">
+          Pulsa cualquier número para ver los registros que hay detrás, con buscador.
+        </p>
+        <div className="mt-1.5 flex items-center gap-3 text-[10px] text-muted-foreground">
+          <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-emerald-500" /> cobro de la venta</span>
+          <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-sky-500" /> cuota del plan de pago</span>
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <div className="inline-flex rounded-md border border-border overflow-hidden">
+            {[['anio', `Todo ${anio}`], ['rango', 'Solo el rango de arriba']].map(([k, etiqueta]) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => { setAmbito(k); setAbierto(null); }}
+                className={`px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                  ambito === k ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+                }`}
+              >
+                {etiqueta}
+              </button>
+            ))}
+          </div>
+          <div className="inline-flex rounded-md border border-border overflow-hidden">
+            {[['cobro', 'Por cobro'], ['factura', 'Por factura']].map(([k, etiqueta]) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => { setBase(k); setAbierto(null); }}
+                className={`px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                  base === k ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+                }`}
+              >
+                {etiqueta}
+              </button>
+            ))}
+          </div>
+        </div>
+        <p className="text-[10px] text-muted-foreground mt-1.5">
+          «Por cobro» cuenta el dinero en el mes en que entró. «Por factura», en el mes en que
+          se emitió la factura, que es como cuadra contabilidad. Un mismo pago puede caer en un
+          mes o en otro según cuál mires.
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        {meses.map((m) => {
+          const open = abierto === m.mes;
+          // Tasa = de los leads que entraron ese mes, cuantos convirtieron.
+          // No se divide por ventas: ahi se colaba quien solo pago una mensualidad.
+          const tasa = m.leads > 0 ? (m.convertidos * 100 / m.leads) : 0;
+          return (
+            <div key={m.mes} className="rounded-lg border border-border overflow-hidden">
+              {/* La cabecera es pulsable para plegar; los números de dentro
+                  abren su detalle y paran la propagación. */}
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => setAbierto(open ? null : m.mes)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setAbierto(open ? null : m.mes); } }}
+                className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-muted/40 text-left cursor-pointer"
+              >
+                {open ? <CaretDown size={13} weight="bold" /> : <CaretRight size={13} weight="bold" />}
+                <span className="font-semibold text-sm capitalize flex-1">{nombreMes(m.mes)}</span>
+                <span className="hidden sm:inline text-[11px] text-muted-foreground">
+                  <Num tipo="leads" mes={m.mes}>{m.leads.toLocaleString('es-ES')}</Num> leads
+                </span>
+                <span className="text-[11px] text-muted-foreground">
+                  <Num tipo="ventas" mes={m.mes}>{m.ventas}</Num> ventas
+                </span>
+                <span className="text-[11px] text-sky-600 dark:text-sky-400">
+                  <Num tipo="mensualidades" mes={m.mes}>{m.mensualidades}</Num> mensual.
+                </span>
+                <span className="text-[11px] text-muted-foreground tabular-nums">{tasa.toFixed(2)}%</span>
+                {/* Reparto del cobro del mes: ventas nuevas vs cuotas del plan. */}
+                {m.cobrado > 0 && (
+                  <span className="hidden md:flex h-2 w-28 rounded-full overflow-hidden bg-muted"
+                    title={`${fmtMoney(m.cobradoVenta)} de ventas · ${fmtMoney(m.cobradoCuotas)} de cuotas`}>
+                    <span className="bg-emerald-500" style={{ width: `${(m.cobradoVenta / m.cobrado) * 100}%` }} />
+                    <span className="bg-sky-500" style={{ width: `${(m.cobradoCuotas / m.cobrado) * 100}%` }} />
+                  </span>
+                )}
+                <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400 w-28 text-right">
+                  <Num tipo="cobros" mes={m.mes}>{fmtMoney(m.cobrado)}</Num>
+                </span>
+              </div>
+
+              {open && (
+                <div className="overflow-x-auto border-t border-border">
+                  <table className="w-full text-[11px]">
+                    <thead className="bg-muted/50 text-muted-foreground">
+                      <tr>
+                        <th className="text-left px-3 py-2 font-bold">Asesora</th>
+                        <th className="text-right px-3 py-2 font-bold">Leads recibidos</th>
+                        <th className="text-right px-3 py-2 font-bold">Convertidos</th>
+                        <th className="text-right px-3 py-2 font-bold">Ventas</th>
+                        <th className="text-right px-3 py-2 font-bold">Mensualidades</th>
+                        <th className="text-right px-3 py-2 font-bold">Tasa</th>
+                        <th className="text-right px-3 py-2 font-bold">Vendido</th>
+                        <th className="text-right px-3 py-2 font-bold">Cobrado</th>
+                        <th className="text-right px-3 py-2 font-bold">· de ventas</th>
+                        <th className="text-right px-3 py-2 font-bold">· de cuotas</th>
+                        <th className="text-right px-3 py-2 font-bold">Ticket medio</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {m.asesoras.map((a) => (
+                        <tr key={`${m.mes}-${a.asesora}`} className="border-b border-border/50 last:border-0">
+                          <td className="px-3 py-2 font-medium">{a.asesora}</td>
+                          <td className="px-3 py-2 text-right">
+                            <Num tipo="leads" mes={m.mes} asesora={a}>{Number(a.leads).toLocaleString('es-ES')}</Num>
+                          </td>
+                          <td className="px-3 py-2 text-right text-emerald-600 dark:text-emerald-400">
+                            <Num tipo="leads-convertidos" mes={m.mes} asesora={a}>{Number(a.leads_convertidos || 0).toLocaleString('es-ES')}</Num>
+                          </td>
+                          <td className="px-3 py-2 text-right font-semibold">
+                            <Num tipo="ventas" mes={m.mes} asesora={a}>{a.ventas}</Num>
+                          </td>
+                          <td className="px-3 py-2 text-right text-sky-600 dark:text-sky-400">
+                            <Num tipo="mensualidades" mes={m.mes} asesora={a}>{a.mensualidades}</Num>
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums">{Number(a.tasa_conversion).toFixed(2)}%</td>
+                          <td className="px-3 py-2 text-right">
+                            <Num tipo="ventas" mes={m.mes} asesora={a}>{fmtMoney(a.vendido)}</Num>
+                          </td>
+                          <td className="px-3 py-2 text-right font-semibold text-emerald-600 dark:text-emerald-400">
+                            <Num tipo="cobros" mes={m.mes} asesora={a}>{fmtMoney(a.cobrado)}</Num>
+                          </td>
+                          <td className="px-3 py-2 text-right text-muted-foreground">
+                            <Num tipo="cobros-venta" mes={m.mes} asesora={a}>{fmtMoney(a.cobrado_venta)}</Num>
+                          </td>
+                          <td className="px-3 py-2 text-right text-sky-600 dark:text-sky-400">
+                            <Num tipo="mensualidades" mes={m.mes} asesora={a}>{fmtMoney(a.cobrado_cuotas)}</Num>
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{fmtMoney(a.ticket_medio)}</td>
+                        </tr>
+                      ))}
+                      <tr className="bg-muted/40 font-bold">
+                        <td className="px-3 py-2">Total del mes</td>
+                        <td className="px-3 py-2 text-right">
+                          <Num tipo="leads" mes={m.mes}>{m.leads.toLocaleString('es-ES')}</Num>
+                        </td>
+                        <td className="px-3 py-2 text-right text-emerald-600 dark:text-emerald-400">
+                          <Num tipo="leads-convertidos" mes={m.mes}>{m.convertidos.toLocaleString('es-ES')}</Num>
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <Num tipo="ventas" mes={m.mes}>{m.ventas}</Num>
+                        </td>
+                        <td className="px-3 py-2 text-right text-sky-600 dark:text-sky-400">
+                          <Num tipo="mensualidades" mes={m.mes}>{m.mensualidades}</Num>
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums">{tasa.toFixed(2)}%</td>
+                        <td className="px-3 py-2 text-right">
+                          <Num tipo="ventas" mes={m.mes}>{fmtMoney(m.vendido)}</Num>
+                        </td>
+                        <td className="px-3 py-2 text-right text-emerald-600 dark:text-emerald-400">
+                          <Num tipo="cobros" mes={m.mes}>{fmtMoney(m.cobrado)}</Num>
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <Num tipo="cobros-venta" mes={m.mes}>{fmtMoney(m.cobradoVenta)}</Num>
+                        </td>
+                        <td className="px-3 py-2 text-right text-sky-600 dark:text-sky-400">
+                          <Num tipo="mensualidades" mes={m.mes}>{fmtMoney(m.cobradoCuotas)}</Num>
+                        </td>
+                        <td className="px-3 py-2"></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <p className="text-[10px] text-muted-foreground mt-3">
+        El detalle venta a venta —cliente, contacto, importe y estado del cobro— también se
+        descarga entero en «Ventas por asesora (detalle)», justo debajo.
+      </p>
+
+      <DetalleMetricaDialog
+        abierto={!!detalle}
+        onClose={() => setDetalle(null)}
+        consulta={detalle?.consulta}
+        subtitulo={detalle?.subtitulo}
+      />
+    </section>
+  );
+}

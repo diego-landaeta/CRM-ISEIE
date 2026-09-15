@@ -1,6 +1,7 @@
 import { logger } from '../shared/utils/logger.js';
 import * as model from '../modules/stripe-payments/stripe-payments.model.js';
 import { syncStripePayments } from '../modules/stripe-payments/stripe-payments.service.js';
+import { vigilar } from './latido.js';
 
 // Sync incremental cada 5 min de los proyectos con Stripe configurado.
 const TICK_MS = parseInt(process.env.STRIPE_SYNC_TICK_MS || String(5 * 60 * 1000));
@@ -24,6 +25,6 @@ async function tick() {
 
 export function startStripePaymentsSyncScheduler() {
   setTimeout(tick, 30_000); // primera corrida a los 30s del boot
-  setInterval(tick, TICK_MS);
+  vigilar('stripe', 'Sincronización de pagos de Stripe', tick, TICK_MS);
   logger.info({ tickMs: TICK_MS }, 'Stripe payments sync scheduler iniciado');
 }

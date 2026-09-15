@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, FloppyDisk, MagnifyingGlass, User, Buildings, Money } from '@phosphor-icons/react';
 import { useProjectContext } from '@/contexts/ProjectContext';
+import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import client from '@/shared/api/client';
+import { CURRENCIES } from '../currencies';
 import { invoicesApi } from '../api/invoices.api';
 import type { Issuer, InvoiceItem } from '../api/invoices.api';
 import { conversionsApi, type Conversion } from '@/modules/conversions/api/conversions.api';
@@ -29,6 +31,9 @@ export default function InvoiceCreatePage() {
     ?? activeProject?.sociedad_emisora_id ?? null;
   const projectOptions = (projects || []).filter((p) =>
     socActual == null ? true : p.sociedad_emisora_id === socActual);
+  const { user } = useAuth() as { user: { role?: string; editar_fechas_factura?: boolean } | null };
+  // Cambiar fechas de la factura: admins o permiso acotado editar_fechas_factura.
+  const puedeFechas = user?.role === 'admin' || user?.role === 'superadmin' || !!user?.editar_fechas_factura;
   const navigate = useNavigate();
   const loc = useLocation();
   const invBase = loc.pathname.split('/facturas')[0];
@@ -40,11 +45,33 @@ export default function InvoiceCreatePage() {
     initTipo === 'proforma' ? 'proforma' : initTipo === 'rectificativa' ? 'rectificativa' : 'factura'
   );
   const esProforma = docTipo === 'proforma';
+
+  // Que el aviso diga QUE ha pasado, no «Error» a secas.
+  //
+  // El servidor manda `error`, y ademas `code` y —cuando es un fallo suyo y no
+  // del formulario— una `ref` con la que encontrarlo en el registro. Antes se
+  // enseñaba solo `error`, que en los fallos internos es siempre la misma frase
+  // generica, asi que quien lo sufria no tenia nada que contar.
+  function detalleDelError(x: unknown): string {
+    const e = (x || {}) as { data?: Record<string, unknown>; error?: string; message?: string; code?: string; ref?: string };
+    const d = (e.data || {}) as { error?: string; code?: string; ref?: string };
+    const texto = d.error || e.error || e.message || 'No se ha podido guardar.';
+    const code = d.code || e.code;
+    const ref = d.ref || e.ref;
+    return [texto, code ? `(${code})` : '', ref ? `· ref ${ref}` : ''].filter(Boolean).join(' ');
+  }
   const esRect = docTipo === 'rectificativa';
   // Modo EDICIÓN (solo admin/superadmin): ?editId=X. Sirve tanto para borradores
   // como para CORREGIR una factura ya emitida/pagada (IVA, datos, concepto).
   const editId = new URLSearchParams(loc.search).get('editId');
   const [editEstado, setEditEstado] = useState<string | null>(null);
+  // Si lo que se esta corrigiendo es un abono: cambia el rotulo y el signo.
+  const [esAbono, setEsAbono] = useState(false);
+  // Fechas de la factura (emisión y pago). Se editan aquí mismo, en el panel.
+  // Solo para admins o usuarias con el permiso editar_fechas_factura.
+  const [fechaEmision, setFechaEmision] = useState('');
+  const [fechaPago, setFechaPago] = useState('');
+  const [fechasIniciales, setFechasIniciales] = useState({ emision: '', pago: '' });
 
   const [tipo, setTipo] = useState<Tipo>('persona');
   const [leadId, setLeadId] = useState<number | null>(null);
@@ -52,6 +79,9 @@ export default function InvoiceCreatePage() {
   // de una conversión pendiente de pago inicial. La factura queda ligada a esa venta.
   const [leadConvs, setLeadConvs] = useState<Conversion[]>([]);
   const [assocConvId, setAssocConvId] = useState<number | ''>('');
+  // Aviso antes de emitir un documento SIN venta asociada: si no, nacia suelto y no
+  // aparecia en la ficha del cliente (el panel busca los documentos DE la venta).
+  const [avisoVenta, setAvisoVenta] = useState(false);
 
   // Buscador de cliente
   const [search, setSearch] = useState('');
@@ -77,7 +107,9 @@ export default function InvoiceCreatePage() {
   const [ivaIncluido, setIvaIncluido] = useState(false);
   const [items, setItems] = useState<InvoiceItem[]>([{ descripcion: '', cantidad: 1, precio_unitario: 0 }]);
   const [metodoPago, setMetodoPago] = useState<'transferencia' | 'tarjeta' | 'tarjeta_stripe' | 'efectivo' | 'bizum' | 'fraccionado' | 'otro'>('transferencia');
-  const [moneda, setMoneda] = useState('EUR'); // divisa de la factura (importes manuales, sin conversión)
+  const [moneda, setMoneda] = useState('EUR');
+  // Doble moneda: importe total en EUROS tecleado a mano (obligatorio si moneda != EUR).
+  const [totalEur, setTotalEur] = useState(''); // divisa de la factura (importes manuales, sin conversión)
   const [piePago, setPiePago] = useState('');
   const [notas, setNotas] = useState('');
   const [issuers, setIssuers] = useState<Issuer[]>([]);
@@ -210,7 +242,19 @@ export default function InvoiceCreatePage() {
   }
   if (!items.some((it) => it.descripcion.trim() && Number(it.precio_unitario) > 0)) missing.push('Al menos un concepto con precio');
 
-  async function generar() {
+  // Suma de conceptos: en la divisa elegida (o en euros si la factura es en EUR).
+  // Símbolo de la divisa elegida: los conceptos se teclean en ESA moneda, así que
+  // enseñar siempre el € confundía (parecía que la factura iba en euros).
+  const simboloMoneda = (CURRENCIES.find((x) => x.code === moneda)?.symbol) || moneda;
+  const totalConceptos = items.reduce((sum, it) => sum + (Number(it.cantidad) || 0) * (Number(it.precio_unitario) || 0), 0);
+
+  async function generar(saltarAvisoVenta = false) {
+    // Documento nuevo para un cliente pero sin venta elegida -> se avisa primero.
+    if (!saltarAvisoVenta && !editId && leadId && !assocConvId) { setAvisoVenta(true); return; }
+    if (moneda !== 'EUR' && !(Number(totalEur) > 0)) {
+      toast({ title: 'Falta el importe en euros', description: `La factura va en ${moneda}: indica el total en euros (es el que cuenta para la contabilidad).`, variant: 'destructive' });
+      return;
+    }
     if (!pid) return;
     if (missing.length) { toast({ title: 'Faltan datos', description: missing.join(' · '), variant: 'destructive' }); return; }
     setSaving(true);
@@ -223,6 +267,9 @@ export default function InvoiceCreatePage() {
         conversionId: assocConvId ? Number(assocConvId) : undefined,
         tipo: esProforma ? ('proforma' as const) : undefined,
         clienteNombre: cNombre, clienteNif: cNif,
+        // Empresa o persona: decide el rotulo del PDF ("RAZON SOCIAL" o
+        // "NOMBRE Y APELLIDO"). Al contado se factura a un particular.
+        clienteTipo: tipo === 'empresa' ? 'empresa' : 'particular',
         clienteDireccion: direccion.trim(), clienteCiudad: ciudad.trim(), clienteCp: cp.trim(), clientePais: pais.trim() || 'España',
         clienteEmail: email.trim() || null, clienteTelefono: telefono.trim() || null,
         items: items.filter((it) => it.descripcion.trim()),
@@ -231,6 +278,7 @@ export default function InvoiceCreatePage() {
         leyendaIva: regimenSel?.coletilla || null,
         notas: notas.trim() || undefined, metodoPago, piePago: piePago.trim() || undefined,
         moneda: moneda !== 'EUR' ? moneda : undefined,
+      totalEur: moneda !== 'EUR' ? Number(totalEur || 0) : undefined,
       };
       // Edición (admin/superadmin): si la factura ya está emitida/pagada se CORRIGE
       // (mantiene su número fiscal); si es borrador, PATCH normal; si no, crear.
@@ -240,15 +288,26 @@ export default function InvoiceCreatePage() {
             ? await invoicesApi.corregir(Number(editId), { ...body, exento: !llevaIva })
             : await invoicesApi.update(Number(editId), body))
         : await invoicesApi.create(body);
+      // Fechas: van por su endpoint (respeta el permiso editar_fechas_factura) y
+      // solo si de verdad cambiaron.
+      if (res.success && editId && puedeFechas
+          && (fechaEmision !== fechasIniciales.emision || fechaPago !== fechasIniciales.pago)) {
+        try {
+          await invoicesApi.updateFechas(Number(editId), {
+            ...(fechaEmision && fechaEmision !== fechasIniciales.emision ? { fechaEmision } : {}),
+            ...(fechaPago && fechaPago !== fechasIniciales.pago ? { fechaPago } : {}),
+          });
+        } catch { toast({ title: 'La factura se guardó, pero no se pudieron cambiar las fechas', variant: 'destructive' }); }
+      }
       if (res.success && res.data) {
         toast({ title: esCorreccion ? '✓ Factura corregida' : editId ? '✓ Borrador guardado' : (esProforma ? '✓ Presupuesto generado' : '✓ Factura emitida'), description: res.data.codigo || '' });
         invoicesApi.openPdf(res.data.id, true).catch(() => {});
         navigate(`${invBase}/facturas${esProforma ? '?tab=proformas' : ''}`);
       } else {
-        toast({ title: 'Error', description: (res as { error?: string }).error, variant: 'destructive' });
+        toast({ title: 'No se pudo guardar', description: detalleDelError(res), variant: 'destructive' });
       }
     } catch (e: any) {
-      toast({ title: 'Error', description: e?.data?.error || e?.message, variant: 'destructive' });
+      toast({ title: 'No se pudo guardar', description: detalleDelError(e), variant: 'destructive' });
     } finally { setSaving(false); }
   }
 
@@ -281,9 +340,13 @@ export default function InvoiceCreatePage() {
       if (!res.success || !res.data) return;
       const f = res.data as import('../api/invoices.api').Invoice;
       setEditEstado(f.estado || null);
+        const d10 = (v?: string | null) => (v ? String(v).slice(0, 10) : '');
+        setFechaEmision(d10(f.fecha_emision));
+        setFechaPago(d10(f.fecha_pago));
+        setFechasIniciales({ emision: d10(f.fecha_emision), pago: d10(f.fecha_pago) });
       setDocTipo(f.tipo === 'proforma' ? 'proforma' : 'factura');
       const noVal = (v?: string | null) => !v || v === '—';
-      setTipo(noVal(f.cliente_nombre) || f.cliente_nombre === '(por completar)' ? 'persona' : 'persona');
+      setTipo(f.cliente_tipo === 'empresa' ? 'empresa' : 'persona');
       setNombre(f.cliente_nombre === '(por completar)' ? '' : (f.cliente_nombre || ''));
       setNif(noVal(f.cliente_nif) ? '' : (f.cliente_nif || ''));
       setDireccion(noVal(f.cliente_direccion) ? '' : (f.cliente_direccion || ''));
@@ -294,9 +357,26 @@ export default function InvoiceCreatePage() {
       setTelefono(f.cliente_telefono || '');
       setLlevaIva(Number(f.iva_pct) > 0);
       setIvaIncluido(!!f.iva_incluido);
-      if (Array.isArray(f.items) && f.items.length) setItems(f.items.map((it) => ({ descripcion: it.descripcion, cantidad: Number(it.cantidad) || 1, precio_unitario: Number(it.precio_unitario) || 0 })));
+      // Un abono se guarda en negativo pero se EDITA en positivo: es como se
+      // lee en el papel y como lo piensa quien corrige. El signo lo vuelve a
+      // poner el servidor al guardar, asi que no depende de esta pantalla.
+      setEsAbono(f.tipo === 'rectificativa');
+      // El precio se lee de las DOS claves. Los abonos importados lo guardan en
+      // `precio` y no en `precio_unitario`, asi que la pantalla los leia como 0 €
+      // y luego se negaba a guardar por «falta un concepto con precio»: los seis
+      // abonos de ISEIE estaban bloqueados por esto. El PDF ya toleraba las dos.
+      if (Array.isArray(f.items) && f.items.length) setItems(f.items.map((it) => ({
+        descripcion: it.descripcion,
+        cantidad: Number(it.cantidad) || 1,
+        precio_unitario: Math.abs(Number(it.precio_unitario ?? (it as { precio?: number | string }).precio ?? 0) || 0),
+      })));
       if (f.metodo_pago) setMetodoPago(f.metodo_pago as typeof metodoPago);
       if (f.moneda) setMoneda(f.moneda);
+        // En positivo, igual que los conceptos: un abono se guarda negativo pero
+        // se teclea en positivo. Sin el valor absoluto el campo salia con «-285»
+        // y el aviso decia «falta el importe en euros» sobre un campo relleno —
+        // era el unico motivo por el que el abono en dolares no se podia guardar.
+        if (f.total_divisa != null) setTotalEur(f.total != null ? String(Math.abs(Number(f.total))) : '');
       if (f.notas) setNotas(f.notas);
       if (f.issuer_id) setIssuerId(f.issuer_id);
       if (f.project_id) setProjectId(f.project_id);
@@ -310,7 +390,11 @@ export default function InvoiceCreatePage() {
     if (!esRect || !issuerId) { setRectList([]); return; }
     invoicesApi.list({ issuerId, limit: 200 }).then((r) => {
       if (r.success) setRectList((r.data || []).filter((i) =>
-        i.tipo !== 'rectificativa' && i.tipo !== 'proforma' && i.estado !== 'borrador' && i.estado !== 'cancelada'));
+      // Las proformas TAMBIEN se rectifican: llevan numero y salen emitidas, asi
+      // que si una se manda mal hay que poder abonarla. Solo quedan fuera las
+      // rectificativas —no se rectifica un abono— y lo que aun es borrador o ya
+      // esta cancelado.
+        i.tipo !== 'rectificativa' && i.estado !== 'borrador' && i.estado !== 'cancelada'));
     }).catch(() => {});
   }, [esRect, issuerId]);
 
@@ -331,10 +415,10 @@ export default function InvoiceCreatePage() {
         invoicesApi.openPdf(res.data.id).catch((e: unknown) => toast({ title: 'No se pudo abrir el PDF', description: (e as { message?: string })?.message, variant: 'destructive' }));
         navigate(`${invBase}/facturas`);
       } else {
-        toast({ title: 'Error', description: (res as { error?: string }).error, variant: 'destructive' });
+        toast({ title: 'No se pudo guardar', description: detalleDelError(res), variant: 'destructive' });
       }
     } catch (e: any) {
-      toast({ title: 'Error', description: e?.data?.error || e?.message, variant: 'destructive' });
+      toast({ title: 'No se pudo guardar', description: detalleDelError(e), variant: 'destructive' });
     } finally { setSaving(false); }
   }
 
@@ -406,7 +490,10 @@ export default function InvoiceCreatePage() {
           <label className="text-xs font-bold uppercase text-muted-foreground">Empresa que emite</label>
           <select value={issuerId ?? ''} onChange={(e) => setIssuerId(Number(e.target.value))}
             className="w-full h-9 px-2 mt-1 rounded border border-primary/40 bg-background text-foreground text-sm font-medium [&>option]:bg-background [&>option]:text-foreground">
-            {issuers.map((iss) => <option key={iss.id} value={iss.id}>{iss.razon_social} — {iss.nif}{iss.serie ? ` · serie ${iss.serie}` : ''}{iss.es_default ? ' (por defecto)' : ''}</option>)}
+            {/* Con alias se enseña el alias: dos emisoras pueden compartir razón
+                social y NIF —misma sociedad, distinto logo— y así se distinguen.
+                En la factura siempre sale la razón social real. */}
+            {issuers.map((iss) => <option key={iss.id} value={iss.id}>{iss.alias || iss.razon_social} — {iss.nif}{iss.serie ? ` · serie ${iss.serie}` : ''}{iss.es_default ? ' (por defecto)' : ''}</option>)}
           </select>
           {fiscalMissing && !esProforma && (
             <div className={`mt-2 flex items-start gap-2 rounded-md px-3 py-2 text-xs border ${fiscalBlock ? 'bg-red-500/10 border-red-500/30 text-red-700 dark:text-red-400' : 'bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-400'}`}>
@@ -561,16 +648,16 @@ export default function InvoiceCreatePage() {
             <input type="number" min="1" value={it.cantidad} onChange={(e) => setItems(items.map((x, i) => i === idx ? { ...x, cantidad: Number(e.target.value) } : x))} placeholder="1" className="col-span-2 h-9 px-2 rounded border border-border bg-background text-sm text-center" />
             <div className="col-span-2 relative">
               <input type="number" step="0.01" min="0" value={it.precio_unitario} onChange={(e) => setItems(items.map((x, i) => i === idx ? { ...x, precio_unitario: Number(e.target.value) } : x))} placeholder="0,00" className="w-full h-9 pl-2 pr-5 rounded border border-border bg-background text-sm text-right" />
-              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">€</span>
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">{simboloMoneda}</span>
             </div>
-            <span className="col-span-1 text-sm text-right tabular-nums font-medium">{subtotal.toFixed(2)}&nbsp;€</span>
+            <span className="col-span-1 text-sm text-right tabular-nums font-medium">{subtotal.toFixed(2)}&nbsp;{simboloMoneda}</span>
             <button onClick={() => setItems(items.length > 1 ? items.filter((_, i) => i !== idx) : items)} title="Quitar línea" className="col-span-1 text-muted-foreground hover:text-red-500 text-lg leading-none">×</button>
           </div>
           );
         })}
         {/* Total de conceptos (suma de subtotales). El IVA se aplica más abajo. */}
         <div className="flex justify-end pt-1 border-t border-border mt-1">
-          <span className="text-sm font-bold tabular-nums">Total conceptos: {items.reduce((s, it) => s + (Number(it.cantidad) || 0) * (Number(it.precio_unitario) || 0), 0).toFixed(2)} €</span>
+          <span className="text-sm font-bold tabular-nums">Total conceptos: {items.reduce((s, it) => s + (Number(it.cantidad) || 0) * (Number(it.precio_unitario) || 0), 0).toFixed(2)} {simboloMoneda}</span>
         </div>
         <div className="flex flex-wrap items-center gap-3 pt-1">
           <button onClick={() => setItems([...items, { descripcion: '', cantidad: 1, precio_unitario: 0 }])} className="text-xs text-primary hover:underline">+ añadir concepto</button>
@@ -631,15 +718,46 @@ export default function InvoiceCreatePage() {
           <label className="text-xs font-bold uppercase text-muted-foreground">Pago</label>
           <select value={metodoPago} onChange={(e) => setMetodoPago(e.target.value as 'transferencia')} className="w-full h-9 px-2 rounded border border-border bg-background text-sm">
             <option value="transferencia">Transferencia bancaria</option><option value="tarjeta">Tarjeta</option><option value="tarjeta_stripe">Tarjeta (Stripe)</option>
-            <option value="efectivo">Efectivo</option><option value="bizum">Bizum</option><option value="fraccionado">Fraccionado</option><option value="otro">Otro</option>
+            <option value="efectivo">Efectivo</option><option value="bizum">Bizum</option><option value="paypal">PayPal</option><option value="fraccionado">Fraccionado</option><option value="otro">Otro</option>
           </select>
           <div>
             <label className="text-[11px] text-muted-foreground">Moneda</label>
             <select value={moneda} onChange={(e) => setMoneda(e.target.value)} className="w-full h-9 px-2 rounded border border-border bg-background text-sm">
-              {['EUR', 'USD', 'MXN', 'COP', 'ARS', 'CLP', 'PEN', 'CRC', 'GBP', 'BRL', 'DOP', 'GTQ', 'UYU'].map((c) => <option key={c} value={c}>{c}</option>)}
+              {CURRENCIES.map((c) => <option key={c.code} value={c.code}>{c.code} · {c.label}</option>)}
             </select>
-            {moneda !== 'EUR' && <p className="text-[10px] text-amber-600 mt-0.5">Importes manuales en {moneda} (sin conversión automática). El PDF saldrá en {moneda}.</p>}
           </div>
+          {/* Doble moneda: al facturar en divisa, el importe en EUROS es obligatorio.
+              Es el que manda en la contabilidad; la divisa es solo lo que se muestra. */}
+          {moneda !== 'EUR' && (
+            <div className="p-2.5 rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 space-y-1.5">
+              <p className="text-[10px] text-amber-800 dark:text-amber-300">
+                Los conceptos van en <strong>{moneda}</strong> (importes manuales, sin conversión automática).
+                Indica también el total en euros: es el que cuenta para la contabilidad y los reportes.
+                En la factura saldrá <strong>{totalConceptos.toFixed(2)} {moneda} ({(Number(totalEur) || 0).toFixed(2)} €)</strong>.
+              </p>
+              <div>
+                <label className="text-[11px] text-muted-foreground">Total en euros <span className="text-red-500">*</span></label>
+                <input type="number" step="0.01" min="0" value={totalEur} onChange={(e) => setTotalEur(e.target.value)}
+                  placeholder="0.00"
+                  className={`w-full h-9 px-2 rounded border bg-background text-sm ${!totalEur ? 'border-amber-400' : 'border-border'}`} />
+              </div>
+            </div>
+          )}
+          {/* Fechas de la factura: se editan aquí, en el panel (antes había un botón aparte). */}
+          {editId && puedeFechas && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[11px] text-muted-foreground">Fecha de emisión</label>
+                <input type="date" value={fechaEmision} onChange={(e) => setFechaEmision(e.target.value)}
+                  className="w-full h-9 px-2 rounded border border-border bg-background text-sm" />
+              </div>
+              <div>
+                <label className="text-[11px] text-muted-foreground">Fecha de pago</label>
+                <input type="date" value={fechaPago} onChange={(e) => setFechaPago(e.target.value)}
+                  className="w-full h-9 px-2 rounded border border-border bg-background text-sm" />
+              </div>
+            </div>
+          )}
           <textarea value={piePago} onChange={(e) => setPiePago(e.target.value)} rows={2} placeholder="Pie de pago (IBAN, vencimiento…)" className="w-full px-2 py-1.5 rounded border border-border bg-background text-sm" />
         </div>
       </div>
@@ -652,11 +770,51 @@ export default function InvoiceCreatePage() {
             <FloppyDisk size={15} weight="bold" /> {saving ? 'Emitiendo abono…' : 'Emitir abono'}
           </button>
         ) : (
-          <button onClick={generar} disabled={saving || (!esProforma && fiscalBlock)} title={!esProforma && fiscalBlock ? 'El CIF/NIF de la sociedad no es válido' : undefined} className="h-10 px-5 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1.5">
+          <button onClick={() => generar()} disabled={saving || (!esProforma && fiscalBlock)} title={!esProforma && fiscalBlock ? 'El CIF/NIF de la sociedad no es válido' : undefined} className="h-10 px-5 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1.5">
             <FloppyDisk size={15} weight="bold" /> {saving ? 'Guardando…' : editId ? 'Guardar cambios' : (esProforma ? 'Generar presupuesto' : 'Generar factura')}
           </button>
         )}
       </div>
+
+      {/* Aviso: se va a emitir sin asociar a una venta. */}
+      {avisoVenta && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center p-4" onClick={() => setAvisoVenta(false)}>
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
+          <div role="dialog" className="relative bg-card rounded-xl border border-border w-full max-w-md p-5" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-semibold text-base mb-1">Este documento no está asociado a ninguna venta</h3>
+            {leadConvs.length > 0 ? (
+              <>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Si lo emites así <b>no aparecerá en la ficha del cliente</b>. Elige a qué venta pertenece:
+                </p>
+                <div className="space-y-1.5 max-h-56 overflow-y-auto">
+                  {leadConvs.map((c) => (
+                    <button key={c.id} onClick={() => { setAssocConvId(c.id); setAvisoVenta(false); }}
+                      className="w-full text-left p-2.5 rounded-md border border-border hover:bg-muted/50">
+                      <div className="text-sm font-medium truncate">{c.producto_contratado || 'Venta'}</div>
+                      <div className="text-[11px] text-muted-foreground">
+                        {Number(c.importe_total || 0).toFixed(2)} € · cobrado {Number(c.importe_pagado || 0).toFixed(2)} €
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground mb-3">
+                Este cliente <b>todavía no tiene ninguna venta registrada</b>. Puedes emitirlo igualmente:
+                cuando crees la venta, el documento <b>se asociará solo</b>.
+              </p>
+            )}
+            <div className="flex justify-end gap-2 mt-4">
+              <button onClick={() => setAvisoVenta(false)} className="h-9 px-3 rounded-md border border-border bg-card text-sm">Cancelar</button>
+              <button onClick={() => { setAvisoVenta(false); generar(true); }}
+                className="h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90">
+                Emitir sin asociar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -666,6 +824,8 @@ function Field({ label, value, onChange, required, full }: { label: string; valu
     <div className={full ? 'col-span-2' : ''}>
       <label className="text-[11px] text-muted-foreground">{label}{required && <span className="text-red-500"> *</span>}</label>
       <input value={value} onChange={(e) => onChange(e.target.value)} className={`w-full h-9 px-2 rounded border bg-background text-sm ${required && !value ? 'border-red-300' : 'border-border'}`} />
+
+
     </div>
   );
 }

@@ -86,7 +86,7 @@ export default function SalesPage() {
 
   useEffect(() => {
     if (!projectId || !isAdmin) return;
-    client.get('/sales/gestores-stats', { params: { projectId } })
+    client.get('/ventas/gestores-stats', { params: { projectId } })
       .then((r) => setGestores(r?.data?.gestores || []))
       .catch(() => setGestores([]));
   }, [projectId, isAdmin, reloadKey]);

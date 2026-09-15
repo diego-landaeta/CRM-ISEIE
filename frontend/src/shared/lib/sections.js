@@ -52,7 +52,7 @@ export const SECTIONS = [
     icon: Calculator,
     tabs: [
       { to: '/accounting',                    label: 'Dashboard',         icon: Calculator,  end: true, roles: ['admin', 'superadmin'] },
-      { to: '/sales',                         label: 'Ventas',            icon: Receipt },
+      { to: '/ventas',                         label: 'Ventas',            icon: Receipt },
       { to: '/accounting/income',             label: 'Ingresos',          icon: CurrencyEur, roles: ['admin', 'superadmin'] },
       { to: '/revenue',                       label: 'Conversiones',      icon: ChartLineUp, roles: ['admin', 'superadmin'] },
       { to: '/expenses',                      label: 'Egresos',           icon: Wallet,      roles: ['admin', 'superadmin'] },
@@ -72,7 +72,7 @@ export const SECTIONS = [
     icon: Envelope,
     roles: ['admin', 'superadmin'],
     tabs: [
-      { to: '/email-sequences', label: 'Secuencias', icon: Envelope },
+      { to: '/secuencias-email', label: 'Secuencias', icon: Envelope },
       { to: '/email-templates', label: 'Plantillas', icon: EnvelopeOpen },
     ],
   },
@@ -81,7 +81,7 @@ export const SECTIONS = [
     label: 'Análisis',
     icon: ChartLineUp,
     tabs: [
-      { to: '/reports',  label: 'Reportes',  icon: ChartLineUp, roles: ['admin', 'superadmin'] },
+      { to: '/informes',  label: 'Reportes',  icon: ChartLineUp, roles: ['admin', 'superadmin'] },
       { to: '/activity', label: 'Actividad', icon: Pulse },
     ],
   },

@@ -13,6 +13,10 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useDashboardSummary } from '@/shared/hooks/useDashboardSummary';
 import client from '@/shared/api/client';
 import ReportsDownloadSection from '@/shared/components/ReportsDownloadSection';
+import AsesorasPanel from '@/shared/components/AsesorasPanel';
+import RankingsPanel from '@/shared/components/RankingsPanel';
+import { ATAJOS, rangoPorDefecto, atajoDe } from '@/shared/lib/rangosDeFecha';
+import PanelSeguimiento from '@/shared/components/PanelSeguimiento';
 
 const REPORT_CATEGORIES = [
   {
@@ -56,13 +60,20 @@ const ACCENT = {
   amber:   { bg: 'bg-amber-50 dark:bg-amber-950/30',     text: 'text-amber-600 dark:text-amber-400' },
 };
 
-const PERIODS = {
-  '7d':  { label: 'Últimos 7 días',   days: 7 },
-  '30d': { label: 'Últimos 30 días',  days: 30 },
-  '90d': { label: 'Últimos 90 días',  days: 90 },
-  'ytd': { label: 'Año en curso',     days: Math.max(1, Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 1).getTime()) / 86400000)) },
-  'all': { label: 'Todo',             days: 730 },
-};
+// Los atajos van por CALENDARIO y viven en `rangosDeFecha`, el mismo fichero en
+// los dos CRMs. Antes eran dias rodantes —«ultimos 7 dias»—, que no es lo que
+// nadie pide: «la semana pasada» es de lunes a domingo, y pedida un martes esos
+// siete dias mezclan media semana con media de la otra.
+//
+// Los atajos solo rellenan las dos fechas: se puede seguir afinando a mano.
+
+/** Cuantos dias cubre el rango, para el resumen que los pide contados. */
+function diasDelRango(rango) {
+  if (!rango?.from || !rango?.to) return 30;
+  const a = new Date(rango.from + 'T00:00:00');
+  const b = new Date(rango.to + 'T00:00:00');
+  return Math.max(1, Math.round((b - a) / 86400000) + 1);
+}
 
 function fmt(n) {
   return new Intl.NumberFormat('es-ES', { maximumFractionDigits: 0 }).format(Number(n || 0));
@@ -114,9 +125,9 @@ function HeroTooltip({ active, payload, label, fmt, color, prevValue }) {
   );
 }
 
-function HeroChart({ heroActive, heroSerie, setHeroSerie, HERO_SERIES, heroData, heroHasData, heroTotal, heroLast, heroDelta, heroAvg, heroMax }) {
-  const TrendIcon = heroDelta >= 0 ? TrendUp : TrendDown;
-  const deltaCls = heroDelta >= 0
+function HeroChart({ heroActive, heroSerie, setHeroSerie, HERO_SERIES, heroData, heroHasData, heroTotal, heroLast, heroDelta, heroAvg, heroMax, unidad = 'periodo', heroRango = 0, trendRango = null, etiquetaRango = 'periodo' }) {
+  const TrendIcon = (trendRango ?? 0) >= 0 ? TrendUp : TrendDown;
+  const deltaCls = (trendRango ?? 0) >= 0
     ? 'text-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200/60 dark:border-emerald-900/60'
     : 'text-rose-700 bg-rose-50 dark:bg-rose-950/40 dark:text-rose-300 border-rose-200/60 dark:border-rose-900/60';
 
@@ -131,28 +142,29 @@ function HeroChart({ heroActive, heroSerie, setHeroSerie, HERO_SERIES, heroData,
               style={{ background: heroActive.color, boxShadow: `0 0 12px ${heroActive.color}` }}
             />
             <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-              {heroActive.label} · última semana
+              {heroActive.label} · {etiquetaRango}
             </span>
           </div>
           <div className="flex items-baseline gap-3 flex-wrap">
+            {/* Manda lo filtrado, no el ultimo punto de la serie. */}
             <span
               className="text-3xl sm:text-4xl font-bold tabular-nums tracking-tight"
               style={{ color: heroActive.color }}
             >
-              {heroActive.fmt(heroLast)}
+              {heroActive.fmt(heroRango)}
             </span>
-            {heroHasData && (
+            {trendRango != null && (
               <span className={`inline-flex items-center gap-0.5 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${deltaCls}`}>
                 <TrendIcon size={11} weight="bold" />
-                {heroDelta >= 0 ? '+' : ''}{heroDelta}%
-                <span className="opacity-60 ml-1">vs semana ant.</span>
+                {trendRango >= 0 ? '+' : ''}{trendRango}%
+                <span className="opacity-60 ml-1">vs periodo anterior</span>
               </span>
             )}
           </div>
-          <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-            <span>Total 8 sem: <strong className="text-foreground tabular-nums">{heroActive.fmt(heroTotal)}</strong></span>
+          <div className="flex items-center gap-3 text-[11px] text-muted-foreground flex-wrap">
+            <span>Último {unidad}: <strong className="text-foreground tabular-nums">{heroActive.fmt(heroLast)}</strong></span>
             <span className="opacity-40">·</span>
-            <span>Media: <strong className="text-foreground tabular-nums">{heroActive.fmt(Math.round(heroAvg))}</strong></span>
+            <span>Media por {unidad}: <strong className="text-foreground tabular-nums">{heroActive.fmt(Math.round(heroAvg))}</strong></span>
             <span className="opacity-40">·</span>
             <span>Pico: <strong className="text-foreground tabular-nums">{heroActive.fmt(heroMax)}</strong></span>
           </div>
@@ -289,8 +301,27 @@ function Kpi({ icon: Icon, label, value, trend, spark, accent = 'sky' }) {
 
 export default function ReportsPage() {
   const { activeProject, user } = useAuth();
-  const [periodKey, setPeriodKey] = useState('30d');
-  const days = PERIODS[periodKey].days;
+  // Arranca en el MES en curso, no en los ultimos 30 dias.
+  const [rango, setRango] = useState(() => rangoPorDefecto());
+  // Lo que trae el panel de seguimiento, para que la descarga se lo lleve.
+  const [panelSeguimiento, setPanelSeguimiento] = useState(null);
+  const atajoActivo = atajoDe(rango);
+  const [panel, setPanel] = useState(null);
+
+  // El resumen sale de /reports/panel: KPIs comparados con el periodo
+  // anterior y la serie de la grafica, todo con el rango de arriba.
+  useEffect(() => {
+    let vivo = true;
+    const q = new URLSearchParams();
+    if (activeProject?.id) q.set('projectId', String(activeProject.id));
+    if (rango.from) q.set('from', rango.from);
+    if (rango.to) q.set('to', rango.to);
+    client.get(`/informes/panel?${q.toString()}`)
+      .then((r) => { if (vivo) setPanel(r.success ? r.data : null); })
+      .catch(() => { if (vivo) setPanel(null); });
+    return () => { vivo = false; };
+  }, [activeProject?.id, rango.from, rango.to]);
+  const days = diasDelRango(rango);
   const { data: summary, loading } = useDashboardSummary(activeProject?.id, days);
   const [iaModal, setIaModal] = useState(false);
   const [claudeConfigured, setClaudeConfigured] = useState(false);
@@ -306,38 +337,51 @@ export default function ReportsPage() {
       .catch(() => {});
   }, [isAdmin]);
 
-  const leads        = summary?.leads        || { value: 0, trend: null, spark: [] };
-  const conversiones = summary?.conversiones || { value: 0, trend: null, spark: [] };
-  const ingresos     = summary?.ingresos     || { value: 0, trend: null, spark: [] };
-  const tasa         = summary?.tasa         || { value: 0, trend: null, spark: [] };
+  // La serie del panel alimenta tanto los KPI como la grafica.
+  const serie = panel?.serie || [];
+  const chispa = (k) => serie.map((x) => Number(x[k] || 0));
+  const kpi = (k, campo) => ({
+    value: Number(panel?.kpis?.[k]?.value || 0),
+    trend: panel?.kpis?.[k]?.trend ?? null,
+    spark: chispa(campo),
+  });
+  const leads        = kpi('prospectos', 'prospectos');
+  const conversiones = kpi('ventas', 'ventas');
+  const ingresos     = kpi('ingresos', 'ingresos');
+  const tasa         = kpi('tasa', 'tasa');
 
   const [heroSerie, setHeroSerie] = useState('ingresos');
   const HERO_SERIES = {
-    leads:        { label: 'Prospectos', spark: leads.spark,        color: 'hsl(199 89% 48%)',  fmt: (v) => fmt(v) },
-    conversiones: { label: 'Ventas',     spark: conversiones.spark, color: 'hsl(160 84% 39%)',  fmt: (v) => fmt(v) },
-    ingresos:     { label: 'Ingresos',   spark: ingresos.spark,     color: 'hsl(258 90% 66%)',  fmt: (v) => fmtMoney(v) },
-    tasa:         { label: 'Tasa conv.', spark: tasa.spark,         color: 'hsl(43 96% 56%)',   fmt: (v) => `${Math.round(v)}%` },
+    leads:        { label: 'Prospectos', campo: 'prospectos', spark: leads.spark,        color: 'hsl(199 89% 48%)',  fmt: (v) => fmt(v) },
+    conversiones: { label: 'Ventas',     campo: 'ventas',     spark: conversiones.spark, color: 'hsl(160 84% 39%)',  fmt: (v) => fmt(v) },
+    ingresos:     { label: 'Ingresos',   campo: 'ingresos',   spark: ingresos.spark,     color: 'hsl(258 90% 66%)',  fmt: (v) => fmtMoney(v) },
+    tasa:         { label: 'Tasa conv.', campo: 'tasa',       spark: tasa.spark,         color: 'hsl(43 96% 56%)',   fmt: (v) => `${Math.round(v)}%` },
   };
   const heroActive = HERO_SERIES[heroSerie] || HERO_SERIES.ingresos;
+  const heroCampo = heroActive.campo;
+  // Como se llama cada punto de la serie, para no decir 'semana' cuando es un mes.
+  const unidad = { day: 'día', week: 'semana', month: 'mes' }[panel?.rango?.grano || 'day'];
+  // Lo que se ve en grande es lo del rango filtrado; para la tasa no se suma,
+  // se usa el porcentaje del periodo que ya calcula el backend.
+  const heroKpiKey = { leads: 'prospectos', conversiones: 'ventas', ingresos: 'ingresos', tasa: 'tasa' }[heroSerie] || 'ingresos';
+  const heroRango = Number(panel?.kpis?.[heroKpiKey]?.value || 0);
+  const trendRango = panel?.kpis?.[heroKpiKey]?.trend ?? null;
+  const etiquetaRango = rango.from && rango.to
+    ? `${new Date(`${rango.from}T00:00:00`).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })} – ${new Date(`${rango.to}T00:00:00`).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: '2-digit' })}`
+    : 'periodo';
 
-  // Backend devuelve 8 semanas ordenadas más antigua → más reciente.
-  // Etiquetamos con la fecha de inicio de cada semana.
+  // Cada punto trae su fecha real y su granularidad: no se inventan semanas.
   const heroData = useMemo(() => {
-    const arr = heroActive.spark || [];
-    if (arr.length === 0) return [];
-    const out = [];
-    const now = new Date();
-    for (let i = 0; i < arr.length; i++) {
-      const weeksAgo = arr.length - 1 - i;
-      const d = new Date(now);
-      d.setDate(d.getDate() - weeksAgo * 7);
-      out.push({
-        label: d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }),
-        value: Number(arr[i] || 0),
-      });
-    }
-    return out;
-  }, [heroActive]);
+    const grano = panel?.rango?.grano || 'day';
+    return serie.map((x) => {
+      const d = new Date(`${x.periodo}T00:00:00`);
+      const label = grano === 'month'
+        ? d.toLocaleDateString('es-ES', { month: 'short', year: '2-digit' })
+        : d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
+      return { label, value: Number(x[heroCampo] || 0) };
+    });
+  }, [serie, heroCampo, panel?.rango?.grano]);
+
 
   const heroTotal = heroData.reduce((s, d) => s + d.value, 0);
   const heroHasData = heroData.some((d) => d.value > 0);
@@ -346,6 +390,52 @@ export default function ReportsPage() {
   const heroDelta = heroPrev > 0 ? Math.round(((heroLast - heroPrev) / heroPrev) * 100) : heroLast > 0 ? 100 : 0;
   const heroMax = Math.max(...heroData.map((d) => d.value), 0);
   const heroAvg = heroData.length > 0 ? heroTotal / heroData.length : 0;
+
+
+  // Se baja en Excel exactamente lo que se ve arriba: el resumen comparado, la
+  // serie de la grafica y el detalle por asesora. Tres hojas en un solo archivo.
+  const [bajando, setBajando] = useState(false);
+  const [bajandoPdf, setBajandoPdf] = useState(false);
+  // El PDF se descarga directo, sin diálogo de impresión. Lleva lo mismo que
+  // el Excel: resumen, evolución y asesoras.
+  async function descargarPdf() {
+    if (!panel) return;
+    setBajandoPdf(true);
+    try {
+      const q = new URLSearchParams();
+      if (activeProject?.id) q.set('projectId', String(activeProject.id));
+      if (rango.from) q.set('from', rango.from);
+      if (rango.to) q.set('to', rango.to);
+      const ase = await client.get(`/informes/asesoras-mes?${q.toString()}`).catch(() => null);
+      const { exportPanelPDF } = await import('@/shared/lib/exportPanelPdf');
+      const nombre = await exportPanelPDF({
+        panel, asesoras: ase?.data || [], proyecto: activeProject?.nombre, rango,
+      });
+      toast({ title: 'PDF descargado', description: nombre });
+    } catch (err) {
+      console.error('descargarPdf', err);
+      toast({ title: 'No se pudo generar el PDF', description: String(err?.message || err), variant: 'destructive' });
+    } finally { setBajandoPdf(false); }
+  }
+
+  // Una sola descarga para toda la pantalla. Antes esto armaba su propio Excel
+  // con columnas que ya no existen (la de clientes) y tasas viejas, asi que
+  // enseñaba numeros distintos a los de la pagina.
+  async function descargarPanel() {
+    setBajando(true);
+    try {
+      const { descargarReportePrincipal } = await import('@/shared/lib/reportePrincipal');
+      const r = await descargarReportePrincipal({
+        projectId: activeProject?.id, projectName: activeProject?.nombre,
+        from: rango.from, to: rango.to,
+      });
+      if (!r.nombre) { toast({ title: 'Sin datos en ese período' }); return; }
+      toast({ title: 'Excel descargado', description: `${r.hojas} hojas · ${r.nombre}` });
+    } catch (err) {
+      console.error('descargarPanel', err);
+      toast({ title: 'No se pudo generar el Excel', description: String(err?.message || err), variant: 'destructive' });
+    } finally { setBajando(false); }
+  }
 
   return (
     <div className="space-y-6">
@@ -357,25 +447,68 @@ export default function ReportsPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <select
-            value={periodKey}
-            onChange={(e) => setPeriodKey(e.target.value)}
-            className="h-9 px-3 rounded-md bg-card border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-          >
-            {Object.entries(PERIODS).map(([k, p]) => <option key={k} value={k}>{p.label}</option>)}
-          </select>
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="inline-flex items-center gap-1 flex-wrap" role="group" aria-label="Periodos rápidos">
+            {ATAJOS.map((a) => (
+              <button
+                key={a.clave}
+                type="button"
+                onClick={() => setRango(a.calcular(new Date()))}
+                aria-pressed={atajoActivo === a.clave}
+                className={
+                  'h-8 px-2.5 rounded-md border text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40 ' +
+                  (atajoActivo === a.clave
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground')
+                }
+              >
+                {a.etiqueta}
+              </button>
+            ))}
+          </div>
+          {/* Las fechas mandan: los presets solo las rellenan. */}
+          <input
+            type="date"
+            value={rango.from}
+            max={rango.to || undefined}
+            onChange={(e) => setRango((v) => ({ ...v, from: e.target.value }))}
+            className="h-9 px-2 rounded-md bg-card border border-border text-sm"
+            aria-label="Desde"
+          />
+          <input
+            type="date"
+            value={rango.to}
+            min={rango.from || undefined}
+            onChange={(e) => setRango((v) => ({ ...v, to: e.target.value }))}
+            className="h-9 px-2 rounded-md bg-card border border-border text-sm"
+            aria-label="Hasta"
+          />
           <button
             type="button"
-            onClick={() => window.print()}
-            title="Imprime o guarda como PDF (Ctrl+P)"
+            onClick={descargarPanel}
+            disabled={bajando || !panel}
+            title="Descarga en Excel el resumen, la evolucion y el detalle por asesora"
+            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-40"
+          >
+            <Download size={14} weight="bold" />
+            {bajando ? 'Generando…' : 'Descargar Excel'}
+          </button>
+          <button
+            type="button"
+            onClick={descargarPdf}
+            disabled={bajandoPdf || !panel}
+            title="Descarga el resumen, la evolución y las asesoras en PDF"
             className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-card border border-border text-sm font-medium hover:bg-muted transition-colors text-foreground"
           >
             <Download size={14} weight="bold" />
-            Exportar PDF
+            {bajandoPdf ? 'Generando…' : 'Descargar PDF'}
           </button>
         </div>
       </header>
+
+      {/* Seguimiento y tiempos: el mismo bloque que el CRM hermano. */}
+      <PanelSeguimiento projectId={activeProject?.id} from={rango.from} to={rango.to}
+        onDatos={setPanelSeguimiento} />
 
       {/* Hero — Resumen del periodo cableado a /leads/dashboard-summary */}
       <div className="rounded-2xl border border-border bg-card p-5 sm:p-6">
@@ -383,7 +516,9 @@ export default function ReportsPage() {
           <div>
             <h2 className="font-semibold tracking-tight">Resumen del periodo</h2>
             <p className="text-xs text-muted-foreground mt-0.5">
-              {PERIODS[periodKey].label}
+              {atajoActivo
+                ? ATAJOS.find((a) => a.clave === atajoActivo).etiqueta
+                : `${rango.from} – ${rango.to}`}
               {activeProject?.nombre ? ` · ${activeProject.nombre}` : ''}
             </p>
           </div>
@@ -416,14 +551,26 @@ export default function ReportsPage() {
               heroDelta={heroDelta}
               heroAvg={heroAvg}
               heroMax={heroMax}
-            />
+            unidad={unidad}
+            heroRango={heroRango}
+            trendRango={trendRango}
+            etiquetaRango={etiquetaRango}
+          />
           </>
         )}
       </div>
 
       {/* Reportes descargables (varios, con rango de fechas) */}
       {isAdmin && (
-        <ReportsDownloadSection projectId={activeProject?.id} projectName={activeProject?.nombre} />
+        <>
+          {/* Los numeros por asesora. El detalle se baja en la seccion de abajo. */}
+          <AsesorasPanel from={rango.from} to={rango.to} />
+
+          {/* Paises y formaciones: en pantalla, no solo descargables. */}
+          <RankingsPanel from={rango.from} to={rango.to} />
+
+          <ReportsDownloadSection projectId={activeProject?.id} projectName={activeProject?.nombre} from={rango.from} to={rango.to} />
+        </>
       )}
 
       {/* Categorías de reportes */}
@@ -551,7 +698,7 @@ export default function ReportsPage() {
                 </ol>
                 {isAdmin ? (
                   <Link
-                    to="/settings"
+                    to="/configuracion"
                     onClick={() => setIaModal(false)}
                     className="inline-flex items-center justify-center w-full gap-1.5 h-10 px-4 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors"
                   >

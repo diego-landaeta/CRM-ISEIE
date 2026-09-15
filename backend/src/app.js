@@ -15,6 +15,8 @@ import leadsModule from './modules/leads/index.js';
 import productsModule from './modules/products/index.js';
 import conversionsModule from './modules/conversions/index.js';
 import salesModule from './modules/sales/index.js';
+import whatsappModule from './modules/whatsapp/index.js';
+import tutoresModule from './modules/tutores/index.js';
 import notificationsModule from './modules/notifications/index.js';
 import metaAdsModule from './modules/meta-ads/index.js';
 import commissionsModule from './modules/commissions/index.js';
@@ -45,6 +47,9 @@ import dossiersModule from './modules/dossiers/index.js';
 import reportsModule from './modules/reports/index.js';
 import clientErrorsModule from './modules/client-errors/index.js';
 import changeRequestsModule from './modules/change-requests/index.js';
+// El proceso comercial (#87): los pasos, y de ahí la cola del día.
+import procesoModule from './modules/proceso/index.js';
+import convocatoriasModule from './modules/convocatorias/index.js';
 import { startEmailSequenceScheduler } from './jobs/emailSequenceScheduler.js';
 import { startDocumentOrphanScheduler } from './jobs/documentOrphanScheduler.js';
 import { startGoogleAdsTokenScheduler } from './jobs/googleAdsTokenScheduler.js';
@@ -52,6 +57,11 @@ import { startMetaAdsSyncScheduler } from './jobs/metaAdsSyncScheduler.js';
 import { startReminderScheduler } from './jobs/reminderScheduler.js';
 import { startWooCommerceSyncScheduler } from './jobs/wooCommerceSyncScheduler.js';
 import { startStripePaymentsSyncScheduler } from './jobs/stripePaymentsSyncScheduler.js';
+import { startTutorCommissionsScheduler } from './jobs/tutorCommissionsScheduler.js';
+import { startVigilanteCatalogoScheduler } from './jobs/vigilanteCatalogoScheduler.js';
+import { startLeadSinTocarScheduler } from './jobs/leadSinTocarScheduler.js';
+import { startResumenDiarioScheduler } from './jobs/resumenDiarioScheduler.js';
+import { startReporteSemanalScheduler } from './jobs/reporteSemanalScheduler.js';
 
 const app = express();
 const PORT = process.env.PORT || 3005;
@@ -66,6 +76,19 @@ app.use(cors({
   origin: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:5173'],
   credentials: true,
 }));
+// El webhook de WhatsApp entra por su propia puerta, mas ancha.
+//
+// Evolution manda la foto o el audio dentro del propio aviso, en base64, y eso
+// abulta un tercio mas que el archivo. Con el tope general de 5 MB, Express
+// rechazaba el aviso ENTERO con «request entity too large»: no es que llegara el
+// mensaje sin la foto, es que se perdia el mensaje. Paso el 21/08/2026.
+//
+// Se abre solo esta ruta y no el tope general: 25 MB en todos los endpoints es
+// una invitacion a tumbar el servidor mandando cuerpos enormes. Los 25 MB son
+// los mismos que deja pasar Nginx, para que no se rechace en dos sitios
+// distintos con dos mensajes distintos.
+app.use('/api/whatsapp/webhook', express.json({ limit: '25mb' }));
+
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 app.use(cookieParser());
@@ -108,7 +131,7 @@ app.get('/api', (_req, res) => {
         installation: '/api/installation',
         credentials: '/api/credentials',
         dossiers: '/api/dossiers',
-        reports: '/api/reports',
+        informes: '/api/informes',
         status: '/api/status',
       },
     },
@@ -187,6 +210,8 @@ app.get('/api/health/detailed', async (_req, res) => {
 // Catálogo de módulos a montar.
 const MODULES = [
   authModule,
+  whatsappModule,
+  tutoresModule,
   usersModule,
   projectsModule,
   leadsModule,
@@ -224,11 +249,19 @@ const MODULES = [
   clientErrorsModule,
   changeRequestsModule,
   statusModule,
+  procesoModule,
+  convocatoriasModule,
 ];
 
 for (const mod of MODULES) {
   app.use(mod.prefix, mod.router);
   logger.info(`Modulo registrado: ${mod.prefix}`);
+  // Un modulo puede responder tambien por su nombre anterior. Sirve para
+  // renombrar sin romper lo que ya apuntaba al viejo.
+  if (mod.alias) {
+    app.use(mod.alias, mod.router);
+    logger.info(`Modulo registrado (alias): ${mod.alias}`);
+  }
   if (mod.publicMount) {
     app.use(mod.publicMount.prefix, mod.publicMount.router);
     logger.info(`Modulo registrado (public): ${mod.publicMount.prefix}`);
@@ -292,6 +325,11 @@ if (process.env.NODE_ENV !== 'test') {
     if (process.env.STRIPE_SYNC_DISABLED !== '1') {
       try {
         startStripePaymentsSyncScheduler();
+        startTutorCommissionsScheduler();
+        startVigilanteCatalogoScheduler();
+        startLeadSinTocarScheduler();
+        startResumenDiarioScheduler();
+        startReporteSemanalScheduler();
       } catch (err) {
         logger.error({ err }, 'Stripe sync scheduler fallo al arrancar');
       }

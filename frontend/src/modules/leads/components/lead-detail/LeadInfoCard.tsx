@@ -6,7 +6,7 @@ import type { Lead } from '@/shared/types';
 
 interface LeadInfoCardProps {
   lead: Lead;
-  onUpdate: (fields: Partial<Lead>) => Promise<void> | void;
+  onUpdate: (fields: Partial<Lead>) => Promise<unknown> | unknown;
 }
 
 const CANAL_OPTIONS = [
@@ -53,7 +53,15 @@ export default function LeadInfoCard({ lead, onUpdate }: LeadInfoCardProps) {
         setEditMode(false);
         return;
       }
-      await onUpdate(fields);
+      const result = await onUpdate(fields);
+      if (
+        result &&
+        typeof result === 'object' &&
+        'success' in result &&
+        (result as { success?: boolean }).success === false
+      ) {
+        throw new Error((result as { error?: string }).error || 'No se pudo guardar el prospecto');
+      }
       toast({ title: 'Lead actualizado' });
       setEditMode(false);
     } catch (err: unknown) {

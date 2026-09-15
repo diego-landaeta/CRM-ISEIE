@@ -1,7 +1,7 @@
 import client from '@/shared/api/client';
 import type { ApiResponse } from '@/shared/types';
 
-export type MetodoPago = 'tarjeta' | 'tarjeta_stripe' | 'transferencia' | 'efectivo' | 'bizum' | 'fraccionado' | 'otro';
+export type MetodoPago = 'tarjeta' | 'tarjeta_stripe' | 'transferencia' | 'efectivo' | 'bizum' | 'paypal' | 'fraccionado' | 'otro';
 
 export interface Payment {
   id: number;
@@ -9,6 +9,9 @@ export interface Payment {
   importe: number | string;
   fecha: string;
   notas?: string | null;
+  metodo?: string | null;
+  cuota_numero?: number | null;
+  pagado_por_stripe?: boolean;
   created_at?: string;
   // Factura de ESTE pago (una factura por pago). Null si aún no tiene.
   factura_id?: number | null;
@@ -63,6 +66,7 @@ export interface Installment {
   fecha_cobro?: string | null;
   importe_cobrado?: number | string | null;
   metodo?: string | null;
+  pagado_por_stripe?: boolean;
   concepto?: string | null;
   payment_id?: number | null;
   factura_id?: number | null;
@@ -102,6 +106,8 @@ export interface AddPaymentInput {
   importe: number;
   fecha: string;
   notas?: string | null;
+  // Solo cuando el usuario confirma que son dos cobros iguales de verdad.
+  permitir_duplicado?: boolean;
 }
 
 type ListParams = Record<string, string | number | undefined> | undefined;

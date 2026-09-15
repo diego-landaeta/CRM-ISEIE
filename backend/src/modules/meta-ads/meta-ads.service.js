@@ -474,11 +474,31 @@ export async function listCampaignsForUI({ projectId, accountId = null, status =
                   COALESCE(ds.reach, 0) AS total_reach, COALESCE(ds.clicks, 0) AS total_clicks,
                   COALESCE(ds.leads, 0) AS total_leads`;
   }
+  // Los leads que llegaron AL CRM por esa campaña, que no son los de Meta.
+  //
+  // Meta solo cuenta los de SU formulario: una campaña que lleva a la web le
+  // reporta cero aunque entren veinte. Y el CRM los tiene: el webhook guarda el
+  // identificador de campaña en `lead_utms.utm_campaign`.
+  //
+  // Va en un LATERAL y con DISTINCT a proposito: un lead puede tener varias
+  // filas de UTM, y un JOIN a secas multiplicaria el gasto por cada una.
+  const crmWhere = ['lu.utm_campaign = mc.campaign_id', 'l.deleted_at IS NULL'];
+  if (dateFrom) { params.push(dateFrom); crmWhere.push(`l.created_at::date >= $${params.length}`); }
+  if (dateTo) { params.push(dateTo); crmWhere.push(`l.created_at::date <= $${params.length}`); }
+  const crmJoin = `LEFT JOIN LATERAL (
+      SELECT count(DISTINCT l.id)::int AS leads_crm,
+             count(DISTINCT l.id) FILTER (WHERE l.status = 'convertido')::int AS ventas_crm
+        FROM lead_utms lu
+        JOIN leads l ON l.id = lu.lead_id
+       WHERE ${crmWhere.join(' AND ')}
+    ) crm ON TRUE`;
+
   const { rows } = await query(
     `SELECT mc.campaign_id, mc.nombre, mc.objective, mc.status, mc.effective_status,
             mc.daily_budget, mc.lifetime_budget, mc.start_time, mc.stop_time,
+            COALESCE(crm.leads_crm, 0) AS leads_crm, COALESCE(crm.ventas_crm, 0) AS ventas_crm,
             ${metricCols}
-     FROM meta_campaigns mc ${dailyJoin}
+     FROM meta_campaigns mc ${dailyJoin} ${crmJoin}
      WHERE ${where.join(' AND ')}
      ORDER BY total_spend DESC NULLS LAST, mc.nombre`,
     params
@@ -490,7 +510,11 @@ export async function listCampaignsForUI({ projectId, accountId = null, status =
     total_reach: Number(r.total_reach || 0),
     total_clicks: Number(r.total_clicks || 0),
     total_leads: Number(r.total_leads || 0),
+    leads_crm: Number(r.leads_crm || 0),
+    ventas_crm: Number(r.ventas_crm || 0),
     cpl: r.total_leads > 0 ? Number(r.total_spend) / Number(r.total_leads) : null,
+    // El coste por lead que importa es el de los leads que de verdad entraron.
+    cpl_crm: Number(r.leads_crm) > 0 ? Number(r.total_spend) / Number(r.leads_crm) : null,
     ctr: r.total_impressions > 0 ? (Number(r.total_clicks) / Number(r.total_impressions)) * 100 : null,
   }));
 }

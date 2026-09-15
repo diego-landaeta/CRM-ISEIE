@@ -194,6 +194,7 @@ export default function InvoicingConfigPage() {
             <option value="tarjeta_stripe">Tarjeta (Stripe)</option>
             <option value="efectivo">Efectivo</option>
             <option value="bizum">Bizum</option>
+            <option value="paypal">PayPal</option>
             <option value="fraccionado">Pago fraccionado</option>
             <option value="otro">Otro</option>
           </select>

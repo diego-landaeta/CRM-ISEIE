@@ -1,7 +1,7 @@
 // Sección de reportes descargables. Rango de fechas + una tarjeta por reporte
 // con Excel/CSV. Pega a /reports/<key> y arma el archivo en el navegador.
-import { useState } from 'react';
-import { FileXls, FileCsv, CalendarBlank, ChartBar, UsersThree, Receipt, ListChecks, Invoice, Trophy, Eye, X } from '@phosphor-icons/react';
+import { useState, useEffect } from 'react';
+import { DownloadSimple, FileXls, FileCsv, CalendarBlank, ChartBar, UsersThree, Receipt, ListChecks, Invoice, Trophy, Eye, X } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 
@@ -32,13 +32,15 @@ const REPORTS = [
     ],
   },
   {
-    key: 'ventas', label: 'Ventas (cobros)', icon: Receipt,
-    desc: 'Por fecha de PAGO: cada cuota donde cae. Incluye mes de origen, país y pendiente de cobro.',
+    key: 'ventas', label: 'Ventas (conversiones)', icon: Receipt,
+    desc: 'Una fila por venta, según su fecha de conversión. No incluye cuotas ni abonos como ventas adicionales.',
     cols: [
-      { h: 'Fecha pago', k: 'fecha_pago', t: 'date' }, { h: 'Cliente', k: 'cliente' },
-      { h: 'Formación', k: 'formacion' }, { h: 'Importe €', k: 'importe', t: 'number' },
-      { h: 'Plan de pago', k: 'plan_pago' }, { h: 'Mes origen', k: 'mes_origen' }, { h: 'País', k: 'pais' },
-      { h: 'Pendiente €', k: 'pendiente', t: 'number' }, { h: 'Método', k: 'metodo_pago' },
+      { h: 'Fecha venta', k: 'fecha_venta', t: 'date' }, { h: 'Cliente', k: 'cliente' },
+      { h: 'Formación', k: 'formacion' }, { h: 'Venta total €', k: 'venta_total', t: 'number' },
+      { h: 'Cobrado €', k: 'cobrado', t: 'number' }, { h: 'Pendiente €', k: 'pendiente', t: 'number' },
+      { h: 'Estado pago', k: 'estado_pago' }, { h: 'Estado lead', k: 'estado', t: 'estado' },
+      { h: 'Responsable', k: 'responsable' }, { h: 'País', k: 'pais' },
+      { h: 'Método', k: 'metodo_pago' }, { h: 'Proyecto', k: 'proyecto' },
     ],
   },
   {
@@ -62,6 +64,58 @@ const REPORTS = [
       { h: 'Vendedora', k: 'vendedora' }, { h: 'Ventas', k: 'ventas', t: 'number' },
       { h: 'Clientes', k: 'clientes', t: 'number' }, { h: 'Total €', k: 'total', t: 'number' },
       { h: 'Cobrado €', k: 'cobrado', t: 'number' }, { h: 'Pendiente €', k: 'pendiente', t: 'number' },
+    ],
+  },
+  {
+    key: 'ventas-asesora', label: 'Ventas por asesora (detalle)', icon: Trophy,
+    desc: 'Una fila por venta con su asesora, la fecha, el cliente y sus datos de contacto, el importe y como va el cobro.',
+    cols: [
+      { h: 'Asesora', k: 'asesora' }, { h: 'Fecha venta', k: 'fecha_venta', t: 'date' },
+      { h: 'Cliente', k: 'cliente' }, { h: 'Email', k: 'cliente_email' },
+      { h: 'Telefono', k: 'cliente_telefono' }, { h: 'Pais', k: 'pais' },
+      { h: 'Formacion', k: 'formacion' }, { h: 'Venta total EUR', k: 'venta_total', t: 'number' },
+      { h: 'Cobrado EUR', k: 'cobrado', t: 'number' }, { h: 'Pendiente EUR', k: 'pendiente', t: 'number' },
+      { h: 'Estado pago', k: 'estado_pago' }, { h: 'Metodo', k: 'metodo_pago' },
+      { h: 'N cobros', k: 'num_cobros', t: 'number' },
+      { h: 'Cuotas pendientes', k: 'cuotas_pendientes', t: 'number' },
+      { h: 'N facturas', k: 'facturas', t: 'number' },
+      { h: 'Estado lead', k: 'estado_lead', t: 'estado' },
+      { h: 'Fecha entrada', k: 'fecha_entrada', t: 'date' }, { h: 'Proyecto', k: 'proyecto' },
+    ],
+  },
+  {
+    key: 'asesoras-mes', label: 'Asesoras por mes', icon: UsersThree,
+    desc: 'Por asesora y mes: leads que le entraron, ventas cerradas, tasa de conversion, lo vendido y lo cobrado ese mes.',
+    cols: [
+      { h: 'Mes', k: 'mes' }, { h: 'Asesora', k: 'asesora' },
+      { h: 'Leads', k: 'leads', t: 'number' }, { h: 'Ventas', k: 'ventas', t: 'number' },
+      { h: 'Mensualidades cobradas', k: 'mensualidades', t: 'number' },
+      { h: 'Clientes', k: 'clientes', t: 'number' },
+      { h: 'Tasa conversion %', k: 'tasa_conversion', t: 'number' },
+      { h: 'Vendido EUR', k: 'vendido', t: 'number' }, { h: 'Cobrado EUR', k: 'cobrado', t: 'number' },
+      { h: 'Cobrado de ventas EUR', k: 'cobrado_venta', t: 'number' },
+      { h: 'Cobrado de cuotas EUR', k: 'cobrado_cuotas', t: 'number' },
+      { h: 'Ticket medio EUR', k: 'ticket_medio', t: 'number' },
+    ],
+  },
+  {
+    key: 'paises', label: 'Países', icon: ChartBar,
+    desc: 'Ventas por país, deducido del prefijo del teléfono. La columna de país fiscal no sirve: casi todos los leads tienen España por defecto.',
+    cols: [
+      { h: 'País', k: 'pais' }, { h: 'Ventas', k: 'ventas', t: 'number' },
+      { h: 'Clientes', k: 'clientes', t: 'number' },
+      { h: 'Vendido EUR', k: 'vendido', t: 'number' },
+      { h: 'Cobrado EUR', k: 'cobrado', t: 'number' },
+    ],
+  },
+  {
+    key: 'formaciones', label: 'Formaciones más vendidas', icon: ListChecks,
+    desc: 'Ranking de formaciones. Cada fila dice si viene del catálogo o de texto tecleado a mano.',
+    cols: [
+      { h: 'Formación', k: 'formacion' }, { h: 'Origen del dato', k: 'origen' },
+      { h: 'Ventas', k: 'ventas', t: 'number' }, { h: 'Clientes', k: 'clientes', t: 'number' },
+      { h: 'Vendido EUR', k: 'vendido', t: 'number' },
+      { h: 'Ticket medio EUR', k: 'ticket_medio', t: 'number' },
     ],
   },
   {
@@ -127,11 +181,27 @@ function downloadBlob(blob, name) {
   URL.revokeObjectURL(url);
 }
 
-export default function ReportsDownloadSection({ projectId, projectName }) {
-  const [from, setFrom] = useState(() => `${new Date().getFullYear()}-01-01`);
-  const [to, setTo] = useState(() => new Date().toISOString().slice(0, 10));
+export default function ReportsDownloadSection({ projectId, projectName, from: desdeArriba, to: hastaArriba }) {
+  // El rango lo manda la cabecera de la pagina: aqui no se elige aparte.
+  const from = desdeArriba || '';
+  const to = hastaArriba || '';
   const [busy, setBusy] = useState(null);
   const [preview, setPreview] = useState(null); // { report, rows, base }
+  const [bajandoTodo, setBajandoTodo] = useState(false);
+
+  // Todo junto, una hoja por bloque. Es lo que se pide cuando alguien quiere
+  // mirar los numeros fuera del CRM sin ir juntando ficheros sueltos.
+  async function bajarTodo() {
+    setBajandoTodo(true);
+    try {
+      const { descargarReportePrincipal } = await import('@/shared/lib/reportePrincipal');
+      const r = await descargarReportePrincipal({ projectId, projectName, from, to });
+      if (!r.nombre) { toast({ title: 'Sin datos en ese período' }); return; }
+      toast({ title: 'Reporte principal descargado', description: `${r.hojas} hojas · ${r.nombre}` });
+    } catch (err) {
+      toast({ title: 'No se pudo generar el reporte', description: err?.message, variant: 'destructive' });
+    } finally { setBajandoTodo(false); }
+  }
   const ready = Boolean(from && to);
 
   // Trae las filas del reporte del backend (compartido por descarga y vista previa).
@@ -142,7 +212,7 @@ export default function ReportsDownloadSection({ projectId, projectName }) {
     if (projectId) p.set('projectId', String(projectId));
     if (dFrom) p.set('from', dFrom);
     if (dTo) p.set('to', dTo);
-    const res = await client.get(`/reports/${report.key}?${p.toString()}`);
+    const res = await client.get(`/informes/${report.key}?${p.toString()}`);
     const rows = res.data || [];
     const sufijo = dFrom || dTo ? `${dFrom || 'inicio'}_${dTo || 'hoy'}` : 'todo';
     return { rows, base: `${report.key}-${projectName || 'crm'}-${sufijo}` };
@@ -197,25 +267,19 @@ export default function ReportsDownloadSection({ projectId, projectName }) {
         <div>
           <h2 className="text-base font-semibold text-foreground">Reportes descargables</h2>
           <p className="text-xs text-muted-foreground">
-            Elige el rango de fechas (Desde y Hasta) y descarga en Excel o CSV.
-            {!ready && <span className="text-amber-600 dark:text-amber-500"> Selecciona ambas fechas para habilitar la descarga.</span>}
+            Usan el mismo rango de fechas que has elegido arriba. Descarga en Excel o CSV.
           </p>
         </div>
-        <div className="flex items-end gap-2 rounded-lg border-2 border-primary/40 bg-primary/5 px-3 py-2">
-          <span className="hidden lg:block self-center text-xs font-semibold text-primary">Fechas del<br />reporte</span>
-          <label className="text-xs font-medium text-foreground">Desde
-            <div className="mt-1 flex items-center gap-1 rounded-md border border-border bg-card px-2">
-              <CalendarBlank size={14} className="text-muted-foreground" />
-              <input type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} className="h-9 bg-transparent text-sm focus:outline-none" />
-            </div>
-          </label>
-          <label className="text-xs font-medium text-foreground">Hasta
-            <div className="mt-1 flex items-center gap-1 rounded-md border border-border bg-card px-2">
-              <CalendarBlank size={14} className="text-muted-foreground" />
-              <input type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} className="h-9 bg-transparent text-sm focus:outline-none" />
-            </div>
-          </label>
-        </div>
+        <button
+          type="button"
+          onClick={bajarTodo}
+          disabled={bajandoTodo}
+          className="inline-flex items-center gap-2 h-10 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 disabled:opacity-50"
+          title="Un solo Excel con resumen, evolución, asesoras, países, formaciones y el detalle de ventas"
+        >
+          <DownloadSimple size={16} weight="bold" />
+          {bajandoTodo ? 'Generando…' : 'Descargar reporte principal'}
+        </button>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">

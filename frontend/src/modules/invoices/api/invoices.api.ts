@@ -10,6 +10,9 @@ export interface Issuer {
   id: number;
   project_id: number | null;
   razon_social: string;
+  // Nombre corto para el selector cuando dos emisoras comparten razón social
+  // (misma sociedad, distinto logo). No se imprime en la factura.
+  alias?: string | null;
   nif: string;
   direccion: string | null;
   ciudad: string | null;
@@ -44,10 +47,14 @@ export interface CreateInvoiceBody {
   ivaIncluido?: boolean;
   leyendaIva?: string | null;
   notas?: string;
-  metodoPago: 'transferencia' | 'tarjeta' | 'tarjeta_stripe' | 'efectivo' | 'bizum' | 'fraccionado' | 'otro';
+  metodoPago: 'transferencia' | 'tarjeta' | 'tarjeta_stripe' | 'efectivo' | 'bizum' | 'paypal' | 'fraccionado' | 'otro';
+  /** Empresa o particular. Decide el rótulo del cliente en el PDF. */
+  clienteTipo?: 'empresa' | 'particular';
   piePago?: string;
   /** Moneda de la factura (ISO). Importes manuales en esa divisa, sin conversión. Default EUR. */
   moneda?: string;
+  /** Obligatorio si moneda != EUR: importe total en euros (contabilidad). */
+  totalEur?: number | null;
   tipo?: 'normal' | 'proforma';
   /** true = crear como BORRADOR (sin numero fiscal, datos fiscales opcionales) */
   borrador?: boolean;
@@ -76,6 +83,8 @@ export interface Invoice {
   fecha_emision: string;
   fecha_pago: string | null;
   cliente_nombre: string;
+  /** 'empresa' o 'particular'. Decide el rótulo del cliente en el PDF. */
+  cliente_tipo?: string | null;
   cliente_nif: string;
   cliente_direccion?: string;
   cliente_ciudad?: string;
@@ -96,9 +105,18 @@ export interface Invoice {
   leyenda_iva?: string | null;
   items?: InvoiceItem[];
   conversion_id?: number | null;
+  lead_id?: number | null;
   tipo?: 'normal' | 'rectificativa' | 'proforma';
   rectifica_id?: number | null;
   rectifica_codigo?: string | null;
+  /** Qué es la factura: la de una venta nueva, una cuota de una venta anterior,
+   *  o una suelta que no cuelga de ninguna venta. */
+  clase?: 'venta' | 'cuota' | 'parte' | 'suelta';
+  /** De cuándo es la venta, para poder decir «cuota de una venta del 6/7». */
+  fecha_de_la_venta?: string | null;
+  /** Sin cobro propio, marcada como pagada, y la venta tiene más facturado que
+   *  cobrado: el dinero de esta factura no existe. */
+  sospecha_duplicada?: boolean;
   motivo_rectificacion?: string | null;
   // Vista por sociedad
   project_id?: number | null;
@@ -108,6 +126,8 @@ export interface Invoice {
   /** Origen del cobro (p.ej. 'tarjeta_stripe' → factura generada por un pago Stripe). */
   metodo_pago?: string | null;
   moneda?: string | null;
+  /** Importe en la divisa internacional (manual). El total va siempre en euros. */
+  total_divisa?: number | string | null;
   /** Gestora responsable del lead de la factura. */
   gestora_nombre?: string | null;
 }
@@ -178,6 +198,8 @@ export interface VentaSinFactura {
   conversion_id: number;
   lead_id: number;
   cliente_nombre: string;
+  /** 'empresa' o 'particular'. Decide el rótulo del cliente en el PDF. */
+  cliente_tipo?: string | null;
   producto_contratado: string | null;
   importe_total: number;
   fecha_conversion: string | null;
@@ -208,10 +230,15 @@ export const invoicesApi = {
   pdfUrl: (id: number) => `${(import.meta.env.BASE_URL || '/').replace(/\/$/, '')}/api/invoices/${id}/pdf`,
   // Abre el PDF descargandolo CON el token (una navegacion normal de pestana NO
   // manda el header Authorization -> daria 401). Lo abre como blob URL.
-  openPdf: async (id: number, preliminar = false): Promise<void> => {
+  /** vista='gestor' → copia con el importe NETO liquidado por Stripe (no la del alumno).
+   *  enEuros → la misma factura totalizada en euros, no en su divisa. */
+  openPdf: async (id: number, preliminar = false, vista?: 'gestor', enEuros = false): Promise<void> => {
     const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
     const tok = getAccessToken();
-    const res = await fetch(`${base}/api/invoices/${id}/pdf${preliminar ? '?preliminar=1' : ''}`, {
+    const qs = preliminar ? '?preliminar=1'
+      : vista === 'gestor' ? '?vista=gestor'
+      : enEuros ? '?moneda=eur' : '';
+    const res = await fetch(`${base}/api/invoices/${id}/pdf${qs}`, {
       headers: tok ? { Authorization: `Bearer ${tok}` } : {},
       credentials: 'include',
     });
@@ -228,10 +255,10 @@ export const invoicesApi = {
   },
   // Descarga el PDF como archivo (attachment). preliminar=true fuerza la vista
   // previa con marca de agua (no exige datos completos del cliente).
-  downloadPdf: async (id: number, filename: string, preliminar = false, forzar = false): Promise<void> => {
+  downloadPdf: async (id: number, filename: string, preliminar = false, forzar = false, vista?: 'gestor'): Promise<void> => {
     const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
     const tok = getAccessToken();
-    const qs = preliminar ? '?preliminar=1' : forzar ? '?forzar=1' : '';
+    const qs = preliminar ? '?preliminar=1' : (vista === 'gestor' ? (forzar ? '?vista=gestor&forzar=1' : '?vista=gestor') : (forzar ? '?forzar=1' : ''));
     const res = await fetch(`${base}/api/invoices/${id}/pdf${qs}`, {
       headers: tok ? { Authorization: `Bearer ${tok}` } : {},
       credentials: 'include',
@@ -242,10 +269,16 @@ export const invoicesApi = {
       throw new Error(msg);
     }
     const blob = await res.blob();
+    if (!blob || blob.size === 0) throw new Error('El PDF llegó vacío. Vuelve a intentarlo.');
     const url = URL.createObjectURL(blob);
+    // El enlace DEBE estar en el documento: si se hace click sobre un <a> suelto,
+    // algunos navegadores lo ignoran en silencio y la descarga "no hace nada".
     const a = document.createElement('a');
-    a.href = url; a.download = filename; a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    a.href = url; a.download = filename; a.rel = 'noopener';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 60000);
   },
   send: (id: number, email?: string) => client.post(`/invoices/${id}/send`, email ? { email } : {}),
   markPaid: (id: number, fechaPago?: string) => client.post(`/invoices/${id}/mark-paid`, fechaPago ? { fechaPago } : {}),
@@ -261,6 +294,10 @@ export const invoicesApi = {
     clienteCiudad?: string; clienteCp?: string; clientePais?: string;
     clienteEmail?: string; clienteTelefono?: string;
   }) => client.patch<Invoice>(`/invoices/${id}/corregir`, body),
+  /** Cambiar SOLO las fechas (emisión y/o pago) de una factura — admin o permiso editar_fechas_factura. */
+  updateFechas: (id: number, body: { fechaEmision?: string; fechaPago?: string }) => client.patch<Invoice>(`/invoices/${id}/fechas`, body),
+  /** Asociar una factura existente a una venta (conversión) del cliente — Opción B. */
+  asociarVenta: (id: number, conversionId: number) => client.patch<Invoice>(`/invoices/${id}/asociar`, { conversionId }),
   /** Validar y emitir un borrador (opcionalmente completando datos del cliente). */
   emitir: (id: number, patch?: Partial<{ clienteNombre: string; clienteNif: string; clienteDireccion: string; clienteCiudad: string; clienteCp: string; clientePais: string; clienteEmail: string | null; clienteTelefono: string | null }>) => client.post<Invoice>(`/invoices/${id}/emitir`, patch || {}),
   getOne: (id: number) => client.get<Invoice>(`/invoices/${id}`),

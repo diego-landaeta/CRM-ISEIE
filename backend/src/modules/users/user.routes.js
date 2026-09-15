@@ -20,6 +20,12 @@ router.delete('/:id/avatar', userController.deleteAvatar);
 router.get('/:id/views', viewsController.getViews);
 router.patch('/:id/views', viewsController.setViews);
 
+// Los avisos por correo de UNO MISMO. Sin roleGuard a proposito: cada persona
+// gestiona los suyos, y el usuario sale del testigo de sesion — nadie puede
+// tocar los de otro aunque acierte el identificador. Tarea #28.
+router.get('/mis-avisos', userController.misAvisos);
+router.patch('/mis-avisos', userController.cambiarMiAviso);
+
 // Resto admin/superadmin
 router.use(roleGuard('admin', 'superadmin'));
 

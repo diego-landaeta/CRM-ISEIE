@@ -4,6 +4,7 @@ import { decrypt } from '../../shared/utils/crypto.js';
 import * as integrationsModel from '../integrations/integrations.model.js';
 import { query } from '../../shared/config/db.js';
 import * as model from './stripe-payments.model.js';
+import * as tutores from '../tutores/tutor.model.js';
 
 async function getStripeKey(projectId) {
   try {
@@ -17,8 +18,12 @@ export async function getWebhookSecret(projectId) {
   try {
     const row = await integrationsModel.get(projectId, 'stripe');
     const pub = row?.config_public || {};
-    if (pub.webhook_secret_encrypted && row.webhook_iv && row.webhook_auth_tag) {
-      return decrypt(pub.webhook_secret_encrypted, row.webhook_iv, row.webhook_auth_tag);
+    // Las columnas row.webhook_iv y row.webhook_auth_tag NUNCA han existido en
+    // project_integrations —son iv y auth_tag, y pertenecen a la clave de API—,
+    // asi que esta rama estaba muerta y siempre se caia al texto plano. El
+    // secreto guarda ahora su propio iv y su etiqueta dentro de config_public.
+    if (pub.webhook_secret_encrypted && pub.webhook_secret_iv && pub.webhook_secret_auth_tag) {
+      return decrypt(pub.webhook_secret_encrypted, pub.webhook_secret_iv, pub.webhook_secret_auth_tag);
     }
     return pub.webhook_secret || null;
   } catch (e) { return null; }
@@ -49,6 +54,10 @@ function chargeToPayment(charge, projectId) {
     status: charge.status,
     amount: amountEur,
     currency: 'EUR',
+    // Comisión de Stripe y neto realmente liquidado (para la copia de gestión).
+    // La factura del alumno siempre va por el bruto (amount).
+    fee_amount: bt && typeof bt.fee === 'number' ? bt.fee / 100 : null,
+    net_amount: bt && typeof bt.net === 'number' ? bt.net / 100 : null,
     customer_email: charge.billing_details?.email || charge.receipt_email || null,
     customer_name: charge.billing_details?.name || null,
     customer_stripe_id: charge.customer || null,
@@ -70,6 +79,15 @@ function chargeToPayment(charge, projectId) {
 async function autoLinkIfPossible(projectId, payment, dbRow) {
   if (dbRow.conversion_id) return;
   if (payment.status !== 'succeeded' || !payment.customer_email) return;
+  // Un cargo en otra moneda solo vale si su importe ya viene liquidado en euros.
+  // Los importados sin el balance_transaction guardaron el importe en la moneda
+  // del cargo: asociarlos meteria 270.000 pesos colombianos como 270.000 euros.
+  const moneda = String(payment.currency || dbRow.currency || 'EUR').toUpperCase();
+  if (moneda !== 'EUR') {
+    logger.warn({ stripeId: payment.stripe_id, moneda, importe: payment.amount },
+      'cargo en moneda extranjera sin convertir a euros: no se asocia');
+    return;
+  }
   const lead = await model.findLeadByEmail(projectId, payment.customer_email);
   if (!lead) return;
   if (lead.status !== 'convertido') {
@@ -82,19 +100,32 @@ async function autoLinkIfPossible(projectId, payment, dbRow) {
     return;
   }
   const fecha = new Date(payment.stripe_created_at * 1000).toISOString().slice(0, 10);
-  const cpId = await model.createConversionPayment(conv.id, payment.amount, fecha, `Auto-Stripe ${payment.stripe_id}`);
-  await model.updateConversionPaid(conv.id, payment.amount);
+  // ¿Es realmente un duplicado? Lo es cuando la asesora ya registró ESE MISMO cobro a mano:
+  // mismo importe y fecha muy próxima en la misma venta. No basta con que la venta esté
+  // saldada — hay ventas cuyo importe_total quedó corto y siguen recibiendo mensualidades
+  // legítimas, y bloquearlas dejaba el cobro sin factura.
+  const dup = await model.findPagoDuplicado(conv.id, payment.amount, fecha, payment.stripe_id);
+  if (dup) {
+    // Se vincula al pago que ya existe (y a su factura, si la tiene) SIN volver a sumar.
+    await model.linkPayment(dbRow.id, { leadId: lead.id, conversionId: conv.id, conversionPaymentId: dup.id, userId: null, method: 'auto_dedup' });
+    return;
+  }
+  // Registrar el cobro con la MISMA lógica que un pago manual (conversion.model.addPayment):
+  // salda la cuota pendiente más antigua (FIFO). allowOverpay: un cobro real de Stripe se
+  // registra aunque supere el total previsto de la venta (el total es lo que suele estar mal).
+  const convModel = await import('../conversions/conversion.model.js');
+  const res = await convModel.addPayment(conv.id, {
+    importe: payment.amount, fecha, notas: `Auto-Stripe ${payment.stripe_id}`, metodo: 'tarjeta',
+  }, { allowOverpay: true, allowDuplicate: true });
+  if (res?.error || !res?.payment) return;
+  const cpId = res.payment.id;
   await model.linkPayment(dbRow.id, { leadId: lead.id, conversionId: conv.id, conversionPaymentId: cpId, userId: null, method: 'auto_email' });
-  // Un pago de Stripe asociado genera SU factura, en el correlativo normal
-  // (igual que cualquier otro abono). No bloqueante.
-  autoInvoiceFromStripe(conv.id, null, cpId, payment.amount);
-}
-
-// Lanza la auto-factura por pago sin acoplar módulos en carga (import dinámico).
-function autoInvoiceFromStripe(conversionId, userId, paymentId, importe) {
-  import('../conversions/conversion.service.js')
-    .then((cs) => cs.autoInvoice(conversionId, userId, { paymentId, importe: Number(importe) }))
-    .catch(() => { /* no bloqueante: el pago sigue su curso */ });
+  // El cobro queda registrado en la venta y espera EN LA COLA de facturacion.
+  // La factura NO sale sola: la emite una persona cuando comprueba que los datos
+  // del cliente estan bien. Antes se emitia aqui mismo, y salian facturas
+  // numeradas con lo que hubiera en la ficha en ese momento.
+  logger.info({ conversionId: conv.id, paymentId: cpId, stripeId: payment.stripe_id },
+    'cobro de Stripe registrado; queda en la cola de facturacion');
 }
 
 // Trae detalle completo de dispute desde Stripe API (incluye evidence_due_by)
@@ -120,7 +151,7 @@ async function fetchAndUpdateDispute(apiKey, projectId, charge) {
   }
 }
 
-export async function syncStripePayments(projectId, { fullHistory = false } = {}) {
+export async function syncStripePayments(projectId, { fullHistory = false, retryPending = false } = {}) {
   const apiKey = await getStripeKey(projectId);
   if (!apiKey) throw new Error('Stripe API key no configurada para este proyecto');
 
@@ -166,6 +197,39 @@ export async function syncStripePayments(projectId, { fullHistory = false } = {}
     pages++;
   }
 
+
+  // Segunda pasada: los cargos que ya estaban importados y siguen sin asociar.
+  // Stripe solo devuelve los cargos nuevos, asi que sin esto un cobro cuya
+  // asociacion se deshizo no se volveria a enganchar nunca por mucho que se
+  // pulse Sincronizar.
+  //
+  // Solo se hace cuando alguien pulsa Sincronizar a mano (retryPending). El cron
+  // de cada 5 min no lo dispara: reasociar en masa es una decision del usuario,
+  // no algo que deba pasar solo de madrugada.
+  let reasociados = 0;
+  if (retryPending) try {
+    const pendientes = await model.listPendientesDeAsociar(projectId, 5000);
+    for (const row of pendientes) {
+      try {
+        const antes = row.conversion_payment_id;
+        await autoLinkIfPossible(projectId, {
+          status: row.status,
+          amount: Number(row.amount),
+          customer_email: row.customer_email,
+          currency: row.currency,
+          stripe_created_at: Number(row.stripe_created_at),
+          stripe_id: row.stripe_id,
+        }, row);
+        const despues = await model.getById(row.id);
+        if (!antes && despues?.conversion_payment_id) reasociados++;
+      } catch (e) {
+        logger.warn({ stripeId: row.stripe_id, err: e.message }, 'reintento de asociacion fallido');
+      }
+    }
+  } catch (e) {
+    logger.warn({ err: e.message }, 'no se pudo reintentar la asociacion de pendientes');
+  }
+
   await model.upsertSyncState(projectId, {
     last_sync_at: new Date().toISOString(),
     last_full_sync_at: fullHistory ? new Date().toISOString() : (state?.last_full_sync_at || null),
@@ -174,26 +238,64 @@ export async function syncStripePayments(projectId, { fullHistory = false } = {}
     last_error: null,
   });
 
-  logger.info({ projectId, imported, disputesFound, pages }, 'Stripe sync OK');
-  return { imported, disputes: disputesFound, pages };
+  logger.info({ projectId, imported, disputesFound, pages, reasociados }, 'Stripe sync OK');
+  return { imported, disputes: disputesFound, pages, reasociados };
 }
 
 export async function manualLink(stripePaymentId, { leadId, conversionId, userId }) {
-  const fecha = new Date().toISOString().slice(0, 10);
   let cpId = null;
   let importe = 0;
+  let yaExistia = false;
   if (conversionId) {
-    const { rows } = await query(`SELECT amount FROM stripe_payments WHERE id=$1`, [stripePaymentId]);
-    const amount = Number(rows[0]?.amount || 0);
+    const { rows } = await query(
+      `SELECT amount, stripe_id, stripe_created_at, status FROM stripe_payments WHERE id=$1`, [stripePaymentId]);
+    // Un cargo que NO se cobro no registra pago. Nunca.
+    //
+    // Aqui no se miraba el estado: asociar un cargo fallido creaba un cobro por
+    // su importe, o sea dinero que no entro figurando como cobrado, y de ahi a
+    // una factura emitida por algo que nadie pago. Hoy hay 225 cargos fallidos
+    // en MultiCRM y 401 en ISEIE: cualquiera estaba a un clic.
+    //
+    // El enlace SI se hace —queda dicho de quien es el intento fallido, que
+    // sirve para perseguirlo— pero sin cobro detras.
+    const cobrado = rows[0]?.status === 'succeeded';
+    const amount = cobrado ? Number(rows[0]?.amount || 0) : 0;
+    // Fecha REAL del cobro en Stripe (antes se guardaba la de hoy y la factura salía con
+    // fecha equivocada). Si faltara, se cae a hoy.
+    const fecha = rows[0]?.stripe_created_at
+      ? new Date(rows[0].stripe_created_at).toISOString().slice(0, 10)
+      : new Date().toISOString().slice(0, 10);
     if (amount > 0) {
       importe = amount;
-      cpId = await model.createConversionPayment(conversionId, amount, fecha, `Manual Stripe #${stripePaymentId}`);
-      await model.updateConversionPaid(conversionId, amount);
+      // Si la asesora ya registró ese mismo cobro a mano, se engancha al pago existente
+      // (y a su factura) en vez de crear otro: se vincula pero NO vuelve a sumar.
+      const dup = await model.findPagoDuplicado(conversionId, amount, fecha, rows[0]?.stripe_id);
+      if (dup) {
+        cpId = dup.id;
+        yaExistia = true;
+      } else {
+        // Mismo camino que un pago manual: salda la cuota pendiente más antigua (FIFO)
+        // para que el cobro aparezca en las mensualidades de la venta.
+        const convModel = await import('../conversions/conversion.model.js');
+        const res = await convModel.addPayment(conversionId, {
+          importe: amount, fecha, notas: `Stripe ${rows[0]?.stripe_id || stripePaymentId}`, metodo: 'tarjeta',
+        }, { allowOverpay: true, allowDuplicate: true });
+        cpId = res?.payment?.id || null;
+      }
     }
   }
-  await model.linkPayment(stripePaymentId, { leadId, conversionId, conversionPaymentId: cpId, userId, method: 'manual' });
-  // Al asociar a mano un pago de Stripe también se emite su factura.
-  if (cpId) autoInvoiceFromStripe(conversionId, userId, cpId, importe);
+  if (conversionId && !cpId) {
+    logger.warn({ stripePaymentId, conversionId },
+      'cargo asociado SIN registrar cobro: no consta como cobrado en Stripe');
+  }
+  await model.linkPayment(stripePaymentId, { leadId, conversionId, conversionPaymentId: cpId, userId, method: yaExistia ? 'manual_dedup' : 'manual' });
+  // Asociar el cargo NO emite la factura: el cobro queda registrado en la venta y
+  // espera en la cola. La emite una persona cuando comprueba que los datos del
+  // cliente estan bien.
+  if (cpId) {
+    logger.info({ conversionId, paymentId: cpId, stripePaymentId },
+      'cargo de Stripe asociado a mano; queda en la cola de facturacion');
+  }
 }
 
 export async function updateDisputeDecision(stripePaymentId, { decision, notes, userId }) {
@@ -220,6 +322,11 @@ export function verifyStripeSignature(rawBody, sigHeader, secret) {
   const t = parts.t?.[0];
   const v1List = parts.v1 || [];
   if (!t || !v1List.length) return false;
+  // La firma incluye la marca de tiempo, pero de nada sirve si no se comprueba:
+  // sin esto, quien capture una peticion valida puede reenviarla mañana y el
+  // cobro se duplica. Cinco minutos, la misma ventana que recomienda Stripe.
+  const edadSegundos = Math.abs(Math.floor(Date.now() / 1000) - Number(t));
+  if (!Number.isFinite(edadSegundos) || edadSegundos > 300) return false;
   const payload = `${t}.${rawBody}`;
   const expected = crypto.createHmac('sha256', secret).update(payload).digest('hex');
   for (const v1 of v1List) {
@@ -227,6 +334,58 @@ export function verifyStripeSignature(rawBody, sigHeader, secret) {
         crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(v1))) return true;
   }
   return false;
+}
+
+
+// Un reembolso de Stripe, llevado hasta el final: devolucion en la venta y
+// comision del tutor revertida.
+//
+// Stripe manda un evento por CADA reembolso, con su propio identificador
+// (re_...). Ese identificador es lo que impide registrarlo dos veces si el
+// evento se reintenta o si alguien resincroniza: la devolucion se guarda con el,
+// y hay un indice unico detras.
+//
+// Si el cobro de Stripe no esta atado a ningun cobro del CRM no se inventa nada:
+// se avisa en el registro y alguien lo mira. Adivinar aqui es adivinar sobre
+// dinero devuelto.
+async function propagarReembolso(charge, projectId) {
+  const { rows } = await query(
+    `SELECT sp.conversion_id, sp.conversion_payment_id
+       FROM stripe_payments sp
+      WHERE sp.project_id = $1 AND sp.stripe_id = $2`,
+    [projectId, charge.id]);
+  const enlace = rows[0];
+  if (!enlace?.conversion_id) {
+    logger.warn({ charge: charge.id }, 'reembolso de un cobro que no esta atado a ninguna venta');
+    return;
+  }
+
+  // Stripe manda todos los reembolsos del cargo; se procesan uno a uno porque
+  // un cargo puede devolverse en partes.
+  const lista = charge.refunds?.data?.length
+    ? charge.refunds.data
+    : [{ id: `${charge.id}_ref`, amount: charge.amount_refunded, reason: null, created: charge.created }];
+
+  for (const r of lista) {
+    const importe = Number(r.amount || 0) / 100;
+    if (!(importe > 0)) continue;
+    const resultado = await tutores.registrarDevolucion({
+      conversionId: enlace.conversion_id,
+      paymentId: enlace.conversion_payment_id || null,
+      importe,
+      fecha: r.created ? new Date(r.created * 1000).toISOString().slice(0, 10) : null,
+      motivo: r.reason || 'Reembolso de Stripe',
+      stripeRefundId: r.id,
+      origen: 'stripe',
+      userId: null,
+    });
+    if (resultado.repetida) continue;
+    logger.info({
+      charge: charge.id, refund: r.id, importe,
+      comisionesRevertidas: resultado.comisionesRevertidas,
+      sinCobroConcreto: resultado.sinCobroConcreto,
+    }, 'reembolso registrado');
+  }
 }
 
 export async function handleWebhookEvent(projectId, event) {
@@ -243,6 +402,13 @@ export async function handleWebhookEvent(projectId, event) {
       const dbRow = await model.upsertPayment(payment);
       try { await autoLinkIfPossible(projectId, payment, dbRow); } catch (e) { logger.warn({ err: e.message }, 'autoLink wh fail'); }
       if (obj.disputed && apiKey) await fetchAndUpdateDispute(apiKey, projectId, obj);
+      // Un reembolso no acaba en stripe_payments: si el alumno recupera su
+      // dinero, hay que registrar la devolucion en su venta y deshacer la
+      // comision del tutor. Antes se quedaba aqui y el tutor cobraba igual.
+      if (event.type === 'charge.refunded') {
+        try { await propagarReembolso(obj, projectId); }
+        catch (e) { logger.error({ err: e.message, charge: obj.id }, 'reembolso: no se pudo propagar'); }
+      }
       return { processed: event.type, stripeId: obj.id };
     }
     case 'charge.dispute.created':

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { verifyToken, roleGuard } from '../../shared/middleware/auth.js';
+import { uploadDoc } from '../../shared/middleware/upload.js';
 import * as ctrl from './accounting.controller.js';
 
 const router = Router();
@@ -14,6 +15,12 @@ router.get('/receivable', roleGuard('admin', 'superadmin', 'soporte', 'gestor'),
 
 // Expenses CRUD (admin y superadmin)
 router.get('/expenses', roleGuard('admin', 'superadmin'), ctrl.listExpenses);
+
+// Upload + download de comprobante (PDF/JPG/PNG/WEBP, máx 10MB).
+// Upload va ANTES de '/expenses/:id' para que no se interprete como un id.
+router.post('/expenses/upload-comprobante', roleGuard('admin', 'superadmin'), uploadDoc, ctrl.uploadComprobante);
+router.get('/expenses/comprobante/:key', roleGuard('admin', 'superadmin'), ctrl.downloadComprobante);
+
 router.get('/expenses/:id', roleGuard('admin', 'superadmin'), ctrl.getExpense);
 router.post('/expenses', roleGuard('admin', 'superadmin'), ctrl.createExpense);
 router.patch('/expenses/:id', roleGuard('admin', 'superadmin'), ctrl.updateExpense);
