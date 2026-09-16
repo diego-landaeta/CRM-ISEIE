@@ -4,6 +4,39 @@ import { logger } from '../../shared/utils/logger.js';
 import * as evolution from './evolution.client.js';
 import { textoDeBot, esDeBot } from './mensajes-de-bot.js';
 
+/**
+ * El nombre del adjunto, leido como lo que es.
+ *
+ * Evolution manda `fileName` con los bytes de UTF-8 interpretados como Latin-1,
+ * asi que «Diseño sin titulo.pdf» llegaba y se guardaba como
+ *
+ *     DiseÃ±o sin tÃ­tulo.pdf
+ *
+ * Se ve tal cual en el chat, y ademas queda asi en la base: arreglarlo despues
+ * en la pantalla no sirve, porque el nombre malo ya esta guardado.
+ *
+ * La vuelta es exacta: se recuperan los bytes originales tratando la cadena
+ * como Latin-1 y se vuelven a leer como UTF-8.
+ *
+ * Solo se toca si el resultado MEJORA. Un nombre que ya venia bien —o uno en
+ * ASCII— no tiene secuencias de estas, y reconvertirlo a ciegas lo estropearia:
+ * es el fallo clasico de aplicar la correccion dos veces.
+ */
+export function enUtf8(nombre) {
+  const v = String(nombre || '');
+  if (!v) return null;
+  // La firma del problema: los caracteres que produce leer UTF-8 como Latin-1.
+  if (!/[Â-Ã][-¿]/.test(v)) return v;
+  try {
+    const arreglado = Buffer.from(v, 'latin1').toString('utf8');
+    // Si la vuelta deja el simbolo de sustitucion, no era esto: se deja como estaba.
+    return arreglado.includes('�') ? v : arreglado;
+  } catch {
+    return v;
+  }
+}
+
+
 // Los adjuntos de WhatsApp.
 //
 // WhatsApp NO da una URL publica de los ficheros: viajan cifrados y solo se
@@ -85,6 +118,41 @@ export function abrirSobres(message, vueltas = 0) {
     if (dentro) return abrirSobres(dentro, vueltas + 1);
   }
   return message;
+}
+
+/**
+ * A que mensaje responde este, si responde a alguno.
+ *
+ * WhatsApp lo mete en el contexto, y dentro del TIPO concreto: un texto citando
+ * lo lleva en `extendedTextMessage`, una foto en `imageMessage`, y asi. Se
+ * busca en todos en vez de solo en el texto, que era lo facil y dejaba fuera
+ * las respuestas con foto o con audio.
+ *
+ * Esto lo hacia el puente de Baileys y lo mandaba ya masticado como
+ * `respondeA`. Evolution manda el mensaje crudo, asi que en produccion nadie lo
+ * sacaba: una respuesta se guardaba sin saber a que respondia y la cita no
+ * salia nunca. Es la mitad que faltaba del #62 y el mismo patron del #63.
+ */
+export function aQueResponde(envuelto, contextoDeFuera = null) {
+  // PRIMERO el de fuera, que es donde lo pone Evolution.
+  //
+  // Comprobado sobre 50 mensajes reales de una cuenta de verdad: 23 llevan el
+  // `contextInfo` colgando del mensaje entero y solo 5 lo llevan dentro del
+  // tipo. Mirando solo dentro se perdian cuatro de cada cinco citas.
+  //
+  // El puente hace lo contrario —lo saca del tipo y lo manda ya masticado—, asi
+  // que en local se veia bien. Cuarta vez que pasa lo mismo.
+  if (contextoDeFuera?.stanzaId) return contextoDeFuera.stanzaId;
+
+  // Y despues dentro del tipo concreto, que es donde lo pone Baileys crudo: un
+  // texto citando lo lleva en `extendedTextMessage`, una foto en `imageMessage`.
+  const message = abrirSobres(envuelto);
+  if (!message || typeof message !== 'object') return null;
+  for (const clave of Object.keys(message)) {
+    const ctx = message[clave]?.contextInfo;
+    if (ctx?.stanzaId) return ctx.stanzaId;
+  }
+  return null;
 }
 
 /** Del tipo de mensaje de WhatsApp al tipo que guardamos. */
@@ -178,7 +246,7 @@ export async function bajarYGuardar({ key, message, instancia }) {
       ruta,
       mime,
       tipo: tipo || r.mediaType || null,
-      nombreArchivo: r.fileName || nombre,
+      nombreArchivo: enUtf8(r.fileName) || nombre,
       tamano: Number(r.size?.fileLength || r.size || 0) || null,
     };
   } catch (err) {

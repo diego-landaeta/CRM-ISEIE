@@ -1,6 +1,7 @@
 import * as model from './whatsapp.model.js';
 import { createSchema, updateSchema } from './whatsapp.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
+import { proyectosDelAmbito } from '../../shared/utils/ambito.js';
 
 function proyecto(req) {
   const p = req.query.projectId || req.body?.projectId;
@@ -35,8 +36,11 @@ function siFaltaLaTabla(err) {
 
 export async function listTemplates(req, res, next) {
   try {
+    const ambito = await proyectosDelAmbito(req);
     res.json({ success: true, data: await model.listTemplates({
-      projectId: proyecto(req), userId: req.user.userId,
+      projectId: ambito.projectId ?? proyecto(req),
+      projectIds: ambito.projectIds,
+      userId: req.user.userId,
     })});
   } catch (err) { next(err); }
 }
