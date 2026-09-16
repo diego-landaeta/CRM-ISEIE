@@ -370,11 +370,35 @@ export async function findByConversion(conversionId) {
 //  - por SOCIEDAD (issuerId, sin projectId): vista global de todas las facturas
 //    de esa empresa emisora entre todos los proyectos (correlativos en orden).
 //    Solo admin/superadmin (lo restringe el controller).
+/*
+  LA MISMA SOCIEDAD, AUNQUE SEAN DOS FILAS.
+
+  Dos emisores pueden ser la misma empresa a efectos fiscales: mismo NIF y misma
+  serie, y por tanto UN SOLO correlativo --`invoice_sequences` tiene una unica
+  fila para los dos--. Pasa cuando se da de alta un emisor aparte solo para
+  distinguir una linea de negocio con un alias.
+
+  Filtrar por `issuer_id` a secas parte ese correlativo en dos listas y deja
+  huecos en ambas: una factura emitida no sale por ningun lado y parece perdida.
+  Paso en MultiCRM el 16/09 con la 2026/0079 de Solvenic. Un correlativo fiscal
+  se lee entero o no se lee.
+
+  Se filtra por la IDENTIDAD FISCAL, no por la fila. Sin NIF no se agrupa nada:
+  cae al emisor exacto, que es el comportamiento de antes.
+*/
+const MISMA_SOCIEDAD = (col, marcador) => `${col} IN (
+    SELECT e.id
+      FROM invoice_issuers e, invoice_issuers base
+     WHERE base.id = ${marcador}
+       AND (e.id = base.id
+            OR (base.nif IS NOT NULL AND e.nif = base.nif
+                AND e.serie IS NOT DISTINCT FROM base.serie)))`;
+
 export async function list({ projectId, issuerId, estado, search, from, to, tipo, responsableId, page = 1, limit = 50 }) {
   const conds = [];
   const params = [];
   let idx = 1;
-  if (issuerId)  { conds.push(`i.issuer_id = $${idx++}`); params.push(issuerId); }
+  if (issuerId)  { conds.push(MISMA_SOCIEDAD('i.issuer_id', `$${idx++}`)); params.push(issuerId); }
   if (projectId) { conds.push(`i.project_id = $${idx++}`); params.push(projectId); }
   // Gestor: solo ve las facturas de SUS leads (responsable). Admin/superadmin ven todas.
   // Quien vendio, no de quien es la ficha: es el criterio del resto del CRM.
@@ -439,7 +463,7 @@ export async function getStats({ projectId, issuerId } = {}) {
   const conds = [`tipo <> 'proforma'`];
   const params = [];
   let idx = 1;
-  if (issuerId)  { conds.push(`issuer_id = $${idx++}`);  params.push(issuerId); }
+  if (issuerId)  { conds.push(MISMA_SOCIEDAD('issuer_id', `$${idx++}`));  params.push(issuerId); }
   if (projectId) { conds.push(`project_id = $${idx++}`); params.push(projectId); }
   const { rows } = await query(
     `SELECT
