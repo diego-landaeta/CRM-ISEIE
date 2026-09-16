@@ -136,7 +136,11 @@ export default function InvoicesPage() {
       if (r3.success) setIssuers(r3.data || []);
       if (r4.success) setVentasSinFactura(r4.data || []);
       // Cobros Stripe sin asociar del proyecto (no bloqueante).
-      client.get<typeof stripeSinAsociar>(`/stripe-payments?projectId=${pid}&linked=no&status=succeeded&facturables=1&limit=50`)
+      // `sinEquivalente=1`: aqui solo los huecos DE VERDAD. Un cargo sin enlazar
+      // que ya tiene su cobro apuntado a mano no es dinero que falte, y salia
+      // repetido con la cola de facturacion. Para enlazarlos uno a uno esta la
+      // pantalla de Pagos Stripe, que los sigue enseñando todos.
+      client.get<typeof stripeSinAsociar>(`/stripe-payments?projectId=${pid}&linked=no&status=succeeded&facturables=1&sinEquivalente=1&limit=50`)
         .then((r) => { if (r.success) setStripeSinAsociar(r.data || []); })
         .catch(() => setStripeSinAsociar([]));
     } finally { setLoading(false); }
