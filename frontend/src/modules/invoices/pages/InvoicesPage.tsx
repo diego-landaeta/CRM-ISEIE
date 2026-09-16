@@ -85,6 +85,16 @@ export default function InvoicesPage() {
   const misSociedadIds = new Set((projects || []).map((p) => p.sociedad_emisora_id).filter((x) => x != null));
   const sociedadesVisibles = allIssuers.filter((i) => misSociedadIds.has(i.id));
   const proyectosDeSociedad = (issuerId: number) => (projects || []).filter((p) => p.sociedad_emisora_id === issuerId);
+  /*
+    El nombre de la sociedad, CON su alias cuando lo tiene.
+
+    Dos emisores pueden compartir razon social y NIF y ser cosas distintas a
+    efectos de numeracion. En MultiCRM paso con Solvenic: el desplegable sacaba
+    dos opciones identicas, elegir era a ciegas, y una factura entera parecia no
+    existir porque vivia en la otra.
+  */
+  const nombreSociedad = (i?: { razon_social?: string; alias?: string | null } | null): string =>
+    i ? (i.alias ? `${i.razon_social} · ${i.alias}` : (i.razon_social || '')) : '';
   const [ventasSinFactura, setVentasSinFactura] = useState<VentaSinFactura[]>([]);
   // Cobros de Stripe cobrados pero SIN cliente asociado: salen aqui igual que en
   // Pagos Stripe, porque hasta asociarlos no generan factura.
@@ -211,7 +221,7 @@ export default function InvoicesPage() {
     // Override opcional de empresa emisora (por defecto hereda la de la factura original)
     let issuerId: number | undefined;
     if (issuers.length > 1) {
-      const opciones = issuers.map((i, idx) => `${idx + 1}. ${i.razon_social}${i.es_default ? ' (default)' : ''}`).join('\n');
+      const opciones = issuers.map((i, idx) => `${idx + 1}. ${nombreSociedad(i)}${i.es_default ? ' (default)' : ''}`).join('\n');
       const sel = prompt(
         `Empresa que emite la rectificativa.\n` +
         `Dejá vacío para usar la misma de la factura original.\n\n${opciones}\n\nNº de empresa (o vacío):`,
@@ -303,14 +313,14 @@ export default function InvoicesPage() {
               // y se ofrece el atajo para entrar a uno de sus proyectos.
               if (id && String(id) !== String(activeProject?.sociedad_emisora_id)) {
                 const soc = sociedadesVisibles.find((s) => s.id === id);
-                if (soc) setSocPrompt({ id, nombre: soc.razon_social });
+                if (soc) setSocPrompt({ id, nombre: nombreSociedad(soc) });
                 return;
               }
               setFilterIssuer(e.target.value);
             }}
             title="La facturación se consulta dentro de su sociedad. Para ver otra, entra a uno de sus proyectos."
             className={`h-9 px-2 rounded-md border text-sm ${filterIssuer ? 'border-primary/50 bg-primary/5 text-primary font-semibold' : 'border-border bg-card'}`}>
-            {sociedadesVisibles.map((i) => <option key={i.id} value={String(i.id)}>{i.razon_social}</option>)}
+            {sociedadesVisibles.map((i) => <option key={i.id} value={String(i.id)}>{nombreSociedad(i)}</option>)}
           </select>
         )}
         {porSociedad && sociedadProjects.length > 0 && (
@@ -341,7 +351,7 @@ export default function InvoicesPage() {
 
       {porSociedad && (
         <div className="text-xs rounded-md border border-primary/30 bg-primary/5 text-primary px-3 py-2">
-          Mostrando facturas de <strong>{allIssuers.find((i) => String(i.id) === filterIssuer)?.razon_social || 'la sociedad'}</strong>
+          Mostrando facturas de <strong>{nombreSociedad(allIssuers.find((i) => String(i.id) === filterIssuer)) || 'la sociedad'}</strong>
           {filterProject
             ? <> · proyecto <strong>{sociedadProjects.find((p) => String(p.id) === filterProject)?.nombre}</strong>.</>
             : <> entre <strong>todos sus proyectos</strong> (correlativo en orden). La columna <strong>Proyecto</strong> indica a quién pertenece cada factura.</>}
