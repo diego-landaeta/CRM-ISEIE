@@ -1311,27 +1311,69 @@ que va a cambiar varias veces antes de quedarse quieta.
 *Asignada a **Ángel y Diego**. Backend (Brevo + el estado) y frontend (el botón,
 la vista previa y el editor de la plantilla).*
 
-## 16 de septiembre, tarde — el descuento que no se guarda como descuento
+## 16 de septiembre, tarde — el CRM sumó el 21 % encima del precio cerrado
 
-**Lo reporta Diego**: Fabiola registra una venta con descuento y el CRM le deja
-el precio base, no el precio con descuento. Dos cuotas. Por WhatsApp: «el crm no
-me agarra los datos bien», 1.793,36 € en dos pagos de 896,68 €.
+**Lo reporta Diego**: Fabiola registra una venta con descuento y el total no es
+el que pactó. Por WhatsApp: «el crm no me agarra los datos bien», 1.793,36 € en
+dos pagos de 896,68 €.
 
-### Qué pasa
+### La venta
 
-Crear la venta **con el descuento puesto en la ventana de conversión funciona
-bien**: el backend recalcula `subtotal_bruto → descuento → base → IVA → total` y
-guarda las cinco cifras coherentes (`conversion.model.js`, `create`).
+ISEIE, conversión **646**, lead 386 (Javier Alfonso Cifuentes Parrado), **Máster
+en Odontología Digital**, creada el 15/09 a las 20:30 por Fabiola.
 
-El problema es el **otro camino**, que es justo el que la interfaz recomienda
-para aplicar un descuento. Hay dos botones que dicen hacerlo:
+```
+subtotal_bruto    4.195,00      precio de catálogo del producto 1018
+descuento 57,25%  −2.401,64
+                  ──────────
+neto               1.793,36     el precio acordado
++ IVA 21%            376,61     el CRM lo suma ENCIMA
+importe_total      2.169,97     lo que quedó guardado
+```
 
-- `EditConversionDialog.tsx` — «Permite corregir importe_total (con
-  descuentos/becas)»
-- `InstallmentsDialog.tsx` — «¿Aplicar descuento o beca? Modifica el importe
-  total antes de fraccionar»
+El 57,25 % no es un número redondo: está elegido para caer exactamente en
+1.793,36. La gestora metió ese porcentaje **para que el neto fuera el precio
+final**, y el CRM lo trató como base imponible.
 
-Los dos llaman a `conversionsApi.update(id, { importe_total })`, y en el modelo:
+La venta entró con `iva_incluido = false` e `iva_pct = 21`. La ventana de
+conversión ya trae `iva_incluido: true` por defecto en `prod/solo-hoy`, así que
+la casilla «IVA incluido» se desmarcó a mano. Con un catálogo cuyos precios ya
+son finales, esa casilla desmarcada sube el total un 21 % sin avisar de nada.
+
+### Lo que sí quedó bien
+
+- El **cobro inicial** de 896,68 y la **cuota pendiente** de 896,68 (vence el
+  15/10). Suman 1.793,36: las cuotas son correctas.
+- La **factura 2026/0799** del primer pago: 896,68, exenta de IVA, pagada.
+  `emitirFacturaDePago` fuerza `ivaPct = 0` para servicios académicos.
+
+De ahí la incoherencia que ve la gestora: la venta dice 2.169,97 con 21 % de
+IVA y su propia factura dice exenta, y el pendiente sale 1.273,29 en vez de los
+896,68 de la cuota.
+
+### Qué hay que arreglar
+
+1. **La venta 646**, a mano: `importe_total` 1.793,36, `base_imponible`
+   1.793,36, `iva_importe` 0, `iva_pct` 0, `iva_exento` true. Es como quedaron
+   las demás ventas académicas de ISEIE (643, 647, 639, 634) y como salió su
+   propia factura. La factura no se toca, ya está bien.
+
+2. **Que no vuelva a pasar.** Si el catálogo guarda precios finales, «IVA
+   incluido» no puede ser una casilla que se apague sin consecuencia visible.
+   Como mínimo, avisar cuando el total resultante no coincide con el precio del
+   producto menos el descuento. Va con el pendiente de «IVA incluido por
+   defecto», que sigue sin subir a ninguna producción.
+
+3. **Barrer las que ya estén así**: ventas con `iva_incluido = false`,
+   `iva_exento = false` e `iva_pct > 0` cuyo producto tenga precio de catálogo.
+
+### Un segundo fallo, distinto, que salió buscando este
+
+No es lo que le pasó a Fabiola, pero está ahí. Los dos botones que la interfaz
+ofrece para aplicar un descuento —`EditConversionDialog` («corregir
+importe_total con descuentos/becas») e `InstallmentsDialog` («¿Aplicar descuento
+o beca? Modifica el importe total antes de fraccionar»)— llaman a
+`conversionsApi.update(id, { importe_total })`, y el modelo solo deja pasar:
 
 ```js
 const allowed = ['producto_contratado', 'producto_contratado_id',
@@ -1339,45 +1381,27 @@ const allowed = ['producto_contratado', 'producto_contratado_id',
                  'fecha_conversion', 'notas_pago'];
 ```
 
-`importe_total` baja. **`subtotal_bruto`, `descuento_tipo`, `descuento_valor`,
-`descuento_importe`, `base_imponible` e `iva_importe` se quedan como estaban**,
-es decir con el precio base. De ahí salen tres cosas torcidas:
+`importe_total` baja y **`subtotal_bruto`, `descuento_tipo`, `descuento_valor`,
+`descuento_importe`, `base_imponible` e `iva_importe` se quedan con el precio de
+antes**. De ahí dos cosas:
 
-1. **En la ficha de la venta el descuento no aparece.** `ConversionsTab.tsx:299`
-   solo pinta el desglose si `descuento_tipo !== 'none'` o
-   `descuento_importe > 0`. Por esta vía ninguna de las dos se cumple: el
-   descuento existe en el total y en ningún otro sitio.
+- **El descuento no aparece en la ficha.** `ConversionsTab.tsx:299` solo pinta
+  el desglose si `descuento_tipo !== 'none'` o `descuento_importe > 0`, y por
+  esta vía no se cumple ninguna de las dos.
+- **La factura del total sale descuadrada.** `invoices.model.js` la arma con
+  `baseImponible: conv.base_imponible` e `ivaImporte: conv.iva_importe`, pero
+  `total: conv.importe_total`: línea y total con descuento, base e IVA sin él.
+  El PDF los imprime tal cual.
 
-2. **La factura del total sale descuadrada.** `invoices.model.js` la arma con
-   `baseImponible: conv.base_imponible ?? conv.importe_total` e
-   `ivaImporte: conv.iva_importe`, pero `total: conv.importe_total`. O sea:
-   línea y total con el precio con descuento, y «Base imponible» e «IVA» con el
-   precio base. El PDF los imprime tal cual (`invoices.service.js`, el layout
-   fijo y el visual).
-
-3. **Puede tragarse un cobro.** Al pagar, `emitirFacturaDePago` busca una
-   factura previa con `total >= importe_total − 0.01`. Si ya había una emitida
-   por el precio base, ese pago se engancha ahí en vez de emitir lo suyo. Es el
-   candidato más probable para el «no me agarra los datos».
-
-Las **facturas de cada cuota no están afectadas**: sacan `base = monto` del
-propio cobro, con IVA 0 por servicio académico.
-
-### Qué hay que arreglar
-
-Que `update` recalcule igual que `create`. Es el mismo bloque de cuentas, así
-que lo suyo es sacarlo a una función y llamarla desde los dos sitios, en vez de
-copiarla. Al bajar el total: recalcular `descuento_importe` contra
-`subtotal_bruto` (y poner `descuento_tipo = 'monto'` si venía en `'none'`),
-`base_imponible` e `iva_importe`.
-
-Y hay que decidir qué se hace con **las ventas ya grabadas así**, que pueden
-tener facturas emitidas con la base mal.
+Las facturas de cada cuota no están afectadas: sacan `base = monto` del propio
+cobro. El arreglo es que `update` recalcule igual que `create` —es el mismo
+bloque de cuentas, hay que sacarlo a una función común.
 
 **En los dos CRMs, mismo código**: ISEIH `conversion.model.js:723`, ISEIE
 `conversion.model.js:663`.
 
-*Sin tocar. Anotado para revisarlo con Diego.*
+*Anotado. La 646 sigue sin corregir: la escritura en la base de producción está
+bloqueada y la espera Diego.*
 
 ## 16 de septiembre, 13:15 — producción de ISEIE en blanco durante la tarde
 
