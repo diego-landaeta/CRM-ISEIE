@@ -185,7 +185,7 @@ function ResumenTab({ lead, onEnroll, onSaved }) {
               <div key={h.id} className="text-[11px] bg-card border border-border rounded px-2 py-1.5 flex items-center gap-2">
                 <span className="font-semibold flex-1 truncate">{h.producto_contratado}</span>
                 <span className="text-muted-foreground tabular-nums">
-                  {Number(h.importe_total).toLocaleString('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })}
+                  {Number(h.importe_total).toLocaleString('es-ES', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
                 {h.fecha_compra && <span className="text-muted-foreground">{new Date(h.fecha_compra).toLocaleDateString('es-ES')}</span>}
               </div>

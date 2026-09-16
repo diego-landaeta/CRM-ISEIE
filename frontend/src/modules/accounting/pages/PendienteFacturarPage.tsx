@@ -38,7 +38,11 @@ const PAYMENT_METHODS = [
 ];
 
 function fmt(n: number | string): string {
-  return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(Number(n || 0));
+  // Con centimos: es el importe exacto que va a ir en una factura.
+  return new Intl.NumberFormat('es-ES', {
+    style: 'currency', currency: 'EUR',
+    minimumFractionDigits: 2, maximumFractionDigits: 2,
+  }).format(Number(n || 0));
 }
 
 function fmtDate(d?: string | null): string {

@@ -44,8 +44,14 @@ const INTERACTION_COLORS = {
   nota:     'text-amber-600 bg-amber-50 dark:bg-amber-950/30',
 };
 
+// Con los centimos SIEMPRE. Esto son euros que alguien pago o que alguien debe,
+// no una cifra de resumen: redondeando, una venta de 1.793,36 aparecia como
+// 1.793 y una cuota de 896,68 como 897, que no es lo que dice la factura.
 function fmt(n) {
-  return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(Number(n || 0));
+  return new Intl.NumberFormat('es-ES', {
+    style: 'currency', currency: 'EUR',
+    minimumFractionDigits: 2, maximumFractionDigits: 2,
+  }).format(Number(n || 0));
 }
 function fmtDate(d) {
   if (!d) return '—';
