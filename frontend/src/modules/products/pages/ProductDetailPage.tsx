@@ -6,7 +6,7 @@ import DossierPanel from '../components/DossierPanel';
 import { Button } from '@/shared/components/ui/button';
 import {
   ArrowLeft, Clock, Hash, MapPin, Calendar, Link as LinkIcon,
-  Image as ImageIcon, GraduationCap,
+  Image as ImageIcon, GraduationCap, Users, Warning,
 } from '@phosphor-icons/react';
 
 interface Product {
@@ -23,6 +23,13 @@ interface Product {
   num_modulos?: number | null;
   modalidad?: string | null;
   fecha_inicio_texto?: string | null;
+  // Convocatoria (#86). `plazas_ocupadas`, `plazas_libres` y `dias_para_cierre`
+  // los calcula el servidor a cada consulta; no hay columna para ellos.
+  plazas_totales?: number | null;
+  plazas_ocupadas?: number | null;
+  plazas_libres?: number | null;
+  fecha_cierre_convocatoria?: string | null;
+  dias_para_cierre?: number | null;
   categoria_nombre?: string | null;
   subcategoria_nombre?: string | null;
   presentacion_texto?: string | null;
@@ -60,6 +67,76 @@ function MetaPill({ icon: Icon, label, value }: { icon: any; label: string; valu
       <Icon size={13} weight="bold" className="text-muted-foreground" />
       <span className="text-muted-foreground">{label}:</span>
       <span className="font-semibold">{String(value)}</span>
+    </div>
+  );
+}
+
+// Cuándo avisar. Son dos umbrales y están aquí, con nombre, en vez de sueltos
+// dentro del JSX: son la regla de negocio, no un detalle de pintado.
+const POCAS_PLAZAS = 5;
+const CIERRE_CERCA_DIAS = 7;
+
+function ConvocatoriaCard({ product }: { product: Product }) {
+  const llevaPlazas = product.plazas_totales != null;
+  const cierre = product.fecha_cierre_convocatoria;
+  if (!llevaPlazas && !cierre) return null;
+
+  const libres = Number(product.plazas_libres ?? 0);
+  const dias = product.dias_para_cierre;
+
+  const agotada = llevaPlazas && libres <= 0;
+  const pocas = llevaPlazas && libres > 0 && libres <= POCAS_PLAZAS;
+  const cerrada = dias != null && dias < 0;
+  const cierraYa = dias != null && dias >= 0 && dias <= CIERRE_CERCA_DIAS;
+
+  const alerta = agotada || cerrada;
+  const aviso = pocas || cierraYa;
+  const tono = alerta
+    ? 'bg-destructive/10 border-destructive/40'
+    : aviso
+      ? 'bg-amber-50 dark:bg-amber-950/20 border-amber-300 dark:border-amber-900'
+      : 'bg-card border-border';
+
+  return (
+    <div className={`rounded-lg border p-3 text-xs space-y-1.5 ${tono}`}>
+      <div className="flex items-center gap-2 flex-wrap">
+        <Users size={14} weight="bold" className="text-muted-foreground" />
+        <span className="font-semibold uppercase tracking-wide text-[11px] text-muted-foreground">
+          Convocatoria
+        </span>
+        {(alerta || aviso) && <Warning size={14} weight="fill" className={alerta ? 'text-destructive' : 'text-amber-600'} />}
+      </div>
+
+      {llevaPlazas && (
+        <div>
+          <span className="font-semibold text-sm">{Math.max(libres, 0)}</span>{' '}
+          {libres === 1 ? 'plaza libre' : 'plazas libres'} de {product.plazas_totales}
+          <span className="text-muted-foreground"> · {product.plazas_ocupadas} ocupadas</span>
+          {/* Sobrevendida: se dice, no se esconde. Enseñar un 0 tranquilo cuando
+              hay más matrículas que plazas es como se descubre tarde. */}
+          {libres < 0 && (
+            <span className="text-destructive font-semibold"> · {Math.abs(libres)} por encima del cupo</span>
+          )}
+        </div>
+      )}
+
+      {cierre && (
+        <div>
+          Cierre: <span className="font-semibold">{new Date(cierre).toLocaleDateString('es-ES')}</span>
+          {dias != null && (
+            <span className={cerrada ? 'text-destructive font-semibold' : 'text-muted-foreground'}>
+              {' · '}
+              {cerrada
+                ? `cerró hace ${Math.abs(dias)} ${Math.abs(dias) === 1 ? 'día' : 'días'}`
+                : dias === 0 ? 'cierra hoy' : `quedan ${dias} ${dias === 1 ? 'día' : 'días'}`}
+            </span>
+          )}
+        </div>
+      )}
+
+      <div className="text-[11px] text-muted-foreground">
+        Las ocupadas se cuentan de las ventas. Este es el número de ahora: compruébalo antes de cada envío.
+      </div>
     </div>
   );
 }
@@ -153,6 +230,13 @@ export default function ProductDetailPage() {
           <MetaPill icon={Calendar} label="Fecha inicio" value={product.fecha_inicio_texto} />
         </div>
       )}
+
+      {/* CONVOCATORIA · plazas y cierre (#86)
+          Va en su propio bloque y no como una pastilla más porque es el dato que
+          la gestora tiene que mirar ANTES de cada envío: el proceso comercial lo
+          pide en cuatro de sus cinco pasos y prohíbe expresamente arrastrar el
+          del mensaje anterior. */}
+      <ConvocatoriaCard product={product} />
 
       {/* URL info */}
       {product.url_info && (

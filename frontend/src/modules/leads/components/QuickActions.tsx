@@ -1,4 +1,7 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { abrirChatCrm } from '@/shared/lib/abrirChatCrm';
+import { toast } from '@/shared/hooks/useToast';
 import {
   WhatsappLogo, EnvelopeSimple, CalendarPlus, CheckCircle, Lightning, PencilSimple, Trash, Flag,
 } from '@phosphor-icons/react';
@@ -49,15 +52,29 @@ export default function QuickActions({
   projectName,
   onEditTemplates,
 }: Props) {
+  const navigate = useNavigate();
   const wa = lead.telefono ? cleanPhone(lead.telefono) : null;
   const [waMenuOpen, setWaMenuOpen] = useState(false);
 
-  function openWhatsappWithTemplate(tpl: WhatsappTemplate | null) {
+  // La plantilla se copia al portapapeles y la conversacion se abre DENTRO del
+  // CRM. Antes se lanzaba wa.me en otra pestaña: se salia del CRM, no quedaba
+  // registro, y con varias sesiones enlazadas abria la del navegador —que puede
+  // ser la personal de quien pulsa— en vez de la del CRM.
+  async function openWhatsappWithTemplate(tpl: WhatsappTemplate | null) {
     const text = tpl ? fillTemplate(tpl.text, { lead, projectName }) : '';
-    const url = `https://wa.me/${wa}${text ? `?text=${encodeURIComponent(text)}` : ''}`;
-    window.open(url, '_blank', 'noopener');
-    onLogInteraction?.(lead, 'whatsapp');
+    if (text) { try { await navigator.clipboard?.writeText(text); } catch { /* sin portapapeles */ } }
     setWaMenuOpen(false);
+    const destino = await abrirChatCrm({ leadId: lead.id, telefono: lead.telefono });
+    if (!destino) {
+      toast({
+        title: 'No se ha podido abrir el chat',
+        description: 'Comprueba en WhatsApp · Conexión que tu número sigue enlazado.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    onLogInteraction?.(lead, 'whatsapp');
+    navigate(destino);
   }
 
   return (

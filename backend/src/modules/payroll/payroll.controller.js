@@ -78,7 +78,7 @@ export const generatePeriod = async (req, res, next) => {
   try {
     const { project_id, user_id, year, month } = req.body || {};
     if (!project_id || !user_id || !year || !month) throw new AppError('project_id, user_id, year, month requeridos', 400, 'VALIDATION_ERROR');
-    const row = await model.generatePeriod({ projectId: project_id, userId: user_id, year, month, calledBy: req.user.id });
+    const row = await model.generatePeriod({ projectId: project_id, userId: user_id, year, month, calledBy: req.user.userId });
     if (!row) throw new AppError('Sin plan activo para este usuario', 404, 'NO_PLAN');
     res.json({ success: true, data: row });
   } catch (e) { next(e); }

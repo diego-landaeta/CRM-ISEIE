@@ -65,7 +65,22 @@ export async function update(req, res, next) {
     if (!parsed.success) {
       throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
     }
+    // Como estaba ANTES, para saber si pierde el acceso a WhatsApp.
+    const antes = await userService.getById(id).catch(() => null);
     const user = await userService.update(id, parsed.data);
+
+    // Si el cambio de rol le quita WhatsApp, se le desvincula el numero — pero
+    // sus conversaciones se quedan. El numero es suyo y no puede seguir
+    // enlazado a un CRM que ya no usa; las conversaciones con prospectos son de
+    // la empresa. Es el punto 3 de la tarea #68.
+    //
+    // No se espera al resultado ni se deja que rompa nada: cambiar un rol no
+    // puede fallar porque WhatsApp no conteste.
+    const wa = await import('../whatsapp/roles.js');
+    if (antes && wa.puedeTenerWhatsapp(antes) && !wa.puedeTenerWhatsapp(user)) {
+      wa.alPerderAcceso(id, `cambio de rol: ${antes.role} -> ${user.role}`).catch(() => {});
+    }
+
     res.json({ success: true, data: user });
   } catch (err) { next(err); }
 }
@@ -75,6 +90,12 @@ export async function deactivate(req, res, next) {
     const id = parseInt(req.params.id);
     if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
     const result = await userService.deactivate(id);
+
+    // Una baja tambien quita el acceso, y por el mismo motivo: quien ya no
+    // trabaja aqui no debe seguir con su numero enlazado.
+    const wa = await import('../whatsapp/roles.js');
+    wa.alPerderAcceso(id, 'baja del usuario').catch(() => {});
+
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
 }
@@ -163,5 +184,60 @@ export async function deleteAvatar(req, res, next) {
     }
     const updated = await userModel.update(id, { avatar_url: null, avatar_key: null });
     res.json({ success: true, data: updated });
+  } catch (err) { next(err); }
+}
+
+/**
+ * GET /api/users/mis-avisos — que avisos por correo tengo encendidos.
+ * PATCH /api/users/mis-avisos — encender o apagar uno.
+ *
+ * Cuarta subfase de la tarea #28. Cada persona gestiona LOS SUYOS: no hace falta
+ * ser admin, y nadie puede tocar los de otro — el usuario sale del testigo de
+ * sesion, no del cuerpo de la peticion.
+ *
+ * En la base se guarda solo lo APAGADO. Aqui se devuelve al reves —encendido si
+ * o no— porque es como se pregunta y como se pinta la casilla.
+ */
+const AVISOS = [
+  { aviso: 'lead_sin_tocar', titulo: 'Prospecto sin contactar',
+    detalle: 'Cuando te asignan uno y pasa media hora sin que lo toques.' },
+  { aviso: 'resumen_del_dia', titulo: 'Resumen del dia',
+    detalle: 'Al cerrar la jornada: que ha entrado, que has hecho y que queda.' },
+  { aviso: 'plan_de_manana', titulo: 'Plan de mañana',
+    detalle: 'Por la noche, lo que te espera al dia siguiente.' },
+  { aviso: 'reporte_semanal', titulo: 'Reporte semanal',
+    detalle: 'Los lunes: como fue la semana comparada con la anterior. Solo administracion.' },
+];
+
+export async function misAvisos(req, res, next) {
+  try {
+    const { query } = await import('../../shared/config/db.js');
+    const { rows } = await query(
+      'SELECT aviso FROM avisos_apagados WHERE user_id = $1', [req.user.userId]);
+    const apagados = new Set(rows.map((r) => r.aviso));
+    res.json({
+      success: true,
+      data: AVISOS.map((a) => ({ ...a, encendido: !apagados.has(a.aviso) })),
+    });
+  } catch (err) { next(err); }
+}
+
+export async function cambiarMiAviso(req, res, next) {
+  try {
+    const { aviso, encendido } = req.body || {};
+    if (!AVISOS.some((a) => a.aviso === aviso)) {
+      throw new AppError('Ese aviso no existe', 400, 'AVISO_DESCONOCIDO');
+    }
+    const { query } = await import('../../shared/config/db.js');
+    if (encendido) {
+      await query('DELETE FROM avisos_apagados WHERE user_id = $1 AND aviso = $2',
+        [req.user.userId, aviso]);
+    } else {
+      await query(
+        `INSERT INTO avisos_apagados (user_id, aviso) VALUES ($1, $2)
+         ON CONFLICT (user_id, aviso) DO NOTHING`,
+        [req.user.userId, aviso]);
+    }
+    res.json({ success: true, data: { aviso, encendido: Boolean(encendido) } });
   } catch (err) { next(err); }
 }

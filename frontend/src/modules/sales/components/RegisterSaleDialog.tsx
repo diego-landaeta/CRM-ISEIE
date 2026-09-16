@@ -18,6 +18,7 @@ const PAYMENT_METHODS = [
   { value: 'transferencia', label: 'Transferencia' },
   { value: 'tarjeta', label: 'Tarjeta' },
   { value: 'efectivo', label: 'Efectivo' },
+  { value: 'paypal', label: 'PayPal' },
   { value: 'fraccionado', label: 'Fraccionado' },
 ];
 
@@ -231,7 +232,7 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
       if (direccionFiscal.trim()) {
         body.direccion_fiscal = direccionFiscal.trim();
       }
-      const res = await client.post<{ sale_id: number; lead_id: number; retroactiva: boolean; duplicado: boolean }>('/sales', body);
+      const res = await client.post<{ sale_id: number; lead_id: number; retroactiva: boolean; duplicado: boolean }>('/ventas', body);
       const data = res.data;
       const desc = mode === 'existing'
         ? `Venta añadida al cliente existente${data.retroactiva ? ' (histórica)' : ''}`

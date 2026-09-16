@@ -31,8 +31,13 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:3005',
+        // Con VITE_API_TARGET se trabaja contra staging sin levantar backend
+        // ni base de datos. Por el proxy de Vite, asi que no hay CORS.
+        target: process.env.VITE_API_TARGET || 'http://localhost:3005',
         changeOrigin: true,
+        // La sesion viaja en cookie del dominio real: sin quitarle el dominio
+        // el navegador la tira y no se puede entrar.
+        cookieDomainRewrite: { '*': '' },
       },
     },
   },

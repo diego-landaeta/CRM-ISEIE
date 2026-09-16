@@ -16,6 +16,10 @@ interface Props {
   responsableId?: number | null;
   className?: string;
   title?: string;
+  /** Rango que manda desde la pantalla. Si viene, la tarjeta no pinta su
+      propio selector: el periodo se elige una sola vez, arriba. */
+  from?: string | null;
+  to?: string | null;
 }
 
 type Period = 'hoy' | 'semana' | 'mes' | 'custom';
@@ -60,14 +64,19 @@ const PERIODS: ReadonlyArray<{ key: Period; label: string }> = [
   { key: 'custom', label: 'Personalizado' },
 ];
 
-export default function CursosVendidosCard({ projectId, responsableId = null, className = '', title = 'Cursos vendidos' }: Props) {
-  const [period, setPeriod] = useState<Period>('hoy');
+export default function CursosVendidosCard({ projectId, responsableId = null, className = '', title = 'Cursos vendidos', from: fromProp = null, to: toProp = null }: Props) {
+  const mandaFuera = !!(fromProp && toProp);
+  // Arranca en el mes: al entrar interesa como va el mes, no si se ha vendido
+  // algo en las ultimas horas. Con 'hoy' la tarjeta salia en blanco casi
+  // siempre y parecia que el CRM no traia datos.
+  const [period, setPeriod] = useState<Period>('mes');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const { from, to } = useMemo(() => rangeFor(period, customFrom, customTo), [period, customFrom, customTo]);
+  const propio = useMemo(() => rangeFor(period, customFrom, customTo), [period, customFrom, customTo]);
+  const { from, to } = mandaFuera ? { from: fromProp as string, to: toProp as string } : propio;
   const customIncompleto = period === 'custom' && (!customFrom || !customTo);
 
   useEffect(() => {
@@ -77,7 +86,7 @@ export default function CursosVendidosCard({ projectId, responsableId = null, cl
     const params: Record<string, string | number> = { from, to, limit: 100 };
     if (projectId) params.projectId = projectId;
     if (responsableId) params.responsableId = responsableId;
-    client.get<Row[]>('/sales/top-products', { params })
+    client.get<Row[]>('/ventas/top-products', { params })
       .then((r) => { if (!cancelled) setRows(Array.isArray(r?.data) ? r.data : []); })
       .catch(() => { if (!cancelled) setRows([]); })
       .finally(() => { if (!cancelled) setLoading(false); });
@@ -94,8 +103,10 @@ export default function CursosVendidosCard({ projectId, responsableId = null, cl
           <GraduationCap size={16} weight="duotone" className="text-primary" />
           {title}
         </h3>
-        <div className="flex flex-wrap gap-1">
-          {PERIODS.map((p) => (
+        {/* Si el periodo lo manda la pantalla, la tarjeta no pinta su propio
+            selector: se elige una sola vez, arriba. */}
+        <div className="flex flex-wrap gap-1" hidden={mandaFuera}>
+          {!mandaFuera && PERIODS.map((p) => (
             <button
               key={p.key}
               type="button"
@@ -110,7 +121,7 @@ export default function CursosVendidosCard({ projectId, responsableId = null, cl
         </div>
       </div>
 
-      {period === 'custom' && (
+      {!mandaFuera && period === 'custom' && (
         <div className="flex items-center gap-2 mb-3 text-xs">
           <input type="date" value={customFrom} max={customTo || undefined} onChange={(e) => setCustomFrom(e.target.value)}
             className="h-8 px-2 rounded border border-border bg-background text-xs" />

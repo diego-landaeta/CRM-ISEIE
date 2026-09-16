@@ -11,7 +11,7 @@ const ACTIONS = [
     action: () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true })),
   },
   { label: 'Nuevo prospecto', icon: Users,        to: '/leads' },
-  { label: 'Nueva venta',     icon: Receipt,      to: '/sales' },
+  { label: 'Nueva venta',     icon: Receipt,      to: '/ventas' },
   { label: 'Nueva matrícula', icon: GraduationCap, to: '/matriculas' },
 ];
 

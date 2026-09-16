@@ -474,6 +474,7 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
                   <option value="tarjeta_stripe">Tarjeta (Stripe)</option>
                   <option value="efectivo">Efectivo</option>
                   <option value="bizum">Bizum</option>
+                  <option value="paypal">PayPal</option>
                   <option value="otro">Otro</option>
                 </select>
               </div>

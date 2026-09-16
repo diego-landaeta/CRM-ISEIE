@@ -1,0 +1,69 @@
+# Despliegue desde GitHub, para cuando no se puede entrar por SSH desde casa.
+#
+# Existe porque una VPN puede interceptar todo lo que no sea web y dejar el SSH
+# sin pasar: da igual el nodo y da igual el pais. Las maquinas de GitHub no
+# tienen ese problema, asi que entran ellas.
+#
+# Se lanza a mano —nunca solo— desde Actions o con `gh workflow run`.
+name: Desplegar
+
+on:
+  workflow_dispatch:
+    inputs:
+      entorno:
+        description: A donde se sube
+        required: true
+        default: staging
+        type: choice
+        options: [staging, produccion]
+      solo_backend:
+        description: Solo el backend (el frontal necesita compilarse antes)
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  desplegar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Preparar el acceso
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq sshpass rsync
+
+      - name: Elegir destino
+        id: destino
+        run: |
+          if [ "${{ inputs.entorno }}" = "produccion" ]; then
+            echo "ruta=/opt/crm-iseie"            >> $GITHUB_OUTPUT
+            echo "app=crm-iseie-api"              >> $GITHUB_OUTPUT
+            echo "puerto=3005"                    >> $GITHUB_OUTPUT
+          else
+            echo "ruta=/opt/crm-iseie-staging"    >> $GITHUB_OUTPUT
+            echo "app=crm-iseie-api-staging"      >> $GITHUB_OUTPUT
+            echo "puerto=3006"                    >> $GITHUB_OUTPUT
+          fi
+
+      - name: Subir el backend
+        env:
+          SSHPASS: ${{ secrets.SSH_PASS }}
+        run: |
+          # Se copia src entero menos lo que no debe viajar. El .env del servidor
+          # NO se toca nunca: ahi viven sus claves.
+          sshpass -e rsync -az --delete \
+            --exclude='.env*' --exclude='node_modules' --exclude='uploads' \
+            -e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
+            backend/src/ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ steps.destino.outputs.ruta }}/src/
+
+      - name: Reiniciar y comprobar
+        env:
+          SSHPASS: ${{ secrets.SSH_PASS }}
+        run: |
+          sshpass -e ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
+            "pm2 restart ${{ steps.destino.outputs.app }} --update-env >/dev/null 2>&1; sleep 8; \
+             printf 'salud: '; curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:${{ steps.destino.outputs.puerto }}/api/health; \
+             pm2 logs ${{ steps.destino.outputs.app }} --err --lines 12 --nostream --no-color 2>&1 | grep -iE 'error|cannot find' | grep -v Deprecation | tail -3 || true" \
+            | tee salida.txt
+          # Si la API no contesta 200, el despliegue se da por fallido.
+          grep -q 'salud: 200' salida.txt || { echo '::error::La API no responde 200 despues del despliegue'; exit 1; }

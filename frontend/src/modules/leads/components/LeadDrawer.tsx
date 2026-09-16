@@ -541,7 +541,7 @@ function EmailsTab({ leadId, onEnroll }) {
   const fetchRuns = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await client.get(`/email-sequences/runs?leadId=${leadId}`);
+      const res = await client.get(`/secuencias-email/runs?leadId=${leadId}`);
       if (res.success) setRuns(res.data || []);
     } catch {} finally { setLoading(false); }
   }, [leadId]);
@@ -550,7 +550,7 @@ function EmailsTab({ leadId, onEnroll }) {
 
   async function stop(runId) {
     try {
-      await client.post(`/email-sequences/runs/${runId}/stop`);
+      await client.post(`/secuencias-email/runs/${runId}/stop`);
       toast({ title: 'Secuencia detenida' });
       fetchRuns();
     } catch (err) {

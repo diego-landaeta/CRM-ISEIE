@@ -1,0 +1,307 @@
+Proceso comercial · ISEIE e ISEIH
+=================================
+
+Texto extraido de docs/proceso-comercial.pdf, para poder buscarlo con grep
+sin abrir el documento. El PDF es el original y manda.
+
+El documento dice ISEIE, pero aplica a los dos CRMs: solo cambian los datos
+de la marca (remitente, enlaces, nombre de la institucion), no los pasos.
+
+==========================================================================
+
+ISEIE · DEPARTAMENTO COMERCIAL
+El proceso comercial de un vistazo
+Cinco columnas, cinco momentos. Cada lead avanza de izquierda a derecha y cada mensaje prepara al siguiente. Abajo, las plantillas de cada día.
+01
+LUNES O MARTES
+Primer contacto e
+información
+WHATSAPP CORREO
+NO INCLUIR TODAVÍA
+Los pasos de admisión y el trámite: solo
+cuando confirme interés.
+02
+MIÉRCOLES O JUEVES
+Prueba social · Opiniones
+LLAMADA WHATSAPP
+SI NO TIENE OPINIONES
+Enviar captura de la vista general de
+Opynio y pedir internamente que se cree la
+opinión de ese curso.
+03
+VIERNES
+Última plaza y facilidades de
+pago
+LLAMADA WHATSAPP CORREO
+LÍMITE
+El 5 % solo aplica en máster y diplomado, y
+se ofrece aquí, no antes.
+04
+LUN/MAR SEMANA SIGUIENTE
+Convocatoria de becas
+CETLAT
+LLAMADA WHATSAPP CORREO
+INTERNO · NO SE COMPARTE
+Formación nueva: máx. 40 %. Formación ya
+habilitada: hasta 70 %, reservado para
+quien casi no ha respondido.
+0X
+FINAL DE MES
+Seguimiento de toda la base
+WASAPI
+OBJETIVO
+Mantener el contacto vivo hasta la
+siguiente convocatoria.
+Los días 2, 3 y 4 empiezan con una llamada por centralita virtual. Si falla,
+WhatsApp del día y llamada por WhatsApp. El día 1 solo se llama si la persona lo
+pide; el seguimiento mensual, no.
+Los mensajes NO deben ser largos. Mejor dos o tres mensajes cortos seguidos
+que un bloque enorme que nadie lee.
+Natural antes que literal. Son una base para que cada uno las haga a su manera:
+adáptalas y escribe como hablas.
+Personaliza un poco, no en exceso. Cambia la forma de decirlo, nunca la
+estructura, los datos ni los importes.
+Las horas lectivas y el diploma que obtiene se indican siempre que se envía
+información de la formación.
+El nº de plazas disponibles va en todas las plantillas y se comprueba antes de
+cada envío: nunca se arrastra el dato del mensaje anterior.
+Usa siempre el nombre de la persona y el nombre exacto de la formación. Lo
+marcado en [amarillo]  se sustituye antes de enviar.
+Saludo ofreciendo correo, llamada o
+WhatsApp. Mejor en nota de voz
+Si elige un medio, seguimos por ese
+medio. Solo se llama si pide llamada
+Si no contesta en 1–2 h → información
+por correo y WhatsApp
+Ficha de la formación: inicio, duración
+y horas, diploma que obtiene,
+inversión, plazas y cierre de
+convocatoria
+Dossier de la formación + quedar
+disponible para dudas
+Correo con los 3 adjuntos: dossier, guía
+de Moodle y homologaciones
+Avisar por WhatsApp de que le hemos
+dejado un correo
+Llamada por centralita virtual. Si falla
+→ WhatsApp del día y llamada por
+WhatsApp
+Captura de una opinión de la
+formación que solicitó
+Link de Opynio con todas nuestras
+opiniones
+Mensaje aparte: ¿pudiste revisar la
+información?
+Llamada por centralita virtual. Si falla
+→ WhatsApp del día y llamada por
+WhatsApp
+Cierre próximo: indicar las plazas que
+quedan y reservar una con
+financiamiento
+Explicar el plan de pagos concreto
+5 % de descuento por pago al contado
+Enviar el detalle por correo, ampliado
+Llamada por centralita virtual. Si falla
+→ WhatsApp del día y llamada por
+WhatsApp
+Beca de hasta el 40 % por la alianza con
+CETLAT
+Enviar el enlace de solicitud:
+cetlat.org/solicitud-beca
+Evaluación en 48–72 h
+Solicitud incompleta = no entra a
+evaluación
+Mensaje a todos los contactos
+asignados en el mes
+Sin presión de venta: quedar
+disponible para dudas o ampliar
+información
+Plantillas de mensaje
+Base de contenido y orden. Reescríbelas con tus palabras antes de enviarlas, sin tocar la estructura ni los datos.
+DÍA 1 · SALUDO (O NOTA DE VOZ)
+Hola, buenas tardes. Soy [Asesor] , asesora comercial de ISEIE.
+En respuesta a tu solicitud de información sobre el [Máster en X] , puedo
+enviarte los detalles por correo, agendar una llamada a la hora que prefieras, o
+seguir por este medio.
+¿Qué opción te resulta más cómoda? 🎓
+Funciona mejor en nota de voz: sube mucho la tasa de respuesta.
+DÍA 1 · FICHA DE LA FORMACIÓN
+[Máster en X]  👨🏻‍🎓
+Información general
+Inicio: [11 de agosto de 2026]
+Duración: [12 meses]  · [nº]  horas lectivas
+Modalidad: Virtual
+Titulación: Diploma de [nº]  horas
+¿Qué incluye? ✨
+1. Plataforma educativa: acceso al campus virtual.
+2. Experiencia digital: 100 % online.
+3. Tutor asignado: acompañamiento en tus dudas.
+4. Chat con el tutor y correo electrónico.
+5. Ritmo personalizado: avanzas a tu propio ritmo.
+6. Diploma de [nº]  horas expedido por ISEIE Innovation School (institución
+europea), acreditado y apostillado a nivel internacional por La Haya (opcional).
+Inversión total: [1.225 € / 1.400 $]
+Plazas disponibles: [nº]
+Cierre de convocatoria: [27 de julio]  o hasta agotar plazas.
+Después: dossier de la formación y «cualquier duda me escribes».
+DÍA 1 · CORREO CON INFORMACIÓN COMPLETA
+ASUNTO Información y dossier · [Máster en X]  — ISEIE Innovation School
+Hola [Nombre] :
+Soy [Asesor] , asesora comercial de ISEIE Innovation School. Te envío la
+información del [Máster en X] , tal y como me pediste.
+DATOS DE LA FORMACIÓN
+· Inicio: [fecha]
+· Duración: [12 meses]  · [nº]  horas lectivas
+· Modalidad: 100 % online, con ritmo personalizado
+· Inversión total: [1.225 € / 1.400 $]
+· Plazas disponibles: [nº]  de [total]
+· Cierre de convocatoria: [fecha]  o hasta agotar plazas
+QUÉ INCLUYE
+· Acceso al campus virtual durante toda la formación
+· Tutor asignado, con chat directo y soporte por correo
+· Materiales descargables y evaluaciones en línea
+TITULACIÓN QUE OBTIENES
+· Diploma de [Máster en X]
+· Carga lectiva certificada: [nº]  horas
+· Expedido por ISEIE Innovation School, institución europea
+· Acreditación y apostilla de La Haya a nivel internacional (opcional)
+DOCUMENTOS ADJUNTOS
+1. Dossier de la formación — programa, módulos y salidas profesionales
+2. Guía del campus virtual (Moodle) — cómo accedes y cómo se estudia
+3. Dossier de homologaciones y acreditaciones de ISEIE
+Quedo pendiente por si prefieres que agendemos una llamada o resolvemos las
+dudas por WhatsApp, lo que te resulte más cómodo.
+Un saludo,
+[Asesor]  · Asesora comercial
+ISEIE Innovation School
+[teléfono]  · [correo]
+Los tres adjuntos son obligatorios. Sin los tres, el correo no sale.
+DÍA 1 · AVISO DE CORREO ENVIADO
+Te acabo de dejar un correo con toda la información y los dossiers 📩
+Échale un ojo cuando puedas y revisa también la carpeta de spam por si acaso.
+DÍA 2 · OPINIONES (3 MENSAJES)
+1 ▸  Hola [Nombre]  👋
+Ayer se me olvidó enviarte una de nuestras últimas opiniones sobre el [máster
+/ diplomado / curso en X] .
+(enviar la captura justo después)
+2 ▸  Te dejo por aquí el link para que puedas revisarlas todas:
+https://web.opynio.com/es/empresa/iseie
+3 ▸  Por otro lado, ¿pudiste revisar toda la información de la formación?
+El tercero va separado: es el que abre conversación.
+DÍA 3 · ÚLTIMA PLAZA Y PAGO
+1 ▸  Buenos días [Nombre]  🙂
+Estamos próximos al cierre de convocatoria: quedan [nº]  plazas en el grupo
+de [mes]  y mi superior me ha autorizado a reservarte una de ellas con
+financiamiento.
+2 ▸  Funcionaría así:
+· Reserva de matrícula: [importe]
+· [nº]  cuotas de [importe] , sin intereses
+· Primera cuota: [fecha]
+También tienes la opción de pago al contado con un 5 % de descuento.
+El 5 % solo aplica en máster y diplomado.
+DÍA 3 · CORREO DE CONDICIONES
+ASUNTO Última plaza y condiciones de pago · [Máster en X]
+Hola [Nombre] :
+Te escribo para confirmarte por escrito lo que hablamos por WhatsApp.
+Estamos a [X]  días del cierre de convocatoria, quedan [nº]  plazas en el grupo
+de [mes de inicio]  y he podido reservarte una de ellas.
+OPCIÓN 1 · PAGO FRACCIONADO
+· Reserva de matrícula: [importe]
+· [nº]  cuotas mensuales de [importe] , sin intereses
+· Primera cuota: [fecha]
+· El acceso al campus se activa con la reserva
+· Plazas disponibles a día de hoy: [nº]
+OPCIÓN 2 · PAGO AL CONTADO
+· Importe con 5 % de descuento: [importe final]
+· Ahorro respecto al precio de convocatoria: [importe]
+· Aplicable a máster y diplomado
+QUÉ NECESITO PARA RESERVAR LA PLAZA
+· Confirmación de la opción que prefieres
+· Documento de identidad y titulación previa (si aplica)
+· [Método de pago disponible en tu país]
+DOCUMENTOS ADJUNTOS
+1. Condiciones de matrícula y plan de pagos
+2. Dossier de la formación
+Si me confirmas hoy, te reservo la plaza sin compromiso hasta [fecha] .
+Un saludo,
+[Asesor]  · Asesora comercial
+ISEIE Innovation School
+DÍA 4 · CONVOCATORIA DE BECAS
+Buenos días [Nombre]  👋
+Hemos abierto una convocatoria de becas de hasta el 40 % en tu formación.
+Gracias a nuestra alianza con CETLAT (Consejo Educativo Trasatlántico Latino-
+Europeo), puedes solicitar una beca en tu matrícula.
+🔗  Postula aquí: https://cetlat.org/solicitud-beca/
+⏳  El proceso de evaluación tarda entre 48 y 72 horas.
+Recuérdale que debe rellenar todos los campos.
+DÍA 4 · CORREO DE SOLICITUD DE BECA
+ASUNTO Convocatoria de becas CETLAT · [Máster en X]
+Hola [Nombre] :
+Te escribo porque se ha abierto una convocatoria de becas que puede aplicarse
+a tu formación.
+LA BECA
+· Entidad: CETLAT, Consejo Educativo Trasatlántico Latino-Europeo, con el que
+ISEIE mantiene una alianza
+· Cobertura: hasta un 40 % del importe de la matrícula
+· Formación: [Máster en X]  — diploma de [nº]  horas, con [nº]  plazas
+disponibles
+· Resolución: entre 48 y 72 horas desde el envío de la solicitud
+CÓMO SOLICITARLA
+1. Entra en https://cetlat.org/solicitud-beca/
+2. Rellena el formulario completo: datos personales, formación solicitada y
+motivación
+3. Envíalo y espera la resolución por correo
+Importante: las solicitudes incompletas no entran a evaluación, así que revisa
+que no quede ningún campo vacío.
+DOCUMENTOS ADJUNTOS
+1. Bases de la convocatoria de becas CETLAT
+2. Dossier de la formación
+En cuanto tengas la resolución, avísame y cerramos la matrícula con el importe
+ya ajustado.
+Un saludo,
+[Asesor]  · Asesora comercial
+ISEIE Innovation School
+DÍA X · SEGUIMIENTO DE FIN DE MES
+Hola [Nombre]  😊
+Soy [Asesor] , de ISEIE. Te escribo solo para saber cómo va todo.
+Seguimos con matrícula abierta en [la formación] , quedan [nº]  plazas, y
+estoy por aquí por si tienes alguna duda o quieres que te amplíe la información.
+El mensaje más corto de la secuencia. Si se alarga, vuelve a parecer una venta.
+Reglas que no se saltan
+Llamada
+Días 2, 3 y 4: se arranca con llamada por centralita
+virtual; si falla, WhatsApp y llamada por WhatsApp. Día
+1 solo a petición; mensual sin llamada.
+Horas y diploma
+Toda la información de la formación lleva la carga
+lectiva en horas y el diploma que se obtiene.
+Plazas
+El nº de plazas disponibles aparece en el día 1, el día 3,
+el día 4 y el seguimiento mensual. Se comprueba antes
+de cada envío.
+Longitud
+Mensajes cortos. Si no cabe en la pantalla del móvil sin
+desplazarse, parte el mensaje.
+Tono
+Natural antes que literal. La plantilla marca el orden;
+las palabras las pones tú.
+Personalización
+Un poco, no en exceso: cambia la forma de decirlo, no
+la estructura ni los datos.
+Admisión
+Los pasos del trámite solo salen cuando la persona ha
+dicho que está interesada.
+Correo
+Si no lo tenemos, se pide el día 1. Sin correo no hay
+guía de Moodle ni homologaciones.
+Doble canal
+Cada envío por correo se avisa por WhatsApp. Nunca
+damos por hecho que lo ha visto.
+Descuento
+El 5 % de contado es del día 3 y solo en máster y
+diplomado.
+Beca
+CETLAT es el último recurso: día 4 y solo sin cierre.
+Opiniones
+Formación sin opiniones publicadas → avisar para que
+se cree. No lo dejes pasar.

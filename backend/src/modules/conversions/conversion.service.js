@@ -18,10 +18,42 @@ async function triggerSequences(triggerEvent, leadId, projectId) {
   }
 }
 
+
+// Un lead no puede comprar antes de existir. Si la fecha de la venta es la
+// buena, entonces la que esta mal es la de entrada, y esa no la arregla quien
+// registra la venta: por eso el mensaje manda a soporte en vez de dejar pasar
+// el dato o pedir que lo cambie por su cuenta.
+async function validarFechaNoAnteriorAlLead(leadId, fechaConversion) {
+  if (!leadId || !fechaConversion) return;
+  const { rows } = await query(
+    `SELECT COALESCE(fecha_solicitud, created_at)::date AS entrada FROM leads WHERE id = $1`,
+    [leadId]
+  );
+  const entrada = rows[0]?.entrada;
+  if (!entrada) return;
+  const venta = new Date(fechaConversion);
+  const alta = new Date(entrada);
+  if (Number.isNaN(venta.getTime())) return;
+  if (venta < alta) {
+    const dia = (d) => new Date(d).toLocaleDateString('es-ES');
+    throw new AppError(
+      `La fecha de la venta (${dia(venta)}) es anterior a la fecha de entrada del prospecto ` +
+      `(${dia(alta)}). Revisa la fecha del pago. Si la correcta es la de la venta, ` +
+      `la que esta mal es la de entrada: avisa a soporte para que la corrijan.`,
+      400, 'FECHA_ANTERIOR_AL_LEAD'
+    );
+  }
+}
+
 export async function create(data, userId) {
   // Validar que el lead pertenece al project_id
   const ok = await conversionModel.leadBelongsToProject(data.lead_id, data.project_id);
   if (!ok) throw new AppError('El lead no pertenece a este proyecto', 400, 'LEAD_PROJECT_MISMATCH');
+
+  // Un lead no puede comprar antes de llegar. Sin esto se colaban ventas con
+  // fecha anterior a la entrada y las tasas de conversion salian sin sentido:
+  // 220 fichas acabaron asi, con entrada de julio y venta de junio.
+  await validarFechaNoAnteriorAlLead(data.lead_id, data.fecha_conversion);
 
   // Auto-lookup de producto_contratado_id si llega el texto pero no el id.
   // Evita el bug histórico de tener `producto_contratado` (varchar) sin FK al
@@ -55,6 +87,25 @@ export async function create(data, userId) {
 
   const conv = await conversionModel.create({ ...data, changed_by: userId });
 
+  // Si al cliente ya se le habia emitido una PROFORMA antes de registrar la venta,
+  // se engancha ahora. Sin esto la proforma quedaba suelta y no aparecia en su ficha
+  // (el panel busca los documentos DE la venta), aunque estuviera en el cliente correcto.
+  // Solo se hace si hay UNA sola proforma suelta: con varias no se adivina cual es.
+  try {
+    const { query } = await import('../../shared/config/db.js');
+    const { rows } = await query(
+      `SELECT id FROM invoices
+        WHERE lead_id = $1 AND tipo = 'proforma' AND conversion_id IS NULL AND estado <> 'cancelada'`,
+      [data.lead_id]
+    );
+    if (rows.length === 1) {
+      await query(`UPDATE invoices SET conversion_id = $2, updated_at = NOW() WHERE id = $1`, [rows[0].id, conv.id]);
+      logger.info({ conversionId: conv.id, invoiceId: rows[0].id }, 'proforma suelta enganchada a la venta nueva');
+    }
+  } catch (err) {
+    logger.warn({ err: err.message }, 'enganche de proforma suelta fallo (no bloqueante)');
+  }
+
   // Hook: crear comision automaticamente si hay regla
   commissionModel.createCommissionForConversion(conv.id).catch(err =>
     logger.warn({ err: err.message, conversionId: conv.id }, 'createCommission failed (non-blocking)')
@@ -77,12 +128,54 @@ export async function create(data, userId) {
 // - Con paymentInfo {paymentId, importe} → factura por ese abono.
 // - Sin paymentInfo (legacy) → factura por el total de la conversión.
 export function autoInvoice(conversionId, userId = null, paymentInfo = null) {
-  import('../invoices/invoices.model.js')
-    .then((m) => (paymentInfo?.paymentId
-      ? m.emitirFacturaDePago(conversionId, paymentInfo, userId)
-      : m.autoEmitirPorPago(conversionId, userId)))
-    .then((inv) => { if (inv?.codigo) logger.info({ conversionId, paymentId: paymentInfo?.paymentId, invoiceId: inv.id, codigo: inv.codigo }, 'auto-factura por pago'); })
-    .catch((err) => logger.warn({ err: err.message, conversionId }, 'auto-factura por pago falló (no bloqueante)'));
+  (async () => {
+    // El cobro se asocia siempre, pero la factura espera a que la facturacion
+    // este al dia hasta esa fecha. Si no, la numeracion se adelantaria a quien
+    // esta facturando a mano y ya no habria forma de recolocarla.
+    if (paymentInfo?.paymentId) {
+      try {
+        const { rows } = await query(
+          `SELECT cp.fecha::text AS fecha, c.project_id
+             FROM conversion_payments cp
+             JOIN conversions c ON c.id = cp.conversion_id
+            WHERE cp.id = $1`,
+          [paymentInfo.paymentId]
+        );
+        const pg = rows[0];
+        if (pg) {
+          const invSrv = await import('../invoices/invoices.service.js');
+          const ok = await invSrv.puedeFacturarAhora(pg.project_id, pg.fecha, paymentInfo.paymentId);
+          if (!ok) {
+            logger.info({ conversionId, paymentId: paymentInfo.paymentId, fecha: pg.fecha },
+              'factura en espera: va a la cola, hay cobros anteriores sin facturar');
+            return;
+          }
+        }
+      } catch (err) {
+        logger.warn({ err: err.message }, 'no se pudo comprobar el corte de facturacion, se factura igual');
+      }
+    }
+    const m = await import('../invoices/invoices.model.js');
+
+    // Quien registra la venta no siempre pone los numeros. Si no puede, el cobro
+    // se queda en la cola: asi la gestora completa los datos fiscales del cliente
+    // con calma y quien factura emite despues, ya con los datos buenos. Antes se
+    // emitia en el acto y salian facturas numeradas a nombre del relleno con el
+    // que se crea el lead desde WhatsApp.
+    if (!(await m.puedeEmitirFactura(userId))) {
+      logger.info({ conversionId, userId, paymentId: paymentInfo?.paymentId },
+        'factura no emitida: quien registro la venta no pone numeros; el cobro queda en la cola');
+      return;
+    }
+
+    const inv = paymentInfo?.paymentId
+      ? await m.emitirFacturaDePago(conversionId, paymentInfo, userId)
+      : await m.autoEmitirPorPago(conversionId, userId);
+    if (inv?.codigo) {
+      logger.info({ conversionId, paymentId: paymentInfo?.paymentId, invoiceId: inv.id, codigo: inv.codigo },
+        'auto-factura por pago');
+    }
+  })().catch((err) => logger.warn({ err: err.message, conversionId }, 'auto-factura por pago fallo (no bloqueante)'));
 }
 
 export async function getById(id) {
@@ -93,6 +186,10 @@ export async function getById(id) {
 
 export async function listByLead(leadId) {
   return await conversionModel.findByLead(leadId);
+}
+
+export async function listProductos(filters) {
+  return await conversionModel.listProductos(filters);
 }
 
 export async function list(filters) {
@@ -114,9 +211,18 @@ export async function update(id, fields) {
 }
 
 export async function addPayment(conversionId, data) {
-  const result = await conversionModel.addPayment(conversionId, data);
+  const { permitir_duplicado, ...pago } = data || {};
+  const result = await conversionModel.addPayment(conversionId, pago,
+    { allowDuplicate: !!permitir_duplicado });
   if (result.error === 'NOT_FOUND') throw new AppError('Conversion no encontrada', 404, 'CONVERSION_NOT_FOUND');
   if (result.error === 'OVERPAY') throw new AppError('El importe excede el pendiente', 400, 'OVERPAY');
+  if (result.error === 'DUPLICATE') {
+    const d = result.existing;
+    throw new AppError(
+      `Ya hay un pago de ${Number(d.importe).toFixed(2)} EUR el ${String(d.fecha).slice(0, 10)} en esta venta. `
+      + 'Si de verdad son dos cobros distintos, marca la casilla de duplicado permitido.',
+      409, 'DUPLICATE_PAYMENT');
+  }
   // Recalcular comision en cada pago (importe_base = importe_pagado actualizado)
   commissionModel.recalculateCommission(conversionId).catch(err =>
     logger.warn({ err: err.message, conversionId }, 'recalculateCommission failed (non-blocking)')

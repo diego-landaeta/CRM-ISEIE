@@ -127,6 +127,12 @@ export async function create(req, res, next) {
     // Facturas de abono (rectificativas): admin/superadmin o una gestora con permiso
     // factura_manager (sobre sus propias ventas).
     const esAdmin = req.user?.role === 'admin' || req.user?.role === 'superadmin';
+    // Proforma de una gestora: se queda esperando el visto bueno de quien
+    // lleva la facturacion. No gasta numero mientras tanto.
+    if (d.tipo === 'proforma' && !esAdmin) {
+      const mandaEllaMisma = await model.esFacturaManager(req.user?.userId);
+      if (!mandaEllaMisma) d.requiereAprobacion = true;
+    }
     if (d.tipo === 'rectificativa' && !esAdmin) {
       const puede = req.user?.role === 'gestor' && await model.esFacturaManager(req.user.userId);
       if (!puede) throw new AppError('No tienes permiso para emitir facturas de abono.', 403, 'FORBIDDEN');
@@ -144,6 +150,9 @@ export async function create(req, res, next) {
     // REGLA: una conversión no puede tener dos proformas. Si ya existe una activa,
     // se bloquea la segunda emisión (evita duplicados y quemar correlativo fiscal).
     if (d.conversionId && d.tipo === 'proforma' && !d.borrador) {
+      if (!(await model.conversionSinPago(d.conversionId))) {
+        throw new AppError('Esta venta ya tiene pagos registrados. No se puede emitir una proforma después del primer cobro.', 409, 'PROFORMA_WITH_PAYMENT');
+      }
       const existente = await model.proformaActivaDeConversion(d.conversionId);
       if (existente) {
         throw new AppError(`Esta venta ya tiene la proforma ${existente.codigo}. Anúlala antes de emitir otra.`, 409, 'PROFORMA_DUPLICADA');
@@ -160,10 +169,20 @@ export async function create(req, res, next) {
       ? (d.leyendaIva || 'Operación exenta de IVA conforme a la normativa aplicable.')
       : (d.leyendaIva || null);
 
+    // Doble moneda: los conceptos se teclean en la divisa, pero la contabilidad va en
+    // EUROS. El total calculado pasa a ser el importe en divisa (solo presentación) y
+    // el total/base/IVA se rehacen con el importe en euros que indicó la gestora.
+    const moneda = (d.moneda || 'EUR').toUpperCase();
+    const enDivisa = moneda !== 'EUR' && d.totalEur != null;
+    const eur = service.repartirEnEuros({ totalEur: d.totalEur, ivaPct, ivaIncluido: d.ivaIncluido });
+
     const inv = await model.create({
       ...d,
-      ivaPct, baseImponible, ivaImporte, total, leyendaIva,
-      moneda: d.moneda || 'EUR',
+      ivaPct, leyendaIva, moneda,
+      baseImponible: enDivisa ? eur.baseImponible : baseImponible,
+      ivaImporte:    enDivisa ? eur.ivaImporte    : ivaImporte,
+      total:         enDivisa ? eur.total         : total,
+      totalDivisa:   enDivisa ? total             : null,
     }, req.user?.userId);
     res.json({ success: true, data: inv });
   } catch (e) {
@@ -205,12 +224,85 @@ export async function corregir(req, res, next) {
       const { baseImponible, ivaImporte, total } = service.calcularImportes({ items: d.items, ivaPct, ivaIncluido: d.ivaIncluido });
       d.baseImponible = baseImponible; d.ivaImporte = ivaImporte; d.total = total; d.ivaPct = ivaPct;
       d.leyendaIva = exento ? (d.leyendaIva || 'Operación exenta de IVA conforme a la normativa aplicable.') : (ivaPct === 0 ? d.leyendaIva : null);
+      // Doble moneda: lo tecleado en la divisa va a total_divisa (presentación) y la
+      // contabilidad se rehace con el importe en euros indicado a mano.
+      if ((d.moneda || 'EUR').toUpperCase() !== 'EUR' && d.totalEur != null) {
+        const eur = service.repartirEnEuros({ totalEur: d.totalEur, ivaPct, ivaIncluido: d.ivaIncluido });
+        d.totalDivisa = total;
+        d.baseImponible = eur.baseImponible; d.ivaImporte = eur.ivaImporte; d.total = eur.total;
+      } else {
+        d.totalDivisa = null;
+      }
     }
-    delete d.exento;
+    delete d.exento; delete d.totalEur;
+
+    // Un ABONO se guarda siempre en negativo, venga como venga.
+    //
+    // Quien corrige una rectificativa teclea importes en positivo —es lo natural,
+    // y es lo que se ve en el papel— pero el dato tiene que seguir restando en
+    // los informes. Se fuerza aqui y no en la pantalla: asi da igual desde donde
+    // llegue la correccion, el signo nunca depende de que el cliente acierte.
+    const actual = await model.findById(id);
+    if (actual?.tipo === 'rectificativa') {
+      const neg = (n) => -Math.abs(Number(n || 0));
+      if (Array.isArray(d.items)) {
+        d.items = d.items.map((it) => ({
+          ...it,
+          precio_unitario: neg(it.precio_unitario ?? it.precio ?? 0),
+          ...(it.subtotal != null ? { subtotal: neg(it.subtotal) } : {}),
+        }));
+      }
+      for (const k of ['baseImponible', 'ivaImporte', 'total', 'totalDivisa']) {
+        if (d[k] != null) d[k] = neg(d[k]);
+      }
+    }
+
     const inv = await model.updateBorrador(id, d, { soloBorrador: false });
     res.json({ success: true, data: inv });
   } catch (e) {
     logger.error({ e: e.message }, 'corregir factura failed');
+    next(e);
+  }
+}
+
+// PATCH /:id/fechas — cambiar SOLO la fecha de emisión y/o de pago de una factura.
+// Para admins y para usuarios con el permiso editar_fechas_factura (que solo pueden eso).
+export async function updateFechas(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    if (!(await model.puedeEditarFechas(req.user.userId, req.user.role))) {
+      throw new AppError('No tienes permiso para cambiar fechas de facturas.', 403, 'FORBIDDEN');
+    }
+    const { fechaEmision = null, fechaPago = null } = req.body || {};
+    const okFecha = (v) => v == null || /^\d{4}-\d{2}-\d{2}$/.test(String(v));
+    if (!okFecha(fechaEmision) || !okFecha(fechaPago)) {
+      throw new AppError('Fecha inválida (formato YYYY-MM-DD).', 400, 'BAD_DATE');
+    }
+    if (fechaEmision == null && fechaPago == null) {
+      throw new AppError('Indica al menos una fecha.', 400, 'NO_DATE');
+    }
+    const inv = await model.updateFechas(id, { fechaEmision, fechaPago });
+    res.json({ success: true, data: inv });
+  } catch (e) {
+    logger.error({ e: e.message }, 'updateFechas failed');
+    next(e);
+  }
+}
+
+// PATCH /:id/asociar — Opción B: asociar una factura existente a una venta del cliente.
+export async function asociarVenta(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    if (!(await model.puedeGestionarFactura(req.user.userId, req.user.role, id))) {
+      throw new AppError('No tienes permiso para gestionar esta factura.', 403, 'FORBIDDEN');
+    }
+    const conversionId = Number(req.body?.conversionId);
+    if (!conversionId) throw new AppError('Falta la venta a asociar.', 400, 'NO_CONVERSION');
+    const inv = await model.asociarVenta(id, conversionId);
+    if (!inv) throw new AppError('La venta no existe o es de otro proyecto.', 404, 'NOT_FOUND');
+    res.json({ success: true, data: inv });
+  } catch (e) {
+    logger.error({ e: e.message }, 'asociarVenta failed');
     next(e);
   }
 }
@@ -236,19 +328,27 @@ export async function pdf(req, res, next) {
         throw new AppError(`Para descargar la factura ${inv.codigo || ''} debes rellenar: ${faltan.join(', ')}.`, 400, 'INVOICE_INCOMPLETE');
       }
     }
+    // ?vista=gestor → COPIA DE GESTIÓN de un cobro por Stripe: mismo documento pero
+    // por el importe NETO liquidado (bruto menos la comisión de Stripe). La factura
+    // del alumno siempre va por el bruto. Solo aplica a facturas normales.
+    const vistaGestor = req.query.vista === 'gestor' && inv.tipo !== 'proforma' && inv.tipo !== 'rectificativa';
+    // ?moneda=eur → la misma factura totalizada EN EUROS. Una factura en divisa
+    // sale por defecto en su moneda con el euro entre parentesis debajo; esta es
+    // la version para quien la necesita en euros de arriba abajo.
+    const enEuros = String(req.query.moneda || '').toLowerCase() === 'eur'
+      && String(inv.moneda || 'EUR').toUpperCase() !== 'EUR';
     let bytes;
-    // El preliminar nunca usa el PDF cacheado (definitivo): siempre se regenera
-    // con la marca de agua.
-    if (inv.pdf_path && !preliminar) {
+    // El preliminar y la copia de gestión nunca usan el PDF cacheado (definitivo).
+    if (inv.pdf_path && !preliminar && !vistaGestor && !enEuros) {
       try { bytes = await fs.readFile(inv.pdf_path); } catch { bytes = null; }
     }
     if (!bytes) {
-      const gen = await service.generatePDF(id, { preliminar });
+      const gen = await service.generatePDF(id, { preliminar, vistaGestor, enEuros });
       bytes = gen.bytes;
     }
     res.setHeader('Content-Type', 'application/pdf');
     // Borrador: no tiene código fiscal todavía.
-    const fname = (preliminar ? 'PRELIMINAR-' : '') + (inv.codigo ? inv.codigo.replace('/', '-') : `BORRADOR-${inv.id}`);
+    const fname = (preliminar ? 'PRELIMINAR-' : '') + (vistaGestor ? 'NETO-' : '') + (enEuros ? 'EUR-' : '') + (inv.codigo ? inv.codigo.replace('/', '-') : `BORRADOR-${inv.id}`);
     res.setHeader('Content-Disposition', `inline; filename="${fname}.pdf"`);
     res.send(Buffer.from(bytes));
   } catch (e) { next(e); }
@@ -498,7 +598,7 @@ export async function deleteTemplate(req, res, next) {
 export async function ventasSinFactura(req, res, next) {
   try {
     const pid = projectId(req);
-    res.json({ success: true, data: await model.listVentasSinFactura(pid) });
+    res.json({ success: true, data: await model.listVentasSinFactura({ projectId: pid }) });
   } catch (e) { next(e); }
 }
 
@@ -539,4 +639,62 @@ export async function updateConfig(req, res, next) {
     await model.updateProjectFacturacionConfig(parsed.data.projectId, parsed.data);
     res.json({ success: true });
   } catch (e) { next(e); }
+}
+
+// GET /api/invoices/facturacion-al-dia?projectId=N
+export async function facturacionAlDia(req, res, next) {
+  try {
+    const projectId = parseInt(req.query.projectId);
+    if (!projectId) throw new AppError('projectId requerido', 400, 'MISSING_PROJECT');
+    res.json({ success: true, data: await service.getFacturacionAlDia(projectId) });
+  } catch (err) { next(err); }
+}
+
+// PUT /api/invoices/facturacion-al-dia  { projectId, alDiaHasta }
+export async function setFacturacionAlDia(req, res, next) {
+  try {
+    const projectId = parseInt(req.body?.projectId);
+    const alDiaHasta = req.body?.alDiaHasta || null;
+    if (!projectId) throw new AppError('projectId requerido', 400, 'MISSING_PROJECT');
+    if (alDiaHasta && !/^\d{4}-\d{2}-\d{2}$/.test(alDiaHasta)) {
+      throw new AppError('Formato de fecha: YYYY-MM-DD', 400, 'BAD_DATE');
+    }
+    // Solo quien lleva la facturacion mueve el corte. El superadmin siempre puede.
+    // El flag no viaja en el token, asi que se consulta en la base de datos.
+    if (req.user?.role !== 'superadmin') {
+      if (!(await model.esFacturaManager(req.user?.userId))) {
+        throw new AppError('Solo quien gestiona la facturacion puede mover esta fecha', 403, 'FORBIDDEN');
+      }
+    }
+    const r = await service.setFacturacionAlDia(projectId, alDiaHasta, req.user.userId, req.body?.stripeOkHasta || null);
+    res.json({ success: true, data: r });
+  } catch (err) { next(err); }
+}
+
+// POST /api/invoices/cola/generar  { projectId, paymentId, forzar }
+export async function generarDeCola(req, res, next) {
+  try {
+    const projectId = parseInt(req.body?.projectId);
+    const paymentId = parseInt(req.body?.paymentId);
+    if (!projectId || !paymentId) throw new AppError('projectId y paymentId requeridos', 400, 'BAD_REQUEST');
+    if (req.user?.role !== 'superadmin' && !(await model.esFacturaManager(req.user?.userId))) {
+      throw new AppError('Solo quien gestiona la facturacion puede emitir desde la cola', 403, 'FORBIDDEN');
+    }
+    const inv = await service.generarFacturaDePago(projectId, paymentId, req.user.userId,
+      { forzar: req.body?.forzar === true });
+    res.json({ success: true, data: inv });
+  } catch (err) { next(err); }
+}
+
+// POST /api/invoices/cola/emitir-hasta  { projectId, hasta }
+export async function emitirColaHasta(req, res, next) {
+  try {
+    const projectId = parseInt(req.body?.projectId);
+    const hasta = req.body?.hasta;
+    if (!projectId || !hasta) throw new AppError('projectId y hasta requeridos', 400, 'BAD_REQUEST');
+    if (req.user?.role !== 'superadmin' && !(await model.esFacturaManager(req.user?.userId))) {
+      throw new AppError('Solo quien gestiona la facturacion puede emitir desde la cola', 403, 'FORBIDDEN');
+    }
+    res.json({ success: true, data: await service.emitirColaHasta(projectId, hasta, req.user.userId) });
+  } catch (err) { next(err); }
 }

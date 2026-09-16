@@ -21,6 +21,8 @@ interface MyStats {
 interface Props {
   projectId?: number | null;
   className?: string;
+  /** Mes 'YYYY-MM' que manda el filtro de la pantalla. 'all' = rango que cruza meses. */
+  periodo?: string | null;
 }
 
 function fmt(n: number) {
@@ -32,26 +34,29 @@ function currentPeriodo() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-export default function MyGoalCard({ projectId, className = '' }: Props) {
+export default function MyGoalCard({ projectId, className = '', periodo: periodoProp }: Props) {
   const [stats, setStats] = useState<MyStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [metaVentas, setMetaVentas] = useState('');
   const [metaFact, setMetaFact] = useState('');
   const [saving, setSaving] = useState(false);
-  const periodo = currentPeriodo();
+  // El mes que diga el filtro de arriba; si el rango cruza varios meses
+  // ('all') se queda en el actual, porque una meta siempre es de un mes.
+  const periodo = periodoProp && periodoProp !== 'all' ? periodoProp : currentPeriodo();
 
   function load() {
     setLoading(true);
     const params: Record<string, string | number> = {};
     if (projectId) params.projectId = projectId;
-    client.get<MyStats>('/sales/my-stats', { params })
+    params.periodo = periodo;
+    client.get<MyStats>('/ventas/my-stats', { params })
       .then((r) => { setStats(r?.data || null); })
       .catch(() => setStats(null))
       .finally(() => setLoading(false));
   }
 
-  useEffect(() => { load(); }, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [projectId, periodo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (editing && stats) {
@@ -64,7 +69,7 @@ export default function MyGoalCard({ projectId, className = '' }: Props) {
     if (!stats?.user_id) return;
     setSaving(true);
     try {
-      await client.post('/sales/goals', {
+      await client.post('/ventas/goals', {
         user_id: stats.user_id,
         project_id: projectId || null,
         periodo_yyyymm: periodo,

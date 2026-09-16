@@ -2,6 +2,7 @@ import { logger } from '../shared/utils/logger.js';
 import { query } from '../shared/config/db.js';
 import { sendEmail } from '../shared/services/brevo.service.js';
 import { notifyUsers } from '../modules/notifications/notifications.service.js';
+import { vigilar } from './latido.js';
 
 const TICK_MS = parseInt(process.env.REMINDER_TICK_MS || String(15 * 60 * 1000)); // 15 min
 
@@ -91,6 +92,6 @@ export function startReminderScheduler() {
     return;
   }
   tick();
-  setInterval(tick, TICK_MS);
+  vigilar('recordatorios', 'Recordatorios de seguimiento', tick, TICK_MS);
   logger.info({ tickMs: TICK_MS }, 'Reminder scheduler iniciado');
 }

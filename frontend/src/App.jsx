@@ -30,6 +30,20 @@ const IntegrationsPage = lazy(() => import('./modules/accounting/pages/Integrati
 const PendienteFacturarPage = lazy(() => import('./modules/accounting/pages/PendienteFacturarPage'));
 const StripePaymentsPage = lazy(() => import('./modules/accounting/pages/StripePaymentsPage'));
 const WhatsappWidgetPage = lazy(() => import('./modules/widget/pages/WhatsappWidgetPage'));
+// Todo WhatsApp pasa por aqui: el chat, con quien enlaza su numero y sus
+// plantillas. La pantalla del equipo y «Mi WhatsApp» eran del metodo viejo —el
+// navegador remoto— y se han retirado con el.
+const ChatWhatsappPage = lazy(() => import('./modules/whatsapp/pages/ChatPage'));
+const ConexionWhatsappPage = lazy(() => import('./modules/whatsapp/pages/ConexionPage'));
+const PlantillasWhatsappPage = lazy(() => import('./modules/whatsapp/pages/PlantillasPage'));
+const BancoWhatsappPage = lazy(() => import('./modules/whatsapp/pages/BancoPage'));
+// La guia para quien usa el chat, dentro del CRM: docs/10-whatsapp.md esta
+// bien para nosotros, pero a una gestora no se le manda a un repositorio.
+const AyudaWhatsappPage = lazy(() => import('./modules/whatsapp/pages/AyudaPage'));
+const TutoresPage = lazy(() => import('./modules/tutores/pages/TutoresPage'));
+const ComisionesTutoresPage = lazy(() => import('./modules/tutores/pages/ComisionesTutoresPage'));
+const FormacionesSinTutorPage = lazy(() => import('./modules/tutores/pages/FormacionesSinTutorPage'));
+const MisCursosPage = lazy(() => import('./modules/tutores/pages/MisCursosPage'));
 const InvoicesPage = lazy(() => import('./modules/invoices/pages/InvoicesPage'));
 const InvoicingConfigPage = lazy(() => import('./modules/invoices/pages/InvoicingConfigPage'));
 const InvoiceTemplateEditorPage = lazy(() => import('./modules/invoices/pages/InvoiceTemplateEditorPage'));
@@ -46,11 +60,14 @@ const CommissionsPage = lazy(() => import('./modules/commissions/pages/Commissio
 const ExpensesPage = lazy(() => import('./modules/expenses/pages/ExpensesPage'));
 const ProfilePage = lazy(() => import('./shared/pages/ProfilePage'));
 const SettingsPage = lazy(() => import('./shared/pages/SettingsPage'));
+const SalesAnalysisPage = lazy(() => import('./modules/sales/pages/SalesAnalysisPage'));
+const SaleDetailPage = lazy(() => import('./modules/sales/pages/SaleDetailPage'));
 const SalesPage = lazy(() => import('./modules/sales/pages/SalesPage'));
 const MetaAdsPage = lazy(() => import('./modules/meta-ads/pages/MetaAdsPage'));
 const ChangeRequestsPage = lazy(() => import('./modules/change-requests/pages/ChangeRequestsPage'));
 const ChangeRequestDetailPage = lazy(() => import('./modules/change-requests/pages/ChangeRequestDetailPage'));
 const DupReviewQueuePage = lazy(() => import('./modules/leads/pages/DupReviewQueuePage'));
+const DuplicatesPage = lazy(() => import('./modules/leads/pages/DuplicatesPage'));
 const ReportsPage = lazy(() => import('./shared/pages/ReportsPage'));
 const NotificacionesPage = lazy(() => import('./modules/notificaciones/pages/NotificacionesPage'));
 const ActivityPage = lazy(() => import('./shared/pages/ActivityPage'));
@@ -72,12 +89,20 @@ const EmailTemplatesPage = lazy(() => import('./modules/email-templates/pages/Em
 const MakeWebhooksPage = lazy(() => import('./modules/make-webhooks/pages/MakeWebhooksPage'));
 const MakeWebhookDetailPage = lazy(() => import('./modules/make-webhooks/pages/MakeWebhookDetailPage'));
 const WooCommercePage = lazy(() => import('./modules/woocommerce/pages/WooCommercePage'));
+const ColaDelDiaPage = lazy(() => import('./modules/proceso/pages/ColaDelDiaPage'));
+const ProcesoPage = lazy(() => import('./modules/proceso/pages/ProcesoPage'));
 
 const ROUTE_TITLES = {
   '/dashboard':                       'Dashboard',
   '/leads':                           'Prospectos',
+
+  '/whatsapp': 'Chat de WhatsApp',
+  '/whatsapp/chat': 'Chat de WhatsApp',
+  '/whatsapp/conexion': 'Conexión de WhatsApp',
+  '/whatsapp/ayuda': 'Cómo se usa WhatsApp',
   '/products':                        'Productos',
-  '/sales':                           'Ventas',
+  '/ventas/analisis':                  'Análisis de ventas',
+  '/ventas':                           'Ventas',
   '/commissions':                     'Comisiones',
   '/expenses':                        'Egresos',
   '/accounting/payable':              'Cuentas por pagar',
@@ -91,18 +116,18 @@ const ROUTE_TITLES = {
   '/forms':                           'Formularios',
   '/make-webhooks':                   'Make / Webhooks',
   '/woocommerce':                     'WooCommerce',
-  '/email-sequences':                 'Secuencias de email',
+  '/secuencias-email':                 'Secuencias de email',
   '/email-templates':                 'Plantillas de email',
   '/documentos':                      'Documentos',
   '/configuracion/categorias-arbol':  'Categorías',
   '/configuracion/campos':            'Campos personalizados',
   '/roles':                           'Roles',
   '/status':                          'Status',
-  '/reports':                         'Reportes',
+  '/informes':                         'Reportes',
   '/notificaciones':                  'Notificaciones',
   '/activity':                        'Actividad',
-  '/profile':                         'Mi cuenta',
-  '/settings':                        'Configuración',
+  '/perfil':                         'Mi cuenta',
+  '/configuracion':                        'Configuración',
   '/login':                           'Iniciar sesión',
   '/set-password':                    'Establecer contraseña',
 };
@@ -159,14 +184,20 @@ function App() {
           <Route path="/leads" element={<LeadsPage />} />
           <Route path="/leads/pipeline" element={<LeadsPipelinePage />} />
           <Route path="/leads/archived" element={<LeadsArchivedPage />} />
+          {/* Antes que `:id`, para que «cola» y «proceso» no se lean como ids. */}
+          <Route path="/leads/cola" element={<ColaDelDiaPage />} />
+          <Route path="/leads/proceso" element={<ProcesoPage />} />
           <Route path="/leads/:id" element={<LeadDetailPage />} />
           <Route path="/products" element={<ProductsPage />} />
           <Route path="/products/pending" element={<CoursesPendingPage />} />
           <Route path="/products/tree" element={<ProductsTreePage />} />
           <Route path="/products/:id" element={<ProductDetailPage />} />
-          <Route path="/sales" element={<SalesPage />} />
+          <Route path="/ventas/analisis" element={<SalesAnalysisPage />} />
+          <Route path="/ventas/:id" element={<SaleDetailPage />} />
+          <Route path="/ventas" element={<SalesPage />} />
           <Route path="/meta-ads" element={<MetaAdsPage />} />
           <Route path="/leads/revision-duplicados" element={<DupReviewQueuePage />} />
+          <Route path="/leads/duplicados" element={<DuplicatesPage />} />
           <Route path="/commissions" element={<CommissionsPage />} />
           <Route path="/expenses" element={<ExpensesPage />} />
           <Route path="/accounting" element={<AccountingDashboardPage />} />
@@ -187,13 +218,25 @@ function App() {
           <Route path="/configuracion/atajos" element={<ShortcutsConfigPage />} />
           <Route path="/external-panels/:id" element={<ExternalPanelPage />} />
           <Route path="/manual" element={<ManualPage />} />
-          <Route path="/preferences" element={<PreferencesPage />} />
+          <Route path="/preferencias" element={<PreferencesPage />} />
           <Route path="/seo" element={<SeoPage />} />
           <Route path="/soporte" element={<SoportePage />} />
           <Route path="/payroll" element={<PayrollPage />} />
           <Route path="/matriculas" element={<MatriculasPage />} />
           <Route path="/forms" element={<FormsPage />} />
           <Route path="/captacion/whatsapp" element={<WhatsappWidgetPage />} />
+          <Route path="/whatsapp" element={<ChatWhatsappPage />} />
+          <Route path="/whatsapp/chat" element={<ChatWhatsappPage />} />
+          <Route path="/whatsapp/conexion" element={<ConexionWhatsappPage />} />
+          <Route path="/whatsapp/plantillas" element={<PlantillasWhatsappPage />} />
+          {/* El banco de mensajes (#101). No es el chat: uno sirve para
+              conversar y este para buscar, auditar y llevarse una copia. */}
+          <Route path="/whatsapp/banco" element={<BancoWhatsappPage />} />
+          <Route path="/whatsapp/ayuda" element={<AyudaWhatsappPage />} />
+          <Route path="/tutores" element={<TutoresPage />} />
+          <Route path="/tutores/comisiones" element={<ComisionesTutoresPage />} />
+          <Route path="/tutores/sin-tutor" element={<FormacionesSinTutorPage />} />
+          <Route path="/mis-cursos" element={<MisCursosPage />} />
           <Route path="/make-webhooks" element={<MakeWebhooksPage />} />
           <Route path="/make-webhooks/:id" element={<MakeWebhookDetailPage />} />
           {/* Alias: el sidebar y deep-links viejos apuntan a /webhooks pero en
@@ -202,26 +245,38 @@ function App() {
           <Route path="/webhooks" element={<Navigate to="/make-webhooks" replace />} />
           <Route path="/webhooks/:id" element={<Navigate to="/make-webhooks" replace />} />
           <Route path="/woocommerce" element={<WooCommercePage />} />
-          <Route path="/email-sequences" element={<EmailSequencesPage />} />
+          <Route path="/secuencias-email" element={<EmailSequencesPage />} />
           <Route path="/email-templates" element={<EmailTemplatesPage />} />
           <Route path="/documentos" element={<DocumentsPage />} />
           <Route path="/documentos/config" element={<DocumentsConfigPage />} />
           <Route path="/configuracion/categorias-arbol" element={<CategoriesTreePage />} />
           <Route path="/configuracion/campos" element={<FieldDefinitionsPage />} />
           <Route path="/roles" element={<RolesPage />} />
-          <Route path="/reports" element={<ReportsPage />} />
+          <Route path="/informes" element={<ReportsPage />} />
           <Route path="/notificaciones" element={<NotificacionesPage />} />
           <Route path="/notifications" element={<Navigate to="/notificaciones" replace />} />
           <Route path="/activity" element={<ActivityPage />} />
           <Route path="/status" element={<StatusPage />} />
           <Route path="/solicitudes-cambio" element={<ChangeRequestsPage />} />
           <Route path="/solicitudes-cambio/:id" element={<ChangeRequestDetailPage />} />
-          <Route path="/profile" element={<ProfilePage />} />
-          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/perfil" element={<ProfilePage />} />
+          <Route path="/configuracion" element={<SettingsPage />} />
         </Route>
 
         {/* Entrada y catch-all */}
         <Route path="/" element={<RootRedirect />} />
+        {/* Las direcciones de antes, en ingles, siguen funcionando: si no,
+            se rompen los favoritos del equipo y los enlaces ya enviados. */}
+        <Route path="/settings" element={<Navigate to="/configuracion" replace />} />
+        <Route path="/reports/ia" element={<Navigate to="/informes/ia" replace />} />
+        <Route path="/reports" element={<Navigate to="/informes" replace />} />
+        <Route path="/sales" element={<Navigate to="/ventas" replace />} />
+        <Route path="/profile" element={<Navigate to="/perfil" replace />} />
+        <Route path="/preferences" element={<Navigate to="/preferencias" replace />} />
+        <Route path="/messages" element={<Navigate to="/mensajes" replace />} />
+        <Route path="/email-sequences" element={<Navigate to="/secuencias-email" replace />} />
+        <Route path="/ai-chat" element={<Navigate to="/chat-ia" replace />} />
+        <Route path="/configuracion/email-templates" element={<Navigate to="/configuracion/plantillas-email" replace />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </Suspense>
