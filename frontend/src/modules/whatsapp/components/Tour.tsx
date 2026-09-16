@@ -133,7 +133,7 @@ export default function Tour({ alCerrar }: { alCerrar?: () => void }) {
    * Antes solo contaba si se salia por la X. Quien recargaba, se iba a otra
    * pantalla o cerraba la pestaña se lo encontraba otra vez, y otra, y otra:
    * el recorrido pasaba de ayuda a estorbo. Un recorrido guiado se enseña una
-   * vez; si alguien lo quiere de nuevo, esta el boton «Cómo va esto».
+   * vez; si alguien lo quiere de nuevo, esta el boton «Tutorial».
    *
    * La excepcion es el paso de enlazar: ese SI lo vuelve a armar, porque quien
    * lo sigue no ha visto el recorrido —ha visto dos carteles— y vuelve con el

@@ -427,8 +427,18 @@ export default function ConexionPage() {
               {typeof sync.progreso === 'number' && (
                 <div className="space-y-1">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">Historial</span>
-                    <span className="font-semibold tabular-nums">{sync.progreso} %</span>
+                    <span className="text-muted-foreground">
+                      {/* El 100 % es de WhatsApp, no del CRM.
+                          Son dos cosas y se veian como una: WhatsApp suelta su
+                          parte de golpe —la barra llega a 100— y el CRM sigue
+                          guardando tandas durante un rato. Se vio enlazando un
+                          numero de verdad: «100 %» al lado de «3 chats y 4
+                          mensajes», que parece que se han perdido 600. */}
+                      {sync.progreso >= 100 ? 'WhatsApp ya lo ha mandado todo' : 'Historial'}
+                    </span>
+                    <span className="font-semibold tabular-nums">
+                      {sync.progreso >= 100 ? 'guardando…' : `${sync.progreso} %`}
+                    </span>
                   </div>
                   <div className="h-2 rounded-full bg-muted overflow-hidden"
                     role="progressbar" aria-valuenow={sync.progreso}
@@ -441,7 +451,9 @@ export default function ConexionPage() {
               )}
               <p className="text-muted-foreground">
                 {sync.conversaciones} chats y {sync.mensajes} mensajes hasta ahora.
-                WhatsApp los manda por tandas: puede tardar unos minutos.
+                {sync.progreso != null && sync.progreso >= 100
+                  ? ' Espera sin cerrar esta pantalla: los números siguen subiendo mientras se guardan.'
+                  : ' WhatsApp los manda por tandas: puede tardar unos minutos.'}
               </p>
             </>
           ) : (

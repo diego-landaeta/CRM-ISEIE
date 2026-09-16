@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { MagnifyingGlass, WarningCircle, X } from '@phosphor-icons/react';
+import { MagnifyingGlass, WarningCircle, X, ImageSquare } from '@phosphor-icons/react';
 import { whatsappApi, type PlantillaWhatsapp } from '../api/whatsapp.api';
 import { rellenar, huecosSinRellenar, type DatosParaRellenar } from '../lib/plantilla';
 
@@ -22,16 +22,18 @@ const plano = (s: string) =>
 
 export default function SelectorPlantillas({
   projectId,
+  issuerId = null,
   datos,
   nombreProyecto,
   alElegir,
   alCerrar,
 }: {
-  projectId: number;
+  projectId: number | null;
+  issuerId?: number | null;
   /** De quien es la conversacion, para rellenar los huecos. */
   datos: DatosParaRellenar;
   nombreProyecto?: string | null;
-  alElegir: (texto: string) => void;
+  alElegir: (texto: string, plantilla?: PlantillaWhatsapp) => void;
   alCerrar: () => void;
 }) {
   const [plantillas, setPlantillas] = useState<PlantillaWhatsapp[] | null>(null);
@@ -42,7 +44,7 @@ export default function SelectorPlantillas({
   useEffect(() => {
     let vivo = true;
     setError(null);
-    whatsappApi.plantillas(projectId)
+    whatsappApi.plantillas(projectId, issuerId)
       .then((r) => {
         if (!vivo) return;
         if (r.success) setPlantillas(r.data || []);
@@ -50,7 +52,7 @@ export default function SelectorPlantillas({
       })
       .catch((e) => { if (vivo) setError(e?.message || 'No se pudieron cargar'); });
     return () => { vivo = false; };
-  }, [projectId]);
+  }, [projectId, issuerId]);
 
   // El foco va a la busqueda al abrir: con veinte plantillas, escribir es mas
   // rapido que recorrer la lista, y es lo que se va a hacer siempre.
@@ -73,7 +75,10 @@ export default function SelectorPlantillas({
   }, [plantillas, busca]);
 
   const elegir = (p: PlantillaWhatsapp) => {
-    alElegir(rellenar(p.body, datos, nombreProyecto));
+    // Se pasa la plantilla entera y no solo el texto: el chat necesita saber si
+    // lleva imagen detrás para abrir el selector de archivos sin que haya que
+    // acordarse del clip.
+    alElegir(rellenar(p.body, datos, nombreProyecto), p);
     alCerrar();
   };
 
@@ -143,6 +148,15 @@ export default function SelectorPlantillas({
                 )}
               </span>
               <span className="wa-plantilla-cuerpo">{rellenar(p.body, datos, nombreProyecto)}</span>
+              {/* La letra pequeña del documento: la lee la gestora mientras
+                  elige, y NO se envía. Antes solo estaba en el PDF, que nadie
+                  tiene abierto mientras escribe. */}
+              {(p.pista || p.pide_adjunto) && (
+                <span className="wa-plantilla-pista">
+                  {p.pide_adjunto && <ImageSquare size={11} weight="bold" />}
+                  {p.pista}
+                </span>
+              )}
               {/* El aviso va con icono ademas del color: un texto ambar a secas
                   no lo distingue quien no ve bien el color. */}
               {huecos.length > 0 && (

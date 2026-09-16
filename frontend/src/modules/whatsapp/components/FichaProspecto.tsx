@@ -4,6 +4,8 @@ import {
   Briefcase, User, Package, ClockCounterClockwise,
 } from '@phosphor-icons/react';
 import Portal from '@/shared/components/ui/portal';
+import { toast } from '@/shared/hooks/useToast';
+import { STATUS_LABELS } from '@/shared/components/ui/StatusBadge';
 import { chatApi, type RespuestaFicha } from '../api/whatsapp.api';
 
 /**
@@ -14,6 +16,10 @@ import { chatApi, type RespuestaFicha } from '../api/whatsapp.api';
  * adjuntos. Son varios segundos, y una gestora entra y sale de la ficha cada dos
  * mensajes. Por eso esto es un popup y por eso «ver ficha completa» abre una
  * pestaña NUEVA — si navegara en la misma, al volver se recargaria todo.
+ *
+ * Y desde aqui se TRABAJA, no solo se mira (#112). Antes el unico boton que
+ * hacia algo era «ver ficha completa», o sea que para apuntar una nota habia que
+ * abrir otra pestaña — justo lo que este popup venia a evitar.
  */
 
 const ESTADOS: Record<string, string> = {
@@ -66,6 +72,61 @@ export default function FichaProspecto({
   // efecto no se dispara —depende de la conversacion, que no ha cambiado— y el
   // boton se queda girando sin ir a ninguna parte.
   const [intento, setIntento] = useState(0);
+  const p = datos?.prospecto ?? null;
+
+  const [nota, setNota] = useState('');
+  const [guardando, setGuardando] = useState(false);
+
+  /**
+   * Apuntar la nota y cambiar el estado se hacen distinto a proposito.
+   *
+   * La nota se RECARGA al guardar: la lista de interacciones es del servidor y
+   * quiero que salga con su fecha y su autor de verdad, no una inventada aqui.
+   * Son dos peticiones, pero es la accion menos frecuente y la que mas se mira
+   * despues.
+   *
+   * El estado se pinta al momento y se deshace si falla: es un solo valor, se
+   * ve arriba, y esperar medio segundo a que cambie una pildora se nota.
+   */
+  async function guardarNota() {
+    const texto = nota.trim();
+    if (!texto || !p?.id) return;
+    setGuardando(true);
+    try {
+      const r = await chatApi.apuntarNota(p.id, texto);
+      if (!r?.success) throw new Error(r?.error || 'No se pudo guardar');
+      setNota('');
+      setIntento((n) => n + 1);          // vuelve a pedir la ficha con la nota dentro
+    } catch (e) {
+      toast({
+        title: 'No se pudo guardar la nota',
+        description: (e as { message?: string })?.message || 'Vuelve a intentarlo.',
+        variant: 'destructive',
+      });
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  async function cambiarEstado(status: string) {
+    if (!p?.id || status === p.status) return;
+    const antes = p.status;
+    setDatos((d) => (d?.prospecto ? { ...d, prospecto: { ...d.prospecto, status } } : d));
+    try {
+      const r = await chatApi.cambiarEstado(p.id, status);
+      if (!r?.success) throw new Error(r?.error || 'No se pudo cambiar');
+    } catch (e) {
+      setDatos((d) => (d?.prospecto ? { ...d, prospecto: { ...d.prospecto, status: antes } } : d));
+      const motivo = (e as { message?: string })?.message;
+      toast({
+        title: 'No se pudo cambiar el estado',
+        // El motivo del servidor cuando lo hay: «ese contacto es de otra
+        // gestora» no se adivina mirando la pantalla.
+        description: motivo && !/^Error \d/.test(motivo) ? motivo : 'Se queda como estaba.',
+        variant: 'destructive',
+      });
+    }
+  }
 
   useEffect(() => {
     let vivo = true;
@@ -88,8 +149,6 @@ export default function FichaProspecto({
     document.addEventListener('keydown', alPulsar);
     return () => document.removeEventListener('keydown', alPulsar);
   }, [onCerrar]);
-
-  const p = datos?.prospecto ?? null;
 
   return (
     <Portal>
@@ -190,9 +249,25 @@ export default function FichaProspecto({
                     {/* El estado NO se dice solo con color: lleva su texto
                         dentro. Un color a secas no lo lee ni quien no lo
                         distingue ni un lector de pantalla. */}
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${ESTADOS[p.status] || ESTADO_POR_DEFECTO}`}>
-                      {p.status}
-                    </span>
+                    {/* El estado se CAMBIA desde aqui (#112). Antes era texto
+                        y habia que irse a Prospectos.
+                        Un <select> de verdad: se abre con teclado, lo lee un
+                        lector de pantalla y en el movil sale la rueda del
+                        sistema. Y sigue diciendo su texto, no solo el color. */}
+                    <select
+                      value={p.status}
+                      onChange={(e) => cambiarEstado(e.target.value)}
+                      aria-label="Estado del prospecto"
+                      title="Cambiar el estado"
+                      className={`text-xs px-2 py-0.5 rounded-full font-medium border-0 cursor-pointer
+                                  focus:outline-none focus-visible:ring-2 focus-visible:ring-ring
+                                  ${ESTADOS[p.status] || ESTADO_POR_DEFECTO}`}
+                    >
+                      {!STATUS_LABELS[p.status] && <option value={p.status}>{p.status}</option>}
+                      {Object.entries(STATUS_LABELS).map(([valor, texto]) => (
+                        <option key={valor} value={valor}>{texto}</option>
+                      ))}
+                    </select>
                     {p.reincidente && (
                       <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
                         reincidente
@@ -237,6 +312,44 @@ export default function FichaProspecto({
                   ) : (
                     <p className="text-sm text-muted-foreground">Todavía no hay ninguna anotada.</p>
                   )}
+
+                  {/* Apuntar una nota SIN salir (#112).
+                      Es lo que la gestora acaba de hacer —hablar con la
+                      persona— y el sitio natural para escribirlo es donde esta
+                      mirando. Va debajo de las interacciones para que se vea
+                      donde va a aparecer. */}
+                  <div className="mt-3">
+                    <label htmlFor="ficha-nota" className="sr-only">Apuntar una nota</label>
+                    <textarea
+                      id="ficha-nota"
+                      value={nota}
+                      onChange={(e) => setNota(e.target.value)}
+                      onKeyDown={(e) => {
+                        // Ctrl/Cmd + Enter guarda. Enter a secas hace salto de
+                        // linea: una nota de varias lineas es lo normal.
+                        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); guardarNota(); }
+                      }}
+                      rows={2}
+                      maxLength={2000}
+                      placeholder="Apuntar lo que has hablado…"
+                      className="w-full text-sm px-2.5 py-2 rounded-md border border-border bg-background
+                                 resize-y focus:outline-none focus:border-primary"
+                    />
+                    <div className="flex items-center justify-between gap-2 mt-1.5">
+                      <span className="text-[11px] text-muted-foreground">
+                        Ctrl + Enter para guardar
+                      </span>
+                      <button
+                        type="button"
+                        onClick={guardarNota}
+                        disabled={!nota.trim() || guardando}
+                        className="h-8 px-3 rounded-md text-xs font-semibold bg-primary text-primary-foreground
+                                   disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        {guardando ? 'Guardando…' : 'Apuntar'}
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}

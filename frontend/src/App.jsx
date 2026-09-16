@@ -36,6 +36,7 @@ const WhatsappWidgetPage = lazy(() => import('./modules/widget/pages/WhatsappWid
 const ChatWhatsappPage = lazy(() => import('./modules/whatsapp/pages/ChatPage'));
 const ConexionWhatsappPage = lazy(() => import('./modules/whatsapp/pages/ConexionPage'));
 const PlantillasWhatsappPage = lazy(() => import('./modules/whatsapp/pages/PlantillasPage'));
+const BancoWhatsappPage = lazy(() => import('./modules/whatsapp/pages/BancoPage'));
 // La guia para quien usa el chat, dentro del CRM: docs/10-whatsapp.md esta
 // bien para nosotros, pero a una gestora no se le manda a un repositorio.
 const AyudaWhatsappPage = lazy(() => import('./modules/whatsapp/pages/AyudaPage'));
@@ -228,6 +229,9 @@ function App() {
           <Route path="/whatsapp/chat" element={<ChatWhatsappPage />} />
           <Route path="/whatsapp/conexion" element={<ConexionWhatsappPage />} />
           <Route path="/whatsapp/plantillas" element={<PlantillasWhatsappPage />} />
+          {/* El banco de mensajes (#101). No es el chat: uno sirve para
+              conversar y este para buscar, auditar y llevarse una copia. */}
+          <Route path="/whatsapp/banco" element={<BancoWhatsappPage />} />
           <Route path="/whatsapp/ayuda" element={<AyudaWhatsappPage />} />
           <Route path="/tutores" element={<TutoresPage />} />
           <Route path="/tutores/comisiones" element={<ComisionesTutoresPage />} />

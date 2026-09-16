@@ -41,7 +41,12 @@ export const createInvoiceSchema = z.object({
   ivaPct: z.number().min(0).max(100).optional(),
   ivaIncluido: z.boolean().optional(),
   notas: z.string().optional(),
-  leyendaIva: z.string().optional(),
+  // Admite NULL a proposito: la pantalla manda `regimenSel?.coletilla || null`,
+  // y cuando la venta no cae en ningun regimen fiscal --Solvenic emitiendo en
+  // ICTESS, por ejemplo-- no hay coletilla que poner. Con solo `.optional()`
+  // eso reventaba con «Expected string, received null» y no se podia emitir la
+  // factura. El modelo ya guardaba `data.leyendaIva || null` sin problema.
+  leyendaIva: z.string().optional().nullable(),
   metodoPago: z.enum(['transferencia', 'tarjeta', 'tarjeta_stripe', 'efectivo', 'bizum', 'paypal', 'fraccionado', 'otro']),
   piePago: z.string().optional(),
   issuerId: z.number().int().positive().optional(),

@@ -27,6 +27,24 @@ import Portal from '@/shared/components/ui/portal';
  * enlace. Hoy el chat no hace ninguna que se salga de la pantalla.
  */
 
+/**
+ * La ruta tal como la entiende el router, sin el prefijo del sitio.
+ *
+ * El `href` de un enlace lleva el prefijo con el que se sirve el CRM — «/crm».
+ * `navigate()` se lo vuelve a poner, porque trabaja con rutas RELATIVAS a su
+ * `basename`. Pasarle la del navegador daba «/crm/crm/whatsapp/conexion»:
+ * pulsar «salir de todas formas» llevaba a una pagina que no existe.
+ *
+ * `window.open` si quiere la del navegador, con su prefijo. Por eso hacen falta
+ * las dos y se guardan por separado.
+ */
+function sinElPrefijo(ruta: string): string {
+  const prefijo = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
+  if (!prefijo || prefijo === '/') return ruta;
+  if (ruta === prefijo) return '/';
+  return ruta.startsWith(`${prefijo}/`) ? ruta.slice(prefijo.length) : ruta;
+}
+
 /** ¿Esta direccion sigue estando dentro del chat de WhatsApp? */
 function sigueEnElChat(ruta: string): boolean {
   // Las pantallas hermanas de WhatsApp —conexion, plantillas, ayuda— TAMBIEN
@@ -151,7 +169,11 @@ export default function AvisoAlSalir({ activo }: { activo: boolean }) {
             </button>
             <button
               type="button"
-              onClick={() => { const d = destino; setDestino(null); navigate(d); }}
+              onClick={() => {
+                const d = sinElPrefijo(destino);
+                setDestino(null);
+                navigate(d);
+              }}
               className="h-8 px-4 rounded-md text-sm text-muted-foreground hover:text-foreground
                          whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >

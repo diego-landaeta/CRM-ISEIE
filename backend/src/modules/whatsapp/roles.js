@@ -44,6 +44,40 @@ export function porQueNoPuede(usuario) {
 export const puedeTenerWhatsapp = (usuario) => porQueNoPuede(usuario) === null;
 
 /**
+ * Por que esta persona NO usa el WhatsApp del CRM. null si lo usa.
+ *
+ * Son dos preguntas distintas y conviene no mezclarlas (#128, punto 1):
+ *
+ *   · `porQueNoPuede` — si le CORRESPONDE tener WhatsApp. Va por rol y es de la
+ *     casa: un tutor no atiende prospectos. Cuando esto deja de cumplirse se le
+ *     desvincula el numero (`alPerderAcceso`).
+ *   · `porQueNoUsa` — si ADEMAS lo usa. Es una casilla en su ficha, la decide
+ *     quien manda, y hoy son las gestoras y Daniela. Apagarla NO desvincula
+ *     nada: deja de salir en el panel y de poder entrar, y punto.
+ *
+ * Colgar lo segundo de lo primero seria un fallo caro: `user.controller` compara
+ * `puedeTenerWhatsapp` antes y despues de cada cambio, asi que apagar la casilla
+ * soltaria la sesion de esa persona y habria que volver a enlazar el movil con
+ * ella delante. Por eso la casilla no entra en `porQueNoPuede`.
+ *
+ * `usa_whatsapp` llega como `null` mientras la migracion 156 no este aplicada
+ * —se pide con `to_jsonb`, que no falla por una columna que todavia no existe— y
+ * entonces esto no niega a nadie: el CRM se queda exactamente como hoy. Solo un
+ * `false` de verdad, el que escribe la casilla, cierra la puerta.
+ */
+export function porQueNoUsa(usuario) {
+  const noPuede = porQueNoPuede(usuario);
+  if (noPuede) return noPuede;
+  if (usuario.usa_whatsapp === false) {
+    return 'No tiene activado el WhatsApp del CRM. Se enciende en su ficha de usuario.';
+  }
+  return null;
+}
+
+/** Lo contrario, para leerlo mejor donde toca. */
+export const usaWhatsapp = (usuario) => porQueNoUsa(usuario) === null;
+
+/**
  * Alguien deja de poder tener WhatsApp: se le desvincula el numero, pero sus
  * conversaciones se quedan.
  *
