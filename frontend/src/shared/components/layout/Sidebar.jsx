@@ -57,6 +57,7 @@ const NAV_SECTIONS = [
           // la deja tocar el suyo.
           { to: '/whatsapp/conexion', label: 'Conexión' },
           { to: '/whatsapp/plantillas', label: 'Plantillas' },
+          { to: '/whatsapp/banco', label: 'Banco de mensajes' },
           { to: '/whatsapp/ayuda', label: 'Cómo se usa' },
           // Solo para quien manda: entrar en el WhatsApp de cada gestora.
           // Fuera del menu: usaba el navegador remoto, que se ha retirado.

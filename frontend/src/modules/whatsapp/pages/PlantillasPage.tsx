@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   WhatsappLogo, Plus, Trash, FloppyDisk, Users, User,
@@ -7,6 +7,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
+import { VARIABLES as VARIABLES_PLANTILLA } from '../lib/plantilla';
 import { whatsappApi, type PlantillaWhatsapp } from '../api/whatsapp.api';
 
 /**
@@ -30,7 +31,12 @@ import { whatsappApi, type PlantillaWhatsapp } from '../api/whatsapp.api';
  * huecos a la vista, que es como hay que leerlo antes de usarlo.
  */
 
-const VARIABLES = ['{nombre}', '{nombreCompleto}', '{producto}', '{proyecto}', '{email}', '{teléfono}'];
+// La lista SALE de `plantilla.ts`, que es quien de verdad los rellena.
+//
+// Escrita aquí aparte decía `{teléfono}` con tilde, y ese hueco no se rellenaba
+// nunca: quien lo copiaba de aquí mandaba «tu teléfono {teléfono}» al cliente.
+// Dos listas para lo mismo siempre acaban así.
+const VARIABLES = VARIABLES_PLANTILLA;
 
 // Sin tildes y en minuscula, para que «matricula» encuentre «Matrícula». Con un
 // mapa y no con normalize('NFD'): se lee, y no hace falta una expresion regular
@@ -62,9 +68,15 @@ const GRUPOS: { clave: string; titulo: string; desc: string; casa: (l: string) =
 
 export default function PlantillasWhatsappPage() {
   const { user } = useAuth() as { user: { role?: string } | null };
-  const { activeProject } = useProjectContext() as { activeProject: { id: number; nombre?: string } | null };
+  const { activeProject, activeIssuerId } = useProjectContext() as {
+    activeProject: { id: number; nombre?: string } | null;
+    activeIssuerId: number | null;
+  };
   const esAdmin = user?.role === 'admin' || user?.role === 'superadmin';
   const projectId = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
+  // Se LEEN las de toda la empresa; para CREAR una sigue haciendo falta un
+  // campus, porque la plantilla se guarda en un proyecto concreto.
+  const issuerId = !projectId ? (activeIssuerId ?? null) : null;
 
   const [lista, setLista] = useState<PlantillaWhatsapp[]>([]);
   const [cargando, setCargando] = useState(true);
@@ -81,14 +93,14 @@ export default function PlantillasWhatsappPage() {
   const [copiada, setCopiada] = useState<number | null>(null);
 
   const cargar = useCallback(async () => {
-    if (!projectId) return;
+    if (!projectId && !issuerId) return;
     setCargando(true);
     try {
-      const r = await whatsappApi.plantillas(projectId);
+      const r = await whatsappApi.plantillas(projectId, issuerId);
       setLista(r.success ? (r.data || []) : []);
       setBorrador({});
     } finally { setCargando(false); }
-  }, [projectId]);
+  }, [projectId, issuerId]);
 
   useEffect(() => { cargar(); }, [cargar]);
 
@@ -114,6 +126,40 @@ export default function PlantillasWhatsappPage() {
   }, [lista, busca]);
 
   const cuantas = agrupadas.reduce((n, g) => n + g.plantillas.length, 0);
+
+  // El último cuadro de texto que se tocó, para saber DÓNDE insertar el dato.
+  //
+  // Hay dos sitios donde se escribe —la plantilla nueva y cada una de las que ya
+  // existen— y el botón de insertar es uno solo, arriba. Sin esto habría que
+  // repetir la fila de botones dentro de cada editor.
+  const ultimoFoco = useRef<HTMLTextAreaElement | null>(null);
+
+  function insertarVariable(hueco: string) {
+    const el = ultimoFoco.current;
+    if (!el) {
+      toast({
+        title: 'Pon el cursor primero',
+        description: 'Pincha en el texto de una plantilla y vuelve a pulsar el dato.',
+      });
+      return;
+    }
+    const ini = el.selectionStart ?? el.value.length;
+    const fin = el.selectionEnd ?? ini;
+    const texto = el.value.slice(0, ini) + hueco + el.value.slice(fin);
+    // Se actualiza por estado y no tocando el DOM: los dos cuadros son
+    // controlados, y escribir en `el.value` se perdería al siguiente render.
+    const cual = el.dataset.plantilla;
+    if (cual === 'nueva') setNueva((n) => (n ? { ...n, body: texto } : n));
+    else if (cual) {
+      const id = Number(cual);
+      setBorrador((b) => ({ ...b, [id]: { ...b[id], body: texto } }));
+    }
+    // El cursor queda DETRÁS de lo insertado, que es donde se sigue escribiendo.
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(ini + hueco.length, ini + hueco.length);
+    });
+  }
 
   async function copiar(t: PlantillaWhatsapp) {
     try {
@@ -268,12 +314,28 @@ export default function PlantillasWhatsappPage() {
 
       {modo === 'editar' && (
         <>
-          <p className="text-xs text-muted-foreground">
-            Variables disponibles:{' '}
+          {/* «Que puedan mapear», del ticket: la gestora ve qué datos hay y los
+              mete sin escribirlos de memoria — que es de donde salían los
+              `{telefono}` mal escritos que nunca se rellenaban.
+              Se inserta donde tenga el cursor, no al final: si no, hay que
+              cortar y pegar para ponerlo en su sitio. */}
+          <div className="text-xs text-muted-foreground">
+            <span className="mr-1">Insertar dato:</span>
             {VARIABLES.map((v) => (
-              <code key={v} className="mx-0.5 px-1 py-0.5 rounded bg-muted/60 font-mono text-[11px]">{v}</code>
+              <button
+                key={v.clave}
+                type="button"
+                onClick={() => insertarVariable(`{${v.clave}}`)}
+                title={`${v.pista} — se pone al escribir el mensaje`}
+                className="mx-0.5 my-0.5 px-1 py-0.5 rounded bg-muted/60 hover:bg-muted font-mono text-[11px] border border-transparent hover:border-border"
+              >
+                {`{${v.clave}}`}
+              </button>
             ))}
-          </p>
+            <span className="block mt-1">
+              Lo que va [entre corchetes] no lo pone el CRM: lo completa la gestora antes de enviar.
+            </span>
+          </div>
 
           {nueva && (
             <div className="bg-card border border-primary/40 rounded-lg p-4 space-y-3">
@@ -291,6 +353,8 @@ export default function PlantillasWhatsappPage() {
                 )}
               </div>
               <textarea value={nueva.body} onChange={(e) => setNueva({ ...nueva, body: e.target.value })}
+                data-plantilla="nueva"
+                onFocus={(e) => { ultimoFoco.current = e.currentTarget; }}
                 rows={4} placeholder="Hola {nombre}, te escribo por {producto}…"
                 className="w-full px-3 py-2 rounded-md border border-border bg-card text-sm leading-relaxed" />
               <div className="flex gap-2">
@@ -346,6 +410,8 @@ export default function PlantillasWhatsappPage() {
                     )}
                   </div>
                   <textarea value={b.body} disabled={!puedo} rows={3}
+                    data-plantilla={String(t.id)}
+                    onFocus={(e) => { ultimoFoco.current = e.currentTarget; }}
                     onChange={(e) => setBorrador({ ...borrador, [t.id]: { ...b, body: e.target.value } })}
                     className="w-full px-3 py-2 rounded-md border border-border bg-card text-sm leading-relaxed disabled:opacity-70" />
                   {!puedo && (

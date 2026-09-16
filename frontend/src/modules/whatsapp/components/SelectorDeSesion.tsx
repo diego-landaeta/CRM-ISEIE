@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { CaretDown, Check, WhatsappLogo } from '@phosphor-icons/react';
 import { usuariosWhatsapp, type UsuarioWhatsapp } from '../api/whatsapp.api';
+import { useProjectContext } from '@/contexts/ProjectContext';
+import { ambitoComoObjeto } from '@/shared/lib/ambitoInforme';
 
 // ¿De quién es el WhatsApp que estoy viendo?
 //
@@ -26,19 +28,38 @@ export default function SelectorDeSesion({
   onCambiar: (s: SesionElegida) => void;
   compacto?: boolean;
 }) {
+  // El selector es de la EMPRESA puesta arriba: con CEDIA no pinta la gente de
+  // ICTESS. Diego, 15/09: «el whatsapp es por empresa, no puedo tener de varias
+  // alli». Quien lo acota de verdad es el servidor; aqui solo se le dice cual.
+  const { activeProject, activeIssuerId } = useProjectContext() as {
+    activeProject: { id?: number | null } | null; activeIssuerId: number | null;
+  };
   const [gente, setGente] = useState<UsuarioWhatsapp[]>([]);
   const [abierto, setAbierto] = useState(false);
   const [cargando, setCargando] = useState(true);
 
   useEffect(() => {
-    usuariosWhatsapp()
+    setCargando(true);
+    usuariosWhatsapp(ambitoComoObjeto({ activeIssuerId, activeProject }))
       .then((r) => setGente(r.success ? (r.data || []) : []))
       .catch(() => setGente([]))
       .finally(() => setCargando(false));
-  }, []);
+  }, [activeProject?.id, activeIssuerId]);
+
+  // Quien no lo usa no se pinta (#128): Diego pidio que el panel fuera «solo
+  // gestoras y Daniela», y una lista con quince nombres apagados no es un panel.
+  //
+  // Pero no se esconde en silencio: los que faltan se cuentan al pie. Sin eso
+  // volveriamos justo a lo de la #68 —alguien no sale y parece una averia—, solo
+  // que ahora con una casilla detras que nadie recordaria haber tocado.
+  //
+  // Uno mismo sale siempre, aunque este apagado: ver «Mi WhatsApp» y que no vaya
+  // se explica con el motivo del servidor; no verse en la lista, no.
+  const visibles = gente.filter((u) => u.usa !== false || u.soyYo);
+  const apagados = gente.length - visibles.length;
 
   // Con una sola persona no hay nada que elegir: es su propio WhatsApp.
-  if (cargando || gente.length <= 1) return null;
+  if (cargando || visibles.length <= 1) return null;
 
   const elegir = (u: UsuarioWhatsapp) => {
     onCambiar({ usuarioId: u.soyYo ? null : u.id, nombre: u.nombre, esMia: u.soyYo });
@@ -48,7 +69,7 @@ export default function SelectorDeSesion({
   // Solo cuenta a quien PUEDE tener WhatsApp. Desde que los que no pueden
   // aparecen en la lista, contarlos diria «1 de 6» incluyendo a un tutor que
   // nunca va a enlazar nada — un objetivo imposible de cumplir.
-  const conDerecho = gente.filter((u) => u.puede !== false);
+  const conDerecho = visibles.filter((u) => u.puede !== false);
   const enlazadas = conDerecho.filter((u) => u.conectado).length;
 
   return (
@@ -75,8 +96,15 @@ export default function SelectorDeSesion({
             <p className="px-3 py-2 text-[11px] text-muted-foreground border-b border-border">
               {enlazadas} de {conDerecho.length} tienen su número enlazado
             </p>
-            {gente.map((u) => {
+            {visibles.map((u) => {
               const puesta = u.soyYo ? valor.esMia : valor.usuarioId === u.id;
+              // Dos motivos distintos para lo mismo: no le corresponde (rol) o
+              // no lo usa (la casilla del #128). El segundo solo se ve en la
+              // propia fila, porque los demas apagados ni se pintan.
+              const bloqueada = u.puede === false || u.usa === false;
+              const razon = u.puede === false
+                ? u.motivo
+                : (u.usa === false ? 'No tienes activado el WhatsApp del CRM' : null);
               return (
                 <button
                   key={u.id}
@@ -84,21 +112,21 @@ export default function SelectorDeSesion({
                   // `puede === false` viene del servidor con su motivo. Se pinta
                   // apagada en vez de esconderla: no salir es la peor forma de
                   // negar algo. Ver la tarea #68.
-                  disabled={u.puede === false}
+                  disabled={bloqueada}
                   onClick={() => elegir(u)}
-                  title={u.motivo || undefined}
+                  title={razon || undefined}
                   className={`w-full text-left px-3 py-2 flex items-center gap-2.5 ${
-                    u.puede === false
+                    bloqueada
                       ? 'opacity-60 cursor-not-allowed'
                       : `hover:bg-muted/50 ${puesta ? 'bg-primary/10' : ''}`
                   }`}
                 >
                   <span
                     className={`w-2 h-2 rounded-full shrink-0 ${
-                      u.puede === false ? 'bg-muted-foreground/30'
+                      bloqueada ? 'bg-muted-foreground/30'
                       : u.conectado ? 'bg-emerald-500' : 'bg-muted-foreground/40'
                     }`}
-                    title={u.puede === false ? 'sin WhatsApp' : (u.conectado ? 'enlazado' : 'sin enlazar')}
+                    title={bloqueada ? 'sin WhatsApp' : (u.conectado ? 'enlazado' : 'sin enlazar')}
                   />
                   <span className="flex-1 min-w-0">
                     <span className="block text-sm truncate">
@@ -107,22 +135,33 @@ export default function SelectorDeSesion({
                     {/* El motivo entero, no cortado: es lo unico que evita que
                         alguien pierda la tarde preguntandose por que no sale. */}
                     <span className={`block text-[11px] ${
-                      u.puede === false ? 'text-muted-foreground' : 'text-muted-foreground truncate'
+                      bloqueada ? 'text-muted-foreground' : 'text-muted-foreground truncate'
                     }`}>
-                      {u.puede === false
-                        ? u.motivo
+                      {bloqueada
+                        ? razon
                         : <>
                             {u.conectado ? (u.numero ? `+${u.numero}` : 'enlazado') : 'sin enlazar'}
                             {!u.soyYo && ` · ${u.role}`}
                           </>}
                     </span>
                   </span>
-                  {puesta && u.puede !== false && (
+                  {puesta && !bloqueada && (
                     <Check size={14} weight="bold" className="text-primary shrink-0" />
                   )}
                 </button>
               );
             })}
+            {/* Los que no salen, contados. Es la diferencia entre «faltan tres
+                porque estan apagados» y «falta gente y no se sabe por que», que
+                es lo que costo la #68. */}
+            {apagados > 0 && (
+              <p className="px-3 py-2 text-[11px] text-muted-foreground border-t border-border">
+                {apagados === 1
+                  ? '1 persona más no usa el WhatsApp del CRM'
+                  : `${apagados} personas más no usan el WhatsApp del CRM`}
+                <span className="block">Se enciende en su ficha de usuario.</span>
+              </p>
+            )}
           </div>
         </>
       )}

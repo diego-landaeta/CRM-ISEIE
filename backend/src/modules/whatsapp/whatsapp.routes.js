@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { verifyToken } from '../../shared/middleware/auth.js';
+import { verifyToken, soloRoles } from '../../shared/middleware/auth.js';
 import { uploadWhatsapp } from '../../shared/middleware/upload.js';
 import * as ctrl from './whatsapp.controller.js';
 import * as chat from './chat.controller.js';
@@ -42,14 +42,31 @@ router.get('/cola', ctrl.cola);
 // el recorte lo hace el controlador, no la pantalla.
 router.get('/usuarios', chat.usuarios);
 
+// El banco de mensajes (#101). Va ANTES de las rutas de chats para leerse
+// junto: no es el chat, es el respaldo.
+// La forma de los avisos de Evolution. Solo soporte y superadmin: no lleva
+// datos de nadie, pero dice como esta montado el sistema por dentro.
+router.get('/forma-avisos', soloRoles('soporte', 'superadmin'), chat.formaDeAvisos);
+router.delete('/forma-avisos', soloRoles('soporte', 'superadmin'), chat.olvidarFormaDeAvisos);
+
+router.get('/banco', chat.banco);
+router.get('/banco/numeros', chat.bancoNumeros);
+
+// Las etiquetas de WhatsApp de esta sesion (#128, #138). Son las del movil de
+// la gestora, no el estado del prospecto que filtra la lista.
+router.get('/etiquetas', chat.etiquetasDeWhatsapp);
+
 router.get('/chats', chat.chats);
 router.post('/chats', chat.abrirChat);
 router.get('/chats/:id', chat.chat);
 router.get('/chats/:id/ficha', chat.ficha);
 router.post('/chats/:id/enviar', chat.enviar);
 router.post('/chats/:id/adjunto', uploadWhatsapp.single('archivo'), chat.adjunto);
+router.post('/chats/:id/historial', chat.traerHistorial);
+router.post('/chats/:id/reenviar', chat.reenviar);
 router.post('/chats/:id/no-escribir', chat.noEscribir);
 // Llamar se hace desde el movil; el CRM solo lo apunta.
+router.post('/chats/:id/etiqueta', chat.etiquetarChat);
 router.post('/chats/:id/llamada', chat.registrarLlamada);
 router.post('/mensajes/:id/descargar', chat.descargarAdjunto);
 // Corregir un mensaje ya enviado. WhatsApp deja 15 minutos (#75).

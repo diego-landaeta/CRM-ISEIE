@@ -34,7 +34,14 @@
   min-height: 420px;
   border-radius: 8px;
   overflow: hidden;
-  border: 1px solid var(--wa-borde);
+  /* SIN marco alrededor.
+     Lo traia el kit y se quedo. WhatsApp Web no lo tiene: su panel se apoya en
+     el fondo sin dibujar un rectangulo. Aqui era ademas la linea mas visible de
+     toda la pantalla —un rectangulo entero de 1px sobre fondo casi negro— y con
+     el navegador a mas zoom se aclara al antialiasear: es la que se reportaba
+     como «linea blanca».
+     Las separaciones de dentro se quedan: esas si las tiene WhatsApp, con el
+     mismo color que usamos (#222d34 sobre #111b21). */
 }
 
 /* La lista de chats ocupa lo que necesita; el hilo, todo lo demas. */
@@ -83,10 +90,37 @@
 }
 .wa-marco .cs-conversation:hover,
 .wa-marco .cs-conversation.cs-conversation--active { background-color: var(--wa-hover); }
+/* Los fondos del kit, apagados a la brava.
+ *
+ * El kit trae `background-color:#f6fbff` y `color:rgba(0,0,0,.87)` en el nombre
+ * y en el subtitulo, porque esta pensado para una interfaz clara. Este panel es
+ * oscuro en los dos temas, asi que hay que anularlos.
+ *
+ * Con `!important`, y no por gusto: la anulacion normal gana por especificidad
+ * SI las dos hojas cargan en el orden esperado, y eso deja de ser cierto en un
+ * build de produccion, donde el empaquetador decide el orden. Se ha visto: una
+ * barra blanca donde va el nombre del chat, con el texto en negro encima del
+ * panel oscuro. Reportado dos veces desde produccion y no reproducible en
+ * desarrollo — que es exactamente la firma de un problema de orden de hojas.
+ *
+ * Es la excepcion que justifica el `!important` del sistema de diseño: no se
+ * esta ganando a codigo nuestro, sino a la hoja de un tercero que no controlamos
+ * ni podemos reordenar. */
 .wa-marco .cs-conversation__name,
-.wa-marco .cs-conversation-header__user-name { color: var(--wa-texto); background: transparent; }
+.wa-marco .cs-conversation-header__user-name {
+  color: var(--wa-texto) !important;
+  background: transparent !important;
+}
 .wa-marco .cs-conversation__info,
-.wa-marco .cs-conversation-header__info { color: var(--wa-apagado); background: transparent; }
+.wa-marco .cs-conversation-header__info {
+  color: var(--wa-apagado) !important;
+  background: transparent !important;
+}
+/* Y la cabecera entera, por lo mismo. */
+.wa-marco .cs-conversation-header,
+.wa-marco .cs-conversation-header__content {
+  background-color: var(--wa-cabecera) !important;
+}
 
 .wa-marco .cs-conversation__unread {
   background-color: var(--wa-verde);
@@ -194,7 +228,27 @@
 /* ── Adjuntos ────────────────────────────────────────────────────────────── */
 
 .wa-adjunto { margin-bottom: 4px; }
-.wa-imagen { border-radius: 6px; max-width: 260px; max-height: 280px; display: block; }
+/* La foto manda el ancho de su burbuja.
+ *
+ * Estaba clavada a 260 px mientras la burbuja crecia con el texto: con un pie
+ * largo, la burbuja se estiraba hasta 800 px y la foto se quedaba pegada a la
+ * izquierda, suelta, sin nada al lado. «La imagen no se centra».
+ *
+ * Lo que hace WhatsApp no es centrarla: es estrechar la burbuja de las fotos
+ * para que el pie se parta al ancho de la imagen. Asi la foto y su texto forman
+ * un bloque, que es lo que se espera de un mensaje con foto. */
+.wa-imagen {
+  border-radius: 6px;
+  display: block;
+  width: 100%;
+  max-width: 280px;
+  max-height: 280px;
+  object-fit: contain;
+}
+
+/* El limite va en el CONTENIDO de la burbuja y no en la imagen: si se pone en
+   la imagen, el texto sigue estirando la burbuja por su cuenta. */
+.wa-marco .cs-message.wa-msg-media .cs-message__content { max-width: 300px; }
 
 /* Los stickers van sueltos sobre el fondo, sin burbuja y pequeños. Hay que
    repetir el estado —first, last, single— porque si no ganan las reglas de
@@ -294,6 +348,79 @@
   background: var(--wa-hover); color: var(--wa-texto);
 }
 .wa-btn-prohibir:hover { color: #f15c6d; }
+
+/* ── Las etiquetas del WhatsApp de la gestora (#128, #138) ───────────────────
+ *
+ * El boton va con sus vecinos de la cabecera —mismo tamaño y mismo redondeo—
+ * porque es uno mas de esa fila. Lo que cambia es el menu, que se parece al de
+ * plantillas y no al desplegable de estado: son dos cosas distintas y no
+ * conviene que se lean como la misma.
+ */
+.wa-etiquetas-chat { position: relative; display: inline-grid; place-items: center; }
+
+.wa-btn-etiquetas {
+  display: grid; place-items: center;
+  width: 34px; height: 34px;
+  border-radius: 9999px;
+  border: 0; cursor: pointer;
+  background: transparent;
+  color: var(--wa-apagado);
+  position: relative;
+}
+.wa-btn-etiquetas:hover { background: var(--wa-hover); color: var(--wa-texto); }
+
+/* Cuantas tiene puestas, encima del icono. Sin esto hay que abrir el menu para
+   saber si este chat tiene etiqueta o no. */
+.wa-etiquetas-cuantas {
+  position: absolute; top: 2px; right: 2px;
+  min-width: 14px; height: 14px; padding: 0 3px;
+  border-radius: 9999px;
+  background: var(--wa-verde); color: #0b141a;
+  font-size: 9px; font-weight: 700; line-height: 14px; text-align: center;
+}
+
+.wa-etiquetas-menu {
+  position: absolute; z-index: 50; top: 38px; right: 0;
+  width: 240px; max-height: 320px; overflow-y: auto;
+  border-radius: 8px;
+  border: 1px solid var(--wa-borde);
+  background: var(--wa-cabecera);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .45);
+  padding: 4px;
+}
+.wa-etiquetas-titulo {
+  padding: 6px 8px 4px;
+  font-size: 11px; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--wa-apagado);
+}
+.wa-etiquetas-item {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; padding: 7px 8px;
+  border: 0; border-radius: 6px;
+  background: transparent; color: var(--wa-texto);
+  font-size: 13px; text-align: left; cursor: pointer;
+}
+.wa-etiquetas-item:hover:not(:disabled) { background: var(--wa-hover); }
+.wa-etiquetas-item:disabled { opacity: .6; cursor: default; }
+/* El tic ocupa sitio SIEMPRE, puesto o no: si apareciera y desapareciera, la
+   fila entera bailaria al marcar una etiqueta. */
+.wa-etiquetas-tic {
+  display: grid; place-items: center;
+  width: 14px; height: 14px; flex: 0 0 14px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, .25);
+  color: #0b141a;
+}
+.wa-etiquetas-item-puesta .wa-etiquetas-tic {
+  background: var(--wa-verde); border-color: var(--wa-verde);
+}
+.wa-etiquetas-nombre { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wa-etiquetas-pie {
+  padding: 6px 8px 4px;
+  border-top: 1px solid var(--wa-borde);
+  margin-top: 4px;
+  font-size: 11px; color: var(--wa-apagado);
+}
 .wa-btn-ayuda:hover { color: var(--wa-verde); }
 
 /* El «?» de la barra de arriba. Va con el mismo aspecto que «Ampliar» y
@@ -562,19 +689,46 @@
 .wa-escribiendo { color: var(--wa-verde); font-style: italic; }
 
 /* Responder a un mensaje: sale al pasar por encima de la burbuja. */
-.wa-responder {
-  position: absolute; top: 2px; right: 4px;
+/* Las acciones de un mensaje: responder, reenviar y corregir.
+ *
+ * En FILA. Antes cada boton llevaba su propia posicion absoluta en la misma
+ * esquina, asi que al anadir el segundo tapaba al primero. Ahora la posicion la
+ * pone el contenedor y los botones solo se colocan dentro. */
+.wa-acciones {
+  /* FUERA de la burbuja, a su lado.
+     Dentro, en la esquina, se montaban encima del texto en cuanto el mensaje
+     era corto — y son casi todos. Al lado no tapan nada y siguen a mano. */
+  position: absolute;
+  top: 50%; transform: translateY(-50%);
+  display: flex; align-items: center; gap: 2px;
+  padding: 3px;
+  border-radius: 9999px;
+  background: var(--wa-cabecera);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .4);
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+/* Cada uno hacia su lado libre: los mios estan pegados a la derecha, asi que
+   sus acciones van por la izquierda, y al reves. */
+.wa-marco .cs-message--incoming .wa-acciones { right: -70px; }
+.wa-marco .cs-message--outgoing .wa-acciones { left: -70px; }
+.wa-marco .cs-message__content { position: relative; }
+/* Con el foco tambien, no solo con el raton: por teclado no habia forma de
+   llegar a ellas — se tabulaba a un boton invisible. */
+.wa-marco .cs-message:hover .wa-acciones,
+.wa-acciones:focus-within { opacity: 1; }
+
+.wa-accion {
   display: grid; place-items: center;
   width: 20px; height: 20px;
   border: 0; border-radius: 9999px;
-  background: rgba(0, 0, 0, 0.35);
+  background: transparent;
   color: var(--wa-apagado);
-  cursor: pointer; opacity: 0;
-  transition: opacity 0.12s;
+  cursor: pointer;
 }
-.wa-marco .cs-message__content { position: relative; }
-.wa-marco .cs-message:hover .wa-responder { opacity: 1; }
-.wa-responder:hover { color: var(--wa-texto); }
+.wa-accion:hover:not(:disabled) { color: var(--wa-texto); background: rgba(255,255,255,.10); }
+.wa-accion:focus-visible { outline: 2px solid var(--wa-verde); outline-offset: 1px; }
+.wa-accion:disabled { cursor: default; opacity: .5; }
 
 /* La cita, encima de la caja de escribir.
  *
@@ -648,24 +802,29 @@
  *
  * Solo aparece en lo que ENTRA: en lo que sales tu, el autor eres tu. */
 .wa-autor {
-  display: flex; align-items: center; gap: 5px;
-  margin-bottom: 3px;
-  font-size: 11.5px;
+  display: block;
+  margin-bottom: 2px;
+  font-size: 12.5px;
   font-weight: 600;
-  color: var(--wa-verde);
   max-width: 100%;
 }
 
+/* El avatar del autor, FUERA de la burbuja y a su izquierda, como en WhatsApp.
+   El color lo pone el nombre, para reconocer a alguien antes de leerlo. */
+.wa-marco .cs-message__avatar { align-self: flex-start; margin-right: 6px; }
+.wa-autor-foto,
+.wa-autor-hueco {
+  display: flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 50%;
+  font-size: 11px; font-weight: 700; color: #fff;
+  overflow: hidden;
+}
+/* Los mensajes siguientes de la misma persona no repiten el avatar, pero
+   guardan su hueco: si no, las burbujas de una misma tanda no se alinean. */
+.wa-autor-hueco { background: transparent; }
+
 /* El nombre se recorta; el avatar nunca, para que no se deforme. */
 .wa-autor-nombre { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-.wa-autor-avatar {
-  flex: 0 0 auto;
-  width: 18px; height: 18px; border-radius: 50%;
-  display: inline-flex; align-items: center; justify-content: center;
-  font-size: 9px; font-weight: 700; letter-spacing: .2px;
-  color: #fff;
-}
 
 /* «Grupos» no es un estado de prospecto, asi que no lleva su paleta: gris
  * neutro para que se lea como lo que es, un filtro de otra clase. */
@@ -1232,12 +1391,71 @@
   border-radius: 999px;
   white-space: nowrap;
 }
+/* La hora, empujada a la derecha del todo. `margin-left:auto` en vez de
+   `justify-content`: el nombre tiene que seguir siendo lo que cede sitio. */
+.wa-fila-cuando {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding-left: 6px;
+  font-size: 11px;
+  color: var(--wa-apagado);
+  font-variant-numeric: tabular-nums;
+}
 .wa-fila-adelanto {
   font-size: 13px;
   color: var(--wa-apagado);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* Quien hablo, delante del adelanto. Del mismo color y sin negrita: es una
+   pista, no un titulo, y en negrita compite con el nombre del grupo de arriba.
+   No se le pone `flex` a la fila a proposito — con flex el corte por elipsis
+   se aplica a cada trozo por su cuenta y se ve «Dieg…: Stic…». */
+.wa-fila-autor { color: var(--wa-apagado); }
+
+/* La etiqueta del prospecto en la cabecera, que ademas se puede cambiar (#72).
+
+   Hereda el color de `.wa-et-*`, que es el mismo de la lista: asi el estado se
+   lee igual en los dos sitios. Sin flecha del sistema —queda enorme al lado de
+   los iconos— pero con el cursor de mano, que es lo que dice que se puede
+   tocar. */
+.wa-estado-elegir {
+  appearance: none;
+  -webkit-appearance: none;
+  /* Sin esto el control se pinta con el lienzo CLARO del sistema y los fondos
+     de `.wa-et-*` —que son translucidos a proposito— quedan encima de blanco:
+     la pildora salia azul palido con letra oscura en medio de un tema oscuro.
+     Es la misma trampa de siempre, pero con quien pinta el control siendo el
+     navegador y no nosotros. */
+  color-scheme: dark;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  padding: 5px 9px;
+  border-radius: 9999px;
+  border: 0;
+  cursor: pointer;
+  max-width: 150px;
+}
+.wa-estado-elegir:focus-visible {
+  outline: 2px solid var(--wa-verde);
+  outline-offset: 2px;
+}
+/* Las opciones las pinta el sistema y no heredan la pildora: se les da el fondo
+   del panel para que no salgan en blanco sobre el tema oscuro. */
+.wa-estado-elegir option {
+  background: var(--wa-panel);
+  color: var(--wa-texto);
+}
+/* El fondo, OPACO y calculado del color del propio estado.
+   `.wa-et-*` los da translucidos, que va bien sobre una fila de la lista pero
+   no sobre un control: el navegador pinta su lienzo debajo y —diga lo que diga
+   `color-scheme`— sale claro. Aqui se mezcla el color del texto con el de la
+   cabecera y queda la misma pildora, opaca, sin depender de quien pinte debajo.
+   Con `select.` para ganar a `.wa-et-*` sin importar el orden del fichero. */
+select.wa-estado-elegir {
+  background-color: color-mix(in srgb, currentColor 20%, var(--wa-cabecera));
 }
 
 /* Los colores de las etiquetas, propios y NO de Tailwind.
@@ -1257,6 +1475,32 @@
    grises. Se vio en la captura, no leyendo. Sirve para un estado que aparezca
    mañana y no este aqui: gris legible, no un hueco sin texto. */
 .wa-fila-etiqueta, .wa-etiqueta { background: rgba(255,255,255,.10); color: var(--wa-apagado); }
+
+/* Un grupo no es un estado de prospecto: gris azulado, para que se lea como
+   lo que es —una propiedad del chat— y no como una fase del embudo. */
+.wa-et-grupo          { background: rgba(148,163,184,.18); color: #cbd5e1; }
+
+/* Las etiquetas del WhatsApp de la gestora (#128, #138).
+   Con borde y sin relleno, al reves que las del estado: son de OTRO sitio —las
+   puso ella en su movil, no el CRM— y si se pintaran igual, en la misma fila
+   parecerian dos estados del mismo prospecto. */
+/* La fila de las etiquetas del móvil, debajo de la de estados y dicha aparte.
+   Juntas salían dos botones «Grupos» que hacían cosas distintas. */
+.wa-etiquetas-wa { padding-top: 2px; }
+.wa-etiquetas-de {
+  font-size: 10px; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--wa-apagado); align-self: center; margin-right: 2px;
+}
+.wa-et-whatsapp {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: transparent;
+  color: var(--wa-apagado);
+  border: 1px solid rgba(255,255,255,.22);
+  max-width: 11ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .wa-et-nuevo          { background: rgba( 59,130,246,.16); color: #93c5fd; }
 .wa-et-por_contactar  { background: rgba(249,115, 22,.16); color: #fdba74; }
@@ -1293,17 +1537,6 @@
 
 /* Corregir un mensaje ya enviado (#75). Discreto: solo aparece durante los
    15 minutos que WhatsApp deja, y no compite con el texto. */
-.wa-corregir {
-  display: inline-block;
-  margin-top: 4px;
-  font-size: 11px;
-  color: var(--wa-apagado);
-  cursor: pointer;
-  opacity: .8;
-}
-.wa-corregir:hover { opacity: 1; color: var(--wa-texto); }
-.wa-corregir:disabled { cursor: default; opacity: .5; }
-
 /* Corregir DENTRO de la burbuja (#75). Antes esto era un window.prompt: un
    cartel del sistema con «localhost dice» encima del CRM, sin estilo, sin
    tema y bloqueando la pestaña entera. */
@@ -1375,6 +1608,59 @@
   background-color: var(--wa-cabecera);
   color: var(--wa-texto);
 }
+
+/* ── Reenviar a otro chat (#99, punto 5) ─────────────────────────────────────
+   Sale FLOTANDO sobre el panel, asi que va con la paleta del panel y no con la
+   del CRM. Es lo mismo que ya paso con las etiquetas: `bg-background` y
+   `text-muted-foreground` siguen el tema de la aplicacion, y este panel es
+   oscuro en los dos. Un cuadro claro sobre el chat se ve de otro sitio. */
+.wa-elegir {
+  background: var(--wa-panel);
+  color: var(--wa-texto);
+  border: 1px solid var(--wa-borde);
+}
+.wa-elegir-cabecera,
+.wa-elegir-buscador { border-bottom: 1px solid var(--wa-borde); }
+
+.wa-elegir-tenue { color: var(--wa-apagado); }
+
+.wa-elegir-cerrar { color: var(--wa-apagado); }
+.wa-elegir-cerrar:hover { color: var(--wa-texto); }
+
+.wa-elegir-campo {
+  background: var(--wa-cabecera);
+  color: var(--wa-texto);
+  border: 1px solid transparent;
+}
+.wa-elegir-campo::placeholder { color: var(--wa-apagado); }
+/* El foco se marca con el verde de WhatsApp, no con el anillo del CRM. */
+.wa-elegir-campo:focus-visible { border-color: var(--wa-verde); }
+
+.wa-elegir-fila { color: var(--wa-texto); }
+.wa-elegir-fila:hover:not(:disabled),
+.wa-elegir-fila:focus-visible { background: var(--wa-hover); }
+
+.wa-elegir-avatar { background: var(--wa-cabecera); color: var(--wa-apagado); }
+
+/* «Buscar en todos», dentro del aviso de sin resultados (#72). Un enlace y no
+   un boton: va en mitad de una frase, y ahi un boton pesa demasiado. */
+.wa-quitar-filtro-enlace {
+  background: none; border: 0; padding: 0;
+  color: var(--wa-verde);
+  font: inherit; font-weight: 600;
+  cursor: pointer; text-decoration: underline;
+}
+.wa-quitar-filtro-enlace:hover { color: var(--wa-texto); }
+
+/* Un mensaje borrado. Como en WhatsApp: se queda el hueco, en cursiva y
+   apagado, diciendo que estuvo. No se borra la fila — son conversaciones con
+   clientes y esto sirve tambien para auditar. */
+.wa-eliminado {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-style: italic;
+  color: var(--wa-apagado);
+}
+.wa-marco .cs-message.wa-msg-eliminado .cs-message__content { opacity: .85; }
 
 /* La letra pequena del documento comercial: la lee la gestora mientras elige
    una plantilla, y NO se envia. Va en ambar para que no se confunda con el

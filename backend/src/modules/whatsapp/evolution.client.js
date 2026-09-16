@@ -27,6 +27,47 @@ export const PREFIJO = process.env.EVOLUTION_INSTANCIA || 'crm';
 // sin mezclarse.
 const WEBHOOK_PROPIO = process.env.EVOLUTION_WEBHOOK_URL || '';
 
+/**
+ * Los avisos de Evolution que el CRM sabe atender.
+ *
+ * Uno por cada rama de `recibir()`. Si se anade un manejador alli, su evento
+ * tiene que entrar aqui o no llegara nunca — que es exactamente como estuvieron
+ * las llamadas, las fotos de perfil y los borrados.
+ */
+export const EVENTOS_QUE_ATENDEMOS = [
+  'MESSAGES_UPSERT',
+  // El HISTORIAL entero viene por aqui, y no por `MESSAGES_UPSERT` (#73).
+  //
+  // Esto es lo que hacia que «el ultimo mes» y «todo el historial» no trajeran
+  // NADA en produccion. Al sincronizar, Baileys emite `messaging-history.set` y
+  // Evolution lo reenvia como `messages.set` —comprobado en su codigo, 2.3.7,
+  // `whatsapp.baileys.service.ts`: `sendDataWebhook(Events.MESSAGES_SET, ...)`—.
+  // Sin este evento suscrito, el CRM solo recibia lo que entraba EN VIVO, asi
+  // que las tres opciones de la pantalla acababan haciendo lo mismo.
+  //
+  // En local no se notaba: el puente de Baileys manda su historial como
+  // `messages.upsert`. Es otra vez la trampa de la #63 — lo que se prueba no es
+  // lo que corre. El puente tiene que emitir `messages.set` igual que Evolution.
+  'MESSAGES_SET',
+  'MESSAGES_UPDATE',
+  'MESSAGES_DELETE',
+  'CONTACTS_UPDATE',
+  'CONNECTION_UPDATE',
+  'CALL',
+  'GROUPS_UPSERT',
+  // Las etiquetas de la gestora (#128, #138). Dos avisos distintos:
+  //
+  //   LABELS_EDIT        se creo, se renombro o se borro una etiqueta.
+  //   LABELS_ASSOCIATION se puso o se quito de un chat.
+  //
+  // Manda el aviso y no `findLabels`: alli el nombre llega PELADO —Evolution le
+  // quita todo lo que no sea ASCII antes de guardarlo— y ademas solo hay algo
+  // si tiene encendido `DATABASE_SAVE_DATA_LABELS`. Por el aviso llega entero y
+  // siempre. Esta escrito con detalle en `168_etiquetas_de_whatsapp.sql`.
+  'LABELS_EDIT',
+  'LABELS_ASSOCIATION',
+];
+
 /** La instancia de WhatsApp de una persona. */
 export const instanciaDe = (userId) => `${PREFIJO}-u${parseInt(userId, 10)}`;
 
@@ -112,8 +153,30 @@ export async function crearInstancia(nombre = INSTANCIA, modo = 'rapido') {
       // que los mensajes de una sesion de pruebas aterrizaran en la base de
       // PRODUCCION: conversaciones apareciendo de la nada que nadie sabria de
       // donde salieron. Cada instancia avisa a quien la creo.
+      //
+      // Y se piden TODOS los eventos que el CRM sabe atender, no tres.
+      //
+      // Aqui iban MESSAGES_UPSERT, MESSAGES_UPDATE y CONNECTION_UPDATE. Los
+      // manejadores de los otros existen y estan probados, pero Evolution no
+      // los mandaba nunca porque nadie se habia suscrito: el codigo estaba ahi,
+      // muerto, y desde fuera parecia que la funcion no existia.
+      //
+      // Lo que se caia con esos tres, comprobado contra la instancia de la
+      // prueba —que tiene los seis puestos a mano y por eso alli si funciona—:
+      //
+      //   CALL            — ni una llamada entrante. La pantalla de «te estan
+      //                     llamando» no salta jamas.
+      //   CONTACTS_UPDATE — ninguna foto de perfil. Se ven las iniciales
+      //                     siempre; es el fallo que `contactos()` arreglo.
+      //   MESSAGES_DELETE — borrar «para mi» no llega. «Elimine un mensaje y no
+      //                     se elimino», tal cual se reporto.
+      //   GROUPS_UPSERT   — el asunto de un grupo al crearlo o renombrarlo.
+      //
+      // Solo pasaba con el webhook propio puesto, o sea SOLO en produccion y
+      // staging: en local se cae al webhook global del contenedor, que los manda
+      // todos. Por eso aqui se veia bien y alli no.
       ...(WEBHOOK_PROPIO ? { webhook: { url: WEBHOOK_PROPIO, byEvents: false,
-        events: ['MESSAGES_UPSERT', 'MESSAGES_UPDATE', 'CONNECTION_UPDATE'] } } : {}),
+        events: EVENTOS_QUE_ATENDEMOS } } : {}),
     },
     esperaMs: 30000,
   });
@@ -283,8 +346,73 @@ export async function agenda(nombre = INSTANCIA) {
       // `contact.name || contact.verifiedName || el numero`—. Que es justo el
       // que se quiere: como tu la tienes apuntada, no como se anuncia ella.
       nombre: c?.name || c?.nombre || c?.pushName || null,
+      foto: c?.profilePicUrl || null,
     }))
     .filter((c) => c.jid && c.nombre);
+}
+
+/**
+ * Un contacto suelto de la agenda, por su jid.
+ *
+ * Existe por las LLAMADAS. El aviso de una llamada no trae nombre: se comprobo
+ * en el Baileys que corre dentro de Evolution v2.3.7 —`handleCall` arma el
+ * evento con `chatId`, `from`, `id`, `date`, `offline` y `status`, y nada mas—.
+ * El nombre y la foto que se ven al sonar salen de aqui.
+ *
+ * Y `from` en una llamada llega como `@lid`, que no es un telefono, asi que se
+ * compara por la parte de delante de la arroba: la agenda guarda ese mismo
+ * `@lid`. Comprobado con la agenda real — quien llamo estaba ahi como
+ * `95069319217252@lid`, con nombre y con foto, mientras el CRM pintaba las
+ * catorce cifras.
+ */
+export async function contactoDe(jid, nombre = INSTANCIA) {
+  if (!jid) return null;
+  const clave = String(jid).split('@')[0];
+  const contactos = await agenda(nombre);
+  return (contactos || []).find((c) => String(c.jid).split('@')[0] === clave) || null;
+}
+
+/** A que avisos esta suscrita una sesion. Null si no se pudo leer. */
+export async function webhookDe(nombre = INSTANCIA) {
+  const r = await pedir(`/webhook/find/${nombre}`, { esperaMs: 10000 });
+  return r.ok ? (r.datos || null) : null;
+}
+
+/**
+ * Se asegura de que la sesion recibe TODOS los avisos que el CRM atiende.
+ *
+ * Las sesiones ya creadas se quedaron con los tres de antes, y arreglar
+ * `crearInstancia` no las toca: seguirian sin llamadas, sin fotos y sin
+ * borrados hasta que alguien las volviera a enlazar. Esto lo repara solo,
+ * desde el propio CRM, sin entrar al servidor.
+ *
+ * Solo anade. La URL no se toca — es la que distingue produccion de staging, y
+ * pisarla mandaria los mensajes de una a la base de la otra.
+ *
+ * Devuelve que se anadio, o null si no habia nada que hacer.
+ */
+export async function asegurarEventos(nombre = INSTANCIA) {
+  const actual = await webhookDe(nombre);
+  if (!actual?.url) return null;
+  const puestos = Array.isArray(actual.events) ? actual.events : [];
+  const faltan = EVENTOS_QUE_ATENDEMOS.filter((e) => !puestos.includes(e));
+  if (!faltan.length) return null;
+  const r = await pedir(`/webhook/set/${nombre}`, {
+    metodo: 'POST',
+    cuerpo: {
+      webhook: {
+        enabled: actual.enabled !== false,
+        url: actual.url,
+        byEvents: Boolean(actual.webhookByEvents ?? actual.byEvents ?? false),
+        base64: actual.webhookBase64 ?? actual.base64 ?? true,
+        events: [...new Set([...puestos, ...EVENTOS_QUE_ATENDEMOS])],
+      },
+    },
+    esperaMs: 10000,
+  });
+  if (!r.ok) return null;
+  logger.info({ instancia: nombre, faltan }, 'WhatsApp: avisos que faltaban, suscritos');
+  return faltan;
 }
 
 /**
@@ -342,6 +470,87 @@ export async function guardarAjustes(nombre = INSTANCIA, cambios = {}) {
     esperaMs: 15000,
   });
   return r.ok ? { ok: true, datos: r.datos } : { ok: false, error: r.error };
+}
+
+/**
+ * Los mensajes que Evolution guarda de UN chat concreto (#73).
+ *
+ * Una gestora no encuentra a alguien de hace dos meses porque ese chat nunca
+ * entro: al enlazar se pide `syncFullHistory: false` y solo llega lo reciente.
+ * Ponerlo a `true` traeria cientos de miles de mensajes de golpe en un numero
+ * con años de uso, asi que se hace al reves — se pide UN chat cuando hace falta.
+ *
+ * Evolution los tiene igualmente: es leerlos de su archivo, no de WhatsApp.
+ *
+ * La forma de la respuesta cambia entre versiones —unas devuelven la lista
+ * pelada, otras la envuelven en `messages.records`— asi que se aceptan las dos.
+ * Devuelve [] si no se pudo: que no haya historial no puede tumbar nada.
+ */
+export async function mensajesDe(jid, nombre = INSTANCIA, limite = 300) {
+  const r = await pedir(`/chat/findMessages/${nombre}`, {
+    metodo: 'POST',
+    cuerpo: { where: { key: { remoteJid: jid } }, limit: limite },
+    esperaMs: 30000,
+  });
+  if (!r.ok) return [];
+  const d = r.datos;
+  const filas = Array.isArray(d) ? d
+    : Array.isArray(d?.messages?.records) ? d.messages.records
+    : Array.isArray(d?.messages) ? d.messages
+    : Array.isArray(d?.records) ? d.records
+    : [];
+  // Solo lo que tiene clave: sin `key.id` no hay como evitar duplicarlo despues.
+  return filas.filter((m) => m?.key?.id);
+}
+
+/**
+ * La foto de perfil de alguien.
+ *
+ * Evolution la manda por su cuenta en `contacts.update`, pero eso solo llega
+ * cuando cambia. Para una conversacion que ya existe sin foto no llega nunca, y
+ * ahi hay que pedirla.
+ *
+ * Se pide UNA vez por conversacion, cuando no la tiene. En cada mensaje serian
+ * cientos de llamadas de mas a WhatsApp — es la misma cuenta que ya esta hecha
+ * en el puente.
+ *
+ * Devuelve null si no se pudo o si esa persona no tiene: no tener foto es
+ * normal y no es un fallo.
+ */
+export async function fotoDe(numero, nombre = INSTANCIA) {
+  const r = await pedir(`/chat/fetchProfilePictureUrl/${nombre}`, {
+    metodo: 'POST',
+    cuerpo: { number: String(numero || '').replace(/[^0-9]/g, '') },
+    esperaMs: 12000,
+  });
+  if (!r.ok) return null;
+  return r.datos?.profilePictureUrl || r.datos?.profilePicUrl || null;
+}
+
+/**
+ * Como se llama un grupo y cual es su foto.
+ *
+ * Evolution NO manda el asunto del grupo en el aviso de cada mensaje —
+ * comprobado sobre mensajes reales: en `key` solo viene el jid del grupo—. El
+ * puente si lo mandaba, porque se lo pedia el mismo. De ahi que en local los
+ * grupos tuvieran nombre y en produccion salieran con un numero de 18 cifras.
+ *
+ * Se pide UNA vez, cuando el grupo no tiene nombre todavia.
+ */
+export async function grupoDe(jid, nombre = INSTANCIA) {
+  const r = await pedir(`/group/findGroupInfos/${nombre}?groupJid=${encodeURIComponent(jid)}`, {
+    esperaMs: 15000,
+  });
+  if (!r.ok) return null;
+  const d = r.datos || {};
+  return {
+    asunto: d.subject || null,
+    foto: d.pictureUrl || null,
+    // Cuantos son. Evolution devuelve la lista con el identificador de cada uno
+    // pero SIN nombre, asi que lo unico util de ahi es el numero — y es lo que
+    // pone WhatsApp cuando no conoce los nombres.
+    miembros: Array.isArray(d.participants) ? d.participants.length : null,
+  };
 }
 
 /** Que numero esta conectado ahora mismo. */
@@ -403,3 +612,65 @@ export async function editarTexto(numero, { waId, jid, mio = true }, texto, nomb
 
 /** Para las pruebas: volver a empezar sin reiniciar el proceso. */
 export const _reiniciarEdicion = () => { editarNoExiste = false; };
+
+/**
+ * Las etiquetas que tiene la gestora en su WhatsApp (#128, #138).
+ *
+ * Devuelve `[{ waId, nombre, color }]`, o lista vacia si no hay ninguna — que
+ * es lo normal en una cuenta que NO sea WhatsApp Business: las etiquetas son
+ * una funcion suya, y en una cuenta personal no existen.
+ *
+ * DOS COSAS QUE NO SE VEN Y HAY QUE SABER, las dos del codigo de Evolution 2.3.7:
+ *
+ *   · Esto lee de la base de Evolution, que solo se llena si tiene encendido
+ *     `DATABASE_SAVE_DATA_LABELS`. Apagado, devuelve vacio aunque el movil
+ *     tenga veinte etiquetas. Es el mismo tropiezo de los audios, cuando
+ *     `SAVE_DATA_NEW_MESSAGE` iba en false y «Descargar audio» contestaba
+ *     «Message not found».
+ *
+ *   · Ahi el nombre esta PELADO: al guardarlo hace
+ *     `name.replace(/[^\x20-\x7E]/g, '')`, asi que «Presupuesto ✅» se queda en
+ *     «Presupuesto » y «Sesión» en «Sesin». El aviso `labels.edit`, en cambio,
+ *     llega con el nombre entero.
+ *
+ * Por eso esto sirve para la PRIMERA carga y nada mas: manda lo que llega por
+ * el aviso. Ver `168_etiquetas_de_whatsapp.sql`.
+ */
+export async function etiquetas(nombre = INSTANCIA) {
+  const r = await pedir(`/label/findLabels/${nombre}`, { esperaMs: 10000 });
+  if (!r.ok) return [];
+  const lista = Array.isArray(r.datos) ? r.datos : (r.datos?.labels || []);
+  return lista
+    .filter((l) => l && (l.id || l.labelId))
+    .map((l) => ({
+      waId: String(l.id ?? l.labelId),
+      nombre: String(l.name ?? '').trim(),
+      color: l.color == null ? null : String(l.color),
+    }));
+}
+
+/**
+ * Poner o quitar una etiqueta a un chat, desde el CRM.
+ *
+ * `handleLabel` pide el NUMERO, no el jid, y antes comprueba contra WhatsApp
+ * que ese numero existe: con un jid entero contesta «Number not found». Por eso
+ * se manda solo la parte de delante de la arroba y sin nada que no sea cifra.
+ *
+ * Con un grupo NO funciona —no tiene numero— y por eso se para aqui en vez de
+ * mandar una peticion que va a fallar con un mensaje que no explica nada.
+ */
+export async function ponerEtiqueta(jid, waIdEtiqueta, accion = 'add', nombre = INSTANCIA) {
+  const destino = String(jid || '');
+  if (destino.endsWith('@g.us')) {
+    return { ok: false, motivo: 'A un grupo no se le pueden poner etiquetas de WhatsApp.' };
+  }
+  const numero = destino.split('@')[0].replace(/[^0-9]/g, '');
+  if (!numero) return { ok: false, motivo: 'Sin numero al que ponersela.' };
+
+  const r = await pedir(`/label/handleLabel/${nombre}`, {
+    metodo: 'POST',
+    cuerpo: { number: numero, labelId: String(waIdEtiqueta), action: accion },
+    esperaMs: 12000,
+  });
+  return { ok: Boolean(r.ok), motivo: r.ok ? null : (r.datos?.message || 'WhatsApp no la acepto.') };
+}

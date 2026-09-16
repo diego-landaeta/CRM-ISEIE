@@ -22,7 +22,7 @@ const TABLA_QUE_NO_ESTA = '42P01';
  * Se avisa al registro del servidor UNA vez, que es donde sirve.
  */
 let avisadoSinTabla = false;
-export async function listTemplates({ projectId, userId }) {
+export async function listTemplates({ projectId, projectIds = null, userId }) {
   try {
     const { rows } = await query(
       `SELECT t.id, t.project_id, t.label, t.body, t.ambito, t.owner_id, t.orden,
@@ -32,10 +32,15 @@ export async function listTemplates({ projectId, userId }) {
               u.nombre AS creada_por
          FROM whatsapp_templates t
          LEFT JOIN users u ON u.id = t.created_by
-        WHERE t.project_id = $1 AND t.active
+        -- Con una EMPRESA puesta llegan sus campus y valen los de todos:
+        -- una gestora de CEDIA atiende sus siete, y tener que bajar a uno
+        -- para poder usar una plantilla no significaba nada.
+        WHERE ($3::int[] IS NOT NULL AND t.project_id = ANY($3::int[])
+               OR $3::int[] IS NULL AND t.project_id = $1)
+          AND t.active
           AND (t.ambito = 'compartida' OR t.owner_id = $2)
         ORDER BY t.ambito DESC, t.orden, t.id`,
-      [projectId, userId]
+      [projectId, userId, projectIds && projectIds.length ? projectIds.map(Number) : null]
     );
     return rows;
   } catch (err) {
