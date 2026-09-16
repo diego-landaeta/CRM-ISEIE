@@ -5,9 +5,11 @@ export async function findAll({ projectId, estado, search, page = 1, limit = 50 
   const params = [projectId];
   let idx = 2;
   if (estado) { conditions.push(`m.estado = $${idx++}`); params.push(estado); }
-  if (search) {
+  // Recortado, igual que en leads: un espacio pegado al nombre vaciaba la lista.
+  const termino = typeof search === 'string' ? search.trim() : '';
+  if (termino) {
     conditions.push(`(l.nombre ILIKE $${idx} OR l.email ILIKE $${idx} OR m.dni ILIKE $${idx})`);
-    params.push(`%${search}%`);
+    params.push(`%${termino}%`);
     idx++;
   }
   const where = 'WHERE ' + conditions.join(' AND ');

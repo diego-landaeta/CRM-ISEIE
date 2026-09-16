@@ -169,7 +169,9 @@ function construirFiltro({ projectId, status, linked, search, from, to, facturab
          AND ( (sp.customer_email IS NOT NULL AND LOWER(f.cliente_email) = LOWER(sp.customer_email))
             OR (sp.customer_name  IS NOT NULL AND LOWER(f.cliente_nombre) = LOWER(sp.customer_name)) ))`);
   }
-  if (search) { conds.push(`(LOWER(sp.customer_email) LIKE $${i} OR LOWER(sp.customer_name) LIKE $${i} OR sp.stripe_id LIKE $${i})`); params.push(`%${search.toLowerCase()}%`); i++; }
+  // Recortado: un espacio pegado al nombre dejaba el buscador a cero.
+  const termino = typeof search === 'string' ? search.trim() : '';
+  if (termino) { conds.push(`(LOWER(sp.customer_email) LIKE $${i} OR LOWER(sp.customer_name) LIKE $${i} OR sp.stripe_id LIKE $${i})`); params.push(`%${termino.toLowerCase()}%`); i++; }
   if (from) { conds.push(`sp.stripe_created_at >= $${i++}`); params.push(from); }
   if (to)   { conds.push(`sp.stripe_created_at <= $${i++}`); params.push(to); }
   return { where: conds.join(' AND '), params };

@@ -43,7 +43,7 @@ export default function MatriculasPage() {
     try {
       const params = new URLSearchParams({ projectId: activeProject.id });
       if (filterEstado) params.set('estado', filterEstado);
-      if (search) params.set('search', search);
+      if (search.trim()) params.set('search', search.trim());
       const res = await client.get(`/matriculas?${params}`);
       if (res.success) {
         setData(res.data || []);

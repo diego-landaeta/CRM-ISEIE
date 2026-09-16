@@ -280,13 +280,15 @@ function filtrosVentas({ projectId, from, to, responsableId, search }, startIdx 
   if (from) { cond.push(`cv.fecha_conversion >= $${idx++}`); params.push(from); }
   if (to) { cond.push(`cv.fecha_conversion <= $${idx++}`); params.push(to); }
   if (responsableId) { cond.push(`${VENDEDORA} = $${idx++}`); params.push(responsableId); }
-  if (search) {
+  // Recortado, igual que en leads: un espacio pegado al nombre vaciaba la lista.
+  const termino = typeof search === 'string' ? search.trim() : '';
+  if (termino) {
     // Busqueda insensible a tildes sin depender de la extension unaccent,
     // que esta en un CRM pero no en el otro.
     cond.push(`(${SIN_TILDES('l.nombre')} ILIKE ${SIN_TILDES('$' + idx)}
                 OR l.email ILIKE $${idx}
                 OR ${SIN_TILDES('cv.producto_contratado')} ILIKE ${SIN_TILDES('$' + idx)})`);
-    params.push(`%${search}%`); idx++;
+    params.push(`%${termino}%`); idx++;
   }
   // Las dos reglas que definen que es una venta, iguales que en los informes:
   // una ficha marcada como mensualidad no es una venta nueva, y una venta sin

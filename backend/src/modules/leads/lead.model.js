@@ -745,9 +745,15 @@ export async function findAll({ projectId, projectIds, status, responsableId, un
     paramIdx++;
     params.push(productId);
   }
-  if (search) {
+  // El termino se recorta SIEMPRE. Los nombres se pegan desde WhatsApp y vienen
+  // con un espacio delante o detras; sin recortarlo el patron queda
+  // "% Javier Alfonso%", que no casa con un nombre que empieza en "Javier", y la
+  // pantalla sale vacia como si el cliente no existiera. Paso el 16/09 con la
+  // ficha de Javier Cifuentes.
+  const termino = typeof search === 'string' ? search.trim() : '';
+  if (termino) {
     conditions.push(`(l.nombre ILIKE $${paramIdx} OR l.email ILIKE $${paramIdx} OR l.telefono ILIKE $${paramIdx} OR l.whatsapp_usuario ILIKE $${paramIdx})`);
-    params.push(`%${search}%`);
+    params.push(`%${termino}%`);
     paramIdx++;
   }
 
@@ -1293,9 +1299,10 @@ export async function getStats(projectId, { responsableId = null, dateFrom = nul
     extra.push(`EXISTS (SELECT 1 FROM lead_utms lu WHERE lu.lead_id = leads.id AND lu.canal_detectado = $${idx++})`);
     params.push(canal);
   }
-  if (search) {
+  const termino = typeof search === 'string' ? search.trim() : '';
+  if (termino) {
     extra.push(`(nombre ILIKE $${idx} OR email ILIKE $${idx} OR telefono ILIKE $${idx})`);
-    params.push(`%${search}%`);
+    params.push(`%${termino}%`);
     idx++;
   }
   const where = extra.length ? ` AND ${extra.join(' AND ')}` : '';

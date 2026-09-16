@@ -304,7 +304,9 @@ export default function ClientsPage() {
         page: String(page),
         limit: String(PAGE_SIZE),
       });
-      if (debouncedSearch) params.set('search', debouncedSearch);
+      // Recortado antes de mandarlo: el nombre pegado desde WhatsApp trae
+      // espacios y el backend buscaba "% Javier%", que no casa con nadie.
+      if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim());
       if (filterResp === 'unassigned') params.set('unassigned', 'true');
       else if (filterResp) params.set('responsableId', filterResp);
       if (filterProducto) params.set('productId', filterProducto);

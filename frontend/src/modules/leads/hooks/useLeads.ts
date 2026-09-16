@@ -150,7 +150,7 @@ export function useLeads(): UseLeadsResult {
       params.set('projectId', String(pid));
       params.set('page', String(page));
       params.set('limit', String(PAGE_SIZE));
-      if (debouncedSearch) params.set('search', debouncedSearch);
+      if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim());
       if (filterEstado) params.set('status', filterEstado);
       if (filterOrigen) params.set('canal', filterOrigen);
       if (filterResponsable === 'unassigned') params.set('unassigned', 'true');
