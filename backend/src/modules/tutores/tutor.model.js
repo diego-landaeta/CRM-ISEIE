@@ -285,8 +285,28 @@ export async function borrarColaboracion(id) {
     [id]
   );
   if (c.n > 0) {
-    await query('UPDATE tutor_collaborations SET activa = FALSE, updated_at = NOW() WHERE id = $1', [id]);
-    return { borrada: false, desactivada: true, comisiones: c.n };
+    // Diego, 17/09: «hay que poner fecha de fin / si genera debe de guardar un
+    // historial». Antes solo se apagaba la casilla: quedaba constancia de que
+    // el tutor estuvo, pero no de hasta cuando, y esa es justo la fecha que
+    // hace falta para revisar una comision. La lista de colaboraciones ya
+    // devuelve las inactivas, asi que el historial se ve sin tocar la pantalla.
+    //
+    // LEAST y no COALESCE a secas: si el tramo tenia fin en diciembre y se
+    // quita hoy, el tutor no estuvo hasta diciembre. Y si ya habia terminado
+    // antes, se respeta la fecha que tenia.
+    const { rows: [h] } = await query(
+      `UPDATE tutor_collaborations
+          SET activa = FALSE,
+              vigente_hasta = LEAST(COALESCE(vigente_hasta, CURRENT_DATE), CURRENT_DATE),
+              updated_at = NOW()
+        WHERE id = $1
+      RETURNING vigente_desde, vigente_hasta`,
+      [id]
+    );
+    return {
+      borrada: false, desactivada: true, comisiones: c.n,
+      desde: h?.vigente_desde ?? null, hasta: h?.vigente_hasta ?? null,
+    };
   }
   await query('DELETE FROM tutor_collaborations WHERE id = $1', [id]);
   return { borrada: true, desactivada: false, comisiones: 0 };
@@ -905,7 +925,9 @@ export async function retirarTutor(tutorId) {
     const { rowCount } = await client.query(
       `UPDATE tutor_collaborations
           SET activa = false,
-              vigente_hasta = COALESCE(vigente_hasta, CURRENT_DATE),
+              -- Mismo criterio que borrarColaboracion: el tramo se cierra hoy,
+              -- no en la fecha futura que tuviera puesta.
+              vigente_hasta = LEAST(COALESCE(vigente_hasta, CURRENT_DATE), CURRENT_DATE),
               updated_at = NOW()
         WHERE tutor_id = $1 AND activa`, [tutorId]);
     const { rows: [pend] } = await client.query(
