@@ -1,6 +1,28 @@
 import bcrypt from 'bcrypt';
 import { query, getClient } from '../../shared/config/db.js';
 
+/*
+  QUE UN CURSO TENGA TUTOR HOY.
+
+  No basta con la casilla `activa`: una colaboracion puede estar marcada activa
+  y su vigencia haber terminado, y entonces ese curso no lo lleva nadie aunque
+  la fila siga ahi. Al reves tambien: un tramo que empieza el mes que viene no
+  deberia tapar el curso desde hoy.
+
+  La regla estaba escrita en la lista de colaboraciones --como `rige_hoy`-- pero
+  «Formaciones sin tutor» solo miraba `activa`, asi que un curso cuya
+  colaboracion caducaba no volvia nunca al panel. Carlos, 17/09: «si se quita un
+  tutor de colaboracion de un curso, ese curso vuelve a estar disponible y por
+  tanto debe de volver al panel de cursos sin tutor».
+
+  Vive aqui una sola vez. `alias` es como se llame la tabla en cada consulta.
+*/
+export const RIGE_HOY = (alias = 'c') => `(
+  ${alias}.activa
+  AND ${alias}.vigente_desde <= CURRENT_DATE
+  AND (${alias}.vigente_hasta IS NULL OR ${alias}.vigente_hasta >= CURRENT_DATE)
+)`;
+
 // Tutores y colaboraciones.
 //
 // El dinero NO se calcula aqui todavia: esta es la fase 1, la de dar de alta
@@ -175,10 +197,8 @@ export async function colaboraciones({ tutorId, productId, soloActivas = false }
             p.project_id, pr.nombre AS proyecto,
             -- Una colaboracion puede estar marcada activa y aun asi no regir
             -- hoy, si su vigencia ya termino. Se dice por separado para que la
-            -- pantalla no tenga que recalcularlo.
-            (c.activa
-             AND c.vigente_desde <= CURRENT_DATE
-             AND (c.vigente_hasta IS NULL OR c.vigente_hasta >= CURRENT_DATE)) AS rige_hoy
+            -- pantalla no tenga que recalcularlo. La regla es la de RIGE_HOY.
+            ${RIGE_HOY('c')} AS rige_hoy
        FROM tutor_collaborations c
        JOIN users u ON u.id = c.tutor_id
        JOIN products p ON p.id = c.product_id
@@ -603,8 +623,11 @@ export async function formacionesSinTutor({ projectId = null } = {}) {
        LEFT JOIN projects pr ON pr.id = p.project_id
        CROSS JOIN tutor_settings s
       WHERE NOT EXISTS (
+              -- Con la vigencia, no solo con la casilla: un curso cuya
+              -- colaboracion ya caduco no lo lleva nadie y tiene que volver
+              -- aqui. Ver RIGE_HOY arriba.
               SELECT 1 FROM tutor_collaborations tc
-               WHERE tc.product_id = p.id AND tc.activa
+               WHERE tc.product_id = p.id AND ${RIGE_HOY('tc')}
             )
         -- El corte va sobre la fecha de la VENTA, no la del cobro.
         --
