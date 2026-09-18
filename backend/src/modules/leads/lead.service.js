@@ -802,11 +802,25 @@ export async function createManualLead({ project_id, nombre, email, telefono, wh
   // Si el creador es gestor/admin (no superadmin/soporte), el lead se le asigna
   // a el/ella aunque venga por formulario manual — el round-robin avanza igual,
   // asi que la siguiente asignacion automatica no le vuelve a tocar.
+  // Un lead que entra por WhatsApp no es un lead repartido: es una conversacion
+  // que ya llego a alguien. Se queda con quien la atiende y NO mueve la rueda,
+  // asi que el reparto de los formularios sigue su orden intacto.
+  //
+  // Diego, 18/09: «si llega por whatsapp no afecta el robin lead».
+  //
+  // Antes se avanzaba el puntero una posicion sin asignar a nadie, con la idea
+  // de que a quien se quedaba el lead no le tocara otro enseguida. Pero el
+  // puntero no apunta a ella, apunta a la SIGUIENTE: el turno saltado se lo
+  // comia una tercera, que perdia un lead de formulario sin haber recibido
+  // nada a cambio. Con 176 leads de WhatsApp en 30 dias, eran 176 turnos
+  // saltados a personas que no tenian nada que ver.
+  //
+  // Esto vale mientras reparta el CRM. Cuando Make decida, manda el
+  // responsable en el webhook y este camino ni se usa.
   let forcedResponsableId = null;
-  let advanceRoundRobin = false;
+  const advanceRoundRobin = false;
   if (creatorUser && (creatorUser.role === 'gestor' || creatorUser.role === 'admin')) {
     forcedResponsableId = creatorUser.userId;
-    advanceRoundRobin = true;
   }
 
   const lead = await leadModel.createLeadWithRoundRobin({
