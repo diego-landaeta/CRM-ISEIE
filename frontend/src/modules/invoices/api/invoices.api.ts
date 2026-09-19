@@ -288,6 +288,9 @@ export const invoicesApi = {
   rectificar: (id: number, body: { motivo: string; parcial?: number | null; issuerId?: number }) => client.post<Invoice>(`/invoices/${id}/rectificar`, body),
   // Corregir una factura ya emitida/pagada (IVA, datos, concepto) — admin only.
   corregir: (id: number, body: {
+    // El numero se puede cambiar desde la pantalla de edicion: el servidor
+    // comprueba que este libre y dice quien lo tiene si no lo esta.
+    numero?: number;
     exento?: boolean; ivaPct?: number; ivaIncluido?: boolean;
     items?: InvoiceItem[];
     clienteNombre?: string; clienteNif?: string; clienteDireccion?: string;

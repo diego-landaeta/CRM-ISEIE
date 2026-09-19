@@ -1136,6 +1136,32 @@ export async function updateBorrador(id, data, { soloBorrador = true } = {}) {
     // (mantiene su número fiscal; se usa para enmendar datos/IVA/concepto).
     if (soloBorrador && inv.estado !== 'borrador') throw new AppError('Solo se pueden editar facturas en borrador (una factura emitida es inmutable).', 400, 'NOT_DRAFT');
 
+    // EL NUMERO DE FACTURA se puede cambiar.
+    //
+    // Diego, 19/09: «LA GESTORA TIENE QUE PODER CAMBIAR EL NUMERO DE FACTURA».
+    //
+    // La pantalla ya lo mandaba —InvoiceCreatePage manda numero en el cuerpo—
+    // pero esta consulta no guardaba ni numero ni codigo. El servidor respondia
+    // «guardado», guardaba lo demas y tiraba el numero sin decir nada: la
+    // gestora lo cambiaba, recargaba, y seguia saliendo el viejo. Un descarte
+    // silencioso es peor que un error, porque nadie sabe que hay que avisar.
+    //
+    // Se apoya en reservarNumero, que toma el cerrojo de la serie y, si el
+    // numero ya esta cogido, dice QUIEN lo tiene. Un numero repetido en una
+    // serie fiscal no es un aviso, es un problema.
+    //
+    // Solo para facturas YA numeradas: un borrador coge su numero al emitirse,
+    // y adelantarlo aqui chocaria con ese momento.
+    let numeroFinal = inv.numero;
+    let codigoFinal = inv.codigo;
+    if (inv.numero != null && data.numero != null && Number(data.numero) !== Number(inv.numero)) {
+      numeroFinal = await reservarNumero(client, inv.project_id, inv.issuer_id, inv.ano, inv.serie, data.numero);
+      // El prefijo se conserva tal cual: la serie PRO numera «PRO-2026/0032»,
+      // y las demas «2026/0126». Se reemplaza solo la cola.
+      const prefijo = String(inv.codigo || '').replace(/\d{4}\/\d+$/, '');
+      codigoFinal = prefijo + inv.ano + '/' + String(numeroFinal).padStart(4, '0');
+    }
+
     // Snapshot del emisor si cambia; si no, conserva el actual.
     let iss = { id: inv.issuer_id, razon_social: inv.issuer_razon_social, nif: inv.issuer_nif, direccion: inv.issuer_direccion, ciudad: inv.issuer_ciudad, cp: inv.issuer_cp, pais: inv.issuer_pais };
     if (data.issuerId && data.issuerId !== inv.issuer_id) {
@@ -1154,7 +1180,7 @@ export async function updateBorrador(id, data, { soloBorrador = true } = {}) {
          -- Faltaba, y era invisible: cambiar de persona fisica a empresa se
          -- guardaba en la pantalla pero no en la factura, asi que el PDF seguia
          -- saliendo con nombre y apellidos.
-         cliente_tipo=$31, updated_at=NOW()
+         cliente_tipo=$31, numero=$32, codigo=$33, updated_at=NOW()
        WHERE id=$1 RETURNING *`,
       [id,
        g('clienteNombre', inv.cliente_nombre), g('clienteNif', inv.cliente_nif), g('clienteDireccion', inv.cliente_direccion),
@@ -1167,7 +1193,7 @@ export async function updateBorrador(id, data, { soloBorrador = true } = {}) {
        iss.id, iss.razon_social, iss.nif, iss.direccion, iss.ciudad, iss.cp, iss.pais,
        g('projectId', inv.project_id),
        g('totalDivisa', inv.total_divisa),
-       g('clienteTipo', inv.cliente_tipo)]);
+       g('clienteTipo', inv.cliente_tipo), numeroFinal, codigoFinal]);
     // Corrección de una emitida: invalida el PDF cacheado para que se regenere
     // con los datos nuevos la próxima vez que se descargue.
     if (!soloBorrador) {
