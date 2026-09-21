@@ -5,6 +5,7 @@ import { useDashboard } from '@/shared/hooks/useDashboard';
 import { useStripeMonitor } from '@/modules/ia-dashboard/hooks/useStripeMonitor';
 
 const LeadDrawer = lazy(() => import('@/modules/leads/components/LeadDrawer'));
+import AvisoHuecosFacturas from '@/modules/invoices/components/AvisoHuecosFacturas';
 import {
   Users,
   Sparkle,
@@ -200,6 +201,11 @@ export default function DashboardPage() {
         title="Dashboard"
         subtitle={`${todayDate} - ${activeProject?.nombre || 'Sin proyecto'}`}
       />
+
+      {/* Si falta algun numero en la serie de facturas, se avisa arriba del
+          todo: es lo que mira Hacienda y no puede quedarse escondido dentro
+          del formulario de crear una factura. */}
+      <AvisoHuecosFacturas projectId={activeProject?.id} />
 
       {/* SECCION HOY */}
       {today && (

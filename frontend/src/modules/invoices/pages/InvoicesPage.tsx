@@ -5,6 +5,7 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import FacturacionAlDiaCard from '../components/FacturacionAlDiaCard';
+import AvisoHuecosFacturas from '../components/AvisoHuecosFacturas';
 import KpiCard from '@/shared/components/ui/KpiCard';
 import client from '@/shared/api/client';
 import { formatDateNumeric } from '@/shared/lib/format';
@@ -272,6 +273,9 @@ export default function InvoicesPage() {
           </div>
         )}
       />
+
+      {/* Si la serie tiene agujeros, se dice aqui: es donde se factura. */}
+      <AvisoHuecosFacturas projectId={activeProject?.id} />
 
       {/* Solo sale en el listado normal: es el estado de la facturacion, no de las proformas. */}
       {!esProformas && !esAbonos && <FacturacionAlDiaCard projectId={activeProject?.id} />}
