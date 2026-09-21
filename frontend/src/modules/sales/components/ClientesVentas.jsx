@@ -59,6 +59,7 @@ export default function ClientesVentas({ projectId = null, from = null, to = nul
       pendiente: Number(f.pendiente) || 0,
       vencidas: Number(f.cuotas_vencidas) || 0,
       asesoras: f.asesoras || '',
+      compartida: Boolean(f.compartida),
     }));
     // Un céntimo de redondeo no es una deuda.
     const deben = limpias.filter((f) => f.pendiente > 0.01);
@@ -158,6 +159,17 @@ export default function ClientesVentas({ projectId = null, from = null, to = nul
                         </span>
                       )}
                       <span className="truncate font-medium">{f.nombre}</span>
+                      {/* Atendida entre dos. La gestora tiene que verlo en SU
+                          pantalla: si no, su contador dice 4,5 y en la lista
+                          cuenta cuatro. */}
+                      {f.compartida && (
+                        <span
+                          title={f.asesoras ? `Compartida con ${f.asesoras}` : 'Venta compartida entre dos gestoras'}
+                          className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold whitespace-nowrap shrink-0 bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300"
+                        >
+                          COMPARTIDO
+                        </span>
+                      )}
                     </div>
                     {f.asesoras && <div className="text-[10px] text-muted-foreground/70 truncate">{f.asesoras}</div>}
                   </td>

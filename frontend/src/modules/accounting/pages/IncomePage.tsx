@@ -92,7 +92,7 @@ function Tipo({ tipo, compartida }: { tipo: string; compartida?: boolean }) {
         className={`${base} bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300`}
         title="Venta repartida entre dos gestoras. Cada una suma su parte."
       >
-        A MEDIAS
+        COMPARTIDO
       </span>
     </span>
   );

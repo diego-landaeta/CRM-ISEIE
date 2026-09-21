@@ -279,7 +279,17 @@ function filtrosVentas({ projectId, from, to, responsableId, search }, startIdx 
   if (projectId) { cond.push(`cv.project_id = $${idx++}`); params.push(projectId); }
   if (from) { cond.push(`cv.fecha_conversion >= $${idx++}`); params.push(from); }
   if (to) { cond.push(`cv.fecha_conversion <= $${idx++}`); params.push(to); }
-  if (responsableId) { cond.push(`${VENDEDORA} = $${idx++}`); params.push(responsableId); }
+  // Por gestora, mirando el reparto y no una sola vendedora.
+  //
+  // Antes era `COALESCE(cv.vendedora_id, l.responsable_id) = $n`, o sea UNA
+  // persona por venta: la venta atendida entre dos solo le salia a la dueña del
+  // lead. La otra veia su contador en 4,5 —eso si sale del reparto— y en la
+  // lista solo cuatro. Daniela, 21/09.
+  if (responsableId) {
+    cond.push(`EXISTS (SELECT 1 FROM conversion_reparto r
+                        WHERE r.conversion_id = cv.id AND r.vendedora_id = $${idx++})`);
+    params.push(responsableId);
+  }
   // Recortado, igual que en leads: un espacio pegado al nombre vaciaba la lista.
   const termino = typeof search === 'string' ? search.trim() : '';
   if (termino) {
@@ -405,7 +415,14 @@ export async function getVentasPorCliente(filtros = {}) {
       SELECT cv.id, cv.lead_id, cv.importe_total, cv.fecha_conversion,
              ${COBRADO_REAL} AS importe_pagado,
              l.nombre AS cliente, l.email, l.telefono,
-             u.nombre AS asesora
+             -- Atendida entre dos: se enseñan las dos, no una.
+             EXISTS (SELECT 1 FROM conversion_vendedoras xv
+                      WHERE xv.conversion_id = cv.id) AS compartida,
+             COALESCE(
+               (SELECT string_agg(u2.nombre, ' + ' ORDER BY u2.nombre)
+                  FROM conversion_vendedoras xv JOIN users u2 ON u2.id = xv.user_id
+                 WHERE xv.conversion_id = cv.id),
+               u.nombre) AS asesora
         FROM conversions cv
         LEFT JOIN leads l ON l.id = cv.lead_id
         LEFT JOIN users u ON u.id = COALESCE(cv.vendedora_id, l.responsable_id)
@@ -440,6 +457,7 @@ export async function getVentasPorCliente(filtros = {}) {
             COALESCE(MAX(cu.cuotas_pendientes), 0) AS cuotas_pendientes,
             COALESCE(MAX(cu.cuotas_vencidas), 0) AS cuotas_vencidas,
             COALESCE(MAX(cu.cuotas_importe_pendiente), 0) AS cuotas_importe_pendiente,
+            BOOL_OR(v.compartida) AS compartida,
             STRING_AGG(DISTINCT v.asesora, ', ') AS asesoras
        FROM v
        LEFT JOIN cu ON cu.lead_id = v.lead_id
