@@ -506,6 +506,15 @@ export async function findAll({ projectId, leadId, responsableId, pendiente, ven
             l.nombre as lead_nombre, l.email as lead_email,
             COALESCE(c.vendedora_id, l.responsable_id) AS responsable_id,
             COALESCE(uv.nombre, u.nombre) AS responsable_nombre,
+            -- Atendida entre dos gestoras. Sin esto la fila enseña una sola
+            -- —la del lead— y la venta repartida parece que no se reparte:
+            -- Daniela dio una por perdida el 21/09 porque la lista no lo decia.
+            EXISTS (SELECT 1 FROM conversion_vendedoras cv
+                     WHERE cv.conversion_id = c.id) AS compartida,
+            (SELECT string_agg(u2.nombre, ' + ' ORDER BY u2.nombre)
+               FROM conversion_vendedoras cv
+               JOIN users u2 ON u2.id = cv.user_id
+              WHERE cv.conversion_id = c.id) AS reparto_nombres,
             p.nombre as proyecto_nombre
      FROM conversions c
      LEFT JOIN leads l ON l.id = c.lead_id
