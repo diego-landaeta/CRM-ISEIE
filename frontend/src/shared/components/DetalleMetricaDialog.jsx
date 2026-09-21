@@ -225,6 +225,18 @@ export default function DetalleMetricaDialog({ abierto, onClose, consulta, subti
                         className={`px-3 py-1.5 ${ES_CIFRA.has(c.t) ? 'text-right tabular-nums' : ''} ${c.t === 'eur' ? 'font-semibold' : ''} ${c.t === 'esmens' && f[c.k] ? 'text-amber-600 dark:text-amber-500 font-semibold' : ''} ${c.t === 'pagos' && Number(f[c.k] || 0) > 1 ? 'text-sky-600 dark:text-sky-400 font-semibold' : ''}`}>
                         <span className="block max-w-[240px] truncate" title={titulo(c, f)}>
                           {celda(c, f)}
+                          {/* Cuál de las filas es la compartida. El importe que
+                              se enseña ya es la parte de esta asesora, no la
+                              venta entera: por eso las filas suman lo que dice
+                              el número que abre el popup. */}
+                          {c.k === 'cliente' && f.compartida && (
+                            <span
+                              title={f.asesora ? `Compartida con ${f.asesora} · aquí se ve su parte` : 'Venta compartida'}
+                              className="ml-1.5 inline-block px-1.5 py-0.5 rounded text-[9px] font-bold align-middle bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300"
+                            >
+                              COMPARTIDO
+                            </span>
+                          )}
                         </span>
                       </td>
                     ))}

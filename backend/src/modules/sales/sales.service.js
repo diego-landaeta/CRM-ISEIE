@@ -311,22 +311,39 @@ function filtrosVentas({ projectId, from, to, responsableId, search }, startIdx 
 // Lo cobrado de una venta, sumando sus apuntes. NO se usa cv.importe_pagado:
 // ese campo declara 213.680 EUR de mas en ISEIE y hacia que la pantalla
 // enseñara un cobrado que los cobros no respaldan.
+// La parte que le toca a UNA gestora.
+//
+// Mirando lo de una sola, la venta atendida entre dos no es suya entera: es
+// mitad y mitad. Sin esto su lista enseñaba los 245 EUR completos mientras su
+// contador contaba media venta, y los numeros no cuadraban entre si.
+// Sin gestora (la vista de todo) el peso es 1: la venta es una para la casa.
+function pesoDe(responsableId, params, idx) {
+  if (!responsableId) return { PESO: '1', idx };
+  params.push(Number(responsableId));
+  return {
+    PESO: `COALESCE((SELECT r.peso FROM conversion_reparto r
+                      WHERE r.conversion_id = cv.id AND r.vendedora_id = $${idx}), 1)`,
+    idx: idx + 1,
+  };
+}
+
 const COBRADO_REAL = `(SELECT COALESCE(SUM(cp.importe), 0)
                          FROM conversion_payments cp WHERE cp.conversion_id = cv.id)`;
 
 // Resumen consolidado que acompana a la vista general de Ventas.
 export async function getResumenVentas(filtros = {}) {
-  const { where, params } = filtrosVentas(filtros);
+  const { where, params, idx } = filtrosVentas(filtros);
+  const { PESO } = pesoDe(filtros.responsableId, params, idx);
   const { rows } = await query(
     `SELECT COUNT(*)::int AS ventas,
             COUNT(DISTINCT cv.lead_id)::int AS clientes,
             COUNT(DISTINCT ${VENDEDORA})::int AS asesoras,
-            COALESCE(SUM(cv.importe_total), 0) AS importe,
-            COALESCE(SUM(${COBRADO_REAL}), 0) AS cobrado,
-            COALESCE(SUM(cv.importe_total - ${COBRADO_REAL}), 0) AS pendiente,
+            COALESCE(SUM(cv.importe_total * ${PESO}), 0) AS importe,
+            COALESCE(SUM(${COBRADO_REAL} * ${PESO}), 0) AS cobrado,
+            COALESCE(SUM((cv.importe_total - ${COBRADO_REAL}) * ${PESO}), 0) AS pendiente,
             COUNT(*) FILTER (WHERE ${COBRADO_REAL} >= cv.importe_total)::int AS liquidadas,
             COUNT(*) FILTER (WHERE ${COBRADO_REAL} <  cv.importe_total)::int AS con_saldo,
-            COALESCE(AVG(cv.importe_total), 0) AS ticket_medio
+            COALESCE(AVG(cv.importe_total * ${PESO}), 0) AS ticket_medio
        FROM conversions cv
        LEFT JOIN leads l ON l.id = cv.lead_id
        ${where}`,
@@ -407,13 +424,15 @@ export async function getVentasPorAsesora(filtros = {}) {
 export async function getVentasPorCliente(filtros = {}) {
   const page = Math.max(1, parseInt(filtros.page) || 1);
   const limit = Math.min(200, Math.max(1, parseInt(filtros.limit) || 50));
-  const { where, params, idx } = filtrosVentas(filtros);
+  const { where, params, idx: idx0 } = filtrosVentas(filtros);
+  const { PESO, idx } = pesoDe(filtros.responsableId, params, idx0);
 
   // Las ventas del filtro se aislan en una CTE para poder contar sus cuotas
   // por cliente sin meter agregados dentro de subconsultas.
   const CTE = `WITH v AS (
-      SELECT cv.id, cv.lead_id, cv.importe_total, cv.fecha_conversion,
-             ${COBRADO_REAL} AS importe_pagado,
+      SELECT cv.id, cv.lead_id, ROUND(cv.importe_total * ${PESO}, 2) AS importe_total,
+             cv.fecha_conversion,
+             ROUND(${COBRADO_REAL} * ${PESO}, 2) AS importe_pagado,
              l.nombre AS cliente, l.email, l.telefono,
              -- Atendida entre dos: se enseñan las dos, no una.
              EXISTS (SELECT 1 FROM conversion_vendedoras xv

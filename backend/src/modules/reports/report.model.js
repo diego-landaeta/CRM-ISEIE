@@ -1354,6 +1354,20 @@ export async function detalleMetrica({ projectId, projectIds, from, to, tipo, as
     if (!finMes) params.push(hasta);
     if (asesoraId === 'sin') cond.push('NOT EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id IS NOT NULL)');
     else if (asesoraId) add('EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id = ?)', Number(asesoraId));
+    // LA PARTE QUE LE TOCA A ELLA.
+    //
+    // Mirando lo de UNA asesora, una venta repartida no es suya entera: es
+    // mitad y mitad. El panel de arriba ya lo cuenta asi —Catherine, septiembre:
+    // 5.067,50 EUR— pero las filas de este popup enseñaban el importe completo y
+    // sumaban 5.190,00: los 122,50 de diferencia son la mitad de la compartida.
+    // Con esto, las filas vuelven a sumar lo que dice el numero que las abre.
+    // Sin asesora (la vista de todo) el peso es 1: la venta es una para la casa.
+    let PESO = '1';
+    if (asesoraId && asesoraId !== 'sin') {
+      params.push(Number(asesoraId));
+      PESO = `COALESCE((SELECT r.peso FROM conversion_reparto r
+                         WHERE r.conversion_id = c.id AND r.vendedora_id = $${idx++}), 1)`;
+    }
     // Placeholder explicito: FORMACION lleva '?' dentro de sus regex y add()
     // sustituiria el primero, que no es el nuestro.
     if (formacion) { cond.push(`${FORMACION} = $${idx++}`); params.push(formacion); }
@@ -1376,18 +1390,28 @@ export async function detalleMetrica({ projectId, projectIds, from, to, tipo, as
               c.fecha_conversion AS fecha,
               ${FORMACION_CON_FACTURA} AS formacion,
               ${ES_MENSUALIDAD} AS es_mensualidad,
-              ROUND(c.importe_total, 2) AS importe,
+              ROUND(c.importe_total * ${PESO}, 2) AS importe,
               -- De los cobros reales, NO de c.importe_pagado: ese campo declara
               -- 240.502,95 EUR de mas en 2026 y enseñaba cobros donde no los hay.
               ROUND(COALESCE((SELECT SUM(cp2.importe) FROM conversion_payments cp2
-                               WHERE cp2.conversion_id = c.id), 0), 2) AS cobrado,
+                               WHERE cp2.conversion_id = c.id), 0) * ${PESO}, 2) AS cobrado,
               -- Lo que cuenta COMO VENTA: el cobro que abre la ficha. Los
               -- siguientes son mensualidades y se cuentan en su metrica. Sin
               -- esta columna la fila solo enseñaba el precio del curso entero.
               ROUND(COALESCE((SELECT cp3.importe FROM conversion_payments cp3
                                WHERE cp3.conversion_id = c.id
-                               ORDER BY cp3.fecha, cp3.id LIMIT 1), 0), 2) AS como_venta,
-              COALESCE(u.nombre, '— sin asesora —') AS asesora,
+                               ORDER BY cp3.fecha, cp3.id LIMIT 1), 0) * ${PESO}, 2) AS como_venta,
+              -- La asesora, y las DOS cuando la venta esta repartida. El filtro
+              -- de arriba ya encuentra estas ventas para las dos, pero la fila
+              -- enseñaba solo a la dueña del lead y no habia forma de saber
+              -- cual de las cinco era la compartida. Diego, 21/09.
+              COALESCE(
+                (SELECT string_agg(u2.nombre, ' + ' ORDER BY u2.nombre)
+                   FROM conversion_vendedoras cv2 JOIN users u2 ON u2.id = cv2.user_id
+                  WHERE cv2.conversion_id = c.id),
+                u.nombre, '— sin asesora —') AS asesora,
+              EXISTS (SELECT 1 FROM conversion_vendedoras cv3
+                       WHERE cv3.conversion_id = c.id) AS compartida,
               (SELECT ${PAIS_TEL} FROM (SELECT (CASE WHEN LENGTH(regexp_replace(regexp_replace(COALESCE(l.telefono, ''), '[^0-9]', '', 'g'), '^00', '')) > 15 THEN LEFT(regexp_replace(regexp_replace(COALESCE(l.telefono, ''), '[^0-9]', '', 'g'), '^00', ''), 11) ELSE regexp_replace(regexp_replace(COALESCE(l.telefono, ''), '[^0-9]', '', 'g'), '^00', '') END) AS tel) _t) AS pais,
               (SELECT COUNT(*) FROM conversion_payments cp WHERE cp.conversion_id = c.id)::int AS cobros,
               (SELECT COUNT(*) FROM conversions c0 WHERE c0.lead_id = c.lead_id
