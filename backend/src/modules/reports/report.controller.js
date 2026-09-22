@@ -109,6 +109,38 @@ export async function asesorasMes(req, res, next) {
   } catch (err) { next(err); }
 }
 
+/**
+ * GET /api/informes/mi-puesto -> como va quien pregunta.
+ *
+ * Una gestora solo puede pedir el suyo. Un admin puede mirar el de otra
+ * --lo necesita para acompañarla-- pasando `gestoraId`.
+ */
+export async function miPuesto(req, res, next) {
+  try {
+    const esJefe = req.user.role === 'admin' || req.user.role === 'superadmin' || req.user.role === 'soporte';
+    const pedido = req.query.gestoraId ? Number(req.query.gestoraId) : null;
+    const userId = esJefe && pedido ? pedido : req.user.userId;
+    const { from, to, ...ambito } = await rangoDeQuery(req);
+    // Por defecto, EL MES EN CURSO. Con el historico entero el puesto casi no
+    // se mueve --lo que se hizo en marzo pesa igual que lo de ayer-- y deja de
+    // servir para corregir nada a tiempo.
+    const hoy = new Date();
+    const mes = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`;
+    const re = /^\d{4}-\d{2}-\d{2}$/;
+    const desde = re.test(req.query.from || '') ? from : `${mes}-01`;
+    const hasta = re.test(req.query.to || '') ? to : `${mes}-${String(hoy.getDate()).padStart(2, '0')}`;
+    // `asesoraId` se queda fuera a proposito: recorta el informe a UNA persona
+    // y aqui hace falta la tabla entera para saber en que puesto va.
+    const { asesoraId, base, ...sinAsesora } = ambito;
+    res.json({ success: true, data: await model.miPuesto({
+      userId, from: desde, to: hasta, ...sinAsesora,
+      // Por fecha de VENTA salvo que pidan lo contrario: es lo que la gestora
+      // reconoce como suyo el dia que cierra.
+      base: req.query.base === 'factura' ? 'factura' : 'cobro',
+    }) });
+  } catch (err) { next(err); }
+}
+
 // GET /api/informes/panel -> KPIs con comparativa y serie para la grafica
 export async function panel(req, res, next) {
   try {

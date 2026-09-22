@@ -29,6 +29,7 @@ import ChannelBadge, { CHANNEL_LABELS } from '@/shared/components/ui/ChannelBadg
 import EmptyState from '@/shared/components/ui/EmptyState';
 import KpiCard from '@/shared/components/ui/KpiCard';
 import PageHeader from '@/shared/components/ui/PageHeader';
+import ComoVoy from '@/modules/reports/components/ComoVoy';
 import SkeletonTable, { SkeletonCard } from '@/shared/components/ui/SkeletonTable';
 import ConversionFunnel from '@/shared/components/dashboard/ConversionFunnel';
 import PerformanceInsights from '@/shared/components/dashboard/PerformanceInsights';
@@ -142,6 +143,10 @@ export default function DashboardPage() {
     return (
       <div className="space-y-8">
         <PageHeader title="Dashboard" subtitle="Cargando datos..." />
+
+      {/* Como va quien mira: su puesto en ventas y su tasa de
+          conversion del mes. */}
+      <ComoVoy />
         <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)}
         </div>

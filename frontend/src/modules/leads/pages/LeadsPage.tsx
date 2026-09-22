@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useProducts } from '@/modules/products/hooks/useProducts';
 import client from '@/shared/api/client';
+import ComoVoy from '@/modules/reports/components/ComoVoy';
 import {
   MagnifyingGlass,
   Plus,
@@ -549,6 +550,10 @@ export default function LeadsPage() {
           />
         </Suspense>
       )}
+
+      {/* Como va quien mira: su puesto en ventas y su tasa de conversion del
+          mes. Va aqui porque esta es la pantalla donde pasa el dia. */}
+      <ComoVoy compacto />
 
       {/* Header compacto: titulo + acciones en la misma fila, todo h-9 */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">

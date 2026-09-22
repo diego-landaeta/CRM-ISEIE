@@ -13,6 +13,7 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import { useAuth } from '@/contexts/AuthContext';
 import useUrlFilters from '@/shared/hooks/useUrlFilters';
 import PageHeader from '@/shared/components/ui/PageHeader';
+import ComoVoy from '@/modules/reports/components/ComoVoy';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import { toast } from '@/shared/hooks/useToast';
@@ -379,6 +380,10 @@ export default function ClientsPage() {
           hasActiveFilters ? `${totalBackend} encontrados` : `${totalBackend} clientes`
         }`}
       />
+
+      {/* Como va quien mira: su puesto en ventas y su tasa de
+          conversion del mes. */}
+      <ComoVoy compacto />
 
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <ClientsFiltersBar
