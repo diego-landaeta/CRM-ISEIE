@@ -5,6 +5,7 @@ import { traerPasosDeLead, type PasoDeLead } from '../api/agenda.api';
 import { iconoDeCanal, nombreDeCanal } from '../lib/canales';
 import PlantillaDelPaso from './PlantillaDelPaso';
 import type { DatosParaRellenar } from '@/modules/whatsapp/lib/plantilla';
+import type { EmailTemplate } from '@/modules/email-templates/api/templates.api';
 
 /**
  * El proceso comercial de ESTA persona, en su ficha.
@@ -31,6 +32,7 @@ export default function AgendaDelProspecto({
   datos,
   nombreProyecto,
   alCopiar,
+  alCorreo,
 }: {
   leadId: number;
   /** De qué proyecto es: sus plantillas son las que valen. */
@@ -40,6 +42,8 @@ export default function AgendaDelProspecto({
   nombreProyecto?: string | null;
   /** Copiar el mensaje deja una nota en su historial. */
   alCopiar?: (nombrePlantilla: string) => void;
+  /** Escribir el correo de este paso, con su plantilla ya puesta. */
+  alCorreo?: (plantilla: EmailTemplate) => void;
 }) {
   const [pasos, setPasos] = useState<PasoDeLead[] | null>(null);
   const [cargando, setCargando] = useState(true);
@@ -136,6 +140,7 @@ export default function AgendaDelProspecto({
                 nombreProyecto={nombreProyecto}
                 compacto
                 alCopiar={(p) => alCopiar?.(p.label)}
+                alCorreo={alCorreo}
               />
             </div>
           )}

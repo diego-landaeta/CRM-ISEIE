@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Copy, Check, WarningCircle, ImageSquare } from '@phosphor-icons/react';
+import { Copy, Check, WarningCircle, ImageSquare, EnvelopeSimple } from '@phosphor-icons/react';
 import { copyToClipboard } from '@/shared/lib/clipboard';
 import { toast } from '@/shared/hooks/useToast';
 import { whatsappApi, type PlantillaWhatsapp } from '@/modules/whatsapp/api/whatsapp.api';
 import { rellenar, huecosSinRellenar, type DatosParaRellenar } from '@/modules/whatsapp/lib/plantilla';
+import { emailTemplatesApi, type EmailTemplate } from '@/modules/email-templates/api/templates.api';
 
 /**
  * El mensaje de ESTE paso, ya escrito, donde se trabaja (#88 · #89 · #90).
@@ -30,6 +31,7 @@ export default function PlantillaDelPaso({
   datos,
   nombreProyecto,
   alCopiar,
+  alCorreo,
   compacto = false,
 }: {
   projectId: number | null;
@@ -40,6 +42,14 @@ export default function PlantillaDelPaso({
   nombreProyecto?: string | null;
   /** Se avisa al copiar, para que quien llame lo deje apuntado en su ficha. */
   alCopiar?: (plantilla: PlantillaWhatsapp, texto: string) => void;
+  /**
+   * Abrir el correo de este paso, ya elegido.
+   *
+   * Solo donde se puede escribir uno —la ficha—. Sin esto no se ofrece: en la
+   * cola no hay ventana de correo y un boton que no lleva a ninguna parte es
+   * peor que no tenerlo.
+   */
+  alCorreo?: (plantilla: EmailTemplate) => void;
   /** En la ficha hay menos sitio que en la cola. */
   compacto?: boolean;
 }) {
@@ -60,6 +70,31 @@ export default function PlantillaDelPaso({
   }, [projectId, issuerId]);
 
   useEffect(() => { setCopiada(null); }, [pasoClave, datos.nombre]);
+
+  /**
+   * El correo de este paso, si lo tiene.
+   *
+   * El proceso no es solo WhatsApp: el dia 1 manda el dossier por correo, y
+   * los dias 3 y 4 llevan el suyo. Solo se pide donde se puede escribir uno.
+   */
+  const [correos, setCorreos] = useState<EmailTemplate[]>([]);
+  // Del `alCorreo` solo interesa SI lo hay, no cual es: si se pusiera la
+  // funcion en las dependencias, una flecha escrita en el JSX de quien llama
+  // seria distinta en cada pintada y esto pediria los correos sin parar.
+  const hayDondeEscribir = Boolean(alCorreo);
+  useEffect(() => {
+    if (!hayDondeEscribir || !projectId) { setCorreos([]); return; }
+    let vivo = true;
+    emailTemplatesApi.list(projectId, false)
+      .then((r) => { if (vivo) setCorreos(r?.success ? (r.data || []) : []); })
+      .catch(() => { if (vivo) setCorreos([]); });
+    return () => { vivo = false; };
+  }, [projectId, hayDondeEscribir]);
+
+  const correoDelPaso = useMemo(
+    () => correos.find((t) => t.paso_clave === pasoClave) || null,
+    [correos, pasoClave],
+  );
 
   const suyas = useMemo(
     () => (todas || [])
@@ -87,8 +122,22 @@ export default function PlantillaDelPaso({
 
   if (todas === null) return null;
 
+  // El correo del paso va debajo de los mensajes, y tambien cuando no hay
+  // ninguno: hay pasos que son solo correo.
+  const elCorreo = correoDelPaso && alCorreo ? (
+    <button
+      type="button"
+      onClick={() => alCorreo(correoDelPaso)}
+      className="flex w-full items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-left text-[11px] font-semibold hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring/40"
+    >
+      <EnvelopeSimple size={13} weight="bold" className="shrink-0 text-muted-foreground" />
+      <span className="min-w-0 truncate">Escribir el correo: {correoDelPaso.name}</span>
+    </button>
+  ) : null;
+
   // Un paso sin plantilla no pinta una caja vacía: dice dónde se crea y ya.
   if (suyas.length === 0) {
+    if (elCorreo) return <div className="space-y-2">{elCorreo}</div>;
     if (compacto) return null;
     return (
       <p className="text-secundario text-muted-foreground">
@@ -149,6 +198,7 @@ export default function PlantillaDelPaso({
           </div>
         );
       })}
+      {elCorreo}
     </div>
   );
 }
