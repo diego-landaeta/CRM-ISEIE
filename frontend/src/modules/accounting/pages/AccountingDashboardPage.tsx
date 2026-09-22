@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { accountingApi } from '../api/accounting.api';
+import { ambitoComoObjeto } from '@/shared/lib/ambitoInforme';
 import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
@@ -33,7 +34,7 @@ const DEFAULT_TO = new Date().toISOString().slice(0, 10);
 
 export default function AccountingDashboardPage() {
   const navigate = useNavigate();
-  const { activeProject } = useProjectContext();
+  const { activeProject, activeIssuerId } = useProjectContext();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [range, setRange] = useUrlFilters({ from: DEFAULT_FROM, to: DEFAULT_TO });
@@ -54,7 +55,11 @@ export default function AccountingDashboardPage() {
       setLoading(true);
       try {
         const res = await accountingApi.dashboard({
-          ...(activeProject?.id ? { projectId: activeProject.id } : {}),
+          // Con una sociedad puesta, sus campus sumados; con un campus, ese.
+          // `activeProject.id` a secas vale -1 con «todos», y el servidor
+          // contesta «Number must be greater than 0»: la pantalla se quedaba
+          // en blanco con un aviso rojo.
+          ...ambitoComoObjeto({ activeIssuerId, activeProject }),
           from: range.from,
           to: range.to,
         });
