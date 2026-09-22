@@ -1038,6 +1038,32 @@
   padding: 8px 10px;
   border-bottom: 1px solid hsl(var(--border));
 }
+/* Los pasos del proceso, en una fila que no parte la caja si son muchos. */
+.wa-plantillas-pasos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 7px 10px;
+  border-bottom: 1px solid hsl(var(--border));
+}
+.wa-plantillas-paso {
+  border: 1px solid hsl(var(--border));
+  background: none;
+  color: hsl(var(--muted-foreground));
+  border-radius: 999px;
+  padding: 2px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.wa-plantillas-paso:hover { background: hsl(var(--muted) / 0.5); }
+.wa-plantillas-paso.es-activo {
+  background: hsl(var(--primary) / 0.12);
+  border-color: hsl(var(--primary));
+  color: hsl(var(--primary));
+}
+
 .wa-plantillas-busca {
   flex: 1;
   min-width: 0;

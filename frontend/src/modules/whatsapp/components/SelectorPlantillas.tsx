@@ -16,6 +16,22 @@ import { rellenar, huecosSinRellenar, type DatosParaRellenar } from '../lib/plan
  * y se decide, igual que con la nota de voz: elegir no es enviar.
  */
 
+/**
+ * Los pasos del proceso, en su orden y con nombre corto.
+ *
+ * La CLAVE es lo estable: no se puede editar desde la pantalla de pasos, al
+ * contrario que el nombre. Por eso los botones se apoyan en ella y no en cómo
+ * se llame hoy el paso.
+ */
+const ORDEN_PASOS = [
+  { clave: 'paso_1', corto: 'Paso 1' },
+  { clave: 'paso_2', corto: 'Paso 2' },
+  { clave: 'paso_3', corto: 'Paso 3' },
+  { clave: 'paso_4', corto: 'Paso 4' },
+  { clave: 'seguimiento_mensual', corto: 'Fin de mes' },
+  { clave: 'sueltas', corto: 'Sueltas' },
+];
+
 /** Sin tildes y en minuscula, para que «matricula» encuentre «Matrícula». */
 const plano = (s: string) =>
   (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -39,6 +55,7 @@ export default function SelectorPlantillas({
   const [plantillas, setPlantillas] = useState<PlantillaWhatsapp[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busca, setBusca] = useState('');
+  const [paso, setPaso] = useState<string>('todas');
   const cajaBusca = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -68,11 +85,24 @@ export default function SelectorPlantillas({
   // de la plantilla y no como se llamo.
   const filtradas = useMemo(() => {
     const q = plano(busca).trim();
-    if (!q) return plantillas || [];
-    return (plantillas || []).filter(
+    let out = plantillas || [];
+    if (paso !== 'todas') out = out.filter((p) => (p.paso_clave || 'sueltas') === paso);
+    if (!q) return out;
+    return out.filter(
       (p) => plano(p.label).includes(q) || plano(p.body).includes(q)
     );
-  }, [plantillas, busca]);
+  }, [plantillas, busca, paso]);
+
+  /**
+   * Los pasos que hay de verdad entre estas plantillas.
+   *
+   * Se sacan de lo que llega, no de una lista fija: si un proyecto no tiene la
+   * del día 4, su botón no aparece.
+   */
+  const pasos = useMemo(() => {
+    const hay = new Set((plantillas || []).map((p) => p.paso_clave || 'sueltas'));
+    return ORDEN_PASOS.filter((x) => hay.has(x.clave));
+  }, [plantillas]);
 
   const elegir = (p: PlantillaWhatsapp) => {
     // Se pasa la plantilla entera y no solo el texto: el chat necesita saber si
@@ -100,6 +130,26 @@ export default function SelectorPlantillas({
           <X size={15} />
         </button>
       </div>
+
+      {/* Por paso del proceso. El documento las da por días y así es como se
+          buscan: la gestora sabe en qué paso va esta persona, no cómo se llama
+          la plantilla. */}
+      {pasos.length > 1 && (
+        <div className="wa-plantillas-pasos" role="group" aria-label="Filtrar por paso del proceso">
+          <button type="button" onClick={() => setPaso('todas')}
+            aria-pressed={paso === 'todas'}
+            className={`wa-plantillas-paso${paso === 'todas' ? ' es-activo' : ''}`}>
+            Todas
+          </button>
+          {pasos.map((x) => (
+            <button key={x.clave} type="button" onClick={() => setPaso(x.clave)}
+              aria-pressed={paso === x.clave}
+              className={`wa-plantillas-paso${paso === x.clave ? ' es-activo' : ''}`}>
+              {x.corto}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="wa-plantillas-lista">
         {/* 1 · Cargando */}

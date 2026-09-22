@@ -17,6 +17,9 @@ export interface PlantillaWhatsapp {
   /** Aviso para la gestora. NO se envía: es la letra pequeña del documento
       comercial, que hasta ahora solo estaba en el PDF. */
   pista?: string | null;
+  /** El paso del proceso al que pertenece (`commercial_steps.clave`).
+      Nulo en las cuatro sueltas de siempre, que no son del proceso. */
+  paso_clave?: string | null;
 }
 
 export interface ProspectoCola {
