@@ -920,7 +920,13 @@ export async function findById(id) {
             pr.nombre as producto_nombre,
             pr.nombre as producto_interes,
             pr.precio as producto_precio,
-            pr.moneda as producto_moneda
+            pr.moneda as producto_moneda,
+            -- Huecos de las plantillas del proceso (#88): la ficha ofrece el
+            -- mensaje del paso ya escrito y estos dos salen del catalogo.
+            -- fecha_inicio_texto llego de WordPress como «marzo 2026» y se
+            -- manda tal cual: es lo que dice la web.
+            pr.fecha_inicio_texto,
+            pr.fecha_cierre_convocatoria
      FROM leads l
      LEFT JOIN users u ON u.id = l.responsable_id
      LEFT JOIN projects p ON p.id = l.project_id

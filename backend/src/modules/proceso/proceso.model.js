@@ -1,4 +1,20 @@
 import { query } from '../../shared/config/db.js';
+/*
+  LAS PLAZAS NO SE CUENTAN AQUI, y antes si.
+
+  Diego, 11/09/2026: «eso lo hacen ellas desde otro sistema, no en el CRM, pero
+  si es un paso a poner... que el CRM no lo recuerde, solamente sea que toca
+  mandar ese mensaje y como un disclaimer de verificar cuantas plazas quedan».
+
+  Tenia razon y el calculo se ha quitado: de dos contabilidades de las mismas
+  plazas solo una puede tener razon, y es la de admisiones. Un numero nuestro
+  que no cuadre con el suyo es PEOR que no dar numero, porque ese numero acaba
+  dentro de un mensaje que ya salio al cliente.
+
+  Lo que queda es `s.avisa_plazas`: el paso dice que su mensaje habla de
+  plazas, y la pantalla pone el aviso de ir a mirarlas. El calculo sigue vivo
+  en el catalogo (`products/plazas.sql.js`) para quien quiera llevarlo ahi.
+*/
 
 // Los pasos del proceso comercial (#87).
 //
@@ -7,7 +23,7 @@ import { query } from '../../shared/config/db.js';
 
 const COLS = `id, project_id, clave, nombre, orden, cuando,
               dia_desde, dia_hasta, canales, es_seguimiento, nota, activo,
-              created_at, updated_at`;
+              avisa_plazas, created_at, updated_at`;
 
 export async function listByProject(projectId, { includeInactive = false } = {}) {
   const { rows } = await query(
@@ -59,7 +75,7 @@ export async function update(id, data) {
   // `clave` NO esta en la lista a proposito: es por donde entra el codigo, y
   // dejar que se renombre desde la pantalla es exactamente como se rompe.
   const permitidos = ['nombre', 'orden', 'cuando', 'dia_desde', 'dia_hasta',
-                      'canales', 'es_seguimiento', 'nota', 'activo'];
+                      'canales', 'es_seguimiento', 'nota', 'activo', 'avisa_plazas'];
   const campos = [];
   const valores = [];
   let i = 1;
@@ -164,6 +180,7 @@ export async function pasosDeLead(leadId) {
   const { rows } = await query(
     `SELECT ls.id, ls.clave, ls.orden, ls.fecha_prevista, ls.estado, ls.nota,
             s.nombre, s.cuando, s.canales, s.nota AS nota_del_paso,
+            COALESCE(s.avisa_plazas, false) AS avisa_plazas,
             (${CONTACTOS}) >= ls.orden AS hecho,
             (CURRENT_DATE - ls.fecha_prevista) AS dias_de_retraso
        FROM lead_steps ls
@@ -198,8 +215,9 @@ export async function colaDelDia({ projectIds, asesoraId, hasta = null, limite =
     ? `AND ls.project_id = ANY($${i++}::int[])`
     : 'AND ls.project_id NOT IN (SELECT id FROM projects WHERE es_prueba)';
   // `if (pProj)` era SIEMPRE cierto —es una cadena no vacia en las dos ramas—
-  // asi que sin proyecto («Todos») se empujaba `null.map` y la cola reventaba
-  // con un 500. Arreglado en los dos CRM el 14/09.
+  // asi que con la lista vacia se empujaba un parametro de mas y la consulta
+  // reventaba con «bind message supplies 2 parameters, but requires 1». No
+  // salto antes porque el controlador siempre manda una lista con algo.
   if (Array.isArray(projectIds) && projectIds.length) par.push(projectIds.map(Number));
   const pAses = asesoraId ? `AND l.responsable_id = $${i++}` : '';
   if (asesoraId) par.push(asesoraId);
@@ -211,6 +229,12 @@ export async function colaDelDia({ projectIds, asesoraId, hasta = null, limite =
   const { rows } = await query(
     `WITH pendientes AS (
        SELECT ls.*, l.responsable_id, l.nombre AS lead_nombre, l.status AS lead_estado,
+              l.producto_interes_id,
+              -- Para rellenar los huecos del mensaje sin salir de la cola
+              -- (#88). Son los mismos datos con los que se rellena en el chat:
+              -- si aqui se dejaran fuera, el mismo mensaje saldria a medias
+              -- segun desde donde se copie.
+              l.email AS lead_email, l.telefono AS lead_telefono,
               ${CONTACTOS} AS contactos,
               ROW_NUMBER() OVER (PARTITION BY ls.lead_id ORDER BY ls.orden) AS pos
          FROM lead_steps ls
@@ -225,25 +249,39 @@ export async function colaDelDia({ projectIds, asesoraId, hasta = null, limite =
           AND ${CONTACTOS} < ls.orden
           ${pProj} ${pAses}
      )
-     SELECT p.lead_id, p.lead_nombre, p.lead_estado, p.responsable_id,
-            p.clave, p.orden, p.fecha_prevista, p.contactos,
+     SELECT q.lead_id, q.lead_nombre, q.lead_estado, q.responsable_id,
+            q.lead_email, q.lead_telefono,
+            q.clave, q.orden, q.fecha_prevista, q.contactos,
             -- De que campus es cada fila. Con una EMPRESA elegida la cola
             -- junta varios campus y sin esto no se sabe de parte de quien
             -- se llama. Lo pidio Carlos el 11/09.
-            p.project_id, pr.nombre AS proyecto,
+            q.project_id, pr.nombre AS proyecto,
             s.nombre AS paso_nombre, s.canales, s.nota AS paso_nota,
             u.nombre AS gestora,
-            (CURRENT_DATE - p.fecha_prevista) AS dias_de_retraso
-       FROM pendientes p
-       LEFT JOIN commercial_steps s ON s.id = p.step_id
-       LEFT JOIN projects pr ON pr.id = p.project_id
-       LEFT JOIN users u ON u.id = p.responsable_id
-      WHERE p.pos = 1
-      ORDER BY p.fecha_prevista, p.orden, p.lead_id
+            (CURRENT_DATE - q.fecha_prevista) AS dias_de_retraso,
+            -- La formacion, para saber de que se habla sin salirse de la cola.
+            -- Las plazas NO: solo la marca de que este paso las menciona y hay
+            -- que ir a comprobarlas fuera.
+            p.nombre AS producto, p.precio AS producto_precio,
+            -- Cuando empieza y cuando cierra la convocatoria: son huecos de
+            -- las plantillas y salen del catalogo, que es donde se mantienen.
+            -- Las PLAZAS no, y no es un olvido: ver la cabecera del fichero.
+            p.fecha_inicio_texto, p.fecha_cierre_convocatoria,
+            COALESCE(s.avisa_plazas, false) AS avisa_plazas
+       FROM pendientes q
+       LEFT JOIN commercial_steps s ON s.id = q.step_id
+       LEFT JOIN projects pr ON pr.id = q.project_id
+       LEFT JOIN users u ON u.id = q.responsable_id
+       LEFT JOIN products p ON p.id = q.producto_interes_id
+      WHERE q.pos = 1
+      ORDER BY q.fecha_prevista, q.orden, q.lead_id
       LIMIT ${pLimite}`,
     par
   );
-  return rows.map((r) => ({ ...r, dias_de_retraso: Number(r.dias_de_retraso) }));
+  return rows.map((r) => ({
+    ...r,
+    dias_de_retraso: Number(r.dias_de_retraso),
+  }));
 }
 
 /**
@@ -260,8 +298,9 @@ export async function resumenDeLaCola({ projectIds, asesoraId }) {
     ? `AND ls.project_id = ANY($${i++}::int[])`
     : 'AND ls.project_id NOT IN (SELECT id FROM projects WHERE es_prueba)';
   // `if (pProj)` era SIEMPRE cierto —es una cadena no vacia en las dos ramas—
-  // asi que sin proyecto («Todos») se empujaba `null.map` y la cola reventaba
-  // con un 500. Arreglado en los dos CRM el 14/09.
+  // asi que con la lista vacia se empujaba un parametro de mas y la consulta
+  // reventaba con «bind message supplies 2 parameters, but requires 1». No
+  // salto antes porque el controlador siempre manda una lista con algo.
   if (Array.isArray(projectIds) && projectIds.length) par.push(projectIds.map(Number));
   const pAses = asesoraId ? `AND l.responsable_id = $${i++}` : '';
   if (asesoraId) par.push(asesoraId);

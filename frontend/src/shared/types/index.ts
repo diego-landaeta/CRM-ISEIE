@@ -84,6 +84,14 @@ export interface Lead {
   producto_nombre?: string | null;
   producto_precio?: number | string | null;
   producto_moneda?: string | null;
+  /**
+   * Cuándo empieza su formación y cuándo cierra la convocatoria.
+   *
+   * Son huecos de las plantillas del proceso (#88) y salen del catálogo, que
+   * es donde se mantienen. Solo llegan en la ficha, no en el listado.
+   */
+  fecha_inicio_texto?: string | null;
+  fecha_cierre_convocatoria?: string | null;
   valor_oportunidad?: 'alto' | 'medio' | 'bajo' | null;
   deleted_at?: string | null;
   deleted_reason?: 'spam' | 'test' | 'duplicado_manual' | 'otro' | null;

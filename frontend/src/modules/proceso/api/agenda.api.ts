@@ -11,6 +11,9 @@ export type PasoEnCola = {
   lead_id: number;
   lead_nombre: string | null;
   lead_estado: string;
+  /** Para rellenar los huecos del mensaje sin salir de la cola (#88). */
+  lead_email?: string | null;
+  lead_telefono?: string | null;
   responsable_id: number | null;
   gestora: string | null;
   clave: string;
@@ -21,6 +24,15 @@ export type PasoEnCola = {
   fecha_prevista: string;
   dias_de_retraso: number;
   contactos: number;
+  /** La formación por la que preguntó. Las plazas NO vienen: no las lleva el
+      CRM, se miran en el sistema de admisiones. Solo viene la marca de que
+      este paso las menciona y hay que ir a comprobarlas. */
+  producto: string | null;
+  producto_precio: string | number | null;
+  /** Cuándo empieza y cuándo cierra, tal como los lleva el catálogo. */
+  fecha_inicio_texto?: string | null;
+  fecha_cierre_convocatoria?: string | null;
+  avisa_plazas: boolean;
   /** El campus. Solo importa cuando se mira una empresa entera. */
   project_id: number;
   proyecto: string | null;
@@ -47,6 +59,8 @@ export type PasoDeLead = {
   hecho: boolean;
   vencido: boolean;
   dias_de_retraso: number;
+  /** Su mensaje dice cuántas plazas quedan: hay que comprobarlo fuera. */
+  avisa_plazas: boolean;
 };
 
 function conAmbito(params: Record<string, string | number | undefined | null>) {
