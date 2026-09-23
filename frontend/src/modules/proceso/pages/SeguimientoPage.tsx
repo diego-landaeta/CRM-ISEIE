@@ -32,6 +32,7 @@ import {
 } from '../api/agenda.api';
 import PanelDeCola from '../components/PanelDeCola';
 import AccionesDeFila from '../components/AccionesDeFila';
+import DescartarDelRepaso from '../components/DescartarDelRepaso';
 import { whatsappApi, type PlantillaWhatsapp } from '@/modules/whatsapp/api/whatsapp.api';
 import { trasSacar } from '../lib/cola';
 
@@ -256,6 +257,44 @@ export default function SeguimientoPage() {
         variant: 'destructive',
       });
     } finally { setBajando(false); }
+  }
+
+  /**
+   * Descartar el seguimiento de alguien: se marca como no interesado.
+   *
+   * Diego, 23/09: «descartar este seguimiento, y cuando se descarta se irá a la
+   * parte de por qué desistió».
+   *
+   * Pasarlo a `no_interesado` hace las dos cosas de una vez: lo saca del repaso
+   * --la base excluye ese estado-- y lo mete en el grupo al que va dirigido el
+   * correo de «¿por qué desististe?» (#169), que sale justo a quien no compró y
+   * no está interesado. No es tirar a alguien: es dejar de perseguirlo y pasar a
+   * preguntarle por qué no.
+   *
+   * El motivo viaja al servidor, que lo exige. Es lo que el panel de feedback
+   * (#170) va a leer: una base de bajas sin motivo no se puede analizar.
+   */
+  async function descartarDelRepaso(p: EnSeguimiento, motivo: string) {
+    try {
+      await client.patch(`/leads/${p.lead_id}/status`, {
+        status: 'no_interesado',
+        motivo: `Descartado del repaso de fin de mes · ${motivo}`,
+      });
+      setBase((b) => b.filter((x) => x.lead_id !== p.lead_id));
+      setMarcados((m) => m.filter((x) => x !== p.lead_id));
+      traerResumenSeguimiento({ projectId: elegido, projectIds })
+        .then((r) => { if (r) setResumen(r); }).catch(() => {});
+      toast({
+        title: 'Descartado del repaso',
+        description: `${p.lead_nombre || 'Sin nombre'} pasa a no interesado. Entra en el grupo del correo de «por qué desististe».`,
+      });
+    } catch (e) {
+      toast({
+        title: 'No se ha podido descartar',
+        description: (e as Error)?.message || 'Inténtalo otra vez',
+        variant: 'destructive',
+      });
+    }
   }
 
   const todosMarcados = visibles.length > 0 && marcados.length === visibles.length;
@@ -498,6 +537,10 @@ export default function SeguimientoPage() {
                   fila={p}
                   plantillas={plantillas}
                   onAtendido={(tipo) => atenderDesdeLaFila(p, tipo)}
+                />
+                <DescartarDelRepaso
+                  nombre={p.lead_nombre}
+                  onDescartar={(motivo) => descartarDelRepaso(p, motivo)}
                 />
               </div>
             </div>
