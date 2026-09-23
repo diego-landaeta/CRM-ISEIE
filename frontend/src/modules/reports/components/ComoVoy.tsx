@@ -38,6 +38,18 @@ export interface FilaDelRanking {
   tasa: number;
 }
 
+/** Una fila del ranking. Solo la recibe quien manda. */
+export interface FilaRanking {
+  puesto: number;
+  user_id: number;
+  nombre: string | null;
+  leads: number;
+  ventas: number;
+  vendido: number;
+  cobrado: number;
+  tasa: number;
+}
+
 export interface Puesto {
   puesto: number | null;
   de: number;
@@ -65,6 +77,65 @@ const euros = (n: number) =>
 /** Cómo se dice un puesto: «la 1.ª», «la 3.ª». */
 function ordinal(n: number) {
   return `${n}.ª`;
+}
+
+/** El nombre, corto: los de cuatro palabras rompen la fila. */
+function corto(nombre: string | null) {
+  const partes = String(nombre || '—').trim().split(/\s+/);
+  return partes.length <= 2 ? partes.join(' ') : `${partes[0]} ${partes[1]}`;
+}
+
+/**
+ * Las tres primeras, con su barra.
+ *
+ * Diego, 23/09: «el top en el dashboard algo así para el admin». Antes había
+ * que desplegar el ranking para saber quién iba primero, y lo que se mira a
+ * diario es justo eso. El resto sigue en la tabla de abajo.
+ *
+ * La barra es proporcional a la de cabeza, no al total: con siete personas las
+ * porciones del total son todas pequeñas y no se distingue la primera de la
+ * cuarta. Contra el líder sí se ve la distancia, que es la pregunta.
+ */
+function Podio({ filas, compacto }: { filas: FilaRanking[]; compacto: boolean }) {
+  const tres = filas.slice(0, 3);
+  if (!tres.length) return null;
+  const tope = Math.max(...tres.map((f) => Number(f.ventas) || 0), 1);
+  return (
+    <ol className={`space-y-1 ${compacto ? 'mt-1.5' : 'mt-3'}`} aria-label="Las tres primeras del mes">
+      {tres.map((f) => (
+        <li key={f.user_id} className="flex items-center gap-2">
+          <span className="w-4 shrink-0 text-right text-[11px] font-bold tabular-nums text-muted-foreground">
+            {f.puesto}
+          </span>
+          <span className="w-28 shrink-0 truncate text-normal font-medium sm:w-36" title={f.nombre || ''}>
+            {corto(f.nombre)}
+          </span>
+          <span className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-muted" aria-hidden="true">
+            <span
+              className={`block h-full rounded-full ${f.puesto === 1 ? 'bg-primary' : 'bg-primary/45'}`}
+              style={{ width: `${Math.round((Number(f.ventas) || 0) * 100 / tope)}%` }}
+            />
+          </span>
+          <span className="shrink-0 text-normal tabular-nums">
+            <strong>{numero(f.ventas)}</strong>
+            <span className="text-muted-foreground"> · {euros(f.vendido)}</span>
+          </span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+/**
+ * Cuánto ocupa una tasa en la barra.
+ *
+ * La escala llega hasta la mayor de las dos que se comparan y no hasta 100: con
+ * tasas del 8 % --que es lo normal aquí-- una barra sobre 100 es una raya que
+ * no se ve, y entonces no compara nada.
+ */
+function anchoTasa(v: number, tope: number) {
+  if (!(tope > 0)) return 0;
+  return Math.max(2, Math.min(100, Math.round((Number(v) || 0) * 100 / tope)));
 }
 
 export default function ComoVoy({
@@ -109,6 +180,8 @@ export default function ComoVoy({
   if (!esJefe && d.puesto === null && d.leads === 0 && d.ventas === 0) return null;
 
   const mejorQueElEquipo = d.tasa > d.tasa_equipo;
+  // Con un poco de aire por encima, para que la barra llena no toque el borde.
+  const topeTasa = Math.max(d.tasa, d.tasa_equipo) * 1.15;
   const igualQueElEquipo = Math.abs(d.tasa - d.tasa_equipo) < 0.05;
   const Icono = igualQueElEquipo ? Equals : mejorQueElEquipo ? TrendUp : TrendDown;
   const tono = igualQueElEquipo
@@ -136,8 +209,11 @@ export default function ComoVoy({
             </p>
           </div>
 
-          {/* El ranking, plegado. Abierto de serie ocupa media pantalla en una
-              lista que ya es larga; y lo que se mira a diario es la media. */}
+          {/* Las tres primeras, siempre a la vista. */}
+          <Podio filas={d.tabla || []} compacto={compacto} />
+
+          {/* El ranking entero, plegado. Abierto de serie ocupa media pantalla
+              en una lista que ya es larga. */}
           <button
             type="button"
             onClick={() => setAbierto((v) => !v)}
@@ -195,43 +271,84 @@ export default function ComoVoy({
         </>
       ) : (
         <>
-          <div className="flex flex-wrap items-baseline gap-x-4 gap-y-2">
-            <p className="flex items-baseline gap-2">
-              <Trophy size={compacto ? 15 : 18} weight="duotone" className="translate-y-0.5 text-primary" />
-              <span className={compacto ? 'text-normal' : 'text-seccion'}>
-                {d.puesto
-                  ? <>Vas <strong>{ordinal(d.puesto)}</strong> de {d.de} en ventas este mes</>
-                  : <>Todavía sin ventas este mes</>}
-              </span>
-            </p>
+          {/* SU PUESTO, EN GRANDE. Diego, 23/09: «para las gestoras algo más
+              único e individual». Lo que había era una frase entre otras; esto
+              es lo suyo y se lee sin buscarlo. */}
+          <div className="flex items-center gap-3">
+            <span className={`flex shrink-0 flex-col items-center justify-center rounded-lg bg-primary/10 text-primary ${compacto ? 'h-11 w-11' : 'h-14 w-14'}`}>
+              {d.puesto ? (
+                <>
+                  <strong className={`leading-none tabular-nums ${compacto ? 'text-lg' : 'text-2xl'}`}>{d.puesto}</strong>
+                  <span className="text-[9px] font-semibold uppercase tracking-wide">de {d.de}</span>
+                </>
+              ) : (
+                <Trophy size={compacto ? 18 : 24} weight="duotone" />
+              )}
+            </span>
 
-            <p className="text-secundario tabular-nums text-muted-foreground">
-              {numero(d.ventas)} {d.ventas === 1 ? 'venta' : 'ventas'} · {euros(d.vendido)}
-            </p>
+            <div className="min-w-0 flex-1">
+              <p className={compacto ? 'text-normal' : 'text-seccion'}>
+                {d.puesto
+                  ? <>Vas <strong>{ordinal(d.puesto)}</strong> en ventas este mes</>
+                  : <>Todavía sin ventas este mes</>}
+              </p>
+              <p className="text-secundario tabular-nums text-muted-foreground">
+                {numero(d.ventas)} {d.ventas === 1 ? 'venta' : 'ventas'} · {euros(d.vendido)}
+                {d.leads > 0 && <> · {d.leads} {d.leads === 1 ? 'prospecto' : 'prospectos'}</>}
+              </p>
+            </div>
           </div>
 
-          <div className={`flex flex-wrap items-center gap-x-4 gap-y-1 ${compacto ? 'mt-1' : 'mt-2'}`}>
-            {/* La tasa, con lo que significa al lado. El icono va además del
-                color: un texto verde a secas no lo distingue quien no ve bien
-                el color. */}
-            <p className={`flex items-center gap-1.5 text-normal ${tono}`}>
-              <Icono size={13} weight="bold" aria-hidden="true" />
-              <span className="tabular-nums font-semibold">{numero(d.tasa)} %</span>
-              <span className="text-muted-foreground">
-                de tus {d.leads} {d.leads === 1 ? 'prospecto' : 'prospectos'} del mes
-                {' · el equipo va al '}<span className="tabular-nums">{numero(d.tasa_equipo)} %</span>
-              </span>
-            </p>
+          {/* SU TASA CONTRA LA DEL EQUIPO, dibujada. Un «16,5 %» a secas no dice
+              si es bueno; al lado de la media del equipo, sí. La marca de la
+              media va encima de la barra: es la línea que hay que pasar. */}
+          {(d.leads > 0 || d.tasa_equipo > 0) && (
+            <div className={compacto ? 'mt-2' : 'mt-3'}>
+              <div className="flex items-baseline justify-between gap-2">
+                <span className={`flex items-center gap-1.5 text-normal font-semibold ${tono}`}>
+                  <Icono size={13} weight="bold" aria-hidden="true" />
+                  <span className="tabular-nums">{numero(d.tasa)} %</span>
+                  <span className="font-normal text-muted-foreground">de cierre</span>
+                </span>
+                <span className="text-secundario tabular-nums text-muted-foreground">
+                  el equipo, {numero(d.tasa_equipo)} %
+                </span>
+              </div>
+              {/* La escala llega hasta la mayor de las dos, no hasta 100: con
+                  tasas del 8 % una barra sobre 100 es una raya invisible. */}
+              <div className="relative mt-1 h-2 overflow-hidden rounded-full bg-muted">
+                <div
+                  className={`h-full rounded-full ${mejorQueElEquipo ? 'bg-success' : 'bg-primary'}`}
+                  style={{ width: `${anchoTasa(d.tasa, topeTasa)}%` }}
+                />
+                {d.tasa_equipo > 0 && (
+                  <span
+                    className="absolute inset-y-0 w-0.5 bg-foreground/50"
+                    style={{ left: `${anchoTasa(d.tasa_equipo, topeTasa)}%` }}
+                    aria-hidden="true"
+                    title={`Media del equipo: ${numero(d.tasa_equipo)} %`}
+                  />
+                )}
+              </div>
+            </div>
+          )}
 
-            {/* Lo que falta para adelantar a quien va justo delante. Sin nombre:
-                es para espabilar, no para señalar a nadie. */}
+          {/* Lo que falta para adelantar a quien va justo delante. Sin nombre:
+              es para espabilar, no para señalar a nadie. */}
+          <div className={`flex flex-wrap items-center gap-x-3 gap-y-1 ${compacto ? 'mt-1.5' : 'mt-2'}`}>
             {d.faltan_para_subir != null && d.faltan_para_subir > 0 && (
               <p className="text-secundario text-muted-foreground">
-                A {numero(d.faltan_para_subir)} {d.faltan_para_subir === 1 ? 'venta' : 'ventas'} del puesto de arriba
+                A <strong className="text-foreground tabular-nums">{numero(d.faltan_para_subir)}</strong>{' '}
+                {d.faltan_para_subir === 1 ? 'venta' : 'ventas'} del puesto de arriba
               </p>
             )}
             {d.puesto === 1 && d.ventas > 0 && (
               <p className="text-secundario font-semibold text-success">Vas en cabeza</p>
+            )}
+            {d.mejor_ventas > 0 && d.puesto !== 1 && (
+              <p className="text-secundario text-muted-foreground tabular-nums">
+                La primera va por {numero(d.mejor_ventas)}
+              </p>
             )}
           </div>
         </>

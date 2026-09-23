@@ -15,6 +15,7 @@ import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { UsersThree, CaretDown, CaretRight } from '@phosphor-icons/react';
 import DetalleMetricaDialog from '@/shared/components/DetalleMetricaDialog';
+import RankingGestoras from '@/modules/reports/components/RankingGestoras';
 
 function fmtMoney(n) {
   // Con decimales: sin ellos los importes no cuadraban con las facturas.
@@ -234,6 +235,15 @@ export default function AsesorasPanel({ from, to }) {
                   <Num tipo="cobros" mes={m.mes}>{fmtMoney(m.cobrado)}</Num>
                 </span>
               </div>
+
+              {open && (
+                <div className="border-t border-border p-3 sm:p-4">
+                  {/* Quien va primero, de un vistazo. La tabla de abajo tiene
+                      once columnas y lo dice todo, pero para saber el orden
+                      hay que recorrerlas con el dedo. */}
+                  <RankingGestoras asesoras={m.asesoras} mes={nombreMes(m.mes)} />
+                </div>
+              )}
 
               {open && (
                 <div className="overflow-x-auto border-t border-border">
