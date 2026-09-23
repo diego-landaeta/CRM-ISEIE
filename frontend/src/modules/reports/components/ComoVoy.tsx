@@ -86,39 +86,76 @@ function corto(nombre: string | null) {
 }
 
 /**
- * Las tres primeras, con su barra.
+ * Las tres primeras, en un podio.
  *
- * Diego, 23/09: «el top en el dashboard algo así para el admin». Antes había
- * que desplegar el ranking para saber quién iba primero, y lo que se mira a
- * diario es justo eso. El resto sigue en la tabla de abajo.
+ * Diego, 23/09: «el equipo de ventas será como un podio, no así». Lo que había
+ * era una lista con barras; se leía, pero no se veía. Un podio se entiende sin
+ * leerlo: la primera está más alta y en el centro.
  *
- * La barra es proporcional a la de cabeza, no al total: con siete personas las
- * porciones del total son todas pequeñas y no se distingue la primera de la
- * cuarta. Contra el líder sí se ve la distancia, que es la pregunta.
+ * El ORDEN visual es 2 · 1 · 3, como en un podio de verdad, y el de lectura
+ * sigue siendo 1 · 2 · 3 --la lista va en ese orden y se recoloca con CSS-- para
+ * que un lector de pantalla no cante la segunda primero.
+ *
+ * Con MENOS DE TRES no se dibuja el podio: dos cajones y un hueco parecen una
+ * avería. Con una o dos personas sale una línea y ya.
  */
 function Podio({ filas, compacto }: { filas: FilaRanking[]; compacto: boolean }) {
   const tres = filas.slice(0, 3);
   if (!tres.length) return null;
-  const tope = Math.max(...tres.map((f) => Number(f.ventas) || 0), 1);
+
+  if (tres.length < 3) {
+    return (
+      <ol className={compacto ? 'mt-1.5 space-y-1' : 'mt-3 space-y-1'} aria-label="Las primeras del mes">
+        {tres.map((f) => (
+          <li key={f.user_id} className="flex items-baseline gap-2 text-normal">
+            <span className="w-4 shrink-0 text-right font-bold tabular-nums text-muted-foreground">{f.puesto}</span>
+            <span className="truncate font-medium">{corto(f.nombre)}</span>
+            <span className="ml-auto shrink-0 tabular-nums">
+              <strong>{numero(f.ventas)}</strong>
+              <span className="text-muted-foreground"> · {euros(f.vendido)}</span>
+            </span>
+          </li>
+        ))}
+      </ol>
+    );
+  }
+
+  // La altura del cajón sale del puesto, no de las ventas: un podio dice quién
+  // va delante, no cuánto. La distancia exacta está en el número de al lado y
+  // en el ranking de abajo.
+  const CAJON: Record<number, string> = {
+    1: compacto ? 'h-12' : 'h-20',
+    2: compacto ? 'h-8' : 'h-14',
+    3: compacto ? 'h-6' : 'h-10',
+  };
+  const TONO: Record<number, string> = {
+    1: 'bg-primary text-primary-foreground',
+    2: 'bg-primary/55 text-primary-foreground',
+    3: 'bg-primary/35 text-foreground',
+  };
+  // 2 · 1 · 3. `order` recoloca sin tocar el orden de lectura.
+  const SITIO: Record<number, string> = { 1: 'order-2', 2: 'order-1', 3: 'order-3' };
+
   return (
-    <ol className={`space-y-1 ${compacto ? 'mt-1.5' : 'mt-3'}`} aria-label="Las tres primeras del mes">
+    <ol
+      className={`flex items-end justify-center gap-2 sm:gap-3 ${compacto ? 'mt-2' : 'mt-4'}`}
+      aria-label="El podio del mes"
+    >
       {tres.map((f) => (
-        <li key={f.user_id} className="flex items-center gap-2">
-          <span className="w-4 shrink-0 text-right text-[11px] font-bold tabular-nums text-muted-foreground">
-            {f.puesto}
-          </span>
-          <span className="w-28 shrink-0 truncate text-normal font-medium sm:w-36" title={f.nombre || ''}>
+        <li key={f.user_id} className={`flex min-w-0 flex-1 flex-col items-center ${SITIO[f.puesto] || ''}`}>
+          <span className="max-w-full truncate text-center text-normal font-semibold" title={f.nombre || ''}>
             {corto(f.nombre)}
           </span>
-          <span className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-muted" aria-hidden="true">
-            <span
-              className={`block h-full rounded-full ${f.puesto === 1 ? 'bg-primary' : 'bg-primary/45'}`}
-              style={{ width: `${Math.round((Number(f.ventas) || 0) * 100 / tope)}%` }}
-            />
+          <span className="text-secundario tabular-nums text-muted-foreground">
+            {numero(f.ventas)} {f.ventas === 1 ? 'venta' : 'ventas'}
           </span>
-          <span className="shrink-0 text-normal tabular-nums">
-            <strong>{numero(f.ventas)}</strong>
-            <span className="text-muted-foreground"> · {euros(f.vendido)}</span>
+          <span className="text-secundario tabular-nums text-muted-foreground">{euros(f.vendido)}</span>
+          <span
+            className={`mt-1 flex w-full items-start justify-center rounded-t-md pt-1 font-bold tabular-nums ${CAJON[f.puesto]} ${TONO[f.puesto]}`}
+          >
+            {/* La copa solo para quien gana, y ADEMAS del sitio: el cajón más
+                alto ya lo dice, pero en móvil los tres se estrechan. */}
+            {f.puesto === 1 ? <Trophy size={compacto ? 13 : 16} weight="fill" /> : f.puesto}
           </span>
         </li>
       ))}

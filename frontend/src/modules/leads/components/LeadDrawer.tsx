@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
+import { CalendarBlank,
   X, ArrowSquareOut, EnvelopeSimple, Phone, WhatsappLogo,
   CalendarCheck, ClockCounterClockwise, ChatCircleText, Plus, CheckCircle,
   PencilSimple, Trash,
@@ -16,6 +16,7 @@ import { detectCountryFromPhone } from '../lib/phoneCountry';
 const ChangeProductDialog = lazy(() => import('./ChangeProductDialog'));
 
 import AgendaDelProspecto from '@/modules/proceso/components/AgendaDelProspecto';
+import { traerPasosDeLead } from '@/modules/proceso/api/agenda.api';
 
 const EnrollSequenceModal = lazy(() => import('./EnrollSequenceModal'));
 
@@ -467,6 +468,84 @@ function InteraccionesTab({ leadId, interacciones, onRefetch }) {
   );
 }
 
+/**
+ * La agenda del proceso, dentro de Recordatorios.
+ *
+ * Diego, 23/09: «en recordatorios debe de mostrar una vez la programación de
+ * cada paso de ventas cuando registro el lead, para que funcione y avise».
+ *
+ * Al dar de alta un prospecto se le monta su agenda --los cinco pasos, cada uno
+ * con su fecha-- pero esa agenda vivía solo en la pestaña «Proceso». Quien
+ * abría Recordatorios leía «Sin recordatorios programados» y se lo creía,
+ * aunque la persona tuviera cuatro pasos por delante. Decir que no hay nada
+ * cuando sí lo hay es peor que no decir nada.
+ *
+ * NO SE DUPLICAN EN LA TABLA DE RECORDATORIOS. Se leen de la agenda y se
+ * pintan. Crear un recordatorio de verdad por cada paso llenaría la tabla de
+ * cinco filas por prospecto y las dos listas se desincronizarían en cuanto
+ * alguien moviera una fecha.
+ */
+function AgendaDelProceso({ leadId }) {
+  const [pasos, setPasos] = useState(null);
+
+  useEffect(() => {
+    let vivo = true;
+    traerPasosDeLead(leadId)
+      .then((r) => { if (vivo) setPasos(r || []); })
+      // Sin proceso montado no hay agenda. No es un error que enseñar.
+      .catch(() => { if (vivo) setPasos([]); });
+    return () => { vivo = false; };
+  }, [leadId]);
+
+  if (!pasos || pasos.length === 0) return null;
+
+  const pendientes = pasos.filter((p) => !p.hecho && p.estado !== 'saltado');
+
+  return (
+    <div className="rounded-lg border border-border bg-muted/20 p-3">
+      <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+        <CalendarBlank size={13} weight="bold" />
+        Del proceso de ventas
+        <span className="font-normal">
+          · {pendientes.length} {pendientes.length === 1 ? 'paso pendiente' : 'pasos pendientes'} de {pasos.length}
+        </span>
+      </p>
+      <ol className="space-y-1.5">
+        {pasos.map((p) => (
+          <li key={p.id} className="flex items-baseline gap-2 text-xs">
+            <span className={`w-4 shrink-0 text-right font-bold tabular-nums ${p.hecho ? 'text-muted-foreground' : 'text-primary'}`}>
+              {p.orden}
+            </span>
+            <span className={`min-w-0 flex-1 truncate ${p.hecho ? 'text-muted-foreground line-through' : ''}`}>
+              {p.nombre || p.clave}
+            </span>
+            {/* Qué le pasa a este paso: hecho, saltado, vencido o a la espera.
+                Con palabra además del color, que un ámbar a secas no lo
+                distingue quien no ve bien el color. */}
+            {p.hecho ? (
+              <span className="shrink-0 text-muted-foreground">hecho</span>
+            ) : p.estado === 'saltado' ? (
+              <span className="shrink-0 text-muted-foreground">saltado</span>
+            ) : p.vencido ? (
+              <span className="shrink-0 font-semibold text-warning-soft-foreground">
+                tarde {p.dias_de_retraso} {p.dias_de_retraso === 1 ? 'día' : 'días'}
+              </span>
+            ) : (
+              <span className="shrink-0 tabular-nums text-muted-foreground">
+                {new Date(p.fecha_prevista).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
+              </span>
+            )}
+          </li>
+        ))}
+      </ol>
+      <p className="mt-2 text-[11px] text-muted-foreground">
+        Los pasos se cierran solos al registrar un contacto. Para mover una fecha,
+        entra en la pestaña «Proceso».
+      </p>
+    </div>
+  );
+}
+
 function RecordatoriosTab({ leadId, reminders, onRefetch }) {
   const [fecha, setFecha] = useState('');
   const [nota, setNota] = useState('');
@@ -508,6 +587,10 @@ function RecordatoriosTab({ leadId, reminders, onRefetch }) {
 
   return (
     <div className="space-y-4">
+      {/* Lo que ya esta programado por el proceso, ANTES del formulario: es lo
+          que hay, y ponerlo debajo de una caja vacia hacia que nadie lo viera. */}
+      <AgendaDelProceso leadId={leadId} />
+
       <form onSubmit={add} className="space-y-2 p-3 rounded-lg border border-border bg-muted/30">
         <input
           type="datetime-local"
@@ -526,7 +609,7 @@ function RecordatoriosTab({ leadId, reminders, onRefetch }) {
         </button>
       </form>
       {reminders.length === 0 ? (
-        <p className="text-sm text-muted-foreground text-center py-6">Sin recordatorios programados.</p>
+        <p className="text-sm text-muted-foreground text-center py-6">Sin recordatorios puestos a mano.</p>
       ) : (
         <ol className="space-y-3">
           {reminders.map((r) => (

@@ -14,6 +14,7 @@
 */
 import { useEffect, useMemo, useState } from 'react';
 import {
+  DownloadSimple,
   ArrowCounterClockwise, CalendarBlank, User, Buildings, WarningCircle,
 } from '@phosphor-icons/react';
 import PageHeader from '@/shared/components/ui/PageHeader';
@@ -215,6 +216,48 @@ export default function SeguimientoPage() {
     }
   }
 
+  /**
+   * La base entera, en el fichero que come Wasapi.
+   *
+   * Diego, 23/09: «seguimiento fin de mes es para descargar con Wasapi». Copiar
+   * los teléfonos al portapapeles vale para cuarenta; la base son cientos, y
+   * una difusión se carga desde un fichero.
+   *
+   * Se descarga LA BASE ENTERA y no solo lo que hay en pantalla: la lista está
+   * recortada a 500 para que la página no se arrastre, y bajarse esas 500
+   * creyendo que son todas es peor que no bajarse nada. Lo monta el servidor,
+   * con el mismo formato que la descarga de Prospectos.
+   */
+  const [bajando, setBajando] = useState(false);
+  async function descargarWasapi() {
+    setBajando(true);
+    try {
+      const p = new URLSearchParams();
+      if (elegido) p.set('projectId', String(elegido));
+      if (projectIds) p.set('projectIds', projectIds);
+      const r = await client.get(`/proceso/seguimiento/wasapi?${p.toString()}`, {
+        responseType: 'blob',
+      } as never) as unknown as Blob;
+      const url = URL.createObjectURL(r instanceof Blob ? r : new Blob([String(r)], { type: 'text/csv' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `wasapi-seguimiento-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 100);
+      toast({
+        title: 'Descargando',
+        description: 'Solo van los que tienen teléfono: sin número no entran en una difusión.',
+      });
+    } catch (e) {
+      toast({
+        title: 'No se ha podido descargar',
+        description: (e as Error)?.message || 'Inténtalo otra vez',
+        variant: 'destructive',
+      });
+    } finally { setBajando(false); }
+  }
+
   const todosMarcados = visibles.length > 0 && marcados.length === visibles.length;
   const alternarTodos = () => setMarcados(todosMarcados ? [] : visibles.map((x) => x.lead_id));
 
@@ -300,6 +343,18 @@ export default function SeguimientoPage() {
             ? `Los ${campus.length} campus de ${activeIssuer.nombre}. Quien entró, no compró y lleva tiempo sin noticias.`
             : 'Quien entró, no compró y lleva tiempo sin noticias. No es la cola del día: esto es toda la base.'
         }
+        actions={(
+          <button
+            type="button"
+            onClick={descargarWasapi}
+            disabled={bajando || base.length === 0}
+            className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-normal font-semibold hover:bg-muted disabled:opacity-50"
+            title="La base entera en el fichero que carga Wasapi"
+          >
+            <DownloadSimple size={14} weight="bold" />
+            {bajando ? 'Preparando…' : 'Descargar para Wasapi'}
+          </button>
+        )}
       />
 
       {resumen && (

@@ -30,6 +30,8 @@ router.get('/cola/resumen', ctrl.resumenCola);
 // El repaso de fin de mes: toda la base que no compro. No es la cola del dia.
 router.get('/seguimiento', ctrl.seguimiento);
 router.get('/seguimiento/resumen', ctrl.resumenSeguimiento);
+// La base entera en formato Wasapi, para la difusion.
+router.get('/seguimiento/wasapi', ctrl.wasapiSeguimiento);
 router.get('/lead/:leadId', ctrl.pasosDeUnLead);
 // Rellena los pasos que falten. Util despues de anadir un paso nuevo al
 // proceso: los prospectos que ya estaban no lo tenian.

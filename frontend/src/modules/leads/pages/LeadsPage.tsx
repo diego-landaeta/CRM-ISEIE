@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useLeads } from '../hooks/useLeads';
 import { useWhatsappTemplates } from '../hooks/useWhatsappTemplates';
 import LeadFormDialog from '../components/LeadFormDialog';
@@ -9,7 +9,7 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import { useProducts } from '@/modules/products/hooks/useProducts';
 import client from '@/shared/api/client';
 import ComoVoy from '@/modules/reports/components/ComoVoy';
-import {
+import { Gear, ArrowCounterClockwise, ListChecks,
   MagnifyingGlass,
   Plus,
   Export,
@@ -65,6 +65,7 @@ import BulkActionBar from '../components/BulkActionBar';
 import usePermission from '@/shared/hooks/usePermission';
 import { getLeadPriority, getPriorityStyle } from '../lib/leadPriority';
 import { getLeadExportColumns } from '../lib/leadFormat';
+import ParaHoyYManana from '@/shared/components/dashboard/ParaHoyYManana';
 import {
   getInitials,
   getAvatarColor,
@@ -152,6 +153,16 @@ export default function LeadsPage() {
   } = useLeads();
 
   const { activeProject, projects } = useProjectContext();
+  /**
+   * El ámbito para la cola: un campus, o los de la empresa.
+   *
+   * `-1` es «todos los proyectos», un valor interno del CRM: mandarlo pediría
+   * el proyecto número menos uno. Con una empresa puesta van sus campus, que
+   * es lo que el servidor sabe sumar.
+   */
+  const proyectoDeLaCola = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
+  const campusCsv = null;
+
   // Columna "Proyecto" visible siempre que el usuario tenga >1 proyecto asignado
   // (no solo en modo multi). Util para saber a qué proyecto pertenece cada lead.
   const showProjectColumn = (projects?.length || 0) > 1;
@@ -640,6 +651,44 @@ export default function LeadsPage() {
       {/* Como va quien mira: su puesto en ventas y su tasa de conversion del
           mes. Va aqui porque esta es la pantalla donde pasa el dia. */}
       <ComoVoy compacto />
+
+      {/* LA COLA DEL DÍA, AQUÍ TAMBIÉN. Diego, 23/09: «la cola del día debe
+          de estar en prospectos también con atajos y todo».
+
+          Es el mismo bloque del dashboard, no una copia: los cuatro números
+          salen de `GET /proceso/cola/resumen`, que ya recorta por rol. Contar
+          aquí por mi cuenta sería una segunda contabilidad de la misma cola, y
+          el día que discrepen nadie sabría cuál creer.
+
+          Cada número abre la cola con ese tramo ya puesto, y debajo van los
+          atajos a las tres pantallas del proceso. */}
+      <div className="space-y-2">
+        <ParaHoyYManana projectId={proyectoDeLaCola} projectIds={campusCsv} />
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            to="/prospectos/cola"
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-normal font-semibold hover:bg-muted"
+          >
+            <ListChecks size={14} weight="bold" className="text-primary" />
+            La cola del día
+          </Link>
+          <Link
+            to="/prospectos/seguimiento"
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-normal font-semibold hover:bg-muted"
+          >
+            <ArrowCounterClockwise size={14} weight="bold" className="text-primary" />
+            Seguimiento de fin de mes
+          </Link>
+          <Link
+            to="/prospectos/proceso"
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-normal font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <Gear size={14} weight="bold" />
+            Proceso comercial
+          </Link>
+        </div>
+      </div>
+
 
       {/* Header compacto: titulo + acciones en la misma fila, todo h-9 */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
