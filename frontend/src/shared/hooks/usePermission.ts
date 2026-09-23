@@ -1,4 +1,5 @@
 import { useAuth } from '@/contexts/AuthContext';
+import { rolesDe, tieneRol as tieneRolDe } from '@/shared/lib/roles';
 import type { UserRole } from '@/shared/types';
 
 export type PermissionKey = string;
@@ -70,7 +71,11 @@ export const FIXED_ROLES: ReadonlyArray<FixedRole> = [
 
 export interface UsePermissionResult {
   can: (permission: PermissionKey) => boolean;
+  /** El rol PRINCIPAL. Para preguntar por uno cualquiera, `tieneRol`. */
   role: UserRole | undefined;
+  /** Todos sus roles: el principal y los añadidos. */
+  roles: UserRole[];
+  tieneRol: (...roles: UserRole[]) => boolean;
   isAdmin: boolean;
 }
 
@@ -80,15 +85,24 @@ export default function usePermission(): UsePermissionResult {
   function can(permission: PermissionKey): boolean {
     if (!user) return false;
     // bypass para roles privilegiados
-    if (user.role === 'superadmin' || user.role === 'soporte') return true;
+    if (tieneRolDe(user, 'superadmin', 'soporte')) return true;
     // override desde el backend (cuando CRM-228 exista)
     if (user.permissions && Object.keys(user.permissions).length > 0) {
       return user.permissions[permission] === true || user.permissions['*'] === true;
     }
     // fallback: defaults por rol
-    const defaults = ROLE_DEFAULT_PERMISSIONS[user.role as UserRole] || {};
-    return defaults[permission] === true || defaults['*'] === true;
+    // Los de cada uno de sus roles, sumados: basta con que UNO lo permita.
+    return rolesDe(user).some((r) => {
+      const defaults = ROLE_DEFAULT_PERMISSIONS[r] || {};
+      return defaults[permission] === true || defaults['*'] === true;
+    });
   }
 
-  return { can, role: user?.role, isAdmin: user?.role === 'admin' || user?.role === 'superadmin' };
+  return {
+    can,
+    role: user?.role,
+    roles: rolesDe(user),
+    tieneRol: (...roles: UserRole[]) => tieneRolDe(user, ...roles),
+    isAdmin: tieneRolDe(user, 'admin', 'superadmin'),
+  };
 }

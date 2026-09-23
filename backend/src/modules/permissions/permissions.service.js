@@ -2,6 +2,8 @@ import * as model from './permissions.model.js';
 import { SYSTEM_ROLE_DEFAULTS, ALL_RESOURCES } from './permissions.defaults.js';
 import { SYSTEM_ROLE_VIEWS, DASHBOARD_WIDGETS_CATALOG, SIDEBAR_ITEMS_CATALOG } from './role-views.defaults.js';
 import { query } from '../../shared/config/db.js';
+// Un array de un ENUM puede llegar como texto crudo: se entiende en un sitio.
+import { comoLista } from '../../shared/utils/roles.js';
 
 // Resuelve si un usuario tiene permiso para resource.action
 // Orden de prioridad: superadmin → override personal → custom_role.permissions → SYSTEM_ROLE_DEFAULTS
@@ -31,7 +33,11 @@ export async function resolvePermission(userId, role, customRoleId, resource, ac
 }
 
 // Calcula el mapa completo de permisos para un usuario (para devolver en /auth/me)
-export async function buildPermissionsMap(userId, role, customRoleId) {
+/**
+ * El mapa de permisos de un usuario. CON VARIOS ROLES, MANDA EL QUE MAS DEJA:
+ * si se cruzaran al reves, añadir un rol QUITARIA permisos.
+ */
+export async function buildPermissionsMap(userId, role, customRoleId, rolesExtra = []) {
   if (role === 'superadmin') {
     const all = {};
     for (const [resource, actions] of Object.entries(ALL_RESOURCES)) {
@@ -53,6 +59,15 @@ export async function buildPermissionsMap(userId, role, customRoleId) {
   }
 
   const base = { ...(SYSTEM_ROLE_DEFAULTS[baseRole] || SYSTEM_ROLE_DEFAULTS.gestor) };
+
+  // Los roles de mas, sumados encima: basta con que UNO lo permita.
+  for (const extra of comoLista(rolesExtra)) {
+    const suyos = SYSTEM_ROLE_DEFAULTS[extra];
+    if (!suyos) continue;
+    for (const [clave, vale] of Object.entries(suyos)) {
+      if (vale === true) base[clave] = true;
+    }
+  }
 
   // Aplicar overrides del custom role
   const merged = { ...base, ...customPermissions };

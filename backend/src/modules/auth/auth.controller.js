@@ -177,6 +177,8 @@ export async function me(req, res, next) {
           nombre: user.nombre,
           email: user.email,
           role: user.role,
+          // Los roles de mas, para que la pantalla sepa que puede.
+          roles_extra: user.roles_extra || [],
           avatar_url: user.avatar_url,
           custom_role_id: user.custom_role_id,
           custom_role_label: user.custom_role_label,

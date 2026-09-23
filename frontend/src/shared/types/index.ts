@@ -56,7 +56,10 @@ export interface User {
   id: number;
   nombre: string;
   email: string;
+  /** El rol PRINCIPAL. Es el que mira medio CRM y el que sale en las listas. */
   role: UserRole;
+  /** Roles de MAS. Solo SUMAN permisos. */
+  roles_extra?: UserRole[];
   custom_role_id?: number | null;
   active?: boolean;
   project_ids?: number[];

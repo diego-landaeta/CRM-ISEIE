@@ -1,5 +1,6 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { soloEsTutor } from '@/shared/lib/roles';
 
 // Dev-only bypass: si VITE_DEV_BYPASS_AUTH=true en .env.local, deja pasar sin login.
 // Solo para validar UI/menus en local sin backend. NUNCA activar en producción.
@@ -40,7 +41,8 @@ export default function ProtectedRoute({ children }) {
 
   // Un tutor que entra por cualquier otro sitio —al iniciar sesion cae en la
   // portada, que no es suya— acaba en sus cursos.
-  if (user?.role === 'tutor' && !tutorPuede(location.pathname)) {
+  // Solo si es tutor Y NADA MAS: con otro rol encima entra al CRM entero.
+  if (soloEsTutor(user) && !tutorPuede(location.pathname)) {
     return <Navigate to="/mis-cursos" replace />;
   }
 

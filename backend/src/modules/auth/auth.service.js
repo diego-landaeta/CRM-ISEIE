@@ -13,7 +13,11 @@ const REFRESH_TOKEN_EXPIRY_DAYS = 30;
 
 function generateAccessToken(user, activeProjectId = null) {
   return jwt.sign(
-    { userId: user.id, email: user.email, role: user.role, customRoleId: user.custom_role_id ?? null, activeProjectId },
+    // `roles_extra` viaja en el token para que cada guardia no tenga que ir a
+    // la base a preguntar.
+    { userId: user.id, email: user.email, role: user.role,
+      roles_extra: Array.isArray(user.roles_extra) ? user.roles_extra : [],
+      customRoleId: user.custom_role_id ?? null, activeProjectId },
     process.env.JWT_SECRET,
     { expiresIn: ACCESS_TOKEN_EXPIRY }
   );

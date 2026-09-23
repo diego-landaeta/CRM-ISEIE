@@ -1,4 +1,5 @@
 import { query, getClient } from '../../shared/config/db.js';
+import { limpiaRolesExtra } from '../../shared/utils/roles.js';
 
 // Esta lista es «quien puede llevar un prospecto», porque es para lo que la usa
 // casi todo el CRM: el filtro de Prospectos, asignar responsable, la exportacion
@@ -48,7 +49,7 @@ export async function findAll({ active, role, projectId, page, limit, incluirTod
   const total = parseInt(countResult.rows[0].count);
 
   const { rows } = await query(
-    `SELECT u.id, u.nombre, u.email, u.role, u.active, u.last_login_at, u.created_at, u.avatar_url, u.avatar_key,
+    `SELECT u.id, u.nombre, u.email, u.role, u.roles_extra::text[] AS roles_extra, u.active, u.last_login_at, u.created_at, u.avatar_url, u.avatar_key,
             u.whatsapp_phone, u.whatsapp_display_name,
             -- Los permisos acotados viajan en el listado: sin esto la pantalla no
             -- puede enseñar quien los tiene, que es como se paso por alto que a Ana
@@ -85,7 +86,7 @@ export async function findAll({ active, role, projectId, page, limit, incluirTod
 
 export async function findById(id) {
   const { rows } = await query(
-    `SELECT u.id, u.nombre, u.email, u.role, u.active, u.last_login_at, u.created_at, u.avatar_url, u.avatar_key
+    `SELECT u.id, u.nombre, u.email, u.role, u.roles_extra::text[] AS roles_extra, u.active, u.last_login_at, u.created_at, u.avatar_url, u.avatar_key
      FROM users u WHERE u.id = $1`,
     [id]
   );
@@ -108,15 +109,16 @@ export async function getUserProjects(userId) {
   return rows;
 }
 
-export async function create({ nombre, email, passwordHash, role, projectIds, projects, setPasswordToken, setPasswordExpires }) {
+export async function create({ nombre, email, passwordHash, role, roles_extra: rolesExtra = [], projectIds, projects, setPasswordToken, setPasswordExpires }) {
   const client = await getClient();
   try {
     await client.query('BEGIN');
 
     const { rows } = await client.query(
-      `INSERT INTO users (nombre, email, password_hash, role, set_password_token, set_password_expires)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, nombre, email, role, active, created_at`,
-      [nombre, email, passwordHash, role, setPasswordToken, setPasswordExpires]
+      `INSERT INTO users (nombre, email, password_hash, role, roles_extra, set_password_token, set_password_expires)
+       VALUES ($1, $2, $3, $4, $5::user_role[], $6, $7)
+       RETURNING id, nombre, email, role, roles_extra::text[] AS roles_extra, active, created_at`,
+      [nombre, email, passwordHash, role, limpiaRolesExtra(rolesExtra, role), setPasswordToken, setPasswordExpires]
     );
     const user = rows[0];
 
@@ -142,7 +144,7 @@ export async function create({ nombre, email, passwordHash, role, projectIds, pr
   }
 }
 
-export async function update(id, { nombre, role, projectIds, projects, avatar_url, avatar_key,
+export async function update(id, { nombre, role, roles_extra: rolesExtra, projectIds, projects, avatar_url, avatar_key,
   whatsapp_phone, whatsapp_display_name,
   factura_manager, editar_fechas_factura, gestor_colaboraciones }) {
   const client = await getClient();
@@ -155,6 +157,13 @@ export async function update(id, { nombre, role, projectIds, projects, avatar_ur
 
     if (nombre) { sets.push(`nombre = $${paramIdx++}`); params.push(nombre); }
     if (role) { sets.push(`role = $${paramIdx++}`); params.push(role); }
+    // Los roles de mas. Se compara con undefined: una lista vacia SIGNIFICA
+    // «quitaselos todos», y con `if (rolesExtra)` no se podria volver atras.
+    if (rolesExtra !== undefined) {
+      const principal = role || (await query('SELECT role FROM users WHERE id = $1', [id])).rows[0]?.role;
+      sets.push(`roles_extra = $${paramIdx++}::user_role[]`);
+      params.push(limpiaRolesExtra(rolesExtra, principal));
+    }
     if (avatar_url !== undefined) { sets.push(`avatar_url = $${paramIdx++}`); params.push(avatar_url); }
     if (avatar_key !== undefined) { sets.push(`avatar_key = $${paramIdx++}`); params.push(avatar_key); }
     // Teléfono WhatsApp del gestor (cadena vacía → NULL para limpiar).

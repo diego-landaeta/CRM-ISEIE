@@ -11,6 +11,7 @@ import {
   UsersThree,
   GraduationCap, Warning } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
+import { rolesDe } from '@/shared/lib/roles';
 import { useTheme } from '@/contexts/ThemeContext';
 import { cn } from '@/shared/lib/utils';
 import client from '@/shared/api/client';
@@ -163,12 +164,23 @@ const NAV_SECTIONS = [
 const APAGADOS = String(import.meta.env.VITE_MODULOS_APAGADOS || '')
   .split(',').map((s) => s.trim()).filter(Boolean);
 
+/**
+ * Que entradas del menu ve alguien.
+ *
+ * Recibe TODOS sus roles, no uno: desde que se puede tener mas de uno, «es
+ * gestor» dejo de ser una pregunta de igualdad.
+ */
 function canSeeItem(item, role, soloColaboraciones, permisos) {
+  const roles = Array.isArray(role) ? role.filter(Boolean) : [role].filter(Boolean);
+  const es = (...r) => r.some((x) => roles.includes(x));
   if (item.apagable && APAGADOS.includes(item.apagable)) return false;
   // Un tutor solo ve lo suyo: lo que no le nombre expresamente queda fuera.
   // Al reves —listar lo prohibido— se olvida siempre algo, y lo que se olvida
   // es un tutor paseandose por Prospectos o por Finanzas.
-  if (role === 'tutor') return Array.isArray(item.roles) && item.roles.includes('tutor');
+  // El recorte del tutor es para quien es SOLO tutor.
+  if (roles.length === 1 && roles[0] === 'tutor') {
+    return Array.isArray(item.roles) && item.roles.includes('tutor');
+  }
   // Un gestor de colaboraciones se dedica SOLO a los tutores: no lleva
   // prospectos, ni ventas, ni finanzas. Se declara lo que puede ver, igual que
   // con el tutor — enumerar lo prohibido deja fuera siempre la pantalla nueva.
@@ -194,11 +206,12 @@ function canSeeItem(item, role, soloColaboraciones, permisos) {
   //
   // Se comprueba solo para gestor: un admin puede facturar por su rol y no
   // necesita el permiso, y a soporte ya se le deja pasar antes.
-  if (item.permiso && role === 'gestor' && !permisos?.[item.permiso]) return false;
+  // A quien NO tiene un rol de mando: si ademas es admin, puede por ese otro.
+  if (item.permiso && !es('admin', 'soporte', 'superadmin') && !permisos?.[item.permiso]) return false;
 
   if (!item.roles) return true;
-  if (role === 'superadmin' || role === 'soporte') return true;
-  return item.roles.includes(role);
+  if (es('superadmin', 'soporte')) return true;
+  return item.roles.some((r) => roles.includes(r));
 }
 
 function NavItem({ to, label, icon: Icon, end, comingSoon, statusTag, collapsed, onClick, sectionPrefixes }) {
@@ -490,7 +503,8 @@ export default function Sidebar({ collapsed = false, onToggleCollapsed, onNaviga
     navigate('/login');
   }
 
-  const role = user?.role || 'gestor';
+  // Todos sus roles, no solo el principal: el menu suma lo de cada uno.
+  const role = rolesDe(user).length ? rolesDe(user) : ['gestor'];
   const initials = user?.nombre?.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2) || '??';
   // Quien lleva las colaboraciones no es una gestora: se la llama por su trabajo,
   // que es dar de alta profesores y ajustarles el porcentaje.
