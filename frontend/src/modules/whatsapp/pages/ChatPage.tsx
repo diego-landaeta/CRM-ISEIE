@@ -1473,6 +1473,8 @@ export default function ChatPage() {
               <SelectorPlantillas
                 anclaje="abajo"
                 borrador={borrador}
+                usuarioId={deQuien}
+                nombreSesion={sesion.esMia ? null : sesion.nombre}
                 projectId={projectId}
                 issuerId={activeIssuerId}
                 datos={datosPlantilla}
@@ -2199,6 +2201,8 @@ export default function ChatPage() {
               {plantillasAbiertas && hayAmbito && (
                 <SelectorPlantillas
                   borrador={borrador}
+                  usuarioId={deQuien}
+                  nombreSesion={sesion.esMia ? null : sesion.nombre}
                   projectId={projectId}
                   issuerId={activeIssuerId}
                   datos={datosPlantilla}

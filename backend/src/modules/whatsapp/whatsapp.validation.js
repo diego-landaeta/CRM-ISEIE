@@ -7,6 +7,9 @@ export const createSchema = z.object({
   // Por defecto compartida: una plantilla que solo ve quien la escribe no
   // arregla el problema que veniamos a resolver.
   ambito: z.enum(['compartida', 'personal']).default('compartida'),
+  // Sobre que WhatsApp se esta trabajando. Sin esto la personal se guarda a
+  // nombre de quien la escribe, y no del numero desde el que se manda.
+  usuarioId: z.coerce.number().int().positive().optional(),
 });
 
 export const updateSchema = z.object({

@@ -54,6 +54,8 @@ export default function SelectorPlantillas({
   alCerrar,
   anclaje = 'arriba',
   borrador = '',
+  usuarioId = null,
+  nombreSesion = null,
 }: {
   projectId: number | null;
   issuerId?: number | null;
@@ -72,6 +74,16 @@ export default function SelectorPlantillas({
   anclaje?: 'arriba' | 'abajo';
   /** Lo que hay escrito ahora, para poder guardarlo como plantilla propia. */
   borrador?: string;
+  /**
+   * Sobre qué WhatsApp se está trabajando. `null` = el mío.
+   *
+   * Las personales son las de ESE número, no las de quien tiene la sesión del
+   * CRM abierta: si un administrador entra al WhatsApp de una gestora, las
+   * suyas no le sirven de nada allí.
+   */
+  usuarioId?: number | null;
+  /** De quién es ese WhatsApp, para no llamar «mías» a las de otra persona. */
+  nombreSesion?: string | null;
 }) {
   const [plantillas, setPlantillas] = useState<PlantillaWhatsapp[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -86,7 +98,7 @@ export default function SelectorPlantillas({
   useEffect(() => {
     let vivo = true;
     setError(null);
-    whatsappApi.plantillas(projectId, issuerId)
+    whatsappApi.plantillas(projectId, issuerId, usuarioId)
       .then((r) => {
         if (!vivo) return;
         if (r.success) setPlantillas(r.data || []);
@@ -94,7 +106,7 @@ export default function SelectorPlantillas({
       })
       .catch((e) => { if (vivo) setError(e?.message || 'No se pudieron cargar'); });
     return () => { vivo = false; };
-  }, [projectId, issuerId]);
+  }, [projectId, issuerId, usuarioId]);
 
   // El foco va a la busqueda al abrir: con veinte plantillas, escribir es mas
   // rapido que recorrer la lista, y es lo que se va a hacer siempre.
@@ -169,7 +181,9 @@ export default function SelectorPlantillas({
             es mejor decirlo que meterla en uno al azar. */}
         {projectId && !creando && (
           <button type="button" className="wa-plantillas-nueva-abrir"
-            title="Guardar una plantilla solo para ti"
+            title={nombreSesion
+              ? `Guardar una plantilla en el WhatsApp de ${nombreSesion}`
+              : 'Guardar una plantilla solo para ti'}
             onClick={() => {
               setCuerpoNuevo(borrador);
               setNombreNueva('');
@@ -208,12 +222,14 @@ export default function SelectorPlantillas({
                 label: nombreNueva.trim(),
                 body: cuerpoNuevo,
                 ambito: 'personal',
+                // Se guarda en el WhatsApp desde el que se esta escribiendo.
+                usuarioId,
               });
               if (!r.success) throw new Error(r.error || 'No se pudo guardar');
               // Se vuelve a pedir la lista en vez de anadirla a mano: asi sale
               // con lo que el servidor haya decidido --el orden, el id-- y no
               // una copia que se le parezca.
-              const lista = await whatsappApi.plantillas(projectId, issuerId);
+              const lista = await whatsappApi.plantillas(projectId, issuerId, usuarioId);
               if (lista.success) setPlantillas(lista.data || []);
               setCreando(false);
               setNombreNueva('');
@@ -244,7 +260,11 @@ export default function SelectorPlantillas({
             className="wa-plantillas-nueva-cuerpo"
           />
           <div className="wa-plantillas-nueva-pie">
-            <span className="wa-plantillas-nueva-nota">Solo la verás tú.</span>
+            <span className="wa-plantillas-nueva-nota">
+              {nombreSesion
+                ? `Se guarda en el WhatsApp de ${nombreSesion}.`
+                : 'Solo la verás tú.'}
+            </span>
             <button type="button" onClick={() => setCreando(false)} className="underline">
               Cancelar
             </button>
@@ -279,9 +299,11 @@ export default function SelectorPlantillas({
           {cuantasMias > 0 && (
             <button type="button" onClick={() => setPaso(MIAS)}
               aria-pressed={paso === MIAS}
-              title="Solo las que has creado tú"
+              title={nombreSesion
+                ? `Solo las de este WhatsApp, el de ${nombreSesion}`
+                : 'Solo las que has creado tú'}
               className={`wa-plantillas-paso es-mias${paso === MIAS ? ' es-activo' : ''}`}>
-              Mías ({cuantasMias})
+              {nombreSesion ? `De ${nombreSesion}` : 'Mías'} ({cuantasMias})
             </button>
           )}
         </div>
@@ -343,7 +365,11 @@ export default function SelectorPlantillas({
                 {p.label}
                 {p.ambito === 'compartida'
                   ? <span className="wa-plantilla-etiqueta">compartida</span>
-                  : <span className="wa-plantilla-etiqueta es-mia">mía</span>}
+                  : (
+                    <span className="wa-plantilla-etiqueta es-mia">
+                      {nombreSesion ? `de ${nombreSesion}` : 'mía'}
+                    </span>
+                  )}
               </span>
               <span className="wa-plantilla-cuerpo">{rellenar(p.body, datos, nombreProyecto)}</span>
               {/* La letra pequeña del documento: la lee la gestora mientras

@@ -40,7 +40,7 @@ const VERSION_AVISO = 1;
  * El recorte vive AQUI y no en cada endpoint: asi lo que se anada manana nace
  * con el candado puesto en vez de heredarlo si alguien se acuerda.
  */
-async function usuarioObjetivo(req) {
+export async function usuarioObjetivo(req) {
   const propio = req.user.userId;
 
   // Lo PRIMERO: si quien pregunta no puede tener WhatsApp, no lo tiene ni el
