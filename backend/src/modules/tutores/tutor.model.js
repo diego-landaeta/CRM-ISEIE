@@ -627,7 +627,25 @@ export async function pagosSinFormacion({ desde, hasta, projectId = null, projec
  * Cuenta los pagos, no las ventas: una venta a plazos con seis cobros ya lleva
  * seis comisiones sin dueño, y eso es lo que mide el agujero de verdad.
  */
-export async function formacionesSinTutor({ projectId = null } = {}) {
+/**
+ * Las formaciones que nadie tutoriza.
+ *
+ * `desdeElCorte` manda sobre lo que se enseña:
+ *
+ *   true  (por defecto) · solo las ventas desde `tutor_settings.aplica_desde`.
+ *                         Es lo de siempre y es lo correcto para el dia a dia:
+ *                         antes del corte no se genera comision, y una venta de
+ *                         febrero pudo tener tutor entonces.
+ *   false · TODAS. Diego, 23/09: veintidos cursos de ICTESS sin tutor que no
+ *           salian en la lista --de febrero a julio, o sea por debajo del
+ *           corte--. La pantalla no los escondia por error, pero quien busca
+ *           «que esta descubierto» no puede enterarse de que hay doce mas solo
+ *           mirando el codigo.
+ *
+ * Cada fila dice si su venta mas reciente es anterior al corte, para que la
+ * pantalla pueda marcarlas y no mezclar las dos cosas sin avisar.
+ */
+export async function formacionesSinTutor({ projectId = null, desdeElCorte = true } = {}) {
   const { rows } = await query(
     `WITH sin_tutor AS (
      SELECT p.id, p.nombre, p.precio, pr.nombre AS proyecto, p.project_id,
@@ -636,7 +654,12 @@ export async function formacionesSinTutor({ projectId = null } = {}) {
             count(cp.id)::int           AS pagos,
             COALESCE(sum(cp.importe), 0) AS cobrado,
             min(cp.fecha) AS primer_cobro,
-            max(cp.fecha) AS ultimo_cobro
+            max(cp.fecha) AS ultimo_cobro,
+            max(cv.fecha_conversion) AS ultima_venta,
+            -- Si su venta mas reciente es anterior al corte. Sirve para que la
+            -- pantalla las marque en vez de mezclarlas con las de ahora.
+            (max(cv.fecha_conversion) < min(s.aplica_desde)) AS antes_del_corte,
+            min(s.aplica_desde) AS corte
        FROM products p
        JOIN conversions cv ON cv.producto_contratado_id = p.id
        JOIN conversion_payments cp ON cp.conversion_id = cv.id
@@ -664,7 +687,7 @@ export async function formacionesSinTutor({ projectId = null } = {}) {
         -- Antes del corte tampoco se genera comision, y una venta de abril pudo
         -- tener tutor entonces y no tenerlo ahora: sacarla aqui seria acusar de
         -- un agujero que no existe.
-        AND cv.fecha_conversion >= s.aplica_desde
+        ${desdeElCorte ? 'AND cv.fecha_conversion >= s.aplica_desde' : ''}
         AND ($1::int IS NULL OR p.project_id = $1)
       GROUP BY p.id, p.nombre, p.precio, pr.nombre, p.project_id
      HAVING count(cp.id) >= 1 AND count(DISTINCT cv.lead_id) >= 1
