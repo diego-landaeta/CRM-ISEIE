@@ -1031,6 +1031,22 @@
   box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
   overflow: hidden;
 }
+/* Colgando de la barra de arriba: hacia abajo y pegado a su botón. Arriba no
+   hay sitio —la barra es lo primero de la pantalla— y el panel se saldría. */
+.wa-plantillas.es-abajo {
+  top: 100%;
+  bottom: auto;
+  left: auto;
+  right: 0;
+  width: 460px;
+  max-width: calc(100vw - 32px);
+  margin-top: 6px;
+  margin-bottom: 0;
+}
+/* El ancla del de la barra. Sin esto el panel se colocaría respecto al marco
+   del chat y saldría en una esquina. */
+.wa-ancla-plantillas { position: relative; }
+
 .wa-plantillas-cabecera {
   display: flex;
   align-items: center;

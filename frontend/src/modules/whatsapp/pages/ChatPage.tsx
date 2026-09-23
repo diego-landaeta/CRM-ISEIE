@@ -491,6 +491,20 @@ export default function ChatPage() {
   // Los datos con los que se rellenan los huecos de la plantilla. Se piden al
   // abrir el selector y no antes: la mayoria de los mensajes no usan plantilla.
   const [datosPlantilla, setDatosPlantilla] = useState<DatosParaRellenar>({});
+  /**
+   * Las plantillas desde la BARRA DE ARRIBA, no solo desde el campo de escribir.
+   *
+   * Diego, 23/09, señalando esa zona: «aquí necesitamos como un desplegable de
+   * las plantillas». El que había vive dentro de la caja de escribir, y esa caja
+   * solo existe con una conversación abierta: quien entra al chat y todavía no
+   * ha elegido a nadie —que es la pantalla de la captura— no veía plantillas por
+   * ningún sitio.
+   *
+   * Con conversación abierta hace lo mismo que el otro: el texto entra en el
+   * campo de escribir. Sin conversación no hay dónde meterlo, así que se copia
+   * al portapapeles: sirve para mirar cómo va un mensaje o para pegarlo fuera.
+   */
+  const [plantillasArriba, setPlantillasArriba] = useState(false);
   // A quien se va a llamar, y si el intento quedo apuntado.
   const [llamando, setLlamando] = useState<
     { telefono: string; nombre: string | null; apuntada: boolean } | null
@@ -1368,6 +1382,59 @@ export default function ChatPage() {
   const hilo = enCamino.length ? [...mensajes, ...enCamino] : mensajes;
 
 
+  /**
+   * Los datos con los que se rellenan los huecos, del chat que esté abierto.
+   *
+   * La usan los dos botones de plantillas. Estaba escrita dentro del `onClick`
+   * de uno de ellos, y duplicarla en el otro era garantizar que un día
+   * rellenaran cosas distintas.
+   */
+  const traerDatosDePlantilla = useCallback(() => {
+    if (!abierto) { setDatosPlantilla({}); return; }
+    chatApi.ficha(abierto, deQuien)
+      .then((r) => {
+        if (!r.success) return;
+        const p = r.data.prospecto;
+        setDatosPlantilla(p
+          ? {
+            nombre: p.nombre, email: p.email, telefono: p.telefono,
+            producto: p.producto,
+            // Los de su formación (#129). Las plazas se cuentan AHORA, al abrir
+            // el selector: el documento comercial dice que no se arrastre nunca
+            // el dato del mensaje anterior.
+            plazas: p.plazas_libres,
+            cierre: p.fecha_cierre_convocatoria,
+            inicio: p.fecha_inicio_texto,
+          }
+          : { telefono: r.data.telefono, nombre: r.data.nombre });
+      })
+      .catch(() => setDatosPlantilla({}));
+  }, [abierto, deQuien]);
+
+  /**
+   * Han elegido una plantilla desde la barra de arriba.
+   *
+   * Con chat abierto va al campo de escribir, igual que el otro botón: elegir
+   * no es enviar, se lee y se ajusta antes. Sin chat abierto no hay campo, así
+   * que se copia —y se dice que se ha copiado, que si no parece que no hizo
+   * nada—.
+   */
+  async function elegirDesdeLaBarra(texto, plantilla) {
+    if (abierto && !bloqueo) {
+      setBorrador(texto);
+      if (plantilla?.pide_adjunto) setTimeout(() => ficheroRef.current?.click(), 120);
+      return;
+    }
+    const { copyToClipboard } = await import('@/shared/lib/clipboard');
+    const ok = await copyToClipboard(texto);
+    toast(ok
+      ? {
+        title: 'Plantilla copiada',
+        description: 'Ábre una conversación y pégala, o úsala donde la necesites.',
+      }
+      : { title: 'No se ha podido copiar', variant: 'destructive' });
+  }
+
   let ultimoDia = '';
 
   return (
@@ -1387,12 +1454,43 @@ export default function ChatPage() {
                 ? <>No tienes WhatsApp enlazado — <Link to="/whatsapp/conexion" className="underline">enlazar mi número</Link></>
                 : `El WhatsApp de ${sesion.nombre} no está enlazado`}
             </span>}
+        {/* Las plantillas, también desde aquí: el otro botón está dentro de
+            la caja de escribir y esa caja no existe hasta que abres un chat. */}
+        {hayAmbito && (
+          <span className="wa-ancla-plantillas ml-auto">
+            <button type="button" className="wa-btn-plantillas"
+              aria-label="Ver las plantillas"
+              title="Ver las plantillas del proceso"
+              aria-expanded={plantillasArriba}
+              onClick={() => {
+                setPlantillasArriba((v) => !v);
+                if (!plantillasArriba) traerDatosDePlantilla();
+              }}>
+              <FileText size={14} weight="bold" />
+              <span className="font-medium">Plantillas</span>
+            </button>
+            {plantillasArriba && (
+              <SelectorPlantillas
+                anclaje="abajo"
+                projectId={projectId}
+                issuerId={activeIssuerId}
+                datos={datosPlantilla}
+                nombreProyecto={nombreProyecto}
+                alElegir={elegirDesdeLaBarra}
+                alCerrar={() => setPlantillasArriba(false)}
+              />
+            )}
+          </span>
+        )}
         {/* La pantalla donde se enlaza o se desvincula el numero. Estaba solo en
             el menu lateral y desde el chat no habia forma de llegar. */}
         <button type="button" onClick={() => setAPantalla((v) => !v)}
           aria-label={aPantalla ? 'Salir' : 'Ampliar'}
           title={aPantalla ? 'Salir de pantalla completa (Esc)' : 'Ver solo el chat'}
-          className="wa-btn-ampliar ml-auto inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
+          /* El ml-auto lo lleva el primero del grupo de la derecha. Normalmente
+             es el de plantillas; si no hay ambito ese boton no sale y le toca
+             a este, o la barra entera se iria a la izquierda. */
+          className={`wa-btn-ampliar ${hayAmbito ? '' : 'ml-auto '}inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground`}>
           {aPantalla ? <ArrowsIn size={14} weight="bold" /> : <ArrowsOut size={14} weight="bold" />}
           <span className="font-medium">{aPantalla ? 'Salir' : 'Ampliar'}</span>
         </button>
@@ -2089,27 +2187,7 @@ export default function ChatPage() {
                     onClick={() => {
                       setPlantillasAbiertas((v) => !v);
                       // Los datos para los huecos se piden al abrir, no antes.
-                      if (!plantillasAbiertas && abierto) {
-                        chatApi.ficha(abierto, deQuien)
-                          .then((r) => {
-                            if (!r.success) return;
-                            const p = r.data.prospecto;
-                            setDatosPlantilla(p
-                              ? {
-                                nombre: p.nombre, email: p.email, telefono: p.telefono,
-                                producto: p.producto,
-                                // Los de su formación (#129). Las plazas se
-                                // cuentan AHORA, al abrir el selector: el
-                                // documento comercial dice que no se arrastre
-                                // nunca el dato del mensaje anterior.
-                                plazas: p.plazas_libres,
-                                cierre: p.fecha_cierre_convocatoria,
-                                inicio: p.fecha_inicio_texto,
-                              }
-                              : { telefono: r.data.telefono, nombre: r.data.nombre });
-                          })
-                          .catch(() => setDatosPlantilla({}));
-                      }
+                      if (!plantillasAbiertas) traerDatosDePlantilla();
                     }}>
                     <FileText size={15} />
                     <span>Plantillas</span>

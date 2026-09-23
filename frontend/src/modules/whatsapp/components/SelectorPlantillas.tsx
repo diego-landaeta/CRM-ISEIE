@@ -43,6 +43,7 @@ export default function SelectorPlantillas({
   nombreProyecto,
   alElegir,
   alCerrar,
+  anclaje = 'arriba',
 }: {
   projectId: number | null;
   issuerId?: number | null;
@@ -51,6 +52,14 @@ export default function SelectorPlantillas({
   nombreProyecto?: string | null;
   alElegir: (texto: string, plantilla?: PlantillaWhatsapp) => void;
   alCerrar: () => void;
+  /**
+   * Por dónde sale el panel.
+   *
+   * `arriba` es lo de siempre: cuelga por encima del campo de escribir, que
+   * está abajo del todo. `abajo` es para la barra superior, donde colgar hacia
+   * arriba lo sacaría de la pantalla.
+   */
+  anclaje?: 'arriba' | 'abajo';
 }) {
   const [plantillas, setPlantillas] = useState<PlantillaWhatsapp[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -113,7 +122,8 @@ export default function SelectorPlantillas({
   };
 
   return (
-    <div className="wa-plantillas" role="dialog" aria-label="Elegir una plantilla">
+    <div className={`wa-plantillas${anclaje === 'abajo' ? ' es-abajo' : ''}`}
+      role="dialog" aria-label="Elegir una plantilla">
       <div className="wa-plantillas-cabecera">
         <MagnifyingGlass size={15} className="shrink-0 text-muted-foreground" aria-hidden="true" />
         <input
