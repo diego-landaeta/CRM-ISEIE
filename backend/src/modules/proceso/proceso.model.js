@@ -397,9 +397,23 @@ export async function ajustarPaso(id, { estado, fecha_prevista, nota }) {
  * EL ORDEN es por quien lleva mas tiempo sin noticias, y los que nunca se
  * tocaron primero: son los que de verdad se perdieron por el camino.
  */
+/**
+ * La base del repaso de fin de mes.
+ *
+ * FILTRA Y PAGINA EN EL SERVIDOR, no en la pantalla. Diego, 23/09: «aun faltan
+ * los filtros aqui y la paginacion». Filtrar sobre lo ya cargado habria sido
+ * mas rapido de escribir y habria mentido: la base son miles y la pantalla solo
+ * tenia las primeras 500, asi que buscar «Gabriela» habria dicho «no hay
+ * ninguna» cuando la hay en la pagina cuatro.
+ *
+ * Devuelve `{ filas, total }`: el total es el de TODO lo que cumple el filtro,
+ * no el de la pagina, que es lo que hace falta para poder paginar y para que el
+ * rotulo de arriba no se contradiga con la lista.
+ */
 export async function baseDeSeguimiento({
   projectIds, projectId = null, asesoraId = null,
-  desdeDias = 15, descansoDias = 30, limite = 500,
+  desdeDias = 15, descansoDias = 30, limite = 500, desplazamiento = 0,
+  busca = null, productoId = null, antiguedad = null, sinContactar = false,
 } = {}) {
   const par = [];
   let i = 1;
@@ -410,12 +424,58 @@ export async function baseDeSeguimiento({
   if (ids) par.push(ids);
   const pAses = asesoraId ? `AND l.responsable_id = $${i++}` : '';
   if (asesoraId) par.push(asesoraId);
+  const ULTIMO_SQL = `(SELECT max(li.fecha) FROM lead_interactions li
+                    WHERE li.lead_id = l.id AND li.tipo <> 'nota')`;
+  const ULTIMO = ULTIMO_SQL;
+
   const pDesde = `$${i++}`; par.push(Number(desdeDias) || 15);
   const pDescanso = `$${i++}`; par.push(Number(descansoDias) || 30);
-  const pLimite = `$${i++}`; par.push(Number(limite) || 500);
 
-  const ULTIMO = `(SELECT max(li.fecha) FROM lead_interactions li
-                    WHERE li.lead_id = l.id AND li.tipo <> 'nota')`;
+  // ── Los filtros de la pantalla ────────────────────────────────────────────
+  // Buscar por nombre, correo o telefono, como en Prospectos. Sin tildes no:
+  // se busca tal cual, que es lo que hace el listado de al lado y cambiarlo
+  // aqui solo haria que las dos pantallas encontraran cosas distintas.
+  let pBusca = '';
+  if (busca && String(busca).trim()) {
+    const q = `%${String(busca).trim()}%`;
+    pBusca = `AND (l.nombre ILIKE $${i} OR l.email ILIKE $${i} OR l.telefono ILIKE $${i})`;
+    i += 1;
+    par.push(q);
+  }
+  const pProd = productoId ? `AND l.producto_interes_id = $${i++}` : '';
+  if (productoId) par.push(Number(productoId));
+
+  // Quien no ha sido contactado NUNCA. Es distinto de «lleva mucho»: a este no
+  // le ha escrito nadie desde que entro, y es el que mas urge.
+  const pNunca = sinContactar ? `AND ${ULTIMO_SQL} IS NULL` : '';
+
+  // El bloque de antiguedad se traduce a dias AQUI y no en la pantalla, con los
+  // mismos cortes que `bloqueDeAntiguedad`: si cada sitio pusiera los suyos, el
+  // contador de arriba y la lista dirian cosas distintas.
+  const CORTES = {
+    este_mes: [0, 30], uno_a_tres: [30, 90], tres_a_seis: [90, 180], mas_de_seis: [180, null],
+  };
+  let pAntig = '';
+  if (antiguedad && CORTES[antiguedad]) {
+    const [desde, hasta] = CORTES[antiguedad];
+    pAntig = `AND (CURRENT_DATE - ${ENTRADA}::date) >= ${desde}`;
+    if (hasta != null) pAntig += ` AND (CURRENT_DATE - ${ENTRADA}::date) < ${hasta}`;
+  }
+
+  const DONDE = `WHERE l.deleted_at IS NULL
+        AND l.status NOT IN ('convertido', 'no_interesado')
+        AND ${ENTRADA}::date <= CURRENT_DATE - ${pDesde}::int
+        AND (${ULTIMO_SQL} IS NULL OR ${ULTIMO_SQL}::date <= CURRENT_DATE - ${pDescanso}::int)
+        ${pProj} ${pAses} ${pBusca} ${pProd} ${pNunca} ${pAntig}`;
+
+  // Cuantos hay en total con este filtro. Va antes del LIMIT y con los mismos
+  // parametros: sin esto no se puede paginar sin inventarse el numero.
+  const { rows: cuenta } = await query(
+    `SELECT count(*)::int AS total FROM leads l ${DONDE}`, par);
+  const total = cuenta[0]?.total || 0;
+
+  const pLimite = `$${i++}`; par.push(Number(limite) || 500);
+  const pSalto = `$${i++}`; par.push(Number(desplazamiento) || 0);
 
   const { rows } = await query(
     `SELECT l.id AS lead_id, l.nombre AS lead_nombre, l.status AS lead_estado,
@@ -440,17 +500,13 @@ export async function baseDeSeguimiento({
        LEFT JOIN products p ON p.id = l.producto_interes_id
        LEFT JOIN commercial_steps s
               ON s.project_id = l.project_id AND s.es_seguimiento = true AND s.activo = true
-      WHERE l.deleted_at IS NULL
-        AND l.status NOT IN ('convertido', 'no_interesado')
-        AND ${ENTRADA}::date <= CURRENT_DATE - ${pDesde}::int
-        AND (${ULTIMO} IS NULL OR ${ULTIMO}::date <= CURRENT_DATE - ${pDescanso}::int)
-        ${pProj} ${pAses}
+      ${DONDE}
       ORDER BY ${ULTIMO} ASC NULLS FIRST, ${ENTRADA} ASC
-      LIMIT ${pLimite}`,
+      LIMIT ${pLimite} OFFSET ${pSalto}`,
     par
   );
 
-  return rows.map((r) => ({
+  const filas = rows.map((r) => ({
     ...r,
     dias_desde_entrada: Number(r.dias_desde_entrada),
     dias_sin_contacto: r.dias_sin_contacto == null ? null : Number(r.dias_sin_contacto),
@@ -459,6 +515,7 @@ export async function baseDeSeguimiento({
     // para que el recuento de arriba y las filas no puedan discrepar.
     antiguedad: bloqueDeAntiguedad(Number(r.dias_desde_entrada)),
   }));
+  return { filas, total };
 }
 
 /** En que bloque cae alguien segun cuanto hace que entro. */

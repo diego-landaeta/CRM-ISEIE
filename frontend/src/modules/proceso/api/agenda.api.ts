@@ -113,11 +113,25 @@ export async function traerResumen(opciones: {
 }
 
 /** La base que toca repasar a fin de mes. */
-export async function traerSeguimiento(opciones: {
-  projectId?: number | null; projectIds?: string | null; gestoraId?: number | null; limite?: number;
-}): Promise<EnSeguimiento[]> {
+/** Los filtros del repaso. Van al servidor: la base son miles, no 500. */
+export type FiltrosSeguimiento = {
+  projectId?: number | null; projectIds?: string | null; gestoraId?: number | null;
+  busca?: string | null; productoId?: number | null;
+  antiguedad?: string | null; sinContactar?: string | null;
+  pagina?: number; limite?: number;
+};
+
+export async function traerSeguimiento(
+  opciones: FiltrosSeguimiento,
+): Promise<{ filas: EnSeguimiento[]; total: number; totalPaginas: number }> {
   const r = await client.get(`/proceso/seguimiento?${conAmbito(opciones)}`);
-  return r?.success ? r.data : [];
+  if (!r?.success) return { filas: [], total: 0, totalPaginas: 1 };
+  const p = (r.pagination || {}) as { total?: number; totalPages?: number };
+  return {
+    filas: r.data || [],
+    total: Number(p.total ?? (r.data || []).length),
+    totalPaginas: Number(p.totalPages ?? 1),
+  };
 }
 
 /** Cuantos son de verdad, sin el tope de la lista. */

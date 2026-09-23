@@ -13,7 +13,7 @@
   porque si no la lista deja de significar «pendientes» y pasa a ser «todos».
 */
 import { useEffect, useMemo, useState } from 'react';
-import {
+import { X, MagnifyingGlass,
   DownloadSimple,
   ArrowCounterClockwise, CalendarBlank, User, Buildings, WarningCircle,
 } from '@phosphor-icons/react';
@@ -107,26 +107,81 @@ export default function SeguimientoPage() {
   const projectIds = idsEmpresa.length ? idsEmpresa.join(',') : null;
   const mezcla = !elegido;
 
+  /**
+   * Los filtros, y la pagina.
+   *
+   * Diego, 23/09: «aun faltan los filtros aqui y la paginacion». Van AL
+   * SERVIDOR, no sobre lo ya cargado: la base son miles y la pantalla solo
+   * tenia las primeras 500, asi que buscar a alguien de la pagina cuatro habria
+   * dicho «no hay ninguna» cuando si la hay.
+   */
+  const [busca, setBusca] = useState('');
+  const [buscaLenta, setBuscaLenta] = useState('');
+  const [producto, setProducto] = useState('');
+  const [pagina, setPagina] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [totalPaginas, setTotalPaginas] = useState(1);
+
+  // Se espera a que deje de escribir: una consulta por tecla sobre una tabla de
+  // miles no la aguanta nadie.
+  useEffect(() => {
+    const id = setTimeout(() => setBuscaLenta(busca.trim()), 350);
+    return () => clearTimeout(id);
+  }, [busca]);
+
+  // Cualquier filtro nuevo vuelve a la primera pagina. Quedarse en la siete
+  // despues de filtrar enseña una lista vacia que parece que no hay nada.
+  useEffect(() => {
+    setPagina(1);
+  }, [buscaLenta, producto, bloque, soloSinContactar, elegido, projectIds]);
+
+  /** Las formaciones del ámbito, para el filtro. */
+  const [productos, setProductos] = useState<Array<{ id: number; nombre: string }>>([]);
+  useEffect(() => {
+    const p = new URLSearchParams();
+    if (elegido) p.set('projectId', String(elegido));
+    else if (activeIssuer?.id) p.set('issuerId', String(activeIssuer.id));
+    else { setProductos([]); return; }
+    p.set('limit', '500');
+    let vivo = true;
+    client.get(`/products?${p.toString()}`)
+      .then((r: any) => {
+        if (!vivo) return;
+        const filas = r?.success ? (r.data || []) : [];
+        setProductos(filas.map((x: any) => ({ id: x.id, nombre: x.nombre })));
+      })
+      .catch(() => { if (vivo) setProductos([]); });
+    return () => { vivo = false; };
+  }, [elegido, activeIssuer?.id]);
+
   useEffect(() => {
     let vivo = true;
     setCargando(true);
     Promise.all([
-      traerSeguimiento({ projectId: elegido, projectIds }),
+      traerSeguimiento({
+        projectId: elegido, projectIds,
+        busca: buscaLenta || null,
+        productoId: producto ? Number(producto) : null,
+        antiguedad: bloque,
+        sinContactar: soloSinContactar ? '1' : null,
+        pagina,
+        limite: 50,
+      }),
       traerResumenSeguimiento({ projectId: elegido, projectIds }),
     ]).then(([b, r]) => {
       if (!vivo) return;
-      setBase(b);
+      setBase(b.filas);
+      setTotal(b.total);
+      setTotalPaginas(b.totalPaginas);
       setResumen(r);
+      setMarcados([]);
     }).finally(() => { if (vivo) setCargando(false); });
     return () => { vivo = false; };
-  }, [elegido, projectIds]);
+  }, [elegido, projectIds, buscaLenta, producto, bloque, soloSinContactar, pagina]);
 
-  const visibles = useMemo(() => {
-    let out = base;
-    if (bloque) out = out.filter((x) => x.antiguedad === bloque);
-    if (soloSinContactar) out = out.filter((x) => x.ultimo_contacto == null);
-    return out;
-  }, [base, bloque, soloSinContactar]);
+  // Ya viene filtrado del servidor: aqui no se vuelve a filtrar, o el recuento
+  // de arriba y la lista dirian cosas distintas.
+  const visibles = base;
 
   useEffect(() => {
     if (enFoco !== null && enFoco >= visibles.length) setEnFoco(null);
@@ -447,6 +502,44 @@ export default function SeguimientoPage() {
         </>
       )}
 
+      {/* LOS FILTROS. Van al servidor; ver el comentario de arriba. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative min-w-[220px] flex-1">
+          <MagnifyingGlass size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <input
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            placeholder="Buscar por nombre, correo o teléfono…"
+            aria-label="Buscar en el repaso"
+            className="h-9 w-full rounded-md border border-border bg-card pl-8 pr-3 text-sm"
+          />
+        </div>
+
+        <select
+          value={producto}
+          onChange={(e) => setProducto(e.target.value)}
+          aria-label="Filtrar por formación"
+          className="h-9 rounded-md border border-border bg-card px-2 text-sm"
+        >
+          <option value="">Cualquier formación</option>
+          {productos.map((p) => (
+            <option key={p.id} value={p.id}>{p.nombre}</option>
+          ))}
+        </select>
+
+        {(busca || producto || bloque || soloSinContactar) && (
+          <button
+            type="button"
+            onClick={() => {
+              setBusca(''); setProducto(''); setBloque(null); setSoloSinContactar(false);
+            }}
+            className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-normal text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <X size={13} /> Quitar filtros
+          </button>
+        )}
+      </div>
+
       {cargando ? (
         <div className="space-y-2">
           {[0, 1, 2, 3, 4].map((i) => <div key={i} className="h-16 rounded-lg bg-muted animate-pulse" />)}
@@ -545,6 +638,34 @@ export default function SeguimientoPage() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* LA PAGINACIÓN. Con 2.000 en la base, pintarlas todas deja la pantalla
+          pegada y nadie baja más allá de la tercera pantalla. */}
+      {totalPaginas > 1 && (
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
+          <span className="text-secundario tabular-nums text-muted-foreground">
+            Página {pagina} de {totalPaginas} · {total} en total
+          </span>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              disabled={pagina <= 1 || cargando}
+              onClick={() => setPagina((n) => Math.max(1, n - 1))}
+              className="rounded-md border border-border px-2.5 py-1.5 text-normal font-semibold hover:bg-muted disabled:opacity-40"
+            >
+              Anterior
+            </button>
+            <button
+              type="button"
+              disabled={pagina >= totalPaginas || cargando}
+              onClick={() => setPagina((n) => Math.min(totalPaginas, n + 1))}
+              className="rounded-md border border-border px-2.5 py-1.5 text-normal font-semibold hover:bg-muted disabled:opacity-40"
+            >
+              Siguiente
+            </button>
+          </div>
         </div>
       )}
 

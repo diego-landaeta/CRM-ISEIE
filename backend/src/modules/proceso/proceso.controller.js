@@ -71,6 +71,26 @@ function proyectosDeLaCola(req) {
 }
 
 /**
+ * Los filtros del repaso, tal como llegan de la pantalla.
+ *
+ * Los leen los DOS sitios que consultan la base --la lista y la descarga de
+ * Wasapi-- para que el fichero que se baja sea exactamente lo que se esta
+ * viendo. Si cada uno leyera los suyos, bajarias 800 creyendo que son los 40
+ * que habias filtrado.
+ */
+function filtrosDelRepaso(req) {
+  const ant = ['este_mes', 'uno_a_tres', 'tres_a_seis', 'mas_de_seis'];
+  return {
+    busca: req.query.busca || null,
+    productoId: req.query.productoId ? Number(req.query.productoId) : null,
+    antiguedad: ant.includes(req.query.antiguedad) ? req.query.antiguedad : null,
+    sinContactar: req.query.sinContactar === '1',
+    desdeDias: Number(req.query.desdeDias) || 15,
+    descansoDias: Number(req.query.descansoDias) || 30,
+  };
+}
+
+/**
  * GET /api/proceso/seguimiento/wasapi -> el repaso de fin de mes, en CSV.
  *
  * Diego, 23/09: «seguimiento fin de mes es para descargar con Wasapi». El
@@ -88,12 +108,14 @@ function proyectosDeLaCola(req) {
  */
 export async function wasapiSeguimiento(req, res, next) {
   try {
-    const filas = await Proceso.baseDeSeguimiento({
+    // MISMOS FILTROS QUE LA LISTA. Lo que se baja es lo que se esta viendo:
+    // bajarse la base entera cuando en pantalla hay cuarenta filtradas es la
+    // forma mas silenciosa de mandar una difusion a quien no tocaba.
+    const { filas } = await Proceso.baseDeSeguimiento({
       projectIds: proyectosDeLaCola(req),
       asesoraId: deQuienEsLaCola(req),
-      desdeDias: Number(req.query.desdeDias) || 15,
-      descansoDias: Number(req.query.descansoDias) || 30,
-      // Sin tope: se descarga la base entera, que es justo para lo que sirve.
+      ...filtrosDelRepaso(req),
+      // Sin tope: se descarga TODO lo que cumple el filtro, no solo la pagina.
       limite: 100000,
     });
 
@@ -146,14 +168,25 @@ export async function cola(req, res, next) {
  */
 export async function seguimiento(req, res, next) {
   try {
-    const data = await Proceso.baseDeSeguimiento({
+    // La pagina. 50 por vuelta: con 2.000 en la base, pintarlas todas deja la
+    // pantalla pegada y nadie baja mas alla de la tercera.
+    const porPagina = Math.min(Number(req.query.limite) || 50, 200);
+    const pagina = Math.max(Number(req.query.pagina) || 1, 1);
+    const { filas, total } = await Proceso.baseDeSeguimiento({
       projectIds: proyectosDeLaCola(req),
       asesoraId: deQuienEsLaCola(req),
-      desdeDias: Number(req.query.desdeDias) || 15,
-      descansoDias: Number(req.query.descansoDias) || 30,
-      limite: Number(req.query.limite) || 500,
+      ...filtrosDelRepaso(req),
+      limite: porPagina,
+      desplazamiento: (pagina - 1) * porPagina,
     });
-    res.json({ success: true, data });
+    res.json({
+      success: true,
+      data: filas,
+      pagination: {
+        total, page: pagina, limit: porPagina,
+        totalPages: Math.max(1, Math.ceil(total / porPagina)),
+      },
+    });
   } catch (err) { next(err); }
 }
 
