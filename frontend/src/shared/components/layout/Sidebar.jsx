@@ -38,6 +38,8 @@ const NAV_SECTIONS = [
         children: [
           { to: '/leads', label: 'Lista', end: true, sectionPrefixes: ['/leads'] },
           { to: '/leads/cola', label: 'La cola del día' },
+          // El quinto paso no cabe en la cola: es toda la base que no compro.
+          { to: '/leads/seguimiento', label: 'Seguimiento de fin de mes' },
           { to: '/leads/proceso', label: 'Proceso comercial' },
         ],
       },

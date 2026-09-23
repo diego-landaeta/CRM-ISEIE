@@ -90,6 +90,8 @@ const MakeWebhooksPage = lazy(() => import('./modules/make-webhooks/pages/MakeWe
 const MakeWebhookDetailPage = lazy(() => import('./modules/make-webhooks/pages/MakeWebhookDetailPage'));
 const WooCommercePage = lazy(() => import('./modules/woocommerce/pages/WooCommercePage'));
 const ColaDelDiaPage = lazy(() => import('./modules/proceso/pages/ColaDelDiaPage'));
+// El repaso de fin de mes: toda la base que no compro. No es la cola del dia.
+const SeguimientoPage = lazy(() => import('./modules/proceso/pages/SeguimientoPage'));
 const ProcesoPage = lazy(() => import('./modules/proceso/pages/ProcesoPage'));
 
 const ROUTE_TITLES = {
@@ -186,6 +188,7 @@ function App() {
           <Route path="/leads/archived" element={<LeadsArchivedPage />} />
           {/* Antes que `:id`, para que «cola» y «proceso» no se lean como ids. */}
           <Route path="/leads/cola" element={<ColaDelDiaPage />} />
+          <Route path="/leads/seguimiento" element={<SeguimientoPage />} />
           <Route path="/leads/proceso" element={<ProcesoPage />} />
           <Route path="/leads/:id" element={<LeadDetailPage />} />
           <Route path="/products" element={<ProductsPage />} />

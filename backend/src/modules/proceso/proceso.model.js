@@ -1,4 +1,5 @@
 import { query } from '../../shared/config/db.js';
+import { comoLista } from '../../shared/utils/ambito.js';
 /*
   LAS PLAZAS NO SE CUENTAN AQUI, y antes si.
 
@@ -374,4 +375,140 @@ export async function ajustarPaso(id, { estado, fecha_prevista, nota }) {
     [id, estado || null, fecha_prevista || null, nota || null]
   );
   return rows[0] || null;
+}
+
+/**
+ * EL SEGUIMIENTO DE FIN DE MES (#90): toda la base que no compro.
+ *
+ * Es el quinto paso del documento y NO es la cola del dia: la cola es el
+ * recorrido de una persona --dia 1, dia 2, dia 4-- y esto es la lista entera de
+ * quien entro hace tiempo, no compro y no dijo que no. Por eso se deja fuera de
+ * `lead_steps` (`es_seguimiento = false` al planificar) y por eso tiene
+ * pantalla propia: meterlo en la cola la llenaria con media base todos los dias.
+ *
+ * QUIEN ENTRA:
+ *   · No ha comprado ni ha dicho que no.
+ *   · Entro hace mas de `desdeDias` (15 por defecto): ya paso su dia 4, asi que
+ *     el recorrido normal se acabo sin cerrar.
+ *   · NO se le ha tocado en los ultimos `descansoDias` (30 por defecto). Sin
+ *     esto, quien se repasa hoy vuelve a salir mañana y la lista deja de
+ *     significar «pendientes de reactivar» para significar «todos».
+ *
+ * EL ORDEN es por quien lleva mas tiempo sin noticias, y los que nunca se
+ * tocaron primero: son los que de verdad se perdieron por el camino.
+ */
+export async function baseDeSeguimiento({
+  projectIds, projectId = null, asesoraId = null,
+  desdeDias = 15, descansoDias = 30, limite = 500,
+} = {}) {
+  const par = [];
+  let i = 1;
+  const ids = comoLista(projectId, projectIds);
+  const pProj = ids
+    ? `AND l.project_id = ANY($${i++}::int[])`
+    : `AND l.project_id NOT IN (SELECT id FROM projects WHERE es_prueba)`;
+  if (ids) par.push(ids);
+  const pAses = asesoraId ? `AND l.responsable_id = $${i++}` : '';
+  if (asesoraId) par.push(asesoraId);
+  const pDesde = `$${i++}`; par.push(Number(desdeDias) || 15);
+  const pDescanso = `$${i++}`; par.push(Number(descansoDias) || 30);
+  const pLimite = `$${i++}`; par.push(Number(limite) || 500);
+
+  const ULTIMO = `(SELECT max(li.fecha) FROM lead_interactions li
+                    WHERE li.lead_id = l.id AND li.tipo <> 'nota')`;
+
+  const { rows } = await query(
+    `SELECT l.id AS lead_id, l.nombre AS lead_nombre, l.status AS lead_estado,
+            l.responsable_id, l.email AS lead_email, l.telefono AS lead_telefono,
+            l.project_id, pr.nombre AS proyecto,
+            u.nombre AS gestora,
+            p.nombre AS producto, p.precio AS producto_precio,
+            p.fecha_inicio_texto, p.fecha_cierre_convocatoria,
+            ${ENTRADA}::date AS fecha_entrada,
+            (CURRENT_DATE - ${ENTRADA}::date) AS dias_desde_entrada,
+            ${ULTIMO} AS ultimo_contacto,
+            (CURRENT_DATE - ${ULTIMO}::date) AS dias_sin_contacto,
+            ${CONTACTOS} AS contactos,
+            -- El paso de fin de mes de SU proyecto: de ahi salen los canales,
+            -- la chuleta y --lo que importa-- la clave con la que la pantalla
+            -- encuentra sus plantillas.
+            s.clave, s.orden, s.nombre AS paso_nombre, s.canales, s.nota AS paso_nota,
+            COALESCE(s.avisa_plazas, false) AS avisa_plazas
+       FROM leads l
+       LEFT JOIN projects pr ON pr.id = l.project_id
+       LEFT JOIN users u ON u.id = l.responsable_id
+       LEFT JOIN products p ON p.id = l.producto_interes_id
+       LEFT JOIN commercial_steps s
+              ON s.project_id = l.project_id AND s.es_seguimiento = true AND s.activo = true
+      WHERE l.deleted_at IS NULL
+        AND l.status NOT IN ('convertido', 'no_interesado')
+        AND ${ENTRADA}::date <= CURRENT_DATE - ${pDesde}::int
+        AND (${ULTIMO} IS NULL OR ${ULTIMO}::date <= CURRENT_DATE - ${pDescanso}::int)
+        ${pProj} ${pAses}
+      ORDER BY ${ULTIMO} ASC NULLS FIRST, ${ENTRADA} ASC
+      LIMIT ${pLimite}`,
+    par
+  );
+
+  return rows.map((r) => ({
+    ...r,
+    dias_desde_entrada: Number(r.dias_desde_entrada),
+    dias_sin_contacto: r.dias_sin_contacto == null ? null : Number(r.dias_sin_contacto),
+    contactos: Number(r.contactos),
+    // Cuanto hace que entro, en bloques. Se decide aqui y no en la pantalla
+    // para que el recuento de arriba y las filas no puedan discrepar.
+    antiguedad: bloqueDeAntiguedad(Number(r.dias_desde_entrada)),
+  }));
+}
+
+/** En que bloque cae alguien segun cuanto hace que entro. */
+function bloqueDeAntiguedad(dias) {
+  if (dias < 30) return 'este_mes';
+  if (dias < 90) return 'uno_a_tres';
+  if (dias < 180) return 'tres_a_seis';
+  return 'mas_de_seis';
+}
+
+/**
+ * Cuantos hay en el repaso de fin de mes, por antiguedad.
+ *
+ * Va aparte de la lista porque la lista tiene tope --500-- y con la base entera
+ * de una empresa se llega siempre. Un «500» de cabecera no seria un dato, seria
+ * el limite disfrazado de dato.
+ */
+export async function resumenDeSeguimiento({
+  projectIds, projectId = null, asesoraId = null, desdeDias = 15, descansoDias = 30,
+} = {}) {
+  const par = [];
+  let i = 1;
+  const ids = comoLista(projectId, projectIds);
+  const pProj = ids
+    ? `AND l.project_id = ANY($${i++}::int[])`
+    : `AND l.project_id NOT IN (SELECT id FROM projects WHERE es_prueba)`;
+  if (ids) par.push(ids);
+  const pAses = asesoraId ? `AND l.responsable_id = $${i++}` : '';
+  if (asesoraId) par.push(asesoraId);
+  const pDesde = `$${i++}`; par.push(Number(desdeDias) || 15);
+  const pDescanso = `$${i++}`; par.push(Number(descansoDias) || 30);
+
+  const ULTIMO = `(SELECT max(li.fecha) FROM lead_interactions li
+                    WHERE li.lead_id = l.id AND li.tipo <> 'nota')`;
+  const DIAS = `(CURRENT_DATE - ${ENTRADA}::date)`;
+
+  const { rows } = await query(
+    `SELECT count(*)::int AS total,
+            count(*) FILTER (WHERE ${DIAS} < 30)::int                      AS este_mes,
+            count(*) FILTER (WHERE ${DIAS} >= 30 AND ${DIAS} < 90)::int    AS uno_a_tres,
+            count(*) FILTER (WHERE ${DIAS} >= 90 AND ${DIAS} < 180)::int   AS tres_a_seis,
+            count(*) FILTER (WHERE ${DIAS} >= 180)::int                    AS mas_de_seis,
+            count(*) FILTER (WHERE ${ULTIMO} IS NULL)::int                 AS nunca_contactados
+       FROM leads l
+      WHERE l.deleted_at IS NULL
+        AND l.status NOT IN ('convertido', 'no_interesado')
+        AND ${ENTRADA}::date <= CURRENT_DATE - ${pDesde}::int
+        AND (${ULTIMO} IS NULL OR ${ULTIMO}::date <= CURRENT_DATE - ${pDescanso}::int)
+        ${pProj} ${pAses}`,
+    par
+  );
+  return rows[0];
 }

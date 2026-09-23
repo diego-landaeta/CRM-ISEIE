@@ -103,6 +103,16 @@ export function colaDelDia(opciones) {
   return Pasos.colaDelDia(opciones);
 }
 
+/** La base que toca repasar a fin de mes. */
+export function baseDeSeguimiento(opciones) {
+  return Pasos.baseDeSeguimiento(opciones);
+}
+
+/** Cuantos son, sin el tope de la lista. */
+export function resumenDeSeguimiento(opciones) {
+  return Pasos.resumenDeSeguimiento(opciones);
+}
+
 export function resumenDeLaCola(opciones) {
   return Pasos.resumenDeLaCola(opciones);
 }

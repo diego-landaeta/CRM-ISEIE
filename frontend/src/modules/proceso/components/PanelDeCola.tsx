@@ -29,6 +29,7 @@ export default function PanelDeCola({
   posicion,
   total,
   guardando,
+  textoUrgencia,
   onContactado,
   onPlantillaCopiada,
   onAnterior,
@@ -40,6 +41,15 @@ export default function PanelDeCola({
   posicion: number;
   total: number;
   guardando: boolean;
+  /**
+   * La frase de arriba, cuando no vale la de la cola.
+   *
+   * En la cola es «le tocaba hace tres dias»; en el repaso de fin de mes eso no
+   * significa nada --alli no hay fecha prevista-- y lo que importa es cuanto
+   * lleva sin noticias. Se deja decir desde fuera en vez de calcular dos cosas
+   * distintas aqui dentro.
+   */
+  textoUrgencia?: string;
   onContactado: (tipo: 'llamada' | 'email' | 'whatsapp' | 'nota', nota: string) => void;
   /** Copiar el mensaje deja rastro en su ficha, pero NO cierra el paso. */
   onPlantillaCopiada?: (nombrePlantilla: string) => void;
@@ -99,7 +109,12 @@ export default function PanelDeCola({
         </div>
 
         <div className="flex-1 space-y-tarjeta overflow-y-auto p-tarjeta">
-          {tarde && (
+          {textoUrgencia ? (
+            <p className="flex items-start gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-secundario">
+              <Warning size={14} weight="fill" className="mt-0.5 shrink-0 text-muted-foreground" />
+              <span>{textoUrgencia}</span>
+            </p>
+          ) : tarde && (
             <p className="flex items-start gap-2 rounded-md border border-warning/30 bg-warning-soft px-3 py-2 text-secundario text-warning-soft-foreground">
               <Warning size={14} weight="fill" className="mt-0.5 shrink-0" />
               <span>

@@ -38,6 +38,30 @@ export type PasoEnCola = {
   proyecto: string | null;
 };
 
+/**
+ * Alguien del repaso de fin de mes.
+ *
+ * Trae lo mismo que una fila de la cola --para poder abrir la misma ventana--
+ * mas lo suyo: cuanto hace que entro y cuanto lleva sin noticias.
+ */
+export type EnSeguimiento = Omit<PasoEnCola, 'fecha_prevista' | 'dias_de_retraso'> & {
+  fecha_entrada: string;
+  dias_desde_entrada: number;
+  /** null = no se le ha contactado NUNCA. */
+  ultimo_contacto: string | null;
+  dias_sin_contacto: number | null;
+  antiguedad: 'este_mes' | 'uno_a_tres' | 'tres_a_seis' | 'mas_de_seis';
+};
+
+export type ResumenSeguimiento = {
+  total: number;
+  este_mes: number;
+  uno_a_tres: number;
+  tres_a_seis: number;
+  mas_de_seis: number;
+  nunca_contactados: number;
+};
+
 export type ResumenCola = {
   atrasados: number;
   hoy: number;
@@ -85,6 +109,22 @@ export async function traerResumen(opciones: {
   projectId?: number | null; projectIds?: string | null; gestoraId?: number | null;
 }): Promise<ResumenCola | null> {
   const r = await client.get(`/proceso/cola/resumen?${conAmbito(opciones)}`);
+  return r?.success ? r.data : null;
+}
+
+/** La base que toca repasar a fin de mes. */
+export async function traerSeguimiento(opciones: {
+  projectId?: number | null; projectIds?: string | null; gestoraId?: number | null; limite?: number;
+}): Promise<EnSeguimiento[]> {
+  const r = await client.get(`/proceso/seguimiento?${conAmbito(opciones)}`);
+  return r?.success ? r.data : [];
+}
+
+/** Cuantos son de verdad, sin el tope de la lista. */
+export async function traerResumenSeguimiento(opciones: {
+  projectId?: number | null; projectIds?: string | null; gestoraId?: number | null;
+}): Promise<ResumenSeguimiento | null> {
+  const r = await client.get(`/proceso/seguimiento/resumen?${conAmbito(opciones)}`);
   return r?.success ? r.data : null;
 }
 

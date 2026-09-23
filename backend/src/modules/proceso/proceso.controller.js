@@ -81,6 +81,35 @@ export async function cola(req, res, next) {
   } catch (err) { next(err); }
 }
 
+/**
+ * GET /api/proceso/seguimiento -> la base que no compro, para el repaso de fin
+ * de mes. Mismo recorte que la cola: una gestora solo ve lo suyo.
+ */
+export async function seguimiento(req, res, next) {
+  try {
+    const data = await Proceso.baseDeSeguimiento({
+      projectIds: proyectosDeLaCola(req),
+      asesoraId: deQuienEsLaCola(req),
+      desdeDias: Number(req.query.desdeDias) || 15,
+      descansoDias: Number(req.query.descansoDias) || 30,
+      limite: Number(req.query.limite) || 500,
+    });
+    res.json({ success: true, data });
+  } catch (err) { next(err); }
+}
+
+export async function resumenSeguimiento(req, res, next) {
+  try {
+    const data = await Proceso.resumenDeSeguimiento({
+      projectIds: proyectosDeLaCola(req),
+      asesoraId: deQuienEsLaCola(req),
+      desdeDias: Number(req.query.desdeDias) || 15,
+      descansoDias: Number(req.query.descansoDias) || 30,
+    });
+    res.json({ success: true, data });
+  } catch (err) { next(err); }
+}
+
 export async function resumenCola(req, res, next) {
   try {
     const data = await Proceso.resumenDeLaCola({
