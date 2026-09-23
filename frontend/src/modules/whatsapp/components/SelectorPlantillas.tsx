@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { MagnifyingGlass, WarningCircle, X, ImageSquare } from '@phosphor-icons/react';
+import { MagnifyingGlass, WarningCircle, X, ImageSquare, Plus } from '@phosphor-icons/react';
 import { whatsappApi, type PlantillaWhatsapp } from '../api/whatsapp.api';
 import { rellenar, huecosSinRellenar, type DatosParaRellenar } from '../lib/plantilla';
 
@@ -23,6 +23,15 @@ import { rellenar, huecosSinRellenar, type DatosParaRellenar } from '../lib/plan
  * contrario que el nombre. Por eso los botones se apoyan en ella y no en cómo
  * se llame hoy el paso.
  */
+/**
+ * El filtro de «las mías».
+ *
+ * No es un paso: es el ámbito. Va en la misma fila porque es donde Diego lo
+ * pidió --«también necesitamos algo como personalizadas»-- y porque para quien
+ * busca es la misma pregunta: «¿cuál de todas quiero?».
+ */
+const MIAS = 'mias';
+
 const ORDEN_PASOS = [
   { clave: 'paso_1', corto: 'Paso 1' },
   { clave: 'paso_2', corto: 'Paso 2' },
@@ -44,6 +53,7 @@ export default function SelectorPlantillas({
   alElegir,
   alCerrar,
   anclaje = 'arriba',
+  borrador = '',
 }: {
   projectId: number | null;
   issuerId?: number | null;
@@ -60,12 +70,18 @@ export default function SelectorPlantillas({
    * arriba lo sacaría de la pantalla.
    */
   anclaje?: 'arriba' | 'abajo';
+  /** Lo que hay escrito ahora, para poder guardarlo como plantilla propia. */
+  borrador?: string;
 }) {
   const [plantillas, setPlantillas] = useState<PlantillaWhatsapp[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busca, setBusca] = useState('');
   const [paso, setPaso] = useState<string>('todas');
   const cajaBusca = useRef<HTMLInputElement>(null);
+  const [creando, setCreando] = useState(false);
+  const [nombreNueva, setNombreNueva] = useState('');
+  const [cuerpoNuevo, setCuerpoNuevo] = useState('');
+  const [guardando, setGuardando] = useState(false);
 
   useEffect(() => {
     let vivo = true;
@@ -95,7 +111,8 @@ export default function SelectorPlantillas({
   const filtradas = useMemo(() => {
     const q = plano(busca).trim();
     let out = plantillas || [];
-    if (paso !== 'todas') out = out.filter((p) => (p.paso_clave || 'sueltas') === paso);
+    if (paso === MIAS) out = out.filter((p) => p.ambito === 'personal');
+    else if (paso !== 'todas') out = out.filter((p) => (p.paso_clave || 'sueltas') === paso);
     if (!q) return out;
     return out.filter(
       (p) => plano(p.label).includes(q) || plano(p.body).includes(q)
@@ -108,6 +125,18 @@ export default function SelectorPlantillas({
    * Se sacan de lo que llega, no de una lista fija: si un proyecto no tiene la
    * del día 4, su botón no aparece.
    */
+  /**
+   * Cuántas son suyas.
+   *
+   * El servidor ya solo manda las compartidas y las de quien pregunta, así que
+   * `personal` aquí significa «mía» sin tener que saber quién soy. Si no tiene
+   * ninguna, el botón no sale: un filtro que siempre da vacío estorba.
+   */
+  const cuantasMias = useMemo(
+    () => (plantillas || []).filter((p) => p.ambito === 'personal').length,
+    [plantillas],
+  );
+
   const pasos = useMemo(() => {
     const hay = new Set((plantillas || []).map((p) => p.paso_clave || 'sueltas'));
     return ORDEN_PASOS.filter((x) => hay.has(x.clave));
@@ -135,17 +164,106 @@ export default function SelectorPlantillas({
           aria-label="Buscar una plantilla por nombre o por contenido"
           className="wa-plantillas-busca"
         />
+        {/* Sin proyecto elegido no se puede: una plantilla vive en un
+            proyecto. Con la empresa entera puesta no hay a cuál guardarla, y
+            es mejor decirlo que meterla en uno al azar. */}
+        {projectId && !creando && (
+          <button type="button" className="wa-plantillas-nueva-abrir"
+            title="Guardar una plantilla solo para ti"
+            onClick={() => {
+              setCuerpoNuevo(borrador);
+              setNombreNueva('');
+              setCreando(true);
+            }}>
+            <Plus size={13} weight="bold" />
+            <span>Nueva mía</span>
+          </button>
+        )}
         <button type="button" onClick={alCerrar} aria-label="Cerrar las plantillas"
           className="wa-plantillas-cerrar">
           <X size={15} />
         </button>
       </div>
+      {/* GUARDAR UNA PROPIA, SIN SALIR DEL CHAT.
+
+          El filtro «Mías» no se llena solo: crear una obligaba a irse a la
+          pantalla de Plantillas, y si hay que salir del chat para eso, no se
+          hace. Lo que se guarda es lo que hay escrito en el campo de escribir,
+          que es de donde salen las plantillas de verdad: una frase que a una le
+          funciona y repite veinte veces al mes.
+
+          Va con los HUECOS SIN RELLENAR a propósito: se guarda el texto tal
+          como está escrito, no el que ya lleva el nombre de esta persona.
+          Guardar «Hola Marta» como plantilla la hace inservible mañana. */}
+      {creando && (
+        <form
+          className="wa-plantillas-nueva"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            if (!projectId || !nombreNueva.trim() || !cuerpoNuevo.trim()) return;
+            setGuardando(true);
+            try {
+              const r = await whatsappApi.crearPlantilla({
+                projectId,
+                label: nombreNueva.trim(),
+                body: cuerpoNuevo,
+                ambito: 'personal',
+              });
+              if (!r.success) throw new Error(r.error || 'No se pudo guardar');
+              // Se vuelve a pedir la lista en vez de anadirla a mano: asi sale
+              // con lo que el servidor haya decidido --el orden, el id-- y no
+              // una copia que se le parezca.
+              const lista = await whatsappApi.plantillas(projectId, issuerId);
+              if (lista.success) setPlantillas(lista.data || []);
+              setCreando(false);
+              setNombreNueva('');
+              setPaso(MIAS);
+            } catch (err) {
+              setError((err as Error)?.message || 'No se pudo guardar');
+            } finally {
+              setGuardando(false);
+            }
+          }}
+        >
+          <input
+            type="text"
+            value={nombreNueva}
+            onChange={(e) => setNombreNueva(e.target.value)}
+            placeholder="¿Cómo la llamas?"
+            aria-label="Nombre de la plantilla"
+            maxLength={80}
+            autoFocus
+            className="wa-plantillas-nueva-nombre"
+          />
+          <textarea
+            value={cuerpoNuevo}
+            onChange={(e) => setCuerpoNuevo(e.target.value)}
+            placeholder="El mensaje. Puedes usar los huecos {nombre}, {producto}, {proyecto}…"
+            aria-label="Texto de la plantilla"
+            rows={3}
+            className="wa-plantillas-nueva-cuerpo"
+          />
+          <div className="wa-plantillas-nueva-pie">
+            <span className="wa-plantillas-nueva-nota">Solo la verás tú.</span>
+            <button type="button" onClick={() => setCreando(false)} className="underline">
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={guardando || !nombreNueva.trim() || !cuerpoNuevo.trim()}
+              className="wa-plantillas-nueva-guardar"
+            >
+              {guardando ? 'Guardando…' : 'Guardar'}
+            </button>
+          </div>
+        </form>
+      )}
 
       {/* Por paso del proceso. El documento las da por días y así es como se
           buscan: la gestora sabe en qué paso va esta persona, no cómo se llama
           la plantilla. */}
-      {pasos.length > 1 && (
-        <div className="wa-plantillas-pasos" role="group" aria-label="Filtrar por paso del proceso">
+      {(pasos.length > 1 || cuantasMias > 0) && (
+        <div className="wa-plantillas-pasos" role="group" aria-label="Filtrar las plantillas">
           <button type="button" onClick={() => setPaso('todas')}
             aria-pressed={paso === 'todas'}
             className={`wa-plantillas-paso${paso === 'todas' ? ' es-activo' : ''}`}>
@@ -158,6 +276,14 @@ export default function SelectorPlantillas({
               {x.corto}
             </button>
           ))}
+          {cuantasMias > 0 && (
+            <button type="button" onClick={() => setPaso(MIAS)}
+              aria-pressed={paso === MIAS}
+              title="Solo las que has creado tú"
+              className={`wa-plantillas-paso es-mias${paso === MIAS ? ' es-activo' : ''}`}>
+              Mías ({cuantasMias})
+            </button>
+          )}
         </div>
       )}
 
@@ -189,10 +315,22 @@ export default function SelectorPlantillas({
             no tener ninguna, y la salida tambien: limpiar la busqueda. */}
         {plantillas && plantillas.length > 0 && filtradas.length === 0 && (
           <div className="wa-plantillas-aviso wa-plantillas-vacio">
-            <span>Ninguna coincide con «{busca}».</span>
-            <button type="button" onClick={() => setBusca('')} className="underline">
-              Quitar la búsqueda
-            </button>
+            <span>
+              {busca.trim()
+                ? `Ninguna coincide con «${busca}».`
+                : 'Ninguna en este filtro.'}
+            </span>
+            {busca.trim()
+              ? (
+                <button type="button" onClick={() => setBusca('')} className="underline">
+                  Quitar la búsqueda
+                </button>
+              )
+              : (
+                <button type="button" onClick={() => setPaso('todas')} className="underline">
+                  Ver todas
+                </button>
+              )}
           </div>
         )}
 
@@ -203,9 +341,9 @@ export default function SelectorPlantillas({
             <button key={p.id} type="button" onClick={() => elegir(p)} className="wa-plantilla">
               <span className="wa-plantilla-nombre">
                 {p.label}
-                {p.ambito === 'compartida' && (
-                  <span className="wa-plantilla-etiqueta">compartida</span>
-                )}
+                {p.ambito === 'compartida'
+                  ? <span className="wa-plantilla-etiqueta">compartida</span>
+                  : <span className="wa-plantilla-etiqueta es-mia">mía</span>}
               </span>
               <span className="wa-plantilla-cuerpo">{rellenar(p.body, datos, nombreProyecto)}</span>
               {/* La letra pequeña del documento: la lee la gestora mientras
