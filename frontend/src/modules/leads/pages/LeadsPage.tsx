@@ -138,6 +138,7 @@ export default function LeadsPage() {
     leads, stats, total, page, totalPages,
     setPage, search, setSearch,
     filterEstado, setFilterEstado,
+    filterPaso, setFilterPaso,
     filterOrigen, setFilterOrigen,
     filterResponsable, setFilterResponsable,
     filterProducto, setFilterProducto,
@@ -155,6 +156,29 @@ export default function LeadsPage() {
   // (no solo en modo multi). Util para saber a qué proyecto pertenece cada lead.
   const showProjectColumn = (projects?.length || 0) > 1;
   const { products } = useProducts(activeProject?.id);
+
+  /**
+   * Los pasos del proceso, para poder filtrar por ellos con su nombre.
+   *
+   * Se piden al servidor y no se escriben aquí: los pasos se pueden renombrar
+   * desde «Proceso comercial», y un filtro que diga «Día 2» cuando la pantalla
+   * de pasos dice «Prueba social» no lo entiende nadie.
+   */
+  const [pasosDelProceso, setPasosDelProceso] = useState<Array<{ clave: string; nombre: string; orden: number }>>([]);
+  useEffect(() => {
+    if (!activeProject?.id) { setPasosDelProceso([]); return; }
+    let vivo = true;
+    client.get(`/proceso/pasos?projectId=${activeProject.id}`)
+      .then((r: any) => {
+        if (!vivo) return;
+        const filas = r?.success ? (r.data || []) : [];
+        setPasosDelProceso(filas.map((x: any) => ({ clave: x.clave, nombre: x.nombre, orden: x.orden })));
+      })
+      // Sin proceso montado no hay filtro, y ya está: no es un error que enseñar.
+      .catch(() => { if (vivo) setPasosDelProceso([]); });
+    return () => { vivo = false; };
+  }, [activeProject?.id]);
+
   const { templates: waTemplates } = useWhatsappTemplates(activeProject?.id);
 
   // Auto-polling de leads nuevos cada 30s + detección de nuevos por id
@@ -443,6 +467,68 @@ export default function LeadsPage() {
     toast({ title: `${selected.length} prospectos exportados` });
   }
 
+  /**
+   * Apuntar el contacto a TODOS los seleccionados.
+   *
+   * El repaso de fin de mes se manda en bloque --Diego, 23/09: «suele ser
+   * masivo»-- y apuntarlo uno a uno despues de mandar cuarenta mensajes no lo
+   * hace nadie: la lista se queda mintiendo y al mes siguiente vuelven a salir
+   * los mismos.
+   */
+  async function marcarContactadosEnBloque() {
+    if (!selectedIds.length) return;
+    setBulkLoading(true);
+    let bien = 0;
+    let mal = 0;
+    for (const id of selectedIds) {
+      try {
+        await client.post(`/leads/${id}/interactions`, {
+          tipo: 'whatsapp',
+          nota: 'Contacto en bloque',
+          fecha: new Date().toISOString(),
+        });
+        bien += 1;
+      } catch { mal += 1; }
+    }
+    setBulkLoading(false);
+    clearSelection();
+    refetch?.();
+    toast(mal === 0
+      ? { title: `${bien} contactos apuntados` }
+      : {
+        title: `${bien} apuntados, ${mal} no`,
+        description: 'Los que fallaron siguen sin contacto apuntado.',
+        variant: 'destructive',
+      });
+  }
+
+  /** Los telefonos o los correos de los seleccionados, al portapapeles. */
+  async function copiarContactosEnBloque(que) {
+    const elegidos = filteredLeads.filter((l) => selectedIds.includes(l.id));
+    const datos = elegidos
+      .map((l) => (que === 'telefono' ? l.telefono : l.email))
+      .filter(Boolean);
+    if (!datos.length) {
+      toast({
+        title: que === 'telefono' ? 'Ninguno tiene teléfono' : 'Ninguno tiene correo',
+        variant: 'destructive',
+      });
+      return;
+    }
+    const { copyToClipboard } = await import('@/shared/lib/clipboard');
+    const ok = await copyToClipboard(datos.join('\n'));
+    toast(ok
+      ? {
+        title: `${datos.length} ${que === 'telefono' ? 'teléfonos' : 'correos'} copiados`,
+        // Se dice cuantos se quedan fuera: pegar 38 cuando se marcaron 40 y no
+        // enterarse es quedarse con dos personas sin avisar.
+        description: datos.length < elegidos.length
+          ? `${elegidos.length - datos.length} de los seleccionados no tienen ese dato.`
+          : undefined,
+      }
+      : { title: 'No se ha podido copiar', variant: 'destructive' });
+  }
+
   // Auto-log de interaccion al usar acciones rapidas (WhatsApp/Email)
   async function handleLogInteraction(lead, tipo) {
     try {
@@ -684,6 +770,8 @@ export default function LeadsPage() {
         user={user}
         search={search} setSearch={setSearch}
         filterEstado={filterEstado} setFilterEstado={setFilterEstadoSafe}
+        filterPaso={filterPaso} setFilterPaso={setFilterPaso}
+        pasosDelProceso={pasosDelProceso}
         filterOrigen={filterOrigen} setFilterOrigen={setFilterOrigen}
         filterResponsable={filterResponsable} setFilterResponsable={setFilterResponsable}
         filterProducto={filterProducto} setFilterProducto={setFilterProducto}
@@ -1012,6 +1100,8 @@ export default function LeadsPage() {
           onChangeStatus={status => handleBulkStatusChange(status)}
           onReassign={gestorId => handleBulkReassign(gestorId)}
           onExport={handleBulkExportCsv}
+          onMarcarContactado={marcarContactadosEnBloque}
+          onCopiarContactos={copiarContactosEnBloque}
           gestores={gestores}
           isAdmin={user?.role === 'superadmin' || user?.role === 'admin'}
           loading={bulkLoading}

@@ -63,6 +63,10 @@ interface Props {
   user: { role?: string } | null;
   search: string; setSearch: (v: string) => void;
   filterEstado: string; setFilterEstado: (v: string) => void;
+  /** En qué paso del proceso comercial va. Vacío = cualquiera. */
+  filterPaso: string; setFilterPaso: (v: string) => void;
+  /** Los pasos del proyecto, para poder nombrarlos. */
+  pasosDelProceso: Array<{ clave: string; nombre: string; orden: number }>;
   filterOrigen: string; setFilterOrigen: (v: string) => void;
   filterResponsable: string; setFilterResponsable: (v: string) => void;
   filterProducto: string; setFilterProducto: (v: string) => void;
@@ -82,7 +86,7 @@ interface Props {
 export default function LeadsFiltersBar(props: Props) {
   const {
     activeProject,
-    gestores, products, user,
+    gestores, products, user, filterPaso, setFilterPaso, pasosDelProceso,
     search, setSearch, filterEstado, setFilterEstado,
     filterOrigen, setFilterOrigen, filterResponsable, setFilterResponsable,
     filterProducto, setFilterProducto, dateFrom, dateTo, setDateRange,
@@ -236,6 +240,30 @@ export default function LeadsFiltersBar(props: Props) {
                     ))}
                   </select>
                 </Row>
+                {/* EN QUÉ PASO DEL PROCESO VA. Diego, 23/09: «en filtros que
+                    diga proceso de ventas y puedas elegir cuál».
+
+                    Los pasos se leen del proceso de verdad —no una lista fija—
+                    porque se pueden renombrar desde «Proceso comercial», y un
+                    filtro que diga «Día 2» cuando la pantalla de pasos dice
+                    «Prueba social» no se entiende. */}
+                {pasosDelProceso.length > 0 && (
+                  <Row label="Proceso de ventas">
+                    <select
+                      value={filterPaso}
+                      onChange={(e) => setFilterPaso(e.target.value)}
+                      className="w-full h-9 px-3 rounded-md border border-border bg-muted/40 text-sm"
+                      aria-label="Paso del proceso comercial"
+                    >
+                      <option value="">Cualquier paso</option>
+                      {pasosDelProceso.map((p) => (
+                        <option key={p.clave} value={p.clave}>
+                          {p.orden}. {p.nombre}
+                        </option>
+                      ))}
+                    </select>
+                  </Row>
+                )}
                 <Row label="Canal">
                   <SearchableSelect
                     value={filterOrigen}

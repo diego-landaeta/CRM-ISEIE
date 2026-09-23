@@ -1571,7 +1571,7 @@ export async function ventasSinFacturaEnRango({ projectId, projectIds, from, to 
  * media del equipo y cuanto le falta para subir un puesto. Quien va delante es
  * un dato del jefe, no de la carrera.
  */
-export async function miPuesto({ userId, projectId, projectIds, from, to, base = 'cobro' }) {
+export async function miPuesto({ userId, projectId, projectIds, from, to, base = 'cobro', esJefe = false }) {
   // `base = 'cobro'` cuenta cada venta POR SU FECHA DE VENTA; 'factura', por la
   // fecha de la factura. Para «cuantas llevo este mes» manda la de venta: una
   // venta cerrada hoy cuenta hoy, y una que todavia no se ha facturado cuenta
@@ -1606,6 +1606,25 @@ export async function miPuesto({ userId, projectId, projectIds, from, to, base =
 
   return {
     desde: from, hasta: to,
+    // LA TABLA ENTERA, SOLO PARA QUIEN MANDA. Diego, 23/09: «para el admin en
+    // esas pestañas debe tener como un desplegable del ranking y el % de
+    // conversion de la media».
+    //
+    // A una gestora NO se le manda: ella ve su puesto, su tasa y la media. Que
+    // cada una sepa el numero exacto de las demas no la ayuda a vender y
+    // convierte el panel en un tablon de comparaciones.
+    tabla: esJefe
+      ? tabla.map((a, n) => ({
+        puesto: n + 1,
+        user_id: a.user_id,
+        nombre: a.nombre,
+        leads: a.leads,
+        ventas: a.ventas,
+        vendido: a.vendido,
+        cobrado: a.cobrado,
+        tasa: tasaDe(a),
+      }))
+      : null,
     // `null` cuando esta persona no entra en la clasificacion --no tiene leads
     // ni ventas en el periodo--, para que la pantalla no diga «eres la 0 de 7».
     puesto: i >= 0 ? i + 1 : null,

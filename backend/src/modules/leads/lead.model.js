@@ -647,7 +647,7 @@ function buildOrderBy(sort, dir = 'desc') {
   return `${FECHA} ${D} NULLS LAST, l.id ${D}`;
 }
 
-export async function findAll({ projectId, projectIds, status, responsableId, unassigned, canal, productId, search, page, limit, includeConverted, dateFrom, dateTo, sort, dir, duplicated, reincidente, conConversion, installmentStatus }) {
+export async function findAll({ projectId, projectIds, status, pasoProceso, responsableId, unassigned, canal, productId, search, page, limit, includeConverted, dateFrom, dateTo, sort, dir, duplicated, reincidente, conConversion, installmentStatus }) {
   const conditions = [];
   const params = [];
   let paramIdx = 1;
@@ -713,6 +713,23 @@ export async function findAll({ projectId, projectIds, status, responsableId, un
     params.push(status);
   } else if (!includeConverted && !conConversion) {
     conditions.push(`l.status <> 'convertido'`);
+  }
+  /* EN QUE PASO DEL PROCESO VA.
+     El paso «en curso» es el primero pendiente que aun no ha llegado su turno:
+     si ya hubo N contactos de verdad --las notas no cuentan-- eso cierra el
+     paso n.o N. Se calcula igual que en la cola del dia para que la lista y la
+     cola no puedan decir cosas distintas de la misma persona.
+
+     Quien no tiene agenda --los de antes del proceso-- no sale con ningun paso
+     elegido, y es lo correcto: no estan en el proceso. */
+  if (pasoProceso) {
+    const CONTACTOS = `(SELECT count(*) FROM lead_interactions li
+                         WHERE li.lead_id = l.id AND li.tipo <> 'nota')`;
+    conditions.push(`(SELECT ls.clave FROM lead_steps ls
+                       WHERE ls.lead_id = l.id AND ls.estado = 'pendiente'
+                         AND ${CONTACTOS} < ls.orden
+                       ORDER BY ls.orden LIMIT 1) = $${paramIdx++}`);
+    params.push(pasoProceso);
   }
   if (unassigned) {
     conditions.push(`l.responsable_id IS NULL`);

@@ -18,9 +18,10 @@ interface AuditLogEntry {
 
 const PAGE_SIZE = 20;
 
-const URL_DEFAULTS: { q: string; estado: string; origen: string; resp: string; prod: string; from: string; to: string; sort: string; dir: string; page: number; dup: string; rein: string } = {
+const URL_DEFAULTS: { q: string; estado: string; paso: string; origen: string; resp: string; prod: string; from: string; to: string; sort: string; dir: string; page: number; dup: string; rein: string } = {
   q: '',
   estado: '',
+  paso: '',  // en que paso del proceso comercial va (la clave del paso)
   origen: '',
   resp: '',
   prod: '',
@@ -54,6 +55,8 @@ export interface UseLeadsResult {
   setSearch: (v: string) => void;
   filterEstado: string;
   setFilterEstado: (v: string) => void;
+  filterPaso: string;
+  setFilterPaso: (v: string) => void;
   filterOrigen: string;
   setFilterOrigen: (v: string) => void;
   filterResponsable: string;
@@ -94,8 +97,8 @@ export function useLeads(): UseLeadsResult {
   const pid = activeProject?.id;
 
   const [urlFilters, setUrlFilters] = useUrlFilters(URL_DEFAULTS);
-  const { q: search, estado: filterEstado, origen: filterOrigen, resp: filterResponsable, prod: filterProducto, from: dateFrom, to: dateTo, sort: sortRaw, dir: dirRaw, page, dup: filterDup, rein: filterReincidente } = urlFilters as {
-    q: string; estado: string; origen: string; resp: string; prod: string; from: string; to: string; sort: string; dir: string; page: number; dup: string; rein: string;
+  const { q: search, estado: filterEstado, paso: filterPaso, origen: filterOrigen, resp: filterResponsable, prod: filterProducto, from: dateFrom, to: dateTo, sort: sortRaw, dir: dirRaw, page, dup: filterDup, rein: filterReincidente } = urlFilters as {
+    q: string; estado: string; paso: string; origen: string; resp: string; prod: string; from: string; to: string; sort: string; dir: string; page: number; dup: string; rein: string;
   };
   // Default CRONOLOGICO ('recent') descendente = mas reciente primero.
   const sortMode = (['value', 'recent', 'urgency', 'recent_value'].includes(sortRaw) ? sortRaw : 'recent') as 'value' | 'recent' | 'urgency' | 'recent_value';
@@ -103,6 +106,7 @@ export function useLeads(): UseLeadsResult {
 
   const setSearch = useCallback((v: string) => setUrlFilters({ q: v, page: 1 }), [setUrlFilters]);
   const setFilterEstado = useCallback((v: string) => setUrlFilters({ estado: v, page: 1 }), [setUrlFilters]);
+  const setFilterPaso = useCallback((v: string) => setUrlFilters({ paso: v, page: 1 }), [setUrlFilters]);
   const setFilterOrigen = useCallback((v: string) => setUrlFilters({ origen: v, page: 1 }), [setUrlFilters]);
   const setFilterResponsable = useCallback((v: string) => setUrlFilters({ resp: v, page: 1 }), [setUrlFilters]);
   const setFilterProducto = useCallback((v: string) => setUrlFilters({ prod: v, page: 1 }), [setUrlFilters]);
@@ -152,6 +156,7 @@ export function useLeads(): UseLeadsResult {
       params.set('limit', String(PAGE_SIZE));
       if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim());
       if (filterEstado) params.set('status', filterEstado);
+      if (filterPaso) params.set('pasoProceso', filterPaso);
       if (filterOrigen) params.set('canal', filterOrigen);
       if (filterResponsable === 'unassigned') params.set('unassigned', 'true');
       else if (filterResponsable) params.set('responsableId', filterResponsable);
@@ -180,7 +185,7 @@ export function useLeads(): UseLeadsResult {
     } finally {
       if (!controller.signal.aborted) setLoading(false);
     }
-  }, [pid, page, debouncedSearch, filterEstado, filterOrigen, filterResponsable, filterProducto, dateFrom, dateTo, sortMode, sortDir, filterDup, filterReincidente]);
+  }, [pid, page, debouncedSearch, filterEstado, filterPaso, filterOrigen, filterResponsable, filterProducto, dateFrom, dateTo, sortMode, sortDir, filterDup, filterReincidente]);
 
   // Trae TODOS los leads filtrados (sin paginar) para exportar. El listado va de
   // 20 en 20; el export debe llevarse todo lo filtrado. El backend limita el
@@ -195,6 +200,7 @@ export function useLeads(): UseLeadsResult {
       if (!ignoreFilters) {
         if (debouncedSearch) p.set('search', debouncedSearch);
         if (filterEstado) p.set('status', filterEstado);
+        if (filterPaso) p.set('pasoProceso', filterPaso);
         if (filterOrigen) p.set('canal', filterOrigen);
         if (filterResponsable === 'unassigned') p.set('unassigned', 'true');
         else if (filterResponsable) p.set('responsableId', filterResponsable);
@@ -224,7 +230,7 @@ export function useLeads(): UseLeadsResult {
       page += 1;
     }
     return all;
-  }, [pid, debouncedSearch, filterEstado, filterOrigen, filterResponsable, filterProducto, dateFrom, dateTo, sortMode, sortDir, filterDup, filterReincidente]);
+  }, [pid, debouncedSearch, filterEstado, filterPaso, filterOrigen, filterResponsable, filterProducto, dateFrom, dateTo, sortMode, sortDir, filterDup, filterReincidente]);
 
   useEffect(() => () => {
     if (abortRef.current) abortRef.current.abort();
@@ -279,6 +285,8 @@ export function useLeads(): UseLeadsResult {
     setSearch,
     filterEstado,
     setFilterEstado,
+    filterPaso,
+    setFilterPaso,
     filterOrigen,
     setFilterOrigen,
     filterResponsable,

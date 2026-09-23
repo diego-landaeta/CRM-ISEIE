@@ -133,7 +133,7 @@ export async function miPuesto(req, res, next) {
     // y aqui hace falta la tabla entera para saber en que puesto va.
     const { asesoraId, base, ...sinAsesora } = ambito;
     res.json({ success: true, data: await model.miPuesto({
-      userId, from: desde, to: hasta, ...sinAsesora,
+      userId, from: desde, to: hasta, ...sinAsesora, esJefe,
       // Por fecha de VENTA salvo que pidan lo contrario: es lo que la gestora
       // reconoce como suyo el dia que cierra.
       base: req.query.base === 'factura' ? 'factura' : 'cobro',

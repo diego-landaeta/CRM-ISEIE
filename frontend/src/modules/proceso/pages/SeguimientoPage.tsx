@@ -23,6 +23,8 @@ import { useProyectosDelAmbito } from '@/shared/hooks/useAmbito';
 import { useAuth } from '@/contexts/AuthContext';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
+import { copyToClipboard } from '@/shared/lib/clipboard';
+import BulkActionBar from '@/modules/leads/components/BulkActionBar';
 import {
   traerSeguimiento, traerResumenSeguimiento,
   type EnSeguimiento, type ResumenSeguimiento, type PasoEnCola,
@@ -82,6 +84,16 @@ export default function SeguimientoPage() {
   const [soloSinContactar, setSoloSinContactar] = useState(false);
   const [enFoco, setEnFoco] = useState<number | null>(null);
   const [apuntando, setApuntando] = useState(false);
+  /**
+   * A quién se ha marcado para hacer algo con todos a la vez.
+   *
+   * El repaso de fin de mes se manda en bloque —Diego, 23/09: «suele ser
+   * masivo»—: se eligen cuarenta, se copian sus teléfonos, se manda la difusión
+   * y se apunta el contacto de los cuarenta de una vez. Uno a uno no lo hace
+   * nadie, y entonces la lista se queda mintiendo.
+   */
+  const [marcados, setMarcados] = useState<number[]>([]);
+  const [enBloque, setEnBloque] = useState(false);
 
   const elegido = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
   const idsEmpresa = useMemo(
@@ -150,6 +162,76 @@ export default function SeguimientoPage() {
     }
   }
 
+  const alternarMarca = (id: number) => setMarcados((p) =>
+    p.includes(id) ? p.filter((x) => x !== id) : [...p, id]);
+
+  const todosMarcados = visibles.length > 0 && marcados.length === visibles.length;
+  const alternarTodos = () => setMarcados(todosMarcados ? [] : visibles.map((x) => x.lead_id));
+
+  /**
+   * Apunta el contacto a TODOS los marcados.
+   *
+   * Se va uno a uno contra el servidor y no en una sola llamada: no hay
+   * endpoint de interacciones en bloque y añadirlo por esto seria inventarse
+   * media API. Se cuenta lo que sale bien y lo que no, porque con cuarenta
+   * personas un «hecho» a secas no se puede comprobar a ojo.
+   */
+  async function marcarContactados() {
+    if (!marcados.length) return;
+    setEnBloque(true);
+    let bien = 0;
+    let mal = 0;
+    for (const id of marcados) {
+      try {
+        await client.post(`/leads/${id}/interactions`, {
+          tipo: 'whatsapp',
+          nota: 'Seguimiento de fin de mes (envío en bloque)',
+          fecha: new Date().toISOString(),
+        });
+        bien += 1;
+      } catch { mal += 1; }
+    }
+    setBase((b) => b.filter((x) => !marcados.includes(x.lead_id) || mal > 0));
+    setMarcados([]);
+    setEnBloque(false);
+    toast(mal === 0
+      ? { title: `${bien} contactos apuntados`, description: 'Salen del repaso hasta dentro de un mes.' }
+      : {
+        title: `${bien} apuntados, ${mal} no`,
+        description: 'Los que fallaron siguen en la lista. Vuelve a intentarlo con esos.',
+        variant: 'destructive',
+      });
+    traerResumenSeguimiento({ projectId: elegido, projectIds })
+      .then((r) => { if (r) setResumen(r); }).catch(() => {});
+  }
+
+  /** Los teléfonos o los correos de los marcados, para pegarlos en la difusión. */
+  async function copiarContactos(que: 'telefono' | 'email') {
+    const elegidos = visibles.filter((x) => marcados.includes(x.lead_id));
+    const datos = elegidos
+      .map((x) => (que === 'telefono' ? x.lead_telefono : x.lead_email))
+      .filter(Boolean) as string[];
+    if (!datos.length) {
+      toast({
+        title: que === 'telefono' ? 'Ninguno tiene teléfono' : 'Ninguno tiene correo',
+        description: 'Prueba con el otro dato o revisa las fichas.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    const ok = await copyToClipboard(datos.join('\n'));
+    toast(ok
+      ? {
+        title: `${datos.length} ${que === 'telefono' ? 'teléfonos' : 'correos'} copiados`,
+        // Se dice cuántos se quedan fuera: pegar 38 cuando se marcaron 40 y no
+        // enterarse es quedarse con dos personas sin avisar.
+        description: datos.length < elegidos.length
+          ? `${elegidos.length - datos.length} de los marcados no tienen ese dato.`
+          : 'Pégalos en la difusión.',
+      }
+      : { title: 'No se ha podido copiar', variant: 'destructive' });
+  }
+
   /** Copiar deja rastro, pero como NOTA: copiar no es hablar con nadie. */
   function apuntarCopia(leadId: number, nombrePlantilla: string) {
     client.post(`/leads/${leadId}/interactions`, {
@@ -204,6 +286,15 @@ export default function SeguimientoPage() {
               Sin contactar nunca
               <span className="tabular-nums opacity-70">{resumen.nunca_contactados}</span>
             </button>
+            <label className="inline-flex items-center gap-1.5 text-normal">
+              <input
+                type="checkbox"
+                checked={todosMarcados}
+                onChange={alternarTodos}
+                className="h-4 w-4 rounded border-border text-primary focus:ring-2 focus:ring-ring/40"
+              />
+              Marcar los {visibles.length} de la lista
+            </label>
             <p className="text-secundario text-muted-foreground">
               {resumen.total} en total · se muestran {base.length}
               {base.length < resumen.total && ', los más olvidados primero'}
@@ -229,17 +320,30 @@ export default function SeguimientoPage() {
       ) : (
         <div className="space-y-2">
           {visibles.map((p, i) => (
-            <button
+            <div
               key={p.lead_id}
-              type="button"
-              onClick={() => setEnFoco(i)}
               className={
-                'w-full text-left rounded-lg border bg-card p-3 transition-colors hover:bg-muted/50 '
-                + 'focus:outline-none focus:ring-2 focus:ring-primary/40 '
+                'w-full rounded-lg border bg-card p-3 transition-colors '
+                + (marcados.includes(p.lead_id) ? 'ring-2 ring-primary/40 ' : '')
                 + (p.ultimo_contacto == null ? 'border-l-4 border-l-warning border-border' : 'border-border')
               }
             >
               <div className="flex items-start gap-3">
+                {/* La casilla va fuera de la zona pulsable: marcar a alguien
+                    para la difusión no es lo mismo que abrirlo, y mezclarlo
+                    hace que cada clic abra una ventana que nadie pidió. */}
+                <input
+                  type="checkbox"
+                  checked={marcados.includes(p.lead_id)}
+                  onChange={() => alternarMarca(p.lead_id)}
+                  aria-label={`Marcar a ${p.lead_nombre || 'sin nombre'}`}
+                  className="mt-1 h-4 w-4 shrink-0 rounded border-border text-primary focus:ring-2 focus:ring-ring/40"
+                />
+                <button
+                  type="button"
+                  onClick={() => setEnFoco(i)}
+                  className="flex min-w-0 flex-1 items-start gap-3 text-left focus:outline-none focus:ring-2 focus:ring-primary/40 rounded"
+                >
                 <span className="mt-0.5 flex shrink-0 flex-col items-center rounded-md bg-muted px-2 py-1 text-muted-foreground">
                   <CalendarBlank size={13} />
                 </span>
@@ -280,10 +384,25 @@ export default function SeguimientoPage() {
                       : `${p.contactos} ${p.contactos === 1 ? 'contacto' : 'contactos'}`}
                   </div>
                 </div>
+                </button>
               </div>
-            </button>
+            </div>
           ))}
         </div>
+      )}
+
+      {/* La barra de acciones en bloque: la misma que en Prospectos, para que
+          marcar cuarenta personas se haga igual en las dos pantallas. */}
+      {marcados.length > 0 && (
+        <BulkActionBar
+          count={marcados.length}
+          onClear={() => setMarcados([])}
+          onMarcarContactado={marcarContactados}
+          onCopiarContactos={copiarContactos}
+          gestores={[]}
+          isAdmin={esAdmin}
+          loading={enBloque}
+        />
       )}
 
       <p className="text-[11px] text-muted-foreground">

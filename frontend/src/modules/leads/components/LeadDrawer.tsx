@@ -15,10 +15,16 @@ import { toast } from '@/shared/hooks/useToast';
 import { detectCountryFromPhone } from '../lib/phoneCountry';
 const ChangeProductDialog = lazy(() => import('./ChangeProductDialog'));
 
+import AgendaDelProspecto from '@/modules/proceso/components/AgendaDelProspecto';
+
 const EnrollSequenceModal = lazy(() => import('./EnrollSequenceModal'));
 
 const TABS = [
   { key: 'resumen', label: 'Resumen' },
+  // Diego, 23/09: «cuando se crea un prospecto debe de salir un apartado,
+  // proceso de ventas y indicar qué paso está y si está hecho». Va la segunda,
+  // pegada al resumen: es lo que hay que hacer con esta persona hoy.
+  { key: 'proceso', label: 'Proceso' },
   { key: 'historial', label: 'Historial' },
   { key: 'interacciones', label: 'Interacciones' },
   { key: 'recordatorios', label: 'Recordatorios' },
@@ -114,6 +120,21 @@ export default function LeadDrawer({ leadId, open, onClose }: Props) {
             {lead && (
               <>
                 {tab === 'resumen' && <ResumenTab lead={lead} onEnroll={() => setEnrollOpen(true)} onSaved={refetch} />}
+                {tab === 'proceso' && (
+                  <AgendaDelProspecto
+                    leadId={lead.id}
+                    projectId={lead.project_id}
+                    nombreProyecto={lead.proyecto_nombre}
+                    datos={{
+                      nombre: lead.nombre,
+                      email: lead.email,
+                      telefono: lead.telefono,
+                      producto: lead.producto_nombre || lead.producto_interes,
+                      inicio: lead.fecha_inicio_texto,
+                      cierre: lead.fecha_cierre_convocatoria,
+                    }}
+                  />
+                )}
                 {tab === 'historial' && <HistorialTab timeline={timeline} />}
                 {tab === 'interacciones' && <InteraccionesTab leadId={lead.id} interacciones={interacciones} onRefetch={refetch} />}
                 {tab === 'recordatorios' && <RecordatoriosTab leadId={lead.id} reminders={reminders} onRefetch={refetch} />}
