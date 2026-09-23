@@ -882,6 +882,27 @@ export async function createManualLead({ project_id, nombre, email, telefono, wh
     }
   }
 
+  // LA AGENDA DEL PROCESO, TAMBIEN AQUI.
+  //
+  // Esto faltaba, y se notaba en todo: un prospecto dado de alta desde el boton
+  // «Nuevo prospecto» --o por carga masiva, que pasa por aqui-- se quedaba SIN
+  // agenda. Sin agenda no sale en la cola del dia, la pestaña «Proceso» esta
+  // vacia y Recordatorios dice que no hay nada. Solo la montaba el camino del
+  // webhook (`_createLeadCore`), asi que el proceso comercial funcionaba con
+  // los leads que entraban solos y no con los que damos de alta nosotros.
+  //
+  // Diego, 23/09: «sigo registrando un prospecto y aun no pasa eso».
+  //
+  // Se AWAITA y va envuelto, igual que en el otro camino: son cuatro filas de
+  // una consulta, pero que falle la agenda NO puede tumbar el alta. Sin agenda
+  // se puede trabajar --se replanifica--; sin lead, no.
+  try {
+    await planificarPasosDeLead(lead.id);
+  } catch (err) {
+    logger.warn({ err: err.message, leadId: lead.id },
+      'No se pudo planificar la agenda del prospecto (alta manual)');
+  }
+
   return {
     lead_id: lead.id,
     responsable_id: lead.responsableId,
