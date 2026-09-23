@@ -1,6 +1,6 @@
 import * as Proceso from './proceso.service.js';
 import { crearPasoSchema, editarPasoSchema, reordenarSchema, ajustarPasoSchema } from './proceso.validation.js';
-import { leadsToWasapiCsv, leadsToWasapiXlsx } from '../../shared/utils/wasapiCsv.js';
+import { leadsToWasapiCsv, leadsToWasapiXlsx, detectCountry } from '../../shared/utils/wasapiCsv.js';
 
 export async function listarPasos(req, res, next) {
   try {
@@ -126,12 +126,27 @@ export async function wasapiSeguimiento(req, res, next) {
       status: f.lead_estado,
       producto_nombre: f.producto,
     }));
-    // Sin telefono no entra en una difusion de WhatsApp. Se quitan aqui y se
-    // dice cuantos eran en la cabecera, para que nadie cuente 800 arriba y 640
-    // en el fichero y piense que se ha perdido algo.
     const total = leads.length;
-    if (req.query.conTelefono !== '0') {
+
+    // ── Las MISMAS condiciones que la descarga de Prospectos ────────────────
+    // Diego: «el descargar para Wasapi debe tener las mismas condiciones como
+    // si fueran de prospectos». Se aplican igual y en el mismo orden que en
+    // `exportWasapi`, para que el fichero salga identico venga de donde venga.
+
+    // Excluir estados: se marca a quien NO debe recibir el envio.
+    const fuera = String(req.query.excludeStatus || '')
+      .split(',').map((s) => s.trim()).filter(Boolean);
+    if (fuera.length) leads = leads.filter((l) => !fuera.includes(l.status));
+
+    // Sin telefono no entra en una difusion de WhatsApp.
+    if (req.query.onlyWithPhone !== 'false' && req.query.conTelefono !== '0') {
       leads = leads.filter((l) => l.telefono && String(l.telefono).replace(/[^\d]/g, '').length >= 7);
+    }
+
+    // El pais sale del prefijo del telefono, igual que alli.
+    if (req.query.pais) {
+      const cual = String(req.query.pais).toLowerCase();
+      leads = leads.filter((l) => (detectCountry(l.telefono) || '').toLowerCase() === cual);
     }
 
     const nombre = `wasapi-seguimiento-${new Date().toISOString().slice(0, 10)}`;

@@ -33,6 +33,7 @@ import {
 import PanelDeCola from '../components/PanelDeCola';
 import AccionesDeFila from '../components/AccionesDeFila';
 import DescartarDelRepaso from '../components/DescartarDelRepaso';
+import WasapiExportDialog from '@/modules/leads/components/WasapiExportDialog';
 import { whatsappApi, type PlantillaWhatsapp } from '@/modules/whatsapp/api/whatsapp.api';
 import { trasSacar } from '../lib/cola';
 
@@ -273,46 +274,44 @@ export default function SeguimientoPage() {
   }
 
   /**
-   * La base entera, en el fichero que come Wasapi.
+   * La descarga para Wasapi, con las mismas condiciones que en Prospectos.
    *
-   * Diego, 23/09: «seguimiento fin de mes es para descargar con Wasapi». Copiar
-   * los teléfonos al portapapeles vale para cuarenta; la base son cientos, y
-   * una difusión se carga desde un fichero.
+   * Diego, 23/09: «el descargar para Wasapi debe tener las mismas condiciones
+   * como si fueran de prospectos». Es el MISMO diálogo, apuntando al endpoint
+   * del repaso. Uno parecido pero aparte habría acabado con dos juegos de
+   * condiciones y un fichero que sale distinto según por dónde lo pidas.
    *
-   * Se descarga LA BASE ENTERA y no solo lo que hay en pantalla: la lista está
-   * recortada a 500 para que la página no se arrastre, y bajarse esas 500
-   * creyendo que son todas es peor que no bajarse nada. Lo monta el servidor,
-   * con el mismo formato que la descarga de Prospectos.
+   * Lo que ya está filtrado en la pantalla viaja en `paramsBase` y no se puede
+   * tocar desde el diálogo: sería raro filtrar por una formación aquí y por
+   * otra ahí. Lo que se elige en el diálogo es lo del envío —país, a quién
+   * excluir, con teléfono o no, y el formato—.
    */
-  const [bajando, setBajando] = useState(false);
-  async function descargarWasapi() {
-    setBajando(true);
-    try {
-      const p = new URLSearchParams();
-      if (elegido) p.set('projectId', String(elegido));
-      if (projectIds) p.set('projectIds', projectIds);
-      const r = await client.get(`/proceso/seguimiento/wasapi?${p.toString()}`, {
-        responseType: 'blob',
-      } as never) as unknown as Blob;
-      const url = URL.createObjectURL(r instanceof Blob ? r : new Blob([String(r)], { type: 'text/csv' }));
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `wasapi-seguimiento-${new Date().toISOString().slice(0, 10)}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 100);
-      toast({
-        title: 'Descargando',
-        description: 'Solo van los que tienen teléfono: sin número no entran en una difusión.',
-      });
-    } catch (e) {
-      toast({
-        title: 'No se ha podido descargar',
-        description: (e as Error)?.message || 'Inténtalo otra vez',
-        variant: 'destructive',
-      });
-    } finally { setBajando(false); }
-  }
+  const [wasapiAbierto, setWasapiAbierto] = useState(false);
+
+  const paramsDeLaDescarga = useMemo(() => {
+    const p: Record<string, string> = {};
+    if (elegido) p.projectId = String(elegido);
+    if (projectIds) p.projectIds = projectIds;
+    if (buscaLenta) p.busca = buscaLenta;
+    if (producto) p.productoId = producto;
+    if (bloque) p.antiguedad = bloque;
+    if (soloSinContactar) p.sinContactar = '1';
+    return p;
+  }, [elegido, projectIds, buscaLenta, producto, bloque, soloSinContactar]);
+
+  /** Lo que ya lleva puesto, en una línea, para decirlo en el diálogo. */
+  const resumenDeFiltros = useMemo(() => {
+    const trozos: string[] = [];
+    if (buscaLenta) trozos.push(`búsqueda «${buscaLenta}»`);
+    if (producto) trozos.push(productos.find((x) => String(x.id) === producto)?.nombre || 'una formación');
+    if (bloque) trozos.push(({
+      este_mes: 'entrados este mes', uno_a_tres: 'de uno a tres meses',
+      tres_a_seis: 'de tres a seis meses', mas_de_seis: 'de más de seis meses',
+    } as Record<string, string>)[bloque] || bloque);
+    if (soloSinContactar) trozos.push('sin contactar nunca');
+    if (!trozos.length) return `los ${total} del repaso`;
+    return `${total} · ${trozos.join(' · ')}`;
+  }, [buscaLenta, producto, productos, bloque, soloSinContactar, total]);
 
   /**
    * Descartar el seguimiento de alguien: se marca como no interesado.
@@ -440,13 +439,13 @@ export default function SeguimientoPage() {
         actions={(
           <button
             type="button"
-            onClick={descargarWasapi}
-            disabled={bajando || base.length === 0}
+            onClick={() => setWasapiAbierto(true)}
+            disabled={total === 0}
             className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-normal font-semibold hover:bg-muted disabled:opacity-50"
             title="La base entera en el fichero que carga Wasapi"
           >
             <DownloadSimple size={14} weight="bold" />
-            {bajando ? 'Preparando…' : 'Descargar para Wasapi'}
+            Descargar para Wasapi
           </button>
         )}
       />
@@ -668,6 +667,20 @@ export default function SeguimientoPage() {
           </div>
         </div>
       )}
+
+      {/* El mismo diálogo que en Prospectos, apuntando al repaso. */}
+      <WasapiExportDialog
+        open={wasapiAbierto}
+        projectId={elegido}
+        onClose={() => setWasapiAbierto(false)}
+        endpoint="/proceso/seguimiento/wasapi"
+        paramsBase={paramsDeLaDescarga}
+        ocultar={['gestor', 'producto', 'fechas', 'convertidos']}
+        titulo="Descargar el repaso para Wasapi"
+        descripcion="Se lleva la base del repaso —todas las páginas, no solo la que ves— con lo que tengas filtrado. Aquí eliges lo del envío: de qué país, a quién excluir y en qué formato."
+        resumenFiltros={resumenDeFiltros}
+        nombreFichero="wasapi-seguimiento"
+      />
 
       {/* La barra de acciones en bloque: la misma que en Prospectos, para que
           marcar cuarenta personas se haga igual en las dos pantallas. */}
