@@ -30,6 +30,8 @@ import {
   type EnSeguimiento, type ResumenSeguimiento, type PasoEnCola,
 } from '../api/agenda.api';
 import PanelDeCola from '../components/PanelDeCola';
+import AccionesDeFila from '../components/AccionesDeFila';
+import { whatsappApi, type PlantillaWhatsapp } from '@/modules/whatsapp/api/whatsapp.api';
 import { trasSacar } from '../lib/cola';
 
 /** Los bloques de antigüedad, en su orden y con nombre corto. */
@@ -164,6 +166,54 @@ export default function SeguimientoPage() {
 
   const alternarMarca = (id: number) => setMarcados((p) =>
     p.includes(id) ? p.filter((x) => x !== id) : [...p, id]);
+
+  /**
+   * Las plantillas del ámbito, para los botones rápidos de cada fila.
+   *
+   * Se piden una vez y no por fila: son las mismas para todos y pedirlas
+   * cuatrocientas veces tumbaría la pantalla. Si este CRM no lleva WhatsApp
+   * instalado el endpoint no existe, y entonces no hay mensaje que poner: el
+   * botón abre el chat vacío, que sigue valiendo.
+   */
+  const [plantillas, setPlantillas] = useState<PlantillaWhatsapp[]>([]);
+  useEffect(() => {
+    let vivo = true;
+    whatsappApi.plantillas(elegido, activeIssuer?.id ?? null)
+      .then((r) => { if (vivo) setPlantillas(r?.success ? (r.data || []) : []); })
+      .catch(() => { if (vivo) setPlantillas([]); });
+    return () => { vivo = false; };
+  }, [elegido, activeIssuer?.id]);
+
+  /**
+   * Ha atendido a alguien desde su fila: se apunta y sale de la lista.
+   *
+   * Sale en cuanto se apunta, sin esperar a recargar: el repaso se hace de
+   * arriba abajo y ver desaparecer la fila es lo que dice que ya está. Si el
+   * guardado falla se vuelve a poner, porque entonces NO está hecho.
+   */
+  async function atenderDesdeLaFila(p: EnSeguimiento, tipo: 'whatsapp' | 'email') {
+    try {
+      await client.post(`/leads/${p.lead_id}/interactions`, {
+        tipo,
+        nota: 'Seguimiento de fin de mes',
+        fecha: new Date().toISOString(),
+      });
+      setBase((b) => b.filter((x) => x.lead_id !== p.lead_id));
+      traerResumenSeguimiento({ projectId: elegido, projectIds })
+        .then((r) => { if (r) setResumen(r); }).catch(() => {});
+    } catch (e) {
+      // El chat se ha abierto igual, asi que lo unico que se puede hacer es
+      // decir que NO ha quedado apuntado. Callarlo es lo peor: la gestora
+      // habla con la persona convencida de que consta.
+      toast({
+        title: 'El contacto no ha quedado apuntado',
+        description: 'Se ha abierto igual, pero apúntalo a mano: '
+          + ((e as Error)?.message || 'no se pudo guardar'),
+        variant: 'destructive',
+      });
+      throw e;
+    }
+  }
 
   const todosMarcados = visibles.length > 0 && marcados.length === visibles.length;
   const alternarTodos = () => setMarcados(todosMarcados ? [] : visibles.map((x) => x.lead_id));
@@ -385,6 +435,15 @@ export default function SeguimientoPage() {
                   </div>
                 </div>
                 </button>
+
+                {/* Atenderla sin abrir la ventana. Va FUERA del botón de la
+                    fila: un botón dentro de otro no es HTML válido y el clic
+                    se lo queda el de fuera. */}
+                <AccionesDeFila
+                  fila={p}
+                  plantillas={plantillas}
+                  onAtendido={(tipo) => atenderDesdeLaFila(p, tipo)}
+                />
               </div>
             </div>
           ))}
