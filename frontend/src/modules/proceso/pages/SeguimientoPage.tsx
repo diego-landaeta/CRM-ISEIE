@@ -34,6 +34,7 @@ import PanelDeCola from '../components/PanelDeCola';
 import AccionesDeFila from '../components/AccionesDeFila';
 import DescartarDelRepaso from '../components/DescartarDelRepaso';
 import WasapiExportDialog from '@/modules/leads/components/WasapiExportDialog';
+import StatusBadge, { STATUS_LABELS } from '@/shared/components/ui/StatusBadge';
 import { whatsappApi, type PlantillaWhatsapp } from '@/modules/whatsapp/api/whatsapp.api';
 import { trasSacar } from '../lib/cola';
 
@@ -65,6 +66,14 @@ function Contador({ etiqueta, valor, activo, onClick, tono = '' }: {
     </button>
   );
 }
+
+/**
+ * Los estados que puede tener alguien del repaso.
+ *
+ * Los convertidos y los no interesados no entran nunca --la base los excluye--
+ * asi que ofrecer esos dos en el filtro seria ofrecer dos listas vacias.
+ */
+const ESTADOS_DEL_REPASO = ['nuevo', 'por_contactar', 'contactado', 'en_seguimiento', 'proxima_convocatoria'];
 
 /** «hace 3 meses», «hace 20 días» — no una fecha que haya que restar. */
 function hace(dias: number | null) {
@@ -119,6 +128,7 @@ export default function SeguimientoPage() {
   const [busca, setBusca] = useState('');
   const [buscaLenta, setBuscaLenta] = useState('');
   const [producto, setProducto] = useState('');
+  const [estado, setEstado] = useState('');
   const [pagina, setPagina] = useState(1);
   const [total, setTotal] = useState(0);
   const [totalPaginas, setTotalPaginas] = useState(1);
@@ -134,7 +144,7 @@ export default function SeguimientoPage() {
   // despues de filtrar enseña una lista vacia que parece que no hay nada.
   useEffect(() => {
     setPagina(1);
-  }, [buscaLenta, producto, bloque, soloSinContactar, elegido, projectIds]);
+  }, [buscaLenta, producto, estado, bloque, soloSinContactar, elegido, projectIds]);
 
   /** Las formaciones del ámbito, para el filtro. */
   const [productos, setProductos] = useState<Array<{ id: number; nombre: string }>>([]);
@@ -165,6 +175,7 @@ export default function SeguimientoPage() {
         productoId: producto ? Number(producto) : null,
         antiguedad: bloque,
         sinContactar: soloSinContactar ? '1' : null,
+        estado: estado || null,
         pagina,
         limite: 50,
       }),
@@ -178,7 +189,7 @@ export default function SeguimientoPage() {
       setMarcados([]);
     }).finally(() => { if (vivo) setCargando(false); });
     return () => { vivo = false; };
-  }, [elegido, projectIds, buscaLenta, producto, bloque, soloSinContactar, pagina]);
+  }, [elegido, projectIds, buscaLenta, producto, estado, bloque, soloSinContactar, pagina]);
 
   // Ya viene filtrado del servidor: aqui no se vuelve a filtrar, o el recuento
   // de arriba y la lista dirian cosas distintas.
@@ -294,16 +305,18 @@ export default function SeguimientoPage() {
     if (projectIds) p.projectIds = projectIds;
     if (buscaLenta) p.busca = buscaLenta;
     if (producto) p.productoId = producto;
+    if (estado) p.estado = estado;
     if (bloque) p.antiguedad = bloque;
     if (soloSinContactar) p.sinContactar = '1';
     return p;
-  }, [elegido, projectIds, buscaLenta, producto, bloque, soloSinContactar]);
+  }, [elegido, projectIds, buscaLenta, producto, estado, bloque, soloSinContactar]);
 
   /** Lo que ya lleva puesto, en una línea, para decirlo en el diálogo. */
   const resumenDeFiltros = useMemo(() => {
     const trozos: string[] = [];
     if (buscaLenta) trozos.push(`búsqueda «${buscaLenta}»`);
     if (producto) trozos.push(productos.find((x) => String(x.id) === producto)?.nombre || 'una formación');
+    if (estado) trozos.push(`en «${STATUS_LABELS[estado] || estado}»`);
     if (bloque) trozos.push(({
       este_mes: 'entrados este mes', uno_a_tres: 'de uno a tres meses',
       tres_a_seis: 'de tres a seis meses', mas_de_seis: 'de más de seis meses',
@@ -311,7 +324,7 @@ export default function SeguimientoPage() {
     if (soloSinContactar) trozos.push('sin contactar nunca');
     if (!trozos.length) return `los ${total} del repaso`;
     return `${total} · ${trozos.join(' · ')}`;
-  }, [buscaLenta, producto, productos, bloque, soloSinContactar, total]);
+  }, [buscaLenta, producto, productos, estado, bloque, soloSinContactar, total]);
 
   /**
    * Descartar el seguimiento de alguien: se marca como no interesado.
@@ -526,11 +539,23 @@ export default function SeguimientoPage() {
           ))}
         </select>
 
-        {(busca || producto || bloque || soloSinContactar) && (
+        <select
+          value={estado}
+          onChange={(e) => setEstado(e.target.value)}
+          aria-label="Filtrar por estado"
+          className="h-9 rounded-md border border-border bg-card px-2 text-sm"
+        >
+          <option value="">Cualquier estado</option>
+          {ESTADOS_DEL_REPASO.map((e) => (
+            <option key={e} value={e}>{STATUS_LABELS[e] || e}</option>
+          ))}
+        </select>
+
+        {(busca || producto || estado || bloque || soloSinContactar) && (
           <button
             type="button"
             onClick={() => {
-              setBusca(''); setProducto(''); setBloque(null); setSoloSinContactar(false);
+              setBusca(''); setProducto(''); setEstado(''); setBloque(null); setSoloSinContactar(false);
             }}
             className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-normal text-muted-foreground hover:bg-muted hover:text-foreground"
           >
@@ -587,6 +612,14 @@ export default function SeguimientoPage() {
                 <div className="min-w-0 flex-1 space-y-1">
                   <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                     <span className="font-semibold truncate">{p.lead_nombre || 'Sin nombre'}</span>
+                    {/* EN QUÉ ESTADO ESTÁ. Diego, 23/09: «en el seguimiento del
+                        mes debe señalar también por las personas su estado».
+                        No es lo mismo llamar a quien está «por contactar» que a
+                        quien ya está «en seguimiento»: el mensaje cambia, y sin
+                        esto había que abrir la ficha para saberlo. */}
+                    {p.lead_estado && (
+                      <StatusBadge status={p.lead_estado} showIcon className="shrink-0" />
+                    )}
                     <span className="text-xs text-muted-foreground">
                       entró {hace(p.dias_desde_entrada)}
                     </span>
@@ -604,6 +637,17 @@ export default function SeguimientoPage() {
 
                   {p.producto && (
                     <p className="truncate text-[11px] text-muted-foreground">{p.producto}</p>
+                  )}
+
+                  {/* Con qué se le puede escribir. Antes había que abrir la
+                      ficha para saber si esta persona siquiera tenía teléfono,
+                      y en una lista que se trabaja de arriba abajo eso es un
+                      viaje por cada fila. */}
+                  {(p.lead_telefono || p.lead_email) && (
+                    <p className="flex flex-wrap gap-x-3 truncate text-[11px] text-muted-foreground">
+                      {p.lead_telefono && <span className="tabular-nums">{p.lead_telefono}</span>}
+                      {p.lead_email && <span className="truncate">{p.lead_email}</span>}
+                    </p>
                   )}
                 </div>
 

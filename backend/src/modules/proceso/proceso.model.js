@@ -414,6 +414,7 @@ export async function baseDeSeguimiento({
   projectIds, projectId = null, asesoraId = null,
   desdeDias = 15, descansoDias = 30, limite = 500, desplazamiento = 0,
   busca = null, productoId = null, antiguedad = null, sinContactar = false,
+  estado = null,
 } = {}) {
   const par = [];
   let i = 1;
@@ -445,6 +446,12 @@ export async function baseDeSeguimiento({
   const pProd = productoId ? `AND l.producto_interes_id = $${i++}` : '';
   if (productoId) par.push(Number(productoId));
 
+  // En que estado esta. Los convertidos y los no interesados no entran nunca
+  // --la base los excluye-- asi que aqui solo valen los cinco de en medio.
+  const ESTADOS = ['nuevo', 'por_contactar', 'contactado', 'en_seguimiento', 'proxima_convocatoria'];
+  const pEstado = ESTADOS.includes(estado) ? `AND l.status = $${i++}` : '';
+  if (ESTADOS.includes(estado)) par.push(estado);
+
   // Quien no ha sido contactado NUNCA. Es distinto de «lleva mucho»: a este no
   // le ha escrito nadie desde que entro, y es el que mas urge.
   const pNunca = sinContactar ? `AND ${ULTIMO_SQL} IS NULL` : '';
@@ -466,7 +473,7 @@ export async function baseDeSeguimiento({
         AND l.status NOT IN ('convertido', 'no_interesado')
         AND ${ENTRADA}::date <= CURRENT_DATE - ${pDesde}::int
         AND (${ULTIMO_SQL} IS NULL OR ${ULTIMO_SQL}::date <= CURRENT_DATE - ${pDescanso}::int)
-        ${pProj} ${pAses} ${pBusca} ${pProd} ${pNunca} ${pAntig}`;
+        ${pProj} ${pAses} ${pBusca} ${pProd} ${pNunca} ${pAntig} ${pEstado}`;
 
   // Cuantos hay en total con este filtro. Va antes del LIMIT y con los mismos
   // parametros: sin esto no se puede paginar sin inventarse el numero.

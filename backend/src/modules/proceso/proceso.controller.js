@@ -85,6 +85,7 @@ function filtrosDelRepaso(req) {
     productoId: req.query.productoId ? Number(req.query.productoId) : null,
     antiguedad: ant.includes(req.query.antiguedad) ? req.query.antiguedad : null,
     sinContactar: req.query.sinContactar === '1',
+    estado: req.query.estado || null,
     desdeDias: Number(req.query.desdeDias) || 15,
     descansoDias: Number(req.query.descansoDias) || 30,
   };

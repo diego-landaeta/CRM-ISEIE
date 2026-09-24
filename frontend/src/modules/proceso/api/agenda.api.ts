@@ -117,7 +117,7 @@ export async function traerResumen(opciones: {
 export type FiltrosSeguimiento = {
   projectId?: number | null; projectIds?: string | null; gestoraId?: number | null;
   busca?: string | null; productoId?: number | null;
-  antiguedad?: string | null; sinContactar?: string | null;
+  antiguedad?: string | null; sinContactar?: string | null; estado?: string | null;
   pagina?: number; limite?: number;
 };
 
