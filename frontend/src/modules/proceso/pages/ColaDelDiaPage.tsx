@@ -25,8 +25,9 @@ import { traerCola, traerResumen, type PasoEnCola, type ResumenCola } from '../a
 import { iconoDeCanal, nombreDeCanal } from '../lib/canales';
 import { contarPorPaso, trasSacar } from '../lib/cola';
 import PanelDeCola from '../components/PanelDeCola';
-import { STATUS_LABELS } from '@/shared/components/ui/StatusBadge';
+import StatusBadge, { STATUS_LABELS } from '@/shared/components/ui/StatusBadge';
 import { toast } from '@/shared/hooks/useToast';
+import { MagnifyingGlass, X } from '@phosphor-icons/react';
 
 /** «hace 3 días», «hoy», «mañana» — no una fecha que hay que restar mentalmente. */
 function cuando(fecha: string, retraso: number) {
@@ -38,6 +39,18 @@ function cuando(fecha: string, retraso: number) {
     texto: d.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' }),
     urgente: false,
   };
+}
+
+/**
+ * La fecha tal cual, para poner al lado del «hace 28 dias».
+ *
+ * Diego, 24/09: «ni fechas». El relativo dice la urgencia pero no sirve para
+ * cuadrar con nada: para eso hace falta el dia.
+ */
+function fechaCorta(iso: string) {
+  const d = new Date(iso + 'T00:00:00');
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
 }
 
 function Contador({ icon: Icon, etiqueta, valor, tono, activo, onClick }: any) {
@@ -68,7 +81,7 @@ function Contador({ icon: Icon, etiqueta, valor, tono, activo, onClick }: any) {
 const ESTADOS_DE_LA_COLA = ['nuevo', 'por_contactar', 'contactado', 'en_seguimiento', 'proxima_convocatoria'];
 
 export default function ColaDelDiaPage() {
-  const { activeProject } = useProjectContext();
+  const { activeProject, activeIssuer } = useProjectContext();
   const { user } = useAuth();
   const esAdmin = user?.role === 'admin' || user?.role === 'superadmin';
 
@@ -77,10 +90,26 @@ export default function ColaDelDiaPage() {
   const [cargando, setCargando] = useState(true);
   const [gestoraId, setGestoraId] = useState<number | null>(null);
   const [estado, setEstado] = useState('');
+  // El buscador va con freno: una peticion por tecla serian veinte consultas
+  // para escribir «gabriela».
+  const [busca, setBusca] = useState('');
+  const [buscaLenta, setBuscaLenta] = useState('');
+  const [producto, setProducto] = useState('');
+  // El desde lo elige quien mira; el hasta sale del tramo, salvo que lo pise.
+  const [desdeFecha, setDesdeFecha] = useState('');
+  const [hastaFecha, setHastaFecha] = useState('');
   // El historial del panel: abierto o no. Vive AQUI y no en el panel para que
   // se quede como esta al pasar a la siguiente persona.
   const [historialAbierto, setHistorialAbierto] = useState(false);
   const [gestoras, setGestoras] = useState<Array<{ id: number; nombre: string }>>([]);
+
+  useEffect(() => {
+    const id = setTimeout(() => setBuscaLenta(busca.trim()), 350);
+    return () => clearTimeout(id);
+  }, [busca]);
+
+  /** Las formaciones del ambito, para el filtro. */
+  const [productos, setProductos] = useState<Array<{ id: number; nombre: string }>>([]);
   // Qué tramo se está mirando. Por defecto todo lo que ya toca —atrasado y hoy—,
   // que es con lo que se abre el día.
   //
@@ -122,13 +151,22 @@ export default function ColaDelDiaPage() {
 
   // Cualquier cambio de filtro vuelve al principio: quedarse en la página siete
   // después de filtrar enseña una lista vacía que parece que no hay nada.
-  useEffect(() => { setPagina(1); }, [proyecto, gestoraId, hasta, estado]);
+  useEffect(() => { setPagina(1); }, [proyecto, gestoraId, hasta, estado, buscaLenta, producto, desdeFecha, hastaFecha]);
 
   useEffect(() => {
     let vivo = true;
     setCargando(true);
     Promise.all([
-      traerCola({ projectId: proyecto, gestoraId, hasta, limite: 100, pagina, estado: estado || null }),
+      traerCola({
+        projectId: proyecto,
+        gestoraId, hasta: hastaFecha || hasta,
+        limite: 100,
+        pagina,
+        estado: estado || null,
+        busca: buscaLenta || null,
+        productoId: producto ? Number(producto) : null,
+        desde: desdeFecha || null,
+      }),
       traerResumen({ projectId: proyecto, gestoraId }),
     ]).then(([c, r]) => {
       if (!vivo) return;
@@ -138,7 +176,7 @@ export default function ColaDelDiaPage() {
       setResumen(r);
     }).finally(() => { if (vivo) setCargando(false); });
     return () => { vivo = false; };
-  }, [proyecto, gestoraId, hasta, pagina, estado]);
+  }, [proyecto, gestoraId, hasta, pagina, estado, buscaLenta, producto, desdeFecha, hastaFecha]);
 
   // La lista de gestoras, solo para quien puede filtrar por ellas.
   useEffect(() => {
@@ -152,6 +190,24 @@ export default function ColaDelDiaPage() {
       })
       .catch(() => { /* si falla, se queda sin filtro y ya */ });
   }, [esAdmin, proyecto]);
+
+  // Las formaciones para el desplegable: las del campus elegido, o las de toda
+  // la empresa si no hay campus puesto.
+  useEffect(() => {
+    const q = new URLSearchParams();
+    if (proyecto) q.set('projectId', String(proyecto));
+    else if (activeIssuer?.id) q.set('issuerId', String(activeIssuer.id));
+    else { setProductos([]); return; }
+    q.set('limit', '500');
+    let vivo = true;
+    client.get(`/products?${q.toString()}`)
+      .then((r: any) => {
+        if (!vivo) return;
+        setProductos((r?.success ? (r.data || []) : []).map((x: any) => ({ id: x.id, nombre: x.nombre })));
+      })
+      .catch(() => { if (vivo) setProductos([]); });
+    return () => { vivo = false; };
+  }, [proyecto, activeIssuer?.id]);
 
   // Qué paso se está mirando, si es que se ha elegido uno. Va aparte del tramo
   // de fechas: se cruzan, no se sustituyen —«los atrasados del paso 2» es la
@@ -246,6 +302,7 @@ export default function ColaDelDiaPage() {
   }
 
   const titulo = esAdmin && !gestoraId ? 'La cola del equipo' : 'Tu día';
+  const hayFiltros = Boolean(busca || producto || estado || desdeFecha || hastaFecha);
 
   return (
     <div className="space-y-5 pb-8">
@@ -265,21 +322,6 @@ export default function ColaDelDiaPage() {
                 {gestoras.map((g) => <option key={g.id} value={g.id}>{g.nombre}</option>)}
               </select>
             )}
-            {/* EN QUE ESTADO ESTAN. Diego, 24/09: «los filtros segun sus
-                estados». Solo los cinco que pueden salir: quien compro o dijo
-                que no ya no esta en la cola, asi que ofrecerlos seria ofrecer
-                dos listas vacias. */}
-            <select
-              value={estado}
-              onChange={(e) => setEstado(e.target.value)}
-              className="h-9 px-3 rounded-md border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
-              aria-label="Filtrar por estado"
-            >
-              <option value="">Cualquier estado</option>
-              {ESTADOS_DE_LA_COLA.map((e) => (
-                <option key={e} value={e}>{STATUS_LABELS[e] || e}</option>
-              ))}
-            </select>
           </div>
         )}
       />
@@ -312,6 +354,98 @@ export default function ColaDelDiaPage() {
           detrás del paso 1—: se cuenta y se filtra por encima del mismo orden.
           Y sirve para lo que se hace de verdad por la mañana: los del paso 2
           seguidos, que llevan el mismo mensaje. */}
+      {/* LOS FILTROS. Diego, 24/09: «no veo nada de los filtros ni el estado,
+          ni fechas». Estaban arriba del todo, en la esquina, lejos de la lista
+          que filtran — así que no estaban. Aquí van juntos y pegados a lo que
+          tocan.
+
+          Todos los hace el SERVIDOR. Filtrar las 100 filas que se ven diría
+          «no hay nadie» teniendo a la persona en la página cuatro. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative min-w-[220px] flex-1">
+          <MagnifyingGlass size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <input
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            placeholder="Buscar por nombre, correo o teléfono…"
+            aria-label="Buscar en la cola"
+            className="h-9 w-full rounded-md border border-border bg-card pl-8 pr-3 text-sm"
+          />
+        </div>
+
+        <select
+          value={producto}
+          onChange={(e) => setProducto(e.target.value)}
+          aria-label="Filtrar por formación"
+          className="h-9 rounded-md border border-border bg-card px-2 text-sm"
+        >
+          <option value="">Cualquier formación</option>
+          {productos.map((p) => (
+            <option key={p.id} value={p.id}>{p.nombre}</option>
+          ))}
+        </select>
+
+        {/* EN QUÉ ESTADO ESTÁN. Solo los cinco que pueden salir: quien compró o
+            dijo que no ya no está en la cola, así que ofrecer esos dos sería
+            ofrecer dos listas siempre vacías. */}
+        <select
+          value={estado}
+          onChange={(e) => setEstado(e.target.value)}
+          aria-label="Filtrar por estado"
+          className="h-9 rounded-md border border-border bg-card px-2 text-sm"
+        >
+          <option value="">Cualquier estado</option>
+          {ESTADOS_DE_LA_COLA.map((e) => (
+            <option key={e} value={e}>{STATUS_LABELS[e] || e}</option>
+          ))}
+        </select>
+
+        {/* LAS FECHAS del paso. El tramo de arriba es de brocha gorda
+            —atrasados, hoy, esta semana—; esto sirve para pedir un día suelto o
+            un trozo de mes. El «hasta» manda sobre el tramo. */}
+        <label className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          Del
+          <input
+            type="date"
+            value={desdeFecha}
+            onChange={(e) => setDesdeFecha(e.target.value)}
+            aria-label="Desde qué día"
+            className="h-9 rounded-md border border-border bg-card px-2 text-sm"
+          />
+        </label>
+        <label className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          al
+          <input
+            type="date"
+            value={hastaFecha}
+            onChange={(e) => setHastaFecha(e.target.value)}
+            aria-label="Hasta qué día"
+            className="h-9 rounded-md border border-border bg-card px-2 text-sm"
+          />
+        </label>
+
+        {hayFiltros && (
+          <button
+            type="button"
+            onClick={() => {
+              setBusca(''); setProducto(''); setEstado(''); setDesdeFecha(''); setHastaFecha('');
+            }}
+            className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <X size={13} /> Quitar filtros
+          </button>
+        )}
+      </div>
+
+      {/* Con un filtro puesto, los contadores de arriba siguen contando el
+          tramo entero: dicen una cosa y la lista otra, y callarlo es peor. */}
+      {hayFiltros && !cargando && (
+        <p className="text-[11px] text-muted-foreground">
+          Filtrando: <strong className="text-foreground">{total}</strong>{' '}
+          {total === 1 ? 'persona' : 'personas'}. Los contadores de arriba cuentan el tramo entero.
+        </p>
+      )}
+
       {!cargando && grupos.length > 1 && (
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/60">
@@ -414,6 +548,13 @@ export default function ColaDelDiaPage() {
                       }>
                         {c.texto}
                       </span>
+                      {/* La fecha de verdad al lado del relativo, y en qué
+                          estado está. Sin esto se filtra por «contactado» y la
+                          lista no dice cuál es cuál. */}
+                      <span className="text-[11px] tabular-nums text-muted-foreground">
+                        {fechaCorta(p.fecha_prevista)}
+                      </span>
+                      <StatusBadge status={p.lead_estado} showIcon className="shrink-0" />
                     </div>
 
                     {/* Los canales, EN ORDEN: la flecha dice por dónde se

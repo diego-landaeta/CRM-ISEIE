@@ -257,6 +257,7 @@ export async function pasosDeLead(leadId) {
  */
 export async function colaDelDia({
   projectIds, asesoraId, hasta = null, limite = 200, desplazamiento = 0, estado = null,
+  busca = null, productoId = null, desde = null,
 }) {
   const par = [];
   let i = 1;
@@ -280,6 +281,23 @@ export async function colaDelDia({
   const ESTADOS = ['nuevo', 'por_contactar', 'contactado', 'en_seguimiento', 'proxima_convocatoria'];
   const pEstado = ESTADOS.includes(estado) ? `AND l.status = $${i++}` : '';
   if (ESTADOS.includes(estado)) par.push(estado);
+  // El buscador y la formacion, igual que en el repaso de fin de mes: los hace
+  // el SERVIDOR y no la pantalla. Buscar dentro de las 100 filas que se ven
+  // seria decir «no esta» de alguien que si esta, en la pagina cuatro.
+  let pBusca = '';
+  if (busca && String(busca).trim()) {
+    const q = `%${String(busca).trim()}%`;
+    pBusca = `AND (l.nombre ILIKE $${i} OR l.email ILIKE $${i} OR l.telefono ILIKE $${i})`;
+    par.push(q);
+    i += 1;
+  }
+  const pProd = productoId ? `AND l.producto_interes_id = $${i++}` : '';
+  if (productoId) par.push(Number(productoId));
+  // Desde que dia. El otro extremo ya lo pone el tramo de arriba (`hasta`);
+  // con este se puede pedir «del 1 al 15» sin pelearse con el tramo.
+  const fechaOk = /^\d{4}-\d{2}-\d{2}$/.test(desde || '');
+  const pDesde = fechaOk ? `AND ls.fecha_prevista >= $${i++}::date` : '';
+  if (fechaOk) par.push(desde);
   const pLimite = `$${i++}`;
   par.push(Number(limite) || 200);
   const pSalto = `$${i++}`;
@@ -307,7 +325,7 @@ export async function colaDelDia({
           ${pEstado}
           -- El paso ya hecho no se pide otra vez.
           AND ${CONTACTOS} < ls.orden
-          ${pProj} ${pAses}
+          ${pProj} ${pAses} ${pBusca} ${pProd} ${pDesde}
      )
      SELECT q.lead_id, q.lead_nombre, q.lead_estado, q.responsable_id,
             q.lead_email, q.lead_telefono,

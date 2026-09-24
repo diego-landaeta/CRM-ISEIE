@@ -177,6 +177,9 @@ export async function cola(req, res, next) {
       asesoraId: deQuienEsLaCola(req),
       hasta: /^\d{4}-\d{2}-\d{2}$/.test(req.query.hasta || '') ? req.query.hasta : null,
       estado: req.query.estado || null,
+      busca: req.query.busca || null,
+      productoId: req.query.productoId ? Number(req.query.productoId) : null,
+      desde: /^\d{4}-\d{2}-\d{2}$/.test(req.query.desde || '') ? req.query.desde : null,
       limite: porPagina,
       desplazamiento: (pagina - 1) * porPagina,
     });
