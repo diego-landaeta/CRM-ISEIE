@@ -256,7 +256,7 @@ export async function pasosDeLead(leadId) {
  * garantiza que el numero y las filas salen del mismo sitio.
  */
 export async function colaDelDia({
-  projectIds, asesoraId, hasta = null, limite = 200, desplazamiento = 0,
+  projectIds, asesoraId, hasta = null, limite = 200, desplazamiento = 0, estado = null,
 }) {
   const par = [];
   let i = 1;
@@ -274,6 +274,12 @@ export async function colaDelDia({
   if (asesoraId) par.push(asesoraId);
   const pHasta = hasta ? `$${i++}::date` : 'CURRENT_DATE';
   if (hasta) par.push(hasta);
+  // En que estado esta. Los convertidos y los no interesados no entran nunca en
+  // la cola --la consulta ya los excluye-- asi que aqui solo valen los cinco de
+  // en medio; cualquier otra cosa se ignora en vez de devolver una lista vacia.
+  const ESTADOS = ['nuevo', 'por_contactar', 'contactado', 'en_seguimiento', 'proxima_convocatoria'];
+  const pEstado = ESTADOS.includes(estado) ? `AND l.status = $${i++}` : '';
+  if (ESTADOS.includes(estado)) par.push(estado);
   const pLimite = `$${i++}`;
   par.push(Number(limite) || 200);
   const pSalto = `$${i++}`;
@@ -298,6 +304,7 @@ export async function colaDelDia({
           -- Quien ya compro o dijo que no, sale de la cola: seguir el proceso
           -- con alguien que ya cerro es hacerle perder el tiempo a las dos.
           AND l.status NOT IN ('convertido', 'no_interesado')
+          ${pEstado}
           -- El paso ya hecho no se pide otra vez.
           AND ${CONTACTOS} < ls.orden
           ${pProj} ${pAses}

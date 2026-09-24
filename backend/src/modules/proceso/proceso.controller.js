@@ -176,6 +176,7 @@ export async function cola(req, res, next) {
       projectIds: proyectosDeLaCola(req),
       asesoraId: deQuienEsLaCola(req),
       hasta: /^\d{4}-\d{2}-\d{2}$/.test(req.query.hasta || '') ? req.query.hasta : null,
+      estado: req.query.estado || null,
       limite: porPagina,
       desplazamiento: (pagina - 1) * porPagina,
     });

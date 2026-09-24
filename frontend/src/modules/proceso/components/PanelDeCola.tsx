@@ -7,6 +7,7 @@ import Field from '@/shared/components/ui/Field';
 import { iconoDeCanal, nombreDeCanal } from '../lib/canales';
 import { tipoDeInteraccion } from '../lib/cola';
 import PlantillaDelPaso from './PlantillaDelPaso';
+import HistorialCorto from './HistorialCorto';
 import type { PasoEnCola } from '../api/agenda.api';
 
 /**
@@ -32,6 +33,8 @@ export default function PanelDeCola({
   textoUrgencia,
   onContactado,
   onPlantillaCopiada,
+  historialAbierto = false,
+  onAlternarHistorial,
   onAnterior,
   onSiguiente,
   onCerrar,
@@ -51,6 +54,15 @@ export default function PanelDeCola({
    */
   textoUrgencia?: string;
   onContactado: (tipo: 'llamada' | 'email' | 'whatsapp' | 'nota', nota: string) => void;
+  /**
+   * Si el historial esta desplegado.
+   *
+   * Lo decide quien llama y no el panel: asi se queda abierto al pasar a la
+   * siguiente persona. Quien lo mira una vez lo suele querer en todas, y
+   * volver a pulsarlo veinte veces seria peor que no tenerlo.
+   */
+  historialAbierto?: boolean;
+  onAlternarHistorial?: () => void;
   /** Copiar el mensaje deja rastro en su ficha, pero NO cierra el paso. */
   onPlantillaCopiada?: (nombrePlantilla: string) => void;
   onAnterior: () => void;
@@ -134,6 +146,18 @@ export default function PanelDeCola({
               <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Para este paso</p>
               <p className="mt-0.5 text-normal">{fila.paso_nota}</p>
             </div>
+          )}
+
+          {/* QUE HA PASADO YA CON ESTA PERSONA. Diego, 24/09: «le añadiria el
+              historial que tiene tambien como apoyo, sin tener que ver la
+              ficha entera». Va plegado: lo primero del panel sigue siendo el
+              mensaje del paso. */}
+          {onAlternarHistorial && (
+            <HistorialCorto
+              leadId={fila.lead_id}
+              abierto={historialAbierto}
+              onAlternar={onAlternarHistorial}
+            />
           )}
 
           {/* El mensaje que toca, ya escrito y con sus datos puestos. Es lo

@@ -100,7 +100,7 @@ function conAmbito(params: Record<string, string | number | undefined | null>) {
 
 export async function traerCola(opciones: {
   projectId?: number | null; projectIds?: string | null; gestoraId?: number | null;
-  hasta?: string | null; limite?: number; pagina?: number;
+  hasta?: string | null; limite?: number; pagina?: number; estado?: string | null;
 }): Promise<{ filas: PasoEnCola[]; total: number; totalPaginas: number }> {
   const r = await client.get(`/proceso/cola?${conAmbito(opciones)}`);
   if (!r?.success) return { filas: [], total: 0, totalPaginas: 1 };

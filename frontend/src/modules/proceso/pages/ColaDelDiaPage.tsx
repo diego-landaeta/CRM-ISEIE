@@ -25,6 +25,7 @@ import { traerCola, traerResumen, type PasoEnCola, type ResumenCola } from '../a
 import { iconoDeCanal, nombreDeCanal } from '../lib/canales';
 import { contarPorPaso, trasSacar } from '../lib/cola';
 import PanelDeCola from '../components/PanelDeCola';
+import { STATUS_LABELS } from '@/shared/components/ui/StatusBadge';
 import { toast } from '@/shared/hooks/useToast';
 
 /** «hace 3 días», «hoy», «mañana» — no una fecha que hay que restar mentalmente. */
@@ -58,6 +59,14 @@ function Contador({ icon: Icon, etiqueta, valor, tono, activo, onClick }: any) {
   );
 }
 
+/**
+ * Los estados que puede tener alguien en la cola.
+ *
+ * Quien compro o dijo que no ya no esta: la consulta los excluye. Ofrecerlos en
+ * el filtro seria ofrecer dos listas que siempre salen vacias.
+ */
+const ESTADOS_DE_LA_COLA = ['nuevo', 'por_contactar', 'contactado', 'en_seguimiento', 'proxima_convocatoria'];
+
 export default function ColaDelDiaPage() {
   const { activeProject } = useProjectContext();
   const { user } = useAuth();
@@ -67,6 +76,10 @@ export default function ColaDelDiaPage() {
   const [resumen, setResumen] = useState<ResumenCola | null>(null);
   const [cargando, setCargando] = useState(true);
   const [gestoraId, setGestoraId] = useState<number | null>(null);
+  const [estado, setEstado] = useState('');
+  // El historial del panel: abierto o no. Vive AQUI y no en el panel para que
+  // se quede como esta al pasar a la siguiente persona.
+  const [historialAbierto, setHistorialAbierto] = useState(false);
   const [gestoras, setGestoras] = useState<Array<{ id: number; nombre: string }>>([]);
   // Qué tramo se está mirando. Por defecto todo lo que ya toca —atrasado y hoy—,
   // que es con lo que se abre el día.
@@ -109,13 +122,13 @@ export default function ColaDelDiaPage() {
 
   // Cualquier cambio de filtro vuelve al principio: quedarse en la página siete
   // después de filtrar enseña una lista vacía que parece que no hay nada.
-  useEffect(() => { setPagina(1); }, [proyecto, gestoraId, hasta]);
+  useEffect(() => { setPagina(1); }, [proyecto, gestoraId, hasta, estado]);
 
   useEffect(() => {
     let vivo = true;
     setCargando(true);
     Promise.all([
-      traerCola({ projectId: proyecto, gestoraId, hasta, limite: 100, pagina }),
+      traerCola({ projectId: proyecto, gestoraId, hasta, limite: 100, pagina, estado: estado || null }),
       traerResumen({ projectId: proyecto, gestoraId }),
     ]).then(([c, r]) => {
       if (!vivo) return;
@@ -125,7 +138,7 @@ export default function ColaDelDiaPage() {
       setResumen(r);
     }).finally(() => { if (vivo) setCargando(false); });
     return () => { vivo = false; };
-  }, [proyecto, gestoraId, hasta, pagina]);
+  }, [proyecto, gestoraId, hasta, pagina, estado]);
 
   // La lista de gestoras, solo para quien puede filtrar por ellas.
   useEffect(() => {
@@ -239,17 +252,36 @@ export default function ColaDelDiaPage() {
       <PageHeader
         title={titulo}
         subtitle="A quién le toca hoy, y quién viene arrastrado. Una fila por persona."
-        actions={esAdmin && gestoras.length > 0 ? (
-          <select
-            value={gestoraId ?? ''}
-            onChange={(e) => setGestoraId(e.target.value ? Number(e.target.value) : null)}
-            className="h-9 px-3 rounded-md border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
-            aria-label="Filtrar por gestora"
-          >
-            <option value="">Todo el equipo</option>
-            {gestoras.map((g) => <option key={g.id} value={g.id}>{g.nombre}</option>)}
-          </select>
-        ) : null}
+        actions={(
+          <div className="flex flex-wrap items-center gap-2">
+            {esAdmin && gestoras.length > 0 && (
+              <select
+                value={gestoraId ?? ''}
+                onChange={(e) => setGestoraId(e.target.value ? Number(e.target.value) : null)}
+                className="h-9 px-3 rounded-md border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+                aria-label="Filtrar por gestora"
+              >
+                <option value="">Todo el equipo</option>
+                {gestoras.map((g) => <option key={g.id} value={g.id}>{g.nombre}</option>)}
+              </select>
+            )}
+            {/* EN QUE ESTADO ESTAN. Diego, 24/09: «los filtros segun sus
+                estados». Solo los cinco que pueden salir: quien compro o dijo
+                que no ya no esta en la cola, asi que ofrecerlos seria ofrecer
+                dos listas vacias. */}
+            <select
+              value={estado}
+              onChange={(e) => setEstado(e.target.value)}
+              className="h-9 px-3 rounded-md border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+              aria-label="Filtrar por estado"
+            >
+              <option value="">Cualquier estado</option>
+              {ESTADOS_DE_LA_COLA.map((e) => (
+                <option key={e} value={e}>{STATUS_LABELS[e] || e}</option>
+              ))}
+            </select>
+          </div>
+        )}
       />
 
       {resumen && (
@@ -492,6 +524,8 @@ export default function ColaDelDiaPage() {
           guardando={apuntando}
           onContactado={(tipo, nota) => apuntarContacto(tipo, nota)}
           onPlantillaCopiada={(nombre) => apuntarCopia(visibles[enFoco].lead_id, nombre)}
+          historialAbierto={historialAbierto}
+          onAlternarHistorial={() => setHistorialAbierto((x) => !x)}
           onAnterior={() => setEnFoco((n) => (n === null ? null : Math.max(0, n - 1)))}
           onSiguiente={() => setEnFoco((n) => (n === null ? null : Math.min(visibles.length - 1, n + 1)))}
           onCerrar={() => setEnFoco(null)}
