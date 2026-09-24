@@ -102,19 +102,30 @@ export default function ColaDelDiaPage() {
     return `${d.getFullYear()}-${mes}-${String(d.getDate()).padStart(2, '0')}`;
   }, [tramo]);
 
+  // La página de la cola, y cuántos hay de verdad detrás.
+  const [pagina, setPagina] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [totalPaginas, setTotalPaginas] = useState(1);
+
+  // Cualquier cambio de filtro vuelve al principio: quedarse en la página siete
+  // después de filtrar enseña una lista vacía que parece que no hay nada.
+  useEffect(() => { setPagina(1); }, [proyecto, gestoraId, hasta]);
+
   useEffect(() => {
     let vivo = true;
     setCargando(true);
     Promise.all([
-      traerCola({ projectId: proyecto, gestoraId, hasta, limite: 300 }),
+      traerCola({ projectId: proyecto, gestoraId, hasta, limite: 100, pagina }),
       traerResumen({ projectId: proyecto, gestoraId }),
     ]).then(([c, r]) => {
       if (!vivo) return;
-      setCola(c);
+      setCola(c.filas);
+      setTotal(c.total);
+      setTotalPaginas(c.totalPaginas);
       setResumen(r);
     }).finally(() => { if (vivo) setCargando(false); });
     return () => { vivo = false; };
-  }, [proyecto, gestoraId, hasta]);
+  }, [proyecto, gestoraId, hasta, pagina]);
 
   // La lista de gestoras, solo para quien puede filtrar por ellas.
   useEffect(() => {
@@ -436,6 +447,35 @@ export default function ColaDelDiaPage() {
               </button>
             );
           })}
+        </div>
+      )}
+
+      {/* LA PAGINACIÓN. Antes la cola cortaba en 300 sin decirlo mientras los
+          contadores de arriba contaban todas, así que quien la trabajaba de
+          arriba abajo creía haberla terminado con gente sin tocar. */}
+      {totalPaginas > 1 && (
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
+          <span className="text-secundario tabular-nums text-muted-foreground">
+            Página {pagina} de {totalPaginas} · {total} en la cola
+          </span>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              disabled={pagina <= 1 || cargando}
+              onClick={() => setPagina((n) => Math.max(1, n - 1))}
+              className="rounded-md border border-border px-2.5 py-1.5 text-normal font-semibold hover:bg-muted disabled:opacity-40"
+            >
+              Anterior
+            </button>
+            <button
+              type="button"
+              disabled={pagina >= totalPaginas || cargando}
+              onClick={() => setPagina((n) => Math.min(totalPaginas, n + 1))}
+              className="rounded-md border border-border px-2.5 py-1.5 text-normal font-semibold hover:bg-muted disabled:opacity-40"
+            >
+              Siguiente
+            </button>
+          </div>
         </div>
       )}
 

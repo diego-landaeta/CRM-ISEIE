@@ -99,10 +99,17 @@ function conAmbito(params: Record<string, string | number | undefined | null>) {
 }
 
 export async function traerCola(opciones: {
-  projectId?: number | null; projectIds?: string | null; gestoraId?: number | null; hasta?: string | null; limite?: number;
-}): Promise<PasoEnCola[]> {
+  projectId?: number | null; projectIds?: string | null; gestoraId?: number | null;
+  hasta?: string | null; limite?: number; pagina?: number;
+}): Promise<{ filas: PasoEnCola[]; total: number; totalPaginas: number }> {
   const r = await client.get(`/proceso/cola?${conAmbito(opciones)}`);
-  return r?.success ? r.data : [];
+  if (!r?.success) return { filas: [], total: 0, totalPaginas: 1 };
+  const p = (r.pagination || {}) as { total?: number; totalPages?: number };
+  return {
+    filas: r.data || [],
+    total: Number(p.total ?? (r.data || []).length),
+    totalPaginas: Number(p.totalPages ?? 1),
+  };
 }
 
 export async function traerResumen(opciones: {

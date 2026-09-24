@@ -168,13 +168,25 @@ export async function wasapiSeguimiento(req, res, next) {
 
 export async function cola(req, res, next) {
   try {
-    const data = await Proceso.colaDelDia({
+    // 100 por pagina. Con 1.400 en la cola de una empresa, pintarlas todas deja
+    // la pantalla pegada; y cortar sin decirlo era lo que habia antes.
+    const porPagina = Math.min(Number(req.query.limite) || 100, 300);
+    const pagina = Math.max(Number(req.query.pagina) || 1, 1);
+    const { filas, total } = await Proceso.colaDelDia({
       projectIds: proyectosDeLaCola(req),
       asesoraId: deQuienEsLaCola(req),
       hasta: /^\d{4}-\d{2}-\d{2}$/.test(req.query.hasta || '') ? req.query.hasta : null,
-      limite: Number(req.query.limite) || 200,
+      limite: porPagina,
+      desplazamiento: (pagina - 1) * porPagina,
     });
-    res.json({ success: true, data });
+    res.json({
+      success: true,
+      data: filas,
+      pagination: {
+        total, page: pagina, limit: porPagina,
+        totalPages: Math.max(1, Math.ceil(total / porPagina)),
+      },
+    });
   } catch (err) { next(err); }
 }
 

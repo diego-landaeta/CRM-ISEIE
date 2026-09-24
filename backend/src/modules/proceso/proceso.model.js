@@ -242,7 +242,22 @@ export async function pasosDeLead(leadId) {
  * gestora abre una ficha por persona, no una por apunte. Si alguien lleva tres
  * pasos sin hacer, lo que necesita es que le llamen, no salir tres veces.
  */
-export async function colaDelDia({ projectIds, asesoraId, hasta = null, limite = 200 }) {
+/**
+ * La cola del dia.
+ *
+ * PAGINA, y devuelve `{ filas, total }`. Antes cortaba en 200 y no decia
+ * cuantos habia: con un campus daba igual, pero con una empresa entera --CEDIA
+ * son siete campus y 1.400 personas-- el contador de arriba decia 900 atrasados
+ * y la lista enseñaba 300. Quien la trabajaba de arriba abajo creia haberla
+ * terminado con mil personas sin tocar.
+ *
+ * El total sale de `count(*) OVER ()`, que se calcula ANTES del LIMIT: con este
+ * CTE es mas limpio que repetir la consulta entera solo para contarla, y
+ * garantiza que el numero y las filas salen del mismo sitio.
+ */
+export async function colaDelDia({
+  projectIds, asesoraId, hasta = null, limite = 200, desplazamiento = 0,
+}) {
   const par = [];
   let i = 1;
   // Sin proyecto elegido, la cola es la del equipo: los de pruebas no
@@ -261,6 +276,8 @@ export async function colaDelDia({ projectIds, asesoraId, hasta = null, limite =
   if (hasta) par.push(hasta);
   const pLimite = `$${i++}`;
   par.push(Number(limite) || 200);
+  const pSalto = `$${i++}`;
+  par.push(Number(desplazamiento) || 0);
 
   const { rows } = await query(
     `WITH pendientes AS (
@@ -303,7 +320,10 @@ export async function colaDelDia({ projectIds, asesoraId, hasta = null, limite =
             -- las plantillas y salen del catalogo, que es donde se mantienen.
             -- Las PLAZAS no, y no es un olvido: ver la cabecera del fichero.
             p.fecha_inicio_texto, p.fecha_cierre_convocatoria,
-            COALESCE(s.avisa_plazas, false) AS avisa_plazas
+            COALESCE(s.avisa_plazas, false) AS avisa_plazas,
+            -- Cuantos hay EN TOTAL con este filtro. La ventana se evalua antes
+            -- del LIMIT, asi que es el de verdad y no el de la pagina.
+            count(*) OVER ()::int AS total_filas
        FROM pendientes q
        LEFT JOIN commercial_steps s ON s.id = q.step_id
        LEFT JOIN projects pr ON pr.id = q.project_id
@@ -311,13 +331,17 @@ export async function colaDelDia({ projectIds, asesoraId, hasta = null, limite =
        LEFT JOIN products p ON p.id = q.producto_interes_id
       WHERE q.pos = 1
       ORDER BY q.fecha_prevista, q.orden, q.lead_id
-      LIMIT ${pLimite}`,
+      LIMIT ${pLimite} OFFSET ${pSalto}`,
     par
   );
-  return rows.map((r) => ({
-    ...r,
-    dias_de_retraso: Number(r.dias_de_retraso),
-  }));
+  return {
+    filas: rows.map(({ total_filas, ...r }) => ({
+      ...r,
+      dias_de_retraso: Number(r.dias_de_retraso),
+    })),
+    // Sin filas no hay ventana que leer, y entonces el total es cero.
+    total: rows.length ? Number(rows[0].total_filas) : 0,
+  };
 }
 
 /**
