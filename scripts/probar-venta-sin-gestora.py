@@ -81,12 +81,40 @@ const despues = await turno();
 console.log(`2 · sin gestora ........ responsable=${r2.responsable_id ?? 'NINGUNO'} vendedora=${r2.vendedora_id ?? 'NINGUNA'}  ${r2.responsable_id === null && r2.vendedora_id === null ? 'OK' : 'MAL: no deberia tener'}`);
 console.log(`3 · el turno del reparto  antes=${medio} despues=${despues}  ${medio === despues ? 'NO se movio, OK' : 'SE MOVIO: MAL'}`);
 
+// ── 3b · Venta de otra gestora: queda de quien lleva el prospecto.
+const { rows: gs } = await query(`
+  SELECT u.id, u.nombre FROM users u
+    JOIN user_projects up ON up.user_id = u.id AND up.project_id = $1 AND up.active
+   WHERE u.active AND u.role = 'gestor' LIMIT 1`, [proy.id]);
+if (gs.length) {
+  const v3 = await createSale(
+    { ...base, nombre: `${marca}-otra`, email: `${marca}-o@x.test`, vendedora_id: gs[0].id }, admin);
+  creados.push(v3);
+  const r3 = (await query('SELECT vendedora_id FROM conversions WHERE id = $1', [v3.sale_id])).rows[0];
+  console.log(`3b· de otra gestora .... vendedora=${r3.vendedora_id ?? 'NINGUNA'} (esperada ${gs[0].id}, ${gs[0].nombre})  ${r3.vendedora_id === gs[0].id ? 'OK' : 'MAL'}`);
+
+  // Y un id inventado NO puede dejar la venta apuntando a nadie.
+  const v4 = await createSale(
+    { ...base, nombre: `${marca}-falsa`, email: `${marca}-f@x.test`, vendedora_id: 999999 }, admin);
+  creados.push(v4);
+  const r4 = (await query('SELECT vendedora_id FROM conversions WHERE id = $1', [v4.sale_id])).rows[0];
+  console.log(`3c· vendedora inventada  vendedora=${r4.vendedora_id ?? 'NINGUNA'}  ${r4.vendedora_id === null ? 'rechazada, OK' : 'ACEPTADA: MAL'}`);
+}
+
 // ── 4 · El permiso.
 const { rows: roles } = await query(
   "SELECT DISTINCT role FROM users WHERE active ORDER BY role");
 for (const { role } of roles) {
-  const { rows: u } = await query(
-    'SELECT id, custom_role_id FROM users WHERE role = $1 AND active LIMIT 1', [role]);
+  // SIN override: si se coge a alguien a quien se le dio el permiso a mano
+  // --Ana, Dayana, Yosbely-- lo que se mide es el override, no el rol.
+  const { rows: u } = await query(`
+    SELECT id, custom_role_id FROM users
+     WHERE role = $1 AND active
+       AND NOT EXISTS (SELECT 1 FROM user_permission_overrides o
+                        WHERE o.user_id = users.id
+                          AND o.resource = 'conversions' AND o.action = 'sin_gestora')
+     LIMIT 1`, [role]);
+  if (!u.length) { console.log(`4 · ${role.padEnd(12)} (todos tienen override, no se puede medir el rol)`); continue; }
   const puede = await resolvePermission(u[0].id, role, u[0].custom_role_id ?? null,
     'conversions', 'sin_gestora');
   const esperado = role === 'admin' || role === 'superadmin';

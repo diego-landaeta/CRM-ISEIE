@@ -7,12 +7,24 @@ import Portal from '@/shared/components/ui/portal';
 
 interface Product { id: number; nombre: string; precio?: number | string; moneda?: string }
 interface Project { id: number; nombre?: string }
-interface LeadLite { id: number; nombre?: string; email?: string; telefono?: string; status?: string }
+interface LeadLite {
+  id: number; nombre?: string; email?: string; telefono?: string; status?: string;
+  /** Quien lleva el prospecto: es de quien sera la venta en «de otra gestora». */
+  responsable_id?: number | null; responsable_nombre?: string | null;
+}
 interface Props {
   open: boolean;
   onClose: () => void;
   project: Project | null;
   onSaved?: (result: { sale_id: number; lead_id: number; retroactiva: boolean }) => void;
+  /**
+   * Con que modo se abre.
+   *
+   * Lo elige el desplegable del boton «Nueva venta» (Diego, 25/09): venta
+   * propia, de otra gestora, o automatica sin gestora. Quien no lo pasa abre
+   * como siempre, que es lo que hacen Clientes e Ingresos.
+   */
+  modoInicial?: Mode;
 }
 
 const PAYMENT_METHODS = [
@@ -32,16 +44,16 @@ const PAYMENT_METHODS = [
  * informe acaba diciendo que vendio quien solo la apunto. Lo piden las
  * contables de CEDIA e ICTESS, que registran ventas que no cerraron ellas.
  */
-type Mode = 'existing' | 'new' | 'sin_gestora';
+type Mode = 'existing' | 'new' | 'sin_gestora' | 'otra_gestora';
 
-export default function RegisterSaleDialog({ open, onClose, project, onSaved }: Props) {
+export default function RegisterSaleDialog({ open, onClose, project, onSaved, modoInicial }: Props) {
   const today = new Date().toISOString().slice(0, 10);
   const { can } = usePermission();
   // Quien puede registrar una venta que no es de nadie. De serie admin y
   // superadmin; a quien lleve la contabilidad se le da por persona desde el
   // panel de permisos, para no tener que desplegar cada vez que cambie.
   const puedeSinGestora = can('conversions.sin_gestora');
-  const [mode, setMode] = useState<Mode>('existing');
+  const [mode, setMode] = useState<Mode>(modoInicial || 'existing');
 
   // Cliente nuevo
   const [nombre, setNombre] = useState('');
@@ -80,7 +92,7 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
 
   useEffect(() => {
     if (!open) return;
-    setMode('existing');
+    setMode(modoInicial || 'existing');
     setNombre(''); setEmail(''); setTelefono('');
     setClientSearch(''); setClientResults([]); setSelectedClient(null);
     setIdentificacionFiscal('');
@@ -100,11 +112,19 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
 
   // Búsqueda debounced de clientes existentes (leads convertidos del proyecto)
   useEffect(() => {
-    if (mode !== 'existing' || !open || !project?.id) return;
+    if ((mode !== 'existing' && mode !== 'otra_gestora') || !open || !project?.id) return;
     if (clientSearch.trim().length < 2) { setClientResults([]); return; }
     const handle = setTimeout(() => {
       setSearching(true);
-      client.get<LeadLite[]>('/leads', { params: { projectId: project.id, status: 'convertido', search: clientSearch.trim(), limit: 20 } })
+      client.get<LeadLite[]>('/leads', {
+        params: {
+          projectId: project.id,
+          // En «de otra gestora» se busca entre TODOS: es un prospecto al que
+          // se le registra la venta, no un cliente que ya compro.
+          ...(mode === 'existing' ? { status: 'convertido' } : {}),
+          search: clientSearch.trim(), limit: 20,
+        },
+      })
         .then((r) => setClientResults(Array.isArray(r?.data) ? r.data : []))
         .catch(() => setClientResults([]))
         .finally(() => setSearching(false));
@@ -178,7 +198,7 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
 
   async function handleSave() {
     if (!project?.id) { toast({ title: 'Selecciona un proyecto', variant: 'destructive' }); return; }
-    if (mode === 'existing' && !selectedClient) {
+    if ((mode === 'existing' || mode === 'otra_gestora') && !selectedClient) {
       toast({ title: 'Selecciona un cliente', description: 'Búscalo por nombre, email o teléfono.', variant: 'destructive' }); return;
     }
     if (mode === 'new') {
@@ -240,6 +260,13 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
         }));
       }
       if (mode === 'sin_gestora') body.sin_gestora = true;
+      // De otra gestora: el prospecto elegido y, fijada en la venta, la
+      // persona que lo lleva. Fijarla importa: si manana reasignan el
+      // prospecto, la venta tiene que seguir siendo de quien la hizo.
+      if (mode === 'otra_gestora' && selectedClient) {
+        body.lead_id = selectedClient.id;
+        if (selectedClient.responsable_id) body.vendedora_id = selectedClient.responsable_id;
+      }
       if (mode === 'existing' && selectedClient) {
         body.lead_id = selectedClient.id;
       } else {
@@ -288,8 +315,10 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
           </div>
 
           <div className="p-5 space-y-4 overflow-y-auto">
-            {/* Toggle: existente / nuevo / sin gestora */}
-            <div className={`bg-muted/40 p-1 rounded-lg grid gap-1 ${puedeSinGestora ? 'grid-cols-3' : 'grid-cols-2'}`}>
+            {/* Cliente existente o nuevo. Solo en la venta propia: en los
+                otros modos ya lo dijo el desplegable del boton. */}
+            {(mode === 'existing' || mode === 'new') && (
+            <div className="bg-muted/40 p-1 rounded-lg grid grid-cols-2 gap-1">
               <button
                 type="button"
                 onClick={() => { setMode('existing'); clearSelectedClient(); }}
@@ -304,20 +333,8 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
               >
                 <UserPlus size={14} weight="bold" /> Cliente nuevo
               </button>
-              {/* VENTA SIN GESTORA. Se esconde a quien no puede, pero el
-                  candado de verdad esta en el servidor: esconder no es
-                  impedir. */}
-              {puedeSinGestora && (
-                <button
-                  type="button"
-                  onClick={() => { setMode('sin_gestora'); clearSelectedClient(); }}
-                  className={`h-9 rounded-md text-sm font-semibold flex items-center justify-center gap-1.5 transition-colors ${mode === 'sin_gestora' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-                >
-                  <UserMinus size={14} weight="bold" /> Sin gestora
-                </button>
-              )}
             </div>
-
+            )}
             {/* MODO: cliente existente */}
             {mode === 'existing' && (
               <div className="space-y-3">
@@ -366,6 +383,74 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
                       <p className="text-sm font-semibold truncate">{selectedClient.nombre || '— sin nombre —'}</p>
                       <p className="text-[11px] text-muted-foreground truncate">{selectedClient.email || '—'} {selectedClient.telefono ? `· ${selectedClient.telefono}` : ''}</p>
                       <p className="text-[11px] text-emerald-700 dark:text-emerald-400 mt-0.5">Cliente seleccionado — se le añadirá una nueva venta.</p>
+                    </div>
+                    <button type="button" onClick={clearSelectedClient} className="text-[11px] text-muted-foreground hover:text-foreground underline flex-shrink-0">
+                      Cambiar
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* MODO: venta de otra gestora. Diego, 25/09: «que en este caso
+                seleccione el prospecto y haga ese proceso».
+
+                Se busca entre TODOS los prospectos, no solo los convertidos: el
+                caso es justo ese, alguien que todavía no ha comprado. Y la
+                venta queda de quien lo lleva, no de quien la está tecleando. */}
+            {mode === 'otra_gestora' && (
+              <div className="space-y-3">
+                {!selectedClient ? (
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">Buscar el prospecto *</label>
+                    <div className="relative">
+                      <MagnifyingGlass size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                      <input
+                        autoFocus
+                        value={clientSearch}
+                        onChange={(e) => setClientSearch(e.target.value)}
+                        placeholder="Nombre, correo o teléfono…"
+                        className="w-full h-10 pl-9 pr-3 rounded-md border border-border bg-card text-sm"
+                      />
+                    </div>
+                    {searching && <p className="mt-1.5 text-[11px] text-muted-foreground">Buscando…</p>}
+                    {!searching && clientSearch.trim().length >= 2 && clientResults.length === 0 && (
+                      <p className="mt-1.5 text-[11px] text-muted-foreground">No se encontró ningún prospecto con eso.</p>
+                    )}
+                    {clientResults.length > 0 && (
+                      <div className="mt-1.5 border border-border rounded-md max-h-48 overflow-y-auto">
+                        {clientResults.map((c) => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => selectClient(c)}
+                            className="w-full text-left px-3 py-2 hover:bg-muted text-sm border-b last:border-0 border-border"
+                          >
+                            <p className="font-medium truncate">{c.nombre || '— sin nombre —'}</p>
+                            <p className="text-[11px] text-muted-foreground truncate">
+                              {c.email || '—'} {c.telefono ? `· ${c.telefono}` : ''}
+                              {' · '}{c.responsable_nombre || 'sin gestora'}
+                            </p>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-900 rounded-md p-3 flex items-start gap-3">
+                    <UserCheck size={20} weight="duotone" className="text-sky-600 flex-shrink-0 mt-0.5" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold truncate">{selectedClient.nombre || '— sin nombre —'}</p>
+                      <p className="text-[11px] text-muted-foreground truncate">{selectedClient.email || '—'} {selectedClient.telefono ? `· ${selectedClient.telefono}` : ''}</p>
+                      {selectedClient.responsable_nombre ? (
+                        <p className="text-[11px] text-sky-700 dark:text-sky-400 mt-0.5">
+                          Esta venta será de <strong>{selectedClient.responsable_nombre}</strong>, que es quien lleva el prospecto.
+                        </p>
+                      ) : (
+                        <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5">
+                          Este prospecto no tiene gestora, así que la venta no será de nadie.
+                        </p>
+                      )}
                     </div>
                     <button type="button" onClick={clearSelectedClient} className="text-[11px] text-muted-foreground hover:text-foreground underline flex-shrink-0">
                       Cambiar

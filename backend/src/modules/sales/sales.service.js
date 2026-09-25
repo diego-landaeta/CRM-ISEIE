@@ -121,6 +121,32 @@ export async function createSale(data, requestUser) {
     requestUser?.userId || null
   );
 
+  // 3b) DE QUIEN ES LA VENTA, cuando se dice a proposito.
+  //
+  // Se guarda en la venta en vez de dejarlo al COALESCE con el responsable del
+  // lead. No es lo mismo: el responsable del lead cambia --se reasigna un
+  // prospecto y ya esta-- y entonces una venta cerrada en marzo empezaria a
+  // contar para quien no la hizo. La venta es un hecho con fecha; su dueña
+  // tambien.
+  //
+  // Se comprueba que esa persona exista, este activa y tenga el proyecto: un id
+  // inventado en la peticion dejaria la venta apuntando a nadie.
+  if (data.vendedora_id) {
+    const { rowCount } = await query(
+      `UPDATE conversions SET vendedora_id = $1, updated_at = NOW()
+        WHERE id = $2
+          AND EXISTS (SELECT 1 FROM users u
+                        JOIN user_projects up ON up.user_id = u.id
+                                             AND up.project_id = $3 AND up.active
+                       WHERE u.id = $1 AND u.active)`,
+      [data.vendedora_id, conversion.id, data.project_id],
+    );
+    if (!rowCount) {
+      logger.warn({ conversionId: conversion.id, vendedoraId: data.vendedora_id },
+        'venta de otra gestora: esa persona no tiene el proyecto, la venta queda sin vendedora');
+    }
+  }
+
   // 4) Si es pago fraccionado, generar las cuotas previstas.
   // El gestor envía un array `installments: [{importe_previsto, fecha_vencimiento}]`
   // que ya viene validado en el frontend (suman el total, importes>0).

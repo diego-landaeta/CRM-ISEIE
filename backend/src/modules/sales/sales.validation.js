@@ -28,6 +28,11 @@ export const createSaleSchema = z.object({
   // decide el permiso `conversions.sin_gestora`, y eso se comprueba en el
   // controlador: aqui solo se acepta la palabra.
   sin_gestora: z.boolean().optional(),
+  // VENTA DE OTRA GESTORA: se elige el prospecto y la venta queda de quien lo
+  // lleva. Se guarda en la venta, no se deja al COALESCE con el responsable del
+  // lead: si manana reasignan el prospecto, la venta seguiria contando para la
+  // persona equivocada.
+  vendedora_id: z.number().int().positive().optional().nullable(),
   // Cuotas para pago fraccionado. Validado además en el service que sumen el total.
   installments: z.array(z.object({
     importe_previsto: z.number().positive('Importe de cuota debe ser > 0'),
