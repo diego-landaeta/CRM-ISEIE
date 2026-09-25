@@ -1432,3 +1432,95 @@ grep -rl '"/staging/"' dist/assets/             # tiene que salir vacío
 
 Y en el servidor, comprobar el directorio nuevo **antes** de moverlo encima del
 que funciona, no después.
+
+
+---
+
+## 25 de septiembre · dos peticiones de Diego, para producción
+
+Anotadas, **sin tocar nada todavía**. Las dos salieron seguidas y las dos tienen
+una pregunta abierta que hay que resolver con él antes de escribir código. La
+segunda además toca pagos, así que va por pruebas primero pase lo que pase.
+
+### 1 · Un botón «Venta sin gestora»
+
+> «necesito en producción agregar un botón que diga: venta sin gestora, solo
+> para admin y super admin, en caso de ICTESS también Yosbely lo tendrá, CEDIA,
+> Ana y Dayana por ahora»
+
+**Comprobado en la base de producción.** Las tres personas existen, están
+activas, las tres son `gestor`, y cada una cuelga exactamente de la empresa que
+Diego dice:
+
+| | id | rol | empresa |
+|---|---|---|---|
+| Ana Comercial | 6 | gestor | CEDIA |
+| Dayana Comercial | 7 | gestor | CEDIA |
+| Yosbely | 11 | gestor | ICTESS |
+
+**Cómo NO hacerlo:** cablear esos tres ids o esos tres nombres en el código. El
+«por ahora» del mensaje ya avisa de que la lista va a cambiar, y cada cambio
+sería un despliegue.
+
+**Cómo sí.** Ya hay un sistema de permisos con **72 claves** y overrides por
+persona (`permissions.defaults.js`, `saveOverridesForUser`). Lo que encaja es
+una clave nueva —`conversions.sin_gestora`— que venga de serie en admin y
+superadmin, y que a esas tres se les dé como override desde el panel. Entonces
+quitar o añadir a alguien no es un despliegue, es un clic.
+
+**La pregunta abierta, y no es menor.** Hoy el diálogo de registrar venta **no
+tiene campo de gestora**: la atribución va por `conversion_reparto` y por
+`conversions.vendedora_id`. Y en producción de MultiCRM **527 de 529 ventas ya
+tienen `vendedora_id` a NULL** —15 no tienen ni vendedora ni responsable del
+lead—, así que «sin gestora» ya es hoy el caso normal en los datos.
+
+Con eso encima de la mesa, hay que preguntarle qué tiene que hacer el botón de
+distinto:
+
+- ¿Crear la venta sin reparto y sin tocar el responsable del lead?
+- ¿Marcarla para que **no cuente** en los números de nadie (podio, ranking,
+  comisiones), que es distinto de simplemente no tener vendedora?
+- ¿O es al revés: hoy el sistema le pone una gestora a la fuerza y lo que quiere
+  es poder decir que no?
+
+Sin esa respuesta se puede construir el botón y que no haga lo que él tenía en
+la cabeza.
+
+### 2 · Pago automático que se cree su propio lead y su cliente
+
+> «cuando se registren pagos automáticos: pon que se cree automático el lead /
+> cliente asociado a la comercial, pero que ponga que la comercial lo gestionó
+> pero que el pago quede reflejado como automático»
+
+**Una parte de esto ya está hecha.** Que el pago quede reflejado como automático
+ya pasa: `stripe_payments.link_method` guarda `auto_email`, `auto_dedup` o
+`auto_pending` según el camino, y el cobro se apunta en la venta con la nota
+`Auto-Stripe <stripe_id>`. Eso no hay que construirlo.
+
+**Lo que falta es lo otro.** Hoy `autoLinkIfPossible()` busca el lead por el
+correo del cargo y, si no lo encuentra, **se va sin hacer nada**: el cargo se
+queda suelto en Stripe y nadie se entera. Si lo encuentra pero el lead no está
+en «convertido», lo enlaza como `auto_pending` y tampoco crea la venta. Los tres
+huecos, en orden:
+
+1. Cargo cobrado y **no hay lead** con ese correo → no se crea nada.
+2. Hay lead pero **no está convertido** → no se crea la venta.
+3. Hay lead convertido pero **sin venta** → `auto_pending`, y ahí se queda.
+
+**La pregunta abierta, y esta bloquea.** ¿A qué comercial? Un cargo de Stripe no
+trae gestora: trae un correo, un importe y una fecha. Si se crea el lead solo,
+alguien tiene que ser su dueño, y las opciones no dan igual:
+
+- por **round-robin**, como un lead nuevo — pero esto no es un lead nuevo, es
+  alguien que ya ha pagado, y repartirlo a quien toque premia al azar;
+- la **gestora del proyecto** por el que entró el cobro, si se puede deducir;
+- o dejarlo en una **cola para asignar a mano**, que es lo más honesto pero es
+  justo el trabajo que Diego quiere quitarse.
+
+Recordar aquí que los leads automáticos **los asigna Make en el webhook**, no el
+round-robin del CRM: si se elige repartir, hay que decidir cuál de los dos manda.
+
+**Riesgo.** Esto crea leads, clientes y ventas solo, a partir de dinero que ya
+entró. Un fallo aquí no se ve: se ve semanas después, en un informe que no
+cuadra. Va a `/testeo` y `/staging` primero, con los cargos reales de Stripe ya
+existentes como prueba, y no pasa a producción hasta que Diego lo mire.
