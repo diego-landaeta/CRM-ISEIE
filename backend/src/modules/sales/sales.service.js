@@ -39,7 +39,13 @@ export async function createSale(data, requestUser) {
     // createManualLead detecta duplicados: si existe lead con mismo email/tel, lo reusa.
     // Si quien registra es admin/superadmin → dejamos round-robin (no se auto-asignan ventas).
     // Si es gestor → se le asigna a sí mismo (es su venta).
-    const passCreator = requestUser && requestUser.role === 'gestor' ? requestUser : null;
+    // Con «sin gestora» no se pasa creador NI se reparte: la venta no es de
+    // nadie a proposito. Sin esto, un gestor se la queda (el creador se queda
+    // el lead) y un admin se la encaja al round-robin, que se la da a alguien
+    // que no ha vendido nada. Las dos cosas acaban en el mismo sitio: un
+    // informe que atribuye una venta a quien solo la apunto.
+    const sinGestora = Boolean(data.sin_gestora);
+    const passCreator = !sinGestora && requestUser && requestUser.role === 'gestor' ? requestUser : null;
     try {
       leadResult = await leadService.createManualLead(
         {
@@ -54,7 +60,7 @@ export async function createSale(data, requestUser) {
             : (data.notas || null),
           custom_fields: undefined,
         },
-        { creatorUser: passCreator }
+        { creatorUser: passCreator, sinResponsable: sinGestora }
       );
     } catch (err) {
       logger.error({ err: err.message, data }, 'createSale: createManualLead failed');

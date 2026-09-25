@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Receipt, X, MagnifyingGlass, UserCheck, UserPlus } from '@phosphor-icons/react';
+import { Receipt, X, MagnifyingGlass, UserCheck, UserPlus, UserMinus } from '@phosphor-icons/react';
+import usePermission from '@/shared/hooks/usePermission';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 import Portal from '@/shared/components/ui/portal';
@@ -22,10 +23,24 @@ const PAYMENT_METHODS = [
   { value: 'fraccionado', label: 'Fraccionado' },
 ];
 
-type Mode = 'existing' | 'new';
+/**
+ * De quien es la venta que se esta registrando.
+ *
+ * `sin_gestora` es de Diego (25/09): una venta que se crea de cero y **no es de
+ * nadie**. Hoy, quien la registra se la queda --si es gestor-- o el round-robin
+ * se la encaja a la gestora que toque --si es admin--, y en los dos casos el
+ * informe acaba diciendo que vendio quien solo la apunto. Lo piden las
+ * contables de CEDIA e ICTESS, que registran ventas que no cerraron ellas.
+ */
+type Mode = 'existing' | 'new' | 'sin_gestora';
 
 export default function RegisterSaleDialog({ open, onClose, project, onSaved }: Props) {
   const today = new Date().toISOString().slice(0, 10);
+  const { can } = usePermission();
+  // Quien puede registrar una venta que no es de nadie. De serie admin y
+  // superadmin; a quien lleve la contabilidad se le da por persona desde el
+  // panel de permisos, para no tener que desplegar cada vez que cambie.
+  const puedeSinGestora = can('conversions.sin_gestora');
   const [mode, setMode] = useState<Mode>('existing');
 
   // Cliente nuevo
@@ -172,6 +187,11 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
         toast({ title: 'Email o teléfono requerido', variant: 'destructive' }); return;
       }
     }
+    // Sin gestora basta el nombre: esta venta se registra justo cuando no hay
+    // nada mas, y pedir un correo inventado es peor que no pedir nada.
+    if (mode === 'sin_gestora' && !nombre.trim()) {
+      toast({ title: 'Nombre requerido', variant: 'destructive' }); return;
+    }
     if (!productoId) { toast({ title: 'Producto requerido', variant: 'destructive' }); return; }
     const totalNum = parseFloat(importeTotal);
     if (!totalNum || totalNum <= 0) { toast({ title: 'Importe inválido', variant: 'destructive' }); return; }
@@ -219,6 +239,7 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
           fecha_vencimiento: it.fecha_vencimiento,
         }));
       }
+      if (mode === 'sin_gestora') body.sin_gestora = true;
       if (mode === 'existing' && selectedClient) {
         body.lead_id = selectedClient.id;
       } else {
@@ -267,8 +288,8 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
           </div>
 
           <div className="p-5 space-y-4 overflow-y-auto">
-            {/* Toggle: existente / nuevo */}
-            <div className="bg-muted/40 p-1 rounded-lg grid grid-cols-2 gap-1">
+            {/* Toggle: existente / nuevo / sin gestora */}
+            <div className={`bg-muted/40 p-1 rounded-lg grid gap-1 ${puedeSinGestora ? 'grid-cols-3' : 'grid-cols-2'}`}>
               <button
                 type="button"
                 onClick={() => { setMode('existing'); clearSelectedClient(); }}
@@ -283,6 +304,18 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
               >
                 <UserPlus size={14} weight="bold" /> Cliente nuevo
               </button>
+              {/* VENTA SIN GESTORA. Se esconde a quien no puede, pero el
+                  candado de verdad esta en el servidor: esconder no es
+                  impedir. */}
+              {puedeSinGestora && (
+                <button
+                  type="button"
+                  onClick={() => { setMode('sin_gestora'); clearSelectedClient(); }}
+                  className={`h-9 rounded-md text-sm font-semibold flex items-center justify-center gap-1.5 transition-colors ${mode === 'sin_gestora' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                >
+                  <UserMinus size={14} weight="bold" /> Sin gestora
+                </button>
+              )}
             </div>
 
             {/* MODO: cliente existente */}
@@ -339,6 +372,37 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved }: 
                     </button>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* MODO: venta sin gestora. Pide lo mismo que «cliente nuevo» pero
+                con el nombre basta, y avisa de en qué se nota. */}
+            {mode === 'sin_gestora' && (
+              <div className="space-y-3">
+                <p className="rounded-md border border-amber-300/60 bg-amber-50 px-3 py-2 text-[12px] text-amber-800 dark:border-amber-800/50 dark:bg-amber-950/30 dark:text-amber-200">
+                  Esta venta <strong>no se le asigna a nadie</strong>: no cuenta en los
+                  números de ninguna gestora ni avanza el reparto de prospectos. Con el
+                  nombre basta.
+                </p>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Nombre del cliente *</label>
+                  <input value={nombre} onChange={(e) => setNombre(e.target.value)}
+                    className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">Email</label>
+                    <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                      placeholder="opcional"
+                      className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">Teléfono</label>
+                    <input value={telefono} onChange={(e) => setTelefono(e.target.value)}
+                      placeholder="opcional"
+                      className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm" />
+                  </div>
+                </div>
               </div>
             )}
 

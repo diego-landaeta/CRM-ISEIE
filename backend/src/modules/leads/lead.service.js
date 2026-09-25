@@ -823,6 +823,15 @@ export async function createManualLead({ project_id, nombre, email, telefono, wh
     forcedResponsableId = creatorUser.userId;
   }
 
+  // SIN DUENO, A PROPOSITO (venta sin gestora).
+  //
+  // No es lo mismo que no pasarle creador: sin creador el round-robin le encaja
+  // el lead a la gestora que toque, y esa persona no ha vendido nada. Aqui se
+  // pide expresamente que no sea de nadie.
+  if (opts.sinResponsable) {
+    forcedResponsableId = null;
+  }
+
   const lead = await leadModel.createLeadWithRoundRobin({
     projectId: project_id,
     nombre,
@@ -837,6 +846,7 @@ export async function createManualLead({ project_id, nombre, email, telefono, wh
     esPropuesto,
     propuestoDe,
     forcedResponsableId,
+    skipRoundRobin: Boolean(opts.sinResponsable),
     advanceRoundRobinAnyway: advanceRoundRobin,
     utms: {
       utm_source: null,
