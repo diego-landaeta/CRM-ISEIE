@@ -25,7 +25,15 @@
 
 export function normalizePhone(raw) {
   if (raw == null) return null;
-  let s = String(raw).trim();
+  // Los caracteres INVISIBLES que mete WhatsApp alrededor de un numero: marcas
+  // de direccion (U+200E/F, U+202A-202E, U+2066-2069), espacios de ancho cero y
+  // el BOM. No se ven, asi que quien copia «+507 6330-2543» de un chat pega
+  // tambien esos caracteres, y el numero se rechazaba como si tuviera letras.
+  // Diego, 28/09, en los dos CRMs. Y el «＋» de ancho completo, como «+».
+  let s = String(raw)
+    .replace(/[​-‏‪-‮⁠-⁩﻿]/g, '')
+    .replace(/＋/g, '+')
+    .trim();
   if (!s) return null;
   // "No suministrado" o similar
   if (/no\s*suministrad/i.test(s)) return null;
