@@ -44,7 +44,7 @@ export default function AsesorasPanel({ from, to }) {
   // El mismo pago cae en meses distintos segun por donde se mire, asi que hay que
   // poder elegir: 'factura' es el de contabilidad y el que manda; 'cobro'
   // responde a cuanto dinero entro, que es otra pregunta.
-  const [base, setBase] = useState('factura');
+  const [base, setBase] = useState('cerrado');
   const anio = new Date().getFullYear();
   const desde = ambito === 'anio' ? `${anio}-01-01` : from;
   const hasta = ambito === 'anio' ? new Date().toISOString().slice(0, 10) : to;
@@ -58,8 +58,11 @@ export default function AsesorasPanel({ from, to }) {
         if (activeProject?.id) p.set('projectId', String(activeProject.id));
         if (desde) p.set('from', desde);
         if (hasta) p.set('to', hasta);
-        // Solo se manda cuando no es el criterio por defecto.
-        if (base === 'cobro') p.set('base', 'cobro');
+        // SIEMPRE se manda. Antes solo se mandaba con «cobro», dando por hecho
+        // que el resto era el defecto del servidor. Al anadir «cerrado» eso
+        // dejo de ser cierto: el boton se veia pulsado y el servidor seguia
+        // devolviendo «factura», asi que la cifra no cambiaba nunca.
+        p.set('base', base);
         const r = await client.get(`/informes/asesoras-mes?${p.toString()}`);
         if (vivo) setFilas(r.success ? (r.data || []) : []);
       } catch {
@@ -173,7 +176,7 @@ export default function AsesorasPanel({ from, to }) {
             ))}
           </div>
           <div className="inline-flex rounded-md border border-border overflow-hidden">
-            {[['cobro', 'Por cobro'], ['factura', 'Por factura']].map(([k, etiqueta]) => (
+            {[['cerrado', 'Contabilidad'], ['cobro', 'Por cobro'], ['factura', 'Por factura']].map(([k, etiqueta]) => (
               <button
                 key={k}
                 type="button"
@@ -188,9 +191,11 @@ export default function AsesorasPanel({ from, to }) {
           </div>
         </div>
         <p className="text-[10px] text-muted-foreground mt-1.5">
-          «Por cobro» cuenta el dinero en el mes en que entró. «Por factura», en el mes en que
-          se emitió la factura, que es como cuadra contabilidad. Un mismo pago puede caer en un
-          mes o en otro según cuál mires.
+          <strong>Contabilidad</strong> cuenta cada factura en el mes en que queda cobrada —el
+          más tardío entre emitirla y cobrarla—: es la que cuadra con las hojas de facturación.
+          «Por cobro» cuenta el dinero en el mes en que entró. «Por factura», en el mes en que se
+          emitió. Un mismo pago cae en un mes o en otro según cuál mires: julio 2026 son 38.128 €
+          en Contabilidad, 36.931 € por cobro y 38.808 € por factura.
         </p>
       </div>
 
@@ -236,14 +241,16 @@ export default function AsesorasPanel({ from, to }) {
                 </span>
               </div>
 
+              {/* EL RANKING, FUERA. Diego, 25/09: «el ranking no lo pedi aun
+                  porque no esta aprobado». Entro en el despliegue del frontal
+                  sin pedirlo. Se queda el componente en el repositorio --esta
+                  hecho y probado-- pero no se pinta hasta que lo apruebe.
               {open && (
                 <div className="border-t border-border p-3 sm:p-4">
-                  {/* Quien va primero, de un vistazo. La tabla de abajo tiene
-                      once columnas y lo dice todo, pero para saber el orden
-                      hay que recorrerlas con el dedo. */}
                   <RankingGestoras asesoras={m.asesoras} mes={nombreMes(m.mes)} />
                 </div>
               )}
+              */}
 
               {open && (
                 <div className="overflow-x-auto border-t border-border">

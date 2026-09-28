@@ -862,6 +862,22 @@ export async function ventasPorAsesoraReport({ projectId, projectIds, from, to, 
 const FEC_COBRO = `(SELECT i.fecha_emision FROM invoices i
                      WHERE i.payment_id = cp.id AND i.tipo <> 'proforma'
                      ORDER BY i.fecha_emision, i.id LIMIT 1)`;
+// CUANDO QUEDA COBRADA: el mas tardio entre emitir la factura y cobrarla.
+//
+// Es el criterio de las hojas de contabilidad y no coincide con ninguno de los
+// otros dos. Una factura de julio cobrada en agosto es ingreso de AGOSTO --hasta
+// que entra el dinero no es ingreso-- pero una de julio cobrada en junio es de
+// JULIO, porque hasta que no hay factura tampoco lo es.
+//
+// Ojo: GREATEST en Postgres IGNORA los nulos, asi que un cobro sin factura cae
+// en su propia fecha. Es justo lo que se quiere.
+const FEC_COBRO_CERRADO = `GREATEST(cp.fecha, (SELECT i.fecha_emision FROM invoices i
+                     WHERE i.payment_id = cp.id AND i.tipo <> 'proforma'
+                     ORDER BY i.fecha_emision, i.id LIMIT 1))`;
+const FEC_VENTA_CERRADO = `GREATEST(c.fecha_conversion, (SELECT i.fecha_emision FROM invoices i
+                     JOIN conversion_payments cpf ON cpf.id = i.payment_id
+                    WHERE cpf.conversion_id = c.id AND i.tipo <> 'proforma'
+                    ORDER BY cpf.fecha, cpf.id, i.fecha_emision, i.id LIMIT 1))`;
 const FEC_VENTA = `(SELECT i.fecha_emision FROM invoices i
                      JOIN conversion_payments cpf ON cpf.id = i.payment_id
                     WHERE cpf.conversion_id = c.id AND i.tipo <> 'proforma'
@@ -878,10 +894,13 @@ export async function asesorasPorMes({ projectId, projectIds, from, to, asesoraI
   // de contabilidad: por fecha de emision de la factura, no por fecha de cobro.
   // Los dos no cuadran (julio 2026: 5/16 por cobro y 5/18 por factura) porque un
   // cobro de junio se puede facturar en julio y al reves.
+  // Tres bases, no dos. La tercera --«cerrado»-- es la del Excel de
+  // contabilidad: ni «por cobro» ni «por factura» daban sus cifras.
   const porFactura = base === 'factura';
+  const porCerrado = base === 'cerrado';
 
-  const DV = porFactura ? FEC_VENTA : 'c.fecha_conversion';
-  const DC = porFactura ? FEC_COBRO : 'cp.fecha';
+  const DV = porCerrado ? FEC_VENTA_CERRADO : (porFactura ? FEC_VENTA : 'c.fecha_conversion');
+  const DC = porCerrado ? FEC_COBRO_CERRADO : (porFactura ? FEC_COBRO : 'cp.fecha');
 
   // Los leads NO cambian nunca de base: siempre por fecha de entrada.
   const fl = buildFilter({ projectId, projectIds, from, to, asesoraId }, ENTRY, 'l.project_id');

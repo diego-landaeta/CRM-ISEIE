@@ -91,7 +91,9 @@ async function rangoDeQuery(req) {
     // dinero entro). Por defecto factura, que es como cuenta la contabilidad;
     // con cobro se caian del mes las facturas emitidas en un mes y cobradas en
     // el anterior.
-    base: req.query.base === 'cobro' ? 'cobro' : 'factura',
+    // Tres bases. «cerrado» es la de contabilidad: el mes en que la factura
+    // queda cobrada. Cualquier otra cosa mantiene el defecto de siempre.
+    base: ['cobro', 'cerrado'].includes(req.query.base) ? req.query.base : 'factura',
   };
 }
 
@@ -136,7 +138,7 @@ export async function miPuesto(req, res, next) {
       userId, from: desde, to: hasta, ...sinAsesora, esJefe,
       // Por fecha de VENTA salvo que pidan lo contrario: es lo que la gestora
       // reconoce como suyo el dia que cierra.
-      base: req.query.base === 'factura' ? 'factura' : 'cobro',
+      base: ['factura', 'cerrado'].includes(req.query.base) ? req.query.base : 'cobro',
     }) });
   } catch (err) { next(err); }
 }
