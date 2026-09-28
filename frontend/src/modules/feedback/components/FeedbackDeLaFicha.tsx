@@ -68,11 +68,34 @@ export default function FeedbackDeLaFicha({ leadId }: { leadId: number }) {
   }
 
   if (envio.respondido_at) {
+    // Todo lo que contestó, pregunta a pregunta. Si la respuesta es de la
+    // encuesta vieja (solo motivo y comentario), se enseña eso.
+    const resp = envio.respuestas || {};
+    const preguntas = (envio.preguntas || []).filter((p) => resp[p.clave] !== undefined);
+    const valor = (p: { tipo: string; opciones?: Array<{ clave: string; texto: string }> }, v: unknown) => {
+      if (p.tipo === 'escala') return `${v} de 5`;
+      if (p.tipo === 'texto') return `«${v}»`;
+      const lista = Array.isArray(v) ? v : [v];
+      return lista.map((x) => p.opciones?.find((o) => o.clave === x)?.texto || String(x)).join(', ');
+    };
     return (
       <div className={`${caja} border-border bg-muted/30`}>
         <p className="flex items-center gap-1.5 font-semibold"><ChatCircleText size={15} /> Contestó al feedback · {dia(envio.respondido_at)}</p>
-        <p className="mt-1">{MOTIVO[envio.motivo || ''] || envio.motivo}</p>
-        {envio.comentario && <p className="mt-1 italic text-muted-foreground">«{envio.comentario}»</p>}
+        {preguntas.length > 0 ? (
+          <dl className="mt-2 space-y-1.5">
+            {preguntas.map((p) => (
+              <div key={p.clave}>
+                <dt className="text-xs text-muted-foreground">{p.texto}</dt>
+                <dd className={p.tipo === 'texto' ? 'italic' : ''}>{valor(p, resp[p.clave])}</dd>
+              </div>
+            ))}
+          </dl>
+        ) : (
+          <>
+            <p className="mt-1">{MOTIVO[envio.motivo || ''] || envio.motivo}</p>
+            {envio.comentario && <p className="mt-1 italic text-muted-foreground">«{envio.comentario}»</p>}
+          </>
+        )}
       </div>
     );
   }

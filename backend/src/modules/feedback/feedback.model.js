@@ -57,11 +57,12 @@ export async function porLead(leadId) {
 export async function porToken(token) {
   const { rows } = await query(
     `SELECT f.*, l.nombre AS lead_nombre, p.nombre AS proyecto, p.logo_url, p.theme_color,
-            pr.nombre AS producto
+            pr.nombre AS producto, u.nombre AS gestora_nombre
        FROM feedback_envios f
        JOIN leads l ON l.id = f.lead_id
        JOIN projects p ON p.id = f.project_id
        LEFT JOIN products pr ON pr.id = l.producto_interes_id
+       LEFT JOIN users u ON u.id = f.gestora_id
       WHERE f.token = $1`,
     [token]);
   return rows[0] || null;
@@ -71,13 +72,13 @@ export async function porToken(token) {
  * La respuesta. Solo entra la PRIMERA: quien abre el enlace dos veces y contesta
  * otra cosa no reescribe lo que dijo, que es lo que ya vio su gestora.
  */
-export async function guardarRespuesta(id, { motivo, comentario }) {
+export async function guardarRespuesta(id, { motivo, comentario, respuestas = {} }) {
   const { rows } = await query(
     `UPDATE feedback_envios
-        SET motivo = $2, comentario = $3, respondido_at = NOW(), updated_at = NOW()
+        SET motivo = $2, comentario = $3, respuestas = $4::jsonb, respondido_at = NOW(), updated_at = NOW()
       WHERE id = $1 AND respondido_at IS NULL
       RETURNING *`,
-    [id, motivo, comentario]);
+    [id, motivo, comentario, JSON.stringify(respuestas)]);
   return rows[0] || null;
 }
 
@@ -195,7 +196,10 @@ export async function panel(filtros) {
               count(*) FILTER (WHERE f.estado = 'enviado')::int AS enviados,
               count(*) FILTER (WHERE f.estado = 'enviado' AND f.respondido_at IS NOT NULL)::int AS respondidos,
               -- El único motivo que depende de nosotros, a la vista junto a su nombre.
-              count(*) FILTER (WHERE f.motivo = 'sin_respuesta')::int AS no_le_contestaron
+              count(*) FILTER (WHERE f.motivo = 'sin_respuesta')::int AS no_le_contestaron,
+              -- La nota que le ponen a su atencion (1 a 5), y de cuantas respuestas sale.
+              round(avg((f.respuestas ->> 'nota_atencion')::numeric), 1) AS nota_atencion,
+              count(f.respuestas ->> 'nota_atencion')::int AS notas
          ${base}
         GROUP BY f.gestora_id, u.nombre
         ORDER BY enviados DESC, nombre`, par),
@@ -209,7 +213,20 @@ export async function panel(filtros) {
         ORDER BY 1`, par),
   ]);
 
+  // Todo lo contestado, para resumir pregunta a pregunta. Son decenas o
+  // cientos: se resume en el servicio, que es quien sabe de que tipo es cada una.
+  const { rows: contestadas } = await query(
+    `SELECT f.respuestas, f.respondido_at, l.nombre AS lead_nombre, f.lead_id, u.nombre AS gestora
+       FROM feedback_envios f
+       JOIN leads l ON l.id = f.lead_id
+       LEFT JOIN users u ON u.id = f.gestora_id
+       LEFT JOIN projects p ON p.id = f.project_id
+      WHERE f.respondido_at IS NOT NULL
+        ${DONDE}
+      ORDER BY f.respondido_at DESC`, par);
+
   return {
+    contestadas,
     totales: totales.rows[0],
     porMotivo: porMotivo.rows,
     porDisparador: porDisparador.rows,
@@ -243,7 +260,7 @@ export async function lista(filtros, { que = 'enviados', motivo = null, disparad
   const { rows } = await query(
     `SELECT f.id, f.lead_id, l.nombre AS lead_nombre, f.email, f.project_id, p.nombre AS proyecto,
             u.nombre AS gestora, f.disparador, f.estado, f.enviado_at, f.respondido_at,
-            f.motivo, f.comentario, f.nota_envio, f.created_at
+            f.motivo, f.comentario, f.nota_envio, f.created_at, f.respuestas
        FROM feedback_envios f
        JOIN leads l ON l.id = f.lead_id
        LEFT JOIN users u ON u.id = f.gestora_id

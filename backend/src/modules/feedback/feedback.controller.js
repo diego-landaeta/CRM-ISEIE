@@ -4,6 +4,7 @@ import { query } from '../../shared/config/db.js';
 import { proyectosDelAmbito } from '../../shared/utils/ambito.js';
 import * as service from './feedback.service.js';
 import { CLAVES, DISPARADORES, MOTIVOS } from './motivos.js';
+import { preguntasPara } from './preguntas.js';
 
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -43,7 +44,7 @@ async function exigirQueSeaSuyo(req, leadId) {
 // GET /api/feedback/panel
 export async function panel(req, res, next) {
   try {
-    const datos = await service.model.panel(await recorteDe(req));
+    const { contestadas, ...datos } = await service.model.panel(await recorteDe(req));
     const totales = datos.totales;
     res.json({
       success: true,
@@ -54,6 +55,8 @@ export async function panel(req, res, next) {
           tasa: totales.enviados ? Math.round((totales.respondidos * 1000) / totales.enviados) / 10 : 0,
         },
         motivos: MOTIVOS,
+        // Pregunta a pregunta: cuántos eligieron cada cosa y lo que escribieron.
+        preguntas: service.resumenDePreguntas(contestadas),
         disparadores: DISPARADORES,
       },
     });
@@ -77,7 +80,9 @@ export async function deUnLead(req, res, next) {
   try {
     const leadId = Number(req.params.leadId);
     await exigirQueSeaSuyo(req, leadId);
-    res.json({ success: true, data: await service.deUnLead(leadId) });
+    const envio = await service.deUnLead(leadId);
+    // Con las preguntas, para que la ficha pueda decir a qué contestó cada cosa.
+    res.json({ success: true, data: envio ? { ...envio, preguntas: preguntasPara({ gestora: 'la gestora', programa: 'el programa' }) } : null });
   } catch (err) { next(err); }
 }
 
@@ -103,8 +108,11 @@ export async function noEnviar(req, res, next) {
 
 const TOKEN = /^[A-Za-z0-9_-]{20,64}$/;
 const respuestaSchema = z.object({
-  motivo: z.string().max(40),
+  // La encuesta de antes: solo motivo y comentario. La de ahora: `respuestas`
+  // con todas, por clave. Lo que no encaje lo descarta `limpiarRespuestas`.
+  motivo: z.string().max(40).optional(),
   comentario: z.string().max(1000).optional().nullable(),
+  respuestas: z.record(z.any()).optional(),
 });
 
 // GET /api/f/:token

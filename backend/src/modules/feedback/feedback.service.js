@@ -6,7 +6,8 @@ import { sendEmail } from '../../shared/services/brevo.service.js';
 import { notifyUsers } from '../notifications/notifications.service.js';
 import * as leadModel from '../leads/lead.model.js';
 import * as model from './feedback.model.js';
-import { CLAVES, DISPARADORES, MOTIVOS, textoDe } from './motivos.js';
+import { DISPARADORES } from './motivos.js';
+import { PREGUNTAS, preguntasPara, limpiarRespuestas, textoDeRespuesta } from './preguntas.js';
 
 /**
  * «¿Por qué has desistido?» (#169).
@@ -265,7 +266,8 @@ export async function encuesta(token) {
     color: f.theme_color,
     nombre: primerNombre(f.lead_nombre),
     programa: f.producto,
-    motivos: MOTIVOS,
+    // Con el nombre de SU gestora y SU formacion ya puestos: «¿Cómo te atendió Ana?».
+    preguntas: preguntasPara({ gestora: primerNombre(f.gestora_nombre) || null, programa: f.producto }),
     respondida: Boolean(f.respondido_at),
   };
 }
@@ -274,21 +276,69 @@ export async function encuesta(token) {
  * Lo que contesta. Queda en SU ficha —la gestora que le llame mañana tiene que
  * ver «me pareció caro» sin ir a buscarlo— y a la gestora le llega un aviso.
  */
-export async function responder(token, { motivo, comentario }) {
-  if (!CLAVES.includes(motivo)) throw new AppError('Elige una de las opciones', 400, 'VALIDATION_ERROR');
+export async function responder(token, { motivo, comentario, respuestas = {} } = {}) {
+  // La encuesta de antes mandaba solo motivo y comentario: se aceptan igual.
+  const r = limpiarRespuestas({
+    ...respuestas,
+    motivo: respuestas.motivo ?? motivo,
+    comentario: respuestas.comentario ?? comentario,
+  });
+  if (!r.motivo) throw new AppError('Dinos por qué no seguiste: es la única obligatoria', 400, 'VALIDATION_ERROR');
   const f = await model.porToken(token);
   if (!f) throw new AppError('Este enlace no es válido', 404, 'NOT_FOUND');
   if (f.respondido_at) return { ya: true };
-  const limpio = String(comentario || '').trim().slice(0, 1000) || null;
-  const fila = await model.guardarRespuesta(f.id, { motivo, comentario: limpio });
+  const fila = await model.guardarRespuesta(f.id, { motivo: r.motivo, comentario: r.comentario || null, respuestas: r });
   if (!fila) return { ya: true };
-  await apuntarEnSuHistorial(f.lead_id,
-    `💬 Contestó al feedback: ${textoDe(motivo)}${limpio ? ` — «${limpio}»` : ''}`);
+  // En su historial, TODO lo que contestó, pregunta a pregunta: la gestora que
+  // le llame mañana lo tiene que ver sin ir a buscarlo.
+  const textos = preguntasPara({ gestora: 'la gestora', programa: 'el programa' });
+  const lineas = textos
+    .filter((p) => r[p.clave] !== undefined)
+    .map((p) => `· ${p.texto} ${textoDeRespuesta(p.clave, r[p.clave])}`);
+  await apuntarEnSuHistorial(f.lead_id, `💬 Contestó al feedback:\n${lineas.join('\n')}`);
+  const nota = r.nota_atencion ? ` · te puso un ${r.nota_atencion}/5` : '';
   await avisarAGestora(fila, {
     titulo: 'Te han contestado al feedback',
-    mensaje: `${f.lead_nombre || 'Un prospecto'}: ${textoDe(motivo)}${limpio ? ` — «${limpio.slice(0, 120)}»` : ''}`,
+    mensaje: `${f.lead_nombre || 'Un prospecto'}: ${textoDeRespuesta('motivo', r.motivo)}${nota}`,
   });
   return { ya: false };
+}
+
+/**
+ * El resumen de cada pregunta para el panel: cuántos eligieron cada opción, la
+ * nota media de la escala y lo que escribieron (lo último primero).
+ */
+export function resumenDePreguntas(contestadas) {
+  const textos = preguntasPara({ gestora: 'la gestora', programa: 'el programa' });
+  return PREGUNTAS.map((p, i) => {
+    const valores = contestadas
+      .map((c) => ({ v: (c.respuestas || {})[p.clave], c }))
+      .filter((x) => x.v !== undefined);
+    const base = { clave: p.clave, tipo: p.tipo, texto: textos[i].texto, respondieron: valores.length };
+    if (p.tipo === 'texto') {
+      return {
+        ...base,
+        escritos: valores.slice(0, 40).map(({ v, c }) => ({
+          texto: v, lead_id: c.lead_id, lead_nombre: c.lead_nombre, gestora: c.gestora, fecha: c.respondido_at,
+        })),
+      };
+    }
+    if (p.tipo === 'escala') {
+      const opciones = [1, 2, 3, 4, 5].map((k) => ({
+        clave: String(k), texto: String(k), n: valores.filter((x) => Number(x.v) === k).length,
+      }));
+      const media = valores.length
+        ? Math.round((valores.reduce((s, x) => s + Number(x.v), 0) / valores.length) * 10) / 10
+        : null;
+      return { ...base, opciones, media };
+    }
+    const opciones = p.opciones.map((o) => ({
+      clave: o.clave,
+      texto: o.texto,
+      n: valores.filter((x) => (Array.isArray(x.v) ? x.v.includes(o.clave) : x.v === o.clave)).length,
+    }));
+    return { ...base, opciones };
+  });
 }
 
 /** El proceso del 7.º día: una vuelta. Devuelve cuántos se pidieron. */

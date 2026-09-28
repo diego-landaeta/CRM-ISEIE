@@ -120,6 +120,55 @@ export default function FeedbackPanelPage() {
         </ul>
       </section>
 
+      {/* ── Pregunta a pregunta ────────────────────────────────────── */}
+      {(datos?.preguntas || []).some((p) => p.clave !== 'motivo' && p.respondieron > 0) && (
+        <section className="rounded-lg border border-border bg-card p-4">
+          <h2 className="text-base font-semibold">Lo que contestaron, pregunta a pregunta</h2>
+          <div className="mt-3 grid grid-cols-1 gap-5 lg:grid-cols-2">
+            {datos!.preguntas.filter((p) => p.clave !== 'motivo').map((p) => (
+              <div key={p.clave} className={p.tipo === 'texto' ? 'lg:col-span-2' : ''}>
+                <h3 className="text-sm font-semibold">{p.texto}</h3>
+                <p className="text-xs text-muted-foreground">
+                  {p.respondieron} {p.respondieron === 1 ? 'respuesta' : 'respuestas'}
+                  {p.tipo === 'escala' && p.media != null && <> · media <strong className="text-foreground">{p.media.toLocaleString('es-ES')}</strong> de 5</>}
+                  {p.tipo === 'varias' && ' · podían marcar varias'}
+                </p>
+                {p.tipo !== 'texto' && (
+                  <ul className="mt-2 space-y-1.5">
+                    {(p.opciones || []).map((o) => (
+                      <li key={o.clave} className="text-sm">
+                        <span className="flex justify-between gap-3"><span>{p.tipo === 'escala' ? `${o.texto} de 5` : o.texto}</span>
+                          <span className="tabular-nums text-muted-foreground">{o.n} · {pct(o.n, p.respondieron)}</span></span>
+                        <span className="mt-0.5 block h-1.5 overflow-hidden rounded-full bg-muted">
+                          <span className="block h-full rounded-full bg-primary" style={{ width: `${p.respondieron ? (o.n * 100) / p.respondieron : 0}%` }} />
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {p.tipo === 'texto' && (
+                  (p.escritos || []).length === 0
+                    ? <p className="mt-2 text-sm text-muted-foreground">Nadie ha escrito nada todavía.</p>
+                    : (
+                      <ul className="mt-2 space-y-2">
+                        {p.escritos!.map((e, k) => (
+                          <li key={k} className="rounded-md bg-muted/40 px-3 py-2 text-sm">
+                            <span className="italic">«{e.texto}»</span>
+                            <span className="mt-1 block text-xs text-muted-foreground">
+                              <Link to={`/leads/${e.lead_id}`} className="hover:underline">{e.lead_nombre || 'Sin nombre'}</Link>
+                              {e.gestora ? ` · de ${e.gestora}` : ''} · {fecha(e.fecha)}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* ── Desglose ───────────────────────────────────────────────── */}
       <section className="rounded-lg border border-border bg-card p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -141,6 +190,7 @@ export default function FeedbackPanelPage() {
                 <th className="py-2 text-right font-semibold">Enviados</th>
                 <th className="py-2 text-right font-semibold">Respondidos</th>
                 <th className="py-2 text-right font-semibold">%</th>
+                {pestaña === 'gestora' && <th className="py-2 text-right font-semibold">Nota de atención</th>}
                 {pestaña === 'gestora' && <th className="py-2 text-right font-semibold">No le contestaron a tiempo</th>}
               </tr>
             </thead>
@@ -153,6 +203,9 @@ export default function FeedbackPanelPage() {
                     <Num n={g.enviados} onClick={() => abrir(`Enviados · ${g.nombre}`, { que: 'enviados', ...extra })} />
                     <Num n={g.respondidos} onClick={() => abrir(`Respondidos · ${g.nombre}`, { que: 'respondidos', ...extra })} />
                     <td className="py-2 text-right tabular-nums">{pct(g.respondidos, g.enviados)}</td>
+                    <td className="py-2 text-right tabular-nums">
+                      {g.notas > 0 ? <>{Number(g.nota_atencion).toLocaleString('es-ES')} <span className="text-xs text-muted-foreground">de 5 · {g.notas}</span></> : <span className="text-muted-foreground">—</span>}
+                    </td>
                     <Num n={g.no_le_contestaron} aviso
                       onClick={() => abrir(`No le contestaron a tiempo · ${g.nombre}`, { que: 'respondidos', motivo: 'sin_respuesta', ...extra })} />
                   </tr>
