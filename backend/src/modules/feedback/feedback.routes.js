@@ -2,6 +2,7 @@ import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { verifyToken } from '../../shared/middleware/auth.js';
 import * as ctrl from './feedback.controller.js';
+import { servir as servirCabecera } from './cabecera.js';
 
 // Con sesión: el panel, su lista y el correo de cada ficha.
 const router = Router();
@@ -15,6 +16,10 @@ router.post('/lead/:leadId/no-enviar', ctrl.noEnviar);
 // Sin sesión: la encuesta. Con un límite por IP: el enlace no pide contraseña,
 // así que es lo que impide probar tokens a ciegas.
 const publicRouter = Router();
+// La cabecera de la marca de los correos, ANTES del límite: la piden los
+// proxies de imágenes de Gmail y compañía, muchos correos desde pocas IP. Está
+// en memoria y no enseña nada que no esté ya en la web de la marca.
+publicRouter.get('/cabecera/:projectId.png', servirCabecera);
 publicRouter.use(rateLimit({ windowMs: 60 * 1000, max: 30, standardHeaders: true, legacyHeaders: false }));
 publicRouter.get('/:token', ctrl.encuesta);
 publicRouter.post('/:token', ctrl.responder);

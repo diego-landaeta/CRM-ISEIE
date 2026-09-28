@@ -6,6 +6,7 @@ import { sendEmail } from '../../shared/services/brevo.service.js';
 import { notifyUsers } from '../notifications/notifications.service.js';
 import * as leadModel from '../leads/lead.model.js';
 import * as model from './feedback.model.js';
+import { versionDe } from './cabecera.js';
 import { DISPARADORES } from './motivos.js';
 import {
   ESCALA, PREGUNTAS, preguntasPara, limpiarRespuestas, textoDeRespuesta, lineaDe, diasHastaVolver,
@@ -81,13 +82,15 @@ export function correoDe(d, token, { vista = false } = {}) {
   const saludo = nombre ? `Hola, ${escapar(nombre)}:` : 'Hola:';
   const programa = d.producto ? `sobre <strong>${escapar(d.producto)}</strong>` : 'sobre nuestro programa';
   const marca = escapar(d.proyecto || '');
-  // La cabecera: el LOGO de la marca sobre SU fondo —el logo de la mayoría es
-  // para fondo claro; el de ACADEMIA IA o ISAEG es blanco y va sobre oscuro—,
-  // con un filete de su color debajo. Sin logo, el nombre.
-  const logo = d.logo_url
-    ? `<img src="${escapar(d.logo_url)}" alt="${marca}" style="display:block;max-height:52px;max-width:220px;border:0">`
-    : `<span style="font-size:18px;font-weight:bold;color:${tintaSobre(fondo)}">${marca}</span>`;
-  const cabecera = `<div style="background:${fondo};border-radius:10px 10px 0 0;padding:18px 24px;border-bottom:4px solid ${color}">${logo}</div>`;
+  // La cabecera: el LOGO de la marca sobre SU fondo —el de la mayoría es para
+  // fondo claro; el de ACADEMIA IA o ISAEG es blanco y va sobre oscuro— con un
+  // filete de su color. Va como UNA imagen opaca que dibuja el CRM
+  // (`cabecera.js`): en HTML, Gmail le pintaba de negro el fondo transparente
+  // al logo de Fono, y el modo oscuro invierte los colores del HTML.
+  const cabecera = d.project_id
+    ? `<img src="${escapar(`${baseDeLaEncuesta()}/api/f/cabecera/${d.project_id}.png?v=${versionDe(d)}`)}" width="560" alt="${marca}"
+         style="display:block;width:100%;max-width:560px;height:auto;border:0;border-radius:10px 10px 0 0;background:${fondo}">`
+    : `<div style="background:${fondo};border-radius:10px 10px 0 0;padding:18px 24px;border-bottom:4px solid ${color};font-size:18px;font-weight:bold;color:${tintaSobre(fondo)}">${marca}</div>`;
   const aviso = vista
     ? `<div style="background:#fff4d6;border:1px solid #f0c75e;border-radius:6px;padding:10px 12px;margin:0 0 18px;font-size:13px;color:#6b4e00">
          Vista previa: esto es lo que recibirá la persona. Todavía no se le ha enviado.</div>`

@@ -9,6 +9,7 @@
 // de entrada, las ventas por su fecha de venta y los cobros por su fecha de
 // cobro. Por eso una asesora puede cobrar en julio algo que vendió en mayo.
 import client from '@/shared/api/client';
+import { PROCESO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 
 const cab = (t) => ({ value: t, fontWeight: 'bold' });
 const num = (v) => ({ value: v == null ? null : Number(v), type: Number });
@@ -90,6 +91,33 @@ export async function descargarReportePrincipal({ projectId, projectName, from, 
         ]),
       ],
     });
+  }
+
+  // Feedback (por qué no compran): las cifras de su panel, con este rango. De
+  // momento solo en pruebas, como el resto del feedback.
+  if (PROCESO_EN_PRUEBAS) {
+    const fq = new URLSearchParams();
+    if (projectId) fq.set('projectId', String(projectId));
+    if (from) fq.set('desde', from);
+    if (to) fq.set('hasta', to);
+    const fb = await client.get(`/feedback/panel?${fq.toString()}`).then((r) => r?.data || null).catch(() => null);
+    if (fb?.totales) {
+      const t = fb.totales;
+      const motivo = (c) => fb.motivos?.find((m) => m.clave === c)?.texto || c;
+      hojas.push({
+        sheet: 'Feedback',
+        data: [
+          [cab('Enviados'), cab('Respondidos'), cab('Tasa de respuesta %')],
+          [num(t.enviados), num(t.respondidos), num(t.tasa)],
+          [],
+          [cab('Motivo'), cab('Respuestas')],
+          ...(fb.porMotivo || []).map((m) => [txt(motivo(m.clave)), num(m.n)]),
+          [],
+          [cab('Gestora'), cab('Enviados'), cab('Respondidos'), cab('No le contestaron a tiempo'), cab('Nota de atención (1-5)')],
+          ...(fb.porGestora || []).map((g) => [txt(g.nombre), num(g.enviados), num(g.respondidos), num(g.no_le_contestaron), num(g.nota_atencion)]),
+        ],
+      });
+    }
   }
 
   if (paises.length) {

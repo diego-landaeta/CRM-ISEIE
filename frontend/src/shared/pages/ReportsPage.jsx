@@ -17,6 +17,8 @@ import AsesorasPanel from '@/shared/components/AsesorasPanel';
 import RankingsPanel from '@/shared/components/RankingsPanel';
 import { ATAJOS, rangoPorDefecto, atajoDe } from '@/shared/lib/rangosDeFecha';
 import PanelSeguimiento from '@/shared/components/PanelSeguimiento';
+import FeedbackEnReportes from '@/modules/feedback/components/FeedbackEnReportes';
+import { PROCESO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 
 const REPORT_CATEGORIES = [
   {
@@ -568,6 +570,12 @@ export default function ReportsPage() {
 
           {/* Paises y formaciones: en pantalla, no solo descargables. */}
           <RankingsPanel from={rango.from} to={rango.to} />
+
+          {/* Por qué no compran: las cifras de «Análisis → Feedback», con este
+              rango. Como todo el feedback, de momento solo en pruebas. */}
+          {PROCESO_EN_PRUEBAS && (
+            <FeedbackEnReportes from={rango.from} to={rango.to} issuerId={null} project={activeProject} />
+          )}
 
           <ReportsDownloadSection projectId={activeProject?.id} projectName={activeProject?.nombre} from={rango.from} to={rango.to} />
         </>
