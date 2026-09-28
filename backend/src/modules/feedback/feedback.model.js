@@ -9,6 +9,9 @@ export async function datosDelLead(leadId) {
   const { rows } = await query(
     `SELECT l.id, l.nombre, l.email, l.status, l.project_id, l.responsable_id, l.deleted_at,
             p.nombre AS proyecto, p.logo_url, p.theme_color, COALESCE(p.es_prueba, false) AS es_prueba,
+            -- Por to_jsonb: si la migracion 168 no esta aplicada, sale null en vez
+            -- de reventar, y el correo firma con el remitente del CRM.
+            to_jsonb(p) ->> 'remitente_no_contestar' AS remitente_no_contestar,
             pr.nombre AS producto
        FROM leads l
        JOIN projects p ON p.id = l.project_id

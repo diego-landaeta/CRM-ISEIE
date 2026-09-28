@@ -51,7 +51,7 @@ function primerNombre(nombre) {
  * web y es lo que reconoce. El texto va al grano: una pregunta, un botón, un
  * minuto.
  */
-function correoDe(d, token, { vista = false } = {}) {
+export function correoDe(d, token, { vista = false } = {}) {
   const color = /^#[0-9a-f]{6}$/i.test(d.theme_color || '') ? d.theme_color : '#1f4e79';
   const nombre = primerNombre(d.nombre || d.lead_nombre);
   const saludo = nombre ? `Hola, ${escapar(nombre)}:` : 'Hola:';
@@ -83,6 +83,10 @@ function correoDe(d, token, { vista = false } = {}) {
            style="background:${color};color:#ffffff;text-decoration:none;padding:12px 22px;border-radius:6px;font-weight:bold;display:inline-block">
           Contestar</a></p>
       <p style="font-size:13px;color:#5b6572;margin:0">Gracias por tu tiempo,<br>el equipo de ${marca}</p>
+      <p style="font-size:12px;line-height:1.5;color:#8a939e;margin:22px 0 0;border-top:1px solid #e6e9ee;padding-top:14px">
+        Este correo es automático: no lo contestes, nadie lo leería. Si el botón no funciona,
+        copia este enlace en tu navegador:<br>
+        <a href="${escapar(enlaceDe(token, { vista }))}" style="color:#5b6572;word-break:break-all">${escapar(enlaceDe(token, { vista }))}</a></p>
     </div>
   </div></body></html>`;
   return { asunto, html };
@@ -112,18 +116,45 @@ async function apuntarEnSuHistorial(leadId, nota, userId = null) {
   }
 }
 
+/**
+ * Quién firma el correo: el «no contestar» DEL CAMPUS, por Brevo.
+ *
+ * La dirección sale de `projects.remitente_no_contestar` (migración 168), que
+ * solo sirve si su dominio está autenticado en Brevo. Sin ella, el remitente del
+ * CRM, pero con el NOMBRE del campus: lo que la persona ve en su bandeja es
+ * «ISEIH · No contestar», que es lo que reconoce.
+ */
+function remitenteDe(datos) {
+  const email = String(datos.remitente_no_contestar || '').trim();
+  return {
+    email: /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) ? email : undefined,
+    nombre: `${datos.proyecto || 'Equipo'} · No contestar`,
+  };
+}
+
 /** Manda el correo de una fila ya creada y deja anotado cómo fue. */
 async function mandar(envio, datos) {
   const { asunto, html } = correoDe(datos, envio.token);
-  const r = await sendEmail({
+  const remitente = remitenteDe(datos);
+  const correo = {
     to: { email: envio.email, name: datos.nombre || undefined },
     subject: asunto,
     htmlContent: html,
     tags: ['feedback', envio.disparador],
     projectId: envio.project_id,
+    fromEmail: remitente.email,
+    fromName: remitente.nombre,
     // Una sola vez por persona, también para Brevo.
     clave: `feedback:${envio.lead_id}`,
-  });
+  };
+  let r = await sendEmail(correo);
+  // Si Brevo no acepta el remitente del campus --su dominio no está
+  // autenticado--, sale con el del CRM. La clave no lo frena: solo cuenta lo
+  // que SALIÓ, así que el reintento no se toma por repetido.
+  if (!r?.sent && remitente.email && !['FRENO_DE_PRUEBAS', 'YA_ENVIADO', 'NO_API_KEY'].includes(r?.reason)) {
+    logger.warn({ remitente: remitente.email, r }, 'feedback: Brevo no aceptó el remitente del campus; sale con el del CRM');
+    r = await sendEmail({ ...correo, fromEmail: undefined });
+  }
 
   let fila;
   if (r?.sent || r?.reason === 'YA_ENVIADO') {
@@ -190,6 +221,7 @@ async function mandarVistaPrevia(envio, datos, userId) {
     to: { email: quien.email, name: quien.nombre },
     subject: `[Vista previa] ${asunto}`,
     htmlContent: html,
+    fromName: remitenteDe(datos).nombre,
     tags: ['feedback', 'vista-previa'],
     projectId: envio.project_id,
   }).catch((err) => logger.warn({ err: err.message }, 'feedback: no salió la vista previa'));
