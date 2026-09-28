@@ -269,7 +269,8 @@ export async function encuesta(token) {
     nombre: primerNombre(f.lead_nombre),
     programa: f.producto,
     // Con SU formacion y SU asesor: «¿Cómo te atendió el asesor?» / «El asesor: Ana».
-    preguntas: preguntasPara({ programa: f.producto, asesor: primerNombre(f.gestora_nombre) || null }),
+    // «El asesor: …» con su nombre PÚBLICO, el del widget de WhatsApp: el que conoce la persona.
+    preguntas: preguntasPara({ programa: f.producto, asesor: f.asesor_publico || null }),
     respondida: Boolean(f.respondido_at),
   };
 }
