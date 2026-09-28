@@ -99,7 +99,10 @@ export default function FeedbackEncuestaPage() {
         body: JSON.stringify({ respuestas: resp }),
       }).then((x) => x.json());
       if (!r?.success) throw new Error(r?.error || 'No se ha podido guardar');
-      setHecho(true);
+      // Ya estaba contestada (otra pestaña, o el enlace reenviado): no se ha
+      // guardado nada nuevo, y se le dice así.
+      if (r.data?.ya) setDatos((d) => (d ? { ...d, respondida: true } : d));
+      else setHecho(true);
       window.scrollTo(0, 0);
     } catch (e) {
       setError((e as Error).message);
@@ -139,11 +142,21 @@ export default function FeedbackEncuestaPage() {
           {error && !datos && <p className="text-base">{error}</p>}
           {!datos && !error && <p className="text-sm text-[#5b6572]">Cargando…</p>}
 
-          {datos && (datos.respondida || hecho) && (
+          {/* UN ENLACE, UNA RESPUESTA (Diego, 28/09): el enlace es único de esa
+              persona y solo vale para contestar una vez —el servidor guarda la
+              primera y no deja pisarla—. Si vuelve a entrar, se le dice que ya
+              participó, en vez de enseñarle un formulario que no guardaría. */}
+          {datos && hecho && (
             <div>
               <h1 className="text-xl font-bold">¡Gracias{datos.nombre ? `, ${datos.nombre}` : ''}!</h1>
+              <p className="mt-2 text-base leading-relaxed text-[#3b4450]">Nos lo apuntamos: nos ayuda de verdad a mejorar.</p>
+            </div>
+          )}
+          {datos && datos.respondida && !hecho && (
+            <div>
+              <h1 className="text-xl font-bold">Ya has participado{datos.nombre ? `, ${datos.nombre}` : ''}</h1>
               <p className="mt-2 text-base leading-relaxed text-[#3b4450]">
-                {hecho ? 'Nos lo apuntamos: nos ayuda de verdad a mejorar.' : 'Ya nos habías contestado. Nos sirve mucho.'}
+                Esta encuesta ya está contestada y solo se puede responder una vez. ¡Gracias por tu tiempo!
               </p>
             </div>
           )}

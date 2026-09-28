@@ -249,8 +249,9 @@ export default function FeedbackPanelPage() {
               {datos!.porMes.map((m) => (
                 <tr key={m.mes} className="border-t border-border">
                   <td className="py-2 capitalize">{MES(m.mes)}</td>
-                  <td className="py-2 text-right tabular-nums">{m.enviados}</td>
-                  <td className="py-2 text-right tabular-nums">{m.respondidos}</td>
+                  {/* Cada número abre quiénes son, de ese mes y dentro del rango de arriba. */}
+                  <Num n={m.enviados} onClick={() => abrir(`Enviados · ${MES(m.mes)}`, { que: 'enviados', ...delMes(m.mes, rango) })} />
+                  <Num n={m.respondidos} onClick={() => abrir(`Respondidos · ${MES(m.mes)}`, { que: 'respondidos', ...delMes(m.mes, rango) })} />
                   <td className="py-2 text-right tabular-nums">{pct(m.respondidos, m.enviados)}</td>
                 </tr>
               ))}
@@ -276,6 +277,17 @@ function Cifra({ etiqueta, valor, cargando, onClick }: {
       <span className="mt-1 block text-3xl font-bold tabular-nums">{cargando ? '…' : (valor ?? '—')}</span>
     </Tag>
   );
+}
+
+/** Del 1 al último día de ese mes («2026-09»), recortado al rango elegido arriba. */
+function delMes(mes: string, rango: { from?: string; to?: string }) {
+  const [a, m] = mes.split('-').map(Number);
+  const inicio = `${mes}-01`;
+  const fin = `${mes}-${String(new Date(a, m, 0).getDate()).padStart(2, '0')}`;
+  return {
+    desde: rango.from && rango.from > inicio ? rango.from : inicio,
+    hasta: rango.to && rango.to < fin ? rango.to : fin,
+  };
 }
 
 function Num({ n, onClick, aviso = false }: { n: number; onClick: () => void; aviso?: boolean }) {
