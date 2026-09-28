@@ -1524,3 +1524,36 @@ round-robin del CRM: si se elige repartir, hay que decidir cuál de los dos mand
 entró. Un fallo aquí no se ve: se ve semanas después, en un informe que no
 cuadra. Va a `/testeo` y `/staging` primero, con los cargos reales de Stripe ya
 existentes como prueba, y no pasa a producción hasta que Diego lo mire.
+
+## Admisión: un apartado propio para sus correos · TAREA PARA DIEGO
+
+Diego, 28/09: «los correos de admisión irán en un nuevo apartado que diga
+**Admisión** y se guarde todo; luego se darán detalles».
+
+**Anotada, no empezada.** Faltan los detalles, que llegan después.
+
+### Lo que se sabe hoy
+
+- Un apartado nuevo en el menú: **«Admisión»**.
+- Ahí van los **correos de admisión**, y **se guarda todo**.
+
+### Lo que ya existe y roza esto (para no duplicarlo)
+
+- **Matrículas → «Webhooks de admisión»**: formularios externos que crean una
+  matrícula en estado «Solicitud admisión», con deduplicado por DNI o correo.
+  Son solicitudes, no correos.
+- **Las plazas las lleva admisiones fuera del CRM** (decidido el 11/09). El CRM
+  solo recuerda comprobarlas.
+
+### Qué preguntar cuando lleguen los detalles
+
+1. **Qué correos son**: los que manda admisiones, los que recibe o los dos. Y
+   de qué buzón salen o entran.
+2. **«Se guarde todo»**: el correo entero con sus adjuntos, o un registro de que
+   se envió.
+3. **A qué se enlazan**: la ficha del prospecto, la matrícula o nada.
+4. **Quién lo ve**: hoy no hay un rol de admisiones. Si lo lleva otra persona,
+   hace falta su permiso.
+5. **Paridad**: va en los dos CRMs, como todo.
+
+*Asignada a **Diego**.*
