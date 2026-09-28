@@ -1563,8 +1563,8 @@ Diego, 28/09: «los correos de admisión irán en un nuevo apartado que diga
 Diego, 28/09: «me gustaría poner las estadísticas de cuántos enviados y cuántos
 respondidos de ese feedback».
 
-**Anotada, no empezada.** Va en el panel de feedback (#170), arriba, antes de
-los motivos:
+**Hecha el 28/09 en los dos staging** (/testeo y crm.iseie.com/staging; no en
+producción). Está en el panel de feedback (#170), arriba, antes de los motivos:
 
 - **Enviados · Respondidos · % de respuesta**, con el rango de fechas del panel
   y el ámbito de siempre (campus, empresa o todo).
@@ -1577,6 +1577,33 @@ quién, cuándo, por qué disparador y, si contesta, cuándo. Anotado también e
 #169.
 
 *Panel: Diego. Envío: Ángel. En los dos CRMs.*
+
+## Feedback: la pregunta 6, un futuro contacto para el asesor · #169
+
+Diego, 28/09: «la 8 debe de quedar como un futuro contacto a la gestora, luego
+lo veremos». (Era la 8 de la encuesta de nueve; en la de seis es la 6.)
+
+**Anotada, a medio camino.** La encuesta pregunta «¿Quieres que el asesor te
+vuelva a contactar más adelante?» (*Sí, que me contacte más adelante* / *No,
+gracias*). Hoy, si contesta que sí:
+
+- queda en su historial, con el resto de respuestas;
+- a su gestora le llega el aviso «… · quiere que le vuelvas a contactar más
+  adelante».
+
+**Falta decidir** (con Diego) y hacer:
+
+1. **Cuándo**: ¿una fecha fija (p. ej. a los 30 o 60 días), la próxima
+   convocatoria del mismo curso, o que la elija la persona en la encuesta?
+2. **Dónde**: ¿un recordatorio en la agenda de su gestora, una tarea en la cola
+   del día, o volver a ponerlo en seguimiento?
+3. **Si su gestora ya no está** (is_available = false): ¿a quién va?
+4. **Paridad**: en los dos CRMs.
+
+Dónde tocar: `backend/src/modules/feedback/preguntas.js` (la pregunta, clave
+`avisar`) y `feedback.service.js` → `responder()` (ahí se crearía el contacto).
+
+*Asignada a **Diego**.*
 
 ## Correos automáticos: ponerles el mismo formato · TAREA PARA ÁNGEL Y DIEGO
 
