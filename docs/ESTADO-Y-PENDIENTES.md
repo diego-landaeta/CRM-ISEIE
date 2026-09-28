@@ -1557,3 +1557,23 @@ Diego, 28/09: «los correos de admisión irán en un nuevo apartado que diga
 5. **Paridad**: va en los dos CRMs, como todo.
 
 *Asignada a **Diego**.*
+
+## Feedback: cuántos enviados y cuántos respondidos · #170 (y #169)
+
+Diego, 28/09: «me gustaría poner las estadísticas de cuántos enviados y cuántos
+respondidos de ese feedback».
+
+**Anotada, no empezada.** Va en el panel de feedback (#170), arriba, antes de
+los motivos:
+
+- **Enviados · Respondidos · % de respuesta**, con el rango de fechas del panel
+  y el ámbito de siempre (campus, empresa o todo).
+- Desglose por **marca o campus**, por **gestora** y por **disparador**: al
+  descartar o al 7.º día sin conversión.
+- Cada número abre la **lista de personas** que tiene detrás.
+
+Para poder contarlo, **el envío (#169) tiene que guardar** por cada correo a
+quién, cuándo, por qué disparador y, si contesta, cuándo. Anotado también en la
+#169.
+
+*Panel: Diego. Envío: Ángel. En los dos CRMs.*
