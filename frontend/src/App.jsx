@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Suspense, lazy, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { PROCESO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 
 // Layout y guardas
 const AppLayout = lazy(() => import('./shared/components/layout/AppLayout'));
@@ -188,7 +189,11 @@ function App() {
           <Route path="/leads/archived" element={<LeadsArchivedPage />} />
           {/* Antes que `:id`, para que «cola» y «proceso» no se lean como ids. */}
           <Route path="/leads/cola" element={<ColaDelDiaPage />} />
-          <Route path="/leads/seguimiento" element={<SeguimientoPage />} />
+          {/* Solo en pruebas hasta que se apruebe (shared/lib/enPruebas.js). En
+              produccion, quien tenga el enlace guardado vuelve a la lista en
+              vez de caer en una pantalla que no deberia ver. */}
+          <Route path="/leads/seguimiento"
+            element={PROCESO_EN_PRUEBAS ? <SeguimientoPage /> : <Navigate to="/leads" replace />} />
           <Route path="/leads/proceso" element={<ProcesoPage />} />
           <Route path="/leads/:id" element={<LeadDetailPage />} />
           <Route path="/products" element={<ProductsPage />} />

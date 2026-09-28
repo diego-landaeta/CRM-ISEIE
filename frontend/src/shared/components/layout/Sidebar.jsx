@@ -17,6 +17,7 @@ import { cn } from '@/shared/lib/utils';
 import client from '@/shared/api/client';
 import NotificationsBell from './NotificationsBell';
 import { isBetaAllowed, BETA_MODE } from '@/shared/config/betaConfig';
+import { PROCESO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 
 const ROLE_LABELS = { superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor', soporte: 'Soporte', tutor: 'Tutor' };
 
@@ -39,7 +40,8 @@ const NAV_SECTIONS = [
           { to: '/leads', label: 'Lista', end: true, sectionPrefixes: ['/leads'] },
           { to: '/leads/cola', label: 'La cola del día' },
           // El quinto paso no cabe en la cola: es toda la base que no compro.
-          { to: '/leads/seguimiento', label: 'Seguimiento de fin de mes' },
+          // Solo en pruebas hasta que se apruebe: ver shared/lib/enPruebas.js.
+          ...(PROCESO_EN_PRUEBAS ? [{ to: '/leads/seguimiento', label: 'Seguimiento de fin de mes' }] : []),
           { to: '/leads/proceso', label: 'Proceso comercial' },
         ],
       },

@@ -33,6 +33,7 @@ import ComoVoy from '@/modules/reports/components/ComoVoy';
 import SkeletonTable, { SkeletonCard } from '@/shared/components/ui/SkeletonTable';
 import ConversionFunnel from '@/shared/components/dashboard/ConversionFunnel';
 import PerformanceInsights from '@/shared/components/dashboard/PerformanceInsights';
+import { PROCESO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 const TopProductsCard = lazy(() => import('@/modules/sales/components/TopProductsCard'));
 const CursosVendidosCard = lazy(() => import('@/modules/sales/components/CursosVendidosCard'));
 
@@ -146,7 +147,7 @@ export default function DashboardPage() {
 
       {/* Como va quien mira: su puesto en ventas y su tasa de
           conversion del mes. */}
-      <ComoVoy />
+      {PROCESO_EN_PRUEBAS && <ComoVoy />}
         <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)}
         </div>

@@ -82,7 +82,9 @@ export default function ParaHoyYManana(
             <button
               key={clave}
               type="button"
-              onClick={() => navigate(`/prospectos/cola?tramo=${clave}`)}
+              // /leads/... en ISEIE: con /prospectos/... --copiado de MultiCRM-- los
+              // cuatro contadores no llevaban a ninguna parte.
+              onClick={() => navigate(`/leads/cola?tramo=${clave}`)}
               aria-label={`${rotulo}: ${n}. Abrir la cola en este tramo`}
               className={`rounded-md p-3 border text-left transition-colors ${
                 urge && n > 0

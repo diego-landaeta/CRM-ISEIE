@@ -66,6 +66,7 @@ import usePermission from '@/shared/hooks/usePermission';
 import { getLeadPriority, getPriorityStyle } from '../lib/leadPriority';
 import { getLeadExportColumns } from '../lib/leadFormat';
 import ParaHoyYManana from '@/shared/components/dashboard/ParaHoyYManana';
+import { PROCESO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 import {
   getInitials,
   getAvatarColor,
@@ -650,7 +651,7 @@ export default function LeadsPage() {
 
       {/* Como va quien mira: su puesto en ventas y su tasa de conversion del
           mes. Va aqui porque esta es la pantalla donde pasa el dia. */}
-      <ComoVoy compacto />
+      {PROCESO_EN_PRUEBAS && <ComoVoy compacto />}
 
       {/* LA COLA DEL DÍA, AQUÍ TAMBIÉN. Diego, 23/09: «la cola del día debe
           de estar en prospectos también con atajos y todo».
@@ -665,22 +666,26 @@ export default function LeadsPage() {
       <div className="space-y-2">
         <ParaHoyYManana projectId={proyectoDeLaCola} projectIds={campusCsv} />
         <div className="flex flex-wrap items-center gap-2">
+          {/* En ISEIE las rutas son /leads/...: con /prospectos/... (copiadas
+              de MultiCRM) estos tres atajos no llevaban a ninguna parte. */}
           <Link
-            to="/prospectos/cola"
+            to="/leads/cola"
             className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-normal font-semibold hover:bg-muted"
           >
             <ListChecks size={14} weight="bold" className="text-primary" />
             La cola del día
           </Link>
+          {PROCESO_EN_PRUEBAS && (
           <Link
-            to="/prospectos/seguimiento"
+            to="/leads/seguimiento"
             className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-normal font-semibold hover:bg-muted"
           >
             <ArrowCounterClockwise size={14} weight="bold" className="text-primary" />
             Seguimiento de fin de mes
           </Link>
+          )}
           <Link
-            to="/prospectos/proceso"
+            to="/leads/proceso"
             className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-normal font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
           >
             <Gear size={14} weight="bold" />

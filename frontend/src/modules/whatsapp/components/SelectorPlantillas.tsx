@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { MagnifyingGlass, WarningCircle, X, ImageSquare, Plus } from '@phosphor-icons/react';
 import { whatsappApi, type PlantillaWhatsapp } from '../api/whatsapp.api';
 import { rellenar, huecosSinRellenar, type DatosParaRellenar } from '../lib/plantilla';
+import { PROCESO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 
 /**
  * Elegir una plantilla SIN salir del chat.
@@ -179,7 +180,7 @@ export default function SelectorPlantillas({
         {/* Sin proyecto elegido no se puede: una plantilla vive en un
             proyecto. Con la empresa entera puesta no hay a cuál guardarla, y
             es mejor decirlo que meterla en uno al azar. */}
-        {projectId && !creando && (
+        {PROCESO_EN_PRUEBAS && projectId && !creando && (
           <button type="button" className="wa-plantillas-nueva-abrir"
             title={nombreSesion
               ? `Guardar una plantilla en el WhatsApp de ${nombreSesion}`
@@ -296,7 +297,7 @@ export default function SelectorPlantillas({
               {x.corto}
             </button>
           ))}
-          {cuantasMias > 0 && (
+          {PROCESO_EN_PRUEBAS && cuantasMias > 0 && (
             <button type="button" onClick={() => setPaso(MIAS)}
               aria-pressed={paso === MIAS}
               title={nombreSesion
