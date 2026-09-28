@@ -289,9 +289,9 @@ export async function responder(token, { motivo, comentario, respuestas = {} } =
   if (f.respondido_at) return { ya: true };
   const fila = await model.guardarRespuesta(f.id, { motivo: r.motivo, comentario: r.comentario || null, respuestas: r });
   if (!fila) return { ya: true };
-  // En su historial, TODO lo que contestó, pregunta a pregunta: la gestora que
-  // le llame mañana lo tiene que ver sin ir a buscarlo.
-  const textos = preguntasPara({ gestora: 'la gestora', programa: 'el programa' });
+  // En su historial, TODO lo que contestó, pregunta a pregunta y tal como se
+  // lo preguntamos: la gestora que le llame mañana lo tiene que ver sin ir a buscarlo.
+  const textos = preguntasPara({ gestora: primerNombre(f.gestora_nombre) || null, programa: f.producto });
   const lineas = textos
     .filter((p) => r[p.clave] !== undefined)
     .map((p) => `· ${p.texto} ${textoDeRespuesta(p.clave, r[p.clave])}`);
@@ -309,7 +309,7 @@ export async function responder(token, { motivo, comentario, respuestas = {} } =
  * nota media de la escala y lo que escribieron (lo último primero).
  */
 export function resumenDePreguntas(contestadas) {
-  const textos = preguntasPara({ gestora: 'la gestora', programa: 'el programa' });
+  const textos = preguntasPara({ gestora: 'la gestora' });
   return PREGUNTAS.map((p, i) => {
     const valores = contestadas
       .map((c) => ({ v: (c.respuestas || {})[p.clave], c }))

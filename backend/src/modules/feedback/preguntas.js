@@ -99,10 +99,15 @@ export const PREGUNTAS = [
 /** Las preguntas con los nombres de esa persona ya puestos. */
 export function preguntasPara({ gestora = null, programa = null } = {}) {
   const quien = gestora || 'nuestro equipo';
-  const que = programa || 'nuestro programa';
+  // El nombre del curso, entre comillas: «el contenido de «Máster en…»», no
+  // «el contenido de Máster en…». Sin curso conocido, «la formación».
+  const que = programa ? `«${programa}»` : 'la formación';
   return PREGUNTAS.map((p) => ({
     ...p,
-    texto: p.texto.replace('{gestora}', quien).replace('{programa}', que),
+    // «¿nuestro equipo te respondió…?» -> «¿Nuestro equipo…?»: el nombre puede
+    // caer al principio de la pregunta.
+    texto: p.texto.replace('{gestora}', quien).replace('{programa}', que)
+      .replace(/^(¿?)(\p{Ll})/u, (_, signo, letra) => signo + letra.toUpperCase()),
   }));
 }
 
