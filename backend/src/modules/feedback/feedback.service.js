@@ -266,8 +266,8 @@ export async function encuesta(token) {
     color: f.theme_color,
     nombre: primerNombre(f.lead_nombre),
     programa: f.producto,
-    // Con el nombre de SU gestora y SU formacion ya puestos: «¿Cómo te atendió Ana?».
-    preguntas: preguntasPara({ gestora: primerNombre(f.gestora_nombre) || null, programa: f.producto }),
+    // Con SU formacion ya puesta. La gestora va sin nombre: «¿Cómo te atendió la gestora?».
+    preguntas: preguntasPara({ programa: f.producto }),
     respondida: Boolean(f.respondido_at),
   };
 }
@@ -291,7 +291,7 @@ export async function responder(token, { motivo, comentario, respuestas = {} } =
   if (!fila) return { ya: true };
   // En su historial, TODO lo que contestó, pregunta a pregunta y tal como se
   // lo preguntamos: la gestora que le llame mañana lo tiene que ver sin ir a buscarlo.
-  const textos = preguntasPara({ gestora: primerNombre(f.gestora_nombre) || null, programa: f.producto });
+  const textos = preguntasPara({ programa: f.producto });
   const lineas = textos
     .filter((p) => r[p.clave] !== undefined)
     .map((p) => `· ${p.texto} ${textoDeRespuesta(p.clave, r[p.clave])}`);
@@ -309,7 +309,7 @@ export async function responder(token, { motivo, comentario, respuestas = {} } =
  * nota media de la escala y lo que escribieron (lo último primero).
  */
 export function resumenDePreguntas(contestadas) {
-  const textos = preguntasPara({ gestora: 'la gestora' });
+  const textos = preguntasPara();
   return PREGUNTAS.map((p, i) => {
     const valores = contestadas
       .map((c) => ({ v: (c.respuestas || {})[p.clave], c }))

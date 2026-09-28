@@ -21,7 +21,11 @@ import { MOTIVOS } from './motivos.js';
  *   escala : de 1 a 5
  *   texto  : escribir (máx. 1000)
  *
- * {gestora} y {programa} se rellenan con los de esa persona.
+ * {programa} se rellena con el curso de esa persona.
+ *
+ * La gestora NO va con su nombre (Diego, 28/09): se pregunta por «la gestora»
+ * y la respuesta se le suma a la suya por dentro —`feedback_envios.gestora_id`—,
+ * en el panel, columna «Nota de atención».
  */
 export const PREGUNTAS = [
   {
@@ -31,16 +35,16 @@ export const PREGUNTAS = [
   },
   {
     clave: 'nota_atencion', tipo: 'escala',
-    texto: '¿Cómo te atendió {gestora}?',
+    texto: '¿Cómo te atendió la gestora?',
     ayuda: '1 = muy mal · 5 = muy bien',
   },
   {
     clave: 'mensaje_gestora', tipo: 'texto',
-    texto: '¿Algo que quieras decirle a {gestora} o que mejorarías de cómo te atendió?',
+    texto: '¿Algo que quieras decirle a la gestora o que mejorarías de cómo te atendió?',
   },
   {
     clave: 'a_tiempo', tipo: 'unica',
-    texto: '¿{gestora} te respondió a tiempo?',
+    texto: '¿La gestora te respondió a tiempo?',
     opciones: [
       { clave: 'enseguida', texto: 'Sí, enseguida' },
       { clave: 'un_poco', texto: 'Tardó un poco' },
@@ -96,18 +100,14 @@ export const PREGUNTAS = [
   },
 ];
 
-/** Las preguntas con los nombres de esa persona ya puestos. */
-export function preguntasPara({ gestora = null, programa = null } = {}) {
-  const quien = gestora || 'nuestro equipo';
+/** Las preguntas con el curso de esa persona ya puesto. */
+export function preguntasPara({ programa = null } = {}) {
   // El nombre del curso, entre comillas: «el contenido de «Máster en…»», no
   // «el contenido de Máster en…». Sin curso conocido, «la formación».
   const que = programa ? `«${programa}»` : 'la formación';
   return PREGUNTAS.map((p) => ({
     ...p,
-    // «¿nuestro equipo te respondió…?» -> «¿Nuestro equipo…?»: el nombre puede
-    // caer al principio de la pregunta.
-    texto: p.texto.replace('{gestora}', quien).replace('{programa}', que)
-      .replace(/^(¿?)(\p{Ll})/u, (_, signo, letra) => signo + letra.toUpperCase()),
+    texto: p.texto.replace('{programa}', que),
   }));
 }
 

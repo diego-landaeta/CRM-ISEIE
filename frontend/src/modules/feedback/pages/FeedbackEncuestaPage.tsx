@@ -13,7 +13,7 @@ import { useParams, useSearchParams } from 'react-router-dom';
  * reconoce. Nada de la estética del CRM.
  *
  * LAS PREGUNTAS LAS MANDA EL SERVIDOR (`modules/feedback/preguntas.js`), con el
- * nombre de su gestora y de su formación ya puestos. Esta pantalla solo sabe
+ * nombre de su formación ya puesto. Esta pantalla solo sabe
  * pintar cuatro tipos: una opción, varias, una escala de 1 a 5 y texto. Cambiar
  * o añadir preguntas no la toca.
  *

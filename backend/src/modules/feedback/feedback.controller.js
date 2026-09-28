@@ -82,7 +82,7 @@ export async function deUnLead(req, res, next) {
     await exigirQueSeaSuyo(req, leadId);
     const envio = await service.deUnLead(leadId);
     // Con las preguntas, para que la ficha pueda decir a qué contestó cada cosa.
-    res.json({ success: true, data: envio ? { ...envio, preguntas: preguntasPara({ gestora: 'la gestora' }) } : null });
+    res.json({ success: true, data: envio ? { ...envio, preguntas: preguntasPara() } : null });
   } catch (err) { next(err); }
 }
 
