@@ -73,6 +73,7 @@ const ReportsPage = lazy(() => import('./shared/pages/ReportsPage'));
 // El feedback de «¿por que has desistido?» (#169, #170): la encuesta es PUBLICA.
 const FeedbackEncuestaPage = lazy(() => import('./modules/feedback/pages/FeedbackEncuestaPage'));
 const FeedbackPanelPage = lazy(() => import('./modules/feedback/pages/FeedbackPanelPage'));
+const NovedadesPage = lazy(() => import('./modules/novedades/pages/NovedadesPage'));
 const NotificacionesPage = lazy(() => import('./modules/notificaciones/pages/NotificacionesPage'));
 const ActivityPage = lazy(() => import('./shared/pages/ActivityPage'));
 const StatusPage = lazy(() => import('./shared/pages/StatusPage'));
@@ -269,6 +270,9 @@ function App() {
           {/* El panel de feedback, fuera de produccion hasta aprobarlo. */}
           <Route path="/informes/feedback"
             element={PROCESO_EN_PRUEBAS ? <FeedbackPanelPage /> : <Navigate to="/informes" replace />} />
+          {/* Las novedades de la 2.0.0 cuentan lo que aun esta en pruebas: con ello. */}
+          <Route path="/novedades"
+            element={PROCESO_EN_PRUEBAS ? <NovedadesPage /> : <Navigate to="/" replace />} />
           <Route path="/notificaciones" element={<NotificacionesPage />} />
           <Route path="/notifications" element={<Navigate to="/notificaciones" replace />} />
           <Route path="/activity" element={<ActivityPage />} />

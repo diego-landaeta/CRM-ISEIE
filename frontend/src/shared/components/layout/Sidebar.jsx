@@ -153,6 +153,9 @@ const NAV_SECTIONS = [
   {
     label: 'Sistema',
     items: [
+      // Lo que trae cada versión (Diego, 28/09). La 2.0.0 cuenta lo que aún está
+      // en pruebas: sale con ello.
+      ...(PROCESO_EN_PRUEBAS ? [{ to: '/novedades', label: 'Novedades', icon: Sparkle, roles: ['superadmin', 'admin', 'gestor', 'soporte'] }] : []),
       { to: '/solicitudes-cambio', label: 'Solicitudes de cambio', icon: GitMerge },
       { to: '/notificaciones', label: 'Notificaciones',   icon: Bell },
       // El tutor entra aqui: es donde cambia su contraseña.
