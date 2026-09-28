@@ -7,7 +7,9 @@ import { notifyUsers } from '../notifications/notifications.service.js';
 import * as leadModel from '../leads/lead.model.js';
 import * as model from './feedback.model.js';
 import { DISPARADORES } from './motivos.js';
-import { ESCALA, PREGUNTAS, preguntasPara, limpiarRespuestas, textoDeRespuesta } from './preguntas.js';
+import {
+  ESCALA, PREGUNTAS, preguntasPara, limpiarRespuestas, textoDeRespuesta, lineaDe, diasHastaVolver,
+} from './preguntas.js';
 
 /**
  * «¿Por qué has desistido?» (#169).
@@ -295,11 +297,29 @@ export async function responder(token, { motivo, comentario, respuestas = {} } =
   const textos = preguntasPara({ programa: f.producto });
   const lineas = textos
     .filter((p) => r[p.clave] !== undefined)
-    .map((p) => `· ${p.texto} ${textoDeRespuesta(p.clave, r[p.clave], r[`${p.clave}_otro`])}`);
+    .map((p) => `· ${p.texto} ${lineaDe(p, r)}`);
   await apuntarEnSuHistorial(f.lead_id, `💬 Contestó al feedback:\n${lineas.join('\n')}`);
   const nota = r.nota_atencion ? ` · te puso un ${r.nota_atencion}/5` : '';
-  // El «sí» será un futuro contacto en su agenda (por decidir); de momento, que lo sepa.
-  const volver = r.avisar === 'si' ? ' · quiere que le vuelvas a contactar más adelante' : '';
+  // «Que me contacte más adelante»: a la agenda de su gestora, el día que eligió.
+  let volver = '';
+  if (r.avisar === 'si') {
+    const avisar = PREGUNTAS.find((p) => p.clave === 'avisar');
+    const cuando = avisar.sub.opciones.find((o) => o.clave === r.avisar_cuando)?.texto.toLowerCase() || 'sin decir cuándo';
+    const rec = await model.agendarVuelta(f.lead_id, {
+      dias: diasHastaVolver(r),
+      nota: `📅 Volver a contactar: lo pidió en la encuesta de feedback (${cuando}). No siguió por: ${textoDeRespuesta('motivo', r.motivo, r.motivo_otro)}`,
+      gestoraDelEnvio: f.gestora_id,
+    }).catch((err) => {
+      logger.warn({ err: err.message, leadId: f.lead_id }, 'feedback: no se pudo agendar la vuelta');
+      return null;
+    });
+    await apuntarEnSuHistorial(f.lead_id, rec
+      ? `📅 Pidió que le volvamos a contactar (${cuando}): recordatorio puesto para el ${rec.dia}.`
+      : `📅 Pidió que le volvamos a contactar (${cuando}), pero no tiene gestora: no se ha podido agendar.`);
+    volver = rec
+      ? ` · quiere que le vuelvas a contactar: lo tienes en recordatorios para el ${rec.dia}`
+      : ' · quiere que le vuelvan a contactar';
+  }
   await avisarAGestora(fila, {
     titulo: 'Te han contestado al feedback',
     mensaje: `${f.lead_nombre || 'Un prospecto'}: ${textoDeRespuesta('motivo', r.motivo, r.motivo_otro)}${nota}${volver}`,
@@ -341,8 +361,15 @@ export function resumenDePreguntas(contestadas) {
       texto: o.texto,
       n: valores.filter((x) => (Array.isArray(x.v) ? x.v.includes(o.clave) : x.v === o.clave)).length,
     }));
-    return { ...base, opciones, ...(escritos ? { escritos } : {}) };
-  });
+    const resumen = { ...base, opciones, ...(escritos ? { escritos } : {}) };
+    if (!p.sub) return [resumen];
+    // La de después («¿cuándo?»), justo detrás, contada sobre los que dijeron que sí.
+    const deLaSub = contestadas.map((c) => (c.respuestas || {})[p.sub.clave]).filter(Boolean);
+    return [resumen, {
+      clave: p.sub.clave, tipo: 'unica', texto: `${p.sub.texto} (los que dijeron que sí)`, respondieron: deLaSub.length,
+      opciones: p.sub.opciones.map((o) => ({ clave: o.clave, texto: o.texto, n: deLaSub.filter((v) => v === o.clave).length })),
+    }];
+  }).flat();
 }
 
 /** El proceso del 7.º día: una vuelta. Devuelve cuántos se pidieron. */

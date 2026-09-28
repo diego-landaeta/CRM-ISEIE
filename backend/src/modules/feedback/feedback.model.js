@@ -83,6 +83,27 @@ export async function guardarRespuesta(id, { motivo, comentario, respuestas = {}
 }
 
 /**
+ * «Que me contacte más adelante»: un recordatorio en la agenda de SU gestora
+ * para el día que eligió. Es el recordatorio de siempre (`lead_reminders`):
+ * le sale en «Hoy» y en la ficha, y ese día le llega el aviso.
+ *
+ * De la gestora que lleva AHORA al prospecto (`responsable_id`): el panel «Hoy»
+ * enseña a cada una los que firmó ella, y el aviso del día va al responsable.
+ * Si no tiene, a la que tenía cuando se le mandó el correo. Sin ninguna, no se
+ * agenda (devuelve null) y el servicio lo deja dicho en el historial.
+ */
+export async function agendarVuelta(leadId, { dias, nota, gestoraDelEnvio = null }) {
+  const { rows } = await query(
+    `INSERT INTO lead_reminders (lead_id, fecha_recordatorio, nota, created_by)
+     SELECT l.id, (NOW() AT TIME ZONE 'Europe/Madrid')::date + $2::int, $3, COALESCE(l.responsable_id, $4)
+       FROM leads l
+      WHERE l.id = $1 AND COALESCE(l.responsable_id, $4) IS NOT NULL
+     RETURNING id, to_char(fecha_recordatorio, 'DD/MM/YYYY') AS dia, created_by`,
+    [leadId, dias, nota, gestoraDelEnvio]);
+  return rows[0] || null;
+}
+
+/**
  * A quién le toca el correo del 7.º día.
  *
  * Entró hace entre 7 y 10 días —no «hace 7 o más»: si el servidor estuvo parado

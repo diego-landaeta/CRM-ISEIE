@@ -47,7 +47,10 @@ export type EnvioDeUnLead = {
   motivo: string | null; comentario: string | null; nota_envio: string | null;
   respuestas?: RespuestasFeedback;
   /** Las preguntas, para poder decir a qué contestó cada cosa. */
-  preguntas?: Array<{ clave: string; tipo: string; texto: string; escribir?: string; opciones?: Array<{ clave: string; texto: string }> }>;
+  preguntas?: Array<{
+    clave: string; tipo: string; texto: string; escribir?: string; opciones?: Array<{ clave: string; texto: string }>;
+    sub?: { clave: string; opciones: Array<{ clave: string; texto: string }> };
+  }>;
 } | null;
 
 export async function traerPanel(params: URLSearchParams): Promise<PanelFeedback | null> {

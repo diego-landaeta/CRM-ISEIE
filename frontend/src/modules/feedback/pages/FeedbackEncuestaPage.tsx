@@ -30,6 +30,8 @@ type Pregunta = {
   clave: string; tipo: 'unica' | 'varias' | 'escala';
   texto: string; ayuda?: string; destacado?: string; obligatoria?: boolean;
   opciones: Opcion[]; escribir?: string;
+  /** La que sale después si contesta `cuando` («Sí» → «¿Cuándo te viene bien?»). */
+  sub?: { cuando: string; clave: string; texto: string; opciones: Opcion[] };
 };
 type Encuesta = {
   marca: string | null; logo_url: string | null; color: string | null;
@@ -188,6 +190,21 @@ export default function FeedbackEncuestaPage() {
                             ))}
                           </div>
                         </details>
+                      )}
+
+                      {p.sub && resp[p.clave] === p.sub.cuando && (
+                        <div className="mt-3">
+                          <label htmlFor={`p-${p.sub.clave}`} className="block text-sm font-semibold">{p.sub.texto}</label>
+                          <div className="relative mt-1.5">
+                            <select id={`p-${p.sub.clave}`} value={(resp[p.sub.clave] as string) || ''}
+                              onChange={(e) => (e.target.value ? poner(p.sub!.clave, e.target.value) : quitar(p.sub!.clave))}
+                              className={desplegable} style={borde(Boolean(resp[p.sub.clave]))}>
+                              <option value="">Elige cuándo</option>
+                              {p.sub.opciones.map((o) => <option key={o.clave} value={o.clave}>{o.texto}</option>)}
+                            </select>
+                            {flecha}
+                          </div>
+                        </div>
                       )}
 
                       {eligioOtro(p) && (

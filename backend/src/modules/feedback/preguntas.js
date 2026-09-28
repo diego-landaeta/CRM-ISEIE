@@ -87,17 +87,35 @@ export const PREGUNTAS = [
     escribir: 'otra',
   },
   {
-    // Diego, 28/09: el «sí» tiene que acabar siendo un futuro contacto para su
-    // gestora. Cómo (cuándo, en qué agenda) está por decidir; de momento queda
-    // en su historial y en el aviso a la gestora.
+    // Diego, 28/09: si dice que sí, que elija cuándo y que quede en la agenda
+    // de su gestora: `feedback.service` → responder() le pone un recordatorio
+    // (`lead_reminders`) para ese día. Sin elegir, al mes.
     clave: 'avisar', tipo: 'unica',
     texto: '¿Quieres que el asesor te vuelva a contactar más adelante?',
     opciones: [
       { clave: 'si', texto: 'Sí, que me contacte más adelante' },
       { clave: 'no', texto: 'No, gracias' },
     ],
+    sub: {
+      cuando: 'si',
+      clave: 'avisar_cuando',
+      texto: '¿Cuándo te viene bien?',
+      opciones: [
+        { clave: 'semanas_2', texto: 'En 2 semanas', dias: 14 },
+        { clave: 'mes_1', texto: 'En 1 mes', dias: 30 },
+        { clave: 'meses_2_3', texto: 'En 2 o 3 meses', dias: 60 },
+        { clave: 'meses_6', texto: 'En 6 meses', dias: 180 },
+        { clave: 'anio', texto: 'El año que viene', dias: 365 },
+      ],
+    },
   },
 ];
+
+/** Los días hasta el recordatorio: el principio del rango que eligió, o un mes. */
+export function diasHastaVolver(r) {
+  const sub = PREGUNTAS.find((p) => p.clave === 'avisar').sub;
+  return sub.opciones.find((o) => o.clave === r.avisar_cuando)?.dias ?? 30;
+}
 
 /** Las preguntas con el curso y el asesor de esa persona ya puestos. */
 export function preguntasPara({ programa = null, asesor = null } = {}) {
@@ -138,8 +156,19 @@ export function limpiarRespuestas(entrada = {}) {
       const t = String(entrada[`${p.clave}_otro`] ?? '').trim().slice(0, 1000);
       if (t) r[`${p.clave}_otro`] = t;
     }
+    // La de después («¿cuándo?»), solo si contestó lo que la abre.
+    if (p.sub && r[p.clave] === p.sub.cuando && vale(p.sub, entrada[p.sub.clave])) {
+      r[p.sub.clave] = entrada[p.sub.clave];
+    }
   }
   return r;
+}
+
+/** La respuesta entera de una pregunta, con su «Otro» y su «¿cuándo?». */
+export function lineaDe(p, r) {
+  const base = textoDeRespuesta(p.clave, r[p.clave], r[`${p.clave}_otro`]);
+  const sub = p.sub && r[p.sub.clave] ? p.sub.opciones.find((o) => o.clave === r[p.sub.clave])?.texto : null;
+  return sub ? `${base} · ${sub}` : base;
 }
 
 /** «Otro motivo: «me mudo»» / «4/5 · Bien» — para el historial y el aviso. */
