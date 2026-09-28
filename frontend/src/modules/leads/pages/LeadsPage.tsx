@@ -664,7 +664,11 @@ export default function LeadsPage() {
           Cada número abre la cola con ese tramo ya puesto, y debajo van los
           atajos a las tres pantallas del proceso. */}
       <div className="space-y-2">
-        <ParaHoyYManana projectId={proyectoDeLaCola} projectIds={campusCsv} />
+        {/* Los contadores --atrasados, hoy, manana, semana-- son del proceso de
+            ventas y todavia no esta al 100 %: fuera de produccion. Diego, 28/09. */}
+        {PROCESO_EN_PRUEBAS && (
+          <ParaHoyYManana projectId={proyectoDeLaCola} projectIds={campusCsv} />
+        )}
         <div className="flex flex-wrap items-center gap-2">
           {/* En ISEIE las rutas son /leads/...: con /prospectos/... (copiadas
               de MultiCRM) estos tres atajos no llevaban a ninguna parte. */}
