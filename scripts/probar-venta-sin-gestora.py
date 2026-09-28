@@ -121,6 +121,34 @@ for (const { role } of roles) {
   console.log(`4 · ${role.padEnd(12)} puede=${String(puede).padEnd(5)} ${Boolean(puede) === esperado ? 'OK' : (puede ? 'MAL: no deberia' : 'MAL: deberia')}`);
 }
 
+// ── 5 · Una venta del PASADO con cliente nuevo (Ana, 28/09).
+//
+// La ficha la crea el mismo alta, asi que nacia hoy y la venta de hace dias
+// quedaba «anterior a la entrada del prospecto». Ahora la entrada se lleva a
+// la fecha de la venta, solo en la ficha recien creada.
+const hace6 = new Date(Date.now() - 6 * 86400000).toISOString().slice(0, 10);
+const entradaDe = async (leadId) => (await query(
+  "SELECT to_char(COALESCE(fecha_solicitud, created_at), 'YYYY-MM-DD') AS d FROM leads WHERE id = $1",
+  [leadId])).rows[0].d;
+try {
+  const v5 = await createSale({ ...base, fecha_pago: hace6, nombre: `${marca}-pasado`, email: `${marca}-p@x.test` }, admin);
+  creados.push(v5);
+  const e5 = await entradaDe(v5.lead_id);
+  console.log(`5 · pasado, cliente nuevo  entrada=${e5} venta=${hace6}  ${e5 === hace6 ? 'OK' : 'MAL'}`);
+} catch (err) { console.log(`5 · pasado, cliente nuevo  FALLA: ${err.message}`); }
+try {
+  const v6 = await createSale({ ...base, fecha_pago: hace6, nombre: `${marca}-pasado-sg`, sin_gestora: true }, admin);
+  creados.push(v6);
+  const e6 = await entradaDe(v6.lead_id);
+  console.log(`5b· pasado, sin gestora .. entrada=${e6} venta=${hace6}  ${e6 === hace6 ? 'OK' : 'MAL'}`);
+} catch (err) { console.log(`5b· pasado, sin gestora .. FALLA: ${err.message}`); }
+// Y a una ficha que YA estaba no se le toca la fecha: ahi el control sigue.
+try {
+  const v7 = await createSale({ ...base, fecha_pago: hace6, lead_id: v1.lead_id }, admin);
+  creados.push(v7);
+  console.log('5c· ficha que ya estaba .. ACEPTADA: MAL, tenia que rechazarse');
+} catch (err) { console.log(`5c· ficha que ya estaba .. rechazada (${err.code || err.message}), OK`); }
+
 // ── Limpieza.
 for (const v of creados) {
   await query('DELETE FROM conversion_payments WHERE conversion_id = $1', [v.sale_id]);

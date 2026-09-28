@@ -67,6 +67,33 @@ export async function createSale(data, requestUser) {
       throw err;
     }
     leadId = leadResult.lead_id;
+
+    // UNA VENTA DEL PASADO CON CLIENTE NUEVO: la ficha entra el dia de la venta.
+    //
+    // Ana, 28/09: registrar la venta del 22/09 de una clienta nueva daba «la
+    // fecha de la venta es anterior a la fecha de entrada del prospecto». Y no
+    // habia forma de pasar: la ficha la crea ESTE MISMO alta, asi que nace hoy,
+    // y una venta de antes de hoy siempre quedaba antes. Pasaba con «cliente
+    // nuevo» y con «sin gestora», es decir, con toda venta historica de alguien
+    // que no estaba ya en el CRM.
+    //
+    // Si alguien compro el dia 22, existia el dia 22: la entrada se lleva a la
+    // fecha de la venta. SOLO para la ficha que acaba de crear este alta --los
+    // ultimos minutos--, y solo hacia atras. A una ficha que ya estaba no se le
+    // toca la fecha: ahi el control sigue en pie, porque si la venta cae antes
+    // de su entrada puede ser la fecha de la venta la que esta mal.
+    //
+    // A mediodia y no a medianoche, para que ningun cambio de zona horaria la
+    // empuje al dia de antes.
+    if (isRetroactive) {
+      await query(
+        `UPDATE leads SET fecha_solicitud = ($2::date + interval '12 hours'), updated_at = NOW()
+          WHERE id = $1
+            AND created_at > NOW() - interval '10 minutes'
+            AND COALESCE(fecha_solicitud, created_at)::date > $2::date`,
+        [leadId, data.fecha_pago],
+      );
+    }
   }
 
   // 2) Cambiar status a convertido (si ya estaba convertido, no falla)
