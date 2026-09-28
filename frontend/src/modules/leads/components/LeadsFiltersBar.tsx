@@ -16,6 +16,7 @@ import {
 } from '@phosphor-icons/react';
 import SearchableSelect from '@/shared/components/ui/SearchableSelect';
 import DateRangeFilter from './DateRangeFilter';
+import { PROCESO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 // ISEIE es single-project: NO usamos MultiProjectPicker (no aplica).
 
 const STATUS_LABELS: Record<string, string> = {
@@ -247,7 +248,7 @@ export default function LeadsFiltersBar(props: Props) {
                     porque se pueden renombrar desde «Proceso comercial», y un
                     filtro que diga «Día 2» cuando la pantalla de pasos dice
                     «Prueba social» no se entiende. */}
-                {pasosDelProceso.length > 0 && (
+                {PROCESO_EN_PRUEBAS && pasosDelProceso.length > 0 && (
                   <Row label="Proceso de ventas">
                     <select
                       value={filterPaso}

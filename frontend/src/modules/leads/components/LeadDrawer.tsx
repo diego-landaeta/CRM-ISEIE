@@ -17,6 +17,7 @@ const ChangeProductDialog = lazy(() => import('./ChangeProductDialog'));
 
 import AgendaDelProspecto from '@/modules/proceso/components/AgendaDelProspecto';
 import { traerPasosDeLead } from '@/modules/proceso/api/agenda.api';
+import { PROCESO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 
 const EnrollSequenceModal = lazy(() => import('./EnrollSequenceModal'));
 
@@ -25,7 +26,8 @@ const TABS = [
   // Diego, 23/09: «cuando se crea un prospecto debe de salir un apartado,
   // proceso de ventas y indicar qué paso está y si está hecho». Va la segunda,
   // pegada al resumen: es lo que hay que hacer con esta persona hoy.
-  { key: 'proceso', label: 'Proceso' },
+  // Fuera de produccion hasta que se apruebe el proceso de ventas (28/09).
+  ...(PROCESO_EN_PRUEBAS ? [{ key: 'proceso', label: 'Proceso' }] : []),
   { key: 'historial', label: 'Historial' },
   { key: 'interacciones', label: 'Interacciones' },
   { key: 'recordatorios', label: 'Recordatorios' },
@@ -121,7 +123,7 @@ export default function LeadDrawer({ leadId, open, onClose }: Props) {
             {lead && (
               <>
                 {tab === 'resumen' && <ResumenTab lead={lead} onEnroll={() => setEnrollOpen(true)} onSaved={refetch} />}
-                {tab === 'proceso' && (
+                {PROCESO_EN_PRUEBAS && tab === 'proceso' && (
                   <AgendaDelProspecto
                     leadId={lead.id}
                     projectId={lead.project_id}
@@ -589,7 +591,7 @@ function RecordatoriosTab({ leadId, reminders, onRefetch }) {
     <div className="space-y-4">
       {/* Lo que ya esta programado por el proceso, ANTES del formulario: es lo
           que hay, y ponerlo debajo de una caja vacia hacia que nadie lo viera. */}
-      <AgendaDelProceso leadId={leadId} />
+      {PROCESO_EN_PRUEBAS && <AgendaDelProceso leadId={leadId} />}
 
       <form onSubmit={add} className="space-y-2 p-3 rounded-lg border border-border bg-muted/30">
         <input

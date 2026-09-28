@@ -13,6 +13,7 @@ import LeadHeaderCard from '../components/lead-detail/LeadHeaderCard';
 import LeadInfoCard from '../components/lead-detail/LeadInfoCard';
 import LeadProductsCard from '../components/lead-detail/LeadProductsCard';
 import AgendaDelProspecto from '@/modules/proceso/components/AgendaDelProspecto';
+import { PROCESO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 import LeadUtmsCard from '../components/lead-detail/LeadUtmsCard';
 import LeadInteractionsCard, { InteractionDialog } from '../components/lead-detail/LeadInteractionsCard';
 import LeadRemindersCard, { ReminderDialog } from '../components/lead-detail/LeadRemindersCard';
@@ -259,6 +260,8 @@ export default function LeadDetailPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 space-y-4">
           <LeadInfoCard lead={lead} onUpdate={updateLead} />
+          {/* El proceso de ventas, fuera de produccion hasta aprobarlo (28/09). */}
+          {PROCESO_EN_PRUEBAS && (
           <AgendaDelProspecto
             leadId={lead.id}
             projectId={lead.project_id}
@@ -279,6 +282,7 @@ export default function LeadDetailPage() {
             // tres de la lista era la de este paso.
             alCorreo={(plantilla) => { setPlantillaCorreo(plantilla.id); setEmailOpen(true); }}
           />
+          )}
           <LeadProductsCard leadId={lead.id} projectId={lead.project_id} isAdmin={isAdmin} />
           <LeadUtmsCard utms={utms} leadOrigen={lead.origen} />
           <LeadInteractionsCard
