@@ -59,7 +59,7 @@ export async function porToken(token) {
     `SELECT f.*, l.nombre AS lead_nombre, p.nombre AS proyecto, p.logo_url, p.theme_color,
             pr.nombre AS producto, u.nombre AS gestora_nombre,
             -- El nombre con el que la conocen los clientes: el mismo que enseña el
-            -- widget de WhatsApp (`widget.model`). Sin él, su primer nombre.
+            -- widget de WhatsApp (widget.model). Sin él, su primer nombre.
             COALESCE(NULLIF(TRIM(u.whatsapp_display_name), ''), split_part(u.nombre, ' ', 1)) AS asesor_publico
        FROM feedback_envios f
        JOIN leads l ON l.id = f.lead_id
