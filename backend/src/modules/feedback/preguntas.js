@@ -93,7 +93,7 @@ export const PREGUNTAS = [
     clave: 'avisar', tipo: 'unica',
     texto: '¿Quieres que el asesor te vuelva a contactar más adelante?',
     opciones: [
-      { clave: 'si', texto: 'Sí, que me contacte más adelante' },
+      { clave: 'si', texto: 'Sí, que me contacte' },
       { clave: 'no', texto: 'No, gracias' },
     ],
     sub: {
