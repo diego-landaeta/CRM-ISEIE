@@ -304,7 +304,7 @@ export default function SeguimientoPage() {
   const resumenDeFiltros = useMemo(() => {
     const trozos: string[] = [];
     if (buscaLenta) trozos.push(`búsqueda «${buscaLenta}»`);
-    if (producto) trozos.push(productos.find((x) => String(x.id) === producto)?.nombre || 'una formación');
+    if (producto) trozos.push(productos.find((x) => x.ids.join(',') === producto)?.nombre || 'una formación');
     if (estado) trozos.push(`en «${STATUS_LABELS[estado] || estado}»`);
     if (bloque) trozos.push(({
       este_mes: 'entrados este mes', uno_a_tres: 'de uno a tres meses',
@@ -330,11 +330,13 @@ export default function SeguimientoPage() {
    * El motivo viaja al servidor, que lo exige. Es lo que el panel de feedback
    * (#170) va a leer: una base de bajas sin motivo no se puede analizar.
    */
-  async function descartarDelRepaso(p: EnSeguimiento, motivo: string) {
+  async function descartarDelRepaso(p: EnSeguimiento, motivo: string, feedback: 'enviar' | 'revisar') {
     try {
       await client.patch(`/leads/${p.lead_id}/status`, {
         status: 'no_interesado',
         motivo: `Descartado del repaso de fin de mes · ${motivo}`,
+        // El correo de «¿por qué has desistido?»: ya, o para verlo antes.
+        feedback,
       });
       setBase((b) => b.filter((x) => x.lead_id !== p.lead_id));
       setMarcados((m) => m.filter((x) => x !== p.lead_id));
@@ -665,7 +667,7 @@ export default function SeguimientoPage() {
                 />
                 <DescartarDelRepaso
                   nombre={p.lead_nombre}
-                  onDescartar={(motivo) => descartarDelRepaso(p, motivo)}
+                  onDescartar={(motivo, feedback) => descartarDelRepaso(p, motivo, feedback)}
                 />
               </div>
             </div>

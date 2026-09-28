@@ -49,6 +49,9 @@ import clientErrorsModule from './modules/client-errors/index.js';
 import changeRequestsModule from './modules/change-requests/index.js';
 // El proceso comercial (#87): los pasos, y de ahí la cola del día.
 import procesoModule from './modules/proceso/index.js';
+// «¿Por que has desistido?» (#169) y su panel (#170).
+import feedbackModule from './modules/feedback/index.js';
+import { startFeedbackDia7Scheduler } from './jobs/feedbackDia7Scheduler.js';
 import convocatoriasModule from './modules/convocatorias/index.js';
 import { startEmailSequenceScheduler } from './jobs/emailSequenceScheduler.js';
 import { startDocumentOrphanScheduler } from './jobs/documentOrphanScheduler.js';
@@ -250,6 +253,7 @@ const MODULES = [
   changeRequestsModule,
   statusModule,
   procesoModule,
+  feedbackModule,
   convocatoriasModule,
 ];
 
@@ -328,6 +332,7 @@ if (process.env.NODE_ENV !== 'test') {
         startTutorCommissionsScheduler();
         startVigilanteCatalogoScheduler();
         startLeadSinTocarScheduler();
+        startFeedbackDia7Scheduler();
         startResumenDiarioScheduler();
         startReporteSemanalScheduler();
       } catch (err) {

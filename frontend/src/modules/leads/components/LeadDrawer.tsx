@@ -18,6 +18,7 @@ const ChangeProductDialog = lazy(() => import('./ChangeProductDialog'));
 import AgendaDelProspecto from '@/modules/proceso/components/AgendaDelProspecto';
 import { traerPasosDeLead } from '@/modules/proceso/api/agenda.api';
 import { PROCESO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
+import FeedbackDeLaFicha from '@/modules/feedback/components/FeedbackDeLaFicha';
 
 const EnrollSequenceModal = lazy(() => import('./EnrollSequenceModal'));
 
@@ -191,6 +192,8 @@ function ResumenTab({ lead, onEnroll, onSaved }) {
 
   return (
     <div className="space-y-5">
+      {/* El correo de «¿por que has desistido?», si se le mando. */}
+      {PROCESO_EN_PRUEBAS && <FeedbackDeLaFicha leadId={lead.id} />}
       <div className="flex items-center gap-2">
         <StatusBadge status={lead.estado} />
         {lead.canal && <ChannelBadge channel={lead.canal} />}

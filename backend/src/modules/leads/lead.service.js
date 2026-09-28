@@ -489,7 +489,7 @@ export async function getTodaySummary(ctx) {
 // OPERACIONES
 // ============================================================
 
-export async function changeStatus(leadId, newStatus, motivo, userId) {
+export async function changeStatus(leadId, newStatus, motivo, userId, opts = {}) {
   const lead = await leadModel.findByIdLight(leadId);
   if (!lead) throw new AppError('Lead no encontrado', 404, 'LEAD_NOT_FOUND');
   if (lead.status === newStatus) throw new AppError('El lead ya tiene ese status', 400, 'SAME_STATUS');
@@ -509,6 +509,16 @@ export async function changeStatus(leadId, newStatus, motivo, userId) {
 
   // Disparar email sequences con trigger status_changed (async)
   triggerSequences('status_changed', leadId, lead.project_id);
+
+  // «¿POR QUE HAS DESISTIDO?» (#169): al pasar a no interesado a mano o al
+  // descartarlo del repaso. Sin esperarlo y sin que un fallo del correo tumbe
+  // el cambio de estado. Una vez por persona. Las acciones en bloque no pasan
+  // por aqui: marcar 500 no puede disparar 500 correos sin que nadie lo pida.
+  if (newStatus === 'no_interesado' && opts.feedback !== 'no') {
+    import('../feedback/feedback.service.js')
+      .then((f) => f.pedirFeedback(leadId, 'descarte', { userId, revisar: opts.feedback === 'revisar' }))
+      .catch((err) => logger.warn({ err: err.message, leadId }, 'feedback: no se pudo pedir al descartar'));
+  }
 
   return { previous: lead.status, current: newStatus };
 }

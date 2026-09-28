@@ -101,6 +101,9 @@ export const checkDuplicateSchema = z.object({
 export const updateStatusSchema = z.object({
   status: z.enum(['nuevo', 'por_contactar', 'contactado', 'en_seguimiento', 'convertido', 'no_interesado', 'proxima_convocatoria']),
   motivo: z.string().max(500).optional().nullable(),
+  // Solo cuenta al pasar a «no interesado»: que salga el correo de «¿por que
+  // has desistido?» (#169), que se prepare para verlo antes, o que no salga.
+  feedback: z.enum(['enviar', 'revisar', 'no']).optional(),
 }).refine(
   (data) => data.status !== 'no_interesado' || (data.motivo && data.motivo.trim().length >= 1),
   { message: 'Motivo requerido al marcar como no interesado', path: ['motivo'] }

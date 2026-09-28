@@ -135,6 +135,8 @@ const NAV_SECTIONS = [
     label: 'Análisis',
     items: [
       { to: '/informes',     label: 'Reportes',      icon: ChartLineUp, sectionPrefixes: ['/informes', '/activity'] },
+      // Por que no compran (#170). Fuera de produccion hasta aprobarlo.
+      ...(PROCESO_EN_PRUEBAS ? [{ to: '/informes/feedback', label: 'Feedback', icon: ChatCircleText, roles: ['admin', 'superadmin'] }] : []),
       { to: '/chat-ia',     label: 'Chat IA',       icon: ChatCircleText, roles: ['admin', 'superadmin'] },
     ],
   },

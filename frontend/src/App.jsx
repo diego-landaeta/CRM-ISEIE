@@ -70,6 +70,9 @@ const ChangeRequestDetailPage = lazy(() => import('./modules/change-requests/pag
 const DupReviewQueuePage = lazy(() => import('./modules/leads/pages/DupReviewQueuePage'));
 const DuplicatesPage = lazy(() => import('./modules/leads/pages/DuplicatesPage'));
 const ReportsPage = lazy(() => import('./shared/pages/ReportsPage'));
+// El feedback de «¿por que has desistido?» (#169, #170): la encuesta es PUBLICA.
+const FeedbackEncuestaPage = lazy(() => import('./modules/feedback/pages/FeedbackEncuestaPage'));
+const FeedbackPanelPage = lazy(() => import('./modules/feedback/pages/FeedbackPanelPage'));
 const NotificacionesPage = lazy(() => import('./modules/notificaciones/pages/NotificacionesPage'));
 const ActivityPage = lazy(() => import('./shared/pages/ActivityPage'));
 const StatusPage = lazy(() => import('./shared/pages/StatusPage'));
@@ -180,6 +183,8 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/set-password" element={<SetPasswordPage />} />
         <Route path="/embed/form/:embedId" element={<EmbedFormPage />} />
+        {/* Sin sesion: la abre desde el correo quien no compro. */}
+        <Route path="/feedback/:token" element={<FeedbackEncuestaPage />} />
 
         {/* Privadas (con layout) */}
         <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
@@ -261,6 +266,9 @@ function App() {
           <Route path="/configuracion/campos" element={<FieldDefinitionsPage />} />
           <Route path="/roles" element={<RolesPage />} />
           <Route path="/informes" element={<ReportsPage />} />
+          {/* El panel de feedback, fuera de produccion hasta aprobarlo. */}
+          <Route path="/informes/feedback"
+            element={PROCESO_EN_PRUEBAS ? <FeedbackPanelPage /> : <Navigate to="/informes" replace />} />
           <Route path="/notificaciones" element={<NotificacionesPage />} />
           <Route path="/notifications" element={<Navigate to="/notificaciones" replace />} />
           <Route path="/activity" element={<ActivityPage />} />

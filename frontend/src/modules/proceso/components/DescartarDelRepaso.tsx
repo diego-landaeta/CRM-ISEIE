@@ -35,21 +35,35 @@ export default function DescartarDelRepaso({
   onDescartar,
 }: {
   nombre: string | null;
-  /** Devuelve el motivo elegido. Quien llama es el que habla con el servidor. */
-  onDescartar: (motivo: string) => Promise<void> | void;
+  /**
+   * Devuelve el motivo elegido y qué hacer con el correo de «¿por qué has
+   * desistido?»: mandarlo ya, o prepararlo para verlo antes. Quien llama es
+   * el que habla con el servidor.
+   */
+  onDescartar: (motivo: string, feedback: 'enviar' | 'revisar') => Promise<void> | void;
 }) {
   const [abierto, setAbierto] = useState(false);
   const [otro, setOtro] = useState<string | null>(null);
   const [yendo, setYendo] = useState(false);
+  // EL CUADRO DE CONFIRMACION (#169, 2.ª parte del descarte). Descartar manda
+  // el correo de «¿por qué has desistido?», y eso no se deshace: antes de
+  // hacerlo se avisa, y se deja elegir verlo primero. El motivo elegido espera
+  // aqui mientras tanto.
+  const [aConfirmar, setAConfirmar] = useState<string | null>(null);
 
-  async function mandar(motivo: string) {
+  function mandar(motivo: string) {
     const limpio = motivo.trim();
-    if (!limpio) return;
+    if (limpio) setAConfirmar(limpio);
+  }
+
+  async function confirmar(feedback: 'enviar' | 'revisar') {
+    if (!aConfirmar) return;
     setYendo(true);
     try {
-      await onDescartar(limpio);
+      await onDescartar(aConfirmar, feedback);
       setAbierto(false);
       setOtro(null);
+      setAConfirmar(null);
     } finally {
       setYendo(false);
     }
@@ -66,6 +80,35 @@ export default function DescartarDelRepaso({
       >
         <Prohibit size={14} />
       </button>
+    );
+  }
+
+  if (aConfirmar) {
+    return (
+      <div role="alertdialog" aria-label="Confirmar el descarte"
+        className="w-full max-w-sm rounded-md border border-warning bg-warning-soft p-2.5 text-left text-xs"
+        onClick={(e) => e.stopPropagation()}>
+        <p className="font-semibold">Esta acción ejecuta un formulario de prueba evaluativa</p>
+        <p className="mt-1 text-muted-foreground">
+          {nombre || 'Esta persona'} pasa a «no interesado» ({aConfirmar}) y le llega el correo de
+          «¿por qué has desistido?». Si prefieres verlo antes, te llega una copia y queda
+          esperando en su ficha.
+        </p>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          <button type="button" disabled={yendo} onClick={() => confirmar('enviar')}
+            className="rounded-md bg-primary px-2 py-1 font-semibold text-primary-foreground disabled:opacity-50">
+            Confirmar y enviar
+          </button>
+          <button type="button" disabled={yendo} onClick={() => confirmar('revisar')}
+            className="rounded-md border border-border bg-card px-2 py-1 font-semibold hover:bg-muted disabled:opacity-50">
+            Quiero verlo antes
+          </button>
+          <button type="button" disabled={yendo} onClick={() => setAConfirmar(null)}
+            className="rounded-md px-2 py-1 text-muted-foreground hover:bg-muted disabled:opacity-50">
+            Volver
+          </button>
+        </div>
+      </div>
     );
   }
 
