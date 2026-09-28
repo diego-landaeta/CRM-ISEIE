@@ -1677,3 +1677,60 @@ export async function hayPendientesAnteriores(projectId, fecha, paymentId) {
   );
   return !!rows[0]?.hay;
 }
+
+// Paridad con MultiCRM (28/09): la pedia la pantalla (aviso de huecos) y
+// no existia, asi que «siguiente-numero» caia en '/:id' y daba 500.
+/**
+ * Que numero saldria ahora, sin reservarlo.
+ *
+ * Para que la pantalla pueda decir «el siguiente disponible es el X» antes de
+ * emitir. No toca el contador: solo mira. Si entre que se consulta y se emite
+ * alguien coge ese numero, la reserva lo detecta y avisa --por eso la
+ * comprobacion de verdad vive en `reservarNumero`, no aqui--.
+ */
+export async function siguienteLibre({ projectId, issuerId = null, ano = null }) {
+  const y = ano || new Date().getFullYear();
+  const { rows: [cfg] } = await query(
+    // La columna es `factura_serie_default`, NO `serie_factura`. Con el nombre
+    // mal la consulta fallaba, el catch se lo tragaba y devolvia 'FAC': la
+    // pantalla decia «el siguiente disponible es 2026/0001» cuando la serie
+    // CEDIA iba por la 119. Un numero sugerido equivocado es peor que ninguno.
+    // Si no se ha elegido emisora todavia, se mira la POR DEFECTO del proyecto:
+    // es la que usaria la factura de verdad. Sin esto, la pantalla sugeria la
+    // serie generica del proyecto --«A», numero 1-- cuando esa factura iba a
+    // salir en la serie CEDIA por la 119. Un numero sugerido que no es el que
+    // va a salir engaña mas que ayuda.
+    `SELECT COALESCE(
+              (SELECT e.serie FROM invoice_issuers e WHERE e.id = $2),
+              (SELECT e2.serie FROM invoice_issuers e2
+                WHERE e2.project_id = p.id AND e2.es_default LIMIT 1),
+              (SELECT e3.serie FROM invoice_issuers e3 WHERE e3.id = p.sociedad_emisora_id),
+              p.factura_serie_default, 'FAC') AS serie
+       FROM projects p WHERE p.id = $1`,
+    [projectId, issuerId]
+  );
+  const serie = cfg?.serie || 'FAC';
+  const { rows: [t] } = await query(
+    `SELECT GREATEST(
+              COALESCE((SELECT MAX(ultimo_numero) FROM invoice_sequences WHERE ano = $1 AND serie = $2), 0),
+              COALESCE((SELECT MAX(numero) FROM invoices WHERE ano = $1 AND serie = $2 AND numero IS NOT NULL), 0)
+            ) AS usado`,
+    [y, serie]
+  );
+  const n = Number(t.usado) + 1;
+  // Los huecos: numeros que faltan por debajo del tope. Si alguien numero a
+  // mano saltandose uno, conviene verlo --una serie fiscal no deberia tenerlos--.
+  const { rows: huecos } = await query(
+    `SELECT g AS n FROM generate_series(1, $3) g
+      WHERE NOT EXISTS (SELECT 1 FROM invoices i WHERE i.ano = $1 AND i.serie = $2 AND i.numero = g)
+      ORDER BY g LIMIT 10`,
+    [y, serie, Number(t.usado)]
+  );
+  return {
+    ano: y,
+    serie,
+    siguiente: n,
+    codigo: `${y}/${String(n).padStart(4, '0')}`,
+    huecos: huecos.map((h) => Number(h.n)),
+  };
+}

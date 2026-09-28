@@ -698,3 +698,15 @@ export async function emitirColaHasta(req, res, next) {
     res.json({ success: true, data: await service.emitirColaHasta(projectId, hasta, req.user.userId) });
   } catch (err) { next(err); }
 }
+
+
+/** GET /invoices/siguiente-numero — que numero saldria ahora, y los huecos. */
+export async function siguienteNumero(req, res, next) {
+  try {
+    const projectId = Number(req.query.projectId);
+    if (!projectId) throw new AppError('projectId requerido', 400, 'BAD_REQUEST');
+    const issuerId = req.query.issuerId ? Number(req.query.issuerId) : null;
+    const ano = req.query.ano ? Number(req.query.ano) : null;
+    res.json({ success: true, data: await model.siguienteLibre({ projectId, issuerId, ano }) });
+  } catch (e) { next(e); }
+}

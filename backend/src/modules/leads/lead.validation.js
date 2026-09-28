@@ -111,13 +111,15 @@ export const updateStatusSchema = z.object({
 
 export const createInteractionSchema = z.object({
   tipo: z.enum(['llamada', 'email', 'whatsapp', 'nota']),
-  nota: z.string().max(2000).optional(),
+  // 10.000, no 2.000: una nota con el resumen de una llamada larga no cabía y
+  // se rechazaba entera (M.ª Eugenia, seis veces en una tarde). La columna es TEXT.
+  nota: z.string().max(10000, 'La nota es demasiado larga (máx. 10.000 caracteres)').optional(),
   fecha: z.string().datetime().optional().or(z.string().regex(/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?/)).optional(),
 });
 
 export const updateInteractionSchema = z.object({
   tipo: z.enum(['llamada', 'email', 'whatsapp', 'nota']).optional(),
-  nota: z.string().max(2000).optional(),
+  nota: z.string().max(10000, 'La nota es demasiado larga (máx. 10.000 caracteres)').optional(),
   fecha: z.string().datetime().optional().or(z.string().regex(/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?/)).optional(),
 }).refine((d) => Object.keys(d).length > 0, { message: 'Al menos un campo a actualizar' });
 
