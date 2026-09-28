@@ -1583,25 +1583,25 @@ quién, cuándo, por qué disparador y, si contesta, cuándo. Anotado también e
 Diego, 28/09: «la 8 debe de quedar como un futuro contacto a la gestora, luego
 lo veremos». (Era la 8 de la encuesta de nueve; en la de seis es la 6.)
 
-**Anotada, a medio camino.** La encuesta pregunta «¿Quieres que el asesor te
-vuelva a contactar más adelante?» (*Sí, que me contacte más adelante* / *No,
-gracias*). Hoy, si contesta que sí:
+**Hecha el 28/09 en los dos staging** (no en producción). Diego: «si pone sí,
+que aparezcan esos rangos de fechas y se sincronice».
 
-- queda en su historial, con el resto de respuestas;
-- a su gestora le llega el aviso «… · quiere que le vuelvas a contactar más
-  adelante».
+- Al contestar *Sí, que me contacte* aparece **«¿Cuándo te viene bien?»**: en 2
+  semanas, en 1 mes, en 2 o 3 meses, en 6 meses o el año que viene.
+- Al enviar, se le pone un **recordatorio** (`lead_reminders`) para el principio
+  de ese rango (14, 30, 60, 180 o 365 días; sin elegir, al mes), a nombre de la
+  gestora que **lleva ahora** al prospecto (`responsable_id`; si no tiene, la del
+  envío). Le sale en «Hoy» y en la ficha, y ese día le llega el aviso del
+  recordatorio aunque el prospecto esté descartado.
+- Queda en su historial («📅 … recordatorio puesto para el dd/mm/aaaa»), en el
+  aviso a la gestora y en el panel («¿Cuándo te viene bien?», contado).
+- Sin gestora: no se agenda y el historial lo dice.
 
-**Falta decidir** (con Diego) y hacer:
+Dónde: `backend/src/modules/feedback/preguntas.js` (clave `avisar` y su `sub`),
+`feedback.service.js` → `responder()` y `feedback.model.js` → `agendarVuelta()`.
 
-1. **Cuándo**: ¿una fecha fija (p. ej. a los 30 o 60 días), la próxima
-   convocatoria del mismo curso, o que la elija la persona en la encuesta?
-2. **Dónde**: ¿un recordatorio en la agenda de su gestora, una tarea en la cola
-   del día, o volver a ponerlo en seguimiento?
-3. **Si su gestora ya no está** (is_available = false): ¿a quién va?
-4. **Paridad**: en los dos CRMs.
-
-Dónde tocar: `backend/src/modules/feedback/preguntas.js` (la pregunta, clave
-`avisar`) y `feedback.service.js` → `responder()` (ahí se crearía el contacto).
+**Queda abierto:** si su gestora ya no está (is_available = false), el
+recordatorio va igual a ella; habría que reasignar el prospecto.
 
 *Asignada a **Diego**.*
 
