@@ -88,7 +88,7 @@ export function correoDe(d, token, { vista = false } = {}) {
   // (`cabecera.js`): en HTML, Gmail le pintaba de negro el fondo transparente
   // al logo de Fono, y el modo oscuro invierte los colores del HTML.
   const cabecera = d.project_id
-    ? `<img src="${escapar(`${baseDeLaEncuesta()}/api/f/cabecera/${d.project_id}.png?v=${versionDe(d)}`)}" width="560" alt="${marca}"
+    ? `<img src="${escapar(`${baseDeLaEncuesta()}/api/f/cabecera/${d.project_id}?v=${versionDe(d)}`)}" width="560" alt="${marca}"
          style="display:block;width:100%;max-width:560px;height:auto;border:0;border-radius:10px 10px 0 0;background:${fondo}">`
     : `<div style="background:${fondo};border-radius:10px 10px 0 0;padding:18px 24px;border-bottom:4px solid ${color};font-size:18px;font-weight:bold;color:${tintaSobre(fondo)}">${marca}</div>`;
   const aviso = vista

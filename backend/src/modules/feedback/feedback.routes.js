@@ -19,6 +19,10 @@ const publicRouter = Router();
 // La cabecera de la marca de los correos, ANTES del límite: la piden los
 // proxies de imágenes de Gmail y compañía, muchos correos desde pocas IP. Está
 // en memoria y no enseña nada que no esté ya en la web de la marca.
+// SIN «.png» en la dirección: el nginx de ISEIE sirve como fichero estático
+// todo lo que acaba en .png y nunca llegaba a la API. El cliente de correo se
+// guía por el Content-Type. La de «.png» se queda por los correos ya enviados.
+publicRouter.get('/cabecera/:projectId', servirCabecera);
 publicRouter.get('/cabecera/:projectId.png', servirCabecera);
 publicRouter.use(rateLimit({ windowMs: 60 * 1000, max: 30, standardHeaders: true, legacyHeaders: false }));
 publicRouter.get('/:token', ctrl.encuesta);

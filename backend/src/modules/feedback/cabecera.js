@@ -101,7 +101,7 @@ export async function cabeceraDe(projectId) {
   return hechas.get(clave);
 }
 
-/** GET /api/f/cabecera/:projectId.png — pública: la pide el cliente de correo. */
+/** GET /api/f/cabecera/:projectId — pública: la pide el cliente de correo. */
 export async function servir(req, res, next) {
   try {
     const id = Number.parseInt(req.params.projectId, 10);
