@@ -9,7 +9,11 @@ export const createSchema = z.object({
   ambito: z.enum(['compartida', 'personal']).default('compartida'),
   // Sobre que WhatsApp se esta trabajando. Sin esto la personal se guarda a
   // nombre de quien la escribe, y no del numero desde el que se manda.
-  usuarioId: z.coerce.number().int().positive().optional(),
+  //
+  // `null` es «el mio», no un cero: con `coerce` a secas un null llegaba como 0
+  // y rompia con «Number must be greater than 0» (28/09).
+  usuarioId: z.preprocess((v) => (v === null || v === '' ? undefined : v),
+    z.coerce.number().int().positive().optional()),
 });
 
 export const updateSchema = z.object({

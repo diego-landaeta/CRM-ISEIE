@@ -62,8 +62,13 @@ function siFaltaLaTabla(err) {
 export async function listTemplates(req, res, next) {
   try {
     const ambito = await proyectosDelAmbito(req);
+    // Con una EMPRESA puesta llegan sus campus y no hace falta uno concreto.
+    // Antes se pedia igualmente (`?? proyecto(req)`) y, al no venir, esto
+    // contestaba «projectId requerido»: la pantalla lo pintaba como «este
+    // proyecto no tiene plantillas». Diego, 28/09 (visto en MultiCRM).
+    const deLaEmpresa = Array.isArray(ambito.projectIds) && ambito.projectIds.length > 0;
     res.json({ success: true, data: await model.listTemplates({
-      projectId: ambito.projectId ?? proyecto(req),
+      projectId: deLaEmpresa ? null : (ambito.projectId ?? proyecto(req)),
       projectIds: ambito.projectIds,
       userId: await duenoDeLasPersonales(req),
     })});
