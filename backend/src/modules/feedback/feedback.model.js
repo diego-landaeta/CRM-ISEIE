@@ -12,6 +12,7 @@ export async function datosDelLead(leadId) {
             -- Por to_jsonb: si la migracion 168 no esta aplicada, sale null en vez
             -- de reventar, y el correo firma con el remitente del CRM.
             to_jsonb(p) ->> 'remitente_no_contestar' AS remitente_no_contestar,
+            to_jsonb(p) ->> 'color_cabecera' AS color_cabecera,
             pr.nombre AS producto
        FROM leads l
        JOIN projects p ON p.id = l.project_id
@@ -57,6 +58,7 @@ export async function porLead(leadId) {
 export async function porToken(token) {
   const { rows } = await query(
     `SELECT f.*, l.nombre AS lead_nombre, p.nombre AS proyecto, p.logo_url, p.theme_color,
+            to_jsonb(p) ->> 'color_cabecera' AS color_cabecera,
             pr.nombre AS producto, u.nombre AS gestora_nombre,
             -- El nombre con el que la conocen los clientes: el mismo que enseña el
             -- widget de WhatsApp (widget.model). Sin él, su primer nombre.

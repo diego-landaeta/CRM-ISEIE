@@ -54,19 +54,40 @@ function primerNombre(nombre) {
  * web y es lo que reconoce. El texto va al grano: una pregunta, un botón, un
  * minuto.
  */
+const hex = (v) => (/^#[0-9a-f]{6}$/i.test(v || '') ? v : null);
+
+/**
+ * Texto blanco u oscuro: el que más se lea sobre ese fondo (contraste WCAG).
+ * Hace falta porque cada marca trae su color: el rosa de Psiko con letra
+ * blanca no se lee, y el azul de ISECD con letra oscura tampoco.
+ */
+export function tintaSobre(fondo) {
+  const m = /^#([0-9a-f]{6})$/i.exec(fondo || '');
+  if (!m) return '#1d2530';
+  const [r, g, b] = [0, 2, 4]
+    .map((i) => parseInt(m[1].slice(i, i + 2), 16) / 255)
+    .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+  const luz = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  // 0,0178 es la luz de #1d2530, el oscuro de la casa.
+  return 1.05 / (luz + 0.05) >= (luz + 0.05) / (0.0178 + 0.05) ? '#ffffff' : '#1d2530';
+}
+
 export function correoDe(d, token, { vista = false } = {}) {
-  const color = /^#[0-9a-f]{6}$/i.test(d.theme_color || '') ? d.theme_color : '#1f4e79';
+  // El color de la marca (botón y filete) y el fondo sobre el que va su logo
+  // (blanco si no se dijo): los dos se cambian en «Configurar esta marca».
+  const color = hex(d.theme_color) || '#1f4e79';
+  const fondo = hex(d.color_cabecera) || '#ffffff';
   const nombre = primerNombre(d.nombre || d.lead_nombre);
   const saludo = nombre ? `Hola, ${escapar(nombre)}:` : 'Hola:';
   const programa = d.producto ? `sobre <strong>${escapar(d.producto)}</strong>` : 'sobre nuestro programa';
   const marca = escapar(d.proyecto || '');
-  // La marca va en una BANDA de su color, con el logo y el nombre. Muchas
-  // guardan la version CLARA del logo --la de la cabecera oscura de su web--
-  // y sobre blanco no se veia: el de ISAEG es literalmente «logo-blanco».
+  // La cabecera: el LOGO de la marca sobre SU fondo —el logo de la mayoría es
+  // para fondo claro; el de ACADEMIA IA o ISAEG es blanco y va sobre oscuro—,
+  // con un filete de su color debajo. Sin logo, el nombre.
   const logo = d.logo_url
-    ? `<img src="${escapar(d.logo_url)}" alt="" style="max-height:40px;max-width:160px;vertical-align:middle;margin-right:12px">`
-    : '';
-  const cabecera = `<div style="background:${color};border-radius:10px 10px 0 0;padding:16px 24px;color:#ffffff;font-size:17px;font-weight:bold">${logo}${marca}</div>`;
+    ? `<img src="${escapar(d.logo_url)}" alt="${marca}" style="display:block;max-height:52px;max-width:220px;border:0">`
+    : `<span style="font-size:18px;font-weight:bold;color:${tintaSobre(fondo)}">${marca}</span>`;
+  const cabecera = `<div style="background:${fondo};border-radius:10px 10px 0 0;padding:18px 24px;border-bottom:4px solid ${color}">${logo}</div>`;
   const aviso = vista
     ? `<div style="background:#fff4d6;border:1px solid #f0c75e;border-radius:6px;padding:10px 12px;margin:0 0 18px;font-size:13px;color:#6b4e00">
          Vista previa: esto es lo que recibirá la persona. Todavía no se le ha enviado.</div>`
@@ -83,7 +104,7 @@ export function correoDe(d, token, { vista = false } = {}) {
         Nos ayudaría mucho saber por qué: son dos clics y nos sirve para mejorar.</p>
       <p style="margin:24px 0">
         <a href="${escapar(enlaceDe(token, { vista }))}"
-           style="background:${color};color:#ffffff;text-decoration:none;padding:12px 22px;border-radius:6px;font-weight:bold;display:inline-block">
+           style="background:${color};color:${tintaSobre(color)};text-decoration:none;padding:12px 22px;border-radius:6px;font-weight:bold;display:inline-block">
           Contestar</a></p>
       <p style="font-size:13px;color:#5b6572;margin:0">Gracias por tu tiempo,<br>el equipo de ${marca}</p>
       <p style="font-size:12px;line-height:1.5;color:#8a939e;margin:22px 0 0;border-top:1px solid #e6e9ee;padding-top:14px">
@@ -147,19 +168,12 @@ async function mandar(envio, datos) {
     projectId: envio.project_id,
     fromEmail: remitente.email,
     fromName: remitente.nombre,
-    // El «no responder» del campus sale por la cuenta de Brevo de los campus.
-    cuenta: remitente.email ? 'campus' : null,
     // Una sola vez por persona, también para Brevo.
     clave: `feedback:${envio.lead_id}`,
   };
-  let r = await sendEmail(correo);
-  // Si Brevo no acepta el remitente del campus --su dominio no está
-  // autenticado--, sale con el del CRM. La clave no lo frena: solo cuenta lo
-  // que SALIÓ, así que el reintento no se toma por repetido.
-  if (!r?.sent && remitente.email && !['FRENO_DE_PRUEBAS', 'YA_ENVIADO', 'NO_API_KEY'].includes(r?.reason)) {
-    logger.warn({ remitente: remitente.email, r }, 'feedback: Brevo no aceptó el remitente del campus; sale con el del CRM');
-    r = await sendEmail({ ...correo, fromEmail: undefined, cuenta: null });
-  }
+  // Por la cuenta de Brevo de la marca si la tiene; si no sale con su
+  // remitente, `sendEmail` lo reintenta solo por la del CRM.
+  const r = await sendEmail(correo);
 
   let fila;
   if (r?.sent || r?.reason === 'YA_ENVIADO') {
@@ -268,6 +282,8 @@ export async function encuesta(token) {
     marca: f.proyecto,
     logo_url: f.logo_url,
     color: f.theme_color,
+    // Sobre qué va su logo (vacío = blanco), como en el correo.
+    fondo: f.color_cabecera,
     nombre: primerNombre(f.lead_nombre),
     programa: f.producto,
     // Con SU formacion y SU asesor: «¿Cómo te atendió el asesor?» / «El asesor: Ana».

@@ -5,11 +5,12 @@ import {
   Users, Calendar, ShieldCheck, TextT, TreeStructure,
   Megaphone, FileText, PlugsConnected, Envelope, EnvelopeOpen, Lightning,
   ListNumbers, Key, Lock, ArrowSquareOut, Plus, WarningCircle,
-  Wrench, X,
+  Wrench, X, Palette,
 } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 import { useConfirm } from '@/shared/components/ui/useConfirm';
+import MarcaSection from './MarcaSection';
 
 // Cada item de la nav interna. Si tiene `external: true` se muestra con el
 // icono de "abrir en otra página" y al hacer click navega a esa ruta.
@@ -27,6 +28,8 @@ const NAV = [
   { label: 'Plantillas email',     icon: EnvelopeOpen,   to: '/email-templates' },
   { label: 'Atajos rápidos',       icon: Lightning,      to: '/configuracion/atajos' },
   { label: 'Numeración docs',      icon: ListNumbers,    to: '/documentos/config' },
+  // La marca en correos y formularios: logo, colores, remitente y su Brevo.
+  { id: 'marca',        label: 'Marca',         icon: Palette, embedded: true },
   { id: 'integrations', label: 'APIs globales', icon: Key, embedded: true },
   { id: 'security',     label: 'Seguridad',     icon: Lock, embedded: true },
 ];
@@ -126,6 +129,9 @@ export default function SettingsPage() {
           )}
           {tab === 'availability' && (
             <AvailabilitySection />
+          )}
+          {tab === 'marca' && (
+            <MarcaSection isAdmin={isAdmin} />
           )}
           {tab === 'integrations' && (
             <IntegrationsSection isAdmin={isAdmin} />

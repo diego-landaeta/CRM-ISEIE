@@ -35,9 +35,22 @@ type Pregunta = {
 };
 type Encuesta = {
   marca: string | null; logo_url: string | null; color: string | null;
+  /** Sobre qué va su logo («Configurar esta marca»); vacío = blanco. */
+  fondo?: string | null;
   nombre: string; programa: string | null; preguntas: Pregunta[]; respondida: boolean;
 };
 type Respuestas = Record<string, string | number | string[]>;
+
+const esHex = (v?: string | null): v is string => /^#[0-9a-f]{6}$/i.test(v || '');
+
+/** Texto blanco u oscuro, el que más se lea sobre ese fondo (el mismo cálculo que el correo). */
+function tintaSobre(fondo: string) {
+  const [r, g, b] = [1, 3, 5]
+    .map((i) => parseInt(fondo.slice(i, i + 2), 16) / 255)
+    .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+  const luz = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return 1.05 / (luz + 0.05) >= (luz + 0.05) / (0.0178 + 0.05) ? '#ffffff' : '#1d2530';
+}
 
 export default function FeedbackEncuestaPage() {
   const { token } = useParams();
@@ -56,7 +69,12 @@ export default function FeedbackEncuestaPage() {
       .catch(() => setError('No hemos podido cargar la encuesta. Vuelve a intentarlo en un rato.'));
   }, [token]);
 
-  const color = /^#[0-9a-f]{6}$/i.test(datos?.color || '') ? (datos?.color as string) : '#1f4e79';
+  // El color de la marca (botón, filete, marcas) y el fondo de su logo.
+  const color = esHex(datos?.color) ? datos!.color! : '#1f4e79';
+  const fondo = esHex(datos?.fondo) ? datos!.fondo! : '#ffffff';
+  const tintaBoton = tintaSobre(color);
+  // Un color claro (el rosa de Psiko) no se lee como texto sobre blanco.
+  const colorTexto = tintaBoton === '#ffffff' ? color : '#1d2530';
   const faltaObligatoria = (datos?.preguntas || []).some((p) => p.obligatoria && !resp[p.clave]);
   const poner = (clave: string, valor: string | number | string[]) => setResp((r) => ({ ...r, [clave]: valor }));
   const quitar = (clave: string) => setResp((r) => {
@@ -103,11 +121,14 @@ export default function FeedbackEncuestaPage() {
   return (
     <div className="min-h-screen bg-[#f4f6f8] px-4 py-10 text-[#1d2530]">
       <main className="mx-auto max-w-lg overflow-hidden rounded-xl bg-white shadow-sm">
-        {/* La marca en una banda de su color: muchas guardan la version CLARA del
-            logo (la de la cabecera oscura de su web) y sobre blanco no se ve. */}
-        <header className="flex items-center gap-3 px-6 py-4 text-white sm:px-8" style={{ background: color }}>
-          {datos?.logo_url && <img src={datos.logo_url} alt="" className="max-h-10 max-w-[160px]" />}
-          {datos?.marca && <span className="text-lg font-bold">{datos.marca}</span>}
+        {/* La cabecera de la marca: su logo sobre SU fondo (el de la mayoría es
+            para fondo claro; el de ACADEMIA IA o ISAEG es blanco y va sobre
+            oscuro) y un filete de su color. Sin logo, el nombre. */}
+        <header className="flex min-h-[76px] items-center px-6 py-4 sm:px-8"
+          style={{ background: fondo, borderBottom: `4px solid ${color}`, color: tintaSobre(fondo) }}>
+          {datos?.logo_url
+            ? <img src={datos.logo_url} alt={datos.marca || ''} className="max-h-12 max-w-[220px]" />
+            : datos?.marca && <span className="text-lg font-bold">{datos.marca}</span>}
         </header>
         <div className="p-6 sm:p-8">
           {vista && (
@@ -146,9 +167,9 @@ export default function FeedbackEncuestaPage() {
                     <div key={p.clave}>
                       <label htmlFor={id} className="block text-base font-semibold leading-snug">
                         <span className="mr-1 text-[#8a939e]">{i + 1}.</span> {p.texto}
-                        {p.obligatoria && <span className="ml-1" style={{ color }} aria-label="obligatoria">*</span>}
+                        {p.obligatoria && <span className="ml-1" style={{ color: colorTexto }} aria-label="obligatoria">*</span>}
                       </label>
-                      {p.destacado && <p className="mt-1 text-sm font-semibold" style={{ color }}>{p.destacado}</p>}
+                      {p.destacado && <p className="mt-1 text-sm font-semibold" style={{ color: colorTexto }}>{p.destacado}</p>}
                       {p.ayuda && <p className="mt-0.5 text-sm text-[#5b6572]">{p.ayuda}</p>}
 
                       {(p.tipo === 'unica' || p.tipo === 'escala') && (
@@ -220,8 +241,8 @@ export default function FeedbackEncuestaPage() {
               {error && <p className="mt-4 text-sm text-red-700">{error}</p>}
 
               <button type="button" onClick={enviar} disabled={faltaObligatoria || enviando || vista}
-                className="mt-7 w-full rounded-lg px-5 py-3 text-base font-bold text-white transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
-                style={{ background: color }}>
+                className="mt-7 w-full rounded-lg px-5 py-3 text-base font-bold transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
+                style={{ background: color, color: tintaBoton }}>
                 {vista ? 'Vista previa: no se envía' : (enviando ? 'Enviando…' : 'Enviar')}
               </button>
               {faltaObligatoria && !vista && (

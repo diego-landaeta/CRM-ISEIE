@@ -17,6 +17,7 @@ export async function findAll({ active }) {
   const { rows } = await query(
     `SELECT p.id, p.nombre, p.slug, p.type, p.emoji,
             p.modules, p.sidebar_labels, p.theme_color,
+            p.logo_url, p.color_cabecera, p.remitente_no_contestar,
             p.webhook_api_key, p.meta_account_id, p.google_account_id,
             p.gsc_property, p.dias_alerta_inactividad, p.active, p.created_at, p.updated_at,
             p.sociedad_emisora_id, s.razon_social AS sociedad_nombre
@@ -32,6 +33,7 @@ export async function findById(id) {
   const { rows } = await query(
     `SELECT id, nombre, slug, type, emoji,
             modules, sidebar_labels, theme_color,
+            logo_url, color_cabecera, remitente_no_contestar,
             webhook_api_key, meta_account_id, google_account_id,
             gsc_property, dias_alerta_inactividad, active, created_at, updated_at
      FROM projects WHERE id = $1`,
@@ -80,7 +82,9 @@ export async function update(id, fields) {
   // 'auto_email_documents'.
   const allowed = ['nombre', 'type', 'emoji', 'meta_account_id', 'google_account_id',
                    'gsc_property', 'dias_alerta_inactividad', 'active',
-                   'modules', 'sidebar_labels', 'theme_color', 'sociedad_emisora_id'];
+                   'modules', 'sidebar_labels', 'theme_color', 'sociedad_emisora_id',
+                   // La marca en correos y formularios (migraciones 168 y 170).
+                   'logo_url', 'color_cabecera', 'remitente_no_contestar'];
   const sets = [];
   const params = [];
   let idx = 1;
