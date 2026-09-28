@@ -121,23 +121,26 @@ export default function FeedbackPanelPage() {
       </section>
 
       {/* ── Pregunta a pregunta ────────────────────────────────────── */}
-      {(datos?.preguntas || []).some((p) => p.clave !== 'motivo' && p.respondieron > 0) && (
+      {(datos?.preguntas || []).some((p) => (p.clave !== 'motivo' && p.respondieron > 0) || (p.escritos || []).length > 0) && (
         <section className="rounded-lg border border-border bg-card p-4">
           <h2 className="text-base font-semibold">Lo que contestaron, pregunta a pregunta</h2>
           <div className="mt-3 grid grid-cols-1 gap-5 lg:grid-cols-2">
-            {datos!.preguntas.filter((p) => p.clave !== 'motivo').map((p) => (
-              <div key={p.clave} className={p.tipo === 'texto' ? 'lg:col-span-2' : ''}>
-                <h3 className="text-sm font-semibold">{p.texto}</h3>
+            {/* El motivo ya tiene sus barras arriba: aquí solo lo que escribieron en «Otro motivo». */}
+            {datos!.preguntas.filter((p) => p.clave !== 'motivo' || (p.escritos || []).length > 0).map((p) => (
+              <div key={p.clave} className={p.tipo === 'texto' || p.clave === 'motivo' ? 'lg:col-span-2' : ''}>
+                <h3 className="text-sm font-semibold">{p.clave === 'motivo' ? 'Lo que escribieron en «Otro motivo»' : p.texto}</h3>
                 <p className="text-xs text-muted-foreground">
-                  {p.respondieron} {p.respondieron === 1 ? 'respuesta' : 'respuestas'}
+                  {p.clave === 'motivo'
+                    ? `${p.escritos!.length} de ${p.respondieron} ${p.respondieron === 1 ? 'respuesta' : 'respuestas'}`
+                    : `${p.respondieron} ${p.respondieron === 1 ? 'respuesta' : 'respuestas'}`}
                   {p.tipo === 'escala' && p.media != null && <> · media <strong className="text-foreground">{p.media.toLocaleString('es-ES')}</strong> de 5</>}
                   {p.tipo === 'varias' && ' · podían marcar varias'}
                 </p>
-                {p.tipo !== 'texto' && (
+                {p.tipo !== 'texto' && p.clave !== 'motivo' && (
                   <ul className="mt-2 space-y-1.5">
                     {(p.opciones || []).map((o) => (
                       <li key={o.clave} className="text-sm">
-                        <span className="flex justify-between gap-3"><span>{p.tipo === 'escala' ? `${o.texto} de 5` : o.texto}</span>
+                        <span className="flex justify-between gap-3"><span>{p.tipo === 'escala' ? `${o.clave} · ${o.texto}` : o.texto}</span>
                           <span className="tabular-nums text-muted-foreground">{o.n} · {pct(o.n, p.respondieron)}</span></span>
                         <span className="mt-0.5 block h-1.5 overflow-hidden rounded-full bg-muted">
                           <span className="block h-full rounded-full bg-primary" style={{ width: `${p.respondieron ? (o.n * 100) / p.respondieron : 0}%` }} />
@@ -146,7 +149,8 @@ export default function FeedbackPanelPage() {
                     ))}
                   </ul>
                 )}
-                {p.tipo === 'texto' && (
+                {/* Lo escrito: en las de «Otro», solo si alguien escribió. */}
+                {(p.tipo === 'texto' || (p.escritos || []).length > 0) && (
                   (p.escritos || []).length === 0
                     ? <p className="mt-2 text-sm text-muted-foreground">Nadie ha escrito nada todavía.</p>
                     : (

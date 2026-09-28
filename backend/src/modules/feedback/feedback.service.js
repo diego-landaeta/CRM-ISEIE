@@ -7,7 +7,7 @@ import { notifyUsers } from '../notifications/notifications.service.js';
 import * as leadModel from '../leads/lead.model.js';
 import * as model from './feedback.model.js';
 import { DISPARADORES } from './motivos.js';
-import { PREGUNTAS, preguntasPara, limpiarRespuestas, textoDeRespuesta } from './preguntas.js';
+import { ESCALA, PREGUNTAS, preguntasPara, limpiarRespuestas, textoDeRespuesta } from './preguntas.js';
 
 /**
  * «¿Por qué has desistido?» (#169).
@@ -266,8 +266,8 @@ export async function encuesta(token) {
     color: f.theme_color,
     nombre: primerNombre(f.lead_nombre),
     programa: f.producto,
-    // Con SU formacion ya puesta. La gestora va sin nombre: «¿Cómo te atendió la gestora?».
-    preguntas: preguntasPara({ programa: f.producto }),
+    // Con SU formacion y SU asesor: «¿Cómo te atendió el asesor?» / «El asesor: Ana».
+    preguntas: preguntasPara({ programa: f.producto, asesor: primerNombre(f.gestora_nombre) || null }),
     respondida: Boolean(f.respondido_at),
   };
 }
@@ -277,36 +277,39 @@ export async function encuesta(token) {
  * ver «me pareció caro» sin ir a buscarlo— y a la gestora le llega un aviso.
  */
 export async function responder(token, { motivo, comentario, respuestas = {} } = {}) {
-  // La encuesta de antes mandaba solo motivo y comentario: se aceptan igual.
+  // La encuesta de antes mandaba solo motivo y comentario: se aceptan igual
+  // (el comentario es lo que escribió en «Otro motivo»).
   const r = limpiarRespuestas({
     ...respuestas,
     motivo: respuestas.motivo ?? motivo,
-    comentario: respuestas.comentario ?? comentario,
+    motivo_otro: respuestas.motivo_otro ?? comentario,
   });
   if (!r.motivo) throw new AppError('Dinos por qué no seguiste: es la única obligatoria', 400, 'VALIDATION_ERROR');
   const f = await model.porToken(token);
   if (!f) throw new AppError('Este enlace no es válido', 404, 'NOT_FOUND');
   if (f.respondido_at) return { ya: true };
-  const fila = await model.guardarRespuesta(f.id, { motivo: r.motivo, comentario: r.comentario || null, respuestas: r });
+  const fila = await model.guardarRespuesta(f.id, { motivo: r.motivo, comentario: r.motivo_otro || null, respuestas: r });
   if (!fila) return { ya: true };
   // En su historial, TODO lo que contestó, pregunta a pregunta y tal como se
   // lo preguntamos: la gestora que le llame mañana lo tiene que ver sin ir a buscarlo.
   const textos = preguntasPara({ programa: f.producto });
   const lineas = textos
     .filter((p) => r[p.clave] !== undefined)
-    .map((p) => `· ${p.texto} ${textoDeRespuesta(p.clave, r[p.clave])}`);
+    .map((p) => `· ${p.texto} ${textoDeRespuesta(p.clave, r[p.clave], r[`${p.clave}_otro`])}`);
   await apuntarEnSuHistorial(f.lead_id, `💬 Contestó al feedback:\n${lineas.join('\n')}`);
   const nota = r.nota_atencion ? ` · te puso un ${r.nota_atencion}/5` : '';
+  // El «sí» será un futuro contacto en su agenda (por decidir); de momento, que lo sepa.
+  const volver = r.avisar === 'si' ? ' · quiere que le vuelvas a contactar más adelante' : '';
   await avisarAGestora(fila, {
     titulo: 'Te han contestado al feedback',
-    mensaje: `${f.lead_nombre || 'Un prospecto'}: ${textoDeRespuesta('motivo', r.motivo)}${nota}`,
+    mensaje: `${f.lead_nombre || 'Un prospecto'}: ${textoDeRespuesta('motivo', r.motivo, r.motivo_otro)}${nota}${volver}`,
   });
   return { ya: false };
 }
 
 /**
  * El resumen de cada pregunta para el panel: cuántos eligieron cada opción, la
- * nota media de la escala y lo que escribieron (lo último primero).
+ * nota media de la escala y lo que escribieron en «Otro» (lo último primero).
  */
 export function resumenDePreguntas(contestadas) {
   const textos = preguntasPara();
@@ -315,17 +318,18 @@ export function resumenDePreguntas(contestadas) {
       .map((c) => ({ v: (c.respuestas || {})[p.clave], c }))
       .filter((x) => x.v !== undefined);
     const base = { clave: p.clave, tipo: p.tipo, texto: textos[i].texto, respondieron: valores.length };
-    if (p.tipo === 'texto') {
-      return {
-        ...base,
-        escritos: valores.slice(0, 40).map(({ v, c }) => ({
-          texto: v, lead_id: c.lead_id, lead_nombre: c.lead_nombre, gestora: c.gestora, fecha: c.respondido_at,
-        })),
-      };
-    }
+    const escritos = p.escribir
+      ? contestadas
+        .filter((c) => (c.respuestas || {})[`${p.clave}_otro`])
+        .slice(0, 40)
+        .map((c) => ({
+          texto: c.respuestas[`${p.clave}_otro`], lead_id: c.lead_id, lead_nombre: c.lead_nombre,
+          gestora: c.gestora, fecha: c.respondido_at,
+        }))
+      : undefined;
     if (p.tipo === 'escala') {
-      const opciones = [1, 2, 3, 4, 5].map((k) => ({
-        clave: String(k), texto: String(k), n: valores.filter((x) => Number(x.v) === k).length,
+      const opciones = ESCALA.map((o) => ({
+        clave: o.clave, texto: o.texto, n: valores.filter((x) => String(x.v) === o.clave).length,
       }));
       const media = valores.length
         ? Math.round((valores.reduce((s, x) => s + Number(x.v), 0) / valores.length) * 10) / 10
@@ -337,7 +341,7 @@ export function resumenDePreguntas(contestadas) {
       texto: o.texto,
       n: valores.filter((x) => (Array.isArray(x.v) ? x.v.includes(o.clave) : x.v === o.clave)).length,
     }));
-    return { ...base, opciones };
+    return { ...base, opciones, ...(escritos ? { escritos } : {}) };
   });
 }
 

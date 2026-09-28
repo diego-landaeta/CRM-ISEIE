@@ -13,9 +13,10 @@ import { useParams, useSearchParams } from 'react-router-dom';
  * reconoce. Nada de la estética del CRM.
  *
  * LAS PREGUNTAS LAS MANDA EL SERVIDOR (`modules/feedback/preguntas.js`), con el
- * nombre de su formación ya puesto. Esta pantalla solo sabe
- * pintar cuatro tipos: una opción, varias, una escala de 1 a 5 y texto. Cambiar
- * o añadir preguntas no la toca.
+ * nombre de su formación y de su asesor ya puestos. Todas van en DESPLEGABLE
+ * (Diego, 28/09): una opción, varias o la nota de 1 a 5. La opción marcada como
+ * `escribir` («Otro motivo», «Otra cosa») abre un recuadro para escribir.
+ * Cambiar o añadir preguntas no toca esta pantalla.
  *
  * `?vista=1` es la copia que recibe la gestora cuando pide «quiero verlo»: se
  * ve igual, pero no guarda nada. Si contestara ella, la respuesta sería de la
@@ -26,8 +27,9 @@ const API_BASE = (import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '') + '/ap
 
 type Opcion = { clave: string; texto: string };
 type Pregunta = {
-  clave: string; tipo: 'unica' | 'varias' | 'escala' | 'texto';
-  texto: string; ayuda?: string; obligatoria?: boolean; opciones?: Opcion[];
+  clave: string; tipo: 'unica' | 'varias' | 'escala';
+  texto: string; ayuda?: string; destacado?: string; obligatoria?: boolean;
+  opciones: Opcion[]; escribir?: string;
 };
 type Encuesta = {
   marca: string | null; logo_url: string | null; color: string | null;
@@ -55,10 +57,16 @@ export default function FeedbackEncuestaPage() {
   const color = /^#[0-9a-f]{6}$/i.test(datos?.color || '') ? (datos?.color as string) : '#1f4e79';
   const faltaObligatoria = (datos?.preguntas || []).some((p) => p.obligatoria && !resp[p.clave]);
   const poner = (clave: string, valor: string | number | string[]) => setResp((r) => ({ ...r, [clave]: valor }));
+  const quitar = (clave: string) => setResp((r) => {
+    const resto = { ...r };
+    delete resto[clave];
+    return resto;
+  });
   const alternar = (clave: string, opcion: string) => setResp((r) => {
     const antes = Array.isArray(r[clave]) ? (r[clave] as string[]) : [];
     return { ...r, [clave]: antes.includes(opcion) ? antes.filter((x) => x !== opcion) : [...antes, opcion] };
   });
+  const eligioOtro = (p: Pregunta) => Boolean(p.escribir) && [resp[p.clave]].flat().includes(p.escribir as string);
 
   async function enviar() {
     if (faltaObligatoria || vista) return;
@@ -80,8 +88,15 @@ export default function FeedbackEncuestaPage() {
     }
   }
 
-  const caja = 'flex cursor-pointer items-center gap-3 rounded-lg border px-4 py-3 text-base transition-colors';
-  const estiloCaja = (elegido: boolean) => ({ borderColor: elegido ? color : '#d8dee6', background: elegido ? `${color}12` : '#fff' });
+  // El desplegable: nativo (en el móvil abre el selector del sistema), con la
+  // flecha dibujada para que se vea igual en todos.
+  const desplegable = 'block w-full cursor-pointer appearance-none rounded-lg border bg-white py-3 pl-4 pr-10 text-left text-base focus:outline-none focus:ring-2';
+  const borde = (elegido: boolean) => ({ borderColor: elegido ? color : '#d8dee6' });
+  const flecha = (
+    <svg aria-hidden="true" viewBox="0 0 20 20" className="pointer-events-none absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-[#5b6572]">
+      <path d="M5 7.5l5 5 5-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
 
   return (
     <div className="min-h-screen bg-[#f4f6f8] px-4 py-10 text-[#1d2530]">
@@ -117,71 +132,72 @@ export default function FeedbackEncuestaPage() {
               </h1>
               <p className="mt-2 text-base leading-relaxed text-[#3b4450]">
                 {datos.programa
-                  ? <>Nos pediste información sobre <strong>{datos.programa}</strong> y no seguiste adelante. Son dos minutos, y solo la primera es obligatoria.</>
-                  : 'Son dos minutos, y solo la primera es obligatoria.'}
+                  ? <>Nos pediste información sobre <strong>{datos.programa}</strong> y no seguiste adelante. Es un minuto, y solo la primera es obligatoria.</>
+                  : 'Es un minuto, y solo la primera es obligatoria.'}
               </p>
 
-              <div className="mt-6 space-y-7">
-                {datos.preguntas.map((p, i) => (
-                  <fieldset key={p.clave}>
-                    <legend className="text-base font-semibold leading-snug">
-                      <span className="mr-1 text-[#8a939e]">{i + 1}.</span> {p.texto}
-                      {p.obligatoria && <span className="ml-1" style={{ color }} aria-label="obligatoria">*</span>}
-                    </legend>
-                    {p.ayuda && <p className="mt-0.5 text-sm text-[#5b6572]">{p.ayuda}</p>}
+              <div className="mt-6 space-y-6">
+                {datos.preguntas.map((p, i) => {
+                  const id = `p-${p.clave}`;
+                  const elegidas = Array.isArray(resp[p.clave]) ? (resp[p.clave] as string[]) : [];
+                  return (
+                    <div key={p.clave}>
+                      <label htmlFor={id} className="block text-base font-semibold leading-snug">
+                        <span className="mr-1 text-[#8a939e]">{i + 1}.</span> {p.texto}
+                        {p.obligatoria && <span className="ml-1" style={{ color }} aria-label="obligatoria">*</span>}
+                      </label>
+                      {p.destacado && <p className="mt-1 text-sm font-semibold" style={{ color }}>{p.destacado}</p>}
+                      {p.ayuda && <p className="mt-0.5 text-sm text-[#5b6572]">{p.ayuda}</p>}
 
-                    {p.tipo === 'unica' && (
-                      <div className="mt-3 space-y-2">
-                        {(p.opciones || []).map((o) => {
-                          const elegido = resp[p.clave] === o.clave;
-                          return (
-                            <label key={o.clave} className={caja} style={estiloCaja(elegido)}>
-                              <input type="radio" name={p.clave} value={o.clave} checked={elegido}
-                                onChange={() => poner(p.clave, o.clave)} className="h-4 w-4" style={{ accentColor: color }} />
-                              {o.texto}
-                            </label>
-                          );
-                        })}
-                      </div>
-                    )}
+                      {(p.tipo === 'unica' || p.tipo === 'escala') && (
+                        <div className="relative mt-2">
+                          <select id={id} value={resp[p.clave] === undefined ? '' : String(resp[p.clave])}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              if (!v) quitar(p.clave);
+                              else poner(p.clave, p.tipo === 'escala' ? Number(v) : v);
+                            }}
+                            className={desplegable} style={borde(resp[p.clave] !== undefined)}>
+                            <option value="">Elige una opción</option>
+                            {p.opciones.map((o) => (
+                              <option key={o.clave} value={o.clave}>{p.tipo === 'escala' ? `${o.clave} · ${o.texto}` : o.texto}</option>
+                            ))}
+                          </select>
+                          {flecha}
+                        </div>
+                      )}
 
-                    {p.tipo === 'varias' && (
-                      <div className="mt-3 space-y-2">
-                        {(p.opciones || []).map((o) => {
-                          const elegido = Array.isArray(resp[p.clave]) && (resp[p.clave] as string[]).includes(o.clave);
-                          return (
-                            <label key={o.clave} className={caja} style={estiloCaja(elegido)}>
-                              <input type="checkbox" checked={elegido} onChange={() => alternar(p.clave, o.clave)}
-                                className="h-4 w-4" style={{ accentColor: color }} />
-                              {o.texto}
-                            </label>
-                          );
-                        })}
-                      </div>
-                    )}
+                      {/* Varias: un desplegable que al abrirse deja marcar las que quiera. */}
+                      {p.tipo === 'varias' && (
+                        <details className="mt-2">
+                          <summary id={id} className={`relative ${desplegable} list-none [&::-webkit-details-marker]:hidden`} style={borde(elegidas.length > 0)}>
+                            <span className={elegidas.length ? '' : 'text-[#5b6572]'}>
+                              {elegidas.length
+                                ? p.opciones.filter((o) => elegidas.includes(o.clave)).map((o) => o.texto).join(', ')
+                                : 'Elige una o varias'}
+                            </span>
+                            {flecha}
+                          </summary>
+                          <div className="mt-1 space-y-0.5 rounded-lg border border-[#d8dee6] bg-white p-2 shadow-sm">
+                            {p.opciones.map((o) => (
+                              <label key={o.clave} className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-base hover:bg-[#f4f6f8]">
+                                <input type="checkbox" checked={elegidas.includes(o.clave)} onChange={() => alternar(p.clave, o.clave)}
+                                  className="h-4 w-4" style={{ accentColor: color }} />
+                                {o.texto}
+                              </label>
+                            ))}
+                          </div>
+                        </details>
+                      )}
 
-                    {p.tipo === 'escala' && (
-                      <div className="mt-3 grid grid-cols-5 gap-2" role="radiogroup" aria-label={p.texto}>
-                        {[1, 2, 3, 4, 5].map((n) => {
-                          const elegido = resp[p.clave] === n;
-                          return (
-                            <button key={n} type="button" role="radio" aria-checked={elegido} onClick={() => poner(p.clave, n)}
-                              className="h-12 rounded-lg border text-lg font-bold transition-colors"
-                              style={{ borderColor: elegido ? color : '#d8dee6', background: elegido ? color : '#fff', color: elegido ? '#fff' : '#1d2530' }}>
-                              {n}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    {p.tipo === 'texto' && (
-                      <textarea value={(resp[p.clave] as string) || ''} onChange={(e) => poner(p.clave, e.target.value)}
-                        maxLength={1000} rows={3} aria-label={p.texto}
-                        className="mt-3 w-full rounded-lg border border-[#d8dee6] px-3 py-2 text-base focus:outline-none focus:ring-2" />
-                    )}
-                  </fieldset>
-                ))}
+                      {eligioOtro(p) && (
+                        <textarea value={(resp[`${p.clave}_otro`] as string) || ''} onChange={(e) => poner(`${p.clave}_otro`, e.target.value)}
+                          maxLength={1000} rows={2} placeholder="Cuéntanos cuál" aria-label={`${p.texto}: escríbelo`}
+                          className="mt-2 w-full rounded-lg border border-[#d8dee6] px-3 py-2 text-base focus:outline-none focus:ring-2" />
+                      )}
+                    </div>
+                  );
+                })}
               </div>
 
               {error && <p className="mt-4 text-sm text-red-700">{error}</p>}

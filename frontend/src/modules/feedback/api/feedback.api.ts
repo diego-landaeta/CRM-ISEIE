@@ -13,6 +13,7 @@ export type ResumenPregunta = {
   clave: string; tipo: 'unica' | 'varias' | 'escala' | 'texto'; texto: string; respondieron: number;
   opciones?: Array<{ clave: string; texto: string; n: number }>;
   media?: number | null;
+  /** Lo que escribieron en «Otro» (o en una de escribir, en respuestas viejas). */
   escritos?: Array<{ texto: string; lead_id: number; lead_nombre: string | null; gestora: string | null; fecha: string }>;
 };
 
@@ -46,7 +47,7 @@ export type EnvioDeUnLead = {
   motivo: string | null; comentario: string | null; nota_envio: string | null;
   respuestas?: RespuestasFeedback;
   /** Las preguntas, para poder decir a qué contestó cada cosa. */
-  preguntas?: Array<{ clave: string; tipo: string; texto: string; opciones?: Array<{ clave: string; texto: string }> }>;
+  preguntas?: Array<{ clave: string; tipo: string; texto: string; escribir?: string; opciones?: Array<{ clave: string; texto: string }> }>;
 } | null;
 
 export async function traerPanel(params: URLSearchParams): Promise<PanelFeedback | null> {

@@ -72,11 +72,14 @@ export default function FeedbackDeLaFicha({ leadId }: { leadId: number }) {
     // encuesta vieja (solo motivo y comentario), se enseña eso.
     const resp = envio.respuestas || {};
     const preguntas = (envio.preguntas || []).filter((p) => resp[p.clave] !== undefined);
-    const valor = (p: { tipo: string; opciones?: Array<{ clave: string; texto: string }> }, v: unknown) => {
-      if (p.tipo === 'escala') return `${v} de 5`;
+    const valor = (p: { clave: string; tipo: string; escribir?: string; opciones?: Array<{ clave: string; texto: string }> }, v: unknown) => {
+      const texto = (x: unknown) => p.opciones?.find((o) => o.clave === String(x))?.texto || String(x);
+      if (p.tipo === 'escala') return `${v} de 5 · ${texto(v)}`;
       if (p.tipo === 'texto') return `«${v}»`;
+      // Lo que escribió en «Otro», pegado a esa opción.
+      const otro = resp[`${p.clave}_otro`];
       const lista = Array.isArray(v) ? v : [v];
-      return lista.map((x) => p.opciones?.find((o) => o.clave === x)?.texto || String(x)).join(', ');
+      return lista.map((x) => (x === p.escribir && otro ? `${texto(x)}: «${otro}»` : texto(x))).join(', ');
     };
     return (
       <div className={`${caja} border-border bg-muted/30`}>
