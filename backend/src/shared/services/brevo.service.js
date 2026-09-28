@@ -9,7 +9,11 @@ const FROM_NAME = process.env.BREVO_FROM_NAME || 'CRM ISEIE';
 // Mientras no exista el modulo `credentials` (encriptacion AES-256 de claves por
 // proyecto/global en la base), la clave sale del entorno. Al portar `credentials`
 // desde el CRM hermano, devolver aqui la busqueda por base de datos.
-function getApiKey() {
+function getApiKey(cuenta = null) {
+  // La cuenta de los CAMPUS (como en MultiCRM, 28/09): quien firma con el «no
+  // responder» del campus puede salir por otra cuenta de Brevo. En ISEIE no hay
+  // `BREVO_CAMPUS_API_KEY` —iseie.com esta en la cuenta de siempre— y sale igual.
+  if (cuenta === 'campus' && process.env.BREVO_CAMPUS_API_KEY) return process.env.BREVO_CAMPUS_API_KEY;
   const envKey = process.env.BREVO_API_KEY;
   if (!envKey || envKey === 'test') return null;
   return envKey;
@@ -43,8 +47,11 @@ const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
  *
  * Quien no la pase se comporta exactamente igual que antes, salvo que ahora
  * queda anotado el intento.
+ *
+ *   · cuenta — 'campus' para salir por la cuenta de Brevo de los campus
+ *              (`BREVO_CAMPUS_API_KEY`). Sin esa variable, la de siempre.
  */
-async function sendEmail({ to, subject, htmlContent, textContent, tags = [], projectId = null, fromEmail, fromName, attachment, clave = null }) {
+async function sendEmail({ to, subject, htmlContent, textContent, tags = [], projectId = null, fromEmail, fromName, attachment, clave = null, cuenta = null }) {
   // `to` llega de cuatro formas: cadena, objeto, lista de objetos, y una cadena
   // con varios correos separados por comas (los avisos a administradores).
   const destinatarios = Array.isArray(to)
@@ -77,7 +84,7 @@ async function sendEmail({ to, subject, htmlContent, textContent, tags = [], pro
     return { sent: false, reason: 'YA_ENVIADO', repetido: true };
   }
 
-  const apiKey = getApiKey();
+  const apiKey = getApiKey(cuenta);
   if (!apiKey) {
     logger.warn({ to, subject }, 'Brevo: sin API key configurada, email no enviado');
     await registrar({ clave, destinatarios, asunto: subject, etiquetas: tags, projectId,

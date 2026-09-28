@@ -147,6 +147,8 @@ async function mandar(envio, datos) {
     projectId: envio.project_id,
     fromEmail: remitente.email,
     fromName: remitente.nombre,
+    // El «no responder» del campus sale por la cuenta de Brevo de los campus.
+    cuenta: remitente.email ? 'campus' : null,
     // Una sola vez por persona, también para Brevo.
     clave: `feedback:${envio.lead_id}`,
   };
@@ -156,7 +158,7 @@ async function mandar(envio, datos) {
   // que SALIÓ, así que el reintento no se toma por repetido.
   if (!r?.sent && remitente.email && !['FRENO_DE_PRUEBAS', 'YA_ENVIADO', 'NO_API_KEY'].includes(r?.reason)) {
     logger.warn({ remitente: remitente.email, r }, 'feedback: Brevo no aceptó el remitente del campus; sale con el del CRM');
-    r = await sendEmail({ ...correo, fromEmail: undefined });
+    r = await sendEmail({ ...correo, fromEmail: undefined, cuenta: null });
   }
 
   let fila;
