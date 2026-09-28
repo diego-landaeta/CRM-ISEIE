@@ -81,15 +81,24 @@ export interface UsePermissionResult {
 }
 
 export default function usePermission(): UsePermissionResult {
-  const { user } = useAuth();
+  const { user, permissions } = useAuth();
 
   function can(permission: PermissionKey): boolean {
     if (!user) return false;
     // bypass para roles privilegiados
     if (tieneRolDe(user, 'superadmin', 'soporte')) return true;
-    // override desde el backend (cuando CRM-228 exista)
-    if (user.permissions && Object.keys(user.permissions).length > 0) {
-      return user.permissions[permission] === true || user.permissions['*'] === true;
+    // Los del backend, que mandan sobre la tabla de abajo.
+    //
+    // Se leian de `user.permissions` y ahi no estan: `/auth/me` los devuelve AL
+    // LADO del usuario. Solo en lo que el backend DEFINE: aqui varias claves se
+    // llaman distinto que alli (`leads.read` / `leads.view`) y esas siguen
+    // saliendo de la tabla. Y no para el tutor: el backend no tiene tabla de
+    // tutor y le calcula la de gestora.
+    if (permissions && user.role !== 'tutor') {
+      if (permissions['*'] === true) return true;
+      if (Object.prototype.hasOwnProperty.call(permissions, permission)) {
+        return permissions[permission] === true;
+      }
     }
     // fallback: defaults por rol
     // Los de cada uno de sus roles, sumados: basta con que UNO lo permita.
