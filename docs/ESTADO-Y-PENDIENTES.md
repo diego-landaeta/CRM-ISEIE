@@ -1577,3 +1577,42 @@ quién, cuándo, por qué disparador y, si contesta, cuándo. Anotado también e
 #169.
 
 *Panel: Diego. Envío: Ángel. En los dos CRMs.*
+
+## Correos automáticos: ponerles el mismo formato · TAREA PARA ÁNGEL Y DIEGO
+
+Diego, 28/09: «acomodar los formatos de los correos de los resúmenes y eso,
+avisos».
+
+**Anotada, no empezada.** Los correos que el CRM manda solo tienen cada uno su
+aspecto. El de feedback (28/09) ya tiene el que se quiere: la banda con el logo y
+el color del campus, el texto al grano, un botón, y abajo el aviso de «no
+contestar» con el enlace completo. La idea es llevar los demás a ese formato.
+
+### Los que hay (backend)
+
+| Correo | Dónde se arma | En qué CRM |
+|---|---|---|
+| Resumen del día (gestora y admin) y plan de mañana | `jobs/resumenDiarioScheduler.js` | MultiCRM /testeo |
+| Reporte semanal | `jobs/reporteSemanalScheduler.js` | los dos |
+| «[CRM] Sin contactar: …» (SLA del lead) | `jobs/leadSinTocarScheduler.js` | los dos |
+| «Recordatorio vencido: …» | `jobs/reminderScheduler.js` | los dos |
+| «[CRM] Has vendido hoy» (aviso al tutor) | `jobs/avisoTutorScheduler.js` | MultiCRM |
+| Avisar al tutor (desde Comisiones) | `modules/tutores/avisarTutor.js` | MultiCRM /testeo |
+| Google Ads desconectado / reactivado | `jobs/googleAdsTokenScheduler.js` | los dos |
+| Bienvenida de usuario y lead asignado | `shared/services/brevo.service.js` | los dos |
+| Pasos de las secuencias | `jobs/emailSequenceScheduler.js` (el asunto y el cuerpo los pone quien las escribe) | los dos |
+
+### Qué revisar en cada uno
+
+- La cabecera con la marca: la del **campus** si va a un prospecto o a un
+  tutor; la del **CRM** si es un aviso interno (resumen, reporte, SLA).
+- Que se lea en el móvil: una columna, letra que no haya que ampliar, botones
+  grandes.
+- El remitente: «no contestar» cuando nadie va a leer la respuesta, y el aviso
+  abajo. Los de un campus salen por Brevo, que solo envía desde dominios
+  autenticados (hoy iseie.com, 360crm.tech, certifex.tech y cediaidsl.com).
+- Que los enlaces vayan a la dirección del CRM que toca (/crm, /testeo,
+  crm.iseie.com), no a localhost ni a la de otro entorno.
+- Una plantilla común en el código, para no arreglar diez veces lo mismo.
+
+*Asignada a **Ángel y Diego**. En los dos CRMs.*
