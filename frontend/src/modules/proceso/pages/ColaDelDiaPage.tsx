@@ -21,7 +21,7 @@ import EmptyState from '@/shared/components/ui/EmptyState';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useAuth } from '@/contexts/AuthContext';
 import client from '@/shared/api/client';
-import { traerCola, traerResumen, type PasoEnCola, type ResumenCola } from '../api/agenda.api';
+import { traerCola, traerResumen, type PasoEnCola, type ResumenCola, type FormacionDeLaLista } from '../api/agenda.api';
 import { iconoDeCanal, nombreDeCanal } from '../lib/canales';
 import { contarPorPaso, trasSacar } from '../lib/cola';
 import PanelDeCola from '../components/PanelDeCola';
@@ -109,7 +109,7 @@ export default function ColaDelDiaPage() {
   }, [busca]);
 
   /** Las formaciones del ambito, para el filtro. */
-  const [productos, setProductos] = useState<Array<{ id: number; nombre: string }>>([]);
+  const [productos, setProductos] = useState<FormacionDeLaLista[]>([]);
   // Qué tramo se está mirando. Por defecto todo lo que ya toca —atrasado y hoy—,
   // que es con lo que se abre el día.
   //
@@ -164,13 +164,17 @@ export default function ColaDelDiaPage() {
         pagina,
         estado: estado || null,
         busca: buscaLenta || null,
-        productoId: producto ? Number(producto) : null,
+        productoIds: producto || null,
         desde: desdeFecha || null,
       }),
       traerResumen({ projectId: proyecto, gestoraId }),
     ]).then(([c, r]) => {
       if (!vivo) return;
       setCola(c.filas);
+      setProductos(c.formaciones);
+      // Si la elegida ya no la tiene nadie de la lista --otro campus, otro
+      // estado--, se suelta: dejarla puesta enseña una lista vacia sin decir por que.
+      if (producto && !c.formaciones.some((f) => f.ids.join(',') === producto)) setProducto('');
       setTotal(c.total);
       setTotalPaginas(c.totalPaginas);
       setResumen(r);
@@ -191,23 +195,10 @@ export default function ColaDelDiaPage() {
       .catch(() => { /* si falla, se queda sin filtro y ya */ });
   }, [esAdmin, proyecto]);
 
-  // Las formaciones para el desplegable: las del campus elegido, o las de toda
-  // la empresa si no hay campus puesto.
-  useEffect(() => {
-    const q = new URLSearchParams();
-    if (proyecto) q.set('projectId', String(proyecto));
-    else if (activeIssuer?.id) q.set('issuerId', String(activeIssuer.id));
-    else { setProductos([]); return; }
-    q.set('limit', '500');
-    let vivo = true;
-    client.get(`/products?${q.toString()}`)
-      .then((r: any) => {
-        if (!vivo) return;
-        setProductos((r?.success ? (r.data || []) : []).map((x: any) => ({ id: x.id, nombre: x.nombre })));
-      })
-      .catch(() => { if (vivo) setProductos([]); });
-    return () => { vivo = false; };
-  }, [proyecto, activeIssuer?.id]);
+  // Las formaciones del desplegable las manda el servidor CON la cola: solo
+  // las que tiene la gente de esta lista. Antes se pedia el catalogo entero
+  // del ambito --500 formaciones con CEDIA-- y elegir una que nadie tenia
+  // dejaba la lista vacia. Diego, 28/09.
 
   // Qué paso se está mirando, si es que se ha elegido uno. Va aparte del tramo
   // de fechas: se cruzan, no se sustituyen —«los atrasados del paso 2» es la
@@ -381,7 +372,7 @@ export default function ColaDelDiaPage() {
         >
           <option value="">Cualquier formación</option>
           {productos.map((p) => (
-            <option key={p.id} value={p.id}>{p.nombre}</option>
+            <option key={p.ids.join(',')} value={p.ids.join(',')}>{p.nombre} ({p.personas})</option>
           ))}
         </select>
 

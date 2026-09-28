@@ -78,11 +78,21 @@ function proyectosDeLaCola(req) {
  * viendo. Si cada uno leyera los suyos, bajarias 800 creyendo que son los 40
  * que habias filtrado.
  */
+/**
+ * «12,40,51» -> [12, 40, 51]. Una formacion puede tener un id por campus, y el
+ * desplegable los manda todos juntos. Lo que no sea un id se descarta.
+ */
+function idsDeFormacion(valor) {
+  const ids = String(valor || '').split(',').map(Number).filter((n) => Number.isInteger(n) && n > 0);
+  return ids.length ? ids : null;
+}
+
 function filtrosDelRepaso(req) {
   const ant = ['este_mes', 'uno_a_tres', 'tres_a_seis', 'mas_de_seis'];
   return {
     busca: req.query.busca || null,
     productoId: req.query.productoId ? Number(req.query.productoId) : null,
+    productoIds: idsDeFormacion(req.query.productoIds),
     antiguedad: ant.includes(req.query.antiguedad) ? req.query.antiguedad : null,
     sinContactar: req.query.sinContactar === '1',
     estado: req.query.estado || null,
@@ -172,20 +182,26 @@ export async function cola(req, res, next) {
     // la pantalla pegada; y cortar sin decirlo era lo que habia antes.
     const porPagina = Math.min(Number(req.query.limite) || 100, 300);
     const pagina = Math.max(Number(req.query.pagina) || 1, 1);
-    const { filas, total } = await Proceso.colaDelDia({
+    const filtros = {
       projectIds: proyectosDeLaCola(req),
       asesoraId: deQuienEsLaCola(req),
       hasta: /^\d{4}-\d{2}-\d{2}$/.test(req.query.hasta || '') ? req.query.hasta : null,
       estado: req.query.estado || null,
       busca: req.query.busca || null,
       productoId: req.query.productoId ? Number(req.query.productoId) : null,
+      productoIds: idsDeFormacion(req.query.productoIds),
       desde: /^\d{4}-\d{2}-\d{2}$/.test(req.query.desde || '') ? req.query.desde : null,
-      limite: porPagina,
-      desplazamiento: (pagina - 1) * porPagina,
-    });
+    };
+    // La lista y, a la vez, las formaciones que tiene su gente: con todos los
+    // filtros MENOS el de formacion, para que elegir una no borre las demas.
+    const [{ filas, total }, { formaciones }] = await Promise.all([
+      Proceso.colaDelDia({ ...filtros, limite: porPagina, desplazamiento: (pagina - 1) * porPagina }),
+      Proceso.colaDelDia({ ...filtros, productoId: null, productoIds: null, soloFormaciones: true }),
+    ]);
     res.json({
       success: true,
       data: filas,
+      formaciones,
       pagination: {
         total, page: pagina, limit: porPagina,
         totalPages: Math.max(1, Math.ceil(total / porPagina)),
@@ -204,14 +220,17 @@ export async function seguimiento(req, res, next) {
     // pantalla pegada y nadie baja mas alla de la tercera.
     const porPagina = Math.min(Number(req.query.limite) || 50, 200);
     const pagina = Math.max(Number(req.query.pagina) || 1, 1);
-    const { filas, total } = await Proceso.baseDeSeguimiento({
+    const comunes = {
       projectIds: proyectosDeLaCola(req),
       asesoraId: deQuienEsLaCola(req),
       ...filtrosDelRepaso(req),
-      limite: porPagina,
-      desplazamiento: (pagina - 1) * porPagina,
-    });
+    };
+    const [{ filas, total }, { formaciones }] = await Promise.all([
+      Proceso.baseDeSeguimiento({ ...comunes, limite: porPagina, desplazamiento: (pagina - 1) * porPagina }),
+      Proceso.baseDeSeguimiento({ ...comunes, productoId: null, productoIds: null, soloFormaciones: true }),
+    ]);
     res.json({
+      formaciones,
       success: true,
       data: filas,
       pagination: {

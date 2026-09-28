@@ -258,6 +258,11 @@ export async function pasosDeLead(leadId) {
 export async function colaDelDia({
   projectIds, asesoraId, hasta = null, limite = 200, desplazamiento = 0, estado = null,
   busca = null, productoId = null, desde = null,
+  // Varias a la vez: la misma formacion en varios campus (ver
+  // `formacionesAgrupadas`).
+  productoIds = null,
+  // En vez de la lista, las formaciones que tiene la gente de la lista.
+  soloFormaciones = false,
 }) {
   const par = [];
   let i = 1;
@@ -291,26 +296,23 @@ export async function colaDelDia({
     par.push(q);
     i += 1;
   }
-  const pProd = productoId ? `AND l.producto_interes_id = $${i++}` : '';
-  if (productoId) par.push(Number(productoId));
+  const variosProd = Array.isArray(productoIds) && productoIds.length ? productoIds.map(Number) : null;
+  const pProd = variosProd
+    ? `AND l.producto_interes_id = ANY($${i++}::int[])`
+    : (productoId ? `AND l.producto_interes_id = $${i++}` : '');
+  if (variosProd) par.push(variosProd);
+  else if (productoId) par.push(Number(productoId));
   // Desde que dia. El otro extremo ya lo pone el tramo de arriba (`hasta`);
   // con este se puede pedir «del 1 al 15» sin pelearse con el tramo.
   const fechaOk = /^\d{4}-\d{2}-\d{2}$/.test(desde || '');
   const pDesde = fechaOk ? `AND ls.fecha_prevista >= $${i++}::date` : '';
   if (fechaOk) par.push(desde);
-  const pLimite = `$${i++}`;
-  par.push(Number(limite) || 200);
-  const pSalto = `$${i++}`;
-  par.push(Number(desplazamiento) || 0);
 
-  const { rows } = await query(
-    `WITH pendientes AS (
+  // LAS PENDIENTES, una sola vez: la lista y su desplegable de formaciones
+  // salen de la MISMA consulta, asi que no pueden contar cosas distintas.
+  const PENDIENTES = `WITH pendientes AS (
        SELECT ls.*, l.responsable_id, l.nombre AS lead_nombre, l.status AS lead_estado,
               l.producto_interes_id,
-              -- Para rellenar los huecos del mensaje sin salir de la cola
-              -- (#88). Son los mismos datos con los que se rellena en el chat:
-              -- si aqui se dejaran fuera, el mismo mensaje saldria a medias
-              -- segun desde donde se copie.
               l.email AS lead_email, l.telefono AS lead_telefono,
               ${CONTACTOS} AS contactos,
               ROW_NUMBER() OVER (PARTITION BY ls.lead_id ORDER BY ls.orden) AS pos
@@ -319,14 +321,33 @@ export async function colaDelDia({
         WHERE l.deleted_at IS NULL
           AND ls.estado = 'pendiente'
           AND ls.fecha_prevista <= ${pHasta}
-          -- Quien ya compro o dijo que no, sale de la cola: seguir el proceso
-          -- con alguien que ya cerro es hacerle perder el tiempo a las dos.
           AND l.status NOT IN ('convertido', 'no_interesado')
           ${pEstado}
-          -- El paso ya hecho no se pide otra vez.
           AND ${CONTACTOS} < ls.orden
           ${pProj} ${pAses} ${pBusca} ${pProd} ${pDesde}
-     )
+     )`;
+
+  if (soloFormaciones) {
+    const { rows } = await query(
+      `${PENDIENTES}
+       SELECT p.nombre, array_agg(DISTINCT q.producto_interes_id) AS ids,
+              count(DISTINCT q.lead_id)::int AS personas
+         FROM pendientes q
+         JOIN products p ON p.id = q.producto_interes_id
+        WHERE q.pos = 1
+        GROUP BY p.nombre
+        ORDER BY p.nombre`,
+      par);
+    return { formaciones: formacionesAgrupadas(rows) };
+  }
+
+  const pLimite = `$${i++}`;
+  par.push(Number(limite) || 200);
+  const pSalto = `$${i++}`;
+  par.push(Number(desplazamiento) || 0);
+
+  const { rows } = await query(
+    `${PENDIENTES}
      SELECT q.lead_id, q.lead_nombre, q.lead_estado, q.responsable_id,
             q.lead_email, q.lead_telefono,
             q.clave, q.orden, q.fecha_prevista, q.contactos,
@@ -464,6 +485,8 @@ export async function baseDeSeguimiento({
   desdeDias = 15, descansoDias = 30, limite = 500, desplazamiento = 0,
   busca = null, productoId = null, antiguedad = null, sinContactar = false,
   estado = null,
+  // Como en la cola: varias a la vez, y el modo «solo formaciones».
+  productoIds = null, soloFormaciones = false,
 } = {}) {
   const par = [];
   let i = 1;
@@ -492,8 +515,12 @@ export async function baseDeSeguimiento({
     i += 1;
     par.push(q);
   }
-  const pProd = productoId ? `AND l.producto_interes_id = $${i++}` : '';
-  if (productoId) par.push(Number(productoId));
+  const variosProd = Array.isArray(productoIds) && productoIds.length ? productoIds.map(Number) : null;
+  const pProd = variosProd
+    ? `AND l.producto_interes_id = ANY($${i++}::int[])`
+    : (productoId ? `AND l.producto_interes_id = $${i++}` : '');
+  if (variosProd) par.push(variosProd);
+  else if (productoId) par.push(Number(productoId));
 
   // En que estado esta. Los convertidos y los no interesados no entran nunca
   // --la base los excluye-- asi que aqui solo valen los cinco de en medio.
@@ -526,6 +553,19 @@ export async function baseDeSeguimiento({
 
   // Cuantos hay en total con este filtro. Va antes del LIMIT y con los mismos
   // parametros: sin esto no se puede paginar sin inventarse el numero.
+  if (soloFormaciones) {
+    const { rows } = await query(
+      `SELECT p.nombre, array_agg(DISTINCT l.producto_interes_id) AS ids,
+              count(*)::int AS personas
+         FROM leads l
+         JOIN products p ON p.id = l.producto_interes_id
+        ${DONDE}
+        GROUP BY p.nombre
+        ORDER BY p.nombre`,
+      par);
+    return { formaciones: formacionesAgrupadas(rows) };
+  }
+
   const { rows: cuenta } = await query(
     `SELECT count(*)::int AS total FROM leads l ${DONDE}`, par);
   const total = cuenta[0]?.total || 0;
@@ -624,4 +664,20 @@ export async function resumenDeSeguimiento({
     par
   );
   return rows[0];
+}
+
+/**
+ * Las formaciones que tiene la gente de una lista, para su desplegable.
+ *
+ * Se juntan por NOMBRE, que es lo que lee la gestora: los campus de una empresa
+ * repiten formaciones con ids distintos, y dos filas iguales en un desplegable
+ * no se distinguen. Por eso cada una lleva TODOS sus ids, y el filtro los usa
+ * todos: con uno solo, elegir «Máster X» con CEDIA dejaba fuera a seis campus.
+ */
+function formacionesAgrupadas(rows) {
+  return rows.map((r) => ({
+    ids: (r.ids || []).map(Number),
+    nombre: r.nombre,
+    personas: Number(r.personas),
+  }));
 }

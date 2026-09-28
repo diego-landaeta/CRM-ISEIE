@@ -28,7 +28,7 @@ import { copyToClipboard } from '@/shared/lib/clipboard';
 import BulkActionBar from '@/modules/leads/components/BulkActionBar';
 import {
   traerSeguimiento, traerResumenSeguimiento,
-  type EnSeguimiento, type ResumenSeguimiento, type PasoEnCola,
+  type EnSeguimiento, type ResumenSeguimiento, type PasoEnCola, type FormacionDeLaLista,
 } from '../api/agenda.api';
 import PanelDeCola from '../components/PanelDeCola';
 import AccionesDeFila from '../components/AccionesDeFila';
@@ -147,23 +147,10 @@ export default function SeguimientoPage() {
   }, [buscaLenta, producto, estado, bloque, soloSinContactar, elegido, projectIds]);
 
   /** Las formaciones del ámbito, para el filtro. */
-  const [productos, setProductos] = useState<Array<{ id: number; nombre: string }>>([]);
-  useEffect(() => {
-    const p = new URLSearchParams();
-    if (elegido) p.set('projectId', String(elegido));
-    else if (activeIssuer?.id) p.set('issuerId', String(activeIssuer.id));
-    else { setProductos([]); return; }
-    p.set('limit', '500');
-    let vivo = true;
-    client.get(`/products?${p.toString()}`)
-      .then((r: any) => {
-        if (!vivo) return;
-        const filas = r?.success ? (r.data || []) : [];
-        setProductos(filas.map((x: any) => ({ id: x.id, nombre: x.nombre })));
-      })
-      .catch(() => { if (vivo) setProductos([]); });
-    return () => { vivo = false; };
-  }, [elegido, activeIssuer?.id]);
+  // 28/09: ya no se pide el catalogo. Las formaciones las manda el servidor
+  // CON la lista: solo las que tiene su gente, juntadas por nombre y con
+  // TODOS sus ids --la misma formacion en varios campus son varios ids--.
+  const [productos, setProductos] = useState<FormacionDeLaLista[]>([]);
 
   useEffect(() => {
     let vivo = true;
@@ -172,7 +159,7 @@ export default function SeguimientoPage() {
       traerSeguimiento({
         projectId: elegido, projectIds,
         busca: buscaLenta || null,
-        productoId: producto ? Number(producto) : null,
+        productoIds: producto || null,
         antiguedad: bloque,
         sinContactar: soloSinContactar ? '1' : null,
         estado: estado || null,
@@ -183,6 +170,8 @@ export default function SeguimientoPage() {
     ]).then(([b, r]) => {
       if (!vivo) return;
       setBase(b.filas);
+      setProductos(b.formaciones);
+      if (producto && !b.formaciones.some((f) => f.ids.join(',') === producto)) setProducto('');
       setTotal(b.total);
       setTotalPaginas(b.totalPaginas);
       setResumen(r);
@@ -304,7 +293,7 @@ export default function SeguimientoPage() {
     if (elegido) p.projectId = String(elegido);
     if (projectIds) p.projectIds = projectIds;
     if (buscaLenta) p.busca = buscaLenta;
-    if (producto) p.productoId = producto;
+    if (producto) p.productoIds = producto;
     if (estado) p.estado = estado;
     if (bloque) p.antiguedad = bloque;
     if (soloSinContactar) p.sinContactar = '1';
@@ -535,7 +524,7 @@ export default function SeguimientoPage() {
         >
           <option value="">Cualquier formación</option>
           {productos.map((p) => (
-            <option key={p.id} value={p.id}>{p.nombre}</option>
+            <option key={p.ids.join(',')} value={p.ids.join(',')}>{p.nombre} ({p.personas})</option>
           ))}
         </select>
 

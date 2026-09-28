@@ -62,6 +62,12 @@ export type ResumenSeguimiento = {
   nunca_contactados: number;
 };
 
+/**
+ * Una formacion que tiene alguien de la lista, para el desplegable. Lleva todos
+ * sus ids: la misma formacion existe en varios campus de una empresa.
+ */
+export type FormacionDeLaLista = { ids: number[]; nombre: string; personas: number };
+
 export type ResumenCola = {
   atrasados: number;
   hoy: number;
@@ -102,11 +108,13 @@ export async function traerCola(opciones: {
   projectId?: number | null; projectIds?: string | null; gestoraId?: number | null;
   hasta?: string | null; limite?: number; pagina?: number; estado?: string | null;
   busca?: string | null; productoId?: number | null; desde?: string | null;
-}): Promise<{ filas: PasoEnCola[]; total: number; totalPaginas: number }> {
+  productoIds?: string | null;
+}): Promise<{ filas: PasoEnCola[]; total: number; totalPaginas: number; formaciones: FormacionDeLaLista[] }> {
   const r = await client.get(`/proceso/cola?${conAmbito(opciones)}`);
-  if (!r?.success) return { filas: [], total: 0, totalPaginas: 1 };
+  if (!r?.success) return { filas: [], total: 0, totalPaginas: 1, formaciones: [] };
   const p = (r.pagination || {}) as { total?: number; totalPages?: number };
   return {
+    formaciones: r.formaciones || [],
     filas: r.data || [],
     total: Number(p.total ?? (r.data || []).length),
     totalPaginas: Number(p.totalPages ?? 1),
@@ -124,18 +132,19 @@ export async function traerResumen(opciones: {
 /** Los filtros del repaso. Van al servidor: la base son miles, no 500. */
 export type FiltrosSeguimiento = {
   projectId?: number | null; projectIds?: string | null; gestoraId?: number | null;
-  busca?: string | null; productoId?: number | null;
+  busca?: string | null; productoId?: number | null; productoIds?: string | null;
   antiguedad?: string | null; sinContactar?: string | null; estado?: string | null;
   pagina?: number; limite?: number;
 };
 
 export async function traerSeguimiento(
   opciones: FiltrosSeguimiento,
-): Promise<{ filas: EnSeguimiento[]; total: number; totalPaginas: number }> {
+): Promise<{ filas: EnSeguimiento[]; total: number; totalPaginas: number; formaciones: FormacionDeLaLista[] }> {
   const r = await client.get(`/proceso/seguimiento?${conAmbito(opciones)}`);
-  if (!r?.success) return { filas: [], total: 0, totalPaginas: 1 };
+  if (!r?.success) return { filas: [], total: 0, totalPaginas: 1, formaciones: [] };
   const p = (r.pagination || {}) as { total?: number; totalPages?: number };
   return {
+    formaciones: r.formaciones || [],
     filas: r.data || [],
     total: Number(p.total ?? (r.data || []).length),
     totalPaginas: Number(p.totalPages ?? 1),
