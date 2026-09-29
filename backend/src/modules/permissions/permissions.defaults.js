@@ -9,6 +9,8 @@ export const SYSTEM_ROLE_DEFAULTS = {
     'leads.view': true, 'leads.create': true, 'leads.edit': true, 'leads.delete': true,
     'leads.export': true, 'leads.assign': true, 'leads.bulk_action': true,
     'conversions.view': true, 'conversions.create': true, 'conversions.edit': true, 'conversions.delete': true,
+    // Registrar una venta que no es de nadie. Ver el comentario de gestor.
+    'conversions.sin_gestora': true,
     'products.view': true, 'products.create': true, 'products.edit': true, 'products.delete': true,
     'clients.view': true, 'clients.create': true, 'clients.edit': true, 'clients.delete': true, 'clients.export': true,
     'dossiers.view': true, 'dossiers.upload': true, 'dossiers.delete': true,
@@ -34,6 +36,14 @@ export const SYSTEM_ROLE_DEFAULTS = {
     'leads.view': true, 'leads.create': true, 'leads.edit': true, 'leads.delete': false,
     'leads.export': false, 'leads.assign': false, 'leads.bulk_action': false,
     'conversions.view': true, 'conversions.create': true, 'conversions.edit': true, 'conversions.delete': false,
+    // VENTA SIN GESTORA. Apagado de serie para gestor y se enciende por
+    // persona desde el panel de permisos.
+    //
+    // Hay gestoras que llevan la contabilidad de su empresa y registran ventas
+    // que no son suyas: hoy el alta se las asigna a ellas --el creador gestor
+    // se queda el lead-- y el informe dice que vendieron lo que solo
+    // apuntaron. Con esto pueden decir que la venta no es de nadie.
+    'conversions.sin_gestora': false,
     'products.view': true, 'products.create': false, 'products.edit': false, 'products.delete': false,
     'clients.view': true, 'clients.create': true, 'clients.edit': true, 'clients.delete': false, 'clients.export': false,
     'dossiers.view': true, 'dossiers.upload': false, 'dossiers.delete': false,

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import * as model from './payroll.model.js';
 import { AppError } from '../../shared/utils/AppError.js';
+import { proyectosDelAmbito } from '../../shared/utils/ambito.js';
 
 const planSchema = z.object({
   project_id: z.number().int().positive(),
@@ -27,9 +28,17 @@ const adjSchema = z.object({
   concepto: z.string().min(1).max(255),
 });
 
-function pid(req) { const p = parseInt(req.query.projectId); if (!p) throw new AppError('projectId requerido', 400, 'PROJECT_REQUIRED'); return p; }
+/**
+ * De quien son las nominas que se piden: un campus, o los de una sociedad.
+ * Solo para LEER; crear, cerrar o pagar sigue pidiendo el campus concreto.
+ */
+async function ambito(req) {
+  const { projectId, projectIds } = await proyectosDelAmbito(req);
+  if (!projectId && !projectIds) throw new AppError('projectId requerido', 400, 'PROJECT_REQUIRED');
+  return { projectId, projectIds };
+}
 
-export const listPlans = async (req, res, next) => { try { res.json({ success: true, data: await model.listPlans(pid(req)) }); } catch (e) { next(e); } };
+export const listPlans = async (req, res, next) => { try { res.json({ success: true, data: await model.listPlans(await ambito(req)) }); } catch (e) { next(e); } };
 export const upsertPlan = async (req, res, next) => {
   try {
     const parsed = planSchema.safeParse(req.body);
@@ -42,7 +51,7 @@ export const deletePlan = async (req, res, next) => { try { await model.deletePl
 export const listHours = async (req, res, next) => {
   try {
     res.json({ success: true, data: await model.listHours({
-      projectId: pid(req),
+      ...(await ambito(req)),
       userId: req.query.userId ? parseInt(req.query.userId) : null,
       from: req.query.from, to: req.query.to,
     })});
@@ -60,7 +69,7 @@ export const deleteHours = async (req, res, next) => { try { await model.deleteH
 export const listPeriods = async (req, res, next) => {
   try {
     res.json({ success: true, data: await model.listPeriods({
-      projectId: pid(req),
+      ...(await ambito(req)),
       userId: req.query.userId ? parseInt(req.query.userId) : null,
       year: req.query.year ? parseInt(req.query.year) : null,
       month: req.query.month ? parseInt(req.query.month) : null,

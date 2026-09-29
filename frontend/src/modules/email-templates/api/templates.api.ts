@@ -9,6 +9,9 @@ export interface EmailTemplate {
   body_html: string;
   description?: string | null;
   active: boolean;
+  /** El paso del proceso al que pertenece (migracion 173). NULL = correo
+      suelto, de los de siempre, que no es del proceso. */
+  paso_clave?: string | null;
   created_by?: number | null;
   created_by_nombre?: string | null;
   created_at: string;

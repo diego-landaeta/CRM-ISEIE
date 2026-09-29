@@ -4,6 +4,7 @@ import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell, LabelList,
 } from 'recharts';
 import { useAuth } from '@/contexts/AuthContext';
+import { tieneRol } from '@/shared/lib/roles';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import KpiCard from '@/shared/components/ui/KpiCard';
 import LoQueFactura from '../components/LoQueFactura';
@@ -56,7 +57,8 @@ function mesActual() {
 
 export default function MisCursosPage() {
   const { user } = useAuth() as { user: { role?: string; nombre?: string } | null };
-  const esTutor = user?.role === 'tutor';
+  // Tambien si lo es «ademas de»: sus cursos son suyos igual.
+  const esTutor = tieneRol(user, 'tutor');
 
   const [periodo, setPeriodo] = useState(mesActual());
   const [cursos, setCursos] = useState<Colaboracion[]>([]);

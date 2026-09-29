@@ -489,7 +489,7 @@ export async function getTodaySummary(ctx) {
 // OPERACIONES
 // ============================================================
 
-export async function changeStatus(leadId, newStatus, motivo, userId) {
+export async function changeStatus(leadId, newStatus, motivo, userId, opts = {}) {
   const lead = await leadModel.findByIdLight(leadId);
   if (!lead) throw new AppError('Lead no encontrado', 404, 'LEAD_NOT_FOUND');
   if (lead.status === newStatus) throw new AppError('El lead ya tiene ese status', 400, 'SAME_STATUS');
@@ -509,6 +509,16 @@ export async function changeStatus(leadId, newStatus, motivo, userId) {
 
   // Disparar email sequences con trigger status_changed (async)
   triggerSequences('status_changed', leadId, lead.project_id);
+
+  // «¿POR QUE HAS DESISTIDO?» (#169): al pasar a no interesado a mano o al
+  // descartarlo del repaso. Sin esperarlo y sin que un fallo del correo tumbe
+  // el cambio de estado. Una vez por persona. Las acciones en bloque no pasan
+  // por aqui: marcar 500 no puede disparar 500 correos sin que nadie lo pida.
+  if (newStatus === 'no_interesado' && opts.feedback !== 'no') {
+    import('../feedback/feedback.service.js')
+      .then((f) => f.pedirFeedback(leadId, 'descarte', { userId, revisar: opts.feedback === 'revisar' }))
+      .catch((err) => logger.warn({ err: err.message, leadId }, 'feedback: no se pudo pedir al descartar'));
+  }
 
   return { previous: lead.status, current: newStatus };
 }
@@ -802,11 +812,34 @@ export async function createManualLead({ project_id, nombre, email, telefono, wh
   // Si el creador es gestor/admin (no superadmin/soporte), el lead se le asigna
   // a el/ella aunque venga por formulario manual — el round-robin avanza igual,
   // asi que la siguiente asignacion automatica no le vuelve a tocar.
+  // Un lead que entra por WhatsApp no es un lead repartido: es una conversacion
+  // que ya llego a alguien. Se queda con quien la atiende y NO mueve la rueda,
+  // asi que el reparto de los formularios sigue su orden intacto.
+  //
+  // Diego, 18/09: «si llega por whatsapp no afecta el robin lead».
+  //
+  // Antes se avanzaba el puntero una posicion sin asignar a nadie, con la idea
+  // de que a quien se quedaba el lead no le tocara otro enseguida. Pero el
+  // puntero no apunta a ella, apunta a la SIGUIENTE: el turno saltado se lo
+  // comia una tercera, que perdia un lead de formulario sin haber recibido
+  // nada a cambio. Con 176 leads de WhatsApp en 30 dias, eran 176 turnos
+  // saltados a personas que no tenian nada que ver.
+  //
+  // Esto vale mientras reparta el CRM. Cuando Make decida, manda el
+  // responsable en el webhook y este camino ni se usa.
   let forcedResponsableId = null;
-  let advanceRoundRobin = false;
+  const advanceRoundRobin = false;
   if (creatorUser && (creatorUser.role === 'gestor' || creatorUser.role === 'admin')) {
     forcedResponsableId = creatorUser.userId;
-    advanceRoundRobin = true;
+  }
+
+  // SIN DUENO, A PROPOSITO (venta sin gestora).
+  //
+  // No es lo mismo que no pasarle creador: sin creador el round-robin le encaja
+  // el lead a la gestora que toque, y esa persona no ha vendido nada. Aqui se
+  // pide expresamente que no sea de nadie.
+  if (opts.sinResponsable) {
+    forcedResponsableId = null;
   }
 
   const lead = await leadModel.createLeadWithRoundRobin({
@@ -823,6 +856,7 @@ export async function createManualLead({ project_id, nombre, email, telefono, wh
     esPropuesto,
     propuestoDe,
     forcedResponsableId,
+    skipRoundRobin: Boolean(opts.sinResponsable),
     advanceRoundRobinAnyway: advanceRoundRobin,
     utms: {
       utm_source: null,
@@ -866,6 +900,27 @@ export async function createManualLead({ project_id, nombre, email, telefono, wh
     } catch (err) {
       logger.warn({ err: err.message, leadId: lead.id, duplicadoDe }, 'No se pudo registrar interaction de duplicado (no crítico)');
     }
+  }
+
+  // LA AGENDA DEL PROCESO, TAMBIEN AQUI.
+  //
+  // Esto faltaba, y se notaba en todo: un prospecto dado de alta desde el boton
+  // «Nuevo prospecto» --o por carga masiva, que pasa por aqui-- se quedaba SIN
+  // agenda. Sin agenda no sale en la cola del dia, la pestaña «Proceso» esta
+  // vacia y Recordatorios dice que no hay nada. Solo la montaba el camino del
+  // webhook (`_createLeadCore`), asi que el proceso comercial funcionaba con
+  // los leads que entraban solos y no con los que damos de alta nosotros.
+  //
+  // Diego, 23/09: «sigo registrando un prospecto y aun no pasa eso».
+  //
+  // Se AWAITA y va envuelto, igual que en el otro camino: son cuatro filas de
+  // una consulta, pero que falle la agenda NO puede tumbar el alta. Sin agenda
+  // se puede trabajar --se replanifica--; sin lead, no.
+  try {
+    await planificarPasosDeLead(lead.id);
+  } catch (err) {
+    logger.warn({ err: err.message, leadId: lead.id },
+      'No se pudo planificar la agenda del prospecto (alta manual)');
   }
 
   return {

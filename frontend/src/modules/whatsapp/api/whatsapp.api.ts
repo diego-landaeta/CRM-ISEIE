@@ -17,6 +17,9 @@ export interface PlantillaWhatsapp {
   /** Aviso para la gestora. NO se envía: es la letra pequeña del documento
       comercial, que hasta ahora solo estaba en el PDF. */
   pista?: string | null;
+  /** El paso del proceso al que pertenece (`commercial_steps.clave`).
+      Nulo en las cuatro sueltas de siempre, que no son del proceso. */
+  paso_clave?: string | null;
 }
 
 export interface ProspectoCola {
@@ -48,11 +51,18 @@ const qs = (params: Params): string => {
 export const whatsappApi = {
   // Con una EMPRESA puesta no hay UN proyecto: se manda `issuerId` y el
   // servidor lo traduce a sus campus. Una gestora de CEDIA atiende los siete.
-  plantillas: (projectId: number | null, issuerId: number | null = null): Promise<ApiResponse<PlantillaWhatsapp[]>> =>
-    client.get(`/whatsapp/templates${qs({ projectId, issuerId })}`),
+  plantillas: (
+    projectId: number | null,
+    issuerId: number | null = null,
+    /** Sobre qué WhatsApp se trabaja. Las personales son las de ESE número. */
+    usuarioId: number | null = null,
+  ): Promise<ApiResponse<PlantillaWhatsapp[]>> =>
+    client.get(`/whatsapp/templates${qs({ projectId, issuerId, usuarioId })}`),
 
   crearPlantilla: (data: {
     projectId: number; label: string; body: string; ambito: 'compartida' | 'personal';
+    /** De qué WhatsApp es, si no es el de quien la escribe. */
+    usuarioId?: number | null;
   }): Promise<ApiResponse<PlantillaWhatsapp>> => client.post('/whatsapp/templates', data),
 
   editarPlantilla: (id: number, data: { label?: string; body?: string }):

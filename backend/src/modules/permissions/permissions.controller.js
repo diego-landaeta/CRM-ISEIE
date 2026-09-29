@@ -72,7 +72,7 @@ export async function getUserPermissions(req, res, next) {
     const userId = parseInt(req.params.userId);
     if (isNaN(userId) || userId <= 0) throw new AppError('userId inválido', 400, 'INVALID_ID');
     const { rows } = await query(
-      `SELECT id, nombre, role, custom_role_id FROM users WHERE id = $1`,
+      `SELECT id, nombre, role, roles_extra::text[] AS roles_extra, custom_role_id FROM users WHERE id = $1`,
       [userId]
     );
     if (!rows[0]) throw new AppError('Usuario no encontrado', 404, 'NOT_FOUND');
@@ -80,7 +80,7 @@ export async function getUserPermissions(req, res, next) {
     const user = rows[0];
     const [overrides, permissionsMap] = await Promise.all([
       service.getUserPermissions(userId),
-      service.buildPermissionsMap(userId, user.role, user.custom_role_id),
+      service.buildPermissionsMap(userId, user.role, user.custom_role_id, user.roles_extra),
     ]);
 
     res.json({

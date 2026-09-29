@@ -41,6 +41,9 @@ router.get('/sequences',              ctrl.listSequences);
 router.post('/sequences',             ctrl.setSequence);
 router.get('/lead-fiscal/:leadId',    ctrl.leadFiscalData);
 router.get('/by-conversion/:conversionId', ctrl.byConversion);
+// Que numero tocaria ahora. Va ANTES de '/:id' para que «siguiente-numero» no
+// se lea como el id de una factura (daba 500: 77 veces en cuatro dias, 28/09).
+router.get('/siguiente-numero',       ctrl.siguienteNumero);
 router.get('/:id',                    ctrl.getOne);
 router.post('/',                      ctrl.create);
 // Editar una factura en borrador: SOLO admin/superadmin.

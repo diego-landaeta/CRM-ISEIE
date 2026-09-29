@@ -121,17 +121,39 @@ cd CRM-ISEIE
 # 1 · la base de datos, en Docker, con datos de mentira
 cd backend
 npm install
-npm run db:arriba      # levanta PostgreSQL
-npm run db:preparar    # aplica las 109 migraciones y siembra datos
+npm run db:arriba      # levanta PostgreSQL en el puerto 15432
+npm run db:preparar    # aplica las migraciones y siembra datos
 
-# 2 · la API
+# 2 · el .env de la API — sin esto arranca pero no conecta
+cp .env.example .env
+```
+
+En ese `.env` basta con cuatro líneas para trabajar en local; lo demás son
+integraciones que no hacen falta para ver el CRM funcionando:
+
+```
+DATABASE_URL=postgresql://crm_user:crm_local@127.0.0.1:15432/crm_dev
+JWT_SECRET=lo-que-quieras-largo
+JWT_REFRESH_SECRET=otra-cosa-larga
+ENCRYPTION_KEY=treinta-y-dos-caracteres-exactos
+```
+
+```bash
+# 3 · la API
 npm run dev            # http://localhost:3001
 
-# 3 · el frontal, en otra terminal
+# 4 · el frontal, en otra terminal
 cd ../frontend
 npm install
 npm run dev            # http://localhost:5173
 ```
+
+El frontal no necesita `.env`: habla con la API por el proxy de Vite, que ya
+apunta a `localhost:3001`.
+
+Para entrar, los usuarios de ejemplo los crea `backend/seeds/003_test_data.js`
+—correos acabados en `@test-seed.iseie.test`— y todos llevan la contraseña
+`Test1234!`. Solo existen en la base de Docker, que es de mentira y desechable.
 
 Para tirarlo todo y volver a empezar:
 `npm run db:abajo && npm run db:arriba && npm run db:preparar`.

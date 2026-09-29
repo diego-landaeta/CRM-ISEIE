@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useProjectContext } from '@/contexts/ProjectContext';
+import { ponerAmbito } from '@/shared/lib/ambitoInforme';
 import client from '@/shared/api/client';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
@@ -60,8 +61,17 @@ const TABS: ReadonlyArray<{ id: TabId; label: string }> = [
   { id: 'hours', label: 'Horas' },
 ];
 
+/** El ambito como cadena de consulta: `issuerId=3` o `projectId=7`. */
+function consulta(ambito: { activeIssuerId?: number | null; activeProject?: { id?: number | null } | null }) {
+  return ponerAmbito(new URLSearchParams(), ambito).toString();
+}
+
 export default function PayrollPage() {
-  const { activeProject } = useProjectContext();
+  const { activeProject, activeIssuerId } = useProjectContext();
+  // El mismo ambito que en MultiCRM. Aqui hay una sola marca, asi que siempre
+  // sale el proyecto; el camino de la empresa queda listo por si se anade.
+  const ambito = { activeIssuerId, activeProject };
+  const deUnCampus = Boolean(activeProject?.id && activeProject.id !== -1);
   const [tab, setTab] = useState<TabId>('plans');
 
   return (
@@ -74,18 +84,22 @@ export default function PayrollPage() {
           </button>
         ))}
       </div>
-      {tab === 'plans' && <PlansTab project={activeProject} />}
-      {tab === 'periods' && <PeriodsTab project={activeProject} />}
-      {tab === 'hours' && <HoursTab project={activeProject} />}
+      {tab === 'plans' && <PlansTab project={activeProject} ambito={ambito} deUnCampus={deUnCampus} />}
+      {tab === 'periods' && <PeriodsTab project={activeProject} ambito={ambito} deUnCampus={deUnCampus} />}
+      {tab === 'hours' && <HoursTab project={activeProject} ambito={ambito} deUnCampus={deUnCampus} />}
     </div>
   );
 }
 
 interface TabProps {
   project: Project | null | undefined;
+  /** Un campus o una sociedad entera: es lo que se manda al leer. */
+  ambito: { activeIssuerId?: number | null; activeProject?: { id?: number | null } | null };
+  /** Con una sociedad puesta esto es falso: se puede mirar, pero no crear. */
+  deUnCampus: boolean;
 }
 
-function PlansTab({ project }: TabProps) {
+function PlansTab({ project, ambito, deUnCampus }: TabProps) {
   const [plans, setPlans] = useState<PayrollPlan[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -97,7 +111,7 @@ function PlansTab({ project }: TabProps) {
     setLoading(true);
     try {
       const [pl, us] = await Promise.all([
-        client.get(`/payroll/plans?projectId=${project.id}`),
+        client.get(`/payroll/plans?${consulta(ambito)}`),
         client.get(`/users?incluirTodos=true`),
       ]);
       if (pl.success) setPlans(Array.isArray(pl.data) ? (pl.data as PayrollPlan[]) : []);
@@ -249,7 +263,7 @@ function PlanEditor({ plan, users, onSave, onClose }: PlanEditorProps) {
   );
 }
 
-function PeriodsTab({ project }: TabProps) {
+function PeriodsTab({ project, ambito, deUnCampus }: TabProps) {
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth() + 1);
@@ -262,8 +276,8 @@ function PeriodsTab({ project }: TabProps) {
     setLoading(true);
     try {
       const [p, u] = await Promise.all([
-        client.get(`/payroll/periods?projectId=${project.id}&year=${year}&month=${month}`),
-        client.get(`/payroll/plans?projectId=${project.id}`),
+        client.get(`/payroll/periods?${consulta(ambito)}&year=${year}&month=${month}`),
+        client.get(`/payroll/plans?${consulta(ambito)}`),
       ]);
       if (p.success) setPeriods(Array.isArray(p.data) ? (p.data as PayrollPeriod[]) : []);
       if (u.success) setUsers(Array.isArray(u.data) ? (u.data as PayrollPlan[]) : []);
@@ -366,7 +380,7 @@ function PeriodsTab({ project }: TabProps) {
   );
 }
 
-function HoursTab({ project }: TabProps) {
+function HoursTab({ project, ambito, deUnCampus }: TabProps) {
   const [hours, setHours] = useState<PayrollHour[]>([]);
   const [users, setUsers] = useState<PayrollPlan[]>([]);
   const [loading, setLoading] = useState(true);
@@ -377,8 +391,8 @@ function HoursTab({ project }: TabProps) {
     setLoading(true);
     try {
       const [h, p] = await Promise.all([
-        client.get(`/payroll/hours?projectId=${project.id}`),
-        client.get(`/payroll/plans?projectId=${project.id}`),
+        client.get(`/payroll/hours?${consulta(ambito)}`),
+        client.get(`/payroll/plans?${consulta(ambito)}`),
       ]);
       if (h.success) setHours(Array.isArray(h.data) ? (h.data as PayrollHour[]) : []);
       if (p.success) setUsers(Array.isArray(p.data) ? (p.data as PayrollPlan[]).filter(x => x.modo_horas != null && x.modo_horas !== '') : []);

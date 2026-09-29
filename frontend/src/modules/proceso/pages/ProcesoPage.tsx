@@ -12,6 +12,7 @@ import useProcesoPasos from '../hooks/useProcesoPasos';
 import { procesoApi, mensajeDeError, type Paso } from '../api/proceso.api';
 import DialogoPaso, { type DatosPaso } from '../components/DialogoPaso';
 import { iconoDeCanal, nombreDeCanal } from '../lib/canales';
+import { textoDeDias } from '../lib/cuando';
 
 /**
  * El proceso comercial de la casa: cinco pasos que vivían en un PDF.
@@ -26,22 +27,9 @@ export function puedeEditar(rol: string | undefined): boolean {
   return rol === 'admin' || rol === 'superadmin';
 }
 
-/** «Días 0-1», «Día 4», «—». Lo que se lee de un vistazo en la lista. */
-export function textoDeDias(desde: number | null, hasta: number | null): string | null {
-  // Sin ventana no hay nada que decir aquí: manda lo que ponga `cuando` —el
-  // seguimiento mensual es «Final de mes», que no se cuenta en días.
-  if (desde === null && hasta === null) return null;
-  const a = desde ?? hasta!;
-  const b = hasta ?? desde!;
-  if (a === 0 && b === 0) return 'El mismo día';
-  if (a === 0 && b === 1) return 'El mismo día o al siguiente';
-  if (a === 1 && b === 1) return 'Al día siguiente';
-  if (a === b) return `A los ${a} días`;
-  // «7 u 8», no «7 o 8»: delante de una palabra que empieza por o- la
-  // conjunción es «u», y ocho y once empiezan por o.
-  const conjuncion = b === 8 || b === 11 ? 'u' : 'o';
-  return `A los ${a} ${conjuncion} ${b} días`;
-}
+// La frase que dice cuándo toca un paso ya no se escribe aquí: vive en
+// `lib/cuando`, porque la necesitan esta lista y el diálogo. Tenerla en un solo
+// sitio es justo lo que pedía Diego al cerrar el #87.
 
 export default function ProcesoPage() {
   const { user } = useAuth() as { user: { role?: string } | null };
@@ -51,20 +39,38 @@ export default function ProcesoPage() {
   };
   const admin = puedeEditar(user?.role);
 
-  // Los pasos son de UN proyecto: cada campus tiene los suyos y se editan por
-  // separado. Con una empresa elegida no se puede adivinar cual, pero tampoco
-  // hace falta echar a nadie: se elige aqui dentro, y solo entre SUS campus.
-  // Diego, 14/09: «si tengo que seleccionar un proyecto, tiene que ser por
-  // proyecto y por empresa».
+  // EL PROCESO ES DE LA EMPRESA, no de cada campus. Diego, 22/09.
+  //
+  // Los pasos se guardan por proyecto, pero los siete campus de CEDIA llevan
+  // exactamente el mismo proceso: el documento comercial es uno. Antes esta
+  // pantalla pedia elegir campus y no se podia pasar de ahi; ahora, con una
+  // empresa puesta, enseña SU proceso y lo que se cambia se cambia en todos
+  // sus campus a la vez.
+  //
+  // El selector de campus se queda para el caso en que alguno se haya
+  // separado: entonces hay dos respuestas distintas y hay que elegir.
   const campus = useProyectosDelAmbito<{ id: number; nombre: string }>();
   const [soloCampus, setSoloCampus] = useState<number | null>(null);
   useEffect(() => { setSoloCampus(null); }, [activeIssuer?.id]);
   const elegido = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
   const projectId = elegido ?? soloCampus;
-  const deQuien = elegido ? activeProject?.nombre : campus.find((c) => c.id === projectId)?.nombre;
+  // Con empresa y sin campus a dedo, se pide por empresa.
+  const issuerId = !projectId && activeIssuer?.id ? activeIssuer.id : null;
+  const deQuien = elegido
+    ? activeProject?.nombre
+    : projectId
+      ? campus.find((c) => c.id === projectId)?.nombre
+      : activeIssuer?.nombre;
 
   const [verInactivos, setVerInactivos] = useState(false);
-  const { pasos, setPasos, cargando, error, recargar } = useProcesoPasos(projectId, verInactivos);
+  const ambito = { projectId, issuerId };
+  const { pasos, setPasos, cargando, error, recargar } = useProcesoPasos(ambito, verInactivos);
+
+  // Un paso que no esta en todos los campus de la empresa: alguno se separo.
+  // Se avisa en vez de dejar que se edite creyendo que vale para los siete.
+  const separados = issuerId
+    ? pasos.filter((p) => p.en_campus != null && p.en_campus < campus.length)
+    : [];
 
   const [editando, setEditando] = useState<Paso | null>(null);
   const [creando, setCreando] = useState(false);
@@ -88,10 +94,10 @@ export default function ProcesoPage() {
     };
     try {
       if (creando) {
-        await procesoApi.crear({ ...cuerpo, clave: datos.clave.trim(), projectId });
+        await procesoApi.crear({ ...cuerpo, clave: datos.clave.trim(), ...ambito });
         toast({ title: 'Paso creado' });
       } else if (editando) {
-        await procesoApi.editar(editando.id, cuerpo);
+        await procesoApi.editar(editando.id, cuerpo, ambito);
         toast({ title: 'Paso guardado' });
       }
       setCreando(false);
@@ -107,8 +113,8 @@ export default function ProcesoPage() {
 
   async function cambiarActivo(paso: Paso) {
     try {
-      if (paso.activo) await procesoApi.desactivar(paso.id);
-      else await procesoApi.editar(paso.id, { activo: true });
+      if (paso.activo) await procesoApi.desactivar(paso.id, ambito);
+      else await procesoApi.editar(paso.id, { activo: true }, ambito);
       toast({ title: paso.activo ? 'Paso desactivado' : 'Paso reactivado' });
       recargar();
     } catch (e) {
@@ -133,7 +139,7 @@ export default function ProcesoPage() {
     setArrastrando(null);
     try {
       // La lista ENTERA de ids, en su nuevo orden, como pide la API.
-      await procesoApi.reordenar(copia.map((p) => p.id));
+      await procesoApi.reordenar(copia.map((p) => p.id), ambito);
     } catch (e) {
       const err = e as { status?: number; message?: string };
       setPasos(antes);
@@ -150,8 +156,6 @@ export default function ProcesoPage() {
       <PageHeader
         title="Proceso comercial"
         subtitle="Los pasos por los que pasa cada prospecto, en orden."
-        backTo="/leads"
-        backLabel="Prospectos"
         actions={admin ? (
           <button
             type="button"
@@ -179,7 +183,12 @@ export default function ProcesoPage() {
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex flex-wrap items-center gap-2">
           <p className="text-secundario text-muted-foreground">
-            {deQuien ? `Proceso de ${deQuien}` : activeIssuer ? 'Elige el campus' : 'Elige un proyecto'}
+            {deQuien ? `Proceso de ${deQuien}` : 'Elige un proyecto'}
+            {issuerId && campus.length > 1 && (
+              <span className="ml-1">
+                · sus {campus.length} campus, a la vez
+              </span>
+            )}
           </p>
           {activeIssuer && !elegido && campus.length > 0 && (
             <select
@@ -204,6 +213,15 @@ export default function ProcesoPage() {
         </label>
       </div>
 
+      {separados.length > 0 && (
+        <p className="rounded-md border border-warning/30 bg-warning-soft px-3 py-2 text-normal text-warning-soft-foreground">
+          Hay {separados.length} paso{separados.length === 1 ? '' : 's'} que no está
+          {separados.length === 1 ? '' : 'n'} en los {campus.length} campus de esta empresa
+          ({separados.map((p) => p.nombre).join(', ')}). Lo que cambies aquí se aplica solo
+          donde exista; para verlo campus a campus, elige uno arriba.
+        </p>
+      )}
+
       {error && (
         <p role="alert" className="rounded-md border border-destructive/30 bg-destructive-soft px-3 py-2 text-normal text-destructive-soft-foreground">
           {error}
@@ -216,15 +234,11 @@ export default function ProcesoPage() {
             <li key={i} className="h-24 animate-pulse rounded-lg border border-border bg-muted/40" />
           ))}
         </ul>
-      ) : !projectId ? (
+      ) : !projectId && !issuerId ? (
         <EmptyState
           icon={ListChecks}
-          title="Elige un campus"
-          description={
-            activeIssuer
-              ? `Cada campus de ${activeIssuer.nombre} lleva sus propios pasos. Elige uno arriba para ver los suyos.`
-              : 'Elige un proyecto en el selector de la cabecera.'
-          }
+          title="Elige un proyecto"
+          description="Elige un proyecto o una empresa en el selector de la cabecera."
         />
       ) : pasos.length === 0 ? (
         <EmptyState

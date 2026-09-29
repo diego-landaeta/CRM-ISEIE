@@ -45,6 +45,10 @@ export const updateProjectSchema = z.object({
   })).max(20).optional(),
   sidebar_labels: z.record(z.string().min(1).max(80), z.string().min(1).max(80)).optional(),
   theme_color: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Hex inválido (#rrggbb)').nullable().optional(),
+  // La marca en correos y formularios: el fondo sobre el que va su logo y el
+  // «no contestar» del que salen (de un dominio autenticado en su Brevo).
+  color_cabecera: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Hex inválido (#rrggbb)').nullable().optional(),
+  remitente_no_contestar: z.preprocess((v) => (v === '' ? null : v), z.string().email('Correo no válido').max(255).nullable().optional()),
   auto_email_documents: z.boolean().optional(),
   sociedad_emisora_id: z.number().int().positive().nullable().optional(),
 }).refine(d => Object.keys(d).length > 0, { message: 'Al menos un campo' });

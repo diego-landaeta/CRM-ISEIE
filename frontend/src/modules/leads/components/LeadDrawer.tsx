@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
+import { CalendarBlank,
   X, ArrowSquareOut, EnvelopeSimple, Phone, WhatsappLogo,
   CalendarCheck, ClockCounterClockwise, ChatCircleText, Plus, CheckCircle,
   PencilSimple, Trash,
@@ -15,10 +15,20 @@ import { toast } from '@/shared/hooks/useToast';
 import { detectCountryFromPhone } from '../lib/phoneCountry';
 const ChangeProductDialog = lazy(() => import('./ChangeProductDialog'));
 
+import AgendaDelProspecto from '@/modules/proceso/components/AgendaDelProspecto';
+import { traerPasosDeLead } from '@/modules/proceso/api/agenda.api';
+import { PROCESO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
+import FeedbackDeLaFicha from '@/modules/feedback/components/FeedbackDeLaFicha';
+
 const EnrollSequenceModal = lazy(() => import('./EnrollSequenceModal'));
 
 const TABS = [
   { key: 'resumen', label: 'Resumen' },
+  // Diego, 23/09: «cuando se crea un prospecto debe de salir un apartado,
+  // proceso de ventas y indicar qué paso está y si está hecho». Va la segunda,
+  // pegada al resumen: es lo que hay que hacer con esta persona hoy.
+  // Fuera de produccion hasta que se apruebe el proceso de ventas (28/09).
+  ...(PROCESO_EN_PRUEBAS ? [{ key: 'proceso', label: 'Proceso' }] : []),
   { key: 'historial', label: 'Historial' },
   { key: 'interacciones', label: 'Interacciones' },
   { key: 'recordatorios', label: 'Recordatorios' },
@@ -114,6 +124,21 @@ export default function LeadDrawer({ leadId, open, onClose }: Props) {
             {lead && (
               <>
                 {tab === 'resumen' && <ResumenTab lead={lead} onEnroll={() => setEnrollOpen(true)} onSaved={refetch} />}
+                {PROCESO_EN_PRUEBAS && tab === 'proceso' && (
+                  <AgendaDelProspecto
+                    leadId={lead.id}
+                    projectId={lead.project_id}
+                    nombreProyecto={lead.proyecto_nombre}
+                    datos={{
+                      nombre: lead.nombre,
+                      email: lead.email,
+                      telefono: lead.telefono,
+                      producto: lead.producto_nombre || lead.producto_interes,
+                      inicio: lead.fecha_inicio_texto,
+                      cierre: lead.fecha_cierre_convocatoria,
+                    }}
+                  />
+                )}
                 {tab === 'historial' && <HistorialTab timeline={timeline} />}
                 {tab === 'interacciones' && <InteraccionesTab leadId={lead.id} interacciones={interacciones} onRefetch={refetch} />}
                 {tab === 'recordatorios' && <RecordatoriosTab leadId={lead.id} reminders={reminders} onRefetch={refetch} />}
@@ -167,6 +192,8 @@ function ResumenTab({ lead, onEnroll, onSaved }) {
 
   return (
     <div className="space-y-5">
+      {/* El correo de «¿por que has desistido?», si se le mando. */}
+      {PROCESO_EN_PRUEBAS && <FeedbackDeLaFicha leadId={lead.id} />}
       <div className="flex items-center gap-2">
         <StatusBadge status={lead.estado} />
         {lead.canal && <ChannelBadge channel={lead.canal} />}
@@ -185,7 +212,7 @@ function ResumenTab({ lead, onEnroll, onSaved }) {
               <div key={h.id} className="text-[11px] bg-card border border-border rounded px-2 py-1.5 flex items-center gap-2">
                 <span className="font-semibold flex-1 truncate">{h.producto_contratado}</span>
                 <span className="text-muted-foreground tabular-nums">
-                  {Number(h.importe_total).toLocaleString('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })}
+                  {Number(h.importe_total).toLocaleString('es-ES', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
                 {h.fecha_compra && <span className="text-muted-foreground">{new Date(h.fecha_compra).toLocaleDateString('es-ES')}</span>}
               </div>
@@ -446,6 +473,84 @@ function InteraccionesTab({ leadId, interacciones, onRefetch }) {
   );
 }
 
+/**
+ * La agenda del proceso, dentro de Recordatorios.
+ *
+ * Diego, 23/09: «en recordatorios debe de mostrar una vez la programación de
+ * cada paso de ventas cuando registro el lead, para que funcione y avise».
+ *
+ * Al dar de alta un prospecto se le monta su agenda --los cinco pasos, cada uno
+ * con su fecha-- pero esa agenda vivía solo en la pestaña «Proceso». Quien
+ * abría Recordatorios leía «Sin recordatorios programados» y se lo creía,
+ * aunque la persona tuviera cuatro pasos por delante. Decir que no hay nada
+ * cuando sí lo hay es peor que no decir nada.
+ *
+ * NO SE DUPLICAN EN LA TABLA DE RECORDATORIOS. Se leen de la agenda y se
+ * pintan. Crear un recordatorio de verdad por cada paso llenaría la tabla de
+ * cinco filas por prospecto y las dos listas se desincronizarían en cuanto
+ * alguien moviera una fecha.
+ */
+function AgendaDelProceso({ leadId }) {
+  const [pasos, setPasos] = useState(null);
+
+  useEffect(() => {
+    let vivo = true;
+    traerPasosDeLead(leadId)
+      .then((r) => { if (vivo) setPasos(r || []); })
+      // Sin proceso montado no hay agenda. No es un error que enseñar.
+      .catch(() => { if (vivo) setPasos([]); });
+    return () => { vivo = false; };
+  }, [leadId]);
+
+  if (!pasos || pasos.length === 0) return null;
+
+  const pendientes = pasos.filter((p) => !p.hecho && p.estado !== 'saltado');
+
+  return (
+    <div className="rounded-lg border border-border bg-muted/20 p-3">
+      <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+        <CalendarBlank size={13} weight="bold" />
+        Del proceso de ventas
+        <span className="font-normal">
+          · {pendientes.length} {pendientes.length === 1 ? 'paso pendiente' : 'pasos pendientes'} de {pasos.length}
+        </span>
+      </p>
+      <ol className="space-y-1.5">
+        {pasos.map((p) => (
+          <li key={p.id} className="flex items-baseline gap-2 text-xs">
+            <span className={`w-4 shrink-0 text-right font-bold tabular-nums ${p.hecho ? 'text-muted-foreground' : 'text-primary'}`}>
+              {p.orden}
+            </span>
+            <span className={`min-w-0 flex-1 truncate ${p.hecho ? 'text-muted-foreground line-through' : ''}`}>
+              {p.nombre || p.clave}
+            </span>
+            {/* Qué le pasa a este paso: hecho, saltado, vencido o a la espera.
+                Con palabra además del color, que un ámbar a secas no lo
+                distingue quien no ve bien el color. */}
+            {p.hecho ? (
+              <span className="shrink-0 text-muted-foreground">hecho</span>
+            ) : p.estado === 'saltado' ? (
+              <span className="shrink-0 text-muted-foreground">saltado</span>
+            ) : p.vencido ? (
+              <span className="shrink-0 font-semibold text-warning-soft-foreground">
+                tarde {p.dias_de_retraso} {p.dias_de_retraso === 1 ? 'día' : 'días'}
+              </span>
+            ) : (
+              <span className="shrink-0 tabular-nums text-muted-foreground">
+                {new Date(p.fecha_prevista).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
+              </span>
+            )}
+          </li>
+        ))}
+      </ol>
+      <p className="mt-2 text-[11px] text-muted-foreground">
+        Los pasos se cierran solos al registrar un contacto. Para mover una fecha,
+        entra en la pestaña «Proceso».
+      </p>
+    </div>
+  );
+}
+
 function RecordatoriosTab({ leadId, reminders, onRefetch }) {
   const [fecha, setFecha] = useState('');
   const [nota, setNota] = useState('');
@@ -487,6 +592,10 @@ function RecordatoriosTab({ leadId, reminders, onRefetch }) {
 
   return (
     <div className="space-y-4">
+      {/* Lo que ya esta programado por el proceso, ANTES del formulario: es lo
+          que hay, y ponerlo debajo de una caja vacia hacia que nadie lo viera. */}
+      {PROCESO_EN_PRUEBAS && <AgendaDelProceso leadId={leadId} />}
+
       <form onSubmit={add} className="space-y-2 p-3 rounded-lg border border-border bg-muted/30">
         <input
           type="datetime-local"
@@ -505,7 +614,7 @@ function RecordatoriosTab({ leadId, reminders, onRefetch }) {
         </button>
       </form>
       {reminders.length === 0 ? (
-        <p className="text-sm text-muted-foreground text-center py-6">Sin recordatorios programados.</p>
+        <p className="text-sm text-muted-foreground text-center py-6">Sin recordatorios puestos a mano.</p>
       ) : (
         <ol className="space-y-3">
           {reminders.map((r) => (

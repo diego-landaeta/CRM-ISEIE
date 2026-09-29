@@ -258,7 +258,8 @@ export async function changeStatus(req, res, next) {
     if (!parsed.success) {
       throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
     }
-    const result = await leadService.changeStatus(id, parsed.data.status, parsed.data.motivo, req.user.userId);
+    const result = await leadService.changeStatus(id, parsed.data.status, parsed.data.motivo, req.user.userId,
+      { feedback: parsed.data.feedback });
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
 }

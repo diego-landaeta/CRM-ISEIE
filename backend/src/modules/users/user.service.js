@@ -98,7 +98,7 @@ export async function getById(id) {
   return { ...user, projects };
 }
 
-export async function create({ nombre, email, role, projectIds, projects }) {
+export async function create({ nombre, email, role, roles_extra, projectIds, projects }) {
   const existing = await userModel.findByEmail(email);
   if (existing) throw new AppError('Ya existe un usuario con ese email', 409, 'EMAIL_EXISTS');
 
@@ -118,6 +118,7 @@ export async function create({ nombre, email, role, projectIds, projects }) {
     email,
     passwordHash,
     role,
+    roles_extra,
     projectIds,
     projects,
     setPasswordToken: tokenHash,

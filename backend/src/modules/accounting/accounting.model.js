@@ -1,4 +1,5 @@
 import { query } from '../../shared/config/db.js';
+import { comoLista } from '../../shared/utils/ambito.js';
 
 // ============================================================
 // EXPENSES (egresos)
@@ -102,16 +103,21 @@ export async function deleteExpense(id) {
 // DASHBOARD ACCOUNTING
 // ============================================================
 
-export async function getDashboardStats({ projectId, from, to }) {
-  const projFilter = projectId ? 'AND c.project_id = $1' : '';
+export async function getDashboardStats({ projectId, projectIds = null, from, to }) {
+  // Un campus o los de una sociedad: aqui dentro son lo mismo, una lista.
+  // Antes solo se sabia acotar a UNO, asi que con varios puestos la pantalla
+  // pedia el proyecto -1 --el «todos» del navegador-- y el servidor contestaba
+  // «Number must be greater than 0»: el panel salia en blanco.
+  const ids = comoLista(projectId, projectIds);
+  const projFilter = ids ? 'AND c.project_id = ANY($1::int[])' : '';
   const dateStart = from || '1970-01-01';
   const dateEnd = to || '2999-12-31';
-  const params = projectId ? [projectId, dateStart, dateEnd] : [dateStart, dateEnd];
-  const fromIdx = projectId ? 2 : 1;
-  const toIdx = projectId ? 3 : 2;
+  const params = ids ? [ids, dateStart, dateEnd] : [dateStart, dateEnd];
+  const fromIdx = ids ? 2 : 1;
+  const toIdx = ids ? 3 : 2;
 
   // Ingresos (via conversion_payments en rango)
-  const paymentsProjFilter = projectId ? 'AND c.project_id = $1' : '';
+  const paymentsProjFilter = projFilter;
   const { rows: ingresosRows } = await query(
     `SELECT
        COALESCE(SUM(cp.importe), 0) AS total_cobrado,
@@ -123,7 +129,7 @@ export async function getDashboardStats({ projectId, from, to }) {
   );
 
   // Facturado (total conversions en rango)
-  const convProjFilter = projectId ? 'AND c.project_id = $1' : '';
+  const convProjFilter = projFilter;
   const { rows: facturadoRows } = await query(
     `SELECT
        COALESCE(SUM(c.importe_total), 0) AS total_facturado,
@@ -136,7 +142,7 @@ export async function getDashboardStats({ projectId, from, to }) {
 
   // Facturado de verdad: lo que se ha emitido con numero fiscal en el rango.
   // (lo de arriba es lo CONTRATADO, que casi nunca coincide con lo facturado)
-  const invProjFilter = projectId ? 'AND i.project_id = $1' : '';
+  const invProjFilter = ids ? 'AND i.project_id = ANY($1::int[])' : '';
   const { rows: emitidoRows } = await query(
     `SELECT
        COALESCE(SUM(i.total), 0) AS total_emitido,
@@ -150,7 +156,7 @@ export async function getDashboardStats({ projectId, from, to }) {
   );
 
   // Egresos
-  const expProjFilter = projectId ? 'AND (e.project_id = $1 OR e.project_id IS NULL)' : '';
+  const expProjFilter = ids ? 'AND (e.project_id = ANY($1::int[]) OR e.project_id IS NULL)' : '';
   const { rows: egresosRows } = await query(
     `SELECT
        COALESCE(SUM(e.importe), 0) AS total_egresos,
@@ -176,10 +182,10 @@ export async function getDashboardStats({ projectId, from, to }) {
      FROM conversions c
      LEFT JOIN leads l ON l.id = c.lead_id
      LEFT JOIN projects p ON p.id = c.project_id
-     WHERE c.importe_pagado < c.importe_total ${convProjFilter.replace('$1', projectId ? '$1' : '$1')}
+     WHERE c.importe_pagado < c.importe_total ${convProjFilter}
      ORDER BY c.fecha_compromiso_pago ASC NULLS LAST
      LIMIT 50`,
-    projectId ? [projectId] : []
+    ids ? [ids] : []
   );
 
   // Totales REALES de por cobrar: el listado de arriba va con LIMIT 50, asi que
@@ -194,12 +200,12 @@ export async function getDashboardStats({ projectId, from, to }) {
                                AND c.fecha_compromiso_pago < CURRENT_DATE)::int AS num_vencido
      FROM conversions c
      WHERE c.importe_pagado < c.importe_total ${convProjFilter}`,
-    projectId ? [projectId] : []
+    ids ? [ids] : []
   );
 
   // Evolucion mensual ultimos 12 meses
-  const trendProjFilter = projectId ? 'AND project_id = $1' : '';
-  const trendParams = projectId ? [projectId] : [];
+  const trendProjFilter = ids ? 'AND project_id = ANY($1::int[])' : '';
+  const trendParams = ids ? [ids] : [];
   const { rows: ingresosTrend } = await query(
     `SELECT to_char(date_trunc('month', cp.fecha), 'YYYY-MM') AS mes,
             COALESCE(SUM(cp.importe), 0) AS total
@@ -214,7 +220,7 @@ export async function getDashboardStats({ projectId, from, to }) {
     `SELECT to_char(date_trunc('month', fecha), 'YYYY-MM') AS mes,
             COALESCE(SUM(importe), 0) AS total
      FROM expenses
-     WHERE fecha >= CURRENT_DATE - INTERVAL '12 months' ${projectId ? 'AND (expenses.project_id = $1 OR expenses.project_id IS NULL)' : ''}
+     WHERE fecha >= CURRENT_DATE - INTERVAL '12 months' ${ids ? 'AND (expenses.project_id = ANY($1::int[]) OR expenses.project_id IS NULL)' : ''}
      GROUP BY 1
      ORDER BY 1`,
     trendParams

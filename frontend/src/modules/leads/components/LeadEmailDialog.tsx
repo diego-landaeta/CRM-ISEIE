@@ -11,12 +11,20 @@ interface LeadEmailDialogProps {
   leadId: number;
   leadName?: string | null;
   leadEmail?: string | null;
+  /**
+   * Con que plantilla se abre, si se abre con una (#88).
+   *
+   * Lo usa el paso del proceso: «escribir el correo de este paso» abre esta
+   * misma ventana con la suya ya puesta, en vez de dejar a la gestora
+   * buscando cual de las tres de la lista era la del dia 3.
+   */
+  plantillaId?: number | null;
   onClose: () => void;
   onSent?: () => void;
 }
 
 export default function LeadEmailDialog({
-  open, leadId, leadName, leadEmail, onClose, onSent,
+  open, leadId, leadName, leadEmail, plantillaId = null, onClose, onSent,
 }: LeadEmailDialogProps) {
   const { activeProject } = useProjectContext();
   const [subject, setSubject] = useState('');
@@ -33,9 +41,13 @@ export default function LeadEmailDialog({
       setSubject('');
       setBody('');
       setSending(false);
-      setSelectedTemplateId('');
+      // Si se abre desde un paso del proceso, con la suya; si no, en blanco.
+      setSelectedTemplateId(plantillaId ?? '');
+      // Elegirla no basta: el asunto y el cuerpo los escribe el servidor con
+      // los datos de esta persona, igual que cuando se elige a mano.
+      if (plantillaId) applyTemplate(plantillaId);
     }
-  }, [open]);
+  }, [open, plantillaId]);
 
   useEffect(() => {
     if (!open || !activeProject?.id) return;

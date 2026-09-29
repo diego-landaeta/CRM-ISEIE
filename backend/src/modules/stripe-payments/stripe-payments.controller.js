@@ -13,10 +13,11 @@ function projectId(req) {
 export async function list(req, res, next) {
   try {
     const pid = projectId(req);
-    const { status, linked, search, from, to, page, limit, facturables } = req.query;
+    const { status, linked, search, from, to, page, limit, facturables, sinEquivalente } = req.query;
     const data = await model.listPayments({
       projectId: pid, status, linked, search, from, to,
       facturables: facturables === '1' || facturables === 'true',
+      sinEquivalente: sinEquivalente === '1' || sinEquivalente === 'true',
       page: Number(page) || 1,
       limit: Math.min(Number(limit) || 50, 200),
     });
@@ -27,12 +28,13 @@ export async function list(req, res, next) {
 export async function stats(req, res, next) {
   try {
     const pid = projectId(req);
-    const { status, linked, search, from, to, facturables } = req.query;
+    const { status, linked, search, from, to, facturables, sinEquivalente } = req.query;
     // Los mismos filtros que el listado: si no, la cabecera cuenta una cosa y la
     // tabla de debajo otra.
     const s = await model.getStats({
       projectId: pid, status, linked, search, from, to,
       facturables: facturables === '1' || facturables === 'true',
+      sinEquivalente: sinEquivalente === '1' || sinEquivalente === 'true',
     });
     const sync = await model.getSyncState(pid);
     res.json({ success: true, data: { ...s, sync } });

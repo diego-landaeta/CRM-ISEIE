@@ -5,6 +5,7 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import FacturacionAlDiaCard from '../components/FacturacionAlDiaCard';
+import AvisoHuecosFacturas from '../components/AvisoHuecosFacturas';
 import KpiCard from '@/shared/components/ui/KpiCard';
 import client from '@/shared/api/client';
 import { formatDateNumeric } from '@/shared/lib/format';
@@ -85,6 +86,16 @@ export default function InvoicesPage() {
   const misSociedadIds = new Set((projects || []).map((p) => p.sociedad_emisora_id).filter((x) => x != null));
   const sociedadesVisibles = allIssuers.filter((i) => misSociedadIds.has(i.id));
   const proyectosDeSociedad = (issuerId: number) => (projects || []).filter((p) => p.sociedad_emisora_id === issuerId);
+  /*
+    El nombre de la sociedad, CON su alias cuando lo tiene.
+
+    Dos emisores pueden compartir razon social y NIF y ser cosas distintas a
+    efectos de numeracion. En MultiCRM paso con Solvenic: el desplegable sacaba
+    dos opciones identicas, elegir era a ciegas, y una factura entera parecia no
+    existir porque vivia en la otra.
+  */
+  const nombreSociedad = (i?: { razon_social?: string; alias?: string | null } | null): string =>
+    i ? (i.alias ? `${i.razon_social} · ${i.alias}` : (i.razon_social || '')) : '';
   const [ventasSinFactura, setVentasSinFactura] = useState<VentaSinFactura[]>([]);
   // Cobros de Stripe cobrados pero SIN cliente asociado: salen aqui igual que en
   // Pagos Stripe, porque hasta asociarlos no generan factura.
@@ -136,7 +147,11 @@ export default function InvoicesPage() {
       if (r3.success) setIssuers(r3.data || []);
       if (r4.success) setVentasSinFactura(r4.data || []);
       // Cobros Stripe sin asociar del proyecto (no bloqueante).
-      client.get<typeof stripeSinAsociar>(`/stripe-payments?projectId=${pid}&linked=no&status=succeeded&facturables=1&limit=50`)
+      // `sinEquivalente=1`: aqui solo los huecos DE VERDAD. Un cargo sin enlazar
+      // que ya tiene su cobro apuntado a mano no es dinero que falte, y salia
+      // repetido con la cola de facturacion. Para enlazarlos uno a uno esta la
+      // pantalla de Pagos Stripe, que los sigue enseñando todos.
+      client.get<typeof stripeSinAsociar>(`/stripe-payments?projectId=${pid}&linked=no&status=succeeded&facturables=1&sinEquivalente=1&limit=50`)
         .then((r) => { if (r.success) setStripeSinAsociar(r.data || []); })
         .catch(() => setStripeSinAsociar([]));
     } finally { setLoading(false); }
@@ -207,7 +222,7 @@ export default function InvoicesPage() {
     // Override opcional de empresa emisora (por defecto hereda la de la factura original)
     let issuerId: number | undefined;
     if (issuers.length > 1) {
-      const opciones = issuers.map((i, idx) => `${idx + 1}. ${i.razon_social}${i.es_default ? ' (default)' : ''}`).join('\n');
+      const opciones = issuers.map((i, idx) => `${idx + 1}. ${nombreSociedad(i)}${i.es_default ? ' (default)' : ''}`).join('\n');
       const sel = prompt(
         `Empresa que emite la rectificativa.\n` +
         `Dejá vacío para usar la misma de la factura original.\n\n${opciones}\n\nNº de empresa (o vacío):`,
@@ -259,6 +274,9 @@ export default function InvoicesPage() {
         )}
       />
 
+      {/* Si la serie tiene agujeros, se dice aqui: es donde se factura. */}
+      <AvisoHuecosFacturas projectId={activeProject?.id} />
+
       {/* Solo sale en el listado normal: es el estado de la facturacion, no de las proformas. */}
       {!esProformas && !esAbonos && <FacturacionAlDiaCard projectId={activeProject?.id} />}
 
@@ -299,14 +317,14 @@ export default function InvoicesPage() {
               // y se ofrece el atajo para entrar a uno de sus proyectos.
               if (id && String(id) !== String(activeProject?.sociedad_emisora_id)) {
                 const soc = sociedadesVisibles.find((s) => s.id === id);
-                if (soc) setSocPrompt({ id, nombre: soc.razon_social });
+                if (soc) setSocPrompt({ id, nombre: nombreSociedad(soc) });
                 return;
               }
               setFilterIssuer(e.target.value);
             }}
             title="La facturación se consulta dentro de su sociedad. Para ver otra, entra a uno de sus proyectos."
             className={`h-9 px-2 rounded-md border text-sm ${filterIssuer ? 'border-primary/50 bg-primary/5 text-primary font-semibold' : 'border-border bg-card'}`}>
-            {sociedadesVisibles.map((i) => <option key={i.id} value={String(i.id)}>{i.razon_social}</option>)}
+            {sociedadesVisibles.map((i) => <option key={i.id} value={String(i.id)}>{nombreSociedad(i)}</option>)}
           </select>
         )}
         {porSociedad && sociedadProjects.length > 0 && (
@@ -337,7 +355,7 @@ export default function InvoicesPage() {
 
       {porSociedad && (
         <div className="text-xs rounded-md border border-primary/30 bg-primary/5 text-primary px-3 py-2">
-          Mostrando facturas de <strong>{allIssuers.find((i) => String(i.id) === filterIssuer)?.razon_social || 'la sociedad'}</strong>
+          Mostrando facturas de <strong>{nombreSociedad(allIssuers.find((i) => String(i.id) === filterIssuer)) || 'la sociedad'}</strong>
           {filterProject
             ? <> · proyecto <strong>{sociedadProjects.find((p) => String(p.id) === filterProject)?.nombre}</strong>.</>
             : <> entre <strong>todos sus proyectos</strong> (correlativo en orden). La columna <strong>Proyecto</strong> indica a quién pertenece cada factura.</>}

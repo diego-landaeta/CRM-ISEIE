@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Suspense, lazy, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { PROCESO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 
 // Layout y guardas
 const AppLayout = lazy(() => import('./shared/components/layout/AppLayout'));
@@ -69,6 +70,10 @@ const ChangeRequestDetailPage = lazy(() => import('./modules/change-requests/pag
 const DupReviewQueuePage = lazy(() => import('./modules/leads/pages/DupReviewQueuePage'));
 const DuplicatesPage = lazy(() => import('./modules/leads/pages/DuplicatesPage'));
 const ReportsPage = lazy(() => import('./shared/pages/ReportsPage'));
+// El feedback de «¿por que has desistido?» (#169, #170): la encuesta es PUBLICA.
+const FeedbackEncuestaPage = lazy(() => import('./modules/feedback/pages/FeedbackEncuestaPage'));
+const FeedbackPanelPage = lazy(() => import('./modules/feedback/pages/FeedbackPanelPage'));
+const NovedadesPage = lazy(() => import('./modules/novedades/pages/NovedadesPage'));
 const NotificacionesPage = lazy(() => import('./modules/notificaciones/pages/NotificacionesPage'));
 const ActivityPage = lazy(() => import('./shared/pages/ActivityPage'));
 const StatusPage = lazy(() => import('./shared/pages/StatusPage'));
@@ -90,6 +95,8 @@ const MakeWebhooksPage = lazy(() => import('./modules/make-webhooks/pages/MakeWe
 const MakeWebhookDetailPage = lazy(() => import('./modules/make-webhooks/pages/MakeWebhookDetailPage'));
 const WooCommercePage = lazy(() => import('./modules/woocommerce/pages/WooCommercePage'));
 const ColaDelDiaPage = lazy(() => import('./modules/proceso/pages/ColaDelDiaPage'));
+// El repaso de fin de mes: toda la base que no compro. No es la cola del dia.
+const SeguimientoPage = lazy(() => import('./modules/proceso/pages/SeguimientoPage'));
 const ProcesoPage = lazy(() => import('./modules/proceso/pages/ProcesoPage'));
 
 const ROUTE_TITLES = {
@@ -177,6 +184,8 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/set-password" element={<SetPasswordPage />} />
         <Route path="/embed/form/:embedId" element={<EmbedFormPage />} />
+        {/* Sin sesion: la abre desde el correo quien no compro. */}
+        <Route path="/feedback/:token" element={<FeedbackEncuestaPage />} />
 
         {/* Privadas (con layout) */}
         <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
@@ -186,6 +195,11 @@ function App() {
           <Route path="/leads/archived" element={<LeadsArchivedPage />} />
           {/* Antes que `:id`, para que «cola» y «proceso» no se lean como ids. */}
           <Route path="/leads/cola" element={<ColaDelDiaPage />} />
+          {/* Solo en pruebas hasta que se apruebe (shared/lib/enPruebas.js). En
+              produccion, quien tenga el enlace guardado vuelve a la lista en
+              vez de caer en una pantalla que no deberia ver. */}
+          <Route path="/leads/seguimiento"
+            element={PROCESO_EN_PRUEBAS ? <SeguimientoPage /> : <Navigate to="/leads" replace />} />
           <Route path="/leads/proceso" element={<ProcesoPage />} />
           <Route path="/leads/:id" element={<LeadDetailPage />} />
           <Route path="/products" element={<ProductsPage />} />
@@ -253,6 +267,12 @@ function App() {
           <Route path="/configuracion/campos" element={<FieldDefinitionsPage />} />
           <Route path="/roles" element={<RolesPage />} />
           <Route path="/informes" element={<ReportsPage />} />
+          {/* El panel de feedback, fuera de produccion hasta aprobarlo. */}
+          <Route path="/informes/feedback"
+            element={PROCESO_EN_PRUEBAS ? <FeedbackPanelPage /> : <Navigate to="/informes" replace />} />
+          {/* Las novedades de la 2.0.0 cuentan lo que aun esta en pruebas: con ello. */}
+          <Route path="/novedades"
+            element={PROCESO_EN_PRUEBAS ? <NovedadesPage /> : <Navigate to="/" replace />} />
           <Route path="/notificaciones" element={<NotificacionesPage />} />
           <Route path="/notifications" element={<Navigate to="/notificaciones" replace />} />
           <Route path="/activity" element={<ActivityPage />} />

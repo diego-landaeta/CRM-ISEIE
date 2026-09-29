@@ -7,7 +7,7 @@
 // Para mover un item de "Proximamente" a operativo, agregalo a BETA_ROUTES.
 // ============================================================
 
-export const BETA_VERSION = '1.0.0';
+export const BETA_VERSION = '2.0.0';
 
 export const BETA_MODE: boolean = String(import.meta.env.VITE_BETA_MODE || '').toLowerCase() === 'true';
 
@@ -48,6 +48,7 @@ export const BETA_ROUTES: readonly string[] = [
   '/manual',
   '/soporte',
   '/activity',                      // Gestores: actividad
+  '/novedades',                     // Lo nuevo de cada versión (2.0.0), con su aviso y su correo
 ];
 
 export function isBetaAllowed(to?: string): boolean {

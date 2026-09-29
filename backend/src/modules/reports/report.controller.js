@@ -91,7 +91,9 @@ async function rangoDeQuery(req) {
     // dinero entro). Por defecto factura, que es como cuenta la contabilidad;
     // con cobro se caian del mes las facturas emitidas en un mes y cobradas en
     // el anterior.
-    base: req.query.base === 'cobro' ? 'cobro' : 'factura',
+    // Tres bases. «cerrado» es la de contabilidad: el mes en que la factura
+    // queda cobrada. Cualquier otra cosa mantiene el defecto de siempre.
+    base: ['cobro', 'cerrado'].includes(req.query.base) ? req.query.base : 'factura',
   };
 }
 
@@ -106,6 +108,38 @@ export async function ventasAsesora(req, res, next) {
 export async function asesorasMes(req, res, next) {
   try {
     res.json({ success: true, data: await model.asesorasPorMes(await rangoDeQuery(req)) });
+  } catch (err) { next(err); }
+}
+
+/**
+ * GET /api/informes/mi-puesto -> como va quien pregunta.
+ *
+ * Una gestora solo puede pedir el suyo. Un admin puede mirar el de otra
+ * --lo necesita para acompañarla-- pasando `gestoraId`.
+ */
+export async function miPuesto(req, res, next) {
+  try {
+    const esJefe = req.user.role === 'admin' || req.user.role === 'superadmin' || req.user.role === 'soporte';
+    const pedido = req.query.gestoraId ? Number(req.query.gestoraId) : null;
+    const userId = esJefe && pedido ? pedido : req.user.userId;
+    const { from, to, ...ambito } = await rangoDeQuery(req);
+    // Por defecto, EL MES EN CURSO. Con el historico entero el puesto casi no
+    // se mueve --lo que se hizo en marzo pesa igual que lo de ayer-- y deja de
+    // servir para corregir nada a tiempo.
+    const hoy = new Date();
+    const mes = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`;
+    const re = /^\d{4}-\d{2}-\d{2}$/;
+    const desde = re.test(req.query.from || '') ? from : `${mes}-01`;
+    const hasta = re.test(req.query.to || '') ? to : `${mes}-${String(hoy.getDate()).padStart(2, '0')}`;
+    // `asesoraId` se queda fuera a proposito: recorta el informe a UNA persona
+    // y aqui hace falta la tabla entera para saber en que puesto va.
+    const { asesoraId, base, ...sinAsesora } = ambito;
+    res.json({ success: true, data: await model.miPuesto({
+      userId, from: desde, to: hasta, ...sinAsesora, esJefe,
+      // Por fecha de VENTA salvo que pidan lo contrario: es lo que la gestora
+      // reconoce como suyo el dia que cierra.
+      base: ['factura', 'cerrado'].includes(req.query.base) ? req.query.base : 'cobro',
+    }) });
   } catch (err) { next(err); }
 }
 

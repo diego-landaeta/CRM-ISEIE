@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { procesoApi, type Paso } from '../api/proceso.api';
+import { procesoApi, type Paso, type Ambito } from '../api/proceso.api';
 
 /**
  * Los pasos del proyecto activo.
@@ -9,19 +9,23 @@ import { procesoApi, type Paso } from '../api/proceso.api';
  * roto. Si el servidor dice que no, se vuelve a lo que había.
  */
 export default function useProcesoPasos(
-  projectId: number | null | undefined,
+  ambito: Ambito,
   incluirInactivos: boolean,
 ) {
+  // Solo los dos numeros, para que el efecto no se vuelva a lanzar por recibir
+  // un objeto nuevo en cada pintada.
+  const projectId = ambito.projectId ?? null;
+  const issuerId = ambito.issuerId ?? null;
   const [pasos, setPasos] = useState<Paso[]>([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const recargar = useCallback(async () => {
-    if (!projectId) { setPasos([]); setCargando(false); return; }
+    if (!projectId && !issuerId) { setPasos([]); setCargando(false); return; }
     setCargando(true);
     setError(null);
     try {
-      const res = await procesoApi.listar(projectId, incluirInactivos);
+      const res = await procesoApi.listar({ projectId, issuerId }, incluirInactivos);
       setPasos(res.success ? (res.data || []) : []);
       if (!res.success) setError('No se han podido cargar los pasos.');
     } catch (e) {
@@ -31,7 +35,7 @@ export default function useProcesoPasos(
     } finally {
       setCargando(false);
     }
-  }, [projectId, incluirInactivos]);
+  }, [projectId, issuerId, incluirInactivos]);
 
   useEffect(() => { recargar(); }, [recargar]);
 

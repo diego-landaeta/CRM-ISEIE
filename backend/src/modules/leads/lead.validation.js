@@ -47,6 +47,11 @@ export const webhookLeadSchema = z.object({
 export const listLeadsSchema = z.object({
   projectId: z.coerce.number().int().positive(),
   status: z.enum(['nuevo', 'por_contactar', 'contactado', 'en_seguimiento', 'convertido', 'no_interesado', 'proxima_convocatoria']).optional(),
+  // En que paso del proceso comercial va. Diego: «en filtros que diga
+  // proceso de ventas y puedas elegir cual». La clave y no el id: los pasos son
+  // por proyecto --cada campus tiene los suyos-- y la clave es la misma en
+  // todos, asi que vale igual con un campus que con una empresa entera.
+  pasoProceso: z.string().max(40).optional(),
   responsableId: z.coerce.number().int().positive().optional(),
   unassigned: z.coerce.boolean().optional(),
   canal: z.enum(['meta_ads', 'google_ads', 'tiktok_ads', 'organico', 'chatgpt_ia', 'directo', 'referido', 'whatsapp']).optional(),
@@ -96,6 +101,9 @@ export const checkDuplicateSchema = z.object({
 export const updateStatusSchema = z.object({
   status: z.enum(['nuevo', 'por_contactar', 'contactado', 'en_seguimiento', 'convertido', 'no_interesado', 'proxima_convocatoria']),
   motivo: z.string().max(500).optional().nullable(),
+  // Solo cuenta al pasar a «no interesado»: que salga el correo de «¿por que
+  // has desistido?» (#169), que se prepare para verlo antes, o que no salga.
+  feedback: z.enum(['enviar', 'revisar', 'no']).optional(),
 }).refine(
   (data) => data.status !== 'no_interesado' || (data.motivo && data.motivo.trim().length >= 1),
   { message: 'Motivo requerido al marcar como no interesado', path: ['motivo'] }
@@ -103,13 +111,15 @@ export const updateStatusSchema = z.object({
 
 export const createInteractionSchema = z.object({
   tipo: z.enum(['llamada', 'email', 'whatsapp', 'nota']),
-  nota: z.string().max(2000).optional(),
+  // 10.000, no 2.000: una nota con el resumen de una llamada larga no cabía y
+  // se rechazaba entera (M.ª Eugenia, seis veces en una tarde). La columna es TEXT.
+  nota: z.string().max(10000, 'La nota es demasiado larga (máx. 10.000 caracteres)').optional(),
   fecha: z.string().datetime().optional().or(z.string().regex(/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?/)).optional(),
 });
 
 export const updateInteractionSchema = z.object({
   tipo: z.enum(['llamada', 'email', 'whatsapp', 'nota']).optional(),
-  nota: z.string().max(2000).optional(),
+  nota: z.string().max(10000, 'La nota es demasiado larga (máx. 10.000 caracteres)').optional(),
   fecha: z.string().datetime().optional().or(z.string().regex(/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?/)).optional(),
 }).refine((d) => Object.keys(d).length > 0, { message: 'Al menos un campo a actualizar' });
 

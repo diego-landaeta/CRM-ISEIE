@@ -1,4 +1,21 @@
 import { query } from '../../shared/config/db.js';
+import { comoLista } from '../../shared/utils/ambito.js';
+/*
+  LAS PLAZAS NO SE CUENTAN AQUI, y antes si.
+
+  Diego, 11/09/2026: «eso lo hacen ellas desde otro sistema, no en el CRM, pero
+  si es un paso a poner... que el CRM no lo recuerde, solamente sea que toca
+  mandar ese mensaje y como un disclaimer de verificar cuantas plazas quedan».
+
+  Tenia razon y el calculo se ha quitado: de dos contabilidades de las mismas
+  plazas solo una puede tener razon, y es la de admisiones. Un numero nuestro
+  que no cuadre con el suyo es PEOR que no dar numero, porque ese numero acaba
+  dentro de un mensaje que ya salio al cliente.
+
+  Lo que queda es `s.avisa_plazas`: el paso dice que su mensaje habla de
+  plazas, y la pantalla pone el aviso de ir a mirarlas. El calculo sigue vivo
+  en el catalogo (`products/plazas.sql.js`) para quien quiera llevarlo ahi.
+*/
 
 // Los pasos del proceso comercial (#87).
 //
@@ -7,7 +24,7 @@ import { query } from '../../shared/config/db.js';
 
 const COLS = `id, project_id, clave, nombre, orden, cuando,
               dia_desde, dia_hasta, canales, es_seguimiento, nota, activo,
-              created_at, updated_at`;
+              avisa_plazas, created_at, updated_at`;
 
 export async function listByProject(projectId, { includeInactive = false } = {}) {
   const { rows } = await query(
@@ -15,6 +32,41 @@ export async function listByProject(projectId, { includeInactive = false } = {})
       WHERE project_id = $1 ${includeInactive ? '' : 'AND activo = true'}
       ORDER BY orden, id`,
     [projectId]
+  );
+  return rows;
+}
+
+/**
+ * Los pasos de VARIOS campus, que es como se mira una empresa entera.
+ *
+ * Los siete campus de CEDIA llevan el mismo proceso, asi que se devuelve UNA
+ * lista --la del primer campus que tenga cada paso-- y, en cada paso,
+ * `en_campus`: en cuantos de los campus del ambito existe. Cuando ese numero
+ * no es el total, alguno se ha separado y la pantalla lo dice en vez de
+ * enseñar una media que no es de nadie.
+ */
+export async function listByProjects(projectIds, { includeInactive = false } = {}) {
+  const { rows } = await query(
+    `SELECT DISTINCT ON (s.clave) ${COLS.split(',').map((c) => 's.' + c.trim()).join(', ')},
+            (SELECT count(*)::int FROM commercial_steps x
+              WHERE x.project_id = ANY($1::int[]) AND x.clave = s.clave
+                ${includeInactive ? '' : 'AND x.activo = true'}) AS en_campus
+       FROM commercial_steps s
+      WHERE s.project_id = ANY($1::int[]) ${includeInactive ? '' : 'AND s.activo = true'}
+      ORDER BY s.clave, s.project_id`,
+    [projectIds]
+  );
+  // El DISTINCT ON obliga a ordenar por clave; el orden que importa es el del
+  // proceso, y ese se pone aqui.
+  return rows.sort((a, b) => a.orden - b.orden || a.id - b.id);
+}
+
+/** El mismo paso en los demas campus de la empresa: los hermanos de clave. */
+export async function hermanosDeClave(clave, projectIds) {
+  const { rows } = await query(
+    `SELECT id, project_id FROM commercial_steps
+      WHERE clave = $1 AND project_id = ANY($2::int[]) ORDER BY project_id`,
+    [clave, projectIds]
   );
   return rows;
 }
@@ -59,7 +111,7 @@ export async function update(id, data) {
   // `clave` NO esta en la lista a proposito: es por donde entra el codigo, y
   // dejar que se renombre desde la pantalla es exactamente como se rompe.
   const permitidos = ['nombre', 'orden', 'cuando', 'dia_desde', 'dia_hasta',
-                      'canales', 'es_seguimiento', 'nota', 'activo'];
+                      'canales', 'es_seguimiento', 'nota', 'activo', 'avisa_plazas'];
   const campos = [];
   const valores = [];
   let i = 1;
@@ -164,6 +216,7 @@ export async function pasosDeLead(leadId) {
   const { rows } = await query(
     `SELECT ls.id, ls.clave, ls.orden, ls.fecha_prevista, ls.estado, ls.nota,
             s.nombre, s.cuando, s.canales, s.nota AS nota_del_paso,
+            COALESCE(s.avisa_plazas, false) AS avisa_plazas,
             (${CONTACTOS}) >= ls.orden AS hecho,
             (CURRENT_DATE - ls.fecha_prevista) AS dias_de_retraso
        FROM lead_steps ls
@@ -189,7 +242,28 @@ export async function pasosDeLead(leadId) {
  * gestora abre una ficha por persona, no una por apunte. Si alguien lleva tres
  * pasos sin hacer, lo que necesita es que le llamen, no salir tres veces.
  */
-export async function colaDelDia({ projectIds, asesoraId, hasta = null, limite = 200 }) {
+/**
+ * La cola del dia.
+ *
+ * PAGINA, y devuelve `{ filas, total }`. Antes cortaba en 200 y no decia
+ * cuantos habia: con un campus daba igual, pero con una empresa entera --CEDIA
+ * son siete campus y 1.400 personas-- el contador de arriba decia 900 atrasados
+ * y la lista enseñaba 300. Quien la trabajaba de arriba abajo creia haberla
+ * terminado con mil personas sin tocar.
+ *
+ * El total sale de `count(*) OVER ()`, que se calcula ANTES del LIMIT: con este
+ * CTE es mas limpio que repetir la consulta entera solo para contarla, y
+ * garantiza que el numero y las filas salen del mismo sitio.
+ */
+export async function colaDelDia({
+  projectIds, asesoraId, hasta = null, limite = 200, desplazamiento = 0, estado = null,
+  busca = null, productoId = null, desde = null,
+  // Varias a la vez: la misma formacion en varios campus (ver
+  // `formacionesAgrupadas`).
+  productoIds = null,
+  // En vez de la lista, las formaciones que tiene la gente de la lista.
+  soloFormaciones = false,
+}) {
   const par = [];
   let i = 1;
   // Sin proyecto elegido, la cola es la del equipo: los de pruebas no
@@ -198,19 +272,48 @@ export async function colaDelDia({ projectIds, asesoraId, hasta = null, limite =
     ? `AND ls.project_id = ANY($${i++}::int[])`
     : 'AND ls.project_id NOT IN (SELECT id FROM projects WHERE es_prueba)';
   // `if (pProj)` era SIEMPRE cierto —es una cadena no vacia en las dos ramas—
-  // asi que sin proyecto («Todos») se empujaba `null.map` y la cola reventaba
-  // con un 500. Arreglado en los dos CRM el 14/09.
+  // asi que con la lista vacia se empujaba un parametro de mas y la consulta
+  // reventaba con «bind message supplies 2 parameters, but requires 1». No
+  // salto antes porque el controlador siempre manda una lista con algo.
   if (Array.isArray(projectIds) && projectIds.length) par.push(projectIds.map(Number));
   const pAses = asesoraId ? `AND l.responsable_id = $${i++}` : '';
   if (asesoraId) par.push(asesoraId);
   const pHasta = hasta ? `$${i++}::date` : 'CURRENT_DATE';
   if (hasta) par.push(hasta);
-  const pLimite = `$${i++}`;
-  par.push(Number(limite) || 200);
+  // En que estado esta. Los convertidos y los no interesados no entran nunca en
+  // la cola --la consulta ya los excluye-- asi que aqui solo valen los cinco de
+  // en medio; cualquier otra cosa se ignora en vez de devolver una lista vacia.
+  const ESTADOS = ['nuevo', 'por_contactar', 'contactado', 'en_seguimiento', 'proxima_convocatoria'];
+  const pEstado = ESTADOS.includes(estado) ? `AND l.status = $${i++}` : '';
+  if (ESTADOS.includes(estado)) par.push(estado);
+  // El buscador y la formacion, igual que en el repaso de fin de mes: los hace
+  // el SERVIDOR y no la pantalla. Buscar dentro de las 100 filas que se ven
+  // seria decir «no esta» de alguien que si esta, en la pagina cuatro.
+  let pBusca = '';
+  if (busca && String(busca).trim()) {
+    const q = `%${String(busca).trim()}%`;
+    pBusca = `AND (l.nombre ILIKE $${i} OR l.email ILIKE $${i} OR l.telefono ILIKE $${i})`;
+    par.push(q);
+    i += 1;
+  }
+  const variosProd = Array.isArray(productoIds) && productoIds.length ? productoIds.map(Number) : null;
+  const pProd = variosProd
+    ? `AND l.producto_interes_id = ANY($${i++}::int[])`
+    : (productoId ? `AND l.producto_interes_id = $${i++}` : '');
+  if (variosProd) par.push(variosProd);
+  else if (productoId) par.push(Number(productoId));
+  // Desde que dia. El otro extremo ya lo pone el tramo de arriba (`hasta`);
+  // con este se puede pedir «del 1 al 15» sin pelearse con el tramo.
+  const fechaOk = /^\d{4}-\d{2}-\d{2}$/.test(desde || '');
+  const pDesde = fechaOk ? `AND ls.fecha_prevista >= $${i++}::date` : '';
+  if (fechaOk) par.push(desde);
 
-  const { rows } = await query(
-    `WITH pendientes AS (
+  // LAS PENDIENTES, una sola vez: la lista y su desplegable de formaciones
+  // salen de la MISMA consulta, asi que no pueden contar cosas distintas.
+  const PENDIENTES = `WITH pendientes AS (
        SELECT ls.*, l.responsable_id, l.nombre AS lead_nombre, l.status AS lead_estado,
+              l.producto_interes_id,
+              l.email AS lead_email, l.telefono AS lead_telefono,
               ${CONTACTOS} AS contactos,
               ROW_NUMBER() OVER (PARTITION BY ls.lead_id ORDER BY ls.orden) AS pos
          FROM lead_steps ls
@@ -218,32 +321,73 @@ export async function colaDelDia({ projectIds, asesoraId, hasta = null, limite =
         WHERE l.deleted_at IS NULL
           AND ls.estado = 'pendiente'
           AND ls.fecha_prevista <= ${pHasta}
-          -- Quien ya compro o dijo que no, sale de la cola: seguir el proceso
-          -- con alguien que ya cerro es hacerle perder el tiempo a las dos.
           AND l.status NOT IN ('convertido', 'no_interesado')
-          -- El paso ya hecho no se pide otra vez.
+          ${pEstado}
           AND ${CONTACTOS} < ls.orden
-          ${pProj} ${pAses}
-     )
-     SELECT p.lead_id, p.lead_nombre, p.lead_estado, p.responsable_id,
-            p.clave, p.orden, p.fecha_prevista, p.contactos,
+          ${pProj} ${pAses} ${pBusca} ${pProd} ${pDesde}
+     )`;
+
+  if (soloFormaciones) {
+    const { rows } = await query(
+      `${PENDIENTES}
+       SELECT p.nombre, array_agg(DISTINCT q.producto_interes_id) AS ids,
+              count(DISTINCT q.lead_id)::int AS personas
+         FROM pendientes q
+         JOIN products p ON p.id = q.producto_interes_id
+        WHERE q.pos = 1
+        GROUP BY p.nombre
+        ORDER BY p.nombre`,
+      par);
+    return { formaciones: formacionesAgrupadas(rows) };
+  }
+
+  const pLimite = `$${i++}`;
+  par.push(Number(limite) || 200);
+  const pSalto = `$${i++}`;
+  par.push(Number(desplazamiento) || 0);
+
+  const { rows } = await query(
+    `${PENDIENTES}
+     SELECT q.lead_id, q.lead_nombre, q.lead_estado, q.responsable_id,
+            q.lead_email, q.lead_telefono,
+            q.clave, q.orden, q.fecha_prevista, q.contactos,
             -- De que campus es cada fila. Con una EMPRESA elegida la cola
-            -- junta varios campus y sin esto no se sabe de parte de quien
-            -- se llama. Lo pidio Carlos el 11/09.
-            p.project_id, pr.nombre AS proyecto,
+            -- junta los siete de CEDIA, y sin esto no se sabe a quien se
+            -- llama de parte de quien. Lo pidio Carlos el 11/09.
+            q.project_id, pr.nombre AS proyecto,
             s.nombre AS paso_nombre, s.canales, s.nota AS paso_nota,
             u.nombre AS gestora,
-            (CURRENT_DATE - p.fecha_prevista) AS dias_de_retraso
-       FROM pendientes p
-       LEFT JOIN commercial_steps s ON s.id = p.step_id
-       LEFT JOIN projects pr ON pr.id = p.project_id
-       LEFT JOIN users u ON u.id = p.responsable_id
-      WHERE p.pos = 1
-      ORDER BY p.fecha_prevista, p.orden, p.lead_id
-      LIMIT ${pLimite}`,
+            (CURRENT_DATE - q.fecha_prevista) AS dias_de_retraso,
+            -- La formacion, para saber de que se habla sin salirse de la cola.
+            -- Las plazas NO: solo la marca de que este paso las menciona y hay
+            -- que ir a comprobarlas fuera.
+            p.nombre AS producto, p.precio AS producto_precio,
+            -- Cuando empieza y cuando cierra la convocatoria: son huecos de
+            -- las plantillas y salen del catalogo, que es donde se mantienen.
+            -- Las PLAZAS no, y no es un olvido: ver la cabecera del fichero.
+            p.fecha_inicio_texto, p.fecha_cierre_convocatoria,
+            COALESCE(s.avisa_plazas, false) AS avisa_plazas,
+            -- Cuantos hay EN TOTAL con este filtro. La ventana se evalua antes
+            -- del LIMIT, asi que es el de verdad y no el de la pagina.
+            count(*) OVER ()::int AS total_filas
+       FROM pendientes q
+       LEFT JOIN commercial_steps s ON s.id = q.step_id
+       LEFT JOIN projects pr ON pr.id = q.project_id
+       LEFT JOIN users u ON u.id = q.responsable_id
+       LEFT JOIN products p ON p.id = q.producto_interes_id
+      WHERE q.pos = 1
+      ORDER BY q.fecha_prevista, q.orden, q.lead_id
+      LIMIT ${pLimite} OFFSET ${pSalto}`,
     par
   );
-  return rows.map((r) => ({ ...r, dias_de_retraso: Number(r.dias_de_retraso) }));
+  return {
+    filas: rows.map(({ total_filas, ...r }) => ({
+      ...r,
+      dias_de_retraso: Number(r.dias_de_retraso),
+    })),
+    // Sin filas no hay ventana que leer, y entonces el total es cero.
+    total: rows.length ? Number(rows[0].total_filas) : 0,
+  };
 }
 
 /**
@@ -260,8 +404,9 @@ export async function resumenDeLaCola({ projectIds, asesoraId }) {
     ? `AND ls.project_id = ANY($${i++}::int[])`
     : 'AND ls.project_id NOT IN (SELECT id FROM projects WHERE es_prueba)';
   // `if (pProj)` era SIEMPRE cierto —es una cadena no vacia en las dos ramas—
-  // asi que sin proyecto («Todos») se empujaba `null.map` y la cola reventaba
-  // con un 500. Arreglado en los dos CRM el 14/09.
+  // asi que con la lista vacia se empujaba un parametro de mas y la consulta
+  // reventaba con «bind message supplies 2 parameters, but requires 1». No
+  // salto antes porque el controlador siempre manda una lista con algo.
   if (Array.isArray(projectIds) && projectIds.length) par.push(projectIds.map(Number));
   const pAses = asesoraId ? `AND l.responsable_id = $${i++}` : '';
   if (asesoraId) par.push(asesoraId);
@@ -300,4 +445,239 @@ export async function ajustarPaso(id, { estado, fecha_prevista, nota }) {
     [id, estado || null, fecha_prevista || null, nota || null]
   );
   return rows[0] || null;
+}
+
+/**
+ * EL SEGUIMIENTO DE FIN DE MES (#90): toda la base que no compro.
+ *
+ * Es el quinto paso del documento y NO es la cola del dia: la cola es el
+ * recorrido de una persona --dia 1, dia 2, dia 4-- y esto es la lista entera de
+ * quien entro hace tiempo, no compro y no dijo que no. Por eso se deja fuera de
+ * `lead_steps` (`es_seguimiento = false` al planificar) y por eso tiene
+ * pantalla propia: meterlo en la cola la llenaria con media base todos los dias.
+ *
+ * QUIEN ENTRA:
+ *   · No ha comprado ni ha dicho que no.
+ *   · Entro hace mas de `desdeDias` (15 por defecto): ya paso su dia 4, asi que
+ *     el recorrido normal se acabo sin cerrar.
+ *   · NO se le ha tocado en los ultimos `descansoDias` (30 por defecto). Sin
+ *     esto, quien se repasa hoy vuelve a salir mañana y la lista deja de
+ *     significar «pendientes de reactivar» para significar «todos».
+ *
+ * EL ORDEN es por quien lleva mas tiempo sin noticias, y los que nunca se
+ * tocaron primero: son los que de verdad se perdieron por el camino.
+ */
+/**
+ * La base del repaso de fin de mes.
+ *
+ * FILTRA Y PAGINA EN EL SERVIDOR, no en la pantalla. Diego, 23/09: «aun faltan
+ * los filtros aqui y la paginacion». Filtrar sobre lo ya cargado habria sido
+ * mas rapido de escribir y habria mentido: la base son miles y la pantalla solo
+ * tenia las primeras 500, asi que buscar «Gabriela» habria dicho «no hay
+ * ninguna» cuando la hay en la pagina cuatro.
+ *
+ * Devuelve `{ filas, total }`: el total es el de TODO lo que cumple el filtro,
+ * no el de la pagina, que es lo que hace falta para poder paginar y para que el
+ * rotulo de arriba no se contradiga con la lista.
+ */
+export async function baseDeSeguimiento({
+  projectIds, projectId = null, asesoraId = null,
+  desdeDias = 15, descansoDias = 30, limite = 500, desplazamiento = 0,
+  busca = null, productoId = null, antiguedad = null, sinContactar = false,
+  estado = null,
+  // Como en la cola: varias a la vez, y el modo «solo formaciones».
+  productoIds = null, soloFormaciones = false,
+} = {}) {
+  const par = [];
+  let i = 1;
+  const ids = comoLista(projectId, projectIds);
+  const pProj = ids
+    ? `AND l.project_id = ANY($${i++}::int[])`
+    : `AND l.project_id NOT IN (SELECT id FROM projects WHERE es_prueba)`;
+  if (ids) par.push(ids);
+  const pAses = asesoraId ? `AND l.responsable_id = $${i++}` : '';
+  if (asesoraId) par.push(asesoraId);
+  const ULTIMO_SQL = `(SELECT max(li.fecha) FROM lead_interactions li
+                    WHERE li.lead_id = l.id AND li.tipo <> 'nota')`;
+  const ULTIMO = ULTIMO_SQL;
+
+  const pDesde = `$${i++}`; par.push(Number(desdeDias) || 15);
+  const pDescanso = `$${i++}`; par.push(Number(descansoDias) || 30);
+
+  // ── Los filtros de la pantalla ────────────────────────────────────────────
+  // Buscar por nombre, correo o telefono, como en Prospectos. Sin tildes no:
+  // se busca tal cual, que es lo que hace el listado de al lado y cambiarlo
+  // aqui solo haria que las dos pantallas encontraran cosas distintas.
+  let pBusca = '';
+  if (busca && String(busca).trim()) {
+    const q = `%${String(busca).trim()}%`;
+    pBusca = `AND (l.nombre ILIKE $${i} OR l.email ILIKE $${i} OR l.telefono ILIKE $${i})`;
+    i += 1;
+    par.push(q);
+  }
+  const variosProd = Array.isArray(productoIds) && productoIds.length ? productoIds.map(Number) : null;
+  const pProd = variosProd
+    ? `AND l.producto_interes_id = ANY($${i++}::int[])`
+    : (productoId ? `AND l.producto_interes_id = $${i++}` : '');
+  if (variosProd) par.push(variosProd);
+  else if (productoId) par.push(Number(productoId));
+
+  // En que estado esta. Los convertidos y los no interesados no entran nunca
+  // --la base los excluye-- asi que aqui solo valen los cinco de en medio.
+  const ESTADOS = ['nuevo', 'por_contactar', 'contactado', 'en_seguimiento', 'proxima_convocatoria'];
+  const pEstado = ESTADOS.includes(estado) ? `AND l.status = $${i++}` : '';
+  if (ESTADOS.includes(estado)) par.push(estado);
+
+  // Quien no ha sido contactado NUNCA. Es distinto de «lleva mucho»: a este no
+  // le ha escrito nadie desde que entro, y es el que mas urge.
+  const pNunca = sinContactar ? `AND ${ULTIMO_SQL} IS NULL` : '';
+
+  // El bloque de antiguedad se traduce a dias AQUI y no en la pantalla, con los
+  // mismos cortes que `bloqueDeAntiguedad`: si cada sitio pusiera los suyos, el
+  // contador de arriba y la lista dirian cosas distintas.
+  const CORTES = {
+    este_mes: [0, 30], uno_a_tres: [30, 90], tres_a_seis: [90, 180], mas_de_seis: [180, null],
+  };
+  let pAntig = '';
+  if (antiguedad && CORTES[antiguedad]) {
+    const [desde, hasta] = CORTES[antiguedad];
+    pAntig = `AND (CURRENT_DATE - ${ENTRADA}::date) >= ${desde}`;
+    if (hasta != null) pAntig += ` AND (CURRENT_DATE - ${ENTRADA}::date) < ${hasta}`;
+  }
+
+  const DONDE = `WHERE l.deleted_at IS NULL
+        AND l.status NOT IN ('convertido', 'no_interesado')
+        AND ${ENTRADA}::date <= CURRENT_DATE - ${pDesde}::int
+        AND (${ULTIMO_SQL} IS NULL OR ${ULTIMO_SQL}::date <= CURRENT_DATE - ${pDescanso}::int)
+        ${pProj} ${pAses} ${pBusca} ${pProd} ${pNunca} ${pAntig} ${pEstado}`;
+
+  // Cuantos hay en total con este filtro. Va antes del LIMIT y con los mismos
+  // parametros: sin esto no se puede paginar sin inventarse el numero.
+  if (soloFormaciones) {
+    const { rows } = await query(
+      `SELECT p.nombre, array_agg(DISTINCT l.producto_interes_id) AS ids,
+              count(*)::int AS personas
+         FROM leads l
+         JOIN products p ON p.id = l.producto_interes_id
+        ${DONDE}
+        GROUP BY p.nombre
+        ORDER BY p.nombre`,
+      par);
+    return { formaciones: formacionesAgrupadas(rows) };
+  }
+
+  const { rows: cuenta } = await query(
+    `SELECT count(*)::int AS total FROM leads l ${DONDE}`, par);
+  const total = cuenta[0]?.total || 0;
+
+  const pLimite = `$${i++}`; par.push(Number(limite) || 500);
+  const pSalto = `$${i++}`; par.push(Number(desplazamiento) || 0);
+
+  const { rows } = await query(
+    `SELECT l.id AS lead_id, l.nombre AS lead_nombre, l.status AS lead_estado,
+            l.responsable_id, l.email AS lead_email, l.telefono AS lead_telefono,
+            l.project_id, pr.nombre AS proyecto,
+            u.nombre AS gestora,
+            p.nombre AS producto, p.precio AS producto_precio,
+            p.fecha_inicio_texto, p.fecha_cierre_convocatoria,
+            ${ENTRADA}::date AS fecha_entrada,
+            (CURRENT_DATE - ${ENTRADA}::date) AS dias_desde_entrada,
+            ${ULTIMO} AS ultimo_contacto,
+            (CURRENT_DATE - ${ULTIMO}::date) AS dias_sin_contacto,
+            ${CONTACTOS} AS contactos,
+            -- El paso de fin de mes de SU proyecto: de ahi salen los canales,
+            -- la chuleta y --lo que importa-- la clave con la que la pantalla
+            -- encuentra sus plantillas.
+            s.clave, s.orden, s.nombre AS paso_nombre, s.canales, s.nota AS paso_nota,
+            COALESCE(s.avisa_plazas, false) AS avisa_plazas
+       FROM leads l
+       LEFT JOIN projects pr ON pr.id = l.project_id
+       LEFT JOIN users u ON u.id = l.responsable_id
+       LEFT JOIN products p ON p.id = l.producto_interes_id
+       LEFT JOIN commercial_steps s
+              ON s.project_id = l.project_id AND s.es_seguimiento = true AND s.activo = true
+      ${DONDE}
+      ORDER BY ${ULTIMO} ASC NULLS FIRST, ${ENTRADA} ASC
+      LIMIT ${pLimite} OFFSET ${pSalto}`,
+    par
+  );
+
+  const filas = rows.map((r) => ({
+    ...r,
+    dias_desde_entrada: Number(r.dias_desde_entrada),
+    dias_sin_contacto: r.dias_sin_contacto == null ? null : Number(r.dias_sin_contacto),
+    contactos: Number(r.contactos),
+    // Cuanto hace que entro, en bloques. Se decide aqui y no en la pantalla
+    // para que el recuento de arriba y las filas no puedan discrepar.
+    antiguedad: bloqueDeAntiguedad(Number(r.dias_desde_entrada)),
+  }));
+  return { filas, total };
+}
+
+/** En que bloque cae alguien segun cuanto hace que entro. */
+function bloqueDeAntiguedad(dias) {
+  if (dias < 30) return 'este_mes';
+  if (dias < 90) return 'uno_a_tres';
+  if (dias < 180) return 'tres_a_seis';
+  return 'mas_de_seis';
+}
+
+/**
+ * Cuantos hay en el repaso de fin de mes, por antiguedad.
+ *
+ * Va aparte de la lista porque la lista tiene tope --500-- y con la base entera
+ * de una empresa se llega siempre. Un «500» de cabecera no seria un dato, seria
+ * el limite disfrazado de dato.
+ */
+export async function resumenDeSeguimiento({
+  projectIds, projectId = null, asesoraId = null, desdeDias = 15, descansoDias = 30,
+} = {}) {
+  const par = [];
+  let i = 1;
+  const ids = comoLista(projectId, projectIds);
+  const pProj = ids
+    ? `AND l.project_id = ANY($${i++}::int[])`
+    : `AND l.project_id NOT IN (SELECT id FROM projects WHERE es_prueba)`;
+  if (ids) par.push(ids);
+  const pAses = asesoraId ? `AND l.responsable_id = $${i++}` : '';
+  if (asesoraId) par.push(asesoraId);
+  const pDesde = `$${i++}`; par.push(Number(desdeDias) || 15);
+  const pDescanso = `$${i++}`; par.push(Number(descansoDias) || 30);
+
+  const ULTIMO = `(SELECT max(li.fecha) FROM lead_interactions li
+                    WHERE li.lead_id = l.id AND li.tipo <> 'nota')`;
+  const DIAS = `(CURRENT_DATE - ${ENTRADA}::date)`;
+
+  const { rows } = await query(
+    `SELECT count(*)::int AS total,
+            count(*) FILTER (WHERE ${DIAS} < 30)::int                      AS este_mes,
+            count(*) FILTER (WHERE ${DIAS} >= 30 AND ${DIAS} < 90)::int    AS uno_a_tres,
+            count(*) FILTER (WHERE ${DIAS} >= 90 AND ${DIAS} < 180)::int   AS tres_a_seis,
+            count(*) FILTER (WHERE ${DIAS} >= 180)::int                    AS mas_de_seis,
+            count(*) FILTER (WHERE ${ULTIMO} IS NULL)::int                 AS nunca_contactados
+       FROM leads l
+      WHERE l.deleted_at IS NULL
+        AND l.status NOT IN ('convertido', 'no_interesado')
+        AND ${ENTRADA}::date <= CURRENT_DATE - ${pDesde}::int
+        AND (${ULTIMO} IS NULL OR ${ULTIMO}::date <= CURRENT_DATE - ${pDescanso}::int)
+        ${pProj} ${pAses}`,
+    par
+  );
+  return rows[0];
+}
+
+/**
+ * Las formaciones que tiene la gente de una lista, para su desplegable.
+ *
+ * Se juntan por NOMBRE, que es lo que lee la gestora: los campus de una empresa
+ * repiten formaciones con ids distintos, y dos filas iguales en un desplegable
+ * no se distinguen. Por eso cada una lleva TODOS sus ids, y el filtro los usa
+ * todos: con uno solo, elegir «Máster X» con CEDIA dejaba fuera a seis campus.
+ */
+function formacionesAgrupadas(rows) {
+  return rows.map((r) => ({
+    ids: (r.ids || []).map(Number),
+    nombre: r.nombre,
+    personas: Number(r.personas),
+  }));
 }

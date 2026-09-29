@@ -7,6 +7,13 @@ export const createSchema = z.object({
   // Por defecto compartida: una plantilla que solo ve quien la escribe no
   // arregla el problema que veniamos a resolver.
   ambito: z.enum(['compartida', 'personal']).default('compartida'),
+  // Sobre que WhatsApp se esta trabajando. Sin esto la personal se guarda a
+  // nombre de quien la escribe, y no del numero desde el que se manda.
+  //
+  // `null` es «el mio», no un cero: con `coerce` a secas un null llegaba como 0
+  // y rompia con «Number must be greater than 0» (28/09).
+  usuarioId: z.preprocess((v) => (v === null || v === '' ? undefined : v),
+    z.coerce.number().int().positive().optional()),
 });
 
 export const updateSchema = z.object({

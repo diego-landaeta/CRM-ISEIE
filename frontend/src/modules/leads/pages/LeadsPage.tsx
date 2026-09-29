@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useLeads } from '../hooks/useLeads';
 import { useWhatsappTemplates } from '../hooks/useWhatsappTemplates';
 import LeadFormDialog from '../components/LeadFormDialog';
@@ -8,7 +8,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useProducts } from '@/modules/products/hooks/useProducts';
 import client from '@/shared/api/client';
-import {
+import ComoVoy from '@/modules/reports/components/ComoVoy';
+import { Gear, ArrowCounterClockwise, ListChecks,
   MagnifyingGlass,
   Plus,
   Export,
@@ -64,6 +65,8 @@ import BulkActionBar from '../components/BulkActionBar';
 import usePermission from '@/shared/hooks/usePermission';
 import { getLeadPriority, getPriorityStyle } from '../lib/leadPriority';
 import { getLeadExportColumns } from '../lib/leadFormat';
+import ParaHoyYManana from '@/shared/components/dashboard/ParaHoyYManana';
+import { PROCESO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 import {
   getInitials,
   getAvatarColor,
@@ -137,6 +140,7 @@ export default function LeadsPage() {
     leads, stats, total, page, totalPages,
     setPage, search, setSearch,
     filterEstado, setFilterEstado,
+    filterPaso, setFilterPaso,
     filterOrigen, setFilterOrigen,
     filterResponsable, setFilterResponsable,
     filterProducto, setFilterProducto,
@@ -150,10 +154,43 @@ export default function LeadsPage() {
   } = useLeads();
 
   const { activeProject, projects } = useProjectContext();
+  /**
+   * El ámbito para la cola: un campus, o los de la empresa.
+   *
+   * `-1` es «todos los proyectos», un valor interno del CRM: mandarlo pediría
+   * el proyecto número menos uno. Con una empresa puesta van sus campus, que
+   * es lo que el servidor sabe sumar.
+   */
+  const proyectoDeLaCola = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
+  const campusCsv = null;
+
   // Columna "Proyecto" visible siempre que el usuario tenga >1 proyecto asignado
   // (no solo en modo multi). Util para saber a qué proyecto pertenece cada lead.
   const showProjectColumn = (projects?.length || 0) > 1;
   const { products } = useProducts(activeProject?.id);
+
+  /**
+   * Los pasos del proceso, para poder filtrar por ellos con su nombre.
+   *
+   * Se piden al servidor y no se escriben aquí: los pasos se pueden renombrar
+   * desde «Proceso comercial», y un filtro que diga «Día 2» cuando la pantalla
+   * de pasos dice «Prueba social» no lo entiende nadie.
+   */
+  const [pasosDelProceso, setPasosDelProceso] = useState<Array<{ clave: string; nombre: string; orden: number }>>([]);
+  useEffect(() => {
+    if (!activeProject?.id) { setPasosDelProceso([]); return; }
+    let vivo = true;
+    client.get(`/proceso/pasos?projectId=${activeProject.id}`)
+      .then((r: any) => {
+        if (!vivo) return;
+        const filas = r?.success ? (r.data || []) : [];
+        setPasosDelProceso(filas.map((x: any) => ({ clave: x.clave, nombre: x.nombre, orden: x.orden })));
+      })
+      // Sin proceso montado no hay filtro, y ya está: no es un error que enseñar.
+      .catch(() => { if (vivo) setPasosDelProceso([]); });
+    return () => { vivo = false; };
+  }, [activeProject?.id]);
+
   const { templates: waTemplates } = useWhatsappTemplates(activeProject?.id);
 
   // Auto-polling de leads nuevos cada 30s + detección de nuevos por id
@@ -442,6 +479,68 @@ export default function LeadsPage() {
     toast({ title: `${selected.length} prospectos exportados` });
   }
 
+  /**
+   * Apuntar el contacto a TODOS los seleccionados.
+   *
+   * El repaso de fin de mes se manda en bloque --Diego, 23/09: «suele ser
+   * masivo»-- y apuntarlo uno a uno despues de mandar cuarenta mensajes no lo
+   * hace nadie: la lista se queda mintiendo y al mes siguiente vuelven a salir
+   * los mismos.
+   */
+  async function marcarContactadosEnBloque() {
+    if (!selectedIds.length) return;
+    setBulkLoading(true);
+    let bien = 0;
+    let mal = 0;
+    for (const id of selectedIds) {
+      try {
+        await client.post(`/leads/${id}/interactions`, {
+          tipo: 'whatsapp',
+          nota: 'Contacto en bloque',
+          fecha: new Date().toISOString(),
+        });
+        bien += 1;
+      } catch { mal += 1; }
+    }
+    setBulkLoading(false);
+    clearSelection();
+    refetch?.();
+    toast(mal === 0
+      ? { title: `${bien} contactos apuntados` }
+      : {
+        title: `${bien} apuntados, ${mal} no`,
+        description: 'Los que fallaron siguen sin contacto apuntado.',
+        variant: 'destructive',
+      });
+  }
+
+  /** Los telefonos o los correos de los seleccionados, al portapapeles. */
+  async function copiarContactosEnBloque(que) {
+    const elegidos = filteredLeads.filter((l) => selectedIds.includes(l.id));
+    const datos = elegidos
+      .map((l) => (que === 'telefono' ? l.telefono : l.email))
+      .filter(Boolean);
+    if (!datos.length) {
+      toast({
+        title: que === 'telefono' ? 'Ninguno tiene teléfono' : 'Ninguno tiene correo',
+        variant: 'destructive',
+      });
+      return;
+    }
+    const { copyToClipboard } = await import('@/shared/lib/clipboard');
+    const ok = await copyToClipboard(datos.join('\n'));
+    toast(ok
+      ? {
+        title: `${datos.length} ${que === 'telefono' ? 'teléfonos' : 'correos'} copiados`,
+        // Se dice cuantos se quedan fuera: pegar 38 cuando se marcaron 40 y no
+        // enterarse es quedarse con dos personas sin avisar.
+        description: datos.length < elegidos.length
+          ? `${elegidos.length - datos.length} de los seleccionados no tienen ese dato.`
+          : undefined,
+      }
+      : { title: 'No se ha podido copiar', variant: 'destructive' });
+  }
+
   // Auto-log de interaccion al usar acciones rapidas (WhatsApp/Email)
   async function handleLogInteraction(lead, tipo) {
     try {
@@ -496,6 +595,12 @@ export default function LeadsPage() {
         nombre: data.nombre,
         email: data.email,
         telefono: data.telefono || '',
+        // El usuario de WhatsApp tambien va: hay gente que solo da eso.
+        //
+        // Faltaba en la peticion y el servidor rechazaba el lead con «hace
+        // falta al menos una forma de contacto», aunque la gestora lo hubiera
+        // escrito. El formulario lo recogia y lo perdia aqui, al armar el envio.
+        whatsapp_usuario: data.whatsapp_usuario || null,
         producto_interes_id: productoInteresId,
         canal: data.origen || 'directo',
         notas: data.notas || '',
@@ -543,6 +648,56 @@ export default function LeadsPage() {
           />
         </Suspense>
       )}
+
+      {/* Como va quien mira: su puesto en ventas y su tasa de conversion del
+          mes. Va aqui porque esta es la pantalla donde pasa el dia. */}
+      {PROCESO_EN_PRUEBAS && <ComoVoy compacto />}
+
+      {/* LA COLA DEL DÍA, AQUÍ TAMBIÉN. Diego, 23/09: «la cola del día debe
+          de estar en prospectos también con atajos y todo».
+
+          Es el mismo bloque del dashboard, no una copia: los cuatro números
+          salen de `GET /proceso/cola/resumen`, que ya recorta por rol. Contar
+          aquí por mi cuenta sería una segunda contabilidad de la misma cola, y
+          el día que discrepen nadie sabría cuál creer.
+
+          Cada número abre la cola con ese tramo ya puesto, y debajo van los
+          atajos a las tres pantallas del proceso. */}
+      <div className="space-y-2">
+        {/* Los contadores --atrasados, hoy, manana, semana-- son del proceso de
+            ventas y todavia no esta al 100 %: fuera de produccion. Diego, 28/09. */}
+        {PROCESO_EN_PRUEBAS && (
+          <ParaHoyYManana projectId={proyectoDeLaCola} projectIds={campusCsv} />
+        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* En ISEIE las rutas son /leads/...: con /prospectos/... (copiadas
+              de MultiCRM) estos tres atajos no llevaban a ninguna parte. */}
+          <Link
+            to="/leads/cola"
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-normal font-semibold hover:bg-muted"
+          >
+            <ListChecks size={14} weight="bold" className="text-primary" />
+            La cola del día
+          </Link>
+          {PROCESO_EN_PRUEBAS && (
+          <Link
+            to="/leads/seguimiento"
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-normal font-semibold hover:bg-muted"
+          >
+            <ArrowCounterClockwise size={14} weight="bold" className="text-primary" />
+            Seguimiento de fin de mes
+          </Link>
+          )}
+          <Link
+            to="/leads/proceso"
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-normal font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <Gear size={14} weight="bold" />
+            Proceso comercial
+          </Link>
+        </div>
+      </div>
+
 
       {/* Header compacto: titulo + acciones en la misma fila, todo h-9 */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -673,6 +828,8 @@ export default function LeadsPage() {
         user={user}
         search={search} setSearch={setSearch}
         filterEstado={filterEstado} setFilterEstado={setFilterEstadoSafe}
+        filterPaso={filterPaso} setFilterPaso={setFilterPaso}
+        pasosDelProceso={pasosDelProceso}
         filterOrigen={filterOrigen} setFilterOrigen={setFilterOrigen}
         filterResponsable={filterResponsable} setFilterResponsable={setFilterResponsable}
         filterProducto={filterProducto} setFilterProducto={setFilterProducto}
@@ -1001,6 +1158,8 @@ export default function LeadsPage() {
           onChangeStatus={status => handleBulkStatusChange(status)}
           onReassign={gestorId => handleBulkReassign(gestorId)}
           onExport={handleBulkExportCsv}
+          onMarcarContactado={marcarContactadosEnBloque}
+          onCopiarContactos={copiarContactosEnBloque}
           gestores={gestores}
           isAdmin={user?.role === 'superadmin' || user?.role === 'admin'}
           loading={bulkLoading}

@@ -11,11 +11,13 @@ import {
   UsersThree,
   GraduationCap, Warning } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
+import { rolesDe } from '@/shared/lib/roles';
 import { useTheme } from '@/contexts/ThemeContext';
 import { cn } from '@/shared/lib/utils';
 import client from '@/shared/api/client';
 import NotificationsBell from './NotificationsBell';
 import { isBetaAllowed, BETA_MODE } from '@/shared/config/betaConfig';
+import { PROCESO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 
 const ROLE_LABELS = { superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor', soporte: 'Soporte', tutor: 'Tutor' };
 
@@ -37,6 +39,9 @@ const NAV_SECTIONS = [
         children: [
           { to: '/leads', label: 'Lista', end: true, sectionPrefixes: ['/leads'] },
           { to: '/leads/cola', label: 'La cola del día' },
+          // El quinto paso no cabe en la cola: es toda la base que no compro.
+          // Solo en pruebas hasta que se apruebe: ver shared/lib/enPruebas.js.
+          ...(PROCESO_EN_PRUEBAS ? [{ to: '/leads/seguimiento', label: 'Seguimiento de fin de mes' }] : []),
           { to: '/leads/proceso', label: 'Proceso comercial' },
         ],
       },
@@ -130,6 +135,8 @@ const NAV_SECTIONS = [
     label: 'Análisis',
     items: [
       { to: '/informes',     label: 'Reportes',      icon: ChartLineUp, sectionPrefixes: ['/informes', '/activity'] },
+      // Por que no compran (#170). Fuera de produccion hasta aprobarlo.
+      ...(PROCESO_EN_PRUEBAS ? [{ to: '/informes/feedback', label: 'Feedback', icon: ChatCircleText, roles: ['admin', 'superadmin'] }] : []),
       { to: '/chat-ia',     label: 'Chat IA',       icon: ChatCircleText, roles: ['admin', 'superadmin'] },
     ],
   },
@@ -146,6 +153,9 @@ const NAV_SECTIONS = [
   {
     label: 'Sistema',
     items: [
+      // Lo que trae cada versión (Diego, 28/09). La 2.0.0 cuenta lo que aún está
+      // en pruebas: sale con ello.
+      ...(PROCESO_EN_PRUEBAS ? [{ to: '/novedades', label: 'Novedades', icon: Sparkle, roles: ['superadmin', 'admin', 'gestor', 'soporte'] }] : []),
       { to: '/solicitudes-cambio', label: 'Solicitudes de cambio', icon: GitMerge },
       { to: '/notificaciones', label: 'Notificaciones',   icon: Bell },
       // El tutor entra aqui: es donde cambia su contraseña.
@@ -163,12 +173,23 @@ const NAV_SECTIONS = [
 const APAGADOS = String(import.meta.env.VITE_MODULOS_APAGADOS || '')
   .split(',').map((s) => s.trim()).filter(Boolean);
 
+/**
+ * Que entradas del menu ve alguien.
+ *
+ * Recibe TODOS sus roles, no uno: desde que se puede tener mas de uno, «es
+ * gestor» dejo de ser una pregunta de igualdad.
+ */
 function canSeeItem(item, role, soloColaboraciones, permisos) {
+  const roles = Array.isArray(role) ? role.filter(Boolean) : [role].filter(Boolean);
+  const es = (...r) => r.some((x) => roles.includes(x));
   if (item.apagable && APAGADOS.includes(item.apagable)) return false;
   // Un tutor solo ve lo suyo: lo que no le nombre expresamente queda fuera.
   // Al reves —listar lo prohibido— se olvida siempre algo, y lo que se olvida
   // es un tutor paseandose por Prospectos o por Finanzas.
-  if (role === 'tutor') return Array.isArray(item.roles) && item.roles.includes('tutor');
+  // El recorte del tutor es para quien es SOLO tutor.
+  if (roles.length === 1 && roles[0] === 'tutor') {
+    return Array.isArray(item.roles) && item.roles.includes('tutor');
+  }
   // Un gestor de colaboraciones se dedica SOLO a los tutores: no lleva
   // prospectos, ni ventas, ni finanzas. Se declara lo que puede ver, igual que
   // con el tutor — enumerar lo prohibido deja fuera siempre la pantalla nueva.
@@ -194,11 +215,12 @@ function canSeeItem(item, role, soloColaboraciones, permisos) {
   //
   // Se comprueba solo para gestor: un admin puede facturar por su rol y no
   // necesita el permiso, y a soporte ya se le deja pasar antes.
-  if (item.permiso && role === 'gestor' && !permisos?.[item.permiso]) return false;
+  // A quien NO tiene un rol de mando: si ademas es admin, puede por ese otro.
+  if (item.permiso && !es('admin', 'soporte', 'superadmin') && !permisos?.[item.permiso]) return false;
 
   if (!item.roles) return true;
-  if (role === 'superadmin' || role === 'soporte') return true;
-  return item.roles.includes(role);
+  if (es('superadmin', 'soporte')) return true;
+  return item.roles.some((r) => roles.includes(r));
 }
 
 function NavItem({ to, label, icon: Icon, end, comingSoon, statusTag, collapsed, onClick, sectionPrefixes }) {
@@ -490,7 +512,8 @@ export default function Sidebar({ collapsed = false, onToggleCollapsed, onNaviga
     navigate('/login');
   }
 
-  const role = user?.role || 'gestor';
+  // Todos sus roles, no solo el principal: el menu suma lo de cada uno.
+  const role = rolesDe(user).length ? rolesDe(user) : ['gestor'];
   const initials = user?.nombre?.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2) || '??';
   // Quien lleva las colaboraciones no es una gestora: se la llama por su trabajo,
   // que es dar de alta profesores y ajustarles el porcentaje.

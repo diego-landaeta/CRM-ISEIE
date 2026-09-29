@@ -1,4 +1,5 @@
 import { useAuth } from '@/contexts/AuthContext';
+import { rolesDe, tieneRol as tieneRolDe } from '@/shared/lib/roles';
 import type { UserRole } from '@/shared/types';
 
 export type PermissionKey = string;
@@ -28,6 +29,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<UserRole, PermissionMap> = {
     'clients.read': true,  'clients.create': true,  'clients.update': true,  'clients.delete': true,
     'products.read': true, 'products.create': true, 'products.update': true, 'products.delete': true,
     'conversions.read': true, 'conversions.create': true, 'conversions.update': true, 'conversions.delete': true,
+    'conversions.sin_gestora': true,
     'matriculas.read': true,  'matriculas.create': true,  'matriculas.update': true,
     'reports.read': true,
     'users.read': true,    'users.create': true,    'users.update': true,    'users.delete': true,
@@ -50,7 +52,7 @@ export const PERMISSION_RESOURCES: ReadonlyArray<PermissionResource> = [
   { key: 'leads',       label: 'Prospectos',  actions: ['read', 'create', 'update', 'delete', 'export', 'reassign'] },
   { key: 'clients',     label: 'Clientes',    actions: ['read', 'create', 'update', 'delete'] },
   { key: 'products',    label: 'Productos',   actions: ['read', 'create', 'update', 'delete'] },
-  { key: 'conversions', label: 'Conversiones', actions: ['read', 'create', 'update', 'delete'] },
+  { key: 'conversions', label: 'Conversiones', actions: ['read', 'create', 'update', 'delete', 'sin_gestora'] },
   { key: 'matriculas',  label: 'Matrículas',  actions: ['read', 'create', 'update'] },
   { key: 'reports',     label: 'Reportes',    actions: ['read'] },
   { key: 'users',       label: 'Usuarios',    actions: ['read', 'create', 'update', 'delete'] },
@@ -70,25 +72,47 @@ export const FIXED_ROLES: ReadonlyArray<FixedRole> = [
 
 export interface UsePermissionResult {
   can: (permission: PermissionKey) => boolean;
+  /** El rol PRINCIPAL. Para preguntar por uno cualquiera, `tieneRol`. */
   role: UserRole | undefined;
+  /** Todos sus roles: el principal y los añadidos. */
+  roles: UserRole[];
+  tieneRol: (...roles: UserRole[]) => boolean;
   isAdmin: boolean;
 }
 
 export default function usePermission(): UsePermissionResult {
-  const { user } = useAuth();
+  const { user, permissions } = useAuth();
 
   function can(permission: PermissionKey): boolean {
     if (!user) return false;
     // bypass para roles privilegiados
-    if (user.role === 'superadmin' || user.role === 'soporte') return true;
-    // override desde el backend (cuando CRM-228 exista)
-    if (user.permissions && Object.keys(user.permissions).length > 0) {
-      return user.permissions[permission] === true || user.permissions['*'] === true;
+    if (tieneRolDe(user, 'superadmin', 'soporte')) return true;
+    // Los del backend, que mandan sobre la tabla de abajo.
+    //
+    // Se leian de `user.permissions` y ahi no estan: `/auth/me` los devuelve AL
+    // LADO del usuario. Solo en lo que el backend DEFINE: aqui varias claves se
+    // llaman distinto que alli (`leads.read` / `leads.view`) y esas siguen
+    // saliendo de la tabla. Y no para el tutor: el backend no tiene tabla de
+    // tutor y le calcula la de gestora.
+    if (permissions && user.role !== 'tutor') {
+      if (permissions['*'] === true) return true;
+      if (Object.prototype.hasOwnProperty.call(permissions, permission)) {
+        return permissions[permission] === true;
+      }
     }
     // fallback: defaults por rol
-    const defaults = ROLE_DEFAULT_PERMISSIONS[user.role as UserRole] || {};
-    return defaults[permission] === true || defaults['*'] === true;
+    // Los de cada uno de sus roles, sumados: basta con que UNO lo permita.
+    return rolesDe(user).some((r) => {
+      const defaults = ROLE_DEFAULT_PERMISSIONS[r] || {};
+      return defaults[permission] === true || defaults['*'] === true;
+    });
   }
 
-  return { can, role: user?.role, isAdmin: user?.role === 'admin' || user?.role === 'superadmin' };
+  return {
+    can,
+    role: user?.role,
+    roles: rolesDe(user),
+    tieneRol: (...roles: UserRole[]) => tieneRolDe(user, ...roles),
+    isAdmin: tieneRolDe(user, 'admin', 'superadmin'),
+  };
 }

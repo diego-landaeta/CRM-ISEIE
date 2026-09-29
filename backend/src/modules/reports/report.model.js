@@ -862,6 +862,22 @@ export async function ventasPorAsesoraReport({ projectId, projectIds, from, to, 
 const FEC_COBRO = `(SELECT i.fecha_emision FROM invoices i
                      WHERE i.payment_id = cp.id AND i.tipo <> 'proforma'
                      ORDER BY i.fecha_emision, i.id LIMIT 1)`;
+// CUANDO QUEDA COBRADA: el mas tardio entre emitir la factura y cobrarla.
+//
+// Es el criterio de las hojas de contabilidad y no coincide con ninguno de los
+// otros dos. Una factura de julio cobrada en agosto es ingreso de AGOSTO --hasta
+// que entra el dinero no es ingreso-- pero una de julio cobrada en junio es de
+// JULIO, porque hasta que no hay factura tampoco lo es.
+//
+// Ojo: GREATEST en Postgres IGNORA los nulos, asi que un cobro sin factura cae
+// en su propia fecha. Es justo lo que se quiere.
+const FEC_COBRO_CERRADO = `GREATEST(cp.fecha, (SELECT i.fecha_emision FROM invoices i
+                     WHERE i.payment_id = cp.id AND i.tipo <> 'proforma'
+                     ORDER BY i.fecha_emision, i.id LIMIT 1))`;
+const FEC_VENTA_CERRADO = `GREATEST(c.fecha_conversion, (SELECT i.fecha_emision FROM invoices i
+                     JOIN conversion_payments cpf ON cpf.id = i.payment_id
+                    WHERE cpf.conversion_id = c.id AND i.tipo <> 'proforma'
+                    ORDER BY cpf.fecha, cpf.id, i.fecha_emision, i.id LIMIT 1))`;
 const FEC_VENTA = `(SELECT i.fecha_emision FROM invoices i
                      JOIN conversion_payments cpf ON cpf.id = i.payment_id
                     WHERE cpf.conversion_id = c.id AND i.tipo <> 'proforma'
@@ -878,10 +894,13 @@ export async function asesorasPorMes({ projectId, projectIds, from, to, asesoraI
   // de contabilidad: por fecha de emision de la factura, no por fecha de cobro.
   // Los dos no cuadran (julio 2026: 5/16 por cobro y 5/18 por factura) porque un
   // cobro de junio se puede facturar en julio y al reves.
+  // Tres bases, no dos. La tercera --«cerrado»-- es la del Excel de
+  // contabilidad: ni «por cobro» ni «por factura» daban sus cifras.
   const porFactura = base === 'factura';
+  const porCerrado = base === 'cerrado';
 
-  const DV = porFactura ? FEC_VENTA : 'c.fecha_conversion';
-  const DC = porFactura ? FEC_COBRO : 'cp.fecha';
+  const DV = porCerrado ? FEC_VENTA_CERRADO : (porFactura ? FEC_VENTA : 'c.fecha_conversion');
+  const DC = porCerrado ? FEC_COBRO_CERRADO : (porFactura ? FEC_COBRO : 'cp.fecha');
 
   // Los leads NO cambian nunca de base: siempre por fecha de entrada.
   const fl = buildFilter({ projectId, projectIds, from, to, asesoraId }, ENTRY, 'l.project_id');
@@ -1354,6 +1373,20 @@ export async function detalleMetrica({ projectId, projectIds, from, to, tipo, as
     if (!finMes) params.push(hasta);
     if (asesoraId === 'sin') cond.push('NOT EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id IS NOT NULL)');
     else if (asesoraId) add('EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id = ?)', Number(asesoraId));
+    // LA PARTE QUE LE TOCA A ELLA.
+    //
+    // Mirando lo de UNA asesora, una venta repartida no es suya entera: es
+    // mitad y mitad. El panel de arriba ya lo cuenta asi —Catherine, septiembre:
+    // 5.067,50 EUR— pero las filas de este popup enseñaban el importe completo y
+    // sumaban 5.190,00: los 122,50 de diferencia son la mitad de la compartida.
+    // Con esto, las filas vuelven a sumar lo que dice el numero que las abre.
+    // Sin asesora (la vista de todo) el peso es 1: la venta es una para la casa.
+    let PESO = '1';
+    if (asesoraId && asesoraId !== 'sin') {
+      params.push(Number(asesoraId));
+      PESO = `COALESCE((SELECT r.peso FROM conversion_reparto r
+                         WHERE r.conversion_id = c.id AND r.vendedora_id = $${idx++}), 1)`;
+    }
     // Placeholder explicito: FORMACION lleva '?' dentro de sus regex y add()
     // sustituiria el primero, que no es el nuestro.
     if (formacion) { cond.push(`${FORMACION} = $${idx++}`); params.push(formacion); }
@@ -1376,18 +1409,28 @@ export async function detalleMetrica({ projectId, projectIds, from, to, tipo, as
               c.fecha_conversion AS fecha,
               ${FORMACION_CON_FACTURA} AS formacion,
               ${ES_MENSUALIDAD} AS es_mensualidad,
-              ROUND(c.importe_total, 2) AS importe,
+              ROUND(c.importe_total * ${PESO}, 2) AS importe,
               -- De los cobros reales, NO de c.importe_pagado: ese campo declara
               -- 240.502,95 EUR de mas en 2026 y enseñaba cobros donde no los hay.
               ROUND(COALESCE((SELECT SUM(cp2.importe) FROM conversion_payments cp2
-                               WHERE cp2.conversion_id = c.id), 0), 2) AS cobrado,
+                               WHERE cp2.conversion_id = c.id), 0) * ${PESO}, 2) AS cobrado,
               -- Lo que cuenta COMO VENTA: el cobro que abre la ficha. Los
               -- siguientes son mensualidades y se cuentan en su metrica. Sin
               -- esta columna la fila solo enseñaba el precio del curso entero.
               ROUND(COALESCE((SELECT cp3.importe FROM conversion_payments cp3
                                WHERE cp3.conversion_id = c.id
-                               ORDER BY cp3.fecha, cp3.id LIMIT 1), 0), 2) AS como_venta,
-              COALESCE(u.nombre, '— sin asesora —') AS asesora,
+                               ORDER BY cp3.fecha, cp3.id LIMIT 1), 0) * ${PESO}, 2) AS como_venta,
+              -- La asesora, y las DOS cuando la venta esta repartida. El filtro
+              -- de arriba ya encuentra estas ventas para las dos, pero la fila
+              -- enseñaba solo a la dueña del lead y no habia forma de saber
+              -- cual de las cinco era la compartida. Diego, 21/09.
+              COALESCE(
+                (SELECT string_agg(u2.nombre, ' + ' ORDER BY u2.nombre)
+                   FROM conversion_vendedoras cv2 JOIN users u2 ON u2.id = cv2.user_id
+                  WHERE cv2.conversion_id = c.id),
+                u.nombre, '— sin asesora —') AS asesora,
+              EXISTS (SELECT 1 FROM conversion_vendedoras cv3
+                       WHERE cv3.conversion_id = c.id) AS compartida,
               (SELECT ${PAIS_TEL} FROM (SELECT (CASE WHEN LENGTH(regexp_replace(regexp_replace(COALESCE(l.telefono, ''), '[^0-9]', '', 'g'), '^00', '')) > 15 THEN LEFT(regexp_replace(regexp_replace(COALESCE(l.telefono, ''), '[^0-9]', '', 'g'), '^00', ''), 11) ELSE regexp_replace(regexp_replace(COALESCE(l.telefono, ''), '[^0-9]', '', 'g'), '^00', '') END) AS tel) _t) AS pais,
               (SELECT COUNT(*) FROM conversion_payments cp WHERE cp.conversion_id = c.id)::int AS cobros,
               (SELECT COUNT(*) FROM conversions c0 WHERE c0.lead_id = c.lead_id
@@ -1522,5 +1565,101 @@ export async function ventasSinFacturaEnRango({ projectId, projectIds, from, to 
     ventas: rows.length,
     importe: rows.reduce((s, r) => s + Number(r.cobrado), 0),
     detalle: rows.slice(0, 50),
+  };
+}
+
+/**
+ * COMO VOY YO: el puesto en ventas y la tasa de conversion de una gestora.
+ *
+ * Diego, 22/09: «debe mostrar en el dashboard y en prospectos: eres la gestora
+ * numero X de ventas», y «su tasa de conversion en prospectos y clientes, y
+ * segun los parametros de sus % significa algo».
+ *
+ * NO SE INVENTA NINGUN CALCULO NUEVO. Sale de `asesorasPorMes`, que es el mismo
+ * que pinta el panel de asesoras en Informes: mismas ventas --repartidas por
+ * peso cuando son compartidas--, misma tasa. Si aqui se contara a mano, la
+ * gestora veria un numero en su pantalla y otro distinto en el informe de su
+ * jefe, y a partir de ahi ninguno de los dos vale.
+ *
+ * LO QUE SIGNIFICA EL PORCENTAJE se dice comparando con el equipo, no con unos
+ * tramos inventados: «tu 8,2 % frente al 6,1 % del equipo» se entiende sin que
+ * nadie tenga que fijar antes que es bueno y que es malo, y se ajusta solo
+ * cuando el equipo mejora. Cuando Carlos ponga su baremo, se suma encima.
+ *
+ * Y NO DEVUELVE LOS NUMEROS DE LAS DEMAS: la gestora ve su puesto, su tasa, la
+ * media del equipo y cuanto le falta para subir un puesto. Quien va delante es
+ * un dato del jefe, no de la carrera.
+ */
+export async function miPuesto({ userId, projectId, projectIds, from, to, base = 'cobro', esJefe = false }) {
+  // `base = 'cobro'` cuenta cada venta POR SU FECHA DE VENTA; 'factura', por la
+  // fecha de la factura. Para «cuantas llevo este mes» manda la de venta: una
+  // venta cerrada hoy cuenta hoy, y una que todavia no se ha facturado cuenta
+  // igual --si no, la gestora cierra tres y su pantalla sigue diciendo cero
+  // hasta que administracion emita, que es justo lo que no depende de ella--.
+  const filas = await asesorasPorMes({ projectId, projectIds, from, to, asesoraId: null, base });
+
+  // El rango puede coger mas de un mes: se suma por asesora y se recalcula la
+  // tasa, porque la media de dos porcentajes no es el porcentaje del total.
+  const porAsesora = new Map();
+  for (const f of filas) {
+    if (f.asesora_id == null) continue;   // «sin asesora» no compite
+    const a = porAsesora.get(f.asesora_id) || {
+      user_id: f.asesora_id, nombre: f.asesora, leads: 0, ventas: 0, vendido: 0, cobrado: 0,
+    };
+    a.leads += Number(f.leads) || 0;
+    a.ventas += Number(f.ventas) || 0;
+    a.vendido += Number(f.vendido) || 0;
+    a.cobrado += Number(f.cobrado) || 0;
+    porAsesora.set(f.asesora_id, a);
+  }
+
+  const tasaDe = (a) => (a.leads > 0 ? Math.round((a.ventas / a.leads) * 1000) / 10 : 0);
+  // Por ventas, que es la pregunta --«eres la numero X de ventas»--, y en
+  // empate manda lo vendido: cerrar tres de mil no es lo mismo que tres de cien.
+  const tabla = [...porAsesora.values()].sort((x, y) => y.ventas - x.ventas || y.vendido - x.vendido);
+
+  const equipo = tabla.reduce((s, a) => ({ leads: s.leads + a.leads, ventas: s.ventas + a.ventas }), { leads: 0, ventas: 0 });
+  const i = tabla.findIndex((a) => a.user_id === userId);
+  const yo = i >= 0 ? tabla[i] : { user_id: userId, nombre: null, leads: 0, ventas: 0, vendido: 0, cobrado: 0 };
+  const arriba = i > 0 ? tabla[i - 1] : null;
+
+  return {
+    desde: from, hasta: to,
+    // LA TABLA ENTERA, SOLO PARA QUIEN MANDA. Diego, 23/09: «para el admin en
+    // esas pestañas debe tener como un desplegable del ranking y el % de
+    // conversion de la media».
+    //
+    // A una gestora NO se le manda: ella ve su puesto, su tasa y la media. Que
+    // cada una sepa el numero exacto de las demas no la ayuda a vender y
+    // convierte el panel en un tablon de comparaciones.
+    tabla: esJefe
+      ? tabla.map((a, n) => ({
+        puesto: n + 1,
+        user_id: a.user_id,
+        nombre: a.nombre,
+        leads: a.leads,
+        ventas: a.ventas,
+        vendido: a.vendido,
+        cobrado: a.cobrado,
+        tasa: tasaDe(a),
+      }))
+      : null,
+    // `null` cuando esta persona no entra en la clasificacion --no tiene leads
+    // ni ventas en el periodo--, para que la pantalla no diga «eres la 0 de 7».
+    puesto: i >= 0 ? i + 1 : null,
+    de: tabla.length,
+    nombre: yo.nombre,
+    leads: yo.leads,
+    ventas: yo.ventas,
+    vendido: yo.vendido,
+    cobrado: yo.cobrado,
+    tasa: tasaDe(yo),
+    tasa_equipo: equipo.leads > 0 ? Math.round((equipo.ventas / equipo.leads) * 1000) / 10 : 0,
+    ventas_equipo: equipo.ventas,
+    // Cuanto falta para adelantar a quien va justo delante. Sin nombre: es lo
+    // que hace falta para espabilar, no una lista de rivales.
+    faltan_para_subir: arriba ? Math.round((arriba.ventas - yo.ventas) * 10) / 10 : null,
+    // El primero de la tabla, para saber donde esta el liston.
+    mejor_ventas: tabla.length ? tabla[0].ventas : 0,
   };
 }

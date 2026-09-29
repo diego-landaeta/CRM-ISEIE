@@ -1,12 +1,24 @@
 import { query, getClient } from '../../shared/config/db.js';
+import { comoLista } from '../../shared/utils/ambito.js';
 import { logger } from '../../shared/utils/logger.js';
 
 // ====== plans ======
-export async function listPlans(projectId) {
+/*
+  UN CAMPUS O UNA EMPRESA ENTERA.
+
+  Lo que se MIRA acepta varios proyectos; lo que se CREA o se CIERRA sigue
+  siendo de uno, porque una nomina pertenece a un proyecto concreto.
+*/
+export async function listPlans({ projectId = null, projectIds = null } = {}) {
+  const ids = comoLista(projectId, projectIds);
   const { rows } = await query(
-    `SELECT pp.*, u.nombre as user_nombre, u.email as user_email, u.role
-       FROM payroll_plans pp JOIN users u ON u.id = pp.user_id
-      WHERE pp.project_id = $1 ORDER BY u.nombre`, [projectId]);
+    `SELECT pp.*, u.nombre as user_nombre, u.email as user_email, u.role,
+            pr.nombre AS proyecto_nombre
+       FROM payroll_plans pp
+       JOIN users u ON u.id = pp.user_id
+       LEFT JOIN projects pr ON pr.id = pp.project_id
+      WHERE ${ids ? 'pp.project_id = ANY($1::int[])' : 'true'}
+      ORDER BY u.nombre`, ids ? [ids] : []);
   return rows;
 }
 export async function getPlan(projectId, userId) {
@@ -30,12 +42,20 @@ export async function upsertPlan(data) {
 export async function deletePlan(id) { await query(`DELETE FROM payroll_plans WHERE id = $1`, [id]); }
 
 // ====== work hours ======
-export async function listHours({ projectId, userId, from, to }) {
-  const c = ['project_id = $1']; const p = [projectId]; let i = 2;
-  if (userId) { c.push(`user_id = $${i++}`); p.push(userId); }
-  if (from) { c.push(`fecha >= $${i++}`); p.push(from); }
-  if (to) { c.push(`fecha <= $${i++}`); p.push(to); }
-  const { rows } = await query(`SELECT wh.*, u.nombre as user_nombre FROM work_hours wh LEFT JOIN users u ON u.id = wh.user_id WHERE ${c.join(' AND ')} ORDER BY wh.fecha DESC`, p);
+export async function listHours({ projectId, projectIds = null, userId, from, to }) {
+  const ids = comoLista(projectId, projectIds);
+  const c = []; const p = []; let i = 1;
+  if (ids) { c.push(`wh.project_id = ANY($${i++}::int[])`); p.push(ids); }
+  if (userId) { c.push(`wh.user_id = $${i++}`); p.push(userId); }
+  if (from) { c.push(`wh.fecha >= $${i++}`); p.push(from); }
+  if (to) { c.push(`wh.fecha <= $${i++}`); p.push(to); }
+  const { rows } = await query(
+    `SELECT wh.*, u.nombre as user_nombre, pr.nombre AS proyecto_nombre
+       FROM work_hours wh
+       LEFT JOIN users u ON u.id = wh.user_id
+       LEFT JOIN projects pr ON pr.id = wh.project_id
+      WHERE ${c.length ? c.join(' AND ') : 'true'}
+      ORDER BY wh.fecha DESC`, p);
   return rows;
 }
 export async function createHours(data) {
@@ -48,15 +68,20 @@ export async function createHours(data) {
 export async function deleteHours(id) { await query(`DELETE FROM work_hours WHERE id = $1`, [id]); }
 
 // ====== periods ======
-export async function listPeriods({ projectId, userId, year, month }) {
-  const c = ['pp.project_id = $1']; const p = [projectId]; let i = 2;
+export async function listPeriods({ projectId, projectIds = null, userId, year, month }) {
+  const ids = comoLista(projectId, projectIds);
+  const c = []; const p = []; let i = 1;
+  if (ids) { c.push(`pp.project_id = ANY($${i++}::int[])`); p.push(ids); }
   if (userId) { c.push(`pp.user_id = $${i++}`); p.push(userId); }
   if (year) { c.push(`pp.periodo_year = $${i++}`); p.push(year); }
   if (month) { c.push(`pp.periodo_month = $${i++}`); p.push(month); }
   const { rows } = await query(
-    `SELECT pp.*, u.nombre as user_nombre, u.email as user_email
-       FROM payroll_periods pp JOIN users u ON u.id = pp.user_id
-      WHERE ${c.join(' AND ')}
+    `SELECT pp.*, u.nombre as user_nombre, u.email as user_email,
+            pr.nombre AS proyecto_nombre
+       FROM payroll_periods pp
+       JOIN users u ON u.id = pp.user_id
+       LEFT JOIN projects pr ON pr.id = pp.project_id
+      WHERE ${c.length ? c.join(' AND ') : 'true'}
       ORDER BY pp.periodo_year DESC, pp.periodo_month DESC, u.nombre`, p);
   return rows;
 }

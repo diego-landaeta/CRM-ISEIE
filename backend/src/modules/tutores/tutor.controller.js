@@ -361,7 +361,10 @@ export async function formacionesSinTutor(req, res, next) {
   try {
     await exigirGestion(req);
     const projectId = req.query.projectId ? parseInt(req.query.projectId) : null;
-    res.json({ success: true, data: await model.formacionesSinTutor({ projectId }) });
+    // ?todas=1 saca tambien las de antes del corte de comisiones.
+    res.json({ success: true, data: await model.formacionesSinTutor({
+      projectId, desdeElCorte: req.query.todas !== '1',
+    }) });
   } catch (err) { next(err); }
 }
 
