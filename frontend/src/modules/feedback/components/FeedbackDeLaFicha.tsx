@@ -73,17 +73,18 @@ export default function FeedbackDeLaFicha({ leadId }: { leadId: number }) {
     const resp = envio.respuestas || {};
     const preguntas = (envio.preguntas || []).filter((p) => resp[p.clave] !== undefined);
     type P = {
-      clave: string; tipo: string; escribir?: string; opciones?: Array<{ clave: string; texto: string }>;
+      clave: string; tipo: string; escribir?: string | string[]; opciones?: Array<{ clave: string; texto: string }>;
       sub?: { clave: string; opciones: Array<{ clave: string; texto: string }> };
     };
     const valor = (p: P, v: unknown) => {
       const texto = (x: unknown) => p.opciones?.find((o) => o.clave === String(x))?.texto || String(x);
-      if (p.tipo === 'escala') return `${v} de 5 · ${texto(v)}`;
-      if (p.tipo === 'texto') return `«${v}»`;
-      // Lo que escribió en «Otro», pegado a esa opción.
+      // Lo que escribió en «Otro» —o tras una nota de Regular para abajo—, pegado a esa opción.
       const otro = resp[`${p.clave}_otro`];
+      const abre = (x: unknown) => Boolean(otro) && [p.escribir ?? []].flat().includes(String(x));
+      if (p.tipo === 'escala') return `${v} de 5 · ${texto(v)}${abre(v) ? `: «${otro}»` : ''}`;
+      if (p.tipo === 'texto') return `«${v}»`;
       const lista = Array.isArray(v) ? v : [v];
-      const dicho = lista.map((x) => (x === p.escribir && otro ? `${texto(x)}: «${otro}»` : texto(x))).join(', ');
+      const dicho = lista.map((x) => (abre(x) ? `${texto(x)}: «${otro}»` : texto(x))).join(', ');
       // «Sí, que me contacte más adelante · En 2 o 3 meses»
       const sub = p.sub && resp[p.sub.clave] ? p.sub.opciones.find((o) => o.clave === resp[p.sub!.clave])?.texto : null;
       return sub ? `${dicho} · ${sub}` : dicho;

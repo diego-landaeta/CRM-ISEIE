@@ -17,13 +17,15 @@ import { MOTIVOS } from './motivos.js';
  * Solo la primera es obligatoria: una encuesta que exige todas se abandona a la
  * mitad, y es mejor una respuesta que ninguna.
  *
- * Tipos (todos se pintan como desplegable):
+ * Tipos (todos se pintan como desplegable, menos `texto`):
  *   unica  : una opción
  *   varias : las que quiera
  *   escala : de 1 a 5, con su palabra («4 · Bien»); se guarda el número
+ *   texto  : un recuadro para escribir lo que quiera (máx. 2000)
  *
- * `escribir`: la opción que abre un recuadro para escribir. Lo escrito se guarda
- * en `<clave>_otro`.
+ * `escribir`: la opción —o las opciones— que abren un recuadro para escribir.
+ * Lo escrito se guarda en `<clave>_otro` (máx. 1000). `escribirTexto` es el
+ * rótulo del recuadro y `pista` lo que se ve dentro antes de escribir.
  *
  * {programa} se rellena con el curso de esa persona y {asesor} con el nombre de
  * su gestora; sin gestora, esa línea no sale.
@@ -48,6 +50,12 @@ export const PREGUNTAS = [
     texto: '¿Cómo te atendió el asesor?',
     destacado: 'El asesor: {asesor}',
     opciones: ESCALA,
+    // El equipo, 29/09: con Regular, Mal o Muy mal, «deja tu comentario». Es
+    // el comentario que más le sirve a la gestora. No es obligatorio: exigirlo
+    // justo a quien está molesto es que no mande nada.
+    escribir: ['3', '2', '1'],
+    escribirTexto: 'Deja tu comentario',
+    pista: 'Cuéntanos qué pasó',
   },
   {
     clave: 'a_tiempo', tipo: 'unica',
@@ -109,7 +117,23 @@ export const PREGUNTAS = [
       ],
     },
   },
+  {
+    // El equipo, 29/09: «un texto al final de: deja tus comentarios». Para todos
+    // y opcional; va sin número detrás de las seis.
+    clave: 'comentarios', tipo: 'texto',
+    texto: 'Deja tus comentarios',
+    ayuda: 'Lo que quieras contarnos',
+    pista: 'Escribe aquí',
+    opciones: [],
+  },
 ];
+
+/** Si con lo que eligió se abre el recuadro de escribir («Otro», o una nota de 3 o menos). */
+export function abreEscribir(p, valor) {
+  if (!p.escribir) return false;
+  const abren = [].concat(p.escribir);
+  return [].concat(valor ?? []).some((v) => abren.includes(String(v)));
+}
 
 /** Los días hasta el recordatorio: el principio del rango que eligió, o un mes. */
 export function diasHastaVolver(r) {
@@ -149,10 +173,12 @@ export function limpiarRespuestas(entrada = {}) {
     } else if (p.tipo === 'escala') {
       const n = Number(v);
       if (Number.isInteger(n) && n >= 1 && n <= 5) r[p.clave] = n;
+    } else if (p.tipo === 'texto') {
+      const t = String(v).trim().slice(0, 2000);
+      if (t) r[p.clave] = t;
     }
-    // Lo escrito en «Otro», solo si de verdad eligió «Otro».
-    const elegida = [].concat(r[p.clave] ?? []);
-    if (p.escribir && elegida.includes(p.escribir)) {
+    // Lo escrito en «Otro» (o tras una nota baja), solo si de verdad lo eligió.
+    if (abreEscribir(p, r[p.clave])) {
       const t = String(entrada[`${p.clave}_otro`] ?? '').trim().slice(0, 1000);
       if (t) r[`${p.clave}_otro`] = t;
     }
@@ -171,16 +197,20 @@ export function lineaDe(p, r) {
   return sub ? `${base} · ${sub}` : base;
 }
 
-/** «Otro motivo: «me mudo»» / «4/5 · Bien» — para el historial y el aviso. */
+/** «Otro motivo: «me mudo»» / «2/5 · Mal: «no me llamó»» — para el historial y el aviso. */
 export function textoDeRespuesta(clave, valor, otro = null) {
   const p = PREGUNTAS.find((x) => x.clave === clave);
   if (!p) return String(valor);
-  if (p.tipo === 'escala') return `${valor}/5 · ${ESCALA.find((o) => o.clave === String(valor))?.texto || ''}`.trim();
+  if (p.tipo === 'texto') return `«${valor}»`;
+  if (p.tipo === 'escala') {
+    const nota = `${valor}/5 · ${ESCALA.find((o) => o.clave === String(valor))?.texto || ''}`.trim();
+    return otro && abreEscribir(p, valor) ? `${nota}: «${otro}»` : nota;
+  }
   const lista = Array.isArray(valor) ? valor : [valor];
   return lista
     .map((v) => {
       const texto = p.opciones.find((o) => o.clave === v)?.texto || v;
-      return v === p.escribir && otro ? `${texto}: «${otro}»` : texto;
+      return otro && abreEscribir(p, v) ? `${texto}: «${otro}»` : texto;
     })
     .join(', ');
 }

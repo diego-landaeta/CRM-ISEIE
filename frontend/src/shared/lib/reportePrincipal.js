@@ -115,6 +115,17 @@ export async function descargarReportePrincipal({ projectId, projectName, from, 
           [],
           [cab('Gestora'), cab('Enviados'), cab('Respondidos'), cab('No le contestaron a tiempo'), cab('Nota de atención (1-5)')],
           ...(fb.porGestora || []).map((g) => [txt(g.nombre), num(g.enviados), num(g.respondidos), num(g.no_le_contestaron), num(g.nota_atencion)]),
+          // Lo que escribieron: «Otro», el porqué de una nota baja y «Deja tus comentarios».
+          ...((fb.preguntas || []).some((p) => (p.escritos || []).length)
+            ? [
+              [],
+              [cab('Lo que escribieron (los 40 últimos de cada pregunta)'), cab('Nota'), cab('Comentario'), cab('Prospecto'), cab('Gestora'), cab('Fecha')],
+              ...(fb.preguntas || []).flatMap((p) => (p.escritos || []).map((e) => [
+                txt(p.clave === 'motivo' ? 'Otro motivo' : p.texto), num(e.nota), txt(e.texto),
+                txt(e.lead_nombre || ''), txt(e.gestora || ''), txt(e.fecha ? new Date(e.fecha).toLocaleDateString('es-ES') : ''),
+              ])),
+            ]
+            : []),
         ],
       });
     }

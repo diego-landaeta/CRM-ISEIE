@@ -59,6 +59,16 @@ export function feedbackEnCsv(datos: PanelFeedback, sep: (fila: unknown[]) => st
     p.opciones!.forEach((o) => filas.push(sep([p.tipo === 'escala' ? `${o.clave} · ${o.texto}` : o.texto, o.n])));
     filas.push('');
   });
+  // Lo que escribieron: «Otro», el porqué de una nota baja y «Deja tus comentarios».
+  const conEscritos = datos.preguntas.filter((p) => (p.escritos || []).length > 0);
+  if (conEscritos.length) {
+    filas.push(sep(['Lo que escribieron (los 40 últimos de cada pregunta)', 'Nota', 'Comentario', 'Prospecto', 'Gestora', 'Fecha']));
+    conEscritos.forEach((p) => p.escritos!.forEach((e) => filas.push(sep([
+      p.clave === 'motivo' ? 'Otro motivo' : p.texto, e.nota ?? '', e.texto, e.lead_nombre || '', e.gestora || '',
+      e.fecha ? new Date(e.fecha).toLocaleDateString('es-ES') : '',
+    ]))));
+    filas.push('');
+  }
   return filas;
 }
 

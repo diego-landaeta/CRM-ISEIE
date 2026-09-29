@@ -14,9 +14,10 @@ import { useParams, useSearchParams } from 'react-router-dom';
  *
  * LAS PREGUNTAS LAS MANDA EL SERVIDOR (`modules/feedback/preguntas.js`), con el
  * nombre de su formación y de su asesor ya puestos. Todas van en DESPLEGABLE
- * (Diego, 28/09): una opción, varias o la nota de 1 a 5. La opción marcada como
- * `escribir` («Otro motivo», «Otra cosa») abre un recuadro para escribir.
- * Cambiar o añadir preguntas no toca esta pantalla.
+ * (Diego, 28/09): una opción, varias o la nota de 1 a 5. Las opciones marcadas
+ * como `escribir` («Otro motivo», «Otra cosa», o una nota de Regular para abajo)
+ * abren un recuadro para escribir, y la de tipo `texto` («Deja tus comentarios»,
+ * al final) es solo el recuadro. Cambiar o añadir preguntas no toca esta pantalla.
  *
  * `?vista=1` es la copia que recibe la gestora cuando pide «quiero verlo»: se
  * ve igual, pero no guarda nada. Si contestara ella, la respuesta sería de la
@@ -27,9 +28,11 @@ const API_BASE = (import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '') + '/ap
 
 type Opcion = { clave: string; texto: string };
 type Pregunta = {
-  clave: string; tipo: 'unica' | 'varias' | 'escala';
+  clave: string; tipo: 'unica' | 'varias' | 'escala' | 'texto';
   texto: string; ayuda?: string; destacado?: string; obligatoria?: boolean;
-  opciones: Opcion[]; escribir?: string;
+  opciones: Opcion[];
+  /** La opción (o las opciones) que abren el recuadro; su rótulo y lo que se ve dentro. */
+  escribir?: string | string[]; escribirTexto?: string; pista?: string;
   /** La que sale después si contesta `cuando` («Sí» → «¿Cuándo te viene bien?»). */
   sub?: { cuando: string; clave: string; texto: string; opciones: Opcion[] };
 };
@@ -86,7 +89,10 @@ export default function FeedbackEncuestaPage() {
     const antes = Array.isArray(r[clave]) ? (r[clave] as string[]) : [];
     return { ...r, [clave]: antes.includes(opcion) ? antes.filter((x) => x !== opcion) : [...antes, opcion] };
   });
-  const eligioOtro = (p: Pregunta) => Boolean(p.escribir) && [resp[p.clave]].flat().includes(p.escribir as string);
+  // La nota se guarda como número y la opción es «2»: se comparan como texto.
+  const eligioOtro = (p: Pregunta) => Boolean(p.escribir)
+    && [resp[p.clave] ?? []].flat().some((v) => [p.escribir!].flat().includes(String(v)));
+  const recuadro = 'w-full rounded-lg border border-[#d8dee6] px-3 py-2 text-base focus:outline-none focus:ring-2';
 
   async function enviar() {
     if (faltaObligatoria || vista) return;
@@ -179,7 +185,8 @@ export default function FeedbackEncuestaPage() {
                   return (
                     <div key={p.clave}>
                       <label htmlFor={id} className="block text-base font-semibold leading-snug">
-                        <span className="mr-1 text-[#8a939e]">{i + 1}.</span> {p.texto}
+                        {/* «Deja tus comentarios» cierra la encuesta: sin número. */}
+                        {p.tipo !== 'texto' && <span className="mr-1 text-[#8a939e]">{i + 1}.</span>} {p.texto}
                         {p.obligatoria && <span className="ml-1" style={{ color: colorTexto }} aria-label="obligatoria">*</span>}
                       </label>
                       {p.destacado && <p className="mt-1 text-sm font-semibold" style={{ color: colorTexto }}>{p.destacado}</p>}
@@ -241,10 +248,22 @@ export default function FeedbackEncuestaPage() {
                         </div>
                       )}
 
+                      {p.tipo === 'texto' && (
+                        <textarea id={id} value={(resp[p.clave] as string) || ''}
+                          onChange={(e) => (e.target.value ? poner(p.clave, e.target.value) : quitar(p.clave))}
+                          maxLength={2000} rows={4} placeholder={p.pista || ''} className={`mt-2 ${recuadro}`} />
+                      )}
+
                       {eligioOtro(p) && (
-                        <textarea value={(resp[`${p.clave}_otro`] as string) || ''} onChange={(e) => poner(`${p.clave}_otro`, e.target.value)}
-                          maxLength={1000} rows={2} placeholder="Cuéntanos cuál" aria-label={`${p.texto}: escríbelo`}
-                          className="mt-2 w-full rounded-lg border border-[#d8dee6] px-3 py-2 text-base focus:outline-none focus:ring-2" />
+                        <div className="mt-3">
+                          {p.escribirTexto && (
+                            <label htmlFor={`${id}-otro`} className="block text-sm font-semibold">{p.escribirTexto}</label>
+                          )}
+                          <textarea id={`${id}-otro`} value={(resp[`${p.clave}_otro`] as string) || ''} onChange={(e) => poner(`${p.clave}_otro`, e.target.value)}
+                            maxLength={1000} rows={p.escribirTexto ? 3 : 2} placeholder={p.pista || 'Cuéntanos cuál'}
+                            aria-label={p.escribirTexto ? undefined : `${p.texto}: escríbelo`}
+                            className={`${p.escribirTexto ? 'mt-1.5' : ''} ${recuadro}`} />
+                        </div>
                       )}
                     </div>
                   );

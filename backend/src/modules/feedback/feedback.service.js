@@ -319,9 +319,14 @@ export async function responder(token, { motivo, comentario, respuestas = {} } =
   const textos = preguntasPara({ programa: f.producto });
   const lineas = textos
     .filter((p) => r[p.clave] !== undefined)
-    .map((p) => `· ${p.texto} ${lineaDe(p, r)}`);
+    .map((p) => (p.tipo === 'texto' ? `· Comentarios: ${lineaDe(p, r)}` : `· ${p.texto} ${lineaDe(p, r)}`));
   await apuntarEnSuHistorial(f.lead_id, `💬 Contestó al feedback:\n${lineas.join('\n')}`);
-  const nota = r.nota_atencion ? ` · te puso un ${r.nota_atencion}/5` : '';
+  // Lo que escribió, en el aviso tal cual: sobre todo el porqué de una nota baja.
+  const corto = (t) => (t.length > 160 ? `${t.slice(0, 157)}…` : t);
+  const nota = r.nota_atencion
+    ? ` · te puso un ${r.nota_atencion}/5${r.nota_atencion_otro ? ` («${corto(r.nota_atencion_otro)}»)` : ''}`
+    : '';
+  const comento = r.comentarios ? ` · comentó: «${corto(r.comentarios)}»` : '';
   // «Que me contacte más adelante»: a la agenda de su gestora, el día que eligió.
   let volver = '';
   if (r.avisar === 'si') {
@@ -344,14 +349,15 @@ export async function responder(token, { motivo, comentario, respuestas = {} } =
   }
   await avisarAGestora(fila, {
     titulo: 'Te han contestado al feedback',
-    mensaje: `${f.lead_nombre || 'Un prospecto'}: ${textoDeRespuesta('motivo', r.motivo, r.motivo_otro)}${nota}${volver}`,
+    mensaje: `${f.lead_nombre || 'Un prospecto'}: ${textoDeRespuesta('motivo', r.motivo, r.motivo_otro)}${nota}${volver}${comento}`,
   });
   return { ya: false };
 }
 
 /**
  * El resumen de cada pregunta para el panel: cuántos eligieron cada opción, la
- * nota media de la escala y lo que escribieron en «Otro» (lo último primero).
+ * nota media de la escala y lo que escribieron —en «Otro», tras una nota baja o
+ * en «Deja tus comentarios»— (lo último primero).
  */
 export function resumenDePreguntas(contestadas) {
   const textos = preguntasPara();
@@ -360,15 +366,19 @@ export function resumenDePreguntas(contestadas) {
       .map((c) => ({ v: (c.respuestas || {})[p.clave], c }))
       .filter((x) => x.v !== undefined);
     const base = { clave: p.clave, tipo: p.tipo, texto: textos[i].texto, respondieron: valores.length };
-    const escritos = p.escribir
+    const escrito = p.tipo === 'texto' ? p.clave : `${p.clave}_otro`;
+    const escritos = p.escribir || p.tipo === 'texto'
       ? contestadas
-        .filter((c) => (c.respuestas || {})[`${p.clave}_otro`])
+        .filter((c) => (c.respuestas || {})[escrito])
         .slice(0, 40)
         .map((c) => ({
-          texto: c.respuestas[`${p.clave}_otro`], lead_id: c.lead_id, lead_nombre: c.lead_nombre,
+          texto: c.respuestas[escrito], lead_id: c.lead_id, lead_nombre: c.lead_nombre,
           gestora: c.gestora, fecha: c.respondido_at,
+          // En la escala, con la nota que puso («2/5»).
+          ...(p.tipo === 'escala' ? { nota: c.respuestas[p.clave] } : {}),
         }))
       : undefined;
+    if (p.tipo === 'texto') return { ...base, opciones: [], escritos };
     if (p.tipo === 'escala') {
       const opciones = ESCALA.map((o) => ({
         clave: o.clave, texto: o.texto, n: valores.filter((x) => String(x.v) === o.clave).length,
@@ -376,7 +386,7 @@ export function resumenDePreguntas(contestadas) {
       const media = valores.length
         ? Math.round((valores.reduce((s, x) => s + Number(x.v), 0) / valores.length) * 10) / 10
         : null;
-      return { ...base, opciones, media };
+      return { ...base, opciones, media, ...(escritos ? { escritos } : {}) };
     }
     const opciones = p.opciones.map((o) => ({
       clave: o.clave,

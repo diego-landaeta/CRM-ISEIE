@@ -13,8 +13,8 @@ export type ResumenPregunta = {
   clave: string; tipo: 'unica' | 'varias' | 'escala' | 'texto'; texto: string; respondieron: number;
   opciones?: Array<{ clave: string; texto: string; n: number }>;
   media?: number | null;
-  /** Lo que escribieron en «Otro» (o en una de escribir, en respuestas viejas). */
-  escritos?: Array<{ texto: string; lead_id: number; lead_nombre: string | null; gestora: string | null; fecha: string }>;
+  /** Lo que escribieron: en «Otro», tras una nota de 3 o menos (con esa `nota`) o en «Deja tus comentarios». */
+  escritos?: Array<{ texto: string; lead_id: number; lead_nombre: string | null; gestora: string | null; fecha: string; nota?: number }>;
 };
 
 /** Lo que contestó una persona, por clave de pregunta. */
@@ -51,7 +51,7 @@ export type EnvioDeUnLead = {
   respuestas?: RespuestasFeedback;
   /** Las preguntas, para poder decir a qué contestó cada cosa. */
   preguntas?: Array<{
-    clave: string; tipo: string; texto: string; escribir?: string; opciones?: Array<{ clave: string; texto: string }>;
+    clave: string; tipo: string; texto: string; escribir?: string | string[]; opciones?: Array<{ clave: string; texto: string }>;
     sub?: { clave: string; opciones: Array<{ clave: string; texto: string }> };
   }>;
 } | null;

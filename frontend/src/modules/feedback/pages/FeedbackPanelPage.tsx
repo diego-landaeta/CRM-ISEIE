@@ -173,7 +173,10 @@ export default function FeedbackPanelPage() {
                     ))}
                   </ul>
                 )}
-                {/* Lo escrito: en las de «Otro», solo si alguien escribió. */}
+                {/* Lo escrito: en las de «Otro» y tras una nota baja, solo si alguien escribió. */}
+                {p.tipo === 'escala' && (p.escritos || []).length > 0 && (
+                  <p className="mt-3 text-xs font-semibold">Lo que escribieron al poner Regular, Mal o Muy mal</p>
+                )}
                 {(p.tipo === 'texto' || (p.escritos || []).length > 0) && (
                   (p.escritos || []).length === 0
                     ? <p className="mt-2 text-sm text-muted-foreground">Nadie ha escrito nada todavía.</p>
@@ -181,6 +184,7 @@ export default function FeedbackPanelPage() {
                       <ul className="mt-2 space-y-2">
                         {p.escritos!.map((e, k) => (
                           <li key={k} className="rounded-md bg-muted/40 px-3 py-2 text-sm">
+                            {e.nota != null && <span className="mr-1.5 font-semibold tabular-nums">{e.nota}/5</span>}
                             <span className="italic">«{e.texto}»</span>
                             <span className="mt-1 block text-xs text-muted-foreground">
                               <Link to={`/leads/${e.lead_id}`} className="hover:underline">{e.lead_nombre || 'Sin nombre'}</Link>
