@@ -26,7 +26,9 @@ async function triggerSequences(triggerEvent, leadId, projectId) {
 async function validarFechaNoAnteriorAlLead(leadId, fechaConversion) {
   if (!leadId || !fechaConversion) return;
   const { rows } = await query(
-    `SELECT COALESCE(fecha_solicitud, created_at)::date AS entrada FROM leads WHERE id = $1`,
+    `SELECT COALESCE(fecha_solicitud, created_at)::date AS entrada,
+            to_jsonb(l) ->> 'landing_url' AS landing_url
+       FROM leads l WHERE id = $1`,
     [leadId]
   );
   const entrada = rows[0]?.entrada;
@@ -35,6 +37,19 @@ async function validarFechaNoAnteriorAlLead(leadId, fechaConversion) {
   const alta = new Date(entrada);
   if (Number.isNaN(venta.getTime())) return;
   if (venta < alta) {
+    // UN ALTA A MANO NO TIENE «ENTRADA» DE VERDAD (Diego, 28/09). Ana dio de
+    // alta hoy a personas que compraron el 22 para registrarles la venta, y
+    // esto no la dejaba. Si el prospecto NO vino de la web (sin landing_url),
+    // su fecha de entrada es cuando alguien lo tecleó, no cuando pidió
+    // información: la que manda es la de la venta. Se lleva la entrada a ese
+    // día y se sigue. Si vino de la web, la entrada es real y la venta
+    // anterior es un error: eso se sigue parando.
+    if (!rows[0]?.landing_url) {
+      await query('UPDATE leads SET fecha_solicitud = $2::date, updated_at = NOW() WHERE id = $1', [leadId, fechaConversion]);
+      logger.info({ leadId, entradaAntes: entrada, venta: fechaConversion },
+        'venta anterior a un alta manual: la entrada pasa a la fecha de la venta');
+      return;
+    }
     const dia = (d) => new Date(d).toLocaleDateString('es-ES');
     throw new AppError(
       `La fecha de la venta (${dia(venta)}) es anterior a la fecha de entrada del prospecto ` +

@@ -105,16 +105,27 @@ export default function FormacionesSinTutorPage() {
   const [cargandoAnuncios, setCargandoAnuncios] = useState(false);
   const [guardando, setGuardando] = useState(false);
 
+  /**
+   * Si se enseñan también las de antes del corte de comisiones.
+   *
+   * Por defecto no, que es lo de siempre: antes del corte no se paga comisión y
+   * una venta de febrero pudo tener tutor entonces. Pero Diego se encontró con
+   * veintidós cursos de ICTESS sin tutor que no salían —de febrero a julio— y
+   * la pantalla no lo decía por ningún sitio: quien busca qué está descubierto
+   * no puede enterarse de que hay doce más solo leyendo el código.
+   */
+  const [conLasViejas, setConLasViejas] = useState(false);
+
   const cargar = useCallback(async () => {
     setCargando(true);
     try {
-      const r = await tutoresApi.formacionesSinTutor(projectId);
+      const r = await tutoresApi.formacionesSinTutor(projectId, conLasViejas);
       setFilas(r.success ? (r.data || []) : []);
       if (!r.success) toast({ title: 'No se pudo cargar', description: r.error || '', variant: 'destructive' });
     } catch (e) {
       toast({ title: 'No se pudo cargar', description: (e as Error).message, variant: 'destructive' });
     } finally { setCargando(false); }
-  }, [projectId]);
+  }, [projectId, conLasViejas]);
 
   useEffect(() => { cargar(); }, [cargar]);
 
@@ -167,7 +178,24 @@ export default function FormacionesSinTutorPage() {
     <div className="space-y-4">
       <PageHeader
         title="Formaciones sin tutor"
-        subtitle="Ya han vendido desde que las comisiones aplican, y no tienen a quien pagarle"
+        subtitle={conLasViejas
+          ? 'Todas las que han vendido alguna vez y no tienen a quien pagarle'
+          : 'Ya han vendido desde que las comisiones aplican, y no tienen a quien pagarle'}
+        actions={(
+          /* El corte de comisiones esconde las ventas anteriores, y eso está
+             bien para el día a día —antes del corte no se paga nada— pero deja
+             fuera formaciones que SIGUEN sin tutor. Aquí se puede mirar la
+             lista entera sin cambiarle el criterio a nadie. */
+          <label className="inline-flex items-center gap-2 text-normal">
+            <input
+              type="checkbox"
+              checked={conLasViejas}
+              onChange={(e) => setConLasViejas(e.target.checked)}
+              className="h-4 w-4 rounded border-border text-primary focus:ring-2 focus:ring-ring/40"
+            />
+            Incluir ventas anteriores al corte
+          </label>
+        )}
       />
 
       {/* El titular, antes de la lista: es la cifra que decide si esto urge. */}
@@ -227,6 +255,14 @@ export default function FormacionesSinTutorPage() {
                   <tr key={f.id} className="border-t border-border hover:bg-muted/30">
                     <td className="px-4 py-2.5">
                       <span className="font-medium">{f.nombre}</span>
+                      {/* Las de antes del corte van marcadas: si no, se
+                          mezclarian con las de ahora y nadie sabria cual
+                          genera comision y cual no. */}
+                      {f.antes_del_corte && (
+                        <span className="ml-1.5 rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          antes del corte
+                        </span>
+                      )}
                       {f.precio ? (
                         <span className="block text-xs text-muted-foreground">
                           catálogo {euros(f.precio)}

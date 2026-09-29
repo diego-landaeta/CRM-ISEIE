@@ -8,9 +8,24 @@ import type { Canal } from '../lib/canales';
  * es el del issue #115 y no se inventa nada por encima de él.
  */
 
+/**
+ * De que ambito se esta hablando: un campus, o una empresa entera con todos
+ * los suyos. Se manda igual en leer y en escribir, porque un cambio en el
+ * proceso de CEDIA se aplica a sus siete campus.
+ */
+export type Ambito = { projectId?: number | null; issuerId?: number | null };
+
+/** La empresa manda sobre el campus, igual que en el resto del CRM. */
+function comoConsulta(ambito: Ambito): string {
+  if (ambito.issuerId) return `issuerId=${ambito.issuerId}`;
+  return `projectId=${ambito.projectId}`;
+}
+
 export interface Paso {
   id: number;
   project_id: number;
+  /** En cuantos campus de la empresa existe este paso. Solo llega con empresa. */
+  en_campus?: number;
   /** El nombre con el que el código encuentra el paso. NO se edita. */
   clave: string;
   nombre: string;
@@ -43,24 +58,24 @@ export type PasoNuevo = {
 export type PasoCambios = Partial<Omit<PasoNuevo, 'clave'>> & { activo?: boolean };
 
 export const procesoApi = {
-  listar: (projectId: number, incluirInactivos = false): Promise<ApiResponse<Paso[]>> =>
+  listar: (ambito: Ambito, incluirInactivos = false): Promise<ApiResponse<Paso[]>> =>
     client.get(
-      `/proceso/pasos?projectId=${projectId}${incluirInactivos ? '&includeInactive=true' : ''}`,
+      `/proceso/pasos?${comoConsulta(ambito)}${incluirInactivos ? '&includeInactive=true' : ''}`,
     ),
 
-  crear: (datos: PasoNuevo & { projectId?: number }): Promise<ApiResponse<Paso>> =>
+  crear: (datos: PasoNuevo & Ambito): Promise<ApiResponse<Paso>> =>
     client.post('/proceso/pasos', datos),
 
   /** La lista ENTERA de ids, en su nuevo orden. No un movimiento suelto. */
-  reordenar: (ids: number[]): Promise<ApiResponse<Paso[]>> =>
-    client.patch('/proceso/pasos/orden', { ids }),
+  reordenar: (ids: number[], ambito: Ambito): Promise<ApiResponse<Paso[]>> =>
+    client.patch(`/proceso/pasos/orden?${comoConsulta(ambito)}`, { ids }),
 
-  editar: (id: number, cambios: PasoCambios): Promise<ApiResponse<Paso>> =>
-    client.patch(`/proceso/pasos/${id}`, cambios),
+  editar: (id: number, cambios: PasoCambios, ambito: Ambito): Promise<ApiResponse<Paso>> =>
+    client.patch(`/proceso/pasos/${id}?${comoConsulta(ambito)}`, cambios),
 
   /** Desactiva. No borra: el paso sigue existiendo y vuelve con el interruptor. */
-  desactivar: (id: number): Promise<ApiResponse<unknown>> =>
-    client.delete(`/proceso/pasos/${id}`),
+  desactivar: (id: number, ambito: Ambito): Promise<ApiResponse<unknown>> =>
+    client.delete(`/proceso/pasos/${id}?${comoConsulta(ambito)}`),
 };
 
 /** Qué se estaba intentando cuando el servidor dijo que no. */

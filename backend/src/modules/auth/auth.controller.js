@@ -5,10 +5,11 @@ import { loginSchema, setPasswordSchema, changePasswordSchema, updateMyProfileSc
 import { AppError } from '../../shared/utils/AppError.js';
 import bcrypt from 'bcrypt';
 import { query } from '../../shared/config/db.js';
+import { buildPermissionsMap } from '../permissions/permissions.service.js';
 
-// /api/auth/me devuelve `permissions` y `view` vacíos hasta que se porte el
-// módulo `permissions` (custom_roles + user_permission_overrides + sidebar
-// override). El frontend cae al comportamiento por defecto basado en `role`.
+// /api/auth/me devuelve el mapa de `permissions` calculado (rol, rol a medida
+// y lo dado a una persona suelta), igual que MultiCRM. `view` sigue vacío: la
+// vista por rol del menú no está portada y el frontend cae a la de siempre.
 
 function getClientIp(req) {
   return req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip;
@@ -167,7 +168,13 @@ export async function me(req, res, next) {
       throw new AppError('Usuario no encontrado', 404, 'USER_NOT_FOUND');
     }
 
-    const projects = await authModel.getUserProjects(user.id, user.role);
+    // Los permisos NO pueden tumbar /me: si fallan, la pantalla se queda con
+    // la tabla del rol, que es lo que tenia hasta ahora.
+    const [projects, permissions] = await Promise.all([
+      authModel.getUserProjects(user.id, user.role),
+      buildPermissionsMap(user.id, user.role, user.custom_role_id, user.roles_extra)
+        .catch(() => ({})),
+    ]);
 
     res.json({
       success: true,
@@ -177,6 +184,8 @@ export async function me(req, res, next) {
           nombre: user.nombre,
           email: user.email,
           role: user.role,
+          // Los roles de mas, para que la pantalla sepa que puede.
+          roles_extra: user.roles_extra || [],
           avatar_url: user.avatar_url,
           custom_role_id: user.custom_role_id,
           custom_role_label: user.custom_role_label,
@@ -184,7 +193,7 @@ export async function me(req, res, next) {
           gestor_colaboraciones: !!user.gestor_colaboraciones,
           editar_fechas_factura: !!user.editar_fechas_factura,
         },
-        permissions: {},
+        permissions,
         view: {},
         projects: sanitizeProjects(projects, user.role),
       },

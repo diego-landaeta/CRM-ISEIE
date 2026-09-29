@@ -25,7 +25,15 @@
 
 export function normalizePhone(raw) {
   if (raw == null) return null;
-  let s = String(raw).trim();
+  // Los caracteres INVISIBLES que mete WhatsApp alrededor de un numero: marcas
+  // de direccion (U+200E/F, U+202A-202E, U+2066-2069), espacios de ancho cero y
+  // el BOM. No se ven, asi que quien copia «+507 6330-2543» de un chat pega
+  // tambien esos caracteres, y el numero se rechazaba como si tuviera letras.
+  // Diego, 28/09, en los dos CRMs. Y el «＋» de ancho completo, como «+».
+  let s = String(raw)
+    .replace(/[​-‏‪-‮⁠-⁩﻿]/g, '')
+    .replace(/＋/g, '+')
+    .trim();
   if (!s) return null;
   // "No suministrado" o similar
   if (/no\s*suministrad/i.test(s)) return null;
@@ -40,6 +48,11 @@ export function normalizePhone(raw) {
   const digits = hasPlus ? s.slice(1) : s;
   // Validar que el resto sean solo dígitos
   if (!/^\d+$/.test(digits)) return null;
+  // UN MÓVIL ESPAÑOL SIN PREFIJO (28/09). «612345678» salía «+612345678», o
+  // sea un número de Australia (+61), y el WhatsApp iba a otra persona. Nueve
+  // cifras que empiezan por 6 o 7 son un móvil de España: ningún país de los
+  // que escriben usa ese formato (Perú y Chile empiezan por 9; Bolivia tiene 8).
+  if (!hasPlus && /^[67]\d{8}$/.test(digits)) return '+34' + digits;
   // Mínimo 7 dígitos (sin el +)
   if (digits.length < 7) return null;
   // Quitar ceros iniciales después del + (raro pero ocurre)

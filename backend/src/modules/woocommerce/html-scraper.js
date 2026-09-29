@@ -308,10 +308,19 @@ function extractMetaBox(html) {
 
   // Patron 4: pares consecutivos de <p class="elementor-heading-title">label</p>
   // ... <p class="elementor-heading-title">valor</p> (estructura ICTESS).
-  const headingPairRe = /<p[^>]*class="[^"]*elementor-heading-title[^"]*"[^>]*>([^<]{2,40})<\/p>[\s\S]{1,600}?<p[^>]*class="[^"]*elementor-heading-title[^"]*"[^>]*>([^<]{1,80})<\/p>/gi;
+  //
+  // La etiqueta no siempre va en un <p>. ISEF la pone en <div>, con el mismo
+  // elementor-heading-title, y por eso caia al patron de mas abajo y emparejaba
+  // mal: guardaba «Modulos 8» como si fueran 8 HORAS, cuando la ficha dice
+  // «Modulos 8 · Horas 750». Un diplomado entraba con 8 horas en vez de 750, y
+  // las horas salen impresas en los diplomas.
+  //
+  // Se aceptan p, div, span y h1-h6, y se exige que el cierre sea de la MISMA
+  // etiqueta que la apertura para no cruzar bloques.
+  const headingPairRe = /<(p|div|span|h[1-6])[^>]*class="[^"]*elementor-heading-title[^"]*"[^>]*>([^<]{2,40})<\/\1>[\s\S]{1,600}?<(p|div|span|h[1-6])[^>]*class="[^"]*elementor-heading-title[^"]*"[^>]*>([^<]{1,80})<\/\3>/gi;
   while ((m = headingPairRe.exec(html)) !== null) {
-    const labelText = normalizeForMatch(htmlToText(m[1]));
-    const valueRaw = htmlToText(m[2]).trim();
+    const labelText = normalizeForMatch(htmlToText(m[2]));
+    const valueRaw = htmlToText(m[4]).trim();
     const key = LABEL_MAP[labelText];
     if (key && valueRaw && !found[key]) {
       found[key] = parseMetaValue(labelText, valueRaw);

@@ -1031,6 +1031,77 @@
   box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
   overflow: hidden;
 }
+/* Colgando de la barra de arriba: hacia abajo y pegado a su botón. Arriba no
+   hay sitio —la barra es lo primero de la pantalla— y el panel se saldría. */
+.wa-plantillas.es-abajo {
+  top: 100%;
+  bottom: auto;
+  left: auto;
+  right: 0;
+  width: 460px;
+  max-width: calc(100vw - 32px);
+  margin-top: 6px;
+  margin-bottom: 0;
+}
+/* El ancla del de la barra. Sin esto el panel se colocaría respecto al marco
+   del chat y saldría en una esquina. */
+.wa-ancla-plantillas { position: relative; }
+
+/* «Mías» no es un paso: se separa con una raya para que no parezca el sexto. */
+.wa-plantillas-paso.es-mias { margin-left: auto; }
+.wa-plantilla-etiqueta.es-mia {
+  background: hsl(var(--primary) / 12%);
+  color: hsl(var(--primary));
+}
+
+/* Guardar una propia desde el chat. */
+.wa-plantillas-nueva-abrir {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 7px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: hsl(var(--primary));
+  white-space: nowrap;
+}
+.wa-plantillas-nueva-abrir:hover { background: hsl(var(--primary) / 10%); }
+.wa-plantillas-nueva {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border-bottom: 1px solid hsl(var(--border));
+  background: hsl(var(--muted) / 40%);
+}
+.wa-plantillas-nueva-nombre,
+.wa-plantillas-nueva-cuerpo {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 6px;
+  background: hsl(var(--background));
+  font-size: 12px;
+  color: hsl(var(--foreground));
+  resize: vertical;
+}
+.wa-plantillas-nueva-pie {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+}
+.wa-plantillas-nueva-nota { margin-right: auto; color: hsl(var(--muted-foreground)); }
+.wa-plantillas-nueva-guardar {
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  font-weight: 600;
+}
+.wa-plantillas-nueva-guardar:disabled { opacity: 0.5; }
+
 .wa-plantillas-cabecera {
   display: flex;
   align-items: center;
@@ -1038,6 +1109,32 @@
   padding: 8px 10px;
   border-bottom: 1px solid hsl(var(--border));
 }
+/* Los pasos del proceso, en una fila que no parte la caja si son muchos. */
+.wa-plantillas-pasos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 7px 10px;
+  border-bottom: 1px solid hsl(var(--border));
+}
+.wa-plantillas-paso {
+  border: 1px solid hsl(var(--border));
+  background: none;
+  color: hsl(var(--muted-foreground));
+  border-radius: 999px;
+  padding: 2px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.wa-plantillas-paso:hover { background: hsl(var(--muted) / 0.5); }
+.wa-plantillas-paso.es-activo {
+  background: hsl(var(--primary) / 0.12);
+  border-color: hsl(var(--primary));
+  color: hsl(var(--primary));
+}
+
 .wa-plantillas-busca {
   flex: 1;
   min-width: 0;

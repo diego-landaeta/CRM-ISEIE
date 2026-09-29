@@ -1,0 +1,188 @@
+# -*- coding: utf-8 -*-
+"""Comprueba la venta sin gestora de punta a punta, contra la base de pruebas.
+
+Cuatro cosas, y las cuatro importan:
+
+  1. La venta normal SIGUE asignandose (no se ha roto lo de siempre).
+  2. La venta sin gestora se queda sin responsable Y sin vendedora.
+  3. NO avanza el reparto: el siguiente prospecto de verdad le toca a quien le
+     tocaba. Si esto falla, cada venta de mostrador saltaria el turno de una
+     gestora en silencio.
+  4. El permiso manda: quien no lo tiene no puede, aunque mande el dato a mano.
+
+Todo lo que crea se borra al final.
+
+    python scripts/probar-venta-sin-gestora.py [multicrm-staging|iseie-staging]
+"""
+import io
+import sys
+
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf8", errors="replace")
+
+SCRATCH = ("C:/Users/Diego/AppData/Local/Temp/claude/"
+           "c--Users-Diego-Desktop-Proyectos-Carlos-CRM-ISEIH/"
+           "02c2801c-3375-4d51-9636-d374bd8ec8c9/scratchpad")
+sys.path.insert(0, SCRATCH)
+from conexion import conectar  # noqa: E402
+
+JS = r'''
+import 'dotenv/config';
+import { createSale } from './src/modules/sales/sales.service.js';
+import { resolvePermission } from './src/modules/permissions/permissions.service.js';
+import { query } from './src/shared/config/db.js';
+
+const marca = `ZZ-PRUEBA-${Date.now()}`;
+const creados = [];
+
+// Un proyecto con gestoras de verdad, para que el reparto tenga a quien darle.
+const { rows: proys } = await query(`
+  SELECT p.id, p.nombre, count(*)::int AS gestoras
+    FROM projects p
+    JOIN user_projects up ON up.project_id = p.id AND up.active
+    JOIN users u ON u.id = up.user_id AND u.active AND u.role IN ('gestor','admin')
+   WHERE p.active AND NOT COALESCE(p.es_prueba, false)
+   GROUP BY p.id, p.nombre HAVING count(*) >= 2
+   ORDER BY count(*) DESC LIMIT 1`);
+if (!proys.length) { console.log('no hay proyecto con dos gestoras: no se puede probar'); process.exit(0); }
+const proy = proys[0];
+const { rows: prod } = await query(
+  'SELECT id FROM products WHERE project_id = $1 AND active LIMIT 1', [proy.id]);
+if (!prod.length) { console.log('el proyecto no tiene productos'); process.exit(0); }
+console.log(`proyecto de prueba: ${proy.nombre} (${proy.gestoras} gestoras)\n`);
+
+const turno = async () => (await query(
+  'SELECT last_assigned_index FROM project_queue_state WHERE project_id = $1',
+  [proy.id])).rows[0]?.last_assigned_index;
+
+const base = {
+  project_id: proy.id, producto_interes_id: prod[0].id,
+  importe_total: 10, importe_pagado: 10, metodo_pago: 'transferencia',
+  fecha_pago: new Date().toISOString().slice(0, 10),
+};
+const admin = { userId: 1, role: 'superadmin', customRoleId: null };
+
+// ── 1 · La venta de siempre: tiene que seguir teniendo duena.
+const antes = await turno();
+const v1 = await createSale({ ...base, nombre: `${marca}-normal`, email: `${marca}@x.test` }, admin);
+creados.push(v1);
+const r1 = (await query(
+  'SELECT l.responsable_id, c.vendedora_id FROM conversions c JOIN leads l ON l.id = c.lead_id WHERE c.id = $1',
+  [v1.sale_id])).rows[0];
+console.log(`1 · venta normal ....... responsable=${r1.responsable_id ?? 'NINGUNO'}  ${r1.responsable_id ? 'OK' : 'MAL: deberia tener'}`);
+
+// ── 2 y 3 · La venta sin gestora.
+const medio = await turno();
+const v2 = await createSale({ ...base, nombre: `${marca}-sin-gestora`, sin_gestora: true }, admin);
+creados.push(v2);
+const r2 = (await query(
+  'SELECT l.responsable_id, c.vendedora_id FROM conversions c JOIN leads l ON l.id = c.lead_id WHERE c.id = $1',
+  [v2.sale_id])).rows[0];
+const despues = await turno();
+console.log(`2 · sin gestora ........ responsable=${r2.responsable_id ?? 'NINGUNO'} vendedora=${r2.vendedora_id ?? 'NINGUNA'}  ${r2.responsable_id === null && r2.vendedora_id === null ? 'OK' : 'MAL: no deberia tener'}`);
+console.log(`3 · el turno del reparto  antes=${medio} despues=${despues}  ${medio === despues ? 'NO se movio, OK' : 'SE MOVIO: MAL'}`);
+
+// ── 3b · Venta de otra gestora: queda de quien lleva el prospecto.
+const { rows: gs } = await query(`
+  SELECT u.id, u.nombre FROM users u
+    JOIN user_projects up ON up.user_id = u.id AND up.project_id = $1 AND up.active
+   WHERE u.active AND u.role = 'gestor' LIMIT 1`, [proy.id]);
+if (gs.length) {
+  const v3 = await createSale(
+    { ...base, nombre: `${marca}-otra`, email: `${marca}-o@x.test`, vendedora_id: gs[0].id }, admin);
+  creados.push(v3);
+  const r3 = (await query('SELECT vendedora_id FROM conversions WHERE id = $1', [v3.sale_id])).rows[0];
+  console.log(`3b· de otra gestora .... vendedora=${r3.vendedora_id ?? 'NINGUNA'} (esperada ${gs[0].id}, ${gs[0].nombre})  ${r3.vendedora_id === gs[0].id ? 'OK' : 'MAL'}`);
+
+  // Y un id inventado NO puede dejar la venta apuntando a nadie.
+  const v4 = await createSale(
+    { ...base, nombre: `${marca}-falsa`, email: `${marca}-f@x.test`, vendedora_id: 999999 }, admin);
+  creados.push(v4);
+  const r4 = (await query('SELECT vendedora_id FROM conversions WHERE id = $1', [v4.sale_id])).rows[0];
+  console.log(`3c· vendedora inventada  vendedora=${r4.vendedora_id ?? 'NINGUNA'}  ${r4.vendedora_id === null ? 'rechazada, OK' : 'ACEPTADA: MAL'}`);
+}
+
+// ── 4 · El permiso.
+const { rows: roles } = await query(
+  "SELECT DISTINCT role FROM users WHERE active ORDER BY role");
+for (const { role } of roles) {
+  // SIN override: si se coge a alguien a quien se le dio el permiso a mano
+  // --Ana, Dayana, Yosbely-- lo que se mide es el override, no el rol.
+  const { rows: u } = await query(`
+    SELECT id, custom_role_id FROM users
+     WHERE role = $1 AND active
+       AND NOT EXISTS (SELECT 1 FROM user_permission_overrides o
+                        WHERE o.user_id = users.id
+                          AND o.resource = 'conversions' AND o.action = 'sin_gestora')
+     LIMIT 1`, [role]);
+  if (!u.length) { console.log(`4 · ${role.padEnd(12)} (todos tienen override, no se puede medir el rol)`); continue; }
+  const puede = await resolvePermission(u[0].id, role, u[0].custom_role_id ?? null,
+    'conversions', 'sin_gestora');
+  const esperado = role === 'admin' || role === 'superadmin';
+  console.log(`4 · ${role.padEnd(12)} puede=${String(puede).padEnd(5)} ${Boolean(puede) === esperado ? 'OK' : (puede ? 'MAL: no deberia' : 'MAL: deberia')}`);
+}
+
+// ── 5 · Una venta del PASADO con cliente nuevo (Ana, 28/09).
+//
+// La ficha la crea el mismo alta, asi que nacia hoy y la venta de hace dias
+// quedaba «anterior a la entrada del prospecto». Ahora la entrada se lleva a
+// la fecha de la venta, solo en la ficha recien creada.
+const hace6 = new Date(Date.now() - 6 * 86400000).toISOString().slice(0, 10);
+const entradaDe = async (leadId) => (await query(
+  "SELECT to_char(COALESCE(fecha_solicitud, created_at), 'YYYY-MM-DD') AS d FROM leads WHERE id = $1",
+  [leadId])).rows[0].d;
+try {
+  const v5 = await createSale({ ...base, fecha_pago: hace6, nombre: `${marca}-pasado`, email: `${marca}-p@x.test` }, admin);
+  creados.push(v5);
+  const e5 = await entradaDe(v5.lead_id);
+  console.log(`5 · pasado, cliente nuevo  entrada=${e5} venta=${hace6}  ${e5 === hace6 ? 'OK' : 'MAL'}`);
+} catch (err) { console.log(`5 · pasado, cliente nuevo  FALLA: ${err.message}`); }
+try {
+  const v6 = await createSale({ ...base, fecha_pago: hace6, nombre: `${marca}-pasado-sg`, sin_gestora: true }, admin);
+  creados.push(v6);
+  const e6 = await entradaDe(v6.lead_id);
+  console.log(`5b· pasado, sin gestora .. entrada=${e6} venta=${hace6}  ${e6 === hace6 ? 'OK' : 'MAL'}`);
+} catch (err) { console.log(`5b· pasado, sin gestora .. FALLA: ${err.message}`); }
+// Y a una ficha que YA estaba no se le toca la fecha: ahi el control sigue.
+try {
+  const v7 = await createSale({ ...base, fecha_pago: hace6, lead_id: v1.lead_id }, admin);
+  creados.push(v7);
+  console.log('5c· ficha que ya estaba .. ACEPTADA: MAL, tenia que rechazarse');
+} catch (err) { console.log(`5c· ficha que ya estaba .. rechazada (${err.code || err.message}), OK`); }
+
+// ── Limpieza.
+for (const v of creados) {
+  await query('DELETE FROM conversion_payments WHERE conversion_id = $1', [v.sale_id]);
+  await query('DELETE FROM conversions WHERE id = $1', [v.sale_id]);
+  await query('DELETE FROM lead_steps WHERE lead_id = $1', [v.lead_id]);
+  await query('DELETE FROM lead_status_history WHERE lead_id = $1', [v.lead_id]);
+  await query('DELETE FROM lead_interactions WHERE lead_id = $1', [v.lead_id]);
+  await query('DELETE FROM leads WHERE id = $1', [v.lead_id]);
+}
+const { rows: quedan } = await query(
+  'SELECT count(*)::int AS n FROM leads WHERE nombre LIKE $1', [`${marca}%`]);
+console.log(`\nlimpieza: quedan ${quedan[0].n} de prueba (tiene que ser 0)`);
+process.exit(0);
+'''
+
+ENTORNOS = {
+    "multicrm-staging": ("187.124.128.126", "/opt/crm/staging",
+                         "/home/claude/.nvm/versions/node/v24.14.1/bin/node"),
+    "iseie-staging": ("72.60.90.135", "/opt/crm-iseie-staging", "/usr/bin/node"),
+}
+cual = sys.argv[1] if len(sys.argv) > 1 else "multicrm-staging"
+ip, ruta, node = ENTORNOS[cual]
+print("=" * 62)
+print(cual)
+print("=" * 62)
+
+c = conectar(ip, "claude", None)
+sftp = c.open_sftp()
+with sftp.open("/tmp/_probar_vsg.mjs", "w") as f:
+    f.write(JS)
+sftp.close()
+_, o, e = c.exec_command(
+    "cd %s && sudo -n cp /tmp/_probar_vsg.mjs ./_vsg.mjs && "
+    "sudo -n %s ./_vsg.mjs 2>&1; sudo -n rm -f ./_vsg.mjs" % (ruta, node), timeout=600)
+salida = (o.read() + e.read()).decode("utf8", "replace")
+print("\n".join(l for l in salida.split("\n")
+                if "DeprecationWarning" not in l and "trace-deprecation" not in l))

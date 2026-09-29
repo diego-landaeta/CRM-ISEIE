@@ -1310,3 +1310,456 @@ que va a cambiar varias veces antes de quedarse quieta.
 
 *Asignada a **Ángel y Diego**. Backend (Brevo + el estado) y frontend (el botón,
 la vista previa y el editor de la plantilla).*
+
+## 16 de septiembre, tarde — el CRM sumó el 21 % encima del precio cerrado
+
+**Lo reporta Diego**: Fabiola registra una venta con descuento y el total no es
+el que pactó. Por WhatsApp: «el crm no me agarra los datos bien», 1.793,36 € en
+dos pagos de 896,68 €.
+
+### La venta
+
+ISEIE, conversión **646**, lead 386 (Javier Alfonso Cifuentes Parrado), **Máster
+en Odontología Digital**, creada el 15/09 a las 20:30 por Fabiola.
+
+```
+subtotal_bruto    4.195,00      precio de catálogo del producto 1018
+descuento 57,25%  −2.401,64
+                  ──────────
+neto               1.793,36     el precio acordado
++ IVA 21%            376,61     el CRM lo suma ENCIMA
+importe_total      2.169,97     lo que quedó guardado
+```
+
+El 57,25 % no es un número redondo: está elegido para caer exactamente en
+1.793,36. La gestora metió ese porcentaje **para que el neto fuera el precio
+final**, y el CRM lo trató como base imponible.
+
+La venta entró con `iva_incluido = false` e `iva_pct = 21`. La ventana de
+conversión ya trae `iva_incluido: true` por defecto en `prod/solo-hoy`, así que
+la casilla «IVA incluido» se desmarcó a mano. Con un catálogo cuyos precios ya
+son finales, esa casilla desmarcada sube el total un 21 % sin avisar de nada.
+
+### Lo que sí quedó bien
+
+- El **cobro inicial** de 896,68 y la **cuota pendiente** de 896,68 (vence el
+  15/10). Suman 1.793,36: las cuotas son correctas.
+- La **factura 2026/0799** del primer pago: 896,68, exenta de IVA, pagada.
+  `emitirFacturaDePago` fuerza `ivaPct = 0` para servicios académicos.
+
+De ahí la incoherencia que ve la gestora: la venta dice 2.169,97 con 21 % de
+IVA y su propia factura dice exenta, y el pendiente sale 1.273,29 en vez de los
+896,68 de la cuota.
+
+### Qué hay que arreglar
+
+1. **La venta 646**, a mano: `importe_total` 1.793,36, `base_imponible`
+   1.793,36, `iva_importe` 0, `iva_pct` 0, `iva_exento` true. Es como quedaron
+   las demás ventas académicas de ISEIE (643, 647, 639, 634) y como salió su
+   propia factura. La factura no se toca, ya está bien.
+
+2. **Que no vuelva a pasar.** Si el catálogo guarda precios finales, «IVA
+   incluido» no puede ser una casilla que se apague sin consecuencia visible.
+   Como mínimo, avisar cuando el total resultante no coincide con el precio del
+   producto menos el descuento. Va con el pendiente de «IVA incluido por
+   defecto», que sigue sin subir a ninguna producción.
+
+3. **Barrer las que ya estén así**: ventas con `iva_incluido = false`,
+   `iva_exento = false` e `iva_pct > 0` cuyo producto tenga precio de catálogo.
+
+### Un segundo fallo, distinto, que salió buscando este
+
+No es lo que le pasó a Fabiola, pero está ahí. Los dos botones que la interfaz
+ofrece para aplicar un descuento —`EditConversionDialog` («corregir
+importe_total con descuentos/becas») e `InstallmentsDialog` («¿Aplicar descuento
+o beca? Modifica el importe total antes de fraccionar»)— llaman a
+`conversionsApi.update(id, { importe_total })`, y el modelo solo deja pasar:
+
+```js
+const allowed = ['producto_contratado', 'producto_contratado_id',
+                 'importe_total', 'metodo_pago', 'fecha_compromiso_pago',
+                 'fecha_conversion', 'notas_pago'];
+```
+
+`importe_total` baja y **`subtotal_bruto`, `descuento_tipo`, `descuento_valor`,
+`descuento_importe`, `base_imponible` e `iva_importe` se quedan con el precio de
+antes**. De ahí dos cosas:
+
+- **El descuento no aparece en la ficha.** `ConversionsTab.tsx:299` solo pinta
+  el desglose si `descuento_tipo !== 'none'` o `descuento_importe > 0`, y por
+  esta vía no se cumple ninguna de las dos.
+- **La factura del total sale descuadrada.** `invoices.model.js` la arma con
+  `baseImponible: conv.base_imponible` e `ivaImporte: conv.iva_importe`, pero
+  `total: conv.importe_total`: línea y total con descuento, base e IVA sin él.
+  El PDF los imprime tal cual.
+
+Las facturas de cada cuota no están afectadas: sacan `base = monto` del propio
+cobro. El arreglo es que `update` recalcule igual que `create` —es el mismo
+bloque de cuentas, hay que sacarlo a una función común.
+
+**En los dos CRMs, mismo código**: ISEIH `conversion.model.js:723`, ISEIE
+`conversion.model.js:663`.
+
+*Anotado. La 646 sigue sin corregir: la escritura en la base de producción está
+bloqueada y la espera Diego.*
+
+## 16 de septiembre, 13:15 — producción de ISEIE en blanco durante la tarde
+
+`crm.iseie.com` cargaba en blanco. No era el servidor: nginx activo, la API en
+200, los ficheros en su sitio. Era el **build**.
+
+El `index.html` de `/var/www/crm-iseie/` pedía `/staging/assets/index-…js`, y
+tenía el **mismo md5 que el de staging**. En el despliegue de WhatsApp de esta
+mañana se construyó staging —que lleva `VITE_BASE_PATH=/staging/`— y se subió
+ese mismo `dist` a producción. La aplicación arrancaba con base `/staging/`
+sobre la URL `/`, así que el router no casaba nada y la página quedaba vacía.
+
+Restaurado desde `/var/www/crm-iseie.20260916_1318`, que era el build bueno del
+15 a las 15:24. El build malo quedó guardado en
+`/var/www/crm-iseie.ROTO-base-staging-20260916`.
+
+**Producción está sirviendo el front del 15, no el de hoy.** Falta volver a
+subir el build de hoy, ya reconstruido con `VITE_BASE_PATH=/`.
+
+### La comprobación que faltaba
+
+Antes de copiar nada a producción, mirar el `index.html` generado:
+
+```bash
+grep -oE '(src|href)="[^"]+"' dist/index.html   # tiene que decir /assets/, nunca /staging/
+grep -rl '"/staging/"' dist/assets/             # tiene que salir vacío
+```
+
+Y en el servidor, comprobar el directorio nuevo **antes** de moverlo encima del
+que funciona, no después.
+
+
+---
+
+## 25 de septiembre · dos peticiones de Diego, para producción
+
+Anotadas, **sin tocar nada todavía**. Las dos salieron seguidas y las dos tienen
+una pregunta abierta que hay que resolver con él antes de escribir código. La
+segunda además toca pagos, así que va por pruebas primero pase lo que pase.
+
+### 1 · Un botón «Venta sin gestora»
+
+> «necesito en producción agregar un botón que diga: venta sin gestora, solo
+> para admin y super admin, en caso de ICTESS también Yosbely lo tendrá, CEDIA,
+> Ana y Dayana por ahora»
+
+**Comprobado en la base de producción.** Las tres personas existen, están
+activas, las tres son `gestor`, y cada una cuelga exactamente de la empresa que
+Diego dice:
+
+| | id | rol | empresa |
+|---|---|---|---|
+| Ana Comercial | 6 | gestor | CEDIA |
+| Dayana Comercial | 7 | gestor | CEDIA |
+| Yosbely | 11 | gestor | ICTESS |
+
+**Cómo NO hacerlo:** cablear esos tres ids o esos tres nombres en el código. El
+«por ahora» del mensaje ya avisa de que la lista va a cambiar, y cada cambio
+sería un despliegue.
+
+**Cómo sí.** Ya hay un sistema de permisos con **72 claves** y overrides por
+persona (`permissions.defaults.js`, `saveOverridesForUser`). Lo que encaja es
+una clave nueva —`conversions.sin_gestora`— que venga de serie en admin y
+superadmin, y que a esas tres se les dé como override desde el panel. Entonces
+quitar o añadir a alguien no es un despliegue, es un clic.
+
+**La pregunta abierta, y no es menor.** Hoy el diálogo de registrar venta **no
+tiene campo de gestora**: la atribución va por `conversion_reparto` y por
+`conversions.vendedora_id`. Y en producción de MultiCRM **527 de 529 ventas ya
+tienen `vendedora_id` a NULL** —15 no tienen ni vendedora ni responsable del
+lead—, así que «sin gestora» ya es hoy el caso normal en los datos.
+
+Con eso encima de la mesa, hay que preguntarle qué tiene que hacer el botón de
+distinto:
+
+- ¿Crear la venta sin reparto y sin tocar el responsable del lead?
+- ¿Marcarla para que **no cuente** en los números de nadie (podio, ranking,
+  comisiones), que es distinto de simplemente no tener vendedora?
+- ¿O es al revés: hoy el sistema le pone una gestora a la fuerza y lo que quiere
+  es poder decir que no?
+
+Sin esa respuesta se puede construir el botón y que no haga lo que él tenía en
+la cabeza.
+
+### 2 · Pago automático que se cree su propio lead y su cliente
+
+> «cuando se registren pagos automáticos: pon que se cree automático el lead /
+> cliente asociado a la comercial, pero que ponga que la comercial lo gestionó
+> pero que el pago quede reflejado como automático»
+
+**Una parte de esto ya está hecha.** Que el pago quede reflejado como automático
+ya pasa: `stripe_payments.link_method` guarda `auto_email`, `auto_dedup` o
+`auto_pending` según el camino, y el cobro se apunta en la venta con la nota
+`Auto-Stripe <stripe_id>`. Eso no hay que construirlo.
+
+**Lo que falta es lo otro.** Hoy `autoLinkIfPossible()` busca el lead por el
+correo del cargo y, si no lo encuentra, **se va sin hacer nada**: el cargo se
+queda suelto en Stripe y nadie se entera. Si lo encuentra pero el lead no está
+en «convertido», lo enlaza como `auto_pending` y tampoco crea la venta. Los tres
+huecos, en orden:
+
+1. Cargo cobrado y **no hay lead** con ese correo → no se crea nada.
+2. Hay lead pero **no está convertido** → no se crea la venta.
+3. Hay lead convertido pero **sin venta** → `auto_pending`, y ahí se queda.
+
+**La pregunta abierta, y esta bloquea.** ¿A qué comercial? Un cargo de Stripe no
+trae gestora: trae un correo, un importe y una fecha. Si se crea el lead solo,
+alguien tiene que ser su dueño, y las opciones no dan igual:
+
+- por **round-robin**, como un lead nuevo — pero esto no es un lead nuevo, es
+  alguien que ya ha pagado, y repartirlo a quien toque premia al azar;
+- la **gestora del proyecto** por el que entró el cobro, si se puede deducir;
+- o dejarlo en una **cola para asignar a mano**, que es lo más honesto pero es
+  justo el trabajo que Diego quiere quitarse.
+
+Recordar aquí que los leads automáticos **los asigna Make en el webhook**, no el
+round-robin del CRM: si se elige repartir, hay que decidir cuál de los dos manda.
+
+**Riesgo.** Esto crea leads, clientes y ventas solo, a partir de dinero que ya
+entró. Un fallo aquí no se ve: se ve semanas después, en un informe que no
+cuadra. Va a `/testeo` y `/staging` primero, con los cargos reales de Stripe ya
+existentes como prueba, y no pasa a producción hasta que Diego lo mire.
+
+## Admisión: un apartado propio para sus correos · TAREA PARA DIEGO
+
+Diego, 28/09: «los correos de admisión irán en un nuevo apartado que diga
+**Admisión** y se guarde todo; luego se darán detalles».
+
+**Anotada, no empezada.** Faltan los detalles, que llegan después.
+
+### Lo que se sabe hoy
+
+- Un apartado nuevo en el menú: **«Admisión»**.
+- Ahí van los **correos de admisión**, y **se guarda todo**.
+
+### Lo que ya existe y roza esto (para no duplicarlo)
+
+- **Matrículas → «Webhooks de admisión»**: formularios externos que crean una
+  matrícula en estado «Solicitud admisión», con deduplicado por DNI o correo.
+  Son solicitudes, no correos.
+- **Las plazas las lleva admisiones fuera del CRM** (decidido el 11/09). El CRM
+  solo recuerda comprobarlas.
+
+### Qué preguntar cuando lleguen los detalles
+
+1. **Qué correos son**: los que manda admisiones, los que recibe o los dos. Y
+   de qué buzón salen o entran.
+2. **«Se guarde todo»**: el correo entero con sus adjuntos, o un registro de que
+   se envió.
+3. **A qué se enlazan**: la ficha del prospecto, la matrícula o nada.
+4. **Quién lo ve**: hoy no hay un rol de admisiones. Si lo lleva otra persona,
+   hace falta su permiso.
+5. **Paridad**: va en los dos CRMs, como todo.
+
+*Asignada a **Diego**.*
+
+## Feedback: cuántos enviados y cuántos respondidos · #170 (y #169)
+
+Diego, 28/09: «me gustaría poner las estadísticas de cuántos enviados y cuántos
+respondidos de ese feedback».
+
+**Hecha el 28/09 en los dos staging** (/testeo y crm.iseie.com/staging; no en
+producción). Está en el panel de feedback (#170), arriba, antes de los motivos:
+
+- **Enviados · Respondidos · % de respuesta**, con el rango de fechas del panel
+  y el ámbito de siempre (campus, empresa o todo).
+- Desglose por **marca o campus**, por **gestora** y por **disparador**: al
+  descartar o al 7.º día sin conversión.
+- Cada número abre la **lista de personas** que tiene detrás.
+
+Para poder contarlo, **el envío (#169) tiene que guardar** por cada correo a
+quién, cuándo, por qué disparador y, si contesta, cuándo. Anotado también en la
+#169.
+
+*Panel: Diego. Envío: Ángel. En los dos CRMs.*
+
+## Feedback: la pregunta 6, un futuro contacto para el asesor · #169
+
+Diego, 28/09: «la 8 debe de quedar como un futuro contacto a la gestora, luego
+lo veremos». (Era la 8 de la encuesta de nueve; en la de seis es la 6.)
+
+**Hecha el 28/09 en los dos staging** (no en producción). Diego: «si pone sí,
+que aparezcan esos rangos de fechas y se sincronice».
+
+- Al contestar *Sí, que me contacte* aparece **«¿Cuándo te viene bien?»**: en 2
+  semanas, en 1 mes, en 2 o 3 meses, en 6 meses o el año que viene.
+- Al enviar, se le pone un **recordatorio** (`lead_reminders`) para el principio
+  de ese rango (14, 30, 60, 180 o 365 días; sin elegir, al mes), a nombre de la
+  gestora que **lleva ahora** al prospecto (`responsable_id`; si no tiene, la del
+  envío). Le sale en «Hoy» y en la ficha, y ese día le llega el aviso del
+  recordatorio aunque el prospecto esté descartado.
+- Queda en su historial («📅 … recordatorio puesto para el dd/mm/aaaa»), en el
+  aviso a la gestora y en el panel («¿Cuándo te viene bien?», contado).
+- Sin gestora: no se agenda y el historial lo dice.
+
+Dónde: `backend/src/modules/feedback/preguntas.js` (clave `avisar` y su `sub`),
+`feedback.service.js` → `responder()` y `feedback.model.js` → `agendarVuelta()`.
+
+**Queda abierto:** si su gestora ya no está (is_available = false), el
+recordatorio va igual a ella; habría que reasignar el prospecto.
+
+*Asignada a **Diego**.*
+
+## Feedback: pedir un comentario si la nota es mala, y uno libre al final · #169
+
+Petición del equipo que Diego pasa el 29/09 (captura de WhatsApp de la encuesta):
+
+1. «Cuando te ponga regular, mal y muy mal, tiene que salir lo de: deja tu
+   comentario».
+2. «Y un texto al final de: deja tus comentarios».
+
+**Hecha el 29/09 en los dos staging** (/testeo y crm.iseie.com/staging; no en
+producción). Probada de punta a punta en los dos: se guarda, sale en el
+historial, en el aviso a la gestora y en el panel. Antes solo se podía escribir
+al elegir «Otro motivo» en la 1 y «Otra cosa» en la 5.
+
+- **La 2 («¿Cómo te atendió el asesor?»)**: con **3 · Regular, 2 · Mal o
+  1 · Muy mal** aparece debajo un recuadro **«Deja tu comentario»**, el mismo
+  que abre «Otro motivo». Con 4 o 5 no sale. No es obligatorio: exigirlo
+  justo cuando alguien está molesto hace que no envíe nada.
+- **Al final, después de la 6**: un recuadro libre **«Deja tus comentarios»**,
+  para todos y opcional.
+- Los dos textos van al **historial del prospecto**, al **aviso a la gestora**
+  (el de la nota baja es el que más le interesa leer), a la **ficha** y al
+  **panel de feedback**, que los lista con el nombre de la persona. En el
+  panel, el de la nota baja sale junto a la nota de atención de su gestora.
+- Y en lo que se descarga: «Respuestas (CSV)» en Reportes y, en ISEIE, la
+  hoja «Feedback».
+
+Dónde: `backend/src/modules/feedback/preguntas.js`, donde hoy solo hay
+`escribir` con una opción. Hace falta que la escala abra el recuadro con varias
+notas (3, 2 y 1) y una pregunta nueva de solo texto al final.
+`limpiarRespuestas()` las guarda (máx. 1000 caracteres, como «Otro»).
+`FeedbackEncuestaPage.tsx` pinta el recuadro al elegir la nota. La encuesta la
+pinta el servidor, así que el cambio de preguntas no toca el resto del frontal.
+
+*Asignada a **Diego**. En los dos CRMs, primero en staging.*
+
+## Conexión de Claude por MCP · #173 (Diana)
+
+Diego, 29/09: «Diana subió algo sobre Claude MCP, podemos vincularlo a staging
+y todo para probarlo».
+
+**En /testeo desde el 29/09. Ni en producción ni en ISEIE.** Es la rama de Diana
+`feat/diana-mcp-claude` (3 commits), llevada a `staging` con cherry-pick: con
+merge habría arrastrado 34 commits de `deploy/16sep` que /testeo no tiene.
+
+- Menú **Conexión → MCP**: cada persona crea su token y copia su URL personal
+  para «Agregar conector personalizado» en Claude Desktop o claude.ai.
+  Superadmin y admin entran por su rol; al resto se le pone la casilla desde esa
+  misma pantalla. Un tutor, nunca.
+- **Solo consulta**: 10 herramientas (prospectos, ventas, facturas, cobros e
+  informes de Reportes) y ninguna escribe. Cada una se limita a los campus de
+  la persona, y la gestora ve solo lo suyo. Cada consulta queda en
+  `mcp_auditoria`.
+- **Migración 182** (Diana la subió como 180, que en staging ya era la de la
+  cabecera de marca). Se le añadieron los GRANT para `crm_user`. Aplicada en
+  `crm_test_db`. En el servidor de /testeo se instaló `@modelcontextprotocol/sdk@1.31.0`.
+- **Probado el 29/09 por HTTPS** con tokens de prueba, ya borrados. Con el
+  token de un superadmin: los 9 campus, ventas, informes y la URL personal. Con
+  el de una gestora: sin casilla da 403; con ella solo lo suyo, y rechaza el
+  informe de todo el campus, un prospecto de otra gestora y un campus ajeno.
+  Un token inventado da 401 y no hay ninguna herramienta que borre.
+
+### Qué falta
+
+1. **Que Diego lo conecte en su Claude** y dé el visto bueno.
+2. **El token queda en el registro de nginx** cuando se usa la URL personal
+   (`/api/mcp/u/crm_mcp_…`). En los registros de la API no (Diana lo tapa), pero
+   nginx apunta la URL entera. Arreglo: `access_log off` (o un formato que la
+   tape) para esa ruta en el bloque de 360crm.tech. Afecta al nginx compartido
+   con producción: pendiente de que Diego diga.
+3. **ISEIE**: por la paridad hay que portarlo (tabla de campus, rutas `/leads`,
+   su numeración de migraciones). Después de validarlo aquí.
+4. **Producción**: migración 182 con GRANT, `npm install` del SDK, y renumerar la
+   180 también en la rama de Diana antes de que llegue a `deploy/16sep`.
+5. **Conectores (29/09, en /testeo)**: además del campus, un conector puede ser
+   de **una empresa** o de **todo el sistema** (este, solo super admin). Es UNO
+   para todos sus campus: cada dato va al campus que diga su campo «Campus» y,
+   si no, al campus por defecto. Y el tipo **Servidor MCP · para Claude**: no
+   trae datos, da una URL personal para pegar en Claude (el MCP de Diana), que
+   solo consulta lo de la persona dentro del «Para quién» del conector. URL
+   nueva revoca la anterior; apagar o borrar el conector la corta. El «Para
+   quién» lo exige también el servidor: un admin, solo sus campus, y de toda la
+   empresa solo si está en todos sus campus. Para producción: migraciones
+   **183 y 184**. En ISEIE no hay pantalla de Conectores.
+
+*Asignada a **Diana**; el paso a staging lo hizo Diego (Claude).*
+
+## 29 de septiembre · la 2.0.0, en producción en los dos CRMs
+
+Diego, 29/09: «todo aprobado, a producción en ambos». Subida la versión entera:
+proceso comercial, feedback (encuesta, panel, informes), Novedades, correos del
+equipo, arreglos de registro y, solo en MultiCRM, el MCP de Claude y Conectores.
+
+- **MultiCRM**: `release/2.0.0` une `staging` y `deploy/16sep` (34 ficheros en
+  conflicto, resueltos conservando los dos lados). Las tres ramas apuntan al
+  mismo commit. Migraciones 160, 164, 166, 171 (correo recibido) y 175–184.
+- **ISEIE**: `actualizar-main-15sep`, con `VITE_PROCESO_EN_PRUEBAS=true` en el
+  build de producción. Migraciones 167–171.
+- **Interruptores en el .env de producción** (los dos): `NOVEDADES_AUTO=1`,
+  `FEEDBACK_DIA7_INICIO=2026-09-29` (el correo del 7.º día solo para primeros
+  contactos desde ese día: los primeros salen el 06/10), `PASO_VENCIDO_DISABLED=1`,
+  y los correos del equipo encendidos (resumen de la tarde, «Tu día y lo de
+  mañana» y los de los lunes).
+- **Novedades 2.0.0** enviadas: 14 personas en MultiCRM y 22 en ISEIE, sin fallos.
+- **Marcas** copiadas a producción: logos, colores, fondos, remitentes y la
+  clave de Brevo de los campus.
+- **Copias de seguridad** de antes de subir: `/var/backups/crm/` y
+  `/var/backups/crm-iseie/` (`…-antes-2.0.0-20260929-*`).
+
+### Lo que queda
+
+1. **/testeo** sigue con el código de antes de la unión: hay que redesplegarlo
+   desde `staging` (y su base puede necesitar migraciones de producción).
+2. **Freno a tutores** puesto (`NO_ESCRIBIR_A_TUTORES`): «Avisar tutor» solo
+   enseña la vista previa. Levantarlo cuando esté arreglado el enlace de
+   contraseña de Brevo.
+3. **Dos pruebas desfasadas** desde antes de la unión: `avisoTutor.test.js`
+   (espera que se envíe con el freno puesto) y `plantillaDelPaso.test.jsx`
+   (busca un texto que ya no existe).
+4. **MCP**: el token de la URL personal queda en el registro de nginx.
+
+## Correos automáticos: ponerles el mismo formato · TAREA PARA ÁNGEL Y DIEGO
+
+Diego, 28/09: «acomodar los formatos de los correos de los resúmenes y eso,
+avisos».
+
+**Anotada, no empezada.** Los correos que el CRM manda solo tienen cada uno su
+aspecto. El de feedback (28/09) ya tiene el que se quiere: la banda con el logo y
+el color del campus, el texto al grano, un botón, y abajo el aviso de «no
+contestar» con el enlace completo. La idea es llevar los demás a ese formato.
+
+### Los que hay (backend)
+
+| Correo | Dónde se arma | En qué CRM |
+|---|---|---|
+| Resumen del día (gestora y admin) y plan de mañana | `jobs/resumenDiarioScheduler.js` | MultiCRM /testeo |
+| Reporte semanal | `jobs/reporteSemanalScheduler.js` | los dos |
+| «[CRM] Sin contactar: …» (SLA del lead) | `jobs/leadSinTocarScheduler.js` | los dos |
+| «Recordatorio vencido: …» | `jobs/reminderScheduler.js` | los dos |
+| «[CRM] Has vendido hoy» (aviso al tutor) | `jobs/avisoTutorScheduler.js` | MultiCRM |
+| Avisar al tutor (desde Comisiones) | `modules/tutores/avisarTutor.js` | MultiCRM /testeo |
+| Google Ads desconectado / reactivado | `jobs/googleAdsTokenScheduler.js` | los dos |
+| Bienvenida de usuario y lead asignado | `shared/services/brevo.service.js` | los dos |
+| Pasos de las secuencias | `jobs/emailSequenceScheduler.js` (el asunto y el cuerpo los pone quien las escribe) | los dos |
+
+### Qué revisar en cada uno
+
+- La cabecera con la marca: la del **campus** si va a un prospecto o a un
+  tutor; la del **CRM** si es un aviso interno (resumen, reporte, SLA).
+- Que se lea en el móvil: una columna, letra que no haya que ampliar, botones
+  grandes.
+- El remitente: «no contestar» cuando nadie va a leer la respuesta, y el aviso
+  abajo. Los de un campus salen por Brevo, que solo envía desde dominios
+  autenticados (hoy iseie.com, 360crm.tech, certifex.tech y cediaidsl.com).
+- Que los enlaces vayan a la dirección del CRM que toca (/crm, /testeo,
+  crm.iseie.com), no a localhost ni a la de otro entorno.
+- Una plantilla común en el código, para no arreglar diez veces lo mismo.
+
+*Asignada a **Ángel y Diego**. En los dos CRMs.*

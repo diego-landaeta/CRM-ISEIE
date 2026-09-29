@@ -5,6 +5,7 @@ import { useDashboard } from '@/shared/hooks/useDashboard';
 import { useStripeMonitor } from '@/modules/ia-dashboard/hooks/useStripeMonitor';
 
 const LeadDrawer = lazy(() => import('@/modules/leads/components/LeadDrawer'));
+import AvisoHuecosFacturas from '@/modules/invoices/components/AvisoHuecosFacturas';
 import {
   Users,
   Sparkle,
@@ -28,9 +29,11 @@ import ChannelBadge, { CHANNEL_LABELS } from '@/shared/components/ui/ChannelBadg
 import EmptyState from '@/shared/components/ui/EmptyState';
 import KpiCard from '@/shared/components/ui/KpiCard';
 import PageHeader from '@/shared/components/ui/PageHeader';
+import ComoVoy from '@/modules/reports/components/ComoVoy';
 import SkeletonTable, { SkeletonCard } from '@/shared/components/ui/SkeletonTable';
 import ConversionFunnel from '@/shared/components/dashboard/ConversionFunnel';
 import PerformanceInsights from '@/shared/components/dashboard/PerformanceInsights';
+import { PROCESO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 const TopProductsCard = lazy(() => import('@/modules/sales/components/TopProductsCard'));
 const CursosVendidosCard = lazy(() => import('@/modules/sales/components/CursosVendidosCard'));
 
@@ -141,6 +144,10 @@ export default function DashboardPage() {
     return (
       <div className="space-y-8">
         <PageHeader title="Dashboard" subtitle="Cargando datos..." />
+
+      {/* Como va quien mira: su puesto en ventas y su tasa de
+          conversion del mes. */}
+      {PROCESO_EN_PRUEBAS && <ComoVoy />}
         <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)}
         </div>
@@ -200,6 +207,11 @@ export default function DashboardPage() {
         title="Dashboard"
         subtitle={`${todayDate} - ${activeProject?.nombre || 'Sin proyecto'}`}
       />
+
+      {/* Si falta algun numero en la serie de facturas, se avisa arriba del
+          todo: es lo que mira Hacienda y no puede quedarse escondido dentro
+          del formulario de crear una factura. */}
+      <AvisoHuecosFacturas projectId={activeProject?.id} />
 
       {/* SECCION HOY */}
       {today && (

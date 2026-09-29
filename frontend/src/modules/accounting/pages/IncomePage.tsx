@@ -92,7 +92,7 @@ function Tipo({ tipo, compartida }: { tipo: string; compartida?: boolean }) {
         className={`${base} bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300`}
         title="Venta repartida entre dos gestoras. Cada una suma su parte."
       >
-        A MEDIAS
+        COMPARTIDO
       </span>
     </span>
   );
@@ -228,7 +228,10 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
         clave: `venta-${r.id}`, tipo: 'venta', fecha: r.fecha_conversion || r.fecha_compra, fecha_de_la_venta: r.fecha_conversion,
         lead_id: r.lead_id, venta_id: r.id, cliente: r.lead_nombre, producto: r.producto_contratado,
         total: r.importe_total, pagado: r.importe_pagado, factura: null, factura_no_requerida: false,
-        compartida: false,
+        // Estaba a false a mano: sin fechas puestas, una venta repartida entre
+        // dos gestoras salia como cualquier otra y parecia que el reparto no se
+        // habia guardado. Con fechas si se veia, porque /filas si lo trae.
+        compartida: Boolean(r.compartida),
         estado: estadoDe(r.importe_total, r.importe_pagado),
       }));
   const totalLista = conFechas ? totalFilas : total;

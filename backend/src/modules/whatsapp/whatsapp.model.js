@@ -29,6 +29,10 @@ export async function listTemplates({ projectId, projectIds = null, userId }) {
               -- pide_adjunto abre el selector de archivos al elegirla;
               -- pista es para la gestora y NO se envia.
               t.pide_adjunto, t.pista,
+              -- El paso del proceso al que pertenece. Sin esto, la cola del dia
+              -- no puede ofrecer «la plantilla de esta persona»: el nombre lo
+              -- dice para quien lo lee, no para el CRM.
+              t.paso_clave,
               u.nombre AS creada_por
          FROM whatsapp_templates t
          LEFT JOIN users u ON u.id = t.created_by

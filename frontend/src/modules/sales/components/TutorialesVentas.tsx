@@ -47,7 +47,7 @@ const TUTORIALES: Tutorial[] = [
       },
       {
         que: 'Dónde se nota',
-        detalle: 'En el equipo aparece «1 compartida» debajo del número. En la lista, la fila lleva la etiqueta A MEDIAS. Y en los reportes por gestora, igual: media venta para cada una.',
+        detalle: 'En el equipo aparece «1 compartida» debajo del número. En la lista, la fila lleva la etiqueta COMPARTIDO. Y en los reportes por gestora, igual: media venta para cada una.',
       },
       {
         que: 'Deshacerlo',
@@ -66,7 +66,7 @@ const TUTORIALES: Tutorial[] = [
       { que: 'VENTA', detalle: 'Una venta nueva registrada en el periodo que estás mirando. Es dinero nuevo que entra.' },
       { que: 'CUOTA', detalle: 'Una mensualidad cobrada en el periodo, de una venta que puede ser de hace meses. Aparece con su número de factura, o «sin factura» si todavía no se ha emitido.' },
       { que: 'MISMA VENTA', detalle: 'Una segunda factura de una venta que ya está en la lista — se partió el cobro en dos. No es una venta más: si la contaras aparte, estarías duplicando.' },
-      { que: 'A MEDIAS', detalle: 'La venta se atendió entre dos gestoras. Cada una suma su parte (ver el tutorial de ventas divididas).' },
+      { que: 'COMPARTIDO', detalle: 'La venta se atendió entre dos gestoras. Cada una suma su parte (ver el tutorial de ventas divididas).' },
     ],
     ojo: 'Si sumas las filas de la lista NO te da el total de ventas: la lista mezcla ventas y cuotas a propósito, para que veas todo el dinero del periodo. El número de ventas es el de la tarjeta de arriba.',
   },

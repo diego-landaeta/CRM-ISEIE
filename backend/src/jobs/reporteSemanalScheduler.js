@@ -3,6 +3,7 @@ import { query } from '../shared/config/db.js';
 import { sendEmail } from '../shared/services/brevo.service.js';
 import * as informes from '../modules/reports/report.model.js';
 import { vigilar } from './latido.js';
+import { correoSemanalDireccion, correoSemanalGestora } from './correosDelEquipo.js';
 
 /**
  * El reporte de los lunes, a direccion.
@@ -69,18 +70,23 @@ export function semanas(hoy = new Date()) {
   };
 }
 
-/** A quien va: direccion, y solo quien no lo haya apagado. */
-async function destinatarios() {
+/**
+ * A quien va: direccion (aviso 'reporte_semanal') o las gestoras (aviso
+ * 'semana_gestora', 28/09), y solo quien no lo haya apagado.
+ */
+async function destinatarios(aviso = 'reporte_semanal', roles = ['admin', 'superadmin']) {
   const { rows } = await query(
-    `SELECT u.id, u.nombre, u.email
+    `SELECT u.id, u.nombre, u.email, u.role
        FROM users u
       WHERE u.active AND u.email IS NOT NULL
-        AND u.role IN ('admin', 'superadmin')
+        AND u.role = ANY($1)
+        AND NOT COALESCE(u.gestor_colaboraciones, false)
         AND NOT EXISTS (
           SELECT 1 FROM avisos_apagados a
-           WHERE a.user_id = u.id AND a.aviso = 'reporte_semanal'
+           WHERE a.user_id = u.id AND a.aviso = $2
         )
-      ORDER BY u.nombre`
+      ORDER BY u.nombre`,
+    [roles, aviso]
   );
   return rows;
 }
@@ -198,43 +204,35 @@ async function vuelta() {
     // impide que salga dos veces.
     if (hoy.getDay() !== 1 || hoy.getHours() !== HORA) return;
 
-    const gente = await destinatarios();
-    if (!gente.length) return;
-
-    const { semana, anterior } = semanas(hoy);
-
-    // Las MISMAS funciones que pinta el panel. Ver la cabecera del fichero.
-    const [ahora, antes, porAsesora, cobrado, cobradoAntes] = await Promise.all([
-      informes.overview({ ...semana }),
-      informes.overview({ ...anterior }),
-      // `ventasVendedora` y NO `ventasPorAsesoraReport`: la segunda devuelve una
-      // fila por VENTA —es el informe descargable de detalle— y salia «Angel M.»
-      // cuatro veces con 0 ventas. Esta agrega por gestora, y ademas saca el
-      // cobrado de `conversion_payments`, que es la regla del dinero del ticket.
-      informes.ventasVendedora({ ...semana }).catch(() => []),
-      // El dinero aparte, y a proposito. Ver la cabecera del fichero.
-      cobradoDeVerdad(semana),
-      cobradoDeVerdad(anterior),
-    ]);
-
-    const html = cuerpo({ rango: semana, ahora, antes, porAsesora, cobrado, cobradoAntes });
-
-    for (const persona of gente) {
-      try {
-        await sendEmail({
-          to: persona.email,
-          subject: `[CRM] Reporte semanal · ${semana.from} a ${semana.to}`,
-          htmlContent: html,
-          tags: ['reporte', 'semanal'],
-          // Una vez por persona y semana. Con la fecha del lunes dentro: el
-          // reporte tiene que llegar cada semana, pero un reinicio no lo repite.
-          clave: `reporte-semanal-${persona.id}-${semana.from}`,
-        });
-      } catch (err) {
-        logger.error({ err: err.message, userId: persona.id }, 'Fallo mandando el reporte semanal');
+    // 28/09: con datos y con la marca, y POR EMPRESA (ver `correosDelEquipo`).
+    // Direccion recibe una seccion por cada empresa que lleva; cada gestora,
+    // como le fue su semana. Uno por persona y semana: la clave lleva el lunes.
+    const { semana } = semanas(hoy);
+    const tandas = [
+      ['reporte_semanal', ['admin', 'superadmin'], correoSemanalDireccion, 'reporte-semanal'],
+      ['semana_gestora', ['gestor'], correoSemanalGestora, 'semana-gestora'],
+    ];
+    for (const [aviso, roles, arma, etiqueta] of tandas) {
+      const gente = await destinatarios(aviso, roles);
+      let mandados = 0;
+      for (const persona of gente) {
+        try {
+          const correo = await arma(persona, hoy);
+          if (!correo) continue;
+          const r = await sendEmail({
+            to: persona.email,
+            subject: correo.asunto,
+            htmlContent: correo.html,
+            tags: ['reporte', etiqueta],
+            clave: `${etiqueta}-${persona.id}-${semana.from}`,
+          });
+          if (r?.sent) mandados++;
+        } catch (err) {
+          logger.error({ err: err.message, userId: persona.id, aviso }, 'Fallo mandando el correo de los lunes');
+        }
       }
+      logger.info({ aviso, destinatarios: gente.length, mandados, ...semana }, 'Correo de los lunes');
     }
-    logger.info({ destinatarios: gente.length, ...semana }, 'Reporte semanal');
   } catch (err) {
     logger.error({ err: err.message }, 'Fallo en el reporte semanal');
   } finally {

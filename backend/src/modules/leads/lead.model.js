@@ -647,7 +647,7 @@ function buildOrderBy(sort, dir = 'desc') {
   return `${FECHA} ${D} NULLS LAST, l.id ${D}`;
 }
 
-export async function findAll({ projectId, projectIds, status, responsableId, unassigned, canal, productId, search, page, limit, includeConverted, dateFrom, dateTo, sort, dir, duplicated, reincidente, conConversion, installmentStatus }) {
+export async function findAll({ projectId, projectIds, status, pasoProceso, responsableId, unassigned, canal, productId, search, page, limit, includeConverted, dateFrom, dateTo, sort, dir, duplicated, reincidente, conConversion, installmentStatus }) {
   const conditions = [];
   const params = [];
   let paramIdx = 1;
@@ -714,6 +714,23 @@ export async function findAll({ projectId, projectIds, status, responsableId, un
   } else if (!includeConverted && !conConversion) {
     conditions.push(`l.status <> 'convertido'`);
   }
+  /* EN QUE PASO DEL PROCESO VA.
+     El paso «en curso» es el primero pendiente que aun no ha llegado su turno:
+     si ya hubo N contactos de verdad --las notas no cuentan-- eso cierra el
+     paso n.o N. Se calcula igual que en la cola del dia para que la lista y la
+     cola no puedan decir cosas distintas de la misma persona.
+
+     Quien no tiene agenda --los de antes del proceso-- no sale con ningun paso
+     elegido, y es lo correcto: no estan en el proceso. */
+  if (pasoProceso) {
+    const CONTACTOS = `(SELECT count(*) FROM lead_interactions li
+                         WHERE li.lead_id = l.id AND li.tipo <> 'nota')`;
+    conditions.push(`(SELECT ls.clave FROM lead_steps ls
+                       WHERE ls.lead_id = l.id AND ls.estado = 'pendiente'
+                         AND ${CONTACTOS} < ls.orden
+                       ORDER BY ls.orden LIMIT 1) = $${paramIdx++}`);
+    params.push(pasoProceso);
+  }
   if (unassigned) {
     conditions.push(`l.responsable_id IS NULL`);
   } else if (responsableId) {
@@ -745,9 +762,15 @@ export async function findAll({ projectId, projectIds, status, responsableId, un
     paramIdx++;
     params.push(productId);
   }
-  if (search) {
+  // El termino se recorta SIEMPRE. Los nombres se pegan desde WhatsApp y vienen
+  // con un espacio delante o detras; sin recortarlo el patron queda
+  // "% Javier Alfonso%", que no casa con un nombre que empieza en "Javier", y la
+  // pantalla sale vacia como si el cliente no existiera. Paso el 16/09 con la
+  // ficha de Javier Cifuentes.
+  const termino = typeof search === 'string' ? search.trim() : '';
+  if (termino) {
     conditions.push(`(l.nombre ILIKE $${paramIdx} OR l.email ILIKE $${paramIdx} OR l.telefono ILIKE $${paramIdx} OR l.whatsapp_usuario ILIKE $${paramIdx})`);
-    params.push(`%${search}%`);
+    params.push(`%${termino}%`);
     paramIdx++;
   }
 
@@ -914,7 +937,13 @@ export async function findById(id) {
             pr.nombre as producto_nombre,
             pr.nombre as producto_interes,
             pr.precio as producto_precio,
-            pr.moneda as producto_moneda
+            pr.moneda as producto_moneda,
+            -- Huecos de las plantillas del proceso (#88): la ficha ofrece el
+            -- mensaje del paso ya escrito y estos dos salen del catalogo.
+            -- fecha_inicio_texto llego de WordPress como «marzo 2026» y se
+            -- manda tal cual: es lo que dice la web.
+            pr.fecha_inicio_texto,
+            pr.fecha_cierre_convocatoria
      FROM leads l
      LEFT JOIN users u ON u.id = l.responsable_id
      LEFT JOIN projects p ON p.id = l.project_id
@@ -1293,9 +1322,10 @@ export async function getStats(projectId, { responsableId = null, dateFrom = nul
     extra.push(`EXISTS (SELECT 1 FROM lead_utms lu WHERE lu.lead_id = leads.id AND lu.canal_detectado = $${idx++})`);
     params.push(canal);
   }
-  if (search) {
+  const termino = typeof search === 'string' ? search.trim() : '';
+  if (termino) {
     extra.push(`(nombre ILIKE $${idx} OR email ILIKE $${idx} OR telefono ILIKE $${idx})`);
-    params.push(`%${search}%`);
+    params.push(`%${termino}%`);
     idx++;
   }
   const where = extra.length ? ` AND ${extra.join(' AND ')}` : '';

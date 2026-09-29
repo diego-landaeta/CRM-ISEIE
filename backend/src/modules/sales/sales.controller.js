@@ -10,6 +10,21 @@ export async function create(req, res, next) {
     if (!parsed.success) {
       throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
     }
+    // EL CANDADO DE «SIN GESTORA», EN EL SERVIDOR.
+    //
+    // La pantalla esconde el boton a quien no puede, pero esconder no es
+    // impedir: la peticion se puede mandar a mano. Quien no tenga el permiso y
+    // lo pida se lleva un 403, no una venta de nadie.
+    if (parsed.data.sin_gestora) {
+      const { resolvePermission } = await import('../permissions/permissions.service.js');
+      const puede = await resolvePermission(
+        req.user.userId, req.user.role, req.user.customRoleId ?? null,
+        'conversions', 'sin_gestora',
+      );
+      if (!puede) {
+        throw new AppError('No tienes permiso para registrar una venta sin gestora', 403, 'FORBIDDEN');
+      }
+    }
     const result = await salesService.createSale(parsed.data, req.user);
     res.status(201).json({ success: true, data: result });
   } catch (err) { next(err); }

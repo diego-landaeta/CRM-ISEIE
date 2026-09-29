@@ -13,8 +13,9 @@ const ProductFormDialog = lazy(() => import('../components/ProductFormDialog'));
 function formatMoney(n: any, currency = 'EUR') {
   const value = Number(n || 0);
   try {
-    return new Intl.NumberFormat('es-ES', { style: 'currency', currency, maximumFractionDigits: 0 }).format(value);
-  } catch { return `${Math.round(value)} ${currency}`; }
+    // Con centimos: el precio del catalogo es el que se pone en la venta.
+    return new Intl.NumberFormat('es-ES', { style: 'currency', currency, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
+  } catch { return `${value.toFixed(2)} ${currency}`; }
 }
 
 export default function ProductsPage() {

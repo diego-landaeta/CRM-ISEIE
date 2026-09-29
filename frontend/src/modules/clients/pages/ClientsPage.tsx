@@ -13,11 +13,13 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import { useAuth } from '@/contexts/AuthContext';
 import useUrlFilters from '@/shared/hooks/useUrlFilters';
 import PageHeader from '@/shared/components/ui/PageHeader';
+import ComoVoy from '@/modules/reports/components/ComoVoy';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import { toast } from '@/shared/hooks/useToast';
 import type { Client } from '@/shared/types';
 import ClientsFiltersBar from '../components/ClientsFiltersBar';
+import { PROCESO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 
 const SoftDeleteDialog = lazy(() => import('@/modules/leads/components/SoftDeleteDialog'));
 
@@ -304,7 +306,9 @@ export default function ClientsPage() {
         page: String(page),
         limit: String(PAGE_SIZE),
       });
-      if (debouncedSearch) params.set('search', debouncedSearch);
+      // Recortado antes de mandarlo: el nombre pegado desde WhatsApp trae
+      // espacios y el backend buscaba "% Javier%", que no casa con nadie.
+      if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim());
       if (filterResp === 'unassigned') params.set('unassigned', 'true');
       else if (filterResp) params.set('responsableId', filterResp);
       if (filterProducto) params.set('productId', filterProducto);
@@ -377,6 +381,10 @@ export default function ClientsPage() {
           hasActiveFilters ? `${totalBackend} encontrados` : `${totalBackend} clientes`
         }`}
       />
+
+      {/* Como va quien mira: su puesto en ventas y su tasa de
+          conversion del mes. */}
+      {PROCESO_EN_PRUEBAS && <ComoVoy compacto />}
 
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <ClientsFiltersBar

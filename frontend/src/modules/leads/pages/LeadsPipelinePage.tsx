@@ -281,6 +281,12 @@ export default function LeadsPipelinePage() {
         nombre: data.nombre,
         email: data.email,
         telefono: data.telefono || '',
+        // El usuario de WhatsApp tambien va: hay gente que solo da eso.
+        //
+        // Faltaba en la peticion y el servidor rechazaba el lead con «hace
+        // falta al menos una forma de contacto», aunque la gestora lo hubiera
+        // escrito. El formulario lo recogia y lo perdia aqui, al armar el envio.
+        whatsapp_usuario: data.whatsapp_usuario || null,
         producto_interes_id: productoInteresId,
         canal: data.origen || 'directo',
         notas: data.notas || '',

@@ -39,7 +39,13 @@ export async function createSale(data, requestUser) {
     // createManualLead detecta duplicados: si existe lead con mismo email/tel, lo reusa.
     // Si quien registra es admin/superadmin → dejamos round-robin (no se auto-asignan ventas).
     // Si es gestor → se le asigna a sí mismo (es su venta).
-    const passCreator = requestUser && requestUser.role === 'gestor' ? requestUser : null;
+    // Con «sin gestora» no se pasa creador NI se reparte: la venta no es de
+    // nadie a proposito. Sin esto, un gestor se la queda (el creador se queda
+    // el lead) y un admin se la encaja al round-robin, que se la da a alguien
+    // que no ha vendido nada. Las dos cosas acaban en el mismo sitio: un
+    // informe que atribuye una venta a quien solo la apunto.
+    const sinGestora = Boolean(data.sin_gestora);
+    const passCreator = !sinGestora && requestUser && requestUser.role === 'gestor' ? requestUser : null;
     try {
       leadResult = await leadService.createManualLead(
         {
@@ -54,13 +60,40 @@ export async function createSale(data, requestUser) {
             : (data.notas || null),
           custom_fields: undefined,
         },
-        { creatorUser: passCreator }
+        { creatorUser: passCreator, sinResponsable: sinGestora }
       );
     } catch (err) {
       logger.error({ err: err.message, data }, 'createSale: createManualLead failed');
       throw err;
     }
     leadId = leadResult.lead_id;
+
+    // UNA VENTA DEL PASADO CON CLIENTE NUEVO: la ficha entra el dia de la venta.
+    //
+    // Ana, 28/09: registrar la venta del 22/09 de una clienta nueva daba «la
+    // fecha de la venta es anterior a la fecha de entrada del prospecto». Y no
+    // habia forma de pasar: la ficha la crea ESTE MISMO alta, asi que nace hoy,
+    // y una venta de antes de hoy siempre quedaba antes. Pasaba con «cliente
+    // nuevo» y con «sin gestora», es decir, con toda venta historica de alguien
+    // que no estaba ya en el CRM.
+    //
+    // Si alguien compro el dia 22, existia el dia 22: la entrada se lleva a la
+    // fecha de la venta. SOLO para la ficha que acaba de crear este alta --los
+    // ultimos minutos--, y solo hacia atras. A una ficha que ya estaba no se le
+    // toca la fecha: ahi el control sigue en pie, porque si la venta cae antes
+    // de su entrada puede ser la fecha de la venta la que esta mal.
+    //
+    // A mediodia y no a medianoche, para que ningun cambio de zona horaria la
+    // empuje al dia de antes.
+    if (isRetroactive) {
+      await query(
+        `UPDATE leads SET fecha_solicitud = ($2::date + interval '12 hours'), updated_at = NOW()
+          WHERE id = $1
+            AND created_at > NOW() - interval '10 minutes'
+            AND COALESCE(fecha_solicitud, created_at)::date > $2::date`,
+        [leadId, data.fecha_pago],
+      );
+    }
   }
 
   // 2) Cambiar status a convertido (si ya estaba convertido, no falla)
@@ -114,6 +147,32 @@ export async function createSale(data, requestUser) {
     },
     requestUser?.userId || null
   );
+
+  // 3b) DE QUIEN ES LA VENTA, cuando se dice a proposito.
+  //
+  // Se guarda en la venta en vez de dejarlo al COALESCE con el responsable del
+  // lead. No es lo mismo: el responsable del lead cambia --se reasigna un
+  // prospecto y ya esta-- y entonces una venta cerrada en marzo empezaria a
+  // contar para quien no la hizo. La venta es un hecho con fecha; su dueña
+  // tambien.
+  //
+  // Se comprueba que esa persona exista, este activa y tenga el proyecto: un id
+  // inventado en la peticion dejaria la venta apuntando a nadie.
+  if (data.vendedora_id) {
+    const { rowCount } = await query(
+      `UPDATE conversions SET vendedora_id = $1, updated_at = NOW()
+        WHERE id = $2
+          AND EXISTS (SELECT 1 FROM users u
+                        JOIN user_projects up ON up.user_id = u.id
+                                             AND up.project_id = $3 AND up.active
+                       WHERE u.id = $1 AND u.active)`,
+      [data.vendedora_id, conversion.id, data.project_id],
+    );
+    if (!rowCount) {
+      logger.warn({ conversionId: conversion.id, vendedoraId: data.vendedora_id },
+        'venta de otra gestora: esa persona no tiene el proyecto, la venta queda sin vendedora');
+    }
+  }
 
   // 4) Si es pago fraccionado, generar las cuotas previstas.
   // El gestor envía un array `installments: [{importe_previsto, fecha_vencimiento}]`
@@ -279,14 +338,26 @@ function filtrosVentas({ projectId, from, to, responsableId, search }, startIdx 
   if (projectId) { cond.push(`cv.project_id = $${idx++}`); params.push(projectId); }
   if (from) { cond.push(`cv.fecha_conversion >= $${idx++}`); params.push(from); }
   if (to) { cond.push(`cv.fecha_conversion <= $${idx++}`); params.push(to); }
-  if (responsableId) { cond.push(`${VENDEDORA} = $${idx++}`); params.push(responsableId); }
-  if (search) {
+  // Por gestora, mirando el reparto y no una sola vendedora.
+  //
+  // Antes era `COALESCE(cv.vendedora_id, l.responsable_id) = $n`, o sea UNA
+  // persona por venta: la venta atendida entre dos solo le salia a la dueña del
+  // lead. La otra veia su contador en 4,5 —eso si sale del reparto— y en la
+  // lista solo cuatro. Daniela, 21/09.
+  if (responsableId) {
+    cond.push(`EXISTS (SELECT 1 FROM conversion_reparto r
+                        WHERE r.conversion_id = cv.id AND r.vendedora_id = $${idx++})`);
+    params.push(responsableId);
+  }
+  // Recortado, igual que en leads: un espacio pegado al nombre vaciaba la lista.
+  const termino = typeof search === 'string' ? search.trim() : '';
+  if (termino) {
     // Busqueda insensible a tildes sin depender de la extension unaccent,
     // que esta en un CRM pero no en el otro.
     cond.push(`(${SIN_TILDES('l.nombre')} ILIKE ${SIN_TILDES('$' + idx)}
                 OR l.email ILIKE $${idx}
                 OR ${SIN_TILDES('cv.producto_contratado')} ILIKE ${SIN_TILDES('$' + idx)})`);
-    params.push(`%${search}%`); idx++;
+    params.push(`%${termino}%`); idx++;
   }
   // Las dos reglas que definen que es una venta, iguales que en los informes:
   // una ficha marcada como mensualidad no es una venta nueva, y una venta sin
@@ -299,22 +370,39 @@ function filtrosVentas({ projectId, from, to, responsableId, search }, startIdx 
 // Lo cobrado de una venta, sumando sus apuntes. NO se usa cv.importe_pagado:
 // ese campo declara 213.680 EUR de mas en ISEIE y hacia que la pantalla
 // enseñara un cobrado que los cobros no respaldan.
+// La parte que le toca a UNA gestora.
+//
+// Mirando lo de una sola, la venta atendida entre dos no es suya entera: es
+// mitad y mitad. Sin esto su lista enseñaba los 245 EUR completos mientras su
+// contador contaba media venta, y los numeros no cuadraban entre si.
+// Sin gestora (la vista de todo) el peso es 1: la venta es una para la casa.
+function pesoDe(responsableId, params, idx) {
+  if (!responsableId) return { PESO: '1', idx };
+  params.push(Number(responsableId));
+  return {
+    PESO: `COALESCE((SELECT r.peso FROM conversion_reparto r
+                      WHERE r.conversion_id = cv.id AND r.vendedora_id = $${idx}), 1)`,
+    idx: idx + 1,
+  };
+}
+
 const COBRADO_REAL = `(SELECT COALESCE(SUM(cp.importe), 0)
                          FROM conversion_payments cp WHERE cp.conversion_id = cv.id)`;
 
 // Resumen consolidado que acompana a la vista general de Ventas.
 export async function getResumenVentas(filtros = {}) {
-  const { where, params } = filtrosVentas(filtros);
+  const { where, params, idx } = filtrosVentas(filtros);
+  const { PESO } = pesoDe(filtros.responsableId, params, idx);
   const { rows } = await query(
     `SELECT COUNT(*)::int AS ventas,
             COUNT(DISTINCT cv.lead_id)::int AS clientes,
             COUNT(DISTINCT ${VENDEDORA})::int AS asesoras,
-            COALESCE(SUM(cv.importe_total), 0) AS importe,
-            COALESCE(SUM(${COBRADO_REAL}), 0) AS cobrado,
-            COALESCE(SUM(cv.importe_total - ${COBRADO_REAL}), 0) AS pendiente,
+            COALESCE(SUM(cv.importe_total * ${PESO}), 0) AS importe,
+            COALESCE(SUM(${COBRADO_REAL} * ${PESO}), 0) AS cobrado,
+            COALESCE(SUM((cv.importe_total - ${COBRADO_REAL}) * ${PESO}), 0) AS pendiente,
             COUNT(*) FILTER (WHERE ${COBRADO_REAL} >= cv.importe_total)::int AS liquidadas,
             COUNT(*) FILTER (WHERE ${COBRADO_REAL} <  cv.importe_total)::int AS con_saldo,
-            COALESCE(AVG(cv.importe_total), 0) AS ticket_medio
+            COALESCE(AVG(cv.importe_total * ${PESO}), 0) AS ticket_medio
        FROM conversions cv
        LEFT JOIN leads l ON l.id = cv.lead_id
        ${where}`,
@@ -395,15 +483,24 @@ export async function getVentasPorAsesora(filtros = {}) {
 export async function getVentasPorCliente(filtros = {}) {
   const page = Math.max(1, parseInt(filtros.page) || 1);
   const limit = Math.min(200, Math.max(1, parseInt(filtros.limit) || 50));
-  const { where, params, idx } = filtrosVentas(filtros);
+  const { where, params, idx: idx0 } = filtrosVentas(filtros);
+  const { PESO, idx } = pesoDe(filtros.responsableId, params, idx0);
 
   // Las ventas del filtro se aislan en una CTE para poder contar sus cuotas
   // por cliente sin meter agregados dentro de subconsultas.
   const CTE = `WITH v AS (
-      SELECT cv.id, cv.lead_id, cv.importe_total, cv.fecha_conversion,
-             ${COBRADO_REAL} AS importe_pagado,
+      SELECT cv.id, cv.lead_id, ROUND(cv.importe_total * ${PESO}, 2) AS importe_total,
+             cv.fecha_conversion,
+             ROUND(${COBRADO_REAL} * ${PESO}, 2) AS importe_pagado,
              l.nombre AS cliente, l.email, l.telefono,
-             u.nombre AS asesora
+             -- Atendida entre dos: se enseñan las dos, no una.
+             EXISTS (SELECT 1 FROM conversion_vendedoras xv
+                      WHERE xv.conversion_id = cv.id) AS compartida,
+             COALESCE(
+               (SELECT string_agg(u2.nombre, ' + ' ORDER BY u2.nombre)
+                  FROM conversion_vendedoras xv JOIN users u2 ON u2.id = xv.user_id
+                 WHERE xv.conversion_id = cv.id),
+               u.nombre) AS asesora
         FROM conversions cv
         LEFT JOIN leads l ON l.id = cv.lead_id
         LEFT JOIN users u ON u.id = COALESCE(cv.vendedora_id, l.responsable_id)
@@ -438,6 +535,7 @@ export async function getVentasPorCliente(filtros = {}) {
             COALESCE(MAX(cu.cuotas_pendientes), 0) AS cuotas_pendientes,
             COALESCE(MAX(cu.cuotas_vencidas), 0) AS cuotas_vencidas,
             COALESCE(MAX(cu.cuotas_importe_pendiente), 0) AS cuotas_importe_pendiente,
+            BOOL_OR(v.compartida) AS compartida,
             STRING_AGG(DISTINCT v.asesora, ', ') AS asesoras
        FROM v
        LEFT JOIN cu ON cu.lead_id = v.lead_id

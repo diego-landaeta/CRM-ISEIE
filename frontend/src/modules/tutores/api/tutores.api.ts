@@ -111,6 +111,10 @@ export interface ResumenComision {
 }
 
 export interface FormacionSinTutor {
+  /** Su venta más reciente es anterior al corte de comisiones. */
+  antes_del_corte?: boolean;
+  ultima_venta?: string | null;
+  corte?: string | null;
   id: number;
   nombre: string;
   precio: string | null;
@@ -271,9 +275,14 @@ export const tutoresApi = {
     client.post(`/tutores/comisiones/${id}/revertir`, { motivo }) as Promise<ApiResponse<ComisionReal>>,
 
   // Las que ya venden y no tienen a quien pagarle.
-  formacionesSinTutor: (projectId?: number | null) =>
-    client.get('/tutores/formaciones-sin-tutor'
-      + (projectId ? `?projectId=${projectId}` : '')) as Promise<ApiResponse<FormacionSinTutor[]>>,
+  formacionesSinTutor: (projectId?: number | null, todas = false) => {
+    const p = new URLSearchParams();
+    if (projectId) p.set('projectId', String(projectId));
+    // Con `todas` salen tambien las ventas anteriores al corte de comisiones.
+    if (todas) p.set('todas', '1');
+    const q = p.toString();
+    return client.get('/tutores/formaciones-sin-tutor' + (q ? `?${q}` : '')) as Promise<ApiResponse<FormacionSinTutor[]>>;
+  },
 
   /** «Se busca tutor para esta formacion», y con que anuncio si lo hay. */
   marcarBusquedaTutor: (productId: number, datos: {

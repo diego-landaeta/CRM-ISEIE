@@ -11,6 +11,9 @@ export type PasoEnCola = {
   lead_id: number;
   lead_nombre: string | null;
   lead_estado: string;
+  /** Para rellenar los huecos del mensaje sin salir de la cola (#88). */
+  lead_email?: string | null;
+  lead_telefono?: string | null;
   responsable_id: number | null;
   gestora: string | null;
   clave: string;
@@ -21,10 +24,49 @@ export type PasoEnCola = {
   fecha_prevista: string;
   dias_de_retraso: number;
   contactos: number;
+  /** La formación por la que preguntó. Las plazas NO vienen: no las lleva el
+      CRM, se miran en el sistema de admisiones. Solo viene la marca de que
+      este paso las menciona y hay que ir a comprobarlas. */
+  producto: string | null;
+  producto_precio: string | number | null;
+  /** Cuándo empieza y cuándo cierra, tal como los lleva el catálogo. */
+  fecha_inicio_texto?: string | null;
+  fecha_cierre_convocatoria?: string | null;
+  avisa_plazas: boolean;
   /** El campus. Solo importa cuando se mira una empresa entera. */
   project_id: number;
   proyecto: string | null;
 };
+
+/**
+ * Alguien del repaso de fin de mes.
+ *
+ * Trae lo mismo que una fila de la cola --para poder abrir la misma ventana--
+ * mas lo suyo: cuanto hace que entro y cuanto lleva sin noticias.
+ */
+export type EnSeguimiento = Omit<PasoEnCola, 'fecha_prevista' | 'dias_de_retraso'> & {
+  fecha_entrada: string;
+  dias_desde_entrada: number;
+  /** null = no se le ha contactado NUNCA. */
+  ultimo_contacto: string | null;
+  dias_sin_contacto: number | null;
+  antiguedad: 'este_mes' | 'uno_a_tres' | 'tres_a_seis' | 'mas_de_seis';
+};
+
+export type ResumenSeguimiento = {
+  total: number;
+  este_mes: number;
+  uno_a_tres: number;
+  tres_a_seis: number;
+  mas_de_seis: number;
+  nunca_contactados: number;
+};
+
+/**
+ * Una formacion que tiene alguien de la lista, para el desplegable. Lleva todos
+ * sus ids: la misma formacion existe en varios campus de una empresa.
+ */
+export type FormacionDeLaLista = { ids: number[]; nombre: string; personas: number };
 
 export type ResumenCola = {
   atrasados: number;
@@ -47,6 +89,8 @@ export type PasoDeLead = {
   hecho: boolean;
   vencido: boolean;
   dias_de_retraso: number;
+  /** Su mensaje dice cuántas plazas quedan: hay que comprobarlo fuera. */
+  avisa_plazas: boolean;
 };
 
 function conAmbito(params: Record<string, string | number | undefined | null>) {
@@ -61,16 +105,57 @@ function conAmbito(params: Record<string, string | number | undefined | null>) {
 }
 
 export async function traerCola(opciones: {
-  projectId?: number | null; projectIds?: string | null; gestoraId?: number | null; hasta?: string | null; limite?: number;
-}): Promise<PasoEnCola[]> {
+  projectId?: number | null; projectIds?: string | null; gestoraId?: number | null;
+  hasta?: string | null; limite?: number; pagina?: number; estado?: string | null;
+  busca?: string | null; productoId?: number | null; desde?: string | null;
+  productoIds?: string | null;
+}): Promise<{ filas: PasoEnCola[]; total: number; totalPaginas: number; formaciones: FormacionDeLaLista[] }> {
   const r = await client.get(`/proceso/cola?${conAmbito(opciones)}`);
-  return r?.success ? r.data : [];
+  if (!r?.success) return { filas: [], total: 0, totalPaginas: 1, formaciones: [] };
+  const p = (r.pagination || {}) as { total?: number; totalPages?: number };
+  return {
+    formaciones: r.formaciones || [],
+    filas: r.data || [],
+    total: Number(p.total ?? (r.data || []).length),
+    totalPaginas: Number(p.totalPages ?? 1),
+  };
 }
 
 export async function traerResumen(opciones: {
   projectId?: number | null; projectIds?: string | null; gestoraId?: number | null;
 }): Promise<ResumenCola | null> {
   const r = await client.get(`/proceso/cola/resumen?${conAmbito(opciones)}`);
+  return r?.success ? r.data : null;
+}
+
+/** La base que toca repasar a fin de mes. */
+/** Los filtros del repaso. Van al servidor: la base son miles, no 500. */
+export type FiltrosSeguimiento = {
+  projectId?: number | null; projectIds?: string | null; gestoraId?: number | null;
+  busca?: string | null; productoId?: number | null; productoIds?: string | null;
+  antiguedad?: string | null; sinContactar?: string | null; estado?: string | null;
+  pagina?: number; limite?: number;
+};
+
+export async function traerSeguimiento(
+  opciones: FiltrosSeguimiento,
+): Promise<{ filas: EnSeguimiento[]; total: number; totalPaginas: number; formaciones: FormacionDeLaLista[] }> {
+  const r = await client.get(`/proceso/seguimiento?${conAmbito(opciones)}`);
+  if (!r?.success) return { filas: [], total: 0, totalPaginas: 1, formaciones: [] };
+  const p = (r.pagination || {}) as { total?: number; totalPages?: number };
+  return {
+    formaciones: r.formaciones || [],
+    filas: r.data || [],
+    total: Number(p.total ?? (r.data || []).length),
+    totalPaginas: Number(p.totalPages ?? 1),
+  };
+}
+
+/** Cuantos son de verdad, sin el tope de la lista. */
+export async function traerResumenSeguimiento(opciones: {
+  projectId?: number | null; projectIds?: string | null; gestoraId?: number | null;
+}): Promise<ResumenSeguimiento | null> {
+  const r = await client.get(`/proceso/seguimiento/resumen?${conAmbito(opciones)}`);
   return r?.success ? r.data : null;
 }
 

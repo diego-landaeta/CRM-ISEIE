@@ -13,6 +13,20 @@ export function AuthProvider({ children }) {
   const [projects, setProjects] = useState(BYPASS ? [FAKE_PROJECT] : []);
   const [activeProjectId, setActiveProjectId] = useState(BYPASS ? FAKE_PROJECT.id : null);
   const [loading, setLoading] = useState(!BYPASS); // bypass salta el loader
+
+  // LOS PERMISOS DE CADA UNO, los que calcula el backend en `/auth/me`.
+  //
+  // Sin esto la pantalla solo sabia el rol: lo que se le da a una persona
+  // suelta en el panel de permisos no le llegaba nunca. En MultiCRM, Ana,
+  // Dayana y Yosbely tenian «venta sin gestora» y no les salia (28/09).
+  const [permissions, setPermissions] = useState(null);
+  // Ni el refresh ni el login los traen: se piden aparte y sin esperar. Hasta
+  // que llegan, vale la tabla del rol, que es lo que habia.
+  const cargarPermisos = useCallback(() => {
+    client.get('/auth/me')
+      .then((me) => { if (me.success) setPermissions(me.data.permissions || null); })
+      .catch(() => {});
+  }, []);
   const initialized = useRef(false);
 
   // Al montar, intentar restaurar sesión con refresh token (cookie httpOnly)
@@ -39,6 +53,7 @@ export function AuthProvider({ children }) {
         const userProjects = data.projects || [];
         setProjects(userProjects);
         setActiveProjectId(data.activeProjectId || userProjects[0]?.id || null);
+        cargarPermisos();
       } catch {
         // sin sesión válida — caer al login
       } finally {
@@ -47,12 +62,13 @@ export function AuthProvider({ children }) {
     }
 
     restoreSession();
-  }, []);
+  }, [cargarPermisos]);
 
   // Configurar callback de fallo de auth para limpiar estado
   useEffect(() => {
     setOnAuthFailure(() => {
       setUser(null);
+      setPermissions(null);
       setProjects([]);
       setActiveProjectId(null);
       setAccessToken(null);
@@ -72,9 +88,10 @@ export function AuthProvider({ children }) {
     setUser(userData);
     setProjects(userProjects || []);
     setActiveProjectId(apiProjectId || userProjects?.[0]?.id || null);
+    cargarPermisos();
 
     return userData;
-  }, []);
+  }, [cargarPermisos]);
 
   const logout = useCallback(async () => {
     try {
@@ -84,6 +101,7 @@ export function AuthProvider({ children }) {
     }
     setAccessToken(null);
     setUser(null);
+    setPermissions(null);
     setProjects([]);
     setActiveProjectId(null);
   }, []);
@@ -96,6 +114,7 @@ export function AuthProvider({ children }) {
       const res = await client.get('/auth/me');
       if (res.success) {
         setUser(res.data.user);
+        setPermissions(res.data.permissions || null);
         setProjects(res.data.projects || []);
       }
     } catch { /* ignore */ }
@@ -103,6 +122,7 @@ export function AuthProvider({ children }) {
 
   const value = useMemo(() => ({
     user,
+    permissions,
     projects,
     activeProject,
     activeProjectId: activeProject?.id || null,
@@ -111,7 +131,7 @@ export function AuthProvider({ children }) {
     login,
     logout,
     refreshUser,
-  }), [user, projects, activeProject, isAuthenticated, loading, login, logout, refreshUser]);
+  }), [user, permissions, projects, activeProject, isAuthenticated, loading, login, logout, refreshUser]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

@@ -24,13 +24,28 @@ export const createSaleSchema = z.object({
   metodo_pago: z.enum(PAYMENT_METHODS).optional().nullable(),
   fecha_pago: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato fecha: YYYY-MM-DD'),
   notas: z.string().max(2000).optional().nullable(),
+  // VENTA SIN GESTORA: se crea de cero y no es de nadie. Quien puede pedirlo lo
+  // decide el permiso `conversions.sin_gestora`, y eso se comprueba en el
+  // controlador: aqui solo se acepta la palabra.
+  sin_gestora: z.boolean().optional(),
+  // VENTA DE OTRA GESTORA: se elige el prospecto y la venta queda de quien lo
+  // lleva. Se guarda en la venta, no se deja al COALESCE con el responsable del
+  // lead: si manana reasignan el prospecto, la venta seguiria contando para la
+  // persona equivocada.
+  vendedora_id: z.number().int().positive().optional().nullable(),
   // Cuotas para pago fraccionado. Validado además en el service que sumen el total.
   installments: z.array(z.object({
     importe_previsto: z.number().positive('Importe de cuota debe ser > 0'),
     fecha_vencimiento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato fecha de cuota: YYYY-MM-DD'),
   })).optional(),
 }).refine(
-  (d) => d.lead_id || (d.nombre && ((d.email && d.email.length > 0) || (d.telefono && d.telefono.length > 0))),
+  // Con `sin_gestora` basta el nombre. Lo normal es exigir correo o telefono
+  // --sin uno de los dos no hay a quien escribir-- pero esta venta se registra
+  // precisamente cuando no hay nada mas: una matricula de mostrador, un cobro
+  // que llego por otro sitio. Pedir un correo inventado seria peor que no
+  // pedir nada.
+  (d) => d.lead_id || (d.sin_gestora && d.nombre)
+    || (d.nombre && ((d.email && d.email.length > 0) || (d.telefono && d.telefono.length > 0))),
   { message: 'Selecciona un cliente existente o proporciona nombre + email/teléfono', path: ['nombre'] }
 ).refine(
   // Si metodo_pago='fraccionado', exigimos al menos 2 cuotas y que sumen el total.

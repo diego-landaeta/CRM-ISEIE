@@ -365,7 +365,7 @@ export default function FichaProspecto({
           {!cargando && !error && p && (
             <div className="p-4 border-t border-border">
               <a
-                href={`${import.meta.env.BASE_URL}prospectos/${p.id}`.replace(/\/{2,}/g, '/')}
+                href={`${import.meta.env.BASE_URL}leads/${p.id}`.replace(/\/{2,}/g, '/')}
                 target="_blank"
                 rel="noreferrer"
                 className="inline-flex items-center gap-2 h-9 px-4 rounded-md w-full justify-center

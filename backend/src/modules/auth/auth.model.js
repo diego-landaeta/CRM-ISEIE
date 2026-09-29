@@ -3,6 +3,7 @@ import { query } from '../../shared/config/db.js';
 export async function findUserByEmail(email) {
   const { rows } = await query(
     `SELECT u.id, u.nombre, u.email, u.password_hash, u.role, u.active, u.avatar_url,
+            u.roles_extra::text[] AS roles_extra,
             u.custom_role_id, u.factura_manager, u.editar_fechas_factura, u.gestor_colaboraciones, u.set_password_token, u.set_password_expires
      FROM users u
      -- Sin distinguir mayusculas: el formulario de entrada pasa el correo a
@@ -17,7 +18,7 @@ export async function findUserByEmail(email) {
 
 export async function findUserById(id) {
   const { rows } = await query(
-    `SELECT u.id, u.nombre, u.email, u.role, u.active, u.avatar_url, u.custom_role_id,
+    `SELECT u.id, u.nombre, u.email, u.role, u.roles_extra::text[] AS roles_extra, u.active, u.avatar_url, u.custom_role_id,
             u.factura_manager, u.editar_fechas_factura, u.gestor_colaboraciones,
             cr.label AS custom_role_label
      FROM users u

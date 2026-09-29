@@ -5,11 +5,12 @@ import {
   Users, Calendar, ShieldCheck, TextT, TreeStructure,
   Megaphone, FileText, PlugsConnected, Envelope, EnvelopeOpen, Lightning,
   ListNumbers, Key, Lock, ArrowSquareOut, Plus, WarningCircle,
-  Wrench, X,
+  Wrench, X, Palette,
 } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 import { useConfirm } from '@/shared/components/ui/useConfirm';
+import MarcaSection from './MarcaSection';
 
 // Cada item de la nav interna. Si tiene `external: true` se muestra con el
 // icono de "abrir en otra página" y al hacer click navega a esa ruta.
@@ -27,6 +28,8 @@ const NAV = [
   { label: 'Plantillas email',     icon: EnvelopeOpen,   to: '/email-templates' },
   { label: 'Atajos rápidos',       icon: Lightning,      to: '/configuracion/atajos' },
   { label: 'Numeración docs',      icon: ListNumbers,    to: '/documentos/config' },
+  // La marca en correos y formularios: logo, colores, remitente y su Brevo.
+  { id: 'marca',        label: 'Marca',         icon: Palette, embedded: true },
   { id: 'integrations', label: 'APIs globales', icon: Key, embedded: true },
   { id: 'security',     label: 'Seguridad',     icon: Lock, embedded: true },
 ];
@@ -126,6 +129,9 @@ export default function SettingsPage() {
           )}
           {tab === 'availability' && (
             <AvailabilitySection />
+          )}
+          {tab === 'marca' && (
+            <MarcaSection isAdmin={isAdmin} />
           )}
           {tab === 'integrations' && (
             <IntegrationsSection isAdmin={isAdmin} />
@@ -307,6 +313,8 @@ function EditUserModal({ user, projects, onClose, onSaved }) {
   const isSuperadmin = me?.role === 'superadmin';
   const [nombre, setNombre] = useState(user.nombre || '');
   const [role, setRole] = useState(user.role || 'gestor');
+  // Los roles de MAS. Solo suman permisos.
+  const [rolesExtra, setRolesExtra] = useState(Array.isArray(user.roles_extra) ? user.roles_extra : []);
   // Los permisos acotados de facturacion. Aparte del rol a proposito: ser
   // «gestor» no basta para decidir quien factura — Vanessa lo es y no debe.
   const [facturaManager, setFacturaManager] = useState(!!user.factura_manager);
@@ -335,7 +343,8 @@ function EditUserModal({ user, projects, onClose, onSaved }) {
     setSaving(true);
     try {
       await client.patch(`/users/${user.id}`, {
-        nombre: nombre.trim(), role, projects: projList, whatsapp_phone: phone.trim(),
+        nombre: nombre.trim(), role, roles_extra: rolesExtra.filter((r) => r !== role),
+        projects: projList, whatsapp_phone: phone.trim(),
         factura_manager: facturaManager,
         // Cambiar fechas sin poder facturar no sirve: esa pantalla se abre desde
         // la factura. Si cae lo primero, cae lo segundo.
@@ -383,6 +392,32 @@ function EditUserModal({ user, projects, onClose, onSaved }) {
               <option value="admin">Admin</option>
               <option value="soporte">Soporte</option>
             </select>
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">Y además es…</label>
+            {/* Mas de un rol por persona: quien lleva prospectos y ademas da
+                clase no tiene que elegir. Solo SUMAN permisos; el principal
+                sigue siendo el de arriba. */}
+            <div className="flex flex-wrap gap-1.5">
+              {['gestor', 'admin', 'soporte', 'tutor'].filter((r) => r !== role).map((r) => {
+                const puesto = rolesExtra.includes(r);
+                return (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => setRolesExtra((prev) => prev.includes(r) ? prev.filter((x) => x !== r) : [...prev, r])}
+                    aria-pressed={puesto}
+                    className={'rounded-md border px-2.5 py-1 text-xs transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40 '
+                      + (puesto ? 'border-primary bg-primary/10 font-semibold text-primary' : 'border-border hover:bg-muted')}
+                  >
+                    {r === 'gestor' ? 'Gestor' : r === 'admin' ? 'Admin' : r === 'soporte' ? 'Soporte' : 'Tutor'}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-1">
+              Opcional. Suma los permisos de otro rol sin perder los de este.
+            </p>
           </div>
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">Teléfono (WhatsApp)</label>

@@ -22,6 +22,8 @@ router.get('/cobros-mensuales', ctrl.cobrosMensuales);
 router.get('/ventas-vendedora', ctrl.ventasVendedora);
 router.get('/ventas-asesora', ctrl.ventasAsesora);
 router.get('/asesoras-mes', ctrl.asesorasMes);
+// Como voy yo: puesto en ventas y tasa de conversion de quien pregunta.
+router.get('/mi-puesto', ctrl.miPuesto);
 router.get('/panel', ctrl.panel);
 router.get('/seguimiento', ctrl.seguimiento);
 router.get('/paises', ctrl.paises);

@@ -1,138 +1,152 @@
 import { useState } from 'react';
-import { X, CheckCircle, Trash, UserSwitch, Tag } from '@phosphor-icons/react';
-import client from '@/shared/api/client';
-import { toast } from '@/shared/hooks/useToast';
-import { useConfirm } from '@/shared/components/ui/useConfirm';
+import { CheckCircle, Users, Export, CaretDown, Phone, EnvelopeSimple } from '@phosphor-icons/react';
+import { STATUS_LABELS } from '@/shared/components/ui/StatusBadge';
 
-export interface BulkActionBarProps {
-  selected: number[];
-  onClear: () => void;
-  onRefresh: () => void;
-  canDelete?: boolean;
+interface Gestor {
+  id: number;
+  nombre: string;
 }
 
-const STATUS_OPTIONS = [
-  { value: 'nuevo',          label: 'Nuevo' },
-  { value: 'por_contactar',  label: 'Por contactar' },
-  { value: 'contactado',     label: 'Contactado' },
-  { value: 'en_seguimiento', label: 'En seguimiento' },
-  { value: 'no_interesado',  label: 'No interesado' },
-  { value: 'proxima_convocatoria', label: 'Próxima convocatoria' },
-];
+interface Props {
+  count: number;
+  onClear: () => void;
+  // Opcionales a proposito: sin el permiso correspondiente la pagina no pasa
+  // el manejador, y aqui la accion entera desaparece de la barra.
+  onChangeStatus?: (status: string) => void;
+  onReassign?: (gestorId: number) => void;
+  onExport?: () => void;
+  /**
+   * Apuntar el contacto a TODOS los seleccionados.
+   *
+   * El repaso de fin de mes se manda en bloque --Diego, 23/09: «suele ser
+   * masivo»-- y apuntarlo uno a uno despues de mandar cuarenta mensajes no lo
+   * hace nadie: la lista se queda mintiendo y al mes siguiente vuelven a salir
+   * los mismos.
+   */
+  onMarcarContactado?: () => void;
+  /**
+   * Los telefonos o los correos de los seleccionados, al portapapeles.
+   *
+   * Para pegarlos en la difusion de WhatsApp o en el correo masivo, que es como
+   * se manda de verdad un seguimiento a cien personas.
+   */
+  onCopiarContactos?: (que: 'telefono' | 'email') => void;
+  gestores: Gestor[];
+  isAdmin: boolean;
+  loading?: boolean;
+}
 
-export default function BulkActionBar({ selected, onClear, onRefresh, canDelete = false }: BulkActionBarProps) {
-  const [working, setWorking] = useState(false);
-  const [statusMenuOpen, setStatusMenuOpen] = useState(false);
-  const confirm = useConfirm();
-
-  if (selected.length === 0) return null;
-
-  async function applyStatus(status: string) {
-    setStatusMenuOpen(false);
-    setWorking(true);
-    let ok = 0, fail = 0;
-    for (const id of selected) {
-      try {
-        await client.patch(`/leads/${id}/status`, {
-          status,
-          motivo: `Cambio masivo desde listado (${selected.length} prospectos)`,
-        });
-        ok++;
-      } catch { fail++; }
-    }
-    setWorking(false);
-    toast({
-      title: `${ok} prospecto${ok === 1 ? '' : 's'} actualizado${ok === 1 ? '' : 's'}`,
-      description: fail > 0 ? `${fail} fallaron` : '',
-    });
-    onClear();
-    onRefresh();
-  }
-
-  async function applyDelete() {
-    if (!(await confirm({ title: 'Eliminar prospectos', message: `¿Eliminar ${selected.length} prospecto${selected.length === 1 ? '' : 's'}? Se moverán a la papelera.`, tone: 'destructive', confirmLabel: 'Eliminar' }))) return;
-    setWorking(true);
-    let ok = 0, fail = 0;
-    for (const id of selected) {
-      try { await client.delete(`/leads/${id}`); ok++; }
-      catch { fail++; }
-    }
-    setWorking(false);
-    toast({
-      title: `${ok} prospecto${ok === 1 ? '' : 's'} a papelera`,
-      description: fail > 0 ? `${fail} fallaron` : '',
-    });
-    onClear();
-    onRefresh();
-  }
+/**
+ * Barra flotante de acciones bulk (cambio de estado, reasignación, export)
+ * que aparece cuando hay leads seleccionados.
+ */
+export default function BulkActionBar({
+  count, onClear, onChangeStatus, onReassign, onExport,
+  onMarcarContactado, onCopiarContactos, gestores, isAdmin, loading,
+}: Props) {
+  const [openMenu, setOpenMenu] = useState<'status' | 'reassign' | null>(null);
 
   return (
-    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[75] w-[min(640px,calc(100%-2rem))]">
-      <div className="bg-card border border-border rounded-2xl shadow-2xl px-4 py-3 flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-2">
-          <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-bold tabular-nums">
-            {selected.length}
-          </span>
-          <span className="text-sm font-medium hidden sm:inline">seleccionado{selected.length === 1 ? '' : 's'}</span>
-        </div>
+    <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-40 bg-card border border-border rounded-lg px-4 py-2.5 flex items-center gap-3 max-w-[95vw]" style={{ boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}>
+      <span className="text-sm font-semibold tabular-nums whitespace-nowrap">
+        {count} seleccionado{count === 1 ? '' : 's'}
+      </span>
 
-        <div className="ml-auto flex items-center gap-1.5 flex-wrap">
+      <div className="h-5 w-px bg-border" />
+
+      <div className="flex items-center gap-1 flex-wrap">
+        {/* Cambiar estado */}
+        {onChangeStatus && (
+        <div className="relative">
+          <button
+            onClick={() => setOpenMenu(openMenu === 'status' ? null : 'status')}
+            disabled={loading}
+            className="px-3 py-1.5 rounded-md text-xs font-medium hover:bg-muted disabled:opacity-50 inline-flex items-center gap-1.5"
+          >
+            <CheckCircle size={14} weight="regular" /> Cambiar estado <CaretDown size={10} weight="bold" />
+          </button>
+          {openMenu === 'status' && (
+            <div className="absolute bottom-full mb-1 left-0 bg-card border border-border rounded-md py-1 min-w-44 z-10" style={{ boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+              {Object.entries(STATUS_LABELS).map(([k, v]) => (
+                <button key={k} onClick={() => { onChangeStatus(k); setOpenMenu(null); }}
+                  className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted">
+                  {v}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        )}
+
+        {/* Reasignar: hace falta el permiso `leads.assign` */}
+        {onReassign && isAdmin && gestores.length > 0 && (
           <div className="relative">
             <button
-              type="button"
-              onClick={() => setStatusMenuOpen((v) => !v)}
-              disabled={working}
-              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-muted hover:bg-muted/70 text-xs font-semibold transition-colors disabled:opacity-50"
+              onClick={() => setOpenMenu(openMenu === 'reassign' ? null : 'reassign')}
+              disabled={loading}
+              className="px-3 py-1.5 rounded-md text-xs font-medium hover:bg-muted disabled:opacity-50 inline-flex items-center gap-1.5"
             >
-              <Tag size={12} weight="bold" /> Cambiar estado
+              <Users size={14} weight="regular" /> Reasignar <CaretDown size={10} weight="bold" />
             </button>
-            {statusMenuOpen && (
-              <div className="absolute bottom-full right-0 mb-1 bg-card border border-border rounded-lg shadow-lg py-1 min-w-[160px]">
-                {STATUS_OPTIONS.map((s) => (
-                  <button
-                    key={s.value}
-                    onClick={() => applyStatus(s.value)}
-                    className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted/60 transition-colors"
-                  >
-                    {s.label}
+            {openMenu === 'reassign' && (
+              <div className="absolute bottom-full mb-1 left-0 bg-card border border-border rounded-md py-1 min-w-48 max-h-60 overflow-y-auto z-10" style={{ boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+                {gestores.map((g) => (
+                  <button key={g.id} onClick={() => { onReassign(g.id); setOpenMenu(null); }}
+                    className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted">
+                    {g.nombre}
                   </button>
                 ))}
               </div>
             )}
           </div>
+        )}
 
+        {/* Exportar CSV */}
+        {onMarcarContactado && (
           <button
-            type="button"
-            onClick={() => applyStatus('contactado')}
-            disabled={working}
-            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-muted hover:bg-muted/70 text-xs font-semibold transition-colors disabled:opacity-50"
+            onClick={onMarcarContactado}
+            disabled={loading}
+            className="h-8 inline-flex items-center gap-1.5 px-2.5 rounded-md border border-border bg-card text-xs font-semibold hover:bg-muted disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-primary/40"
           >
-            <CheckCircle size={12} weight="bold" /> Contactado
+            <CheckCircle size={13} weight="bold" /> Marcar contactados
           </button>
+        )}
 
-          {canDelete && (
+        {onCopiarContactos && (
+          <>
             <button
-              type="button"
-              onClick={applyDelete}
-              disabled={working}
-              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-rose-100 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 hover:bg-rose-200 dark:hover:bg-rose-950/60 text-xs font-semibold transition-colors disabled:opacity-50"
+              onClick={() => onCopiarContactos('telefono')}
+              disabled={loading}
+              className="h-8 inline-flex items-center gap-1.5 px-2.5 rounded-md border border-border bg-card text-xs font-semibold hover:bg-muted disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-primary/40"
             >
-              <Trash size={12} weight="bold" /> Eliminar
+              <Phone size={13} weight="bold" /> Copiar teléfonos
             </button>
-          )}
+            <button
+              onClick={() => onCopiarContactos('email')}
+              disabled={loading}
+              className="h-8 inline-flex items-center gap-1.5 px-2.5 rounded-md border border-border bg-card text-xs font-semibold hover:bg-muted disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-primary/40"
+            >
+              <EnvelopeSimple size={13} weight="bold" /> Copiar correos
+            </button>
+          </>
+        )}
 
-          <button
-            type="button"
-            onClick={onClear}
-            disabled={working}
-            title="Limpiar selección (Esc)"
-            aria-label="Limpiar selección"
-            className="inline-flex items-center justify-center h-8 w-8 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
-          >
-            <X size={13} weight="bold" />
-          </button>
-        </div>
+        {onExport && (
+        <button
+          onClick={onExport}
+          disabled={loading}
+          className="px-3 py-1.5 rounded-md text-xs font-medium hover:bg-muted disabled:opacity-50 inline-flex items-center gap-1.5"
+        >
+          <Export size={14} weight="regular" /> Exportar CSV
+        </button>
+        )}
       </div>
+
+      <div className="h-5 w-px bg-border" />
+
+      <button onClick={onClear} className="text-xs text-muted-foreground hover:text-foreground p-1 rounded">
+        Cancelar
+      </button>
     </div>
   );
 }
