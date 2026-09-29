@@ -1605,6 +1605,39 @@ recordatorio va igual a ella; habría que reasignar el prospecto.
 
 *Asignada a **Diego**.*
 
+## Feedback: pedir un comentario si la nota es mala, y uno libre al final · #169
+
+Petición del equipo que Diego pasa el 29/09 (captura de WhatsApp de la encuesta):
+
+1. «Cuando te ponga regular, mal y muy mal, tiene que salir lo de: deja tu
+   comentario».
+2. «Y un texto al final de: deja tus comentarios».
+
+**Anotada, no empezada.** Comprobado en `staging`: hoy no hay ninguna de las
+dos. Solo se puede escribir al elegir «Otro motivo» en la 1 y «Otra cosa» en la 5.
+
+- **La 2 («¿Cómo te atendió el asesor?»)**: con **3 · Regular, 2 · Mal o
+  1 · Muy mal** aparece debajo un recuadro **«Deja tu comentario»**, el mismo
+  que abre «Otro motivo». Con 4 o 5 no sale. No es obligatorio: exigirlo
+  justo cuando alguien está molesto hace que no envíe nada.
+- **Al final, después de la 6**: un recuadro libre **«Deja tus comentarios»**,
+  para todos y opcional.
+- Los dos textos van al **historial del prospecto**, al **aviso a la gestora**
+  (el de la nota baja es el que más le interesa leer), a la **ficha** y al
+  **panel de feedback**, que los lista con el nombre de la persona. En el
+  panel, el de la nota baja sale junto a la nota de atención de su gestora.
+- Y en lo que se descarga: «Respuestas (CSV)» en Reportes y, en ISEIE, la
+  hoja «Feedback».
+
+Dónde: `backend/src/modules/feedback/preguntas.js`, donde hoy solo hay
+`escribir` con una opción. Hace falta que la escala abra el recuadro con varias
+notas (3, 2 y 1) y una pregunta nueva de solo texto al final.
+`limpiarRespuestas()` las guarda (máx. 1000 caracteres, como «Otro»).
+`FeedbackEncuestaPage.tsx` pinta el recuadro al elegir la nota. La encuesta la
+pinta el servidor, así que el cambio de preguntas no toca el resto del frontal.
+
+*Asignada a **Diego**. En los dos CRMs, primero en staging.*
+
 ## Correos automáticos: ponerles el mismo formato · TAREA PARA ÁNGEL Y DIEGO
 
 Diego, 28/09: «acomodar los formatos de los correos de los resúmenes y eso,
