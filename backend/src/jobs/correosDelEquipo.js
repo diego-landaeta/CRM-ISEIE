@@ -107,7 +107,7 @@ export function envoltorio({ cabeceraUrl = null, preTitulo, titulo, subtitulo = 
 /** Un título de apartado, con el logo de la empresa si lo tiene. */
 export function apartado(titulo, { logoUrl = null, detalle = '' } = {}) {
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:26px 0 10px"><tr>
-    ${logoUrl ? `<td width="56" style="padding-right:12px;vertical-align:middle"><img src="${esc(logoUrl)}" alt="" width="44" style="display:block;max-width:44px;max-height:44px;border:0"></td>` : ''}
+    ${logoUrl ? `<td style="padding-right:14px;vertical-align:middle;width:1%;white-space:nowrap"><img src="${esc(logoUrl)}" alt="" height="40" style="display:block;height:40px;width:auto;max-width:150px;border:0"></td>` : ''}
     <td style="vertical-align:middle;border-left:${logoUrl ? '0' : `4px solid ${CRM.color}`};padding-left:${logoUrl ? '0' : '10px'}">
       <div style="font-size:16px;font-weight:bold;color:${TINTA}">${esc(titulo)}</div>
       ${detalle ? `<div style="font-size:12px;color:${GRIS};margin-top:2px">${detalle}</div>` : ''}
