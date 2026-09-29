@@ -66,6 +66,28 @@ const bonita = (isoDia) => { const [a, m, d] = isoDia.split('-').map(Number); re
 const diaSemana = (d) => `${DIAS[d.getDay()]} ${d.getDate()} de ${MESES[d.getMonth()]}`;
 const primerNombre = (s) => String(s || '').trim().split(/\s+/)[0] || '';
 
+// La hora de la aplicacion: la de Reportes y los listados.
+const TZ = process.env.APP_TIMEZONE || 'Europe/Madrid';
+const horaEspana = (d) => new Intl.DateTimeFormat('es-ES', {
+  timeZone: TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(d);
+
+/*
+  EL TRAMO DE HORAS DE «HOY», con la hora de España.
+
+  Diego, 29/09: «deberías de incluir el plazo de horas que salió eso». El
+  resumen sale a media tarde, y «hoy» son las horas que van del día, no uno
+  entero: por eso salía «−56 % vs. ayer» con 31 prospectos, comparados con el
+  día ENTERO de ayer. Sin decirlo, parecía que el día había ido a la mitad.
+
+  El día empieza a las 00:00 de la base, que está en UTC: es como cuentan
+  Reportes y «Ayer y hoy», y este correo tiene que decir lo mismo que ellos. En
+  España eso son las 02:00 en verano y la 01:00 en invierno, y así se dice.
+*/
+export function tramoDeHoy(ahora = new Date()) {
+  const inicio = new Date(`${iso(ahora)}T00:00:00Z`);
+  return `de ${horaEspana(inicio)} a ${horaEspana(ahora)} (hora de España)`;
+}
+
 /** ▲ +12 % / ▼ −5 % / «nuevo» respecto a antes. */
 export function comparar(ahora, antes) {
   const a = n(ahora); const b = n(antes);
@@ -180,7 +202,7 @@ export async function empresasDe(persona) {
   }
   const ids = [...new Set(campus.map((c) => c.sociedad_id).filter(Boolean))];
   const { rows: socs } = ids.length
-    ? await query('SELECT id, razon_social, logo_url FROM invoice_issuers WHERE id = ANY($1::int[])', [ids])
+    ? await query('SELECT id, razon_social FROM invoice_issuers WHERE id = ANY($1::int[])', [ids])
     : { rows: [] };
   const grupos = new Map();
   for (const c of campus) {
@@ -189,11 +211,30 @@ export async function empresasDe(persona) {
     if (!grupos.has(clave)) {
       grupos.set(clave, {
         nombre: s ? s.razon_social : c.nombre,
-        logoUrl: s?.logo_url && /^https?:\/\//.test(s.logo_url) ? s.logo_url : null,
+        logoUrl: null,
         campus: [],
       });
     }
     grupos.get(clave).campus.push(c);
+  }
+  /*
+    EL LOGO DE LA EMPRESA ES EL DE SU MARCA, no la imagen de facturacion de la
+    sociedad: en ISEIE esa es el SELLO. Diego, 29/09: «pusiste el logo y sello,
+    pon el logo en ambos». Va dibujado sobre el color de la marca (la insignia
+    de `cabecera.js`), porque el logo de ISEIE es blanco.
+
+    Solo si la empresa es un campus. Una con varios (CEDIA, siete) no tiene un
+    logo suyo, y poner el de uno de sus campus seria decir que es ese.
+  */
+  const solos = [...grupos.values()].filter((g) => g.campus.length === 1).map((g) => g.campus[0].id);
+  const { rows: marcas } = solos.length
+    ? await query(
+      `SELECT id, nombre, logo_url, theme_color, to_jsonb(p) ->> 'color_cabecera' AS color_cabecera
+         FROM projects p WHERE id = ANY($1::int[])`, [solos])
+    : { rows: [] };
+  for (const g of grupos.values()) {
+    const m = g.campus.length === 1 ? marcas.find((x) => x.id === g.campus[0].id) : null;
+    if (m?.logo_url) g.logoUrl = `${base()}/api/f/insignia/${m.id}?v=${versionDe({ ...m, proyecto: m.nombre })}`;
   }
   // La que tiene mas campus, primero: suele ser la que mas pesa.
   return [...grupos.values()].sort((a, b) => b.campus.length - a.campus.length || a.nombre.localeCompare(b.nombre, 'es'));
@@ -277,7 +318,7 @@ export async function correoDiarioGestora(persona, ahora = new Date()) {
 
   const colaUrl = `${base()}${R.cola}`;
   const contenido = [
-    apartado('Hoy', { detalle: diaSemana(ahora) }),
+    apartado('Hoy', { detalle: `${diaSemana(ahora)} · ${tramoDeHoy(ahora)}` }),
     tarjetas([
       { etiqueta: 'Prospectos nuevos', valor: entero(hoy.leads), cmp: comparar(hoy.leads, ayer.leads), nota: 'vs. ayer' },
       { etiqueta: 'Contactos apuntados', valor: entero(contactos) },
@@ -433,7 +474,7 @@ export async function correoDiarioDireccion(persona, ahora = new Date()) {
       cabeceraUrl: empresas.length === 1 ? await cabeceraPara(empresas[0].campus) : await cabeceraPara([]),
       preTitulo: 'Resumen del día',
       titulo: `${diaSemana(ahora)[0].toUpperCase()}${diaSemana(ahora).slice(1)}`,
-      subtitulo: `${empresas.length > 1 ? `Tus ${empresas.length} empresas, cada una con sus cifras.` : 'Cómo ha ido el día.'} Prospectos y ventas cuentan como «Ayer y hoy»; lo cobrado, los pagos registrados hoy.`,
+      subtitulo: `${empresas.length > 1 ? `Tus ${empresas.length} empresas, cada una con sus cifras.` : 'Cómo ha ido el día.'} Hoy cuenta <strong>${tramoDeHoy(ahora)}</strong>, y «vs. ayer» lo compara con el día entero de ayer. Ventas y cobrado: los que llevan fecha de hoy.`,
       contenido: partes.join('') + boton('Abrir Reportes', `${base()}${R.informes}`),
     }),
   };
