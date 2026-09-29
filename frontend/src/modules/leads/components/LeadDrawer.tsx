@@ -544,8 +544,8 @@ function AgendaDelProceso({ leadId }) {
         ))}
       </ol>
       <p className="mt-2 text-[11px] text-muted-foreground">
-        Los pasos se cierran solos al registrar un contacto. Para mover una fecha,
-        entra en la pestaña «Proceso».
+        Un contacto cierra el paso que toca si ya ha llegado su día, y solo uno por día.
+        Para mover una fecha, entra en la pestaña «Proceso».
       </p>
     </div>
   );
