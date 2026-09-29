@@ -295,7 +295,11 @@ export async function colaDelDia({
   const elTramo = TRAMOS[tramo] || null;
   const pHasta = hasta ? `$${i++}::date` : (elTramo ? elTramo.hasta : 'CURRENT_DATE');
   if (hasta) par.push(hasta);
-  const pTramoDesde = elTramo?.desde ? `AND ls.fecha_prevista >= ${elTramo.desde}` : '';
+  // El «desde» se mira sobre el paso ACTUAL de cada persona (`q.pos = 1`), no en
+  // la lista de pendientes: puesto ahi, a quien va atrasado se le colaba su paso
+  // SIGUIENTE como si fuera de hoy (probado en ISEIE staging: 7 «para hoy» con el
+  // contador en 0). Lo mismo con la fecha «desde» puesta a mano.
+  const pTramoDesde = elTramo?.desde ? `AND q.fecha_prevista >= ${elTramo.desde}` : '';
   // En que estado esta. Los convertidos y los no interesados no entran nunca en
   // la cola --la consulta ya los excluye-- asi que aqui solo valen los cinco de
   // en medio; cualquier otra cosa se ignora en vez de devolver una lista vacia.
@@ -321,7 +325,7 @@ export async function colaDelDia({
   // Desde que dia. El otro extremo ya lo pone el tramo de arriba (`hasta`);
   // con este se puede pedir «del 1 al 15» sin pelearse con el tramo.
   const fechaOk = /^\d{4}-\d{2}-\d{2}$/.test(desde || '');
-  const pDesde = fechaOk ? `AND ls.fecha_prevista >= $${i++}::date` : '';
+  const pDesde = fechaOk ? `AND q.fecha_prevista >= $${i++}::date` : '';
   if (fechaOk) par.push(desde);
 
   // LAS PENDIENTES, una sola vez: la lista y su desplegable de formaciones
@@ -340,7 +344,7 @@ export async function colaDelDia({
           AND l.status NOT IN ('convertido', 'no_interesado')
           ${pEstado}
           AND ${CONTACTOS} < ls.orden
-          ${pProj} ${pAses} ${pBusca} ${pProd} ${pDesde} ${pTramoDesde}
+          ${pProj} ${pAses} ${pBusca} ${pProd}
      )`;
 
   if (soloFormaciones) {
@@ -350,7 +354,7 @@ export async function colaDelDia({
               count(DISTINCT q.lead_id)::int AS personas
          FROM pendientes q
          JOIN products p ON p.id = q.producto_interes_id
-        WHERE q.pos = 1
+        WHERE q.pos = 1 ${pDesde} ${pTramoDesde}
         GROUP BY p.nombre
         ORDER BY p.nombre`,
       par);
@@ -391,7 +395,7 @@ export async function colaDelDia({
        LEFT JOIN projects pr ON pr.id = q.project_id
        LEFT JOIN users u ON u.id = q.responsable_id
        LEFT JOIN products p ON p.id = q.producto_interes_id
-      WHERE q.pos = 1
+      WHERE q.pos = 1 ${pDesde} ${pTramoDesde}
       ORDER BY q.fecha_prevista, q.orden, q.lead_id
       LIMIT ${pLimite} OFFSET ${pSalto}`,
     par
