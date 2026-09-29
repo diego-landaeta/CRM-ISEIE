@@ -10,6 +10,8 @@ hace en uno se hace en el otro** — ver
 
 ## Dónde está
 
+**Versión en producción: 2.0.0** (29/09/2026). `main` = producción y `staging` = pruebas, independientes.
+
 | Rama | Entorno | Dirección | Base de datos | PM2 |
 |---|---|---|---|---|
 | `main` | Producción | https://crm.iseie.com | `crm_iseie` | `crm-iseie-api` :3005 |
@@ -176,8 +178,11 @@ flowchart LR
   class M prod
 ```
 
-- Rama por tarea, **pull request a `staging`**. A `main` no se va directo si toca
-  dinero, sesiones o el esquema de la base.
+- Rama por tarea, que sale de `staging`, y **pull request a `staging`**.
+- **A `main` solo por pull request desde `staging`**, cuando Diego lo aprueba: `main` está
+  protegida y el gancho `pre-push` bloquea el push directo. Cada versión lleva su etiqueta
+  (`v2.0.0`…) y su release en GitHub; lo nuevo de cada una está dentro del CRM, en **Novedades**.
+- Cómo se despliega cada entorno: [`docs/README.md`](docs/README.md), «Deploy y ramas».
 - **Migraciones**: un fichero nuevo en `backend/migrations/`, numerado. **No se
   ejecuta SQL a mano en el servidor** — las aplica quien despliega.
 - **Commits en español**, con prefijo: `feat:`, `fix:`, `refactor:`, `docs:`,

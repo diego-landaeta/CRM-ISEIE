@@ -3,11 +3,30 @@
 > **Fuente de verdad del esquema:** `backend/migrations/*.sql` — todos los SQL ejecutados, en orden.
 > Único documento de referencia; el resto se consolidó aquí (historial en git).
 
-## Deploy y ramas (resumen)
-- `main` = producción. ISEIE: https://crm.iseie.com · VPS `72.60.90.135` · PM2 `crm-iseie-api` · front `/var/www/crm-iseie`.
-- CRM hermano ISEIH: https://360crm.tech/crm · VPS `187.124.128.126`.
-- Deploy front: build → tar → paramiko → swap con backup → chown www-data. Backend: scp módulo + `pm2 restart`.
-- **Paridad:** el módulo `invoices` es espejo con ISEIH; navegación/rutas NO se copian enteras (ISEIE usa base `/accounting`).
+## Deploy y ramas (al día el 29/09/2026)
+
+**Ramas.** `main` = **producción**, con la etiqueta de cada versión (`v2.0.0`, `v2.0.1`). `staging` = **pruebas** (crm.iseie.com/staging), independiente de `main`. Hasta el 29/09 producción y staging salían de la misma rama (`actualizar-main-15sep`); ya no. Lo nuevo entra por `staging`; cuando Diego lo aprueba pasa a `main` con un **pull request** (`gh pr create` + `gh pr merge --admin`). El gancho `pre-push` no deja empujar a `main` ni a `feat/angel|fabian|diego`.
+
+| | Producción | Pruebas |
+|---|---|---|
+| Web | https://crm.iseie.com | https://crm.iseie.com/staging |
+| Rama | `main` | `staging` |
+| Backend | `/opt/crm-iseie` · PM2 `crm-iseie-api` :3005 | `/opt/crm-iseie-staging` · PM2 `crm-iseie-api-staging` :3006 |
+| Frontal | `/var/www/crm-iseie` (sin `/frontend`) · `npm run build` | `/var/www/crm-iseie-staging` · `VITE_BASE_PATH=/staging/ npm run build -- --mode staging` |
+| Base | `crm_iseie` | `crm_iseie_staging` |
+
+VPS `72.60.90.135`. PM2 corre como **root** (`sudo pm2 …`).
+
+**Subir el backend.** El código sale de la rama (`git archive <rama> backend/src …`), nunca de ficheros sueltos. Antes de reiniciar se carga la app entera sin escuchar (`NODE_ENV=test node --env-file=.env -e "import('./src/app.js')"`). Luego `sudo pm2 restart` y `/api/health`.
+**Subir el frontal.** Comprobar en `dist/index.html` que las rutas son las del entorno (`/assets/` o `/staging/assets/`). `.env.production` no está en git: lleva `VITE_BETA_MODE=true` y, desde la 2.0.0, `VITE_PROCESO_EN_PRUEBAS=true`.
+**Migraciones.** Como `postgres`, con su GRANT a `crm_iseie_user`, y comprobando el catálogo después. Copias antes de subir en `/var/backups/crm-iseie/`.
+
+**Interruptores del `.env` de producción** (29/09): `NOVEDADES_AUTO=1` · `FEEDBACK_DIA7_INICIO=2026-09-29` · `PASO_VENCIDO_DISABLED=1` · correos del equipo encendidos · `LEAD_SIN_TOCAR_DISABLED=1`.
+**Paridad:** MultiCRM (https://360crm.tech/crm, repo `CRM`) tiene las mismas funciones; aquí las rutas son `/leads` donde allí es `/prospectos`. Conectores y el MCP de Claude, de momento, solo allí.
+
+## Versión 2.0.0 (en producción desde el 29/09/2026)
+
+Lo nuevo está dentro del CRM en **Novedades** (`backend/src/modules/novedades/versiones.js`) y en la release `v2.0.0` de GitHub. En corto: el proceso comercial (cola por tramos, pasos en la ficha, seguimiento de fin de mes; desde el 29/09 un contacto solo cierra el paso que toca, en su día y uno por día — `shared/utils/pasoCerrado.js`), el feedback de quien no compra (correo, encuesta, panel y Reportes), las Novedades, los correos del equipo, mejoras de ventas y facturación, y la marca de ISEIE en correos y formularios.
 
 ---
 
@@ -138,6 +157,33 @@ Fuente de verdad del esquema. Cada archivo en `backend/migrations/` es un SQL ej
 | 134 | 134_whatsapp_participante.sql | Quien escribio cada mensaje de un grupo |
 | 135 | 135_wa_mensajes_unico_por_conversacion.sql | El identificador de WhatsApp es unico POR CONVERSACION, no en toda la tabla |
 | 136 | 136_numero_de_factura_unico_por_serie.sql | El numero de factura, unico por SERIE y AÑO. No por proyecto |
+| 142 | 142_plazas_y_cierre.sql | #86 · Plazas y cierre de convocatoria en el catalogo. |
+| 143 | 143_pasos_comerciales.sql | #87 · Los cinco pasos del proceso comercial, en la base y editables. |
+| 146 | 146_agenda_del_lead.sql | La agenda de cada prospecto: qué paso del proceso le toca y qué día. |
+| 147 | 147_convocatorias.sql | Las convocatorias, y a quién se le ofrecieron (#86). |
+| 148 | 148_proyecto_de_pruebas.sql | Un proyecto marcado como DE PRUEBAS, para trastear en producción sin |
+| 149 | 149_busqueda_de_tutor.sql | Si se está buscando tutor para una formación, y con qué anuncio. |
+| 150 | 150_ventas_compartidas.sql | Una venta, dos gestoras: repartir el mérito sin descuadrar los totales. |
+| 156 | 156_estados_comision_tutor.sql | Los estados de la comision del tutor: dos mas. |
+| 157 | 157_entregables_del_tutor.sql | Que ha entregado cada tutor de cada formacion. |
+| 159 | 159_usa_whatsapp.sql | Portada desde MultiCRM el 16/09/2026. Alli es la 167; aqui la serie va |
+| 160 | 160_etiquetas_de_whatsapp.sql | Portada desde MultiCRM el 16/09/2026. Alli es la 168; aqui la serie va |
+| 161 | 161_etiquetas_pendientes.sql | Portada desde MultiCRM el 16/09/2026. Alli es la 169; aqui la serie va |
+| 162 | 162_lid_de_la_conversacion.sql | Portada desde MultiCRM el 16/09/2026. Alli es la 170; aqui la serie va |
+| 163 | 163_hora_de_sincronizacion.sql | La hora a la que sincroniza cada proyecto su catalogo. |
+| 164 | 164_plantilla_por_paso.sql | Cada plantilla, atada a su paso del proceso comercial. |
+| 165 | 165_correo_por_paso.sql | El correo de cada paso, atado al paso (la otra mitad del #88). |
+| 166 | 166_roles_adicionales.sql | Un usuario puede tener MAS DE UN ROL. |
+| 167 | 167_feedback.sql | El correo de «¿por qué has desistido?» y lo que contesta cada uno |
+| 168 | 168_remitente_no_contestar.sql | El remitente «no contestar» de cada campus |
+| 169 | 169_feedback_respuestas.sql | La encuesta de feedback, con todas sus preguntas |
+| 170 | 170_cabecera_de_marca.sql | El fondo de la cabecera de cada marca, en correos y formularios |
+| 171 | 171_novedades.sql | Las novedades de cada versión: cuándo y a quién se mandaron |
+
+> **Comprobado el 29/09/2026 contra el catálogo de producción** (no contra la
+> salida de ningún comando): aplicadas todas las de esta lista hasta la **171**.
+> Las de la 2.0.0 se aplicaron ese día (167–171).
+
 
 > **Estado al 04/09/2026**, comprobado contra el catalogo de Postgres y no
 > contra la salida de ningun comando. Aplicadas **hasta la 136**, incluida la

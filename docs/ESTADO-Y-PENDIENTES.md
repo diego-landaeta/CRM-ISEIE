@@ -1691,6 +1691,37 @@ merge habría arrastrado 34 commits de `deploy/16sep` que /testeo no tiene.
 
 *Asignada a **Diana**; el paso a staging lo hizo Diego (Claude).*
 
+## 29 de septiembre, cierre del día · v2.0.1 y todo al día
+
+**En producción después de la 2.0.0 (v2.0.1, los dos CRMs):**
+
+- **La cola del día por tramos.** «Para hoy», «Para mañana»… salían vacíos en
+  producción: la pantalla filtraba el tramo sobre la primera página de 100, que
+  eran todo atrasados. Ahora filtra el servidor, con su «hoy» y sobre el paso
+  actual de cada persona; cada botón da lo mismo que su contador (ISEIE: 229 ·
+  15 · 14; MultiCRM con CEDIA: 147 · 13 · 1).
+- **Un contacto solo cierra el paso que toca**, si ya llegó su día, y como mucho
+  uno por día (antes, 4 interacciones cerraban los pasos 1 a 4). Desde el 29/09
+  a las 17:00 UTC: lo apuntado antes cuenta como antes, así que nadie cambió de
+  paso al subirlo. Una sola regla en `backend/src/shared/utils/pasoCerrado.js`.
+- **/testeo y ISEIE staging** subidos desde `staging`: iguales que producción.
+
+**GitHub:** `main` = producción y `staging` = pruebas (ver «Ramas desde el 29/09»),
+releases `v2.0.0` y `v2.0.1` publicadas, `docs/README.md` al día (deploy,
+entornos, interruptores del `.env` e índice de migraciones completo).
+**Issues revisados contra el código de `main`:** cerrados 9 que ya estaban en
+producción (#2, #5, #7, #8, #9, #10, #16, #68, #74). Quedan 33 abiertos. Tres
+tienen el original de MultiCRM cerrado pero la función no está aquí todavía:
+#12 (administración de usuarios), #18 (recuperar la contraseña por correo) y
+#21 (filtros en Clientes y Matrículas).
+
+### Lo que queda para la próxima tanda
+
+1. **Paridad pendiente**: #12, #18 y #21 (hechos en MultiCRM, no aquí), y Conectores y el MCP de Claude, que de momento solo están en MultiCRM.
+2. **`feat/angel`** (panel de claves, pantalla de registro, cuatro entradas del menú con 404) y **`feat/angel-paridad`** (32 cambios del 14–16/09, entre ellos el IVA incluido): revisar qué falta de verdad antes de subir nada.
+3. **#73** · Finanzas por empresa: aquí solo hay una sociedad; decidir si aplica.
+4. **#20** · tasa de cierre y baremo: espera a MultiCRM #39.
+
 ## Ramas desde el 29/09: `main` = producción, `staging` = pruebas
 
 Diego, 29/09: «unifica ramas ya aprobadas y en producción claramente; testeo y

@@ -100,7 +100,7 @@ Mismo stack que el CRM existente, salvo que el usuario indique lo contrario:
 - NO abrir puertos extras en UFW
 - NO tocar `/var/www/.env`
 
-**Ramas y entornos:** seguir el modelo del CRM existente — `main` = producción, `staging` = QA, `feat/<nombre>` = features.
+**Ramas y entornos:** `main` = producción (crm.iseie.com), `staging` = pruebas (crm.iseie.com/staging), independientes; `feat/<nombre>` sale de `staging`. Hasta el 29/09/2026 producción y staging salían de la misma rama (`actualizar-main-15sep`); ya no. Detalle en `docs/README.md` («Deploy y ramas»).
 
 ---
 
@@ -206,7 +206,7 @@ Y la planificación heredada del Claude anterior (`documentacion/`, `fase-1/`, .
 ## Reglas firmes (heredadas del usuario)
 
 - **No commits sin pedirlo** el usuario, aunque el cambio esté listo
-- **Sin PRs.** Flujo: trabajar en `feat/X`, mergear a `staging`, validar, mergear a `main`. Para cambios chicos: directo a `main`
+- **A `main` solo por pull request** (desde el 29/09/2026: `main` está protegida en GitHub y el gancho `pre-push` bloquea el push directo). Flujo: trabajar en `feat/X`, mergear a `staging`, validar, y pull request a `main` (`gh pr merge --admin`)
 - **No `git rm --cached`, `git reset --hard`, `rm -rf`** sin plan + confirmación
 - **No instalar paquetes globales** (`npm install -g`) sin pedirlo
 - **OPSEC:** ningún secreto en el chat. Si el usuario pega uno, sugerir rotarlo y configurarlo por canal correcto

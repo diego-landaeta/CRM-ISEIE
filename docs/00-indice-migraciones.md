@@ -110,3 +110,45 @@ Fuente de verdad del esquema. Cada archivo en `backend/migrations/` es un SQL ej
 | 119 | 119_invoices_cliente_tipo.sql | 119 · La factura necesita saber si el cliente es empresa o persona |
 | 120 | 120_invoice_issuers_alias.sql | Un nombre corto para distinguir emisoras que comparten datos fiscales. |
 | 121 | 121_conversion_payments_metodo.sql | conversion_payments.metodo |
+| 122 | 122_whatsapp_templates.sql | Hasta ahora vivian en el localStorage del navegador, con dos consecuencias: |
+| 123 | 123_tutores_rol.sql | Tutores · el rol nuevo |
+| 124 | 124_tutores.sql | Tutores y colaboraciones · las tablas |
+| 125 | 125_reembolsos_y_comisiones.sql | Reembolsos: de que pago son, y que pasa con la comision del tutor. |
+| 126 | 126_gestor_colaboraciones.sql | Permiso gestor_colaboraciones: quien da de alta tutores y les asigna cursos, |
+| 127 | 127_registro_de_correos.sql | Hasta ahora un envio fallido moria en un logger.error() que nadie lee. Los |
+| 128 | 128_whatsapp_conversaciones.sql | Hasta ahora WhatsApp vivia FUERA del CRM: un navegador remoto retransmitido |
+| 129 | 129_whatsapp_consentimiento.sql | Quien acepto enlazar un numero, y cuando. |
+| 130 | 130_whatsapp_responde_a.sql | A que mensaje responde cada mensaje. |
+| 131 | 131_lead_whatsapp_usuario.sql | El usuario de WhatsApp de un prospecto, además de su teléfono. |
+| 132 | 132_avisos_por_correo.sql | Es la cuarta subfase de la tarea #28. Los tres avisos nuevos —lead sin tocar a |
+| 133 | 133_tutor_banco.sql | El IBAN ya lleva dentro el codigo de la entidad (las cuatro cifras despues de |
+| 134 | 134_whatsapp_participante.sql | Quien escribio cada mensaje de un grupo. |
+| 135 | 135_wa_mensajes_unico_por_conversacion.sql | El identificador de WhatsApp es unico POR CONVERSACION, no en toda la tabla. |
+| 136 | 136_numero_de_factura_unico_por_serie.sql | El numero de factura, unico por SERIE y AÑO. No por proyecto. |
+| 142 | 142_plazas_y_cierre.sql | #86 · Plazas y cierre de convocatoria en el catalogo. |
+| 143 | 143_pasos_comerciales.sql | #87 · Los cinco pasos del proceso comercial, en la base y editables. |
+| 146 | 146_agenda_del_lead.sql | La agenda de cada prospecto: qué paso del proceso le toca y qué día. |
+| 147 | 147_convocatorias.sql | Las convocatorias, y a quién se le ofrecieron (#86). |
+| 148 | 148_proyecto_de_pruebas.sql | Un proyecto marcado como DE PRUEBAS, para trastear en producción sin |
+| 149 | 149_busqueda_de_tutor.sql | Si se está buscando tutor para una formación, y con qué anuncio. |
+| 150 | 150_ventas_compartidas.sql | Una venta, dos gestoras: repartir el mérito sin descuadrar los totales. |
+| 156 | 156_estados_comision_tutor.sql | Los estados de la comision del tutor: dos mas. |
+| 157 | 157_entregables_del_tutor.sql | Que ha entregado cada tutor de cada formacion. |
+| 159 | 159_usa_whatsapp.sql | Portada desde MultiCRM el 16/09/2026. Alli es la 167; aqui la serie va |
+| 160 | 160_etiquetas_de_whatsapp.sql | Portada desde MultiCRM el 16/09/2026. Alli es la 168; aqui la serie va |
+| 161 | 161_etiquetas_pendientes.sql | Portada desde MultiCRM el 16/09/2026. Alli es la 169; aqui la serie va |
+| 162 | 162_lid_de_la_conversacion.sql | Portada desde MultiCRM el 16/09/2026. Alli es la 170; aqui la serie va |
+| 163 | 163_hora_de_sincronizacion.sql | La hora a la que sincroniza cada proyecto su catalogo. |
+| 164 | 164_plantilla_por_paso.sql | Cada plantilla, atada a su paso del proceso comercial. |
+| 165 | 165_correo_por_paso.sql | El correo de cada paso, atado al paso (la otra mitad del #88). |
+| 166 | 166_roles_adicionales.sql | Un usuario puede tener MAS DE UN ROL. |
+| 167 | 167_feedback.sql | El correo de «¿por qué has desistido?» y lo que contesta cada uno |
+| 168 | 168_remitente_no_contestar.sql | El remitente «no contestar» de cada campus |
+| 169 | 169_feedback_respuestas.sql | La encuesta de feedback, con todas sus preguntas |
+| 170 | 170_cabecera_de_marca.sql | El fondo de la cabecera de cada marca, en correos y formularios |
+| 171 | 171_novedades.sql | Las novedades de cada versión: cuándo y a quién se mandaron |
+
+> **Comprobado el 29/09/2026 contra el catálogo de producción** (no contra la
+> salida de ningún comando): aplicadas todas las de esta lista hasta la **171**.
+> Las de la 2.0.0 se aplicaron ese día (167–171).
+
