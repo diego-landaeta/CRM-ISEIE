@@ -48,6 +48,7 @@ export const BETA_ROUTES: readonly string[] = [
   '/manual',
   '/soporte',
   '/activity',                      // Gestores: actividad
+  '/novedades',                     // Lo nuevo de cada versión (2.0.0), con su aviso y su correo
 ];
 
 export function isBetaAllowed(to?: string): boolean {
