@@ -1640,6 +1640,47 @@ pinta el servidor, así que el cambio de preguntas no toca el resto del frontal.
 
 *Asignada a **Diego**. En los dos CRMs, primero en staging.*
 
+## Conexión de Claude por MCP · #173 (Diana)
+
+Diego, 29/09: «Diana subió algo sobre Claude MCP, podemos vincularlo a staging
+y todo para probarlo».
+
+**En /testeo desde el 29/09. Ni en producción ni en ISEIE.** Es la rama de Diana
+`feat/diana-mcp-claude` (3 commits), llevada a `staging` con cherry-pick: con
+merge habría arrastrado 34 commits de `deploy/16sep` que /testeo no tiene.
+
+- Menú **Conexión → MCP**: cada persona crea su token y copia su URL personal
+  para «Agregar conector personalizado» en Claude Desktop o claude.ai.
+  Superadmin y admin entran por su rol; al resto se le pone la casilla desde esa
+  misma pantalla. Un tutor, nunca.
+- **Solo consulta**: 10 herramientas (prospectos, ventas, facturas, cobros e
+  informes de Reportes) y ninguna escribe. Cada una se limita a los campus de
+  la persona, y la gestora ve solo lo suyo. Cada consulta queda en
+  `mcp_auditoria`.
+- **Migración 182** (Diana la subió como 180, que en staging ya era la de la
+  cabecera de marca). Se le añadieron los GRANT para `crm_user`. Aplicada en
+  `crm_test_db`. En el servidor de /testeo se instaló `@modelcontextprotocol/sdk@1.31.0`.
+- **Probado el 29/09 por HTTPS** con tokens de prueba, ya borrados. Con el
+  token de un superadmin: los 9 campus, ventas, informes y la URL personal. Con
+  el de una gestora: sin casilla da 403; con ella solo lo suyo, y rechaza el
+  informe de todo el campus, un prospecto de otra gestora y un campus ajeno.
+  Un token inventado da 401 y no hay ninguna herramienta que borre.
+
+### Qué falta
+
+1. **Que Diego lo conecte en su Claude** y dé el visto bueno.
+2. **El token queda en el registro de nginx** cuando se usa la URL personal
+   (`/api/mcp/u/crm_mcp_…`). En los registros de la API no (Diana lo tapa), pero
+   nginx apunta la URL entera. Arreglo: `access_log off` (o un formato que la
+   tape) para esa ruta en el bloque de 360crm.tech. Afecta al nginx compartido
+   con producción: pendiente de que Diego diga.
+3. **ISEIE**: por la paridad hay que portarlo (tabla de campus, rutas `/leads`,
+   su numeración de migraciones). Después de validarlo aquí.
+4. **Producción**: migración 182 con GRANT, `npm install` del SDK, y renumerar la
+   180 también en la rama de Diana antes de que llegue a `deploy/16sep`.
+
+*Asignada a **Diana**; el paso a staging lo hizo Diego (Claude).*
+
 ## Correos automáticos: ponerles el mismo formato · TAREA PARA ÁNGEL Y DIEGO
 
 Diego, 28/09: «acomodar los formatos de los correos de los resúmenes y eso,
