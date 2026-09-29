@@ -25,6 +25,9 @@ const HASTA = parseInt(process.env.FEEDBACK_DIA7_HASTA || '20', 10);
 const PILA = parseInt(process.env.FEEDBACK_DIA7_PILA || '25', 10);
 const TOPE = parseInt(process.env.FEEDBACK_DIA7_TOPE || '200', 10);
 const MAX_DIAS = parseInt(process.env.FEEDBACK_DIA7_MAX_DIAS || '30', 10);
+// Desde qué día cuenta el primer contacto (AAAA-MM-DD). En producción,
+// 2026-09-29: Diego no quiere que les llegue a los de antes de subirlo.
+const INICIO = /^\d{4}-\d{2}-\d{2}$/.test(process.env.FEEDBACK_DIA7_INICIO || '') ? process.env.FEEDBACK_DIA7_INICIO : null;
 
 /** La hora en Madrid, sea cual sea la del servidor. */
 function horaDeMadrid() {
@@ -37,7 +40,7 @@ async function vuelta() {
   // de la casa está para ver si algo ha ido mal.
   if (hora < DESDE || hora >= HASTA) return null;
   try {
-    const r = await vueltaDelDia7({ pila: PILA, tope: TOPE, maxDias: MAX_DIAS });
+    const r = await vueltaDelDia7({ pila: PILA, tope: TOPE, maxDias: MAX_DIAS, inicio: INICIO });
     if (r.pedidos) logger.info(r, 'Feedback del 7.º día: una tanda');
     return r;
   } catch (err) {
@@ -52,5 +55,5 @@ export function startFeedbackDia7Scheduler() {
     return;
   }
   vigilar('feedback_dia7', 'Feedback del 7.º día (tandas)', vuelta, TICK_MS);
-  logger.info({ desde: DESDE, hasta: HASTA, pila: PILA, tope: TOPE, maxDias: MAX_DIAS, tickMs: TICK_MS }, 'Feedback del 7.º día iniciado');
+  logger.info({ desde: DESDE, hasta: HASTA, pila: PILA, tope: TOPE, maxDias: MAX_DIAS, inicio: INICIO, tickMs: TICK_MS }, 'Feedback del 7.º día iniciado');
 }

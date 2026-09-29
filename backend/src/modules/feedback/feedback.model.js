@@ -122,7 +122,12 @@ export async function agendarVuelta(leadId, { dias, nota, gestoraDelEnvio = null
  * esperando, primero. No ha comprado, no ha dicho que no, tiene correo y nunca
  * se le preguntó. Los campus de pruebas no entran.
  */
-export async function candidatosDelDia7({ tope = 25, maxDias = 30 } = {}) {
+/**
+ * `inicio` (AAAA-MM-DD): solo quien tuvo su primer contacto ese día o después.
+ * Diego, 29/09, al subirlo a producción: «se cuenta desde hoy, no antes». Sin
+ * él, la ventana de siempre (7 a `maxDias` días).
+ */
+export async function candidatosDelDia7({ tope = 25, maxDias = 30, inicio = null } = {}) {
   const { rows } = await query(
     `SELECT l.id, pc.primer_contacto
        FROM leads l
@@ -136,11 +141,12 @@ export async function candidatosDelDia7({ tope = 25, maxDias = 30 } = {}) {
         AND l.status NOT IN ('convertido', 'no_interesado')
         AND NULLIF(TRIM(l.email), '') IS NOT NULL
         AND pc.primer_contacto BETWEEN CURRENT_DATE - $2::int AND CURRENT_DATE - 7
+        AND ($3::date IS NULL OR pc.primer_contacto >= $3::date)
         AND NOT EXISTS (SELECT 1 FROM feedback_envios f WHERE f.lead_id = l.id)
         AND NOT EXISTS (SELECT 1 FROM conversions c WHERE c.lead_id = l.id)
       ORDER BY pc.primer_contacto, l.id
       LIMIT $1`,
-    [tope, maxDias]);
+    [tope, maxDias, inicio]);
   return rows.map((r) => r.id);
 }
 

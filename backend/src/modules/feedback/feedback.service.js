@@ -411,11 +411,11 @@ export function resumenDePreguntas(contestadas) {
  * `pila`, y entre todas no se pasa de `tope` al día —contando también los de
  * descarte, que salen por la misma cuenta de Brevo—.
  */
-export async function vueltaDelDia7({ pila = 25, tope = 200, maxDias = 30 } = {}) {
+export async function vueltaDelDia7({ pila = 25, tope = 200, maxDias = 30, inicio = null } = {}) {
   const hoy = await model.correosDeHoy();
   const hueco = Math.max(0, Math.min(pila, tope - hoy));
   if (!hueco) return { candidatos: 0, pedidos: 0, hoy, tope };
-  const ids = await model.candidatosDelDia7({ tope: hueco, maxDias });
+  const ids = await model.candidatosDelDia7({ tope: hueco, maxDias, inicio });
   let pedidos = 0;
   for (const id of ids) {
     try {
