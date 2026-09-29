@@ -1,4 +1,5 @@
 import { query, getClient } from '../../shared/config/db.js';
+import { PASO_CERRADO } from '../../shared/utils/pasoCerrado.js';
 
 // ============================================================
 // WEBHOOK + ROUND-ROBIN
@@ -723,11 +724,9 @@ export async function findAll({ projectId, projectIds, status, pasoProceso, resp
      Quien no tiene agenda --los de antes del proceso-- no sale con ningun paso
      elegido, y es lo correcto: no estan en el proceso. */
   if (pasoProceso) {
-    const CONTACTOS = `(SELECT count(*) FROM lead_interactions li
-                         WHERE li.lead_id = l.id AND li.tipo <> 'nota')`;
     conditions.push(`(SELECT ls.clave FROM lead_steps ls
                        WHERE ls.lead_id = l.id AND ls.estado = 'pendiente'
-                         AND ${CONTACTOS} < ls.orden
+                         AND NOT ${PASO_CERRADO('ls')}
                        ORDER BY ls.orden LIMIT 1) = $${paramIdx++}`);
     params.push(pasoProceso);
   }
