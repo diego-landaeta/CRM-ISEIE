@@ -25,6 +25,9 @@ export type PanelFeedback = {
   porMotivo: Array<{ clave: string; n: number }>;
   porDisparador: Array<{ clave: string; enviados: number; respondidos: number }>;
   porCampus: Array<{ project_id: number; nombre: string; enviados: number; respondidos: number }>;
+  /** Los campus agrupados por su sociedad; un campus sin sociedad va solo (project_id). */
+  porEmpresa?: Array<{ issuer_id: number | null; project_id: number | null; nombre: string; campus: number;
+    enviados: number; respondidos: number; nota_atencion: string | number | null }>;
   porGestora: Array<{ gestora_id: number | null; nombre: string; enviados: number; respondidos: number; no_le_contestaron: number;
     nota_atencion: string | number | null; notas: number }>;
   porMes: Array<{ mes: string; enviados: number; respondidos: number }>;

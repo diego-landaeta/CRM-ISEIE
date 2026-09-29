@@ -9,30 +9,36 @@ import { vigilar } from './latido.js';
  * envía». El 7 no es un número al azar: es cuando acaba el proceso comercial,
  * así que el correo sale justo cuando ya se ha hecho todo lo que tocaba.
  *
- * Una vuelta al día, a media mañana: un correo que llega de madrugada se lee
- * peor, y a esa hora nadie de la casa está para ver si algo ha ido mal.
- *
- * Quién entra lo decide `candidatosDelDia7` (entró hace 7 a 10 días, no compró,
- * no dijo que no, tiene correo y nunca se le preguntó). El margen de 10 días
- * recupera un día de servidor parado sin escribir de golpe a la base antigua.
+ * Quién entra lo decide `candidatosDelDia7`: su PRIMER CONTACTO fue hace 7 a 30
+ * días, no compró, no dijo que no, tiene correo y nunca se le preguntó.
  *
  * Se apaga con FEEDBACK_DIA7_DISABLED=1.
  */
 
-const TICK_MS = parseInt(process.env.FEEDBACK_DIA7_TICK_MS || String(60 * 60 * 1000), 10);
-const HORA = parseInt(process.env.FEEDBACK_DIA7_HORA || '10', 10);
+// Diego, 28/09: «se cuenta desde el primer contacto; máximo 200 correos
+// diarios, así que irán en pilas para que se vayan enviando». Una tanda cada
+// media hora dentro del horario, hasta el tope del día (que incluye los de
+// descarte). Todo se puede cambiar desde el .env.
+const TICK_MS = parseInt(process.env.FEEDBACK_DIA7_TICK_MS || String(30 * 60 * 1000), 10);
+const DESDE = parseInt(process.env.FEEDBACK_DIA7_DESDE || '9', 10);
+const HASTA = parseInt(process.env.FEEDBACK_DIA7_HASTA || '20', 10);
+const PILA = parseInt(process.env.FEEDBACK_DIA7_PILA || '25', 10);
+const TOPE = parseInt(process.env.FEEDBACK_DIA7_TOPE || '200', 10);
+const MAX_DIAS = parseInt(process.env.FEEDBACK_DIA7_MAX_DIAS || '30', 10);
 
-// Con un tick de una hora, sin esto la misma mañana daría la vuelta varias veces.
-let ultimoDia = null;
+/** La hora en Madrid, sea cual sea la del servidor. */
+function horaDeMadrid() {
+  return Number(new Intl.DateTimeFormat('es-ES', { hour: 'numeric', hour12: false, timeZone: 'Europe/Madrid' }).format(new Date()));
+}
 
 async function vuelta() {
-  const ahora = new Date();
-  const dia = ahora.toISOString().slice(0, 10);
-  if (ahora.getHours() !== HORA || ultimoDia === dia) return null;
+  const hora = horaDeMadrid();
+  // Ni de madrugada ni de noche: un correo así se lee peor, y a esa hora nadie
+  // de la casa está para ver si algo ha ido mal.
+  if (hora < DESDE || hora >= HASTA) return null;
   try {
-    const r = await vueltaDelDia7();
-    ultimoDia = dia;
-    if (r.pedidos) logger.info(r, 'Feedback del 7.º día: pedidos');
+    const r = await vueltaDelDia7({ pila: PILA, tope: TOPE, maxDias: MAX_DIAS });
+    if (r.pedidos) logger.info(r, 'Feedback del 7.º día: una tanda');
     return r;
   } catch (err) {
     logger.error({ err: err.message }, 'Fallo pidiendo el feedback del 7.º día');
@@ -45,6 +51,6 @@ export function startFeedbackDia7Scheduler() {
     logger.info('Feedback del 7.º día desactivado (FEEDBACK_DIA7_DISABLED=1)');
     return;
   }
-  vigilar('feedback_dia7', 'Feedback del 7.º día sin comprar', vuelta, TICK_MS);
-  logger.info({ hora: HORA, tickMs: TICK_MS }, 'Feedback del 7.º día iniciado');
+  vigilar('feedback_dia7', 'Feedback del 7.º día (tandas)', vuelta, TICK_MS);
+  logger.info({ desde: DESDE, hasta: HASTA, pila: PILA, tope: TOPE, maxDias: MAX_DIAS, tickMs: TICK_MS }, 'Feedback del 7.º día iniciado');
 }

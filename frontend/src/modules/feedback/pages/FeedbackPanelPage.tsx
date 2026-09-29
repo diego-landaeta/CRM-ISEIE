@@ -34,22 +34,36 @@ const MES = (m: string) => {
 };
 
 export default function FeedbackPanelPage() {
-  const { activeProject, activeIssuerId } = useProjectContext() as {
-    activeProject: { id?: number | null } | null; activeIssuerId: number | null;
+  const { activeProject, activeIssuerId, activeIssuer, projects } = useProjectContext() as {
+    activeProject: { id?: number | null; nombre?: string; sociedad_emisora_id?: number | null } | null;
+    activeIssuerId: number | null; activeIssuer: { nombre?: string } | null;
+    projects: Array<{ id: number; sociedad_emisora_id?: number | null; sociedad_nombre?: string }> | null;
   };
+  // POR EMPRESA, COMO REPORTES (Diego, 28/09: «en feedback tengo que verlo por
+  // empresa, no por proyecto únicamente»). Con un campus puesto, se arranca en
+  // su empresa —sus campus sumados—; «Solo este campus» lo acota. Es local a
+  // esta pantalla: no cambia el ámbito del resto del CRM.
+  const [soloCampus, setSoloCampus] = useState(false);
+  const socDelProyecto = activeProject?.sociedad_emisora_id ? Number(activeProject.sociedad_emisora_id) : null;
+  const issuerEfectivo = activeIssuerId ?? (soloCampus ? null : socDelProyecto);
+  const proyectoEfectivo = issuerEfectivo && !activeIssuerId ? { id: -1 } : activeProject;
+  const campusDeLaEmpresa = issuerEfectivo ? (projects || []).filter((x) => Number(x.sociedad_emisora_id) === issuerEfectivo) : [];
+  const nombreAmbito = issuerEfectivo
+    ? `${activeIssuer?.nombre || campusDeLaEmpresa[0]?.sociedad_nombre || 'La empresa'} · ${campusDeLaEmpresa.length} campus`
+    : (activeProject?.nombre || 'Todas las empresas');
   const [rango, setRango] = useState(() => rangoPorDefecto());
   const [datos, setDatos] = useState<PanelFeedback | null>(null);
   const [cargando, setCargando] = useState(true);
-  const [pestaña, setPestaña] = useState<'campus' | 'gestora' | 'disparador'>('gestora');
+  const [pestaña, setPestaña] = useState<'empresa' | 'campus' | 'gestora' | 'disparador'>('gestora');
   const [detalle, setDetalle] = useState<Detalle | null>(null);
 
   // El ámbito y las fechas, en un solo sitio: el panel y su lista piden lo mismo.
   const base = useMemo(() => {
-    const p = ponerAmbito(new URLSearchParams(), { activeIssuerId, activeProject });
+    const p = ponerAmbito(new URLSearchParams(), { activeIssuerId: issuerEfectivo, activeProject: proyectoEfectivo });
     if (rango.from) p.set('desde', rango.from);
     if (rango.to) p.set('hasta', rango.to);
     return p;
-  }, [activeIssuerId, activeProject?.id, rango.from, rango.to]);
+  }, [issuerEfectivo, activeProject?.id, rango.from, rango.to]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     let vivo = true;
@@ -70,8 +84,18 @@ export default function FeedbackPanelPage() {
     <div className="space-y-4">
       <PageHeader
         title="Feedback"
-        subtitle="Por qué no compran: lo que contestan al correo de «¿por qué has desistido?»"
-        actions={<RangoRapido valor={rango} alElegir={(r) => setRango(r)} />}
+        subtitle={`${nombreAmbito} · por qué no compran: lo que contestan al correo de «¿por qué has desistido?»`}
+        actions={(
+          <div className="flex flex-wrap items-center gap-2">
+            {socDelProyecto && !activeIssuerId && (
+              <button type="button" onClick={() => setSoloCampus((v) => !v)}
+                className="h-8 rounded-md border border-border bg-card px-3 text-xs font-semibold hover:bg-muted">
+                {soloCampus ? 'Ver toda la empresa' : `Solo ${activeProject?.nombre || 'este campus'}`}
+              </button>
+            )}
+            <RangoRapido valor={rango} alElegir={(r) => setRango(r)} />
+          </div>
+        )}
       />
 
       {/* ── Enviados · respondidos · % ─────────────────────────────── */}
@@ -178,7 +202,7 @@ export default function FeedbackPanelPage() {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-base font-semibold">Desglose</h2>
           <div className="inline-flex rounded-md border border-border p-0.5 text-sm" role="tablist">
-            {([['gestora', 'Por gestora'], ['campus', 'Por campus'], ['disparador', 'Por disparador']] as const).map(([k, etq]) => (
+            {([['empresa', 'Por empresa'], ['campus', 'Por campus'], ['gestora', 'Por gestora'], ['disparador', 'Por disparador']] as const).map(([k, etq]) => (
               <button key={k} type="button" role="tab" aria-selected={pestaña === k} onClick={() => setPestaña(k)}
                 className={`rounded px-2.5 py-1 ${pestaña === k ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}>
                 {etq}
@@ -190,11 +214,11 @@ export default function FeedbackPanelPage() {
           <table className="w-full min-w-[480px] text-sm">
             <thead className="text-[11px] uppercase tracking-wide text-muted-foreground">
               <tr>
-                <th className="py-2 text-left font-semibold">{pestaña === 'gestora' ? 'Gestora' : pestaña === 'campus' ? 'Campus' : 'Cuándo se envió'}</th>
+                <th className="py-2 text-left font-semibold">{{ gestora: 'Gestora', campus: 'Campus', empresa: 'Empresa', disparador: 'Cuándo se envió' }[pestaña]}</th>
                 <th className="py-2 text-right font-semibold">Enviados</th>
                 <th className="py-2 text-right font-semibold">Respondidos</th>
                 <th className="py-2 text-right font-semibold">%</th>
-                {pestaña === 'gestora' && <th className="py-2 text-right font-semibold">Nota de atención</th>}
+                {(pestaña === 'gestora' || pestaña === 'empresa') && <th className="py-2 text-right font-semibold">Nota de atención</th>}
                 {pestaña === 'gestora' && <th className="py-2 text-right font-semibold">No le contestaron a tiempo</th>}
               </tr>
             </thead>
@@ -212,6 +236,19 @@ export default function FeedbackPanelPage() {
                     </td>
                     <Num n={g.no_le_contestaron} aviso
                       onClick={() => abrir(`No le contestaron a tiempo · ${g.nombre}`, { que: 'respondidos', motivo: 'sin_respuesta', ...extra })} />
+                  </tr>
+                );
+              })}
+              {pestaña === 'empresa' && (datos?.porEmpresa || []).map((e) => {
+                // Una empresa abre su lista por empresa; un campus suelto, por campus.
+                const donde: Record<string, string> = e.issuer_id ? { soloEmpresa: String(e.issuer_id) } : { soloCampus: String(e.project_id) };
+                return (
+                  <tr key={`${e.issuer_id}-${e.project_id}`} className="border-t border-border">
+                    <td className="py-2">{e.nombre}{e.issuer_id ? <span className="ml-1 text-xs text-muted-foreground">· {e.campus} campus</span> : null}</td>
+                    <Num n={e.enviados} onClick={() => abrir(`Enviados · ${e.nombre}`, { que: 'enviados', ...donde })} />
+                    <Num n={e.respondidos} onClick={() => abrir(`Respondidos · ${e.nombre}`, { que: 'respondidos', ...donde })} />
+                    <td className="py-2 text-right tabular-nums">{pct(e.respondidos, e.enviados)}</td>
+                    <td className="py-2 text-right tabular-nums">{e.nota_atencion != null ? <>{Number(e.nota_atencion).toLocaleString('es-ES')} <span className="text-xs text-muted-foreground">de 5</span></> : <span className="text-muted-foreground">—</span>}</td>
                   </tr>
                 );
               })}
@@ -313,7 +350,9 @@ function ListaDeDetras({ detalle, base, textoMotivo, disparadores, onCerrar }: {
   const [filas, setFilas] = useState<FilaFeedback[] | null>(null);
   useEffect(() => {
     const p = new URLSearchParams(base);
-    const { soloCampus, ...resto } = detalle.params;
+    const { soloCampus, soloEmpresa, ...resto } = detalle.params;
+    // Una empresa concreta desde el desglose: su sociedad, en vez del ámbito de arriba.
+    if (soloEmpresa) { p.delete('projectId'); p.set('issuerId', soloEmpresa); }
     // Un campus concreto desde el desglose: sustituye a la empresa, no se suma.
     if (soloCampus) { p.delete('issuerId'); p.set('projectId', soloCampus); }
     Object.entries(resto).forEach(([k, v]) => p.set(k, v));

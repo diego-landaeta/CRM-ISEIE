@@ -395,8 +395,17 @@ export function resumenDePreguntas(contestadas) {
 }
 
 /** El proceso del 7.º día: una vuelta. Devuelve cuántos se pidieron. */
-export async function vueltaDelDia7() {
-  const ids = await model.candidatosDelDia7();
+/**
+ * El 7.º día, en TANDAS (Diego, 28/09: «máximo 200 correos diarios, así que
+ * irán en pilas para que se vayan enviando»). Cada vuelta manda como mucho
+ * `pila`, y entre todas no se pasa de `tope` al día —contando también los de
+ * descarte, que salen por la misma cuenta de Brevo—.
+ */
+export async function vueltaDelDia7({ pila = 25, tope = 200, maxDias = 30 } = {}) {
+  const hoy = await model.correosDeHoy();
+  const hueco = Math.max(0, Math.min(pila, tope - hoy));
+  if (!hueco) return { candidatos: 0, pedidos: 0, hoy, tope };
+  const ids = await model.candidatosDelDia7({ tope: hueco, maxDias });
   let pedidos = 0;
   for (const id of ids) {
     try {
@@ -405,7 +414,7 @@ export async function vueltaDelDia7() {
       logger.warn({ err: err.message, leadId: id }, 'feedback: fallo pidiéndolo al 7.º día');
     }
   }
-  return { candidatos: ids.length, pedidos };
+  return { candidatos: ids.length, pedidos, hoy: hoy + pedidos, tope };
 }
 
 export { model };

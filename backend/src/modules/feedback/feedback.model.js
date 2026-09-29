@@ -111,27 +111,52 @@ export async function agendarVuelta(leadId, { dias, nota, gestoraDelEnvio = null
 /**
  * A quién le toca el correo del 7.º día.
  *
- * Entró hace entre 7 y 10 días —no «hace 7 o más»: si el servidor estuvo parado
- * un día se recupera, pero encender esto no escribe de golpe a toda la base
- * antigua—, no ha comprado, no ha dicho que no, tiene correo y no se le ha
- * preguntado nunca. Los campus de pruebas no entran.
+ * Diego, 28/09: «el de 7 días se cuenta desde el PRIMER CONTACTO». No desde que
+ * entró: quien entró y nadie llamó no ha tenido proceso del que opinar. El
+ * primer contacto es la primera interacción que no es una nota interna —la
+ * misma regla que el proceso comercial (`CONTACTOS` en proceso.model)—.
+ *
+ * Entra quien tuvo el primer contacto hace entre 7 y `maxDias` días (30 por
+ * defecto): con margen para ir saliendo en tandas sin perder a nadie, pero sin
+ * escribir de golpe a toda la base antigua al encenderlo. Los que más llevan
+ * esperando, primero. No ha comprado, no ha dicho que no, tiene correo y nunca
+ * se le preguntó. Los campus de pruebas no entran.
  */
-export async function candidatosDelDia7({ tope = 300 } = {}) {
+export async function candidatosDelDia7({ tope = 25, maxDias = 30 } = {}) {
   const { rows } = await query(
-    `SELECT l.id
+    `SELECT l.id, pc.primer_contacto
        FROM leads l
        JOIN projects p ON p.id = l.project_id AND NOT COALESCE(p.es_prueba, false)
+       JOIN LATERAL (
+         SELECT MIN(li.fecha)::date AS primer_contacto
+           FROM lead_interactions li
+          WHERE li.lead_id = l.id AND li.tipo <> 'nota'
+       ) pc ON pc.primer_contacto IS NOT NULL
       WHERE l.deleted_at IS NULL
         AND l.status NOT IN ('convertido', 'no_interesado')
         AND NULLIF(TRIM(l.email), '') IS NOT NULL
-        AND COALESCE(l.fecha_solicitud, l.created_at)::date
-              BETWEEN CURRENT_DATE - 10 AND CURRENT_DATE - 7
+        AND pc.primer_contacto BETWEEN CURRENT_DATE - $2::int AND CURRENT_DATE - 7
         AND NOT EXISTS (SELECT 1 FROM feedback_envios f WHERE f.lead_id = l.id)
         AND NOT EXISTS (SELECT 1 FROM conversions c WHERE c.lead_id = l.id)
-      ORDER BY l.id
+      ORDER BY pc.primer_contacto, l.id
       LIMIT $1`,
-    [tope]);
+    [tope, maxDias]);
   return rows.map((r) => r.id);
+}
+
+/**
+ * Cuántos correos de feedback han salido hoy, de los dos disparadores: el tope
+ * de 200 al día es de correos, no de «días 7» (Diego, 28/09). Cuenta lo que
+ * salió o lo intentó —en pruebas, lo que paró el freno también, para que el
+ * ritmo se vea igual que en producción—; lo que espera revisión, no tenía
+ * correo o se canceló no ha gastado nada.
+ */
+export async function correosDeHoy() {
+  const { rows } = await query(
+    `SELECT count(*)::int AS n FROM feedback_envios
+      WHERE created_at >= date_trunc('day', NOW() AT TIME ZONE 'Europe/Madrid') AT TIME ZONE 'Europe/Madrid'
+        AND estado NOT IN ('sin_correo', 'cancelado', 'revision')`);
+  return rows[0].n;
 }
 
 /**
@@ -188,7 +213,7 @@ export async function panel(filtros) {
       WHERE true
         ${DONDE}`;
 
-  const [totales, porMotivo, porDisparador, porCampus, porGestora, porMes] = await Promise.all([
+  const [totales, porMotivo, porDisparador, porCampus, porGestora, porMes, porEmpresa] = await Promise.all([
     query(
       `SELECT count(*) FILTER (WHERE f.estado = 'enviado')::int AS enviados,
               count(*) FILTER (WHERE f.estado = 'enviado' AND f.respondido_at IS NOT NULL)::int AS respondidos,
@@ -237,6 +262,23 @@ export async function panel(filtros) {
           AND f.estado = 'enviado'
         GROUP BY 1
         ORDER BY 1`, par),
+    // Por EMPRESA (Diego, 28/09: «tengo que verlo por empresa, no por proyecto
+    // únicamente»): los campus agrupados por su sociedad. Un campus sin
+    // sociedad va solo, con su nombre.
+    query(
+      `SELECT s.id AS issuer_id, CASE WHEN s.id IS NULL THEN f.project_id END AS project_id,
+              COALESCE(s.razon_social, p.nombre) AS nombre,
+              count(DISTINCT f.project_id)::int AS campus,
+              count(*) FILTER (WHERE f.estado = 'enviado')::int AS enviados,
+              count(*) FILTER (WHERE f.estado = 'enviado' AND f.respondido_at IS NOT NULL)::int AS respondidos,
+              round(avg((f.respuestas ->> 'nota_atencion')::numeric), 1) AS nota_atencion
+         FROM feedback_envios f
+         LEFT JOIN projects p ON p.id = f.project_id
+         LEFT JOIN invoice_issuers s ON s.id = p.sociedad_emisora_id
+        WHERE true
+          ${DONDE}
+        GROUP BY s.id, CASE WHEN s.id IS NULL THEN f.project_id END, COALESCE(s.razon_social, p.nombre)
+        ORDER BY enviados DESC, nombre`, par),
   ]);
 
   // Todo lo contestado, para resumir pregunta a pregunta. Son decenas o
@@ -257,6 +299,7 @@ export async function panel(filtros) {
     porMotivo: porMotivo.rows,
     porDisparador: porDisparador.rows,
     porCampus: porCampus.rows,
+    porEmpresa: porEmpresa.rows,
     porGestora: porGestora.rows,
     porMes: porMes.rows,
   };
