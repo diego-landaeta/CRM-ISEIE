@@ -1691,6 +1691,45 @@ merge habría arrastrado 34 commits de `deploy/16sep` que /testeo no tiene.
 
 *Asignada a **Diana**; el paso a staging lo hizo Diego (Claude).*
 
+## Ramas desde el 29/09: `main` = producción, `staging` = pruebas
+
+Diego, 29/09: «unifica ramas ya aprobadas y en producción claramente; testeo y
+staging siguen siendo independientes».
+
+- **`main` es lo que corre en producción**, con la etiqueta `v2.0.0`. Se llegó
+  con un pull request (#76) cuyo árbol es idéntico al de producción.
+- **`staging` es el entorno de pruebas (https://crm.iseie.com/staging/)**, independiente de `main`.
+  Lo nuevo entra por `staging`; pasa a `main` con un pull request cuando Diego lo
+  aprueba, y se despliega a producción desde `main`.
+- `main` está protegida en GitHub y el gancho `pre-push` no deja empujar a ella:
+  siempre por pull request.
+- **Hasta hoy producción y staging salían de la misma rama
+  (`actualizar-main-15sep`).** Ya no: el entorno de staging se despliega desde
+  `staging`.
+- La `staging` antigua (parada el 16/09, commit `1594a57`) se reajustó a `main`
+  con un push forzado. No se pierde nada: ese mismo commit sigue en
+  `feat/angel-paridad` y en `feat/whatsapp-paridad-16sep`. Para volver:
+  `git push origin +1594a57:refs/heads/staging`.
+- **Dentro de esa rama antigua está el arreglo del IVA** («si nadie dice nada, el
+  precio YA lleva el IVA»): en MultiCRM ya está en producción con la 2.0.0; en
+  ISEIE no. Paridad pendiente, decide Diego.
+
+### Ramas con trabajo que NO está en producción (se quedan)
+
+- `feat/angel` · 3 cambios propios: panel de claves y variables (#113, #80), la pantalla de registro (#111), cuatro entradas del menú que daban 404 (#32).
+- `feat/angel-paridad` y `feat/whatsapp-paridad-16sep` (el mismo commit `1594a57`) · 32 cambios propios del 14–16/09: plantillas del proceso comercial, WhatsApp «al nivel de MultiCRM», atajos de fecha en facturación, el IVA incluido… Parte puede estar ya en producción hecha de otra forma; hay que revisarlo antes de subir nada.
+
+### Ramas borradas (su trabajo ya estaba entero en producción)
+
+Para recuperar una: `git push origin <commit>:refs/heads/<nombre>`.
+
+- `actualizar-main-15sep` · `d133271` (era producción y staging a la vez)
+- `produccion/2.0.0` · `44be103` (la del pull request #76)
+- `feat/facturacion-v2` · `2c3dcdd`
+- `feat/finanzas-sprint1` · `922dbf2`
+- `feat/ui-clientes-v2` · `e0b24b1`
+- `prod/solo-hoy` · `c4b2b01`
+
 ## 29 de septiembre · la 2.0.0, en producción en los dos CRMs
 
 Diego, 29/09: «todo aprobado, a producción en ambos». Subida la versión entera:
