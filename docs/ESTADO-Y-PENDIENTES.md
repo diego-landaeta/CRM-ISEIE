@@ -1678,6 +1678,14 @@ merge habría arrastrado 34 commits de `deploy/16sep` que /testeo no tiene.
    su numeración de migraciones). Después de validarlo aquí.
 4. **Producción**: migración 182 con GRANT, `npm install` del SDK, y renumerar la
    180 también en la rama de Diana antes de que llegue a `deploy/16sep`.
+5. **Conectores (29/09, en /testeo)**: además del campus, un conector puede ser
+   de **una empresa** o de **todo el sistema** (este, solo super admin). Es UNO
+   para todos sus campus: cada dato va al campus que diga su campo «Campus» y,
+   si no, al campus por defecto. Y hay un tipo nuevo, **Servidor MCP**: el CRM
+   se conecta a un MCP de fuera con los mismos límites (solo herramientas de
+   solo lectura, https y servidores públicos, auditoría, 20 s, 5 MB, 5000
+   elementos). Para producción: migración **183**. En ISEIE no hay pantalla de
+   Conectores.
 
 *Asignada a **Diana**; el paso a staging lo hizo Diego (Claude).*
 
