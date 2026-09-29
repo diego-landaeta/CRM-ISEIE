@@ -5,7 +5,7 @@ import * as service from './invoices.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import { saveLocal, getLocal, deleteLocal } from '../../shared/services/localStorage.service.js';
-import { createInvoiceSchema, setSequenceSchema, updateConfigSchema, issuerSchema } from './invoices.validation.js';
+import { createInvoiceSchema, setSequenceSchema, updateConfigSchema, issuerSchema, cobrarProformaSchema } from './invoices.validation.js';
 
 function logoExt(mime) {
   if (mime === 'image/png') return 'png';
@@ -391,6 +391,19 @@ export async function markPaid(req, res, next) {
     }
     await model.markPaid(id, req.body?.fechaPago);
     res.json({ success: true });
+  } catch (e) { next(e); }
+}
+
+// POST /:id/cobrar-proforma  { importe, fecha, metodo?, notas? }
+// Apunta el cobro en la venta y la proforma pasa a ser la factura (mismo numero).
+export async function cobrarProforma(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) throw new AppError('Proforma no valida', 400, 'BAD_ID');
+    const parsed = cobrarProformaSchema.safeParse(req.body || {});
+    if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
+    const inv = await service.cobrarProforma(id, parsed.data, req.user);
+    res.json({ success: true, data: inv });
   } catch (e) { next(e); }
 }
 
