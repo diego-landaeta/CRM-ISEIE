@@ -1691,6 +1691,40 @@ merge habría arrastrado 34 commits de `deploy/16sep` que /testeo no tiene.
 
 *Asignada a **Diana**; el paso a staging lo hizo Diego (Claude).*
 
+## 29 de septiembre · la 2.0.0, en producción en los dos CRMs
+
+Diego, 29/09: «todo aprobado, a producción en ambos». Subida la versión entera:
+proceso comercial, feedback (encuesta, panel, informes), Novedades, correos del
+equipo, arreglos de registro y, solo en MultiCRM, el MCP de Claude y Conectores.
+
+- **MultiCRM**: `release/2.0.0` une `staging` y `deploy/16sep` (34 ficheros en
+  conflicto, resueltos conservando los dos lados). Las tres ramas apuntan al
+  mismo commit. Migraciones 160, 164, 166, 171 (correo recibido) y 175–184.
+- **ISEIE**: `actualizar-main-15sep`, con `VITE_PROCESO_EN_PRUEBAS=true` en el
+  build de producción. Migraciones 167–171.
+- **Interruptores en el .env de producción** (los dos): `NOVEDADES_AUTO=1`,
+  `FEEDBACK_DIA7_INICIO=2026-09-29` (el correo del 7.º día solo para primeros
+  contactos desde ese día: los primeros salen el 06/10), `PASO_VENCIDO_DISABLED=1`,
+  y los correos del equipo encendidos (resumen de la tarde, «Tu día y lo de
+  mañana» y los de los lunes).
+- **Novedades 2.0.0** enviadas: 14 personas en MultiCRM y 22 en ISEIE, sin fallos.
+- **Marcas** copiadas a producción: logos, colores, fondos, remitentes y la
+  clave de Brevo de los campus.
+- **Copias de seguridad** de antes de subir: `/var/backups/crm/` y
+  `/var/backups/crm-iseie/` (`…-antes-2.0.0-20260929-*`).
+
+### Lo que queda
+
+1. **/testeo** sigue con el código de antes de la unión: hay que redesplegarlo
+   desde `staging` (y su base puede necesitar migraciones de producción).
+2. **Freno a tutores** puesto (`NO_ESCRIBIR_A_TUTORES`): «Avisar tutor» solo
+   enseña la vista previa. Levantarlo cuando esté arreglado el enlace de
+   contraseña de Brevo.
+3. **Dos pruebas desfasadas** desde antes de la unión: `avisoTutor.test.js`
+   (espera que se envíe con el freno puesto) y `plantillaDelPaso.test.jsx`
+   (busca un texto que ya no existe).
+4. **MCP**: el token de la URL personal queda en el registro de nginx.
+
 ## Correos automáticos: ponerles el mismo formato · TAREA PARA ÁNGEL Y DIEGO
 
 Diego, 28/09: «acomodar los formatos de los correos de los resúmenes y eso,
