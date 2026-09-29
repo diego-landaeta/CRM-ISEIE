@@ -109,6 +109,8 @@ export async function traerCola(opciones: {
   hasta?: string | null; limite?: number; pagina?: number; estado?: string | null;
   busca?: string | null; productoId?: number | null; desde?: string | null;
   productoIds?: string | null;
+  /** «atrasados», «hoy», «manana» o «semana»: lo aplica el servidor con su «hoy». */
+  tramo?: string | null;
 }): Promise<{ filas: PasoEnCola[]; total: number; totalPaginas: number; formaciones: FormacionDeLaLista[] }> {
   const r = await client.get(`/proceso/cola?${conAmbito(opciones)}`);
   if (!r?.success) return { filas: [], total: 0, totalPaginas: 1, formaciones: [] };

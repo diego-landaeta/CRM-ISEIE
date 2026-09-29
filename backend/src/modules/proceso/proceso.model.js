@@ -258,6 +258,8 @@ export async function pasosDeLead(leadId) {
 export async function colaDelDia({
   projectIds, asesoraId, hasta = null, limite = 200, desplazamiento = 0, estado = null,
   busca = null, productoId = null, desde = null,
+  // «atrasados», «hoy», «manana» o «semana»: el tramo de arriba (ver abajo).
+  tramo = null,
   // Varias a la vez: la misma formacion en varios campus (ver
   // `formacionesAgrupadas`).
   productoIds = null,
@@ -278,8 +280,26 @@ export async function colaDelDia({
   if (Array.isArray(projectIds) && projectIds.length) par.push(projectIds.map(Number));
   const pAses = asesoraId ? `AND l.responsable_id = $${i++}` : '';
   if (asesoraId) par.push(asesoraId);
-  const pHasta = hasta ? `$${i++}::date` : 'CURRENT_DATE';
+  // EL TRAMO de arriba («Atrasados», «Para hoy», «Para mañana», «Esta semana»)
+  // lo aplica el SERVIDOR, con su «hoy»: el mismo de los contadores y de
+  // `dias_de_retraso`. Antes lo filtraba la pantalla sobre la página que le
+  // llegaba, y con más de 100 en la cola la primera página eran todo atrasados:
+  // «Para hoy» salía vacío con 14 para hoy (Diego, 29/09: «en ninguno de los
+  // CRM funciona esto en producción»). Una fecha «hasta» puesta a mano manda.
+  const TRAMOS = {
+    atrasados: { hasta: 'CURRENT_DATE - 1', desde: null },
+    hoy: { hasta: 'CURRENT_DATE', desde: 'CURRENT_DATE' },
+    manana: { hasta: 'CURRENT_DATE + 1', desde: 'CURRENT_DATE + 1' },
+    semana: { hasta: 'CURRENT_DATE + 7', desde: null },
+  };
+  const elTramo = TRAMOS[tramo] || null;
+  const pHasta = hasta ? `$${i++}::date` : (elTramo ? elTramo.hasta : 'CURRENT_DATE');
   if (hasta) par.push(hasta);
+  // El «desde» se mira sobre el paso ACTUAL de cada persona (`q.pos = 1`), no en
+  // la lista de pendientes: puesto ahi, a quien va atrasado se le colaba su paso
+  // SIGUIENTE como si fuera de hoy (probado en ISEIE staging: 7 «para hoy» con el
+  // contador en 0). Lo mismo con la fecha «desde» puesta a mano.
+  const pTramoDesde = elTramo?.desde ? `AND q.fecha_prevista >= ${elTramo.desde}` : '';
   // En que estado esta. Los convertidos y los no interesados no entran nunca en
   // la cola --la consulta ya los excluye-- asi que aqui solo valen los cinco de
   // en medio; cualquier otra cosa se ignora en vez de devolver una lista vacia.
@@ -305,7 +325,7 @@ export async function colaDelDia({
   // Desde que dia. El otro extremo ya lo pone el tramo de arriba (`hasta`);
   // con este se puede pedir «del 1 al 15» sin pelearse con el tramo.
   const fechaOk = /^\d{4}-\d{2}-\d{2}$/.test(desde || '');
-  const pDesde = fechaOk ? `AND ls.fecha_prevista >= $${i++}::date` : '';
+  const pDesde = fechaOk ? `AND q.fecha_prevista >= $${i++}::date` : '';
   if (fechaOk) par.push(desde);
 
   // LAS PENDIENTES, una sola vez: la lista y su desplegable de formaciones
@@ -324,7 +344,7 @@ export async function colaDelDia({
           AND l.status NOT IN ('convertido', 'no_interesado')
           ${pEstado}
           AND ${CONTACTOS} < ls.orden
-          ${pProj} ${pAses} ${pBusca} ${pProd} ${pDesde}
+          ${pProj} ${pAses} ${pBusca} ${pProd}
      )`;
 
   if (soloFormaciones) {
@@ -334,7 +354,7 @@ export async function colaDelDia({
               count(DISTINCT q.lead_id)::int AS personas
          FROM pendientes q
          JOIN products p ON p.id = q.producto_interes_id
-        WHERE q.pos = 1
+        WHERE q.pos = 1 ${pDesde} ${pTramoDesde}
         GROUP BY p.nombre
         ORDER BY p.nombre`,
       par);
@@ -375,7 +395,7 @@ export async function colaDelDia({
        LEFT JOIN projects pr ON pr.id = q.project_id
        LEFT JOIN users u ON u.id = q.responsable_id
        LEFT JOIN products p ON p.id = q.producto_interes_id
-      WHERE q.pos = 1
+      WHERE q.pos = 1 ${pDesde} ${pTramoDesde}
       ORDER BY q.fecha_prevista, q.orden, q.lead_id
       LIMIT ${pLimite} OFFSET ${pSalto}`,
     par
