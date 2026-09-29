@@ -116,7 +116,7 @@ export const VERSIONES = [
         "items": [
           {
             "titulo": "El correo y la encuesta",
-            "texto": "Cuando alguien pasa a «No interesado» le llega un correo con la marca de ISEIE desde noresponder@iseie.com y un enlace a una encuesta corta de seis preguntas. Solo llega una vez por persona. Lo que conteste queda en su ficha y su gestora recibe un aviso.",
+            "texto": "Cuando alguien pasa a «No interesado» le llega un correo con la marca de ISEIE desde noresponder@iseie.com y un enlace a una encuesta corta de seis preguntas. También a quien, 7 días después de su primer contacto, no ha comprado (cuenta desde el 29/09). Solo llega una vez por persona. Si pone Regular, Mal o Muy mal a la atención se le pide un comentario, y al final puede dejar los suyos. Lo que conteste queda en su ficha y su gestora recibe un aviso.",
             "roles": [
               "gestor",
               "admin",
@@ -147,7 +147,7 @@ export const VERSIONES = [
           },
           {
             "titulo": "Panel de Feedback",
-            "texto": "En Análisis → Feedback: cuántos correos salieron, cuántos contestaron, los motivos que más se repiten, la nota media de atención de cada gestora y lo que escribieron en «Otro». En «Mes a mes», cada cifra abre la lista de personas.",
+            "texto": "En Análisis → Feedback: cuántos correos salieron, cuántos contestaron, los motivos que más se repiten, la nota media de atención de cada gestora y todo lo que escribieron: en «Otro», el porqué de una nota baja y sus comentarios. En «Mes a mes», cada cifra abre la lista de personas.",
             "roles": [
               "admin",
               "superadmin"
