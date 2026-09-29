@@ -1681,11 +1681,13 @@ merge habría arrastrado 34 commits de `deploy/16sep` que /testeo no tiene.
 5. **Conectores (29/09, en /testeo)**: además del campus, un conector puede ser
    de **una empresa** o de **todo el sistema** (este, solo super admin). Es UNO
    para todos sus campus: cada dato va al campus que diga su campo «Campus» y,
-   si no, al campus por defecto. Y hay un tipo nuevo, **Servidor MCP**: el CRM
-   se conecta a un MCP de fuera con los mismos límites (solo herramientas de
-   solo lectura, https y servidores públicos, auditoría, 20 s, 5 MB, 5000
-   elementos). Para producción: migración **183**. En ISEIE no hay pantalla de
-   Conectores.
+   si no, al campus por defecto. Y el tipo **Servidor MCP · para Claude**: no
+   trae datos, da una URL personal para pegar en Claude (el MCP de Diana), que
+   solo consulta lo de la persona dentro del «Para quién» del conector. URL
+   nueva revoca la anterior; apagar o borrar el conector la corta. El «Para
+   quién» lo exige también el servidor: un admin, solo sus campus, y de toda la
+   empresa solo si está en todos sus campus. Para producción: migraciones
+   **183 y 184**. En ISEIE no hay pantalla de Conectores.
 
 *Asignada a **Diana**; el paso a staging lo hizo Diego (Claude).*
 
