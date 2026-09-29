@@ -191,6 +191,8 @@ export async function cola(req, res, next) {
       productoId: req.query.productoId ? Number(req.query.productoId) : null,
       productoIds: idsDeFormacion(req.query.productoIds),
       desde: /^\d{4}-\d{2}-\d{2}$/.test(req.query.desde || '') ? req.query.desde : null,
+      // El tramo lo aplica el servidor con SU «hoy» (ver colaDelDia).
+      tramo: ['atrasados', 'hoy', 'manana', 'semana'].includes(req.query.tramo) ? req.query.tramo : null,
     };
     // La lista y, a la vez, las formaciones que tiene su gente: con todos los
     // filtros MENOS el de formacion, para que elegir una no borre las demas.

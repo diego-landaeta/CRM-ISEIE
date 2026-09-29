@@ -258,6 +258,8 @@ export async function pasosDeLead(leadId) {
 export async function colaDelDia({
   projectIds, asesoraId, hasta = null, limite = 200, desplazamiento = 0, estado = null,
   busca = null, productoId = null, desde = null,
+  // «atrasados», «hoy», «manana» o «semana»: el tramo de arriba (ver abajo).
+  tramo = null,
   // Varias a la vez: la misma formacion en varios campus (ver
   // `formacionesAgrupadas`).
   productoIds = null,
@@ -278,8 +280,22 @@ export async function colaDelDia({
   if (Array.isArray(projectIds) && projectIds.length) par.push(projectIds.map(Number));
   const pAses = asesoraId ? `AND l.responsable_id = $${i++}` : '';
   if (asesoraId) par.push(asesoraId);
-  const pHasta = hasta ? `$${i++}::date` : 'CURRENT_DATE';
+  // EL TRAMO de arriba («Atrasados», «Para hoy», «Para mañana», «Esta semana»)
+  // lo aplica el SERVIDOR, con su «hoy»: el mismo de los contadores y de
+  // `dias_de_retraso`. Antes lo filtraba la pantalla sobre la página que le
+  // llegaba, y con más de 100 en la cola la primera página eran todo atrasados:
+  // «Para hoy» salía vacío con 14 para hoy (Diego, 29/09: «en ninguno de los
+  // CRM funciona esto en producción»). Una fecha «hasta» puesta a mano manda.
+  const TRAMOS = {
+    atrasados: { hasta: 'CURRENT_DATE - 1', desde: null },
+    hoy: { hasta: 'CURRENT_DATE', desde: 'CURRENT_DATE' },
+    manana: { hasta: 'CURRENT_DATE + 1', desde: 'CURRENT_DATE + 1' },
+    semana: { hasta: 'CURRENT_DATE + 7', desde: null },
+  };
+  const elTramo = TRAMOS[tramo] || null;
+  const pHasta = hasta ? `$${i++}::date` : (elTramo ? elTramo.hasta : 'CURRENT_DATE');
   if (hasta) par.push(hasta);
+  const pTramoDesde = elTramo?.desde ? `AND ls.fecha_prevista >= ${elTramo.desde}` : '';
   // En que estado esta. Los convertidos y los no interesados no entran nunca en
   // la cola --la consulta ya los excluye-- asi que aqui solo valen los cinco de
   // en medio; cualquier otra cosa se ignora en vez de devolver una lista vacia.
@@ -324,7 +340,7 @@ export async function colaDelDia({
           AND l.status NOT IN ('convertido', 'no_interesado')
           ${pEstado}
           AND ${CONTACTOS} < ls.orden
-          ${pProj} ${pAses} ${pBusca} ${pProd} ${pDesde}
+          ${pProj} ${pAses} ${pBusca} ${pProd} ${pDesde} ${pTramoDesde}
      )`;
 
   if (soloFormaciones) {
