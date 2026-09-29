@@ -1613,8 +1613,10 @@ Petición del equipo que Diego pasa el 29/09 (captura de WhatsApp de la encuesta
    comentario».
 2. «Y un texto al final de: deja tus comentarios».
 
-**Anotada, no empezada.** Comprobado en `staging`: hoy no hay ninguna de las
-dos. Solo se puede escribir al elegir «Otro motivo» en la 1 y «Otra cosa» en la 5.
+**Hecha el 29/09 en los dos staging** (/testeo y crm.iseie.com/staging; no en
+producción). Probada de punta a punta en los dos: se guarda, sale en el
+historial, en el aviso a la gestora y en el panel. Antes solo se podía escribir
+al elegir «Otro motivo» en la 1 y «Otra cosa» en la 5.
 
 - **La 2 («¿Cómo te atendió el asesor?»)**: con **3 · Regular, 2 · Mal o
   1 · Muy mal** aparece debajo un recuadro **«Deja tu comentario»**, el mismo
