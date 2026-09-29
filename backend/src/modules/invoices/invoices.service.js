@@ -792,6 +792,64 @@ export async function generarFacturaDePago(projectId, paymentId, userId, { forza
   return inv;
 }
 
+/*
+  «COBRADA» EN UNA PROFORMA.
+
+  Yolanda, 29/09: tenia dos proformas cobradas y no encontraba como pasarlas a
+  pagadas. El boton «Pagada» no sale en las proformas, y esta bien que no salga:
+  una proforma no es una factura, y marcarla pagada la dejaria cobrada sin
+  factura. Lo que toca es apuntar el cobro en la venta y generar la factura
+  desde la cola, que convierte la proforma --mismo numero-- en la factura. Eran
+  dos pantallas y nada lo decia.
+
+  Esto hace los dos pasos de una vez, por los mismos caminos: el cobro entra por
+  conversionService.addPayment (comision, anti-duplicado, tope del pendiente) y
+  la factura sale de emitirFacturaDePago, como desde la cola. No se salta el
+  orden de la cola porque no gasta numero: el de la proforma ya estaba puesto.
+*/
+export async function cobrarProforma(invoiceId, { importe, fecha, metodo, notas }, user) {
+  const prof = await model.findById(invoiceId);
+  if (!prof) throw new AppError('Esa proforma no existe', 404, 'NOT_FOUND');
+  if (prof.tipo !== 'proforma') {
+    throw new AppError('Solo las proformas se cobran así; una factura se marca con «Pagada».', 400, 'NOT_PROFORMA');
+  }
+  if (prof.estado === 'cancelada') throw new AppError('Esa proforma está cancelada.', 400, 'CANCELADA');
+  if (prof.estado === 'borrador' || prof.numero == null) {
+    throw new AppError('Esta proforma espera aprobación y aún no tiene número: apruébala primero.', 400, 'SIN_NUMERO');
+  }
+  if (!prof.conversion_id) {
+    throw new AppError('Asóciala antes a la venta del cliente («Asociar a venta»): el cobro se apunta en la venta.',
+      400, 'SIN_VENTA');
+  }
+  // Los mismos que emiten desde la cola: quien lleva la facturacion.
+  if (user.role !== 'superadmin' && !(await model.esFacturaManager(user.userId))) {
+    throw new AppError('Solo quien gestiona la facturación puede pasar una proforma a factura.', 403, 'FORBIDDEN');
+  }
+  if (user.role === 'gestor' && !(await model.esProformaDe(user.userId, invoiceId))) {
+    throw new AppError('Solo puedes cobrar tus propias proformas.', 403, 'FORBIDDEN');
+  }
+  const motivo = await model.motivoParaNoCobrarProforma(prof, { importe, fecha });
+  if (motivo) throw new AppError(motivo.texto, 409, motivo.code);
+
+  // Import dinamico: conversion.service ya importa este modulo de la misma forma.
+  // Aqui addPayment ademas intenta facturar solo (en ISEIE autoInvoice no esta
+  // frenado). Si llega antes, la llamada de abajo encuentra la factura por el
+  // payment_id y devuelve esa misma: no sale otra.
+  const conversionService = await import('../conversions/conversion.service.js');
+  const { payment } = await conversionService.addPayment(prof.conversion_id, { importe, fecha, metodo, notas });
+  const inv = await model.emitirFacturaDePago(
+    prof.conversion_id, { paymentId: payment.id, importe: Number(payment.importe) }, user.userId);
+  if (!inv || inv.id !== prof.id) {
+    logger.error({ invoiceId, paymentId: payment.id, devuelta: inv?.id || null },
+      'proforma cobrada pero no convertida');
+    throw new AppError('El cobro quedó apuntado en la venta, pero la proforma no pasó a factura. '
+      + 'Genérala desde la cola de facturación.', 409, 'NO_CONVERTIDA');
+  }
+  logger.info({ invoiceId, codigo: inv.codigo, estado: inv.estado, paymentId: payment.id, userId: user.userId },
+    'proforma cobrada: ya es factura');
+  return inv;
+}
+
 // Emite de golpe, en orden de fecha, todo lo que quede en la cola hasta esa fecha.
 export async function emitirColaHasta(projectId, hasta, userId) {
   const pendientes = await model.listPagosSinFactura(projectId, hasta);

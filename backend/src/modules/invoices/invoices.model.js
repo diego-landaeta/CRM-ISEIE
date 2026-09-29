@@ -431,6 +431,8 @@ export async function list({ projectId, issuerId, estado, search, from, to, tipo
             u.nombre AS gestora_nombre,
             ${CLASE_FACTURA} AS clase,
             cv.fecha_conversion AS fecha_de_la_venta,
+            -- Lo que falta por cobrar de la venta: el importe que propone «Cobrada».
+            (cv.importe_total - COALESCE(cv.importe_pagado, 0)) AS pendiente_de_la_venta,
             ${SOSPECHA_DUPLICADA} AS sospecha_duplicada
      FROM invoices i
      LEFT JOIN projects p ON p.id = i.project_id
@@ -742,6 +744,13 @@ function telefonoClienteFactura(conv) {
 // PROFORMA → FACTURA: convierte una proforma (número fiscal ya reservado) en
 // factura definitiva con ESE MISMO número, por el TOTAL de la conversión. Así el
 // correlativo fiscal queda continuo (el número reservado acaba siendo factura).
+//
+// Y CONSERVA SU FECHA. Antes tomaba la del cobro, y eso descolocaba la serie:
+// la 2026/0065 de ICTESS es una proforma del 7/8; cobrada a finales de
+// septiembre habria salido fechada detras de la 0066 a la 0085, con un numero
+// menor y una fecha posterior. El numero se le dio el dia de la proforma, y
+// numero y fecha van juntos. El cobro guarda su propia fecha en fecha_pago.
+// Diego, 29/09, al pedir el boton «Cobrada».
 async function _convertirProformaEnFactura(prof, conv, paymentId, fechaPago) {
   const total = Number(conv.importe_total) || 0;
   const pagado = Number(conv.importe_pagado) || 0;
@@ -758,7 +767,6 @@ async function _convertirProformaEnFactura(prof, conv, paymentId, fechaPago) {
   const { rows } = await query(
     `UPDATE invoices SET
        tipo = 'normal', estado = $2::text,
-       fecha_emision = COALESCE($3::date, fecha_emision),
        fecha_pago = CASE WHEN $2::text = 'pagada' THEN $3::date ELSE NULL END,
        payment_id = COALESCE(payment_id, $4::int),
        items = $5::jsonb, base_imponible = $6::numeric, iva_pct = $7::numeric, iva_importe = $8::numeric,
@@ -772,6 +780,76 @@ async function _convertirProformaEnFactura(prof, conv, paymentId, fechaPago) {
     [prof.id, saldada ? 'pagada' : 'emitida', fechaPago, paymentId, items, base, ivaPct, ivaImp, total,
      ivaPct === 0 ? 'Operación exenta de IVA conforme a la normativa aplicable.' : null]);
   return rows[0];
+}
+
+// La proforma de una venta que pasa a factura cuando se cobra: la ultima viva
+// y ya numerada.
+async function proformaQueSeConvierte(conversionId) {
+  const { rows } = await query(
+    `SELECT * FROM invoices
+      WHERE conversion_id = $1 AND tipo = 'proforma'
+        AND estado NOT IN ('cancelada', 'borrador') AND numero IS NOT NULL
+      ORDER BY id DESC LIMIT 1`,
+    [conversionId]);
+  return rows[0] || null;
+}
+
+/*
+  ¿SE PUEDE COBRAR ESTA PROFORMA?
+
+  El boton «Cobrada» apunta el cobro en la venta y luego convierte la proforma
+  por el mismo camino que la cola (emitirFacturaDePago). Ese camino tiene
+  salidas en las que el cobro se queda apuntado pero la proforma NO pasa a
+  factura. Se miran antes de apuntar nada, para no dejar un cobro a medias.
+  Devuelve null si se puede, o { code, texto } si no.
+*/
+export async function motivoParaNoCobrarProforma(prof, { importe, fecha }) {
+  const vigente = await proformaQueSeConvierte(prof.conversion_id);
+  if (!vigente || vigente.id !== prof.id) {
+    return { code: 'OTRA_PROFORMA',
+      texto: `La venta tiene otra proforma más reciente${vigente?.codigo ? ` (${vigente.codigo})` : ''}: es esa la que pasa a factura.` };
+  }
+  // Una factura de la venta por el mismo importe y sin cobro: el cobro se le
+  // engancharia a ella y la proforma se quedaria como estaba.
+  const { rows: huerfana } = await query(
+    `SELECT codigo FROM invoices
+      WHERE conversion_id = $1 AND payment_id IS NULL
+        AND tipo = 'normal' AND estado <> 'cancelada'
+        AND ABS(total - $2::numeric) < 0.01
+      LIMIT 1`,
+    [prof.conversion_id, importe]);
+  if (huerfana[0]) {
+    return { code: 'YA_HAY_FACTURA',
+      texto: `La venta ya tiene la factura ${huerfana[0].codigo || ''} por ese importe: el cobro va con ella, no con la proforma.` };
+  }
+  // Cobros de antes de que la sociedad empezara a facturar no llevan factura.
+  const { rows: antes } = await query(
+    `SELECT to_char(MIN(f.fecha_emision), 'DD/MM/YYYY') AS desde
+       FROM projects pr
+       JOIN invoices f ON f.issuer_id = pr.sociedad_emisora_id
+         AND f.tipo <> 'proforma' AND f.numero IS NOT NULL
+      WHERE pr.id = $1
+      GROUP BY pr.id
+     HAVING COALESCE($2::date, CURRENT_DATE) < MIN(f.fecha_emision)`,
+    [prof.project_id, fecha || null]);
+  if (antes[0]) {
+    return { code: 'ANTES_DEL_ARRANQUE',
+      texto: `Esa fecha es anterior a la primera factura de la sociedad (${antes[0].desde}): ese cobro no lleva factura.` };
+  }
+  return null;
+}
+
+// ¿Es de esta gestora? La hizo ella, o es de su venta o de su cliente: lo mismo
+// que le deja verla en el listado, mas la que escribio.
+export async function esProformaDe(userId, invoiceId) {
+  const { rows } = await query(
+    `SELECT 1 FROM invoices i
+       LEFT JOIN conversions cv ON cv.id = i.conversion_id
+       LEFT JOIN leads l ON l.id = COALESCE(i.lead_id, cv.lead_id)
+      WHERE i.id = $1
+        AND (i.created_by = $2 OR COALESCE(cv.vendedora_id, l.responsable_id) = $2)`,
+    [invoiceId, userId]);
+  return rows.length > 0;
 }
 
 // FACTURA POR PAGO (spec owner 2026-07-16): cada abono genera su propia factura
@@ -850,10 +928,10 @@ export async function emitirFacturaDePago(conversionId, { paymentId, importe, sa
 
   // ¿La conversión tiene una PROFORMA? → convertirla en factura (por el total, con
   // su número reservado). El correlativo fiscal queda continuo.
-  const { rows: prof } = await query(
-    `SELECT * FROM invoices WHERE conversion_id = $1 AND tipo = 'proforma' AND estado <> 'cancelada' ORDER BY id DESC LIMIT 1`,
-    [conversionId]);
-  if (prof[0]) return await _convertirProformaEnFactura(prof[0], conv, paymentId, fechaPago);
+  // Solo una proforma CON numero: la que una gestora deja esperando aprobacion es
+  // un borrador sin numero, y convertirla daria una factura sin numero.
+  const prof = await proformaQueSeConvierte(conversionId);
+  if (prof) return await _convertirProformaEnFactura(prof, conv, paymentId, fechaPago);
 
   // ¿Ya hay una factura por el TOTAL de la conversión (ex-proforma o completa)?
   // No se crea otra por pago: solo se marca pagada cuando la venta queda saldada.
