@@ -116,3 +116,60 @@ export async function servir(req, res, next) {
     return next(err);
   }
 }
+
+/*
+  LA INSIGNIA: el logo solo, sobre el fondo de su marca, para la fila de cada
+  empresa en los resúmenes al equipo.
+
+  Diego, 29/09, sobre el resumen del día de ISEIE: «pusiste el logo y sello, pon
+  el logo en ambos». Arriba iba la cabecera con el logo y, en la fila de la
+  empresa, la imagen de FACTURACIÓN de la sociedad, que en ISEIE es el sello.
+
+  Se dibuja por lo mismo que la cabecera: el logo de ISEIE es blanco, pensado
+  para ir sobre el azul, y pegado tal cual en un correo blanco no se ve. Así
+  sale sobre su color, opaco, igual en el tema claro y en el oscuro.
+*/
+// Al doble de como se ve (40 px de alto).
+const INSIGNIA_ALTO = 80;
+const INSIGNIA_MARGEN = 14;
+const INSIGNIA_LOGO_ANCHO = 360;
+
+export async function dibujarInsignia(marca) {
+  const original = await bajarLogo(marca.logo_url);
+  if (!original) return null;
+  const fondo = hex(marca.color_cabecera) || '#ffffff';
+  const logo = await sharp(original)
+    .resize({ width: INSIGNIA_LOGO_ANCHO, height: INSIGNIA_ALTO - 2 * INSIGNIA_MARGEN, fit: 'inside' })
+    .png().toBuffer();
+  const { width, height } = await sharp(logo).metadata();
+  return liso(width + 2 * INSIGNIA_MARGEN, INSIGNIA_ALTO, fondo)
+    .composite([{ input: logo, top: Math.round((INSIGNIA_ALTO - height) / 2), left: INSIGNIA_MARGEN }])
+    .removeAlpha().png().toBuffer();
+}
+
+/** La insignia de esa marca, de memoria o recién dibujada. Sin logo: null. */
+export async function insigniaDe(projectId) {
+  const marca = await marcaDe(projectId);
+  if (!marca?.logo_url) return null;
+  const clave = `insignia:${marca.id}:${versionDe({ ...marca, proyecto: marca.nombre })}`;
+  if (!hechas.has(clave)) {
+    if (hechas.size >= MAX_EN_MEMORIA) hechas.delete(hechas.keys().next().value);
+    hechas.set(clave, dibujarInsignia(marca).catch((err) => { hechas.delete(clave); throw err; }));
+  }
+  return hechas.get(clave);
+}
+
+/** GET /api/f/insignia/:projectId — pública, como la cabecera. */
+export async function servirInsignia(req, res, next) {
+  try {
+    const id = Number.parseInt(req.params.projectId, 10);
+    if (!Number.isInteger(id) || id <= 0) return res.status(404).end();
+    const png = await insigniaDe(id);
+    if (!png) return res.status(404).end();
+    res.set('Content-Type', 'image/png');
+    res.set('Cache-Control', 'public, max-age=86400');
+    return res.send(png);
+  } catch (err) {
+    return next(err);
+  }
+}

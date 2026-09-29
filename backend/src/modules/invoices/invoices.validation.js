@@ -108,3 +108,11 @@ export const updateConfigSchema = z.object({
   serieDefault: z.string().max(10).optional(),
   metodoDefault: z.enum(['transferencia', 'tarjeta', 'tarjeta_stripe', 'efectivo', 'bizum', 'paypal', 'fraccionado', 'otro']).optional(),
 });
+
+// «Cobrada» en una proforma: el cobro que se apunta en la venta.
+export const cobrarProformaSchema = z.object({
+  importe: z.coerce.number().positive('El importe tiene que ser mayor que 0'),
+  fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha: YYYY-MM-DD'),
+  metodo: z.enum(['transferencia', 'tarjeta', 'tarjeta_stripe', 'efectivo', 'bizum', 'paypal', 'otro']).optional().nullable(),
+  notas: z.string().max(500).optional().nullable(),
+});

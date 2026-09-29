@@ -2,7 +2,7 @@ import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { verifyToken } from '../../shared/middleware/auth.js';
 import * as ctrl from './feedback.controller.js';
-import { servir as servirCabecera } from './cabecera.js';
+import { servir as servirCabecera, servirInsignia } from './cabecera.js';
 
 // Con sesión: el panel, su lista y el correo de cada ficha.
 const router = Router();
@@ -24,6 +24,8 @@ const publicRouter = Router();
 // guía por el Content-Type. La de «.png» se queda por los correos ya enviados.
 publicRouter.get('/cabecera/:projectId', servirCabecera);
 publicRouter.get('/cabecera/:projectId.png', servirCabecera);
+// El logo de cada empresa en los resúmenes al equipo, dibujado igual.
+publicRouter.get('/insignia/:projectId', servirInsignia);
 publicRouter.use(rateLimit({ windowMs: 60 * 1000, max: 30, standardHeaders: true, legacyHeaders: false }));
 publicRouter.get('/:token', ctrl.encuesta);
 publicRouter.post('/:token', ctrl.responder);
