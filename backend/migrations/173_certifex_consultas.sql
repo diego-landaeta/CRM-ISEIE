@@ -45,3 +45,17 @@ CREATE TABLE IF NOT EXISTS certifex_consultas (
 );
 
 CREATE INDEX IF NOT EXISTS idx_certifex_consultas_estado ON certifex_consultas (estado, recibida_en DESC);
+
+-- LA TABLA ES DEL USUARIO DE LA APP, no de quien aplica la migración. Aplicada como
+-- `postgres` (el despliegue lo hace así), la tabla era de postgres y la API recibía
+-- «permission denied for table certifex_consultas» (/testeo e ISEIE staging, 30/09).
+-- Se le da el mismo dueño que `leads`, sea quien sea en cada servidor.
+DO $$
+DECLARE dueno text;
+BEGIN
+  SELECT tableowner INTO dueno FROM pg_tables WHERE schemaname = 'public' AND tablename = 'leads';
+  IF dueno IS NOT NULL THEN
+    EXECUTE format('ALTER TABLE certifex_consultas OWNER TO %I', dueno);
+    EXECUTE format('ALTER SEQUENCE certifex_consultas_id_seq OWNER TO %I', dueno);
+  END IF;
+END $$;
