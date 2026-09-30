@@ -155,9 +155,27 @@ function wrapToLines(font, text, size, maxWidth) {
 }
 
 // Genera PDF de factura usando pdf-lib
+/**
+ * El banco al que se paga, para las facturas por transferencia (Carlos, 30/09:
+ * «debe de aparecer el IBAN y abajo el código BIC/SWIFT»). Se lee de la sociedad
+ * que emite AHORA y no de la copia guardada en la factura: es a donde hay que
+ * pagar, y las facturas de antes no guardaban el BIC. Sin nada, null.
+ */
+async function datosDelBanco(inv) {
+  let iss = null;
+  if (inv.issuer_id) {
+    const { rows } = await query('SELECT iban, bic FROM invoice_issuers WHERE id = $1', [inv.issuer_id]);
+    iss = rows[0] || null;
+  }
+  const iban = String(iss?.iban || inv.issuer_iban || '').trim();
+  const bic = String(iss?.bic || '').trim();
+  return iban || bic ? { iban, bic } : null;
+}
+
 export async function generatePDF(invoiceId, { preliminar = false, vistaGestor = false, enEuros = false } = {}) {
   const inv = await model.findById(invoiceId);
   if (!inv) throw new Error('Factura no encontrada');
+  inv.banco = inv.metodo_pago === 'transferencia' ? await datosDelBanco(inv) : null;
   // COPIA DE GESTIÓN de un cobro por Stripe: el alumno recibe la factura por el
   // BRUTO (lo que pagó) y gestión necesita el NETO liquidado (bruto − comisión).
   // Se sustituyen los importes solo para este PDF; en la base de datos no se toca
@@ -392,6 +410,9 @@ export async function generatePDF(invoiceId, { preliminar = false, vistaGestor =
   };
   page.drawText(`Forma de pago: ${metodoLabels[inv.metodo_pago] || inv.metodo_pago || '—'}`,
     { x: left, y, size: 10, font: bold, color: black });
+  // Por transferencia: a dónde. El IBAN y, debajo, el BIC/SWIFT.
+  if (inv.banco?.iban) { y -= 14; page.drawText(`IBAN: ${inv.banco.iban}`, { x: left, y, size: 10, font, color: black }); }
+  if (inv.banco?.bic) { y -= 14; page.drawText(`BIC/SWIFT: ${inv.banco.bic}`, { x: left, y, size: 10, font, color: black }); }
 
   // Sello del emisor al pie (abajo-derecha) — SOLO si logo_en_pie (p.ej. ISEIE).
   if (logoImg && logoEnPie) {
@@ -602,6 +623,9 @@ async function renderFromTemplate({ pdfDoc, page, font, bold, inv, layout }) {
         case 'pie':
           drawLines(b, [
             { text: `Forma de pago: ${METODO_LABELS[inv.metodo_pago] || inv.metodo_pago || '—'}`, bold: true },
+            // Por transferencia: el IBAN y, debajo, el BIC/SWIFT (ver datosDelBanco).
+            ...(inv.banco?.iban ? [{ text: `IBAN: ${inv.banco.iban}` }] : []),
+            ...(inv.banco?.bic ? [{ text: `BIC/SWIFT: ${inv.banco.bic}` }] : []),
             ...String(inv.pie_pago || '').split('\n').map((t) => ({ text: t })),
           ]);
           break;

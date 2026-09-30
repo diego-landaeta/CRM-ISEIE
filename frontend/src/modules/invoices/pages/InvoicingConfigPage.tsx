@@ -77,7 +77,7 @@ export default function InvoicingConfigPage() {
         razonSocial: editingIssuer.razon_social, nif: editingIssuer.nif,
         direccion: editingIssuer.direccion, ciudad: editingIssuer.ciudad, cp: editingIssuer.cp,
         pais: editingIssuer.pais || 'España', email: editingIssuer.email, telefono: editingIssuer.telefono,
-        iban: editingIssuer.iban, pieDefault: editingIssuer.pie_default, esDefault: editingIssuer.es_default,
+        iban: editingIssuer.iban, bic: editingIssuer.bic, pieDefault: editingIssuer.pie_default, esDefault: editingIssuer.es_default,
         serie: editingIssuer.serie, logoUrl: editingIssuer.logo_url, projectId: pid,
       };
       const res = editingIssuer.id
@@ -262,6 +262,8 @@ export default function InvoicingConfigPage() {
               <input placeholder="Email" value={editingIssuer.email || ''} onChange={e => setEditingIssuer({ ...editingIssuer, email: e.target.value })} className="h-9 px-2 rounded border border-border bg-background text-sm" />
               <input placeholder="Teléfono" value={editingIssuer.telefono || ''} onChange={e => setEditingIssuer({ ...editingIssuer, telefono: e.target.value })} className="h-9 px-2 rounded border border-border bg-background text-sm" />
               <input placeholder="IBAN" value={editingIssuer.iban || ''} onChange={e => setEditingIssuer({ ...editingIssuer, iban: e.target.value })} className="h-9 px-2 rounded border border-border bg-background text-sm" />
+              {/* Sale debajo del IBAN en las facturas por transferencia (Carlos, 30/09). */}
+              <input placeholder="BIC/SWIFT" value={editingIssuer.bic || ''} onChange={e => setEditingIssuer({ ...editingIssuer, bic: e.target.value.toUpperCase() })} className="h-9 px-2 rounded border border-border bg-background text-sm font-mono" />
               <input placeholder="Logo (URL de la imagen)" value={editingIssuer.logo_url || ''} onChange={e => { setEditingIssuer({ ...editingIssuer, logo_url: e.target.value }); setLogoFile(null); }} className="h-9 px-2 rounded border border-border bg-background text-sm col-span-2" />
             </div>
             {/* Numeración propia de esta empresa emisora */}

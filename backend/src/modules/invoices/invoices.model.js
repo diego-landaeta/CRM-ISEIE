@@ -1369,11 +1369,11 @@ export async function getDefaultIssuer(projectId) {
 export async function createIssuer(d, userId) {
   const { rows } = await query(
     `INSERT INTO invoice_issuers
-       (project_id, razon_social, nif, direccion, ciudad, cp, pais, email, telefono, iban, logo_url, pie_default, es_default, serie, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
+       (project_id, razon_social, nif, direccion, ciudad, cp, pais, email, telefono, iban, logo_url, pie_default, es_default, serie, created_by, bic)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
     [d.projectId || null, d.razonSocial, d.nif, d.direccion || null, d.ciudad || null, d.cp || null,
      d.pais || 'España', d.email || null, d.telefono || null, d.iban || null, d.logoUrl || null,
-     d.pieDefault || null, !!d.esDefault, (d.serie && d.serie.trim()) || null, userId]
+     d.pieDefault || null, !!d.esDefault, (d.serie && d.serie.trim()) || null, userId, (d.bic && d.bic.trim()) || null]
   );
   return rows[0];
 }
@@ -1382,7 +1382,7 @@ export async function updateIssuer(id, d) {
   // Update parcial: solo toca los campos presentes en `d` (no pisa el resto con null).
   const COLS = {
     razonSocial: 'razon_social', nif: 'nif', direccion: 'direccion', ciudad: 'ciudad',
-    cp: 'cp', pais: 'pais', email: 'email', telefono: 'telefono', iban: 'iban',
+    cp: 'cp', pais: 'pais', email: 'email', telefono: 'telefono', iban: 'iban', bic: 'bic',
     logoUrl: 'logo_url', logoKey: 'logo_key', pieDefault: 'pie_default',
     esDefault: 'es_default', activo: 'activo', serie: 'serie',
   };
