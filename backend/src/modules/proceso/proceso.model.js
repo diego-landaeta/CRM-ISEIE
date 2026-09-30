@@ -1,5 +1,6 @@
 import { query } from '../../shared/config/db.js';
 import { PASO_CERRADO } from '../../shared/utils/pasoCerrado.js';
+import { EN_EL_PROCESO } from '../../shared/utils/enElProceso.js';
 import { comoLista } from '../../shared/utils/ambito.js';
 /*
   LAS PLAZAS NO SE CUENTAN AQUI, y antes si.
@@ -197,6 +198,8 @@ export async function planificarPasosDeLead(leadId) {
        JOIN commercial_steps s ON s.project_id = l.project_id
       WHERE l.id = $1
         AND l.deleted_at IS NULL
+        -- Solo quien entro desde el inicio del proceso (ver enElProceso.js).
+        AND ${EN_EL_PROCESO('l')}
         AND s.activo = true
         AND s.es_seguimiento = false
      ON CONFLICT (lead_id, clave) DO NOTHING
@@ -224,6 +227,9 @@ export async function pasosDeLead(leadId) {
        JOIN leads l ON l.id = ls.lead_id
        LEFT JOIN commercial_steps s ON s.id = ls.step_id
       WHERE ls.lead_id = $1
+        -- Los de antes del proceso no tienen pasos que enseñar, aunque les
+        -- quede agenda escrita de antes (ver enElProceso.js).
+        AND ${EN_EL_PROCESO('l')}
       ORDER BY ls.orden, ls.id`,
     [leadId]
   );
@@ -343,6 +349,7 @@ export async function colaDelDia({
           AND ls.estado = 'pendiente'
           AND ls.fecha_prevista <= ${pHasta}
           AND l.status NOT IN ('convertido', 'no_interesado')
+          AND ${EN_EL_PROCESO('l')}
           ${pEstado}
           AND NOT ${PASO_CERRADO('ls')}
           ${pProj} ${pAses} ${pBusca} ${pProd}
@@ -440,6 +447,7 @@ export async function resumenDeLaCola({ projectIds, asesoraId }) {
          JOIN leads l ON l.id = ls.lead_id
         WHERE l.deleted_at IS NULL AND ls.estado = 'pendiente'
           AND l.status NOT IN ('convertido', 'no_interesado')
+          AND ${EN_EL_PROCESO('l')}
           AND NOT ${PASO_CERRADO('ls')}
           ${pProj} ${pAses}
      )
