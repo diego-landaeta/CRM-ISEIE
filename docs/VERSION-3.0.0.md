@@ -17,9 +17,13 @@ En MultiCRM está en producción desde el 29/09. **ISEIE no tiene ni Conectores 
 - los módulos `connectors` y `mcp` del backend, con las migraciones 182–185 renumeradas a la serie de ISEIE;
 - las páginas del frontal y la sección del menú.
 
+## También el 30/09
+
+- **Ranking de gestoras por lo facturado.** «Cómo voy», el podio y los correos miden a las gestoras por el total de las facturas emitidas en el periodo, IVA incluido. Los abonos restan y las ventas compartidas se reparten. Antes se medía por número de ventas. PR #84.
+
 ## El día que se saque
 
 1. **Decidir** si la 3.0.0 de ISEIE espera a tener Conexión o sale con lo de arriba.
-2. **Fusionar en `main`** #81 y #82. Hasta entonces producción va por delante de `main`: **no subir producción desde `main`**.
+2. **Fusionar en `main`** #81, #82 y #84. Hasta entonces producción va por delante de `main`: **no subir producción desde `main`**.
 3. **Novedades.** Añadir la entrada `3.0.0` en `backend/src/modules/novedades/versiones.js`. Con `NOVEDADES_AUTO=1` el correo al equipo sale solo al arrancar.
 4. **Etiqueta y release** `v3.0.0`.
