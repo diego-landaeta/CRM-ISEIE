@@ -578,7 +578,9 @@ async function renderFromTemplate({ pdfDoc, page, font, bold, inv, layout }) {
             { text: [inv.issuer_cp, inv.issuer_ciudad].filter(Boolean).join(' ') + (inv.issuer_pais ? `, ${inv.issuer_pais}` : '') },
             { text: inv.issuer_email },
             { text: inv.issuer_telefono ? `Tel: ${inv.issuer_telefono}` : '' },
-            { text: inv.issuer_iban ? `IBAN: ${inv.issuer_iban}` : '' },
+            // El IBAN ya no va aquí: sale debajo de la forma de pago, y solo en las
+            // facturas por transferencia (Carlos, 30/09). Hasta hoy la sociedad no
+            // tenía IBAN, así que esta línea nunca se había visto.
           ]);
           break;
         case 'cliente':
