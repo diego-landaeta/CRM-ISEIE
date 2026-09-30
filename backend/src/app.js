@@ -52,6 +52,7 @@ import procesoModule from './modules/proceso/index.js';
 // «¿Por que has desistido?» (#169) y su panel (#170).
 import feedbackModule from './modules/feedback/index.js';
 import novedadesModule from './modules/novedades/index.js';
+import mcpModule from './modules/mcp/index.js';
 import { startFeedbackDia7Scheduler } from './jobs/feedbackDia7Scheduler.js';
 import { startNovedadesScheduler } from './jobs/novedadesScheduler.js';
 import convocatoriasModule from './modules/convocatorias/index.js';
@@ -258,6 +259,8 @@ const MODULES = [
   feedbackModule,
   novedadesModule,
   convocatoriasModule,
+  // Conexion de Claude por MCP: solo consulta, con token personal (como MultiCRM).
+  mcpModule,
 ];
 
 for (const mod of MODULES) {

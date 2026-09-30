@@ -12,7 +12,7 @@ import { AppError } from '../../shared/utils/AppError.js';
 // Soporta:
 //   - mapping plano: { nombre: 'name' } o { nombre: { source: 'name', transform: 'trim' } }
 //   - mapping a custom_fields: { 'custom_fields.acf_field': 'acf.mi_campo' }
-//   - mapping a array anidado (modulos): { _modules: { source: 'acf.modulos[*]', subfields: { titulo: 'titulo', horas: 'horas' } } }
+//   - mapping a array anidado (módulos): { _modules: { source: 'acf.modulos[*]', subfields: { titulo: 'titulo', horas: 'horas' } } }
 function applyMapping(item, mapping) {
   const out = { custom_fields: {} };
   for (const [crmField, def] of Object.entries(mapping || {})) {
@@ -26,14 +26,14 @@ function applyMapping(item, mapping) {
     }
     if (value === undefined || value === null) continue;
 
-    // custom_fields.X -> va a out.custom_fields[X]
+    // custom_fields.X → va a out.custom_fields[X]
     if (crmField.startsWith('custom_fields.')) {
       const fieldName = crmField.slice('custom_fields.'.length);
       out.custom_fields[fieldName] = value;
       continue;
     }
 
-    // _modules -> array de subitems con subfields mapeados
+    // _modules → array de subitems con subfields mapeados
     if (crmField === '_modules' && Array.isArray(value)) {
       out._modules = value.map(sub => {
         const subItem = {};
@@ -54,7 +54,7 @@ function applyMapping(item, mapping) {
   return out;
 }
 
-// Resuelve categoria por id numerico o por nombre (case-insensitive)
+// Resuelve categoría por id numérico o por nombre (case-insensitive)
 async function resolveCategoryId(projectId, value) {
   if (!value) return null;
   if (/^\d+$/.test(String(value))) return parseInt(value);
@@ -86,7 +86,12 @@ async function upsertProduct(projectId, mapped, originalItem) {
     nombre: mapped.nombre,
     descripcion: mapped.descripcion || null,
     precio: mapped.precio !== undefined ? parseFloat(mapped.precio) || null : null,
-    moneda: mapped.moneda || null,
+    // `|| null` no vale aqui: `products.moneda` es NOT NULL con DEFAULT 'EUR'.
+    // Mandando null explicito, Postgres NO aplica el defecto y revienta — asi
+    // que CUALQUIER importacion que no mapeara la moneda fallaba en todos sus
+    // elementos, y el producto de WooCommerce no la trae. Se cae al defecto de
+    // la columna, que es el que ya usa el resto del CRM.
+    moneda: mapped.moneda || 'EUR',
     sku: sku,
     duracion: mapped.duracion || null,
     url_info: mapped.url_info || null,
@@ -117,13 +122,13 @@ async function upsertProduct(projectId, mapped, originalItem) {
   return { action: 'created', id: ins.rows[0].id };
 }
 
-// Inserta modulos del producto si el mapping incluye `_modules` (array).
+// Inserta módulos del producto si el mapping incluye `_modules` (array)
 async function upsertModules(productId, mappedModules) {
   if (!Array.isArray(mappedModules) || !mappedModules.length) return 0;
   await query(`DELETE FROM product_modules WHERE product_id = $1`, [productId]);
   for (let i = 0; i < mappedModules.length; i++) {
     const m = mappedModules[i];
-    const titulo = m?.titulo || m?.title || m?.nombre || `Modulo ${i + 1}`;
+    const titulo = m?.titulo || m?.title || m?.nombre || `Módulo ${i + 1}`;
     const descripcion = m?.descripcion || m?.description || m?.contenido || null;
     const horas = m?.horas || m?.hours || null;
     await query(
@@ -135,6 +140,21 @@ async function upsertModules(productId, mappedModules) {
   return mappedModules.length;
 }
 
+/**
+ * El campo «Campus» del mapeo: solo en los conectores de empresa o de todo el
+ * sistema, que traen datos de varios campus. Lo que diga ahí —el nombre del
+ * campus— decide adónde va cada elemento; lo que no lo diga, o diga uno que no
+ * está en su alcance, va al campus por defecto (`project_id`).
+ */
+const CAMPO_CAMPUS = {
+  key: 'campus', label: 'Campus (por su nombre; sin él, al campus por defecto)', type: 'string', group: 'Campus',
+};
+function targetsDe(c) {
+  const base = TARGETS_CATALOG[c.destination] || TARGETS_CATALOG.product;
+  return c.alcance && c.alcance !== 'campus' ? [...base, CAMPO_CAMPUS] : base;
+}
+const normal = (s) => String(s ?? '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
 export async function previewConnector(connectorId) {
   const c = await model.findById(connectorId);
   if (!c) throw new AppError('Conector no encontrado', 404, 'NOT_FOUND');
@@ -145,8 +165,8 @@ export async function previewConnector(connectorId) {
   // muestre tree-view y permita drag-to-map cualquier campo.
   const schema = items[0] ? adapters.inspectSchema(items[0]) : [];
 
-  // Catalogo de campos destino del CRM segun destination
-  const targets = TARGETS_CATALOG[c.destination] || TARGETS_CATALOG.product;
+  // Catálogo de campos destino del CRM según destination
+  const targets = targetsDe(c);
 
   // Test de mapping: aplicar el field_mapping actual al primer sample
   let mapped_preview = null;
@@ -154,7 +174,7 @@ export async function previewConnector(connectorId) {
     if (c.field_mapping && Object.keys(c.field_mapping).length > 0 && items[0]) {
       mapped_preview = applyMapping(items[0], c.field_mapping);
     }
-  } catch (e) { /* mapping invalido, ignorar */ }
+  } catch (e) { /* mapping inválido, ignorar */ }
 
   return {
     type: c.type,
@@ -170,11 +190,11 @@ export async function previewConnector(connectorId) {
   };
 }
 
-// Sugiere mapping inicial a partir de un item de muestra (heuristica simple)
+// Sugiere mapping inicial a partir de un item de muestra (heurística simple)
 function detectFieldsFromSample(item) {
   if (!item || typeof item !== 'object') return {};
   const sug = {};
-  for (const [k] of Object.entries(item)) {
+  for (const [k, v] of Object.entries(item)) {
     const key = k.toLowerCase();
     if (sug.nombre === undefined && (key === 'name' || key === 'title' || key === 'nombre')) sug.nombre = k;
     else if (sug.email === undefined && (key === 'email' || key.includes('mail'))) sug.email = k;
@@ -194,7 +214,7 @@ export async function importFromConnector(connectorId) {
     throw new AppError('Conector sin field_mapping configurado', 400, 'NO_MAPPING');
   }
   if (c.destination !== 'product') {
-    throw new AppError(`Destination '${c.destination}' aun no soportada en import`, 501, 'NOT_IMPLEMENTED');
+    throw new AppError(`Destination '${c.destination}' aún no soportada en import`, 501, 'NOT_IMPLEMENTED');
   }
 
   let created = 0, updated = 0, skipped = 0, errors = 0;
@@ -202,14 +222,31 @@ export async function importFromConnector(connectorId) {
     const items = await adapters.fetchAll(c);
     logger.info({ connectorId, items: items.length }, 'Connector: items descargados');
 
+    // Un conector de empresa o de todo el sistema es UNO para todos sus campus
+    // (Diego, 29/09: «tiene que ser único»). Cada elemento va al campus que
+    // diga su campo «Campus», siempre dentro del alcance; si no dice o no casa,
+    // al campus por defecto. Nunca a un campus de fuera del alcance.
+    const campus = c.alcance && c.alcance !== 'campus' ? await model.campusDelAlcance(c) : [];
+    const porNombre = new Map(campus.map((p) => [normal(p.nombre), p.id]));
+    const porId = new Set(campus.map((p) => Number(p.id)));
+    const campusDe = (mapped) => {
+      if (!campus.length || mapped.campus === undefined) return c.project_id;
+      const dicho = mapped.campus;
+      if (porNombre.has(normal(dicho))) return porNombre.get(normal(dicho));
+      if (porId.has(Number(dicho))) return Number(dicho);
+      return c.project_id;
+    };
+
     for (const item of items) {
       try {
         const mapped = applyMapping(item, c.field_mapping);
-        const result = await upsertProduct(c.project_id, mapped, item);
+        const destino = campusDe(mapped);
+        delete mapped.campus;
+        const result = await upsertProduct(destino, mapped, item);
         if (result.action === 'created') created++;
         else if (result.action === 'updated') updated++;
         else if (result.skipped) skipped++;
-        // Si el mapping incluye campo `_modules` (path al array de modulos), insertarlos
+        // Si el mapping incluye campo `_modules` (path al array de módulos), insertarlos
         if (c.field_mapping._modules && result.id) {
           const modulesArray = adapters.resolvePath(item, c.field_mapping._modules);
           if (Array.isArray(modulesArray)) await upsertModules(result.id, modulesArray);
@@ -219,7 +256,17 @@ export async function importFromConnector(connectorId) {
         logger.warn({ err: err.message, connectorId }, 'Connector: error en item');
       }
     }
-    await model.recordSync(connectorId, errors === 0 ? 'success' : 'partial', items.length);
+    // Se guardan los que ENTRARON, no los que se miraron.
+    //
+    // Antes se guardaba `items.length`, o sea cuantos habia en el origen. La
+    // pantalla lo enseña como «N traidos», asi que una importacion donde los
+    // tres items fallaron —por ejemplo por un NOT NULL de `products.moneda`—
+    // decia «3 traidos» con cero productos creados. Que es exactamente lo que
+    // no puede hacer un contador.
+    //
+    // `partial` ya distingue que hubo fallos; el numero tiene que decir lo que
+    // hay, no lo que se intento.
+    await model.recordSync(connectorId, errors === 0 ? 'success' : 'partial', created + updated);
     return { total: items.length, created, updated, skipped, errors };
   } catch (err) {
     await model.recordSync(connectorId, 'error', 0);

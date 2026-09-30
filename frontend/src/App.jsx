@@ -83,6 +83,8 @@ const RolesPage = lazy(() => import('./modules/permissions/pages/RolesPage'));
 const FieldDefinitionsPage = lazy(() => import('./modules/field-definitions/pages/FieldDefinitionsPage'));
 const CategoriesTreePage = lazy(() => import('./modules/product-categories/pages/CategoriesTreePage'));
 const MatriculasPage = lazy(() => import('./modules/matriculas/pages/MatriculasPage'));
+const McpPage = lazy(() => import('./modules/mcp/pages/McpPage'));
+const ConnectorsPage = lazy(() => import('./modules/connectors/pages/ConnectorsPage'));
 const AccountsPayablePage = lazy(() => import('./modules/accounts-payable/pages/AccountsPayablePage'));
 const PayrollPage = lazy(() => import('./modules/payroll/pages/PayrollPage'));
 const DocumentsPage = lazy(() => import('./modules/documents/pages/DocumentsPage'));
@@ -120,6 +122,8 @@ const ROUTE_TITLES = {
   '/accounting/facturas/configuracion':'Configuración de facturación',
   '/payroll':                         'Nóminas',
   '/matriculas':                      'Matrículas',
+  '/conexion/mcp':                    'MCP',
+  '/conexion/conectores':             'Conectores',
   '/forms':                           'Formularios',
   '/make-webhooks':                   'Make / Webhooks',
   '/woocommerce':                     'WooCommerce',
@@ -237,6 +241,9 @@ function App() {
           <Route path="/soporte" element={<SoportePage />} />
           <Route path="/payroll" element={<PayrollPage />} />
           <Route path="/matriculas" element={<MatriculasPage />} />
+          {/* Conexión → MCP y Conectores, como en MultiCRM. Quién puede usar el MCP lo decide el servidor. */}
+          <Route path="/conexion/mcp" element={<McpPage />} />
+          <Route path="/conexion/conectores" element={<ConnectorsPage />} />
           <Route path="/forms" element={<FormsPage />} />
           <Route path="/captacion/whatsapp" element={<WhatsappWidgetPage />} />
           <Route path="/whatsapp" element={<ChatWhatsappPage />} />

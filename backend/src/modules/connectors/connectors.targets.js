@@ -1,26 +1,26 @@
-// Catalogo de campos destino del CRM por tipo de destination.
+// Catálogo de campos destino del CRM por tipo de destination.
 // El frontend usa esto para construir los selectores de mapping.
 // Cada campo: { key, label, type, required, group }
 
 export const TARGETS_CATALOG = {
   product: [
-    { key: 'nombre',         label: 'Nombre',                  type: 'string', required: true,  group: 'Basico' },
-    { key: 'sku',            label: 'SKU / Codigo',            type: 'string', group: 'Basico' },
-    { key: 'descripcion',    label: 'Descripcion',             type: 'text',   group: 'Basico' },
+    { key: 'nombre',         label: 'Nombre',                  type: 'string', required: true,  group: 'Básico' },
+    { key: 'sku',            label: 'SKU / Código',            type: 'string', group: 'Básico' },
+    { key: 'descripcion',    label: 'Descripción',             type: 'text',   group: 'Básico' },
     { key: 'precio',         label: 'Precio',                  type: 'number', group: 'Precio' },
     { key: 'moneda',         label: 'Moneda (EUR/USD/...)',    type: 'string', group: 'Precio' },
-    { key: 'duracion',       label: 'Duracion (ej. 8 sesiones)', type: 'string', group: 'Detalle' },
+    { key: 'duracion',       label: 'Duración (ej. 8 sesiones)', type: 'string', group: 'Detalle' },
     { key: 'url_info',       label: 'URL de la landing',       type: 'string', group: 'Detalle' },
     { key: 'image_url',      label: 'URL imagen',              type: 'string', group: 'Detalle' },
     { key: 'stripe_link',    label: 'Link de pago Stripe',     type: 'string', group: 'Pagos' },
     { key: 'brochure_url',   label: 'URL del folleto/brochure (PDF)', type: 'string', group: 'Pagos' },
-    { key: 'categoria_id',   label: 'Categoria (resuelve por nombre o ID)', type: 'category', group: 'Categorizacion' },
+    { key: 'categoria_id',   label: 'Categoría (resuelve por nombre o ID)', type: 'category', group: 'Categorización' },
     { key: 'external_id',    label: 'ID externo (para idempotencia)', type: 'string', group: 'Avanzado' },
-    // Array anidado - para modulos del programa
-    { key: '_modules',       label: 'Modulos (array de objetos)', type: 'array_subfield', group: 'Subitems',
+    // Array anidado — para módulos del programa
+    { key: '_modules',       label: 'Módulos (array de objetos)', type: 'array_subfield', group: 'Subitems',
       subfields: [
-        { key: 'titulo',      label: 'Titulo del modulo',  type: 'string', required: true },
-        { key: 'descripcion', label: 'Descripcion',        type: 'text' },
+        { key: 'titulo',      label: 'Título del módulo',  type: 'string', required: true },
+        { key: 'descripcion', label: 'Descripción',        type: 'text' },
         { key: 'horas',       label: 'Horas',              type: 'number' },
       ],
     },
@@ -29,11 +29,11 @@ export const TARGETS_CATALOG = {
   ],
 
   lead: [
-    { key: 'nombre',     label: 'Nombre',     type: 'string', required: true, group: 'Basico' },
-    { key: 'email',      label: 'Email',      type: 'string', required: true, group: 'Basico' },
-    { key: 'telefono',   label: 'Telefono',   type: 'string', group: 'Basico' },
-    { key: 'notas',      label: 'Notas',      type: 'text',   group: 'Basico' },
-    { key: 'producto_interes_id', label: 'Producto de interes (ID)', type: 'product_ref', group: 'Detalle' },
+    { key: 'nombre',     label: 'Nombre',     type: 'string', required: true, group: 'Básico' },
+    { key: 'email',      label: 'Email',      type: 'string', required: true, group: 'Básico' },
+    { key: 'telefono',   label: 'Teléfono',   type: 'string', group: 'Básico' },
+    { key: 'notas',      label: 'Notas',      type: 'text',   group: 'Básico' },
+    { key: 'producto_interes_id', label: 'Producto de interés (ID)', type: 'product_ref', group: 'Detalle' },
     { key: 'landing_url', label: 'URL landing origen', type: 'string', group: 'Detalle' },
     { key: 'utm_source',  label: 'UTM source',     type: 'string', group: 'UTM' },
     { key: 'utm_medium',  label: 'UTM medium',     type: 'string', group: 'UTM' },
@@ -42,26 +42,26 @@ export const TARGETS_CATALOG = {
   ],
 
   matricula: [
-    { key: 'dni',     label: 'DNI/NIE', type: 'string', required: true, group: 'Basico' },
-    { key: 'titulo',  label: 'Titulo',  type: 'string', group: 'Basico' },
-    { key: 'notas',   label: 'Notas',   type: 'text',   group: 'Basico' },
+    { key: 'dni',     label: 'DNI/NIE', type: 'string', required: true, group: 'Básico' },
+    { key: 'titulo',  label: 'Título',  type: 'string', group: 'Básico' },
+    { key: 'notas',   label: 'Notas',   type: 'text',   group: 'Básico' },
   ],
 
   category: [
-    { key: 'nombre',    label: 'Nombre',                type: 'string', required: true, group: 'Basico' },
-    { key: 'parent_id', label: 'Padre (resolucion por nombre o ID)', type: 'category', group: 'Jerarquia' },
-    { key: 'orden',     label: 'Orden',                 type: 'number', group: 'Jerarquia' },
+    { key: 'nombre',    label: 'Nombre',                type: 'string', required: true, group: 'Básico' },
+    { key: 'parent_id', label: 'Padre (resolución por nombre o ID)', type: 'category', group: 'Jerarquía' },
+    { key: 'orden',     label: 'Orden',                 type: 'number', group: 'Jerarquía' },
   ],
 };
 
 // Lista de transformaciones disponibles para el frontend
 export const TRANSFORMS_CATALOG = [
   { id: 'trim',       label: 'Trim (quitar espacios)' },
-  { id: 'lowercase',  label: 'Minusculas' },
-  { id: 'uppercase',  label: 'MAYUSCULAS' },
+  { id: 'lowercase',  label: 'Minúsculas' },
+  { id: 'uppercase',  label: 'MAYÚSCULAS' },
   { id: 'parseInt',   label: 'Convertir a entero' },
   { id: 'parseFloat', label: 'Convertir a decimal' },
   { id: 'stripHtml',  label: 'Quitar HTML' },
   { id: 'slug',       label: 'Convertir a slug' },
-  { id: 'regex:PATRON', label: 'Regex captura grupo 1' },
+  { id: 'regex:PATRÓN', label: 'Regex captura grupo 1' },
 ];

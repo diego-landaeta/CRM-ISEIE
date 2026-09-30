@@ -1,13 +1,13 @@
 // Adaptadores por tipo de conector. Cada adaptador sabe:
-//   - fetchSample(config)  -> trae 1-3 items de muestra (para mapping visual)
-//   - fetchAll(config)     -> trae TODOS los items (con paginacion)
-// El mapping field_mapping y la importacion al CRM se hace en el service.
+//   - fetchSample(config)  → trae 1-3 items de muestra (para mapping visual)
+//   - fetchAll(config)     → trae TODOS los items (con paginación)
+// El mapping field_mapping y la importación al CRM se hace en el service.
 
 import { logger } from '../../shared/utils/logger.js';
 
 // Helper: resuelve "a.b.c" sobre obj. Soporta:
-//   - Notacion bracket: a.b[2].c
-//   - Wildcard array: a.b[*].c -> devuelve array de valores
+//   - Notación bracket: a.b[2].c
+//   - Wildcard array: a.b[*].c → devuelve array de valores
 //   - meta_data search: meta_data{key=foo}.value (busca en array de objetos por key)
 export function resolvePath(obj, path) {
   if (!obj || !path) return undefined;
@@ -16,7 +16,7 @@ export function resolvePath(obj, path) {
   for (const part of parts) {
     if (acc === undefined || acc === null) return undefined;
 
-    // Wildcard [*] - itera sobre array
+    // Wildcard [*] — itera sobre array
     if (part.endsWith('[*]')) {
       const key = part.slice(0, -3);
       const arr = key ? acc[key] : acc;
@@ -28,7 +28,7 @@ export function resolvePath(obj, path) {
       return arr.map(item => resolvePath(item, restPath));
     }
 
-    // meta_data{key=foo}.value - buscar en array por keypair
+    // meta_data{key=foo}.value — buscar en array por keypair
     const searchMatch = part.match(/^([^{]+)\{([^=]+)=([^}]+)\}$/);
     if (searchMatch) {
       const [, arrKey, searchKey, searchVal] = searchMatch;
@@ -48,9 +48,9 @@ export function resolvePath(obj, path) {
   return acc;
 }
 
-// Aplica una transformacion al valor extraido
+// Aplica una transformación al valor extraído
 // Transformaciones soportadas: trim, lowercase, uppercase, parseInt, parseFloat,
-// stripHtml, slug, regex:patron -> captura el grupo 1
+// stripHtml, slug, regex:patrón → captura el grupo 1
 export function applyTransform(value, transform) {
   if (value === undefined || value === null) return value;
   if (!transform) return value;
@@ -73,7 +73,7 @@ export function applyTransform(value, transform) {
 }
 
 // Recorre recursivamente un objeto y devuelve todos los paths posibles con sus tipos
-// Util para que el frontend muestre un tree-view del JSON sample
+// Útil para que el frontend muestre un tree-view del JSON sample
 export function inspectSchema(obj, prefix = '', maxDepth = 5) {
   if (maxDepth <= 0 || obj === null || obj === undefined) return [];
   const paths = [];
@@ -82,7 +82,7 @@ export function inspectSchema(obj, prefix = '', maxDepth = 5) {
     if (obj.length > 0) {
       const itemPaths = inspectSchema(obj[0], `${prefix}[0]`, maxDepth - 1);
       paths.push(...itemPaths);
-      // Wildcard alternativo mas util para mapping
+      // Wildcard alternativo más útil para mapping
       if (typeof obj[0] === 'object') {
         for (const key of Object.keys(obj[0] || {})) {
           paths.push({ path: `${prefix}[*].${key}`, type: 'wildcard', sample: obj[0][key] });
@@ -106,7 +106,7 @@ export function inspectSchema(obj, prefix = '', maxDepth = 5) {
   return [{ path: prefix, type: typeof obj, sample: obj }];
 }
 
-// Adaptador WooCommerce - products o orders
+// Adaptador WooCommerce — products o orders
 async function wcRequest(config, endpoint, params = {}) {
   const base = config.base_url?.replace(/\/$/, '') || '';
   if (!base) throw new Error('config.base_url requerida');
@@ -121,14 +121,14 @@ async function wcRequest(config, endpoint, params = {}) {
   return { items: await r.json(), total: parseInt(r.headers.get('x-wp-total') || '0') };
 }
 
-// Adaptador WP REST generico - custom post types con plugin ACF to REST API
+// Adaptador WP REST genérico — custom post types con plugin ACF to REST API
 async function wpRequest(config, endpoint, params = {}) {
   const base = config.base_url?.replace(/\/$/, '') || '';
   if (!base) throw new Error('config.base_url requerida');
   const qs = new URLSearchParams(params);
   const url = `${base}/wp-json/${endpoint}?${qs}`;
   const headers = { 'User-Agent': 'CRM-ISEIE-Connector/1.0' };
-  // Auth: basic con application password si esta configurada
+  // Auth: basic con application password si está configurada
   if (config.wp_user && config.wp_app_password) {
     const token = Buffer.from(`${config.wp_user}:${config.wp_app_password}`).toString('base64');
     headers['Authorization'] = `Basic ${token}`;
@@ -138,7 +138,7 @@ async function wpRequest(config, endpoint, params = {}) {
   return { items: await r.json(), total: parseInt(r.headers.get('x-wp-total') || '0') };
 }
 
-// Adaptador generico para cualquier API REST/JSON
+// Adaptador genérico para cualquier API REST/JSON
 async function customRequest(config, params = {}) {
   if (!config.url) throw new Error('config.url requerida');
   const url = config.url + (config.url.includes('?') ? '&' : '?') + new URLSearchParams(params).toString();
@@ -147,7 +147,7 @@ async function customRequest(config, params = {}) {
   const r = await fetch(url, { headers });
   if (!r.ok) throw new Error(`API ${r.status}`);
   const data = await r.json();
-  // Si la respuesta tiene un wrapper, extraerlo segun config.items_path
+  // Si la respuesta tiene un wrapper, extraerlo según config.items_path
   const items = config.items_path ? resolvePath(data, config.items_path) : data;
   return { items: Array.isArray(items) ? items : [items], total: items?.length || 0 };
 }
@@ -183,7 +183,7 @@ export async function fetchSample(connector) {
       return { items, total };
     }
     case 'acf': {
-      // ACF to REST API: requiere plugin instalado. Endpoint tipico /acf/v3/{post_type}/{id}
+      // ACF to REST API: requiere plugin instalado. Endpoint típico /acf/v3/{post_type}/{id}
       const endpoint = config.endpoint || 'acf/v3/posts';
       const { items, total } = await wpRequest(config, endpoint, { per_page: 3 });
       return { items, total };
