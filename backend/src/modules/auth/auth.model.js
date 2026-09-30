@@ -4,7 +4,10 @@ export async function findUserByEmail(email) {
   const { rows } = await query(
     `SELECT u.id, u.nombre, u.email, u.password_hash, u.role, u.active, u.avatar_url,
             u.roles_extra::text[] AS roles_extra,
-            u.custom_role_id, u.factura_manager, u.editar_fechas_factura, u.gestor_colaboraciones, u.set_password_token, u.set_password_expires
+            u.custom_role_id, u.factura_manager, u.editar_fechas_factura, u.gestor_colaboraciones, u.set_password_token, u.set_password_expires,
+            -- Via to_jsonb y no u.usa_mcp: si el codigo llega antes que la migracion 174,
+            -- leer la columna directamente romperia el login de todos. Asi vale false.
+            COALESCE((to_jsonb(u)->>'usa_mcp')::boolean, false) AS usa_mcp
      FROM users u
      -- Sin distinguir mayusculas: el formulario de entrada pasa el correo a
      -- minusculas, asi que comparar exacto dejaba FUERA a cualquiera dado de
@@ -20,6 +23,7 @@ export async function findUserById(id) {
   const { rows } = await query(
     `SELECT u.id, u.nombre, u.email, u.role, u.roles_extra::text[] AS roles_extra, u.active, u.avatar_url, u.custom_role_id,
             u.factura_manager, u.editar_fechas_factura, u.gestor_colaboraciones,
+            COALESCE((to_jsonb(u)->>'usa_mcp')::boolean, false) AS usa_mcp,
             cr.label AS custom_role_label
      FROM users u
      LEFT JOIN custom_roles cr ON cr.id = u.custom_role_id

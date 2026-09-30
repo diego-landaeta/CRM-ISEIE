@@ -53,6 +53,7 @@ import procesoModule from './modules/proceso/index.js';
 import feedbackModule from './modules/feedback/index.js';
 import novedadesModule from './modules/novedades/index.js';
 import certifexModule from './modules/certifex/index.js';
+import mcpModule from './modules/mcp/index.js';
 import { startFeedbackDia7Scheduler } from './jobs/feedbackDia7Scheduler.js';
 import { startNovedadesScheduler } from './jobs/novedadesScheduler.js';
 import convocatoriasModule from './modules/convocatorias/index.js';
@@ -261,6 +262,8 @@ const MODULES = [
   convocatoriasModule,
   // Certifex: el CRM aprueba y Certifex emite (Matrículas → Certificaciones).
   certifexModule,
+  // Conexion de Claude por MCP: solo consulta, con token personal (como MultiCRM).
+  mcpModule,
 ];
 
 for (const mod of MODULES) {

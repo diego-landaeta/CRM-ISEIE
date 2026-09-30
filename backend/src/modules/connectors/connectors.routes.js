@@ -1,12 +1,16 @@
 import { Router } from 'express';
-import { verifyToken, roleGuard } from '../../shared/middleware/auth.js';
+import { verifyToken, soloRoles } from '../../shared/middleware/auth.js';
 import * as ctrl from './connectors.controller.js';
 
 const router = Router();
 router.use(verifyToken);
-router.use(roleGuard('admin', 'superadmin'));
+// `soloRoles` y no `roleGuard`: roleGuard deja pasar tambien a soporte, y
+// Conectores es solo de admin y super admin (Diego, 29/09).
+router.use(soloRoles('admin', 'superadmin'));
 
 router.get('/', ctrl.list);
+// «Servidor MCP»: tu URL para Claude en ese conector (una nueva revoca la anterior).
+router.post('/:id/mcp-url', ctrl.mcpUrl);
 router.get('/:id', ctrl.getById);
 router.post('/', ctrl.create);
 router.patch('/:id', ctrl.update);
