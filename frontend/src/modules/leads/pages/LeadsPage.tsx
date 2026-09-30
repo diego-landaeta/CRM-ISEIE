@@ -67,6 +67,7 @@ import { getLeadPriority, getPriorityStyle } from '../lib/leadPriority';
 import { getLeadExportColumns } from '../lib/leadFormat';
 import ParaHoyYManana from '@/shared/components/dashboard/ParaHoyYManana';
 import { PROCESO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
+import { entroEnElProceso } from '@/shared/lib/enElProceso';
 import {
   getInitials,
   getAvatarColor,
@@ -329,6 +330,8 @@ export default function LeadsPage() {
     const tomorrow = new Date(today.getTime() + 86400000);
     const inWeek = new Date(today.getTime() + 7 * 86400000);
     return lista.filter(l => {
+      // La barra de vencidos cuenta desde el 29/09 (ver enElProceso.ts).
+      if (!entroEnElProceso(l)) return false;
       const next = parseLocalDateOnly(l.next_reminder_at);
       const last = l.last_interaction_at ? new Date(l.last_interaction_at) : null;
       if (quickFilter === 'overdue') return next && next < today;
@@ -353,6 +356,8 @@ export default function LeadsPage() {
     const tomorrow = new Date(today.getTime() + 86400000);
     const inWeek = new Date(today.getTime() + 7 * 86400000);
     return leads.filter(l => {
+      // La barra de vencidos cuenta desde el 29/09 (ver enElProceso.ts).
+      if (!entroEnElProceso(l)) return false;
       const next = parseLocalDateOnly(l.next_reminder_at);
       const last = l.last_interaction_at ? new Date(l.last_interaction_at) : null;
       if (quickFilter === 'overdue') return next && next < today;
@@ -377,6 +382,7 @@ export default function LeadsPage() {
     const inWeek = new Date(today.getTime() + 7 * 86400000);
     let overdue = 0, todayCount = 0, tomorrowCount = 0, weekCount = 0, noReminder = 0, noContact = 0;
     leads.forEach(l => {
+      if (!entroEnElProceso(l)) return;
       const next = parseLocalDateOnly(l.next_reminder_at);
       const last = l.last_interaction_at ? new Date(l.last_interaction_at) : null;
       if (next && next < today) overdue++;
