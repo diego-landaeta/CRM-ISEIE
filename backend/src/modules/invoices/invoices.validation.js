@@ -88,6 +88,8 @@ export const issuerSchema = z.object({
   email: z.string().email().optional().nullable().or(z.literal('')),
   telefono: z.string().optional().nullable(),
   iban: z.string().optional().nullable(),
+  // BIC/SWIFT: 8 u 11 caracteres (BSCHESMMXXX). Vacío = sin BIC.
+  bic: z.string().trim().max(20).optional().nullable(),
   serie: z.string().max(10).optional().nullable(),
   logoUrl: z.string().optional().nullable(),
   pieDefault: z.string().optional().nullable(),
