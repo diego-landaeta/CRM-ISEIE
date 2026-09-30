@@ -883,6 +883,23 @@ const FEC_VENTA = `(SELECT i.fecha_emision FROM invoices i
                     WHERE cpf.conversion_id = c.id AND i.tipo <> 'proforma'
                     ORDER BY cpf.fecha, cpf.id, i.fecha_emision, i.id LIMIT 1)`;
 
+/*
+  LO FACTURADO, que es como se mide a las gestoras. Diego, 30/09: «el ranking de
+  gestoras será por montos facturados; así es como se medirá».
+
+  · El TOTAL de la factura, IVA incluido: el número que lleva el papel. Para
+    medir sin IVA basta con cambiar esta línea por `i.base_imponible`.
+  · Por la fecha de EMISIÓN, sin importar cuándo se cobró ni cuándo se vendió.
+  · Los abonos (rectificativas) restan: van en negativo y conservan su venta.
+  · No cuentan proformas, borradores ni anuladas.
+  · A cada gestora, su parte (`conversion_reparto`: la vendedora, o si no la
+    responsable del cliente; en una venta compartida, su porcentaje).
+  · Una factura que no cuelga de ninguna venta no cuenta: no tiene gestora.
+*/
+const IMPORTE_FACTURADO = 'i.total';
+const FACTURA_QUE_CUENTA = `i.tipo IN ('normal', 'rectificativa')
+          AND i.estado NOT IN ('cancelada', 'borrador') AND i.numero IS NOT NULL`;
+
 export async function asesorasPorMes({ projectId, projectIds, from, to, asesoraId, base }) {
   // Tres cosas distintas con tres fechas distintas: los leads por su fecha de
   // entrada, las ventas por su fecha de venta y los cobros por su fecha de cobro.
@@ -906,10 +923,14 @@ export async function asesorasPorMes({ projectId, projectIds, from, to, asesoraI
   const fl = buildFilter({ projectId, projectIds, from, to, asesoraId }, ENTRY, 'l.project_id');
   const fv = buildFilter({ projectId, projectIds, from, to, asesoraId }, DV, 'c.project_id');
   const fc = buildFilter({ projectId, projectIds, from, to, asesoraId }, DC, 'c.project_id');
+  // Lo facturado va SIEMPRE por la fecha de emision, sea cual sea la base.
+  const ff = buildFilter({ projectId, projectIds, from, to, asesoraId }, 'i.fecha_emision', 'c.project_id');
   const off1 = fl.params.length;
   const off2 = off1 + fv.params.length;
+  const off3 = off2 + fc.params.length;
   let wv = fv.where.replace(/\$(\d+)/g, (_, n) => '$' + (Number(n) + off1));
   let wc = fc.where.replace(/\$(\d+)/g, (_, n) => '$' + (Number(n) + off2));
+  const wf = ff.where.replace(/\$(\d+)/g, (_, n) => '$' + (Number(n) + off3));
   // Sin rango de fechas la subconsulta puede dar NULL y saldria una fila de mes
   // vacio; con rango ya se filtra sola.
   if (porFactura) {
@@ -974,10 +995,23 @@ export async function asesorasPorMes({ projectId, projectIds, from, to, asesoraI
          ${wc}
         GROUP BY 1, 2
      ),
+     facturas_mes AS (
+       SELECT to_char(date_trunc('month', i.fecha_emision), 'YYYY-MM') AS mes,
+              r.vendedora_id AS uid,
+              COALESCE(SUM(${IMPORTE_FACTURADO} * r.peso), 0) AS facturado
+         FROM invoices i
+         JOIN conversions c ON c.id = i.conversion_id
+         JOIN conversion_reparto r ON r.conversion_id = c.id
+         LEFT JOIN leads l ON l.id = c.lead_id
+         ${wf}
+          AND ${FACTURA_QUE_CUENTA}
+        GROUP BY 1, 2
+     ),
      todo AS (
        SELECT mes, uid FROM leads_mes
        UNION SELECT mes, uid FROM ventas_mes
        UNION SELECT mes, uid FROM cobros_mes
+       UNION SELECT mes, uid FROM facturas_mes
      )
      SELECT t.mes, t.uid AS asesora_id,
             COALESCE(u.nombre, '— sin asesora —') AS asesora,
@@ -1001,18 +1035,20 @@ export async function asesorasPorMes({ projectId, projectIds, from, to, asesoraI
             ROUND(COALESCE(cm.cobrado_venta, 0), 2) AS cobrado_venta,
             ROUND(COALESCE(cm.cobrado_cuotas, 0), 2) AS cobrado_cuotas,
             COALESCE(cm.mensualidades, 0) AS mensualidades,
+            ROUND(COALESCE(fm.facturado, 0), 2) AS facturado,
             ROUND(CASE WHEN COALESCE(vm.ventas, 0) > 0
                        THEN COALESCE(vm.vendido, 0) / vm.ventas::numeric ELSE 0 END, 2) AS ticket_medio
        FROM todo t
        LEFT JOIN leads_mes  lm ON lm.mes = t.mes AND lm.uid IS NOT DISTINCT FROM t.uid
        LEFT JOIN ventas_mes vm ON vm.mes = t.mes AND vm.uid IS NOT DISTINCT FROM t.uid
        LEFT JOIN cobros_mes cm ON cm.mes = t.mes AND cm.uid IS NOT DISTINCT FROM t.uid
+       LEFT JOIN facturas_mes fm ON fm.mes = t.mes AND fm.uid IS NOT DISTINCT FROM t.uid
        LEFT JOIN users u ON u.id = t.uid
       -- Desempate fijo: sin el, dos asesoras con el mismo cobrado salian en
       -- un orden u otro segun el plan que eligiera Postgres, y el mismo
       -- informe podia bajarse dos veces con las filas cambiadas de sitio.
       ORDER BY t.mes DESC, cobrado DESC, asesora, t.uid`,
-    [...fl.params, ...fv.params, ...fc.params]
+    [...fl.params, ...fv.params, ...fc.params, ...ff.params]
   );
   return rows;
 }
@@ -1569,7 +1605,12 @@ export async function ventasSinFacturaEnRango({ projectId, projectIds, from, to 
 }
 
 /**
- * COMO VOY YO: el puesto en ventas y la tasa de conversion de una gestora.
+ * COMO VOY YO: el puesto y la tasa de conversion de una gestora.
+ *
+ * EL PUESTO ES POR LO FACTURADO desde el 30/09 (Diego: «el ranking de gestoras
+ * será por montos facturados; así es como se medirá»). Antes era por numero de
+ * ventas, y cada pantalla comparaba por una cosa distinta. La definicion de
+ * facturado esta en `IMPORTE_FACTURADO`, encima de `asesorasPorMes`.
  *
  * Diego, 22/09: «debe mostrar en el dashboard y en prospectos: eres la gestora
  * numero X de ventas», y «su tasa de conversion en prospectos y clientes, y
@@ -1604,23 +1645,27 @@ export async function miPuesto({ userId, projectId, projectIds, from, to, base =
   for (const f of filas) {
     if (f.asesora_id == null) continue;   // «sin asesora» no compite
     const a = porAsesora.get(f.asesora_id) || {
-      user_id: f.asesora_id, nombre: f.asesora, leads: 0, ventas: 0, vendido: 0, cobrado: 0,
+      user_id: f.asesora_id, nombre: f.asesora, leads: 0, ventas: 0, vendido: 0, cobrado: 0, facturado: 0,
     };
     a.leads += Number(f.leads) || 0;
     a.ventas += Number(f.ventas) || 0;
     a.vendido += Number(f.vendido) || 0;
     a.cobrado += Number(f.cobrado) || 0;
+    a.facturado += Number(f.facturado) || 0;
     porAsesora.set(f.asesora_id, a);
   }
 
   const tasaDe = (a) => (a.leads > 0 ? Math.round((a.ventas / a.leads) * 1000) / 10 : 0);
-  // Por ventas, que es la pregunta --«eres la numero X de ventas»--, y en
-  // empate manda lo vendido: cerrar tres de mil no es lo mismo que tres de cien.
-  const tabla = [...porAsesora.values()].sort((x, y) => y.ventas - x.ventas || y.vendido - x.vendido);
+  // Por lo facturado, y en empate por numero de ventas. Redondeado al
+  // centimo: la suma de repartos deja decimales que no deben desempatar.
+  const cent = (v) => Math.round(v * 100) / 100;
+  for (const a of porAsesora.values()) a.facturado = cent(a.facturado);
+  const tabla = [...porAsesora.values()].sort((x, y) => y.facturado - x.facturado || y.ventas - x.ventas);
 
-  const equipo = tabla.reduce((s, a) => ({ leads: s.leads + a.leads, ventas: s.ventas + a.ventas }), { leads: 0, ventas: 0 });
+  const equipo = tabla.reduce((s, a) => ({ leads: s.leads + a.leads, ventas: s.ventas + a.ventas, facturado: s.facturado + a.facturado }),
+    { leads: 0, ventas: 0, facturado: 0 });
   const i = tabla.findIndex((a) => a.user_id === userId);
-  const yo = i >= 0 ? tabla[i] : { user_id: userId, nombre: null, leads: 0, ventas: 0, vendido: 0, cobrado: 0 };
+  const yo = i >= 0 ? tabla[i] : { user_id: userId, nombre: null, leads: 0, ventas: 0, vendido: 0, cobrado: 0, facturado: 0 };
   const arriba = i > 0 ? tabla[i - 1] : null;
 
   return {
@@ -1641,6 +1686,7 @@ export async function miPuesto({ userId, projectId, projectIds, from, to, base =
         ventas: a.ventas,
         vendido: a.vendido,
         cobrado: a.cobrado,
+        facturado: a.facturado,
         tasa: tasaDe(a),
       }))
       : null,
@@ -1653,13 +1699,17 @@ export async function miPuesto({ userId, projectId, projectIds, from, to, base =
     ventas: yo.ventas,
     vendido: yo.vendido,
     cobrado: yo.cobrado,
+    facturado: yo.facturado,
     tasa: tasaDe(yo),
     tasa_equipo: equipo.leads > 0 ? Math.round((equipo.ventas / equipo.leads) * 1000) / 10 : 0,
     ventas_equipo: equipo.ventas,
-    // Cuanto falta para adelantar a quien va justo delante. Sin nombre: es lo
-    // que hace falta para espabilar, no una lista de rivales.
-    faltan_para_subir: arriba ? Math.round((arriba.ventas - yo.ventas) * 10) / 10 : null,
+    facturado_equipo: cent(equipo.facturado),
+    // Cuanto falta para adelantar a quien va justo delante, EN EUROS
+    // FACTURADOS. Sin nombre: es lo que hace falta para espabilar, no una
+    // lista de rivales.
+    faltan_para_subir: arriba ? cent(arriba.facturado - yo.facturado) : null,
     // El primero de la tabla, para saber donde esta el liston.
+    mejor_facturado: tabla.length ? tabla[0].facturado : 0,
     mejor_ventas: tabla.length ? tabla[0].ventas : 0,
   };
 }
