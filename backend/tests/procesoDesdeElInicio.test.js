@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-// Diego, 30/09/2026: «todos los clientes desde el 29 en adelante es que entran
-// en el proceso, no los anteriores». Los de antes no salen en la cola ni tienen
+// Diego, 30/09/2026: solo entran en el proceso los prospectos de septiembre en
+// adelante («todos es de este mes de septiembre»). Los de antes no salen en la cola ni tienen
 // pasos en la ficha.
 
 let filas = [];
@@ -15,15 +15,15 @@ vi.mock('../src/shared/config/db.js', () => ({
 const { EN_EL_PROCESO, inicioDelProceso } = await import('../src/shared/utils/enElProceso.js');
 const Proceso = await import('../src/modules/proceso/proceso.model.js');
 
-const REGLA = "COALESCE(l.fecha_solicitud, l.created_at) >= TIMESTAMPTZ '2026-09-29 00:00 Europe/Madrid'";
+const REGLA = "COALESCE(l.fecha_solicitud, l.created_at) >= TIMESTAMPTZ '2026-09-01 00:00 Europe/Madrid'";
 const sql = () => consultas.map((c) => c.sql).join('\n');
 
 beforeEach(() => { filas = []; consultas.length = 0; delete process.env.PROCESO_INICIO; });
 afterEach(() => { delete process.env.PROCESO_INICIO; });
 
 describe('la fecha de inicio', () => {
-  it('es el 29/09/2026 si no se dice otra cosa', () => {
-    expect(inicioDelProceso()).toBe('2026-09-29');
+  it('es el 01/09/2026 si no se dice otra cosa', () => {
+    expect(inicioDelProceso()).toBe('2026-09-01');
     expect(EN_EL_PROCESO('l')).toContain(REGLA);
   });
 
@@ -34,12 +34,12 @@ describe('la fecha de inicio', () => {
 
   it('una fecha mal escrita no entra en el SQL: se queda la de siempre', () => {
     process.env.PROCESO_INICIO = "2026-01-01' OR 1=1 --";
-    expect(inicioDelProceso()).toBe('2026-09-29');
+    expect(inicioDelProceso()).toBe('2026-09-01');
     expect(EN_EL_PROCESO()).not.toContain('OR 1=1');
   });
 });
 
-describe('los de antes del 29/09 quedan fuera del proceso', () => {
+describe('los de antes del 01/09 quedan fuera del proceso', () => {
   it('no se les escribe agenda', async () => {
     await Proceso.planificarPasosDeLead(7);
     expect(sql()).toContain('INSERT INTO lead_steps');

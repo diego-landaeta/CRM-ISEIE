@@ -724,7 +724,7 @@ export async function findAll({ projectId, projectIds, status, pasoProceso, resp
 
      Quien no tiene agenda --los de antes del proceso-- no sale con ningun paso
      elegido, y es lo correcto: no estan en el proceso. Tampoco quien entro antes
-     del 29/09 aunque le quede agenda escrita de antes (ver enElProceso.js). */
+     del 01/09 aunque le quede agenda escrita de antes (ver enElProceso.js). */
   if (pasoProceso) {
     conditions.push(`${EN_EL_PROCESO('l')} AND (SELECT ls.clave FROM lead_steps ls
                        WHERE ls.lead_id = l.id AND ls.estado = 'pendiente'

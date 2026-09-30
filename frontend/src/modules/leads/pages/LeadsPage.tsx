@@ -330,7 +330,7 @@ export default function LeadsPage() {
     const tomorrow = new Date(today.getTime() + 86400000);
     const inWeek = new Date(today.getTime() + 7 * 86400000);
     return lista.filter(l => {
-      // La barra de vencidos cuenta desde el 29/09 (ver enElProceso.ts).
+      // La barra de vencidos cuenta desde el 01/09 (ver enElProceso.ts).
       if (!entroEnElProceso(l)) return false;
       const next = parseLocalDateOnly(l.next_reminder_at);
       const last = l.last_interaction_at ? new Date(l.last_interaction_at) : null;
@@ -356,7 +356,7 @@ export default function LeadsPage() {
     const tomorrow = new Date(today.getTime() + 86400000);
     const inWeek = new Date(today.getTime() + 7 * 86400000);
     return leads.filter(l => {
-      // La barra de vencidos cuenta desde el 29/09 (ver enElProceso.ts).
+      // La barra de vencidos cuenta desde el 01/09 (ver enElProceso.ts).
       if (!entroEnElProceso(l)) return false;
       const next = parseLocalDateOnly(l.next_reminder_at);
       const last = l.last_interaction_at ? new Date(l.last_interaction_at) : null;

@@ -1,10 +1,11 @@
 /**
  * Quién está en el proceso comercial: los prospectos que ENTRARON desde el
- * 29/09/2026, y nadie más.
+ * 01/09/2026, y nadie más.
  *
  * Diego, 30/09/2026: «se ajustaron los procesos comerciales de leads
- * anteriores; no pueden ajustarse solos porque sí. Todos los clientes desde el
- * 29 en adelante es que entran en el proceso, no los anteriores».
+ * anteriores; no pueden ajustarse solos porque sí». Primero dijo «desde el
+ * 29»; viendo la cola con los de agosto, lo dejó en septiembre: «todos es de
+ * este mes de septiembre». Agosto fuera; septiembre, dentro.
  *
  * Lo que pasaba: el 08/09 se escribió la agenda de golpe a los que habían
  * entrado desde el 09/08, y desde entonces a cada uno que entraba. Al montar el
@@ -30,12 +31,12 @@ const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
  * Desde qué día (AAAA-MM-DD). Se puede cambiar con PROCESO_INICIO en el .env;
- * sin ella, el 29/09/2026. Se lee en cada llamada y no al cargar, para que los
+ * sin ella, el 01/09/2026. Se lee en cada llamada y no al cargar, para que los
  * tests puedan moverla.
  */
 export function inicioDelProceso() {
   const env = process.env.PROCESO_INICIO;
-  return FECHA.test(env || '') ? env : '2026-09-29';
+  return FECHA.test(env || '') ? env : '2026-09-01';
 }
 
 /**
