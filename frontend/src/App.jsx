@@ -120,6 +120,7 @@ const ROUTE_TITLES = {
   '/accounting/facturas/configuracion':'Configuración de facturación',
   '/payroll':                         'Nóminas',
   '/matriculas':                      'Matrículas',
+  '/matriculas/certificaciones':      'Certificaciones',
   '/forms':                           'Formularios',
   '/make-webhooks':                   'Make / Webhooks',
   '/woocommerce':                     'WooCommerce',
@@ -237,6 +238,10 @@ function App() {
           <Route path="/soporte" element={<SoportePage />} />
           <Route path="/payroll" element={<PayrollPage />} />
           <Route path="/matriculas" element={<MatriculasPage />} />
+          {/* Certifex vive dentro de Matrículas (Diego, 30/09). */}
+          <Route path="/matriculas/certificaciones" element={<MatriculasPage />} />
+          <Route path="/certifex/consultas" element={<Navigate to="/matriculas/certificaciones?vista=consultas" replace />} />
+          <Route path="/certifex/emisiones" element={<Navigate to="/matriculas/certificaciones" replace />} />
           <Route path="/forms" element={<FormsPage />} />
           <Route path="/captacion/whatsapp" element={<WhatsappWidgetPage />} />
           <Route path="/whatsapp" element={<ChatWhatsappPage />} />

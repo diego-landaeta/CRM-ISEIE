@@ -100,7 +100,8 @@ const NAV_SECTIONS = [
       { to: '/products/pending', label: 'Cursos pendientes', icon: Clock, roles: ['admin', 'superadmin'] },
       { to: '/woocommerce', label: 'WooCommerce', icon: ShoppingBag, roles: ['admin', 'superadmin'] },
       { to: '/configuracion/categorias-arbol', label: 'Árbol de categorías', icon: Sliders, roles: ['admin', 'superadmin'] },
-      { to: '/documentos', label: 'Certificados', icon: FilePdf, roles: ['admin', 'superadmin'], sectionPrefixes: ['/documentos'] },
+      // «Certificados» (/documentos) fuera del menú: estaba vacío, y los títulos
+      // ahora los emite Certifex desde Matrículas → Certificaciones (Diego, 30/09).
     ],
   },
   {
