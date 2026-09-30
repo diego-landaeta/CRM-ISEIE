@@ -8,7 +8,7 @@ import {
   Megaphone, Robot, Sparkle, PlugsConnected, CreditCard, WarningCircle, WhatsappLogo,
   ChatText,
   Receipt, Coins, Wrench, ShoppingBag, ChatCircleText, Wallet, Bank, Clock, GitMerge, CopySimple,
-  UsersThree,
+  UsersThree, CloudArrowDown,
   GraduationCap, Warning } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { rolesDe } from '@/shared/lib/roles';
@@ -152,6 +152,18 @@ const NAV_SECTIONS = [
     ],
   },
   {
+    // Conexión: el MCP de Claude y los Conectores (WordPress, tiendas, APIs), como en
+    // MultiCRM. Diego, 30/09: «en iseie no puedo ver el status de conectores de mcp,
+    // no está ese apartado, tiene que ponerlos como en el 360».
+    // `accesoMcp` y no `roles`: soporte se salta los roles, y aquí no puede. Es la
+    // misma regla que el servidor (`puedeUsarMcp` en mcp.acceso.js).
+    label: 'Conexión',
+    items: [
+      { to: '/conexion/mcp', label: 'MCP', icon: Robot, accesoMcp: true },
+      { to: '/conexion/conectores', label: 'Conectores', icon: CloudArrowDown, roles: ['admin', 'superadmin'] },
+    ],
+  },
+  {
     label: 'Sistema',
     items: [
       // Lo que trae cada versión (Diego, 28/09). La 2.0.0 cuenta lo que aún está
@@ -180,10 +192,21 @@ const APAGADOS = String(import.meta.env.VITE_MODULOS_APAGADOS || '')
  * Recibe TODOS sus roles, no uno: desde que se puede tener mas de uno, «es
  * gestor» dejo de ser una pregunta de igualdad.
  */
+// Espejo de `puedeUsarMcp` (backend/src/modules/mcp/mcp.acceso.js). Con el rol
+// PRINCIPAL, como el servidor: un rol añadido no da el MCP.
+export function tieneAccesoMcp(role, permisos) {
+  if (role === 'superadmin' || role === 'admin') return true;
+  if (role === 'tutor') return false;
+  return permisos?.usa_mcp === true;
+}
+
 function canSeeItem(item, role, soloColaboraciones, permisos) {
   const roles = Array.isArray(role) ? role.filter(Boolean) : [role].filter(Boolean);
   const es = (...r) => r.some((x) => roles.includes(x));
   if (item.apagable && APAGADOS.includes(item.apagable)) return false;
+  // MCP de Claude: super admin y admin por su rol; el resto solo con la casilla.
+  // Va ANTES del atajo de soporte y del recorte del tutor: «roles únicamente».
+  if (item.accesoMcp) return tieneAccesoMcp(roles[0], permisos);
   // Un tutor solo ve lo suyo: lo que no le nombre expresamente queda fuera.
   // Al reves —listar lo prohibido— se olvida siempre algo, y lo que se olvida
   // es un tutor paseandose por Prospectos o por Finanzas.

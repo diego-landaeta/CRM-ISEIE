@@ -192,6 +192,7 @@ export async function me(req, res, next) {
           factura_manager: !!user.factura_manager,
           gestor_colaboraciones: !!user.gestor_colaboraciones,
           editar_fechas_factura: !!user.editar_fechas_factura,
+          usa_mcp: !!user.usa_mcp,
         },
         permissions,
         view: {},
