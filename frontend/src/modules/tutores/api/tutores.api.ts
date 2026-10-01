@@ -63,6 +63,8 @@ export interface AjustesTutores {
   aplica_desde: string;
   pct_por_defecto: string;
   updated_at: string;
+  /** Si el CRM escribe a los tutores. Con el freno puesto (15/09), no. */
+  correos_a_tutores?: boolean;
 }
 
 

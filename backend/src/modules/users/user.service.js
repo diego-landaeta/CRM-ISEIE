@@ -21,7 +21,8 @@ import { sendWelcomeUserEmail } from '../../shared/services/brevo.service.js';
 //
 // Para que un tutor entre mientras tanto: darle contraseña al crearlo, o desde
 // «Cambiar contraseña» en su ficha. Eso no manda ningun correo.
-const NO_ESCRIBIR_A_TUTORES = true;
+// La constante vive en shared/config/frenoTutores.js desde el 01/10.
+import { NO_ESCRIBIR_A_TUTORES } from '../../shared/config/frenoTutores.js';
 import { logger } from '../../shared/utils/logger.js';
 import { query } from '../../shared/config/db.js';
 

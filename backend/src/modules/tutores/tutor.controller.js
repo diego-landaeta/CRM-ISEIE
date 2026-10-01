@@ -7,6 +7,7 @@ import {
   editarColaboracionSchema, ajustesSchema, calcularSchema, liquidarSchema,
   busquedaDeTutorSchema,
 } from './tutor.validation.js';
+import { NO_ESCRIBIR_A_TUTORES } from '../../shared/config/frenoTutores.js';
 
 // Quien manda aqui.
 //
@@ -66,6 +67,13 @@ export async function alta(req, res, next) {
   try {
     await exigirGestion(req);
     const d = valida(altaTutorSchema, req.body);
+
+    // Con el freno de correos a tutores puesto, el alta SIN contraseña dejaria
+    // a la persona sin forma de entrar: no le llega ningun correo para ponerla.
+    // Diego, 01/10: «esa opción para tutores no debe de mandarse ni hacerse».
+    if (NO_ESCRIBIR_A_TUTORES && !d.password) {
+      throw new AppError('Ponle una contraseña: a los tutores no se les manda ningún correo.', 400, 'CONTRASENA_OBLIGATORIA');
+    }
 
     // Se reutiliza el alta de usuarios tal cual: contraseña temporal, token de
     // 24 horas y correo de Brevo con el enlace para poner contraseña. No hay
@@ -210,7 +218,10 @@ export async function borrarColaboracion(req, res, next) {
 export async function ajustes(req, res, next) {
   try {
     await exigirGestion(req);
-    res.json({ success: true, data: await model.ajustes() });
+    // `correos_a_tutores`: si el CRM les escribe. Con el freno puesto, la
+    // pantalla no ofrece nada que dependa de un correo (alta sin contraseña,
+    // «mandarle el enlace») ni dice que se le vaya a mandar.
+    res.json({ success: true, data: { ...(await model.ajustes()), correos_a_tutores: !NO_ESCRIBIR_A_TUTORES } });
   } catch (err) { next(err); }
 }
 
