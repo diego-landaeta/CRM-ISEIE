@@ -5,6 +5,7 @@ import { webhookLeadSchema, listLeadsSchema, updateStatusSchema, createInteracti
 import * as dupQueue from './dup-queue.service.js';
 import * as leadProducts from './lead-products.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
+import { tieneRol } from '../../shared/utils/roles.js';
 import { leadsToWasapiCsv, leadsToWasapiXlsx, detectCountry } from '../../shared/utils/wasapiCsv.js';
 
 // ============================================================
@@ -398,13 +399,33 @@ export async function getPurchaseHistory(req, res, next) {
   } catch (err) { next(err); }
 }
 
-// DELETE /api/leads/:id  (superadmin only — soft delete con motivo)
+// Lo que una gestora puede alegar para eliminar: limpieza, no decisiones de
+// negocio. «Otro» queda para quien administra.
+export const MOTIVOS_DE_GESTORA = ['test', 'spam', 'duplicado_manual'];
+
+// DELETE /api/leads/:id  (soft delete con motivo)
+//
+// Admin y superadmin, como siempre. Y desde el 01/10, la gestora que tenga el
+// permiso `leads.delete` —se da persona a persona en Permisos—. Diego: «a
+// Dayana y a Ana no les sale para eliminar leads, tienen que poder» (#204).
+// Para ella, tres limites que comprueba el servidor, no la pantalla: solo sus
+// leads, ninguno con venta, y solo por prueba, spam o duplicado.
 export async function softDelete(req, res, next) {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
     const reason = (req.body?.reason || 'otro').toLowerCase();
     const motivo = req.body?.motivo || null;
+    if (!tieneRol(req.user, 'admin', 'superadmin', 'soporte')) {
+      await exigirQueSeaSuyo(req, id);
+      if (!MOTIVOS_DE_GESTORA.includes(reason)) {
+        throw new AppError('Puedes eliminar por prueba, spam o duplicado. Para otro motivo, pídeselo a un administrador.', 403, 'MOTIVO_SOLO_ADMIN');
+      }
+      const { rows } = await query('SELECT 1 FROM conversions WHERE lead_id = $1 LIMIT 1', [id]);
+      if (rows.length) {
+        throw new AppError('Este contacto ya tiene una venta: solo un administrador puede eliminarlo.', 403, 'TIENE_VENTA');
+      }
+    }
     const result = await leadService.softDelete(id, { reason, motivo, userId: req.user.userId });
     res.json({ success: true, data: result });
   } catch (err) { next(err); }

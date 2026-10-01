@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Trash, Warning } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface LeadLite {
   id: number;
@@ -23,18 +24,25 @@ const REASONS: Array<{ value: string; label: string; desc: string }> = [
   { value: 'otro',              label: 'Otro',              desc: 'Especifica el motivo abajo.' },
 ];
 
-// Soft delete (superadmin). Permite recuperar el lead luego desde DB si hace falta.
+// Lo que puede alegar una gestora con permiso de eliminar (#204): limpieza.
+// «Otro» es de quien administra. El servidor aplica la misma lista.
+const MOTIVOS_DE_GESTORA = ['test', 'spam', 'duplicado_manual'];
+
+// Soft delete. Permite recuperar el lead luego desde DB si hace falta.
 export default function SoftDeleteDialog({ open, lead, onClose, onDeleted }: Props) {
+  const { user } = useAuth();
+  const esJefe = user?.role === 'superadmin' || user?.role === 'admin' || user?.role === 'soporte';
+  const motivos = esJefe ? REASONS : REASONS.filter((r) => MOTIVOS_DE_GESTORA.includes(r.value));
   const [reason, setReason] = useState<string>('spam');
   const [motivo, setMotivo] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (open) {
-      setReason('spam');
+      setReason(esJefe ? 'spam' : 'test');
       setMotivo('');
     }
-  }, [open]);
+  }, [open, esJefe]);
 
   if (!open || !lead) return null;
 
@@ -73,7 +81,7 @@ export default function SoftDeleteDialog({ open, lead, onClose, onDeleted }: Pro
           <div>
             <label className="text-xs font-semibold text-foreground mb-1.5 block">Motivo</label>
             <div className="grid grid-cols-2 gap-1.5">
-              {REASONS.map((r) => (
+              {motivos.map((r) => (
                 <button
                   key={r.value}
                   type="button"

@@ -134,7 +134,9 @@ export async function changePassword(req, res, next) {
     const { rows } = await query('SELECT password_hash FROM users WHERE id = $1', [userId]);
     if (!rows[0]) throw new AppError('Usuario no encontrado', 404, 'USER_NOT_FOUND');
     const ok = await bcrypt.compare(currentPassword, rows[0].password_hash);
-    if (!ok) throw new AppError('Contrasena actual incorrecta', 401, 'INVALID_CURRENT_PASSWORD');
+    // 400 y no 401: un 401 hace que la pantalla intente renovar la sesion,
+    // cuando lo unico que ha pasado es que la contraseña actual no es esa.
+    if (!ok) throw new AppError('La contraseña actual no es correcta', 400, 'INVALID_CURRENT_PASSWORD');
 
     const newHash = await bcrypt.hash(newPassword, 12);
     await query('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2', [newHash, userId]);
