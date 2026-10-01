@@ -45,9 +45,11 @@ export interface CursoQueFallo { nombre: string; motivo: string }
  * que ponerle ese curso desde su ficha.
  */
 export function avisoDelAlta(entraYa: boolean, asignados: number, fallidos: CursoQueFallo[]) {
+  // No promete un correo: mientras los correos a tutores esten parados, no
+  // hay alta sin contraseña, y no le llega nada.
   const acceso = entraYa
-    ? 'Ya puede entrar con el correo y la contraseña que le has puesto.'
-    : 'Le llega un correo con el enlace para poner su contraseña. Caduca en 24 horas.';
+    ? 'Ya puede entrar con el correo y la contraseña que le has puesto. No se le ha mandado ningún correo: pásasela tú.'
+    : 'Todavía no puede entrar: ponle una contraseña desde «Cambiar contraseña» y pásasela.';
   if (!fallidos.length) {
     return {
       title: 'Tutor dado de alta',
