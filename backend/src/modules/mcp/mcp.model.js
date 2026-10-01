@@ -1,5 +1,6 @@
 import { query } from '../../shared/config/db.js';
 import { getReceivable } from '../accounting/accounting.model.js';
+import { RIGE_HOY } from '../tutores/tutor.model.js';
 
 /**
  * Todo el SQL del MCP.
@@ -501,5 +502,81 @@ export async function cobrosPendientes({ projectIds, responsableId, desde, hasta
       producto: r.producto, proyecto: r.proyecto_nombre, gestora: r.gestora_nombre,
       cuota: r.cuota_numero, importe: r.importe, vence: r.vence, vencido: r.vencido,
     })),
+  };
+}
+
+// ── Tutores ─────────────────────────────────────────────────────────────────
+//
+// Carlos, 01/10: «la conexión crm-claude no exporta los datos de tutores». No
+// habia ninguna herramienta: Claude solo veia prospectos, ventas y facturas.
+//
+// Lo que NO sale, a proposito: DNI, IBAN, banco, telefono y notas del perfil.
+// Para contestar quien da que curso, a que porcentaje y cuanto se le debe no
+// hacen falta, y por una conversacion con Claude no tienen por que viajar.
+
+/** Los tutores de unos campus, cada uno con sus cursos y su porcentaje. */
+export async function tutoresConCursos({ projectIds, incluir_retirados = false, texto = null }) {
+  const { rows } = await query(
+    `SELECT u.id, u.nombre, u.email, u.active AS activo,
+            (SELECT string_agg(DISTINCT pr.nombre, ' · ' ORDER BY pr.nombre)
+               FROM user_projects up JOIN projects pr ON pr.id = up.project_id
+              WHERE up.user_id = u.id AND up.project_id = ANY($1::int[])) AS campus,
+            COALESCE((
+              SELECT json_agg(json_build_object(
+                       'curso', p.nombre, 'campus', pr.nombre, 'pct', c.pct,
+                       'desde', c.vigente_desde, 'hasta', c.vigente_hasta,
+                       'activa', c.activa, 'rige_hoy', ${RIGE_HOY('c')})
+                     ORDER BY pr.nombre, p.nombre, c.vigente_desde DESC)
+                FROM tutor_collaborations c
+                JOIN products p ON p.id = c.product_id
+                JOIN projects pr ON pr.id = p.project_id
+               WHERE c.tutor_id = u.id AND p.project_id = ANY($1::int[])), '[]'::json) AS cursos
+       FROM users u
+      WHERE u.role = 'tutor'
+        AND ($2::boolean OR u.active)
+        AND EXISTS (SELECT 1 FROM user_projects up2
+                     WHERE up2.user_id = u.id AND up2.project_id = ANY($1::int[]))
+        AND ($3::text IS NULL
+             OR u.nombre ILIKE '%' || $3 || '%'
+             OR u.email ILIKE '%' || $3 || '%'
+             OR EXISTS (SELECT 1 FROM tutor_collaborations c2
+                          JOIN products p2 ON p2.id = c2.product_id
+                         WHERE c2.tutor_id = u.id AND p2.project_id = ANY($1::int[])
+                           AND p2.nombre ILIKE '%' || $3 || '%'))
+      ORDER BY u.nombre`,
+    [projectIds, Boolean(incluir_retirados), texto || null]
+  );
+  return { total: rows.length, tutores: rows };
+}
+
+/**
+ * Lo que se le debe y lo pagado a cada tutor, por mes. El mismo calculo que la
+ * pantalla Comisiones (`resumenComisiones`): por pagar es todo lo que no esta
+ * pagado ni revertido.
+ */
+export async function comisionesDeTutores({ projectIds, periodo = null, tutor_id = null }) {
+  const { rows } = await query(
+    `SELECT tc.periodo, tc.tutor_id, u.nombre AS tutor,
+            COUNT(*)::int AS lineas,
+            COALESCE(SUM(tc.base_calculo), 0)::float AS base,
+            COALESCE(SUM(tc.importe) FILTER (WHERE tc.estado NOT IN ('pagada', 'revertida')), 0)::float AS por_pagar,
+            COALESCE(SUM(tc.importe) FILTER (WHERE tc.estado = 'pagada'), 0)::float AS pagado,
+            COALESCE(SUM(tc.importe) FILTER (WHERE tc.estado = 'revertida'), 0)::float AS revertido,
+            MAX(tc.fecha_liquidacion) AS ultima_liquidacion
+       FROM tutor_commissions tc
+       JOIN users u ON u.id = tc.tutor_id
+       JOIN products p ON p.id = tc.product_id
+      WHERE p.project_id = ANY($1::int[])
+        AND ($2::text IS NULL OR tc.periodo = $2)
+        AND ($3::int IS NULL OR tc.tutor_id = $3)
+      GROUP BY tc.periodo, tc.tutor_id, u.nombre
+      ORDER BY tc.periodo DESC, u.nombre`,
+    [projectIds, periodo || null, tutor_id || null]
+  );
+  const suma = (k) => Math.round(rows.reduce((t, r) => t + Number(r[k] || 0), 0) * 100) / 100;
+  return {
+    periodo: periodo || 'todos los meses',
+    totales: { por_pagar: suma('por_pagar'), pagado: suma('pagado'), revertido: suma('revertido') },
+    filas: rows,
   };
 }

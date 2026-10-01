@@ -246,7 +246,8 @@ describe('el protocolo, con la base de verdad', () => {
     expect(init.body.result.serverInfo.name).toBe('crm-iseih');
 
     const list = await rpc(TOKENS.ANA, 'tools/list');
-    expect(list.body.result.tools.length).toBe(10);
+    // 12 desde el 01/10: «listar_tutores» y «comisiones_tutores».
+    expect(list.body.result.tools.length).toBe(12);
   });
 
   it('el token se guarda como huella, nunca en claro', async () => {

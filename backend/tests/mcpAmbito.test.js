@@ -147,14 +147,17 @@ const ARGS = {
   resumen_facturas: {},
   cobros_pendientes: { limite: 50 },
   informe: { tipo: 'resumen_mensual', desde: '2026-01-01', hasta: '2026-09-01' },
+  listar_tutores: { texto: 'ana', incluir_retirados: true },
+  comisiones_tutores: { periodo: '2026-09', tutor_id: 3 },
 };
 
 const ejecutarTodas = async (ambito, extra = {}, omitir = []) => {
   for (const h of HERRAMIENTAS.filter((x) => !omitir.includes(x.nombre))) {
     // ver_prospecto devuelve «no existe» con la base vacia; lo que se mira
     // aqui es la consulta que lanzo, no el resultado.
+    // Y las de tutores, a una gestora, se niegan: es lo que tienen que hacer.
     await h.ejecutar(ambito, { ...ARGS[h.nombre], ...extra }).catch((e) => {
-      if (e.code !== 'MCP_NO_ENCONTRADO') throw e;
+      if (e.code !== 'MCP_NO_ENCONTRADO' && e.code !== 'MCP_SOLO_ADMIN') throw e;
     });
   }
 };
@@ -262,6 +265,39 @@ describe('lo que nunca sale', () => {
       if (/FROM invoices i|FROM leads l|FROM conversions c|lead_interactions/.test(sql)) {
         expect(sql).not.toMatch(PROHIBIDO);
       }
+    }
+  });
+});
+
+describe('tutores (Carlos, 01/10: «la conexión no exporta los datos de tutores»)', () => {
+  const TUTORES = ['listar_tutores', 'comisiones_tutores'];
+
+  it('existen y van acotadas a los campus pedidos', async () => {
+    for (const n of TUTORES) {
+      consultas.length = 0;
+      await HERRAMIENTAS.find((h) => h.nombre === n).ejecutar(ambitoDe('admin'), { ...ARGS[n], proyecto_id: 11 });
+      expect(consultas.length, n).toBeGreaterThan(0);
+      for (const { sql, params } of consultas) {
+        expect(sql).toMatch(/project_id = ANY\(\$1::int\[\]\)/);
+        expect(params[0]).toEqual([11]);
+      }
+    }
+  });
+
+  it('a una gestora se le niegan sin llegar a la base', async () => {
+    for (const n of TUTORES) {
+      consultas.length = 0;
+      const r = await HERRAMIENTAS.find((h) => h.nombre === n).ejecutar(ambitoDe('gestor'), ARGS[n]).catch((e) => e);
+      expect(r?.code, n).toBe('MCP_SOLO_ADMIN');
+      expect(consultas).toEqual([]);
+    }
+  });
+
+  it('no piden DNI, IBAN, banco ni teléfono', async () => {
+    consultas.length = 0;
+    for (const n of TUTORES) await HERRAMIENTAS.find((h) => h.nombre === n).ejecutar(ambitoDe('admin'), ARGS[n]);
+    for (const { sql } of consultas) {
+      expect(sql).not.toMatch(/iban|dni|nif|banco|telefono|tutor_profiles|password|token|[a-z]+\.\*/i);
     }
   });
 });
