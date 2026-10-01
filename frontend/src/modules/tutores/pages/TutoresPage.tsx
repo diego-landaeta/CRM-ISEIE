@@ -10,6 +10,7 @@ import { Button } from '@/shared/components/ui/button';
 import BuscadorCurso from '../components/BuscadorCurso';
 import Entregables from '../components/Entregables';
 import { tutoresApi, type Tutor, type Colaboracion, type AjustesTutores } from '../api/tutores.api';
+import { cursosParaElAlta, avisoDelAlta, type CursoDelAlta, type CursoQueFallo } from '../lib/colaboraciones';
 
 // Tutores y sus colaboraciones.
 //
@@ -22,7 +23,6 @@ interface Formacion { id: number; nombre: string; precio: string }
 // Un curso tal como se asigna en el alta: cada uno con SU fecha. No es un
 // detalle: un tutor puede llevar Logopedia desde marzo y haber cogido Disfagia
 // en septiembre, y cobrar de los dos desde el mismo dia le regala meses.
-interface CursoDelAlta { productId: number; pct: number; desde: string }
 
 const hoy = () => new Date().toISOString().slice(0, 10);
 const soloFecha = (f: string | null) => (f ? String(f).slice(0, 10) : null);
@@ -160,22 +160,6 @@ export default function TutoresPage() {
     if (!(pct >= 0 && pct <= 100)) return;
     setCursosAlta((prev) => [...prev, { productId: id, pct, desde: nuevaFecha }]);
     setNuevoCurso('');
-  }
-
-  // Los cursos del alta MAS el que esta elegido en el buscador y sin «Añadir».
-  //
-  // Carlos, 01/10: «cuando se crea un tutor y se selecciona formación, NO SE
-  // GUARDA». Elegir el curso no lo añadia: habia que pulsar «Añadir» despues, y
-  // quien elige uno solo y da a «Dar de alta» lo perdia sin aviso.
-  function cursosConElElegido(): CursoDelAlta[] {
-    const id = Number(nuevoCurso);
-    if (!id || cursosAlta.some((c) => c.productId === id)) return cursosAlta;
-    const pct = Number(nuevoPct);
-    return [...cursosAlta, {
-      productId: id,
-      pct: pct >= 0 && pct <= 100 ? pct : Number(ajustes?.pct_por_defecto ?? 10),
-      desde: nuevaFecha,
-    }];
   }
 
   function abrirAlta() {
@@ -364,30 +348,24 @@ export default function TutoresPage() {
       });
       if (!r.success) throw new Error(r.error || 'no se pudo');
 
-      // Cada curso con SU fecha. Si alguno falla se dice cual: el tutor ya
-      // existe y no tiene sentido deshacerlo por eso.
-      const cursos = cursosConElElegido();
-      const fallidos: string[] = [];
+      // Cada curso con SU fecha, y cada uno por separado. El tutor YA existe:
+      // un curso que falla no puede convertir el alta entera en «No se ha
+      // podido dar de alta», que era lo que pasaba, porque la llamada lanza el
+      // error y saltaba al `catch` de abajo con el tutor ya creado (#206).
+      const cursos = cursosParaElAlta(cursosAlta, nuevoCurso, nuevoPct, nuevaFecha, Number(ajustes?.pct_por_defecto ?? 10));
+      const fallidos: CursoQueFallo[] = [];
       for (const c of cursos) {
-        const rc = await tutoresApi.crearColaboracion({
-          tutorId: r.data!.id, productId: c.productId, pct: c.pct, desde: c.desde,
-        });
-        if (!rc.success) fallidos.push(formaciones.find((x) => x.id === c.productId)?.nombre || String(c.productId));
+        const nombre = formaciones.find((x) => x.id === c.productId)?.nombre || `curso ${c.productId}`;
+        try {
+          const rc = await tutoresApi.crearColaboracion({
+            tutorId: r.data!.id, productId: c.productId, pct: c.pct, desde: c.desde,
+          });
+          if (!rc.success) fallidos.push({ nombre, motivo: rc.error || 'no se pudo guardar' });
+        } catch (err) {
+          fallidos.push({ nombre, motivo: err instanceof Error ? err.message : 'no se pudo guardar' });
+        }
       }
-      if (fallidos.length) {
-        toast({ title: 'Algún curso no se ha podido asignar', description: fallidos.join(', '), variant: 'destructive' });
-      }
-
-      const cuantos = cursos.length - fallidos.length;
-      toast({
-        title: 'Tutor dado de alta',
-        description: [
-          r.data?.entraYa
-            ? 'Ya puede entrar con el correo y la contraseña que le has puesto.'
-            : 'Le llega un correo con el enlace para poner su contraseña. Caduca en 24 horas.',
-          cuantos > 0 ? `Con ${cuantos} ${cuantos === 1 ? 'curso asignado' : 'cursos asignados'}.` : '',
-        ].filter(Boolean).join(' '),
-      });
+      toast(avisoDelAlta(Boolean(r.data?.entraYa), cursos.length - fallidos.length, fallidos));
       setPopupAlta(false);
       setCursosAlta([]);
       setNuevoCurso('');

@@ -645,7 +645,9 @@ export async function pagosSinFormacion({ desde, hasta, projectId = null, projec
  * Cada fila dice si su venta mas reciente es anterior al corte, para que la
  * pantalla pueda marcarlas y no mezclar las dos cosas sin avisar.
  */
-export async function formacionesSinTutor({ projectId = null, desdeElCorte = true } = {}) {
+// `projectIds`: varios campus a la vez, como en MultiCRM. Lo usa Claude (#207);
+// la pantalla sigue pasando uno solo.
+export async function formacionesSinTutor({ projectId = null, projectIds = null, desdeElCorte = true } = {}) {
   const { rows } = await query(
     `WITH sin_tutor AS (
      SELECT p.id, p.nombre, p.precio, pr.nombre AS proyecto, p.project_id,
@@ -688,7 +690,8 @@ export async function formacionesSinTutor({ projectId = null, desdeElCorte = tru
         -- tener tutor entonces y no tenerlo ahora: sacarla aqui seria acusar de
         -- un agujero que no existe.
         ${desdeElCorte ? 'AND cv.fecha_conversion >= s.aplica_desde' : ''}
-        AND ($1::int IS NULL OR p.project_id = $1)
+        AND ($2::int[] IS NOT NULL AND p.project_id = ANY($2::int[])
+             OR $2::int[] IS NULL AND ($1::int IS NULL OR p.project_id = $1))
       GROUP BY p.id, p.nombre, p.precio, pr.nombre, p.project_id
      HAVING count(cp.id) >= 1 AND count(DISTINCT cv.lead_id) >= 1
     )
@@ -713,7 +716,7 @@ export async function formacionesSinTutor({ projectId = null, desdeElCorte = tru
       -- entera --hay quien anuncia asi--, de ella misma.
       LEFT JOIN meta_campaigns cam ON cam.campaign_id = COALESCE(ads.campaign_id, b.campaign_id)
      ORDER BY s.cobrado DESC`,
-    [projectId]
+    [projectId, (Array.isArray(projectIds) && projectIds.length) ? projectIds.map(Number) : null]
   );
   return rows;
 }
