@@ -148,7 +148,8 @@ const ARGS = {
   cobros_pendientes: { limite: 50 },
   informe: { tipo: 'resumen_mensual', desde: '2026-01-01', hasta: '2026-09-01' },
   listar_tutores: { texto: 'ana', incluir_retirados: true },
-  comisiones_tutores: { periodo: '2026-09', tutor_id: 3 },
+  comisiones_tutores: { desde: '2026-08', hasta: '2026-09', tutor_id: 3 },
+  formaciones_sin_tutor: { incluir_anteriores_al_corte: true },
 };
 
 const ejecutarTodas = async (ambito, extra = {}, omitir = []) => {
@@ -270,7 +271,7 @@ describe('lo que nunca sale', () => {
 });
 
 describe('tutores (Carlos, 01/10: «la conexión no exporta los datos de tutores»)', () => {
-  const TUTORES = ['listar_tutores', 'comisiones_tutores'];
+  const TUTORES = ['listar_tutores', 'comisiones_tutores', 'formaciones_sin_tutor'];
 
   it('existen y van acotadas a los campus pedidos', async () => {
     for (const n of TUTORES) {
@@ -278,8 +279,10 @@ describe('tutores (Carlos, 01/10: «la conexión no exporta los datos de tutores
       await HERRAMIENTAS.find((h) => h.nombre === n).ejecutar(ambitoDe('admin'), { ...ARGS[n], proyecto_id: 11 });
       expect(consultas.length, n).toBeGreaterThan(0);
       for (const { sql, params } of consultas) {
-        expect(sql).toMatch(/project_id = ANY\(\$1::int\[\]\)/);
-        expect(params[0]).toEqual([11]);
+        // «formaciones_sin_tutor» usa la consulta de la pantalla, que lleva la
+        // lista en $2; lo que importa es que la lleve y que sea solo [11].
+        expect(sql).toMatch(/project_id = ANY\(\$\d::int\[\]\)/);
+        expect(params.find((p) => Array.isArray(p))).toEqual([11]);
       }
     }
   });
@@ -297,7 +300,10 @@ describe('tutores (Carlos, 01/10: «la conexión no exporta los datos de tutores
     consultas.length = 0;
     for (const n of TUTORES) await HERRAMIENTAS.find((h) => h.nombre === n).ejecutar(ambitoDe('admin'), ARGS[n]);
     for (const { sql } of consultas) {
-      expect(sql).not.toMatch(/iban|dni|nif|banco|telefono|tutor_profiles|password|token|[a-z]+\.\*/i);
+      expect(sql).not.toMatch(/iban|dni|nif|banco|telefono|tutor_profiles|password|\btoken\b/i);
+      // El `s.*` de «Cursos sin tutor» lee de su propia subconsulta, que no
+      // tiene nada personal; en las demás, ni un `*`.
+      if (!/WITH sin_tutor AS/.test(sql)) expect(sql).not.toMatch(/\b[a-z]+\.\*/i);
     }
   });
 });

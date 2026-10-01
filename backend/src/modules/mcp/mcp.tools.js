@@ -242,17 +242,34 @@ export const HERRAMIENTAS = [
   {
     nombre: 'comisiones_tutores',
     titulo: 'Comisiones de tutores',
-    descripcion: 'Lo que se le debe y lo ya pagado a cada tutor, mes a mes: base de cálculo, por pagar, pagado y revertido. '
-      + 'Los mismos números que la pantalla Comisiones de tutores (solo super admin y admin).',
+    descripcion: 'Lo que se le debe y lo ya pagado a cada tutor, mes a mes: base de cálculo, generado, por pagar, pagado y revertido. '
+      + 'Un mes o un tramo de meses. Los mismos números que la pantalla Comisiones de tutores (solo super admin y admin).',
     entrada: {
       ...AMBITO,
-      periodo: z.string().regex(/^\d{4}-\d{2}$/, 'Formato AAAA-MM').optional().describe('Un mes, AAAA-MM. Sin él: todos'),
+      periodo: z.string().regex(/^\d{4}-\d{2}$/, 'Formato AAAA-MM').optional().describe('Un mes, AAAA-MM'),
+      desde: z.string().regex(/^\d{4}-\d{2}$/, 'Formato AAAA-MM').optional().describe('Primer mes del tramo, AAAA-MM'),
+      hasta: z.string().regex(/^\d{4}-\d{2}$/, 'Formato AAAA-MM').optional().describe('Último mes del tramo, AAAA-MM'),
       tutor_id: z.number().int().positive().optional().describe('Un tutor concreto (id de «listar_tutores»)'),
     },
     ejecutar: async (ambito, a) => {
       const { projectIds } = acotar(ambito, a);
       soloAdministracion(ambito, 'comisiones_tutores');
       return model.comisionesDeTutores({ ...a, projectIds });
+    },
+  },
+  {
+    nombre: 'formaciones_sin_tutor',
+    titulo: 'Formaciones sin tutor',
+    descripcion: 'Formaciones que se han vendido y cobrado y que hoy no tiene ningún tutor: lo mismo que la pantalla «Cursos sin tutor». '
+      + 'Por defecto, solo las vendidas desde el arranque de las comisiones (solo super admin y admin).',
+    entrada: {
+      ...AMBITO,
+      incluir_anteriores_al_corte: z.boolean().default(false).describe('true: también las vendidas antes del arranque de las comisiones'),
+    },
+    ejecutar: async (ambito, a) => {
+      const { projectIds } = acotar(ambito, a);
+      soloAdministracion(ambito, 'formaciones_sin_tutor');
+      return model.formacionesSinTutorDe({ ...a, projectIds });
     },
   },
   {
