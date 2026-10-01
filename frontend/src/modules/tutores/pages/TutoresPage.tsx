@@ -162,6 +162,22 @@ export default function TutoresPage() {
     setNuevoCurso('');
   }
 
+  // Los cursos del alta MAS el que esta elegido en el buscador y sin «Añadir».
+  //
+  // Carlos, 01/10: «cuando se crea un tutor y se selecciona formación, NO SE
+  // GUARDA». Elegir el curso no lo añadia: habia que pulsar «Añadir» despues, y
+  // quien elige uno solo y da a «Dar de alta» lo perdia sin aviso.
+  function cursosConElElegido(): CursoDelAlta[] {
+    const id = Number(nuevoCurso);
+    if (!id || cursosAlta.some((c) => c.productId === id)) return cursosAlta;
+    const pct = Number(nuevoPct);
+    return [...cursosAlta, {
+      productId: id,
+      pct: pct >= 0 && pct <= 100 ? pct : Number(ajustes?.pct_por_defecto ?? 10),
+      desde: nuevaFecha,
+    }];
+  }
+
   function abrirAlta() {
     setCursosAlta([]);
     setNuevoCurso('');
@@ -350,8 +366,9 @@ export default function TutoresPage() {
 
       // Cada curso con SU fecha. Si alguno falla se dice cual: el tutor ya
       // existe y no tiene sentido deshacerlo por eso.
+      const cursos = cursosConElElegido();
       const fallidos: string[] = [];
-      for (const c of cursosAlta) {
+      for (const c of cursos) {
         const rc = await tutoresApi.crearColaboracion({
           tutorId: r.data!.id, productId: c.productId, pct: c.pct, desde: c.desde,
         });
@@ -361,7 +378,7 @@ export default function TutoresPage() {
         toast({ title: 'Algún curso no se ha podido asignar', description: fallidos.join(', '), variant: 'destructive' });
       }
 
-      const cuantos = cursosAlta.length - fallidos.length;
+      const cuantos = cursos.length - fallidos.length;
       toast({
         title: 'Tutor dado de alta',
         description: [
@@ -373,6 +390,7 @@ export default function TutoresPage() {
       });
       setPopupAlta(false);
       setCursosAlta([]);
+      setNuevoCurso('');
       setContrasena('');
       cargar();
     } catch (err) {
@@ -871,7 +889,9 @@ export default function TutoresPage() {
                   </ul>
                 ) : (
                   <p className="text-xs text-muted-foreground border border-dashed border-border rounded-md px-3 py-3 text-center">
-                    Sin cursos todavía. Mientras no tenga ninguno, no genera comisión.
+                    {nuevoCurso
+                      ? 'El curso elegido se le asigna al darle de alta, aunque no pulses «Añadir».'
+                      : 'Sin cursos todavía. Mientras no tenga ninguno, no genera comisión.'}
                   </p>
                 )}
 

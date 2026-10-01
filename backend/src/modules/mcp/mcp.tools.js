@@ -96,6 +96,18 @@ export const INFORMES = {
   },
 };
 
+/**
+ * Lo de tutores es de administracion: lo que se le paga a cada profesor no lo
+ * ve una gestora, igual que en la pantalla (Tutores pide admin, superadmin o
+ * quien lleva las colaboraciones). Se llama DESPUES de acotar, para que un
+ * campus ajeno se rechace por ajeno y no por esto.
+ */
+function soloAdministracion(ambito, herramienta) {
+  if (ambito.soloLoSuyo) {
+    throw new AppError(`«${herramienta}» es de administración: solo la ven super admin y admin.`, 403, 'MCP_SOLO_ADMIN');
+  }
+}
+
 async function conTope(promesa, ms, nombre) {
   let reloj;
   const tope = new Promise((_, rechazar) => {
@@ -210,6 +222,38 @@ export const HERRAMIENTAS = [
       limite: z.number().int().min(1).max(200).default(50).describe('Máximo de filas de detalle'),
     },
     ejecutar: (ambito, a) => model.cobrosPendientes({ ...a, ...acotar(ambito, a) }),
+  },
+  {
+    nombre: 'listar_tutores',
+    titulo: 'Tutores y sus cursos',
+    descripcion: 'Los tutores (profesores colaboradores) de tus campus: en qué campus están, qué cursos dan, con qué porcentaje de comisión '
+      + 'y desde cuándo. «rige_hoy» dice si ese curso le genera comisión hoy. No incluye DNI, IBAN ni teléfono (solo super admin y admin).',
+    entrada: {
+      ...AMBITO,
+      texto: z.string().max(100).optional().describe('Busca en nombre, email o nombre del curso'),
+      incluir_retirados: z.boolean().default(false).describe('true: también los tutores dados de baja'),
+    },
+    ejecutar: async (ambito, a) => {
+      const { projectIds } = acotar(ambito, a);
+      soloAdministracion(ambito, 'listar_tutores');
+      return model.tutoresConCursos({ ...a, projectIds });
+    },
+  },
+  {
+    nombre: 'comisiones_tutores',
+    titulo: 'Comisiones de tutores',
+    descripcion: 'Lo que se le debe y lo ya pagado a cada tutor, mes a mes: base de cálculo, por pagar, pagado y revertido. '
+      + 'Los mismos números que la pantalla Comisiones de tutores (solo super admin y admin).',
+    entrada: {
+      ...AMBITO,
+      periodo: z.string().regex(/^\d{4}-\d{2}$/, 'Formato AAAA-MM').optional().describe('Un mes, AAAA-MM. Sin él: todos'),
+      tutor_id: z.number().int().positive().optional().describe('Un tutor concreto (id de «listar_tutores»)'),
+    },
+    ejecutar: async (ambito, a) => {
+      const { projectIds } = acotar(ambito, a);
+      soloAdministracion(ambito, 'comisiones_tutores');
+      return model.comisionesDeTutores({ ...a, projectIds });
+    },
   },
   {
     nombre: 'informe',
