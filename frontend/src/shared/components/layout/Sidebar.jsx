@@ -43,6 +43,8 @@ const NAV_SECTIONS = [
           // Solo en pruebas hasta que se apruebe: ver shared/lib/enPruebas.js.
           ...(PROCESO_EN_PRUEBAS ? [{ to: '/leads/seguimiento', label: 'Seguimiento de fin de mes' }] : []),
           { to: '/leads/proceso', label: 'Proceso comercial' },
+          // Las becas y su embudo (#86): a quién se le ofrecieron y en qué acabaron.
+          { to: '/leads/convocatorias', label: 'Convocatorias' },
         ],
       },
       // WhatsApp cuelga de su propia entrada, con lo suyo escalonado debajo: son
