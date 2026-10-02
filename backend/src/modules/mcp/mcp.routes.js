@@ -5,6 +5,7 @@ import { urlPersonal, verificarTokenMcp } from './mcp.auth.js';
 import { atenderPeticion, metodoNoPermitido } from './mcp.server.js';
 import { huella } from './mcp.acceso.js';
 import * as ctrl from './mcp.controller.js';
+import oauth from './mcp.oauth.js';
 
 const router = Router();
 
@@ -20,6 +21,11 @@ panel.delete('/tokens/:id', ctrl.revocarToken);
 panel.get('/personas', soloRoles('superadmin', 'admin'), ctrl.personas);
 panel.patch('/personas/:id', soloRoles('superadmin', 'admin'), ctrl.cambiarAcceso);
 router.use('/panel', panel);
+
+// ─── Inicio de sesión OAuth para Claude (sin JWT: lo usa Claude) ─────────
+// Para las cuentas de Claude que al pulsar «Connect» exigen OAuth. Ver
+// mcp.oauth.js. Va antes que `POST /` por la misma razon que el panel.
+router.use('/oauth', oauth);
 
 // ─── El MCP (token personal) ──────────────────────────────────────────────
 // 60 preguntas por minuto y token: de sobra para una conversacion, y corta un
