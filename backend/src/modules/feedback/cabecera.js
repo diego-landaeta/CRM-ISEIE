@@ -22,14 +22,22 @@ import { logger } from '../../shared/utils/logger.js';
  * marca en el panel cambia la versión, y el correo siguiente pide la nueva.
  */
 
-// Al doble del tamaño con el que se ve (560 × 88): en retina no sale borroso.
+// Al doble del tamaño con el que se ve (560 × 132): en retina no sale borroso.
+//
+// Antes era 560 × 88 con el logo en 520 × 104. Carlos, 02/10 (#213): en el
+// móvil la cabecera se queda en unos 300 px de ancho y el logo de Psiko —de
+// trazo fino y casi cuadrado— medía 25 px de alto: no se distinguía. Más alta y
+// con el logo más grande se reconoce en las 10 marcas (comprobado una a una).
 const ANCHO = 1120;
-const ALTO = 176;
+const ALTO = 264;
 const FILETE = 8;
-const MARGEN = 48;
-const LOGO_ALTO = 104;
-const LOGO_ANCHO = 520;
+const MARGEN = 56;
+const LOGO_ALTO = 184;
+const LOGO_ANCHO = 760;
 const MAX_EN_MEMORIA = 60;
+// Entra en la versión: si cambian las medidas, cambia la dirección de la imagen
+// y Gmail no sigue enseñando la vieja que tiene guardada.
+const DISENO = '2';
 
 // `${id}:${version}` -> la promesa del PNG: si llegan diez peticiones a la vez
 // para una marca sin dibujar, se dibuja una vez, no diez.
@@ -40,7 +48,7 @@ const hex = (v) => (/^#[0-9a-f]{6}$/i.test(v || '') ? v : null);
 /** La versión de la cabecera: cambia en cuanto cambia el logo o un color. */
 export function versionDe(marca) {
   return crypto.createHash('sha1')
-    .update([marca.logo_url, marca.color_cabecera, marca.theme_color, marca.proyecto || marca.nombre].join('|'))
+    .update([DISENO, marca.logo_url, marca.color_cabecera, marca.theme_color, marca.proyecto || marca.nombre].join('|'))
     .digest('hex').slice(0, 10);
 }
 
