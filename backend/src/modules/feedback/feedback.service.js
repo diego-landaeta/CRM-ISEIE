@@ -43,11 +43,19 @@ export function enlaceDe(token, { vista = false } = {}) {
 const escapar = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-function primerNombre(nombre) {
+export function primerNombre(nombre) {
   const limpio = String(nombre || '').replace(/\(.*?\)/g, '').trim();
   const uno = limpio.split(/\s+/)[0] || '';
-  // «Anónimo» y parecidos: mejor un saludo sin nombre que «Hola Anónimo».
-  return /^an[oó]nim/i.test(uno) ? '' : uno;
+  // «Anónimo» y parecidos: mejor un saludo sin nombre que «Hola Anónimo». Y lo
+  // mismo si en el nombre vino un correo o un número.
+  if (/^an[oó]nim/i.test(uno) || /[@\d]/.test(uno)) return '';
+  // «manuel» o «MANUEL», tal cual llegó del formulario, salían así en el saludo
+  // y ahora también saldrían en el asunto (#213). Si viene mezclado —McDonald,
+  // DeLuca— es a propósito y se respeta.
+  if (uno === uno.toLocaleLowerCase('es') || uno === uno.toLocaleUpperCase('es')) {
+    return uno.toLocaleLowerCase('es').replace(/(^|-)(\p{L})/gu, (m, antes, letra) => antes + letra.toLocaleUpperCase('es'));
+  }
+  return uno;
 }
 
 /**
@@ -95,7 +103,11 @@ export function correoDe(d, token, { vista = false } = {}) {
     ? `<div style="background:#fff4d6;border:1px solid #f0c75e;border-radius:6px;padding:10px 12px;margin:0 0 18px;font-size:13px;color:#6b4e00">
          Vista previa: esto es lo que recibirá la persona. Todavía no se le ha enviado.</div>`
     : '';
-  const asunto = '¿Por qué has desistido de saber más sobre nuestro programa?';
+  // Carlos, 02/10: «que salga el nombre en el asunto» (#213 de MultiCRM). Delante,
+  // porque el móvil corta los asuntos largos. Sin nombre, el de siempre.
+  const asunto = nombre
+    ? `${nombre}, ¿por qué has desistido de saber más sobre nuestro programa?`
+    : '¿Por qué has desistido de saber más sobre nuestro programa?';
   const html = `<!doctype html><html><body style="margin:0;background:#f4f6f8;font-family:Arial,Helvetica,sans-serif;color:#1d2530">
   <div style="max-width:560px;margin:0 auto;padding:28px 16px">
     ${cabecera}
