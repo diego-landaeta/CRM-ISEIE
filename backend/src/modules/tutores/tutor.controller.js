@@ -8,6 +8,9 @@ import {
   busquedaDeTutorSchema,
 } from './tutor.validation.js';
 import { NO_ESCRIBIR_A_TUTORES } from '../../shared/config/frenoTutores.js';
+// Se usaba en Comisiones y en Pagos sin formación sin importarla: las dos daban
+// 500 «proyectosDelAmbito is not defined» (Manuel, 02/10). En MultiCRM sí estaba.
+import { proyectosDelAmbito } from '../../shared/utils/ambito.js';
 
 // Quien manda aqui.
 //
