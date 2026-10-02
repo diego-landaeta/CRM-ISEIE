@@ -514,8 +514,41 @@ export async function cobrosPendientes({ projectIds, responsableId, desde, hasta
 // Para contestar quien da que curso, a que porcentaje y cuanto se le debe no
 // hacen falta, y por una conversacion con Claude no tienen por que viajar.
 
-/** Los tutores de unos campus, cada uno con sus cursos y su porcentaje. */
-export async function tutoresConCursos({ projectIds, incluir_retirados = false, texto = null }) {
+/**
+ * Lo entregado de una colaboracion, con el MISMO texto que la columna Entregado
+ * de Comisiones (`Entregables` en solo lectura): «Foto y Vídeo · 50% módulos» o
+ * «sin entregar». Y lo que falta, para contestar «¿a quien se le puede pagar ya?»
+ * (#207, Manuel 02/10). Completo es foto, video y los modulos al 100 %.
+ */
+export function entregadoDe(c) {
+  const foto = Boolean(c?.entrego_foto);
+  const video = Boolean(c?.entrego_video);
+  const pct = Number(c?.modulos_pct || 0);
+  const puestas = [];
+  if (foto && video) puestas.push('Foto y Vídeo');
+  else if (foto) puestas.push('Foto corporativa');
+  else if (video) puestas.push('Vídeo');
+  if (pct) puestas.push(pct === 100 ? '100% completo' : `${pct}% módulos`);
+  const falta = [];
+  if (!foto) falta.push('foto corporativa');
+  if (!video) falta.push('vídeo');
+  if (pct < 100) falta.push(pct ? `módulos (va por el ${pct} %)` : 'módulos');
+  return {
+    entrego_foto: foto,
+    entrego_video: video,
+    modulos_pct: pct,
+    entregado: puestas.length ? puestas.join(' · ') : 'sin entregar',
+    falta,
+    todo_entregado: falta.length === 0,
+  };
+}
+
+/**
+ * Los tutores de unos campus, cada uno con sus cursos, su porcentaje y lo que ha
+ * entregado de cada uno. Con `solo_entregas_pendientes`, solo los tutores a los
+ * que les falta algo en un curso que siguen dando, y de ellos solo esos cursos.
+ */
+export async function tutoresConCursos({ projectIds, incluir_retirados = false, texto = null, solo_entregas_pendientes = false }) {
   const { rows } = await query(
     `SELECT u.id, u.nombre, u.email, u.active AS activo,
             (SELECT string_agg(DISTINCT pr.nombre, ' · ' ORDER BY pr.nombre)
@@ -525,7 +558,9 @@ export async function tutoresConCursos({ projectIds, incluir_retirados = false, 
               SELECT json_agg(json_build_object(
                        'curso', p.nombre, 'campus', pr.nombre, 'pct', c.pct,
                        'desde', c.vigente_desde, 'hasta', c.vigente_hasta,
-                       'activa', c.activa, 'rige_hoy', ${RIGE_HOY('c')})
+                       'activa', c.activa, 'rige_hoy', ${RIGE_HOY('c')},
+                       'entrego_foto', c.entrego_foto, 'entrego_video', c.entrego_video,
+                       'modulos_pct', c.modulos_pct)
                      ORDER BY pr.nombre, p.nombre, c.vigente_desde DESC)
                 FROM tutor_collaborations c
                 JOIN products p ON p.id = c.product_id
@@ -546,7 +581,19 @@ export async function tutoresConCursos({ projectIds, incluir_retirados = false, 
       ORDER BY u.nombre`,
     [projectIds, Boolean(incluir_retirados), texto || null]
   );
-  return { total: rows.length, tutores: rows };
+  // Pendiente cuenta solo en los cursos que no se le han retirado: a quien ya no
+  // da un curso no hay que pedirle la foto de ese curso.
+  const pendiente = (c) => c.activa && !c.todo_entregado;
+  let tutores = rows.map((t) => {
+    const cursos = (t.cursos || []).map((c) => ({ ...c, ...entregadoDe(c) }));
+    return { ...t, cursos, cursos_con_entregas_pendientes: cursos.filter(pendiente).length };
+  });
+  if (solo_entregas_pendientes) {
+    tutores = tutores
+      .filter((t) => t.cursos_con_entregas_pendientes > 0)
+      .map((t) => ({ ...t, cursos: t.cursos.filter(pendiente) }));
+  }
+  return { total: tutores.length, tutores };
 }
 
 /**
@@ -556,8 +603,12 @@ export async function tutoresConCursos({ projectIds, incluir_retirados = false, 
  *
  * «generado» es todo lo que le corresponde menos lo revertido (#207). En ISEIE
  * no hay «Avisar tutor», asi que tampoco la fecha del aviso.
+ *
+ * «cursos» es lo entregado de cada curso de esas lineas, leido de la misma
+ * colaboracion que pinta la columna Entregado de la pantalla. «se_puede_pagar»:
+ * queda algo por pagar y esta todo entregado (#207, Manuel 02/10).
  */
-export async function comisionesDeTutores({ projectIds, periodo = null, desde = null, hasta = null, tutor_id = null }) {
+export async function comisionesDeTutores({ projectIds, periodo = null, desde = null, hasta = null, tutor_id = null, solo_entregas_pendientes = false }) {
   const de = periodo || desde || null;
   const a = periodo || hasta || null;
   const { rows } = await query(
@@ -568,10 +619,16 @@ export async function comisionesDeTutores({ projectIds, periodo = null, desde = 
             COALESCE(SUM(tc.importe) FILTER (WHERE tc.estado NOT IN ('pagada', 'revertida')), 0)::float AS por_pagar,
             COALESCE(SUM(tc.importe) FILTER (WHERE tc.estado = 'pagada'), 0)::float AS pagado,
             COALESCE(SUM(tc.importe) FILTER (WHERE tc.estado = 'revertida'), 0)::float AS revertido,
-            MAX(tc.fecha_liquidacion) AS ultima_liquidacion
+            MAX(tc.fecha_liquidacion) AS ultima_liquidacion,
+            jsonb_agg(DISTINCT jsonb_build_object(
+              'curso', p.nombre, 'campus', pr.nombre,
+              'entrego_foto', col.entrego_foto, 'entrego_video', col.entrego_video,
+              'modulos_pct', col.modulos_pct)) AS cursos
        FROM tutor_commissions tc
        JOIN users u ON u.id = tc.tutor_id
        JOIN products p ON p.id = tc.product_id
+       JOIN projects pr ON pr.id = p.project_id
+       LEFT JOIN tutor_collaborations col ON col.id = tc.collaboration_id
       WHERE p.project_id = ANY($1::int[])
         AND ($2::text IS NULL OR tc.periodo >= $2)
         AND ($3::text IS NULL OR tc.periodo <= $3)
@@ -580,11 +637,24 @@ export async function comisionesDeTutores({ projectIds, periodo = null, desde = 
       ORDER BY tc.periodo DESC, u.nombre`,
     [projectIds, de, a, tutor_id || null]
   );
-  const suma = (k) => Math.round(rows.reduce((t, r) => t + Number(r[k] || 0), 0) * 100) / 100;
+  let filas = rows.map((r) => {
+    const cursos = (r.cursos || [])
+      .map((c) => ({ curso: c.curso, campus: c.campus, ...entregadoDe(c) }))
+      .sort((x, y) => `${x.campus} ${x.curso}`.localeCompare(`${y.campus} ${y.curso}`, 'es'));
+    const pendientes = cursos.filter((c) => !c.todo_entregado).length;
+    return {
+      ...r,
+      cursos,
+      cursos_con_entregas_pendientes: pendientes,
+      se_puede_pagar: Number(r.por_pagar) > 0 && pendientes === 0,
+    };
+  });
+  if (solo_entregas_pendientes) filas = filas.filter((r) => r.cursos_con_entregas_pendientes > 0);
+  const suma = (k) => Math.round(filas.reduce((t, r) => t + Number(r[k] || 0), 0) * 100) / 100;
   return {
     periodo: periodo || (de || a ? `${de || 'el principio'} a ${a || 'hoy'}` : 'todos los meses'),
     totales: { generado: suma('generado'), por_pagar: suma('por_pagar'), pagado: suma('pagado'), revertido: suma('revertido') },
-    filas: rows,
+    filas,
   };
 }
 

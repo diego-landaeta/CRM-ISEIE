@@ -227,11 +227,15 @@ export const HERRAMIENTAS = [
     nombre: 'listar_tutores',
     titulo: 'Tutores y sus cursos',
     descripcion: 'Los tutores (profesores colaboradores) de tus campus: en qué campus están, qué cursos dan, con qué porcentaje de comisión '
-      + 'y desde cuándo. «rige_hoy» dice si ese curso le genera comisión hoy. No incluye DNI, IBAN ni teléfono (solo super admin y admin).',
+      + 'y desde cuándo. «rige_hoy» dice si ese curso le genera comisión hoy. De cada curso, lo entregado (foto corporativa, vídeo y módulos '
+      + 'al 25, 50 o 100 %): «entregado» es el mismo texto que la columna Entregado de la pantalla y «falta», lo que queda. '
+      + 'No incluye DNI, IBAN ni teléfono (solo super admin y admin).',
     entrada: {
       ...AMBITO,
       texto: z.string().max(100).optional().describe('Busca en nombre, email o nombre del curso'),
       incluir_retirados: z.boolean().default(false).describe('true: también los tutores dados de baja'),
+      solo_entregas_pendientes: z.boolean().default(false)
+        .describe('true: solo los tutores a los que les falta foto, vídeo o módulos al 100 % en un curso que siguen dando, y solo esos cursos'),
     },
     ejecutar: async (ambito, a) => {
       const { projectIds } = acotar(ambito, a);
@@ -243,13 +247,17 @@ export const HERRAMIENTAS = [
     nombre: 'comisiones_tutores',
     titulo: 'Comisiones de tutores',
     descripcion: 'Lo que se le debe y lo ya pagado a cada tutor, mes a mes: base de cálculo, generado, por pagar, pagado y revertido. '
-      + 'Un mes o un tramo de meses. Los mismos números que la pantalla Comisiones de tutores (solo super admin y admin).',
+      + 'Un mes o un tramo de meses. Los mismos números que la pantalla Comisiones de tutores. '
+      + 'Cada fila trae, curso a curso, lo entregado (como la columna Entregado) y «se_puede_pagar»: queda algo por pagar y lo ha entregado todo. '
+      + 'Sirve para contestar «¿a quién se le puede pagar ya?» (solo super admin y admin).',
     entrada: {
       ...AMBITO,
       periodo: z.string().regex(/^\d{4}-\d{2}$/, 'Formato AAAA-MM').optional().describe('Un mes, AAAA-MM'),
       desde: z.string().regex(/^\d{4}-\d{2}$/, 'Formato AAAA-MM').optional().describe('Primer mes del tramo, AAAA-MM'),
       hasta: z.string().regex(/^\d{4}-\d{2}$/, 'Formato AAAA-MM').optional().describe('Último mes del tramo, AAAA-MM'),
       tutor_id: z.number().int().positive().optional().describe('Un tutor concreto (id de «listar_tutores»)'),
+      solo_entregas_pendientes: z.boolean().default(false)
+        .describe('true: solo las filas con algún curso sin foto, sin vídeo o con los módulos por debajo del 100 %; los totales, de esas filas'),
     },
     ejecutar: async (ambito, a) => {
       const { projectIds } = acotar(ambito, a);
