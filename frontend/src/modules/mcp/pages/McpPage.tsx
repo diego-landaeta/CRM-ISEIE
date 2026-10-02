@@ -305,6 +305,10 @@ Su URL no se borra: si le devuelves el acceso, volverá a funcionar sin que teng
             <ol className="text-sm text-muted-foreground list-decimal pl-5 space-y-1">
               <li>Pulsa <strong>Sacar mi URL</strong> en una conexión, o <strong>Crear mi URL personal</strong>, y cópiala.</li>
               <li>Claude Desktop o claude.ai: <em>Configuración → Conectores → Agregar → Agregar conector personalizado</em>, ponle un nombre y pega la URL.</li>
+              <li>
+                <strong>Sin OAuth:</strong> deja vacíos «OAuth Client ID» y «OAuth Client Secret» (en «Configuración avanzada»).
+                La llave ya va en la URL; con OAuth puesto, Claude dice «Couldn&apos;t register with … sign-in service».
+              </li>
               <li>Claude Code: usa el comando de «Otras formas de conectar».</li>
               <li>Pregúntale a Claude, por ejemplo: «¿cuántos prospectos nuevos entraron este mes en mis campus?».</li>
             </ol>
