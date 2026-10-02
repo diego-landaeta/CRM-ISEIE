@@ -33,7 +33,12 @@ export default function UrlParaClaude({ token, nombre, onCerrar }: { token: stri
             </div>
             <ol className="list-decimal space-y-1 pl-5 text-xs text-muted-foreground">
               <li>En Claude (escritorio o claude.ai): <strong className="text-foreground">Configuración → Conectores → Agregar conector personalizado</strong>.</li>
-              <li>Ponle un nombre y pega esta URL. No pide nada más.</li>
+              <li>Ponle un nombre y pega esta URL.</li>
+              <li>
+                <strong className="text-foreground">Déjalo sin OAuth:</strong> no rellenes «OAuth Client ID» ni «OAuth Client
+                Secret» (en «Configuración avanzada»). La llave ya va en la URL. Con OAuth puesto, Claude contesta
+                «Couldn&apos;t register with … sign-in service».
+              </li>
               <li>Pregúntale como a una persona: «¿cuántas ventas llevamos este mes por campus?».</li>
             </ol>
             <p className="rounded-md bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-xs text-amber-900 dark:text-amber-200">
