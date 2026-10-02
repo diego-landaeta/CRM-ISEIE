@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CheckCircle, Circle, WarningCircle, CaretRight, ListChecks } from '@phosphor-icons/react';
-import { traerPasosDeLead, type PasoDeLead } from '../api/agenda.api';
+import { traerPasosDeLead, ajustarPaso, type PasoDeLead } from '../api/agenda.api';
+import { toast } from '@/shared/hooks/useToast';
 import { iconoDeCanal, nombreDeCanal } from '../lib/canales';
 import PlantillaDelPaso from './PlantillaDelPaso';
 import type { DatosParaRellenar } from '@/modules/whatsapp/lib/plantilla';
 import type { EmailTemplate } from '@/modules/email-templates/api/templates.api';
+import { fechaCorta, fechaAplazada, APLAZAMIENTOS } from '../lib/fechasDelPaso';
 
 /**
  * El proceso comercial de ESTA persona, en su ficha.
@@ -22,9 +24,9 @@ import type { EmailTemplate } from '@/modules/email-templates/api/templates.api'
  * tres avisos.
  */
 
-function fecha(d: string) {
-  return new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
-}
+// La fecha como día del calendario: con `new Date(d)` a secas, al oeste de
+// Greenwich el paso de hoy salía fechado ayer (rescatado de la PR #150).
+const fecha = fechaCorta;
 
 export default function AgendaDelProspecto({
   leadId,
@@ -33,6 +35,7 @@ export default function AgendaDelProspecto({
   nombreProyecto,
   alCopiar,
   alCorreo,
+  alCambiar,
 }: {
   leadId: number;
   /** De qué proyecto es: sus plantillas son las que valen. */
@@ -44,9 +47,17 @@ export default function AgendaDelProspecto({
   alCopiar?: (nombrePlantilla: string) => void;
   /** Escribir el correo de este paso, con su plantilla ya puesta. */
   alCorreo?: (plantilla: EmailTemplate) => void;
+  /**
+   * Se ha aplazado o saltado un paso, por si quien pinta la tarjeta tiene algo
+   * que rehacer. La ficha de ISEIE no lo pasa: aplazar o saltar solo toca los
+   * pasos —que esta tarjeta ya vuelve a pedir— y recargar la ficha entera la
+   * dejaría en blanco un momento para enseñar lo mismo.
+   */
+  alCambiar?: () => void;
 }) {
   const [pasos, setPasos] = useState<PasoDeLead[] | null>(null);
   const [cargando, setCargando] = useState(true);
+  const [guardando, setGuardando] = useState<number | null>(null);
 
   useEffect(() => {
     let vivo = true;
@@ -56,6 +67,32 @@ export default function AgendaDelProspecto({
       .finally(() => { if (vivo) setCargando(false); });
     return () => { vivo = false; };
   }, [leadId]);
+
+  /**
+   * Aplazar o saltar el paso que toca. Rescatado de la PR #150 de Fabián: son
+   * decisiones de la gestora —«con esta persona, dentro de tres días», «este
+   * paso con ella no aplica»— y el servidor ya las aceptaba, pero no había
+   * dónde pulsarlas. «Planificar el proceso», que traía también, no: metería
+   * en el proceso a gente de antes del 01/09.
+   */
+  async function cambiarPaso(p: PasoDeLead, datos: Parameters<typeof ajustarPaso>[1], aviso: string) {
+    if (guardando) return;
+    setGuardando(p.id);
+    try {
+      await ajustarPaso(p.id, datos);
+      // Se vuelve a pedir la lista entera en vez de tocarla aquí: al saltar un
+      // paso cambia también cuál es «el siguiente» y la cuenta de arriba, y
+      // calcular eso dos veces —en el servidor y aquí— es como empiezan a no
+      // coincidir.
+      setPasos(await traerPasosDeLead(leadId));
+      alCambiar?.();
+      toast({ title: aviso });
+    } catch {
+      toast({ title: 'No se pudo guardar', description: 'Vuelve a intentarlo.', variant: 'destructive' });
+    } finally {
+      setGuardando(null);
+    }
+  }
 
   if (cargando) return null;
 
@@ -125,6 +162,32 @@ export default function AgendaDelProspecto({
           {siguiente.nota_del_paso && (
             <p className="mt-1.5 text-[11px] text-muted-foreground">{siguiente.nota_del_paso}</p>
           )}
+
+          {/* Aplazar o saltar ESTE paso. La fecha se cuenta desde hoy, no desde
+              la que tenía: un paso atrasado aplazado «a mañana» cae mañana. */}
+          <div className="mt-2 flex flex-wrap items-center gap-1.5" aria-label="Aplazar o saltar este paso">
+            <span className="text-[11px] text-muted-foreground">Aplazar:</span>
+            {APLAZAMIENTOS.map(({ dias, texto }) => (
+              <button
+                key={dias}
+                type="button"
+                disabled={guardando === siguiente.id}
+                onClick={() => cambiarPaso(siguiente, { fecha_prevista: fechaAplazada(dias) }, `Paso aplazado: ${texto.toLowerCase()}`)}
+                className="rounded border border-border bg-card px-2 py-0.5 text-[11px] font-medium hover:bg-muted disabled:opacity-50"
+              >
+                {texto}
+              </button>
+            ))}
+            <button
+              type="button"
+              disabled={guardando === siguiente.id}
+              onClick={() => cambiarPaso(siguiente, { estado: 'saltado' }, 'Paso saltado: pasa al siguiente')}
+              title="Este paso no aplica con esta persona: se salta y le toca el siguiente"
+              className="rounded border border-border bg-card px-2 py-0.5 text-[11px] font-medium text-muted-foreground hover:bg-muted disabled:opacity-50"
+            >
+              Saltar este paso
+            </button>
+          </div>
 
           {/* Y su mensaje, ya escrito (#89: «qué paso toca, por qué, y su
               plantilla»). Hasta ahora decía cuál toca y había que ir al chat a
