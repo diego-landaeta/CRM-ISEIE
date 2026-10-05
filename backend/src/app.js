@@ -351,19 +351,22 @@ if (process.env.NODE_ENV !== 'test') {
         logger.error({ err }, 'Stripe sync scheduler fallo al arrancar');
       }
     }
-    // Seguridad del MCP (#237, desde #194): fuera del bloque de Stripe a
-    // propósito, para que apagar la sincronización de Stripe no la apague.
-    // Se desactivan con MCP_ROTACION_DISABLED=1 y MCP_VIGILANCIA_DISABLED=1,
-    // dentro de cada trabajo.
-    try {
-      startMcpRotacionScheduler();
-    } catch (err) {
-      logger.error({ err }, 'MCP: la rotación de URLs falló al arrancar');
+    // Seguridad del MCP (#237, desde #194 y #195): fuera del bloque de Stripe
+    // a propósito, para que apagar la sincronización de Stripe no la apague.
+    // Cada uno con su interruptor en el .env, como los demás trabajos.
+    if (process.env.MCP_ROTACION_DISABLED !== '1') {
+      try {
+        startMcpRotacionScheduler();
+      } catch (err) {
+        logger.error({ err }, 'MCP: la rotación de URLs falló al arrancar');
+      }
     }
-    try {
-      startMcpVigilanciaScheduler();   // alertas de uso raro (#237, desde #195)
-    } catch (err) {
-      logger.error({ err }, 'MCP: la vigilancia de alertas falló al arrancar');
+    if (process.env.MCP_VIGILANCIA_DISABLED !== '1') {
+      try {
+        startMcpVigilanciaScheduler();   // alertas de uso raro
+      } catch (err) {
+        logger.error({ err }, 'MCP: la vigilancia de alertas falló al arrancar');
+      }
     }
   });
 }
