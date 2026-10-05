@@ -16,6 +16,8 @@ panel.use(verifyToken);
 panel.get('/', ctrl.estado);
 panel.post('/tokens', ctrl.crearToken);
 panel.delete('/tokens/:id', ctrl.revocarToken);
+// Código de desbloqueo para Claude (#192).
+panel.post('/codigo', ctrl.crearCodigo);
 // `soloRoles` y no `roleGuard`: roleGuard deja pasar a soporte, y Diego dijo
 // super admin y admin.
 panel.get('/personas', soloRoles('superadmin', 'admin'), ctrl.personas);

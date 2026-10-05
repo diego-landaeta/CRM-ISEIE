@@ -41,6 +41,15 @@ export interface McpEstado {
   proyectos: McpProyecto[];
   herramientas: McpHerramienta[];
   tokens: McpToken[];
+  /** Código de desbloqueo (#192): si hace falta y cuánto dura cada cosa. */
+  codigo?: { obligatorio: boolean; minutosCodigo: number; inactividadMin: number; maximoMin: number };
+}
+
+export interface McpCodigo {
+  /** Se enseña una vez. El servidor solo guarda su huella. */
+  codigo: string;
+  caducaAt: string;
+  minutos: number;
 }
 
 export interface McpPersona {
@@ -61,6 +70,8 @@ export const urlDelMcp = () => `${window.location.origin}${API_BASE_URL}/mcp`;
 export const mcpApi = {
   estado: () => client.get('/mcp/panel'),
   crearToken: (nombre: string) => client.post('/mcp/panel/tokens', { nombre }),
+  /** Código para darle a Claude (#192): un solo uso, caduca en minutos. */
+  crearCodigo: () => client.post('/mcp/panel/codigo', {}),
   revocarToken: (id: number) => client.delete(`/mcp/panel/tokens/${id}`),
   personas: () => client.get('/mcp/panel/personas'),
   cambiarAcceso: (id: number, usa_mcp: boolean) => client.patch(`/mcp/panel/personas/${id}`, { usa_mcp }),

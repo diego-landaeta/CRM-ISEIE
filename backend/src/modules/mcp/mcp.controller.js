@@ -6,6 +6,7 @@ import {
   generarToken, puedeUsarMcp,
 } from './mcp.acceso.js';
 import { HERRAMIENTAS } from './mcp.tools.js';
+import * as desbloqueo from './mcp.desbloqueo.js';
 import { accesoSchema, crearTokenSchema, idSchema } from './mcp.validation.js';
 
 /**
@@ -42,6 +43,9 @@ export async function estado(req, res, next) {
         proyectos,
         herramientas: HERRAMIENTAS.map((h) => ({ nombre: h.nombre, titulo: h.titulo, descripcion: h.descripcion })),
         tokens: tieneAcceso ? await model.listarTokens(user.id) : [],
+        // Código de desbloqueo (#192): si hace falta y cuánto dura cada cosa.
+        codigo: (({ obligatorio, minutosCodigo, inactividadMin, maximoMin }) =>
+          ({ obligatorio, minutosCodigo, inactividadMin, maximoMin }))(desbloqueo.config()),
       },
     });
   } catch (err) { next(err); }
@@ -118,5 +122,21 @@ export async function cambiarAcceso(req, res, next) {
     await model.setUsaMcp(persona.id, usa_mcp);
     logger.info({ por: quien.id, userId: persona.id, usa_mcp }, 'MCP: acceso cambiado');
     res.json({ success: true, data: { id: persona.id, usa_mcp } });
+  } catch (err) { next(err); }
+}
+
+/**
+ * POST /api/mcp/panel/codigo — el código para dárselo a Claude (#192).
+ *
+ * Solo quien tiene acceso al MCP. Se enseña UNA vez; se guarda su huella.
+ * Pedir otro anula el anterior.
+ */
+export async function crearCodigo(req, res, next) {
+  try {
+    const user = await personaActual(req);
+    if (!puedeUsarMcp(user)) throw new AppError('No tienes acceso al MCP del CRM', 403, 'FORBIDDEN');
+    const r = await desbloqueo.crearCodigo(user.id);
+    logger.info({ userId: user.id }, 'MCP: código de desbloqueo creado');
+    res.status(201).json({ success: true, data: { codigo: r.codigo, caducaAt: r.caducaAt, minutos: r.minutos } });
   } catch (err) { next(err); }
 }

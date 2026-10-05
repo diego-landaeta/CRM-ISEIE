@@ -284,3 +284,26 @@ export async function sendTestEmail(apiKey, toEmail) {
 }
 
 export { sendEmail };
+
+/**
+ * MCP de Claude (#192): una conexión se ha bloqueado por fallar el código de
+ * desbloqueo. Va al dueño de la conexión y a quien vigila (MCP_AVISO_EMAIL o
+ * los super admin). Puede ser un despiste o alguien probando códigos con una
+ * URL que no es suya: el correo lo dice para que lo mire quien sabe.
+ */
+export async function sendMcpBloqueoEmail({ para, persona, hasta, maxFallos }) {
+  const cuando = new Date(hasta).toLocaleString('es-ES', { timeZone: process.env.APP_TIMEZONE || 'Europe/Madrid' });
+  const conexion = `${persona.conexion} (${persona.prefijo}…)`;
+  const subject = `MCP de Claude bloqueado: ${persona.nombre}`;
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html><body style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; color: #1f2937; max-width: 560px; margin: 0 auto; padding: 24px;">
+      <h2 style="margin: 0 0 12px;">Conexión de Claude bloqueada</h2>
+      <p>La conexión <strong>${conexion}</strong> de <strong>${persona.nombre}</strong> ha fallado el código de desbloqueo ${maxFallos} veces seguidas.</p>
+      <p>Queda bloqueada hasta las <strong>${cuando}</strong>: hasta entonces no da datos ni acepta códigos.</p>
+      <p>Si no has sido tú, revoca esa URL en el CRM → Conexión → MCP: alguien podría tenerla.</p>
+    </body></html>`;
+  const textContent = `La conexión ${conexion} de ${persona.nombre} ha fallado el código de desbloqueo ${maxFallos} veces seguidas.\n`
+    + `Queda bloqueada hasta las ${cuando}.\nSi no has sido tú, revoca esa URL en el CRM → Conexión → MCP.`;
+  return await sendEmail({ to: para, subject, htmlContent, textContent, tags: ['mcp-bloqueo', 'crm'] });
+}

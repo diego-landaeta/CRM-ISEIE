@@ -7,6 +7,7 @@ import EmptyState from '@/shared/components/ui/EmptyState';
 import { toast } from '@/shared/hooks/useToast';
 import { mcpApi, urlDelMcp, type McpEstado, type McpPersona, type McpToken } from '../api/mcp.api';
 import ConexionesClaude from '../components/ConexionesClaude';
+import CodigoParaClaude from '../components/CodigoParaClaude';
 
 /**
  * Conexión → MCP.
@@ -204,6 +205,9 @@ Su URL no se borra: si le devuelves el acceso, volverá a funcionar sin que teng
             )}
           </div>
 
+          {/* Segundo factor (#192): solo con el interruptor encendido. */}
+          {estado.codigo?.obligatorio && <CodigoParaClaude config={estado.codigo} />}
+
           {/* El token recien creado, UNA vez. */}
           {nuevo && (
             <div className="border border-emerald-300 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/20 rounded-lg p-4 space-y-3">
@@ -310,6 +314,12 @@ Su URL no se borra: si le devuelves el acceso, volverá a funcionar sin que teng
                 La llave ya va en la URL; con OAuth puesto, Claude dice «Couldn&apos;t register with … sign-in service».
               </li>
               <li>Claude Code: usa el comando de «Otras formas de conectar».</li>
+              {estado.codigo?.obligatorio && (
+                <li>
+                  Cuando Claude te pida el código, pulsa <strong>Sacar código para Claude</strong> arriba y díselo.
+                  Te lo volverá a pedir tras un rato sin usarlo.
+                </li>
+              )}
               <li>Pregúntale a Claude, por ejemplo: «¿cuántos prospectos nuevos entraron este mes en mis campus?».</li>
             </ol>
             <p className="text-xs text-muted-foreground">

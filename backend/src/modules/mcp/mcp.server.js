@@ -3,6 +3,8 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { logger } from '../../shared/utils/logger.js';
 import { HERRAMIENTAS } from './mcp.tools.js';
 import * as model from './mcp.model.js';
+import { z } from 'zod';
+import * as desbloqueo from './mcp.desbloqueo.js';
 
 /**
  * El servidor MCP del CRM.
@@ -48,6 +50,14 @@ export function crearServidor({ ambito, tokenId }) {
         let ok = true;
         let error = null;
         try {
+          // Segundo factor (#192): con el interruptor encendido, sin desbloquear
+          // no sale ningún dato. Se mira en cada llamada contra la base.
+          const barrera = await barreraDeDesbloqueo(tokenId);
+          if (barrera) {
+            ok = false;
+            error = barrera;
+            return { isError: true, content: [{ type: 'text', text: barrera }] };
+          }
           const datos = await h.ejecutar(ambito, args || {});
           return { content: [{ type: 'text', text: comoTexto(datos) }] };
         } catch (err) {
@@ -71,7 +81,89 @@ export function crearServidor({ ambito, tokenId }) {
       }
     );
   }
+
+  // Solo con el interruptor encendido: apagado, Claude ve las mismas
+  // herramientas que antes y no se le ofrece una que no sirve.
+  if (desbloqueo.config().obligatorio) registrarDesbloquear(server, { ambito, tokenId });
   return server;
+}
+
+/**
+ * null si se puede consultar; si no, el mensaje que verá Claude.
+ * Con el interruptor apagado no mira nada: el MCP sigue como antes.
+ */
+async function barreraDeDesbloqueo(tokenId) {
+  if (!desbloqueo.config().obligatorio) return null;
+  const estado = await desbloqueo.estadoDeLaConexion(tokenId);
+  if (estado.bloqueado) {
+    return `Esta conexión está bloqueada hasta las ${horaLocal(estado.bloqueado_hasta)} por fallar el código demasiadas veces.`;
+  }
+  if (!estado.desbloqueado) return desbloqueo.MENSAJE_SIN_DESBLOQUEAR;
+  await desbloqueo.marcarUsoDesbloqueo(tokenId);
+  return null;
+}
+
+const horaLocal = (fecha) => new Date(fecha).toLocaleTimeString('es-ES', {
+  hour: '2-digit', minute: '2-digit', timeZone: process.env.APP_TIMEZONE || 'Europe/Madrid',
+});
+
+/**
+ * La herramienta `desbloquear(codigo)`. Va aparte de HERRAMIENTAS porque no es
+ * una consulta: cambia el estado de la conexión (por eso no lleva readOnlyHint,
+ * y por eso las pruebas de «todo es de solo lectura» no la cuentan: solo existe
+ * con MCP_CODIGO_OBLIGATORIO encendido). NUNCA se guarda el código en la
+ * auditoría, ni siquiera el que falla.
+ */
+function registrarDesbloquear(server, { ambito, tokenId }) {
+  server.registerTool(
+    'desbloquear',
+    {
+      title: 'Desbloquear con el código del CRM',
+      description: 'Desbloquea esta conexión con el código que la persona saca en el CRM → Conexión → MCP → «Código para Claude». '
+        + 'Úsala cuando una consulta conteste que hace falta un código, y pídeselo a la persona: no lo inventes.',
+      inputSchema: { codigo: z.string().min(4).max(20).describe('El código que te dé la persona, por ejemplo K7QM-2XPA') },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    },
+    async ({ codigo }) => {
+      const inicio = Date.now();
+      let ok = false;
+      let error = null;
+      try {
+        const r = await desbloqueo.intentarDesbloqueo({ userId: ambito.userId, tokenId, codigo });
+        const { inactividadMin } = desbloqueo.config();
+        if (r.resultado === 'ok') {
+          ok = true;
+          return { content: [{ type: 'text', text:
+            `Desbloqueado. Ya puedes consultar el CRM. Se vuelve a bloquear tras ${inactividadMin / 60} h sin uso `
+            + `o, como muy tarde, a las ${horaLocal(r.caducaMaxAt)}.` }] };
+        }
+        if (r.resultado === 'incorrecto') {
+          error = 'CODIGO_INCORRECTO';
+          return { isError: true, content: [{ type: 'text', text:
+            `El código no vale: está mal escrito, ha caducado (dura ${desbloqueo.config().minutosCodigo} minutos) o ya se usó. `
+            + `Pide a la persona uno nuevo. Quedan ${r.quedan} intentos antes de bloquear la conexión.` }] };
+        }
+        if (r.resultado === 'bloqueada') {
+          error = 'BLOQUEADA';
+          desbloqueo.avisarBloqueo({ userId: ambito.userId, tokenId, hasta: r.hasta });
+          return { isError: true, content: [{ type: 'text', text:
+            `Demasiados códigos incorrectos: la conexión queda bloqueada hasta las ${horaLocal(r.hasta)}. Se ha avisado por correo.` }] };
+        }
+        error = 'YA_BLOQUEADA';
+        return { isError: true, content: [{ type: 'text', text:
+          `Esta conexión está bloqueada hasta las ${horaLocal(r.hasta)} por fallar el código demasiadas veces.` }] };
+      } catch (err) {
+        error = err.message;
+        logger.error({ err, userId: ambito.userId }, 'MCP: fallo al desbloquear');
+        return { isError: true, content: [{ type: 'text', text: 'Error interno al comprobar el código.' }] };
+      } finally {
+        model.registrarAuditoria({
+          userId: ambito.userId, tokenId, herramienta: 'desbloquear', parametros: null,
+          ok, error, duracionMs: Date.now() - inicio,
+        }).catch((err) => logger.warn({ err: err.message }, 'MCP: no se pudo guardar la auditoria'));
+      }
+    }
+  );
 }
 
 /** POST /api/mcp — una peticion MCP (JSON-RPC) de Claude. */
