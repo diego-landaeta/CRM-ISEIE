@@ -72,6 +72,44 @@ export interface McpPersona {
 }
 
 /** La dirección que se pega en Claude. La misma API del CRM, en /mcp. */
+/** Una consulta de Claude, de Conexión → MCP → Actividad (#195). */
+export interface McpActividadFila {
+  id: number;
+  created_at: string;
+  user_id: number | null;
+  persona: string | null;
+  email: string | null;
+  token_id: number | null;
+  url_nombre: string | null;
+  prefijo: string | null;
+  connector_id: number | null;
+  conexion: string | null;
+  herramienta: string;
+  parametros: Record<string, unknown> | null;
+  ok: boolean;
+  error: string | null;
+  duracion_ms: number | null;
+  ip: string | null;
+  cliente: string | null;
+}
+
+export interface McpActividad {
+  total: number;
+  pagina: number;
+  limite: number;
+  filas: McpActividadFila[];
+  opciones: {
+    personas: { id: number; nombre: string }[];
+    conexiones: { id: number; label: string }[];
+    herramientas: string[];
+  };
+}
+
+export interface McpFiltrosActividad {
+  persona?: string; conexion?: string; desde?: string; hasta?: string;
+  herramienta?: string; resultado?: string; pagina?: number;
+}
+
 export const urlDelMcp = () => `${window.location.origin}${API_BASE_URL}/mcp`;
 
 export const mcpApi = {
@@ -81,5 +119,10 @@ export const mcpApi = {
   crearCodigo: () => client.post('/mcp/panel/codigo', {}),
   revocarToken: (id: number) => client.delete(`/mcp/panel/tokens/${id}`),
   personas: () => client.get('/mcp/panel/personas'),
+  /** Actividad (#195): solo super admin y admin. */
+  actividad: (f: McpFiltrosActividad) => {
+    const q = new URLSearchParams(Object.entries(f).filter(([, v]) => v !== undefined && v !== '').map(([k, v]) => [k, String(v)]));
+    return client.get(`/mcp/panel/actividad?${q.toString()}`);
+  },
   cambiarAcceso: (id: number, usa_mcp: boolean) => client.patch(`/mcp/panel/personas/${id}`, { usa_mcp }),
 };

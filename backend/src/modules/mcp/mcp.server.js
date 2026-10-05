@@ -25,7 +25,7 @@ function comoTexto(datos) {
     + '\n…[respuesta recortada: usa filtros, fechas o un límite menor para ver el resto]';
 }
 
-export function crearServidor({ ambito, tokenId }) {
+export function crearServidor({ ambito, tokenId, origen = {} }) {
   const server = new McpServer(
     { name: 'crm-iseih', version: '1.0.0' },
     {
@@ -75,7 +75,7 @@ export function crearServidor({ ambito, tokenId }) {
         } finally {
           model.registrarAuditoria({
             userId: ambito.userId, tokenId, herramienta: h.nombre, parametros: args || null,
-            ok, error, duracionMs: Date.now() - inicio,
+            ok, error, duracionMs: Date.now() - inicio, origen,
           }).catch((err) => logger.warn({ err: err.message }, 'MCP: no se pudo guardar la auditoria'));
         }
       }
@@ -84,7 +84,7 @@ export function crearServidor({ ambito, tokenId }) {
 
   // Solo con el interruptor encendido: apagado, Claude ve las mismas
   // herramientas que antes y no se le ofrece una que no sirve.
-  if (desbloqueo.config().obligatorio) registrarDesbloquear(server, { ambito, tokenId });
+  if (desbloqueo.config().obligatorio) registrarDesbloquear(server, { ambito, tokenId, origen });
   return server;
 }
 
@@ -114,7 +114,7 @@ const horaLocal = (fecha) => new Date(fecha).toLocaleTimeString('es-ES', {
  * con MCP_CODIGO_OBLIGATORIO encendido). NUNCA se guarda el código en la
  * auditoría, ni siquiera el que falla.
  */
-function registrarDesbloquear(server, { ambito, tokenId }) {
+function registrarDesbloquear(server, { ambito, tokenId, origen }) {
   server.registerTool(
     'desbloquear',
     {
@@ -159,7 +159,7 @@ function registrarDesbloquear(server, { ambito, tokenId }) {
       } finally {
         model.registrarAuditoria({
           userId: ambito.userId, tokenId, herramienta: 'desbloquear', parametros: null,
-          ok, error, duracionMs: Date.now() - inicio,
+          ok, error, duracionMs: Date.now() - inicio, origen,
         }).catch((err) => logger.warn({ err: err.message }, 'MCP: no se pudo guardar la auditoria'));
       }
     }

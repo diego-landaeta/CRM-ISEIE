@@ -7,7 +7,8 @@ import {
 } from './mcp.acceso.js';
 import { HERRAMIENTAS } from './mcp.tools.js';
 import * as desbloqueo from './mcp.desbloqueo.js';
-import { accesoSchema, crearTokenSchema, idSchema } from './mcp.validation.js';
+import { accesoSchema, actividadSchema, crearTokenSchema, idSchema } from './mcp.validation.js';
+import * as actividadModel from './mcp.actividad.js';
 
 /**
  * El panel «Conexión → MCP» del CRM. Aqui se usa el JWT normal del CRM: es la
@@ -139,5 +140,21 @@ export async function crearCodigo(req, res, next) {
     const r = await desbloqueo.crearCodigo(user.id);
     logger.info({ userId: user.id }, 'MCP: código de desbloqueo creado');
     res.status(201).json({ success: true, data: { codigo: r.codigo, caducaAt: r.caducaAt, minutos: r.minutos } });
+  } catch (err) { next(err); }
+}
+
+/**
+ * GET /api/mcp/panel/actividad — quién consultó qué con Claude (#195).
+ * Solo super admin y admin; un admin, solo lo de sus empresas.
+ */
+export async function actividad(req, res, next) {
+  try {
+    const filtros = validar(actividadSchema, req.query);
+    const quien = await personaActual(req);
+    const [lista, opciones] = await Promise.all([
+      actividadModel.listarActividad(quien, filtros),
+      actividadModel.opcionesActividad(quien),
+    ]);
+    res.json({ success: true, data: { ...lista, opciones } });
   } catch (err) { next(err); }
 }

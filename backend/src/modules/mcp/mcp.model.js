@@ -270,11 +270,14 @@ export async function setUsaMcp(userId, valor) {
   await query(`UPDATE users SET usa_mcp = $2, updated_at = NOW() WHERE id = $1`, [userId, !!valor]);
 }
 
-export async function registrarAuditoria({ userId, tokenId, herramienta, parametros, ok, error, duracionMs }) {
+export async function registrarAuditoria({ userId, tokenId, herramienta, parametros, ok, error, duracionMs, origen = {} }) {
+  // `origen` (#195): IP y cliente de la consulta, para la pantalla de Actividad
+  // y para avisar de una IP o un cliente nuevos.
   await query(
-    `INSERT INTO mcp_auditoria (user_id, token_id, herramienta, parametros, ok, error, duracion_ms)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-    [userId, tokenId, herramienta, parametros ? JSON.stringify(parametros) : null, ok, error || null, duracionMs]
+    `INSERT INTO mcp_auditoria (user_id, token_id, herramienta, parametros, ok, error, duracion_ms, ip, cliente)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+    [userId, tokenId, herramienta, parametros ? JSON.stringify(parametros) : null, ok, error || null, duracionMs,
+      origen.ip ? String(origen.ip).slice(0, 64) : null, origen.cliente ? String(origen.cliente).slice(0, 200) : null]
   );
 }
 

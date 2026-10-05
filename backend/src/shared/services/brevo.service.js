@@ -334,3 +334,36 @@ export async function sendMcpCaducidadEmail({ persona, urls, enlace }) {
     + `Crea una nueva en ${enlace} y cámbiala en tu Claude (Configuración → Conectores).\nSi ya no la usas, no hace falta hacer nada.`;
   return await sendEmail({ to: [{ email: persona.email, name: persona.nombre }], subject, htmlContent, textContent, tags: ['mcp-caducidad', 'crm'] });
 }
+
+/**
+ * MCP de Claude (#195): las alertas de una vuelta, todas en un correo, para
+ * quien vigila (MCP_AVISO_EMAIL o los super admin).
+ */
+export async function sendMcpAlertasEmail({ para, alertas, enlace }) {
+  const tz = process.env.APP_TIMEZONE || 'Europe/Madrid';
+  const hora = (d) => new Date(d).toLocaleString('es-ES', { timeZone: tz, day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  const texto = (a) => {
+    const quien = `${a.persona.nombre}${a.persona.email ? ` (${a.persona.email})` : ''}`;
+    const d = a.detalle;
+    switch (a.tipo) {
+      case 'rafaga': return `Ráfaga: ${quien} hizo ${d.consultas} consultas en ${d.minutos} minutos (hasta las ${hora(d.hasta)}).`;
+      case 'ip_nueva': return `Red nueva: ${quien} consultó desde ${d.red} (${d.ips.join(', ')}), desde donde no lo había hecho antes.`;
+      case 'cliente_nuevo': return `Cliente nuevo: ${quien} consultó con «${d.cliente}», que no había usado antes.`;
+      case 'fallos_desbloqueo': return `Fallos de desbloqueo: ${quien} falló el código ${d.fallos} veces en la última hora.`;
+      case 'madrugada': return `Madrugada: ${quien} hizo ${d.consultas} consultas entre las ${hora(d.primera)} y las ${hora(d.ultima)} (franja ${d.franja}).`;
+      default: return `${a.tipo}: ${quien}`;
+    }
+  };
+  const lineas = alertas.map(texto);
+  const subject = alertas.length === 1 ? 'Alerta del MCP de Claude' : `${alertas.length} alertas del MCP de Claude`;
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html><body style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; color: #1f2937; max-width: 600px; margin: 0 auto; padding: 24px;">
+      <h2 style="margin: 0 0 12px;">${subject}</h2>
+      <ul>${lineas.map((l) => `<li style="margin-bottom: 6px;">${l}</li>`).join('')}</ul>
+      <p>El detalle de cada consulta está en <a href="${enlace}">Conexión → MCP → Actividad</a>.
+         Si algo no es de quien dice ser, revoca su URL en esa misma pantalla.</p>
+    </body></html>`;
+  const textContent = `${subject}\n\n${lineas.map((l) => `- ${l}`).join('\n')}\n\nDetalle: ${enlace}`;
+  return await sendEmail({ to: para, subject, htmlContent, textContent, tags: ['mcp-alertas', 'crm'] });
+}

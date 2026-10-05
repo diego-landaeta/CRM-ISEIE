@@ -22,6 +22,8 @@ panel.post('/codigo', ctrl.crearCodigo);
 // super admin y admin.
 panel.get('/personas', soloRoles('superadmin', 'admin'), ctrl.personas);
 panel.patch('/personas/:id', soloRoles('superadmin', 'admin'), ctrl.cambiarAcceso);
+// Actividad: quién consultó qué con Claude (#195).
+panel.get('/actividad', soloRoles('superadmin', 'admin'), ctrl.actividad);
 router.use('/panel', panel);
 
 // ─── Inicio de sesión OAuth para Claude (sin JWT: lo usa Claude) ─────────

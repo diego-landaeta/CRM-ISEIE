@@ -8,6 +8,7 @@ import { toast } from '@/shared/hooks/useToast';
 import { mcpApi, urlDelMcp, type McpEstado, type McpPersona, type McpToken } from '../api/mcp.api';
 import ConexionesClaude from '../components/ConexionesClaude';
 import CodigoParaClaude from '../components/CodigoParaClaude';
+import ActividadMcp from '../components/ActividadMcp';
 
 /**
  * Conexión → MCP.
@@ -377,6 +378,9 @@ Su URL no se borra: si le devuelves el acceso, volverá a funcionar sin que teng
           </div>
         </>
       )}
+
+      {/* Actividad (#195): qué ha consultado cada uno. Solo super admin y admin. */}
+      {estado?.puedeAdministrar && <ActividadMcp />}
 
       {/* Quien tiene acceso: solo super admin y admin. */}
       {estado?.puedeAdministrar && (

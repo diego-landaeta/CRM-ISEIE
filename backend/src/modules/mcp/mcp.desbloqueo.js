@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { query } from '../../shared/config/db.js';
 import { logger } from '../../shared/utils/logger.js';
 import { sendMcpBloqueoEmail } from '../../shared/services/brevo.service.js';
+import { destinatariosVigilancia } from './mcp.alertas.js';
 
 /**
  * Código de desbloqueo del MCP (#192): un segundo factor además de la URL.
@@ -173,11 +174,7 @@ export async function avisarBloqueo({ userId, tokenId, hasta }) {
       [userId, tokenId]
     );
     if (!persona) return;
-    let vigilan = String(process.env.MCP_AVISO_EMAIL || '').split(',').map((s) => s.trim()).filter(Boolean);
-    if (!vigilan.length) {
-      const { rows } = await query(`SELECT email FROM users WHERE role = 'superadmin' AND active = true`);
-      vigilan = rows.map((r) => r.email);
-    }
+    const vigilan = await destinatariosVigilancia();
     const para = [...new Set([persona.email, ...vigilan])].map((email) => ({ email }));
     await sendMcpBloqueoEmail({ para, persona, hasta, maxFallos: config().maxFallos });
   } catch (err) {
