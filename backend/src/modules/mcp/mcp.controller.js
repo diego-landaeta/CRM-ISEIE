@@ -35,17 +35,22 @@ export async function estado(req, res, next) {
     const user = await personaActual(req);
     const tieneAcceso = puedeUsarMcp(user);
     const proyectos = tieneAcceso ? await model.proyectosDeLaPersona(user) : [];
+    const administra = ROLES_QUE_ADMINISTRAN.includes(user.role);
     res.json({
       success: true,
       data: {
         tieneAcceso,
-        puedeAdministrar: ROLES_QUE_ADMINISTRAN.includes(user.role),
+        puedeAdministrar: administra,
         soloLoSuyo: !ROLES_CON_ACCESO.includes(user.role),
         diasDeVida: diasDeVidaToken(),
         diasSinUso: configRotacion().diasSinUso,
         proyectos,
         herramientas: HERRAMIENTAS.map((h) => ({ nombre: h.nombre, titulo: h.titulo, descripcion: h.descripcion })),
         tokens: tieneAcceso ? await model.listarTokens(user.id) : [],
+        // Quien administra ve TODAS las URLs que alcanza, no solo las suyas
+        // (Diego, 05/10: «aquí deben de aparecer todas las conexiones hechas»).
+        ...(tieneAcceso && administra ? { todas: await model.listarTodasLasUrls(user) } : {}),
+        puedeRevocarTodas: user.role === 'superadmin',
         // Interruptor de emergencia (#196): si el MCP está apagado y por qué.
         interruptor: await interruptorModel.estado(),
         puedeApagar: user.role === 'superadmin',
@@ -73,13 +78,18 @@ export async function crearToken(req, res, next) {
   } catch (err) { next(err); }
 }
 
-/** DELETE /api/mcp/panel/tokens/:id — revoca uno de SUS tokens. */
+/**
+ * DELETE /api/mcp/panel/tokens/:id — revoca uno de SUS tokens. El super admin,
+ * el de cualquiera: es quien decide quién tiene acceso (Diego, 05/10).
+ */
 export async function revocarToken(req, res, next) {
   try {
     const { id } = validar(idSchema, req.params);
-    const ok = await model.revocarToken(id, req.user.userId);
+    // El rol, de la base y no del JWT: un JWT de hace 10 minutos puede ser de antes de un cambio de rol.
+    const esSuperadmin = (await personaActual(req)).role === 'superadmin';
+    const ok = esSuperadmin ? await model.revocarCualquierToken(id) : await model.revocarToken(id, req.user.userId);
     if (!ok) throw new AppError('Token no encontrado', 404, 'NOT_FOUND');
-    logger.info({ userId: req.user.userId, tokenId: id }, 'MCP: token revocado');
+    logger.info({ userId: req.user.userId, tokenId: id, comoSuperadmin: esSuperadmin }, 'MCP: token revocado');
     res.json({ success: true, data: { id } });
   } catch (err) { next(err); }
 }

@@ -124,6 +124,45 @@ export async function crearToken({ userId, nombre, hash, prefijo, dias }) {
   return rows[0];
 }
 
+/**
+ * Todas las URLs que ve quien administra (Diego, 05/10: «aquí deben de aparecer
+ * todas las conexiones hechas»). El super admin, las de todo el mundo; un admin,
+ * las suyas y las de quien comparte algún campus con él (el mismo criterio que
+ * «Quién tiene acceso»). Las vivas primero.
+ */
+export async function listarTodasLasUrls(quien) {
+  const params = [];
+  let filtro = '';
+  if (quien.role !== 'superadmin') {
+    params.push(quien.id);
+    filtro = `WHERE t.user_id = $1 OR EXISTS (
+                SELECT 1 FROM user_projects a
+                  JOIN user_projects b ON b.project_id = a.project_id
+                 WHERE a.user_id = $1 AND a.active AND b.user_id = t.user_id AND b.active)`;
+  }
+  const { rows } = await query(
+    `SELECT t.id, t.user_id, u.nombre AS persona, u.role, t.nombre, t.prefijo, t.created_at, t.expires_at,
+            t.last_used_at, t.revoked_at, t.last_used_ip, t.last_used_cliente, t.revocado_motivo,
+            (t.revoked_at IS NULL AND (t.expires_at IS NULL OR t.expires_at > NOW())) AS vivo
+       FROM mcp_tokens t JOIN users u ON u.id = t.user_id
+      ${filtro}
+      ORDER BY (t.revoked_at IS NULL AND (t.expires_at IS NULL OR t.expires_at > NOW())) DESC, t.created_at DESC
+      LIMIT 200`,
+    params
+  );
+  return rows;
+}
+
+/** El super admin revoca la URL de cualquiera. Devuelve false si no existe o ya estaba revocada. */
+export async function revocarCualquierToken(id) {
+  const { rowCount } = await query(
+    `UPDATE mcp_tokens SET revoked_at = NOW(), revocado_motivo = 'manual'
+      WHERE id = $1 AND revoked_at IS NULL`,
+    [id]
+  );
+  return rowCount > 0;
+}
+
 /** Revoca un token SUYO. Devuelve false si no existe o es de otra persona. */
 export async function revocarToken(id, userId) {
   const { rowCount } = await query(
