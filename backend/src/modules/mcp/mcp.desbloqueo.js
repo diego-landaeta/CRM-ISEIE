@@ -3,6 +3,7 @@ import { query } from '../../shared/config/db.js';
 import { logger } from '../../shared/utils/logger.js';
 import { sendMcpBloqueoEmail } from '../../shared/services/brevo.service.js';
 import { destinatariosVigilancia } from './mcp.alertas.js';
+import { enteroEnv, siNoEnv } from './mcp.config.js';
 
 /**
  * Código de desbloqueo del MCP (#192): un segundo factor además de la URL.
@@ -21,22 +22,17 @@ import { destinatariosVigilancia } from './mcp.alertas.js';
  * así no hay dos relojes que puedan no coincidir.
  */
 
-const entero = (v, def) => {
-  const n = parseInt(v, 10);
-  return Number.isInteger(n) && n > 0 ? n : def;
-};
-
 /** Se lee en cada llamada: cambiar el .env y reiniciar basta, y las pruebas pueden tocarlo. */
 export function config() {
   return {
     // Apagado por defecto: encenderlo sin avisar dejaría sin servicio a quien ya
     // lo usa. Se enciende cuando el panel ya explica cómo pedir el código.
-    obligatorio: ['1', 'true', 'si', 'sí'].includes(String(process.env.MCP_CODIGO_OBLIGATORIO || '').toLowerCase()),
-    minutosCodigo: entero(process.env.MCP_CODIGO_MINUTOS, 10),
-    inactividadMin: entero(process.env.MCP_DESBLOQUEO_INACTIVIDAD_MIN, 120),
-    maximoMin: entero(process.env.MCP_DESBLOQUEO_MAX_MIN, 540),
-    maxFallos: entero(process.env.MCP_CODIGO_MAX_FALLOS, 5),
-    bloqueoMin: entero(process.env.MCP_CODIGO_BLOQUEO_MIN, 15),
+    obligatorio: siNoEnv('MCP_CODIGO_OBLIGATORIO', false),
+    minutosCodigo: enteroEnv('MCP_CODIGO_MINUTOS', 10),
+    inactividadMin: enteroEnv('MCP_DESBLOQUEO_INACTIVIDAD_MIN', 120),
+    maximoMin: enteroEnv('MCP_DESBLOQUEO_MAX_MIN', 540),
+    maxFallos: enteroEnv('MCP_CODIGO_MAX_FALLOS', 5),
+    bloqueoMin: enteroEnv('MCP_CODIGO_BLOQUEO_MIN', 15),
   };
 }
 

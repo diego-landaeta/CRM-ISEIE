@@ -6,9 +6,11 @@ import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { toast } from '@/shared/hooks/useToast';
 import { mcpApi, urlDelMcp, type McpEstado, type McpPersona, type McpToken } from '../api/mcp.api';
+import { nombreDelCliente } from '../lib/cliente';
 import ConexionesClaude from '../components/ConexionesClaude';
 import CodigoParaClaude from '../components/CodigoParaClaude';
 import ActividadMcp from '../components/ActividadMcp';
+import InterruptorMcp from '../components/InterruptorMcp';
 
 /**
  * Conexión → MCP.
@@ -40,14 +42,6 @@ const MOTIVO: Record<string, string> = {
   conector: 'Revocada (conector)',
 };
 
-/** «Claude-User» → «Claude Desktop / claude.ai», etc.: el User-Agent en cristiano. */
-function cliente(ua: string | null | undefined): string {
-  if (!ua) return '';
-  if (/^claude-code\//i.test(ua)) return 'Claude Code';
-  if (/Claude-User|Anthropic|python-httpx/i.test(ua)) return 'Claude Desktop / claude.ai';
-  if (/mcp-remote|node/i.test(ua)) return 'Claude Desktop (archivo de configuración)';
-  return ua.length > 40 ? `${ua.slice(0, 40)}…` : ua;
-}
 
 function fecha(iso: string | null): string {
   if (!iso) return '—';
@@ -181,6 +175,11 @@ Su URL no se borra: si le devuelves el acceso, volverá a funcionar sin que teng
         title="Conexión MCP"
         subtitle="Conecta Claude al CRM para consultar prospectos, ventas y facturas · solo consulta"
       />
+
+      {/* Interruptor de emergencia (#196): aviso para todos si está apagado; botón para super admin. */}
+      {estado?.interruptor && (
+        <InterruptorMcp estado={estado.interruptor} puedeApagar={!!estado.puedeApagar} onCambio={cargar} />
+      )}
 
       {/* Las conexiones por campus, empresa o todo el sistema: quien administra. */}
       {estado?.tieneAcceso && estado.puedeAdministrar && <ConexionesClaude />}
@@ -316,7 +315,7 @@ Su URL no se borra: si le devuelves el acceso, volverá a funcionar sin que teng
                         {/* Desde dónde (#194): para notar un cliente o una IP que no son tuyos. */}
                         {t.last_used_at && (t.last_used_cliente || t.last_used_ip) && (
                           <span className="block text-[11px]" title={t.last_used_cliente || ''}>
-                            {[cliente(t.last_used_cliente), t.last_used_ip].filter(Boolean).join(' · ')}
+                            {[nombreDelCliente(t.last_used_cliente), t.last_used_ip].filter(Boolean).join(' · ')}
                           </span>
                         )}
                       </td>

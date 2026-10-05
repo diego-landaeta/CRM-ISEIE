@@ -18,7 +18,7 @@ import jwt from 'jsonwebtoken';
  */
 
 // El correo de bloqueo no sale de verdad: se comprueba que se pide.
-const correos = vi.hoisted(() => ({ sendMcpBloqueoEmail: vi.fn(async () => ({ ok: true })) }));
+const correos = vi.hoisted(() => ({ sendMcpBloqueoEmail: vi.fn(async () => ({ sent: true })) }));
 vi.mock('../src/shared/services/brevo.service.js', async (original) => ({ ...(await original()), ...correos }));
 
 const { default: pool } = await import('../src/shared/config/db.js');

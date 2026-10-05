@@ -78,14 +78,16 @@ export async function findTokenVivo(hash) {
 export async function marcarUso(tokenId, { ip = null, cliente = null } = {}) {
   // Una vez por minuto basta: sin esto cada consulta de Claude es un UPDATE.
   // Desde dónde (#194): la IP y el cliente (User-Agent), para verlo en el panel.
-  // Si cambian, se apunta aunque no haya pasado el minuto: un cliente nuevo es
-  // justo lo que interesa ver.
+  // Un cliente distinto se apunta al momento; una IP distinta NO, porque con
+  // «Agregar conector» los servidores de Anthropic cambian de IP casi en cada
+  // consulta y sería otra vez un UPDATE por consulta. La IP se pone al día en
+  // el siguiente minuto (y la red nueva la avisa la #195).
   await query(
     `UPDATE mcp_tokens
         SET last_used_at = NOW(), last_used_ip = $2, last_used_cliente = $3
       WHERE id = $1
         AND (last_used_at IS NULL OR last_used_at < NOW() - INTERVAL '1 minute'
-             OR last_used_ip IS DISTINCT FROM $2 OR last_used_cliente IS DISTINCT FROM $3)`,
+             OR last_used_cliente IS DISTINCT FROM $3)`,
     [tokenId, ip ? String(ip).slice(0, 64) : null, cliente ? String(cliente).slice(0, 200) : null]
   );
 }
@@ -202,7 +204,9 @@ export async function revocarSinUso(dias) {
     `UPDATE mcp_tokens SET revoked_at = NOW(), revocado_motivo = 'sin_uso'
       WHERE revoked_at IS NULL
         AND (expires_at IS NULL OR expires_at > NOW())
-        AND COALESCE(last_used_at, created_at) < NOW() - make_interval(days => $1::int)
+        -- Cuenta desde el último uso, desde que se creó o desde el despliegue de
+        -- la #194 (rotacion_desde), lo que sea más reciente.
+        AND GREATEST(COALESCE(last_used_at, created_at), rotacion_desde) < NOW() - make_interval(days => $1::int)
       RETURNING id, user_id, prefijo`,
     [dias]
   );
@@ -217,8 +221,11 @@ export async function porCaducarSinAviso(dias) {
   const { rows } = await query(
     `SELECT u.id AS user_id, u.nombre, u.email,
             json_agg(json_build_object('id', t.id, 'nombre', t.nombre, 'prefijo', t.prefijo,
-                                       'expires_at', t.expires_at) ORDER BY t.expires_at) AS urls
+                                       'expires_at', t.expires_at,
+                                       -- La de una conexión se renueva en esa conexión (#196 revisión).
+                                       'conexion', c.label) ORDER BY t.expires_at) AS urls
        FROM mcp_tokens t JOIN users u ON u.id = t.user_id AND u.active
+       LEFT JOIN project_connectors c ON c.id = t.connector_id
       WHERE t.revoked_at IS NULL AND t.aviso_caducidad_at IS NULL
         AND t.expires_at > NOW()
         AND t.expires_at <= NOW() + make_interval(days => $1::int)

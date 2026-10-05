@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { enteroEnv } from './mcp.config.js';
 import { AppError } from '../../shared/utils/AppError.js';
 
 /**
@@ -48,17 +49,11 @@ export const ROLES_SIN_MCP = ['tutor'];
  * de Diego lo cambia: la URL es la llave, y una llave que no caduca ni se usa
  * es justo la que alguien puede tener sin que nadie lo note.
  */
-const dias = (v, def) => {
-  if (v === undefined || v === '') return def;
-  const n = parseInt(v, 10);
-  return Number.isInteger(n) && n >= 0 ? n : def;
-};
-
 export function configRotacion() {
   return {
-    diasDeVida: dias(process.env.MCP_TOKEN_DIAS, 90) || null,
-    diasAviso: dias(process.env.MCP_TOKEN_AVISO_DIAS, 7),
-    diasSinUso: dias(process.env.MCP_TOKEN_SIN_USO_DIAS, 30) || null,
+    diasDeVida: enteroEnv('MCP_TOKEN_DIAS', 90, { cero: true }) || null,
+    diasAviso: enteroEnv('MCP_TOKEN_AVISO_DIAS', 7, { cero: true }),
+    diasSinUso: enteroEnv('MCP_TOKEN_SIN_USO_DIAS', 30, { cero: true }) || null,
   };
 }
 

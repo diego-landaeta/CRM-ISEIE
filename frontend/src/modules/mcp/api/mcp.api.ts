@@ -48,8 +48,21 @@ export interface McpEstado {
   proyectos: McpProyecto[];
   herramientas: McpHerramienta[];
   tokens: McpToken[];
+  /** Interruptor de emergencia (#196). */
+  interruptor?: McpInterruptor;
+  puedeApagar?: boolean;
   /** Código de desbloqueo (#192): si hace falta y cuánto dura cada cosa. */
   codigo?: { obligatorio: boolean; minutosCodigo: number; inactividadMin: number; maximoMin: number };
+}
+
+export interface McpInterruptor {
+  apagado: boolean;
+  /** Apagado con MCP_DISABLED=1 en el .env: el botón no lo enciende. */
+  porEnv: boolean;
+  porBoton: boolean;
+  cambiadoPor: string | null;
+  cambiadoAt: string | null;
+  motivo: string | null;
 }
 
 export interface McpCodigo {
@@ -119,6 +132,8 @@ export const mcpApi = {
   crearCodigo: () => client.post('/mcp/panel/codigo', {}),
   revocarToken: (id: number) => client.delete(`/mcp/panel/tokens/${id}`),
   personas: () => client.get('/mcp/panel/personas'),
+  /** Interruptor de emergencia (#196): solo super admin. */
+  cambiarInterruptor: (apagado: boolean, motivo?: string) => client.post('/mcp/panel/interruptor', { apagado, motivo }),
   /** Actividad (#195): solo super admin y admin. */
   actividad: (f: McpFiltrosActividad) => {
     const q = new URLSearchParams(Object.entries(f).filter(([, v]) => v !== undefined && v !== '').map(([k, v]) => [k, String(v)]));

@@ -35,13 +35,15 @@ export async function vuelta() {
   }
 
   if (diasAviso) {
-    const enlace = `${process.env.CRM_BASE_URL || 'http://localhost:5173'}/conexion/mcp`;
+    const enlace = `${process.env.CRM_BASE_URL || 'http://localhost:5173/crm'}/conexion/mcp`;
     for (const p of await mcpModel.porCaducarSinAviso(diasAviso)) {
       try {
         const r = await sendMcpCaducidadEmail({ persona: p, urls: p.urls, enlace });
-        // Solo se marca avisado si el correo salió: si no, se reintenta en la
+        // Solo se marca avisado si el correo SALIÓ: si no, se reintenta en la
         // siguiente vuelta en vez de quedarse sin aviso para siempre.
-        if (r && r.ok === false) throw new Error(r.error || 'el correo no salió');
+        // `sendEmail` contesta { sent: true|false, reason }; sin clave de Brevo,
+        // con el freno de pruebas o tras agotar los reintentos, sent es false.
+        if (!r || r.sent !== true) throw new Error(r?.reason || 'el correo no salió');
         await mcpModel.marcarAvisoCaducidad(p.urls.map((u) => u.id));
         resumen.avisosEnviados += 1;
       } catch (err) {

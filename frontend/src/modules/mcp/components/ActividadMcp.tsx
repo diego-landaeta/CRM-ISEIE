@@ -3,6 +3,7 @@ import { ClockCounterClockwise, CaretLeft, CaretRight, ArrowClockwise } from '@p
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { toast } from '@/shared/hooks/useToast';
 import { mcpApi, type McpActividad, type McpFiltrosActividad } from '../api/mcp.api';
+import { nombreDelCliente } from '../lib/cliente';
 
 /**
  * Conexión → MCP → Actividad (#195): quién consultó qué con Claude, cuándo, con
@@ -16,14 +17,6 @@ const fechaHora = (iso: string) => new Date(iso).toLocaleString('es-ES', {
   day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit',
 });
 
-/** «Claude-User» → «Claude Desktop / claude.ai», como en la tabla de URLs. */
-function cliente(ua: string | null): string {
-  if (!ua) return '';
-  if (/^claude-code\//i.test(ua)) return 'Claude Code';
-  if (/Claude-User|Anthropic|python-httpx/i.test(ua)) return 'Claude Desktop / claude.ai';
-  if (/mcp-remote|node/i.test(ua)) return 'Claude Desktop (archivo)';
-  return ua.length > 30 ? `${ua.slice(0, 30)}…` : ua;
-}
 
 /** {"texto":"ana","proyecto_id":2} → «texto: ana · proyecto_id: 2». */
 function queConsulto(p: Record<string, unknown> | null): string {
@@ -129,7 +122,7 @@ export default function ActividadMcp() {
                     {f.duracion_ms != null && <span className="block text-muted-foreground">{f.duracion_ms} ms</span>}
                   </td>
                   <td className="px-4 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
-                    {cliente(f.cliente)}{f.ip && <span className="block">{f.ip}</span>}
+                    {nombreDelCliente(f.cliente)}{f.ip && <span className="block">{f.ip}</span>}
                   </td>
                 </tr>
               ))}

@@ -5,6 +5,8 @@ import { HERRAMIENTAS } from './mcp.tools.js';
 import * as model from './mcp.model.js';
 import { z } from 'zod';
 import * as desbloqueo from './mcp.desbloqueo.js';
+import { protegerDatos, recortarFilas } from './mcp.privacidad.js';
+import { MENSAJE_APAGADO } from './mcp.interruptor.js';
 
 /**
  * El servidor MCP del CRM.
@@ -25,14 +27,30 @@ function comoTexto(datos) {
     + '\n…[respuesta recortada: usa filtros, fechas o un límite menor para ver el resto]';
 }
 
-export function crearServidor({ ambito, tokenId, origen = {} }) {
+/**
+ * Lo que contesta cualquier herramienta con el interruptor apagado (#196).
+ *
+ * La aclaración es un DATO, no una orden: con la frase sola, Claude rellenaba
+ * el «qué hago» por su cuenta y pedía un código de desbloqueo que no tiene que
+ * ver con esto. Una orden («repite esta frase») la rechazaba por venir de una
+ * herramienta.
+ */
+const ACLARACION_APAGADO = 'Lo activa un administrador desde el panel del CRM. No tiene que ver con el código de desbloqueo: no hace falta pedirlo.';
+const RESPUESTA_APAGADO = {
+  isError: true,
+  content: [{ type: 'text', text: `${MENSAJE_APAGADO}. ${ACLARACION_APAGADO}` }],
+};
+
+export function crearServidor({ ambito, tokenId, origen = {}, apagado = false }) {
   const server = new McpServer(
     { name: 'crm-iseih', version: '1.0.0' },
     {
-      instructions:
+      instructions: apagado ? `${MENSAJE_APAGADO}. ${ACLARACION_APAGADO}` :
         'CRM del ecosistema ISEIE/ISEIH. Solo consulta: no se puede crear, cambiar ni borrar nada. '
         + 'Empieza por «mis_proyectos» para saber a qué campus y empresas tienes acceso. '
-        + 'Importes en euros salvo que se indique moneda. Fechas en formato AAAA-MM-DD.',
+        + 'Importes en euros salvo que se indique moneda. Fechas en formato AAAA-MM-DD. '
+        + 'Los correos y teléfonos salen enmascarados y, en los listados, los clientes con nombre abreviado: '
+        + 'pide datos_completos: true solo si la persona necesita contactar a alguien (queda registrado).',
     }
   );
 
@@ -50,6 +68,12 @@ export function crearServidor({ ambito, tokenId, origen = {} }) {
         let ok = true;
         let error = null;
         try {
+          // Interruptor apagado (#196): ningún dato, solo el aviso.
+          if (apagado) {
+            ok = false;
+            error = 'MCP_APAGADO';
+            return RESPUESTA_APAGADO;
+          }
           // Segundo factor (#192): con el interruptor encendido, sin desbloquear
           // no sale ningún dato. Se mira en cada llamada contra la base.
           const barrera = await barreraDeDesbloqueo(tokenId);
@@ -59,7 +83,18 @@ export function crearServidor({ ambito, tokenId, origen = {} }) {
             return { isError: true, content: [{ type: 'text', text: barrera }] };
           }
           const datos = await h.ejecutar(ambito, args || {});
-          return { content: [{ type: 'text', text: comoTexto(datos) }] };
+          // Menos datos personales y un máximo de filas por respuesta (#196).
+          const protegidos = protegerDatos(datos, {
+            completos: args?.datos_completos === true,
+            nombresDeLista: h.listasDeClientes || [],
+          });
+          const { datos: recortados, recortes } = recortarFilas(protegidos);
+          const aviso = recortes.length
+            ? `\n[Solo se muestran las primeras ${recortes[0].quedan} filas de ${recortes.map((r) => `«${r.lista}» (había ${r.tenia})`).join(', ')}. `
+              + 'Acota con filtros o fechas (o pide la página siguiente, en las consultas que tienen páginas). '
+              + 'Dile a la persona que la lista está incompleta.]'
+            : '';
+          return { content: [{ type: 'text', text: comoTexto(recortados) + aviso }] };
         } catch (err) {
           ok = false;
           // Los errores de ambito y de validacion se le cuentan a Claude tal
@@ -82,9 +117,10 @@ export function crearServidor({ ambito, tokenId, origen = {} }) {
     );
   }
 
-  // Solo con el interruptor encendido: apagado, Claude ve las mismas
-  // herramientas que antes y no se le ofrece una que no sirve.
-  if (desbloqueo.config().obligatorio) registrarDesbloquear(server, { ambito, tokenId, origen });
+  // Solo con el código obligatorio: si no, Claude ve las mismas herramientas
+  // que antes y no se le ofrece una que no sirve. Y nunca con el MCP apagado
+  // (#196): viéndola, Claude le pedía a la persona un código que no hace falta.
+  if (desbloqueo.config().obligatorio && !apagado) registrarDesbloquear(server, { ambito, tokenId, origen });
   return server;
 }
 
@@ -168,7 +204,7 @@ function registrarDesbloquear(server, { ambito, tokenId, origen }) {
 
 /** POST /api/mcp — una peticion MCP (JSON-RPC) de Claude. */
 export async function atenderPeticion(req, res) {
-  const server = crearServidor(req.mcp);
+  const server = crearServidor({ ...req.mcp, apagado: req.mcpApagado === true });
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
     enableJsonResponse: true,

@@ -16,7 +16,7 @@ import jwt from 'jsonwebtoken';
  *   npx vitest run tests/mcpAlertas.test.js
  */
 
-const correos = vi.hoisted(() => ({ sendMcpAlertasEmail: vi.fn(async () => ({ ok: true })) }));
+const correos = vi.hoisted(() => ({ sendMcpAlertasEmail: vi.fn(async () => ({ sent: true })) }));
 vi.mock('../src/shared/services/brevo.service.js', async (original) => ({ ...(await original()), ...correos }));
 
 const { default: pool } = await import('../src/shared/config/db.js');
@@ -208,6 +208,19 @@ describe('alertas', () => {
     expect(a.find((x) => x.tipo === 'ip_nueva').detalle.red).toBe('203.0.113.*');
   });
 
+  it('tras desplegar: el historial SIN IP ni cliente (de antes de la 191) no hace que todo parezca nuevo', async () => {
+    const [antiguo] = await q(
+      `INSERT INTO users (nombre, email, password_hash, role) VALUES ($1, $2, 'x', 'admin') RETURNING id`,
+      [`${MARCA} ANTIGUO`, `antiguo@${MARCA.toLowerCase()}.test`]
+    );
+    ids.users.push(antiguo.id);
+    await auditar({ id: antiguo.id }, { ip: null, cliente: null });          // como antes de la 191
+    await marcarRevisado();
+    await auditar({ id: antiguo.id }, { ip: '160.79.106.20', cliente: 'Claude-User' });
+    await revisar();
+    expect(alertasDe().filter((x) => x.userId === antiguo.id)).toHaveLength(0);
+  });
+
   it('la primera vez de alguien no es «nueva»: no tiene con qué compararse', async () => {
     const [nuevo] = await q(
       `INSERT INTO users (nombre, email, password_hash, role) VALUES ($1, $2, 'x', 'admin') RETURNING id`,
@@ -246,6 +259,24 @@ describe('alertas', () => {
     await auditar(U.GEMA, { cuando: `${las3} + INTERVAL '40 minutes'` });
     await revisar();
     expect(alertasDe().filter((x) => x.tipo === 'madrugada' && x.userId === U.GEMA.id)).toHaveLength(0);
+  });
+
+  it('madrugada que cruza la medianoche («22-6»): las 23 h y las 3 h cuentan, las 12 h no', async () => {
+    process.env.MCP_ALERTA_MADRUGADA = '22-6';
+    const tz = process.env.APP_TIMEZONE || 'Europe/Madrid';
+    const hora = (h) => `(date_trunc('day', NOW() AT TIME ZONE '${tz}') - INTERVAL '2 days' + INTERVAL '${h} hours') AT TIME ZONE '${tz}'`;
+    const [nocturno] = await q(
+      `INSERT INTO users (nombre, email, password_hash, role) VALUES ($1, $2, 'x', 'admin') RETURNING id`,
+      [`${MARCA} NOCTURNO`, `nocturno@${MARCA.toLowerCase()}.test`]
+    );
+    ids.users.push(nocturno.id);
+    await marcarRevisado();
+    await auditar({ id: nocturno.id }, { cuando: hora(23) });
+    await auditar({ id: nocturno.id }, { cuando: hora(12) });
+    await revisar();
+    const a = alertasDe().filter((x) => x.tipo === 'madrugada' && x.userId === nocturno.id);
+    expect(a).toHaveLength(1);
+    expect(a[0].detalle.consultas).toBe(1);   // la de las 23 h; la de las 12 h no
   });
 
   it('con MCP_ALERTAS=false no avisa, pero la marca avanza', async () => {

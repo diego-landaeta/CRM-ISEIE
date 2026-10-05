@@ -24,3 +24,9 @@ export const actividadSchema = z.object({
   pagina: z.coerce.number().int().min(1).max(10000).default(1),
   limite: z.coerce.number().int().min(1).max(100).default(50),
 });
+
+/** Interruptor de emergencia (#196). */
+export const interruptorSchema = z.object({
+  apagado: z.boolean(),
+  motivo: z.string().trim().max(300).optional(),
+});

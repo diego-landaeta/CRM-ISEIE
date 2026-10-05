@@ -1,6 +1,7 @@
 import { query } from '../../shared/config/db.js';
 import { logger } from '../../shared/utils/logger.js';
 import { sendMcpAlertasEmail } from '../../shared/services/brevo.service.js';
+import { enteroEnv, siNoEnv } from './mcp.config.js';
 
 /**
  * Alertas del MCP de Claude (#195): avisar a Diego de lo raro.
@@ -25,23 +26,17 @@ import { sendMcpAlertasEmail } from '../../shared/services/brevo.service.js';
  * versión del mismo.
  */
 
-const entero = (v, def) => {
-  if (v === undefined || v === '') return def;
-  const n = parseInt(v, 10);
-  return Number.isInteger(n) && n >= 0 ? n : def;
-};
-
 /** Umbrales, del .env en cada vuelta. 0 o vacío apaga esa alerta. */
 export function configAlertas() {
   const madrugada = String(process.env.MCP_ALERTA_MADRUGADA ?? '0-6').match(/^(\d{1,2})-(\d{1,2})$/);
   return {
-    activas: !['0', 'false', 'no'].includes(String(process.env.MCP_ALERTAS ?? 'true').toLowerCase()),
-    rafagaConsultas: entero(process.env.MCP_ALERTA_RAFAGA_CONSULTAS, 100),
-    rafagaMinutos: entero(process.env.MCP_ALERTA_RAFAGA_MINUTOS, 10),
-    origenNuevo: !['0', 'false', 'no'].includes(String(process.env.MCP_ALERTA_ORIGEN_NUEVO ?? 'true').toLowerCase()),
-    fallosDesbloqueo: entero(process.env.MCP_ALERTA_FALLOS_DESBLOQUEO, 3),
+    activas: siNoEnv('MCP_ALERTAS', true),
+    rafagaConsultas: enteroEnv('MCP_ALERTA_RAFAGA_CONSULTAS', 100, { cero: true }),
+    rafagaMinutos: enteroEnv('MCP_ALERTA_RAFAGA_MINUTOS', 10),
+    origenNuevo: siNoEnv('MCP_ALERTA_ORIGEN_NUEVO', true),
+    fallosDesbloqueo: enteroEnv('MCP_ALERTA_FALLOS_DESBLOQUEO', 3, { cero: true }),
     madrugada: madrugada ? { desde: Number(madrugada[1]), hasta: Number(madrugada[2]) } : null,
-    mesesAuditoria: entero(process.env.MCP_AUDITORIA_MESES, 12),
+    mesesAuditoria: enteroEnv('MCP_AUDITORIA_MESES', 12, { cero: true }),
   };
 }
 
@@ -91,37 +86,55 @@ async function rafagas(cfg, ultimo, max) {
     detalle: { consultas: r.consultas, minutos: cfg.rafagaMinutos, desde: r.desde, hasta: r.hasta } }));
 }
 
+// La misma regla que `red()` y `familia()`, en SQL: así se calcula para todos
+// de una vez en la base, en vez de traer el historial de cada persona a Node.
+// String.raw: en un texto normal de JS, «\d» pierde la barra y llega a la
+// base como «d», con lo que no reconocería ninguna IP.
+const IPV4 = String.raw`'^\d+\.\d+\.\d+\.\d+$'`;
+const ULTIMO_OCTETO = String.raw`'\.\d+$'`;
+const RED_SQL = (c) => `CASE
+    WHEN ${c} IS NULL THEN NULL
+    WHEN regexp_replace(${c}, '^::ffff:', '') ~ ${IPV4}
+      THEN regexp_replace(regexp_replace(${c}, '^::ffff:', ''), ${ULTIMO_OCTETO}, '.*')
+    WHEN ${c} LIKE '%:%' THEN array_to_string((string_to_array(${c}, ':'))[1:3], ':') || '::/48'
+    ELSE ${c} END`;
+const FAMILIA_SQL = (c) => `NULLIF(lower(split_part(split_part(split_part(btrim(${c}), ' ', 1), '/', 1), '(', 1)), '')`;
+
 async function origenesNuevos(cfg, ultimo, max) {
   if (!cfg.origenNuevo) return [];
-  const { rows: nuevos } = await query(
-    `SELECT DISTINCT user_id, ip, cliente FROM mcp_auditoria
-      WHERE id > $1 AND id <= $2 AND user_id IS NOT NULL`,
+  // UNA consulta para todos. Se compara con lo que esa persona ya había usado
+  // ANTES de esta vuelta, y solo con filas que tienen IP o cliente: la auditoría
+  // anterior a la migración 191 no los tiene, y compararla haría que TODO
+  // pareciera nuevo el día del despliegue (y un aviso por cada persona).
+  // Sin historial con IP no hay red «nueva», solo la primera; lo mismo con el
+  // cliente.
+  const { rows } = await query(
+    `WITH nuevos AS (
+       SELECT DISTINCT user_id, ip, ${RED_SQL('ip')} AS red, cliente, ${FAMILIA_SQL('cliente')} AS familia
+         FROM mcp_auditoria
+        WHERE id > $1 AND id <= $2 AND user_id IS NOT NULL
+     ), conocidos AS (
+       SELECT user_id,
+              array_agg(DISTINCT ${RED_SQL('ip')}) FILTER (WHERE ip IS NOT NULL)            AS redes,
+              array_agg(DISTINCT ${FAMILIA_SQL('cliente')}) FILTER (WHERE cliente IS NOT NULL) AS familias
+         FROM mcp_auditoria
+        WHERE id <= $1 AND user_id IN (SELECT user_id FROM nuevos)
+        GROUP BY user_id
+     )
+     SELECT n.user_id, 'ip_nueva' AS tipo, n.red AS valor, array_agg(DISTINCT n.ip) AS ejemplos
+       FROM nuevos n JOIN conocidos k USING (user_id)
+      WHERE n.red IS NOT NULL AND k.redes IS NOT NULL AND NOT (n.red = ANY(k.redes))
+      GROUP BY n.user_id, n.red
+     UNION ALL
+     SELECT n.user_id, 'cliente_nuevo', n.familia, array_agg(DISTINCT n.cliente)
+       FROM nuevos n JOIN conocidos k USING (user_id)
+      WHERE n.familia IS NOT NULL AND k.familias IS NOT NULL AND NOT (n.familia = ANY(k.familias))
+      GROUP BY n.user_id, n.familia`,
     [ultimo, max]
   );
-  const alertas = [];
-  const porPersona = new Map();
-  for (const n of nuevos) porPersona.set(n.user_id, [...(porPersona.get(n.user_id) || []), n]);
-
-  for (const [userId, filas] of porPersona) {
-    const { rows: antes } = await query(
-      `SELECT DISTINCT ip, cliente FROM mcp_auditoria WHERE user_id = $1 AND id <= $2`,
-      [userId, ultimo]
-    );
-    // Sin historial no hay nada con qué comparar: la primera vez no es «nuevo»,
-    // es estrenar. Eso ya se ve en el panel (#194).
-    if (!antes.length) continue;
-    const redesViejas = new Set(antes.map((a) => red(a.ip)).filter(Boolean));
-    const familiasViejas = new Set(antes.map((a) => familia(a.cliente)).filter(Boolean));
-    const redesNuevas = [...new Set(filas.map((f) => red(f.ip)).filter((r) => r && !redesViejas.has(r)))];
-    const familiasNuevas = [...new Set(filas.map((f) => familia(f.cliente)).filter((c) => c && !familiasViejas.has(c)))];
-    for (const r of redesNuevas) {
-      alertas.push({ tipo: 'ip_nueva', userId, detalle: { red: r, ips: filas.filter((f) => red(f.ip) === r).map((f) => f.ip) } });
-    }
-    for (const c of familiasNuevas) {
-      alertas.push({ tipo: 'cliente_nuevo', userId, detalle: { cliente: c, completo: filas.find((f) => familia(f.cliente) === c).cliente } });
-    }
-  }
-  return alertas;
+  return rows.map((r) => (r.tipo === 'ip_nueva'
+    ? { tipo: 'ip_nueva', userId: r.user_id, detalle: { red: r.valor, ips: r.ejemplos } }
+    : { tipo: 'cliente_nuevo', userId: r.user_id, detalle: { cliente: r.valor, completo: r.ejemplos[0] } }));
 }
 
 async function fallosDesbloqueo(cfg, ultimo, max) {
@@ -155,8 +168,12 @@ async function madrugada(cfg, ultimo, max) {
             to_char(MIN(a.created_at AT TIME ZONE '${TZ()}'), 'YYYY-MM-DD') AS noche
        FROM mcp_auditoria a
       WHERE a.id > $1 AND a.id <= $2 AND a.user_id IS NOT NULL
-        AND EXTRACT(HOUR FROM a.created_at AT TIME ZONE '${TZ()}') >= $3
-        AND EXTRACT(HOUR FROM a.created_at AT TIME ZONE '${TZ()}') < $4
+        -- «0-6» es de 0 a 6; «22-6» cruza la medianoche: de 22 a 24 O de 0 a 6.
+        AND (CASE WHEN $3::int < $4::int
+                  THEN EXTRACT(HOUR FROM a.created_at AT TIME ZONE '${TZ()}') >= $3::int
+                   AND EXTRACT(HOUR FROM a.created_at AT TIME ZONE '${TZ()}') < $4::int
+                  ELSE EXTRACT(HOUR FROM a.created_at AT TIME ZONE '${TZ()}') >= $3::int
+                    OR EXTRACT(HOUR FROM a.created_at AT TIME ZONE '${TZ()}') < $4::int END)
       GROUP BY a.user_id`,
     [ultimo, max, desde, hasta]
   );
@@ -213,8 +230,11 @@ export async function revisar() {
     try {
       const para = (await destinatariosVigilancia()).map((email) => ({ email }));
       if (para.length) {
-        const r = await sendMcpAlertasEmail({ para, alertas, enlace: `${process.env.CRM_BASE_URL || 'http://localhost:5173'}/conexion/mcp` });
-        resumen.correo = r?.ok !== false;
+        const r = await sendMcpAlertasEmail({ para, alertas, enlace: `${process.env.CRM_BASE_URL || 'http://localhost:5173/crm'}/conexion/mcp` });
+        // `sendEmail` contesta { sent: true|false }. Si no sale, las alertas
+        // siguen guardadas en mcp_alertas (y se ven en el registro).
+        resumen.correo = r?.sent === true;
+        if (!resumen.correo) logger.warn({ reason: r?.reason }, 'MCP: el correo de alertas no salió');
       }
     } catch (err) {
       logger.warn({ err: err.message }, 'MCP: no se pudo enviar el correo de alertas');

@@ -17,8 +17,8 @@ import jwt from 'jsonwebtoken';
  */
 
 const correos = vi.hoisted(() => ({
-  sendMcpCaducidadEmail: vi.fn(async () => ({ ok: true })),
-  sendMcpBloqueoEmail: vi.fn(async () => ({ ok: true })),
+  sendMcpCaducidadEmail: vi.fn(async () => ({ sent: true })),
+  sendMcpBloqueoEmail: vi.fn(async () => ({ sent: true })),
 }));
 vi.mock('../src/shared/services/brevo.service.js', async (original) => ({ ...(await original()), ...correos }));
 
@@ -96,7 +96,7 @@ beforeEach(async () => {
   delete process.env.MCP_TOKEN_AVISO_DIAS;
   delete process.env.MCP_TOKEN_SIN_USO_DIAS;
   process.env.MCP_CODIGO_OBLIGATORIO = 'false';
-  correos.sendMcpCaducidadEmail.mockReset().mockResolvedValue({ ok: true });
+  correos.sendMcpCaducidadEmail.mockReset().mockResolvedValue({ sent: true });
 });
 
 describe('caducidad configurable', () => {
@@ -136,6 +136,17 @@ describe('desde dónde se usó por última vez', () => {
     expect(t.last_used_ip).toBe('203.0.113.7');
   });
 
+  it('otra IP en el mismo minuto NO reescribe la fila (Anthropic cambia de IP casi en cada consulta)', async () => {
+    const { token, id } = await crearUrl(ANA, 'ip cambiante');
+    await usar(token, 'Claude-User');
+    await vi.waitFor(async () => expect((await fila(id)).last_used_ip).toBe('203.0.113.7'));
+    await request.post(`/api/mcp/u/${token}`).set('Accept', 'application/json, text/event-stream')
+      .set('User-Agent', 'Claude-User').set('X-Forwarded-For', '203.0.113.99')
+      .send({ jsonrpc: '2.0', id: 1, method: 'tools/list' });
+    await new Promise((r) => setTimeout(r, 200));
+    expect((await fila(id)).last_used_ip).toBe('203.0.113.7');
+  });
+
   it('si cambia el cliente, se apunta aunque no haya pasado el minuto', async () => {
     const { token, id } = await crearUrl(ANA, 'cambia');
     await usar(token, 'Claude-User');
@@ -150,9 +161,11 @@ describe('la vuelta: URLs sin usar', () => {
     const vieja = await crearUrl(ANA, 'sin usar 31 días');
     const nueva = await crearUrl(ANA, 'usada ayer');
     const nunca = await crearUrl(ANA, 'nunca usada');
+    // Una URL «de hace tiempo»: creada, y empezando a contar, hace 40 días.
+    const envejecer = (id) => q(`UPDATE mcp_tokens SET created_at = NOW() - INTERVAL '40 days', rotacion_desde = NOW() - INTERVAL '40 days' WHERE id = $1`, [id]);
+    for (const u of [vieja, nueva, nunca]) await envejecer(u.id);
     await q(`UPDATE mcp_tokens SET last_used_at = NOW() - INTERVAL '31 days' WHERE id = $1`, [vieja.id]);
     await q(`UPDATE mcp_tokens SET last_used_at = NOW() - INTERVAL '1 day' WHERE id = $1`, [nueva.id]);
-    await q(`UPDATE mcp_tokens SET created_at = NOW() - INTERVAL '31 days' WHERE id = $1`, [nunca.id]);
 
     await vuelta();
 
@@ -162,10 +175,21 @@ describe('la vuelta: URLs sin usar', () => {
     expect((await usar(vieja.token)).status).toBe(401);
   });
 
+  it('tras desplegar, las URLs viejas empiezan a contar ese día: no se revocan de golpe', async () => {
+    // Revisión de la #196: creada hace 60 días y sin usar desde hace 50, pero
+    // la #194 se desplegó HOY (rotacion_desde = ahora). La primera vuelta no la
+    // puede revocar sin aviso.
+    const vieja = await crearUrl(ANA, 'de antes del despliegue');
+    await q(`UPDATE mcp_tokens SET created_at = NOW() - INTERVAL '60 days', last_used_at = NOW() - INTERVAL '50 days',
+             rotacion_desde = NOW() WHERE id = $1`, [vieja.id]);
+    await vuelta();
+    expect((await fila(vieja.id)).revoked_at).toBeNull();
+  });
+
   it('MCP_TOKEN_SIN_USO_DIAS=0 lo apaga', async () => {
     process.env.MCP_TOKEN_SIN_USO_DIAS = '0';
     const v = await crearUrl(ANA, 'vieja pero sin rotación');
-    await q(`UPDATE mcp_tokens SET last_used_at = NOW() - INTERVAL '200 days' WHERE id = $1`, [v.id]);
+    await q(`UPDATE mcp_tokens SET last_used_at = NOW() - INTERVAL '200 days', rotacion_desde = NOW() - INTERVAL '200 days' WHERE id = $1`, [v.id]);
     await vuelta();
     expect((await fila(v.id)).revoked_at).toBeNull();
   });
@@ -193,10 +217,10 @@ describe('la vuelta: aviso antes de caducar', () => {
   it('si el correo no sale, no se marca: se reintenta en la siguiente vuelta', async () => {
     const u = await crearUrl(GESTOR, 'correo que falla');
     await q(`UPDATE mcp_tokens SET expires_at = NOW() + INTERVAL '2 days', last_used_at = NOW() WHERE id = $1`, [u.id]);
-    correos.sendMcpCaducidadEmail.mockResolvedValue({ ok: false, error: 'Brevo caído' });
+    correos.sendMcpCaducidadEmail.mockResolvedValue({ sent: false, reason: 'NO_API_KEY' });
     await vuelta();
     expect((await fila(u.id)).aviso_caducidad_at).toBeNull();
-    correos.sendMcpCaducidadEmail.mockResolvedValue({ ok: true });
+    correos.sendMcpCaducidadEmail.mockResolvedValue({ sent: true });
     await vuelta();
     expect((await fila(u.id)).aviso_caducidad_at).not.toBeNull();
   });

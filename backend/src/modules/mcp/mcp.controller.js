@@ -7,7 +7,8 @@ import {
 } from './mcp.acceso.js';
 import { HERRAMIENTAS } from './mcp.tools.js';
 import * as desbloqueo from './mcp.desbloqueo.js';
-import { accesoSchema, actividadSchema, crearTokenSchema, idSchema } from './mcp.validation.js';
+import { accesoSchema, actividadSchema, crearTokenSchema, idSchema, interruptorSchema } from './mcp.validation.js';
+import * as interruptorModel from './mcp.interruptor.js';
 import * as actividadModel from './mcp.actividad.js';
 
 /**
@@ -45,6 +46,9 @@ export async function estado(req, res, next) {
         proyectos,
         herramientas: HERRAMIENTAS.map((h) => ({ nombre: h.nombre, titulo: h.titulo, descripcion: h.descripcion })),
         tokens: tieneAcceso ? await model.listarTokens(user.id) : [],
+        // Interruptor de emergencia (#196): si el MCP está apagado y por qué.
+        interruptor: await interruptorModel.estado(),
+        puedeApagar: user.role === 'superadmin',
         // Código de desbloqueo (#192): si hace falta y cuánto dura cada cosa.
         codigo: (({ obligatorio, minutosCodigo, inactividadMin, maximoMin }) =>
           ({ obligatorio, minutosCodigo, inactividadMin, maximoMin }))(desbloqueo.config()),
@@ -156,5 +160,24 @@ export async function actividad(req, res, next) {
       actividadModel.opcionesActividad(quien),
     ]);
     res.json({ success: true, data: { ...lista, opciones } });
+  } catch (err) { next(err); }
+}
+
+/**
+ * POST /api/mcp/panel/interruptor — apaga o enciende TODO el MCP al momento
+ * (#196). Solo super admin. Queda en la Actividad con quién y por qué.
+ */
+export async function interruptor(req, res, next) {
+  try {
+    const { apagado, motivo } = validar(interruptorSchema, req.body);
+    if (!apagado && interruptorModel.apagadoPorEnv()) {
+      throw new AppError('Está apagado desde el servidor (MCP_DISABLED=1 en el .env): el botón no puede encenderlo.', 409, 'MCP_APAGADO_POR_ENV');
+    }
+    const estado = await interruptorModel.cambiar({ userId: req.user.userId, apagado, motivo });
+    await model.registrarAuditoria({
+      userId: req.user.userId, tokenId: null, herramienta: apagado ? 'interruptor_apagar' : 'interruptor_encender',
+      parametros: motivo ? { motivo } : null, ok: true, duracionMs: 0,
+    });
+    res.json({ success: true, data: estado });
   } catch (err) { next(err); }
 }
