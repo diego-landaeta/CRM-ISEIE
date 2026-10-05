@@ -40,16 +40,12 @@ function alcance(campus, params) {
 
 const TZ = process.env.APP_TIMEZONE || 'Europe/Madrid';
 
-export async function listarActividad(quien, { persona, conexion, desde, hasta, herramienta, resultado, pagina = 1, limite = 50 }) {
+export async function listarActividad(quien, { persona, desde, hasta, herramienta, resultado, pagina = 1, limite = 50 }) {
   const params = [];
   const cond = [alcance(await campusVisibles(quien), params)];
   const add = (sql, v) => { params.push(v); cond.push(sql.replace('?', `$${params.length}`)); };
 
   if (persona) add('a.user_id = ?', persona);
-  // Conexión: «personal» = las URLs personales; un número = una conexión de
-  // Claude (conector de tipo MCP, migración 184).
-  if (conexion === 'personal') cond.push('t.connector_id IS NULL');
-  else if (conexion) add('t.connector_id = ?', Number(conexion));
   if (desde) add(`(a.created_at AT TIME ZONE '${TZ}')::date >= ?::date`, desde);
   if (hasta) add(`(a.created_at AT TIME ZONE '${TZ}')::date <= ?::date`, hasta);
   if (herramienta) add('a.herramienta = ?', herramienta);
@@ -59,12 +55,11 @@ export async function listarActividad(quien, { persona, conexion, desde, hasta, 
   const where = 'WHERE ' + cond.join(' AND ');
   const desdeTabla = `FROM mcp_auditoria a
        LEFT JOIN users u ON u.id = a.user_id
-       LEFT JOIN mcp_tokens t ON t.id = a.token_id
-       LEFT JOIN project_connectors c ON c.id = t.connector_id`;
+       LEFT JOIN mcp_tokens t ON t.id = a.token_id`;
 
   const { rows } = await query(
     `SELECT a.id, a.created_at, a.user_id, u.nombre AS persona, u.email,
-            a.token_id, t.nombre AS url_nombre, t.prefijo, t.connector_id, c.label AS conexion,
+            a.token_id, t.nombre AS url_nombre, t.prefijo,
             a.herramienta, a.parametros, a.ok, a.error, a.duracion_ms, a.ip, a.cliente
        ${desdeTabla}
       ${where}
@@ -76,19 +71,15 @@ export async function listarActividad(quien, { persona, conexion, desde, hasta, 
   return { total, pagina: Number(pagina), limite: Number(limite), filas: rows };
 }
 
-/** Para los desplegables: personas y conexiones que tienen actividad visible. */
+/** Para los desplegables: personas y consultas que tienen actividad visible. */
 export async function opcionesActividad(quien) {
   const params = [];
   const donde = alcance(await campusVisibles(quien), params);
-  const [{ rows: personas }, { rows: conexiones }, { rows: herramientas }] = await Promise.all([
+  const [{ rows: personas }, { rows: herramientas }] = await Promise.all([
     query(
       `SELECT DISTINCT u.id, u.nombre FROM mcp_auditoria a JOIN users u ON u.id = a.user_id
         WHERE ${donde} ORDER BY u.nombre`, params),
-    query(
-      `SELECT DISTINCT c.id, c.label FROM mcp_auditoria a
-         JOIN mcp_tokens t ON t.id = a.token_id JOIN project_connectors c ON c.id = t.connector_id
-        WHERE ${donde} ORDER BY c.label`, params),
     query(`SELECT DISTINCT a.herramienta FROM mcp_auditoria a WHERE ${donde} ORDER BY a.herramienta`, params),
   ]);
-  return { personas, conexiones, herramientas: herramientas.map((h) => h.herramienta) };
+  return { personas, herramientas: herramientas.map((h) => h.herramienta) };
 }

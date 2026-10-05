@@ -39,7 +39,7 @@ const reto = crypto.createHash('sha256').update(verificador).digest('base64url')
 beforeEach(() => {
   model.findTokenVivo.mockReset();
   model.findUserById.mockReset();
-  model.findTokenVivo.mockImplementation(async (h) => (h === huella(LLAVE) ? { token_id: 7, user_id: 2, connector_id: null } : null));
+  model.findTokenVivo.mockImplementation(async (h) => (h === huella(LLAVE) ? { token_id: 7, user_id: 2 } : null));
   model.findUserById.mockResolvedValue({ id: 2, role: 'superadmin', active: true, usa_mcp: false });
 });
 

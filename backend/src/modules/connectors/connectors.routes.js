@@ -9,8 +9,6 @@ router.use(verifyToken);
 router.use(soloRoles('admin', 'superadmin'));
 
 router.get('/', ctrl.list);
-// «Servidor MCP»: tu URL para Claude en ese conector (una nueva revoca la anterior).
-router.post('/:id/mcp-url', ctrl.mcpUrl);
 router.get('/:id', ctrl.getById);
 router.post('/', ctrl.create);
 router.patch('/:id', ctrl.update);

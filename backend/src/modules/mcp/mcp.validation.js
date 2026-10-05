@@ -16,7 +16,6 @@ export const accesoSchema = z.object({
 const fecha = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha en formato AAAA-MM-DD');
 export const actividadSchema = z.object({
   persona: z.coerce.number().int().positive().optional(),
-  conexion: z.union([z.literal('personal'), z.coerce.number().int().positive()]).optional(),
   desde: fecha.optional(),
   hasta: fecha.optional(),
   herramienta: z.string().max(60).optional(),

@@ -315,11 +315,8 @@ export async function sendMcpBloqueoEmail({ para, persona, hasta, maxFallos }) {
 export async function sendMcpCaducidadEmail({ persona, urls, enlace }) {
   const tz = process.env.APP_TIMEZONE || 'Europe/Madrid';
   const fecha = (d) => new Date(d).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', timeZone: tz });
-  // La URL de una conexión (Conexiones de Claude) no se crea con «Crear mi URL
-  // personal»: se vuelve a sacar en esa conexión.
-  const como = (u) => (u.conexion ? ` — de la conexión «${u.conexion}»: pulsa «Sacar mi URL» en esa conexión` : '');
-  const lista = urls.map((u) => `<li><strong>${u.nombre}</strong> (${u.prefijo}…): caduca el ${fecha(u.expires_at)}${como(u)}</li>`).join('');
-  const listaTexto = urls.map((u) => `- ${u.nombre} (${u.prefijo}…): caduca el ${fecha(u.expires_at)}${como(u)}`).join('\n');
+  const lista = urls.map((u) => `<li><strong>${u.nombre}</strong> (${u.prefijo}…): caduca el ${fecha(u.expires_at)}</li>`).join('');
+  const listaTexto = urls.map((u) => `- ${u.nombre} (${u.prefijo}…): caduca el ${fecha(u.expires_at)}`).join('\n');
   const una = urls.length === 1;
   const subject = una ? 'Tu URL de Claude para el CRM caduca pronto' : `${urls.length} URLs de Claude para el CRM caducan pronto`;
   const htmlContent = `
