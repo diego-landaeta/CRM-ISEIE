@@ -307,3 +307,30 @@ export async function sendMcpBloqueoEmail({ para, persona, hasta, maxFallos }) {
     + `Queda bloqueada hasta las ${cuando}.\nSi no has sido tú, revoca esa URL en el CRM → Conexión → MCP.`;
   return await sendEmail({ to: para, subject, htmlContent, textContent, tags: ['mcp-bloqueo', 'crm'] });
 }
+
+/**
+ * MCP de Claude (#194): sus URLs van a caducar pronto. Un correo por persona,
+ * con todas las que le caducan, y el enlace al panel para crear otra.
+ */
+export async function sendMcpCaducidadEmail({ persona, urls, enlace }) {
+  const tz = process.env.APP_TIMEZONE || 'Europe/Madrid';
+  const fecha = (d) => new Date(d).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', timeZone: tz });
+  const lista = urls.map((u) => `<li><strong>${u.nombre}</strong> (${u.prefijo}…): caduca el ${fecha(u.expires_at)}</li>`).join('');
+  const listaTexto = urls.map((u) => `- ${u.nombre} (${u.prefijo}…): caduca el ${fecha(u.expires_at)}`).join('\n');
+  const una = urls.length === 1;
+  const subject = una ? 'Tu URL de Claude para el CRM caduca pronto' : `${urls.length} URLs de Claude para el CRM caducan pronto`;
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html><body style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; color: #1f2937; max-width: 560px; margin: 0 auto; padding: 24px;">
+      <p>Hola ${persona.nombre},</p>
+      <p>${una ? 'Esta URL con la que Claude consulta el CRM va a caducar' : 'Estas URLs con las que Claude consulta el CRM van a caducar'}:</p>
+      <ul>${lista}</ul>
+      <p>Cuando caduque, Claude dejará de poder consultar. Para seguir, crea una URL nueva y cámbiala en tu Claude
+         (Configuración → Conectores):</p>
+      <p style="margin: 24px 0;"><a href="${enlace}" style="background: #3b82f6; color: white; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: bold;">Ir a Conexión → MCP</a></p>
+      <p style="font-size: 13px; color: #6b7280;">Si ya no la usas, no hace falta hacer nada: se apagará sola.</p>
+    </body></html>`;
+  const textContent = `Hola ${persona.nombre},\n\n${una ? 'Esta URL de Claude caduca' : 'Estas URLs de Claude caducan'} pronto:\n${listaTexto}\n\n`
+    + `Crea una nueva en ${enlace} y cámbiala en tu Claude (Configuración → Conectores).\nSi ya no la usas, no hace falta hacer nada.`;
+  return await sendEmail({ to: [{ email: persona.email, name: persona.nombre }], subject, htmlContent, textContent, tags: ['mcp-caducidad', 'crm'] });
+}

@@ -75,18 +75,25 @@ export async function findTokenVivo(hash) {
   return rows[0] || null;
 }
 
-export async function marcarUso(tokenId) {
+export async function marcarUso(tokenId, { ip = null, cliente = null } = {}) {
   // Una vez por minuto basta: sin esto cada consulta de Claude es un UPDATE.
+  // Desde dónde (#194): la IP y el cliente (User-Agent), para verlo en el panel.
+  // Si cambian, se apunta aunque no haya pasado el minuto: un cliente nuevo es
+  // justo lo que interesa ver.
   await query(
-    `UPDATE mcp_tokens SET last_used_at = NOW()
-      WHERE id = $1 AND (last_used_at IS NULL OR last_used_at < NOW() - INTERVAL '1 minute')`,
-    [tokenId]
+    `UPDATE mcp_tokens
+        SET last_used_at = NOW(), last_used_ip = $2, last_used_cliente = $3
+      WHERE id = $1
+        AND (last_used_at IS NULL OR last_used_at < NOW() - INTERVAL '1 minute'
+             OR last_used_ip IS DISTINCT FROM $2 OR last_used_cliente IS DISTINCT FROM $3)`,
+    [tokenId, ip ? String(ip).slice(0, 64) : null, cliente ? String(cliente).slice(0, 200) : null]
   );
 }
 
 export async function listarTokens(userId) {
   const { rows } = await query(
     `SELECT id, nombre, prefijo, created_at, expires_at, last_used_at, revoked_at,
+            last_used_ip, last_used_cliente, revocado_motivo,
             (revoked_at IS NULL AND (expires_at IS NULL OR expires_at > NOW())) AS vivo
        FROM mcp_tokens WHERE user_id = $1
         -- Los de un conector se ven y se renuevan en Conectores (migración 184).
@@ -151,7 +158,7 @@ export async function tokensDeConectores(userId, connectorIds) {
 /** Una URL por persona y conector: pedir otra revoca la anterior. */
 export async function revocarTokensDelConector(userId, connectorId) {
   await query(
-    `UPDATE mcp_tokens SET revoked_at = NOW()
+    `UPDATE mcp_tokens SET revoked_at = NOW(), revocado_motivo = 'conector'
       WHERE user_id = $1 AND connector_id = $2 AND revoked_at IS NULL`,
     [userId, connectorId]
   );
@@ -160,7 +167,7 @@ export async function revocarTokensDelConector(userId, connectorId) {
 /** Revoca un token SUYO. Devuelve false si no existe o es de otra persona. */
 export async function revocarToken(id, userId) {
   const { rowCount } = await query(
-    `UPDATE mcp_tokens SET revoked_at = NOW()
+    `UPDATE mcp_tokens SET revoked_at = NOW(), revocado_motivo = 'manual'
       WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL`,
     [id, userId]
   );
@@ -171,6 +178,60 @@ export async function revocarToken(id, userId) {
  * Personas a las que se puede dar o quitar el acceso. Un admin solo ve a
  * quien comparte algun campus con el; el super admin, a todos.
  */
+/**
+ * Revoca TODAS las URLs vivas de una persona (#194: al desactivarla). Devuelve
+ * cuántas. Quitar la casilla de acceso NO llama a esto: eso solo pausa.
+ */
+export async function revocarTodasDeLaPersona(userId, motivo) {
+  const { rowCount } = await query(
+    `UPDATE mcp_tokens SET revoked_at = NOW(), revocado_motivo = $2
+      WHERE user_id = $1 AND revoked_at IS NULL`,
+    [userId, motivo]
+  );
+  return rowCount;
+}
+
+// ─── Rotación (#194): lo que hace la vuelta diaria ────────────────────────
+
+/**
+ * Revoca las URLs que lleven `dias` sin usarse (o sin estrenar desde que se
+ * crearon). Devuelve las revocadas, para el registro.
+ */
+export async function revocarSinUso(dias) {
+  const { rows } = await query(
+    `UPDATE mcp_tokens SET revoked_at = NOW(), revocado_motivo = 'sin_uso'
+      WHERE revoked_at IS NULL
+        AND (expires_at IS NULL OR expires_at > NOW())
+        AND COALESCE(last_used_at, created_at) < NOW() - make_interval(days => $1::int)
+      RETURNING id, user_id, prefijo`,
+    [dias]
+  );
+  return rows;
+}
+
+/**
+ * Las URLs vivas que caducan dentro de `dias` y de las que aún no se ha avisado,
+ * agrupadas por persona activa (un correo por persona, no uno por URL).
+ */
+export async function porCaducarSinAviso(dias) {
+  const { rows } = await query(
+    `SELECT u.id AS user_id, u.nombre, u.email,
+            json_agg(json_build_object('id', t.id, 'nombre', t.nombre, 'prefijo', t.prefijo,
+                                       'expires_at', t.expires_at) ORDER BY t.expires_at) AS urls
+       FROM mcp_tokens t JOIN users u ON u.id = t.user_id AND u.active
+      WHERE t.revoked_at IS NULL AND t.aviso_caducidad_at IS NULL
+        AND t.expires_at > NOW()
+        AND t.expires_at <= NOW() + make_interval(days => $1::int)
+      GROUP BY u.id, u.nombre, u.email`,
+    [dias]
+  );
+  return rows;
+}
+
+export async function marcarAvisoCaducidad(ids) {
+  await query(`UPDATE mcp_tokens SET aviso_caducidad_at = NOW() WHERE id = ANY($1::int[])`, [ids]);
+}
+
 export async function listarPersonas(quien) {
   const params = [];
   let filtro = '';

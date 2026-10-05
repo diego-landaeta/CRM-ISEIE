@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import * as model from './connectors.model.js';
 import * as service from './connectors.service.js';
-import { generarToken } from '../mcp/mcp.acceso.js';
+import { generarToken, diasDeVidaToken } from '../mcp/mcp.acceso.js';
 import * as mcpModel from '../mcp/mcp.model.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { proyectosDelAmbito, comoLista } from '../../shared/utils/ambito.js';
@@ -272,7 +272,7 @@ async function urlNueva(req, c) {
   const userId = req.user?.userId;
   await mcpModel.revocarTokensDelConector(userId, c.id);
   const { token, hash, prefijo } = generarToken();
-  await mcpModel.crearToken({ userId, nombre: `Conector: ${c.label}`.slice(0, 100), hash, prefijo, dias: null, connectorId: c.id });
+  await mcpModel.crearToken({ userId, nombre: `Conector: ${c.label}`.slice(0, 100), hash, prefijo, dias: diasDeVidaToken(), connectorId: c.id });
   return { token, prefijo };
 }
 

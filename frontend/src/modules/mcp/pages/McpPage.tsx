@@ -31,6 +31,23 @@ const ROL: Record<string, string> = {
   superadmin: 'Super admin', admin: 'Admin', gestor: 'Gestor', soporte: 'Soporte', project_manager: 'Project manager',
 };
 
+/** Por qué se revocó una URL (#194). */
+const MOTIVO: Record<string, string> = {
+  manual: 'Revocada',
+  sin_uso: 'Revocada por no usarse',
+  usuario_desactivado: 'Revocada al desactivar el usuario',
+  conector: 'Revocada (conector)',
+};
+
+/** «Claude-User» → «Claude Desktop / claude.ai», etc.: el User-Agent en cristiano. */
+function cliente(ua: string | null | undefined): string {
+  if (!ua) return '';
+  if (/^claude-code\//i.test(ua)) return 'Claude Code';
+  if (/Claude-User|Anthropic|python-httpx/i.test(ua)) return 'Claude Desktop / claude.ai';
+  if (/mcp-remote|node/i.test(ua)) return 'Claude Desktop (archivo de configuración)';
+  return ua.length > 40 ? `${ua.slice(0, 40)}…` : ua;
+}
+
 function fecha(iso: string | null): string {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -245,6 +262,13 @@ Su URL no se borra: si le devuelves el acceso, volverá a funcionar sin que teng
               <div className="flex-1 min-w-[200px]">
                 <h2 className="font-semibold text-sm">Tu URL personal</h2>
                 <p className="text-xs text-muted-foreground">Todo lo que ves tú, en todos tus campus.{estado.puedeAdministrar ? ' Para acotarla a una empresa o un campus, usa una conexión de arriba.' : ''}</p>
+                {/* Caducidad y rotación (#194). */}
+                {(estado.diasDeVida || estado.diasSinUso) && (
+                  <p className="text-xs text-muted-foreground">
+                    {estado.diasDeVida ? `Cada URL caduca a los ${estado.diasDeVida} días (te avisamos por correo antes). ` : ''}
+                    {estado.diasSinUso ? `Si no se usa en ${estado.diasSinUso} días, se revoca sola.` : ''}
+                  </p>
+                )}
               </div>
               <input
                 value={nombre}
@@ -284,9 +308,17 @@ Su URL no se borra: si le devuelves el acceso, volverá a funcionar sin que teng
                       <td className="px-4 py-3"><code className="text-[13px] text-muted-foreground">{t.prefijo}…</code></td>
                       <td className="px-4 py-3 text-muted-foreground">{fecha(t.created_at)}</td>
                       <td className="px-4 py-3 text-muted-foreground">
-                        {t.revoked_at ? 'Revocado' : !t.vivo ? 'Caducado' : t.expires_at ? fecha(t.expires_at) : 'Nunca'}
+                        {t.revoked_at ? (MOTIVO[t.revocado_motivo || ''] || 'Revocada') : !t.vivo ? 'Caducada' : t.expires_at ? fecha(t.expires_at) : 'Nunca'}
                       </td>
-                      <td className="px-4 py-3 text-muted-foreground">{fecha(t.last_used_at)}</td>
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {fecha(t.last_used_at)}
+                        {/* Desde dónde (#194): para notar un cliente o una IP que no son tuyos. */}
+                        {t.last_used_at && (t.last_used_cliente || t.last_used_ip) && (
+                          <span className="block text-[11px]" title={t.last_used_cliente || ''}>
+                            {[cliente(t.last_used_cliente), t.last_used_ip].filter(Boolean).join(' · ')}
+                          </span>
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-right">
                         {t.vivo && (
                           <button

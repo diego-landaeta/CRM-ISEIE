@@ -2,7 +2,7 @@ import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import * as model from './mcp.model.js';
 import {
-  DIAS_DE_VIDA_DEL_TOKEN, MAX_TOKENS_VIVOS, ROLES_CON_ACCESO, ROLES_QUE_ADMINISTRAN, ROLES_SIN_MCP,
+  diasDeVidaToken, configRotacion, MAX_TOKENS_VIVOS, ROLES_CON_ACCESO, ROLES_QUE_ADMINISTRAN, ROLES_SIN_MCP,
   generarToken, puedeUsarMcp,
 } from './mcp.acceso.js';
 import { HERRAMIENTAS } from './mcp.tools.js';
@@ -39,7 +39,8 @@ export async function estado(req, res, next) {
         tieneAcceso,
         puedeAdministrar: ROLES_QUE_ADMINISTRAN.includes(user.role),
         soloLoSuyo: !ROLES_CON_ACCESO.includes(user.role),
-        diasDeVida: DIAS_DE_VIDA_DEL_TOKEN,
+        diasDeVida: diasDeVidaToken(),
+        diasSinUso: configRotacion().diasSinUso,
         proyectos,
         herramientas: HERRAMIENTAS.map((h) => ({ nombre: h.nombre, titulo: h.titulo, descripcion: h.descripcion })),
         tokens: tieneAcceso ? await model.listarTokens(user.id) : [],
@@ -61,7 +62,7 @@ export async function crearToken(req, res, next) {
       throw new AppError(`Ya tienes ${MAX_TOKENS_VIVOS} URLs activas. Revoca alguna antes de crear otra.`, 400, 'MCP_DEMASIADOS_TOKENS');
     }
     const { token, hash, prefijo } = generarToken();
-    const creado = await model.crearToken({ userId: user.id, nombre, hash, prefijo, dias: DIAS_DE_VIDA_DEL_TOKEN });
+    const creado = await model.crearToken({ userId: user.id, nombre, hash, prefijo, dias: diasDeVidaToken() });
     logger.info({ userId: user.id, tokenId: creado.id }, 'MCP: token creado');
     res.status(201).json({ success: true, data: { ...creado, token } });
   } catch (err) { next(err); }

@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import * as mcpModel from '../mcp/mcp.model.js';
 import bcrypt from 'bcrypt';
 import { AppError } from '../../shared/utils/AppError.js';
 import * as userModel from './user.model.js';
@@ -183,6 +184,10 @@ export async function deactivate(id) {
   await userModel.deactivate(id);
   // PDF spec: al desactivar, la sesion activa se cierra inmediatamente
   await revokeAllUserTokens(id);
+  // Y sus URLs del MCP de Claude, revocadas, no pausadas (#194): si un día se
+  // reactiva, tendrá que crear URLs nuevas. Quitar solo la casilla de acceso
+  // al MCP sigue pausando; esto es para quien deja de estar en el CRM.
+  await mcpModel.revocarTodasDeLaPersona(id, 'usuario_desactivado');
 
   // Huerfanizar los leads de los que era responsable y re-asignar via
   // round-robin a los gestores restantes de cada proyecto afectado.

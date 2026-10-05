@@ -73,7 +73,10 @@ export async function verificarTokenMcp(req, res, next) {
       if (limite.ids) proyectos = proyectos.filter((p) => limite.ids.includes(Number(p.id)));
     }
     req.mcp = { ambito: construirAmbito(user, proyectos), tokenId: vivo.token_id };
-    model.marcarUso(vivo.token_id).catch(() => {});
+    // Desde dónde (#194). req.ip ya viene del X-Forwarded-For de nginx
+    // (`trust proxy`); el cliente es el User-Agent: «Claude-User» desde
+    // Claude Desktop o claude.ai, «claude-code/…» desde Claude Code.
+    model.marcarUso(vivo.token_id, { ip: req.ip, cliente: req.headers['user-agent'] }).catch(() => {});
     next();
   } catch (err) {
     next(err);

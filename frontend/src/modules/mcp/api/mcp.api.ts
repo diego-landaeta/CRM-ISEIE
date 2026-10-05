@@ -16,6 +16,11 @@ export interface McpToken {
   expires_at: string | null;
   last_used_at: string | null;
   revoked_at: string | null;
+  /** Desde dónde se usó por última vez (#194). */
+  last_used_ip?: string | null;
+  last_used_cliente?: string | null;
+  /** 'manual' | 'sin_uso' | 'usuario_desactivado' | 'conector' */
+  revocado_motivo?: string | null;
   vivo: boolean;
 }
 
@@ -38,6 +43,8 @@ export interface McpEstado {
   soloLoSuyo: boolean;
   /** null = los tokens no caducan. */
   diasDeVida: number | null;
+  /** Días sin usarse tras los que una URL se revoca sola; null = nunca (#194). */
+  diasSinUso?: number | null;
   proyectos: McpProyecto[];
   herramientas: McpHerramienta[];
   tokens: McpToken[];
