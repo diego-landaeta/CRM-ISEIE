@@ -224,7 +224,7 @@ Su URL no se borra: si le devuelves el acceso, volverá a funcionar sin que teng
                 Esta URL es tu llave: quien la tenga consulta el CRM con tus permisos. No la compartas ni la pegues en capturas.
               </p>
               <details className="text-sm">
-                <summary className="cursor-pointer text-xs font-semibold text-muted-foreground">Otras formas de conectar (Claude Code, archivo de configuración)</summary>
+                <summary className="cursor-pointer text-xs font-semibold text-muted-foreground">Otras formas de conectar (Claude Code, archivo de configuración) · más seguras: la llave no va en la dirección</summary>
                 <div className="space-y-3 mt-3">
                   <Bloque titulo="Claude Code · terminal" texto={comandoClaudeCode(url, nuevo)} />
                   <Bloque titulo="Claude Desktop · claude_desktop_config.json" texto={configEscritorio(url, nuevo)} />
@@ -313,7 +313,10 @@ Su URL no se borra: si le devuelves el acceso, volverá a funcionar sin que teng
                 <strong>Sin OAuth:</strong> deja vacíos «OAuth Client ID» y «OAuth Client Secret» (en «Configuración avanzada»).
                 La llave ya va en la URL; con OAuth puesto, Claude dice «Couldn&apos;t register with … sign-in service».
               </li>
-              <li>Claude Code: usa el comando de «Otras formas de conectar».</li>
+              <li>
+                Claude Code, o Claude Desktop por archivo de configuración: usa «Otras formas de conectar». <strong>Es la opción más segura</strong>:
+                la llave viaja en una cabecera y no en la dirección, así que no queda escrita en ningún registro.
+              </li>
               {estado.codigo?.obligatorio && (
                 <li>
                   Cuando Claude te pida el código, pulsa <strong>Sacar código para Claude</strong> arriba y díselo.

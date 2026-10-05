@@ -58,7 +58,7 @@ export async function crearToken(req, res, next) {
     const user = await personaActual(req);
     if (!puedeUsarMcp(user)) throw new AppError('No tienes acceso al MCP del CRM', 403, 'FORBIDDEN');
     if (await model.contarTokensVivos(user.id) >= MAX_TOKENS_VIVOS) {
-      throw new AppError(`Ya tienes ${MAX_TOKENS_VIVOS} tokens activos. Revoca alguno antes de crear otro.`, 400, 'MCP_DEMASIADOS_TOKENS');
+      throw new AppError(`Ya tienes ${MAX_TOKENS_VIVOS} URLs activas. Revoca alguna antes de crear otra.`, 400, 'MCP_DEMASIADOS_TOKENS');
     }
     const { token, hash, prefijo } = generarToken();
     const creado = await model.crearToken({ userId: user.id, nombre, hash, prefijo, dias: DIAS_DE_VIDA_DEL_TOKEN });
