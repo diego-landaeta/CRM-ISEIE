@@ -7,6 +7,7 @@ import EmptyState from '@/shared/components/ui/EmptyState';
 import { toast } from '@/shared/hooks/useToast';
 import { mcpApi, urlDelMcp, type McpEstado, type McpPersona, type McpToken } from '../api/mcp.api';
 import { nombreDelCliente } from '../lib/cliente';
+import ConexionesClaude from '../components/ConexionesClaude';
 import CodigoParaClaude from '../components/CodigoParaClaude';
 import ActividadMcp from '../components/ActividadMcp';
 import InterruptorMcp from '../components/InterruptorMcp';
@@ -19,11 +20,11 @@ import InterruptorMcp from '../components/InterruptorMcp';
  * cómo pegarlo en Claude. Super admin y admin, además, deciden quién más tiene
  * acceso.
  *
- * Una sola URL por persona. Del 29/09 al 05/10 hubo además «conexiones» que
- * acotaban la URL a un campus o una empresa; Diego las quitó el 05/10: «una
- * sola, no ambas… el superadmin decide quién tiene acceso y qué no según su
- * rol». Lo que ve Claude es lo que ve esa persona por su rol; quién tiene
- * acceso se decide abajo, en «Quién tiene acceso».
+ * Y desde el 29/09 las CONEXIONES de Claude viven aquí, no en Conectores:
+ * «lo de Claude MCP, ese formulario pasa a esa parte de MCP en conexión». Una
+ * conexión acota lo que ve Claude a un campus, una empresa o todo el sistema,
+ * y dice quién la creó y quién tiene URL (`ConexionesClaude`). La URL personal
+ * de abajo es lo de siempre: todo lo que ve esa persona.
  *
  * El token se enseña UNA vez, justo al crearlo. No se guarda en ningún estado
  * que sobreviva a cerrar el aviso: el servidor tampoco lo tiene, solo su huella.
@@ -180,6 +181,9 @@ Su URL no se borra: si le devuelves el acceso, volverá a funcionar sin que teng
         <InterruptorMcp estado={estado.interruptor} puedeApagar={!!estado.puedeApagar} onCambio={cargar} />
       )}
 
+      {/* Las conexiones por campus, empresa o todo el sistema: quien administra. */}
+      {estado?.tieneAcceso && estado.puedeAdministrar && <ConexionesClaude />}
+
       {!estado?.tieneAcceso ? (
         <div className="bg-card border border-border rounded-lg">
           <EmptyState
@@ -257,7 +261,7 @@ Su URL no se borra: si le devuelves el acceso, volverá a funcionar sin que teng
               <Key size={18} weight="bold" className="text-primary" />
               <div className="flex-1 min-w-[200px]">
                 <h2 className="font-semibold text-sm">Tu URL personal</h2>
-                <p className="text-xs text-muted-foreground">Claude ve lo mismo que tú, en todos tus campus: lo que permite tu rol.</p>
+                <p className="text-xs text-muted-foreground">Todo lo que ves tú, en todos tus campus.{estado.puedeAdministrar ? ' Para acotarla a una empresa o un campus, usa una conexión de arriba.' : ''}</p>
                 {/* Caducidad y rotación (#194). */}
                 {(estado.diasDeVida || estado.diasSinUso) && (
                   <p className="text-xs text-muted-foreground">

@@ -1,14 +1,16 @@
 import { z } from 'zod';
 import * as model from './connectors.model.js';
 import * as service from './connectors.service.js';
+import { generarToken, diasDeVidaToken } from '../mcp/mcp.acceso.js';
+import * as mcpModel from '../mcp/mcp.model.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { proyectosDelAmbito, comoLista } from '../../shared/utils/ambito.js';
 
-// Hasta el 05/10 hubo también `mcp` («Servidor MCP»: una URL de Claude acotada
-// al «Para quién» del conector). Diego lo quitó: «una sola, no ambas… el
-// superadmin decide quién tiene acceso y qué no según su rol». Claude va solo
-// por la URL personal de Conexión → MCP (migración 193).
-const VALID_TYPES = ['woocommerce_products', 'woocommerce_orders', 'wp_rest', 'acf', 'custom_api'];
+// `mcp`: «Servidor MCP» — no trae datos: da una URL para Claude, como la de
+// Diana (modules/mcp), acotada al «Para quién» del conector. Diego, 29/09: «es
+// para que dé la API y yo meterla en Claude y hacer mis consultas allí».
+// Solo consulta, con todos los límites de aquel MCP.
+const VALID_TYPES = ['woocommerce_products', 'woocommerce_orders', 'wp_rest', 'acf', 'custom_api', 'mcp'];
 const ALCANCES = ['campus', 'empresa', 'sistema'];
 const VALID_DESTINATIONS = ['product', 'lead', 'matricula', 'category'];
 
@@ -161,7 +163,8 @@ async function puedeTocar(req, c, mios) {
  * admin, todo; un admin, lo de sus campus y sus empresas (Diego, 29/09: «que
  * funcione por empresa y todos los proyectos»).
  *
- * `?tipo=datos`: los que traen datos (Conexión → Conectores).
+ * `?tipo=mcp` son las conexiones de Claude (Conexión → MCP) y `?tipo=datos` los
+ * que traen datos (Conexión → Conectores).
  */
 export async function list(req, res, next) {
   try {
@@ -170,7 +173,7 @@ export async function list(req, res, next) {
     if (ids && ids.some((id) => !Number.isInteger(id))) {
       throw new AppError('Campus o empresa no válidos', 400, 'VALIDATION_ERROR');
     }
-    const tipo = req.query.tipo === 'datos' ? 'datos' : null;
+    const tipo = ['mcp', 'datos'].includes(req.query.tipo) ? req.query.tipo : null;
     // Un admin, solo sus campus: el de otro no se le enseña aunque lo pida.
     const mios = await misCampus(req);
     if (mios) {
@@ -179,11 +182,17 @@ export async function list(req, res, next) {
       if (!ids.length) return res.json({ success: true, data: [] });
     }
     const conectores = await model.listByAmbito(ids, { tipo, incluirSistema: esSuperadmin(req) });
+    // En los «Servidor MCP», si esta persona ya tiene su URL (solo el inicio del
+    // token y cuándo la usó Claude por última vez: la URL entera no se guarda).
+    const deMcp = conectores.filter((c) => c.type === 'mcp').map((c) => c.id);
+    const suyas = deMcp.length ? await mcpModel.tokensDeConectores(req.user?.userId, deMcp) : [];
+    const porConector = new Map(suyas.map((t) => [t.connector_id, t]));
     res.json({
       success: true,
       data: await Promise.all(conectores.map(async (c) => ({
         ...sinSecretos(c),
         puede_tocar: await puedeTocar(req, c, mios),
+        ...(c.type === 'mcp' ? { mcp_mio: porConector.get(c.id) || null } : {}),
       }))),
     });
   } catch (err) { next(err); }
@@ -202,7 +211,9 @@ export async function create(req, res, next) {
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
     const alcance = await alcanceValido(req, parsed.data);
     const c = await model.create({ ...parsed.data, ...alcance, created_by: req.user?.userId ?? null });
-    res.status(201).json({ success: true, data: sinSecretos(c) });
+    // «Servidor MCP»: la URL para Claude sale ya, y es la única vez que se ve entera.
+    const mcp = c.type === 'mcp' ? await urlNueva(req, c) : undefined;
+    res.status(201).json({ success: true, data: { ...sinSecretos(c), ...(mcp ? { mcp } : {}) } });
   } catch (err) { next(err); }
 }
 
@@ -248,10 +259,39 @@ export async function remove(req, res, next) {
   } catch (err) { next(err); }
 }
 
+/**
+ * La URL de ESTA persona para Claude en un conector «Servidor MCP».
+ *
+ * Es un token del MCP de Diana (`mcp_tokens`, se guarda solo su huella) atado
+ * al conector: Claude ve lo de la persona DENTRO del «Para quién» del conector
+ * (lo comprueba `verificarTokenMcp` en cada consulta). Una por persona y
+ * conector: pedir otra revoca la anterior. Cada admin que pueda ver el conector
+ * saca la suya, y con ella ve solo sus campus.
+ */
+async function urlNueva(req, c) {
+  const userId = req.user?.userId;
+  await mcpModel.revocarTokensDelConector(userId, c.id);
+  const { token, hash, prefijo } = generarToken();
+  await mcpModel.crearToken({ userId, nombre: `Conector: ${c.label}`.slice(0, 100), hash, prefijo, dias: diasDeVidaToken(), connectorId: c.id });
+  return { token, prefijo };
+}
+
+/** POST /api/connectors/:id/mcp-url — una URL nueva para Claude (la anterior deja de valer). */
+export async function mcpUrl(req, res, next) {
+  try {
+    const c = await acceso(req, await model.findById(cid(req)), 'ver');
+    if (c.type !== 'mcp') throw new AppError('Este conector no es un Servidor MCP', 400, 'VALIDATION_ERROR');
+    res.status(201).json({ success: true, data: await urlNueva(req, c) });
+  } catch (err) { next(err); }
+}
+
+const NO_IMPORTA = new AppError('Un Servidor MCP no trae datos: es la URL para consultar desde Claude.', 400, 'MCP_NO_IMPORTA');
+
 // Trae 1-3 items de muestra del API externo + sugerencias de mapping
 export async function preview(req, res, next) {
   try {
-    await acceso(req, await model.findById(cid(req)), 'ver');
+    const c = await acceso(req, await model.findById(cid(req)), 'ver');
+    if (c.type === 'mcp') throw NO_IMPORTA;
     const data = await service.previewConnector(cid(req));
     res.json({ success: true, data });
   } catch (err) { next(err); }
@@ -261,7 +301,8 @@ export async function preview(req, res, next) {
 export async function runImport(req, res, next) {
   try {
     const id = cid(req);
-    await acceso(req, await model.findById(id), 'tocar');
+    const c = await acceso(req, await model.findById(id), 'tocar');
+    if (c.type === 'mcp') throw NO_IMPORTA;
     res.status(202).json({ success: true, data: { connector_id: id, status: 'running' } });
     // Background
     setImmediate(async () => {

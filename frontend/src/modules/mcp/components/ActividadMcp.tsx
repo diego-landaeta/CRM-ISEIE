@@ -65,6 +65,11 @@ export default function ActividadMcp() {
             <option value="">Todas las personas</option>
             {datos?.opciones.personas.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
           </select>
+          <select className={campo} value={filtros.conexion || ''} onChange={(e) => poner('conexion', e.target.value)} aria-label="Conexión">
+            <option value="">Todas las conexiones</option>
+            <option value="personal">URLs personales</option>
+            {datos?.opciones.conexiones.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+          </select>
           <select className={campo} value={filtros.herramienta || ''} onChange={(e) => poner('herramienta', e.target.value)} aria-label="Herramienta">
             <option value="">Todas las consultas</option>
             {datos?.opciones.herramientas.map((h) => <option key={h} value={h}>{h}</option>)}
@@ -106,7 +111,7 @@ export default function ActividadMcp() {
                   <td className="px-4 py-2.5 whitespace-nowrap text-muted-foreground">{fechaHora(f.created_at)}</td>
                   <td className="px-4 py-2.5">{f.persona || <span className="text-muted-foreground">usuario borrado</span>}</td>
                   <td className="px-4 py-2.5 text-muted-foreground">
-                    {f.url_nombre ? `${f.url_nombre} (${f.prefijo}…)` : '—'}
+                    {f.conexion ? `Conexión: ${f.conexion}` : f.url_nombre ? `${f.url_nombre} (${f.prefijo}…)` : '—'}
                   </td>
                   <td className="px-4 py-2.5"><code className="text-[12px]">{f.herramienta}</code></td>
                   <td className="px-4 py-2.5 text-xs text-muted-foreground max-w-[280px] break-words">{queConsulto(f.parametros)}</td>

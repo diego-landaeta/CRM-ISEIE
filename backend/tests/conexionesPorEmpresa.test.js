@@ -1,13 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// Conectores, por empresa y con «Todos los proyectos» (Diego, 29/09):
+// Conexión → MCP y Conectores, por empresa y con «Todos los proyectos» (Diego, 29/09):
 //
 //   «que funcione por empresa y todos los proyectos, y puedas ver quién gestiona
 //    o quién creó un MCP y en dónde; Antonio solo puede consultar y ver los de su
 //    empresa, en cambio Manuel Casas puede ver TODO en todos lados».
-//
-// Hasta el 05/10 también eran «conexiones de Claude» (tipo `mcp`); ya no: Claude
-// va solo por la URL personal de Conexión → MCP («una sola, no ambas»).
 
 const llamadas = [];
 const CEDIA = [1, 2, 3];
@@ -32,6 +29,11 @@ vi.mock('../src/modules/connectors/connectors.model.js', () => ({
   findById: vi.fn(async (id) => conectores.find((c) => c.id === id) || null),
   create: vi.fn(async (d) => ({ id: 99, ...d })),
 }));
+vi.mock('../src/modules/mcp/mcp.model.js', () => ({
+  tokensDeConectores: vi.fn(async () => []),
+  revocarTokensDelConector: vi.fn(async () => {}),
+  crearToken: vi.fn(async () => ({ id: 1 })),
+}));
 
 const ctrl = await import('../src/modules/connectors/connectors.controller.js');
 const model = await import('../src/modules/connectors/connectors.model.js');
@@ -54,26 +56,21 @@ beforeEach(() => {
 
 describe('con «Todos los proyectos» arriba', () => {
   it('Manuel (super admin) lo ve todo, también lo de todo el sistema', async () => {
-    const { error } = await pedir(ctrl.list, MANUEL, { query: { tipo: 'datos' } });
+    const { error } = await pedir(ctrl.list, MANUEL, { query: { tipo: 'mcp' } });
     expect(error).toBeNull();
-    expect(llamadas[0]).toEqual({ ids: null, tipo: 'datos', incluirSistema: true });
+    expect(llamadas[0]).toEqual({ ids: null, tipo: 'mcp', incluirSistema: true });
   });
 
   it('Antonio (admin) ve lo de sus campus y su empresa, y nada de todo el sistema', async () => {
-    const { error } = await pedir(ctrl.list, ANTONIO, { query: { tipo: 'datos' } });
+    const { error } = await pedir(ctrl.list, ANTONIO, { query: { tipo: 'mcp' } });
     expect(error).toBeNull();
-    expect(llamadas[0]).toEqual({ ids: [1, 2, 3], tipo: 'datos', incluirSistema: false });
+    expect(llamadas[0]).toEqual({ ids: [1, 2, 3], tipo: 'mcp', incluirSistema: false });
   });
 
   it('ya no pide elegir campus o empresa', async () => {
-    const { error } = await pedir(ctrl.list, ANTONIO, {});
+    const { error } = await pedir(ctrl.list, ANTONIO, { query: { tipo: 'datos' } });
     expect(error).toBeNull();
-    expect(llamadas[0].ids).toEqual([1, 2, 3]);
-  });
-
-  it('«tipo=mcp» ya no existe: no filtra nada', async () => {
-    await pedir(ctrl.list, MANUEL, { query: { tipo: 'mcp' } });
-    expect(llamadas[0].tipo).toBeNull();
+    expect(llamadas[0].tipo).toBe('datos');
   });
 });
 
@@ -93,22 +90,22 @@ describe('con una empresa arriba', () => {
 describe('lo que puede tocar cada uno', () => {
   it('Antonio toca lo de su empresa y su campus; lo de otro, no', async () => {
     conectores = [
-      { id: 1, alcance: 'empresa', issuer_id: 8, project_id: 1, type: 'custom_api', config: {} },
-      { id: 2, alcance: 'campus', project_id: 2, type: 'custom_api', config: {} },
-      { id: 3, alcance: 'campus', project_id: 4, type: 'custom_api', config: {} },
+      { id: 1, alcance: 'empresa', issuer_id: 8, project_id: 1, type: 'mcp', config: {} },
+      { id: 2, alcance: 'campus', project_id: 2, type: 'mcp', config: {} },
+      { id: 3, alcance: 'campus', project_id: 4, type: 'mcp', config: {} },
     ];
     const { salida } = await pedir(ctrl.list, ANTONIO, {});
     expect(salida.data.map((c) => [c.id, c.puede_tocar])).toEqual([[1, true], [2, true], [3, false]]);
   });
 
   it('Manuel lo toca todo', async () => {
-    conectores = [{ id: 5, alcance: 'sistema', project_id: 1, type: 'custom_api', config: {} }];
+    conectores = [{ id: 5, alcance: 'sistema', project_id: 1, type: 'mcp', config: {} }];
     const { salida } = await pedir(ctrl.list, MANUEL, {});
     expect(salida.data[0].puede_tocar).toBe(true);
   });
 
   it('una de todo el sistema, Antonio ni la abre', async () => {
-    conectores = [{ id: 5, alcance: 'sistema', project_id: 1, type: 'custom_api', config: {} }];
+    conectores = [{ id: 5, alcance: 'sistema', project_id: 1, type: 'mcp', config: {} }];
     const { error } = await pedir(ctrl.getById, ANTONIO, { params: { id: '5' } });
     expect(error?.statusCode).toBe(403);
   });
@@ -117,22 +114,8 @@ describe('lo que puede tocar cada uno', () => {
 describe('quién la creó', () => {
   it('el alta guarda a quien la crea', async () => {
     await pedir(ctrl.create, ANTONIO, {
-      body: { project_id: 1, type: 'custom_api', label: 'API de CEDIA', alcance: 'empresa', issuer_id: 8 },
+      body: { project_id: 1, type: 'mcp', label: 'Claude de CEDIA', alcance: 'empresa', issuer_id: 8 },
     });
     expect(model.create).toHaveBeenCalledWith(expect.objectContaining({ created_by: 20, alcance: 'empresa', issuer_id: 8 }));
-  });
-});
-
-describe('Claude ya no va por conectores (05/10)', () => {
-  it('crear uno de tipo «mcp» da error de validación', async () => {
-    const { error } = await pedir(ctrl.create, MANUEL, {
-      body: { project_id: 1, type: 'mcp', label: 'Claude de CEDIA', alcance: 'sistema' },
-    });
-    expect(error?.statusCode).toBe(400);
-    expect(model.create).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'mcp' }));
-  });
-
-  it('ya no existe la ruta para sacar una URL de Claude de un conector', () => {
-    expect(ctrl.mcpUrl).toBeUndefined();
   });
 });

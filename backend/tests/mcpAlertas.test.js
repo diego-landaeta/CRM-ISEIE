@@ -163,7 +163,7 @@ describe('Conexión → MCP → Actividad', () => {
       const [f] = await q(`SELECT ip, cliente, token_id FROM mcp_auditoria WHERE user_id = $1 ORDER BY id DESC LIMIT 1`, [U.GUS.id]);
       expect(f).toMatchObject({ ip: '198.51.100.4', cliente: 'claude-code/9.9' });
     });
-    const r = await actividad(U.ANA, `?persona=${U.GUS.id}`);
+    const r = await actividad(U.ANA, `?persona=${U.GUS.id}&conexion=personal`);
     expect(r.body.data.filas[0]).toMatchObject({ url_nombre: 'Prueba', herramienta: 'mis_proyectos' });
   });
 });

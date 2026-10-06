@@ -95,6 +95,8 @@ export interface McpActividadFila {
   token_id: number | null;
   url_nombre: string | null;
   prefijo: string | null;
+  connector_id: number | null;
+  conexion: string | null;
   herramienta: string;
   parametros: Record<string, unknown> | null;
   ok: boolean;
@@ -111,12 +113,13 @@ export interface McpActividad {
   filas: McpActividadFila[];
   opciones: {
     personas: { id: number; nombre: string }[];
+    conexiones: { id: number; label: string }[];
     herramientas: string[];
   };
 }
 
 export interface McpFiltrosActividad {
-  persona?: string; desde?: string; hasta?: string;
+  persona?: string; conexion?: string; desde?: string; hasta?: string;
   herramienta?: string; resultado?: string; pagina?: number;
 }
 

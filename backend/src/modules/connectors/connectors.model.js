@@ -31,14 +31,20 @@ export async function listByAmbito(projectIds, { tipo = null, incluirSistema = t
   }
   const filtros = [];
   if (conds.length) filtros.push(`(${conds.join(' ')})`);
-  // 'datos': todos menos los antiguos «Servidor MCP» (quitados el 05/10, migración 193).
+  if (tipo === 'mcp') filtros.push("c.type = 'mcp'");
   if (tipo === 'datos') filtros.push("c.type <> 'mcp'");
   const { rows } = await query(
     `SELECT c.id, c.project_id, p.nombre AS proyecto, c.alcance, c.issuer_id, s.razon_social AS empresa,
             c.type, c.label, c.destination, c.config, c.field_mapping,
             c.sample_payload, c.sample_received_at, c.active,
             c.last_sync_at, c.last_sync_status, c.last_sync_count, c.created_at, c.updated_at,
-            c.created_by, u.nombre AS creado_por
+            c.created_by, u.nombre AS creado_por,
+            (SELECT count(DISTINCT t.user_id)::int FROM mcp_tokens t
+              WHERE t.connector_id = c.id AND t.revoked_at IS NULL) AS personas_con_url,
+            (SELECT array_agg(DISTINCT uu.nombre ORDER BY uu.nombre) FROM mcp_tokens t
+               JOIN users uu ON uu.id = t.user_id
+              WHERE t.connector_id = c.id AND t.revoked_at IS NULL) AS con_url,
+            (SELECT max(t.last_used_at) FROM mcp_tokens t WHERE t.connector_id = c.id) AS ultimo_uso_claude
      FROM project_connectors c
      JOIN projects p ON p.id = c.project_id
      LEFT JOIN invoice_issuers s ON s.id = c.issuer_id
