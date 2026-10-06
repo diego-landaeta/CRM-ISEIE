@@ -32,6 +32,15 @@ export const RIGE_HOY = (alias = 'c') => `(
 
 // ── Tutores ─────────────────────────────────────────────────────────────────
 
+/** Si el tutor está en alguno de esos campus (#245: su ficha solo para quien comparte campus). */
+export async function tieneAlgunCampus(tutorId, projectIds) {
+  if (!Array.isArray(projectIds) || !projectIds.length) return false;
+  const { rows } = await query(
+    'SELECT 1 FROM user_projects WHERE user_id = $1 AND project_id = ANY($2::int[]) LIMIT 1',
+    [tutorId, projectIds.map(Number)]);
+  return rows.length > 0;
+}
+
 export async function listar({ projectId, activos = true }) {
   // Con un proyecto elegido no se corta en seco: primero los profesores de ESE
   // proyecto y despues los de los demas proyectos de la MISMA SOCIEDAD.
