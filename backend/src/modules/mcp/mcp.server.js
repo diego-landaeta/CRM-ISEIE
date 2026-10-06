@@ -139,9 +139,7 @@ async function barreraDeDesbloqueo(tokenId) {
   return null;
 }
 
-const horaLocal = (fecha) => new Date(fecha).toLocaleTimeString('es-ES', {
-  hour: '2-digit', minute: '2-digit', timeZone: process.env.APP_TIMEZONE || 'Europe/Madrid',
-});
+const { horaLocal } = desbloqueo;
 
 /**
  * La herramienta `desbloquear(codigo)`. Va aparte de HERRAMIENTAS porque no es

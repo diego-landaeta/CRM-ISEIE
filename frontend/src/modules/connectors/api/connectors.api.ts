@@ -1,4 +1,5 @@
 import client, { API_BASE_URL } from '@/shared/api/client';
+import type { McpEstadoCodigo } from '@/modules/mcp/api/mcp.api';
 
 /**
  * Los conectores de un proyecto (#6).
@@ -123,7 +124,14 @@ export interface Conector {
   /** Nombre de su empresa, si es de empresa. */
   empresa?: string | null;
   /** «Servidor MCP»: la URL de esta persona, si ya tiene (solo el inicio del token). */
-  mcp_mio?: { prefijo: string; created_at: string; last_used_at: string | null } | null;
+  mcp_mio?: {
+    id: number; prefijo: string; created_at: string; last_used_at: string | null;
+    /** Cuándo caduca la URL (#194); null = no caduca. */
+    expires_at: string | null;
+    vivo: boolean;
+    /** Cuándo volverá a pedir el código (#192); null con el código apagado. */
+    codigo: McpEstadoCodigo | null;
+  } | null;
   type: TipoConector;
   label: string;
   destination: DestinoConector;

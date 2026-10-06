@@ -9,6 +9,7 @@ import { mcpApi, urlDelMcp, type McpEstado, type McpPersona, type McpToken } fro
 import { nombreDelCliente } from '../lib/cliente';
 import ConexionesClaude from '../components/ConexionesClaude';
 import CodigoParaClaude from '../components/CodigoParaClaude';
+import EstadoCodigoUrl from '../components/EstadoCodigoUrl';
 import ActividadMcp from '../components/ActividadMcp';
 import InterruptorMcp from '../components/InterruptorMcp';
 
@@ -187,7 +188,7 @@ Su URL no se borra: si le devuelves el acceso, volverá a funcionar sin que teng
       )}
 
       {/* Las conexiones por campus, empresa o todo el sistema: quien administra. */}
-      {estado?.tieneAcceso && estado.puedeAdministrar && <ConexionesClaude />}
+      {estado?.tieneAcceso && estado.puedeAdministrar && <ConexionesClaude onCambio={cargar} />}
 
       {!estado?.tieneAcceso ? (
         <div className="bg-card border border-border rounded-lg">
@@ -230,7 +231,7 @@ Su URL no se borra: si le devuelves el acceso, volverá a funcionar sin que teng
           </div>
 
           {/* Segundo factor (#192): solo con el interruptor encendido. */}
-          {estado.codigo?.obligatorio && <CodigoParaClaude config={estado.codigo} />}
+          {estado.codigo?.obligatorio && <CodigoParaClaude config={estado.codigo} onCambio={cargar} />}
 
           {/* El token recien creado, UNA vez. */}
           {nuevo && (
@@ -324,6 +325,8 @@ Su URL no se borra: si le devuelves el acceso, volverá a funcionar sin que teng
                       <td className="px-4 py-3 text-muted-foreground">{fecha(t.created_at)}</td>
                       <td className="px-4 py-3 text-muted-foreground">
                         {t.revoked_at ? (MOTIVO[t.revocado_motivo || ''] || 'Revocada') : !t.vivo ? 'Caducada' : t.expires_at ? fecha(t.expires_at) : 'Nunca'}
+                        {/* Y cuándo volverá a pedir el código (#192, Diego 05/10). */}
+                        {t.vivo && <div className="mt-1"><EstadoCodigoUrl codigo={t.codigo} tokenId={t.id} onCambio={cargar} /></div>}
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">
                         {fecha(t.last_used_at)}
@@ -372,7 +375,8 @@ Su URL no se borra: si le devuelves el acceso, volverá a funcionar sin que teng
               {estado.codigo?.obligatorio && (
                 <li>
                   Cuando Claude te pida el código, pulsa <strong>Sacar código para Claude</strong> arriba y díselo.
-                  Te lo volverá a pedir tras un rato sin usarlo.
+                  Te lo volverá a pedir tras un rato sin usarlo. Si tu Claude dice que no tiene la herramienta «desbloquear»,
+                  pulsa <strong>Desbloquear desde aquí</strong> junto a tu URL y pídele que vuelva a consultar.
                 </li>
               )}
               <li>Pregúntale a Claude, por ejemplo: «¿cuántos prospectos nuevos entraron este mes en mis campus?».</li>

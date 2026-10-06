@@ -57,9 +57,29 @@ export function huellaCodigo(codigo) {
   return crypto.createHash('sha256').update(normalizar(codigo)).digest('hex');
 }
 
+// claude.ai guarda la lista de herramientas del momento en que se conectó y no
+// la vuelve a pedir (#192, 05/10): quien conectó con el código apagado no tiene
+// «desbloquear». Para eso está el botón del panel, y el mensaje lo pone PRIMERO:
+// probado con claude.ai (06/10), con el botón al final Claude pedía antes el
+// código, que sin la herramienta no puede usar.
 export const MENSAJE_SIN_DESBLOQUEAR =
-  'Esta conexión con el CRM necesita un código para dar datos. Pide a la persona que entre en el CRM '
-  + '→ Conexión → MCP → «Código para Claude» y te lo diga; después llama a la herramienta «desbloquear» con ese código.';
+  'Esta conexión con el CRM necesita desbloquearse para dar datos. '
+  + 'Si no tienes la herramienta «desbloquear», no pidas el código (no podrías usarlo): pide a la persona que pulse '
+  + '«Desbloquear desde aquí» en el CRM → Conexión → MCP, junto a su URL, y después vuelve a consultar. '
+  + 'Si la tienes, pide a la persona el código de CRM → Conexión → MCP → «Código para Claude» y llama a «desbloquear» con él.';
+
+const ZONA = () => process.env.APP_TIMEZONE || 'Europe/Madrid';
+
+/** «16:55», con la hora de Madrid. */
+export const horaLocal = (fecha) => new Date(fecha).toLocaleTimeString('es-ES', {
+  hour: '2-digit', minute: '2-digit', timeZone: ZONA(),
+});
+
+/** «las 16:55», o «mañana a las 00:40» si cae en otro día (el máximo son 9 h). */
+function cuando(fecha) {
+  const dia = (d) => new Date(d).toLocaleDateString('es-ES', { timeZone: ZONA() });
+  return `${dia(fecha) === dia(Date.now()) ? '' : 'mañana '}a las ${horaLocal(fecha)}`;
+}
 
 // ─── Base de datos ────────────────────────────────────────────────────────
 
@@ -95,6 +115,122 @@ export async function estadoDeLaConexion(tokenId) {
     [tokenId, inactividadMin]
   );
   return rows[0] || { bloqueado: false, desbloqueado: false, bloqueado_hasta: null };
+}
+
+/**
+ * Cuándo volverá a pedir el código cada URL, para el panel (#192, Diego 05/10).
+ *
+ * Devuelve un Map tokenId → { estado, hasta, texto } con uno de:
+ *   'bloqueada'        por códigos falsos; `hasta` = bloqueado_hasta
+ *   'desbloqueada'     `hasta` = la menor de último uso + inactividad y el máximo
+ *   'sin_desbloquear'  sin desbloqueo, o ya pasó: lo pide en la próxima consulta
+ * Con el código apagado, el Map va vacío: no se enseña nada.
+ *
+ * La cuenta es la misma que la de `estadoDeLaConexion` (desbloqueada si esa
+ * menor hora aún no ha llegado), y se hace aquí para no repetirla en el frontal.
+ */
+export async function estadoParaElPanel(tokenIds) {
+  const { obligatorio, inactividadMin } = config();
+  const ids = (tokenIds || []).map(Number).filter(Number.isInteger);
+  if (!obligatorio || !ids.length) return new Map();
+  const { rows } = await query(
+    `SELECT t.id, t.bloqueado_hasta,
+            (t.bloqueado_hasta IS NOT NULL AND t.bloqueado_hasta > NOW()) AS bloqueado,
+            d.caduca_max_at,
+            LEAST(d.ultimo_uso_at + make_interval(mins => $2::int), d.caduca_max_at) AS pide_a,
+            (d.token_id IS NOT NULL
+              AND LEAST(d.ultimo_uso_at + make_interval(mins => $2::int), d.caduca_max_at) > NOW()) AS desbloqueado
+       FROM mcp_tokens t
+       LEFT JOIN mcp_desbloqueos d ON d.token_id = t.id
+      WHERE t.id = ANY($1::int[])`,
+    [ids, inactividadMin]
+  );
+  const horas = inactividadMin % 60 === 0 ? `${inactividadMin / 60} h` : `${inactividadMin} min`;
+  return new Map(rows.map((r) => {
+    if (r.bloqueado) {
+      return [r.id, { estado: 'bloqueada', hasta: r.bloqueado_hasta, texto: `Bloqueada hasta ${cuando(r.bloqueado_hasta).replace(/^a /, '')}` }];
+    }
+    if (r.desbloqueado) {
+      // Si la hora sale del máximo, usarla no la alarga; si sale de la
+      // inactividad, cada consulta la empuja, como mucho hasta el máximo.
+      const porMaximo = new Date(r.pide_a).getTime() >= new Date(r.caduca_max_at).getTime();
+      return [r.id, {
+        estado: 'desbloqueada',
+        hasta: r.pide_a,
+        texto: porMaximo
+          ? `Pedirá el código ${cuando(r.pide_a)}`
+          : `Pedirá el código ${cuando(r.pide_a)} si pasan ${horas} sin usarla (como muy tarde, ${cuando(r.caduca_max_at)})`,
+      }];
+    }
+    return [r.id, { estado: 'sin_desbloquear', hasta: null, texto: 'Pedirá el código en la próxima consulta' }];
+  }));
+}
+
+/**
+ * «El estado actual en una línea» para «Código para Claude» (#192, Diego 05/10).
+ *
+ * El estado es de cada URL, y un admin puede tener varias (una por conexión).
+ * Con una sola, la línea es la suya (`una`, con su botón). Con varias, un
+ * resumen de todas, sin elegir ninguna por la persona: «Tus 3 URLs: 1
+ * desbloqueada (pedirá el código a las 16:15), 2 cerradas». El detalle de cada
+ * una está en la tabla. null con el código apagado o sin URLs.
+ */
+export function resumenParaElPanel(urls, estados) {
+  const conEstado = (urls || []).filter((u) => estados.get(u.id)).map((u) => ({ ...u, ...estados.get(u.id) }));
+  if (!conEstado.length) return null;
+  if (conEstado.length === 1) return { total: 1, una: conEstado[0], texto: conEstado[0].texto };
+  const de = (estado) => conEstado.filter((u) => u.estado === estado);
+  const primera = (lista) => lista.map((u) => u.hasta).sort((a, b) => new Date(a) - new Date(b))[0];
+  const partes = [];
+  const desbloqueadas = de('desbloqueada');
+  if (desbloqueadas.length) {
+    partes.push(desbloqueadas.length === 1
+      ? `1 desbloqueada (pedirá el código ${cuando(desbloqueadas[0].hasta)})`
+      : `${desbloqueadas.length} desbloqueadas (la primera pedirá el código ${cuando(primera(desbloqueadas))})`);
+  }
+  const bloqueadas = de('bloqueada');
+  if (bloqueadas.length) {
+    partes.push(bloqueadas.length === 1
+      ? `1 bloqueada (hasta ${cuando(bloqueadas[0].hasta).replace(/^a /, '')})`
+      : `${bloqueadas.length} bloqueadas`);
+  }
+  const cerradas = de('sin_desbloquear');
+  if (cerradas.length) partes.push(`${cerradas.length} cerrada${cerradas.length === 1 ? '' : 's'} (pedirá${cerradas.length === 1 ? '' : 'n'} el código en la próxima consulta)`);
+  return { total: conEstado.length, una: null, texto: `Tus ${conEstado.length} URLs: ${partes.join(', ')}` };
+}
+
+/**
+ * «Desbloquear desde aquí» (#192, Diego 05/10, opción 3): la persona, que ya ha
+ * entrado al CRM, desbloquea SU URL desde el panel. Sirve aunque su Claude no
+ * vea `desbloquear` (claude.ai guarda la lista de herramientas al conectar).
+ * Las mismas reglas que con el código: 2 h sin uso y 9 h como máximo.
+ *
+ * Devuelve { resultado } con uno de:
+ *   'ok'            trae `caducaMaxAt`
+ *   'no_encontrada' no existe, es de otra persona, está revocada o caducada
+ *   'ya_bloqueada'  bloqueada por códigos falsos: se espera a `hasta`
+ */
+export async function desbloquearDesdePanel({ userId, tokenId }) {
+  const { maximoMin } = config();
+  const { rows: [t] } = await query(
+    `SELECT id, (bloqueado_hasta IS NOT NULL AND bloqueado_hasta > NOW()) AS bloqueado, bloqueado_hasta
+       FROM mcp_tokens
+      WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > NOW())`,
+    [tokenId, userId]
+  );
+  if (!t) return { resultado: 'no_encontrada' };
+  if (t.bloqueado) return { resultado: 'ya_bloqueada', hasta: t.bloqueado_hasta };
+  const { rows } = await query(
+    `INSERT INTO mcp_desbloqueos (token_id, user_id, codigo_id, desbloqueado_at, ultimo_uso_at, caduca_max_at)
+     VALUES ($1, $2, NULL, NOW(), NOW(), NOW() + make_interval(mins => $3::int))
+     ON CONFLICT (token_id) DO UPDATE
+       SET codigo_id = NULL, desbloqueado_at = NOW(), ultimo_uso_at = NOW(),
+           caduca_max_at = EXCLUDED.caduca_max_at, user_id = EXCLUDED.user_id
+     RETURNING caduca_max_at`,
+    [tokenId, userId, maximoMin]
+  );
+  await query(`UPDATE mcp_tokens SET fallos_codigo = 0 WHERE id = $1`, [tokenId]);
+  return { resultado: 'ok', caducaMaxAt: rows[0].caduca_max_at };
 }
 
 /** Cada consulta con la conexión desbloqueada alarga la inactividad (no el máximo). */

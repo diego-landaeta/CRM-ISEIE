@@ -22,6 +22,19 @@ export interface McpToken {
   /** 'manual' | 'sin_uso' | 'usuario_desactivado' | 'conector' */
   revocado_motivo?: string | null;
   vivo: boolean;
+  /** Cuándo volverá a pedir el código (#192). null con el código apagado o la URL muerta. */
+  codigo?: McpEstadoCodigo | null;
+}
+
+/**
+ * Cuándo volverá a pedir el código una URL (#192, Diego 05/10). Lo calcula el
+ * servidor, con la hora de Madrid: aquí solo se enseña `texto`.
+ */
+export interface McpEstadoCodigo {
+  estado: 'sin_desbloquear' | 'desbloqueada' | 'bloqueada';
+  /** La hora a la que lo pedirá, o hasta la que está bloqueada. */
+  hasta: string | null;
+  texto: string;
 }
 
 export interface McpProyecto {
@@ -52,7 +65,18 @@ export interface McpEstado {
   interruptor?: McpInterruptor;
   puedeApagar?: boolean;
   /** Código de desbloqueo (#192): si hace falta y cuánto dura cada cosa. */
-  codigo?: { obligatorio: boolean; minutosCodigo: number; inactividadMin: number; maximoMin: number };
+  codigo?: {
+    obligatorio: boolean; minutosCodigo: number; inactividadMin: number; maximoMin: number;
+    /**
+     * El estado actual en una línea, de todas sus URLs. Con una sola, `una`
+     * trae la suya (y su botón); con varias, `texto` las resume.
+     */
+    resumen?: {
+      total: number;
+      una: (McpEstadoCodigo & { id: number; nombre: string }) | null;
+      texto: string;
+    } | null;
+  };
 }
 
 export interface McpInterruptor {
@@ -131,6 +155,8 @@ export const mcpApi = {
   /** Código para darle a Claude (#192): un solo uso, caduca en minutos. */
   crearCodigo: () => client.post('/mcp/panel/codigo', {}),
   revocarToken: (id: number) => client.delete(`/mcp/panel/tokens/${id}`),
+  /** «Desbloquear desde aquí» (#192): sin pasar por Claude. Solo una URL tuya. */
+  desbloquearUrl: (id: number) => client.post(`/mcp/panel/tokens/${id}/desbloquear`, {}),
   personas: () => client.get('/mcp/panel/personas'),
   /** Interruptor de emergencia (#196): solo super admin. */
   cambiarInterruptor: (apagado: boolean, motivo?: string) => client.post('/mcp/panel/interruptor', { apagado, motivo }),

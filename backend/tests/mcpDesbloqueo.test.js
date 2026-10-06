@@ -23,11 +23,13 @@ vi.mock('../src/shared/services/brevo.service.js', async (original) => ({ ...(aw
 
 const { default: pool } = await import('../src/shared/config/db.js');
 const { default: mcp } = await import('../src/modules/mcp/index.js');
+const { default: conectores } = await import('../src/modules/connectors/index.js');
 const { errorHandler } = await import('../src/shared/middleware/errorHandler.js');
 
 const app = express();
 app.use(express.json());
 app.use(mcp.prefix, mcp.router);
+app.use(conectores.prefix, conectores.router);
 app.use(errorHandler);
 const request = supertest(app);
 
@@ -84,6 +86,8 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await q(`DELETE FROM mcp_auditoria WHERE user_id = ANY($1::int[])`, [ids.users]);
+  await q(`DELETE FROM mcp_tokens WHERE connector_id IN (SELECT id FROM project_connectors WHERE project_id = ANY($1::int[]))`, [ids.projects]);
+  await q(`DELETE FROM project_connectors WHERE project_id = ANY($1::int[])`, [ids.projects]);
   await q(`DELETE FROM mcp_desbloqueos WHERE user_id = ANY($1::int[])`, [ids.users]);
   await q(`DELETE FROM mcp_codigos WHERE user_id = ANY($1::int[])`, [ids.users]);
   await q(`DELETE FROM mcp_tokens WHERE user_id = ANY($1::int[])`, [ids.users]);
@@ -126,6 +130,13 @@ describe('sin código no sale ningún dato', () => {
       expect(r.ok).toBe(false);
       expect(r.texto).toMatch(/Código para Claude/);
     }
+  });
+
+  it('y dice cómo seguir si Claude no ve «desbloquear»: el botón del panel (#192, 05/10)', async () => {
+    const r = await llamar(TOKEN_ANA, 'mis_proyectos');
+    expect(r.texto).toContain('Si no tienes la herramienta «desbloquear», no pidas el código (no podrías usarlo): pide a la persona que pulse «Desbloquear desde aquí»');
+    // El botón va primero: con él al final, claude.ai pedía antes el código (06/10).
+    expect(r.texto.indexOf('Desbloquear desde aquí')).toBeLessThan(r.texto.indexOf('Código para Claude'));
   });
 
   it('y queda en la auditoría como rechazada', async () => {
@@ -260,5 +271,208 @@ describe('se bloquea al quinto fallo', () => {
     const bueno = await pedirCodigo(LUIS);
     expect((await llamar(TOKEN_FALLOS, 'desbloquear', { codigo: bueno })).ok).toBe(true);
     expect((await llamar(TOKEN_FALLOS, 'mis_proyectos')).ok).toBe(true);
+  });
+});
+
+// ─── Diego, 05/10 (#192): los dos tiempos de cada URL y «Desbloquear desde aquí» ───
+
+const panelDe = async (u) => (await request.get('/api/mcp/panel').set('Authorization', `Bearer ${jwtDe(u)}`)).body.data;
+const desbloquearDesdeAqui = (u, id) => request.post(`/api/mcp/panel/tokens/${id}/desbloquear`)
+  .set('Authorization', `Bearer ${jwtDe(u)}`).send({});
+const hhmm = /\d{2}:\d{2}/;
+
+describe('cuándo volverá a pedir el código, por cada URL (los cuatro estados)', () => {
+  let U; let TOK; let ID;
+  beforeAll(async () => {
+    U = await persona('ESTADOS', 'admin');
+    TOK = (await token(U, 'Estados')).token;
+    ID = await tokenIdDe(TOK);
+  });
+  const suEstado = async () => (await panelDe(U)).tokens.find((t) => t.id === ID).codigo;
+
+  it('sin desbloquear: «Pedirá el código en la próxima consulta»', async () => {
+    expect(await suEstado()).toMatchObject({ estado: 'sin_desbloquear', texto: 'Pedirá el código en la próxima consulta' });
+  });
+
+  it('desbloqueada: a qué hora lo pedirá, con la hora de Madrid', async () => {
+    expect((await llamar(TOK, 'desbloquear', { codigo: await pedirCodigo(U) })).ok).toBe(true);
+    const e = await suEstado();
+    expect(e.estado).toBe('desbloqueada');
+    // Recién desbloqueada manda la inactividad (2 h), que es antes que el máximo (9 h).
+    // «mañana» si cae en otro día: después de las 22:00 de Madrid, las 2 h ya son mañana.
+    expect(e.texto).toMatch(/^Pedirá el código (mañana )?a las \d{2}:\d{2} si pasan 2 h sin usarla \(como muy tarde, (mañana )?a las \d{2}:\d{2}\)$/);
+    const [d] = await q(`SELECT ultimo_uso_at + INTERVAL '120 minutes' AS a FROM mcp_desbloqueos WHERE token_id = $1`, [ID]);
+    expect(new Date(e.hasta).getTime()).toBe(new Date(d.a).getTime());
+    const madrid = new Date(d.a).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid' });
+    expect(e.texto).toContain(`a las ${madrid} si pasan`);
+  });
+
+  it('desbloqueada cerca del máximo: manda el máximo (la menor de las dos)', async () => {
+    await q(`UPDATE mcp_desbloqueos SET caduca_max_at = NOW() + INTERVAL '30 minutes' WHERE token_id = $1`, [ID]);
+    const e = await suEstado();
+    expect(e.texto).toMatch(/^Pedirá el código (mañana )?a las \d{2}:\d{2}$/);
+    const [d] = await q(`SELECT caduca_max_at FROM mcp_desbloqueos WHERE token_id = $1`, [ID]);
+    expect(new Date(e.hasta).getTime()).toBe(new Date(d.caduca_max_at).getTime());
+  });
+
+  it('si la hora ya pasó, vuelve a «en la próxima consulta»', async () => {
+    await q(`UPDATE mcp_desbloqueos SET ultimo_uso_at = NOW() - INTERVAL '121 minutes' WHERE token_id = $1`, [ID]);
+    expect((await suEstado()).estado).toBe('sin_desbloquear');
+  });
+
+  it('bloqueada por códigos falsos: «Bloqueada hasta las HH:MM»', async () => {
+    await q(`UPDATE mcp_tokens SET bloqueado_hasta = NOW() + INTERVAL '15 minutes' WHERE id = $1`, [ID]);
+    const e = await suEstado();
+    expect(e.estado).toBe('bloqueada');
+    expect(e.texto).toMatch(/^Bloqueada hasta (mañana a )?las \d{2}:\d{2}$/);
+    await q(`UPDATE mcp_tokens SET bloqueado_hasta = NULL WHERE id = $1`, [ID]);
+  });
+
+  it('código apagado: no se enseña nada', async () => {
+    process.env.MCP_CODIGO_OBLIGATORIO = 'false';
+    const p = await panelDe(U);
+    expect(p.tokens.find((t) => t.id === ID).codigo).toBeNull();
+    expect(p.codigo.resumen).toBeNull();
+  });
+
+  it('«Código para Claude», con una sola URL: el estado actual de esa URL', async () => {
+    expect((await llamar(TOK, 'desbloquear', { codigo: await pedirCodigo(U) })).ok).toBe(true);
+    const { resumen } = (await panelDe(U)).codigo;
+    expect(resumen.total).toBe(1);
+    expect(resumen.una).toMatchObject({ id: ID, nombre: 'Estados', estado: 'desbloqueada' });
+    expect(resumen.texto).toMatch(hhmm);
+  });
+});
+
+describe('«Código para Claude» con varias URLs: el estado actual de todas, en una línea', () => {
+  it('resume cuántas hay desbloqueadas, bloqueadas y cerradas, sin elegir ninguna', async () => {
+    const V = await persona('VARIAS', 'admin');
+    const abierta = await token(V, 'Abierta');
+    const bloqueada = await token(V, 'Bloqueada');
+    await token(V, 'Cerrada');
+    expect((await desbloquearDesdeAqui(V, abierta.id)).status).toBe(200);
+    await q(`UPDATE mcp_tokens SET bloqueado_hasta = NOW() + INTERVAL '15 minutes' WHERE id = $1`, [bloqueada.id]);
+    const { resumen } = (await panelDe(V)).codigo;
+    expect(resumen.total).toBe(3);
+    expect(resumen.una).toBeNull();
+    expect(resumen.texto).toMatch(
+      /^Tus 3 URLs: 1 desbloqueada \(pedirá el código (mañana )?a las \d{2}:\d{2}\), 1 bloqueada \(hasta (mañana a )?las \d{2}:\d{2}\), 1 cerrada \(pedirá el código en la próxima consulta\)$/
+    );
+  });
+
+  it('cuenta también las URLs de las conexiones de Claude', async () => {
+    const W = await persona('MIXTA', 'admin');
+    await token(W, 'Suelta');
+    const cx = await request.post('/api/connectors').set('Authorization', `Bearer ${jwtDe(W)}`)
+      .send({ project_id: ids.projects[0], type: 'mcp', label: `${MARCA} Mixta`, alcance: 'campus' });
+    expect(cx.status).toBe(201);
+    const { resumen } = (await panelDe(W)).codigo;
+    expect(resumen.texto).toBe('Tus 2 URLs: 2 cerradas (pedirán el código en la próxima consulta)');
+  });
+});
+
+describe('«Desbloquear desde aquí» (opción 3 de Diego)', () => {
+  let U; let OTRA; let TOK; let ID;
+  beforeAll(async () => {
+    U = await persona('BOTON', 'admin');
+    OTRA = await persona('OTRA', 'admin');
+    TOK = (await token(U, 'Lista vieja')).token;
+    ID = await tokenIdDe(TOK);
+  });
+
+  it('el caso de Diego: Claude sin «desbloquear», se pulsa el botón y ya hay datos', async () => {
+    // Igual que su claude.ai: con la lista guardada no llama a «desbloquear», solo consulta.
+    const antes = await llamar(TOK, 'mis_proyectos');
+    expect(antes.ok).toBe(false);
+    expect(antes.texto).toMatch(/Desbloquear desde aquí/);
+    const r = await desbloquearDesdeAqui(U, ID);
+    expect(r.status).toBe(200);
+    expect(r.body.data.codigo.estado).toBe('desbloqueada');
+    expect((await llamar(TOK, 'mis_proyectos')).ok).toBe(true);
+  });
+
+  it('con las mismas reglas: 9 h como máximo', async () => {
+    const [d] = await q(
+      `SELECT EXTRACT(EPOCH FROM (caduca_max_at - desbloqueado_at))::int AS s, codigo_id FROM mcp_desbloqueos WHERE token_id = $1`, [ID]
+    );
+    expect(d.s).toBe(540 * 60);
+    expect(d.codigo_id).toBeNull();
+  });
+
+  it('queda en la Actividad', async () => {
+    const [f] = await q(
+      `SELECT ok, ip, cliente FROM mcp_auditoria WHERE token_id = $1 AND herramienta = 'desbloquear_panel' ORDER BY id DESC LIMIT 1`, [ID]
+    );
+    // Sin IP ni cliente: el navegador no es un Claude y la vigilancia no debe tomarlo por uno nuevo.
+    expect(f).toEqual({ ok: true, ip: null, cliente: null });
+  });
+
+  it('la URL de otra persona, no: 404 y sigue cerrada', async () => {
+    const otro = (await token(OTRA, 'Ajena')).token;
+    const idOtro = await tokenIdDe(otro);
+    expect((await desbloquearDesdeAqui(U, idOtro)).status).toBe(404);
+    expect((await llamar(otro, 'mis_proyectos')).ok).toBe(false);
+  });
+
+  it('una URL revocada, no', async () => {
+    const t = await token(U, 'Revocada');
+    await request.delete(`/api/mcp/panel/tokens/${t.id}`).set('Authorization', `Bearer ${jwtDe(U)}`);
+    expect((await desbloquearDesdeAqui(U, t.id)).status).toBe(404);
+  });
+
+  it('bloqueada por códigos falsos, no: hay que esperar', async () => {
+    const t = await token(U, 'Bloqueada');
+    await q(`UPDATE mcp_tokens SET bloqueado_hasta = NOW() + INTERVAL '15 minutes' WHERE id = $1`, [t.id]);
+    const r = await desbloquearDesdeAqui(U, t.id);
+    expect(r.status).toBe(409);
+    expect(r.body.error || r.body.message).toMatch(/bloqueada hasta las \d{2}:\d{2}/);
+    expect((await llamar(t.token, 'mis_proyectos')).texto).toMatch(/bloqueada hasta/);
+  });
+
+  it('con el código apagado no hace falta: 400', async () => {
+    process.env.MCP_CODIGO_OBLIGATORIO = 'false';
+    expect((await desbloquearDesdeAqui(U, ID)).status).toBe(400);
+  });
+
+  it('quien no tiene acceso al MCP, no', async () => {
+    const [g] = await q(
+      `INSERT INTO users (nombre, email, password_hash, role) VALUES ($1, $2, 'x', 'gestor') RETURNING id, role`,
+      [`${MARCA} GESTOR2`, `gestor2@${MARCA.toLowerCase()}.test`]
+    );
+    ids.users.push(g.id);
+    expect((await desbloquearDesdeAqui(g, ID)).status).toBe(403);
+  });
+});
+
+describe('una gestora con acceso, en «Tu URL personal»', () => {
+  it('ve el estado de su URL y la desbloquea con el botón', async () => {
+    const G = await persona('GESTORA', 'gestor');
+    await q(`UPDATE users SET usa_mcp = true WHERE id = $1`, [G.id]);
+    const t = await token(G, 'Portátil');
+    const suya = async () => (await panelDe(G)).tokens.find((x) => x.id === t.id).codigo;
+    expect((await suya()).estado).toBe('sin_desbloquear');
+    expect((await llamar(t.token, 'mis_proyectos')).ok).toBe(false);
+    expect((await desbloquearDesdeAqui(G, t.id)).status).toBe(200);
+    expect((await suya()).estado).toBe('desbloqueada');
+    expect((await llamar(t.token, 'mis_proyectos')).ok).toBe(true);
+  });
+});
+
+describe('en «Conexiones de Claude» (mcp_mio de cada conexión)', () => {
+  it('trae cuándo caduca la URL y cuándo volverá a pedir el código, y el botón la desbloquea', async () => {
+    const U = await persona('CONEXION', 'admin');
+    const auth = { Authorization: `Bearer ${jwtDe(U)}` };
+    const cx = await request.post('/api/connectors').set(auth)
+      .send({ project_id: ids.projects[0], type: 'mcp', label: `${MARCA} Claude`, alcance: 'campus' });
+    expect(cx.status).toBe(201);
+    const mia = async () => (await request.get(`/api/connectors?tipo=mcp&projectId=${ids.projects[0]}`).set(auth))
+      .body.data.find((c) => c.id === cx.body.data.id).mcp_mio;
+
+    const antes = await mia();
+    expect(antes.expires_at).toBeTruthy();
+    expect(antes.codigo).toMatchObject({ estado: 'sin_desbloquear' });
+
+    expect((await desbloquearDesdeAqui(U, antes.id)).status).toBe(200);
+    expect((await mia()).codigo.estado).toBe('desbloqueada');
   });
 });

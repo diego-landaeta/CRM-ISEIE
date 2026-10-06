@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Copy, LockKey } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
 import { mcpApi, type McpCodigo, type McpEstado } from '../api/mcp.api';
+import EstadoCodigoUrl from './EstadoCodigoUrl';
 
 /**
  * «Código para Claude» (#192): el segundo factor del MCP.
@@ -16,7 +17,10 @@ import { mcpApi, type McpCodigo, type McpEstado } from '../api/mcp.api';
  */
 const horas = (min: number) => (min % 60 === 0 ? `${min / 60} h` : `${min} min`);
 
-export default function CodigoParaClaude({ config }: { config: NonNullable<McpEstado['codigo']> }) {
+export default function CodigoParaClaude({ config, onCambio }: {
+  config: NonNullable<McpEstado['codigo']>;
+  onCambio: () => void;
+}) {
   const [codigo, setCodigo] = useState<McpCodigo | null>(null);
   const [pidiendo, setPidiendo] = useState(false);
   const [quedan, setQuedan] = useState(0);
@@ -63,6 +67,19 @@ export default function CodigoParaClaude({ config }: { config: NonNullable<McpEs
           className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50"
         ><LockKey size={14} weight="bold" /> {codigo ? 'Sacar otro' : 'Sacar código para Claude'}</button>
       </div>
+
+      {/* El estado actual en una línea (#192, Diego 05/10): el de su URL o, si tiene varias,
+          un resumen de todas. El detalle y el botón de cada una, en su tabla. */}
+      {config.resumen && (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+          {config.resumen.una ? (<>
+            <span>Tu URL ({config.resumen.una.nombre}):</span>
+            <EstadoCodigoUrl codigo={config.resumen.una} tokenId={config.resumen.una.id} onCambio={onCambio} />
+          </>) : (
+            <span className="inline-flex items-start gap-1"><LockKey size={12} weight="bold" className="mt-0.5 shrink-0" /> {config.resumen.texto}</span>
+          )}
+        </div>
+      )}
 
       {codigo && (
         <div className="flex flex-wrap items-center gap-4 rounded-md bg-muted p-4">

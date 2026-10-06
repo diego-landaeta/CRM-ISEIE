@@ -19,6 +19,8 @@ panel.post('/tokens', ctrl.crearToken);
 panel.delete('/tokens/:id', ctrl.revocarToken);
 // Código de desbloqueo para Claude (#192).
 panel.post('/codigo', ctrl.crearCodigo);
+// «Desbloquear desde aquí»: sin pasar por Claude (#192, Diego 05/10).
+panel.post('/tokens/:id/desbloquear', ctrl.desbloquearUrl);
 // `soloRoles` y no `roleGuard`: roleGuard deja pasar a soporte, y Diego dijo
 // super admin y admin.
 panel.get('/personas', soloRoles('superadmin', 'admin'), ctrl.personas);

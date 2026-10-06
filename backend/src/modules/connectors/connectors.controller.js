@@ -3,6 +3,7 @@ import * as model from './connectors.model.js';
 import * as service from './connectors.service.js';
 import { generarToken, diasDeVidaToken } from '../mcp/mcp.acceso.js';
 import * as mcpModel from '../mcp/mcp.model.js';
+import * as desbloqueo from '../mcp/mcp.desbloqueo.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { proyectosDelAmbito, comoLista } from '../../shared/utils/ambito.js';
 
@@ -186,7 +187,9 @@ export async function list(req, res, next) {
     // token y cuándo la usó Claude por última vez: la URL entera no se guarda).
     const deMcp = conectores.filter((c) => c.type === 'mcp').map((c) => c.id);
     const suyas = deMcp.length ? await mcpModel.tokensDeConectores(req.user?.userId, deMcp) : [];
-    const porConector = new Map(suyas.map((t) => [t.connector_id, t]));
+    // Y cuándo volverá a pedir el código (#192, Diego 05/10); null con el código apagado.
+    const estados = await desbloqueo.estadoParaElPanel(suyas.filter((t) => t.vivo).map((t) => t.id));
+    const porConector = new Map(suyas.map((t) => [t.connector_id, { ...t, codigo: estados.get(t.id) || null }]));
     res.json({
       success: true,
       data: await Promise.all(conectores.map(async (c) => ({

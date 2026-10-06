@@ -101,7 +101,7 @@ export default function DialogoConexionClaude({
             </Field>
             <Field label="Nombre" required hint="Para reconocerla en la lista." htmlFor="conexion-nombre">
               <input id="conexion-nombre" value={nombre} onChange={(e) => setNombre(e.target.value)}
-                maxLength={150} placeholder="Conexión Claude MCP" className={inputClass} />
+                maxLength={150} placeholder="Colocar nombre" className={inputClass} />
             </Field>
             <p className="flex items-start gap-2 text-[11px] text-muted-foreground bg-muted rounded-md p-2.5">
               <Warning size={13} className="mt-0.5 shrink-0" />

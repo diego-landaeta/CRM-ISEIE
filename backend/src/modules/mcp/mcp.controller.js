@@ -35,6 +35,13 @@ export async function estado(req, res, next) {
     const user = await personaActual(req);
     const tieneAcceso = puedeUsarMcp(user);
     const proyectos = tieneAcceso ? await model.proyectosDeLaPersona(user) : [];
+    const tokens = tieneAcceso ? await model.listarTokens(user.id) : [];
+    // Cuándo volverá a pedir el código cada URL (#192, Diego 05/10). Vacío con
+    // el código apagado: entonces no se enseña nada.
+    const urls = tieneAcceso ? await model.urlsVivasDeLaPersona(user.id) : [];
+    const estados = await desbloqueo.estadoParaElPanel([
+      ...tokens.filter((t) => t.vivo).map((t) => t.id), ...urls.map((u) => u.id),
+    ]);
     res.json({
       success: true,
       data: {
@@ -45,13 +52,18 @@ export async function estado(req, res, next) {
         diasSinUso: configRotacion().diasSinUso,
         proyectos,
         herramientas: HERRAMIENTAS.map((h) => ({ nombre: h.nombre, titulo: h.titulo, descripcion: h.descripcion })),
-        tokens: tieneAcceso ? await model.listarTokens(user.id) : [],
+        tokens: tokens.map((t) => ({ ...t, codigo: estados.get(t.id) || null })),
         // Interruptor de emergencia (#196): si el MCP está apagado y por qué.
         interruptor: await interruptorModel.estado(),
         puedeApagar: user.role === 'superadmin',
         // Código de desbloqueo (#192): si hace falta y cuánto dura cada cosa.
-        codigo: (({ obligatorio, minutosCodigo, inactividadMin, maximoMin }) =>
-          ({ obligatorio, minutosCodigo, inactividadMin, maximoMin }))(desbloqueo.config()),
+        // `resumen`: el estado actual en una línea, de todas sus URLs, para el
+        // recuadro «Código para Claude».
+        codigo: {
+          ...(({ obligatorio, minutosCodigo, inactividadMin, maximoMin }) =>
+            ({ obligatorio, minutosCodigo, inactividadMin, maximoMin }))(desbloqueo.config()),
+          resumen: desbloqueo.resumenParaElPanel(urls, estados),
+        },
       },
     });
   } catch (err) { next(err); }
@@ -144,6 +156,39 @@ export async function crearCodigo(req, res, next) {
     const r = await desbloqueo.crearCodigo(user.id);
     logger.info({ userId: user.id }, 'MCP: código de desbloqueo creado');
     res.status(201).json({ success: true, data: { codigo: r.codigo, caducaAt: r.caducaAt, minutos: r.minutos } });
+  } catch (err) { next(err); }
+}
+
+/**
+ * POST /api/mcp/panel/tokens/:id/desbloquear — «Desbloquear desde aquí» (#192,
+ * Diego 05/10, opción 3). Solo una URL SUYA y viva, con el código encendido, y
+ * no si está bloqueada por códigos falsos. Queda en la Actividad.
+ *
+ * Sin `origen` en la auditoría a propósito: el navegador no es un Claude, y la
+ * vigilancia (#195) lo tomaría por un cliente nuevo y mandaría una alerta.
+ */
+export async function desbloquearUrl(req, res, next) {
+  const inicio = Date.now();
+  try {
+    const { id } = validar(idSchema, req.params);
+    const user = await personaActual(req);
+    if (!puedeUsarMcp(user)) throw new AppError('No tienes acceso al MCP del CRM', 403, 'FORBIDDEN');
+    if (!desbloqueo.config().obligatorio) {
+      throw new AppError('El código para Claude no está encendido: no hace falta desbloquear.', 400, 'MCP_CODIGO_APAGADO');
+    }
+    const r = await desbloqueo.desbloquearDesdePanel({ userId: user.id, tokenId: id });
+    if (r.resultado === 'no_encontrada') throw new AppError('URL no encontrada', 404, 'NOT_FOUND');
+    const ok = r.resultado === 'ok';
+    await model.registrarAuditoria({
+      userId: user.id, tokenId: id, herramienta: 'desbloquear_panel', parametros: null,
+      ok, error: ok ? null : 'YA_BLOQUEADA', duracionMs: Date.now() - inicio,
+    });
+    if (!ok) {
+      throw new AppError(`Esta URL está bloqueada hasta las ${desbloqueo.horaLocal(r.hasta)} por fallar el código demasiadas veces.`, 409, 'MCP_URL_BLOQUEADA');
+    }
+    logger.info({ userId: user.id, tokenId: id }, 'MCP: URL desbloqueada desde el panel');
+    const estado = (await desbloqueo.estadoParaElPanel([id])).get(id) || null;
+    res.json({ success: true, data: { id, caducaMaxAt: r.caducaMaxAt, codigo: estado } });
   } catch (err) { next(err); }
 }
 
