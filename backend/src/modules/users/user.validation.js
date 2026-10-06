@@ -38,6 +38,9 @@ export const updateUserSchema = z.object({
   nombre: z.string().min(2).max(200).optional(),
   // Solo lo acepta el super admin (lo comprueba el controlador): #248.
   email: correoSchema.optional(),
+  // Con el correo nuevo, mandarle el enlace para poner contraseña allí (#246).
+  // A un tutor no le sale nada mientras siga el freno.
+  reenviarEnlace: z.boolean().optional(),
   role: z.enum(['admin', 'gestor', 'soporte', 'tutor']).optional(),
   roles_extra: z.array(z.enum(['admin', 'gestor', 'soporte', 'tutor'])).optional(),
   factura_manager: z.boolean().optional(),

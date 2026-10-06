@@ -1045,7 +1045,7 @@ export default function TutoresPage() {
                 className={`mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-normal ${esSuperadmin ? '' : 'opacity-60 cursor-not-allowed'}`} />
               {!esSuperadmin && (
                 <span className="mt-1 block text-[11px] font-normal text-muted-foreground">
-                  Es con lo que entra al CRM: solo lo puede cambiar un superadministrador.
+                  Solo un superadmin puede cambiar el correo.
                 </span>
               )}
             </label>

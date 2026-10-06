@@ -67,7 +67,7 @@ export async function update(req, res, next) {
     }
     // El correo de otro, solo el super admin (#248). Un admin que lo mande se
     // lleva un 403 aunque la pantalla no se lo ofrezca: no basta con ocultarlo.
-    const { email, ...resto } = parsed.data;
+    const { email, reenviarEnlace, ...resto } = parsed.data;
     if (email !== undefined && req.user?.role !== 'superadmin') {
       throw new AppError('Solo un superadmin puede cambiar el correo de otro usuario', 403, 'FORBIDDEN');
     }
@@ -75,7 +75,9 @@ export async function update(req, res, next) {
     const antes = await userService.getById(id).catch(() => null);
     // El correo va primero: si choca con el de otro (409), no se guarda nada a medias.
     const correo = email !== undefined
-      ? await userService.cambiarCorreo(id, email, { porUserId: req.user.userId, ip: req.ip })
+      ? await userService.cambiarCorreo(id, email, {
+        reenviarEnlace: reenviarEnlace === true, porUserId: req.user.userId, ip: req.ip,
+      })
       : null;
     const user = Object.keys(resto).length
       ? await userService.update(id, resto)

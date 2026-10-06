@@ -238,6 +238,31 @@ export async function sendWelcomeUserEmail({ nombre, email, setPasswordToken, ba
   });
 }
 
+/**
+ * Aviso a la dirección VIEJA de que el correo con el que se entra al CRM ha
+ * cambiado (#246). Si no lo pidió la persona, es como se entera; y si sí, sabe
+ * con cuál entrar a partir de ahora. Los tutores no lo reciben mientras siga el
+ * freno (`NO_ESCRIBIR_A_TUTORES`): eso lo decide quien llama.
+ */
+export async function sendCorreoCambiadoEmail({ nombre, de, a }) {
+  const cuando = new Date().toLocaleString('es-ES', { timeZone: process.env.APP_TIMEZONE || 'Europe/Madrid' });
+  const subject = 'Ha cambiado el correo con el que entras al CRM';
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html><body style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; color: #1f2937; max-width: 560px; margin: 0 auto; padding: 24px;">
+      <h2 style="margin: 0 0 12px;">Ha cambiado tu correo de acceso al CRM</h2>
+      <p>Hola <strong>${nombre}</strong>,</p>
+      <p>Un administrador ha cambiado el correo con el que entras al CRM (${cuando}):</p>
+      <p style="background: #f9fafb; padding: 12px 16px; border-radius: 8px;">${de} → <strong>${a}</strong></p>
+      <p>A partir de ahora entra con <strong>${a}</strong>. Con esta dirección ya no podrás, y las sesiones que tenías abiertas se han cerrado.</p>
+      <p style="font-size: 13px; color: #6b7280;">Si no esperabas este cambio, avisa a tu responsable cuanto antes.</p>
+    </body></html>`;
+  const textContent = `Hola ${nombre},\n\nUn administrador ha cambiado el correo con el que entras al CRM (${cuando}):\n${de} → ${a}\n\n`
+    + `A partir de ahora entra con ${a}. Con esta dirección ya no podrás, y las sesiones que tenías abiertas se han cerrado.\n\n`
+    + 'Si no esperabas este cambio, avisa a tu responsable cuanto antes.';
+  return await sendEmail({ to: [{ email: de, name: nombre }], subject, htmlContent, textContent, tags: ['correo-cambiado', 'crm'] });
+}
+
 export async function sendLeadAssignedEmail({ gestor, lead, proyecto, baseUrl }) {
   const link = `${baseUrl}/leads/${lead.id}`;
   const subject = `Nuevo lead asignado: ${lead.nombre}`;

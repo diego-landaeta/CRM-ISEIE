@@ -45,6 +45,7 @@ export function confirmacionCambioCorreo(nombre: string, de: string, a: string, 
     `${de} → ${a}`,
     '',
     'Con el correo viejo ya no podrá entrar, y se cerrarán sus sesiones abiertas.',
+    'Se le avisará por correo en la dirección vieja (a los tutores no, mientras siga el freno).',
   ];
   if (aviso?.recibeProspectos) {
     const porque = [

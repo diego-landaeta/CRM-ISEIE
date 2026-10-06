@@ -4,7 +4,7 @@ import bcrypt from 'bcrypt';
 import { AppError } from '../../shared/utils/AppError.js';
 import * as userModel from './user.model.js';
 import { revokeAllUserTokens, logActivity } from '../auth/auth.model.js';
-import { sendWelcomeUserEmail } from '../../shared/services/brevo.service.js';
+import { sendWelcomeUserEmail, sendCorreoCambiadoEmail } from '../../shared/services/brevo.service.js';
 
 // A LOS TUTORES NO SE LES MANDA NADA. TODAVIA NO.
 //
@@ -79,6 +79,18 @@ export async function cambiarCorreo(id, email, { reenviarEnlace = false, porUser
 
   logger.info({ userId: id, de: user.email, a: nuevo, reenviarEnlace }, 'Correo de usuario cambiado');
   await anotarCambio(porUserId, 'usuario.cambiar_correo', { usuario_id: id, nombre: user.nombre, de: user.email, a: nuevo }, ip);
+
+  // Aviso a la dirección VIEJA (#246): si no lo esperaba, así se entera. No se
+  // espera a que salga: un fallo del correo no puede deshacer el cambio. A un
+  // tutor, nada mientras siga el freno (Diego, #246: «el correo a la dirección
+  // vieja tiene que pasar por NO_ESCRIBIR_A_TUTORES»).
+  if (NO_ESCRIBIR_A_TUTORES && user.role === 'tutor') {
+    logger.warn({ userId: id }, 'correo de tutor cambiado SIN avisar a la dirección vieja: los avisos a tutores estan cortados (15/09)');
+  } else {
+    sendCorreoCambiadoEmail({ nombre: user.nombre, de: user.email, a: nuevo })
+      .then((r) => logger.info({ userId: id, enviado: r.sent, motivo: r.reason }, 'Aviso de correo cambiado a la direccion vieja'))
+      .catch((err) => logger.error({ err: err.message, userId: id }, 'Fallo avisando a la direccion vieja'));
+  }
 
   if (rawToken && NO_ESCRIBIR_A_TUTORES && user.role === 'tutor') {
     logger.warn({ userId: id, email: nuevo },

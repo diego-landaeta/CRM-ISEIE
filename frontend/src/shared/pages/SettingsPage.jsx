@@ -315,6 +315,8 @@ function EditUserModal({ user, projects, onClose, onSaved }) {
   const [nombre, setNombre] = useState(user.nombre || '');
   // El correo de otro, solo el super admin (#248).
   const [email, setEmail] = useState(user.email || '');
+  const [reenviarEnlace, setReenviarEnlace] = useState(false);
+  const cambiaElCorreo = isSuperadmin && email.trim().toLowerCase() !== String(user.email || '').toLowerCase();
   const [role, setRole] = useState(user.role || 'gestor');
   // Los roles de MAS. Solo suman permisos.
   const [rolesExtra, setRolesExtra] = useState(Array.isArray(user.roles_extra) ? user.roles_extra : []);
@@ -360,7 +362,7 @@ function EditUserModal({ user, projects, onClose, onSaved }) {
     try {
       await client.patch(`/users/${user.id}`, {
         nombre: nombre.trim(), role, roles_extra: rolesExtra.filter((r) => r !== role),
-        ...(cambiaCorreo ? { email: correoNuevo } : {}),
+        ...(cambiaCorreo ? { email: correoNuevo, reenviarEnlace: reenviarEnlace && user.role !== 'tutor' } : {}),
         projects: projList, whatsapp_phone: phone.trim(),
         factura_manager: facturaManager,
         // Cambiar fechas sin poder facturar no sirve: esa pantalla se abre desde
@@ -414,9 +416,24 @@ function EditUserModal({ user, projects, onClose, onSaved }) {
               className={`w-full h-9 px-3 rounded-md border border-border bg-background text-sm ${isSuperadmin ? '' : 'opacity-60 cursor-not-allowed'}`} />
             <p className="text-[10px] text-muted-foreground mt-1">
               {isSuperadmin
-                ? 'Es con lo que entra: al cambiarlo, con el viejo ya no podrá, y se cierran sus sesiones. Si recibe prospectos por Make, cámbialo también allí.'
-                : 'Es con lo que entra: solo lo puede cambiar un superadministrador.'}
+                ? 'Es con lo que entra: al cambiarlo, con el viejo ya no podrá, y se cierran sus sesiones. Se le avisa por correo en la dirección vieja. Si recibe prospectos por Make, cámbialo también allí.'
+                : 'Solo un superadmin puede cambiar el correo.'}
             </p>
+            {/* «Reenviar enlace de acceso» al correo nuevo (#246). A un tutor no le
+                sale ningún correo mientras siga el freno: se dice en vez de esconderlo. */}
+            {cambiaElCorreo && (user.role === 'tutor' ? (
+              <p className="text-[10px] text-muted-foreground mt-1">
+                A los tutores no se les manda ningún correo por ahora: si lo necesita, ponle tú una contraseña abajo y pásasela.
+              </p>
+            ) : (
+              <label className="mt-1.5 flex items-start gap-2 text-xs cursor-pointer">
+                <input type="checkbox" checked={reenviarEnlace} onChange={(e) => setReenviarEnlace(e.target.checked)} className="mt-0.5" />
+                <span>
+                  Reenviar enlace de acceso
+                  <span className="block text-[10px] text-muted-foreground">Le llega a la dirección nueva para poner su contraseña.</span>
+                </span>
+              </label>
+            ))}
           </div>
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">Rol</label>

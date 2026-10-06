@@ -18,18 +18,23 @@ import bcrypt from 'bcrypt';
  */
 
 // Ningún correo sale de verdad: se comprueba que NO se pide para un tutor.
-const correos = vi.hoisted(() => ({ sendWelcomeUserEmail: vi.fn(async () => ({ sent: true })) }));
+const correos = vi.hoisted(() => ({
+  sendWelcomeUserEmail: vi.fn(async () => ({ sent: true })),
+  sendCorreoCambiadoEmail: vi.fn(async () => ({ sent: true })),
+}));
 vi.mock('../src/shared/services/brevo.service.js', async (original) => ({ ...(await original()), ...correos }));
 
 const { default: pool } = await import('../src/shared/config/db.js');
 const { default: usuarios } = await import('../src/modules/users/index.js');
 const { default: tutores } = await import('../src/modules/tutores/index.js');
+const { default: auth } = await import('../src/modules/auth/index.js');
 const { errorHandler } = await import('../src/shared/middleware/errorHandler.js');
 
 const app = express();
 app.use(express.json());
 app.use(usuarios.prefix, usuarios.router);
 app.use(tutores.prefix, tutores.router);
+app.use(auth.prefix, auth.router);
 app.use(errorHandler);
 const request = supertest(app);
 
@@ -88,7 +93,7 @@ afterAll(async () => {
   await pool.end();
 }, 60000);
 
-beforeEach(() => correos.sendWelcomeUserEmail.mockClear());
+beforeEach(() => { correos.sendWelcomeUserEmail.mockClear(); correos.sendCorreoCambiadoEmail.mockClear(); });
 
 describe('el correo de otro, desde Usuarios', () => {
   it('el super admin lo cambia: sin espacios y en minúsculas, y cierra sus sesiones', async () => {
@@ -143,6 +148,47 @@ describe('el correo de otro, desde Usuarios', () => {
     const OTRO_SUPER = await persona('SUPER2', 'superadmin');
     expect((await request.patch(`/api/users/${OTRO_SUPER.id}`).set(como(SUPER)).send({ email: `s2@${dominio}` })).status).toBe(403);
     expect(await correoDe(OTRO_SUPER)).toBe(`super2@${dominio}`);
+  });
+});
+
+describe('#246: lo que pide además la issue', () => {
+  it('avisa por correo a la dirección VIEJA de que ha cambiado', async () => {
+    const P = await persona('AVISO', 'gestor');
+    const r = await request.patch(`/api/users/${P.id}`).set(como(SUPER)).send({ email: `aviso.nuevo@${dominio}` });
+    expect(r.status).toBe(200);
+    await vi.waitFor(() => expect(correos.sendCorreoCambiadoEmail).toHaveBeenCalledTimes(1));
+    expect(correos.sendCorreoCambiadoEmail.mock.calls[0][0]).toMatchObject({ de: `aviso@${dominio}`, a: `aviso.nuevo@${dominio}` });
+  });
+
+  it('ofrece «Reenviar enlace de acceso» al correo nuevo, también desde Usuarios', async () => {
+    const P = await persona('ENLACE', 'gestor');
+    const r = await request.patch(`/api/users/${P.id}`).set(como(SUPER))
+      .send({ email: `enlace.nuevo@${dominio}`, reenviarEnlace: true });
+    expect(r.status).toBe(200);
+    expect(r.body.data.correo).toMatchObject({ enlaceReenviado: true });
+    await vi.waitFor(() => expect(correos.sendWelcomeUserEmail).toHaveBeenCalledTimes(1));
+    expect(correos.sendWelcomeUserEmail.mock.calls[0][0].email).toBe(`enlace.nuevo@${dominio}`);
+  });
+
+  it('a un tutor, ni el aviso a la vieja ni el enlace a la nueva (freno de tutores)', async () => {
+    const T = await persona('TUTOR2', 'tutor');
+    const r = await request.patch(`/api/users/${T.id}`).set(como(SUPER))
+      .send({ email: `tutor2.nuevo@${dominio}`, reenviarEnlace: true });
+    expect(r.status).toBe(200);
+    expect(correos.sendCorreoCambiadoEmail).not.toHaveBeenCalled();
+    expect(correos.sendWelcomeUserEmail).not.toHaveBeenCalled();
+  });
+
+  it('«Terminada cuando»: entra con el correo nuevo y con el viejo ya no', async () => {
+    const A = await persona('ENTRA', 'admin');
+    expect((await request.patch(`/api/users/${A.id}/password`).set(como(SUPER))
+      .send({ password: 'EntraBien1', confirmPassword: 'EntraBien1' })).status).toBe(200);
+    expect((await request.patch(`/api/users/${A.id}`).set(como(SUPER)).send({ email: `entra.nuevo@${dominio}` })).status).toBe(200);
+    const viejo = await request.post('/api/auth/login').send({ email: `entra@${dominio}`, password: 'EntraBien1' });
+    expect(viejo.status).toBe(401);
+    const nuevo = await request.post('/api/auth/login').send({ email: `entra.nuevo@${dominio}`, password: 'EntraBien1' });
+    expect(nuevo.status).toBe(200);
+    expect(nuevo.body.data.accessToken).toBeTruthy();
   });
 });
 
