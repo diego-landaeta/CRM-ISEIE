@@ -23,8 +23,13 @@ import InterruptorMcp from '../components/InterruptorMcp';
  * Y desde el 29/09 las CONEXIONES de Claude viven aquí, no en Conectores:
  * «lo de Claude MCP, ese formulario pasa a esa parte de MCP en conexión». Una
  * conexión acota lo que ve Claude a un campus, una empresa o todo el sistema,
- * y dice quién la creó y quién tiene URL (`ConexionesClaude`). La URL personal
- * de abajo es lo de siempre: todo lo que ve esa persona.
+ * y dice quién la creó y quién tiene URL (`ConexionesClaude`).
+ *
+ * Una sola sección para cada uno (Diego, 05/10: «una sola, no ambas»; y eligió
+ * «Conexiones como antes»). Quien administra trabaja SOLO con conexiones: la
+ * URL personal suelta ya no se le ofrece, y si le queda alguna viva se enseña
+ * como «URLs sin conexión», para poder revocarla. Las gestoras con acceso, que
+ * no ven conexiones, siguen con su URL personal (todo lo que ven por su rol).
  *
  * El token se enseña UNA vez, justo al crearlo. No se guarda en ningún estado
  * que sobreviva a cerrar el aviso: el servidor tampoco lo tiene, solo su huella.
@@ -198,12 +203,14 @@ Su URL no se borra: si le devuelves el acceso, volverá a funcionar sin que teng
           <div className="bg-card border border-border rounded-lg p-4 space-y-3">
             <div className="flex items-center gap-2">
               <ShieldCheck size={18} weight="bold" className="text-emerald-600" />
-              <h2 className="font-semibold text-sm">Lo que Claude podrá consultar con tu URL personal</h2>
+              <h2 className="font-semibold text-sm">Lo que Claude podrá consultar{estado.puedeAdministrar ? '' : ' con tu URL personal'}</h2>
             </div>
             <p className="text-sm text-muted-foreground">
               {estado.soloLoSuyo
                 ? 'Solo tus propios prospectos, ventas y facturas, dentro de tus campus.'
-                : 'Todos los datos de tus campus.'}
+                : estado.puedeAdministrar
+                  ? 'Como mucho, todos los datos de tus campus: cada conexión lo recorta a su «Para quién».'
+                  : 'Todos los datos de tus campus.'}
               {' '}Nunca datos de otros campus, ni DNI, IBAN, datos fiscales o contraseñas. No puede crear, cambiar ni borrar nada.
             </p>
             {porEmpresa.length === 0 ? (
@@ -255,13 +262,19 @@ Su URL no se borra: si le devuelves el acceso, volverá a funcionar sin que teng
             </div>
           )}
 
-          {/* Mis URLs */}
+          {/* Mis URLs: las gestoras con acceso. Quien administra usa las conexiones de arriba y
+              solo ve aquí las URLs sueltas que le queden vivas, para revocarlas. */}
+          {(!estado.puedeAdministrar || estado.tokens.some((t) => t.vivo)) && (
           <div className="bg-card border border-border rounded-lg overflow-hidden">
             <div className="p-4 border-b border-border flex flex-wrap items-center gap-2">
               <Key size={18} weight="bold" className="text-primary" />
               <div className="flex-1 min-w-[200px]">
-                <h2 className="font-semibold text-sm">Tu URL personal</h2>
-                <p className="text-xs text-muted-foreground">Todo lo que ves tú, en todos tus campus.{estado.puedeAdministrar ? ' Para acotarla a una empresa o un campus, usa una conexión de arriba.' : ''}</p>
+                <h2 className="font-semibold text-sm">{estado.puedeAdministrar ? 'URLs sin conexión' : 'Tu URL personal'}</h2>
+                <p className="text-xs text-muted-foreground">
+                  {estado.puedeAdministrar
+                    ? 'URLs de antes, que ven todo lo tuyo. Ya no se crean: usa una conexión de arriba.'
+                    : 'Todo lo que ves tú, en todos tus campus.'}
+                </p>
                 {/* Caducidad y rotación (#194). */}
                 {(estado.diasDeVida || estado.diasSinUso) && (
                   <p className="text-xs text-muted-foreground">
@@ -270,6 +283,7 @@ Su URL no se borra: si le devuelves el acceso, volverá a funcionar sin que teng
                   </p>
                 )}
               </div>
+              {!estado.puedeAdministrar && (<>
               <input
                 value={nombre}
                 onChange={(e) => setNombre(e.target.value)}
@@ -283,6 +297,7 @@ Su URL no se borra: si le devuelves el acceso, volverá a funcionar sin que teng
                 disabled={creando || !nombre.trim()}
                 className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50"
               ><Plus size={14} weight="bold" /> Crear mi URL personal</button>
+              </>)}
             </div>
             {!estado.tokens.length ? (
               <EmptyState icon={Key} title="Aún no tienes URL personal"
@@ -334,12 +349,17 @@ Su URL no se borra: si le devuelves el acceso, volverá a funcionar sin que teng
               </table>
             )}
           </div>
+          )}
 
           {/* Como conectar */}
           <div className="bg-card border border-border rounded-lg p-4 space-y-3">
             <h2 className="font-semibold text-sm">Cómo conectar Claude</h2>
             <ol className="text-sm text-muted-foreground list-decimal pl-5 space-y-1">
-              <li>Pulsa <strong>Sacar mi URL</strong> en una conexión, o <strong>Crear mi URL personal</strong>, y cópiala.</li>
+              <li>
+                {estado.puedeAdministrar
+                  ? <>Pulsa <strong>Sacar mi URL</strong> en una conexión (o crea una con <strong>Nueva conexión con Claude</strong>) y cópiala.</>
+                  : <>Ponle un nombre, pulsa <strong>Crear mi URL personal</strong> y cópiala.</>}
+              </li>
               <li>Claude Desktop o claude.ai: <em>Configuración → Conectores → Agregar → Agregar conector personalizado</em>, ponle un nombre y pega la URL.</li>
               <li>
                 <strong>Sin OAuth:</strong> deja vacíos «OAuth Client ID» y «OAuth Client Secret» (en «Configuración avanzada»).
