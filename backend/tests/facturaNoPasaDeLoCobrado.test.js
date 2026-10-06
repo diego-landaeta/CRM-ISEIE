@@ -166,10 +166,20 @@ describe('de quien es una factura, para una gestora', () => {
     respuestas = [{ rows: [] }, { rows: [{ total: 0 }] }];
     await real.list({ projectId: 4, responsableId: 11 });
     const lista = consultas[0];
-    expect(lista.sql).toMatch(/i\.created_by = \$\d+ OR COALESCE\(cv\.vendedora_id, l\.responsable_id\) = \$\d+/);
+    expect(lista.sql).toMatch(/i\.created_by = \$\d+\s+OR COALESCE\(cv\.vendedora_id, l\.responsable_id\) = \$\d+/);
     expect(lista.params).toContain(11);
     // Y el recuento, con la misma condicion: si no, la paginacion no cuadra.
     expect(consultas[1].sql).toContain('i.created_by =');
+  });
+
+  it('y las sin gestora, solo de sus campus', async () => {
+    // Diego, 06/10: «son facturas sin gestora, debo de verlas». Pero solo las de
+    // un campus suyo: una sin gestora de otro campus no es asunto de ella.
+    respuestas = [{ rows: [] }, { rows: [{ total: 0 }] }];
+    await real.list({ projectId: 4, responsableId: 11 });
+    const sql = consultas[0].sql;
+    expect(sql).toMatch(/COALESCE\(cv\.vendedora_id, l\.responsable_id\) IS NULL/);
+    expect(sql).toMatch(/user_projects up\s+WHERE up\.user_id = \$\d+ AND up\.project_id = i\.project_id AND up\.active/);
   });
 
   it('y puede tocar la suya aunque no tenga ficha', async () => {

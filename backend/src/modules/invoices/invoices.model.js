@@ -405,9 +405,16 @@ const MISMA_SOCIEDAD = (col, marcador) => `${col} IN (
   solo la venta y la ficha, y una factura sin ninguna de las dos no era de
   nadie. Lo mismo con editar, borrar o hacer el abono, que miraban solo la ficha
   (`invoices.lead_id`). Las proformas ya iban asi; ahora todo igual.
+
+  Y LAS SIN GESTORA DE SUS CAMPUS. Diego, con Yolanda: «son facturas sin
+  gestora, debo de verlas»; y que tambien las gestione (con su permiso de
+  facturacion). Ya corre asi en las dos producciones desde el 06/10.
 */
-const FACTURA_DE = (param) =>
-  `(i.created_by = ${param} OR COALESCE(cv.vendedora_id, l.responsable_id) = ${param})`;
+const FACTURA_DE = (param) => `(i.created_by = ${param}
+    OR COALESCE(cv.vendedora_id, l.responsable_id) = ${param}
+    OR (COALESCE(cv.vendedora_id, l.responsable_id) IS NULL
+        AND EXISTS (SELECT 1 FROM user_projects up
+                     WHERE up.user_id = ${param} AND up.project_id = i.project_id AND up.active)))`;
 
 export async function list({ projectId, issuerId, estado, search, from, to, tipo, responsableId, page = 1, limit = 50 }) {
   const conds = [];
