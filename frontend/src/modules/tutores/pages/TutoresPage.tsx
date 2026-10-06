@@ -10,6 +10,7 @@ import { Button } from '@/shared/components/ui/button';
 import BuscadorCurso from '../components/BuscadorCurso';
 import Entregables from '../components/Entregables';
 import { tutoresApi, type Tutor, type Colaboracion, type AjustesTutores } from '../api/tutores.api';
+import { avisoCambioCorreo, confirmacionCambioCorreo, problemaDeContrasena } from '@/shared/lib/credenciales';
 import { cursosParaElAlta, avisoDelAlta, type CursoDelAlta, type CursoQueFallo } from '../lib/colaboraciones';
 
 // Tutores y sus colaboraciones.
@@ -66,6 +67,8 @@ export default function TutoresPage() {
     projects: Array<{ id: number; nombre: string }>;
   };
   const puede = ['admin', 'superadmin'].includes(user?.role || '') || user?.gestor_colaboraciones === true;
+  // El correo y la contraseña de un tutor, solo el super admin (#248).
+  const esSuperadmin = user?.role === 'superadmin';
   const projectId = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
 
   const [tutores, setTutores] = useState<Tutor[]>([]);
@@ -110,6 +113,7 @@ export default function TutoresPage() {
   const [popupDatos, setPopupDatos] = useState(false);
   const [datos, setDatos] = useState({ nombre: '', dniNif: '', telefono: '', iban: '', banco: '', email: '', reenviar: true });
   const [claveNueva, setClaveNueva] = useState('');
+  const [claveRepetida, setClaveRepetida] = useState('');
   const [claveCopiada, setClaveCopiada] = useState(false);
   const [popupRetiro, setPopupRetiro] = useState(false);
   // La formacion que se esta editando. Hasta hoy la unica accion de la fila era
@@ -204,6 +208,14 @@ export default function TutoresPage() {
 
   async function guardarDatos() {
     if (!elegido) return;
+    // El correo solo lo cambia el super admin (#248); a los demás el campo les
+    // sale bloqueado y el servidor les contesta 403.
+    const correoNuevo = datos.email.trim().toLowerCase();
+    const cambiaCorreo = esSuperadmin && correoNuevo !== (elegido.email || '').toLowerCase();
+    if (cambiaCorreo) {
+      const aviso = await avisoCambioCorreo(elegido.id).catch(() => null);
+      if (!window.confirm(confirmacionCambioCorreo(elegido.nombre || 'este tutor', elegido.email || '—', correoNuevo, aviso))) return;
+    }
     setProcesando(true);
     try {
       const r = await tutoresApi.guardarPerfil(elegido.id, {
@@ -211,8 +223,8 @@ export default function TutoresPage() {
         telefono: datos.telefono.trim() || null,
         iban: datos.iban.replace(/\s+/g, '').toUpperCase() || null,
         banco: datos.banco.trim() || null,
-        ...(datos.email.trim().toLowerCase() !== (elegido.email || '').toLowerCase()
-          ? { email: datos.email.trim(), reenviarEnlace: datos.reenviar && !sinCorreos }
+        ...(cambiaCorreo
+          ? { email: correoNuevo, reenviarEnlace: datos.reenviar && !sinCorreos }
           : {}),
       });
       if (!r.success) throw new Error((r as { error?: string }).error || 'no se pudo');
@@ -230,7 +242,9 @@ export default function TutoresPage() {
   }
 
   function abrirClave() {
-    setClaveNueva(generarContrasena());
+    const clave = generarContrasena();
+    setClaveNueva(clave);
+    setClaveRepetida(clave);
     setClaveCopiada(false);
     setPopupClave(true);
   }
@@ -242,9 +256,9 @@ export default function TutoresPage() {
     if (!elegido) return;
     setProcesando(true);
     try {
-      const r = await tutoresApi.cambiarContrasena(elegido.id, claveNueva);
+      const r = await tutoresApi.cambiarContrasena(elegido.id, claveNueva, claveRepetida);
       if (!r.success) throw new Error(r.error || 'no se pudo');
-      toast({ title: 'Contraseña cambiada', description: `${elegido.nombre} ya puede entrar con ella.` });
+      toast({ title: 'Contraseña cambiada', description: `${elegido.nombre} ya puede entrar con ella. Sus sesiones abiertas se han cerrado.` });
       setPopupClave(false);
       cargar();
     } catch (err) {
@@ -602,9 +616,12 @@ export default function TutoresPage() {
                       <Button variant="outline" size="sm" onClick={abrirDatos}>
                         <PencilSimple size={14} weight="bold" className="mr-1.5" /> Editar datos
                       </Button>
-                      <Button variant="outline" size="sm" onClick={abrirClave}>
-                        <Key size={14} weight="bold" className="mr-1.5" /> Cambiar contraseña
-                      </Button>
+                      {/* Solo el super admin (#248). */}
+                      {esSuperadmin && (
+                        <Button variant="outline" size="sm" onClick={abrirClave}>
+                          <Key size={14} weight="bold" className="mr-1.5" /> Cambiar contraseña
+                        </Button>
+                      )}
                       <Button variant="outline" size="sm"
                         className="text-destructive hover:text-destructive"
                         onClick={() => setPopupRetiro(true)}>
@@ -1024,10 +1041,16 @@ export default function TutoresPage() {
               Correo
               <input type="email" value={datos.email}
                 onChange={(e) => setDatos({ ...datos, email: e.target.value })}
-                className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-normal" />
+                readOnly={!esSuperadmin} disabled={!esSuperadmin}
+                className={`mt-1 w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-normal ${esSuperadmin ? '' : 'opacity-60 cursor-not-allowed'}`} />
+              {!esSuperadmin && (
+                <span className="mt-1 block text-[11px] font-normal text-muted-foreground">
+                  Es con lo que entra al CRM: solo lo puede cambiar un superadministrador.
+                </span>
+              )}
             </label>
 
-            {datos.email.trim().toLowerCase() !== (elegido.email || '').toLowerCase() && (
+            {esSuperadmin && datos.email.trim().toLowerCase() !== (elegido.email || '').toLowerCase() && (
               <div className="rounded-md border border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40 px-3 py-2 space-y-2">
                 <p className="text-[11px] text-amber-800 dark:text-amber-300">
                   El correo es con lo que entra al CRM. Al cambiarlo se cierran sus
@@ -1133,9 +1156,10 @@ export default function TutoresPage() {
             </p>
             <div className="flex gap-1.5">
               <input value={claveNueva} onChange={(e) => { setClaveNueva(e.target.value); setClaveCopiada(false); }}
+                aria-label="Nueva contraseña" autoComplete="new-password"
                 className="flex-1 h-9 px-3 rounded-md border border-border bg-background text-sm font-mono min-w-0" />
               <Button type="button" variant="outline" size="sm" aria-label="Generar otra"
-                onClick={() => { setClaveNueva(generarContrasena()); setClaveCopiada(false); }}>
+                onClick={() => { const c = generarContrasena(); setClaveNueva(c); setClaveRepetida(c); setClaveCopiada(false); }}>
                 <ArrowsClockwise size={14} weight="bold" />
               </Button>
               <Button type="button" variant="outline" size="sm" aria-label="Copiar"
@@ -1143,12 +1167,16 @@ export default function TutoresPage() {
                 {claveCopiada ? <CheckCircle size={14} weight="fill" className="text-green-600" /> : <Copy size={14} weight="bold" />}
               </Button>
             </div>
-            {claveNueva.length < 8 && (
+            {/* Repetida, como en «Establece tu contraseña» (#248). La generada ya la rellena. */}
+            <input value={claveRepetida} onChange={(e) => setClaveRepetida(e.target.value)}
+              placeholder="Repítela" aria-label="Repite la contraseña" autoComplete="new-password"
+              className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono" />
+            {problemaDeContrasena(claveNueva, claveRepetida) && (
               <p className="text-[11px] text-amber-600 dark:text-amber-400">
-                Necesita al menos 8 caracteres.
+                {problemaDeContrasena(claveNueva, claveRepetida)}
               </p>
             )}
-            <Button className="w-full" disabled={procesando || claveNueva.length < 8} onClick={guardarClave}>
+            <Button className="w-full" disabled={procesando || Boolean(problemaDeContrasena(claveNueva, claveRepetida))} onClick={guardarClave}>
               {procesando ? 'Cambiando…' : 'Cambiar la contraseña'}
             </Button>
           </div>

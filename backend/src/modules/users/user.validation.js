@@ -1,4 +1,12 @@
 import { z } from 'zod';
+import { contrasenaNueva } from '../auth/auth.validation.js';
+
+// El correo de otro, solo el super admin (#248). Igual que al crear: sin
+// espacios y en minúsculas.
+export const correoSchema = z.preprocess(
+  (v) => (typeof v === 'string' ? v.trim().toLowerCase() : v),
+  z.string().email('Email invalido').max(255)
+);
 
 const projectAssignmentSchema = z.object({
   projectId: z.number().int().positive(),
@@ -28,6 +36,8 @@ export const createUserSchema = z.object({
 // factura. Vanessa lo es y no debe.
 export const updateUserSchema = z.object({
   nombre: z.string().min(2).max(200).optional(),
+  // Solo lo acepta el super admin (lo comprueba el controlador): #248.
+  email: correoSchema.optional(),
   role: z.enum(['admin', 'gestor', 'soporte', 'tutor']).optional(),
   roles_extra: z.array(z.enum(['admin', 'gestor', 'soporte', 'tutor'])).optional(),
   factura_manager: z.boolean().optional(),
@@ -41,8 +51,13 @@ export const updateUserSchema = z.object({
 });
 
 // Reset de contraseña por un superadmin (no requiere la contraseña actual).
+// #248: las mismas reglas que «Establece tu contraseña», y repetida.
 export const adminSetPasswordSchema = z.object({
-  password: z.string().min(8, 'La contraseña debe tener al menos 8 caracteres').max(200),
+  password: contrasenaNueva,
+  confirmPassword: z.string().min(1, 'Repite la contraseña'),
+}).refine((d) => d.password === d.confirmPassword, {
+  message: 'Las contraseñas no coinciden',
+  path: ['confirmPassword'],
 });
 
 export const listUsersSchema = z.object({

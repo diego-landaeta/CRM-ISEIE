@@ -3,7 +3,7 @@ import * as mcpModel from '../mcp/mcp.model.js';
 import bcrypt from 'bcrypt';
 import { AppError } from '../../shared/utils/AppError.js';
 import * as userModel from './user.model.js';
-import { revokeAllUserTokens } from '../auth/auth.model.js';
+import { revokeAllUserTokens, logActivity } from '../auth/auth.model.js';
 import { sendWelcomeUserEmail } from '../../shared/services/brevo.service.js';
 
 // A LOS TUTORES NO SE LES MANDA NADA. TODAVIA NO.
@@ -41,10 +41,14 @@ const SET_PASSWORD_EXPIRY_HOURS = 24;
  * nombre —«Albertoj@iseie.com»— que no existe, asi que el enlace de bienvenida
  * no llego a nadie y ninguno de ellos habia entrado jamas.
  */
-export async function cambiarCorreo(id, email, { reenviarEnlace = false } = {}) {
+export async function cambiarCorreo(id, email, { reenviarEnlace = false, porUserId = null, ip = null } = {}) {
   const nuevo = String(email).trim().toLowerCase();
   const user = await userModel.findById(id);
   if (!user) throw new AppError('Usuario no encontrado', 404, 'NOT_FOUND');
+  // El de un super admin no se cambia desde aquí (#248, decidido con Diana el 06/10).
+  if (user.role === 'superadmin') {
+    throw new AppError('No se puede cambiar el correo de un superadmin', 403, 'CANNOT_EDIT_SUPERADMIN');
+  }
   if (String(user.email).toLowerCase() === nuevo) return { cambiado: false, email: user.email };
 
   const otro = await userModel.findByEmail(nuevo);
@@ -74,6 +78,7 @@ export async function cambiarCorreo(id, email, { reenviarEnlace = false } = {}) 
   try { await revokeAllUserTokens(id); } catch { /* no bloqueante */ }
 
   logger.info({ userId: id, de: user.email, a: nuevo, reenviarEnlace }, 'Correo de usuario cambiado');
+  await anotarCambio(porUserId, 'usuario.cambiar_correo', { usuario_id: id, nombre: user.nombre, de: user.email, a: nuevo }, ip);
 
   if (rawToken && NO_ESCRIBIR_A_TUTORES && user.role === 'tutor') {
     logger.warn({ userId: id, email: nuevo },
@@ -160,7 +165,7 @@ export async function update(id, data) {
   return { ...updated, projects };
 }
 
-export async function setPassword(id, password) {
+export async function setPassword(id, password, { porUserId = null, ip = null } = {}) {
   const user = await userModel.findById(id);
   if (!user) throw new AppError('Usuario no encontrado', 404, 'USER_NOT_FOUND');
   if (user.role === 'superadmin') {
@@ -170,7 +175,34 @@ export async function setPassword(id, password) {
   await userModel.setPasswordHash(id, passwordHash);
   // Cierra sesiones activas: obliga a entrar con la nueva contraseña.
   await revokeAllUserTokens(id);
+  // Quién y a quién; la contraseña, nunca.
+  await anotarCambio(porUserId, 'usuario.cambiar_contrasena', { usuario_id: id, nombre: user.nombre }, ip);
   return { id };
+}
+
+/**
+ * Deja escrito en el registro de actividad quién cambió el correo o la
+ * contraseña de otro, cuándo, y el correo anterior y el nuevo (#248). Va a
+ * `user_activity_log`, el mismo registro que el resto («Registro» → usuario),
+ * con quien lo hizo en `user_id` y a quién en `details.usuario_id`.
+ *
+ * El cambio ya está hecho cuando se llega aquí: si el registro falla, se avisa
+ * en el log del servidor pero no se deshace — volver al correo viejo sería peor.
+ */
+async function anotarCambio(porUserId, action, details, ip) {
+  if (!porUserId) return;
+  try {
+    await logActivity(porUserId, action, details, ip || null);
+  } catch (err) {
+    logger.error({ err: err.message, porUserId, action, details }, 'No se pudo anotar el cambio en el registro');
+  }
+}
+
+/** Antes de cambiar un correo: si la persona recibe prospectos, avisar de Make (#248). */
+export async function avisoCambioCorreo(id) {
+  const aviso = await userModel.avisoCambioCorreo(id);
+  if (!aviso) throw new AppError('Usuario no encontrado', 404, 'USER_NOT_FOUND');
+  return aviso;
 }
 
 export async function deactivate(id) {

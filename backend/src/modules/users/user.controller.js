@@ -65,9 +65,21 @@ export async function update(req, res, next) {
     if (!parsed.success) {
       throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
     }
+    // El correo de otro, solo el super admin (#248). Un admin que lo mande se
+    // lleva un 403 aunque la pantalla no se lo ofrezca: no basta con ocultarlo.
+    const { email, ...resto } = parsed.data;
+    if (email !== undefined && req.user?.role !== 'superadmin') {
+      throw new AppError('Solo un superadmin puede cambiar el correo de otro usuario', 403, 'FORBIDDEN');
+    }
     // Como estaba ANTES, para saber si pierde el acceso a WhatsApp.
     const antes = await userService.getById(id).catch(() => null);
-    const user = await userService.update(id, parsed.data);
+    // El correo va primero: si choca con el de otro (409), no se guarda nada a medias.
+    const correo = email !== undefined
+      ? await userService.cambiarCorreo(id, email, { porUserId: req.user.userId, ip: req.ip })
+      : null;
+    const user = Object.keys(resto).length
+      ? await userService.update(id, resto)
+      : await userService.getById(id);
 
     // Si el cambio de rol le quita WhatsApp, se le desvincula el numero — pero
     // sus conversaciones se quedan. El numero es suyo y no puede seguir
@@ -81,7 +93,7 @@ export async function update(req, res, next) {
       wa.alPerderAcceso(id, `cambio de rol: ${antes.role} -> ${user.role}`).catch(() => {});
     }
 
-    res.json({ success: true, data: user });
+    res.json({ success: true, data: correo ? { ...user, correo } : user });
   } catch (err) { next(err); }
 }
 
@@ -119,8 +131,18 @@ export async function setPassword(req, res, next) {
     }
     const parsed = adminSetPasswordSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
-    await userService.setPassword(id, parsed.data.password);
+    await userService.setPassword(id, parsed.data.password, { porUserId: req.user.userId, ip: req.ip });
     res.json({ success: true });
+  } catch (err) { next(err); }
+}
+
+// GET /api/users/:id/aviso-correo — antes de cambiar el correo de alguien, si
+// recibe prospectos por Make (#248). Solo super admin, como el cambio.
+export async function avisoCorreo(req, res, next) {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    res.json({ success: true, data: await userService.avisoCambioCorreo(id) });
   } catch (err) { next(err); }
 }
 

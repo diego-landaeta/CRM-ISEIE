@@ -11,6 +11,7 @@ import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 import { useConfirm } from '@/shared/components/ui/useConfirm';
 import MarcaSection from './MarcaSection';
+import { avisoCambioCorreo, confirmacionCambioCorreo, problemaDeContrasena } from '@/shared/lib/credenciales';
 
 // Cada item de la nav interna. Si tiene `external: true` se muestra con el
 // icono de "abrir en otra página" y al hacer click navega a esa ruta.
@@ -312,6 +313,8 @@ function EditUserModal({ user, projects, onClose, onSaved }) {
   const { user: me } = useAuth();
   const isSuperadmin = me?.role === 'superadmin';
   const [nombre, setNombre] = useState(user.nombre || '');
+  // El correo de otro, solo el super admin (#248).
+  const [email, setEmail] = useState(user.email || '');
   const [role, setRole] = useState(user.role || 'gestor');
   // Los roles de MAS. Solo suman permisos.
   const [rolesExtra, setRolesExtra] = useState(Array.isArray(user.roles_extra) ? user.roles_extra : []);
@@ -326,6 +329,7 @@ function EditUserModal({ user, projects, onClose, onSaved }) {
     return m;
   });
   const [newPass, setNewPass] = useState('');
+  const [newPass2, setNewPass2] = useState('');
   const [saving, setSaving] = useState(false);
   const [savingPass, setSavingPass] = useState(false);
 
@@ -340,17 +344,32 @@ function EditUserModal({ user, projects, onClose, onSaved }) {
   async function save() {
     if (nombre.trim().length < 2) { toast({ title: 'Nombre inválido', variant: 'destructive' }); return; }
     const projList = Object.entries(assigned).map(([projectId, recibeLeads]) => ({ projectId: Number(projectId), recibeLeads: !!recibeLeads }));
+    // El correo solo si ha cambiado, y solo lo cambia el super admin (#248). Antes
+    // de guardar, lo que supone: sobre todo si recibe prospectos por Make.
+    const correoNuevo = email.trim().toLowerCase();
+    const cambiaCorreo = isSuperadmin && correoNuevo !== String(user.email || '').toLowerCase();
+    if (cambiaCorreo) {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correoNuevo)) {
+        toast({ title: 'Email inválido', description: 'Revisa el formato del email.', variant: 'destructive' });
+        return;
+      }
+      const aviso = await avisoCambioCorreo(user.id).catch(() => null);
+      if (!window.confirm(confirmacionCambioCorreo(user.nombre, user.email, correoNuevo, aviso))) return;
+    }
     setSaving(true);
     try {
       await client.patch(`/users/${user.id}`, {
         nombre: nombre.trim(), role, roles_extra: rolesExtra.filter((r) => r !== role),
+        ...(cambiaCorreo ? { email: correoNuevo } : {}),
         projects: projList, whatsapp_phone: phone.trim(),
         factura_manager: facturaManager,
         // Cambiar fechas sin poder facturar no sirve: esa pantalla se abre desde
         // la factura. Si cae lo primero, cae lo segundo.
         editar_fechas_factura: facturaManager && editarFechas,
       });
-      toast({ title: '✓ Guardado' });
+      toast(cambiaCorreo
+        ? { title: '✓ Guardado', description: `${nombre.trim()} entra ahora con ${correoNuevo}. Sus sesiones se han cerrado.` }
+        : { title: '✓ Guardado' });
       onSaved();
     } catch (e) {
       toast({ title: 'Error', description: e?.data?.error || e?.message, variant: 'destructive' });
@@ -358,12 +377,15 @@ function EditUserModal({ user, projects, onClose, onSaved }) {
   }
 
   async function changePassword() {
-    if (newPass.length < 8) { toast({ title: 'Contraseña muy corta', description: 'Mínimo 8 caracteres', variant: 'destructive' }); return; }
+    // Las reglas de «Establece tu contraseña», y repetida (#248).
+    const problema = problemaDeContrasena(newPass, newPass2);
+    if (problema) { toast({ title: 'Revisa la contraseña', description: problema, variant: 'destructive' }); return; }
     setSavingPass(true);
     try {
-      await client.patch(`/users/${user.id}/password`, { password: newPass });
-      toast({ title: '✓ Contraseña actualizada', description: `${user.nombre} deberá entrar con la nueva contraseña.` });
+      await client.patch(`/users/${user.id}/password`, { password: newPass, confirmPassword: newPass2 });
+      toast({ title: '✓ Contraseña actualizada', description: `${user.nombre} deberá entrar con la nueva contraseña. Sus sesiones se han cerrado.` });
       setNewPass('');
+      setNewPass2('');
     } catch (e) {
       toast({ title: 'Error', description: e?.data?.error || e?.message, variant: 'destructive' });
     } finally { setSavingPass(false); }
@@ -384,6 +406,17 @@ function EditUserModal({ user, projects, onClose, onSaved }) {
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">Nombre</label>
             <input value={nombre} onChange={(e) => setNombre(e.target.value)} className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm" />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">Email</label>
+            <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" maxLength={255}
+              readOnly={!isSuperadmin} disabled={!isSuperadmin}
+              className={`w-full h-9 px-3 rounded-md border border-border bg-background text-sm ${isSuperadmin ? '' : 'opacity-60 cursor-not-allowed'}`} />
+            <p className="text-[10px] text-muted-foreground mt-1">
+              {isSuperadmin
+                ? 'Es con lo que entra: al cambiarlo, con el viejo ya no podrá, y se cierran sus sesiones. Si recibe prospectos por Make, cámbialo también allí.'
+                : 'Es con lo que entra: solo lo puede cambiar un superadministrador.'}
+            </p>
           </div>
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">Rol</label>
@@ -490,13 +523,14 @@ function EditUserModal({ user, projects, onClose, onSaved }) {
         {isSuperadmin && (
           <div className="border-t border-border pt-4 space-y-2">
             <label className="text-xs font-semibold flex items-center gap-1.5"><Key size={12} weight="bold" /> Cambiar contraseña</label>
-            <div className="flex gap-2">
-              <input type="text" value={newPass} onChange={(e) => setNewPass(e.target.value)} placeholder="Nueva contraseña (mín. 8)" className="flex-1 h-9 px-3 rounded-md border border-border bg-background text-sm font-mono" />
-              <button onClick={changePassword} disabled={savingPass} className="h-9 px-3 rounded-md border border-border text-sm font-medium hover:bg-muted disabled:opacity-50 whitespace-nowrap">
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <input type="text" value={newPass} onChange={(e) => setNewPass(e.target.value)} placeholder="Nueva contraseña" autoComplete="new-password" className="flex-1 min-w-0 h-9 px-3 rounded-md border border-border bg-background text-sm font-mono" />
+              <input type="text" value={newPass2} onChange={(e) => setNewPass2(e.target.value)} placeholder="Repítela" aria-label="Repite la contraseña" autoComplete="new-password" className="flex-1 min-w-0 h-9 px-3 rounded-md border border-border bg-background text-sm font-mono" />
+              <button onClick={changePassword} disabled={savingPass || !newPass || !newPass2} className="h-9 px-3 rounded-md border border-border text-sm font-medium hover:bg-muted disabled:opacity-50 whitespace-nowrap">
                 {savingPass ? '…' : 'Cambiar'}
               </button>
             </div>
-            <p className="text-[10px] text-muted-foreground">Se la comunicas tú al usuario. Al cambiarla, se cierran sus sesiones activas.</p>
+            <p className="text-[10px] text-muted-foreground">Mínimo 8 caracteres, con una mayúscula y un número. Se la comunicas tú al usuario. Al cambiarla, se cierran sus sesiones activas.</p>
           </div>
         )}
       </div>
