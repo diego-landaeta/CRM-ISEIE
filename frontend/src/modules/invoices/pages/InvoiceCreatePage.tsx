@@ -8,6 +8,7 @@ import client from '@/shared/api/client';
 import { CURRENCIES } from '../currencies';
 import { invoicesApi } from '../api/invoices.api';
 import type { Issuer, InvoiceItem } from '../api/invoices.api';
+import { emitirPreguntandoSiPasa } from '../lib/masQueLoCobrado';
 import { conversionsApi, type Conversion } from '@/modules/conversions/api/conversions.api';
 import { toast } from '@/shared/hooks/useToast';
 
@@ -220,11 +221,21 @@ export default function InvoiceCreatePage() {
         // Traer los cursos contratados (conversiones) como conceptos + importe.
         const convs = d.conversiones || [];
         if (convs.length) {
-          setItems(convs.map((c) => ({
-            descripcion: `Producto/servicio: servicio académico, ${c.producto_contratado || c.producto_nombre || 'programa'}`,
-            cantidad: 1,
-            precio_unitario: Number(c.importe_total ?? c.producto_precio ?? 0) || 0,
-          })));
+          setItems(convs.map((c) => {
+            // Una venta que ya ha cobrado algo se factura por lo cobrado y aún
+            // sin facturar, no por su precio entero: la factura va por cobro. Así
+            // salió la 87 de ICTESS (06/10), por los 333 € de un curso a plazos
+            // cuando la cuota era de 111. Un presupuesto sí va por el total.
+            const porFacturar = Number(c.por_facturar);
+            const precio = !esProforma && Number(c.importe_pagado) > 0 && porFacturar > 0.005
+              ? porFacturar
+              : Number(c.importe_total ?? c.producto_precio ?? 0) || 0;
+            return {
+              descripcion: `Producto/servicio: servicio académico, ${c.producto_contratado || c.producto_nombre || 'programa'}`,
+              cantidad: 1,
+              precio_unitario: Math.round(precio * 100) / 100,
+            };
+          }));
           // Método de pago de la conversión, si encaja con los válidos de factura.
           const MP = ['transferencia', 'tarjeta', 'tarjeta_stripe', 'efectivo', 'bizum', 'fraccionado', 'otro'];
           const mp = convs[0]?.metodo_pago;
@@ -287,7 +298,8 @@ export default function InvoiceCreatePage() {
         ? (esCorreccion
             ? await invoicesApi.corregir(Number(editId), { ...body, exento: !llevaIva })
             : await invoicesApi.update(Number(editId), body))
-        : await invoicesApi.create(body);
+        : await emitirPreguntandoSiPasa((permitir) =>
+            invoicesApi.create(permitir ? { ...body, permitirMasDeLoCobrado: true } : body));
       // Fechas: van por su endpoint (respeta el permiso editar_fechas_factura) y
       // solo si de verdad cambiaron.
       if (res.success && editId && puedeFechas

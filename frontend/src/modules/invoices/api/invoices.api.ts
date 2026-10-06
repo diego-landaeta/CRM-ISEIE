@@ -60,6 +60,8 @@ export interface CreateInvoiceBody {
   tipo?: 'normal' | 'proforma';
   /** true = crear como BORRADOR (sin numero fiscal, datos fiscales opcionales) */
   borrador?: boolean;
+  /** «Emitir igualmente» cuando el CRM avisa de que pasa de lo cobrado de la venta. */
+  permitirMasDeLoCobrado?: boolean;
 }
 
 export interface ProjectInvoicingConfig {
@@ -146,6 +148,8 @@ export interface LeadConversion {
   fecha_conversion: string | null;
   producto_nombre: string | null;
   producto_precio: number | string | null;
+  /** Lo cobrado que aún no tiene factura. */
+  por_facturar?: number | string | null;
 }
 
 export interface LeadFiscalData {
@@ -309,7 +313,7 @@ export const invoicesApi = {
   /** Asociar una factura existente a una venta (conversión) del cliente — Opción B. */
   asociarVenta: (id: number, conversionId: number) => client.patch<Invoice>(`/invoices/${id}/asociar`, { conversionId }),
   /** Validar y emitir un borrador (opcionalmente completando datos del cliente). */
-  emitir: (id: number, patch?: Partial<{ clienteNombre: string; clienteNif: string; clienteDireccion: string; clienteCiudad: string; clienteCp: string; clientePais: string; clienteEmail: string | null; clienteTelefono: string | null }>) => client.post<Invoice>(`/invoices/${id}/emitir`, patch || {}),
+  emitir: (id: number, patch?: Partial<{ clienteNombre: string; clienteNif: string; clienteDireccion: string; clienteCiudad: string; clienteCp: string; clientePais: string; clienteEmail: string | null; clienteTelefono: string | null; permitirMasDeLoCobrado: boolean }>) => client.post<Invoice>(`/invoices/${id}/emitir`, patch || {}),
   getOne: (id: number) => client.get<Invoice>(`/invoices/${id}`),
   /** Completar datos fiscales del cliente en una factura YA emitida (auto-emitida al pagar). */
   completarDatos: (id: number, patch: Partial<{ clienteNombre: string; clienteNif: string; clienteDireccion: string; clienteCiudad: string; clienteCp: string; clientePais: string; clienteEmail: string | null; clienteTelefono: string | null }>) => client.post<Invoice>(`/invoices/${id}/completar-datos`, patch),
