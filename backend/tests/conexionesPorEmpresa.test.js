@@ -18,6 +18,10 @@ vi.mock('../src/shared/config/db.js', () => ({
     if (sql.includes('FROM projects WHERE sociedad_emisora_id = $1 ORDER BY id')) {
       return { rows: (params[0] === 8 ? CEDIA : ICTESS).map((id) => ({ id })) };
     }
+    // Los campus de la persona (ambito.js, #245): Antonio, los tres de CEDIA.
+    if (sql.includes('FROM user_projects WHERE user_id = $1 AND active = true')) {
+      return { rows: (params[0] === 20 ? CEDIA : []).map((project_id) => ({ project_id })) };
+    }
     return { rows: [] };
   }),
 }));

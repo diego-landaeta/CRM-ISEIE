@@ -47,13 +47,17 @@ test('SIN_PRUEBAS · excluye los proyectos marcados de pruebas', () => {
   assert.match(SIN_PRUEBAS('c.project_id'), /c\.project_id NOT IN/);
 });
 
+// Estas cuatro piden como super admin, que ve el CRM entero. Lo que cambia
+// para el resto (#245: siempre dentro de sus campus) va en ambitoPorPersona.test.js.
+const SUPER = { role: 'superadmin', userId: 1 };
+
 test('proyectosDelAmbito · sin issuerId, pasa el proyecto tal cual', async () => {
-  assert.deepEqual(await proyectosDelAmbito({ query: { projectId: '7' } }),
+  assert.deepEqual(await proyectosDelAmbito({ query: { projectId: '7' } , user: SUPER }),
     { projectId: 7, projectIds: null });
 });
 
 test('proyectosDelAmbito · sin nada, es «todos»', async () => {
-  assert.deepEqual(await proyectosDelAmbito({ query: {} }),
+  assert.deepEqual(await proyectosDelAmbito({ query: {} , user: SUPER }),
     { projectId: null, projectIds: null });
 });
 
@@ -66,7 +70,7 @@ test('proyectosDelAmbito · una sociedad se traduce a sus campus', async () => {
   if (!rows.length) return; // Sin sociedades configuradas no hay nada que probar.
   const { id, n } = rows[0];
 
-  const r = await proyectosDelAmbito({ query: { issuerId: String(id), projectId: '7' } });
+  const r = await proyectosDelAmbito({ query: { issuerId: String(id), projectId: '7' } , user: SUPER });
   assert.equal(r.projectIds.length, n);
   // El proyecto se descarta: lo que se pidió fue la sociedad entera.
   assert.equal(r.projectId, null);
@@ -75,7 +79,7 @@ test('proyectosDelAmbito · una sociedad se traduce a sus campus', async () => {
 test('proyectosDelAmbito · una sociedad SIN campus no puede significar «todos»', async () => {
   // Es el fallo peligroso: devolver null aquí enseñaría el CRM entero justo
   // cuando se pidió acotar. Se devuelve una lista que no casa con nada.
-  const r = await proyectosDelAmbito({ query: { issuerId: '999999' } });
+  const r = await proyectosDelAmbito({ query: { issuerId: '999999' } , user: SUPER });
   assert.deepEqual(r.projectIds, [-1]);
   assert.notEqual(r.projectIds, null);
 });
