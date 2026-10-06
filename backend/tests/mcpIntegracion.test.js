@@ -247,7 +247,9 @@ describe('el protocolo, con la base de verdad', () => {
 
     const list = await rpc(TOKENS.ANA, 'tools/list');
     // 13 desde el 01/10: «listar_tutores», «comisiones_tutores» y «formaciones_sin_tutor».
-    expect(list.body.result.tools.length).toBe(13);
+    // 16 desde el 06/10 (#215): «listar_formaciones», «resumen_catalogo» y «ver_formacion».
+    expect(list.body.result.tools.length).toBe(16);
+    expect(list.body.result.tools.map((t) => t.name)).toEqual(expect.arrayContaining(['listar_formaciones', 'resumen_catalogo', 'ver_formacion']));
   });
 
   it('el token se guarda como huella, nunca en claro', async () => {

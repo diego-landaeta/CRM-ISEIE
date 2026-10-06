@@ -293,6 +293,50 @@ export const HERRAMIENTAS = [
       return model.formacionesSinTutorDe({ ...a, projectIds });
     },
   },
+  // El catálogo de cada campus (#215, ficha de Diego del 05/10). Lo usan todos
+  // los roles con MCP, también las gestoras: lo necesitan para vender y no es
+  // información sensible. Nada de ventas ni de `stripe_link`; del tutor, solo
+  // el nombre.
+  {
+    nombre: 'listar_formaciones',
+    titulo: 'Formaciones y precios',
+    descripcion: 'El catálogo de tus campus: cada formación activa con su precio, moneda, campus y enlace a la web, como la pantalla de Productos. '
+      + 'Busca por nombre sin distinguir mayúsculas ni tildes. Devuelve una página y el total: con muchas, pide un nombre o usa «resumen_catalogo». '
+      + 'Si una formación no tiene precio, contesta que en el CRM no consta; no lo deduzcas ni lo inventes. No da ventas.',
+    entrada: {
+      ...AMBITO,
+      texto: z.string().max(100).optional().describe('Parte del nombre de la formación, por ejemplo «psicología clínica»'),
+      ...PAGINA,
+    },
+    ejecutar: (ambito, a) => model.listarFormaciones({ ...a, projectIds: acotar(ambito, a).projectIds }),
+  },
+  {
+    nombre: 'resumen_catalogo',
+    titulo: 'Resumen del catálogo',
+    descripcion: 'Por campus: cuántas formaciones activas hay, el precio mínimo, el máximo y el más habitual (el que más se repite; vacío si ninguno se repite: entonces no lo hay), '
+      + 'las monedas, y cuántas no tienen precio o enlace. '
+      + 'Úsala para «¿cuánto cuestan los cursos de X?» sin listar cientos de formaciones.',
+    entrada: { ...AMBITO },
+    ejecutar: (ambito, a) => model.resumenCatalogo({ projectIds: acotar(ambito, a).projectIds }),
+  },
+  {
+    nombre: 'ver_formacion',
+    titulo: 'Ficha de una formación',
+    descripcion: 'La ficha de una formación (id de «listar_formaciones»): precio, moneda, enlace, categoría, duración, plazas totales y libres, '
+      + 'cierre de convocatoria, dossier y el nombre del tutor que la da hoy. Plazas, cierre de convocatoria y dossier están vacíos en casi todo el catálogo: '
+      + 'si vienen vacíos, contesta que en el CRM no consta; no lo deduzcas.',
+    entrada: { id: z.number().int().positive().describe('Id de la formación') },
+    ejecutar: async (ambito, a) => {
+      const permitidos = acotar(ambito, {}).projectIds;
+      const r = await model.verFormacion(a.id);
+      if (!r) throw new AppError(`La formación ${a.id} no existe.`, 404, 'MCP_NO_ENCONTRADO');
+      // El mismo 403 que dan las demás herramientas con un campus ajeno.
+      if (!permitidos.includes(Number(r.campus_id))) {
+        throw new AppError(`No tienes acceso al campus ${r.campus_id}. Usa «mis_proyectos» para ver los tuyos.`, 403, 'MCP_FUERA_DE_AMBITO');
+      }
+      return r;
+    },
+  },
   {
     nombre: 'informe',
     titulo: 'Informe del CRM',

@@ -763,3 +763,131 @@ export async function formacionesSinTutorDe({ projectIds, incluir_anteriores_al_
     })),
   };
 }
+
+// ─── El catálogo de cada campus (#215) ────────────────────────────────────
+//
+// Carlos (05/10): «¿cuánto cuesta el Máster X en Psiko?» o «dame los precios de
+// los cursos de CEDIA», con los mismos datos que la pantalla de Productos. Solo
+// las formaciones activas, como la pantalla. Nada de ventas ni de `stripe_link`.
+//
+// ESTA CONSULTA ES LA DE ISEIE. La de MultiCRM devuelve además `modalidad`: la
+// ficha de Diego (05/10) la pide solo allí. (Comprobado el 06/10: aquí la crea
+// la migración 002 y la usa la pantalla de Productos, pero se sigue la ficha.)
+// `brochure_url`, que solo tiene ISEIE, no se pide.
+
+// Sin tildes ni mayúsculas, a mano con translate() como en MultiCRM: `unaccent`
+// no está en todas las bases (la local de ISEIE no la tiene; ver sales.service).
+const SIN_TILDES = (col) => `translate(lower(${col}), 'áéíóúàèìòùäëïöüâêîôûñç', 'aeiouaeiouaeiouaeiounc')`;
+const sinTildes = (s) => String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+// Lo que escriba Claude se busca tal cual: un «%» o un «_» no son comodines.
+const comoTexto = (s) => sinTildes(s).replace(/[\%_]/g, (c) => `\${c}`);
+const numero = (v) => (v == null ? null : Number(v));
+// «Sin precio» es que no lo tiene o que es 0: ninguna formación cuesta 0 €.
+const CON_PRECIO = (col) => `(${col} IS NOT NULL AND ${col} > 0)`;
+
+/** Por encima de esto, sin texto, se pide acotar: el catálogo entero no cabe en una respuesta. */
+export const AVISO_FORMACIONES = 100;
+
+export async function listarFormaciones({ projectIds, texto, pagina = 1, limite = 25 }) {
+  const f = condiciones('p.project_id', projectIds);
+  f.cond.push('p.active = true');
+  if (texto) f.add(`${SIN_TILDES('p.nombre')} LIKE ?`, `%${comoTexto(texto)}%`);
+  const { limit, offset } = paginado(pagina, limite);
+  const { rows } = await query(
+    `SELECT p.id, p.nombre AS curso, pr.nombre AS campus, p.project_id AS campus_id,
+            p.precio, p.moneda, p.url_info AS enlace
+       FROM products p
+       JOIN projects pr ON pr.id = p.project_id
+      ${f.where()}
+      ORDER BY pr.nombre, p.nombre, p.id
+      LIMIT ${limit} OFFSET ${offset}`,
+    f.params
+  );
+  const { rows: porCampus } = await query(
+    `SELECT pr.nombre AS campus, COUNT(*)::int AS formaciones
+       FROM products p JOIN projects pr ON pr.id = p.project_id
+      ${f.where()}
+      GROUP BY pr.nombre ORDER BY COUNT(*) DESC, pr.nombre`,
+    f.params
+  );
+  const total = porCampus.reduce((s, c) => s + c.formaciones, 0);
+  return {
+    total,
+    pagina,
+    paginas: Math.max(1, Math.ceil(total / limite)),
+    ...(porCampus.length > 1 ? { por_campus: porCampus } : {}),
+    // Sin texto y con muchas, Claude tiene que saber que esto es solo un trozo.
+    ...(!texto && total > AVISO_FORMACIONES ? {
+      aviso: `Hay ${total} formaciones${porCampus.length === 1 ? ` en ${porCampus[0].campus}` : ` (${porCampus.map((c) => `${c.campus} ${c.formaciones}`).join(', ')})`}: `
+        + 'pide un nombre (texto) o usa «resumen_catalogo».',
+    } : {}),
+    formaciones: rows.map((r) => ({ ...r, precio: numero(r.precio) })),
+  };
+}
+
+export async function resumenCatalogo({ projectIds }) {
+  const { rows } = await query(
+    `SELECT pr.id AS campus_id, pr.nombre AS campus,
+            COUNT(p.id)::int AS formaciones,
+            MIN(p.precio) FILTER (WHERE ${CON_PRECIO('p.precio')}) AS precio_minimo,
+            MAX(p.precio) FILTER (WHERE ${CON_PRECIO('p.precio')}) AS precio_maximo,
+            -- El más habitual, solo si alguno SE REPITE. Con todos distintos no hay
+            -- uno «más habitual», y MODE() devolvía el más bajo (prueba con Claude,
+            -- 06/10: con 385, 490 y 560 decía «el más habitual: 385»).
+            (SELECT x.precio FROM (
+               SELECT p2.precio, COUNT(*) AS veces FROM products p2
+                WHERE p2.project_id = pr.id AND p2.active = true AND ${CON_PRECIO('p2.precio')}
+                GROUP BY p2.precio HAVING COUNT(*) > 1
+                ORDER BY COUNT(*) DESC, p2.precio LIMIT 1) x) AS precio_mas_habitual,
+            COALESCE(ARRAY_AGG(DISTINCT p.moneda) FILTER (WHERE p.moneda IS NOT NULL), '{}') AS monedas,
+            COUNT(p.id) FILTER (WHERE NOT ${CON_PRECIO('p.precio')})::int AS sin_precio,
+            COUNT(p.id) FILTER (WHERE p.url_info IS NULL OR btrim(p.url_info) = '')::int AS sin_enlace
+       FROM projects pr
+       LEFT JOIN products p ON p.project_id = pr.id AND p.active = true
+      WHERE pr.id = ANY($1::int[])
+      GROUP BY pr.id, pr.nombre
+      ORDER BY pr.nombre`,
+    [projectIds]
+  );
+  return {
+    total_formaciones: rows.reduce((s, r) => s + r.formaciones, 0),
+    campus: rows.map((r) => ({
+      ...r,
+      precio_minimo: numero(r.precio_minimo),
+      precio_maximo: numero(r.precio_maximo),
+      precio_mas_habitual: numero(r.precio_mas_habitual),
+    })),
+  };
+}
+
+/** La ficha de una formación, o null si no existe. El ámbito lo mira quien llama. */
+export async function verFormacion(id) {
+  const { rows: [r] } = await query(
+    `SELECT p.id, p.nombre AS curso, pr.nombre AS campus, p.project_id AS campus_id, p.active AS activa,
+            p.precio, p.moneda, p.url_info AS enlace, p.duracion, p.horas,
+            cat.nombre AS categoria, sub.nombre AS subcategoria,
+            p.plazas_totales,
+            -- Las libres, solo si hay totales: sin totales no se sabe (Diego, 05/10).
+            CASE WHEN p.plazas_totales IS NOT NULL
+                 THEN GREATEST(p.plazas_totales - COALESCE(p.plazas_ocupadas_previas, 0), 0) END AS plazas_libres,
+            p.fecha_cierre_convocatoria AS cierre_convocatoria,
+            d.version AS dossier_version, d.created_at AS dossier_fecha,
+            -- Del tutor, solo el NOMBRE: nunca su porcentaje ni lo que cobra.
+            (SELECT string_agg(DISTINCT u.nombre, ', ')
+               FROM tutor_collaborations c JOIN users u ON u.id = c.tutor_id
+              WHERE c.product_id = p.id AND ${RIGE_HOY('c')}) AS tutor
+       FROM products p
+       JOIN projects pr ON pr.id = p.project_id
+       LEFT JOIN product_categories cat ON cat.id = p.categoria_id
+       LEFT JOIN product_categories sub ON sub.id = p.subcategoria_id
+       LEFT JOIN LATERAL (
+         SELECT version, created_at FROM dossiers
+          WHERE product_id = p.id AND active = true
+          ORDER BY version DESC LIMIT 1
+       ) d ON true
+      WHERE p.id = $1`,
+    [id]
+  );
+  if (!r) return null;
+  return { ...r, precio: numero(r.precio), tiene_dossier: r.dossier_version != null };
+}
