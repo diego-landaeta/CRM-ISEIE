@@ -163,7 +163,10 @@ describe('ver_formacion', () => {
     expect(m).toMatchObject({ curso: `Máster en Psicología Clínica ${marca}`, precio: 1490, plazas_totales: 30, plazas_libres: 18, tiene_dossier: false });
     const t = await herramienta('ver_formacion').ejecutar(admin(), { id: CON_TUTOR });
     expect(t.tutor).toBe(`Tutora ${marca}`);
-    expect(JSON.stringify(t)).not.toMatch(/17|pct|stripe/);
+    // Ni el campo del porcentaje ni el enlace de pago. (Se mira el campo, no el
+    // número 17: en el CI el campus de prueba salió con el id 17.)
+    expect(Object.keys(t)).not.toEqual(expect.arrayContaining(['pct']));
+    expect(JSON.stringify(t)).not.toMatch(/"pct"|porcentaje|comision|stripe/i);
   });
 
   it('lo que el CRM no tiene, vacío: plazas, cierre de convocatoria y dossier (Claude dirá «no consta»)', async () => {

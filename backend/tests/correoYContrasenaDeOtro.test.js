@@ -74,6 +74,7 @@ const registro = async (accion, objetivo) => q(
 );
 
 let SUPER; let ADMIN; let SOPORTE; let GESTORA; let COLABORACIONES; let TUTOR; let OTRA;
+let CAMPUS;
 
 beforeAll(async () => {
   SUPER = await persona('SUPER', 'superadmin');
@@ -83,13 +84,24 @@ beforeAll(async () => {
   COLABORACIONES = await persona('COLAB', 'gestor', { colaboraciones: true });
   TUTOR = await persona('TUTOR', 'tutor');
   OTRA = await persona('OTRA', 'gestor');
+  // Todos en el mismo campus: desde la #245 (Diego, 06/10) la ficha de un tutor
+  // solo la toca quien comparte campus con él, y si no, «no encontrado». Aquí se
+  // prueba la regla de la #246 (solo el super admin), no esa.
+  const [c] = await q(`INSERT INTO projects (nombre, slug, webhook_api_key) VALUES ($1, $2, $3) RETURNING id`,
+    [`${MARCA} Campus`, MARCA.toLowerCase(), `${MARCA}-key`]);
+  CAMPUS = c.id;
+  for (const u of [ADMIN, SOPORTE, GESTORA, COLABORACIONES, TUTOR, OTRA]) {
+    await q('INSERT INTO user_projects (user_id, project_id, active) VALUES ($1, $2, true)', [u.id, CAMPUS]);
+  }
 }, 60000);
 
 afterAll(async () => {
   await q(`DELETE FROM user_activity_log WHERE user_id = ANY($1::int[]) OR (details->>'usuario_id')::int = ANY($1::int[])`, [ids]);
   await q(`DELETE FROM user_refresh_tokens WHERE user_id = ANY($1::int[])`, [ids]);
   await q(`DELETE FROM tutor_profiles WHERE user_id = ANY($1::int[])`, [ids]);
+  await q(`DELETE FROM user_projects WHERE user_id = ANY($1::int[])`, [ids]);
   await q(`DELETE FROM users WHERE id = ANY($1::int[])`, [ids]);
+  if (CAMPUS) await q('DELETE FROM projects WHERE id = $1', [CAMPUS]);
   await pool.end();
 }, 60000);
 
