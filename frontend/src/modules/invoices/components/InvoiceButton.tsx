@@ -2,6 +2,7 @@ import { lazy, Suspense, useState, useCallback, useEffect } from 'react';
 import { Receipt, Warning } from '@phosphor-icons/react';
 import { invoicesApi, invoiceFaltantes } from '../api/invoices.api';
 import type { Invoice, InvoiceItem } from '../api/invoices.api';
+import { emitirPreguntandoSiPasa } from '../lib/masQueLoCobrado';
 import { toast } from '@/shared/hooks/useToast';
 
 const EmitirBorradorDialog = lazy(() => import('./EmitirBorradorDialog'));
@@ -110,7 +111,8 @@ export default function InvoiceButton({ projectId, leadId, conversionId, items, 
         return;
       }
 
-      const res = await invoicesApi.create({
+      const res = await emitirPreguntandoSiPasa((permitir) => invoicesApi.create({
+        ...(permitir ? { permitirMasDeLoCobrado: true } : {}),
         projectId, leadId, conversionId,
         borrador: complete ? undefined : true,
         clienteNombre: d.nombre,
@@ -124,7 +126,7 @@ export default function InvoiceButton({ projectId, leadId, conversionId, items, 
         items,
         metodoPago: metodoDefault as 'transferencia',
         piePago: pieDefault,
-      });
+      }));
       if (res.success && res.data) {
         setExisting(res.data);
         if (res.data.estado === 'borrador') {
@@ -138,6 +140,11 @@ export default function InvoiceButton({ projectId, leadId, conversionId, items, 
       } else {
         toast({ title: 'Error', description: (res as { error?: string }).error, variant: 'destructive' });
       }
+    } catch (e: unknown) {
+      // Lo que el servidor rechaza llega como error, no como `success: false`.
+      // Sin esto se perdía sin aviso: el botón dejaba de girar y ya está.
+      const err = e as { data?: { error?: string }; message?: string };
+      toast({ title: 'No se pudo emitir', description: err?.data?.error || err?.message, variant: 'destructive' });
     } finally { setWorking(false); }
   }
 
