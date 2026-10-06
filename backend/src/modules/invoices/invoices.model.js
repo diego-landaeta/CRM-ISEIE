@@ -394,15 +394,29 @@ const MISMA_SOCIEDAD = (col, marcador) => `${col} IN (
             OR (base.nif IS NOT NULL AND e.nif = base.nif
                 AND e.serie IS NOT DISTINCT FROM base.serie)))`;
 
+/*
+  DE QUIEN ES UNA FACTURA, para una gestora (06/10): la que escribio ella, la de
+  una venta suya (quien vendio, y si no consta, de quien es la ficha) o una SIN
+  GESTORA de uno de sus campus. Necesita los alias i, cv (la venta) y l (la ficha).
+
+  Yolanda (ICTESS) emitio la 2026/0086 --una ponencia para una empresa, sin venta
+  ni ficha-- y no le salia en su lista. Diego: «son facturas sin gestora, debo de
+  verlas». Vale para la lista y para editar, borrar, abono y cobrar la proforma.
+*/
+const FACTURA_DE = (param) => `(i.created_by = ${param}
+    OR COALESCE(cv.vendedora_id, l.responsable_id) = ${param}
+    OR (COALESCE(cv.vendedora_id, l.responsable_id) IS NULL
+        AND EXISTS (SELECT 1 FROM user_projects up
+                     WHERE up.user_id = ${param} AND up.project_id = i.project_id AND up.active)))`;
+
 export async function list({ projectId, issuerId, estado, search, from, to, tipo, responsableId, page = 1, limit = 50 }) {
   const conds = [];
   const params = [];
   let idx = 1;
   if (issuerId)  { conds.push(MISMA_SOCIEDAD('i.issuer_id', `$${idx++}`)); params.push(issuerId); }
   if (projectId) { conds.push(`i.project_id = $${idx++}`); params.push(projectId); }
-  // Gestor: solo ve las facturas de SUS leads (responsable). Admin/superadmin ven todas.
-  // Quien vendio, no de quien es la ficha: es el criterio del resto del CRM.
-  if (responsableId) { conds.push(`COALESCE(cv.vendedora_id, l.responsable_id) = $${idx++}`); params.push(responsableId); }
+  // Gestor: solo ve las SUYAS (ver FACTURA_DE). Admin/superadmin ven todas.
+  if (responsableId) { conds.push(FACTURA_DE(`$${idx++}`)); params.push(responsableId); }
   // La pestana Facturas muestra tambien las PROFORMAS. Comparten el mismo
   // correlativo que las facturas normales, asi que si se ocultan parece que
   // falta un numero: la 642 se veia como un salto cuando en realidad la tenia
@@ -585,10 +599,13 @@ export async function puedeGestionarFactura(userId, role, invoiceId) {
   if (role !== 'gestor') return false;
   if (!(await esFacturaManager(userId))) return false;
   const { rows } = await query(
-    `SELECT l.responsable_id FROM invoices i LEFT JOIN leads l ON l.id = i.lead_id WHERE i.id = $1`,
-    [invoiceId]
+    `SELECT 1 FROM invoices i
+       LEFT JOIN conversions cv ON cv.id = i.conversion_id
+       LEFT JOIN leads l ON l.id = COALESCE(i.lead_id, cv.lead_id)
+      WHERE i.id = $1 AND ${FACTURA_DE('$2')}`,
+    [invoiceId, userId]
   );
-  return !!rows[0] && rows[0].responsable_id === userId;
+  return rows.length > 0;
 }
 
 // Permiso acotado: usuario que SOLO puede cambiar las fechas (emisión y pago) de
@@ -847,7 +864,7 @@ export async function esProformaDe(userId, invoiceId) {
        LEFT JOIN conversions cv ON cv.id = i.conversion_id
        LEFT JOIN leads l ON l.id = COALESCE(i.lead_id, cv.lead_id)
       WHERE i.id = $1
-        AND (i.created_by = $2 OR COALESCE(cv.vendedora_id, l.responsable_id) = $2)`,
+        AND ${FACTURA_DE('$2')}`,
     [invoiceId, userId]);
   return rows.length > 0;
 }
