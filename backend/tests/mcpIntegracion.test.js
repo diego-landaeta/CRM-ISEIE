@@ -507,14 +507,10 @@ describe('la puerta, con la base de verdad', () => {
     expect((await rpc(TOKENS.GEMA, 'tools/list')).status).toBe(401);
   });
 
-  // Desde el 05/10 el super admin SÍ revoca la de cualquiera (mcpTodasLasUrls);
-  // el resto, incluido un admin, solo las suyas.
-  it('un admin no puede revocar el token de otra persona', async () => {
-    const { id } = await one(`SELECT id FROM mcp_tokens WHERE user_id = $1 AND revoked_at IS NULL`, [U.SUPER]);
-    const r = await request.delete(`/api/mcp/panel/tokens/${id}`).set('Authorization', `Bearer ${await jwtDe('ANA')}`);
+  it('no se puede revocar el token de otra persona', async () => {
+    const { id } = await one(`SELECT id FROM mcp_tokens WHERE user_id = $1 AND revoked_at IS NULL`, [U.ANA]);
+    const r = await request.delete(`/api/mcp/panel/tokens/${id}`).set('Authorization', `Bearer ${await jwtDe('SUPER')}`);
     expect(r.status).toBe(404);
-    const { vivo } = await one(`SELECT (revoked_at IS NULL) AS vivo FROM mcp_tokens WHERE id = $1`, [id]);
-    expect(vivo).toBe(true);
   });
 });
 

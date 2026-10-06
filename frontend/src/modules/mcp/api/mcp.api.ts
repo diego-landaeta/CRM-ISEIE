@@ -22,10 +22,6 @@ export interface McpToken {
   /** 'manual' | 'sin_uso' | 'usuario_desactivado' | 'conector' */
   revocado_motivo?: string | null;
   vivo: boolean;
-  /** Solo en `todas`: de quién es la URL. */
-  user_id?: number;
-  persona?: string | null;
-  role?: string;
 }
 
 export interface McpProyecto {
@@ -52,10 +48,6 @@ export interface McpEstado {
   proyectos: McpProyecto[];
   herramientas: McpHerramienta[];
   tokens: McpToken[];
-  /** Quien administra: todas las URLs que alcanza, de todas las personas (05/10). */
-  todas?: McpToken[];
-  /** El super admin revoca la URL de cualquiera. */
-  puedeRevocarTodas?: boolean;
   /** Interruptor de emergencia (#196). */
   interruptor?: McpInterruptor;
   puedeApagar?: boolean;
