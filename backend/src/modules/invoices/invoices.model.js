@@ -534,15 +534,23 @@ export async function deleteInvoice(id) {
     const inv = sel[0];
     if (!inv) { await client.query('ROLLBACK'); return null; }
     await client.query(`DELETE FROM invoices WHERE id = $1`, [id]);
-    if (inv.issuer_id != null && inv.serie != null && inv.numero != null) {
+    // Reajusta el correlativo al máximo restante de la SERIE Y AÑO, en todas sus
+    // filas: es como numera `nextNumero`, que coge el mayor de todas.
+    //
+    // Iba por emisora: si la serie tiene varias filas (una por campus, alguna
+    // sin emisora), borrar la ultima bajaba una y las otras se quedaban arriba,
+    // y la siguiente factura se saltaba numeros. Paso en MultiCRM con la 0188 de
+    // CEDIA el 06/10.
+    if (inv.serie != null && inv.numero != null) {
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`invoice_serie:${inv.ano}:${inv.serie}`]);
       const { rows: mx } = await client.query(
-        `SELECT COALESCE(MAX(numero), 0) AS m FROM invoices WHERE issuer_id = $1 AND ano = $2 AND serie = $3`,
-        [inv.issuer_id, inv.ano, inv.serie]
+        `SELECT COALESCE(MAX(numero), 0) AS m FROM invoices WHERE ano = $1 AND serie = $2`,
+        [inv.ano, inv.serie]
       );
       await client.query(
         `UPDATE invoice_sequences SET ultimo_numero = $1
-          WHERE issuer_id = $2 AND ano = $3 AND serie = $4 AND ultimo_numero > $1`,
-        [mx[0].m, inv.issuer_id, inv.ano, inv.serie]
+          WHERE ano = $2 AND serie = $3 AND ultimo_numero > $1`,
+        [mx[0].m, inv.ano, inv.serie]
       );
     }
     await client.query('COMMIT');

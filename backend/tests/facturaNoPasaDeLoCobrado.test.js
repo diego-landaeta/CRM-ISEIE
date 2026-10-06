@@ -186,6 +186,32 @@ describe('de quien es una factura, para una gestora', () => {
   });
 });
 
+describe('al borrar la ultima de la serie', () => {
+  it('el contador baja en TODAS las filas de la serie, no solo en la de su emisora', async () => {
+    // CEDIA lleva la serie en cuatro filas (campus 1 con emisora, 2, 3 y 6 sin
+    // ella). Borrar la 0188 solo bajaba la del campus 1, y la siguiente salia
+    // como 0189 dejando huecos.
+    const sqls = [];
+    const db = await import('../src/shared/config/db.js');
+    db.getClient.mockResolvedValueOnce({
+      query: vi.fn(async (sql, params) => {
+        sqls.push({ sql, params });
+        if (/FOR UPDATE/.test(sql)) return { rows: [{ id: 388, ano: 2026, serie: 'CEDIA', numero: 188, issuer_id: 8 }] };
+        if (/MAX\(numero\)/.test(sql)) return { rows: [{ m: 185 }] };
+        return { rows: [] };
+      }),
+      release: vi.fn(),
+    });
+    await real.deleteInvoice(388);
+    const max = sqls.find((q) => /MAX\(numero\)/.test(q.sql));
+    expect(max.sql).not.toContain('issuer_id');
+    expect(max.params).toEqual([2026, 'CEDIA']);
+    const upd = sqls.find((q) => /UPDATE invoice_sequences/.test(q.sql));
+    expect(upd.sql).not.toContain('issuer_id');
+    expect(upd.params).toEqual([185, 2026, 'CEDIA']);
+  });
+});
+
 describe('la cola', () => {
   beforeEach(() => { consultas.length = 0; respuestas = []; });
 
