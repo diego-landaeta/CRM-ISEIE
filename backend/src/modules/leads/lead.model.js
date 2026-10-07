@@ -1,5 +1,6 @@
 import { query, getClient } from '../../shared/config/db.js';
 import { PASO_CERRADO } from '../../shared/utils/pasoCerrado.js';
+import { EN_EL_PROCESO } from '../../shared/utils/enElProceso.js';
 
 // ============================================================
 // WEBHOOK + ROUND-ROBIN
@@ -648,6 +649,21 @@ function buildOrderBy(sort, dir = 'desc') {
   return `${FECHA} ${D} NULLS LAST, l.id ${D}`;
 }
 
+/*
+  QUE ES UN PROSPECTO Y NO UN CLIENTE (06/10).
+
+  Prospectos escondia todo lo que estuviera en «convertido», y Clientes solo
+  enseña lo que tiene al menos una venta. Una ficha en «convertido» SIN venta
+  no salia en ninguna de las dos. Paso en MultiCRM con Orlando Villalobos
+  (ICTESS): se le registro la venta, se borro como «Error al cargar», la ficha
+  se quedo en «convertido» y desaparecio. Igual aqui, por paridad.
+
+  Asi que un «convertido» sin ninguna venta sigue siendo prospecto: sale en la
+  lista, con su estado, para que alguien lo vea y lo arregle.
+*/
+const NO_ES_CLIENTE = `(l.status <> 'convertido'
+     OR NOT EXISTS (SELECT 1 FROM conversions cx WHERE cx.lead_id = l.id))`;
+
 export async function findAll({ projectId, projectIds, status, pasoProceso, responsableId, unassigned, canal, productId, search, page, limit, includeConverted, dateFrom, dateTo, sort, dir, duplicated, reincidente, conConversion, installmentStatus }) {
   const conditions = [];
   const params = [];
@@ -713,7 +729,7 @@ export async function findAll({ projectId, projectIds, status, pasoProceso, resp
     conditions.push(`l.status = $${paramIdx++}`);
     params.push(status);
   } else if (!includeConverted && !conConversion) {
-    conditions.push(`l.status <> 'convertido'`);
+    conditions.push(NO_ES_CLIENTE);
   }
   /* EN QUE PASO DEL PROCESO VA.
      El paso «en curso» es el primero pendiente que aun no ha llegado su turno:
@@ -722,9 +738,10 @@ export async function findAll({ projectId, projectIds, status, pasoProceso, resp
      cola no puedan decir cosas distintas de la misma persona.
 
      Quien no tiene agenda --los de antes del proceso-- no sale con ningun paso
-     elegido, y es lo correcto: no estan en el proceso. */
+     elegido, y es lo correcto: no estan en el proceso. Tampoco quien entro antes
+     del 01/09 aunque le quede agenda escrita de antes (ver enElProceso.js). */
   if (pasoProceso) {
-    conditions.push(`(SELECT ls.clave FROM lead_steps ls
+    conditions.push(`${EN_EL_PROCESO('l')} AND (SELECT ls.clave FROM lead_steps ls
                        WHERE ls.lead_id = l.id AND ls.estado = 'pendiente'
                          AND NOT ${PASO_CERRADO('ls')}
                        ORDER BY ls.orden LIMIT 1) = $${paramIdx++}`);

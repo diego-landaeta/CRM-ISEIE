@@ -9,10 +9,18 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import { useProducts } from '@/modules/products/hooks/useProducts';
 import client from '@/shared/api/client';
 import ComoVoy from '@/modules/reports/components/ComoVoy';
+// El resumen de arriba, traído de MultiCRM: las cuatro cifras y el bloque
+// plegable con la salud, las siguientes acciones y los accesos.
+import CifrasProspectos from '../components/CifrasProspectos';
+import SaludComercial from '../components/SaludComercial';
+import SiguientesAcciones from '../components/SiguientesAcciones';
+import AccesosClave from '@/shared/components/ui/AccesosClave';
+import BloquePlegable from '@/shared/components/ui/BloquePlegable';
 import { Gear, ArrowCounterClockwise, ListChecks,
   MagnifyingGlass,
   Plus,
-  Export,
+  Kanban,
+  GitMerge,
   CaretLeft,
   CaretRight,
   Users,
@@ -60,6 +68,8 @@ import EmptyState from '@/shared/components/ui/EmptyState';
 import LeadsViewToggle from '../components/LeadsViewToggle';
 import LeadsFiltersBar from '../components/LeadsFiltersBar';
 import QuickActions from '../components/QuickActions';
+// Las dos formas de abrir a una persona, a la vista y no escondidas.
+import AtajosDeFicha from '../components/AtajosDeFicha';
 import ReminderQuickDialog from '../components/ReminderQuickDialog';
 import BulkActionBar from '../components/BulkActionBar';
 import usePermission from '@/shared/hooks/usePermission';
@@ -67,6 +77,7 @@ import { getLeadPriority, getPriorityStyle } from '../lib/leadPriority';
 import { getLeadExportColumns } from '../lib/leadFormat';
 import ParaHoyYManana from '@/shared/components/dashboard/ParaHoyYManana';
 import { PROCESO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
+import { entroEnElProceso } from '@/shared/lib/enElProceso';
 import {
   getInitials,
   getAvatarColor,
@@ -136,6 +147,11 @@ export default function LeadsPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { can } = usePermission();
+  // Eliminar: admin y superadmin, y desde el 01/10 la gestora con el permiso
+  // «leads.delete» (#204) en SUS leads sin venta. El servidor lo vuelve a mirar.
+  const puedeEliminar = (l: { responsable_id?: number | null; status?: string }) =>
+    user?.role === 'superadmin' || user?.role === 'admin'
+    || (can('leads.delete') && l.responsable_id === user?.id && l.status !== 'convertido');
   const {
     leads, stats, total, page, totalPages,
     setPage, search, setSearch,
@@ -329,6 +345,8 @@ export default function LeadsPage() {
     const tomorrow = new Date(today.getTime() + 86400000);
     const inWeek = new Date(today.getTime() + 7 * 86400000);
     return lista.filter(l => {
+      // La barra de vencidos cuenta desde el 01/09 (ver enElProceso.ts).
+      if (!entroEnElProceso(l)) return false;
       const next = parseLocalDateOnly(l.next_reminder_at);
       const last = l.last_interaction_at ? new Date(l.last_interaction_at) : null;
       if (quickFilter === 'overdue') return next && next < today;
@@ -353,6 +371,8 @@ export default function LeadsPage() {
     const tomorrow = new Date(today.getTime() + 86400000);
     const inWeek = new Date(today.getTime() + 7 * 86400000);
     return leads.filter(l => {
+      // La barra de vencidos cuenta desde el 01/09 (ver enElProceso.ts).
+      if (!entroEnElProceso(l)) return false;
       const next = parseLocalDateOnly(l.next_reminder_at);
       const last = l.last_interaction_at ? new Date(l.last_interaction_at) : null;
       if (quickFilter === 'overdue') return next && next < today;
@@ -377,6 +397,7 @@ export default function LeadsPage() {
     const inWeek = new Date(today.getTime() + 7 * 86400000);
     let overdue = 0, todayCount = 0, tomorrowCount = 0, weekCount = 0, noReminder = 0, noContact = 0;
     leads.forEach(l => {
+      if (!entroEnElProceso(l)) return;
       const next = parseLocalDateOnly(l.next_reminder_at);
       const last = l.last_interaction_at ? new Date(l.last_interaction_at) : null;
       if (next && next < today) overdue++;
@@ -725,15 +746,11 @@ export default function LeadsPage() {
             )}
           </button>
           <LeadsViewToggle active="list" />
-          <button
-            onClick={() => navigate('/leads/audiences')}
-            title="Audiencias para Meta/Google"
-            aria-label="Audiencias"
-            className="h-9 inline-flex items-center gap-1.5 px-2.5 sm:px-3 rounded-md border border-border bg-card text-xs sm:text-sm font-medium hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
-          >
-            <Export size={14} weight="bold" />
-            <span className="hidden md:inline">Audiencias</span>
-          </button>
+          {/* Aquí había un «Audiencias» que llevaba a /leads/audiences, y esa
+              pantalla no existe en ISEIE: la dirección la recogía /leads/:id y
+              abría la ficha de un prospecto «audiences». MultiCRM lo quitó de
+              aquí también (lo lleva en el bloque de accesos); en ISEIE no va ni
+              ahí, porque no hay adónde llevarlo. */}
           {filteredLeads.length > 0 && can('leads.export') && (
             <button
               onClick={abrirExport}
@@ -746,17 +763,9 @@ export default function LeadsPage() {
               <span className="hidden md:inline">Exportar</span>
             </button>
           )}
-          {(user?.role === 'admin' || user?.role === 'superadmin') && (
-            <button
-              onClick={() => navigate('/informes')}
-              title="Ir a Reportes (descargables)"
-              aria-label="Reportes"
-              className="h-9 inline-flex items-center gap-1.5 px-2.5 sm:px-3 rounded-md border border-border bg-card text-xs sm:text-sm font-medium hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
-            >
-              <ChartLineUp size={14} weight="bold" />
-              <span className="hidden md:inline">Reportes</span>
-            </button>
-          )}
+          {/* Y aquí un «Reportes», que llevaba al mismo sitio que el acceso
+              «Reportes» del bloque de abajo. Se queda el del bloque, como en
+              MultiCRM, y para los mismos: admin y superadmin. */}
           <button
             onClick={() => setWasapiOpen(true)}
             title="Descargar plantilla Wasapi (CSV bulk WhatsApp)"
@@ -819,6 +828,76 @@ export default function LeadsPage() {
         </div>
       </div>
 
+      {/* Los tres bloques de arriba, como en MultiCRM: qué pasa, qué toca hacer,
+          y a dónde se va desde aquí. Los números ya venían del servidor
+          (`/leads/stats`); solo se usaban para unas píldoras dentro del
+          desplegable de filtros, donde no los ve nadie.
+
+          «Piden atención» sale de los mismos contadores que los filtros rápidos
+          (`quickCounts`, sobre la página cargada y solo desde el 01/09), así que
+          pulsarla y filtrar por «urgentes» dicen lo mismo. */}
+      <CifrasProspectos
+        stats={stats}
+        urgencias={quickCounts}
+        filtroRapido={quickFilter}
+        onFiltroRapido={(clave) => setQuickFilter(clave || '')}
+      />
+
+      {/* Plegable y con memoria (#125): «está súper bien, pero que se pueda
+          desplegar». Ocupa la primera pantalla entera y empuja la tabla abajo
+          del todo — a quien viene a mirar la tabla le sobra, y a quien viene a
+          organizarse el día le hace falta. */}
+      <BloquePlegable
+        clave="prospectos-resumen"
+        // Diego, repaso del 15/09: «tiene que nacer cerrado, no desplegado».
+        // Quien ya lo dejó abierto lo sigue viendo abierto: lo guardado manda
+        // sobre el arranque.
+        abiertoPorDefecto={false}
+        titulo="Resumen del dia"
+        resumen={
+          quickCounts.urgent > 0
+            ? `${quickCounts.urgent} piden atención`
+            : 'Nada urgente'
+        }
+      >
+      <section className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(300px,0.9fr)_minmax(260px,0.7fr)]">
+        <SaludComercial
+          stats={stats}
+          onFiltroEstado={setFilterEstadoSafe}
+          onVerPipeline={() => navigate('/leads/pipeline')}
+        />
+        <SiguientesAcciones
+          leads={leads}
+          // El PANEL, no la ficha entera. Diego, 24/09: «y abra el panel, no la
+          // ficha completa». Desde aquí se entra a ver qué toca con alguien y
+          // se vuelve a la lista.
+          onAbrir={(id) => setDrawerLeadId(id)}
+          // Quita el filtro rápido —se ven todos, los vencidos arriba— y baja
+          // a la lista.
+          onVerTodos={() => {
+            setQuickFilter('');
+            document.getElementById('lista-de-prospectos')
+              ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }}
+        />
+        {/* Los accesos de MultiCRM son cuatro. «Audiencias» no viene: ISEIE no
+            tiene esa pantalla. Y Duplicados y Reportes solo para admin y
+            superadmin, que son los únicos que los ven en el menú y a los que el
+            servidor deja entrar; a una gestora la llevarían a un «sin permiso». */}
+        <AccesosClave
+          accesos={[
+            { label: 'Pipeline', detail: 'Arrastrar por estados', icon: Kanban, to: '/leads/pipeline' },
+            ...(user?.role === 'admin' || user?.role === 'superadmin'
+              ? [
+                { label: 'Duplicados', detail: 'Repetidos por webhook', icon: GitMerge, to: '/leads/revision-duplicados' },
+                { label: 'Reportes', detail: 'Números descargables', icon: ChartLineUp, to: '/informes' },
+              ]
+              : []),
+          ]}
+        />
+      </section>
+      </BloquePlegable>
+
       {/* v2 — UI limpia. TODOS los filtros viven dentro del dropdown "Filtros".
               Arriba quedan solo el botón Filtros + las pildoras de filtros activos. */}
       <LeadsFiltersBar
@@ -870,8 +949,9 @@ export default function LeadsPage() {
         </div>
       )}
 
-      {/* Table */}
-      <div className="bg-card rounded-lg border border-border">
+      {/* Table. El id es adonde baja «Ver todos» de Siguientes acciones: en
+          MultiCRM va en la fila de tramos de encima, que ISEIE no tiene. */}
+      <div id="lista-de-prospectos" className="bg-card rounded-lg border border-border scroll-mt-4">
         {/* Desktop table */}
         <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-[13px]">
@@ -1011,7 +1091,10 @@ export default function LeadsPage() {
                   </td>
                   <td className="px-5 py-3.5 text-muted-foreground">{lead.responsable_nombre || lead.gestor || 'Sin asignar'}</td>
                   <td className="px-5 py-3.5 text-right pr-3">
-                    <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} onEnrollSequence={(l) => setEnrollLeadId(l.id)} onSoftDelete={(user?.role === 'superadmin' || user?.role === 'admin') ? (l) => setDeletingLead(l) : undefined} onReportSpam={(user?.role === 'superadmin' || user?.role === 'admin') ? (l) => setReportingSpamLead(l) : undefined} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => navigate('/whatsapp/plantillas')} />
+                    <div className="flex items-center justify-end gap-1.5">
+                    <AtajosDeFicha leadId={lead.id} nombre={lead.nombre} onFichaRapida={() => setDrawerLeadId(lead.id)} />
+                    <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} onEnrollSequence={(l) => setEnrollLeadId(l.id)} onSoftDelete={puedeEliminar(lead) ? (l) => setDeletingLead(l) : undefined} onReportSpam={(user?.role === 'superadmin' || user?.role === 'admin') ? (l) => setReportingSpamLead(l) : undefined} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => navigate('/whatsapp/plantillas')} />
+                    </div>
                   </td>
                 </tr>
                 );
@@ -1075,7 +1158,10 @@ export default function LeadsPage() {
               </div>
               <div className="flex items-center justify-between pt-1 border-t border-border/60">
                 <span className="text-[11px] text-muted-foreground">{lead.responsable_nombre || 'Sin asignar'}</span>
-                <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} onEnrollSequence={(l) => setEnrollLeadId(l.id)} onSoftDelete={(user?.role === 'superadmin' || user?.role === 'admin') ? (l) => setDeletingLead(l) : undefined} onReportSpam={(user?.role === 'superadmin' || user?.role === 'admin') ? (l) => setReportingSpamLead(l) : undefined} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => navigate('/whatsapp/plantillas')} />
+                <span className="flex items-center gap-1.5">
+                <AtajosDeFicha leadId={lead.id} nombre={lead.nombre} onFichaRapida={() => setDrawerLeadId(lead.id)} />
+                <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} onEnrollSequence={(l) => setEnrollLeadId(l.id)} onSoftDelete={puedeEliminar(lead) ? (l) => setDeletingLead(l) : undefined} onReportSpam={(user?.role === 'superadmin' || user?.role === 'admin') ? (l) => setReportingSpamLead(l) : undefined} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => navigate('/whatsapp/plantillas')} />
+                </span>
               </div>
             </div>
           ))}

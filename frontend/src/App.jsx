@@ -83,6 +83,8 @@ const RolesPage = lazy(() => import('./modules/permissions/pages/RolesPage'));
 const FieldDefinitionsPage = lazy(() => import('./modules/field-definitions/pages/FieldDefinitionsPage'));
 const CategoriesTreePage = lazy(() => import('./modules/product-categories/pages/CategoriesTreePage'));
 const MatriculasPage = lazy(() => import('./modules/matriculas/pages/MatriculasPage'));
+const McpPage = lazy(() => import('./modules/mcp/pages/McpPage'));
+const ConnectorsPage = lazy(() => import('./modules/connectors/pages/ConnectorsPage'));
 const AccountsPayablePage = lazy(() => import('./modules/accounts-payable/pages/AccountsPayablePage'));
 const PayrollPage = lazy(() => import('./modules/payroll/pages/PayrollPage'));
 const DocumentsPage = lazy(() => import('./modules/documents/pages/DocumentsPage'));
@@ -98,6 +100,8 @@ const ColaDelDiaPage = lazy(() => import('./modules/proceso/pages/ColaDelDiaPage
 // El repaso de fin de mes: toda la base que no compro. No es la cola del dia.
 const SeguimientoPage = lazy(() => import('./modules/proceso/pages/SeguimientoPage'));
 const ProcesoPage = lazy(() => import('./modules/proceso/pages/ProcesoPage'));
+// Las becas: las campañas, su embudo y a quién se le debe respuesta (#86).
+const ConvocatoriasPage = lazy(() => import('./modules/convocatorias/pages/ConvocatoriasPage'));
 
 const ROUTE_TITLES = {
   '/dashboard':                       'Dashboard',
@@ -120,6 +124,9 @@ const ROUTE_TITLES = {
   '/accounting/facturas/configuracion':'Configuración de facturación',
   '/payroll':                         'Nóminas',
   '/matriculas':                      'Matrículas',
+  '/conexion/mcp':                    'MCP',
+  '/conexion/conectores':             'Conectores',
+  '/matriculas/certificaciones':      'Certificaciones',
   '/forms':                           'Formularios',
   '/make-webhooks':                   'Make / Webhooks',
   '/woocommerce':                     'WooCommerce',
@@ -201,6 +208,7 @@ function App() {
           <Route path="/leads/seguimiento"
             element={PROCESO_EN_PRUEBAS ? <SeguimientoPage /> : <Navigate to="/leads" replace />} />
           <Route path="/leads/proceso" element={<ProcesoPage />} />
+          <Route path="/leads/convocatorias" element={<ConvocatoriasPage />} />
           <Route path="/leads/:id" element={<LeadDetailPage />} />
           <Route path="/products" element={<ProductsPage />} />
           <Route path="/products/pending" element={<CoursesPendingPage />} />
@@ -237,6 +245,13 @@ function App() {
           <Route path="/soporte" element={<SoportePage />} />
           <Route path="/payroll" element={<PayrollPage />} />
           <Route path="/matriculas" element={<MatriculasPage />} />
+          {/* Conexión → MCP y Conectores, como en MultiCRM. Quién puede usar el MCP lo decide el servidor. */}
+          <Route path="/conexion/mcp" element={<McpPage />} />
+          <Route path="/conexion/conectores" element={<ConnectorsPage />} />
+          {/* Certifex vive dentro de Matrículas (Diego, 30/09). */}
+          <Route path="/matriculas/certificaciones" element={<MatriculasPage />} />
+          <Route path="/certifex/consultas" element={<Navigate to="/matriculas/certificaciones?vista=consultas" replace />} />
+          <Route path="/certifex/emisiones" element={<Navigate to="/matriculas/certificaciones" replace />} />
           <Route path="/forms" element={<FormsPage />} />
           <Route path="/captacion/whatsapp" element={<WhatsappWidgetPage />} />
           <Route path="/whatsapp" element={<ChatWhatsappPage />} />

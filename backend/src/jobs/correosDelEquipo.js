@@ -29,7 +29,7 @@ import { versionDe } from '../modules/feedback/cabecera.js';
  *
  * POR EMPRESA: las empresas de cada persona son las de los campus que tiene
  * asignados (una sociedad agrupa sus campus; un campus sin sociedad va solo).
- * Un superadmin sin campus asignados las ve todas. Tres empresas = un correo
+ * Un superadmin las ve todas, tenga los campus que tenga. Tres empresas = un correo
  * con tres secciones.
  *
  * NINGUNA CIFRA SE CUENTA AQUÍ: salen de las mismas funciones que pintan las
@@ -65,6 +65,28 @@ export const iso = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).
 const bonita = (isoDia) => { const [a, m, d] = isoDia.split('-').map(Number); return `${d} de ${MESES[m - 1]}`; };
 const diaSemana = (d) => `${DIAS[d.getDay()]} ${d.getDate()} de ${MESES[d.getMonth()]}`;
 const primerNombre = (s) => String(s || '').trim().split(/\s+/)[0] || '';
+
+// La hora de la aplicacion: la de Reportes y los listados.
+const TZ = process.env.APP_TIMEZONE || 'Europe/Madrid';
+const horaEspana = (d) => new Intl.DateTimeFormat('es-ES', {
+  timeZone: TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(d);
+
+/*
+  EL TRAMO DE HORAS DE «HOY», con la hora de España.
+
+  Diego, 29/09: «deberías de incluir el plazo de horas que salió eso». El
+  resumen sale a media tarde, y «hoy» son las horas que van del día, no uno
+  entero: por eso salía «−56 % vs. ayer» con 31 prospectos, comparados con el
+  día ENTERO de ayer. Sin decirlo, parecía que el día había ido a la mitad.
+
+  El día empieza a las 00:00 de la base, que está en UTC: es como cuentan
+  Reportes y «Ayer y hoy», y este correo tiene que decir lo mismo que ellos. En
+  España eso son las 02:00 en verano y la 01:00 en invierno, y así se dice.
+*/
+export function tramoDeHoy(ahora = new Date()) {
+  const inicio = new Date(`${iso(ahora)}T00:00:00Z`);
+  return `de ${horaEspana(inicio)} a ${horaEspana(ahora)} (hora de España)`;
+}
 
 /** ▲ +12 % / ▼ −5 % / «nuevo» respecto a antes. */
 export function comparar(ahora, antes) {
@@ -168,19 +190,21 @@ export async function proyectosDe(userId) {
 
 /**
  * Las EMPRESAS de una persona: sus campus agrupados por sociedad. Un campus sin
- * sociedad va como su propia «empresa». Un superadmin sin campus asignados
- * recibe todas.
+ * sociedad va como su propia «empresa». Un SUPERADMIN recibe todas, tenga los
+ * campus que tenga asignados: Manuel tiene los de CEDIA para trabajar y no le
+ * llegaban ni ICTESS ni Academia IA (Diego, 07/10: «faltan los reportes de
+ * academia y ictess que lleguen a manuelcasas»).
  */
 export async function empresasDe(persona) {
   let campus = await proyectosDe(persona.id);
-  if (!campus.length && persona.role === 'superadmin') {
+  if (persona.role === 'superadmin') {
     ({ rows: campus } = await query(
       `SELECT p.id, p.nombre, p.sociedad_emisora_id AS sociedad_id FROM projects p
         WHERE p.active AND NOT COALESCE(p.es_prueba, false) ORDER BY p.nombre`));
   }
   const ids = [...new Set(campus.map((c) => c.sociedad_id).filter(Boolean))];
   const { rows: socs } = ids.length
-    ? await query('SELECT id, razon_social, logo_url FROM invoice_issuers WHERE id = ANY($1::int[])', [ids])
+    ? await query('SELECT id, razon_social FROM invoice_issuers WHERE id = ANY($1::int[])', [ids])
     : { rows: [] };
   const grupos = new Map();
   for (const c of campus) {
@@ -189,11 +213,30 @@ export async function empresasDe(persona) {
     if (!grupos.has(clave)) {
       grupos.set(clave, {
         nombre: s ? s.razon_social : c.nombre,
-        logoUrl: s?.logo_url && /^https?:\/\//.test(s.logo_url) ? s.logo_url : null,
+        logoUrl: null,
         campus: [],
       });
     }
     grupos.get(clave).campus.push(c);
+  }
+  /*
+    EL LOGO DE LA EMPRESA ES EL DE SU MARCA, no la imagen de facturacion de la
+    sociedad: en ISEIE esa es el SELLO. Diego, 29/09: «pusiste el logo y sello,
+    pon el logo en ambos». Va dibujado sobre el color de la marca (la insignia
+    de `cabecera.js`), porque el logo de ISEIE es blanco.
+
+    Solo si la empresa es un campus. Una con varios (CEDIA, siete) no tiene un
+    logo suyo, y poner el de uno de sus campus seria decir que es ese.
+  */
+  const solos = [...grupos.values()].filter((g) => g.campus.length === 1).map((g) => g.campus[0].id);
+  const { rows: marcas } = solos.length
+    ? await query(
+      `SELECT id, nombre, logo_url, theme_color, to_jsonb(p) ->> 'color_cabecera' AS color_cabecera
+         FROM projects p WHERE id = ANY($1::int[])`, [solos])
+    : { rows: [] };
+  for (const g of grupos.values()) {
+    const m = g.campus.length === 1 ? marcas.find((x) => x.id === g.campus[0].id) : null;
+    if (m?.logo_url) g.logoUrl = `${base()}/api/f/insignia/${m.id}?v=${versionDe({ ...m, proyecto: m.nombre })}`;
   }
   // La que tiene mas campus, primero: suele ser la que mas pesa.
   return [...grupos.values()].sort((a, b) => b.campus.length - a.campus.length || a.nombre.localeCompare(b.nombre, 'es'));
@@ -277,7 +320,7 @@ export async function correoDiarioGestora(persona, ahora = new Date()) {
 
   const colaUrl = `${base()}${R.cola}`;
   const contenido = [
-    apartado('Hoy', { detalle: diaSemana(ahora) }),
+    apartado('Hoy', { detalle: `${diaSemana(ahora)} · ${tramoDeHoy(ahora)}` }),
     tarjetas([
       { etiqueta: 'Prospectos nuevos', valor: entero(hoy.leads), cmp: comparar(hoy.leads, ayer.leads), nota: 'vs. ayer' },
       { etiqueta: 'Contactos apuntados', valor: entero(contactos) },
@@ -300,8 +343,8 @@ export async function correoDiarioGestora(persona, ahora = new Date()) {
     ...(mes && mes.puesto ? [
       apartado('Tu mes', { detalle: `del 1 al ${ahora.getDate()} de ${MESES[ahora.getMonth()]}` }),
       tarjetas([
-        { etiqueta: 'Tu puesto', valor: `${mes.puesto}.º`, nota: `de ${mes.de}`, destaca: mes.puesto <= 3 },
-        { etiqueta: 'Ventas', valor: entero(mes.ventas), nota: mes.faltan_para_subir > 0 ? `${entero(mes.faltan_para_subir)} para subir un puesto` : '' },
+        { etiqueta: 'Tu puesto', valor: `${mes.puesto}.º`, nota: `de ${mes.de} · por lo facturado`, destaca: mes.puesto <= 3 },
+        { etiqueta: 'Facturado', valor: eur(mes.facturado), nota: mes.faltan_para_subir > 0 ? `${eur(mes.faltan_para_subir)} para subir un puesto` : `${entero(mes.ventas)} ventas` },
         { etiqueta: 'Tu conversión', valor: `${entero(mes.tasa)} %`, nota: `equipo ${entero(mes.tasa_equipo)} %` },
         { etiqueta: 'Vendido', valor: eur(mes.vendido) },
       ]),
@@ -343,10 +386,10 @@ export async function correoSemanalGestora(persona, ahora = new Date()) {
       { etiqueta: 'Prospectos recibidos', valor: entero(ls.total), cmp: comparar(ls.total, la.total) },
       { etiqueta: 'Ventas', valor: entero(cs.total), cmp: comparar(cs.total, ca.total), destaca: n(cs.total) > 0 },
       { etiqueta: 'Tu conversión', valor: `${entero(puesto?.tasa)} %`, nota: puesto ? `equipo ${entero(puesto.tasa_equipo)} %` : '' },
-      { etiqueta: 'Tu puesto', valor: puesto?.puesto ? `${puesto.puesto}.º` : '—', nota: puesto?.puesto ? `de ${puesto.de}${puestoAntes?.puesto ? ` · la semana anterior ${puestoAntes.puesto}.º` : ''}` : 'sin ventas ni prospectos' },
+      { etiqueta: 'Tu puesto', valor: puesto?.puesto ? `${puesto.puesto}.º` : '—', nota: puesto?.puesto ? `de ${puesto.de} por lo facturado${puestoAntes?.puesto ? ` · la semana anterior ${puestoAntes.puesto}.º` : ''}` : 'sin ventas ni prospectos' },
     ]),
     parrafo(puesto?.faltan_para_subir > 0
-      ? `Te faltaron <strong>${entero(puesto.faltan_para_subir)} ventas</strong> para subir un puesto. La mejor de la semana hizo ${entero(puesto.mejor_ventas)}.`
+      ? `Facturaste <strong>${eur(puesto.facturado)}</strong>. Te faltaron <strong>${eur(puesto.faltan_para_subir)}</strong> para subir un puesto; la mejor de la semana facturó ${eur(puesto.mejor_facturado)}.`
       : (puesto?.puesto === 1 ? '<strong>Fuiste la primera de la semana.</strong> Enhorabuena.' : '')),
     apartado('La semana que empieza', { detalle: 'tu cola del proceso comercial' }),
     tarjetas([
@@ -433,7 +476,7 @@ export async function correoDiarioDireccion(persona, ahora = new Date()) {
       cabeceraUrl: empresas.length === 1 ? await cabeceraPara(empresas[0].campus) : await cabeceraPara([]),
       preTitulo: 'Resumen del día',
       titulo: `${diaSemana(ahora)[0].toUpperCase()}${diaSemana(ahora).slice(1)}`,
-      subtitulo: `${empresas.length > 1 ? `Tus ${empresas.length} empresas, cada una con sus cifras.` : 'Cómo ha ido el día.'} Prospectos y ventas cuentan como «Ayer y hoy»; lo cobrado, los pagos registrados hoy.`,
+      subtitulo: `${empresas.length > 1 ? `Tus ${empresas.length} empresas, cada una con sus cifras.` : 'Cómo ha ido el día.'} Hoy cuenta <strong>${tramoDeHoy(ahora)}</strong>, y «vs. ayer» lo compara con el día entero de ayer. Ventas y cobrado: los que llevan fecha de hoy.`,
       contenido: partes.join('') + boton('Abrir Reportes', `${base()}${R.informes}`),
     }),
   };
@@ -459,8 +502,9 @@ export async function correoSemanalDireccion(persona, ahora = new Date()) {
     const cs = s.conversions || {}; const ca = a.conversions || {};
     const tasa = n(ls.total) ? Math.round((n(ls.convertido) / n(ls.total)) * 1000) / 10 : 0;
     const tasaA = n(la.total) ? Math.round((n(la.convertido) / n(la.total)) * 1000) / 10 : 0;
+    // Por lo facturado (Diego, 30/09), que es por lo que ordena `miPuesto`.
     const filas = (puesto?.tabla || []).slice(0, 12).map((g) => [
-      `${g.puesto}. ${esc(g.nombre || '—')}`, entero(g.leads), entero(g.ventas), `${entero(g.tasa)} %`, eur(g.cobrado),
+      `${g.puesto}. ${esc(g.nombre || '—')}`, eur(g.facturado), entero(g.ventas), `${entero(g.tasa)} %`, eur(g.cobrado),
     ]);
     partes.push([
       apartado(e.nombre, { logoUrl: e.logoUrl, detalle: e.campus.length > 1 ? `${e.campus.length} campus` : '' }),
@@ -470,7 +514,7 @@ export async function correoSemanalDireccion(persona, ahora = new Date()) {
         { etiqueta: 'Cobrado', valor: eur(cob), cmp: comparar(cob, cobA) },
         { etiqueta: 'Conversión', valor: `${entero(tasa)} %`, nota: `la anterior ${entero(tasaA)} %` },
       ]),
-      filas.length ? `<div style="font-size:13px;font-weight:bold;color:${GRIS};margin:18px 0 0">Ranking de la semana</div>${tabla(['Gestora', 'Prosp.', 'Ventas', 'Conv.', 'Cobrado'], filas)}` : '',
+      filas.length ? `<div style="font-size:13px;font-weight:bold;color:${GRIS};margin:18px 0 0">Ranking de la semana</div>${tabla(['Gestora', 'Facturado', 'Ventas', 'Conv.', 'Cobrado'], filas)}` : '',
     ].join(''));
   }
   return {
@@ -479,7 +523,7 @@ export async function correoSemanalDireccion(persona, ahora = new Date()) {
       cabeceraUrl: empresas.length === 1 ? await cabeceraPara(empresas[0].campus) : await cabeceraPara([]),
       preTitulo: 'Reporte semanal',
       titulo: `Semana del ${bonita(semana.from)} al ${bonita(semana.to)}`,
-      subtitulo: `${empresas.length > 1 ? `Tus ${empresas.length} empresas, cada una con sus cifras. ` : ''}Comparada con la semana anterior. Prospectos, ventas y ranking cuentan como Reportes y «Cómo voy»; lo cobrado sale de los pagos registrados.`,
+      subtitulo: `${empresas.length > 1 ? `Tus ${empresas.length} empresas, cada una con sus cifras. ` : ''}Comparada con la semana anterior. El ranking es por lo facturado, como en «Cómo voy»; prospectos y ventas cuentan como Reportes, y lo cobrado sale de los pagos registrados.`,
       contenido: partes.join('') + boton('Abrir Reportes', `${base()}${R.informes}`),
     }),
   };

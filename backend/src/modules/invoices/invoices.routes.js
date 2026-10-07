@@ -58,6 +58,9 @@ router.patch('/:id/asociar',          roleGuard('admin', 'superadmin', 'gestor')
 router.get('/:id/pdf',                ctrl.pdf);
 router.post('/:id/send',              ctrl.send);
 router.post('/:id/mark-paid',         ctrl.markPaid);
+// «Cobrada» en una proforma: apunta el cobro y la pasa a factura. El servicio
+// deja solo a quien lleva la facturacion, y a una gestora, con las suyas.
+router.post('/:id/cobrar-proforma',   roleGuard('admin', 'superadmin', 'gestor'), ctrl.cobrarProforma);
 router.post('/:id/cancel',            ctrl.cancel);
 // Eliminar factura + liberar número (errores de carga): SOLO admin/superadmin.
 router.delete('/:id',                 roleGuard('admin', 'superadmin', 'gestor'), ctrl.destroy);

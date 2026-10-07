@@ -93,9 +93,45 @@ export async function findById(id) {
   return rows[0] || null;
 }
 
+// Sin distinguir mayúsculas, como el login y como Make: hay correos guardados con
+// mayúsculas («Albertoj@iseie.com») y con `email = $1` otro podía quedarse con el
+// mismo cambiando solo una letra (#248).
 export async function findByEmail(email) {
-  const { rows } = await query(`SELECT id FROM users WHERE email = $1`, [email]);
+  const { rows } = await query(`SELECT id FROM users WHERE LOWER(email) = LOWER($1)`, [email]);
   return rows[0] || null;
+}
+
+/**
+ * Si cambiarle el correo a alguien puede dejarle sin prospectos (#248).
+ *
+ * Make asigna el responsable de un prospecto por su correo (`responsable_email`,
+ * cabecera X-Asesora-Email): si se cambia aquí y no en Make, ese prospecto ya no
+ * le llega y se reparte a otra, sin error. Se mira si la persona:
+ *   · entra en el reparto de algún campus (mismas reglas que `reparto.js`);
+ *   · tiene prospectos asignados;
+ *   · aparece por su correo en los envíos de Make.
+ */
+export async function avisoCambioCorreo(id) {
+  const { rows: [r] } = await query(
+    `SELECT u.email,
+            (SELECT COUNT(*)::int FROM user_projects up
+              WHERE up.user_id = u.id AND up.active = true
+                AND (u.role = 'gestor' OR (u.role IN ('admin','superadmin') AND up.recibe_leads = TRUE))
+                AND NOT COALESCE(u.gestor_colaboraciones, false)) AS campus_en_reparto,
+            (SELECT COUNT(*)::int FROM leads l WHERE l.responsable_id = u.id) AS prospectos_asignados,
+            (SELECT COUNT(*)::int FROM make_webhook_deliveries d
+              WHERE LOWER(d.mapped->>'responsable_email') = LOWER(u.email)) AS envios_de_make
+       FROM users u WHERE u.id = $1`,
+    [id]
+  );
+  if (!r) return null;
+  return {
+    email: r.email,
+    campusEnReparto: r.campus_en_reparto,
+    prospectosAsignados: r.prospectos_asignados,
+    enviosDeMake: r.envios_de_make,
+    recibeProspectos: r.campus_en_reparto > 0 || r.prospectos_asignados > 0 || r.envios_de_make > 0,
+  };
 }
 
 export async function getUserProjects(userId) {

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { verifyToken, roleGuard } from '../../shared/middleware/auth.js';
+import { checkPermission } from '../../shared/middleware/permissions.js';
 import * as leadController from './lead.controller.js';
 import * as leadEmailsController from './lead-emails.controller.js';
 import * as spamReportController from './spam-report.controller.js';
@@ -89,7 +90,16 @@ router.patch('/:id/reassign', roleGuard('admin', 'superadmin'), leadController.r
 
 // Soft delete / restore: SOLO superadmin (audit trail importante).
 // #15: admin y superadmin pueden eliminar (soft-delete). Restore solo superadmin.
-router.delete('/:id', roleGuard('admin', 'superadmin'), leadController.softDelete);
+// #204: y quien tenga el permiso `leads.delete` (una gestora a la que se le da
+// en Permisos). Hasta hoy ese permiso existia en el catalogo pero esta ruta no
+// lo miraba: marcarlo no hacia nada. Lo que puede borrar ella lo acota el
+// controlador.
+const soloJefes = roleGuard('admin', 'superadmin');
+const conPermisoDeBorrar = checkPermission('leads', 'delete');
+function puedeEliminar(req, res, next) {
+  soloJefes(req, res, (noEsJefe) => (noEsJefe ? conPermisoDeBorrar(req, res, next) : next()));
+}
+router.delete('/:id', puedeEliminar, leadController.softDelete);
 router.patch('/:id/restore', roleGuard('superadmin'), leadController.restore);
 
 // Asignar pendientes: re-aplica round-robin a leads con responsable_id IS NULL.

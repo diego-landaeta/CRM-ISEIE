@@ -1,5 +1,6 @@
 import * as model from './tutor.model.js';
 import * as userService from '../users/user.service.js';
+import { adminSetPasswordSchema } from '../users/user.validation.js';
 import * as dossierService from '../dossiers/dossier.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import {
@@ -7,6 +8,10 @@ import {
   editarColaboracionSchema, ajustesSchema, calcularSchema, liquidarSchema,
   busquedaDeTutorSchema,
 } from './tutor.validation.js';
+import { NO_ESCRIBIR_A_TUTORES } from '../../shared/config/frenoTutores.js';
+// Se usaba en Comisiones y en Pagos sin formación sin importarla: las dos daban
+// 500 «proyectosDelAmbito is not defined» (Manuel, 02/10). En MultiCRM sí estaba.
+import { proyectosDelAmbito, veTodoElCrm, campusDeLaPersona } from '../../shared/utils/ambito.js';
 
 // Quien manda aqui.
 //
@@ -29,6 +34,20 @@ async function puedeGestionar(req) {
 async function exigirGestion(req) {
   if (!(await puedeGestionar(req))) {
     throw new AppError('No puedes gestionar colaboraciones', 403, 'FORBIDDEN');
+  }
+}
+
+/**
+ * La ficha de un tutor, solo si comparte algún campus con quien la pide (#245).
+ * Gestionar colaboraciones no basta: Mireia (CEDIA) podía abrir la de un
+ * profesor de ICTESS cambiando el id. Se contesta «no encontrado», como si no
+ * existiera, para no confirmar que ese id es un tutor de otra empresa.
+ */
+async function exigirTutorDeMisCampus(req, tutorId) {
+  if (req.user.userId === tutorId || veTodoElCrm(req.user)) return;
+  const mios = await campusDeLaPersona(req.user.userId);
+  if (!(await model.tieneAlgunCampus(tutorId, mios))) {
+    throw new AppError('Tutor no encontrado', 404, 'NOT_FOUND');
   }
 }
 
@@ -55,6 +74,7 @@ export async function ficha(req, res, next) {
     // Un tutor puede ver SU ficha; el resto necesita permiso de gestion.
     const id = parseInt(req.params.id);
     if (req.user.userId !== id) await exigirGestion(req);
+    await exigirTutorDeMisCampus(req, id);
     const t = await model.ficha(id);
     if (!t) throw new AppError('Tutor no encontrado', 404, 'NOT_FOUND');
     res.json({ success: true, data: t });
@@ -66,6 +86,13 @@ export async function alta(req, res, next) {
   try {
     await exigirGestion(req);
     const d = valida(altaTutorSchema, req.body);
+
+    // Con el freno de correos a tutores puesto, el alta SIN contraseña dejaria
+    // a la persona sin forma de entrar: no le llega ningun correo para ponerla.
+    // Diego, 01/10: «esa opción para tutores no debe de mandarse ni hacerse».
+    if (NO_ESCRIBIR_A_TUTORES && !d.password) {
+      throw new AppError('Ponle una contraseña: a los tutores no se les manda ningún correo.', 400, 'CONTRASENA_OBLIGATORIA');
+    }
 
     // Se reutiliza el alta de usuarios tal cual: contraseña temporal, token de
     // 24 horas y correo de Brevo con el enlace para poner contraseña. No hay
@@ -96,15 +123,26 @@ export async function guardarPerfil(req, res, next) {
   try {
     const id = parseInt(req.params.id);
     if (req.user.userId !== id) await exigirGestion(req);
+    await exigirTutorDeMisCampus(req, id);
     const d = valida(perfilSchema, req.body);
 
     // El correo, si viene y es otro. Va antes que el perfil: si el correo choca
     // con el de otro usuario, no se guarda nada — mejor que dejar el IBAN
     // puesto y el correo no, que es como se pierde la pista de lo que paso.
+    //
+    // Solo el super admin, y solo de un TUTOR (#248). Antes lo cambiaba quien
+    // gestiona colaboraciones, el propio tutor, y por este camino también el de
+    // cualquier usuario, super admin incluido, con su identificador.
     let correo = null;
-    if (d.email) correo = await userService.cambiarCorreo(id, d.email, {
-      reenviarEnlace: d.reenviarEnlace === true,
-    });
+    if (d.email) {
+      if (req.user.role !== 'superadmin') {
+        throw new AppError('Solo un superadmin puede cambiar el correo', 403, 'FORBIDDEN');
+      }
+      if (!(await model.ficha(id))) throw new AppError('Ese tutor no existe', 404, 'NOT_FOUND');
+      correo = await userService.cambiarCorreo(id, d.email, {
+        reenviarEnlace: d.reenviarEnlace === true, porUserId: req.user.userId, ip: req.ip,
+      });
+    }
 
     // El nombre va aparte del perfil: es de `users`, no de `tutor_profiles`.
     if (d.nombre) await model.renombrarTutor(id, d.nombre);
@@ -210,7 +248,10 @@ export async function borrarColaboracion(req, res, next) {
 export async function ajustes(req, res, next) {
   try {
     await exigirGestion(req);
-    res.json({ success: true, data: await model.ajustes() });
+    // `correos_a_tutores`: si el CRM les escribe. Con el freno puesto, la
+    // pantalla no ofrece nada que dependa de un correo (alta sin contraseña,
+    // «mandarle el enlace») ni dice que se le vaya a mandar.
+    res.json({ success: true, data: { ...(await model.ajustes()), correos_a_tutores: !NO_ESCRIBIR_A_TUTORES } });
   } catch (err) { next(err); }
 }
 
@@ -464,21 +505,25 @@ export async function brochureDelCurso(req, res, next) {
 
 // POST /api/tutores/:id/contrasena — ponerle una contraseña nueva.
 //
-// La pone quien gestiona colaboraciones: es lo que pasa de verdad cuando un
-// profesor la pierde y escribe por WhatsApp un domingo. Antes habia que ser
-// administrador y el profesor se quedaba fuera hasta el lunes.
+// Solo el super admin (#248, Diego 06/10: «que el superadmin pueda cambiar el
+// correo y contraseña de todos los usuarios, tutores, gestores, todo»). Antes la
+// ponía también quien gestiona colaboraciones.
+//
+// Con las mismas reglas que «Establece tu contraseña», repetida, y cerrando las
+// sesiones abiertas del tutor: es el mismo cambio que desde Usuarios.
 //
 // Solo vale para TUTORES: por aqui no se le puede cambiar la clave a una
 // gestora ni a un administrador, aunque se pruebe con su identificador.
 export async function cambiarContrasena(req, res, next) {
   try {
-    await exigirGestion(req);
+    if (req.user.role !== 'superadmin') {
+      throw new AppError('Solo un superadmin puede cambiar la contraseña', 403, 'FORBIDDEN');
+    }
     const id = parseInt(req.params.id);
     const t = await model.ficha(id);
     if (!t) throw new AppError('Ese tutor no existe', 404, 'NOT_FOUND');
-    const nueva = String(req.body?.password || '');
-    if (nueva.length < 8) throw new AppError('La contraseña necesita al menos 8 caracteres', 400, 'CORTA');
-    await model.ponerContrasena(id, nueva);
+    const { password } = valida(adminSetPasswordSchema, req.body);
+    await userService.setPassword(id, password, { porUserId: req.user.userId, ip: req.ip });
     res.json({ success: true, data: { id, nombre: t.nombre, email: t.email } });
   } catch (err) { next(err); }
 }

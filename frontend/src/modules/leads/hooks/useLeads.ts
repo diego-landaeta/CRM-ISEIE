@@ -42,6 +42,7 @@ export interface LeadStats {
   en_seguimiento: number;
   convertido: number;
   no_interesado: number;
+  sin_asignar: number;
 }
 
 export interface UseLeadsResult {
@@ -260,6 +261,10 @@ export function useLeads(): UseLeadsResult {
         en_seguimiento: Number(merged.en_seguimiento) || 0,
         convertido: Number(merged.convertidos) || 0,
         no_interesado: Number(merged.no_interesados) || 0,
+        // El servidor ya lo devolvía (lead.model.js: responsable_id IS NULL y
+        // aún vivo) y aquí se tiraba. Es la cifra «Sin asignar» de arriba: dice
+        // si hay prospectos que no está trabajando nadie.
+        sin_asignar: Number(merged.sin_asignar) || 0,
       } as Partial<LeadStats>);
     } catch {
       // Stats son secundarios, no bloquear UI

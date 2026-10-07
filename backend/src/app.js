@@ -52,6 +52,8 @@ import procesoModule from './modules/proceso/index.js';
 // «¿Por que has desistido?» (#169) y su panel (#170).
 import feedbackModule from './modules/feedback/index.js';
 import novedadesModule from './modules/novedades/index.js';
+import certifexModule from './modules/certifex/index.js';
+import mcpModule from './modules/mcp/index.js';
 import { startFeedbackDia7Scheduler } from './jobs/feedbackDia7Scheduler.js';
 import { startNovedadesScheduler } from './jobs/novedadesScheduler.js';
 import convocatoriasModule from './modules/convocatorias/index.js';
@@ -67,6 +69,8 @@ import { startVigilanteCatalogoScheduler } from './jobs/vigilanteCatalogoSchedul
 import { startLeadSinTocarScheduler } from './jobs/leadSinTocarScheduler.js';
 import { startResumenDiarioScheduler } from './jobs/resumenDiarioScheduler.js';
 import { startReporteSemanalScheduler } from './jobs/reporteSemanalScheduler.js';
+import { startMcpRotacionScheduler } from './jobs/mcpRotacionScheduler.js';
+import { startMcpVigilanciaScheduler } from './jobs/mcpVigilanciaScheduler.js';
 
 const app = express();
 const PORT = process.env.PORT || 3005;
@@ -258,6 +262,10 @@ const MODULES = [
   feedbackModule,
   novedadesModule,
   convocatoriasModule,
+  // Certifex: el CRM aprueba y Certifex emite (Matrículas → Certificaciones).
+  certifexModule,
+  // Conexion de Claude por MCP: solo consulta, con token personal (como MultiCRM).
+  mcpModule,
 ];
 
 for (const mod of MODULES) {
@@ -341,6 +349,23 @@ if (process.env.NODE_ENV !== 'test') {
         startReporteSemanalScheduler();
       } catch (err) {
         logger.error({ err }, 'Stripe sync scheduler fallo al arrancar');
+      }
+    }
+    // Seguridad del MCP (#237, desde #194 y #195): fuera del bloque de Stripe
+    // a propósito, para que apagar la sincronización de Stripe no la apague.
+    // Cada uno con su interruptor en el .env, como los demás trabajos.
+    if (process.env.MCP_ROTACION_DISABLED !== '1') {
+      try {
+        startMcpRotacionScheduler();
+      } catch (err) {
+        logger.error({ err }, 'MCP: la rotación de URLs falló al arrancar');
+      }
+    }
+    if (process.env.MCP_VIGILANCIA_DISABLED !== '1') {
+      try {
+        startMcpVigilanciaScheduler();   // alertas de uso raro
+      } catch (err) {
+        logger.error({ err }, 'MCP: la vigilancia de alertas falló al arrancar');
       }
     }
   });

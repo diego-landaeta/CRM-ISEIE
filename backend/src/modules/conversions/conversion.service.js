@@ -4,6 +4,7 @@ import * as commissionModel from '../commissions/commission.model.js';
 import * as seqModel from '../email-sequences/sequence.model.js';
 import { query } from '../../shared/config/db.js';
 import { logger } from '../../shared/utils/logger.js';
+import * as leadModel from '../leads/lead.model.js';
 
 async function triggerSequences(triggerEvent, leadId, projectId) {
   try {
@@ -281,5 +282,43 @@ export async function remove(id, { reason, motivo, userId } = {}) {
   }
 
   await conversionModel.deleteConversion(id);
+  await devolverEstadoSiNoQuedanVentas(existing.lead_id, userId);
   return { message: 'Conversion eliminada', reason, motivo };
+}
+
+/*
+  BORRAR LA ULTIMA VENTA DEVUELVE LA FICHA A DONDE ESTABA (06/10).
+
+  Registrar una venta pone la ficha en «convertido»; borrarla la dejaba ahi. Con
+  ninguna venta, no salia ni en Prospectos (esconde los convertidos) ni en
+  Clientes (solo los que tienen venta). Paso en MultiCRM con Orlando
+  Villalobos (ICTESS): venta registrada a las 17:03, borrada a las 19:24 como
+  «Error al cargar», y al dia siguiente no lo encontraba. Igual aqui.
+
+  Vuelve al ultimo estado que tuvo antes de «convertido» (el historial), y si no
+  hay ninguno, a «contactado»: si se le llego a vender, se hablo con el. Solo si
+  ya no le queda ninguna venta y sigue en «convertido» --si alguien lo cambio a
+  mano despues, eso manda--.
+
+  Con `updateStatus` (estado + historial) y no con `changeStatus`, que dispara
+  las secuencias de correo de «cambio de estado»: borrar una venta mal cargada
+  no puede escribirle a nadie. Y si falla, la venta ya esta borrada: se avisa en
+  el registro y ya.
+*/
+async function devolverEstadoSiNoQuedanVentas(leadId, userId) {
+  if (!leadId) return;
+  try {
+    const { rows: [l] } = await query(
+      `SELECT l.status,
+              EXISTS (SELECT 1 FROM conversions c WHERE c.lead_id = l.id) AS quedan_ventas,
+              (SELECT h.status_nuevo FROM lead_status_history h
+                WHERE h.lead_id = l.id AND h.status_nuevo <> 'convertido'
+                ORDER BY h.changed_at DESC, h.id DESC LIMIT 1) AS antes
+         FROM leads l WHERE l.id = $1`,
+      [leadId]);
+    if (!l || l.quedan_ventas || l.status !== 'convertido') return;
+    await leadModel.updateStatus(leadId, l.antes || 'contactado', 'convertido', userId || null);
+  } catch (err) {
+    logger.warn({ err: err.message, leadId }, 'No se pudo devolver la ficha a su estado tras borrar su ultima venta');
+  }
 }

@@ -1,4 +1,5 @@
 import { query } from '../config/db.js';
+import { AppError } from './AppError.js';
 
 /*
   De qué va lo que se está mirando: un proyecto, una sociedad entera, o todo.
@@ -21,7 +22,29 @@ import { query } from '../config/db.js';
   configuración NO: un webhook, un formulario o una plantilla se montan PARA UN
   PROYECTO, y «el webhook de CEDIA» no existe. Ahí el muro de «elige un
   proyecto» es la respuesta correcta, no un fallo.
+
+  SIEMPRE DENTRO DE LO TUYO (#245, 06/10). Antes esto solo miraba lo que
+  llegaba en la URL: sin campus ni empresa devolvía «todo el CRM», y con el
+  `issuerId` de otra empresa la daba entera. Así Mireia, admin de CEDIA, veía en
+  Tutores a un profesor de ICTESS con su IBAN y su DNI. Ahora el ámbito se
+  recorta por los campus de la persona (`user_projects`): «Todos» son SUS
+  campus, una empresa son SUS campus de esa empresa, y un campus que no es suyo
+  es un 403. Super admin y soporte siguen viéndolo todo: el mismo criterio que
+  el middleware `projectAccess`.
 */
+
+/** Quien ve el CRM entero. El mismo criterio que `projectAccess`: por el rol principal. */
+export function veTodoElCrm(user) {
+  return ['superadmin', 'soporte'].includes(user?.role);
+}
+
+/** Los campus de una persona (sus `user_projects` activos). */
+export async function campusDeLaPersona(userId) {
+  if (!userId) return [];
+  const { rows } = await query(
+    'SELECT project_id FROM user_projects WHERE user_id = $1 AND active = true ORDER BY project_id', [userId]);
+  return rows.map((r) => Number(r.project_id));
+}
 
 /**
  * Resuelve el ámbito que pide la petición.
@@ -34,18 +57,33 @@ import { query } from '../config/db.js';
  */
 export async function proyectosDelAmbito(req) {
   const issuerId = req.query?.issuerId ? Number(req.query.issuerId) : null;
+  const projectId = req.query?.projectId ? Number(req.query.projectId) : null;
+  let pedido;
   if (!issuerId) {
-    return {
-      projectId: req.query?.projectId ? Number(req.query.projectId) : null,
-      projectIds: null,
-    };
+    pedido = { projectId, projectIds: null };
+  } else {
+    const { rows } = await query(
+      'SELECT id FROM projects WHERE sociedad_emisora_id = $1 ORDER BY id', [issuerId]);
+    // Una sociedad sin proyectos NO puede acabar significando «todos»: sería
+    // enseñar de más justo cuando se pidió acotar. Se devuelve una lista que no
+    // casa con nada y la pantalla sale vacía, que es la respuesta honesta.
+    pedido = { projectId: null, projectIds: rows.length ? rows.map((r) => Number(r.id)) : [-1] };
   }
-  const { rows } = await query(
-    'SELECT id FROM projects WHERE sociedad_emisora_id = $1 ORDER BY id', [issuerId]);
-  // Una sociedad sin proyectos NO puede acabar significando «todos»: sería
-  // enseñar de más justo cuando se pidió acotar. Se devuelve una lista que no
-  // casa con nada y la pantalla sale vacía, que es la respuesta honesta.
-  return { projectId: null, projectIds: rows.length ? rows.map((r) => r.id) : [-1] };
+  if (veTodoElCrm(req.user)) return pedido;
+
+  // El resto, solo dentro de sus campus (#245). Lo mismo que arriba: quedarse
+  // sin ninguno es una lista que no casa con nada, nunca «todos».
+  const mios = await campusDeLaPersona(req.user?.userId);
+  const soloMios = (ids) => {
+    const quedan = ids.filter((id) => mios.includes(Number(id)));
+    return quedan.length ? quedan : [-1];
+  };
+  if (issuerId) return { projectId: null, projectIds: soloMios(pedido.projectIds) };
+  if (projectId) {
+    if (!mios.includes(projectId)) throw new AppError('No tienes acceso a ese campus', 403, 'FORBIDDEN');
+    return pedido;
+  }
+  return { projectId: null, projectIds: mios.length ? mios : [-1] };
 }
 
 /**

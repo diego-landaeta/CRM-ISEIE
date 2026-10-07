@@ -29,6 +29,20 @@ input::-ms-clear { display: none; }
     --accent-foreground: 220 100% 23%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
+    --destructive-soft: 0 86% 97%;             /* red-50 */
+    --destructive-soft-foreground: 0 74% 42%;  /* red-700 */
+    --success: 163 94% 24%;
+    --success-foreground: 0 0% 100%;
+    --success-soft: 152 81% 96%;
+    --success-soft-foreground: 163 94% 24%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 21 92% 14%;
+    --warning-soft: 48 100% 96%;
+    --warning-soft-foreground: 26 90% 37%;
+    --info: 221 83% 53%;
+    --info-foreground: 0 0% 100%;
+    --info-soft: 214 100% 97%;
+    --info-soft-foreground: 224 76% 48%;
     --border: 220 13% 91%;
     --input: 220 13% 91%;
     --ring: 220 100% 23%;
@@ -58,6 +72,20 @@ input::-ms-clear { display: none; }
     --accent-foreground: 215 78% 70%;
     --destructive: 0 70% 55%;
     --destructive-foreground: 0 0% 100%;
+    --destructive-soft: 0 75% 15%;             /* red-950 */
+    --destructive-soft-foreground: 0 91% 71%;  /* red-400 */
+    --success: 160 84% 39%;
+    --success-foreground: 166 91% 9%;
+    --success-soft: 166 91% 9%;
+    --success-soft-foreground: 158 64% 52%;
+    --warning: 43 96% 56%;
+    --warning-foreground: 21 92% 14%;
+    --warning-soft: 21 92% 14%;
+    --warning-soft-foreground: 43 96% 56%;
+    --info: 213 94% 68%;
+    --info-foreground: 226 57% 21%;
+    --info-soft: 226 57% 21%;
+    --info-soft-foreground: 213 94% 68%;
     --border: 220 16% 22%;
     --input: 220 16% 22%;
     --ring: 215 78% 58%;

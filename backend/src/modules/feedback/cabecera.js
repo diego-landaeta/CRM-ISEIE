@@ -22,14 +22,22 @@ import { logger } from '../../shared/utils/logger.js';
  * marca en el panel cambia la versión, y el correo siguiente pide la nueva.
  */
 
-// Al doble del tamaño con el que se ve (560 × 88): en retina no sale borroso.
+// Al doble del tamaño con el que se ve (560 × 132): en retina no sale borroso.
+//
+// Antes era 560 × 88 con el logo en 520 × 104. Carlos, 02/10 (#213): en el
+// móvil la cabecera se queda en unos 300 px de ancho y el logo de Psiko —de
+// trazo fino y casi cuadrado— medía 25 px de alto: no se distinguía. Más alta y
+// con el logo más grande se reconoce en las 10 marcas (comprobado una a una).
 const ANCHO = 1120;
-const ALTO = 176;
+const ALTO = 264;
 const FILETE = 8;
-const MARGEN = 48;
-const LOGO_ALTO = 104;
-const LOGO_ANCHO = 520;
+const MARGEN = 56;
+const LOGO_ALTO = 184;
+const LOGO_ANCHO = 760;
 const MAX_EN_MEMORIA = 60;
+// Entra en la versión: si cambian las medidas, cambia la dirección de la imagen
+// y Gmail no sigue enseñando la vieja que tiene guardada.
+const DISENO = '2';
 
 // `${id}:${version}` -> la promesa del PNG: si llegan diez peticiones a la vez
 // para una marca sin dibujar, se dibuja una vez, no diez.
@@ -40,7 +48,7 @@ const hex = (v) => (/^#[0-9a-f]{6}$/i.test(v || '') ? v : null);
 /** La versión de la cabecera: cambia en cuanto cambia el logo o un color. */
 export function versionDe(marca) {
   return crypto.createHash('sha1')
-    .update([marca.logo_url, marca.color_cabecera, marca.theme_color, marca.proyecto || marca.nombre].join('|'))
+    .update([DISENO, marca.logo_url, marca.color_cabecera, marca.theme_color, marca.proyecto || marca.nombre].join('|'))
     .digest('hex').slice(0, 10);
 }
 
@@ -110,6 +118,63 @@ export async function servir(req, res, next) {
     if (!png) return res.status(404).end();
     res.set('Content-Type', 'image/png');
     // La URL lleva la versión (?v=...): se puede guardar un día sin miedo.
+    res.set('Cache-Control', 'public, max-age=86400');
+    return res.send(png);
+  } catch (err) {
+    return next(err);
+  }
+}
+
+/*
+  LA INSIGNIA: el logo solo, sobre el fondo de su marca, para la fila de cada
+  empresa en los resúmenes al equipo.
+
+  Diego, 29/09, sobre el resumen del día de ISEIE: «pusiste el logo y sello, pon
+  el logo en ambos». Arriba iba la cabecera con el logo y, en la fila de la
+  empresa, la imagen de FACTURACIÓN de la sociedad, que en ISEIE es el sello.
+
+  Se dibuja por lo mismo que la cabecera: el logo de ISEIE es blanco, pensado
+  para ir sobre el azul, y pegado tal cual en un correo blanco no se ve. Así
+  sale sobre su color, opaco, igual en el tema claro y en el oscuro.
+*/
+// Al doble de como se ve (40 px de alto).
+const INSIGNIA_ALTO = 80;
+const INSIGNIA_MARGEN = 14;
+const INSIGNIA_LOGO_ANCHO = 360;
+
+export async function dibujarInsignia(marca) {
+  const original = await bajarLogo(marca.logo_url);
+  if (!original) return null;
+  const fondo = hex(marca.color_cabecera) || '#ffffff';
+  const logo = await sharp(original)
+    .resize({ width: INSIGNIA_LOGO_ANCHO, height: INSIGNIA_ALTO - 2 * INSIGNIA_MARGEN, fit: 'inside' })
+    .png().toBuffer();
+  const { width, height } = await sharp(logo).metadata();
+  return liso(width + 2 * INSIGNIA_MARGEN, INSIGNIA_ALTO, fondo)
+    .composite([{ input: logo, top: Math.round((INSIGNIA_ALTO - height) / 2), left: INSIGNIA_MARGEN }])
+    .removeAlpha().png().toBuffer();
+}
+
+/** La insignia de esa marca, de memoria o recién dibujada. Sin logo: null. */
+export async function insigniaDe(projectId) {
+  const marca = await marcaDe(projectId);
+  if (!marca?.logo_url) return null;
+  const clave = `insignia:${marca.id}:${versionDe({ ...marca, proyecto: marca.nombre })}`;
+  if (!hechas.has(clave)) {
+    if (hechas.size >= MAX_EN_MEMORIA) hechas.delete(hechas.keys().next().value);
+    hechas.set(clave, dibujarInsignia(marca).catch((err) => { hechas.delete(clave); throw err; }));
+  }
+  return hechas.get(clave);
+}
+
+/** GET /api/f/insignia/:projectId — pública, como la cabecera. */
+export async function servirInsignia(req, res, next) {
+  try {
+    const id = Number.parseInt(req.params.projectId, 10);
+    if (!Number.isInteger(id) || id <= 0) return res.status(404).end();
+    const png = await insigniaDe(id);
+    if (!png) return res.status(404).end();
+    res.set('Content-Type', 'image/png');
     res.set('Cache-Control', 'public, max-age=86400');
     return res.send(png);
   } catch (err) {

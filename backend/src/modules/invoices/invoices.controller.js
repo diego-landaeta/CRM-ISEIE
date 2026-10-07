@@ -5,7 +5,7 @@ import * as service from './invoices.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import { saveLocal, getLocal, deleteLocal } from '../../shared/services/localStorage.service.js';
-import { createInvoiceSchema, setSequenceSchema, updateConfigSchema, issuerSchema } from './invoices.validation.js';
+import { createInvoiceSchema, setSequenceSchema, updateConfigSchema, issuerSchema, cobrarProformaSchema } from './invoices.validation.js';
 
 function logoExt(mime) {
   if (mime === 'image/png') return 'png';
@@ -175,6 +175,21 @@ export async function create(req, res, next) {
     const moneda = (d.moneda || 'EUR').toUpperCase();
     const enDivisa = moneda !== 'EUR' && d.totalEur != null;
     const eur = service.repartirEnEuros({ totalEur: d.totalEur, ivaPct, ivaIncluido: d.ivaIncluido });
+
+    // REGLA: la factura de una venta no pasa de lo cobrado y aún sin facturar
+    // (06/10, la 87 de ICTESS y la 0188 de CEDIA). Se compara en euros, que es
+    // en lo que van los cobros; una factura en otra divisa sin su importe en
+    // euros no tiene con qué compararse y no se mira.
+    if (d.conversionId && d.tipo !== 'proforma' && !d.borrador && !d.permitirMasDeLoCobrado
+        && (moneda === 'EUR' || enDivisa)) {
+      const cuadre = await model.cuadreDeVenta(d.conversionId);
+      const motivo = cuadre && model.motivoParaNoFacturarDeMas({
+        total: enDivisa ? eur.total : total,
+        base: enDivisa ? eur.baseImponible : baseImponible,
+        ivaPct, ivaIncluido: !!d.ivaIncluido, ...cuadre,
+      });
+      if (motivo) throw new AppError(motivo, 409, 'MAS_QUE_LO_COBRADO');
+    }
 
     const inv = await model.create({
       ...d,
@@ -391,6 +406,19 @@ export async function markPaid(req, res, next) {
     }
     await model.markPaid(id, req.body?.fechaPago);
     res.json({ success: true });
+  } catch (e) { next(e); }
+}
+
+// POST /:id/cobrar-proforma  { importe, fecha, metodo?, notas? }
+// Apunta el cobro en la venta y la proforma pasa a ser la factura (mismo numero).
+export async function cobrarProforma(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) throw new AppError('Proforma no valida', 400, 'BAD_ID');
+    const parsed = cobrarProformaSchema.safeParse(req.body || {});
+    if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
+    const inv = await service.cobrarProforma(id, parsed.data, req.user);
+    res.json({ success: true, data: inv });
   } catch (e) { next(e); }
 }
 

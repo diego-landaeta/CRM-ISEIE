@@ -1,4 +1,5 @@
 import { logger } from '../utils/logger.js';
+import * as plantilla from './email-plantilla.service.js';
 import { getDecryptedValue } from '../../modules/credentials/credentials.model.js';
 import { query } from '../config/db.js';
 import { yaSeEnvio, registrar } from './email-log.service.js';
@@ -238,6 +239,47 @@ export async function sendWelcomeUserEmail({ nombre, email, setPasswordToken, ba
   });
 }
 
+/**
+ * Aviso a la dirección VIEJA de que el correo con el que se entra al CRM ha
+ * cambiado (#246). Si no lo pidió la persona, es como se entera; y si sí, sabe
+ * con cuál entrar a partir de ahora. Los tutores no lo reciben mientras siga el
+ * freno (`NO_ESCRIBIR_A_TUTORES`): eso lo decide quien llama.
+ */
+/*
+  LOS CORREOS DEL MCP DE CLAUDE Y EL DEL CAMBIO DE CORREO, CON LA PLANTILLA COMÚN
+  (Diego, 07/10: «que se vean bonitos»). La misma cabecera con la marca y la
+  fecha, el mismo botón, la nota y el pie que el resto de avisos del CRM, y su
+  modo oscuro. Todo lo que viene de la base va escapado: un nombre o un
+  User-Agent con «<» no puede romper el correo ni meter HTML.
+*/
+const MARCA_CORREOS = { nombre: 'ISEIE', slug: 'iseie' };
+const zonaCorreos = () => process.env.APP_TIMEZONE || 'Europe/Madrid';
+const fechaHoraCorreo = (d) => new Date(d).toLocaleString('es-ES', {
+  timeZone: zonaCorreos(), day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit',
+});
+const fechaCorreo = (d) => new Date(d).toLocaleDateString('es-ES', { timeZone: zonaCorreos(), day: 'numeric', month: 'long' });
+const letraPequena = (texto) => plantilla.parrafo(
+  `<span style="font-size:13px;line-height:20px;color:#71717a">${plantilla.esc(texto)}</span>`);
+
+export async function sendCorreoCambiadoEmail({ nombre, de, a }) {
+  const P = plantilla;
+  const subject = 'Ha cambiado el correo con el que entras al CRM';
+  const { htmlContent, textContent } = P.correo({
+    proyecto: MARCA_CORREOS,
+    titulo: 'Ha cambiado tu correo de acceso',
+    saludo: nombre,
+    resumen: `A partir de ahora entras con ${a}`,
+    bloques: [
+      P.parrafo(`Un administrador ha cambiado el correo con el que entras al CRM (${P.esc(fechaHoraCorreo(new Date()))}):`),
+      P.nota(`${P.esc(de)} → <strong>${P.esc(a)}</strong>`),
+      P.parrafo(`A partir de ahora entra con <strong>${P.esc(a)}</strong>. Con esta dirección ya no podrás, y tendrás que volver a iniciar sesión.`),
+      P.boton({ texto: 'Entrar al CRM', url: P.enlace('login') }),
+      letraPequena('Si no esperabas este cambio, avisa a tu responsable cuanto antes.'),
+    ],
+  });
+  return await sendEmail({ to: [{ email: de, name: nombre }], subject, htmlContent, textContent, tags: ['correo-cambiado', 'crm'] });
+}
+
 export async function sendLeadAssignedEmail({ gestor, lead, proyecto, baseUrl }) {
   const link = `${baseUrl}/leads/${lead.id}`;
   const subject = `Nuevo lead asignado: ${lead.nombre}`;
@@ -284,3 +326,93 @@ export async function sendTestEmail(apiKey, toEmail) {
 }
 
 export { sendEmail };
+
+/**
+ * MCP de Claude (#192): una conexión se ha bloqueado por fallar el código de
+ * desbloqueo. Va al dueño de la conexión y a quien vigila (MCP_AVISO_EMAIL o
+ * los super admin). Puede ser un despiste o alguien probando códigos con una
+ * URL que no es suya: el correo lo dice para que lo mire quien sabe.
+ */
+export async function sendMcpBloqueoEmail({ para, persona, hasta, maxFallos }) {
+  const P = plantilla;
+  const conexion = `${persona.conexion} (${persona.prefijo}…)`;
+  const subject = `MCP de Claude bloqueado: ${persona.nombre}`;
+  const { htmlContent, textContent } = P.correo({
+    proyecto: MARCA_CORREOS,
+    titulo: 'Conexión de Claude bloqueada',
+    resumen: `${persona.nombre} falló el código ${maxFallos} veces seguidas`,
+    bloques: [
+      P.parrafo(`La conexión <strong>${P.esc(conexion)}</strong> de <strong>${P.esc(persona.nombre)}</strong> ha fallado el código de desbloqueo <strong>${P.esc(maxFallos)} veces seguidas</strong>.`),
+      P.nota(`Queda bloqueada hasta el <strong>${P.esc(fechaHoraCorreo(hasta))}</strong>: hasta entonces no da datos ni acepta códigos.`),
+      P.parrafo('Puede ser un despiste. Si no has sido tú, revoca esa URL: alguien podría tenerla.'),
+      P.boton({ texto: 'Ir a Conexión → MCP', url: P.enlace('conexion/mcp') }),
+    ],
+  });
+  return await sendEmail({ to: para, subject, htmlContent, textContent, tags: ['mcp-bloqueo', 'crm'] });
+}
+
+/**
+ * MCP de Claude (#194): sus URLs van a caducar pronto. Un correo por persona,
+ * con todas las que le caducan, y el enlace a la pantalla para sacar otra.
+ */
+export async function sendMcpCaducidadEmail({ persona, urls, enlace }) {
+  const P = plantilla;
+  const una = urls.length === 1;
+  const subject = una ? 'Tu URL de Claude para el CRM caduca pronto' : `${urls.length} URLs de Claude para el CRM caducan pronto`;
+  const fila = (u) => `<li style="margin:0 0 8px"><strong>${P.esc(u.nombre)}</strong>`
+    + ` <span style="color:#71717a">(${P.esc(u.prefijo)}…)</span><br>`
+    + `caduca el <strong>${P.esc(fechaCorreo(u.expires_at))}</strong>`
+    + `${u.conexion ? ` · conexión «${P.esc(u.conexion)}»` : ''}</li>`;
+  const { htmlContent, textContent } = P.correo({
+    proyecto: MARCA_CORREOS,
+    titulo: una ? 'Tu URL de Claude caduca pronto' : 'Tus URLs de Claude caducan pronto',
+    saludo: persona.nombre,
+    resumen: una ? `Caduca el ${fechaCorreo(urls[0].expires_at)}` : `${urls.length} URLs caducan pronto`,
+    bloques: [
+      P.parrafo(una ? 'Esta URL, con la que Claude consulta el CRM, va a caducar:' : 'Estas URLs, con las que Claude consulta el CRM, van a caducar:'),
+      P.nota(`<ul style="margin:0;padding-left:18px">${urls.map(fila).join('')}</ul>`),
+      P.parrafo('Cuando caduque, Claude dejará de poder consultar. Para seguir, saca una nueva con el botón <strong>«URL nueva»</strong> de su conexión y cámbiala en tu Claude, en Configuración → Conectores.'),
+      P.boton({ texto: 'Ir a Conexión → MCP', url: enlace || P.enlace('conexion/mcp') }),
+      letraPequena('Si ya no la usas, no hace falta hacer nada: se apagará sola.'),
+    ],
+  });
+  return await sendEmail({ to: [{ email: persona.email, name: persona.nombre }], subject, htmlContent, textContent, tags: ['mcp-caducidad', 'crm'] });
+}
+
+/**
+ * MCP de Claude (#195): las alertas de una vuelta, todas en un correo, para
+ * quien vigila (MCP_AVISO_EMAIL o los super admin).
+ */
+export async function sendMcpAlertasEmail({ para, alertas, enlace }) {
+  const P = plantilla;
+  const hora = (d) => new Date(d).toLocaleString('es-ES', { timeZone: zonaCorreos(), day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  const TITULOS = {
+    rafaga: 'Ráfaga de consultas', ip_nueva: 'Red nueva', cliente_nuevo: 'Cliente nuevo',
+    fallos_desbloqueo: 'Fallos de desbloqueo', madrugada: 'De madrugada',
+  };
+  const texto = (a) => {
+    const quien = `<strong>${P.esc(a.persona.nombre)}</strong>${a.persona.email ? ` (${P.esc(a.persona.email)})` : ''}`;
+    const d = a.detalle || {};
+    switch (a.tipo) {
+      case 'rafaga': return `${quien} hizo ${P.esc(d.consultas)} consultas en ${P.esc(d.minutos)} minutos (hasta las ${P.esc(hora(d.hasta))}).`;
+      case 'ip_nueva': return `${quien} consultó desde ${P.esc(d.red)} (${P.esc((d.ips || []).join(', '))}), desde donde no lo había hecho antes.`;
+      case 'cliente_nuevo': return `${quien} consultó con «${P.esc(d.cliente)}», que no había usado antes.`;
+      case 'fallos_desbloqueo': return `${quien} falló el código ${P.esc(d.fallos)} veces en la última hora.`;
+      case 'madrugada': return `${quien} hizo ${P.esc(d.consultas)} consultas entre las ${P.esc(hora(d.primera))} y las ${P.esc(hora(d.ultima))} (franja ${P.esc(d.franja)}).`;
+      default: return quien;
+    }
+  };
+  const subject = alertas.length === 1 ? 'Alerta del MCP de Claude' : `${alertas.length} alertas del MCP de Claude`;
+  const { htmlContent, textContent } = P.correo({
+    proyecto: MARCA_CORREOS,
+    titulo: subject,
+    resumen: alertas.map((a) => TITULOS[a.tipo] || a.tipo).join(' · '),
+    bloques: [
+      P.parrafo('Claude ha consultado el CRM de una forma que conviene mirar:'),
+      ...alertas.map((a) => P.nota(`<strong>${P.esc(TITULOS[a.tipo] || a.tipo)}</strong><br>${texto(a)}`)),
+      P.parrafo('El detalle de cada consulta está en la pestaña Actividad. Si algo no es de quien dice ser, revoca su URL en esa misma pantalla.'),
+      P.boton({ texto: 'Ver la actividad', url: enlace || P.enlace('conexion/mcp') }),
+    ],
+  });
+  return await sendEmail({ to: para, subject, htmlContent, textContent, tags: ['mcp-alertas', 'crm'] });
+}
