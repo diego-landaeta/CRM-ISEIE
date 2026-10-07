@@ -41,7 +41,7 @@ const SET_PASSWORD_EXPIRY_HOURS = 24;
  * nombre —«Albertoj@iseie.com»— que no existe, asi que el enlace de bienvenida
  * no llego a nadie y ninguno de ellos habia entrado jamas.
  */
-export async function cambiarCorreo(id, email, { reenviarEnlace = false, porUserId = null, ip = null } = {}) {
+export async function cambiarCorreo(id, email, { reenviarEnlace = false, porUserId = null, ip = null, rolFinal = null } = {}) {
   const nuevo = String(email).trim().toLowerCase();
   const user = await userModel.findById(id);
   if (!user) throw new AppError('Usuario no encontrado', 404, 'NOT_FOUND');
@@ -71,7 +71,14 @@ export async function cambiarCorreo(id, email, { reenviarEnlace = false, porUser
       [nuevo, tokenHash, expires, id]
     );
   } else {
-    await query('UPDATE users SET email = $1, updated_at = NOW() WHERE id = $2', [nuevo, id]);
+    // El enlace de «poner contraseña» que hubiera pendiente se anula (#262): se
+    // mando a la direccion vieja, y el aviso de abajo le dice a ese buzon cual es
+    // la nueva. Con las dos cosas, quien tenga el buzon viejo entraria.
+    await query(
+      `UPDATE users SET email = $1, set_password_token = NULL, set_password_expires = NULL,
+              updated_at = NOW() WHERE id = $2`,
+      [nuevo, id]
+    );
   }
 
   // Las sesiones abiertas se cierran: la credencial ha cambiado.
@@ -84,7 +91,10 @@ export async function cambiarCorreo(id, email, { reenviarEnlace = false, porUser
   // espera a que salga: un fallo del correo no puede deshacer el cambio. A un
   // tutor, nada mientras siga el freno (Diego, #246: «el correo a la dirección
   // vieja tiene que pasar por NO_ESCRIBIR_A_TUTORES»).
-  if (NO_ESCRIBIR_A_TUTORES && user.role === 'tutor') {
+  // Tutor ANTES o DESPUES de este guardado (#262): si en la misma edicion se le
+  // pasa a tutor, el freno tiene que valer igual.
+  const esTutor = [user.role, rolFinal].includes('tutor');
+  if (NO_ESCRIBIR_A_TUTORES && esTutor) {
     logger.warn({ userId: id }, 'correo de tutor cambiado SIN avisar a la dirección vieja: los avisos a tutores estan cortados (15/09)');
   } else {
     sendCorreoCambiadoEmail({ nombre: user.nombre, de: user.email, a: nuevo })
@@ -92,7 +102,7 @@ export async function cambiarCorreo(id, email, { reenviarEnlace = false, porUser
       .catch((err) => logger.error({ err: err.message, userId: id }, 'Fallo avisando a la direccion vieja'));
   }
 
-  if (rawToken && NO_ESCRIBIR_A_TUTORES && user.role === 'tutor') {
+  if (rawToken && NO_ESCRIBIR_A_TUTORES && esTutor) {
     logger.warn({ userId: id, email: nuevo },
       'correo de tutor cambiado SIN reenviar el enlace: los avisos a tutores estan cortados (15/09)');
   } else if (rawToken) {

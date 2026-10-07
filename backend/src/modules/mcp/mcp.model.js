@@ -780,7 +780,9 @@ export async function formacionesSinTutorDe({ projectIds, incluir_anteriores_al_
 const SIN_TILDES = (col) => `translate(lower(${col}), 'áéíóúàèìòùäëïöüâêîôûñç', 'aeiouaeiouaeiouaeiounc')`;
 const sinTildes = (s) => String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 // Lo que escriba Claude se busca tal cual: un «%» o un «_» no son comodines.
-const comoTexto = (s) => sinTildes(s).replace(/[\%_]/g, (c) => `\${c}`);
+// Se escapan con la barra, que es el escape por defecto de LIKE (#262): antes
+// la plantilla dejaba el texto literal «${c}» y buscar «100%» no encontraba nada.
+export const comoTexto = (s) => sinTildes(s).replace(/[\\%_]/g, (c) => '\\' + c);
 const numero = (v) => (v == null ? null : Number(v));
 // «Sin precio» es que no lo tiene o que es 0: ninguna formación cuesta 0 €.
 const CON_PRECIO = (col) => `(${col} IS NOT NULL AND ${col} > 0)`;

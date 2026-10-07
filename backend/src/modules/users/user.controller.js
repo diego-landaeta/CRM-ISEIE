@@ -77,6 +77,8 @@ export async function update(req, res, next) {
     const correo = email !== undefined
       ? await userService.cambiarCorreo(id, email, {
         reenviarEnlace: reenviarEnlace === true, porUserId: req.user.userId, ip: req.ip,
+        // El rol con el que se va a guardar, para el freno de tutores (#262).
+        rolFinal: resto.role ?? null,
       })
       : null;
     const user = Object.keys(resto).length
