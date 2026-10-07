@@ -43,7 +43,7 @@ export default function SetPasswordPage() {
     setError(null);
     setLoading(true);
     try {
-      await client.post('/auth/set-password', { token, password });
+      await client.post('/auth/set-password', { token, password, confirmPassword: confirm });
       setSuccess(true);
       setTimeout(() => navigate('/login'), 2000);
     } catch (err) {

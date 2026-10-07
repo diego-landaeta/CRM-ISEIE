@@ -15,6 +15,7 @@ import type { Invoice, Issuer, VentaSinFactura } from '../api/invoices.api';
 import InvoiceButton from '../components/InvoiceButton';
 import EmitirBorradorDialog from '../components/EmitirBorradorDialog';
 import AsociarVentaDialog from '../components/AsociarVentaDialog';
+import CobrarProformaDialog from '../components/CobrarProformaDialog';
 import TutorialButton from '../components/TutorialButton';
 import { toast } from '@/shared/hooks/useToast';
 
@@ -104,6 +105,8 @@ export default function InvoicesPage() {
   const [emittingInv, setEmittingInv] = useState<Invoice | null>(null);
   const [deletingInv, setDeletingInv] = useState<Invoice | null>(null);
   const [asociarInv, setAsociarInv] = useState<Invoice | null>(null);
+  // Proforma que se está marcando cobrada (apunta el cobro y la pasa a factura).
+  const [cobrarInv, setCobrarInv] = useState<Invoice | null>(null);
   // Cobro por Stripe: al descargar se elige entre la factura del alumno (bruto)
   // y la copia de gestión (neto liquidado).
   const [descargarInv, setDescargarInv] = useState<Invoice | null>(null);
@@ -657,6 +660,18 @@ export default function InvoicesPage() {
                           <CheckCircle size={11} /> Pagada
                         </button>
                       )}
+                      {/* Una proforma no se marca «Pagada»: se apunta el cobro en su venta y
+                          pasa a ser la factura, con su número. Lo hace quien factura. */}
+                      {inv.tipo === 'proforma' && inv.estado !== 'borrador' && inv.estado !== 'cancelada' && puedeFacturar && (
+                        <button onClick={() => inv.conversion_id && setCobrarInv(inv)}
+                          disabled={!inv.conversion_id}
+                          title={inv.conversion_id
+                            ? 'El cliente ya pagó: apunta el cobro en la venta y la proforma pasa a ser la factura'
+                            : 'Asóciala antes a la venta del cliente (botón «Venta»): el cobro se apunta en la venta'}
+                          className="h-7 px-2 rounded border border-emerald-300 text-emerald-700 dark:text-emerald-300 text-[11px] font-semibold hover:bg-emerald-50 dark:hover:bg-emerald-950/30 inline-flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed">
+                          <CheckCircle size={11} weight="bold" /> Cobrada
+                        </button>
+                      )}
                       {inv.estado !== 'borrador' && inv.tipo !== 'rectificativa' && canManage && (
                         <button onClick={() => rectificar(inv)}
                           title="Crear factura rectificativa (de abono)"
@@ -729,6 +744,10 @@ export default function InvoicesPage() {
       {asociarInv && (
         <AsociarVentaDialog invoice={asociarInv} onClose={() => setAsociarInv(null)}
           onSaved={() => { setAsociarInv(null); load(); }} />
+      )}
+      {cobrarInv && (
+        <CobrarProformaDialog invoice={cobrarInv} onClose={() => setCobrarInv(null)}
+          onSaved={() => { setCobrarInv(null); load(); }} />
       )}
 
       {/* Confirmación de borrado de factura (libera el número). */}

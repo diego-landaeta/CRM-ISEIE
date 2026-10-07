@@ -21,6 +21,8 @@ export interface Issuer {
   email: string | null;
   telefono: string | null;
   iban: string | null;
+  /** BIC/SWIFT del banco; sale debajo del IBAN en las facturas por transferencia. */
+  bic?: string | null;
   serie: string | null;
   logo_url: string | null;
   pie_default: string | null;
@@ -114,6 +116,8 @@ export interface Invoice {
   clase?: 'venta' | 'cuota' | 'parte' | 'suelta';
   /** De cuándo es la venta, para poder decir «cuota de una venta del 6/7». */
   fecha_de_la_venta?: string | null;
+  /** Lo que falta por cobrar de la venta: lo que propone «Cobrada» en una proforma. */
+  pendiente_de_la_venta?: number | string | null;
   /** Sin cobro propio, marcada como pagada, y la venta tiene más facturado que
    *  cobrado: el dinero de esta factura no existe. */
   sospecha_duplicada?: boolean;
@@ -282,6 +286,9 @@ export const invoicesApi = {
   },
   send: (id: number, email?: string) => client.post(`/invoices/${id}/send`, email ? { email } : {}),
   markPaid: (id: number, fechaPago?: string) => client.post(`/invoices/${id}/mark-paid`, fechaPago ? { fechaPago } : {}),
+  // «Cobrada» en una proforma: apunta el cobro en la venta y la proforma pasa a factura.
+  cobrarProforma: (id: number, body: { importe: number; fecha: string; metodo?: string | null; notas?: string | null }) =>
+    client.post<Invoice>(`/invoices/${id}/cobrar-proforma`, body),
   cancel: (id: number) => client.post(`/invoices/${id}/cancel`, {}),
   // Eliminar factura + liberar su número (errores de carga) — admin/superadmin.
   remove: (id: number) => client.delete<{ id: number; codigo: string | null }>(`/invoices/${id}`),

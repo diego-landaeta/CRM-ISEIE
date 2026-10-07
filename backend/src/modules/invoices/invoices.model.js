@@ -394,15 +394,29 @@ const MISMA_SOCIEDAD = (col, marcador) => `${col} IN (
             OR (base.nif IS NOT NULL AND e.nif = base.nif
                 AND e.serie IS NOT DISTINCT FROM base.serie)))`;
 
+/*
+  DE QUIEN ES UNA FACTURA, para una gestora (06/10): la que escribio ella, la de
+  una venta suya (quien vendio, y si no consta, de quien es la ficha) o una SIN
+  GESTORA de uno de sus campus. Necesita los alias i, cv (la venta) y l (la ficha).
+
+  Yolanda (ICTESS) emitio la 2026/0086 --una ponencia para una empresa, sin venta
+  ni ficha-- y no le salia en su lista. Diego: «son facturas sin gestora, debo de
+  verlas». Vale para la lista y para editar, borrar, abono y cobrar la proforma.
+*/
+const FACTURA_DE = (param) => `(i.created_by = ${param}
+    OR COALESCE(cv.vendedora_id, l.responsable_id) = ${param}
+    OR (COALESCE(cv.vendedora_id, l.responsable_id) IS NULL
+        AND EXISTS (SELECT 1 FROM user_projects up
+                     WHERE up.user_id = ${param} AND up.project_id = i.project_id AND up.active)))`;
+
 export async function list({ projectId, issuerId, estado, search, from, to, tipo, responsableId, page = 1, limit = 50 }) {
   const conds = [];
   const params = [];
   let idx = 1;
   if (issuerId)  { conds.push(MISMA_SOCIEDAD('i.issuer_id', `$${idx++}`)); params.push(issuerId); }
   if (projectId) { conds.push(`i.project_id = $${idx++}`); params.push(projectId); }
-  // Gestor: solo ve las facturas de SUS leads (responsable). Admin/superadmin ven todas.
-  // Quien vendio, no de quien es la ficha: es el criterio del resto del CRM.
-  if (responsableId) { conds.push(`COALESCE(cv.vendedora_id, l.responsable_id) = $${idx++}`); params.push(responsableId); }
+  // Gestor: solo ve las SUYAS (ver FACTURA_DE). Admin/superadmin ven todas.
+  if (responsableId) { conds.push(FACTURA_DE(`$${idx++}`)); params.push(responsableId); }
   // La pestana Facturas muestra tambien las PROFORMAS. Comparten el mismo
   // correlativo que las facturas normales, asi que si se ocultan parece que
   // falta un numero: la 642 se veia como un salto cuando en realidad la tenia
@@ -431,6 +445,8 @@ export async function list({ projectId, issuerId, estado, search, from, to, tipo
             u.nombre AS gestora_nombre,
             ${CLASE_FACTURA} AS clase,
             cv.fecha_conversion AS fecha_de_la_venta,
+            -- Lo que falta por cobrar de la venta: el importe que propone «Cobrada».
+            (cv.importe_total - COALESCE(cv.importe_pagado, 0)) AS pendiente_de_la_venta,
             ${SOSPECHA_DUPLICADA} AS sospecha_duplicada
      FROM invoices i
      LEFT JOIN projects p ON p.id = i.project_id
@@ -583,10 +599,13 @@ export async function puedeGestionarFactura(userId, role, invoiceId) {
   if (role !== 'gestor') return false;
   if (!(await esFacturaManager(userId))) return false;
   const { rows } = await query(
-    `SELECT l.responsable_id FROM invoices i LEFT JOIN leads l ON l.id = i.lead_id WHERE i.id = $1`,
-    [invoiceId]
+    `SELECT 1 FROM invoices i
+       LEFT JOIN conversions cv ON cv.id = i.conversion_id
+       LEFT JOIN leads l ON l.id = COALESCE(i.lead_id, cv.lead_id)
+      WHERE i.id = $1 AND ${FACTURA_DE('$2')}`,
+    [invoiceId, userId]
   );
-  return !!rows[0] && rows[0].responsable_id === userId;
+  return rows.length > 0;
 }
 
 // Permiso acotado: usuario que SOLO puede cambiar las fechas (emisión y pago) de
@@ -742,6 +761,13 @@ function telefonoClienteFactura(conv) {
 // PROFORMA → FACTURA: convierte una proforma (número fiscal ya reservado) en
 // factura definitiva con ESE MISMO número, por el TOTAL de la conversión. Así el
 // correlativo fiscal queda continuo (el número reservado acaba siendo factura).
+//
+// Y CONSERVA SU FECHA. Antes tomaba la del cobro, y eso descolocaba la serie:
+// la 2026/0065 de ICTESS es una proforma del 7/8; cobrada a finales de
+// septiembre habria salido fechada detras de la 0066 a la 0085, con un numero
+// menor y una fecha posterior. El numero se le dio el dia de la proforma, y
+// numero y fecha van juntos. El cobro guarda su propia fecha en fecha_pago.
+// Diego, 29/09, al pedir el boton «Cobrada».
 async function _convertirProformaEnFactura(prof, conv, paymentId, fechaPago) {
   const total = Number(conv.importe_total) || 0;
   const pagado = Number(conv.importe_pagado) || 0;
@@ -758,7 +784,6 @@ async function _convertirProformaEnFactura(prof, conv, paymentId, fechaPago) {
   const { rows } = await query(
     `UPDATE invoices SET
        tipo = 'normal', estado = $2::text,
-       fecha_emision = COALESCE($3::date, fecha_emision),
        fecha_pago = CASE WHEN $2::text = 'pagada' THEN $3::date ELSE NULL END,
        payment_id = COALESCE(payment_id, $4::int),
        items = $5::jsonb, base_imponible = $6::numeric, iva_pct = $7::numeric, iva_importe = $8::numeric,
@@ -772,6 +797,76 @@ async function _convertirProformaEnFactura(prof, conv, paymentId, fechaPago) {
     [prof.id, saldada ? 'pagada' : 'emitida', fechaPago, paymentId, items, base, ivaPct, ivaImp, total,
      ivaPct === 0 ? 'Operación exenta de IVA conforme a la normativa aplicable.' : null]);
   return rows[0];
+}
+
+// La proforma de una venta que pasa a factura cuando se cobra: la ultima viva
+// y ya numerada.
+async function proformaQueSeConvierte(conversionId) {
+  const { rows } = await query(
+    `SELECT * FROM invoices
+      WHERE conversion_id = $1 AND tipo = 'proforma'
+        AND estado NOT IN ('cancelada', 'borrador') AND numero IS NOT NULL
+      ORDER BY id DESC LIMIT 1`,
+    [conversionId]);
+  return rows[0] || null;
+}
+
+/*
+  ¿SE PUEDE COBRAR ESTA PROFORMA?
+
+  El boton «Cobrada» apunta el cobro en la venta y luego convierte la proforma
+  por el mismo camino que la cola (emitirFacturaDePago). Ese camino tiene
+  salidas en las que el cobro se queda apuntado pero la proforma NO pasa a
+  factura. Se miran antes de apuntar nada, para no dejar un cobro a medias.
+  Devuelve null si se puede, o { code, texto } si no.
+*/
+export async function motivoParaNoCobrarProforma(prof, { importe, fecha }) {
+  const vigente = await proformaQueSeConvierte(prof.conversion_id);
+  if (!vigente || vigente.id !== prof.id) {
+    return { code: 'OTRA_PROFORMA',
+      texto: `La venta tiene otra proforma más reciente${vigente?.codigo ? ` (${vigente.codigo})` : ''}: es esa la que pasa a factura.` };
+  }
+  // Una factura de la venta por el mismo importe y sin cobro: el cobro se le
+  // engancharia a ella y la proforma se quedaria como estaba.
+  const { rows: huerfana } = await query(
+    `SELECT codigo FROM invoices
+      WHERE conversion_id = $1 AND payment_id IS NULL
+        AND tipo = 'normal' AND estado <> 'cancelada'
+        AND ABS(total - $2::numeric) < 0.01
+      LIMIT 1`,
+    [prof.conversion_id, importe]);
+  if (huerfana[0]) {
+    return { code: 'YA_HAY_FACTURA',
+      texto: `La venta ya tiene la factura ${huerfana[0].codigo || ''} por ese importe: el cobro va con ella, no con la proforma.` };
+  }
+  // Cobros de antes de que la sociedad empezara a facturar no llevan factura.
+  const { rows: antes } = await query(
+    `SELECT to_char(MIN(f.fecha_emision), 'DD/MM/YYYY') AS desde
+       FROM projects pr
+       JOIN invoices f ON f.issuer_id = pr.sociedad_emisora_id
+         AND f.tipo <> 'proforma' AND f.numero IS NOT NULL
+      WHERE pr.id = $1
+      GROUP BY pr.id
+     HAVING COALESCE($2::date, CURRENT_DATE) < MIN(f.fecha_emision)`,
+    [prof.project_id, fecha || null]);
+  if (antes[0]) {
+    return { code: 'ANTES_DEL_ARRANQUE',
+      texto: `Esa fecha es anterior a la primera factura de la sociedad (${antes[0].desde}): ese cobro no lleva factura.` };
+  }
+  return null;
+}
+
+// ¿Es de esta gestora? La hizo ella, o es de su venta o de su cliente: lo mismo
+// que le deja verla en el listado, mas la que escribio.
+export async function esProformaDe(userId, invoiceId) {
+  const { rows } = await query(
+    `SELECT 1 FROM invoices i
+       LEFT JOIN conversions cv ON cv.id = i.conversion_id
+       LEFT JOIN leads l ON l.id = COALESCE(i.lead_id, cv.lead_id)
+      WHERE i.id = $1
+        AND ${FACTURA_DE('$2')}`,
+    [invoiceId, userId]);
+  return rows.length > 0;
 }
 
 // FACTURA POR PAGO (spec owner 2026-07-16): cada abono genera su propia factura
@@ -850,10 +945,10 @@ export async function emitirFacturaDePago(conversionId, { paymentId, importe, sa
 
   // ¿La conversión tiene una PROFORMA? → convertirla en factura (por el total, con
   // su número reservado). El correlativo fiscal queda continuo.
-  const { rows: prof } = await query(
-    `SELECT * FROM invoices WHERE conversion_id = $1 AND tipo = 'proforma' AND estado <> 'cancelada' ORDER BY id DESC LIMIT 1`,
-    [conversionId]);
-  if (prof[0]) return await _convertirProformaEnFactura(prof[0], conv, paymentId, fechaPago);
+  // Solo una proforma CON numero: la que una gestora deja esperando aprobacion es
+  // un borrador sin numero, y convertirla daria una factura sin numero.
+  const prof = await proformaQueSeConvierte(conversionId);
+  if (prof) return await _convertirProformaEnFactura(prof, conv, paymentId, fechaPago);
 
   // ¿Ya hay una factura por el TOTAL de la conversión (ex-proforma o completa)?
   // No se crea otra por pago: solo se marca pagada cuando la venta queda saldada.
@@ -1291,11 +1386,11 @@ export async function getDefaultIssuer(projectId) {
 export async function createIssuer(d, userId) {
   const { rows } = await query(
     `INSERT INTO invoice_issuers
-       (project_id, razon_social, nif, direccion, ciudad, cp, pais, email, telefono, iban, logo_url, pie_default, es_default, serie, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
+       (project_id, razon_social, nif, direccion, ciudad, cp, pais, email, telefono, iban, logo_url, pie_default, es_default, serie, created_by, bic)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
     [d.projectId || null, d.razonSocial, d.nif, d.direccion || null, d.ciudad || null, d.cp || null,
      d.pais || 'España', d.email || null, d.telefono || null, d.iban || null, d.logoUrl || null,
-     d.pieDefault || null, !!d.esDefault, (d.serie && d.serie.trim()) || null, userId]
+     d.pieDefault || null, !!d.esDefault, (d.serie && d.serie.trim()) || null, userId, (d.bic && d.bic.trim()) || null]
   );
   return rows[0];
 }
@@ -1304,7 +1399,7 @@ export async function updateIssuer(id, d) {
   // Update parcial: solo toca los campos presentes en `d` (no pisa el resto con null).
   const COLS = {
     razonSocial: 'razon_social', nif: 'nif', direccion: 'direccion', ciudad: 'ciudad',
-    cp: 'cp', pais: 'pais', email: 'email', telefono: 'telefono', iban: 'iban',
+    cp: 'cp', pais: 'pais', email: 'email', telefono: 'telefono', iban: 'iban', bic: 'bic',
     logoUrl: 'logo_url', logoKey: 'logo_key', pieDefault: 'pie_default',
     esDefault: 'es_default', activo: 'activo', serie: 'serie',
   };

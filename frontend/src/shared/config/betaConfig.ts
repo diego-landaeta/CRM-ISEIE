@@ -18,6 +18,7 @@ export const BETA_ROUTES: readonly string[] = [
   '/leads',                         // Prospectos (incluye /leads/revision-duplicados)
   '/clients',                       // Clientes
   '/matriculas',                    // Matriculas
+  '/conexion',                      // Conexión: MCP de Claude y Conectores (como MultiCRM)
   '/ventas',                         // Ventas (registro venta historica + listado conversiones)
   '/accounting',                    // Finanzas: dashboard, income, conversions, receivable, payable, integrations
   '/expenses',                      // Egresos

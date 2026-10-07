@@ -64,7 +64,7 @@ export async function login(email, password, ipAddress) {
     accessToken,
     refreshToken,
     refreshTokenExpiryDays: REFRESH_TOKEN_EXPIRY_DAYS,
-    user: { id: user.id, nombre: user.nombre, email: user.email, role: user.role, avatar_url: user.avatar_url, factura_manager: !!user.factura_manager, editar_fechas_factura: !!user.editar_fechas_factura, gestor_colaboraciones: !!user.gestor_colaboraciones },
+    user: { id: user.id, nombre: user.nombre, email: user.email, role: user.role, avatar_url: user.avatar_url, factura_manager: !!user.factura_manager, editar_fechas_factura: !!user.editar_fechas_factura, gestor_colaboraciones: !!user.gestor_colaboraciones, usa_mcp: !!user.usa_mcp },
     projects: sanitizeProjects(projects, user.role),
     activeProjectId,
   };
@@ -120,7 +120,7 @@ export async function refresh(refreshToken) {
     accessToken,
     refreshToken: newRefreshToken,
     refreshTokenExpiryDays: REFRESH_TOKEN_EXPIRY_DAYS,
-    user: { id: user.id, nombre: user.nombre, email: user.email, role: user.role, avatar_url: user.avatar_url, factura_manager: !!user.factura_manager, editar_fechas_factura: !!user.editar_fechas_factura, gestor_colaboraciones: !!user.gestor_colaboraciones },
+    user: { id: user.id, nombre: user.nombre, email: user.email, role: user.role, avatar_url: user.avatar_url, factura_manager: !!user.factura_manager, editar_fechas_factura: !!user.editar_fechas_factura, gestor_colaboraciones: !!user.gestor_colaboraciones, usa_mcp: !!user.usa_mcp },
     projects: sanitizeProjects(projects, user.role),
     activeProjectId,
   };

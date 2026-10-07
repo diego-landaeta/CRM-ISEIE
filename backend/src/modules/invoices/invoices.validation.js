@@ -88,6 +88,8 @@ export const issuerSchema = z.object({
   email: z.string().email().optional().nullable().or(z.literal('')),
   telefono: z.string().optional().nullable(),
   iban: z.string().optional().nullable(),
+  // BIC/SWIFT: 8 u 11 caracteres (BSCHESMMXXX). Vacío = sin BIC.
+  bic: z.string().trim().max(20).optional().nullable(),
   serie: z.string().max(10).optional().nullable(),
   logoUrl: z.string().optional().nullable(),
   pieDefault: z.string().optional().nullable(),
@@ -107,4 +109,12 @@ export const updateConfigSchema = z.object({
   piePagoDefault: z.string().optional(),
   serieDefault: z.string().max(10).optional(),
   metodoDefault: z.enum(['transferencia', 'tarjeta', 'tarjeta_stripe', 'efectivo', 'bizum', 'paypal', 'fraccionado', 'otro']).optional(),
+});
+
+// «Cobrada» en una proforma: el cobro que se apunta en la venta.
+export const cobrarProformaSchema = z.object({
+  importe: z.coerce.number().positive('El importe tiene que ser mayor que 0'),
+  fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha: YYYY-MM-DD'),
+  metodo: z.enum(['transferencia', 'tarjeta', 'tarjeta_stripe', 'efectivo', 'bizum', 'paypal', 'otro']).optional().nullable(),
+  notas: z.string().max(500).optional().nullable(),
 });

@@ -37,6 +37,9 @@ export interface ApiClient {
 
 export function setAccessToken(token: string | null): void;
 export function getAccessToken(): string | null;
+/** La base de la app y de la API (client.js): "/staging" en pruebas, "" en producción. */
+export const APP_BASE_URL: string;
+export const API_BASE_URL: string;
 export function setOnAuthFailure(cb: (() => void) | null): void;
 
 declare const client: ApiClient;

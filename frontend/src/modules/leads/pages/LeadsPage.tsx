@@ -67,6 +67,7 @@ import { getLeadPriority, getPriorityStyle } from '../lib/leadPriority';
 import { getLeadExportColumns } from '../lib/leadFormat';
 import ParaHoyYManana from '@/shared/components/dashboard/ParaHoyYManana';
 import { PROCESO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
+import { entroEnElProceso } from '@/shared/lib/enElProceso';
 import {
   getInitials,
   getAvatarColor,
@@ -136,6 +137,11 @@ export default function LeadsPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { can } = usePermission();
+  // Eliminar: admin y superadmin, y desde el 01/10 la gestora con el permiso
+  // «leads.delete» (#204) en SUS leads sin venta. El servidor lo vuelve a mirar.
+  const puedeEliminar = (l: { responsable_id?: number | null; status?: string }) =>
+    user?.role === 'superadmin' || user?.role === 'admin'
+    || (can('leads.delete') && l.responsable_id === user?.id && l.status !== 'convertido');
   const {
     leads, stats, total, page, totalPages,
     setPage, search, setSearch,
@@ -329,6 +335,8 @@ export default function LeadsPage() {
     const tomorrow = new Date(today.getTime() + 86400000);
     const inWeek = new Date(today.getTime() + 7 * 86400000);
     return lista.filter(l => {
+      // La barra de vencidos cuenta desde el 01/09 (ver enElProceso.ts).
+      if (!entroEnElProceso(l)) return false;
       const next = parseLocalDateOnly(l.next_reminder_at);
       const last = l.last_interaction_at ? new Date(l.last_interaction_at) : null;
       if (quickFilter === 'overdue') return next && next < today;
@@ -353,6 +361,8 @@ export default function LeadsPage() {
     const tomorrow = new Date(today.getTime() + 86400000);
     const inWeek = new Date(today.getTime() + 7 * 86400000);
     return leads.filter(l => {
+      // La barra de vencidos cuenta desde el 01/09 (ver enElProceso.ts).
+      if (!entroEnElProceso(l)) return false;
       const next = parseLocalDateOnly(l.next_reminder_at);
       const last = l.last_interaction_at ? new Date(l.last_interaction_at) : null;
       if (quickFilter === 'overdue') return next && next < today;
@@ -377,6 +387,7 @@ export default function LeadsPage() {
     const inWeek = new Date(today.getTime() + 7 * 86400000);
     let overdue = 0, todayCount = 0, tomorrowCount = 0, weekCount = 0, noReminder = 0, noContact = 0;
     leads.forEach(l => {
+      if (!entroEnElProceso(l)) return;
       const next = parseLocalDateOnly(l.next_reminder_at);
       const last = l.last_interaction_at ? new Date(l.last_interaction_at) : null;
       if (next && next < today) overdue++;
@@ -1011,7 +1022,7 @@ export default function LeadsPage() {
                   </td>
                   <td className="px-5 py-3.5 text-muted-foreground">{lead.responsable_nombre || lead.gestor || 'Sin asignar'}</td>
                   <td className="px-5 py-3.5 text-right pr-3">
-                    <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} onEnrollSequence={(l) => setEnrollLeadId(l.id)} onSoftDelete={(user?.role === 'superadmin' || user?.role === 'admin') ? (l) => setDeletingLead(l) : undefined} onReportSpam={(user?.role === 'superadmin' || user?.role === 'admin') ? (l) => setReportingSpamLead(l) : undefined} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => navigate('/whatsapp/plantillas')} />
+                    <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} onEnrollSequence={(l) => setEnrollLeadId(l.id)} onSoftDelete={puedeEliminar(lead) ? (l) => setDeletingLead(l) : undefined} onReportSpam={(user?.role === 'superadmin' || user?.role === 'admin') ? (l) => setReportingSpamLead(l) : undefined} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => navigate('/whatsapp/plantillas')} />
                   </td>
                 </tr>
                 );
@@ -1075,7 +1086,7 @@ export default function LeadsPage() {
               </div>
               <div className="flex items-center justify-between pt-1 border-t border-border/60">
                 <span className="text-[11px] text-muted-foreground">{lead.responsable_nombre || 'Sin asignar'}</span>
-                <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} onEnrollSequence={(l) => setEnrollLeadId(l.id)} onSoftDelete={(user?.role === 'superadmin' || user?.role === 'admin') ? (l) => setDeletingLead(l) : undefined} onReportSpam={(user?.role === 'superadmin' || user?.role === 'admin') ? (l) => setReportingSpamLead(l) : undefined} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => navigate('/whatsapp/plantillas')} />
+                <QuickActions lead={lead} onMarkContacted={handleMarkContacted} onConvert={handleConvert} onLogInteraction={handleLogInteraction} onCreateReminder={handleCreateReminder} onEnrollSequence={(l) => setEnrollLeadId(l.id)} onSoftDelete={puedeEliminar(lead) ? (l) => setDeletingLead(l) : undefined} onReportSpam={(user?.role === 'superadmin' || user?.role === 'admin') ? (l) => setReportingSpamLead(l) : undefined} templates={waTemplates} projectName={activeProject?.nombre} onEditTemplates={() => navigate('/whatsapp/plantillas')} />
               </div>
             </div>
           ))}
