@@ -75,18 +75,27 @@ export async function findTokenVivo(hash) {
   return rows[0] || null;
 }
 
-export async function marcarUso(tokenId) {
+export async function marcarUso(tokenId, { ip = null, cliente = null } = {}) {
   // Una vez por minuto basta: sin esto cada consulta de Claude es un UPDATE.
+  // Desde dónde (#194): la IP y el cliente (User-Agent), para verlo en el panel.
+  // Un cliente distinto se apunta al momento; una IP distinta NO, porque con
+  // «Agregar conector» los servidores de Anthropic cambian de IP casi en cada
+  // consulta y sería otra vez un UPDATE por consulta. La IP se pone al día en
+  // el siguiente minuto (y la red nueva la avisa la #195).
   await query(
-    `UPDATE mcp_tokens SET last_used_at = NOW()
-      WHERE id = $1 AND (last_used_at IS NULL OR last_used_at < NOW() - INTERVAL '1 minute')`,
-    [tokenId]
+    `UPDATE mcp_tokens
+        SET last_used_at = NOW(), last_used_ip = $2, last_used_cliente = $3
+      WHERE id = $1
+        AND (last_used_at IS NULL OR last_used_at < NOW() - INTERVAL '1 minute'
+             OR last_used_cliente IS DISTINCT FROM $3)`,
+    [tokenId, ip ? String(ip).slice(0, 64) : null, cliente ? String(cliente).slice(0, 200) : null]
   );
 }
 
 export async function listarTokens(userId) {
   const { rows } = await query(
     `SELECT id, nombre, prefijo, created_at, expires_at, last_used_at, revoked_at,
+            last_used_ip, last_used_cliente, revocado_motivo,
             (revoked_at IS NULL AND (expires_at IS NULL OR expires_at > NOW())) AS vivo
        FROM mcp_tokens WHERE user_id = $1
         -- Los de un conector se ven y se renuevan en Conectores (migración 184).
@@ -139,7 +148,8 @@ export async function campusDelConector(connectorId) {
 /** La URL viva de una persona en cada conector (sin el token: solo su inicio). */
 export async function tokensDeConectores(userId, connectorIds) {
   const { rows } = await query(
-    `SELECT DISTINCT ON (connector_id) connector_id, prefijo, created_at, last_used_at
+    `SELECT DISTINCT ON (connector_id) id, connector_id, prefijo, created_at, last_used_at, expires_at,
+            (expires_at IS NULL OR expires_at > NOW()) AS vivo
        FROM mcp_tokens
       WHERE user_id = $1 AND connector_id = ANY($2::int[]) AND revoked_at IS NULL
       ORDER BY connector_id, created_at DESC`,
@@ -148,10 +158,26 @@ export async function tokensDeConectores(userId, connectorIds) {
   return rows;
 }
 
+/**
+ * Todas las URLs vivas de la persona (sueltas y de conexiones), para la línea
+ * de estado de «Código para Claude» (#192).
+ */
+export async function urlsVivasDeLaPersona(userId) {
+  const { rows } = await query(
+    `SELECT t.id, COALESCE(c.label, t.nombre) AS nombre
+       FROM mcp_tokens t
+       LEFT JOIN project_connectors c ON c.id = t.connector_id
+      WHERE t.user_id = $1 AND t.revoked_at IS NULL AND (t.expires_at IS NULL OR t.expires_at > NOW())
+      ORDER BY t.created_at`,
+    [userId]
+  );
+  return rows;
+}
+
 /** Una URL por persona y conector: pedir otra revoca la anterior. */
 export async function revocarTokensDelConector(userId, connectorId) {
   await query(
-    `UPDATE mcp_tokens SET revoked_at = NOW()
+    `UPDATE mcp_tokens SET revoked_at = NOW(), revocado_motivo = 'conector'
       WHERE user_id = $1 AND connector_id = $2 AND revoked_at IS NULL`,
     [userId, connectorId]
   );
@@ -160,7 +186,7 @@ export async function revocarTokensDelConector(userId, connectorId) {
 /** Revoca un token SUYO. Devuelve false si no existe o es de otra persona. */
 export async function revocarToken(id, userId) {
   const { rowCount } = await query(
-    `UPDATE mcp_tokens SET revoked_at = NOW()
+    `UPDATE mcp_tokens SET revoked_at = NOW(), revocado_motivo = 'manual'
       WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL`,
     [id, userId]
   );
@@ -171,6 +197,65 @@ export async function revocarToken(id, userId) {
  * Personas a las que se puede dar o quitar el acceso. Un admin solo ve a
  * quien comparte algun campus con el; el super admin, a todos.
  */
+/**
+ * Revoca TODAS las URLs vivas de una persona (#194: al desactivarla). Devuelve
+ * cuántas. Quitar la casilla de acceso NO llama a esto: eso solo pausa.
+ */
+export async function revocarTodasDeLaPersona(userId, motivo) {
+  const { rowCount } = await query(
+    `UPDATE mcp_tokens SET revoked_at = NOW(), revocado_motivo = $2
+      WHERE user_id = $1 AND revoked_at IS NULL`,
+    [userId, motivo]
+  );
+  return rowCount;
+}
+
+// ─── Rotación (#194): lo que hace la vuelta diaria ────────────────────────
+
+/**
+ * Revoca las URLs que lleven `dias` sin usarse (o sin estrenar desde que se
+ * crearon). Devuelve las revocadas, para el registro.
+ */
+export async function revocarSinUso(dias) {
+  const { rows } = await query(
+    `UPDATE mcp_tokens SET revoked_at = NOW(), revocado_motivo = 'sin_uso'
+      WHERE revoked_at IS NULL
+        AND (expires_at IS NULL OR expires_at > NOW())
+        -- Cuenta desde el último uso, desde que se creó o desde el despliegue de
+        -- la #194 (rotacion_desde), lo que sea más reciente.
+        AND GREATEST(COALESCE(last_used_at, created_at), rotacion_desde) < NOW() - make_interval(days => $1::int)
+      RETURNING id, user_id, prefijo`,
+    [dias]
+  );
+  return rows;
+}
+
+/**
+ * Las URLs vivas que caducan dentro de `dias` y de las que aún no se ha avisado,
+ * agrupadas por persona activa (un correo por persona, no uno por URL).
+ */
+export async function porCaducarSinAviso(dias) {
+  const { rows } = await query(
+    `SELECT u.id AS user_id, u.nombre, u.email,
+            json_agg(json_build_object('id', t.id, 'nombre', t.nombre, 'prefijo', t.prefijo,
+                                       'expires_at', t.expires_at,
+                                       -- La de una conexión se renueva en esa conexión (#196 revisión).
+                                       'conexion', c.label) ORDER BY t.expires_at) AS urls
+       FROM mcp_tokens t JOIN users u ON u.id = t.user_id AND u.active
+       LEFT JOIN project_connectors c ON c.id = t.connector_id
+      WHERE t.revoked_at IS NULL AND t.aviso_caducidad_at IS NULL
+        AND t.expires_at > NOW()
+        AND t.expires_at <= NOW() + make_interval(days => $1::int)
+      GROUP BY u.id, u.nombre, u.email`,
+    [dias]
+  );
+  return rows;
+}
+
+export async function marcarAvisoCaducidad(ids) {
+  await query(`UPDATE mcp_tokens SET aviso_caducidad_at = NOW() WHERE id = ANY($1::int[])`, [ids]);
+}
+
 export async function listarPersonas(quien) {
   const params = [];
   let filtro = '';
@@ -209,11 +294,14 @@ export async function setUsaMcp(userId, valor) {
   await query(`UPDATE users SET usa_mcp = $2, updated_at = NOW() WHERE id = $1`, [userId, !!valor]);
 }
 
-export async function registrarAuditoria({ userId, tokenId, herramienta, parametros, ok, error, duracionMs }) {
+export async function registrarAuditoria({ userId, tokenId, herramienta, parametros, ok, error, duracionMs, origen = {} }) {
+  // `origen` (#195): IP y cliente de la consulta, para la pantalla de Actividad
+  // y para avisar de una IP o un cliente nuevos.
   await query(
-    `INSERT INTO mcp_auditoria (user_id, token_id, herramienta, parametros, ok, error, duracion_ms)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-    [userId, tokenId, herramienta, parametros ? JSON.stringify(parametros) : null, ok, error || null, duracionMs]
+    `INSERT INTO mcp_auditoria (user_id, token_id, herramienta, parametros, ok, error, duracion_ms, ip, cliente)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+    [userId, tokenId, herramienta, parametros ? JSON.stringify(parametros) : null, ok, error || null, duracionMs,
+      origen.ip ? String(origen.ip).slice(0, 64) : null, origen.cliente ? String(origen.cliente).slice(0, 200) : null]
   );
 }
 
@@ -674,4 +762,134 @@ export async function formacionesSinTutorDe({ projectIds, incluir_anteriores_al_
       buscando_tutor: f.buscando, nota_de_la_busqueda: f.busqueda_nota,
     })),
   };
+}
+
+// ─── El catálogo de cada campus (#215) ────────────────────────────────────
+//
+// Carlos (05/10): «¿cuánto cuesta el Máster X en Psiko?» o «dame los precios de
+// los cursos de CEDIA», con los mismos datos que la pantalla de Productos. Solo
+// las formaciones activas, como la pantalla. Nada de ventas ni de `stripe_link`.
+//
+// ESTA CONSULTA ES LA DE ISEIE. La de MultiCRM devuelve además `modalidad`: la
+// ficha de Diego (05/10) la pide solo allí. (Comprobado el 06/10: aquí la crea
+// la migración 002 y la usa la pantalla de Productos, pero se sigue la ficha.)
+// `brochure_url`, que solo tiene ISEIE, no se pide.
+
+// Sin tildes ni mayúsculas, a mano con translate() como en MultiCRM: `unaccent`
+// no está en todas las bases (la local de ISEIE no la tiene; ver sales.service).
+const SIN_TILDES = (col) => `translate(lower(${col}), 'áéíóúàèìòùäëïöüâêîôûñç', 'aeiouaeiouaeiouaeiounc')`;
+const sinTildes = (s) => String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+// Lo que escriba Claude se busca tal cual: un «%» o un «_» no son comodines.
+// Se escapan con la barra, que es el escape por defecto de LIKE (#262): antes
+// la plantilla dejaba el texto literal «${c}» y buscar «100%» no encontraba nada.
+export const comoTexto = (s) => sinTildes(s).replace(/[\\%_]/g, (c) => '\\' + c);
+const numero = (v) => (v == null ? null : Number(v));
+// «Sin precio» es que no lo tiene o que es 0: ninguna formación cuesta 0 €.
+const CON_PRECIO = (col) => `(${col} IS NOT NULL AND ${col} > 0)`;
+
+/** Por encima de esto, sin texto, se pide acotar: el catálogo entero no cabe en una respuesta. */
+export const AVISO_FORMACIONES = 100;
+
+export async function listarFormaciones({ projectIds, texto, pagina = 1, limite = 25 }) {
+  const f = condiciones('p.project_id', projectIds);
+  f.cond.push('p.active = true');
+  if (texto) f.add(`${SIN_TILDES('p.nombre')} LIKE ?`, `%${comoTexto(texto)}%`);
+  const { limit, offset } = paginado(pagina, limite);
+  const { rows } = await query(
+    `SELECT p.id, p.nombre AS curso, pr.nombre AS campus, p.project_id AS campus_id,
+            p.precio, p.moneda, p.url_info AS enlace
+       FROM products p
+       JOIN projects pr ON pr.id = p.project_id
+      ${f.where()}
+      ORDER BY pr.nombre, p.nombre, p.id
+      LIMIT ${limit} OFFSET ${offset}`,
+    f.params
+  );
+  const { rows: porCampus } = await query(
+    `SELECT pr.nombre AS campus, COUNT(*)::int AS formaciones
+       FROM products p JOIN projects pr ON pr.id = p.project_id
+      ${f.where()}
+      GROUP BY pr.nombre ORDER BY COUNT(*) DESC, pr.nombre`,
+    f.params
+  );
+  const total = porCampus.reduce((s, c) => s + c.formaciones, 0);
+  return {
+    total,
+    pagina,
+    paginas: Math.max(1, Math.ceil(total / limite)),
+    ...(porCampus.length > 1 ? { por_campus: porCampus } : {}),
+    // Sin texto y con muchas, Claude tiene que saber que esto es solo un trozo.
+    ...(!texto && total > AVISO_FORMACIONES ? {
+      aviso: `Hay ${total} formaciones${porCampus.length === 1 ? ` en ${porCampus[0].campus}` : ` (${porCampus.map((c) => `${c.campus} ${c.formaciones}`).join(', ')})`}: `
+        + 'pide un nombre (texto) o usa «resumen_catalogo».',
+    } : {}),
+    formaciones: rows.map((r) => ({ ...r, precio: numero(r.precio) })),
+  };
+}
+
+export async function resumenCatalogo({ projectIds }) {
+  const { rows } = await query(
+    `SELECT pr.id AS campus_id, pr.nombre AS campus,
+            COUNT(p.id)::int AS formaciones,
+            MIN(p.precio) FILTER (WHERE ${CON_PRECIO('p.precio')}) AS precio_minimo,
+            MAX(p.precio) FILTER (WHERE ${CON_PRECIO('p.precio')}) AS precio_maximo,
+            -- El más habitual, solo si alguno SE REPITE. Con todos distintos no hay
+            -- uno «más habitual», y MODE() devolvía el más bajo (prueba con Claude,
+            -- 06/10: con 385, 490 y 560 decía «el más habitual: 385»).
+            (SELECT x.precio FROM (
+               SELECT p2.precio, COUNT(*) AS veces FROM products p2
+                WHERE p2.project_id = pr.id AND p2.active = true AND ${CON_PRECIO('p2.precio')}
+                GROUP BY p2.precio HAVING COUNT(*) > 1
+                ORDER BY COUNT(*) DESC, p2.precio LIMIT 1) x) AS precio_mas_habitual,
+            COALESCE(ARRAY_AGG(DISTINCT p.moneda) FILTER (WHERE p.moneda IS NOT NULL), '{}') AS monedas,
+            COUNT(p.id) FILTER (WHERE NOT ${CON_PRECIO('p.precio')})::int AS sin_precio,
+            COUNT(p.id) FILTER (WHERE p.url_info IS NULL OR btrim(p.url_info) = '')::int AS sin_enlace
+       FROM projects pr
+       LEFT JOIN products p ON p.project_id = pr.id AND p.active = true
+      WHERE pr.id = ANY($1::int[])
+      GROUP BY pr.id, pr.nombre
+      ORDER BY pr.nombre`,
+    [projectIds]
+  );
+  return {
+    total_formaciones: rows.reduce((s, r) => s + r.formaciones, 0),
+    campus: rows.map((r) => ({
+      ...r,
+      precio_minimo: numero(r.precio_minimo),
+      precio_maximo: numero(r.precio_maximo),
+      precio_mas_habitual: numero(r.precio_mas_habitual),
+    })),
+  };
+}
+
+/** La ficha de una formación, o null si no existe. El ámbito lo mira quien llama. */
+export async function verFormacion(id) {
+  const { rows: [r] } = await query(
+    `SELECT p.id, p.nombre AS curso, pr.nombre AS campus, p.project_id AS campus_id, p.active AS activa,
+            p.precio, p.moneda, p.url_info AS enlace, p.duracion, p.horas,
+            cat.nombre AS categoria, sub.nombre AS subcategoria,
+            p.plazas_totales,
+            -- Las libres, solo si hay totales: sin totales no se sabe (Diego, 05/10).
+            CASE WHEN p.plazas_totales IS NOT NULL
+                 THEN GREATEST(p.plazas_totales - COALESCE(p.plazas_ocupadas_previas, 0), 0) END AS plazas_libres,
+            p.fecha_cierre_convocatoria AS cierre_convocatoria,
+            d.version AS dossier_version, d.created_at AS dossier_fecha,
+            -- Del tutor, solo el NOMBRE: nunca su porcentaje ni lo que cobra.
+            (SELECT string_agg(DISTINCT u.nombre, ', ')
+               FROM tutor_collaborations c JOIN users u ON u.id = c.tutor_id
+              WHERE c.product_id = p.id AND ${RIGE_HOY('c')}) AS tutor
+       FROM products p
+       JOIN projects pr ON pr.id = p.project_id
+       LEFT JOIN product_categories cat ON cat.id = p.categoria_id
+       LEFT JOIN product_categories sub ON sub.id = p.subcategoria_id
+       LEFT JOIN LATERAL (
+         SELECT version, created_at FROM dossiers
+          WHERE product_id = p.id AND active = true
+          ORDER BY version DESC LIMIT 1
+       ) d ON true
+      WHERE p.id = $1`,
+    [id]
+  );
+  if (!r) return null;
+  return { ...r, precio: numero(r.precio), tiene_dossier: r.dossier_version != null };
 }

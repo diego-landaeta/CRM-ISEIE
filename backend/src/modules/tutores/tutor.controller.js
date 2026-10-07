@@ -1,5 +1,6 @@
 import * as model from './tutor.model.js';
 import * as userService from '../users/user.service.js';
+import { adminSetPasswordSchema } from '../users/user.validation.js';
 import * as dossierService from '../dossiers/dossier.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import {
@@ -128,10 +129,20 @@ export async function guardarPerfil(req, res, next) {
     // El correo, si viene y es otro. Va antes que el perfil: si el correo choca
     // con el de otro usuario, no se guarda nada — mejor que dejar el IBAN
     // puesto y el correo no, que es como se pierde la pista de lo que paso.
+    //
+    // Solo el super admin, y solo de un TUTOR (#248). Antes lo cambiaba quien
+    // gestiona colaboraciones, el propio tutor, y por este camino también el de
+    // cualquier usuario, super admin incluido, con su identificador.
     let correo = null;
-    if (d.email) correo = await userService.cambiarCorreo(id, d.email, {
-      reenviarEnlace: d.reenviarEnlace === true,
-    });
+    if (d.email) {
+      if (req.user.role !== 'superadmin') {
+        throw new AppError('Solo un superadmin puede cambiar el correo', 403, 'FORBIDDEN');
+      }
+      if (!(await model.ficha(id))) throw new AppError('Ese tutor no existe', 404, 'NOT_FOUND');
+      correo = await userService.cambiarCorreo(id, d.email, {
+        reenviarEnlace: d.reenviarEnlace === true, porUserId: req.user.userId, ip: req.ip,
+      });
+    }
 
     // El nombre va aparte del perfil: es de `users`, no de `tutor_profiles`.
     if (d.nombre) await model.renombrarTutor(id, d.nombre);
@@ -494,21 +505,25 @@ export async function brochureDelCurso(req, res, next) {
 
 // POST /api/tutores/:id/contrasena — ponerle una contraseña nueva.
 //
-// La pone quien gestiona colaboraciones: es lo que pasa de verdad cuando un
-// profesor la pierde y escribe por WhatsApp un domingo. Antes habia que ser
-// administrador y el profesor se quedaba fuera hasta el lunes.
+// Solo el super admin (#248, Diego 06/10: «que el superadmin pueda cambiar el
+// correo y contraseña de todos los usuarios, tutores, gestores, todo»). Antes la
+// ponía también quien gestiona colaboraciones.
+//
+// Con las mismas reglas que «Establece tu contraseña», repetida, y cerrando las
+// sesiones abiertas del tutor: es el mismo cambio que desde Usuarios.
 //
 // Solo vale para TUTORES: por aqui no se le puede cambiar la clave a una
 // gestora ni a un administrador, aunque se pruebe con su identificador.
 export async function cambiarContrasena(req, res, next) {
   try {
-    await exigirGestion(req);
+    if (req.user.role !== 'superadmin') {
+      throw new AppError('Solo un superadmin puede cambiar la contraseña', 403, 'FORBIDDEN');
+    }
     const id = parseInt(req.params.id);
     const t = await model.ficha(id);
     if (!t) throw new AppError('Ese tutor no existe', 404, 'NOT_FOUND');
-    const nueva = String(req.body?.password || '');
-    if (nueva.length < 8) throw new AppError('La contraseña necesita al menos 8 caracteres', 400, 'CORTA');
-    await model.ponerContrasena(id, nueva);
+    const { password } = valida(adminSetPasswordSchema, req.body);
+    await userService.setPassword(id, password, { porUserId: req.user.userId, ip: req.ip });
     res.json({ success: true, data: { id, nombre: t.nombre, email: t.email } });
   } catch (err) { next(err); }
 }

@@ -26,6 +26,16 @@ const PERIODO = {
   desde: fecha.optional().describe('Fecha inicial, AAAA-MM-DD'),
   hasta: fecha.optional().describe('Fecha final, AAAA-MM-DD'),
 };
+/**
+ * Datos personales (#196): correos y teléfonos salen enmascarados y, en los
+ * listados, los clientes como «Pedro S.». Esto los da enteros. Queda en la
+ * auditoría (Conexión → MCP → Actividad).
+ */
+const DATOS_COMPLETOS = {
+  datos_completos: z.boolean().optional()
+    .describe('true SOLO si la persona necesita el correo, el teléfono o el nombre completo (por ejemplo, para contactar a alguien). Queda registrado.'),
+};
+
 const PAGINA = {
   pagina: z.number().int().min(1).max(1000).default(1),
   limite: z.number().int().min(1).max(100).default(25),
@@ -137,9 +147,11 @@ export const HERRAMIENTAS = [
   },
   {
     nombre: 'buscar_prospectos',
+    // En esta lista, «nombre» es el de un cliente: sale abreviado (#196).
+    listasDeClientes: ['prospectos'],
     titulo: 'Buscar prospectos',
     descripcion: 'Busca prospectos (leads) por estado, canal, texto (nombre, email o teléfono) y fechas de solicitud. Devuelve una página de resultados y el total.',
-    entrada: {
+    entrada: { ...DATOS_COMPLETOS,
       ...AMBITO,
       estado: z.string().max(40).optional().describe('nuevo, por_contactar, contactado, en_seguimiento, convertido, no_interesado…'),
       canal: z.string().max(40).optional().describe('Canal de captación (meta, google, organico…)'),
@@ -153,7 +165,7 @@ export const HERRAMIENTAS = [
     nombre: 'ver_prospecto',
     titulo: 'Ver un prospecto',
     descripcion: 'Ficha de un prospecto: datos de contacto, origen, últimas interacciones y sus ventas.',
-    entrada: { id: z.number().int().positive().describe('Id del prospecto') },
+    entrada: { ...DATOS_COMPLETOS, id: z.number().int().positive().describe('Id del prospecto') },
     ejecutar: async (ambito, a) => {
       const r = await model.verProspecto({ id: a.id, ...acotar(ambito, {}) });
       if (!r) throw new AppError(`El prospecto ${a.id} no existe o no tienes acceso a él.`, 404, 'MCP_NO_ENCONTRADO');
@@ -172,7 +184,7 @@ export const HERRAMIENTAS = [
     titulo: 'Listar ventas',
     descripcion: 'Ventas (conversiones) con importe, lo cobrado y lo pendiente. Filtra por fechas, texto (producto o cliente) y si están pendientes de cobro. '
       + 'Lo cobrado son los PAGOS REGISTRADOS de cada venta; puede no cuadrar con «cobros_pendientes», que usa el campo de importe pagado de la venta.',
-    entrada: {
+    entrada: { ...DATOS_COMPLETOS,
       ...AMBITO,
       ...PERIODO,
       texto: z.string().max(100).optional().describe('Busca en producto o nombre del cliente'),
@@ -193,7 +205,7 @@ export const HERRAMIENTAS = [
     nombre: 'listar_facturas',
     titulo: 'Listar facturas',
     descripcion: 'Facturas con código, estado, cliente, total y empresa emisora. Filtra por estado, tipo, texto y fecha de emisión.',
-    entrada: {
+    entrada: { ...DATOS_COMPLETOS,
       ...AMBITO,
       estado: z.enum(['borrador', 'emitida', 'enviada', 'pagada', 'cancelada']).optional(),
       tipo: z.enum(['normal', 'proforma', 'rectificativa']).optional(),
@@ -216,10 +228,11 @@ export const HERRAMIENTAS = [
     descripcion: 'Cuentas por cobrar: cuotas y ventas pendientes con su vencimiento, y cuánto está vencido. Las fechas filtran por vencimiento. '
       + 'Da lo mismo que la pantalla «Cuentas por cobrar» del CRM, que se fía del campo de importe pagado de la venta: si una venta está marcada como pagada '
       + 'pero no tiene pagos registrados, aquí no sale como pendiente y en «listar_ventas» sí. Si las cifras no cuadran, dilo y explica esta diferencia.',
-    entrada: {
+    entrada: { ...DATOS_COMPLETOS,
       ...AMBITO,
       ...PERIODO,
-      limite: z.number().int().min(1).max(200).default(50).describe('Máximo de filas de detalle'),
+      // 100 como máximo: es el tope de filas de cualquier respuesta (#196).
+      limite: z.number().int().min(1).max(100).default(50).describe('Máximo de filas de detalle (hasta 100)'),
     },
     ejecutar: (ambito, a) => model.cobrosPendientes({ ...a, ...acotar(ambito, a) }),
   },
@@ -230,7 +243,7 @@ export const HERRAMIENTAS = [
       + 'y desde cuándo. «rige_hoy» dice si ese curso le genera comisión hoy. De cada curso, lo entregado (foto corporativa, vídeo y módulos '
       + 'al 25, 50 o 100 %): «entregado» es el mismo texto que la columna Entregado de la pantalla y «falta», lo que queda. '
       + 'No incluye DNI, IBAN ni teléfono (solo super admin y admin).',
-    entrada: {
+    entrada: { ...DATOS_COMPLETOS,
       ...AMBITO,
       texto: z.string().max(100).optional().describe('Busca en nombre, email o nombre del curso'),
       incluir_retirados: z.boolean().default(false).describe('true: también los tutores dados de baja'),
@@ -280,12 +293,56 @@ export const HERRAMIENTAS = [
       return model.formacionesSinTutorDe({ ...a, projectIds });
     },
   },
+  // El catálogo de cada campus (#215, ficha de Diego del 05/10). Lo usan todos
+  // los roles con MCP, también las gestoras: lo necesitan para vender y no es
+  // información sensible. Nada de ventas ni de `stripe_link`; del tutor, solo
+  // el nombre.
+  {
+    nombre: 'listar_formaciones',
+    titulo: 'Formaciones y precios',
+    descripcion: 'El catálogo de tus campus: cada formación activa con su precio, moneda, campus y enlace a la web, como la pantalla de Productos. '
+      + 'Busca por nombre sin distinguir mayúsculas ni tildes. Devuelve una página y el total: con muchas, pide un nombre o usa «resumen_catalogo». '
+      + 'Si una formación no tiene precio, contesta que en el CRM no consta; no lo deduzcas ni lo inventes. No da ventas.',
+    entrada: {
+      ...AMBITO,
+      texto: z.string().max(100).optional().describe('Parte del nombre de la formación, por ejemplo «psicología clínica»'),
+      ...PAGINA,
+    },
+    ejecutar: (ambito, a) => model.listarFormaciones({ ...a, projectIds: acotar(ambito, a).projectIds }),
+  },
+  {
+    nombre: 'resumen_catalogo',
+    titulo: 'Resumen del catálogo',
+    descripcion: 'Por campus: cuántas formaciones activas hay, el precio mínimo, el máximo y el más habitual (el que más se repite; vacío si ninguno se repite: entonces no lo hay), '
+      + 'las monedas, y cuántas no tienen precio o enlace. '
+      + 'Úsala para «¿cuánto cuestan los cursos de X?» sin listar cientos de formaciones.',
+    entrada: { ...AMBITO },
+    ejecutar: (ambito, a) => model.resumenCatalogo({ projectIds: acotar(ambito, a).projectIds }),
+  },
+  {
+    nombre: 'ver_formacion',
+    titulo: 'Ficha de una formación',
+    descripcion: 'La ficha de una formación (id de «listar_formaciones»): precio, moneda, enlace, categoría, duración, plazas totales y libres, '
+      + 'cierre de convocatoria, dossier y el nombre del tutor que la da hoy. Plazas, cierre de convocatoria y dossier están vacíos en casi todo el catálogo: '
+      + 'si vienen vacíos, contesta que en el CRM no consta; no lo deduzcas.',
+    entrada: { id: z.number().int().positive().describe('Id de la formación') },
+    ejecutar: async (ambito, a) => {
+      const permitidos = acotar(ambito, {}).projectIds;
+      const r = await model.verFormacion(a.id);
+      if (!r) throw new AppError(`La formación ${a.id} no existe.`, 404, 'MCP_NO_ENCONTRADO');
+      // El mismo 403 que dan las demás herramientas con un campus ajeno.
+      if (!permitidos.includes(Number(r.campus_id))) {
+        throw new AppError(`No tienes acceso al campus ${r.campus_id}. Usa «mis_proyectos» para ver los tuyos.`, 403, 'MCP_FUERA_DE_AMBITO');
+      }
+      return r;
+    },
+  },
   {
     nombre: 'informe',
     titulo: 'Informe del CRM',
     descripcion: 'Ejecuta uno de los informes de Reportes del CRM (mismos números que la pantalla). Tipos: '
       + Object.entries(INFORMES).map(([k, v]) => `${k} (${v.descripcion})`).join('; '),
-    entrada: {
+    entrada: { ...DATOS_COMPLETOS,
       tipo: z.enum(Object.keys(INFORMES)),
       ...AMBITO,
       ...PERIODO,

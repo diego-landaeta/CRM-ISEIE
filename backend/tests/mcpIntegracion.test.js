@@ -247,7 +247,9 @@ describe('el protocolo, con la base de verdad', () => {
 
     const list = await rpc(TOKENS.ANA, 'tools/list');
     // 13 desde el 01/10: «listar_tutores», «comisiones_tutores» y «formaciones_sin_tutor».
-    expect(list.body.result.tools.length).toBe(13);
+    // 16 desde el 06/10 (#215): «listar_formaciones», «resumen_catalogo» y «ver_formacion».
+    expect(list.body.result.tools.length).toBe(16);
+    expect(list.body.result.tools.map((t) => t.name)).toEqual(expect.arrayContaining(['listar_formaciones', 'resumen_catalogo', 'ver_formacion']));
   });
 
   it('el token se guarda como huella, nunca en claro', async () => {
@@ -465,10 +467,13 @@ describe('la puerta, con la base de verdad', () => {
       .set('Authorization', `Bearer ${jwtAna}`).send({ usa_mcp: false }).expect(200);
   });
 
-  it('los tokens no caducan: se crean sin fecha de fin', async () => {
-    const filas = await q(`SELECT expires_at FROM mcp_tokens WHERE user_id = ANY($1::int[])`, [[U.ANA, U.GEMA]]);
+  it('los tokens caducan a los 90 días por defecto (#194; hasta el 03/10 no caducaban)', async () => {
+    const filas = await q(
+      `SELECT EXTRACT(EPOCH FROM (expires_at - created_at)) / 86400 AS dias
+         FROM mcp_tokens WHERE user_id = ANY($1::int[])`, [[U.ANA, U.GEMA]]
+    );
     expect(filas.length).toBeGreaterThan(0);
-    expect(filas.every((f) => f.expires_at === null)).toBe(true);
+    expect(filas.every((f) => Math.round(Number(f.dias)) === 90)).toBe(true);
   });
 
   it('quitar el campus a una persona: deja de verlo en la siguiente pregunta', async () => {

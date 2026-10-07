@@ -10,6 +10,7 @@ import { conectoresApi, type Campus, type Conector } from '@/modules/connectors/
 import ParaQuien from '@/modules/connectors/components/ParaQuien';
 import DialogoConexionClaude from './DialogoConexionClaude';
 import UrlParaClaude from './UrlParaClaude';
+import EstadoCodigoUrl from './EstadoCodigoUrl';
 
 /**
  * Las conexiones de Claude, en Conexión → MCP.
@@ -30,7 +31,8 @@ function fecha(iso: string | null | undefined): string {
   return new Date(iso).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-export default function ConexionesClaude() {
+/** `onCambio`: para que el resto del panel («Código para Claude») se entere de una URL nueva o desbloqueada. */
+export default function ConexionesClaude({ onCambio }: { onCambio?: () => void } = {}) {
   const { activeProject, activeIssuerId, activeIssuer, isAllProjects } = useProjectContext() as {
     activeProject: { id: number; nombre?: string } | null;
     activeIssuerId: number | null;
@@ -67,13 +69,16 @@ export default function ConexionesClaude() {
 
   useEffect(() => { cargar(); }, [cargar]);
 
+  // Tras sacar o desbloquear una URL cambia también «Código para Claude», que es del panel.
+  const recargarTodo = () => { cargar(); onCambio?.(); };
+
   async function urlNueva(c: Conector) {
     if (c.mcp_mio && !window.confirm('Se va a crear una URL nueva y la que tienes ahora en Claude dejará de funcionar. ¿Seguir?')) return;
     try {
       const r = await conectoresApi.mcpUrl(c.id);
       if (!r.success) throw new Error((r as { error?: string }).error || 'no se pudo');
       setUrlClaude({ token: r.data.token, nombre: c.label });
-      cargar();
+      recargarTodo();
     } catch (e) {
       toast({ title: 'No se pudo sacar la URL', description: (e as Error).message, variant: 'destructive' });
     }
@@ -88,7 +93,7 @@ export default function ConexionesClaude() {
       const r = await conectoresApi.borrar(c.id);
       if (!r.success) throw new Error((r as { error?: string }).error || 'no se pudo');
       toast({ title: 'Conexión borrada' });
-      cargar();
+      recargarTodo();
     } catch (e) {
       toast({ title: 'No se pudo borrar', description: (e as Error).message, variant: 'destructive' });
     }
@@ -159,6 +164,16 @@ export default function ConexionesClaude() {
                         <Robot size={12} /> {c.mcp_mio ? 'URL nueva' : 'Sacar mi URL'}
                       </button>
                     </div>
+                    {/* Los dos tiempos de la URL (#192 y #194, Diego 05/10). */}
+                    {c.mcp_mio && (
+                      <div className="mt-1 space-y-0.5">
+                        <p className="text-[11px] text-muted-foreground">
+                          {!c.mcp_mio.vivo ? 'Caducada: saca una URL nueva'
+                            : c.mcp_mio.expires_at ? `La URL caduca el ${fecha(c.mcp_mio.expires_at)}` : 'La URL no caduca'}
+                        </p>
+                        {c.mcp_mio.vivo && c.active && <EstadoCodigoUrl codigo={c.mcp_mio.codigo} tokenId={c.mcp_mio.id} onCambio={recargarTodo} />}
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-right whitespace-nowrap">
                     {c.puede_tocar && (
@@ -191,7 +206,7 @@ export default function ConexionesClaude() {
           onCerrar={() => setEditando(undefined)}
           onGuardado={(d) => {
             setEditando(undefined);
-            cargar();
+            recargarTodo();
             if (d?.mcp?.token) setUrlClaude({ token: d.mcp.token, nombre: d.label });
           }}
         />

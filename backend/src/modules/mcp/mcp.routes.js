@@ -6,6 +6,7 @@ import { atenderPeticion, metodoNoPermitido } from './mcp.server.js';
 import { huella } from './mcp.acceso.js';
 import * as ctrl from './mcp.controller.js';
 import oauth from './mcp.oauth.js';
+import { comprobarInterruptor } from './mcp.interruptor.js';
 
 const router = Router();
 
@@ -16,11 +17,24 @@ panel.use(verifyToken);
 panel.get('/', ctrl.estado);
 panel.post('/tokens', ctrl.crearToken);
 panel.delete('/tokens/:id', ctrl.revocarToken);
+// Código de desbloqueo para Claude (#192).
+panel.post('/codigo', ctrl.crearCodigo);
+// «Desbloquear desde aquí»: sin pasar por Claude (#192, Diego 05/10).
+panel.post('/tokens/:id/desbloquear', ctrl.desbloquearUrl);
 // `soloRoles` y no `roleGuard`: roleGuard deja pasar a soporte, y Diego dijo
 // super admin y admin.
 panel.get('/personas', soloRoles('superadmin', 'admin'), ctrl.personas);
 panel.patch('/personas/:id', soloRoles('superadmin', 'admin'), ctrl.cambiarAcceso);
+// Actividad: quién consultó qué con Claude (#195).
+panel.get('/actividad', soloRoles('superadmin', 'admin'), ctrl.actividad);
+// Interruptor de emergencia (#196): solo super admin.
+panel.post('/interruptor', soloRoles('superadmin'), ctrl.interruptor);
 router.use('/panel', panel);
+
+// ─── Interruptor de emergencia (#196) ─────────────────────────────────────
+// Todo lo que viene después —OAuth y el MCP— deja de responder si está
+// apagado. El panel va antes a propósito: es desde donde se vuelve a encender.
+router.use(comprobarInterruptor);
 
 // ─── Inicio de sesión OAuth para Claude (sin JWT: lo usa Claude) ─────────
 // Para las cuentas de Claude que al pulsar «Connect» exigen OAuth. Ver
