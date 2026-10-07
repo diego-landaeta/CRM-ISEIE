@@ -17,7 +17,7 @@ import { cn } from '@/shared/lib/utils';
 import client from '@/shared/api/client';
 import NotificationsBell from './NotificationsBell';
 import { isBetaAllowed, BETA_MODE } from '@/shared/config/betaConfig';
-import { PROCESO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
+import { PROCESO_EN_PRUEBAS, SOLO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 
 const ROLE_LABELS = { superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor', soporte: 'Soporte', tutor: 'Tutor' };
 
@@ -44,7 +44,8 @@ const NAV_SECTIONS = [
           ...(PROCESO_EN_PRUEBAS ? [{ to: '/leads/seguimiento', label: 'Seguimiento de fin de mes' }] : []),
           { to: '/leads/proceso', label: 'Proceso comercial' },
           // Las becas y su embudo (#86): a quién se le ofrecieron y en qué acabaron.
-          { to: '/leads/convocatorias', label: 'Convocatorias' },
+          // Sin aprobar para producción (07/10): solo en /staging.
+          ...(SOLO_EN_PRUEBAS ? [{ to: '/leads/convocatorias', label: 'Convocatorias' }] : []),
         ],
       },
       // WhatsApp cuelga de su propia entrada, con lo suyo escalonado debajo: son
