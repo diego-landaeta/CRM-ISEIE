@@ -12,6 +12,7 @@ import { toast } from '@/shared/hooks/useToast';
 import PromptDialog from '@/shared/components/ui/PromptDialog';
 import WebhooksTab from '../components/WebhooksTab';
 import MatriculaDetail from '../components/MatriculaDetail';
+import { SOLO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 
 // Certificaciones (Certifex). Diego, 30/09: «meterlo en la parte de matrículas en
 // una subsección que sea certificaciones [...] cuando alguien termina la formación,
@@ -44,7 +45,9 @@ export default function MatriculasPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
-  const enCertificaciones = location.pathname.replace(/\/$/, '').endsWith('/certificaciones');
+  // Certificaciones (Certifex) está EN DESARROLLO, la lleva Ángel: solo en pruebas.
+  // En producción la dirección cae en el listado (Diego, 07/10).
+  const enCertificaciones = SOLO_EN_PRUEBAS && location.pathname.replace(/\/$/, '').endsWith('/certificaciones');
   // Los mismos roles que la API: emitir es de administración; las consultas de la web
   // las ve también soporte.
   const verEmisiones = tieneRol('superadmin', 'admin');
@@ -125,7 +128,7 @@ export default function MatriculasPage() {
         >
           <PlugsConnected size={14} /> <span className="hidden sm:inline">Webhooks de admisión</span><span className="sm:hidden">Webhooks</span>
         </button>
-        {verConsultas && (
+        {SOLO_EN_PRUEBAS && verConsultas && (
           <button
             onClick={() => navigate('/matriculas/certificaciones')}
             className={`flex items-center gap-2 px-3 h-9 text-sm font-bold border-b-2 focus:outline-none focus:ring-2 focus:ring-primary/40 ${enCertificaciones ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}
