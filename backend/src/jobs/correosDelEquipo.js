@@ -29,7 +29,7 @@ import { versionDe } from '../modules/feedback/cabecera.js';
  *
  * POR EMPRESA: las empresas de cada persona son las de los campus que tiene
  * asignados (una sociedad agrupa sus campus; un campus sin sociedad va solo).
- * Un superadmin sin campus asignados las ve todas. Tres empresas = un correo
+ * Un superadmin las ve todas, tenga los campus que tenga. Tres empresas = un correo
  * con tres secciones.
  *
  * NINGUNA CIFRA SE CUENTA AQUÍ: salen de las mismas funciones que pintan las
@@ -190,12 +190,14 @@ export async function proyectosDe(userId) {
 
 /**
  * Las EMPRESAS de una persona: sus campus agrupados por sociedad. Un campus sin
- * sociedad va como su propia «empresa». Un superadmin sin campus asignados
- * recibe todas.
+ * sociedad va como su propia «empresa». Un SUPERADMIN recibe todas, tenga los
+ * campus que tenga asignados: Manuel tiene los de CEDIA para trabajar y no le
+ * llegaban ni ICTESS ni Academia IA (Diego, 07/10: «faltan los reportes de
+ * academia y ictess que lleguen a manuelcasas»).
  */
 export async function empresasDe(persona) {
   let campus = await proyectosDe(persona.id);
-  if (!campus.length && persona.role === 'superadmin') {
+  if (persona.role === 'superadmin') {
     ({ rows: campus } = await query(
       `SELECT p.id, p.nombre, p.sociedad_emisora_id AS sociedad_id FROM projects p
         WHERE p.active AND NOT COALESCE(p.es_prueba, false) ORDER BY p.nombre`));
