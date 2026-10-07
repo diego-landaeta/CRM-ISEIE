@@ -176,6 +176,21 @@ export async function create(req, res, next) {
     const enDivisa = moneda !== 'EUR' && d.totalEur != null;
     const eur = service.repartirEnEuros({ totalEur: d.totalEur, ivaPct, ivaIncluido: d.ivaIncluido });
 
+    // REGLA: la factura de una venta no pasa de lo cobrado y aún sin facturar
+    // (06/10, la 87 de ICTESS y la 0188 de CEDIA). Se compara en euros, que es
+    // en lo que van los cobros; una factura en otra divisa sin su importe en
+    // euros no tiene con qué compararse y no se mira.
+    if (d.conversionId && d.tipo !== 'proforma' && !d.borrador && !d.permitirMasDeLoCobrado
+        && (moneda === 'EUR' || enDivisa)) {
+      const cuadre = await model.cuadreDeVenta(d.conversionId);
+      const motivo = cuadre && model.motivoParaNoFacturarDeMas({
+        total: enDivisa ? eur.total : total,
+        base: enDivisa ? eur.baseImponible : baseImponible,
+        ivaPct, ivaIncluido: !!d.ivaIncluido, ...cuadre,
+      });
+      if (motivo) throw new AppError(motivo, 409, 'MAS_QUE_LO_COBRADO');
+    }
+
     const inv = await model.create({
       ...d,
       ivaPct, leyendaIva, moneda,

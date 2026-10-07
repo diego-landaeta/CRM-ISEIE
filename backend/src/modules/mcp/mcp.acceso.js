@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { enteroEnv } from './mcp.config.js';
 import { AppError } from '../../shared/utils/AppError.js';
 
 /**
@@ -36,14 +37,28 @@ export const ROLES_QUE_ADMINISTRAN = ['superadmin', 'admin'];
 export const ROLES_SIN_MCP = ['tutor'];
 
 /**
- * Lo que dura un token desde que se crea. `null` = no caduca.
+ * Caducidad y rotación de las URLs (#194). Se lee del .env en cada llamada.
  *
- * Decidido con Diana el 28/09: la URL personal se pega una vez en Claude
- * Desktop y tiene que seguir funcionando. Deja de valer si la persona la
- * revoca, si se le quita el acceso o si se desactiva su usuario — y eso se
- * comprueba en cada consulta, no depende de una fecha.
+ *   MCP_TOKEN_DIAS          días que vive una URL desde que se crea (90).
+ *                           0 = no caducan (lo que había hasta la #194).
+ *   MCP_TOKEN_AVISO_DIAS    días antes de caducar en que se avisa por correo (7).
+ *   MCP_TOKEN_SIN_USO_DIAS  días sin usarse tras los que se revoca sola (30).
+ *                           0 = no se revocan por falta de uso.
+ *
+ * Hasta el 03/10 las URLs no caducaban (decidido con Diana el 28/09). La #194
+ * de Diego lo cambia: la URL es la llave, y una llave que no caduca ni se usa
+ * es justo la que alguien puede tener sin que nadie lo note.
  */
-export const DIAS_DE_VIDA_DEL_TOKEN = null;
+export function configRotacion() {
+  return {
+    diasDeVida: enteroEnv('MCP_TOKEN_DIAS', 90, { cero: true }) || null,
+    diasAviso: enteroEnv('MCP_TOKEN_AVISO_DIAS', 7, { cero: true }),
+    diasSinUso: enteroEnv('MCP_TOKEN_SIN_USO_DIAS', 30, { cero: true }) || null,
+  };
+}
+
+/** Días que vive una URL nueva; null = no caduca. */
+export const diasDeVidaToken = () => configRotacion().diasDeVida;
 
 /** Maximo de tokens vivos por persona: uno por equipo, no una coleccion. */
 export const MAX_TOKENS_VIVOS = 5;

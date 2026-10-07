@@ -9,6 +9,9 @@ const itemSchema = z.object({
 export const createInvoiceSchema = z.object({
   projectId: z.number().int().positive(),
   conversionId: z.number().int().positive().optional(),
+  // «Emitir igualmente» cuando el CRM avisa de que la factura pasa de lo
+  // cobrado de la venta.
+  permitirMasDeLoCobrado: z.coerce.boolean().optional(),
   leadId: z.number().int().positive().optional(),
   // 'proforma' = presupuesto no fiscal. 'normal' = factura. (rectificativa va por su ruta)
   tipo: z.enum(['normal', 'proforma']).optional(),

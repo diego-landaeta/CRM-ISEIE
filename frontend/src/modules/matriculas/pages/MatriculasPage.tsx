@@ -1,15 +1,24 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, lazy, Suspense } from 'react';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import usePermission from '@/shared/hooks/usePermission';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import client from '@/shared/api/client';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import Select from '@/shared/components/ui/Select';
-import { GraduationCap, Eye, PlugsConnected } from '@phosphor-icons/react';
+import { GraduationCap, Eye, PlugsConnected, Certificate, ChatText } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
 import PromptDialog from '@/shared/components/ui/PromptDialog';
 import WebhooksTab from '../components/WebhooksTab';
 import MatriculaDetail from '../components/MatriculaDetail';
+
+// Certificaciones (Certifex). Diego, 30/09: «meterlo en la parte de matrículas en
+// una subsección que sea certificaciones [...] cuando alguien termina la formación,
+// en el CRM aprobamos y Certifex emite». Carga aparte: es una pantalla grande y
+// solo la abre administración.
+const CertifexEmisionesPage = lazy(() => import('@/modules/certifex/pages/CertifexEmisionesPage'));
+const CertifexConsultasPage = lazy(() => import('@/modules/certifex/pages/CertifexConsultasPage'));
 
 const ESTADO_LABEL = {
   solicitud_admision: 'Solicitud admisión',
@@ -29,6 +38,18 @@ const ESTADO_COLOR = {
 export default function MatriculasPage() {
   const { activeProject } = useProjectContext();
   const [tab, setTab] = useState('list');
+  // Certificaciones tiene dirección propia (/matriculas/certificaciones): la campana
+  // enlaza ahí, y Certifex va por campus de Certifex, no por proyecto del CRM.
+  const { tieneRol } = usePermission();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
+  const enCertificaciones = location.pathname.replace(/\/$/, '').endsWith('/certificaciones');
+  // Los mismos roles que la API: emitir es de administración; las consultas de la web
+  // las ve también soporte.
+  const verEmisiones = tieneRol('superadmin', 'admin');
+  const verConsultas = tieneRol('superadmin', 'admin', 'soporte');
+  const vistaCert = params.get('vista') === 'consultas' || !verEmisiones ? 'consultas' : 'emisiones';
   const [data, setData] = useState([]);
   const [stats, setStats] = useState<{ total: number; pendientes: number; validadas: number; rechazadas: number }>({ total: 0, pendientes: 0, validadas: 0, rechazadas: 0 });
   const [loading, setLoading] = useState(true);
@@ -84,24 +105,68 @@ export default function MatriculasPage() {
 
   return (
     <div className="space-y-5 pb-8">
-      <PageHeader title="Matrículas" subtitle={`${stats.total || 0} matrículas en ${activeProject?.nombre || 'este proyecto'}`} />
+      <PageHeader
+        title="Matrículas"
+        subtitle={enCertificaciones
+          ? 'Certificaciones: quien termina la formación se aprueba aquí, y Certifex emite su título'
+          : `${stats.total || 0} matrículas en ${activeProject?.nombre || 'este proyecto'}`}
+      />
 
       <div className="flex border-b border-border">
         <button
-          onClick={() => setTab('list')}
-          className={`flex items-center gap-2 px-3 h-9 text-sm font-bold border-b-2 focus:outline-none focus:ring-2 focus:ring-primary/40 ${tab === 'list' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}
+          onClick={() => { setTab('list'); if (enCertificaciones) navigate('/matriculas'); }}
+          className={`flex items-center gap-2 px-3 h-9 text-sm font-bold border-b-2 focus:outline-none focus:ring-2 focus:ring-primary/40 ${!enCertificaciones && tab === 'list' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}
         >
           <GraduationCap size={14} /> Listado
         </button>
         <button
-          onClick={() => setTab('webhooks')}
-          className={`flex items-center gap-2 px-3 h-9 text-sm font-bold border-b-2 focus:outline-none focus:ring-2 focus:ring-primary/40 ${tab === 'webhooks' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}
+          onClick={() => { setTab('webhooks'); if (enCertificaciones) navigate('/matriculas'); }}
+          className={`flex items-center gap-2 px-3 h-9 text-sm font-bold border-b-2 focus:outline-none focus:ring-2 focus:ring-primary/40 ${!enCertificaciones && tab === 'webhooks' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}
         >
           <PlugsConnected size={14} /> <span className="hidden sm:inline">Webhooks de admisión</span><span className="sm:hidden">Webhooks</span>
         </button>
+        {verConsultas && (
+          <button
+            onClick={() => navigate('/matriculas/certificaciones')}
+            className={`flex items-center gap-2 px-3 h-9 text-sm font-bold border-b-2 focus:outline-none focus:ring-2 focus:ring-primary/40 ${enCertificaciones ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}
+          >
+            <Certificate size={14} /> Certificaciones
+          </button>
+        )}
       </div>
 
-      {tab === 'webhooks' ? <WebhooksTab project={activeProject} /> : <>
+      {enCertificaciones ? (
+        !verConsultas ? (
+          <EmptyState icon={Certificate} title="Solo administración" description="Las certificaciones las aprueba y emite administración." />
+        ) : (
+          <div className="space-y-4">
+            {verEmisiones && (
+              <div className="flex items-center gap-1">
+                {[
+                  { clave: 'emisiones', rotulo: 'Emisiones', icono: Certificate },
+                  { clave: 'consultas', rotulo: 'Consultas de la web', icono: ChatText },
+                ].map(({ clave, rotulo, icono: Icono }) => (
+                  <button
+                    key={clave}
+                    type="button"
+                    aria-pressed={vistaCert === clave}
+                    onClick={() => setParams(clave === 'consultas' ? { vista: 'consultas' } : {}, { replace: true })}
+                    className={`h-8 px-3 rounded-md border text-xs font-medium inline-flex items-center gap-1.5 transition-colors ${
+                      vistaCert === clave
+                        ? 'border-primary bg-primary text-primary-foreground'
+                        : 'border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground'}`}
+                  >
+                    <Icono size={13} /> {rotulo}
+                  </button>
+                ))}
+              </div>
+            )}
+            <Suspense fallback={<SkeletonTable rows={5} columns={6} />}>
+              {vistaCert === 'consultas' ? <CertifexConsultasPage embebida /> : <CertifexEmisionesPage embebida />}
+            </Suspense>
+          </div>
+        )
+      ) : tab === 'webhooks' ? <WebhooksTab project={activeProject} /> : <>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
         {[
           { label: 'Total', value: stats.total, color: '#64748b' },

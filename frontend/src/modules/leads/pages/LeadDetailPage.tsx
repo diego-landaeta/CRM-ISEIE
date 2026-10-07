@@ -13,6 +13,7 @@ import LeadHeaderCard from '../components/lead-detail/LeadHeaderCard';
 import LeadInfoCard from '../components/lead-detail/LeadInfoCard';
 import LeadProductsCard from '../components/lead-detail/LeadProductsCard';
 import AgendaDelProspecto from '@/modules/proceso/components/AgendaDelProspecto';
+import ConvocatoriasDelProspecto from '@/modules/convocatorias/components/ConvocatoriasDelProspecto';
 import { PROCESO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 import LeadUtmsCard from '../components/lead-detail/LeadUtmsCard';
 import LeadInteractionsCard, { InteractionDialog } from '../components/lead-detail/LeadInteractionsCard';
@@ -284,6 +285,7 @@ export default function LeadDetailPage() {
           />
           )}
           <LeadProductsCard leadId={lead.id} projectId={lead.project_id} isAdmin={isAdmin} />
+          <ConvocatoriasDelProspecto leadId={lead.id} projectId={lead.project_id} />
           <LeadUtmsCard utms={utms} leadOrigen={lead.origen} />
           <LeadInteractionsCard
             interacciones={interacciones}

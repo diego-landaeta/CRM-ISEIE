@@ -395,13 +395,20 @@ const MISMA_SOCIEDAD = (col, marcador) => `${col} IN (
                 AND e.serie IS NOT DISTINCT FROM base.serie)))`;
 
 /*
-  DE QUIEN ES UNA FACTURA, para una gestora (06/10): la que escribio ella, la de
-  una venta suya (quien vendio, y si no consta, de quien es la ficha) o una SIN
-  GESTORA de uno de sus campus. Necesita los alias i, cv (la venta) y l (la ficha).
+  DE QUIEN ES UNA FACTURA, para una gestora: la que escribio ella, o la de una
+  venta suya (quien vendio, y si no consta, de quien es la ficha). Necesita los
+  alias `i`, `cv` (la venta) y `l` (la ficha).
 
-  Yolanda (ICTESS) emitio la 2026/0086 --una ponencia para una empresa, sin venta
-  ni ficha-- y no le salia en su lista. Diego: «son facturas sin gestora, debo de
-  verlas». Vale para la lista y para editar, borrar, abono y cobrar la proforma.
+  Paso en MultiCRM el 06/10: Yolanda (ICTESS) emitio la 2026/0086 --una
+  ponencia para una empresa, sin venta ni ficha detras-- y no le salia en su
+  lista; a Diego, si, y con «Yolanda» en la columna de gestora. La lista miraba
+  solo la venta y la ficha, y una factura sin ninguna de las dos no era de
+  nadie. Lo mismo con editar, borrar o hacer el abono, que miraban solo la ficha
+  (`invoices.lead_id`). Las proformas ya iban asi; ahora todo igual.
+
+  Y LAS SIN GESTORA DE SUS CAMPUS. Diego, con Yolanda: «son facturas sin
+  gestora, debo de verlas»; y que tambien las gestione (con su permiso de
+  facturacion). Ya corre asi en las dos producciones desde el 06/10.
 */
 const FACTURA_DE = (param) => `(i.created_by = ${param}
     OR COALESCE(cv.vendedora_id, l.responsable_id) = ${param}
@@ -534,15 +541,23 @@ export async function deleteInvoice(id) {
     const inv = sel[0];
     if (!inv) { await client.query('ROLLBACK'); return null; }
     await client.query(`DELETE FROM invoices WHERE id = $1`, [id]);
-    if (inv.issuer_id != null && inv.serie != null && inv.numero != null) {
+    // Reajusta el correlativo al máximo restante de la SERIE Y AÑO, en todas sus
+    // filas: es como numera `nextNumero`, que coge el mayor de todas.
+    //
+    // Iba por emisora: si la serie tiene varias filas (una por campus, alguna
+    // sin emisora), borrar la ultima bajaba una y las otras se quedaban arriba,
+    // y la siguiente factura se saltaba numeros. Paso en MultiCRM con la 0188 de
+    // CEDIA el 06/10.
+    if (inv.serie != null && inv.numero != null) {
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`invoice_serie:${inv.ano}:${inv.serie}`]);
       const { rows: mx } = await client.query(
-        `SELECT COALESCE(MAX(numero), 0) AS m FROM invoices WHERE issuer_id = $1 AND ano = $2 AND serie = $3`,
-        [inv.issuer_id, inv.ano, inv.serie]
+        `SELECT COALESCE(MAX(numero), 0) AS m FROM invoices WHERE ano = $1 AND serie = $2`,
+        [inv.ano, inv.serie]
       );
       await client.query(
         `UPDATE invoice_sequences SET ultimo_numero = $1
-          WHERE issuer_id = $2 AND ano = $3 AND serie = $4 AND ultimo_numero > $1`,
-        [mx[0].m, inv.issuer_id, inv.ano, inv.serie]
+          WHERE ano = $2 AND serie = $3 AND ultimo_numero > $1`,
+        [mx[0].m, inv.ano, inv.serie]
       );
     }
     await client.query('COMMIT');
@@ -567,6 +582,76 @@ export async function conversionSinPago(conversionId) {
     [conversionId]
   );
   return rows[0] ? Number(rows[0].pagado) <= 0 && !rows[0].tiene_pagos : false;
+}
+
+/*
+  UNA FACTURA DE UNA VENTA NO PASA DE LO COBRADO (06/10).
+
+  La factura va por cobro: cada abono o cuota lleva la suya (migracion 107). La
+  cola lo hace bien, pero la factura hecha a mano desde la venta salia con el
+  precio de la venta entero. Dos el mismo dia:
+
+  - ICTESS, la 87: segunda cuota de un curso de 333 € en dos plazos de 111.
+    Salio por los 333 enteros; la primera cuota ya tenia la suya (la 0077).
+  - CEDIA, la 0188 de Delia Garcia Moratilla: cobrados 285,50, y la factura de
+    345,45 --el IVA sumado encima de un precio que ya lo llevaba--. Ademas, como
+    la factura no casaba con el cobro, el cobro se quedo en la cola, y «Generar
+    factura» devolvia la misma 0188 sin quitarlo de alli.
+
+  La regla: lo que ya se ha facturado de esa venta mas esta factura no pasa de
+  lo cobrado. Las de abono restan (van en negativo). No se cierra del todo: una
+  empresa que paga a 30 dias recibe la factura antes de pagar, y por eso se
+  puede confirmar y emitir igual (`permitirMasDeLoCobrado`).
+
+  Separada de la consulta para poder probarla sola: es la parte que decide.
+*/
+export function motivoParaNoFacturarDeMas({ total, base, ivaPct = 0, ivaIncluido = false, cobrado, facturado, totalVenta }) {
+  const r2 = (n) => Math.round(Number(n || 0) * 100) / 100;
+  const eur = (n) => `${r2(n).toFixed(2)} €`;
+  const queda = r2(Math.max(0, Number(cobrado || 0) - Number(facturado || 0)));
+  if (r2(total) <= queda + 0.01) return null;
+
+  const cuenta = Number(facturado) > 0.005
+    ? `Esta venta lleva cobrados ${eur(cobrado)} y ya tiene facturados ${eur(facturado)}`
+    : `Esta venta lleva cobrados ${eur(cobrado)}`;
+  const confirmar = ' Si de verdad tiene que ser por más —una empresa que paga a 30 días, por ejemplo—, confírmalo y se emite igual.';
+  if (queda <= 0.01) {
+    return `${cuenta}: no queda nada por facturar. La siguiente factura sale cuando entre el próximo cobro, desde la cola de facturación.${confirmar}`;
+  }
+  let porQue = '';
+  if (Number(ivaPct) > 0 && !ivaIncluido && Math.abs(r2(base) - queda) <= 0.01) {
+    porQue = ' La diferencia es el IVA: si el precio ya lo lleva, marca «IVA incluido».';
+  } else if (Number(totalVenta) > Number(cobrado) + 0.01) {
+    porQue = ' La venta va a plazos: cada factura es la de su cobro, y sale de la cola de facturación.';
+  }
+  return `${cuenta}, así que lo que queda por facturar son ${eur(queda)}, y esta factura es de ${eur(total)}.${porQue}${confirmar}`;
+}
+
+// Lo cobrado y lo facturado de la venta `c`. Cobrado: lo mayor entre la cifra
+// de la venta y la suma de sus cobros --hay ventas antiguas con `importe_pagado`
+// y sin filas de cobro, y quedarse con la menor bloquearia facturas legitimas--.
+// Facturado: las facturas y las de abono, que restan.
+const COBRADO_DE_LA_VENTA = `GREATEST(COALESCE(c.importe_pagado, 0),
+         COALESCE((SELECT SUM(cp.importe) FROM conversion_payments cp
+                    WHERE cp.conversion_id = c.id), 0))`;
+const FACTURADO_DE_LA_VENTA = `COALESCE((SELECT SUM(i.total) FROM invoices i
+          WHERE i.conversion_id = c.id
+            AND i.tipo IN ('normal', 'rectificativa')
+            AND i.estado NOT IN ('cancelada', 'borrador')), 0)`;
+
+/** Lo que lleva cobrado y facturado una venta, para `motivoParaNoFacturarDeMas`. */
+export async function cuadreDeVenta(conversionId) {
+  const { rows: [r] } = await query(
+    `SELECT c.importe_total AS total_venta,
+            ${COBRADO_DE_LA_VENTA} AS cobrado,
+            ${FACTURADO_DE_LA_VENTA} AS facturado
+       FROM conversions c
+      WHERE c.id = $1`,
+    [conversionId]
+  );
+  return r
+    ? { totalVenta: Number(r.total_venta), cobrado: Number(r.cobrado), facturado: Number(r.facturado) }
+    : null;
 }
 
 // ¿El usuario tiene el permiso factura_manager? (gestora con poderes de factura).
@@ -1155,6 +1240,20 @@ export async function emitirBorrador(id, patch = {}) {
       throw new AppError(`No se puede emitir. Falta: ${faltan.join(', ')}.`, 400, 'DRAFT_INCOMPLETE');
     }
 
+    // La misma regla que al crearla: un borrador de una venta tampoco sale por
+    // mas de lo cobrado. El borrador no cuenta en lo facturado (aun no lo esta).
+    // En otra divisa, `total` esta en euros solo si se dio su importe en euros
+    // (`total_divisa` puesto); si no, no hay con que comparar.
+    if (inv.tipo === 'normal' && inv.conversion_id && !patch.permitirMasDeLoCobrado
+        && (!inv.moneda || inv.moneda === 'EUR' || inv.total_divisa != null)) {
+      const cuadre = await cuadreDeVenta(inv.conversion_id);
+      const motivo = cuadre && motivoParaNoFacturarDeMas({
+        total: inv.total, base: inv.base_imponible, ivaPct: inv.iva_pct,
+        ivaIncluido: inv.iva_incluido, ...cuadre,
+      });
+      if (motivo) throw new AppError(motivo, 409, 'MAS_QUE_LO_COBRADO');
+    }
+
     // Gating fiscal del emisor (igual que en create): NIF inválido bloquea.
     if (inv.issuer_id) {
       const r = await client.query(`SELECT * FROM invoice_issuers WHERE id = $1`, [inv.issuer_id]);
@@ -1326,7 +1425,10 @@ export async function getLeadConversions(leadId) {
   const { rows } = await query(
     `SELECT c.id, c.producto_contratado, c.producto_contratado_id,
             c.importe_total, c.importe_pagado, c.metodo_pago, c.fecha_conversion,
-            p.nombre AS producto_nombre, p.precio AS producto_precio
+            p.nombre AS producto_nombre, p.precio AS producto_precio,
+            -- Lo cobrado que aun no tiene factura: es lo que propone «Nueva
+            -- factura» en una venta que ya ha cobrado algo (06/10, la 87).
+            (${COBRADO_DE_LA_VENTA} - ${FACTURADO_DE_LA_VENTA}) AS por_facturar
        FROM conversions c
        LEFT JOIN products p ON p.id = c.producto_contratado_id
       WHERE c.lead_id = $1
@@ -1708,6 +1810,29 @@ const FACTURA_HUERFANA_LO_CUBRE = `AND NOT EXISTS (
            AND h.estado <> 'cancelada'
            AND ABS(h.total - cp.importe) < 0.01)`;
 
+/*
+  Y UNA FACTURA QUE YA CUBRE LA VENTA ENTERA, TAMBIEN (06/10).
+
+  Es el otro caso en que `emitirFacturaDePago` no emite nada: la venta ya tiene
+  una factura por su total y entre todas cubren lo cobrado. «Generar factura»
+  devuelve entonces esa misma... y el cobro seguia en la cola. Paso en MultiCRM
+  con Delia Garcia Moratilla (CEDIA): Dayana pulsaba, salia la 0188 y Delia
+  seguia ahi.
+
+  La misma condicion que alli, para que la cola y el boton digan lo mismo.
+*/
+const VENTA_YA_FACTURADA_LO_CUBRE = `AND NOT (
+        EXISTS (SELECT 1 FROM invoices t
+                 WHERE t.conversion_id = cp.conversion_id
+                   AND t.tipo = 'normal' AND t.estado <> 'cancelada'
+                   AND t.total >= (SELECT v.importe_total FROM conversions v
+                                    WHERE v.id = cp.conversion_id) - 0.01)
+        AND (SELECT COALESCE(SUM(s.total), 0) FROM invoices s
+              WHERE s.conversion_id = cp.conversion_id
+                AND s.tipo = 'normal' AND s.estado <> 'cancelada') + 0.01
+            >= (SELECT COALESCE(SUM(p.importe), 0) FROM conversion_payments p
+                 WHERE p.conversion_id = cp.conversion_id))`;
+
 export async function listPagosSinFactura(projectId, hasta = null) {
   const params = [projectId];
   let filtroFecha = '';
@@ -1741,6 +1866,7 @@ export async function listPagosSinFactura(projectId, hasta = null) {
         AND NOT EXISTS (SELECT 1 FROM invoices i
                          WHERE i.payment_id = cp.id AND i.estado <> 'cancelada')
         ${FACTURA_HUERFANA_LO_CUBRE}
+        ${VENTA_YA_FACTURADA_LO_CUBRE}
       ORDER BY cp.fecha ASC, cp.id ASC`,
     params
   );
@@ -1767,6 +1893,7 @@ export async function hayPendientesAnteriores(projectId, fecha, paymentId) {
           AND NOT EXISTS (SELECT 1 FROM invoices i
                            WHERE i.payment_id = cp.id AND i.estado <> 'cancelada')
           ${FACTURA_HUERFANA_LO_CUBRE}
+          ${VENTA_YA_FACTURADA_LO_CUBRE}
      ) AS hay`,
     [projectId, fecha, paymentId || 0]
   );

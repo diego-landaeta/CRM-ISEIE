@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { CheckCircle } from '@phosphor-icons/react';
 import { invoicesApi } from '../api/invoices.api';
 import type { Invoice } from '../api/invoices.api';
+import { emitirPreguntandoSiPasa } from '../lib/masQueLoCobrado';
 import { toast } from '@/shared/hooks/useToast';
 
 const fmt = (n: number) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(Number(n || 0));
@@ -46,7 +47,8 @@ export default function EmitirBorradorDialog({ invoice, onClose, onEmitted }: { 
         clienteCiudad: ciudad.trim(), clienteCp: cp.trim(), clientePais: pais.trim(),
       };
       const res = esBorrador
-        ? await invoicesApi.emitir(invoice.id, payload)
+        ? await emitirPreguntandoSiPasa((permitir) =>
+            invoicesApi.emitir(invoice.id, permitir ? { ...payload, permitirMasDeLoCobrado: true } : payload))
         : await invoicesApi.completarDatos(invoice.id, payload);
       if (res.success && res.data) onEmitted(res.data.codigo || '', invoice.id);
       else toast({ title: 'Error', description: (res as { error?: string }).error || 'No se pudo emitir', variant: 'destructive' });

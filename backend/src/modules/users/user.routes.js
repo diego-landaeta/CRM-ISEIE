@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { verifyToken, roleGuard } from '../../shared/middleware/auth.js';
+import { verifyToken, roleGuard, soloRoles } from '../../shared/middleware/auth.js';
 import { uploadImage } from '../../shared/middleware/upload.js';
 import * as userController from './user.controller.js';
 import * as viewsController from './user.views.controller.js';
@@ -42,6 +42,8 @@ router.patch('/:id', userController.update);
 router.delete('/:id', userController.deactivate);
 router.patch('/:id/reactivate', userController.reactivate);
 router.patch('/:id/password', userController.setPassword);
+// Antes de cambiar un correo, el aviso de Make (#248). `soloRoles`: roleGuard deja pasar a soporte.
+router.get('/:id/aviso-correo', soloRoles('superadmin'), userController.avisoCorreo);
 router.patch('/:id/availability',                 availabilityController.setAvailability);
 router.get('/:id/availability-blocks',            availabilityController.listBlocks);
 router.post('/:id/availability-blocks',           availabilityController.createBlock);

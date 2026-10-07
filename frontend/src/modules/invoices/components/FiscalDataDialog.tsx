@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { X, FloppyDisk } from '@phosphor-icons/react';
 import { invoicesApi } from '../api/invoices.api';
 import type { LeadFiscalData, InvoiceItem } from '../api/invoices.api';
+import { emitirPreguntandoSiPasa } from '../lib/masQueLoCobrado';
 import { toast } from '@/shared/hooks/useToast';
 
 interface Props {
@@ -114,7 +115,8 @@ export default function FiscalDataDialog({ projectId, leadId, conversionId, defa
     }
     setSaving(true);
     try {
-      const res = await invoicesApi.create({
+      const res = await emitirPreguntandoSiPasa((permitir) => invoicesApi.create({
+        ...(permitir ? { permitirMasDeLoCobrado: true } : {}),
         projectId, leadId, conversionId,
         issuerId: issuerId || undefined,
         tipo: isProforma ? 'proforma' : undefined,
@@ -133,7 +135,7 @@ export default function FiscalDataDialog({ projectId, leadId, conversionId, defa
         notas: notas.trim() || undefined,
         metodoPago,
         piePago: piePago.trim() || undefined,
-      });
+      }));
       if (res.success && res.data) {
         toast({
           title: asDraft ? '✓ Borrador guardado' : `✓ ${docCap} ${isProforma ? 'generado' : 'emitida'}`,

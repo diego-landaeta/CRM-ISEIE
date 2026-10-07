@@ -100,6 +100,8 @@ const ColaDelDiaPage = lazy(() => import('./modules/proceso/pages/ColaDelDiaPage
 // El repaso de fin de mes: toda la base que no compro. No es la cola del dia.
 const SeguimientoPage = lazy(() => import('./modules/proceso/pages/SeguimientoPage'));
 const ProcesoPage = lazy(() => import('./modules/proceso/pages/ProcesoPage'));
+// Las becas: las campañas, su embudo y a quién se le debe respuesta (#86).
+const ConvocatoriasPage = lazy(() => import('./modules/convocatorias/pages/ConvocatoriasPage'));
 
 const ROUTE_TITLES = {
   '/dashboard':                       'Dashboard',
@@ -124,6 +126,7 @@ const ROUTE_TITLES = {
   '/matriculas':                      'Matrículas',
   '/conexion/mcp':                    'MCP',
   '/conexion/conectores':             'Conectores',
+  '/matriculas/certificaciones':      'Certificaciones',
   '/forms':                           'Formularios',
   '/make-webhooks':                   'Make / Webhooks',
   '/woocommerce':                     'WooCommerce',
@@ -205,6 +208,7 @@ function App() {
           <Route path="/leads/seguimiento"
             element={PROCESO_EN_PRUEBAS ? <SeguimientoPage /> : <Navigate to="/leads" replace />} />
           <Route path="/leads/proceso" element={<ProcesoPage />} />
+          <Route path="/leads/convocatorias" element={<ConvocatoriasPage />} />
           <Route path="/leads/:id" element={<LeadDetailPage />} />
           <Route path="/products" element={<ProductsPage />} />
           <Route path="/products/pending" element={<CoursesPendingPage />} />
@@ -244,6 +248,10 @@ function App() {
           {/* Conexión → MCP y Conectores, como en MultiCRM. Quién puede usar el MCP lo decide el servidor. */}
           <Route path="/conexion/mcp" element={<McpPage />} />
           <Route path="/conexion/conectores" element={<ConnectorsPage />} />
+          {/* Certifex vive dentro de Matrículas (Diego, 30/09). */}
+          <Route path="/matriculas/certificaciones" element={<MatriculasPage />} />
+          <Route path="/certifex/consultas" element={<Navigate to="/matriculas/certificaciones?vista=consultas" replace />} />
+          <Route path="/certifex/emisiones" element={<Navigate to="/matriculas/certificaciones" replace />} />
           <Route path="/forms" element={<FormsPage />} />
           <Route path="/captacion/whatsapp" element={<WhatsappWidgetPage />} />
           <Route path="/whatsapp" element={<ChatWhatsappPage />} />

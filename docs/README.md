@@ -19,7 +19,7 @@ VPS `72.60.90.135`. PM2 corre como **root** (`sudo pm2 …`).
 
 **Subir el backend.** El código sale de la rama (`git archive <rama> backend/src …`), nunca de ficheros sueltos. Antes de reiniciar se carga la app entera sin escuchar (`NODE_ENV=test node --env-file=.env -e "import('./src/app.js')"`). Luego `sudo pm2 restart` y `/api/health`.
 **Subir el frontal.** Comprobar en `dist/index.html` que las rutas son las del entorno (`/assets/` o `/staging/assets/`). `.env.production` no está en git: lleva `VITE_BETA_MODE=true` y, desde la 2.0.0, `VITE_PROCESO_EN_PRUEBAS=true`.
-**Migraciones.** Como `postgres`, con su GRANT a `crm_iseie_user`, y comprobando el catálogo después. Copias antes de subir en `/var/backups/crm-iseie/`.
+**Migraciones.** Como `postgres`, con su GRANT a `crm_iseie_user`, y comprobando el catálogo después. **Después de cada tanda, `scripts/dar-propiedad-a-crm-user.sql`** sobre la misma base (#71): lo que crea `postgres` nace suyo y las bases se separan. Es idempotente y el destino es el dueño de la base (`crm_iseie_user`). Copias antes de subir en `/var/backups/crm-iseie/`.
 
 **Interruptores del `.env` de producción** (29/09): `NOVEDADES_AUTO=1` · `FEEDBACK_DIA7_INICIO=2026-09-29` · `PASO_VENCIDO_DISABLED=1` · correos del equipo encendidos · `LEAD_SIN_TOCAR_DISABLED=1`.
 **Paridad:** MultiCRM (https://360crm.tech/crm, repo `CRM`) tiene las mismas funciones; aquí las rutas son `/leads` donde allí es `/prospectos`. Conectores y el MCP de Claude, de momento, solo allí.
