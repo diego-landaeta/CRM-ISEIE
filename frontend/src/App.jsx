@@ -1,7 +1,7 @@
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Suspense, lazy, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { PROCESO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
+import { PROCESO_EN_PRUEBAS, SOLO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 
 // Layout y guardas
 const AppLayout = lazy(() => import('./shared/components/layout/AppLayout'));
@@ -208,7 +208,7 @@ function App() {
           <Route path="/leads/seguimiento"
             element={PROCESO_EN_PRUEBAS ? <SeguimientoPage /> : <Navigate to="/leads" replace />} />
           <Route path="/leads/proceso" element={<ProcesoPage />} />
-          <Route path="/leads/convocatorias" element={<ConvocatoriasPage />} />
+          <Route path="/leads/convocatorias" element={SOLO_EN_PRUEBAS ? <ConvocatoriasPage /> : <Navigate to="/leads" replace />} />
           <Route path="/leads/:id" element={<LeadDetailPage />} />
           <Route path="/products" element={<ProductsPage />} />
           <Route path="/products/pending" element={<CoursesPendingPage />} />
