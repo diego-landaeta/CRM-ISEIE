@@ -18,3 +18,12 @@
  * El codigo sigue ahi y sigue probandose en /staging. No se borra nada.
  */
 export const PROCESO_EN_PRUEBAS = import.meta.env.VITE_PROCESO_EN_PRUEBAS === 'true';
+
+/**
+ * Lo que todavía NO está aprobado para producción: se ve en /staging (y en
+ * local), no en crm.iseie.com. Diego, 07/10, al ver la 2.1.0 publicada:
+ * Convocatorias no va, «recuerda que era Claude y los errores». Mismo nombre
+ * que en MultiCRM. El código sigue ahí; no se borra nada.
+ */
+export const SOLO_EN_PRUEBAS = import.meta.env.DEV
+  || (import.meta.env.BASE_URL || '').startsWith('/staging/');

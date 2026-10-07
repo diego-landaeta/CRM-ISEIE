@@ -90,17 +90,6 @@ export const VERSIONES = [
             ],
             "ruta": "/leads/cola",
             "boton": "Abrir la cola del día"
-          },
-          {
-            "titulo": "Convocatorias y becas",
-            "texto": "Pantalla nueva en Prospectos. Arriba, a quién le debes una respuesta de beca (lo de hoy en ámbar, lo atrasado en rojo); debajo, el embudo de cada convocatoria. En la ficha del prospecto se ofrece la beca, se apunta si llenó la solicitud y el descuento: si pasa del tope avisa, pero no bloquea. Crear y cerrar convocatorias es de administración.",
-            "roles": [
-              "gestor",
-              "admin",
-              "superadmin"
-            ],
-            "ruta": "/leads/convocatorias",
-            "boton": "Abrir Convocatorias"
           }
         ]
       },
