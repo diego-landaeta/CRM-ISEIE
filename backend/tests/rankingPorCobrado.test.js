@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// El ranking de gestoras, por lo FACTURADO (Diego, 30/09: «el ranking de
-// gestoras será por montos facturados; así es como se medirá»).
+// El ranking de gestoras, por lo COBRADO (Diego, 08/10: «en los reportes el
+// ranking de gestora es por lo cobrado»). Del 30/09 al 08/10 fue por lo
+// facturado: lo facturado sigue saliendo, pero ya no ordena.
 
 let filas = [];
 const consultas = [];
@@ -13,58 +14,60 @@ vi.mock('../src/shared/config/db.js', () => ({
 
 const { miPuesto } = await import('../src/modules/reports/report.model.js');
 
-const fila = (id, nombre, { ventas = 0, facturado = 0, leads = 0, mes = '2026-09' } = {}) => ({
-  mes, asesora_id: id, asesora: nombre, leads, ventas, vendido: 0, cobrado: 0, facturado,
+const fila = (id, nombre, { ventas = 0, cobrado = 0, facturado = 0, leads = 0, mes = '2026-09' } = {}) => ({
+  mes, asesora_id: id, asesora: nombre, leads, ventas, vendido: 0, cobrado, facturado,
 });
 
 beforeEach(() => { filas = []; consultas.length = 0; });
 
 describe('el puesto', () => {
-  it('va por lo facturado, aunque otra haya cerrado más ventas', async () => {
+  it('va por lo cobrado, aunque otra haya cerrado más ventas o facturado más', async () => {
     filas = [
-      fila(1, 'Dayana', { ventas: 23, facturado: 5424 }),
-      fila(2, 'Ana', { ventas: 21, facturado: 10682 }),
-      fila(3, 'Yolanda', { ventas: 12, facturado: 5171 }),
+      fila(1, 'Dayana', { ventas: 23, cobrado: 5424, facturado: 9000 }),
+      fila(2, 'Ana', { ventas: 21, cobrado: 10682, facturado: 4000 }),
+      fila(3, 'Yolanda', { ventas: 12, cobrado: 5171, facturado: 12000 }),
     ];
     const r = await miPuesto({ userId: 1, projectIds: [1], from: '2026-09-01', to: '2026-09-30', esJefe: true });
     expect(r.tabla.map((f) => f.nombre)).toEqual(['Ana', 'Dayana', 'Yolanda']);
     expect(r.puesto).toBe(2);
-    expect(r.facturado).toBe(5424);
+    expect(r.cobrado).toBe(5424);
+    expect(r.facturado).toBe(9000);
   });
 
-  it('lo que falta para subir y la primera, en euros facturados', async () => {
-    filas = [fila(1, 'Dayana', { ventas: 23, facturado: 5424 }), fila(2, 'Ana', { ventas: 21, facturado: 10682 })];
+  it('lo que falta para subir y la primera, en euros cobrados', async () => {
+    filas = [fila(1, 'Dayana', { ventas: 23, cobrado: 5424 }), fila(2, 'Ana', { ventas: 21, cobrado: 10682 })];
     const r = await miPuesto({ userId: 1, projectIds: [1] });
     expect(r.faltan_para_subir).toBe(5258);
-    expect(r.mejor_facturado).toBe(10682);
+    expect(r.mejor_cobrado).toBe(10682);
+    expect(r.cobrado_equipo).toBe(16106);
   });
 
   it('suma varios meses y redondea al céntimo el reparto de una venta compartida', async () => {
     filas = [
-      fila(1, 'Dayana', { facturado: 100.005, mes: '2026-08' }),
-      fila(1, 'Dayana', { facturado: 200.004, mes: '2026-09' }),
-      fila(2, 'Ana', { facturado: 300 }),
+      fila(1, 'Dayana', { cobrado: 100.005, mes: '2026-08' }),
+      fila(1, 'Dayana', { cobrado: 200.004, mes: '2026-09' }),
+      fila(2, 'Ana', { cobrado: 300 }),
     ];
     const r = await miPuesto({ userId: 1, projectIds: [1], esJefe: true });
-    expect(r.tabla.map((f) => [f.nombre, f.facturado])).toEqual([['Dayana', 300.01], ['Ana', 300]]);
+    expect(r.tabla.map((f) => [f.nombre, f.cobrado])).toEqual([['Dayana', 300.01], ['Ana', 300]]);
     expect(r.faltan_para_subir).toBeNull();
   });
 
-  it('en empate de facturado, manda el número de ventas', async () => {
-    filas = [fila(1, 'Dayana', { ventas: 2, facturado: 500 }), fila(2, 'Ana', { ventas: 5, facturado: 500 })];
+  it('en empate de cobrado, manda el número de ventas', async () => {
+    filas = [fila(1, 'Dayana', { ventas: 2, cobrado: 500 }), fila(2, 'Ana', { ventas: 5, cobrado: 500 })];
     const r = await miPuesto({ userId: 1, projectIds: [1], esJefe: true });
     expect(r.tabla.map((f) => f.nombre)).toEqual(['Ana', 'Dayana']);
   });
 
   it('una gestora ve su puesto, no la tabla de las demás', async () => {
-    filas = [fila(1, 'Dayana', { facturado: 5424 }), fila(2, 'Ana', { facturado: 10682 })];
+    filas = [fila(1, 'Dayana', { cobrado: 5424 }), fila(2, 'Ana', { cobrado: 10682 })];
     const r = await miPuesto({ userId: 1, projectIds: [1] });
     expect(r.tabla).toBeNull();
     expect(r.puesto).toBe(2);
   });
 });
 
-describe('la consulta de lo facturado', () => {
+describe('la consulta de lo facturado (sigue saliendo, ya no ordena)', () => {
   it('cuenta facturas y abonos emitidos, no proformas, borradores ni anuladas', async () => {
     await miPuesto({ userId: 1, projectIds: [1, 2], from: '2026-09-01', to: '2026-09-30', esJefe: true });
     const { sql } = consultas[0];

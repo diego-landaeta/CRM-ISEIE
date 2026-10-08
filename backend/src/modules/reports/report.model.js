@@ -884,8 +884,9 @@ const FEC_VENTA = `(SELECT i.fecha_emision FROM invoices i
                     ORDER BY cpf.fecha, cpf.id, i.fecha_emision, i.id LIMIT 1)`;
 
 /*
-  LO FACTURADO, que es como se mide a las gestoras. Diego, 30/09: «el ranking de
-  gestoras será por montos facturados; así es como se medirá».
+  LO FACTURADO. Del 30/09 al 08/10 fue la medida del ranking de gestoras; desde
+  el 08/10 el ranking va por lo COBRADO (ver `miPuesto`), y lo facturado sigue
+  saliendo al lado, como dato.
 
   · El TOTAL de la factura, IVA incluido: el número que lleva el papel. Para
     medir sin IVA basta con cambiar esta línea por `i.base_imponible`.
@@ -1607,10 +1608,10 @@ export async function ventasSinFacturaEnRango({ projectId, projectIds, from, to 
 /**
  * COMO VOY YO: el puesto y la tasa de conversion de una gestora.
  *
- * EL PUESTO ES POR LO FACTURADO desde el 30/09 (Diego: «el ranking de gestoras
- * será por montos facturados; así es como se medirá»). Antes era por numero de
- * ventas, y cada pantalla comparaba por una cosa distinta. La definicion de
- * facturado esta en `IMPORTE_FACTURADO`, encima de `asesorasPorMes`.
+ * EL PUESTO ES POR LO COBRADO desde el 08/10 (Diego, 08/10: «en los reportes el ranking de gestora es por lo cobrado»): los pagos registrados en el periodo, por su fecha de cobro y
+ * repartidos como la venta (`conversion_reparto`). Antes fue por numero de
+ * ventas y, del 30/09 al 08/10, por lo facturado. El cobrado sale de
+ * `asesorasPorMes`, el mismo que pinta el panel de asesoras en Informes.
  *
  * Diego, 22/09: «debe mostrar en el dashboard y en prospectos: eres la gestora
  * numero X de ventas», y «su tasa de conversion en prospectos y clientes, y
@@ -1656,14 +1657,15 @@ export async function miPuesto({ userId, projectId, projectIds, from, to, base =
   }
 
   const tasaDe = (a) => (a.leads > 0 ? Math.round((a.ventas / a.leads) * 1000) / 10 : 0);
-  // Por lo facturado, y en empate por numero de ventas. Redondeado al
+  // Por lo COBRADO, y en empate por numero de ventas. Redondeado al
   // centimo: la suma de repartos deja decimales que no deben desempatar.
   const cent = (v) => Math.round(v * 100) / 100;
-  for (const a of porAsesora.values()) a.facturado = cent(a.facturado);
-  const tabla = [...porAsesora.values()].sort((x, y) => y.facturado - x.facturado || y.ventas - x.ventas);
+  for (const a of porAsesora.values()) { a.cobrado = cent(a.cobrado); a.facturado = cent(a.facturado); }
+  const tabla = [...porAsesora.values()].sort((x, y) => y.cobrado - x.cobrado || y.ventas - x.ventas);
 
-  const equipo = tabla.reduce((s, a) => ({ leads: s.leads + a.leads, ventas: s.ventas + a.ventas, facturado: s.facturado + a.facturado }),
-    { leads: 0, ventas: 0, facturado: 0 });
+  const equipo = tabla.reduce((s, a) => ({
+    leads: s.leads + a.leads, ventas: s.ventas + a.ventas, cobrado: s.cobrado + a.cobrado, facturado: s.facturado + a.facturado,
+  }), { leads: 0, ventas: 0, cobrado: 0, facturado: 0 });
   const i = tabla.findIndex((a) => a.user_id === userId);
   const yo = i >= 0 ? tabla[i] : { user_id: userId, nombre: null, leads: 0, ventas: 0, vendido: 0, cobrado: 0, facturado: 0 };
   const arriba = i > 0 ? tabla[i - 1] : null;
@@ -1703,12 +1705,14 @@ export async function miPuesto({ userId, projectId, projectIds, from, to, base =
     tasa: tasaDe(yo),
     tasa_equipo: equipo.leads > 0 ? Math.round((equipo.ventas / equipo.leads) * 1000) / 10 : 0,
     ventas_equipo: equipo.ventas,
+    cobrado_equipo: cent(equipo.cobrado),
     facturado_equipo: cent(equipo.facturado),
     // Cuanto falta para adelantar a quien va justo delante, EN EUROS
-    // FACTURADOS. Sin nombre: es lo que hace falta para espabilar, no una
+    // COBRADOS. Sin nombre: es lo que hace falta para espabilar, no una
     // lista de rivales.
-    faltan_para_subir: arriba ? cent(arriba.facturado - yo.facturado) : null,
+    faltan_para_subir: arriba ? cent(arriba.cobrado - yo.cobrado) : null,
     // El primero de la tabla, para saber donde esta el liston.
+    mejor_cobrado: tabla.length ? tabla[0].cobrado : 0,
     mejor_facturado: tabla.length ? tabla[0].facturado : 0,
     mejor_ventas: tabla.length ? tabla[0].ventas : 0,
   };
