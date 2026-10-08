@@ -91,15 +91,15 @@ export const INFORMES = {
     descripcion: 'Formaciones (productos) más vendidas.',
     ejecutar: reportes.formacionesMasVendidas,
   },
-  // Diego, 30/09: «el ranking de gestoras será por montos facturados; así es
-  // como se medirá». El mismo calculo que «Cómo voy» (`miPuesto`), para que
+  // Diego, 08/10: «en los reportes el ranking de gestora es por lo cobrado» (antes, del 30/09 al 08/10, por lo facturado).
+  // El mismo calculo que «Cómo voy» (`miPuesto`), para que
   // Claude no conteste «la mejor comercial» con otra medida.
   //
   // Solo super admin y admin: el puesto se calcula con los numeros de TODO el
   // equipo, y por Claude una gestora no saca cifras de nadie mas (lo vigila
   // `mcpAmbito.test.js`). Su puesto lo ve en «Cómo voy».
   ranking_gestoras: {
-    descripcion: 'El ranking de gestoras, que se mide por lo FACTURADO: facturas emitidas en el periodo, IVA incluido, y los abonos restan. '
+    descripcion: 'El ranking de gestoras, que se mide por lo COBRADO: los pagos registrados en el periodo, por su fecha de cobro. '
       + 'Es la respuesta a «quién es la mejor comercial» (solo super admin y admin).',
     ejecutar: ({ projectIds, from, to }) => reportes.miPuesto({ userId: 0, projectIds, from, to, esJefe: true }),
     soloAdmin: true,
@@ -197,7 +197,7 @@ export const HERRAMIENTAS = [
     nombre: 'resumen_ventas',
     titulo: 'Resumen de ventas',
     descripcion: 'Número de ventas, importe vendido, cobrado y pendiente en un periodo, desglosado por campus. '
-      + 'Para comparar gestoras no uses esto: se miden por lo facturado, con el informe «ranking_gestoras».',
+      + 'Para comparar gestoras no uses esto: se miden por lo cobrado, con el informe «ranking_gestoras».',
     entrada: { ...AMBITO, ...PERIODO },
     ejecutar: (ambito, a) => model.resumenVentas({ ...a, ...acotar(ambito, a) }),
   },
