@@ -343,8 +343,8 @@ export async function correoDiarioGestora(persona, ahora = new Date()) {
     ...(mes && mes.puesto ? [
       apartado('Tu mes', { detalle: `del 1 al ${ahora.getDate()} de ${MESES[ahora.getMonth()]}` }),
       tarjetas([
-        { etiqueta: 'Tu puesto', valor: `${mes.puesto}.º`, nota: `de ${mes.de} · por lo facturado`, destaca: mes.puesto <= 3 },
-        { etiqueta: 'Facturado', valor: eur(mes.facturado), nota: mes.faltan_para_subir > 0 ? `${eur(mes.faltan_para_subir)} para subir un puesto` : `${entero(mes.ventas)} ventas` },
+        { etiqueta: 'Tu puesto', valor: `${mes.puesto}.º`, nota: `de ${mes.de} · por lo cobrado`, destaca: mes.puesto <= 3 },
+        { etiqueta: 'Cobrado', valor: eur(mes.cobrado), nota: mes.faltan_para_subir > 0 ? `${eur(mes.faltan_para_subir)} para subir un puesto` : `${entero(mes.ventas)} ventas` },
         { etiqueta: 'Tu conversión', valor: `${entero(mes.tasa)} %`, nota: `equipo ${entero(mes.tasa_equipo)} %` },
         { etiqueta: 'Vendido', valor: eur(mes.vendido) },
       ]),
@@ -386,10 +386,10 @@ export async function correoSemanalGestora(persona, ahora = new Date()) {
       { etiqueta: 'Prospectos recibidos', valor: entero(ls.total), cmp: comparar(ls.total, la.total) },
       { etiqueta: 'Ventas', valor: entero(cs.total), cmp: comparar(cs.total, ca.total), destaca: n(cs.total) > 0 },
       { etiqueta: 'Tu conversión', valor: `${entero(puesto?.tasa)} %`, nota: puesto ? `equipo ${entero(puesto.tasa_equipo)} %` : '' },
-      { etiqueta: 'Tu puesto', valor: puesto?.puesto ? `${puesto.puesto}.º` : '—', nota: puesto?.puesto ? `de ${puesto.de} por lo facturado${puestoAntes?.puesto ? ` · la semana anterior ${puestoAntes.puesto}.º` : ''}` : 'sin ventas ni prospectos' },
+      { etiqueta: 'Tu puesto', valor: puesto?.puesto ? `${puesto.puesto}.º` : '—', nota: puesto?.puesto ? `de ${puesto.de} por lo cobrado${puestoAntes?.puesto ? ` · la semana anterior ${puestoAntes.puesto}.º` : ''}` : 'sin ventas ni prospectos' },
     ]),
     parrafo(puesto?.faltan_para_subir > 0
-      ? `Facturaste <strong>${eur(puesto.facturado)}</strong>. Te faltaron <strong>${eur(puesto.faltan_para_subir)}</strong> para subir un puesto; la mejor de la semana facturó ${eur(puesto.mejor_facturado)}.`
+      ? `Cobraste <strong>${eur(puesto.cobrado)}</strong>. Te faltaron <strong>${eur(puesto.faltan_para_subir)}</strong> para subir un puesto; la mejor de la semana cobró ${eur(puesto.mejor_cobrado)}.`
       : (puesto?.puesto === 1 ? '<strong>Fuiste la primera de la semana.</strong> Enhorabuena.' : '')),
     apartado('La semana que empieza', { detalle: 'tu cola del proceso comercial' }),
     tarjetas([
@@ -502,9 +502,9 @@ export async function correoSemanalDireccion(persona, ahora = new Date()) {
     const cs = s.conversions || {}; const ca = a.conversions || {};
     const tasa = n(ls.total) ? Math.round((n(ls.convertido) / n(ls.total)) * 1000) / 10 : 0;
     const tasaA = n(la.total) ? Math.round((n(la.convertido) / n(la.total)) * 1000) / 10 : 0;
-    // Por lo facturado (Diego, 30/09), que es por lo que ordena `miPuesto`.
+    // Por lo cobrado (Diego, 08/10), que es por lo que ordena `miPuesto`.
     const filas = (puesto?.tabla || []).slice(0, 12).map((g) => [
-      `${g.puesto}. ${esc(g.nombre || '—')}`, eur(g.facturado), entero(g.ventas), `${entero(g.tasa)} %`, eur(g.cobrado),
+      `${g.puesto}. ${esc(g.nombre || '—')}`, eur(g.cobrado), entero(g.ventas), `${entero(g.tasa)} %`, eur(g.facturado),
     ]);
     partes.push([
       apartado(e.nombre, { logoUrl: e.logoUrl, detalle: e.campus.length > 1 ? `${e.campus.length} campus` : '' }),
@@ -514,7 +514,7 @@ export async function correoSemanalDireccion(persona, ahora = new Date()) {
         { etiqueta: 'Cobrado', valor: eur(cob), cmp: comparar(cob, cobA) },
         { etiqueta: 'Conversión', valor: `${entero(tasa)} %`, nota: `la anterior ${entero(tasaA)} %` },
       ]),
-      filas.length ? `<div style="font-size:13px;font-weight:bold;color:${GRIS};margin:18px 0 0">Ranking de la semana</div>${tabla(['Gestora', 'Facturado', 'Ventas', 'Conv.', 'Cobrado'], filas)}` : '',
+      filas.length ? `<div style="font-size:13px;font-weight:bold;color:${GRIS};margin:18px 0 0">Ranking de la semana</div>${tabla(['Gestora', 'Cobrado', 'Ventas', 'Conv.', 'Facturado'], filas)}` : '',
     ].join(''));
   }
   return {
@@ -523,7 +523,7 @@ export async function correoSemanalDireccion(persona, ahora = new Date()) {
       cabeceraUrl: empresas.length === 1 ? await cabeceraPara(empresas[0].campus) : await cabeceraPara([]),
       preTitulo: 'Reporte semanal',
       titulo: `Semana del ${bonita(semana.from)} al ${bonita(semana.to)}`,
-      subtitulo: `${empresas.length > 1 ? `Tus ${empresas.length} empresas, cada una con sus cifras. ` : ''}Comparada con la semana anterior. El ranking es por lo facturado, como en «Cómo voy»; prospectos y ventas cuentan como Reportes, y lo cobrado sale de los pagos registrados.`,
+      subtitulo: `${empresas.length > 1 ? `Tus ${empresas.length} empresas, cada una con sus cifras. ` : ''}Comparada con la semana anterior. El ranking es por lo cobrado, como en «Cómo voy»; prospectos y ventas cuentan como Reportes, y lo cobrado sale de los pagos registrados.`,
       contenido: partes.join('') + boton('Abrir Reportes', `${base()}${R.informes}`),
     }),
   };

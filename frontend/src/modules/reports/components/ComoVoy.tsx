@@ -21,8 +21,7 @@ import { ponerAmbito } from '@/shared/lib/ambitoInforme';
  * del equipo» se entiende sin que nadie tenga que decidir antes qué es bueno.
  * Cuando Carlos ponga su baremo, se suma encima.
  *
- * EL PUESTO ES POR LO FACTURADO desde el 30/09. Diego: «el ranking de gestoras
- * será por montos facturados; así es como se medirá». Lo calcula el servidor
+ * EL PUESTO ES POR LO COBRADO desde el 08/10 (Diego, 08/10: «en los reportes el ranking de gestora es por lo cobrado»; del 30/09 al 08/10 fue por lo facturado). Lo calcula el servidor
  * (`miPuesto`); aquí solo se dice. Las ventas siguen al lado, como
  * contexto.
  *
@@ -64,15 +63,17 @@ export interface Puesto {
   leads: number;
   ventas: number;
   vendido: number;
-  cobrado: number;
   /** Por esto se ordena el puesto. */
+  cobrado: number;
   facturado: number;
   tasa: number;
   tasa_equipo: number;
   ventas_equipo: number;
+  cobrado_equipo: number;
   facturado_equipo: number;
-  /** En euros facturados. */
+  /** En euros cobrados. */
   faltan_para_subir: number | null;
+  mejor_cobrado: number;
   mejor_facturado: number;
   mejor_ventas: number;
   /** Solo para quien manda. `null` para una gestora. */
@@ -123,7 +124,7 @@ function Podio({ filas, compacto }: { filas: FilaRanking[]; compacto: boolean })
             <span className="w-4 shrink-0 text-right font-bold tabular-nums text-muted-foreground">{f.puesto}</span>
             <span className="truncate font-medium">{corto(f.nombre)}</span>
             <span className="ml-auto shrink-0 tabular-nums">
-              <strong>{euros(f.facturado)}</strong>
+              <strong>{euros(f.cobrado)}</strong>
               <span className="text-muted-foreground"> · {numero(f.ventas)} {f.ventas === 1 ? 'venta' : 'ventas'}</span>
             </span>
           </li>
@@ -158,7 +159,7 @@ function Podio({ filas, compacto }: { filas: FilaRanking[]; compacto: boolean })
           <span className="max-w-full truncate text-center text-normal font-semibold" title={f.nombre || ''}>
             {corto(f.nombre)}
           </span>
-          <span className="text-secundario font-semibold tabular-nums">{euros(f.facturado)}</span>
+          <span className="text-secundario font-semibold tabular-nums">{euros(f.cobrado)}</span>
           <span className="text-secundario tabular-nums text-muted-foreground">
             {numero(f.ventas)} {f.ventas === 1 ? 'venta' : 'ventas'}
           </span>
@@ -217,7 +218,7 @@ export default function ComoVoy({
     return {
       gente: t.length,
       ventas: t.reduce((s, x) => s + Number(x.ventas || 0), 0),
-      facturado: t.reduce((s, x) => s + Number(x.facturado || 0), 0),
+      cobrado: t.reduce((s, x) => s + Number(x.cobrado || 0), 0),
     };
   }, [d]);
 
@@ -226,7 +227,7 @@ export default function ComoVoy({
   // Una gestora sin nada este mes no está en la clasificación: decirle que es
   // «la 0 de 7» no es información, es un palo. A quien manda se le enseña igual,
   // porque lo que mira es el equipo, no lo suyo.
-  if (!esJefe && d.puesto === null && d.leads === 0 && d.ventas === 0 && !d.facturado) return null;
+  if (!esJefe && d.puesto === null && d.leads === 0 && d.ventas === 0 && !d.cobrado) return null;
 
   const mejorQueElEquipo = d.tasa > d.tasa_equipo;
   // Con un poco de aire por encima, para que la barra llena no toque el borde.
@@ -248,7 +249,7 @@ export default function ComoVoy({
             <p className="flex items-baseline gap-2">
               <Users size={compacto ? 15 : 18} weight="duotone" className="translate-y-0.5 text-primary" />
               <span className={compacto ? 'text-normal' : 'text-seccion'}>
-                El equipo este mes: <strong>{euros(equipo.facturado)}</strong> facturados
+                El equipo este mes: <strong>{euros(equipo.cobrado)}</strong> cobrados
                 {' · '}{numero(equipo.ventas)} {equipo.ventas === 1 ? 'venta' : 'ventas'}
               </span>
             </p>
@@ -281,7 +282,7 @@ export default function ComoVoy({
                   <tr className="text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                     <th className="py-1 pr-2 font-semibold">#</th>
                     <th className="py-1 pr-2 font-semibold">Gestora</th>
-                    <th className="py-1 pr-2 text-right font-semibold">Facturado</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Cobrado</th>
                     <th className="py-1 pr-2 text-right font-semibold">Ventas</th>
                     <th className="py-1 pr-2 text-right font-semibold">Prospectos</th>
                     <th className="py-1 text-right font-semibold">Tasa</th>
@@ -294,7 +295,7 @@ export default function ComoVoy({
                       <tr key={f.user_id} className={`border-t border-border/60 ${suya ? 'font-semibold' : ''}`}>
                         <td className="py-1 pr-2 tabular-nums text-muted-foreground">{f.puesto}</td>
                         <td className="py-1 pr-2 truncate">{f.nombre || '—'}</td>
-                        <td className="py-1 pr-2 text-right font-semibold tabular-nums">{euros(f.facturado)}</td>
+                        <td className="py-1 pr-2 text-right font-semibold tabular-nums">{euros(f.cobrado)}</td>
                         <td className="py-1 pr-2 text-right tabular-nums">{numero(f.ventas)}</td>
                         <td className="py-1 pr-2 text-right tabular-nums text-muted-foreground">{f.leads}</td>
                         {/* La tasa, comparada con la media del equipo: es lo
@@ -310,7 +311,7 @@ export default function ComoVoy({
                   })}
                   {(d.tabla || []).length === 0 && (
                     <tr><td colSpan={6} className="py-2 text-muted-foreground">
-                      Nadie con prospectos, ventas ni facturas este mes.
+                      Nadie con prospectos, ventas ni cobros este mes.
                     </td></tr>
                   )}
                 </tbody>
@@ -338,11 +339,11 @@ export default function ComoVoy({
             <div className="min-w-0 flex-1">
               <p className={compacto ? 'text-normal' : 'text-seccion'}>
                 {d.puesto
-                  ? <>Vas <strong>{ordinal(d.puesto)}</strong> en facturación este mes</>
-                  : <>Todavía sin facturación este mes</>}
+                  ? <>Vas <strong>{ordinal(d.puesto)}</strong> en lo cobrado este mes</>
+                  : <>Todavía sin cobros este mes</>}
               </p>
               <p className="text-secundario tabular-nums text-muted-foreground">
-                <strong className="text-foreground">{euros(d.facturado)}</strong> facturados
+                <strong className="text-foreground">{euros(d.cobrado)}</strong> cobrados
                 {' · '}{numero(d.ventas)} {d.ventas === 1 ? 'venta' : 'ventas'}
                 {d.leads > 0 && <> · {d.leads} {d.leads === 1 ? 'prospecto' : 'prospectos'}</>}
               </p>
@@ -391,12 +392,12 @@ export default function ComoVoy({
                 A <strong className="text-foreground tabular-nums">{euros(d.faltan_para_subir)}</strong> del puesto de arriba
               </p>
             )}
-            {d.puesto === 1 && d.facturado > 0 && (
+            {d.puesto === 1 && d.cobrado > 0 && (
               <p className="text-secundario font-semibold text-success">Vas en cabeza</p>
             )}
-            {d.mejor_facturado > 0 && d.puesto !== 1 && (
+            {d.mejor_cobrado > 0 && d.puesto !== 1 && (
               <p className="text-secundario text-muted-foreground tabular-nums">
-                La primera va por {euros(d.mejor_facturado)}
+                La primera va por {euros(d.mejor_cobrado)}
               </p>
             )}
           </div>
