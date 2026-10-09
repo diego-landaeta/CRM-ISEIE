@@ -30,8 +30,16 @@ const ARRANQUE = Date.now();
  * @param {string} titulo   como se llama en cristiano
  * @param {Function} tick   la vuelta
  * @param {number} cadaMs   cada cuanto
+ * @param {object} [opciones]
+ * @param {number} [opciones.alArrancarMs]  da además UNA vuelta a los N ms de
+ *   arrancar. Para las tareas que miran «¿es la hora?» (el resumen de las 21:00,
+ *   el reporte de los lunes): con solo el intervalo, un reinicio en la última
+ *   media hora de esa hora se saltaba el envío del día, porque la primera vuelta
+ *   llegaba ya en la hora siguiente (Diego, 09/10: el resumen de ISEIE salió tarde
+ *   por mis reinicios). Solo para tareas que no repiten lo hecho: esas dos llevan
+ *   la clave del día en cada correo.
  */
-export function vigilar(nombre, titulo, tick, cadaMs) {
+export function vigilar(nombre, titulo, tick, cadaMs, { alArrancarMs = null } = {}) {
   tareas.set(nombre, {
     nombre, titulo, cadaMs,
     desde: ARRANQUE,
@@ -63,6 +71,7 @@ export function vigilar(nombre, titulo, tick, cadaMs) {
     }
   };
 
+  if (alArrancarMs !== null) setTimeout(envuelto, alArrancarMs);
   return setInterval(envuelto, cadaMs);
 }
 
