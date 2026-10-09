@@ -510,15 +510,9 @@ export async function changeStatus(leadId, newStatus, motivo, userId, opts = {})
   // Disparar email sequences con trigger status_changed (async)
   triggerSequences('status_changed', leadId, lead.project_id);
 
-  // «¿POR QUE HAS DESISTIDO?» (#169): al pasar a no interesado a mano o al
-  // descartarlo del repaso. Sin esperarlo y sin que un fallo del correo tumbe
-  // el cambio de estado. Una vez por persona. Las acciones en bloque no pasan
-  // por aqui: marcar 500 no puede disparar 500 correos sin que nadie lo pida.
-  if (newStatus === 'no_interesado' && opts.feedback !== 'no') {
-    import('../feedback/feedback.service.js')
-      .then((f) => f.pedirFeedback(leadId, 'descarte', { userId, revisar: opts.feedback === 'revisar' }))
-      .catch((err) => logger.warn({ err: err.message, leadId }, 'feedback: no se pudo pedir al descartar'));
-  }
+  // «¿POR QUE HAS DESISTIDO?» (#169): YA NO SALE AL DESCARTAR. Diego, 09/10:
+  // «mandarlo solamente a los 7 días que no haya interacción». Lo manda solo
+  // `feedbackDia7Scheduler`, cuando la persona lleva 7 días sin ninguna.
 
   return { previous: lead.status, current: newStatus };
 }

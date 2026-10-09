@@ -128,23 +128,30 @@ export async function agendarVuelta(leadId, { dias, nota, gestoraDelEnvio = null
  * él, la ventana de siempre (7 a `maxDias` días).
  */
 export async function candidatosDelDia7({ tope = 25, maxDias = 30, inicio = null } = {}) {
+  // 7 DÍAS SIN NINGUNA INTERACCIÓN (Diego, 09/10: «a veces el proceso dura más
+  // de una semana y lo manda»). Antes contaba 7 días desde el PRIMER contacto,
+  // y le llegaba a gente con la que se seguía hablando. Ahora cuenta desde la
+  // ÚLTIMA interacción de cualquier tipo —también una nota: es que alguien la
+  // está trabajando—. Sigue haciendo falta un primer contacto (sin proceso no
+  // hay nada que opinar), y `inicio` sigue mirando ese primer contacto.
   const { rows } = await query(
-    `SELECT l.id, pc.primer_contacto
+    `SELECT l.id, pc.primer_contacto, pc.ultima
        FROM leads l
        JOIN projects p ON p.id = l.project_id AND NOT COALESCE(p.es_prueba, false)
        JOIN LATERAL (
-         SELECT MIN(li.fecha)::date AS primer_contacto
+         SELECT (MIN(li.fecha) FILTER (WHERE li.tipo <> 'nota'))::date AS primer_contacto,
+                MAX(li.fecha)::date AS ultima
            FROM lead_interactions li
-          WHERE li.lead_id = l.id AND li.tipo <> 'nota'
+          WHERE li.lead_id = l.id
        ) pc ON pc.primer_contacto IS NOT NULL
       WHERE l.deleted_at IS NULL
         AND l.status NOT IN ('convertido', 'no_interesado')
         AND NULLIF(TRIM(l.email), '') IS NOT NULL
-        AND pc.primer_contacto BETWEEN CURRENT_DATE - $2::int AND CURRENT_DATE - 7
+        AND pc.ultima BETWEEN CURRENT_DATE - $2::int AND CURRENT_DATE - 7
         AND ($3::date IS NULL OR pc.primer_contacto >= $3::date)
         AND NOT EXISTS (SELECT 1 FROM feedback_envios f WHERE f.lead_id = l.id)
         AND NOT EXISTS (SELECT 1 FROM conversions c WHERE c.lead_id = l.id)
-      ORDER BY pc.primer_contacto, l.id
+      ORDER BY pc.ultima, l.id
       LIMIT $1`,
     [tope, maxDias, inicio]);
   return rows.map((r) => r.id);

@@ -15,11 +15,12 @@ import {
 /**
  * «¿Por qué has desistido?» (#169).
  *
- * Sale en DOS casos, y en ninguno más:
- *   · descarte : cuando alguien pasa a «no interesado» a mano o al descartarlo
- *                del repaso de fin de mes.
- *   · dia7     : al 7.º día sin comprar, que es cuando acaba el proceso
- *                comercial (el paso 4 cae entre el día 7 y el 8).
+ * Sale en UN solo caso desde el 09/10 (Diego: «mandarlo solamente a los 7 días
+ * que no haya interacción»):
+ *   · dia7     : cuando la persona lleva 7 días sin ninguna interacción y no ha
+ *                comprado (ver `candidatosDelDia7`).
+ * Al descartar a alguien («no interesado») ya no sale: el disparador
+ * «descarte» se queda solo para leer los envíos antiguos.
  *
  * UNA VEZ POR PERSONA: lo garantiza la base (feedback_envios.lead_id es único) y
  * además el correo lleva una clave de idempotencia, así que ni un reintento ni
