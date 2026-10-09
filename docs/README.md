@@ -3,7 +3,7 @@
 > **Fuente de verdad del esquema:** `backend/migrations/*.sql` — todos los SQL ejecutados, en orden.
 > Único documento de referencia; el resto se consolidó aquí (historial en git).
 
-## Deploy y ramas (al día el 29/09/2026)
+## Deploy y ramas (al día el 09/10/2026)
 
 **Ramas.** `main` = **producción**, con la etiqueta de cada versión (`v2.0.0`, `v2.0.1`). `staging` = **pruebas** (crm.iseie.com/staging), independiente de `main`. Hasta el 29/09 producción y staging salían de la misma rama (`actualizar-main-15sep`); ya no. Lo nuevo entra por `staging`; cuando Diego lo aprueba pasa a `main` con un **pull request** (`gh pr create` + `gh pr merge --admin`). El gancho `pre-push` no deja empujar a `main` ni a `feat/angel|fabian|diego`.
 
@@ -21,8 +21,21 @@ VPS `72.60.90.135`. PM2 corre como **root** (`sudo pm2 …`).
 **Subir el frontal.** Comprobar en `dist/index.html` que las rutas son las del entorno (`/assets/` o `/staging/assets/`). `.env.production` no está en git: lleva `VITE_BETA_MODE=true` y, desde la 2.0.0, `VITE_PROCESO_EN_PRUEBAS=true`.
 **Migraciones.** Como `postgres`, con su GRANT a `crm_iseie_user`, y comprobando el catálogo después. **Después de cada tanda, `scripts/dar-propiedad-a-crm-user.sql`** sobre la misma base (#71): lo que crea `postgres` nace suyo y las bases se separan. Es idempotente y el destino es el dueño de la base (`crm_iseie_user`). Copias antes de subir en `/var/backups/crm-iseie/`.
 
-**Interruptores del `.env` de producción** (29/09): `NOVEDADES_AUTO=1` · `FEEDBACK_DIA7_INICIO=2026-09-29` · `PASO_VENCIDO_DISABLED=1` · correos del equipo encendidos · `LEAD_SIN_TOCAR_DISABLED=1`.
-**Paridad:** MultiCRM (https://360crm.tech/crm, repo `CRM`) tiene las mismas funciones; aquí las rutas son `/leads` donde allí es `/prospectos`. Conectores y el MCP de Claude, de momento, solo allí.
+**Interruptores del `.env` de producción** (09/10): `NOVEDADES_AUTO=0` desde la 2.1.0 (las Novedades se mandan a mano) · `MCP_CODIGO_OBLIGATORIO=true` · `FEEDBACK_DIA7_INICIO=2026-09-29` · `PASO_VENCIDO_DISABLED=1` · correos del equipo encendidos · `LEAD_SIN_TOCAR_DISABLED=1`.
+**Paridad:** MultiCRM (https://360crm.tech/crm, repo `CRM`) tiene las mismas funciones; aquí las rutas son `/leads` donde allí es `/prospectos`. Desde la 2.1.0 el MCP de Claude también está aquí. Lo que solo tiene MultiCRM: Sistema › Correos y el tablero de tareas (#210, que se trae cuando se apruebe), entre otros (#227).
+**nginx** (#193, 07/10): el registro de accesos tapa la llave del MCP (`crm_mcp_***`) con el formato `crm_seguro` (`/etc/nginx/conf.d/crm-registro-seguro.conf`). Las copias del sitio van a la carpeta de copias, **nunca** dentro de `sites-enabled`: nginx carga todo lo que hay ahí.
+
+**Versiones y arreglos urgentes** (09/10). `v2.1.0` en producción desde el 07/10 (etiqueta en `main`). Un arreglo que tiene que llegar a producción sin esperar a la versión siguiente va **solo**: rama `hotfix/<nombre>` sacada de `origin/main`, `git cherry-pick -x` del commit que ya entró en `staging`, pull request a `main` y despliegue desde `main`. Así no se arrastra lo que está en pruebas (el 08 y el 09/10: el ranking por lo cobrado, la paginación de Facturas de ISEIE y la checklist manual). `staging` siempre lleva todo lo de `main` y algo más; nunca al revés.
+**Comprobar qué corre de verdad un servidor:** el md5 de cada `.js` de `backend/src` (quitando los `\r`) contra el de la rama. El 09/10 los cuatro entornos daban 0 ficheros distintos.
+
+**Lo que no está aprobado para producción** va detrás de `SOLO_EN_PRUEBAS` en el frontal (verdadero en local y en el entorno de pruebas, falso en producción): no sale ni en el menú ni por la dirección. El 09/10: Tareas (#210), Convocatorias y Certificaciones (Certifex). Para aprobar una pantalla, se quita de detrás de la bandera.
+
+**Checklist del proceso comercial** (09/10). Es **manual**: un paso solo sale hecho si la gestora lo marca (guarda quién y cuándo). Si ya hay un contacto apuntado que lo daría, lleva la marca «contactado», pero sigue por hacer. «+ Seguimiento» añade el 5, el 6… (`POST /proceso/lead/:leadId/seguimiento`). La cola del día no cambia: sigue sacando a quien ya se contactó según la regla de un paso por contacto y día.
+
+**Correo de «¿por qué has desistido?»** (09/10). Sale en **un solo caso**: tras **7 días sin ninguna interacción** (de cualquier tipo, también una nota), con un primer contacto y sin comprar. Ya no sale al descartar a alguien. `FEEDBACK_DIA7_INICIO` sigue mirando el primer contacto.
+
+**Resumen del día de dirección:** a las 19 del reloj del servidor (`RESUMEN_HORA`, las 21:00 de Madrid). La tarea mira cada 30 minutos y la primera vez a los 30 minutos de arrancar: **no reiniciar la API entre las 21:31 y las 22:00 de Madrid**, o ese día no sale. El reporte semanal sale los lunes. Un superadmin recibe todas las empresas, tenga o no campus asignados.
+
 
 ## Versión 2.0.0 (en producción desde el 29/09/2026)
 
