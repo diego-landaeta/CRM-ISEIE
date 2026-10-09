@@ -1,5 +1,5 @@
 import * as Proceso from './proceso.service.js';
-import { crearPasoSchema, editarPasoSchema, reordenarSchema, ajustarPasoSchema } from './proceso.validation.js';
+import { crearPasoSchema, editarPasoSchema, reordenarSchema, ajustarPasoSchema, anadirSeguimientoSchema } from './proceso.validation.js';
 import { leadsToWasapiCsv, leadsToWasapiXlsx, detectCountry } from '../../shared/utils/wasapiCsv.js';
 
 export async function listarPasos(req, res, next) {
@@ -282,7 +282,17 @@ export async function replanificar(req, res, next) {
 export async function ajustarPasoDeLead(req, res, next) {
   try {
     const datos = ajustarPasoSchema.parse(req.body);
-    const paso = await Proceso.ajustarPaso(Number(req.params.id), datos);
+    // Con quién lo marcó: el paso hecho a mano guarda quién y cuándo (como en MultiCRM).
+    const paso = await Proceso.ajustarPaso(Number(req.params.id), datos, req.user.userId);
     res.json({ success: true, data: paso });
+  } catch (err) { next(err); }
+}
+
+/** POST /proceso/lead/:leadId/seguimiento — un seguimiento más, «por hacer». */
+export async function anadirSeguimientoDeLead(req, res, next) {
+  try {
+    const datos = anadirSeguimientoSchema.parse(req.body || {});
+    const paso = await Proceso.anadirSeguimiento(Number(req.params.leadId), datos);
+    res.status(201).json({ success: true, data: paso });
   } catch (err) { next(err); }
 }
