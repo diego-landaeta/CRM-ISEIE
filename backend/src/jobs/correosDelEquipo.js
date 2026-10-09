@@ -170,6 +170,47 @@ export function lineaConEnlace(valor, texto, url) {
       <a href="${esc(url)}" style="color:${CRM.color};font-weight:bold;font-size:13px;text-decoration:none">abrir →</a></td></tr>`;
 }
 
+/**
+ * Los recordatorios de una persona, uno por uno, para el correo de la noche
+ * (Diego, 09/10: «que vayan en el reporte, no un correo por recordatorio: eso es
+ * gastar Brevo por gusto»). Los vencidos, los de hoy y los de mañana, de los
+ * prospectos que lleva en sus campus. Sale de su propia consulta y no de los
+ * contadores del listado, que ISEIE no tiene.
+ */
+export async function recordatoriosPendientes(personaId, projectIds, hastaIso, tope = 15) {
+  const { rows } = await query(
+    `SELECT r.id, r.lead_id, r.fecha_recordatorio::text AS fecha, r.nota, l.nombre AS lead_nombre,
+            p.nombre AS campus, count(*) OVER () AS total
+       FROM lead_reminders r
+       JOIN leads l ON l.id = r.lead_id
+       JOIN projects p ON p.id = l.project_id
+      WHERE l.responsable_id = $1
+        AND l.project_id = ANY($2::int[])
+        AND l.deleted_at IS NULL
+        AND r.completado = false
+        AND r.fecha_recordatorio <= $3::date
+      ORDER BY r.fecha_recordatorio, r.id
+      LIMIT $4`,
+    [personaId, projectIds, hastaIso, tope]
+  );
+  return { filas: rows, total: rows.length ? Number(rows[0].total) : 0 };
+}
+
+/** La lista de recordatorios: cuándo toca, el prospecto (enlace a su ficha) y la nota. */
+export function bloqueRecordatorios({ filas, total }, { hoyIso, mananaIso, variosCampus = false }) {
+  if (!filas.length) return '';
+  const cuando = (f) => (f.fecha < hoyIso
+    ? `<span style="color:#b3261e;font-weight:bold">vencido · ${esc(bonita(f.fecha))}</span>`
+    : f.fecha === hoyIso ? '<strong>hoy</strong>' : f.fecha === mananaIso ? '<strong>mañana</strong>' : esc(bonita(f.fecha)));
+  const tr = filas.map((f) => `<tr>
+    <td style="padding:7px 8px 7px 0;font-size:13px;color:${TINTA};border-bottom:1px solid #f1f3f6;white-space:nowrap;vertical-align:top">${cuando(f)}</td>
+    <td style="padding:7px 0;font-size:13px;color:${TINTA};border-bottom:1px solid #f1f3f6;vertical-align:top">
+      <a href="${esc(`${base()}${R.prospectos}/${f.lead_id}`)}" style="color:${CRM.color};font-weight:bold;text-decoration:none">${esc(f.lead_nombre || 'Sin nombre')}</a>${variosCampus ? ` <span style="color:${GRIS}">· ${esc(f.campus)}</span>` : ''}
+      ${f.nota ? `<div style="color:${GRIS};margin-top:2px">${esc(f.nota)}</div>` : ''}</td></tr>`).join('');
+  const resto = total > filas.length ? `<p style="font-size:13px;color:${GRIS};margin:8px 0 0">Y ${entero(total - filas.length)} más en el CRM.</p>` : '';
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:8px">${tr}</table>${resto}`;
+}
+
 export function boton(texto, url) {
   return `<p style="margin:22px 0 4px"><a href="${esc(url)}" style="background:${CRM.color};color:#ffffff;text-decoration:none;padding:11px 20px;border-radius:7px;font-weight:bold;font-size:14px;display:inline-block">${esc(texto)}</a></p>`;
 }
@@ -317,6 +358,8 @@ export async function correoDiarioGestora(persona, ahora = new Date()) {
     ].filter(Boolean);
     if (lineas.length) avisos.push({ campus: c, lineas });
   }
+  // Y los recordatorios uno por uno: ya no llega un correo por cada uno.
+  const recordatorios = await recordatoriosPendientes(persona.id, ids, iso(manana));
 
   const colaUrl = `${base()}${R.cola}`;
   const contenido = [
@@ -335,10 +378,11 @@ export async function correoDiarioGestora(persona, ahora = new Date()) {
       { etiqueta: 'Esta semana', valor: entero(cola.esta_semana) },
     ]),
     boton('Abrir mi cola', colaUrl),
-    ...(avisos.length ? [
+    ...(avisos.length || recordatorios.filas.length ? [
       apartado('Recordatorios y pendientes'),
       ...avisos.map((a) => `${campus.length > 1 ? `<div style="font-size:13px;font-weight:bold;color:${GRIS};margin:12px 0 2px">${esc(a.campus.nombre)}</div>` : ''}
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${a.lineas.join('')}</table>`),
+      bloqueRecordatorios(recordatorios, { hoyIso, mananaIso: iso(manana), variosCampus: campus.length > 1 }),
     ] : []),
     ...(mes && mes.puesto ? [
       apartado('Tu mes', { detalle: `del 1 al ${ahora.getDate()} de ${MESES[ahora.getMonth()]}` }),
