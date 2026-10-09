@@ -57,6 +57,34 @@ async function destinatarios(aviso, roles) {
   return rows;
 }
 
+/**
+ * «Tu día y lo de mañana»: las gestoras, y también quien tenga recordatorios
+ * pendientes (vencidos, de hoy o de mañana) en prospectos suyos, sea del rol que
+ * sea. Desde el 09/10 los recordatorios ya no mandan un correo cada uno: van en
+ * este, y sin esto un admin con recordatorios se quedaría solo con la campanita.
+ */
+async function destinatariosDelPlan(aviso) {
+  const { rows } = await query(
+    `SELECT u.id, u.nombre, u.email, u.role
+       FROM users u
+      WHERE u.active
+        AND u.email IS NOT NULL
+        AND NOT COALESCE(u.gestor_colaboraciones, false)
+        AND NOT EXISTS (
+          SELECT 1 FROM avisos_apagados a
+           WHERE a.user_id = u.id AND a.aviso = $1
+        )
+        AND (u.role = 'gestor'
+          OR EXISTS (
+            SELECT 1 FROM lead_reminders r JOIN leads l ON l.id = r.lead_id
+             WHERE l.responsable_id = u.id AND l.deleted_at IS NULL
+               AND r.completado = false AND r.fecha_recordatorio <= CURRENT_DATE + 1))
+      ORDER BY u.nombre`,
+    [aviso]
+  );
+  return rows;
+}
+
 // Para el repaso mensual: una linea con su enlace al listado ya filtrado.
 const BASE = () => (process.env.FEEDBACK_BASE_URL || process.env.CRM_BASE_URL || 'http://localhost:5173/crm').replace(/\/+$/, '');
 const lineaConEnlace = (etiqueta, valor, qf, projectId) => (valor
@@ -144,7 +172,8 @@ const textoValidacion = (nombre, d) => envoltorio({
 });
 
 async function mandar(aviso, roles, asunto, arma, texto, periodo = hoy()) {
-  const gente = await destinatarios(aviso, roles);
+  // `roles`: la lista de roles, o una función que devuelve la gente (el plan).
+  const gente = typeof roles === 'function' ? await roles(aviso) : await destinatarios(aviso, roles);
   let mandados = 0;
   for (const persona of gente) {
     try {
@@ -211,7 +240,7 @@ async function vuelta() {
     if (hora === HORA_PLAN) {
       const r = await mandar(
         'plan_de_manana',
-        ['gestor'],
+        destinatariosDelPlan,
         null,
         (persona) => correoDiarioGestora(persona), null
       );
