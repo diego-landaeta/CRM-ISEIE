@@ -8,7 +8,7 @@ const TICK_MS = parseInt(process.env.REMINDER_TICK_MS || String(15 * 60 * 1000))
 
 let running = false;
 
-async function processDueReminders() {
+export async function processDueReminders() {
   // Buscar recordatorios vencidos no completados y no notificados aún.
   // OJO: ya NO exigimos u.email IS NOT NULL — el recordatorio se notifica en
   // campanita aunque el gestor no tenga email configurado (que lo tiene casi
@@ -17,7 +17,7 @@ async function processDueReminders() {
     SELECT r.id, r.lead_id, r.fecha_recordatorio, r.nota,
            l.nombre as lead_nombre, l.email as lead_email, l.responsable_id,
            u.nombre as gestor_nombre, u.email as gestor_email,
-           p.nombre as proyecto_nombre
+           l.project_id, p.nombre as proyecto_nombre
       FROM lead_reminders r
       JOIN leads l ON l.id = r.lead_id
       JOIN projects p ON p.id = l.project_id
@@ -56,6 +56,11 @@ async function processDueReminders() {
             <p><a href="${baseUrl}/leads/${rem.lead_id}">Ver prospecto →</a></p>
           `,
           tags: ['reminder', `lead-${rem.lead_id}`],
+          // Con su CAMPUS, para que en Sistema › Correos se vea de dónde es
+          // (Diego, 09/10: Carlos vio uno de Academia IA y no supo de quién era).
+          // `cuenta: 'crm'`: guardar el campus no cambia por dónde sale.
+          projectId: rem.project_id,
+          cuenta: 'crm',
         });
       } catch (err) {
         // Email fallido NO debe impedir marcar el recordatorio como notificado —
