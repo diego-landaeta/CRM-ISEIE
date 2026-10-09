@@ -66,6 +66,18 @@ export default function InvoicesPage() {
   const [filters, setFilters] = useState({ search: '', estado: '', from: '', to: '' });
   // Paginacion: con cientos de facturas ya no cabian todas de una tacada.
   const PER_PAGE = 50;
+
+  // Apuntar que una factura ya se le paso al cliente. Optimista: la marca
+  // cambia al momento y si el servidor dice que no, se recarga y vuelve.
+  async function marcarEntregada(inv: Invoice) {
+    const ahora = inv.sent_at ? null : new Date().toISOString();
+    setInvoices((lista) => lista.map((x) => (x.id === inv.id ? { ...x, sent_at: ahora } : x)));
+    const r = await client.patch(`/invoices/${inv.id}/entregada`, { entregada: !inv.sent_at });
+    if (!r?.success) {
+      toast({ title: 'No se pudo guardar la marca', variant: 'destructive' });
+      load();
+    }
+  }
   const [page, setPage] = useState(1);
   const [totalFacturas, setTotalFacturas] = useState(0);
   const [sending, setSending] = useState<number | null>(null);
@@ -579,6 +591,27 @@ export default function InvoicesPage() {
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${ESTADO_BADGE[inv.estado] || 'bg-muted'}`}>
                       {inv.estado.toUpperCase()}
                     </span>
+                    {/* ENTREGADA O NO. Diego, 14/09: «añadir: factura enviada o no».
+
+                        Es una MARCA, no un envio: de 206 facturas ninguna tenia
+                        `sent_at`, porque lo unico que lo rellenaba era un correo
+                        que aqui no se manda --«no enviemos NADA por correo»--.
+                        Las facturas salen por donde cada uno las mande; esto solo
+                        lleva la cuenta de cuales estan hechas. */}
+                    {inv.tipo !== 'proforma' && inv.estado !== 'borrador' && (
+                      <button
+                        type="button"
+                        onClick={() => marcarEntregada(inv)}
+                        title={inv.sent_at ? `Entregada el ${fmtDate(inv.sent_at)} — pulsa para desmarcar` : 'Marcar como entregada al cliente (no manda nada)'}
+                        className={`mt-0.5 block text-[10px] font-semibold px-1.5 py-0.5 rounded transition-colors ${
+                          inv.sent_at
+                            ? 'bg-success-soft text-success-soft-foreground'
+                            : 'border border-dashed border-border text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        {inv.sent_at ? '✓ entregada' : 'sin entregar'}
+                      </button>
+                    )}
                   </td>
                   <td className="px-3 py-2 text-right">
                     <div className="inline-flex gap-1">
@@ -703,6 +736,42 @@ export default function InvoicesPage() {
           </table>
         )}
       </div>
+
+      {/* PAGINACION.
+
+          El estado `page` y el limite de 50 ya existian y viajaban a la API,
+          pero no habia NADA que dejara cambiar de pagina: se veian las 50
+          primeras y las demas no existian para el usuario. Con 205 facturas
+          eso son 155 invisibles. Diego, 14/09: «paginacion en facturacion».
+
+          Se enseña siempre el total --no solo cuando hay varias paginas--
+          porque saber cuantas facturas hay es la mitad de la pregunta. */}
+      {!loading && totalFacturas > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+          <span className="text-muted-foreground tabular-nums">
+            {totalFacturas <= PER_PAGE
+              ? `${totalFacturas} ${totalFacturas === 1 ? 'factura' : 'facturas'}`
+              : `${(page - 1) * PER_PAGE + 1}–${Math.min(page * PER_PAGE, totalFacturas)} de ${totalFacturas}`}
+          </span>
+          {totalFacturas > PER_PAGE && (
+            <div className="flex items-center gap-2">
+              <button type="button" disabled={page <= 1}
+                onClick={() => setPage((n) => Math.max(1, n - 1))}
+                className="h-9 px-3 rounded-md border border-border text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-muted/60">
+                ← Anterior
+              </button>
+              <span className="text-muted-foreground tabular-nums px-1">
+                {page} de {Math.ceil(totalFacturas / PER_PAGE)}
+              </span>
+              <button type="button" disabled={page >= Math.ceil(totalFacturas / PER_PAGE)}
+                onClick={() => setPage((n) => n + 1)}
+                className="h-9 px-3 rounded-md border border-border text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-muted/60">
+                Siguiente →
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {emittingInv && (
         <EmitirBorradorDialog
