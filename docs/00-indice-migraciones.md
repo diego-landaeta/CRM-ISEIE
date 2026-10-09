@@ -147,7 +147,22 @@ Fuente de verdad del esquema. Cada archivo en `backend/migrations/` es un SQL ej
 | 169 | 169_feedback_respuestas.sql | La encuesta de feedback, con todas sus preguntas |
 | 170 | 170_cabecera_de_marca.sql | El fondo de la cabecera de cada marca, en correos y formularios |
 | 171 | 171_novedades.sql | Las novedades de cada versión: cuándo y a quién se mandaron |
+| 172 | 172_emisor_bic.sql | El BIC/SWIFT de cada sociedad emisora, para las facturas por transferencia |
+| 173 | 173_certifex_consultas.sql | Las consultas que llegan desde la web de Certifex |
+| 174 | 174_mcp_acceso.sql | Conexión de Claude al CRM por MCP |
+| 175 | 175_conectores_alcance.sql | Conectores de un campus, de una empresa o de todo el sistema |
+| 176 | 176_mcp_por_conector.sql | Un token del MCP puede nacer de un conector |
+| 177 | 177_conectores_creador.sql | Quién creó cada conector y cada conexión de Claude |
+| 178 | 178_enlace_opynio_iseie.sql | El enlace de Opynio de ISEIE (#209) |
+| 179 | 179_mcp_codigo_desbloqueo.sql | Código de verificación del MCP de Claude (#192) |
+| 180 | 180_mcp_caducidad_y_rotacion.sql | MCP: caducidad, rotación y URLs sin usar (#194) |
+| 181 | 181_mcp_auditoria_visible_y_alertas.sql | MCP: actividad visible y alertas (#195) |
+| 182 | 182_mcp_interruptor.sql | Interruptor de emergencia del MCP (#196) |
+| 183 | 183_paso_hecho_a_mano.sql | Marcar un paso del proceso a mano: quién y cuándo (la 175 de MultiCRM, 09/10) |
 
+> **09/10/2026, comprobado contra el catálogo de producción:** aplicadas hasta la **183** (la 183, el
+> 09/10 con la checklist manual).
+>
 > **Comprobado el 29/09/2026 contra el catálogo de producción** (no contra la
 > salida de ningún comando): aplicadas todas las de esta lista hasta la **171**.
 > Las de la 2.0.0 se aplicaron ese día (167–171).
