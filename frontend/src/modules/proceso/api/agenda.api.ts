@@ -84,9 +84,15 @@ export type PasoDeLead = {
   canales: string[] | null;
   nota_del_paso: string | null;
   fecha_prevista: string;
-  estado: 'pendiente' | 'saltado';
+  estado: 'pendiente' | 'saltado' | 'hecho';
   nota: string | null;
   hecho: boolean;
+  /** Lo marcó una persona: la única forma de que salga hecho (09/10). */
+  a_mano: boolean;
+  /** Ya hay un contacto apuntado que daría este paso, aunque nadie lo haya marcado. */
+  con_contacto?: boolean;
+  hecho_at: string | null;
+  hecho_por_nombre: string | null;
   vencido: boolean;
   dias_de_retraso: number;
   /** Su mensaje dice cuántas plazas quedan: hay que comprobarlo fuera. */
@@ -167,9 +173,15 @@ export async function traerPasosDeLead(leadId: number): Promise<PasoDeLead[]> {
 }
 
 export async function ajustarPaso(id: number, datos: {
-  estado?: 'pendiente' | 'saltado'; fecha_prevista?: string; nota?: string;
+  estado?: 'pendiente' | 'saltado' | 'hecho'; fecha_prevista?: string; nota?: string;
 }) {
   const r = await client.patch(`/proceso/paso-lead/${id}`, datos);
+  return r?.success ? r.data : null;
+}
+
+/** Un seguimiento más tras los pasos del proceso (5, 6…), «por hacer». */
+export async function anadirSeguimiento(leadId: number, fecha_prevista?: string) {
+  const r = await client.post(`/proceso/lead/${leadId}/seguimiento`, fecha_prevista ? { fecha_prevista } : {});
   return r?.success ? r.data : null;
 }
 

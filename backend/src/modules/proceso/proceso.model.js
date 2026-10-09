@@ -219,13 +219,27 @@ export async function planificarPasosDeLead(leadId) {
 export async function pasosDeLead(leadId) {
   const { rows } = await query(
     `SELECT ls.id, ls.clave, ls.orden, ls.fecha_prevista, ls.estado, ls.nota,
-            s.nombre, s.cuando, s.canales, s.nota AS nota_del_paso,
+            ls.hecho_at, ls.hecho_por, u.nombre AS hecho_por_nombre,
+            -- Los seguimientos que se añaden a mano (5, 6…) no tienen paso en la
+            -- plantilla: se llaman por su número.
+            COALESCE(s.nombre, 'Seguimiento ' || ls.orden) AS nombre,
+            s.cuando, s.canales, s.nota AS nota_del_paso,
             COALESCE(s.avisa_plazas, false) AS avisa_plazas,
-            ${PASO_CERRADO('ls')} AS hecho,
+            -- HECHO = MARCADO A MANO (Diego, 09/10: «que sea manual pero que
+            -- aparezca por hacer, porque uno lo toca y luego no quiere
+            -- funcionar»). Antes un paso salía hecho también por los contactos
+            -- apuntados, y entonces la casilla no se podía tocar. Ahora la
+            -- checklist es de la gestora: cada paso está «por hacer» hasta que
+            -- lo marca. Que ya haya un contacto se dice aparte (con_contacto).
+            -- La cola del día no cambia: sigue sacando a quien ya se contactó.
+            ls.estado = 'hecho' AS hecho,
+            ls.estado = 'hecho' AS a_mano,
+            (ls.estado <> 'hecho' AND ${PASO_CERRADO('ls')}) AS con_contacto,
             (CURRENT_DATE - ls.fecha_prevista) AS dias_de_retraso
        FROM lead_steps ls
        JOIN leads l ON l.id = ls.lead_id
        LEFT JOIN commercial_steps s ON s.id = ls.step_id
+       LEFT JOIN users u ON u.id = ls.hecho_por
       WHERE ls.lead_id = $1
         -- Los de antes del proceso no tienen pasos que enseñar, aunque les
         -- quede agenda escrita de antes (ver enElProceso.js).
@@ -462,16 +476,46 @@ export async function resumenDeLaCola({ projectIds, asesoraId }) {
 }
 
 /** Saltarse un paso o moverlo de fecha, a mano y con su porque. */
-export async function ajustarPaso(id, { estado, fecha_prevista, nota }) {
+export async function ajustarPaso(id, { estado, fecha_prevista, nota }, userId = null) {
   const { rows } = await query(
     `UPDATE lead_steps
         SET estado = COALESCE($2, estado),
             fecha_prevista = COALESCE($3::date, fecha_prevista),
             nota = COALESCE($4, nota),
+            hecho_at  = CASE WHEN $2 = 'hecho' THEN NOW()
+                             WHEN $2 IS NULL   THEN hecho_at
+                             ELSE NULL END,
+            hecho_por = CASE WHEN $2 = 'hecho' THEN $5::int
+                             WHEN $2 IS NULL   THEN hecho_por
+                             ELSE NULL END,
             updated_at = NOW()
       WHERE id = $1
-      RETURNING id, lead_id, clave, orden, fecha_prevista, estado, nota`,
-    [id, estado || null, fecha_prevista || null, nota || null]
+      RETURNING id, lead_id, clave, orden, fecha_prevista, estado, nota,
+                hecho_at, hecho_por`,
+    [id, estado || null, fecha_prevista || null, nota || null, userId || null]
+  );
+  return rows[0] || null;
+}
+
+/**
+ * Añadir un seguimiento a mano después de los pasos del proceso (Diego, 09/10:
+ * «cuando hacen el seguimiento 5, 6…» no había casilla). Va el último de su
+ * agenda, «por hacer», con la fecha que se diga (hoy si no). Sale en la cola
+ * cuando le toque, como cualquier otro paso.
+ */
+export async function anadirSeguimiento(leadId, { fecha_prevista } = {}) {
+  const { rows } = await query(
+    `INSERT INTO lead_steps (lead_id, project_id, step_id, clave, orden, fecha_prevista, estado)
+     SELECT l.id, l.project_id, NULL,
+            'seguimiento_' || (COALESCE(MAX(ls.orden), 0) + 1),
+            COALESCE(MAX(ls.orden), 0) + 1,
+            COALESCE($2::date, CURRENT_DATE), 'pendiente'
+       FROM leads l
+       LEFT JOIN lead_steps ls ON ls.lead_id = l.id
+      WHERE l.id = $1 AND l.deleted_at IS NULL
+      GROUP BY l.id, l.project_id
+     RETURNING id, lead_id, clave, orden, fecha_prevista, estado`,
+    [leadId, fecha_prevista || null]
   );
   return rows[0] || null;
 }

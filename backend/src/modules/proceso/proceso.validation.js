@@ -56,9 +56,14 @@ export const reordenarSchema = z.object({
 
 // Mover de fecha o saltarse un paso de la agenda de alguien (#89).
 export const ajustarPasoSchema = z.object({
-  estado: z.enum(['pendiente', 'saltado']).optional(),
+  estado: z.enum(['pendiente', 'saltado', 'hecho']).optional(),
   fecha_prevista: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha va como AAAA-MM-DD').optional(),
   nota: z.string().trim().max(500).optional(),
 }).refine((d) => d.estado || d.fecha_prevista || d.nota, {
   message: 'Hay que cambiar algo: el estado, la fecha o la nota',
+});
+
+// Un seguimiento más tras los pasos del proceso (5, 6…). La fecha es opcional: hoy.
+export const anadirSeguimientoSchema = z.object({
+  fecha_prevista: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha va como AAAA-MM-DD').optional(),
 });

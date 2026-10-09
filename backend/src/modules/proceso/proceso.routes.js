@@ -38,5 +38,7 @@ router.get('/lead/:leadId', ctrl.pasosDeUnLead);
 router.post('/lead/:leadId/replanificar', roleGuard('admin', 'superadmin'), ctrl.replanificar);
 // Mover de fecha o saltarse un paso. Lo puede hacer la gestora con los suyos.
 router.patch('/paso-lead/:id', ctrl.ajustarPasoDeLead);
+// Añadir un seguimiento a mano después de los pasos del proceso (5, 6…).
+router.post('/lead/:leadId/seguimiento', ctrl.anadirSeguimientoDeLead);
 
 export default router;
