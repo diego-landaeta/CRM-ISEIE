@@ -2,6 +2,11 @@
 
 Al 12 de agosto de 2026. Los diagramas se dibujan solos en GitHub.
 
+> **Es una foto de esa fecha, no el estado de hoy.** Al 09/10/2026: las dos producciones con la
+> versión **2.1.0** (07/10) y los arreglos del 08–09/10 (ranking por lo cobrado, checklist manual,
+> correo de desistimiento solo tras 7 días sin interacción). Lo vigente está en `docs/README.md`,
+> sección «Deploy y ramas»; lo abierto, en los issues de GitHub.
+
 Dos CRMs con **paridad absoluta**: lo que se hace en uno se hace en el otro,
 salvo la marca y las rutas.
 
