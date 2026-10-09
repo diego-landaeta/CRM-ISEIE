@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// Diego, 09/10: el correo de un recordatorio guarda su campus (en MultiCRM, Carlos vio uno
-// en Sistema › Correos y no supo de quién era). Paridad: ISEIE no tiene esa pantalla.
+// Diego, 09/10: un recordatorio ya no manda correo; va en «Tu día y lo de mañana».
 
 const consultas = [];
 let filas = [];
@@ -21,15 +20,15 @@ const { processDueReminders } = await import('../src/jobs/reminderScheduler.js')
 beforeEach(() => { consultas.length = 0; enviados.length = 0; filas = []; });
 
 
-describe('el correo de un recordatorio guarda su campus', () => {
-  it('con projectId y por la cuenta del CRM (no cambia por dónde sale)', async () => {
+describe('un recordatorio ya no manda correo (Diego, 09/10: va en «Tu día y lo de mañana»)', () => {
+  it('avisa en la campanita y lo marca como avisado, sin gastar Brevo', async () => {
+    const { notifyUsers } = await import('../src/modules/notifications/notifications.service.js');
     filas = [{ id: 174, lead_id: 4007, fecha_recordatorio: '2026-10-08', nota: 'Enviar la invitación a Skool',
       lead_nombre: 'Carlos Daswani', responsable_id: 12, gestor_nombre: 'M@ Eugenia',
       gestor_email: 'admisiones@academiaia.ai', project_id: 5, proyecto_nombre: 'ACADEMIA IA' }];
     await processDueReminders();
-    expect(enviados).toHaveLength(1);
-    expect(enviados[0].projectId).toBe(5);
-    expect(enviados[0].cuenta).toBe('crm');
-    expect(consultas[0].sql).toMatch(/l\.project_id/);
+    expect(enviados).toHaveLength(0);
+    expect(notifyUsers).toHaveBeenCalledWith(expect.objectContaining({ targetUserIds: [12], type: 'lead_reminder' }));
+    expect(consultas.some((c) => /UPDATE lead_reminders SET notificado_at/.test(c.sql))).toBe(true);
   });
 });
