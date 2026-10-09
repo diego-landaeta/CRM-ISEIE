@@ -33,6 +33,7 @@ const HORA_RESUMEN = parseInt(process.env.RESUMEN_HORA || '19', 10);
 const HORA_PLAN = parseInt(process.env.PLAN_HORA || '21', 10);
 const DIA_VALIDACION = parseInt(process.env.VALIDACION_DIA || '25', 10);
 const TICK_MS = parseInt(process.env.RESUMEN_TICK_MS || String(30 * 60 * 1000), 10);
+const AL_ARRANCAR_MS = parseInt(process.env.AVISOS_AL_ARRANCAR_MS || String(60 * 1000), 10);
 
 let corriendo = false;
 
@@ -229,7 +230,9 @@ export function startResumenDiarioScheduler() {
     logger.info('Avisos diarios desactivados (RESUMEN_DISABLED=1)');
     return;
   }
-  vigilar('resumen_diario', 'Resumen del día y plan de mañana', vuelta, TICK_MS);
+  // Y una vuelta al minuto de arrancar: un reinicio a las 21:40 ya no se salta
+  // el resumen de ese día (la clave del día impide que salga dos veces).
+  vigilar('resumen_diario', 'Resumen del día y plan de mañana', vuelta, TICK_MS, { alArrancarMs: AL_ARRANCAR_MS });
   logger.info({ tickMs: TICK_MS, horaResumen: HORA_RESUMEN, horaPlan: HORA_PLAN },
     'Avisos diarios iniciados');
 }
