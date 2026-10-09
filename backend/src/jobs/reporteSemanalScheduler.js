@@ -41,6 +41,7 @@ import { correoSemanalDireccion, correoSemanalGestora } from './correosDelEquipo
 
 const HORA = parseInt(process.env.REPORTE_SEMANAL_HORA || '8', 10);
 const TICK_MS = parseInt(process.env.REPORTE_SEMANAL_TICK_MS || String(30 * 60 * 1000), 10);
+const AL_ARRANCAR_MS = parseInt(process.env.AVISOS_AL_ARRANCAR_MS || String(60 * 1000), 10);
 
 let corriendo = false;
 
@@ -245,7 +246,8 @@ export function startReporteSemanalScheduler() {
     logger.info('Reporte semanal desactivado (REPORTE_SEMANAL_DISABLED=1)');
     return;
   }
-  vigilar('reporte_semanal', 'Reporte semanal', vuelta, TICK_MS);
+  // Y una vuelta al minuto de arrancar, por lo mismo que el resumen del día.
+  vigilar('reporte_semanal', 'Reporte semanal', vuelta, TICK_MS, { alArrancarMs: AL_ARRANCAR_MS });
   logger.info({ tickMs: TICK_MS, hora: HORA }, 'Reporte semanal iniciado');
 }
 
