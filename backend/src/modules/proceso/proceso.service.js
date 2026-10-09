@@ -117,8 +117,14 @@ export function resumenDeLaCola(opciones) {
   return Pasos.resumenDeLaCola(opciones);
 }
 
-export async function ajustarPaso(id, datos) {
-  const paso = await Pasos.ajustarPaso(id, datos);
+export async function ajustarPaso(id, datos, userId = null) {
+  const paso = await Pasos.ajustarPaso(id, datos, userId);
   if (!paso) throw new AppError('Ese paso no existe', 404);
+  return paso;
+}
+
+export async function anadirSeguimiento(leadId, datos) {
+  const paso = await Pasos.anadirSeguimiento(leadId, datos);
+  if (!paso) throw new AppError('Ese prospecto no existe', 404);
   return paso;
 }

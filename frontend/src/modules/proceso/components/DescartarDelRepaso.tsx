@@ -121,16 +121,6 @@ export default function DescartarDelRepaso({
             </div>
 
             <div className="space-y-5 px-6 py-5">
-              <div className="flex gap-3 rounded-lg border border-warning bg-warning-soft p-4 text-sm">
-                <EnvelopeSimple size={22} className="mt-0.5 shrink-0 text-warning" />
-                <div>
-                  <p className="font-semibold">Esta acción ejecuta un formulario de prueba evaluativa</p>
-                  <p className="mt-1 text-muted-foreground">
-                    {quien} pasa a «no interesado», sale del repaso y le llega el correo de «¿por qué has
-                    desistido?» con la encuesta. El correo no se puede deshacer.
-                  </p>
-                </div>
-              </div>
 
               <fieldset>
                 <legend className="text-sm font-semibold">¿Por qué se descarta?</legend>
@@ -160,14 +150,9 @@ export default function DescartarDelRepaso({
                 className="rounded-lg px-4 py-2.5 text-sm font-semibold text-muted-foreground hover:bg-muted disabled:opacity-50">
                 Cancelar
               </button>
-              <button type="button" disabled={yendo || !elegido} onClick={() => confirmar('revisar')}
-                title="Te llega una copia y queda esperando en su ficha hasta que la envíes"
-                className="rounded-lg border border-border bg-card px-4 py-2.5 text-sm font-semibold hover:bg-muted disabled:opacity-50">
-                Quiero verlo antes
-              </button>
               <button type="button" disabled={yendo || !elegido} onClick={() => confirmar('enviar')}
                 className="rounded-lg bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground shadow hover:bg-primary/90 disabled:opacity-50">
-                {yendo ? 'Descartando…' : 'Confirmar y enviar'}
+                {yendo ? 'Descartando…' : 'Confirmar'}
               </button>
             </div>
           </div>
