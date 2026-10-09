@@ -1956,3 +1956,36 @@ export async function siguienteLibre({ projectId, issuerId = null, ano = null })
     huecos: huecos.map((h) => Number(h.n)),
   };
 }
+
+/**
+ * Marcar a mano que una factura ya se entrego al cliente. NO ENVIA NADA.
+ *
+ * Diego, 14/09: «añadir: factura enviada o no». Y sigue en pie su regla de
+ * antes: «no enviemos NADA por correo». Las dos cosas conviven porque esto es
+ * un APUNTE, no un envio: las facturas salen por donde salgan --WhatsApp, el
+ * correo de cada uno-- y aqui solo queda constancia de cuales estan hechas.
+ *
+ * De 206 facturas, CERO tenian `sent_at`: el dato existia y no lo usaba nadie,
+ * porque lo unico que lo rellenaba era un envio que no se hace.
+ *
+ * El estado fiscal no se toca. «emitida» pasa a «enviada» y al revuelta vuelve,
+ * pero una PAGADA se queda pagada: que se la hayas mandado no cambia que este
+ * cobrada, y pisarlo seria falsear la contabilidad.
+ */
+export async function marcarEntregada(id, { entregada, userId }) {
+  const { rows } = await query(
+    `UPDATE invoices
+        SET sent_at = CASE WHEN $2 THEN COALESCE(sent_at, NOW()) ELSE NULL END,
+            sent_to_email = CASE WHEN $2 THEN sent_to_email ELSE NULL END,
+            estado = CASE
+                       WHEN $2 AND estado = 'emitida' THEN 'enviada'
+                       WHEN NOT $2 AND estado = 'enviada' THEN 'emitida'
+                       ELSE estado
+                     END,
+            updated_at = NOW()
+      WHERE id = $1
+      RETURNING id, codigo, estado, sent_at`,
+    [id, !!entregada]
+  );
+  return rows[0] || null;
+}
