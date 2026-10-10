@@ -51,4 +51,8 @@ router.post('/change-password', changePasswordLimiter, verifyToken, authControll
 // PATCH /api/auth/me — usuario edita su propio perfil (nombre)
 router.patch('/me', verifyToken, authController.updateMyProfile);
 
+// PATCH /api/auth/me/email — el propio correo, solo un tutor (#246). Con el mismo
+// límite de intentos que el cambio de contraseña: también toca la credencial.
+router.patch('/me/email', changePasswordLimiter, verifyToken, authController.updateMyEmail);
+
 export default router;

@@ -67,8 +67,10 @@ export default function TutoresPage() {
     projects: Array<{ id: number; nombre: string }>;
   };
   const puede = ['admin', 'superadmin'].includes(user?.role || '') || user?.gestor_colaboraciones === true;
-  // El correo y la contraseña de un tutor, solo el super admin (#248).
+  // El correo de un tutor, solo el super admin (#248). La contraseña, también el
+  // admin (Diego, 09/10, #246).
   const esSuperadmin = user?.role === 'superadmin';
+  const puedeContrasena = esSuperadmin || user?.role === 'admin';
   const projectId = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
 
   const [tutores, setTutores] = useState<Tutor[]>([]);
@@ -616,8 +618,8 @@ export default function TutoresPage() {
                       <Button variant="outline" size="sm" onClick={abrirDatos}>
                         <PencilSimple size={14} weight="bold" className="mr-1.5" /> Editar datos
                       </Button>
-                      {/* Solo el super admin (#248). */}
-                      {esSuperadmin && (
+                      {/* El super admin y el admin (#246). */}
+                      {puedeContrasena && (
                         <Button variant="outline" size="sm" onClick={abrirClave}>
                           <Key size={14} weight="bold" className="mr-1.5" /> Cambiar contraseña
                         </Button>

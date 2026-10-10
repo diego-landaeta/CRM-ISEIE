@@ -130,8 +130,21 @@ export async function setPassword(req, res, next) {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    // El super admin, a cualquiera. El admin, solo a un TUTOR de sus campus (Diego,
+    // 09/10, #246: «sí, y admin»). A nadie más: ni a una gestora ni a otro admin.
     if (req.user?.role !== 'superadmin') {
-      throw new AppError('Solo un superadmin puede cambiar la contraseña de otro usuario', 403, 'FORBIDDEN');
+      if (req.user?.role !== 'admin') {
+        throw new AppError('Solo un superadmin puede cambiar la contraseña de otro usuario', 403, 'FORBIDDEN');
+      }
+      const destino = await userModel.findById(id);
+      if (!destino || destino.role !== 'tutor') {
+        throw new AppError('Un admin solo puede cambiar la contraseña de un tutor', 403, 'FORBIDDEN');
+      }
+      const { campusDeLaPersona } = await import('../../shared/utils/ambito.js');
+      const { tieneAlgunCampus } = await import('../tutores/tutor.model.js');
+      if (!(await tieneAlgunCampus(id, await campusDeLaPersona(req.user.userId)))) {
+        throw new AppError('Tutor no encontrado', 404, 'NOT_FOUND');
+      }
     }
     const parsed = adminSetPasswordSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');

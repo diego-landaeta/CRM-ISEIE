@@ -48,3 +48,8 @@ export const changePasswordSchema = z.object({
 export const updateMyProfileSchema = z.object({
   nombre: z.string().min(2, 'Nombre muy corto').max(200),
 });
+
+// El propio correo, solo para tutores (#246, Diego 09/10).
+export const updateMyEmailSchema = z.object({
+  email: z.string().trim().toLowerCase().email('Correo no válido').max(255),
+});

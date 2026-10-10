@@ -4,7 +4,8 @@ import bcrypt from 'bcrypt';
 import { AppError } from '../../shared/utils/AppError.js';
 import * as userModel from './user.model.js';
 import { revokeAllUserTokens, logActivity } from '../auth/auth.model.js';
-import { sendWelcomeUserEmail, sendCorreoCambiadoEmail } from '../../shared/services/brevo.service.js';
+import { sendWelcomeUserEmail, sendCorreoCambiadoEmail, sendEmail } from '../../shared/services/brevo.service.js';
+import { notifyUsers } from '../notifications/notifications.service.js';
 
 // A LOS TUTORES NO SE LES MANDA NADA. TODAVIA NO.
 //
@@ -45,9 +46,14 @@ export async function cambiarCorreo(id, email, { reenviarEnlace = false, porUser
   const nuevo = String(email).trim().toLowerCase();
   const user = await userModel.findById(id);
   if (!user) throw new AppError('Usuario no encontrado', 404, 'NOT_FOUND');
-  // El de un super admin no se cambia desde aquí (#248, decidido con Diana el 06/10).
+  // El de un super admin, solo otro super admin (Diego, 09/10, #246: «sí»). Hasta
+  // entonces no se podía nunca (#248). Se mira quién lo pide en la base, no en el
+  // token: así vale igual desde Usuarios, desde Tutores o desde «Mi perfil».
   if (user.role === 'superadmin') {
-    throw new AppError('No se puede cambiar el correo de un superadmin', 403, 'CANNOT_EDIT_SUPERADMIN');
+    const quien = porUserId ? await userModel.findById(porUserId) : null;
+    if (quien?.role !== 'superadmin') {
+      throw new AppError('Solo otro superadmin puede cambiar el correo de un superadmin', 403, 'CANNOT_EDIT_SUPERADMIN');
+    }
   }
   if (String(user.email).toLowerCase() === nuevo) return { cambiado: false, email: user.email };
 
@@ -113,6 +119,45 @@ export async function cambiarCorreo(id, email, { reenviarEnlace = false, porUser
   }
 
   return { cambiado: true, email: nuevo, enlaceReenviado: Boolean(rawToken) };
+}
+
+/**
+ * Un tutor ha cambiado su correo desde «Mi perfil» (#246, Diego 09/10: «sí, y debe
+ * mandar notificación»). Es el correo al que va la factura de su comisión, así que
+ * se avisa a administración: los superadmin y los admin de algún campus del tutor,
+ * en la campanita y por correo. Al tutor no se le escribe mientras siga el freno
+ * (NO_ESCRIBIR_A_TUTORES); a administración, sí.
+ */
+export async function avisarCorreoDeTutorCambiado({ tutorId, nombre, de, a }) {
+  const { rows: gente } = await query(
+    `SELECT u.id, u.email, u.nombre FROM users u
+      WHERE u.active AND u.email IS NOT NULL
+        AND (u.role = 'superadmin'
+          OR (u.role = 'admin' AND EXISTS (
+                SELECT 1 FROM user_projects mio JOIN user_projects suyo ON suyo.project_id = mio.project_id
+                 WHERE mio.user_id = u.id AND suyo.user_id = $1)))`,
+    [tutorId]
+  );
+  if (!gente.length) return { avisados: 0 };
+  const titulo = `El tutor ${nombre} cambió su correo`;
+  const texto = `De ${de} a ${a}. Es el correo de la factura de su comisión.`;
+  await notifyUsers({
+    targetUserIds: gente.map((g) => g.id), type: 'tutor_correo_cambiado', title: titulo, message: texto,
+    link_path: '/tutores', metadata: { tutor_id: tutorId, de, a }, triggered_by_user_id: tutorId,
+  });
+  const esc = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  for (const g of gente) {
+    sendEmail({
+      to: g.email, subject: titulo,
+      htmlContent: `<p>Hola ${esc(g.nombre)},</p><p>El tutor <strong>${esc(nombre)}</strong> ha cambiado su correo desde «Mi perfil»:</p>
+        <p>De <strong>${esc(de)}</strong><br>a <strong>${esc(a)}</strong></p>
+        <p>Es el correo al que va la factura de su comisión. Si no os cuadra, revisadlo en Tutores.</p>`,
+      tags: ['tutor-correo-cambiado'],
+      clave: `tutor-correo-${tutorId}-${g.id}-${a}`,
+    }).catch((err) => logger.error({ err: err.message, a: g.id }, 'Fallo avisando del correo de tutor cambiado'));
+  }
+  logger.info({ tutorId, avisados: gente.length }, 'Correo de tutor cambiado: avisada administración');
+  return { avisados: gente.length };
 }
 
 export async function list(filters) {
