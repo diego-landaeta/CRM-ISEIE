@@ -333,7 +333,7 @@ async function _createLeadCore(project, leadData) {
           await sendLeadAssignedEmail({
             gestor: rows[0],
             lead: { id: lead.id, nombre: lead.nombre, email: lead.email, telefono: lead.telefono },
-            proyecto: { nombre: project.nombre },
+            proyecto: { id: project.id, nombre: project.nombre, slug: project.slug, logo_url: project.logo_url, emoji: project.emoji },
             baseUrl,
           });
         }

@@ -27,6 +27,7 @@ import { notifyUsers } from '../notifications/notifications.service.js';
 import { NO_ESCRIBIR_A_TUTORES } from '../../shared/config/frenoTutores.js';
 import { logger } from '../../shared/utils/logger.js';
 import { query } from '../../shared/config/db.js';
+import * as P from '../../shared/services/email-plantilla.service.js';
 
 const BCRYPT_ROUNDS = 12;
 const SET_PASSWORD_EXPIRY_HOURS = 24;
@@ -145,13 +146,30 @@ export async function avisarCorreoDeTutorCambiado({ tutorId, nombre, de, a }) {
     targetUserIds: gente.map((g) => g.id), type: 'tutor_correo_cambiado', title: titulo, message: texto,
     link_path: '/tutores', metadata: { tutor_id: tutorId, de, a }, triggered_by_user_id: tutorId,
   });
-  const esc = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  // Con la plantilla común y la marca de su campus (Diego, 10/10: «cada correo
+  // con un formato completo y lindo, y con el branding»). Antes iba en texto plano.
+  const { rows: [marca] } = await query(
+    `SELECT p.id, p.nombre, p.slug, p.logo_url, p.emoji
+       FROM user_projects up JOIN projects p ON p.id = up.project_id AND p.active = true
+      WHERE up.user_id = $1
+      ORDER BY (p.remitente_no_contestar IS NULL), p.id LIMIT 1`,
+    [tutorId]
+  );
   for (const g of gente) {
+    const { htmlContent, textContent } = P.correo({
+      proyecto: marca || {},
+      titulo: titulo,
+      saludo: g.nombre,
+      resumen: `De ${de} a ${a}`,
+      bloques: [
+        P.parrafo(`El tutor <strong>${P.esc(nombre)}</strong> ha cambiado su correo desde «Mi perfil».`),
+        P.nota(`Antes: <strong>${P.esc(de)}</strong><br>Ahora: <strong>${P.esc(a)}</strong>`),
+        P.parrafo('Es el correo al que va la factura de su comisión. Si no os cuadra, revisadlo en Tutores.'),
+        P.boton({ texto: 'Abrir Tutores', url: P.enlace('/tutores') }),
+      ],
+    });
     sendEmail({
-      to: g.email, subject: titulo,
-      htmlContent: `<p>Hola ${esc(g.nombre)},</p><p>El tutor <strong>${esc(nombre)}</strong> ha cambiado su correo desde «Mi perfil»:</p>
-        <p>De <strong>${esc(de)}</strong><br>a <strong>${esc(a)}</strong></p>
-        <p>Es el correo al que va la factura de su comisión. Si no os cuadra, revisadlo en Tutores.</p>`,
+      to: g.email, subject: titulo, htmlContent, textContent, projectId: marca?.id ?? null,
       tags: ['tutor-correo-cambiado'],
       clave: `tutor-correo-${tutorId}-${g.id}-${a}`,
     }).catch((err) => logger.error({ err: err.message, a: g.id }, 'Fallo avisando del correo de tutor cambiado'));

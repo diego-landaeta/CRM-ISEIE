@@ -2,6 +2,7 @@ import * as model from './change-request.model.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import { sendEmail } from '../../shared/services/brevo.service.js';
+import * as P from '../../shared/services/email-plantilla.service.js';
 import { notifyAdmins } from '../notifications/notifications.service.js';
 import { query } from '../../shared/config/db.js';
 
@@ -184,6 +185,27 @@ export async function reopen(id, { userId, role, motivo }) {
 
 // ─── Notificaciones email ───────────────────────────────────────
 
+// Los dos avisos de solicitudes de cambio, con la plantilla común y la marca de
+// su proyecto, o la del CRM si es general (Diego, 10/10: «cada correo con un
+// formato completo y lindo, y con el branding»).
+async function correoRfc(rfc, { titulo, texto }) {
+  let marca = { nombre: 'ISEIE', slug: 'iseie' };
+  if (rfc.project_id) {
+    const { rows } = await query('SELECT nombre, slug, logo_url, emoji FROM projects WHERE id = $1', [rfc.project_id]);
+    if (rows[0]) marca = rows[0];
+  }
+  return P.correo({
+    proyecto: marca,
+    titulo,
+    resumen: `${rfc.codigo_rfc} · ${rfc.titulo}`,
+    bloques: [
+      P.nota(`<strong>${P.esc(rfc.codigo_rfc)}</strong> · ${P.esc(rfc.titulo)}<br><span style="color:#71717a">Estado: ${P.esc(rfc.estado || '—')}</span>`),
+      P.parrafo(P.esc(texto)),
+      P.boton({ texto: 'Abrir la solicitud', url: P.enlace(`/solicitudes-cambio/${rfc.id}`) }),
+    ],
+  });
+}
+
 async function notifyPmsOfNewRfc(rfc) {
   const pms = await model.listUsersByRole('project_manager');
   // Si no hay PM dedicado, notificar a admins.
@@ -192,18 +214,15 @@ async function notifyPmsOfNewRfc(rfc) {
     logger.info({ rfcId: rfc.id }, 'RFC: sin destinatarios PM/admin para notificar');
     return;
   }
-  const subject = `[RFC] Nueva solicitud de cambio: ${rfc.codigo_rfc} — ${rfc.titulo}`;
-  const html = `
-    <h2>Nueva solicitud de cambio</h2>
-    <p><strong>${rfc.codigo_rfc}</strong> — ${rfc.titulo}</p>
-    <p>Solicitante: ${rfc.solicitante_user_id || '—'}</p>
-    <p>Estado: ${rfc.estado}</p>
-    <p>Revisa la solicitud en el CRM para completar la parte técnica.</p>
-  `;
+  const subject = `Nueva solicitud de cambio: ${rfc.codigo_rfc} · ${rfc.titulo}`;
+  const html = await correoRfc(rfc, {
+    titulo: 'Nueva solicitud de cambio',
+    texto: 'Revisa la solicitud en el CRM para completar la parte técnica.',
+  });
   for (const r of recipients) {
     if (!r.email) continue;
     try {
-      await sendEmail({ to: [{ email: r.email, name: r.nombre }], subject, htmlContent: html, tags: ['rfc', 'created'] });
+      await sendEmail({ to: [{ email: r.email, name: r.nombre }], subject, ...html, projectId: rfc.project_id ?? null, tags: ['rfc', 'created'] });
     } catch (err) {
       logger.warn({ err: err.message, to: r.email }, 'Brevo: fallo al notificar PM');
     }
@@ -213,17 +232,15 @@ async function notifyPmsOfNewRfc(rfc) {
 async function notifyCeoOfRfc(rfc) {
   const ceos = await model.listUsersByRole('superadmin');
   if (ceos.length === 0) return;
-  const subject = `[RFC] ${rfc.codigo_rfc} enviado para tu aprobación`;
-  const html = `
-    <h2>RFC pendiente de tu aprobación (CCB)</h2>
-    <p><strong>${rfc.codigo_rfc}</strong> — ${rfc.titulo}</p>
-    <p>Estado: enviado al CEO.</p>
-    <p>Entra al CRM, revisa la propuesta del PM y firma tu decisión.</p>
-  `;
+  const subject = `${rfc.codigo_rfc}: pendiente de tu aprobación`;
+  const html = await correoRfc(rfc, {
+    titulo: 'Una solicitud de cambio espera tu aprobación',
+    texto: 'Entra al CRM, revisa la propuesta y firma tu decisión.',
+  });
   for (const c of ceos) {
     if (!c.email) continue;
     try {
-      await sendEmail({ to: [{ email: c.email, name: c.nombre }], subject, htmlContent: html, tags: ['rfc', 'ceo_review'] });
+      await sendEmail({ to: [{ email: c.email, name: c.nombre }], subject, ...html, projectId: rfc.project_id ?? null, tags: ['rfc', 'ceo_review'] });
     } catch (err) {
       logger.warn({ err: err.message, to: c.email }, 'Brevo: fallo al notificar CEO');
     }
