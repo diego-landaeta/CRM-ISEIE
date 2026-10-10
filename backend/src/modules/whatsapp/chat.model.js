@@ -6,6 +6,7 @@ import { seAceptanGrupos } from './politica.js';
 import { PLAZAS_JOIN, PLAZAS_COLS } from '../products/plazas.sql.js';
 import { normalizePhone, phoneCanonical } from '../../shared/utils/normalizePhone.js';
 import { logger } from '../../shared/utils/logger.js';
+import { recolocarPasos } from '../../shared/utils/recolocarPasos.js';
 
 // Las conversaciones de WhatsApp. Antes esto no existia: se veian en el
 // navegador remoto y se perdian. Ahora viven aqui, y por eso se pueden buscar,
@@ -1097,6 +1098,12 @@ export async function apuntarInteraccion({ leadId, nota, userId, fecha }) {
      RETURNING id`,
     [leadId, nota, userId, fecha || null]
   );
+  // Como cualquier contacto: los pasos que quedan, desde él (ver recolocarPasos.js).
+  try {
+    await recolocarPasos([leadId]);
+  } catch (err) {
+    logger.warn({ err: err.message, leadId }, 'No se pudo recolocar la agenda tras la llamada');
+  }
   return rows[0] || null;
 }
 
