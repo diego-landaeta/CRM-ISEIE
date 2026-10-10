@@ -1,6 +1,8 @@
 import { query, getClient } from '../../shared/config/db.js';
 import { PASO_CERRADO } from '../../shared/utils/pasoCerrado.js';
 import { EN_EL_PROCESO } from '../../shared/utils/enElProceso.js';
+import { recolocarPasos } from '../../shared/utils/recolocarPasos.js';
+import { logger } from '../../shared/utils/logger.js';
 
 // ============================================================
 // WEBHOOK + ROUND-ROBIN
@@ -1063,7 +1065,19 @@ export async function createInteraction(leadId, tipo, nota, createdBy, fecha) {
      RETURNING id, lead_id, tipo, nota, fecha, created_by`,
     [leadId, tipo, nota, createdBy, fecha || null]
   );
+  // Un contacto puede cerrar el paso que toca: los que quedan se cuentan desde
+  // él, no desde la entrada (Diego, 10/10; ver recolocarPasos.js).
+  if (tipo !== 'nota') await recolocarSinRomper(leadId);
   return rows[0];
+}
+
+async function recolocarSinRomper(leadId) {
+  try {
+    await recolocarPasos([leadId]);
+  } catch (err) {
+    // La agenda se puede recolocar más tarde; el contacto no se puede perder.
+    logger.warn({ err: err.message, leadId }, 'No se pudo recolocar la agenda tras el contacto');
+  }
 }
 
 // Devuelve la interacción si pertenece al lead indicado. Usado para checks de
