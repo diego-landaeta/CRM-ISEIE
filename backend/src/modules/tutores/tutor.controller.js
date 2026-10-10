@@ -514,12 +514,15 @@ export async function brochureDelCurso(req, res, next) {
 //
 // Solo vale para TUTORES: por aqui no se le puede cambiar la clave a una
 // gestora ni a un administrador, aunque se pruebe con su identificador.
+// Desde el 09/10 también el admin, a los tutores de sus campus (Diego, #246: «sí, y
+// admin»). Quien solo gestiona colaboraciones, no.
 export async function cambiarContrasena(req, res, next) {
   try {
-    if (req.user.role !== 'superadmin') {
-      throw new AppError('Solo un superadmin puede cambiar la contraseña', 403, 'FORBIDDEN');
+    if (!['superadmin', 'admin'].includes(req.user.role)) {
+      throw new AppError('Solo un superadmin o un admin puede cambiar la contraseña', 403, 'FORBIDDEN');
     }
     const id = parseInt(req.params.id);
+    await exigirTutorDeMisCampus(req, id);
     const t = await model.ficha(id);
     if (!t) throw new AppError('Ese tutor no existe', 404, 'NOT_FOUND');
     const { password } = valida(adminSetPasswordSchema, req.body);

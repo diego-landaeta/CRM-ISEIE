@@ -1,7 +1,8 @@
 import * as authService from './auth.service.js';
 import { sanitizeProjects } from './auth.service.js';
 import * as authModel from './auth.model.js';
-import { loginSchema, setPasswordSchema, changePasswordSchema, updateMyProfileSchema } from './auth.validation.js';
+import { loginSchema, setPasswordSchema, changePasswordSchema, updateMyProfileSchema, updateMyEmailSchema } from './auth.validation.js';
+import * as userService from '../users/user.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import bcrypt from 'bcrypt';
 import { query } from '../../shared/config/db.js';
@@ -204,4 +205,28 @@ export async function me(req, res, next) {
   } catch (err) {
     next(err);
   }
+}
+
+// PATCH /api/auth/me/email — un TUTOR cambia su propio correo (#246, Diego 09/10:
+// «sí, y debe mandar notificación, aunque actualmente no tienen acceso»). El resto
+// de roles lo sigue pidiendo a administración. Es la credencial: al cambiarlo se
+// cierran sus sesiones y tiene que volver a entrar con el nuevo. Se avisa a
+// administración, porque es el correo de la factura de su comisión.
+export async function updateMyEmail(req, res, next) {
+  try {
+    if (req.user?.role !== 'tutor') {
+      throw new AppError('Tu correo lo cambia administración', 403, 'FORBIDDEN');
+    }
+    const parsed = updateMyEmailSchema.safeParse(req.body);
+    if (!parsed.success) throw new AppError(parsed.error.issues[0].message, 400, 'VALIDATION_ERROR');
+    const userId = req.user.userId;
+    const { rows: [yo] } = await query('SELECT nombre, email FROM users WHERE id = $1', [userId]);
+    if (!yo) throw new AppError('Usuario no encontrado', 404, 'NOT_FOUND');
+    const r = await userService.cambiarCorreo(userId, parsed.data.email, { porUserId: userId, ip: getClientIp(req) });
+    if (r.cambiado) {
+      await userService.avisarCorreoDeTutorCambiado({ tutorId: userId, nombre: yo.nombre, de: yo.email, a: r.email })
+        .catch(() => {});
+    }
+    res.json({ success: true, data: { email: r.email, cambiado: r.cambiado, hayQueVolverAEntrar: r.cambiado } });
+  } catch (err) { next(err); }
 }

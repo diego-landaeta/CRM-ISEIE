@@ -156,10 +156,12 @@ describe('el correo de otro, desde Usuarios', () => {
     expect((await request.patch(`/api/users/${GESTORA.id}`).set(como(SUPER)).send({ email: 'no-es-un-correo' })).status).toBe(400);
   });
 
-  it('el de otro super admin, no (decidido con Diana, 06/10)', async () => {
+  it('el de otro super admin, sí: lo cambia otro super admin (Diego, 09/10, #246); un admin, no', async () => {
     const OTRO_SUPER = await persona('SUPER2', 'superadmin');
-    expect((await request.patch(`/api/users/${OTRO_SUPER.id}`).set(como(SUPER)).send({ email: `s2@${dominio}` })).status).toBe(403);
+    expect((await request.patch(`/api/users/${OTRO_SUPER.id}`).set(como(ADMIN)).send({ email: `s2@${dominio}` })).status).toBe(403);
     expect(await correoDe(OTRO_SUPER)).toBe(`super2@${dominio}`);
+    expect((await request.patch(`/api/users/${OTRO_SUPER.id}`).set(como(SUPER)).send({ email: `s2@${dominio}` })).status).toBe(200);
+    expect(await correoDe(OTRO_SUPER)).toBe(`s2@${dominio}`);
   });
 });
 
@@ -291,11 +293,11 @@ describe('desde Tutores: el correo y la contraseña de un tutor', () => {
     expect((await registro('usuario.cambiar_contrasena', TUTOR))[0].user_id).toBe(SUPER.id);
   });
 
-  it('la contraseña de un tutor, ni un admin ni quien gestiona colaboraciones', async () => {
-    for (const quien of [ADMIN, COLABORACIONES]) {
-      expect((await request.post(`/api/tutores/${TUTOR.id}/contrasena`).set(como(quien))
-        .send({ password: 'ClaveTutor2', confirmPassword: 'ClaveTutor2' })).status).toBe(403);
-    }
+  it('la contraseña de un tutor: el admin de su campus sí (Diego, 09/10, #246); quien gestiona colaboraciones, no', async () => {
+    expect((await request.post(`/api/tutores/${TUTOR.id}/contrasena`).set(como(COLABORACIONES))
+      .send({ password: 'ClaveTutor2', confirmPassword: 'ClaveTutor2' })).status).toBe(403);
+    expect((await request.post(`/api/tutores/${TUTOR.id}/contrasena`).set(como(ADMIN))
+      .send({ password: 'ClaveTutor2', confirmPassword: 'ClaveTutor2' })).status).toBe(200);
   });
 });
 

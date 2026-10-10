@@ -19,6 +19,24 @@ const ROLE_LABELS = {
 
 export default function ProfilePage() {
   const { user, refreshUser } = useAuth();
+  const { logout } = useAuth();
+  // El propio correo, solo un tutor (#246, Diego 09/10). El resto lo pide a administración.
+  const esTutor = user?.role === 'tutor';
+  const [correoNuevo, setCorreoNuevo] = useState('');
+  const [cambiandoCorreo, setCambiandoCorreo] = useState(false);
+  async function cambiarCorreo() {
+    const nuevo = correoNuevo.trim().toLowerCase();
+    if (!nuevo || nuevo === String(user?.email || '').toLowerCase()) return;
+    setCambiandoCorreo(true);
+    try {
+      await client.patch('/auth/me/email', { email: nuevo });
+      // Es con lo que se entra: el servidor cierra las sesiones, hay que volver a entrar.
+      toast({ title: 'Correo cambiado', description: `Vuelve a entrar con ${nuevo}. Hemos avisado a administración.` });
+      setTimeout(() => { logout?.(); }, 2500);
+    } catch (err) {
+      toast({ title: 'No se pudo cambiar', description: err?.data?.error || err?.message, variant: 'destructive' });
+    } finally { setCambiandoCorreo(false); }
+  }
   const [tab, setTab] = useState('general');
   const [nombre, setNombre] = useState(user?.nombre || '');
   const [savingProfile, setSavingProfile] = useState(false);
@@ -170,7 +188,23 @@ export default function ProfilePage() {
                     className="w-full h-10 pl-9 pr-3 rounded-lg border border-border bg-muted text-muted-foreground text-sm cursor-not-allowed"
                   />
                 </div>
-                <p className="text-[11px] text-muted-foreground mt-1">El email no puede modificarse desde aquí.</p>
+                <p className="text-[11px] text-muted-foreground mt-1">{esTutor ? 'Es con lo que entras. Puedes cambiarlo abajo.' : 'El email no puede modificarse desde aquí.'}</p>
+                {esTutor && (
+                  <div className="mt-3 space-y-1.5">
+                    <label className="block text-[13px] font-medium">Cambiar mi correo</label>
+                    <div className="flex gap-2">
+                      <input type="email" value={correoNuevo} onChange={(e) => setCorreoNuevo(e.target.value)} maxLength={255}
+                        placeholder="tu.correo.nuevo@ejemplo.com"
+                        className="flex-1 h-10 px-3 rounded-lg border border-border bg-card text-foreground text-sm focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all" />
+                      <button type="button" onClick={cambiarCorreo}
+                        disabled={cambiandoCorreo || !correoNuevo.trim() || correoNuevo.trim().toLowerCase() === String(user?.email || '').toLowerCase()}
+                        className="inline-flex items-center h-10 px-4 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50">
+                        {cambiandoCorreo ? 'Cambiando…' : 'Cambiar correo'}
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">Es con lo que entras y a donde va la factura de tu comisión. Al cambiarlo se cierra tu sesión y entras con el nuevo; avisamos a administración.</p>
+                  </div>
+                )}
               </div>
             </div>
 
