@@ -2,6 +2,7 @@ import { query } from '../../shared/config/db.js';
 import { PASO_CERRADO } from '../../shared/utils/pasoCerrado.js';
 import { EN_EL_PROCESO } from '../../shared/utils/enElProceso.js';
 import { comoLista } from '../../shared/utils/ambito.js';
+import { recolocarPasos } from '../../shared/utils/recolocarPasos.js';
 /*
   LAS PLAZAS NO SE CUENTAN AQUI, y antes si.
 
@@ -494,6 +495,15 @@ export async function ajustarPaso(id, { estado, fecha_prevista, nota }, userId =
                 hecho_at, hecho_por`,
     [id, estado || null, fecha_prevista || null, nota || null, userId || null]
   );
+  // Marcado a mano también cierra el paso: los que quedan, desde hoy (ver
+  // recolocarPasos.js). Si se ha puesto una fecha a mano, manda esa.
+  if (rows[0] && estado === 'hecho' && !fecha_prevista) {
+    await recolocarPasos([rows[0].lead_id]);
+    const { rows: [fresco] } = await query(
+      `SELECT id, lead_id, clave, orden, fecha_prevista, estado, nota, hecho_at, hecho_por
+         FROM lead_steps WHERE id = $1`, [id]);
+    return fresco || rows[0];
+  }
   return rows[0] || null;
 }
 
