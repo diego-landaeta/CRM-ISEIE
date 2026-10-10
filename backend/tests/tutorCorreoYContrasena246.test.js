@@ -15,6 +15,7 @@ vi.mock('../src/shared/config/db.js', () => ({
     consultas.push({ sql, params });
     if (/SELECT nombre, email FROM users WHERE id/.test(sql)) return { rows: [usuarios.get(params[0])].filter(Boolean) };
     if (/FROM users u\s+WHERE u.active AND u.email IS NOT NULL/.test(sql)) return { rows: [{ id: 1, email: 'sa@x.com', nombre: 'Super' }, { id: 7, email: 'ad@x.com', nombre: 'Admin' }] };
+    if (/FROM user_projects up JOIN projects p/.test(sql)) return { rows: [{ id: 3, nombre: 'ISEIE', slug: 'iseie', logo_url: null, emoji: null }] };
     return { rows: [] };
   }),
 }));
@@ -95,6 +96,16 @@ describe('3 · el tutor cambia su correo y se avisa a administración', () => {
     expect(notifyUsers).toHaveBeenCalledWith(expect.objectContaining({ type: 'tutor_correo_cambiado', targetUserIds: [1, 7] }));
     expect(sendEmail).toHaveBeenCalledTimes(2);
     expect(sendEmail.mock.calls[0][0].htmlContent).toMatch(/juan@viejo\.com/);
+  });
+  it('el correo va con la plantilla común y la marca del campus del tutor (Diego, 10/10)', async () => {
+    await llamar(authController.updateMyEmail, { body: { email: 'juan@nuevo.com' }, user: { userId: 21, role: 'tutor' } });
+    const { htmlContent, textContent, projectId } = sendEmail.mock.calls[0][0];
+    expect(htmlContent).toMatch(/<!DOCTYPE html>/);
+    expect(htmlContent).toMatch(/Te lo manda el <strong[^>]*>CRM de ISEIE<\/strong>/);
+    expect(htmlContent).toMatch(/\/iseie-icon-192\.png/); // el logo del campus
+    expect(htmlContent).toMatch(/Abrir Tutores/);
+    expect(textContent).toMatch(/juan@nuevo\.com/);
+    expect(projectId).toBe(3); // sale por la cuenta y el remitente de esa marca
   });
   it('a administración solo le llegan los admin de algún campus del tutor (y los superadmin)', async () => {
     await llamar(authController.updateMyEmail, { body: { email: 'juan@nuevo.com' }, user: { userId: 21, role: 'tutor' } });

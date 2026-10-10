@@ -207,34 +207,54 @@ async function sendEmail({ to, subject, htmlContent, textContent, tags = [], pro
 // TEMPLATES
 // ============================================================
 
-export async function sendWelcomeUserEmail({ nombre, email, setPasswordToken, baseUrl }) {
-  const link = `${baseUrl}/set-password?token=${encodeURIComponent(setPasswordToken)}`;
-  const subject = 'Bienvenido al CRM - Establece tu contrasena';
-  const htmlContent = `
-    <!DOCTYPE html>
-    <html><body style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; color: #1f2937; max-width: 560px; margin: 0 auto; padding: 24px;">
-      <div style="background: linear-gradient(135deg, #3b82f6, #8b5cf6); padding: 32px; border-radius: 12px; color: white; text-align: center;">
-        <h1 style="margin: 0; font-size: 24px;">Bienvenido al CRM</h1>
-      </div>
-      <div style="background: white; padding: 24px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 12px 12px;">
-        <p>Hola <strong>${nombre}</strong>,</p>
-        <p>Se ha creado tu cuenta en el CRM MultiProyecto. Para empezar, establece tu contrasena haciendo click en el siguiente boton:</p>
-        <p style="text-align: center; margin: 32px 0;">
-          <a href="${link}" style="background: #3b82f6; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold; display: inline-block;">Establecer contrasena</a>
-        </p>
-        <p style="font-size: 13px; color: #6b7280;">O copia este enlace en tu navegador:<br><code style="background: #f3f4f6; padding: 4px 8px; border-radius: 4px; word-break: break-all;">${link}</code></p>
-        <p style="font-size: 13px; color: #6b7280;">Este enlace expira en 24 horas.</p>
-        <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;">
-        <p style="font-size: 12px; color: #9ca3af;">Si no esperabas este email, ignoralo.</p>
-      </div>
-    </body></html>`;
-  const textContent = `Hola ${nombre},\n\nSe ha creado tu cuenta en el CRM. Establece tu contrasena aqui:\n${link}\n\nEste enlace expira en 24 horas.`;
+/**
+ * La marca con la que le llega un correo a una persona del equipo: su primer
+ * campus activo, mejor el que tiene remitente «no contestar» (#177). Si no tiene
+ * ninguno, la del CRM. Da el logo de la cabecera y, por su id, la cuenta y el
+ * remitente de esa marca en Brevo.
+ */
+async function marcaDeLaPersona(email) {
+  try {
+    const { rows } = await query(
+      `SELECT p.id, p.nombre, p.slug, p.logo_url, p.emoji
+         FROM users u
+         JOIN user_projects up ON up.user_id = u.id
+         JOIN projects p ON p.id = up.project_id AND p.active = true
+        WHERE lower(u.email) = lower($1)
+        ORDER BY (p.remitente_no_contestar IS NULL), p.id LIMIT 1`,
+      [email],
+    );
+    return rows[0] || null;
+  } catch {
+    return null;
+  }
+}
 
+// Bienvenida con la plantilla común y la marca de su campus (Diego, 10/10:
+// «cada correo con un formato completo y lindo, y con el branding»).
+export async function sendWelcomeUserEmail({ nombre, email, setPasswordToken, baseUrl }) {
+  const P = plantilla;
+  const link = `${baseUrl}/set-password?token=${encodeURIComponent(setPasswordToken)}`;
+  const marca = await marcaDeLaPersona(email);
+  const subject = `Bienvenida al CRM${marca ? ` de ${marca.nombre}` : ''}: crea tu contraseña`;
+  const { htmlContent, textContent } = P.correo({
+    proyecto: marca || MARCA_CORREOS,
+    titulo: 'Te damos la bienvenida al CRM',
+    saludo: nombre,
+    resumen: 'Crea tu contraseña para entrar',
+    bloques: [
+      P.parrafo('Ya tienes cuenta en el CRM. Para entrar, crea tu contraseña:'),
+      P.boton({ texto: 'Crear mi contraseña', url: link }),
+      P.nota(`Entrarás con <strong>${P.esc(email)}</strong>. El enlace caduca en 24 horas.`),
+      letraPequena('Si no esperabas este correo, ignóralo: sin contraseña nadie puede entrar con tu cuenta.'),
+    ],
+  });
   return await sendEmail({
     to: [{ email, name: nombre }],
     subject,
     htmlContent,
     textContent,
+    projectId: marca?.id ?? null,
     tags: ['welcome-user', 'crm'],
   });
 }
@@ -280,32 +300,29 @@ export async function sendCorreoCambiadoEmail({ nombre, de, a }) {
   return await sendEmail({ to: [{ email: de, name: nombre }], subject, htmlContent, textContent, tags: ['correo-cambiado', 'crm'] });
 }
 
+// Con la plantilla común y la marca del campus del prospecto (Diego, 10/10).
 export async function sendLeadAssignedEmail({ gestor, lead, proyecto, baseUrl }) {
+  const P = plantilla;
   const link = `${baseUrl}/leads/${lead.id}`;
-  const subject = `Nuevo lead asignado: ${lead.nombre}`;
-  const htmlContent = `
-    <!DOCTYPE html>
-    <html><body style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; color: #1f2937; max-width: 560px; margin: 0 auto; padding: 24px;">
-      <h2 style="color: #3b82f6;">Nuevo lead asignado</h2>
-      <p>Hola <strong>${gestor.nombre}</strong>, te han asignado un nuevo lead.</p>
-      <div style="background: #f9fafb; padding: 16px; border-radius: 8px; border-left: 4px solid #3b82f6;">
-        <p style="margin: 0 0 8px;"><strong>${lead.nombre}</strong></p>
-        <p style="margin: 0 0 4px; font-size: 14px;">${lead.email}</p>
-        ${lead.telefono ? `<p style="margin: 0 0 4px; font-size: 14px;">${lead.telefono}</p>` : ''}
-        <p style="margin: 8px 0 0; font-size: 13px; color: #6b7280;">Proyecto: ${proyecto.nombre}</p>
-      </div>
-      <p style="text-align: center; margin: 24px 0;">
-        <a href="${link}" style="background: #3b82f6; color: white; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: bold;">Ver lead</a>
-      </p>
-      <p style="font-size: 12px; color: #9ca3af;">Contactalo lo antes posible para maximizar la conversion.</p>
-    </body></html>`;
-  const textContent = `Hola ${gestor.nombre},\nNuevo lead asignado:\n${lead.nombre} <${lead.email}>\nProyecto: ${proyecto.nombre}\nVer: ${link}`;
-
+  const subject = `Nuevo prospecto asignado: ${lead.nombre}`;
+  const datos = [lead.email, lead.telefono].filter(Boolean).map((d) => P.esc(d)).join('<br>');
+  const { htmlContent, textContent } = P.correo({
+    proyecto: proyecto || MARCA_CORREOS,
+    titulo: 'Te han asignado un prospecto',
+    saludo: gestor.nombre,
+    resumen: `${lead.nombre}${proyecto?.nombre ? ` · ${proyecto.nombre}` : ''}`,
+    bloques: [
+      P.nota(`<strong>${P.esc(lead.nombre)}</strong>${datos ? `<br>${datos}` : ''}${proyecto?.nombre ? `<br><span style="color:#71717a">${P.esc(proyecto.nombre)}</span>` : ''}`),
+      P.boton({ texto: 'Ver el prospecto', url: link }),
+      letraPequena('Cuanto antes lo contactes, más fácil es que se matricule.'),
+    ],
+  });
   return await sendEmail({
     to: [{ email: gestor.email, name: gestor.nombre }],
     subject,
     htmlContent,
     textContent,
+    projectId: proyecto?.id ?? null,
     tags: ['lead-assigned', 'crm'],
   });
 }

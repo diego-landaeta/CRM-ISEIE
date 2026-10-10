@@ -1,6 +1,7 @@
 import { logger } from '../shared/utils/logger.js';
 import { query } from '../shared/config/db.js';
 import { sendEmail } from '../shared/services/brevo.service.js';
+import * as P from '../shared/services/email-plantilla.service.js';
 import { notifyUsers } from '../modules/notifications/notifications.service.js';
 import { vigilar } from './latido.js';
 
@@ -35,7 +36,8 @@ async function sinTocar() {
     `SELECT l.id, l.nombre, l.email, l.telefono, l.status, l.fecha_solicitud, l.created_at,
             l.responsable_id,
             u.nombre AS gestora, u.email AS gestora_email,
-            p.nombre AS proyecto
+            p.nombre AS proyecto, p.id AS proyecto_id, p.slug AS proyecto_slug,
+            p.logo_url AS proyecto_logo, p.emoji AS proyecto_emoji
        FROM leads l
        JOIN users u    ON u.id = l.responsable_id AND u.active
        LEFT JOIN projects p ON p.id = l.project_id
@@ -60,21 +62,26 @@ async function sinTocar() {
   return rows;
 }
 
+// Con la plantilla común y la marca del campus del prospecto (Diego, 10/10:
+// «cada correo con un formato completo y lindo, y con el branding»).
 function cuerpo(lead) {
   const entro = new Date(lead.fecha_solicitud || lead.created_at);
   const hace = Math.round((Date.now() - entro.getTime()) / 60000);
-  return `
-    <p>Hola ${lead.gestora || ''},</p>
-    <p><strong>${lead.nombre}</strong> entro hace ${hace} minutos y todavia no
-       tiene ningun contacto apuntado.</p>
-    <ul>
-      ${lead.proyecto ? `<li><strong>Proyecto:</strong> ${lead.proyecto}</li>` : ''}
-      ${lead.telefono ? `<li><strong>Telefono:</strong> ${lead.telefono}</li>` : ''}
-      ${lead.email ? `<li><strong>Correo:</strong> ${lead.email}</li>` : ''}
-    </ul>
-    <p>Este aviso se manda una sola vez por prospecto. Puedes apagarlo en
-       <em>Mis preferencias</em>.</p>
-  `;
+  const datos = [lead.telefono, lead.email].filter(Boolean).map((d) => P.esc(d)).join('<br>');
+  return P.correo({
+    proyecto: lead.proyecto_id
+      ? { nombre: lead.proyecto, slug: lead.proyecto_slug, logo_url: lead.proyecto_logo, emoji: lead.proyecto_emoji }
+      : { nombre: 'ISEIE', slug: 'iseie' },
+    titulo: 'Un prospecto sin contactar',
+    saludo: lead.gestora || null,
+    resumen: `${lead.nombre} entró hace ${hace} minutos`,
+    bloques: [
+      P.parrafo(`<strong>${P.esc(lead.nombre)}</strong> entró hace ${hace} minutos y todavía no tiene ningún contacto apuntado.`),
+      P.nota(`<strong>${P.esc(lead.nombre)}</strong>${datos ? `<br>${datos}` : ''}`),
+      P.boton({ texto: 'Abrir el prospecto', url: P.enlace(`/prospectos/${lead.id}`) }),
+    ],
+    apagar: { texto: 'Este aviso se manda una sola vez por prospecto.' },
+  });
 }
 
 async function vuelta() {
@@ -99,8 +106,9 @@ async function vuelta() {
 
       await sendEmail({
         to: lead.gestora_email,
-        subject: `[CRM] Sin contactar: ${lead.nombre}`,
-        htmlContent: cuerpo(lead),
+        subject: `Sin contactar: ${lead.nombre}`,
+        ...cuerpo(lead),
+        projectId: lead.proyecto_id ?? null,
         tags: ['recordatorio', 'lead-sin-tocar'],
         // UNA sola vez por prospecto, y esto es el criterio de terminado del
         // ticket. La clave lleva el id del lead y no la fecha: el aviso es «este

@@ -7,6 +7,7 @@ import { logger } from '../shared/utils/logger.js';
 import { query } from '../shared/config/db.js';
 import { decrypt } from '../shared/utils/crypto.js';
 import { sendEmail } from '../shared/services/brevo.service.js';
+import * as P from '../shared/services/email-plantilla.service.js';
 import { refreshGoogleAdsAccessToken } from '../shared/services/googleAds.service.js';
 import { vigilar } from './latido.js';
 
@@ -26,7 +27,7 @@ async function loadActiveGoogleCreds() {
   const { rows } = await query(`
     SELECT ac.id, ac.project_id, ac.encrypted_value, ac.iv, ac.auth_tag,
            ac.metadata, ac.last_test_result,
-           p.nombre AS project_nombre
+           p.nombre AS project_nombre, p.slug AS project_slug, p.logo_url AS project_logo, p.emoji AS project_emoji
       FROM api_credentials ac
       LEFT JOIN projects p ON p.id = ac.project_id
      WHERE ac.service = 'google_ads' AND ac.active = true
@@ -47,21 +48,31 @@ async function recordResult(id, result) {
 // comparaciones, y lo que se quiere es «un aviso al dia», no la medianoche exacta.
 const hoy = () => new Date().toISOString().slice(0, 10);
 
+// Con la plantilla común y la marca del proyecto de la credencial (Diego, 10/10:
+// «cada correo con un formato completo y lindo, y con el branding»).
+const marcaDe = (cred) => (cred.project_id
+  ? { nombre: cred.project_nombre, slug: cred.project_slug, logo_url: cred.project_logo, emoji: cred.project_emoji }
+  : { nombre: 'ISEIE', slug: 'iseie' });
+
 async function notifyExpired(cred, errorCode, errorMessage, adminEmails) {
   if (adminEmails.length === 0) return;
-  const projectLabel = cred.project_nombre || `(global, project_id=NULL)`;
+  const projectLabel = cred.project_nombre || 'la cuenta general';
+  const correo = P.correo({
+    proyecto: marcaDe(cred),
+    titulo: 'Google Ads se ha desconectado',
+    resumen: `Las métricas de ${projectLabel} dejan de sincronizarse`,
+    bloques: [
+      P.parrafo(`La conexión con Google Ads de <strong>${P.esc(projectLabel)}</strong> ha dejado de ser válida. Las métricas no se sincronizarán hasta que un superadmin vuelva a autorizar la cuenta.`),
+      P.nota(`Código: <strong>${P.esc(errorCode)}</strong>${errorMessage ? `<br>${P.esc(errorMessage)}` : ''}`),
+      P.boton({ texto: 'Volver a conectar', url: P.enlace('/finanzas/integraciones') }),
+      P.parrafo('<span style="font-size:13px;line-height:20px;color:#71717a">Suele pasar porque se retiró el acceso desde Google, se suspendió la aplicación o la conexión llevaba más de seis meses sin usarse.</span>'),
+    ],
+  });
   await sendEmail({
     to: adminEmails.join(','),
-    subject: `[CRM] Google Ads desconectado — ${projectLabel}`,
-    htmlContent: `
-      <p>El refresh token de Google Ads para <strong>${projectLabel}</strong> ha dejado de ser valido.</p>
-      <p><strong>Codigo:</strong> ${errorCode}</p>
-      ${errorMessage ? `<p><strong>Detalle:</strong> ${errorMessage}</p>` : ''}
-      <p>Las metricas dejaran de sincronizarse hasta que un superadmin re-autorice la cuenta desde
-         <em>Configuracion → Credenciales API</em>.</p>
-      <p>Posibles causas: el usuario Google revoco el acceso, la app de OAuth fue suspendida,
-         o el refresh token expiro por inactividad (>6 meses).</p>
-    `,
+    subject: `Google Ads desconectado · ${projectLabel}`,
+    ...correo,
+    projectId: cred.project_id ?? null,
     tags: ['google-ads-token', `cred-${cred.id}`],
     // UN aviso al dia por credencial, y no uno por arranque.
     //
@@ -75,14 +86,20 @@ async function notifyExpired(cred, errorCode, errorMessage, adminEmails) {
 
 async function notifyReactivated(cred, adminEmails) {
   if (adminEmails.length === 0) return;
-  const projectLabel = cred.project_nombre || `(global)`;
+  const projectLabel = cred.project_nombre || 'la cuenta general';
+  const correo = P.correo({
+    proyecto: marcaDe(cred),
+    titulo: 'Google Ads vuelve a funcionar',
+    resumen: `${projectLabel}: conexión recuperada`,
+    bloques: [
+      P.parrafo(`La conexión con Google Ads de <strong>${P.esc(projectLabel)}</strong> ha vuelto a funcionar. Las métricas se sincronizarán de nuevo en el próximo ciclo.`),
+    ],
+  });
   await sendEmail({
     to: adminEmails.join(','),
-    subject: `[CRM] Google Ads reactivado — ${projectLabel}`,
-    htmlContent: `
-      <p>La conexion con Google Ads para <strong>${projectLabel}</strong> ha vuelto a funcionar.</p>
-      <p>Las metricas se sincronizaran de nuevo en el proximo ciclo.</p>
-    `,
+    subject: `Google Ads reactivado · ${projectLabel}`,
+    ...correo,
+    projectId: cred.project_id ?? null,
     tags: ['google-ads-token', `cred-${cred.id}`],
     // Igual que el de caido: uno al dia. Aqui ademas evita el ping-pong si la
     // credencial se recupera y se vuelve a caer en el mismo dia.
