@@ -10,6 +10,8 @@ export interface WidgetConfig {
   excluded_user_ids: number[];
   show_bubble: boolean;
   bubble_delay_ms: number;
+  /** Los otros idiomas (12/10): vacío = el texto por defecto de ese idioma. */
+  traducciones?: Partial<Record<'en' | 'fr' | 'pt', { welcome?: string; template?: string }>>;
   updated_at: string;
 }
 

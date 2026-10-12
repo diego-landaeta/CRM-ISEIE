@@ -5,6 +5,10 @@ import PageHeader from '@/shared/components/ui/PageHeader';
 import { widgetApi } from '../api/widget.api';
 import type { WidgetConfig, CandidateUser } from '../api/widget.api';
 import { toast } from '@/shared/hooks/useToast';
+import { construirSnippet, IDIOMAS_WIDGET, type IdiomaWidget } from '../lib/snippet';
+import { POR_DEFECTO_WIDGET } from '../lib/porDefecto';
+
+type OtroIdioma = Exclude<IdiomaWidget, 'es'>;
 
 export default function WhatsappWidgetPage() {
   const { activeProject } = useProjectContext() as { activeProject: { id?: number; nombre?: string } };
@@ -14,6 +18,9 @@ export default function WhatsappWidgetPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
+  // Idiomas (12/10): la pestaña de textos que se edita y el idioma del código para la web.
+  const [idiomaTab, setIdiomaTab] = useState<IdiomaWidget>('es');
+  const [idiomaCodigo, setIdiomaCodigo] = useState<IdiomaWidget | ''>('');
 
   const load = useCallback(async () => {
     if (!pid) return;
@@ -40,6 +47,7 @@ export default function WhatsappWidgetPage() {
         excluded_user_ids: config.excluded_user_ids,
         show_bubble: config.show_bubble,
         bubble_delay_ms: config.bubble_delay_ms,
+        traducciones: config.traducciones || {},
       });
       if (r.success) toast({ title: '✓ Widget actualizado' });
     } catch (e: any) {
@@ -65,42 +73,8 @@ export default function WhatsappWidgetPage() {
 
   const baseUrl = window.location.origin + (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
   const dataUrl = `${baseUrl}/api/w/data/${pid}.json`;
-  // Snippet INLINE (igual que psikoaprende/opynio): el botón es HTML puro pintado
-  // directo en la página → aparece SIEMPRE, fijo a la derecha, sin depender de
-  // cargar scripts externos (que WP Rocket/LiteSpeed delayán o matan).
-  // Un mini-script inline hace fetch al CRM para rotar gestora y armar el href.
-  const embedCode = `<!-- WhatsApp CRM360 -->
-<style>
-#c3w{position:fixed!important;bottom:20px!important;right:16px!important;z-index:2147483647!important;display:flex!important;flex-direction:column!important;align-items:flex-end!important;gap:8px!important;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif!important}
-#c3w-tag{display:none!important;background:#fff!important;color:#111!important;border-radius:14px!important;padding:8px 14px!important;box-shadow:0 3px 14px rgba(0,0,0,.15)!important;font-size:14px!important;white-space:nowrap!important;cursor:pointer!important;line-height:1.4!important}
-#c3w-tag.s{display:block!important}
-#c3w-tag b{color:#25D366!important;font-weight:700!important}
-#c3w-btn{width:58px!important;height:58px!important;background:#25D366!important;border:none!important;border-radius:50%!important;display:flex!important;align-items:center!important;justify-content:center!important;cursor:pointer!important;box-shadow:0 4px 16px rgba(37,211,102,.5)!important;padding:0!important;margin:0!important;transition:transform .2s!important}
-#c3w-btn:hover{transform:scale(1.08)!important}
-#c3w-btn svg{width:30px!important;height:30px!important;fill:#fff!important;display:block!important}
-</style>
-<div id="c3w" role="complementary">
-  <div id="c3w-tag"><b id="c3w-name"></b> <span id="c3w-msg"></span></div>
-  <button id="c3w-btn" aria-label="WhatsApp" type="button">
-    <svg viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
-  </button>
-</div>
-<script>
-(function(){if(window.__c3w)return;window.__c3w=1;
-var wa=null,btn=document.getElementById('c3w-btn'),tag=document.getElementById('c3w-tag'),nm=document.getElementById('c3w-name'),mg=document.getElementById('c3w-msg');
-function go(){if(wa)window.open(wa,'_blank')}
-btn.addEventListener('click',go);tag.addEventListener('click',go);
-fetch('${dataUrl}').then(function(r){return r.json()}).then(function(d){
-  if(!d.enabled||!d.gestoras||!d.gestoras.length){document.getElementById('c3w').style.display='none';return}
-  var p=d.gestoras[Math.floor(Math.random()*d.gestoras.length)];
-  var msg=(d.template||'Hola, quiero información: {{url}}').replace(/\\{\\{nombre\\}\\}/g,p[0]).replace(/\\{\\{project\\}\\}/g,d.project||'').replace(/\\{\\{url\\}\\}/g,location.href);
-  wa='https://wa.me/'+p[1]+'?text='+encodeURIComponent(msg);
-  nm.textContent=p[0];mg.textContent=d.welcome||'¿Hablamos? 👋';
-  setTimeout(function(){tag.className='s'},3000);
-  setTimeout(function(){tag.className=''},15000);
-}).catch(function(){document.getElementById('c3w').style.display='none'});
-})();
-</script>`;
+  // El código para la web, con el idioma elegido (vacío = el de cada página). Ver lib/snippet.ts.
+  const embedCode = construirSnippet({ dataUrl, idioma: idiomaCodigo });
   const activeInWidget = users.filter(u => u.in_project && u.whatsapp_widget_active && u.whatsapp_phone && !config.excluded_user_ids.includes(u.id));
 
   function copyEmbed() {
@@ -134,6 +108,17 @@ fetch('${dataUrl}').then(function(r){return r.json()}).then(function(d){
             {activeInWidget.length} gestoras activas
           </span>
         </div>
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <label htmlFor="idioma-codigo" className="font-semibold text-muted-foreground">Idioma del botón</label>
+          <select id="idioma-codigo" value={idiomaCodigo} onChange={(e) => setIdiomaCodigo(e.target.value as IdiomaWidget | '')}
+            className="h-8 rounded-md border border-border bg-background px-2 text-xs">
+            <option value="">Automático (el de cada página)</option>
+            {IDIOMAS_WIDGET.map((i) => <option key={i.codigo} value={i.codigo}>Siempre en {i.nombre}</option>)}
+          </select>
+          <span className="text-muted-foreground">
+            {idiomaCodigo ? 'Para webs de un solo idioma.' : 'Una web con varios idiomas usa el mismo código: cada página sale en el suyo.'}
+          </span>
+        </div>
         <p className="text-xs text-muted-foreground">
           Copia este código y pégalo antes del <code className="px-1 bg-muted rounded text-[10px]">&lt;/body&gt;</code> de tu landing
           (en WordPress: Elementor → Configuración del sitio → Código personalizado → "End of body").
@@ -150,7 +135,7 @@ fetch('${dataUrl}').then(function(r){return r.json()}).then(function(d){
           El botón es HTML inline → aparece <strong>siempre</strong>, fijo abajo-derecha, sin que WP Rocket/LiteSpeed lo bloqueen.
           La rotación de gestoras se actualiza desde el CRM automáticamente.
         </p>
-        <a href={dataUrl} target="_blank" rel="noopener" className="text-[11px] text-primary hover:underline inline-flex items-center gap-1">
+        <a href={dataUrl} target="_blank" rel="noopener noreferrer" className="text-[11px] text-primary hover:underline inline-flex items-center gap-1">
           Ver datos del widget <ArrowSquareOut size={11} />
         </a>
       </div>
@@ -164,46 +149,85 @@ fetch('${dataUrl}').then(function(r){return r.json()}).then(function(d){
           Widget activo (mostrar el botón en el sitio)
         </label>
 
+        {/* Los textos, por idioma (12/10). El español es el de siempre; en los demás, vacío = el de por defecto. */}
         <div>
-          <label className="text-xs font-semibold text-muted-foreground">Texto de la burbuja</label>
-          <input value={config.welcome_text} onChange={e => setConfig({ ...config, welcome_text: e.target.value })}
-            placeholder="¡Hablamos? 👋"
-            className="w-full h-9 px-3 mt-1 rounded-md border border-border bg-background text-sm" />
+          <div role="tablist" aria-label="Idioma de los textos" className="inline-flex flex-wrap gap-1 rounded-md bg-muted p-0.5 text-xs">
+            {IDIOMAS_WIDGET.map((i) => {
+              const escrito = i.codigo !== 'es' && !!(config.traducciones?.[i.codigo as OtroIdioma]?.welcome || config.traducciones?.[i.codigo as OtroIdioma]?.template);
+              return (
+                <button key={i.codigo} type="button" role="tab" aria-selected={idiomaTab === i.codigo} onClick={() => setIdiomaTab(i.codigo)}
+                  className={`rounded px-3 py-1 font-medium ${idiomaTab === i.codigo ? 'bg-card shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
+                  {i.nombre}{i.codigo === 'es' ? ' (base)' : escrito ? ' ✓' : ''}
+                </button>
+              );
+            })}
+          </div>
+          {idiomaTab !== 'es' && (
+            <p className="mt-1.5 text-[11px] text-muted-foreground">
+              Lo ven las páginas de la web en {IDIOMAS_WIDGET.find((i) => i.codigo === idiomaTab)?.nombre}. Si lo dejas vacío, sale el texto por defecto (el que ves en gris).
+            </p>
+          )}
         </div>
 
-        <div>
-          <label className="text-xs font-semibold text-muted-foreground">Plantilla del mensaje</label>
-          <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 rounded-md p-2 mt-1 mb-2 text-[10px]">
-            <strong className="text-blue-900 dark:text-blue-300">Variables disponibles:</strong>
-            <div className="flex flex-wrap gap-2 mt-1">
-              <code className="bg-white dark:bg-slate-800 px-1.5 py-0.5 rounded">{'{{nombre}}'}</code>
-              <span className="text-muted-foreground">→ nombre de la gestora que sale en la rotación</span>
-            </div>
-            <div className="flex flex-wrap gap-2 mt-1">
-              <code className="bg-white dark:bg-slate-800 px-1.5 py-0.5 rounded">{'{{project}}'}</code>
-              <span className="text-muted-foreground">→ nombre del proyecto ({config.project_nombre})</span>
-            </div>
-            <div className="flex flex-wrap gap-2 mt-1">
-              <code className="bg-white dark:bg-slate-800 px-1.5 py-0.5 rounded">{'{{url}}'}</code>
-              <span className="text-muted-foreground">→ URL de la página donde está embebido el widget</span>
-            </div>
-          </div>
-          <input value={config.message_template} onChange={e => setConfig({ ...config, message_template: e.target.value })}
-            placeholder="Hola, soy {{nombre}} de {{project}}. Quiero información sobre: {{url}}"
-            className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono" />
-          {(() => {
-            const firstActive = users.find(u => u.in_project && u.whatsapp_widget_active && u.whatsapp_phone && !config.excluded_user_ids.includes(u.id));
-            const preview = (config.message_template || '')
-              .replace(/\{\{nombre\}\}/g, firstActive ? (firstActive.whatsapp_display_name || firstActive.nombre) : '(gestora)')
-              .replace(/\{\{project\}\}/g, config.project_nombre || '(proyecto)')
-              .replace(/\{\{url\}\}/g, 'https://tu-landing.com/curso-xyz');
-            return (
-              <p className="text-[11px] text-emerald-700 dark:text-emerald-400 mt-1 italic">
-                Vista previa: «{preview}»
-              </p>
-            );
-          })()}
-        </div>
+        {(() => {
+          const esBase = idiomaTab === 'es';
+          const otro = idiomaTab as OtroIdioma;
+          const trad = esBase ? {} : (config.traducciones?.[otro] || {});
+          const defecto = esBase ? null : POR_DEFECTO_WIDGET[otro];
+          const welcome = esBase ? config.welcome_text : (trad.welcome || '');
+          const template = esBase ? config.message_template : (trad.template || '');
+          const poner = (campo: 'welcome' | 'template', valor: string) => {
+            if (esBase) {
+              setConfig({ ...config, ...(campo === 'welcome' ? { welcome_text: valor } : { message_template: valor }) });
+              return;
+            }
+            const actual = config.traducciones || {};
+            setConfig({ ...config, traducciones: { ...actual, [otro]: { ...(actual[otro] || {}), [campo]: valor } } });
+          };
+          const firstActive = users.find(u => u.in_project && u.whatsapp_widget_active && u.whatsapp_phone && !config.excluded_user_ids.includes(u.id));
+          const nombreG = firstActive ? (firstActive.whatsapp_display_name || firstActive.nombre) : '(gestora)';
+          const preview = (template || defecto?.template || '')
+            .replace(/\{\{nombre\}\}/g, nombreG)
+            .replace(/\{\{project\}\}/g, config.project_nombre || '(proyecto)')
+            .replace(/\{\{url\}\}/g, 'https://tu-landing.com/curso-xyz');
+          return (
+            <>
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground">Texto de la burbuja</label>
+                <input value={welcome} onChange={e => poner('welcome', e.target.value)}
+                  placeholder={defecto?.welcome || '¿Hablamos? 👋'} maxLength={500}
+                  className="w-full h-9 px-3 mt-1 rounded-md border border-border bg-background text-sm" />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground">Plantilla del mensaje</label>
+                <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 rounded-md p-2 mt-1 mb-2 text-[10px]">
+                  <strong className="text-blue-900 dark:text-blue-300">Variables disponibles:</strong>
+                  <div className="flex flex-wrap gap-2 mt-1">
+                    <code className="bg-white dark:bg-slate-800 px-1.5 py-0.5 rounded">{'{{nombre}}'}</code>
+                    <span className="text-muted-foreground">→ nombre de la gestora que sale en la rotación</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2 mt-1">
+                    <code className="bg-white dark:bg-slate-800 px-1.5 py-0.5 rounded">{'{{project}}'}</code>
+                    <span className="text-muted-foreground">→ nombre del proyecto ({config.project_nombre})</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2 mt-1">
+                    <code className="bg-white dark:bg-slate-800 px-1.5 py-0.5 rounded">{'{{url}}'}</code>
+                    <span className="text-muted-foreground">→ URL de la página donde está embebido el widget</span>
+                  </div>
+                </div>
+                <input value={template} onChange={e => poner('template', e.target.value)}
+                  placeholder={defecto?.template || 'Hola, soy {{nombre}} de {{project}}. Quiero información sobre: {{url}}'} maxLength={1000}
+                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono" />
+                <div className="mt-2 rounded-md border border-border bg-muted/30 p-2 text-[11px]">
+                  <div className="text-muted-foreground">Vista previa · {IDIOMAS_WIDGET.find((i) => i.codigo === idiomaTab)?.nombre}</div>
+                  <div className="mt-1"><b className="text-emerald-700 dark:text-emerald-400">{nombreG}</b> {welcome || defecto?.welcome}</div>
+                  <div className="mt-0.5 italic text-emerald-700 dark:text-emerald-400">«{preview}»</div>
+                </div>
+              </div>
+            </>
+          );
+        })()}
 
         <div className="grid grid-cols-2 gap-3">
           <label className="flex items-center gap-2 text-sm">
