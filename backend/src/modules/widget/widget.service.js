@@ -1,11 +1,12 @@
 import * as model from './widget.model.js';
+import { textosPorIdioma, IDIOMA_BASE } from './widget.idiomas.js';
 
 function escapeJs(s) {
   return String(s || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n').replace(/<\/script>/gi, '<\\/script>');
 }
 
 // Genera el codigo JS que el cliente embebe en su pagina
-export async function generateWidgetScript(projectId) {
+export async function generateWidgetScript(projectId, idioma = IDIOMA_BASE) {
   const config = await model.getConfig(projectId);
   if (!config || !config.enabled) {
     return '// Widget desactivado o proyecto no existe\n';
@@ -17,8 +18,10 @@ export async function generateWidgetScript(projectId) {
 
   const arr = users.map((u) => `["${escapeJs(u.display_name)}","${escapeJs(u.whatsapp_phone)}"]`).join(',');
   const projectName = escapeJs(config.project_nombre);
-  const welcomeText = escapeJs(config.welcome_text);
-  const messageTemplate = escapeJs(config.message_template);
+  // Los textos del idioma pedido (?lang=), o los del español.
+  const textos = textosPorIdioma(config)[idioma] || textosPorIdioma(config)[IDIOMA_BASE];
+  const welcomeText = escapeJs(textos.welcome);
+  const messageTemplate = escapeJs(textos.template);
   const bubbleDelay = Number(config.bubble_delay_ms) || 3000;
   const showBubble = !!config.show_bubble;
 

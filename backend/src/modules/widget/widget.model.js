@@ -2,7 +2,7 @@ import { query } from '../../shared/config/db.js';
 
 const DEFAULT_CONFIG = {
   enabled: true,
-  welcome_text: '¡Hablamos? 👋',
+  welcome_text: '¿Hablamos? 👋',
   message_template: 'Hola, soy {{nombre}} de {{project}}. Quiero información sobre: {{url}}',
   excluded_user_ids: [],
   show_bubble: true,
@@ -29,6 +29,8 @@ export async function getConfig(projectId) {
     excluded_user_ids: r.excluded_user_ids || [],
     show_bubble: r.show_bubble ?? DEFAULT_CONFIG.show_bubble,
     bubble_delay_ms: r.bubble_delay_ms ?? DEFAULT_CONFIG.bubble_delay_ms,
+    // Los otros idiomas (migración 200). Sin la columna todavía, vacío y no rompe.
+    traducciones: r.traducciones || {},
     updated_at: r.updated_at,
   };
 }
@@ -43,11 +45,12 @@ export async function upsertConfig(projectId, fields) {
     excluded_user_ids: fields.excluded_user_ids ?? cur.excluded_user_ids,
     show_bubble:       fields.show_bubble       ?? cur.show_bubble,
     bubble_delay_ms:   fields.bubble_delay_ms   ?? cur.bubble_delay_ms,
+    traducciones:      fields.traducciones      ?? cur.traducciones,
   };
   await query(
     `INSERT INTO project_widget_config
-       (project_id, enabled, welcome_text, message_template, excluded_user_ids, show_bubble, bubble_delay_ms, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())
+       (project_id, enabled, welcome_text, message_template, excluded_user_ids, show_bubble, bubble_delay_ms, traducciones, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,NOW())
      ON CONFLICT (project_id) DO UPDATE SET
        enabled = EXCLUDED.enabled,
        welcome_text = EXCLUDED.welcome_text,
@@ -55,9 +58,10 @@ export async function upsertConfig(projectId, fields) {
        excluded_user_ids = EXCLUDED.excluded_user_ids,
        show_bubble = EXCLUDED.show_bubble,
        bubble_delay_ms = EXCLUDED.bubble_delay_ms,
+       traducciones = EXCLUDED.traducciones,
        updated_at = NOW()`,
     [projectId, merged.enabled, merged.welcome_text, merged.message_template, merged.excluded_user_ids,
-     merged.show_bubble, merged.bubble_delay_ms]
+     merged.show_bubble, merged.bubble_delay_ms, JSON.stringify(merged.traducciones || {})]
   );
   return await getConfig(projectId);
 }

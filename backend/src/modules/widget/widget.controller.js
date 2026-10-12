@@ -1,6 +1,7 @@
 import * as model from './widget.model.js';
 import * as service from './widget.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
+import { traduccionesSchema, limpiarTraducciones, textosPorIdioma, idiomaDe } from './widget.idiomas.js';
 
 // Endpoint PUBLICO: GET /api/widget/whatsapp/:projectId.js
 // Sin auth. Devuelve JS para embeber. Cache 5 minutos.
@@ -10,7 +11,8 @@ export async function widgetScript(req, res, next) {
     const m = raw.match(/^(\d+)(?:\.js)?$/);
     if (!m) return res.status(400).type('text/plain').send('// invalid project id');
     const projectId = Number(m[1]);
-    const js = await service.generateWidgetScript(projectId);
+    // ?lang=en|fr|pt: el script antiguo lleva los textos dentro, así que se elige aquí.
+    const js = await service.generateWidgetScript(projectId, idiomaDe(req.query.lang));
     res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
     // Cache corto (60s): cambios casi instantáneos. Impacto SEO = 0 porque el
     // script es async de ~3.6KB (lo que afecta SEO es bloquear render, no esto).
@@ -40,8 +42,14 @@ export async function widgetData(req, res, next) {
     res.json({
       enabled: true,
       project: config.project_nombre,
+      // El español, como siempre: lo leen los códigos pegados antes de los idiomas.
       welcome: config.welcome_text,
       template: config.message_template,
+      // Cada idioma, para que el código de la web elija el de la página (12/10).
+      textos: textosPorIdioma(config),
+      // La burbuja como dice el panel (antes el código ponía 3 s siempre).
+      burbuja: config.show_bubble !== false,
+      retraso: Number(config.bubble_delay_ms) || 3000,
       gestoras: users.map((u) => [u.display_name, u.whatsapp_phone]),
     });
   } catch (e) {
@@ -66,11 +74,17 @@ export async function updateConfig(req, res, next) {
   try {
     const pid = Number(req.body?.projectId);
     if (!pid) throw new AppError('projectId requerido', 400, 'BAD_REQUEST');
-    const { enabled, welcome_text, message_template, excluded_user_ids, show_bubble, bubble_delay_ms } = req.body || {};
+    const { enabled, welcome_text, message_template, excluded_user_ids, show_bubble, bubble_delay_ms, traducciones } = req.body || {};
+    let trad;
+    if (traducciones !== undefined) {
+      const r = traduccionesSchema.safeParse(traducciones);
+      if (!r.success) throw new AppError('Traducciones no válidas: solo inglés, francés y portugués, con el texto de la burbuja y el mensaje.', 400, 'VALIDATION_ERROR');
+      trad = limpiarTraducciones(r.data);
+    }
     const config = await model.upsertConfig(pid, {
       enabled, welcome_text, message_template,
       excluded_user_ids: Array.isArray(excluded_user_ids) ? excluded_user_ids : undefined,
-      show_bubble, bubble_delay_ms,
+      show_bubble, bubble_delay_ms, traducciones: trad,
     });
     res.json({ success: true, data: config });
   } catch (e) { next(e); }
