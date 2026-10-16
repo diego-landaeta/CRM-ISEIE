@@ -18,7 +18,7 @@ import { cn } from '@/shared/lib/utils';
 import client from '@/shared/api/client';
 import NotificationsBell from './NotificationsBell';
 import { isBetaAllowed, BETA_MODE } from '@/shared/config/betaConfig';
-import { PROCESO_EN_PRUEBAS, SOLO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
+import { PROCESO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 import { CERTIFEX_PANEL } from '@/shared/lib/certifexPanel';
 
 const ROLE_LABELS = { superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor', soporte: 'Soporte', tutor: 'Tutor', colaborador: 'Colaborador' };
@@ -56,7 +56,7 @@ export const NAV_SECTIONS = [
           { to: '/leads/proceso', label: 'Proceso comercial' },
           // Las becas y su embudo (#86): a quién se le ofrecieron y en qué acabaron.
           // Sin aprobar para producción (07/10): solo en /staging.
-          ...(SOLO_EN_PRUEBAS ? [{ to: '/leads/convocatorias', label: 'Convocatorias' }] : []),
+          { to: '/leads/convocatorias', label: 'Convocatorias' },
         ],
       },
       // WhatsApp cuelga de su propia entrada, con lo suyo escalonado debajo: son
@@ -91,8 +91,8 @@ export const NAV_SECTIONS = [
   // El tablero del equipo (#210, como en MultiCRM). Es lo único que ve quien es
   // solo colaborador. «Por revisar» y «Configurar tablero» se enseñan por
   // permiso (`permiso`), no por rol: lo que se cambie en Configuración › Roles
-  // manda también aquí. Toda la sección, solo en pruebas hasta que se apruebe.
-  ...(SOLO_EN_PRUEBAS ? [{
+  // manda también aquí. Aprobada para producción en la 2.2.0 (Diego, 16/10).
+  {
     label: 'Equipo de Desarrollo',
     items: [
       { to: '/tareas', label: 'Tablero', icon: Kanban, roles: ROLES_TAREAS, end: true },
@@ -102,7 +102,7 @@ export const NAV_SECTIONS = [
       // Aquí, junto a su tablero, como en MultiCRM: es lo otro que ve un colaborador.
       { to: '/mi-factura', label: 'Mi factura', icon: Receipt, roles: ['colaborador'] },
     ],
-  }] : []),
+  },
   {
     label: 'Captación',
     items: [
@@ -168,7 +168,7 @@ export const NAV_SECTIONS = [
       { to: '/accounting/pagos-stripe', label: 'Pagos Stripe',    icon: PlugsConnected, roles: ['admin', 'superadmin'] },
       { to: '/accounting/facturas', label: 'Facturación', icon: FilePdf, roles: ['admin', 'superadmin', 'soporte', 'gestor'], permiso: 'factura_manager', sectionPrefixes: ['/accounting/facturas'] },
       // Facturas de colaboradores (#202): en evaluación, solo en /staging y en local.
-      ...(SOLO_EN_PRUEBAS ? [{ to: '/accounting/facturas-colaboradores', label: 'Facturas de colaboradores', icon: Receipt, roles: ['admin', 'superadmin'] }] : []),
+      { to: '/accounting/facturas-colaboradores', label: 'Facturas de colaboradores', icon: Receipt, roles: ['admin', 'superadmin'] },
       { to: '/accounting/integrations', label: 'Integraciones',   icon: PlugsConnected, roles: ['admin', 'superadmin'], statusTag: 'Pruebas' },
     ],
   },

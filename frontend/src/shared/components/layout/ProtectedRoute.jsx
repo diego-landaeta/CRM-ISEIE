@@ -1,7 +1,6 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { soloEsTutor, soloEsColaborador } from '@/shared/lib/roles';
-import { SOLO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 
 // Dev-only bypass: si VITE_DEV_BYPASS_AUTH=true en .env.local, deja pasar sin login.
 // Solo para validar UI/menus en local sin backend. NUNCA activar en producción.
@@ -56,11 +55,9 @@ export default function ProtectedRoute({ children }) {
     return <Navigate to="/mis-cursos" replace />;
   }
 
-  // A su tablero. Mientras el tablero no esté aprobado para producción, /tareas
-  // lleva a la portada (App.jsx) y de aquí volvería a /tareas sin fin: allí va
-  // a sus preferencias.
+  // A su tablero (aprobado para producción en la 2.2.0).
   if (soloEsColaborador(user) && !colaboradorPuede(location.pathname)) {
-    return <Navigate to={SOLO_EN_PRUEBAS ? '/tareas' : '/preferencias'} replace />;
+    return <Navigate to="/tareas" replace />;
   }
 
   return children;

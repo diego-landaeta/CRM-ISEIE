@@ -54,6 +54,42 @@ export const VERSIONES = [
         ]
       },
       {
+        "titulo": "Nuevo en el CRM",
+        "items": [
+          {
+            "titulo": "El tablero del equipo",
+            "texto": "Equipo de Desarrollo → Tablero: las tareas del equipo por áreas, con «Por revisar» para aprobar o devolver y «Configurar tablero» para las columnas, las áreas y los proyectos. Quién puede qué se cambia en Configuración → Roles.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/tareas",
+            "boton": "Abrir el tablero"
+          },
+          {
+            "titulo": "Facturas de colaboradores",
+            "texto": "Los colaboradores suben su factura del mes en «Mi factura». En Finanzas → Facturas de colaboradores se revisan: enviadas, por pagar, pagadas e historial, con el desglose de cada una, «marcar pagada» y el ZIP del mes para administración.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/accounting/facturas-colaboradores",
+            "boton": "Ir a Facturas de colaboradores"
+          },
+          {
+            "titulo": "Convocatorias",
+            "texto": "Prospectos → Convocatorias: cada convocatoria de becas como una campaña, con su embudo y sus topes, y la beca de cada persona en su ficha.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/leads/convocatorias",
+            "boton": "Ir a Convocatorias"
+          }
+        ]
+      },
+      {
         "titulo": "Finanzas",
         "items": [
           {

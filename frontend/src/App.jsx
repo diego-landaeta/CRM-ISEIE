@@ -1,7 +1,7 @@
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Suspense, lazy, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { PROCESO_EN_PRUEBAS, SOLO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
+import { PROCESO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 
 // Layout y guardas
 const AppLayout = lazy(() => import('./shared/components/layout/AppLayout'));
@@ -241,7 +241,7 @@ function App() {
           <Route path="/leads/seguimiento"
             element={PROCESO_EN_PRUEBAS ? <SeguimientoPage /> : <Navigate to="/leads" replace />} />
           <Route path="/leads/proceso" element={<ProcesoPage />} />
-          <Route path="/leads/convocatorias" element={SOLO_EN_PRUEBAS ? <ConvocatoriasPage /> : <Navigate to="/leads" replace />} />
+          <Route path="/leads/convocatorias" element={<ConvocatoriasPage />} />
           <Route path="/leads/:id" element={<LeadDetailPage />} />
           <Route path="/products" element={<ProductsPage />} />
           <Route path="/products/pending" element={<CoursesPendingPage />} />
@@ -268,8 +268,8 @@ function App() {
           <Route path="/accounting/facturas/plantillas" element={<InvoiceTemplateEditorPage />} />
           {/* Facturas de colaboradores (#202): en evaluación, solo en /staging y en local, como en MultiCRM. */}
           <Route path="/accounting/facturas-colaboradores"
-            element={SOLO_EN_PRUEBAS ? <FacturasColaboradoresPage /> : <Navigate to="/accounting" replace />} />
-          <Route path="/mi-factura" element={SOLO_EN_PRUEBAS ? <MiFacturaPage /> : <Navigate to="/" replace />} />
+            element={<FacturasColaboradoresPage />} />
+          <Route path="/mi-factura" element={<MiFacturaPage />} />
           <Route path="/revenue" element={<RevenuePage />} />
           <Route path="/clients" element={<ClientsPage />} />
           <Route path="/clients/:id" element={<ClientDetailPage />} />
@@ -340,9 +340,9 @@ function App() {
           <Route path="/perfil" element={<ProfilePage />} />
           <Route path="/configuracion" element={<SettingsPage />} />
           {/* Equipo de Desarrollo (#210): sin aprobar para producción, solo en /staging. */}
-          <Route path="/tareas" element={SOLO_EN_PRUEBAS ? <TasksPage /> : <Navigate to="/" replace />} />
-          <Route path="/tareas/revisar" element={SOLO_EN_PRUEBAS ? <TasksPage /> : <Navigate to="/" replace />} />
-          <Route path="/tareas/configurar" element={SOLO_EN_PRUEBAS ? <TaskBoardConfigPage /> : <Navigate to="/" replace />} />
+          <Route path="/tareas" element={<TasksPage />} />
+          <Route path="/tareas/revisar" element={<TasksPage />} />
+          <Route path="/tareas/configurar" element={<TaskBoardConfigPage />} />
         </Route>
 
         {/* Entrada y catch-all */}
