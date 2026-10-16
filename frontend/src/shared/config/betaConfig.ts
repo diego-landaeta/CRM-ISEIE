@@ -50,6 +50,8 @@ export const BETA_ROUTES: readonly string[] = [
   '/soporte',
   '/activity',                      // Gestores: actividad
   '/novedades',                     // Lo nuevo de cada versión (2.0.0), con su aviso y su correo
+  '/mensajes',                      // Sistema › Mensajes, el chat del equipo (paridad, 2.2.0)
+  '/registro',                      // Sistema › Registro (paridad, 2.2.0)
 ];
 
 export function isBetaAllowed(to?: string): boolean {

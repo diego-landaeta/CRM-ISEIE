@@ -13,6 +13,198 @@ export const CRM = { nombre: 'CRM ISEIE', color: '#002776' };
 
 export const VERSIONES = [
   {
+    "version": "2.2.0",
+    "fecha": "2026-10-16",
+    "titulo": "Versión 2.2.0",
+    "intro": "Los diplomas de Certifex, ya desde el CRM, y una tanda de mejoras en Finanzas, usuarios y correos. Aquí está todo lo nuevo, con un botón para ir a cada pantalla.",
+    "grupos": [
+      {
+        "titulo": "Diplomas de Certifex · casi listo",
+        "items": [
+          {
+            "titulo": "Aprobar, emitir y enviar los diplomas",
+            "texto": "En Matrículas → Diplomas ves lo que piden los alumnos desde Moodle y lo apruebas; Certifex emite el diploma con el temario de la formación. Emitir no escribe al alumno: el correo sale cuando pulsas «Enviar al alumno», después de ver el PDF. Las consultas de la web y las emisiones están en Matrículas → Certificaciones.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/matriculas/diplomas",
+            "boton": "Ir a Diplomas"
+          },
+          {
+            "titulo": "Casi listo: falta la firma del alumno",
+            "texto": "Los diplomas ya salen con la firma de la institución. La del alumno, la que hace en la solicitud de admisión, la mandará el CRM y Certifex la colocará sobre «El interesado». Mientras tanto, en esa línea sale su nombre.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": null,
+            "boton": null
+          },
+          {
+            "titulo": "El temario, desde la página del curso",
+            "texto": "Antes de aprobar, «Sincronizar módulos con el producto» copia los módulos de la página del curso, y se pueden retocar a mano. Un nombre mal escrito se corrige sin revocar: mismo número de expediente y mismo QR, y queda anotado quién y por qué.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/matriculas/diplomas",
+            "boton": "Ir a Diplomas"
+          }
+        ]
+      },
+      {
+        "titulo": "Finanzas",
+        "items": [
+          {
+            "titulo": "El Dashboard cuenta lo facturado",
+            "texto": "Las cifras del Dashboard, también las del equipo, son lo facturado, con una fila «Sin gestora» para las ventas que no tienen. En Ventas, las que aún no tienen ningún cobro salen aparte.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/",
+            "boton": "Ir al Dashboard"
+          },
+          {
+            "titulo": "Egresos, por empresa",
+            "texto": "Un egreso puede ser de un campus, de toda una empresa o general (este, solo el super admin). La pantalla funciona igual en los dos CRM y cada uno ve solo lo de sus campus.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/expenses",
+            "boton": "Ir a Egresos"
+          },
+          {
+            "titulo": "Ingresos más limpio",
+            "texto": "Los nombres de los cursos ya no salen con «&amp;», y los atajos de fecha («Hoy · Ayer · …») salen una sola vez.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/revenue",
+            "boton": "Ir a Ingresos"
+          },
+          {
+            "titulo": "Una factura tapa un solo cobro",
+            "texto": "Una factura sin cobro enganchado ya no da por facturados todos los cobros del mismo importe: solo uno.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": null,
+            "boton": null
+          }
+        ]
+      },
+      {
+        "titulo": "Conexión",
+        "items": [
+          {
+            "titulo": "Aviso de cobros por transferencia o depósito",
+            "texto": "En Conexión → Webhook de transferencias se configura una dirección que recibe un aviso firmado cada vez que se apunta un cobro por transferencia o depósito bancario, y solo esos. Se puede limitar a una empresa o a un campus, probarlo y ver el registro de envíos.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/conexion/webhook-transferencias",
+            "boton": "Abrir el webhook"
+          }
+        ]
+      },
+      {
+        "titulo": "Usuarios y tutores",
+        "items": [
+          {
+            "titulo": "Un admin con toda su empresa",
+            "texto": "Al dar de alta o editar un admin, el super admin puede marcar «Todos los campus de esta empresa, también los que se creen». Sigue sin ver otras empresas ni gestionar usuarios.",
+            "roles": [
+              "superadmin"
+            ],
+            "ruta": "/configuracion",
+            "boton": "Ir a Configuración"
+          },
+          {
+            "titulo": "Contraseña de tutor y correo de un super admin",
+            "texto": "La contraseña de un tutor la pueden poner el super admin y el admin (este, solo de sus campus). Un super admin puede cambiar el correo de otro super admin, y queda registrado.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/tutores",
+            "boton": "Ir a Tutores"
+          },
+          {
+            "titulo": "«Cobra desde» en Editar tutor",
+            "texto": "La fecha desde la que cobra un tutor se cambia en «Editar tutor», también hacia atrás para que cuadre. Y lo que factura avisa cuando ya está todo pagado.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/tutores",
+            "boton": "Ir a Tutores"
+          }
+        ]
+      },
+      {
+        "titulo": "Correos y detalles",
+        "items": [
+          {
+            "titulo": "Cada correo con la marca de su campus",
+            "texto": "Los avisos al equipo (bienvenida, prospecto asignado o sin contactar, solicitudes de cambio, Google Ads…) usan la plantilla común con el logo del campus y salen con el nombre de su marca.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": null,
+            "boton": null
+          },
+          {
+            "titulo": "Ningún enlace a «Página no encontrada»",
+            "texto": "El buscador (Ctrl+K), los atajos y los avisos de la campana llevan siempre a una pantalla que existe. El filtro «Hoy» de Prospectos ya no salta a mañana por la noche en Latinoamérica.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": null,
+            "boton": null
+          }
+        ]
+      },
+      {
+        "titulo": "Como en MultiCRM",
+        "items": [
+          {
+            "titulo": "Mensajes del equipo",
+            "texto": "Sistema → Mensajes: el chat interno del equipo, el mismo que en MultiCRM.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/mensajes",
+            "boton": "Abrir Mensajes"
+          },
+          {
+            "titulo": "Registro de actividad",
+            "texto": "Sistema → Registro: quién hizo qué y cuándo, como en MultiCRM.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/registro",
+            "boton": "Abrir el Registro"
+          }
+        ]
+      }
+    ]
+  },
+  {
     "version": "2.1.0",
     "fecha": "2026-10-07",
     "titulo": "Versión 2.1.0",

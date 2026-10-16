@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { LinkBreak, MagnifyingGlass } from '@phosphor-icons/react';
+import { LinkBreak, MagnifyingGlass, Signature } from '@phosphor-icons/react';
 import StatusDot from '@/shared/components/ui/StatusDot';
 import { cn } from '@/shared/lib/utils';
 import { emisionesApi, type CampusCertifex, type Candidato, type ConexionCertifex } from '../api/certifex.api';
@@ -194,6 +194,27 @@ export function AvisoDireccionPublica({ conexion }: { conexion: ConexionCertifex
           {d.motivos.map((m) => <li key={m}>{m}</li>)}
         </ul>
         <p className="mt-1 text-xs">Mientras tanto no se enseñan enlaces directos ni salen avisos al alumno. «Ver PDF» sí funciona.</p>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * «Casi listo» (Diego, 16/10, al subir Certificaciones a producción): los diplomas ya se
+ * aprueban, emiten y envían de verdad, pero la línea «El interesado» aún no lleva la firma
+ * del alumno. La de la institución va impresa en el diseño de cada campus. Se quita este
+ * aviso al cerrar #349, cuando el CRM mande a Certifex la firma de la solicitud de admisión.
+ */
+export function AvisoCasiListo() {
+  return (
+    <div role="note" className="flex items-start gap-3 rounded-lg border border-info/30 bg-info-soft px-4 py-3 text-sm text-info-soft-foreground">
+      <Signature size={18} weight="bold" className="mt-0.5 flex-none" aria-hidden />
+      <div>
+        <p className="font-medium">Casi listo: los diplomas aún salen sin la firma del alumno</p>
+        <p className="mt-0.5 text-xs">
+          La firma de la institución ya va impresa. La del alumno, la que hace en la solicitud de admisión, la mandará el CRM
+          a Certifex y se colocará sola sobre «El interesado». Hasta entonces, en esa línea sale solo su nombre.
+        </p>
       </div>
     </div>
   );

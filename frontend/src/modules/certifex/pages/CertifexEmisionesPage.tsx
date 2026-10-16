@@ -13,7 +13,7 @@ import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
 import PromptDialog from '@/shared/components/ui/PromptDialog';
 import { Button } from '@/shared/components/ui/button';
 import { cn } from '@/shared/lib/utils';
-import { Avance, AvisoDireccionPublica, Barra, Buscador, Decision, EnElCrmEtiqueta, Etiqueta, LogoCampus, Pestana, euros } from '../components/piezas';
+import { Avance, AvisoCasiListo, AvisoDireccionPublica, Barra, Buscador, Decision, EnElCrmEtiqueta, Etiqueta, LogoCampus, Pestana, euros } from '../components/piezas';
 import {
   emisionesApi,
   type CampusCertifex,
@@ -446,6 +446,7 @@ export default function CertifexEmisionesPage({ embebida = false }: { embebida?:
       />
 
       {/* Certifex en una dirección local: sus enlaces no abrirían (Certifex#96). */}
+      <AvisoCasiListo />
       <AvisoDireccionPublica conexion={conexion} />
 
       {/* Resumen de todos los campus de este CRM. */}

@@ -24,7 +24,7 @@ import {
   type CambiosSolicitud, type CampusCertifex, type CatalogoDelCampus, type ConexionCertifex, type CursoCertifex, type Diploma, type FiltroAviso,
   type PestanaDiplomas, type ProgramaDelCrm, type ProgramaOficial, type ResultadoAprobarEmitir, type ResumenDiplomas, type Solicitud, type Terminado,
 } from '../api/certifex.api';
-import { Avance, AvisoDireccionPublica, Buscador, EnElCrmEtiqueta, Etiqueta, Pestana } from '../components/piezas';
+import { Avance, AvisoCasiListo, AvisoDireccionPublica, Buscador, EnElCrmEtiqueta, Etiqueta, Pestana } from '../components/piezas';
 
 /**
  * Certifex · Diplomas (#272): lo que los alumnos piden desde Moodle y los diplomas ya
@@ -840,6 +840,7 @@ export default function CertifexDiplomasPage() {
       <SaludCampus campus={campus} />
 
       {/* Certifex en una dirección local: sus enlaces no abrirían (Certifex#96). */}
+      <AvisoCasiListo />
       <AvisoDireccionPublica conexion={conexion} />
 
       {/* Contadores: del campus elegido, o de todos. */}
