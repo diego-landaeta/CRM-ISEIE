@@ -245,6 +245,18 @@ export const editarSchema = z.object({
 
 export const formacionesSchema = z.object({ centro });
 
+/**
+ * «Nuevo diploma» (Diego, 19/10: «crear el diploma desde 0, seleccionando el cliente»): el
+ * campus, el cliente (un prospecto o cliente del proyecto de ese campus) y la formación del
+ * catálogo. `nombre`, el que se imprimirá; sin él, el de la ficha del cliente.
+ */
+export const nuevoDiplomaSchema = z.object({
+  centro,
+  leadId: z.number().int().positive(),
+  productoId: z.number().int().positive(),
+  nombre: nombreDiploma.optional(),
+});
+
 /** Sincronizar el temario de una formación del catálogo con la página del curso (12/10). */
 export const sincronizarTemarioSchema = z.object({ centro, productoId: z.coerce.number().int().positive() });
 

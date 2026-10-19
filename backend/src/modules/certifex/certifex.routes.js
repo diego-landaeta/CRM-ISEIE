@@ -56,6 +56,8 @@ router.post('/diplomas/revocar', soloAdmin, diplomas.revocar);
 router.post('/diplomas/corregir', soloAdmin, diplomas.corregir);
 // Revisar antes de aprobar: nombre (en Certifex), correo del CRM, formacion y programa.
 router.post('/diplomas/editar', soloAdmin, diplomas.editar);
+// «Nuevo diploma»: desde cero, eligiendo cliente y formación (19/10).
+router.post('/diplomas/nuevo', soloAdmin, diplomas.nuevo);
 router.get('/diplomas/formaciones', soloAdmin, diplomas.formaciones);
 router.post('/diplomas/formaciones/sincronizar', soloAdmin, diplomas.sincronizarFormacion);
 router.get('/diplomas', soloAdmin, diplomas.diplomas);
