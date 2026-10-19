@@ -427,6 +427,12 @@ export const diplomasApi = {
    * CRM, la formación y el programa se guardan en el CRM. Devuelve la fila actualizada.
    */
   editar: (cambios: CambiosSolicitud) => client.post('/certifex/diplomas/editar', cambios) as R<Solicitud>,
+  /**
+   * «Nuevo diploma» (19/10): la solicitud desde cero, eligiendo el cliente y la formación.
+   * Queda en «Por decidir» para aprobarla y emitirla como las que llegan de Moodle.
+   */
+  nuevo: (d: { centro: string; leadId: number; productoId: number; nombre?: string }) =>
+    client.post('/certifex/diplomas/nuevo', d) as R<{ matriculaId: number; yaExistia: boolean; centro: string; curso: string; nombre: string }>,
   /** Las formaciones del catálogo del proyecto de ese campus, para elegir la vendida. */
   formaciones: (centro: string) => client.get(`/certifex/diplomas/formaciones?${qs({ centro })}`) as R<CatalogoDelCampus>,
   /** Los módulos de esa formación, leídos de la página del curso y guardados en el catálogo (12/10). */

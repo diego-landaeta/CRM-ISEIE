@@ -11,7 +11,7 @@ import { prepararEmision, emitirConPrograma, emitirMatriculas } from './certifex
 import {
   listarSolicitudesSchema, listarDiplomasSchema, porAvisarSchema, aprobarEmitirSchema, rechazarSchema, emitirDiplomasSchema,
   avisosSchema, avisosRechazoSchema, revocarSchema, corregirSchema, editarSchema, formacionesSchema, listarTerminadosSchema,
-  sincronizarTemarioSchema,
+  sincronizarTemarioSchema, nuevoDiplomaSchema,
   mensajeDeValidacion,
 } from './certifex.validation.js';
 
@@ -420,6 +420,57 @@ export async function editar(req, res, next) {
       campos: ['nombre', 'emailCrm', 'productoId', 'programa'].filter((k) => d[k] !== undefined),
     }, 'Certifex: solicitud revisada antes de aprobar');
     res.json({ success: true, data: c });
+  } catch (err) { next(err); }
+}
+
+/**
+ * Referencias de curso de lo que se crea desde el CRM: 900.000.000 + el id de la formación.
+ * Es el rango que Certifex reserva a lo que no viene de Moodle (REF_CURSO_CRM): ni un
+ * barrido del campus lo pisa ni se busca en Moodle al emitir.
+ */
+const REF_CURSO_CRM = 900_000_000;
+
+/**
+ * POST /diplomas/nuevo { centro, leadId, productoId, nombre? } — «Nuevo diploma»: crea la
+ * solicitud DESDE CERO, eligiendo al cliente y la formación (Diego, 19/10: «Academia IA está
+ * sin Moodle, así que tiene que crear el diploma desde 0, seleccionando el cliente; igual para
+ * los demás»). Queda en «Por decidir» y se aprueba y emite como las que llegan de Moodle.
+ *
+ * La formación se guarda como «revisada a mano» (productoId): el diploma sale con su temario
+ * y sus horas del catálogo, sin buscar la venta.
+ */
+export async function nuevo(req, res, next) {
+  try {
+    const d = parsear(nuevoDiplomaSchema, req.body);
+    const cod = d.centro.toUpperCase();
+    exigirCentro(await alcanceDe(req.user), cod, 'Campus no encontrado.');
+    const { proyecto, motivo } = await proyectoDeCentro(cod);
+    if (!proyecto) throw new AppError(motivo || 'Ese campus no tiene proyecto en el CRM.', 404, 'NOT_FOUND');
+    const { rows: [lead] } = await query(
+      'SELECT id, nombre, email FROM leads WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL',
+      [d.leadId, proyecto.id],
+    );
+    if (!lead) throw new AppError('Ese cliente no es de este campus.', 404, 'NOT_FOUND');
+    const email = String(lead.email ?? '').trim().toLowerCase();
+    if (!email) throw new AppError('Ese cliente no tiene correo: añádelo en su ficha para poder enviarle el diploma.', 400, 'VALIDATION_ERROR');
+    const { rows: [p] } = await query('SELECT id, nombre FROM products WHERE id = $1 AND project_id = $2', [d.productoId, proyecto.id]);
+    if (!p) throw new AppError('Esa formación no es del catálogo de este campus.', 404, 'NOT_FOUND');
+    const nombre = d.nombre ?? String(lead.nombre ?? '').trim();
+
+    const r = await certifex('POST', '/matriculas', {
+      centro: cod, nombre, email, curso: p.nombre, cursoRef: REF_CURSO_CRM + p.id, creadoPor: quien(req),
+    });
+    await model.guardarEdicion(r.matriculaId, { productoId: p.id }, quien(req), {
+      centro: cod,
+      cursoRef: r.cursoRef ?? REF_CURSO_CRM + p.id,
+      cursoNombre: p.nombre,
+      nombreDiploma: nombre,
+      nombreMoodle: null,
+      email,
+      solicitadaEn: new Date().toISOString(),
+    });
+    logger.info({ userId: req.user.userId, centro: cod, matriculaId: r.matriculaId, productoId: p.id, yaExistia: !!r.yaExistia }, 'Certifex: nuevo diploma desde el CRM');
+    res.json({ success: true, data: { matriculaId: r.matriculaId, yaExistia: !!r.yaExistia, centro: cod, curso: p.nombre, nombre } });
   } catch (err) { next(err); }
 }
 

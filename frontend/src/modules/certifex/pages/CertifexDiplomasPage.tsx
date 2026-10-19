@@ -19,6 +19,7 @@ import { Button } from '@/shared/components/ui/button';
 import { cn } from '@/shared/lib/utils';
 import { copyToClipboard } from '@/shared/lib/clipboard';
 import { runExport, type ExportColumn } from '@/shared/lib/export';
+import client from '@/shared/api/client';
 import {
   diplomasApi, emisionesApi,
   type CambiosSolicitud, type CampusCertifex, type CatalogoDelCampus, type ConexionCertifex, type CursoCertifex, type Diploma, type FiltroAviso,
@@ -396,6 +397,8 @@ export default function CertifexDiplomasPage() {
   const [versiones, setVersiones] = useState<Record<string, number>>({});
   // «Editar»: revisar los datos de una solicitud antes de aprobarla.
   const [editando, setEditando] = useState<Solicitud | null>(null);
+  // «Nuevo diploma» (19/10): desde cero, eligiendo cliente y formación.
+  const [creandoNuevo, setCreandoNuevo] = useState(false);
   // El error del servidor en un diálogo con texto (rechazar, revocar, corregir): el
   // diálogo sigue abierto y no pierde lo escrito.
   const [errorDialogo, setErrorDialogo] = useState<string | null>(null);
@@ -827,6 +830,9 @@ export default function CertifexDiplomasPage() {
           <span>· Emitir no avisa al alumno: el correo sale solo cuando lo apruebas aquí</span>
         </span>
         <div className="flex flex-wrap gap-2">
+          <Button size="sm" onClick={() => setCreandoNuevo(true)} disabled={!conexion?.conectado || !campus?.length}>
+            <Plus size={13} weight="bold" className="mr-1.5" /> Nuevo diploma
+          </Button>
           <Button variant="outline" size="sm" onClick={recargar} disabled={trabajando || !conexion?.conectado}>
             <ArrowClockwise size={13} weight="bold" className="mr-1.5" /> Actualizar
           </Button>
@@ -1412,6 +1418,22 @@ export default function CertifexDiplomasPage() {
         />
       )}
 
+      {creandoNuevo && campus && (
+        <DialogoNuevoDiploma
+          campus={campus}
+          alCerrar={() => setCreandoNuevo(false)}
+          alCrear={(r) => {
+            setCreandoNuevo(false);
+            toast({
+              title: r.yaExistia ? 'Ya estaba creado' : 'Diploma creado',
+              description: `${r.nombre} · ${r.curso}. Está en «Por decidir»: apruébalo y emítelo cuando quieras.`,
+            });
+            irA('pendientes');
+            recargar();
+          }}
+        />
+      )}
+
       {editando && (
         <DialogoEditar
           c={editando}
@@ -1559,6 +1581,191 @@ const CORREO = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  * se imprimirá. El nombre se guarda en Certifex (es quien imprime); el correo del CRM,
  * la formación vendida y el programa, en el CRM. Solo antes de emitir: después, Corregir.
  */
+/** Un prospecto o cliente del proyecto del campus, tal y como lo da la búsqueda. */
+interface ClienteLite { id: number; nombre: string | null; email: string | null; telefono?: string | null }
+
+/**
+ * «Nuevo diploma» (Diego, 19/10: «Academia IA está sin Moodle, así que tiene que crear el
+ * diploma desde 0, seleccionando el cliente; igual para los demás»). Campus, cliente (de ese
+ * campus), formación del catálogo y el nombre que se imprimirá. Crea la solicitud en
+ * Certifex: queda en «Por decidir» para aprobarla y emitirla como las de Moodle.
+ */
+function DialogoNuevoDiploma({ campus, alCerrar, alCrear }: {
+  campus: CampusCertifex[]; alCerrar: () => void; alCrear: (r: { matriculaId: number; yaExistia: boolean; curso: string; nombre: string }) => void;
+}) {
+  const [centro, setCentro] = useState(campus.length === 1 ? campus[0]!.codigo : '');
+  const [catalogo, setCatalogo] = useState<CatalogoDelCampus | null>(null);
+  const [errorCatalogo, setErrorCatalogo] = useState<string | null>(null);
+  const [busqueda, setBusqueda] = useState('');
+  const [resultados, setResultados] = useState<ClienteLite[]>([]);
+  const [buscando, setBuscando] = useState(false);
+  const [cliente, setCliente] = useState<ClienteLite | null>(null);
+  const [producto, setProducto] = useState('');
+  const [nombreD, setNombreD] = useState('');
+  const [creando, setCreando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // El catálogo (y el proyecto del CRM) del campus elegido.
+  useEffect(() => {
+    setCatalogo(null); setErrorCatalogo(null); setCliente(null); setResultados([]); setProducto('');
+    if (!centro) return;
+    let vivo = true;
+    diplomasApi.formaciones(centro)
+      .then((r) => { if (vivo) setCatalogo(r.data); })
+      .catch((e) => { if (vivo) setErrorCatalogo((e as Error).message); });
+    return () => { vivo = false; };
+  }, [centro]);
+
+  // Buscar al cliente en el proyecto del campus: por nombre, teléfono o correo.
+  const proyectoId = catalogo?.proyecto?.id ?? null;
+  useEffect(() => {
+    const q = busqueda.trim();
+    if (!proyectoId || q.length < 2 || cliente) { setResultados([]); return; }
+    let vivo = true;
+    const t = setTimeout(async () => {
+      setBuscando(true);
+      try {
+        const r = q.includes('@')
+          ? await client.get(`/leads/lookup-by-email?email=${encodeURIComponent(q)}&projectId=${proyectoId}`)
+          : await client.get(`/leads?projectId=${proyectoId}&search=${encodeURIComponent(q)}&limit=10`);
+        if (vivo) setResultados(((r as { data?: ClienteLite[] }).data ?? []).slice(0, 10));
+      } catch { if (vivo) setResultados([]); }
+      finally { if (vivo) setBuscando(false); }
+    }, 350);
+    return () => { vivo = false; clearTimeout(t); };
+  }, [busqueda, proyectoId, cliente]);
+
+  const elegirCliente = (c: ClienteLite) => {
+    setCliente(c);
+    setResultados([]);
+    // El nombre impreso arranca con el de la ficha (sin lo que no puede ir en un diploma).
+    setNombreD((c.nombre ?? '').replace(/[()[\]{}0-9_@#*]+/g, ' ').replace(/\s+/g, ' ').trim());
+  };
+
+  const errorNombre = !cliente ? null : !nombreD.trim() ? 'Falta el nombre: es el que se imprimirá en el diploma.' : !nombreValido(nombreD) ? MSG_NOMBRE : null;
+  const sinCorreo = !!cliente && !(cliente.email ?? '').trim();
+  const listo = !creando && !!centro && !!cliente && !sinCorreo && !!producto && !errorNombre;
+
+  const ref = useRef<HTMLFormElement>(null);
+  useModalAccesible(ref, { onClose: () => !creando && alCerrar(), bloqueado: creando });
+
+  async function crear() {
+    if (!listo || !cliente) return;
+    setCreando(true);
+    setError(null);
+    try {
+      const r = await diplomasApi.nuevo({ centro, leadId: cliente.id, productoId: Number(producto), nombre: nombreValido(nombreD) ?? undefined });
+      alCrear(r.data);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setCreando(false);
+    }
+  }
+
+  const campo = 'mt-1 h-10 w-full rounded-md border border-border bg-muted/30 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40';
+  const formaciones = (catalogo?.formaciones ?? []).filter((f) => f.activa).concat((catalogo?.formaciones ?? []).filter((f) => !f.activa));
+  const elegida = formaciones.find((f) => String(f.id) === producto) ?? null;
+
+  return (
+    <Portal>
+      <div className="fixed inset-0 !m-0 z-[80] flex items-center justify-center sm:p-4">
+        <div className="fixed inset-0 !m-0 bg-black/60 backdrop-blur-sm" onClick={() => !creando && alCerrar()} />
+        <form
+          ref={ref}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="nuevo-diploma-titulo"
+          onSubmit={(e) => { e.preventDefault(); void crear(); }}
+          className="relative flex max-h-[100dvh] w-full max-w-xl flex-col border border-border bg-card sm:max-h-[92vh] sm:rounded-lg"
+        >
+          <div className="flex items-start gap-3 border-b border-border px-5 pb-3 pt-5">
+            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary"><Certificate size={20} /></div>
+            <div className="min-w-0 flex-1">
+              <h2 id="nuevo-diploma-titulo" className="text-base font-semibold">Nuevo diploma</h2>
+              <p className="mt-1 text-sm text-muted-foreground">Para un cliente que no pide el diploma desde Moodle. Quedará en «Por decidir» para aprobarlo y emitirlo.</p>
+            </div>
+            <button type="button" onClick={alCerrar} disabled={creando} aria-label="Cerrar" className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><X size={16} /></button>
+          </div>
+
+          <div className="flex-1 space-y-5 overflow-y-auto px-5 py-4">
+            <label className="block text-sm">
+              <span className="text-xs font-medium text-muted-foreground">Campus</span>
+              <Select<string> value={centro} onChange={setCentro} ariaLabel="Campus" className="mt-1 w-full"
+                options={[{ value: '', label: 'Elige el campus' }, ...campus.map((c) => ({ value: c.codigo, label: c.nombre }))]} />
+              {errorCatalogo && <span className="mt-1 block text-xs text-destructive" role="alert">{errorCatalogo}</span>}
+              {catalogo && !catalogo.proyecto && <span className="mt-1 block text-xs text-destructive" role="alert">{catalogo.motivo || 'Ese campus no tiene proyecto en el CRM.'}</span>}
+            </label>
+
+            <div className="block text-sm">
+              <span className="text-xs font-medium text-muted-foreground">Cliente</span>
+              {cliente ? (
+                <div className="mt-1 flex items-center justify-between gap-2 rounded-md border border-border bg-muted/30 px-3 py-2">
+                  <div className="min-w-0">
+                    <div className="truncate font-medium text-foreground">{cliente.nombre || 'Sin nombre'}</div>
+                    <div className="truncate text-xs text-muted-foreground">{cliente.email || 'sin correo'}{cliente.telefono ? ` · ${cliente.telefono}` : ''}</div>
+                  </div>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => { setCliente(null); setBusqueda(''); }} disabled={creando}>Cambiar</Button>
+                </div>
+              ) : (
+                <>
+                  <input data-autofocus value={busqueda} onChange={(e) => setBusqueda(e.target.value)} disabled={!proyectoId} aria-label="Buscar cliente"
+                    placeholder={proyectoId ? 'Busca por nombre, teléfono o correo…' : 'Elige antes el campus'} className={campo} />
+                  {buscando && <span className="mt-1 block text-xs text-muted-foreground">Buscando…</span>}
+                  {resultados.length > 0 && (
+                    <ul className="mt-1 max-h-56 overflow-y-auto rounded-md border border-border" role="listbox" aria-label="Clientes encontrados">
+                      {resultados.map((c) => (
+                        <li key={c.id}>
+                          <button type="button" role="option" aria-selected="false" onClick={() => elegirCliente(c)}
+                            className="block w-full px-3 py-2 text-left hover:bg-muted focus:bg-muted focus:outline-none">
+                            <span className="block truncate text-sm text-foreground">{c.nombre || 'Sin nombre'}</span>
+                            <span className="block truncate text-xs text-muted-foreground">{c.email || 'sin correo'}{c.telefono ? ` · ${c.telefono}` : ''}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {!buscando && busqueda.trim().length >= 2 && resultados.length === 0 && proyectoId && (
+                    <span className="mt-1 block text-xs text-muted-foreground">Nadie con eso en {catalogo?.proyecto?.nombre}. Si no está, créalo antes como prospecto.</span>
+                  )}
+                </>
+              )}
+              {sinCorreo && <span className="mt-1 block text-xs text-destructive" role="alert">Este cliente no tiene correo: añádelo en su ficha para poder enviarle el diploma.</span>}
+            </div>
+
+            <label className="block text-sm">
+              <span className="text-xs font-medium text-muted-foreground">Formación</span>
+              <SearchableSelect value={producto} onChange={setProducto} ariaLabel="Formación" placeholder="Buscar formación…" allLabel="Elige la formación"
+                className="mt-1 w-full" options={formaciones.map((f) => ({ value: String(f.id), label: [f.nombre, f.horas ? `${miles(f.horas)} h` : null, f.activa ? null : 'inactiva'].filter(Boolean).join(' · ') }))} />
+              {elegida && (
+                <span className="mt-1 block text-xs text-muted-foreground">
+                  {elegida.modulos.length ? `${elegida.modulos.length} módulos` : 'Sin módulos en el catálogo: podrás añadirlos con «Editar» antes de aprobar'}
+                  {elegida.horas ? ` · ${miles(elegida.horas)} h` : ''}
+                </span>
+              )}
+            </label>
+
+            {cliente && (
+              <label className="block text-sm">
+                <span className="text-xs font-medium text-muted-foreground">Nombre para el diploma</span>
+                <input value={nombreD} onChange={(e) => setNombreD(e.target.value)} maxLength={160} aria-invalid={!!errorNombre} className={campo} />
+                {errorNombre && <span className="mt-0.5 block text-xs text-destructive" role="alert">{errorNombre}</span>}
+              </label>
+            )}
+
+            {error && <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">{error}</p>}
+          </div>
+
+          <div className="flex justify-end gap-2 border-t border-border px-5 py-3">
+            <Button type="button" variant="outline" onClick={alCerrar} disabled={creando}>Cancelar</Button>
+            <Button type="submit" disabled={!listo}>{creando ? 'Creando…' : 'Crear diploma'}</Button>
+          </div>
+        </form>
+      </div>
+    </Portal>
+  );
+}
+
 function DialogoEditar({ c, alCerrar, alGuardar }: {
   c: Solicitud; alCerrar: () => void; alGuardar: (fila: Solicitud) => void;
 }) {
