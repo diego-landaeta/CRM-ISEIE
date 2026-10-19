@@ -1,7 +1,7 @@
 import type { FieldDefinition } from '../api/fields.api';
 import Select from '@/shared/components/ui/Select';
-
-const inputClass = 'w-full h-10 px-3 rounded-md border border-border bg-muted/30 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all';
+import Field from '@/shared/components/ui/Field';
+import { inputClass } from '@/shared/lib/ui';
 
 export type CustomFieldValue = string | number | boolean | null | undefined;
 
@@ -20,13 +20,13 @@ export default function CustomFieldRenderer({ field, value, onChange, disabled =
     onChange?.(field.field_key, next);
   }
 
+  // El Field común (#106): el obligatorio con su nombre para el lector de
+  // pantalla, y no un asterisco rojo suelto. La etiqueta enfoca su campo,
+  // también el desplegable (el `id` va a su botón).
   return (
-    <div>
-      <label htmlFor={id} className="text-xs font-medium text-muted-foreground mb-1 block">
-        {field.label}{field.required && <span className="text-red-500"> *</span>}
-      </label>
+    <Field label={field.label} required={field.required} disabled={disabled} htmlFor={id}>
       {renderInput()}
-    </div>
+    </Field>
   );
 
   function renderInput() {
@@ -34,7 +34,7 @@ export default function CustomFieldRenderer({ field, value, onChange, disabled =
     switch (field.type) {
       case 'number':
         return (
-          <input
+          <input autoComplete="off"
             id={id}
             type="number"
             disabled={disabled}
@@ -60,10 +60,11 @@ export default function CustomFieldRenderer({ field, value, onChange, disabled =
         const choices = field.options?.choices || [];
         return (
           <Select<string>
+            id={id}
             value={stringValue}
             onChange={set}
             options={[
-              { value: '', label: '— Seleccionar —' },
+              { value: '', label: 'Elige una opción…' },
               ...choices.map((c) => ({ value: c, label: c })),
             ]}
             ariaLabel={field.label}
@@ -82,25 +83,25 @@ export default function CustomFieldRenderer({ field, value, onChange, disabled =
               onChange={(e) => set(e.target.checked)}
               className="rounded border-border"
             />
-            {v ? 'Si' : 'No'}
+            {v ? 'Sí' : 'No'}
           </label>
         );
       case 'textarea':
         return (
-          <textarea
+          <textarea autoComplete="off"
             id={id}
             disabled={disabled}
             required={field.required}
             value={stringValue}
             onChange={(e) => set(e.target.value)}
             rows={3}
-            className="w-full px-3 py-2 rounded-md border border-border bg-muted/30 text-sm outline-none resize-y focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all"
+            className={`${inputClass} h-auto py-2 resize-y`}
           />
         );
       case 'text':
       default:
         return (
-          <input
+          <input autoComplete="off"
             id={id}
             type="text"
             disabled={disabled}

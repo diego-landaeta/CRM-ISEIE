@@ -8,11 +8,14 @@ import { useProducts } from '@/modules/products/hooks/useProducts';
 import { X, Warning, Link as LinkIcon } from '@phosphor-icons/react';
 import Portal from '@/shared/components/ui/portal';
 import Select from '@/shared/components/ui/Select';
+import { inputClass } from '@/shared/lib/ui';
 import ProductCombobox from './ProductCombobox';
 import client from '@/shared/api/client';
 import { detectCountryFromPhone } from '../lib/phoneCountry';
 import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
 import type { Lead } from '@/shared/types';
+import Field from '@/shared/components/ui/Field';
+import FilaCampos from '@/shared/components/ui/FilaCampos';
 
 interface CustomFieldDef {
   id: number;
@@ -41,24 +44,6 @@ interface Props {
   onSubmit: (data: LeadFormData & { custom_fields: Record<string, unknown> }) => Promise<void> | void;
 }
 
-function Field({ label, error, hint, children, required }: { label: string; error?: string; hint?: string; children: React.ReactNode; required?: boolean }) {
-  // Si el label termina en " *" lo separamos para colorear el asterisco.
-  const trimmed = label.replace(/\s*\*\s*$/, '');
-  const isRequired = required || trimmed !== label;
-  return (
-    <div>
-      <label className="text-xs text-muted-foreground mb-1.5 block px-1">
-        {trimmed}
-        {isRequired && <span className="text-rose-500 font-bold ml-0.5">*</span>}
-      </label>
-      {children}
-      {hint && <p className="text-xs text-muted-foreground mt-1 px-1">{hint}</p>}
-      {error && <p className="text-xs text-rose-500 mt-1 px-1">{error}</p>}
-    </div>
-  );
-}
-
-const inputClass = 'w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground';
 
 export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props) {
   useEscapeKey(onClose, open);
@@ -74,6 +59,13 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
 
   const [customFields, setCustomFields] = useState<CustomFieldDef[]>([]);
   const [customValues, setCustomValues] = useState<Record<string, unknown>>({});
+  // Los personalizados obligatorios que se quedaron vacíos al pulsar «Crear».
+  // Antes lo decía el globo del navegador; ahora, el Field de cada uno (#106).
+  const [faltanPersonalizados, setFaltanPersonalizados] = useState<string[]>([]);
+  // Y los de número con algo que no es un número: sin el globo del navegador
+  // (noValidate) pasaban como vacíos.
+  const [numerosMalos, setNumerosMalos] = useState<string[]>([]);
+  const vacio = (k: string) => (customValues[k] ?? '') === '';
   const [duplicates, setDuplicates] = useState<DuplicateLead[]>([]);
   // Confirmación de duplicado bloqueante (busca por email O teléfono)
   const [pendingDup, setPendingDup] = useState<{
@@ -97,8 +89,16 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
     },
   });
 
+  // El aviso de un `refine` sin `path` (la forma de contacto) no cuelga de
+  // ningún campo: zodResolver lo deja en la clave vacía, o en `root`.
+  const errorSinCampo = (errors as Record<string, { message?: string } | undefined>)['']?.message
+    ?? errors.root?.message;
+
   const watchedEmail = watch('email');
   const watchedTelefono = watch('telefono');
+  const watchedUsuario = watch('whatsapp_usuario');
+  const avisoContacto = errorSinCampo && !(watchedEmail || watchedTelefono || watchedUsuario)
+    ? errorSinCampo : undefined;
 
   // Que se esta escribiendo: el numero, el usuario, o los dos.
   //
@@ -139,6 +139,9 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
         ? (lead.telefono ? 'ambos' : 'usuario')
         : 'numero');
       setCustomValues((lead?.custom_fields as Record<string, unknown>) || {});
+      // Los avisos de personalizados de la vez anterior no se arrastran.
+      setFaltanPersonalizados([]);
+      setNumerosMalos([]);
     }
   }, [open, lead, reset]);
 
@@ -162,8 +165,19 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
 
   if (!open) return null;
 
-  async function handleFormSubmit(data: LeadFormData): Promise<void> {
+  async function handleFormSubmit(data: LeadFormData, evento?: { target?: EventTarget | null }): Promise<void> {
     if (!effectiveProjectId) return;
+    // Los mismos que comprobaba el navegador: los de texto, número, fecha y
+    // área de texto. El desplegable y el sí/no nunca se comprobaron.
+    const faltan = customFields
+      .filter((f) => f.required && f.type !== 'select' && f.type !== 'boolean' && vacio(f.field_key))
+      .map((f) => f.field_key);
+    setFaltanPersonalizados(faltan);
+    const malos = [...((evento?.target as Element | null)?.querySelectorAll<HTMLInputElement>('input[type=number][id^="prospecto-cf-"]') || [])]
+      .filter((c) => c.validity?.badInput)
+      .map((c) => c.id.replace('prospecto-cf-', ''));
+    setNumerosMalos(malos);
+    if (faltan.length || malos.length) return;
     let nombre = data.nombre;
     const sinNombreFlag = (customValues as any)?._sin_nombre === true;
     if (sinNombreFlag && (!nombre || !nombre.trim() || /^sin nombre$/i.test(nombre.trim()))) {
@@ -213,23 +227,27 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
             </button>
           </div>
 
-          <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <Field label={(customValues as any)?._sin_nombre ? 'Nombre (se generará automáticamente)' : 'Nombre *'} error={errors.nombre?.message}>
-                <input
+          {/* noValidate: los avisos los da el CRM (el esquema y los Field), no
+              el globo del navegador (#106). */}
+          <form onSubmit={handleSubmit(handleFormSubmit)} noValidate className="space-y-3">
+            <FilaCampos>
+              <Field label={(customValues as any)?._sin_nombre ? 'Nombre (se generará automáticamente)' : 'Nombre'}
+                required={!(customValues as any)?._sin_nombre} error={errors.nombre?.message} htmlFor="prospecto-nombre">
+                <input autoComplete="off"
+                  id="prospecto-nombre"
                   {...register('nombre')}
                   placeholder={(customValues as any)?._sin_nombre ? 'Se autorellenará como Anónimo (tel ...)' : 'Nombre completo'}
                   className={inputClass}
                   disabled={(customValues as any)?._sin_nombre === true}
                 />
               </Field>
-              <Field label="Email" error={errors.email?.message} hint="Opcional si pones teléfono">
-                <input {...register('email')} type="email" placeholder="correo@ejemplo.com (opcional)" className={inputClass} />
+              <Field label="Email" error={errors.email?.message} hint="Opcional si pones teléfono" htmlFor="prospecto-email">
+                <input autoComplete="off" id="prospecto-email" {...register('email')} type="email" placeholder="correo@ejemplo.com (opcional)" className={inputClass} />
               </Field>
-            </div>
+            </FilaCampos>
 
             {/* Checkbox para personas que llegan sin nombre — evita duplicados por colision de "Sin nombre" */}
-            <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+            <label className="flex items-center gap-2 px-1 text-secundario text-muted-foreground cursor-pointer select-none">
               <input
                 type="checkbox"
                 checked={(customValues as any)?._sin_nombre === true}
@@ -258,16 +276,16 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
                     );
                     return isMine ? (
                       <a key={d.id} href={`/crm/leads/${d.id}`} target="_blank" rel="noopener noreferrer"
-                        className="text-[11px] text-amber-700 dark:text-amber-300 hover:underline flex items-center gap-1 mt-0.5"
+                        className="text-secundario text-amber-700 dark:text-amber-300 hover:underline flex items-center gap-1 mt-0.5"
                       >{inner}</a>
                     ) : (
-                      <div key={d.id} className="text-[11px] text-amber-700 dark:text-amber-300 flex items-center gap-1 mt-0.5"
+                      <div key={d.id} className="text-secundario text-amber-700 dark:text-amber-300 flex items-center gap-1 mt-0.5"
                         title="Este lead pertenece a otra asesora — contacta con ella para coordinar"
                       >{inner}</div>
                     );
                   })}
                   {isGestor && duplicates.some(d => d.responsable_id !== user?.id) && (
-                    <p className="text-[10px] text-amber-700 dark:text-amber-400 mt-1.5 italic">
+                    <p className="text-secundario text-amber-700 dark:text-amber-400 mt-1.5 italic">
                       Hay duplicados asignados a otras asesoras. Coordina con ellas antes de crear un registro nuevo.
                     </p>
                   )}
@@ -275,10 +293,10 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Teléfono" error={errors.telefono?.message} hint="Opcional si pones email">
+            <FilaCampos>
+              <Field label="Teléfono" error={errors.telefono?.message} hint="Opcional si pones email" htmlFor="prospecto-telefono">
                 <div className="relative">
-                  <input {...register('telefono')} placeholder="+34 600 000 000 (opcional)" className={inputClass + ' pr-14'} />
+                  <input autoComplete="off" id="prospecto-telefono" {...register('telefono')} placeholder="+34 600 000 000 (opcional)" className={inputClass + ' pr-14'} />
                   {(() => {
                     const c = detectCountryFromPhone(watchedTelefono);
                     if (!c) return null;
@@ -293,12 +311,13 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
                   })()}
                 </div>
               </Field>
-              <Field label="Origen *" error={errors.origen?.message}>
+              <Field label="Origen" required error={errors.origen?.message} htmlFor="prospecto-origen">
                 <Controller
                   name="origen"
                   control={control}
                   render={({ field }) => (
                     <Select<LeadFormData['origen']>
+                      id="prospecto-origen"
                       value={field.value}
                       onChange={field.onChange}
                       options={ORIGEN_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
@@ -307,7 +326,7 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
                   )}
                 />
               </Field>
-            </div>
+            </FilaCampos>
               {/* Numero o usuario de WhatsApp.
                   El desplegable elige QUE se esta escribiendo, no «uno u otro
                   para siempre»: la misma persona puede tener los dos, y con
@@ -316,7 +335,7 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
                   Se valida distinto segun el tipo: un numero lleva prefijo de
                   pais y solo cifras; un usuario no. Validar un usuario con las
                   reglas de un telefono lo rechazaria siempre. */}
-              <Field label="Contacto de WhatsApp"
+              <Field label="Contacto de WhatsApp" htmlFor="prospecto-whatsapp"
                 hint="Elige si tienes su número, su usuario, o los dos">
                 {/* El ancho lo ponen las envolturas, NO las clases del campo.
                     Antes el desplegable llevaba `w-40` encima de `inputClass`,
@@ -329,19 +348,27 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
                     `min-w-0` en el segundo hace falta: sin el, un elemento flex
                     no baja de su contenido y vuelve a desbordar. */}
                 <div className="flex gap-2 items-start">
+                  {/* El desplegable del CRM, no el del sistema. Era el único
+                      control del formulario con la flecha del navegador, al
+                      lado de «Origen» y «País» que llevan la del CRM: un solo
+                      campo distinto en un formulario se ve enseguida (#125, #134). */}
                   <div className="w-40 flex-none">
-                    <select
+                    <Select<ModoContacto>
+                      id="prospecto-whatsapp"
                       value={modoContacto}
-                      onChange={(e) => setModoContacto(e.target.value as ModoContacto)}
-                      className={inputClass}>
-                      <option value="numero">Número</option>
-                      <option value="usuario">Usuario de WhatsApp</option>
-                      <option value="ambos">Ambos</option>
-                    </select>
+                      onChange={(v) => setModoContacto(v)}
+                      ariaLabel="Qué tienes de WhatsApp"
+                      options={[
+                        { value: 'numero', label: 'Número' },
+                        { value: 'usuario', label: 'Usuario de WhatsApp' },
+                        { value: 'ambos', label: 'Ambos' },
+                      ]}
+                    />
                   </div>
                   {modoContacto !== 'numero' && (
                     <div className="flex-1 min-w-0">
-                      <input {...register('whatsapp_usuario')}
+                      <input autoComplete="off" {...register('whatsapp_usuario')}
+                        aria-label="Usuario de WhatsApp"
                         placeholder="@usuario o como lo tengas guardado"
                         className={inputClass} />
                     </div>
@@ -349,13 +376,14 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
                 </div>
               </Field>
 
-            <div className="grid grid-cols-2 gap-4">
-              <Field label={`${productoLabel} de interes`}>
+            <FilaCampos>
+              <Field label={`${productoLabel} de interés`} htmlFor="prospecto-producto">
                 <Controller
                   name="producto_interes"
                   control={control}
                   render={({ field }) => (
                     <ProductCombobox
+                      id="prospecto-producto"
                       value={field.value}
                       onChange={field.onChange}
                       products={products}
@@ -366,12 +394,13 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
                   )}
                 />
               </Field>
-              <Field label="Pais">
+              <Field label="País" htmlFor="prospecto-pais">
                 <Controller
                   name="pais"
                   control={control}
                   render={({ field }) => (
                     <Select<string>
+                      id="prospecto-pais"
                       value={field.value || ''}
                       onChange={field.onChange}
                       options={[
@@ -383,30 +412,36 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
                   )}
                 />
               </Field>
-            </div>
+            </FilaCampos>
 
             {customFields.length > 0 && (
               <div className="border-t border-border pt-3 mt-3 space-y-3">
-                <p className="text-xs text-muted-foreground text-muted-foreground">Campos personalizados</p>
-                <div className="grid grid-cols-2 gap-3">
+                <p className="mb-1.5 px-1 text-tabla uppercase text-muted-foreground">Campos personalizados</p>
+                <FilaCampos>
                   {customFields.map(f => (
-                    <div key={f.id} className={f.type === 'textarea' ? 'col-span-2' : ''}>
-                      <label className="text-xs text-muted-foreground text-muted-foreground mb-1.5 block px-1">
-                        {f.label} {f.required && <span className="text-red-500">*</span>}
-                      </label>
+                    <Field key={f.id} label={f.label} required={f.required} htmlFor={`prospecto-cf-${f.field_key}`}
+                      className={f.type === 'textarea' ? 'sm:col-span-2' : undefined}
+                      error={faltanPersonalizados.includes(f.field_key) && vacio(f.field_key)
+                        ? `Falta «${f.label}»: es obligatorio.`
+                        : numerosMalos.includes(f.field_key) ? `En «${f.label}», escribe solo un número.` : undefined}>
                       {f.type === 'textarea' ? (
-                        <textarea
+                        // `h-auto`, no `h-20`: en la hoja de estilos `h-9` (de
+                        // inputClass) va después de `h-20` y la dejaba en 36 px.
+                        <textarea autoComplete="off"
+                          id={`prospecto-cf-${f.field_key}`}
                           value={(customValues[f.field_key] as string) || ''}
                           onChange={e => setCustomValues({ ...customValues, [f.field_key]: e.target.value })}
                           required={f.required}
-                          className={inputClass + ' h-20 py-2 resize-none'}
+                          rows={3}
+                          className={`${inputClass} h-auto py-2 resize-none`}
                         />
                       ) : f.type === 'select' ? (
                         <Select<string>
+                          id={`prospecto-cf-${f.field_key}`}
                           value={(customValues[f.field_key] as string) || ''}
                           onChange={(v) => setCustomValues({ ...customValues, [f.field_key]: v })}
                           options={[
-                            { value: '', label: 'Seleccionar...' },
+                            { value: '', label: 'Elige una opción…' },
                             ...(f.options || []).map(o => ({ value: o, label: o })),
                           ]}
                           ariaLabel={f.label}
@@ -414,13 +449,15 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
                       ) : f.type === 'boolean' ? (
                         <label className="flex items-center gap-2 h-9">
                           <input type="checkbox"
+                            id={`prospecto-cf-${f.field_key}`}
                             checked={!!customValues[f.field_key]}
                             onChange={e => setCustomValues({ ...customValues, [f.field_key]: e.target.checked })}
                           />
-                          <span className="text-sm">Si</span>
+                          <span className="text-sm">Sí</span>
                         </label>
                       ) : (
-                        <input
+                        <input autoComplete="off"
+                          id={`prospecto-cf-${f.field_key}`}
                           type={f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text'}
                           value={(customValues[f.field_key] as string) || ''}
                           onChange={e => setCustomValues({ ...customValues, [f.field_key]: e.target.value })}
@@ -428,20 +465,28 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
                           className={inputClass}
                         />
                       )}
-                    </div>
+                    </Field>
                   ))}
-                </div>
+                </FilaCampos>
               </div>
             )}
 
-            <Field label="Notas">
-              <textarea
+            <Field label="Notas" htmlFor="prospecto-notas">
+              <textarea autoComplete="off"
+                id="prospecto-notas"
                 {...register('notas')}
                 placeholder="Notas adicionales sobre el lead..."
                 rows={3}
-                className="w-full px-4 py-3 rounded-md border border-border bg-muted/50 text-sm outline-none resize-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground"
+                className={`${inputClass} h-auto py-2 resize-none`}
               />
             </Field>
+
+            {/* Lo que no es de un campo concreto: «hace falta al menos una forma
+                de contacto». El esquema lo devolvía sin campo y no se pintaba en
+                ningún sitio, así que al pulsar «Crear» no pasaba nada (#106). */}
+            {avisoContacto && (
+              <p role="alert" className="px-1 text-secundario text-destructive">{avisoContacto}</p>
+            )}
 
             <div className="flex justify-end gap-2 pt-2">
               <button type="button" onClick={onClose}

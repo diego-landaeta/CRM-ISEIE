@@ -9,10 +9,15 @@ import {
 } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
+import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
+import { avisoDeLoQueFalta } from '@/shared/lib/loQueFalta';
 import { useConfirm } from '@/shared/components/ui/useConfirm';
 import MarcaSection from './MarcaSection';
 import CampusPorEmpresa, { marcarVarios } from '@/shared/components/CampusPorEmpresa';
 import { avisoCambioCorreo, confirmacionCambioCorreo, problemaDeContrasena } from '@/shared/lib/credenciales';
+import Field from '@/shared/components/ui/Field';
+import Select from '@/shared/components/ui/Select';
+import { inputClass } from '@/shared/lib/ui';
 
 // Cada item de la nav interna. Si tiene `external: true` se muestra con el
 // icono de "abrir en otra página" y al hacer click navega a esa ruta.
@@ -191,7 +196,7 @@ function UsersSection({ isAdmin }) {
       const res = await client.get('/users?limit=100&incluirTodos=true');
       setUsers(res?.data || []);
     } catch (e) {
-      toast({ title: 'Error', description: e?.data?.error || 'No se pudieron cargar los usuarios', variant: 'destructive' });
+      toast({ title: 'No se pudieron cargar los usuarios', description: e?.data?.error, variant: 'destructive' });
     } finally { setLoading(false); }
   }
   useEffect(() => { load(); }, []);
@@ -212,7 +217,7 @@ function UsersSection({ isAdmin }) {
       toast({ title: activar ? '✓ Reactivado' : '✓ Desactivado' });
       await load();
     } catch (e) {
-      toast({ title: 'Error', description: e?.data?.error || e?.message, variant: 'destructive' });
+      toast({ title: activar ? 'No se pudo reactivar el usuario' : 'No se pudo desactivar el usuario', description: e?.data?.error || e?.message, variant: 'destructive' });
     }
   }
 
@@ -328,6 +333,8 @@ function UsersSection({ isAdmin }) {
 }
 
 function EditUserModal({ user, projects, onClose, onSaved, empresas, faltaMigracionEmpresas = false }) {
+  // Escape cierra, como los demás formularios (#106).
+  useEscapeKey(onClose);
   const { user: me } = useAuth();
   const isSuperadmin = me?.role === 'superadmin';
   const [nombre, setNombre] = useState(user.nombre || '');
@@ -376,17 +383,21 @@ function EditUserModal({ user, projects, onClose, onSaved, empresas, faltaMigrac
   }
 
   async function save() {
-    if (nombre.trim().length < 2) { toast({ title: 'Nombre inválido', variant: 'destructive' }); return; }
     const projList = Object.entries(assigned).map(([projectId, recibeLeads]) => ({ projectId: Number(projectId), recibeLeads: !!recibeLeads }));
     // El correo solo si ha cambiado, y solo lo cambia el super admin (#248). Antes
     // de guardar, lo que supone: sobre todo si recibe prospectos por Make.
     const correoNuevo = email.trim().toLowerCase();
     const cambiaCorreo = isSuperadmin && correoNuevo !== String(user.email || '').toLowerCase();
+    // Todo lo que falta o está mal, de una vez (#106).
+    const faltan = [];
+    if (!nombre.trim()) faltan.push({ title: 'Falta el nombre', description: 'Escríbelo en «Nombre».', que: 'el nombre en «Nombre»' });
+    else if (nombre.trim().length < 2) faltan.push({ title: 'Nombre demasiado corto', description: 'En «Nombre», al menos 2 caracteres.', que: 'un nombre de al menos 2 letras en «Nombre»' });
+    if (cambiaCorreo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correoNuevo)) {
+      faltan.push({ title: 'Email no válido', description: 'Escríbelo en «Email» como nombre@dominio.com.', que: 'un email válido en «Email» (nombre@dominio.com)' });
+    }
+    const falta = avisoDeLoQueFalta(faltan);
+    if (falta) { toast(falta); return; }
     if (cambiaCorreo) {
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correoNuevo)) {
-        toast({ title: 'Email inválido', description: 'Revisa el formato del email.', variant: 'destructive' });
-        return;
-      }
       const aviso = await avisoCambioCorreo(user.id).catch(() => null);
       if (!window.confirm(confirmacionCambioCorreo(user.nombre, user.email, correoNuevo, aviso))) return;
     }
@@ -409,7 +420,7 @@ function EditUserModal({ user, projects, onClose, onSaved, empresas, faltaMigrac
         : { title: '✓ Guardado' });
       onSaved();
     } catch (e) {
-      toast({ title: 'Error', description: e?.data?.error || e?.message, variant: 'destructive' });
+      toast({ title: 'No se pudo guardar el usuario', description: e?.data?.error || e?.message, variant: 'destructive' });
     } finally { setSaving(false); }
   }
 
@@ -424,7 +435,7 @@ function EditUserModal({ user, projects, onClose, onSaved, empresas, faltaMigrac
       setNewPass('');
       setNewPass2('');
     } catch (e) {
-      toast({ title: 'Error', description: e?.data?.error || e?.message, variant: 'destructive' });
+      toast({ title: 'No se pudo cambiar la contraseña', description: e?.data?.error || e?.message, variant: 'destructive' });
     } finally { setSavingPass(false); }
   }
 
@@ -440,48 +451,52 @@ function EditUserModal({ user, projects, onClose, onSaved, empresas, faltaMigrac
           <button onClick={onClose} className="p-1 rounded hover:bg-muted"><X size={16} weight="bold" /></button>
         </div>
         <div className="space-y-3">
+          <Field label="Nombre" required htmlFor="editar-usuario-nombre">
+            <input autoComplete="off" id="editar-usuario-nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} className={inputClass} />
+          </Field>
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Nombre</label>
-            <input value={nombre} onChange={(e) => setNombre(e.target.value)} className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm" />
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Email</label>
-            <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" maxLength={255}
-              readOnly={!isSuperadmin} disabled={!isSuperadmin}
-              className={`w-full h-9 px-3 rounded-md border border-border bg-background text-sm ${isSuperadmin ? '' : 'opacity-60 cursor-not-allowed'}`} />
-            <p className="text-[10px] text-muted-foreground mt-1">
-              {isSuperadmin
+            <Field label="Email" disabled={!isSuperadmin} htmlFor="editar-usuario-email"
+              hint={isSuperadmin
                 ? 'Es con lo que entra: al cambiarlo, con el viejo ya no podrá, y se cierran sus sesiones. Se le avisa por correo en la dirección vieja. Si recibe prospectos por Make, cámbialo también allí.'
-                : 'Solo un superadmin puede cambiar el correo.'}
-            </p>
+                : 'Solo un superadmin puede cambiar el correo.'}>
+              <input autoComplete="off" id="editar-usuario-email" value={email} onChange={(e) => setEmail(e.target.value)} type="email" maxLength={255}
+                readOnly={!isSuperadmin} disabled={!isSuperadmin}
+                className={`${inputClass} ${isSuperadmin ? '' : 'opacity-60 cursor-not-allowed'}`} />
+            </Field>
             {/* «Reenviar enlace de acceso» al correo nuevo (#246). A un tutor no le
                 sale ningún correo mientras siga el freno: se dice en vez de esconderlo. */}
             {cambiaElCorreo && (user.role === 'tutor' ? (
-              <p className="text-[10px] text-muted-foreground mt-1">
+              <p className="mt-1.5 px-1 text-secundario text-muted-foreground">
                 A los tutores no se les manda ningún correo por ahora: si lo necesita, ponle tú una contraseña abajo y pásasela.
               </p>
             ) : (
-              <label className="mt-1.5 flex items-start gap-2 text-xs cursor-pointer">
+              <label className="mt-1.5 flex items-start gap-2 px-1 cursor-pointer">
                 <input type="checkbox" checked={reenviarEnlace} onChange={(e) => setReenviarEnlace(e.target.checked)} className="mt-0.5" />
-                <span>
+                <span className="text-sm">
                   Reenviar enlace de acceso
-                  <span className="block text-[10px] text-muted-foreground">Le llega a la dirección nueva para poner su contraseña.</span>
+                  <span className="block text-secundario text-muted-foreground">Le llega a la dirección nueva para poner su contraseña.</span>
                 </span>
               </label>
             ))}
           </div>
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Rol</label>
-            <select value={role} onChange={(e) => setRole(e.target.value)} className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm">
-              <option value="gestor">Gestor</option>
-              <option value="admin">Admin</option>
-              <option value="soporte">Soporte</option>
-              {/* Tablero de tareas (#210): equipo de desarrollo, solo ve sus Tareas. */}
-              <option value="colaborador">Colaborador</option>
-            </select>
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Y además es…</label>
+          <Field label="Rol" required htmlFor="editar-usuario-rol">
+            <Select
+              id="editar-usuario-rol"
+              value={role}
+              onChange={setRole}
+              ariaLabel="Rol"
+              options={[
+                { value: 'gestor', label: 'Gestor' },
+                { value: 'admin', label: 'Admin' },
+                { value: 'soporte', label: 'Soporte' },
+                // Tablero de tareas (#210): equipo de desarrollo, solo ve sus Tareas.
+                { value: 'colaborador', label: 'Colaborador' },
+              ]}
+            />
+          </Field>
+          {/* Un grupo de botones, no una casilla: fieldset y legend, como en MultiCRM (#106). */}
+          <fieldset className="min-w-0">
+            <legend className="mb-1.5 block px-1 text-secundario text-muted-foreground">Y además es…</legend>
             {/* Mas de un rol por persona: quien lleva prospectos y ademas da
                 clase no tiene que elegir. Solo SUMAN permisos; el principal
                 sigue siendo el de arriba. */}
@@ -494,7 +509,7 @@ function EditUserModal({ user, projects, onClose, onSaved, empresas, faltaMigrac
                     type="button"
                     onClick={() => setRolesExtra((prev) => prev.includes(r) ? prev.filter((x) => x !== r) : [...prev, r])}
                     aria-pressed={puesto}
-                    className={'rounded-md border px-2.5 py-1 text-xs transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40 '
+                    className={'rounded-md border px-2.5 py-1 text-normal transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40 '
                       + (puesto ? 'border-primary bg-primary/10 font-semibold text-primary' : 'border-border hover:bg-muted')}
                   >
                     {r === 'gestor' ? 'Gestor' : r === 'admin' ? 'Admin' : r === 'soporte' ? 'Soporte' : r === 'colaborador' ? 'Colaborador' : 'Tutor'}
@@ -502,17 +517,13 @@ function EditUserModal({ user, projects, onClose, onSaved, empresas, faltaMigrac
                 );
               })}
             </div>
-            <p className="text-[10px] text-muted-foreground mt-1">
-              Opcional. Suma los permisos de otro rol sin perder los de este.
-            </p>
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Teléfono (WhatsApp)</label>
-            <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+34 600 000 000" className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm" />
-            <p className="text-[10px] text-muted-foreground mt-1">Se usa para el widget de WhatsApp y el contacto del gestor.</p>
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Proyectos asignados</label>
+            <p className="mt-1 px-1 text-secundario text-muted-foreground">Opcional. Suma los permisos de otro rol sin perder los de este.</p>
+          </fieldset>
+          <Field label="Teléfono (WhatsApp)" htmlFor="editar-usuario-tel" hint="Se usa para el widget de WhatsApp y el contacto del gestor.">
+            <input autoComplete="off" id="editar-usuario-tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+34 600 000 000" className={inputClass} />
+          </Field>
+          <fieldset className="min-w-0">
+            <legend className="mb-1.5 block px-1 text-secundario text-muted-foreground">Proyectos asignados</legend>
             {/* Agrupados por empresa, con «Marcar todos» y, para un admin, la
                 empresa entera con los campus que se creen (#220). */}
             <CampusPorEmpresa
@@ -527,20 +538,20 @@ function EditUserModal({ user, projects, onClose, onSaved, empresas, faltaMigrac
               onToggleEmpresa={empresas ? alternarEmpresa : undefined}
               faltaMigracion={faltaMigracionEmpresas}
             />
-          </div>
+          </fieldset>
         </div>
 
         {/* Facturacion. Un admin puede siempre por su rol, asi que para el estas
             casillas no cambiarian nada y no se pintan. */}
         {(role === 'gestor' || role === 'soporte') && (
           <div className="rounded-lg border border-border p-3 space-y-2">
-            <p className="text-xs text-muted-foreground px-1">Facturación</p>
+            <p className="text-secundario text-muted-foreground px-1">Facturación</p>
             <label className="flex items-start gap-2 cursor-pointer px-1">
               <input type="checkbox" checked={facturaManager}
                 onChange={(e) => setFacturaManager(e.target.checked)} className="mt-0.5" />
               <span className="text-sm">
                 Puede emitir y corregir facturas
-                <span className="block text-xs text-muted-foreground">Solo las de sus propios prospectos.</span>
+                <span className="block text-secundario text-muted-foreground">Solo las de sus propios prospectos.</span>
               </span>
             </label>
             <label className={`flex items-start gap-2 px-1 ${facturaManager ? 'cursor-pointer' : 'opacity-50'}`}>
@@ -548,7 +559,7 @@ function EditUserModal({ user, projects, onClose, onSaved, empresas, faltaMigrac
                 onChange={(e) => setEditarFechas(e.target.checked)} className="mt-0.5" />
               <span className="text-sm">
                 Puede cambiar las fechas de emisión y de pago
-                <span className="block text-xs text-muted-foreground">Sin tocar importes ni conceptos.</span>
+                <span className="block text-secundario text-muted-foreground">Sin tocar importes ni conceptos.</span>
               </span>
             </label>
           </div>
@@ -562,17 +573,16 @@ function EditUserModal({ user, projects, onClose, onSaved, empresas, faltaMigrac
         </div>
 
         {isSuperadmin && (
-          <div className="border-t border-border pt-4 space-y-2">
-            <label className="text-xs font-semibold flex items-center gap-1.5"><Key size={12} weight="bold" /> Cambiar contraseña</label>
+          <Field label="Cambiar contraseña" htmlFor="editar-usuario-pass" className="border-t border-border pt-4"
+            hint="Mínimo 8 caracteres, con una mayúscula y un número. Se la comunicas tú al usuario. Al cambiarla, se cierran sus sesiones activas.">
             <div className="flex flex-col gap-2 sm:flex-row">
-              <input type="text" value={newPass} onChange={(e) => setNewPass(e.target.value)} placeholder="Nueva contraseña" autoComplete="new-password" className="flex-1 min-w-0 h-9 px-3 rounded-md border border-border bg-background text-sm font-mono" />
-              <input type="text" value={newPass2} onChange={(e) => setNewPass2(e.target.value)} placeholder="Repítela" aria-label="Repite la contraseña" autoComplete="new-password" className="flex-1 min-w-0 h-9 px-3 rounded-md border border-border bg-background text-sm font-mono" />
+              <input id="editar-usuario-pass" type="text" value={newPass} onChange={(e) => setNewPass(e.target.value)} placeholder="Nueva contraseña" autoComplete="new-password" className={`${inputClass} min-w-0 sm:flex-1 font-mono`} />
+              <input type="text" value={newPass2} onChange={(e) => setNewPass2(e.target.value)} placeholder="Repítela" aria-label="Repite la contraseña" autoComplete="new-password" className={`${inputClass} min-w-0 sm:flex-1 font-mono`} />
               <button onClick={changePassword} disabled={savingPass || !newPass || !newPass2} className="h-9 px-3 rounded-md border border-border text-sm font-medium hover:bg-muted disabled:opacity-50 whitespace-nowrap">
                 {savingPass ? '…' : 'Cambiar'}
               </button>
             </div>
-            <p className="text-[10px] text-muted-foreground">Mínimo 8 caracteres, con una mayúscula y un número. Se la comunicas tú al usuario. Al cambiarla, se cierran sus sesiones activas.</p>
-          </div>
+          </Field>
         )}
       </div>
     </div>
@@ -580,6 +590,8 @@ function EditUserModal({ user, projects, onClose, onSaved, empresas, faltaMigrac
 }
 
 function InviteUserModal({ projects, onClose, onCreated, empresas, faltaMigracionEmpresas = false }) {
+  // Escape cierra, como los demás formularios (#106).
+  useEscapeKey(onClose);
   const [nombre, setNombre] = useState('');
   const [email, setEmail] = useState('');
   const [role, setRole] = useState('gestor');
@@ -609,20 +621,25 @@ function InviteUserModal({ projects, onClose, onCreated, empresas, faltaMigracio
   }
 
   async function submit() {
-    if (nombre.trim().length < 2) { toast({ title: 'Nombre inválido', description: 'Mínimo 2 caracteres', variant: 'destructive' }); return; }
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) { toast({ title: 'Email inválido', variant: 'destructive' }); return; }
+    // Todo lo que falta o está mal, de una vez (#106).
+    const faltan = [];
+    if (!nombre.trim()) faltan.push({ title: 'Falta el nombre', description: 'Escríbelo en «Nombre y apellido».', que: 'el nombre en «Nombre y apellido»' });
+    else if (nombre.trim().length < 2) faltan.push({ title: 'Nombre demasiado corto', description: 'En «Nombre y apellido», al menos 2 caracteres.', que: 'un nombre de al menos 2 letras en «Nombre y apellido»' });
+    if (!email.trim()) faltan.push({ title: 'Falta el email', description: 'Escríbelo en «Email» como nombre@dominio.com.', que: 'el email en «Email»' });
+    else if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) faltan.push({ title: 'Email no válido', description: 'Escríbelo en «Email» como nombre@dominio.com.', que: 'un email válido en «Email» (nombre@dominio.com)' });
     const projList = Object.entries(assigned).map(([projectId, recibeLeads]) => ({ projectId: Number(projectId), recibeLeads: !!recibeLeads }));
     // Un admin o una gestora sin campus entraría a un CRM vacío (#220). Al
     // admin le vale una empresa entera; a la gestora, no.
     const conEmpresa = role === 'admin' && puedeDarEmpresas && empresasEnteras.length > 0;
     if ((role === 'admin' || role === 'gestor') && projList.length === 0 && !conEmpresa) {
-      toast({
+      faltan.push({
         title: 'Falta el campus',
         description: role === 'admin' && puedeDarEmpresas ? 'Marca al menos un campus o una empresa entera.' : 'Marca al menos un campus.',
-        variant: 'destructive',
+        que: 'al menos un campus en «Proyectos asignados»',
       });
-      return;
     }
+    const falta = avisoDeLoQueFalta(faltan);
+    if (falta) { toast(falta); return; }
     setSaving(true);
     try {
       await client.post('/users', {
@@ -632,7 +649,7 @@ function InviteUserModal({ projects, onClose, onCreated, empresas, faltaMigracio
       toast({ title: '✓ Usuario invitado', description: 'Se le envió un email para crear su contraseña.' });
       onCreated();
     } catch (e) {
-      toast({ title: 'Error', description: e?.data?.error || e?.message || 'No se pudo crear el usuario', variant: 'destructive' });
+      toast({ title: 'No se pudo crear el usuario', description: e?.data?.error || e?.message, variant: 'destructive' });
     } finally { setSaving(false); }
   }
 
@@ -645,25 +662,28 @@ function InviteUserModal({ projects, onClose, onCreated, empresas, faltaMigracio
           <button onClick={onClose} className="p-1 rounded hover:bg-muted"><X size={16} weight="bold" /></button>
         </div>
         <div className="space-y-3">
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Nombre y apellido *</label>
-            <input value={nombre} onChange={(e) => setNombre(e.target.value)} className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm" placeholder="Ej: Fabiola Comercial" />
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Email *</label>
-            <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm" placeholder="persona@empresa.com" />
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Rol *</label>
-            <select value={role} onChange={(e) => setRole(e.target.value)} className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm">
-              <option value="gestor">Gestor — solo sus proyectos y leads</option>
-              <option value="admin">Admin — acceso operativo completo</option>
-              <option value="soporte">Soporte — tickets y consultas</option>
-              <option value="colaborador">Colaborador — solo su tablero de Tareas</option>
-            </select>
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Proyectos asignados{(role === 'admin' || role === 'gestor') && ' *'}</label>
+          <Field label="Nombre y apellido" required htmlFor="invitar-nombre">
+            <input autoComplete="off" id="invitar-nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} className={inputClass} placeholder="Ej: Fabiola Comercial" />
+          </Field>
+          <Field label="Email" required htmlFor="invitar-email">
+            <input autoComplete="off" id="invitar-email" value={email} onChange={(e) => setEmail(e.target.value)} type="email" className={inputClass} placeholder="persona@empresa.com" />
+          </Field>
+          <Field label="Rol" required htmlFor="invitar-rol">
+            <Select
+              id="invitar-rol"
+              value={role}
+              onChange={setRole}
+              ariaLabel="Rol"
+              options={[
+                { value: 'gestor', label: 'Gestor — solo sus proyectos y leads' },
+                { value: 'admin', label: 'Admin — acceso operativo completo' },
+                { value: 'soporte', label: 'Soporte — tickets y consultas' },
+                { value: 'colaborador', label: 'Colaborador — solo su tablero de Tareas' },
+              ]}
+            />
+          </Field>
+          <fieldset className="min-w-0">
+            <legend className="mb-1.5 block px-1 text-secundario text-muted-foreground">Proyectos asignados{(role === 'admin' || role === 'gestor') && <span className="text-destructive"> *<span className="sr-only"> (obligatorio)</span></span>}</legend>
             {/* Agrupados por empresa, con «Marcar todos» y, para un admin, la
                 empresa entera con los campus que se creen (#220). */}
             <CampusPorEmpresa
@@ -678,7 +698,7 @@ function InviteUserModal({ projects, onClose, onCreated, empresas, faltaMigracio
               onToggleEmpresa={empresas ? alternarEmpresa : undefined}
               faltaMigracion={faltaMigracionEmpresas}
             />
-          </div>
+          </fieldset>
         </div>
         <div className="flex justify-end gap-2 pt-1">
           <button onClick={onClose} className="h-9 px-4 rounded-md border border-border text-sm font-medium hover:bg-muted">Cancelar</button>

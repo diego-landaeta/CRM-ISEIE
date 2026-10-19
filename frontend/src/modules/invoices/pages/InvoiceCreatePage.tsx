@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, FloppyDisk, MagnifyingGlass, User, Buildings, Money } from '@phosphor-icons/react';
 import { useProjectContext } from '@/contexts/ProjectContext';
@@ -11,6 +11,11 @@ import type { Issuer, InvoiceItem } from '../api/invoices.api';
 import { emitirPreguntandoSiPasa } from '../lib/masQueLoCobrado';
 import { conversionsApi, type Conversion } from '@/modules/conversions/api/conversions.api';
 import { toast } from '@/shared/hooks/useToast';
+import Field from '@/shared/components/ui/Field';
+import FilaCampos from '@/shared/components/ui/FilaCampos';
+import Select from '@/shared/components/ui/Select';
+import { inputClass } from '@/shared/lib/ui';
+import { cn } from '@/shared/lib/utils';
 
 type Tipo = 'persona' | 'empresa' | 'contado';
 interface LeadHit { id: number; nombre: string; email?: string | null; telefono?: string | null }
@@ -262,12 +267,17 @@ export default function InvoiceCreatePage() {
   async function generar(saltarAvisoVenta = false) {
     // Documento nuevo para un cliente pero sin venta elegida -> se avisa primero.
     if (!saltarAvisoVenta && !editId && leadId && !assocConvId) { setAvisoVenta(true); return; }
-    if (moneda !== 'EUR' && !(Number(totalEur) > 0)) {
+    // Todo lo que falta, de una vez (#106): el total en euros va en la misma lista.
+    const faltaEur = moneda !== 'EUR' && !(Number(totalEur) > 0);
+    if (faltaEur && !missing.length) {
       toast({ title: 'Falta el importe en euros', description: `La factura va en ${moneda}: indica el total en euros (es el que cuenta para la contabilidad).`, variant: 'destructive' });
       return;
     }
     if (!pid) return;
-    if (missing.length) { toast({ title: 'Faltan datos', description: missing.join(' · '), variant: 'destructive' }); return; }
+    if (missing.length) {
+      toast({ title: 'Faltan datos', description: [...missing, ...(faltaEur ? ['Total en euros'] : [])].join(' · '), variant: 'destructive' });
+      return;
+    }
     setSaving(true);
     try {
       const cNombre = tipo === 'contado' ? (nombre.trim() || 'Consumidor final') : nombre.trim();
@@ -413,8 +423,8 @@ export default function InvoiceCreatePage() {
   const rectOrig = rectList.find((i) => i.id === rectOriginalId) || null;
 
   async function emitirAbono() {
-    if (!rectOriginalId) { toast({ title: 'Elige la factura a rectificar', variant: 'destructive' }); return; }
-    if (!rectMotivo.trim()) { toast({ title: 'Indica el motivo del abono', variant: 'destructive' }); return; }
+    if (!rectOriginalId) { toast({ title: 'Elige la factura a rectificar', description: 'Está arriba, en «Factura a rectificar».', variant: 'destructive' }); return; }
+    if (!rectMotivo.trim()) { toast({ title: 'Indica el motivo del abono', description: 'Escríbelo en «Motivo del abono»: sale en el documento.', variant: 'destructive' }); return; }
     const parcialNum = rectParcial.trim() ? Number(rectParcial) : null;
     if (parcialNum != null && (!(parcialNum > 0) || (rectOrig && parcialNum > Number(rectOrig.total)))) {
       toast({ title: 'Importe parcial inválido', description: 'Debe ser mayor que 0 y no superar el total de la factura.', variant: 'destructive' }); return;
@@ -462,7 +472,7 @@ export default function InvoiceCreatePage() {
       {/* Tipo de documento: factura fiscal vs proforma (presupuesto).
           En EDICIÓN el tipo es FIJO (no se puede convertir una factura emitida en
           proforma al editarla); solo se muestra como etiqueta. */}
-      <div className="inline-flex rounded-lg border border-border bg-muted/30 p-1 text-sm font-semibold">
+      <div className="inline-flex flex-wrap rounded-lg border border-border bg-muted/30 p-1 text-sm font-semibold">
         {editId ? (
           <span className="px-4 h-8 inline-flex items-center rounded-md bg-primary text-primary-foreground shadow">
             {esProforma ? 'Proforma' : esRect ? 'Abono' : 'Factura'}
@@ -473,7 +483,7 @@ export default function InvoiceCreatePage() {
             {label}
           </button>
         ))}
-        <span className="self-center pl-3 pr-1 text-[11px] font-normal text-muted-foreground">
+        <span className="self-center basis-full sm:basis-auto px-1 pt-1 sm:pt-0 sm:pl-3 text-secundario font-normal text-muted-foreground">
           {editId ? 'El tipo no se cambia al editar una factura ya emitida'
             : esRect ? 'Factura rectificativa (abono) · importe negativo · serie R'
             : esProforma ? 'Proforma sin validez fiscal · serie propia (PRO)'
@@ -484,29 +494,38 @@ export default function InvoiceCreatePage() {
       {/* Proyecto de la factura — manda sobre cliente/leads, cursos y emisores */}
       {projectOptions.length > 0 && (
         <div className="bg-card border border-border rounded-lg p-4">
-          <label className="text-xs font-bold uppercase text-muted-foreground">Proyecto</label>
-          <select value={projectId ?? ''} onChange={(e) => setProjectId(Number(e.target.value))}
-            className="w-full h-9 px-2 mt-1 rounded border border-primary/40 bg-background text-foreground text-sm font-medium [&>option]:bg-background [&>option]:text-foreground">
-            {projectOptions.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-          </select>
-          <p className="text-[10px] text-muted-foreground mt-1">
-            Los clientes, cursos y empresas emisoras se filtran por este proyecto. Solo se listan
-            proyectos de la misma sociedad (no se factura cruzado entre sociedades).
-          </p>
+          <Field label="Proyecto" htmlFor="factura-proyecto"
+            hint="Los clientes, cursos y empresas emisoras se filtran por este proyecto. Solo se listan proyectos de la misma sociedad (no se factura cruzado entre sociedades).">
+            <Select<number | null>
+              id="factura-proyecto"
+              value={projectId ?? null}
+              onChange={(v) => { if (v) setProjectId(v); }}
+              placeholder="Elige el proyecto"
+              ariaLabel="Proyecto"
+              options={projectOptions.map((p) => ({ value: p.id, label: p.nombre }))}
+            />
+          </Field>
         </div>
       )}
 
       {/* Emisor */}
       {issuers.length > 0 && (
         <div className="bg-card border border-border rounded-lg p-4">
-          <label className="text-xs font-bold uppercase text-muted-foreground">Empresa que emite</label>
-          <select value={issuerId ?? ''} onChange={(e) => setIssuerId(Number(e.target.value))}
-            className="w-full h-9 px-2 mt-1 rounded border border-primary/40 bg-background text-foreground text-sm font-medium [&>option]:bg-background [&>option]:text-foreground">
+          <Field label="Empresa que emite" htmlFor="factura-empresa">
             {/* Con alias se enseña el alias: dos emisoras pueden compartir razón
                 social y NIF —misma sociedad, distinto logo— y así se distinguen.
                 En la factura siempre sale la razón social real. */}
-            {issuers.map((iss) => <option key={iss.id} value={iss.id}>{iss.alias || iss.razon_social} — {iss.nif}{iss.serie ? ` · serie ${iss.serie}` : ''}{iss.es_default ? ' (por defecto)' : ''}</option>)}
-          </select>
+            <Select<number | null>
+              id="factura-empresa"
+              value={issuerId ?? null}
+              onChange={(v) => { if (v) setIssuerId(v); }}
+              ariaLabel="Empresa que emite"
+              options={issuers.map((iss) => ({
+                value: iss.id,
+                label: `${iss.alias || iss.razon_social} — ${iss.nif}${iss.serie ? ` · serie ${iss.serie}` : ''}${iss.es_default ? ' (por defecto)' : ''}`,
+              }))}
+            />
+          </Field>
           {fiscalMissing && !esProforma && (
             <div className={`mt-2 flex items-start gap-2 rounded-md px-3 py-2 text-xs border ${fiscalBlock ? 'bg-red-500/10 border-red-500/30 text-red-700 dark:text-red-400' : 'bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-400'}`}>
               <span className="font-bold">{fiscalBlock ? '⛔' : '⚠'}</span>
@@ -524,45 +543,47 @@ export default function InvoiceCreatePage() {
       {esRect && (
         <div className="bg-card border border-border rounded-lg p-4 space-y-3">
           <div>
-            <label className="text-xs font-bold uppercase text-muted-foreground">Factura a rectificar</label>
-            <p className="text-[11px] text-muted-foreground">El abono copia los datos de la factura original en negativo. Elige de esta sociedad emisora.</p>
-            <select value={rectOriginalId ?? ''} onChange={(e) => setRectOriginalId(e.target.value ? Number(e.target.value) : null)}
-              className="w-full h-9 px-2 mt-1 rounded border border-primary/40 bg-background text-foreground text-sm [&>option]:bg-background [&>option]:text-foreground">
-              <option value="">— elegir factura —</option>
-              {rectList.map((i) => (
-                <option key={i.id} value={i.id}>
-                  {i.codigo} · {i.cliente_nombre} · {new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(Number(i.total))}
-                </option>
-              ))}
-            </select>
-            {rectList.length === 0 && <p className="text-[11px] text-amber-600 mt-1">No hay facturas rectificables en esta sociedad.</p>}
+            <Field label="Factura a rectificar" required htmlFor="abono-factura"
+              hint="El abono copia los datos de la factura original en negativo. Elige de esta sociedad emisora.">
+              <Select<number | null>
+                id="abono-factura"
+                value={rectOriginalId ?? null}
+                onChange={setRectOriginalId}
+                ariaLabel="Factura a rectificar"
+                options={[
+                  { value: null, label: 'Elige la factura…' },
+                  ...rectList.map((i) => ({
+                    value: i.id,
+                    label: `${i.codigo} · ${i.cliente_nombre} · ${new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(Number(i.total))}`,
+                  })),
+                ]}
+              />
+            </Field>
+            {rectList.length === 0 && <p className="mt-1 px-1 text-secundario text-amber-600">No hay facturas rectificables en esta sociedad.</p>}
           </div>
           {rectOrig && (
             <div className="text-xs rounded-md border border-border bg-muted/30 px-3 py-2">
               Rectificando <strong>{rectOrig.codigo}</strong> — {rectOrig.cliente_nombre} · total {new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(Number(rectOrig.total))}
             </div>
           )}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2">
-              <label className="text-[11px] text-muted-foreground">Motivo del abono <span className="text-red-500">*</span></label>
-              <textarea value={rectMotivo} onChange={(e) => setRectMotivo(e.target.value)} rows={2}
+          <FilaCampos>
+            <Field label="Motivo del abono" required className="sm:col-span-2" htmlFor="abono-motivo">
+              <textarea autoComplete="off" id="abono-motivo" value={rectMotivo} onChange={(e) => setRectMotivo(e.target.value)} rows={2}
                 placeholder="Ej: anulación por error, devolución, corrección de importe…"
-                className={`w-full px-2 py-1.5 rounded border bg-background text-sm ${!rectMotivo.trim() ? 'border-red-300' : 'border-border'}`} />
-            </div>
-            <div>
-              <label className="text-[11px] text-muted-foreground">Importe a rectificar (opcional)</label>
-              <input type="number" step="0.01" value={rectParcial} onChange={(e) => setRectParcial(e.target.value)}
+                className={cn(inputClass, 'h-auto py-2 resize-none', !rectMotivo.trim() && 'border-red-300')} />
+            </Field>
+            <Field label="Importe a rectificar (opcional)" hint="Vacío = abono total. Rellena solo para un abono parcial." htmlFor="abono-parcial">
+              <input autoComplete="off" id="abono-parcial" type="number" step="0.01" value={rectParcial} onChange={(e) => setRectParcial(e.target.value)}
                 placeholder={rectOrig ? `Total: ${Number(rectOrig.total)}` : 'Vacío = total'}
-                className="w-full h-9 px-2 rounded border border-border bg-background text-sm" />
-              <p className="text-[10px] text-muted-foreground mt-0.5">Vacío = abono total. Rellena solo para un abono parcial.</p>
-            </div>
-          </div>
+                className={inputClass} />
+            </Field>
+          </FilaCampos>
         </div>
       )}
 
       {/* Tipo */}
       {!esRect && (<>
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {TIPOS.map((t) => {
           const Icon = t.icon;
           return (
@@ -570,7 +591,7 @@ export default function InvoiceCreatePage() {
               className={`text-left border rounded-lg p-3 transition ${tipo === t.key ? 'border-primary ring-2 ring-primary/20 bg-primary/5' : 'border-border hover:bg-muted'}`}>
               <Icon size={18} weight="bold" className={tipo === t.key ? 'text-primary' : 'text-muted-foreground'} />
               <div className="font-semibold text-sm mt-1">{t.label}</div>
-              <div className="text-[11px] text-muted-foreground">{t.desc}</div>
+              <div className="text-secundario text-muted-foreground">{t.desc}</div>
             </button>
           );
         })}
@@ -579,13 +600,11 @@ export default function InvoiceCreatePage() {
       {/* Cliente */}
       {tipo !== 'contado' && (
         <div className="bg-card border border-border rounded-lg p-4 space-y-3">
-          <div>
-            <label className="text-xs font-bold uppercase text-muted-foreground">Cliente</label>
-            <p className="text-[11px] text-muted-foreground">Buscá por nombre/email para traer sus datos; lo que falte lo completás abajo.</p>
-            <div className="relative mt-1">
+          <Field label="Cliente" htmlFor="factura-buscar-cliente" hint="Busca por nombre o email para traer sus datos; lo que falte lo completas abajo.">
+            <div className="relative">
               <MagnifyingGlass size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <input value={search} onChange={(e) => { setSearch(e.target.value); setLeadId(null); }} onFocus={() => hits.length && setOpenHits(true)}
-                placeholder="Buscar cliente o escribir nombre nuevo…" className="w-full h-9 pl-8 pr-3 rounded border border-border bg-background text-sm" />
+              <input autoComplete="off" id="factura-buscar-cliente" value={search} onChange={(e) => { setSearch(e.target.value); setLeadId(null); }} onFocus={() => hits.length && setOpenHits(true)}
+                placeholder="Buscar cliente o escribir nombre nuevo…" className={`${inputClass} pl-8`} />
               {openHits && hits.length > 0 && (
                 <div className="absolute z-10 mt-1 w-full bg-card border border-border rounded-md shadow-lg max-h-56 overflow-auto">
                   {hits.map((h) => (
@@ -596,39 +615,42 @@ export default function InvoiceCreatePage() {
                 </div>
               )}
             </div>
-          </div>
+          </Field>
 
           {/* Asociar el documento a una venta del cliente (p. ej. proforma de una
               conversión pendiente de pago). El concepto se escribe libre abajo. */}
           {!editId && leadId && leadConvs.length > 0 && (
-            <div className="mb-3">
-              <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Asociar a venta del cliente (opcional)</label>
-              <select value={assocConvId} onChange={(e) => setAssocConvId(e.target.value ? Number(e.target.value) : '')}
-                className="w-full h-9 px-2 rounded border border-border bg-background text-sm">
-                <option value="">— Sin asociar (documento suelto) —</option>
-                {leadConvs.map((c) => {
-                  const pend = Number(c.importe_total) - Number(c.importe_pagado);
-                  return (
-                    <option key={c.id} value={c.id}>
-                      {c.producto_contratado} · pendiente {pend.toFixed(2)}€{Number(c.importe_pagado) <= 0 ? ' (sin pago)' : ''}
-                    </option>
-                  );
-                })}
-              </select>
-              <p className="text-[10px] text-muted-foreground mt-0.5">Queda ligada a esa venta y sus pagos; el concepto de la factura puede ser distinto al del producto.</p>
-            </div>
+            <Field label="Asociar a venta del cliente (opcional)" className="mb-3" htmlFor="factura-venta"
+              hint="Queda ligada a esa venta y sus pagos; el concepto de la factura puede ser distinto al del producto.">
+              <Select<number | ''>
+                id="factura-venta"
+                value={assocConvId}
+                onChange={setAssocConvId}
+                ariaLabel="Asociar a venta del cliente"
+                options={[
+                  { value: '', label: 'Sin asociar (documento suelto)' },
+                  ...leadConvs.map((c) => {
+                    const pend = Number(c.importe_total) - Number(c.importe_pagado);
+                    return {
+                      value: c.id,
+                      label: `${c.producto_contratado} · pendiente ${pend.toFixed(2)}€${Number(c.importe_pagado) <= 0 ? ' (sin pago)' : ''}`,
+                    };
+                  }),
+                ]}
+              />
+            </Field>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
-            <Field label={tipo === 'empresa' ? 'Razón social' : 'Nombre y apellido'} value={nombre} onChange={(v) => { setNombre(v); if (v !== search) setSearch(v); }} required />
-            <Field label={tipo === 'empresa' ? 'NIF / CIF' : 'DNI / NIF'} value={nif} onChange={setNif} required />
-            <Field label="Dirección" value={direccion} onChange={setDireccion} full />
-            <Field label="Ciudad" value={ciudad} onChange={setCiudad} />
-            <Field label="Código postal" value={cp} onChange={setCp} />
-            <Field label="País" value={pais} onChange={(v) => { setPais(v); setLlevaIva(!!v.toLowerCase().match(/españa|espana|spain|^es$/)); }} />
-            <Field label="Email (opcional)" value={email} onChange={setEmail} />
-            <Field label="Teléfono (opcional)" value={telefono} onChange={setTelefono} />
-          </div>
+          <FilaCampos>
+            <CampoTexto label={tipo === 'empresa' ? 'Razón social' : 'Nombre y apellido'} value={nombre} onChange={(v) => { setNombre(v); if (v !== search) setSearch(v); }} required />
+            <CampoTexto label={tipo === 'empresa' ? 'NIF / CIF' : 'DNI / NIF'} value={nif} onChange={setNif} required />
+            <CampoTexto label="Dirección" value={direccion} onChange={setDireccion} full />
+            <CampoTexto label="Ciudad" value={ciudad} onChange={setCiudad} />
+            <CampoTexto label="Código postal" value={cp} onChange={setCp} />
+            <CampoTexto label="País" value={pais} onChange={(v) => { setPais(v); setLlevaIva(!!v.toLowerCase().match(/españa|espana|spain|^es$/)); }} />
+            <CampoTexto label="Email (opcional)" value={email} onChange={setEmail} />
+            <CampoTexto label="Teléfono (opcional)" value={telefono} onChange={setTelefono} />
+          </FilaCampos>
           {tipo === 'empresa' && !pais.toLowerCase().match(/españa|espana|spain|^es$/) && (
             <label className="flex items-start gap-2 mt-3 p-2.5 rounded-md border border-border bg-muted/20 cursor-pointer">
               <input type="checkbox" checked={viesOk} onChange={(e) => setViesOk(e.target.checked)} className="mt-0.5" />
@@ -644,25 +666,28 @@ export default function InvoiceCreatePage() {
 
       {/* Conceptos */}
       <div className="bg-card border border-border rounded-lg p-4 space-y-2">
-        <label className="text-xs font-bold uppercase text-muted-foreground">Conceptos</label>
-        {/* Cabecera de columnas para que se entienda qué es cada campo. */}
-        <div className="grid grid-cols-12 gap-2 items-center px-0.5">
-          <span className="col-span-6 text-[10px] font-semibold uppercase text-muted-foreground">Concepto</span>
-          <span className="col-span-2 text-[10px] font-semibold uppercase text-muted-foreground text-center">Cantidad</span>
-          <span className="col-span-2 text-[10px] font-semibold uppercase text-muted-foreground text-right">Precio unit.</span>
-          <span className="col-span-2 text-[10px] font-semibold uppercase text-muted-foreground text-right">Subtotal</span>
+        <p className="mb-1.5 px-1 text-tabla uppercase text-muted-foreground">Conceptos</p>
+        {/* Cabecera de columnas para que se entienda qué es cada campo. En el
+            móvil sobra: cada línea va en dos filas (el concepto arriba; la
+            cantidad, el precio y el subtotal debajo) y los campos dicen qué son
+            (#106). */}
+        <div className="hidden sm:grid grid-cols-12 gap-fila items-center px-0.5">
+          <span className="col-span-6 text-tabla uppercase text-muted-foreground">Concepto</span>
+          <span className="col-span-2 text-tabla uppercase text-muted-foreground text-center">Cantidad</span>
+          <span className="col-span-2 text-tabla uppercase text-muted-foreground text-right">Precio unit.</span>
+          <span className="col-span-2 text-tabla uppercase text-muted-foreground text-right">Subtotal</span>
         </div>
         {items.map((it, idx) => {
           const subtotal = (Number(it.cantidad) || 0) * (Number(it.precio_unitario) || 0);
           return (
-          <div key={idx} className="grid grid-cols-12 gap-2 items-center">
-            <input value={it.descripcion} onChange={(e) => setItems(items.map((x, i) => i === idx ? { ...x, descripcion: e.target.value } : x))} placeholder="Ej: Producto/servicio: servicio académico, [programa]" className="col-span-6 h-9 px-2 rounded border border-border bg-background text-sm" />
-            <input type="number" min="1" value={it.cantidad} onChange={(e) => setItems(items.map((x, i) => i === idx ? { ...x, cantidad: Number(e.target.value) } : x))} placeholder="1" className="col-span-2 h-9 px-2 rounded border border-border bg-background text-sm text-center" />
-            <div className="col-span-2 relative">
-              <input type="number" step="0.01" min="0" value={it.precio_unitario} onChange={(e) => setItems(items.map((x, i) => i === idx ? { ...x, precio_unitario: Number(e.target.value) } : x))} placeholder="0,00" className="w-full h-9 pl-2 pr-5 rounded border border-border bg-background text-sm text-right" />
+          <div key={idx} className="grid grid-cols-7 sm:grid-cols-12 gap-fila items-center">
+            <input autoComplete="off" value={it.descripcion} onChange={(e) => setItems(items.map((x, i) => i === idx ? { ...x, descripcion: e.target.value } : x))} placeholder="Ej: Producto/servicio: servicio académico, [programa]" aria-label={`Concepto ${idx + 1}`} className={`${inputClass} col-span-7 sm:col-span-6 min-w-0`} />
+            <input autoComplete="off" type="number" min="1" value={it.cantidad} onChange={(e) => setItems(items.map((x, i) => i === idx ? { ...x, cantidad: Number(e.target.value) } : x))} placeholder="1" aria-label={`Cantidad del concepto ${idx + 1}`} className={`${inputClass} col-span-2 min-w-0 text-center`} />
+            <div className="col-span-2 relative min-w-0">
+              <input autoComplete="off" type="number" step="0.01" min="0" value={it.precio_unitario} onChange={(e) => setItems(items.map((x, i) => i === idx ? { ...x, precio_unitario: Number(e.target.value) } : x))} placeholder="0,00" aria-label={`Precio unitario del concepto ${idx + 1}`} className={`${inputClass} pr-6 text-right`} />
               <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">{simboloMoneda}</span>
             </div>
-            <span className="col-span-1 text-sm text-right tabular-nums font-medium">{subtotal.toFixed(2)}&nbsp;{simboloMoneda}</span>
+            <span className="col-span-2 sm:col-span-1 text-sm text-right tabular-nums font-medium">{subtotal.toFixed(2)}&nbsp;{simboloMoneda}</span>
             <button onClick={() => setItems(items.length > 1 ? items.filter((_, i) => i !== idx) : items)} title="Quitar línea" className="col-span-1 text-muted-foreground hover:text-red-500 text-lg leading-none">×</button>
           </div>
           );
@@ -674,103 +699,132 @@ export default function InvoiceCreatePage() {
         <div className="flex flex-wrap items-center gap-3 pt-1">
           <button onClick={() => setItems([...items, { descripcion: '', cantidad: 1, precio_unitario: 0 }])} className="text-xs text-primary hover:underline">+ añadir concepto</button>
           {products.length > 0 && (
-            <div className="flex items-center gap-1.5 text-xs">
+            <div className="flex flex-wrap items-center gap-1.5 text-secundario">
               <span className="text-muted-foreground">o añade un curso:</span>
-              <select
-                value=""
-                onChange={(e) => {
-                  const p = products.find((x) => String(x.id) === e.target.value);
-                  if (!p) return;
-                  const line = { descripcion: `Producto/servicio: servicio académico, ${p.nombre}`, cantidad: 1, precio_unitario: Number(p.precio ?? 0) || 0 };
-                  // Si la única fila está vacía, la reemplaza; si no, añade.
-                  setItems((prev) => (prev.length === 1 && !prev[0].descripcion.trim() && !Number(prev[0].precio_unitario))
-                    ? [line] : [...prev, line]);
-                  e.target.value = '';
-                }}
-                className="h-8 px-2 rounded border border-border bg-background text-xs max-w-[280px]"
-              >
-                <option value="">— elegir del catálogo —</option>
-                {products.map((p) => (
-                  <option key={p.id} value={p.id}>{p.nombre}{p.precio ? ` · ${Number(p.precio)}€` : ''}</option>
-                ))}
-              </select>
+              {/* El desplegable del CRM, como el resto (#106). Elegir añade la
+                  línea y el desplegable vuelve a «elegir». */}
+              <div className="w-72 max-w-full">
+                <Select<number | null>
+                  value={null}
+                  onChange={(id) => {
+                    const p = products.find((x) => x.id === id);
+                    if (!p) return;
+                    const line = { descripcion: `Producto/servicio: servicio académico, ${p.nombre}`, cantidad: 1, precio_unitario: Number(p.precio ?? 0) || 0 };
+                    // Si la única fila está vacía, la reemplaza; si no, añade.
+                    setItems((prev) => (prev.length === 1 && !prev[0].descripcion.trim() && !Number(prev[0].precio_unitario))
+                      ? [line] : [...prev, line]);
+                  }}
+                  ariaLabel="Añadir un curso del catálogo"
+                  options={[
+                    { value: null, label: 'Elige del catálogo…' },
+                    ...products.map((p) => ({ value: p.id, label: `${p.nombre}${p.precio ? ` · ${Number(p.precio)}€` : ''}` })),
+                  ]}
+                />
+              </div>
             </div>
           )}
         </div>
       </div>
 
       {/* IVA + Pago */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="bg-card border border-border rounded-lg p-4 space-y-2">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-bold uppercase text-muted-foreground">IVA / Régimen fiscal</label>
-            {regimenSel && (
-              regimenAuto
-                ? <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-primary/10 text-primary" title="Resuelto por el motor fiscal según país, CP y tipo de cliente">🤖 automático</span>
-                : <button type="button" onClick={() => setRegimenAuto(true)} className="text-[10px] font-semibold text-primary hover:underline">↺ automático</button>
-            )}
-          </div>
-          {regimenes.length > 0 && (
-            <select value={regimenId ?? ''} onChange={(e) => pickRegimen(e.target.value ? Number(e.target.value) : null)}
-              className="w-full h-9 px-2 rounded border border-border bg-background text-foreground text-sm [&>option]:bg-background [&>option]:text-foreground">
-              <option value="">Manual (elegir IVA abajo)</option>
-              {regimenes.map((r) => <option key={r.id} value={r.id}>{r.nombre} — {r.aplica_iva ? `${Number(r.iva_pct)}% IVA` : 'sin IVA'}</option>)}
-            </select>
-          )}
-          {!regimenSel && (
-            <>
-              <label className="flex items-center gap-1.5 text-xs"><input type="checkbox" checked={llevaIva} onChange={(e) => setLlevaIva(e.target.checked)} /> Lleva IVA (21%)</label>
-              {!llevaIva && <p className="text-[11px] text-muted-foreground">Operación exenta de IVA.</p>}
-            </>
-          )}
-          {llevaIva && <label className="flex items-center gap-1.5 text-xs"><input type="checkbox" checked={ivaIncluido} onChange={(e) => setIvaIncluido(e.target.checked)} /> El precio ya incluye IVA</label>}
-          {regimenSel?.coletilla && <p className="text-[10px] text-muted-foreground border-t border-border/60 pt-1 mt-1">📎 Coletilla: <i>{regimenSel.coletilla}</i></p>}
+          <Field label="IVA / Régimen fiscal" htmlFor="factura-regimen"
+            hint={regimenSel?.coletilla ? `📎 Coletilla: ${regimenSel.coletilla}` : undefined}>
+            <div className="space-y-2">
+              {regimenSel && (
+                <div className="flex justify-end">
+                  {regimenAuto
+                    ? <span className="text-secundario font-bold px-1.5 py-0.5 rounded bg-primary/10 text-primary" title="Resuelto por el motor fiscal según país, CP y tipo de cliente">🤖 automático</span>
+                    : <button type="button" onClick={() => setRegimenAuto(true)} className="text-secundario font-semibold text-primary hover:underline">↺ automático</button>}
+                </div>
+              )}
+              {regimenes.length > 0 && (
+                <Select<number | null>
+                  id="factura-regimen"
+                  value={regimenId ?? null}
+                  onChange={pickRegimen}
+                  ariaLabel="IVA / Régimen fiscal"
+                  options={[
+                    { value: null, label: 'Manual (elegir IVA abajo)' },
+                    ...regimenes.map((r) => {
+                      const iva = r.aplica_iva ? `${Number(r.iva_pct)}% IVA` : 'sin IVA';
+                      // «España — 21% IVA» ya lo dice en el nombre: salía dos veces.
+                      return { value: r.id, label: r.nombre.includes(iva) ? r.nombre : `${r.nombre} — ${iva}` };
+                    }),
+                  ]}
+                />
+              )}
+              {!regimenSel && (
+                <>
+                  <label className="flex items-center gap-1.5 text-sm"><input type="checkbox" checked={llevaIva} onChange={(e) => setLlevaIva(e.target.checked)} /> Lleva IVA (21%)</label>
+                  {!llevaIva && <p className="px-1 text-secundario text-muted-foreground">Operación exenta de IVA.</p>}
+                </>
+              )}
+              {llevaIva && <label className="flex items-center gap-1.5 text-sm"><input type="checkbox" checked={ivaIncluido} onChange={(e) => setIvaIncluido(e.target.checked)} /> El precio ya incluye IVA</label>}
+            </div>
+          </Field>
         </div>
-        <div className="bg-card border border-border rounded-lg p-4 space-y-2">
-          <label className="text-xs font-bold uppercase text-muted-foreground">Pago</label>
-          <select value={metodoPago} onChange={(e) => setMetodoPago(e.target.value as 'transferencia')} className="w-full h-9 px-2 rounded border border-border bg-background text-sm">
-            <option value="transferencia">Transferencia bancaria</option><option value="deposito">Depósito bancario</option><option value="tarjeta">Tarjeta</option><option value="tarjeta_stripe">Tarjeta (Stripe)</option>
-            <option value="efectivo">Efectivo</option><option value="bizum">Bizum</option><option value="paypal">PayPal</option><option value="fraccionado">Fraccionado</option><option value="otro">Otro</option>
-          </select>
-          <div>
-            <label className="text-[11px] text-muted-foreground">Moneda</label>
-            <select value={moneda} onChange={(e) => setMoneda(e.target.value)} className="w-full h-9 px-2 rounded border border-border bg-background text-sm">
-              {CURRENCIES.map((c) => <option key={c.code} value={c.code}>{c.code} · {c.label}</option>)}
-            </select>
-          </div>
+        <div className="bg-card border border-border rounded-lg p-4 space-y-3">
+          <Field label="Método de pago" htmlFor="factura-metodo">
+            <Select<string>
+              id="factura-metodo"
+              value={metodoPago}
+              onChange={(v) => setMetodoPago(v as 'transferencia')}
+              ariaLabel="Método de pago"
+              options={[
+                { value: 'transferencia', label: 'Transferencia bancaria' },
+                { value: 'deposito', label: 'Depósito bancario' },
+                { value: 'tarjeta', label: 'Tarjeta' },
+                { value: 'tarjeta_stripe', label: 'Tarjeta (Stripe)' },
+                { value: 'efectivo', label: 'Efectivo' },
+                { value: 'bizum', label: 'Bizum' },
+                { value: 'paypal', label: 'PayPal' },
+                { value: 'fraccionado', label: 'Fraccionado' },
+                { value: 'otro', label: 'Otro' },
+              ]}
+            />
+          </Field>
+          <Field label="Moneda" htmlFor="factura-moneda">
+            <Select<string>
+              id="factura-moneda"
+              value={moneda}
+              onChange={setMoneda}
+              placeholder={moneda}
+              ariaLabel="Moneda"
+              options={CURRENCIES.map((c) => ({ value: c.code, label: `${c.code} · ${c.label}` }))}
+            />
+          </Field>
           {/* Doble moneda: al facturar en divisa, el importe en EUROS es obligatorio.
               Es el que manda en la contabilidad; la divisa es solo lo que se muestra. */}
           {moneda !== 'EUR' && (
             <div className="p-2.5 rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 space-y-1.5">
-              <p className="text-[10px] text-amber-800 dark:text-amber-300">
+              <p className="px-1 text-secundario text-amber-800 dark:text-amber-300">
                 Los conceptos van en <strong>{moneda}</strong> (importes manuales, sin conversión automática).
                 Indica también el total en euros: es el que cuenta para la contabilidad y los reportes.
                 En la factura saldrá <strong>{totalConceptos.toFixed(2)} {moneda} ({(Number(totalEur) || 0).toFixed(2)} €)</strong>.
               </p>
-              <div>
-                <label className="text-[11px] text-muted-foreground">Total en euros <span className="text-red-500">*</span></label>
-                <input type="number" step="0.01" min="0" value={totalEur} onChange={(e) => setTotalEur(e.target.value)}
+              <Field label="Total en euros" required htmlFor="factura-total-eur">
+                <input autoComplete="off" id="factura-total-eur" type="number" step="0.01" min="0" value={totalEur} onChange={(e) => setTotalEur(e.target.value)}
                   placeholder="0.00"
-                  className={`w-full h-9 px-2 rounded border bg-background text-sm ${!totalEur ? 'border-amber-400' : 'border-border'}`} />
-              </div>
+                  className={cn(inputClass, !totalEur && 'border-amber-400')} />
+              </Field>
             </div>
           )}
           {/* Fechas de la factura: se editan aquí, en el panel (antes había un botón aparte). */}
           {editId && puedeFechas && (
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-[11px] text-muted-foreground">Fecha de emisión</label>
-                <input type="date" value={fechaEmision} onChange={(e) => setFechaEmision(e.target.value)}
-                  className="w-full h-9 px-2 rounded border border-border bg-background text-sm" />
-              </div>
-              <div>
-                <label className="text-[11px] text-muted-foreground">Fecha de pago</label>
-                <input type="date" value={fechaPago} onChange={(e) => setFechaPago(e.target.value)}
-                  className="w-full h-9 px-2 rounded border border-border bg-background text-sm" />
-              </div>
-            </div>
+            <FilaCampos>
+              <Field label="Fecha de emisión" htmlFor="factura-fecha-emision">
+                <input id="factura-fecha-emision" type="date" value={fechaEmision} onChange={(e) => setFechaEmision(e.target.value)} className={inputClass} />
+              </Field>
+              <Field label="Fecha de pago" htmlFor="factura-fecha-pago">
+                <input id="factura-fecha-pago" type="date" value={fechaPago} onChange={(e) => setFechaPago(e.target.value)} className={inputClass} />
+              </Field>
+            </FilaCampos>
           )}
-          <textarea value={piePago} onChange={(e) => setPiePago(e.target.value)} rows={2} placeholder="Pie de pago (IBAN, vencimiento…)" className="w-full px-2 py-1.5 rounded border border-border bg-background text-sm" />
+          <Field label="Pie de pago" htmlFor="factura-pie">
+            <textarea autoComplete="off" id="factura-pie" value={piePago} onChange={(e) => setPiePago(e.target.value)} rows={2} placeholder="IBAN, vencimiento…" className={`${inputClass} h-auto py-2 resize-none`} />
+          </Field>
         </div>
       </div>
       </>)}
@@ -831,13 +885,21 @@ export default function InvoiceCreatePage() {
   );
 }
 
-function Field({ label, value, onChange, required, full }: { label: string; value: string; onChange: (v: string) => void; required?: boolean; full?: boolean }) {
+// Un campo de texto del cliente con el Field común (antes era una copia local
+// que se llamaba igual). `full` ocupa las dos columnas solo cuando las hay:
+// con `col-span-2` a secas, en el móvil abría una segunda columna (#106).
+function CampoTexto({ label, value, onChange, required, full }: { label: string; value: string; onChange: (v: string) => void; required?: boolean; full?: boolean }) {
+  // Un id propio para que la etiqueta enfoque su campo (#106).
+  const id = useId();
   return (
-    <div className={full ? 'col-span-2' : ''}>
-      <label className="text-[11px] text-muted-foreground">{label}{required && <span className="text-red-500"> *</span>}</label>
-      <input value={value} onChange={(e) => onChange(e.target.value)} className={`w-full h-9 px-2 rounded border bg-background text-sm ${required && !value ? 'border-red-300' : 'border-border'}`} />
-
-
-    </div>
+    <Field label={label} required={required} className={full ? 'sm:col-span-2' : undefined} htmlFor={id}>
+      <input autoComplete="off"
+        id={id}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        aria-invalid={required && !value ? true : undefined}
+        className={cn(inputClass, required && !value && 'border-red-300')}
+      />
+    </Field>
   );
 }

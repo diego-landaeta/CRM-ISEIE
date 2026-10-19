@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react';
 import { PencilSimple, X, Check } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
 import InfoField, { inputClass } from './InfoField';
+import Field from '@/shared/components/ui/Field';
+import FilaCampos from '@/shared/components/ui/FilaCampos';
+import Select from '@/shared/components/ui/Select';
 import type { Lead } from '@/shared/types';
 
 interface LeadInfoCardProps {
@@ -65,7 +68,7 @@ export default function LeadInfoCard({ lead, onUpdate }: LeadInfoCardProps) {
       toast({ title: 'Lead actualizado' });
       setEditMode(false);
     } catch (err: unknown) {
-      toast({ title: 'Error', description: err instanceof Error ? err.message : String(err), variant: 'destructive' });
+      toast({ title: 'No se pudo guardar el prospecto', description: err instanceof Error ? err.message : String(err), variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -115,41 +118,37 @@ export default function LeadInfoCard({ lead, onUpdate }: LeadInfoCardProps) {
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
-          <div>
-            <p className="text-xs text-muted-foreground mb-1.5">Nombre</p>
-            <input value={nombre} onChange={(e) => setNombre(e.target.value)} className={inputClass} />
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground mb-1.5">Email</p>
-            <input
+        // Las piezas comunes, como en «Nuevo prospecto» (#106).
+        <FilaCampos>
+          <Field label="Nombre" htmlFor="ficha-nombre">
+            <input autoComplete="off" id="ficha-nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} className={inputClass} />
+          </Field>
+          <Field label="Email" htmlFor="ficha-email">
+            <input autoComplete="off"
+              id="ficha-email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="correo@ejemplo.com"
               className={inputClass}
             />
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground mb-1.5">Teléfono</p>
-            <input value={telefono} onChange={(e) => setTelefono(e.target.value)} className={inputClass} />
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground mb-1.5">Canal</p>
-            <select value={canal} onChange={(e) => setCanal(e.target.value)} className={inputClass}>
-              {CANAL_OPTIONS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
-            </select>
-          </div>
-          <div className="sm:col-span-2">
-            <p className="text-xs text-muted-foreground mb-1.5">Notas</p>
-            <textarea
+          </Field>
+          <Field label="Teléfono" htmlFor="ficha-telefono">
+            <input autoComplete="off" id="ficha-telefono" value={telefono} onChange={(e) => setTelefono(e.target.value)} className={inputClass} />
+          </Field>
+          <Field label="Canal" htmlFor="ficha-canal">
+            <Select<string> id="ficha-canal" value={canal} onChange={setCanal} ariaLabel="Canal" options={CANAL_OPTIONS} placeholder={canal} />
+          </Field>
+          <Field label="Notas" htmlFor="ficha-notas" className="sm:col-span-2">
+            <textarea autoComplete="off"
+              id="ficha-notas"
               value={notas}
               onChange={(e) => setNotas(e.target.value)}
               rows={3}
-              className="w-full px-4 py-3 rounded-md border border-border bg-muted/50 text-sm outline-none resize-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground"
+              className={`${inputClass} h-auto py-2 resize-none`}
             />
-          </div>
-        </div>
+          </Field>
+        </FilaCampos>
       )}
     </div>
   );

@@ -4,6 +4,8 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import Select from '@/shared/components/ui/Select';
+import Field from '@/shared/components/ui/Field';
+import { inputClass } from '@/shared/lib/ui';
 import { Plus, PencilSimple, Trash, ArrowUp, ArrowDown, ListChecks, Users, Package, UserCheck } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
 import useFieldDefinitions from '../hooks/useFieldDefinitions';
@@ -27,10 +29,10 @@ const TABS: ReadonlyArray<TabDef> = [
 
 const TYPES: ReadonlyArray<{ v: FieldType; label: string }> = [
   { v: 'text',     label: 'Texto' },
-  { v: 'number',   label: 'Numero' },
+  { v: 'number',   label: 'Número' },
   { v: 'date',     label: 'Fecha' },
   { v: 'select',   label: 'Lista (opciones)' },
-  { v: 'boolean',  label: 'Si/No' },
+  { v: 'boolean',  label: 'Sí/No' },
   { v: 'textarea', label: 'Texto largo' },
 ];
 
@@ -83,11 +85,11 @@ export default function FieldDefinitionsPage() {
   async function save(): Promise<void> {
     if (!editing) return;
     if (!editing.label.trim()) {
-      toast({ title: 'Falta etiqueta', variant: 'destructive' }); return;
+      toast({ title: 'Falta la etiqueta', description: 'Escríbela en «Etiqueta visible»: es lo que se ve en el formulario.', variant: 'destructive' }); return;
     }
     const fieldKey = editing.field_key || toSnake(editing.label);
     if (!/^[a-z][a-z0-9_]*$/.test(fieldKey)) {
-      toast({ title: 'Clave invalida', description: 'Debe empezar con letra minuscula y solo a-z, 0-9, _.', variant: 'destructive' });
+      toast({ title: 'Clave no válida', description: 'En «Clave interna»: empieza por una letra minúscula y usa solo a-z, 0-9 y _.', variant: 'destructive' });
       return;
     }
     try {
@@ -116,7 +118,7 @@ export default function FieldDefinitionsPage() {
       setEditing(null);
       refetch();
     } catch (err: any) {
-      toast({ title: 'Error', description: err?.data?.error || err.message, variant: 'destructive' });
+      toast({ title: 'No se pudo guardar el campo', description: err?.data?.error || err.message, variant: 'destructive' });
     }
   }
 
@@ -127,7 +129,7 @@ export default function FieldDefinitionsPage() {
       toast({ title: 'Campo eliminado' });
       refetch();
     } catch (err: any) {
-      toast({ title: 'Error', description: err?.data?.error || err.message, variant: 'destructive' });
+      toast({ title: 'No se pudo eliminar el campo', description: err?.data?.error || err.message, variant: 'destructive' });
     } finally {
       setDeleteTarget(null);
     }
@@ -146,7 +148,7 @@ export default function FieldDefinitionsPage() {
       await api.reorderFields(activeProject.id, newOrder);
       refetch();
     } catch (err: any) {
-      toast({ title: 'Error', description: err?.data?.error || err.message, variant: 'destructive' });
+      toast({ title: 'No se pudo cambiar el orden', description: err?.data?.error || err.message, variant: 'destructive' });
     }
   }
 
@@ -193,7 +195,7 @@ export default function FieldDefinitionsPage() {
         <EmptyState
           icon={ListChecks}
           title={`Sin campos custom para ${tabMeta?.label.toLowerCase()}`}
-          description="Crea campos extra para capturar datos especificos del proyecto."
+          description="Crea campos extra para capturar datos específicos del proyecto."
           action={
             <button onClick={startCreate} className="flex items-center gap-1.5 h-9 px-4 rounded-xl bg-primary text-primary-foreground text-sm font-bold">
               <Plus size={14} weight="bold" /> Crear primer campo
@@ -261,7 +263,7 @@ export default function FieldDefinitionsPage() {
       {fields.length > 0 && (
         <section className="bg-card border border-border rounded-2xl p-4 space-y-3">
           <h3 className="text-sm font-bold uppercase text-muted-foreground">Preview</h3>
-          <p className="text-xs text-muted-foreground">Asi se veran al editar un {tabMeta?.label.toLowerCase().replace(/s$/, '') || 'registro'}.</p>
+          <p className="text-xs text-muted-foreground">Así se verán al editar un {tabMeta?.label.toLowerCase().replace(/s$/, '') || 'registro'}.</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {fields.map((f) => (
               <CustomFieldRenderer key={f.id} field={f} value="" onChange={() => {}} />
@@ -284,7 +286,7 @@ export default function FieldDefinitionsPage() {
         <ConfirmDialog
           open={!!deleteTarget}
           title="Eliminar campo"
-          message={`Eliminar el campo "${deleteTarget?.label}"? Los valores existentes en los registros NO se borraran, pero el campo dejara de aparecer en formularios.`}
+          message={`¿Eliminar el campo "${deleteTarget?.label}"? Los valores existentes en los registros NO se borrarán, pero el campo dejará de aparecer en formularios.`}
           confirmLabel="Eliminar"
           tone="destructive"
           onConfirm={confirmDelete}
@@ -320,55 +322,59 @@ function FieldEditorDialog({ field, onChange, onSave, onClose, isEdit }: FieldEd
           <h3 className="font-extrabold">{isEdit ? 'Editar campo' : 'Nuevo campo'}</h3>
           <button onClick={onClose} className="p-1.5 rounded hover:bg-muted" aria-label="Cerrar">x</button>
         </header>
+        {/* #106: el mismo formato que el resto de formularios. Antes cada campo
+            llevaba sus clases, con alturas distintas (36 y 40 px) y la ayuda a
+            11px; ahora Field pone la etiqueta y la ayuda, e inputClass el campo. */}
         <div className="p-5 space-y-4">
-          <label className="block">
-            <span className="text-xs font-bold text-muted-foreground">Etiqueta visible *</span>
-            <input
+          <Field label="Etiqueta visible" required htmlFor="campo-etiqueta">
+            <input autoComplete="off"
+              id="campo-etiqueta"
               autoFocus
               value={field.label}
               onChange={(e) => patch({ label: e.target.value })}
               placeholder="Ej: Edad del prospecto"
-              className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-muted/30 text-sm"
+              className={inputClass}
             />
-          </label>
+          </Field>
 
           {!isEdit && (
-            <label className="block">
-              <span className="text-xs font-bold text-muted-foreground">Clave interna (snake_case)</span>
-              <input
+            <Field
+              label="Clave interna (snake_case)"
+              htmlFor="campo-clave"
+              hint="Si lo dejas vacío se genera de la etiqueta. NO se puede cambiar después."
+            >
+              <input autoComplete="off"
+                id="campo-clave"
                 value={field.field_key}
                 onChange={(e) => patch({ field_key: e.target.value })}
                 onBlur={() => { if (!field.field_key && field.label) patch({ field_key: toSnake(field.label) }); }}
                 placeholder={field.label ? toSnake(field.label) : 'edad_prospecto'}
-                className="mt-1 w-full h-10 px-3 rounded-md border border-border bg-muted/30 text-sm font-mono"
+                className={`${inputClass} font-mono`}
               />
-              <p className="text-[11px] text-muted-foreground mt-1">Si lo dejas vacio se genera de la etiqueta. NO se puede cambiar despues.</p>
-            </label>
+            </Field>
           )}
 
-          <label className="block">
-            <span className="text-xs font-bold text-muted-foreground">Tipo</span>
-            <div className="mt-1">
-              <Select<FieldType>
-                value={field.type}
-                onChange={(v) => patch({ type: v, options: v === 'select' ? (field.options || { choices: [] }) : null })}
-                options={TYPES.map((t) => ({ value: t.v, label: t.label }))}
-                ariaLabel="Tipo de campo"
-              />
-            </div>
-          </label>
+          <Field label="Tipo" htmlFor="campo-tipo">
+            <Select<FieldType>
+              id="campo-tipo"
+              value={field.type}
+              onChange={(v) => patch({ type: v, options: v === 'select' ? (field.options || { choices: [] }) : null })}
+              options={TYPES.map((t) => ({ value: t.v, label: t.label }))}
+              ariaLabel="Tipo de campo"
+            />
+          </Field>
 
           {field.type === 'select' && (
-            <label className="block">
-              <span className="text-xs font-bold text-muted-foreground">Opciones (una por linea)</span>
-              <textarea
+            <Field label="Opciones (una por línea)" htmlFor="campo-opciones">
+              <textarea autoComplete="off"
+                id="campo-opciones"
                 value={(field.options?.choices || []).join('\n')}
                 onChange={(e) => setOptionsFromText(e.target.value)}
                 rows={4}
-                placeholder="Opcion 1&#10;Opcion 2"
-                className="mt-1 w-full px-3 py-2 rounded-md border border-border bg-muted/30 text-sm font-mono"
+                placeholder="Opción 1&#10;Opción 2"
+                className={`${inputClass} h-auto py-2 font-mono`}
               />
-            </label>
+            </Field>
           )}
 
           <label className="flex items-center gap-2 text-sm">

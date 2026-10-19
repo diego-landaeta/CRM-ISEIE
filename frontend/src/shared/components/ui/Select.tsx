@@ -13,6 +13,8 @@ interface SelectProps<T> {
   ariaLabel?: string;
   disabled?: boolean;
   className?: string;
+  /** El `id` del botón, para que la etiqueta de un `Field` (`htmlFor`) lo enfoque. */
+  id?: string;
 }
 
 export default function Select<T>({
@@ -24,6 +26,7 @@ export default function Select<T>({
   ariaLabel,
   disabled,
   className,
+  id,
 }: SelectProps<T>) {
   const [open, setOpen] = useState(false);
   const [highlighted, setHighlighted] = useState<number>(-1);
@@ -84,8 +87,24 @@ export default function Select<T>({
     }
   }
 
+  // Como el desplegable del navegador: una letra salta a la siguiente opción
+  // que empieza por ella (sin mirar tildes ni mayúsculas). En listas largas
+  // —el catálogo, las facturas, los campus— es como se elige con el teclado.
+  function saltarPorLetra(letra: string): void {
+    const plano = (t: string) => t.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+    const l = plano(letra);
+    const n = options.length;
+    for (let paso = 1; paso <= n; paso++) {
+      const i = ((highlighted < 0 ? -1 : highlighted) + paso) % n;
+      if (plano(options[i].label.replace(/^[^\p{L}\p{N}]+/u, '')).startsWith(l)) { setHighlighted(i); return; }
+    }
+  }
+
   function onListKey(e: ReactKeyboardEvent) {
-    if (e.key === 'ArrowDown') {
+    if (e.key.length === 1 && /[\p{L}\p{N}]/u.test(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault();
+      saltarPorLetra(e.key);
+    } else if (e.key === 'ArrowDown') {
       e.preventDefault();
       setHighlighted((h) => Math.min(h + 1, options.length - 1));
     } else if (e.key === 'ArrowUp') {
@@ -116,6 +135,7 @@ export default function Select<T>({
     <div className={cn('relative', className)}>
       <button
         ref={btnRef}
+        id={id}
         type="button"
         role="combobox"
         disabled={disabled}
@@ -126,9 +146,12 @@ export default function Select<T>({
         aria-controls={open ? listId : undefined}
         aria-label={ariaLabel}
         className={cn(
-          'w-full flex items-center rounded-lg border border-border bg-muted/30 text-foreground transition-colors',
+          // El mismo fondo, borde y esquinas que `inputClass` (#106): al lado de una
+          // casilla de texto, el desplegable salía casi blanco y más redondeado,
+          // y dos campos de la misma fila no se veían iguales.
+          'w-full flex items-center rounded-md border border-border bg-muted/50 text-foreground transition-colors',
           'focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary',
-          'hover:bg-muted/50 disabled:opacity-50 disabled:cursor-not-allowed',
+          'hover:bg-muted/70 disabled:opacity-50 disabled:cursor-not-allowed',
           triggerCls,
         )}
       >
@@ -159,7 +182,10 @@ export default function Select<T>({
                 key={String(opt.value) + ':' + idx}
                 role="option"
                 aria-selected={isSelected ? 'true' : 'false'}
-                onMouseEnter={() => setHighlighted(idx)}
+                // onMouseMove y no onMouseEnter: al saltar con una letra la lista se
+                // desplaza, pasa por debajo del ratón quieto y «entraba» en otra opción,
+                // que pisaba la elegida con el teclado (visto en la prueba a mano, #106).
+                onMouseMove={() => { if (highlighted !== idx) setHighlighted(idx); }}
                 onMouseDown={(e) => {
                   e.preventDefault();
                   commit(idx);

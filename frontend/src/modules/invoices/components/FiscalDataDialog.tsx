@@ -1,9 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { X, FloppyDisk } from '@phosphor-icons/react';
 import { invoicesApi } from '../api/invoices.api';
 import type { LeadFiscalData, InvoiceItem } from '../api/invoices.api';
 import { emitirPreguntandoSiPasa } from '../lib/masQueLoCobrado';
 import { toast } from '@/shared/hooks/useToast';
+
+import Field from '@/shared/components/ui/Field';
+import { inputClass } from '@/shared/lib/ui';
+import { cn } from '@/shared/lib/utils';
+import FilaCampos from '@/shared/components/ui/FilaCampos';
+import Select from '@/shared/components/ui/Select';
 
 interface Props {
   projectId: number;
@@ -105,12 +111,20 @@ export default function FiscalDataDialog({ projectId, leadId, conversionId, defa
     ? (nombre.trim() && metodoPago)
     : (nombre.trim() && nif.trim() && direccion.trim() && ciudad.trim() && cp.trim() && pais.trim() && metodoPago);
 
+  // Que diga QUÉ falta, con el nombre de cada campo, y no la lista entera.
+  function loQueFalta(asDraft: boolean): string[] {
+    if (isProforma || asDraft) return nombre.trim() ? [] : ['Nombre'];
+    return ([['Nombre', nombre], ['NIF / DNI / CIF', nif], ['Código postal', cp], ['Dirección fiscal', direccion], ['Ciudad', ciudad], ['País', pais]] as const)
+      .filter(([, v]) => !v.trim()).map(([k]) => k);
+  }
+  const faltanParaEmitir = loQueFalta(false);
+
   // asDraft=true → guarda la factura como BORRADOR (sin número fiscal) aunque
   // falten datos; solo exige el nombre. Se completa y emite desde Facturación.
   async function save(asDraft = false) {
     const draftOk = nombre.trim() && metodoPago;
     if (asDraft ? !draftOk : !required) {
-      toast({ title: 'Faltan datos', description: (isProforma || asDraft) ? 'Completa al menos el nombre del cliente.' : 'Completa nombre, NIF, dirección, ciudad, CP y país.', variant: 'destructive' });
+      toast({ title: 'Faltan datos', description: `En «Cliente»: ${loQueFalta(asDraft).join(' · ')}.`, variant: 'destructive' });
       return;
     }
     setSaving(true);
@@ -143,11 +157,11 @@ export default function FiscalDataDialog({ projectId, leadId, conversionId, defa
         });
         onCreated(res.data.id);
       } else {
-        toast({ title: 'Error', description: (res as { error?: string }).error || 'No se pudo generar', variant: 'destructive' });
+        toast({ title: isProforma ? 'No se pudo generar el presupuesto' : 'No se pudo emitir la factura', description: (res as { error?: string }).error || 'Inténtalo de nuevo en un momento.', variant: 'destructive' });
       }
     } catch (e: unknown) {
       const err = e as { data?: { error?: string }; message?: string };
-      toast({ title: 'Error', description: err?.data?.error || err?.message, variant: 'destructive' });
+      toast({ title: isProforma ? 'No se pudo generar el presupuesto' : 'No se pudo emitir la factura', description: err?.data?.error || err?.message, variant: 'destructive' });
     } finally { setSaving(false); }
   }
 
@@ -167,34 +181,36 @@ export default function FiscalDataDialog({ projectId, leadId, conversionId, defa
         ) : (
           <div className="p-4 space-y-3 text-sm">
             {issuers.length > 0 && (
-              <Section title="Empresa que emite">
-                <select value={issuerId ?? ''} onChange={e => setIssuerId(Number(e.target.value))}
-                  className="w-full h-9 px-2 rounded border border-primary/40 bg-background text-foreground text-sm font-medium [&>option]:bg-background [&>option]:text-foreground">
-                  {issuers.map(iss => (
-                    <option key={iss.id} value={iss.id}>{iss.razon_social} — {iss.nif}{iss.es_default ? ' (por defecto)' : ''}</option>
-                  ))}
-                </select>
-                <p className="text-[10px] text-muted-foreground mt-1">Esta factura se emite desde esta empresa. Solo las administradoras gestionan el listado en Configuración.</p>
+              <Section title="Emisor">
+                <Field label="Empresa que emite" htmlFor="datos-fiscales-empresa" hint="Esta factura se emite desde esta empresa. Solo las administradoras gestionan el listado en Configuración.">
+                  <Select<number | null>
+                    id="datos-fiscales-empresa"
+                    value={issuerId ?? null}
+                    onChange={(v) => { if (v) setIssuerId(v); }}
+                    ariaLabel="Empresa que emite"
+                    options={issuers.map((iss) => ({ value: iss.id, label: `${iss.razon_social} — ${iss.nif}${iss.es_default ? ' (por defecto)' : ''}` }))}
+                  />
+                </Field>
               </Section>
             )}
             <Section title="Cliente">
-              <Field label="Nombre" value={nombre} onChange={setNombre} required />
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="NIF / DNI / CIF" value={nif} onChange={setNif} required={!isProforma} />
-                <Field label="Código postal" value={cp} onChange={setCp} required={!isProforma} />
-              </div>
-              <Field label="Dirección fiscal" value={direccion} onChange={setDireccion} required={!isProforma} />
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Ciudad" value={ciudad} onChange={setCiudad} required={!isProforma} />
-                <Field label="País" value={pais} onChange={(v) => { setPais(v); setLlevaIva(!!v.toLowerCase().match(/españa|espana|spain|^es$/)); }} required={!isProforma} />
-              </div>
+              <CampoTexto label="Nombre" value={nombre} onChange={setNombre} required />
+              <FilaCampos>
+                <CampoTexto label="NIF / DNI / CIF" value={nif} onChange={setNif} required={!isProforma} />
+                <CampoTexto label="Código postal" value={cp} onChange={setCp} required={!isProforma} />
+              </FilaCampos>
+              <CampoTexto label="Dirección fiscal" value={direccion} onChange={setDireccion} required={!isProforma} />
+              <FilaCampos>
+                <CampoTexto label="Ciudad" value={ciudad} onChange={setCiudad} required={!isProforma} />
+                <CampoTexto label="País" value={pais} onChange={(v) => { setPais(v); setLlevaIva(!!v.toLowerCase().match(/españa|espana|spain|^es$/)); }} required={!isProforma} />
+              </FilaCampos>
               {/* Email y teléfono SOLO si el lead los tiene */}
-              {lead?.email && <Field label="Email (opcional)" value={email} onChange={setEmail} />}
-              {lead?.telefono && <Field label="Teléfono (opcional)" value={telefono} onChange={setTelefono} />}
+              {lead?.email && <CampoTexto label="Email (opcional)" value={email} onChange={setEmail} />}
+              {lead?.telefono && <CampoTexto label="Teléfono (opcional)" value={telefono} onChange={setTelefono} />}
             </Section>
 
             <Section title="IVA">
-              <div className="flex flex-wrap gap-3 items-center text-xs">
+              <div className="flex flex-wrap gap-3 items-center text-sm">
                 <label className="inline-flex items-center gap-1.5">
                   <input type="checkbox" checked={llevaIva} onChange={(e) => setLlevaIva(e.target.checked)} />
                   Lleva IVA (21%)
@@ -211,14 +227,16 @@ export default function FiscalDataDialog({ projectId, leadId, conversionId, defa
 
             <Section title="Conceptos">
               <div className="space-y-2">
+                {/* En el móvil cada concepto va en dos filas (la descripción arriba;
+                    la cantidad y el precio debajo) en vez de estrujarse (#106). */}
                 {items.map((it, idx) => (
-                  <div key={idx} className="grid grid-cols-12 gap-2 items-center">
-                    <input value={it.descripcion} onChange={(e) => setItems(items.map((x, i) => i === idx ? { ...x, descripcion: e.target.value } : x))}
-                      placeholder="Descripción" className="col-span-7 h-9 px-2 rounded border border-border bg-background text-sm" />
-                    <input type="number" value={it.cantidad} onChange={(e) => setItems(items.map((x, i) => i === idx ? { ...x, cantidad: Number(e.target.value) } : x))}
-                      placeholder="Cant" className="col-span-2 h-9 px-2 rounded border border-border bg-background text-sm" />
-                    <input type="number" step="0.01" value={it.precio_unitario} onChange={(e) => setItems(items.map((x, i) => i === idx ? { ...x, precio_unitario: Number(e.target.value) } : x))}
-                      placeholder="€" className="col-span-2 h-9 px-2 rounded border border-border bg-background text-sm" />
+                  <div key={idx} className="grid grid-cols-6 sm:grid-cols-12 gap-fila items-center">
+                    <input autoComplete="off" value={it.descripcion} onChange={(e) => setItems(items.map((x, i) => i === idx ? { ...x, descripcion: e.target.value } : x))}
+                      placeholder="Descripción" aria-label={`Concepto ${idx + 1}`} className={`${inputClass} col-span-6 sm:col-span-7 min-w-0`} />
+                    <input autoComplete="off" type="number" value={it.cantidad} onChange={(e) => setItems(items.map((x, i) => i === idx ? { ...x, cantidad: Number(e.target.value) } : x))}
+                      placeholder="Cant" aria-label={`Cantidad del concepto ${idx + 1}`} className={`${inputClass} col-span-2 min-w-0`} />
+                    <input autoComplete="off" type="number" step="0.01" value={it.precio_unitario} onChange={(e) => setItems(items.map((x, i) => i === idx ? { ...x, precio_unitario: Number(e.target.value) } : x))}
+                      placeholder="€" aria-label={`Precio del concepto ${idx + 1}`} className={`${inputClass} col-span-3 sm:col-span-2 min-w-0`} />
                     <button onClick={() => setItems(items.filter((_, i) => i !== idx))} className="col-span-1 text-muted-foreground hover:text-red-500 text-xs">×</button>
                   </div>
                 ))}
@@ -228,35 +246,45 @@ export default function FiscalDataDialog({ projectId, leadId, conversionId, defa
             </Section>
 
             <Section title="Pago">
-              <div>
-                <label className="text-[11px] text-muted-foreground">Método de pago <span className="text-red-500">*</span></label>
-                <select value={metodoPago} onChange={(e) => setMetodoPago(e.target.value as 'transferencia')}
-                  className="w-full h-9 px-2 rounded border border-border bg-background text-sm">
-                  <option value="transferencia">Transferencia bancaria</option>
-                  <option value="deposito">Depósito bancario</option>
-                  <option value="tarjeta">Tarjeta</option>
-                  <option value="tarjeta_stripe">Tarjeta (Stripe)</option>
-                  <option value="efectivo">Efectivo</option>
-                  <option value="bizum">Bizum</option>
-                  <option value="paypal">PayPal</option>
-                  <option value="fraccionado">Pago fraccionado</option>
-                  <option value="otro">Otro</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-[11px] text-muted-foreground">Pie de pago (instrucciones / IBAN / etc)</label>
-                <textarea value={piePago} onChange={(e) => setPiePago(e.target.value)} rows={3}
+              <Field label="Método de pago" required htmlFor="datos-fiscales-metodo">
+                <Select<string>
+                  id="datos-fiscales-metodo"
+                  value={metodoPago}
+                  onChange={(v) => setMetodoPago(v as 'transferencia')}
+                  ariaLabel="Método de pago"
+                  options={[
+                    { value: 'transferencia', label: 'Transferencia bancaria' },
+                    { value: 'deposito', label: 'Depósito bancario' },
+                    { value: 'tarjeta', label: 'Tarjeta' },
+                    { value: 'tarjeta_stripe', label: 'Tarjeta (Stripe)' },
+                    { value: 'efectivo', label: 'Efectivo' },
+                    { value: 'bizum', label: 'Bizum' },
+                    { value: 'paypal', label: 'PayPal' },
+                    { value: 'fraccionado', label: 'Pago fraccionado' },
+                    { value: 'otro', label: 'Otro' },
+                  ]}
+                />
+              </Field>
+              <Field label="Pie de pago (instrucciones / IBAN / etc)" htmlFor="datos-fiscales-pie">
+                <textarea autoComplete="off" id="datos-fiscales-pie" value={piePago} onChange={(e) => setPiePago(e.target.value)} rows={3}
                   placeholder="Ej: IBAN ES12 3456 …  /  Pago a 30 días"
-                  className="w-full px-2 py-1.5 rounded border border-border bg-background text-sm" />
-              </div>
+                  className={`${inputClass} h-auto py-2 resize-none`} />
+              </Field>
             </Section>
 
-            <textarea value={notas} onChange={(e) => setNotas(e.target.value)} rows={2} placeholder="Notas (opcional)"
-              className="w-full px-3 py-2 rounded-md border border-border bg-background text-sm" />
+            <Field label="Notas (opcional)" htmlFor="datos-fiscales-notas">
+              <textarea autoComplete="off" id="datos-fiscales-notas" value={notas} onChange={(e) => setNotas(e.target.value)} rows={2}
+                className={`${inputClass} h-auto py-2 resize-none`} />
+            </Field>
           </div>
         )}
 
-        <div className="p-3 border-t border-border flex justify-end gap-2 bg-muted/20">
+        <div className="p-3 border-t border-border flex flex-wrap items-center justify-end gap-2 bg-muted/20">
+          {!loading && faltanParaEmitir.length > 0 && (
+            <p role="status" className="mr-auto px-1 text-secundario text-muted-foreground">
+              Para {isProforma ? 'generarlo' : 'emitirla'}, falta en «Cliente»: {faltanParaEmitir.join(' · ')}.
+            </p>
+          )}
           <button onClick={onClose} className="h-9 px-3 rounded-md border border-border bg-card text-sm">Cancelar</button>
           {!isProforma && (
             <button onClick={() => save(true)} disabled={saving || !nombre.trim()}
@@ -278,18 +306,24 @@ export default function FiscalDataDialog({ projectId, leadId, conversionId, defa
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="border border-border rounded-md p-3 space-y-2">
-      <p className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">{title}</p>
+      <p className="text-tabla uppercase text-muted-foreground">{title}</p>
       {children}
     </div>
   );
 }
 
-function Field({ label, value, onChange, required }: { label: string; value: string; onChange: (v: string) => void; required?: boolean }) {
+function CampoTexto({ label, value, onChange, required }: { label: string; value: string; onChange: (v: string) => void; required?: boolean }) {
+  // Un id propio para que la etiqueta enfoque su campo (#106).
+  const id = useId();
   return (
-    <div>
-      <label className="text-[11px] text-muted-foreground">{label}{required && <span className="text-red-500"> *</span>}</label>
-      <input value={value} onChange={(e) => onChange(e.target.value)}
-        className={`w-full h-9 px-2 rounded border bg-background text-sm ${required && !value ? 'border-red-300' : 'border-border'}`} />
-    </div>
+    <Field label={label} required={required} htmlFor={id}>
+      <input autoComplete="off"
+        id={id}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        aria-invalid={required && !value ? true : undefined}
+        className={cn(inputClass, required && !value && 'border-red-300')}
+      />
+    </Field>
   );
 }

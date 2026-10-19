@@ -5,10 +5,12 @@ import PageHeader from '@/shared/components/ui/PageHeader';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
+import { avisoDeLoQueFalta, type Falta } from '@/shared/lib/loQueFalta';
 import { useConfirm } from '@/shared/components/ui/useConfirm';
 import { emailTemplatesApi, type EmailTemplate, type TemplateVariable } from '../api/templates.api';
+import Field from '@/shared/components/ui/Field';
+import { inputClass } from '@/shared/lib/ui';
 
-const inp = 'w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all';
 
 export default function EmailTemplatesPage() {
   const { user } = useAuth();
@@ -51,7 +53,7 @@ export default function EmailTemplatesPage() {
       setEditing(null);
       refresh();
     } catch (e: unknown) {
-      toast({ title: 'Error', description: e instanceof Error ? e.message : 'No se pudo guardar', variant: 'destructive' });
+      toast({ title: 'No se pudo guardar la plantilla', description: e instanceof Error ? e.message : undefined, variant: 'destructive' });
     }
   }
 
@@ -63,7 +65,7 @@ export default function EmailTemplatesPage() {
       toast({ title: 'Plantilla eliminada' });
       refresh();
     } catch (e: unknown) {
-      toast({ title: 'Error', description: e instanceof Error ? e.message : 'No se pudo eliminar', variant: 'destructive' });
+      toast({ title: 'No se pudo eliminar la plantilla', description: e instanceof Error ? e.message : undefined, variant: 'destructive' });
     }
   }
 
@@ -73,7 +75,7 @@ export default function EmailTemplatesPage() {
       const res = await emailTemplatesApi.render(t.id, activeProject.id);
       if (res.success && res.data) setPreviewHtml(res.data);
     } catch {
-      toast({ title: 'Error generando preview', variant: 'destructive' });
+      toast({ title: 'No se pudo generar la vista previa', variant: 'destructive' });
     }
   }
 
@@ -157,7 +159,7 @@ export default function EmailTemplatesPage() {
           <div className="bg-card rounded-xl border border-border shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-3 border-b border-border">
               <div>
-                <p className="text-[11px] text-muted-foreground">Asunto</p>
+                <p className="text-secundario text-muted-foreground">Asunto</p>
                 <h3 className="font-semibold text-sm">{previewHtml.subject}</h3>
               </div>
               <button onClick={() => setPreviewHtml(null)} aria-label="Cerrar" className="p-1.5 rounded-md hover:bg-muted">
@@ -187,10 +189,14 @@ function TemplateEditorDialog({ template, variables, onClose, onSave }: {
   const [saving, setSaving] = useState(false);
 
   async function submit() {
-    if (!name.trim() || !subject.trim() || !body.trim()) {
-      toast({ title: 'Faltan campos', description: 'Nombre, asunto y cuerpo son obligatorios', variant: 'destructive' });
-      return;
-    }
+    // Que diga CUÁLES faltan, con el nombre que se ve en pantalla, y con el
+    // mismo aviso que los demás formularios (#106).
+    const faltan: Falta[] = [];
+    if (!name.trim()) faltan.push({ title: 'Falta el nombre interno', description: 'Escríbelo en «Nombre interno».', que: 'el nombre en «Nombre interno»' });
+    if (!subject.trim()) faltan.push({ title: 'Falta el asunto', description: 'Escríbelo en «Asunto».', que: 'el asunto en «Asunto»' });
+    if (!body.trim()) faltan.push({ title: 'Falta el cuerpo', description: 'Escríbelo en «Cuerpo HTML».', que: 'el cuerpo en «Cuerpo HTML»' });
+    const falta = avisoDeLoQueFalta(faltan);
+    if (falta) { toast(falta); return; }
     setSaving(true);
     try {
       await onSave({ name: name.trim(), subject: subject.trim(), body_html: body, description: description.trim() || undefined });
@@ -213,31 +219,28 @@ function TemplateEditorDialog({ template, variables, onClose, onSave }: {
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Nombre interno *</label>
-            <input value={name} onChange={e => setName(e.target.value)} className={inp} placeholder="ej: Bienvenida tras conversion" maxLength={120} />
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Asunto *</label>
-            <input value={subject} onChange={e => setSubject(e.target.value)} className={inp} placeholder="Hola {{lead.nombre}}, ..." maxLength={500} />
+          <Field label="Nombre interno" required htmlFor="plantilla-nombre">
+            <input autoComplete="off" id="plantilla-nombre" value={name} onChange={e => setName(e.target.value)} className={inputClass} placeholder="ej: Bienvenida tras conversión" maxLength={120} />
+          </Field>
+          <Field label="Asunto" required htmlFor="plantilla-asunto">
+            <input autoComplete="off" id="plantilla-asunto" value={subject} onChange={e => setSubject(e.target.value)} className={inputClass} placeholder="Hola {{lead.nombre}}, ..." maxLength={500} />
             <VariablePicker variables={variables} onPick={tok => insertVar(tok, 'subject')} />
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Cuerpo HTML *</label>
-            <textarea
+          </Field>
+          <Field label="Cuerpo HTML" required htmlFor="plantilla-cuerpo">
+            <textarea autoComplete="off"
+              id="plantilla-cuerpo"
               value={body}
               onChange={e => setBody(e.target.value)}
               rows={12}
               maxLength={50000}
-              className="w-full px-3 py-2 rounded-md border border-border bg-muted/50 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 font-mono text-[13px]"
+              className={`${inputClass} h-auto py-2 resize-y font-mono`}
               placeholder="<p>Hola {{lead.nombre}},</p><p>...</p>"
             />
             <VariablePicker variables={variables} onPick={tok => insertVar(tok, 'body')} />
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Descripcion interna (opcional)</label>
-            <input value={description || ''} onChange={e => setDescription(e.target.value)} className={inp} placeholder="Cuando usar esta plantilla" maxLength={1000} />
-          </div>
+          </Field>
+          <Field label="Descripción interna (opcional)" htmlFor="plantilla-descripcion">
+            <input autoComplete="off" id="plantilla-descripcion" value={description || ''} onChange={e => setDescription(e.target.value)} className={inputClass} placeholder="Cuándo usar esta plantilla" maxLength={1000} />
+          </Field>
         </div>
 
         <div className="flex justify-end gap-2 px-5 py-3 border-t border-border bg-muted/20">

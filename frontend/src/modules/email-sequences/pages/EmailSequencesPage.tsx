@@ -5,7 +5,10 @@ import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import Select from '@/shared/components/ui/Select';
-import { Envelope, Plus, Trash, X, Play, Pause, FloppyDisk, FileText } from '@phosphor-icons/react';
+import Field from '@/shared/components/ui/Field';
+import FilaCampos from '@/shared/components/ui/FilaCampos';
+import { inputClass } from '@/shared/lib/ui';
+import { Envelope, Plus, Trash, X, Play, Pause, FloppyDisk } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
 import { emailTemplatesApi, type EmailTemplate } from '@/modules/email-templates/api/templates.api';
 
@@ -69,17 +72,18 @@ export default function EmailSequencesPage() {
       toast({ title: 'Guardado' });
       setEditing(null);
       load();
-    } catch (err: any) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
+    } catch (err: any) { toast({ title: 'No se pudo guardar la secuencia', description: err?.data?.error || 'Inténtalo de nuevo en un momento.', variant: 'destructive' }); }
   }
   async function handleToggle(s: EmailSequence): Promise<void> {
     try { await client.patch(`/secuencias-email/${s.id}`, { active: !s.active }); load(); }
-    catch (err: any) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
+    catch (err: any) { toast({ title: s.active ? 'No se pudo pausar la secuencia' : 'No se pudo reanudar la secuencia', description: err?.data?.error || 'Inténtalo de nuevo en un momento.', variant: 'destructive' }); }
   }
   function handleDelete(s: EmailSequence): void { setPendingDelete(s); }
   async function doDelete(): Promise<void> {
     if (!pendingDelete) return;
     try { await client.delete(`/secuencias-email/${pendingDelete.id}`); load(); }
-    catch { /* silencioso */ }
+    // Antes se callaba: la secuencia seguía en la lista y nadie sabía por qué (#106).
+    catch (err: any) { toast({ title: 'No se pudo eliminar la secuencia', description: err?.data?.error || 'Inténtalo de nuevo en un momento.', variant: 'destructive' }); }
     finally { setPendingDelete(null); }
   }
 
@@ -143,8 +147,8 @@ export default function EmailSequencesPage() {
       <Suspense fallback={null}>
         <ConfirmDialog
           open={pendingDelete !== null}
-          title="Eliminar secuencia?"
-          message="Se eliminara la secuencia y todos sus pasos."
+          title="¿Eliminar secuencia?"
+          message="Se eliminará la secuencia y todos sus pasos."
           confirmLabel="Eliminar"
           tone="destructive"
           onConfirm={doDelete}
@@ -184,6 +188,18 @@ function SequenceEditor({ seq, onSave, onClose }: SequenceEditorProps) {
   function addStep(): void { setS({ ...s, steps: [...s.steps, { delay_hours: 24, subject: '', body: '' }] }); }
   function removeStep(i: number): void { setS({ ...s, steps: s.steps.filter((_, idx) => idx !== i) }); }
 
+  // Sin nombre, el servidor la rechaza (es lo único que exige) y el aviso era
+  // genérico. Aquí se dice antes y dónde (#106). Lo demás se guarda como
+  // siempre: un paso sin asunto o sin cuerpo lo rellena el programador de
+  // envíos, así que no se bloquea.
+  function guardar(): void {
+    if (!s.nombre) {
+      toast({ title: 'Falta el nombre de la secuencia', description: 'Escríbelo en «Nombre de la secuencia».', variant: 'destructive' });
+      return;
+    }
+    onSave(s);
+  }
+
   return (
     <div className="fixed inset-0 !m-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
       <div role="dialog" aria-modal="true" aria-labelledby="seq-editor-title" className="bg-card rounded-2xl border border-border max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
@@ -197,37 +213,49 @@ function SequenceEditor({ seq, onSave, onClose }: SequenceEditorProps) {
             <X size={18} />
           </button>
         </div>
+        {/* #106: con etiqueta visible (antes solo el texto de ejemplo) y la misma
+            clase de campo que el resto del CRM; en el móvil, uno debajo de otro. */}
         <div className="p-5 space-y-4">
-          <input
-            value={s.nombre}
-            onChange={e => setS({ ...s, nombre: e.target.value })}
-            placeholder="Nombre de la secuencia"
-            aria-label="Nombre de la secuencia"
-            className="w-full h-9 px-3 rounded-lg border border-border bg-muted/30 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
-          />
-          <Select<TriggerEvent>
-            value={s.trigger_event}
-            onChange={(v) => setS({ ...s, trigger_event: v })}
-            options={TRIGGERS.map(t => ({ value: t.v, label: t.label }))}
-            ariaLabel="Evento que dispara la secuencia"
-          />
+          <FilaCampos>
+            <Field label="Nombre de la secuencia" required htmlFor="secuencia-nombre">
+              <input autoComplete="off"
+                id="secuencia-nombre"
+                value={s.nombre}
+                onChange={e => setS({ ...s, nombre: e.target.value })}
+                placeholder="Nombre de la secuencia"
+                className={inputClass}
+              />
+            </Field>
+            <Field label="Cuándo empieza" htmlFor="secuencia-disparador">
+              <Select<TriggerEvent>
+                id="secuencia-disparador"
+                value={s.trigger_event}
+                onChange={(v) => setS({ ...s, trigger_event: v })}
+                options={TRIGGERS.map(t => ({ value: t.v, label: t.label }))}
+                ariaLabel="Cuándo empieza"
+              />
+            </Field>
+          </FilaCampos>
 
           <div className="space-y-3 pt-2 border-t border-border">
-            <p className="text-xs font-bold uppercase text-muted-foreground">Pasos</p>
+            <p className="px-1 text-tabla uppercase text-muted-foreground">Pasos</p>
             {s.steps.map((step, i) => {
               const usingTemplate = step.template_id != null && step.template_id > 0;
               return (
               <div key={i} className="bg-muted/30 border border-border rounded-xl p-3 space-y-2">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-bold">Paso {i + 1}</span>
-                  <input
-                    type="number"
-                    min="0"
-                    value={step.delay_hours}
-                    onChange={e => updateStep(i, 'delay_hours', Number(e.target.value))}
-                    aria-label={`Horas de retraso del paso ${i + 1}`}
-                    className="w-20 h-8 px-2 rounded border border-border bg-card text-xs focus:outline-none focus:ring-2 focus:ring-primary/40"
-                  />
+                  {/* El ancho lo pone la envoltura, no una clase encima de inputClass (#106). */}
+                  <div className="w-20 flex-none">
+                    <input autoComplete="off"
+                      type="number"
+                      min="0"
+                      value={step.delay_hours}
+                      onChange={e => updateStep(i, 'delay_hours', Number(e.target.value))}
+                      aria-label={`Horas de retraso del paso ${i + 1}`}
+                      className={inputClass}
+                    />
+                  </div>
                   <span className="text-xs text-muted-foreground">horas tras anterior</span>
                   {s.steps.length > 1 && (
                     <button
@@ -240,38 +268,42 @@ function SequenceEditor({ seq, onSave, onClose }: SequenceEditorProps) {
                   )}
                 </div>
                 {templates.length > 0 && (
-                  <div className="flex items-center gap-1.5">
-                    <FileText size={11} className="text-muted-foreground" />
+                  // Con su Field y al tamaño de los demás campos (#106): era un
+                  // desplegable pequeño, con un icono y sin etiqueta.
+                  <Field label="Plantilla" htmlFor={`paso-${i}-plantilla`} hint={usingTemplate ? 'El asunto y el cuerpo los pone la plantilla.' : undefined}>
                     <Select<number | null>
+                      id={`paso-${i}-plantilla`}
                       value={step.template_id ?? null}
                       onChange={(v) => updateStep(i, 'template_id', v)}
                       options={[
-                        { value: null, label: '- Sin plantilla (usar texto manual) -' },
+                        { value: null, label: 'Sin plantilla (usar texto manual)' },
                         ...templates.map(t => ({ value: t.id as number, label: t.name })),
                       ]}
                       ariaLabel={`Plantilla del paso ${i + 1}`}
-                      size="sm"
-                      className="flex-1"
                     />
-                  </div>
+                  </Field>
                 )}
-                <input
-                  value={step.subject || ''}
-                  onChange={e => updateStep(i, 'subject', e.target.value)}
-                  placeholder={usingTemplate ? 'Ignorado - la plantilla provee el asunto' : 'Asunto'}
-                  disabled={usingTemplate}
-                  aria-label={`Asunto del paso ${i + 1}`}
-                  className="w-full h-8 px-2 rounded border border-border bg-card text-xs focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-40"
-                />
-                <textarea
-                  value={step.body || ''}
-                  onChange={e => updateStep(i, 'body', e.target.value)}
-                  placeholder={usingTemplate ? 'Ignorado - la plantilla provee el cuerpo' : 'Cuerpo HTML del email'}
-                  disabled={usingTemplate}
-                  rows={3}
-                  aria-label={`Cuerpo del paso ${i + 1}`}
-                  className="w-full px-2 py-1.5 rounded border border-border bg-card text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-40"
-                />
+                <Field label="Asunto" htmlFor={`paso-${i}-asunto`} disabled={usingTemplate}>
+                  <input autoComplete="off"
+                    id={`paso-${i}-asunto`}
+                    value={step.subject || ''}
+                    onChange={e => updateStep(i, 'subject', e.target.value)}
+                    placeholder={usingTemplate ? 'Ignorado — la plantilla provee el asunto' : 'Asunto'}
+                    disabled={usingTemplate}
+                    className={`${inputClass} disabled:opacity-40`}
+                  />
+                </Field>
+                <Field label="Cuerpo HTML" htmlFor={`paso-${i}-cuerpo`} disabled={usingTemplate}>
+                  <textarea autoComplete="off"
+                    id={`paso-${i}-cuerpo`}
+                    value={step.body || ''}
+                    onChange={e => updateStep(i, 'body', e.target.value)}
+                    placeholder={usingTemplate ? 'Ignorado — la plantilla provee el cuerpo' : 'Cuerpo HTML del email'}
+                    disabled={usingTemplate}
+                    rows={3}
+                    className={`${inputClass} h-auto py-2 font-mono disabled:opacity-40`}
+                  />
+                </Field>
               </div>
               );
             })}
@@ -280,7 +312,7 @@ function SequenceEditor({ seq, onSave, onClose }: SequenceEditorProps) {
               onClick={addStep}
               className="flex items-center gap-1 h-9 px-3 rounded bg-muted text-xs font-bold focus:outline-none focus:ring-2 focus:ring-primary/40"
             >
-              <Plus size={12} /> Anadir paso
+              <Plus size={12} /> Añadir paso
             </button>
           </div>
 
@@ -294,7 +326,7 @@ function SequenceEditor({ seq, onSave, onClose }: SequenceEditorProps) {
             </button>
             <button
               type="button"
-              onClick={() => onSave(s)}
+              onClick={guardar}
               className="flex items-center gap-1 h-9 px-4 rounded-lg bg-primary text-primary-foreground text-xs font-bold focus:outline-none focus:ring-2 focus:ring-primary/40"
             >
               <FloppyDisk size={14} weight="bold" /> Guardar

@@ -21,7 +21,7 @@ const euros = (n: string | number | undefined) =>
   n == null ? '' : Number(n).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
 
 export default function BuscadorCurso({
-  cursos, valor, onElegir, excluir = [], placeholder = 'Escribe para buscar un curso…', autoFocus = false,
+  cursos, valor, onElegir, excluir = [], placeholder = 'Escribe para buscar un curso…', autoFocus = false, id,
 }: {
   cursos: CursoElegible[];
   valor: number | null;
@@ -29,6 +29,8 @@ export default function BuscadorCurso({
   excluir?: number[];
   placeholder?: string;
   autoFocus?: boolean;
+  /** El `id` del campo de búsqueda, para que la etiqueta de un `Field` lo enfoque. */
+  id?: string;
 }) {
   const [texto, setTexto] = useState('');
   const [abierto, setAbierto] = useState(false);
@@ -83,7 +85,7 @@ export default function BuscadorCurso({
 
   if (elegido) {
     return (
-      <div className="flex items-center gap-2 h-9 px-3 rounded-md border border-border bg-background text-sm">
+      <div className="flex items-center gap-2 h-9 px-3 rounded-md border border-border bg-muted/50 text-sm">
         <span className="flex-1 truncate">{elegido.nombre}</span>
         {elegido.precio != null && (
           <span className="text-xs text-muted-foreground tabular-nums shrink-0">{euros(elegido.precio)}</span>
@@ -98,9 +100,12 @@ export default function BuscadorCurso({
 
   return (
     <div ref={caja} className="relative">
-      <div className="flex items-center gap-2 h-9 px-2.5 rounded-md border border-border bg-background">
+      {/* Como `inputClass` (#106): el mismo fondo y el mismo foco que el resto de
+          campos del formulario (la caja era blanca al lado de casillas grises). */}
+      <div className="flex items-center gap-2 h-9 px-2.5 rounded-md border border-border bg-muted/50 transition-all focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/10 focus-within:bg-card">
         <MagnifyingGlass size={14} className="text-muted-foreground shrink-0" />
-        <input
+        <input autoComplete="off"
+          id={id}
           value={texto}
           autoFocus={autoFocus}
           onChange={(e) => { setTexto(e.target.value); setAbierto(true); }}
