@@ -248,6 +248,11 @@ describe('qué forma de cobro dispara el webhook', () => {
       registrado_por: { id: 3, nombre: 'Quien apunta' },
     });
     expect(p.importe).toBe(450);   // arriba, el de ESTE cobro (21/10)
+    // Y plano, con los nombres de los escenarios de Make montados así (21/10).
+    expect(p).toMatchObject({
+      'Nombre completo': 'Ana', Email: 'ana@example.com', 'Teléfono': '+34600', 'Formación': 'Máster X',
+      Importe: 450, Moneda: 'EUR', 'Fecha de pago': '2026-10-15', Referencia: 'TRF-1', Comercial: 'Gestora',
+    });
     expect(typeof p.enviado_at).toBe('string');
     expect(envios[0].estado).toBe('enviado');
   });
