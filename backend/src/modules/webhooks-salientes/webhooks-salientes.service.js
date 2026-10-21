@@ -84,6 +84,18 @@ export function construirPayload(d, { evento, idempotencyKey, prueba = false }) 
     // El importe de ESTE cobro: la transferencia que se acaba de registrar, no el total
     // de la venta (ese va en venta.importe_total). Diego, 21/10/2026.
     importe: num(d.importe),
+    // Lo mismo, plano y con nombres en español, para los escenarios de Make montados así
+    // (Diego, 21/10/2026: el de Psiko espera «Nombre completo», «Email», «Formación», «Importe»…;
+    // «deben estar acomodados en todos»). «Importe» es el de ESTE cobro, no el total.
+    'Nombre completo': d.cliente_nombre || null,
+    Email: d.cliente_email || null,
+    'Teléfono': d.cliente_telefono || null,
+    'Formación': d.producto_catalogo || d.producto_contratado || null,
+    Importe: num(d.importe),
+    Moneda: 'EUR',
+    'Fecha de pago': d.fecha ? String(d.fecha).slice(0, 10) : null,
+    Referencia: d.referencia || null,
+    Comercial: d.gestora_nombre || null,
     cobro: {
       id: d.id,
       importe: num(d.importe),
