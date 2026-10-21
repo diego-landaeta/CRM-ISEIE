@@ -126,7 +126,11 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
   const [aplicaDescuento, setAplicaDescuento] = useState(false);
   // Estado del pago: 'total' SIEMPRE manda calc.total al registrar (no se queda
   // con un valor viejo si cambias el precio después), 'parcial' usa el input, 'none' = 0.
-  const [pagoMode, setPagoMode] = useState<'none' | 'parcial' | 'total'>('none');
+  // Diego, 21/10/2026: eligió «Transferencia» como forma de pago, se quedó en «Sin pago»
+  // —que venía marcado— y la venta salió sin cobro, sin factura y sin aviso a Make. Ya no
+  // viene nada marcado (null): hay que decir si ha pagado antes de registrar.
+  const [pagoMode, setPagoMode] = useState<'none' | 'parcial' | 'total' | null>(null);
+  const hayPago = pagoMode === 'parcial' || pagoMode === 'total';
   // Método REAL con el que se cobró la inicial cuando la venta es fraccionada.
   const [metodoInicial, setMetodoInicial] = useState<MetodoPago>('tarjeta');
   const [numCuotas, setNumCuotas] = useState(3);
@@ -268,7 +272,7 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
     if (!created) { setDocPhase('factura'); return; }
     try {
       let inv = (await invoicesApi.byConversion(created.id)).data || null;
-      if (!inv && pagoMode !== 'none') {
+      if (!inv && hayPago) {
         // la auto-emisión corre asíncrona en el server: pequeño reintento
         await new Promise((r) => setTimeout(r, 900));
         inv = (await invoicesApi.byConversion(created.id)).data || null;
@@ -362,6 +366,10 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
         toast({ title: 'Revisa importe y fecha de cada cuota', variant: 'destructive' });
         return;
       }
+    }
+    if (!pagoMode) {
+      toast({ title: 'Falta decir si ha pagado', description: 'Elige «Sin pago», «Parcial» o «Pagó TODO». La forma de pago sola no registra el cobro.', variant: 'destructive' });
+      return;
     }
     setSaving(true);
     try {
@@ -650,6 +658,9 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
                     }}
                     className={`flex-1 h-9 ${pagoMode === 'total' ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300' : 'bg-card text-muted-foreground hover:bg-muted/50'}`}>Pagó TODO</button>
                 </div>
+                {pagoMode === null && (
+                  <p className="text-[10px] text-amber-700 dark:text-amber-300 mt-1 font-medium">Elige si ha pagado: la forma de pago sola no registra el cobro.</p>
+                )}
                 {pagoMode === 'parcial' && (
                   <input type="number" step="0.01" min="0" value={form.importe_pagado} onChange={e => update('importe_pagado', e.target.value)}
                     placeholder="¿Cuánto pagó?" className={inputClass + ' mt-1.5'} autoFocus />
@@ -659,7 +670,7 @@ export default function ConversionDialog({ open, onClose, lead, projectId, onCre
                 )}
                 {/* Con plan fraccionado, el pago inicial necesita su método real
                     (la factura de ese pago lo usará; 'fraccionado' es el plan). */}
-                {pagoMode !== 'none' && form.metodo_pago === 'fraccionado' && (
+                {hayPago && form.metodo_pago === 'fraccionado' && (
                   <div className="mt-1.5">
                     <label className="text-[10px] text-muted-foreground">Método del pago inicial</label>
                     <select value={metodoInicial} onChange={(e) => setMetodoInicial(e.target.value as MetodoPago)}

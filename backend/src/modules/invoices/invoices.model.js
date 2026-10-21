@@ -1751,8 +1751,8 @@ export async function listVentasSinFactura({ projectId = null, projectIds = null
   */
   const lista = comoLista(projectId, projectIds);
   const { rows } = await query(
-    `SELECT c.id AS conversion_id, c.lead_id, l.nombre AS cliente_nombre,
-            c.producto_contratado, c.importe_total, c.fecha_conversion, c.metodo_pago
+    `SELECT c.id AS conversion_id, c.lead_id, l.nombre AS cliente_nombre, c.project_id,
+            c.producto_contratado, c.importe_total, c.importe_pagado, c.fecha_conversion, c.metodo_pago
        FROM conversions c
        JOIN leads l ON l.id = c.lead_id
        LEFT JOIN invoices i ON i.conversion_id = c.id AND i.estado <> 'cancelada' AND i.tipo <> 'proforma'

@@ -192,7 +192,7 @@ export async function borrar(req, res, next) {
 export async function prueba(req, res, next) {
   try {
     const w = await elWebhook(req, idDe(req.params.id));
-    const envio = await service.enviarPrueba(w);
+    const envio = await service.enviarPrueba(w, req.user?.userId ?? null);
     res.json({ success: true, data: envio });
   } catch (err) { next(err); }
 }
