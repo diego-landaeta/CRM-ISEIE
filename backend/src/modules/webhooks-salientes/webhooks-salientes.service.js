@@ -302,6 +302,12 @@ export async function enviarPrueba(webhook, userId = null) {
   } catch (err) {
     logger.warn({ err: err.message, webhookId: webhook.id }, 'webhook de transferencias: la prueba sale con datos de ejemplo');
   }
+  // Los correos de una prueba van a quien la lanza: el escenario de Make manda correos al
+  // cliente y a la gestora, y a un @example.com no puede escribir (Diego, 21/10/2026: «554
+  // Recipient domain is reserved»). Así le llegan a él y ve lo que va a recibir cada uno.
+  if (real?.registrado_email) {
+    real = { ...real, cliente_email: real.registrado_email, gestora_email: real.registrado_email };
+  }
   const payload = payloadDeEjemplo({ metodo, prueba: true, idempotencyKey, real });
   const envioId = await model.crearEnvio({
     webhookId: webhook.id, evento: payload.evento, idempotencyKey, prueba: true, payload,
