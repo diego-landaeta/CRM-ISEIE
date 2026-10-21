@@ -427,7 +427,9 @@ describe('reintentos y duplicados', () => {
     expect(p.empresa).toMatchObject({ razon_social: 'Lateral Thinking Solutions SL' });
     expect(p.cuenta_destino).toMatchObject({ iban: 'ES11 2', bic: 'BICY' });
     expect(p.registrado_por).toMatchObject({ id: 9, nombre: 'Diego' });
-    expect(p.cliente).toMatchObject({ nombre: 'Cliente de prueba', email: 'prueba@example.com' });
+    // Los correos de la prueba van a quien la lanza (Make no puede escribir a example.com).
+    expect(p.cliente).toMatchObject({ nombre: 'Cliente de prueba', email: 'd@example.com' });
+    expect(p.gestora.email).toBe('d@example.com');
     expect(p.venta.producto).toBe('Producto de prueba');
     expect(p.importe).toBe(250);
     expect(p.cobro.importe).toBe(250);
