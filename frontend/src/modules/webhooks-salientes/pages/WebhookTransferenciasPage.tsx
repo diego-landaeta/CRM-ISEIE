@@ -319,6 +319,8 @@ export default function WebhookTransferenciasPage() {
           version={versionRegistro}
           webhookId={verEnviosDe}
           onWebhookId={setVerEnviosDe}
+          projectId={projectId}
+          issuerId={conEmpresa ? activeIssuerId : null}
         />
       )}
 

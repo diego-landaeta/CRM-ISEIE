@@ -113,6 +113,9 @@ export const cambiarWebhookSchema = z.object({
 
 export const listarEnviosSchema = z.object({
   webhookId: z.coerce.number().int().positive().optional(),
+  // El ámbito elegido arriba (21/10): los envíos de una empresa no se ven desde otra.
+  projectId: z.coerce.number().int().positive().optional(),
+  issuerId: z.coerce.number().int().positive().optional(),
   estado: z.enum(['pendiente', 'enviando', 'enviado', 'fallido']).optional(),
   limit: z.coerce.number().int().positive().max(200).default(50),
 });

@@ -32,9 +32,12 @@ interface Props {
   /** El webhook elegido desde su tarjeta («Ver envíos»). */
   webhookId: number | null;
   onWebhookId: (id: number | null) => void;
+  /** El ámbito elegido arriba: solo los envíos de esa empresa o ese campus (21/10). */
+  projectId?: number | null;
+  issuerId?: number | null;
 }
 
-export default function RegistroEnvios({ webhooks, version, webhookId, onWebhookId }: Props) {
+export default function RegistroEnvios({ webhooks, version, webhookId, onWebhookId, projectId = null, issuerId = null }: Props) {
   const [envios, setEnvios] = useState<EnvioWebhook[]>([]);
   const [estado, setEstado] = useState<EstadoEnvio | ''>('');
   const [cargando, setCargando] = useState(false);
@@ -44,12 +47,12 @@ export default function RegistroEnvios({ webhooks, version, webhookId, onWebhook
   const cargar = useCallback(async () => {
     setCargando(true);
     try {
-      const r = await webhooksSalientesApi.envios({ webhookId, estado, limit: 50 });
+      const r = await webhooksSalientesApi.envios({ webhookId, estado, limit: 50, projectId, issuerId });
       if (r.success) setEnvios(lista<EnvioWebhook>(r.data));
     } catch (e: any) {
       toast({ title: 'No se pudo cargar el registro', description: e?.data?.error || e?.message, variant: 'destructive' });
     } finally { setCargando(false); }
-  }, [webhookId, estado]);
+  }, [webhookId, estado, projectId, issuerId]);
 
   useEffect(() => { cargar(); }, [cargar, version]);
 
