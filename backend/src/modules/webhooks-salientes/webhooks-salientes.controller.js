@@ -197,18 +197,28 @@ export async function prueba(req, res, next) {
   } catch (err) { next(err); }
 }
 
-/** GET /envios?webhookId=&estado=&limit= — los últimos, solo de los webhooks que puede ver. */
+/**
+ * GET /envios?webhookId=&estado=&limit=&projectId=&issuerId= — los últimos, solo de los webhooks
+ * que puede ver y, con una empresa o un campus elegidos arriba, solo de los de ese ámbito: los
+ * mismos que enseña la pantalla. Diego, 21/10: con ICTESS elegido salían los de Academia IA.
+ */
 export async function envios(req, res, next) {
   try {
     const f = validar(listarEnviosSchema, req.query);
+    const mios = await misCampus(req);
+    if (mios && !mios.length) return res.json({ success: true, data: [] });
+    const ambito = { projectId: f.projectId ?? null, issuerId: f.projectId ? null : (f.issuerId ?? null) };
+    const conAmbito = Boolean(ambito.projectId || ambito.issuerId);
     let webhookIds = null;
-    if (!esSuperadmin(req)) {
-      const mios = await misCampus(req);
-      webhookIds = mios.length ? (await model.listar({ misCampus: mios })).map((w) => w.id) : [];
+    if (mios || conAmbito) {
+      webhookIds = (await model.listar({ misCampus: mios, ...ambito })).map((w) => w.id);
       if (!webhookIds.length) return res.json({ success: true, data: [] });
     }
+    const campusContexto = conAmbito ? await model.campusDeContexto(ambito) : null;
     if (f.webhookId) await elWebhook(req, f.webhookId);
-    res.json({ success: true, data: await model.listarEnvios({ webhookIds, ...f }) });
+    res.json({ success: true, data: await model.listarEnvios({
+      webhookIds, campusContexto, webhookId: f.webhookId, estado: f.estado, limit: f.limit,
+    }) });
   } catch (err) { next(err); }
 }
 

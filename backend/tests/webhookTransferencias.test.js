@@ -44,7 +44,9 @@ vi.mock('../src/shared/config/db.js', () => ({
     if (sql.includes('FROM user_projects WHERE user_id = $1 AND active = true')) {
       return { rows: (USER_PROJECTS[params[0]] || []).map((project_id) => ({ project_id })) };
     }
-    if (sql.includes('SELECT id FROM projects WHERE sociedad_emisora_id = $1')) {
+    // Solo la consulta suelta (ámbito.js, campusDeContexto): el listado de webhooks por empresa la
+    // lleva dentro como subconsulta y no es esto.
+    if (sql.trim().startsWith('SELECT id FROM projects WHERE sociedad_emisora_id = $1')) {
       return { rows: Object.entries(CAMPUS).filter(([, e]) => e === params[0]).map(([id]) => ({ id: Number(id) })) };
     }
     if (sql.includes('SELECT 1 FROM projects WHERE id = $1')) return { rows: CAMPUS[params[0]] ? [{}] : [] };
@@ -83,7 +85,17 @@ vi.mock('../src/shared/config/db.js', () => ({
     if (sql.includes('FROM webhooks_salientes w')) {
       // listar: si viene la lista de campus de un admin, la regla de verdad.
       const mios = Array.isArray(params[0]) ? params[0] : null;
-      const lista = webhooks.filter((w) => {
+      // El ámbito de arriba (21/10): un campus o una empresa, como la consulta de verdad.
+      const ctx = params.find((p) => typeof p === 'number');
+      const porEmpresa = sql.includes('IN (SELECT id FROM projects WHERE sociedad_emisora_id');
+      const porCampus = !porEmpresa && sql.includes('sociedad_emisora_id FROM projects WHERE id');
+      const enAmbito = (w) => {
+        if (ctx == null || (!porEmpresa && !porCampus)) return true;
+        if (w.ambito === 'todas') return true;
+        if (porEmpresa) return w.ambito === 'empresa' ? w.issuer_id === ctx : CAMPUS[w.project_id] === ctx;
+        return w.ambito === 'campus' ? w.project_id === ctx : w.issuer_id === CAMPUS[ctx];
+      };
+      const lista = webhooks.filter(enAmbito).filter((w) => {
         if (!mios) return true;
         if (w.ambito === 'campus') return mios.includes(w.project_id);
         if (w.ambito === 'empresa') {
@@ -137,7 +149,10 @@ vi.mock('../src/shared/config/db.js', () => ({
     if (sql.includes('SELECT * FROM webhooks_salientes_envios WHERE id = $1')) {
       return { rows: envios.filter((e) => e.id === params[0]).map((e) => ({ ...e })) };
     }
-    if (sql.includes('FROM webhooks_salientes_envios e')) return { rows: envios.map((e) => ({ ...e })) };
+    if (sql.includes('FROM webhooks_salientes_envios e')) {
+      const ids = Array.isArray(params[0]) ? params[0] : null;
+      return { rows: envios.filter((e) => !ids || ids.includes(e.webhook_id)).map((e) => ({ ...e })) };
+    }
     if (sql.includes('/* prueba del webhook */')) {
       return { rows: [{ campus_id: params[0] ?? null, campus_nombre: params[0] ? 'ACADEMIA IA' : null,
         empresa_id: 5, empresa_razon_social: 'Lateral Thinking Solutions SL', empresa_nif: 'B2', iban: 'ES11 2', bic: 'BICY',
@@ -523,6 +538,22 @@ describe('quién puede', () => {
     envios.push({ id: 999, webhook_id: ajeno, estado: 'fallido', idempotency_key: 'k', payload: {} });
     const reenvio = await request(app).post('/api/webhooks-salientes/envios/999/reenviar').set('Authorization', token(BERTA));
     expect(reenvio.status).toBe(403);
+  });
+
+  it('con una empresa elegida arriba, los envíos de los webhooks de otra empresa no se ven (21/10)', async () => {
+    const deCedia = webhook({ ambito: 'campus', project_id: 1 });
+    const deIctess = webhook({ ambito: 'campus', project_id: 3 });
+    envios.push({ id: 801, webhook_id: deCedia, estado: 'enviado', idempotency_key: 'a', payload: {} });
+    envios.push({ id: 802, webhook_id: deIctess, estado: 'enviado', idempotency_key: 'b', payload: {} });
+    const ictess = await request(app).get(`/api/webhooks-salientes/envios?issuerId=${ICTESS}`).set('Authorization', token(MANUEL));
+    expect(ictess.status).toBe(200);
+    expect(ictess.body.data.map((e) => e.id)).toEqual([802]);
+    const campus1 = await request(app).get('/api/webhooks-salientes/envios?projectId=1').set('Authorization', token(MANUEL));
+    expect(campus1.body.data.map((e) => e.id)).toEqual([801]);
+    const todo = await request(app).get('/api/webhooks-salientes/envios').set('Authorization', token(MANUEL));
+    expect(todo.body.data.map((e) => e.id).sort()).toEqual([801, 802]);
+    const berta = await request(app).get(`/api/webhooks-salientes/envios?issuerId=${ICTESS}`).set('Authorization', token(BERTA));
+    expect(berta.body.data).toEqual([]);   // ICTESS no es de sus campus
   });
 
   it('una URL sin https se rechaza al guardar', async () => {
