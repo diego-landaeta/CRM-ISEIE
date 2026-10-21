@@ -293,7 +293,18 @@ export default function InvoicesPage() {
       <AvisoHuecosFacturas projectId={activeProject?.id} />
 
       {/* Solo sale en el listado normal: es el estado de la facturacion, no de las proformas. */}
-      {!esProformas && !esAbonos && <FacturacionAlDiaCard projectId={activeProject?.id} />}
+      {/* Con una empresa elegida arriba no hay un proyecto en la cabecera: una cola por campus
+          suyo. Antes salía «todo facturado» con 20 cobros esperando en ACADEMIA IA (21/10). */}
+      {!esProformas && !esAbonos && (porSociedad ? (
+        <>
+          {!filterProject && sociedadProjects.length > 1 && (
+            <p className="text-[11px] text-muted-foreground">Cola de facturación por campus: solo salen los que tienen cobros por facturar.</p>
+          )}
+          {(filterProject ? sociedadProjects.filter((p) => String(p.id) === filterProject) : sociedadProjects).map((p) => (
+            <FacturacionAlDiaCard key={p.id} projectId={p.id} titulo={p.nombre} ocultarSiVacia={!filterProject && sociedadProjects.length > 1} />
+          ))}
+        </>
+      ) : <FacturacionAlDiaCard projectId={activeProject?.id} />)}
 
       {/* Pestañas: facturas fiscales vs proformas (presupuestos) */}
       <div className="inline-flex rounded-lg border border-border bg-muted/30 p-1 text-sm font-semibold">
@@ -445,6 +456,13 @@ export default function InvoicesPage() {
                     <td className="px-3 py-2 text-muted-foreground">{v.producto_contratado || '—'}</td>
                     <td className="px-3 py-2 text-right tabular-nums font-semibold">{fmt(Number(v.importe_total))}</td>
                     <td className="px-3 py-2 text-right">
+                      {Number(v.importe_pagado) > 0 ? (
+                        // Ya cobrada: su factura sale de la cola (por pago y en orden de fecha), no de
+                        // una proforma. Diego, 21/10: «todas las que salen en proforma ya están pagadas».
+                        <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400" title="Ya tiene cobros: su factura sale de la cola de facturación, por orden de fecha.">
+                          Cobrada · factúrala desde la cola
+                        </span>
+                      ) : (
                       <InvoiceButton
                         // El campus de la VENTA: con una empresa elegida arriba no hay un
                         // proyecto en la cabecera y la proforma salía con un 400 (21/10).
@@ -454,6 +472,7 @@ export default function InvoicesPage() {
                         items={[{ descripcion: v.producto_contratado || 'Servicio', cantidad: 1, precio_unitario: Number(v.importe_total) }]}
                         onInvoiced={load}
                       />
+                      )}
                     </td>
                   </tr>
                 ))}

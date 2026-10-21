@@ -206,6 +206,8 @@ export interface VentaSinFactura {
   conversion_id: number;
   /** El campus de la venta (lo usa «Emitir proforma» cuando arriba hay una empresa). */
   project_id?: number | null;
+  /** Lo ya cobrado: con algún cobro, su factura sale de la cola, no de una proforma (21/10). */
+  importe_pagado?: number | string | null;
   lead_id: number;
   cliente_nombre: string;
   /** 'empresa' o 'particular'. Decide el rótulo del cliente en el PDF. */
