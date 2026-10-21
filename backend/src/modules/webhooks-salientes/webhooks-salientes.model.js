@@ -340,12 +340,31 @@ export async function rescatarAtascados(maxIntentos) {
 }
 
 /** Los últimos envíos, de los webhooks que la persona puede ver (`webhookIds` null = todos). */
-export async function listarEnvios({ webhookIds = null, webhookId = null, estado = null, limit = 50 } = {}) {
+/** Los campus del ámbito elegido arriba: un campus, o los de una empresa. */
+export async function campusDeContexto({ projectId = null, issuerId = null } = {}) {
+  if (projectId) return [Number(projectId)];
+  if (!issuerId) return null;
+  const { rows } = await query('SELECT id FROM projects WHERE sociedad_emisora_id = $1', [issuerId]);
+  return rows.map((r) => Number(r.id));
+}
+
+/**
+ * Con `campusContexto` (una empresa o un campus elegidos arriba), un webhook «de todas las
+ * empresas» solo enseña sus envíos de cobros de esos campus: sus pruebas y los cobros de otras
+ * empresas no (Diego, 21/10: «los registros de Make de una empresa no se pueden ver en otra»).
+ */
+export async function listarEnvios({ webhookIds = null, webhookId = null, estado = null, limit = 50, campusContexto = null } = {}) {
   const params = [];
   const conds = [];
   if (webhookIds) { params.push(webhookIds); conds.push(`e.webhook_id = ANY($${params.length}::int[])`); }
   if (webhookId) { params.push(webhookId); conds.push(`e.webhook_id = $${params.length}`); }
   if (estado) { params.push(estado); conds.push(`e.estado = $${params.length}`); }
+  if (campusContexto) {
+    params.push(campusContexto);
+    conds.push(`(w.ambito <> 'todas' OR e.payment_id IN (
+      SELECT cp.id FROM conversion_payments cp JOIN conversions c ON c.id = cp.conversion_id
+       WHERE c.project_id = ANY($${params.length}::int[])))`);
+  }
   params.push(limit);
   const { rows } = await query(
     `SELECT e.id, e.webhook_id, w.nombre AS webhook_nombre, e.payment_id, e.evento, e.idempotency_key,

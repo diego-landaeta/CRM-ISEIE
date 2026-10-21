@@ -92,9 +92,12 @@ export const webhooksSalientesApi = {
   borrar: (id: number) => client.delete(`/webhooks-salientes/${id}`),
   /** «Enviar prueba»: el payload de ejemplo con `"prueba": true`. Contesta con el envío. */
   probar: (id: number) => client.post(`/webhooks-salientes/${id}/prueba`, {}),
-  envios: (filtro: { webhookId?: number | null; estado?: EstadoEnvio | ''; limit?: number } = {}) => {
+  envios: (filtro: { webhookId?: number | null; estado?: EstadoEnvio | ''; limit?: number; projectId?: number | null; issuerId?: number | null } = {}) => {
     const q = new URLSearchParams();
     if (filtro.webhookId) q.set('webhookId', String(filtro.webhookId));
+    // El ámbito de arriba: los envíos de una empresa no se ven desde otra (21/10).
+    if (filtro.projectId) q.set('projectId', String(filtro.projectId));
+    else if (filtro.issuerId) q.set('issuerId', String(filtro.issuerId));
     if (filtro.estado) q.set('estado', filtro.estado);
     q.set('limit', String(filtro.limit || 50));
     return client.get(`/webhooks-salientes/envios?${q.toString()}`);
