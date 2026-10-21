@@ -53,8 +53,12 @@ export async function listar({ misCampus = null, projectId = null, issuerId = nu
   if (projectId) {
     params.push(projectId);
     const n = params.length;
+    // Un campus ve también los webhooks de los demás campus de SU empresa (Diego, 21/10: «los
+    // hooks de empresas se pueden ver entre campus de la misma empresa»). Nunca los de otra.
     conds.push(`(w.ambito = 'todas'
-      OR (w.ambito = 'campus' AND w.project_id = $${n})
+      OR (w.ambito = 'campus' AND (w.project_id = $${n} OR w.project_id IN (
+            SELECT pe.id FROM projects pe
+             WHERE pe.sociedad_emisora_id = (SELECT sociedad_emisora_id FROM projects WHERE id = $${n}))))
       OR (w.ambito = 'empresa' AND w.issuer_id = (SELECT sociedad_emisora_id FROM projects WHERE id = $${n})))`);
   } else if (issuerId) {
     params.push(issuerId);
@@ -340,9 +344,13 @@ export async function rescatarAtascados(maxIntentos) {
 }
 
 /** Los últimos envíos, de los webhooks que la persona puede ver (`webhookIds` null = todos). */
-/** Los campus del ámbito elegido arriba: un campus, o los de una empresa. */
+/** Los campus del ámbito elegido arriba: los de una empresa, o los de la empresa del campus elegido. */
 export async function campusDeContexto({ projectId = null, issuerId = null } = {}) {
-  if (projectId) return [Number(projectId)];
+  if (projectId) {
+    const { rows: [p] } = await query('SELECT sociedad_emisora_id FROM projects WHERE id = $1', [projectId]);
+    if (!p?.sociedad_emisora_id) return [Number(projectId)];
+    issuerId = p.sociedad_emisora_id;
+  }
   if (!issuerId) return null;
   const { rows } = await query('SELECT id FROM projects WHERE sociedad_emisora_id = $1', [issuerId]);
   return rows.map((r) => Number(r.id));
