@@ -41,7 +41,13 @@ function fecha(d: unknown) {
   return d ? new Date(String(d)).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
 }
 
-export default function FacturacionAlDiaCard({ projectId }: { projectId?: number | null }) {
+export default function FacturacionAlDiaCard({ projectId, titulo, ocultarSiVacia = false }: {
+  projectId?: number | null;
+  /** El campus, cuando hay una cola por campus (empresa elegida arriba). */
+  titulo?: string;
+  /** Con varias colas, la que no tiene nada por facturar no se pinta. */
+  ocultarSiVacia?: boolean;
+}) {
   const { user } = useAuth() as { user?: { role?: string; factura_manager?: boolean } };
   const puedeFacturar = !!user?.factura_manager || user?.role === 'superadmin';
   const [estado, setEstado] = useState<Estado | null>(null);
@@ -108,13 +114,14 @@ export default function FacturacionAlDiaCard({ projectId }: { projectId?: number
 
   if (!estado) return null;
   const cola = estado.cola || [];
+  if (ocultarSiVacia && (estado.pagos_sin_factura || 0) === 0 && (estado.proformas_pendientes?.length || 0) === 0) return null;
 
   return (
     <div className="bg-card border border-border rounded-lg p-4">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h3 className="font-semibold flex items-center gap-2">
-            <Receipt size={16} weight="bold" /> Cola de facturación
+            <Receipt size={16} weight="bold" /> Cola de facturación{titulo ? ` · ${titulo}` : ''}
           </h3>
           <p className="text-[11px] text-muted-foreground mt-1 max-w-[52ch]">
             Todo cobro sin factura sale aquí por orden de fecha, venga de Stripe o

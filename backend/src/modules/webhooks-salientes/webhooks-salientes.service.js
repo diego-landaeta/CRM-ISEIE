@@ -81,6 +81,9 @@ export function construirPayload(d, { evento, idempotencyKey, prueba = false }) 
     evento,
     prueba: Boolean(prueba),
     idempotency_key: idempotencyKey,
+    // El importe de ESTE cobro: la transferencia que se acaba de registrar, no el total
+    // de la venta (ese va en venta.importe_total). Diego, 21/10/2026.
+    importe: num(d.importe),
     cobro: {
       id: d.id,
       importe: num(d.importe),
@@ -125,19 +128,25 @@ export function construirPayload(d, { evento, idempotencyKey, prueba = false }) 
 }
 
 /** Un ejemplo inventado, con la misma forma. Para «Enviar prueba» y para la pantalla. */
-export function payloadDeEjemplo({ metodo = 'transferencia', prueba = true, idempotencyKey = 'prueba-ejemplo' } = {}) {
+export function payloadDeEjemplo({ metodo = 'transferencia', prueba = true, idempotencyKey = 'prueba-ejemplo', real = {} } = {}) {
+  // Lo que se sabe del webhook de verdad (campus, empresa, cuenta, quien lo lanza) manda
+  // sobre lo inventado; lo que no se sabe, se queda de ejemplo.
+  const deVerdad = Object.fromEntries(Object.entries(real || {}).filter(([, v]) => v != null && v !== ''));
   return construirPayload({
-    id: 12345, importe: '450.00', fecha: new Date().toISOString().slice(0, 10), metodo,
-    referencia: 'TRF-2026-000123', notas: 'Segunda cuota', divisa_moneda: null, importe_divisa: null,
-    venta_id: 678, producto_contratado: 'Máster en Psicología Clínica', producto_contratado_id: 91,
-    producto_catalogo: 'Máster en Psicología Clínica', importe_total: '1800.00', importe_pagado: '900.00',
-    cliente_id: 4321, cliente_nombre: 'Ana Pérez (ejemplo)', cliente_email: 'ana.perez@example.com',
-    cliente_telefono: '+34600000000', cliente_dni: '00000000T',
+    // Una transferencia de 250 € de una venta de 1.000 €: el importe que viaja es el de la
+    // transferencia registrada, no el total (Diego, 21/10/2026).
+    id: 12345, importe: '250.00', fecha: new Date().toISOString().slice(0, 10), metodo,
+    referencia: 'TRF-PRUEBA-0001', notas: 'Transferencia de prueba', divisa_moneda: null, importe_divisa: null,
+    venta_id: 678, producto_contratado: 'Producto de prueba', producto_contratado_id: null,
+    producto_catalogo: 'Producto de prueba', importe_total: '1000.00', importe_pagado: '250.00',
+    cliente_id: null, cliente_nombre: 'Cliente de prueba', cliente_email: 'prueba@example.com',
+    cliente_telefono: '+34600000000', cliente_dni: 'PRUEBA',
     campus_id: 1, campus_nombre: 'Campus de ejemplo',
     empresa_id: 2, empresa_razon_social: 'Empresa de ejemplo S.L.', empresa_nif: 'B00000000',
     iban: 'ES00 0000 0000 0000 0000 0000', bic: 'XXXXESMMXXX',
     gestora_id: 7, gestora_nombre: 'Gestora de ejemplo', gestora_email: 'gestora@example.com',
     registrado_id: 7, registrado_nombre: 'Gestora de ejemplo', registrado_email: 'gestora@example.com',
+    ...deVerdad,
   }, { evento: EVENTO_DE[metodo] || EVENTO_DE.transferencia, idempotencyKey, prueba });
 }
 
@@ -278,11 +287,28 @@ export function dispararCobro(paymentId, opciones = {}) {
   });
 }
 
-/** «Enviar prueba»: un payload de ejemplo con `"prueba": true`, un solo intento. */
-export async function enviarPrueba(webhook) {
+/**
+ * «Enviar prueba»: con `"prueba": true` y un solo intento. Lleva la misma forma que un aviso
+ * de verdad y lo que se sabe de verdad del webhook —su campus, su empresa, la cuenta de
+ * destino y quien la lanza—; el cliente y el producto son de prueba, y el importe es el de una
+ * transferencia, no el total de la venta (Diego, 21/10/2026: «para saber qué va a mandar»).
+ */
+export async function enviarPrueba(webhook, userId = null) {
   const metodo = (webhook.metodos || [])[0] || 'transferencia';
   const idempotencyKey = `prueba-${webhook.id}-${crypto.randomUUID()}`;
-  const payload = payloadDeEjemplo({ metodo, prueba: true, idempotencyKey });
+  let real = {};
+  try {
+    real = await model.datosParaPrueba({ projectId: webhook.project_id ?? null, issuerId: webhook.issuer_id ?? null, userId });
+  } catch (err) {
+    logger.warn({ err: err.message, webhookId: webhook.id }, 'webhook de transferencias: la prueba sale con datos de ejemplo');
+  }
+  // Los correos de una prueba van a quien la lanza: el escenario de Make manda correos al
+  // cliente y a la gestora, y a un @example.com no puede escribir (Diego, 21/10/2026: «554
+  // Recipient domain is reserved»). Así le llegan a él y ve lo que va a recibir cada uno.
+  if (real?.registrado_email) {
+    real = { ...real, cliente_email: real.registrado_email, gestora_email: real.registrado_email };
+  }
+  const payload = payloadDeEjemplo({ metodo, prueba: true, idempotencyKey, real });
   const envioId = await model.crearEnvio({
     webhookId: webhook.id, evento: payload.evento, idempotencyKey, prueba: true, payload,
   });

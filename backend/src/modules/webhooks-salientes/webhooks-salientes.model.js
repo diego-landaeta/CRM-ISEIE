@@ -189,6 +189,34 @@ export async function datosDelCobro(paymentId, userId = null) {
   return rows[0] || null;
 }
 
+/**
+ * Para «Enviar prueba»: el campus, la empresa, la cuenta de destino y quien la lanza, de verdad.
+ * Un webhook de empresa toma su primer campus; uno de «todas», nada (se queda de ejemplo). La
+ * cuenta sale igual que en un cobro real (`datosDelCobro`).
+ */
+export async function datosParaPrueba({ projectId = null, issuerId = null, userId = null } = {}) {
+  const { rows } = await query(
+    `/* prueba del webhook */
+     SELECT p.id AS campus_id, p.nombre AS campus_nombre,
+            s.id AS empresa_id, s.razon_social AS empresa_razon_social, s.nif AS empresa_nif,
+            COALESCE(NULLIF(TRIM(s.iban), ''), ic.iban) AS iban,
+            CASE WHEN NULLIF(TRIM(s.iban), '') IS NOT NULL THEN s.bic ELSE COALESCE(ic.bic, s.bic) END AS bic,
+            r.id AS registrado_id, r.nombre AS registrado_nombre, r.email AS registrado_email
+       FROM (SELECT 1) AS uno
+       LEFT JOIN projects p ON p.id = COALESCE($1::int,
+            (SELECT pp.id FROM projects pp WHERE pp.sociedad_emisora_id = $2::int ORDER BY pp.id LIMIT 1))
+       LEFT JOIN invoice_issuers s ON s.id = COALESCE($2::int, p.sociedad_emisora_id)
+       LEFT JOIN LATERAL (
+         SELECT ii.iban, ii.bic FROM invoice_issuers ii
+          WHERE ii.project_id = p.id AND ii.activo AND NULLIF(TRIM(ii.iban), '') IS NOT NULL
+          ORDER BY ii.es_default DESC, ii.id LIMIT 1
+       ) ic ON true
+       LEFT JOIN users r ON r.id = $3::int`,
+    [projectId, issuerId, userId]
+  );
+  return rows[0] || {};
+}
+
 /** Los webhooks encendidos que se disparan con un cobro de esa forma, ese campus y esa empresa. */
 export async function webhooksParaCobro({ metodo, projectId, issuerId }) {
   const { rows } = await query(
