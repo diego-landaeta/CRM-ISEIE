@@ -138,6 +138,11 @@ vi.mock('../src/shared/config/db.js', () => ({
       return { rows: envios.filter((e) => e.id === params[0]).map((e) => ({ ...e })) };
     }
     if (sql.includes('FROM webhooks_salientes_envios e')) return { rows: envios.map((e) => ({ ...e })) };
+    if (sql.includes('/* prueba del webhook */')) {
+      return { rows: [{ campus_id: params[0] ?? null, campus_nombre: params[0] ? 'ACADEMIA IA' : null,
+        empresa_id: 5, empresa_razon_social: 'Lateral Thinking Solutions SL', empresa_nif: 'B2', iban: 'ES11 2', bic: 'BICY',
+        registrado_id: params[2], registrado_nombre: params[2] ? 'Diego' : null, registrado_email: params[2] ? 'd@example.com' : null }] };
+    }
     return { rows: [] };
   }),
 }));
@@ -227,6 +232,7 @@ describe('qué forma de cobro dispara el webhook', () => {
       gestora: { nombre: 'Gestora', email: 'g@example.com' },
       registrado_por: { id: 3, nombre: 'Quien apunta' },
     });
+    expect(p.importe).toBe(450);   // arriba, el de ESTE cobro (21/10)
     expect(typeof p.enviado_at).toBe('string');
     expect(envios[0].estado).toBe('enviado');
   });
@@ -410,6 +416,22 @@ describe('reintentos y duplicados', () => {
     expect(p.prueba).toBe(true);
     expect(p.evento).toBe('cobro.deposito');
     expect(r.estado).toBe('fallido');   // la prueba no se reintenta
+  });
+
+  it('«Enviar prueba» lleva lo real del webhook, cliente y producto de prueba y el importe de la transferencia, no el total', async () => {
+    const w = webhook({ ambito: 'campus', project_id: 5 });
+    await service.enviarPrueba(webhooks.find((x) => x.id === w), 9);
+    const p = JSON.parse(fetchFalso.mock.calls[0][1].body);
+    expect(p.prueba).toBe(true);
+    expect(p.campus).toMatchObject({ id: 5, nombre: 'ACADEMIA IA' });
+    expect(p.empresa).toMatchObject({ razon_social: 'Lateral Thinking Solutions SL' });
+    expect(p.cuenta_destino).toMatchObject({ iban: 'ES11 2', bic: 'BICY' });
+    expect(p.registrado_por).toMatchObject({ id: 9, nombre: 'Diego' });
+    expect(p.cliente).toMatchObject({ nombre: 'Cliente de prueba', email: 'prueba@example.com' });
+    expect(p.venta.producto).toBe('Producto de prueba');
+    expect(p.importe).toBe(250);
+    expect(p.cobro.importe).toBe(250);
+    expect(p.venta.importe_total).toBe(1000);
   });
 });
 

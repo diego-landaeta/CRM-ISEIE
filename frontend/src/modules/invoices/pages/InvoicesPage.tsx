@@ -446,7 +446,9 @@ export default function InvoicesPage() {
                     <td className="px-3 py-2 text-right tabular-nums font-semibold">{fmt(Number(v.importe_total))}</td>
                     <td className="px-3 py-2 text-right">
                       <InvoiceButton
-                        projectId={pid}
+                        // El campus de la VENTA: con una empresa elegida arriba no hay un
+                        // proyecto en la cabecera y la proforma salía con un 400 (21/10).
+                        projectId={v.project_id ?? pid}
                         leadId={v.lead_id}
                         conversionId={v.conversion_id}
                         items={[{ descripcion: v.producto_contratado || 'Servicio', cantidad: 1, precio_unitario: Number(v.importe_total) }]}

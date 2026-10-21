@@ -204,6 +204,8 @@ export interface InvoiceTemplate {
 
 export interface VentaSinFactura {
   conversion_id: number;
+  /** El campus de la venta (lo usa «Emitir proforma» cuando arriba hay una empresa). */
+  project_id?: number | null;
   lead_id: number;
   cliente_nombre: string;
   /** 'empresa' o 'particular'. Decide el rótulo del cliente en el PDF. */
