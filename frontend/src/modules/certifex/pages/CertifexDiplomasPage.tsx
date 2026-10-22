@@ -1843,13 +1843,9 @@ function deForm(f: ProgramaForm): { programa: ProgramaOficial | null; error: str
   for (const [i, m] of f.modulos.entries()) {
     const titulo = m.titulo.replace(/\s+/g, ' ').trim();
     if (!titulo || titulo.length > 300) return { programa: null, error: `El módulo ${i + 1} necesita un título (hasta 300 caracteres).` };
-    if (m.horas.trim()) {
-      const h = entero(m.horas);
-      if (!Number.isInteger(h) || h < 0 || h > 2000) return { programa: null, error: `Las horas del módulo ${i + 1} van de 0 a 2.000 (número entero).` };
-      modulos.push({ titulo, horas: h });
-    } else {
-      modulos.push({ titulo });
-    }
+    // Sin horas por módulo (Diego, 22/10/2026: «no hay horas por módulos, sino en general»):
+    // las horas van solo en «Horas totales».
+    modulos.push({ titulo });
   }
   if (horas == null && modulos.length === 0) return { programa: null, error: 'Pon las horas totales o al menos un módulo.' };
   return { programa: { ...(horas != null ? { horas } : {}), modulos }, error: null };
@@ -1857,7 +1853,7 @@ function deForm(f: ProgramaForm): { programa: ProgramaOficial | null; error: str
 
 const mismoPrograma = (a: ProgramaOficial | null | undefined, b: ProgramaOficial | null | undefined) => {
   const n = (p: ProgramaOficial | null | undefined) => (p
-    ? JSON.stringify({ horas: p.horas ?? null, modulos: p.modulos.map((m) => ({ titulo: m.titulo, horas: m.horas ?? null })) })
+    ? JSON.stringify({ horas: p.horas ?? null, modulos: p.modulos.map((m) => m.titulo) })
     : null);
   return n(a) === n(b);
 };
@@ -2159,8 +2155,6 @@ function DialogoEditar({ c, alCerrar, alGuardar, alCambiarFirma, puedeSincroniza
   const correoN = correo.trim().toLowerCase();
   const errorCorreo = correoN && !CORREO.test(correoN) ? 'Ese correo no es válido.' : null;
   const prog = tocado ? deForm(form) : { programa: null, error: null };
-  const sumaModulos = form.modulos.reduce((s, m) => s + (/^\d+$/.test(m.horas.trim()) ? Number(m.horas) : 0), 0);
-  const horasTotales = /^\d+$/.test(form.horas.trim()) ? Number(form.horas) : null;
 
   const dniN = normalizarDni(dniD);
   const errorDni = errorDeDni(dniN);
@@ -2314,11 +2308,6 @@ function DialogoEditar({ c, alCerrar, alGuardar, alCambiarFirma, puedeSincroniza
               <div className="mt-3">
                 <div className="flex items-baseline justify-between gap-2">
                   <span className="text-xs font-medium text-muted-foreground">Módulos ({form.modulos.length})</span>
-                  {form.modulos.length > 0 && (
-                    <span className={cn('text-[11px]', horasTotales != null && sumaModulos !== horasTotales ? 'text-warning-soft-foreground' : 'text-muted-foreground')}>
-                      Suman {miles(sumaModulos)} h{horasTotales != null && sumaModulos !== horasTotales ? ` (el total dice ${miles(horasTotales)} h)` : ''}
-                    </span>
-                  )}
                 </div>
                 {form.modulos.length === 0 ? (
                   esDeMoodle(c)
@@ -2334,9 +2323,6 @@ function DialogoEditar({ c, alCerrar, alGuardar, alCambiarFirma, puedeSincroniza
                         <input value={m.titulo} maxLength={300} aria-label={`Título del módulo ${i + 1}`} placeholder="Título del módulo"
                           onChange={(e) => cambiarForm((f) => ({ ...f, modulos: f.modulos.map((x, j) => (j === i ? { ...x, titulo: e.target.value } : x)) }))}
                           className="h-9 min-w-0 flex-1 rounded-md border border-border bg-muted/30 px-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40" />
-                        <input value={m.horas} inputMode="numeric" aria-label={`Horas del módulo ${i + 1}`} placeholder="h"
-                          onChange={(e) => cambiarForm((f) => ({ ...f, modulos: f.modulos.map((x, j) => (j === i ? { ...x, horas: e.target.value } : x)) }))}
-                          className="h-9 w-20 flex-none rounded-md border border-border bg-muted/30 px-2.5 text-right text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-primary/40" />
                         <IconoAccion etiqueta={`Quitar el módulo ${i + 1}`} peligro onClick={() => cambiarForm((f) => ({ ...f, modulos: f.modulos.filter((_, j) => j !== i) }))}>
                           <Trash size={14} />
                         </IconoAccion>
