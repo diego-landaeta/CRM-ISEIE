@@ -104,6 +104,89 @@ export async function crear({ secreto, vuelta }) {
   return { id: c.id, llave, estado: c.estado };
 }
 
+// ─── Un Claude conectado a la manera de antes (Diego, 22/10) ─────────────
+//
+// POR QUÉ. Diego (22/10): «volvió la validación de 2 horas, y solo debe
+// validarse una vez». No volvió ninguna caducidad: lo que pasaba es que, desde
+// que la #326 llegó a producción (16/10), el CRM contesta 401 a todo Claude que
+// consulta con la URL sola, sin haber iniciado sesión (mcp.auth.js), y los
+// conectores de claude.ai que se añadieron ANTES no inician sesión por su
+// cuenta: del 19 al 22/10 hubo 67 rechazos así en MultiCRM y 57 en ISEIE, y ni
+// una petición de su inicio de sesión. Cada conversación nueva le volvía a
+// decir a la persona que conectara el CRM, y nadie le decía cómo. Solo Tony lo
+// rehízo (20/10) y desde entonces no se le ha vuelto a pedir nada.
+//
+// Así que aquí se le AVISA al dueño de la URL, a la campana, con lo que tiene
+// que hacer una sola vez. Se espera un poco antes de avisar porque un Claude
+// que se está conectando AHORA también entra la primera vez sin sesión: si en
+// la espera termina de conectarse (nace su conexión), no era uno de antes y no
+// se avisa. Como mucho un aviso al día por URL.
+
+const ESPERA_AVISO_MS = 2 * 60 * 1000;
+const VOLVER_A_MIRAR_MS = 60 * 60 * 1000;
+/** tokenId → { pendiente, mirado }: para no programar un aviso por cada 401 de la misma conversación. */
+const avisos = new Map();
+
+/**
+ * Lo llama mcp.auth.js cuando rechaza un Claude que trae la URL (o su llave)
+ * pero no la llave de una conexión. No espera a nada ni hace fallar la consulta.
+ * Devuelve true si ha programado la comprobación.
+ */
+export function avisarConectorAntiguo({ token_id: tokenId }, { esperaMs = ESPERA_AVISO_MS } = {}) {
+  const ahora = Date.now();
+  const previo = avisos.get(tokenId);
+  if (previo && (previo.pendiente || ahora - previo.mirado < VOLVER_A_MIRAR_MS)) return false;
+  const desde = new Date(ahora);
+  avisos.set(tokenId, { pendiente: true, mirado: ahora });
+  const reloj = setTimeout(() => {
+    comprobarConectorAntiguo(tokenId, desde)
+      .catch((err) => logger.warn({ err: err.message, tokenId }, 'MCP: no se pudo avisar del Claude conectado a la manera de antes'))
+      .finally(() => avisos.set(tokenId, { pendiente: false, mirado: Date.now() }));
+  }, esperaMs);
+  reloj.unref?.();
+  return true;
+}
+
+/** Para las pruebas: si hay un aviso programado para esta URL. */
+export const avisoPendiente = (tokenId) => avisos.get(tokenId)?.pendiente === true;
+
+/** Para las pruebas: olvida los avisos programados. */
+export function _olvidarAvisos() { avisos.clear(); }
+
+/**
+ * Pasada la espera: avisa al dueño si la URL sigue viva, si ese Claude no ha
+ * terminado de conectarse desde `desde` y si no se le avisó en las últimas 20 h.
+ * Devuelve true si ha avisado.
+ */
+export async function comprobarConectorAntiguo(tokenId, desde = new Date()) {
+  const { rows: [t] } = await query(
+    `SELECT t.id, t.user_id, t.nombre, c.label AS conexion
+       FROM mcp_tokens t
+       LEFT JOIN project_connectors c ON c.id = t.connector_id
+      WHERE t.id = $1 AND t.revoked_at IS NULL AND (t.expires_at IS NULL OR t.expires_at > NOW())
+        AND NOT EXISTS (SELECT 1 FROM mcp_conexiones x WHERE x.token_id = t.id AND x.created_at >= $2)
+        AND NOT EXISTS (SELECT 1 FROM admin_notifications n
+                         WHERE n.type = 'mcp_conector_antiguo' AND n.metadata->>'tokenId' = t.id::text
+                           AND n.created_at > NOW() - INTERVAL '20 hours')`,
+    [tokenId, desde]
+  );
+  if (!t) return false;
+  await notifyUsers({
+    targetUserIds: [t.user_id],
+    type: 'mcp_conector_antiguo',
+    title: 'Tu Claude tiene que conectarse una vez',
+    message: `Un Claude intenta consultar el CRM con tu URL «${t.conexion || t.nombre}» sin haber iniciado sesión (se conectó a la manera de antes) y el CRM no le da datos. `
+      + 'Hay que conectarlo UNA vez: en claude.ai o Claude Desktop, Configuración → Conectores → en el del CRM pulsa «Conectar» '
+      + '(si no sale, quítalo y vuelve a añadirlo con la misma URL); en Claude Code, claude mcp add --transport http crm <tu URL>. '
+      + 'Después autoriza ese Claude en Conexión → MCP y dale el código cuando te lo pida: no lo vuelve a pedir. '
+      + 'Si no has sido tú, alguien tiene tu URL: revócala.',
+    link_path: '/conexion/mcp',
+    metadata: { tokenId: t.id },
+  });
+  logger.info({ userId: t.user_id, tokenId: t.id }, 'MCP: aviso de Claude conectado a la manera de antes');
+  return true;
+}
+
 /**
  * La llave de una conexión que sigue viva, para el refresco de Claude: la misma
  * de siempre (ver `llaveDe`). null si la conexión ya no existe o la URL murió.
