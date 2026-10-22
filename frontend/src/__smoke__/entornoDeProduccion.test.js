@@ -29,8 +29,7 @@ const build = (extra = {}) => comprobarEntornoDeProduccion({
 });
 
 describe('El build de producción y su .env.production', () => {
-  it('el ejemplo versionado enciende el ranking (VITE_PROCESO_EN_PRUEBAS=true) y la beta', () => {
-    expect(EJEMPLO).toMatch(/^VITE_PROCESO_EN_PRUEBAS=true$/m);
+  it('el ejemplo versionado pide las cuatro y la beta encendida (lo que vale el proceso lo decide Diego)', () => {
     expect(EJEMPLO).toMatch(/^VITE_BETA_MODE=true$/m);
     expect(clavesDe(EJEMPLO)).toEqual(expect.arrayContaining([
       'VITE_API_URL', 'VITE_BETA_MODE', 'VITE_MODULOS_APAGADOS', 'VITE_PROCESO_EN_PRUEBAS',

@@ -19,7 +19,6 @@ import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import { toast } from '@/shared/hooks/useToast';
 import type { Client } from '@/shared/types';
 import ClientsFiltersBar from '../components/ClientsFiltersBar';
-import { PROCESO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 
 const SoftDeleteDialog = lazy(() => import('@/modules/leads/components/SoftDeleteDialog'));
 
@@ -384,7 +383,9 @@ export default function ClientsPage() {
 
       {/* Como va quien mira: su puesto en ventas y su tasa de
           conversion del mes. */}
-      {PROCESO_EN_PRUEBAS && <ComoVoy compacto />}
+      {/* El ranking de gestoras no es el proceso comercial: sin PROCESO_EN_PRUEBAS
+          (Diego, 22/10/2026; ver DashboardPage). */}
+      <ComoVoy compacto />
 
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <ClientsFiltersBar
