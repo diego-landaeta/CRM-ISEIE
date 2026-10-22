@@ -31,6 +31,7 @@ vi.mock('../src/modules/certifex/certifex.emisiones.js', () => Object.fromEntrie
 vi.mock('../src/modules/certifex/certifex.diplomas.js', () => Object.fromEntries(
   ['resumen', 'solicitudes', 'porAvisar', 'terminados', 'aprobarEmitir', 'emitir', 'rechazar', 'avisos', 'avisosRechazo',
     'revocar', 'corregir', 'editar', 'subirFirma', 'verFirma', 'nuevo', 'formaciones', 'sincronizarFormacion', 'diplomas',
+    'pedir',
   ].map((n) => [n, handler(`diplomas.${n}`)])));
 
 const { default: express } = await import('express');
@@ -55,7 +56,7 @@ const SUPER = token(55, 'superadmin');
 
 // El recorrido de emitir: lo que pasa con `diplomas.emit`.
 const EMITIR = [
-  ['post', '/diplomas/editar'], ['post', '/diplomas/aprobar-emitir'], ['post', '/diplomas/emitir'],
+  ['post', '/diplomas/editar'], ['post', '/diplomas/pedir'], ['post', '/diplomas/aprobar-emitir'], ['post', '/diplomas/emitir'],
   ['post', '/diplomas/avisos'], ['post', '/diplomas/nuevo'], ['get', '/diplomas/formaciones?centro=ICTESS'],
 ];
 // Lo que sigue siendo solo de administracion, aunque se emita.
@@ -88,7 +89,7 @@ describe('emitir diplomas: el recorrido', () => {
     expect(alcanzado).toEqual([]);
   });
 
-  it('una gestora que solo VE (diplomas.view): 403 al aprobar, emitir, editar, enviar y crear', async () => {
+  it('una gestora que solo VE (diplomas.view): 403 al aprobar, emitir, editar, pasar a pendientes, enviar y crear', async () => {
     for (const [metodo, ruta] of EMITIR) expect((await pedir(metodo, ruta, GESTORA_SOLO_VE)).status, ruta).toBe(403);
     expect(alcanzado).toEqual([]);
   });
@@ -96,7 +97,7 @@ describe('emitir diplomas: el recorrido', () => {
   it('una gestora con diplomas.emit: llega a cada paso del recorrido', async () => {
     for (const [metodo, ruta] of EMITIR) expect((await pedir(metodo, ruta, GESTORA_EMITE)).status, ruta).toBe(200);
     expect(alcanzado).toEqual([
-      'diplomas.editar', 'diplomas.aprobarEmitir', 'diplomas.emitir', 'diplomas.avisos', 'diplomas.nuevo', 'diplomas.formaciones',
+      'diplomas.editar', 'diplomas.pedir', 'diplomas.aprobarEmitir', 'diplomas.emitir', 'diplomas.avisos', 'diplomas.nuevo', 'diplomas.formaciones',
     ]);
   });
 

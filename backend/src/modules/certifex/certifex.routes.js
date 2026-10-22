@@ -55,13 +55,17 @@ router.get('/diplomas', verDiplomas, diplomas.diplomas);
 // dejan; puede hacerlo». Admin y superadmin por su rol, y ademas quien tenga
 // `diplomas.emit` (Configuracion › Roles, por rol o por persona, como `diplomas.view`).
 // Es el recorrido de emitir, entero: revisar los datos (nombre, DNI, correo, formacion y
-// programa), aprobar y emitir, reintentar la emision, enviar el diploma al alumno y «Nuevo diploma» (con su catalogo).
+// programa), «Pasar a pendientes» a quien no lo ha pedido, aprobar y emitir, reintentar
+// la emision, enviar el diploma al alumno y «Nuevo diploma» (con su catalogo).
 // Siempre en sus campus: cada controlador lo mira con certifex.alcance.js, igual que para
 // un admin. Rechazar, el aviso de rechazo, revocar, corregir lo emitido, la firma, el A3
 // y todo `/emisiones/*` siguen siendo solo de administracion (abajo).
 const emitirDiplomas = rolOPermiso(['admin', 'superadmin'], 'diplomas', 'emit');
 // Revisar antes de aprobar: nombre (en Certifex), DNI, correo del CRM, formacion y programa.
 router.post('/diplomas/editar', emitirDiplomas, diplomas.editar);
+// «Pasar a pendientes» (22/10/2026): Moodle tiene su matricula, pero no la da por
+// terminada o el alumno no ha pedido el diploma. Se pide desde aqui, sobre esa matricula.
+router.post('/diplomas/pedir', emitirDiplomas, diplomas.pedir);
 router.post('/diplomas/aprobar-emitir', emitirDiplomas, diplomas.aprobarEmitir);
 router.post('/diplomas/emitir', emitirDiplomas, diplomas.emitir);
 // «Enviar diploma al alumno»: el correo con el diploma, despues de ver el PDF.

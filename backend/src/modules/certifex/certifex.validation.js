@@ -285,6 +285,18 @@ export const nuevoDiplomaSchema = z.object({
   dni: dniObligatorio,
 });
 
+/**
+ * «Pasar a pendientes» (Diego, 22/10/2026: «que se pueda pasar de sin emitir a
+ * pendientes»): la matrícula de Moodle y su campus. Nada más: el nombre, el correo y el
+ * curso los pone el servidor con lo que dice Certifex de esa matrícula, no el panel.
+ * `cursoRef` solo sirve para encontrarla antes (si no casa, no se encuentra).
+ */
+export const pedirDiplomaSchema = z.object({
+  matriculaId: z.number().int().positive(),
+  centro,
+  cursoRef: z.number().int().positive().optional(),
+});
+
 /** Sincronizar el temario de una formación del catálogo con la página del curso (12/10). */
 export const sincronizarTemarioSchema = z.object({ centro, productoId: z.coerce.number().int().positive() });
 
