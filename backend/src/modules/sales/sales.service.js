@@ -554,12 +554,21 @@ function filtrosVentas({ projectId, from, to, responsableId, search }, startIdx 
 // mitad y mitad. Sin esto su lista enseñaba los 245 EUR completos mientras su
 // contador contaba media venta, y los numeros no cuadraban entre si.
 // Sin gestora (la vista de todo) el peso es 1: la venta es una para la casa.
+//
+// Devuelve una lista de parámetros NUEVA —la del filtro más la gestora— y no
+// toca la que recibe. Hasta el 22/10/2026 hacía `params.push()` sobre la del
+// filtro, y getResumenVentas reutilizaba esa misma lista en la consulta de las
+// cuotas, que no lleva PESO: al filtrar Ventas por gestora le mandaba 5
+// parámetros a una consulta que usa 4, y Postgres contestaba con un 500
+// («bind message supplies 5 parameters, but prepared statement requires 4»).
+// En producción de ISEIE, 13 veces ese mismo día. Ahora cada consulta pasa la
+// lista que de verdad usa: la del filtro, o la que devuelve esta función.
 function pesoDe(responsableId, params, idx) {
-  if (!responsableId) return { PESO: '1', idx };
-  params.push(Number(responsableId));
+  if (!responsableId) return { PESO: '1', params: [...params], idx };
   return {
     PESO: `COALESCE((SELECT r.peso FROM conversion_reparto r
                       WHERE r.conversion_id = cv.id AND r.vendedora_id = $${idx}), 1)`,
+    params: [...params, Number(responsableId)],
     idx: idx + 1,
   };
 }
@@ -585,8 +594,8 @@ const COBRADO_REAL = `(SELECT COALESCE(SUM(cp.importe), 0)
   arriba dejaría de cuadrar. `con_proforma` dice cuántas ya la tienen.
 */
 async function ventasSinCobro(filtros = {}) {
-  const { where, params, idx } = filtrosVentas(filtros, 1, { sinCobro: true });
-  const { PESO } = pesoDe(filtros.responsableId, params, idx);
+  const { where, params: delFiltro, idx } = filtrosVentas(filtros, 1, { sinCobro: true });
+  const { PESO, params } = pesoDe(filtros.responsableId, delFiltro, idx);
   const { rows: [s] } = await query(
     `SELECT COUNT(*)::int AS ventas,
             COALESCE(SUM(cv.importe_total * ${PESO}), 0) AS importe,
@@ -605,7 +614,7 @@ async function ventasSinCobro(filtros = {}) {
 // Resumen consolidado que acompana a la vista general de Ventas.
 export async function getResumenVentas(filtros = {}) {
   const { where, params, idx } = filtrosVentas(filtros);
-  const { PESO } = pesoDe(filtros.responsableId, params, idx);
+  const { PESO, params: conPeso } = pesoDe(filtros.responsableId, params, idx);
   const { rows } = await query(
     `SELECT COUNT(*)::int AS ventas,
             COUNT(DISTINCT cv.lead_id)::int AS clientes,
@@ -619,11 +628,13 @@ export async function getResumenVentas(filtros = {}) {
        FROM conversions cv
        LEFT JOIN leads l ON l.id = cv.lead_id
        ${where}`,
-    params
+    conPeso
   );
   const r = rows[0];
 
   // Cuotas: cuantas ventas van fraccionadas y como va el cobro de ese plan.
+  // Sin PESO, así que van los parámetros del filtro y no `conPeso`: el de
+  // la gestora sobraría y Postgres rechaza la consulta entera (22/10/2026).
   const { rows: cuotas } = await query(
     `SELECT COUNT(DISTINCT ci.conversion_id)::int AS ventas_con_plan,
             COUNT(*)::int AS cuotas,
@@ -701,8 +712,8 @@ export async function getVentasPorAsesora(filtros = {}) {
 export async function getVentasPorCliente(filtros = {}) {
   const page = Math.max(1, parseInt(filtros.page) || 1);
   const limit = Math.min(200, Math.max(1, parseInt(filtros.limit) || 50));
-  const { where, params, idx: idx0 } = filtrosVentas(filtros);
-  const { PESO, idx } = pesoDe(filtros.responsableId, params, idx0);
+  const { where, params: delFiltro, idx: idx0 } = filtrosVentas(filtros);
+  const { PESO, params, idx } = pesoDe(filtros.responsableId, delFiltro, idx0);
 
   // Las ventas del filtro se aislan en una CTE para poder contar sus cuotas
   // por cliente sin meter agregados dentro de subconsultas.
