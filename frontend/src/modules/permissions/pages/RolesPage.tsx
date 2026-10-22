@@ -35,9 +35,10 @@ const ROLES_CON_TABLERO: ReadonlyArray<{ key: string; label: string; desc: strin
 // project manager y tutor no tienen tablero (Diego, 09/10). Igual que el servidor.
 const editaTareas = (key: string) => key === 'admin' || key === 'colaborador' || key.startsWith('custom:');
 
-// «Diplomas (Certifex) · Ver» (#223) se da a los roles que no lo tienen por el
-// suyo: admin y superadmin ya lo ven, y tutor y colaborador no pueden. Igual que
-// el servidor (CLAVES_SUELTAS en permissions.service.js).
+// «Diplomas (Certifex) · Ver» (#223) y «· Emitir» (22/10/2026) se dan a los roles
+// que no los tienen por el suyo: admin y superadmin ya los tienen, y tutor y
+// colaborador no pueden. Igual que el servidor (CLAVES_SUELTAS en
+// permissions.service.js).
 const daDiplomas = (key: string) => key === 'gestor' || key === 'soporte' || key.startsWith('custom:');
 
 // Las acciones de Tareas en castellano, en la columna «Otros», y lo que permite
@@ -47,8 +48,8 @@ const ACCION_ES: Record<string, string> = {
   create: 'Crear', delete: 'Eliminar', close: 'Aprobar y cerrar', manage: 'Configurar',
   // Facturas de colaboradores (#202), como en MultiCRM.
   ver_todas: 'Ver todas', gestionar: 'Gestionar', anular: 'Anular', pagar: 'Marcar pagada', subir: 'Subir la suya',
-  // Diplomas de Certifex (#223): `diplomas.view`.
-  view: 'Ver',
+  // Diplomas de Certifex (#223): `diplomas.view`; y `diplomas.emit` (22/10/2026).
+  view: 'Ver', emit: 'Emitir',
 };
 const AYUDA: Record<string, string> = {
   'tasks.view_all': 'Ver el tablero de cualquier persona, «Todo el equipo» y sus métricas',
@@ -59,6 +60,9 @@ const AYUDA: Record<string, string> = {
   'tasks.delete': 'Archivar cualquier tarea y borrar comentarios de otros',
   'tasks.close': 'Aprobar o devolver desde «Por revisar», y cerrar o reabrir una tarea («Hecha»)',
   'tasks.manage': 'Configurar el tablero: columnas, áreas y proyectos propios',
+  // Diplomas de Certifex (#223 y 22/10/2026).
+  'diplomas.view': 'Ver la pantalla Diplomas en solo lectura, con sus campus',
+  'diplomas.emit': 'Revisar, pasar a Pendientes, aprobar y emitir y enviar el diploma al alumno, con sus campus. Rechazar, corregir y revocar, no',
 };
 const etiquetaAccion = (res: string, a: string) => (res === 'tasks' || res === 'facturas_colaborador' || res === 'diplomas' ? ACCION_ES[a] || a : a);
 
@@ -221,6 +225,17 @@ export default function RolesPage() {
 
               {puedeEditarTareas && daDiplomas(role.key) && (
                 <PermisoDiplomas
+                  clave="diplomas.view"
+                  roleKey={role.key}
+                  rolLabel={role.label}
+                  puedeCambiarRol={tieneRol('superadmin')}
+                />
+              )}
+
+              {/* Emitir (Diego, 22/10/2026: «que Dayana pueda emitir»): igual, por rol o por persona. */}
+              {puedeEditarTareas && daDiplomas(role.key) && (
+                <PermisoDiplomas
+                  clave="diplomas.emit"
                   roleKey={role.key}
                   rolLabel={role.label}
                   puedeCambiarRol={tieneRol('superadmin')}

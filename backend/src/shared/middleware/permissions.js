@@ -34,15 +34,25 @@ export function checkPermission(resource, action) {
  * Es lo que hace falta para «que lo vea quien no es admin» sin tocar lo que
  * hace el admin: Diplomas sigue siendo de administración por su rol, y además
  * lo VE a quien se le dé `diplomas.view`.
+ *
+ * `action` puede ser una lista: pasa quien tenga CUALQUIERA de ellas. Diego,
+ * 22/10/2026: «que Dayana pueda emitir, no la dejan; puede hacerlo». Quien
+ * EMITE diplomas (`diplomas.emit`) tiene que poder verlos aunque no le hayan
+ * dado también `diplomas.view`: las lecturas de Diplomas piden una u otra.
  */
 export function rolOPermiso(roles, resource, action) {
+  const acciones = Array.isArray(action) ? action : [action];
   return async (req, _res, next) => {
     try {
       if (!req.user) return next(new AppError('No autenticado', 401, 'AUTH_REQUIRED'));
       if (tieneRol(req.user, ...roles)) return next();
       const { userId, role, customRoleId } = req.user;
-      const puede = await resolvePermission(
-        userId, role, customRoleId ?? null, resource, action, req.user.roles_extra ?? []);
+      let puede = false;
+      for (const a of acciones) {
+        puede = await resolvePermission(
+          userId, role, customRoleId ?? null, resource, a, req.user.roles_extra ?? []);
+        if (puede) break;
+      }
       if (!puede) return next(new AppError('No tienes permiso para esta accion', 403, 'FORBIDDEN'));
       next();
     } catch (err) {

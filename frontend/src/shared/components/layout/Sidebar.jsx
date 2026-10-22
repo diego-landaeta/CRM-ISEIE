@@ -194,9 +194,10 @@ export const NAV_SECTIONS = [
       { to: '/matriculas', label: 'Matrículas', icon: UserCheck },
       // Diplomas de Certifex (#272): lo que piden los alumnos desde Moodle, aprobarlo,
       // enviarlo y revocarlo. Administración, como en MultiCRM, y además, para VERLO en
-      // solo lectura, quien tenga `diplomas.view` (#223, `oPermiso`). Se enciende por
-      // configuración, como Certificaciones (VITE_CERTIFEX_PANEL).
-      ...(CERTIFEX_PANEL ? [{ to: '/matriculas/diplomas', label: 'Diplomas', icon: Certificate, roles: ['superadmin', 'admin'], oPermiso: 'diplomas.view' }] : []),
+      // solo lectura, quien tenga `diplomas.view` (#223, `oPermiso`), y para emitir,
+      // quien tenga `diplomas.emit` (Diego, 22/10/2026: «que Dayana pueda emitir»). Se
+      // enciende por configuración, como Certificaciones (VITE_CERTIFEX_PANEL).
+      ...(CERTIFEX_PANEL ? [{ to: '/matriculas/diplomas', label: 'Diplomas', icon: Certificate, roles: ['superadmin', 'admin'], oPermiso: ['diplomas.view', 'diplomas.emit'] }] : []),
     ],
   },
   {
@@ -264,7 +265,9 @@ export function canSeeItem(item, role, soloColaboraciones, permisos, can) {
   const es = (...r) => r.some((x) => roles.includes(x));
   // «Por su rol o porque se le ha dado»: quien tiene el permiso la ve aunque su rol
   // no esté en `roles`. Lo que ve dentro lo recorta la pantalla (y la API).
-  const porPermiso = Boolean(item.oPermiso && typeof can === 'function' && can(item.oPermiso) === true);
+  // `oPermiso` puede ser una lista: basta con uno (Diplomas: ver O emitir).
+  const porPermiso = Boolean(item.oPermiso && typeof can === 'function'
+    && [].concat(item.oPermiso).some((p) => can(p) === true));
   if (item.apagable && APAGADOS.includes(item.apagable)) return false;
   // MCP de Claude: super admin y admin por su rol; el resto solo con la casilla.
   // Va ANTES del atajo de soporte y del recorte del tutor: «roles únicamente».
