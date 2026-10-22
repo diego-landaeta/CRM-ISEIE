@@ -12,8 +12,8 @@ import { conFirma, correoDe, firmaTransparente, guardarFirmaSubida, origenesDeFi
 import {
   listarSolicitudesSchema, listarDiplomasSchema, porAvisarSchema, aprobarEmitirSchema, rechazarSchema, emitirDiplomasSchema,
   avisosSchema, avisosRechazoSchema, revocarSchema, corregirSchema, editarSchema, formacionesSchema, listarTerminadosSchema,
-  sincronizarTemarioSchema, nuevoDiplomaSchema,
-  mensajeDeValidacion,
+  sincronizarTemarioSchema, nuevoDiplomaSchema, pedirDiplomaSchema,
+  mensajeDeValidacion, normalizarNombreDiploma,
 } from './certifex.validation.js';
 
 /**
@@ -586,6 +586,100 @@ export async function nuevo(req, res, next) {
   } catch (err) { next(err); }
 }
 
+// ─────────────────────────────────────────────── pasar a pendientes
+
+/**
+ * La fila de Certifex de una matrícula de ese campus, la haya pedido o no el alumno (null
+ * si no está). `cursoRef`, si llega, solo acota la búsqueda.
+ */
+async function candidatoDe(matriculaId, centro, cursoRef) {
+  const r = await recorrer('/candidatos', { estado: 'todas', centro, curso: cursoRef }, {
+    filtro: (c) => c.matriculaId === matriculaId && String(c.centro).toUpperCase() === centro,
+    completo: (hallados) => hallados.length >= 1,
+  });
+  return r.filas[0] ?? null;
+}
+
+/**
+ * POST /diplomas/pedir { matriculaId, centro, cursoRef? } — «Pasar a pendientes». Diego,
+ * 22/10/2026: «que se pueda pasar de sin emitir a pendientes». Hay alumnos con su
+ * matrícula de Moodle (y su nota) que no salen en Pendientes porque Moodle no los da por
+ * terminados o porque no han pedido el diploma: en Emisiones salen como «Sin emitir» o
+ * «Propuesto», y en «Terminaron sin pedir» solo se veían. Esto pide el diploma desde el
+ * CRM sobre ESA matrícula, como si lo pidiera el alumno: queda en «Por decidir» y desde
+ * ahí se revisa, se aprueba y se emite como cualquier otra.
+ *
+ * Se hace con el «Nuevo diploma» de Certifex (`POST /matriculas`), mandándole el curso
+ * con el nombre TAL CUAL está en Moodle: así Certifex engancha esa misma matrícula
+ * (`matriculaDelMismoCurso`) en vez de crear una del CRM. El nombre, el correo, el DNI y
+ * el curso salen de Certifex, nunca del panel. El nombre que se imprimirá es el de Moodle;
+ * se revisa con «Editar» antes de aprobar.
+ *
+ * Si Certifex no devuelve esa matrícula (`vinculadaMoodle` y el mismo `matriculaId`), NO
+ * se da por hecho: error claro, diciendo lo que ha hecho en su lugar. Si ya tenía diploma
+ * o ya estaba pedida, se dice y no se pide otra vez.
+ */
+export async function pedir(req, res, next) {
+  try {
+    const d = parsear(pedirDiplomaSchema, req.body);
+    const cod = d.centro.toUpperCase();
+    exigirCentro(await alcanceDe(req.user), cod, `${NO_ENCONTRADA} (${d.matriculaId})`);
+    const c = await candidatoDe(d.matriculaId, cod, d.cursoRef);
+    if (!c) throw new AppError(`${NO_ENCONTRADA} (${d.matriculaId})`, 404, 'NOT_FOUND');
+    if (c.nexpediente) {
+      throw new AppError(`Ya tiene el diploma emitido (${c.nexpediente}): está en Emitidos.`, 409, 'YA_EMITIDO');
+    }
+    if (c.solicitud) {
+      throw new AppError('Ya está pedido: búscalo en Pendientes (o en Rechazados, si se rechazó).', 409, 'YA_PEDIDO');
+    }
+    // Lo creado desde el CRM («Nuevo diploma») no es de Moodle: no hay matrícula que enganchar.
+    if (Number(c.curso?.ref) >= REF_CURSO_CRM) {
+      throw new AppError('Esta matrícula no viene de Moodle: se creó desde el CRM. Búscala en Pendientes.', 409, 'NO_ES_DE_MOODLE');
+    }
+    const email = String(c.titular?.email ?? '').trim().toLowerCase() || null;
+    const dni = String(c.titular?.dni ?? '').trim() || null;
+    if (!email && !dni) {
+      throw new AppError('Este alumno no tiene correo ni DNI en Moodle: Certifex no puede encontrarlo para pedir su diploma.', 400, 'SIN_CORREO');
+    }
+    const curso = String(c.curso?.nombre ?? '').trim();
+    if (!curso) throw new AppError('Certifex no da el nombre del curso de esta matrícula: no se puede pedir el diploma.', 502, 'CERTIFEX_SIN_CURSO');
+    const nombre = normalizarNombreDiploma(c.titular?.nombre ?? '');
+    if (!nombre) {
+      throw new AppError(
+        `El nombre que tiene en Moodle («${String(c.titular?.nombre ?? '').trim() || 'vacío'}») no vale para un diploma: hace falta nombre y apellidos, solo con letras. Corrígelo en Moodle y vuelve a intentarlo.`,
+        400, 'NOMBRE_NO_VALIDO',
+      );
+    }
+
+    const r = await certifex('POST', '/matriculas', {
+      centro: cod, nombre, email, ...(dni ? { dni } : {}), curso, creadoPor: quien(req),
+    });
+    const misma = Number(r?.matriculaId) === d.matriculaId;
+    if (!r?.vinculadaMoodle || !misma) {
+      logger.error({
+        userId: req.user.userId, centro: cod, matriculaId: d.matriculaId,
+        devuelta: r?.matriculaId ?? null, vinculadaMoodle: !!r?.vinculadaMoodle, nexpediente: r?.nexpediente ?? null,
+      }, 'Certifex: «Pasar a pendientes» no enganchó la matrícula de Moodle');
+      const queHizo = !r?.matriculaId
+        ? 'Certifex no ha dicho qué matrícula ha usado.'
+        : r.nexpediente
+          ? `Ha encontrado otra matrícula de ese alumno en el mismo curso (nº ${r.matriculaId}) que ya tiene el diploma ${r.nexpediente}.`
+          : r.vinculadaMoodle
+            ? `Ha usado otra matrícula de Moodle de ese alumno en el mismo curso (nº ${r.matriculaId}): revisa en Pendientes cuál es la buena antes de aprobar.`
+            : `Ha creado una solicitud aparte (nº ${r.matriculaId}), sin lo de Moodle, que saldrá en Pendientes: no la apruebes y pide a administración que la rechace.`;
+      throw new AppError(`Certifex no ha enganchado esta matrícula de Moodle, así que no se ha pasado a Pendientes. ${queHizo}`, 502, 'CERTIFEX_NO_ENGANCHA');
+    }
+    if (r.nexpediente) {
+      throw new AppError(`Ya tiene el diploma emitido (${r.nexpediente}): está en Emitidos.`, 409, 'YA_EMITIDO');
+    }
+    logger.info({ userId: req.user.userId, centro: cod, matriculaId: d.matriculaId, yaPedido: !!r.yaExistia }, 'Certifex: pasado a Pendientes desde el CRM');
+    res.json({
+      success: true,
+      data: { matriculaId: d.matriculaId, centro: cod, curso, nombre, yaPedido: !!r.yaExistia },
+    });
+  } catch (err) { next(err); }
+}
+
 /** Las formaciones del catalogo del campus, para elegir a mano la vendida. */
 export async function formaciones(req, res, next) {
   try {
@@ -694,9 +788,9 @@ export async function corregir(req, res, next) {
 
 /**
  * «Terminaron sin pedir»: Moodle da la formacion por terminada, pero el alumno aun no ha
- * pedido su diploma (ni lo tiene). Solo consulta: aqui no se aprueba ni se emite nada,
- * porque lo que se imprime sale de la solicitud del alumno. En cuanto la hace, sale de
- * esta lista y pasa a Pendientes. Cada fila trae lo que el CRM sabe de ese correo (`crm`)
+ * pedido su diploma (ni lo tiene). Aqui no se aprueba ni se emite nada, porque lo que se
+ * imprime sale de la solicitud. En cuanto la hace el alumno —o alguien del CRM con
+ * «Pasar a pendientes» (`pedir`, 22/10/2026)—, sale de esta lista y pasa a Pendientes. Cada fila trae lo que el CRM sabe de ese correo (`crm`)
  * y, si llego, el aviso de Certifex (`aviso`: cuando lo dio Moodle por terminado y
  * cuando llego al CRM).
  */

@@ -510,8 +510,17 @@ function SaludCampus({ campus }: { campus: CampusCertifex[] | null }) {
  * Ve lo mismo —sus campus, los contadores, las cinco pestañas, el PDF digital—, pero
  * sin ningún botón que cambie nada: ni aprobar, emitir, rechazar, editar, poner el DNI,
  * enviar, corregir, revocar ni «Nuevo diploma». El servidor tampoco se lo deja.
+ *
+ * `soloEmitir` (Diego, 22/10/2026: «que Dayana pueda emitir, no la dejan; puede
+ * hacerlo»): para quien tiene «Diplomas (Certifex) · Emitir» sin ser admin. Hace el
+ * recorrido de emitir —editar, poner el DNI, «Nuevo diploma», aprobar y emitir,
+ * reintentar y enviar el diploma al alumno—, siempre en sus campus. Lo que sigue siendo
+ * de administración no le sale: rechazar, el aviso de rechazo, corregir, revocar, la
+ * firma, sincronizar el temario del catálogo y el A3 de imprenta.
  */
-export default function CertifexDiplomasPage({ soloLectura = false }: { soloLectura?: boolean } = {}) {
+export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir = false }: { soloLectura?: boolean; soloEmitir?: boolean } = {}) {
+  // Administración: todo. Con `soloEmitir`, solo lo de emitir; con `soloLectura`, nada.
+  const administra = !soloLectura && !soloEmitir;
   const [params, setParams] = useSearchParams();
   const pestana: PestanaDiplomas = (PESTANAS.find((p) => p.clave === params.get('pestana'))?.clave) ?? 'pendientes';
   const irA = (p: PestanaDiplomas) => setParams(p === 'pendientes' ? {} : { pestana: p }, { replace: true });
@@ -560,6 +569,8 @@ export default function CertifexDiplomasPage({ soloLectura = false }: { soloLect
   const [editando, setEditando] = useState<Solicitud | null>(null);
   // «Nuevo diploma» (19/10): desde cero, eligiendo cliente y formación.
   const [creandoNuevo, setCreandoNuevo] = useState(false);
+  // «Pasar a pendientes» (22/10/2026): la matrícula que se está pidiendo, para su botón.
+  const [pidiendo, setPidiendo] = useState<number | null>(null);
   // El error del servidor en un diálogo con texto (rechazar, revocar, corregir): el
   // diálogo sigue abierto y no pierde lo escrito.
   const [errorDialogo, setErrorDialogo] = useState<string | null>(null);
@@ -842,6 +853,27 @@ export default function CertifexDiplomasPage({ soloLectura = false }: { soloLect
     });
   });
 
+  /**
+   * «Pasar a pendientes» (Diego, 22/10/2026: «que se pueda pasar de sin emitir a
+   * pendientes»): pide el diploma en Certifex sobre la matrícula de Moodle de quien terminó
+   * sin pedirlo. Queda en «Por decidir», con el nombre de Moodle: se revisa con «Editar».
+   */
+  async function pasarAPendientes(c: Terminado) {
+    setPidiendo(c.matriculaId);
+    try {
+      const r = await diplomasApi.pedir({ matriculaId: c.matriculaId, centro: c.centro, cursoRef: c.curso.ref });
+      toast({
+        title: r.data.yaPedido ? 'Ya estaba en Pendientes' : 'Pasado a Pendientes',
+        description: `${r.data.nombre} · ${r.data.curso}. Apruébalo y emítelo desde allí; revisa antes su nombre y su DNI con «Editar».`,
+      });
+      recargar();
+    } catch (e) {
+      toast({ title: 'No se ha pasado a Pendientes', description: (e as Error).message, variant: 'destructive' });
+    } finally {
+      setPidiendo(null);
+    }
+  }
+
   async function copiarEnlace(d: Diploma) {
     if (!d.verificarUrl) {
       toast({ title: 'Sin enlace público', description: 'Certifex no tiene una dirección que abra desde fuera: el enlace no funcionaría. Mira el aviso de arriba.', variant: 'destructive' });
@@ -997,7 +1029,7 @@ export default function CertifexDiplomasPage({ soloLectura = false }: { soloLect
             ? <StatusDot tono="success">Conectado{conexion.nombre ? ` como ${conexion.nombre}` : ''}</StatusDot>
             : 'Conectando con Certifex…'}
           {soloLectura ? (
-            <span role="status" title="Puedes ver los diplomas de tus campus. Aprobar, emitir, enviar, corregir y revocar lo hace administración."
+            <span role="status" title="Puedes ver los diplomas de tus campus. Aprobar, emitir y enviar lo hace administración o quien tenga «Diplomas (Certifex) · Emitir»; corregir y revocar, administración."
               className="inline-flex items-center gap-1 rounded-md border border-border bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
               <Eye size={12} aria-hidden /> Solo lectura
             </span>
@@ -1158,6 +1190,7 @@ export default function CertifexDiplomasPage({ soloLectura = false }: { soloLect
         {pestana === 'terminados' && (
           <CardSection className="text-sm text-muted-foreground">
             Moodle da la formación por terminada, pero el alumno aún no ha pedido su diploma. Cuando lo pida, pasará a Pendientes.
+            {!soloLectura && ' Si no lo va a pedir, pásalo tú con «Pasar a pendientes» y emítelo desde allí.'}
           </CardSection>
         )}
         {pestana === 'enviados' && (
@@ -1187,7 +1220,8 @@ export default function CertifexDiplomasPage({ soloLectura = false }: { soloLect
                     <Th>Formación</Th>
                     <Th className="text-right">Nota · avance</Th>
                     <Th>En el CRM</Th>
-                    <Th className="pr-4">Aviso de Certifex</Th>
+                    <Th className={soloLectura ? 'pr-4' : undefined}>Aviso de Certifex</Th>
+                    {!soloLectura && <Th className="pr-4 text-right">Acción</Th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -1206,9 +1240,19 @@ export default function CertifexDiplomasPage({ soloLectura = false }: { soloLect
                         <div className="mt-1"><Avance hechas={c.actividades.calificadas} total={c.actividades.total} /></div>
                       </td>
                       <td className="px-2 py-3"><EnElCrmEtiqueta crm={c.crm} /></td>
-                      <td className="whitespace-nowrap px-2 py-3 pr-4 text-xs">
+                      <td className={cn('whitespace-nowrap px-2 py-3 text-xs', soloLectura && 'pr-4')}>
                         {c.aviso?.recibidoEn ? fechaHora(c.aviso.recibidoEn) : <span className="text-muted-foreground">Sin aviso</span>}
                       </td>
+                      {!soloLectura && (
+                        <td className="px-2 py-3 pr-4 text-right">
+                          <Button size="sm" variant="secondary" disabled={trabajando || pidiendo !== null} aria-busy={pidiendo === c.matriculaId}
+                            aria-label={`Pasar a pendientes a ${c.titular.nombre || c.titular.email || `la matrícula ${c.matriculaId}`}`}
+                            title="Pide el diploma por el alumno: pasa a Pendientes para revisarlo, aprobarlo y emitirlo"
+                            onClick={() => void pasarAPendientes(c)}>
+                            <HourglassMedium size={14} className="mr-1.5" /> {pidiendo === c.matriculaId ? 'Pasando…' : 'Pasar a pendientes'}
+                          </Button>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -1304,7 +1348,7 @@ export default function CertifexDiplomasPage({ soloLectura = false }: { soloLect
                             <NombreDiploma c={c} />
                             <CorreoDelAlumno c={c} />
                             <div className="flex flex-wrap items-center gap-1.5">
-                              {FIRMA_EN_DIPLOMA && !soloLectura && <FirmaEnFila c={c} alSubir={() => setEditando(c)} deshabilitado={trabajando} />}
+                              {FIRMA_EN_DIPLOMA && administra && <FirmaEnFila c={c} alSubir={() => setEditando(c)} deshabilitado={trabajando} />}
                               {soloLectura
                                 ? (tieneDni(c)
                                   ? <div className="mt-1"><Etiqueta tono="neutral">DNI {c.titular.dni}</Etiqueta></div>
@@ -1334,9 +1378,12 @@ export default function CertifexDiplomasPage({ soloLectura = false }: { soloLect
                                 {!tieneDni(c) && (
                                   <span id={`diplomas-sin-dni-${k}`} className="text-center text-[11px] font-medium text-destructive" title={TITULO_SIN_DNI}>{PON_EL_DNI}</span>
                                 )}
-                                <Button size="sm" variant="outline" disabled={trabajando} onClick={() => abrir({ tipo: 'rechazar', ids: [c.matriculaId] })}>
-                                  <XCircle size={14} className="mr-1.5" /> Rechazar
-                                </Button>
+                                {/* Rechazar sigue siendo de administración (22/10/2026). */}
+                                {administra && (
+                                  <Button size="sm" variant="outline" disabled={trabajando} onClick={() => abrir({ tipo: 'rechazar', ids: [c.matriculaId] })}>
+                                    <XCircle size={14} className="mr-1.5" /> Rechazar
+                                  </Button>
+                                )}
                                 <Button size="sm" variant="ghost" disabled={trabajando} onClick={() => setEditando(c)} aria-label={`Editar los datos de ${nombre(c.matriculaId)}`}>
                                   <NotePencil size={14} className="mr-1.5" /> Editar
                                 </Button>
@@ -1360,13 +1407,14 @@ export default function CertifexDiplomasPage({ soloLectura = false }: { soloLect
               <table className="w-full min-w-[980px] text-sm">
                 <thead className="bg-muted/40 text-[11px] uppercase tracking-wide text-muted-foreground">
                   <tr className="border-b border-border">
-                    {!soloLectura && <th className="w-10 px-4 py-2 text-left"><Casilla id="diplomas-elegir-todas" etiqueta="Elegir toda la página" marcada={todas} alCambiar={() => setElegidas(todas ? new Set() : new Set(filasClave))} /></th>}
-                    <Th className={soloLectura ? 'pl-4' : undefined}>Alumno</Th>
+                    {/* El aviso de rechazo es de administración: quien solo emite, aquí solo mira. */}
+                    {administra && <th className="w-10 px-4 py-2 text-left"><Casilla id="diplomas-elegir-todas" etiqueta="Elegir toda la página" marcada={todas} alCambiar={() => setElegidas(todas ? new Set() : new Set(filasClave))} /></th>}
+                    <Th className={!administra ? 'pl-4' : undefined}>Alumno</Th>
                     <Th>Formación</Th>
                     <Th>Motivo</Th>
                     <Th>Rechazada</Th>
-                    <Th className={soloLectura ? 'pr-4' : undefined}>Aviso de rechazo</Th>
-                    {!soloLectura && <Th className="pr-4 text-right">Acción</Th>}
+                    <Th className={!administra ? 'pr-4' : undefined}>Aviso de rechazo</Th>
+                    {administra && <Th className="pr-4 text-right">Acción</Th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -1375,22 +1423,22 @@ export default function CertifexDiplomasPage({ soloLectura = false }: { soloLect
                     const a = c.avisoRechazo;
                     return (
                       <tr key={k} className={cn('align-top transition-colors', elegidas.has(k) ? 'bg-primary/5' : 'hover:bg-muted/40')}>
-                        {!soloLectura && <td className="px-4 py-3"><Casilla id={`diplomas-elegir-${k}`} etiqueta={`Elegir a ${nombre(c.matriculaId)}`} marcada={elegidas.has(k)} alCambiar={() => alternar(setElegidas, k)} /></td>}
-                        <td className={cn('px-2 py-3', soloLectura && 'pl-4')}>
+                        {administra && <td className="px-4 py-3"><Casilla id={`diplomas-elegir-${k}`} etiqueta={`Elegir a ${nombre(c.matriculaId)}`} marcada={elegidas.has(k)} alCambiar={() => alternar(setElegidas, k)} /></td>}
+                        <td className={cn('px-2 py-3', !administra && 'pl-4')}>
                           <NombreDiploma c={c} />
                           <div className="mt-0.5 max-w-[260px] truncate text-xs text-muted-foreground">{c.titular.email || 'sin correo'}</div>
                         </td>
                         <td className="px-2 py-3"><div className="max-w-[200px] truncate" title={c.curso.nombre}>{c.curso.nombre}</div><div className="text-xs text-muted-foreground">{nombreCampus(c.centro)}</div></td>
                         <td className="px-2 py-3"><p className="max-w-[260px] text-sm italic text-muted-foreground">«{c.decision?.motivo || 'sin motivo'}»</p></td>
                         <td className="whitespace-nowrap px-2 py-3 text-xs">{fecha(c.decision?.decididoEn)}<div className="max-w-[160px] truncate text-muted-foreground" title={c.decision?.decididoPor}>{c.decision?.decididoPor}</div></td>
-                        <td className={cn('px-2 py-3', soloLectura && 'pr-4')}>
+                        <td className={cn('px-2 py-3', !administra && 'pr-4')}>
                           {!a ? <StatusDot tono="neutral">Sin avisar</StatusDot>
                             : a.resultado === 'enviado' ? <StatusDot tono="success">Enviado</StatusDot>
                               : a.resultado === 'correo_apagado' ? <StatusDot tono="warning">Aviso aprobado (correo apagado)</StatusDot>
                                 : <StatusDot tono="danger">{ROTULO_AVISO[a.resultado] ?? a.resultado}</StatusDot>}
                           {a && <div className="mt-0.5 max-w-[170px] truncate text-[11px] text-muted-foreground" title={a.por}>{fecha(a.en)} · {a.por}</div>}
                         </td>
-                        {!soloLectura && (
+                        {administra && (
                           <td className="px-2 py-3 pr-4 text-right">
                             <Button size="sm" variant={a?.resultado === 'enviado' ? 'outline' : 'secondary'} disabled={trabajando} onClick={() => setDialogo({ tipo: 'avisoRechazo', ids: [c.matriculaId] })}>
                               <Envelope size={14} className="mr-1.5" /> {a ? 'Reenviar aviso' : 'Enviar aviso de rechazo'}
@@ -1462,7 +1510,7 @@ export default function CertifexDiplomasPage({ soloLectura = false }: { soloLect
                           {/* Revocado, Certifex ya no sirve su PDF (404): solo el enlace, que dice «revocado». */}
                           {pestana === 'enviados' && <IconoAccion etiqueta="Ver PDF" onClick={() => setVisor({ d, enviable: !soloLectura && !d.aviso && delCrm(d) })}><FilePdf size={15} /></IconoAccion>}
                           <IconoAccion etiqueta={d.verificarUrl ? 'Copiar enlace de verificación' : 'Sin enlace público: Certifex no tiene una dirección que abra desde fuera'} disabled={!d.verificarUrl} onClick={() => copiarEnlace(d)}><LinkSimple size={15} /></IconoAccion>
-                          {pestana === 'enviados' && !soloLectura && (
+                          {pestana === 'enviados' && administra && (
                             <>
                               <IconoAccion etiqueta="Corregir nombre" disabled={trabajando} onClick={() => abrir({ tipo: 'corregir', d })}><PencilSimple size={15} /></IconoAccion>
                               <IconoAccion etiqueta="Revocar" peligro disabled={trabajando} onClick={() => abrir({ tipo: 'revocar', d })}><Prohibit size={15} /></IconoAccion>
@@ -1503,9 +1551,11 @@ export default function CertifexDiplomasPage({ soloLectura = false }: { soloLect
           <div className="ml-auto flex flex-wrap gap-2">
             {pestana === 'pendientes' && (
               <>
-                <Button variant="outline" size="sm" disabled={trabajando} onClick={() => abrir({ tipo: 'rechazar', ids: [...elegidas].map(Number) })}>
-                  <XCircle size={14} className="mr-1.5" /> Rechazar ({elegidas.size})
-                </Button>
+                {administra && (
+                  <Button variant="outline" size="sm" disabled={trabajando} onClick={() => abrir({ tipo: 'rechazar', ids: [...elegidas].map(Number) })}>
+                    <XCircle size={14} className="mr-1.5" /> Rechazar ({elegidas.size})
+                  </Button>
+                )}
                 {/* Sin DNI no se emite: las que no lo tienen se quedan fuera, y se dice. */}
                 {elegidasSinDni > 0 && (
                   <span className="self-center text-xs font-medium text-destructive" role="status">
@@ -1521,7 +1571,7 @@ export default function CertifexDiplomasPage({ soloLectura = false }: { soloLect
                 </Button>
               </>
             )}
-            {pestana === 'rechazados' && (
+            {pestana === 'rechazados' && administra && (
               <Button size="sm" variant="secondary" disabled={trabajando} onClick={() => setDialogo({ tipo: 'avisoRechazo', ids: [...elegidas].map(Number) })}>
                 <Envelope size={14} className="mr-1.5" /> Enviar aviso de rechazo ({elegidas.size})
               </Button>
@@ -1663,6 +1713,7 @@ export default function CertifexDiplomasPage({ soloLectura = false }: { soloLect
       {editando && (
         <DialogoEditar
           c={editando}
+          puedeSincronizar={administra}
           alCambiarFirma={() => { firmaCambiada.current = true; }}
           alCerrar={() => {
             setEditando(null);
@@ -1682,7 +1733,7 @@ export default function CertifexDiplomasPage({ soloLectura = false }: { soloLect
           version={versiones[visor.d.nexpediente]}
           alCerrar={() => setVisor(null)}
           alEnviar={visor.enviable && !soloLectura ? () => { const exp = visor.d.nexpediente; setVisor(null); setDialogo({ tipo: 'avisos', exps: [exp], reenvio: false }); } : undefined}
-          soloLectura={soloLectura}
+          sinImprenta={!administra}
         />
       )}
     </div>
@@ -2018,8 +2069,13 @@ function DialogoNuevoDiploma({ campus, alCerrar, alCrear }: {
   );
 }
 
-function DialogoEditar({ c, alCerrar, alGuardar, alCambiarFirma }: {
+function DialogoEditar({ c, alCerrar, alGuardar, alCambiarFirma, puedeSincronizar = true }: {
   c: Solicitud; alCerrar: () => void; alGuardar: (fila: Solicitud) => void;
+  /**
+   * «Sincronizar módulos con el producto» escribe en el catálogo: es de administración.
+   * Quien solo emite (22/10/2026) revisa y edita el programa, pero no toca el catálogo.
+   */
+  puedeSincronizar?: boolean;
   /** La firma se guarda al subirla: el panel recarga al cerrar aunque no se pulse «Guardar». */
   alCambiarFirma?: () => void;
 }) {
@@ -2222,12 +2278,14 @@ function DialogoEditar({ c, alCerrar, alGuardar, alCambiarFirma }: {
                 {correoN !== (ed?.emailCrm ?? '') && !producto ? ' Con otro correo, la automática se recalcula al guardar.' : ''}
               </span>
               <div className="mt-2 flex flex-wrap items-center gap-2">
+                {puedeSincronizar && (
                 <Button type="button" size="sm" variant="outline" onClick={() => void sincronizar()}
                   disabled={!formacionActual || sincronizando || !catalogo} aria-busy={sincronizando}
                   title={formacionActual ? 'Lee los módulos de la página del curso y los guarda en el catálogo' : 'Elige antes la formación vendida'}>
                   <ArrowClockwise size={14} className={cn('mr-1.5', sincronizando && 'animate-spin')} />
                   {sincronizando ? 'Sincronizando…' : 'Sincronizar módulos con el producto'}
                 </Button>
+                )}
                 {avisoTemario && <span className="text-xs text-muted-foreground" role="status">{avisoTemario}</span>}
               </div>
             </div>
@@ -2399,13 +2457,16 @@ function DialogoCorregir({ d, ocupado, error, alCancelar, alConfirmar }: {
 }
 
 /** El PDF del diploma, traído por el servidor del CRM (Certifex no se deja incrustar). */
-function VisorPdf({ d, version, alCerrar, alEnviar, soloLectura = false }: {
+function VisorPdf({ d, version, alCerrar, alEnviar, sinImprenta = false }: {
   d: Pick<Diploma, 'nexpediente' | 'alumno' | 'titulacion' | 'centro' | 'diplomaUrl' | 'imprenta'>;
   version?: number;
   alCerrar: () => void;
   alEnviar?: () => void;
-  /** Quien solo ve Diplomas (#223): el digital sí; el A3 de imprenta es de administración. */
-  soloLectura?: boolean;
+  /**
+   * Quien no es de administración —solo ve Diplomas (#223) o solo emite (22/10/2026)—:
+   * el digital sí; el A3 de imprenta es de administración.
+   */
+  sinImprenta?: boolean;
 }) {
   const [pdf, setPdf] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -2441,7 +2502,7 @@ function VisorPdf({ d, version, alCerrar, alEnviar, soloLectura = false }: {
                   <Button variant="outline" size="sm" asChild><a href={pdf} download={`${d.nexpediente}.pdf`}><DownloadSimple size={14} className="mr-1.5" /> Descargar</a></Button>
                 </>
               )}
-              {d.imprenta && !soloLectura && <BotonImprenta nexpediente={d.nexpediente} />}
+              {d.imprenta && !sinImprenta && <BotonImprenta nexpediente={d.nexpediente} />}
               {alEnviar && <Button size="sm" disabled={!pdf} onClick={alEnviar}><PaperPlaneTilt size={14} className="mr-1.5" /> Está bien: enviar al alumno</Button>}
             </div>
           </div>
