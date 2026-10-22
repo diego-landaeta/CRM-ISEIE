@@ -482,6 +482,14 @@ export const diplomasApi = {
       matriculaId: number; yaExistia: boolean; centro: string; curso: string; nombre: string; vinculadaMoodle?: boolean;
       dni?: string | null; avisoDni?: string | null;
     }>,
+  /**
+   * «Pasar a pendientes» (22/10/2026): pide el diploma en Certifex sobre la matrícula de
+   * Moodle de quien terminó sin pedirlo (o que Moodle no da por terminada). El servidor pone
+   * el nombre, el correo y el curso con lo que dice Certifex; `cursoRef` solo ayuda a
+   * encontrarla. Queda en «Por decidir».
+   */
+  pedir: (d: { matriculaId: number; centro: string; cursoRef?: number }) =>
+    client.post('/certifex/diplomas/pedir', d) as R<{ matriculaId: number; centro: string; curso: string; nombre: string; yaPedido: boolean }>,
   /** Las formaciones del catálogo del proyecto de ese campus, para elegir la vendida. */
   formaciones: (centro: string) => client.get(`/certifex/diplomas/formaciones?${qs({ centro })}`) as R<CatalogoDelCampus>,
   /** Los módulos de esa formación, leídos de la página del curso y guardados en el catálogo (12/10). */

@@ -569,6 +569,8 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
   const [editando, setEditando] = useState<Solicitud | null>(null);
   // «Nuevo diploma» (19/10): desde cero, eligiendo cliente y formación.
   const [creandoNuevo, setCreandoNuevo] = useState(false);
+  // «Pasar a pendientes» (22/10/2026): la matrícula que se está pidiendo, para su botón.
+  const [pidiendo, setPidiendo] = useState<number | null>(null);
   // El error del servidor en un diálogo con texto (rechazar, revocar, corregir): el
   // diálogo sigue abierto y no pierde lo escrito.
   const [errorDialogo, setErrorDialogo] = useState<string | null>(null);
@@ -850,6 +852,27 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
       description: d.aviso ? 'Mismo número y mismo QR. El alumno ya recibió el anterior: usa «Reenviar» si quieres mandarle el corregido.' : 'Mismo número y mismo QR. Revisa el PDF antes de enviarlo.',
     });
   });
+
+  /**
+   * «Pasar a pendientes» (Diego, 22/10/2026: «que se pueda pasar de sin emitir a
+   * pendientes»): pide el diploma en Certifex sobre la matrícula de Moodle de quien terminó
+   * sin pedirlo. Queda en «Por decidir», con el nombre de Moodle: se revisa con «Editar».
+   */
+  async function pasarAPendientes(c: Terminado) {
+    setPidiendo(c.matriculaId);
+    try {
+      const r = await diplomasApi.pedir({ matriculaId: c.matriculaId, centro: c.centro, cursoRef: c.curso.ref });
+      toast({
+        title: r.data.yaPedido ? 'Ya estaba en Pendientes' : 'Pasado a Pendientes',
+        description: `${r.data.nombre} · ${r.data.curso}. Apruébalo y emítelo desde allí; revisa antes su nombre y su DNI con «Editar».`,
+      });
+      recargar();
+    } catch (e) {
+      toast({ title: 'No se ha pasado a Pendientes', description: (e as Error).message, variant: 'destructive' });
+    } finally {
+      setPidiendo(null);
+    }
+  }
 
   async function copiarEnlace(d: Diploma) {
     if (!d.verificarUrl) {
@@ -1167,6 +1190,7 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
         {pestana === 'terminados' && (
           <CardSection className="text-sm text-muted-foreground">
             Moodle da la formación por terminada, pero el alumno aún no ha pedido su diploma. Cuando lo pida, pasará a Pendientes.
+            {!soloLectura && ' Si no lo va a pedir, pásalo tú con «Pasar a pendientes» y emítelo desde allí.'}
           </CardSection>
         )}
         {pestana === 'enviados' && (
@@ -1196,7 +1220,8 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
                     <Th>Formación</Th>
                     <Th className="text-right">Nota · avance</Th>
                     <Th>En el CRM</Th>
-                    <Th className="pr-4">Aviso de Certifex</Th>
+                    <Th className={soloLectura ? 'pr-4' : undefined}>Aviso de Certifex</Th>
+                    {!soloLectura && <Th className="pr-4 text-right">Acción</Th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -1215,9 +1240,19 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
                         <div className="mt-1"><Avance hechas={c.actividades.calificadas} total={c.actividades.total} /></div>
                       </td>
                       <td className="px-2 py-3"><EnElCrmEtiqueta crm={c.crm} /></td>
-                      <td className="whitespace-nowrap px-2 py-3 pr-4 text-xs">
+                      <td className={cn('whitespace-nowrap px-2 py-3 text-xs', soloLectura && 'pr-4')}>
                         {c.aviso?.recibidoEn ? fechaHora(c.aviso.recibidoEn) : <span className="text-muted-foreground">Sin aviso</span>}
                       </td>
+                      {!soloLectura && (
+                        <td className="px-2 py-3 pr-4 text-right">
+                          <Button size="sm" variant="secondary" disabled={trabajando || pidiendo !== null} aria-busy={pidiendo === c.matriculaId}
+                            aria-label={`Pasar a pendientes a ${c.titular.nombre || c.titular.email || `la matrícula ${c.matriculaId}`}`}
+                            title="Pide el diploma por el alumno: pasa a Pendientes para revisarlo, aprobarlo y emitirlo"
+                            onClick={() => void pasarAPendientes(c)}>
+                            <HourglassMedium size={14} className="mr-1.5" /> {pidiendo === c.matriculaId ? 'Pasando…' : 'Pasar a pendientes'}
+                          </Button>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>

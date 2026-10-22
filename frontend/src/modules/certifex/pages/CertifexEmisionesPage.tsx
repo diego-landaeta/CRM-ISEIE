@@ -15,6 +15,7 @@ import { Button } from '@/shared/components/ui/button';
 import { cn } from '@/shared/lib/utils';
 import { Avance, AvisoCasiListo, AvisoDireccionPublica, Barra, Buscador, Decision, EnElCrmEtiqueta, Etiqueta, LogoCampus, Pestana, euros } from '../components/piezas';
 import {
+  diplomasApi,
   emisionesApi,
   type CampusCertifex,
   type Candidato,
@@ -228,6 +229,8 @@ export default function CertifexEmisionesPage({ embebida = false }: { embebida?:
   const [lote, setLote] = useState<{ hechas: number; total: number } | null>(null);
   const [fallos, setFallos] = useState<{ quien: string; error: string }[]>([]);
   const [abierta, setAbierta] = useState<Candidato | null>(null);
+  // «Pasar a pendientes» (22/10/2026): la matrícula que se está pidiendo, para su botón.
+  const [pidiendo, setPidiendo] = useState<number | null>(null);
 
   const base = conexion?.urlPublica ?? null;
 
@@ -398,6 +401,28 @@ export default function CertifexEmisionesPage({ embebida = false }: { embebida?:
     }
     contarEmision(ids.length ? await emitirEnTandas(ids) : [], []);
   }, 'No se pudo emitir');
+
+  /**
+   * «Pasar a pendientes» (Diego, 22/10/2026: «que se pueda pasar de sin emitir a
+   * pendientes»). Quien está aquí sin diploma ni solicitud no sale en Diplomas ›
+   * Pendientes: Moodle no lo da por terminado o el alumno no lo ha pedido. Esto lo pide
+   * por él sobre esta misma matrícula de Moodle, y se aprueba y emite desde Diplomas.
+   */
+  async function pasarAPendientes(c: Candidato) {
+    setPidiendo(c.matriculaId);
+    try {
+      const r = await diplomasApi.pedir({ matriculaId: c.matriculaId, centro: c.centro, cursoRef: c.curso.ref });
+      toast({
+        title: r.data.yaPedido ? 'Ya estaba en Pendientes' : 'Pasado a Pendientes',
+        description: `${r.data.nombre} · ${r.data.curso}. Apruébalo y emítelo desde allí (Matrículas › Diplomas › Pendientes).`,
+      });
+      await cargarFilas();
+    } catch (e) {
+      toast({ title: 'No se ha pasado a Pendientes', description: (e as Error).message, variant: 'destructive' });
+    } finally {
+      setPidiendo(null);
+    }
+  }
 
   const acciones = (
     <>
@@ -632,6 +657,17 @@ export default function CertifexEmisionesPage({ embebida = false }: { embebida?:
                               <Certificate size={14} /> {c.nexpediente}
                             </span>
                           ) : c.propuesto ? <Etiqueta tono="neutral">Propuesto</Etiqueta> : <span className="text-xs text-muted-foreground">Sin emitir</span>}
+                          {/* Sin diploma y sin pedir: no está en Diplomas › Pendientes. Se pasa desde aquí. */}
+                          {!c.nexpediente && !c.solicitud && (
+                            <div className="mt-1.5" onClick={(e) => e.stopPropagation()}>
+                              <Button size="sm" variant="outline" disabled={trabajando || pidiendo !== null} aria-busy={pidiendo === c.matriculaId}
+                                aria-label={`Pasar a pendientes a ${c.titular.nombre || c.titular.email || `la matrícula ${c.matriculaId}`}`}
+                                title="Pide el diploma por el alumno: pasa a Diplomas › Pendientes para revisarlo, aprobarlo y emitirlo"
+                                onClick={() => void pasarAPendientes(c)}>
+                                <HourglassMedium size={14} className="mr-1.5" /> {pidiendo === c.matriculaId ? 'Pasando…' : 'Pasar a pendientes'}
+                              </Button>
+                            </div>
+                          )}
                         </td>
                       </tr>
                     ))}
