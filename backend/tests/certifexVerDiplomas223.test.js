@@ -28,6 +28,7 @@ vi.mock('../src/modules/certifex/certifex.emisiones.js', () => Object.fromEntrie
 vi.mock('../src/modules/certifex/certifex.diplomas.js', () => Object.fromEntries(
   ['resumen', 'solicitudes', 'porAvisar', 'terminados', 'aprobarEmitir', 'emitir', 'rechazar', 'avisos', 'avisosRechazo',
     'revocar', 'corregir', 'editar', 'subirFirma', 'verFirma', 'nuevo', 'formaciones', 'sincronizarFormacion', 'diplomas',
+    'pedir',
   ].map((n) => [n, handler(`diplomas.${n}`)])));
 
 const { default: express } = await import('express');
@@ -63,7 +64,7 @@ const ESCRITURAS = [
   ['post', '/diplomas/aprobar-emitir'], ['post', '/diplomas/emitir'], ['post', '/diplomas/rechazar'],
   ['post', '/diplomas/avisos'], ['post', '/diplomas/avisos-rechazo'], ['post', '/diplomas/revocar'],
   ['post', '/diplomas/corregir'], ['post', '/diplomas/editar'], ['post', '/diplomas/firma'],
-  ['post', '/diplomas/nuevo'], ['post', '/diplomas/formaciones/sincronizar'],
+  ['post', '/diplomas/nuevo'], ['post', '/diplomas/formaciones/sincronizar'], ['post', '/diplomas/pedir'],
   ['post', '/emisiones/decisiones'], ['post', '/emisiones/emitir'], ['patch', '/consultas/7'],
 ];
 const OTRAS_LECTURAS = ['/diplomas/formaciones?centro=ISEIE', '/diplomas/firma/7', '/emisiones', '/consultas'];
