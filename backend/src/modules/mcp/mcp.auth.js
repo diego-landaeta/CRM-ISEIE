@@ -90,7 +90,13 @@ export async function verificarTokenMcp(req, res, next) {
     // Con el código obligatorio, la llave de la URL sola ya no da datos (#326):
     // si no, quien tenga la URL entraría con el desbloqueo de su dueño. Claude
     // tiene que conectarse y que el dueño autorice esa conexión.
+    //
+    // Y se le avisa al dueño (Diego, 22/10): los conectores de claude.ai que se
+    // añadieron antes de la #326 no se conectan solos con este 401, y la persona
+    // veía «conecta el CRM» en cada conversación sin saber qué hacer. Ver
+    // `avisarConectorAntiguo` en mcp.conexiones.js.
     if (desbloqueo.config().obligatorio) {
+      conexiones.avisarConectorAntiguo(vivo);
       return pedirConexion(req, res, req.mcpTokenDeUrl
         ? 'Conéctate primero: Claude tiene que iniciar sesión con esta URL y el dueño autorizar la conexión en el CRM → Conexión → MCP.'
         : 'Usa tu URL personal del CRM (Conexión → MCP) en el conector de Claude: la llave sola ya no da datos.');
