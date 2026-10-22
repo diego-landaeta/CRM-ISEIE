@@ -1,10 +1,18 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
+import { comprobarEntornoDeProduccion } from './scripts/entornoDeProduccion.js';
 
 const BASE = process.env.VITE_BASE_PATH || '/';
 
-export default defineConfig({
+// Diego, 22/10/2026: un build de producción sin `.env.production` (los worktrees
+// no lo traen) se llevó el ranking de gestoras sin avisar. Ahora se para.
+export default defineConfig(({ command, mode }) => {
+  comprobarEntornoDeProduccion({ command, mode, cwd: __dirname });
+  return CONFIG;
+});
+
+const CONFIG = {
   plugins: [react()],
   base: BASE,
   resolve: {
@@ -41,4 +49,4 @@ export default defineConfig({
       },
     },
   },
-});
+};

@@ -33,7 +33,6 @@ import ComoVoy from '@/modules/reports/components/ComoVoy';
 import SkeletonTable, { SkeletonCard } from '@/shared/components/ui/SkeletonTable';
 import ConversionFunnel from '@/shared/components/dashboard/ConversionFunnel';
 import PerformanceInsights from '@/shared/components/dashboard/PerformanceInsights';
-import { PROCESO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 const TopProductsCard = lazy(() => import('@/modules/sales/components/TopProductsCard'));
 const CursosVendidosCard = lazy(() => import('@/modules/sales/components/CursosVendidosCard'));
 
@@ -150,10 +149,6 @@ export default function DashboardPage() {
     return (
       <div className="space-y-8">
         <PageHeader title="Dashboard" subtitle="Cargando datos..." />
-
-      {/* Como va quien mira: su puesto en ventas y su tasa de
-          conversion del mes. */}
-      {PROCESO_EN_PRUEBAS && <ComoVoy medida="facturado" />}
         <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)}
         </div>
@@ -218,6 +213,17 @@ export default function DashboardPage() {
           todo: es lo que mira Hacienda y no puede quedarse escondido dentro
           del formulario de crear una factura. */}
       <AvisoHuecosFacturas projectId={activeProject?.id} />
+
+      {/* Como va quien mira: su puesto y, a quien dirige, el podio y el
+          ranking de gestoras por lo cobrado. Como en MultiCRM.
+          Diego, 22/10/2026: «¿por qué en ISEIE dejaron de aparecer los
+          ranking de las gestoras para los admin?». Desde el 22/09 estaba
+          dentro del «Cargando datos…» —se veía un instante y se iba— y
+          desde el 28/09 (480e7de), además, detrás de PROCESO_EN_PRUEBAS. El
+          ranking no es el proceso comercial: va a producción por su cuenta
+          desde el 08/10 («por lo cobrado»), así que no depende de esa
+          bandera. */}
+      <ComoVoy medida="facturado" />
 
       {/* SECCION HOY */}
       {today && (

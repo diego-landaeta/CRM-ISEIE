@@ -673,7 +673,9 @@ export default function LeadsPage() {
 
       {/* Como va quien mira: su puesto en ventas y su tasa de conversion del
           mes. Va aqui porque esta es la pantalla donde pasa el dia. */}
-      {PROCESO_EN_PRUEBAS && <ComoVoy compacto />}
+      {/* El ranking de gestoras no es el proceso comercial: sin PROCESO_EN_PRUEBAS
+          (Diego, 22/10/2026; ver DashboardPage). */}
+      <ComoVoy compacto />
 
       {/* LA COLA DEL DÍA, AQUÍ TAMBIÉN. Diego, 23/09: «la cola del día debe
           de estar en prospectos también con atajos y todo».
