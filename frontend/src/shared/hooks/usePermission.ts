@@ -43,6 +43,8 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<UserRole, PermissionMap> = {
     'facturas_colaborador.ver_todas': true, 'facturas_colaborador.gestionar': true, 'facturas_colaborador.anular': true, 'facturas_colaborador.pagar': true,
     // Diplomas de Certifex (#223): verlos. El admin además los maneja, por su rol.
     'diplomas.view': true,
+    // Emitirlos (Diego, 22/10/2026): el admin ya emite por su rol.
+    'diplomas.emit': true,
   },
   gestor: {
     'leads.read': true,    'leads.create': true,    'leads.update': true,
@@ -76,8 +78,10 @@ export const PERMISSION_RESOURCES: ReadonlyArray<PermissionResource> = [
   { key: 'accounting',  label: 'Contabilidad', actions: ['read', 'update'] },
   { key: 'tasks',       label: 'Tareas',      actions: ['view_all', 'view_own', 'create', 'assign', 'edit', 'delete', 'close', 'manage'] },
   { key: 'facturas_colaborador', label: 'Facturas de colaboradores', actions: ['ver_todas', 'gestionar', 'anular', 'pagar', 'subir'] },
-  // #223: ver la pantalla Diplomas en solo lectura. Manejarla sigue siendo del admin.
-  { key: 'diplomas',    label: 'Diplomas (Certifex)', actions: ['view'] },
+  // #223: ver la pantalla Diplomas en solo lectura. 22/10/2026: `emit`, emitirlos
+  // (revisar, pasar a Pendientes, aprobar y emitir, enviar). Rechazar, corregir y
+  // revocar siguen siendo del admin.
+  { key: 'diplomas',    label: 'Diplomas (Certifex)', actions: ['view', 'emit'] },
 ];
 
 export const FIXED_ROLES: ReadonlyArray<FixedRole> = [
