@@ -123,6 +123,11 @@ export async function estadoDeLaConexion(tokenId) {
 /** «1 Claude», «2 Claude»… para los textos del panel. */
 const claudes = (n) => `${n} Claude`;
 
+/** Para una URL que su Claude usaba sin iniciar sesión (antes de la #326). Diego, 22/10. */
+export const TEXTO_RECONECTAR = 'Tu Claude se conectó con esta URL a la manera de antes y ya no puede consultar: '
+  + 'conéctalo una vez (en Claude, Configuración → Conectores → «Conectar» en el del CRM, o quítalo y vuelve a añadirlo con esta URL), '
+  + 'autorízalo aquí y dale el código. No se vuelve a pedir.';
+
 /**
  * El estado de cada URL para el panel (#192, Diego 05/10; #326, 13/10).
  *
@@ -141,7 +146,8 @@ export async function estadoParaElPanel(tokenIds) {
   if (!obligatorio || !ids.length) return new Map();
   const { rows } = await query(
     `SELECT t.id, t.bloqueado_hasta,
-            (t.bloqueado_hasta IS NOT NULL AND t.bloqueado_hasta > NOW()) AS bloqueado
+            (t.bloqueado_hasta IS NOT NULL AND t.bloqueado_hasta > NOW()) AS bloqueado,
+            (t.anterior_a_conexiones AND t.last_used_at IS NOT NULL) AS usada_a_la_manera_de_antes
        FROM mcp_tokens t
       WHERE t.id = ANY($1::int[])`,
     [ids]
@@ -157,6 +163,12 @@ export async function estadoParaElPanel(tokenIds) {
       return [r.id, { ...base, estado: 'bloqueada', hasta: r.bloqueado_hasta, texto: `Bloqueada hasta ${cuando(r.bloqueado_hasta).replace(/^a /, '')}` }];
     }
     if (!lista.length) {
+      // Diego, 22/10: una URL de antes de la #326 que su Claude usaba sin iniciar
+      // sesión. Ese Claude ya no consulta y no se reconecta solo: se dice aquí,
+      // debajo de la URL, qué hay que hacer (y una vez al día, a la campana).
+      if (r.usada_a_la_manera_de_antes) {
+        return [r.id, { ...base, estado: 'sin_desbloquear', hasta: null, texto: TEXTO_RECONECTAR }];
+      }
       return [r.id, { ...base, estado: 'sin_desbloquear', hasta: null, texto: 'Ningún Claude conectado todavía con esta URL' }];
     }
     const partes = [];
