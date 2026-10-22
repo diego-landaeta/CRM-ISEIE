@@ -289,9 +289,16 @@ export async function saveRoleTaskPermissions(roleKey, permissions, updatedBy) {
 
   Va aparte de los permisos de Tareas a propósito: aquello está probado y
   esto no tiene por qué tocarlo.
+
+  «Diplomas (Certifex) · Emitir» (Diego, 22/10/2026: «que Dayana pueda emitir,
+  no la dejan; puede hacerlo»; la misma clave en los dos CRM): a los mismos
+  roles y del mismo modo. Revisar, pasar a Pendientes, aprobar y emitir y
+  enviar el diploma al alumno, siempre en sus campus; rechazar, corregir y
+  revocar siguen siendo de administración.
 */
 export const CLAVES_SUELTAS = {
   'diplomas.view': { roles: ['gestor', 'soporte', 'project_manager'] },
+  'diplomas.emit': { roles: ['gestor', 'soporte', 'project_manager'] },
 };
 
 function laClave(clave) {
