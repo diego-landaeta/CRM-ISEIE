@@ -7,6 +7,114 @@
 > (escritas aquí con su porqué), **preguntas para Diego** y **pendientes** (se
 > portan, pero no han cabido todavía).
 
+## Estado al 26/10/2026
+
+Comparación de los dos `origin/staging` del 26/10 (MultiCRM `bd6044c3`, ISEIE
+`33cab573`) con **todas las PR fusionadas desde el 11/09** en `main` y `staging`
+de los dos repos (162 del 360, 119 de ISEIE). Para cada PR del 360 se buscaron
+sus líneas añadidas en el fichero equivalente de ISEIE, y lo que faltaba se miró
+a mano (la numeración de migraciones y los nombres de las pruebas son distintos,
+así que eso no cuenta como diferencia).
+
+**Conclusión:** todo lo que entró en MultiCRM entre el 15/10 y el 26/10 con PR
+gemela está también en ISEIE, con las adaptaciones de siempre (rutas, marca,
+`enPruebas` frente a `soloEnPruebas`, su propia guarda del build). Lo que faltaba
+es lo de los colaboradores externos (Diana y Hugo), que solo trabajan en
+MultiCRM y cuyo traslado a ISEIE «lo hacéis vosotros».
+
+### Portado a ISEIE el 26/10 (PR `feat/paridad-iseie-2610`)
+
+| Qué | PR del 360 | Issue ISEIE | Notas |
+|---|---|---|---|
+| MCP: `cuentas_publicitarias`, `resumen_publicidad`, `campanas_publicitarias` (#235) | #347 | #207 | Mismo código. Solo super admin y admin; nunca el token. Sin migración: las tablas de Publicidad (071, 072) ya estaban |
+| MCP: `actividad_por_comercial` (#203, parte A) | #348 | #195 | Mismo código; `wa_mensajes` (128) y `lead_interactions` ya estaban |
+| Configuración → Usuarios: la tabla no se sale por la derecha (#221) | #451 | #202 | **Adaptado**: la tabla de ISEIE es otra (cuatro columnas, en `SettingsPage.jsx`); se arregla su caja (`overflow-x-auto`) y las acciones no se parten. Prueba `__smoke__/usuariosTablaAncho-202` |
+
+Pruebas: `publicidadEnClaude`, `actividadEnClaude`, `mcpAmbito`, `mcpIntegracion`
+(106/106 contra una base local nueva) y la del frontal (falla sin el arreglo).
+
+**Queda detrás:** la PR #484 del 360 (correcciones del QA del 22/10 en la
+publicidad de Claude: gasto por el campus de la fila diaria, índice en
+`lead_utms.utm_campaign` —migración 224 del 360— y tope de 8 s) sigue **abierta**.
+Cuando se fusione allí, se trae igual.
+
+### Ya estaban en los dos (11/09 → 26/10)
+
+Cada PR del 360 tiene su gemela en ISEIE: #251/#252 → #88 · #254 → #86 ·
+#256 → #89 · #263 → #90 · #264 → #91 · #266 → #93 · #268 → #95 · #283 → #97 ·
+#287 → #99 (sin la parte de Sistema → Correos, que ISEIE no tiene: pregunta 2) ·
+#288 → #102 · #296 → #109 · #297 → #110 · #302 → #113 · #308 → #114 ·
+#309 → #115 · #314 → #117 · #316 → #118 · #321 → #121 · #323 → #123 ·
+#324 → #124 · #327 → #125 · #328 → #126 · #329 → #127 · #330 → #128 ·
+#331 → #129 · #333 → #130 · #339 → #133 · #337 → #131 · #340 → #134 ·
+#342 → #136 · #293/#303/#304/#305/#319/#320/#332 (#202) → #140 ·
+#300/#306/#312/#334 (Certifex) → #142 · #350 → #143 · #356 → #146 ·
+#359 → #148 · #361 → #150 · #363 → #152 · #364 → #153 · #366 → #155 ·
+#367 → #156 · #369 → #158 · #373 → #162 · #375 → #166 · #376 → #167 ·
+#380 → #221 · #402 → #224 · #420 → #227 · #421 → #228 · #425 → #232 ·
+#428 → #235 · #431 → #238 · #438 → #244 · #441 → #242 · #443 → #247 ·
+#447 → #250 · #456 → #254 · #458 → #256 · #487 → #259 · #494 → #263. Las de
+Fabián del 02/10 (#152 Convocatorias, #154 Próximos cobros, #155 cola del día,
+#156 atajos) también están (salvo `ProximosCobros`, que va con la «cabecera de
+cobros» de Clientes, pendiente desde el 15/10). Las de `main` (#174, #181–#183,
+#201, #205 —ISEIE no tenía el fallo—) también.
+
+**De ISEIE a MultiCRM no hay nada nuevo desde el 15/10**: #135 (Actividad, módulo
+que solo tiene ISEIE y que en MultiCRM cubre el Registro) y #164 (la versión junto
+al logo, que MultiCRM ya enseñaba).
+
+### No aplica en ISEIE (diferente a propósito o por estructura)
+
+| Qué | PR del 360 | Por qué |
+|---|---|---|
+| «Árbol de categorías» apuntaba a una ruta muerta (#79) | #414 | En ISEIE `/configuracion/categorias-arbol` **sigue viva** (ruta, menú y prueba de humo): no hay enlace roto |
+| Logos rotos y subtítulo de Configuración → Proyectos (#222) | #452 | ISEIE no tiene esa pantalla ni logos por proyecto (la marca va en Configuración → Marca). Su gemela ISEIE #203 no tiene nada que arreglar |
+| Remitente «MultiCRM» por defecto en tres trabajos (#308) | #308 | Marca |
+| Tareas / tablero (#210 y lo nuevo: por empresa, supervisor, Meta solo lectura) | #249, #282, #292, #294, #307, #313, #315 | Lo lleva otro trabajo en curso; no se ha tocado aquí |
+| Permisos por acción (#423) | #489 | Lo lleva otro trabajo en curso (gemela ISEIE #230); no se ha tocado aquí |
+| Permiso «Diplomas · Ver/Emitir» (#384, #437) | #402, #438 | Ya está en ISEIE, con su propio `PermisoDiplomas.tsx` en Roles (MultiCRM lo tiene dentro de su editor de permisos). Entra en la #230 |
+
+### Para que decida Diego (no portado)
+
+Son bloques grandes, con migraciones, y los cuatro tienen **correcciones de QA
+abiertas** en el 360 (PR #482 a #485, del QA del 22/10). Portarlos ahora sería
+portar dos veces.
+
+1. **Consultas de alumnos** (#187–#190; PR del 360 #353, #354, #355, #358;
+   gemelas ISEIE #189–#192). Unas 8.000 líneas: módulo `consultas`, cliente de
+   Moodle, `tutor.campus.js`, migraciones 208–211 del 360, seis trabajos
+   programados (`consultas*Scheduler`, `tutoresCampusScheduler`) y pantallas en
+   Tutores. La épica #185 dice que ISEIE se replica **cuando esté validado en
+   MultiCRM**; la #483 (QA) sigue abierta.
+2. **Matrículas: solicitudes y webhook de admisión** (#198, #199; PR del 360 #341,
+   #436, #449; gemelas ISEIE #193, #194). Migraciones 212–213 del 360, descarga de
+   documentos desde URL de terceros (con su defensa contra SSRF), `MatriculasFiltros`.
+   La #449 dice «para QA en /testeo, no para producción»; la #482 (QA) sigue abierta.
+3. **Formularios con el mismo formato** (#106; PR del 360 #352, #454; gemela ISEIE
+   #177). 42 ficheros del frontal, entre ellos los de dinero (`ConversionDialog`,
+   `RegisterSaleDialog`, `InvoiceCreatePage`) y Tutores. Se apoya en las
+   primitivas del rediseño (#32), que ISEIE no tiene. La #485 (QA) sigue abierta.
+4. **El rediseño del frontal**: usuarios como módulo (#31, PR #58), el marco
+   —cabecera fija, apartados, menú denso— (#33, PR #69) y los tokens y primitivas
+   (#32, cerrada en MultiCRM el 07/10). Gemelas ISEIE #12, #13 y #14, abiertas.
+   Ya estaban en la lista del 15/10 como «pendiente» / «estructural».
+
+### Gemelas abiertas en ISEIE con la del 360 ya cerrada (más antiguas)
+
+Para revisar una a una; ninguna es de las últimas seis semanas salvo la #13:
+ISEIE #6 (= 360 #25, plantillas de WhatsApp compartidas), #12 (#31), #13 (#32),
+#14 (#33), #21 (#40, filtros en Clientes y Matrículas), #28 (#49, rutas en
+español), #29 (#50, tipografía de administración), #31 (#4, selectores de
+Documentos) y #32 (#5, botón del Chat IA en el dock: la IA sigue aparcada en
+ISEIE, ver pregunta 1).
+
+### Migraciones (26/10)
+
+Ninguna. Lo portado no toca el esquema. (La numeración libre en ISEIE empieza en
+**235**: la 234 la usa ya la rama `feat/equipo-tareas-empresa`.)
+
+---
+
 ## Estado al 15/10/2026
 
 Comparación de los dos `origin/staging` del 15/10. Lo de este día entró por los PR
@@ -263,9 +371,11 @@ cambia todas las URLs de uno de los dos y rompe los enlaces guardados.
 1. **Grupo A entero.** Son fallos, no diferencias. Poco trabajo y quitan riesgo
    real: la fuga de `sales` es de la misma familia que la de Facturación que ya
    cerramos.
-2. **Plantillas de WhatsApp en ISEIE.** Y de paso subirlas a base de datos en
-   los dos: hoy viven en el `localStorage` del navegador, así que no se comparten
-   entre gestoras ni sobreviven a un cambio de equipo.
+2. **Plantillas de WhatsApp en ISEIE.** En ISEIH ya están en base de datos
+   (migración 122, tarea #25, 21/08/2026): compartidas por proyecto, con ámbito
+   `compartida` / `personal`, y editables desde `/whatsapp/plantillas`. Queda
+   subirlas igual en ISEIE, donde el hook sigue siendo un stub vacío — hasta
+   entonces la diferencia entre los dos CRMs es mayor, no menor.
 3. **Las columnas y el endpoint que faltan** (`products`, `wc_credentials`,
    `dashboard-summary`). Son migraciones de una línea.
 4. **El bloque de IA y mensajería en ISEIE**: es la diferencia grande de verdad.

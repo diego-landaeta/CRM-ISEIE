@@ -119,6 +119,13 @@ function soloAdministracion(ambito, herramienta) {
   }
 }
 
+/** Un periodo al revés no da «0 de todo»: se le dice a Claude que lo corrija. */
+function periodoEnOrden({ desde, hasta }) {
+  if (desde && hasta && desde > hasta) {
+    throw new AppError(`«desde» (${desde}) es posterior a «hasta» (${hasta}).`, 400, 'MCP_PERIODO_AL_REVES');
+  }
+}
+
 async function conTope(promesa, ms, nombre) {
   let reloj;
   const tope = new Promise((_, rechazar) => {
@@ -341,6 +348,89 @@ export const HERRAMIENTAS = [
         throw new AppError(`No tienes acceso al campus ${r.campus_id}. Usa «mis_proyectos» para ver los tuyos.`, 403, 'MCP_FUERA_DE_AMBITO');
       }
       return r;
+    },
+  },
+  // Publicidad (#235, ficha de Diego del 05/10 y respuesta del 07/10): lo que
+  // ya guarda el CRM de Meta. Solo super admin y admin: el gasto publicitario
+  // no lo ve una gestora. Primero `acotar` (un campus ajeno se rechaza por
+  // ajeno) y luego `soloAdministracion`, como las de tutores.
+  {
+    nombre: 'cuentas_publicitarias',
+    titulo: 'Cuentas publicitarias',
+    descripcion: 'Las cuentas de Meta conectadas en Publicidad: campus, nombre, moneda, cómo va la sincronización (estado y última vez) '
+      + 'y si tiene el histórico cargado. Contesta a «¿qué cuentas tenemos conectadas?» (solo super admin y admin).',
+    entrada: { ...AMBITO },
+    ejecutar: async (ambito, a) => {
+      const { projectIds } = acotar(ambito, a);
+      soloAdministracion(ambito, 'cuentas_publicitarias');
+      return model.cuentasPublicitarias({ projectIds });
+    },
+  },
+  {
+    nombre: 'resumen_publicidad',
+    titulo: 'Resumen de publicidad',
+    descripcion: 'Por campus, en un periodo: gasto en Meta (el mismo que la pantalla Publicidad), impresiones, clics, los «leads» que da Meta '
+      + 'y lo que vende la publicidad: prospectos que llegaron por una campaña, cuántos compraron, lo facturado y el coste por venta. '
+      + 'De los prospectos que entraron en el periodo, cuenta los que compraron (en cualquier fecha) y lo facturado. Sin fechas, todo el histórico. '
+      + '«atribucion» dice qué se puede saber de cada campus: «por_campaña» (las cifras son un MÍNIMO: solo cuentan los prospectos que traen la campaña; '
+      + 'una campaña con 0 puede haber traído prospectos sin ella, así que no digas que no vende); '
+      + '«no_disponible» o «solo_total_del_campus» (no se puede saber qué vende la publicidad: explica el «motivo» y NUNCA digas que vende 0). '
+      + 'En «solo_total_del_campus» compara el gasto con las ventas de todo el campus y dilo así. '
+      + 'Si citas los «leads_segun_meta», di siempre que no son fiables (#48) (solo super admin y admin).',
+    entrada: { ...AMBITO, ...PERIODO },
+    ejecutar: async (ambito, a) => {
+      const { projectIds } = acotar(ambito, a);
+      soloAdministracion(ambito, 'resumen_publicidad');
+      periodoEnOrden(a);
+      return model.resumenPublicidad({ projectIds, desde: a.desde, hasta: a.hasta });
+    },
+  },
+  {
+    nombre: 'campanas_publicitarias',
+    titulo: 'Campañas publicitarias',
+    descripcion: 'Cada campaña de Meta con gasto o prospectos en el periodo, de la que más gasta a la que menos: estado, objetivo, presupuesto diario, '
+      + 'gasto, los «leads» que da Meta, prospectos atribuidos, ventas atribuidas y coste por venta. Sirve para «¿qué campaña funciona mejor?». '
+      + 'Los atribuidos son un MÍNIMO: solo cuentan los prospectos que traen la campaña. Sin fechas, todo el histórico. '
+      + 'Con «atribucion» distinta de «por_campaña», ese campus no se puede atribuir por campaña: explica el «motivo», no digas que vende 0. '
+      + 'Si citas los «leads_segun_meta», di siempre que no son fiables (#48) (solo super admin y admin).',
+    entrada: {
+      ...AMBITO,
+      ...PERIODO,
+      // 100 como máximo: es el tope de filas de cualquier respuesta (#196).
+      limite: z.number().int().min(1).max(100).default(50).describe('Máximo de campañas (hasta 100)'),
+    },
+    ejecutar: async (ambito, a) => {
+      const { projectIds } = acotar(ambito, a);
+      soloAdministracion(ambito, 'campanas_publicitarias');
+      periodoEnOrden(a);
+      return model.campanasPublicitarias({ projectIds, desde: a.desde, hasta: a.hasta, limite: a.limite });
+    },
+  },
+  // Actividad por comercial (#203, parte A; ficha de Diego del 07/10). La usan
+  // todos los roles con MCP: a quien solo ve lo suyo se le impone su id y se
+  // ve a sí misma.
+  {
+    nombre: 'actividad_por_comercial',
+    titulo: 'Actividad por comercial',
+    descripcion: 'Llamadas, WhatsApp y correos registrados en el CRM por cada comercial en un periodo, contados por quien los registró '
+      + '(también en fichas de otra), con el día de Madrid. «personas» son las distintas que contactó y «toques», los contactos. '
+      + 'Las notas internas no son contactos: van aparte y no cuentan en «toques» ni en «personas». '
+      + '«whatsapp» son los WhatsApp apuntados como contacto (los que suman en «toques»); «whatsapp_texto» y «whatsapp_voz» son los mensajes '
+      + 'que salieron por WhatsApp, escritos y en nota de voz; los que no tienen autora salen en «Sin asignar». '
+      + 'Sin fechas, el día de ayer. Las llamadas son las REGISTRADAS en el CRM: las apuntadas a mano y las que entraron por WhatsApp '
+      + 'a su línea (también perdidas o rechazadas); las del móvil que no se apuntan no están. Dilo así («llamadas registradas»), '
+      + 'no como que las hizo ella. '
+      + 'Ejemplo: «Ayer, Victoria hizo 4 llamadas, Malena 3 y el resto ninguna registrada». '
+      + 'Quien no es super admin ni admin solo se ve a sí misma.',
+    entrada: { ...AMBITO, ...PERIODO },
+    ejecutar: async (ambito, a) => {
+      const { projectIds, responsableId } = acotar(ambito, a);
+      const desde = a.desde || a.hasta || model.ayerEnMadrid();
+      const hasta = a.hasta || (a.desde ? model.hoyEnMadrid() : desde);
+      if (desde > hasta) {
+        throw new AppError(`«desde» (${desde}) es posterior a «hasta» (${hasta}).`, 400, 'MCP_PERIODO_AL_REVES');
+      }
+      return model.actividadPorComercial({ projectIds, responsableId, desde, hasta });
     },
   },
   {
