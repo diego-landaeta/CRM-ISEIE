@@ -3,6 +3,7 @@ import { ArrowsClockwise, PlugsConnected, Receipt, Eye, CursorClick, Target, Cha
 import { useAuth } from '@/contexts/AuthContext';
 import { metaApi, MetaAccount, MetaCampaign, MetaDashboard, MetaRoiRow, MetaAdSet, MetaAd } from '../api/metaAds.api';
 import { toast } from '@/shared/hooks/useToast';
+import { tieneRol } from '@/shared/lib/roles';
 
 const ConnectWizard = lazy(() => import('../components/ConnectWizard'));
 const AssociateProductsDialog = lazy(() => import('../components/AssociateProductsDialog'));
@@ -28,8 +29,15 @@ const STATUS_TONE: Record<string, string> = {
 };
 
 export default function MetaAdsPage() {
-  const { activeProject } = useAuth() as { activeProject: { id?: number; nombre?: string } | null };
+  const { activeProject, user } = useAuth() as {
+    activeProject: { id?: number; nombre?: string } | null;
+    user: { role?: string; roles_extra?: string[] } | null;
+  };
   const projectId = activeProject?.id;
+  // Quien la ve por `meta_ads.view` (26/10/2026: el equipo de desarrollo) solo
+  // CONSULTA: conectar, sincronizar, configurar y asociar son de administración
+  // (el servidor también se lo niega).
+  const soloVer = !tieneRol(user, 'admin', 'superadmin', 'soporte');
   const [accounts, setAccounts] = useState<MetaAccount[]>([]);
   // ID de la cuenta filtrada en la UI. null = "Todas" (agrega cross-cuentas, default).
   const [filterAccountId, setFilterAccountId] = useState<number | null>(null);
@@ -129,6 +137,13 @@ export default function MetaAdsPage() {
   if (loading) {
     return <div className="h-40 bg-muted/40 rounded-lg animate-pulse" />;
   }
+  if (soloVer && accounts.length === 0) {
+    return (
+      <div className="bg-info-soft border border-border rounded-lg p-6 text-center text-sm">
+        Este campus no tiene ninguna cuenta de Meta conectada todavía.
+      </div>
+    );
+  }
   if (accounts.length === 0 || showAddAccount) {
     return (
       <div className="space-y-3">
@@ -199,6 +214,7 @@ export default function MetaAdsPage() {
             )}
           </div>
         </div>
+        {!soloVer && (
         <div className="flex items-center gap-2 flex-shrink-0">
           <button onClick={handleSync}
             disabled={syncing || account.last_sync_status === 'in_progress' || (filterAccountId == null && accounts.length > 1)}
@@ -222,6 +238,7 @@ export default function MetaAdsPage() {
             <Gear size={14} weight="duotone" /> Configuración
           </button>
         </div>
+        )}
       </div>
 
       {/* Selector rango fechas (oculto cuando estás en config) */}
@@ -284,10 +301,12 @@ export default function MetaAdsPage() {
             className={`px-3 py-1.5 rounded-md text-sm font-semibold ${tab === 'manual' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-muted-foreground'}`}>
             Manual
           </button>
+          {!soloVer && (
           <button onClick={() => setTab('config')}
             className={`px-3 py-1.5 rounded-md text-sm font-semibold flex items-center gap-1.5 ${tab === 'config' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-muted-foreground'}`}>
             <Gear size={13} weight="duotone" /> Configuración
           </button>
+          )}
         </div>
 
         {tab === 'campaigns' && (
@@ -323,8 +342,8 @@ export default function MetaAdsPage() {
                       currency={currency}
                       dateFrom={dateFrom}
                       dateTo={dateTo}
-                      onAssociate={() => setAssociateOpen(c)}
-                      onAssociateAdSet={(a) => setAssociateAdSetOpen(a)}
+                      onAssociate={soloVer ? undefined : () => setAssociateOpen(c)}
+                      onAssociateAdSet={soloVer ? undefined : (a) => setAssociateAdSetOpen(a)}
                     />
                   ))}
                 </tbody>
@@ -347,7 +366,7 @@ export default function MetaAdsPage() {
           </Suspense>
         )}
 
-        {tab === 'config' && (
+        {tab === 'config' && !soloVer && (
           <div className="p-4">
             <Suspense fallback={<div className="h-40 bg-muted/40 rounded animate-pulse" />}>
               <MetaSettingsPanel
@@ -439,7 +458,7 @@ function DailyChart({ daily, currency }: { daily: MetaDashboard['daily']; curren
 // Tabla 3 niveles: Campaign → AdSet → Ad. Click en chevron toggle.
 
 function CampaignRow({ c, projectId, currency, dateFrom, dateTo, onAssociate, onAssociateAdSet }:
-  { c: MetaCampaign; projectId: number; currency: string; dateFrom: string; dateTo: string; onAssociate: () => void; onAssociateAdSet: (a: MetaAdSet) => void }) {
+  { c: MetaCampaign; projectId: number; currency: string; dateFrom: string; dateTo: string; onAssociate?: () => void; onAssociateAdSet?: (a: MetaAdSet) => void }) {
   const [open, setOpen] = useState(false);
   const [adsets, setAdSets] = useState<MetaAdSet[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -498,9 +517,11 @@ function CampaignRow({ c, projectId, currency, dateFrom, dateTo, onAssociate, on
           <span className={c.ventas_crm ? 'font-semibold' : 'text-muted-foreground'}>{fmtNum(c.ventas_crm || 0)}</span>
         </td>
         <td className="px-3 py-2.5 text-right">
+          {onAssociate && (
           <button onClick={onAssociate} className="text-[11px] text-primary hover:underline font-semibold">
             Asociar
           </button>
+          )}
         </td>
       </tr>
       {open && (
@@ -520,7 +541,7 @@ function CampaignRow({ c, projectId, currency, dateFrom, dateTo, onAssociate, on
                 <tbody>
                   {(adsets || []).map((a) => (
                     <AdSetRow key={a.adset_id} a={a} projectId={projectId} currency={currency} dateFrom={dateFrom} dateTo={dateTo}
-                      onAssociate={() => onAssociateAdSet(a)} />
+                      onAssociate={onAssociateAdSet ? () => onAssociateAdSet(a) : undefined} />
                   ))}
                 </tbody>
               </table>
@@ -533,7 +554,7 @@ function CampaignRow({ c, projectId, currency, dateFrom, dateTo, onAssociate, on
 }
 
 function AdSetRow({ a, projectId, currency, dateFrom, dateTo, onAssociate }:
-  { a: MetaAdSet; projectId: number; currency: string; dateFrom: string; dateTo: string; onAssociate: () => void }) {
+  { a: MetaAdSet; projectId: number; currency: string; dateFrom: string; dateTo: string; onAssociate?: () => void }) {
   const [open, setOpen] = useState(false);
   const [ads, setAds] = useState<MetaAd[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -579,10 +600,12 @@ function AdSetRow({ a, projectId, currency, dateFrom, dateTo, onAssociate }:
           {fmtNum(a.total_leads)} <span className="text-muted-foreground">· {a.cpl != null ? fmtMoney(a.cpl, currency) : '—'}</span>
         </td>
         <td className="px-3 py-2 text-right">
+          {onAssociate && (
           <button onClick={(e) => { e.stopPropagation(); onAssociate(); }}
             className="text-[11px] text-primary hover:underline font-semibold">
             Asociar
           </button>
+          )}
         </td>
       </tr>
       {open && (

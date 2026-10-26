@@ -68,6 +68,9 @@ export const RUTAS_DEL_COLABORADOR = [
   // público y las descargas firmadas no pasan por `verifyToken`: no llegan aquí.)
   /^\/api\/facturas-colaborador\/mias(?:\/|$)/,
   /^\/api\/notifications(?:\/|$)/,
+  // Meta Ads, solo ver y solo con su permiso (`meta_ads.view`, 26/10/2026): la
+  // guardia de la ruta lo mira; sin él, 403 igual.
+  /^\/api\/meta-ads(?:\/|$)/,
   /^\/api\/users\/mis-avisos\/?$/,
   /^\/api\/users\/\d+\/(?:avatar|views)\/?$/,
 ];
