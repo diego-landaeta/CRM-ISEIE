@@ -207,8 +207,9 @@ const CONSULTAS = [
         issuer_id: x.issuer_id, importe_acordado: n2(x.importe_acordado), modalidad: x.modalidad ?? null,
         importe_fijo: n2(x.importe_fijo), tarifa_hora: n2(x.tarifa_hora), iva_pct: n2(x.iva_pct), irpf_pct: n2(x.irpf_pct),
       })))],
-  [(s) => s.includes("FROM users WHERE id = $1 AND role = 'colaborador'"), ([id]) =>
-    filas(usuario(id)?.role === 'colaborador' ? [{ '?column?': 1 }] : [])],
+  // Rol colaborador, principal o añadido (26/10/2026).
+  [(s) => s.includes("FROM users WHERE id = $1 AND (role = 'colaborador'"), ([id]) =>
+    filas(usuario(id)?.role === 'colaborador' || (usuario(id)?.roles_extra || []).includes('colaborador') ? [{ '?column?': 1 }] : [])],
   [(s) => s.includes('FROM colaborador_empresas') && s.includes('NOT (issuer_id = ANY($2::int[])) LIMIT 1'), ([id, issuerIds]) =>
     filas(datos.ce.some((x) => x.colaborador_id === Number(id) && !issuerIds.includes(x.issuer_id)) ? [{ '?column?': 1 }] : [])],
   [(s) => s.includes('INSERT INTO colaboradores'), ([nombre, email, nif, area, notas, userId, altaDesde, porUserId]) => {

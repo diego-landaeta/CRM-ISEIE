@@ -80,6 +80,8 @@ export function TaskModal({
   const [projectSelection, setProjectSelection] = useState<string>(''); // 'campus:1' o 'ext:2' o ''
   const [areaId, setAreaId] = useState<number | ''>('');
   const [assignedTo, setAssignedTo] = useState<number>(currentUserId);
+  // El supervisor (26/10/2026): lo pone quien puede asignar.
+  const [supervisorId, setSupervisorId] = useState<number | ''>('');
 
   const [nuevoPaso, setNuevoPaso] = useState('');
   const [nuevoComentario, setNuevoComentario] = useState('');
@@ -91,6 +93,8 @@ export function TaskModal({
   // Lo decide la clave `tasks.close`, no el rol: lo que se cambie en
   // Configuración › Roles manda también aquí.
   const tienePermisoCierre = canClose;
+  // Quien la supervisa la aprueba o la devuelve aunque no tenga la clave.
+  const esSupervisor = !!task && task.supervisor_id === currentUserId;
   const gruposDeCampus = useMemo(() => agruparPorEmpresa(projects), [projects]);
   // Una tarea ya guardada con un campus de otra empresa no pierde el suyo al abrirla.
   const campusFuera = task?.project_id && !projects.some((p) => p.id === task.project_id)
@@ -109,6 +113,7 @@ export function TaskModal({
     else setProjectSelection('');
     setAreaId(t.area_id ?? '');
     setAssignedTo(t.assigned_to ?? currentUserId);
+    setSupervisorId(t.supervisor_id ?? '');
   }, [currentUserId]);
 
   const recargar = useCallback(async (id: number) => {
@@ -171,6 +176,13 @@ export function TaskModal({
   const opcionesResponsable = (assignees.length ? assignees : [{ id: currentUserId, nombre: 'Yo', email: '', role: '' }])
     .filter((a: Assignee) => a.asignable !== false || a.id === (task?.assigned_to ?? currentUserId))
     .map((a) => ({ value: a.id, label: a.id === currentUserId ? `${a.nombre} (yo)` : a.nombre }));
+  // Supervisor: cualquiera del equipo al que se le pueda asignar, menos quien la lleva.
+  const opcionesSupervisor = assignees
+    .filter((a: Assignee) => (a.asignable !== false || a.id === task?.supervisor_id) && a.id !== assignedTo)
+    .map((a) => ({ value: a.id, label: a.id === currentUserId ? `${a.nombre} (yo)` : a.nombre }));
+  if (task?.supervisor_id && !opcionesSupervisor.some((o) => o.value === task.supervisor_id)) {
+    opcionesSupervisor.push({ value: task.supervisor_id, label: task.supervisor_name || `Persona ${task.supervisor_id}` });
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -204,6 +216,10 @@ export function TaskModal({
         const { mover, actualizar } = armarCambiosDeTarea({
           base: basePayload, actual: task!, estadoAntes: task!.status, estadoNuevo: status, canAssign, assignedTo,
         });
+        const supervisorNuevo = supervisorId || null;
+        if (canAssign && (task!.supervisor_id ?? null) !== supervisorNuevo) {
+          (actualizar as Record<string, unknown>).supervisor_id = supervisorNuevo;
+        }
         if (mover) await tasksApi.moveTask(task!.id, { status: mover });
         if (Object.keys(actualizar).length > 0) await tasksApi.updateTask(task!.id, actualizar);
         toast({ title: 'Tarea actualizada' });
@@ -212,6 +228,7 @@ export function TaskModal({
           ...basePayload,
           status,
           assigned_to: canAssign ? (assignedTo || null) : currentUserId,
+          ...(canAssign && supervisorId ? { supervisor_id: Number(supervisorId) } : {}),
         };
         await tasksApi.createTask(createPayload);
         toast({ title: 'Tarea creada' });
@@ -321,7 +338,7 @@ export function TaskModal({
 
             <div className="flex items-center gap-1.5">
               {/* Acciones de Revisión si la tarea está en revisión */}
-              {editando && task?.status === 'en_revision' && tienePermisoCierre && (
+              {editando && task?.status === 'en_revision' && (tienePermisoCierre || esSupervisor) && (
                 <div className="flex items-center gap-1.5 mr-2">
                   <Button type="button" size="sm" variant="outline" className="text-amber-600 border-amber-300 dark:border-amber-800 hover:bg-amber-50 dark:hover:bg-amber-950/40 text-xs h-7.5 px-2" onClick={() => setMostrarDialogoDevolver(true)}>
                     <ArrowUUpLeft size={13} className="mr-1" /> Devolver
@@ -471,6 +488,28 @@ export function TaskModal({
                     )}
                   </div>
                 </div>
+
+                {(canAssign || task?.supervisor_id) && (
+                  <div>
+                    <label className="block text-xs font-semibold mb-1 flex items-center gap-1">
+                      <User size={12} /> Supervisor
+                    </label>
+                    <select
+                      value={supervisorId}
+                      disabled={!canAssign}
+                      onChange={(e) => setSupervisorId(e.target.value ? Number(e.target.value) : '')}
+                      className={inputClass}
+                    >
+                      <option value="">Sin supervisor</option>
+                      {opcionesSupervisor.map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      La ve, le llega un correo al ponerla y cuando esté «En revisión», y la aprueba o la devuelve.
+                    </p>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>

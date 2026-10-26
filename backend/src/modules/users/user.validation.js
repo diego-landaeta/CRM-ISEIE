@@ -19,6 +19,14 @@ const empresaIdsSchema = z.array(z.number().int().positive()).max(50).optional()
 
 const tieneCampus = (d) => d.projectIds?.length > 0 || d.projects?.length > 0;
 
+/**
+ * Quién puede tener una empresa entera: el admin (#220, con sus campus) y el
+ * colaborador —rol principal o añadido— (Diego, 26/10/2026: el equipo de
+ * desarrollo va por empresa en Tareas; al colaborador no se le dan campus).
+ */
+export const puedeTenerEmpresa = (role, rolesExtra = []) =>
+  role === 'admin' || role === 'colaborador' || (rolesExtra || []).includes('colaborador');
+
 export const createUserSchema = z.object({
   nombre: z.string().min(2, 'Nombre minimo 2 caracteres').max(200),
   email: z.string().email('Email invalido').transform((v) => v.toLowerCase().trim()),
@@ -45,9 +53,9 @@ export const createUserSchema = z.object({
     path: ['projectIds'],
   }
 ).refine(
-  (d) => !(d.empresaIds?.length > 0) || d.role === 'admin',
+  (d) => !(d.empresaIds?.length > 0) || puedeTenerEmpresa(d.role, d.roles_extra),
   {
-    message: 'Solo un admin puede tener una empresa entera',
+    message: 'Solo un admin o un colaborador pueden tener una empresa entera',
     path: ['empresaIds'],
   }
 );

@@ -48,6 +48,8 @@ export type TaskPayload = {
   area_id?: number | null;
   status?: TaskStatus;
   assigned_to?: number | null;
+  /** Quien la supervisa (26/10/2026). Solo lo manda quien puede asignar. */
+  supervisor_id?: number | null;
 };
 
 export async function getTasks(params: GetTasksParams = {}): Promise<Task[]> {
