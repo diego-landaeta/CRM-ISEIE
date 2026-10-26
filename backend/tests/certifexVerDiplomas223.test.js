@@ -14,11 +14,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  * lo que se ve sea solo de sus campus está en certifexDiplomasSoloLectura.test.js.
  */
 
-const conPermiso = new Set();
-vi.mock('../src/modules/permissions/permissions.service.js', () => ({
-  resolvePermission: vi.fn(async (userId, _role, _custom, resource, action) =>
-    conPermiso.has(`${userId}:${resource}.${action}`)),
-}));
+// Desde #230 (gemela de CRM#423) las rutas preguntan a `puede('clave')`: el
+// resolver de verdad, con las personas de cada token y sus excepciones
+// (tests/helpers/permisosSinBase.js).
+vi.mock('../src/modules/permissions/permissions.service.js', () => import('./helpers/permisosSinBase.js'));
+const { registrar } = await import('./helpers/permisosSinBase.js');
+// Quién tiene «Ver diplomas» por una excepción suya.
+const conPermiso = new Set(['32:diplomas.view']);
 const alcanzado = vi.hoisted(() => []);
 const handler = (nombre) => (req, res) => { alcanzado.push(nombre); res.json({ success: true, data: nombre }); };
 vi.mock('../src/modules/certifex/certifex.controller.js', () => Object.fromEntries(
@@ -43,8 +45,11 @@ app.use('/api/certifex', router);
 app.use((err, _req, res, _next) => res.status(err.statusCode || 500).json({ success: false, code: err.code }));
 const request = supertest(app);
 
-const token = (userId, role, roles_extra = []) =>
-  jwt.sign({ userId, email: `u${userId}@prueba.test`, role, roles_extra }, process.env.JWT_SECRET, { expiresIn: '5m' });
+const token = (userId, role, roles_extra = []) => {
+  const excepciones = Object.fromEntries([...conPermiso].filter((x) => x.startsWith(`${userId}:`)).map((x) => [x.split(':')[1], true]));
+  registrar({ userId, role, roles_extra, excepciones });
+  return jwt.sign({ userId, email: `u${userId}@prueba.test`, role, roles_extra }, process.env.JWT_SECRET, { expiresIn: '5m' });
+};
 const GESTORA = token(31, 'gestor');
 const GESTORA_CON_PERMISO = token(32, 'gestor');
 const ADMIN = token(33, 'admin');
@@ -72,8 +77,6 @@ const OTRAS_LECTURAS = ['/diplomas/formaciones?centro=ISEIE', '/diplomas/firma/7
 const pedir = (metodo, ruta, t) => request[metodo](`/api/certifex${ruta}`).set('Authorization', `Bearer ${t}`).send({});
 
 beforeEach(() => {
-  conPermiso.clear();
-  conPermiso.add('32:diplomas.view');
   alcanzado.length = 0;
 });
 

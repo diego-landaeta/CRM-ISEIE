@@ -77,7 +77,7 @@ describe('1 · Diego, superadmin con soporte (26/10)', () => {
     const me = await request.get('/api/auth/me').set(como('diego'));
     expect(me.status, JSON.stringify(me.body)).toBe(200);
     const p = me.body.data.permissions;
-    for (const k of ['roles.edit', 'users.excepciones', 'credentials.view', 'credentials.revelar', 'projects.create', 'installation.edit', 'leads.restaurar']) {
+    for (const k of ['roles.edit', 'users.excepciones', 'credentials.view', 'credentials.edit', 'projects.create', 'installation.edit', 'leads.restaurar']) {
       expect(p[k], k).toBe(true);
     }
   });

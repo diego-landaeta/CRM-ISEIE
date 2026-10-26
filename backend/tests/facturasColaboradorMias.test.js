@@ -10,6 +10,7 @@ import supertest from 'supertest';
  */
 
 vi.mock('../src/shared/config/db.js', async () => (await import('./facturasColaborador.base.js')).moduloDb);
+vi.mock('../src/modules/permissions/permissions.service.js', () => import('./helpers/permisosSinBase.js'));
 vi.mock('../src/modules/status/status.model.js', () => ({ logError: vi.fn(async () => {}) }));
 vi.mock('../src/shared/services/brevo.service.js', () => ({ sendEmail: vi.fn(async () => ({ sent: true })) }));
 vi.mock('../src/shared/services/r2.service.js', () => ({

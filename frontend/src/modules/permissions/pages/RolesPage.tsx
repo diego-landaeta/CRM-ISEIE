@@ -36,8 +36,9 @@ export default function RolesPage() {
   const cargar = useCallback(async () => {
     try {
       const [c, r] = await Promise.all([api.getCatalogo(), api.getRoles()]);
-      setCatalogo(c);
-      setRoles(r);
+      // Si el servidor no manda la forma esperada, la pantalla no se cae (#113).
+      setCatalogo(Array.isArray(c?.secciones) ? c : null);
+      setRoles({ fijos: Array.isArray(r?.fijos) ? r.fijos : [], aMedida: Array.isArray(r?.aMedida) ? r.aMedida : [] });
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudieron cargar los roles');
