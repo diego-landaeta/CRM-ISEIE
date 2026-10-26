@@ -45,8 +45,9 @@ const correosA = (clave) => sendEmail.mock.calls
   .filter((c) => c.to?.[0]?.email === U[clave].email);
 
 async function tareaEnRevision(titulo) {
+  // 26/10/2026: aprobar y devolver es del supervisor (o del superadmin).
   const t = (await request.post('/api/tasks').set(como('admin'))
-    .send({ title: titulo, assigned_to: U.colaborador.id })).body.data;
+    .send({ title: titulo, assigned_to: U.colaborador.id, supervisor_id: U.admin.id })).body.data;
   await request.patch(`/api/tasks/${t.id}/move`).set(como('colaborador')).send({ status: 'en_revision' });
   return t;
 }
@@ -134,7 +135,7 @@ describe('con TAREAS_CORREOS_ACTIVOS encendido', () => {
 
   it('comentario nuevo en su tarea: a la persona de la tarea, con el texto', async () => {
     const t = (await request.post('/api/tasks').set(como('admin'))
-      .send({ title: 'Correo: comentario', assigned_to: U.colaborador.id })).body.data;
+      .send({ title: 'Correo: comentario', assigned_to: U.colaborador.id, supervisor_id: U.admin.id })).body.data;
     sendEmail.mockClear();
     await request.post(`/api/tasks/${t.id}/comments`).set(como('admin')).send({ content: 'Revisa el H1' });
     const [c] = correosA('colaborador');

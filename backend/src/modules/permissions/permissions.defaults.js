@@ -32,7 +32,7 @@ export const SYSTEM_ROLE_DEFAULTS = {
     'field_defs.view': true, 'field_defs.edit': true,
     'channels.view': true, 'channels.edit': true,
     'roles.view': true, 'roles.edit': false,
-    'tasks.view_all': true, 'tasks.view_own': true, 'tasks.create': true, 'tasks.assign': true, 'tasks.edit': true, 'tasks.delete': true, 'tasks.close': true, 'tasks.manage': true,
+    'tasks.view_all': true, 'tasks.view_own': true, 'tasks.create': true, 'tasks.assign': true, 'tasks.edit': true, 'tasks.delete': true, 'tasks.close': true, 'tasks.manage': true, 'tasks.manage_teams': true,
     // Diplomas de Certifex (#223, gemela de MultiCRM #384): VER la pantalla, en solo
     // lectura. El admin la ve y la maneja por su rol; esto es para darsela a quien no lo es.
     'diplomas.view': true,
@@ -77,7 +77,7 @@ export const SYSTEM_ROLE_DEFAULTS = {
     'channels.view': true, 'channels.edit': false,
     'roles.view': false, 'roles.edit': false,
     // Sin tablero (Diego, 09/10: «las gestoras no tienen tareas»): ni menú ni API.
-    'tasks.view_all': false, 'tasks.view_own': false, 'tasks.create': false, 'tasks.assign': false, 'tasks.edit': false, 'tasks.delete': false, 'tasks.close': false, 'tasks.manage': false,
+    'tasks.view_all': false, 'tasks.view_own': false, 'tasks.create': false, 'tasks.assign': false, 'tasks.edit': false, 'tasks.delete': false, 'tasks.close': false, 'tasks.manage': false, 'tasks.manage_teams': false,
     // Diplomas de Certifex (#223): apagado de serie; se da por rol o por persona
     // desde Configuración › Roles. Solo VER, y solo sus campus.
     'diplomas.view': false,
@@ -113,7 +113,7 @@ export const SYSTEM_ROLE_DEFAULTS = {
     'channels.view': true, 'channels.edit': false,
     'roles.view': false, 'roles.edit': false,
     // Sin tablero (Diego, 09/10: «las gestoras no tienen tareas»): ni menú ni API.
-    'tasks.view_all': false, 'tasks.view_own': false, 'tasks.create': false, 'tasks.assign': false, 'tasks.edit': false, 'tasks.delete': false, 'tasks.close': false, 'tasks.manage': false,
+    'tasks.view_all': false, 'tasks.view_own': false, 'tasks.create': false, 'tasks.assign': false, 'tasks.edit': false, 'tasks.delete': false, 'tasks.close': false, 'tasks.manage': false, 'tasks.manage_teams': false,
     // Diplomas de Certifex (#223): no los ve (como hasta ahora), ni los emite.
     'diplomas.view': false,
     'diplomas.emit': false,
@@ -122,7 +122,7 @@ export const SYSTEM_ROLE_DEFAULTS = {
   // es «no»: `resolvePermission` solo da por bueno un `true` explicito, y el
   // servidor le corta el resto de rutas en `verifyToken`.
   colaborador: {
-    'tasks.view_all': false, 'tasks.view_own': true, 'tasks.create': true, 'tasks.assign': false, 'tasks.edit': true, 'tasks.delete': false, 'tasks.close': false, 'tasks.manage': false,
+    'tasks.view_all': false, 'tasks.view_own': true, 'tasks.create': true, 'tasks.assign': false, 'tasks.edit': true, 'tasks.delete': false, 'tasks.close': false, 'tasks.manage': false, 'tasks.manage_teams': false,
     // Facturas de colaboradores (#202): sube la suya («Mi factura»), y nada de administración.
     'facturas_colaborador.ver_todas': false, 'facturas_colaborador.gestionar': false, 'facturas_colaborador.anular': false, 'facturas_colaborador.pagar': false, 'facturas_colaborador.subir': true,
     // Diplomas de Certifex (#223): no.
@@ -156,7 +156,8 @@ export const ALL_RESOURCES = {
   field_defs:       ['view', 'edit'],
   channels:         ['view', 'edit'],
   roles:            ['view', 'edit'],
-  tasks:            ['view_all', 'view_own', 'create', 'assign', 'edit', 'delete', 'close', 'manage'],
+  // manage_teams (26/10/2026): crear y archivar equipos del tablero, sus cargos y sus miembros.
+  tasks:            ['view_all', 'view_own', 'create', 'assign', 'edit', 'delete', 'close', 'manage', 'manage_teams'],
   // Diplomas de Certifex (#223). `view`: verlos. `emit` (Diego, 22/10/2026):
   // revisar, pasar a Pendientes, aprobar y emitir y enviar el diploma al
   // alumno; quien emite tambien ve. Rechazar, corregir, revocar, la firma y el

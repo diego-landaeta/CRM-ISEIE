@@ -81,8 +81,10 @@ export const createTaskSchema = z.object({
   external_project_id: id.optional().nullable(),
   area_id: id.optional().nullable(),
   assigned_to: id.optional().nullable(),
-  // Quien la supervisa (26/10/2026). Lo pone quien tiene «Asignar».
+  // Quien la supervisa (26/10/2026). Lo pone quien puede delegar.
   supervisor_id: id.optional().nullable(),
+  // El equipo de la tarea (26/10/2026). Sin él, «Sin equipo».
+  team_id: id.optional().nullable(),
 }).refine((d) => !(d.project_id && d.external_project_id), {
   message: 'No puedes asignar un proyecto del catálogo y un proyecto propio a la vez',
 });
@@ -97,6 +99,7 @@ export const updateTaskSchema = z.object({
   area_id: id.optional().nullable(),
   assigned_to: id.optional().nullable(),
   supervisor_id: id.optional().nullable(),
+  team_id: id.optional().nullable(),
 }).refine((d) => Object.keys(d).length > 0, {
   message: 'No se envió ningún campo para actualizar',
 }).refine((d) => !(d.project_id && d.external_project_id), {
@@ -123,8 +126,43 @@ const ambitoQuery = {
 
 export const ambitoQuerySchema = z.object(ambitoQuery);
 
+// La gente para asignar; con `team_id`, su cargo y nivel en ese equipo.
+export const assigneesQuerySchema = z.object({ ...ambitoQuery, team_id: z.coerce.number().int().positive().optional() });
+
+/* --- Equipos (26/10/2026) --- */
+const nombreEquipo = z.string().trim().min(1, 'El nombre es obligatorio').max(80, 'Máximo 80 caracteres');
+const nivel = z.number().positive('El nivel tiene que ser mayor que 0').max(9999, 'Nivel demasiado alto')
+  .refine((v) => Math.round(v * 100) === v * 100, 'El nivel admite como mucho dos decimales');
+export const createTeamSchema = z.object({
+  issuer_id: id,
+  name: nombreEquipo,
+  color: colorTablero.optional(),
+  sort_order: z.number().int().min(0).max(2147483647).optional(),
+});
+export const updateTeamSchema = z.object({
+  name: nombreEquipo.optional(),
+  color: colorTablero.optional(),
+  is_active: z.boolean().optional(),
+  sort_order: z.number().int().min(0).max(2147483647).optional(),
+}).refine((d) => Object.keys(d).length > 0, { message: 'No se envió ningún campo para cambiar' });
+export const createTeamRoleSchema = z.object({
+  name: z.string().trim().min(1, 'El nombre del cargo es obligatorio').max(60),
+  level: nivel,
+  sort_order: z.number().int().min(0).max(2147483647).optional(),
+});
+export const updateTeamRoleSchema = z.object({
+  name: z.string().trim().min(1).max(60).optional(),
+  level: nivel.optional(),
+  sort_order: z.number().int().min(0).max(2147483647).optional(),
+  is_active: z.boolean().optional(),
+}).refine((d) => Object.keys(d).length > 0, { message: 'No se envió ningún campo para cambiar' });
+export const setTeamMemberSchema = z.object({ team_role_id: id });
+export const listTeamsQuerySchema = z.object({ gestion: booleanoDeQuery.optional() });
+
 export const listTasksQuerySchema = z.object({
   ...ambitoQuery,
+  // El equipo elegido arriba (26/10/2026): uno, o 0 = «Sin equipo».
+  team_id: z.coerce.number().int().min(0).optional(),
   status: columna.optional(),
   assigned_to: z.coerce.number().int().positive().optional(),
   project_id: z.coerce.number().int().positive().optional(),

@@ -181,8 +181,10 @@ describe('A · por empresa, no por campus', () => {
       expect(mov.status, JSON.stringify(mov.body)).toBe(200);
       await esperar();
       expect(correosA('angel').map((c) => c.subject)).toEqual([`Para revisar: ${MARCA} Para Diana`]);
-      // Ángel no tiene tasks.close: la lista «Por revisar» no es suya, pero la tarjeta sí.
-      expect((await request.get('/api/tasks/review').set(como('angel'))).status).toBe(403);
+      // En su «Por revisar» le salen las que supervisa (26/10/2026), sin «Aprobar y cerrar».
+      const lista = await request.get('/api/tasks/review').set(como('angel'));
+      expect(lista.status).toBe(200);
+      expect(lista.body.data.map((x) => x.id)).toContain(tarea.id);
       const ok = await request.patch(`/api/tasks/${tarea.id}/approve`).set(como('angel'));
       expect(ok.status, JSON.stringify(ok.body)).toBe(200);
       expect(ok.body.data.status).toBe('hecha');
