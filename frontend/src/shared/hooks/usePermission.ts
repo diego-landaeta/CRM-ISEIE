@@ -45,6 +45,8 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<UserRole, PermissionMap> = {
     'diplomas.view': true,
     // Emitirlos (Diego, 22/10/2026): el admin ya emite por su rol.
     'diplomas.emit': true,
+    // Meta Ads, solo ver (26/10/2026): el admin por su rol.
+    'meta_ads.view': true,
   },
   gestor: {
     'leads.read': true,    'leads.create': true,    'leads.update': true,
@@ -82,6 +84,8 @@ export const PERMISSION_RESOURCES: ReadonlyArray<PermissionResource> = [
   // (revisar, pasar a Pendientes, aprobar y emitir, enviar). Rechazar, corregir y
   // revocar siguen siendo del admin.
   { key: 'diplomas',    label: 'Diplomas (Certifex)', actions: ['view', 'emit'] },
+  // 26/10/2026: Meta Ads en solo lectura, para quien no es admin (equipo de desarrollo).
+  { key: 'meta_ads',    label: 'Meta Ads (ver)', actions: ['view'] },
 ];
 
 export const FIXED_ROLES: ReadonlyArray<FixedRole> = [
