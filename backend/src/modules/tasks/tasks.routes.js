@@ -18,6 +18,19 @@ router.get('/tags', ctrl.tagNames);
 router.get('/review', ctrl.reviewTasks);
 router.get('/review/count', ctrl.reviewCount);
 
+// Equipos (26/10/2026): ver los suyos; gestionarlos, con «Gestionar equipos».
+router.get('/teams', ctrl.listTeams);
+router.get('/teams/mine', ctrl.myTeams);
+router.get('/teams/empresas', ctrl.teamEmpresas);
+router.post('/teams', ctrl.createTeam);
+router.get('/teams/:teamId', ctrl.getTeam);
+router.patch('/teams/:teamId', ctrl.updateTeam);
+router.post('/teams/:teamId/roles', ctrl.createTeamRole);
+router.patch('/teams/:teamId/roles/:roleId', ctrl.updateTeamRole);
+router.get('/teams/:teamId/candidates', ctrl.teamCandidates);
+router.put('/teams/:teamId/members/:userId', ctrl.setTeamMember);
+router.delete('/teams/:teamId/members/:userId', ctrl.removeTeamMember);
+
 // Configuración de columnas
 router.get('/columns', ctrl.listColumns);
 router.post('/columns', ctrl.createColumn);

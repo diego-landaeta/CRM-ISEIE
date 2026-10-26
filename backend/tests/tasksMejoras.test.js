@@ -178,15 +178,16 @@ describe('1 · Por revisar', () => {
   let paraDevolver;
 
   beforeAll(async () => {
-    paraAprobar = await crear('admin', { title: 'Revisar la home', assigned_to: U.colaborador.id, due_date: '2030-01-10' });
-    paraDevolver = await crear('admin', { title: 'Revisar el SEO', assigned_to: U.colaborador2.id, due_date: '2030-01-05' });
+    // 26/10/2026: «Por revisar» es de quien las supervisa (o del superadmin).
+    paraAprobar = await crear('admin', { title: 'Revisar la home', assigned_to: U.colaborador.id, due_date: '2030-01-10', supervisor_id: U.admin.id });
+    paraDevolver = await crear('admin', { title: 'Revisar el SEO', assigned_to: U.colaborador2.id, due_date: '2030-01-05', supervisor_id: U.admin.id });
     for (const t of [paraAprobar, paraDevolver]) {
       const quien = t.assigned_to === U.colaborador.id ? 'colaborador' : 'colaborador2';
       expect((await mover(quien, t.id, { status: 'en_revision' })).status).toBe(200);
     }
   });
 
-  it('la lista trae las de todo el equipo, por fecha límite, con lo que hace falta para revisar', async () => {
+  it('la lista trae las que supervisa, por fecha límite, con lo que hace falta para revisar', async () => {
     const res = await request.get('/api/tasks/review').set(como('admin'));
     expect(res.status).toBe(200);
     const mias = res.body.data.filter((t) => [paraAprobar.id, paraDevolver.id].includes(t.id));
@@ -242,31 +243,34 @@ describe('1 · Por revisar', () => {
   });
 });
 
-describe('3 · permisos: decide la clave, no el rol', () => {
+describe('3 · permisos: aprobar es del supervisor (26/10/2026), no de la clave', () => {
   let t;
   beforeEach(async () => {
-    t = await crear('admin', { title: `Permisos ${Math.random()}`, assigned_to: U.colaborador.id });
+    t = await crear('admin', { title: `Permisos ${Math.random()}`, assigned_to: U.colaborador.id, supervisor_id: U.colaborador2.id });
     expect((await mover('colaborador', t.id, { status: 'en_revision' })).status).toBe(200);
   });
 
-  it('sin tasks.close no se aprueba ni se devuelve, aunque se llame a la API', async () => {
-    expect((await request.patch(`/api/tasks/${t.id}/approve`).set(como('gestora'))).status).toBe(403);
-    expect((await request.patch(`/api/tasks/${t.id}/return`).set(como('gestora')).send({ comment: 'x' })).status).toBe(403);
+  it('quien no la supervisa no la aprueba ni la devuelve, tenga o no «Aprobar y cerrar»', async () => {
+    for (const quien of ['gestora', 'gestoraConCierre', 'admin', 'adminSinCierre']) {
+      expect((await request.patch(`/api/tasks/${t.id}/approve`).set(como(quien))).status, quien).toBe(403);
+      expect((await request.patch(`/api/tasks/${t.id}/return`).set(como(quien)).send({ comment: 'x' })).status, quien).toBe(403);
+    }
     expect((await mover('gestora', t.id, { status: 'hecha' })).status).toBe(403);
-    expect((await request.get('/api/tasks/review').set(como('gestora'))).status).toBe(403);
+    // «Por revisar» le sale vacío: no supervisa ninguna.
+    const lista = await request.get('/api/tasks/review').set(como('gestora'));
+    expect(lista.status).toBe(200);
+    expect(lista.body.data.map((x) => x.id)).not.toContain(t.id);
   });
 
-  it('un rol a medida de admin sin tasks.close (Configuración › Roles) ya no aprueba', async () => {
-    expect((await request.patch(`/api/tasks/${t.id}/approve`).set(como('adminSinCierre'))).status).toBe(403);
-    expect((await mover('adminSinCierre', t.id, { status: 'hecha' })).status).toBe(403);
+  it('el supervisor la aprueba aunque no tenga «Aprobar y cerrar»', async () => {
+    expect((await request.patch(`/api/tasks/${t.id}/approve`).set(como('colaborador2'))).status).toBe(200);
   });
 
-  it('un admin al que se le quita tasks.close en su ficha ya no aprueba', async () => {
-    expect((await request.patch(`/api/tasks/${t.id}/approve`).set(como('adminVetado'))).status).toBe(403);
-  });
-
-  it('una gestora a la que se le da tasks.close sí aprueba', async () => {
-    expect((await request.patch(`/api/tasks/${t.id}/approve`).set(como('gestoraConCierre'))).status).toBe(200);
+  it('quien la lleva, con «Aprobar y cerrar», la cierra arrastrando; sin ella, no', async () => {
+    const suya = await crear('gestoraConCierre', { title: `Mía ${Math.random()}` });
+    expect((await mover('gestoraConCierre', suya.id, { status: 'hecha' })).status).toBe(200);
+    const otra = await crear('gestora', { title: `Mía ${Math.random()}` });
+    expect((await mover('gestora', otra.id, { status: 'hecha' })).status).toBe(403);
   });
 
   it('sin tasks.manage no se configura el tablero', async () => {

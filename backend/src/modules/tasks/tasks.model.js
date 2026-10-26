@@ -1,4 +1,5 @@
 import { query, getClient } from '../../shared/config/db.js';
+import { existeEquipos } from './tasks.equipos.model.js';
 
 // Quien tiene tablero de tareas: el equipo de desarrollo (Diego, 09/10: «las
 // tareas son del equipo de desarrollo, las gestoras no tienen tareas»). Ni
@@ -99,10 +100,30 @@ const columnasSupervisor = (hay) => (hay
   NULL::text AS supervisor_name,`);
 const joinSupervisor = (hay) => (hay ? '\n  LEFT JOIN users u_sup ON u_sup.id = t.supervisor_id' : '');
 
+// El equipo de la tarea y el cargo de quien la lleva en él (migración 235).
+const columnasEquipo = (eq) => (eq
+  ? `t.team_id,
+  tm_t.name AS team_name,
+  tm_t.color AS team_color,
+  (SELECT r_c.name FROM task_team_members m_c JOIN task_team_roles r_c ON r_c.id = m_c.team_role_id
+    WHERE m_c.team_id = t.team_id AND m_c.user_id = t.assigned_to) AS assigned_cargo,`
+  : `NULL::int AS team_id,
+  NULL::text AS team_name,
+  NULL::text AS team_color,
+  NULL::text AS assigned_cargo,`);
+const joinEquipo = (eq) => (eq ? '\n  LEFT JOIN task_teams tm_t ON tm_t.id = t.team_id' : '');
+
+/** Lo que hay en la base: supervisor y equipos (cada uno con su migración). */
+async function extras() {
+  const [sup, eq] = await Promise.all([existeSupervisor(), existeEquipos()]);
+  return { sup, eq };
+}
+
 // Las columnas de una tarjeta. `position` es NUMERIC y pg lo devolveria como
 // texto: se pasa a numero para que el tablero pueda calcular puntos medios.
-const columnas = (hay) => `
+const columnas = (hay, eq = false) => `
   ${columnasSupervisor(hay)}
+  ${columnasEquipo(eq)}
   t.id,
   t.title,
   t.description,
@@ -128,19 +149,20 @@ const columnas = (hay) => `
   t.created_at,
   t.updated_at`;
 
-const joins = (hay) => `
+const joins = (hay, eq = false) => `
   FROM tasks t
   LEFT JOIN projects p ON p.id = t.project_id
   LEFT JOIN task_external_projects ep ON ep.id = t.external_project_id
   LEFT JOIN task_areas ar ON ar.id = t.area_id
   LEFT JOIN users u_assign ON u_assign.id = t.assigned_to
-  LEFT JOIN users u_create ON u_create.id = t.created_by${joinSupervisor(hay)}`;
+  LEFT JOIN users u_create ON u_create.id = t.created_by${joinSupervisor(hay)}${joinEquipo(eq)}`;
 
 export async function findTasks({
   assigned_to, project_id, external_project_id, area_id, status, priority, search, tag, vencidas, desde, hasta,
   incluir_archivadas = false, orden = 'tablero', ambito = null, yo = null, supervisor_id = null, tambien_supervisa = null,
+  team_id, visibles_para = null,
 }) {
-  const hay = await existeSupervisor();
+  const { sup: hay, eq } = await extras();
   const conditions = [];
   const params = [];
   const add = (sql, value) => {
@@ -164,6 +186,19 @@ export async function findTasks({
   if (supervisor_id != null) {
     if (hay) add('t.supervisor_id = $?', supervisor_id);
     else conditions.push('FALSE');
+  }
+  // Sin «Ver todo» (26/10/2026): las suyas —las lleva, las creó o las supervisa—
+  // y las de sus equipos, que se ven aunque no se puedan mover.
+  if (visibles_para) {
+    params.push(visibles_para);
+    const yoN = `$${params.length}`;
+    conditions.push(`(t.assigned_to = ${yoN} OR t.created_by = ${yoN}${hay ? ` OR t.supervisor_id = ${yoN}` : ''}${eq
+      ? ` OR EXISTS (SELECT 1 FROM task_team_members m_v WHERE m_v.team_id = t.team_id AND m_v.user_id = ${yoN})` : ''})`);
+  }
+  // El equipo elegido arriba: uno, o 0 = «Sin equipo».
+  if (team_id != null && eq) {
+    if (Number(team_id) === 0) conditions.push('t.team_id IS NULL');
+    else add('t.team_id = $?', team_id);
   }
   if (project_id != null) add('t.project_id = $?', project_id);
   if (external_project_id != null) add('t.external_project_id = $?', external_project_id);
@@ -189,7 +224,7 @@ export async function findTasks({
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
   const sql = `
-    SELECT ${columnas(hay)},
+    SELECT ${columnas(hay, eq)},
       (SELECT COUNT(*)::int FROM task_checklist_items ci WHERE ci.task_id = t.id) AS checklist_total,
       (SELECT COUNT(*)::int FROM task_checklist_items ci WHERE ci.task_id = t.id AND ci.is_completed) AS checklist_completed,
       (SELECT COUNT(*)::int FROM task_comments cm WHERE cm.task_id = t.id) AS comments_count,
@@ -199,7 +234,7 @@ export async function findTasks({
         SELECT json_agg(json_build_object('id', tg.id, 'name', tg.name, 'color', tg.color) ORDER BY tg.id)
         FROM task_tags tg WHERE tg.task_id = t.id
       ), '[]'::json) AS tags
-    ${joins(hay)}
+    ${joins(hay, eq)}
     ${whereClause}
     ORDER BY ${orden === 'vencimiento'
     ? 't.due_date ASC NULLS LAST, t.updated_at ASC'
@@ -238,11 +273,11 @@ export async function personaEnAmbito(personaId, ambito, yo) {
 }
 
 export async function findTaskById(id) {
-  const hay = await existeSupervisor();
+  const { sup: hay, eq } = await extras();
   const { rows } = await query(
-    `SELECT ${columnas(hay)},
+    `SELECT ${columnas(hay, eq)},
        (SELECT cm.content FROM task_comments cm WHERE cm.task_id = t.id ORDER BY cm.created_at DESC, cm.id DESC LIMIT 1) AS last_comment
-     ${joins(hay)} WHERE t.id = $1`,
+     ${joins(hay, eq)} WHERE t.id = $1`,
     [id]
   );
   return rows[0] || null;
@@ -352,6 +387,7 @@ export async function createTask(data) {
     created_by,
     completed_at = null,
     supervisor_id = null,
+    team_id = null,
   } = data;
 
   const { rows } = await query(
@@ -374,12 +410,16 @@ export async function createTask(data) {
   if (supervisor_id && await existeSupervisor()) {
     await query('UPDATE tasks SET supervisor_id = $2 WHERE id = $1', [rows[0].id, supervisor_id]);
   }
+  if (team_id && await existeEquipos()) {
+    await query('UPDATE tasks SET team_id = $2 WHERE id = $1', [rows[0].id, team_id]);
+  }
   return findTaskById(rows[0].id);
 }
 
 export async function updateTask(id, fields) {
   const allowed = ['title', 'description', 'priority', 'due_date', 'project_id', 'external_project_id', 'area_id', 'assigned_to'];
   if (await existeSupervisor()) allowed.push('supervisor_id');
+  if (await existeEquipos()) allowed.push('team_id');
   const sets = [];
   const params = [];
 
@@ -818,7 +858,7 @@ export async function personaAsignable(personaId, ambito, yo) {
 
 export async function findUserBasic(id) {
   const { rows } = await query(
-    `SELECT u.id, u.nombre, u.email, u.active,
+    `SELECT u.id, u.nombre, u.email, u.active, u.role::text AS role,
             (u.role::text = ANY($2::text[]) OR u.roles_extra::text[] && $2::text[]) AS con_tablero
        FROM users u WHERE u.id = $1`,
     [id, ROLES_TAREAS]
