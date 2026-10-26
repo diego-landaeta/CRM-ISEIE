@@ -2,8 +2,7 @@ import * as taskModel from './tasks.model.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import { tieneRol } from '../../shared/utils/roles.js';
-import { proyectosDelAmbito, comoLista } from '../../shared/utils/ambito.js';
-import { query as dbQuery } from '../../shared/config/db.js';
+import { veTodoElCrm } from '../../shared/utils/ambito.js';
 import { notifyUsers } from '../notifications/notifications.service.js';
 import { buildPermissionsMap } from '../permissions/permissions.service.js';
 import {
@@ -11,6 +10,9 @@ import {
   enviarCorreoDevuelta,
   enviarCorreoCerrada,
   enviarCorreoComentario,
+  enviarCorreoSupervisor,
+  enviarCorreoParaRevisar,
+  AVISO_TAREA_SUPERVISOR,
   AVISO_TAREA_ASIGNADA,
   AVISO_TAREA_DEVUELTA,
   AVISO_TAREA_CERRADA,
@@ -69,6 +71,9 @@ function comentariosDeCambios(dif, antes, despues) {
   if (dif.assigned_to) {
     lineas.push(`Cambió la persona asignada de «${nombre(antes, 'assigned_to_name', 'nadie')}» a «${nombre(despues, 'assigned_to_name', 'nadie')}».`);
   }
+  if (dif.supervisor_id) {
+    lineas.push(`Cambió el supervisor de «${nombre(antes, 'supervisor_name', 'nadie')}» a «${nombre(despues, 'supervisor_name', 'nadie')}».`);
+  }
   return lineas;
 }
 
@@ -104,18 +109,38 @@ function exigir(condicion, mensaje) {
 }
 
 /**
- * El ámbito de quien mira (#245, Diego 08/10): los campus que puede ver, como
- * el resto del CRM. Con una empresa o un campus elegidos arriba, solo esos;
- * siempre cortados a los suyos (`proyectosDelAmbito`). `null` es «todo el CRM»
- * (superadmin y soporte sin elegir nada).
+ * El ámbito de quien mira, POR EMPRESA (Diego, 26/10/2026: «para los
+ * encargados del equipo de desarrollo, las tareas van por empresa, no por
+ * proyecto»): todos los campus de sus empresas —las de sus campus y las que
+ * tiene en `user_empresas`—, aunque no esté en cada uno. Así Julián, de CEDIA,
+ * pone una tarea a Diana y la supervisa Ángel sin compartir campus.
+ *
+ * Con una empresa o un campus elegidos arriba, la empresa entera de lo elegido,
+ * siempre cortada a las suyas (#245). `null` es «todo el CRM» (superadmin y
+ * soporte sin elegir nada).
  *
  * Sobre esa lista, `genteDelAmbito` (modelo) decide qué personas entran: las de
- * esos campus, las que no tienen ningún campus (colaboradores del grupo) y
- * quien mira.
+ * esos campus, las de esas empresas, las que no tienen ni campus ni empresa
+ * (colaboradores del grupo) y quien mira.
  */
 export async function ambitoDe(user, { issuerId = null, projectId = null } = {}) {
-  const { projectId: uno, projectIds } = await proyectosDelAmbito({ user, query: { issuerId, projectId } });
-  return comoLista(uno, projectIds);
+  const empresa = issuerId ? Number(issuerId) : null;
+  const campus = projectId ? Number(projectId) : null;
+  let pedidos = null;
+  if (empresa) {
+    pedidos = await taskModel.campusDeLaEmpresa(empresa);
+  } else if (campus) {
+    const suya = await taskModel.empresaDelCampus(campus);
+    pedidos = suya ? await taskModel.campusDeLaEmpresa(suya) : [campus];
+  }
+  // Una empresa sin campus no puede acabar significando «todos».
+  if (pedidos && !pedidos.length) pedidos = [-1];
+  if (veTodoElCrm(user)) return pedidos;
+
+  const mios = await taskModel.campusDeSusEmpresas(user.userId);
+  if (campus && !mios.includes(campus)) throw new AppError('No tienes acceso a ese campus', 403, 'FORBIDDEN');
+  const lista = pedidos ? pedidos.filter((id) => mios.includes(id)) : mios;
+  return lista.length ? lista : [-1];
 }
 
 /** Una tarea fuera del ámbito no existe para quien mira: 404, no 403. */
@@ -131,10 +156,10 @@ async function exigirEnAmbito(personaId, user) {
  * 09/10): un admin de CEDIA, a gente de sus campus de CEDIA. A un colaborador
  * sin campus, solo el superadmin. El superadmin, a cualquiera.
  */
-async function exigirResponsableEnAmbito(personaId, user) {
+async function exigirResponsableEnAmbito(personaId, user, que = 'asignar tareas') {
   const ambito = await ambitoDe(user);
   if (!(await taskModel.personaAsignable(personaId, ambito, user.userId))) {
-    throw new AppError('Solo puedes asignar tareas a gente de tus campus', 403, 'FORBIDDEN');
+    throw new AppError(`Solo puedes ${que} a gente de tu empresa`, 403, 'FORBIDDEN');
   }
 }
 
@@ -143,11 +168,14 @@ async function exigirResponsableEnAmbito(personaId, user) {
  * le sale en «Por revisar», es decir, cualquier tarea de su ámbito. No hace
  * falta «Ver todo»: un colaborador al que se le da tasks.close revisa.
  */
-async function tareaRevisable(id, user) {
+async function tareaRevisable(id, user, p) {
   const task = await taskModel.findTaskById(id);
   if (!task || task.archived_at) {
     throw new AppError('Tarea no encontrada', 404, 'NOT_FOUND');
   }
+  // Su supervisor la revisa aunque no tenga «Aprobar y cerrar» (Diego, 26/10/2026).
+  if (task.supervisor_id === user.userId) return task;
+  exigir(p.close, 'No tienes permiso para revisar esta tarea');
   await exigirEnAmbito(task.assigned_to, user);
   return task;
 }
@@ -204,16 +232,13 @@ async function sinRepetir(fn, mensaje) {
   }
 }
 
-/** El proyecto tiene que ser uno de los campus de la persona. */
+/** El proyecto tiene que ser un campus de las empresas de la persona (26/10/2026: por empresa). */
 async function validarAccesoProyecto(projectId, user) {
   if (!projectId) return;
   if (tieneRol(user, 'superadmin', 'soporte')) return;
 
-  const { rows } = await dbQuery(
-    'SELECT 1 FROM user_projects WHERE user_id = $1 AND project_id = $2 AND active = true',
-    [user.userId, projectId]
-  );
-  if (rows.length === 0) {
+  const mios = await taskModel.campusDeSusEmpresas(user.userId);
+  if (!mios.includes(Number(projectId))) {
     throw new AppError('No tienes acceso al campus/proyecto seleccionado', 403, 'FORBIDDEN');
   }
 }
@@ -257,7 +282,9 @@ async function tareaVisible(id, user, permisos) {
     throw new AppError('Tarea no encontrada', 404, 'NOT_FOUND');
   }
   const p = permisos || await permisosDe(user);
-  const suya = task.assigned_to === user.userId || task.created_by === user.userId;
+  // Suya: la lleva, la creó o la supervisa.
+  const suya = task.assigned_to === user.userId || task.created_by === user.userId
+    || task.supervisor_id === user.userId;
   if (suya) {
     exigir(p.viewOwn || p.viewAll, 'No tienes permiso para ver el tablero de tareas');
     return task;
@@ -290,7 +317,7 @@ async function correoA(personaId, aviso, enviar) {
  *
  * Guardado: un comentario automático en la tarjeta, a nombre de quien cambió
  * (el historial ya lo apunta cada función). Notificado: un aviso en la campana
- * a la persona asignada y a quien la creó, nunca a quien hizo el cambio ni a
+ * a la persona asignada, a quien la creó y a quien la supervisa, nunca a quien hizo el cambio ni a
  * quien ya recibió otro aviso por lo mismo (`yaAvisados`). Sin correo: serían
  * decenas al día.
  */
@@ -299,7 +326,7 @@ async function registrarCambio({ tarea, user, lineas, yaAvisados = [] }) {
   if (!texto) return;
   await taskModel.createComment({ task_id: tarea.id, user_id: user.userId, content: texto });
 
-  const destinatarios = new Set([tarea.assigned_to, tarea.created_by].filter(Boolean));
+  const destinatarios = new Set([tarea.assigned_to, tarea.created_by, tarea.supervisor_id].filter(Boolean));
   destinatarios.delete(user.userId);
   for (const id of yaAvisados) destinatarios.delete(id);
   if (destinatarios.size === 0) return;
@@ -328,6 +355,43 @@ async function avisarAsignacion({ tarea, responsableId, quien, reasignada = fals
   const autor = await taskModel.findUserBasic(quien.userId);
   await correoA(responsableId, AVISO_TAREA_ASIGNADA,
     (persona) => enviarCorreoAsignada({ persona, tarea, quien: autor }));
+}
+
+/**
+ * A quien se pone de supervisor (Diego, 26/10/2026: «eso debe llegar por
+ * correo»): campana y correo, como al asignar.
+ */
+async function avisarSupervisor({ tarea, supervisorId, quien }) {
+  if (!supervisorId || supervisorId === quien.userId) return;
+  await notifyUsers({
+    targetUserIds: [supervisorId],
+    type: 'task_supervisor',
+    title: `Supervisas una tarea: ${truncar(tarea.title, 180)}`,
+    message: `Te han puesto de supervisor de "${tarea.title}"${tarea.assigned_to_name ? `, que lleva ${tarea.assigned_to_name}` : ''}.`,
+    link_path: `/tareas?id=${tarea.id}`,
+    triggered_by_user_id: quien.userId,
+    metadata: { task_id: tarea.id },
+  });
+  const autor = await taskModel.findUserBasic(quien.userId);
+  await correoA(supervisorId, AVISO_TAREA_SUPERVISOR,
+    (persona) => enviarCorreoSupervisor({ persona, tarea, quien: autor }));
+}
+
+/**
+ * El supervisor: alguien del equipo, activo, con tablero y de la empresa de
+ * quien lo pone. Lo pone quien tiene «Asignar» (los encargados y el admin).
+ */
+async function validarSupervisor(supervisorId, responsableId, user, p) {
+  exigir(p.assign, 'Solo quienes asignan tareas pueden ponerles supervisor');
+  if (!supervisorId) return;
+  if (supervisorId === responsableId) {
+    throw new AppError('El supervisor tiene que ser otra persona, no quien lleva la tarea', 400, 'VALIDATION_ERROR');
+  }
+  if (!(await taskModel.existeSupervisor())) {
+    throw new AppError('Falta aplicar la migración 234: todavía no se puede poner supervisor', 409, 'FALTA_MIGRACION');
+  }
+  await validarResponsable(supervisorId);
+  await exigirResponsableEnAmbito(supervisorId, user, 'poner de supervisor');
 }
 
 /** A quien la lleva: su tarea se ha cerrado (aprobada o movida a «Hecha»). */
@@ -428,6 +492,7 @@ export async function createTask(data, user) {
     await validarResponsable(responsable);
     await exigirResponsableEnAmbito(responsable, user);
   }
+  if (data.supervisor_id) await validarSupervisor(data.supervisor_id, responsable, user, p);
   if (data.project_id) await validarAccesoProyecto(data.project_id, user);
   await validarClasificacion(data);
 
@@ -451,11 +516,15 @@ export async function createTask(data, user) {
       status: createdTask.status,
       priority: createdTask.priority,
       assigned_to: createdTask.assigned_to,
+      ...(createdTask.supervisor_id ? { supervisor_id: createdTask.supervisor_id } : {}),
     },
   });
 
   if (responsable !== user.userId) {
     await avisarAsignacion({ tarea: createdTask, responsableId: responsable, quien: user });
+  }
+  if (createdTask.supervisor_id) {
+    await avisarSupervisor({ tarea: createdTask, supervisorId: createdTask.supervisor_id, quien: user });
   }
 
   logger.info({ taskId: createdTask.id, userId: user.userId }, 'Tarea creada en el tablero');
@@ -468,9 +537,11 @@ export async function updateTask(id, rawFields, user) {
 
   const fields = soloLoQueCambia(rawFields, currentTask);
   const cambiaResponsable = fields.assigned_to !== undefined;
-  // Reasignar es de quien tiene «Asignar» (el admin, aunque no la lleve).
-  // Cualquier otro campo, solo la persona asignada.
-  const otrosCampos = Object.keys(fields).some((k) => k !== 'assigned_to');
+  const cambiaSupervisor = fields.supervisor_id !== undefined;
+  // Reasignar y poner o quitar supervisor es de quien tiene «Asignar» (el
+  // admin y los encargados, aunque no la lleven). Cualquier otro campo, solo la
+  // persona asignada.
+  const otrosCampos = Object.keys(fields).some((k) => k !== 'assigned_to' && k !== 'supervisor_id');
   // Guardar sin cambiar nada no es editar: se devuelve la tarea tal cual.
   if (Object.keys(fields).length === 0) return currentTask;
   if (otrosCampos) exigirEdicion(currentTask, user, p);
@@ -481,6 +552,12 @@ export async function updateTask(id, rawFields, user) {
       await validarResponsable(fields.assigned_to);
       await exigirResponsableEnAmbito(fields.assigned_to, user);
     }
+  }
+  if (cambiaSupervisor) {
+    const responsable = cambiaResponsable ? fields.assigned_to : currentTask.assigned_to;
+    await validarSupervisor(fields.supervisor_id, responsable, user, p);
+  } else if (cambiaResponsable && fields.assigned_to && fields.assigned_to === currentTask.supervisor_id) {
+    throw new AppError('El supervisor tiene que ser otra persona, no quien lleva la tarea', 400, 'VALIDATION_ERROR');
   }
 
   if (fields.project_id && fields.project_id !== currentTask.project_id) {
@@ -507,7 +584,7 @@ export async function updateTask(id, rawFields, user) {
     await taskModel.createTaskEvent({
       task_id: id,
       user_id: user.userId,
-      event_type: cambiaResponsable ? 'assigned' : 'updated',
+      event_type: cambiaResponsable || cambiaSupervisor ? 'assigned' : 'updated',
       details: diferencias,
     });
   }
@@ -520,11 +597,17 @@ export async function updateTask(id, rawFields, user) {
     tarea: currentTask,
     user,
     lineas: comentariosDeCambios(diferencias, currentTask, updatedTask),
-    yaAvisados: cambiaResponsable && fields.assigned_to ? [fields.assigned_to] : [],
+    yaAvisados: [
+      ...(cambiaResponsable && fields.assigned_to ? [fields.assigned_to] : []),
+      ...(cambiaSupervisor && fields.supervisor_id ? [fields.supervisor_id] : []),
+    ],
   });
 
   if (cambiaResponsable && fields.assigned_to && fields.assigned_to !== user.userId) {
     await avisarAsignacion({ tarea: updatedTask, responsableId: fields.assigned_to, quien: user, reasignada: true });
+  }
+  if (cambiaSupervisor && fields.supervisor_id) {
+    await avisarSupervisor({ tarea: updatedTask, supervisorId: fields.supervisor_id, quien: user });
   }
 
   return updatedTask;
@@ -625,6 +708,13 @@ export async function moveTask(id, { status, prev_id, next_id }, user) {
     yaAvisados.push(currentTask.assigned_to);
   }
 
+  // Al supervisor, por correo, cuando está lista para revisar (Diego, 26/10/2026).
+  if (status === EN_REVISION && currentTask.supervisor_id && currentTask.supervisor_id !== user.userId) {
+    const autor = await taskModel.findUserBasic(user.userId);
+    await correoA(currentTask.supervisor_id, AVISO_TAREA_SUPERVISOR,
+      (persona) => enviarCorreoParaRevisar({ persona, tarea: movedTask, quien: autor }));
+  }
+
   // Comentario automático también al cambiarla de columna (WhatsApp, 09/10).
   await registrarCambio({
     tarea: currentTask, user, lineas: `Movió la tarea de «${deNombre}» a «${aNombre}».`, yaAvisados,
@@ -656,26 +746,30 @@ export async function archiveTask(id, user) {
 
 /* --- Por revisar --- */
 
-/** Las tareas «En revisión» de todo el equipo, por fecha límite. */
+/**
+ * Las tareas «En revisión» de su ámbito, por fecha límite, y además las que
+ * supervisa (26/10/2026). La lista es de quien tiene «Aprobar y cerrar»; el
+ * supervisor sin él revisa desde la tarjeta (le llega el correo con el enlace).
+ */
 export async function getReviewTasks(user, q = {}) {
   const p = await permisosDe(user);
   exigir(p.close, 'No tienes permiso para revisar tareas');
   return taskModel.findTasks({
     status: EN_REVISION, orden: 'vencimiento', ambito: await ambitoDe(user, q), yo: user.userId,
+    tambien_supervisa: user.userId,
   });
 }
 
 export async function getReviewCount(user, q = {}) {
   const p = await permisosDe(user);
   if (!p.close) return { count: 0 };
-  return { count: await taskModel.countReview(await ambitoDe(user, q), user.userId) };
+  return { count: await taskModel.countReview(await ambitoDe(user, q), user.userId, { tambienSupervisa: true }) };
 }
 
 /** Aprobar: de «En revisión» a «Hecha», en una transacción. */
 export async function approveTask(id, user) {
   const p = await permisosDe(user);
-  exigir(p.close, 'No tienes permiso para aprobar tareas');
-  await tareaRevisable(id, user);
+  await tareaRevisable(id, user, p);
 
   const result = await taskModel.approveTaskAtomic({ taskId: id, user });
   if (!result) throw new AppError('Tarea no encontrada', 404, 'NOT_FOUND');
@@ -705,8 +799,7 @@ export async function approveTask(id, user) {
  */
 export async function returnTask(id, { comment }, user) {
   const p = await permisosDe(user);
-  exigir(p.close, 'No tienes permiso para devolver tareas');
-  await tareaRevisable(id, user);
+  await tareaRevisable(id, user, p);
 
   const result = await taskModel.returnTaskAtomic({ taskId: id, comment, user });
   if (!result) throw new AppError('Tarea no encontrada', 404, 'NOT_FOUND');

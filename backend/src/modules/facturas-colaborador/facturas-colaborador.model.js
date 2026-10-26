@@ -155,13 +155,14 @@ export function comoCobra(e) {
 }
 
 /**
- * Que el usuario exista y tenga el rol colaborador (#210) como rol principal.
- * Como rol añadido no sirve: los permisos se resuelven por el rol principal, y
- * vería «Mi factura» en el menú pero el servidor le daría 403.
+ * Que el usuario exista y tenga el rol colaborador (#210), como rol principal
+ * o añadido (26/10/2026: Diego es soporte y además factura como colaborador).
+ * Con el rol añadido, «Mi factura» le funciona porque la guardia de esas rutas
+ * mira también los roles de más (`subeSuFactura`, routes).
  */
 export async function esUsuarioColaborador(userId) {
   const { rows } = await query(
-    `SELECT 1 FROM users WHERE id = $1 AND role = 'colaborador'`,
+    `SELECT 1 FROM users WHERE id = $1 AND (role = 'colaborador' OR 'colaborador' = ANY(roles_extra::text[]))`,
     [userId],
   );
   return rows.length > 0;

@@ -287,6 +287,8 @@ export function canSeeItem(item, role, soloColaboraciones, permisos, can) {
     // Lo que no es de su rol, solo si se le ha dado a propósito para él (Meta
     // Ads, 26/10/2026). `oPermiso` a secas no basta: Diplomas no es para un colaborador.
     if (item.colaboradorConPermiso) return typeof can === 'function' && can(item.colaboradorConPermiso) === true;
+    // «Por revisar» y «Configurar tablero», solo con su clave (como en MultiCRM).
+    if (item.permiso && String(item.permiso).includes('.') && !(typeof can === 'function' && can(item.permiso) === true)) return false;
     return Array.isArray(item.roles) && item.roles.includes('colaborador');
   }
   // Un gestor de colaboraciones se dedica SOLO a los tutores: no lleva

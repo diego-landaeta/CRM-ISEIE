@@ -68,6 +68,9 @@ export interface Task {
   assigned_to: number | null;
   assigned_to_name?: string | null;
   assigned_to_email?: string | null;
+  /** Quien la supervisa (26/10/2026): la ve, recibe los avisos y la aprueba o devuelve. */
+  supervisor_id?: number | null;
+  supervisor_name?: string | null;
   created_by: number;
   created_by_name?: string | null;
   completed_at: string | null;

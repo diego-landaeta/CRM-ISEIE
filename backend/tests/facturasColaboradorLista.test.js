@@ -144,9 +144,11 @@ describe('facturas de colaboradores (#202) · la lista', () => {
   it('el usuario del CRM que se le pone tiene que tener el rol colaborador', async () => {
     const mal = await request.patch(`${API}/colaboradores/${laura.id}`).set(como('super')).send({ user_id: U.gestora });
     expect(mal.status).toBe(400);
-    // Colaborador solo como rol añadido tampoco: el servidor le daría 403 en «Mi factura».
+    // Colaborador como rol AÑADIDO sí vale (26/10/2026: Diego es soporte y factura
+    // como colaborador; «Mi factura» ya mira los roles de más).
     base.datos.users.find((u) => u.id === U.gestora).roles_extra = ['colaborador'];
-    expect((await request.patch(`${API}/colaboradores/${laura.id}`).set(como('super')).send({ user_id: U.gestora })).status).toBe(400);
+    expect((await request.patch(`${API}/colaboradores/${laura.id}`).set(como('super')).send({ user_id: U.gestora })).status).toBe(200);
+    base.datos.users.find((u) => u.id === U.gestora).roles_extra = [];
     const bien = await request.patch(`${API}/colaboradores/${laura.id}`).set(como('super')).send({ user_id: U.colaborador });
     expect(bien.status, JSON.stringify(bien.body)).toBe(200);
     expect(bien.body.data.user_id).toBe(U.colaborador);
@@ -171,7 +173,7 @@ describe('facturas de colaboradores (#202) · la lista', () => {
   it('el historial, al admin de A, sin lo acordado con la empresa B', async () => {
     const deLaFicha = (filas) => filas.filter((r) => ['alta', 'baja', 'cambio'].includes(r.evento));
     const ficha = deLaFicha((await request.get(`${API}/colaboradores/${laura.id}/registro`).set(como('adminA'))).body.data);
-    expect(ficha.map((r) => r.evento)).toEqual(['baja', 'alta', 'baja', 'cambio', 'cambio', 'cambio', 'alta']);
+    expect(ficha.map((r) => r.evento)).toEqual(['baja', 'alta', 'baja', 'cambio', 'cambio', 'cambio', 'cambio', 'alta']);
     expect(ficha[ficha.length - 1].detalle.empresas.map((e) => e.issuer_id)).toEqual([E.A]);
 
     const todo = deLaFicha((await request.get(`${API}/colaboradores/${laura.id}/registro`).set(como('super'))).body.data);
