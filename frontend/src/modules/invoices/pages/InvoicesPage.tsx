@@ -635,7 +635,11 @@ export default function InvoicesPage() {
                     )}
                   </td>
                   <td className="px-3 py-2 text-right">
-                    <div className="inline-flex gap-1">
+                    {/* Los botones bajan de línea cuando no caben. Con una fila que
+                        llevaba «Email» y «Pagada», la tabla de Yolanda (ICTESS) se
+                        salía por la derecha y la papelera quedaba fuera de la vista:
+                        parecía que no podía eliminar (Diego, 23/10/2026). */}
+                    <div className="inline-flex flex-wrap justify-end gap-1">
                       <button onClick={() => {
                           const prelim = inv.estado !== 'borrador' && inv.tipo !== 'proforma' && invoiceFaltantes(inv).length > 0;
                           invoicesApi.openPdf(inv.id, prelim).catch((e: unknown) => toast({ title: 'No se pudo abrir el PDF', description: (e as { message?: string })?.message, variant: 'destructive' }));
