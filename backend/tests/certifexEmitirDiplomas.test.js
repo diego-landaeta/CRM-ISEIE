@@ -17,11 +17,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  * campus esta en certifexEmitirAlcance.test.js.
  */
 
-const conPermiso = new Set();
-vi.mock('../src/modules/permissions/permissions.service.js', () => ({
-  resolvePermission: vi.fn(async (userId, _role, _custom, resource, action) =>
-    conPermiso.has(`${userId}:${resource}.${action}`)),
-}));
+// Los permisos, con el resolver de verdad (#423): cada persona con sus
+// excepciones, como las daría Configuración › Roles o su ficha.
+vi.mock('../src/modules/permissions/permissions.service.js', () => import('./helpers/permisosSinBase.js'));
+const { registrar } = await import('./helpers/permisosSinBase.js');
 const alcanzado = vi.hoisted(() => []);
 const handler = (nombre) => (req, res) => { alcanzado.push(nombre); res.json({ success: true, data: nombre }); };
 vi.mock('../src/modules/certifex/certifex.controller.js', () => Object.fromEntries(
@@ -77,9 +76,11 @@ const LECTURAS = [
 const pedir = (metodo, ruta, t) => request[metodo](`/api/certifex${ruta}`).set('Authorization', `Bearer ${t}`).send({});
 
 beforeEach(() => {
-  conPermiso.clear();
-  conPermiso.add('52:diplomas.view');
-  conPermiso.add('53:diplomas.emit');
+  registrar({ userId: 51, role: 'gestor' });
+  registrar({ userId: 52, role: 'gestor', excepciones: { 'diplomas.view': true } });
+  registrar({ userId: 53, role: 'gestor', excepciones: { 'diplomas.emit': true } });
+  registrar({ userId: 54, role: 'admin' });
+  registrar({ userId: 55, role: 'superadmin' });
   alcanzado.length = 0;
 });
 

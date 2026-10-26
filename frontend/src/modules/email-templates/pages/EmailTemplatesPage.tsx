@@ -7,6 +7,7 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
 import { useConfirm } from '@/shared/components/ui/useConfirm';
 import { emailTemplatesApi, type EmailTemplate, type TemplateVariable } from '../api/templates.api';
+import usePermission from '@/shared/hooks/usePermission';
 
 const inp = 'w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all';
 
@@ -15,6 +16,8 @@ export default function EmailTemplatesPage() {
   const { activeProject } = useProjectContext();
   const confirm = useConfirm();
   const role = (user as { role?: string } | null)?.role;
+  // Lo que dice el servidor (#423): sale si salía antes Y tiene el permiso.
+  const { can } = usePermission();
   const isAdmin = role === 'superadmin' || role === 'admin';
 
   const [templates, setTemplates] = useState<EmailTemplate[]>([]);
@@ -82,7 +85,7 @@ export default function EmailTemplatesPage() {
       <PageHeader
         title="Plantillas de email"
         subtitle="Reutiliza textos para enviar a leads, variables dinamicas con {{...}}"
-        actions={isAdmin ? (
+        actions={isAdmin && can('email_templates.create') ? (
           <button
             onClick={() => setEditing('new')}
             className="inline-flex items-center gap-2 h-9 px-4 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90"
@@ -121,7 +124,7 @@ export default function EmailTemplatesPage() {
                 >
                   <Eye size={11} /> Preview
                 </button>
-                {isAdmin && (
+                {isAdmin && can('email_templates.edit') && (
                   <>
                     <button
                       onClick={() => setEditing(t)}

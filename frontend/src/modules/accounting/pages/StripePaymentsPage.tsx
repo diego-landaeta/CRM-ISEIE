@@ -9,6 +9,7 @@ import {
   CreditCard, ArrowsClockwise, CheckCircle, XCircle, WarningCircle, ArrowSquareOut,
   Link as LinkIcon, MagnifyingGlass, ArrowCounterClockwise,
 } from '@phosphor-icons/react';
+import usePermission from '@/shared/hooks/usePermission';
 
 type Payment = {
   id: number;
@@ -55,7 +56,9 @@ export default function StripePaymentsPage() {
   // Asociar a mano mueve dinero y emite factura: solo admin y superadmin.
   // La gestora ve el correo del cobro, lo pone en la ficha del cliente y
   // sincroniza; el match se hace solo.
-  const puedeAsociar = user?.role === 'admin' || user?.role === 'superadmin';
+  // Lo que dice el servidor (#423): sale si salía antes Y tiene el permiso.
+  const { can } = usePermission();
+  const puedeAsociar = (user?.role === 'admin' || user?.role === 'superadmin') && can('stripe.edit');
   const { activeProject } = useProjectContext() as { activeProject: { id?: number | null; nombre?: string } };
   const pid = activeProject?.id;
 

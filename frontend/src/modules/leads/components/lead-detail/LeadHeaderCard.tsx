@@ -5,6 +5,7 @@ import StatusBadge from '@/shared/components/ui/StatusBadge';
 import { getLeadPriority, getPriorityStyle } from '../../lib/leadPriority';
 import { avatarColor, getInitials } from './InfoField';
 import type { Lead } from '@/shared/types';
+import usePermission from '@/shared/hooks/usePermission';
 
 // Repartir la venta de este prospecto entre dos gestoras. Se carga aparte
 // porque solo lo ven admin y superadmin.
@@ -18,6 +19,8 @@ interface LeadHeaderCardProps {
 }
 
 export default function LeadHeaderCard({ lead, isAdmin, onReassign, onBack }: LeadHeaderCardProps) {
+  // Lo que dice el servidor (#423): sale si salía antes Y tiene el permiso.
+  const { can } = usePermission();
   return (
     <>
       {lead.lead_duplicado_de && (
@@ -65,12 +68,12 @@ export default function LeadHeaderCard({ lead, isAdmin, onReassign, onBack }: Le
                 reasignar es pasarsela a otra, compartir es atenderla entre dos.
                 Diego: «no es nada intuitivo» — la funcion existia pero habia que
                 entrar a la ficha de la venta para encontrarla. */}
-            {isAdmin && (
+            {isAdmin && can('conversions.reparto') && (
               <Suspense fallback={null}>
                 <CompartirVentaBoton leadId={lead.id} />
               </Suspense>
             )}
-            {isAdmin && (
+            {isAdmin && can('leads.assign') && (
               <button
                 onClick={onReassign}
                 aria-label="Reasignar"

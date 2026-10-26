@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+// Los permisos salen del catálogo (#423): sin base, el resolver de verdad con
+// las personas de cada `req` (tests/helpers/permisosSinBase.js).
+vi.mock('../src/modules/permissions/permissions.service.js', () => import('./helpers/permisosSinBase.js'));
+const { registrar } = await import('./helpers/permisosSinBase.js');
+
 // Conexión → MCP y Conectores, por empresa y con «Todos los proyectos» (Diego, 29/09):
 //
 //   «que funcione por empresa y todos los proyectos, y puedas ver quién gestiona
@@ -42,8 +47,8 @@ vi.mock('../src/modules/mcp/mcp.model.js', () => ({
 const ctrl = await import('../src/modules/connectors/connectors.controller.js');
 const model = await import('../src/modules/connectors/connectors.model.js');
 
-const MANUEL = { userId: 1, role: 'superadmin' };
-const ANTONIO = { userId: 20, role: 'admin' }; // admin de los tres campus de CEDIA
+const MANUEL = registrar({ userId: 1, role: 'superadmin' });
+const ANTONIO = registrar({ userId: 20, role: 'admin' }); // admin de los tres campus de CEDIA
 
 async function pedir(fn, user, { query = {}, params = {}, body = {} } = {}) {
   let salida = null;

@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+// Los permisos salen del catálogo (#423): sin base, el resolver de verdad con
+// las personas de cada `req` (tests/helpers/permisosSinBase.js).
+vi.mock('../src/modules/permissions/permissions.service.js', () => import('./helpers/permisosSinBase.js'));
+const { registrar } = await import('./helpers/permisosSinBase.js');
+
 // El aviso antes de enlazar un numero — tarea #45.
 //
 // Enlazar por esta via no es la forma oficial de WhatsApp: el numero puede
@@ -33,7 +38,7 @@ async function llamar(handler, req) {
 }
 
 const comoUsuario = (userId, role, body = {}) => ({
-  user: { userId, role },
+  user: registrar({ userId, role }),
   params: {}, query: {}, body,
   ip: '127.0.0.1',
   get: () => 'navegador-de-prueba',

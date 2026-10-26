@@ -2,6 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import express from 'express';
 import request from 'supertest';
 
+// Los permisos salen del catálogo (#423): sin base, el resolver de verdad con
+// las personas de cada `req` (tests/helpers/permisosSinBase.js).
+vi.mock('../src/modules/permissions/permissions.service.js', () => import('./helpers/permisosSinBase.js'));
+const { registrar, conPermisos } = await import('./helpers/permisosSinBase.js');
+
 /**
  * La alerta «de madrugada» de Tony del 13/10 (Diego, 13/10).
  *
@@ -32,7 +37,7 @@ vi.mock('../src/shared/config/db.js', () => ({ query, getClient: vi.fn(), defaul
 
 const modelo = vi.hoisted(() => ({
   findTokenVivo: vi.fn(async () => ({ token_id: 2, user_id: 7 })),
-  findUserById: vi.fn(async () => TONY),
+  findUserById: vi.fn(async () => conPermisos(TONY)),
   proyectosDeLaPersona: vi.fn(async () => [{ id: 10, nombre: 'ISEIH', sociedad_id: 1 }]),
   marcarUso: vi.fn(async () => {}),
   registrarAuditoria: vi.fn(async () => {}),

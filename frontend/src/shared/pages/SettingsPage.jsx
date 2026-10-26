@@ -12,6 +12,7 @@ import { toast } from '@/shared/hooks/useToast';
 import { useConfirm } from '@/shared/components/ui/useConfirm';
 import MarcaSection from './MarcaSection';
 import CampusPorEmpresa, { marcarVarios } from '@/shared/components/CampusPorEmpresa';
+import PermisosDePersona from '@/modules/permissions/components/PermisosDePersona';
 import { avisoCambioCorreo, confirmacionCambioCorreo, problemaDeContrasena } from '@/shared/lib/credenciales';
 
 // Cada item de la nav interna. Si tiene `external: true` se muestra con el
@@ -341,10 +342,10 @@ function EditUserModal({ user, projects, onClose, onSaved, empresas, faltaMigrac
   const [role, setRole] = useState(user.role || 'gestor');
   // Los roles de MAS. Solo suman permisos.
   const [rolesExtra, setRolesExtra] = useState(Array.isArray(user.roles_extra) ? user.roles_extra : []);
-  // Los permisos acotados de facturacion. Aparte del rol a proposito: ser
-  // «gestor» no basta para decidir quien factura — Vanessa lo es y no debe.
-  const [facturaManager, setFacturaManager] = useState(!!user.factura_manager);
-  const [editarFechas, setEditarFechas] = useState(!!user.editar_fechas_factura);
+  // Facturación y fechas de facturas ya no son casillas de aquí (#230, gemela de
+  // CRM#423): son permisos del catálogo y se dan en «Ver permisos», con su
+  // registro de quién y cuándo.
+  const [verPermisos, setVerPermisos] = useState(false);
   const [phone, setPhone] = useState(user.whatsapp_phone || '');
   const [assigned, setAssigned] = useState(() => {
     const m = {};
@@ -402,10 +403,6 @@ function EditUserModal({ user, projects, onClose, onSaved, empresas, faltaMigrac
         // Las empresas enteras (#220), solo si las ha podido tocar. Para otro
         // rol que no sea admin van vacías: una gestora no tiene empresa entera.
         ...(puedeDarEmpresas ? { empresaIds: role === 'admin' ? empresasEnteras : [] } : {}),
-        factura_manager: facturaManager,
-        // Cambiar fechas sin poder facturar no sirve: esa pantalla se abre desde
-        // la factura. Si cae lo primero, cae lo segundo.
-        editar_fechas_factura: facturaManager && editarFechas,
       });
       toast(cambiaCorreo
         ? { title: '✓ Guardado', description: `${nombre.trim()} entra ahora con ${correoNuevo}. Sus sesiones se han cerrado.` }
@@ -533,29 +530,19 @@ function EditUserModal({ user, projects, onClose, onSaved, empresas, faltaMigrac
           </div>
         </div>
 
-        {/* Facturacion. Un admin puede siempre por su rol, asi que para el estas
-            casillas no cambiarian nada y no se pintan. */}
-        {(role === 'gestor' || role === 'soporte') && (
-          <div className="rounded-lg border border-border p-3 space-y-2">
-            <p className="text-xs text-muted-foreground px-1">Facturación</p>
-            <label className="flex items-start gap-2 cursor-pointer px-1">
-              <input type="checkbox" checked={facturaManager}
-                onChange={(e) => setFacturaManager(e.target.checked)} className="mt-0.5" />
-              <span className="text-sm">
-                Puede emitir y corregir facturas
-                <span className="block text-xs text-muted-foreground">Solo las de sus propios prospectos.</span>
-              </span>
-            </label>
-            <label className={`flex items-start gap-2 px-1 ${facturaManager ? 'cursor-pointer' : 'opacity-50'}`}>
-              <input type="checkbox" checked={facturaManager && editarFechas} disabled={!facturaManager}
-                onChange={(e) => setEditarFechas(e.target.checked)} className="mt-0.5" />
-              <span className="text-sm">
-                Puede cambiar las fechas de emisión y de pago
-                <span className="block text-xs text-muted-foreground">Sin tocar importes ni conceptos.</span>
-              </span>
-            </label>
-          </div>
-        )}
+        {/* Todo lo que puede hacer y de dónde le viene (#230, gemela de CRM#423): su
+            rol, su rol a medida o una excepción suya. Ahí mismo se le cambian. */}
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
+          <span className="text-sm">
+            Permisos
+            <span className="block text-xs text-muted-foreground">Lo que puede hacer, de dónde le viene y sus excepciones.</span>
+          </span>
+          <button type="button" onClick={() => setVerPermisos(true)}
+            className="inline-flex h-9 flex-shrink-0 items-center gap-1.5 rounded-md border border-border px-3 text-sm font-medium hover:bg-muted">
+            Ver permisos
+          </button>
+        </div>
+        {verPermisos && <PermisosDePersona userId={user.id} onClose={() => setVerPermisos(false)} />}
 
         <div className="flex justify-end gap-2">
           <button onClick={onClose} className="h-9 px-4 rounded-md border border-border text-sm font-medium hover:bg-muted">Cancelar</button>

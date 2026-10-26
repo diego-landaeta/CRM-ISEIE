@@ -1,10 +1,9 @@
 import * as model from './permissions.model.js';
 import { SYSTEM_ROLE_DEFAULTS, ALL_RESOURCES } from './permissions.defaults.js';
+import { resolverPermisos, permisosDelRol } from './resolver.js';
 import { SYSTEM_ROLE_VIEWS, DASHBOARD_WIDGETS_CATALOG, SIDEBAR_ITEMS_CATALOG } from './role-views.defaults.js';
 import { query } from '../../shared/config/db.js';
 import { AppError } from '../../shared/utils/AppError.js';
-// Un array de un ENUM puede llegar como texto crudo: se entiende en un sitio.
-import { comoLista } from '../../shared/utils/roles.js';
 
 /**
  * Los permisos por defecto de un rol del sistema con lo que se le haya cambiado
@@ -19,86 +18,52 @@ export function defaultsDelRol(role, filas = [], respaldo = null) {
   return out;
 }
 
-// Resuelve si un usuario tiene permiso para resource.action
-// Orden de prioridad: superadmin → override personal → custom_role.permissions
-// → lo cambiado en Roles para su rol (211) → SYSTEM_ROLE_DEFAULTS
-export async function resolvePermission(userId, role, customRoleId, resource, action, rolesExtra = []) {
-  if (role === 'superadmin') return true;
+/**
+ * Qué puede una persona y de dónde le viene cada permiso (#423).
+ *
+ * Lo lee de la BASE —rol, roles de más, rol a medida, excepciones y lo cambiado
+ * en Roles— y no del token: quitarle algo a alguien surte efecto ya, no al
+ * caducar su sesión. La regla está en `resolver.js`. `db` permite leer dentro
+ * de una transacción lo que se acaba de escribir.
+ *
+ * Devuelve `{ mapa, origenes, persona }`, o `null` si la persona no existe. Una
+ * persona desactivada no puede nada.
+ */
+export async function explicarPermisos(userId, db) {
+  const datos = await model.datosDePermisos(userId, db);
+  if (!datos) return null;
+  const { usuario: u } = datos;
+  const { mapa, origenes } = resolverPermisos({
+    role: u.role, roles_extra: u.roles_extra, customRole: datos.customRole,
+    excepciones: datos.excepciones, ajustesRol: datos.ajustesRol,
+  });
+  if (u.active === false) for (const k of Object.keys(mapa)) mapa[k] = false;
+  return { mapa, origenes, persona: u, customRole: datos.customRole, excepciones: datos.excepciones };
+}
 
-  const key = `${resource}.${action}`;
-
-  // 1. Override personal (máxima prioridad)
-  const overrides = await model.getOverridesByUser(userId);
-  const override = overrides.find(o => o.resource === resource && o.action === action);
-  if (override !== undefined) return override.allowed;
-
-  // 2. Rol custom
-  if (customRoleId) {
-    const customRole = await model.findCustomRoleById(customRoleId);
-    if (customRole && key in customRole.permissions) {
-      return customRole.permissions[key];
-    }
-    // Si el custom role no define este permiso, cae al base_role
-    const baseRole = customRole?.base_role || 'gestor';
-    const filas = await model.getRoleOverrides([baseRole]);
-    return defaultsDelRol(baseRole, filas)[key] ?? false;
-  }
-
-  // 3. Rol fijo del sistema, y los añadidos: basta con que uno lo permita.
-  const todos = [role, ...comoLista(rolesExtra)];
-  const filas = await model.getRoleOverrides(todos);
-  return todos.some((r) => defaultsDelRol(r, filas)[key] === true);
+/**
+ * Si un usuario tiene `resource.action`. Los argumentos de más se aceptan por
+ * quien ya llamaba así, pero manda lo que dice la base (`explicarPermisos`):
+ * antes esta función y `buildPermissionsMap` no daban lo mismo.
+ */
+export async function resolvePermission(userId, _role, _customRoleId, resource, action) {
+  const e = await explicarPermisos(userId);
+  return e?.mapa[`${resource}.${action}`] === true;
 }
 
 // Calcula el mapa completo de permisos para un usuario (para devolver en /auth/me)
 /**
- * El mapa de permisos de un usuario. CON VARIOS ROLES, MANDA EL QUE MAS DEJA:
- * si se cruzaran al reves, añadir un rol QUITARIA permisos.
+ * El mapa completo de permisos de un usuario (lo que devuelve el login y
+ * /auth/me, y lo que usa Tareas). Mismos argumentos que siempre; la respuesta
+ * sale de `explicarPermisos`.
+ *
+ * CON VARIOS ROLES, MANDA EL QUE MAS DEJA. Quien es gestora y ademas tutora
+ * puede lo de las dos: si se cruzaran al reves, añadir un rol QUITARIA
+ * permisos, que es lo contrario de lo que se pide al añadirlo.
  */
-export async function buildPermissionsMap(userId, role, customRoleId, rolesExtra = []) {
-  if (role === 'superadmin') {
-    const all = {};
-    for (const [resource, actions] of Object.entries(ALL_RESOURCES)) {
-      for (const action of actions) all[`${resource}.${action}`] = true;
-    }
-    return all;
-  }
-
-  // Base: defaults del rol fijo (o del base_role del custom role)
-  let baseRole = role;
-  let customPermissions = {};
-
-  if (customRoleId) {
-    const customRole = await model.findCustomRoleById(customRoleId);
-    if (customRole) {
-      baseRole = customRole.base_role || 'gestor';
-      customPermissions = customRole.permissions || {};
-    }
-  }
-
-  // Lo cambiado en Roles (211) para su rol y sus roles de más, de una vez.
-  const filas = await model.getRoleOverrides([baseRole, ...comoLista(rolesExtra)]);
-  const base = defaultsDelRol(baseRole, filas, SYSTEM_ROLE_DEFAULTS.gestor);
-
-  // Los roles de mas, sumados encima: basta con que UNO lo permita.
-  for (const extra of comoLista(rolesExtra)) {
-    if (!SYSTEM_ROLE_DEFAULTS[extra] && !filas.some((f) => f.role === extra)) continue;
-    const suyos = defaultsDelRol(extra, filas);
-    for (const [clave, vale] of Object.entries(suyos)) {
-      if (vale === true) base[clave] = true;
-    }
-  }
-
-  // Aplicar overrides del custom role
-  const merged = { ...base, ...customPermissions };
-
-  // Aplicar overrides personales del usuario (máxima prioridad)
-  const overrides = await model.getOverridesByUser(userId);
-  for (const { resource, action, allowed } of overrides) {
-    merged[`${resource}.${action}`] = allowed;
-  }
-
-  return merged;
+export async function buildPermissionsMap(userId) {
+  const e = await explicarPermisos(userId);
+  return e?.mapa || {};
 }
 
 export async function listCustomRoles() {
@@ -135,12 +100,12 @@ export async function getSystemDefaults() {
     resources: ALL_RESOURCES,
     roles: {
       superadmin: '(acceso total)',
-      admin: defaultsDelRol('admin', filas),
-      gestor: defaultsDelRol('gestor', filas),
-      soporte: defaultsDelRol('soporte', filas),
-      colaborador: defaultsDelRol('colaborador', filas),
-      // Como en MultiCRM: el project manager parte de los de gestor.
-      project_manager: defaultsDelRol('project_manager', filas, SYSTEM_ROLE_DEFAULTS.gestor),
+      admin: permisosDelRol('admin', filas),
+      gestor: permisosDelRol('gestor', filas),
+      soporte: permisosDelRol('soporte', filas),
+      colaborador: permisosDelRol('colaborador', filas),
+      project_manager: permisosDelRol('project_manager', filas),
+      tutor: permisosDelRol('tutor', filas),
     },
     views: SYSTEM_ROLE_VIEWS,
     catalogs: {
@@ -255,22 +220,20 @@ export async function getRoleTaskPermissions(roleKey) {
  * solo los que se apartan del código (tabla 211); en uno a medida se fusionan
  * en su JSON sin tocar el resto de claves.
  */
-export async function saveRoleTaskPermissions(roleKey, permissions, updatedBy) {
+export async function saveRoleTaskPermissions(roleKey, permissions, quien) {
   const r = rolDeLaClave(roleKey);
   if (!r) return null;
+  // Por el mismo camino que la pantalla de Roles (#423): con su registro.
+  const editar = await import('./permissions.editar.js');
+  // Quien lo cambia DE VERDAD (Diego, 26/10): desde que el admin cambia roles,
+  // las reglas de «nadie da lo que no tiene» miran a esa persona.
   if (r.custom) {
     const custom = await model.findCustomRoleById(r.custom);
     if (!custom) return null;
-    await model.mergeCustomRolePermissions(r.custom, permissions);
+    await editar.guardarRolAMedida(r.custom, { permisos: permissions }, quien);
     return getRoleTaskPermissions(roleKey);
   }
-  const deFabrica = { ...(SYSTEM_ROLE_DEFAULTS[r.role] || SYSTEM_ROLE_DEFAULTS.gestor) };
-  const actuales = defaultsDelRol(r.role, await model.getRoleOverrides([r.role]), SYSTEM_ROLE_DEFAULTS.gestor);
-  const deseados = { ...actuales, ...permissions };
-  const filas = CLAVES_EDITABLES
-    .filter((k) => (deseados[k] === true) !== (deFabrica[k] === true))
-    .map((k) => ({ action: k.slice('tasks.'.length), allowed: deseados[k] === true }));
-  await model.saveRoleOverrides(r.role, 'tasks', filas, updatedBy);
+  await editar.guardarRolFijo(r.role, permissions, quien);
   return getRoleTaskPermissions(roleKey);
 }
 
@@ -340,20 +303,19 @@ export async function getClaveDeRol(clave, roleKey) {
  * aparta del código (tabla de la 211), sin tocar las demás acciones del recurso;
  * en uno a medida se fusiona en su JSON.
  */
-export async function setClaveDeRol(clave, roleKey, permitido, updatedBy) {
+export async function setClaveDeRol(clave, roleKey, permitido, quien) {
   const conf = laClave(clave);
   const r = elRol(conf, roleKey);
+  // Por el mismo camino que la pantalla de Roles (#423): con su registro.
+  const editar = await import('./permissions.editar.js');
+  // Quien lo cambia DE VERDAD (Diego, 26/10): desde que el admin cambia roles,
+  // las reglas de «nadie da lo que no tiene» miran a esa persona.
   if (r.custom) {
     if (!(await model.findCustomRoleById(r.custom))) throw new AppError('Ese rol no existe', 404, 'NOT_FOUND');
-    await model.mergeCustomRolePermissions(r.custom, { [clave]: permitido === true });
+    await editar.guardarRolAMedida(r.custom, { permisos: { [clave]: permitido === true } }, quien);
     return getClaveDeRol(clave, roleKey);
   }
-  const deFabrica = SYSTEM_ROLE_DEFAULTS[r.role]?.[clave] === true;
-  const otras = (await model.getRoleOverrides([r.role]))
-    .filter((f) => f.role === r.role && f.resource === conf.resource && f.action !== conf.action)
-    .map(({ action, allowed }) => ({ action, allowed }));
-  const filas = (permitido === true) === deFabrica ? otras : [...otras, { action: conf.action, allowed: permitido === true }];
-  await model.saveRoleOverrides(r.role, conf.resource, filas, updatedBy);
+  await editar.guardarRolFijo(r.role, { [clave]: permitido === true }, quien);
   return getClaveDeRol(clave, roleKey);
 }
 
@@ -415,10 +377,40 @@ export async function setClaveDePersona(clave, userId, permitido, quien) {
   if (!conf.roles.includes(u.role)) {
     throw new AppError('A una persona con ese rol no se le puede dar esto', 400, 'ROLE_NOT_EDITABLE');
   }
-  await model.setUserOverride(userId, conf.resource, conf.action, permitido);
+  // Por el mismo camino que la ficha (#423): transacción, reglas y registro.
+  const editar = await import('./permissions.editar.js');
+  await editar.guardarExcepciones(userId, { [clave]: permitido }, quien);
   return {
     id: u.id,
     excepcion: permitido,
     puede: await resolvePermission(u.id, u.role, u.custom_role_id, conf.resource, conf.action, u.roles_extra),
   };
+}
+
+/* ─── El mapa, recordado medio minuto, para lo que pregunta sin parar ─── */
+
+/*
+  El chat de WhatsApp pregunta cada tres segundos (mensajes sin leer, llamadas
+  sonando). Leer el mapa entero en cada vuelta serían varias consultas por
+  vuelta y persona para un dato que cambia dos veces al año. Antes la casilla
+  `usa_whatsapp` se recordaba medio minuto (#128); el permiso que la sustituye
+  (#423) se recuerda igual, y se OLVIDA en cuanto alguien cambia lo de esa
+  persona (`olvidarPermisos`): quien lo cambia lo ve al momento.
+*/
+const VIVE_MS = 30_000;
+const recordados = new Map();
+
+export async function explicarPermisosRecordados(userId) {
+  const id = Number(userId);
+  const r = recordados.get(id);
+  if (r && r.hasta > Date.now()) return r.e;
+  const e = await explicarPermisos(id);
+  recordados.set(id, { e, hasta: Date.now() + VIVE_MS });
+  return e;
+}
+
+/** Se acaba de cambiar algo de esta persona (o de todas, sin id). */
+export function olvidarPermisos(userId) {
+  if (userId === undefined || userId === null) recordados.clear();
+  else recordados.delete(Number(userId));
 }

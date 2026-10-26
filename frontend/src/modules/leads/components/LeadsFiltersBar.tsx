@@ -18,6 +18,7 @@ import SearchableSelect from '@/shared/components/ui/SearchableSelect';
 import DateRangeFilter from './DateRangeFilter';
 import { PROCESO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 // ISEIE es single-project: NO usamos MultiProjectPicker (no aplica).
+import usePermission from '@/shared/hooks/usePermission';
 
 const STATUS_LABELS: Record<string, string> = {
   nuevo: 'Nuevo',
@@ -96,6 +97,8 @@ export default function LeadsFiltersBar(props: Props) {
     stats, leadsCount, filteredCount, onAssignPending,
   } = props;
 
+  // Lo que dice el servidor (#423): sale si salía antes Y tiene el permiso.
+  const { can } = usePermission();
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
   const [open, setOpen] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null); // wrapper del botón (ancla de posición)
@@ -177,7 +180,7 @@ export default function LeadsFiltersBar(props: Props) {
     setFilterReincidente(false);
   }
 
-  const showAssignBtn = isAdmin
+  const showAssignBtn = isAdmin && can('leads.assign')
     && ((stats?.sin_asignar ?? 0) > 0 || filterResponsable === 'unassigned')
     && activeProject?.id && activeProject.id > 0;
 

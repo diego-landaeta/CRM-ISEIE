@@ -17,6 +17,7 @@ import {
 import DialogoWebhook from '../components/DialogoWebhook';
 import RegistroEnvios from '../components/RegistroEnvios';
 import EjemploPayload from '../components/EjemploPayload';
+import usePermission from '@/shared/hooks/usePermission';
 
 /**
  * Conexión → «Webhook de transferencias» (Diego, 15/10; migración 206).
@@ -95,7 +96,9 @@ export default function WebhookTransferenciasPage() {
   const conEmpresa = Boolean(activeIssuerId);
   const projectId = !conEmpresa && !isAllProjects && activeProject?.id && activeProject.id !== TODOS_LOS_PROYECTOS
     ? activeProject.id : null;
-  const esSuperadmin = user?.role === 'superadmin';
+  // Lo que dice el servidor (#423): sale si salía antes Y tiene el permiso.
+  const { can } = usePermission();
+  const esSuperadmin = user?.role === 'superadmin' && can('webhooks_salientes.todas');
 
   const [webhooks, setWebhooks] = useState<WebhookSaliente[]>([]);
   const [cargando, setCargando] = useState(true);

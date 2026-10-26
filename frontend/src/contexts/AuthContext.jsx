@@ -82,7 +82,9 @@ export function AuthProvider({ children }) {
       throw new Error(res.error || 'Error al iniciar sesión');
     }
 
-    const { accessToken: token, user: userData, projects: userProjects, activeProjectId: apiProjectId } = res.data;
+    const { accessToken: token, user: userData, projects: userProjects, activeProjectId: apiProjectId, permissions: mapa } = res.data;
+    // El mapa de permisos llega ya con el login (#423): no hay tabla de respaldo.
+    if (mapa) setPermissions(mapa);
 
     setAccessToken(token);
     setUser(userData);

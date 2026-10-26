@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { verifyToken } from '../../shared/middleware/auth.js';
+import { puede } from '../../shared/middleware/permissions.js';
 import * as authController from './auth.controller.js';
 
 const router = Router();
@@ -53,6 +54,7 @@ router.patch('/me', verifyToken, authController.updateMyProfile);
 
 // PATCH /api/auth/me/email — el propio correo, solo un tutor (#246). Con el mismo
 // límite de intentos que el cambio de contraseña: también toca la credencial.
-router.patch('/me/email', changePasswordLimiter, verifyToken, authController.updateMyEmail);
+// La sesión ANTES que el permiso: sin `req.user`, `puede` siempre da 401.
+router.patch('/me/email', changePasswordLimiter, verifyToken, puede('cuenta.cambiar_correo'), authController.updateMyEmail);
 
 export default router;
