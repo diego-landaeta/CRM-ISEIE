@@ -226,7 +226,7 @@ function UsersSection({ isAdmin }) {
             onClick={() => setShowInvite(true)}
             disabled={!isAdmin}
             title={!isAdmin ? 'Necesitas rol admin' : undefined}
-            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex-shrink-0 whitespace-nowrap inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Plus size={14} weight="bold" />
             Invitar usuario
@@ -247,8 +247,11 @@ function UsersSection({ isAdmin }) {
           </p>
         </div>
       ) : (
-        <div className="rounded-2xl border border-border bg-card overflow-hidden">
-          <table className="w-full text-sm">
+        // Con un correo largo o la pantalla estrecha, la tabla se desplaza dentro
+        // de su caja y «Editar» / «Desactivar» no se cortan (#221 de MultiCRM,
+        // gemela ISEIE #202).
+        <div className="rounded-2xl border border-border bg-card overflow-x-auto">
+          <table className="w-full min-w-[560px] text-sm">
             <thead className="bg-muted/50 border-b border-border">
               <tr>
                 <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">Usuario</th>
@@ -282,7 +285,7 @@ function UsersSection({ isAdmin }) {
                     </span>
                   </td>
                   {isAdmin && (
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-4 py-3 text-right whitespace-nowrap">
                       {u.role !== 'superadmin' && (
                         <div className="inline-flex gap-1.5">
                           <button onClick={() => setEditingUser(u)}
