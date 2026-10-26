@@ -81,6 +81,8 @@ export const createTaskSchema = z.object({
   external_project_id: id.optional().nullable(),
   area_id: id.optional().nullable(),
   assigned_to: id.optional().nullable(),
+  // Quien la supervisa (26/10/2026). Lo pone quien tiene «Asignar».
+  supervisor_id: id.optional().nullable(),
 }).refine((d) => !(d.project_id && d.external_project_id), {
   message: 'No puedes asignar un proyecto del catálogo y un proyecto propio a la vez',
 });
@@ -94,6 +96,7 @@ export const updateTaskSchema = z.object({
   external_project_id: id.optional().nullable(),
   area_id: id.optional().nullable(),
   assigned_to: id.optional().nullable(),
+  supervisor_id: id.optional().nullable(),
 }).refine((d) => Object.keys(d).length > 0, {
   message: 'No se envió ningún campo para actualizar',
 }).refine((d) => !(d.project_id && d.external_project_id), {

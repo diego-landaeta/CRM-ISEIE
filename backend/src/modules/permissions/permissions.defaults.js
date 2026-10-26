@@ -39,6 +39,8 @@ export const SYSTEM_ROLE_DEFAULTS = {
     // EMITIR diplomas (Diego, 22/10/2026: «que Dayana pueda emitir»; la misma clave que en
     // MultiCRM). El admin ya emite por su rol; la clave es para darsela a quien no lo es.
     'diplomas.emit': true,
+    // Meta Ads, solo ver (26/10/2026). El admin la ve por su rol; la clave es para dársela a otro.
+    'meta_ads.view': true,
   },
 
   gestor: {
@@ -126,6 +128,8 @@ export const SYSTEM_ROLE_DEFAULTS = {
     // Diplomas de Certifex (#223): no.
     'diplomas.view': false,
     'diplomas.emit': false,
+    // Meta Ads (26/10/2026): no de serie; se da por persona a quien la necesita.
+    'meta_ads.view': false,
   },
 };
 
@@ -158,4 +162,8 @@ export const ALL_RESOURCES = {
   // alumno; quien emite tambien ve. Rechazar, corregir, revocar, la firma y el
   // A3 de imprenta siguen siendo de admin y superadmin, por su rol.
   diplomas:         ['view', 'emit'],
+  // Meta Ads, solo VER (Diego, 26/10/2026: «en Meta tendrán acceso Ruth, Julián,
+  // Jesús, Emmanuel…»). Conectar cuentas, sincronizar y asociar siguen siendo de
+  // admin y superadmin, por su rol. Solo lo de sus campus.
+  meta_ads:         ['view'],
 };

@@ -54,7 +54,16 @@ router.get('/justificante-local/:id', limite(60), facturas.justificanteLocal);
 // Son las únicas de este módulo que puede pedir el rol colaborador
 // (`RUTAS_DEL_COLABORADOR`, shared/utils/roles.js).
 
-const sube = [verifyToken, checkPermission('facturas_colaborador', 'subir')];
+// Con los roles de más (26/10/2026): quien es soporte y además colaborador sube
+// la suya. `checkPermission` solo mira el rol principal.
+const subeSuFactura = async (req, _res, next) => {
+  try {
+    const { userId, role, customRoleId, roles_extra: rolesExtra } = req.user;
+    if (await resolvePermission(userId, role, customRoleId ?? null, 'facturas_colaborador', 'subir', rolesExtra ?? [])) return next();
+    next(new AppError('No tienes permiso para esta accion', 403, 'FORBIDDEN'));
+  } catch (err) { next(err); }
+};
+const sube = [verifyToken, subeSuFactura];
 
 router.get('/mias', sube, facturas.mias);
 router.post('/mias/:id', sube, limite(20), recibirArchivo, facturas.subirMia);
