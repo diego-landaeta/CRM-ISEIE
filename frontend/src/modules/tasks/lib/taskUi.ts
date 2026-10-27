@@ -171,20 +171,24 @@ export function neighboursAt(
  * aquí solo evita ofrecer lo que daría 403.
  */
 /**
- * La vista con la que se entra en el tablero, para TODOS (Diego, 26/10/2026):
- * «Mi tablero». No depende del rol ni de la última vez.
+ * Qué tareas enseña el único tablero (Diego, 27/10/2026: «un solo tablero, y ya
+ * con filtros»): «Mis tareas» (lo que llevo, superviso o creé), «Mi equipo»
+ * (eso y lo de mis equipos) o «Todo» (lo que mi permiso me deje ver). El
+ * servidor manda: «Todo» nunca abre más de lo permitido.
  */
-export const VISTA_INICIAL = 'mio' as const;
+export type VerTablero = 'mias' | 'equipo' | 'todo';
+export const OPCIONES_VER: ReadonlyArray<{ value: VerTablero; label: string }> = [
+  { value: 'mias', label: 'Mis tareas' },
+  { value: 'equipo', label: 'Mi equipo' },
+  { value: 'todo', label: 'Todo' },
+];
 
-/**
- * Qué pide cada vista al servidor: «Mi tablero» = lo que llevo, supervisé o
- * creé (`mias`); «Mi equipo / Todos» = lo que el servidor deje ver; una persona
- * concreta = su tablero.
- */
-export function filtroDeVista(vista: 'mio' | 'equipo' | 'revisar' | number): { mias?: true; assigned_to?: number } {
-  if (vista === 'mio') return { mias: true };
-  if (typeof vista === 'number') return { assigned_to: vista };
-  return {};
+/** Se entra siempre en «Mis tareas», sea quien sea (Diego, 26/10/2026). */
+export const VISTA_INICIAL: VerTablero = 'mias';
+
+/** Lo que pide cada «Ver» al servidor. */
+export function filtroDeVista(ver: VerTablero): { ver: VerTablero } {
+  return { ver };
 }
 
 export function puedeEditarTarea(

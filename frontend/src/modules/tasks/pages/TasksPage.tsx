@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState, type DragEvent } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { Plus, MagnifyingGlass, ArrowsClockwise, Warning, X, SlidersHorizontal, ArrowClockwise, Compass } from '@phosphor-icons/react';
+import {
+  Plus, MagnifyingGlass, ArrowsClockwise, Warning, X, SlidersHorizontal, ArrowClockwise, Compass,
+  CaretLeft, CaretRight, ChartBar, ListChecks, ArrowLeft,
+} from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import usePermission from '@/shared/hooks/usePermission';
@@ -11,13 +14,19 @@ import { CLAVE_RECORRIDO_TABLERO, PASOS_TABLERO } from '../lib/recorridoTablero'
 import Select from '@/shared/components/ui/Select';
 import { agruparPorEmpresa, campusConEmpresa, empresaCorta } from '../lib/campusPorEmpresa';
 import { Button } from '@/shared/components/ui/button';
-import { avatarColorFor, getInitials, inputClass } from '@/shared/lib/ui';
+import { inputClass } from '@/shared/lib/ui';
 import * as tasksApi from '../api/tasks.api';
 import { TaskColumn } from '../components/TaskColumn';
 import { TaskModal } from '../components/TaskModal';
 import { TeamAreaMetrics, TeamTasksMetrics } from '../components/TeamTasksMetrics';
 import { TasksReviewView } from '../components/TasksReviewView';
-import { DEFAULT_COLUMNS, PRIORITY, VISTA_INICIAL, boardColor, filtroDeVista, neighboursAt, puedeEditarTarea } from '../lib/taskUi';
+import {
+  DEFAULT_COLUMNS, OPCIONES_VER, PRIORITY, VISTA_INICIAL, boardColor, filtroDeVista, neighboursAt, puedeEditarTarea,
+  type VerTablero,
+} from '../lib/taskUi';
+import {
+  etiquetaDePeriodo, hoyEnOficina, moverReferencia, rangoDePeriodo, textoDelPeriodo, type TipoPeriodo,
+} from '../lib/periodo';
 import type {
   AreaMetric,
   Assignee,
@@ -33,29 +42,40 @@ import type {
   MyTeam,
 } from '../types';
 
-// «Mi tablero» por defecto. Con permiso: «Por revisar» (su propia ruta,
-// /tareas/revisar, para que el menú lleve directo), «Todo el equipo» o una
-// persona concreta.
-type Vista = 'mio' | 'revisar' | 'equipo' | number;
-type Agrupar = 'persona' | 'area';
+/*
+ * UN SOLO TABLERO (Diego, 27/10/2026): «Esto tiene que tener fecha de cuándo se
+ * creó y cuándo se terminó, y clasificarla en vistas por día, semana y mes, PERO
+ * QUE SEA UN SOLO TABLERO TODO Y YA CON FILTROS, NO MÚLTIPLES TABLEROS.»
+ *
+ * Cuatro columnas con todo lo que se ve según los filtros; nada de un bloque de
+ * columnas por persona. La persona es un filtro más. «Ver» (Mis tareas / Mi
+ * equipo / Todo) sustituye al selector de antes, y el servidor manda: «Todo»
+ * nunca abre más de lo que deja el permiso. «Por revisar» sigue en su ruta.
+ */
 
 type Filtros = {
   search: string;
+  personaId: number | '';
+  equipo: string; // '' = cualquiera, 'sin' = sin equipo, o el id
   projectId: number | '';
   externalProjectId: number | '';
   areaId: number | '';
   priority: TaskPriority | '';
   tag: string;
   vencidas: boolean;
-  desde: string;
-  hasta: string;
 };
 
 const SIN_FILTROS: Filtros = {
-  search: '', projectId: '', externalProjectId: '', areaId: '', priority: '', tag: '', vencidas: false, desde: '', hasta: '',
+  search: '', personaId: '', equipo: '', projectId: '', externalProjectId: '', areaId: '', priority: '', tag: '', vencidas: false,
 };
 
-type Carril = { id: string; titulo: string; color?: string | null; userId: number | null; tasks: Task[] };
+const PERIODOS: ReadonlyArray<{ value: TipoPeriodo; label: string }> = [
+  { value: 'dia', label: 'Hoy' },
+  { value: 'semana', label: 'Esta semana' },
+  { value: 'mes', label: 'Este mes' },
+  { value: 'todo', label: 'Todo' },
+];
+const PASO_DE: Record<TipoPeriodo, string> = { dia: 'día', semana: 'semana', mes: 'mes', todo: '' };
 
 const errorDe = (err: unknown) => (err instanceof Error && err.message) ? err.message : 'Error desconocido';
 
@@ -86,16 +106,16 @@ export default function TasksPage() {
   const ambito = useMemo<tasksApi.Ambito>(() => ({}), []);
 
   const enRevisar = location.pathname.endsWith('/tareas/revisar');
-  // Diego, 26/10/2026: «la vista principal al entrar en Tablero, para todos, es
-  // ver SU tablero» —lo que lleva, lo que supervisa y lo que creó—, también el
-  // admin y el superadmin. Quien ve más cambia arriba a «Mi equipo» o «Todos».
-  // No se recuerda la última vista: al volver a entrar, otra vez «Mi tablero».
-  const [vistaTablero, setVistaTablero] = useState<Exclude<Vista, 'revisar'>>(VISTA_INICIAL);
-  const vista: Vista = enRevisar ? 'revisar' : vistaTablero;
-  const [agrupar, setAgrupar] = useState<Agrupar>('persona');
+  // Se entra siempre en «Mis tareas» (Diego, 26/10/2026); no se recuerda la última.
+  const [ver, setVer] = useState<VerTablero>(VISTA_INICIAL);
 
   const [filtros, setFiltros] = useState<Filtros>(SIN_FILTROS);
   const [busqueda, setBusqueda] = useState('');
+  // El periodo: «Todo» por defecto; Hoy, Esta semana o Este mes, y moverse.
+  const [tipoPeriodo, setTipoPeriodo] = useState<TipoPeriodo>('todo');
+  const [referencia, setReferencia] = useState<string>(() => hoyEnOficina());
+  const rango = useMemo(() => rangoDePeriodo(tipoPeriodo, referencia), [tipoPeriodo, referencia]);
+
   const [tasks, setTasks] = useState<Task[]>([]);
   const [cargando, setCargando] = useState(true);
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
@@ -105,15 +125,13 @@ export default function TasksPage() {
   const [areas, setAreas] = useState<TaskArea[]>([]);
   const [proyectosPropios, setProyectosPropios] = useState<TaskExternalProject[]>([]);
   const [columnas, setColumnas] = useState<TaskColumnType[]>([]);
-  // Los equipos (26/10/2026): los que se ven, los suyos con su cargo, y el
-  // elegido arriba —«Todos mis equipos», uno, o «Sin equipo»—. Tampoco se
-  // recuerda: se entra siempre en «Mi tablero» sin filtro (Diego, 26/10).
   const [equipos, setEquipos] = useState<Team[]>([]);
   const [misEquipos, setMisEquipos] = useState<MyTeam[]>([]);
-  const [equipoElegido, setEquipoElegido] = useState<string>('');
-  const elegirEquipo = (v: string) => setEquipoElegido(v);
-  const teamIdElegido = equipoElegido === '' ? undefined : equipoElegido === 'sin' ? 0 : Number(equipoElegido);
+  // Las personas que han salido en el tablero: para el filtro de quien no ve la lista del equipo.
+  const [personasVistas, setPersonasVistas] = useState<Array<{ id: number; nombre: string }>>([]);
 
+  const [verCifras, setVerCifras] = useState(false);
+  const [cifrasPor, setCifrasPor] = useState<'persona' | 'area'>('persona');
   const [metricas, setMetricas] = useState<TeamMemberMetric[]>([]);
   const [metricasArea, setMetricasArea] = useState<AreaMetric[]>([]);
   const [cargandoMetricas, setCargandoMetricas] = useState(false);
@@ -122,6 +140,8 @@ export default function TasksPage() {
   const [nueva, setNueva] = useState<{ status: TaskStatus } | null>(null);
   // El recorrido guiado (12/10): solo la primera vez, y cuando se pida con «Recorrido».
   const [recorrido, setRecorrido] = useState(false);
+
+  const teamIdElegido = filtros.equipo === '' ? undefined : filtros.equipo === 'sin' ? 0 : Number(filtros.equipo);
 
   // Por empresa, no por campus (Diego, 10/10). En MultiCRM, con una empresa o un
   // campus en la cabecera, solo los de esa empresa. En ISEIE no hay cabecera:
@@ -145,6 +165,9 @@ export default function TasksPage() {
   const areasActivas = useMemo(() => areas.filter((a) => a.is_active), [areas]);
   const proyectosActivos = useMemo(() => proyectosPropios.filter((p) => p.is_active), [proyectosPropios]);
 
+  // Quien solo ve lo suyo (sin «Ver todo», sin asignar y sin equipos): la persona es él.
+  const soloLoSuyo = !canViewAll && !canAssign && misEquipos.length === 0;
+
   // La tarea abierta va en la URL (?id=): los avisos de la campana y del
   // correo abren justo esa tarjeta.
   const abiertaId = Number(searchParams.get('id')) || null;
@@ -164,14 +187,16 @@ export default function TasksPage() {
     setCargando(true);
     setErrorCarga(null);
     try {
-      if (vista === 'revisar') {
+      if (enRevisar) {
         setTasks(await tasksApi.getReviewTasks(ambito));
       } else {
-        setTasks(await tasksApi.getTasks({
-          // Mi tablero es mío, esté donde esté: el ámbito solo acota al equipo.
-          ...(vista === 'mio' ? {} : ambito),
-          ...filtroDeVista(vista),
+        const lista = await tasksApi.getTasks({
+          // Lo mío y lo de mi equipo son míos, esté donde esté: el ámbito de
+          // arriba solo acota «Todo».
+          ...(ver === 'todo' ? ambito : {}),
+          ...filtroDeVista(ver),
           team_id: teamIdElegido,
+          assigned_to: filtros.personaId || undefined,
           search: filtros.search.trim() || undefined,
           project_id: filtros.projectId || undefined,
           external_project_id: filtros.externalProjectId || undefined,
@@ -179,9 +204,15 @@ export default function TasksPage() {
           priority: filtros.priority || undefined,
           tag: filtros.tag || undefined,
           vencidas: filtros.vencidas || undefined,
-          desde: filtros.desde || undefined,
-          hasta: filtros.hasta || undefined,
-        }));
+          periodo_desde: rango?.desde,
+          periodo_hasta: rango?.hasta,
+        });
+        setTasks(lista);
+        setPersonasVistas((antes) => {
+          const mapa = new Map(antes.map((p) => [p.id, p]));
+          for (const t of lista) if (t.assigned_to && t.assigned_to_name) mapa.set(t.assigned_to, { id: t.assigned_to, nombre: t.assigned_to_name });
+          return mapa.size === antes.length ? antes : [...mapa.values()];
+        });
       }
     } catch (err) {
       // Un error no es un tablero vacío: se dice y se puede reintentar.
@@ -190,7 +221,7 @@ export default function TasksPage() {
     } finally {
       setCargando(false);
     }
-  }, [vista, yo, filtros, ambito, teamIdElegido]);
+  }, [enRevisar, ver, filtros, ambito, teamIdElegido, rango]);
 
   // Lo que no cambia al arrastrar: se pide al entrar y al volver de configurar.
   const cargarCatalogos = useCallback(() => {
@@ -206,8 +237,9 @@ export default function TasksPage() {
     tasksApi.getTagNames(ambito).then(setEtiquetas).catch(() => setEtiquetas([]));
   }, [ambito]);
 
+  const conCifras = verCifras && canViewAll && ver === 'todo' && !enRevisar;
   const cargarMetricas = useCallback(async () => {
-    if (vista !== 'equipo' || !canViewAll) return;
+    if (!conCifras) return;
     setCargandoMetricas(true);
     try {
       const pid = filtros.projectId || undefined;
@@ -218,11 +250,11 @@ export default function TasksPage() {
       setMetricas(personas);
       setMetricasArea(porArea);
     } catch (err) {
-      toast({ title: 'No se pudieron cargar las métricas del equipo', description: errorDe(err), variant: 'destructive' });
+      toast({ title: 'No se pudieron cargar las cifras del equipo', description: errorDe(err), variant: 'destructive' });
     } finally {
       setCargandoMetricas(false);
     }
-  }, [vista, canViewAll, filtros.projectId, filtros.areaId, ambito]);
+  }, [conCifras, filtros.projectId, filtros.areaId, ambito]);
 
   const cargarPorRevisar = useCallback(async () => {
     try {
@@ -252,27 +284,6 @@ export default function TasksPage() {
   }, [columnas]);
   const nombreColumna = (key: string) => columnasActivas.find((c) => c.key === key)?.label || key;
 
-  // Los carriles: uno solo, o en «Todo el equipo» uno por persona o por área.
-  const carriles: Carril[] = useMemo(() => {
-    if (vista === 'revisar') return [];
-    if (vista !== 'equipo') {
-      const titulo = vista === 'mio' ? 'Mi tablero' : assignees.find((a) => a.id === vista)?.nombre || '';
-      return [{ id: 'unico', titulo, userId: vista === 'mio' ? yo : vista, tasks }];
-    }
-    const grupos = new Map<string, Carril>();
-    for (const t of tasks) {
-      const porArea = agrupar === 'area';
-      const id = porArea ? `a${t.area_id ?? 0}` : `u${t.assigned_to ?? 0}`;
-      if (!grupos.has(id)) {
-        grupos.set(id, porArea
-          ? { id, titulo: t.area_name || 'Sin área', color: t.area_color, userId: null, tasks: [] }
-          : { id, titulo: t.assigned_to_name || 'Sin responsable', userId: t.assigned_to, tasks: [] });
-      }
-      grupos.get(id)!.tasks.push(t);
-    }
-    return [...grupos.values()].sort((a, b) => a.titulo.localeCompare(b.titulo, 'es'));
-  }, [vista, tasks, assignees, yo, agrupar]);
-
   // Arrastrar es mover (26/10/2026): lo dice el servidor de cada tarjeta
   // (el responsable, el supervisor o un superadmin). Sin el dato, la regla de antes.
   const puedeArrastrar = (t: Task) => (t.puede_mover ?? puedeEditarTarea(t, yo, { edit: canEdit, viewAll: canViewAll }))
@@ -294,7 +305,11 @@ export default function TasksPage() {
       toast({ title: 'No puedes cerrar tareas', description: 'Llévala a «En revisión» y la revisarán.', variant: 'destructive' });
       return;
     }
-    const vecinas = neighboursAt(columna, index, t.id);
+    // El orden de una columna es el de cada responsable (el servidor ordena por
+    // persona): en el tablero único, las vecinas son las de la misma persona.
+    const deLaPersona = columna.filter((x) => x.assigned_to === t.assigned_to);
+    const indice = columna.slice(0, index).filter((x) => x.assigned_to === t.assigned_to).length;
+    const vecinas = neighboursAt(deLaPersona, indice, t.id);
     if (!vecinas && status === t.status) return; // se soltó donde estaba
 
     // Se pinta ya en su sitio y luego se confirma con el servidor.
@@ -319,35 +334,64 @@ export default function TasksPage() {
     }
   }
 
-  const hayFiltros = JSON.stringify(filtros) !== JSON.stringify(SIN_FILTROS);
-
-  const opcionesVista: Array<{ value: Vista; label: string }> = [
-    { value: 'mio', label: 'Mi tablero' },
-    ...(canClose || porRevisar > 0 ? [{ value: 'revisar' as Vista, label: `Por revisar (${porRevisar})` }] : []),
-    ...(canViewAll || misEquipos.length > 0 ? [{ value: 'equipo' as Vista, label: canViewAll ? 'Todos' : 'Mi equipo' }] : []),
-    ...(canViewAll ? assignees.filter((a) => a.id !== yo).map((a) => ({ value: a.id as Vista, label: a.nombre })) : []),
-  ];
   useEffect(() => {
-    if (cargando || vista === 'revisar' || !recorridoPendiente(CLAVE_RECORRIDO_TABLERO)) return undefined;
+    if (cargando || enRevisar || !recorridoPendiente(CLAVE_RECORRIDO_TABLERO)) return undefined;
     const t = setTimeout(() => setRecorrido(true), 800);
     return () => clearTimeout(t);
-  }, [cargando, vista]);
+  }, [cargando, enRevisar]);
 
-  function cambiarVista(v: Vista) {
-    if (v === 'revisar') { navigate('/tareas/revisar'); return; }
-    setVistaTablero(v);
-    if (enRevisar) navigate('/tareas');
+  // Las opciones de cada filtro.
+  const opcionesPersona = useMemo(() => {
+    const base = assignees.length > 0 ? assignees.map((a) => ({ id: a.id, nombre: a.nombre })) : personasVistas;
+    const yoMismo = { id: yo, nombre: user?.nombre || 'Yo' };
+    const lista = base.some((p) => p.id === yo) ? base : [yoMismo, ...base];
+    return [...lista].sort((a, b) => (a.id === yo ? -1 : b.id === yo ? 1 : a.nombre.localeCompare(b.nombre, 'es')))
+      .map((p) => ({ value: p.id as number | '', label: p.id === yo ? `${p.nombre} (yo)` : p.nombre }));
+  }, [assignees, personasVistas, yo, user?.nombre]);
+  const nombreEquipo = (e: Team) => (equipos.some((o) => o.id !== e.id && o.name === e.name) ? `${e.name} · ${empresaCorta(e.empresa)}` : e.name);
+  const equiposActivos = equipos.filter((e) => e.is_active);
+
+  // Los filtros activos, para verlos y quitarlos uno a uno.
+  const activos: Array<{ clave: string; texto: string; quitar: () => void }> = [];
+  const quitar = (k: keyof Filtros) => () => {
+    if (k === 'search') setBusqueda('');
+    setFiltros((f) => ({ ...f, [k]: SIN_FILTROS[k] }));
+  };
+  if (filtros.search) activos.push({ clave: 'search', texto: `«${filtros.search}»`, quitar: quitar('search') });
+  if (filtros.personaId) activos.push({ clave: 'persona', texto: `Persona: ${opcionesPersona.find((o) => o.value === filtros.personaId)?.label || '…'}`, quitar: quitar('personaId') });
+  if (filtros.equipo) {
+    const e = equipos.find((x) => String(x.id) === filtros.equipo);
+    activos.push({ clave: 'equipo', texto: `Equipo: ${filtros.equipo === 'sin' ? 'sin equipo' : e ? nombreEquipo(e) : '…'}`, quitar: quitar('equipo') });
+  }
+  if (filtros.areaId) activos.push({ clave: 'area', texto: `Área: ${areasActivas.find((a) => a.id === filtros.areaId)?.name || '…'}`, quitar: quitar('areaId') });
+  if (filtros.tag) activos.push({ clave: 'tag', texto: `Etiqueta: ${filtros.tag}`, quitar: quitar('tag') });
+  if (filtros.priority) activos.push({ clave: 'prioridad', texto: `Prioridad: ${PRIORITY[filtros.priority].label.toLowerCase()}`, quitar: quitar('priority') });
+  if (filtros.projectId) activos.push({ clave: 'campus', texto: `Campus: ${opcionesCampus.find((o) => o.value === filtros.projectId)?.label || '…'}`, quitar: quitar('projectId') });
+  if (filtros.externalProjectId) activos.push({ clave: 'propio', texto: `Proyecto: ${proyectosActivos.find((p) => p.id === filtros.externalProjectId)?.name || '…'}`, quitar: quitar('externalProjectId') });
+  if (filtros.vencidas) activos.push({ clave: 'vencidas', texto: 'Solo vencidas', quitar: quitar('vencidas') });
+  if (rango) activos.push({ clave: 'periodo', texto: etiquetaDePeriodo(tipoPeriodo, rango), quitar: () => setTipoPeriodo('todo') });
+
+  function quitarFiltros() {
+    setFiltros(SIN_FILTROS);
+    setBusqueda('');
+    setTipoPeriodo('todo');
+    setReferencia(hoyEnOficina());
   }
 
-  // Al crear desde el tablero de otra persona, el responsable es esa persona.
-  const defaultAssigneeId = typeof vista === 'number' ? vista : yo;
+  function elegirPeriodo(tipo: TipoPeriodo) {
+    setTipoPeriodo(tipo);
+    setReferencia(hoyEnOficina());
+  }
+
+  // Al crear con una persona filtrada (y pudiendo asignar), es para ella.
+  const defaultAssigneeId = filtros.personaId && canAssign ? Number(filtros.personaId) : yo;
 
   // Sin «Ver lo suyo» ni «Ver todo» (Configuración › Roles), el servidor no da
   // tablero: se dice en vez de enseñar un error de carga.
   if (!canViewOwn && !canViewAll && !canClose) {
     return (
       <div className="space-y-4">
-        <PageHeader title="Equipo de Desarrollo" />
+        <PageHeader title="Tablero de tareas" />
         <p className="text-sm text-muted-foreground">
           Tu rol no tiene acceso al tablero de tareas. Si lo necesitas, pídeselo a quien gestiona los roles.
         </p>
@@ -355,91 +399,97 @@ export default function TasksPage() {
     );
   }
 
+  const subtitulo = enRevisar ? 'Las tareas «En revisión» de todo el equipo, por fecha límite'
+    : ver === 'mias' ? 'Lo que llevas, lo que supervisas y lo que creaste'
+      : ver === 'equipo' ? 'Lo tuyo y lo de tus equipos' : 'Todo lo que puedes ver del equipo';
+
   return (
     <div className="space-y-4">
       <PageHeader
-        title={vista === 'revisar' ? 'Por revisar' : vista === 'mio' ? 'Mi tablero' : 'Equipo de Desarrollo'}
-        subtitle={
-          vista === 'revisar' ? 'Las tareas «En revisión» de todo el equipo, por fecha límite'
-            : vista === 'equipo' ? `Todo el equipo, por ${agrupar === 'area' ? 'área' : 'persona'}`
-              : vista === 'mio' ? 'Lo que llevas, lo que supervisas y lo que creaste' : 'Arrastra las tarjetas para avanzar o reordenarlas'
-        }
+        title={enRevisar ? 'Por revisar' : 'Tablero de tareas'}
+        subtitle={subtitulo}
         actions={(
           <div className="flex flex-wrap items-center gap-2">
-            {equipos.length > 0 && vista !== 'revisar' && (
-              <Select<string>
-                value={equipoElegido}
-                onChange={elegirEquipo}
-                options={[
-                  { value: '', label: 'Todos mis equipos' },
-                  ...equipos.filter((e) => e.is_active).map((e) => ({
-                    value: String(e.id),
-                    label: equipos.some((o) => o.id !== e.id && o.name === e.name) ? `${e.name} · ${empresaCorta(e.empresa)}` : e.name,
-                  })),
-                  { value: 'sin', label: 'Sin equipo' },
-                ]}
-                ariaLabel="Qué equipo ver"
-                size="sm"
-                className="w-52"
-              />
-            )}
-            {opcionesVista.length > 1 && (
-              <span data-recorrido="vista">
-                <Select<Vista> value={vista} onChange={cambiarVista} options={opcionesVista} ariaLabel="Qué tablero ver" size="sm" className="w-48" />
-              </span>
-            )}
-            {canManage && (
-              <Button variant="outline" size="sm" className="h-9" onClick={() => navigate('/tareas/configurar')} data-recorrido="configurar">
-                <SlidersHorizontal size={15} className="mr-1.5" /> Configurar tablero
+            {enRevisar ? (
+              <Button variant="outline" size="sm" className="h-9" onClick={() => navigate('/tareas')} aria-label="Volver al tablero">
+                <ArrowLeft size={15} className="sm:mr-1.5" /> <span className="hidden sm:inline">Volver al tablero</span>
+              </Button>
+            ) : (canClose || porRevisar > 0) && (
+              <Button variant="outline" size="sm" className="h-9" onClick={() => navigate('/tareas/revisar')} aria-label={`Por revisar (${porRevisar})`}>
+                <ListChecks size={15} className="sm:mr-1.5" /> <span className="hidden sm:inline">Por revisar </span>({porRevisar})
               </Button>
             )}
-            <Button variant="outline" size="sm" className="h-9" onClick={() => setRecorrido(true)} title="Un recorrido por el tablero, paso a paso">
-              <Compass size={15} className="mr-1.5" /> Recorrido
+            {canManage && (
+              <Button variant="outline" size="sm" className="h-9" onClick={() => navigate('/tareas/configurar')} data-recorrido="configurar" aria-label="Configurar tablero">
+                <SlidersHorizontal size={15} className="sm:mr-1.5" /> <span className="hidden sm:inline">Configurar tablero</span>
+              </Button>
+            )}
+            <Button variant="outline" size="sm" className="h-9" onClick={() => setRecorrido(true)} title="Un recorrido por el tablero, paso a paso" aria-label="Recorrido">
+              <Compass size={15} className="sm:mr-1.5" /> <span className="hidden sm:inline">Recorrido</span>
             </Button>
             <Button variant="outline" size="icon" className="h-9 w-9" onClick={refrescar} aria-label="Recargar">
               <ArrowsClockwise size={16} />
             </Button>
-            {canCreate && vista !== 'revisar' && (
+            {canCreate && !enRevisar && (
               <Button size="sm" className="h-9" onClick={() => setNueva({ status: 'por_hacer' })} data-recorrido="nueva">
-                <Plus size={15} weight="bold" className="mr-1.5" /> Nueva tarea
+                <Plus size={15} weight="bold" className="mr-1.5" /> <span className="hidden sm:inline">Nueva tarea</span><span className="sm:hidden">Nueva</span>
               </Button>
             )}
           </div>
         )}
       />
 
-      {vista !== 'revisar' && (
-        <>
-          {/* El tablero se divide por áreas (Meta, WEB · WordPress · SEO…). */}
-          {areasActivas.length > 0 && (
-            <div role="tablist" aria-label="Áreas" className="flex flex-wrap gap-1.5" data-recorrido="areas">
-              {[{ id: '' as number | '', name: 'Todas las áreas', color: null as string | null }, ...areasActivas].map((a) => {
-                const activa = filtros.areaId === a.id;
-                return (
-                  <button
-                    key={String(a.id)}
-                    type="button"
-                    role="tab"
-                    aria-selected={activa}
-                    onClick={() => setFiltros((f) => ({ ...f, areaId: a.id }))}
-                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
-                      activa ? 'bg-primary text-primary-foreground border-primary' : 'bg-card border-border hover:bg-muted'
-                    }`}
-                  >
-                    {a.color && <span className={`w-2 h-2 rounded-full ${boardColor(a.color).dot}`} aria-hidden />}
-                    {a.name}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
-          <div className="bg-card border border-border rounded-lg p-3 flex flex-wrap items-end gap-2" data-recorrido="filtros">
-            <div className="relative flex-1 min-w-[12rem]">
+      {!enRevisar && (
+        <div className="bg-card border border-border rounded-lg p-3 space-y-2.5" data-recorrido="filtros">
+          {/* Los filtros, en una sola fila (se parte en el móvil) y combinables. */}
+          <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filtros del tablero">
+            <div className="relative flex-1 min-w-[11rem]">
               <MagnifyingGlass size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar en título o descripción…"
                 aria-label="Buscar" className={`${inputClass} pl-9`} />
             </div>
+            <span data-recorrido="vista">
+              <Select<VerTablero> value={ver} onChange={setVer} options={[...OPCIONES_VER]} ariaLabel="Ver" size="sm" className="w-36" />
+            </span>
+            <Select<number | ''>
+              value={soloLoSuyo ? yo : filtros.personaId}
+              onChange={(v) => setFiltros((f) => ({ ...f, personaId: v }))}
+              options={[{ value: '', label: 'Cualquier persona' }, ...opcionesPersona]}
+              disabled={soloLoSuyo}
+              ariaLabel="Persona" size="sm" className="w-44"
+            />
+            {equiposActivos.length > 0 && (
+              <Select<string>
+                value={filtros.equipo}
+                onChange={(v) => setFiltros((f) => ({ ...f, equipo: v }))}
+                options={[
+                  { value: '', label: 'Cualquier equipo' },
+                  ...equiposActivos.map((e) => ({ value: String(e.id), label: nombreEquipo(e) })),
+                  { value: 'sin', label: 'Sin equipo' },
+                ]}
+                ariaLabel="Equipo" size="sm" className="w-44"
+              />
+            )}
+            {areasActivas.length > 0 && (
+              <Select<number | ''>
+                value={filtros.areaId}
+                onChange={(v) => setFiltros((f) => ({ ...f, areaId: v }))}
+                options={[{ value: '', label: 'Cualquier área' }, ...areasActivas.map((a) => ({ value: a.id as number | '', label: a.name }))]}
+                ariaLabel="Área" size="sm" className="w-44"
+              />
+            )}
+            <Select<string>
+              value={filtros.tag}
+              onChange={(v) => setFiltros((f) => ({ ...f, tag: v }))}
+              options={[{ value: '', label: 'Cualquier etiqueta' }, ...etiquetas.map((t) => ({ value: t.name, label: `${t.name} (${t.total})` }))]}
+              ariaLabel="Etiqueta" size="sm" className="w-40"
+            />
+            <Select<TaskPriority | ''>
+              value={filtros.priority}
+              onChange={(v) => setFiltros((f) => ({ ...f, priority: v }))}
+              options={[{ value: '', label: 'Cualquier prioridad' }, ...(['alta', 'media', 'baja'] as const).map((p) => ({ value: p as TaskPriority | '', label: PRIORITY[p].label }))]}
+              ariaLabel="Prioridad" size="sm" className="w-40"
+            />
             <Select<number | ''>
               value={filtros.projectId}
               onChange={(v) => setFiltros((f) => ({ ...f, projectId: v }))}
@@ -454,40 +504,77 @@ export default function TasksPage() {
                 ariaLabel="Proyecto propio" size="sm" className="w-48"
               />
             )}
-            <Select<TaskPriority | ''>
-              value={filtros.priority}
-              onChange={(v) => setFiltros((f) => ({ ...f, priority: v }))}
-              options={[{ value: '', label: 'Cualquier prioridad' }, ...(['alta', 'media', 'baja'] as const).map((p) => ({ value: p as TaskPriority | '', label: PRIORITY[p].label }))]}
-              ariaLabel="Prioridad" size="sm" className="w-40"
-            />
-            <Select<string>
-              value={filtros.tag}
-              onChange={(v) => setFiltros((f) => ({ ...f, tag: v }))}
-              options={[{ value: '', label: 'Cualquier etiqueta' }, ...etiquetas.map((t) => ({ value: t.name, label: `${t.name} (${t.total})` }))]}
-              ariaLabel="Etiqueta" size="sm" className="w-40"
-            />
-            <label className="flex flex-col text-[11px] text-muted-foreground">
-              Vence desde
-              <input type="date" value={filtros.desde} onChange={(e) => setFiltros((f) => ({ ...f, desde: e.target.value }))} className={`${inputClass} w-36`} />
-            </label>
-            <label className="flex flex-col text-[11px] text-muted-foreground">
-              hasta
-              <input type="date" value={filtros.hasta} min={filtros.desde || undefined} onChange={(e) => setFiltros((f) => ({ ...f, hasta: e.target.value }))} className={`${inputClass} w-36`} />
-            </label>
             <Button type="button" variant={filtros.vencidas ? 'default' : 'outline'} size="sm" className="h-9" aria-pressed={filtros.vencidas}
               onClick={() => setFiltros((f) => ({ ...f, vencidas: !f.vencidas }))}>
               <Warning size={14} className="mr-1.5" /> Solo vencidas
             </Button>
-            {hayFiltros && (
-              <Button type="button" variant="ghost" size="sm" className="h-9" onClick={() => { setFiltros(SIN_FILTROS); setBusqueda(''); }}>
-                <X size={14} className="mr-1" /> Quitar filtros
+
+            {/* El periodo: la «vista por día, semana y mes». */}
+            <div className="flex flex-wrap items-center gap-1.5" data-recorrido="periodo">
+              <div role="tablist" aria-label="Periodo" className="inline-flex bg-muted p-0.5 rounded-md text-xs">
+                {PERIODOS.map((p) => (
+                  <button key={p.value} type="button" role="tab" aria-selected={tipoPeriodo === p.value}
+                    onClick={() => elegirPeriodo(p.value)}
+                    className={`px-2.5 py-1.5 rounded font-medium whitespace-nowrap ${tipoPeriodo === p.value ? 'bg-card shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+              {tipoPeriodo !== 'todo' && (
+                <>
+                  <Button type="button" variant="outline" size="icon" className="h-8 w-8" aria-label={`${PASO_DE[tipoPeriodo]} anterior`}
+                    title={`${PASO_DE[tipoPeriodo]} anterior`}
+                    onClick={() => setReferencia((r) => moverReferencia(tipoPeriodo, r, -1))}>
+                    <CaretLeft size={14} />
+                  </Button>
+                  <Button type="button" variant="outline" size="icon" className="h-8 w-8" aria-label={`${PASO_DE[tipoPeriodo]} siguiente`}
+                    title={`${PASO_DE[tipoPeriodo]} siguiente`}
+                    onClick={() => setReferencia((r) => moverReferencia(tipoPeriodo, r, 1))}>
+                    <CaretRight size={14} />
+                  </Button>
+                </>
+              )}
+              <div className="w-36">
+                <input type="date" aria-label="Ir a la fecha" value={tipoPeriodo === 'todo' ? '' : referencia}
+                  onChange={(e) => {
+                    if (!e.target.value) return;
+                    setReferencia(e.target.value);
+                    if (tipoPeriodo === 'todo') setTipoPeriodo('dia');
+                  }}
+                  className={`${inputClass} !h-8`} />
+              </div>
+            </div>
+          </div>
+
+          {/* Lo que hay: el periodo y sus cuentas, y los filtros activos. */}
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <p className="text-muted-foreground" aria-live="polite" data-testid="resumen-periodo">
+              {cargando ? 'Cargando…' : textoDelPeriodo(tipoPeriodo, rango, tasks)}
+            </p>
+            {activos.map((a) => (
+              <span key={a.clave} className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/60 pl-2.5 pr-1 py-0.5">
+                {a.texto}
+                <button type="button" onClick={a.quitar} aria-label={`Quitar ${a.texto}`} className="rounded-full p-0.5 hover:bg-muted">
+                  <X size={11} />
+                </button>
+              </span>
+            ))}
+            {activos.length > 0 && (
+              <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={quitarFiltros}>
+                <X size={12} className="mr-1" /> Quitar filtros
+              </Button>
+            )}
+            {canViewAll && ver === 'todo' && (
+              <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs ml-auto" aria-pressed={verCifras}
+                onClick={() => setVerCifras((v) => !v)} data-recorrido="metricas">
+                <ChartBar size={13} className="mr-1" /> {verCifras ? 'Ocultar cifras' : 'Cifras del equipo'}
               </Button>
             )}
           </div>
-        </>
+        </div>
       )}
 
-      {vista === 'revisar' ? (
+      {enRevisar ? (
         <TasksReviewView
           tasks={tasks}
           loading={cargando}
@@ -506,18 +593,19 @@ export default function TasksPage() {
         </div>
       ) : (
         <>
-          {vista === 'equipo' && (
-            <div className="space-y-2" data-recorrido="metricas">
-              <div role="tablist" aria-label="Agrupar" className="inline-flex bg-muted p-0.5 rounded-md text-xs">
+          {conCifras && (
+            <div className="space-y-2">
+              <div role="tablist" aria-label="Cifras por" className="inline-flex bg-muted p-0.5 rounded-md text-xs">
                 {(['persona', 'area'] as const).map((g) => (
-                  <button key={g} type="button" role="tab" aria-selected={agrupar === g} onClick={() => setAgrupar(g)}
-                    className={`px-3 py-1 rounded font-medium ${agrupar === g ? 'bg-card shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
+                  <button key={g} type="button" role="tab" aria-selected={cifrasPor === g} onClick={() => setCifrasPor(g)}
+                    className={`px-3 py-1 rounded font-medium ${cifrasPor === g ? 'bg-card shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
                     Por {g === 'persona' ? 'persona' : 'área'}
                   </button>
                 ))}
               </div>
-              {agrupar === 'persona' ? (
-                <TeamTasksMetrics metrics={metricas} loading={cargandoMetricas} onSelectUser={(id) => setVistaTablero(id === yo ? 'mio' : id)} />
+              {/* Pulsar una fila no abre otro tablero: filtra este. */}
+              {cifrasPor === 'persona' ? (
+                <TeamTasksMetrics metrics={metricas} loading={cargandoMetricas} onSelectUser={(id) => setFiltros((f) => ({ ...f, personaId: id }))} />
               ) : (
                 <TeamAreaMetrics metrics={metricasArea} loading={cargandoMetricas} onSelectArea={(id) => setFiltros((f) => ({ ...f, areaId: id ?? '' }))} />
               )}
@@ -526,65 +614,39 @@ export default function TasksPage() {
 
           {cargando && tasks.length === 0 ? (
             <p className="py-12 text-center text-sm text-muted-foreground">Cargando el tablero…</p>
-          ) : vista === 'equipo' && carriles.length === 0 ? (
-            <p className="py-12 text-center text-sm text-muted-foreground">
-              {hayFiltros ? 'Ninguna tarea cumple esos filtros.' : 'Nadie tiene tareas abiertas.'}
-            </p>
           ) : (
-            carriles.map((carril) => {
-              // Se arrastra dentro de un mismo carril de persona: mover una
-              // tarjeta no la cambia de responsable. Por área, la columna manda.
-              const mismoCarril = arrastrando
-                && (vista !== 'equipo' || agrupar === 'area' || arrastrando.assigned_to === carril.userId);
-              return (
-                <section key={carril.id} className="space-y-2">
-                  {vista === 'equipo' && (
-                    <h2 className="flex items-center gap-2 text-sm font-semibold">
-                      {agrupar === 'persona' ? (
-                        <button type="button" onClick={() => carril.userId && setVistaTablero(carril.userId === yo ? 'mio' : carril.userId)}
-                          className="inline-flex items-center gap-2 hover:underline">
-                          <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-semibold ${avatarColorFor(carril.userId || 0)}`}>
-                            {getInitials(carril.titulo)}
-                          </span>
-                          {carril.titulo}
-                        </button>
-                      ) : (
-                        <span className="inline-flex items-center gap-2">
-                          <span className={`w-2.5 h-2.5 rounded-full ${boardColor(carril.color).dot}`} aria-hidden />
-                          {carril.titulo}
-                        </span>
-                      )}
-                      <span className="text-xs font-normal text-muted-foreground tabular-nums">· {carril.tasks.length}</span>
-                    </h2>
-                  )}
-                  <div className="flex gap-3 overflow-x-auto pb-3 snap-x snap-mandatory sm:snap-none -mx-4 px-4 lg:mx-0 lg:px-0" data-recorrido="columnas">
-                    {columnasActivas.map((col) => {
-                      const columna = carril.tasks.filter((t) => t.status === col.key);
-                      return (
-                        <TaskColumn
-                          key={col.key}
-                          status={col.key}
-                          label={col.label}
-                          dot={col.dot}
-                          head={col.head}
-                          tasks={columna}
-                          dragging={mismoCarril ? arrastrando : null}
-                          canCreate={canCreate && vista !== 'equipo' && (vista === 'mio' || canAssign)}
-                          canDragTask={puedeArrastrar}
-                          showAssignee={vista === 'equipo'}
-                          conEquipos={equipos.length > 0}
-                          onOpen={(t) => abrir(t.id)}
-                          onAdd={(status) => setNueva({ status })}
-                          onDragStart={empezarArrastre}
-                          onDragEnd={() => setArrastrando(null)}
-                          onDropAt={(status, index) => soltar(columna, status, index)}
-                        />
-                      );
-                    })}
-                  </div>
-                </section>
-              );
-            })
+            <section aria-label="Tablero" data-testid="tablero-unico" className="space-y-2">
+              {tasks.length === 0 && (
+                <p className="text-center text-sm text-muted-foreground py-2">
+                  {activos.length > 0 ? 'Ninguna tarea cumple esos filtros.' : 'No hay tareas que enseñar.'}
+                </p>
+              )}
+              <div className="flex gap-3 overflow-x-auto pb-3 snap-x snap-mandatory sm:snap-none -mx-4 px-4 lg:mx-0 lg:px-0" data-recorrido="columnas">
+                {columnasActivas.map((col) => {
+                  const columna = tasks.filter((t) => t.status === col.key);
+                  return (
+                    <TaskColumn
+                      key={col.key}
+                      status={col.key}
+                      label={col.label}
+                      dot={col.dot}
+                      head={col.head}
+                      tasks={columna}
+                      dragging={arrastrando}
+                      canCreate={canCreate}
+                      canDragTask={puedeArrastrar}
+                      showAssignee
+                      conEquipos={equipos.length > 0}
+                      onOpen={(t) => abrir(t.id)}
+                      onAdd={(status) => setNueva({ status })}
+                      onDragStart={empezarArrastre}
+                      onDragEnd={() => setArrastrando(null)}
+                      onDropAt={(status, index) => soltar(columna, status, index)}
+                    />
+                  );
+                })}
+              </div>
+            </section>
           )}
         </>
       )}

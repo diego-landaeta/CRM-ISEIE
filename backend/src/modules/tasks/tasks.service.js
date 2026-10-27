@@ -469,9 +469,13 @@ async function nombreDeColumna(key) {
 export async function listTasks(user, q) {
   const p = await permisosDe(user);
   exigir(p.viewAll || p.viewOwn, 'No tienes permiso para ver el tablero de tareas');
-  // Sin «Ver todo»: las suyas (las lleva, las creó o las supervisa) y las de sus
-  // equipos (26/10/2026). Con él, la gente de su ámbito (empresa o campus de arriba).
-  const ambito = p.viewAll && !q.mias ? await ambitoDe(user, q) : null;
+  // Qué se ve (un solo tablero con filtros, Diego 27/10/2026):
+  //   · «Mis tareas»: lo que lleva, supervisa o creó, sea quien sea;
+  //   · «Mi equipo»: eso y lo de sus equipos;
+  //   · «Todo»: con «Ver todo», la gente de su ámbito (empresa o campus de
+  //     arriba); sin él, lo mismo que «Mi equipo». El filtro nunca abre más.
+  const ver = q.ver || (q.mias ? 'mias' : 'todo');
+  const ambito = p.viewAll && ver === 'todo' ? await ambitoDe(user, q) : null;
 
   if (q.project_id) {
     await validarAccesoProyecto(q.project_id, user);
@@ -480,9 +484,9 @@ export async function listTasks(user, q) {
   const tareas = await taskModel.findTasks({
     ambito,
     yo: user.userId,
-    visibles_para: p.viewAll ? null : user.userId,
-    // «Mi tablero»: lo suyo, sea quien sea (también el admin y el superadmin).
-    mias_de: q.mias ? user.userId : null,
+    visibles_para: p.viewAll && ver === 'todo' ? null : user.userId,
+    // «Mis tareas»: lo suyo, sea quien sea (también el admin y el superadmin).
+    mias_de: ver === 'mias' ? user.userId : null,
     assigned_to: q.assigned_to,
     team_id: q.team_id,
     project_id: q.project_id,
@@ -495,6 +499,8 @@ export async function listTasks(user, q) {
     vencidas: q.vencidas,
     desde: q.desde,
     hasta: q.hasta,
+    periodo_desde: q.periodo_desde,
+    periodo_hasta: q.periodo_hasta,
     incluir_archivadas: p.viewAll ? q.incluir_archivadas : false,
   });
   // Lo que el tablero necesita para dejar arrastrar o no cada tarjeta.

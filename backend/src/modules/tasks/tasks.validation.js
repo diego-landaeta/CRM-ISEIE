@@ -2,6 +2,9 @@ import { z } from 'zod';
 
 export const PRIORIDADES_VALIDAS = ['baja', 'media', 'alta'];
 
+// Qué tareas enseña el tablero (27/10/2026).
+export const VISTAS_TABLERO = ['mias', 'equipo', 'todo'];
+
 /**
  * Valida de forma estricta fechas de calendario (AAAA-MM-DD) o marcas ISO 8601 completas.
  * Comprueba que el año, mes y día existan realmente en el calendario (rechaza días como 2026-02-31 o textos inválidos).
@@ -164,7 +167,17 @@ export const listTasksQuerySchema = z.object({
   // El equipo elegido arriba (26/10/2026): uno, o 0 = «Sin equipo».
   team_id: z.coerce.number().int().min(0).optional(),
   // «Mi tablero» (26/10/2026): lo que lleva, supervisa o creó quien mira.
+  // Se sigue aceptando; desde el 27/10 manda `ver`.
   mias: booleanoDeQuery.optional(),
+  // Un solo tablero con filtros (Diego, 27/10/2026): «Mis tareas» (lo que
+  // lleva, supervisa o creó), «Mi equipo» (eso y lo de sus equipos) o «Todo»
+  // (lo que su permiso le deje ver). El filtro nunca abre más que el permiso.
+  ver: z.enum(VISTAS_TABLERO).optional(),
+  // El periodo (día, semana o mes), en días de la oficina: entra lo que se
+  // creó, se terminó o vence dentro, y lo que sigue abierto y se creó antes de
+  // que acabe.
+  periodo_desde: dia.optional(),
+  periodo_hasta: dia.optional(),
   status: columna.optional(),
   assigned_to: z.coerce.number().int().positive().optional(),
   project_id: z.coerce.number().int().positive().optional(),
@@ -179,6 +192,10 @@ export const listTasksQuerySchema = z.object({
   incluir_archivadas: booleanoDeQuery.optional().default('false'),
 }).refine((q) => !q.desde || !q.hasta || q.desde <= q.hasta, {
   message: 'La fecha «desde» no puede ser posterior a «hasta»',
+}).refine((q) => !q.periodo_desde === !q.periodo_hasta, {
+  message: 'El periodo necesita su principio y su final',
+}).refine((q) => !q.periodo_desde || q.periodo_desde <= q.periodo_hasta, {
+  message: 'El periodo no puede acabar antes de empezar',
 });
 
 export const metricsQuerySchema = z.object({

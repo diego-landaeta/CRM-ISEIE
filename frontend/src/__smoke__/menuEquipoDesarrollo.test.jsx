@@ -51,11 +51,13 @@ describe('«Mi tablero» (Diego, 26/10/2026)', () => {
     expect(entrada.label).toBe('Mi tablero');
   });
 
-  it('se entra siempre en «Mi tablero», que pide lo suyo (lleva, supervisa o creó), sea quien sea', async () => {
-    const { VISTA_INICIAL, filtroDeVista } = await import('@/modules/tasks/lib/taskUi');
-    expect(VISTA_INICIAL).toBe('mio');
-    expect(filtroDeVista('mio')).toEqual({ mias: true });
-    expect(filtroDeVista('equipo')).toEqual({});
-    expect(filtroDeVista(7)).toEqual({ assigned_to: 7 });
+  it('se entra siempre en «Mis tareas», que pide lo suyo (lleva, supervisa o creó), sea quien sea', async () => {
+    const { VISTA_INICIAL, filtroDeVista, OPCIONES_VER } = await import('@/modules/tasks/lib/taskUi');
+    expect(VISTA_INICIAL).toBe('mias');
+    expect(filtroDeVista('mias')).toEqual({ ver: 'mias' });
+    expect(filtroDeVista('equipo')).toEqual({ ver: 'equipo' });
+    expect(filtroDeVista('todo')).toEqual({ ver: 'todo' });
+    // Ya no hay «el tablero de una persona»: la persona es un filtro (27/10/2026).
+    expect(OPCIONES_VER.map((o) => o.label)).toEqual(['Mis tareas', 'Mi equipo', 'Todo']);
   });
 });

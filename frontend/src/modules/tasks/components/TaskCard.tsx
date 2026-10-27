@@ -1,7 +1,8 @@
 import type { DragEvent } from 'react';
-import { Buildings, CalendarBlank, ChatCircle, CheckSquare, DotsSixVertical, LinkSimple, Rocket, WarningCircle } from '@phosphor-icons/react';
+import { Buildings, CalendarBlank, ChatCircle, CheckCircle, CheckSquare, DotsSixVertical, LinkSimple, Rocket, WarningCircle } from '@phosphor-icons/react';
 import { avatarColorFor, getInitials } from '@/shared/lib/ui';
 import { PRIORITY, dueInfo, tagChip, boardColor } from '../lib/taskUi';
+import { fechaCorta, fechaYHora } from '../lib/periodo';
 import type { Task } from '../types';
 
 interface TaskCardProps {
@@ -102,9 +103,21 @@ export function TaskCard({
         </div>
       )}
 
+      {/* Cuándo se creó y cuándo se terminó (Diego, 27/10/2026). */}
+      <div className="flex items-center flex-wrap gap-x-2 gap-y-0.5 text-[10.5px] text-muted-foreground">
+        <span title={`Creada el ${fechaYHora(task.created_at)}${task.created_by_name ? ` por ${task.created_by_name}` : ''}`}>
+          Creada {fechaCorta(task.created_at)}
+        </span>
+        {task.status === 'hecha' && task.completed_at && (
+          <span className="inline-flex items-center gap-0.5 text-success font-medium" title={`Terminada el ${fechaYHora(task.completed_at)}`}>
+            <CheckCircle size={10} weight="fill" aria-hidden /> Terminada {fechaCorta(task.completed_at)}
+          </span>
+        )}
+      </div>
+
       <div className="flex items-center flex-wrap gap-x-2.5 gap-y-1 text-[11px] text-muted-foreground pt-0.5">
         {vence && (
-          <span className={`inline-flex items-center gap-1 font-semibold px-1.5 py-0.5 rounded ${vence.classes}`}>
+          <span className={`inline-flex items-center gap-1 font-semibold px-1.5 py-0.5 rounded ${vence.classes}`} title="Fecha límite">
             <CalendarBlank size={10} weight="bold" />
             {vence.label}
           </span>
