@@ -283,6 +283,10 @@ const AVISOS = [
     detalle: 'Cuando alguien comenta en una tarea que tienes asignada.' },
   { aviso: 'tarea_supervisor', titulo: 'Tarea que supervisas',
     detalle: 'Cuando te ponen de supervisor de una tarea y cuando está lista para revisar.' },
+  { aviso: 'tarea_estado', titulo: 'Cambio de estado de una tarea',
+    detalle: 'Cuando cambia de estado una tarea que llevas, supervisas o creaste (si se mueve varias veces seguidas, un solo correo).' },
+  { aviso: 'tareas_resumen', titulo: 'Tu resumen de tareas',
+    detalle: 'De lunes a viernes por la tarde: lo que hiciste hoy en el tablero y lo que te falta.' },
 ];
 
 export async function misAvisos(req, res, next) {
