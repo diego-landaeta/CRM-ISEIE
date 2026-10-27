@@ -9,9 +9,9 @@
 // aparece en la cola ni suma en los totales.
 import { useEffect, useState, useCallback } from 'react';
 import client from '@/shared/api/client';
-import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/shared/hooks/useToast';
 import { CreditCard, User, Receipt, CheckCircle } from '@phosphor-icons/react';
+import usePermission from '@/shared/hooks/usePermission';
 
 type ColaItem = {
   payment_id: number; conversion_id: number; fecha: string; importe: number;
@@ -48,8 +48,9 @@ export default function FacturacionAlDiaCard({ projectId, titulo, ocultarSiVacia
   /** Con varias colas, la que no tiene nada por facturar no se pinta. */
   ocultarSiVacia?: boolean;
 }) {
-  const { user } = useAuth() as { user?: { role?: string; factura_manager?: boolean } };
-  const puedeFacturar = !!user?.factura_manager || user?.role === 'superadmin';
+  // «Emitir desde la cola» del catálogo (#423; antes, la casilla factura_manager).
+  const { can } = usePermission();
+  const puedeFacturar = can('facturas.cola');
   const [estado, setEstado] = useState<Estado | null>(null);
   const [generando, setGenerando] = useState<number | null>(null);
   const [aprobando, setAprobando] = useState<number | null>(null);

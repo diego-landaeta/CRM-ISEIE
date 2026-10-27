@@ -62,3 +62,5 @@ export async function ambitoDelProceso(req, res, next) {
     next();
   } catch (err) { next(err); }
 }
+// Alcance, no permiso (#423).
+ambitoDelProceso.regla = { tipo: 'alcance', nombre: 'ambitoDelProceso' };

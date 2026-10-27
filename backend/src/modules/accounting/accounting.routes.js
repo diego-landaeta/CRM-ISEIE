@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { verifyToken, roleGuard } from '../../shared/middleware/auth.js';
+import { verifyToken } from '../../shared/middleware/auth.js';
+import { puede } from '../../shared/middleware/permissions.js';
 import * as ctrl from './accounting.controller.js';
 
 const router = Router();
@@ -7,10 +8,10 @@ const router = Router();
 router.use(verifyToken);
 
 // Dashboard accounting (admin y superadmin, NO gestor)
-router.get('/dashboard', roleGuard('admin', 'superadmin'), ctrl.dashboard);
+router.get('/dashboard', puede('accounting.view'), ctrl.dashboard);
 
 // Cuentas por cobrar (admin, superadmin y gestor — la gestora solo ve las suyas)
-router.get('/receivable', roleGuard('admin', 'superadmin', 'soporte', 'gestor'), ctrl.receivable);
+router.get('/receivable', puede('accounting.por_cobrar'), ctrl.receivable);
 
 // Los egresos viven en su propio módulo (`modules/expenses`, #227), igual en
 // los dos CRM. /api/accounting/expenses sigue respondiendo como alias suyo.

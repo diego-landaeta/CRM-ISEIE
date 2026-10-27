@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Plus, Package, X, PencilSimple, Check, MagnifyingGlass, Star } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
+import usePermission from '@/shared/hooks/usePermission';
 
 interface ProductItem {
   id: number | null; // null = principal (no es row de lead_products)
@@ -35,6 +36,8 @@ const VIA_LABEL: Record<string, string> = {
 };
 
 export default function LeadProductsCard({ leadId, projectId, isAdmin }: Props) {
+  // Lo que dice el servidor (#423): sale si salía antes Y tiene el permiso.
+  const { can } = usePermission();
   const [items, setItems] = useState<ProductItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
@@ -131,7 +134,7 @@ export default function LeadProductsCard({ leadId, projectId, isAdmin }: Props) 
                     </p>
                     {it.notas && <p className="text-[11px] text-muted-foreground italic mt-1 line-clamp-2">{it.notas}</p>}
                   </div>
-                  {!it.is_principal && isAdmin && it.id != null && (
+                  {!it.is_principal && isAdmin && can('leads.edit') && it.id != null && (
                     <div className="flex gap-1 flex-shrink-0">
                       <button onClick={() => setEditingId(it.id!)} title="Editar gestor/notas" className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground">
                         <PencilSimple size={12} />

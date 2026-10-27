@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
 import { useConfirm } from '@/shared/components/ui/useConfirm';
+import usePermission from '@/shared/hooks/usePermission';
 
 type Estado = 'pendiente' | 'pagado' | 'cancelado';
 
@@ -88,6 +89,8 @@ export default function CommissionsPage() {
   const { activeProject } = useProjectContext();
   const navigate = useNavigate();
   const confirm = useConfirm();
+  // Lo que dice el servidor (#423): sale si salía antes Y tiene el permiso.
+  const { can } = usePermission();
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
 
   const [period, setPeriod] = useState('current');
@@ -264,7 +267,7 @@ export default function CommissionsPage() {
                       </span>
                     </div>
                     <div className="text-right">
-                      {isAdmin && r.estado === 'pendiente' ? (
+                      {isAdmin && can('commissions.pagar') && r.estado === 'pendiente' ? (
                         <button
                           onClick={() => handlePay(r)}
                           disabled={paying === r.id}

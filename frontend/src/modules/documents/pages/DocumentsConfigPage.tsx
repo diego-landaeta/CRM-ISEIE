@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { documentsApi, type CrmDocument, type DocumentType } from '../api/documents.api';
 import { toast } from '@/shared/hooks/useToast';
 import client from '@/shared/api/client';
+import usePermission from '@/shared/hooks/usePermission';
 
 interface Project {
   id: number;
@@ -53,7 +54,9 @@ function buildLast12Months(): { key: string; label: string; date: Date }[] {
 export default function DocumentsConfigPage() {
   const { user, projects } = useAuth();
   const role = (user as { role?: string } | null)?.role;
-  const isAdmin = role === 'superadmin' || role === 'admin';
+  // Lo que dice el servidor (#423): sale si salía antes Y tiene el permiso.
+  const { can } = usePermission();
+  const isAdmin = (role === 'superadmin' || role === 'admin') && can('documents.numeracion');
 
   const [counters, setCounters] = useState<CounterRow[]>([]);
   const [docs, setDocs] = useState<CrmDocument[]>([]);

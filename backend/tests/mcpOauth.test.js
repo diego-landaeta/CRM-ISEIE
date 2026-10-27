@@ -31,6 +31,10 @@ const conexiones = {
   renovarLlave: vi.fn(async (id) => (id === 9 ? { id: 9, llave: LLAVE_RENOVADA } : null)),
 };
 vi.mock('../src/modules/mcp/mcp.conexiones.js', () => conexiones);
+// «Usar el MCP» sale del catálogo (#230, gemela de CRM#423): el resolver de
+// verdad, sin base, con el superadmin del token (id 2).
+vi.mock('../src/modules/permissions/permissions.service.js', () => import('./helpers/permisosSinBase.js'));
+(await import('./helpers/permisosSinBase.js')).registrar({ userId: 2, role: 'superadmin' });
 
 const { huella } = await import('../src/modules/mcp/mcp.acceso.js');
 const { default: oauth, secretoDe, vueltaPermitida, sellar } = await import('../src/modules/mcp/mcp.oauth.js');

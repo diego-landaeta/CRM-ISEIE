@@ -2,6 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import express from 'express';
 import request from 'supertest';
 
+// Los permisos salen del catálogo (#423): sin base, el resolver de verdad con
+// las personas de cada `req` (tests/helpers/permisosSinBase.js).
+vi.mock('../src/modules/permissions/permissions.service.js', () => import('./helpers/permisosSinBase.js'));
+const { registrar, conPermisos } = await import('./helpers/permisosSinBase.js');
+
 /**
  * El MCP por HTTP, como lo llama Claude: la puerta del token y el protocolo.
  *
@@ -46,7 +51,7 @@ beforeEach(() => {
     if (hash === huella(TOKEN_LUIS)) return { token_id: 22, user_id: 2 };
     return null; // TOKEN_REVOCADO y cualquier otro
   });
-  modelo.findUserById.mockImplementation(async (id) => PERSONAS[id] || null);
+  modelo.findUserById.mockImplementation(async (id) => conPermisos(PERSONAS[id] || null));
   modelo.proyectosDeLaPersona.mockImplementation(async () => ([
     { id: 10, nombre: 'ISEIH', sociedad_id: 1, sociedad_nombre: 'CEDIA' },
   ]));
@@ -88,7 +93,7 @@ describe('la puerta', () => {
   });
 
   it('usuario desactivado: 403', async () => {
-    modelo.findUserById.mockResolvedValueOnce({ ...PERSONAS[1], active: false });
+    modelo.findUserById.mockResolvedValueOnce(conPermisos({ ...PERSONAS[1], active: false }));
     const r = await rpc(TOKEN_ANA, 'tools/list');
     expect(r.status).toBe(403);
   });
@@ -144,7 +149,7 @@ describe('el protocolo', () => {
   });
 
   it('a una gestora con la casilla se le impone su id', async () => {
-    modelo.findUserById.mockImplementation(async (id) => ({ ...PERSONAS[id], usa_mcp: true }));
+    modelo.findUserById.mockImplementation(async (id) => conPermisos({ ...PERSONAS[id], usa_mcp: true }));
     await llamar(TOKEN_LUIS, 'buscar_prospectos', {});
     expect(modelo.buscarProspectos).toHaveBeenCalledWith(expect.objectContaining({ responsableId: 2 }));
   });
@@ -185,7 +190,7 @@ describe('la URL personal', () => {
   });
 
   it('y aplica los mismos filtros: a una gestora se le impone su id', async () => {
-    modelo.findUserById.mockImplementation(async (id) => ({ ...PERSONAS[id], usa_mcp: true }));
+    modelo.findUserById.mockImplementation(async (id) => conPermisos({ ...PERSONAS[id], usa_mcp: true }));
     await porUrl(TOKEN_LUIS, 'tools/call', { name: 'buscar_prospectos', arguments: {} });
     expect(modelo.buscarProspectos).toHaveBeenCalledWith(expect.objectContaining({ responsableId: 2, projectIds: [10] }));
   });

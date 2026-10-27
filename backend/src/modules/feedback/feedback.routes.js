@@ -1,17 +1,18 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { verifyToken } from '../../shared/middleware/auth.js';
+import { puede } from '../../shared/middleware/permissions.js';
 import * as ctrl from './feedback.controller.js';
 import { servir as servirCabecera, servirInsignia } from './cabecera.js';
 
 // Con sesión: el panel, su lista y el correo de cada ficha.
 const router = Router();
 router.use(verifyToken);
-router.get('/panel', ctrl.panel);
-router.get('/lista', ctrl.lista);
-router.get('/lead/:leadId', ctrl.deUnLead);
-router.post('/lead/:leadId/enviar', ctrl.enviarLoRevisado);
-router.post('/lead/:leadId/no-enviar', ctrl.noEnviar);
+router.get('/panel', puede('feedback.view'), ctrl.panel);
+router.get('/lista', puede('feedback.view'), ctrl.lista);
+router.get('/lead/:leadId', puede('feedback.view'), ctrl.deUnLead);
+router.post('/lead/:leadId/enviar', puede('feedback.enviar'), ctrl.enviarLoRevisado);
+router.post('/lead/:leadId/no-enviar', puede('feedback.enviar'), ctrl.noEnviar);
 
 // Sin sesión: la encuesta. Con un límite por IP: el enlace no pide contraseña,
 // así que es lo que impide probar tokens a ciegas.

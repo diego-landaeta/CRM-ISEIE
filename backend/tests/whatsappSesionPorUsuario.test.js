@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+// Los permisos salen del catálogo (#423): sin base, el resolver de verdad con
+// las personas de cada `req` (tests/helpers/permisosSinBase.js).
+vi.mock('../src/modules/permissions/permissions.service.js', () => import('./helpers/permisosSinBase.js'));
+const { registrar } = await import('./helpers/permisosSinBase.js');
+
 // Cada usuario, su propia sesion de WhatsApp.
 //
 // Esto empezo siendo UNA sesion compartida por todo el CRM: quien enlazaba su
@@ -19,7 +24,8 @@ vi.mock('../src/shared/config/db.js', () => ({ query: (...a) => query(...a) }));
 
 const evolution = await import('../src/modules/whatsapp/evolution.client.js');
 const ctrl = await import('../src/modules/whatsapp/chat.controller.js');
-const { olvidarTodo } = await import('../src/modules/whatsapp/usaWhatsapp.js');
+// Los permisos se recuerdan medio minuto (también «Usar su WhatsApp», #423).
+const { olvidarPermisos: olvidarTodo } = await import('../src/modules/permissions/permissions.service.js');
 
 /**
  * Responde a la consulta de la casilla del #128 y deja pasar el resto.
@@ -55,7 +61,7 @@ async function llamar(handler, req) {
 }
 
 const comoUsuario = (userId, extra = {}) => ({
-  user: { userId, role: 'gestor' }, params: {}, query: {}, body: {}, ...extra,
+  user: registrar({ userId, role: 'gestor' }), params: {}, query: {}, body: {}, ...extra,
 });
 
 describe('la instancia sale del usuario, no de lo que mande el cliente', () => {

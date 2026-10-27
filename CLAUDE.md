@@ -31,7 +31,8 @@ Patrones críticos a copiar literalmente del CRM hermano:
 
 - Arquitectura modular backend (`backend/src/modules/<dominio>/`) — un dir por dominio, archivos `<X>.{routes,controller,service,model,validation}.js` + `index.js` que exporta `{ prefix, router }`
 - Arquitectura modular frontend (`frontend/src/modules/<feature>/`) — `api/`, `hooks/`, `components/`, `pages/`
-- Auth JWT (access 15 min Bearer + refresh 30d httpOnly) + bcrypt cost 12 + middleware chain `verifyToken → roleGuard → projectAccess`
+- Auth JWT (access 15 min Bearer + refresh 30d httpOnly) + bcrypt cost 12 + middleware chain `verifyToken → puede('recurso.accion') → projectAccess`
+- **Permisos (#230, gemela de CRM#423):** cada ruta pide su permiso del catálogo con `puede('clave')` (`shared/middleware/permissions.js`); dentro de un controlador, `await tienePermiso(req, 'clave')`. Un permiso nuevo se registra SOLO en `backend/src/modules/permissions/catalogo.js` y sale solo en Roles, en la ficha y en `/auth/me`. Nada de `roleGuard`/`soloRoles` ni de `role === 'admin'` para decidir quién entra (una prueba lo impide); el rol solo vale para el ALCANCE. Tras tocar rutas: `npm run permisos:inventario` (regenera `docs/PERMISOS.md`).
 - Round-robin transaccional para asignación de leads (`BEGIN/COMMIT`)
 - Pre-signed URLs R2 (15 min de expiración)
 - Encriptación AES-256 de credenciales API en DB (módulo `credentials`)

@@ -18,6 +18,7 @@ import AsociarVentaDialog from '../components/AsociarVentaDialog';
 import CobrarProformaDialog from '../components/CobrarProformaDialog';
 import TutorialButton from '../components/TutorialButton';
 import { toast } from '@/shared/hooks/useToast';
+import usePermission from '@/shared/hooks/usePermission';
 
 const fmt = (n: number) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(Number(n || 0));
 // Usa el formateador compartido: parsea 'YYYY-MM-DD' como fecha LOCAL. Con
@@ -43,14 +44,15 @@ export default function InvoicesPage() {
   };
   // Sociedad a la que se pide saltar (abre el aviso "entra a este proyecto").
   const [socPrompt, setSocPrompt] = useState<{ id: number; nombre: string } | null>(null);
-  const { user } = useAuth() as { user: { role?: string; factura_manager?: boolean; editar_fechas_factura?: boolean } | null };
+  const { user } = useAuth() as { user: { role?: string } | null };
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
-  // Gestión de facturas (editar/eliminar/abonar): admin o gestora con permiso
-  // factura_manager (el backend valida además que sean SUS facturas).
-  const canManage = isAdmin || !!user?.factura_manager;
-  // Quien factura de verdad. Los totales de la sociedad, las ventas sin
-  // factura y los cobros sueltos son trabajo suyo, no de cada gestora.
-  const puedeFacturar = user?.role === 'superadmin' || !!user?.factura_manager;
+  // Por permiso del catálogo (#423), como el servidor: gestionar (editar,
+  // eliminar, abonar) es «Corregir y abonar» —el backend valida además que sean
+  // SUS facturas—; quien factura de verdad, «Emitir desde la cola». Los totales
+  // de la sociedad, las ventas sin factura y los cobros sueltos son trabajo suyo.
+  const { can } = usePermission();
+  const canManage = can('facturas.gestionar');
+  const puedeFacturar = can('facturas.cola');
   const pid = activeProject?.id;
   const loc = useLocation();
   const [tab, setTab] = useState<'facturas' | 'proformas' | 'abonos'>(() => {
@@ -674,7 +676,7 @@ export default function InvoicesPage() {
                         className="h-7 px-2 rounded border border-border text-[11px] hover:bg-muted inline-flex items-center gap-1">
                         <DownloadSimple size={11} />
                       </button>
-                      {inv.estado === 'borrador' && isAdmin && (
+                      {inv.estado === 'borrador' && isAdmin && can('facturas.edit') && (
                         <Link to={`nueva?editId=${inv.id}`}
                           title="Editar esta factura abierta (solo admin/superadmin)"
                           className="h-7 px-2 rounded border border-sky-300 text-sky-700 dark:text-sky-300 text-[11px] font-semibold hover:bg-sky-50 dark:hover:bg-sky-950/30 inline-flex items-center gap-1">

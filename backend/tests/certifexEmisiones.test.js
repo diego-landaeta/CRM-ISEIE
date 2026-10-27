@@ -8,7 +8,7 @@
 // navegador, que quien decide o emite es el usuario con sesion (no lo que diga el
 // cuerpo), que solo administracion puede, y que sin configurar se dice claro.
 
-import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi, onTestFinished } from 'vitest';
 
 const CLAVE = 'cfx_crm_clave-de-prueba-que-no-sale-del-servidor';
 process.env.CERTIFEX_API_URL = 'https://certifex.test/';
@@ -71,7 +71,14 @@ describe('quien puede', () => {
   // `roleGuard` deja pasar a soporte antes de mirar la lista; emitir es SOLO administracion.
   it('soporte no aprueba ni emite: 403 y no se llama a Certifex', async () => {
     const { default: jwt } = await import('jsonwebtoken');
-    const soporte = jwt.sign({ userId: 999999, email: 'soporte@prueba.test', role: 'soporte', roles_extra: [] },
+    // Una persona de soporte DE VERDAD: desde #423 lo que puede se lee de la
+    // base, no del token (un id que no existe no puede nada).
+    const { default: pool } = await import('../src/shared/config/db.js');
+    const { rows: [u] } = await pool.query(
+      `INSERT INTO users (nombre, email, password_hash, role) VALUES ('Soporte prueba', $1, 'x', 'soporte') RETURNING id`,
+      [`soporte_${Date.now()}@prueba.test`]);
+    onTestFinished(() => pool.query('DELETE FROM users WHERE id = $1', [u.id]));
+    const soporte = jwt.sign({ userId: u.id, email: 'soporte@prueba.test', role: 'soporte', roles_extra: [] },
       process.env.JWT_SECRET, { expiresIn: '5m' });
     const con = (req) => req.set('Authorization', `Bearer ${soporte}`);
     expect((await con(request.get('/api/certifex/emisiones'))).status).toBe(403);

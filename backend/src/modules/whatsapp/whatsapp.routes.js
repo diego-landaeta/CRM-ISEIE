@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { verifyToken, soloRoles } from '../../shared/middleware/auth.js';
+import { verifyToken } from '../../shared/middleware/auth.js';
+import { puede } from '../../shared/middleware/permissions.js';
 import { uploadWhatsapp } from '../../shared/middleware/upload.js';
 import * as ctrl from './whatsapp.controller.js';
 import * as chat from './chat.controller.js';
@@ -18,15 +19,23 @@ router.get('/media/:mensajeId', chat.verMedia);
 
 router.use(verifyToken);
 
+// Su WhatsApp o el de otra persona (#423): la ruta deja pasar con cualquiera de
+// los dos y el controlador decide cuál hace falta. Sin ninguno, el aviso de
+// siempre, no el 403 genérico.
+const usaOSupervisa = puede('whatsapp.usar', 'whatsapp.supervisar', {
+  mensaje: 'No tienes activado el WhatsApp del CRM. Lo enciende quien administra, en tu ficha de usuario.',
+  code: 'SIN_WHATSAPP',
+});
+
 // Sin roleGuard a proposito: esta pantalla es de las gestoras. El recorte va en
 // el controlador, que a un gestor le fuerza su propio responsableId y solo le
 // enseña las plantillas compartidas mas las suyas.
-router.get('/templates', ctrl.listTemplates);
-router.post('/templates', ctrl.createTemplate);
-router.patch('/templates/:id', ctrl.updateTemplate);
-router.delete('/templates/:id', ctrl.deleteTemplate);
+router.get('/templates', puede('whatsapp.plantillas'), ctrl.listTemplates);
+router.post('/templates', puede('whatsapp.plantillas'), ctrl.createTemplate);
+router.patch('/templates/:id', puede('whatsapp.plantillas'), ctrl.updateTemplate);
+router.delete('/templates/:id', puede('whatsapp.plantillas'), ctrl.deleteTemplate);
 
-router.get('/cola', ctrl.cola);
+router.get('/cola', puede('whatsapp.cola'), ctrl.cola);
 
 // Aqui vivian /sala y /equipo: el panel que abria la sesion de cada gestora en
 // un navegador remoto. Ese metodo se retiro —contenedores borrados y servicio
@@ -46,42 +55,42 @@ router.get('/usuarios', chat.usuarios);
 // junto: no es el chat, es el respaldo.
 // La forma de los avisos de Evolution. Solo soporte y superadmin: no lleva
 // datos de nadie, pero dice como esta montado el sistema por dentro.
-router.get('/forma-avisos', soloRoles('soporte', 'superadmin'), chat.formaDeAvisos);
-router.delete('/forma-avisos', soloRoles('soporte', 'superadmin'), chat.olvidarFormaDeAvisos);
+router.get('/forma-avisos', puede('whatsapp.forma_avisos'), chat.formaDeAvisos);
+router.delete('/forma-avisos', puede('whatsapp.forma_avisos'), chat.olvidarFormaDeAvisos);
 
-router.get('/banco', chat.banco);
-router.get('/banco/numeros', chat.bancoNumeros);
+router.get('/banco', usaOSupervisa, chat.banco);
+router.get('/banco/numeros', usaOSupervisa, chat.bancoNumeros);
 
 // Las etiquetas de WhatsApp de esta sesion (#128, #138). Son las del movil de
 // la gestora, no el estado del prospecto que filtra la lista.
-router.get('/etiquetas', chat.etiquetasDeWhatsapp);
+router.get('/etiquetas', usaOSupervisa, chat.etiquetasDeWhatsapp);
 
-router.get('/chats', chat.chats);
-router.post('/chats', chat.abrirChat);
-router.get('/chats/:id', chat.chat);
-router.get('/chats/:id/ficha', chat.ficha);
-router.post('/chats/:id/enviar', chat.enviar);
-router.post('/chats/:id/adjunto', uploadWhatsapp.single('archivo'), chat.adjunto);
-router.post('/chats/:id/historial', chat.traerHistorial);
-router.post('/chats/:id/reenviar', chat.reenviar);
-router.post('/chats/:id/no-escribir', chat.noEscribir);
+router.get('/chats', usaOSupervisa, chat.chats);
+router.post('/chats', usaOSupervisa, chat.abrirChat);
+router.get('/chats/:id', usaOSupervisa, chat.chat);
+router.get('/chats/:id/ficha', usaOSupervisa, chat.ficha);
+router.post('/chats/:id/enviar', usaOSupervisa, chat.enviar);
+router.post('/chats/:id/adjunto', usaOSupervisa, uploadWhatsapp.single('archivo'), chat.adjunto);
+router.post('/chats/:id/historial', usaOSupervisa, chat.traerHistorial);
+router.post('/chats/:id/reenviar', usaOSupervisa, chat.reenviar);
+router.post('/chats/:id/no-escribir', usaOSupervisa, chat.noEscribir);
 // Llamar se hace desde el movil; el CRM solo lo apunta.
-router.post('/chats/:id/etiqueta', chat.etiquetarChat);
-router.post('/chats/:id/llamada', chat.registrarLlamada);
-router.post('/mensajes/:id/descargar', chat.descargarAdjunto);
+router.post('/chats/:id/etiqueta', usaOSupervisa, chat.etiquetarChat);
+router.post('/chats/:id/llamada', usaOSupervisa, chat.registrarLlamada);
+router.post('/mensajes/:id/descargar', usaOSupervisa, chat.descargarAdjunto);
 // Corregir un mensaje ya enviado. WhatsApp deja 15 minutos (#75).
-router.patch('/mensajes/:id', chat.editarMensaje);
-router.get('/conexion', chat.conexion);
-router.get('/sincronizacion', chat.sincronizacion);
-router.post('/reintentar-archivos', chat.reintentarArchivos);
-router.post('/emparejar', chat.emparejar);
-router.post('/desconectar', chat.desconectar);
+router.patch('/mensajes/:id', usaOSupervisa, chat.editarMensaje);
+router.get('/conexion', usaOSupervisa, chat.conexion);
+router.get('/sincronizacion', usaOSupervisa, chat.sincronizacion);
+router.post('/reintentar-archivos', usaOSupervisa, chat.reintentarArchivos);
+router.post('/emparejar', usaOSupervisa, chat.emparejar);
+router.post('/desconectar', usaOSupervisa, chat.desconectar);
 // Que se le contesta a quien llama. Por sesion: no todas la quieren.
 // Lo consulta todo el CRM, no solo la pantalla de WhatsApp. No toca la base.
 router.get('/sonando', chat.sonando);
 // Lo que ha entrado y nadie ha leido, para avisar desde cualquier pantalla.
-router.get('/sin-leer', chat.sinLeer);
-router.get('/respuesta-llamada', chat.respuestaLlamada);
-router.post('/respuesta-llamada', chat.guardarRespuestaLlamada);
+router.get('/sin-leer', usaOSupervisa, chat.sinLeer);
+router.get('/respuesta-llamada', usaOSupervisa, chat.respuestaLlamada);
+router.post('/respuesta-llamada', usaOSupervisa, chat.guardarRespuestaLlamada);
 
 export default router;

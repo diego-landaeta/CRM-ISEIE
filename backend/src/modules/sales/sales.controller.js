@@ -4,6 +4,7 @@ import * as goalsService from './sales.goals.js';
 import { createSaleSchema, facturadoQuerySchema } from './sales.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { proyectosDelAmbito } from '../../shared/utils/ambito.js';
+import { tienePermiso } from '../../shared/middleware/permissions.js';
 
 export async function create(req, res, next) {
   try {
@@ -17,12 +18,7 @@ export async function create(req, res, next) {
     // impedir: la peticion se puede mandar a mano. Quien no tenga el permiso y
     // lo pida se lleva un 403, no una venta de nadie.
     if (parsed.data.sin_gestora) {
-      const { resolvePermission } = await import('../permissions/permissions.service.js');
-      const puede = await resolvePermission(
-        req.user.userId, req.user.role, req.user.customRoleId ?? null,
-        'conversions', 'sin_gestora',
-      );
-      if (!puede) {
+      if (!(await tienePermiso(req, 'conversions.sin_gestora'))) {
         throw new AppError('No tienes permiso para registrar una venta sin gestora', 403, 'FORBIDDEN');
       }
     }

@@ -289,7 +289,7 @@ export default function ClientDetailPage() {
               <span className="hidden sm:inline">Fusionar</span>
             </button>
           )}
-          {user?.role === 'superadmin' && (
+          {user?.role === 'superadmin' && can('clients.delete') && (
             <button
               onClick={() => setDeleteOpen(true)}
               aria-label="Eliminar cliente (soft delete)"

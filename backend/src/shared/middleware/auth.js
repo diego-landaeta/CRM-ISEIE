@@ -5,6 +5,19 @@ import { tieneRol, soloEsColaborador, colaboradorPuede } from '../utils/roles.js
 // La sesión se mira contra la base: rol y activo (hotfix del 26/10/2026).
 import { comprobarSesion, sesionVigente } from './sesionViva.js';
 
+/**
+ * Pega a un guardia la regla que aplica (#423).
+ *
+ * No cambia lo que hace: solo deja escrito, en la propia función, a quién deja
+ * pasar. El inventario de permisos (`modules/permissions/inventario`) recorre
+ * las rutas y lee esto; así la tabla sale del código y no de una lista a mano
+ * que se queda vieja.
+ */
+export function conRegla(fn, regla) {
+  fn.regla = regla;
+  return fn;
+}
+
 export async function verifyToken(req, _res, next) {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) {
@@ -39,6 +52,7 @@ export async function verifyToken(req, _res, next) {
   }
   next();
 }
+verifyToken.regla = { tipo: 'token' };
 
 /**
  * Como `roleGuard`, pero SIN el atajo.
@@ -53,7 +67,7 @@ export async function verifyToken(req, _res, next) {
  * viene no le regala el acceso.
  */
 export function soloRoles(...rolesPermitidos) {
-  return (req, _res, next) => {
+  return conRegla((req, _res, next) => {
     if (!req.user) {
       return next(new AppError('No autenticado', 401, 'AUTH_REQUIRED'));
     }
@@ -61,11 +75,11 @@ export function soloRoles(...rolesPermitidos) {
       return next(new AppError('No tienes permisos para esta accion', 403, 'FORBIDDEN'));
     }
     next();
-  };
+  }, { tipo: 'roles', roles: rolesPermitidos, atajoSoporte: false });
 }
 
 export function roleGuard(...allowedRoles) {
-  return (req, _res, next) => {
+  return conRegla((req, _res, next) => {
     if (!req.user) {
       return next(new AppError('No autenticado', 401, 'AUTH_REQUIRED'));
     }
@@ -74,5 +88,5 @@ export function roleGuard(...allowedRoles) {
       return next(new AppError('No tienes permisos para esta accion', 403, 'FORBIDDEN'));
     }
     next();
-  };
+  }, { tipo: 'roles', roles: allowedRoles, atajoSoporte: true });
 }
