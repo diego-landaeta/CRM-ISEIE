@@ -15,7 +15,7 @@
  *                            La columna se queda: decide además el reparto,
  *                            las listas y WhatsApp (comportamiento).
  *   usa_mcp                → mcp.usar          (no admin, superadmin ni tutor)
- *   usa_whatsapp = false   → whatsapp.usar NO  (a quien su rol se lo daba)
+ *   usa_whatsapp = false   → whatsapp.usar NO  (a quien su rol se lo daba, también al superadmin)
  *
  * Solo el rol PRINCIPAL, como miraban las comprobaciones de antes.
  */
@@ -33,6 +33,8 @@ export function excepcionesDeCasillas(u) {
   if (u.editar_fechas_factura === true && !ADMIN.includes(rol)) out['facturas.editar_fechas'] = true;
   if (u.gestor_colaboraciones === true && !ADMIN.includes(rol)) out['tutores.gestionar'] = true;
   if (u.usa_mcp === true && ![...ADMIN, 'tutor'].includes(rol)) out['mcp.usar'] = true;
-  if (u.usa_whatsapp === false && ['admin', 'gestor', 'soporte'].includes(rol)) out['whatsapp.usar'] = false;
+  // También al superadmin (Diego, 26/10/2026: «Carlos y Vladys siguen sin WhatsApp»): su
+  // «no» por persona gana en WhatsApp (resolver.js).
+  if (u.usa_whatsapp === false && ['admin', 'gestor', 'soporte', 'superadmin'].includes(rol)) out['whatsapp.usar'] = false;
   return out;
 }

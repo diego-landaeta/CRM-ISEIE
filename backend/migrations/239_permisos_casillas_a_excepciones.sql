@@ -11,7 +11,8 @@
 --   editar_fechas_factura  → facturas.editar_fechas (no admin ni superadmin)
 --   gestor_colaboraciones  → tutores.gestionar  (no admin ni superadmin)
 --   usa_mcp                → mcp.usar          (no admin, superadmin ni tutor)
---   usa_whatsapp = false   → whatsapp.usar NO  (admin, gestora y soporte)
+--   usa_whatsapp = false   → whatsapp.usar NO  (admin, gestora, soporte y superadmin:
+--                            Diego, 26/10: Carlos y Vladys siguen sin WhatsApp)
 --
 -- Es la misma regla que `permissions/casillas.js`; la prueba
 -- `casillasMigracion423.test.js` pasa esta migración y exige que salgan las
@@ -53,7 +54,7 @@ CREATE TEMP TABLE _casillas ON COMMIT DROP AS
       ('facturas', 'editar_fechas',  true,  COALESCE(u.editar_fechas_factura, false) AND u.role::text NOT IN ('admin', 'superadmin')),
       ('tutores',  'gestionar',      true,  COALESCE(u.gestor_colaboraciones, false) AND u.role::text NOT IN ('admin', 'superadmin')),
       ('mcp',      'usar',           true,  COALESCE((to_jsonb(u) ->> 'usa_mcp')::boolean, false) AND u.role::text NOT IN ('admin', 'superadmin', 'tutor')),
-      ('whatsapp', 'usar',           false, (to_jsonb(u) ->> 'usa_whatsapp')::boolean IS FALSE AND u.role::text IN ('admin', 'gestor', 'soporte'))
+      ('whatsapp', 'usar',           false, (to_jsonb(u) ->> 'usa_whatsapp')::boolean IS FALSE AND u.role::text IN ('admin', 'gestor', 'soporte', 'superadmin'))
     ) AS x(resource, action, allowed, aplica)
    WHERE x.aplica;
 
