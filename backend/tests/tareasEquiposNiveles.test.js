@@ -237,6 +237,24 @@ describe('mover y comentar: el responsable, el supervisor y el superadmin; nadie
   });
 });
 
+describe('«Mi tablero» (26/10/2026): para todos, lo que lleva, supervisa o creó', () => {
+  it('el superadmin, con mias, ve solo lo suyo y no el tablero de todos', async () => {
+    const suya = (await crear('superadmin', { title: `${MARCA} Del superadmin` })).body.data;
+    const todas = (await request.get('/api/tasks').set(como('superadmin'))).body.data.map((x) => x.id);
+    const mias = (await request.get('/api/tasks?mias=true').set(como('superadmin'))).body.data;
+    expect(todas.length).toBeGreaterThan(mias.length);
+    expect(mias.map((x) => x.id)).toContain(suya.id);
+    expect(mias.every((x) => [x.assigned_to, x.created_by, x.supervisor_id].includes(U.superadmin.id))).toBe(true);
+  });
+
+  it('Jesús ve en su tablero la que supervisa aunque no la lleve; Julián, la que creó', async () => {
+    const t = (await crear('julian', { title: `${MARCA} Mía de supervisar`, team_id: equipo.id, assigned_to: U.diana.id, supervisor_id: U.jesus.id })).body.data;
+    expect((await request.get('/api/tasks?mias=true').set(como('jesus'))).body.data.map((x) => x.id)).toContain(t.id);
+    expect((await request.get('/api/tasks?mias=true').set(como('julian'))).body.data.map((x) => x.id)).toContain(t.id);
+    expect((await request.get('/api/tasks?mias=true').set(como('pedro'))).body.data.map((x) => x.id)).not.toContain(t.id);
+  });
+});
+
 describe('el tablero, por equipo', () => {
   it('«Sin equipo» trae las que no tienen; uno concreto, solo las suyas', async () => {
     const sin = (await request.get('/api/tasks?team_id=0').set(como('diana'))).body.data;

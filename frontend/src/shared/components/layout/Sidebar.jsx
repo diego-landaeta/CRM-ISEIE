@@ -95,7 +95,7 @@ export const NAV_SECTIONS = [
   {
     label: 'Equipo de Desarrollo',
     items: [
-      { to: '/tareas', label: 'Tablero', icon: Kanban, roles: ROLES_TAREAS, end: true },
+      { to: '/tareas', label: 'Mi tablero', icon: Kanban, roles: ROLES_TAREAS, end: true },
       { to: '/tareas/revisar', label: 'Por revisar', icon: CheckSquare, roles: ROLES_TAREAS, permiso: 'tasks.close' },
       { to: '/tareas/configurar', label: 'Configurar tablero', icon: SlidersHorizontal, roles: ROLES_TAREAS, permiso: 'tasks.manage' },
       // «Mi factura» (#202): el colaborador con usuario sube aquí su factura del mes.

@@ -31,6 +31,8 @@ export type Ambito = { issuerId?: number; projectId?: number };
 export type GetTasksParams = Ambito & {
   /** El equipo elegido arriba; 0 = «Sin equipo». */
   team_id?: number;
+  /** «Mi tablero»: lo que llevo, lo que supervisé y lo que creé (26/10/2026). */
+  mias?: boolean;
   status?: TaskStatus;
   assigned_to?: number;
   project_id?: number;
