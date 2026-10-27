@@ -80,7 +80,11 @@ export interface Task {
   puede_mover?: boolean;
   created_by: number;
   created_by_name?: string | null;
+  /** Cuándo pasó a «Hecha» (se borra si vuelve atrás). */
   completed_at: string | null;
+  /** En la ficha: quién la pasó a «Hecha» (la cerró o la aprobó). */
+  completed_by?: number | null;
+  completed_by_name?: string | null;
   archived_at: string | null;
   created_at: string;
   updated_at: string;

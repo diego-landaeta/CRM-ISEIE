@@ -31,8 +31,13 @@ export type Ambito = { issuerId?: number; projectId?: number };
 export type GetTasksParams = Ambito & {
   /** El equipo elegido arriba; 0 = «Sin equipo». */
   team_id?: number;
-  /** «Mi tablero»: lo que llevo, lo que supervisé y lo que creé (26/10/2026). */
+  /** «Mi tablero»: lo que llevo, lo que supervisé y lo que creé (26/10/2026). Desde el 27/10, `ver`. */
   mias?: boolean;
+  /** «Mis tareas», «Mi equipo» o «Todo» (27/10/2026). El servidor lo recorta al permiso. */
+  ver?: 'mias' | 'equipo' | 'todo';
+  /** El periodo (día, semana o mes), en días de la oficina: los dos o ninguno. */
+  periodo_desde?: string;
+  periodo_hasta?: string;
   status?: TaskStatus;
   assigned_to?: number;
   project_id?: number;
