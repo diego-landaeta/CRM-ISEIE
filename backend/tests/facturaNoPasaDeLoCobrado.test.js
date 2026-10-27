@@ -83,7 +83,7 @@ vi.mock('../src/modules/invoices/invoices.model.js', async () => {
     motivoParaNoFacturarDeMas: actual.motivoParaNoFacturarDeMas,
     conversionSinPago: vi.fn(async () => false),
     proformaActivaDeConversion: vi.fn(async () => null),
-    esFacturaManager: vi.fn(async () => true),
+    tieneLaClave: vi.fn(async () => true),
     cuadreDeVenta: vi.fn(async () => cuadre),
     create: vi.fn(async (data) => ({ id: 1, codigo: '2026/0087', ...data })),
   };
@@ -183,16 +183,17 @@ describe('de quien es una factura, para una gestora', () => {
   });
 
   it('y puede tocar la suya aunque no tenga ficha', async () => {
-    respuestas = [{ rows: [{ factura_manager: true }] }, { rows: [{ '?column?': 1 }] }];
-    expect(await real.puedeGestionarFactura(11, 'gestor', 392)).toBe(true);
-    const sql = consultas[1].sql;
+    // El permiso lo pide la ruta (#423); esto es solo de quién es.
+    respuestas = [{ rows: [{ '?column?': 1 }] }];
+    expect(await real.esFacturaQueGestiona(11, 'gestor', 392)).toBe(true);
+    const sql = consultas[0].sql;
     expect(sql).toContain('i.created_by = $2');
     expect(sql).toContain('LEFT JOIN conversions cv');
   });
 
   it('pero no la de otra', async () => {
-    respuestas = [{ rows: [{ factura_manager: true }] }, { rows: [] }];
-    expect(await real.puedeGestionarFactura(6, 'gestor', 392)).toBe(false);
+    respuestas = [{ rows: [] }];
+    expect(await real.esFacturaQueGestiona(6, 'gestor', 392)).toBe(false);
   });
 });
 

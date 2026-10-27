@@ -20,7 +20,8 @@ vi.mock('../src/shared/config/db.js', () => ({
 }));
 vi.mock('../src/modules/invoices/invoices.model.js', () => ({
   findById: vi.fn(async () => proforma),
-  esFacturaManager: vi.fn(async () => facturaManager),
+  // Como el resolver de verdad (#423): el superadmin (id 1 aquí) lo tiene todo.
+  tieneLaClave: vi.fn(async (userId) => userId === 1 || facturaManager),
   esProformaDe: vi.fn(async () => esSuya),
   motivoParaNoCobrarProforma: vi.fn(async () => motivo),
   emitirFacturaDePago: vi.fn(async () => devuelta),

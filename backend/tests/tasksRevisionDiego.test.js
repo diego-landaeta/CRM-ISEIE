@@ -323,7 +323,8 @@ describe('C · Configuración › Roles: permisos de Tareas por rol', () => {
     try {
       expect((await cerrar()).status).toBe(403);
 
-      // Lo cambia el admin.
+      // Lo cambia el admin: Diego (26/10), «los admin siguen pudiendo», y él
+      // tiene «Aprobar y cerrar» (nadie le pone a un rol lo que no tiene).
       const res = await permisosDeRol('adminA', 'colaborador', { 'tasks.close': true });
       expect(res.status, JSON.stringify(res.body)).toBe(200);
       expect(res.body.data.permissions['tasks.close']).toBe(true);

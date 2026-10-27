@@ -281,8 +281,14 @@ export async function update(id, data, { porUserId = null } = {}) {
 export async function setPassword(id, password, { porUserId = null, ip = null } = {}) {
   const user = await userModel.findById(id);
   if (!user) throw new AppError('Usuario no encontrado', 404, 'USER_NOT_FOUND');
+  // La de un superadmin, solo otro superadmin: la misma regla que su correo
+  // (#246). Hasta el 26/10 no se podía nunca; desde que Diego es superadmin con
+  // soporte (#423), sin esto nadie podría ponerle contraseña como hasta ahora.
   if (user.role === 'superadmin') {
-    throw new AppError('No se puede cambiar la contraseña de un superadmin', 403, 'CANNOT_EDIT_SUPERADMIN');
+    const quien = porUserId ? await userModel.findById(porUserId) : null;
+    if (quien?.role !== 'superadmin' || Number(quien.id) === Number(id)) {
+      throw new AppError('La contraseña de un superadmin solo la cambia otro superadmin', 403, 'CANNOT_EDIT_SUPERADMIN');
+    }
   }
   const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
   await userModel.setPasswordHash(id, passwordHash);

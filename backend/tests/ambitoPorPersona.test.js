@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+// Los permisos salen del catálogo (#423): sin base, el resolver de verdad con
+// las personas de cada `req` (tests/helpers/permisosSinBase.js).
+vi.mock('../src/modules/permissions/permissions.service.js', () => import('./helpers/permisosSinBase.js'));
+const { registrar } = await import('./helpers/permisosSinBase.js');
+
 // #245 (06/10): cada pantalla, siempre dentro de los campus de la persona.
 //
 //   «Perfil de administrador de Mireia, solo tiene acceso a CEDIA. Perfil de
@@ -43,7 +48,9 @@ const tutorModel = await import('../src/modules/tutores/tutor.model.js');
 const MIREIA = { userId: 34, role: 'admin' };
 const ANTONIO = { userId: 40, role: 'admin' };
 const EUGENIA = { userId: 12, role: 'admin' };
-const MANUEL = { userId: 2, role: 'superadmin' };
+// Sus permisos, del catálogo (#423).
+[MIREIA, ANTONIO, EUGENIA].forEach((p) => registrar(p));
+const MANUEL = registrar({ userId: 2, role: 'superadmin' });
 const SOPORTE = { userId: 3, role: 'soporte' };
 
 const ambito = (user, query = {}) => proyectosDelAmbito({ user, query });

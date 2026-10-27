@@ -30,7 +30,7 @@ export default function SalesPage() {
   const puedeSinGestora = can('conversions.sin_gestora');
   // Registrar una venta a nombre de otra persona es reasignar dinero: lo mismo
   // que hace falta para reasignar prospectos.
-  const puedeDeOtra = can('leads.assign') || can('leads.reassign');
+  const puedeDeOtra = can('leads.assign');
 
   function abrirVenta(modo: 'existing' | 'otra_gestora' | 'sin_gestora') {
     setModoVenta(modo);

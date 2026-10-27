@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, useCallback, lazy, Suspense } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import usePermission from '@/shared/hooks/usePermission';
-import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import client from '@/shared/api/client';
 import PageHeader from '@/shared/components/ui/PageHeader';
@@ -45,7 +44,7 @@ export default function MatriculasPage() {
   const [tab, setTab] = useState('list');
   // Certificaciones tiene dirección propia (/matriculas/certificaciones): la campana
   // enlaza ahí, y Certifex va por campus de Certifex, no por proyecto del CRM.
-  const { tieneRol } = usePermission();
+  const { tieneRol, can } = usePermission();
   const location = useLocation();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
@@ -57,18 +56,15 @@ export default function MatriculasPage() {
   const enCertifex = enCertificaciones || enDiplomas;
   // Los mismos roles que la API: emitir es de administración; las consultas de la web
   // las ve también soporte.
-  const verEmisiones = tieneRol('superadmin', 'admin');
-  const verConsultas = tieneRol('superadmin', 'admin', 'soporte');
-  // Diplomas: administración los maneja; quien tenga `diplomas.view` (#223) los VE,
-  // en solo lectura y con sus campus. Es la misma regla que la API, y por eso se mira
-  // el mapa del servidor y no `can()`, que aquí deja pasar a soporte por su rol.
-  const { permissions } = useAuth() as { permissions?: Record<string, boolean> | null };
-  //
-  // Quien tenga `diplomas.emit` (Diego, 22/10/2026: «que Dayana pueda emitir») los
-  // revisa, aprueba, emite y envía, también con sus campus; rechazar, corregir y
-  // revocar siguen siendo de administración.
-  const emiteDiplomas = verEmisiones || permissions?.['diplomas.emit'] === true;
-  const verDiplomas = emiteDiplomas || permissions?.['diplomas.view'] === true;
+  const verEmisiones = tieneRol('superadmin', 'admin') && can('diplomas.view_emisiones');
+  const verConsultas = tieneRol('superadmin', 'admin', 'soporte') && can('certifex_consultas.view');
+  // Diplomas: administración los maneja; quien tenga `diplomas.view` (#384) los
+  // VE, en solo lectura y con sus campus. Quien tenga `diplomas.emit` (Diego,
+  // 22/10/2026: «que Dayana pueda emitir») los revisa, aprueba, emite y envía,
+  // también con sus campus; rechazar, corregir y revocar siguen siendo de
+  // administración. Es la misma regla que la API.
+  const emiteDiplomas = verEmisiones || can('diplomas.emit');
+  const verDiplomas = emiteDiplomas || can('diplomas.view');
   const diplomasSoloLectura = !emiteDiplomas;
   const diplomasSoloEmitir = emiteDiplomas && !verEmisiones;
   const vistaCert = params.get('vista') === 'consultas' || !verEmisiones ? 'consultas' : 'emisiones';

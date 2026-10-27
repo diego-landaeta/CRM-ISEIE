@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { verifyToken, roleGuard, soloRoles } from '../../shared/middleware/auth.js';
-import { rolOPermiso } from '../../shared/middleware/permissions.js';
+import { verifyToken } from '../../shared/middleware/auth.js';
+import { puede } from '../../shared/middleware/permissions.js';
 import { uploadImage } from '../../shared/middleware/upload.js';
 import * as ctrl from './certifex.controller.js';
 import * as emisiones from './certifex.emisiones.js';
@@ -22,7 +22,6 @@ router.use(verifyToken);
 
 // `soloRoles` y no `roleGuard`: roleGuard deja pasar a soporte antes de mirar la lista,
 // y con el soporte habria podido aprobar y emitir titulos.
-const soloAdmin = soloRoles('admin', 'superadmin');
 
 // VER Diplomas sin ser admin (#223). Diego: «Adriana, Daniela, Yosbely, Dayana, Mireia y
 // Ana deben de tener para ver los de Certifex». Ver, no tocar: admin y superadmin por su
@@ -37,7 +36,7 @@ const soloAdmin = soloRoles('admin', 'superadmin');
 // gestora, y cada una con su guardia: lo de despues no cambia para nadie.
 //
 // Quien EMITE (`diplomas.emit`, abajo) tambien ve: no hace falta darle las dos claves.
-const verDiplomas = rolOPermiso(['admin', 'superadmin'], 'diplomas', ['view', 'emit']);
+const verDiplomas = puede('diplomas.view', 'diplomas.emit');
 router.get('/emisiones/estado', verDiplomas, emisiones.estado);
 router.get('/emisiones/centros', verDiplomas, emisiones.centros);
 router.get('/emisiones/cursos', verDiplomas, emisiones.cursos);
@@ -60,7 +59,7 @@ router.get('/diplomas', verDiplomas, diplomas.diplomas);
 // Siempre en sus campus: cada controlador lo mira con certifex.alcance.js, igual que para
 // un admin. Rechazar, el aviso de rechazo, revocar, corregir lo emitido, la firma, el A3
 // y todo `/emisiones/*` siguen siendo solo de administracion (abajo).
-const emitirDiplomas = rolOPermiso(['admin', 'superadmin'], 'diplomas', 'emit');
+const emitirDiplomas = puede('diplomas.emit');
 // Revisar antes de aprobar: nombre (en Certifex), DNI, correo del CRM, formacion y programa.
 router.post('/diplomas/editar', emitirDiplomas, diplomas.editar);
 // «Pasar a pendientes» (22/10/2026): Moodle tiene su matricula, pero no la da por
@@ -76,16 +75,15 @@ router.get('/diplomas/formaciones', emitirDiplomas, diplomas.formaciones);
 
 // Lo demas, como siempre. Los mismos roles que ven la campana de administracion: son
 // quienes reciben el aviso.
-router.use(roleGuard('admin', 'superadmin', 'soporte'));
 
-router.get('/consultas', ctrl.listar);
-router.patch('/consultas/:id', ctrl.actualizar);
+router.get('/consultas', puede('certifex_consultas.view'), ctrl.listar);
+router.patch('/consultas/:id', puede('certifex_consultas.edit'), ctrl.actualizar);
 
 // Emisiones: aprobar, rechazar y emitir titulos en Certifex. Solo administracion: es
 // decidir quien recibe un titulo que no se puede borrar. Soporte ve las consultas, no esto.
-router.get('/emisiones', soloAdmin, emisiones.listar);
-router.post('/emisiones/decisiones', soloAdmin, emisiones.decidir);
-router.post('/emisiones/emitir', soloAdmin, emisiones.emitir);
+router.get('/emisiones', puede('diplomas.view_emisiones'), emisiones.listar);
+router.post('/emisiones/decisiones', puede('diplomas.aprobar'), emisiones.decidir);
+router.post('/emisiones/emitir', puede('diplomas.aprobar'), emisiones.emitir);
 
 // Diplomas (#272): las solicitudes desde Moodle y los diplomas emitidos. Rechazar, el
 // aviso de rechazo, revocar, corregir lo emitido, la firma y sincronizar el temario del
@@ -93,14 +91,14 @@ router.post('/emisiones/emitir', soloAdmin, emisiones.emitir);
 // (emitir y lo que lleva a emitir van arriba). Y ademas, cada admin solo sobre los
 // campus de sus proyectos (certifex.alcance.js): eso lo mira cada controlador, porque
 // depende de la matricula o del diploma.
-router.post('/diplomas/rechazar', soloAdmin, diplomas.rechazar);
-router.post('/diplomas/avisos-rechazo', soloAdmin, diplomas.avisosRechazo);
-router.post('/diplomas/revocar', soloAdmin, diplomas.revocar);
-router.post('/diplomas/corregir', soloAdmin, diplomas.corregir);
+router.post('/diplomas/rechazar', puede('diplomas.aprobar'), diplomas.rechazar);
+router.post('/diplomas/avisos-rechazo', puede('diplomas.avisar'), diplomas.avisosRechazo);
+router.post('/diplomas/revocar', puede('diplomas.revocar'), diplomas.revocar);
+router.post('/diplomas/corregir', puede('diplomas.edit'), diplomas.corregir);
 // La firma del alumno (CRM #349): subirla o cambiarla antes de aprobar, y verla.
-router.post('/diplomas/firma', soloAdmin, uploadImage, diplomas.subirFirma);
-router.get('/diplomas/firma/:matriculaId', soloAdmin, diplomas.verFirma);
+router.post('/diplomas/firma', puede('diplomas.edit'), uploadImage, diplomas.subirFirma);
+router.get('/diplomas/firma/:matriculaId', puede('diplomas.view_emisiones'), diplomas.verFirma);
 // Escribe en el catalogo de productos (el temario de la formacion): de administracion.
-router.post('/diplomas/formaciones/sincronizar', soloAdmin, diplomas.sincronizarFormacion);
+router.post('/diplomas/formaciones/sincronizar', puede('diplomas.edit'), diplomas.sincronizarFormacion);
 
 export default router;

@@ -1,6 +1,11 @@
-import { describe, it, expect } from 'vitest';
-import * as ctrl from '../src/modules/tutores/tutor.controller.js';
-import { NO_ESCRIBIR_A_TUTORES } from '../src/shared/config/frenoTutores.js';
+import { describe, it, expect, vi } from 'vitest';
+
+// Los permisos salen del catálogo (#230, gemela de CRM#423). La base de pruebas
+// de ISEIE no trae usuarios de ejemplo: el resolver de verdad, sin base.
+vi.mock('../src/modules/permissions/permissions.service.js', () => import('./helpers/permisosSinBase.js'));
+const { registrar } = await import('./helpers/permisosSinBase.js');
+const ctrl = await import('../src/modules/tutores/tutor.controller.js');
+const { NO_ESCRIBIR_A_TUTORES } = await import('../src/shared/config/frenoTutores.js');
 
 /**
  * Con el freno de correos a tutores puesto (15/09), nada del alta puede
@@ -22,7 +27,7 @@ async function llamar(handler, req) {
   return { res, error };
 }
 
-const ADMIN = { userId: 1, role: 'admin' };
+const ADMIN = registrar({ userId: 1, role: 'admin' });
 
 describe('con el freno de correos a tutores', () => {
   it('el freno sigue puesto (si se quita, esta prueba hay que revisarla)', () => {

@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import fs from 'node:fs';
 
+// Los permisos salen del catálogo (#423): sin base, el resolver de verdad con
+// las personas de cada `req` (tests/helpers/permisosSinBase.js).
+vi.mock('../src/modules/permissions/permissions.service.js', () => import('./helpers/permisosSinBase.js'));
+const { registrar } = await import('./helpers/permisosSinBase.js');
+
 // Diego, 09/10:
 //  · «cuando hacen el seguimiento 5, 6 o quieren darle al check… no funciona» →
 //    «que sea manual pero que aparezca por hacer».
@@ -44,7 +49,8 @@ describe('la checklist del proceso es manual', () => {
   });
   it('la ruta del seguimiento existe', () => {
     const rutas = fs.readFileSync(new URL('../src/modules/proceso/proceso.routes.js', import.meta.url), 'utf8');
-    expect(rutas).toMatch(/router\.post\('\/lead\/:leadId\/seguimiento', ctrl\.anadirSeguimientoDeLead\)/);
+    // Con su permiso del catálogo delante (#423): «Trabajar la cola».
+    expect(rutas).toMatch(/router\.post\('\/lead\/:leadId\/seguimiento', puede\('proceso\.trabajar'\), ctrl\.anadirSeguimientoDeLead\)/);
   });
 });
 

@@ -24,6 +24,12 @@ import jwt from 'jsonwebtoken';
 
 const db = vi.hoisted(() => {
   const estado = { overrides: [], userProjects: [], sql: [] };
+  // Las personas de la prueba, para el resolver de permisos (#230, gemela de
+  // CRM#423): cada ruta pregunta a `puede('clave')` y eso lee `users`.
+  const USUARIOS = {
+    1: { role: 'superadmin', roles_extra: [] }, 2: { role: 'admin', roles_extra: [] }, 3: { role: 'gestor', roles_extra: [] },
+    4: { role: 'soporte', roles_extra: [] }, 5: { role: 'colaborador', roles_extra: [] }, 6: { role: 'gestor', roles_extra: ['colaborador'] },
+  };
   function reiniciar() {
     estado.overrides = [];
     estado.userProjects = [
@@ -37,8 +43,14 @@ const db = vi.hoisted(() => {
   async function query(sql, params = []) {
     estado.sql.push(sql);
     if (/FROM role_permission_overrides/.test(sql)) {
+      // Sin parámetros, todas (el resolver de #423); con una lista de roles, las suyas.
+      if (!params.length) return { rows: estado.overrides };
       const roles = params[0] || [];
       return { rows: estado.overrides.filter((o) => roles.includes(o.role)) };
+    }
+    if (/FROM users WHERE id = \$1/.test(sql) && /roles_extra/.test(sql)) {
+      const u = USUARIOS[params[0]];
+      return { rows: u ? [{ id: params[0], nombre: `p${params[0]}`, email: `p${params[0]}@x.com`, ...u, custom_role_id: null, active: true }] : [] };
     }
     if (/SELECT project_id FROM user_projects WHERE user_id = \$1/.test(sql)) {
       return { rows: estado.userProjects.filter((u) => u.user_id === params[0]).map((u) => ({ project_id: u.project_id })) };
@@ -49,9 +61,13 @@ const db = vi.hoisted(() => {
   const client = {
     async query(sql, params = []) {
       if (/DELETE FROM role_permission_overrides/.test(sql)) {
-        estado.overrides = estado.overrides.filter((o) => !(o.role === params[0] && o.resource === params[1]));
+        // Sin recurso, todo lo del rol (#423: se guarda el rol entero de nuevo).
+        estado.overrides = estado.overrides.filter((o) => !(o.role === params[0] && (params.length < 2 || o.resource === params[1])));
       } else if (/INSERT INTO role_permission_overrides/.test(sql)) {
         estado.overrides.push({ role: params[0], resource: params[1], action: params[2], allowed: params[3] });
+      } else {
+        // Dentro de la transacción se leen también los permisos de quien cambia (#423).
+        return query(sql, params);
       }
       return { rows: [] };
     },

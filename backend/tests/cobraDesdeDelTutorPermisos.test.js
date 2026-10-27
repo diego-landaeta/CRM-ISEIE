@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+// Los permisos salen del catálogo (#423): sin base, el resolver de verdad con
+// las personas de cada `req` (tests/helpers/permisosSinBase.js).
+vi.mock('../src/modules/permissions/permissions.service.js', () => import('./helpers/permisosSinBase.js'));
+const { registrar } = await import('./helpers/permisosSinBase.js');
+
 /**
  * PATCH /api/tutores/:id/cobra-desde — quien puede y con que fecha.
  *
@@ -38,7 +43,7 @@ const llamar = async (req) => {
   return { error, cuerpo };
 };
 
-const pedir = (user, body = { desde: '2025-10-20' }, id = '21') => llamar({ params: { id }, body, user });
+const pedir = (user, body = { desde: '2025-10-20' }, id = '21') => llamar({ params: { id }, body, user: registrar(user) });
 
 beforeEach(() => {
   esGestor.mockReset().mockResolvedValue(false);
@@ -54,9 +59,8 @@ describe('quien puede', () => {
     expect(cuerpo.success).toBe(true);
   });
 
-  it('quien tiene la casilla de gestor de colaboraciones, tambien', async () => {
-    esGestor.mockResolvedValue(true);
-    const { error } = await pedir({ userId: 9, role: 'gestor' });
+  it('quien tiene «Gestionar colaboraciones» (antes, la casilla), tambien', async () => {
+    const { error } = await pedir({ userId: 9, role: 'gestor', excepciones: { 'tutores.gestionar': true } });
     expect(error).toBeNull();
     expect(cambiar).toHaveBeenCalled();
   });

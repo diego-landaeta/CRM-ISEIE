@@ -62,6 +62,7 @@ export async function login(req, res, next) {
         user: result.user,
         projects: result.projects,
         activeProjectId: result.activeProjectId,
+        permissions: result.permissions,
       },
     });
   } catch (err) {
@@ -215,9 +216,7 @@ export async function me(req, res, next) {
 // administración, porque es el correo de la factura de su comisión.
 export async function updateMyEmail(req, res, next) {
   try {
-    if (req.user?.role !== 'tutor') {
-      throw new AppError('Tu correo lo cambia administración', 403, 'FORBIDDEN');
-    }
+    // Quién puede: la ruta pide «Cambiar su correo» (#423; de serie, el tutor).
     const parsed = updateMyEmailSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError(parsed.error.issues[0].message, 400, 'VALIDATION_ERROR');
     const userId = req.user.userId;

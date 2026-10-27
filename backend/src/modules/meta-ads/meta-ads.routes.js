@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { verifyToken, roleGuard } from '../../shared/middleware/auth.js';
-import { rolOPermiso } from '../../shared/middleware/permissions.js';
+import { verifyToken } from '../../shared/middleware/auth.js';
+import { puede } from '../../shared/middleware/permissions.js';
 import { veTodoElCrm, campusDeLaPersona } from '../../shared/utils/ambito.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import * as ctrl from './meta-ads.controller.js';
@@ -8,20 +8,15 @@ import * as ctrl from './meta-ads.controller.js';
 const router = Router();
 router.use(verifyToken);
 
-// Configurar (conectar, token, sincronizar, asociar): admin/superadmin, como siempre.
-const soloAdmin = roleGuard('admin', 'superadmin');
-
 /**
- * VER Meta Ads (26/10/2026, Diego: «en Meta tendrán acceso Ruth, Julián, Jesús,
- * Emmanuel —solo CEDIA él—; en ISEIE, Jonathan y Gustavo»): el admin, el
- * superadmin y soporte por su rol, y quien tenga `meta_ads.view` (una
- * excepción suya o de su rol), en solo lectura.
+ * Ver (`meta_ads.view`) y configurar (`meta_ads.edit`), con el catálogo de la #423.
+ * El equipo de desarrollo (Diego, 26/10/2026: Ruth, Julián, Jesús, Emmanuel —solo
+ * CEDIA él—; en ISEIE, Jonathan y Gustavo) lo ve con `meta_ads.view` por persona.
  *
  * Y solo de SUS campus: el `projectId` que pide tiene que ser uno de los suyos.
- * Antes no se miraba —cualquier admin podía pedir la publicidad de otra
+ * Antes no se miraba —cualquiera con la clave podía pedir la publicidad de otra
  * empresa cambiando el número—. Superadmin y soporte ven todo el CRM.
  */
-const puedeVer = rolOPermiso(['admin', 'superadmin', 'soporte'], 'meta_ads', 'view');
 async function deSusCampus(req, _res, next) {
   try {
     if (veTodoElCrm(req.user)) return next();
@@ -32,18 +27,20 @@ async function deSusCampus(req, _res, next) {
     next();
   } catch (err) { next(err); }
 }
-const ver = [puedeVer, deSusCampus];
-const configurar = [soloAdmin, deSusCampus];
+// Para el inventario de permisos (#423): acota por campus, no decide quién entra.
+deSusCampus.regla = { tipo: 'alcance', nombre: 'deSusCampus' };
+const ver = [puede('meta_ads.view'), deSusCampus];
+const configurar = [puede('meta_ads.edit'), deSusCampus];
 
 // Multi-cuenta: el proyecto puede tener N cuentas. /accounts devuelve lista.
 router.get('/accounts', ver, ctrl.listAccounts);
 // Legacy 1:1 — devuelve la primera, mantenido por retro-compat.
 router.get('/account', ver, ctrl.getAccount);
 router.post('/connect', configurar, ctrl.connect);
-router.patch('/accounts/:accountId/token', soloAdmin, ctrl.updateToken);
-router.delete('/accounts/:accountId', soloAdmin, ctrl.disconnect);
-router.post('/accounts/:accountId/sync', soloAdmin, ctrl.syncNow);
-router.post('/accounts/:accountId/backfill', soloAdmin, ctrl.backfill);
+router.patch('/accounts/:accountId/token', puede('meta_ads.edit'), ctrl.updateToken);
+router.delete('/accounts/:accountId', puede('meta_ads.edit'), ctrl.disconnect);
+router.post('/accounts/:accountId/sync', puede('meta_ads.edit'), ctrl.syncNow);
+router.post('/accounts/:accountId/backfill', puede('meta_ads.edit'), ctrl.backfill);
 
 router.get('/campaigns', ver, ctrl.listCampaigns);
 router.get('/campaigns/:campaignId', ver, ctrl.campaignDetail);

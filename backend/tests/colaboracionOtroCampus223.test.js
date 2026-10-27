@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+// Los permisos salen del catálogo (#230, gemela de CRM#423): sin base, el
+// resolver de verdad con las personas de cada `req` (tests/helpers/permisosSinBase.js).
+vi.mock('../src/modules/permissions/permissions.service.js', () => import('./helpers/permisosSinBase.js'));
+const { registrar } = await import('./helpers/permisosSinBase.js');
+
 /**
  * #223 (gemela de MultiCRM #384) · Añadir a una tutora una formación de otro campus.
  *
@@ -119,7 +124,11 @@ beforeEach(() => {
 async function crear(user, body) {
   let error = null; let cuerpo = null; let codigo = 200;
   const res = { status(c) { codigo = c; return this; }, json(b) { cuerpo = b; } };
-  await ctrl.crearColaboracion({ user, body: { tutorId: 21, pct: 10, desde: '2026-10-01', ...body } }, res, (e) => { error = e; });
+  // Vanessa gestiona colaboraciones: desde #230 es el permiso «Gestionar
+  // colaboraciones» (una excepción suya), no la casilla.
+  const conPermisos = registrar(estado.usuarios[user.userId]?.gestorColab
+    ? { ...user, excepciones: { 'tutores.gestionar': true } } : user);
+  await ctrl.crearColaboracion({ user: conPermisos, body: { tutorId: 21, pct: 10, desde: '2026-10-01', ...body } }, res, (e) => { error = e; });
   return { error, cuerpo, codigo };
 }
 const enCampus = (uid, pid) => estado.campus.some((c) => c.user_id === uid && c.project_id === pid && c.active);

@@ -106,7 +106,7 @@ async function llaveViva(secreto) {
   const vivo = await model.findTokenVivo(huella(secreto));
   if (!vivo) return false;
   const user = await model.findUserById(vivo.user_id);
-  return puedeUsarMcp(user);
+  return await puedeUsarMcp(user);
 }
 
 function metadatosServidor(req) {

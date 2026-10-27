@@ -258,7 +258,8 @@ export async function decidir({ id, quien, decision }) {
   const { rows: [x] } = await query('SELECT id, user_id, estado FROM mcp_conexiones WHERE id = $1', [id]);
   if (!x) return { error: 'no_encontrada' };
   const esDueno = Number(x.user_id) === Number(quien.id);
-  const puede = esDueno || (quien.role === 'superadmin' && decision === 'rechazar');
+  // Rechazar la de otra persona: «Apagar el MCP» (#423; de serie, el superadmin).
+  const puede = esDueno || (quien.puedeSupervisar === true && decision === 'rechazar');
   if (!puede) return { error: 'no_es_tuya' };
   const estado = decision === 'autorizar' ? 'autorizada' : 'rechazada';
   const { rows: [c] } = await query(

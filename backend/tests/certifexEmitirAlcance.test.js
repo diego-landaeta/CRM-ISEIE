@@ -30,11 +30,10 @@ vi.mock('../src/shared/config/db.js', () => {
   });
   return { query, getClient: vi.fn(), default: { query, end: vi.fn() } };
 });
-const conPermiso = new Set();
-vi.mock('../src/modules/permissions/permissions.service.js', () => ({
-  resolvePermission: vi.fn(async (userId, _role, _custom, resource, action) =>
-    conPermiso.has(`${userId}:${resource}.${action}`)),
-}));
+// Los permisos, con el resolver de verdad (#423): cada persona con sus
+// excepciones, como las daría Configuración › Roles o su ficha.
+vi.mock('../src/modules/permissions/permissions.service.js', () => import('./helpers/permisosSinBase.js'));
+const { registrar } = await import('./helpers/permisosSinBase.js');
 
 process.env.CERTIFEX_API_URL = 'https://certifex.test';
 process.env.CERTIFEX_CRM_CLAVE = 'cfx_crm_clave-de-prueba-emitir-alcance';
@@ -119,8 +118,8 @@ beforeAll(() => {
 afterAll(() => { globalThis.fetch = fetchReal; });
 beforeEach(() => {
   pedidas = [];
-  conPermiso.clear();
-  conPermiso.add('61:diplomas.emit');
+  registrar({ userId: 61, role: 'gestor', excepciones: { 'diplomas.emit': true } });
+  registrar({ userId: 62, role: 'gestor' });
   // Lo normal: Certifex engancha la misma matrícula de Moodle y la deja pedida.
   alCrear = (b) => ({ matriculaId: SIN_PEDIR, cursoRef: 34, yaExistia: false, vinculadaMoodle: true, eco: b });
 });

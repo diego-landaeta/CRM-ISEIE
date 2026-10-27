@@ -6,6 +6,7 @@ import {
 import { AppError } from '../../shared/utils/AppError.js';
 import { tieneRol } from '../../shared/utils/roles.js';
 import { campusDeLaPersona } from '../../shared/utils/ambito.js';
+import { tienePermiso } from '../../shared/middleware/permissions.js';
 
 /*
   QUIÉN PUEDE (Diego, 15/10: solo super admin y admin).
@@ -17,8 +18,8 @@ import { campusDeLaPersona } from '../../shared/utils/ambito.js';
     con nombre, correo y DNI de cada cliente: quien no ve uno de esos campus no
     puede ni verlo ni ponerlo. La misma regla que «tocar» en Conectores.
 
-  Las rutas ya cortan a soporte y al resto con `soloRoles('admin',
-  'superadmin')`. No va `projectAccess`: ese mira UN campus de la petición, y un
+  Quién entra lo dicen las rutas, con sus permisos del catálogo
+  (`webhooks_salientes.*`, #423; de serie, admin). No va `projectAccess`: ese mira UN campus de la petición, y un
   webhook puede ser de una empresa o de todas. La comprobación equivalente se
   hace aquí, con el ámbito del propio webhook.
 */
@@ -52,7 +53,7 @@ function normalizarAmbito({ ambito, issuer_id, project_id }) {
 
 /** Si esta persona puede tener un webhook con ese ámbito. Lanza si no. */
 async function comprobarAmbito(req, { ambito, issuer_id, project_id }) {
-  if (ambito === 'todas' && !esSuperadmin(req)) {
+  if (ambito === 'todas' && !(await tienePermiso(req, 'webhooks_salientes.todas'))) {
     throw prohibido('Un webhook de todas las empresas solo lo puede crear, ver o cambiar un super admin.');
   }
   if (ambito === 'empresa' && !(await model.existeEmpresa(issuer_id))) {

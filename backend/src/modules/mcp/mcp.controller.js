@@ -2,7 +2,7 @@ import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import * as model from './mcp.model.js';
 import {
-  diasDeVidaToken, configRotacion, MAX_TOKENS_VIVOS, ROLES_CON_ACCESO, ROLES_QUE_ADMINISTRAN, ROLES_SIN_MCP,
+  diasDeVidaToken, configRotacion, MAX_TOKENS_VIVOS, ROLES_CON_ACCESO, ROLES_SIN_MCP,
   generarToken, puedeUsarMcp,
 } from './mcp.acceso.js';
 import { HERRAMIENTAS } from './mcp.tools.js';
@@ -11,6 +11,8 @@ import { accesoSchema, actividadSchema, crearTokenSchema, decisionSchema, idSche
 import * as conexiones from './mcp.conexiones.js';
 import * as interruptorModel from './mcp.interruptor.js';
 import * as actividadModel from './mcp.actividad.js';
+import { tienePermiso } from '../../shared/middleware/permissions.js';
+import { explicarPermisos } from '../permissions/permissions.service.js';
 
 /**
  * El panel «Conexión → MCP» del CRM. Aqui se usa el JWT normal del CRM: es la
@@ -34,7 +36,7 @@ async function personaActual(req) {
 export async function estado(req, res, next) {
   try {
     const user = await personaActual(req);
-    const tieneAcceso = puedeUsarMcp(user);
+    const tieneAcceso = await puedeUsarMcp(user);
     const proyectos = tieneAcceso ? await model.proyectosDeLaPersona(user) : [];
     const tokens = tieneAcceso ? await model.listarTokens(user.id) : [];
     // Cuándo volverá a pedir el código cada URL (#192, Diego 05/10). Vacío con
@@ -47,7 +49,7 @@ export async function estado(req, res, next) {
       success: true,
       data: {
         tieneAcceso,
-        puedeAdministrar: ROLES_QUE_ADMINISTRAN.includes(user.role),
+        puedeAdministrar: await tienePermiso(req, 'mcp.administrar'),
         soloLoSuyo: !ROLES_CON_ACCESO.includes(user.role),
         diasDeVida: diasDeVidaToken(),
         diasSinUso: configRotacion().diasSinUso,
@@ -56,7 +58,7 @@ export async function estado(req, res, next) {
         tokens: tokens.map((t) => ({ ...t, codigo: estados.get(t.id) || null })),
         // Interruptor de emergencia (#196): si el MCP está apagado y por qué.
         interruptor: await interruptorModel.estado(),
-        puedeApagar: user.role === 'superadmin',
+        puedeApagar: await tienePermiso(req, 'mcp.supervisar'),
         // Código de desbloqueo (#192): si hace falta y cuánto dura cada cosa.
         // `resumen`: el estado actual en una línea, de todas sus URLs, para el
         // recuadro «Código para Claude».
@@ -66,7 +68,7 @@ export async function estado(req, res, next) {
           resumen: desbloqueo.resumenParaElPanel(urls, estados),
         },
         // #326: el super admin puede rechazar cualquier Claude conectado.
-        conexionesDelEquipo: user.role === 'superadmin' && desbloqueo.config().obligatorio
+        conexionesDelEquipo: (await tienePermiso(req, 'mcp.supervisar')) && desbloqueo.config().obligatorio
           ? await conexiones.delEquipo(user.id) : null,
       },
     });
@@ -78,7 +80,7 @@ export async function crearToken(req, res, next) {
   try {
     const { nombre } = validar(crearTokenSchema, req.body);
     const user = await personaActual(req);
-    if (!puedeUsarMcp(user)) throw new AppError('No tienes acceso al MCP del CRM', 403, 'FORBIDDEN');
+    if (!(await puedeUsarMcp(user))) throw new AppError('No tienes acceso al MCP del CRM', 403, 'FORBIDDEN');
     if (await model.contarTokensVivos(user.id) >= MAX_TOKENS_VIVOS) {
       throw new AppError(`Ya tienes ${MAX_TOKENS_VIVOS} URLs activas. Revoca alguna antes de crear otra.`, 400, 'MCP_DEMASIADOS_TOKENS');
     }
@@ -107,10 +109,12 @@ export async function personas(req, res, next) {
     const lista = await model.listarPersonas(quien);
     res.json({
       success: true,
-      data: lista.map((p) => ({
-        ...p,
-        porRol: ROLES_CON_ACCESO.includes(p.role),
-        tieneAcceso: ROLES_CON_ACCESO.includes(p.role) || p.usa_mcp,
+      // Lo que dice el catálogo de cada una (#423): «Usar el MCP», y si le
+      // viene de su rol o se le ha dado a ella.
+      data: await Promise.all(lista.map(async (p) => {
+        const e = await explicarPermisos(p.id);
+        const origen = e?.origenes['mcp.usar']?.tipo;
+        return { ...p, porRol: origen === 'rol' || origen === 'ajuste_rol' || origen === 'superadmin', tieneAcceso: e?.mapa['mcp.usar'] === true };
       })),
     });
   } catch (err) { next(err); }
@@ -141,7 +145,10 @@ export async function cambiarAcceso(req, res, next) {
     if (quien.role !== 'superadmin' && !(await model.comparteProyecto(quien.id, persona.id))) {
       throw new AppError('Solo puedes dar acceso a personas de tus campus.', 403, 'FORBIDDEN');
     }
-    await model.setUsaMcp(persona.id, usa_mcp);
+    // Una excepción «Usar el MCP» (#423), por el mismo camino que la ficha:
+    // sus reglas, su transacción y su registro.
+    const { guardarExcepciones } = await import('../permissions/permissions.editar.js');
+    await guardarExcepciones(persona.id, { 'mcp.usar': usa_mcp ? true : null }, req.user);
     logger.info({ por: quien.id, userId: persona.id, usa_mcp }, 'MCP: acceso cambiado');
     res.json({ success: true, data: { id: persona.id, usa_mcp } });
   } catch (err) { next(err); }
@@ -156,7 +163,7 @@ export async function cambiarAcceso(req, res, next) {
 export async function crearCodigo(req, res, next) {
   try {
     const user = await personaActual(req);
-    if (!puedeUsarMcp(user)) throw new AppError('No tienes acceso al MCP del CRM', 403, 'FORBIDDEN');
+    if (!(await puedeUsarMcp(user))) throw new AppError('No tienes acceso al MCP del CRM', 403, 'FORBIDDEN');
     const r = await desbloqueo.crearCodigo(user.id);
     logger.info({ userId: user.id }, 'MCP: código de desbloqueo creado');
     res.status(201).json({ success: true, data: { codigo: r.codigo, caducaAt: r.caducaAt, minutos: r.minutos } });
@@ -176,7 +183,7 @@ export async function desbloquearUrl(req, res, next) {
   try {
     const { id } = validar(idSchema, req.params);
     const user = await personaActual(req);
-    if (!puedeUsarMcp(user)) throw new AppError('No tienes acceso al MCP del CRM', 403, 'FORBIDDEN');
+    if (!(await puedeUsarMcp(user))) throw new AppError('No tienes acceso al MCP del CRM', 403, 'FORBIDDEN');
     if (!desbloqueo.config().obligatorio) {
       throw new AppError('El código para Claude no está encendido: no hace falta desbloquear.', 400, 'MCP_CODIGO_APAGADO');
     }
@@ -210,7 +217,7 @@ export async function decidirConexion(req, res, next) {
     const { id } = validar(idSchema, req.params);
     const { decision } = validar(decisionSchema, req.body);
     const quien = await personaActual(req);
-    const r = await conexiones.decidir({ id, quien, decision });
+    const r = await conexiones.decidir({ id, quien: { ...quien, puedeSupervisar: await tienePermiso(req, 'mcp.supervisar') }, decision });
     if (r.error === 'no_encontrada') throw new AppError('Conexión no encontrada', 404, 'NOT_FOUND');
     if (r.error === 'no_es_tuya') {
       throw new AppError(decision === 'autorizar'
