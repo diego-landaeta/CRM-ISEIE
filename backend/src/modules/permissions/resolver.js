@@ -18,7 +18,8 @@
  *      lo que su rol PRINCIPAL veta aunque tenga otros (un tutor con un rol de
  *      más sigue sin WhatsApp ni MCP, como antes de #423). Y lo `soloPrincipal`
  *      (WhatsApp, MCP) lo trae de serie solo el rol principal.
- * El superadmin lo tiene todo, siempre.
+ * El superadmin lo tiene todo, siempre, salvo su WhatsApp si se le ha quitado a él
+ * por persona (una excepción `whatsapp.*` en «no»; Diego, 26/10/2026).
  *
  * `origen` de cada clave, para la ficha:
  *   { tipo: 'superadmin' }
@@ -47,7 +48,16 @@ export function resolverPermisos({ role, roles_extra = [], customRole = null, ex
   const mapa = {};
   const origenes = {};
   if (role === 'superadmin') {
-    for (const x of ACCIONES) { mapa[x.clave] = true; origenes[x.clave] = { tipo: 'superadmin' }; }
+    for (const x of ACCIONES) {
+      // Lo único que se le quita al superadmin: su WhatsApp, si se le ha quitado a él
+      // por persona (Diego, 26/10/2026: «Carlos y Vladys siguen sin WhatsApp»; antes
+      // era la casilla «Usa WhatsApp» de su ficha). Ninguna otra excepción le resta.
+      if (x.clave.startsWith('whatsapp.') && excepciones[x.clave] === false) {
+        mapa[x.clave] = false; origenes[x.clave] = { tipo: 'excepcion' };
+        continue;
+      }
+      mapa[x.clave] = true; origenes[x.clave] = { tipo: 'superadmin' };
+    }
     return { mapa, origenes };
   }
 
