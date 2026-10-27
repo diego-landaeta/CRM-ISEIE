@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-666 rutas en 51 módulos, y 25 acciones con condición dentro de una ruta.
+677 rutas en 51 módulos, y 25 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -764,6 +764,17 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | (anónima) | `GET /api/tasks/tags` | sesión · soloRoles(superadmin, admin, colaborador) | superadmin, admin, colaborador | `tasks.view_own` o `tasks.view_all` |
 | (anónima) | `GET /api/tasks/review` | sesión · soloRoles(superadmin, admin, colaborador) | superadmin, admin, colaborador | `tasks.view_own` o `tasks.view_all` |
 | (anónima) | `GET /api/tasks/review/count` | sesión · soloRoles(superadmin, admin, colaborador) | superadmin, admin, colaborador | `tasks.view_own` o `tasks.view_all` |
+| (anónima) | `GET /api/tasks/teams` | (no existía) | (ruta nueva) | `tasks.view_own` o `tasks.view_all` |
+| (anónima) | `GET /api/tasks/teams/mine` | (no existía) | (ruta nueva) | `tasks.view_own` o `tasks.view_all` |
+| (anónima) | `GET /api/tasks/teams/empresas` | (no existía) | (ruta nueva) | `tasks.view_own` o `tasks.view_all` |
+| (anónima) | `POST /api/tasks/teams` | (no existía) | (ruta nueva) | `tasks.view_own` o `tasks.view_all` |
+| (anónima) | `GET /api/tasks/teams/:teamId` | (no existía) | (ruta nueva) | `tasks.view_own` o `tasks.view_all` |
+| (anónima) | `PATCH /api/tasks/teams/:teamId` | (no existía) | (ruta nueva) | `tasks.view_own` o `tasks.view_all` |
+| (anónima) | `POST /api/tasks/teams/:teamId/roles` | (no existía) | (ruta nueva) | `tasks.view_own` o `tasks.view_all` |
+| (anónima) | `PATCH /api/tasks/teams/:teamId/roles/:roleId` | (no existía) | (ruta nueva) | `tasks.view_own` o `tasks.view_all` |
+| (anónima) | `GET /api/tasks/teams/:teamId/candidates` | (no existía) | (ruta nueva) | `tasks.view_own` o `tasks.view_all` |
+| (anónima) | `PUT /api/tasks/teams/:teamId/members/:userId` | (no existía) | (ruta nueva) | `tasks.view_own` o `tasks.view_all` |
+| (anónima) | `DELETE /api/tasks/teams/:teamId/members/:userId` | (no existía) | (ruta nueva) | `tasks.view_own` o `tasks.view_all` |
 | (anónima) | `GET /api/tasks/columns` | sesión · soloRoles(superadmin, admin, colaborador) | superadmin, admin, colaborador | `tasks.view_own` o `tasks.view_all` |
 | (anónima) | `POST /api/tasks/columns` | sesión · soloRoles(superadmin, admin, colaborador) | superadmin, admin, colaborador | `tasks.view_own` o `tasks.view_all` |
 | (anónima) | `PATCH /api/tasks/columns/reorder` | sesión · soloRoles(superadmin, admin, colaborador) | superadmin, admin, colaborador | `tasks.view_own` o `tasks.view_all` |
@@ -1042,6 +1053,7 @@ lo que pide para tener sentido (editar pide ver).
 | Archivar tareas | `tasks.delete` | Archivar cualquier tarea y borrar comentarios ajenos. | Admin | `tasks.view_own` |
 | Aprobar y cerrar | `tasks.close` | Aprobar, devolver, cerrar y reabrir tareas en «Por revisar». | Admin | `tasks.view_own` |
 | Configurar el tablero | `tasks.manage` | Columnas, áreas y proyectos del tablero. | Admin | `tasks.view_own` |
+| Gestionar equipos | `tasks.manage_teams` | Crear, renombrar y archivar equipos del tablero, sus cargos y quién está en cada uno. | Admin | `tasks.view_own` |
 
 ## Captación
 
