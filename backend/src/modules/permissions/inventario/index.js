@@ -77,7 +77,10 @@ export function puedeDespues(u, fila, mapa, { comoGuardia = false } = {}) {
 }
 
 function tieneClave(u, k, mapa) {
-  if (u.role === 'superadmin') return true;
+  // El superadmin lo tiene todo salvo lo que su mapa diga que NO: su WhatsApp quitado por
+  // persona (Diego, 26/10/2026: Carlos y Vladys siguen sin WhatsApp). Como `puede`, que no
+  // tiene atajo para el superadmin: mira el mapa de `explicarPermisos`.
+  if (u.role === 'superadmin') return k === undefined || k === null || [].concat(k).some((c) => mapa?.[c] !== false);
   if (k === undefined || k === null) return false;
   return [].concat(k).some((c) => mapa[c] === true);
 }
