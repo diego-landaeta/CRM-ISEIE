@@ -170,6 +170,23 @@ export function neighboursAt(
  * asignado, también quien la creó. Es la misma regla que aplica el servidor;
  * aquí solo evita ofrecer lo que daría 403.
  */
+/**
+ * La vista con la que se entra en el tablero, para TODOS (Diego, 26/10/2026):
+ * «Mi tablero». No depende del rol ni de la última vez.
+ */
+export const VISTA_INICIAL = 'mio' as const;
+
+/**
+ * Qué pide cada vista al servidor: «Mi tablero» = lo que llevo, supervisé o
+ * creé (`mias`); «Mi equipo / Todos» = lo que el servidor deje ver; una persona
+ * concreta = su tablero.
+ */
+export function filtroDeVista(vista: 'mio' | 'equipo' | 'revisar' | number): { mias?: true; assigned_to?: number } {
+  if (vista === 'mio') return { mias: true };
+  if (typeof vista === 'number') return { assigned_to: vista };
+  return {};
+}
+
 export function puedeEditarTarea(
   task: { assigned_to: number | null; created_by?: number | null } | null | undefined,
   yo: number,

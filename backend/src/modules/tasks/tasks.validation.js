@@ -163,6 +163,8 @@ export const listTasksQuerySchema = z.object({
   ...ambitoQuery,
   // El equipo elegido arriba (26/10/2026): uno, o 0 = «Sin equipo».
   team_id: z.coerce.number().int().min(0).optional(),
+  // «Mi tablero» (26/10/2026): lo que lleva, supervisa o creó quien mira.
+  mias: booleanoDeQuery.optional(),
   status: columna.optional(),
   assigned_to: z.coerce.number().int().positive().optional(),
   project_id: z.coerce.number().int().positive().optional(),

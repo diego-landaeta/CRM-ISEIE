@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type DragEvent } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, MagnifyingGlass, ArrowsClockwise, Warning, X, SlidersHorizontal, ArrowClockwise, Compass } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -17,7 +17,7 @@ import { TaskColumn } from '../components/TaskColumn';
 import { TaskModal } from '../components/TaskModal';
 import { TeamAreaMetrics, TeamTasksMetrics } from '../components/TeamTasksMetrics';
 import { TasksReviewView } from '../components/TasksReviewView';
-import { DEFAULT_COLUMNS, PRIORITY, boardColor, neighboursAt, puedeEditarTarea } from '../lib/taskUi';
+import { DEFAULT_COLUMNS, PRIORITY, VISTA_INICIAL, boardColor, filtroDeVista, neighboursAt, puedeEditarTarea } from '../lib/taskUi';
 import type {
   AreaMetric,
   Assignee,
@@ -59,8 +59,6 @@ type Carril = { id: string; titulo: string; color?: string | null; userId: numbe
 
 const errorDe = (err: unknown) => (err instanceof Error && err.message) ? err.message : 'Error desconocido';
 
-const CLAVE_EQUIPO = 'tareas.equipo';
-
 export default function TasksPage() {
   const { user } = useAuth();
   const { projects } = useProjectContext() as { projects: Parameters<typeof campusConEmpresa>[0] };
@@ -88,14 +86,11 @@ export default function TasksPage() {
   const ambito = useMemo<tasksApi.Ambito>(() => ({}), []);
 
   const enRevisar = location.pathname.endsWith('/tareas/revisar');
-  // Quien ve todo (superadmin, admin) entra en «Todo el equipo»; el resto, en lo
-  // suyo (Diego, 09/10). Los permisos pueden llegar después del primer render:
-  // hasta que la persona elija otra vista, se sigue esa regla.
-  const [vistaTablero, setVistaTablero] = useState<Exclude<Vista, 'revisar'>>(canViewAll ? 'equipo' : 'mio');
-  const vistaElegida = useRef(false);
-  useEffect(() => {
-    if (!vistaElegida.current) setVistaTablero(canViewAll ? 'equipo' : 'mio');
-  }, [canViewAll]);
+  // Diego, 26/10/2026: «la vista principal al entrar en Tablero, para todos, es
+  // ver SU tablero» —lo que lleva, lo que supervisa y lo que creó—, también el
+  // admin y el superadmin. Quien ve más cambia arriba a «Mi equipo» o «Todos».
+  // No se recuerda la última vista: al volver a entrar, otra vez «Mi tablero».
+  const [vistaTablero, setVistaTablero] = useState<Exclude<Vista, 'revisar'>>(VISTA_INICIAL);
   const vista: Vista = enRevisar ? 'revisar' : vistaTablero;
   const [agrupar, setAgrupar] = useState<Agrupar>('persona');
 
@@ -111,16 +106,12 @@ export default function TasksPage() {
   const [proyectosPropios, setProyectosPropios] = useState<TaskExternalProject[]>([]);
   const [columnas, setColumnas] = useState<TaskColumnType[]>([]);
   // Los equipos (26/10/2026): los que se ven, los suyos con su cargo, y el
-  // elegido arriba —«Todos mis equipos», uno, o «Sin equipo»—, recordado aquí.
+  // elegido arriba —«Todos mis equipos», uno, o «Sin equipo»—. Tampoco se
+  // recuerda: se entra siempre en «Mi tablero» sin filtro (Diego, 26/10).
   const [equipos, setEquipos] = useState<Team[]>([]);
   const [misEquipos, setMisEquipos] = useState<MyTeam[]>([]);
-  const [equipoElegido, setEquipoElegido] = useState<string>(() => {
-    try { return localStorage.getItem(CLAVE_EQUIPO) || ''; } catch { return ''; }
-  });
-  const elegirEquipo = (v: string) => {
-    setEquipoElegido(v);
-    try { localStorage.setItem(CLAVE_EQUIPO, v); } catch { /* sin almacenamiento: solo esta vez */ }
-  };
+  const [equipoElegido, setEquipoElegido] = useState<string>('');
+  const elegirEquipo = (v: string) => setEquipoElegido(v);
   const teamIdElegido = equipoElegido === '' ? undefined : equipoElegido === 'sin' ? 0 : Number(equipoElegido);
 
   const [metricas, setMetricas] = useState<TeamMemberMetric[]>([]);
@@ -176,11 +167,10 @@ export default function TasksPage() {
       if (vista === 'revisar') {
         setTasks(await tasksApi.getReviewTasks(ambito));
       } else {
-        const assignedTo = vista === 'mio' ? yo : vista === 'equipo' ? undefined : vista;
         setTasks(await tasksApi.getTasks({
           // Mi tablero es mío, esté donde esté: el ámbito solo acota al equipo.
           ...(vista === 'mio' ? {} : ambito),
-          assigned_to: assignedTo || undefined,
+          ...filtroDeVista(vista),
           team_id: teamIdElegido,
           search: filtros.search.trim() || undefined,
           project_id: filtros.projectId || undefined,
@@ -334,7 +324,7 @@ export default function TasksPage() {
   const opcionesVista: Array<{ value: Vista; label: string }> = [
     { value: 'mio', label: 'Mi tablero' },
     ...(canClose || porRevisar > 0 ? [{ value: 'revisar' as Vista, label: `Por revisar (${porRevisar})` }] : []),
-    ...(canViewAll || misEquipos.length > 0 ? [{ value: 'equipo' as Vista, label: canViewAll ? 'Todo el equipo' : 'Mis equipos' }] : []),
+    ...(canViewAll || misEquipos.length > 0 ? [{ value: 'equipo' as Vista, label: canViewAll ? 'Todos' : 'Mi equipo' }] : []),
     ...(canViewAll ? assignees.filter((a) => a.id !== yo).map((a) => ({ value: a.id as Vista, label: a.nombre })) : []),
   ];
   useEffect(() => {
@@ -345,7 +335,6 @@ export default function TasksPage() {
 
   function cambiarVista(v: Vista) {
     if (v === 'revisar') { navigate('/tareas/revisar'); return; }
-    vistaElegida.current = true;
     setVistaTablero(v);
     if (enRevisar) navigate('/tareas');
   }
@@ -369,11 +358,11 @@ export default function TasksPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title={vista === 'revisar' ? 'Por revisar' : 'Equipo de Desarrollo'}
+        title={vista === 'revisar' ? 'Por revisar' : vista === 'mio' ? 'Mi tablero' : 'Equipo de Desarrollo'}
         subtitle={
           vista === 'revisar' ? 'Las tareas «En revisión» de todo el equipo, por fecha límite'
             : vista === 'equipo' ? `Todo el equipo, por ${agrupar === 'area' ? 'área' : 'persona'}`
-              : 'Arrastra las tarjetas para avanzar o reordenarlas'
+              : vista === 'mio' ? 'Lo que llevas, lo que supervisas y lo que creaste' : 'Arrastra las tarjetas para avanzar o reordenarlas'
         }
         actions={(
           <div className="flex flex-wrap items-center gap-2">

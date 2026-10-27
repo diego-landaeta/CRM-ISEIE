@@ -160,7 +160,7 @@ const joins = (hay, eq = false) => `
 export async function findTasks({
   assigned_to, project_id, external_project_id, area_id, status, priority, search, tag, vencidas, desde, hasta,
   incluir_archivadas = false, orden = 'tablero', ambito = null, yo = null, supervisor_id = null, tambien_supervisa = null,
-  team_id, visibles_para = null,
+  team_id, visibles_para = null, mias_de = null,
 }) {
   const { sup: hay, eq } = await extras();
   const conditions = [];
@@ -194,6 +194,12 @@ export async function findTasks({
     const yoN = `$${params.length}`;
     conditions.push(`(t.assigned_to = ${yoN} OR t.created_by = ${yoN}${hay ? ` OR t.supervisor_id = ${yoN}` : ''}${eq
       ? ` OR EXISTS (SELECT 1 FROM task_team_members m_v WHERE m_v.team_id = t.team_id AND m_v.user_id = ${yoN})` : ''})`);
+  }
+  // «Mi tablero» (Diego, 26/10/2026): lo que lleva, lo que supervisa y lo que creó.
+  if (mias_de) {
+    params.push(mias_de);
+    const yoM = `$${params.length}`;
+    conditions.push(`(t.assigned_to = ${yoM} OR t.created_by = ${yoM}${hay ? ` OR t.supervisor_id = ${yoM}` : ''})`);
   }
   // El equipo elegido arriba: uno, o 0 = «Sin equipo».
   if (team_id != null && eq) {
