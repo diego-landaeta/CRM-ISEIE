@@ -12,8 +12,9 @@ import { inputClass } from '@/shared/lib/ui';
 import * as tasksApi from '../api/tasks.api';
 import { agruparPorEmpresa, type CampusDeEmpresa } from '../lib/campusPorEmpresa';
 import {
-  DEFAULT_COLUMNS, TAG_COLORS, armarCambiosDeTarea, fromDateInput, puedeEditarTarea, tagChip, toDateInput,
+  DEFAULT_COLUMNS, TAG_COLORS, ZONA_OFICINA, armarCambiosDeTarea, fromDateInput, puedeEditarTarea, tagChip, toDateInput,
 } from '../lib/taskUi';
+import { fechaYHora } from '../lib/periodo';
 import type {
   Assignee,
   TagColor,
@@ -437,6 +438,31 @@ export function TaskModal({
               </div>
             ) : (
               <form id="task-form" onSubmit={handleSubmit} className="space-y-4">
+                {/* Las fechas de la tarea (Diego, 27/10/2026): creada, terminada y límite. */}
+                {editando && task && (
+                  <dl className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs rounded-md border border-border bg-muted/40 px-3 py-2" data-testid="fechas-tarea">
+                    <div>
+                      <dt className="font-semibold text-muted-foreground">Creada</dt>
+                      <dd className="tabular-nums">{fechaYHora(task.created_at)}</dd>
+                      {task.created_by_name && <dd className="text-muted-foreground">por {task.created_by_name}</dd>}
+                    </div>
+                    <div>
+                      <dt className="font-semibold text-muted-foreground">Terminada</dt>
+                      {task.status === 'hecha' && task.completed_at ? (
+                        <>
+                          <dd className="tabular-nums">{fechaYHora(task.completed_at)}</dd>
+                          {task.completed_by_name && <dd className="text-muted-foreground">por {task.completed_by_name}</dd>}
+                        </>
+                      ) : (
+                        <dd className="text-muted-foreground">Todavía no</dd>
+                      )}
+                    </div>
+                    <div>
+                      <dt className="font-semibold text-muted-foreground">Fecha límite</dt>
+                      <dd className="tabular-nums">{task.due_date ? new Date(task.due_date).toLocaleDateString('es-ES', { timeZone: ZONA_OFICINA, dateStyle: 'medium' }) : 'Sin fecha'}</dd>
+                    </div>
+                  </dl>
+                )}
                 {soloLectura && (
                   <p className="text-xs rounded-md border border-border bg-muted/50 px-3 py-2 text-muted-foreground">
                     Sus datos los cambia quien la creó, un superadmin o quien delega en su equipo.
