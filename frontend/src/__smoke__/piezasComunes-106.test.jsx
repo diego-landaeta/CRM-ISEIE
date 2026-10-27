@@ -137,6 +137,27 @@ describe('piezas comunes de los formularios (#106)', () => {
     expect(cerrar).toHaveBeenCalledTimes(1);
   });
 
+  // Visto en la prueba a mano (26/10): en «Añadir formación», con la lista del
+  // buscador de cursos abierta, Escape cerraba la ventana entera.
+  it('con la lista del buscador de cursos abierta, Escape la cierra a ella y no al diálogo', () => {
+    const cerrar = vi.fn();
+    function Dialogo() {
+      useEscapeKey(cerrar, true);
+      const [v, setV] = useState(null);
+      return <BuscadorCurso id="curso" cursos={[{ id: 1, nombre: 'Curso de prueba' }]} valor={v} onElegir={setV} />;
+    }
+    render(<Dialogo />);
+    const casilla = document.getElementById('curso');
+    fireEvent.focus(casilla);
+    expect(screen.getByText('Curso de prueba')).toBeTruthy();
+    fireEvent.keyDown(casilla, { key: 'Escape' });
+    expect(screen.queryByText('Curso de prueba')).toBeNull();
+    expect(cerrar).not.toHaveBeenCalled();
+    // Ya cerrada la lista, Escape sí cierra el diálogo.
+    fireEvent.keyDown(casilla, { key: 'Escape' });
+    expect(cerrar).toHaveBeenCalledTimes(1);
+  });
+
   // Visto en la prueba a mano: con una sección del menú lateral desplegada
   // (también lleva aria-expanded), el segundo Escape no cerraba el diálogo.
   // Visto en la prueba a mano: al saltar con «p», la lista se desplazaba bajo
