@@ -75,6 +75,8 @@ CREATE TEMP TABLE _aplicadas (patron text) ON COMMIT DROP;
 INSERT INTO _aplicadas VALUES
   -- Las miraba una ruta o un servicio.
   ('leads.delete'), ('facturas_colaborador.%'), ('diplomas.view'), ('diplomas.emit'), ('tasks.%'), ('conversions.sin_gestora'),
+  -- Meta Ads · Ver (ISEIE#264, 26/10): el equipo de desarrollo la tiene por excepción.
+  ('meta_ads.view'),
   -- Las miraba la pantalla.
   ('clients.create'), ('clients.delete'), ('clients.export'), ('conversions.edit'),
   ('leads.assign'), ('leads.create'), ('leads.edit'), ('leads.export'),
