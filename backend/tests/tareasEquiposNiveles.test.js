@@ -278,6 +278,9 @@ describe('el tablero, por equipo', () => {
   it('archivar el equipo lo saca de los equipos de cada uno', async () => {
     expect((await request.patch(`/api/tasks/teams/${equipo.id}`).set(como('admin')).send({ is_active: false })).status).toBe(200);
     expect((await request.get('/api/tasks/teams/mine').set(como('diana'))).body.data).toEqual([]);
-    expect((await crear('julian', { title: 'x', team_id: equipo.id })).status).toBe(400);
+    // El equipo es el de quien la lleva (27/10/2026): uno archivado no se le pone; sin otro, va sin equipo.
+    const r = await crear('julian', { title: `${MARCA} Con equipo archivado`, team_id: equipo.id });
+    expect(r.status, JSON.stringify(r.body)).toBe(201);
+    expect(r.body.data.team_id ?? null).toBeNull();
   });
 });
