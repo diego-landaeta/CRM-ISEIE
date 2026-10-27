@@ -7,6 +7,7 @@ import { notifyUsers } from '../notifications/notifications.service.js';
 import { buildPermissionsMap } from '../permissions/permissions.service.js';
 import * as reglas from './tasks.reglas.js';
 import * as eqModel from './tasks.equipos.model.js';
+import { anotarCambioDeEstado } from './tasks.avisos-estado.js';
 import {
   enviarCorreoAsignada,
   enviarCorreoDevuelta,
@@ -390,7 +391,7 @@ async function avisarAsignacion({ tarea, responsableId, quien, reasignada = fals
   });
   const autor = await taskModel.findUserBasic(quien.userId);
   await correoA(responsableId, AVISO_TAREA_ASIGNADA,
-    (persona) => enviarCorreoAsignada({ persona, tarea, quien: autor }));
+    (persona) => enviarCorreoAsignada({ persona, tarea, quien: autor, reasignada }));
 }
 
 /**
@@ -799,6 +800,16 @@ export async function moveTask(id, { status, prev_id, next_id }, user) {
     tarea: currentTask, user, lineas: `Movió la tarea de «${deNombre}» a «${aNombre}».`, yaAvisados,
   });
 
+  // El correo de cambio de estado (26/10/2026), agrupado si se mueve varias veces
+  // seguidas. Sin quien ya tiene el suyo: «Tarea completada» o «Para revisar».
+  await anotarCambioDeEstado({
+    taskId: id, de: currentTask.status, a: status, autorId: user.userId,
+    yaConCorreo: [
+      status === HECHA ? currentTask.assigned_to : null,
+      status === EN_REVISION ? currentTask.supervisor_id : null,
+    ],
+  });
+
   return movedTask;
 }
 
@@ -871,6 +882,10 @@ export async function approveTask(id, user) {
     });
   }
   await avisarCierre({ tarea: result.task, quien: user });
+  await anotarCambioDeEstado({
+    taskId: id, de: EN_REVISION, a: HECHA, autorId: user.userId, accion: 'aprobada',
+    yaConCorreo: [result.oldTask.assigned_to],
+  });
   return result.task;
 }
 
@@ -902,6 +917,11 @@ export async function returnTask(id, { comment }, user) {
     await correoA(oldTask.assigned_to, AVISO_TAREA_DEVUELTA,
       (persona) => enviarCorreoDevuelta({ persona, tarea: task, quien: autor, comentario: comment }));
   }
+  // Al supervisor y a quien la creó, con el motivo; quien la lleva ya tiene «Tarea devuelta».
+  await anotarCambioDeEstado({
+    taskId: id, de: EN_REVISION, a: task.status || 'en_curso', autorId: user.userId,
+    accion: 'devuelta', comentario: comment, yaConCorreo: [oldTask.assigned_to],
+  });
 
   return task;
 }
