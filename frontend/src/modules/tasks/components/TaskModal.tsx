@@ -64,6 +64,20 @@ interface TaskModalProps {
 // texto, la misma con su alto.
 const textareaClass = `${inputClass.replace('h-9', 'min-h-[72px] py-2')} resize-y disabled:opacity-60`;
 
+/**
+ * Por qué no se guardó, dicho para quien está delante (27/10/2026): el servidor ya
+ * responde en castellano y con el campo («Falta el título»); aquí solo se traducen
+ * los fallos de la conexión o de la sesión, que llegan con texto técnico.
+ */
+export function motivoDelError(err: unknown): string {
+  const status = (err as { status?: number })?.status;
+  const msg = err instanceof Error ? err.message : '';
+  if (status === 401) return 'Tu sesión ha caducado: vuelve a entrar y prueba otra vez.';
+  if (!status && /fetch|network|Failed/i.test(msg)) return 'No hay conexión con el CRM. Revisa tu internet y prueba otra vez.';
+  if (status && status >= 500) return 'El CRM ha tenido un fallo al guardar. Prueba otra vez en un momento; si sigue, avisa a soporte.';
+  return msg || 'Revisa los datos de la tarea y prueba otra vez.';
+}
+
 export function TaskModal({
   open, taskId, initialStatus = 'por_hacer', initialProjectId = null, defaultAssigneeId = null, onClose, onChanged,
   currentUserId, canClose = false, canAssign, canEdit = true, canViewAll = false, canArchiveAny, assignees, projects,
@@ -268,8 +282,9 @@ export function TaskModal({
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    // Lo que falta se dice antes de enviar, campo a campo (Diego, 27/10/2026).
     if (!title.trim()) {
-      toast({ title: 'El título es obligatorio', variant: 'destructive' });
+      toast({ title: 'Falta el título', description: 'Escribe un título para poder guardar la tarea.', variant: 'destructive' });
       return;
     }
 
@@ -324,8 +339,7 @@ export function TaskModal({
       onChanged();
       onClose();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Error al guardar';
-      toast({ title: 'No se pudo guardar la tarea', description: msg, variant: 'destructive' });
+      toast({ title: 'No se pudo guardar la tarea', description: motivoDelError(err), variant: 'destructive' });
     } finally {
       setGuardando(false);
     }
