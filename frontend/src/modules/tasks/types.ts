@@ -126,6 +126,8 @@ export interface Assignee {
   /** Con un equipo elegido: su cargo y su nivel en él (null si no está). */
   team_nivel?: number | null;
   team_cargo?: string | null;
+  /** Sus equipos, con su cargo: el equipo de una tarea es el de quien la lleva (27/10/2026). */
+  equipos?: Array<{ team_id: number; team_name: string; issuer_id: number; empresa: string; cargo: string | null; nivel: number | null }>;
 }
 
 /** Un cargo de un equipo, con su nivel: se delega hacia niveles menores. */
