@@ -97,6 +97,33 @@ export async function equiposDeLaPersona(userId) {
   return rows;
 }
 
+/**
+ * Los equipos de varias personas a la vez (para la lista de responsables: la
+ * ficha enseña el equipo de quien la va a llevar). Un Map id → [{ team_id, … }].
+ */
+export async function equiposDeLaGente(userIds) {
+  const ids = [...new Set((userIds || []).filter(Boolean).map(Number))];
+  const out = new Map();
+  if (!ids.length || !(await existeEquipos())) return out;
+  const { rows } = await query(
+    `SELECT m.user_id, tm.id AS team_id, tm.name AS team_name, tm.issuer_id, ii.razon_social AS empresa,
+            r.name AS cargo, r.level::float8 AS nivel
+       FROM task_team_members m
+       JOIN task_teams tm ON tm.id = m.team_id AND tm.is_active
+       JOIN invoice_issuers ii ON ii.id = tm.issuer_id
+       JOIN task_team_roles r ON r.id = m.team_role_id
+      WHERE m.user_id = ANY($1::int[])
+      ORDER BY ii.razon_social, tm.sort_order, tm.name`,
+    [ids]
+  );
+  for (const { user_id: uid, ...e } of rows) {
+    const k = Number(uid);
+    if (!out.has(k)) out.set(k, []);
+    out.get(k).push({ ...e, team_id: Number(e.team_id), issuer_id: Number(e.issuer_id), nivel: n(e.nivel) });
+  }
+  return out;
+}
+
 /** El nivel de cada una de estas personas en el equipo (las que no están, no salen). */
 export async function nivelesEn(teamId, userIds) {
   const ids = [...new Set(userIds.filter(Boolean).map(Number))];
