@@ -71,6 +71,7 @@ beforeAll(async () => {
   );
 
   await crearPersona('admin', 'admin');
+  await crearPersona('superadmin', 'superadmin');
   await crearPersona('gestora', 'colaborador');
   await crearPersona('otraGestora', 'colaborador');
   await crearPersona('colaborador', 'colaborador');
@@ -215,7 +216,8 @@ describe('mover: la regla de «Hecha» (decision 4)', () => {
   let t;
 
   beforeAll(async () => {
-    t = await crear('admin', { title: 'Tarea para cerrar', assigned_to: U.gestora.id });
+    // 26/10/2026: cerrar y reabrir es del supervisor de la tarea (o del superadmin).
+    t = await crear('admin', { title: 'Tarea para cerrar', assigned_to: U.gestora.id, supervisor_id: U.admin.id });
   });
 
   it('la gestora la lleva hasta «En revisión», y a quien la creo le avisa', async () => {
@@ -237,7 +239,7 @@ describe('mover: la regla de «Hecha» (decision 4)', () => {
     expect(res.status).toBe(403);
   });
 
-  it('el admin la cierra y se guarda la fecha de cierre', async () => {
+  it('el admin, que la supervisa, la cierra y se guarda la fecha de cierre', async () => {
     const res = await request.patch(`/api/tasks/${t.id}/move`).set(como('admin')).send({ status: 'hecha' });
     expect(res.status).toBe(200);
     expect(res.body.data.status).toBe('hecha');
@@ -249,7 +251,7 @@ describe('mover: la regla de «Hecha» (decision 4)', () => {
     expect(res.status).toBe(403);
   });
 
-  it('el admin la devuelve a «En curso» y la fecha de cierre se vacia', async () => {
+  it('el admin, que la supervisa, la devuelve a «En curso» y la fecha de cierre se vacia', async () => {
     const res = await request.patch(`/api/tasks/${t.id}/move`).set(como('admin')).send({ status: 'en_curso' });
     expect(res.status).toBe(200);
     expect(res.body.data.completed_at).toBeNull();
@@ -512,8 +514,8 @@ describe('archivar', () => {
   it('una tarea cerrada y luego archivada sigue contando como cerrada esta semana', async () => {
     const fila = async () => (await request.get('/api/tasks/metrics').set(como('admin'))).body.data
       .find((m) => m.user_id === U.colaborador.id);
-    const t = await crear('admin', { title: 'Cerrar y archivar', assigned_to: U.colaborador.id });
-    expect((await request.patch(`/api/tasks/${t.id}/move`).set(como('admin')).send({ status: 'hecha' })).status).toBe(200);
+    const t = await crear('superadmin', { title: 'Cerrar y archivar', assigned_to: U.colaborador.id });
+    expect((await request.patch(`/api/tasks/${t.id}/move`).set(como('superadmin')).send({ status: 'hecha' })).status).toBe(200);
     const antes = await fila();
     expect((await request.delete(`/api/tasks/${t.id}`).set(como('admin'))).status).toBe(200);
     const despues = await fila();

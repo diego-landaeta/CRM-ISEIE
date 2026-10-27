@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type DragEvent } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, MagnifyingGlass, ArrowsClockwise, Warning, X, SlidersHorizontal, ArrowClockwise, Compass } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -17,7 +17,7 @@ import { TaskColumn } from '../components/TaskColumn';
 import { TaskModal } from '../components/TaskModal';
 import { TeamAreaMetrics, TeamTasksMetrics } from '../components/TeamTasksMetrics';
 import { TasksReviewView } from '../components/TasksReviewView';
-import { DEFAULT_COLUMNS, PRIORITY, boardColor, neighboursAt, puedeEditarTarea } from '../lib/taskUi';
+import { DEFAULT_COLUMNS, PRIORITY, VISTA_INICIAL, boardColor, filtroDeVista, neighboursAt, puedeEditarTarea } from '../lib/taskUi';
 import type {
   AreaMetric,
   Assignee,
@@ -29,6 +29,8 @@ import type {
   TaskPriority,
   TaskStatus,
   TeamMemberMetric,
+  Team,
+  MyTeam,
 } from '../types';
 
 // «Mi tablero» por defecto. Con permiso: «Por revisar» (su propia ruta,
@@ -84,14 +86,11 @@ export default function TasksPage() {
   const ambito = useMemo<tasksApi.Ambito>(() => ({}), []);
 
   const enRevisar = location.pathname.endsWith('/tareas/revisar');
-  // Quien ve todo (superadmin, admin) entra en «Todo el equipo»; el resto, en lo
-  // suyo (Diego, 09/10). Los permisos pueden llegar después del primer render:
-  // hasta que la persona elija otra vista, se sigue esa regla.
-  const [vistaTablero, setVistaTablero] = useState<Exclude<Vista, 'revisar'>>(canViewAll ? 'equipo' : 'mio');
-  const vistaElegida = useRef(false);
-  useEffect(() => {
-    if (!vistaElegida.current) setVistaTablero(canViewAll ? 'equipo' : 'mio');
-  }, [canViewAll]);
+  // Diego, 26/10/2026: «la vista principal al entrar en Tablero, para todos, es
+  // ver SU tablero» —lo que lleva, lo que supervisa y lo que creó—, también el
+  // admin y el superadmin. Quien ve más cambia arriba a «Mi equipo» o «Todos».
+  // No se recuerda la última vista: al volver a entrar, otra vez «Mi tablero».
+  const [vistaTablero, setVistaTablero] = useState<Exclude<Vista, 'revisar'>>(VISTA_INICIAL);
   const vista: Vista = enRevisar ? 'revisar' : vistaTablero;
   const [agrupar, setAgrupar] = useState<Agrupar>('persona');
 
@@ -106,6 +105,14 @@ export default function TasksPage() {
   const [areas, setAreas] = useState<TaskArea[]>([]);
   const [proyectosPropios, setProyectosPropios] = useState<TaskExternalProject[]>([]);
   const [columnas, setColumnas] = useState<TaskColumnType[]>([]);
+  // Los equipos (26/10/2026): los que se ven, los suyos con su cargo, y el
+  // elegido arriba —«Todos mis equipos», uno, o «Sin equipo»—. Tampoco se
+  // recuerda: se entra siempre en «Mi tablero» sin filtro (Diego, 26/10).
+  const [equipos, setEquipos] = useState<Team[]>([]);
+  const [misEquipos, setMisEquipos] = useState<MyTeam[]>([]);
+  const [equipoElegido, setEquipoElegido] = useState<string>('');
+  const elegirEquipo = (v: string) => setEquipoElegido(v);
+  const teamIdElegido = equipoElegido === '' ? undefined : equipoElegido === 'sin' ? 0 : Number(equipoElegido);
 
   const [metricas, setMetricas] = useState<TeamMemberMetric[]>([]);
   const [metricasArea, setMetricasArea] = useState<AreaMetric[]>([]);
@@ -160,11 +167,11 @@ export default function TasksPage() {
       if (vista === 'revisar') {
         setTasks(await tasksApi.getReviewTasks(ambito));
       } else {
-        const assignedTo = vista === 'mio' ? yo : vista === 'equipo' ? undefined : vista;
         setTasks(await tasksApi.getTasks({
           // Mi tablero es mío, esté donde esté: el ámbito solo acota al equipo.
           ...(vista === 'mio' ? {} : ambito),
-          assigned_to: assignedTo || undefined,
+          ...filtroDeVista(vista),
+          team_id: teamIdElegido,
           search: filtros.search.trim() || undefined,
           project_id: filtros.projectId || undefined,
           external_project_id: filtros.externalProjectId || undefined,
@@ -183,7 +190,7 @@ export default function TasksPage() {
     } finally {
       setCargando(false);
     }
-  }, [vista, yo, filtros, ambito]);
+  }, [vista, yo, filtros, ambito, teamIdElegido]);
 
   // Lo que no cambia al arrastrar: se pide al entrar y al volver de configurar.
   const cargarCatalogos = useCallback(() => {
@@ -191,6 +198,8 @@ export default function TasksPage() {
     tasksApi.getExternalProjects().then(setProyectosPropios).catch(() => setProyectosPropios([]));
     tasksApi.getColumns().then(setColumnas).catch(() => setColumnas([]));
     if (canViewAll || canAssign) tasksApi.getAssignees(ambito).then(setAssignees).catch(() => setAssignees([]));
+    tasksApi.getTeams().then(setEquipos).catch(() => setEquipos([]));
+    tasksApi.getMyTeams().then(setMisEquipos).catch(() => setMisEquipos([]));
   }, [canViewAll, canAssign, ambito]);
 
   const cargarEtiquetas = useCallback(() => {
@@ -216,13 +225,12 @@ export default function TasksPage() {
   }, [vista, canViewAll, filtros.projectId, filtros.areaId, ambito]);
 
   const cargarPorRevisar = useCallback(async () => {
-    if (!canClose) return;
     try {
       setPorRevisar((await tasksApi.getReviewCount(ambito)).count);
     } catch {
       setPorRevisar(0);
     }
-  }, [canClose, ambito]);
+  }, [ambito]);
 
   useEffect(() => { cargarTareas(); }, [cargarTareas]);
   useEffect(() => { cargarCatalogos(); cargarEtiquetas(); }, [cargarCatalogos, cargarEtiquetas]);
@@ -265,9 +273,10 @@ export default function TasksPage() {
     return [...grupos.values()].sort((a, b) => a.titulo.localeCompare(b.titulo, 'es'));
   }, [vista, tasks, assignees, yo, agrupar]);
 
-  // Arrastrar es editar: la misma regla que la ficha y el servidor.
-  const puedeArrastrar = (t: Task) => puedeEditarTarea(t, yo, { edit: canEdit, viewAll: canViewAll })
-    && (canClose || t.status !== 'hecha');
+  // Arrastrar es mover (26/10/2026): lo dice el servidor de cada tarjeta
+  // (el responsable, el supervisor o un superadmin). Sin el dato, la regla de antes.
+  const puedeArrastrar = (t: Task) => (t.puede_mover ?? puedeEditarTarea(t, yo, { edit: canEdit, viewAll: canViewAll }))
+    && (canClose || t.status !== 'hecha' || user?.role === 'superadmin' || t.supervisor_id === yo);
 
   function empezarArrastre(e: DragEvent<HTMLDivElement>, t: Task) {
     setArrastrando(t);
@@ -314,8 +323,8 @@ export default function TasksPage() {
 
   const opcionesVista: Array<{ value: Vista; label: string }> = [
     { value: 'mio', label: 'Mi tablero' },
-    ...(canClose ? [{ value: 'revisar' as Vista, label: `Por revisar (${porRevisar})` }] : []),
-    ...(canViewAll ? [{ value: 'equipo' as Vista, label: 'Todo el equipo' }] : []),
+    ...(canClose || porRevisar > 0 ? [{ value: 'revisar' as Vista, label: `Por revisar (${porRevisar})` }] : []),
+    ...(canViewAll || misEquipos.length > 0 ? [{ value: 'equipo' as Vista, label: canViewAll ? 'Todos' : 'Mi equipo' }] : []),
     ...(canViewAll ? assignees.filter((a) => a.id !== yo).map((a) => ({ value: a.id as Vista, label: a.nombre })) : []),
   ];
   useEffect(() => {
@@ -326,7 +335,6 @@ export default function TasksPage() {
 
   function cambiarVista(v: Vista) {
     if (v === 'revisar') { navigate('/tareas/revisar'); return; }
-    vistaElegida.current = true;
     setVistaTablero(v);
     if (enRevisar) navigate('/tareas');
   }
@@ -350,14 +358,31 @@ export default function TasksPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title={vista === 'revisar' ? 'Por revisar' : 'Equipo de Desarrollo'}
+        title={vista === 'revisar' ? 'Por revisar' : vista === 'mio' ? 'Mi tablero' : 'Equipo de Desarrollo'}
         subtitle={
           vista === 'revisar' ? 'Las tareas «En revisión» de todo el equipo, por fecha límite'
             : vista === 'equipo' ? `Todo el equipo, por ${agrupar === 'area' ? 'área' : 'persona'}`
-              : 'Arrastra las tarjetas para avanzar o reordenarlas'
+              : vista === 'mio' ? 'Lo que llevas, lo que supervisas y lo que creaste' : 'Arrastra las tarjetas para avanzar o reordenarlas'
         }
         actions={(
           <div className="flex flex-wrap items-center gap-2">
+            {equipos.length > 0 && vista !== 'revisar' && (
+              <Select<string>
+                value={equipoElegido}
+                onChange={elegirEquipo}
+                options={[
+                  { value: '', label: 'Todos mis equipos' },
+                  ...equipos.filter((e) => e.is_active).map((e) => ({
+                    value: String(e.id),
+                    label: equipos.some((o) => o.id !== e.id && o.name === e.name) ? `${e.name} · ${empresaCorta(e.empresa)}` : e.name,
+                  })),
+                  { value: 'sin', label: 'Sin equipo' },
+                ]}
+                ariaLabel="Qué equipo ver"
+                size="sm"
+                className="w-52"
+              />
+            )}
             {opcionesVista.length > 1 && (
               <span data-recorrido="vista">
                 <Select<Vista> value={vista} onChange={cambiarVista} options={opcionesVista} ariaLabel="Qué tablero ver" size="sm" className="w-48" />
@@ -547,6 +572,7 @@ export default function TasksPage() {
                           canCreate={canCreate && vista !== 'equipo' && (vista === 'mio' || canAssign)}
                           canDragTask={puedeArrastrar}
                           showAssignee={vista === 'equipo'}
+                          conEquipos={equipos.length > 0}
                           onOpen={(t) => abrir(t.id)}
                           onAdd={(status) => setNueva({ status })}
                           onDragStart={empezarArrastre}
@@ -586,6 +612,10 @@ export default function TasksPage() {
         areas={areasActivas}
         externalProjects={proyectosActivos}
         columns={columnas.filter((c) => c.is_active)}
+        equipos={equipos}
+        misEquipos={misEquipos}
+        initialTeamId={teamIdElegido ? teamIdElegido : null}
+        esSuperadmin={user?.role === 'superadmin'}
       />
     </div>
   );

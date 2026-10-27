@@ -8,6 +8,7 @@ interface TaskCardProps {
   task: Task;
   draggable: boolean;
   showAssignee: boolean;
+  conEquipos?: boolean;
   onOpen: (task: Task) => void;
   onDragStart: (e: DragEvent<HTMLDivElement>, task: Task) => void;
   onDragEnd: () => void;
@@ -15,7 +16,7 @@ interface TaskCardProps {
 }
 
 export function TaskCard({
-  task, draggable, showAssignee, onOpen, onDragStart, onDragEnd, onDragOverCard,
+  task, draggable, showAssignee, conEquipos = false, onOpen, onDragStart, onDragEnd, onDragOverCard,
 }: TaskCardProps) {
   const prioridad = PRIORITY[task.priority] || PRIORITY.media;
   const vence = dueInfo(task);
@@ -50,8 +51,16 @@ export function TaskCard({
         )}
       </div>
 
-      {/* Badges de Área, Proyecto y Prioridad */}
+      {/* Badges de Equipo, Área, Proyecto y Prioridad */}
       <div className="flex flex-wrap items-center gap-1.5">
+        {/* El equipo y el cargo de quien la lleva (26/10/2026): «Desarrollo y SEO · Miembro». */}
+        {conEquipos && (task.team_name ? (
+          <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded ${boardColor(task.team_color || 'gray').chip}`}>
+            {task.team_name}{task.assigned_cargo ? ` · ${task.assigned_cargo}` : ''}
+          </span>
+        ) : (
+          <span className="inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded bg-muted text-muted-foreground">Sin equipo</span>
+        ))}
         {task.priority === 'alta' ? (
           <span className={`inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded ${prioridad.chip}`}>
             <WarningCircle size={10} weight="fill" />
