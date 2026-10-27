@@ -91,9 +91,12 @@ export function TaskModal({
   const [assignedTo, setAssignedTo] = useState<number>(currentUserId);
   // El supervisor (26/10/2026): lo pone quien puede asignar.
   const [supervisorId, setSupervisorId] = useState<number | ''>('');
-  // El equipo (26/10/2026) y su gente con cargo y nivel, para asignar hacia abajo.
+  // El equipo es el de quien la lleva (27/10/2026); su gente, con cargo y nivel,
+  // sirve para el supervisor.
   const [teamId, setTeamId] = useState<number | ''>(initialTeamId ?? '');
   const [genteDelEquipo, setGenteDelEquipo] = useState<Assignee[] | null>(null);
+  // A quién puede dársela quien delega solo en sus equipos: los de cargo menor.
+  const [delegables, setDelegables] = useState<Assignee[] | null>(null);
 
   const [nuevoPaso, setNuevoPaso] = useState('');
   const [nuevoComentario, setNuevoComentario] = useState('');
@@ -113,12 +116,10 @@ export function TaskModal({
   const puedeMover = !editando || (permisosTarea ? permisosTarea.mover : true);
   const puedeComentar = !editando || (permisosTarea ? permisosTarea.comentar : true);
   const puedeRevisarla = permisosTarea ? permisosTarea.revisar : (tienePermisoCierre || esSupervisor);
-  const miEquipo = misEquipos.find((e) => e.team_id === Number(teamId)) || null;
-  // Delegar: «Asignar» en todos, o tener a alguien por debajo en este equipo.
-  const puedeDelegarAqui = canAssign || !!miEquipo?.puede_delegar;
-  // Los equipos que puede elegir: los suyos, o todos los que ve si delega en todos.
-  const equiposElegibles = (canAssign ? equipos : equipos.filter((e) => misEquipos.some((m) => m.team_id === e.id)))
-    .filter((e) => e.is_active || e.id === task?.team_id);
+  // Delegar: «Asignar» en todos, o tener a alguien por debajo en alguno de sus equipos.
+  const equiposDondeDelego = misEquipos.filter((m) => m.puede_delegar).map((m) => m.team_id);
+  const puedeDelegarAqui = canAssign || equiposDondeDelego.length > 0;
+  const clavesDelego = equiposDondeDelego.join(',');
   const gruposDeCampus = useMemo(() => agruparPorEmpresa(projects), [projects]);
   // Una tarea ya guardada con un campus de otra empresa no pierde el suyo al abrirla.
   const campusFuera = task?.project_id && !projects.some((p) => p.id === task.project_id)
@@ -149,6 +150,45 @@ export function TaskModal({
       .catch(() => { if (vivo) setGenteDelEquipo(null); });
     return () => { vivo = false; };
   }, [open, teamId]);
+
+  // Los equipos de una persona: de la lista de responsables o, si es quien mira,
+  // los suyos. null si no se sabe (entonces lo decide el servidor al guardar).
+  const gentePosible: Assignee[] = canAssign ? assignees : (delegables ?? []);
+  function equiposDe(personaId: number): NonNullable<Assignee['equipos']> | null {
+    const suyos = [...gentePosible, ...assignees, ...(genteDelEquipo || [])].find((g) => g.id === personaId && g.equipos)?.equipos;
+    if (suyos) return suyos;
+    if (personaId === currentUserId) {
+      return misEquipos.map((m) => ({ team_id: m.team_id, team_name: m.team_name, issuer_id: m.issuer_id, empresa: m.empresa, cargo: m.cargo, nivel: m.nivel }));
+    }
+    return null;
+  }
+  const equiposDelResponsable = equiposDe(assignedTo);
+  const clavesEquiposResp = equiposDelResponsable ? equiposDelResponsable.map((e) => e.team_id).join(',') : null;
+
+  // El equipo sigue al responsable (Diego, 27/10/2026: «el equipo es según la
+  // persona enlazada»): el que ya tenía si también es suyo; si no, el primero.
+  useEffect(() => {
+    if (!open || clavesEquiposResp === null) return;
+    const ids = clavesEquiposResp ? clavesEquiposResp.split(',').map(Number) : [];
+    setTeamId((t) => (t && ids.includes(Number(t)) ? t : (ids[0] ?? '')));
+  }, [open, assignedTo, clavesEquiposResp]);
+
+  // Quien delega solo en sus equipos: la gente de cargo menor de cada uno, juntos.
+  useEffect(() => {
+    if (!open || canAssign || !clavesDelego) { setDelegables(null); return; }
+    let vivo = true;
+    Promise.all(clavesDelego.split(',').map((id) => tasksApi.getAssignees({ team_id: Number(id) }).catch(() => [] as Assignee[])))
+      .then((listas) => {
+        if (!vivo) return;
+        const porId = new Map<number, Assignee>();
+        for (const g of listas.flat()) {
+          const ya = porId.get(g.id);
+          porId.set(g.id, ya ? { ...ya, asignable: ya.asignable !== false || g.asignable !== false } : g);
+        }
+        setDelegables([...porId.values()]);
+      });
+    return () => { vivo = false; };
+  }, [open, canAssign, clavesDelego]);
 
   const recargar = useCallback(async (id: number) => {
     try {
@@ -210,7 +250,8 @@ export function TaskModal({
 
   // Solo la gente a la que se le puede asignar (un colaborador sin campus,
   // solo el superadmin), más quien ya la lleva, para que el desplegable la enseñe.
-  const baseResponsables: Assignee[] = teamId && genteDelEquipo ? genteDelEquipo : assignees;
+  // Quien delega en todos, a cualquiera; quien delega en sus equipos, a los de cargo menor.
+  const baseResponsables: Assignee[] = gentePosible;
   const opcionesResponsable = (baseResponsables.length ? baseResponsables : [{ id: currentUserId, nombre: 'Yo', email: '', role: '' }])
     .filter((a: Assignee) => a.asignable !== false || a.id === (task?.assigned_to ?? currentUserId))
     .map((a) => ({ value: a.id, label: a.id === currentUserId ? `${a.nombre} (yo)` : a.nombre }));
@@ -559,33 +600,41 @@ export function TaskModal({
                     {!puedeDelegarAqui && (
                       <p className="text-[11px] text-muted-foreground mt-0.5">Tus tareas son para ti.</p>
                     )}
-                    {puedeDelegarAqui && !!teamId && !canAssign && (
-                      <p className="text-[11px] text-muted-foreground mt-0.5">Puedes dársela a quien tiene un cargo por debajo del tuyo en el equipo.</p>
+                    {puedeDelegarAqui && !canAssign && (
+                      <p className="text-[11px] text-muted-foreground mt-0.5">Puedes dársela a quien tiene un cargo por debajo del tuyo en tu equipo.</p>
                     )}
                   </div>
                 </div>
 
-                {(equiposElegibles.length > 0 || task?.team_id) && (
+                {/* El equipo es el de quien la lleva (Diego, 27/10/2026): no se elige
+                    aparte. Si esa persona está en varios, se escoge entre los suyos. */}
+                {(equipos.length > 0 || task?.team_id) && (
                   <div>
                     <label className="block text-xs font-semibold mb-1 flex items-center gap-1">
-                      <User size={12} /> Equipo
+                      <User size={12} /> Equipo <span className="font-normal text-muted-foreground">· el de quien la lleva</span>
                     </label>
-                    <select
-                      value={teamId}
-                      disabled={soloLectura}
-                      onChange={(e) => { setTeamId(e.target.value ? Number(e.target.value) : ''); setAssignedTo(currentUserId); setSupervisorId(''); }}
-                      className={inputClass}
-                    >
-                      <option value="">Sin equipo</option>
-                      {equiposElegibles.map((e) => (
-                        <option key={e.id} value={e.id}>{e.name}{equipos.some((o) => o.id !== e.id && o.name === e.name) ? ` (${e.empresa})` : ''}</option>
-                      ))}
-                      {task?.team_id && !equiposElegibles.some((e) => e.id === task.team_id) && (
-                        <option value={task.team_id}>{task.team_name || `Equipo ${task.team_id}`}</option>
-                      )}
-                    </select>
-                    {miEquipo && (
-                      <p className="text-[11px] text-muted-foreground mt-0.5">Tu cargo en el equipo: {miEquipo.cargo}.</p>
+                    {equiposDelResponsable && equiposDelResponsable.length > 1 && !soloLectura ? (
+                      <select
+                        value={teamId}
+                        onChange={(e) => setTeamId(Number(e.target.value))}
+                        className={inputClass}
+                        aria-label="Equipo"
+                      >
+                        {equiposDelResponsable.map((e) => (
+                          <option key={e.team_id} value={e.team_id}>
+                            {e.team_name}{equiposDelResponsable.some((o) => o.team_id !== e.team_id && o.team_name === e.team_name) ? ` (${e.empresa})` : ''}{e.cargo ? ` · ${e.cargo}` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <p className="h-9 flex items-center px-3 rounded-md border border-border bg-muted/40 text-sm" data-testid="equipo-de-la-tarea">
+                        {(() => {
+                          const e = equiposDelResponsable?.find((x) => x.team_id === Number(teamId)) || equiposDelResponsable?.[0];
+                          if (e) return `${e.team_name}${e.cargo ? ` · ${e.cargo}` : ''}`;
+                          if (equiposDelResponsable) return 'Sin equipo: quien la lleva no está en ninguno';
+                          return task?.team_name || 'El de quien la lleva';
+                        })()}
+                      </p>
                     )}
                   </div>
                 )}

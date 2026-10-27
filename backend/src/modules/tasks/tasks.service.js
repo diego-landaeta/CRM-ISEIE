@@ -214,20 +214,29 @@ async function exigirCampos(task, user, p) {
 }
 
 /**
- * El equipo de una tarea: que exista, esté activo, sea de una empresa de quien
- * mira, y que sea suyo (o pueda delegar en todos).
+ * El equipo de una tarea es el de quien la lleva (Diego, 27/10/2026: «el equipo
+ * es según la persona enlazada»), no se elige aparte. Si esa persona está en
+ * varios equipos, por este orden: el que se pide (o ya tenía la tarea) si es
+ * suyo, el de la empresa del campus de la tarea, el que comparte con quien la
+ * da, o el primero. Sin equipos, ninguno.
  */
-async function validarEquipo(teamId, user, p) {
-  const equipo = await eqModel.equipoPorId(teamId);
-  if (!equipo || !equipo.is_active) throw new AppError('Ese equipo no existe o está archivado', 400, 'VALIDATION_ERROR');
-  if (!veTodoElCrm(user)) {
-    const empresas = await eqModel.empresasDeLosCampus(await ambitoDe(user));
-    if (!empresas.includes(Number(equipo.issuer_id))) throw new AppError('Ese equipo no es de tu empresa', 403, 'FORBIDDEN');
+async function equipoDelResponsable(responsableId, { preferido = null, projectId = null, quien = null } = {}) {
+  if (!responsableId || !(await eqModel.existeEquipos())) return null;
+  const suyos = (await eqModel.equiposDeLaGente([responsableId])).get(Number(responsableId)) || [];
+  if (!suyos.length) return null;
+  const ids = suyos.map((e) => e.team_id);
+  if (preferido && ids.includes(Number(preferido))) return Number(preferido);
+  if (projectId) {
+    const [empresa] = await eqModel.empresasDeLosCampus([Number(projectId)]);
+    const deEsa = suyos.find((e) => e.issuer_id === empresa);
+    if (deEsa) return deEsa.team_id;
   }
-  if (!reglas.esMando(p) && (await reglas.nivelEn(teamId, user.userId)) == null) {
-    throw new AppError('No eres de ese equipo', 403, 'FORBIDDEN');
+  if (quien && Number(quien) !== Number(responsableId)) {
+    const mios = new Set(((await eqModel.equiposDeLaGente([quien])).get(Number(quien)) || []).map((e) => e.team_id));
+    const compartido = ids.find((id) => mios.has(id));
+    if (compartido) return compartido;
   }
-  return equipo;
+  return ids[0];
 }
 
 /** El día de una fecha en la oficina: dos horas del mismo día no son un cambio. */
@@ -535,7 +544,10 @@ export async function listAssignees(user, q = {}) {
   const teamId = q.team_id ? Number(q.team_id) : null;
   const delega = teamId ? await reglas.puedeDelegarEn(teamId, user, p) : false;
   exigir(p.viewAll || p.assign || p.manage || delega, 'No tienes permiso para ver el equipo');
-  const gente = await taskModel.findAssignees(await ambitoDe(user, q), user.userId, await ambitoDe(user));
+  const lista = await taskModel.findAssignees(await ambitoDe(user, q), user.userId, await ambitoDe(user));
+  // Con sus equipos: la ficha enseña el de quien la va a llevar (27/10/2026).
+  const equiposDe = await eqModel.equiposDeLaGente(lista.map((g) => g.id));
+  const gente = lista.map((g) => ({ ...g, equipos: equiposDe.get(Number(g.id)) || [] }));
   if (!teamId) return gente;
   const niveles = await eqModel.nivelesEn(teamId, gente.map((g) => g.id));
   const mio = niveles.get(Number(user.userId))?.nivel ?? null;
@@ -560,8 +572,11 @@ export async function createTask(data, user) {
   // Decisión 3, con equipos (26/10/2026): cualquiera se crea tareas; dársela a
   // otro, solo hacia abajo en su equipo (o en todos, quien tiene «Asignar»).
   const responsable = data.assigned_to || user.userId;
-  const equipo = data.team_id && await eqModel.existeEquipos() ? await validarEquipo(data.team_id, user, p) : null;
-  if (!equipo) delete data.team_id;
+  // El equipo, el de quien la lleva (27/10/2026).
+  const teamId = await equipoDelResponsable(responsable, { preferido: data.team_id, projectId: data.project_id, quien: user.userId });
+  if (teamId) data.team_id = teamId;
+  else delete data.team_id;
+  const equipo = teamId ? { id: teamId } : null;
   await exigirAsignable(equipo?.id ?? null, user, p, responsable);
   // Decisión 4, también al crear: si no, crearla ya cerrada se saltaba la regla.
   exigir(data.status !== HECHA || p.close,
@@ -620,6 +635,19 @@ export async function updateTask(id, rawFields, user) {
   const fields = soloLoQueCambia(rawFields, currentTask);
   const cambiaResponsable = fields.assigned_to !== undefined;
   const cambiaSupervisor = fields.supervisor_id !== undefined;
+  const responsable = cambiaResponsable ? fields.assigned_to : currentTask.assigned_to;
+  // El equipo es el de quien la lleva (27/10/2026): al cambiar de responsable
+  // se recalcula, y pedir otro equipo solo vale si también es suyo.
+  let teamId = currentTask.team_id ?? null;
+  if (cambiaResponsable || fields.team_id !== undefined) {
+    teamId = await equipoDelResponsable(responsable, {
+      preferido: fields.team_id !== undefined ? fields.team_id : currentTask.team_id,
+      projectId: fields.project_id !== undefined ? fields.project_id : currentTask.project_id,
+      quien: user.userId,
+    });
+    if (teamId !== (currentTask.team_id ?? null)) fields.team_id = teamId;
+    else delete fields.team_id;
+  }
   const cambiaEquipo = fields.team_id !== undefined;
   // Guardar sin cambiar nada no es editar: se devuelve la tarea tal cual.
   if (Object.keys(fields).length === 0) return currentTask;
@@ -627,11 +655,6 @@ export async function updateTask(id, rawFields, user) {
   // quien la creó, el superadmin o quien delega en su equipo.
   await exigirCampos(currentTask, user, p);
 
-  let teamId = currentTask.team_id ?? null;
-  if (cambiaEquipo) {
-    teamId = fields.team_id ? (await validarEquipo(fields.team_id, user, p)).id : null;
-  }
-  const responsable = cambiaResponsable ? fields.assigned_to : currentTask.assigned_to;
   if (cambiaResponsable && fields.assigned_to) {
     await validarResponsable(fields.assigned_to);
     if (fields.assigned_to !== user.userId) await exigirResponsableEnAmbito(fields.assigned_to, user);
