@@ -105,7 +105,11 @@ describe('menú por perfil (#423)', () => {
     fs.mkdirSync(path.dirname(FOTO), { recursive: true });
     fs.writeFileSync(FOTO, JSON.stringify(ahora, null, 1) + '\n');
   }
-  const foto = JSON.parse(fs.readFileSync(FOTO, 'utf8'));
+  // Entradas que solo cambian de NOMBRE, no de acceso: la foto se lee con el nombre de hoy.
+  // «Mi tablero» (Diego, 26/10/2026: se entra siempre en lo suyo).
+  const RENOMBRADAS = { 'Equipo de Desarrollo › Tablero': 'Equipo de Desarrollo › Mi tablero' };
+  const foto = Object.fromEntries(Object.entries(JSON.parse(fs.readFileSync(FOTO, 'utf8')))
+    .map(([k, v]) => [k, Array.isArray(v) ? v.map((x) => RENOMBRADAS[x] || x) : v]));
 
   for (const perfil of Object.keys(PERFILES)) {
     it(`${perfil}: el mismo menú que antes, salvo lo aprobado`, () => {
@@ -115,7 +119,7 @@ describe('menú por perfil (#423)', () => {
         ...[...despues].filter((x) => !antes.has(x)).map((x) => `+ ${x}`),
         ...[...antes].filter((x) => !despues.has(x)).map((x) => `- ${x}`),
       ].sort();
-      expect(diferencias).toEqual([...(CAMBIOS_APROBADOS[perfil] || [])].sort());
+      expect(diferencias).toEqual([...(CAMBIOS_APROBADOS[perfil] || [])].map((l) => l.slice(0, 2) + (RENOMBRADAS[l.slice(2)] || l.slice(2))).sort());
     });
   }
 

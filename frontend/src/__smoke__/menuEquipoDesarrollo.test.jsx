@@ -44,3 +44,18 @@ describe('menú · equipo de desarrollo', () => {
     expect(loQueVe(['gestor'], [])).not.toContain('/meta-ads');
   });
 });
+
+describe('«Mi tablero» (Diego, 26/10/2026)', () => {
+  it('la entrada del menú se llama «Mi tablero»', () => {
+    const entrada = NAV_SECTIONS.flatMap((s) => s.items).find((i) => i.to === '/tareas');
+    expect(entrada.label).toBe('Mi tablero');
+  });
+
+  it('se entra siempre en «Mi tablero», que pide lo suyo (lleva, supervisa o creó), sea quien sea', async () => {
+    const { VISTA_INICIAL, filtroDeVista } = await import('@/modules/tasks/lib/taskUi');
+    expect(VISTA_INICIAL).toBe('mio');
+    expect(filtroDeVista('mio')).toEqual({ mias: true });
+    expect(filtroDeVista('equipo')).toEqual({});
+    expect(filtroDeVista(7)).toEqual({ assigned_to: 7 });
+  });
+});
