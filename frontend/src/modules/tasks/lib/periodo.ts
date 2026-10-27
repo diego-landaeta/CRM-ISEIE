@@ -86,20 +86,38 @@ export function entraEnPeriodo(
   return t.status !== 'hecha' && diaEnOficina(t.created_at) <= r.hasta;
 }
 
+/**
+ * Si una tarea viene de antes del periodo (Diego, 27/10/2026: «si la tarea no
+ * está cerrada en un mes, pasa al siguiente mes»): sigue abierta y se creó
+ * antes de que empezara. Devuelve el mes de donde viene («septiembre», o
+ * «septiembre de 2025» si es de otro año), o null.
+ */
+export function vieneDeAntes(
+  t: Pick<Task, 'created_at' | 'status'>,
+  r: Rango | null
+): string | null {
+  if (!r || t.status === 'hecha') return null;
+  const creada = diaEnOficina(t.created_at);
+  if (creada >= r.desde) return null;
+  const otroAno = creada.slice(0, 4) !== r.desde.slice(0, 4);
+  return fmt(creada, otroAno ? { month: 'long', year: 'numeric' } : { month: 'long' });
+}
+
 /** Lo que dice la línea de debajo de los filtros. */
 export function resumenDelPeriodo(
   tasks: ReadonlyArray<Pick<Task, 'created_at' | 'completed_at' | 'due_date' | 'status'>>,
   r: Rango | null
-): { total: number; creadas: number; terminadas: number; vencen: number } {
+): { total: number; creadas: number; terminadas: number; vencen: number; deAntes: number } {
   const lista = tasks.filter((t) => entraEnPeriodo(t, r));
   if (!r) {
-    return { total: lista.length, creadas: lista.length, terminadas: lista.filter((t) => t.status === 'hecha').length, vencen: 0 };
+    return { total: lista.length, creadas: lista.length, terminadas: lista.filter((t) => t.status === 'hecha').length, vencen: 0, deAntes: 0 };
   }
   return {
     total: lista.length,
     creadas: lista.filter((t) => dentro(t.created_at, r)).length,
     terminadas: lista.filter((t) => t.status === 'hecha' && dentro(t.completed_at, r)).length,
     vencen: lista.filter((t) => t.status !== 'hecha' && dentro(t.due_date, r)).length,
+    deAntes: lista.filter((t) => vieneDeAntes(t, r) !== null).length,
   };
 }
 
@@ -112,6 +130,7 @@ export function textoDelPeriodo(tipo: TipoPeriodo, rango: Rango | null, tasks: P
   if (!rango) return r.terminadas ? `${cabeza}: ${plural(r.terminadas, 'terminada', 'terminadas')}` : cabeza;
   const partes = [plural(r.creadas, 'creada', 'creadas'), plural(r.terminadas, 'terminada', 'terminadas')];
   if (r.vencen) partes.push(plural(r.vencen, 'vence', 'vencen'));
+  if (r.deAntes) partes.push(plural(r.deAntes, 'sin cerrar de antes', 'sin cerrar de antes'));
   return `${cabeza}: ${partes.join(', ')}`;
 }
 

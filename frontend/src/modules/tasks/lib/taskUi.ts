@@ -183,8 +183,22 @@ export const OPCIONES_VER: ReadonlyArray<{ value: VerTablero; label: string }> =
   { value: 'todo', label: 'Todo' },
 ];
 
-/** Se entra siempre en «Mis tareas», sea quien sea (Diego, 26/10/2026). */
+/** Se entra en «Mis tareas» (Diego, 26/10/2026)… */
 export const VISTA_INICIAL: VerTablero = 'mias';
+
+/**
+ * …salvo admin y superadmin, que entran en «Todo» del mes en curso (Diego,
+ * 27/10/2026: «admin y super admin ven todos por defecto del mes»). El resto,
+ * «Mis tareas» de todas las fechas. No se recuerda la última elección.
+ */
+export function vistaInicialDe(
+  user: { role?: string | null; roles_extra?: ReadonlyArray<string> | null } | null | undefined
+): { ver: VerTablero; periodo: 'todo' | 'mes' } {
+  const roles = [user?.role, ...(user?.roles_extra || [])];
+  return roles.some((r) => r === 'admin' || r === 'superadmin')
+    ? { ver: 'todo', periodo: 'mes' }
+    : { ver: VISTA_INICIAL, periodo: 'todo' };
+}
 
 /** Lo que pide cada «Ver» al servidor. */
 export function filtroDeVista(ver: VerTablero): { ver: VerTablero } {
