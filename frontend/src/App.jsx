@@ -96,6 +96,8 @@ const McpPage = lazy(() => import('./modules/mcp/pages/McpPage'));
 const ConnectorsPage = lazy(() => import('./modules/connectors/pages/ConnectorsPage'));
 // Conexión → Webhook de transferencias (Diego, 15/10), como en MultiCRM.
 const WebhookTransferenciasPage = lazy(() => import('./modules/webhooks-salientes/pages/WebhookTransferenciasPage'));
+// Conexión → Asignación de leads por actividad (CRM#513, 27/10/2026).
+const AsignacionLeadsPage = lazy(() => import('./modules/asignacion/pages/AsignacionLeadsPage'));
 const AccountsPayablePage = lazy(() => import('./modules/accounts-payable/pages/AccountsPayablePage'));
 const PayrollPage = lazy(() => import('./modules/payroll/pages/PayrollPage'));
 const DocumentsPage = lazy(() => import('./modules/documents/pages/DocumentsPage'));
@@ -148,6 +150,7 @@ const ROUTE_TITLES = {
   '/conexion/mcp':                    'MCP',
   '/conexion/conectores':             'Conectores',
   '/conexion/webhook-transferencias': 'Webhook de transferencias',
+  '/conexion/asignacion-leads':       'Asignación de leads',
   '/matriculas/certificaciones':      'Certificaciones',
   '/matriculas/diplomas':            'Diplomas',
   '/forms':                           'Formularios',
@@ -287,6 +290,8 @@ function App() {
           <Route path="/conexion/conectores" element={<ConnectorsPage />} />
           {/* Conexión → Webhook de transferencias. Solo super admin y admin: lo corta el servidor. */}
           <Route path="/conexion/webhook-transferencias" element={<WebhookTransferenciasPage />} />
+          {/* Conexión → Asignación de leads por actividad (CRM#513). Solo super admin y admin: lo corta el servidor. */}
+          <Route path="/conexion/asignacion-leads" element={<AsignacionLeadsPage />} />
           {/* Certifex vive dentro de Matrículas (Diego, 30/09). */}
           <Route path="/matriculas/certificaciones" element={<MatriculasPage />} />
           {/* Diplomas (#272): las solicitudes desde Moodle y los diplomas emitidos. */}
