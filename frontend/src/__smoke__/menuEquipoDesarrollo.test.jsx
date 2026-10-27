@@ -51,9 +51,14 @@ describe('«Mi tablero» (Diego, 26/10/2026)', () => {
     expect(entrada.label).toBe('Mi tablero');
   });
 
-  it('se entra siempre en «Mis tareas», que pide lo suyo (lleva, supervisa o creó), sea quien sea', async () => {
-    const { VISTA_INICIAL, filtroDeVista, OPCIONES_VER } = await import('@/modules/tasks/lib/taskUi');
+  it('se entra en «Mis tareas», que pide lo suyo (lleva, supervisa o creó); admin y superadmin, «Todo» del mes', async () => {
+    const { VISTA_INICIAL, filtroDeVista, OPCIONES_VER, vistaInicialDe } = await import('@/modules/tasks/lib/taskUi');
     expect(VISTA_INICIAL).toBe('mias');
+    expect(vistaInicialDe({ role: 'colaborador' })).toEqual({ ver: 'mias', periodo: 'todo' });
+    expect(vistaInicialDe({ role: 'gestor', roles_extra: ['tutor'] })).toEqual({ ver: 'mias', periodo: 'todo' });
+    expect(vistaInicialDe({ role: 'admin' })).toEqual({ ver: 'todo', periodo: 'mes' });
+    expect(vistaInicialDe({ role: 'superadmin', roles_extra: ['colaborador', 'soporte'] })).toEqual({ ver: 'todo', periodo: 'mes' });
+    expect(vistaInicialDe(null)).toEqual({ ver: 'mias', periodo: 'todo' });
     expect(filtroDeVista('mias')).toEqual({ ver: 'mias' });
     expect(filtroDeVista('equipo')).toEqual({ ver: 'equipo' });
     expect(filtroDeVista('todo')).toEqual({ ver: 'todo' });

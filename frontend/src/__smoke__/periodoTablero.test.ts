@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  entraEnPeriodo, etiquetaDePeriodo, fechaCorta, moverReferencia, rangoDePeriodo, resumenDelPeriodo, textoDelPeriodo,
+  entraEnPeriodo, etiquetaDePeriodo, fechaCorta, moverReferencia, rangoDePeriodo, resumenDelPeriodo, textoDelPeriodo, vieneDeAntes,
 } from '@/modules/tasks/lib/periodo';
 
 // El periodo del tablero (Diego, 27/10/2026: «vistas por día, semana y mes»).
@@ -75,15 +75,45 @@ describe('el texto de debajo de los filtros', () => {
     { created_at: '2026-10-01T09:00:00Z', completed_at: null, due_date: '2026-10-30T22:59:00Z', status: 'en_curso' },
   ];
 
-  it('cuenta las creadas, las terminadas y las que vencen', () => {
-    expect(resumenDelPeriodo(tareas, semana)).toEqual({ total: 4, creadas: 2, terminadas: 2, vencen: 1 });
+  it('cuenta las creadas, las terminadas, las que vencen y las sin cerrar de antes', () => {
+    expect(resumenDelPeriodo(tareas, semana)).toEqual({ total: 4, creadas: 2, terminadas: 2, vencen: 1, deAntes: 1 });
     expect(textoDelPeriodo('semana', semana, tareas, HOY))
-      .toBe('Semana del 26 oct al 1 nov · 4 tareas: 2 creadas, 2 terminadas, 1 vence');
+      .toBe('Semana del 26 oct al 1 nov · 4 tareas: 2 creadas, 2 terminadas, 1 vence, 1 sin cerrar de antes');
   });
 
   it('con «Todo», cuántas hay y cuántas están terminadas', () => {
     expect(textoDelPeriodo('todo', null, tareas, HOY)).toBe('Todas las fechas · 4 tareas: 2 terminadas');
     expect(textoDelPeriodo('todo', null, [], HOY)).toBe('Todas las fechas · 0 tareas');
+  });
+});
+
+// Diego, 27/10/2026: «si la tarea no está cerrada en un mes, pasa al siguiente mes».
+describe('las tareas sin cerrar pasan al mes siguiente', () => {
+  const noviembre = rangoDePeriodo('mes', '2026-11-05');
+  const octubre = rangoDePeriodo('mes', '2026-10-05');
+
+  it('abierta de octubre: sale en noviembre y dice de dónde viene', () => {
+    const t = { created_at: '2026-10-10T09:00:00Z', completed_at: null, due_date: null, status: 'en_curso' };
+    expect(entraEnPeriodo(t, noviembre)).toBe(true);
+    expect(vieneDeAntes(t, noviembre)).toBe('octubre');
+    expect(vieneDeAntes(t, octubre)).toBeNull();
+  });
+  it('cerrada en octubre: ya no pasa a noviembre', () => {
+    const t = { created_at: '2026-10-10T09:00:00Z', completed_at: '2026-10-20T09:00:00Z', due_date: null, status: 'hecha' };
+    expect(entraEnPeriodo(t, noviembre)).toBe(false);
+    expect(vieneDeAntes(t, noviembre)).toBeNull();
+  });
+  it('cerrada en noviembre aunque se creara en octubre: sale en noviembre, sin «viene de»', () => {
+    const t = { created_at: '2026-10-10T09:00:00Z', completed_at: '2026-11-03T09:00:00Z', due_date: null, status: 'hecha' };
+    expect(entraEnPeriodo(t, noviembre)).toBe(true);
+    expect(vieneDeAntes(t, noviembre)).toBeNull();
+  });
+  it('de otro año, con el año', () => {
+    const enero = rangoDePeriodo('mes', '2027-01-10');
+    expect(vieneDeAntes({ created_at: '2026-12-15T09:00:00Z', status: 'por_hacer' }, enero)).toBe('diciembre de 2026');
+  });
+  it('sin periodo, nunca «viene de»', () => {
+    expect(vieneDeAntes({ created_at: '2026-01-01T09:00:00Z', status: 'por_hacer' }, null)).toBeNull();
   });
 });
 
