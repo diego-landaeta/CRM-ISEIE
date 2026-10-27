@@ -159,7 +159,7 @@ const joins = (hay, eq = false) => `
 
 export async function findTasks({
   assigned_to, project_id, external_project_id, area_id, status, priority, search, tag, vencidas, desde, hasta,
-  incluir_archivadas = false, orden = 'tablero', ambito = null, yo = null, supervisor_id = null, tambien_supervisa = null,
+  periodo_desde, periodo_hasta, incluir_archivadas = false, orden = 'tablero', ambito = null, yo = null, supervisor_id = null, tambien_supervisa = null,
   team_id, visibles_para = null, mias_de = null,
 }) {
   const { sup: hay, eq } = await extras();
@@ -226,6 +226,18 @@ export async function findTasks({
     params.push(hasta, zona);
     conditions.push(`t.due_date < (($${params.length - 1}::date + 1)::timestamp AT TIME ZONE $${params.length})`);
   }
+  // El periodo (Diego, 27/10/2026: «vistas por día, semana y mes»). Entra la
+  // tarea que se creó, se terminó o vence dentro, y la que sigue abierta y se
+  // creó antes de que acabe (lo que está en marcha ese día, esa semana o ese mes).
+  if (periodo_desde && periodo_hasta) {
+    params.push(periodo_desde, periodo_hasta, zona);
+    const n = params.length;
+    const ini = `($${n - 2}::date::timestamp AT TIME ZONE $${n})`;
+    const fin = `(($${n - 1}::date + 1)::timestamp AT TIME ZONE $${n})`;
+    const dentro = (col) => `(${col} >= ${ini} AND ${col} < ${fin})`;
+    conditions.push(`(${dentro('t.created_at')} OR ${dentro('t.completed_at')} OR ${dentro('t.due_date')}
+      OR (t.status <> 'hecha' AND t.created_at < ${fin}))`);
+  }
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
@@ -280,10 +292,20 @@ export async function personaEnAmbito(personaId, ambito, yo) {
 
 export async function findTaskById(id) {
   const { sup: hay, eq } = await extras();
+  // Quién la terminó (27/10/2026): quien la pasó a «Hecha» por última vez
+  // —arrastrándola o aprobándola—, del historial. Si nació ya hecha, quien la creó.
   const { rows } = await query(
     `SELECT ${columnas(hay, eq)},
-       (SELECT cm.content FROM task_comments cm WHERE cm.task_id = t.id ORDER BY cm.created_at DESC, cm.id DESC LIMIT 1) AS last_comment
-     ${joins(hay, eq)} WHERE t.id = $1`,
+       (SELECT cm.content FROM task_comments cm WHERE cm.task_id = t.id ORDER BY cm.created_at DESC, cm.id DESC LIMIT 1) AS last_comment,
+       CASE WHEN t.status = 'hecha' THEN COALESCE(cierre.user_id, t.created_by) END AS completed_by,
+       CASE WHEN t.status = 'hecha' THEN COALESCE(u_cierre.nombre, u_create.nombre) END AS completed_by_name
+     ${joins(hay, eq)}
+     LEFT JOIN LATERAL (
+       SELECT te.user_id FROM task_events te
+        WHERE te.task_id = t.id AND te.event_type = 'status_changed' AND te.details->>'new_status' = 'hecha'
+        ORDER BY te.created_at DESC, te.id DESC LIMIT 1) cierre ON t.status = 'hecha'
+     LEFT JOIN users u_cierre ON u_cierre.id = cierre.user_id
+     WHERE t.id = $1`,
     [id]
   );
   return rows[0] || null;

@@ -3,7 +3,7 @@ import type { PasoRecorrido } from '@/shared/components/ui/RecorridoGuiado';
 /**
  * El recorrido del tablero del equipo (Diego, 12/10: «un tutorial guiado, para verlo y
  * todo»). Cada paso señala algo de la pantalla con `data-recorrido`; lo que esa persona
- * no tiene (un colaborador no ve «Todo el equipo» ni «Configurar tablero») se salta solo.
+ * no tiene (un colaborador no ve las cifras del equipo ni «Configurar tablero») se salta solo.
  */
 export const CLAVE_RECORRIDO_TABLERO = 'tablero-recorrido-visto-v1';
 
@@ -13,24 +13,24 @@ export const PASOS_TABLERO: PasoRecorrido[] = [
     texto: 'Aquí van las tareas del equipo —web, SEO, Meta, diseño, Moodle—, cada una con su responsable. Avanzan de «Por hacer» a «En curso», «En revisión» y «Hecha». Solo lo usan superadmin, admin y colaboradores: las gestoras no lo ven. En {pasos} pasos te enseño cada cosa.',
   },
   {
+    donde: '[data-recorrido="filtros"]',
+    titulo: 'Un solo tablero, con filtros',
+    texto: 'Todas las tareas van en el mismo tablero; lo que cambia es lo que filtras: persona, equipo, área, etiqueta, prioridad, campus o proyecto propio. Se combinan, se ven debajo y se quitan con «Quitar filtros».',
+  },
+  {
     donde: '[data-recorrido="vista"]',
-    titulo: 'Qué tablero ves',
-    texto: '«Mi tablero» son tus tareas. Si ves a todo el equipo, aquí cambias a «Todo el equipo» o al tablero de una persona concreta. «Por revisar» sale si puedes aprobar tareas.',
+    titulo: 'Qué ves',
+    texto: '«Mis tareas» es lo que llevas, supervisas o creaste. «Mi equipo» suma lo de tus equipos, y «Todo», lo que tu permiso te deje ver.',
+  },
+  {
+    donde: '[data-recorrido="periodo"]',
+    titulo: 'Por día, semana o mes',
+    texto: 'Hoy, Esta semana o Este mes, con las flechas para ir al anterior o al siguiente, o una fecha. Entra lo que se creó, se terminó o vence en ese periodo, y lo que sigue abierto. Debajo, cuántas se crearon y cuántas se terminaron.',
   },
   {
     donde: '[data-recorrido="metricas"]',
-    titulo: 'Cómo va cada uno',
-    texto: 'Por persona o por área: cuántas tareas tiene abiertas, cuántas vencidas y cuántas cerró esta semana. Pulsa a alguien para abrir su tablero.',
-  },
-  {
-    donde: '[data-recorrido="areas"]',
-    titulo: 'Las áreas',
-    texto: 'Meta, WEB · WordPress · SEO, Diseño, Campus y Moodle… Pulsa una para ver solo sus tareas. Las áreas se crean en «Configurar tablero».',
-  },
-  {
-    donde: '[data-recorrido="filtros"]',
-    titulo: 'Buscar y filtrar',
-    texto: 'Busca por título o descripción, y filtra por campus, proyecto propio (Opynio, YourCVPassport…), prioridad, etiqueta o fechas; «Solo vencidas» deja lo que ya pasó de fecha. Los campus que salen son los tuyos, agrupados por empresa.',
+    titulo: 'Cifras del equipo',
+    texto: 'Por persona o por área: cuántas tareas tiene abiertas, cuántas vencidas y cuántas cerró esta semana. Pulsa a alguien para filtrar el tablero por esa persona.',
   },
   {
     donde: '[data-recorrido="columnas"]',
@@ -40,7 +40,7 @@ export const PASOS_TABLERO: PasoRecorrido[] = [
   {
     donde: '[data-recorrido="tarjeta"]',
     titulo: 'Una tarea',
-    texto: 'Cada tarjeta dice su prioridad, su fecha límite, de quién es y cuánto lleva de su lista. Ábrela para ver y cambiar todo: descripción, lista de comprobación, comentarios, enlaces, etiquetas y el historial de quién hizo qué.',
+    texto: 'Cada tarjeta dice su prioridad, cuándo se creó y cuándo se terminó, su fecha límite, de quién es y cuánto lleva de su lista. Ábrela para ver y cambiar todo: descripción, lista de comprobación, comentarios, enlaces, etiquetas y el historial de quién hizo qué.',
   },
   {
     donde: '[data-recorrido="nueva"]',
