@@ -411,28 +411,28 @@ export default function TasksPage() {
         actions={(
           <div className="flex flex-wrap items-center gap-2">
             {enRevisar ? (
-              <Button variant="outline" size="sm" className="h-9" onClick={() => navigate('/tareas')}>
-                <ArrowLeft size={15} className="mr-1.5" /> Volver al tablero
+              <Button variant="outline" size="sm" className="h-9" onClick={() => navigate('/tareas')} aria-label="Volver al tablero">
+                <ArrowLeft size={15} className="sm:mr-1.5" /> <span className="hidden sm:inline">Volver al tablero</span>
               </Button>
             ) : (canClose || porRevisar > 0) && (
-              <Button variant="outline" size="sm" className="h-9" onClick={() => navigate('/tareas/revisar')}>
-                <ListChecks size={15} className="mr-1.5" /> Por revisar ({porRevisar})
+              <Button variant="outline" size="sm" className="h-9" onClick={() => navigate('/tareas/revisar')} aria-label={`Por revisar (${porRevisar})`}>
+                <ListChecks size={15} className="sm:mr-1.5" /> <span className="hidden sm:inline">Por revisar </span>({porRevisar})
               </Button>
             )}
             {canManage && (
-              <Button variant="outline" size="sm" className="h-9" onClick={() => navigate('/tareas/configurar')} data-recorrido="configurar">
-                <SlidersHorizontal size={15} className="mr-1.5" /> Configurar tablero
+              <Button variant="outline" size="sm" className="h-9" onClick={() => navigate('/tareas/configurar')} data-recorrido="configurar" aria-label="Configurar tablero">
+                <SlidersHorizontal size={15} className="sm:mr-1.5" /> <span className="hidden sm:inline">Configurar tablero</span>
               </Button>
             )}
-            <Button variant="outline" size="sm" className="h-9" onClick={() => setRecorrido(true)} title="Un recorrido por el tablero, paso a paso">
-              <Compass size={15} className="mr-1.5" /> Recorrido
+            <Button variant="outline" size="sm" className="h-9" onClick={() => setRecorrido(true)} title="Un recorrido por el tablero, paso a paso" aria-label="Recorrido">
+              <Compass size={15} className="sm:mr-1.5" /> <span className="hidden sm:inline">Recorrido</span>
             </Button>
             <Button variant="outline" size="icon" className="h-9 w-9" onClick={refrescar} aria-label="Recargar">
               <ArrowsClockwise size={16} />
             </Button>
             {canCreate && !enRevisar && (
               <Button size="sm" className="h-9" onClick={() => setNueva({ status: 'por_hacer' })} data-recorrido="nueva">
-                <Plus size={15} weight="bold" className="mr-1.5" /> Nueva tarea
+                <Plus size={15} weight="bold" className="mr-1.5" /> <span className="hidden sm:inline">Nueva tarea</span><span className="sm:hidden">Nueva</span>
               </Button>
             )}
           </div>
@@ -534,13 +534,15 @@ export default function TasksPage() {
                   </Button>
                 </>
               )}
-              <input type="date" aria-label="Ir a la fecha" value={tipoPeriodo === 'todo' ? '' : referencia}
-                onChange={(e) => {
-                  if (!e.target.value) return;
-                  setReferencia(e.target.value);
-                  if (tipoPeriodo === 'todo') setTipoPeriodo('dia');
-                }}
-                className={`${inputClass} w-36 h-8`} />
+              <div className="w-36">
+                <input type="date" aria-label="Ir a la fecha" value={tipoPeriodo === 'todo' ? '' : referencia}
+                  onChange={(e) => {
+                    if (!e.target.value) return;
+                    setReferencia(e.target.value);
+                    if (tipoPeriodo === 'todo') setTipoPeriodo('dia');
+                  }}
+                  className={`${inputClass} !h-8`} />
+              </div>
             </div>
           </div>
 
