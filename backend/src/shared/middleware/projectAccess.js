@@ -24,3 +24,5 @@ export async function projectAccess(req, _res, next) {
   req.projectId = Number(projectId);
   next();
 }
+// Alcance, no permiso (#423): dice SOBRE QUÉ campus, no QUÉ se puede hacer.
+projectAccess.regla = { tipo: 'alcance', nombre: 'projectAccess' };

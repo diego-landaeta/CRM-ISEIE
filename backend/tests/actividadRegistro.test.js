@@ -114,6 +114,10 @@ vi.mock('../src/shared/config/db.js', () => ({
   getClient: async () => ({ query: (...a) => db.query(...a), release: () => {} }),
   default: { query: (...a) => db.query(...a) },
 }));
+// Los permisos salen del catálogo (#230, gemela de CRM#423): sin base, el
+// resolver de verdad con la persona que firma el token.
+vi.mock('../src/modules/permissions/permissions.service.js', () => import('./helpers/permisosSinBase.js'));
+const { registrar } = await import('./helpers/permisosSinBase.js');
 
 const userModel = await import('../src/modules/users/user.model.js');
 const { default: usuarios } = await import('../src/modules/users/index.js');
@@ -125,7 +129,7 @@ app.use(usuarios.prefix, usuarios.router);
 app.use(errorHandler);
 const request = supertest(app);
 
-const como = (id, role) => ({ Authorization: `Bearer ${jwt.sign({ userId: id, role }, process.env.JWT_SECRET, { expiresIn: '5m' })}` });
+const como = (id, role) => ({ Authorization: `Bearer ${jwt.sign(registrar({ userId: id, role }), process.env.JWT_SECRET, { expiresIn: '5m' })}` });
 const ids = (r) => r.body.data.map((f) => f.id);
 const consultasDelRegistro = () => db.estado.sql.filter((q) => /FROM user_activity_log/.test(q.sql));
 

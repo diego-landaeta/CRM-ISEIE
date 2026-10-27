@@ -9,6 +9,7 @@ import {
   type Convocatoria, type Embudo, type Pendiente,
 } from '../api/convocatorias.api';
 import { tramosDelEmbudo, hayEmbudo } from '../lib/ofrecimiento';
+import usePermission from '@/shared/hooks/usePermission';
 
 /**
  * Convocatorias: las campañas, el embudo y a quién hay que contestarle hoy (#86).
@@ -45,6 +46,8 @@ function Cifra({ etiqueta, valor, pie }: { etiqueta: string; valor: string; pie?
 export default function ConvocatoriasPage() {
   const { activeProject, user } = useAuth();
   const projectId = activeProject?.id ?? null;
+  // Lo que dice el servidor (#423): sale si salía antes Y tiene el permiso.
+  const { can } = usePermission();
   const esAdmin = user?.role === 'admin' || user?.role === 'superadmin';
 
   const [campanas, setCampanas] = useState<Convocatoria[]>([]);
@@ -240,7 +243,7 @@ export default function ConvocatoriasPage() {
               <input type="checkbox" checked={verInactivas} onChange={(e) => setVerInactivas(e.target.checked)} />
               Ver también las cerradas
             </label>
-            {esAdmin && !creando && (
+            {esAdmin && can('convocatorias.create') && !creando && (
               <button type="button" className={boton} onClick={() => { setCreando(true); setFallo(null); }}>
                 <Plus size={13} weight="bold" /> Nueva
               </button>

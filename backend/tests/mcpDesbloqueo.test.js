@@ -483,6 +483,8 @@ describe('una gestora con acceso, en «Tu URL personal»', () => {
   it('ve el estado de su URL y la desbloquea con el botón', async () => {
     const G = await persona('GESTORA', 'gestor');
     await q(`UPDATE users SET usa_mcp = true WHERE id = $1`, [G.id]);
+    // La casilla de antes es la excepción «Usar el MCP» (#423, migración 222).
+    await q(`INSERT INTO user_permission_overrides (user_id, resource, action, allowed) VALUES ($1, 'mcp', 'usar', true)`, [G.id]);
     const t = await token(G, 'Portátil');
     const suya = async () => (await panelDe(G)).tokens.find((x) => x.id === t.id).codigo;
     expect((await llamar(t.token, 'mis_proyectos')).ok).toBe(false);

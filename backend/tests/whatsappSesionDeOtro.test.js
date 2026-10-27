@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+// Los permisos salen del catálogo (#423): sin base, el resolver de verdad con
+// las personas de cada `req` (tests/helpers/permisosSinBase.js).
+vi.mock('../src/modules/permissions/permissions.service.js', () => import('./helpers/permisosSinBase.js'));
+const { registrar } = await import('./helpers/permisosSinBase.js');
+
 // Quien puede abrir el WhatsApp de otra persona.
 //
 // Es la regla mas delicada del modulo: al otro lado hay conversaciones privadas
@@ -56,11 +61,12 @@ vi.mock('../src/modules/whatsapp/evolution.client.js', () => ({
 }));
 
 const { chats, usuarios } = await import('../src/modules/whatsapp/chat.controller.js');
-const { olvidarTodo } = await import('../src/modules/whatsapp/usaWhatsapp.js');
+// Los permisos se recuerdan medio minuto (también «Usar su WhatsApp», #423).
+const { olvidarPermisos: olvidarTodo } = await import('../src/modules/permissions/permissions.service.js');
 const modelo = await import('../src/modules/whatsapp/chat.model.js');
 
 function pedir(user, query = {}) {
-  const req = { user, query, body: {} };
+  const req = { user: registrar(user), query, body: {} };
   const res = { json: vi.fn((x) => x) };
   const next = vi.fn();
   return { req, res, next };
@@ -87,7 +93,7 @@ describe('de quien es la sesion que se abre', () => {
     expect(res.json).not.toHaveBeenCalled();
   });
 
-  it('pedir la suya por su propio identificador vale, y la base se toca UNA vez', async () => {
+  it('pedir la suya por su propio identificador vale, y la base no se toca', async () => {
     // Antes esto exigia CERO consultas, y era la propiedad correcta: el rol
     // viaja en el testigo de sesion y con eso bastaba.
     //
@@ -95,21 +101,25 @@ describe('de quien es la sesion que se abre', () => {
     // no puede ir en el testigo, que dura ocho horas: apagar a alguien tiene que
     // notarse hoy, no manana. Lo que se sigue exigiendo es lo que motivaba la
     // prueba: que el chat, que pregunta cada tres segundos, NO se traiga una
-    // consulta por vuelta. Se recuerda medio minuto (`usaWhatsapp.js`).
+    // consulta por vuelta.
+    //
+    // Desde #423 la casilla es el permiso «Usar su WhatsApp» del catálogo, y el
+    // chat lo lee del mapa recordado medio minuto (`explicarPermisosRecordados`,
+    // permissions.service.js): aquí, ninguna consulta propia.
     for (let i = 0; i < 3; i++) {
       const { req, res, next } = pedir({ userId: 7, role: 'gestor' }, { usuarioId: '7' });
       await chats(req, res, next);
       expect(next).not.toHaveBeenCalled();
     }
-    expect(consultas.length).toBe(1);
-    expect(consultas[0].sql).toContain('usa_whatsapp');
+    expect(consultas.length).toBe(0);
   });
 
   it('con la casilla apagada no se abre ni la suya', async () => {
     // Apagar no es solo dejar de salir en la lista: es dejar de usarlo. Si solo
     // se escondiera, la gestora seguiria trabajando por una pantalla que quien
     // manda cree cerrada.
-    const { req, res, next } = pedir({ userId: 95, role: 'gestor' });
+    // La casilla apagada es ahora «Usar su WhatsApp» quitado (#423).
+    const { req, res, next } = pedir({ userId: 95, role: 'gestor', excepciones: { 'whatsapp.usar': false } });
     await chats(req, res, next);
     const err = next.mock.calls[0][0];
     expect(err.statusCode).toBe(403);

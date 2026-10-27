@@ -18,6 +18,7 @@ import {
   cobraDesdeActual, hayQueMandarCobraDesde, confirmacionCobraDesde, avisoCobraDesde,
   campusDelRechazo, formacionesConCampus, type CampusDeLaFormacion, type FormacionConCampus,
 } from '../lib/colaboraciones';
+import usePermission from '@/shared/hooks/usePermission';
 
 // Tutores y sus colaboraciones.
 //
@@ -72,11 +73,13 @@ export default function TutoresPage() {
     activeProject: { id: number } | null;
     projects: Array<{ id: number; nombre: string }>;
   };
-  const puede = ['admin', 'superadmin'].includes(user?.role || '') || user?.gestor_colaboraciones === true;
+  // «Gestionar colaboraciones» del catálogo (#423; antes, admin o la casilla).
+  const { can } = usePermission();
+  const puede = can('tutores.gestionar');
   // El correo de un tutor, solo el super admin (#248). La contraseña, también el
   // admin (Diego, 09/10, #246).
-  const esSuperadmin = user?.role === 'superadmin';
-  const puedeContrasena = esSuperadmin || user?.role === 'admin';
+  const esSuperadmin = user?.role === 'superadmin' && can('tutores.cambiar_correo');
+  const puedeContrasena = (user?.role === 'superadmin' || user?.role === 'admin') && can('tutores.contrasena');
   const projectId = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
 
   const [tutores, setTutores] = useState<Tutor[]>([]);

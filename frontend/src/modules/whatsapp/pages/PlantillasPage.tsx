@@ -9,6 +9,7 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
 import { VARIABLES as VARIABLES_PLANTILLA } from '../lib/plantilla';
 import { whatsappApi, type PlantillaWhatsapp } from '../api/whatsapp.api';
+import usePermission from '@/shared/hooks/usePermission';
 
 /**
  * Las plantillas de WhatsApp, para CONSULTARLAS y para editarlas.
@@ -72,7 +73,9 @@ export default function PlantillasWhatsappPage() {
     activeProject: { id: number; nombre?: string } | null;
     activeIssuerId: number | null;
   };
-  const esAdmin = user?.role === 'admin' || user?.role === 'superadmin';
+  // Lo que dice el servidor (#423): sale si salía antes Y tiene el permiso.
+  const { can } = usePermission();
+  const esAdmin = (user?.role === 'admin' || user?.role === 'superadmin') && can('whatsapp.plantillas_compartidas');
   const projectId = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
   // Se LEEN las de toda la empresa; para CREAR una sigue haciendo falta un
   // campus, porque la plantilla se guarda en un proyecto concreto.

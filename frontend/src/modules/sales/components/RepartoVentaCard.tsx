@@ -4,6 +4,7 @@ import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 import { useAuth } from '@/contexts/AuthContext';
 import DialogoRepartoVenta, { eur, type Reparto } from './DialogoRepartoVenta';
+import usePermission from '@/shared/hooks/usePermission';
 
 /**
  * «Esta venta la atendimos entre dos», en la ficha de la venta.
@@ -22,7 +23,9 @@ import DialogoRepartoVenta, { eur, type Reparto } from './DialogoRepartoVenta';
  */
 export default function RepartoVentaCard({ conversionId }: { conversionId: number | string }) {
   const { user } = useAuth();
-  const puedeRepartir = user?.role === 'admin' || user?.role === 'superadmin';
+  // Lo que dice el servidor (#423): sale si salía antes Y tiene el permiso.
+  const { can } = usePermission();
+  const puedeRepartir = (user?.role === 'admin' || user?.role === 'superadmin') && can('conversions.reparto');
 
   const [data, setData] = useState<Reparto | null>(null);
   const [cargando, setCargando] = useState(true);

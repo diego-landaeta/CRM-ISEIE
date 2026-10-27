@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { verifyToken, roleGuard } from '../../shared/middleware/auth.js';
-import { rolOPermiso } from '../../shared/middleware/permissions.js';
+import { verifyToken } from '../../shared/middleware/auth.js';
+import { puede } from '../../shared/middleware/permissions.js';
 import { veTodoElCrm, campusDeLaPersona } from '../../shared/utils/ambito.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import * as ctrl from './meta-ads.controller.js';
@@ -8,8 +8,9 @@ import * as ctrl from './meta-ads.controller.js';
 const router = Router();
 router.use(verifyToken);
 
-// Configurar (conectar, token, sincronizar, asociar): admin/superadmin, como siempre.
-const soloAdmin = roleGuard('admin', 'superadmin');
+// Configurar (conectar, token, sincronizar, asociar): «Conectar y sincronizar Meta Ads»
+// del catálogo (#230; de serie admin, soporte y el superadmin, como el roleGuard de antes).
+const soloAdmin = puede('meta_ads.edit');
 
 /**
  * VER Meta Ads (26/10/2026, Diego: «en Meta tendrán acceso Ruth, Julián, Jesús,
@@ -21,7 +22,8 @@ const soloAdmin = roleGuard('admin', 'superadmin');
  * Antes no se miraba —cualquier admin podía pedir la publicidad de otra
  * empresa cambiando el número—. Superadmin y soporte ven todo el CRM.
  */
-const puedeVer = rolOPermiso(['admin', 'superadmin', 'soporte'], 'meta_ads', 'view');
+// «Ver Meta Ads» del catálogo (#230): de serie admin y soporte; a otros, por excepción.
+const puedeVer = puede('meta_ads.view');
 async function deSusCampus(req, _res, next) {
   try {
     if (veTodoElCrm(req.user)) return next();
@@ -32,6 +34,8 @@ async function deSusCampus(req, _res, next) {
     next();
   } catch (err) { next(err); }
 }
+// Alcance, no permiso (#230): dice SOBRE QUÉ campus, no QUÉ se puede hacer.
+deSusCampus.regla = { tipo: 'alcance', nombre: 'deSusCampus' };
 const ver = [puedeVer, deSusCampus];
 const configurar = [soloAdmin, deSusCampus];
 

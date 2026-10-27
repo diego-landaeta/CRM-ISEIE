@@ -164,3 +164,79 @@ export async function getUserCustomRoleId(userId) {
   );
   return rows[0]?.custom_role_id ?? null;
 }
+
+/* ─── #423 · Lo que hace falta para decidir, y el registro de cambios ─── */
+
+/**
+ * Todo lo que decide qué puede una persona, de una vez: su fila, su rol a
+ * medida, sus excepciones y lo cambiado en Roles para sus roles.
+ * `db` es `query` o un cliente de transacción (para leer lo recién escrito).
+ */
+export async function datosDePermisos(userId, db = { query }) {
+  const { rows: [u] } = await db.query(
+    `SELECT id, nombre, email, role::text AS role, COALESCE(roles_extra::text[], '{}') AS roles_extra,
+            custom_role_id, active
+       FROM users WHERE id = $1`, [userId]);
+  if (!u) return null;
+  const [cr, exc, aj] = await Promise.all([
+    u.custom_role_id
+      ? db.query('SELECT id, label, description, base_role, permissions, active FROM custom_roles WHERE id = $1', [u.custom_role_id])
+      : { rows: [] },
+    db.query('SELECT resource, action, allowed FROM user_permission_overrides WHERE user_id = $1', [userId]),
+    ajustesDeRoles(db),
+  ]);
+  const excepciones = {};
+  for (const e of exc.rows) excepciones[`${e.resource}.${e.action}`] = e.allowed;
+  return { usuario: u, customRole: cr.rows[0] || null, excepciones, ajustesRol: aj };
+}
+
+/** Todas las filas de la 197 (son pocas). Sin la tabla, ninguna. */
+export async function ajustesDeRoles(db = { query }) {
+  try {
+    const { rows } = await db.query('SELECT role, resource, action, allowed FROM role_permission_overrides');
+    return rows;
+  } catch (err) {
+    if (err.code === '42P01') return [];
+    throw err;
+  }
+}
+
+/**
+ * Un apunte en `permisos_registro` (238). Va con el cliente de la transacción
+ * del cambio: o se guardan los dos o ninguno.
+ */
+export async function registrarCambio(db, { quienId = null, destino, usuarioId = null, rol = null, customRoleId = null, clave, antes = null, despues = null, origen, motivo = null }) {
+  const texto = (v) => (v === null || v === undefined ? null : String(v));
+  await db.query(
+    `INSERT INTO permisos_registro (quien_id, destino_tipo, usuario_id, rol, custom_role_id, clave, antes, despues, origen, motivo)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+    [quienId, destino, usuarioId, rol, customRoleId, clave, texto(antes), texto(despues), origen, motivo]);
+}
+
+/** Los cambios de permisos, de una persona, de un rol o todos, los últimos primero. */
+export async function leerRegistro({ usuarioId = null, rol = null, customRoleId = null, limite = 100 } = {}) {
+  const { rows } = await query(
+    `SELECT r.id, r.cuando, r.quien_id, q.nombre AS quien_nombre, r.destino_tipo, r.usuario_id,
+            u.nombre AS usuario_nombre, r.rol, r.custom_role_id, cr.label AS custom_role_nombre,
+            r.clave, r.antes, r.despues, r.origen, r.motivo
+       FROM permisos_registro r
+       LEFT JOIN users q ON q.id = r.quien_id
+       LEFT JOIN users u ON u.id = r.usuario_id
+       LEFT JOIN custom_roles cr ON cr.id = r.custom_role_id
+      WHERE ($1::int IS NULL OR r.usuario_id = $1)
+        AND ($2::text IS NULL OR r.rol = $2)
+        AND ($3::int IS NULL OR r.custom_role_id = $3)
+      ORDER BY r.cuando DESC, r.id DESC
+      LIMIT $4`,
+    [usuarioId, rol, customRoleId, limite]);
+  return rows;
+}
+
+/** ¿Comparten algún campus activo? (lo mismo que #245 y #384) */
+export async function compartenCampus(a, b, db = { query }) {
+  const { rows } = await db.query(
+    `SELECT 1 FROM user_projects mio
+       JOIN user_projects suyo ON suyo.project_id = mio.project_id AND suyo.active
+      WHERE mio.user_id = $1 AND mio.active AND suyo.user_id = $2 LIMIT 1`, [a, b]);
+  return rows.length > 0;
+}

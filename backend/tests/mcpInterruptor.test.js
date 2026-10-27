@@ -3,6 +3,11 @@ import express from 'express';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
 
+// Los permisos salen del catálogo (#423): sin base, el resolver de verdad con
+// las personas que firman token (tests/helpers/permisosSinBase.js).
+vi.mock('../src/modules/permissions/permissions.service.js', () => import('./helpers/permisosSinBase.js'));
+const { registrar } = await import('./helpers/permisosSinBase.js');
+
 /**
  * Interruptor de emergencia del MCP (#196).
  *
@@ -20,6 +25,8 @@ const PERSONAS = {
   1: { id: 1, nombre: 'Super', role: 'superadmin', active: true },
   2: { id: 2, nombre: 'Ana', role: 'admin', active: true },
 };
+// Con sus permisos del catálogo (#423): el MCP lo usan por su rol.
+Object.values(PERSONAS).forEach((p) => registrar({ userId: p.id, role: p.role, active: p.active }));
 
 // La fila de mcp_interruptor, en memoria.
 const fila = vi.hoisted(() => ({ apagado: false, cambiado_por: null, cambiado_at: null, motivo: null }));
@@ -46,7 +53,7 @@ app.use(express.json());
 app.use(mcp.prefix, mcp.router);
 app.use(errorHandler);
 
-const jwtDe = (id) => jwt.sign({ userId: id, role: PERSONAS[id].role }, process.env.JWT_SECRET, { expiresIn: '10m' });
+const jwtDe = (id) => jwt.sign(registrar({ userId: id, role: PERSONAS[id].role }), process.env.JWT_SECRET, { expiresIn: '10m' });
 
 const llamarMcp = () => request(app).post(`/api/mcp/u/${TOKEN}`)
   .set('Accept', 'application/json, text/event-stream')

@@ -875,8 +875,8 @@ export async function cobrarProforma(invoiceId, { importe, fecha, metodo, notas,
     throw new AppError('Asóciala antes a la venta del cliente («Asociar a venta»): el cobro se apunta en la venta.',
       400, 'SIN_VENTA');
   }
-  // Los mismos que emiten desde la cola: quien lleva la facturacion.
-  if (user.role !== 'superadmin' && !(await model.esFacturaManager(user.userId))) {
+  // Los mismos que emiten desde la cola: «Emitir desde la cola» (#423).
+  if (!(await model.tieneLaClave(user.userId, 'facturas.cola'))) {
     throw new AppError('Solo quien gestiona la facturación puede pasar una proforma a factura.', 403, 'FORBIDDEN');
   }
   if (user.role === 'gestor' && !(await model.esProformaDe(user.userId, invoiceId))) {

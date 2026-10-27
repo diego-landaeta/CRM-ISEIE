@@ -3,6 +3,11 @@ import express from 'express';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
 
+// Los permisos salen del catálogo (#423): sin base, el resolver de verdad con
+// las personas que firman token (tests/helpers/permisosSinBase.js).
+vi.mock('../src/modules/permissions/permissions.service.js', () => import('./helpers/permisosSinBase.js'));
+const { registrar } = await import('./helpers/permisosSinBase.js');
+
 /*
   Egresos, igual en los dos CRM (#227). Diego, 10/10: «Egresos se empareja: la
   misma pantalla y el mismo funcionamiento en los dos CRM. Se comparan las dos
@@ -78,7 +83,7 @@ app.use(expensesModule.prefix, expensesModule.router);
 app.use(expensesModule.alias, expensesModule.router);
 app.use(errorHandler);
 
-const firmar = (user) => `Bearer ${jwt.sign(user, process.env.JWT_SECRET)}`;
+const firmar = (user) => `Bearer ${jwt.sign(registrar(user), process.env.JWT_SECRET)}`;
 const MIREIA = firmar({ userId: 34, role: 'admin' });
 const ANTONIO = firmar({ userId: 40, role: 'admin' });
 const MANUEL = firmar({ userId: 2, role: 'superadmin' });

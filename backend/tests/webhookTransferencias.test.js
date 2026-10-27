@@ -4,6 +4,11 @@ import express from 'express';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
 
+// Los permisos salen del catálogo (#423): sin base, el resolver de verdad con
+// las personas que firman token (tests/helpers/permisosSinBase.js).
+vi.mock('../src/modules/permissions/permissions.service.js', () => import('./helpers/permisosSinBase.js'));
+const { registrar } = await import('./helpers/permisosSinBase.js');
+
 /*
   Webhook de transferencias (Diego, 15/10; migración 206).
 
@@ -488,7 +493,7 @@ describe('quién puede', () => {
   // eslint-disable-next-line no-unused-vars
   app.use((err, _req, res, _next) => res.status(err.statusCode || 500).json({ success: false, error: err.message, code: err.code }));
 
-  const token = (user) => `Bearer ${jwt.sign(user, process.env.JWT_SECRET)}`;
+  const token = (user) => `Bearer ${jwt.sign(registrar(user), process.env.JWT_SECRET)}`;
   const MANUEL = { userId: 1, role: 'superadmin' };
   const ANTONIO = { userId: 20, role: 'admin' };   // CEDIA entera (campus 1 y 2)
   const BERTA = { userId: 21, role: 'admin' };     // solo el campus 1

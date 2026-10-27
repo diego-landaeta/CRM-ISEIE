@@ -1,5 +1,6 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
+import { registrar } from './helpers/permisosSinBase.js';
 
 /*
   Facturas de colaboradores (#202) · lo común de las pruebas: la API del módulo
@@ -54,6 +55,9 @@ const ROL = Object.fromEntries([
 ]);
 
 export function token(userId) {
+  // Los permisos salen del catálogo (#230, gemela de CRM#423): sin base, el
+  // resolver de verdad con la persona que firma el token (helpers/permisosSinBase.js).
+  registrar({ userId, role: ROL[userId] });
   return jwt.sign(
     { userId, email: `p${userId}@test.local`, role: ROL[userId], roles_extra: [], customRoleId: null },
     process.env.JWT_SECRET,

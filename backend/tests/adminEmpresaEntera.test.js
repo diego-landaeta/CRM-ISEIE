@@ -3,6 +3,11 @@ import express from 'express';
 import supertest from 'supertest';
 import jwt from 'jsonwebtoken';
 
+// Los permisos salen del catálogo (#423): sin base, el resolver de verdad con
+// las personas que firman token (tests/helpers/permisosSinBase.js).
+vi.mock('../src/modules/permissions/permissions.service.js', () => import('./helpers/permisosSinBase.js'));
+const { registrar } = await import('./helpers/permisosSinBase.js');
+
 /**
  * Un admin con la empresa entera, también los campus que se creen (#220).
  *
@@ -68,6 +73,16 @@ const db = vi.hoisted(() => {
     }
     if (s.startsWith('SELECT u.id, u.nombre, u.email, u.role')) {
       return { rows: estado.users.filter((u) => u.id === Number(params[0])) };
+    }
+    // Registro de permisos (#423): cómo estaba la persona, y el apunte.
+    if (s.startsWith('SELECT u.role::text AS role, COALESCE(u.roles_extra::text[]')) {
+      return { rows: estado.users.filter((u) => u.id === Number(params[0])).map((u) => ({
+        role: u.role, roles_extra: u.roles_extra || [], factura_manager: false, editar_fechas_factura: false,
+        gestor_colaboraciones: false, usa_whatsapp: true })) };
+    }
+    if (s.startsWith('INSERT INTO permisos_registro')) {
+      (estado.registro ||= []).push(params);
+      return { rows: [] };
     }
     if (s.startsWith('SELECT role FROM users WHERE id')) {
       return { rows: estado.users.filter((u) => u.id === Number(params[0])).map((u) => ({ role: u.role })) };
@@ -168,7 +183,6 @@ vi.mock('../src/modules/auth/auth.model.js', () => ({ revokeAllUserTokens: vi.fn
 vi.mock('../src/modules/notifications/notifications.service.js', () => ({ notifyUsers: vi.fn(async () => {}) }));
 vi.mock('../src/modules/mcp/mcp.model.js', () => ({ revocarTodasDeLaPersona: vi.fn(async () => {}) }));
 vi.mock('../src/modules/whatsapp/roles.js', () => ({ puedeTenerWhatsapp: () => false, alPerderAcceso: vi.fn(async () => {}) }));
-vi.mock('../src/modules/whatsapp/usaWhatsapp.js', () => ({ olvidar: () => {} }));
 
 const { default: usuarios } = await import('../src/modules/users/index.js');
 const proyectos = await import('../src/modules/projects/project.service.js');
@@ -181,7 +195,7 @@ app.use(usuarios.prefix, usuarios.router);
 app.use(errorHandler);
 const request = supertest(app);
 
-const como = (id, role) => ({ Authorization: `Bearer ${jwt.sign({ userId: id, role }, process.env.JWT_SECRET, { expiresIn: '5m' })}` });
+const como = (id, role) => ({ Authorization: `Bearer ${jwt.sign(registrar({ userId: id, role }), process.env.JWT_SECRET, { expiresIn: '5m' })}` });
 const SUPER = como(1, 'superadmin');
 const ADMIN = como(2, 'admin');
 

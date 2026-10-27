@@ -49,6 +49,8 @@ async function persona(nombre, role, extra = '') {
     [`${MARCA} ${nombre}`, `${nombre.toLowerCase()}@${MARCA.toLowerCase()}.test`, role]
   );
   ids.users.push(u.id);
+  // La casilla de antes es la excepción «Usar el MCP» (#423, migración 222).
+  if (extra) await q(`INSERT INTO user_permission_overrides (user_id, resource, action, allowed) VALUES ($1, 'mcp', 'usar', true)`, [u.id]);
   await q(`INSERT INTO user_projects (user_id, project_id) VALUES ($1, $2)`, [u.id, ids.projects[0]]);
   return u;
 }

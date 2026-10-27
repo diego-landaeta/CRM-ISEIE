@@ -3,6 +3,7 @@ import { createSchema, updateSchema } from './whatsapp.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { proyectosDelAmbito } from '../../shared/utils/ambito.js';
 import { usuarioObjetivo } from './chat.controller.js';
+import { tienePermiso } from '../../shared/middleware/permissions.js';
 
 function proyecto(req) {
   const p = req.query.projectId || req.body?.projectId;
@@ -11,7 +12,6 @@ function proyecto(req) {
   return n;
 }
 
-const esAdmin = (req) => ['admin', 'superadmin', 'soporte'].includes(req.user.role);
 
 /**
  * De quien son las plantillas PERSONALES que se ven o se guardan aqui.
@@ -83,7 +83,7 @@ export async function createTemplate(req, res, next) {
     const { projectId, label, body, ambito } = parsed.data;
     // Una compartida la ve todo el equipo, asi que la crea quien manda. Las
     // personales, cualquiera: son suyas.
-    if (ambito === 'compartida' && !esAdmin(req)) {
+    if (ambito === 'compartida' && !(await tienePermiso(req, 'whatsapp.plantillas_compartidas'))) {
       throw new AppError('Solo un administrador crea plantillas compartidas', 403, 'FORBIDDEN');
     }
     const row = await model.createTemplate({
@@ -101,7 +101,7 @@ async function permitida(req, id) {
   const t = await model.getTemplate(id);
   if (!t) throw new AppError('Plantilla no encontrada', 404, 'NOT_FOUND');
   const propia = t.ambito === 'personal' && t.owner_id === req.user.userId;
-  if (!propia && !esAdmin(req)) throw new AppError('No puedes tocar esta plantilla', 403, 'FORBIDDEN');
+  if (!propia && !(await tienePermiso(req, 'whatsapp.plantillas_compartidas'))) throw new AppError('No puedes tocar esta plantilla', 403, 'FORBIDDEN');
   return t;
 }
 

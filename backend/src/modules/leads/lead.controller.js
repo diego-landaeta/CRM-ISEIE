@@ -6,8 +6,8 @@ import * as dupQueue from './dup-queue.service.js';
 import * as leadProducts from './lead-products.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { veTodoElCrm, campusDeLaPersona } from '../../shared/utils/ambito.js';
-import { tieneRol } from '../../shared/utils/roles.js';
 import { leadsToWasapiCsv, leadsToWasapiXlsx, detectCountry } from '../../shared/utils/wasapiCsv.js';
+import { tienePermiso } from '../../shared/middleware/permissions.js';
 
 // ============================================================
 // WEBHOOK (publico, autenticado por API key en header)
@@ -438,7 +438,7 @@ export async function softDelete(req, res, next) {
     if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
     const reason = (req.body?.reason || 'otro').toLowerCase();
     const motivo = req.body?.motivo || null;
-    if (!tieneRol(req.user, 'admin', 'superadmin', 'soporte')) {
+    if (!(await tienePermiso(req, 'leads.delete_cualquiera'))) {
       await exigirQueSeaSuyo(req, id);
       if (!MOTIVOS_DE_GESTORA.includes(reason)) {
         throw new AppError('Puedes eliminar por prueba, spam o duplicado. Para otro motivo, pídeselo a un administrador.', 403, 'MOTIVO_SOLO_ADMIN');

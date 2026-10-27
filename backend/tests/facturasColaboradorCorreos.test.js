@@ -12,6 +12,7 @@ import supertest from 'supertest';
  */
 
 vi.mock('../src/shared/config/db.js', async () => (await import('./facturasColaborador.base.js')).moduloDb);
+vi.mock('../src/modules/permissions/permissions.service.js', () => import('./helpers/permisosSinBase.js'));
 vi.mock('../src/modules/status/status.model.js', () => ({ logError: vi.fn(async () => {}) }));
 vi.mock('../src/modules/whatsapp/media.service.js', () => ({ enUtf8: (s) => s }));
 // Nada sale de verdad: Brevo y R2, simulados.

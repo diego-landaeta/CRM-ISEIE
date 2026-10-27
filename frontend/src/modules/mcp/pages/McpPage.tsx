@@ -155,7 +155,7 @@ Su URL no se borra: si le devuelves el acceso, volverá a funcionar sin que teng
     try {
       await mcpApi.cambiarAcceso(p.id, valor);
       setPersonas((lista) => lista.map((x) => (x.id === p.id
-        ? { ...x, usa_mcp: valor, tieneAcceso: valor } : x)));
+        ? { ...x, tieneAcceso: valor } : x)));
       toast({ title: valor ? `Acceso dado a ${p.nombre}` : `Acceso pausado a ${p.nombre}` });
     } catch (e) {
       toast({ title: 'No se pudo cambiar el acceso', description: (e as Error).message, variant: 'destructive' });
@@ -463,12 +463,12 @@ Su URL no se borra: si le devuelves el acceso, volverá a funcionar sin que teng
                       <label className="inline-flex items-center gap-2 cursor-pointer">
                         <input
                           type="checkbox"
-                          checked={p.usa_mcp}
+                          checked={p.tieneAcceso}
                           onChange={(e) => cambiarAcceso(p, e.target.checked)}
                           className="h-4 w-4 accent-primary"
                           aria-label={`Acceso MCP de ${p.nombre}`}
                         />
-                        <span className="text-xs">{p.usa_mcp ? 'Sí' : 'No'}</span>
+                        <span className="text-xs">{p.tieneAcceso ? 'Sí' : 'No'}</span>
                       </label>
                     )}
                   </td>

@@ -19,6 +19,7 @@ import DialogoConector from '../components/DialogoConector';
 import ParaQuien from '../components/ParaQuien';
 import { lista } from '@/shared/lib/lista';
 import PanelMapeo from '../components/PanelMapeo';
+import usePermission from '@/shared/hooks/usePermission';
 
 /**
  * Conectores (#6). Desde el 29/09 en Conexión → Conectores, no en Captación:
@@ -187,6 +188,8 @@ export default function ConnectorsPage() {
   // los conectores de todos sus campus, cada uno con el suyo al lado. Con
   // «Todos los proyectos», todo lo que la persona puede ver.
   const conEmpresa = Boolean(activeIssuerId);
+  // Lo que dice el servidor (#423): sale si salía antes Y tiene el permiso.
+  const { can } = usePermission();
   const { user, projects } = useAuth() as {
     user: { role?: string } | null;
     projects: Array<{ id: number; nombre: string; sociedad_emisora_id?: number | null; sociedad_nombre?: string | null }>;
@@ -393,7 +396,7 @@ export default function ConnectorsPage() {
           projectId={projectId}
           issuerId={activeIssuerId}
           proyectos={projects || []}
-          esSuperadmin={user?.role === 'superadmin'}
+          esSuperadmin={user?.role === 'superadmin' && can('connectors.sistema')}
           onCerrar={() => setEditando(undefined)}
           onGuardado={() => {
             setEditando(undefined);
