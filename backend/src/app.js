@@ -85,6 +85,7 @@ import { startMcpVigilanciaScheduler } from './jobs/mcpVigilanciaScheduler.js';
 // Tablero de tareas del equipo (#210, paridad con MultiCRM): solo en pruebas.
 import tasksModule from './modules/tasks/index.js';
 import { startTasksDailySummaryScheduler } from './jobs/tasksDailySummaryJob.js';
+import { startTareasResumenScheduler } from './jobs/tareasResumenJob.js';
 // Lo que aún no está aprobado para producción: el tablero (#210) y las facturas de colaboradores (#202).
 import { tareasActivas, facturasColaboradorActivas } from './shared/config/soloEnPruebas.js';
 
@@ -487,6 +488,12 @@ if (process.env.NODE_ENV !== 'test') {
         startTasksDailySummaryScheduler();
       } catch (err) {
         logger.error({ err }, 'Tareas: el correo de cada mañana falló al arrancar');
+      }
+      // El resumen de la tarde y los correos de cambio de estado (26/10/2026).
+      try {
+        startTareasResumenScheduler();
+      } catch (err) {
+        logger.error({ err }, 'Tareas: el resumen de la tarde falló al arrancar');
       }
     }
   });
