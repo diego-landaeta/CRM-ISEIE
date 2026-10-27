@@ -73,6 +73,8 @@ async function crearPersona(clave, role, proyectos = [], { usaMcp = false } = {}
      VALUES ($1, $2, 'x', $3, $4) RETURNING id`,
     [`${MARCA} ${clave}`, `${clave.toLowerCase()}@${MARCA.toLowerCase()}.test`, role, usaMcp]
   )).id;
+  // La casilla de antes es la excepción «Usar el MCP» (#423, migración 222).
+  if (usaMcp) await q(`INSERT INTO user_permission_overrides (user_id, resource, action, allowed) VALUES ($1, 'mcp', 'usar', true)`, [U[clave]]);
   for (const p of proyectos) {
     await q(`INSERT INTO user_projects (user_id, project_id) VALUES ($1, $2)`, [U[clave], P[p]]);
   }

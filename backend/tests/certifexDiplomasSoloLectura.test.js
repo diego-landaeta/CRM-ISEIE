@@ -198,9 +198,12 @@ describe('por persona, desde Configuración › Roles', () => {
 });
 
 describe('por rol, desde Configuración › Roles', () => {
-  it('solo el super admin cambia un rol entero; dárselo hace que lo vea y quitárselo, que no', async () => {
+  it('el super admin y el admin cambian un rol entero; dárselo hace que lo vea y quitárselo, que no', async () => {
     expect((await como('pm')(request.get('/api/certifex/diplomas'))).status).toBe(403);
-    expect((await como('adminAjeno')(request.put('/api/permissions/claves/diplomas.view/rol/project_manager')).send({ permitido: true })).status).toBe(403);
+    // Diego, 26/10: el admin sigue cambiando lo que trae cada rol (y «Diplomas · Ver» lo tiene).
+    const delAdmin = await como('adminAjeno')(request.put('/api/permissions/claves/diplomas.view/rol/project_manager')).send({ permitido: true });
+    expect(delAdmin.status, JSON.stringify(delAdmin.body)).toBe(200);
+    expect((await como('adminAjeno')(request.put('/api/permissions/claves/diplomas.view/rol/project_manager')).send({ permitido: false })).status).toBe(200);
 
     const si = await como('sa')(request.put('/api/permissions/claves/diplomas.view/rol/project_manager')).send({ permitido: true });
     expect(si.status, JSON.stringify(si.body)).toBe(200);

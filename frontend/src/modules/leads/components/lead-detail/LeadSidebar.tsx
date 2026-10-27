@@ -3,6 +3,7 @@ import { STATUS_LABELS as ESTADO_LABELS } from '@/shared/components/ui/StatusBad
 import { CHANNEL_LABELS as CANAL_LABELS } from '@/shared/components/ui/ChannelBadge';
 import Select from '@/shared/components/ui/Select';
 import type { Lead, Interaction, Reminder, LeadStatus } from '@/shared/types';
+import usePermission from '@/shared/hooks/usePermission';
 
 interface LeadSidebarProps {
   lead: Lead;
@@ -24,6 +25,8 @@ export default function LeadSidebar({
   selectedEstado, onSelectedEstadoChange, statusLoading, onEstadoUpdate,
   onOpenInteraction, onOpenReminder, onOpenReassign, onOpenMerge,
 }: LeadSidebarProps) {
+  // Lo que dice el servidor (#423): sale si salía antes Y tiene el permiso.
+  const { can } = usePermission();
   return (
     <div className="space-y-3">
       <div className="bg-card p-4 rounded-lg border border-border">
@@ -62,7 +65,7 @@ export default function LeadSidebar({
           >
             <CalendarCheck size={14} weight="bold" /> Programar recordatorio
           </button>
-          {isAdmin && (
+          {isAdmin && can('leads.assign') && (
             <button
               onClick={onOpenReassign}
               className="w-full h-9 rounded-md border border-border bg-card text-[13px] font-semibold hover:bg-muted transition-colors flex items-center justify-center gap-2"
@@ -70,7 +73,7 @@ export default function LeadSidebar({
               <Users size={14} weight="bold" /> Reasignar
             </button>
           )}
-          {isAdmin && onOpenMerge && (
+          {isAdmin && can('leads.edit') && onOpenMerge && (
             <button
               onClick={onOpenMerge}
               title="Fusionar este lead con un duplicado (combina interacciones, recordatorios, ventas, etc)"

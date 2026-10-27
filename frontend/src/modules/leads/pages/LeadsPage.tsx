@@ -151,7 +151,7 @@ export default function LeadsPage() {
   // Eliminar: admin y superadmin, y desde el 01/10 la gestora con el permiso
   // «leads.delete» (#204) en SUS leads sin venta. El servidor lo vuelve a mirar.
   const puedeEliminar = (l: { responsable_id?: number | null; status?: string }) =>
-    user?.role === 'superadmin' || user?.role === 'admin'
+    ((user?.role === 'superadmin' || user?.role === 'admin') && can('leads.delete'))
     || (can('leads.delete') && l.responsable_id === user?.id && l.status !== 'convertido');
   const {
     leads, stats, total, page, totalPages,

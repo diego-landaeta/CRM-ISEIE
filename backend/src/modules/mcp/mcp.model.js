@@ -1,4 +1,5 @@
-import { query } from '../../shared/config/db.js';
+import { query, getClient } from '../../shared/config/db.js';
+import { registrarCambio } from '../permissions/permissions.model.js';
 import { getReceivable } from '../accounting/accounting.model.js';
 import { RIGE_HOY, formacionesSinTutor } from '../tutores/tutor.model.js';
 
@@ -290,8 +291,24 @@ export async function comparteProyecto(userA, userB) {
   return rows.length > 0;
 }
 
-export async function setUsaMcp(userId, valor) {
-  await query(`UPDATE users SET usa_mcp = $2, updated_at = NOW() WHERE id = $1`, [userId, !!valor]);
+export async function setUsaMcp(userId, valor, porUserId = null) {
+  // Con su apunte en el registro de permisos (#423), en la misma transacción.
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+    const { rows: [u] } = await client.query(
+      `SELECT COALESCE((to_jsonb(u) ->> 'usa_mcp')::boolean, false) AS usa_mcp FROM users u WHERE id = $1 FOR UPDATE`, [userId]);
+    await client.query(`UPDATE users SET usa_mcp = $2, updated_at = NOW() WHERE id = $1`, [userId, !!valor]);
+    if (u && u.usa_mcp !== !!valor) {
+      await registrarCambio(client, { quienId: porUserId, destino: 'usuario', usuarioId: userId, clave: 'usa_mcp', antes: u.usa_mcp, despues: !!valor, origen: 'panel_mcp' });
+    }
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 export async function registrarAuditoria({ userId, tokenId, herramienta, parametros, ok, error, duracionMs, origen = {} }) {

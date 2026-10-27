@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
-import { verifyToken, soloRoles } from '../../shared/middleware/auth.js';
+import { verifyToken } from '../../shared/middleware/auth.js';
+import { puede } from '../../shared/middleware/permissions.js';
 import { urlPersonal, verificarTokenMcp } from './mcp.auth.js';
 import { atenderPeticion, metodoNoPermitido } from './mcp.server.js';
 import { huella } from './mcp.acceso.js';
@@ -15,22 +16,22 @@ const router = Router();
 const panel = Router();
 panel.use(verifyToken);
 panel.get('/', ctrl.estado);
-panel.post('/tokens', ctrl.crearToken);
+panel.post('/tokens', puede('mcp.usar'), ctrl.crearToken);
 panel.delete('/tokens/:id', ctrl.revocarToken);
 // Código de desbloqueo para Claude (#192).
-panel.post('/codigo', ctrl.crearCodigo);
+panel.post('/codigo', puede('mcp.usar'), ctrl.crearCodigo);
 // «Desbloquear desde aquí»: sin pasar por Claude (#192, Diego 05/10).
-panel.post('/tokens/:id/desbloquear', ctrl.desbloquearUrl);
+panel.post('/tokens/:id/desbloquear', puede('mcp.usar'), ctrl.desbloquearUrl);
 // Autorizar o rechazar cada Claude conectado a una URL (#326).
 panel.patch('/conexiones/:id', ctrl.decidirConexion);
 // `soloRoles` y no `roleGuard`: roleGuard deja pasar a soporte, y Diego dijo
 // super admin y admin.
-panel.get('/personas', soloRoles('superadmin', 'admin'), ctrl.personas);
-panel.patch('/personas/:id', soloRoles('superadmin', 'admin'), ctrl.cambiarAcceso);
+panel.get('/personas', puede('mcp.administrar'), ctrl.personas);
+panel.patch('/personas/:id', puede('mcp.administrar'), ctrl.cambiarAcceso);
 // Actividad: quién consultó qué con Claude (#195).
-panel.get('/actividad', soloRoles('superadmin', 'admin'), ctrl.actividad);
+panel.get('/actividad', puede('mcp.administrar'), ctrl.actividad);
 // Interruptor de emergencia (#196): solo super admin.
-panel.post('/interruptor', soloRoles('superadmin'), ctrl.interruptor);
+panel.post('/interruptor', puede('mcp.supervisar'), ctrl.interruptor);
 router.use('/panel', panel);
 
 // ─── Interruptor de emergencia (#196) ─────────────────────────────────────

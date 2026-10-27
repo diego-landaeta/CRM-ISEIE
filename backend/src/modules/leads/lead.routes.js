@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { verifyToken, roleGuard } from '../../shared/middleware/auth.js';
-import { checkPermission } from '../../shared/middleware/permissions.js';
+import { verifyToken } from '../../shared/middleware/auth.js';
+import { puede } from '../../shared/middleware/permissions.js';
 import * as leadController from './lead.controller.js';
 import * as leadEmailsController from './lead-emails.controller.js';
 import * as spamReportController from './spam-report.controller.js';
@@ -18,92 +18,81 @@ router.post('/webhooks/:slug', leadController.webhook);
 router.use(verifyToken);
 
 // Listado y detalle
-router.get('/', leadController.list);
-router.get('/export/wasapi', leadController.exportWasapi);
-router.get('/stats', leadController.stats);
-router.get('/today', leadController.today);
-router.get('/dashboard-summary', leadController.dashboardSummary);
+router.get('/', puede('leads.view'), leadController.list);
+router.get('/export/wasapi', puede('leads.exportar_wasapi'), leadController.exportWasapi);
+router.get('/stats', puede('leads.view'), leadController.stats);
+router.get('/today', puede('leads.view'), leadController.today);
+router.get('/dashboard-summary', puede('leads.view'), leadController.dashboardSummary);
 // Lookup público para gestores: devuelve metadata mínima de leads con el
 // email indicado, ignorando el RBAC de listado normal. Para que un gestor
 // pueda detectar duplicados de leads que pertenecen a otra asesora.
-router.get('/lookup-by-email', leadController.lookupByEmail);
+router.get('/lookup-by-email', puede('leads.view'), leadController.lookupByEmail);
 
-// Check duplicado antes de crear (manual). FE llama antes del POST para
-// mostrar diálogo de confirmación si hay match por email o teléfono.
-router.post('/check-duplicate', leadController.checkDuplicate);
+// Check duplicado antes de crear (manual).
+router.post('/check-duplicate', puede('leads.view'), leadController.checkDuplicate);
 
-// Spam reports — admin/superadmin gestiona reportes; cualquier autenticado puede levantar uno.
-// IMPORTANTE: las rutas con path fijo deben ir antes que las que tienen :id.
-router.get('/spam-reports',              roleGuard('admin', 'superadmin'), spamReportController.listPending);
-router.get('/spam-reports/count',        roleGuard('admin', 'superadmin'), spamReportController.countPending);
-router.patch('/spam-reports/:reportId',  roleGuard('superadmin'),          spamReportController.resolveReport);
+// Spam reports: rutas estáticas ANTES de /:id para que no las absorba
+router.get('/spam-reports', puede('leads.spam'), spamReportController.listPending);
+router.get('/spam-reports/count', puede('leads.spam'), spamReportController.countPending);
+router.patch('/spam-reports/:reportId', puede('leads.spam_resolver'), spamReportController.resolveReport);
 
 // #13 Cola de revisión de duplicados — admin/superadmin
-router.get('/review-queue',              roleGuard('admin', 'superadmin'), leadController.listReviewQueue);
+router.get('/review-queue',              puede('leads.duplicados'), leadController.listReviewQueue);
 // #102 - Repaso de duplicados sobre lo que YA hay guardado. Va antes de
 // '/:id' o Express se lo come como si 'duplicados' fuera un identificador.
-router.get('/duplicados',                roleGuard('admin', 'superadmin'), leadController.listDuplicateGroups);
-router.post('/review-queue/:id/decide',  roleGuard('admin', 'superadmin'), leadController.decideReviewQueue);
+router.get('/duplicados',                puede('leads.duplicados'), leadController.listDuplicateGroups);
+router.post('/review-queue/:id/decide',  puede('leads.duplicados'), leadController.decideReviewQueue);
 
 // #18 Multi-cursos por lead
-router.get('/:id/products',              leadController.listLeadProducts);
-router.post('/:id/products',             leadController.addLeadProduct);
-router.patch('/:id/products/:lpId',      leadController.updateLeadProduct);
-router.delete('/:id/products/:lpId',     leadController.removeLeadProduct);
+router.get('/:id/products',              puede('leads.view'), leadController.listLeadProducts);
+router.post('/:id/products',             puede('leads.edit'), leadController.addLeadProduct);
+router.patch('/:id/products/:lpId',      puede('leads.edit'), leadController.updateLeadProduct);
+router.delete('/:id/products/:lpId',     puede('leads.edit'), leadController.removeLeadProduct);
 
-router.get('/:id', leadController.getById);
-router.post('/:id/merge', leadController.mergeLeads);
+router.get('/:id', puede('leads.view'), leadController.getById);
+router.post('/:id/merge', puede('leads.edit'), leadController.mergeLeads);
 
 // Creacion manual (formulario interno)
-router.post('/', leadController.createManual);
+router.post('/', puede('leads.create'), leadController.createManual);
 
 // Import CSV (bulk)
-router.post('/bulk', leadController.bulkCreate);
+router.post('/bulk', puede('leads.create'), leadController.bulkCreate);
 
 // Edicion general del lead
-router.patch('/:id', leadController.update);
+router.patch('/:id', puede('leads.edit'), leadController.update);
 
 // Operaciones sobre lead
-router.patch('/:id/status', leadController.changeStatus);
-router.post('/:id/interactions', leadController.addInteraction);
-router.patch('/:id/interactions/:interactionId', leadController.updateInteraction);
-router.delete('/:id/interactions/:interactionId', leadController.deleteInteraction);
-router.post('/:id/reminders', leadController.addReminder);
-router.patch('/reminders/:reminderId/complete', leadController.completeReminder);
+router.patch('/:id/status', puede('leads.edit'), leadController.changeStatus);
+router.post('/:id/interactions', puede('leads.edit'), leadController.addInteraction);
+router.patch('/:id/interactions/:interactionId', puede('leads.edit'), leadController.updateInteraction);
+router.delete('/:id/interactions/:interactionId', puede('leads.edit'), leadController.deleteInteraction);
+router.post('/:id/reminders', puede('leads.edit'), leadController.addReminder);
+router.patch('/reminders/:reminderId/complete', puede('leads.edit'), leadController.completeReminder);
 
 // Secuencias de email del lead (para popup de detalle)
-router.get('/:id/sequences', leadController.getLeadSequences);
+router.get('/:id/sequences', puede('leads.view'), leadController.getLeadSequences);
 
 // Historial de compra del email del lead (cross-sell / propuesto)
-router.get('/:id/purchase-history', leadController.getPurchaseHistory);
+router.get('/:id/purchase-history', puede('leads.view'), leadController.getPurchaseHistory);
 
-// Email manual + historial desde la ficha del lead.
-router.post('/:id/send-email', leadEmailsController.sendLeadEmail);
-router.get('/:id/emails', leadEmailsController.listLeadEmails);
+// Envío manual de email + historial (CRM-231)
+router.post('/:id/send-email', puede('leads.enviar_correo'), leadEmailsController.sendLeadEmail);
+router.get('/:id/emails', puede('leads.view'), leadEmailsController.listLeadEmails);
 
 // Levantar un reporte de spam sobre un lead (cualquier autenticado).
 // #15: solo admin/superadmin puede reportar spam.
-router.post('/:id/report-spam', roleGuard('admin', 'superadmin'), spamReportController.reportSpam);
+router.post('/:id/report-spam', puede('leads.reportar_spam'), spamReportController.reportSpam);
 
 // Reasignar (solo admin/superadmin)
-router.patch('/:id/reassign', roleGuard('admin', 'superadmin'), leadController.reassign);
+router.patch('/:id/reassign', puede('leads.assign'), leadController.reassign);
 
-// Soft delete / restore: SOLO superadmin (audit trail importante).
-// #15: admin y superadmin pueden eliminar (soft-delete). Restore solo superadmin.
-// #204: y quien tenga el permiso `leads.delete` (una gestora a la que se le da
-// en Permisos). Hasta hoy ese permiso existia en el catalogo pero esta ruta no
-// lo miraba: marcarlo no hacia nada. Lo que puede borrar ella lo acota el
-// controlador.
-const soloJefes = roleGuard('admin', 'superadmin');
-const conPermisoDeBorrar = checkPermission('leads', 'delete');
-function puedeEliminar(req, res, next) {
-  soloJefes(req, res, (noEsJefe) => (noEsJefe ? conPermisoDeBorrar(req, res, next) : next()));
-}
-router.delete('/:id', puedeEliminar, leadController.softDelete);
-router.patch('/:id/restore', roleGuard('superadmin'), leadController.restore);
+// Borrar: «Borrar prospectos» (#204, #423). Lo que puede borrar cada uno lo
+// acota el controlador: por cualquier motivo, «Borrar cualquier prospecto».
+router.delete('/:id', puede('leads.delete'), leadController.softDelete);
+router.patch('/:id/restore', puede('leads.restaurar'), leadController.restore);
 
 // Asignar pendientes: re-aplica round-robin a leads con responsable_id IS NULL.
 // Útil cuando llegan leads sin gestores activos y luego se activan.
-router.post('/reassign-pending', roleGuard('admin', 'superadmin'), leadController.reassignPending);
+router.post('/reassign-pending', puede('leads.assign'), leadController.reassignPending);
 
 export default router;

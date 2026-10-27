@@ -13,6 +13,7 @@ import { NO_ESCRIBIR_A_TUTORES } from '../../shared/config/frenoTutores.js';
 // Se usaba en Comisiones y en Pagos sin formación sin importarla: las dos daban
 // 500 «proyectosDelAmbito is not defined» (Manuel, 02/10). En MultiCRM sí estaba.
 import { proyectosDelAmbito, veTodoElCrm, campusDeLaPersona } from '../../shared/utils/ambito.js';
+import { tienePermiso } from '../../shared/middleware/permissions.js';
 
 // Quien manda aqui.
 //
@@ -28,8 +29,9 @@ import { proyectosDelAmbito, veTodoElCrm, campusDeLaPersona } from '../../shared
 // solo lleva el rol, asi que si viajara ahi, quitarle el permiso a alguien no
 // surtiria efecto hasta que caducara su sesion.
 async function puedeGestionar(req) {
-  if (['admin', 'superadmin'].includes(req.user.role)) return true;
-  return model.esGestorColaboraciones(req.user.userId);
+  // «Gestionar colaboraciones» del catálogo (#423). Antes: admin/superadmin o
+  // la casilla; la casilla pasa a ser una excepción con la migración 222.
+  return tienePermiso(req, 'tutores.gestionar');
 }
 
 async function exigirGestion(req) {
@@ -136,7 +138,7 @@ export async function guardarPerfil(req, res, next) {
     // cualquier usuario, super admin incluido, con su identificador.
     let correo = null;
     if (d.email) {
-      if (req.user.role !== 'superadmin') {
+      if (!(await tienePermiso(req, 'tutores.cambiar_correo'))) {
         throw new AppError('Solo un superadmin puede cambiar el correo', 403, 'FORBIDDEN');
       }
       if (!(await model.ficha(id))) throw new AppError('Ese tutor no existe', 404, 'NOT_FOUND');
@@ -308,7 +310,7 @@ export async function guardarAjustes(req, res, next) {
   try {
     // Mover la fecha desde la que se paga cambia lo que cobra todo el mundo.
     // Eso no lo toca quien organiza colaboraciones: solo un administrador.
-    if (!['admin', 'superadmin'].includes(req.user.role)) {
+    if (!(await tienePermiso(req, 'tutores.ajustes'))) {
       throw new AppError('Solo un administrador cambia estos ajustes', 403, 'FORBIDDEN');
     }
     const d = valida(ajustesSchema, req.body);
@@ -415,7 +417,7 @@ export async function resumenComisiones(req, res, next) {
 // un administrador. Es la misma linea que separa organizar de pagar.
 export async function liquidar(req, res, next) {
   try {
-    if (!['admin', 'superadmin'].includes(req.user.role)) {
+    if (!(await tienePermiso(req, 'tutores.liquidar'))) {
       throw new AppError('Solo un administrador marca comisiones como pagadas', 403, 'FORBIDDEN');
     }
     const d = valida(liquidarSchema, req.body || {});
@@ -432,7 +434,7 @@ export async function liquidar(req, res, next) {
 // POST /api/tutores/comisiones/:id/revertir
 export async function revertirComision(req, res, next) {
   try {
-    if (!['admin', 'superadmin'].includes(req.user.role)) {
+    if (!(await tienePermiso(req, 'tutores.liquidar'))) {
       throw new AppError('Solo un administrador revierte una comisión', 403, 'FORBIDDEN');
     }
     const c = await model.revertirComision(parseInt(req.params.id), {
@@ -567,7 +569,7 @@ export async function brochureDelCurso(req, res, next) {
 // admin»). Quien solo gestiona colaboraciones, no.
 export async function cambiarContrasena(req, res, next) {
   try {
-    if (!['superadmin', 'admin'].includes(req.user.role)) {
+    if (!(await tienePermiso(req, 'tutores.contrasena'))) {
       throw new AppError('Solo un superadmin o un admin puede cambiar la contraseña', 403, 'FORBIDDEN');
     }
     const id = parseInt(req.params.id);

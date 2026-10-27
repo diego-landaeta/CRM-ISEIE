@@ -2,11 +2,11 @@ import { AppError } from '../../shared/utils/AppError.js';
 import { query } from '../../shared/config/db.js';
 import { logger } from '../../shared/utils/logger.js';
 import { veTodoElCrm } from '../../shared/utils/ambito.js';
-import { tieneRol } from '../../shared/utils/roles.js';
 import { listarEmisionesSchema, decisionesSchema, emitirSchema, cursosSchema, mensajeDeValidacion } from './certifex.validation.js';
 import { config, urlPublica, direccionPublica, certifex, recorrer } from './certifex.cliente.js';
 import { alcanceDe, centrosPermitidos, acotar, exigirCentro, exigirMatriculas, exigirExpedientes } from './certifex.alcance.js';
 import { datosPara, emitirMatriculas } from './certifex.emision.js';
+import { tienePermiso } from '../../shared/middleware/permissions.js';
 
 export { certifex };
 
@@ -221,7 +221,7 @@ export async function diploma(req, res, next) {
     if (formato !== 'digital' && formato !== 'imprenta') throw new AppError('Formato desconocido: usa «digital» o «imprenta».', 400, 'VALIDATION_ERROR');
     // Quien solo VE Diplomas (`diplomas.view`, #223) ve el digital, el que le llega al
     // alumno. El A3 es para mandarlo a imprenta: eso lo hace administracion.
-    if (formato === 'imprenta' && !tieneRol(req.user, 'admin', 'superadmin')) {
+    if (formato === 'imprenta' && !(await tienePermiso(req, 'diplomas.imprenta'))) {
       throw new AppError('El PDF de imprenta (A3) lo descarga administración.', 403, 'FORBIDDEN');
     }
     if (formato === 'imprenta') return await enviarImprenta(res, nexp);

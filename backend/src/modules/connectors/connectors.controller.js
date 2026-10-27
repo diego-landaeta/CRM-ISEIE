@@ -6,6 +6,7 @@ import * as mcpModel from '../mcp/mcp.model.js';
 import * as desbloqueo from '../mcp/mcp.desbloqueo.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { proyectosDelAmbito, comoLista } from '../../shared/utils/ambito.js';
+import { tienePermiso } from '../../shared/middleware/permissions.js';
 
 // `mcp`: «Servidor MCP» — no trae datos: da una URL para Claude, como la de
 // Diana (modules/mcp), acotada al «Para quién» del conector. Diego, 29/09: «es
@@ -63,7 +64,7 @@ async function estaEnTodaLaEmpresa(mios, issuerId) {
  * importado podría acabar en un campus de otra sociedad.
  */
 async function alcanceValido(req, { alcance = 'campus', issuer_id = null, project_id }) {
-  if (alcance === 'sistema' && !esSuperadmin(req)) {
+  if (alcance === 'sistema' && !(await tienePermiso(req, 'connectors.sistema'))) {
     throw new AppError('Solo un super admin puede hacer un conector de todo el sistema', 403, 'FORBIDDEN');
   }
   const mios = await misCampus(req);
@@ -94,6 +95,8 @@ async function acceso(req, c, que) {
   if (!c) throw new AppError('No encontrado', 404, 'NOT_FOUND');
   if (esSuperadmin(req)) return c;
   if (c.alcance === 'sistema') {
+    // Los de todo el sistema: «Conectores de todo el sistema» (#423).
+    if (await tienePermiso(req, 'connectors.sistema')) return c;
     throw new AppError('Este conector es de todo el sistema: solo lo ve y lo cambia un super admin', 403, 'FORBIDDEN');
   }
   const mios = await misCampus(req);
@@ -149,7 +152,7 @@ function cid(req) {
 /** Si puede cambiar y borrar este conector: la misma regla que `acceso(…, 'tocar')`. */
 async function puedeTocar(req, c, mios) {
   if (esSuperadmin(req)) return true;
-  if (c.alcance === 'sistema') return false;
+  if (c.alcance === 'sistema') return tienePermiso(req, 'connectors.sistema');
   if (c.alcance === 'empresa') {
     const suyos = await model.campusDeLaEmpresa(c.issuer_id);
     return suyos.length > 0 && suyos.every((id) => mios.includes(id));
@@ -182,7 +185,7 @@ export async function list(req, res, next) {
       ids = (ids || mios).filter((id) => mios.includes(id));
       if (!ids.length) return res.json({ success: true, data: [] });
     }
-    const conectores = await model.listByAmbito(ids, { tipo, incluirSistema: esSuperadmin(req) });
+    const conectores = await model.listByAmbito(ids, { tipo, incluirSistema: await tienePermiso(req, 'connectors.sistema') });
     // En los «Servidor MCP», si esta persona ya tiene su URL (solo el inicio del
     // token y cuándo la usó Claude por última vez: la URL entera no se guarda).
     const deMcp = conectores.filter((c) => c.type === 'mcp').map((c) => c.id);

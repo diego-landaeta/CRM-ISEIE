@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
-import { verifyToken, roleGuard } from '../../shared/middleware/auth.js';
+import { verifyToken } from '../../shared/middleware/auth.js';
+import { puede } from '../../shared/middleware/permissions.js';
 import { projectAccess } from '../../shared/middleware/projectAccess.js';
 import * as ctrl from './documents.controller.js';
 
@@ -20,21 +21,21 @@ const heavyGenLimit = rateLimit({
 });
 
 // Lecturas con projectAccess — gestor solo ve docs de proyectos asignados.
-router.get('/',                 projectAccess, ctrl.list);
-router.get('/:id/download',     projectAccess, ctrl.download);
+router.get('/',                 puede('documents.view'), projectAccess, ctrl.list);
+router.get('/:id/download',     puede('documents.view'), projectAccess, ctrl.download);
 
 // Audit log de un documento — solo superadmin (expone IPs/user agents).
-router.get('/:id/audit',        roleGuard('superadmin'), projectAccess, ctrl.audit);
+router.get('/:id/audit',        puede('documents.auditar'), projectAccess, ctrl.audit);
 
 // Operaciones de creacion/modificacion — solo superadmin/admin + projectAccess.
 // Preview no usa projectAccess porque no toca DB (solo renderiza HTML); su rol
 // guard ya garantiza que solo admins puedan generar previews.
-router.get('/next-number',      roleGuard('superadmin', 'admin'), projectAccess, ctrl.peekNumber);
-router.post('/set-number',      roleGuard('superadmin', 'admin'), projectAccess, ctrl.setNumber);
-router.post('/preview',         roleGuard('superadmin', 'admin'), ctrl.preview);
-router.post('/generate',        roleGuard('superadmin', 'admin'), projectAccess, heavyGenLimit, ctrl.generate);
-router.post('/:id/regenerate',  roleGuard('superadmin', 'admin'), projectAccess, heavyGenLimit, ctrl.regenerate);
-router.post('/:id/resend-email', roleGuard('superadmin', 'admin'), projectAccess, ctrl.resendEmail);
-router.delete('/:id',           roleGuard('superadmin', 'admin'), projectAccess, ctrl.remove);
+router.get('/next-number',      puede('documents.numeracion'), projectAccess, ctrl.peekNumber);
+router.post('/set-number',      puede('documents.numeracion'), projectAccess, ctrl.setNumber);
+router.post('/preview',         puede('documents.create'), ctrl.preview);
+router.post('/generate',        puede('documents.create'), projectAccess, heavyGenLimit, ctrl.generate);
+router.post('/:id/regenerate',  puede('documents.create'), projectAccess, heavyGenLimit, ctrl.regenerate);
+router.post('/:id/resend-email', puede('documents.create'), projectAccess, ctrl.resendEmail);
+router.delete('/:id',           puede('documents.delete'), projectAccess, ctrl.remove);
 
 export default router;

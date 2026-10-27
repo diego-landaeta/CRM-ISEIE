@@ -30,6 +30,7 @@ describe('marcar una factura como entregada', () => {
   it('la ruta existe', async () => {
     const fs = await import('node:fs');
     const rutas = fs.readFileSync(new URL('../src/modules/invoices/invoices.routes.js', import.meta.url), 'utf8');
-    expect(rutas).toMatch(/router\.patch\('\/:id\/entregada',\s+ctrl\.marcarEntregada\)/);
+    // Con su permiso del catálogo desde #230 (gemela de CRM#423).
+    expect(rutas).toMatch(/router\.patch\('\/:id\/entregada',\s+puede\('facturas\.completar'\),\s*ctrl\.marcarEntregada\)/);
   });
 });

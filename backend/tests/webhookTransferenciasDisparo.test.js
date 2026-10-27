@@ -40,7 +40,7 @@ vi.mock('../src/modules/conversions/installments.model.js', () => ({
 
 vi.mock('../src/modules/invoices/invoices.model.js', () => ({
   findById: vi.fn(async () => ({ id: 44, tipo: 'proforma', estado: 'emitida', numero: 12, conversion_id: 70 })),
-  esFacturaManager: vi.fn(async () => true),
+  tieneLaClave: vi.fn(async () => true),
   esProformaDe: vi.fn(async () => true),
   motivoParaNoCobrarProforma: vi.fn(async () => null),
   emitirFacturaDePago: vi.fn(async () => ({ id: 44, codigo: 'P-12', estado: 'pagada' })),

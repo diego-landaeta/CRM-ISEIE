@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { verifyToken, roleGuard } from '../../shared/middleware/auth.js';
+import { verifyToken } from '../../shared/middleware/auth.js';
+import { puede } from '../../shared/middleware/permissions.js';
 import { uploadDoc as uploadDocMiddleware } from '../../shared/middleware/upload.js';
 import * as ctrl from './matricula.controller.js';
 
@@ -27,12 +28,12 @@ router.use(verifyToken);
 
 // Los mismos que pueden crearlas. No cambia nada para quien trabaja hoy;
 // cierra la puerta a cualquier rol que se añada mañana.
-router.get('/', roleGuard('admin', 'superadmin', 'gestor'), ctrl.list);
-router.get('/:id', roleGuard('admin', 'superadmin', 'gestor'), ctrl.getById);
-router.post('/', roleGuard('admin', 'superadmin', 'gestor'), ctrl.create);
-router.patch('/:id', roleGuard('admin', 'superadmin', 'gestor'), ctrl.update);
-router.delete('/:id', roleGuard('admin', 'superadmin'), ctrl.remove);
-router.post('/:id/estado', roleGuard('admin', 'superadmin'), ctrl.setEstado);
-router.post('/:id/doc/:tipo', roleGuard('admin', 'superadmin', 'gestor'), uploadDocMiddleware, ctrl.uploadDoc);
+router.get('/', puede('matriculas.view'), ctrl.list);
+router.get('/:id', puede('matriculas.view'), ctrl.getById);
+router.post('/', puede('matriculas.create'), ctrl.create);
+router.patch('/:id', puede('matriculas.edit'), ctrl.update);
+router.delete('/:id', puede('matriculas.delete'), ctrl.remove);
+router.post('/:id/estado', puede('matriculas.cambiar_estado'), ctrl.setEstado);
+router.post('/:id/doc/:tipo', puede('matriculas.edit'), uploadDocMiddleware, ctrl.uploadDoc);
 
 export default router;

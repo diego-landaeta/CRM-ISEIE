@@ -1,6 +1,7 @@
 import { query, getClient } from '../../shared/config/db.js';
 import { limpiaRolesExtra } from '../../shared/utils/roles.js';
 import { existeTablaEmpresas, ponerEmpresas } from './user.empresas.js';
+import { registrarCambio } from '../permissions/permissions.model.js';
 
 // Esta lista es «quien puede llevar un prospecto», porque es para lo que la usa
 // casi todo el CRM: el filtro de Prospectos, asignar responsable, la exportacion
@@ -199,6 +200,8 @@ export async function update(id, { nombre, role, roles_extra: rolesExtra, projec
   const client = await getClient();
   try {
     await client.query('BEGIN');
+    // Cómo estaba, para el registro de permisos (#423).
+    const previo = await quePermisosDecide(client, id, true);
 
     const sets = [];
     const params = [];
@@ -254,6 +257,19 @@ export async function update(id, { nombre, role, roles_extra: rolesExtra, projec
     // que es lo que dice la casilla. Quitar la empresa no quita sus campus.
     if (empresaIds !== undefined) await ponerEmpresas(client, id, empresaIds, porUserId);
 
+    // Registro de permisos (#423): rol, roles de más y casillas, quién y cuándo.
+    // En la misma transacción: si no se apunta, no se guarda.
+    const ahora = await quePermisosDecide(client, id, false);
+    for (const campo of Object.keys(ahora)) {
+      if (JSON.stringify(previo?.[campo]) === JSON.stringify(ahora[campo])) continue;
+      await registrarCambio(client, {
+        quienId: porUserId, destino: 'usuario', usuarioId: id, clave: campo,
+        antes: Array.isArray(previo?.[campo]) ? previo[campo].join(', ') : previo?.[campo],
+        despues: Array.isArray(ahora[campo]) ? ahora[campo].join(', ') : ahora[campo],
+        origen: 'usuarios',
+      });
+    }
+
     await client.query('COMMIT');
 
     return await findById(id);
@@ -263,6 +279,20 @@ export async function update(id, { nombre, role, roles_extra: rolesExtra, projec
   } finally {
     client.release();
   }
+}
+
+/** Lo de una persona que decide qué puede hacer: su rol, sus roles de más y las casillas. */
+async function quePermisosDecide(db, id, bloquear) {
+  const { rows: [u] } = await db.query(
+    `SELECT u.role::text AS role, COALESCE(u.roles_extra::text[], '{}') AS roles_extra,
+            COALESCE(u.factura_manager, false) AS factura_manager,
+            COALESCE(u.editar_fechas_factura, false) AS editar_fechas_factura,
+            COALESCE(u.gestor_colaboraciones, false) AS gestor_colaboraciones,
+            COALESCE((to_jsonb(u) ->> 'usa_whatsapp')::boolean, true) AS usa_whatsapp
+       FROM users u WHERE u.id = $1 ${bloquear ? 'FOR UPDATE' : ''}`, [id]);
+  if (!u) return null;
+  return { rol: u.role, roles_extra: [...u.roles_extra].sort(), factura_manager: u.factura_manager,
+    editar_fechas_factura: u.editar_fechas_factura, gestor_colaboraciones: u.gestor_colaboraciones, usa_whatsapp: u.usa_whatsapp };
 }
 
 export async function deactivate(id) {

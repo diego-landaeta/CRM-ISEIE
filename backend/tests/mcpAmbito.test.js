@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+// Los permisos salen del catálogo (#423): sin base, el resolver de verdad con
+// las personas de cada `req` (tests/helpers/permisosSinBase.js).
+vi.mock('../src/modules/permissions/permissions.service.js', () => import('./helpers/permisosSinBase.js'));
+const { registrar, conPermisos } = await import('./helpers/permisosSinBase.js');
+
 /**
  * MCP de Claude: solo consulta y solo lo de cada uno.
  *
@@ -42,24 +47,24 @@ const ambitoDe = (role, proyectos = PROYECTOS) => construirAmbito(persona(role),
 beforeEach(() => { consultas.length = 0; });
 
 describe('quien entra', () => {
-  it('super admin y admin entran por su rol', () => {
-    expect(puedeUsarMcp(persona('superadmin'))).toBe(true);
-    expect(puedeUsarMcp(persona('admin'))).toBe(true);
+  it('super admin y admin entran por su rol', async () => {
+    expect(await puedeUsarMcp(conPermisos(persona('superadmin')))).toBe(true);
+    expect(await puedeUsarMcp(conPermisos(persona('admin')))).toBe(true);
   });
 
-  it('el resto solo si se le ha puesto la casilla', () => {
-    expect(puedeUsarMcp(persona('gestor'))).toBe(false);
-    expect(puedeUsarMcp(persona('gestor', { usa_mcp: true }))).toBe(true);
-    expect(puedeUsarMcp(persona('soporte'))).toBe(false);
+  it('el resto solo si se le ha dado «Usar el MCP» (antes, la casilla)', async () => {
+    expect(await puedeUsarMcp(conPermisos(persona('gestor')))).toBe(false);
+    expect(await puedeUsarMcp(conPermisos(persona('gestor', { usa_mcp: true })))).toBe(true);
+    expect(await puedeUsarMcp(conPermisos(persona('soporte')))).toBe(false);
   });
 
-  it('un tutor no entra ni con la casilla puesta', () => {
-    expect(puedeUsarMcp(persona('tutor', { usa_mcp: true }))).toBe(false);
+  it('un tutor no entra ni con el permiso dado: su rol no puede tenerlo', async () => {
+    expect(await puedeUsarMcp(conPermisos(persona('tutor', { usa_mcp: true })))).toBe(false);
   });
 
-  it('un usuario desactivado no entra, sea quien sea', () => {
-    expect(puedeUsarMcp(persona('superadmin', { active: false }))).toBe(false);
-    expect(puedeUsarMcp(null)).toBe(false);
+  it('un usuario desactivado no entra, sea quien sea', async () => {
+    expect(await puedeUsarMcp(conPermisos(persona('superadmin', { active: false })))).toBe(false);
+    expect(await puedeUsarMcp(conPermisos(null))).toBe(false);
   });
 });
 

@@ -63,11 +63,13 @@ export const diasDeVidaToken = () => configRotacion().diasDeVida;
 /** Maximo de tokens vivos por persona: uno por equipo, no una coleccion. */
 export const MAX_TOKENS_VIVOS = 5;
 
-export function puedeUsarMcp(user) {
+export async function puedeUsarMcp(user) {
+  // «Usar el MCP» del catálogo (#423), leído en cada petición: quitárselo a
+  // alguien cierra la puerta en su siguiente consulta. Antes: admin/superadmin
+  // por su rol, el tutor nunca y el resto por la casilla `usa_mcp`.
   if (!user || !user.active) return false;
-  if (ROLES_CON_ACCESO.includes(user.role)) return true;
-  if (ROLES_SIN_MCP.includes(user.role)) return false;
-  return user.usa_mcp === true;
+  const { explicarPermisos } = await import('../permissions/permissions.service.js');
+  return (await explicarPermisos(user.id))?.mapa['mcp.usar'] === true;
 }
 
 /**

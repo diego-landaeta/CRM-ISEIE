@@ -18,71 +18,11 @@ export interface FixedRole {
   color: 'rose' | 'violet' | 'sky' | 'emerald';
 }
 
-// Permisos por rol fijo del sistema. Cuando CRM-228 (backend custom_roles)
-// este desplegado, `user.permissions` vendra del backend y sobreescribira
-// estos defaults. Mientras tanto, esta tabla cubre los 4 roles base.
-export const ROLE_DEFAULT_PERMISSIONS: Record<UserRole, PermissionMap> = {
-  superadmin: { '*': true },
-  soporte:    { '*': true },
-  admin: {
-    'leads.read': true,    'leads.create': true,    'leads.update': true,    'leads.delete': true,    'leads.export': true,    'leads.reassign': true,
-    'clients.read': true,  'clients.create': true,  'clients.update': true,  'clients.delete': true,
-    'products.read': true, 'products.create': true, 'products.update': true, 'products.delete': true,
-    'conversions.read': true, 'conversions.create': true, 'conversions.update': true, 'conversions.delete': true,
-    'conversions.sin_gestora': true,
-    'matriculas.read': true,  'matriculas.create': true,  'matriculas.update': true,
-    'reports.read': true,
-    'users.read': true,    'users.create': true,    'users.update': true,    'users.delete': true,
-    'settings.read': true, 'settings.update': true,
-    'projects.read': true, 'projects.update': true,
-    'campaigns.read': true,
-    'accounting.read': true, 'accounting.update': true,
-    // Tablero de tareas (#210): las mismas claves que el backend.
-    'tasks.view_all': true, 'tasks.view_own': true, 'tasks.create': true, 'tasks.assign': true, 'tasks.edit': true, 'tasks.delete': true, 'tasks.close': true, 'tasks.manage': true,
-    // Facturas de colaboradores (#202): las de las empresas de sus campus. Espejo del backend.
-    'facturas_colaborador.ver_todas': true, 'facturas_colaborador.gestionar': true, 'facturas_colaborador.anular': true, 'facturas_colaborador.pagar': true,
-    // Diplomas de Certifex (#223): verlos. El admin además los maneja, por su rol.
-    'diplomas.view': true,
-    // Emitirlos (Diego, 22/10/2026): el admin ya emite por su rol.
-    'diplomas.emit': true,
-  },
-  gestor: {
-    'leads.read': true,    'leads.create': true,    'leads.update': true,
-    'clients.read': true,
-    'products.read': true,
-    'conversions.read': true, 'conversions.create': true,
-    'matriculas.read': true,
-    'reports.read': true,
-    // Sin tablero (Diego, 09/10: «las gestoras no tienen tareas»): ni menú ni API.
-  },
-  // El tutor no entra al CRM normal (como en MultiCRM): ningún permiso por defecto.
-  tutor: {},
-  // Colaborador (#210, fase 5): solo su tablero de tareas. Espejo del backend.
-  colaborador: {
-    'tasks.view_all': false, 'tasks.view_own': true, 'tasks.create': true, 'tasks.assign': false, 'tasks.edit': true, 'tasks.delete': false, 'tasks.close': false, 'tasks.manage': false,
-    // Facturas de colaboradores (#202): sube la suya («Mi factura»).
-    'facturas_colaborador.subir': true,
-  },
-};
-
-export const PERMISSION_RESOURCES: ReadonlyArray<PermissionResource> = [
-  { key: 'leads',       label: 'Prospectos',  actions: ['read', 'create', 'update', 'delete', 'export', 'reassign'] },
-  { key: 'clients',     label: 'Clientes',    actions: ['read', 'create', 'update', 'delete'] },
-  { key: 'products',    label: 'Productos',   actions: ['read', 'create', 'update', 'delete'] },
-  { key: 'conversions', label: 'Conversiones', actions: ['read', 'create', 'update', 'delete', 'sin_gestora'] },
-  { key: 'matriculas',  label: 'Matrículas',  actions: ['read', 'create', 'update'] },
-  { key: 'reports',     label: 'Reportes',    actions: ['read'] },
-  { key: 'users',       label: 'Usuarios',    actions: ['read', 'create', 'update', 'delete'] },
-  { key: 'settings',    label: 'Configuración', actions: ['read', 'update'] },
-  { key: 'campaigns',   label: 'Campañas',    actions: ['read'] },
-  { key: 'accounting',  label: 'Contabilidad', actions: ['read', 'update'] },
-  { key: 'tasks',       label: 'Tareas',      actions: ['view_all', 'view_own', 'create', 'assign', 'edit', 'delete', 'close', 'manage'] },
-  { key: 'facturas_colaborador', label: 'Facturas de colaboradores', actions: ['ver_todas', 'gestionar', 'anular', 'pagar', 'subir'] },
-  // #223: ver la pantalla Diplomas en solo lectura. 22/10/2026: `emit`, emitirlos
-  // (revisar, pasar a Pendientes, aprobar y emitir, enviar). Rechazar, corregir y
-  // revocar siguen siendo del admin.
-  { key: 'diplomas',    label: 'Diplomas (Certifex)', actions: ['view', 'emit'] },
-];
+// Los permisos de cada rol NO viven aquí (#423). Había una copia de la tabla
+// del servidor y otra de la lista de recursos, y una prueba que las comparaba;
+// en cuanto el catálogo creció, la copia era una tercera lista que mantener.
+// Ahora el mapa de cada persona llega del servidor con el login y con
+// /auth/me, y el catálogo con `/permissions/catalogo`.
 
 export const FIXED_ROLES: ReadonlyArray<FixedRole> = [
   { key: 'superadmin', label: 'Superadmin', desc: 'Acceso total. Solo este rol gestiona usuarios.', color: 'rose' },
@@ -103,33 +43,32 @@ export interface UsePermissionResult {
   isAdmin: boolean;
 }
 
+/**
+ * El `can` de una persona, sin React (#423): lo usa el hook y lo usan las
+ * pruebas del menú, que necesitan saber qué ve cada perfil sin montar nada.
+ */
+export function crearCan(user: Parameters<typeof rolesDe>[0] | null | undefined, permissions: PermissionMap | null | undefined) {
+  return function can(permission: PermissionKey): boolean {
+    if (!user) return false;
+    // Solo el superadmin lo puede todo. Soporte NO: el backend le da un mapa
+    // restrictivo y saltarselo aqui le pintaba botones que su rol no permite.
+    if (tieneRolDe(user, 'superadmin')) return true;
+    // El mapa del servidor, que llega con el login y con /auth/me (al lado del
+    // usuario, no dentro). No hay tabla de respaldo (#423): sin mapa todavía,
+    // nada — mejor un botón que tarda un instante en salir que uno que sale y
+    // no debía.
+    //
+    // También para el tutor (#423): el servidor ya tiene su propio mapa (antes
+    // le calculaba el de una gestora); qué pantallas ve lo recorta ProtectedRoute.
+    if (!permissions) return false;
+    if (permissions['*'] === true) return true;
+    return permissions[permission] === true;
+  };
+}
+
 export default function usePermission(): UsePermissionResult {
   const { user, permissions } = useAuth();
-
-  function can(permission: PermissionKey): boolean {
-    if (!user) return false;
-    // bypass para roles privilegiados
-    if (tieneRolDe(user, 'superadmin', 'soporte')) return true;
-    // Los del backend, que mandan sobre la tabla de abajo.
-    //
-    // Se leian de `user.permissions` y ahi no estan: `/auth/me` los devuelve AL
-    // LADO del usuario. Solo en lo que el backend DEFINE: aqui varias claves se
-    // llaman distinto que alli (`leads.read` / `leads.view`) y esas siguen
-    // saliendo de la tabla. Y no para el tutor: el backend no tiene tabla de
-    // tutor y le calcula la de gestora.
-    if (permissions && user.role !== 'tutor') {
-      if (permissions['*'] === true) return true;
-      if (Object.prototype.hasOwnProperty.call(permissions, permission)) {
-        return permissions[permission] === true;
-      }
-    }
-    // fallback: defaults por rol
-    // Los de cada uno de sus roles, sumados: basta con que UNO lo permita.
-    return rolesDe(user).some((r) => {
-      const defaults = ROLE_DEFAULT_PERMISSIONS[r] || {};
-      return defaults[permission] === true || defaults['*'] === true;
-    });
-  }
+  const can = crearCan(user, permissions);
 
   return {
     can,

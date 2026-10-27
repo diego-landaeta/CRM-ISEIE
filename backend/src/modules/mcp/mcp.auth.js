@@ -111,7 +111,7 @@ export async function verificarTokenMcp(req, res, next) {
 async function seguir(req, res, next, vivo, conexion) {
   try {
     const user = await model.findUserById(vivo.user_id);
-    if (!puedeUsarMcp(user)) {
+    if (!(await puedeUsarMcp(user))) {
       return rechazar(res, 403, 'Tu usuario no tiene acceso al MCP del CRM.');
     }
 
