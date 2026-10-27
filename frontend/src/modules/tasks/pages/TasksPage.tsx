@@ -336,11 +336,17 @@ export default function TasksPage() {
     }
   }
 
+  // Con una ficha abierta, el recorrido NO se abre solo, y si estaba abierto se cierra
+  // (27/10/2026): su capa quedaba encima de la ficha y se tragaba «Crear tarea».
+  const fichaAbierta = abiertaId != null || nueva != null;
   useEffect(() => {
-    if (cargando || enRevisar || !recorridoPendiente(CLAVE_RECORRIDO_TABLERO)) return undefined;
+    if (cargando || enRevisar || fichaAbierta || !recorridoPendiente(CLAVE_RECORRIDO_TABLERO)) return undefined;
     const t = setTimeout(() => setRecorrido(true), 800);
     return () => clearTimeout(t);
-  }, [cargando, enRevisar]);
+  }, [cargando, enRevisar, fichaAbierta]);
+  useEffect(() => {
+    if (fichaAbierta) setRecorrido(false);
+  }, [fichaAbierta]);
 
   // Las opciones de cada filtro.
   const opcionesPersona = useMemo(() => {
