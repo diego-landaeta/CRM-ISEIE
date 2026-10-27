@@ -1,4 +1,5 @@
 import { query, getClient } from '../../shared/config/db.js';
+import { existeEquipos } from './tasks.equipos.model.js';
 
 // Quien tiene tablero de tareas: el equipo de desarrollo (Diego, 09/10: «las
 // tareas son del equipo de desarrollo, las gestoras no tienen tareas»). Ni
@@ -12,9 +13,15 @@ const conTablero = (n) => CON_TABLERO.replaceAll('$ROLES', `$${n}`);
 /**
  * La gente del ámbito (#245, decisiones de Diego del 08/10).
  *
+ * El ámbito es una lista de campus, pero se llega a él POR EMPRESA (Diego,
+ * 26/10/2026: «las tareas van por empresa, no por proyecto»): `ambitoDe`
+ * (servicio) mete en la lista todos los campus de las empresas de quien mira.
+ *
  * Una persona entra si:
- *   · tiene algún campus activo dentro del ámbito (su empresa o el campus elegido);
- *   · NO tiene ningún campus: colaboradores del grupo, que los ve todo el equipo;
+ *   · tiene algún campus activo dentro del ámbito;
+ *   · o es de una empresa del ámbito (`user_empresas`) aunque no tenga ningún
+ *     campus: el equipo de desarrollo es de la empresa, no de un campus;
+ *   · NO tiene ni campus ni empresa: colaboradores del grupo, que los ve todo el equipo;
  *   · o es quien está mirando.
  *
  * `col` es la columna con el id de la persona; `idxIds` y `idxYo`, los números
@@ -25,12 +32,98 @@ export function genteDelAmbito(col, idxIds, idxYo) {
   return `(${col} = $${idxYo}
     OR EXISTS (SELECT 1 FROM user_projects up_a
                 WHERE up_a.user_id = ${col} AND up_a.active AND up_a.project_id = ANY($${idxIds}::int[]))
-    OR NOT EXISTS (SELECT 1 FROM user_projects up_s WHERE up_s.user_id = ${col} AND up_s.active))`;
+    OR ${deEmpresaDelAmbito(col, idxIds)}
+    OR (NOT EXISTS (SELECT 1 FROM user_projects up_s WHERE up_s.user_id = ${col} AND up_s.active)
+        AND NOT EXISTS (SELECT 1 FROM user_empresas ue_s WHERE ue_s.user_id = ${col})))`;
+}
+
+/** Es de una empresa (`user_empresas`) que tiene algún campus en el ámbito. */
+function deEmpresaDelAmbito(col, idxIds) {
+  return `EXISTS (SELECT 1 FROM user_empresas ue_a
+                     JOIN projects pe_a ON pe_a.sociedad_emisora_id = ue_a.issuer_id
+                    WHERE ue_a.user_id = ${col} AND pe_a.id = ANY($${idxIds}::int[]))`;
+}
+
+/**
+ * Los campus de las empresas de una persona: las de sus campus y las que tiene
+ * enteras (`user_empresas`), más sus campus sin empresa. Es «su empresa» para
+ * el tablero (Diego, 26/10/2026).
+ */
+export async function campusDeSusEmpresas(userId) {
+  const { rows } = await query(
+    `WITH empresas AS (
+       SELECT p.sociedad_emisora_id AS id FROM user_projects up JOIN projects p ON p.id = up.project_id
+        WHERE up.user_id = $1 AND up.active AND p.sociedad_emisora_id IS NOT NULL
+       UNION
+       SELECT issuer_id FROM user_empresas WHERE user_id = $1)
+     SELECT p.id FROM projects p WHERE p.sociedad_emisora_id IN (SELECT id FROM empresas)
+     UNION
+     SELECT up.project_id FROM user_projects up WHERE up.user_id = $1 AND up.active
+     ORDER BY 1`,
+    [userId]
+  );
+  return rows.map((r) => Number(r.id));
+}
+
+/** Los campus de una empresa (para el selector de la cabecera). */
+export async function campusDeLaEmpresa(issuerId) {
+  const { rows } = await query('SELECT id FROM projects WHERE sociedad_emisora_id = $1 ORDER BY id', [issuerId]);
+  return rows.map((r) => Number(r.id));
+}
+
+/** La empresa de un campus, o null si no tiene. */
+export async function empresaDelCampus(projectId) {
+  const { rows } = await query('SELECT sociedad_emisora_id AS id FROM projects WHERE id = $1', [projectId]);
+  return rows[0]?.id == null ? null : Number(rows[0].id);
+}
+
+/*
+ * El supervisor (migración 234). Hasta que se pase, el tablero sigue sin él: la
+ * columna se pide solo si existe. Se recuerda solo el «sí».
+ */
+let haySupervisor = false;
+export async function existeSupervisor() {
+  if (haySupervisor) return true;
+  const { rows } = await query(
+    `SELECT EXISTS (SELECT 1 FROM information_schema.columns
+                     WHERE table_name = 'tasks' AND column_name = 'supervisor_id') AS hay`);
+  haySupervisor = rows[0]?.hay === true;
+  return haySupervisor;
+}
+/** Solo para las pruebas. */
+export function olvidarSupervisor() { haySupervisor = false; }
+
+const columnasSupervisor = (hay) => (hay
+  ? `t.supervisor_id,
+  u_sup.nombre AS supervisor_name,`
+  : `NULL::int AS supervisor_id,
+  NULL::text AS supervisor_name,`);
+const joinSupervisor = (hay) => (hay ? '\n  LEFT JOIN users u_sup ON u_sup.id = t.supervisor_id' : '');
+
+// El equipo de la tarea y el cargo de quien la lleva en él (migración 235).
+const columnasEquipo = (eq) => (eq
+  ? `t.team_id,
+  tm_t.name AS team_name,
+  tm_t.color AS team_color,
+  (SELECT r_c.name FROM task_team_members m_c JOIN task_team_roles r_c ON r_c.id = m_c.team_role_id
+    WHERE m_c.team_id = t.team_id AND m_c.user_id = t.assigned_to) AS assigned_cargo,`
+  : `NULL::int AS team_id,
+  NULL::text AS team_name,
+  NULL::text AS team_color,
+  NULL::text AS assigned_cargo,`);
+const joinEquipo = (eq) => (eq ? '\n  LEFT JOIN task_teams tm_t ON tm_t.id = t.team_id' : '');
+
+/** Lo que hay en la base: supervisor y equipos (cada uno con su migración). */
+async function extras() {
+  const [sup, eq] = await Promise.all([existeSupervisor(), existeEquipos()]);
+  return { sup, eq };
 }
 
 // Las columnas de una tarjeta. `position` es NUMERIC y pg lo devolveria como
 // texto: se pasa a numero para que el tablero pueda calcular puntos medios.
-const COLUMNAS = `
+const columnas = (hay, eq = false) => `
+  ${columnasSupervisor(hay)}
+  ${columnasEquipo(eq)}
   t.id,
   t.title,
   t.description,
@@ -56,18 +149,20 @@ const COLUMNAS = `
   t.created_at,
   t.updated_at`;
 
-const JOINS = `
+const joins = (hay, eq = false) => `
   FROM tasks t
   LEFT JOIN projects p ON p.id = t.project_id
   LEFT JOIN task_external_projects ep ON ep.id = t.external_project_id
   LEFT JOIN task_areas ar ON ar.id = t.area_id
   LEFT JOIN users u_assign ON u_assign.id = t.assigned_to
-  LEFT JOIN users u_create ON u_create.id = t.created_by`;
+  LEFT JOIN users u_create ON u_create.id = t.created_by${joinSupervisor(hay)}${joinEquipo(eq)}`;
 
 export async function findTasks({
   assigned_to, project_id, external_project_id, area_id, status, priority, search, tag, vencidas, desde, hasta,
-  incluir_archivadas = false, orden = 'tablero', ambito = null, yo = null,
+  incluir_archivadas = false, orden = 'tablero', ambito = null, yo = null, supervisor_id = null, tambien_supervisa = null,
+  team_id, visibles_para = null,
 }) {
+  const { sup: hay, eq } = await extras();
   const conditions = [];
   const params = [];
   const add = (sql, value) => {
@@ -80,7 +175,30 @@ export async function findTasks({
   // `null` es «todo el CRM» (superadmin y soporte): no se acota.
   if (ambito) {
     params.push(ambito, yo);
-    conditions.push(genteDelAmbito('t.assigned_to', params.length - 1, params.length));
+    const enAmbito = genteDelAmbito('t.assigned_to', params.length - 1, params.length);
+    // «Por revisar» del supervisor: lo de su ámbito y, además, lo que supervisa.
+    if (tambien_supervisa && hay) {
+      params.push(tambien_supervisa);
+      conditions.push(`(${enAmbito} OR t.supervisor_id = $${params.length})`);
+    } else conditions.push(enAmbito);
+  }
+  // Las que supervisa una persona (sin la migración 234, ninguna).
+  if (supervisor_id != null) {
+    if (hay) add('t.supervisor_id = $?', supervisor_id);
+    else conditions.push('FALSE');
+  }
+  // Sin «Ver todo» (26/10/2026): las suyas —las lleva, las creó o las supervisa—
+  // y las de sus equipos, que se ven aunque no se puedan mover.
+  if (visibles_para) {
+    params.push(visibles_para);
+    const yoN = `$${params.length}`;
+    conditions.push(`(t.assigned_to = ${yoN} OR t.created_by = ${yoN}${hay ? ` OR t.supervisor_id = ${yoN}` : ''}${eq
+      ? ` OR EXISTS (SELECT 1 FROM task_team_members m_v WHERE m_v.team_id = t.team_id AND m_v.user_id = ${yoN})` : ''})`);
+  }
+  // El equipo elegido arriba: uno, o 0 = «Sin equipo».
+  if (team_id != null && eq) {
+    if (Number(team_id) === 0) conditions.push('t.team_id IS NULL');
+    else add('t.team_id = $?', team_id);
   }
   if (project_id != null) add('t.project_id = $?', project_id);
   if (external_project_id != null) add('t.external_project_id = $?', external_project_id);
@@ -106,7 +224,7 @@ export async function findTasks({
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
   const sql = `
-    SELECT ${COLUMNAS},
+    SELECT ${columnas(hay, eq)},
       (SELECT COUNT(*)::int FROM task_checklist_items ci WHERE ci.task_id = t.id) AS checklist_total,
       (SELECT COUNT(*)::int FROM task_checklist_items ci WHERE ci.task_id = t.id AND ci.is_completed) AS checklist_completed,
       (SELECT COUNT(*)::int FROM task_comments cm WHERE cm.task_id = t.id) AS comments_count,
@@ -116,7 +234,7 @@ export async function findTasks({
         SELECT json_agg(json_build_object('id', tg.id, 'name', tg.name, 'color', tg.color) ORDER BY tg.id)
         FROM task_tags tg WHERE tg.task_id = t.id
       ), '[]'::json) AS tags
-    ${JOINS}
+    ${joins(hay, eq)}
     ${whereClause}
     ORDER BY ${orden === 'vencimiento'
     ? 't.due_date ASC NULLS LAST, t.updated_at ASC'
@@ -128,12 +246,13 @@ export async function findTasks({
 }
 
 /** Cuántas tareas esperan revisión: el número del selector y del menú. */
-export async function countReview(ambito = null, yo = null) {
+export async function countReview(ambito = null, yo = null, { tambienSupervisa = false } = {}) {
+  const hay = await existeSupervisor();
   const params = [];
   let filtro = '';
   if (ambito) {
     params.push(ambito, yo);
-    filtro = `AND ${genteDelAmbito('t.assigned_to', 1, 2)}`;
+    filtro = `AND (${genteDelAmbito('t.assigned_to', 1, 2)}${tambienSupervisa && hay ? ' OR t.supervisor_id = $2' : ''})`;
   }
   const { rows } = await query(
     `SELECT COUNT(*)::int AS total FROM tasks t
@@ -154,10 +273,11 @@ export async function personaEnAmbito(personaId, ambito, yo) {
 }
 
 export async function findTaskById(id) {
+  const { sup: hay, eq } = await extras();
   const { rows } = await query(
-    `SELECT ${COLUMNAS},
+    `SELECT ${columnas(hay, eq)},
        (SELECT cm.content FROM task_comments cm WHERE cm.task_id = t.id ORDER BY cm.created_at DESC, cm.id DESC LIMIT 1) AS last_comment
-     ${JOINS} WHERE t.id = $1`,
+     ${joins(hay, eq)} WHERE t.id = $1`,
     [id]
   );
   return rows[0] || null;
@@ -266,6 +386,8 @@ export async function createTask(data) {
     assigned_to = null,
     created_by,
     completed_at = null,
+    supervisor_id = null,
+    team_id = null,
   } = data;
 
   const { rows } = await query(
@@ -284,11 +406,20 @@ export async function createTask(data) {
      RETURNING id`,
     [title, description, status, position, priority, due_date, project_id, external_project_id, area_id, assigned_to, created_by, completed_at]
   );
+  // El supervisor va aparte: sin la migración 234 la columna no existe.
+  if (supervisor_id && await existeSupervisor()) {
+    await query('UPDATE tasks SET supervisor_id = $2 WHERE id = $1', [rows[0].id, supervisor_id]);
+  }
+  if (team_id && await existeEquipos()) {
+    await query('UPDATE tasks SET team_id = $2 WHERE id = $1', [rows[0].id, team_id]);
+  }
   return findTaskById(rows[0].id);
 }
 
 export async function updateTask(id, fields) {
   const allowed = ['title', 'description', 'priority', 'due_date', 'project_id', 'external_project_id', 'area_id', 'assigned_to'];
+  if (await existeSupervisor()) allowed.push('supervisor_id');
+  if (await existeEquipos()) allowed.push('team_id');
   const sets = [];
   const params = [];
 
@@ -676,13 +807,16 @@ export async function deleteLink(task_id, id) {
 
 /**
  * A quién puede asignar tareas quien mira (Hugo, 09/10): a sí mismo y a la
- * gente con algún campus activo dentro de su ámbito. Los colaboradores sin
- * campus, NO: a ellos solo les asigna el superadmin (`ambito` null).
+ * gente con algún campus activo dentro de su ámbito, o de una empresa del
+ * ámbito (`user_empresas`, Diego 26/10/2026: el equipo de desarrollo va por
+ * empresa). Los colaboradores sin campus ni empresa, NO: a ellos solo les
+ * asigna el superadmin (`ambito` null).
  */
 export function asignableEnAmbito(col, idxIds, idxYo) {
   return `(${col} = $${idxYo}
     OR EXISTS (SELECT 1 FROM user_projects up_g
-                WHERE up_g.user_id = ${col} AND up_g.active AND up_g.project_id = ANY($${idxIds}::int[])))`;
+                WHERE up_g.user_id = ${col} AND up_g.active AND up_g.project_id = ANY($${idxIds}::int[]))
+    OR ${deEmpresaDelAmbito(col, idxIds)})`;
 }
 
 /**
@@ -724,7 +858,7 @@ export async function personaAsignable(personaId, ambito, yo) {
 
 export async function findUserBasic(id) {
   const { rows } = await query(
-    `SELECT u.id, u.nombre, u.email, u.active,
+    `SELECT u.id, u.nombre, u.email, u.active, u.role::text AS role,
             (u.role::text = ANY($2::text[]) OR u.roles_extra::text[] && $2::text[]) AS con_tablero
        FROM users u WHERE u.id = $1`,
     [id, ROLES_TAREAS]

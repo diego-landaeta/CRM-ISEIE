@@ -4,6 +4,8 @@ import bcrypt from 'bcrypt';
 import { AppError } from '../../shared/utils/AppError.js';
 import * as userModel from './user.model.js';
 import * as empresas from './user.empresas.js';
+import { puedeTenerEmpresa } from './user.validation.js';
+import { comoLista } from '../../shared/utils/roles.js';
 import { revokeAllUserTokens, logActivity } from '../auth/auth.model.js';
 import { sendWelcomeUserEmail, sendCorreoCambiadoEmail, sendEmail } from '../../shared/services/brevo.service.js';
 import { notifyUsers } from '../notifications/notifications.service.js';
@@ -259,8 +261,11 @@ export async function update(id, data, { porUserId = null } = {}) {
   // aplicada no es un error: no habia nada que quitar.
   const cambios = { ...data };
   if (cambios.empresaIds?.length) {
-    if ((cambios.role ?? user.role) !== 'admin') {
-      throw new AppError('Solo un admin puede tener una empresa entera', 400, 'VALIDATION_ERROR');
+    // El admin (con sus campus) y el colaborador (solo la empresa, para Tareas).
+    const rolFinal = cambios.role ?? user.role;
+    const extra = comoLista(cambios.roles_extra ?? user.roles_extra ?? []);
+    if (rolFinal !== 'admin' && !puedeTenerEmpresa(rolFinal, extra)) {
+      throw new AppError('Solo un admin o un colaborador pueden tener una empresa entera', 400, 'VALIDATION_ERROR');
     }
     await empresas.comprobarEmpresas(cambios.empresaIds);
   } else if (cambios.empresaIds !== undefined && !(await empresas.existeTablaEmpresas())) {

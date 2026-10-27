@@ -1,4 +1,5 @@
 import * as taskService from './tasks.service.js';
+import * as equipos from './tasks.equipos.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import {
   createTaskSchema,
@@ -22,6 +23,13 @@ import {
   setAreaMembersSchema,
   createExternalProjectSchema,
   updateExternalProjectSchema,
+  assigneesQuerySchema,
+  createTeamSchema,
+  updateTeamSchema,
+  createTeamRoleSchema,
+  updateTeamRoleSchema,
+  setTeamMemberSchema,
+  listTeamsQuerySchema,
 } from './tasks.validation.js';
 
 function validar(schema, datos) {
@@ -117,7 +125,7 @@ export const reviewCount = accion(async (req, res) => {
 /* --- Personas, Etiquetas y Métricas --- */
 
 export const assignees = accion(async (req, res) => {
-  const data = await taskService.listAssignees(quien(req), validar(ambitoQuerySchema, req.query));
+  const data = await taskService.listAssignees(quien(req), validar(assigneesQuerySchema, req.query));
   res.json({ success: true, data });
 });
 
@@ -306,3 +314,24 @@ export const updateExternalProject = accion(async (req, res) => {
   const data = await taskService.updateExternalProject(id, body, quien(req));
   res.json({ success: true, data });
 });
+
+/* --- Equipos del tablero (26/10/2026) --- */
+
+const responder = (fn) => accion(async (req, res) => {
+  const data = await fn(req);
+  res.status(req.method === 'POST' ? 201 : 200).json({ success: true, data });
+});
+
+export const listTeams = responder((req) => equipos.listar(quien(req), validar(listTeamsQuerySchema, req.query)));
+export const myTeams = responder((req) => equipos.mios(quien(req)));
+export const teamEmpresas = responder((req) => equipos.empresas(quien(req)));
+export const getTeam = responder((req) => equipos.detalle(quien(req), validarId(req.params.teamId)));
+export const createTeam = responder((req) => equipos.crear(quien(req), validar(createTeamSchema, req.body)));
+export const updateTeam = responder((req) => equipos.editar(quien(req), validarId(req.params.teamId), validar(updateTeamSchema, req.body)));
+export const createTeamRole = responder((req) => equipos.crearCargo(quien(req), validarId(req.params.teamId), validar(createTeamRoleSchema, req.body)));
+export const updateTeamRole = responder((req) => equipos.editarCargo(quien(req), validarId(req.params.teamId),
+  validarId(req.params.roleId), validar(updateTeamRoleSchema, req.body)));
+export const teamCandidates = responder((req) => equipos.candidatos(quien(req), validarId(req.params.teamId)));
+export const setTeamMember = responder((req) => equipos.ponerMiembro(quien(req), validarId(req.params.teamId),
+  validarId(req.params.userId), validar(setTeamMemberSchema, req.body)));
+export const removeTeamMember = responder((req) => equipos.quitarMiembro(quien(req), validarId(req.params.teamId), validarId(req.params.userId)));

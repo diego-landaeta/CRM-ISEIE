@@ -15,6 +15,8 @@ export const AVISO_TAREAS_DEL_DIA = 'tareas_del_dia';
 export const AVISO_TAREA_DEVUELTA = 'tarea_devuelta';
 export const AVISO_TAREA_CERRADA = 'tarea_cerrada';
 export const AVISO_TAREA_COMENTARIO = 'tarea_comentario';
+// El supervisor de una tarea (26/10/2026): al ponerlo y cuando está para revisar.
+export const AVISO_TAREA_SUPERVISOR = 'tarea_supervisor';
 
 const ESTADOS = {
   por_hacer: 'Por hacer', en_curso: 'En curso', en_revision: 'En revisión', hecha: 'Hecha',
@@ -27,6 +29,11 @@ const PRIORIDADES = { baja: 'Baja', media: 'Media', alta: 'Alta' };
 const MARCA_CRM = { nombre: 'ISEIE', slug: 'iseie' };
 
 const tz = () => process.env.APP_TIMEZONE || 'Europe/Madrid';
+
+// El equipo en el asunto (26/10/2026): «Tarea asignada · Desarrollo y SEO: …».
+const conEquipo = (prefijo, tarea) => (tarea.team_name ? `${prefijo} · ${tarea.team_name}` : prefijo);
+const lineaEquipo = (tarea) => (tarea.team_name
+  ? `Equipo: <strong>${esc(tarea.team_name)}</strong>${tarea.assigned_cargo ? ` · ${esc(tarea.assigned_cargo)}` : ''}` : null);
 const fechaCorta = (d) => new Date(d).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', timeZone: tz() });
 
 /**
@@ -81,6 +88,7 @@ export async function marcaDeTarea(tarea) {
 /** El correo «te han asignado una tarea». */
 export function armarCorreoAsignada({ persona, tarea, quien, marca = null }) {
   const datos = [
+    lineaEquipo(tarea),
     `Prioridad: <strong>${esc(PRIORIDADES[tarea.priority] || tarea.priority)}</strong>`,
     tarea.due_date ? `Fecha límite: <strong>${esc(fechaCorta(tarea.due_date))}</strong>` : null,
     tarea.project_name ? `Proyecto: <strong>${esc(tarea.project_name)}</strong>` : null,
@@ -100,7 +108,7 @@ export function armarCorreoAsignada({ persona, tarea, quien, marca = null }) {
     ],
     apagar: { texto: 'Recibes este aviso porque te han asignado una tarea.' },
   });
-  return { asunto: `Tarea asignada: ${tarea.title}`, htmlContent, textContent };
+  return { asunto: `${conEquipo('Tarea asignada', tarea)}: ${tarea.title}`, htmlContent, textContent };
 }
 
 export async function enviarCorreoAsignada({ persona, tarea, quien }) {
@@ -114,6 +122,84 @@ export async function enviarCorreoAsignada({ persona, tarea, quien }) {
     textContent: c.textContent,
     tags: ['tareas', 'tarea-asignada'],
     clave: `${AVISO_TAREA_ASIGNADA}-${tarea.id}-${persona.id}`,
+  });
+}
+
+/** Los datos de la tarea, en la nota del correo: quién la lleva, prioridad, fecha y proyecto. */
+function datosDeLaTarea(tarea) {
+  return [
+    lineaEquipo(tarea),
+    tarea.assigned_to_name ? `La lleva: <strong>${esc(tarea.assigned_to_name)}</strong>` : null,
+    `Prioridad: <strong>${esc(PRIORIDADES[tarea.priority] || tarea.priority)}</strong>`,
+    tarea.due_date ? `Fecha límite: <strong>${esc(fechaCorta(tarea.due_date))}</strong>` : null,
+    tarea.project_name ? `Proyecto: <strong>${esc(tarea.project_name)}</strong>` : null,
+    tarea.external_project_name ? `Proyecto propio: <strong>${esc(tarea.external_project_name)}</strong>` : null,
+  ].filter(Boolean).join('<br>');
+}
+
+/**
+ * El correo «te han puesto de supervisor» (Diego, 26/10/2026: «si Julián pone
+ * una tarea a Diana y la supervisa Ángel, se puede, y eso debe llegar por correo»).
+ */
+export function armarCorreoSupervisor({ persona, tarea, quien, marca = null }) {
+  const { htmlContent, textContent } = correo({
+    proyecto: marca || MARCA_CRM,
+    titulo: 'Supervisas una tarea',
+    saludo: persona.nombre,
+    resumen: `${quien?.nombre || 'Alguien'} te ha puesto de supervisor de «${tarea.title}»`,
+    bloques: [
+      parrafo(`${esc(quien?.nombre || 'Alguien del equipo')} te ha puesto de <strong>supervisor</strong> de esta tarea. Te avisaremos cuando esté lista para revisar, y podrás aprobarla o devolverla:`),
+      nota(`<strong>${esc(tarea.title)}</strong><br>${datosDeLaTarea(tarea)}`),
+      boton({ texto: 'Abrir la tarea', url: enlace(`tareas?id=${tarea.id}`) }),
+    ],
+    apagar: { texto: 'Recibes este aviso porque te han puesto de supervisor de una tarea.' },
+  });
+  return { asunto: `${conEquipo('Supervisas', tarea)}: ${tarea.title}`, htmlContent, textContent };
+}
+
+export async function enviarCorreoSupervisor({ persona, tarea, quien }) {
+  const marca = await marcaDeTarea(tarea);
+  const c = armarCorreoSupervisor({ persona, tarea, quien, marca });
+  return despacharCorreo({
+    marca,
+    to: [{ email: persona.email, name: persona.nombre }],
+    subject: c.asunto,
+    htmlContent: c.htmlContent,
+    textContent: c.textContent,
+    tags: ['tareas', 'tarea-supervisor'],
+    clave: `${AVISO_TAREA_SUPERVISOR}-${tarea.id}-${persona.id}`,
+  });
+}
+
+/** Al supervisor: la tarea que supervisa está «En revisión». */
+export function armarCorreoParaRevisar({ persona, tarea, quien, marca = null }) {
+  const { htmlContent, textContent } = correo({
+    proyecto: marca || MARCA_CRM,
+    titulo: 'Una tarea que supervisas está para revisar',
+    saludo: persona.nombre,
+    resumen: `«${tarea.title}» está en «En revisión»`,
+    bloques: [
+      parrafo(`${esc(quien?.nombre || 'Alguien del equipo')} ha pasado a <strong>En revisión</strong> una tarea que supervisas. Ábrela para aprobarla o devolverla con lo que falte:`),
+      nota(`<strong>${esc(tarea.title)}</strong><br>${datosDeLaTarea(tarea)}`),
+      boton({ texto: 'Revisar la tarea', url: enlace(`tareas?id=${tarea.id}`) }),
+    ],
+    apagar: { texto: 'Recibes este aviso porque supervisas esta tarea.' },
+  });
+  return { asunto: `${conEquipo('Para revisar', tarea)}: ${tarea.title}`, htmlContent, textContent };
+}
+
+export async function enviarCorreoParaRevisar({ persona, tarea, quien }) {
+  const marca = await marcaDeTarea(tarea);
+  const c = armarCorreoParaRevisar({ persona, tarea, quien, marca });
+  return despacharCorreo({
+    marca,
+    to: [{ email: persona.email, name: persona.nombre }],
+    subject: c.asunto,
+    htmlContent: c.htmlContent,
+    textContent: c.textContent,
+    tags: ['tareas', 'tarea-para-revisar'],
+    // Cada vez que vuelve a «En revisión», otro aviso.
+    clave: `${AVISO_TAREA_SUPERVISOR}-revisar-${tarea.id}-${persona.id}-${Date.now()}`,
   });
 }
 

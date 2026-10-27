@@ -15,6 +15,10 @@ import type {
   TaskTag,
   TeamMemberMetric,
   AreaMetric,
+  Team,
+  TeamMember,
+  TeamRole,
+  MyTeam,
 } from '../types';
 
 /**
@@ -25,6 +29,8 @@ import type {
 export type Ambito = { issuerId?: number; projectId?: number };
 
 export type GetTasksParams = Ambito & {
+  /** El equipo elegido arriba; 0 = «Sin equipo». */
+  team_id?: number;
   status?: TaskStatus;
   assigned_to?: number;
   project_id?: number;
@@ -48,6 +54,10 @@ export type TaskPayload = {
   area_id?: number | null;
   status?: TaskStatus;
   assigned_to?: number | null;
+  /** Quien la supervisa (26/10/2026). Solo lo manda quien puede asignar. */
+  supervisor_id?: number | null;
+  /** Su equipo (26/10/2026). */
+  team_id?: number | null;
 };
 
 export async function getTasks(params: GetTasksParams = {}): Promise<Task[]> {
@@ -106,7 +116,7 @@ export async function archiveTask(id: number): Promise<Task> {
   return data as Task;
 }
 
-export async function getAssignees(ambito: Ambito = {}): Promise<Assignee[]> {
+export async function getAssignees(ambito: Ambito & { team_id?: number } = {}): Promise<Assignee[]> {
   const { data } = await client.get<Assignee[]>('/tasks/assignees', { params: ambito });
   return data ?? [];
 }
@@ -260,4 +270,61 @@ export async function createExternalProject(payload: { name: string; description
 export async function updateExternalProject(id: number, payload: Partial<TaskExternalProject>): Promise<TaskExternalProject> {
   const { data } = await client.patch<TaskExternalProject>(`/tasks/external-projects/${id}`, payload);
   return data as TaskExternalProject;
+}
+
+/* --- Equipos del tablero (26/10/2026) --- */
+
+export async function getTeams(opciones: { gestion?: boolean } = {}): Promise<Team[]> {
+  const { data } = await client.get<Team[]>('/tasks/teams', { params: opciones.gestion ? { gestion: 'true' } : {} });
+  return data ?? [];
+}
+
+export async function getMyTeams(): Promise<MyTeam[]> {
+  const { data } = await client.get<MyTeam[]>('/tasks/teams/mine');
+  return data ?? [];
+}
+
+export async function getTeamEmpresas(): Promise<{ id: number; razon_social: string }[]> {
+  const { data } = await client.get<{ id: number; razon_social: string }[]>('/tasks/teams/empresas');
+  return data ?? [];
+}
+
+export async function getTeam(id: number): Promise<Team & { miembros: TeamMember[] }> {
+  const { data } = await client.get<Team & { miembros: TeamMember[] }>(`/tasks/teams/${id}`);
+  return data;
+}
+
+export async function createTeam(body: { issuer_id: number; name: string; color?: string }): Promise<Team> {
+  const { data } = await client.post<Team>('/tasks/teams', body);
+  return data;
+}
+
+export async function updateTeam(id: number, body: Partial<Pick<Team, 'name' | 'color' | 'is_active' | 'sort_order'>>): Promise<Team> {
+  const { data } = await client.patch<Team>(`/tasks/teams/${id}`, body);
+  return data;
+}
+
+export async function createTeamRole(teamId: number, body: { name: string; level: number; sort_order?: number }): Promise<TeamRole> {
+  const { data } = await client.post<TeamRole>(`/tasks/teams/${teamId}/roles`, body);
+  return data;
+}
+
+export async function updateTeamRole(teamId: number, roleId: number, body: Partial<Pick<TeamRole, 'name' | 'level' | 'sort_order' | 'is_active'>>): Promise<TeamRole> {
+  const { data } = await client.patch<TeamRole>(`/tasks/teams/${teamId}/roles/${roleId}`, body);
+  return data;
+}
+
+export async function getTeamCandidates(teamId: number): Promise<{ id: number; nombre: string; email: string; role: string }[]> {
+  const { data } = await client.get<{ id: number; nombre: string; email: string; role: string }[]>(`/tasks/teams/${teamId}/candidates`);
+  return data ?? [];
+}
+
+export async function setTeamMember(teamId: number, userId: number, teamRoleId: number): Promise<TeamMember[]> {
+  const { data } = await client.put<TeamMember[]>(`/tasks/teams/${teamId}/members/${userId}`, { team_role_id: teamRoleId });
+  return data ?? [];
+}
+
+export async function removeTeamMember(teamId: number, userId: number): Promise<TeamMember[]> {
+  const { data } = await client.delete<TeamMember[]>(`/tasks/teams/${teamId}/members/${userId}`);
+  return data ?? [];
 }

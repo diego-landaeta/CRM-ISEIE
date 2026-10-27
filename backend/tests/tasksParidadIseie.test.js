@@ -141,15 +141,10 @@ describe('el tablero es del equipo de desarrollo', () => {
     expect(consulta).toMatch(/user_projects/);
   });
 
-  it('«Por revisar» es de quien tiene «Aprobar y cerrar»: la colaboradora no, el admin sí', async () => {
-    expect((await request.get('/api/tasks/review').set(como('colaboradora'))).status).toBe(403);
+  it('«Por revisar» (26/10/2026) es de quien supervisa: responde a todos, y a quien no supervisa nada, vacío', async () => {
+    expect((await request.get('/api/tasks/review').set(como('colaboradora'))).status).toBe(200);
     expect((await request.get('/api/tasks/review').set(como('admin'))).status).toBe(200);
     expect((await request.get('/api/tasks/review/count').set(como('colaboradora'))).body.data).toEqual({ count: 0 });
-  });
-
-  it('si en Roles se le quita «Aprobar y cerrar» al admin, deja de poder revisar', async () => {
-    db.estado.overrides.push({ role: 'admin', resource: 'tasks', action: 'close', allowed: false });
-    expect((await request.get('/api/tasks/review').set(como('admin'))).status).toBe(403);
   });
 });
 

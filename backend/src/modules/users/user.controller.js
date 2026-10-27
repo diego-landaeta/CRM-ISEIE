@@ -309,6 +309,8 @@ const AVISOS = [
     detalle: 'Cuando aprueban una tarea tuya y pasa a «Hecha».' },
   { aviso: 'tarea_comentario', titulo: 'Comentario en tu tarea',
     detalle: 'Cuando alguien comenta en una tarea que tienes asignada.' },
+  { aviso: 'tarea_supervisor', titulo: 'Tarea que supervisas',
+    detalle: 'Cuando te ponen de supervisor de una tarea y cuando está lista para revisar.' },
 ];
 
 export async function misAvisos(req, res, next) {

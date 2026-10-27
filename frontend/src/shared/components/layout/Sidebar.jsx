@@ -124,7 +124,9 @@ export const NAV_SECTIONS = [
   {
     label: 'Publicidad',
     items: [
-      { to: '/meta-ads',   label: 'Meta Ads',   icon: ChartLineUp, roles: ['admin', 'superadmin'], permiso: 'meta_ads.view' },
+      // Meta Ads: administración por su rol; y en solo lectura a quien se le da
+      // `meta_ads.view` (26/10/2026: Jonathan, Gustavo, Ruth, Julián, Jesús), también si es solo colaborador.
+      { to: '/meta-ads',   label: 'Meta Ads',   icon: ChartLineUp, roles: ['admin', 'superadmin'], permiso: 'meta_ads.view', oPermiso: 'meta_ads.view', colaboradorConPermiso: 'meta_ads.view' },
       { to: '/google-ads', label: 'Google Ads', icon: ChartLineUp, roles: ['admin', 'superadmin'], comingSoon: true },
     ],
   },
@@ -287,6 +289,11 @@ export function canSeeItem(item, role, soloColaboraciones, permisos, can) {
   // Lo mismo para quien es SOLO colaborador (#210, fase 5): Tareas y sus
   // preferencias. El servidor le responde 403 en todo lo demas.
   if (roles.length > 0 && roles.every((r) => r === 'colaborador')) {
+    // Lo que no es de su rol, solo si se le ha dado a propósito para él (Meta
+    // Ads, 26/10/2026). `oPermiso` a secas no basta: Diplomas no es para un colaborador.
+    if (item.colaboradorConPermiso) return typeof can === 'function' && can(item.colaboradorConPermiso) === true;
+    // «Por revisar» y «Configurar tablero», solo con su clave (como en MultiCRM).
+    if (item.permiso && String(item.permiso).includes('.') && !(typeof can === 'function' && can(item.permiso) === true)) return false;
     return Array.isArray(item.roles) && item.roles.includes('colaborador');
   }
   // Un gestor de colaboraciones se dedica SOLO a los tutores: no lleva

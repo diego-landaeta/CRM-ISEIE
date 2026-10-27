@@ -68,6 +68,16 @@ export interface Task {
   assigned_to: number | null;
   assigned_to_name?: string | null;
   assigned_to_email?: string | null;
+  /** Quien la supervisa (26/10/2026): la ve, recibe los avisos y la aprueba o devuelve. */
+  supervisor_id?: number | null;
+  supervisor_name?: string | null;
+  /** Su equipo (26/10/2026) y el cargo de quien la lleva en él. */
+  team_id?: number | null;
+  team_name?: string | null;
+  team_color?: string | null;
+  assigned_cargo?: string | null;
+  /** Si quien mira puede moverla (arrastrarla): el responsable, el supervisor o un superadmin. */
+  puede_mover?: boolean;
   created_by: number;
   created_by_name?: string | null;
   completed_at: string | null;
@@ -83,7 +93,18 @@ export interface Task {
 }
 
 /** La tarjeta abierta: con todo lo que cuelga de ella. */
+/** Lo que quien mira puede hacer con esta tarea (lo decide el servidor, tasks.reglas.js). */
+export interface TaskPermisos {
+  mover: boolean;
+  comentar: boolean;
+  revisar: boolean;
+  cerrar: boolean;
+  editar: boolean;
+  delegar: boolean;
+}
+
 export interface TaskDetail extends Task {
+  permisos?: TaskPermisos;
   checklist: TaskChecklistItem[];
   comments: TaskComment[];
   tags: TaskTag[];
@@ -98,6 +119,55 @@ export interface Assignee {
   role: string;
   /** Si quien mira puede ponerla como responsable (un colaborador sin campus, solo el superadmin). */
   asignable?: boolean;
+  /** Con un equipo elegido: su cargo y su nivel en él (null si no está). */
+  team_nivel?: number | null;
+  team_cargo?: string | null;
+}
+
+/** Un cargo de un equipo, con su nivel: se delega hacia niveles menores. */
+export interface TeamRole {
+  id: number;
+  name: string;
+  level: number;
+  sort_order: number;
+  is_active: boolean;
+}
+
+/** Un equipo del tablero (26/10/2026), de una empresa. */
+export interface Team {
+  id: number;
+  issuer_id: number;
+  empresa: string;
+  name: string;
+  color: string;
+  is_active: boolean;
+  sort_order: number;
+  miembros: number;
+  cargos: TeamRole[];
+}
+
+export interface TeamMember {
+  id: number;
+  nombre: string;
+  email: string;
+  role: string;
+  active: boolean;
+  team_role_id: number;
+  cargo: string;
+  nivel: number;
+}
+
+/** Un equipo de quien mira, con su cargo. */
+export interface MyTeam {
+  team_id: number;
+  team_name: string;
+  team_color: string;
+  issuer_id: number;
+  empresa: string;
+  team_role_id: number;
+  cargo: string;
+  nivel: number;
+  puede_delegar: boolean;
 }
 
 export interface TagName {

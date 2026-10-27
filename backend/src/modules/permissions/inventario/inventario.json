@@ -7400,6 +7400,10 @@
     "claves": [
      "meta_ads.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "deSusCampus"
    }
   ],
   "puertas": []
@@ -7422,6 +7426,10 @@
     "claves": [
      "meta_ads.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "deSusCampus"
    }
   ],
   "puertas": []
@@ -7444,6 +7452,10 @@
     "claves": [
      "meta_ads.edit"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "deSusCampus"
    }
   ],
   "puertas": []
@@ -7554,6 +7566,10 @@
     "claves": [
      "meta_ads.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "deSusCampus"
    }
   ],
   "puertas": []
@@ -7576,6 +7592,10 @@
     "claves": [
      "meta_ads.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "deSusCampus"
    }
   ],
   "puertas": []
@@ -7598,6 +7618,10 @@
     "claves": [
      "meta_ads.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "deSusCampus"
    }
   ],
   "puertas": []
@@ -7620,6 +7644,10 @@
     "claves": [
      "meta_ads.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "deSusCampus"
    }
   ],
   "puertas": []
@@ -7642,6 +7670,10 @@
     "claves": [
      "meta_ads.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "deSusCampus"
    }
   ],
   "puertas": []
@@ -7664,6 +7696,10 @@
     "claves": [
      "meta_ads.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "deSusCampus"
    }
   ],
   "puertas": []
@@ -7686,6 +7722,10 @@
     "claves": [
      "meta_ads.edit"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "deSusCampus"
    }
   ],
   "puertas": []
@@ -7708,6 +7748,10 @@
     "claves": [
      "meta_ads.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "deSusCampus"
    }
   ],
   "puertas": []
@@ -7730,6 +7774,10 @@
     "claves": [
      "meta_ads.edit"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "deSusCampus"
    }
   ],
   "puertas": []
@@ -7752,6 +7800,10 @@
     "claves": [
      "meta_ads.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "deSusCampus"
    }
   ],
   "puertas": []
@@ -7774,6 +7826,10 @@
     "claves": [
      "meta_ads.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "deSusCampus"
    }
   ],
   "puertas": []
@@ -11092,6 +11148,259 @@
   "metodo": "GET",
   "ruta": "/api/tasks/review/count",
   "relativa": "GET /review/count",
+  "controlador": null,
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tasks.view_own",
+     "tasks.view_all"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/tasks/teams",
+  "tipo": "ruta",
+  "modulo": "tasks",
+  "metodo": "GET",
+  "ruta": "/api/tasks/teams",
+  "relativa": "GET /teams",
+  "controlador": null,
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tasks.view_own",
+     "tasks.view_all"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/tasks/teams/mine",
+  "tipo": "ruta",
+  "modulo": "tasks",
+  "metodo": "GET",
+  "ruta": "/api/tasks/teams/mine",
+  "relativa": "GET /teams/mine",
+  "controlador": null,
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tasks.view_own",
+     "tasks.view_all"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/tasks/teams/empresas",
+  "tipo": "ruta",
+  "modulo": "tasks",
+  "metodo": "GET",
+  "ruta": "/api/tasks/teams/empresas",
+  "relativa": "GET /teams/empresas",
+  "controlador": null,
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tasks.view_own",
+     "tasks.view_all"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/tasks/teams",
+  "tipo": "ruta",
+  "modulo": "tasks",
+  "metodo": "POST",
+  "ruta": "/api/tasks/teams",
+  "relativa": "POST /teams",
+  "controlador": null,
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tasks.view_own",
+     "tasks.view_all"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/tasks/teams/:teamId",
+  "tipo": "ruta",
+  "modulo": "tasks",
+  "metodo": "GET",
+  "ruta": "/api/tasks/teams/:teamId",
+  "relativa": "GET /teams/:teamId",
+  "controlador": null,
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tasks.view_own",
+     "tasks.view_all"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PATCH /api/tasks/teams/:teamId",
+  "tipo": "ruta",
+  "modulo": "tasks",
+  "metodo": "PATCH",
+  "ruta": "/api/tasks/teams/:teamId",
+  "relativa": "PATCH /teams/:teamId",
+  "controlador": null,
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tasks.view_own",
+     "tasks.view_all"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/tasks/teams/:teamId/roles",
+  "tipo": "ruta",
+  "modulo": "tasks",
+  "metodo": "POST",
+  "ruta": "/api/tasks/teams/:teamId/roles",
+  "relativa": "POST /teams/:teamId/roles",
+  "controlador": null,
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tasks.view_own",
+     "tasks.view_all"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PATCH /api/tasks/teams/:teamId/roles/:roleId",
+  "tipo": "ruta",
+  "modulo": "tasks",
+  "metodo": "PATCH",
+  "ruta": "/api/tasks/teams/:teamId/roles/:roleId",
+  "relativa": "PATCH /teams/:teamId/roles/:roleId",
+  "controlador": null,
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tasks.view_own",
+     "tasks.view_all"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/tasks/teams/:teamId/candidates",
+  "tipo": "ruta",
+  "modulo": "tasks",
+  "metodo": "GET",
+  "ruta": "/api/tasks/teams/:teamId/candidates",
+  "relativa": "GET /teams/:teamId/candidates",
+  "controlador": null,
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tasks.view_own",
+     "tasks.view_all"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PUT /api/tasks/teams/:teamId/members/:userId",
+  "tipo": "ruta",
+  "modulo": "tasks",
+  "metodo": "PUT",
+  "ruta": "/api/tasks/teams/:teamId/members/:userId",
+  "relativa": "PUT /teams/:teamId/members/:userId",
+  "controlador": null,
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tasks.view_own",
+     "tasks.view_all"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "DELETE /api/tasks/teams/:teamId/members/:userId",
+  "tipo": "ruta",
+  "modulo": "tasks",
+  "metodo": "DELETE",
+  "ruta": "/api/tasks/teams/:teamId/members/:userId",
+  "relativa": "DELETE /teams/:teamId/members/:userId",
   "controlador": null,
   "publica": false,
   "guardias": [

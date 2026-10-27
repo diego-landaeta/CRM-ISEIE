@@ -17,9 +17,12 @@ import { Buildings } from '@phosphor-icons/react';
  */
 export default function CampusPorEmpresa({
   projects, assigned, role, onToggle, onSetRecibe, onSetMany,
-  empresas, empresasEnteras = [], onToggleEmpresa, faltaMigracion = false,
+  empresas, empresasEnteras = [], onToggleEmpresa, faltaMigracion = false, esColaborador = false,
 }) {
-  const conEmpresas = role === 'admin' && !!onToggleEmpresa && Array.isArray(empresas);
+  // El colaborador (rol principal o añadido) también tiene empresa: el equipo de
+  // desarrollo va por empresa en Tareas (26/10/2026). A él NO le da campus.
+  const paraColaborador = role !== 'admin' && esColaborador;
+  const conEmpresas = (role === 'admin' || paraColaborador) && !!onToggleEmpresa && Array.isArray(empresas);
 
   const porEmpresa = new Map();
   for (const p of projects) {
@@ -77,6 +80,14 @@ export default function CampusPorEmpresa({
             {conEmpresas && g.id !== null && (
               <label className={`flex items-start gap-2 rounded-md border px-2 py-1.5 text-xs ${entera ? 'border-primary/50 bg-primary/5' : 'border-dashed border-border'} ${faltaMigracion ? 'opacity-50' : 'cursor-pointer'}`}>
                 <input type="checkbox" checked={entera} disabled={faltaMigracion} onChange={() => onToggleEmpresa(g.id)} className="mt-0.5" />
+                {paraColaborador ? (
+                <span>
+                  Es del equipo de esta empresa (Tareas y su factura)
+                  <span className="block text-[10px] text-muted-foreground">
+                    Le pueden asignar tareas los encargados de la empresa. No le da ningún campus.
+                  </span>
+                </span>
+                ) : (
                 <span>
                   Todos los campus de esta empresa, también los que se creen
                   <span className="block text-[10px] text-muted-foreground">
@@ -85,6 +96,7 @@ export default function CampusPorEmpresa({
                       : 'No es superadmin: no ve otras empresas ni gestiona usuarios.'}
                   </span>
                 </span>
+                )}
               </label>
             )}
 

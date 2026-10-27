@@ -98,6 +98,11 @@ export async function ponerEmpresas(client, userId, ids, porUserId = null) {
      ON CONFLICT (user_id, issuer_id) DO NOTHING`,
     [userId, lista, porUserId]
   );
+  // Un colaborador (el equipo de desarrollo, 26/10/2026) es de la empresa, no de
+  // sus campus: la empresa le vale para el tablero de tareas, y NO se le dan
+  // campus (no tiene por qué ver nada de cada uno). Solo el admin los recibe.
+  const { rows: [u] } = await client.query('SELECT role FROM users WHERE id = $1', [userId]);
+  if (u?.role !== 'admin') return { campusAnadidos: 0 };
   // Todos los campus de la empresa, también los inactivos: el login ya filtra
   // `p.active`, y si uno se reactiva el admin lo tiene sin hacer nada.
   // El reparto no se toca: entra sin `recibe_leads`, como cualquier admin.

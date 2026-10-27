@@ -360,12 +360,16 @@ function EditUserModal({ user, projects, onClose, onSaved, empresas, faltaMigrac
   // proyectos futuros, pero de SU empresa». Solo las da el super admin.
   const puedeDarEmpresas = Array.isArray(empresas) && !faltaMigracionEmpresas;
   const [empresasEnteras, setEmpresasEnteras] = useState(Array.isArray(user.empresa_ids) ? user.empresa_ids : []);
+  // El colaborador también tiene empresa, sin campus (equipo de desarrollo, 26/10/2026).
+  const esColaborador = role === 'colaborador' || (rolesExtra || []).includes('colaborador');
+  const llevaEmpresa = role === 'admin' || esColaborador;
   // Al marcarla se marcan ya sus campus de hoy (es lo que guardará el
-  // servidor). Al quitarla NO se desmarcan: conserva lo que tiene.
+  // servidor). Al quitarla NO se desmarcan: conserva lo que tiene. Al
+  // colaborador no: la empresa no le da campus.
   function alternarEmpresa(issuerId) {
     const entera = empresasEnteras.includes(issuerId);
     setEmpresasEnteras((prev) => (entera ? prev.filter((x) => x !== issuerId) : [...prev, issuerId]));
-    if (!entera) {
+    if (!entera && role === 'admin') {
       const ids = projects.filter((p) => Number(p.sociedad_emisora_id) === issuerId).map((p) => p.id);
       setAssigned((a) => marcarVarios(a, ids, true));
     }
@@ -401,8 +405,8 @@ function EditUserModal({ user, projects, onClose, onSaved, empresas, faltaMigrac
         ...(cambiaCorreo ? { email: correoNuevo, reenviarEnlace: reenviarEnlace && user.role !== 'tutor' } : {}),
         projects: projList, whatsapp_phone: phone.trim(),
         // Las empresas enteras (#220), solo si las ha podido tocar. Para otro
-        // rol que no sea admin van vacías: una gestora no tiene empresa entera.
-        ...(puedeDarEmpresas ? { empresaIds: role === 'admin' ? empresasEnteras : [] } : {}),
+        // rol que no sea admin ni colaborador van vacías: una gestora no tiene empresa.
+        ...(puedeDarEmpresas ? { empresaIds: llevaEmpresa ? empresasEnteras : [] } : {}),
       });
       toast(cambiaCorreo
         ? { title: '✓ Guardado', description: `${nombre.trim()} entra ahora con ${correoNuevo}. Sus sesiones se han cerrado.` }
@@ -526,6 +530,7 @@ function EditUserModal({ user, projects, onClose, onSaved, empresas, faltaMigrac
               empresasEnteras={empresasEnteras}
               onToggleEmpresa={empresas ? alternarEmpresa : undefined}
               faltaMigracion={faltaMigracionEmpresas}
+              esColaborador={esColaborador}
             />
           </div>
         </div>
@@ -580,11 +585,12 @@ function InviteUserModal({ projects, onClose, onCreated, empresas, faltaMigracio
   const puedeDarEmpresas = Array.isArray(empresas) && !faltaMigracionEmpresas;
   const [empresasEnteras, setEmpresasEnteras] = useState([]);
   // Al marcarla se marcan ya sus campus de hoy (es lo que guardará el
-  // servidor). Al quitarla NO se desmarcan: conserva lo que tiene.
+  // servidor). Al quitarla NO se desmarcan: conserva lo que tiene. Al
+  // colaborador no: la empresa no le da campus (26/10/2026).
   function alternarEmpresa(issuerId) {
     const entera = empresasEnteras.includes(issuerId);
     setEmpresasEnteras((prev) => (entera ? prev.filter((x) => x !== issuerId) : [...prev, issuerId]));
-    if (!entera) {
+    if (!entera && role === 'admin') {
       const ids = projects.filter((p) => Number(p.sociedad_emisora_id) === issuerId).map((p) => p.id);
       setAssigned((a) => marcarVarios(a, ids, true));
     }
@@ -604,7 +610,7 @@ function InviteUserModal({ projects, onClose, onCreated, empresas, faltaMigracio
     const projList = Object.entries(assigned).map(([projectId, recibeLeads]) => ({ projectId: Number(projectId), recibeLeads: !!recibeLeads }));
     // Un admin o una gestora sin campus entraría a un CRM vacío (#220). Al
     // admin le vale una empresa entera; a la gestora, no.
-    const conEmpresa = role === 'admin' && puedeDarEmpresas && empresasEnteras.length > 0;
+    const conEmpresa = (role === 'admin' || role === 'colaborador') && puedeDarEmpresas && empresasEnteras.length > 0;
     if ((role === 'admin' || role === 'gestor') && projList.length === 0 && !conEmpresa) {
       toast({
         title: 'Falta el campus',
@@ -667,6 +673,7 @@ function InviteUserModal({ projects, onClose, onCreated, empresas, faltaMigracio
               empresasEnteras={empresasEnteras}
               onToggleEmpresa={empresas ? alternarEmpresa : undefined}
               faltaMigracion={faltaMigracionEmpresas}
+              esColaborador={role === 'colaborador'}
             />
           </div>
         </div>
