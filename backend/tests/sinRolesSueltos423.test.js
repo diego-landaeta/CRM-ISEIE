@@ -57,6 +57,7 @@ const DECLARADAS = {
   'users/user.validation.js': [3, 'comportamiento: qué campus pide cada rol al darlo de alta'],
   'users/user.views.controller.js': [1, 'alcance: su vista, o la de cualquiera el superadmin'],
   'webhooks-salientes/webhooks-salientes.controller.js': [2, 'alcance: el superadmin ve todos los campus'],
+  'asignacion/asignacion.controller.js': [3, 'alcance: el superadmin ve todas las configuraciones de la asignación; la de todas las empresas, solo él'],
   'whatsapp/chat.controller.js': [2, 'alcance: supervisar solo a quien comparte campus'],
   'whatsapp/roles.js': [2, 'comportamiento: por qué un rol no tiene WhatsApp (el motivo que se enseña)'],
   'whatsapp/whatsapp.controller.js': [1, 'alcance: la gestora, su cola'],

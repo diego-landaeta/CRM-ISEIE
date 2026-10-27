@@ -7,7 +7,7 @@ import {
   FilePdf, ShieldCheck, MagnifyingGlass, Headset, BookOpen, Sliders,
   Megaphone, Robot, Sparkle, PlugsConnected, CreditCard, WarningCircle, WhatsappLogo,
   ChatText,
-  Receipt, Coins, Wrench, ShoppingBag, ChatCircleText, Wallet, Bank, Clock, GitMerge, CopySimple,
+  Receipt, Coins, Wrench, ShoppingBag, ChatCircleText, Wallet, Bank, Shuffle, Clock, GitMerge, CopySimple,
   UsersThree, CloudArrowDown,
   GraduationCap, Warning, Certificate, ClipboardText, ChatsCircle, Kanban, CheckSquare, SlidersHorizontal } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -215,6 +215,7 @@ export const NAV_SECTIONS = [
       // Diego, 15/10: «un apartado en Conexión para enviar esos datos ÚNICAMENTE
       // CUANDO SE PONGA DATOS POR TRANSFERENCIA BANCARIA / DEPÓSITO BANCARIO».
       { to: '/conexion/webhook-transferencias', label: 'Webhook de transferencias', icon: Bank, roles: ['admin', 'superadmin'], permiso: 'webhooks_salientes.view' },
+      { to: '/conexion/asignacion-leads', label: 'Asignación de leads', icon: Shuffle, roles: ['admin', 'superadmin'], permiso: 'webhooks_salientes.view' },
     ],
   },
   {
