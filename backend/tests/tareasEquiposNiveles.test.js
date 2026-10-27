@@ -147,20 +147,29 @@ describe('delegar: hacia abajo, dentro del equipo', () => {
 
   it('el nivel más bajo crea solo las suyas: dársela a otro, o ponerle supervisor, 403', async () => {
     expect((await crear('diana', { title: `${MARCA} De Diana`, team_id: equipo.id })).status).toBe(201);
-    expect((await crear('diana', { title: `${MARCA} De Diana sin equipo` })).status).toBe(201);
     expect((await crear('diana', { title: 'x', team_id: equipo.id, assigned_to: U.pedro.id })).status).toBe(403);
     expect((await crear('diana', { title: 'x', team_id: equipo.id, supervisor_id: U.julian.id })).status).toBe(403);
-    // Sin equipo, a otro tampoco, ni siendo encargado en un equipo.
-    expect((await crear('julian', { title: 'x', assigned_to: U.diana.id })).status).toBe(403);
   });
 
-  it('a quien no es del equipo: 400, aunque sea de la empresa', async () => {
-    expect((await crear('julian', { title: 'x', team_id: equipo.id, assigned_to: U.fuera.id })).status).toBe(400);
+  // Diego, 27/10/2026: «el equipo es según la persona enlazada».
+  it('el equipo es el de quien la lleva: sin pedirlo, sale el suyo; pedir otro no cuela', async () => {
+    const r = await crear('julian', { title: `${MARCA} Sin pedir equipo`, assigned_to: U.diana.id });
+    expect(r.status, JSON.stringify(r.body)).toBe(201);
+    expect(r.body.data.team_id).toBe(equipo.id);
+    const propia = await crear('diana', { title: `${MARCA} De Diana sin pedir` });
+    expect(propia.body.data.team_id).toBe(equipo.id);
+  });
+
+  it('a quien no está en ningún equipo, solo quien delega en todos: 403', async () => {
+    expect((await crear('julian', { title: 'x', team_id: equipo.id, assigned_to: U.fuera.id })).status).toBe(403);
   });
 
   it('el admin delega en todo el equipo; un equipo de otra empresa no es suyo', async () => {
     expect((await crear('admin', { title: `${MARCA} Admin→Jefe`, team_id: equipo.id, assigned_to: U.jefe.id })).status).toBe(201);
-    expect((await crear('ajeno', { title: 'x', team_id: equipo.id })).status).toBe(403);
+    // Quien no es del equipo se crea la suya, pero con SU equipo, no con el que pida.
+    const ajena = await crear('ajeno', { title: `${MARCA} De ajeno`, team_id: equipo.id });
+    if (ajena.status === 201) expect(ajena.body.data.team_id).not.toBe(equipo.id);
+    else expect(ajena.status).toBe(403);
   });
 });
 
@@ -257,8 +266,10 @@ describe('«Mi tablero» (26/10/2026): para todos, lo que lleva, supervisa o cre
 
 describe('el tablero, por equipo', () => {
   it('«Sin equipo» trae las que no tienen; uno concreto, solo las suyas', async () => {
-    const sin = (await request.get('/api/tasks?team_id=0').set(como('diana'))).body.data;
-    expect(sin.map((x) => x.title)).toContain(`${MARCA} De Diana sin equipo`);
+    // Una tarea de quien no está en ningún equipo (el admin se la da a sí mismo).
+    expect((await crear('admin', { title: `${MARCA} Del admin, sin equipo` })).status).toBe(201);
+    const sin = (await request.get('/api/tasks?team_id=0').set(como('admin'))).body.data;
+    expect(sin.map((x) => x.title)).toContain(`${MARCA} Del admin, sin equipo`);
     expect(sin.every((x) => x.team_id == null)).toBe(true);
     const del = (await request.get(`/api/tasks?team_id=${equipo.id}`).set(como('diana'))).body.data;
     expect(del.every((x) => x.team_id === equipo.id)).toBe(true);
