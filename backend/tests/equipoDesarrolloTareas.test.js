@@ -130,7 +130,8 @@ describe('A · por empresa, no por campus', () => {
     // Los dos correos: a Diana, la tarea; a Ángel, que la supervisa.
     expect(correosA('diana').map((c) => c.subject)).toEqual([`Tarea asignada: ${MARCA} Para Diana`]);
     expect(correosA('angel').map((c) => c.subject)).toEqual([`Supervisas: ${MARCA} Para Diana`]);
-    expect(correosA('angel')[0].clave).toBe(`tarea_supervisor-${tarea.id}-${U.angel.id}`);
+    // Con el momento del cambio (26/10/2026): si lo quitan y lo vuelven a poner, vuelve a llegar.
+    expect(correosA('angel')[0].clave).toMatch(new RegExp(`^tarea_supervisor-${tarea.id}-${U.angel.id}-[0-9]+$`));
     // Y la campana del supervisor.
     const aviso = await one(
       `SELECT title FROM admin_notifications WHERE $1 = ANY(target_user_ids) AND type = 'task_supervisor'`, [U.angel.id]);
