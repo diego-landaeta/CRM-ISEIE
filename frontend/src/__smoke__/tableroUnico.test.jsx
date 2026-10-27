@@ -13,13 +13,15 @@ import { MemoryRouter } from 'react-router-dom';
   filtros»; y en la tarjeta, «Creada …» y, si está hecha, «Terminada …».
 */
 
-const { api } = vi.hoisted(() => ({
+const { api, yo } = vi.hoisted(() => ({
   api: {
     getTasks: vi.fn(),
   },
+  // Quien mira: superadmin salvo en las pruebas que lo cambian.
+  yo: { id: 1, nombre: 'Diego', role: 'superadmin', roles_extra: [] },
 }));
 
-vi.mock('@/contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 1, nombre: 'Diego', role: 'superadmin' } }) }));
+vi.mock('@/contexts/AuthContext', () => ({ useAuth: () => ({ user: yo }) }));
 vi.mock('@/contexts/ProjectContext', () => ({ useProjectContext: () => ({ projects: [] }) }));
 vi.mock('@/shared/hooks/usePermission', () => ({ default: () => ({ can: () => true }) }));
 vi.mock('@/shared/components/ui/RecorridoGuiado', () => ({ default: () => null, recorridoPendiente: () => false }));
@@ -62,6 +64,7 @@ const TAREAS = [
 beforeEach(() => {
   api.getTasks.mockReset();
   api.getTasks.mockResolvedValue(TAREAS);
+  Object.assign(yo, { role: 'superadmin', roles_extra: [] });
 });
 afterEach(() => cleanup());
 
@@ -98,12 +101,39 @@ describe('un solo tablero', () => {
     expect(screen.getAllByText(/Terminada 22 oct/)).toHaveLength(1);
   });
 
-  it('se entra en «Mis tareas», sin periodo', async () => {
+  it('el equipo entra en «Mis tareas», sin periodo', async () => {
+    Object.assign(yo, { role: 'colaborador' });
     abrir();
     await screen.findByText('Maquetar la home');
     expect(api.getTasks.mock.calls[0][0]).toMatchObject({ ver: 'mias' });
     expect(api.getTasks.mock.calls[0][0].periodo_desde).toBeUndefined();
     expect(screen.getByTestId('resumen-periodo').textContent).toBe('Todas las fechas · 4 tareas: 1 terminada');
+  });
+
+  // Diego, 27/10/2026: «admin y super admin ven todos por defecto del mes».
+  for (const role of ['superadmin', 'admin']) {
+    it(`${role} entra en «Todo» del mes en curso`, async () => {
+      Object.assign(yo, { role });
+      abrir();
+      await screen.findByText('Maquetar la home');
+      const mes = rangoDePeriodo('mes', hoyEnOficina());
+      expect(api.getTasks.mock.calls[0][0]).toMatchObject({ ver: 'todo', periodo_desde: mes.desde, periodo_hasta: mes.hasta });
+      expect(screen.getByTestId('resumen-periodo').textContent).toMatch(/^[A-ZÁÉÍÓÚ][a-záéíóú]+ de \d{4} · /);
+    });
+  }
+
+  it('una tarea sin cerrar de un mes anterior sale en el mes y dice de dónde viene', async () => {
+    const hoy = hoyEnOficina();
+    const mesPasado = moverReferencia('mes', hoy, -1);
+    api.getTasks.mockResolvedValue([
+      ...TAREAS.slice(0, 1),
+      tarea(9, 'Pendiente del mes pasado', 2, 'Ruth Sánchez', { status: 'en_curso', created_at: `${mesPasado.slice(0, 8)}10T10:00:00Z` }),
+    ]);
+    abrir();
+    await screen.findByText('Pendiente del mes pasado');
+    const tarjeta = screen.getByRole('button', { name: 'Abrir tarea Pendiente del mes pasado' });
+    expect(within(tarjeta).getByText(/^Viene de [a-z]+/)).toBeTruthy();
+    expect(screen.getByTestId('resumen-periodo').textContent).toMatch(/1 sin cerrar de antes$/);
   });
 });
 

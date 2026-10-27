@@ -1,5 +1,5 @@
 import type { DragEvent } from 'react';
-import { Buildings, CalendarBlank, ChatCircle, CheckCircle, CheckSquare, DotsSixVertical, LinkSimple, Rocket, WarningCircle } from '@phosphor-icons/react';
+import { Buildings, CalendarBlank, ChatCircle, CheckCircle, CheckSquare, ClockCounterClockwise, DotsSixVertical, LinkSimple, Rocket, WarningCircle } from '@phosphor-icons/react';
 import { avatarColorFor, getInitials } from '@/shared/lib/ui';
 import { PRIORITY, dueInfo, tagChip, boardColor } from '../lib/taskUi';
 import { fechaCorta, fechaYHora } from '../lib/periodo';
@@ -10,6 +10,8 @@ interface TaskCardProps {
   draggable: boolean;
   showAssignee: boolean;
   conEquipos?: boolean;
+  /** Sin cerrar y creada antes del periodo: el mes de donde viene. */
+  vieneDe?: string | null;
   onOpen: (task: Task) => void;
   onDragStart: (e: DragEvent<HTMLDivElement>, task: Task) => void;
   onDragEnd: () => void;
@@ -17,7 +19,7 @@ interface TaskCardProps {
 }
 
 export function TaskCard({
-  task, draggable, showAssignee, conEquipos = false, onOpen, onDragStart, onDragEnd, onDragOverCard,
+  task, draggable, showAssignee, conEquipos = false, vieneDe = null, onOpen, onDragStart, onDragEnd, onDragOverCard,
 }: TaskCardProps) {
   const prioridad = PRIORITY[task.priority] || PRIORITY.media;
   const vence = dueInfo(task);
@@ -108,6 +110,12 @@ export function TaskCard({
         <span title={`Creada el ${fechaYHora(task.created_at)}${task.created_by_name ? ` por ${task.created_by_name}` : ''}`}>
           Creada {fechaCorta(task.created_at)}
         </span>
+        {/* Sin cerrar de un mes anterior: pasa a este (Diego, 27/10/2026). */}
+        {vieneDe && (
+          <span className="inline-flex items-center gap-0.5 font-medium text-warning" title="Sigue abierta: viene de un periodo anterior">
+            <ClockCounterClockwise size={10} weight="bold" aria-hidden /> Viene de {vieneDe}
+          </span>
+        )}
         {task.status === 'hecha' && task.completed_at && (
           <span className="inline-flex items-center gap-0.5 text-success font-medium" title={`Terminada el ${fechaYHora(task.completed_at)}`}>
             <CheckCircle size={10} weight="fill" aria-hidden /> Terminada {fechaCorta(task.completed_at)}

@@ -21,11 +21,11 @@ import { TaskModal } from '../components/TaskModal';
 import { TeamAreaMetrics, TeamTasksMetrics } from '../components/TeamTasksMetrics';
 import { TasksReviewView } from '../components/TasksReviewView';
 import {
-  DEFAULT_COLUMNS, OPCIONES_VER, PRIORITY, VISTA_INICIAL, boardColor, filtroDeVista, neighboursAt, puedeEditarTarea,
+  DEFAULT_COLUMNS, OPCIONES_VER, PRIORITY, boardColor, filtroDeVista, neighboursAt, puedeEditarTarea, vistaInicialDe,
   type VerTablero,
 } from '../lib/taskUi';
 import {
-  etiquetaDePeriodo, hoyEnOficina, moverReferencia, rangoDePeriodo, textoDelPeriodo, type TipoPeriodo,
+  etiquetaDePeriodo, hoyEnOficina, moverReferencia, rangoDePeriodo, textoDelPeriodo, vieneDeAntes, type TipoPeriodo,
 } from '../lib/periodo';
 import type {
   AreaMetric,
@@ -106,13 +106,15 @@ export default function TasksPage() {
   const ambito = useMemo<tasksApi.Ambito>(() => ({}), []);
 
   const enRevisar = location.pathname.endsWith('/tareas/revisar');
-  // Se entra siempre en «Mis tareas» (Diego, 26/10/2026); no se recuerda la última.
-  const [ver, setVer] = useState<VerTablero>(VISTA_INICIAL);
+  // Al entrar: «Mis tareas» (Diego, 26/10/2026); admin y superadmin, «Todo» del
+  // mes en curso (27/10/2026). No se recuerda la última elección.
+  const [inicio] = useState(() => vistaInicialDe(user));
+  const [ver, setVer] = useState<VerTablero>(inicio.ver);
 
   const [filtros, setFiltros] = useState<Filtros>(SIN_FILTROS);
   const [busqueda, setBusqueda] = useState('');
-  // El periodo: «Todo» por defecto; Hoy, Esta semana o Este mes, y moverse.
-  const [tipoPeriodo, setTipoPeriodo] = useState<TipoPeriodo>('todo');
+  // El periodo: el de entrada (arriba); Hoy, Esta semana, Este mes o Todo, y moverse.
+  const [tipoPeriodo, setTipoPeriodo] = useState<TipoPeriodo>(inicio.periodo);
   const [referencia, setReferencia] = useState<string>(() => hoyEnOficina());
   const rango = useMemo(() => rangoDePeriodo(tipoPeriodo, referencia), [tipoPeriodo, referencia]);
 
@@ -637,6 +639,7 @@ export default function TasksPage() {
                       canDragTask={puedeArrastrar}
                       showAssignee
                       conEquipos={equipos.length > 0}
+                      vieneDe={(t) => vieneDeAntes(t, rango)}
                       onOpen={(t) => abrir(t.id)}
                       onAdd={(status) => setNueva({ status })}
                       onDragStart={empezarArrastre}
