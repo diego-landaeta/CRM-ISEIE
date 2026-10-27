@@ -198,6 +198,194 @@
   "puertas": []
  },
  {
+  "id": "POST /api/asignacion/entrada",
+  "tipo": "ruta",
+  "modulo": "asignacion",
+  "metodo": "POST",
+  "ruta": "/api/asignacion/entrada",
+  "relativa": "POST /entrada",
+  "controlador": "entrada",
+  "publica": true,
+  "guardias": [],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/asignacion/",
+  "tipo": "ruta",
+  "modulo": "asignacion",
+  "metodo": "GET",
+  "ruta": "/api/asignacion/",
+  "relativa": "GET /",
+  "controlador": "listar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "webhooks_salientes.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/asignacion/decisiones",
+  "tipo": "ruta",
+  "modulo": "asignacion",
+  "metodo": "GET",
+  "ruta": "/api/asignacion/decisiones",
+  "relativa": "GET /decisiones",
+  "controlador": "decisiones",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "webhooks_salientes.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/asignacion/decisiones/:id/reenviar",
+  "tipo": "ruta",
+  "modulo": "asignacion",
+  "metodo": "POST",
+  "ruta": "/api/asignacion/decisiones/:id/reenviar",
+  "relativa": "POST /decisiones/:id/reenviar",
+  "controlador": "reenviar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "webhooks_salientes.edit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/asignacion/",
+  "tipo": "ruta",
+  "modulo": "asignacion",
+  "metodo": "POST",
+  "ruta": "/api/asignacion/",
+  "relativa": "POST /",
+  "controlador": "crear",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "webhooks_salientes.create"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PATCH /api/asignacion/:id",
+  "tipo": "ruta",
+  "modulo": "asignacion",
+  "metodo": "PATCH",
+  "ruta": "/api/asignacion/:id",
+  "relativa": "PATCH /:id",
+  "controlador": "cambiar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "webhooks_salientes.edit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/asignacion/:id/clave",
+  "tipo": "ruta",
+  "modulo": "asignacion",
+  "metodo": "POST",
+  "ruta": "/api/asignacion/:id/clave",
+  "relativa": "POST /:id/clave",
+  "controlador": "nuevaClave",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "webhooks_salientes.edit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/asignacion/:id/prueba",
+  "tipo": "ruta",
+  "modulo": "asignacion",
+  "metodo": "POST",
+  "ruta": "/api/asignacion/:id/prueba",
+  "relativa": "POST /:id/prueba",
+  "controlador": "prueba",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "webhooks_salientes.edit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "DELETE /api/asignacion/:id",
+  "tipo": "ruta",
+  "modulo": "asignacion",
+  "metodo": "DELETE",
+  "ruta": "/api/asignacion/:id",
+  "relativa": "DELETE /:id",
+  "controlador": "borrar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "webhooks_salientes.delete"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "POST /api/auth/login",
   "tipo": "ruta",
   "modulo": "auth",

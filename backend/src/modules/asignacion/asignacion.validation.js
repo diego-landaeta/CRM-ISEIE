@@ -1,0 +1,86 @@
+import { z } from 'zod';
+import { revisarUrl } from '../webhooks-salientes/webhooks-salientes.validation.js';
+
+/*
+  ASIGNACIÓN DE LEADS POR ACTIVIDAD (CRM#513, 27/10/2026): lo que se acepta.
+
+  La ENTRADA recibe lo mismo que hoy manda Make al crear un lead (los campos del
+  webhook de leads: nombre, email, teléfono, producto, UTM, landing…), más:
+    · `uid`: un identificador único del formulario. Si Make reintenta, no se
+      decide ni se crea dos veces.
+    · `original` (opcional): el correo del formulario tal cual (asunto, html,
+      texto). Si viene, es lo que se reenvía al escenario por mailhook, para que
+      el escenario lo reciba «como desde la web».
+    · `project_id` o `proyecto` (slug): solo si la configuración es de una
+      empresa o de todas; con la de un campus, el campus es ese.
+*/
+
+export const TIPOS_DESTINO = ['mailhook', 'webhook'];
+export const AMBITOS = ['todas', 'empresa', 'campus'];
+
+const correo = z.string().trim().toLowerCase().email('El mailhook tiene que ser una dirección de correo (la que da Make)');
+
+/** Un destino: o una dirección de correo (mailhook) o una URL https (webhook). */
+export function revisarDestino(tipo, valor) {
+  const v = String(valor || '').trim();
+  if (!v) return 'Falta el destino';
+  if (tipo === 'mailhook') return correo.safeParse(v).success ? null : 'El mailhook tiene que ser una dirección de correo (la que da Make)';
+  return revisarUrl(v);
+}
+
+const destino = z.object({
+  tipo: z.enum(TIPOS_DESTINO, { message: 'El destino es un mailhook (correo) o un webhook (URL)' }),
+  valor: z.string().trim().min(1, 'Falta el destino').max(500),
+}).superRefine((d, ctx) => {
+  const problema = revisarDestino(d.tipo, d.valor);
+  if (problema) ctx.addIssue({ code: 'custom', message: problema, path: ['valor'] });
+});
+
+const id = z.coerce.number().int().positive();
+
+export const crearConfigSchema = z.object({
+  nombre: z.string().trim().min(1, 'Ponle un nombre').max(150),
+  activo: z.boolean().default(true),
+  ambito: z.enum(AMBITOS).default('campus'),
+  issuer_id: id.nullable().optional(),
+  project_id: id.nullable().optional(),
+  ventana_min: z.coerce.number().int().min(1, 'La ventana va de 1 a 240 minutos').max(240, 'La ventana va de 1 a 240 minutos').default(15),
+  escenario1: destino,
+  escenario2: destino,
+});
+
+export const cambiarConfigSchema = z.object({
+  nombre: z.string().trim().min(1, 'Ponle un nombre').max(150).optional(),
+  activo: z.boolean().optional(),
+  ventana_min: z.coerce.number().int().min(1).max(240).optional(),
+  escenario1: destino.optional(),
+  escenario2: destino.optional(),
+}).refine((d) => Object.keys(d).length > 0, { message: 'No hay nada que cambiar' });
+
+export const pruebaSchema = z.object({
+  escenario: z.coerce.number().int().refine((n) => n === 1 || n === 2, 'El escenario es 1 o 2'),
+});
+
+export const listarDecisionesSchema = z.object({
+  destino_id: id.optional(),
+  project_id: id.optional(),
+  escenario: z.coerce.number().int().refine((n) => n === 1 || n === 2).optional(),
+  estado: z.enum(['pendiente', 'enviando', 'enviado', 'fallido']).optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+});
+
+/** Lo propio de la entrada; el resto de campos se valida con el esquema del webhook de leads. */
+export const entradaSchema = z.object({
+  uid: z.string().trim().min(1, 'Falta el uid del formulario').max(200),
+  original: z.object({
+    asunto: z.string().max(500).optional(),
+    html: z.string().max(200000).optional(),
+    texto: z.string().max(100000).optional(),
+    remitente: z.string().max(300).optional(),
+  }).partial().optional(),
+  project_id: id.optional(),
+  proyecto: z.string().trim().max(120).optional(),
+}).passthrough();
+
+/** Lo que la entrada nunca puede decidir: la gestora y la clave la pone el CRM. */
+export const CAMPOS_QUE_PONE_EL_CRM = ['responsable_id', 'responsable_email', 'responsable_nombre', 'idempotency_key'];

@@ -46,7 +46,10 @@ import woocommerceModule from './modules/woocommerce/index.js';
 import connectorsModule from './modules/connectors/index.js';
 // Conexión → «Webhook de transferencias» (Diego, 15/10), como en MultiCRM. Migración 206.
 import webhooksSalientesModule from './modules/webhooks-salientes/index.js';
+import asignacionModule from './modules/asignacion/index.js';
+import { registrarActividad } from './shared/middleware/registrarActividad.js';
 import { startWebhooksSalientesScheduler } from './jobs/webhooksSalientesScheduler.js';
+import { startAsignacionScheduler } from './jobs/asignacionScheduler.js';
 import projectChannelsModule from './modules/project-channels/index.js';
 import installationModule from './modules/installation/index.js';
 import credentialsModule from './modules/credentials/index.js';
@@ -118,6 +121,8 @@ app.use('/api/whatsapp/webhook', express.json({ limit: '25mb' }));
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 app.use(cookieParser());
+// Lo que hace una gestora y no guarda su autor, para «activa en los últimos 15 min» (CRM#513).
+app.use(registrarActividad);
 
 // API root
 app.get('/api', (_req, res) => {
@@ -272,6 +277,8 @@ const MODULES = [
   connectorsModule,
   // Avisa a fuera de los cobros por transferencia o depósito bancario (Diego, 15/10).
   webhooksSalientesModule,
+  // Asignación de leads por actividad (CRM#513, 27/10/2026). Migración 243.
+  asignacionModule,
   projectChannelsModule,
   installationModule,
   credentialsModule,
@@ -479,6 +486,12 @@ if (process.env.NODE_ENV !== 'test') {
       startWebhooksSalientesScheduler();
     } catch (err) {
       logger.error({ err }, 'Webhook de transferencias: los reintentos fallaron al arrancar');
+    }
+    // Los reintentos de la asignación de leads (CRM#513; se apaga con ASIGNACION_DISABLED=1).
+    try {
+      startAsignacionScheduler();
+    } catch (err) {
+      logger.error({ err }, 'Asignación de leads: los reintentos fallaron al arrancar');
     }
     // Los adjuntos de WhatsApp que se quedaron a medias con el reinicio (como en MultiCRM).
     recuperarAdjuntosDeWhatsapp();

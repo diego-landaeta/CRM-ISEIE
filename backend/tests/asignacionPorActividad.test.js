@@ -1,0 +1,207 @@
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+
+// Brevo simulado: se ve qué correo habría salido al mailhook, sin mandar nada.
+const sendEmail = vi.fn(async () => ({ sent: true, messageId: '<prueba-asignacion>' }));
+vi.mock('../src/shared/services/brevo.service.js', async (importOriginal) => ({
+  ...(await importOriginal()),
+  sendEmail,
+}));
+
+const supertest = (await import('supertest')).default;
+const jwt = (await import('jsonwebtoken')).default;
+const app = (await import('../src/app.js')).default;
+const pool = (await import('../src/shared/config/db.js')).default;
+
+/**
+ * Asignación de leads por actividad, de punta a punta (CRM#513; Carlos y Diego, 27/10/2026).
+ *
+ *   «Una gestora está activa si ha hecho al menos una acción válida en los
+ *   últimos 15 minutos.» Con alguna activa, el CRM crea el lead con ella y lo
+ *   manda al escenario 2; sin ninguna, al escenario 1 sin crearlo.
+ *
+ *   cd backend && npx vitest run tests/asignacionPorActividad.test.js
+ */
+
+const request = supertest(app);
+const MARCA = `ASIG_${Date.now().toString(36)}`;
+const q = (sql, params) => pool.query(sql, params).then((r) => r.rows);
+const one = async (sql, params) => (await q(sql, params))[0];
+const U = {};
+const T = {};
+const ids = { issuer: null, project: null, otro: null, config: null };
+let clave;
+const MAIL1 = `escenario1_${MARCA.toLowerCase()}@hook.eu2.make.com`;
+const MAIL2 = `escenario2_${MARCA.toLowerCase()}@hook.eu2.make.com`;
+
+async function persona(c, role, campus = []) {
+  const u = await one(`INSERT INTO users (nombre, email, password_hash, role) VALUES ($1, $2, 'x', $3) RETURNING id, email`,
+    [`${MARCA} ${c}`, `${c.toLowerCase()}_${MARCA.toLowerCase()}@test.local`, role]);
+  for (const p of campus) await q('INSERT INTO user_projects (user_id, project_id) VALUES ($1, $2)', [u.id, p]);
+  U[c] = u;
+  T[c] = jwt.sign({ userId: u.id, email: u.email, role, roles_extra: [], customRoleId: null }, process.env.JWT_SECRET, { expiresIn: '1h' });
+}
+const como = (c) => ({ Authorization: `Bearer ${T[c]}` });
+const entrar = (uid, extra = {}) => request.post('/api/asignacion/entrada').set('Authorization', `Bearer ${clave}`)
+  .send({ uid: `${MARCA}-${uid}`, nombre: `${MARCA} cliente ${uid}`, email: `${uid}_${MARCA.toLowerCase()}@cliente.test`, telefono: '+34600000000', ...extra });
+const esperar = () => new Promise((s) => setTimeout(s, 400));
+const correosA = (dir) => sendEmail.mock.calls.map(([a]) => a).filter((m) => m.to?.[0]?.email === dir);
+let leadDePrueba;
+const nota = (c, texto) => q('INSERT INTO lead_interactions (lead_id, tipo, nota, created_by) VALUES ($1, $2, $3, $4)', [leadDePrueba, 'nota', texto, U[c].id]);
+const llamada = (c) => q('INSERT INTO lead_interactions (lead_id, tipo, nota, created_by) VALUES ($1, $2, $3, $4)', [leadDePrueba, 'llamada', 'contestó', U[c].id]);
+const sinActividad = () => q('DELETE FROM lead_interactions WHERE lead_id = $1', [leadDePrueba]);
+
+beforeAll(async () => {
+  const s = await one('INSERT INTO invoice_issuers (razon_social, nif) VALUES ($1, $2) RETURNING id', [`${MARCA} EMPRESA`, `${MARCA}-E`]);
+  ids.issuer = s.id;
+  for (const k of ['project', 'otro']) {
+    const p = await one('INSERT INTO projects (nombre, slug, webhook_api_key, sociedad_emisora_id) VALUES ($1, $2, $3, $4) RETURNING id',
+      [`${MARCA} ${k}`, `${MARCA.toLowerCase()}-${k}`, `${MARCA}-${k}`, s.id]);
+    ids[k] = p.id;
+  }
+  await persona('superadmin', 'superadmin');
+  await persona('admin', 'admin', [ids.project]);
+  await persona('adminOtro', 'admin', [ids.otro]);
+  for (const g of ['ana', 'bea', 'cris']) await persona(g, 'gestor', [ids.project]);
+  // Un lead del campus sobre el que las gestoras «trabajan» en las pruebas.
+  leadDePrueba = (await one('INSERT INTO leads (project_id, nombre, email) VALUES ($1, $2, $3) RETURNING id',
+    [ids.project, `${MARCA} lead de trabajo`, `trabajo_${MARCA.toLowerCase()}@x.test`])).id;
+});
+
+afterAll(async () => {
+  const us = Object.values(U).map((u) => u.id);
+  await q('DELETE FROM asignacion_decisiones WHERE project_id = ANY($1::int[])', [[ids.project, ids.otro]]);
+  await q('DELETE FROM asignacion_destinos WHERE project_id = ANY($1::int[])', [[ids.project, ids.otro]]);
+  await q('DELETE FROM actividad_crm WHERE user_id = ANY($1::int[])', [us]);
+  await q('DELETE FROM leads WHERE project_id = ANY($1::int[])', [[ids.project, ids.otro]]);
+  await q('DELETE FROM user_projects WHERE user_id = ANY($1::int[])', [us]);
+  await q('DELETE FROM user_activity_log WHERE user_id = ANY($1::int[])', [us]);
+  await q('DELETE FROM users WHERE id = ANY($1::int[])', [us]);
+  await q('DELETE FROM projects WHERE id = ANY($1::int[])', [[ids.project, ids.otro]]);
+  await q('DELETE FROM invoice_issuers WHERE id = $1', [ids.issuer]);
+  await pool.end();
+}, 60000);
+
+describe('la configuración (Conexión › Asignación de leads)', () => {
+  it('el admin la crea para su campus y ve la clave UNA vez; los destinos, solo su cola', async () => {
+    const r = await request.post('/api/asignacion').set(como('admin')).send({
+      nombre: `${MARCA} campus`, ambito: 'campus', project_id: ids.project, ventana_min: 15,
+      escenario1: { tipo: 'mailhook', valor: MAIL1 }, escenario2: { tipo: 'mailhook', valor: MAIL2 },
+    });
+    expect(r.status, JSON.stringify(r.body)).toBe(201);
+    clave = r.body.data.clave;
+    ids.config = r.body.data.id;
+    expect(clave).toMatch(/^asig_/);
+    expect(JSON.stringify(r.body.data)).not.toContain(MAIL1);
+    const lista = await request.get('/api/asignacion').set(como('admin'));
+    expect(lista.body.data.find((c) => c.id === ids.config).clave).toBeUndefined();
+  });
+  it('un admin de otro campus no la ve ni la toca; la de «todas», solo el superadmin', async () => {
+    const lista = await request.get('/api/asignacion').set(como('adminOtro'));
+    expect(lista.body.data.some((c) => c.id === ids.config)).toBe(false);
+    expect((await request.patch(`/api/asignacion/${ids.config}`).set(como('adminOtro')).send({ ventana_min: 20 })).status).toBe(403);
+    expect((await request.post('/api/asignacion').set(como('admin')).send({
+      nombre: 'x', ambito: 'todas', escenario1: { tipo: 'mailhook', valor: MAIL1 }, escenario2: { tipo: 'mailhook', valor: MAIL2 },
+    })).status).toBe(403);
+  });
+  it('una gestora no entra', async () => {
+    expect((await request.get('/api/asignacion').set(como('ana'))).status).toBe(403);
+  });
+});
+
+describe('la entrada', () => {
+  it('sin clave o con una que no es, 401 (y Make lo manda al escenario 1)', async () => {
+    expect((await request.post('/api/asignacion/entrada').send({ uid: 'x', nombre: 'x', email: 'x@x.test' })).status).toBe(401);
+    expect((await request.post('/api/asignacion/entrada').set('X-API-Key', 'asig_mala').send({ uid: 'x', nombre: 'x', email: 'x@x.test' })).status).toBe(401);
+  });
+  it('sin forma de contacto, 400 con el motivo', async () => {
+    const r = await request.post('/api/asignacion/entrada').set('Authorization', `Bearer ${clave}`).send({ uid: `${MARCA}-sin`, nombre: 'Sin contacto' });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toMatch(/forma de contacto/);
+  });
+});
+
+describe('a quién y a qué escenario', () => {
+  it('nadie activo: escenario 1, el CRM NO crea el lead, y el correo va al mailhook del 1', async () => {
+    await sinActividad();
+    sendEmail.mockClear();
+    const r = await entrar('nadie');
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(r.body.data).toMatchObject({ escenario: 1, gestora: null, lead_id: null });
+    expect(r.body.data.motivo).toMatch(/Ninguna gestora activa/);
+    await esperar();
+    expect(correosA(MAIL1)).toHaveLength(1);
+    expect(await q('SELECT 1 FROM leads WHERE email = $1', [`nadie_${MARCA.toLowerCase()}@cliente.test`])).toHaveLength(0);
+  });
+
+  it('el mismo formulario otra vez (Make reintenta): la misma respuesta y ningún correo más', async () => {
+    sendEmail.mockClear();
+    const r = await entrar('nadie');
+    expect(r.body.data.escenario).toBe(1);
+    await esperar();
+    expect(correosA(MAIL1)).toHaveLength(0);
+  });
+
+  it('una nota de menos de 20 caracteres no hace activa a nadie', async () => {
+    await sinActividad();
+    await nota('ana', 'ok, llamo luego');
+    expect((await entrar('nota-corta')).body.data.escenario).toBe(1);
+  });
+
+  it('un cambio de estado deshecho en menos de 10 min no cuenta', async () => {
+    await sinActividad();
+    await q(`INSERT INTO lead_status_history (lead_id, status_anterior, status_nuevo, changed_by) VALUES
+               ($1, 'nuevo', 'contactado', $2), ($1, 'contactado', 'nuevo', $2)`, [leadDePrueba, U.bea.id]);
+    expect((await entrar('deshecho')).body.data.escenario).toBe(1);
+    await q('DELETE FROM lead_status_history WHERE lead_id = $1', [leadDePrueba]);
+  });
+
+  it('con una activa (una llamada hace un momento): escenario 2, el CRM crea el lead con ella', async () => {
+    await sinActividad();
+    await llamada('ana');
+    sendEmail.mockClear();
+    const r = await entrar('ana');
+    expect(r.body.data).toMatchObject({ escenario: 2, gestora: { id: U.ana.id } });
+    expect(r.body.data.motivo).toMatch(/activa (ahora mismo|hace \d+ min) \(contacto\) · 0 hoy · 0 en total/);
+    const lead = await one('SELECT id, responsable_id FROM leads WHERE email = $1', [`ana_${MARCA.toLowerCase()}@cliente.test`]);
+    expect(lead.responsable_id).toBe(U.ana.id);
+    expect(r.body.data.lead_id).toBe(lead.id);
+    await esperar();
+    const [correo] = correosA(MAIL2);
+    expect(correo.textContent).toContain(`GESTORA ASIGNADA: ${MARCA} ana`);
+  });
+
+  it('con dos activas, la que menos lleva hoy (Ana ya tiene uno)', async () => {
+    await llamada('bea');
+    const r = await entrar('ana-y-bea');
+    expect(r.body.data.gestora.id).toBe(U.bea.id);
+  });
+
+  it('crear un lead a mano cuenta como acción (actividad_crm)', async () => {
+    await sinActividad();
+    const r = await request.post('/api/leads').set(como('cris')).send({ project_id: ids.project, nombre: `${MARCA} a mano`, email: `mano_${MARCA.toLowerCase()}@x.test` });
+    expect(r.status, JSON.stringify(r.body)).toBeLessThan(300);
+    await esperar();
+    expect(await q("SELECT 1 FROM actividad_crm WHERE user_id = $1 AND accion = 'crear_lead'", [U.cris.id])).toHaveLength(1);
+    const d = await entrar('cris');
+    expect(d.body.data.escenario).toBe(2);
+    expect(d.body.data.gestora.id).toBe(U.cris.id);
+  });
+
+  it('apagada: todo al escenario 1 aunque haya alguien activa', async () => {
+    await request.patch(`/api/asignacion/${ids.config}`).set(como('admin')).send({ activo: false });
+    await llamada('ana');
+    const r = await entrar('apagada');
+    expect(r.body.data).toMatchObject({ escenario: 1 });
+    expect(r.body.data.motivo).toMatch(/apagada/);
+    await request.patch(`/api/asignacion/${ids.config}`).set(como('admin')).send({ activo: true });
+  });
+
+  it('el registro enseña cada decisión con su porqué', async () => {
+    const r = await request.get(`/api/asignacion/decisiones?destino_id=${ids.config}`).set(como('admin'));
+    expect(r.status).toBe(200);
+    const escenarios = r.body.data.map((d) => d.escenario);
+    expect(escenarios).toContain(1);
+    expect(escenarios).toContain(2);
+    expect(r.body.data.every((d) => d.motivo?.texto)).toBe(true);
+  });
+});
