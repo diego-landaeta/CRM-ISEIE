@@ -2,6 +2,7 @@ import * as model from './widget.model.js';
 import * as service from './widget.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { traduccionesSchema, limpiarTraducciones, textosPorIdioma, idiomaDe } from './widget.idiomas.js';
+import { gestorasParaLaWeb } from '../asignacion/asignacion.widget.js';
 
 // Endpoint PUBLICO: GET /api/widget/whatsapp/:projectId.js
 // Sin auth. Devuelve JS para embeber. Cache 5 minutos.
@@ -50,7 +51,9 @@ export async function widgetData(req, res, next) {
       // La burbuja como dice el panel (antes el código ponía 3 s siempre).
       burbuja: config.show_bubble !== false,
       retraso: Number(config.bubble_delay_ms) || 3000,
-      gestoras: users.map((u) => [u.display_name, u.whatsapp_phone]),
+      // Si hay una gestora activa a la que le toca, solo ella; el código de la
+      // web elige al azar entre las que recibe, así que no hay que repegarlo.
+      gestoras: (await gestorasParaLaWeb(projectId, users)).map((u) => [u.display_name, u.whatsapp_phone]),
     });
   } catch (e) {
     res.setHeader('Access-Control-Allow-Origin', '*');

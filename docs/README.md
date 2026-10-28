@@ -53,6 +53,39 @@ El mismo panel que MultiCRM (paridad). Certifex emite los diplomas; el CRM decid
 
 **Orden de despliegue:** Certifex primero (contrato `/api/crm/v1` completo); luego el CRM en staging con la 230 y las cuatro variables apuntando a un Certifex de pruebas; Diego lo aprueba; y solo entonces producción con `VITE_CERTIFEX_PANEL=1`. El candado de un centro en Certifex (`npm run crm:clave`) va el último: desde ese momento ISEIE no emite nada sin el OK del CRM.
 
+## Asignación de leads por actividad (#284 · gemela de diego-landaeta/CRM#513, 27/10/2026)
+
+Pedida por Carlos y definida con Diego. Pantalla: **Conexión › Asignación de leads** (super admin y admin; permisos `webhooks_salientes.*`). El paso a paso y su estado están en la issue diego-landaeta/CRM#513.
+
+**Flujo.** Web (Brevo o SMTP de Hostinger) → **entrada de Make** (mailhook o webhook por campus) → `POST /api/asignacion/entrada` con la clave de la configuración (`Authorization: Bearer` o `X-API-Key`).
+- **Hay alguna gestora activa:** el CRM crea el lead con ella (`idempotency_key = asignacion-<uid>`) y manda el formulario al **escenario 2**. Ese escenario no rota por HTTP ni crea el lead. Recibe los campos tal cual, más `gestora`, `responsable_*` y `lead_id`.
+- **No hay ninguna, o la asignación está apagada:** el CRM no crea el lead y lo manda al **escenario 1**, el de siempre.
+- **El CRM no contesta en 5 s o da error:** la entrada de Make lo manda al escenario 1 por su cuenta.
+- **Envío a los escenarios:** lo hace el CRM, por mailhook (Brevo, cuenta `crm`) o webhook JSON. Reintenta a 1, 5 y 15 minutos (`jobs/asignacionScheduler.js`; se apaga con `ASIGNACION_DISABLED=1`).
+- **Sin duplicados:** una decisión por campus y `uid`.
+
+**Activa.** Al menos una acción en la ventana, que por defecto son 15 minutos y se configura entre 1 y 240. Todo está en `asignacion.actividad.js`.
+- **Qué cuenta:**
+  - `lead_interactions`: una nota cuenta solo si tiene 20 caracteres o más y no repite otra suya.
+  - `lead_status_history`, sin los cambios deshechos en menos de 10 minutos.
+  - `lead_reminders`, `lead_steps` y `lead_audit_log`.
+  - WhatsApp salientes, también los mandados desde el móvil con el número conectado (instancia `crm-u<id>`). Se mira la hora de WhatsApp para que no cuente el historial; los grupos no cuentan.
+  - `actividad_crm`, que apunta el middleware `registrarActividad` (crear lead, venta, cobro, matrícula, factura, proceso).
+- **Candidatas:** las de `gestoresDelReparto` del campus. Con menos de dos, no se elige por actividad: va al escenario 1 (Diego, 28/10).
+- **Freno de pruebas (temporal):** un formulario con correo @ejemplo.com se decide pero no crea lead ni se manda al escenario 1.
+- **A quién le toca entre las activas:**
+  1. menos asignados hoy en ese campus (día de Valencia; cada campus reparte aparte, Diego 28/10);
+  2. menos en total en ese campus;
+  3. la que lleva más rato sin recibir uno;
+  4. el id.
+- **«Hoy» suma también las conversaciones de WhatsApp que le abrió la persona ese día.** Si esa conversación acaba en un lead suyo, cuenta una sola vez.
+
+**WhatsApp (widget).** `/api/w/data/:id.json` y `/api/w/whatsapp/:id.js` le dan a la web solo a la gestora del widget a la que le toca (`asignacion.widget.js`; la decisión se guarda 20 s por campus). La web ya elige al azar entre las que recibe, así que no hay que volver a pegar el código. Si no hay nadie activo, la web recibe todas las gestoras. Pulsar el botón no asigna nada.
+
+**Tablas** (migraciones 243 y 244 aquí; 230 y 231 en el 360): `asignacion_destinos` (destinos cifrados y huella de la clave), `asignacion_decisiones` (qué se decidió, por qué y el envío) y `actividad_crm`.
+
+**Probar en un staging:** `cd backend && node scripts/asignacion-e2e.mjs` en el servidor (se niega en las bases de producción). Crea una configuración contra un receptor de pruebas, simula actividad y borra todo al terminar. El 27/10 dio 31/31 en el staging de ISEIE y en /testeo.
+
 ## Versión 2.0.0 (en producción desde el 29/09/2026)
 
 Lo nuevo está dentro del CRM en **Novedades** (`backend/src/modules/novedades/versiones.js`) y en la release `v2.0.0` de GitHub. En corto: el proceso comercial (cola por tramos, pasos en la ficha, seguimiento de fin de mes; desde el 29/09 un contacto solo cierra el paso que toca, en su día y uno por día — `shared/utils/pasoCerrado.js`), el feedback de quien no compra (correo, encuesta, panel y Reportes), las Novedades, los correos del equipo, mejoras de ventas y facturación, y la marca de ISEIE en correos y formularios.

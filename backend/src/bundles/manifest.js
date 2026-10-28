@@ -13,7 +13,7 @@ export const BUNDLES = {
   core: {
     label: 'Core (obligatorio)',
     description: 'Auth, users, projects. Siempre activo.',
-    modules: ['auth', 'users', 'projects', 'credentials', 'field-definitions', 'project-channels', 'permissions', 'connectors', 'webhooks-salientes', 'messages', 'notifications', 'registro', 'correos', 'novedades', 'mcp', 'certifex', 'tasks'],
+    modules: ['auth', 'users', 'projects', 'credentials', 'field-definitions', 'project-channels', 'permissions', 'connectors', 'webhooks-salientes', 'asignacion', 'messages', 'notifications', 'registro', 'correos', 'novedades', 'mcp', 'certifex', 'tasks'],
     requires: [],
   },
   leads: {
