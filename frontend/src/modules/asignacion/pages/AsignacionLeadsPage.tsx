@@ -319,6 +319,7 @@ export default function AsignacionLeadsPage() {
             <li>También los WhatsApp que manda desde su móvil con el número conectado (no los de grupos ni el historial que baja al conectar el número).</li>
             <li>No cuentan: abrir una ficha, guardar sin cambiar nada, tener la sesión abierta, una nota de menos de 20 caracteres o repetida, ni un cambio de estado deshecho en menos de 10 minutos.</li>
             <li>Entre varias activas: la que menos leads lleva hoy en ese campus (hora de Valencia), luego la que menos en total allí, y luego la que lleva más rato sin recibir uno. Cada campus reparte aparte: lo que reciba en otro no cuenta.</li>
+            <li>Si en el campus solo hay una persona que recibe leads, no se elige por actividad: el formulario va al escenario de siempre hasta que sean dos.</li>
             <li>WhatsApp: con esto encendido, el botón de WhatsApp de la web lleva a la gestora activa a la que le toca. Pulsarlo no asigna nada; cuenta cuando la persona le escribe o cuando se registra el lead.</li>
           </ul>
         </details>
