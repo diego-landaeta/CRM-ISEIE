@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { elegir, porQue } from '../src/modules/asignacion/asignacion.actividad.js';
 import { accionDe } from '../src/shared/middleware/registrarActividad.js';
 import { construirPayload, construirCorreo } from '../src/modules/asignacion/asignacion.service.js';
-import { revisarDestino } from '../src/modules/asignacion/asignacion.validation.js';
+import { revisarDestino, motivoDelFallo, entradaSchema } from '../src/modules/asignacion/asignacion.validation.js';
+import { webhookLeadSchema } from '../src/modules/leads/lead.validation.js';
 
 /*
   Asignación de leads por actividad (CRM#513; Carlos y Diego, 27/10/2026): las
@@ -42,6 +43,11 @@ describe('a quién le toca entre las activas', () => {
     expect(porQue({ hoy: 2, total: 310 }, { ultima: '2026-10-27T11:56:00Z', que: 'estado' }, ahora))
       .toBe('activa hace 4 min (estado) · 2 hoy · 310 en total');
     expect(porQue(null)).toBe('Ninguna gestora activa');
+  });
+  it('si parte de lo de hoy es de WhatsApp, lo dice', () => {
+    const ahora = new Date('2026-10-27T12:00:00Z');
+    expect(porQue({ hoy: 3, total: 40, whatsapp: 1 }, { ultima: ahora, que: 'whatsapp' }, ahora))
+      .toBe('activa ahora mismo (whatsapp) · 3 hoy (1 por WhatsApp) · 40 en total');
   });
 });
 
@@ -115,5 +121,17 @@ describe('los destinos', () => {
     expect(revisarDestino('mailhook', 'https://hook.eu2.make.com/x')).toMatch(/correo/);
     expect(revisarDestino('webhook', 'https://hook.eu2.make.com/abc')).toBeNull();
     expect(revisarDestino('webhook', 'http://hook.eu2.make.com/abc')).toBeTruthy();
+  });
+});
+
+describe('lo que contesta la entrada cuando falta algo (para quien monta Make)', () => {
+  const motivo = (schema, datos) => motivoDelFallo(schema.safeParse(datos).error.errors[0]);
+  it('dice qué campo falta, no «Required»', () => {
+    expect(motivo(entradaSchema, { nombre: 'x' })).toBe('Falta el campo «uid»');
+    expect(motivo(entradaSchema, { uid: '  ' })).toBe('Falta el campo «uid»');
+    expect(motivo(webhookLeadSchema, { email: 'a@b.test' })).toBe('Falta el campo «nombre»');
+  });
+  it('y si está pero no vale, cuál y por qué', () => {
+    expect(motivo(entradaSchema, { uid: 'x'.repeat(201) })).toMatch(/^El campo «uid» no es válido/);
   });
 });

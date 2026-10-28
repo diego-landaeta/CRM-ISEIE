@@ -11,6 +11,9 @@ const supertest = (await import('supertest')).default;
 const jwt = (await import('jsonwebtoken')).default;
 const app = (await import('../src/app.js')).default;
 const pool = (await import('../src/shared/config/db.js')).default;
+const { cuentasDe } = await import('../src/modules/asignacion/asignacion.actividad.js');
+const { _memoria: memoriaDelWidget } = await import('../src/modules/asignacion/asignacion.widget.js');
+const { upsertConfig: configDelWidget } = await import('../src/modules/widget/widget.model.js');
 
 /**
  * Asignación de leads por actividad, de punta a punta (CRM#513; Carlos y Diego, 27/10/2026).
@@ -69,6 +72,8 @@ beforeAll(async () => {
 
 afterAll(async () => {
   const us = Object.values(U).map((u) => u.id);
+  await q('DELETE FROM wa_conversaciones WHERE instancia = ANY($1::text[])', [us.map((id) => `crm-u${id}`)]);
+  await q('DELETE FROM project_widget_config WHERE project_id = ANY($1::int[])', [[ids.project, ids.otro]]);
   await q('DELETE FROM asignacion_decisiones WHERE project_id = ANY($1::int[])', [[ids.project, ids.otro]]);
   await q('DELETE FROM asignacion_destinos WHERE project_id = ANY($1::int[])', [[ids.project, ids.otro]]);
   await q('DELETE FROM actividad_crm WHERE user_id = ANY($1::int[])', [us]);
@@ -203,5 +208,85 @@ describe('a quién y a qué escenario', () => {
     expect(escenarios).toContain(1);
     expect(escenarios).toContain(2);
     expect(r.body.data.every((d) => d.motivo?.texto)).toBe(true);
+  });
+});
+
+describe('WhatsApp (fase 5)', () => {
+  // Cada conversación, en el número conectado de la gestora (instancia `crm-u<id>`).
+  let n = 0;
+  const conversacion = async (c, { grupo = false } = {}) => (await one(
+    `INSERT INTO wa_conversaciones (instancia, jid, telefono) VALUES ($1, $2, $3) RETURNING id`,
+    [`crm-u${U[c].id}`, `34611${String(++n).padStart(6, '0')}@${grupo ? 'g.us' : 's.whatsapp.net'}`, `+34611${String(n).padStart(6, '0')}`])).id;
+  const mensaje = (conv, direccion, { haceMin = 0, enviadoPor = null } = {}) => q(
+    `INSERT INTO wa_mensajes (conversacion_id, direccion, texto, enviado_por, ts) VALUES ($1, $2, 'hola', $3, NOW() - make_interval(mins => $4::int))`,
+    [conv, direccion, enviadoPor, haceMin]);
+  const limpiarTodo = async () => {
+    await sinActividad();
+    await q('DELETE FROM actividad_crm WHERE user_id = ANY($1::int[])', [Object.values(U).map((u) => u.id)]);
+    await q('DELETE FROM wa_conversaciones WHERE instancia = ANY($1::text[])', [Object.values(U).map((u) => `crm-u${u.id}`)]);
+  };
+
+  it('lo que manda desde su móvil con el número conectado la hace activa', async () => {
+    await limpiarTodo();
+    await mensaje(await conversacion('bea'), 'saliente');
+    const r = await entrar('wa-movil');
+    expect(r.body.data).toMatchObject({ escenario: 2, gestora: { id: U.bea.id } });
+    expect(r.body.data.motivo).toMatch(/\(whatsapp\)/);
+  });
+
+  it('el historial que baja al emparejar el número no cuenta (hora de WhatsApp antigua)', async () => {
+    await limpiarTodo();
+    await mensaje(await conversacion('bea'), 'saliente', { haceMin: 3 * 24 * 60 });
+    expect((await entrar('wa-historial')).body.data.escenario).toBe(1);
+  });
+
+  it('lo que escribe en un grupo no cuenta', async () => {
+    await limpiarTodo();
+    await mensaje(await conversacion('bea', { grupo: true }), 'saliente');
+    expect((await entrar('wa-grupo')).body.data.escenario).toBe(1);
+  });
+
+  it('una conversación que le abre la persona hoy cuenta como asignada; si luego es su lead, cuenta una vez', async () => {
+    await limpiarTodo();
+    const antes = (await cuentasDe([U.ana.id])).get(U.ana.id);
+    const conv = await conversacion('ana');
+    await mensaje(conv, 'entrante', { haceMin: 2 });
+    await mensaje(conv, 'saliente', { haceMin: 1 });
+    const despues = (await cuentasDe([U.ana.id])).get(U.ana.id);
+    expect(despues.hoy).toBe(antes.hoy + 1);
+    expect(despues.whatsapp).toBe(1);
+    // La gestora registra el lead de esa conversación: sigue contando uno.
+    const lead = await one('INSERT INTO leads (project_id, nombre, email, responsable_id) VALUES ($1, $2, $3, $4) RETURNING id',
+      [ids.project, `${MARCA} de WhatsApp`, `wa_${MARCA.toLowerCase()}@x.test`, U.ana.id]);
+    await q('UPDATE wa_conversaciones SET lead_id = $1 WHERE id = $2', [lead.id, conv]);
+    const registrado = (await cuentasDe([U.ana.id])).get(U.ana.id);
+    expect(registrado.hoy).toBe(antes.hoy + 1);
+    expect(registrado.whatsapp).toBe(0);
+  });
+
+  it('la conversación que empieza la gestora no cuenta como asignada', async () => {
+    await limpiarTodo();
+    const antes = (await cuentasDe([U.bea.id])).get(U.bea.id);
+    const conv = await conversacion('bea');
+    await mensaje(conv, 'saliente', { haceMin: 5 });
+    await mensaje(conv, 'entrante', { haceMin: 1 });
+    expect((await cuentasDe([U.bea.id])).get(U.bea.id).hoy).toBe(antes.hoy);
+  });
+
+  it('el widget de la web: con alguien activo, solo ella; sin nadie, todas (y sigue al azar)', async () => {
+    await limpiarTodo();
+    await configDelWidget(ids.project, { enabled: true });
+    await q(`UPDATE users SET whatsapp_phone = '34600000001', whatsapp_widget_active = true WHERE id = ANY($1::int[])`, [[U.ana.id, U.bea.id]]);
+    const datos = async () => { memoriaDelWidget.clear(); return (await request.get(`/api/w/data/${ids.project}.json`)).body; };
+    const nombres = (d) => d.gestoras.map(([nombre]) => nombre).sort();
+    expect((await datos()).gestoras).toHaveLength(2);
+    await llamada('bea');
+    expect(nombres(await datos())).toEqual([MARCA]); // el nombre visible es la primera palabra: la marca
+    const js = (memoriaDelWidget.clear(), (await request.get(`/api/w/whatsapp/${ids.project}.js`)).text);
+    expect((js.match(/\["[^"]*","34600000001"\]/g) || [])).toHaveLength(1);
+    // Apagada la asignación del campus, otra vez todas.
+    await request.patch(`/api/asignacion/${ids.config}`).set(como('admin')).send({ activo: false });
+    expect((await datos()).gestoras).toHaveLength(2);
+    await request.patch(`/api/asignacion/${ids.config}`).set(como('admin')).send({ activo: true });
   });
 });
