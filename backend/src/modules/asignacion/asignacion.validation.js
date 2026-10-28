@@ -82,5 +82,18 @@ export const entradaSchema = z.object({
   proyecto: z.string().trim().max(120).optional(),
 }).passthrough();
 
+/**
+ * El error para quien monta el escenario de Make: qué campo y qué le pasa. Zod
+ * dice «Required» a secas, y con eso no se sabe qué falta (prueba del 27/10).
+ */
+export function motivoDelFallo(issue) {
+  const campo = (issue?.path || []).join('.');
+  const falta = (issue?.code === 'invalid_type' && ['undefined', 'null'].includes(issue.received))
+    || (issue?.code === 'too_small' && issue?.type === 'string' && issue?.minimum === 1);
+  if (campo && falta) return `Falta el campo «${campo}»`;
+  if (/[áéíóúñ]|Falta/.test(issue?.message || '')) return issue.message;
+  return campo ? `El campo «${campo}» no es válido: ${issue?.message || 'revísalo'}` : (issue?.message || 'Datos no válidos');
+}
+
 /** Lo que la entrada nunca puede decidir: la gestora y la clave la pone el CRM. */
 export const CAMPOS_QUE_PONE_EL_CRM = ['responsable_id', 'responsable_email', 'responsable_nombre', 'idempotency_key'];

@@ -10,7 +10,7 @@ import { webhookLeadSchema } from '../leads/lead.validation.js';
 import { comprobarDestino } from '../webhooks-salientes/webhooks-salientes.red.js';
 import * as model from './asignacion.model.js';
 import { activasEntre, cuentasDe, elegir, porQue } from './asignacion.actividad.js';
-import { CAMPOS_QUE_PONE_EL_CRM } from './asignacion.validation.js';
+import { CAMPOS_QUE_PONE_EL_CRM, motivoDelFallo } from './asignacion.validation.js';
 
 /*
   ASIGNACIÓN DE LEADS POR ACTIVIDAD (CRM#513; Carlos y Diego, 27/10/2026).
@@ -97,7 +97,7 @@ export async function decidir(config, datos, { prueba = false } = {}) {
 
   const campos = camposDelLead(datos);
   const valido = webhookLeadSchema.safeParse(campos);
-  if (!valido.success) throw new AppError(valido.error.errors[0].message, 400, 'VALIDATION_ERROR');
+  if (!valido.success) throw new AppError(motivoDelFallo(valido.error.errors[0]), 400, 'VALIDATION_ERROR');
 
   return enFila(campus.id, async () => {
     // Si este formulario ya entró (Make reintenta), se contesta lo mismo.
