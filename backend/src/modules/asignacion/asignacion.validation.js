@@ -115,8 +115,30 @@ const vacio = (v) => v == null || String(v).trim() === '';
 const ordenado = (v) => (Array.isArray(v) ? v.map(ordenado)
   : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, ordenado(v[k])])) : v);
 
-export function prepararEntrada(cuerpo) {
-  const d = cuerpo && typeof cuerpo === 'object' && !Array.isArray(cuerpo) ? { ...cuerpo } : {};
+/*
+  Y CON EL CORREO ORIGINAL. Para que el escenario 1 reciba el formulario tal cual
+  llegó de la web, la entrada de Make lo manda como formulario codificado (Make
+  escapa los valores; meterlos a mano en un JSON se rompe con comillas o saltos):
+    json   = el JSON de OpenAI          asunto / texto / html = el correo original
+*/
+function desenvolver(cuerpo) {
+  if (!cuerpo || typeof cuerpo !== 'object' || Array.isArray(cuerpo)) return {};
+  const { json, asunto, texto, html, remitente, ...resto } = cuerpo;
+  let base = resto;
+  if (typeof json === 'string' && json.trim()) {
+    try {
+      const dentro = JSON.parse(json);
+      if (dentro && typeof dentro === 'object' && !Array.isArray(dentro)) base = { ...dentro, ...resto };
+    } catch { /* no era JSON: se queda como estaba y la validación dirá qué falta */ }
+  }
+  const original = { ...(base.original || {}) };
+  for (const [k, v] of Object.entries({ asunto, texto, html, remitente })) if (!vacio(v)) original[k] = String(v);
+  return Object.keys(original).length ? { ...base, original } : base;
+}
+
+export function prepararEntrada(entrada) {
+  const cuerpo = desenvolver(entrada);
+  const d = { ...cuerpo };
   for (const [campo, alias] of ALIAS) {
     if (!vacio(d[campo])) continue;
     const de = alias.find((a) => !vacio(d[a]));
