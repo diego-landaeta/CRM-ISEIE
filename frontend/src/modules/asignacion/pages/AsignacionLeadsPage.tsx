@@ -313,7 +313,7 @@ export default function AsignacionLeadsPage() {
             <li>Cualquier acción en el CRM en los últimos minutos de la ventana (15 de serie): llamada, correo o WhatsApp registrado, nota, cambio de estado, recordatorio, paso del proceso, editar un prospecto, crear un lead, una venta, un cobro, una matrícula o una factura.</li>
             <li>También los WhatsApp que manda desde su móvil con el número conectado (no los de grupos ni el historial que baja al conectar el número).</li>
             <li>No cuentan: abrir una ficha, guardar sin cambiar nada, tener la sesión abierta, una nota de menos de 20 caracteres o repetida, ni un cambio de estado deshecho en menos de 10 minutos.</li>
-            <li>Entre varias activas: la que menos leads lleva hoy (hora de Valencia, sumando todos sus campus), luego la que menos en total, y luego la que lleva más rato sin recibir uno.</li>
+            <li>Entre varias activas: la que menos leads lleva hoy en ese campus (hora de Valencia), luego la que menos en total allí, y luego la que lleva más rato sin recibir uno. Cada campus reparte aparte: lo que reciba en otro no cuenta.</li>
             <li>WhatsApp: con esto encendido, el botón de WhatsApp de la web lleva a la gestora activa a la que le toca. Pulsarlo no asigna nada; cuenta cuando la persona le escribe o cuando se registra el lead.</li>
           </ul>
         </details>

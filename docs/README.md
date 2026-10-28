@@ -73,8 +73,8 @@ Pedida por Carlos y definida con Diego. Pantalla: **Conexión › Asignación de
   - `actividad_crm`, que apunta el middleware `registrarActividad` (crear lead, venta, cobro, matrícula, factura, proceso).
 - **Candidatas:** las de `gestoresDelReparto` del campus.
 - **A quién le toca entre las activas:**
-  1. menos asignados hoy (día de Valencia, en todos sus campus);
-  2. menos en total;
+  1. menos asignados hoy en ese campus (día de Valencia; cada campus reparte aparte, Diego 28/10);
+  2. menos en total en ese campus;
   3. la que lleva más rato sin recibir uno;
   4. el id.
 - **«Hoy» suma también las conversaciones de WhatsApp que le abrió la persona ese día.** Si esa conversación acaba en un lead suyo, cuenta una sola vez.

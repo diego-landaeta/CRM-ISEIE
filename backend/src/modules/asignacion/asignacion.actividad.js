@@ -25,8 +25,10 @@ import { query } from '../../shared/config/db.js';
   rastro) ni tener la sesión abierta.
 
   A QUIÉN, entre las activas: la que tenga menos leads asignados hoy (día de
-  Valencia, en todos sus campus); si empatan, menos en total; si siguen, la que
-  lleva más tiempo sin recibir uno (el turno); y al final, el id.
+  Valencia) EN ESE CAMPUS; si empatan, menos en total en ese campus; si siguen,
+  la que lleva más tiempo sin recibir uno allí (el turno); y al final, el id.
+  Cada campus lleva su reparto aparte (Diego, 28/10/2026: «cada campus tiene su
+  rotación independiente»): lo que una gestora reciba en otro campus no cuenta.
 
   WHATSAPP (fase 5): pulsar el botón del widget no asigna nada. Un contacto de
   WhatsApp cuenta como asignado a una gestora cuando la persona le ESCRIBE —una
@@ -103,13 +105,15 @@ export async function activasEntre(candidatas, ventanaMin, ejecutar = query) {
 }
 
 // Las conversaciones de hoy que abrió la persona (su primer mensaje es suyo y es
-// de hoy, hora de WhatsApp) y que no son ya un lead de hoy de la misma gestora.
+// de hoy, hora de WhatsApp) en este campus —el de la conversación o, si no lo
+// tiene, el de su lead— y que no son ya un lead de hoy de la misma gestora.
 const SQL_CUENTAS = `
 WITH d AS (SELECT (date_trunc('day', NOW() AT TIME ZONE '${ZONA}') AT TIME ZONE '${ZONA}') AS hoy),
 conv AS (
   SELECT c.id, c.lead_id, ${DUENA_INSTANCIA('c.instancia')} AS uid
     FROM wa_conversaciones c, d
    WHERE c.created_at >= d.hoy AND c.jid NOT LIKE '%@g.us'
+     AND COALESCE(c.project_id, (SELECT lc.project_id FROM leads lc WHERE lc.id = c.lead_id)) = $2
 ),
 wa AS (
   SELECT conv.uid, COUNT(*)::int AS n, MAX(p.ts) AS ultimo
@@ -130,19 +134,18 @@ SELECT u.id,
   CROSS JOIN d
   LEFT JOIN wa ON wa.uid = u.id
   LEFT JOIN leads l
-    ON l.responsable_id = u.id AND l.deleted_at IS NULL
-   AND l.project_id IN (SELECT up.project_id FROM user_projects up WHERE up.user_id = u.id AND up.active)
+    ON l.responsable_id = u.id AND l.deleted_at IS NULL AND l.project_id = $2
  GROUP BY u.id`;
 
 /**
- * Asignados hoy (Valencia) y en total a cada una, en todos sus campus.
+ * Asignados hoy (Valencia) y en total a cada una, EN ESTE CAMPUS.
  * «Hoy» suma los leads y las conversaciones de WhatsApp que le abrieron hoy.
  * Map id → { hoy, total, ultimo, whatsapp }.
  */
-export async function cuentasDe(ids, ejecutar = query) {
+export async function cuentasDe(ids, projectId, ejecutar = query) {
   const lista = [...new Set((ids || []).map(Number).filter(Boolean))];
-  if (!lista.length) return new Map();
-  const { rows } = await ejecutar(SQL_CUENTAS, [lista]);
+  if (!lista.length || !Number(projectId)) return new Map();
+  const { rows } = await ejecutar(SQL_CUENTAS, [lista, Number(projectId)]);
   return new Map(rows.map((r) => [Number(r.id), { hoy: r.hoy, total: r.total, ultimo: r.ultimo, whatsapp: r.whatsapp }]));
 }
 
