@@ -96,4 +96,4 @@ export function motivoDelFallo(issue) {
 }
 
 /** Lo que la entrada nunca puede decidir: la gestora y la clave la pone el CRM. */
-export const CAMPOS_QUE_PONE_EL_CRM = ['responsable_id', 'responsable_email', 'responsable_nombre', 'idempotency_key'];
+export const CAMPOS_QUE_PONE_EL_CRM = ['responsable_id', 'responsable_email', 'responsable_nombre', 'responsable_whatsapp', 'idempotency_key'];

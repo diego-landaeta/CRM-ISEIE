@@ -215,8 +215,8 @@ describe('WhatsApp (fase 5)', () => {
   // Cada conversación, en el número conectado de la gestora (instancia `crm-u<id>`).
   let n = 0;
   const conversacion = async (c, { grupo = false } = {}) => (await one(
-    `INSERT INTO wa_conversaciones (instancia, jid, telefono) VALUES ($1, $2, $3) RETURNING id`,
-    [`crm-u${U[c].id}`, `34611${String(++n).padStart(6, '0')}@${grupo ? 'g.us' : 's.whatsapp.net'}`, `+34611${String(n).padStart(6, '0')}`])).id;
+    `INSERT INTO wa_conversaciones (instancia, jid, telefono, project_id) VALUES ($1, $2, $3, $4) RETURNING id`,
+    [`crm-u${U[c].id}`, `34611${String(++n).padStart(6, '0')}@${grupo ? 'g.us' : 's.whatsapp.net'}`, `+34611${String(n).padStart(6, '0')}`, ids.project])).id;
   const mensaje = (conv, direccion, { haceMin = 0, enviadoPor = null } = {}) => q(
     `INSERT INTO wa_mensajes (conversacion_id, direccion, texto, enviado_por, ts) VALUES ($1, $2, 'hola', $3, NOW() - make_interval(mins => $4::int))`,
     [conv, direccion, enviadoPor, haceMin]);
@@ -248,29 +248,29 @@ describe('WhatsApp (fase 5)', () => {
 
   it('una conversación que le abre la persona hoy cuenta como asignada; si luego es su lead, cuenta una vez', async () => {
     await limpiarTodo();
-    const antes = (await cuentasDe([U.ana.id])).get(U.ana.id);
+    const antes = (await cuentasDe([U.ana.id], ids.project)).get(U.ana.id);
     const conv = await conversacion('ana');
     await mensaje(conv, 'entrante', { haceMin: 2 });
     await mensaje(conv, 'saliente', { haceMin: 1 });
-    const despues = (await cuentasDe([U.ana.id])).get(U.ana.id);
+    const despues = (await cuentasDe([U.ana.id], ids.project)).get(U.ana.id);
     expect(despues.hoy).toBe(antes.hoy + 1);
     expect(despues.whatsapp).toBe(1);
     // La gestora registra el lead de esa conversación: sigue contando uno.
     const lead = await one('INSERT INTO leads (project_id, nombre, email, responsable_id) VALUES ($1, $2, $3, $4) RETURNING id',
       [ids.project, `${MARCA} de WhatsApp`, `wa_${MARCA.toLowerCase()}@x.test`, U.ana.id]);
     await q('UPDATE wa_conversaciones SET lead_id = $1 WHERE id = $2', [lead.id, conv]);
-    const registrado = (await cuentasDe([U.ana.id])).get(U.ana.id);
+    const registrado = (await cuentasDe([U.ana.id], ids.project)).get(U.ana.id);
     expect(registrado.hoy).toBe(antes.hoy + 1);
     expect(registrado.whatsapp).toBe(0);
   });
 
   it('la conversación que empieza la gestora no cuenta como asignada', async () => {
     await limpiarTodo();
-    const antes = (await cuentasDe([U.bea.id])).get(U.bea.id);
+    const antes = (await cuentasDe([U.bea.id], ids.project)).get(U.bea.id);
     const conv = await conversacion('bea');
     await mensaje(conv, 'saliente', { haceMin: 5 });
     await mensaje(conv, 'entrante', { haceMin: 1 });
-    expect((await cuentasDe([U.bea.id])).get(U.bea.id).hoy).toBe(antes.hoy);
+    expect((await cuentasDe([U.bea.id], ids.project)).get(U.bea.id).hoy).toBe(antes.hoy);
   });
 
   it('el widget de la web: con alguien activo, solo ella; sin nadie, todas (y sigue al azar)', async () => {
@@ -288,5 +288,30 @@ describe('WhatsApp (fase 5)', () => {
     await request.patch(`/api/asignacion/${ids.config}`).set(como('admin')).send({ activo: false });
     expect((await datos()).gestoras).toHaveLength(2);
     await request.patch(`/api/asignacion/${ids.config}`).set(como('admin')).send({ activo: true });
+  });
+});
+
+describe('cada campus reparte aparte (Diego, 28/10)', () => {
+  it('los leads que una gestora recibe en otro campus no cuentan para el «menos hoy» de este', async () => {
+    const antes = (await cuentasDe([U.bea.id], ids.project)).get(U.bea.id);
+    for (let i = 0; i < 3; i++) {
+      await q('INSERT INTO leads (project_id, nombre, email, responsable_id) VALUES ($1, $2, $3, $4)',
+        [ids.otro, `${MARCA} otro campus ${i}`, `otro${i}_${MARCA.toLowerCase()}@x.test`, U.bea.id]);
+    }
+    expect((await cuentasDe([U.bea.id], ids.project)).get(U.bea.id).hoy).toBe(antes.hoy);
+    expect((await cuentasDe([U.bea.id], ids.otro)).get(U.bea.id).hoy).toBe(3);
+  });
+  it('el escenario recibe también el WhatsApp de la gestora (para la plantilla de Wasapi)', async () => {
+    await q(`UPDATE users SET whatsapp_phone = '34600111222' WHERE id = $1`, [U.cris.id]);
+    await q('DELETE FROM lead_interactions WHERE lead_id = $1', [leadDePrueba]);
+    await q('DELETE FROM actividad_crm WHERE user_id = ANY($1::int[])', [Object.values(U).map((u) => u.id)]);
+    await q('DELETE FROM wa_conversaciones WHERE instancia = ANY($1::text[])', [Object.values(U).map((u) => `crm-u${u.id}`)]);
+    await q('INSERT INTO lead_interactions (lead_id, tipo, nota, created_by) VALUES ($1, $2, $3, $4)', [leadDePrueba, 'llamada', 'contestó', U.cris.id]);
+    sendEmail.mockClear();
+    const r = await entrar('wa-de-la-gestora');
+    expect(r.body.data.gestora).toMatchObject({ id: U.cris.id, whatsapp: '34600111222' });
+    await esperar();
+    const [correo] = correosA(MAIL2);
+    expect(correo).toBeTruthy();
   });
 });
