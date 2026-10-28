@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { elegir, porQue } from '../src/modules/asignacion/asignacion.actividad.js';
 import { accionDe } from '../src/shared/middleware/registrarActividad.js';
 import { construirPayload, construirCorreo } from '../src/modules/asignacion/asignacion.service.js';
-import { revisarDestino, motivoDelFallo, entradaSchema } from '../src/modules/asignacion/asignacion.validation.js';
+import { revisarDestino, motivoDelFallo, entradaSchema, prepararEntrada } from '../src/modules/asignacion/asignacion.validation.js';
 import { webhookLeadSchema } from '../src/modules/leads/lead.validation.js';
 
 /*
@@ -133,5 +133,24 @@ describe('lo que contesta la entrada cuando falta algo (para quien monta Make)',
   });
   it('y si está pero no vale, cuál y por qué', () => {
     expect(motivo(entradaSchema, { uid: 'x'.repeat(201) })).toMatch(/^El campo «uid» no es válido/);
+  });
+});
+
+describe('la entrada acepta el JSON tal cual lo saca Make (28/10)', () => {
+  const deMake = { full_name: 'Ana Pérez', email: 'ana@x.test', phone_complete: '+34600111222', course: 'Curso X', message: 'Hola', page_url: 'https://psikoaprende.com/curso-x/' };
+  it('copia full_name, phone_complete, course, page_url y message a los campos del CRM, sin quitar los originales', () => {
+    const d = prepararEntrada(deMake);
+    expect(d).toMatchObject({ nombre: 'Ana Pérez', telefono: '+34600111222', producto_interes: 'Curso X', landing_url: 'https://psikoaprende.com/curso-x/', notas: 'Hola', full_name: 'Ana Pérez' });
+  });
+  it('si ya vienen los del CRM, mandan esos', () => {
+    expect(prepararEntrada({ ...deMake, nombre: 'Otra' }).nombre).toBe('Otra');
+  });
+  it('sin uid, la huella del JSON: el mismo formulario da el mismo uid, en cualquier orden', () => {
+    const a = prepararEntrada(deMake).uid;
+    const b = prepararEntrada(Object.fromEntries(Object.entries(deMake).reverse())).uid;
+    expect(a).toMatch(/^auto-[0-9a-f]{32}$/);
+    expect(b).toBe(a);
+    expect(prepararEntrada({ ...deMake, email: 'otra@x.test' }).uid).not.toBe(a);
+    expect(prepararEntrada({ ...deMake, uid: 'mio' }).uid).toBe('mio');
   });
 });

@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { z } from 'zod';
 import { revisarUrl } from '../webhooks-salientes/webhooks-salientes.validation.js';
 
@@ -93,6 +94,38 @@ export function motivoDelFallo(issue) {
   if (campo && falta) return `Falta el campo «${campo}»`;
   if (/[áéíóúñ]|Falta/.test(issue?.message || '')) return issue.message;
   return campo ? `El campo «${campo}» no es válido: ${issue?.message || 'revísalo'}` : (issue?.message || 'Datos no válidos');
+}
+
+/*
+  EL JSON QUE YA SACA MAKE (28/10/2026). Los escenarios «Contestación automática»
+  de cada campus sacan del correo, con OpenAI, un JSON con `full_name`, `email`,
+  `phone_complete`, `course`, `message`, `page_url`… y hoy lo mandan tal cual al
+  CRM. La entrada lo acepta igual, para que en Make baste un HTTP con ese mismo
+  JSON (escribir los campos a mano rompe el envío en cuanto un nombre trae comillas):
+    · los nombres de ese JSON se copian a los del CRM si faltan (`full_name` →
+      `nombre`, `phone_complete` → `telefono`, `course` → `producto_interes`,
+      `page_url` → `landing_url`, `message` → `notas`); los originales siguen y
+      llegan igual al escenario;
+    · sin `uid`, se toma la huella del propio JSON: si Make reenvía el mismo
+      formulario, es el mismo uid y no se duplica.
+*/
+const ALIAS = [['nombre', ['full_name', 'name']], ['telefono', ['phone_complete', 'phone']],
+  ['producto_interes', ['course']], ['landing_url', ['page_url']], ['notas', ['message']]];
+const vacio = (v) => v == null || String(v).trim() === '';
+const ordenado = (v) => (Array.isArray(v) ? v.map(ordenado)
+  : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, ordenado(v[k])])) : v);
+
+export function prepararEntrada(cuerpo) {
+  const d = cuerpo && typeof cuerpo === 'object' && !Array.isArray(cuerpo) ? { ...cuerpo } : {};
+  for (const [campo, alias] of ALIAS) {
+    if (!vacio(d[campo])) continue;
+    const de = alias.find((a) => !vacio(d[a]));
+    if (de) d[campo] = String(d[de]).trim();
+  }
+  if (vacio(d.uid)) {
+    d.uid = 'auto-' + crypto.createHash('sha256').update(JSON.stringify(ordenado(cuerpo || {}))).digest('hex').slice(0, 32);
+  }
+  return d;
 }
 
 /** Lo que la entrada nunca puede decidir: la gestora y la clave la pone el CRM. */

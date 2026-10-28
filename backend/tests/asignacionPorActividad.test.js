@@ -331,3 +331,16 @@ describe('«Probar escenario 2» (visto probando la pantalla, 28/10)', () => {
     expect(correo.textContent).not.toContain('GESTORA ASIGNADA');
   });
 });
+
+describe('la entrada con el JSON de Make (28/10)', () => {
+  it('sin uid y con full_name/phone_complete: entra, y repetido no duplica', async () => {
+    const cuerpo = { full_name: `${MARCA} de Make`, email: `make_${MARCA.toLowerCase()}@cliente.test`, phone_complete: '+34600000088', course: 'Curso X' };
+    const a = await request.post('/api/asignacion/entrada').set('Authorization', `Bearer ${clave}`).send(cuerpo);
+    expect(a.status, JSON.stringify(a.body)).toBe(200);
+    const b = await request.post('/api/asignacion/entrada').set('Authorization', `Bearer ${clave}`).send(cuerpo);
+    expect(b.body.data.decision_id).toBe(a.body.data.decision_id);
+    const d = await one('SELECT uid, datos FROM asignacion_decisiones WHERE id = $1', [a.body.data.decision_id]);
+    expect(d.uid).toMatch(/^auto-/);
+    expect(d.datos).toMatchObject({ nombre: cuerpo.full_name, telefono: cuerpo.phone_complete, full_name: cuerpo.full_name });
+  });
+});

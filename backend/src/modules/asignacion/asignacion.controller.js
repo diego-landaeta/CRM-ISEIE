@@ -1,7 +1,7 @@
 import * as model from './asignacion.model.js';
 import * as service from './asignacion.service.js';
 import {
-  crearConfigSchema, cambiarConfigSchema, pruebaSchema, listarDecisionesSchema, entradaSchema, motivoDelFallo,
+  crearConfigSchema, cambiarConfigSchema, pruebaSchema, listarDecisionesSchema, entradaSchema, motivoDelFallo, prepararEntrada,
 } from './asignacion.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { tieneRol } from '../../shared/utils/roles.js';
@@ -189,7 +189,8 @@ export async function entrada(req, res, next) {
     if (!clave) throw new AppError('Falta la clave de la entrada (Authorization: Bearer … o X-API-Key)', 401, 'API_KEY_REQUIRED');
     const config = await model.porClave(service.huella(clave));
     if (!config) throw new AppError('Clave de la entrada no válida', 401, 'API_KEY_INVALID');
-    const datos = validar(entradaSchema, req.body);
+    // Acepta también el JSON tal cual lo saca Make (`full_name`, `phone_complete`…), con o sin uid.
+    const datos = validar(entradaSchema, prepararEntrada(req.body));
     const r = await service.decidir(config, datos);
     res.json({ success: true, data: r });
   } catch (err) { next(err); }
