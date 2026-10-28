@@ -78,9 +78,12 @@ export const asignacionApi = {
   borrar: (id: number) => client.delete(`/asignacion/${id}`),
   nuevaClave: (id: number) => client.post(`/asignacion/${id}/clave`, {}),
   probar: (id: number, escenario: 1 | 2) => client.post(`/asignacion/${id}/prueba`, { escenario }),
-  decisiones: (f: { destinoId?: number | null; escenario?: 1 | 2 | null; estado?: EstadoEnvio | '' } = {}) => {
+  decisiones: (f: { destinoId?: number | null; projectId?: number | null; issuerId?: number | null; escenario?: 1 | 2 | null; estado?: EstadoEnvio | '' } = {}) => {
     const q = new URLSearchParams();
     if (f.destinoId) q.set('destino_id', String(f.destinoId));
+    // Un campus manda sobre la empresa: con los dos, el campus ya es de esa empresa.
+    if (f.projectId) q.set('project_id', String(f.projectId));
+    else if (f.issuerId) q.set('issuer_id', String(f.issuerId));
     if (f.escenario) q.set('escenario', String(f.escenario));
     if (f.estado) q.set('estado', f.estado);
     q.set('limit', '100');
