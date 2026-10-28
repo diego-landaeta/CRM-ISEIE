@@ -315,3 +315,19 @@ describe('cada campus reparte aparte (Diego, 28/10)', () => {
     expect(correo).toBeTruthy();
   });
 });
+
+describe('«Probar escenario 2» (visto probando la pantalla, 28/10)', () => {
+  it('lleva una gestora de ejemplo, para poder enlazar sus campos en Make', async () => {
+    sendEmail.mockClear();
+    const r = await request.post(`/api/asignacion/${ids.config}/prueba`).set(como('admin')).send({ escenario: 2 });
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    const [correo] = correosA(MAIL2);
+    expect(correo.textContent).toContain('GESTORA ASIGNADA: Gestora de prueba');
+  });
+  it('la del escenario 1 sigue sin gestora', async () => {
+    sendEmail.mockClear();
+    await request.post(`/api/asignacion/${ids.config}/prueba`).set(como('admin')).send({ escenario: 1 });
+    const [correo] = correosA(MAIL1);
+    expect(correo.textContent).not.toContain('GESTORA ASIGNADA');
+  });
+});
