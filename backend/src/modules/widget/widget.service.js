@@ -1,5 +1,6 @@
 import * as model from './widget.model.js';
 import { textosPorIdioma, IDIOMA_BASE } from './widget.idiomas.js';
+import { gestorasParaLaWeb } from '../asignacion/asignacion.widget.js';
 
 function escapeJs(s) {
   return String(s || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n').replace(/<\/script>/gi, '<\\/script>');
@@ -15,8 +16,10 @@ export async function generateWidgetScript(projectId, idioma = IDIOMA_BASE) {
   if (!users.length) {
     return '// No hay gestores activos en el widget\n';
   }
+  // Si hay una gestora activa a la que le toca, solo ella (CRM#513, fase 5).
+  const lista = await gestorasParaLaWeb(projectId, users);
 
-  const arr = users.map((u) => `["${escapeJs(u.display_name)}","${escapeJs(u.whatsapp_phone)}"]`).join(',');
+  const arr = lista.map((u) => `["${escapeJs(u.display_name)}","${escapeJs(u.whatsapp_phone)}"]`).join(',');
   const projectName = escapeJs(config.project_nombre);
   // Los textos del idioma pedido (?lang=), o los del español.
   const textos = textosPorIdioma(config)[idioma] || textosPorIdioma(config)[IDIOMA_BASE];

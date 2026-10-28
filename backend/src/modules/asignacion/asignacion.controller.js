@@ -1,7 +1,7 @@
 import * as model from './asignacion.model.js';
 import * as service from './asignacion.service.js';
 import {
-  crearConfigSchema, cambiarConfigSchema, pruebaSchema, listarDecisionesSchema, entradaSchema,
+  crearConfigSchema, cambiarConfigSchema, pruebaSchema, listarDecisionesSchema, entradaSchema, motivoDelFallo,
 } from './asignacion.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { tieneRol } from '../../shared/utils/roles.js';
@@ -26,7 +26,7 @@ function idDe(valor, que = 'id') {
 
 function validar(schema, datos) {
   const r = schema.safeParse(datos ?? {});
-  if (!r.success) throw new AppError(r.error.errors[0].message, 400, 'VALIDATION_ERROR');
+  if (!r.success) throw new AppError(motivoDelFallo(r.error.errors[0]), 400, 'VALIDATION_ERROR');
   return r.data;
 }
 

@@ -15,7 +15,10 @@ import { query } from '../../shared/config/db.js';
       ni la vuelta atrás;
     · recordatorios (`lead_reminders`) y pasos del proceso hechos (`lead_steps`);
     · ediciones reales de un prospecto (`lead_audit_log` solo apunta cambios);
-    · WhatsApp enviados desde el CRM (`wa_mensajes`, saliente, `enviado_por`);
+    · WhatsApp que ella manda, desde el CRM (`enviado_por`) o desde su móvil
+      con el número conectado (la instancia es suya: `crm-u<id>`). Se mira la
+      hora de WhatsApp además de la de llegada, para que el historial que baja
+      al emparejar el número no la haga pasar por activa; los grupos no cuentan;
     · lo que no guarda su autor —crear un lead, una venta, un cobro, una
       matrícula, una factura—, que se apunta en `actividad_crm`.
   No cuenta: abrir una ficha (no se registra), guardar sin cambios (no deja
@@ -24,7 +27,16 @@ import { query } from '../../shared/config/db.js';
   A QUIÉN, entre las activas: la que tenga menos leads asignados hoy (día de
   Valencia, en todos sus campus); si empatan, menos en total; si siguen, la que
   lleva más tiempo sin recibir uno (el turno); y al final, el id.
+
+  WHATSAPP (fase 5): pulsar el botón del widget no asigna nada. Un contacto de
+  WhatsApp cuenta como asignado a una gestora cuando la persona le ESCRIBE —una
+  conversación nueva que abre ella en el número de la gestora— o cuando la
+  gestora lo registra (crea el lead, y entonces cuenta como lead). Si las dos
+  cosas pasan el mismo día, cuenta una vez.
 */
+
+/** De quién es una instancia de WhatsApp (`crm-u12` → 12), en SQL. */
+const DUENA_INSTANCIA = (col) => `NULLIF(substring(${col} from '-u([0-9]+)$'), '')::int`;
 
 export const MINUTOS_PARA_DESHACER = 10;
 export const LARGO_MINIMO_NOTA = 20;
@@ -67,9 +79,11 @@ acciones AS (
   SELECT a.changed_by_user_id, a.changed_at, 'edicion'
     FROM lead_audit_log a, v WHERE a.changed_at >= v.desde AND a.changed_by_user_id = ANY($1::int[])
   UNION ALL
-  SELECT m.enviado_por, m.created_at, 'whatsapp'
-    FROM wa_mensajes m, v
-   WHERE m.created_at >= v.desde AND m.direccion = 'saliente' AND m.enviado_por = ANY($1::int[])
+  SELECT COALESCE(m.enviado_por, ${DUENA_INSTANCIA('c.instancia')}), m.ts, 'whatsapp'
+    FROM wa_mensajes m JOIN wa_conversaciones c ON c.id = m.conversacion_id, v
+   WHERE m.direccion = 'saliente' AND m.ts >= v.desde AND m.created_at >= v.desde
+     AND c.jid NOT LIKE '%@g.us'
+     AND COALESCE(m.enviado_por, ${DUENA_INSTANCIA('c.instancia')}) = ANY($1::int[])
   UNION ALL
   SELECT c.user_id, c.created_at, c.accion
     FROM actividad_crm c, v WHERE c.created_at >= v.desde AND c.user_id = ANY($1::int[])
@@ -88,24 +102,48 @@ export async function activasEntre(candidatas, ventanaMin, ejecutar = query) {
   return new Map(rows.map((r) => [Number(r.uid), { ultima: r.ultima, que: r.que, acciones: r.acciones }]));
 }
 
+// Las conversaciones de hoy que abrió la persona (su primer mensaje es suyo y es
+// de hoy, hora de WhatsApp) y que no son ya un lead de hoy de la misma gestora.
 const SQL_CUENTAS = `
+WITH d AS (SELECT (date_trunc('day', NOW() AT TIME ZONE '${ZONA}') AT TIME ZONE '${ZONA}') AS hoy),
+conv AS (
+  SELECT c.id, c.lead_id, ${DUENA_INSTANCIA('c.instancia')} AS uid
+    FROM wa_conversaciones c, d
+   WHERE c.created_at >= d.hoy AND c.jid NOT LIKE '%@g.us'
+),
+wa AS (
+  SELECT conv.uid, COUNT(*)::int AS n, MAX(p.ts) AS ultimo
+    FROM conv CROSS JOIN d
+    CROSS JOIN LATERAL (SELECT m.ts, m.direccion FROM wa_mensajes m
+                         WHERE m.conversacion_id = conv.id ORDER BY m.ts, m.id LIMIT 1) p
+   WHERE conv.uid = ANY($1::int[]) AND p.direccion = 'entrante' AND p.ts >= d.hoy
+     AND NOT EXISTS (SELECT 1 FROM leads l WHERE l.id = conv.lead_id AND l.responsable_id = conv.uid
+                        AND l.created_at >= d.hoy AND l.deleted_at IS NULL)
+   GROUP BY conv.uid
+)
 SELECT u.id,
-       COUNT(l.id) FILTER (
-         WHERE l.created_at >= (date_trunc('day', NOW() AT TIME ZONE '${ZONA}') AT TIME ZONE '${ZONA}'))::int AS hoy,
+       (COUNT(l.id) FILTER (WHERE l.created_at >= d.hoy) + COALESCE(MAX(wa.n), 0))::int AS hoy,
        COUNT(l.id)::int AS total,
-       MAX(l.created_at) AS ultimo
+       GREATEST(MAX(l.created_at), MAX(wa.ultimo)) AS ultimo,
+       COALESCE(MAX(wa.n), 0)::int AS whatsapp
   FROM unnest($1::int[]) AS u(id)
+  CROSS JOIN d
+  LEFT JOIN wa ON wa.uid = u.id
   LEFT JOIN leads l
     ON l.responsable_id = u.id AND l.deleted_at IS NULL
    AND l.project_id IN (SELECT up.project_id FROM user_projects up WHERE up.user_id = u.id AND up.active)
  GROUP BY u.id`;
 
-/** Leads asignados hoy (Valencia) y en total a cada una, en todos sus campus. Map id → { hoy, total, ultimo }. */
+/**
+ * Asignados hoy (Valencia) y en total a cada una, en todos sus campus.
+ * «Hoy» suma los leads y las conversaciones de WhatsApp que le abrieron hoy.
+ * Map id → { hoy, total, ultimo, whatsapp }.
+ */
 export async function cuentasDe(ids, ejecutar = query) {
   const lista = [...new Set((ids || []).map(Number).filter(Boolean))];
   if (!lista.length) return new Map();
   const { rows } = await ejecutar(SQL_CUENTAS, [lista]);
-  return new Map(rows.map((r) => [Number(r.id), { hoy: r.hoy, total: r.total, ultimo: r.ultimo }]));
+  return new Map(rows.map((r) => [Number(r.id), { hoy: r.hoy, total: r.total, ultimo: r.ultimo, whatsapp: r.whatsapp }]));
 }
 
 const ms = (f) => (f ? new Date(f).getTime() : -Infinity);
@@ -121,7 +159,7 @@ const ms = (f) => (f ? new Date(f).getTime() : -Infinity);
 export function elegir(activas, cuentas) {
   const filas = [...activas].map((id) => {
     const c = cuentas.get(Number(id)) || { hoy: 0, total: 0, ultimo: null };
-    return { id: Number(id), hoy: Number(c.hoy || 0), total: Number(c.total || 0), ultimo: c.ultimo || null };
+    return { id: Number(id), hoy: Number(c.hoy || 0), total: Number(c.total || 0), ultimo: c.ultimo || null, whatsapp: Number(c.whatsapp || 0) };
   });
   filas.sort((a, b) => (a.hoy - b.hoy) || (a.total - b.total) || (ms(a.ultimo) - ms(b.ultimo)) || (a.id - b.id));
   return { elegida: filas[0] || null, orden: filas };
@@ -132,5 +170,6 @@ export function porQue(fila, actividad, ahora = new Date()) {
   if (!fila) return 'Ninguna gestora activa';
   const hace = actividad?.ultima ? Math.max(0, Math.round((ahora - new Date(actividad.ultima)) / 60000)) : null;
   const cuando = hace == null ? 'activa' : hace === 0 ? 'activa ahora mismo' : `activa hace ${hace} min`;
-  return `${cuando}${actividad?.que ? ` (${actividad.que})` : ''} · ${fila.hoy} hoy · ${fila.total} en total`;
+  const wa = fila.whatsapp ? ` (${fila.whatsapp} por WhatsApp)` : '';
+  return `${cuando}${actividad?.que ? ` (${actividad.que})` : ''} · ${fila.hoy} hoy${wa} · ${fila.total} en total`;
 }
