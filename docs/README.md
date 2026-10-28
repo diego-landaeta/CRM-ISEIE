@@ -71,7 +71,8 @@ Pedida por Carlos y definida con Diego. Pantalla: **Conexión › Asignación de
   - `lead_reminders`, `lead_steps` y `lead_audit_log`.
   - WhatsApp salientes, también los mandados desde el móvil con el número conectado (instancia `crm-u<id>`). Se mira la hora de WhatsApp para que no cuente el historial; los grupos no cuentan.
   - `actividad_crm`, que apunta el middleware `registrarActividad` (crear lead, venta, cobro, matrícula, factura, proceso).
-- **Candidatas:** las de `gestoresDelReparto` del campus.
+- **Candidatas:** las de `gestoresDelReparto` del campus. Con menos de dos, no se elige por actividad: va al escenario 1 (Diego, 28/10).
+- **Freno de pruebas (temporal):** un formulario con correo @ejemplo.com se decide pero no crea lead ni se manda al escenario 1.
 - **A quién le toca entre las activas:**
   1. menos asignados hoy en ese campus (día de Valencia; cada campus reparte aparte, Diego 28/10);
   2. menos en total en ese campus;

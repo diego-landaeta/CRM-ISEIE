@@ -50,7 +50,7 @@ const entrada = (clave, cuerpo) => pedir('POST', '/asignacion/entrada', cuerpo, 
 const formulario = (letra) => ({
   uid: `asig-e2e-${SELLO}-${letra}`,
   nombre: `[E2E] Cliente ${letra}`,
-  email: `asig-e2e-${SELLO}-${letra.toLowerCase()}@ejemplo.com`,
+  email: `asig-e2e-${SELLO}-${letra.toLowerCase()}@e2e.test`,
   telefono: `+3460000${String(SELLO).slice(-4)}${letra.charCodeAt(0) % 10}`,
   notas: 'Formulario de prueba de la asignación por actividad',
   landing_url: 'https://ejemplo.com/curso-prueba?utm_source=e2e',
@@ -104,7 +104,7 @@ try {
 
   // ── B · Lo que NO cuenta: una nota corta, una nota repetida, un cambio de estado deshecho.
   const { rows: [lp] } = await query(`INSERT INTO leads (project_id, nombre, email) VALUES ($1, '[E2E] lead para actividad', $2) RETURNING id`,
-    [campus.id, `asig-e2e-${SELLO}-actividad@ejemplo.com`]);
+    [campus.id, `asig-e2e-${SELLO}-actividad@e2e.test`]);
   limpiar.lead_prueba = lp.id; limpiar.leads.add(lp.id);
   const nota = async (uid, texto, haceMin = 0) => {
     const { rows: [r] } = await query(`INSERT INTO lead_interactions (lead_id, tipo, nota, created_by, created_at)
@@ -187,7 +187,7 @@ try {
   const k2 = await pedir('POST', '/asignacion/entrada', formulario('I'), { 'Content-Type': 'application/json' });
   ok(k2.s === 401, `G · sin clave → ${k2.s}`);
   // El JSON tal cual lo saca Make (full_name, phone_complete, course…), sin uid: se acepta y no se duplica.
-  const deMake = { full_name: '[E2E] Cliente de Make', email: `asig-e2e-${SELLO}-make@ejemplo.com`, phone_complete: '+34600000077',
+  const deMake = { full_name: '[E2E] Cliente de Make', email: `asig-e2e-${SELLO}-make@e2e.test`, phone_complete: '+34600000077',
     course: 'Curso de prueba', message: 'Quiero información', page_url: 'https://ejemplo.com/curso', date: '28 de octubre de 2026' };
   const k3 = await entrada(clave, deMake);
   const k3b = await entrada(clave, deMake);

@@ -356,3 +356,47 @@ describe('la entrada como formulario codificado, con el correo original (28/10)'
     expect(d.datos.original).toMatchObject({ asunto: 'Nuevo formulario del Curso X', texto: 'Nombre: codificado' });
   });
 });
+
+describe('freno de pruebas: los formularios @ejemplo.com (28/10)', () => {
+  it('con una activa: se decide el escenario 2 pero no se crea el lead', async () => {
+    await q('DELETE FROM lead_interactions WHERE lead_id = $1', [leadDePrueba]);
+    await q('INSERT INTO lead_interactions (lead_id, tipo, nota, created_by) VALUES ($1, $2, $3, $4)', [leadDePrueba, 'llamada', 'contestó', U.ana.id]);
+    const r = await entrar('freno-activa', { email: `freno_${MARCA.toLowerCase()}@ejemplo.com` });
+    expect(r.body.data).toMatchObject({ escenario: 2, lead_id: null });
+    expect(await q('SELECT 1 FROM leads WHERE email = $1', [`freno_${MARCA.toLowerCase()}@ejemplo.com`])).toHaveLength(0);
+  });
+  it('sin nadie activa: escenario 1, pero no se le manda', async () => {
+    await q('DELETE FROM lead_interactions WHERE lead_id = $1', [leadDePrueba]);
+    await q('DELETE FROM actividad_crm WHERE user_id = ANY($1::int[])', [Object.values(U).map((u) => u.id)]);
+    await q('DELETE FROM wa_conversaciones WHERE instancia = ANY($1::text[])', [Object.values(U).map((u) => `crm-u${u.id}`)]);
+    sendEmail.mockClear();
+    const r = await entrar('freno-nadie', { email: `freno2_${MARCA.toLowerCase()}@ejemplo.com` });
+    expect(r.body.data.escenario).toBe(1);
+    await esperar();
+    expect(correosA(MAIL1)).toHaveLength(0);
+    const d = await one('SELECT estado, respuesta FROM asignacion_decisiones WHERE id = $1', [r.body.data.decision_id]);
+    expect(d.respuesta).toMatch(/PRUEBA/);
+  });
+});
+
+describe('con una sola persona en el reparto (Diego, 28/10)', () => {
+  it('va al escenario 1 aunque esté activa, hasta que sean dos', async () => {
+    const solo = await one('INSERT INTO projects (nombre, slug, webhook_api_key, sociedad_emisora_id) VALUES ($1, $2, $3, $4) RETURNING id',
+      [`${MARCA} solo`, `${MARCA.toLowerCase()}-solo`, `${MARCA}-solo`, ids.issuer]);
+    await q('INSERT INTO user_projects (user_id, project_id) VALUES ($1, $2)', [U.ana.id, solo.id]);
+    const c = await request.post('/api/asignacion').set(como('superadmin')).send({
+      nombre: `${MARCA} solo`, ambito: 'campus', project_id: solo.id, ventana_min: 15,
+      escenario1: { tipo: 'mailhook', valor: MAIL1 }, escenario2: { tipo: 'mailhook', valor: MAIL2 },
+    });
+    expect(c.status, JSON.stringify(c.body)).toBe(201);
+    await q('INSERT INTO lead_interactions (lead_id, tipo, nota, created_by) VALUES ($1, $2, $3, $4)', [leadDePrueba, 'llamada', 'contestó', U.ana.id]);
+    const r = await request.post('/api/asignacion/entrada').set('Authorization', `Bearer ${c.body.data.clave}`)
+      .send({ uid: `${MARCA}-solo`, nombre: 'Uno solo', email: `solo_${MARCA.toLowerCase()}@cliente.test` });
+    expect(r.body.data).toMatchObject({ escenario: 1, gestora: null, lead_id: null });
+    expect(r.body.data.motivo).toMatch(/Solo una persona/);
+    await q('DELETE FROM asignacion_decisiones WHERE project_id = $1', [solo.id]);
+    await q('DELETE FROM asignacion_destinos WHERE project_id = $1', [solo.id]);
+    await q('DELETE FROM user_projects WHERE project_id = $1', [solo.id]);
+    await q('DELETE FROM projects WHERE id = $1', [solo.id]);
+  });
+});
