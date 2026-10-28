@@ -142,7 +142,9 @@ try {
   ok(eC.estado === 'enviado' && eC.http_status === 200, `C · entregado al escenario 2 (${eC.estado} · http ${eC.http_status} ${eC.error || ''})`);
   ok(eC.crudo.includes('"escenario":2') && eC.crudo.includes(`"lead_id":${lC?.id}`) && eC.crudo.includes(`"gestora":{"id":${G1.id},`)
     , 'C · el escenario 2 recibe el lead y la gestora');  // los planos (responsable_*) van detrás y el eco los corta; los cubre la prueba de construirPayload
-  ok(eC.crudo.includes(`"nombre":"${fC.nombre}"`) && eC.crudo.includes(`"telefono":"${fC.telefono}"`), 'C · y los campos del formulario tal cual');
+  // El eco del receptor se corta a 1000 caracteres: el teléfono puede quedar fuera; el nombre va antes.
+  ok(eC.crudo.includes(`"nombre":"${fC.nombre}"`), 'C · y los campos del formulario tal cual');
+  ok(/"gestora":\{[^}]*"whatsapp":/.test(eC.crudo), 'C · con el WhatsApp de la gestora (para la plantilla del escenario)');
   R(`C · así le llega: ${eC.crudo.slice(0, 420)}…`);
 
   // ── D · Make reintenta el mismo formulario → la misma respuesta, ni lead ni envío nuevos.
