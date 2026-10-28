@@ -158,7 +158,7 @@ export async function decisiones(req, res, next) {
     const mios = await misCampus(req);
     if (mios && !mios.length) return res.json({ success: true, data: [] });
     const filas = await model.listarDecisiones({
-      misCampus: mios, destinoId: q.destino_id, projectId: q.project_id, escenario: q.escenario, estado: q.estado, limit: q.limit,
+      misCampus: mios, destinoId: q.destino_id, projectId: q.project_id, issuerId: q.issuer_id, escenario: q.escenario, estado: q.estado, limit: q.limit,
     });
     res.json({ success: true, data: filas });
   } catch (err) { next(err); }

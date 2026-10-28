@@ -11,6 +11,8 @@ import { inputClass } from '@/shared/lib/ui';
 import { cn } from '@/shared/lib/utils';
 import { toast } from '@/shared/hooks/useToast';
 import { useAuth } from '@/contexts/AuthContext';
+import { useProjectContext } from '@/contexts/ProjectContext';
+import { TODOS_LOS_PROYECTOS } from '@/shared/lib/ambitoInforme';
 import { copyToClipboard } from '@/shared/lib/clipboard';
 import usePermission from '@/shared/hooks/usePermission';
 import {
@@ -47,6 +49,45 @@ function hace(iso: string | null): string {
 }
 
 const fechaHora = (iso: string) => new Date(iso).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' });
+
+/*
+  LO QUE SE VE SIGUE A LA CABECERA (Diego, 28/10: «tengo que verlo por empresa y
+  campus»). Con una empresa elegida, las configuraciones que tocan a sus campus y
+  las decisiones de todos ellos, con un filtro para quedarse con uno; con un
+  campus, solo lo suyo; con «todos», todo lo que ve cada uno.
+*/
+export type VistaCabecera =
+  | { tipo: 'todo' }
+  | { tipo: 'empresa'; issuerId: number; nombre: string; campus: CampusConEmpresa[] }
+  | { tipo: 'campus'; campus: CampusConEmpresa };
+
+type Cabecera = {
+  activeIssuerId?: number | null;
+  activeIssuer?: { nombre?: string } | null;
+  activeProject?: { id?: number | string | null; nombre?: string } | null;
+  isAllProjects?: boolean;
+};
+
+export function vistaDeCabecera(cab: Cabecera, proyectos: CampusConEmpresa[]): VistaCabecera {
+  if (cab.activeIssuerId) {
+    const issuerId = Number(cab.activeIssuerId);
+    return { tipo: 'empresa', issuerId, nombre: cab.activeIssuer?.nombre || 'la empresa', campus: proyectos.filter((p) => Number(p.sociedad_emisora_id) === issuerId) };
+  }
+  const id = cab.activeProject?.id;
+  if (!cab.isAllProjects && id && id !== TODOS_LOS_PROYECTOS) {
+    return { tipo: 'campus', campus: proyectos.find((p) => Number(p.id) === Number(id)) || { id: Number(id), nombre: cab.activeProject?.nombre || 'Campus' } };
+  }
+  return { tipo: 'todo' };
+}
+
+/** Si una configuración toca lo que se está viendo: la de todas las empresas, siempre. */
+export function configEnVista(c: Pick<ConfigAsignacion, 'ambito' | 'issuer_id' | 'project_id'>, v: VistaCabecera): boolean {
+  if (v.tipo === 'todo' || c.ambito === 'todas') return true;
+  if (v.tipo === 'empresa') {
+    return c.ambito === 'empresa' ? Number(c.issuer_id) === v.issuerId : v.campus.some((p) => Number(p.id) === Number(c.project_id));
+  }
+  return c.ambito === 'empresa' ? Number(c.issuer_id) === Number(v.campus.sociedad_emisora_id) : Number(c.project_id) === Number(v.campus.id);
+}
 
 function ParaQuien({ c }: { c: ConfigAsignacion }) {
   if (c.ambito === 'todas') return <span className="rounded bg-info-soft px-1.5 py-0.5 text-[10px] font-semibold text-info-soft-foreground">Todas las empresas</span>;
@@ -187,17 +228,27 @@ const ESTADOS: Record<EstadoEnvio, string> = {
   enviado: 'bg-success-soft text-success-soft-foreground', fallido: 'bg-destructive/10 text-destructive',
 };
 
-function Registro({ configs, version }: { configs: ConfigAsignacion[]; version: number }) {
+function Registro({ configs, version, vista, proyectos }: { configs: ConfigAsignacion[]; version: number; vista: VistaCabecera; proyectos: CampusConEmpresa[] }) {
   const [filas, setFilas] = useState<DecisionAsignacion[]>([]);
-  const [filtro, setFiltro] = useState<{ destinoId: number | null; escenario: 1 | 2 | null; estado: EstadoEnvio | '' }>({ destinoId: null, escenario: null, estado: '' });
+  const [filtro, setFiltro] = useState<{ destinoId: number | null; campusId: number | null; escenario: 1 | 2 | null; estado: EstadoEnvio | '' }>({ destinoId: null, campusId: null, escenario: null, estado: '' });
   const [cargando, setCargando] = useState(true);
+  // Los campus entre los que elegir: los de la empresa de la cabecera o, con «todos», todos los suyos.
+  const campusAElegir = vista.tipo === 'empresa' ? vista.campus : vista.tipo === 'todo' ? proyectos : [];
+  const claveVista = vista.tipo === 'empresa' ? `e${vista.issuerId}` : vista.tipo === 'campus' ? `c${vista.campus.id}` : 'todo';
+  // Al cambiar la cabecera, el campus y la configuración elegidos ya pueden no estar en la lista.
+  useEffect(() => { setFiltro((f) => ({ ...f, campusId: null, destinoId: null })); }, [claveVista]);
   const cargar = useCallback(async () => {
     setCargando(true);
     try {
-      const r = await asignacionApi.decisiones(filtro);
+      const r = await asignacionApi.decisiones({
+        destinoId: filtro.destinoId, escenario: filtro.escenario, estado: filtro.estado,
+        projectId: vista.tipo === 'campus' ? Number(vista.campus.id) : filtro.campusId,
+        issuerId: vista.tipo === 'empresa' ? vista.issuerId : null,
+      });
       setFilas(r.success ? (r.data as DecisionAsignacion[]) : []);
     } finally { setCargando(false); }
-  }, [filtro]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtro, claveVista]);
   // `version` sube al probar un escenario: así la prueba sale en el registro sin recargar la página.
   useEffect(() => { cargar(); }, [cargar, version]);
 
@@ -212,7 +263,13 @@ function Registro({ configs, version }: { configs: ConfigAsignacion[]; version: 
   return (
     <section className="space-y-3" aria-labelledby="asig-registro">
       <div className="flex flex-wrap items-center gap-2">
-        <h2 id="asig-registro" className="mr-auto flex items-center gap-2 font-semibold"><ListBullets size={16} /> Registro de decisiones</h2>
+        <h2 id="asig-registro" className="mr-auto flex items-center gap-2 font-semibold"><ListBullets size={16} /> Registro de decisiones
+          {vista.tipo !== 'todo' && <span className="text-xs font-normal text-muted-foreground">· {vista.tipo === 'empresa' ? `${vista.nombre} (${vista.campus.length} campus)` : vista.campus.nombre}</span>}
+        </h2>
+        {campusAElegir.length > 1 && (
+          <Select<number | null> value={filtro.campusId} onChange={(v) => setFiltro((f) => ({ ...f, campusId: v }))} size="sm" ariaLabel="Campus"
+            options={[{ value: null, label: 'Todos los campus' }, ...campusAElegir.map((p) => ({ value: Number(p.id), label: p.nombre }))]} />
+        )}
         <Select<number | null> value={filtro.destinoId} onChange={(v) => setFiltro((f) => ({ ...f, destinoId: v }))} size="sm" ariaLabel="Configuración"
           options={[{ value: null, label: 'Todas las configuraciones' }, ...configs.map((c) => ({ value: c.id, label: c.nombre }))]} />
         <Select<1 | 2 | null> value={filtro.escenario} onChange={(v) => setFiltro((f) => ({ ...f, escenario: v }))} size="sm" ariaLabel="Escenario"
@@ -263,6 +320,9 @@ export default function AsignacionLeadsPage() {
   const [clave, setClave] = useState<{ nombre: string; clave: string } | null>(null);
   const [probando, setProbando] = useState<string | null>(null);
   const [versionRegistro, setVersionRegistro] = useState(0);
+  const cabecera = useProjectContext() as Cabecera;
+  const vista = vistaDeCabecera(cabecera, projects || []);
+  const enVista = configs.filter((c) => configEnVista(c, vista));
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -337,11 +397,13 @@ export default function AsignacionLeadsPage() {
 
       {clave && <ClaveUnaVez nombre={clave.nombre} clave={clave.clave} onCerrar={() => setClave(null)} />}
 
-      {!cargando && !configs.length ? (
-        <EmptyState icon={Shuffle} title="Ningún campus reparte todavía por actividad" description="Crea una para un campus o una empresa con los destinos de sus escenarios 1 y 2 de Make." />
+      {!cargando && !enVista.length ? (
+        <EmptyState icon={Shuffle}
+          title={vista.tipo === 'todo' ? 'Ningún campus reparte todavía por actividad' : `${vista.tipo === 'empresa' ? `Ningún campus de ${vista.nombre}` : vista.campus.nombre} no reparte todavía por actividad`}
+          description="Crea una para un campus o una empresa con los destinos de sus escenarios 1 y 2 de Make." />
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
-          {configs.map((c) => (
+          {enVista.map((c) => (
             <article key={c.id} className="space-y-2 rounded-md border border-border bg-card p-4">
               <div className="flex flex-wrap items-center gap-2">
                 <h3 className="mr-auto font-semibold">{c.nombre}</h3>
@@ -372,7 +434,7 @@ export default function AsignacionLeadsPage() {
         </div>
       )}
 
-      <Registro configs={configs} version={versionRegistro} />
+      <Registro configs={enVista} version={versionRegistro} vista={vista} proyectos={projects || []} />
 
       {dialogo !== undefined && (
         <Dialogo config={dialogo} proyectos={projects || []} esSuperadmin={esSuperadmin} onCerrar={() => setDialogo(undefined)}
