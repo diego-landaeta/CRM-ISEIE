@@ -307,6 +307,26 @@ export default function AsignacionLeadsPage() {
       <div className="space-y-1.5 rounded-md border border-border bg-muted/40 p-3 text-sm">
         <p><b>Cómo funciona.</b> La entrada de Make recibe el formulario y lo pasa al CRM. Si alguna gestora que recibe leads en ese campus ha trabajado en el CRM en los últimos minutos, el CRM crea el lead con ella (la que menos lleva hoy; si empatan, la que menos en total) y lo manda al <b>escenario 2</b>. Si no hay ninguna, lo manda al <b>escenario 1</b>, que lo crea como siempre. Si el CRM no contesta, la entrada de Make lo manda al escenario 1 por su cuenta.</p>
         <p className="text-xs text-muted-foreground">Dirección de la entrada (POST con <code>Authorization: Bearer &lt;clave&gt;</code>): <code className="break-all">{URL_ENTRADA}</code></p>
+        <details className="text-xs">
+          <summary className="cursor-pointer font-semibold text-foreground">Qué cuenta como «activa»</summary>
+          <ul className="mt-1.5 list-disc space-y-0.5 pl-5 text-muted-foreground">
+            <li>Cualquier acción en el CRM en los últimos minutos de la ventana (15 de serie): llamada, correo o WhatsApp registrado, nota, cambio de estado, recordatorio, paso del proceso, editar un prospecto, crear un lead, una venta, un cobro, una matrícula o una factura.</li>
+            <li>También los WhatsApp que manda desde su móvil con el número conectado (no los de grupos ni el historial que baja al conectar el número).</li>
+            <li>No cuentan: abrir una ficha, guardar sin cambiar nada, tener la sesión abierta, una nota de menos de 20 caracteres o repetida, ni un cambio de estado deshecho en menos de 10 minutos.</li>
+            <li>Entre varias activas: la que menos leads lleva hoy (hora de Valencia, sumando todos sus campus), luego la que menos en total, y luego la que lleva más rato sin recibir uno.</li>
+            <li>WhatsApp: con esto encendido, el botón de WhatsApp de la web lleva a la gestora activa a la que le toca. Pulsarlo no asigna nada; cuenta cuando la persona le escribe o cuando se registra el lead.</li>
+          </ul>
+        </details>
+        <details className="text-xs">
+          <summary className="cursor-pointer font-semibold text-foreground">Cómo montarlo en Make, paso a paso</summary>
+          <ol className="mt-1.5 list-decimal space-y-0.5 pl-5 text-muted-foreground">
+            <li>Aquí: <b>Nueva</b>, elige el campus y pon el mailhook o la URL del <b>escenario 1</b> (el de siempre) y del <b>escenario 2</b> (el nuevo). Copia la clave: solo se enseña una vez.</li>
+            <li>En Make, el <b>escenario 2</b> es una copia del de siempre <b>sin</b> la rotación por HTTP y <b>sin</b> crear el lead (el CRM ya lo ha creado con la gestora). Recibe lo mismo que el formulario y además <code>gestora</code>, <code>responsable_id</code>, <code>responsable_email</code>, <code>responsable_nombre</code> y <code>lead_id</code>.</li>
+            <li>La <b>entrada</b> (mailhook o webhook del formulario) hace un POST a la dirección de arriba con la clave y estos campos: <code>uid</code> (único por formulario: si Make lo reenvía, no se duplica), <code>nombre</code>, <code>email</code> o <code>telefono</code>, y los demás del formulario tal cual. Si es un correo, mándalo en <code>original</code> (<code>asunto</code>, <code>html</code>, <code>texto</code>) y saldrá igual hacia el escenario.</li>
+            <li>En ese módulo HTTP de Make pon un tiempo máximo de 5 segundos y una ruta de error: si el CRM no contesta o contesta con error, la entrada manda el formulario al <b>escenario 1</b>. Si contesta bien, no hace nada más: el CRM ya lo ha mandado al escenario que toca.</li>
+            <li>Prueba con <b>Probar escenario 1</b> y <b>Probar escenario 2</b>, y mira abajo el <b>Registro de decisiones</b>: a quién fue cada formulario, por qué y si llegó.</li>
+          </ol>
+        </details>
       </div>
 
       {clave && <ClaveUnaVez nombre={clave.nombre} clave={clave.clave} onCerrar={() => setClave(null)} />}
