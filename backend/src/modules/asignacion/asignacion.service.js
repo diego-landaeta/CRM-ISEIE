@@ -106,7 +106,7 @@ export async function decidir(config, datos, { prueba = false } = {}) {
 
     const candidatas = config.activo ? await gestoresDelReparto((sql, p) => query(sql, p), campus.id) : [];
     const activas = candidatas.length ? await activasEntre(candidatas.map((g) => g.id), config.ventana_min) : new Map();
-    const cuentas = activas.size ? await cuentasDe([...activas.keys()]) : new Map();
+    const cuentas = activas.size ? await cuentasDe([...activas.keys()], campus.id) : new Map();
     const { elegida, orden } = elegir(activas.keys(), cuentas);
 
     const motivo = {
@@ -156,7 +156,7 @@ function respuestaDe(dec, personas) {
   return {
     decision_id: dec?.id ?? null,
     escenario: dec?.escenario ?? 1,
-    gestora: g ? { id: Number(g.id), nombre: g.nombre, email: g.email } : null,
+    gestora: g ? { id: Number(g.id), nombre: g.nombre, email: g.email, whatsapp: g.whatsapp || null } : null,
     lead_id: dec?.lead_id ?? null,
     motivo: dec?.motivo?.texto || null,
   };
@@ -174,10 +174,11 @@ export function construirPayload(dec, campus, gestora) {
     prueba: Boolean(dec.prueba),
     campus: campus ? { id: Number(campus.id), nombre: campus.nombre, slug: campus.slug } : null,
     lead_id: dec.lead_id ?? null,
-    gestora: gestora ? { id: Number(gestora.id), nombre: gestora.nombre, email: gestora.email } : null,
+    gestora: gestora ? { id: Number(gestora.id), nombre: gestora.nombre, email: gestora.email, whatsapp: gestora.whatsapp || null } : null,
     // Planos, como los espera un escenario de Make.
     ...campos,
-    ...(gestora ? { responsable_id: Number(gestora.id), responsable_email: gestora.email, responsable_nombre: gestora.nombre } : {}),
+    // `responsable_whatsapp`: para la plantilla de WhatsApp que manda el escenario (Wasapi en Psiko).
+    ...(gestora ? { responsable_id: Number(gestora.id), responsable_email: gestora.email, responsable_nombre: gestora.nombre, responsable_whatsapp: gestora.whatsapp || null } : {}),
     datos: campos,
     original: dec.datos?.original || null,
   };

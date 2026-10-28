@@ -120,7 +120,7 @@ export async function existeEmpresa(id) {
 export async function personas(ids) {
   const lista = [...new Set((ids || []).map(Number).filter(Boolean))];
   if (!lista.length) return new Map();
-  const { rows } = await query('SELECT id, nombre, email FROM users WHERE id = ANY($1::int[])', [lista]);
+  const { rows } = await query(`SELECT id, nombre, email, NULLIF(TRIM(whatsapp_phone), '') AS whatsapp FROM users WHERE id = ANY($1::int[])`, [lista]);
   return new Map(rows.map((r) => [Number(r.id), r]));
 }
 

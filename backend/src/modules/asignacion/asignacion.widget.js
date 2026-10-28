@@ -8,8 +8,8 @@ import { activasEntre, cuentasDe, elegir } from './asignacion.actividad.js';
   ahora (`/api/w/data/:id.json`)— elige AL AZAR entre las gestoras que le da el
   CRM. Así que no hace falta volver a pegar nada en ninguna web: si hay alguna
   gestora del widget activa, el CRM le da solo esa, la que toca por la regla de
-  los formularios (activa en los últimos N minutos → menos asignados hoy → menos
-  en total → turno). Si no hay ninguna, o la asignación por actividad no está
+  los formularios (activa en los últimos N minutos → menos asignados hoy en ese
+  campus → menos en total allí → turno). Si no hay ninguna, o la asignación por actividad no está
   encendida en el campus, le da la lista entera y sigue al azar como siempre. Y
   si el CRM no contesta, el código de la web hace lo que hacía.
 
@@ -35,7 +35,7 @@ export async function turnoDelWidget(projectId, ids, { ahora = Date.now() } = {}
   const config = await model.paraCampus(projectId);
   if (config?.activo) {
     const activas = await activasEntre(lista, config.ventana_min);
-    if (activas.size) id = elegir(activas.keys(), await cuentasDe([...activas.keys()])).elegida?.id ?? null;
+    if (activas.size) id = elegir(activas.keys(), await cuentasDe([...activas.keys()], projectId)).elegida?.id ?? null;
   }
   memoria.set(llave, { id, at: ahora });
   if (memoria.size > 500) memoria.delete(memoria.keys().next().value);

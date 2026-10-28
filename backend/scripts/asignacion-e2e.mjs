@@ -154,7 +154,7 @@ try {
 
   // ── E · Las dos activas → le toca a quien tenga menos hoy, luego menos en total, luego el turno.
   await actividad(G2.id);
-  const cuentas = await cuentasDe([G1.id, G2.id]);
+  const cuentas = await cuentasDe([G1.id, G2.id], campus.id);
   const esperada = elegir([G1.id, G2.id], cuentas).elegida;
   const fE = formulario('E');
   const e = await entrada(clave, fE);
@@ -163,7 +163,7 @@ try {
   R(`E · cuentas: ${[G1, G2].map((g) => `${g.nombre} ${cuentas.get(g.id).hoy} hoy / ${cuentas.get(g.id).total} total`).join(' · ')}`);
   ok(e.j.data?.escenario === 2 && e.j.data?.gestora?.id === esperada.id, `E · desempate → ${nom(esperada.id)} (${e.j.data?.motivo})`);
   // Y el siguiente, ya con ese lead contado.
-  const cuentas2 = await cuentasDe([G1.id, G2.id]);
+  const cuentas2 = await cuentasDe([G1.id, G2.id], campus.id);
   const esperada2 = elegir([G1.id, G2.id], cuentas2).elegida;
   const f = await entrada(clave, formulario('F'));
   if (f.j.data?.lead_id) limpiar.leads.add(f.j.data.lead_id);
@@ -201,8 +201,8 @@ try {
   await query(`DELETE FROM actividad_crm WHERE id = ANY($1::bigint[])`, [limpiar.actividad]);
   await query(`DELETE FROM lead_interactions WHERE id = ANY($1::int[])`, [limpiar.interacciones]);
   ok((await activasEntre([G1.id, G2.id], 15)).size === 0, 'W · sin actividad otra vez');
-  const conv = async (uid, jid) => (await query(`INSERT INTO wa_conversaciones (instancia, jid, telefono) VALUES ($1, $2, $3) RETURNING id`,
-    [`e2e-u${uid}`, jid, '+34699' + String(SELLO).slice(-6)])).rows[0].id;
+  const conv = async (uid, jid) => (await query(`INSERT INTO wa_conversaciones (instancia, jid, telefono, project_id) VALUES ($1, $2, $3, $4) RETURNING id`,
+    [`e2e-u${uid}`, jid, '+34699' + String(SELLO).slice(-6), campus.id])).rows[0].id;
   const historial = await conv(G1.id, `e2e${SELLO}h@s.whatsapp.net`);
   await query(`INSERT INTO wa_mensajes (conversacion_id, direccion, texto, ts) VALUES ($1, 'saliente', 'hola', NOW() - INTERVAL '3 days')`, [historial]);
   ok((await entrada(clave, formulario('W'))).j.data?.escenario === 1, 'W · el historial al emparejar no la hace activa');
@@ -211,10 +211,10 @@ try {
   const w = await entrada(clave, formulario('X'));
   if (w.j.data?.lead_id) limpiar.leads.add(w.j.data.lead_id);
   ok(w.j.data?.escenario === 2 && w.j.data?.gestora?.id === G2.id, `W · un WhatsApp desde su móvil → ${G2.nombre} (${w.j.data?.motivo})`);
-  const antes = (await cuentasDe([G1.id])).get(G1.id).hoy;
+  const antes = (await cuentasDe([G1.id], campus.id)).get(G1.id).hoy;
   const abierta = await conv(G1.id, `e2e${SELLO}a@s.whatsapp.net`);
   await query(`INSERT INTO wa_mensajes (conversacion_id, direccion, texto, ts) VALUES ($1, 'entrante', 'Hola, quiero información', NOW())`, [abierta]);
-  const desp = (await cuentasDe([G1.id])).get(G1.id);
+  const desp = (await cuentasDe([G1.id], campus.id)).get(G1.id);
   ok(desp.hoy === antes + 1 && desp.whatsapp === 1, `W · una conversación que le abren hoy cuenta (${antes} → ${desp.hoy} hoy, ${desp.whatsapp} por WhatsApp)`);
   const wd = await fetch(`${API}/w/data/${campus.id}.json`).then((r) => r.json()).catch(() => ({}));
   R(`W · widget del campus: ${wd.enabled ? `encendido, da ${wd.gestoras?.length} gestora(s)` : 'apagado en este campus'}`);
