@@ -30,6 +30,8 @@ import { CAMPOS_QUE_PONE_EL_CRM, motivoDelFallo } from './asignacion.validation.
 */
 
 export const MAX_INTENTOS = 4;
+/** La gestora que lleva «Probar escenario 2». Inventada: no es nadie del equipo. */
+export const GESTORA_DE_PRUEBA = Object.freeze({ id: 0, nombre: 'Gestora de prueba', email: 'gestora.prueba@ejemplo.com', whatsapp: '34600000001' });
 export const ESPERAS_MS = [60_000, 5 * 60_000, 15 * 60_000];
 const TIMEOUT_MS = parseInt(process.env.ASIGNACION_TIMEOUT_MS || '10000', 10);
 const RESPUESTA_MAX = 1000;
@@ -227,7 +229,11 @@ export async function procesarEnvio(decisionId) {
     if (!config) return fallo({ error: 'La configuración de la asignación ya no existe', permanente: true });
     const destino = destinoDe(config, dec.escenario);
     const campus = await model.campus(dec.project_id);
-    const gestora = dec.responsable_id ? (await model.personas([dec.responsable_id])).get(Number(dec.responsable_id)) : null;
+    // «Probar escenario 2» lleva una gestora de ejemplo: sin ella, quien monta el
+    // escenario en Make no tiene `gestora` ni `responsable_*` para enlazarlos
+    // (visto probando la pantalla el 28/10).
+    const gestora = dec.responsable_id ? (await model.personas([dec.responsable_id])).get(Number(dec.responsable_id))
+      : (dec.prueba && Number(dec.escenario) === 2 ? GESTORA_DE_PRUEBA : null);
     const payload = construirPayload(dec, campus, gestora);
 
     if (destino.tipo === 'mailhook') {
