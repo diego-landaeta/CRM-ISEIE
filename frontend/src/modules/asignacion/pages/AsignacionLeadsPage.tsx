@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Plus, ArrowClockwise, Trash, PencilSimple, PaperPlaneTilt, Key, Copy, X, Shuffle, ListBullets,
 } from '@phosphor-icons/react';
@@ -57,8 +57,11 @@ function ParaQuien({ c }: { c: ConfigAsignacion }) {
 /** La clave recién creada: se enseña una vez, con la dirección de la entrada. */
 function ClaveUnaVez({ nombre, clave, onCerrar }: { nombre: string; clave: string; onCerrar: () => void }) {
   const copiar = async (t: string, que: string) => toast({ title: (await copyToClipboard(t)) ? `${que} copiada` : 'No se pudo copiar' });
+  // Sale debajo de la explicación: con los desplegables abiertos quedaba fuera de la vista y la clave solo se enseña una vez.
+  const caja = useRef<HTMLDivElement>(null);
+  useEffect(() => { caja.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, []);
   return (
-    <div role="status" className="space-y-2 rounded-md border border-warning bg-warning-soft p-3 text-sm text-warning-soft-foreground">
+    <div ref={caja} role="status" className="space-y-2 rounded-md border border-warning bg-warning-soft p-3 text-sm text-warning-soft-foreground">
       <p className="flex items-center gap-2 font-semibold"><Key size={15} /> Clave de la entrada de «{nombre}»: cópiala ahora</p>
       <p className="text-xs">No se vuelve a enseñar. En Make, la entrada hace un <b>POST</b> a esta dirección con la cabecera <code>Authorization: Bearer &lt;clave&gt;</code>.</p>
       {[['Dirección', URL_ENTRADA], ['Clave', clave]].map(([que, v]) => (
@@ -184,7 +187,7 @@ const ESTADOS: Record<EstadoEnvio, string> = {
   enviado: 'bg-success-soft text-success-soft-foreground', fallido: 'bg-destructive/10 text-destructive',
 };
 
-function Registro({ configs }: { configs: ConfigAsignacion[] }) {
+function Registro({ configs, version }: { configs: ConfigAsignacion[]; version: number }) {
   const [filas, setFilas] = useState<DecisionAsignacion[]>([]);
   const [filtro, setFiltro] = useState<{ destinoId: number | null; escenario: 1 | 2 | null; estado: EstadoEnvio | '' }>({ destinoId: null, escenario: null, estado: '' });
   const [cargando, setCargando] = useState(true);
@@ -195,7 +198,8 @@ function Registro({ configs }: { configs: ConfigAsignacion[] }) {
       setFilas(r.success ? (r.data as DecisionAsignacion[]) : []);
     } finally { setCargando(false); }
   }, [filtro]);
-  useEffect(() => { cargar(); }, [cargar]);
+  // `version` sube al probar un escenario: así la prueba sale en el registro sin recargar la página.
+  useEffect(() => { cargar(); }, [cargar, version]);
 
   async function reenviar(id: number) {
     try {
@@ -258,6 +262,7 @@ export default function AsignacionLeadsPage() {
   const [dialogo, setDialogo] = useState<ConfigAsignacion | null | undefined>(undefined);
   const [clave, setClave] = useState<{ nombre: string; clave: string } | null>(null);
   const [probando, setProbando] = useState<string | null>(null);
+  const [versionRegistro, setVersionRegistro] = useState(0);
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -276,7 +281,7 @@ export default function AsignacionLeadsPage() {
       toast({ title: ok ? `Prueba enviada al escenario ${escenario}` : `La prueba al escenario ${escenario} no llegó`, description: ok ? undefined : r.data?.error || undefined, variant: ok ? undefined : 'destructive' });
     } catch (e: any) {
       toast({ title: 'No se pudo probar', description: e?.data?.error || e?.message, variant: 'destructive' });
-    } finally { setProbando(null); }
+    } finally { setProbando(null); setVersionRegistro((v) => v + 1); }
   }
 
   async function nuevaClave(c: ConfigAsignacion) {
@@ -305,7 +310,7 @@ export default function AsignacionLeadsPage() {
         ) : undefined} />
 
       <div className="space-y-1.5 rounded-md border border-border bg-muted/40 p-3 text-sm">
-        <p><b>Cómo funciona.</b> La entrada de Make recibe el formulario y lo pasa al CRM. Si alguna gestora que recibe leads en ese campus ha trabajado en el CRM en los últimos minutos, el CRM crea el lead con ella (la que menos lleva hoy; si empatan, la que menos en total) y lo manda al <b>escenario 2</b>. Si no hay ninguna, lo manda al <b>escenario 1</b>, que lo crea como siempre. Si el CRM no contesta, la entrada de Make lo manda al escenario 1 por su cuenta.</p>
+        <p><b>Cómo funciona.</b> La entrada de Make recibe el formulario y lo pasa al CRM. Si alguna gestora que recibe leads en ese campus ha trabajado en el CRM en los últimos minutos, el CRM crea el lead con ella (la que menos lleva hoy en ese campus; si empatan, la que menos en total allí) y lo manda al <b>escenario 2</b>. Si no hay ninguna, lo manda al <b>escenario 1</b>, que lo crea como siempre. Si el CRM no contesta, la entrada de Make lo manda al escenario 1 por su cuenta.</p>
         <p className="text-xs text-muted-foreground">Dirección de la entrada (POST con <code>Authorization: Bearer &lt;clave&gt;</code>): <code className="break-all">{URL_ENTRADA}</code></p>
         <details className="text-xs">
           <summary className="cursor-pointer font-semibold text-foreground">Qué cuenta como «activa»</summary>
@@ -321,10 +326,10 @@ export default function AsignacionLeadsPage() {
           <summary className="cursor-pointer font-semibold text-foreground">Cómo montarlo en Make, paso a paso</summary>
           <ol className="mt-1.5 list-decimal space-y-0.5 pl-5 text-muted-foreground">
             <li>Aquí: <b>Nueva</b>, elige el campus y pon el mailhook o la URL del <b>escenario 1</b> (el de siempre) y del <b>escenario 2</b> (el nuevo). Copia la clave: solo se enseña una vez.</li>
-            <li>En Make, el <b>escenario 2</b> es una copia del de siempre <b>sin</b> la rotación por HTTP y <b>sin</b> crear el lead (el CRM ya lo ha creado con la gestora). Recibe lo mismo que el formulario y además <code>gestora</code>, <code>responsable_id</code>, <code>responsable_email</code>, <code>responsable_nombre</code> y <code>lead_id</code>.</li>
+            <li>En Make, el <b>escenario 2</b> es una copia del de siempre <b>sin</b> la rotación por HTTP y <b>sin</b> crear el lead (el CRM ya lo ha creado con la gestora). Recibe lo mismo que el formulario y además <code>gestora</code>, <code>responsable_id</code>, <code>responsable_email</code>, <code>responsable_nombre</code>, <code>responsable_whatsapp</code> y <code>lead_id</code>.</li>
             <li>La <b>entrada</b> (mailhook o webhook del formulario) hace un POST a la dirección de arriba con la clave y estos campos: <code>uid</code> (único por formulario: si Make lo reenvía, no se duplica), <code>nombre</code>, <code>email</code> o <code>telefono</code>, y los demás del formulario tal cual. Si es un correo, mándalo en <code>original</code> (<code>asunto</code>, <code>html</code>, <code>texto</code>) y saldrá igual hacia el escenario.</li>
             <li>En ese módulo HTTP de Make pon un tiempo máximo de 5 segundos y una ruta de error: si el CRM no contesta o contesta con error, la entrada manda el formulario al <b>escenario 1</b>. Si contesta bien, no hace nada más: el CRM ya lo ha mandado al escenario que toca.</li>
-            <li>Prueba con <b>Probar escenario 1</b> y <b>Probar escenario 2</b>, y mira abajo el <b>Registro de decisiones</b>: a quién fue cada formulario, por qué y si llegó.</li>
+            <li>Prueba con <b>Probar escenario 1</b> y <b>Probar escenario 2</b> (la del 2 lleva una «Gestora de prueba» inventada, para que en Make puedas enlazar sus campos), y mira abajo el <b>Registro de decisiones</b>: a quién fue cada formulario, por qué y si llegó.</li>
           </ol>
         </details>
       </div>
@@ -366,7 +371,7 @@ export default function AsignacionLeadsPage() {
         </div>
       )}
 
-      <Registro configs={configs} />
+      <Registro configs={configs} version={versionRegistro} />
 
       {dialogo !== undefined && (
         <Dialogo config={dialogo} proyectos={projects || []} esSuperadmin={esSuperadmin} onCerrar={() => setDialogo(undefined)}
