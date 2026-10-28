@@ -186,9 +186,14 @@ try {
   ok(k1.s === 401, `G · clave mala → ${k1.s}`);
   const k2 = await pedir('POST', '/asignacion/entrada', formulario('I'), { 'Content-Type': 'application/json' });
   ok(k2.s === 401, `G · sin clave → ${k2.s}`);
-  const sinUid = formulario('J'); delete sinUid.uid;
-  const k3 = await entrada(clave, sinUid);
-  ok(k3.s === 400, `G · sin uid → ${k3.s} (${k3.j.error})`);
+  // El JSON tal cual lo saca Make (full_name, phone_complete, course…), sin uid: se acepta y no se duplica.
+  const deMake = { full_name: '[E2E] Cliente de Make', email: `asig-e2e-${SELLO}-make@ejemplo.com`, phone_complete: '+34600000077',
+    course: 'Curso de prueba', message: 'Quiero información', page_url: 'https://ejemplo.com/curso', date: '28 de octubre de 2026' };
+  const k3 = await entrada(clave, deMake);
+  const k3b = await entrada(clave, deMake);
+  ok(k3.s === 200 && k3b.j.data?.decision_id === k3.j.data?.decision_id, `G · JSON de Make sin uid → ${k3.s}, y repetido → la misma decisión`);
+  const { rows: [dm] } = await query(`SELECT uid, datos->>'nombre' AS nombre, datos->>'telefono' AS tel FROM asignacion_decisiones WHERE id = $1`, [k3.j.data?.decision_id]);
+  ok(String(dm?.uid).startsWith('auto-') && dm?.nombre === deMake.full_name && dm?.tel === deMake.phone_complete, 'G · uid automático y full_name/phone_complete pasan a nombre/teléfono');
   const sinNombre = formulario('K'); delete sinNombre.nombre;
   const k4 = await entrada(clave, sinNombre);
   R(`G · sin nombre → ${k4.s} (${k4.j.error || 'escenario ' + k4.j.data?.escenario})`);
@@ -244,7 +249,7 @@ try {
       R(`limpieza: ${ids.length} leads, ${limpiar.actividad.length} acciones, configuración ${b.s}`);
     }
     const { rows: [resto] } = await query(`SELECT (SELECT COUNT(*) FROM leads WHERE email LIKE $1)::int AS leads,
-      (SELECT COUNT(*) FROM asignacion_decisiones WHERE uid LIKE $2)::int AS decisiones`, [`asig-e2e-${SELLO}-%`, `asig-e2e-${SELLO}-%`]);
+      (SELECT COUNT(*) FROM asignacion_decisiones WHERE uid LIKE $2 OR datos->>'email' LIKE $1)::int AS decisiones`, [`asig-e2e-${SELLO}-%`, `asig-e2e-${SELLO}-%`]);
     ok(resto.leads === 0 && resto.decisiones === 0, `limpio (quedan ${resto.leads} leads y ${resto.decisiones} decisiones de la prueba)`);
   } catch (err) { R('AVISO limpieza: ' + err.message); }
   R(`RESULTADO ${bien} bien · ${mal} mal`);
