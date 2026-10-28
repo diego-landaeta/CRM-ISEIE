@@ -154,3 +154,19 @@ describe('la entrada acepta el JSON tal cual lo saca Make (28/10)', () => {
     expect(prepararEntrada({ ...deMake, uid: 'mio' }).uid).toBe('mio');
   });
 });
+
+describe('la entrada con el correo original, como formulario codificado (28/10)', () => {
+  it('lee el JSON de OpenAI del campo json y el correo de asunto/texto/html', () => {
+    const texto = 'Nombre: Ana\nTel: 1';
+    const d = prepararEntrada({ json: JSON.stringify({ full_name: 'Ana "la" Pérez', email: 'ana@x.test' }), asunto: 'Nuevo formulario', texto, html: '<p>Ana</p>' });
+    expect(d).toMatchObject({ nombre: 'Ana "la" Pérez', email: 'ana@x.test', original: { asunto: 'Nuevo formulario', texto, html: '<p>Ana</p>' } });
+    expect(d.json).toBeUndefined();
+  });
+  it('el uid no cambia si Make reenvía lo mismo', () => {
+    const c = { json: '{"full_name":"A","email":"a@x.test"}', texto: 'hola' };
+    expect(prepararEntrada(c).uid).toBe(prepararEntrada({ ...c }).uid);
+  });
+  it('si json no es JSON, no rompe: la validación dirá lo que falta', () => {
+    expect(prepararEntrada({ json: 'no es json', texto: 'x' }).original).toEqual({ texto: 'x' });
+  });
+});

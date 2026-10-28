@@ -344,3 +344,15 @@ describe('la entrada con el JSON de Make (28/10)', () => {
     expect(d.datos).toMatchObject({ nombre: cuerpo.full_name, telefono: cuerpo.phone_complete, full_name: cuerpo.full_name });
   });
 });
+
+describe('la entrada como formulario codificado, con el correo original (28/10)', () => {
+  it('entra y el escenario recibe el correo tal cual', async () => {
+    const r = await request.post('/api/asignacion/entrada').set('Authorization', `Bearer ${clave}`).type('form').send({
+      json: JSON.stringify({ full_name: `${MARCA} codificado`, email: `cod_${MARCA.toLowerCase()}@cliente.test` }),
+      asunto: 'Nuevo formulario del Curso X', texto: 'Nombre: codificado', html: '<p>codificado</p>',
+    });
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    const d = await one('SELECT datos FROM asignacion_decisiones WHERE id = $1', [r.body.data.decision_id]);
+    expect(d.datos.original).toMatchObject({ asunto: 'Nuevo formulario del Curso X', texto: 'Nombre: codificado' });
+  });
+});
