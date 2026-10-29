@@ -219,7 +219,7 @@ export default function WhatsappWidgetPage() {
                   </div>
                 </div>
                 <input value={template} onChange={e => poner('template', e.target.value)}
-                  placeholder={defecto?.template || 'Hola, soy {{nombre}} de {{project}}. Quiero información sobre: {{url}}'} maxLength={1000}
+                  placeholder={defecto?.template || 'Hola {{nombre}} de {{project}}. Quiero información sobre: {{url}}'} maxLength={1000}
                   className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono" />
                 <div className="mt-2 rounded-md border border-border bg-muted/30 p-2 text-[11px]">
                   <div className="text-muted-foreground">Vista previa · {IDIOMAS_WIDGET.find((i) => i.codigo === idiomaTab)?.nombre}</div>
