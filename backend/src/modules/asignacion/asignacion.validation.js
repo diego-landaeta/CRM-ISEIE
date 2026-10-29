@@ -65,6 +65,8 @@ export const pruebaSchema = z.object({
 export const listarDecisionesSchema = z.object({
   destino_id: id.optional(),
   project_id: id.optional(),
+  // La empresa de la cabecera: las decisiones de sus campus (Diego, 28/10: «tengo que verlo por empresa y campus»).
+  issuer_id: id.optional(),
   escenario: z.coerce.number().int().refine((n) => n === 1 || n === 2).optional(),
   estado: z.enum(['pendiente', 'enviando', 'enviado', 'fallido']).optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),

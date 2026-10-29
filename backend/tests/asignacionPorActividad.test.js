@@ -400,3 +400,16 @@ describe('con una sola persona en el reparto (Diego, 28/10)', () => {
     await q('DELETE FROM projects WHERE id = $1', [solo.id]);
   });
 });
+
+describe('el registro por empresa (Diego, 28/10: «tengo que verlo por empresa y campus»)', () => {
+  it('con issuer_id salen las decisiones de sus campus; con otra empresa, ninguna', async () => {
+    const r = await request.get(`/api/asignacion/decisiones?issuer_id=${ids.issuer}`).set(como('superadmin'));
+    expect(r.status).toBe(200);
+    expect(r.body.data.length).toBeGreaterThan(0);
+    expect(r.body.data.every((d) => d.project_id === ids.project || d.project_id === ids.otro)).toBe(true);
+    const otra = await one('INSERT INTO invoice_issuers (razon_social, nif) VALUES ($1, $2) RETURNING id', [`${MARCA} OTRA`, `${MARCA}-O`]);
+    const vacia = await request.get(`/api/asignacion/decisiones?issuer_id=${otra.id}`).set(como('superadmin'));
+    expect(vacia.body.data).toHaveLength(0);
+    await q('DELETE FROM invoice_issuers WHERE id = $1', [otra.id]);
+  });
+});

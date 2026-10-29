@@ -217,13 +217,14 @@ export async function rescatarAtascados(maxIntentos) {
 }
 
 /** El registro de decisiones, para la pantalla. `misCampus` null = todas. */
-export async function listarDecisiones({ misCampus = null, destinoId = null, projectId = null, escenario = null, estado = null, limit = 50 } = {}) {
+export async function listarDecisiones({ misCampus = null, destinoId = null, projectId = null, issuerId = null, escenario = null, estado = null, limit = 50 } = {}) {
   const cond = [];
   const params = [];
   const add = (sql, v) => { params.push(v); cond.push(sql.replace('$?', `$${params.length}`)); };
   if (misCampus) add('x.project_id = ANY($?::int[])', misCampus);
   if (destinoId) add('x.destino_id = $?', destinoId);
   if (projectId) add('x.project_id = $?', projectId);
+  if (issuerId) add('x.project_id IN (SELECT id FROM projects WHERE sociedad_emisora_id = $?)', issuerId);
   if (escenario) add('x.escenario = $?', escenario);
   if (estado) add('x.estado = $?', estado);
   params.push(limit);
