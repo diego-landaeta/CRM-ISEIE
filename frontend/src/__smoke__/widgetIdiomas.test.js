@@ -81,3 +81,25 @@ describe('la burbuja hace caso al panel', () => {
     expect(document.getElementById('c3w-tag').className).toBe('');
   });
 });
+
+describe('el código de la web avisa de cada pulsación (29/10)', () => {
+  it('al pulsar, sendBeacon al CRM con la gestora, la página y el idioma', async () => {
+    const beacon = vi.fn(() => true);
+    Object.defineProperty(navigator, 'sendBeacon', { value: beacon, configurable: true });
+    const { abrir } = await montar({ lang: 'es', datos: { ...DATOS, gestoras: [['Ana', '34600111222', 14]] } });
+    document.getElementById('c3w-btn').click();
+    expect(abrir).toHaveBeenCalled();
+    expect(beacon).toHaveBeenCalledTimes(1);
+    const [url, cuerpo] = beacon.mock.calls[0];
+    expect(url).toBe('https://crm.test/api/w/clic/1');
+    expect(JSON.parse(cuerpo)).toMatchObject({ g: 14, l: 'es' });
+  });
+  it('sin id de la gestora (datos de antes), abre el WhatsApp y no avisa', async () => {
+    const beacon = vi.fn(() => true);
+    Object.defineProperty(navigator, 'sendBeacon', { value: beacon, configurable: true });
+    const { abrir } = await montar({ lang: 'es' });
+    document.getElementById('c3w-btn').click();
+    expect(abrir).toHaveBeenCalled();
+    expect(beacon).not.toHaveBeenCalled();
+  });
+});

@@ -8,6 +8,11 @@
  * navegador); con «en», «fr»… lo fija (webs de un solo idioma, como ictess.us). Si el
  * idioma no es uno de los del CRM, sale el español. La burbuja respeta «mostrar burbuja» y
  * «aparece a los (ms)» del panel.
+ *
+ * Pulsaciones (Diego, 29/10: «así medimos cuáles pulsan y cuántos pasan a la
+ * conversación»): al pulsar, el código avisa al CRM con `sendBeacon` de a qué gestora
+ * mandó y desde qué página (`/api/w/clic/:id`). Si el aviso falla, el WhatsApp se abre
+ * igual. Las webs con el código de antes no avisan: hay que volver a pegarlo.
  */
 export const IDIOMAS_WIDGET = [
   { codigo: 'es', nombre: 'Español' },
@@ -21,7 +26,9 @@ const SVG = '<svg viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.
 
 export function construirSnippet({ dataUrl, idioma = '' }: { dataUrl: string; idioma?: IdiomaWidget | '' }): string {
   const fijo = idioma ? `'${idioma}'` : "''";
-  return `<!-- WhatsApp CRM360${idioma ? ` · ${idioma}` : ''} -->
+  // Donde se avisa de cada pulsación: el mismo campus que los datos.
+  const clicUrl = dataUrl.replace(/\/data\/(\d+)\.json$/, '/clic/$1');
+  return `<!-- WhatsApp CRM360 · pulsaciones${idioma ? ` · ${idioma}` : ''} -->
 <style>
 #c3w{position:fixed!important;bottom:20px!important;right:16px!important;z-index:2147483647!important;display:flex!important;flex-direction:column!important;align-items:flex-end!important;gap:8px!important;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif!important}
 #c3w-tag{display:none!important;background:#fff!important;color:#111!important;border-radius:14px!important;padding:8px 14px!important;box-shadow:0 3px 14px rgba(0,0,0,.15)!important;font-size:14px!important;white-space:nowrap!important;cursor:pointer!important;line-height:1.4!important}
@@ -40,13 +47,13 @@ export function construirSnippet({ dataUrl, idioma = '' }: { dataUrl: string; id
 <script>
 (function(){if(window.__c3w)return;window.__c3w=1;
 var F=${fijo},L=(F||document.documentElement.lang||navigator.language||'es').slice(0,2).toLowerCase();
-var wa=null,btn=document.getElementById('c3w-btn'),tag=document.getElementById('c3w-tag'),nm=document.getElementById('c3w-name'),mg=document.getElementById('c3w-msg');
-function go(){if(wa)window.open(wa,'_blank')}
+var wa=null,P=null,C='${clicUrl}',btn=document.getElementById('c3w-btn'),tag=document.getElementById('c3w-tag'),nm=document.getElementById('c3w-name'),mg=document.getElementById('c3w-msg');
+function go(){if(!wa)return;window.open(wa,'_blank');try{if(P&&P[2]&&navigator.sendBeacon)navigator.sendBeacon(C,JSON.stringify({g:P[2],u:location.href,l:L}))}catch(e){}}
 btn.addEventListener('click',go);tag.addEventListener('click',go);
 fetch('${dataUrl}').then(function(r){return r.json()}).then(function(d){
   if(!d.enabled||!d.gestoras||!d.gestoras.length){document.getElementById('c3w').style.display='none';return}
   var t=(d.textos&&(d.textos[L]||d.textos.es))||{};
-  var p=d.gestoras[Math.floor(Math.random()*d.gestoras.length)];
+  var p=P=d.gestoras[Math.floor(Math.random()*d.gestoras.length)];
   var msg=(t.template||d.template||'Hola, quiero información: {{url}}').replace(/\{\{nombre\}\}/g,p[0]).replace(/\{\{project\}\}/g,d.project||'').replace(/\{\{url\}\}/g,location.href);
   wa='https://wa.me/'+p[1]+'?text='+encodeURIComponent(msg);
   nm.textContent=p[0];mg.textContent=t.welcome||d.welcome||'¿Hablamos? 👋';
