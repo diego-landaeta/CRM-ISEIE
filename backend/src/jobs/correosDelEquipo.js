@@ -570,6 +570,39 @@ export async function correoSemanalGestora(persona, ahora = new Date()) {
   };
 }
 
+// ─── De dónde llegan los prospectos de cada gestora ──────────────────────────
+//
+// Diego, 29/10: «WhatsApp es que toquen el widget, y tocan y ellas cargan». La
+// columna «Prospectos» lo sumaba todo, y «15» no decía si se los había dado el
+// reparto o si los había dado de alta ella (Carlos: «¿esto tiene sentido en
+// base a la regla?»). Se separan:
+//   · formulario — entraron solos (webhook, Make o la asignación por actividad);
+//   · WhatsApp  — la persona pulsó el botón de la web y la gestora lo dio de alta;
+//   · a mano    — el resto de altas a mano.
+
+/** Si el lead entró solo (formulario, Make o asignación), no dado de alta a mano. */
+const ENTRA_SOLO = (l) => `(${l}.idempotency_key IS NOT NULL
+  OR EXISTS (SELECT 1 FROM make_webhook_deliveries m WHERE m.lead_id = ${l}.id)
+  OR EXISTS (SELECT 1 FROM asignacion_decisiones d WHERE d.lead_id = ${l}.id))`;
+const POR_WHATSAPP = (l) => `EXISTS (SELECT 1 FROM lead_utms lu WHERE lu.lead_id = ${l}.id AND lu.canal_detectado::text = 'whatsapp')`;
+/** Las dos columnas que se añaden al contar los prospectos de cada gestora. */
+const ORIGEN_DE_LOS_LEADS = (l = 'l') => `count(*) FILTER (WHERE ${ENTRA_SOLO(l)})::int AS formularios,
+            count(*) FILTER (WHERE NOT ${ENTRA_SOLO(l)} AND ${POR_WHATSAPP(l)})::int AS whatsapp`;
+
+/** La celda «Prospectos»: el total y, debajo, de dónde llegaron. */
+export function prospectosConOrigen(g) {
+  const formularios = n(g.formularios);
+  const whatsapp = n(g.whatsapp);
+  const aMano = Math.max(0, n(g.leads) - formularios - whatsapp);
+  const partes = [[formularios, 'formulario'], [whatsapp, 'WhatsApp'], [aMano, 'a mano']]
+    .filter(([c]) => c > 0)
+    .map(([c, que]) => `<div style="font-size:11px;line-height:1.35;color:${GRIS}">${entero(c)} ${que}</div>`);
+  return `${entero(g.leads)}${partes.join('')}`;
+}
+
+/** Lo que significa cada origen, debajo de la tabla. */
+export const LEYENDA_ORIGEN = `<div style="font-size:11px;color:${GRIS};margin-top:6px">Formulario: lo reparte la regla o Make. WhatsApp: pulsó el botón de la web y la gestora lo dio de alta. A mano: el resto de altas.</div>`;
+
 // ─── DIRECCIÓN, cada tarde: «Resumen del día», por empresa ───────────────────
 
 async function porGestoraHoy(ids, dia) {
@@ -577,9 +610,13 @@ async function porGestoraHoy(ids, dia) {
     `SELECT u.nombre,
             (SELECT count(*)::int FROM leads l WHERE l.responsable_id = u.id AND l.deleted_at IS NULL
                AND l.project_id = ANY($1::int[]) AND l.created_at::date = $2::date) AS leads,
+            o.formularios, o.whatsapp,
             (SELECT count(*)::int FROM lead_interactions i JOIN leads l ON l.id = i.lead_id
               WHERE l.responsable_id = u.id AND l.project_id = ANY($1::int[]) AND i.fecha::date = $2::date) AS contactos
        FROM users u
+      CROSS JOIN LATERAL (SELECT ${ORIGEN_DE_LOS_LEADS('l')}
+              FROM leads l WHERE l.responsable_id = u.id AND l.deleted_at IS NULL
+               AND l.project_id = ANY($1::int[]) AND l.created_at::date = $2::date) o
       WHERE u.active AND u.role = 'gestor'
         AND EXISTS (SELECT 1 FROM user_projects up WHERE up.user_id = u.id AND up.active AND up.project_id = ANY($1::int[]))
       ORDER BY u.nombre`, [ids, dia]);
@@ -606,7 +643,7 @@ export async function correoDiarioDireccion(persona, ahora = new Date()) {
     const filas = gestoras
       .map((g) => ({ ...g, ventas: ventasDe(g.nombre) }))
       .filter((g) => g.leads || g.contactos || g.ventas)
-      .map((g) => [esc(g.nombre), entero(g.leads), entero(g.contactos), entero(g.ventas)]);
+      .map((g) => [esc(g.nombre), prospectosConOrigen(g), entero(g.contactos), entero(g.ventas)]);
     // Por campus, cuando la empresa tiene varios: dónde entra y dónde se vende.
     let porCampus = '';
     if (e.campus.length > 1) {
@@ -625,7 +662,7 @@ export async function correoDiarioDireccion(persona, ahora = new Date()) {
         { etiqueta: 'Cobrado hoy', valor: eur(cobradoHoy) },
         { etiqueta: 'Pasos atrasados', valor: entero(cola.atrasados), nota: `${entero(hoy.sin_tocar)} de hoy sin contactar` },
       ]),
-      filas.length ? `<div style="font-size:13px;font-weight:bold;color:${GRIS};margin:18px 0 0">Por gestora</div>${tabla(['Gestora', 'Prospectos', 'Contactos', 'Ventas'], filas)}` : parrafo(`<span style="color:${GRIS}">Hoy no hay actividad de gestoras que contar.</span>`),
+      filas.length ? `<div style="font-size:13px;font-weight:bold;color:${GRIS};margin:18px 0 0">Por gestora</div>${tabla(['Gestora', 'Prospectos', 'Contactos', 'Ventas'], filas)}${LEYENDA_ORIGEN}` : parrafo(`<span style="color:${GRIS}">Hoy no hay actividad de gestoras que contar.</span>`),
       porCampus,
     ].join(''));
   }
