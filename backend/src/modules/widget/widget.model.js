@@ -3,7 +3,10 @@ import { query } from '../../shared/config/db.js';
 const DEFAULT_CONFIG = {
   enabled: true,
   welcome_text: '¿Hablamos? 👋',
-  message_template: 'Hola, soy {{nombre}} de {{project}}. Quiero información sobre: {{url}}',
+  // Lo manda la persona que entra en la web: {{nombre}} es la GESTORA de la burbuja,
+  // así que se la saluda. «Hola, soy {{nombre}}» ponía a la persona a presentarse con
+  // el nombre de la gestora (Diego, 29/10).
+  message_template: 'Hola {{nombre}} de {{project}}. Quiero información sobre: {{url}}',
   excluded_user_ids: [],
   show_bubble: true,
   bubble_delay_ms: 3000,
