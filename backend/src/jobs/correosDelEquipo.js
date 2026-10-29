@@ -8,6 +8,7 @@ import { resumenDeLaCola } from '../modules/proceso/proceso.model.js';
 // Sin ellos, el correo de la gestora sale sin el bloque de recordatorios.
 import * as leadModel from '../modules/leads/lead.model.js';
 import { versionDe } from '../modules/feedback/cabecera.js';
+import { ENTRA_SOLO, POR_WHATSAPP } from '../shared/utils/origenDelLead.js';
 
 /**
  * Los correos al equipo, con datos y con la marca (Diego, 28/09):
@@ -580,11 +581,7 @@ export async function correoSemanalGestora(persona, ahora = new Date()) {
 //   · WhatsApp  — la persona pulsó el botón de la web y la gestora lo dio de alta;
 //   · a mano    — el resto de altas a mano.
 
-/** Si el lead entró solo (formulario, Make o asignación), no dado de alta a mano. */
-const ENTRA_SOLO = (l) => `(${l}.idempotency_key IS NOT NULL
-  OR EXISTS (SELECT 1 FROM make_webhook_deliveries m WHERE m.lead_id = ${l}.id)
-  OR EXISTS (SELECT 1 FROM asignacion_decisiones d WHERE d.lead_id = ${l}.id))`;
-const POR_WHATSAPP = (l) => `EXISTS (SELECT 1 FROM lead_utms lu WHERE lu.lead_id = ${l}.id AND lu.canal_detectado::text = 'whatsapp')`;
+// La regla está en origenDelLead.js: la comparten las cifras del botón de WhatsApp.
 /** Las dos columnas que se añaden al contar los prospectos de cada gestora. */
 const ORIGEN_DE_LOS_LEADS = (l = 'l') => `count(*) FILTER (WHERE ${ENTRA_SOLO(l)})::int AS formularios,
             count(*) FILTER (WHERE NOT ${ENTRA_SOLO(l)} AND ${POR_WHATSAPP(l)})::int AS whatsapp`;

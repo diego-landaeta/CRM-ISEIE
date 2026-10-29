@@ -7,6 +7,7 @@ import type { WidgetConfig, CandidateUser } from '../api/widget.api';
 import { toast } from '@/shared/hooks/useToast';
 import { construirSnippet, IDIOMAS_WIDGET, type IdiomaWidget } from '../lib/snippet';
 import { POR_DEFECTO_WIDGET } from '../lib/porDefecto';
+import PulsacionesDelBoton from '../components/PulsacionesDelBoton';
 
 type OtroIdioma = Exclude<IdiomaWidget, 'es'>;
 
@@ -99,6 +100,9 @@ export default function WhatsappWidgetPage() {
           </p>
         </div>
       </div>
+
+      {/* Cuántos pulsan y cuántos pasan a la conversación (29/10). */}
+      <PulsacionesDelBoton projectId={pid} />
 
       {/* Embed snippet */}
       <div className="bg-card border border-border rounded-lg p-5 space-y-3">

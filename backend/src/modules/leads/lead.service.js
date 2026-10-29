@@ -8,6 +8,7 @@ import { notifyAdmins } from '../notifications/notifications.service.js';
 import * as dupQueue from './dup-queue.service.js';
 import * as leadProducts from './lead-products.service.js';
 import { planificarPasosDeLead } from '../proceso/proceso.model.js';
+import { cruzarConPulsacion } from '../widget/widget.pulsaciones.js';
 
 // Dispara secuencias de email activas. STUB v1 mientras email-sequences no este portado.
 async function triggerSequences(_triggerEvent, _leadId, _projectId) {
@@ -947,6 +948,18 @@ export async function createManualLead({ project_id, nombre, email, telefono, wh
   } catch (err) {
     logger.warn({ err: err.message, leadId: lead.id },
       'No se pudo planificar la agenda del prospecto (alta manual)');
+  }
+
+  // EL BOTÓN DE WHATSAPP DE LA WEB (Diego, 29/10: «tocan y ellas cargan»). Si la
+  // gestora lo da de alta con origen WhatsApp, se le cruza su última pulsación
+  // del botón de las 24 h anteriores: así se mide cuántos de los que pulsan pasan
+  // a la conversación. No puede tumbar el alta.
+  if ((canal || '') === 'whatsapp' && lead.responsableId) {
+    try {
+      await cruzarConPulsacion({ leadId: lead.id, projectId: project_id, userId: lead.responsableId });
+    } catch (err) {
+      logger.warn({ err: err.message, leadId: lead.id }, 'No se pudo cruzar el alta con una pulsación del botón');
+    }
   }
 
   return {

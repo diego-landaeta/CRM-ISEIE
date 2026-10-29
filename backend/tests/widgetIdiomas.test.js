@@ -9,7 +9,7 @@ const config = {
 };
 vi.mock('../src/modules/widget/widget.model.js', () => ({
   getConfig: vi.fn(async () => config),
-  listActiveWidgetUsers: vi.fn(async () => [{ display_name: 'Ana', whatsapp_phone: '34600111222' }]),
+  listActiveWidgetUsers: vi.fn(async () => [{ id: 14, display_name: 'Ana', whatsapp_phone: '34600111222' }]),
   upsertConfig: vi.fn(async (pid, f) => ({ ...config, ...f })),
   listCandidateUsers: vi.fn(async () => []),
 }));
@@ -63,7 +63,8 @@ describe('lo que recibe la web', () => {
     expect(res.cuerpo.textos.fr.welcome).toBe(I.POR_DEFECTO.fr.welcome);
     expect(res.cuerpo.burbuja).toBe(false);
     expect(res.cuerpo.retraso).toBe(5000);
-    expect(res.cuerpo.gestoras).toEqual([['Ana', '34600111222']]);
+    // El tercero es su id, para avisar de la pulsación (29/10).
+    expect(res.cuerpo.gestoras).toEqual([['Ana', '34600111222', 14]]);
   });
   it('el script antiguo, con ?lang=fr, lleva los textos en francés', async () => {
     const js = await service.generateWidgetScript(1, 'fr');
