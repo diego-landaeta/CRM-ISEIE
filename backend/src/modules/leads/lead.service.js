@@ -517,9 +517,47 @@ export async function changeStatus(leadId, newStatus, motivo, userId, opts = {})
   return { previous: lead.status, current: newStatus };
 }
 
+/**
+ * El texto que pone la cola cuando se pulsa «Contactado, al siguiente» sin
+ * escribir nada (ColaDelDiaPage y SeguimientoPage).
+ *
+ * Diego, 29/10: a las gestoras «se les ponen interacciones sin ellas ponerlas».
+ * Salían por dos caminos: la gestora escribía su nota en la ficha y luego
+ * pulsaba el botón para pasar a la siguiente —una «llamada» que nunca hizo—, y
+ * ráfagas de 20 a 40 en unos segundos, una cada 0,2–0,4 s, con el botón
+ * repetido. Se mira aquí y no solo en la pantalla porque el navegador puede
+ * tener guardada la versión de antes.
+ */
+export const NOTA_DE_LA_COLA = /^(Contacto del seguimiento \d+|Seguimiento de fin de mes)$/;
+
+async function contactoDeLaColaSobra(leadId, userId) {
+  const { rows } = await query(
+    `SELECT
+       (SELECT id FROM lead_interactions
+         WHERE lead_id = $1 AND created_by = $2
+           AND created_at > NOW() - INTERVAL '12 hours'
+           AND nota NOT LIKE 'Copiado el mensaje%'
+         ORDER BY created_at DESC LIMIT 1) AS ya_apuntado,
+       EXISTS (SELECT 1 FROM lead_interactions
+         WHERE created_by = $2 AND created_at > NOW() - INTERVAL '2 seconds'
+           AND nota ~ '^(Contacto del seguimiento [0-9]+|Seguimiento de fin de mes)$') AS rafaga`,
+    [leadId, userId]
+  );
+  return rows[0] || {};
+}
+
 export async function addInteraction(leadId, tipo, nota, userId, fecha) {
   const lead = await leadModel.findByIdLight(leadId);
   if (!lead) throw new AppError('Lead no encontrado', 404, 'LEAD_NOT_FOUND');
+
+  if (NOTA_DE_LA_COLA.test(nota || '')) {
+    const { ya_apuntado, rafaga } = await contactoDeLaColaSobra(leadId, userId);
+    if (rafaga) {
+      throw new AppError('Más despacio: un contacto por persona. Este no se ha apuntado.', 429, 'DEMASIADO_RAPIDO');
+    }
+    // Ya apuntó algo suyo en esta persona: el botón solo la saca de la cola.
+    if (ya_apuntado) return { id: ya_apuntado, lead_id: leadId, ya_apuntado: true };
+  }
 
   return await leadModel.createInteraction(leadId, tipo, nota, userId, fecha);
 }

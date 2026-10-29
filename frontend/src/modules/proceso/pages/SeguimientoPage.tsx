@@ -200,14 +200,18 @@ export default function SeguimientoPage() {
     if (!fila) return;
     setApuntando(true);
     try {
-      await client.post(`/leads/${fila.lead_id}/interactions`, {
+      const res = await client.post<{ ya_apuntado?: boolean }>(`/leads/${fila.lead_id}/interactions`, {
         tipo,
         nota: nota || 'Seguimiento de fin de mes',
         fecha: new Date().toISOString(),
       });
       setBase((b) => b.filter((x) => x.lead_id !== fila.lead_id));
       setEnFoco(trasSacar(visibles.length, enFoco));
-      toast({ title: 'Contacto apuntado', description: `${fila.lead_nombre || 'Sin nombre'} sale del repaso.` });
+      // Si ya habia apuntado algo suyo en esta persona, el servidor no crea
+      // otro contacto: solo sale de la lista (Diego, 29/10).
+      toast(res?.data?.ya_apuntado
+        ? { title: 'Ya lo tenías apuntado', description: `${fila.lead_nombre || 'Sin nombre'} sale del repaso sin apuntar otro contacto.` }
+        : { title: 'Contacto apuntado', description: `${fila.lead_nombre || 'Sin nombre'} sale del repaso.` });
       traerResumenSeguimiento({ projectId: elegido, projectIds })
         .then((r) => { if (r) setResumen(r); }).catch(() => {});
     } catch (e) {

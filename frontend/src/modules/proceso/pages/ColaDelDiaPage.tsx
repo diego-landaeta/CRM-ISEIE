@@ -243,7 +243,7 @@ export default function ColaDelDiaPage() {
     if (!fila) return;
     setApuntando(true);
     try {
-      await client.post(`/leads/${fila.lead_id}/interactions`, {
+      const res = await client.post<{ ya_apuntado?: boolean }>(`/leads/${fila.lead_id}/interactions`, {
         tipo,
         nota: nota || `Contacto del seguimiento ${fila.orden}`,
         fecha: new Date().toISOString(),
@@ -252,7 +252,11 @@ export default function ColaDelDiaPage() {
       // para quitar una parpadea y pierde el sitio donde ibas.
       setCola((c) => c.filter((x) => x.lead_id !== fila.lead_id));
       setEnFoco(trasSacar(visibles.length, enFoco));
-      toast({ title: 'Contacto apuntado', description: `${fila.lead_nombre || 'Sin nombre'} sale de la cola.` });
+      // Si ya habia apuntado algo suyo en esta persona, el servidor no crea
+      // otro contacto: solo sale de la lista (Diego, 29/10).
+      toast(res?.data?.ya_apuntado
+        ? { title: 'Ya lo tenías apuntado', description: `${fila.lead_nombre || 'Sin nombre'} sale de la cola sin apuntar otro contacto.` }
+        : { title: 'Contacto apuntado', description: `${fila.lead_nombre || 'Sin nombre'} sale de la cola.` });
       // Los contadores de arriba sí se rehacen contra el servidor, en segundo
       // plano: son los que dicen cuánto queda del día.
       traerResumen({ projectId: proyecto, gestoraId }).then((r) => { if (r) setResumen(r); }).catch(() => {});
