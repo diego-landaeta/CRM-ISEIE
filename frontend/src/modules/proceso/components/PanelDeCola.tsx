@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { X, CaretRight, CaretLeft, Check, ArrowSquareOut, Warning } from '@phosphor-icons/react';
 import { inputClass } from '@/shared/lib/ui';
@@ -87,6 +87,17 @@ export default function PanelDeCola({
     document.addEventListener('keydown', alPulsar);
     return () => document.removeEventListener('keydown', alPulsar);
   }, [onCerrar]);
+
+  // Freno del botón (Diego, 29/10): salían ráfagas de 20 a 40 contactos en
+  // unos segundos, uno cada 0,2–0,4 s, con el botón repetido o Enter apretado.
+  // Un contacto es una persona: menos de un segundo entre dos no es contactar.
+  const ultimoContacto = useRef(0);
+  const contactado = () => {
+    const ahora = Date.now();
+    if (guardando || ahora - ultimoContacto.current < 1000) return;
+    ultimoContacto.current = ahora;
+    onContactado(tipoDeInteraccion(canal), nota.trim());
+  };
 
   const tarde = fila.dias_de_retraso > 0;
 
@@ -277,7 +288,9 @@ export default function PanelDeCola({
 
           <button
             type="button"
-            onClick={() => onContactado(tipoDeInteraccion(canal), nota.trim())}
+            onClick={contactado}
+            // Enter apretado repite la tecla: cada repetición sería un contacto.
+            onKeyDown={(e) => { if (e.repeat) e.preventDefault(); }}
             disabled={guardando}
             className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-normal font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-primary/40"
           >
