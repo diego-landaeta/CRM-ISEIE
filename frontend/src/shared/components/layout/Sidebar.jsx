@@ -118,6 +118,7 @@ export const NAV_SECTIONS = [
       // true`— y traer cifras falsas a un CRM con dinero real es peor que no
       // tenerla. Vuelve cuando haya datos de verdad detrás.
       { to: '/campaigns',       label: 'Campañas',  icon: Megaphone, roles: ['admin', 'superadmin'], comingSoon: true },
+      // Lleva a «Aún no conectado» (#216): enseñaba datos de ejemplo de Search Console.
       { to: '/seo',             label: 'Tráfico orgánico', icon: MagnifyingGlass, roles: ['admin', 'superadmin'] },
     ],
   },
