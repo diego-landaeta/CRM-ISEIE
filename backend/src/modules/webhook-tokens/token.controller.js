@@ -2,6 +2,7 @@ import { z } from 'zod';
 import * as model from './token.model.js';
 import * as matriculaModel from '../matriculas/matricula.model.js';
 import * as leadModel from '../leads/lead.model.js';
+import { duplicadoParaAlta, apuntarReenvio, avisarDuplicado } from '../leads/duplicado-en-alta.js';
 import { AppError } from '../../shared/utils/AppError.js';
 
 const createSchema = z.object({
@@ -132,18 +133,28 @@ export async function publicReceive(req, res, next) {
 
     if (tok.kind === 'leads') {
       if (!mapped.nombre || !mapped.email) throw new AppError('nombre y email requeridos tras mapeo', 400, 'VALIDATION_ERROR');
+      const productoInteresId = mapped.producto_interes_id ? parseInt(mapped.producto_interes_id) : null;
+      // Duplicados y reenvíos con la misma regla que el webhook de leads (29/10).
+      const dup = await duplicadoParaAlta({ projectId: tok.project_id, email: mapped.email, telefono: mapped.telefono, productoInteresId });
+      if (dup.reenvio) {
+        const ya = await apuntarReenvio(dup, { notas: mapped.notas, origen: 'webhook con token' });
+        return res.status(200).json({ success: true, data: { lead_id: ya.id, action: 'resent' } });
+      }
       const lead = await leadModel.createLeadWithRoundRobin({
         projectId: tok.project_id,
         nombre: mapped.nombre,
         email: mapped.email,
         telefono: mapped.telefono || null,
-        productoInteresId: mapped.producto_interes_id ? parseInt(mapped.producto_interes_id) : null,
+        productoInteresId,
         notas: mapped.notas || null,
+        duplicadoDe: dup.duplicadoDe,
+        reincidente: dup.reincidente,
         landingUrl: mapped.landing_url || null,
         utms: { utm_source: mapped.utm_source || 'webhook', utm_medium: mapped.utm_medium || 'token', utm_campaign: mapped.utm_campaign || tok.token.slice(0, 20) },
         customFields: mapped.custom_fields || {},
       });
-      return res.status(201).json({ success: true, data: { lead_id: lead.id, action: 'created' } });
+      avisarDuplicado(lead, dup, { origen: 'webhook con token', productoInteresId });
+      return res.status(201).json({ success: true, data: { lead_id: lead.id, action: dup.duplicadoDe ? 'created_duplicate' : 'created' } });
     }
 
     res.status(200).json({ success: true, data: { received: true, mapped: Object.keys(mapped) } });
