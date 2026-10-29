@@ -170,6 +170,64 @@ function respuestaDe(dec, personas) {
   };
 }
 
+/*
+  FORMULARIOS QUE ENTRAN DIRECTOS AL CRM (Diego, 29/10: «arregla todo en producción»).
+  ISECD, ISEF e ISSLOGG mandan su formulario al webhook de formularios del CRM, sin
+  pasar por Make, y se repartían por el turno de siempre aunque hubiera alguien
+  trabajando. Con la asignación encendida en el campus (y dos o más en el reparto),
+  la misma regla: si alguien ha hecho algo en la ventana, el lead es para la que
+  toca; si no, sigue el turno. Queda en el registro con su porqué, sin envío a Make
+  (esos campus no tienen escenario: el CRM ya avisa a la gestora del lead nuevo).
+*/
+
+/** Antes de crear el lead: a quién le toca por actividad en ese campus, o null (sigue el turno). Nunca falla. */
+export async function decidirFormulario(projectId) {
+  try {
+    const config = await model.paraCampus(projectId);
+    if (!config?.activo) return null;
+    const candidatas = await gestoresDelReparto((sql, p) => query(sql, p), projectId);
+    if (candidatas.length < MINIMO_EN_EL_REPARTO) return null;
+    const activas = await activasEntre(candidatas.map((g) => g.id), config.ventana_min);
+    const cuentas = activas.size ? await cuentasDe([...activas.keys()], projectId) : new Map();
+    const { elegida, orden } = elegir(activas.keys(), cuentas);
+    return {
+      config,
+      elegida: elegida || null,
+      motivo: {
+        ventana_min: config.ventana_min,
+        candidatas: candidatas.map((g) => ({ id: Number(g.id), nombre: g.nombre })),
+        activas: orden.map((f) => ({ ...f, ...(activas.get(f.id) || {}) })),
+        texto: elegida ? porQue(elegida, activas.get(elegida.id))
+          : `Ninguna gestora activa en los últimos ${config.ventana_min} min: sigue el turno de siempre`,
+      },
+    };
+  } catch (err) {
+    logger.warn({ err: err.message, projectId }, 'asignación: no se pudo decidir el formulario; sigue el turno');
+    return null;
+  }
+}
+
+/** Después de crear el lead: lo apunta en el registro de la asignación (sin envío a Make). Nunca falla. */
+export async function apuntarFormulario(decision, lead, datos = {}) {
+  if (!decision || !lead?.id) return;
+  try {
+    await model.crearDecision({
+      destinoId: decision.config.id,
+      projectId: lead.project_id,
+      uid: `formulario-${lead.id}`,
+      escenario: decision.elegida ? 2 : 1,
+      responsableId: lead.responsable_id || null,
+      leadId: lead.id,
+      motivo: decision.motivo,
+      datos: { nombre: lead.nombre || datos.nombre || null, email: datos.email || null, origen: datos.origen || 'formulario' },
+      destinoTipo: decision.elegida ? decision.config.destino2_tipo : decision.config.destino1_tipo,
+      sinEnvio: 'Formulario directo al CRM: no pasa por Make',
+    });
+  } catch (err) {
+    logger.warn({ err: err.message, leadId: lead.id }, 'asignación: no se pudo apuntar el formulario en el registro');
+  }
+}
+
 /* ─── El envío al escenario ─── */
 
 /** Lo que recibe el escenario: los mismos campos que llegaron, más la gestora (escenario 2). */

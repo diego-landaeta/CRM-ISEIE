@@ -14,6 +14,7 @@ const pool = (await import('../src/shared/config/db.js')).default;
 const { cuentasDe } = await import('../src/modules/asignacion/asignacion.actividad.js');
 const { _memoria: memoriaDelWidget } = await import('../src/modules/asignacion/asignacion.widget.js');
 const { upsertConfig: configDelWidget } = await import('../src/modules/widget/widget.model.js');
+const service = await import('../src/modules/asignacion/asignacion.service.js');
 
 /**
  * Asignación de leads por actividad, de punta a punta (CRM#513; Carlos y Diego, 27/10/2026).
@@ -401,5 +402,27 @@ describe('el registro por empresa (Diego, 28/10: «tengo que verlo por empresa y
     const vacia = await request.get(`/api/asignacion/decisiones?issuer_id=${otra.id}`).set(como('superadmin'));
     expect(vacia.body.data).toHaveLength(0);
     await q('DELETE FROM invoice_issuers WHERE id = $1', [otra.id]);
+  });
+});
+
+describe('formularios que entran directos al CRM (Diego, 29/10: «arregla todo»)', () => {
+  it('con alguien activa: la elige; la decisión queda en el registro ya cerrada, sin envío a Make', async () => {
+    await q('DELETE FROM lead_interactions WHERE lead_id = $1', [leadDePrueba]);
+    await q('INSERT INTO lead_interactions (lead_id, tipo, nota, created_by) VALUES ($1, $2, $3, $4)', [leadDePrueba, 'llamada', 'contestó', U.bea.id]);
+    const decision = await service.decidirFormulario(ids.project);
+    expect(decision?.elegida?.id).toBe(U.bea.id);
+    const lead = await one('INSERT INTO leads (project_id, nombre, email, responsable_id) VALUES ($1, $2, $3, $4) RETURNING id, project_id, nombre, responsable_id',
+      [ids.project, `${MARCA} por formulario`, `formulario_${MARCA.toLowerCase()}@cliente.test`, U.bea.id]);
+    await service.apuntarFormulario(decision, lead, { email: `formulario_${MARCA.toLowerCase()}@cliente.test` });
+    const d = await one('SELECT escenario, estado, responsable_id, lead_id, respuesta, proximo_intento_at FROM asignacion_decisiones WHERE uid = $1', [`formulario-${lead.id}`]);
+    expect(d).toMatchObject({ escenario: 2, estado: 'enviado', responsable_id: U.bea.id, lead_id: lead.id, proximo_intento_at: null });
+    expect(d.respuesta).toMatch(/directo al CRM/);
+  });
+  it('sin nadie activa: no elige (sigue el turno)', async () => {
+    await q('DELETE FROM lead_interactions WHERE lead_id = $1', [leadDePrueba]);
+    await q('DELETE FROM actividad_crm WHERE user_id = ANY($1::int[])', [Object.values(U).map((u) => u.id)]);
+    await q('DELETE FROM wa_conversaciones WHERE instancia = ANY($1::text[])', [Object.values(U).map((u) => `crm-u${u.id}`)]);
+    const decision = await service.decidirFormulario(ids.project);
+    expect(decision?.elegida ?? null).toBeNull();
   });
 });
