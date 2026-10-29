@@ -530,12 +530,18 @@ export async function list({ projectId, issuerId, estado, search, from, to, tipo
 
 // Stats de la MISMA vista que la lista: por proyecto o por sociedad (issuerId),
 // pudiendo acotar a un proyecto de esa sociedad. Así los KPIs cuadran con la tabla.
-export async function getStats({ projectId, issuerId } = {}) {
+//
+// Y con LOS MISMOS FILTROS que la lista (#233, Manuel 03/10: «poner una fecha y que
+// no agarre»): con septiembre puesto, las tarjetas decían el acumulado de siempre.
+export async function getStats({ projectId, issuerId, from, to, estado } = {}) {
   const conds = [`tipo <> 'proforma'`];
   const params = [];
   let idx = 1;
   if (issuerId)  { conds.push(MISMA_SOCIEDAD('issuer_id', `$${idx++}`));  params.push(issuerId); }
   if (projectId) { conds.push(`project_id = $${idx++}`); params.push(projectId); }
+  if (from)      { conds.push(`fecha_emision >= $${idx++}`); params.push(from); }
+  if (to)        { conds.push(`fecha_emision <= $${idx++}`); params.push(to); }
+  if (estado)    { conds.push(`estado = $${idx++}`); params.push(estado); }
   const { rows } = await query(
     `SELECT
        COUNT(*) FILTER (WHERE estado <> 'borrador')::int AS total,
@@ -1721,7 +1727,7 @@ export async function deleteTemplate(id) {
 }
 
 // Ventas (conversiones) con importe > 0 que aún NO tienen factura emitida (no cancelada).
-export async function listVentasSinFactura({ projectId = null, projectIds = null } = {}) {
+export async function listVentasSinFactura({ projectId = null, projectIds = null, from = null, to = null } = {}) {
   /*
     La MISMA FIRMA que en el CRM hermano, aunque aqui solo haya un proyecto.
 
@@ -1741,8 +1747,11 @@ export async function listVentasSinFactura({ projectId = null, projectIds = null
         AND COALESCE(c.importe_total, 0) > 0
         AND i.id IS NULL
         AND c.factura_no_requerida IS NOT TRUE
+        -- El periodo de arriba (#233): con septiembre puesto salían ventas de junio.
+        AND ($2::date IS NULL OR c.fecha_conversion::date >= $2::date)
+        AND ($3::date IS NULL OR c.fecha_conversion::date <= $3::date)
       ORDER BY c.fecha_conversion DESC NULLS LAST`,
-    [lista]
+    [lista, from || null, to || null]
   );
   return rows;
 }
