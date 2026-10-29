@@ -84,18 +84,8 @@ function camposDelLead(datos) {
  *
  * Devuelve lo que contesta la entrada a Make: { escenario, gestora?, lead_id?, decision_id }.
  */
-/*
-  FRENO DE PRUEBAS (Diego, 28/10/2026: «hazlo en todos y luego lo borramos»).
-  Para probar en producción sin escribir a nadie: un formulario cuyo correo
-  acaba en @ejemplo.com se decide igual (a quién iría y por qué) pero NO crea el
-  lead —ni avisa a la gestora— y NO se manda al escenario 1, que es el de
-  siempre y no tiene freno. Al escenario 2 sí va: allí lo para su filtro.
-  Es temporal: se quita al terminar las pruebas masivas.
-*/
-export const esFormularioDePrueba = (datos) => /@ejemplo\.com$/i.test(String(datos?.email || '').trim());
-
 export async function decidir(config, datos, opciones = {}) {
-  let prueba = Boolean(opciones.prueba);
+  const prueba = Boolean(opciones.prueba);
   // El campus: el de la configuración; si es de una empresa o de todas, el que diga el formulario.
   let campus;
   if (config.ambito === 'campus') {
@@ -113,7 +103,6 @@ export async function decidir(config, datos, opciones = {}) {
   const campos = camposDelLead(datos);
   const valido = webhookLeadSchema.safeParse(campos);
   if (!valido.success) throw new AppError(motivoDelFallo(valido.error.errors[0]), 400, 'VALIDATION_ERROR');
-  if (esFormularioDePrueba(valido.data)) prueba = true;
 
   return enFila(campus.id, async () => {
     // Si este formulario ya entró (Make reintenta), se contesta lo mismo.
@@ -252,11 +241,6 @@ export async function procesarEnvio(decisionId) {
     const gestora = dec.responsable_id ? (await model.personas([dec.responsable_id])).get(Number(dec.responsable_id))
       : (dec.prueba && Number(dec.escenario) === 2 ? GESTORA_DE_PRUEBA : null);
     const payload = construirPayload(dec, campus, gestora);
-
-    // Freno de pruebas: un formulario @ejemplo.com no llega al escenario 1 (el botón «Probar» sí, su uid empieza por prueba-).
-    if (Number(dec.escenario) === 1 && esFormularioDePrueba(dec.datos) && !String(dec.uid).startsWith('prueba-')) {
-      return model.marcarEnviado(dec.id, { respuesta: 'PRUEBA (@ejemplo.com): no se manda al escenario 1' });
-    }
 
     if (destino.tipo === 'mailhook') {
       const correo = construirCorreo(payload);
