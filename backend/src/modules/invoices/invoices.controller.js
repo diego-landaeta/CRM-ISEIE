@@ -50,13 +50,22 @@ export async function list(req, res, next) {
   } catch (e) { next(e); }
 }
 
+// Los filtros de la lista que tambien mandan en las tarjetas (#233). Solo fechas
+// AAAA-MM-DD y un estado de los que existen: lo demas se ignora.
+const ESTADOS_FACTURA = ['borrador', 'emitida', 'enviada', 'pagada', 'cancelada'];
+function periodo(req) {
+  const fecha = (v) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
+  const estado = ESTADOS_FACTURA.includes(req.query.estado) ? req.query.estado : null;
+  return { from: fecha(req.query.from), to: fecha(req.query.to), estado };
+}
+
 export async function stats(req, res, next) {
   try {
     const issuerId = req.query.issuerId ? Number(req.query.issuerId) : null;
     // Con issuerId → stats de la sociedad (opcionalmente acotada a un proyecto).
     // Sin issuerId → stats del proyecto activo (comportamiento clásico).
     const pid = req.query.projectId ? Number(req.query.projectId) : (issuerId ? null : projectId(req));
-    res.json({ success: true, data: await model.getStats({ projectId: pid, issuerId }) });
+    res.json({ success: true, data: await model.getStats({ projectId: pid, issuerId, ...periodo(req) }) });
   } catch (e) { next(e); }
 }
 
@@ -632,7 +641,7 @@ export async function deleteTemplate(req, res, next) {
 export async function ventasSinFactura(req, res, next) {
   try {
     const pid = projectId(req);
-    res.json({ success: true, data: await model.listVentasSinFactura({ projectId: pid }) });
+    res.json({ success: true, data: await model.listVentasSinFactura({ projectId: pid, from: periodo(req).from, to: periodo(req).to }) });
   } catch (e) { next(e); }
 }
 

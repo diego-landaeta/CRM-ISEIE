@@ -138,8 +138,13 @@ export default function InvoicesPage() {
       .catch((e: unknown) => toast({ title: 'No se pudo descargar el PDF', description: (e as { message?: string })?.message || 'Error desconocido', variant: 'destructive' }));
   }
 
+  // Las tarjetas y «Ventas sin factura» con las mismas fechas y estado que la
+  // lista (#233): con septiembre puesto enseñaban el acumulado de siempre.
+  const hayFechas = Boolean(filters.from || filters.to);
+
   const load = useCallback(async () => {
     if (!pid) return;
+    const periodo = { from: filters.from, to: filters.to, estado: filters.estado };
     setLoading(true);
     try {
       // Modo sociedad (admin): facturas globales de esa empresa emisora; el resto
@@ -150,10 +155,10 @@ export default function InvoicesPage() {
       const [r1, r2, r3, r4] = await Promise.all([
         invoicesApi.list(listParams),
         porSociedad
-          ? invoicesApi.stats({ issuerId: Number(filterIssuer), projectId: filterProject ? Number(filterProject) : null })
-          : invoicesApi.stats({ projectId: pid }),
+          ? invoicesApi.stats({ issuerId: Number(filterIssuer), projectId: filterProject ? Number(filterProject) : null, ...periodo })
+          : invoicesApi.stats({ projectId: pid, ...periodo }),
         invoicesApi.listIssuers(pid).catch(() => ({ success: false, data: [] as Issuer[] })),
-        invoicesApi.ventasSinFactura(pid).catch(() => ({ success: false, data: [] as VentaSinFactura[] })),
+        invoicesApi.ventasSinFactura(pid, periodo).catch(() => ({ success: false, data: [] as VentaSinFactura[] })),
       ]);
       if (r1.success) {
         setInvoices(r1.data || []);
@@ -321,7 +326,7 @@ export default function InvoicesPage() {
       {!esProformas && stats && puedeFacturar && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <KpiCard icon={Receipt} iconBg="bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400"
-            label="Total facturas" numericValue={stats.total} />
+            label={hayFechas ? 'Facturas del periodo' : 'Total facturas'} numericValue={stats.total} />
           <KpiCard icon={Receipt} iconBg="bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400"
             label="Facturado" numericValue={Number(stats.total_facturado)} format={(n) => fmt(Number(n))} />
           <KpiCard icon={CheckCircle} iconBg="bg-violet-50 text-violet-600 dark:bg-violet-950/30 dark:text-violet-400"
