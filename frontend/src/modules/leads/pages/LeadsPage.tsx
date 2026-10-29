@@ -14,6 +14,7 @@ import ComoVoy from '@/modules/reports/components/ComoVoy';
 import CifrasProspectos from '../components/CifrasProspectos';
 import SaludComercial from '../components/SaludComercial';
 import SiguientesAcciones from '../components/SiguientesAcciones';
+import UltimoLeadAsignado from '../components/UltimoLeadAsignado';
 import AccesosClave from '@/shared/components/ui/AccesosClave';
 import BloquePlegable from '@/shared/components/ui/BloquePlegable';
 import { Gear, ArrowCounterClockwise, ListChecks,
@@ -669,6 +670,13 @@ export default function LeadsPage() {
             onSaved={() => { /* refrescado por contexto */ }}
           />
         </Suspense>
+      )}
+
+      {/* Lo que ha recibido cada gestora y quién está activa ahora (#11 del 360;
+          sombreado: CRM#524 / ISEIE #293). Solo para quien manda: es una vista
+          del reparto de todo el equipo, no algo que una gestora necesite. */}
+      {(user?.role === 'admin' || user?.role === 'superadmin') && (
+        <UltimoLeadAsignado projectId={activeProject?.id} />
       )}
 
       {/* Como va quien mira: su puesto en ventas y su tasa de conversion del
