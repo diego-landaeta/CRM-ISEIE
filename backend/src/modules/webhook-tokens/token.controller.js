@@ -3,6 +3,7 @@ import * as model from './token.model.js';
 import * as matriculaModel from '../matriculas/matricula.model.js';
 import * as leadModel from '../leads/lead.model.js';
 import { duplicadoParaAlta, apuntarReenvio, avisarDuplicado } from '../leads/duplicado-en-alta.js';
+import { decidirFormulario, apuntarFormulario } from '../asignacion/asignacion.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
 
 const createSchema = z.object({
@@ -140,8 +141,10 @@ export async function publicReceive(req, res, next) {
         const ya = await apuntarReenvio(dup, { notas: mapped.notas, origen: 'webhook con token' });
         return res.status(200).json({ success: true, data: { lead_id: ya.id, action: 'resent' } });
       }
+      const porActividad = await decidirFormulario(tok.project_id);
       const lead = await leadModel.createLeadWithRoundRobin({
         projectId: tok.project_id,
+        forcedResponsableId: porActividad?.elegida?.id || null,
         nombre: mapped.nombre,
         email: mapped.email,
         telefono: mapped.telefono || null,
@@ -154,6 +157,7 @@ export async function publicReceive(req, res, next) {
         customFields: mapped.custom_fields || {},
       });
       avisarDuplicado(lead, dup, { origen: 'webhook con token', productoInteresId });
+      await apuntarFormulario(porActividad, lead, { email: mapped.email, origen: 'webhook con token' });
       return res.status(201).json({ success: true, data: { lead_id: lead.id, action: dup.duplicadoDe ? 'created_duplicate' : 'created' } });
     }
 

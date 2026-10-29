@@ -131,15 +131,21 @@ export async function decisionPorUid(projectId, uid) {
   return rows[0] || null;
 }
 
-/** Apunta una decisión. Si ya hay una con ese uid en el campus, devuelve null (la decide quien llegó primero). */
-export async function crearDecision({ destinoId, projectId, uid, prueba = false, escenario, responsableId = null, leadId = null, motivo, datos, destinoTipo }) {
+/**
+ * Apunta una decisión. Si ya hay una con ese uid en el campus, devuelve null (la decide quien llegó primero).
+ * `sinEnvio`: por qué no va a ningún escenario de Make (un formulario que entró directo al CRM); nace ya
+ * cerrada, para que el reenviador no la mande.
+ */
+export async function crearDecision({ destinoId, projectId, uid, prueba = false, escenario, responsableId = null, leadId = null, motivo, datos, destinoTipo, sinEnvio = null }) {
   const { rows } = await query(
     `INSERT INTO asignacion_decisiones
-       (destino_id, project_id, uid, prueba, escenario, responsable_id, lead_id, motivo, datos, destino_tipo, estado, proximo_intento_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pendiente', NOW())
+       (destino_id, project_id, uid, prueba, escenario, responsable_id, lead_id, motivo, datos, destino_tipo, estado, proximo_intento_at, respuesta, enviado_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+             CASE WHEN $11::text IS NULL THEN 'pendiente' ELSE 'enviado' END,
+             CASE WHEN $11::text IS NULL THEN NOW() END, $11::text, CASE WHEN $11::text IS NOT NULL THEN NOW() END)
      ON CONFLICT (project_id, uid) DO NOTHING
      RETURNING *`,
-    [destinoId, projectId, uid, prueba, escenario, responsableId, leadId, JSON.stringify(motivo || {}), JSON.stringify(datos || {}), destinoTipo]
+    [destinoId, projectId, uid, prueba, escenario, responsableId, leadId, JSON.stringify(motivo || {}), JSON.stringify(datos || {}), destinoTipo, sinEnvio]
   );
   return rows[0] || null;
 }
