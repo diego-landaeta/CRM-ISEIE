@@ -103,7 +103,8 @@ export default function RegistroPage() {
     registroApi.fuentes().then((r) => { if (r.success) setFuentes(lista(r.data)); }).catch(() => {});
     // Para el filtro de usuario. Si no se puede —permisos, o la pantalla se
     // abre sin ellos— el filtro se queda sin lista y los demas siguen.
-    client.get('/users?limit=200')
+    // El servidor admite 100 como mucho: con 200 respondía 400 y el filtro salía vacío (#216).
+    client.get('/users?limit=100')
       .then((r) => setUsuarios(lista(r?.data).map((u: any) => ({ id: u.id, nombre: u.nombre }))))
       .catch(() => {});
   }, []);
