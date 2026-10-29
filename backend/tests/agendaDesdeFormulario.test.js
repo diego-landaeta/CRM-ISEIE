@@ -25,6 +25,9 @@ vi.mock('../src/modules/forms/form.model.js', () => ({
 }));
 vi.mock('../src/modules/leads/lead.model.js', () => ({
   createLeadWithRoundRobin: vi.fn(async () => ({ id: 77 })),
+  // Desde el 29/10 el alta por formulario mira antes si la persona ya está (duplicados).
+  findDuplicateByEmailOrPhone: vi.fn(async () => null),
+  createInteraction: vi.fn(async () => {}),
 }));
 vi.mock('../src/modules/proceso/proceso.model.js', () => ({
   planificarPasosDeLead: vi.fn(async () => 4),
