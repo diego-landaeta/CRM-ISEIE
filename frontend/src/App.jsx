@@ -60,7 +60,6 @@ const ShortcutsConfigPage = lazy(() => import('./modules/settings/pages/Shortcut
 const ExternalPanelPage = lazy(() => import('./modules/external-panels/pages/ExternalPanelPage'));
 const ManualPage = lazy(() => import('./modules/manual/pages/ManualPage'));
 const PreferencesPage = lazy(() => import('./modules/preferences/pages/PreferencesPage'));
-const SeoPage = lazy(() => import('./modules/seo/pages/SeoPage'));
 const SoportePage = lazy(() => import('./modules/soporte/pages/SoportePage'));
 const CommissionsPage = lazy(() => import('./modules/commissions/pages/CommissionsPage'));
 const ExpensesPage = lazy(() => import('./modules/expenses/pages/ExpensesPage'));
@@ -123,6 +122,7 @@ const ConvocatoriasPage = lazy(() => import('./modules/convocatorias/pages/Convo
 // El tablero de tareas del equipo (#210, como en MultiCRM): solo en pruebas.
 const TasksPage = lazy(() => import('./modules/tasks/pages/TasksPage'));
 const TaskBoardConfigPage = lazy(() => import('./modules/tasks/pages/TaskBoardConfigPage'));
+const AunNoConectadoPage = lazy(() => import('./shared/pages/AunNoConectadoPage'));
 
 const ROUTE_TITLES = {
   '/dashboard':                       'Dashboard',
@@ -281,7 +281,8 @@ function App() {
           <Route path="/external-panels/:id" element={<ExternalPanelPage />} />
           <Route path="/manual" element={<ManualPage />} />
           <Route path="/preferencias" element={<PreferencesPage />} />
-          <Route path="/seo" element={<SeoPage />} />
+          {/* #216: enseñaba datos de ejemplo de Search Console. Hasta que esté conectado (#17). */}
+          <Route path="/seo" element={<AunNoConectadoPage titulo="Tráfico orgánico" />} />
           <Route path="/soporte" element={<SoportePage />} />
           <Route path="/payroll" element={<PayrollPage />} />
           <Route path="/matriculas" element={<MatriculasPage />} />
