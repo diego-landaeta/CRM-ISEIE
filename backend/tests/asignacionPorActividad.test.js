@@ -426,3 +426,18 @@ describe('formularios que entran directos al CRM (Diego, 29/10: «arregla todo»
     expect(decision?.elegida ?? null).toBeNull();
   });
 });
+
+describe('el sombreado de la gestora activa en Prospectos (CRM#524)', () => {
+  it('«Último lead de cada gestora» dice quién está activa, hace cuánto y por qué', async () => {
+    await q('DELETE FROM lead_interactions WHERE lead_id = $1', [leadDePrueba]);
+    await q('INSERT INTO lead_interactions (lead_id, tipo, nota, created_by) VALUES ($1, $2, $3, $4)', [leadDePrueba, 'llamada', 'contestó', U.cris.id]);
+    const r = await request.get(`/api/projects/${ids.project}/ultimo-lead`).set(como('superadmin'));
+    expect(r.status).toBe(200);
+    const cris = r.body.data.gestoras.find((g) => g.id === U.cris.id);
+    const ana = r.body.data.gestoras.find((g) => g.id === U.ana.id);
+    expect(cris.activa).toMatchObject({ que: 'contacto' });
+    expect(cris.activa.hace_min).toBeLessThanOrEqual(1);
+    expect(ana.activa ?? null).toBeNull();
+    expect(r.body.data.ventana_min).toBeGreaterThan(0);
+  });
+});

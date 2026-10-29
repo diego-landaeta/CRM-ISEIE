@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-686 rutas en 52 módulos, y 25 acciones con condición dentro de una ruta.
+687 rutas en 52 módulos, y 25 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -688,6 +688,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | create | `POST /api/projects/` | sesión · roleGuard(superadmin) +superadmin +soporte por el atajo | superadmin, soporte | `projects.create` |
 | update | `PATCH /api/projects/:id` | sesión · roleGuard(superadmin) +superadmin +soporte por el atajo | superadmin, soporte | `projects.edit` |
 | regenerateKey | `POST /api/projects/:id/regenerate-webhook-key` | sesión · roleGuard(superadmin) +superadmin +soporte por el atajo | superadmin, soporte | `projects.edit` |
+| getUltimoLead | `GET /api/projects/:id/ultimo-lead` | (no existía) | (ruta nueva) | `projects.view` |
 | getQueueState | `GET /api/projects/:id/queue-state` | sesión | superadmin, admin, gestor, soporte, project_manager, tutor | `projects.view` |
 
 ## registro

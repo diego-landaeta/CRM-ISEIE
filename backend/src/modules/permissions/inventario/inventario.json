@@ -10101,6 +10101,28 @@
   "puertas": []
  },
  {
+  "id": "GET /api/projects/:id/ultimo-lead",
+  "tipo": "ruta",
+  "modulo": "projects",
+  "metodo": "GET",
+  "ruta": "/api/projects/:id/ultimo-lead",
+  "relativa": "GET /:id/ultimo-lead",
+  "controlador": "getUltimoLead",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "projects.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/projects/:id/queue-state",
   "tipo": "ruta",
   "modulo": "projects",

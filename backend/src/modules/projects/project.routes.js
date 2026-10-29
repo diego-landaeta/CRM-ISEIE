@@ -26,6 +26,7 @@ router.patch('/:id', puede('projects.edit'), ctrl.update);
 router.post('/:id/regenerate-webhook-key', puede('projects.edit'), ctrl.regenerateKey);
 
 // Round-robin: estado de la cola de gestores (cualquier autenticado)
+router.get('/:id/ultimo-lead', puede('projects.view'), shortcutsCtrl.getUltimoLead);
 router.get('/:id/queue-state', puede('projects.view'), shortcutsCtrl.getQueueState);
 
 export default router;
