@@ -38,11 +38,16 @@ vi.mock('../src/modules/leads/lead.model.js', () => ({
 vi.mock('../src/modules/leads/dup-queue.service.js', () => ({ enqueue: vi.fn(async () => null) }));
 vi.mock('../src/modules/leads/lead-products.service.js', () => ({ autoAddFromReincidente: vi.fn(async () => {}) }));
 vi.mock('../src/modules/proceso/proceso.model.js', () => ({ planificarPasosDeLead: vi.fn(async () => 0) }));
+vi.mock('../src/modules/asignacion/asignacion.service.js', () => ({
+  decidirFormulario: vi.fn(async () => null),
+  apuntarFormulario: vi.fn(async () => {}),
+}));
 
 const forms = await import('../src/modules/forms/form.controller.js');
 const tokens = await import('../src/modules/webhook-tokens/token.controller.js');
 const leadModel = await import('../src/modules/leads/lead.model.js');
 const dupQueue = await import('../src/modules/leads/dup-queue.service.js');
+const asignacion = await import('../src/modules/asignacion/asignacion.service.js');
 
 async function llamar(fn, { params = { embedId: 'isecd', token: TOKEN.token }, body = {} } = {}) {
   let salida = null;
@@ -115,5 +120,26 @@ describe('webhook con token', () => {
     const b = await llamar(tokens.publicReceive, { body: ENVIO });
     expect(b.salida.data).toMatchObject({ lead_id: 70, action: 'resent' });
     expect(leadModel.createLeadWithRoundRobin).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('asignación por actividad en los formularios directos al CRM (29/10)', () => {
+  it('con alguien activa: el lead es para ella y queda en el registro', async () => {
+    const decision = { elegida: { id: 47 }, config: { id: 5 }, motivo: { texto: 'activa hace 2 min' } };
+    asignacion.decidirFormulario.mockResolvedValueOnce(decision);
+    await llamar(forms.publicWebhook, { body: { nombre: 'Jaime Prueba', email: 'jaime@example.com' } });
+    expect(leadModel.createLeadWithRoundRobin).toHaveBeenCalledWith(expect.objectContaining({ forcedResponsableId: 47 }));
+    expect(asignacion.apuntarFormulario).toHaveBeenCalledWith(decision, expect.objectContaining({ id: 90 }), expect.objectContaining({ origen: 'formulario' }));
+  });
+
+  it('sin nadie activa (o asignación apagada): sigue el turno de siempre', async () => {
+    await llamar(forms.publicSubmit, { body: ENVIO });
+    expect(leadModel.createLeadWithRoundRobin).toHaveBeenCalledWith(expect.objectContaining({ forcedResponsableId: null }));
+  });
+
+  it('el webhook con token, igual', async () => {
+    asignacion.decidirFormulario.mockResolvedValueOnce({ elegida: { id: 6 }, config: { id: 5 }, motivo: {} });
+    await llamar(tokens.publicReceive, { body: ENVIO });
+    expect(leadModel.createLeadWithRoundRobin).toHaveBeenCalledWith(expect.objectContaining({ forcedResponsableId: 6 }));
   });
 });

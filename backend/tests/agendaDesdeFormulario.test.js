@@ -32,6 +32,10 @@ vi.mock('../src/modules/leads/lead.model.js', () => ({
 vi.mock('../src/modules/proceso/proceso.model.js', () => ({
   planificarPasosDeLead: vi.fn(async () => 4),
 }));
+vi.mock('../src/modules/asignacion/asignacion.service.js', () => ({
+  decidirFormulario: vi.fn(async () => null),
+  apuntarFormulario: vi.fn(async () => {}),
+}));
 
 const ctrl = await import('../src/modules/forms/form.controller.js');
 const leadModel = await import('../src/modules/leads/lead.model.js');
