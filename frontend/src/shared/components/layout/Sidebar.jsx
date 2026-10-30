@@ -77,6 +77,8 @@ export const NAV_SECTIONS = [
           { to: '/whatsapp/conexion', label: 'Conexión', permiso: 'whatsapp.usar' },
           { to: '/whatsapp/plantillas', label: 'Plantillas', permiso: 'whatsapp.plantillas' },
           { to: '/whatsapp/banco', label: 'Banco de mensajes' },
+          // Si cada gestora responde y lo que apunta (Diego, 30/10). Para quien ve Reportes.
+          { to: '/whatsapp/actividad', label: 'Actividad', permiso: 'reports.view' },
           { to: '/whatsapp/ayuda', label: 'Cómo se usa' },
           // Solo para quien manda: entrar en el WhatsApp de cada gestora.
           // Fuera del menu: usaba el navegador remoto, que se ha retirado.
