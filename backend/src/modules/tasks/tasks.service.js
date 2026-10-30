@@ -151,6 +151,22 @@ export async function ambitoDe(user, { issuerId = null, projectId = null } = {})
   return lista.length ? lista : [-1];
 }
 
+/**
+ * Los campus de la empresa elegida arriba: la empresa entera, o la del campus
+ * elegido (las tareas van por empresa). null si arriba no hay nada.
+ */
+export async function campusDeLaCabecera({ issuerId = null, projectId = null } = {}) {
+  if (issuerId) {
+    const ids = await taskModel.campusDeLaEmpresa(Number(issuerId));
+    return ids.length ? ids : [-1];
+  }
+  if (projectId) {
+    const suya = await taskModel.empresaDelCampus(Number(projectId));
+    return suya ? await taskModel.campusDeLaEmpresa(suya) : [Number(projectId)];
+  }
+  return null;
+}
+
 /** Una tarea fuera del ámbito no existe para quien mira: 404, no 403. */
 async function exigirEnAmbito(personaId, user) {
   const ambito = await ambitoDe(user);
@@ -485,6 +501,9 @@ export async function listTasks(user, q) {
   //     arriba); sin él, lo mismo que «Mi equipo». El filtro nunca abre más.
   const ver = q.ver || (q.mias ? 'mias' : 'todo');
   const ambito = p.viewAll && ver === 'todo' ? await ambitoDe(user, q) : null;
+  // Con una empresa o un campus arriba, en cualquier vista, solo las tareas de esa
+  // empresa (30/10). Sin nada arriba, como siempre.
+  const deLaCabecera = await campusDeLaCabecera(q);
 
   if (q.project_id) {
     await validarAccesoProyecto(q.project_id, user);
@@ -492,6 +511,7 @@ export async function listTasks(user, q) {
 
   const tareas = await taskModel.findTasks({
     ambito,
+    de_la_cabecera: deLaCabecera,
     yo: user.userId,
     visibles_para: p.viewAll && ver === 'todo' ? null : user.userId,
     // «Mis tareas»: lo suyo, sea quien sea (también el admin y el superadmin).
