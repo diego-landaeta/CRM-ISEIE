@@ -75,6 +75,8 @@ export default function FichaProspecto({
   const p = datos?.prospecto ?? null;
 
   const [nota, setNota] = useState('');
+  // Por defecto WhatsApp: es donde está hablando. Cuenta como contacto (30/10).
+  const [tipo, setTipo] = useState<'whatsapp' | 'llamada' | 'email' | 'nota'>('whatsapp');
   const [guardando, setGuardando] = useState(false);
 
   /**
@@ -93,13 +95,13 @@ export default function FichaProspecto({
     if (!texto || !p?.id) return;
     setGuardando(true);
     try {
-      const r = await chatApi.apuntarNota(p.id, texto);
+      const r = await chatApi.apuntarInteraccion(p.id, tipo, texto);
       if (!r?.success) throw new Error(r?.error || 'No se pudo guardar');
       setNota('');
       setIntento((n) => n + 1);          // vuelve a pedir la ficha con la nota dentro
     } catch (e) {
       toast({
-        title: 'No se pudo guardar la nota',
+        title: 'No se pudo apuntar',
         description: (e as { message?: string })?.message || 'Vuelve a intentarlo.',
         variant: 'destructive',
       });
@@ -319,7 +321,23 @@ export default function FichaProspecto({
                       mirando. Va debajo de las interacciones para que se vea
                       donde va a aparecer. */}
                   <div className="mt-3">
-                    <label htmlFor="ficha-nota" className="sr-only">Apuntar una nota</label>
+                    {/* Qué ha sido: un WhatsApp, una llamada o un correo cuentan como
+                        contacto (cierran el paso y cuentan como actividad); una nota, no. */}
+                    <div className="flex flex-wrap gap-1 mb-1.5" role="radiogroup" aria-label="Qué has hecho">
+                      {([['whatsapp', 'WhatsApp'], ['llamada', 'Llamada'], ['email', 'Correo'], ['nota', 'Nota']] as const).map(([v, txt]) => (
+                        <button
+                          key={v}
+                          type="button"
+                          role="radio"
+                          aria-checked={tipo === v}
+                          onClick={() => setTipo(v)}
+                          className={`h-7 px-2.5 rounded-md border text-xs ${tipo === v ? 'border-primary bg-primary/10 font-semibold text-primary' : 'border-border hover:bg-muted'}`}
+                        >
+                          {txt}
+                        </button>
+                      ))}
+                    </div>
+                    <label htmlFor="ficha-nota" className="sr-only">Qué ha pasado</label>
                     <textarea
                       id="ficha-nota"
                       value={nota}
@@ -337,7 +355,7 @@ export default function FichaProspecto({
                     />
                     <div className="flex items-center justify-between gap-2 mt-1.5">
                       <span className="text-[11px] text-muted-foreground">
-                        Ctrl + Enter para guardar
+                        {tipo === 'nota' ? 'La nota no cuenta como contacto' : 'Cuenta como contacto'} · Ctrl + Enter
                       </span>
                       <button
                         type="button"

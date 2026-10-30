@@ -36,6 +36,8 @@ router.patch('/templates/:id', puede('whatsapp.plantillas'), ctrl.updateTemplate
 router.delete('/templates/:id', puede('whatsapp.plantillas'), ctrl.deleteTemplate);
 
 router.get('/cola', puede('whatsapp.cola'), ctrl.cola);
+// Si cada gestora responde en WhatsApp y lo que apunta (30/10). Para quien ve Reportes.
+router.get('/actividad', puede('reports.view'), ctrl.actividad);
 
 // Aqui vivian /sala y /equipo: el panel que abria la sesion de cada gestora en
 // un navegador remoto. Ese metodo se retiro —contenedores borrados y servicio
