@@ -86,7 +86,7 @@ export async function widgetClic(req, res) {
   res.status(204).end();
 }
 
-// Admin: GET /api/widget/pulsaciones?projectId|issuerId&from&to
+// Admin: GET /api/widget/pulsaciones?[projectId|issuerId]&from&to (sin ninguno = todos)
 // Por gestora: pulsaciones, altas por WhatsApp y cuántas tienen pulsación.
 export async function pulsaciones(req, res, next) {
   try {
@@ -94,9 +94,10 @@ export async function pulsaciones(req, res, next) {
     const hoy = new Date().toISOString().slice(0, 10);
     const to = fecha(req.query.to) || hoy;
     const from = fecha(req.query.from) || new Date(Date.now() - 6 * 864e5).toISOString().slice(0, 10);
+    // Un campus, una empresa (sus campus) o «Todos» (null: todos menos pruebas).
+    // proyectosDelAmbito ya recorta a los campus de cada persona.
     const ambito = await proyectosDelAmbito(req);
-    const projectIds = comoLista(ambito.projectId, ambito.projectIds) || [];
-    if (!projectIds.length) throw new AppError('Elige un campus', 400, 'BAD_REQUEST');
+    const projectIds = comoLista(ambito.projectId, ambito.projectIds);
     res.json({ success: true, data: { from, to, ...(await resumenDePulsaciones({ projectIds, from, to })) } });
   } catch (e) { next(e); }
 }

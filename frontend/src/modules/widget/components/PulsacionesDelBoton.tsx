@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { CursorClick } from '@phosphor-icons/react';
-import { widgetApi, type ResumenPulsaciones } from '../api/widget.api';
+import { widgetApi, type ResumenPulsaciones, type AmbitoPulsaciones } from '../api/widget.api';
 
 /**
  * Cuántos pulsan el botón y cuántos pasan a la conversación (Diego, 29/10).
@@ -19,7 +19,7 @@ const PERIODOS = [
 const diaIso = (d: Date) => d.toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' });
 const pct = (a: number, b: number) => (b > 0 ? `${Math.round((a / b) * 100)} %` : '—');
 
-export default function PulsacionesDelBoton({ projectId }: { projectId: number }) {
+export default function PulsacionesDelBoton({ ambito, titulo }: { ambito: AmbitoPulsaciones; titulo?: string }) {
   const [periodo, setPeriodo] = useState<(typeof PERIODOS)[number]['clave']>('7');
   const [datos, setDatos] = useState<ResumenPulsaciones | null>(null);
   const [cargando, setCargando] = useState(true);
@@ -30,12 +30,12 @@ export default function PulsacionesDelBoton({ projectId }: { projectId: number }
     const from = diaIso(new Date(Date.now() - dias * 864e5));
     let vivo = true;
     setCargando(true);
-    widgetApi.pulsaciones(projectId, from, to)
+    widgetApi.pulsaciones(ambito, from, to)
       .then((r) => { if (vivo && r.success) setDatos(r.data || null); })
       .catch(() => { if (vivo) setDatos(null); })
       .finally(() => { if (vivo) setCargando(false); });
     return () => { vivo = false; };
-  }, [projectId, periodo]);
+  }, [ambito.projectId, ambito.issuerId, periodo]);
 
   const filas = datos?.porGestora || [];
   const total = filas.reduce((t, f) => ({
@@ -48,7 +48,7 @@ export default function PulsacionesDelBoton({ projectId }: { projectId: number }
     <div className="bg-card border border-border rounded-md p-4 space-y-3">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h3 className="font-semibold text-sm flex items-center gap-2"><CursorClick size={16} /> Pulsaciones del botón</h3>
+          <h3 className="font-semibold text-sm flex items-center gap-2"><CursorClick size={16} /> Pulsaciones del botón{titulo ? ` · ${titulo}` : ''}</h3>
           <p className="text-xs text-muted-foreground mt-0.5">
             Cuántos pulsan y cuántos pasan a la conversación: las altas por WhatsApp de cada gestora y cuántas tienen una pulsación suya de las 24 h anteriores.
           </p>
