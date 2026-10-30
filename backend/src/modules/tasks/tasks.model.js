@@ -160,7 +160,7 @@ const joins = (hay, eq = false) => `
 export async function findTasks({
   assigned_to, project_id, external_project_id, area_id, status, priority, search, tag, vencidas, desde, hasta,
   periodo_desde, periodo_hasta, incluir_archivadas = false, orden = 'tablero', ambito = null, yo = null, supervisor_id = null, tambien_supervisa = null,
-  team_id, visibles_para = null, mias_de = null,
+  team_id, visibles_para = null, mias_de = null, de_la_cabecera = null,
 }) {
   const { sup: hay, eq } = await extras();
   const conditions = [];
@@ -172,6 +172,21 @@ export async function findTasks({
 
   if (!incluir_archivadas) conditions.push('t.archived_at IS NULL');
   if (assigned_to != null) add('t.assigned_to = $?', assigned_to);
+  // La empresa (o el campus) de arriba: solo las tareas DE esa empresa (Diego,
+  // 30/10: «en el tablero se están ligando tareas entre empresas»). El ámbito de
+  // abajo mira a la PERSONA, y quien está en CEDIA y en ICTESS traía las de las dos.
+  // La empresa de una tarea es la de su equipo; sin equipo, la de su campus; sin
+  // ninguno de los dos, no se puede saber y se deja ver.
+  if (de_la_cabecera) {
+    params.push(de_la_cabecera);
+    const ids = `$${params.length}::int[]`;
+    conditions.push(`(CASE
+      ${eq ? `WHEN t.team_id IS NOT NULL THEN EXISTS (SELECT 1 FROM task_teams tt_c
+                 JOIN projects pc ON pc.sociedad_emisora_id = tt_c.issuer_id
+                WHERE tt_c.id = t.team_id AND pc.id = ANY(${ids}))` : ''}
+      WHEN t.project_id IS NOT NULL THEN t.project_id = ANY(${ids})
+      ELSE TRUE END)`);
+  }
   // `null` es «todo el CRM» (superadmin y soporte): no se acota.
   if (ambito) {
     params.push(ambito, yo);
