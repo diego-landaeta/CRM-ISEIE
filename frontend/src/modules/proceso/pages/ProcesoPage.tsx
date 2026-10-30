@@ -1,5 +1,5 @@
 import { useEffect, useState, type DragEvent } from 'react';
-import { Plus, PencilSimple, EyeSlash, Eye, DotsSixVertical, Info, ArrowRight, ListChecks } from '@phosphor-icons/react';
+import { Plus, PencilSimple, EyeSlash, Eye, DotsSixVertical, Info, ArrowRight, ListChecks, ChatText, CaretDown } from '@phosphor-icons/react';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import Card from '@/shared/components/ui/Card';
 import EmptyState from '@/shared/components/ui/EmptyState';
@@ -11,6 +11,7 @@ import { cn } from '@/shared/lib/utils';
 import useProcesoPasos from '../hooks/useProcesoPasos';
 import { procesoApi, mensajeDeError, type Paso } from '../api/proceso.api';
 import DialogoPaso, { type DatosPaso } from '../components/DialogoPaso';
+import PlantillaDelPaso from '../components/PlantillaDelPaso';
 import { iconoDeCanal, nombreDeCanal } from '../lib/canales';
 import { textoDeDias } from '../lib/cuando';
 
@@ -73,6 +74,9 @@ export default function ProcesoPage() {
     : [];
 
   const [editando, setEditando] = useState<Paso | null>(null);
+  // El paso con las plantillas desplegadas (#247, Manuel 06/10: «que se haga clic
+  // y carguen las plantillas»). Uno a la vez: con siete abiertos no se lee nada.
+  const [conPlantillas, setConPlantillas] = useState<number | null>(null);
   const [creando, setCreando] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [errorDialogo, setErrorDialogo] = useState<string | null>(null);
@@ -282,7 +286,15 @@ export default function ProcesoPage() {
 
                   <div className="min-w-0 flex-1 space-y-1.5">
                     <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                      <h2 className="text-normal font-semibold">{paso.nombre}</h2>
+                      <h2 className="text-normal font-semibold">
+                        <button
+                          type="button"
+                          onClick={() => setConPlantillas((x) => (x === paso.id ? null : paso.id))}
+                          className="text-left hover:underline focus:outline-none focus:ring-2 focus:ring-ring/40 rounded"
+                        >
+                          {paso.nombre}
+                        </button>
+                      </h2>
                       {/* La clave, apagada: hace falta para entenderse con
                           quien toca el codigo, y no se edita. */}
                       <code className="rounded bg-muted px-1 py-0.5 text-secundario text-muted-foreground">
@@ -341,6 +353,32 @@ export default function ProcesoPage() {
                     )}
 
                     {paso.nota && <p className="text-secundario text-muted-foreground">{paso.nota}</p>}
+
+                    <button
+                      type="button"
+                      onClick={() => setConPlantillas((x) => (x === paso.id ? null : paso.id))}
+                      aria-expanded={conPlantillas === paso.id}
+                      className="inline-flex items-center gap-1 text-secundario font-semibold text-primary hover:underline"
+                    >
+                      <ChatText size={13} /> Plantillas de este paso
+                      <CaretDown size={11} weight="bold" className={cn('transition-transform', conPlantillas === paso.id && 'rotate-180')} />
+                    </button>
+                    {/* Las de WhatsApp (de la casa y las propias) y el correo del paso,
+                        para copiar. Aquí no hay alumno: van con un nombre de ejemplo y
+                        los demás huecos a la vista, para ver qué se rellena solo. */}
+                    {conPlantillas === paso.id && (
+                      <div className="mt-1 rounded-md border border-border bg-muted/30 p-2">
+                        <PlantillaDelPaso
+                          projectId={projectId}
+                          issuerId={issuerId}
+                          pasoClave={paso.clave}
+                          nombreProyecto={deQuien}
+                          datos={{ nombre: 'María' }}
+                          compacto
+                        />
+                        <p className="mt-1 text-[11px] text-muted-foreground">Con «María» de ejemplo: en la cola y en la ficha salen los datos de cada persona.</p>
+                      </div>
+                    )}
                   </div>
 
                   {admin && (
