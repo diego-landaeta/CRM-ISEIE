@@ -14594,6 +14594,28 @@
   "puertas": []
  },
  {
+  "id": "GET /api/widget/pulsaciones",
+  "tipo": "ruta",
+  "modulo": "widget",
+  "metodo": "GET",
+  "ruta": "/api/widget/pulsaciones",
+  "relativa": "GET /pulsaciones",
+  "controlador": "pulsaciones",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "widget.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "PATCH /api/widget/config",
   "tipo": "ruta",
   "modulo": "widget",
@@ -14657,6 +14679,18 @@
   "ruta": "/api/w/data/:projectIdJson",
   "relativa": "GET /data/:projectIdJson",
   "controlador": "widgetData",
+  "publica": true,
+  "guardias": [],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/w/clic/:projectId",
+  "tipo": "ruta",
+  "modulo": "widget",
+  "metodo": "POST",
+  "ruta": "/api/w/clic/:projectId",
+  "relativa": "POST /clic/:projectId",
+  "controlador": "widgetClic",
   "publica": true,
   "guardias": [],
   "puertas": []

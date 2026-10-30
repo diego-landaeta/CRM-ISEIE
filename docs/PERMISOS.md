@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-686 rutas en 52 módulos, y 25 acciones con condición dentro de una ruta.
+688 rutas en 52 módulos, y 25 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -966,10 +966,12 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
 |---|---|---|---|---|
 | getConfig | `GET /api/widget/config` | sesión | superadmin, admin, gestor, soporte, project_manager, tutor | `widget.view` |
+| pulsaciones | `GET /api/widget/pulsaciones` | (no existía) | (ruta nueva) | `widget.view` |
 | updateConfig | `PATCH /api/widget/config` | sesión | superadmin, admin, gestor, soporte, project_manager, tutor | `widget.edit` |
 | updateUserPhone | `PATCH /api/widget/users/:userId/phone` | sesión | superadmin, admin, gestor, soporte, project_manager, tutor | `widget.edit` |
 | widgetScript | `GET /api/w/whatsapp/:projectIdJs` | nada (pública) | cualquiera, sin sesión | — |
 | widgetData | `GET /api/w/data/:projectIdJson` | nada (pública) | cualquiera, sin sesión | — |
+| widgetClic | `POST /api/w/clic/:projectId` | (no existía) | (ruta nueva) | — |
 
 ## woocommerce
 

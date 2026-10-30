@@ -27,7 +27,26 @@ export interface CandidateUser {
   in_project: boolean;
 }
 
+/** Las cifras del botón por gestora (widget.pulsaciones.js). */
+export interface PulsacionesDeGestora {
+  id: number;
+  nombre: string;
+  pulsaciones: number;
+  /** Altas que dio ella con origen WhatsApp. */
+  altas: number;
+  /** De esas altas, las que tienen una pulsación suya de las 24 h anteriores. */
+  con_pulsacion: number;
+}
+export interface ResumenPulsaciones {
+  from: string;
+  to: string;
+  porGestora: PulsacionesDeGestora[];
+  paginas: { pagina: string; pulsaciones: number; con_alta: number }[];
+}
+
 export const widgetApi = {
+  pulsaciones: (projectId: number, from: string, to: string) =>
+    client.get<ResumenPulsaciones>(`/widget/pulsaciones?projectId=${projectId}&from=${from}&to=${to}`),
   getConfig: (projectId: number) =>
     client.get<{ config: WidgetConfig; candidates: CandidateUser[] }>(`/widget/config?projectId=${projectId}`),
   updateConfig: (body: Partial<WidgetConfig> & { projectId: number }) =>
