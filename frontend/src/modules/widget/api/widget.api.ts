@@ -37,6 +37,7 @@ export interface PulsacionesDeGestora {
   /** De esas altas, las que tienen una pulsación suya de las 24 h anteriores. */
   con_pulsacion: number;
 }
+export interface AmbitoPulsaciones { projectId?: number | null; issuerId?: number | null }
 export interface ResumenPulsaciones {
   from: string;
   to: string;
@@ -45,8 +46,13 @@ export interface ResumenPulsaciones {
 }
 
 export const widgetApi = {
-  pulsaciones: (projectId: number, from: string, to: string) =>
-    client.get<ResumenPulsaciones>(`/widget/pulsaciones?projectId=${projectId}&from=${from}&to=${to}`),
+  /** Un campus, una empresa o, sin ninguno, todos los campus que ve quien mira. */
+  pulsaciones: (ambito: AmbitoPulsaciones, from: string, to: string) =>
+    client.get<ResumenPulsaciones>(`/widget/pulsaciones?${new URLSearchParams({
+      ...(ambito.projectId ? { projectId: String(ambito.projectId) } : {}),
+      ...(ambito.issuerId ? { issuerId: String(ambito.issuerId) } : {}),
+      from, to,
+    })}`),
   getConfig: (projectId: number) =>
     client.get<{ config: WidgetConfig; candidates: CandidateUser[] }>(`/widget/config?projectId=${projectId}`),
   updateConfig: (body: Partial<WidgetConfig> & { projectId: number }) =>
