@@ -151,6 +151,22 @@ export async function ambitoDe(user, { issuerId = null, projectId = null } = {})
   return lista.length ? lista : [-1];
 }
 
+/**
+ * Los campus de la empresa elegida arriba: la empresa entera, o la del campus
+ * elegido (las tareas van por empresa). null si arriba no hay nada.
+ */
+export async function campusDeLaCabecera({ issuerId = null, projectId = null } = {}) {
+  if (issuerId) {
+    const ids = await taskModel.campusDeLaEmpresa(Number(issuerId));
+    return ids.length ? ids : [-1];
+  }
+  if (projectId) {
+    const suya = await taskModel.empresaDelCampus(Number(projectId));
+    return suya ? await taskModel.campusDeLaEmpresa(suya) : [Number(projectId)];
+  }
+  return null;
+}
+
 /** Una tarea fuera del ámbito no existe para quien mira: 404, no 403. */
 async function exigirEnAmbito(personaId, user) {
   const ambito = await ambitoDe(user);
@@ -485,6 +501,9 @@ export async function listTasks(user, q) {
   //     arriba); sin él, lo mismo que «Mi equipo». El filtro nunca abre más.
   const ver = q.ver || (q.mias ? 'mias' : 'todo');
   const ambito = p.viewAll && ver === 'todo' ? await ambitoDe(user, q) : null;
+  // Con una empresa o un campus arriba, en cualquier vista, solo las tareas de esa
+  // empresa (30/10). Sin nada arriba, como siempre.
+  const deLaCabecera = await campusDeLaCabecera(q);
 
   if (q.project_id) {
     await validarAccesoProyecto(q.project_id, user);
@@ -492,6 +511,7 @@ export async function listTasks(user, q) {
 
   const tareas = await taskModel.findTasks({
     ambito,
+    de_la_cabecera: deLaCabecera,
     yo: user.userId,
     visibles_para: p.viewAll && ver === 'todo' ? null : user.userId,
     // «Mis tareas»: lo suyo, sea quien sea (también el admin y el superadmin).
@@ -876,16 +896,17 @@ export async function getReviewTasks(user, q = {}) {
   if (reglas.esSuperadmin(user)) {
     return taskModel.findTasks({
       status: EN_REVISION, orden: 'vencimiento', ambito: await ambitoDe(user, q), yo: user.userId,
+      de_la_cabecera: await campusDeLaCabecera(q),
     });
   }
-  return taskModel.findTasks({ status: EN_REVISION, orden: 'vencimiento', supervisor_id: user.userId });
+  return taskModel.findTasks({ status: EN_REVISION, orden: 'vencimiento', supervisor_id: user.userId, de_la_cabecera: await campusDeLaCabecera(q) });
 }
 
 export async function getReviewCount(user, q = {}) {
   if (reglas.esSuperadmin(user)) {
-    return { count: await taskModel.countReview(await ambitoDe(user, q), user.userId) };
+    return { count: await taskModel.countReview(await ambitoDe(user, q), user.userId, { deLaCabecera: await campusDeLaCabecera(q) }) };
   }
-  return { count: (await taskModel.findTasks({ status: EN_REVISION, supervisor_id: user.userId })).length };
+  return { count: (await taskModel.findTasks({ status: EN_REVISION, supervisor_id: user.userId, de_la_cabecera: await campusDeLaCabecera(q) })).length };
 }
 
 /** Aprobar: de «En revisión» a «Hecha», en una transacción. */
@@ -1138,14 +1159,14 @@ export async function getTeamMetrics(projectId, areaId, user, q = {}) {
   const p = await permisosDe(user);
   exigir(p.viewAll, 'No tienes permiso para ver las métricas del equipo');
   if (projectId) await validarAccesoProyecto(projectId, user);
-  return taskModel.getTeamMetrics(projectId, areaId, await ambitoDe(user, q), user.userId);
+  return taskModel.getTeamMetrics(projectId, areaId, await ambitoDe(user, q), user.userId, await campusDeLaCabecera(q));
 }
 
 export async function getTeamMetricsByArea(projectId, user, q = {}) {
   const p = await permisosDe(user);
   exigir(p.viewAll, 'No tienes permiso para ver las métricas del equipo');
   if (projectId) await validarAccesoProyecto(projectId, user);
-  return taskModel.getTeamMetricsByArea(projectId, await ambitoDe(user, q), user.userId);
+  return taskModel.getTeamMetricsByArea(projectId, await ambitoDe(user, q), user.userId, await campusDeLaCabecera(q));
 }
 
 /* --- Configurar tablero: columnas --- */
