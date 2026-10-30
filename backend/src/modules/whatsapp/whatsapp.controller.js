@@ -1,7 +1,8 @@
 import * as model from './whatsapp.model.js';
 import { createSchema, updateSchema } from './whatsapp.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
-import { proyectosDelAmbito } from '../../shared/utils/ambito.js';
+import { proyectosDelAmbito, comoLista } from '../../shared/utils/ambito.js';
+import { actividadEnWhatsapp } from './actividad.model.js';
 import { usuarioObjetivo } from './chat.controller.js';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
 
@@ -125,6 +126,21 @@ export async function deleteTemplate(req, res, next) {
 }
 
 // GET /api/whatsapp/cola?projectId=N&responsableId=&estado=&productoId=&sinContactar=
+// GET /api/whatsapp/actividad?[projectId|issuerId]&from&to (30/10)
+// Por gestora: si responde en WhatsApp (chats, respondidos, sin responder,
+// tiempo de respuesta) y los contactos que apunta. Ver actividad.model.js.
+export async function actividad(req, res, next) {
+  try {
+    const fecha = (v) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
+    const hoy = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Madrid' }).format(new Date());
+    const hasta = fecha(req.query.to) || hoy;
+    const desde = fecha(req.query.from) || hasta;
+    const ambito = await proyectosDelAmbito(req);
+    const projectIds = comoLista(ambito.projectId, ambito.projectIds);
+    res.json({ success: true, data: await actividadEnWhatsapp({ projectIds, desde, hasta }) });
+  } catch (e) { next(e); }
+}
+
 export async function cola(req, res, next) {
   try {
     // Una gestora ve SU cola, ignorando lo que pida por query. Un admin puede

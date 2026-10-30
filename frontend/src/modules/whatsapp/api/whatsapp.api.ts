@@ -329,6 +329,15 @@ export const chatApi = {
     client.post(`/leads/${leadId}/interactions`, { tipo: 'nota', nota }),
 
   /**
+   * Apuntar una interacción del tipo que sea desde el chat (Diego, 30/10: «que
+   * pueda añadir interacciones desde ahí»). Una nota no cuenta como contacto; un
+   * WhatsApp, una llamada o un correo sí: cierran el paso que toca y cuentan como
+   * actividad para la asignación.
+   */
+  apuntarInteraccion: (leadId: number, tipo: 'whatsapp' | 'llamada' | 'email' | 'nota', nota: string): Promise<ApiResponse<unknown>> =>
+    client.post(`/leads/${leadId}/interactions`, { tipo, nota, fecha: new Date().toISOString() }),
+
+  /**
    * La ficha del prospecto de una conversacion, para el popup del chat.
    *
    * `usuarioId` NO es opcional de verdad: sin el, con la sesion de otra persona
