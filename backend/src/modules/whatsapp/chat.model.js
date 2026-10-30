@@ -1300,7 +1300,26 @@ export async function guardarEtiqueta({ instancia, waId, nombre, color }) {
       `INSERT INTO wa_etiquetas (instancia, wa_id, nombre, color)
             VALUES ($1, $2, $3, $4)
        ON CONFLICT (instancia, wa_id) DO UPDATE
-          SET nombre = EXCLUDED.nombre,
+          -- EL NOMBRE BUENO NO SE PISA CON EL PELADO (#148).
+          --
+          -- Evolution guarda los nombres sin acentos —los pela con un
+          -- replace de todo lo que no sea ASCII— asi que por la carga inicial
+          -- llegan «Facturacin», «Semana prxima», «No ledos». Solo el aviso
+          -- de edicion de etiqueta trae el nombre entero.
+          --
+          -- Con un SET a secas, el orden mandaba: llegaba el bueno por el
+          -- aviso, y la siguiente carga inicial lo volvia a dejar pelado. Las
+          -- 18 etiquetas de la cuenta de Ana estaban asi.
+          --
+          -- Asi que uno SIN letras acentuadas no sustituye a uno que SI las
+          -- tiene. Al reves si: un nombre de verdad siempre puede corregir al
+          -- pelado. Y si ninguno tiene acentos, manda el ultimo, como antes.
+          SET nombre = CASE
+                WHEN wa_etiquetas.nombre ~ '[^ -~]'
+                 AND EXCLUDED.nombre !~ '[^ -~]'
+                THEN wa_etiquetas.nombre
+                ELSE EXCLUDED.nombre
+              END,
               color  = COALESCE(EXCLUDED.color, wa_etiquetas.color),
               -- Volver a verla es que existe: si estaba dada por borrada y
               -- reaparece, vuelve.
