@@ -85,11 +85,11 @@ export function encaja(producto, curso) {
 export function proyectosDeCentro(centro, proyectos) {
   const c = compacto(centro);
   if (!c) return [];
-  return proyectos.filter((p) => {
-    const n = compacto(p.nombre);
-    const s = compacto(p.slug);
-    return n === c || s === c || n.startsWith(c) || s.startsWith(c);
-  });
+  // Si alguno coincide EXACTO, solo esos (30/10): «ICTESS» casaba con ICTESS y con
+  // ICTESS US, y con dos campus el centro no era de nadie (Yosbely no veía diplomas).
+  const exactos = proyectos.filter((p) => compacto(p.nombre) === c || compacto(p.slug) === c);
+  if (exactos.length) return exactos;
+  return proyectos.filter((p) => compacto(p.nombre).startsWith(c) || compacto(p.slug).startsWith(c));
 }
 
 /**
