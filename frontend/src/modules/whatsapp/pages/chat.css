@@ -1588,15 +1588,39 @@ select.wa-estado-elegir {
   font-size: 10px; text-transform: uppercase; letter-spacing: .04em;
   color: var(--wa-apagado); align-self: center; margin-right: 2px;
 }
+/* Las del movil (#148).
+
+   EL ANCHO: eran 11ch y de las 18 etiquetas de una cuenta real se cortaba la
+   mitad — «Cliente pote…», «Financiamie…», «Seguimient…». Y con dos que
+   empiezan igual, «Seguimiento» y «Seguimiento tiempo», quedaban
+   indistinguibles: el corte no solo molesta, borra la diferencia. 18ch entran
+   casi todas sin que la fila crezca de mas. */
 .wa-et-whatsapp {
   display: inline-flex; align-items: center; gap: 4px;
   background: transparent;
   color: var(--wa-apagado);
   border: 1px solid rgba(255,255,255,.22);
-  max-width: 11ch;
+  max-width: 18ch;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* PUESTA: aqui SI se rellena el fondo, al reves que en las de estado.
+
+   La regla de no tocar el fondo es para las de estado, que llevan color
+   propio y es lo que las identifica. Estas no tienen fondo —transparente con
+   borde—, asi que ahi queda el sitio para marcarlas de verdad.
+
+   Antes, al seleccionar una solo subia la opacidad de .75 a 1 y el borde
+   pasaba de un gris a otro gris: sobre fondo oscuro, un par de puntos de
+   luminancia. Diego no distinguia cual estaba puesta. Ahora cambian tres
+   cosas a la vez —fondo, borde y color del texto—, que es lo que se ve de un
+   vistazo sin tener que comparar dos etiquetas entre si. */
+.wa-etiqueta-puesta.wa-et-whatsapp {
+  background: rgba(255,255,255,.14);
+  border-color: rgba(255,255,255,.55);
+  color: #e9edef;
 }
 
 .wa-et-nuevo          { background: rgba( 59,130,246,.16); color: #93c5fd; }
