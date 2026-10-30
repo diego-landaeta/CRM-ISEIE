@@ -1,5 +1,6 @@
 import { query } from '../../shared/config/db.js';
 import { ALTA_POR_WHATSAPP } from '../../shared/utils/origenDelLead.js';
+import { SIN_PRUEBAS } from '../../shared/utils/ambito.js';
 
 /*
   LAS PULSACIONES DEL BOTÓN DE WHATSAPP DE LAS WEBS (Diego, 29/10).
@@ -103,22 +104,26 @@ export async function cruzarConPulsacion({ leadId, projectId, userId }) {
  * Las cifras de la pantalla, por gestora, en días de Madrid: pulsaciones, altas
  * por WhatsApp y cuántas de esas altas tienen una pulsación cruzada. Y las
  * páginas desde las que más se pulsa.
+ *
+ * Un campus, los de una empresa o, con `projectIds` null, todos menos los de
+ * pruebas (Diego, 30/10: «sigue sin tener la vista de empresa»).
  */
 export async function resumenDePulsaciones({ projectIds, from, to }) {
-  const params = [projectIds, from, to];
+  const params = [projectIds || null, from, to];
+  const enCampus = (col) => `($1::int[] IS NULL AND ${SIN_PRUEBAS(col)} OR ${col} = ANY($1::int[]))`;
   const enRango = (col) => `(${col} AT TIME ZONE 'Europe/Madrid')::date BETWEEN $2::date AND $3::date`;
   const [{ rows: porGestora }, { rows: paginas }] = await Promise.all([
     query(
       `WITH pul AS (
          SELECT user_id, count(*)::int AS pulsaciones
            FROM widget_pulsaciones
-          WHERE project_id = ANY($1::int[]) AND ${enRango('creado_at')}
+          WHERE ${enCampus('project_id')} AND ${enRango('creado_at')}
           GROUP BY user_id
        ), altas AS (
          SELECT l.responsable_id AS user_id, count(*)::int AS altas,
                 count(*) FILTER (WHERE EXISTS (SELECT 1 FROM widget_pulsaciones p WHERE p.lead_id = l.id))::int AS con_pulsacion
            FROM leads l
-          WHERE l.project_id = ANY($1::int[]) AND l.deleted_at IS NULL
+          WHERE ${enCampus('l.project_id')} AND l.deleted_at IS NULL
             AND ${enRango('l.created_at')} AND ${ALTA_POR_WHATSAPP('l')}
           GROUP BY l.responsable_id
        )
@@ -138,7 +143,7 @@ export async function resumenDePulsaciones({ projectIds, from, to }) {
               count(*)::int AS pulsaciones,
               count(lead_id)::int AS con_alta
          FROM widget_pulsaciones
-        WHERE project_id = ANY($1::int[]) AND ${enRango('creado_at')}
+        WHERE ${enCampus('project_id')} AND ${enRango('creado_at')}
         GROUP BY 1 ORDER BY 2 DESC LIMIT 10`,
       params
     ),

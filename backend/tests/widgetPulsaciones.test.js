@@ -86,3 +86,20 @@ describe('cruzar el alta con la pulsación', () => {
     expect(query).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('las cifras por campus, por empresa o de todos (30/10)', () => {
+  it('con los campus de una empresa, solo esos', async () => {
+    query.mockResolvedValue({ rows: [] });
+    await P.resumenDePulsaciones({ projectIds: [1, 2, 3], from: '2026-10-24', to: '2026-10-30' });
+    const [sql, params] = query.mock.calls[0];
+    expect(params).toEqual([[1, 2, 3], '2026-10-24', '2026-10-30']);
+    expect(sql).toMatch(/project_id = ANY\(\$1::int\[\]\)/);
+  });
+  it('con «Todos» (null), todos menos los campus de pruebas', async () => {
+    query.mockResolvedValue({ rows: [] });
+    await P.resumenDePulsaciones({ projectIds: null, from: '2026-10-24', to: '2026-10-30' });
+    const [sql, params] = query.mock.calls[0];
+    expect(params[0]).toBeNull();
+    expect(sql).toMatch(/es_prueba/);
+  });
+});
