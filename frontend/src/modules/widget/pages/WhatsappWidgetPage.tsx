@@ -281,7 +281,7 @@ export default function WhatsappWidgetPage() {
         <div className="p-4 border-b border-border">
           <h3 className="font-semibold text-sm">Gestoras de {config.project_nombre}</h3>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Solo aparecen las gestoras asignadas a este proyecto. Activa/desactiva la rotación con los checkboxes.
+            Solo aparecen las gestoras y los admin de este proyecto. Activa/desactiva la rotación con los checkboxes.
           </p>
         </div>
         {users.length === 0 ? (

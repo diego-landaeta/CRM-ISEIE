@@ -13896,6 +13896,28 @@
   "puertas": []
  },
  {
+  "id": "GET /api/whatsapp/actividad",
+  "tipo": "ruta",
+  "modulo": "whatsapp",
+  "metodo": "GET",
+  "ruta": "/api/whatsapp/actividad",
+  "relativa": "GET /actividad",
+  "controlador": "actividad",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "reports.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/whatsapp/usuarios",
   "tipo": "ruta",
   "modulo": "whatsapp",
