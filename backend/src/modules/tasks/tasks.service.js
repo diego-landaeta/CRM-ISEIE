@@ -896,16 +896,17 @@ export async function getReviewTasks(user, q = {}) {
   if (reglas.esSuperadmin(user)) {
     return taskModel.findTasks({
       status: EN_REVISION, orden: 'vencimiento', ambito: await ambitoDe(user, q), yo: user.userId,
+      de_la_cabecera: await campusDeLaCabecera(q),
     });
   }
-  return taskModel.findTasks({ status: EN_REVISION, orden: 'vencimiento', supervisor_id: user.userId });
+  return taskModel.findTasks({ status: EN_REVISION, orden: 'vencimiento', supervisor_id: user.userId, de_la_cabecera: await campusDeLaCabecera(q) });
 }
 
 export async function getReviewCount(user, q = {}) {
   if (reglas.esSuperadmin(user)) {
-    return { count: await taskModel.countReview(await ambitoDe(user, q), user.userId) };
+    return { count: await taskModel.countReview(await ambitoDe(user, q), user.userId, { deLaCabecera: await campusDeLaCabecera(q) }) };
   }
-  return { count: (await taskModel.findTasks({ status: EN_REVISION, supervisor_id: user.userId })).length };
+  return { count: (await taskModel.findTasks({ status: EN_REVISION, supervisor_id: user.userId, de_la_cabecera: await campusDeLaCabecera(q) })).length };
 }
 
 /** Aprobar: de «En revisión» a «Hecha», en una transacción. */
@@ -1158,14 +1159,14 @@ export async function getTeamMetrics(projectId, areaId, user, q = {}) {
   const p = await permisosDe(user);
   exigir(p.viewAll, 'No tienes permiso para ver las métricas del equipo');
   if (projectId) await validarAccesoProyecto(projectId, user);
-  return taskModel.getTeamMetrics(projectId, areaId, await ambitoDe(user, q), user.userId);
+  return taskModel.getTeamMetrics(projectId, areaId, await ambitoDe(user, q), user.userId, await campusDeLaCabecera(q));
 }
 
 export async function getTeamMetricsByArea(projectId, user, q = {}) {
   const p = await permisosDe(user);
   exigir(p.viewAll, 'No tienes permiso para ver las métricas del equipo');
   if (projectId) await validarAccesoProyecto(projectId, user);
-  return taskModel.getTeamMetricsByArea(projectId, await ambitoDe(user, q), user.userId);
+  return taskModel.getTeamMetricsByArea(projectId, await ambitoDe(user, q), user.userId, await campusDeLaCabecera(q));
 }
 
 /* --- Configurar tablero: columnas --- */
