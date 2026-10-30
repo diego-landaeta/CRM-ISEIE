@@ -44,3 +44,25 @@ describe('el tablero con una empresa arriba', () => {
     expect(await service.campusDeLaCabecera({})).toBeNull();
   });
 });
+
+describe('«Por revisar» y las cifras del equipo, también por empresa (30/10)', () => {
+  const conEquipos = () => query.mockImplementation(async () => ({ rows: [{ hay: true, total: 0 }], rowCount: 1 }));
+  it('el contador de «Por revisar»', async () => {
+    conEquipos();
+    await model.countReview(null, 3, { deLaCabecera: [4, 13] });
+    const [sql, params] = query.mock.calls.find(([s]) => /en_revision/.test(s));
+    expect(sql).toMatch(/tt_c\.issuer_id/);
+    expect(params).toContainEqual([4, 13]);
+  });
+  it('las cifras por persona y por área', async () => {
+    conEquipos();
+    await model.getTeamMetrics(null, null, null, 3, [4, 13]);
+    await model.getTeamMetricsByArea(null, null, 3, [4, 13]);
+    const consultas = query.mock.calls.filter(([s]) => /open_tasks/.test(s));
+    expect(consultas).toHaveLength(2);
+    for (const [sql, params] of consultas) {
+      expect(sql).toMatch(/tt_c\.issuer_id/);
+      expect(params).toContainEqual([4, 13]);
+    }
+  });
+});

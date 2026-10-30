@@ -37,6 +37,22 @@ export function genteDelAmbito(col, idxIds, idxYo) {
         AND NOT EXISTS (SELECT 1 FROM user_empresas ue_s WHERE ue_s.user_id = ${col})))`;
 }
 
+/**
+ * La tarea es de la empresa elegida arriba (Diego, 30/10: «en el tablero se están
+ * ligando tareas entre empresas»). `idx` es el parámetro con los campus de esa
+ * empresa. La empresa de una tarea es la de su equipo; sin equipo, la de su campus;
+ * sin ninguno de los dos no se puede saber y se deja ver. `eq`: si hay equipos.
+ */
+export function deLaEmpresa(t, idx, eq = true) {
+  const ids = `$${idx}::int[]`;
+  return `(CASE
+      ${eq ? `WHEN ${t}.team_id IS NOT NULL THEN EXISTS (SELECT 1 FROM task_teams tt_c
+                 JOIN projects pc ON pc.sociedad_emisora_id = tt_c.issuer_id
+                WHERE tt_c.id = ${t}.team_id AND pc.id = ANY(${ids}))` : ''}
+      WHEN ${t}.project_id IS NOT NULL THEN ${t}.project_id = ANY(${ids})
+      ELSE TRUE END)`;
+}
+
 /** Es de una empresa (`user_empresas`) que tiene algún campus en el ámbito. */
 function deEmpresaDelAmbito(col, idxIds) {
   return `EXISTS (SELECT 1 FROM user_empresas ue_a
@@ -179,13 +195,7 @@ export async function findTasks({
   // ninguno de los dos, no se puede saber y se deja ver.
   if (de_la_cabecera) {
     params.push(de_la_cabecera);
-    const ids = `$${params.length}::int[]`;
-    conditions.push(`(CASE
-      ${eq ? `WHEN t.team_id IS NOT NULL THEN EXISTS (SELECT 1 FROM task_teams tt_c
-                 JOIN projects pc ON pc.sociedad_emisora_id = tt_c.issuer_id
-                WHERE tt_c.id = t.team_id AND pc.id = ANY(${ids}))` : ''}
-      WHEN t.project_id IS NOT NULL THEN t.project_id = ANY(${ids})
-      ELSE TRUE END)`);
+    conditions.push(deLaEmpresa('t', params.length, eq));
   }
   // `null` es «todo el CRM» (superadmin y soporte): no se acota.
   if (ambito) {
@@ -279,13 +289,17 @@ export async function findTasks({
 }
 
 /** Cuántas tareas esperan revisión: el número del selector y del menú. */
-export async function countReview(ambito = null, yo = null, { tambienSupervisa = false } = {}) {
-  const hay = await existeSupervisor();
+export async function countReview(ambito = null, yo = null, { tambienSupervisa = false, deLaCabecera = null } = {}) {
+  const { sup: hay, eq } = await extras();
   const params = [];
   let filtro = '';
   if (ambito) {
     params.push(ambito, yo);
     filtro = `AND (${genteDelAmbito('t.assigned_to', 1, 2)}${tambienSupervisa && hay ? ' OR t.supervisor_id = $2' : ''})`;
+  }
+  if (deLaCabecera) {
+    params.push(deLaCabecera);
+    filtro += ` AND ${deLaEmpresa('t', params.length, eq)}`;
   }
   const { rows } = await query(
     `SELECT COUNT(*)::int AS total FROM tasks t
@@ -911,7 +925,8 @@ export async function findUserBasic(id) {
 
 /* --- Todo el equipo y métricas --- */
 
-export async function getTeamMetrics(projectId = null, areaId = null, ambito = null, yo = null) {
+export async function getTeamMetrics(projectId = null, areaId = null, ambito = null, yo = null, deLaCabecera = null) {
+  const { eq } = await extras();
   const params = [ROLES_TAREAS];
   let filtroProyecto = '';
   let filtroArea = '';
@@ -928,6 +943,11 @@ export async function getTeamMetrics(projectId = null, areaId = null, ambito = n
   if (ambito) {
     params.push(ambito, yo);
     filtroGente = `AND ${genteDelAmbito('u.id', params.length - 1, params.length)}`;
+  }
+  // Solo se cuentan las tareas de la empresa de arriba (30/10).
+  if (deLaCabecera) {
+    params.push(deLaCabecera);
+    filtroArea += ` AND ${deLaEmpresa('t', params.length, eq)}`;
   }
 
   const { rows } = await query(
@@ -951,7 +971,8 @@ export async function getTeamMetrics(projectId = null, areaId = null, ambito = n
 }
 
 /** «Todo el equipo» por área: lo mismo que por persona, agrupado por área. */
-export async function getTeamMetricsByArea(projectId = null, ambito = null, yo = null) {
+export async function getTeamMetricsByArea(projectId = null, ambito = null, yo = null, deLaCabecera = null) {
+  const { eq } = await extras();
   const params = [];
   let filtroProyecto = '';
   let filtroGente = '';
@@ -962,6 +983,10 @@ export async function getTeamMetricsByArea(projectId = null, ambito = null, yo =
   if (ambito) {
     params.push(ambito, yo);
     filtroGente = `AND ${genteDelAmbito('t.assigned_to', params.length - 1, params.length)}`;
+  }
+  if (deLaCabecera) {
+    params.push(deLaCabecera);
+    filtroGente += ` AND ${deLaEmpresa('t', params.length, eq)}`;
   }
   const { rows } = await query(
     `SELECT
