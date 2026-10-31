@@ -280,7 +280,10 @@ function DelMes({ empresas, empresa }: { empresas: EmpresaDelGrupo[]; empresa: n
         {datos && r && (
           <div className="px-4 py-2.5 border-b border-border text-sm">
             <strong>{primeraMayuscula(datos.mes.replace(' de ', ' '))}</strong>
-            <span className="text-muted-foreground"> · {r.recibidas} de {r.total} recibidas · {euros(r.importe_recibido)} de {euros(r.importe_acordado)} acordados</span>
+            <span className="text-muted-foreground"> · {r.recibidas} de {r.total} recibidas · {r.por_moneda
+              // Cada moneda por su lado (247): «356,03 US$ de 0,00 US$ acordados y 600,00 € de 600,00 € acordados».
+              ? r.por_moneda.map((s) => `${euros(s.importe_recibido, s.moneda)} de ${euros(s.importe_acordado, s.moneda)} acordados`).join(' y ')
+              : `${euros(r.importe_recibido)} de ${euros(r.importe_acordado)} acordados`}</span>
           </div>
         )}
         {!datos || datos.facturas.length === 0 ? (
@@ -308,7 +311,7 @@ function DelMes({ empresas, empresa }: { empresas: EmpresaDelGrupo[]; empresa: n
                     <td className="px-2 py-2 font-medium">{f.colaborador_nombre}</td>
                     <td className="px-2 py-2">{AREA_ES[f.area]}</td>
                     <td className="px-2 py-2 whitespace-nowrap" title={f.empresa}>{empresaCorta(f.empresa)}</td>
-                    <td className="px-2 py-2 text-right tabular-nums">{euros(f.importe_esperado)}</td>
+                    <td className="px-2 py-2 text-right tabular-nums">{euros(f.importe_esperado, f.moneda)}</td>
                     <td className="px-2 py-2 text-xs text-muted-foreground"><div className="max-w-[6.5rem] truncate" title={f.email}>{f.email}</div></td>
                     <td className="px-2 py-2 text-xs text-muted-foreground whitespace-nowrap">
                       {f.abierto_at ? <>Abierto<br />{diaMes(f.abierto_at)}</> : f.enviado_at ? <>Enviado<br />{diaMes(f.enviado_at)}</> : '—'}
@@ -331,9 +334,9 @@ function DelMes({ empresas, empresa }: { empresas: EmpresaDelGrupo[]; empresa: n
                         </div>
                       )}
                     </td>
-                    <td className="px-2 py-2 text-right tabular-nums">{euros(f.importe)}</td>
+                    <td className="px-2 py-2 text-right tabular-nums">{euros(f.importe, f.moneda)}</td>
                     <td className={`px-2 py-2 text-right tabular-nums ${f.diferencia && Number(f.diferencia) !== 0 ? 'text-warning-soft-foreground font-semibold' : ''}`}>
-                      {f.diferencia === null ? '—' : euros(f.diferencia)}
+                      {f.diferencia === null ? '—' : euros(f.diferencia, f.moneda)}
                     </td>
                     <td className="px-2 py-2">
                       <div className="flex justify-end gap-0.5">
@@ -376,7 +379,7 @@ function DelMes({ empresas, empresa }: { empresas: EmpresaDelGrupo[]; empresa: n
           alCerrar={() => setAnular(null)} alGuardar={() => { setAnular(null); void cargar(); }} />
       )}
       {pagar && (
-        <PagarDialog facturas={[{ id: pagar.id, quien: `${pagar.colaborador_nombre} · ${empresaCorta(pagar.empresa)}`, importe: pagar.importe }]}
+        <PagarDialog facturas={[{ id: pagar.id, quien: `${pagar.colaborador_nombre} · ${empresaCorta(pagar.empresa)}`, importe: pagar.importe, moneda: pagar.moneda }]}
           alCerrar={() => setPagar(null)} alGuardar={() => { setPagar(null); void cargar(); }} />
       )}
       {deshacer && (
@@ -430,7 +433,7 @@ function Colaboradores({ empresas, empresa }: { empresas: EmpresaDelGrupo[]; emp
   );
 
   const acordado = useMemo(() => (c: Colaborador) => c.empresas
-    .map((e) => (e.importe_acordado === null ? '—' : `${euros(e.importe_acordado)}/mes`)).join(' · '), []);
+    .map((e) => (e.importe_acordado === null ? '—' : `${euros(e.importe_acordado, e.moneda)}/mes`)).join(' · '), []);
 
   return (
     <div className="space-y-3">

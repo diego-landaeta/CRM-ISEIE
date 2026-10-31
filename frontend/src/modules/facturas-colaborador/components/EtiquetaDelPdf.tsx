@@ -11,15 +11,15 @@ import { euros, pdfFrenteAEscrito, type FacturaDelMes } from '../api/facturasCol
   Debajo del estado, como «Pagada»: al lado no cabía la tabla en un portátil.
 */
 
-type Fila = Pick<FacturaDelMes, 'estado' | 'subida_at' | 'cuadra' | 'importe_pdf' | 'importe' | 'total' | 'mime'>;
+type Fila = Pick<FacturaDelMes, 'estado' | 'subida_at' | 'cuadra' | 'importe_pdf' | 'importe' | 'total' | 'mime'> & Partial<Pick<FacturaDelMes, 'moneda'>>;
 
 export default function EtiquetaDelPdf({ f }: { f: Fila }) {
   if (!f.subida_at || f.estado === 'anulada' || f.cuadra === true) return null;
   if (f.cuadra === false) {
     // Sin importe del PDF es una subida de antes del 13/10, cuando se comparaba con el desglose.
     const detalle = f.importe_pdf !== null && f.importe_pdf !== undefined
-      ? pdfFrenteAEscrito(f.importe_pdf, f.importe)
-      : `Escrito: ${euros(f.importe)} · el desglose da ${euros(f.total)} (regla anterior al 13/10)`;
+      ? pdfFrenteAEscrito(f.importe_pdf, f.importe, f.moneda)
+      : `Escrito: ${euros(f.importe, f.moneda)} · el desglose da ${euros(f.total, f.moneda)} (regla anterior al 13/10)`;
     return (
       <div className="mt-0.5">
         <span title={detalle}
@@ -31,8 +31,8 @@ export default function EtiquetaDelPdf({ f }: { f: Fila }) {
   }
   const foto = Boolean(f.mime && f.mime.startsWith('image/'));
   const detalle = foto
-    ? `Es una foto: el importe no se lee solo · escrito: ${euros(f.importe)}`
-    : `No se pudo leer el importe del PDF · escrito: ${euros(f.importe)}`;
+    ? `Es una foto: el importe no se lee solo · escrito: ${euros(f.importe, f.moneda)}`
+    : `No se pudo leer el importe del PDF · escrito: ${euros(f.importe, f.moneda)}`;
   return (
     <div className="mt-0.5">
       <span title={detalle}

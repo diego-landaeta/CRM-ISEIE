@@ -12,6 +12,7 @@ import { notifyUsers } from '../notifications/notifications.service.js';
 import { enUtf8 } from '../whatsapp/media.service.js';
 import { calcularDesglose } from './desglose.js';
 import { leerImporteDelPdf, cuadraConElPdf } from './importePdf.js';
+import { conMoneda, porMoneda } from './moneda.js';
 
 /*
   Facturas de colaboradores (#202) · el mes, el enlace y la subida.
@@ -95,6 +96,7 @@ export async function prepararMes(periodo) {
       issuerId: p.issuer_id,
       periodo,
       importeEsperado: p.importe_acordado,
+      moneda: p.moneda,
       tokenHash: hash,
       semilla,
       caducaAt: caducidad(),
@@ -154,7 +156,7 @@ async function avisarDeLaFactura(f) {
 }
 
 async function avisar(f) {
-  const importe = f.importe === null ? '' : ` · ${Number(f.importe).toLocaleString('es-ES', { minimumFractionDigits: 2 })} €`;
+  const importe = f.importe === null ? '' : ` · ${conMoneda(f.importe, f.moneda)}`;
   // Sin nadie a quien avisar, nada: una lista vacía podría entenderse como «para todos».
   const destinatarios = await model.avisarA(f.issuer_id);
   if (!destinatarios?.length) return;
@@ -213,6 +215,8 @@ function paraElColaborador(f) {
       logo_url: f.logo_url,
     },
     importe_acordado: f.importe_esperado === null ? null : Number(f.importe_esperado),
+    // La de la factura: la de su ficha hasta que la sube, y la que eligió después (247).
+    moneda: f.moneda || 'EUR',
     caduca_at: f.caduca_at,
     // Cómo cobra de esta empresa (segunda parte), para pedirle el desglose. Sin
     // modalidad, null: la factura se sube como en la primera parte.
@@ -335,7 +339,7 @@ export async function subir(token, datos, ip) {
  * Subir la factura de una fila del mes. Lo mismo por el enlace del correo que
  * desde «Mi factura»: una por empresa y mes, PDF o foto, 10 MB.
  */
-async function guardarFactura(f, { archivo, importe, numeroFactura, desglose: entrada = {} }, { ip = null, userId = null, enlaceHash = null }) {
+async function guardarFactura(f, { archivo, importe, moneda, numeroFactura, desglose: entrada = {} }, { ip = null, userId = null, enlaceHash = null }) {
   const delMes = `${nombreDelMes(f.periodo)} para ${f.razon_social}`;
   if (f.estado === 'anulada') {
     throw new AppError('Esta factura se anuló: te llegará un enlace nuevo', 409, 'ANULADA');
@@ -392,13 +396,13 @@ async function guardarFactura(f, { archivo, importe, numeroFactura, desglose: en
 
     const numeroRecepcion = await model.siguienteRecepcion(db, f.periodo);
     await model.guardarSubida(db, f.id, {
-      numeroRecepcion, importe, numeroFactura, archivoKey, nombreOriginal,
+      numeroRecepcion, importe, moneda, numeroFactura, archivoKey, nombreOriginal,
       mime: tipo.mime, tamano: archivo.size, sha256, desglose, importePdf, cuadra: cuadraConElPdfSubido,
     });
     await anotar(db, {
       facturaId: f.id, evento: 'recibida', ip, userId,
       detalle: {
-        archivo: nombreOriginal, tamano: archivo.size, importe,
+        archivo: nombreOriginal, tamano: archivo.size, importe, moneda: moneda || f.moneda,
         numero_factura: numeroFactura, numero_recepcion: numeroRecepcion,
         // Lo leído del PDF, o null si no se pudo leer; y si cuadra con lo escrito.
         importe_pdf: importePdf, cuadra: cuadraConElPdfSubido,
@@ -457,18 +461,24 @@ export async function delMes(user, filtros) {
   }
   const filas = await model.delMes({ ...filtros, issuerIds: ambito });
   const vivas = filas.filter((f) => f.estado !== 'anulada');
-  const suma = (k) => vivas.reduce((s, f) => s + (f[k] === null ? 0 : Number(f[k])), 0);
   // «3.150,00 € de 3.600,00 € acordados»: lo acordado es la base, así que con desglose
   // cuenta su base (600 de 600, no los 636 con IVA e IRPF), como la diferencia de cada fila.
-  const recibido = vivas.reduce((s, f) => s + (f.importe === null ? 0 : Number(f.base ?? f.importe)), 0);
+  // Cada moneda por su lado (247): los dólares de Andrea no son euros.
+  const sumas = porMoneda(vivas, {
+    importe_recibido: (f) => (f.importe === null ? null : f.base ?? f.importe),
+    importe_acordado: (f) => f.importe_esperado,
+  });
+  const euros = sumas.find((s) => s.moneda === 'EUR');
   return {
     periodo: filtros.periodo.slice(0, 7),
     mes: nombreDelMes(filtros.periodo),
     resumen: {
       total: vivas.length,
       recibidas: vivas.filter((f) => f.estado === 'recibida').length,
-      importe_recibido: Math.round(recibido * 100) / 100,
-      importe_acordado: Math.round(suma('importe_esperado') * 100) / 100,
+      // Solo los euros, como antes; lo demás va en `por_moneda`.
+      importe_recibido: euros?.importe_recibido ?? 0,
+      importe_acordado: euros?.importe_acordado ?? 0,
+      por_moneda: sumas,
     },
     facturas: filas,
   };
@@ -484,15 +494,21 @@ export async function deLaVista(user, filtros) {
     throw new AppError('Esa empresa no es de tus campus', 403, 'FORBIDDEN');
   }
   const filas = await model.deLaVista({ ...filtros, issuerIds: ambito });
-  const suma = (l) => Math.round(l.reduce((s, f) => s + (f.importe === null ? 0 : Number(f.importe)), 0) * 100) / 100;
   const vivas = filas.filter((f) => f.estado !== 'anulada');
+  // Cada moneda por su lado (247). «Por pagar (con el total pendiente)»: lo recibido y aún sin pagar.
+  const sumas = porMoneda(vivas, {
+    importe: (f) => f.importe,
+    pendiente: (f) => (f.subida_at && !f.pagada_at ? f.importe : null),
+  });
+  const euros = sumas.find((s) => s.moneda === 'EUR');
   return {
     vista: filtros.vista,
     resumen: {
       total: filas.length,
-      importe: suma(vivas),
-      // «Por pagar (con el total pendiente)»: lo recibido y aún sin pagar.
-      pendiente: suma(vivas.filter((f) => f.subida_at && !f.pagada_at)),
+      // Solo los euros, como antes; lo demás va en `por_moneda`.
+      importe: euros?.importe ?? 0,
+      pendiente: euros?.pendiente ?? 0,
+      por_moneda: sumas,
     },
     facturas: filas,
   };
@@ -563,19 +579,23 @@ export async function zipDelMes(user, periodo, issuerId) {
     { header: 'Área', key: 'area', width: 14 },
     { header: 'NIF', key: 'nif', width: 14 },
     { header: 'Número de factura', key: 'numero_factura', width: 20 },
-    { header: 'Importe', key: 'importe', width: 12, style: { numFmt: '#,##0.00 €' } },
-    { header: 'Acordado', key: 'acordado', width: 12, style: { numFmt: '#,##0.00 €' } },
-    { header: 'Diferencia', key: 'diferencia', width: 12, style: { numFmt: '#,##0.00 €' } },
+    { header: 'Importe', key: 'importe', width: 12 },
+    { header: 'Acordado', key: 'acordado', width: 12 },
+    { header: 'Diferencia', key: 'diferencia', width: 12 },
+    { header: 'Moneda', key: 'moneda', width: 9 },
     { header: 'Fecha de subida', key: 'subida', width: 18, style: { numFmt: 'dd/mm/yyyy hh:mm' } },
     { header: 'Número de recepción', key: 'numero_recepcion', width: 20 },
   ];
   hoja.getRow(1).font = { bold: true };
   for (const f of filas) {
-    hoja.addRow({
+    const fila = hoja.addRow({
       colaborador: f.colaborador, area: AREA_ES[f.area] || f.area, nif: f.nif || '',
       numero_factura: f.numero_factura, importe: num(f.importe), acordado: num(f.importe_esperado),
-      diferencia: num(f.diferencia), subida: horaDeMadrid(f.subida_at), numero_recepcion: f.numero_recepcion,
+      diferencia: num(f.diferencia), moneda: f.moneda, subida: horaDeMadrid(f.subida_at), numero_recepcion: f.numero_recepcion,
     });
+    // El formato de cada fila en su moneda (247): una factura en dólares no sale con «€».
+    const formato = f.moneda === 'USD' ? '#,##0.00 "US$"' : '#,##0.00 €';
+    for (const k of ['importe', 'acordado', 'diferencia']) fila.getCell(k).numFmt = formato;
   }
   zip.file('resumen.xlsx', Buffer.from(await libro.xlsx.writeBuffer()), { date: horaDeMadrid(new Date()) });
 
@@ -596,6 +616,7 @@ export async function desgloseDeFactura(user, id) {
   const f = await model.porId(id, await ambitoDe(user));
   if (!f) throw NO_ESTA();
   return {
+    moneda: f.moneda || 'EUR',
     importe: num(f.importe), base: num(f.base), iva: num(f.iva), irpf: num(f.irpf),
     total: num(f.total), horas: num(f.horas),
     importe_pdf: num(f.importe_pdf), cuadra: f.cuadra ?? null, es_pdf: f.mime === 'application/pdf',
@@ -662,7 +683,7 @@ export async function pagar(user, { ids, fecha, forma, referencia, archivo }, ip
         facturaId: f.id, evento: 'pagada', userId: user.userId, ip,
         detalle: {
           fecha, forma_pago: forma, referencia_pago: referencia, justificante: nombreJustificante,
-          importe: f.importe === null ? null : Number(f.importe), ...(ids.length > 1 ? { junto_con: ids.length } : {}),
+          importe: f.importe === null ? null : Number(f.importe), moneda: f.moneda, ...(ids.length > 1 ? { junto_con: ids.length } : {}),
         },
       });
     }
@@ -738,7 +759,8 @@ export async function anular(user, id, motivo, ip) {
     await anotar(db, { facturaId: id, evento: 'anulada', userId: user.userId, ip, detalle: { motivo } });
     const nueva = await model.crearDelMes(db, {
       colaboradorId: f.colaborador_id, issuerId: f.issuer_id, periodo: f.periodo,
-      importeEsperado: f.importe_esperado, tokenHash: hash, semilla, caducaAt: caducidad(),
+      // La moneda de la ficha, no la que eligió al subir: si se anula por eso, la nueva sale bien (247).
+      importeEsperado: f.importe_esperado, moneda: f.moneda_acordada || f.moneda, tokenHash: hash, semilla, caducaAt: caducidad(),
     });
     await anotar(db, { facturaId: nueva, evento: 'reenviado', userId: user.userId, ip, detalle: { sustituye_a: id } });
     return nueva;
