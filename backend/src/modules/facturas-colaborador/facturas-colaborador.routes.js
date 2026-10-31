@@ -45,6 +45,9 @@ router.get('/enlace/:token', limite(60), facturas.verEnlace);
 const codigoConFormato = (req, res, next) => (/^[A-Za-z0-9_-]{40,60}$/.test(String(req.params.token || ''))
   ? next() : next(new AppError('Este enlace no existe o ya no es válido', 404, 'NOT_FOUND')));
 router.post('/enlace/:token', limite(20), codigoConFormato, recibirArchivo, facturas.subir);
+// «Este mes no facturo a esta empresa», y deshacerlo (31/10).
+router.post('/enlace/:token/sin-factura', limite(20), codigoConFormato, facturas.sinFactura);
+router.delete('/enlace/:token/sin-factura', limite(20), codigoConFormato, facturas.quitarSinFactura);
 // El archivo guardado en disco (sin R2), con enlace firmado de 15 min (revisión del 10/10).
 router.get('/archivo-local/:id', limite(60), facturas.archivoLocal);
 router.get('/justificante-local/:id', limite(60), facturas.justificanteLocal);

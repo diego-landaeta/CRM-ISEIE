@@ -25,7 +25,7 @@ export default function MiFacturaPage() {
       const r = await facturasColaboradorApi.mias();
       setMeses(r.data);
       // Se abre sola la primera que falta por subir.
-      setAbierta((a) => a ?? r.data.find((m) => !['recibida', 'anulada', 'caducado'].includes(m.estado))?.id ?? null);
+      setAbierta((a) => a ?? r.data.find((m) => !['recibida', 'sin_factura', 'anulada', 'caducado'].includes(m.estado))?.id ?? null);
     } catch (err: any) {
       toast({ title: 'No se pudieron cargar tus facturas', description: err?.message, variant: 'destructive' });
     } finally { setCargando(false); }
@@ -66,7 +66,7 @@ export default function MiFacturaPage() {
                   </p>
                 </div>
                 <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${ESTADO[m.estado].clase}`}>
-                  {m.estado === 'recibida' || m.estado === 'anulada' || m.estado === 'caducado' ? ESTADO[m.estado].rotulo : 'Pendiente'}
+                  {m.estado === 'recibida' || m.estado === 'sin_factura' || m.estado === 'anulada' || m.estado === 'caducado' ? ESTADO[m.estado].rotulo : 'Pendiente'}
                 </span>
                 {/* El pago, aparte del estado de la factura: «Pagada 05/10 · Transferencia» o «Por pagar». */}
                 {m.recibida && (m.pago ? (
@@ -87,7 +87,7 @@ export default function MiFacturaPage() {
                     Tu enlace <ArrowSquareOut size={12} />
                   </a>
                 )}
-                {!m.recibida && m.estado !== 'anulada' && m.estado !== 'caducado' && (
+                {!m.recibida && m.estado !== 'sin_factura' && m.estado !== 'anulada' && m.estado !== 'caducado' && (
                   <Button size="sm" variant={abierta === m.id ? 'outline' : 'default'} onClick={() => setAbierta(abierta === m.id ? null : m.id!)}>
                     {abierta === m.id ? 'Cerrar' : 'Subir mi factura'}
                   </Button>
@@ -103,7 +103,7 @@ export default function MiFacturaPage() {
               )}
               {/* Montado aunque esté cerrado: al abrir otro mes (o «Cerrar») no se pierde lo que
                   ya había puesto —el archivo, el número, las horas—. Diana, prueba a mano del 12/10. */}
-              {!m.recibida && m.estado !== 'anulada' && m.estado !== 'caducado' && (
+              {!m.recibida && m.estado !== 'sin_factura' && m.estado !== 'anulada' && m.estado !== 'caducado' && (
                 <div className={abierta === m.id ? 'border-t border-border p-4' : 'hidden'}>
                   <SubirFactura
                     factura={m}

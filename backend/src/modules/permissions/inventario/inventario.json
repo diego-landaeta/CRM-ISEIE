@@ -3524,6 +3524,30 @@
   "puertas": []
  },
  {
+  "id": "POST /api/facturas-colaborador/enlace/:token/sin-factura",
+  "tipo": "ruta",
+  "modulo": "facturas-colaborador",
+  "metodo": "POST",
+  "ruta": "/api/facturas-colaborador/enlace/:token/sin-factura",
+  "relativa": "POST /enlace/:token/sin-factura",
+  "controlador": null,
+  "publica": true,
+  "guardias": [],
+  "puertas": []
+ },
+ {
+  "id": "DELETE /api/facturas-colaborador/enlace/:token/sin-factura",
+  "tipo": "ruta",
+  "modulo": "facturas-colaborador",
+  "metodo": "DELETE",
+  "ruta": "/api/facturas-colaborador/enlace/:token/sin-factura",
+  "relativa": "DELETE /enlace/:token/sin-factura",
+  "controlador": null,
+  "publica": true,
+  "guardias": [],
+  "puertas": []
+ },
+ {
   "id": "GET /api/facturas-colaborador/archivo-local/:id",
   "tipo": "ruta",
   "modulo": "facturas-colaborador",

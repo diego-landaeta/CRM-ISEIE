@@ -12,6 +12,8 @@ export const ESTADO = `
   CASE
     WHEN f.anulada_at IS NOT NULL THEN 'anulada'
     WHEN f.subida_at IS NOT NULL THEN 'recibida'
+    -- «Este mes no facturo a esta empresa» (migración 233/246, 31/10).
+    WHEN f.sin_factura_at IS NOT NULL THEN 'sin_factura'
     WHEN f.caduca_at IS NOT NULL AND f.caduca_at < NOW() THEN 'caducado'
     WHEN f.abierto_at IS NOT NULL THEN 'abierto'
     WHEN f.enviado_at IS NOT NULL THEN 'enviado'
@@ -143,6 +145,7 @@ export async function sinEnviar(periodo) {
   const { rows } = await query(
     `SELECT f.id, f.token_semilla, f.token_hash FROM facturas_colaborador f
       WHERE f.periodo = $1::date AND f.enviado_at IS NULL AND f.subida_at IS NULL AND f.anulada_at IS NULL
+        AND f.sin_factura_at IS NULL
         AND (f.caduca_at IS NULL OR f.caduca_at > NOW())
       ORDER BY f.id`,
     [periodo],
@@ -154,6 +157,7 @@ export async function sinSubir(periodo) {
   const { rows } = await query(
     `SELECT f.id, f.token_semilla, f.token_hash FROM facturas_colaborador f
       WHERE f.periodo = $1::date AND f.subida_at IS NULL AND f.anulada_at IS NULL
+        AND f.sin_factura_at IS NULL
         AND (f.caduca_at IS NULL OR f.caduca_at > NOW())
       ORDER BY f.id`,
     [periodo],
@@ -215,6 +219,24 @@ export async function tieneEvento(id, evento) {
   return rows.length > 0;
 }
 
+/**
+ * «Este mes no facturo a esta empresa» (31/10), o deshacerlo. Solo si no está
+ * recibida ni anulada: lo comprueba quien llama, con la fila bloqueada.
+ */
+export async function marcarSinFactura(db, id, motivo) {
+  await db.query(
+    `UPDATE facturas_colaborador SET sin_factura_at = NOW(), sin_factura_motivo = $2 WHERE id = $1`,
+    [id, motivo || null],
+  );
+}
+
+export async function quitarSinFactura(db, id) {
+  await db.query(
+    `UPDATE facturas_colaborador SET sin_factura_at = NULL, sin_factura_motivo = NULL WHERE id = $1`,
+    [id],
+  );
+}
+
 export async function marcarAbierto(id) {
   const { rowCount } = await query(
     'UPDATE facturas_colaborador SET abierto_at = NOW() WHERE id = $1 AND abierto_at IS NULL',
@@ -244,7 +266,7 @@ export async function guardarSubida(db, id, datos) {
   const d = datos.desglose;
   await db.query(
     `UPDATE facturas_colaborador
-        SET subida_at = NOW(), numero_recepcion = $2, importe = $3, numero_factura = $4,
+        SET subida_at = NOW(), sin_factura_at = NULL, sin_factura_motivo = NULL, numero_recepcion = $2, importe = $3, numero_factura = $4,
             archivo_key = $5, nombre_original = $6, mime = $7, tamano = $8, sha256 = $9,
             base = $10, iva = $11, irpf = $12, total = $13, horas = $14, cuadra = $15, importe_pdf = $16
       WHERE id = $1`,

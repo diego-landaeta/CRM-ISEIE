@@ -15,7 +15,7 @@ export const AREA_ES: Record<Area, string> = {
   soporte: 'Soporte', desarrollo: 'Desarrollo', wordpress: 'WordPress', seo: 'SEO', contenido: 'Contenido', otra: 'Otra',
 };
 
-export type EstadoFactura = 'sin_enviar' | 'enviado' | 'abierto' | 'recibida' | 'anulada' | 'no_enviado' | 'caducado';
+export type EstadoFactura = 'sin_enviar' | 'enviado' | 'abierto' | 'recibida' | 'sin_factura' | 'anulada' | 'no_enviado' | 'caducado';
 
 export interface EmpresaDelGrupo { id: number; razon_social: string; nif: string }
 
@@ -305,6 +305,12 @@ export const facturasColaboradorApi = {
   subirPorEnlace: (token: string, archivo: File, importe: string, numeroFactura: string, desglose?: DesgloseEnvio) =>
     client.post(`${BASE}/enlace/${token}`, subida(archivo, importe, numeroFactura, desglose)) as R<FacturaDelColaborador>,
 
+  /** «Este mes no facturo a esta empresa», o deshacerlo (31/10). */
+  sinFacturaPorEnlace: (token: string, motivo?: string) =>
+    client.post(`${BASE}/enlace/${token}/sin-factura`, { motivo: motivo || null }) as R<FacturaDelColaborador>,
+  quitarSinFacturaPorEnlace: (token: string) =>
+    client.delete(`${BASE}/enlace/${token}/sin-factura`) as R<FacturaDelColaborador>,
+
   // ── «Mi factura» (colaborador con usuario) ──
   mias: () => client.get(`${BASE}/mias`) as R<FacturaDelColaborador[]>,
   subirMia: (id: number, archivo: File, importe: string, numeroFactura: string, desglose?: DesgloseEnvio) =>
@@ -404,6 +410,7 @@ export const ESTADO: Record<EstadoFactura, { rotulo: string; clase: string }> = 
   enviado: { rotulo: 'Enviado', clase: 'bg-info-soft text-info-soft-foreground' },
   abierto: { rotulo: 'Abierto', clase: 'bg-info-soft text-info-soft-foreground' },
   recibida: { rotulo: 'Recibida', clase: 'bg-success-soft text-success-soft-foreground' },
+  sin_factura: { rotulo: 'No factura este mes', clase: 'bg-muted text-muted-foreground' },
   anulada: { rotulo: 'Anulada', clase: 'bg-destructive-soft text-destructive-soft-foreground' },
   no_enviado: { rotulo: 'No enviado (error)', clase: 'bg-destructive-soft text-destructive-soft-foreground' },
   caducado: { rotulo: 'Caducado', clase: 'bg-warning-soft text-warning-soft-foreground' },
