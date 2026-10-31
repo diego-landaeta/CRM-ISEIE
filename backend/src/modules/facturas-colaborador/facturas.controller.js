@@ -56,6 +56,15 @@ export const subir = accion(async (req, res) => {
   res.status(201).json({ success: true, data });
 });
 
+// «Este mes no facturo a esta empresa» (31/10). DELETE lo deshace.
+export const sinFactura = accion(async (req, res) => {
+  const motivo = typeof req.body?.motivo === 'string' ? req.body.motivo : null;
+  res.json({ success: true, data: await service.sinFacturaPorEnlace(enlaceDe(req), { motivo }, ipDe(req)) });
+});
+export const quitarSinFactura = accion(async (req, res) => {
+  res.json({ success: true, data: await service.sinFacturaPorEnlace(enlaceDe(req), { deshacer: true }, ipDe(req)) });
+});
+
 // ─── Administración ───
 // Nunca se devuelve el enlace en claro: lo lleva el correo, y solo el correo.
 
