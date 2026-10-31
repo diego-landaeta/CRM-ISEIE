@@ -32,7 +32,7 @@ export const ESTADO = `
  */
 export async function pendientesDePreparar(periodo, db = pool) {
   const { rows } = await db.query(
-    `SELECT c.id AS colaborador_id, ce.issuer_id, ce.importe_acordado
+    `SELECT c.id AS colaborador_id, ce.issuer_id, ce.importe_acordado, ce.moneda
        FROM colaboradores c
        JOIN colaborador_empresas ce ON ce.colaborador_id = c.id
        JOIN invoice_issuers ii ON ii.id = ce.issuer_id AND ii.activo = true
@@ -51,26 +51,26 @@ export async function pendientesDePreparar(periodo, db = pool) {
 }
 
 /** Crea la fila del mes. Si otra llamada se adelantó, no hace nada y devuelve null. */
-export async function crearDelMes(db, { colaboradorId, issuerId, periodo, importeEsperado, tokenHash, semilla, caducaAt }) {
+export async function crearDelMes(db, { colaboradorId, issuerId, periodo, importeEsperado, moneda = 'EUR', tokenHash, semilla, caducaAt }) {
   const { rows } = await db.query(
     `INSERT INTO facturas_colaborador
-       (colaborador_id, issuer_id, periodo, importe_esperado, token_hash, caduca_at, token_semilla)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+       (colaborador_id, issuer_id, periodo, importe_esperado, token_hash, caduca_at, token_semilla, moneda)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      ON CONFLICT (colaborador_id, issuer_id, periodo) WHERE anulada_at IS NULL DO NOTHING
      RETURNING id`,
-    [colaboradorId, issuerId, periodo, importeEsperado, tokenHash, caducaAt, semilla],
+    [colaboradorId, issuerId, periodo, importeEsperado, tokenHash, caducaAt, semilla, moneda],
   );
   return rows[0] ? Number(rows[0].id) : null;
 }
 
 const CAMPOS_ENLACE = `
   f.id, f.colaborador_id, f.issuer_id, to_char(f.periodo, 'YYYY-MM-DD') AS periodo,
-  f.importe_esperado, f.importe, f.numero_factura, f.numero_recepcion,
+  f.importe_esperado, f.importe, f.moneda, f.numero_factura, f.numero_recepcion,
   f.subida_at, f.abierto_at, f.caduca_at, f.anulada_at, f.nombre_original,
   ${ESTADO} AS estado,
   c.nombre AS colaborador_nombre, c.email AS colaborador_email, c.area, c.nif AS colaborador_nif,
   ii.razon_social, ii.nif AS empresa_nif, ii.direccion, ii.cp, ii.ciudad, ii.pais, ii.logo_url,
-  ce.modalidad, ce.importe_fijo, ce.tarifa_hora, ce.iva_pct, ce.irpf_pct,
+  ce.modalidad, ce.importe_fijo, ce.tarifa_hora, ce.iva_pct, ce.irpf_pct, ce.moneda AS moneda_acordada,
   f.base, f.iva, f.irpf, f.total, f.horas, f.cuadra, f.importe_pdf, f.mime,
   to_char(f.pagada_at, 'YYYY-MM-DD') AS pagada_at, f.pagada_por, f.forma_pago, f.referencia_pago, f.justificante`;
 
@@ -268,12 +268,13 @@ export async function guardarSubida(db, id, datos) {
     `UPDATE facturas_colaborador
         SET subida_at = NOW(), sin_factura_at = NULL, sin_factura_motivo = NULL, numero_recepcion = $2, importe = $3, numero_factura = $4,
             archivo_key = $5, nombre_original = $6, mime = $7, tamano = $8, sha256 = $9,
-            base = $10, iva = $11, irpf = $12, total = $13, horas = $14, cuadra = $15, importe_pdf = $16
+            base = $10, iva = $11, irpf = $12, total = $13, horas = $14, cuadra = $15, importe_pdf = $16,
+            moneda = COALESCE($17, moneda)
       WHERE id = $1`,
     [id, datos.numeroRecepcion, datos.importe, datos.numeroFactura,
       datos.archivoKey, datos.nombreOriginal, datos.mime, datos.tamano, datos.sha256,
       d?.base ?? null, d?.iva ?? null, d?.irpf ?? null, d?.total ?? null, d?.horas ?? null,
-      datos.cuadra ?? null, datos.importePdf ?? null],
+      datos.cuadra ?? null, datos.importePdf ?? null, datos.moneda ?? null],
   );
   for (const l of d?.lineas ?? []) {
     await db.query(
@@ -379,7 +380,7 @@ export async function cambiarEnlace(db, id, tokenHash, semilla, caducaAt) {
 const FILA_DE_LISTA = `SELECT f.id, f.colaborador_id, f.issuer_id, to_char(f.periodo, 'YYYY-MM') AS periodo,
               c.nombre AS colaborador_nombre, c.email, c.area,
               ii.razon_social AS empresa,
-              f.importe_esperado, f.importe,
+              f.importe_esperado, f.importe, f.moneda,
               -- Lo acordado es la base: con desglose, la diferencia es la de su base
               -- (600 acordados y 636 de total con IVA e IRPF no son 36 € de más).
               CASE WHEN f.importe IS NOT NULL AND f.importe_esperado IS NOT NULL
@@ -452,7 +453,8 @@ export async function costePorCampus({ periodo, issuerIds, issuerId = null }) {
   const { rows } = await query(
     // Por empresa y campus (Diego, 10/10: «son por EMPRESA»): con «Todos los
     // proyectos», lo que no lleva campus de CEDIA y de Ictess no se suma en una fila.
-    `SELECT f.issuer_id, ii.razon_social AS empresa, l.project_id, p.nombre AS campus,
+    // Y por moneda (247): los dólares de una factura no se suman a los euros de otra.
+    `SELECT f.issuer_id, ii.razon_social AS empresa, l.project_id, p.nombre AS campus, f.moneda,
             SUM(l.horas)::float AS horas, SUM(l.importe)::float AS importe, COUNT(DISTINCT f.id)::int AS facturas
        FROM facturas_colaborador_lineas l
        JOIN facturas_colaborador f ON f.id = l.factura_id
@@ -461,7 +463,7 @@ export async function costePorCampus({ periodo, issuerIds, issuerId = null }) {
       WHERE f.periodo = $1::date AND f.subida_at IS NOT NULL AND f.anulada_at IS NULL
         AND ($2::int[] IS NULL OR f.issuer_id = ANY($2::int[]))
         AND ($3::int IS NULL OR f.issuer_id = $3)
-      GROUP BY f.issuer_id, ii.razon_social, l.project_id, p.nombre
+      GROUP BY f.issuer_id, ii.razon_social, l.project_id, p.nombre, f.moneda
       ORDER BY ii.razon_social, (l.project_id IS NULL), importe DESC`,
     [periodo, issuerIds, issuerId],
   );
@@ -472,7 +474,7 @@ export async function costePorCampus({ periodo, issuerIds, issuerId = null }) {
 export async function paraElZip(periodo, issuerId) {
   const { rows } = await query(
     `SELECT f.id, c.nombre AS colaborador, c.area, c.nif,
-            f.numero_factura, f.importe, f.importe_esperado,
+            f.numero_factura, f.importe, f.importe_esperado, f.moneda,
             -- Como en la lista: con desglose, la de su base.
             CASE WHEN f.importe IS NOT NULL AND f.importe_esperado IS NOT NULL
                  THEN COALESCE(f.base, f.importe) - f.importe_esperado END AS diferencia,
