@@ -41,10 +41,16 @@ const cuando = (iso: string) => {
   return `el ${dos(d.getDate())}/${dos(d.getMonth() + 1)} a las ${dos(d.getHours())}:${dos(d.getMinutes())}`;
 };
 
-export default function SubirFactura({ factura, alSubir }: {
+export default function SubirFactura({ factura, alSubir, alNoFacturar, alDeshacerNoFacturar }: {
   factura: FacturaDelColaborador;
   /** Manda el formulario; devuelve la factura ya recibida o lanza el error del servidor. */
   alSubir: (archivo: File, importe: string, numero: string, desglose: DesgloseEnvio) => Promise<void>;
+  /**
+   * «Este mes no facturo a esta empresa» (Diego, 31/10). Solo en la página del enlace:
+   * sin esto no se ofrece.
+   */
+  alNoFacturar?: (motivo: string) => Promise<void>;
+  alDeshacerNoFacturar?: () => Promise<void>;
 }) {
   const f = factura;
   // Ids propios: en «Mi factura» puede haber varios formularios montados a la vez (uno por mes pendiente).
@@ -56,6 +62,22 @@ export default function SubirFactura({ factura, alSubir }: {
     setLineas((ls) => ls.map((l, j) => (j === i ? { ...l, [campo]: valor } : l)));
   const calculo = f.cobro ? calcularDesglose(f.cobro, horas, lineas) : null;
   const [archivo, setArchivo] = useState<File | null>(null);
+  // «Este mes no facturo» (31/10): primero se pregunta, con un motivo opcional.
+  const [noFacturo, setNoFacturo] = useState(false);
+  const [motivo, setMotivo] = useState('');
+  const [marcando, setMarcando] = useState(false);
+  async function marcarNoFacturo(deshacer = false) {
+    setMarcando(true);
+    try {
+      if (deshacer) await alDeshacerNoFacturar?.();
+      else await alNoFacturar?.(motivo.trim());
+      setNoFacturo(false);
+    } catch (err: any) {
+      toast({ title: 'No se pudo guardar', description: err?.data?.error || err?.message, variant: 'destructive' });
+    } finally {
+      setMarcando(false);
+    }
+  }
   // El importe sugerido: sin desglose, lo acordado (primera parte, «con el acordado ya
   // sugerido»); con desglose, su total, que sigue a las horas hasta que lo cambie a mano.
   // Lo acordado es la base (el ejemplo de Diego: 600 acordados, 636 de total con IVA e IRPF):
@@ -171,6 +193,21 @@ export default function SubirFactura({ factura, alSubir }: {
           </div>
         </div>
         {aviso && <Aviso neutro={f.recibida.cuadra === null}>{aviso}</Aviso>}
+      </div>
+    );
+  }
+  if (f.estado === 'sin_factura') {
+    return (
+      <div className="space-y-4">
+        {cabecera}
+        <Aviso neutro>
+          Has indicado que este mes no facturas a {f.empresa.razon_social}. No te llegará el recordatorio.
+        </Aviso>
+        {alDeshacerNoFacturar && (
+          <Button type="button" variant="outline" disabled={marcando} onClick={() => marcarNoFacturo(true)}>
+            {marcando ? 'Guardando…' : 'Me equivoqué: sí voy a facturar este mes'}
+          </Button>
+        )}
       </div>
     );
   }
@@ -344,6 +381,36 @@ export default function SubirFactura({ factura, alSubir }: {
           {enviando ? 'Enviando…' : 'Enviar factura'}
         </Button>
       </div>
+
+      {/* «Este mes no facturo a esta empresa» (Diego, 31/10): para quien recibe un
+          enlace por empresa y un mes solo trabajó para alguna. */}
+      {alNoFacturar && (
+        <div className="border-t border-border pt-4">
+          {!noFacturo ? (
+            <button type="button" onClick={() => setNoFacturo(true)} className="text-sm text-muted-foreground underline hover:text-foreground">
+              Este mes no facturo a {f.empresa.razon_social}
+            </button>
+          ) : (
+            <div className="space-y-2 rounded-lg border border-border bg-muted/40 p-3">
+              <p className="text-sm font-semibold">¿Seguro que este mes no facturas a {f.empresa.razon_social}?</p>
+              <p className="text-sm text-muted-foreground">No te llegará el recordatorio. Si te equivocas, puedes deshacerlo desde este mismo enlace.</p>
+              <input
+                value={motivo}
+                onChange={(e) => setMotivo(e.target.value)}
+                maxLength={300}
+                placeholder="Motivo (opcional): no trabajé para esta empresa este mes…"
+                className={inputClass}
+              />
+              <div className="flex gap-2 justify-end">
+                <Button type="button" variant="outline" onClick={() => setNoFacturo(false)} disabled={marcando}>Cancelar</Button>
+                <Button type="button" onClick={() => marcarNoFacturo(false)} disabled={marcando}>
+                  {marcando ? 'Guardando…' : 'Sí, este mes no facturo'}
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </form>
   );
 }

@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-690 rutas en 52 módulos, y 25 acciones con condición dentro de una ruta.
+692 rutas en 52 módulos, y 25 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -273,6 +273,8 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 |---|---|---|---|---|
 | (anónima) | `GET /api/facturas-colaborador/enlace/:token` | nada (pública) | cualquiera, sin sesión | — |
 | (anónima) | `POST /api/facturas-colaborador/enlace/:token` | nada (pública) | cualquiera, sin sesión | — |
+| (anónima) | `POST /api/facturas-colaborador/enlace/:token/sin-factura` | (no existía) | (ruta nueva) | — |
+| (anónima) | `DELETE /api/facturas-colaborador/enlace/:token/sin-factura` | (no existía) | (ruta nueva) | — |
 | archivoLocal | `GET /api/facturas-colaborador/archivo-local/:id` | nada (pública) | cualquiera, sin sesión | — |
 | justificanteLocal | `GET /api/facturas-colaborador/justificante-local/:id` | nada (pública) | cualquiera, sin sesión | — |
 | (anónima) | `GET /api/facturas-colaborador/mias` | sesión · checkPermission(facturas_colaborador.subir) sin roles de más | superadmin, colaborador y quien tenga el permiso por rol a medida o excepción | `facturas_colaborador.subir` |

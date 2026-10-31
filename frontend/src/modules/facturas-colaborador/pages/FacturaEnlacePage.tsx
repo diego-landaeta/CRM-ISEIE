@@ -42,6 +42,14 @@ export default function FacturaEnlacePage() {
               const r = await facturasColaboradorApi.subirPorEnlace(token, archivo, importe, numero, desglose);
               setFactura(r.data);
             }}
+            alNoFacturar={async (motivo) => {
+              const r = await facturasColaboradorApi.sinFacturaPorEnlace(token, motivo);
+              setFactura(r.data);
+            }}
+            alDeshacerNoFacturar={async () => {
+              const r = await facturasColaboradorApi.quitarSinFacturaPorEnlace(token);
+              setFactura(r.data);
+            }}
           />
         )}
       </div>
