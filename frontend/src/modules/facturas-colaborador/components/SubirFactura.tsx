@@ -7,8 +7,8 @@ import FilaCampos from '@/shared/components/ui/FilaCampos';
 import Select from '@/shared/components/ui/Select';
 import { inputClass } from '@/shared/lib/ui';
 import {
-  avisoDelPdf, calcularDesglose, euros, normalizarImporte,
-  type DesgloseEnvio, type FacturaDelColaborador, type LineaForm,
+  avisoDelPdf, calcularDesglose, euros, normalizarImporte, MONEDAS, MONEDA_ES, simbolo,
+  type DesgloseEnvio, type Moneda, type FacturaDelColaborador, type LineaForm,
 } from '../api/facturasColaborador.api';
 
 /*
@@ -87,6 +87,8 @@ export default function SubirFactura({ factura, alSubir, alNoFacturar, alDeshace
   const sugerido = calculo && calculo.total > 0 ? calculo.total.toFixed(2).replace('.', ',') : '';
   const importe = calculo && !tocado ? sugerido : escrito;
   const [numero, setNumero] = useState('');
+  // La moneda de su factura (247, 31/10): sale la de su ficha y la puede cambiar (Andrea factura en dólares).
+  const [moneda, setMoneda] = useState<Moneda>(f.moneda || 'EUR');
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [arrastrando, setArrastrando] = useState(false);
@@ -137,7 +139,7 @@ export default function SubirFactura({ factura, alSubir, alNoFacturar, alDeshace
     if (!archivo) { setError('Elige el archivo de tu factura.'); return; }
     if (!importe.trim()) { setError('Escribe el importe de tu factura.'); return; }
     if (!numero.trim()) { setError('Escribe el número de tu factura.'); return; }
-    const desglose: DesgloseEnvio = {};
+    const desglose: DesgloseEnvio = { moneda };
     if (f.cobro?.modalidad === 'hora') {
       if (!horas.trim()) { setError('Escribe las horas del mes.'); return; }
       desglose.horas = horas.trim();
@@ -169,7 +171,7 @@ export default function SubirFactura({ factura, alSubir, alNoFacturar, alDeshace
         {f.importe_acordado !== null && (
           <p className="text-xs text-muted-foreground">
             {/* Con desglose, lo acordado es la base: que no parezca que su factura (con IVA e IRPF) está mal. */}
-            Importe acordado{f.cobro ? ' (base, sin IVA ni IRPF)' : ''}: <strong className="text-foreground">{euros(f.importe_acordado)}</strong>
+            Importe acordado{f.cobro ? ' (base, sin IVA ni IRPF)' : ''}: <strong className="text-foreground">{euros(f.importe_acordado, f.moneda)}</strong>
           </p>
         )}
       </div>
@@ -179,7 +181,7 @@ export default function SubirFactura({ factura, alSubir, alNoFacturar, alDeshace
   // ── Estados en los que ya no se sube nada ──
   if (f.estado === 'recibida' && f.recibida) {
     // Lo que dice el PDF frente a lo escrito (13/10): si no cuadra o no se pudo leer, se dice claro.
-    const aviso = avisoDelPdf(f.recibida);
+    const aviso = avisoDelPdf(f.recibida, f.moneda);
     return (
       <div className="space-y-4">
         {cabecera}
@@ -188,7 +190,7 @@ export default function SubirFactura({ factura, alSubir, alNoFacturar, alDeshace
           <div className="space-y-1">
             <p className="font-semibold">Factura recibida {cuando(f.recibida.subida_at)} · {f.recibida.numero_recepcion}</p>
             <p className="text-xs">
-              {f.recibida.archivo} · {euros(f.recibida.importe)} · n.º {f.recibida.numero_factura}
+              {f.recibida.archivo} · {euros(f.recibida.importe, f.moneda)} · n.º {f.recibida.numero_factura}
             </p>
           </div>
         </div>
@@ -279,7 +281,7 @@ export default function SubirFactura({ factura, alSubir, alNoFacturar, alDeshace
           {f.cobro.modalidad === 'fijo' && (
             <div className="flex items-center justify-between gap-3 text-sm">
               <span className="min-w-0">{f.cobro.concepto}</span>
-              <span className="tabular-nums font-medium">{euros(f.cobro.importe_fijo)}</span>
+              <span className="tabular-nums font-medium">{euros(f.cobro.importe_fijo, f.moneda)}</span>
             </div>
           )}
 
@@ -289,7 +291,7 @@ export default function SubirFactura({ factura, alSubir, alNoFacturar, alDeshace
                 <label htmlFor={`${uid}-horas`} className="text-xs text-muted-foreground">Horas del mes</label>
                 <input id={`${uid}-horas`} inputMode="decimal" autoComplete="off" value={horas} onChange={(e) => setHoras(e.target.value)} className={inputClass} />
               </div>
-              <span className="pb-2 text-muted-foreground">× {euros(f.cobro.tarifa_hora)}/h = <strong className="text-foreground tabular-nums">{euros(calculo.base)}</strong></span>
+              <span className="pb-2 text-muted-foreground">× {euros(f.cobro.tarifa_hora, f.moneda)}/h = <strong className="text-foreground tabular-nums">{euros(calculo.base, f.moneda)}</strong></span>
             </div>
           )}
 
@@ -322,23 +324,23 @@ export default function SubirFactura({ factura, alSubir, alNoFacturar, alDeshace
                 <Button type="button" variant="outline" size="sm" onClick={() => setLineas((ls) => [...ls, { concepto: '', project_id: '', horas: '' }])}>
                   <Plus size={13} className="mr-1.5" /> Añadir encargo
                 </Button>
-                <span className="text-xs text-muted-foreground">Tu tarifa: {euros(f.cobro.tarifa_hora)}/h</span>
+                <span className="text-xs text-muted-foreground">Tu tarifa: {euros(f.cobro.tarifa_hora, f.moneda)}/h</span>
               </div>
             </div>
           )}
 
           <dl className="grid grid-cols-2 gap-x-4 gap-y-1 border-t border-border pt-3 text-sm tabular-nums">
-            <dt className="text-muted-foreground">Base</dt><dd className="text-right">{euros(calculo.base)}</dd>
-            <dt className="text-muted-foreground">IVA ({f.cobro.iva_pct} %)</dt><dd className="text-right">{euros(calculo.iva)}</dd>
+            <dt className="text-muted-foreground">Base</dt><dd className="text-right">{euros(calculo.base, f.moneda)}</dd>
+            <dt className="text-muted-foreground">IVA ({f.cobro.iva_pct} %)</dt><dd className="text-right">{euros(calculo.iva, f.moneda)}</dd>
             <dt className="text-muted-foreground">IRPF ({f.cobro.irpf_pct} %)</dt>
-            <dd className="text-right">{calculo.irpf ? '−' : ''}{euros(calculo.irpf)}</dd>
-            <dt className="font-semibold">Total</dt><dd className="text-right font-semibold">{euros(calculo.total)}</dd>
+            <dd className="text-right">{calculo.irpf ? '−' : ''}{euros(calculo.irpf, f.moneda)}</dd>
+            <dt className="font-semibold">Total</dt><dd className="text-right font-semibold">{euros(calculo.total, f.moneda)}</dd>
           </dl>
         </div>
       )}
 
       <FilaCampos>
-        <Field label="Importe de tu factura (€)" htmlFor={`${uid}-importe`} required
+        <Field label={`Importe de tu factura (${simbolo(moneda)})`} htmlFor={`${uid}-importe`} required
           // Con desglose y aún sin total (sin horas), no se dice «ya puesto»: no hay nada puesto.
           hint={calculo ? (tocado ? undefined : sugerido
             ? 'Ya está puesto el total de tu desglose: cámbialo si tu factura dice otro importe'
@@ -349,6 +351,10 @@ export default function SubirFactura({ factura, alSubir, alNoFacturar, alDeshace
             // Texto y no una cifra de ejemplo: el «600,00» gris se leía como si fuera lo acordado.
             placeholder="Escribe el importe de tu factura" className={inputClass} />
         </Field>
+        <Field label="Moneda" required>
+          <Select<Moneda> value={moneda} onChange={setMoneda} ariaLabel="Moneda de tu factura"
+            options={MONEDAS.map((m) => ({ value: m, label: MONEDA_ES[m] }))} />
+        </Field>
         <Field label="Número de tu factura" htmlFor={`${uid}-numero`} required>
           <input autoComplete="off" id={`${uid}-numero`} value={numero} onChange={(e) => setNumero(e.target.value)}
             placeholder="Escribe el número de tu factura" maxLength={60} className={inputClass} />
@@ -358,13 +364,13 @@ export default function SubirFactura({ factura, alSubir, alNoFacturar, alDeshace
       {noCoincide && (
         <p className="rounded-md bg-warning-soft text-warning-soft-foreground px-3 py-2 text-xs">
           {calculo
-            ? <>La base de tu desglose ({euros(calculo.base)}) no coincide con lo acordado ({euros(f.importe_acordado)}). Puedes enviarla igual.</>
-            : <>El importe no coincide con lo acordado ({euros(f.importe_acordado)}). Puedes enviarla igual.</>}
+            ? <>La base de tu desglose ({euros(calculo.base, f.moneda)}) no coincide con lo acordado ({euros(f.importe_acordado, f.moneda)}). Puedes enviarla igual.</>
+            : <>El importe no coincide con lo acordado ({euros(f.importe_acordado, f.moneda)}). Puedes enviarla igual.</>}
         </p>
       )}
       {otroQueElDesglose && calculo && (
         <p className="text-xs text-muted-foreground">
-          Tu desglose da {euros(calculo.total)}. Escribe el total que pone tu factura: es lo que se compara con el PDF.
+          Tu desglose da {euros(calculo.total, f.moneda)}. Escribe el total que pone tu factura: es lo que se compara con el PDF.
         </p>
       )}
       {error && (

@@ -7,8 +7,8 @@ import { Button } from '@/shared/components/ui/button';
 import Select from '@/shared/components/ui/Select';
 import { inputClass } from '@/shared/lib/ui';
 import {
-  ESTADO, FORMA_PAGO_ES, diaDelPago, empresaCorta, euros, facturasColaboradorApi, fechaHora, primeraMayuscula, urlDelArchivo,
-  type CosteDeCampus, type EmpresaDelGrupo, type EstadoFactura, type FacturaDelMes, type VistaDeFacturas,
+  ESTADO, FORMA_PAGO_ES, diaDelPago, empresaCorta, enSusMonedas, euros, facturasColaboradorApi, fechaHora, primeraMayuscula, urlDelArchivo,
+  type CosteDeCampus, type EmpresaDelGrupo, type EstadoFactura, type FacturaDelMes, type SumaPorMoneda, type VistaDeFacturas,
 } from '../api/facturasColaborador.api';
 import { DeshacerPagoDialog, PagarDialog, RegistroDialog, errorDe, esMes } from './DialogosFacturas';
 import EtiquetaDelPdf from './EtiquetaDelPdf';
@@ -51,7 +51,7 @@ export default function ListaDeFacturas({ vista, empresas, empresa }: {
   const [periodo, setPeriodo] = useState('');
   const [estado, setEstado] = useState('');
   const [colaboradores, setColaboradores] = useState<{ id: number; nombre: string }[]>([]);
-  const [datos, setDatos] = useState<{ resumen: { total: number; importe: number; pendiente: number }; facturas: FacturaDelMes[] } | null>(null);
+  const [datos, setDatos] = useState<{ resumen: { total: number; importe: number; pendiente: number; por_moneda?: SumaPorMoneda<'importe' | 'pendiente'>[] }; facturas: FacturaDelMes[] } | null>(null);
   const [cargando, setCargando] = useState(true);
   const [marcadas, setMarcadas] = useState<Set<number>>(new Set());
   const [pagar, setPagar] = useState<FacturaDelMes[] | null>(null);
@@ -153,10 +153,10 @@ export default function ListaDeFacturas({ vista, empresas, empresa }: {
           <div className="flex flex-wrap items-center gap-3 px-4 py-2.5 border-b border-border text-sm">
             <span>
               <strong>{datos.resumen.total} {datos.resumen.total === 1 ? 'factura' : 'facturas'}</strong>
-              <span className="text-muted-foreground"> · {euros(datos.resumen.importe)}</span>
+              <span className="text-muted-foreground"> · {datos.resumen.por_moneda ? enSusMonedas(datos.resumen.por_moneda, 'importe') : euros(datos.resumen.importe)}</span>
             </span>
             {vista === 'por_pagar' && (
-              <span>Pendiente de pagar: <strong className="tabular-nums">{euros(datos.resumen.pendiente)}</strong></span>
+              <span>Pendiente de pagar: <strong className="tabular-nums">{datos.resumen.por_moneda ? enSusMonedas(datos.resumen.por_moneda.filter((s) => s.pendiente), 'pendiente') : euros(datos.resumen.pendiente)}</strong></span>
             )}
             {conCasillas && marcadas.size > 0 && (
               <Button size="sm" className="ml-auto" onClick={() => setPagar(filas.filter((f) => marcadas.has(f.id)))}>
@@ -203,7 +203,7 @@ export default function ListaDeFacturas({ vista, empresas, empresa }: {
                         <div className="text-xs text-muted-foreground mt-0.5 whitespace-nowrap">{f.numero_recepcion}<br />{fechaHora(f.subida_at)}</div>
                       )}
                     </td>
-                    <td className="px-2 py-2 text-right tabular-nums">{euros(f.importe)}</td>
+                    <td className="px-2 py-2 text-right tabular-nums">{euros(f.importe, f.moneda)}</td>
                     <td className="px-2 py-2 whitespace-nowrap">
                       {f.pagada_at ? (
                         <>
@@ -242,7 +242,7 @@ export default function ListaDeFacturas({ vista, empresas, empresa }: {
       </div>
 
       {pagar && (
-        <PagarDialog facturas={pagar.map((f) => ({ id: f.id, quien: quien(f), importe: f.importe }))}
+        <PagarDialog facturas={pagar.map((f) => ({ id: f.id, quien: quien(f), importe: f.importe, moneda: f.moneda }))}
           alCerrar={() => setPagar(null)} alGuardar={() => { setPagar(null); void cargar(); }} />
       )}
       {deshacer && (
@@ -300,7 +300,7 @@ export function CostePorCampus({ periodo, issuerId, recargar }: {
               {conEmpresa && <td className="px-3 py-2 whitespace-nowrap" title={c.empresa}>{empresaCorta(c.empresa)}</td>}
               <td className="px-3 py-2">{c.campus ?? <span className="text-muted-foreground">Toda la empresa</span>}</td>
               <td className="px-3 py-2 text-right tabular-nums">{c.horas === null ? '—' : c.horas.toLocaleString('es-ES')}</td>
-              <td className="px-3 py-2 text-right tabular-nums">{euros(c.importe)}</td>
+              <td className="px-3 py-2 text-right tabular-nums">{euros(c.importe, c.moneda)}</td>
               <td className="px-3 py-2 text-right tabular-nums">{c.facturas}</td>
             </tr>
           ))}
