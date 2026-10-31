@@ -8,10 +8,10 @@ import FilaCampos from '@/shared/components/ui/FilaCampos';
 import Select from '@/shared/components/ui/Select';
 import { inputClass } from '@/shared/lib/ui';
 import {
-  AREAS, AREA_ES, FORMAS_PAGO, FORMA_PAGO_ES, MODALIDADES, MODALIDAD_ES, diaDelPago, empresaCorta, euros, facturasColaboradorApi,
-  fechaHora, mesEscrito, normalizarImporte,
+  AREAS, AREA_ES, FORMAS_PAGO, FORMA_PAGO_ES, MODALIDADES, MODALIDAD_ES, MONEDAS, MONEDA_ES, diaDelPago, empresaCorta, euros,
+  enSusMonedas, facturasColaboradorApi, fechaHora, mesEscrito, normalizarImporte, simbolo,
   type Area, type Colaborador, type DesgloseDeFactura, type EmpresaDelColaborador, type EmpresaDelGrupo, type FormaPago,
-  type LineaRegistro, type Modalidad,
+  type LineaRegistro, type Modalidad, type Moneda,
 } from '../api/facturasColaborador.api';
 
 /** El marco de los diálogos de esta pantalla. */
@@ -49,14 +49,14 @@ export const errorDe = (err: any) => err?.data?.error || err?.message || 'Intén
 interface UsuarioColaborador { id: number; nombre: string; email: string }
 
 /** Una empresa marcada, tal como se escribe en el formulario (texto; vacío = sin poner). */
-interface FormEmpresa { acordado: string; modalidad: Modalidad | ''; fijo: string; tarifa: string; iva: string; irpf: string }
+interface FormEmpresa { acordado: string; moneda: Moneda; modalidad: Modalidad | ''; fijo: string; tarifa: string; iva: string; irpf: string }
 
 const texto = (v: number | string | null | undefined) => (v === null || v === undefined ? '' : String(v));
 const deLaFicha = (e: EmpresaDelColaborador): FormEmpresa => ({
-  acordado: texto(e.importe_acordado), modalidad: e.modalidad ?? '',
+  acordado: texto(e.importe_acordado), moneda: e.moneda || 'EUR', modalidad: e.modalidad ?? '',
   fijo: texto(e.importe_fijo), tarifa: texto(e.tarifa_hora), iva: texto(e.iva_pct), irpf: texto(e.irpf_pct),
 });
-const VACIA: FormEmpresa = { acordado: '', modalidad: '', fijo: '', tarifa: '', iva: '', irpf: '' };
+const VACIA: FormEmpresa = { acordado: '', moneda: 'EUR', modalidad: '', fijo: '', tarifa: '', iva: '', irpf: '' };
 /** Texto a número (vacío → null; mal escrito → NaN, para avisar). */
 const numero = (v: string) => (v.trim() === '' ? null : Number(normalizarImporte(v)));
 
@@ -111,6 +111,7 @@ export function ColaboradorDialog({ colaborador, empresas, alCerrar, alGuardar }
       return {
         issuer_id: id,
         importe_acordado: numero(f.acordado),
+        moneda: f.moneda,
         modalidad: f.modalidad || null,
         importe_fijo: f.modalidad === 'fijo' ? numero(f.fijo) : null,
         tarifa_hora: f.modalidad !== 'fijo' ? numero(f.tarifa) : null,
@@ -193,12 +194,20 @@ export function ColaboradorDialog({ colaborador, empresas, alCerrar, alGuardar }
                     {on && (
                       // Donde estaba, al lado del nombre, pero con su título en la misma línea: con «600»
                       // dentro no se sabía qué era (y debajo está «Fijo €/mes», que también puede llevar 600).
+                      <div className="flex flex-none items-center gap-2">
+                      {/* La moneda en que se acuerda y factura con esta empresa (247): Andrea, en dólares. */}
+                      <div className="w-36">
+                        <Select<Moneda> value={f.moneda} onChange={(v) => cambiar(e.id, 'moneda', v)}
+                          ariaLabel={`Moneda con ${e.razon_social}`}
+                          options={MONEDAS.map((m) => ({ value: m, label: MONEDA_ES[m] }))} />
+                      </div>
                       <label className="flex flex-none items-center gap-2">
-                        <span className="text-xs text-muted-foreground whitespace-nowrap">Acordado €/mes</span>
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">Acordado {simbolo(f.moneda)}/mes</span>
                         <input aria-label={`Importe acordado con ${e.razon_social}`} inputMode="decimal" autoComplete="off" placeholder="Opcional"
                           value={f.acordado} onChange={(ev) => cambiar(e.id, 'acordado', ev.target.value)}
                           className={`${inputClass} w-40`} />
                       </label>
+                      </div>
                     )}
                   </div>
                   {on && (
@@ -212,13 +221,13 @@ export function ColaboradorDialog({ colaborador, empresas, alCerrar, alGuardar }
                       </label>
                       {f.modalidad === 'fijo' ? (
                         <label className="space-y-1">
-                          <span className="text-xs text-muted-foreground">Fijo €/mes (base)</span>
+                          <span className="text-xs text-muted-foreground">Fijo {simbolo(f.moneda)}/mes (base)</span>
                           <input aria-label={`Importe fijo con ${e.razon_social}`} inputMode="decimal" autoComplete="off"
                             value={f.fijo} onChange={(ev) => cambiar(e.id, 'fijo', ev.target.value)} className={inputClass} />
                         </label>
                       ) : (
                         <label className="space-y-1">
-                          <span className="text-xs text-muted-foreground">Tarifa €/h</span>
+                          <span className="text-xs text-muted-foreground">Tarifa {simbolo(f.moneda)}/h</span>
                           <input aria-label={`Tarifa por hora con ${e.razon_social}`} inputMode="decimal" autoComplete="off"
                             disabled={!f.modalidad}
                             value={f.tarifa} onChange={(ev) => cambiar(e.id, 'tarifa', ev.target.value)} className={inputClass} />
@@ -383,7 +392,7 @@ const hoy = () => {
  * forma de pago y, si se quiere, el justificante. Una o varias a la vez.
  */
 export function PagarDialog({ facturas, alCerrar, alGuardar }: {
-  facturas: { id: number; quien: string; importe: number | string | null }[];
+  facturas: { id: number; quien: string; importe: number | string | null; moneda: Moneda }[];
   alCerrar: () => void; alGuardar: () => void;
 }) {
   const [fecha, setFecha] = useState(hoy());
@@ -391,7 +400,10 @@ export function PagarDialog({ facturas, alCerrar, alGuardar }: {
   const [referencia, setReferencia] = useState('');
   const [justificante, setJustificante] = useState<File | null>(null);
   const [guardando, setGuardando] = useState(false);
-  const total = facturas.reduce((s, f) => s + (f.importe === null ? 0 : Number(f.importe)), 0);
+  // Cada moneda por su lado (247): «356,03 US$ y 600,00 €».
+  const total = MONEDAS
+    .map((moneda) => ({ moneda, total: facturas.filter((f) => f.moneda === moneda).reduce((s, f) => s + (f.importe === null ? 0 : Number(f.importe)), 0) }))
+    .filter((t) => facturas.some((f) => f.moneda === t.moneda));
 
   async function guardar() {
     setGuardando(true);
@@ -410,10 +422,10 @@ export function PagarDialog({ facturas, alCerrar, alGuardar }: {
       <div className="space-y-4">
         {facturas.length > 1 && (
           <ul className="max-h-32 overflow-y-auto text-xs text-muted-foreground space-y-0.5">
-            {facturas.map((f) => <li key={f.id}>{f.quien} · {euros(f.importe)}</li>)}
+            {facturas.map((f) => <li key={f.id}>{f.quien} · {euros(f.importe, f.moneda)}</li>)}
           </ul>
         )}
-        <p className="text-sm">Total: <strong className="tabular-nums">{euros(total)}</strong></p>
+        <p className="text-sm">Total: <strong className="tabular-nums">{enSusMonedas(total, 'total')}</strong></p>
         <FilaCampos>
           <Field label="Fecha del pago" htmlFor="pago-fecha" required>
             <input id="pago-fecha" type="date" value={fecha} max={hoy()} onChange={(e) => setFecha(e.target.value)} className={inputClass} />
@@ -497,12 +509,12 @@ const valor = (k: string, v: unknown) => {
 };
 /** Lo de una empresa en la ficha: lo acordado y cómo cobra (segunda parte), con su IVA e IRPF. */
 const deLaEmpresa = (e: any) => {
-  const acordado = e.importe_acordado === null || e.importe_acordado === undefined ? 'sin importe acordado' : `${euros(e.importe_acordado)} acordados`;
+  const acordado = e.importe_acordado === null || e.importe_acordado === undefined ? 'sin importe acordado' : `${euros(e.importe_acordado, e.moneda)} acordados`;
   if (!e.modalidad) return `${acordado}, sin forma de cobro`;
   // En minúscula, que va a mitad de frase: «…, fijo de 600,00 €» / «…, por hora a 22,00 €/h».
   const como = e.modalidad === 'fijo'
-    ? `fijo de ${euros(e.importe_fijo)}`
-    : `${MODALIDAD_ES[e.modalidad as Modalidad].toLowerCase()} a ${euros(e.tarifa_hora)}/h`;
+    ? `fijo de ${euros(e.importe_fijo, e.moneda)}`
+    : `${MODALIDAD_ES[e.modalidad as Modalidad].toLowerCase()} a ${euros(e.tarifa_hora, e.moneda)}/h`;
   return `${acordado}, ${como} · IVA ${e.iva_pct} % · IRPF ${e.irpf_pct} %`;
 };
 
@@ -542,16 +554,16 @@ function detalleDe(l: LineaRegistro, nombreDe: (id: number) => string) {
   const d = l.detalle || {};
   const partes: string[] = [];
   if (d.archivo) partes.push(`${d.archivo}${d.tamano ? ` (${Math.ceil(Number(d.tamano) / 1024)} KB)` : ''}`);
-  if (d.importe !== undefined && d.importe !== null) partes.push(euros(d.importe as number));
+  if (d.importe !== undefined && d.importe !== null) partes.push(euros(d.importe as number, d.moneda as Moneda | undefined));
   if (d.numero_factura) partes.push(`n.º ${d.numero_factura}`);
   if (d.numero_recepcion) partes.push(String(d.numero_recepcion));
   // Lo que dice el PDF (13/10): lo leído, o que no se pudo leer; y si cuadra con lo escrito.
   if ('importe_pdf' in d) {
     if (d.importe_pdf === null) partes.push('PDF sin leer');
-    else partes.push(`PDF: ${euros(d.importe_pdf as number)}${d.cuadra === false ? ', no cuadra' : ''}`);
+    else partes.push(`PDF: ${euros(d.importe_pdf as number, d.moneda as Moneda | undefined)}${d.cuadra === false ? ', no cuadra' : ''}`);
   } else if (d.cuadra === false) {
     // Las subidas de antes del 13/10, cuando se comparaba con el desglose.
-    partes.push(`no cuadra (el desglose da ${euros(d.total as number)})`);
+    partes.push(`no cuadra (el desglose da ${euros(d.total as number, d.moneda as Moneda | undefined)})`);
   }
   // El pago (segunda parte).
   if (d.forma_pago) partes.push(`${FORMA_PAGO_ES[d.forma_pago as FormaPago] || d.forma_pago} del ${diaDelPago(String(d.fecha))}`);
@@ -596,10 +608,10 @@ function DesgloseDeLaFactura({ d }: { d: DesgloseDeFactura }) {
         )}
       </div>
       <dl className={`grid grid-cols-2 gap-x-4 gap-y-0.5 px-3 py-2 text-sm tabular-nums ${conLineas ? 'border-b border-border' : ''}`}>
-        <dt className="text-muted-foreground">Escrito por el colaborador</dt><dd className="text-right">{euros(d.importe)}</dd>
+        <dt className="text-muted-foreground">Escrito por el colaborador</dt><dd className="text-right">{euros(d.importe, d.moneda)}</dd>
         <dt className="text-muted-foreground">{d.es_pdf ? 'Lo que pone el PDF' : 'Lo que pone el archivo'}</dt>
         <dd className="text-right">
-          {d.importe_pdf !== null ? euros(d.importe_pdf)
+          {d.importe_pdf !== null ? euros(d.importe_pdf, d.moneda)
             : <span className="text-muted-foreground">{d.es_pdf ? 'no se pudo leer' : 'es una foto: no se lee'}</span>}
         </dd>
       </dl>
@@ -617,17 +629,17 @@ function DesgloseDeLaFactura({ d }: { d: DesgloseDeFactura }) {
               <td className="px-3 py-1.5">{l.concepto}</td>
               <td className="px-3 py-1.5">{l.campus ?? <span className="text-muted-foreground">—</span>}</td>
               <td className="px-3 py-1.5 text-right tabular-nums">{l.horas === null ? '—' : l.horas.toLocaleString('es-ES')}</td>
-              <td className="px-3 py-1.5 text-right tabular-nums">{l.tarifa === null ? '—' : `${euros(l.tarifa)}/h`}</td>
-              <td className="px-3 py-1.5 text-right tabular-nums">{euros(l.importe)}</td>
+              <td className="px-3 py-1.5 text-right tabular-nums">{l.tarifa === null ? '—' : `${euros(l.tarifa, d.moneda)}/h`}</td>
+              <td className="px-3 py-1.5 text-right tabular-nums">{euros(l.importe, d.moneda)}</td>
             </tr>
           ))}
         </tbody>
       </table>
       <dl className="grid grid-cols-2 gap-x-4 gap-y-0.5 border-t border-border px-3 py-2 text-sm tabular-nums">
-        <dt className="text-muted-foreground">Base</dt><dd className="text-right">{euros(d.base)}</dd>
-        <dt className="text-muted-foreground">IVA</dt><dd className="text-right">{euros(d.iva)}</dd>
-        <dt className="text-muted-foreground">IRPF</dt><dd className="text-right">{d.irpf ? `−${euros(d.irpf)}` : euros(d.irpf)}</dd>
-        <dt className="font-semibold">Total del desglose</dt><dd className="text-right font-semibold">{euros(d.total)}</dd>
+        <dt className="text-muted-foreground">Base</dt><dd className="text-right">{euros(d.base, d.moneda)}</dd>
+        <dt className="text-muted-foreground">IVA</dt><dd className="text-right">{euros(d.iva, d.moneda)}</dd>
+        <dt className="text-muted-foreground">IRPF</dt><dd className="text-right">{d.irpf ? `−${euros(d.irpf, d.moneda)}` : euros(d.irpf, d.moneda)}</dd>
+        <dt className="font-semibold">Total del desglose</dt><dd className="text-right font-semibold">{euros(d.total, d.moneda)}</dd>
       </dl>
       </>)}
     </div>

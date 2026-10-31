@@ -17,6 +17,15 @@ export const AREA_ES: Record<Area, string> = {
 
 export type EstadoFactura = 'sin_enviar' | 'enviado' | 'abierto' | 'recibida' | 'sin_factura' | 'anulada' | 'no_enviado' | 'caducado';
 
+// La moneda (247, 31/10): Andrea factura a CEDIA en dólares. No se convierte: cada una se suma por su lado.
+export const MONEDAS = ['EUR', 'USD'] as const;
+export type Moneda = typeof MONEDAS[number];
+export const MONEDA_ES: Record<Moneda, string> = { EUR: 'Euros (€)', USD: 'Dólares (US$)' };
+const SIMBOLO: Record<Moneda, string> = { EUR: '€', USD: 'US$' };
+export const simbolo = (m: Moneda | null | undefined) => SIMBOLO[m || 'EUR'] || SIMBOLO.EUR;
+/** Una suma en una moneda; los totales llegan así, una por moneda. */
+export type SumaPorMoneda<K extends string> = { moneda: Moneda } & Record<K, number>;
+
 export interface EmpresaDelGrupo { id: number; razon_social: string; nif: string }
 
 // Cómo cobra de cada empresa (#202, segunda parte, «Añadido 01/10 (tarde)»).
@@ -39,6 +48,8 @@ export type VistaDeFacturas = 'enviadas' | 'por_pagar' | 'pagadas' | 'historial'
  * `cuadra` null = no se pudo leer el PDF.
  */
 export interface DesgloseDeFactura {
+  /** La de la factura (247). */
+  moneda?: Moneda;
   importe: number | null; base: number | null; iva: number | null; irpf: number | null;
   total: number | null; horas: number | null; cuadra: boolean | null;
   importe_pdf: number | null; es_pdf: boolean;
@@ -49,6 +60,7 @@ export interface DesgloseDeFactura {
 export interface CosteDeCampus {
   issuer_id: number; empresa: string;
   project_id: number | null; campus: string | null; horas: number | null; importe: number; facturas: number;
+  moneda: Moneda;
 }
 
 /** «2026-06-05» → «05/06», como «transferencia del 05/10» en la definición. */
@@ -63,7 +75,7 @@ export interface ComoCobra {
   irpf_pct: number | string | null;
 }
 
-export interface EmpresaDelColaborador extends ComoCobra { issuer_id: number; razon_social: string; importe_acordado: number | string | null }
+export interface EmpresaDelColaborador extends ComoCobra { issuer_id: number; razon_social: string; importe_acordado: number | string | null; moneda?: Moneda }
 
 export interface Colaborador {
   id: number;
@@ -90,7 +102,7 @@ export interface ColaboradorEnvio {
   notas?: string | null;
   alta_desde?: string | null;
   empresas: {
-    issuer_id: number; importe_acordado: number | null;
+    issuer_id: number; importe_acordado: number | null; moneda: Moneda;
     modalidad: Modalidad | null; importe_fijo: number | null; tarifa_hora: number | null;
     iva_pct: number | null; irpf_pct: number | null;
   }[];
@@ -107,6 +119,7 @@ export interface FacturaDelMes {
   empresa: string;
   importe_esperado: string | null;
   importe: string | null;
+  moneda: Moneda;
   diferencia: string | null;
   numero_factura: string | null;
   numero_recepcion: string | null;
@@ -137,7 +150,11 @@ export interface FacturaDelMes {
 export interface Mes {
   periodo: string;
   mes: string;
-  resumen: { total: number; recibidas: number; importe_recibido: number; importe_acordado: number };
+  resumen: {
+    total: number; recibidas: number; importe_recibido: number; importe_acordado: number;
+    /** Cada moneda por su lado (247); `importe_recibido` e `importe_acordado` son solo los euros. */
+    por_moneda?: SumaPorMoneda<'importe_recibido' | 'importe_acordado'>[];
+  };
   facturas: FacturaDelMes[];
 }
 
@@ -163,6 +180,8 @@ export interface FacturaDelColaborador {
     cp: string | null; ciudad: string | null; pais: string | null; logo_url: string | null;
   };
   importe_acordado: number | null;
+  /** La de la factura: la de su ficha hasta que la sube (247). */
+  moneda?: Moneda;
   caduca_at: string | null;
   /** Cómo cobra de esta empresa (segunda parte). null: se sube sin desglose. */
   cobro: null | {
@@ -184,7 +203,8 @@ export interface FacturaDelColaborador {
 }
 
 /** El desglose tal como lo manda el formulario: las horas o las líneas (JSON). */
-export interface DesgloseEnvio { horas?: string; lineas?: string }
+/** Y la moneda en que la factura (247): sin ella, la de su ficha. */
+export interface DesgloseEnvio { horas?: string; lineas?: string; moneda?: Moneda }
 
 /** Una línea del desglose por proyecto, tal como se escribe. */
 export interface LineaForm { concepto: string; project_id: string; horas: string }
@@ -233,6 +253,7 @@ const subida = (archivo: File, importe: string, numeroFactura: string, desglose:
   fd.append('numero_factura', numeroFactura);
   if (desglose.horas !== undefined) fd.append('horas', desglose.horas);
   if (desglose.lineas !== undefined) fd.append('lineas', desglose.lineas);
+  if (desglose.moneda) fd.append('moneda', desglose.moneda);
   return fd;
 };
 
@@ -272,7 +293,7 @@ export const facturasColaboradorApi = {
 
   // ── Enviadas, Por pagar, Pagadas e Historial, y el coste por campus (segunda parte) ──
   vista: (f: { vista: VistaDeFacturas; issuerId?: string; colaboradorId?: string; periodo?: string; estado?: string }) =>
-    client.get(`${BASE}/facturas${query(f)}`) as R<{ vista: VistaDeFacturas; resumen: { total: number; importe: number; pendiente: number }; facturas: FacturaDelMes[] }>,
+    client.get(`${BASE}/facturas${query(f)}`) as R<{ vista: VistaDeFacturas; resumen: { total: number; importe: number; pendiente: number; por_moneda?: SumaPorMoneda<'importe' | 'pendiente'>[] }; facturas: FacturaDelMes[] }>,
   /**
    * El ZIP del mes de una empresa, como descarga. Con su propio fetch, como el
    * diploma de Certifex: `client` lee como texto lo que no es JSON y el ZIP se rompía.
@@ -344,7 +365,7 @@ export const mesEscrito = (v: string | null | undefined) => {
  * Aquí sirve para avisar en pantalla; al servidor se le manda lo escrito tal cual.
  */
 export function normalizarImporte(texto: string): string {
-  const t = texto.trim().replace(/\s|€/g, '');
+  const t = texto.trim().replace(/\s|€|\$/g, '');
   const coma = t.lastIndexOf(',');
   const punto = t.lastIndexOf('.');
   // Con los dos, el decimal es el que va último: «1.234,56» y «1,234.56».
@@ -363,8 +384,13 @@ const FORMATO_EUROS = {
   minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: 'always',
 } as unknown as Intl.NumberFormatOptions;
 
-export const euros = (n: number | string | null | undefined) =>
-  n === null || n === undefined || n === '' ? '—' : `${Number(n).toLocaleString('es-ES', FORMATO_EUROS)} €`;
+/** «3.600,00 €», o en la moneda que se le dé (247): «356,03 US$». */
+export const euros = (n: number | string | null | undefined, moneda?: Moneda | null) =>
+  n === null || n === undefined || n === '' ? '—' : `${Number(n).toLocaleString('es-ES', FORMATO_EUROS)} ${simbolo(moneda)}`;
+
+/** «356,03 US$ y 600,00 €»: una suma por moneda, sin convertir (247). Sin ninguna, «0,00 €». */
+export const enSusMonedas = <K extends string>(sumas: SumaPorMoneda<K>[] | undefined, k: K) =>
+  sumas?.length ? sumas.map((s) => euros(s[k], s.moneda)).join(' y ') : euros(0);
 
 /*
   Lo que dice el PDF frente a lo escrito (corrección de Diego del 13/10: «el
@@ -372,19 +398,19 @@ export const euros = (n: number | string | null | undefined) =>
 */
 
 /** «PDF: 650,00 € · escrito: 636,00 €». */
-export const pdfFrenteAEscrito = (importePdf: number | string | null | undefined, escrito: number | string | null | undefined) =>
-  `PDF: ${euros(importePdf)} · escrito: ${euros(escrito)}`;
+export const pdfFrenteAEscrito = (importePdf: number | string | null | undefined, escrito: number | string | null | undefined, moneda?: Moneda | null) =>
+  `PDF: ${euros(importePdf, moneda)} · escrito: ${euros(escrito, moneda)}`;
 
 /**
  * El aviso al colaborador una vez subida: si no cuadra, qué dice el PDF y qué
  * escribió; si no se pudo leer, que lo revisará administración; si cuadra, nada.
  */
-export function avisoDelPdf(r: { importe: number | null; importe_pdf?: number | null; cuadra: boolean | null; es_pdf?: boolean }): string | null {
+export function avisoDelPdf(r: { importe: number | null; importe_pdf?: number | null; cuadra: boolean | null; es_pdf?: boolean }, moneda?: Moneda | null): string | null {
   if (r.cuadra === true) return null;
   if (r.cuadra === false) {
     // Sin importe del PDF es una subida de antes del 13/10 (se comparaba con el desglose): ya no se dice nada.
     if (r.importe_pdf === null || r.importe_pdf === undefined) return null;
-    return `El PDF dice ${euros(r.importe_pdf)} y has escrito ${euros(r.importe)}. La hemos recibido igual; si te equivocaste, avisa a administración.`;
+    return `El PDF dice ${euros(r.importe_pdf, moneda)} y has escrito ${euros(r.importe, moneda)}. La hemos recibido igual; si te equivocaste, avisa a administración.`;
   }
   return r.es_pdf === false
     ? 'No hemos podido leer el importe de la foto; lo revisará administración.'

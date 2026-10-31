@@ -64,6 +64,7 @@ const EMPRESAS_VISIBLES = `
              'issuer_id', ce.issuer_id,
              'razon_social', ii.razon_social,
              'importe_acordado', ce.importe_acordado,
+             'moneda', ce.moneda,
              'modalidad', ce.modalidad,
              'importe_fijo', ce.importe_fijo,
              'tarifa_hora', ce.tarifa_hora,
@@ -121,7 +122,7 @@ export async function porId(id, issuerIds) {
 /** Sus empresas, todas, para saber qué cambia al guardar. */
 export async function empresasDe(colaboradorId, db = pool) {
   const { rows } = await db.query(
-    `SELECT issuer_id, importe_acordado, modalidad, importe_fijo, tarifa_hora, iva_pct, irpf_pct
+    `SELECT issuer_id, importe_acordado, moneda, modalidad, importe_fijo, tarifa_hora, iva_pct, irpf_pct
        FROM colaborador_empresas
       WHERE colaborador_id = $1 ORDER BY issuer_id`,
     [colaboradorId],
@@ -130,6 +131,7 @@ export async function empresasDe(colaboradorId, db = pool) {
   return rows.map((r) => ({
     issuer_id: Number(r.issuer_id),
     importe_acordado: num(r.importe_acordado),
+    moneda: r.moneda,
     modalidad: r.modalidad,
     importe_fijo: num(r.importe_fijo),
     tarifa_hora: num(r.tarifa_hora),
@@ -219,14 +221,16 @@ export async function ponerEmpresa(db, colaboradorId, empresa) {
   const c = comoCobra(empresa);
   await db.query(
     `INSERT INTO colaborador_empresas
-       (colaborador_id, issuer_id, importe_acordado, modalidad, importe_fijo, tarifa_hora, iva_pct, irpf_pct)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       (colaborador_id, issuer_id, importe_acordado, modalidad, importe_fijo, tarifa_hora, iva_pct, irpf_pct, moneda)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, COALESCE($9, 'EUR'))
      ON CONFLICT (colaborador_id, issuer_id) DO UPDATE SET
        importe_acordado = EXCLUDED.importe_acordado, modalidad = EXCLUDED.modalidad,
+       -- Sin moneda en lo que llega (una pantalla de antes), se queda la que tenía.
+       moneda = COALESCE($9, colaborador_empresas.moneda),
        importe_fijo = EXCLUDED.importe_fijo, tarifa_hora = EXCLUDED.tarifa_hora,
        iva_pct = EXCLUDED.iva_pct, irpf_pct = EXCLUDED.irpf_pct`,
     [colaboradorId, empresa.issuer_id, empresa.importe_acordado ?? null,
-      c.modalidad, c.importe_fijo, c.tarifa_hora, c.iva_pct, c.irpf_pct],
+      c.modalidad, c.importe_fijo, c.tarifa_hora, c.iva_pct, c.irpf_pct, empresa.moneda ?? null],
   );
 }
 
