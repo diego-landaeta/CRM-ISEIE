@@ -259,6 +259,35 @@ async function anotarCaducado(f, ip) {
   }
 }
 
+/**
+ * «Este mes no facturo a esta empresa» desde el enlace (Diego, 31/10). No le llega
+ * el recordatorio del día 5 ni sale como pendiente; se deshace con `deshacer` o
+ * subiendo la factura. Un enlace caducado, recibido o anulado no se toca.
+ */
+export async function sinFacturaPorEnlace(token, { motivo = null, deshacer = false } = {}, ip) {
+  const f = await model.porTokenHash(huella(token));
+  if (!f) throw ENLACE_NO_VALE();
+  await anotarCaducado(f, ip);
+  await enTransaccion(async (db) => {
+    const fila = await model.bloquear(db, f.id);
+    if (fila.anulada_at) throw new AppError('Esta factura se anuló: te llegará un enlace nuevo', 409, 'ANULADA');
+    if (fila.subida_at) throw new AppError('Esta factura ya está recibida', 409, 'YA_SUBIDA');
+    if (fila.caduca_at && new Date(fila.caduca_at) < new Date()) {
+      throw new AppError('Este enlace ha caducado: pide uno nuevo a administración', 410, 'CADUCADO');
+    }
+    if (deshacer) {
+      await model.quitarSinFactura(db, f.id);
+      await anotar(db, { facturaId: f.id, evento: 'sin_factura_deshecho', ip });
+    } else {
+      const m = typeof motivo === 'string' ? motivo.trim().slice(0, 300) : '';
+      await model.marcarSinFactura(db, f.id, m || null);
+      await anotar(db, { facturaId: f.id, evento: 'sin_factura', ip, detalle: m ? { motivo: m } : null });
+    }
+  });
+  const ahora = await model.porTokenHash(huella(token));
+  return conCampus(paraElColaborador(ahora), ahora.issuer_id);
+}
+
 export async function verEnlace(token, ip) {
   const f = await model.porTokenHash(huella(token));
   if (!f) throw ENLACE_NO_VALE();
