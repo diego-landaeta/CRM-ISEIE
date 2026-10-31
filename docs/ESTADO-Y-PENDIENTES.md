@@ -18,6 +18,27 @@ salvo la marca y las rutas.
 
 ---
 
+## Cierre de octubre · 31 de octubre de 2026
+
+- Los dos CRM, en la **2.5.14**: 46 versiones en octubre, de la 2.1.0 (07/10) a la 2.5.14 (31/10), siempre a la par.
+- GitHub en octubre, en los 12 repositorios: **91 issues cerradas, 140 nuevas, 1.468 commits y 466 PR fusionadas**. Quedan 117 abiertas. Las issues de CRM-ISEIE no cuentan aparte: son las gemelas de las del 360.
+- La última semana: asignación de leads por actividad (2.5.0–2.5.6), pulsaciones del botón de WhatsApp de las webs (2.5.8–2.5.9), la actividad de WhatsApp de cada gestora (2.5.11) y, en las facturas de colaboradores, «este mes no facturo» (2.5.13) y la moneda (2.5.14).
+- Cerradas el 31/10 por estar comprobadas: diego-landaeta/CRM#221 y CRM#67, y aquí su gemela #70.
+- **Los números de abajo son de las issues del 360 (diego-landaeta/CRM)**: aquí están sus gemelas. Las 11 en revisión tienen un comentario «Estado al 31/10».
+
+**Lo que abrimos en noviembre** (issue «Noviembre 2026 · lo que abrimos»):
+
+- **Diana:** primero, cerrar sus PR de correcciones #482–#485, que desbloquean 7 issues ya en /testeo (consultas de alumnos, matrículas y formularios). Después, la #203 parte B (PR #570) y su lista: #79, #167, #253, #474, #212, #34/#78 y, al final, #66.
+- **Ángel:** sus 7 PR a producción (#574–#580), que revisa Diego; YourCVPassport #3 y #4 (falta un correo real de confirmación); YourCVPassport #10; Certifex #96 (falta el OK de Carlos) y #103; Zadarma #137.
+- **Hugo:** #219, #223 y #346. Además, la #222 sube cuando Diego la revise.
+- **Claude:** #586; las 11 gemelas de CRM-ISEIE abiertas con la del 360 cerrada (llevarlas o cerrarlas); subir #524 y #222 tras la revisión; después #245, #270, #461 y #218.
+- **Diego:** revisar las PR del equipo y decidir la #484.
+
+Lo que va solo: del 1 al 4/11 se recuperan las facturas de colaborador de octubre que falten; el 5/11 sale el recordatorio; el resumen de tareas, de lunes a viernes a las 18:00 de Venezuela.
+
+---
+
+
 ## Dónde está cada cosa
 
 ```mermaid
