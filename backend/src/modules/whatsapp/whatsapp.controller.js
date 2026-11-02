@@ -5,6 +5,7 @@ import { proyectosDelAmbito, comoLista } from '../../shared/utils/ambito.js';
 import { actividadEnWhatsapp } from './actividad.model.js';
 import { usuarioObjetivo } from './chat.controller.js';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
+import { soloLoSuyo } from '../../shared/utils/roles.js';
 
 function proyecto(req) {
   const p = req.query.projectId || req.body?.projectId;
@@ -145,7 +146,7 @@ export async function cola(req, res, next) {
   try {
     // Una gestora ve SU cola, ignorando lo que pida por query. Un admin puede
     // mirar la de quien quiera, o la de todos si no pide a nadie.
-    const responsableId = req.user.role === 'gestor'
+    const responsableId = soloLoSuyo(req.user)
       ? req.user.userId
       : (req.query.responsableId ? parseInt(req.query.responsableId) : null);
 
