@@ -10,6 +10,12 @@ vi.mock('../src/shared/config/db.js', () => {
   const query = vi.fn(async () => ({ rows: [], rowCount: 0 }));
   return { default: { query }, query, getClient: vi.fn() };
 });
+// Desde el arreglo de Hugo (las listas, solo de los campus de cada uno), la lista mira
+// los campus de quien pide: aquí todos llevan el campus 3, que es el que piden.
+vi.mock('../src/shared/utils/ambito.js', async (orig) => ({
+  ...(await orig()),
+  campusDeLaPersona: vi.fn(async () => [3]),
+}));
 vi.mock('../src/modules/leads/lead.service.js', () => ({
   list: vi.fn(async () => ({ leads: [], total: 0, page: 1, limit: 20, totalPages: 0 })),
 }));
