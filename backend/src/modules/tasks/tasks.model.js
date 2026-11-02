@@ -236,7 +236,8 @@ export async function findTasks({
   if (area_id != null) add('t.area_id = $?', area_id);
   if (status) add('t.status = $?', status);
   if (priority) add('t.priority = $?', priority);
-  if (search) add('(t.title ILIKE $? OR t.description ILIKE $?)', `%${search}%`);
+  // Sin acentos (gemela de CRM#591): «campana» encuentra «campaña». Necesita la 248.
+  if (search) add(`(unaccent(t.title) ILIKE unaccent($?) OR unaccent(COALESCE(t.description, '')) ILIKE unaccent($?))`, `%${search}%`);
   if (tag) add('EXISTS (SELECT 1 FROM task_tags tg WHERE tg.task_id = t.id AND LOWER(tg.name) = LOWER($?))', tag);
   if (vencidas) conditions.push(`t.due_date < NOW() AND t.status <> 'hecha'`);
   // El rango es de dias enteros DE LA OFICINA (APP_TIMEZONE), como el
