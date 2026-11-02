@@ -460,12 +460,14 @@ const FACTURA_DE = (param) => `(i.created_by = ${param}
         AND EXISTS (SELECT 1 FROM user_projects up
                      WHERE up.user_id = ${param} AND up.project_id = i.project_id AND up.active)))`;
 
-export async function list({ projectId, issuerId, estado, search, from, to, tipo, responsableId, page = 1, limit = 50 }) {
+export async function list({ projectId, projectIds, issuerId, estado, search, from, to, tipo, responsableId, page = 1, limit = 50 }) {
   const conds = [];
   const params = [];
   let idx = 1;
   if (issuerId)  { conds.push(MISMA_SOCIEDAD('i.issuer_id', `$${idx++}`)); params.push(issuerId); }
   if (projectId) { conds.push(`i.project_id = $${idx++}`); params.push(projectId); }
+  // Los campus de quien mira (#591): null es «todos» (superadmin y soporte).
+  if (Array.isArray(projectIds)) { conds.push(`i.project_id = ANY($${idx++}::int[])`); params.push(projectIds); }
   // Gestor: solo ve las SUYAS (ver FACTURA_DE). Admin/superadmin ven todas.
   if (responsableId) { conds.push(FACTURA_DE(`$${idx++}`)); params.push(responsableId); }
   // La pestana Facturas muestra tambien las PROFORMAS. Comparten el mismo
@@ -533,12 +535,13 @@ export async function list({ projectId, issuerId, estado, search, from, to, tipo
 //
 // Y con LOS MISMOS FILTROS que la lista (#233, Manuel 03/10: «poner una fecha y que
 // no agarre»): con septiembre puesto, las tarjetas decían el acumulado de siempre.
-export async function getStats({ projectId, issuerId, from, to, estado } = {}) {
+export async function getStats({ projectId, projectIds, issuerId, from, to, estado } = {}) {
   const conds = [`tipo <> 'proforma'`];
   const params = [];
   let idx = 1;
   if (issuerId)  { conds.push(MISMA_SOCIEDAD('issuer_id', `$${idx++}`));  params.push(issuerId); }
   if (projectId) { conds.push(`project_id = $${idx++}`); params.push(projectId); }
+  if (Array.isArray(projectIds)) { conds.push(`project_id = ANY($${idx++}::int[])`); params.push(projectIds); }
   if (from)      { conds.push(`fecha_emision >= $${idx++}`); params.push(from); }
   if (to)        { conds.push(`fecha_emision <= $${idx++}`); params.push(to); }
   if (estado)    { conds.push(`estado = $${idx++}`); params.push(estado); }
