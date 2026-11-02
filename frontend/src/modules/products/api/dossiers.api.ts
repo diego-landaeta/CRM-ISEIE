@@ -41,15 +41,15 @@ export async function uploadDossier(
     headers: { 'Content-Type': 'multipart/form-data' },
     onUploadProgress: onProgress,
   });
-  return data.data;
+  return data;
 }
 
 export async function getDossierUrl(id: number, projectId: number): Promise<{ url: string; expiresAt?: string }> {
   const { data } = await client.get(`/dossiers/${id}/url`, { params: { projectId } });
-  return data.data;
+  return data;
 }
 
 export async function getDossierHistory(productId: number, projectId: number): Promise<Dossier[]> {
   const { data } = await client.get(`/dossiers/product/${productId}/history`, { params: { projectId } });
-  return data.data;
+  return data;
 }
