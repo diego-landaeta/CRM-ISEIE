@@ -120,6 +120,13 @@ export const adminSetPasswordSchema = z.object({
   path: ['confirmPassword'],
 });
 
+// El buscador (Ctrl K, gemela de CRM#591): por nombre o correo, pocos resultados.
+export const buscarUsersSchema = z.object({
+  q: z.string().trim().min(2, 'Escribe al menos dos letras').max(100),
+  projectIds: z.string().optional().transform((v) => (v ? v.split(',').map(Number).filter((n) => Number.isInteger(n) && n > 0) : null)),
+  limit: z.coerce.number().int().positive().max(10).default(5),
+});
+
 export const listUsersSchema = z.object({
   active: z.enum(['true', 'false']).optional(),
   role: z.enum(['superadmin', 'admin', 'gestor', 'soporte', 'tutor', 'colaborador']).optional(),
