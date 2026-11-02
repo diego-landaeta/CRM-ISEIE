@@ -120,7 +120,8 @@ const SIMBOLOS_NO_WINANSI = {
   '₿': 'BTC ', '₵': 'GHS ', '₾': 'GEL ',
 };
 function winAnsi(t) {
-  let out = String(t ?? '');
+  // «n⁰», «n°»: el cero volado (U+2070) se escribe como «º», que WinAnsi sí tiene.
+  let out = String(t ?? '').replace(/⁰/g, 'º');
   for (const [sym, iso] of Object.entries(SIMBOLOS_NO_WINANSI)) out = out.split(sym).join(iso);
   // OJO: WinAnsi (CP1252) SI admite caracteres fuera de Latin-1 — el euro entre
   // ellos. Filtrar solo por Latin-1 se cargaba el simbolo de TODOS los importes.
@@ -133,6 +134,21 @@ function winAnsi(t) {
     if (cp <= 0xFF || EXTRAS.has(cp)) res += ch;
   }
   return res;
+}
+
+/**
+ * La fuente del PDF, con el texto limpio SIEMPRE (02/11/2026). Muchos `drawText`
+ * no pasaban por winAnsi(): la dirección de un cliente con «n⁰» (cero volado,
+ * U+2070) hacía reventar la factura ICTESS 2026/0111 de Yosbely, que no se podía
+ * descargar, generar ni enviar. Limpiando dentro de la fuente vale para todo lo
+ * que se dibuje con ella, también lo que se añada después.
+ */
+export function fuenteSegura(f) {
+  const codificar = f.encodeText.bind(f);
+  const ancho = f.widthOfTextAtSize.bind(f);
+  f.encodeText = (t) => codificar(winAnsi(t));
+  f.widthOfTextAtSize = (t, size) => ancho(winAnsi(t), size);
+  return f;
 }
 
 // Formatea un importe en la moneda de la factura (por defecto EUR). Los importes
@@ -247,8 +263,8 @@ export async function generatePDF(invoiceId, { preliminar = false, vistaGestor =
 
   const pdfDoc = await PDFDocument.create();
   const page = pdfDoc.addPage([595, 842]); // A4
-  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  const font = fuenteSegura(await pdfDoc.embedFont(StandardFonts.Helvetica));
+  const bold = fuenteSegura(await pdfDoc.embedFont(StandardFonts.HelveticaBold));
   const black = rgb(0, 0, 0);
   const gray = rgb(0.4, 0.4, 0.4);
   const lightGray = rgb(0.92, 0.92, 0.92);
