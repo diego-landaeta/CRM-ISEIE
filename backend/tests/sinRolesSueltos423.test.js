@@ -23,27 +23,21 @@ const COMPARA_ROL = /role\b\s*(===|!==)|\.includes\([a-zA-Z_.?]*\.role\)|tieneRo
 
 /** Lo que queda, y por qué no es un permiso. */
 const DECLARADAS = {
-  'accounting/accounting.controller.js': [1, 'alcance: la gestora, sus cuentas por cobrar'],
   'auth/auth.model.js': [1, 'alcance: los campus que ve el superadmin'],
   'auth/auth.service.js': [1, 'comportamiento: la clave de webhook solo se enseña a admin'],
   'connectors/connectors.controller.js': [4, 'alcance: el superadmin ve los conectores de todos los campus'],
-  'conversions/conversion.controller.js': [6, 'alcance: la gestora, sus ventas'],
   'facturas-colaborador/facturas-colaborador.service.js': [1, 'alcance: el superadmin, todas las empresas'],
   'feedback/feedback.controller.js': [1, 'alcance: la gestora, sus prospectos'],
-  'invoices/invoices.controller.js': [2, 'alcance: la gestora, sus facturas; filtrar por empresa'],
+  'invoices/invoices.controller.js': [1, 'alcance: la gestora, sus facturas; filtrar por empresa'],
   'invoices/invoices.model.js': [1, 'alcance: admin y superadmin, todas las facturas'],
-  'invoices/invoices.service.js': [1, 'alcance: la gestora cobra sus proformas'],
-  'leads/lead.controller.js': [5, 'alcance: la gestora, sus prospectos'],
   'leads/lead.model.js': [1, 'alcance: el resumen del día de la gestora'],
-  'leads/lead.service.js': [4, 'alcance y comportamiento: interacciones propias; el reparto no da a tutores'],
+  'leads/lead.service.js': [2, 'alcance y comportamiento: interacciones propias; el reparto no da a tutores'],
   'mcp/mcp.acceso.js': [1, 'alcance: soloLoSuyo, lo que ve por el MCP quien no es admin'],
   'mcp/mcp.actividad.js': [1, 'alcance: el superadmin ve la actividad de todos'],
   'mcp/mcp.controller.js': [4, 'alcance y avisos: soloLoSuyo, por qué un rol no se marca, campus'],
   'mcp/mcp.model.js': [2, 'alcance: personas y campus de quien pregunta'],
   'notifications/notifications.service.js': [1, 'alcance: qué avisos ve cada uno'],
   'proceso/proceso.ambito.js': [1, 'alcance: qué campus entran en la cola'],
-  'sales/sales.controller.js': [4, 'alcance: la gestora, sus ventas'],
-  'sales/sales.goals.js': [2, 'alcance: la gestora, su meta'],
   'sales/sales.service.js': [1, 'comportamiento: a quién se asigna la venta'],
   // Equipos (26/10/2026): quién mueve, comenta y aprueba UNA tarea es alcance,
   // no quién entra a una pantalla (eso sigue en el catálogo: tasks.*).
@@ -60,7 +54,6 @@ const DECLARADAS = {
   'asignacion/asignacion.controller.js': [3, 'alcance: el superadmin ve todas las configuraciones de la asignación; la de todas las empresas, solo él'],
   'whatsapp/chat.controller.js': [2, 'alcance: supervisar solo a quien comparte campus'],
   'whatsapp/roles.js': [2, 'comportamiento: por qué un rol no tiene WhatsApp (el motivo que se enseña)'],
-  'whatsapp/whatsapp.controller.js': [1, 'alcance: la gestora, su cola'],
 };
 
 function ficheros(dir) {

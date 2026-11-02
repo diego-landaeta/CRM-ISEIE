@@ -11,6 +11,7 @@ import {
 } from './conversion.validation.js';
 import { METODOS_QUE_DISPARAN } from '../webhooks-salientes/webhooks-salientes.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
+import { soloLoSuyo } from '../../shared/utils/roles.js';
 
 export async function create(req, res, next) {
   try {
@@ -27,7 +28,7 @@ export async function list(req, res, next) {
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
     const filters = { ...parsed.data };
     // SEGURIDAD: gestor solo ve sus propias ventas, ignora filtro responsableId externo.
-    if (req.user.role === 'gestor') {
+    if (soloLoSuyo(req.user)) {
       filters.responsableId = req.user.userId;
     }
     const result = await conversionService.list(filters);
@@ -52,7 +53,7 @@ export async function cuotas(req, res, next) {
     if (!from || !to) throw new AppError('Hacen falta las dos fechas', 400, 'VALIDATION_ERROR');
 
     let responsableId = req.query.responsableId ? parseInt(req.query.responsableId, 10) : null;
-    if (req.user.role === 'gestor') responsableId = req.user.userId;
+    if (soloLoSuyo(req.user)) responsableId = req.user.userId;
 
     const data = await conversionModel.cuotasDelPeriodo({
       projectId: req.query.projectId ? parseInt(req.query.projectId, 10) : null,
@@ -74,7 +75,7 @@ export async function filas(req, res, next) {
     if (!from || !to) throw new AppError('Hacen falta las dos fechas', 400, 'VALIDATION_ERROR');
     let responsableId = req.query.responsableId ? parseInt(req.query.responsableId, 10) : null;
     // Igual que en el listado: una gestora ve lo suyo, escriba lo que escriba.
-    if (req.user.role === 'gestor') responsableId = req.user.userId;
+    if (soloLoSuyo(req.user)) responsableId = req.user.userId;
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));
     const r = await conversionModel.filasDelPeriodo({
@@ -131,7 +132,7 @@ export async function removePayment(req, res, next) {
     const paymentId = parseInt(req.params.paymentId);
     if (isNaN(paymentId)) throw new AppError('ID invalido', 400, 'INVALID_ID');
     // RBAC: gestor solo puede borrar pagos de leads asignados a él.
-    if (req.user.role === 'gestor') {
+    if (soloLoSuyo(req.user)) {
       const { getPaymentOwnership } = await import('./conversion.model.js');
       const own = await getPaymentOwnership(paymentId);
       if (!own) throw new AppError('Pago no encontrado', 404, 'PAYMENT_NOT_FOUND');
@@ -161,7 +162,7 @@ export async function remove(req, res, next) {
     // RBAC: gestor solo puede borrar conversiones de sus propios leads
     const existing = await conversionService.getById(id);
     if (!existing) throw new AppError('Conversión no encontrada', 404, 'CONVERSION_NOT_FOUND');
-    if (req.user.role === 'gestor') {
+    if (soloLoSuyo(req.user)) {
       const { rows } = await (await import('../../shared/config/db.js')).query(
         `SELECT responsable_id FROM leads WHERE id = $1`, [existing.lead_id]
       );
@@ -284,7 +285,7 @@ export async function listProductos(req, res, next) {
   try {
     const projectId = req.query.projectId ? parseInt(req.query.projectId) : null;
     let responsableId = req.query.responsableId ? parseInt(req.query.responsableId) : null;
-    if (req.user.role === 'gestor') responsableId = req.user.userId;
+    if (soloLoSuyo(req.user)) responsableId = req.user.userId;
     const data = await conversionService.listProductos({ projectId, responsableId });
     res.json({ success: true, data });
   } catch (err) { next(err); }

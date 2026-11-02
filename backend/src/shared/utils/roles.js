@@ -97,3 +97,29 @@ export function limpiaRolesExtra(extra, principal) {
 export function sinPermiso() {
   return new AppError('No tienes permisos para esta accion', 403, 'FORBIDDEN');
 }
+
+
+/*
+  «SOLO LO SUYO»: el ALCANCE comercial (Diego, 02/11/2026: «arréglalo tú de una vez»).
+
+  Antes se decidía con `req.user.role === 'gestor'`, el rol PRINCIPAL. Así un
+  project manager —que el catálogo trata «como una gestora»— y quien tiene la
+  gestora como rol añadido veían todos los prospectos, ventas, conversiones y
+  facturas de su campus en vez de solo los suyos.
+
+  Es solo lo suyo quien no tiene ningún rol que vea el campus entero (super
+  admin, admin, soporte) y tiene alguno comercial propio (gestora, project
+  manager), sea el principal o uno añadido. Un admin con la gestora añadida
+  sigue viéndolo todo; un tutor con la gestora añadida, solo lo suyo.
+
+  Es ALCANCE (qué datos ve), no la puerta (si entra): esa la deciden los
+  permisos del catálogo (#423).
+*/
+const VEN_TODO_EL_CAMPUS = ['superadmin', 'admin', 'soporte'];
+const COMERCIAL_PROPIO = ['gestor', 'project_manager'];
+
+export function soloLoSuyo(user) {
+  const suyos = rolesDe(user);
+  if (suyos.some((r) => VEN_TODO_EL_CAMPUS.includes(r))) return false;
+  return suyos.some((r) => COMERCIAL_PROPIO.includes(r));
+}
