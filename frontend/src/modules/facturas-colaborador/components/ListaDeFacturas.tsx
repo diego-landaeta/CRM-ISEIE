@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowClockwise, ArrowCounterClockwise, ClockCounterClockwise, CurrencyEur, FileText, Receipt } from '@phosphor-icons/react';
+import { ArrowClockwise, FileText } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
 import usePermission from '@/shared/hooks/usePermission';
 import EmptyState from '@/shared/components/ui/EmptyState';
@@ -12,6 +12,7 @@ import {
 } from '../api/facturasColaborador.api';
 import { DeshacerPagoDialog, PagarDialog, RegistroDialog, errorDe, esMes } from './DialogosFacturas';
 import EtiquetaDelPdf from './EtiquetaDelPdf';
+import LeyendaFacturas, { ACCION } from './LeyendaFacturas';
 
 /*
   Las pestañas de la segunda parte (#202, «Añadido 01/10 (tarde)»):
@@ -160,7 +161,7 @@ export default function ListaDeFacturas({ vista, empresas, empresa }: {
             )}
             {conCasillas && marcadas.size > 0 && (
               <Button size="sm" className="ml-auto" onClick={() => setPagar(filas.filter((f) => marcadas.has(f.id)))}>
-                <CurrencyEur size={13} className="mr-1.5" /> Marcar pagadas ({marcadas.size})
+                <ACCION.pagar.Icono size={13} className="mr-1.5" /> Marcar pagadas ({marcadas.size})
               </Button>
             )}
           </div>
@@ -219,17 +220,17 @@ export default function ListaDeFacturas({ vista, empresas, empresa }: {
                     <td className="px-2 py-2">
                       <div className="flex justify-end gap-0.5">
                         {f.nombre_original && (
-                          <Button variant="ghost" size="sm" className="px-2" title="Ver el archivo" aria-label="Ver el archivo" onClick={() => abrir(f, 'archivo')}><FileText size={15} /></Button>
+                          <Button variant="ghost" size="sm" className="px-2" title="Ver el archivo" aria-label="Ver el archivo" onClick={() => abrir(f, 'archivo')}><ACCION.archivo.Icono size={15} /></Button>
                         )}
-                        <Button variant="ghost" size="sm" className="px-2" title="Ver el registro" aria-label="Ver el registro" onClick={() => setRegistro(f)}><ClockCounterClockwise size={15} /></Button>
+                        <Button variant="ghost" size="sm" className="px-2" title="Ver el registro" aria-label="Ver el registro" onClick={() => setRegistro(f)}><ACCION.registro.Icono size={15} /></Button>
                         {puedePagar && f.subida_at && !f.anulada_at && !f.pagada_at && (
-                          <Button variant="ghost" size="sm" className="px-2" title="Marcar pagada" aria-label="Marcar pagada" onClick={() => setPagar([f])}><CurrencyEur size={15} /></Button>
+                          <Button variant="ghost" size="sm" className="px-2" title="Marcar pagada" aria-label="Marcar pagada" onClick={() => setPagar([f])}><ACCION.pagar.Icono size={15} /></Button>
                         )}
                         {f.pagada_at && f.con_justificante && (
-                          <Button variant="ghost" size="sm" className="px-2" title="Ver el justificante" aria-label="Ver el justificante" onClick={() => abrir(f, 'justificante')}><Receipt size={15} /></Button>
+                          <Button variant="ghost" size="sm" className="px-2" title="Ver el justificante" aria-label="Ver el justificante" onClick={() => abrir(f, 'justificante')}><ACCION.justificante.Icono size={15} /></Button>
                         )}
                         {puedePagar && f.pagada_at && (
-                          <Button variant="ghost" size="sm" className="px-2" title="Deshacer el pago" aria-label="Deshacer el pago" onClick={() => setDeshacer(f)}><ArrowCounterClockwise size={15} /></Button>
+                          <Button variant="ghost" size="sm" className="px-2" title="Deshacer el pago" aria-label="Deshacer el pago" onClick={() => setDeshacer(f)}><ACCION.deshacer.Icono size={15} /></Button>
                         )}
                       </div>
                     </td>
@@ -240,6 +241,9 @@ export default function ListaDeFacturas({ vista, empresas, empresa }: {
           </div>
         )}
       </div>
+
+      {/* Qué es cada botón y cada estado (#586), también en Enviadas, Por pagar, Pagadas e Historial. */}
+      {filas.length > 0 && <LeyendaFacturas />}
 
       {pagar && (
         <PagarDialog facturas={pagar.map((f) => ({ id: f.id, quien: quien(f), importe: f.importe, moneda: f.moneda }))}
