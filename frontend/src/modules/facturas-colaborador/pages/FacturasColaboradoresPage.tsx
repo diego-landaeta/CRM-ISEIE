@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
-  ArrowClockwise, ArrowCounterClockwise, ClockCounterClockwise, CurrencyEur, FileText, FileZip, LockKey, PaperPlaneTilt, PencilSimple, Plus, Prohibit,
-  Receipt, UserMinus, UserPlus, UsersThree,
+  ArrowClockwise, ClockCounterClockwise, FileText, FileZip, LockKey, PencilSimple, Plus,
+  UserMinus, UserPlus, UsersThree,
 } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
 import usePermission from '@/shared/hooks/usePermission';
@@ -22,6 +22,7 @@ import {
 } from '../components/DialogosFacturas';
 import ListaDeFacturas, { CostePorCampus } from '../components/ListaDeFacturas';
 import EtiquetaDelPdf from '../components/EtiquetaDelPdf';
+import LeyendaFacturas, { ACCION } from '../components/LeyendaFacturas';
 
 /**
  * Finanzas › Facturas de colaboradores (#202).
@@ -341,24 +342,24 @@ function DelMes({ empresas, empresa }: { empresas: EmpresaDelGrupo[]; empresa: n
                     <td className="px-2 py-2">
                       <div className="flex justify-end gap-0.5">
                         {f.nombre_original && (
-                          <Button variant="ghost" size="sm" className="px-2" title="Ver el archivo" aria-label="Ver el archivo" onClick={() => verArchivo(f)}><FileText size={15} /></Button>
+                          <Button variant="ghost" size="sm" className="px-2" title="Ver el archivo" aria-label="Ver el archivo" onClick={() => verArchivo(f)}><ACCION.archivo.Icono size={15} /></Button>
                         )}
-                        <Button variant="ghost" size="sm" className="px-2" title="Ver el registro" aria-label="Ver el registro" onClick={() => setRegistro(f)}><ClockCounterClockwise size={15} /></Button>
+                        <Button variant="ghost" size="sm" className="px-2" title="Ver el registro" aria-label="Ver el registro" onClick={() => setRegistro(f)}><ACCION.registro.Icono size={15} /></Button>
                         {puedeReenviar && !f.subida_at && !f.anulada_at && (
                           <Button variant="ghost" size="sm" className="px-2" title="Reenviar el enlace" aria-label="Reenviar el enlace"
-                            disabled={reenviando !== null} onClick={() => reenviar(f)}><PaperPlaneTilt size={15} /></Button>
+                            disabled={reenviando !== null} onClick={() => reenviar(f)}><ACCION.reenviar.Icono size={15} /></Button>
                         )}
                         {puedePagar && f.subida_at && !f.anulada_at && !f.pagada_at && (
-                          <Button variant="ghost" size="sm" className="px-2" title="Marcar pagada" aria-label="Marcar pagada" onClick={() => setPagar(f)}><CurrencyEur size={15} /></Button>
+                          <Button variant="ghost" size="sm" className="px-2" title="Marcar pagada" aria-label="Marcar pagada" onClick={() => setPagar(f)}><ACCION.pagar.Icono size={15} /></Button>
                         )}
                         {f.pagada_at && f.con_justificante && (
-                          <Button variant="ghost" size="sm" className="px-2" title="Ver el justificante" aria-label="Ver el justificante" onClick={() => verJustificante(f)}><Receipt size={15} /></Button>
+                          <Button variant="ghost" size="sm" className="px-2" title="Ver el justificante" aria-label="Ver el justificante" onClick={() => verJustificante(f)}><ACCION.justificante.Icono size={15} /></Button>
                         )}
                         {puedePagar && f.pagada_at && (
-                          <Button variant="ghost" size="sm" className="px-2" title="Deshacer el pago" aria-label="Deshacer el pago" onClick={() => setDeshacer(f)}><ArrowCounterClockwise size={15} /></Button>
+                          <Button variant="ghost" size="sm" className="px-2" title="Deshacer el pago" aria-label="Deshacer el pago" onClick={() => setDeshacer(f)}><ACCION.deshacer.Icono size={15} /></Button>
                         )}
                         {puedeAnular && !f.anulada_at && !f.pagada_at && (
-                          <Button variant="ghost" size="sm" className="px-2" title="Anular" aria-label="Anular" onClick={() => setAnular(f)}><Prohibit size={15} /></Button>
+                          <Button variant="ghost" size="sm" className="px-2" title="Anular" aria-label="Anular" onClick={() => setAnular(f)}><ACCION.anular.Icono size={15} /></Button>
                         )}
                       </div>
                     </td>
@@ -372,6 +373,9 @@ function DelMes({ empresas, empresa }: { empresas: EmpresaDelGrupo[]; empresa: n
 
       {/* Con la lista del mes: al anular, pagar o «Actualizar», el coste se vuelve a pedir
           (antes se quedaba con las cifras viejas, también las de una factura ya anulada). */}
+      {/* Qué es cada botón y cada estado (#586): sin el ratón, en el móvil no se sabía. */}
+      {datos && datos.facturas.length > 0 && <LeyendaFacturas conEnlace />}
+
       <CostePorCampus periodo={periodo} issuerId={issuerId} recargar={vueltas} />
 
       {anular && (

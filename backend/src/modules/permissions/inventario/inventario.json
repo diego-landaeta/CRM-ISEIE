@@ -10125,6 +10125,28 @@
   "puertas": []
  },
  {
+  "id": "GET /api/projects/:id/ultimo-lead",
+  "tipo": "ruta",
+  "modulo": "projects",
+  "metodo": "GET",
+  "ruta": "/api/projects/:id/ultimo-lead",
+  "relativa": "GET /:id/ultimo-lead",
+  "controlador": "getUltimoLead",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "projects.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/projects/:id/queue-state",
   "tipo": "ruta",
   "modulo": "projects",
@@ -13119,6 +13141,28 @@
   "ruta": "/api/users/",
   "relativa": "GET /",
   "controlador": "list",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "users.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/users/buscar",
+  "tipo": "ruta",
+  "modulo": "users",
+  "metodo": "GET",
+  "ruta": "/api/users/buscar",
+  "relativa": "GET /buscar",
+  "controlador": "buscar",
   "publica": false,
   "guardias": [
    {

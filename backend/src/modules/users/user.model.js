@@ -3,6 +3,30 @@ import { limpiaRolesExtra } from '../../shared/utils/roles.js';
 import { existeTablaEmpresas, ponerEmpresas } from './user.empresas.js';
 import { registrarCambio } from '../permissions/permissions.model.js';
 
+/**
+ * Buscar personas del equipo por nombre o correo, sin acentos (gemela de CRM#591).
+ *
+ * `campus` null es «todos» (superadmin y soporte); si no, solo quien tiene
+ * alguno de esos campus. Como la lista por defecto, sin tutores ni gente de
+ * colaboraciones: esos tienen su propia pantalla.
+ */
+export async function buscar({ q, campus, limit = 5 }) {
+  const { rows } = await query(
+    `SELECT u.id, u.nombre, u.email, u.role, u.active
+       FROM users u
+      WHERE (unaccent(COALESCE(u.nombre, '')) ILIKE unaccent($1) OR u.email ILIKE $1)
+        AND u.role <> 'tutor'
+        AND NOT COALESCE(u.gestor_colaboraciones, false)
+        AND ($2::int[] IS NULL OR EXISTS (
+              SELECT 1 FROM user_projects up
+               WHERE up.user_id = u.id AND up.active AND up.project_id = ANY($2::int[])))
+      ORDER BY u.active DESC, u.nombre
+      LIMIT $3`,
+    [`%${q}%`, campus, limit],
+  );
+  return rows;
+}
+
 // Esta lista es «quien puede llevar un prospecto», porque es para lo que la usa
 // casi todo el CRM: el filtro de Prospectos, asignar responsable, la exportacion
 // a Wasapi, el desplegable de gestora en Clientes y en Ventas.

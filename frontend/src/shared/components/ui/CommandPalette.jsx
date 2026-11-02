@@ -1,100 +1,134 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  MagnifyingGlass, SquaresFour, Users, UserCheck, Package, Receipt,
-  CurrencyEur, Calculator, ChartLineUp, Bell, Gear, UserCircle, Pulse,
-  Envelope, EnvelopeOpen, Globe, FilePdf, ShieldCheck, GraduationCap,
-  Calendar, TreeStructure, TextT, Lightning, ListNumbers, Megaphone,
-  Wallet, Question, Power, Command,
+  MagnifyingGlass, SquaresFour, Users, Package, Receipt, Kanban, UserGear,
+  Power, Command, Plus,
 } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
+import { crearCan } from '@/shared/hooks/usePermission';
+import { useIdsDelAmbito } from '@/shared/hooks/useAmbito';
+import {
+  NAV_SECTIONS,
+  entradasDeSeccion,
+  canSeeItem,
+  esSoloColaboraciones,
+} from '@/shared/components/layout/Sidebar';
+import { isBetaAllowed } from '@/shared/config/betaConfig';
+import { rolesDe } from '@/shared/lib/roles';
 import client from '@/shared/api/client';
 
-const ITEMS = [
-  // Navegación principal
-  { id: 'dashboard',       label: 'Dashboard',                 to: '/dashboard',                    icon: SquaresFour,    group: 'Ir a' },
-  { id: 'leads',           label: 'Prospectos',                to: '/leads',                        icon: Users,          group: 'Ir a' },
-  { id: 'pipeline',        label: 'Pipeline',                  to: '/leads/pipeline',               icon: ChartLineUp,    group: 'Ir a' },
-  { id: 'clients',         label: 'Clientes',                  to: '/clients',                      icon: UserCheck,      group: 'Ir a' },
-  { id: 'products',        label: 'Productos',                 to: '/products',                     icon: Package,        group: 'Ir a' },
-  { id: 'products-tree',   label: 'Productos por categoría',   to: '/products/tree',                icon: TreeStructure,  group: 'Ir a' },
-  { id: 'matriculas',      label: 'Matrículas',                to: '/matriculas',                   icon: GraduationCap,  group: 'Ir a' },
-  { id: 'sales',           label: 'Ventas',                    to: '/ventas',                        icon: Receipt,        group: 'Ir a' },
-  { id: 'commissions',     label: 'Comisiones',                to: '/commissions',                  icon: CurrencyEur,    group: 'Ir a' },
-  { id: 'expenses',        label: 'Egresos',                   to: '/expenses',                     icon: Wallet,         group: 'Ir a',  roles: ['admin', 'superadmin'] },
-  { id: 'accounting',      label: 'Contabilidad',              to: '/accounting',                   icon: Calculator,     group: 'Ir a',  roles: ['admin', 'superadmin'] },
-  { id: 'payable',         label: 'Cuentas por pagar',         to: '/accounting/payable',           icon: Calculator,     group: 'Ir a',  roles: ['admin', 'superadmin'] },
-  { id: 'payroll',         label: 'Nóminas',                   to: '/payroll',                      icon: CurrencyEur,    group: 'Ir a',  roles: ['admin', 'superadmin'] },
-  { id: 'documents',       label: 'Documentos',                to: '/documentos',                   icon: FilePdf,        group: 'Ir a',  roles: ['admin', 'superadmin'] },
-  { id: 'forms',           label: 'Formularios',               to: '/forms',                        icon: Globe,          group: 'Ir a',  roles: ['admin', 'superadmin'] },
-  { id: 'make',            label: 'Make / Webhooks',           to: '/make-webhooks',                icon: Globe,          group: 'Ir a',  roles: ['admin', 'superadmin'] },
-  { id: 'wc',              label: 'WooCommerce',               to: '/woocommerce',                  icon: Globe,          group: 'Ir a',  roles: ['admin', 'superadmin'] },
-  { id: 'sequences',       label: 'Secuencias de email',       to: '/secuencias-email',              icon: Envelope,       group: 'Ir a',  roles: ['admin', 'superadmin'] },
-  { id: 'templates',       label: 'Plantillas de email',       to: '/email-templates',              icon: EnvelopeOpen,   group: 'Ir a',  roles: ['admin', 'superadmin'] },
-  { id: 'reports',         label: 'Reportes',                  to: '/informes',                      icon: ChartLineUp,    group: 'Ir a',  roles: ['admin', 'superadmin'] },
-  { id: 'activity',        label: 'Actividad',                 to: '/activity',                     icon: Pulse,          group: 'Ir a' },
-  { id: 'notifications',   label: 'Notificaciones',            to: '/notificaciones',               icon: Bell,           group: 'Ir a' },
-  { id: 'roles',           label: 'Roles y usuarios',          to: '/roles',                        icon: ShieldCheck,    group: 'Ir a',  roles: ['admin', 'superadmin'] },
-  { id: 'fields',          label: 'Campos personalizados',     to: '/configuracion/campos',         icon: TextT,          group: 'Ir a',  roles: ['admin', 'superadmin'] },
-  { id: 'categories',      label: 'Categorías',                to: '/configuracion/categorias-arbol', icon: TreeStructure, group: 'Ir a' },
-  { id: 'channels',        label: 'Canales',                   to: '/configuracion/canales',        icon: Megaphone,      group: 'Ir a' },
-  { id: 'shortcuts',       label: 'Atajos rápidos',            to: '/configuracion/atajos',         icon: Lightning,      group: 'Ir a' },
-  { id: 'doc-config',      label: 'Numeración documentos',     to: '/documentos/config',            icon: ListNumbers,    group: 'Ir a',  roles: ['admin', 'superadmin'] },
-  { id: 'status',          label: 'Estado del sistema',        to: '/status',                       icon: Pulse,          group: 'Sistema' },
-  { id: 'profile',         label: 'Mi cuenta',                 to: '/perfil',                      icon: UserCircle,     group: 'Sistema' },
-  { id: 'settings',        label: 'Configuración',             to: '/configuracion',                     icon: Gear,           group: 'Sistema' },
-  { id: 'preferences',     label: 'Mis preferencias',          to: '/preferencias',                  icon: Gear,           group: 'Sistema' },
-  { id: 'manual',          label: 'Manual del CRM',            to: '/manual',                       icon: Question,       group: 'Sistema' },
-  { id: 'soporte',         label: 'Soporte',                   to: '/soporte',                      icon: Question,       group: 'Sistema' },
-  { id: 'income',          label: 'Ingresos',                  to: '/accounting/income',            icon: CurrencyEur,    group: 'Ir a', roles: ['admin', 'superadmin'] },
-  { id: 'revenue',         label: 'Conversiones',              to: '/revenue',                      icon: Receipt,        group: 'Ir a', roles: ['admin', 'superadmin'] },
-  { id: 'receivable',      label: 'Cuentas por cobrar',        to: '/accounting/receivable',        icon: Wallet,         group: 'Ir a', roles: ['admin', 'superadmin'] },
-];
+/*
+  El buscador (Ctrl K). Gemela de CRM#591 (ISEIE #335), el que hizo Hugo en
+  MultiCRM, llevado aquí:
 
-function normalize(s) {
-  return (s || '').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  - Las páginas salen del MENÚ, con su mismo filtro de permisos. Antes era una
+    lista fija (`ITEMS`) filtrada por el nombre del rol: no salían Facturas de
+    colaboradores, Diplomas, WhatsApp, Mi tablero… y una gestora veía
+    Contabilidad o Nóminas.
+  - Personas, productos, ventas por número, facturas, tareas y usuarios del
+    equipo, cada tipo SOLO con su permiso efectivo (/auth/me). El ámbito (sus
+    campus; si es gestora, solo lo suyo) lo pone la ruta del servidor.
+  - Sin acentos y el teléfono por cifras: lo hace el servidor (migración 248).
+
+  `includeConverted` no se puede quitar: sin él, /leads añade «status <>
+  convertido» y la búsqueda esconde justo a quien ya compró —a quien más se
+  busca, para cobrar o facturar—. Es el fallo que Diego encontró el 14/09.
+*/
+
+export function sinAcentos(str) {
+  return String(str || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 }
 
+/** Las páginas que encuentra alguien: exactamente las de su menú. */
+export function paginasDelBuscador({ user, can }) {
+  const soloColab = esSoloColaboraciones(user);
+  const roles = rolesDe(user).length ? rolesDe(user) : ['gestor'];
+  const abre = (it) => it.to && !it.href && !it.comingSoon && isBetaAllowed(it.to);
+  const list = [];
+  const seen = new Set();
+  const meter = (it, grupo, iconoPadre) => {
+    if (!abre(it) || seen.has(it.to)) return;
+    seen.add(it.to);
+    list.push({ label: it.label, grupo, to: it.to, icon: it.icon || iconoPadre || SquaresFour });
+  };
+  for (const section of NAV_SECTIONS) {
+    for (const item of entradasDeSeccion(section, { user, can, soloColab })) {
+      if (Array.isArray(item.children)) {
+        item.children
+          .filter((c) => canSeeItem(c, roles, soloColab, user, can))
+          .forEach((c) => meter(c, item.label, item.icon));
+      } else {
+        meter(item, section.label);
+      }
+    }
+  }
+  return list;
+}
+
+/**
+ * Qué tipos de resultado busca alguien: los permisos que protegen su pantalla,
+ * los efectivos (con sus excepciones). Quien es SOLO tutor no busca personas
+ * ni productos (decisión de Diego, 02/11): el catálogo le da `leads.view` y
+ * `products.view`, pero su menú no tiene ninguna de las dos.
+ */
+export function queBusca({ user, can }) {
+  const tiene = (p) => typeof can === 'function' && can(p) === true;
+  const roles = rolesDe(user);
+  const soloTutor = roles.length === 1 && roles[0] === 'tutor';
+  const personas = !soloTutor && tiene('leads.view');
+  const productos = !soloTutor && tiene('products.view');
+  return {
+    personas,
+    clientes: personas && tiene('clients.view'),
+    productos,
+    crearProspecto: personas && tiene('leads.create'),
+    crearProducto: productos && tiene('products.create'),
+    ventas: !soloTutor && tiene('conversions.view'),
+    facturas: !soloTutor && tiene('facturas.view'),
+    tareas: tiene('tasks.view_own') || tiene('tasks.view_all'),
+    usuarios: tiene('users.view'),
+  };
+}
+
+/** A dónde lleva cada resultado. Rutas de App.jsx (lo comprueba la prueba). */
+export const destinoDePersona = (l) => (l.status === 'convertido' ? `/clients/${l.id}` : `/leads/${l.id}`);
+export const destinoDeProducto = (p) => `/products/${p.id}`;
+export const destinoDeVenta = (v) => `/ventas/${v.id}`;
+// Una factura no tiene ficha propia: se abre la venta de la que cuelga, o la lista.
+export const destinoDeFactura = (f) => (f.conversion_id ? `/ventas/${f.conversion_id}` : '/accounting/facturas');
+export const destinoDeTarea = (t) => `/tareas?id=${t.id}`;
+// La lista de usuarios de Configuración no tiene buscador: se abre la pestaña.
+export const destinoDeUsuario = () => '/configuracion';
+
+/** «1234» o «#1234»: el número de una venta. */
+export const numeroDeVenta = (q) => (/^#?\d{1,9}$/.test(q.trim()) ? q.trim().replace('#', '') : null);
+/** «F-2026/0641» se guarda como «2026/0641»: se quita la «F-» de delante. */
+export const terminoDeFactura = (q) => q.trim().replace(/^f\s*-?\s*(?=\d)/i, '');
+/** Letras a partir de las que se pregunta al servidor. */
+export const MIN_SERVIDOR = 2;
+
+const VACIO = { personas: [], productos: [], ventas: [], facturas: [], tareas: [], usuarios: [] };
+
 export default function CommandPalette() {
-  const { user, logout } = useAuth();
+  const { user, logout, permissions } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
   const [activeIdx, setActiveIdx] = useState(0);
   const inputRef = useRef(null);
   const listRef = useRef(null);
-
-  const role = user?.role || 'gestor';
-
-  /*
-    BUSCAR PERSONAS, no solo secciones.
-
-    Esta paleta solo sabia navegar entre pantallas, asi que con 17.694
-    prospectos y 558 clientes en la base no encontraba a NADIE. El CRM hermano
-    si los busca; esto es ponerse a la par.
-
-    `includeConverted` no se puede quitar: sin el, /leads añade
-    «status <> convertido» y la busqueda esconde justo a quien ya compro --a
-    quien mas se busca, para cobrar o facturar--. Es el fallo que Diego
-    encontro el 14/09 en el otro CRM.
-  */
+  // La misma `can` por usuario y mapa de permisos: una nueva en cada render
+  // relanzaba la búsqueda en bucle (lo vio Hugo en MultiCRM: 75 peticiones).
+  const can = useMemo(() => crearCan(user, permissions), [user, permissions]);
   const { activeProject } = useProjectContext() || {};
-  const projectId = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
-  const [personas, setPersonas] = useState([]);
-
-  useEffect(() => {
-    const texto = q.trim();
-    if (!open || !projectId || texto.length < 2) { setPersonas([]); return undefined; }
-    let vivo = true;
-    // Se espera a que pare de teclear: sin esto seria una peticion por letra.
-    const t = setTimeout(() => {
-      client.get(`/leads?projectId=${projectId}&search=${encodeURIComponent(texto)}&limit=5&includeConverted=1`)
-        .then((r) => { if (vivo) setPersonas(r?.success ? (r.data || []) : []); })
-        .catch(() => { if (vivo) setPersonas([]); });
-    }, 250);
-    return () => { vivo = false; clearTimeout(t); };
-  }, [q, open, projectId]);
+  const idsDelAmbito = useIdsDelAmbito();
+  const pages = useMemo(() => paginasDelBuscador({ user, can }), [user, can]);
+  const busca = useMemo(() => queBusca({ user, can }), [user, can]);
+  const [res, setRes] = useState(VACIO);
+  const [buscando, setBuscando] = useState(false);
+  const catalogos = useRef(new Map());
+  const ultima = useRef(0);
 
   // Atajo global Ctrl+K / Cmd+K
   useEffect(() => {
@@ -115,32 +149,116 @@ export default function CommandPalette() {
     if (open) {
       setQ('');
       setActiveIdx(0);
+      setRes(VACIO);
+      catalogos.current = new Map();
       setTimeout(() => inputRef.current?.focus(), 30);
     }
   }, [open]);
 
+  const search = useCallback(async (texto) => {
+    const turno = ++ultima.current;
+    const vigente = () => turno === ultima.current;
+    const vaciar = () => { setRes(VACIO); setBuscando(false); };
+    if (!texto || (texto.length < MIN_SERVIDOR && !numeroDeVenta(texto))) return vaciar();
+
+    // Un campus, o los del ámbito: el servidor exige projectId o projectIds y
+    // los recorta a los de la persona.
+    const unCampus = activeProject?.id && activeProject.id > 0;
+    const campus = unCampus ? [activeProject.id] : idsDelAmbito;
+    const b = texto.length < MIN_SERVIDOR ? { ventas: busca.ventas } : busca;
+    if (!campus.length || !Object.values(b).some(Boolean)) return vaciar();
+    const ambito = unCampus ? `projectId=${activeProject.id}` : `projectIds=${campus.join(',')}`;
+    const pedir = (url) => client.get(url).catch(() => ({ success: false }));
+    const lista = (r) => (r?.success && Array.isArray(r.data) ? r.data.slice(0, 5) : []);
+    const t = encodeURIComponent(texto);
+    const numero = numeroDeVenta(texto);
+    const catalogoDe = (pid) => {
+      if (!catalogos.current.has(pid)) {
+        catalogos.current.set(pid, client.get(`/products?projectId=${pid}`)
+          .then((r) => (r.success && Array.isArray(r.data) ? r.data : []))
+          .catch(() => []));
+      }
+      return catalogos.current.get(pid);
+    };
+
+    setBuscando(true);
+    try {
+      const [personas, catalogo, venta, facturas, tareas, usuarios] = await Promise.all([
+        b.personas ? pedir(`/leads?${ambito}&search=${t}&limit=5${b.clientes ? '&includeConverted=1' : ''}`) : null,
+        b.productos
+          ? Promise.all(campus.map(catalogoDe)).then((ls) => { const vistos = new Set(); return ls.flat().filter((p) => !vistos.has(p.id) && vistos.add(p.id)); })
+          : [],
+        b.ventas && numero ? pedir(`/conversions/${numero}`) : null,
+        // `GET /invoices` entiende un campus cada vez: facturas, solo con un campus arriba.
+        b.facturas && unCampus ? pedir(`/invoices?projectId=${activeProject.id}&search=${encodeURIComponent(terminoDeFactura(texto))}&limit=5`) : null,
+        b.tareas ? pedir(`/tasks?search=${t}`) : null,
+        b.usuarios ? pedir(`/users/buscar?q=${t}${unCampus ? `&projectIds=${activeProject.id}` : ''}`) : null,
+      ]);
+      if (!vigente()) return;
+      const normQ = sinAcentos(texto);
+      setRes({
+        personas: lista(personas),
+        productos: catalogo.filter((p) => sinAcentos(p.nombre).includes(normQ) || sinAcentos(p.codigo || p.sku).includes(normQ)).slice(0, 5),
+        ventas: venta?.success && venta.data?.id ? [venta.data] : [],
+        facturas: lista(facturas),
+        tareas: lista(tareas),
+        usuarios: lista(usuarios),
+      });
+    } catch {
+      if (vigente()) vaciar();
+    } finally {
+      if (vigente()) setBuscando(false);
+    }
+  }, [activeProject?.id, idsDelAmbito, busca]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const texto = q.trim();
+    if (texto.length >= MIN_SERVIDOR || numeroDeVenta(texto)) setBuscando(true);
+    const timer = setTimeout(() => search(texto), 250);
+    return () => clearTimeout(timer);
+  }, [open, q, search]);
+
   const filtered = useMemo(() => {
-    const visible = ITEMS.filter((it) => !it.roles || it.roles.includes(role) || role === 'superadmin' || role === 'soporte');
-    const items = visible.concat([
+    const acciones = [
+      busca.crearProspecto && pages.some((p) => p.to === '/leads')
+        && { id: '__new-lead', label: 'Crear nuevo prospecto', icon: Plus, group: 'Acciones', to: '/leads?new=1' },
+      busca.crearProducto && pages.some((p) => p.to === '/products')
+        && { id: '__new-product', label: 'Crear nuevo producto', icon: Plus, group: 'Acciones', to: '/products' },
       { id: '__logout', label: 'Cerrar sesión', icon: Power, group: 'Acciones', action: 'logout' },
-    ]);
-    if (!q.trim()) return items;
-    const needle = normalize(q);
-    const secciones = items.filter((it) => normalize(it.label).includes(needle) || normalize(it.group).includes(needle));
+    ].filter(Boolean);
+    const paginas = pages.map((p, i) => ({ id: `pag-${i}`, label: p.label, sublabel: p.grupo, to: p.to, icon: p.icon, group: 'Ir a' }));
+    const texto = q.trim();
+    if (!texto) return paginas.slice(0, 8).concat(acciones);
+    const needle = sinAcentos(texto);
+    const casa = (it) => sinAcentos(`${it.label} ${it.sublabel || ''}`).includes(needle);
+    const euros = (n) => (n != null && n !== '' ? `${Number(n).toLocaleString('es-ES', { maximumFractionDigits: 2 })} €` : '');
     // Las personas van DELANTE: quien escribe un nombre o un correo busca a
     // alguien, no una pantalla.
-    const gente = personas.map((l) => ({
-      id: 'lead-' + l.id,
-      label: l.nombre || ('#' + l.id),
-      // Se dice si ya compro: un cliente y un prospecto vivo no son lo mismo ni
-      // se les escribe igual.
-      sublabel: (l.email || l.telefono || ('#' + l.id)) + (l.status === 'convertido' ? ' · cliente' : ''),
-      to: '/leads/' + l.id,
-      icon: Users,
-      group: 'Personas',
-    }));
-    return gente.concat(secciones);
-  }, [q, role, personas]);
+    return [
+      ...res.personas.map((l) => ({
+        id: `lead-${l.id}`, label: l.nombre || `#${l.id}`, icon: Users, group: 'Personas', to: destinoDePersona(l),
+        // Se dice si ya compró: un cliente y un prospecto vivo no son lo mismo.
+        sublabel: (l.email || l.telefono || `#${l.id}`) + (l.status === 'convertido' ? ' · cliente' : ''),
+      })),
+      ...res.productos.map((p) => ({ id: `prod-${p.id}`, label: p.nombre, sublabel: p.codigo || '', icon: Package, group: 'Productos', to: destinoDeProducto(p) })),
+      ...res.ventas.map((v) => ({
+        id: `venta-${v.id}`, label: `Venta ${v.id}`, icon: Receipt, group: 'Ventas', to: destinoDeVenta(v),
+        sublabel: [v.lead_nombre, v.producto_contratado, euros(v.importe_total)].filter(Boolean).join(' · '),
+      })),
+      ...res.facturas.map((f) => ({
+        id: `fact-${f.id}`, label: `${f.tipo === 'proforma' ? 'Proforma' : 'Factura'} ${f.codigo || f.numero}`, icon: Receipt, group: 'Facturas', to: destinoDeFactura(f),
+        sublabel: [f.cliente_nombre, euros(f.total)].filter(Boolean).join(' · '),
+      })),
+      ...res.tareas.map((tk) => ({ id: `tarea-${tk.id}`, label: tk.title, icon: Kanban, group: 'Tareas', to: destinoDeTarea(tk) })),
+      ...res.usuarios.map((u) => ({
+        id: `user-${u.id}`, label: u.nombre, icon: UserGear, group: 'Usuarios', to: destinoDeUsuario(u),
+        sublabel: [u.email, u.active === false ? 'Inactivo' : ''].filter(Boolean).join(' · '),
+      })),
+      ...paginas.filter(casa),
+      ...acciones.filter(casa),
+    ];
+  }, [q, pages, busca, res]);
 
   const grouped = useMemo(() => {
     const map = new Map();
@@ -152,8 +270,8 @@ export default function CommandPalette() {
     return Array.from(map.entries());
   }, [filtered]);
 
-  // Mapa idx → item para navegación con flechas
-  const flat = filtered;
+  // El orden de las flechas es el de los grupos tal como se pintan.
+  const flat = useMemo(() => grouped.flatMap(([, items]) => items), [grouped]);
 
   useEffect(() => {
     if (activeIdx >= flat.length) setActiveIdx(0);
@@ -199,6 +317,8 @@ export default function CommandPalette() {
       onClick={() => setOpen(false)}
     >
       <div
+        role="dialog"
+        aria-label="Búsqueda rápida"
         className="w-full max-w-xl bg-card border border-border rounded-2xl shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
@@ -209,9 +329,10 @@ export default function CommandPalette() {
             value={q}
             onChange={(e) => { setQ(e.target.value); setActiveIdx(0); }}
             onKeyDown={onKeyDown}
-            placeholder="Buscar páginas, atajos, acciones…"
-            className="flex-1 bg-transparent outline-none text-sm placeholder:text-muted-foreground"
+            placeholder="Buscar personas, ventas, facturas, páginas…"
+            className="flex-1 min-w-0 bg-transparent outline-none text-sm placeholder:text-muted-foreground"
           />
+          {buscando && <span className="hidden sm:inline text-[10px] text-muted-foreground font-mono animate-pulse flex-shrink-0">buscando…</span>}
           <kbd className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded border border-border bg-muted text-muted-foreground">
             Esc
           </kbd>
@@ -219,8 +340,8 @@ export default function CommandPalette() {
 
         <div ref={listRef} className="max-h-[60vh] overflow-y-auto">
           {flat.length === 0 ? (
-            <div className="px-4 py-10 text-center text-sm text-muted-foreground">
-              Sin coincidencias para "{q}"
+            <div className="px-4 py-10 text-center text-sm text-muted-foreground" role="status">
+              {buscando ? 'Buscando…' : `Sin coincidencias para "${q}"`}
             </div>
           ) : (
             grouped.map(([groupLabel, items]) => (
@@ -231,7 +352,7 @@ export default function CommandPalette() {
                 {items.map((it) => {
                   const idx = runningIdx++;
                   const isActive = idx === activeIdx;
-                  const Icon = it.icon;
+                  const Icon = it.icon || SquaresFour;
                   return (
                     <button
                       key={it.id}
@@ -245,9 +366,8 @@ export default function CommandPalette() {
                       <Icon size={16} weight={isActive ? 'duotone' : 'regular'} className="flex-shrink-0" />
                       <span className="flex-1 min-w-0 truncate">
                         {it.label}
-                        {/* El correo o el telefono debajo: con 17.694 personas en
-                            la base, dos «Maria Garcia» son indistinguibles sin
-                            esto. Las secciones no lo llevan y no pasa nada. */}
+                        {/* El correo o el teléfono debajo: dos «Maria Garcia» son
+                            indistinguibles sin esto. */}
                         {it.sublabel && (
                           <span className="block truncate text-[11px] font-normal text-muted-foreground">
                             {it.sublabel}
