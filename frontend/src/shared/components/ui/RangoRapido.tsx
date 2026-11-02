@@ -91,10 +91,17 @@ export default function RangoRapido({
   valor,
   alElegir,
   className = '',
+  desdeSiempre = false,
 }: {
   valor: Rango;
   alElegir: (r: Rango) => void;
   className?: string;
+  /**
+   * Un primer atajo «Desde siempre»: sin fecha de inicio ni de fin. Solo donde
+   * lo que se mira llega poco a poco y el mes en curso sale casi vacío —el
+   * panel de Feedback, #242: «predefinida la opción de desde siempre»—.
+   */
+  desdeSiempre?: boolean;
 }) {
   // Cual esta puesto. Se compara con lo que habria calculado cada atajo, asi
   // que tambien se enciende si las fechas se escribieron a mano y coinciden
@@ -108,8 +115,20 @@ export default function RangoRapido({
     return hit ? hit.clave : null;
   }, [valor?.from, valor?.to]);
 
+  const sinFechas = !valor?.from && !valor?.to;
+  const clase = (puesto: boolean) => 'h-7 px-2.5 rounded-md border text-xs font-medium transition-colors '
+    + (puesto
+      ? 'border-primary bg-primary text-primary-foreground'
+      : 'border-border bg-card text-muted-foreground hover:text-foreground hover:bg-muted/60');
+
   return (
     <div className={`flex flex-wrap items-center gap-1 ${className}`} role="group" aria-label="Atajos de fecha">
+      {desdeSiempre && (
+        <button type="button" aria-pressed={sinFechas} onClick={() => alElegir({ from: '', to: '' })}
+          title="Todo, sin fecha de inicio ni de fin" className={clase(sinFechas)}>
+          Desde siempre
+        </button>
+      )}
       {ATAJOS.map((a) => {
         const puesto = activo === a.clave;
         // Se dice el periodo exacto que coge. Viene del de Ingresos, y es buena
@@ -123,12 +142,7 @@ export default function RangoRapido({
             aria-pressed={puesto}
             onClick={() => alElegir(puesto ? { from: '', to: '' } : calcular(a.clave))}
             title={puesto ? 'Quitar este filtro' : `${r.from} → ${r.to}`}
-            className={
-              'h-7 px-2.5 rounded-md border text-xs font-medium transition-colors '
-              + (puesto
-                ? 'border-primary bg-primary text-primary-foreground'
-                : 'border-border bg-card text-muted-foreground hover:text-foreground hover:bg-muted/60')
-            }
+            className={clase(puesto)}
           >
             {a.texto}
           </button>
