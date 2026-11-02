@@ -5,7 +5,6 @@ import PageHeader from '@/shared/components/ui/PageHeader';
 import RangoRapido from '@/shared/components/ui/RangoRapido';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { ponerAmbito } from '@/shared/lib/ambitoInforme';
-import { rangoPorDefecto } from '@/shared/lib/rangosDeFecha';
 import {
   traerPanel, traerLista, type PanelFeedback, type FilaFeedback,
 } from '../api/feedback.api';
@@ -51,7 +50,10 @@ export default function FeedbackPanelPage() {
   const nombreAmbito = issuerEfectivo
     ? `${activeIssuer?.nombre || campusDeLaEmpresa[0]?.sociedad_nombre || 'La empresa'} · ${campusDeLaEmpresa.length} campus`
     : (activeProject?.nombre || 'Todas las empresas');
-  const [rango, setRango] = useState(() => rangoPorDefecto());
+  // «Desde siempre» de entrada (#242, Manuel 06/10; Diego 02/11: «el panel de
+  // feedback está fallando»). Las respuestas llegan poco a poco: con «este mes»
+  // el día 2 salía 0 enviados y 0 respondidos, como si no funcionara.
+  const [rango, setRango] = useState<{ from: string; to: string }>({ from: '', to: '' });
   const [datos, setDatos] = useState<PanelFeedback | null>(null);
   const [cargando, setCargando] = useState(true);
   const [pestaña, setPestaña] = useState<'empresa' | 'campus' | 'gestora' | 'disparador'>('gestora');
@@ -93,7 +95,7 @@ export default function FeedbackPanelPage() {
                 {soloCampus ? 'Ver toda la empresa' : `Solo ${activeProject?.nombre || 'este campus'}`}
               </button>
             )}
-            <RangoRapido valor={rango} alElegir={(r) => setRango(r)} />
+            <RangoRapido valor={rango} alElegir={(r) => setRango(r)} desdeSiempre />
           </div>
         )}
       />
@@ -120,7 +122,9 @@ export default function FeedbackPanelPage() {
       <section className="rounded-lg border border-border bg-card p-4">
         <h2 className="text-base font-semibold">Por qué no compran</h2>
         {!cargando && totalRespuestas === 0 && (
-          <p className="mt-2 text-sm text-muted-foreground">Todavía no ha contestado nadie en estas fechas.</p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {rango.from || rango.to ? 'Todavía no ha contestado nadie en estas fechas.' : 'Todavía no ha contestado nadie.'}
+          </p>
         )}
         <ul className="mt-3 space-y-2">
           {(datos?.porMotivo || []).map((m) => (
