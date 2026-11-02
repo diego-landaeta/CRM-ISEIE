@@ -2,6 +2,7 @@
 import { query } from '../../shared/config/db.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { SIN_PRUEBAS } from '../../shared/utils/ambito.js';
+import { soloLoSuyo } from '../../shared/utils/roles.js';
 
 function currentPeriodo() {
   // Server timezone — para CRM single-tenant es suficiente.
@@ -174,7 +175,7 @@ export async function getMyStats(userId, { projectId = null, periodo = null } = 
  */
 export async function setGoal({ user_id, project_id = null, periodo_yyyymm, meta_ventas, meta_facturacion, notas = null }, actor) {
   if (!actor) throw new AppError('Auth requerida', 401, 'AUTH_REQUIRED');
-  if (actor.role === 'gestor' && actor.userId !== user_id) {
+  if (soloLoSuyo(actor) && actor.userId !== user_id) {
     throw new AppError('Un gestor solo puede setear su propia meta', 403, 'FORBIDDEN');
   }
   if (!periodo_yyyymm || !/^\d{4}-\d{2}$/.test(periodo_yyyymm)) {
@@ -199,7 +200,7 @@ export async function setGoal({ user_id, project_id = null, periodo_yyyymm, meta
 }
 
 export async function deleteGoal(id, actor) {
-  if (actor.role === 'gestor') {
+  if (soloLoSuyo(actor)) {
     // Gestor solo puede borrar la suya
     const { rowCount } = await query(`DELETE FROM sales_goals WHERE id = $1 AND user_id = $2`, [id, actor.userId]);
     if (rowCount === 0) throw new AppError('Meta no encontrada o sin permisos', 404, 'NOT_FOUND');

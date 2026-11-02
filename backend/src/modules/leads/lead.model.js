@@ -1286,9 +1286,11 @@ export async function getLeadProjectId(leadId) {
 // ============================================================
 
 // Panel "Hoy" - actividad del dia, reminders pendientes, alertas
-export async function getTodaySummary({ userId, role, projectId, projectIds = null }) {
+export async function getTodaySummary({ userId, role, soloSuyo, projectId, projectIds = null }) {
   // Usamos parametros para evitar SQL injection
-  const userIdParam = role === 'gestor' ? userId : null;
+  // Solo lo suyo: la gestora, el project manager y quien tiene la gestora añadida (02/11,
+  // `soloLoSuyo` de shared/utils/roles.js). Sin `soloSuyo`, por el rol, como antes.
+  const userIdParam = (soloSuyo ?? role === 'gestor') ? userId : null;
   // Uno o varios campus en la MISMA consulta (#224). Con una empresa elegida
   // el Dashboard pedia esto una vez por campus —siete con CEDIA, cada una con
   // seis consultas seguidas— y sumaba en el navegador. Ahora es una sola
