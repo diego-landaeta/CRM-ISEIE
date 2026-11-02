@@ -13156,6 +13156,28 @@
   "puertas": []
  },
  {
+  "id": "GET /api/users/buscar",
+  "tipo": "ruta",
+  "modulo": "users",
+  "metodo": "GET",
+  "ruta": "/api/users/buscar",
+  "relativa": "GET /buscar",
+  "controlador": "buscar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "users.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/users/activity-log",
   "tipo": "ruta",
   "modulo": "users",

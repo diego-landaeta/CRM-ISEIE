@@ -1,12 +1,33 @@
 import * as userService from './user.service.js';
 import * as userModel from './user.model.js';
-import { createUserSchema, updateUserSchema, listUsersSchema, adminSetPasswordSchema, activityLogSchema } from './user.validation.js';
+import { createUserSchema, updateUserSchema, listUsersSchema, adminSetPasswordSchema, activityLogSchema, buscarUsersSchema } from './user.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { veTodoElCrm, campusDeLaPersona } from '../../shared/utils/ambito.js';
 import { saveLocal, getLocal, deleteLocal } from '../../shared/services/localStorage.service.js';
 import { mimeToExt, extToMime } from '../../shared/utils/mime.js';
 import crypto from 'crypto';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
+
+/**
+ * GET /api/users/buscar?q=&projectIds= — el buscador (Ctrl K, gemela de CRM#591).
+ *
+ * Una ruta aparte para no cambiar la lista de Configuración. Superadmin y
+ * soporte encuentran a cualquiera; el resto, solo a quien comparte alguno de
+ * sus campus (y, si la cabecera acota, dentro de esos).
+ */
+export async function buscar(req, res, next) {
+  try {
+    const parsed = buscarUsersSchema.safeParse(req.query);
+    if (!parsed.success) {
+      throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
+    }
+    const { q, projectIds, limit } = parsed.data;
+    let campus = veTodoElCrm(req.user) ? null : await campusDeLaPersona(req.user?.userId);
+    if (projectIds?.length) campus = campus ? projectIds.filter((id) => campus.includes(id)) : projectIds;
+    if (campus && !campus.length) campus = [-1];
+    res.json({ success: true, data: await userModel.buscar({ q, campus, limit }) });
+  } catch (err) { next(err); }
+}
 
 export async function list(req, res, next) {
   try {
