@@ -5,6 +5,7 @@ import { createSaleSchema, facturadoQuerySchema } from './sales.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { proyectosDelAmbito } from '../../shared/utils/ambito.js';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
+import { soloLoSuyo } from '../../shared/utils/roles.js';
 
 export async function create(req, res, next) {
   try {
@@ -38,7 +39,7 @@ export async function topProducts(req, res, next) {
     const to = dateRe.test(req.query.to || '') ? req.query.to : null;
     let responsableId = req.query.responsableId ? parseInt(req.query.responsableId) : null;
     // Gestor: forzar su propio responsableId (no puede consultar el de otros)
-    if (req.user.role === 'gestor') responsableId = req.user.userId;
+    if (soloLoSuyo(req.user)) responsableId = req.user.userId;
     const result = await salesService.getTopProducts({ projectId, limit, days, from, to, responsableId });
     // `data` sigue siendo la lista, como siempre: el panel de inicio la lee así
     // y no tiene por qué enterarse. Lo que no es un programa va aparte, y los
@@ -66,7 +67,7 @@ export async function facturado(req, res, next) {
     }
     const { projectId, projectIds } = await proyectosDelAmbito(req);
     // Una gestora, solo su parte, pida lo que pida.
-    const responsableId = req.user.role === 'gestor'
+    const responsableId = soloLoSuyo(req.user)
       ? req.user.userId
       : (parsed.data.responsableId ?? null);
     const data = await salesService.getFacturado({
@@ -135,7 +136,7 @@ function filtrosDeQuery(req) {
   const dateRe2 = /^\d{4}-\d{2}-\d{2}$/;
   let responsableId = req.query.responsableId ? parseInt(req.query.responsableId) : null;
   // Gestor: solo lo suyo, ignorando lo que pida por query.
-  if (req.user.role === 'gestor') responsableId = req.user.userId;
+  if (soloLoSuyo(req.user)) responsableId = req.user.userId;
   return {
     projectId: req.query.projectId ? parseInt(req.query.projectId) : null,
     from: dateRe2.test(req.query.from || '') ? req.query.from : null,
@@ -182,7 +183,7 @@ export async function desglose(req, res, next) {
       from: dateRe.test(req.query.from || '') ? req.query.from : null,
       to: dateRe.test(req.query.to || '') ? req.query.to : null,
       // Una gestora ve su propio reparto, no el del proyecto entero.
-      responsableId: req.user.role === 'gestor' ? req.user.userId
+      responsableId: soloLoSuyo(req.user) ? req.user.userId
         : (req.query.responsableId ? parseInt(req.query.responsableId) : null),
     });
     res.json({ success: true, data });

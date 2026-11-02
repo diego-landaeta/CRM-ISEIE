@@ -7,6 +7,7 @@ import { logger } from '../../shared/utils/logger.js';
 import { saveLocal, getLocal, deleteLocal } from '../../shared/services/localStorage.service.js';
 import { createInvoiceSchema, setSequenceSchema, updateConfigSchema, issuerSchema, cobrarProformaSchema } from './invoices.validation.js';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
+import { soloLoSuyo } from '../../shared/utils/roles.js';
 
 function logoExt(mime) {
   if (mime === 'image/png') return 'png';
@@ -42,7 +43,7 @@ export async function list(req, res, next) {
       pid = projectId(req);
     }
     // Gestor: solo ve SUS facturas (las de sus leads). Admin/superadmin, todas.
-    const responsableId = req.user?.role === 'gestor' ? req.user.userId : null;
+    const responsableId = soloLoSuyo(req.user) ? req.user.userId : null;
     const data = await model.list({ projectId: pid, issuerId: issuerId && isAdmin ? issuerId : null,
       estado, search, from, to, tipo, responsableId,
       page: Number(page) || 1, limit: Math.min(Number(limit) || 50, 200) });
