@@ -71,6 +71,20 @@ export async function list(req, res, next) {
       throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
     }
     const filters = { ...parsed.data };
+    // Solo dentro de sus campus (#591). La lista no pasaba por `projectAccess`:
+    // un admin de un campus podía pedir `?projectId=` de otro y el buscador
+    // (Ctrl K) le encontraba personas que no puede abrir. Mismo criterio que
+    // `campusPedidos`: lo ajeno se cae, y si no queda nada no casa con nada.
+    if (!veTodoElCrm(req.user)) {
+      const mios = await campusDeLaPersona(req.user?.userId);
+      if (filters.projectId && !mios.includes(Number(filters.projectId))) {
+        throw new AppError('No tienes acceso a ese campus', 403, 'FORBIDDEN');
+      }
+      if (Array.isArray(filters.projectIds)) {
+        const quedan = filters.projectIds.filter((id) => mios.includes(Number(id)));
+        filters.projectIds = quedan.length ? quedan : [-1];
+      }
+    }
     // SEGURIDAD: el rol 'gestor' SOLO puede ver leads asignados a él.
     // Ignoramos cualquier responsableId/unassigned que venga del cliente.
     if (soloLoSuyo(req.user)) {

@@ -6,6 +6,7 @@ import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import { saveLocal, getLocal, deleteLocal } from '../../shared/services/localStorage.service.js';
 import { createInvoiceSchema, setSequenceSchema, updateConfigSchema, issuerSchema, cobrarProformaSchema } from './invoices.validation.js';
+import { veTodoElCrm, campusDeLaPersona } from '../../shared/utils/ambito.js';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
 import { soloLoSuyo } from '../../shared/utils/roles.js';
 
@@ -29,6 +30,22 @@ function projectId(req) {
   return pid;
 }
 
+/**
+ * Los campus que puede mirar quien pide la lista o las cifras (#591).
+ *
+ * La lista y `/stats` usaban el `projectId` que llegaba sin más: un admin de un
+ * campus veía las facturas de otro cambiando el número, y con `issuerId` las de
+ * toda la empresa, aunque solo tuviera uno de sus campus. Como en leads: un
+ * campus ajeno es un 403, y por empresa solo cuentan los suyos. `null` es
+ * «todos» (superadmin y soporte).
+ */
+async function campusPermitidos(req, pid) {
+  if (veTodoElCrm(req.user)) return null;
+  const mios = await campusDeLaPersona(req.user?.userId);
+  if (pid && !mios.includes(Number(pid))) throw new AppError('No tienes acceso a ese campus', 403, 'FORBIDDEN');
+  return mios.length ? mios : [-1];
+}
+
 export async function list(req, res, next) {
   try {
     const { estado, search, from, to, tipo, page, limit } = req.query;
@@ -42,9 +59,10 @@ export async function list(req, res, next) {
     } else {
       pid = projectId(req);
     }
+    const projectIds = await campusPermitidos(req, pid);
     // Gestor: solo ve SUS facturas (las de sus leads). Admin/superadmin, todas.
     const responsableId = soloLoSuyo(req.user) ? req.user.userId : null;
-    const data = await model.list({ projectId: pid, issuerId: issuerId && isAdmin ? issuerId : null,
+    const data = await model.list({ projectId: pid, projectIds, issuerId: issuerId && isAdmin ? issuerId : null,
       estado, search, from, to, tipo, responsableId,
       page: Number(page) || 1, limit: Math.min(Number(limit) || 50, 200) });
     res.json({ success: true, data: data.rows, pagination: { total: data.total, page: Number(page) || 1, limit: Number(limit) || 50 } });
@@ -66,7 +84,8 @@ export async function stats(req, res, next) {
     // Con issuerId → stats de la sociedad (opcionalmente acotada a un proyecto).
     // Sin issuerId → stats del proyecto activo (comportamiento clásico).
     const pid = req.query.projectId ? Number(req.query.projectId) : (issuerId ? null : projectId(req));
-    res.json({ success: true, data: await model.getStats({ projectId: pid, issuerId, ...periodo(req) }) });
+    const projectIds = await campusPermitidos(req, pid);
+    res.json({ success: true, data: await model.getStats({ projectId: pid, projectIds, issuerId, ...periodo(req) }) });
   } catch (e) { next(e); }
 }
 
