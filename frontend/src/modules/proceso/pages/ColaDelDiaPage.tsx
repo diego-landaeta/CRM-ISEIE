@@ -231,11 +231,13 @@ export default function ColaDelDiaPage() {
   }, [visibles.length, enFoco]);
 
   /**
-   * Apunta el contacto y pasa al siguiente.
+   * Apunta el contacto, marca hecho el paso de la fila y pasa al siguiente.
    *
-   * NO SE MARCA EL PASO. Se apunta lo que ha pasado de verdad —una llamada, un
-   * WhatsApp— y el servidor cierra el paso solo, porque lo deduce de cuántos
-   * contactos lleva la persona. Por eso al volver ya no sale en la cola.
+   * Se manda el paso (`paso_id`) y el servidor lo marca por el mismo camino que
+   * la checklist de la ficha (#212). Antes solo se apuntaba el contacto y el
+   * paso se deducía de los contactos, una regla que cierra un paso por día: si
+   * esa mañana ya se había hablado con la persona, el seguimiento 3 se quedaba
+   * abierto, volvía a la cola, y la checklist lo enseñaba «por hacer».
    */
   async function apuntarContacto(tipo: string, nota: string) {
     if (enFoco === null) return;
@@ -243,10 +245,11 @@ export default function ColaDelDiaPage() {
     if (!fila) return;
     setApuntando(true);
     try {
-      const res = await client.post<{ ya_apuntado?: boolean }>(`/leads/${fila.lead_id}/interactions`, {
+      const res = await client.post<{ ya_apuntado?: boolean; paso_hecho?: number | null }>(`/leads/${fila.lead_id}/interactions`, {
         tipo,
         nota: nota || `Contacto del seguimiento ${fila.orden}`,
         fecha: new Date().toISOString(),
+        ...(fila.paso_id ? { paso_id: fila.paso_id } : {}),
       });
       // Se saca de la lista aquí mismo en vez de recargar: recargar 300 filas
       // para quitar una parpadea y pierde el sitio donde ibas.
@@ -254,9 +257,11 @@ export default function ColaDelDiaPage() {
       setEnFoco(trasSacar(visibles.length, enFoco));
       // Si ya habia apuntado algo suyo en esta persona, el servidor no crea
       // otro contacto: solo sale de la lista (Diego, 29/10).
+      // Lo dice solo si el servidor lo ha marcado de verdad.
+      const paso = res?.data?.paso_hecho ? `${fila.paso_nombre || `Seguimiento ${fila.orden}`} hecho: ` : '';
       toast(res?.data?.ya_apuntado
-        ? { title: 'Ya lo tenías apuntado', description: `${fila.lead_nombre || 'Sin nombre'} sale de la cola sin apuntar otro contacto.` }
-        : { title: 'Contacto apuntado', description: `${fila.lead_nombre || 'Sin nombre'} sale de la cola.` });
+        ? { title: 'Ya lo tenías apuntado', description: `${paso}${fila.lead_nombre || 'Sin nombre'} sale de la cola sin apuntar otro contacto.` }
+        : { title: 'Contacto apuntado', description: `${paso}${fila.lead_nombre || 'Sin nombre'} sale de la cola.` });
       // Los contadores de arriba sí se rehacen contra el servidor, en segundo
       // plano: son los que dicen cuánto queda del día.
       traerResumen({ projectId: proyecto, gestoraId }).then((r) => { if (r) setResumen(r); }).catch(() => {});

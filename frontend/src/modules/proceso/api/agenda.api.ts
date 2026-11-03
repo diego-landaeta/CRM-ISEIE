@@ -15,6 +15,8 @@ export type PasoEnCola = {
   lead_email?: string | null;
   lead_telefono?: string | null;
   responsable_id: number | null;
+  /** El paso de esta fila (`lead_steps.id`): «Contactar» lo marca hecho (#212). */
+  paso_id?: number;
   gestora: string | null;
   clave: string;
   orden: number;
