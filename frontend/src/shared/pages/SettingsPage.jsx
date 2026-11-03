@@ -14,6 +14,7 @@ import MarcaSection from './MarcaSection';
 import CampusPorEmpresa, { marcarVarios } from '@/shared/components/CampusPorEmpresa';
 import PermisosDePersona from '@/modules/permissions/components/PermisosDePersona';
 import { avisoCambioCorreo, confirmacionCambioCorreo, problemaDeContrasena } from '@/shared/lib/credenciales';
+import { listRolesAsignables, mensajeNoLoTienes, motivoNoAsignable, NOMBRE_ROL, porRol } from '@/shared/lib/rolesAsignables';
 
 // Cada item de la nav interna. Si tiene `external: true` se muestra con el
 // icono de "abrir en otra página" y al hacer click navega a esa ruta.
@@ -413,7 +414,11 @@ function EditUserModal({ user, projects, onClose, onSaved, empresas, faltaMigrac
         : { title: '✓ Guardado' });
       onSaved();
     } catch (e) {
-      toast({ title: 'Error', description: e?.data?.error || e?.message, variant: 'destructive' });
+      // Un rol que quien guarda no puede dar (gemela de CRM#644): qué rol quitar, no solo el «no».
+      const sinPermiso = mensajeNoLoTienes(e, { role, roles_extra: rolesExtra });
+      toast(sinPermiso
+        ? { title: 'Ese rol no lo puedes dar', description: sinPermiso, variant: 'destructive' }
+        : { title: 'Error', description: e?.data?.error || e?.message, variant: 'destructive' });
     } finally { setSaving(false); }
   }
 
@@ -574,12 +579,31 @@ function EditUserModal({ user, projects, onClose, onSaved, empresas, faltaMigrac
   );
 }
 
+// Los roles que se ofrecen al invitar, con lo que hace cada uno.
+const ROLES_ALTA = [
+  ['gestor', 'Gestor — solo sus proyectos y leads'],
+  ['admin', 'Admin — acceso operativo completo'],
+  ['soporte', 'Soporte — tickets y consultas'],
+  ['colaborador', 'Colaborador — solo su tablero de Tareas'],
+];
+
 function InviteUserModal({ projects, onClose, onCreated, empresas, faltaMigracionEmpresas = false }) {
   const [nombre, setNombre] = useState('');
   const [email, setEmail] = useState('');
   const [role, setRole] = useState('gestor');
   const [assigned, setAssigned] = useState({}); // { [projectId]: recibeLeads }
   const [saving, setSaving] = useState(false);
+  // Qué roles puede dar quien invita (gemela de CRM#644: Tony, cinco altas
+  // rechazadas por elegir «Soporte» sin saber por qué). Si la lista no llega,
+  // el formulario sigue como antes y decide el servidor.
+  const [asignables, setAsignables] = useState(null);
+  useEffect(() => {
+    let vivo = true;
+    listRolesAsignables().then((l) => { if (vivo) setAsignables(l); }).catch(() => {});
+    return () => { vivo = false; };
+  }, []);
+  const filaDe = porRol(asignables);
+  const motivoPrincipal = (r) => motivoNoAsignable(filaDe[r]?.principal);
   // Las empresas enteras (#220). Diego, 10/10: «Un admin puede tener los
   // proyectos futuros, pero de SU empresa». Solo las da el super admin.
   const puedeDarEmpresas = Array.isArray(empresas) && !faltaMigracionEmpresas;
@@ -607,6 +631,10 @@ function InviteUserModal({ projects, onClose, onCreated, empresas, faltaMigracio
   async function submit() {
     if (nombre.trim().length < 2) { toast({ title: 'Nombre inválido', description: 'Mínimo 2 caracteres', variant: 'destructive' }); return; }
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) { toast({ title: 'Email inválido', variant: 'destructive' }); return; }
+    if (motivoPrincipal(role)) {
+      toast({ title: 'Ese rol no lo puedes dar', description: `Elige otro rol en lugar de «${NOMBRE_ROL[role] ?? role}»: le daría permisos que tú no tienes. Si de verdad lo necesita, pídeselo a un superadmin.`, variant: 'destructive' });
+      return;
+    }
     const projList = Object.entries(assigned).map(([projectId, recibeLeads]) => ({ projectId: Number(projectId), recibeLeads: !!recibeLeads }));
     // Un admin o una gestora sin campus entraría a un CRM vacío (#220). Al
     // admin le vale una empresa entera; a la gestora, no.
@@ -628,7 +656,10 @@ function InviteUserModal({ projects, onClose, onCreated, empresas, faltaMigracio
       toast({ title: '✓ Usuario invitado', description: 'Se le envió un email para crear su contraseña.' });
       onCreated();
     } catch (e) {
-      toast({ title: 'Error', description: e?.data?.error || e?.message || 'No se pudo crear el usuario', variant: 'destructive' });
+      const sinPermiso = mensajeNoLoTienes(e, { role });
+      toast(sinPermiso
+        ? { title: 'Ese rol no lo puedes dar', description: sinPermiso, variant: 'destructive' }
+        : { title: 'Error', description: e?.data?.error || e?.message || 'No se pudo crear el usuario', variant: 'destructive' });
     } finally { setSaving(false); }
   }
 
@@ -650,13 +681,24 @@ function InviteUserModal({ projects, onClose, onCreated, empresas, faltaMigracio
             <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm" placeholder="persona@empresa.com" />
           </div>
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Rol *</label>
-            <select value={role} onChange={(e) => setRole(e.target.value)} className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm">
-              <option value="gestor">Gestor — solo sus proyectos y leads</option>
-              <option value="admin">Admin — acceso operativo completo</option>
-              <option value="soporte">Soporte — tickets y consultas</option>
-              <option value="colaborador">Colaborador — solo su tablero de Tareas</option>
+            <label htmlFor="invitar-rol" className="text-xs text-muted-foreground mb-1 block">Rol *</label>
+            <select id="invitar-rol" value={role} onChange={(e) => setRole(e.target.value)} className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm">
+              {ROLES_ALTA.map(([v, texto]) => (
+                <option key={v} value={v} disabled={!!motivoPrincipal(v)}>
+                  {motivoPrincipal(v) ? `${NOMBRE_ROL[v]} (no puedes darlo)` : texto}
+                </option>
+              ))}
             </select>
+            {/* Los roles que no se pueden dar, con su porqué, a la vista sin abrir la lista. */}
+            {ROLES_ALTA.some(([v]) => motivoPrincipal(v)) && (
+              <ul className="mt-1 space-y-1 text-[10px] text-muted-foreground">
+                {ROLES_ALTA.filter(([v]) => motivoPrincipal(v)).map(([v]) => (
+                  <li key={v} data-testid={`rol-no-asignable-${v}`}>
+                    <span className="font-medium text-foreground/80">{NOMBRE_ROL[v]}.</span> {motivoPrincipal(v)}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">Proyectos asignados{(role === 'admin' || role === 'gestor') && ' *'}</label>
