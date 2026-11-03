@@ -8,7 +8,7 @@ import { notifyAdmins } from '../notifications/notifications.service.js';
 import * as dupQueue from './dup-queue.service.js';
 import * as leadProducts from './lead-products.service.js';
 import { deducirCanal } from './canal.js';
-import { planificarPasosDeLead } from '../proceso/proceso.model.js';
+import { planificarPasosDeLead, ajustarPaso } from '../proceso/proceso.model.js';
 import { cruzarConPulsacion } from '../widget/widget.pulsaciones.js';
 import { soloLoSuyo } from '../../shared/utils/roles.js';
 
@@ -547,20 +547,62 @@ async function contactoDeLaColaSobra(leadId, userId) {
   return rows[0] || {};
 }
 
-export async function addInteraction(leadId, tipo, nota, userId, fecha) {
+/**
+ * «Contactar» en la cola del día cierra el paso que la cola enseñaba (#212,
+ * gemela de diego-landaeta/CRM#259).
+ *
+ * Diego, 07/10: «si en la cola del día hice el seguimiento 3 y le doy a
+ * contactar, se guarda pero aún se mantiene, y la checklist no lo guarda. Si lo
+ * hago luego en la checklist, sí sale». Pasaba porque la cola solo apuntaba el
+ * contacto y dejaba que la regla de los contactos (pasoCerrado.js) dedujera el
+ * paso. Esa regla cierra UN paso por día de contacto: si esa mañana ya se había
+ * hablado con la persona, el seguimiento 3 se quedaba abierto y la persona
+ * volvía a la cola. Y la checklist, que desde el 09/10 es manual, lo enseñaba
+ * «por hacer» siempre (617 de los 632 «Contactar» de la cola en producción).
+ *
+ * Ahora el paso se marca hecho por el MISMO camino que la checklist
+ * (`ajustarPaso`, que recoloca los que quedan). Solo un paso de esta persona y
+ * que siga pendiente: un id de otra persona o uno ya hecho no se tocan.
+ */
+async function marcarPasoDeLaCola(leadId, pasoId, userId) {
+  const { rows } = await query(
+    `SELECT id FROM lead_steps WHERE id = $1 AND lead_id = $2 AND estado = 'pendiente'`,
+    [pasoId, leadId]);
+  if (!rows[0]) return null;
+  return ajustarPaso(pasoId, { estado: 'hecho' }, userId);
+}
+
+export async function addInteraction(leadId, tipo, nota, userId, fecha, { pasoId = null } = {}) {
   const lead = await leadModel.findByIdLight(leadId);
   if (!lead) throw new AppError('Lead no encontrado', 404, 'LEAD_NOT_FOUND');
+
+  // Una nota interna no es haber hablado con nadie: no cierra ningún paso.
+  const cierraPaso = pasoId && tipo !== 'nota';
 
   if (NOTA_DE_LA_COLA.test(nota || '')) {
     const { ya_apuntado, rafaga } = await contactoDeLaColaSobra(leadId, userId);
     if (rafaga) {
       throw new AppError('Más despacio: un contacto por persona. Este no se ha apuntado.', 429, 'DEMASIADO_RAPIDO');
     }
-    // Ya apuntó algo suyo en esta persona: el botón solo la saca de la cola.
-    if (ya_apuntado) return { id: ya_apuntado, lead_id: leadId, ya_apuntado: true };
+    // Ya apuntó algo suyo en esta persona: no se crea otro contacto, pero el
+    // paso que la cola enseñaba sí se cierra; si no, volvía a salir (#212).
+    if (ya_apuntado) {
+      const r = { id: ya_apuntado, lead_id: leadId, ya_apuntado: true };
+      if (!cierraPaso) return r;
+      const paso = await marcarPasoDeLaCola(leadId, pasoId, userId);
+      return { ...r, paso_hecho: paso ? paso.id : null };
+    }
   }
 
-  return await leadModel.createInteraction(leadId, tipo, nota, userId, fecha);
+  const interaccion = await leadModel.createInteraction(leadId, tipo, nota, userId, fecha);
+  if (!cierraPaso) return interaccion;
+
+  // Si falla, el contacto se queda apuntado; el paso se puede marcar en la ficha.
+  const pasoHecho = await marcarPasoDeLaCola(leadId, pasoId, userId).catch((err) => {
+    logger.warn({ err: err.message, leadId, pasoId }, 'No se pudo marcar el paso de la cola');
+    return null;
+  });
+  return { ...interaccion, paso_hecho: pasoHecho ? pasoHecho.id : null };
 }
 
 // Edición de una interacción existente. Gestor solo puede editar las suyas;

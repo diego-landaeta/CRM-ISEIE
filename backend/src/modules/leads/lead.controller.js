@@ -312,7 +312,11 @@ export async function addInteraction(req, res, next) {
     if (!parsed.success) {
       throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
     }
-    const result = await leadService.addInteraction(id, parsed.data.tipo, parsed.data.nota, req.user.userId, parsed.data.fecha);
+    // El paso que se atiende desde la cola se marca solo si puede marcar pasos,
+    // que es el mismo permiso que pide la checklist (PATCH /proceso/paso-lead).
+    const pasoId = parsed.data.paso_id && await tienePermiso(req, 'proceso.trabajar')
+      ? parsed.data.paso_id : null;
+    const result = await leadService.addInteraction(id, parsed.data.tipo, parsed.data.nota, req.user.userId, parsed.data.fecha, { pasoId });
     res.status(201).json({ success: true, data: result });
   } catch (err) { next(err); }
 }

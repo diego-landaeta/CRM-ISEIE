@@ -20,7 +20,7 @@ process.env.DATABASE_URL = process.env.DATABASE_URL
   || 'postgresql://crm_user:crm_local@127.0.0.1:15432/crm_dev';
 process.env.PORT = '3099';
 process.env.CORS_ORIGINS = 'http://localhost:5173';
-process.env.LOG_LEVEL = process.env.LOG_LEVEL_DEPURAR || 'silent';
+process.env.LOG_LEVEL = 'silent';
 // Las credenciales de las APIs externas se guardan cifradas, y sin esta clave
 // el modulo entero se cae con «ENCRYPTION_KEY must be 64 hex chars». Es de
 // pega y solo vale para tests: la de verdad vive en el .env del servidor.

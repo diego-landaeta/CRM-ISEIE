@@ -397,6 +397,8 @@ export async function colaDelDia({
   const { rows } = await query(
     `${PENDIENTES}
      SELECT q.lead_id, q.lead_nombre, q.lead_estado, q.responsable_id,
+            -- El paso de esta fila (#212): «Contactar» lo marca hecho, como la checklist.
+            q.id AS paso_id,
             q.lead_email, q.lead_telefono,
             q.clave, q.orden, q.fecha_prevista, q.contactos,
             -- De que campus es cada fila. Con una EMPRESA elegida la cola

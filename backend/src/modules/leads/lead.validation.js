@@ -126,6 +126,8 @@ export const createInteractionSchema = z.object({
   // se rechazaba entera (M.ª Eugenia, seis veces en una tarde). La columna es TEXT.
   nota: z.string().max(10000, 'La nota es demasiado larga (máx. 10.000 caracteres)').optional(),
   fecha: z.string().datetime().optional().or(z.string().regex(/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?/)).optional(),
+  // El paso de la cola del día que se está atendiendo (#212): se marca hecho.
+  paso_id: z.number().int().positive().optional(),
 });
 
 export const updateInteractionSchema = z.object({
