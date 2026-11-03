@@ -109,3 +109,24 @@ export function atajoDe(rango, hoy = new Date()) {
   });
   return encontrado ? encontrado.clave : null;
 }
+
+/**
+ * Cómo se dice un rango en una etiqueta (#223): el nombre de su atajo si es uno
+ * («Este mes»), y si no, las fechas, cortas: «1–30 sep», «15 sep – 3 oct», «3 nov»;
+ * con el año solo si no es el de hoy. Antes «Programas más vendidos» decía
+ * «Histórico» enseñando el mes en curso.
+ */
+const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+
+export function nombreDelRango(rango, hoy = new Date()) {
+  if (!rango?.from || !rango?.to) return null;
+  const clave = atajoDe(rango, hoy);
+  if (clave) return ATAJOS.find((a) => a.clave === clave).etiqueta;
+  const [a1, m1, d1] = rango.from.split('-').map(Number);
+  const [a2, m2, d2] = rango.to.split('-').map(Number);
+  const anio = (a) => (a === hoy.getFullYear() ? '' : ` ${a}`);
+  if (rango.from === rango.to) return `${d1} ${MESES[m1 - 1]}${anio(a1)}`;
+  if (a1 === a2 && m1 === m2) return `${d1}–${d2} ${MESES[m1 - 1]}${anio(a1)}`;
+  if (a1 === a2) return `${d1} ${MESES[m1 - 1]} – ${d2} ${MESES[m2 - 1]}${anio(a1)}`;
+  return `${d1} ${MESES[m1 - 1]} ${a1} – ${d2} ${MESES[m2 - 1]} ${a2}`;
+}

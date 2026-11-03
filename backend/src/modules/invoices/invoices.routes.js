@@ -5,6 +5,7 @@ import { uploadImage } from '../../shared/middleware/upload.js';
 import * as ctrl from './invoices.controller.js';
 import { facturaDeSuCampus, campusDelCuerpo } from './invoices.acceso.js';
 import { ventaPorId, prospectoPorId } from '../conversions/conversion.acceso.js';
+import { projectAccess } from '../../shared/middleware/projectAccess.js';
 
 // Guardas de alcance con NOMBRE: el inventario de permisos (#423) las reconoce por el nombre (ver TECNICOS).
 const prospectoDelParametro = (req, res, next) => prospectoPorId(req, res, next, req.params.leadId);
@@ -19,8 +20,9 @@ router.use(verifyToken);
 
 // Corte de facturacion: hasta que dia esta al dia. Consultarlo lo puede
 // cualquiera; moverlo solo quien gestiona la facturacion (se comprueba dentro).
-router.get('/facturacion-al-dia',     puede('facturas.view'), ctrl.facturacionAlDia);
-router.put('/facturacion-al-dia',     puede('facturas.cola'), ctrl.setFacturacionAlDia);
+// Solo de un campus de quien pide (projectAccess): antes valía el id de cualquiera.
+router.get('/facturacion-al-dia',     puede('facturas.view'), projectAccess, ctrl.facturacionAlDia);
+router.put('/facturacion-al-dia',     puede('facturas.cola'), projectAccess, ctrl.setFacturacionAlDia);
 router.post('/cola/generar',          puede('facturas.cola'), campusDelCuerpo, ctrl.generarDeCola);
 router.post('/cola/emitir-hasta',     puede('facturas.cola'), campusDelCuerpo, ctrl.emitirColaHasta);
 router.get('/',                       puede('facturas.view'), ctrl.list);

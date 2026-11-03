@@ -49,6 +49,9 @@ const cursosQ = campusQ.extend({
   sentido: z.enum(['asc', 'desc']).default('asc'),
   pagina: num.default(1),
   limite: z.coerce.number().int().min(1).max(100).default(25),
+  // `con_alumnos=0`: sin contar los alumnos de cada curso (una llamada a Moodle por curso).
+  // Lo pide el buscador (Ctrl K, #591), que solo enseña el nombre.
+  con_alumnos: z.enum(['0', '1']).optional().transform((v) => v !== '0'),
 });
 const cursoP = z.object({ id: num });
 

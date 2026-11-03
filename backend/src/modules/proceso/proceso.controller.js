@@ -1,6 +1,7 @@
 import * as Proceso from './proceso.service.js';
 import { crearPasoSchema, editarPasoSchema, reordenarSchema, ajustarPasoSchema, anadirSeguimientoSchema } from './proceso.validation.js';
 import { leadsToWasapiCsv, leadsToWasapiXlsx, detectCountry } from '../../shared/utils/wasapiCsv.js';
+import { listaDelAmbito } from '../../shared/utils/ambito.js';
 
 export async function listarPasos(req, res, next) {
   try {
@@ -55,20 +56,12 @@ function deQuienEsLaCola(req) {
   return req.user?.userId || -1;
 }
 
-// Que proyectos entran. Sin `projectId` no se filtra por proyecto, que es la
-// vista de «todos». No abre ninguna puerta: a una gestora la acota su propio
-// recorte, y quien no es gestora ya puede ver todos los proyectos.
-function proyectosDeLaCola(req) {
-  // Una EMPRESA manda varios proyectos a la vez (sus campus). Diego, 14/09:
-  // «estos procesos en empresas deben ser por empresa, no por proyecto».
-  // Antes solo se leia `projectId`, asi que con CEDIA elegida la cola
-  // enseñaba la de TODOS los proyectos --no la de sus siete campus--.
-  const varios = String(req.query.projectIds || '')
-    .split(',').map((x) => Number(x.trim())).filter((n) => Number.isInteger(n) && n > 0);
-  if (varios.length) return varios;
-  const uno = Number(req.query.projectId);
-  return Number.isInteger(uno) && uno > 0 ? [uno] : null;
-}
+// Que proyectos entran: los que pida la pantalla (un campus, los de una
+// empresa o `projectIds`), SIEMPRE recortados a los de quien pide; sin pedir
+// nada, los suyos. Antes un admin veía la cola y el seguimiento de cualquier
+// empresa con solo poner sus ids en la URL, y sin ninguno, los de todas.
+// Super admin y soporte, todo (`null`).
+const proyectosDeLaCola = (req) => listaDelAmbito(req);
 
 /**
  * Los filtros del repaso, tal como llegan de la pantalla.
@@ -123,7 +116,7 @@ export async function wasapiSeguimiento(req, res, next) {
     // bajarse la base entera cuando en pantalla hay cuarenta filtradas es la
     // forma mas silenciosa de mandar una difusion a quien no tocaba.
     const { filas } = await Proceso.baseDeSeguimiento({
-      projectIds: proyectosDeLaCola(req),
+      projectIds: await proyectosDeLaCola(req),
       asesoraId: deQuienEsLaCola(req),
       ...filtrosDelRepaso(req),
       // Sin tope: se descarga TODO lo que cumple el filtro, no solo la pagina.
@@ -183,7 +176,7 @@ export async function cola(req, res, next) {
     const porPagina = Math.min(Number(req.query.limite) || 100, 300);
     const pagina = Math.max(Number(req.query.pagina) || 1, 1);
     const filtros = {
-      projectIds: proyectosDeLaCola(req),
+      projectIds: await proyectosDeLaCola(req),
       asesoraId: deQuienEsLaCola(req),
       hasta: /^\d{4}-\d{2}-\d{2}$/.test(req.query.hasta || '') ? req.query.hasta : null,
       estado: req.query.estado || null,
@@ -223,7 +216,7 @@ export async function seguimiento(req, res, next) {
     const porPagina = Math.min(Number(req.query.limite) || 50, 200);
     const pagina = Math.max(Number(req.query.pagina) || 1, 1);
     const comunes = {
-      projectIds: proyectosDeLaCola(req),
+      projectIds: await proyectosDeLaCola(req),
       asesoraId: deQuienEsLaCola(req),
       ...filtrosDelRepaso(req),
     };
@@ -246,7 +239,7 @@ export async function seguimiento(req, res, next) {
 export async function resumenSeguimiento(req, res, next) {
   try {
     const data = await Proceso.resumenDeSeguimiento({
-      projectIds: proyectosDeLaCola(req),
+      projectIds: await proyectosDeLaCola(req),
       asesoraId: deQuienEsLaCola(req),
       desdeDias: Number(req.query.desdeDias) || 15,
       descansoDias: Number(req.query.descansoDias) || 30,
@@ -258,7 +251,7 @@ export async function resumenSeguimiento(req, res, next) {
 export async function resumenCola(req, res, next) {
   try {
     const data = await Proceso.resumenDeLaCola({
-      projectIds: proyectosDeLaCola(req),
+      projectIds: await proyectosDeLaCola(req),
       asesoraId: deQuienEsLaCola(req),
     });
     res.json({ success: true, data });

@@ -3,7 +3,8 @@ import DOMPurify from 'dompurify';
 import { Plus, EnvelopeSimple, Pencil, Trash, Eye, FloppyDisk, X } from '@phosphor-icons/react';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import { useAuth } from '@/contexts/AuthContext';
-import { useProjectContext } from '@/contexts/ProjectContext';
+import { useCampusDeLaPantalla } from '@/shared/hooks/useCampusDeLaPantalla';
+import ElegirCampus from '@/shared/components/ui/ElegirCampus';
 import { toast } from '@/shared/hooks/useToast';
 import { useConfirm } from '@/shared/components/ui/useConfirm';
 import { avisoDeLoQueFalta, type Falta } from '@/shared/lib/loQueFalta';
@@ -14,7 +15,10 @@ import usePermission from '@/shared/hooks/usePermission';
 
 export default function EmailTemplatesPage() {
   const { user } = useAuth();
-  const { activeProject } = useProjectContext();
+  // Las plantillas son de UN campus. Con «Todos» arriba, el campus se elige
+  // aquí (CRM#632: el admin con varios campus se quedaba en el muro).
+  const campus = useCampusDeLaPantalla();
+  const activeProject = campus.id ? { id: campus.id } : null;
   const confirm = useConfirm();
   const role = (user as { role?: string } | null)?.role;
   // Lo que dice el servidor (#423): sale si salía antes Y tiene el permiso.
@@ -96,7 +100,13 @@ export default function EmailTemplatesPage() {
         ) : undefined}
       />
 
-      {loading ? (
+      <ElegirCampus campus={campus} que="sus plantillas" />
+
+      {!campus.id ? (
+        <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+          Elige el campus: cada uno tiene sus plantillas.
+        </p>
+      ) : loading ? (
         <div className="grid gap-3 md:grid-cols-2">
           {[1, 2].map(i => <div key={i} className="h-32 bg-muted/30 rounded-xl animate-pulse" />)}
         </div>

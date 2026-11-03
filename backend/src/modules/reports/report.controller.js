@@ -20,21 +20,10 @@ import { construirAmbito, acotarProyectos, responsableImpuesto } from '../mcp/mc
 // No hace falta modelo nuevo: la sociedad ya vive en `projects.sociedad_emisora_id`,
 // que apunta a `invoice_issuers`. Se traduce la sociedad a su lista de proyectos
 // y el resto del informe no se entera de nada.
-async function proyectosDelInforme(req) {
-  const issuerId = req.query.issuerId ? Number(req.query.issuerId) : null;
-  if (!issuerId) {
-    return {
-      projectId: req.query.projectId ? Number(req.query.projectId) : null,
-      projectIds: null,
-    };
-  }
-  const { rows } = await query(
-    `SELECT id FROM projects WHERE sociedad_emisora_id = $1 ORDER BY id`, [issuerId]);
-  // Una sociedad sin proyectos NO puede acabar significando «todos»: seria
-  // enseñar de mas justo cuando se pidio acotar. Se devuelve una lista que no
-  // casa con nada y el informe sale vacio, que es la respuesta honesta.
-  return { projectId: null, projectIds: rows.length ? rows.map((r) => r.id) : [-1] };
-}
+// Siempre dentro de lo suyo (`proyectosDelAmbito`): antes un admin de CEDIA
+// pedía el informe de ICTESS con su `issuerId` o su `projectId` en la URL, y
+// sin ninguno veía el de todas las empresas.
+const proyectosDelInforme = (req) => proyectosDelAmbito(req);
 
 export async function overview(req, res, next) {
   try {

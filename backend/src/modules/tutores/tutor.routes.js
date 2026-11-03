@@ -40,6 +40,8 @@ router.get('/anuncios', puede('tutores.gestionar'), ctrl.anunciosDeTutores);
 router.get('/curso/:productId', puede('tutores.mis_cursos', 'tutores.gestionar'), ctrl.cursoDetalle);
 router.get('/curso/:productId/brochure', puede('tutores.mis_cursos', 'tutores.gestionar'), ctrl.brochureDelCurso);
 
+// El buscador (Ctrl K, #591). Antes que `/:id`, o «buscar» se leería como un id.
+router.get('/buscar', puede('tutores.gestionar'), ctrl.buscar);
 router.get('/', puede('tutores.gestionar'), ctrl.listar);
 router.post('/', puede('tutores.gestionar'), ctrl.alta);
 router.get('/:id', ctrl.ficha);

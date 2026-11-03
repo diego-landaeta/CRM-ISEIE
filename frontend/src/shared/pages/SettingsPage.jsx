@@ -10,6 +10,7 @@ import {
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 import { useConfirm } from '@/shared/components/ui/useConfirm';
+import usePermission from '@/shared/hooks/usePermission';
 import MarcaSection from './MarcaSection';
 import CampusPorEmpresa, { marcarVarios } from '@/shared/components/CampusPorEmpresa';
 import PermisosDePersona from '@/modules/permissions/components/PermisosDePersona';
@@ -939,6 +940,11 @@ function IntegrationsSection({ isAdmin }) {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(null);
   const confirm = useConfirm();
+  // Ver la lista lo trae también el admin (CRM#632), con las de sus campus;
+  // guardar, probar y borrar siguen siendo de soporte: no se ofrece lo que el
+  // servidor niega.
+  const { can } = usePermission();
+  const puedeGuardar = isAdmin && can('credentials.edit');
 
   async function loadCreds() {
     setLoading(true);
@@ -1046,14 +1052,15 @@ function IntegrationsSection({ isAdmin }) {
                 </div>
                 <div className="flex items-center gap-2">
                   <button
-                    disabled={!isAdmin}
+                    disabled={!puedeGuardar}
+                    title={puedeGuardar ? undefined : 'Guardar una clave es de soporte'}
                     onClick={() => { setEditing(i); setValue(''); }}
                     className="flex-1 h-8 rounded-md bg-muted hover:bg-muted/70 text-xs font-medium text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-1.5"
                   >
                     <Wrench size={12} />
                     {c ? 'Actualizar' : 'Configurar'}
                   </button>
-                  {c && isAdmin && (
+                  {c && puedeGuardar && (
                     <>
                       <button
                         onClick={() => handleTest(c)}

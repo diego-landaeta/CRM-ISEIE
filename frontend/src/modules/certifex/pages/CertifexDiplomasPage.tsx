@@ -535,8 +535,9 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
   const [curso, setCurso] = useState('');
   const [desde, setDesde] = useState('');
   const [hasta, setHasta] = useState('');
-  const [buscar, setBuscar] = useState('');
-  const [q, setQ] = useState('');
+  // `?buscar=` lo trae el buscador (Ctrl K, #591): la pestaña sale ya filtrada por ese alumno.
+  const [buscar, setBuscar] = useState(() => params.get('buscar') ?? '');
+  const [q, setQ] = useState(() => (params.get('buscar') ?? '').trim());
   const [filtroAviso, setFiltroAviso] = useState<FiltroAviso | ''>('');
   const [pagina, setPagina] = useState(1);
   const [recarga, setRecarga] = useState(0);

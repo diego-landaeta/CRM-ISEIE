@@ -181,6 +181,15 @@ describe('el panel de Moodle', () => {
     expect(r.body.data.cursos.find((c) => c.curso_id === 11)).toMatchObject({ nombre: 'Máster en Psicología', alumnos: 2, visible: true, estado: 'activo' });
   });
 
+  // El buscador (Ctrl K, #591) solo enseña el nombre: no pregunta a Moodle curso a curso.
+  it('con con_alumnos=0, los cursos sin contar alumnos', async () => {
+    const r = await request.get(`/api/moodle/cursos?proyecto_id=${CON}&estado=todos&texto=psicologia&con_alumnos=0`).set(como(ADMIN));
+    expect(r.status).toBe(200);
+    const curso = r.body.data.cursos.find((c) => c.curso_id === 11);
+    expect(curso).toMatchObject({ nombre: 'Máster en Psicología' });
+    expect(curso.alumnos).toBeUndefined();
+  });
+
   it('las categorías, para filtrar', async () => {
     const r = await request.get(`/api/moodle/categorias?proyecto_id=${CON}`).set(como(ADMIN));
     expect(r.body.data.categorias).toEqual([expect.objectContaining({ id: 5, nombre: 'Másteres', cursos: 2 })]);

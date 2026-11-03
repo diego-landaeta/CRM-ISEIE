@@ -54,7 +54,31 @@ export async function tieneAlgunCampus(tutorId, projectIds) {
   return rows.length > 0;
 }
 
-export async function listar({ projectId, activos = true }) {
+/**
+ * El buscador (Ctrl K, #591): un tutor por nombre o correo, sin acentos.
+ * Solo lo que sale en el resultado: ni DNI, ni IBAN, ni banco, ni notas
+ * (esos se ven en su ficha, con su guarda). `campus` null: todos.
+ */
+export async function buscar({ q, campus, limit = 5 }) {
+  const { rows } = await query(
+    `SELECT u.id, u.nombre, u.email, u.active,
+            (SELECT string_agg(DISTINCT pr.nombre, ' · ' ORDER BY pr.nombre)
+               FROM user_projects up JOIN projects pr ON pr.id = up.project_id
+              WHERE up.user_id = u.id) AS marcas
+       FROM users u
+      WHERE u.role = 'tutor'
+        AND (unaccent(COALESCE(u.nombre, '')) ILIKE unaccent($1) OR u.email ILIKE $1)
+        AND ($2::int[] IS NULL OR EXISTS (
+              SELECT 1 FROM user_projects up
+               WHERE up.user_id = u.id AND up.project_id = ANY($2::int[])))
+      ORDER BY u.active DESC, u.nombre
+      LIMIT $3`,
+    [`%${q}%`, campus, limit],
+  );
+  return rows;
+}
+
+export async function listar({ projectId, projectIds = null, activos = true }) {
   // Con un proyecto elegido no se corta en seco: primero los profesores de ESE
   // proyecto y despues los de los demas proyectos de la MISMA SOCIEDAD.
   //
@@ -68,10 +92,14 @@ export async function listar({ projectId, activos = true }) {
        SELECT p.id,
               (p.id = $1) AS es_el_elegido
          FROM projects p
-        WHERE $1::int IS NULL
-           OR p.id = $1
-           OR (p.sociedad_emisora_id IS NOT NULL
-               AND p.sociedad_emisora_id = (SELECT sociedad_emisora_id FROM projects WHERE id = $1))
+        -- Con una SOCIEDAD elegida, el alcance son sus campus y punto: no se
+        -- amplia a la sociedad de nadie porque ya ES una sociedad.
+        WHERE ($2::int[] IS NOT NULL AND p.id = ANY($2::int[]))
+           OR ($2::int[] IS NULL AND (
+                $1::int IS NULL
+                OR p.id = $1
+                OR (p.sociedad_emisora_id IS NOT NULL
+                    AND p.sociedad_emisora_id = (SELECT sociedad_emisora_id FROM projects WHERE id = $1))))
      )
      SELECT u.id, u.nombre, u.email, u.active, u.last_login_at,
             -- «Aun no ha entrado»: tiene un enlace pendiente Y nunca ha iniciado
@@ -112,7 +140,7 @@ export async function listar({ projectId, activos = true }) {
                           JOIN projects p ON p.sociedad_emisora_id = te.issuer_id AND p.active = true
                          WHERE te.tutor_id = u.id AND p.id IN (SELECT id FROM alcance)))
       ORDER BY es_de_este_proyecto DESC, u.nombre`,
-    [projectId || null]
+    [projectId || null, (Array.isArray(projectIds) && projectIds.length) ? projectIds.map(Number) : null]
   );
   return rows;
 }

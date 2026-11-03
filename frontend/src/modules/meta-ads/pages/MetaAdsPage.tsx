@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState, lazy, Suspense } from 'react';
+import { useCampusDeLaPantalla } from '@/shared/hooks/useCampusDeLaPantalla';
+import ElegirCampus from '@/shared/components/ui/ElegirCampus';
 import { ArrowsClockwise, PlugsConnected, Receipt, Eye, CursorClick, Target, ChartLineUp, Warning, Gear, CaretRight, CaretDown, Plus, CaretUpDown } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { metaApi, MetaAccount, MetaCampaign, MetaDashboard, MetaRoiRow, MetaAdSet, MetaAd } from '../api/metaAds.api';
@@ -29,11 +31,15 @@ const STATUS_TONE: Record<string, string> = {
 };
 
 export default function MetaAdsPage() {
-  const { activeProject, user } = useAuth() as {
-    activeProject: { id?: number; nombre?: string } | null;
+  const { user } = useAuth() as {
     user: { role?: string; roles_extra?: string[] } | null;
   };
-  const projectId = activeProject?.id;
+  // La publicidad es de UN campus: cada uno tiene su cuenta de anuncios (Diego,
+  // 15/09: «publicidad individual»). Con una empresa o «Todos» arriba, ya no se
+  // tapia: se elige aquí cuál (#218, tanda 3).
+  const campus = useCampusDeLaPantalla();
+  const projectId = campus.id;
+  const selector = <ElegirCampus campus={campus} que="sus anuncios" />;
   // Quien la ve por `meta_ads.view` (26/10/2026: el equipo de desarrollo) solo
   // CONSULTA: conectar, sincronizar, configurar y asociar son de administración
   // (el servidor también se lo niega).
@@ -127,10 +133,13 @@ export default function MetaAdsPage() {
   const currency = account?.currency || 'EUR';
 
   // Estados de página
-  if (!projectId || projectId === -1) {
+  if (!projectId) {
     return (
-      <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-lg p-6 text-center text-sm text-amber-800 dark:text-amber-300">
-        Selecciona un proyecto en la barra superior.
+      <div className="space-y-3">
+        {selector}
+        <div className="bg-warning-soft border border-warning/30 rounded-lg p-6 text-center text-sm text-warning-soft-foreground">
+          Elige el campus: cada uno tiene su cuenta de anuncios.
+        </div>
       </div>
     );
   }
@@ -139,14 +148,18 @@ export default function MetaAdsPage() {
   }
   if (soloVer && accounts.length === 0) {
     return (
-      <div className="bg-info-soft border border-border rounded-lg p-6 text-center text-sm">
-        Este campus no tiene ninguna cuenta de Meta conectada todavía.
+      <div className="space-y-3">
+        {selector}
+        <div className="bg-info-soft border border-border rounded-lg p-6 text-center text-sm">
+          Este campus no tiene ninguna cuenta de Meta conectada todavía.
+        </div>
       </div>
     );
   }
   if (accounts.length === 0 || showAddAccount) {
     return (
       <div className="space-y-3">
+        {selector}
         {showAddAccount && (
           <button onClick={() => setShowAddAccount(false)}
             className="text-xs text-muted-foreground hover:text-foreground">
@@ -156,7 +169,7 @@ export default function MetaAdsPage() {
         <Suspense fallback={null}>
           <ConnectWizard
             projectId={projectId}
-            projectName={activeProject?.nombre}
+            projectName={campus.nombre}
             onConnected={() => { setShowAddAccount(false); loadAccounts(); }}
           />
         </Suspense>
@@ -167,6 +180,7 @@ export default function MetaAdsPage() {
 
   return (
     <div className="space-y-5 pb-8">
+      {selector}
       {/* Header con selector de cuenta (cuando hay >1) + info + acciones */}
       <div className="bg-card border border-border rounded-lg p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0 flex-1">

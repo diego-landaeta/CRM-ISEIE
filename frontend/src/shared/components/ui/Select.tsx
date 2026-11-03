@@ -2,7 +2,8 @@ import { useEffect, useId, useRef, useState, KeyboardEvent as ReactKeyboardEvent
 import { CaretDown, Check } from '@phosphor-icons/react';
 import { cn } from '@/shared/lib/utils';
 
-export type SelectOption<T> = { value: T; label: string };
+/** `disabled`: se ve en la lista pero no se puede elegir (un rol que no puedes dar, por ejemplo). */
+export type SelectOption<T> = { value: T; label: string; disabled?: boolean };
 
 interface SelectProps<T> {
   value: T;
@@ -74,6 +75,7 @@ export default function Select<T>({
 
   function commit(idx: number) {
     const opt = options[idx];
+    if (opt?.disabled) return;
     if (opt) onChange(opt.value);
     setOpen(false);
     btnRef.current?.focus();
@@ -182,6 +184,7 @@ export default function Select<T>({
                 key={String(opt.value) + ':' + idx}
                 role="option"
                 aria-selected={isSelected ? 'true' : 'false'}
+                aria-disabled={opt.disabled ? 'true' : undefined}
                 // onMouseMove y no onMouseEnter: al saltar con una letra la lista se
                 // desplaza, pasa por debajo del ratón quieto y «entraba» en otra opción,
                 // que pisaba la elegida con el teclado (visto en la prueba a mano, #106).
@@ -195,6 +198,7 @@ export default function Select<T>({
                   itemCls,
                   isHigh ? 'bg-secondary text-foreground' : 'text-foreground/90',
                   isSelected && 'font-semibold',
+                  opt.disabled && 'opacity-50 cursor-not-allowed',
                 )}
               >
                 <span className="flex-1 truncate">{opt.label}</span>

@@ -2,6 +2,7 @@ import { useEffect, useState, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowsClockwise, CheckCircle, X, GitMerge, Warning, ArrowSquareOut } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
+import { ambitoComoObjeto } from '@/shared/lib/ambitoInforme';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 
@@ -37,8 +38,17 @@ function fmtDate(d: string | null): string {
 
 export default function DupReviewQueuePage() {
   const navigate = useNavigate();
-  const { activeProject } = useAuth() as { activeProject: { id?: number; nombre?: string } | null };
+  const { activeProject, activeIssuerId, projects } = useAuth() as {
+    activeProject: { id?: number; nombre?: string } | null;
+    activeIssuerId?: number | null;
+    projects?: Array<{ id: number; nombre: string }>;
+  };
   const projectId = activeProject?.id;
+  // Un campus, una empresa o «Todos» (#218): el servidor recorta a los campus de
+  // quien mira (`listaDelAmbito`, #620). Con varios, cada fila dice de cuál es.
+  const ambito = ambitoComoObjeto({ activeIssuerId, activeProject });
+  const varios = !(projectId && projectId > 0);
+  const campusDe = (id: number) => projects?.find((p) => p.id === id)?.nombre;
   const [items, setItems] = useState<QueueItem[]>([]);
   const [counts, setCounts] = useState<{ pending: number; approved: number; merged: number; rejected: number }>({ pending: 0, approved: 0, merged: 0, rejected: 0 });
   const [statusFilter, setStatusFilter] = useState<'pending' | 'approved' | 'merged' | 'rejected'>('pending');
@@ -51,13 +61,13 @@ export default function DupReviewQueuePage() {
   function load() {
     if (!projectId) return;
     setLoading(true);
-    client.get<QueueItem[]>('/leads/review-queue', { params: { projectId, status: statusFilter } })
+    client.get<QueueItem[]>('/leads/review-queue', { params: { ...ambito, status: statusFilter } })
       .then((r: any) => { setItems(r?.data || []); setCounts(r?.counts || { pending: 0, approved: 0, merged: 0, rejected: 0 }); })
       .catch(() => { setItems([]); })
       .finally(() => setLoading(false));
   }
 
-  useEffect(() => { load(); }, [projectId, statusFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [projectId, activeIssuerId, statusFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function approve(it: QueueItem) {
     console.log('[dup-review] approve click', { queueId: it.id, leadId: it.lead_id });
@@ -89,9 +99,6 @@ export default function DupReviewQueuePage() {
     } finally { setBusyId(null); }
   }
 
-  if (!projectId || projectId === -1) {
-    return <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-lg p-6 text-center text-sm text-amber-800 dark:text-amber-300">Selecciona un proyecto.</div>;
-  }
 
   return (
     <div className="space-y-5 pb-8">
@@ -149,6 +156,9 @@ export default function DupReviewQueuePage() {
                     <h3 className="text-sm font-semibold">Lead nuevo #{it.lead_id}</h3>
                     {it.reincidente && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300 font-semibold">REINCIDENTE</span>}
                     <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">{it.source}</span>
+                    {varios && campusDe(it.project_id) && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-border text-muted-foreground">{campusDe(it.project_id)}</span>
+                    )}
                   </div>
                   <p className="text-sm font-medium">{it.lead_nombre || '— sin nombre —'}</p>
                   <p className="text-xs text-muted-foreground">{it.lead_email || it.lead_telefono || '—'}</p>

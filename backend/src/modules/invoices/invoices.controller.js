@@ -6,7 +6,7 @@ import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import { saveLocal, getLocal, deleteLocal } from '../../shared/services/localStorage.service.js';
 import { createInvoiceSchema, setSequenceSchema, updateConfigSchema, issuerSchema, cobrarProformaSchema } from './invoices.validation.js';
-import { veTodoElCrm, campusDeLaPersona } from '../../shared/utils/ambito.js';
+import { proyectosDelAmbito, veTodoElCrm, campusDeLaPersona, campusDeTodos } from '../../shared/utils/ambito.js';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
 import { soloLoSuyo } from '../../shared/utils/roles.js';
 
@@ -53,13 +53,17 @@ export async function list(req, res, next) {
     // Vista por SOCIEDAD (todas las facturas de una empresa emisora entre
     // proyectos): global, solo admin/superadmin. Si no, se exige projectId.
     const isAdmin = req.user?.role === 'admin' || req.user?.role === 'superadmin';
+    // «Todos los proyectos» (#218): sin campus ni empresa, las de los campus de
+    // quien pide (super admin y soporte, todos menos los de pruebas). Antes,
+    // «projectId requerido» y la pantalla se quedaba tras el muro.
+    const todos = !issuerId && !req.query.projectId;
     let pid = null;
     if (issuerId && isAdmin) {
       pid = req.query.projectId ? Number(req.query.projectId) : null; // opcional en modo sociedad
-    } else {
+    } else if (!todos) {
       pid = projectId(req);
     }
-    const projectIds = await campusPermitidos(req, pid);
+    const projectIds = todos ? await campusDeTodos(req) : await campusPermitidos(req, pid);
     // Gestor: solo ve SUS facturas (las de sus leads). Admin/superadmin, todas.
     const responsableId = soloLoSuyo(req.user) ? req.user.userId : null;
     const data = await model.list({ projectId: pid, projectIds, issuerId: issuerId && isAdmin ? issuerId : null,
@@ -83,8 +87,10 @@ export async function stats(req, res, next) {
     const issuerId = req.query.issuerId ? Number(req.query.issuerId) : null;
     // Con issuerId → stats de la sociedad (opcionalmente acotada a un proyecto).
     // Sin issuerId → stats del proyecto activo (comportamiento clásico).
-    const pid = req.query.projectId ? Number(req.query.projectId) : (issuerId ? null : projectId(req));
-    const projectIds = await campusPermitidos(req, pid);
+    // Sin campus ni empresa: «Todos los proyectos» (#218), como la lista.
+    const todos = !issuerId && !req.query.projectId;
+    const pid = req.query.projectId ? Number(req.query.projectId) : null;
+    const projectIds = todos ? await campusDeTodos(req) : await campusPermitidos(req, pid);
     res.json({ success: true, data: await model.getStats({ projectId: pid, projectIds, issuerId, ...periodo(req) }) });
   } catch (e) { next(e); }
 }

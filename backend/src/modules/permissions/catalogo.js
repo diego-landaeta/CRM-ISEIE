@@ -36,7 +36,13 @@
  * `catalogoPermisos.test.js` lo comprueba rol por rol.
  */
 
-const TODOS = ['admin', 'gestor', 'soporte', 'project_manager', 'tutor'];
+// El tutor NO va en TODOS (Diego, 03/11, #591): solo ve lo suyo. Lo que de verdad usa
+// lleva 'tutor' a mano: sus cursos y comisiones, sus consultas, cambiar su correo, las
+// novedades y los mensajes. Lo demás de TODOS no le funcionaba igualmente: el servidor
+// le cierra todo lo que no está en `RUTAS_DEL_TUTOR` (shared/utils/roles.js), pero el
+// catálogo se lo daba y el frontal se lo creía.
+const TODOS = ['admin', 'gestor', 'soporte', 'project_manager'];
+const TODOS_Y_TUTOR = [...TODOS, 'tutor'];
 const ADMIN = ['admin'];
 const ADMIN_SOPORTE = ['admin', 'soporte'];
 const SOPORTE = ['soporte'];
@@ -465,14 +471,14 @@ export const SECCIONES = [
     recursos: [
       {
         clave: 'novedades', nombre: 'Novedades', acciones: [
-          a('view', 'Ver novedades', 'Lo que trae cada versión del CRM.', TODOS),
+          a('view', 'Ver novedades', 'Lo que trae cada versión del CRM.', TODOS_Y_TUTOR),
           a('envios', 'Ver a quién llegó', 'A quién se ha mandado cada versión.', ADMIN_SOPORTE),
           a('enviar', 'Mandar novedades', 'Mandar el correo de una versión.', SOPORTE),
         ],
       },
       {
         clave: 'mensajes', nombre: 'Mensajes internos', acciones: [
-          a('usar', 'Usar los mensajes', 'Escribirse con el resto del equipo.', TODOS),
+          a('usar', 'Usar los mensajes', 'Escribirse con el resto del equipo.', TODOS_Y_TUTOR),
         ],
       },
       {

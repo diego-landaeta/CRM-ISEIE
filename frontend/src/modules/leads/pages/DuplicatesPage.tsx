@@ -14,7 +14,8 @@ import {
   ArrowsClockwise, GitMerge, Warning, MagnifyingGlass, CheckCircle,
   ArrowSquareOut, Phone, EnvelopeSimple, WhatsappLogo, Crown,
 } from '@phosphor-icons/react';
-import { useAuth } from '@/contexts/AuthContext';
+import { useCampusDeLaPantalla } from '@/shared/hooks/useCampusDeLaPantalla';
+import ElegirCampus from '@/shared/components/ui/ElegirCampus';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 
@@ -64,8 +65,10 @@ function porDefecto(g: Grupo): number {
 }
 
 export default function DuplicatesPage() {
-  const { activeProject } = useAuth() as { activeProject: { id?: number; nombre?: string } | null };
-  const projectId = activeProject?.id;
+  // Los duplicados se buscan dentro de UN campus. Con una empresa o «Todos»
+  // arriba, se elige aquí cuál (#218, tanda 3).
+  const campus = useCampusDeLaPantalla();
+  const projectId = campus.id;
 
   const [grupos, setGrupos] = useState<Grupo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -143,10 +146,14 @@ export default function DuplicatesPage() {
     } finally { setFusionando(null); }
   }
 
-  if (!projectId || projectId === -1) {
+  if (!projectId) {
     return (
-      <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-lg p-6 text-center text-sm text-amber-800 dark:text-amber-300">
-        Selecciona un proyecto para repasar sus duplicados.
+      <div className="space-y-4 pb-8">
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Duplicados</h1>
+        <ElegirCampus campus={campus} que="sus duplicados" />
+        <div className="bg-warning-soft border border-warning/30 rounded-lg p-6 text-center text-sm text-warning-soft-foreground">
+          Elige el campus para repasar sus duplicados.
+        </div>
       </div>
     );
   }
@@ -159,12 +166,14 @@ export default function DuplicatesPage() {
       <div>
         <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Duplicados</h1>
         <p className="text-sm text-muted-foreground mt-1 max-w-3xl">
-          Fichas de <strong>{activeProject?.nombre}</strong> que comparten correo, teléfono o usuario de
+          Fichas de <strong>{campus.nombre}</strong> que comparten correo, teléfono o usuario de
           WhatsApp con otra. Elige cuál se queda y fusiona: el historial completo —interacciones,
           recordatorios, ventas, matrículas, correos y el chat de WhatsApp— se mueve a la que se queda,
           y las demás van a la papelera apuntando a ella.
         </p>
       </div>
+
+      <ElegirCampus campus={campus} que="sus duplicados" />
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[

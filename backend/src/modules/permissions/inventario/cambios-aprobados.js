@@ -118,6 +118,15 @@ export const CAMBIOS = [
     sentido: 'gana',
     aprobadoPor: 'Diego, 03/11',
   },
+  {
+    id: 'tutor-solo-lo-suyo',
+    que: 'El tutor se queda con 5 permisos de serie: sus cursos y comisiones, sus consultas, cambiar su correo, las novedades y los mensajes. Pierde el aviso de comisiones, que nunca pudo usar.',
+    motivo: 'Diego (03/11, #591): «el tutor solo ve lo de él». Venía en TODOS y el catálogo le daba 55, pero el servidor ya le cerraba todo menos `RUTAS_DEL_TUTOR`. La única ruta que el tutor alcanzaba es la del aviso, y su controlador pedía `tutores.gestionar`: ya daba 403.',
+    filas: ['GET /api/tutores/comisiones/aviso', 'POST /api/tutores/comisiones/avisar'],
+    roles: ['tutor'],
+    sentido: 'pierde',
+    aprobadoPor: 'Diego, 03/11',
+  },
 ];
 
 /** ¿Está aprobado (o pendiente de aprobar en esta lista) que esta fila cambie para este rol? */
@@ -198,6 +207,17 @@ export const CAMBIOS_POR_DATOS = [
  * deja pasar estas diferencias. `+` aparece, `-` desaparece.
  */
 export const CAMBIOS_DE_MENU = [
+  {
+    id: 'menu-claves-admin',
+    que: '«Sistema › Claves y variables» la ve también el admin, con las claves de sus campus (CRM#632).',
+    motivo: 'Va con el cambio `admin-ve-claves`: el admin ya puede leerlas en el servidor, y el menú se la enseña.',
+    perfiles: {
+      admin: ['+ Sistema › Claves y variables'],
+      'gestora+admin': ['+ Sistema › Claves y variables'],
+    },
+    rutas: { 'Sistema › Claves y variables': 'GET /api/credentials/' },
+    aprobadoPor: 'Diego, 03/11',
+  },
   {
     id: 'menu-facturacion',
     que: '«Finanzas › Facturación» la ve quien puede facturar: el admin, quien lleva la cola (la casilla «factura_manager») y quien es admin como rol de más.',

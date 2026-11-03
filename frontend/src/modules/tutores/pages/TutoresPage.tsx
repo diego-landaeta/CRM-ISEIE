@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { GraduationCap, Plus, X, Warning, Trash, CheckCircle, Copy, ArrowsClockwise, Key, UserMinus, PencilSimple, MagnifyingGlass} from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
+import { useProyectosDelAmbito } from '@/shared/hooks/useAmbito';
 import { toast } from '@/shared/hooks/useToast';
 import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
 import { avisoDeLoQueFalta, numerosMalEscritos, type Falta } from '@/shared/lib/loQueFalta';
@@ -108,6 +109,12 @@ export default function TutoresPage() {
   const esSuperadmin = user?.role === 'superadmin' && can('tutores.cambiar_correo');
   const puedeContrasena = (user?.role === 'superadmin' || user?.role === 'admin') && can('tutores.contrasena');
   const projectId = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
+  // Dar de alta no obliga a tener un campus arriba (#219): sin él, el
+  // formulario pide el campus, entre los suyos, y de su catálogo salen los cursos.
+  const campus = useProyectosDelAmbito<{ id: number; nombre: string }>();
+  const puedeAlta = Boolean(projectId) || campus.length > 0;
+  const [campusAlta, setCampusAlta] = useState<number | null>(null);
+  const [formacionesAlta, setFormacionesAlta] = useState<Formacion[]>([]);
 
   const [tutores, setTutores] = useState<Tutor[]>([]);
   const [elegido, setElegido] = useState<Tutor | null>(null);
@@ -142,7 +149,10 @@ export default function TutoresPage() {
   // alguien por error no tendria vuelta atras desde esta pantalla.
   const [verRetirados, setVerRetirados] = useState(false);
   // Buscador de la lista (paridad con MultiCRM). No habia ninguno.
-  const [busca, setBusca] = useState('');
+  // `?buscar=` lo trae el buscador (Ctrl K, #591): la lista sale ya filtrada por ese tutor.
+  // Se lee una vez, al abrir, de la dirección: sin el hook del router, que esta
+  // pantalla no necesitaba (y sus pruebas la montan sin él).
+  const [busca, setBusca] = useState(() => new URLSearchParams(window.location.search).get('buscar') ?? '');
   const [popupClave, setPopupClave] = useState(false);
 
   // Editar los datos del tutor. Existia el endpoint (PATCH /tutores/:id/perfil)
@@ -191,6 +201,22 @@ export default function TutoresPage() {
       .then((r) => setFormaciones(r.success ? (r.data || []) : []))
       .catch(() => setFormaciones([]));
   }, [projectId]);
+
+  // Las del alta: las del campus elegido en el formulario (#219). Si es el de
+  // arriba, ya están pedidas.
+  useEffect(() => {
+    if (!popupAlta || !campusAlta) { setFormacionesAlta([]); return; }
+    if (campusAlta === projectId) { setFormacionesAlta(formaciones); return; }
+    let vivo = true;
+    client.get(`/products?projectId=${campusAlta}&limit=500`)
+      .then((r) => {
+        if (!vivo) return;
+        const filas = (r.success ? (r.data || []) : []) as Formacion[];
+        setFormacionesAlta([...filas].sort((a, b) => a.nombre.localeCompare(b.nombre)));
+      })
+      .catch(() => { if (vivo) setFormacionesAlta([]); });
+    return () => { vivo = false; };
+  }, [popupAlta, campusAlta, projectId, formaciones]);
 
   // Las de «Añadir formación»: las de todos los campus de quien asigna, cada una
   // con su campus (#223). Antes eran solo las del campus elegido arriba —y sin
@@ -249,8 +275,24 @@ export default function TutoresPage() {
     // entrar: va ya generada, y el alta no se deja sin ella.
     setContrasena(sinCorreos ? generarContrasena() : '');
     setCopiada(false);
-    setMarcas(projectId ? [projectId] : []);
+    // El campus del alta: el de arriba; si no hay y la empresa tiene uno solo,
+    // ese; si tiene varios, se elige en el formulario (#219).
+    const inicial = projectId ?? (campus.length === 1 ? campus[0].id : null);
+    setCampusAlta(inicial);
+    setMarcas(inicial ? [inicial] : []);
     setPopupAlta(true);
+  }
+
+  // Cambiar el campus del alta cambia el catálogo: los cursos ya añadidos eran
+  // del otro, así que se quitan. Y el campus va marcado en «En qué marcas».
+  function elegirCampusAlta(id: number | null) {
+    setCursosAlta([]);
+    setNuevoCurso('');
+    setMarcas((prev) => {
+      const sin = prev.filter((x) => x !== campusAlta);
+      return id && !sin.includes(id) ? [...sin, id] : sin;
+    });
+    setCampusAlta(id);
   }
 
   const cargarColabs = useCallback(async (t: Tutor) => {
@@ -462,11 +504,11 @@ export default function TutoresPage() {
 
   async function altaTutor(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!projectId) return;
     const f = new FormData(e.currentTarget);
     // Todo lo que falta o está mal, de una vez (#106).
     const correo = String(f.get('email') || '');
     const faltan: Falta[] = numerosMalEscritos(e.currentTarget);
+    if (!campusAlta) faltan.push({ title: 'Falta el campus', description: 'Elige en «Campus» en cuál se le da de alta: de su catálogo salen sus cursos.', que: 'el campus en «Campus»' });
     if (!String(f.get('nombre') || '').trim()) faltan.push({ ...faltaNombre('')!, que: 'el nombre en «Nombre y apellidos»' });
     if (!correo.trim()) faltan.push({ title: 'Falta el correo', description: 'Escríbelo en «Correo»: es con lo que entra al CRM.', que: 'el correo en «Correo»' });
     else if (correoMalo(correo)) faltan.push({ ...correoMalo(correo)!, que: 'un correo válido en «Correo» (nombre@dominio.com)' });
@@ -480,13 +522,14 @@ export default function TutoresPage() {
       faltan.push({ ...porcentajeMalo(nuevoPct, '%')!, que: 'un % del curso de 0 a 100' });
     }
     const falta = avisoDeLoQueFalta(faltan);
-    if (falta) { toast(falta); return; }
+    if (falta || !campusAlta) { if (falta) toast(falta); return; }
     setGuardando(true);
     try {
       const r = await tutoresApi.alta({
         nombre: String(f.get('nombre') || ''),
         email: String(f.get('email') || ''),
-        projectIds: marcas.length ? marcas : [projectId],
+        // El campus del alta, siempre; y las demás marcas que se hayan marcado.
+        projectIds: [...new Set([campusAlta, ...marcas])],
         dniNif: String(f.get('dniNif') || '') || undefined,
         iban: String(f.get('iban') || '') || undefined,
         telefono: String(f.get('telefono') || '') || undefined,
@@ -501,7 +544,7 @@ export default function TutoresPage() {
       const cursos = cursosParaElAlta(cursosAlta, nuevoCurso, nuevoPct, nuevaFecha, Number(ajustes?.pct_por_defecto ?? 10));
       const fallidos: CursoQueFallo[] = [];
       for (const c of cursos) {
-        const nombre = formaciones.find((x) => x.id === c.productId)?.nombre || `curso ${c.productId}`;
+        const nombre = formacionesAlta.find((x) => x.id === c.productId)?.nombre || `curso ${c.productId}`;
         try {
           const rc = await tutoresApi.crearColaboracion({
             tutorId: r.data!.id, productId: c.productId, pct: c.pct, desde: c.desde,
@@ -710,21 +753,21 @@ export default function TutoresPage() {
       </div>
     );
   }
-  if (!projectId) {
-    return (
-      <div className="bg-card border border-border rounded-lg p-6 text-center text-sm text-muted-foreground">
-        Elige un proyecto concreto para ver sus tutores.
-      </div>
-    );
-  }
+  // Sin un campus arriba ya no se tapia la pantalla (#219, como en MultiCRM):
+  // la lista sale con los tutores de todos sus campus —lo recorta el servidor— y
+  // el alta pide el campus en el formulario.
 
   return (
     <div className="space-y-3">
       <PageHeader
         title="Tutores"
-        subtitle={cargando ? 'cargando…' : `${tutores.length} ${tutores.length === 1 ? 'tutor' : 'tutores'} · cobran un porcentaje de lo que se cobra de sus formaciones`}
+        subtitle={cargando
+          ? 'cargando…'
+          : `${tutores.length} ${tutores.length === 1 ? 'tutor' : 'tutores'} · cobran un porcentaje de lo que se cobra de sus formaciones`
+            + (puedeAlta ? '' : ' · no tienes ningún campus en el que dar de alta')}
         actions={(
-          <Button onClick={abrirAlta}>
+          <Button onClick={abrirAlta} disabled={!puedeAlta}
+            title={puedeAlta ? undefined : 'No tienes ningún campus en el que dar de alta'}>
             <Plus size={15} weight="bold" className="mr-1.5" /> Nuevo tutor
           </Button>
         )}
@@ -939,6 +982,21 @@ export default function TutoresPage() {
             </div>
 
             <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+              {/* Sin un campus arriba, se elige aquí (#219). */}
+              {!projectId && (
+                <section className="space-y-2">
+                  <Field label="Campus" required htmlFor="alta-campus"
+                    hint="En el que se le da de alta. De su catálogo salen los cursos de abajo.">
+                    <select id="alta-campus" value={campusAlta ?? ''}
+                      onChange={(e) => elegirCampusAlta(e.target.value ? Number(e.target.value) : null)}
+                      className={inputClass}>
+                      <option value="">Elige el campus…</option>
+                      {campus.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                    </select>
+                  </Field>
+                </section>
+              )}
+
               <section className="space-y-3">
                 <h3 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Quién es</h3>
                 <FilaCampos>
@@ -1032,7 +1090,8 @@ export default function TutoresPage() {
                   <Field label="Curso" htmlFor="alta-curso" className="col-span-2 sm:col-span-1">
                     <BuscadorCurso
                       id="alta-curso"
-                      cursos={formaciones}
+                      cursos={formacionesAlta}
+                      placeholder={campusAlta ? 'Escribe para buscar un curso…' : 'Elige antes el campus'}
                       valor={nuevoCurso ? Number(nuevoCurso) : null}
                       onElegir={(id) => setNuevoCurso(id ? String(id) : '')}
                       excluir={cursosAlta.map((c) => c.productId)}
