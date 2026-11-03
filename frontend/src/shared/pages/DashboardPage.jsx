@@ -2,6 +2,9 @@ import { lazy, Suspense, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useDashboard } from '@/shared/hooks/useDashboard';
+import ActividadDeHoy from '@/shared/components/dashboard/ActividadDeHoy';
+import { TarjetaActividad } from '@/modules/reports/components/ActividadPorComercial';
+import { ambitoComoObjeto } from '@/shared/lib/ambitoInforme';
 import { useStripeMonitor } from '@/modules/ia-dashboard/hooks/useStripeMonitor';
 
 const LeadDrawer = lazy(() => import('@/modules/leads/components/LeadDrawer'));
@@ -225,6 +228,14 @@ export default function DashboardPage() {
           bandera. */}
       <ComoVoy medida="facturado" />
 
+      {/* Actividad por comercial de ayer (#203, parte B), como en MultiCRM. Al
+          admin, las 3 primeras y el equipo; a una gestora, su línea (lo recorta
+          el servidor). */}
+      <TarjetaActividad ambito={ambitoComoObjeto({ activeProject })} />
+
+      {/* Qué ha pasado hoy (#13): altas, ventas, estados y contactos. Cada gestora ve lo suyo. */}
+      <ActividadDeHoy projectId={proyectoReal} mostrarProyecto={!proyectoReal} />
+
       {/* SECCION HOY */}
       {today && (
         <div className="bg-gradient-to-br from-blue-50 to-violet-50 dark:from-blue-950/30 dark:to-violet-950/30 border border-border rounded-lg p-4">
@@ -258,7 +269,7 @@ export default function DashboardPage() {
               className="bg-card rounded-md p-3 border border-border text-left hover:border-red-300 hover:bg-red-50/30 dark:hover:bg-red-950/10 transition-colors">
               <p className="text-xs font-medium text-muted-foreground">Cobros vencidos</p>
               <p className="text-2xl font-semibold tabular-nums text-red-600">{today.cobros_vencidos || 0}</p>
-              <p className="text-[10px] text-muted-foreground">pagos atrasados</p>
+              <p className="text-[10px] text-muted-foreground" title="Cuenta ventas con saldo pendiente y fecha de pago ya pasada. «Cuentas por cobrar» (Finanzas) cuenta cuotas e importes; son dos cifras distintas.">ventas con la fecha de pago pasada</p>
             </button>
             <button onClick={() => navigate('/accounting/income')}
               className="bg-card rounded-md p-3 border border-border text-left hover:border-emerald-300 hover:bg-emerald-50/30 dark:hover:bg-emerald-950/10 transition-colors">

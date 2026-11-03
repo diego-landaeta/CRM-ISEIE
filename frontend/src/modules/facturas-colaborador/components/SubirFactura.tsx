@@ -380,7 +380,8 @@ export default function SubirFactura({ factura, alSubir, alNoFacturar, alDeshace
       <div className="flex flex-wrap items-center justify-between gap-3">
         {f.caduca_at && (
           <p className="text-xs text-muted-foreground">
-            El enlace es solo tuyo y caduca el {new Date(f.caduca_at).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })}.
+            {/* Caduca a las 00:00 de Madrid: el último día para subirla es el anterior. */}
+            El enlace es solo tuyo. Puedes subirla hasta el {new Date(new Date(f.caduca_at).getTime() - 1).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', timeZone: 'Europe/Madrid' })}.
           </p>
         )}
         <Button type="submit" disabled={enviando} className="ml-auto">

@@ -15,6 +15,10 @@ router.post('/', puede('ventas.registrar'), salesController.create);
 // pedirlos por API aunque la pantalla se los escondiera.
 router.get('/resumen', puede('ventas.view_equipo'), salesController.resumenVentas);
 router.get('/por-asesora', puede('ventas.view_equipo'), salesController.ventasPorAsesora);
+// Las ventas sin formacion del catalogo (#41). Solo el equipo de administracion:
+// es la lista de lo que no cuadra del proyecto entero, con nombre y correo de
+// cada alumno. Mismo permiso que el resumen y las ventas por asesora.
+router.get('/sin-formacion', puede('ventas.view_equipo'), salesController.sinFormacion);
 // Sin roleGuard: filtrosDeQuery ya recorta a la gestora a sus propios clientes.
 router.get('/por-cliente', puede('ventas.view'), salesController.ventasPorCliente);
 // Este se queda abierto: lo pinta el dashboard de todos los roles.

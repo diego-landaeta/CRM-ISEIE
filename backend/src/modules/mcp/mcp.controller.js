@@ -5,7 +5,7 @@ import {
   diasDeVidaToken, configRotacion, MAX_TOKENS_VIVOS, ROLES_CON_ACCESO, ROLES_SIN_MCP,
   generarToken, puedeUsarMcp,
 } from './mcp.acceso.js';
-import { HERRAMIENTAS } from './mcp.tools.js';
+import { HERRAMIENTAS, GRUPO_DE_CONSULTA } from './mcp.tools.js';
 import * as desbloqueo from './mcp.desbloqueo.js';
 import { accesoSchema, actividadSchema, crearTokenSchema, decisionSchema, idSchema, interruptorSchema } from './mcp.validation.js';
 import * as conexiones from './mcp.conexiones.js';
@@ -54,18 +54,18 @@ export async function estado(req, res, next) {
         diasDeVida: diasDeVidaToken(),
         diasSinUso: configRotacion().diasSinUso,
         proyectos,
-        herramientas: HERRAMIENTAS.map((h) => ({ nombre: h.nombre, titulo: h.titulo, descripcion: h.descripcion })),
+        herramientas: HERRAMIENTAS.map((h) => ({ nombre: h.nombre, titulo: h.titulo, descripcion: h.descripcion, grupo: GRUPO_DE_CONSULTA[h.nombre] || 'Otras' })),
         tokens: tokens.map((t) => ({ ...t, codigo: estados.get(t.id) || null })),
         // Interruptor de emergencia (#196): si el MCP está apagado y por qué.
         interruptor: await interruptorModel.estado(),
         puedeApagar: await tienePermiso(req, 'mcp.supervisar'),
-        // Código de desbloqueo (#192): si hace falta y cuánto dura cada cosa.
-        // `resumen`: el estado actual en una línea, de todas sus URLs, para el
-        // recuadro «Código para Claude».
-        // Sin horas desde la #326: el desbloqueo ya no caduca.
+        // Código de desbloqueo (#192): si hace falta y cuánto dura. Sin horas
+        // desde la #326: el desbloqueo ya no caduca.
+        // `urls` (#260): TODAS sus URLs vivas, estén en el ámbito que se mira o
+        // no, para que la pantalla avise de las que la lista no enseña.
         codigo: {
           ...(({ obligatorio, minutosCodigo }) => ({ obligatorio, minutosCodigo }))(desbloqueo.config()),
-          resumen: desbloqueo.resumenParaElPanel(urls, estados),
+          urls: desbloqueo.config().obligatorio ? urls : [],
         },
         // #326: el super admin puede rechazar cualquier Claude conectado.
         conexionesDelEquipo: (await tienePermiso(req, 'mcp.supervisar')) && desbloqueo.config().obligatorio
@@ -155,18 +155,28 @@ export async function cambiarAcceso(req, res, next) {
 }
 
 /**
- * POST /api/mcp/panel/codigo — el código para dárselo a Claude (#192).
+ * POST /api/mcp/panel/tokens/:id/codigo — el código de ESTA URL para dárselo a
+ * Claude (#192, #260).
  *
- * Solo quien tiene acceso al MCP. Se enseña UNA vez; se guarda su huella.
- * Pedir otro anula el anterior.
+ * Solo quien tiene acceso al MCP, de una URL SUYA y viva; sin URL no hay código.
+ * Se enseña UNA vez; se guarda su huella. Pedir otro anula el anterior de la
+ * misma URL. Solo desbloquea esa URL.
  */
 export async function crearCodigo(req, res, next) {
   try {
+    const { id } = validar(idSchema, req.params);
     const user = await personaActual(req);
     if (!(await puedeUsarMcp(user))) throw new AppError('No tienes acceso al MCP del CRM', 403, 'FORBIDDEN');
-    const r = await desbloqueo.crearCodigo(user.id);
-    logger.info({ userId: user.id }, 'MCP: código de desbloqueo creado');
-    res.status(201).json({ success: true, data: { codigo: r.codigo, caducaAt: r.caducaAt, minutos: r.minutos } });
+    if (!desbloqueo.config().obligatorio) {
+      throw new AppError('El código para Claude no está encendido: no hace falta.', 400, 'MCP_CODIGO_APAGADO');
+    }
+    const r = await desbloqueo.crearCodigo({ userId: user.id, tokenId: id });
+    if (r.resultado === 'no_encontrada') throw new AppError('URL no encontrada', 404, 'NOT_FOUND');
+    if (r.resultado === 'ya_bloqueada') {
+      throw new AppError(`Esta URL está bloqueada hasta las ${desbloqueo.horaLocal(r.hasta)} por fallar el código demasiadas veces.`, 409, 'MCP_URL_BLOQUEADA');
+    }
+    logger.info({ userId: user.id, tokenId: id }, 'MCP: código de desbloqueo creado');
+    res.status(201).json({ success: true, data: { id, codigo: r.codigo, caducaAt: r.caducaAt, minutos: r.minutos } });
   } catch (err) { next(err); }
 }
 

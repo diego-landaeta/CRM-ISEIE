@@ -483,7 +483,54 @@ export async function resumenDeLaCola({ projectIds, asesoraId }) {
   return rows[0];
 }
 
-/** Saltarse un paso o moverlo de fecha, a mano y con su porque. */
+/**
+ * El proceso comercial en cifras (#325): cuántos prospectos hay en cada paso, con
+ * cuántos atrasados y la fecha del siguiente. El MISMO criterio que
+ * `resumenDeLaCola` (mismos prospectos, mismo «paso actual» = el primero que
+ * sigue pendiente), repartido por paso en vez de por tramo de fecha, para que
+ * las dos cifras cuadren entre sí.
+ */
+export async function resumenPorPaso({ projectIds, asesoraId }) {
+  const par = [];
+  let i = 1;
+  const pProj = Array.isArray(projectIds) && projectIds.length
+    ? `AND ls.project_id = ANY($${i++}::int[])`
+    : 'AND ls.project_id NOT IN (SELECT id FROM projects WHERE es_prueba)';
+  if (Array.isArray(projectIds) && projectIds.length) par.push(projectIds.map(Number));
+  const pAses = asesoraId ? `AND l.responsable_id = $${i++}` : '';
+  if (asesoraId) par.push(asesoraId);
+
+  const { rows } = await query(
+    `WITH pendientes AS (
+       SELECT ls.lead_id, ls.clave, ls.orden, ls.fecha_prevista,
+              ROW_NUMBER() OVER (PARTITION BY ls.lead_id ORDER BY ls.orden) AS pos
+         FROM lead_steps ls
+         JOIN leads l ON l.id = ls.lead_id
+        WHERE l.deleted_at IS NULL AND ls.estado = 'pendiente'
+          AND l.status NOT IN ('convertido', 'no_interesado')
+          AND ${EN_EL_PROCESO('l')}
+          AND NOT ${PASO_CERRADO('ls')}
+          ${pProj} ${pAses}
+     )
+     SELECT clave, orden,
+            count(*)::int AS prospectos,
+            count(*) FILTER (WHERE fecha_prevista < CURRENT_DATE)::int AS atrasados,
+            min(fecha_prevista) AS siguiente
+       FROM pendientes WHERE pos = 1
+      GROUP BY clave, orden
+      ORDER BY orden`,
+    par
+  );
+  return { pasos: rows, total: rows.reduce((s, r) => s + r.prospectos, 0) };
+}
+
+/**
+ * Marcar un paso, saltarselo o moverlo de fecha, a mano y con su porque.
+ *
+ * Al marcarlo se guarda quien y cuando; al devolverlo a pendiente se borran los
+ * dos. Si no se limpiaran, un paso desmarcado seguiria diciendo que lo cerro
+ * alguien que ya se arrepintio.
+ */
 export async function ajustarPaso(id, { estado, fecha_prevista, nota }, userId = null) {
   const { rows } = await query(
     `UPDATE lead_steps

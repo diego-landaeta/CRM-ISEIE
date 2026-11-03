@@ -547,13 +547,13 @@ export async function createLeadWithRoundRobin({ projectId, nombre, email, telef
     if (
       utms && (
         utms.utm_source || utms.utm_medium || utms.utm_campaign ||
-        utms.canal_detectado || utms.landing_url
+        utms.canal_detectado || utms.landing_url || utms.referrer
       )
     ) {
       await client.query(
-        `INSERT INTO lead_utms (lead_id, utm_source, utm_medium, utm_campaign, utm_content, utm_term, landing_url, canal_detectado)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [lead.id, utms.utm_source, utms.utm_medium, utms.utm_campaign, utms.utm_content, utms.utm_term, utms.landing_url, utms.canal_detectado]
+        `INSERT INTO lead_utms (lead_id, utm_source, utm_medium, utm_campaign, utm_content, utm_term, landing_url, canal_detectado, referrer)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [lead.id, utms.utm_source, utms.utm_medium, utms.utm_campaign, utms.utm_content, utms.utm_term, utms.landing_url, utms.canal_detectado, utms.referrer || null]
       );
     }
 
@@ -862,6 +862,12 @@ export async function findAll({ projectId, projectIds, status, pasoProceso, resp
   const total = parseInt(countResult.rows[0].count);
 
   const clientStatsSelect = conConversion ? `,
+            client_stats.conversiones,
+            client_stats.total_compras,
+            client_stats.total_pagado,
+            client_stats.pendiente,
+            client_stats.ultima_compra,
+            client_stats.cursos,
             client_stats.programas,
             client_stats.total_cuotas,
             client_stats.cuotas_pagadas,
@@ -870,7 +876,21 @@ export async function findAll({ projectId, projectIds, status, pasoProceso, resp
             client_stats.proximo_vencimiento` : '';
   const clientStatsJoin = conConversion ? `
      LEFT JOIN LATERAL (
-       SELECT ARRAY(
+       -- Compras, facturado, cobrado y pendiente de cada cliente, como en MultiCRM:
+       -- los pide la consulta «clientes» de Claude (MCP, #325 parte 2).
+       SELECT (SELECT COUNT(*)::int FROM conversions cs WHERE cs.lead_id = l.id) AS conversiones,
+              (SELECT COALESCE(SUM(cs.importe_total), 0)::numeric FROM conversions cs WHERE cs.lead_id = l.id) AS total_compras,
+              (SELECT COALESCE(SUM(cs.importe_pagado), 0)::numeric FROM conversions cs WHERE cs.lead_id = l.id) AS total_pagado,
+              (SELECT COALESCE(SUM(cs.importe_total - cs.importe_pagado), 0)::numeric FROM conversions cs WHERE cs.lead_id = l.id) AS pendiente,
+              (SELECT MAX(cs.fecha_conversion) FROM conversions cs WHERE cs.lead_id = l.id) AS ultima_compra,
+              ARRAY(
+                SELECT DISTINCT ccur.producto_contratado
+                FROM conversions ccur
+                WHERE ccur.lead_id = l.id
+                  AND NULLIF(BTRIM(ccur.producto_contratado), '') IS NOT NULL
+                ORDER BY ccur.producto_contratado
+              ) AS cursos,
+              ARRAY(
                 SELECT program_name
                 FROM (
                   SELECT DISTINCT COALESCE(

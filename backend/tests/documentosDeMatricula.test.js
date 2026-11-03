@@ -32,7 +32,7 @@ process.env.JWT_SECRET = process.env.JWT_SECRET || 'secreto-de-pruebas';
 
 // Los dobles van AQUI y no dentro de un `describe`: `vi.mock` se eleva al
 // principio del fichero, asi que no puede usar nada declarado mas abajo.
-const model = { findById: vi.fn(), update: vi.fn() };
+const model = { findById: vi.fn(), update: vi.fn(), registrarEvento: vi.fn(), historial: vi.fn(async () => []), conTransaccion: vi.fn(async (fn) => fn(null)) };
 vi.mock('../src/modules/matriculas/matricula.model.js', () => model);
 vi.mock('../src/shared/services/localStorage.service.js', () => ({
   getLocal: vi.fn(async () => ({ buffer: Buffer.from('imagen') })),
@@ -171,7 +171,8 @@ describe('la ruta, de punta a punta', () => {
     const res = fingirRes();
     let error = null;
     await ctrl.uploadDoc(
-      { params: { id: '7', tipo: 'dni' }, file: { originalname: 'dni.png', buffer: Buffer.from('x') } },
+      // Con sesión, como llega siempre por la ruta (#199: la ficha comprueba el campus).
+      { user: { userId: 2, role: 'superadmin' }, params: { id: '7', tipo: 'dni' }, file: { originalname: 'dni.png', buffer: Buffer.from('x') } },
       res, (e) => { error = e; }
     );
     expect(error).toBeNull();

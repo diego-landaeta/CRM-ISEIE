@@ -1,4 +1,5 @@
 import * as Conv from './convocatoria.service.js';
+import { listaDelAmbito } from '../../shared/utils/ambito.js';
 import {
   crearConvocatoriaSchema, editarConvocatoriaSchema,
   ofrecerSchema, actualizarOfrecimientoSchema,
@@ -14,10 +15,9 @@ function deQuien(req) {
   return req.user?.userId || -1;
 }
 
-function proyectos(req) {
-  const uno = Number(req.query.projectId);
-  return Number.isInteger(uno) && uno > 0 ? [uno] : null;
-}
+// Los campus del embudo y de los pendientes: los que pida, dentro de los suyos;
+// sin pedir ninguno, los suyos (antes, los de todas las empresas).
+const proyectos = (req) => listaDelAmbito(req);
 
 export async function listar(req, res, next) {
   try {
@@ -70,7 +70,7 @@ export async function deLead(req, res, next) {
 export async function pendientes(req, res, next) {
   try {
     const data = await Conv.pendientesDeRespuesta({
-      projectIds: proyectos(req), asesoraId: deQuien(req),
+      projectIds: await proyectos(req), asesoraId: deQuien(req),
     });
     res.json({ success: true, data });
   } catch (err) { next(err); }
@@ -81,7 +81,7 @@ export async function embudo(req, res, next) {
     const re = /^\d{4}-\d{2}-\d{2}$/;
     const data = await Conv.embudo({
       convocatoriaId: req.query.convocatoriaId ? Number(req.query.convocatoriaId) : null,
-      projectIds: proyectos(req),
+      projectIds: await proyectos(req),
       from: re.test(req.query.from || '') ? req.query.from : null,
       to: re.test(req.query.to || '') ? req.query.to : null,
     });

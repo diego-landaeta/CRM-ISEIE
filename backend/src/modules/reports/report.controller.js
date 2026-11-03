@@ -1,6 +1,15 @@
 import * as model from './report.model.js';
 import { query } from '../../shared/config/db.js';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
+import { proyectosDelAmbito } from '../../shared/utils/ambito.js';
+import { AppError } from '../../shared/utils/AppError.js';
+import { dineroPorCanal } from './dondePonerElDinero.js';
+import { tramosPara, lecturaDe, guardarTramos, quitarTramos } from './tasaBaremo.js';
+import {
+  actividadPorComercial, detalleActividadPorComercial, TIPOS_DE_DETALLE,
+  proyectosDeLaPersona, ayerEnMadrid,
+} from '../mcp/mcp.model.js';
+import { construirAmbito, acotarProyectos, responsableImpuesto } from '../mcp/mcp.acceso.js';
 
 // A que proyectos se acota el informe.
 //
@@ -11,21 +20,10 @@ import { tienePermiso } from '../../shared/middleware/permissions.js';
 // No hace falta modelo nuevo: la sociedad ya vive en `projects.sociedad_emisora_id`,
 // que apunta a `invoice_issuers`. Se traduce la sociedad a su lista de proyectos
 // y el resto del informe no se entera de nada.
-async function proyectosDelInforme(req) {
-  const issuerId = req.query.issuerId ? Number(req.query.issuerId) : null;
-  if (!issuerId) {
-    return {
-      projectId: req.query.projectId ? Number(req.query.projectId) : null,
-      projectIds: null,
-    };
-  }
-  const { rows } = await query(
-    `SELECT id FROM projects WHERE sociedad_emisora_id = $1 ORDER BY id`, [issuerId]);
-  // Una sociedad sin proyectos NO puede acabar significando «todos»: seria
-  // enseñar de mas justo cuando se pidio acotar. Se devuelve una lista que no
-  // casa con nada y el informe sale vacio, que es la respuesta honesta.
-  return { projectId: null, projectIds: rows.length ? rows.map((r) => r.id) : [-1] };
-}
+// Siempre dentro de lo suyo (`proyectosDelAmbito`): antes un admin de CEDIA
+// pedía el informe de ICTESS con su `issuerId` o su `projectId` en la URL, y
+// sin ninguno veía el de todas las empresas.
+const proyectosDelInforme = (req) => proyectosDelAmbito(req);
 
 export async function overview(req, res, next) {
   try {
@@ -167,6 +165,31 @@ export async function paises(req, res, next) {
   } catch (err) { next(err); }
 }
 
+// GET /api/informes/canales  -> de donde vienen los prospectos y las ventas (#48)
+export async function canales(req, res, next) {
+  try {
+    res.json({ success: true, data: await model.origenDeLosProspectos(await rangoDeQuery(req)) });
+  } catch (err) { next(err); }
+}
+
+// GET /api/informes/canales/dinero  -> dónde poner el dinero (#56): por canal y campaña, contra el periodo anterior.
+// Solo admin y super admin (lleva el gasto), y recortado a SUS campus.
+export async function dondePonerElDinero(req, res, next) {
+  try {
+    const re = /^\d{4}-\d{2}-\d{2}$/;
+    const hoy = new Date();
+    const dia = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const from = req.query.from || dia(new Date(hoy.getFullYear(), hoy.getMonth(), 1));
+    const to = req.query.to || dia(hoy);
+    if (!re.test(from) || !re.test(to) || Number.isNaN(Date.parse(from)) || Number.isNaN(Date.parse(to))) {
+      throw new AppError('from y to tienen que ser fechas AAAA-MM-DD', 400, 'INVALID_DATE');
+    }
+    if (from > to) throw new AppError('from no puede ser posterior a to', 400, 'INVALID_RANGE');
+    if ((Date.parse(to) - Date.parse(from)) / 86400000 > 366) throw new AppError('El rango no puede pasar de un año', 400, 'INVALID_RANGE');
+    res.json({ success: true, data: await dineroPorCanal({ ...(await proyectosDelAmbito(req)), from, to }) });
+  } catch (err) { next(err); }
+}
+
 // GET /api/informes/formaciones  -> ranking de formaciones
 export async function formaciones(req, res, next) {
   try {
@@ -194,7 +217,55 @@ export async function detalle(req, res, next) {
 // GET /api/informes/tasa-cierre -> el numero unico, con su desglose por meses.
 export async function tasaCierre(req, res, next) {
   try {
-    res.json({ success: true, data: await model.tasaDeCierre(await rangoDeQuery(req)) });
+    const r = await rangoDeQuery(req);
+    const tasa = await model.tasaDeCierre(r);
+    // Qué significa el número (#39): el tramo del baremo, si lo hay; y, para una
+    // gestora, frente al equipo, que no necesita que nadie invente umbrales.
+    const { ambito, tramos } = await tramosPara(r.projectIds || (r.projectId ? [r.projectId] : null));
+    const equipo = r.asesoraId ? (await model.tasaDeCierre({ ...r, asesoraId: null })).tasa : null;
+    res.json({ success: true, data: { ...tasa, baremo: { ambito, tramos }, lectura: lecturaDe(tasa.tasa, tramos), equipo } });
+  } catch (err) { next(err); }
+}
+
+// GET /api/informes/tasa-cierre/baremo — los tramos que aplican a este ámbito.
+export async function baremo(req, res, next) {
+  try {
+    const r = await rangoDeQuery(req);
+    res.json({ success: true, data: await tramosPara(r.projectIds || (r.projectId ? [r.projectId] : null)) });
+  } catch (err) { next(err); }
+}
+
+// PUT /api/informes/tasa-cierre/baremo { tramos, general? | project_id } — solo admin y super admin.
+// Un campus suyo, o el general (solo super admin).
+export async function guardarBaremo(req, res, next) {
+  try {
+    let projectId = null;
+    if (req.body?.general === true) {
+      if (req.user.role !== 'superadmin') throw new AppError('El baremo general lo cambia un super admin', 403, 'FORBIDDEN');
+    } else {
+      projectId = Number(req.body?.project_id ?? req.query.projectId);
+      if (!Number.isInteger(projectId) || projectId <= 0) throw new AppError('Falta el campus (project_id) o general: true', 400, 'PROJECT_REQUIRED');
+      req.query.projectId = String(projectId);
+      await proyectosDelAmbito(req); // 403 si no es uno de sus campus
+    }
+    const tramos = await guardarTramos({ projectId, tramos: req.body?.tramos, userId: req.user.userId });
+    res.json({ success: true, data: { project_id: projectId, tramos } });
+  } catch (err) { next(err); }
+}
+
+// DELETE /api/informes/tasa-cierre/baremo?projectId= | general=true — vuelve a no etiquetar.
+export async function quitarBaremo(req, res, next) {
+  try {
+    let projectId = null;
+    if (req.query.general === 'true') {
+      if (req.user.role !== 'superadmin') throw new AppError('El baremo general lo cambia un super admin', 403, 'FORBIDDEN');
+    } else {
+      projectId = Number(req.query.projectId);
+      if (!Number.isInteger(projectId) || projectId <= 0) throw new AppError('Falta el campus (projectId) o general=true', 400, 'PROJECT_REQUIRED');
+      await proyectosDelAmbito(req);
+    }
+    await quitarTramos(projectId);
+    res.json({ success: true });
   } catch (err) { next(err); }
 }
 
@@ -217,5 +288,75 @@ export async function avisoSinFactura(req, res, next) {
     res.json({ success: true, data: await model.ventasSinFacturaEnRango({
       projectId: r.projectId, projectIds: r.projectIds, from: r.from, to: r.to,
     })});
+  } catch (err) { next(err); }
+}
+
+
+// ─── Actividad por comercial (#203, parte B) ──────────────────────────────
+//
+// La pantalla usa LA MISMA consulta que Claude (`actividadPorComercial`, parte
+// A) y el mismo ámbito: sale de la persona (sus campus de `user_projects`; el
+// superadmin, todos), y el campus o la empresa que pida la pantalla solo lo
+// estrechan. Quien no es admin ni superadmin se ve solo a sí misma.
+async function ambitoDeActividad(req) {
+  const user = { id: req.user.userId, role: req.user.role };
+  // Un campus de pruebas solo se ve si se elige él o su empresa (migración
+  // 148); con «Todos», no. Claude no los ve nunca.
+  const eligeAlgo = Boolean(req.query.projectId || req.query.issuerId);
+  const ambito = construirAmbito(user, await proyectosDeLaPersona(user, { conPruebas: eligeAlgo }));
+  const projectIds = acotarProyectos(ambito, {
+    proyecto_id: req.query.projectId ? Number(req.query.projectId) : null,
+    sociedad_id: req.query.issuerId ? Number(req.query.issuerId) : null,
+  });
+  return { projectIds, responsableId: responsableImpuesto(ambito) };
+}
+
+// Una fecha AAAA-MM-DD que existe: el 30/02 tiene buen formato y no existe
+// (llegaba a Postgres y daba un 500).
+const esFecha = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s)
+  && new Date(`${s}T00:00:00Z`).toISOString().slice(0, 10) === s;
+
+// Sin fechas, ayer (lo primero que se mira por la mañana).
+function periodoDeActividad(req) {
+  for (const k of ['desde', 'hasta']) {
+    if (req.query[k] && !esFecha(req.query[k])) {
+      throw new AppError(`Fecha no válida en «${k}»: ${req.query[k]}.`, 400, 'FECHA_NO_VALIDA');
+    }
+  }
+  const desde = req.query.desde || ayerEnMadrid();
+  const hasta = req.query.hasta || desde;
+  if (desde > hasta) {
+    throw new AppError(`«desde» (${desde}) es posterior a «hasta» (${hasta}).`, 400, 'PERIODO_AL_REVES');
+  }
+  return { desde, hasta };
+}
+
+// GET /api/reports/actividad-comercial?desde&hasta&projectId|issuerId
+export async function actividadComercial(req, res, next) {
+  try {
+    const { projectIds, responsableId } = await ambitoDeActividad(req);
+    res.json({ success: true, data: await actividadPorComercial({
+      projectIds, responsableId, ...periodoDeActividad(req),
+    }) });
+  } catch (err) { next(err); }
+}
+
+// GET /api/reports/actividad-comercial/detalle?userId&tipo&desde&hasta&projectId|issuerId
+// La lista detrás de un número. Una gestora solo puede pedir la suya, pida lo
+// que pida.
+export async function actividadComercialDetalle(req, res, next) {
+  try {
+    const { projectIds, responsableId } = await ambitoDeActividad(req);
+    const tipo = String(req.query.tipo || '');
+    if (!TIPOS_DE_DETALLE.includes(tipo)) {
+      throw new AppError(`Tipo no válido: ${tipo || '(vacío)'}.`, 400, 'TIPO_NO_VALIDO');
+    }
+    const userId = responsableId ?? Number(req.query.userId);
+    if (!Number.isInteger(userId) || userId <= 0) {
+      throw new AppError('Falta la comercial (userId).', 400, 'FALTA_COMERCIAL');
+    }
+    res.json({ success: true, data: await detalleActividadPorComercial({
+      projectIds, userId, tipo, ...periodoDeActividad(req),
+    }) });
   } catch (err) { next(err); }
 }

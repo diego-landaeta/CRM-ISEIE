@@ -704,6 +704,96 @@ export async function getResumenVentas(filtros = {}) {
   };
 }
 
+/*
+  LAS VENTAS QUE NO DICEN DE QUE FORMACION SON (#41).
+
+  321 ventas cobradas sin curso del catalogo detras --272 en ISEIE y 49 aqui--.
+  La consecuencia no es estetica: sin formacion no se sabe de quien es la
+  comision y NINGUN PROFESOR COBRA por ellas. En los informes salen bajo
+  «servicio academico», que es el texto que traia el pago.
+
+  Esto hace las dos primeras subfases: sacar la lista con lo que se sepa de
+  cada una, y proponer el cruce de las que se puedan por el nombre.
+
+  LO QUE NO HACE: atarlas solo. La sugerencia se propone y la confirma una
+  persona. Atar un cobro a la formacion equivocada es peor que dejarlo sin
+  atar --lo segundo se ve en un aviso; lo primero se paga a quien no era--, y
+  ese aviso ya esta escrito en `scripts/venta-177-sin-formacion.sql`.
+*/
+export async function ventasSinFormacion({ projectId, projectIds = null, from = null, to = null } = {}) {
+  const params = [];
+  const cond = [];
+  const lista = comoLista(projectId, projectIds);
+  if (lista) { params.push(lista); cond.push(`c.project_id = ANY($${params.length}::int[])`); }
+  else cond.push(SIN_PRUEBAS('c.project_id'));
+  cond.push('c.producto_contratado_id IS NULL');
+  // Una venta sin cobrar no es de nadie todavia: la comision nace del cobro.
+  cond.push('EXISTS (SELECT 1 FROM conversion_payments cp WHERE cp.conversion_id = c.id)');
+  if (from) { params.push(from); cond.push(`c.fecha_conversion >= $${params.length}::date`); }
+  if (to) { params.push(to); cond.push(`c.fecha_conversion <= $${params.length}::date`); }
+
+  const { rows } = await query(
+    `SELECT c.id,
+            c.fecha_conversion,
+            c.importe_total,
+            ${NOMBRE_LIMPIO} AS texto,
+            l.nombre AS alumno,
+            l.email  AS alumno_email,
+            (SELECT COALESCE(SUM(cp.importe), 0) FROM conversion_payments cp
+              WHERE cp.conversion_id = c.id) AS cobrado,
+            /*
+              EL CRUCE, con la MISMA regla que usa el alta: mismo nombre sin
+              tildes y sin mayusculas, y SOLO si hay uno. Con dos candidatos no
+              se propone nada — adivinar cual de los dos es exactamente lo que
+              no puede hacer una maquina aqui.
+            */
+            -- CASE WHEN COUNT(*) = 1 THEN MIN(...): devuelve el candidato
+            -- SOLO si es unico. Con dos, null. (Un COUNT(*) OVER () dentro de
+            -- un HAVING no lo admite Postgres, y sin acento grave porque esto
+            -- vive dentro de una plantilla de JS.)
+            (SELECT CASE WHEN COUNT(*) = 1 THEN MIN(pr.id) END FROM products pr
+              WHERE pr.project_id = c.project_id AND pr.active
+                AND LOWER(TRANSLATE(pr.nombre, 'áéíóúÁÉÍÓÚñÑ', 'aeiouAEIOUnN'))
+                  = LOWER(TRANSLATE(${NOMBRE_LIMPIO}, 'áéíóúÁÉÍÓÚñÑ', 'aeiouAEIOUnN'))
+            ) AS sugerencia_id,
+            (SELECT CASE WHEN COUNT(*) = 1 THEN MIN(pr.nombre) END FROM products pr
+              WHERE pr.project_id = c.project_id AND pr.active
+                AND LOWER(TRANSLATE(pr.nombre, 'áéíóúÁÉÍÓÚñÑ', 'aeiouAEIOUnN'))
+                  = LOWER(TRANSLATE(${NOMBRE_LIMPIO}, 'áéíóúÁÉÍÓÚñÑ', 'aeiouAEIOUnN'))
+            ) AS sugerencia_nombre
+       FROM conversions c
+       LEFT JOIN leads l ON l.id = c.lead_id
+      WHERE ${cond.join(' AND ')}
+      ORDER BY c.fecha_conversion DESC, c.id DESC`,
+    params
+  );
+
+  const filas = rows.map((r) => ({
+    id: r.id,
+    fecha: r.fecha_conversion,
+    alumno: r.alumno,
+    alumnoEmail: r.alumno_email,
+    texto: r.texto,
+    importe: Number(r.importe_total),
+    cobrado: Number(r.cobrado),
+    sugerencia: r.sugerencia_id ? { id: r.sugerencia_id, nombre: r.sugerencia_nombre } : null,
+  }));
+
+  return {
+    filas,
+    total: filas.length,
+    conSugerencia: filas.filter((f) => f.sugerencia).length,
+    // Sin texto no hay nada que cruzar: esas son las que hay que mirar a mano.
+    sinTexto: filas.filter((f) => !f.texto).length,
+    // Lo VENDIDO y lo COBRADO, por separado. La pantalla habla de ventas cobradas
+    // y la comision nace del cobro, asi que la tarjeta suma `cobrado`: sumar el
+    // total de la venta y rotularlo «cobrados» enseñaba 4.200 € arriba y 2.800 €
+    // en la fila de esa misma venta.
+    importe: Number(filas.reduce((s, f) => s + f.importe, 0).toFixed(2)),
+    cobrado: Number(filas.reduce((s, f) => s + f.cobrado, 0).toFixed(2)),
+  };
+}
+
 // Ventas agrupadas por asesora.
 export async function getVentasPorAsesora(filtros = {}) {
   const { where, params } = filtrosVentas(filtros);

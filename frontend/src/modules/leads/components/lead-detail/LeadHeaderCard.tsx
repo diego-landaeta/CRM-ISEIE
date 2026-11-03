@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, CaretRight, Lightning, WarningCircle, Link as LinkIcon, FileText } from '@phosphor-icons/react';
 import StatusBadge from '@/shared/components/ui/StatusBadge';
 import { getLeadPriority, getPriorityStyle } from '../../lib/leadPriority';
@@ -21,6 +21,9 @@ interface LeadHeaderCardProps {
 export default function LeadHeaderCard({ lead, isAdmin, onReassign, onBack }: LeadHeaderCardProps) {
   // Lo que dice el servidor (#423): sale si salía antes Y tiene el permiso.
   const { can } = usePermission();
+  const navigate = useNavigate();
+  // Sin página anterior dentro del CRM (enlace pegado, pestaña nueva), a Prospectos.
+  const hayAnterior = useLocation().key !== 'default';
   return (
     <>
       {lead.lead_duplicado_de && (
@@ -39,6 +42,16 @@ export default function LeadHeaderCard({ lead, isAdmin, onReassign, onBack }: Le
       )}
 
       <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        {/* Volver a la página de la que se viene (Reportes, el Dashboard…), no siempre a Prospectos. */}
+        <button
+          type="button"
+          onClick={() => (hayAnterior ? navigate(-1) : navigate('/leads'))}
+          aria-label="Volver a la página anterior"
+          title="Volver a la página anterior"
+          className="p-1 -ml-1 rounded-md hover:bg-muted hover:text-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
+        >
+          <ArrowLeft size={14} weight="bold" />
+        </button>
         <Link to="/leads" className="hover:text-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40 rounded px-1">
           Prospectos
         </Link>

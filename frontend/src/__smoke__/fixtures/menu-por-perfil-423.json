@@ -65,7 +65,10 @@
   "Sistema › Soporte",
   "Sistema › Manual del CRM",
   "Sistema › Status",
-  "Sistema › Registro"
+  "Sistema › Registro",
+  "Tutores › Consultas",
+  "Análisis › Pregunta a tus datos",
+  "Conexión › Moodle"
  ],
  "admin": [
   "Principal › Dashboard",
@@ -131,7 +134,10 @@
   "Sistema › Soporte",
   "Sistema › Manual del CRM",
   "Sistema › Status",
-  "Sistema › Registro"
+  "Sistema › Registro",
+  "Tutores › Consultas",
+  "Análisis › Pregunta a tus datos",
+  "Conexión › Moodle"
  ],
  "soporte": [
   "Principal › Dashboard",
@@ -197,7 +203,9 @@
   "Sistema › Soporte",
   "Sistema › Manual del CRM",
   "Sistema › Status",
-  "Sistema › Registro"
+  "Sistema › Registro",
+  "Tutores › Consultas",
+  "Análisis › Pregunta a tus datos"
  ],
  "gestora": [
   "Principal › Dashboard",
@@ -223,7 +231,8 @@
   "Sistema › Mis preferencias",
   "Sistema › Soporte",
   "Sistema › Manual del CRM",
-  "Sistema › Status"
+  "Sistema › Status",
+  "Catálogo › Cursos pendientes"
  ],
  "project_manager": [
   "Principal › Dashboard",
@@ -251,7 +260,8 @@
  ],
  "tutor": [
   "Tutores › Mis cursos",
-  "Sistema › Mis preferencias"
+  "Sistema › Mis preferencias",
+  "Tutores › Consultas"
  ],
  "colaborador": [
   "Equipo de Desarrollo › Tablero",
@@ -321,7 +331,10 @@
   "Sistema › Soporte",
   "Sistema › Manual del CRM",
   "Sistema › Status",
-  "Sistema › Registro"
+  "Sistema › Registro",
+  "Tutores › Consultas",
+  "Análisis › Pregunta a tus datos",
+  "Conexión › Moodle"
  ],
  "gestora+tutor": [
   "Principal › Dashboard",
@@ -348,7 +361,9 @@
   "Sistema › Mis preferencias",
   "Sistema › Soporte",
   "Sistema › Manual del CRM",
-  "Sistema › Status"
+  "Sistema › Status",
+  "Catálogo › Cursos pendientes",
+  "Tutores › Consultas"
  ],
  "gestora con factura_manager": [
   "Principal › Dashboard",
@@ -375,7 +390,8 @@
   "Sistema › Mis preferencias",
   "Sistema › Soporte",
   "Sistema › Manual del CRM",
-  "Sistema › Status"
+  "Sistema › Status",
+  "Catálogo › Cursos pendientes"
  ],
  "gestora con editar_fechas_factura": [
   "Principal › Dashboard",
@@ -401,7 +417,8 @@
   "Sistema › Mis preferencias",
   "Sistema › Soporte",
   "Sistema › Manual del CRM",
-  "Sistema › Status"
+  "Sistema › Status",
+  "Catálogo › Cursos pendientes"
  ],
  "gestora con gestor_colaboraciones": [
   "Tutores › Tutores",
@@ -434,7 +451,8 @@
   "Sistema › Mis preferencias",
   "Sistema › Soporte",
   "Sistema › Manual del CRM",
-  "Sistema › Status"
+  "Sistema › Status",
+  "Catálogo › Cursos pendientes"
  ],
  "gestora con diplomas.view": [
   "Principal › Dashboard",
@@ -461,7 +479,8 @@
   "Sistema › Mis preferencias",
   "Sistema › Soporte",
   "Sistema › Manual del CRM",
-  "Sistema › Status"
+  "Sistema › Status",
+  "Catálogo › Cursos pendientes"
  ],
  "gestora con tasks.close": [
   "Principal › Dashboard",
@@ -487,6 +506,7 @@
   "Sistema › Mis preferencias",
   "Sistema › Soporte",
   "Sistema › Manual del CRM",
-  "Sistema › Status"
+  "Sistema › Status",
+  "Catálogo › Cursos pendientes"
  ]
 }

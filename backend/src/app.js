@@ -17,6 +17,7 @@ import conversionsModule from './modules/conversions/index.js';
 import salesModule from './modules/sales/index.js';
 import whatsappModule from './modules/whatsapp/index.js';
 import tutoresModule from './modules/tutores/index.js';
+import consultasModule from './modules/consultas/index.js';
 import notificationsModule from './modules/notifications/index.js';
 import metaAdsModule from './modules/meta-ads/index.js';
 import commissionsModule from './modules/commissions/index.js';
@@ -68,6 +69,14 @@ import registroModule from './modules/registro/index.js';
 // Sistema → Mensajes: el chat interno del equipo, como en MultiCRM. Migración 232.
 import messagesModule from './modules/messages/index.js';
 import mcpModule from './modules/mcp/index.js';
+// 2.6.0 (paridad con la staging del 360): consultas de alumnos, Moodle, soporte,
+// cursos pendientes, «qué ha pasado hoy», «Pregunta a tus datos» y los pedidos de WooCommerce.
+import moodleModule from './modules/moodle/index.js';
+import soporteModule from './modules/soporte/index.js';
+import actividadModule from './modules/actividad/index.js';
+import cursosPendientesModule from './modules/cursos-pendientes/index.js';
+import iaAnalisisModule from './modules/ia-analisis/index.js';
+import wcWebhook from './modules/woocommerce/wc.webhook.js';
 import { startFeedbackDia7Scheduler } from './jobs/feedbackDia7Scheduler.js';
 import { startNovedadesScheduler } from './jobs/novedadesScheduler.js';
 import convocatoriasModule from './modules/convocatorias/index.js';
@@ -79,11 +88,19 @@ import { startReminderScheduler } from './jobs/reminderScheduler.js';
 import { startWooCommerceSyncScheduler } from './jobs/wooCommerceSyncScheduler.js';
 import { startStripePaymentsSyncScheduler } from './jobs/stripePaymentsSyncScheduler.js';
 import { startTutorCommissionsScheduler } from './jobs/tutorCommissionsScheduler.js';
+import { startTutoresCampusScheduler } from './jobs/tutoresCampusScheduler.js';
+import { startConsultasCampusScheduler } from './jobs/consultasCampusScheduler.js';
+import { startConsultasAlumnosScheduler } from './jobs/consultasAlumnosScheduler.js';
+import { startConsultasResumenScheduler } from './jobs/consultasResumenScheduler.js';
+import { startConsultasPlazoScheduler } from './jobs/consultasPlazoScheduler.js';
+import { startConsultasCargaScheduler } from './jobs/consultasCargaScheduler.js';
 import { startVigilanteCatalogoScheduler } from './jobs/vigilanteCatalogoScheduler.js';
 import { startLeadSinTocarScheduler } from './jobs/leadSinTocarScheduler.js';
+import { startCursosPendientesScheduler } from './jobs/cursosPendientesScheduler.js';
 import { startResumenDiarioScheduler } from './jobs/resumenDiarioScheduler.js';
 import { startReporteSemanalScheduler } from './jobs/reporteSemanalScheduler.js';
 import { startMcpRotacionScheduler } from './jobs/mcpRotacionScheduler.js';
+import { startMoodleAvisosScheduler } from './jobs/moodleAvisosScheduler.js';
 import { startMcpVigilanciaScheduler } from './jobs/mcpVigilanciaScheduler.js';
 // Tablero de tareas del equipo (#210, paridad con MultiCRM): solo en pruebas.
 import tasksModule from './modules/tasks/index.js';
@@ -91,6 +108,8 @@ import { startTasksDailySummaryScheduler } from './jobs/tasksDailySummaryJob.js'
 import { startTareasResumenScheduler } from './jobs/tareasResumenJob.js';
 // Lo que aún no está aprobado para producción: el tablero (#210) y las facturas de colaboradores (#202).
 import { tareasActivas, facturasColaboradorActivas } from './shared/config/soloEnPruebas.js';
+import { porteroDelWebhook, topeDelEnvio, traducirTope } from './modules/webhook-tokens/portero.js';
+import { MAX_ENVIO_BYTES } from './modules/matriculas/admision.archivos.js';
 
 const app = express();
 const PORT = process.env.PORT || 3005;
@@ -117,6 +136,18 @@ app.use(cors({
 // los mismos que deja pasar Nginx, para que no se rechace en dos sitios
 // distintos con dos mensajes distintos.
 app.use('/api/whatsapp/webhook', express.json({ limit: '25mb' }));
+// El webhook de admisión (#198): el formulario puede mandar los documentos como
+// imagen en texto (DNI por las dos caras, foto, título, firma), y con 5 MB se
+// perdía la solicitud entera. Solo esta ruta, con 19 MB: por debajo de los 20 MB de
+// Nginx (nginx/crm.conf), para que lo que no quepa lo rechace la aplicación con su
+// motivo y no Nginx con un 413 sin explicación (QA de Diego, 22/10; antes eran 25 MB).
+// Antes de leerlo, el portero: el token tiene que existir (si no, se leían 19 MB
+// para nada con cualquier token inventado), y el envío no pasar del tope.
+app.use('/api/webhook-tokens/receive/:token', porteroDelWebhook, topeDelEnvio,
+  express.json({ limit: MAX_ENVIO_BYTES }), express.urlencoded({ extended: true, limit: MAX_ENVIO_BYTES }), traducirTope);
+
+// El aviso de WooCommerce (#14) lleva su propio parser, en bruto, para poder comprobar la firma.
+app.use('/api/woocommerce/webhook', wcWebhook);
 
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true, limit: '5mb' }));
@@ -299,6 +330,18 @@ const MODULES = [
   messagesModule,
   // Conexion de Claude por MCP: solo consulta, con token personal (como MultiCRM).
   mcpModule,
+  // Consultas de alumnos (#188): la bandeja del tutor y el panel.
+  consultasModule,
+  // El Moodle de cada campus (#335): conectarlo y verlo.
+  moodleModule,
+  // Soporte (#38): los tickets se guardan en el servidor y llegan a alguien.
+  soporteModule,
+  // «Qué ha pasado hoy», para cada gestora con lo suyo (#13).
+  actividadModule,
+  // Cursos pendientes para las tutoras, por campus (#336).
+  cursosPendientesModule,
+  // «Pregunta a tus datos» (#30): sin clave de Claude contesta 503 SIN_CLAVE.
+  iaAnalisisModule,
   // El tablero aún no está aprobado para producción: solo en local y /staging.
   ...(tareasActivas() ? [tasksModule] : []),
 ];
@@ -464,6 +507,26 @@ if (process.env.NODE_ENV !== 'test') {
         startMcpRotacionScheduler();
       } catch (err) {
         logger.error({ err }, 'MCP: la rotación de URLs falló al arrancar');
+      }
+    }
+    // Lo nuevo de la 2.6.0. Cada uno se apaga con su interruptor del .env, que
+    // mira el propio trabajo: TUTORES_CAMPUS_DISABLED, CONSULTAS_CAMPUS_DISABLED,
+    // CONSULTAS_ALUMNOS_DISABLED, CONSULTAS_RESUMEN_DISABLED, CONSULTAS_PLAZO_DISABLED,
+    // CONSULTAS_CARGA_RECORDATORIO_DISABLED, CURSOS_PENDIENTES_DISABLED y MOODLE_AVISOS_DISABLED.
+    for (const [nombre, arrancar] of [
+      ['tutores en los campus', startTutoresCampusScheduler],
+      ['consultas de los campus', startConsultasCampusScheduler],
+      ['alumnos de los campus', startConsultasAlumnosScheduler],
+      ['resumen semanal de consultas', startConsultasResumenScheduler],
+      ['plazos de las consultas', startConsultasPlazoScheduler],
+      ['carga de los tutores', startConsultasCargaScheduler],
+      ['cursos pendientes', startCursosPendientesScheduler],
+      ['avisos del Moodle', startMoodleAvisosScheduler],
+    ]) {
+      try {
+        arrancar();
+      } catch (err) {
+        logger.error({ err }, `${nombre}: el trabajo falló al arrancar`);
       }
     }
     if (process.env.MCP_VIGILANCIA_DISABLED !== '1') {

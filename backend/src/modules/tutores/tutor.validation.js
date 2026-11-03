@@ -132,3 +132,27 @@ export const busquedaDeTutorSchema = z.object({
   campaignId: z.string().trim().max(50).nullable().optional(),
   nota: z.string().trim().max(500).nullable().optional(),
 });
+
+// El buscador (Ctrl K, #591): el mismo contrato que `GET /api/users/buscar`.
+export const buscarTutoresSchema = z.object({
+  q: z.string().trim().min(2, 'Escribe al menos dos letras').max(100),
+  projectIds: z.string().optional().transform((v) => (v ? v.split(',').map(Number).filter((n) => Number.isInteger(n) && n > 0) : null)),
+  limit: z.coerce.number().int().positive().max(10).default(5),
+});
+
+/*
+  Consultas de alumnos, fase 1 (#187): una empresa entera, un campus y
+  «No disponible» (vacaciones o baja).
+*/
+export const empresaDelTutorSchema = z.object({
+  issuerId: z.coerce.number({ invalid_type_error: 'Elige una empresa' }).int().positive('Elige una empresa'),
+});
+
+export const campusDelTutorSchema = z.object({
+  projectId: z.coerce.number({ invalid_type_error: 'Elige un campus' }).int().positive('Elige un campus'),
+});
+
+export const disponibleSchema = z.object({
+  disponible: z.boolean({ required_error: 'Falta si está disponible o no' }),
+  motivo: z.string().trim().max(200, 'El motivo, en 200 caracteres como mucho').nullable().optional(),
+});

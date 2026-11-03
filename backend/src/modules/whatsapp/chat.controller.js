@@ -1,4 +1,5 @@
 import * as model from './chat.model.js';
+import { vozOTextoDeLaPeticion } from './vozOTexto.js';
 import * as servicio from './chat.service.js';
 import * as politica from './politica.js';
 import * as evolution from './evolution.client.js';
@@ -1432,5 +1433,17 @@ export async function editarMensaje(req, res, next) {
       instancia: await instanciaObjetivo(req),
     });
     res.json({ success: true, data: fila });
+  } catch (err) { next(err); }
+}
+
+/**
+ * GET /api/whatsapp/voz-o-texto
+ *
+ * Cuanto se manda por voz y cuanto escrito (#128). Solo lo SALIENTE: lo que
+ * entra lo decide el cliente y no dice nada de como trabaja el equipo.
+ */
+export async function vozOTextoCtrl(req, res, next) {
+  try {
+    res.json({ success: true, data: await vozOTextoDeLaPeticion(req) });
   } catch (err) { next(err); }
 }

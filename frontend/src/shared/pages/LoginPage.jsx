@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Eye, EyeSlash } from '@phosphor-icons/react';
+import OlvideLaClave from '@/shared/components/OlvideLaClave';
 import { MARCA } from '@/shared/config/marca';
 
 // Patron topografico (Hero Patterns "Topography", MIT) — encoded as data URL
@@ -131,6 +132,11 @@ export default function LoginPage() {
                   'Iniciar sesión'
                 )}
               </button>
+
+              {/* #37 · quien pierde la clave dependia de que alguien se la
+                  cambiara a mano. Va aqui, debajo del boton, que es donde se
+                  mira despues de que no te dejen entrar. */}
+              <OlvideLaClave correoInicial={email} />
 
               <p className="text-xs text-muted-foreground text-center pt-2">
                 ¿No tienes cuenta?{' '}

@@ -7,6 +7,7 @@ import { normalizePhone } from '../../shared/utils/normalizePhone.js';
 import { notifyAdmins } from '../notifications/notifications.service.js';
 import * as dupQueue from './dup-queue.service.js';
 import * as leadProducts from './lead-products.service.js';
+import { deducirCanal } from './canal.js';
 import { planificarPasosDeLead, ajustarPaso } from '../proceso/proceso.model.js';
 import { cruzarConPulsacion } from '../widget/widget.pulsaciones.js';
 import { soloLoSuyo } from '../../shared/utils/roles.js';
@@ -17,24 +18,11 @@ async function triggerSequences(_triggerEvent, _leadId, _projectId) {
 }
 
 // ============================================================
-// DETECCION DE CANAL POR UTMs
+// DETECCION DE CANAL
 // ============================================================
-
-function detectChannel(utmSource, utmMedium) {
-  if (!utmSource && !utmMedium) return 'directo';
-
-  const source = (utmSource || '').toLowerCase();
-  const medium = (utmMedium || '').toLowerCase();
-
-  if (source.includes('facebook') || source.includes('instagram') || source.includes('fb') || source.includes('meta')) return 'meta_ads';
-  if (source.includes('google') && (medium === 'cpc' || medium === 'ppc')) return 'google_ads';
-  if (source.includes('tiktok')) return 'tiktok_ads';
-  if (source.includes('chatgpt') || source.includes('openai')) return 'chatgpt_ia';
-  if (medium === 'referral' || source.includes('referido')) return 'referido';
-  if (medium === 'organic' || source.includes('google') || source.includes('bing')) return 'organico';
-
-  return 'directo';
-}
+//
+// La regla vive en ./canal.js (#48): una sola para el alta de un prospecto y
+// para el script que la aplica hacia atrás. Aquí solo se llama.
 
 /**
  * Saca las UTM de dentro de la propia direccion.
@@ -181,6 +169,19 @@ async function _createLeadCore(project, leadData) {
     duplicate.producto_interes_id === productoInteresId
   );
 
+  // Canal: override de Make > deteccion automatica por UTMs.
+  //
+  // Se declara AQUI y no mas abajo porque el burst-merge de justo debajo lo
+  // devuelve, y `const` no se puede leer antes de su linea: daba
+  // `ReferenceError: Cannot access 'canalDetectado' before initialization`, o
+  // sea un 500 cada vez que entraba esa rama.
+  const canalDetectado = leadData.canal || deducirCanal({
+    utm_source: leadData.utm_source,
+    utm_medium: leadData.utm_medium,
+    referrer: leadData.referrer,
+    landing_url: leadData.landing_url,
+  });
+
   // Burst-merge: si el MISMO email/tel pide el MISMO producto en una ventana
   // corta (default 2min), no creamos un lead nuevo — sumamos una interacción
   // al lead original. Esto agrupa los rebotes de Make / form duplicados y
@@ -220,9 +221,6 @@ async function _createLeadCore(project, leadData) {
   );
   const propuestoDe = esPropuesto ? converted.id : null;
 
-  // Canal: override de Make > deteccion automatica por UTMs
-  const canalDetectado = leadData.canal || detectChannel(leadData.utm_source, leadData.utm_medium);
-
   // Si es spam recurrente, no malgastamos un slot del round-robin.
   // Forzamos responsable null pasandolo como flag y luego lo soft-deleteamos.
   const skipAssign = !!spamHistory;
@@ -252,6 +250,7 @@ async function _createLeadCore(project, leadData) {
       utm_content: leadData.utm_content || null,
       utm_term: leadData.utm_term || null,
       landing_url: leadData.landing_url || null,
+      referrer: leadData.referrer || null,
       canal_detectado: canalDetectado,
     },
   });

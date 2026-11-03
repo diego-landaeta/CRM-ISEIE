@@ -338,6 +338,9 @@ const AVISOS = [
     detalle: 'Cuando aprueban una tarea tuya y pasa a «Hecha».' },
   { aviso: 'tarea_comentario', titulo: 'Comentario en tu tarea',
     detalle: 'Cuando alguien comenta en una tarea que tienes asignada.' },
+  // Cursos pendientes (#336), en cursos-pendientes.correos.js.
+  { aviso: 'cursos_pendientes', titulo: 'Cursos pendientes',
+    detalle: 'Cuando te asignan un curso, se acerca o pasa su fecha, o hay alumnas sin habilitar; y el resumen de los lunes (super admin).' },
   { aviso: 'tarea_supervisor', titulo: 'Tarea que supervisas',
     detalle: 'Cuando te ponen de supervisor de una tarea y cuando está lista para revisar.' },
   { aviso: 'tarea_estado', titulo: 'Cambio de estado de una tarea',

@@ -33,16 +33,52 @@ export const RIGE_HOY = (alias = 'c') => `(
 
 // ── Tutores ─────────────────────────────────────────────────────────────────
 
-/** Si el tutor está en alguno de esos campus (#245: su ficha solo para quien comparte campus). */
+/**
+ * Si el tutor está en alguno de esos campus (#245: su ficha solo para quien comparte campus).
+ *
+ * También por sus EMPRESAS (QA de Diego, 22/10, punto 7). `tutor_empresas` no
+ * copia filas en `user_projects` —se resuelve al consultar (#187), al revés que
+ * `user_empresas`—, así que mirando solo `user_projects` un tutor dado de alta
+ * por empresa no estaba en ningún campus y su ficha daba «no encontrado».
+ */
 export async function tieneAlgunCampus(tutorId, projectIds) {
   if (!Array.isArray(projectIds) || !projectIds.length) return false;
   const { rows } = await query(
-    'SELECT 1 FROM user_projects WHERE user_id = $1 AND project_id = ANY($2::int[]) LIMIT 1',
+    `SELECT 1 FROM user_projects WHERE user_id = $1 AND project_id = ANY($2::int[])
+     UNION ALL
+     SELECT 1 FROM tutor_empresas te
+       JOIN projects p ON p.sociedad_emisora_id = te.issuer_id AND p.active = true
+      WHERE te.tutor_id = $1 AND p.id = ANY($2::int[])
+     LIMIT 1`,
     [tutorId, projectIds.map(Number)]);
   return rows.length > 0;
 }
 
-export async function listar({ projectId, activos = true }) {
+/**
+ * El buscador (Ctrl K, #591): un tutor por nombre o correo, sin acentos.
+ * Solo lo que sale en el resultado: ni DNI, ni IBAN, ni banco, ni notas
+ * (esos se ven en su ficha, con su guarda). `campus` null: todos.
+ */
+export async function buscar({ q, campus, limit = 5 }) {
+  const { rows } = await query(
+    `SELECT u.id, u.nombre, u.email, u.active,
+            (SELECT string_agg(DISTINCT pr.nombre, ' · ' ORDER BY pr.nombre)
+               FROM user_projects up JOIN projects pr ON pr.id = up.project_id
+              WHERE up.user_id = u.id) AS marcas
+       FROM users u
+      WHERE u.role = 'tutor'
+        AND (unaccent(COALESCE(u.nombre, '')) ILIKE unaccent($1) OR u.email ILIKE $1)
+        AND ($2::int[] IS NULL OR EXISTS (
+              SELECT 1 FROM user_projects up
+               WHERE up.user_id = u.id AND up.project_id = ANY($2::int[])))
+      ORDER BY u.active DESC, u.nombre
+      LIMIT $3`,
+    [`%${q}%`, campus, limit],
+  );
+  return rows;
+}
+
+export async function listar({ projectId, projectIds = null, activos = true }) {
   // Con un proyecto elegido no se corta en seco: primero los profesores de ESE
   // proyecto y despues los de los demas proyectos de la MISMA SOCIEDAD.
   //
@@ -56,13 +92,21 @@ export async function listar({ projectId, activos = true }) {
        SELECT p.id,
               (p.id = $1) AS es_el_elegido
          FROM projects p
-        WHERE $1::int IS NULL
-           OR p.id = $1
-           OR (p.sociedad_emisora_id IS NOT NULL
-               AND p.sociedad_emisora_id = (SELECT sociedad_emisora_id FROM projects WHERE id = $1))
+        -- Con una SOCIEDAD elegida, el alcance son sus campus y punto: no se
+        -- amplia a la sociedad de nadie porque ya ES una sociedad.
+        WHERE ($2::int[] IS NOT NULL AND p.id = ANY($2::int[]))
+           OR ($2::int[] IS NULL AND (
+                $1::int IS NULL
+                OR p.id = $1
+                OR (p.sociedad_emisora_id IS NOT NULL
+                    AND p.sociedad_emisora_id = (SELECT sociedad_emisora_id FROM projects WHERE id = $1))))
      )
      SELECT u.id, u.nombre, u.email, u.active, u.last_login_at,
-            u.set_password_token IS NOT NULL AS pendiente_de_entrar,
+            -- «Aun no ha entrado»: tiene un enlace pendiente Y nunca ha iniciado
+            -- sesion. Lo segundo es lo que distingue la invitacion real (caducada o
+            -- no, sigue sin haber entrado) de «he olvidado mi clave» (#37), que deja
+            -- un token en un tutor que ya entraba, y que nadie limpia al caducar.
+            (u.set_password_token IS NOT NULL AND u.last_login_at IS NULL) AS pendiente_de_entrar,
             perfil.dni_nif, perfil.iban, perfil.banco, perfil.telefono, perfil.notas,
             -- Sus cursos dentro del alcance: los de fuera no son asunto de esta pantalla.
             (SELECT count(*) FROM tutor_collaborations c
@@ -78,16 +122,25 @@ export async function listar({ projectId, activos = true }) {
                FROM user_projects up3 JOIN projects pr3 ON pr3.id = up3.project_id
               WHERE up3.user_id = u.id) AS marcas,
             -- ¿Es de la marca que hay elegida arriba, o de una hermana?
-            EXISTS (SELECT 1 FROM user_projects upx
-                     WHERE upx.user_id = u.id AND ($1::int IS NULL OR upx.project_id = $1)) AS es_de_este_proyecto
+            -- (también si le llega por su empresa entera, como en tieneAlgunCampus)
+            (EXISTS (SELECT 1 FROM user_projects upx
+                      WHERE upx.user_id = u.id AND ($1::int IS NULL OR upx.project_id = $1))
+             OR EXISTS (SELECT 1 FROM tutor_empresas tex
+                          JOIN projects px ON px.sociedad_emisora_id = tex.issuer_id AND px.active = true
+                         WHERE tex.tutor_id = u.id AND ($1::int IS NULL OR px.id = $1))) AS es_de_este_proyecto
        FROM users u
        LEFT JOIN tutor_profiles perfil ON perfil.user_id = u.id
       WHERE u.role = 'tutor'
         ${activos ? 'AND u.active' : ''}
-        AND EXISTS (SELECT 1 FROM user_projects up
-                     WHERE up.user_id = u.id AND up.project_id IN (SELECT id FROM alcance))
+        -- Por sus campus o por sus EMPRESAS (QA de Diego, 22/10, punto 7): un
+        -- tutor dado de alta por empresa no tiene filas en user_projects.
+        AND (EXISTS (SELECT 1 FROM user_projects up
+                      WHERE up.user_id = u.id AND up.project_id IN (SELECT id FROM alcance))
+             OR EXISTS (SELECT 1 FROM tutor_empresas te
+                          JOIN projects p ON p.sociedad_emisora_id = te.issuer_id AND p.active = true
+                         WHERE te.tutor_id = u.id AND p.id IN (SELECT id FROM alcance)))
       ORDER BY es_de_este_proyecto DESC, u.nombre`,
-    [projectId || null]
+    [projectId || null, (Array.isArray(projectIds) && projectIds.length) ? projectIds.map(Number) : null]
   );
   return rows;
 }
@@ -194,9 +247,11 @@ export async function guardarPerfil(tutorId, datos = {}) {
 
 // ── Colaboraciones ──────────────────────────────────────────────────────────
 
-export async function colaboraciones({ tutorId, productId, soloActivas = false }) {
+export async function colaboraciones({ tutorId, productId, soloActivas = false, projectIds = null }) {
   const cond = [];
   const params = [];
+  // Solo las de esos campus (la formación manda): quien no lo ve todo no ve las de otra empresa.
+  if (Array.isArray(projectIds)) { params.push(projectIds.map(Number)); cond.push(`p.project_id = ANY($${params.length}::int[])`); }
   if (tutorId) { params.push(tutorId); cond.push(`c.tutor_id = $${params.length}`); }
   if (productId) { params.push(productId); cond.push(`c.product_id = $${params.length}`); }
   if (soloActivas) cond.push('c.activa');
@@ -640,7 +695,7 @@ export async function reconciliar({ desde = null, hasta = null, projectId = null
 }
 
 // Las comisiones ya creadas, con lo que hace falta para entender cada una.
-export async function comisiones({ periodo = null, tutorId = null, estado = null, projectId = null, limit = 1000 }) {
+export async function comisiones({ periodo = null, tutorId = null, estado = null, projectId = null, projectIds = null, limit = 1000 }) {
   const { rows } = await query(
     `SELECT tc.id, tc.periodo, tc.estado, tc.base_calculo, tc.pct, tc.importe,
             tc.fecha_liquidacion, tc.created_at,
@@ -664,10 +719,12 @@ export async function comisiones({ periodo = null, tutorId = null, estado = null
       WHERE ($1::char(7) IS NULL OR tc.periodo = $1)
         AND ($2::int IS NULL OR tc.tutor_id = $2)
         AND ($3::text IS NULL OR tc.estado = $3)
-        AND ($4::int IS NULL OR p.project_id = $4)
+        AND ($5::int[] IS NOT NULL AND p.project_id = ANY($5::int[])
+             OR $5::int[] IS NULL AND ($4::int IS NULL OR p.project_id = $4))
       ORDER BY tc.periodo DESC, u.nombre, cp.fecha
       LIMIT ${Number(limit) || 1000}`,
-    [periodo, tutorId, estado, projectId]
+    [periodo, tutorId, estado, projectId,
+     (Array.isArray(projectIds) && projectIds.length) ? projectIds.map(Number) : null]
   );
   return rows;
 }
@@ -710,7 +767,7 @@ export async function resumenComisiones({ periodo = null, tutorId = null, projec
 //
 // Solo pasan de 'pendiente' a 'pagada'. Una revertida no se paga por descuido, y
 // una ya pagada no se paga dos veces aunque se pulse el boton dos veces.
-export async function liquidar({ ids = null, periodo = null, tutorId = null, userId }) {
+export async function liquidar({ ids = null, periodo = null, tutorId = null, userId, projectIds = null }) {
   const { rows } = await query(
     `UPDATE tutor_commissions
         SET estado = 'pagada',
@@ -723,8 +780,16 @@ export async function liquidar({ ids = null, periodo = null, tutorId = null, use
         AND ($2::int[] IS NULL OR id = ANY($2))
         AND ($3::char(7) IS NULL OR periodo = $3)
         AND ($4::int IS NULL OR tutor_id = $4)
+        -- Solo las de mis campus: un tutor que da clase en varias empresas no se paga entero
+        -- por quien lleva solo una de ellas.
+        AND ($5::int[] IS NULL OR id IN (
+          SELECT tc.id FROM tutor_commissions tc
+            LEFT JOIN products p ON p.id = tc.product_id
+            LEFT JOIN conversion_payments cp ON cp.id = tc.payment_id
+            LEFT JOIN conversions cv ON cv.id = cp.conversion_id
+           WHERE COALESCE(p.project_id, cv.project_id) = ANY($5::int[])))
       RETURNING id, importe, tutor_id`,
-    [userId, ids && ids.length ? ids : null, periodo, tutorId]
+    [userId, ids && ids.length ? ids : null, periodo, tutorId, Array.isArray(projectIds) ? projectIds.map(Number) : null]
   );
   return { liquidadas: rows.length, importe: rows.reduce((s, r) => s + Number(r.importe), 0) };
 }

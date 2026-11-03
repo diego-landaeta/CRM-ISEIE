@@ -43,6 +43,11 @@ input::-ms-clear { display: none; }
     --info-foreground: 0 0% 100%;
     --info-soft: 214 100% 97%;
     --info-soft-foreground: 224 76% 48%;
+    /* Índigo: el de «Datos validados» en Matrículas (#199). Del tema, como los demás. */
+    --indigo: 243 75% 59%;                  /* indigo-600 */
+    --indigo-foreground: 0 0% 100%;
+    --indigo-soft: 226 100% 97%;            /* indigo-50 */
+    --indigo-soft-foreground: 245 58% 51%;  /* indigo-700 */
     --border: 220 13% 91%;
     --input: 220 13% 91%;
     --ring: 220 100% 23%;
@@ -86,6 +91,10 @@ input::-ms-clear { display: none; }
     --info-foreground: 226 57% 21%;
     --info-soft: 226 57% 21%;
     --info-soft-foreground: 213 94% 68%;
+    --indigo: 234 89% 74%;                  /* indigo-400 */
+    --indigo-foreground: 244 47% 20%;       /* indigo-950 */
+    --indigo-soft: 244 47% 20%;             /* indigo-950 */
+    --indigo-soft-foreground: 234 89% 74%;  /* indigo-400 */
     --border: 220 16% 22%;
     --input: 220 16% 22%;
     --ring: 215 78% 58%;

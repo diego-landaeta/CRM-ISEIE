@@ -787,7 +787,8 @@ export async function getProductsView({ projectId, dateFrom = null, dateTo = nul
        SELECT c.producto_contratado_id AS product_id,
               COUNT(DISTINCT c.id)::int AS ventas,
               COALESCE(SUM(c.importe_total), 0)::numeric AS facturado,
-              COALESCE(SUM(c.importe_pagado), 0)::numeric AS cobrado
+              -- Lo cobrado sale de los apuntes, no de importe_pagado, que declara de más (#53).
+              COALESCE(SUM((SELECT COALESCE(SUM(cp.importe), 0) FROM conversion_payments cp WHERE cp.conversion_id = c.id)), 0)::numeric AS cobrado
        FROM conversions c
        WHERE ${convW.join(' AND ')} AND c.producto_contratado_id IS NOT NULL
        GROUP BY c.producto_contratado_id
@@ -841,44 +842,82 @@ export async function getProductsView({ projectId, dateFrom = null, dateTo = nul
 }
 
 /**
- * ROI: por cada campaña con productos asociados, calcular:
- *   spend (suma de campaign daily en rango)
- *   facturado (suma conversions.importe_total de productos asociados en rango)
- *   ROI = (facturado - spend) / spend
+ * Retorno por campaña: del gasto a la venta, no al lead (#53).
+ *
+ * LA CADENA. campaña de Meta → lead (`lead_utms.utm_campaign` = id de la
+ * campaña; una sola fila de UTM por lead, así que un lead cuenta en UNA
+ * campaña) → venta (`conversions.lead_id`) → lo COBRADO de verdad
+ * (`conversion_payments`, nunca `conversions.importe_pagado`, que declara de
+ * más). Antes esto cruzaba el gasto con TODAS las ventas de los productos
+ * asociados a la campaña, vinieran de ella o no.
+ *
+ * LO QUE ES UNA VENTA aquí: la que ya tiene algún cobro apuntado y no es una
+ * mensualidad. Es la misma regla de «Ventas» (getTopProducts), para que las
+ * cifras cuadren con Finanzas.
+ *
+ * EL DESFASE entre el clic y el dinero. Una campaña de hace dos meses puede
+ * estar cobrando ahora; mirar solo lo cobrado dentro del rango la deja en
+ * pérdidas. Por eso hay DOS lecturas del mismo rango [dateFrom, dateTo]:
+ *   · COHORTE: el gasto del rango frente a lo que han vendido y cobrado
+ *     —hasta hoy— los leads captados EN el rango. Es la que responde «¿qué
+ *     campaña nos ha traído más dinero este trimestre?» (`ventas`, `vendido`,
+ *     `cobrado`, `retorno`, `roi_pct`).
+ *   · CAJA: lo que ha entrado en el rango por los leads de la campaña, sean
+ *     de cuando sean (`cobrado_en_periodo`, `retorno_en_periodo`). Dice qué
+ *     campañas están cobrando AHORA.
+ * Sin rango, las dos coinciden con el total de la vida de la campaña.
+ *
+ * `facturado` se queda por no romper a quien ya lo lee: es lo VENDIDO (el
+ * importe de las ventas), como en «Ventas»; `ganancia` es el retorno.
  */
 export async function getRoi({ projectId, dateFrom = null, dateTo = null }) {
-  const params = [projectId];
-  const dailyWhere = ['d.project_id = $1'];
-  const convWhere = ['c.project_id = $1'];
-  if (dateFrom) {
-    params.push(dateFrom);
-    dailyWhere.push(`d.date >= $${params.length}`);
-    convWhere.push(`c.fecha_conversion >= $${params.length}`);
-  }
-  if (dateTo) {
-    params.push(dateTo);
-    dailyWhere.push(`d.date <= $${params.length}`);
-    convWhere.push(`c.fecha_conversion <= $${params.length}`);
-  }
   const { rows } = await query(
     `WITH camp_spend AS (
        SELECT mc.campaign_id, mc.nombre, mc.status, mc.effective_status,
               COALESCE(SUM(d.spend), 0)::numeric AS spend,
               COALESCE(SUM(d.leads), 0)::int AS leads_meta
        FROM meta_campaigns mc
-       LEFT JOIN meta_campaigns_daily d ON d.campaign_id = mc.campaign_id AND ${dailyWhere.join(' AND ').replace('d.project_id = $1', 'mc.project_id = $1')}
+       LEFT JOIN meta_campaigns_daily d ON d.campaign_id = mc.campaign_id
+            AND ($2::date IS NULL OR d.date >= $2::date)
+            AND ($3::date IS NULL OR d.date <= $3::date)
        WHERE mc.project_id = $1
        GROUP BY mc.campaign_id, mc.nombre, mc.status, mc.effective_status
      ),
-     camp_revenue AS (
-       SELECT mcp.campaign_id,
-              COUNT(DISTINCT c.id)::int AS ventas,
-              COALESCE(SUM(c.importe_total), 0)::numeric AS facturado,
-              COALESCE(SUM(c.importe_pagado), 0)::numeric AS cobrado
-       FROM meta_campaign_products mcp
-       LEFT JOIN conversions c ON c.producto_contratado_id = mcp.product_id AND ${convWhere.join(' AND ')}
-       WHERE mcp.project_id = $1
-       GROUP BY mcp.campaign_id
+     -- Cada lead del proyecto que llegó por una campaña de Meta, con su fecha.
+     lead_campana AS (
+       SELECT l.id AS lead_id, lu.utm_campaign AS campaign_id, l.created_at::date AS dia
+       FROM lead_utms lu
+       JOIN leads l ON l.id = lu.lead_id
+       WHERE l.project_id = $1 AND l.deleted_at IS NULL
+         AND lu.utm_campaign IN (SELECT campaign_id FROM meta_campaigns WHERE project_id = $1)
+     ),
+     -- Ventas de esos leads, con lo cobrado (todo, hasta hoy) de cada una.
+     venta AS (
+       SELECT lc.lead_id, lc.campaign_id, c.id AS conversion_id, c.importe_total,
+              (SELECT COALESCE(SUM(cp.importe), 0) FROM conversion_payments cp WHERE cp.conversion_id = c.id) AS cobrado
+       FROM lead_campana lc
+       JOIN conversions c ON c.lead_id = lc.lead_id AND c.project_id = $1 AND NOT c.es_mensualidad
+       WHERE EXISTS (SELECT 1 FROM conversion_payments cx WHERE cx.conversion_id = c.id)
+     ),
+     camp_cohorte AS (
+       SELECT lc.campaign_id,
+              COUNT(DISTINCT lc.lead_id)::int AS leads_crm,
+              COUNT(v.conversion_id)::int AS ventas,
+              COALESCE(SUM(v.importe_total), 0)::numeric AS vendido,
+              COALESCE(SUM(v.cobrado), 0)::numeric AS cobrado
+       FROM lead_campana lc
+       LEFT JOIN venta v ON v.lead_id = lc.lead_id
+       WHERE ($2::date IS NULL OR lc.dia >= $2::date) AND ($3::date IS NULL OR lc.dia <= $3::date)
+       GROUP BY lc.campaign_id
+     ),
+     camp_caja AS (
+       SELECT lc.campaign_id, COALESCE(SUM(cp.importe), 0)::numeric AS cobrado_periodo
+       FROM lead_campana lc
+       JOIN conversions c ON c.lead_id = lc.lead_id AND c.project_id = $1 AND NOT c.es_mensualidad
+       JOIN conversion_payments cp ON cp.conversion_id = c.id
+            AND ($2::date IS NULL OR cp.fecha >= $2::date)
+            AND ($3::date IS NULL OR cp.fecha <= $3::date)
+       GROUP BY lc.campaign_id
      ),
      camp_products AS (
        SELECT mcp.campaign_id, COUNT(*)::int AS n_productos,
@@ -890,23 +929,29 @@ export async function getRoi({ projectId, dateFrom = null, dateTo = null }) {
      )
      SELECT cs.campaign_id, cs.nombre, cs.status, cs.effective_status,
             cs.spend, cs.leads_meta,
-            COALESCE(cr.ventas, 0) AS ventas,
-            COALESCE(cr.facturado, 0)::numeric AS facturado,
-            COALESCE(cr.cobrado, 0)::numeric AS cobrado,
+            COALESCE(cc.leads_crm, 0) AS leads_crm,
+            COALESCE(cc.ventas, 0) AS ventas,
+            COALESCE(cc.vendido, 0)::numeric AS vendido,
+            COALESCE(cc.cobrado, 0)::numeric AS cobrado,
+            COALESCE(cj.cobrado_periodo, 0)::numeric AS cobrado_periodo,
             COALESCE(cp.n_productos, 0) AS n_productos,
             cp.productos_nombres
      FROM camp_spend cs
-     LEFT JOIN camp_revenue cr ON cr.campaign_id = cs.campaign_id
+     LEFT JOIN camp_cohorte cc ON cc.campaign_id = cs.campaign_id
+     LEFT JOIN camp_caja cj ON cj.campaign_id = cs.campaign_id
      LEFT JOIN camp_products cp ON cp.campaign_id = cs.campaign_id
-     WHERE cs.spend > 0 OR cp.n_productos > 0
-     ORDER BY cs.spend DESC`,
-    params
+     WHERE cs.spend > 0 OR COALESCE(cc.leads_crm, 0) > 0 OR COALESCE(cj.cobrado_periodo, 0) > 0
+     ORDER BY cs.spend DESC, cs.nombre`,
+    [projectId, dateFrom, dateTo]
   );
   return rows.map((r) => {
     const spend = Number(r.spend || 0);
-    const facturado = Number(r.facturado || 0);
+    const vendido = Number(r.vendido || 0);
     const cobrado = Number(r.cobrado || 0);
-    const roi = spend > 0 ? ((facturado - spend) / spend) * 100 : null;
+    const cobradoPeriodo = Number(r.cobrado_periodo || 0);
+    const ventas = Number(r.ventas || 0);
+    const leadsCrm = Number(r.leads_crm || 0);
+    const pct = (dinero) => (spend > 0 ? Number((((dinero - spend) / spend) * 100).toFixed(2)) : null);
     return {
       campaign_id: r.campaign_id,
       nombre: r.nombre,
@@ -914,11 +959,19 @@ export async function getRoi({ projectId, dateFrom = null, dateTo = null }) {
       effective_status: r.effective_status,
       spend,
       leads_meta: Number(r.leads_meta || 0),
-      ventas: Number(r.ventas || 0),
-      facturado,
+      leads_crm: leadsCrm,
+      ventas,
+      vendido,
+      facturado: vendido,
       cobrado,
-      ganancia: facturado - spend,
-      roi_pct: roi != null ? Number(roi.toFixed(2)) : null,
+      cobrado_en_periodo: cobradoPeriodo,
+      coste_por_lead: leadsCrm > 0 ? Number((spend / leadsCrm).toFixed(2)) : null,
+      coste_por_venta: ventas > 0 ? Number((spend / ventas).toFixed(2)) : null,
+      retorno: Number((cobrado - spend).toFixed(2)),
+      retorno_en_periodo: Number((cobradoPeriodo - spend).toFixed(2)),
+      ganancia: Number((cobrado - spend).toFixed(2)),
+      roi_pct: pct(cobrado),
+      roi_en_periodo_pct: pct(cobradoPeriodo),
       n_productos_asociados: Number(r.n_productos || 0),
       productos_nombres: r.productos_nombres,
     };

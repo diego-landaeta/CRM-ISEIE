@@ -20,11 +20,13 @@ import { conMoneda, porMoneda } from './moneda.js';
   El enlace (Definición acordada, 01/10):
     - token aleatorio de 32 bytes; en la base solo su sha256, como los del MCP;
     - vale para un colaborador, una empresa y un mes, y no abre nada más;
-    - caduca a los 60 días, y en cuanto se sube la factura ya no admite otra;
-    - administración puede mandar uno nuevo (el viejo deja de valer).
+    - caduca el día 6 del mes siguiente a las 00:00 de Madrid (Diego, 30/10): la de
+      octubre se sube hasta el 5 de noviembre; y en cuanto se sube ya no admite otra;
+    - administración puede mandar uno nuevo (el viejo deja de valer). Antes del día 6
+      caduca igual el 6; después, vale 6 días enteros desde el reenvío.
 */
 
-export const DIAS_DE_ENLACE = 60;
+export const DIAS_TRAS_REENVIAR = 6;
 export const TOPE_BYTES = 10 * 1024 * 1024;
 
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio',
@@ -60,7 +62,39 @@ function tokenNuevo() {
   return { token, hash: huella(token), semilla };
 }
 
-const caducidad = (ahora = Date.now()) => new Date(ahora + DIAS_DE_ENLACE * 24 * 3600 * 1000);
+/** Año, mes y día de hoy en Madrid (el servidor está en UTC). */
+function hoyEnMadrid(ahora) {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Madrid', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(ahora).map((x) => [x.type, Number(x.value)]));
+  return { anio: p.year, mes: p.month, dia: p.day };
+}
+
+/**
+ * Las 00:00 de ese día en Madrid. A las 00:00 UTC Madrid va una o dos horas por
+ * delante, también el día del cambio de hora (se cambia a la 01:00 UTC). El día
+ * puede pasarse del mes: Date.UTC lo lleva al siguiente.
+ */
+function ceroHorasEnMadrid(anio, mes, dia) {
+  const utc = Date.UTC(anio, mes - 1, dia);
+  const hora = Number(new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Madrid', hour: '2-digit', hourCycle: 'h23',
+  }).format(new Date(utc)));
+  return new Date(utc - hora * 3600 * 1000);
+}
+
+/**
+ * Cuándo caduca el enlace de un mes: el día 6 del mes siguiente a las 00:00 de
+ * Madrid. Si eso ya pasó (un reenvío o una anulación después del día 6), 6 días
+ * enteros desde hoy: reenviado el 10, vale hasta el 16 a las 23:59.
+ */
+export function caducidad(periodo, ahora = new Date()) {
+  const [a, m] = periodo.split('-').map(Number);
+  const delMes = ceroHorasEnMadrid(m === 12 ? a + 1 : a, m === 12 ? 1 : m + 1, 6);
+  if (ahora < delMes) return delMes;
+  const hoy = hoyEnMadrid(ahora);
+  return ceroHorasEnMadrid(hoy.anio, hoy.mes, hoy.dia + DIAS_TRAS_REENVIAR + 1);
+}
 
 async function enTransaccion(fn) {
   const db = await getClient();
@@ -99,7 +133,7 @@ export async function prepararMes(periodo) {
       moneda: p.moneda,
       tokenHash: hash,
       semilla,
-      caducaAt: caducidad(),
+      caducaAt: caducidad(periodo),
     });
     if (id) preparados.push({ facturaId: id, colaboradorId: p.colaborador_id, issuerId: p.issuer_id, token });
   }
@@ -760,7 +794,7 @@ export async function anular(user, id, motivo, ip) {
     const nueva = await model.crearDelMes(db, {
       colaboradorId: f.colaborador_id, issuerId: f.issuer_id, periodo: f.periodo,
       // La moneda de la ficha, no la que eligió al subir: si se anula por eso, la nueva sale bien (247).
-      importeEsperado: f.importe_esperado, moneda: f.moneda_acordada || f.moneda, tokenHash: hash, semilla, caducaAt: caducidad(),
+      importeEsperado: f.importe_esperado, moneda: f.moneda_acordada || f.moneda, tokenHash: hash, semilla, caducaAt: caducidad(f.periodo),
     });
     await anotar(db, { facturaId: nueva, evento: 'reenviado', userId: user.userId, ip, detalle: { sustituye_a: id } });
     return nueva;
@@ -783,7 +817,7 @@ export async function reenviar(user, id, ip) {
     const fila = await model.bloquear(db, id);
     if (fila.anulada_at) throw new AppError('Esta factura está anulada', 409, 'CONFLICT');
     if (fila.subida_at) throw new AppError('Esta factura ya está recibida', 409, 'CONFLICT');
-    await model.cambiarEnlace(db, id, hash, semilla, caducidad());
+    await model.cambiarEnlace(db, id, hash, semilla, caducidad(f.periodo));
     await anotar(db, { facturaId: id, evento: 'reenviado', userId: user.userId, ip });
   });
   await mandarEnlace(id, token, { nuevo: true, clave: `facturas-colaborador-reenvio-${id}-${Date.now()}` });

@@ -203,12 +203,21 @@ export async function getProductsView(req, res, next) {
   } catch (err) { next(err); }
 }
 
+/** Una fecha YYYY-MM-DD, o null si no viene. Cualquier otra cosa, 400 (no un error de la base). */
+function fechaOpcional(valor, nombre) {
+  if (!valor) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(valor)) || Number.isNaN(Date.parse(valor))) {
+    throw new AppError(`${nombre} tiene que ser una fecha AAAA-MM-DD`, 400, 'INVALID_DATE');
+  }
+  return String(valor);
+}
+
 export async function getRoi(req, res, next) {
   try {
     const result = await service.getRoi({
       projectId: pid(req),
-      dateFrom: req.query.dateFrom || null,
-      dateTo: req.query.dateTo || null,
+      dateFrom: fechaOpcional(req.query.dateFrom, 'dateFrom'),
+      dateTo: fechaOpcional(req.query.dateTo, 'dateTo'),
     });
     res.json({ success: true, data: result });
   } catch (err) { next(err); }

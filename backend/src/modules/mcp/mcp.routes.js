@@ -18,8 +18,8 @@ panel.use(verifyToken);
 panel.get('/', ctrl.estado);
 panel.post('/tokens', puede('mcp.usar'), ctrl.crearToken);
 panel.delete('/tokens/:id', ctrl.revocarToken);
-// Código de desbloqueo para Claude (#192).
-panel.post('/codigo', puede('mcp.usar'), ctrl.crearCodigo);
+// Código de desbloqueo para Claude (#192), de UNA url (#260): se saca desde su fila.
+panel.post('/tokens/:id/codigo', puede('mcp.usar'), ctrl.crearCodigo);
 // «Desbloquear desde aquí»: sin pasar por Claude (#192, Diego 05/10).
 panel.post('/tokens/:id/desbloquear', puede('mcp.usar'), ctrl.desbloquearUrl);
 // Autorizar o rechazar cada Claude conectado a una URL (#326).

@@ -1,7 +1,7 @@
-import { useState } from 'react';
-import { CheckCircle, Clock, LockKey, LockKeyOpen, Prohibit, XCircle } from '@phosphor-icons/react';
+import { useEffect, useState } from 'react';
+import { CheckCircle, Clock, Copy, LockKey, LockKeyOpen, Prohibit, XCircle } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
-import { mcpApi, type McpConexionClaude, type McpEstadoCodigo } from '../api/mcp.api';
+import { mcpApi, type McpCodigo, type McpConexionClaude, type McpEstadoCodigo } from '../api/mcp.api';
 
 /**
  * El estado de una URL con el código para Claude, y cada Claude conectado con
@@ -17,6 +17,12 @@ import { mcpApi, type McpConexionClaude, type McpEstadoCodigo } from '../api/mcp
  * claude.ai guarda la lista de herramientas al conectar y a veces no tiene
  * `desbloquear`. Los textos los calcula el servidor; con el código apagado no
  * llega nada y aquí no se pinta nada.
+ *
+ * #260 (Diego, 07/10): «Sacar código» vive AQUÍ, en la fila de la URL, y el
+ * código solo vale para esta URL. Ya no hay una sección suelta «Código para
+ * Claude»: si hay fila, hay URL, y sin URL no hay botón. El código se enseña UNA
+ * vez, con su cuenta atrás, y se olvida al caducar: el servidor solo guarda su
+ * huella.
  */
 export default function EstadoCodigoUrl({ codigo, tokenId, onCambio }: {
   codigo: McpEstadoCodigo | null | undefined;
@@ -24,7 +30,34 @@ export default function EstadoCodigoUrl({ codigo, tokenId, onCambio }: {
   onCambio: () => void;
 }) {
   const [desbloqueando, setDesbloqueando] = useState(false);
+  const [elCodigo, setElCodigo] = useState<McpCodigo | null>(null);
+  const [pidiendo, setPidiendo] = useState(false);
+  const [quedan, setQuedan] = useState(0);
+
+  // Cuenta atrás. Al llegar a cero el código se borra de la pantalla: ya no vale.
+  useEffect(() => {
+    if (!elCodigo) return undefined;
+    const tic = () => {
+      const s = Math.max(0, Math.round((new Date(elCodigo.caducaAt).getTime() - Date.now()) / 1000));
+      setQuedan(s);
+      if (s === 0) setElCodigo(null);
+    };
+    tic();
+    const t = setInterval(tic, 1000);
+    return () => clearInterval(t);
+  }, [elCodigo]);
+
   if (!codigo) return null;
+
+  async function sacarCodigo() {
+    setPidiendo(true);
+    try {
+      const r = await mcpApi.crearCodigo(tokenId);
+      setElCodigo(r.data as McpCodigo);
+    } catch (e) {
+      toast({ title: 'No se pudo sacar el código', description: (e as Error).message, variant: 'destructive' });
+    } finally { setPidiendo(false); }
+  }
 
   async function desbloquear() {
     setDesbloqueando(true);
@@ -60,7 +93,35 @@ export default function EstadoCodigoUrl({ codigo, tokenId, onCambio }: {
             className="inline-flex h-6 shrink-0 items-center gap-1 rounded-md border border-border bg-card px-2 text-[11px] font-bold hover:bg-muted disabled:opacity-50"
           ><LockKeyOpen size={12} weight="bold" /> Desbloquear desde aquí</button>
         )}
+        {codigo.estado !== 'bloqueada' && (
+          <button
+            type="button"
+            onClick={sacarCodigo}
+            disabled={pidiendo}
+            title="El código solo vale para esta URL"
+            className="inline-flex h-6 shrink-0 items-center gap-1 rounded-md border border-border bg-card px-2 text-[11px] font-bold hover:bg-muted disabled:opacity-50"
+          ><LockKey size={12} weight="bold" /> {elCodigo ? 'Sacar otro' : 'Sacar código'}</button>
+        )}
       </div>
+      {elCodigo && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md bg-muted px-3 py-2">
+          <code className="text-lg font-bold tracking-[0.2em]">{elCodigo.codigo}</code>
+          <button
+            type="button"
+            onClick={() => { navigator.clipboard?.writeText(elCodigo.codigo); toast({ title: 'Código copiado' }); }}
+            className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline"
+          ><Copy size={12} weight="bold" /> Copiar</button>
+          <span className="text-[11px] text-muted-foreground">
+            Caduca en {Math.floor(quedan / 60)}:{String(quedan % 60).padStart(2, '0')} y vale una sola vez, solo para esta URL.
+            Díselo a Claude: «mi código es {elCodigo.codigo}».
+          </span>
+        </div>
+      )}
+      {!elCodigo && codigo.estado !== 'bloqueada' && (
+        <p className="text-[11px] text-muted-foreground">
+          Claude te pide el código la primera vez que se conecta con esta URL; después no lo vuelve a pedir.
+        </p>
+      )}
       {conexiones.length > 0 && (
         <ul className="space-y-1">
           {conexiones.map((c) => <FilaConexion key={c.id} conexion={c} onCambio={onCambio} />)}

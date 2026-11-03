@@ -32,7 +32,7 @@ export async function list({ projectId, service }) {
     active: r.active,
     last_tested_at: r.last_tested_at,
     last_test_result: r.last_test_result,
-    masked_value: maskSecret(decrypt(r.encrypted_value, r.iv, r.auth_tag)),
+    masked_value: maskSecret(secretoVisible(decrypt(r.encrypted_value, r.iv, r.auth_tag))),
     created_at: r.created_at,
     updated_at: r.updated_at,
   }));
@@ -49,6 +49,43 @@ export async function getDecryptedValue(service, projectId = null) {
   return decrypt(rows[0].encrypted_value, rows[0].iv, rows[0].auth_tag);
 }
 
+/**
+ * El secreto del que se enseñan los cuatro ultimos caracteres.
+ *
+ * Casi siempre es el valor entero. Pero Moodle guarda un JSON ({"url":…,"token":…}) y
+ * sus ultimos cuatro caracteres son `a9"}`: comillas y llave, no el token. Si el valor es
+ * un JSON con `token`, se enseña la cola del TOKEN. (Como en MultiCRM, #335.)
+ */
+export function secretoVisible(value) {
+  const texto = String(value);
+  if (texto.trim().startsWith('{')) {
+    try {
+      const o = JSON.parse(texto);
+      if (o && typeof o.token === 'string' && o.token.length >= 4) return o.token;
+    } catch { /* no es JSON: vale el valor entero */ }
+  }
+  return texto;
+}
+
+/**
+ * Sella en `metadata.last_used_at` cuando se uso por ultima vez una credencial.
+ * Sin esperar y sin fallar: el sello no vale una excepcion. (Lo usa el Moodle
+ * del MCP, como en MultiCRM.)
+ */
+export function marcarUso(service, projectId = null) {
+  query(
+    `UPDATE api_credentials
+        SET metadata = COALESCE(metadata, '{}'::jsonb)
+                       || jsonb_build_object('last_used_at', NOW()::text)
+      WHERE service = $1
+        AND (project_id = $2 OR ($2::int IS NULL AND project_id IS NULL))
+        AND active = true`,
+    [service, projectId]
+  ).catch(() => { /* el sello no vale una excepcion */ });
+}
+
+// ISEIE no separa las claves por entorno (la #80 de MultiCRM): `entorno` y
+// `userId`, si llegan (el Moodle los manda), no cambian nada aqui.
 export async function upsert({ project_id, service, value, metadata }) {
   const { encrypted, iv, authTag } = encrypt(value);
   const pId = project_id || null;
@@ -66,7 +103,7 @@ export async function upsert({ project_id, service, value, metadata }) {
     [pId, service, encrypted, iv, authTag, metadata ? JSON.stringify(metadata) : null]
   );
   const r = rows[0];
-  return { ...r, masked_value: maskSecret(value) };
+  return { ...r, masked_value: maskSecret(secretoVisible(value)) };
 }
 
 export async function remove(id) {

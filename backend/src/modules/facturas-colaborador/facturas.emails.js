@@ -109,7 +109,8 @@ export function armarCorreoDelMes({ f, token, recordatorio = false, nuevo = fals
       }),
       parrafo(`Concepto sugerido: <strong>${esc(conceptoSugerido(f.area, f.periodo))}</strong>`),
       boton({ texto: `Subir mi factura de ${mes}`, url: urlDelEnlace(token) }),
-      f.caduca_at ? parrafo(`El enlace es solo tuyo y caduca el ${esc(diaMes(f.caduca_at))}.`) : null,
+      // Caduca a las 00:00: el último día para subirla es el anterior.
+      f.caduca_at ? parrafo(`El enlace es solo tuyo. Puedes subirla hasta el ${esc(diaMes(new Date(f.caduca_at).getTime() - 1))}.`) : null,
     ],
   });
   return { asunto, htmlContent, textContent, fromName: `${corta} · Facturación` };

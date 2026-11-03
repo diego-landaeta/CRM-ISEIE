@@ -11,19 +11,22 @@ import ShortcutsFAB from '@/shared/components/ui/ShortcutsFAB';
 import SectionTabs from './SectionTabs';
 import BetaDisclaimer from '@/shared/components/ui/BetaDisclaimer';
 import { useAuth } from '@/contexts/AuthContext';
-import { soloEsColaborador } from '@/shared/lib/roles';
+import { tieneWhatsapp } from '@/shared/lib/roles';
 // Avisa de un mensaje entrante desde cualquier pantalla. Antes de esto el CRM
 // no avisaba de nada cuando entraba un WhatsApp.
 const AvisoDeMensaje = lazy(() => import('./AvisoDeMensaje'));
+// Los tickets de soporte (#38): en Soporte y en el Manual, como el icono del 360 (#611).
+const TicketsLauncher = lazy(() => import('@/modules/soporte/components/TicketsLauncher'));
 
 const COLLAPSED_KEY = 'crm.sidebar.collapsed';
 
 export default function AppLayout() {
-  const { user } = useAuth();
-  // Quien es solo colaborador (#210) no tiene WhatsApp: el servidor le responde
-  // 403, y el aviso de mensajes preguntaba cada pocos segundos (QA del 07/10 en
-  // MultiCRM).
-  const esSoloColaborador = soloEsColaborador(user);
+  const { permissions } = useAuth();
+  // Quien no tiene WhatsApp —el colaborador (#210, QA del 07/10), el tutor (QA
+  // del 22/10)…— recibe un 403 del servidor, y el aviso de mensajes preguntaba
+  // cada pocos segundos. Se decide con el mismo criterio que el servidor: su
+  // permiso (#423), como en MultiCRM.
+  const sinWhatsapp = !tieneWhatsapp(permissions);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem(COLLAPSED_KEY) === '1'; } catch { return false; }
@@ -136,9 +139,14 @@ export default function AppLayout() {
           manda y no lo ve nadie. Estuvo asi hasta el 19/08 y por eso «guardar
           un prospecto no hacia nada» — el servidor devolvia el motivo del
           rechazo y la pantalla se lo callaba. */}
-      {!esSoloColaborador && (
+      {!sinWhatsapp && (
         <Suspense fallback={null}>
           <AvisoDeMensaje />
+        </Suspense>
+      )}
+      {(pathname.startsWith('/manual') || pathname === '/soporte') && !mobileOpen && (
+        <Suspense fallback={null}>
+          <TicketsLauncher />
         </Suspense>
       )}
       <Toaster />

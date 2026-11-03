@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { X, ArrowRight, ArrowLeft } from '@phosphor-icons/react';
+import './tour.css';
 
 // El tour del chat.
 //
@@ -13,7 +14,7 @@ import { X, ArrowRight, ArrowLeft } from '@phosphor-icons/react';
 
 const VISTO = 'wa-tour-visto-v1';
 
-type Paso = {
+export type Paso = {
   /** A que se apunta. Si no esta en pantalla, el paso se salta. */
   donde?: string;
   titulo: string;
@@ -34,6 +35,16 @@ type Paso = {
    * Con esto el cartel lleva su propio boton y va.
    */
   accion?: { texto: string; a: string };
+  /**
+   * La vista de la pantalla en la que está lo que se señala (#576).
+   *
+   * En Plantillas, los datos que se insertan solo existen en «Editar», y la
+   * pantalla abre en «Consultar»: el paso no encontraba su objetivo y se
+   * saltaba, así que el recorrido de cuatro pasos enseñaba tres. Con esto el
+   * recorrido avisa con `alEntrar` y la pantalla se pone en esa vista antes
+   * de medir.
+   */
+  vista?: string;
 };
 
 const PASOS: Paso[] = [
@@ -95,8 +106,34 @@ const PASOS: Paso[] = [
   },
 ];
 
-export default function Tour({ alCerrar }: { alCerrar?: () => void }) {
+/**
+ * El mismo recorrido, para otra pantalla (#129).
+ *
+ * Las plantillas piden su propio tutorial guiado —lo pidio Diego con esas
+ * palabras— y montar un segundo motor de carteles para cuatro pasos seria
+ * tener dos cosas que mantener y que se van a separar a la primera. Se
+ * parametriza este: sin props se comporta exactamente igual que antes.
+ *
+ * La marca de «visto» va aparte por recorrido: haber visto el del chat no
+ * significa haber visto el de las plantillas.
+ */
+export default function Tour({
+  alCerrar,
+  pasos: pasosPropios,
+  clave = VISTO,
+  alEntrar,
+}: {
+  alCerrar?: () => void;
+  pasos?: Paso[];
+  clave?: string;
+  /** Al llegar a un paso con `vista`: la pantalla se pone en ella. */
+  alEntrar?: (paso: Paso) => void;
+}) {
   const navegar = useNavigate();
+  // En una referencia: la pantalla la pasa como flecha nueva en cada render, y
+  // como dependencia del efecto lo volvería a lanzar sin parar.
+  const entrar = useRef(alEntrar);
+  entrar.current = alEntrar;
 
   /**
    * Sin numero enlazado, el recorrido es CORTO: presentar y mandar a enlazar.
@@ -112,6 +149,7 @@ export default function Tour({ alCerrar }: { alCerrar?: () => void }) {
    * bailaria.
    */
   const [pasos] = useState<Paso[]>(() => {
+    if (pasosPropios) return pasosPropios;
     const sinNumero = Boolean(document.querySelector('.wa-sin-enlazar'));
     return sinNumero
       ? PASOS.filter((p) => p.enElCorto)
@@ -140,8 +178,8 @@ export default function Tour({ alCerrar }: { alCerrar?: () => void }) {
    * numero puesto para verlo entero. Lo hace `seguirGuia`.
    */
   useEffect(() => {
-    try { localStorage.setItem(VISTO, '1'); } catch { /* navegador sin permiso */ }
-  }, []);
+    try { localStorage.setItem(clave, '1'); } catch { /* navegador sin permiso */ }
+  }, [clave]);
 
   useEffect(() => {
     const alRedimensionar = () => setVentana({ w: window.innerWidth, h: window.innerHeight });
@@ -171,11 +209,11 @@ export default function Tour({ alCerrar }: { alCerrar?: () => void }) {
     // numero» no ha visto el recorrido, ha visto dos carteles, y tiene que
     // encontrarselo entero al volver con el numero puesto.
     try {
-      if (marcar) localStorage.setItem(VISTO, '1');
-      else localStorage.removeItem(VISTO);
+      if (marcar) localStorage.setItem(clave, '1');
+      else localStorage.removeItem(clave);
     } catch { /* navegador sin permiso */ }
     alCerrar?.();
-  }, [alCerrar]);
+  }, [alCerrar, clave]);
 
   // Estables a proposito. El efecto que mide llama a `saltar`, asi que tiene que
   // poder declararlo como dependencia; si cambiara de identidad en cada render,
@@ -184,10 +222,10 @@ export default function Tour({ alCerrar }: { alCerrar?: () => void }) {
   const saltar = useCallback(() => {
     for (let i = paso + 1; i < pasos.length; i++) {
       const p = pasos[i];
-      if (!p.donde || document.querySelector(p.donde)) { setPaso(i); return; }
+      if (!p.donde || p.vista || document.querySelector(p.donde)) { setPaso(i); return; }
     }
     cerrar();
-  }, [paso, cerrar]);
+  }, [paso, cerrar, pasos]);
 
   // Se mide donde esta lo que se señala, cada vez. Guardar la posicion no vale:
   // la ventana cambia de tamaño y la lista crece mientras entra el historial.
@@ -201,6 +239,12 @@ export default function Tour({ alCerrar }: { alCerrar?: () => void }) {
   // Antes de saltarlo se ESPERA: en esa pantalla la lista se llena por tandas
   // mientras entra el historial, y el objetivo puede tardar un segundo en
   // existir. Rendirse a la primera saltaria pasos que si eran validos.
+  // Primero la vista del paso; el efecto que mide espera hasta 1,5 s a que
+  // aparezca lo que señala, que es lo que tarda de sobra en pintarse.
+  useEffect(() => {
+    if (actual?.vista) entrar.current?.(actual);
+  }, [actual]);
+
   useEffect(() => {
     if (!actual?.donde) { setHueco(null); return undefined; }
 
@@ -245,9 +289,9 @@ export default function Tour({ alCerrar }: { alCerrar?: () => void }) {
   const atras = useCallback(() => {
     for (let i = paso - 1; i >= 0; i--) {
       const p = pasos[i];
-      if (!p.donde || document.querySelector(p.donde)) { setPaso(i); return; }
+      if (!p.donde || p.vista || document.querySelector(p.donde)) { setPaso(i); return; }
     }
-  }, [paso]);
+  }, [paso, pasos]);
 
   // Escape cierra, como cualquier otra cosa que se abre encima. Sin esto habia
   // que buscar la X con el raton.
@@ -348,8 +392,8 @@ export default function Tour({ alCerrar }: { alCerrar?: () => void }) {
 }
 
 /** ¿Toca enseñarlo? Solo la primera vez de cada persona en este navegador. */
-export function tourPendiente() {
-  try { return localStorage.getItem(VISTO) !== '1'; } catch { return false; }
+export function tourPendiente(clave: string = VISTO) {
+  try { return localStorage.getItem(clave) !== '1'; } catch { return false; }
 }
 
 /**
@@ -363,6 +407,6 @@ export function hayQueSeñalar() {
 }
 
 /** Para poder volver a verlo desde la guia. */
-export function reiniciarTour() {
-  try { localStorage.removeItem(VISTO); } catch { /* da igual */ }
+export function reiniciarTour(clave: string = VISTO) {
+  try { localStorage.removeItem(clave); } catch { /* da igual */ }
 }

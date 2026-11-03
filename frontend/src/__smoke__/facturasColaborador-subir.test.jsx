@@ -88,4 +88,11 @@ describe('subir la factura · lo acordado y el desglose', () => {
     fireEvent.change(importe(), { target: { value: '650' } });
     expect(screen.getByText(/El importe no coincide con lo acordado \(600,00 €\)/)).toBeTruthy();
   });
+
+  it('dice hasta qué día se puede subir (Diego, 30/10): caduca el 06/11 a las 00:00 de Madrid, se sube hasta el 05/11', () => {
+    abrir(factura({ cobro: null, caduca_at: '2026-11-05T23:00:00.000Z' }));
+    // Con el texto entero del párrafo: React lo parte en varios trozos.
+    const aviso = screen.getByText((_, el) => el?.tagName === 'P' && /Puedes subirla hasta el/.test(el.textContent || ''));
+    expect(aviso.textContent).toMatch(/Puedes subirla hasta el 0?5\/11\.$/);
+  });
 });

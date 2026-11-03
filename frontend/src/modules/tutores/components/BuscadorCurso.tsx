@@ -25,7 +25,7 @@ const euros = (n: string | number | undefined) =>
   n == null ? '' : Number(n).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
 
 export default function BuscadorCurso({
-  cursos, valor, onElegir, excluir = [], placeholder = 'Escribe para buscar un curso…', autoFocus = false,
+  cursos, valor, onElegir, excluir = [], placeholder = 'Escribe para buscar un curso…', autoFocus = false, id,
 }: {
   cursos: CursoElegible[];
   valor: number | null;
@@ -33,6 +33,8 @@ export default function BuscadorCurso({
   excluir?: number[];
   placeholder?: string;
   autoFocus?: boolean;
+  /** El `id` del campo de texto: lo enlaza con su etiqueta (Field, #106). */
+  id?: string;
 }) {
   const [texto, setTexto] = useState('');
   const [abierto, setAbierto] = useState(false);
@@ -105,6 +107,8 @@ export default function BuscadorCurso({
       <div className="flex items-center gap-2 h-9 px-2.5 rounded-md border border-border bg-background">
         <MagnifyingGlass size={14} className="text-muted-foreground shrink-0" />
         <input
+          id={id}
+          autoComplete="off"
           value={texto}
           autoFocus={autoFocus}
           onChange={(e) => { setTexto(e.target.value); setAbierto(true); }}
