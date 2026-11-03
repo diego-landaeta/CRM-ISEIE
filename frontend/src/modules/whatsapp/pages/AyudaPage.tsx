@@ -346,7 +346,7 @@ export default function AyudaPage() {
         <ul className="text-sm text-amber-800 dark:text-amber-300/90 space-y-2 leading-relaxed">
           <li>· <strong>Escribir a quien no dejó su teléfono</strong> en un formulario nuestro. El CRM
             te deja hacerlo —hay motivos buenos: un antiguo alumno, una madre preguntando por su
-            hijo— pero <strong>queda anotado</strong>, y es lo que mas rápido lleva a que reporten
+            hijo— pero <strong>queda anotado</strong>, y es lo que más rápido lleva a que reporten
             un número. Piensatelo antes.</li>
           <li>· <strong>Envíos masivos</strong> o el mismo mensaje en cadena a mucha gente seguida.</li>
           <li>· <strong>Insistir a quien no contesta.</strong> Si alguien pide que no le escribas,

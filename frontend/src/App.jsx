@@ -2,6 +2,7 @@ import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Suspense, lazy, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { PROCESO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
+import { MARCA } from '@/shared/config/marca';
 
 // Layout y guardas
 const AppLayout = lazy(() => import('./shared/components/layout/AppLayout'));
@@ -189,7 +190,7 @@ function ScrollToTop() {
 function DocumentTitle() {
   const { pathname } = useLocation();
   useEffect(() => {
-    const base = 'CRM ISEIE';
+    const base = MARCA;
     const route = ROUTE_TITLES[pathname];
     document.title = route ? `${route} — ${base}` : base;
   }, [pathname]);

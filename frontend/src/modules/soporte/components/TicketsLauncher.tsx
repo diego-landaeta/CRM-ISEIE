@@ -97,7 +97,7 @@ export default function TicketsLauncher() {
                   <p className="text-[11px] text-muted-foreground">
                     {view === 'list'
                       ? `${tickets.length} ${tickets.length === 1 ? 'ticket' : 'tickets'}`
-                      : 'Cuentanos lo que pasa, mientras mas detalle mejor.'}
+                      : 'Cuéntanos lo que pasa: cuanto más detalle, mejor.'}
                   </p>
                 </div>
               </div>
