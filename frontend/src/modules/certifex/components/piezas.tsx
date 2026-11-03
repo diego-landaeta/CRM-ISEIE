@@ -106,6 +106,46 @@ export function Avance({ hechas, total }: { hechas: number; total: number }) {
   );
 }
 
+/**
+ * Tareas entregadas / totales que manda Certifex (#629): es lo que decide su «terminó», y
+ * no tiene por qué coincidir con el % de calificadas de al lado.
+ */
+export function Entregas({ e }: { e?: Candidato['entregas'] }) {
+  if (!e || !e.total) return <span className="text-[11px] text-muted-foreground" title="El campus no ha mandado sus tareas entregadas">sin datos de tareas</span>;
+  const todas = e.entregadas >= e.total;
+  return (
+    <span className={cn('whitespace-nowrap text-[11px] tabular-nums', todas ? 'text-muted-foreground' : 'text-warning-soft-foreground')}
+      title={`${e.entregadas} de ${e.total} tareas entregadas, de las que cuenta Moodle: con todas, Certifex lo da por terminado`}>
+      {e.entregadas}/{e.total} tareas
+    </span>
+  );
+}
+
+/**
+ * ¿Le falta algo para darlo por terminado? (#629 / CRM-ISEIE #356). Misma regla y mismo
+ * texto que el backend (`avisoSinTerminar` en certifex.diplomas.js): avance de calificadas
+ * por debajo del 100 % o sin nota. Con el campus sin actividades (total 0) el avance no se
+ * sabe y no cuenta. null = nada que confirmar.
+ */
+export function avisoSinTerminar(c: Pick<Candidato, 'notaFinal' | 'actividades' | 'entregas'>): string | null {
+  const total = Number(c.actividades?.total) || 0;
+  const calificadas = Number(c.actividades?.calificadas) || 0;
+  const faltaAvance = total > 0 && calificadas < total;
+  const faltaNota = c.notaFinal == null;
+  if (!faltaAvance && !faltaNota) return null;
+  const e = c.entregas;
+  const partes: string[] = [];
+  if (e && Number(e.total) > 0) {
+    partes.push(`${Number(e.entregadas) < Number(e.total) ? 'Solo ha' : 'Ha'} entregado ${Number(e.entregadas)} de ${Number(e.total)} tareas visibles`);
+  } else {
+    partes.push('No hay datos de sus tareas entregadas');
+  }
+  if (faltaAvance) partes.push(`tiene ${calificadas} de ${total} actividades calificadas`);
+  if (faltaNota) partes.push('no tiene nota');
+  const frase = partes.length > 1 ? `${partes.slice(0, -1).join(', ')} y ${partes[partes.length - 1]}` : partes[0];
+  return `${frase}: ¿seguro?`;
+}
+
 export function Decision({ c }: { c: Candidato }) {
   if (c.decision?.decision === 'aprobada') return <StatusDot tono="success">Aprobada</StatusDot>;
   if (c.decision?.decision === 'rechazada') return <StatusDot tono="danger">Rechazada</StatusDot>;

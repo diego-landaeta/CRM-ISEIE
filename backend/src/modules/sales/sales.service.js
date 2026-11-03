@@ -413,6 +413,16 @@ export async function getTopProducts({ projectId, projectIds = null, limit = 10,
  * «VENTAS» = ventas con alguna factura (no abono) emitida en el periodo. Una
  * venta con tres facturas de cuotas en el mismo mes es una venta.
  *
+ * LAS RECTIFICATIVAS, APARTE EN LOS PRODUCTOS (#534). Restaban dentro de su
+ * producto: en octubre, «Cuentoterapia −541,67 €» (108,33 € facturados menos la
+ * R-2026/0002 de −650 €) y «Tarot Terapéutico (dolor emocional) 0,00 €». Ahora
+ * cada producto enseña lo FACTURADO (sin abonos) y los abonos van en su fila,
+ * `rectificativas`, con su detalle por producto. El total no cambia:
+ *
+ *   gestoras + sin_gestora  =  total  =  productos + sin_producto + rectificativas
+ *
+ * Las gestoras siguen netas (con sus abonos dentro): es su ranking.
+ *
  * @param {{ projectId?, projectIds?, from?, to?, responsableId? }} opts
  *   `responsableId`: solo la parte de esa gestora (una gestora ve lo suyo).
  */
@@ -430,6 +440,8 @@ export async function getFacturado({ projectId = null, projectIds = null, from =
   const CTE = `WITH fac AS (
       SELECT i.conversion_id,
              SUM(${IMPORTE_FACTURADO}) AS facturado,
+             -- Lo que restan los abonos (negativo): va aparte en los productos.
+             COALESCE(SUM(${IMPORTE_FACTURADO}) FILTER (WHERE i.tipo = 'rectificativa'), 0) AS rectificado,
              BOOL_OR(i.tipo = 'normal') AS con_factura
         FROM invoices i
         JOIN conversions c ON c.id = i.conversion_id
@@ -437,7 +449,7 @@ export async function getFacturado({ projectId = null, projectIds = null, from =
        GROUP BY i.conversion_id
     ),
     rep AS (
-      SELECT f.conversion_id, f.facturado, f.con_factura, r.vendedora_id, r.peso
+      SELECT f.conversion_id, f.facturado, f.rectificado, f.con_factura, r.vendedora_id, r.peso
         FROM fac f
         JOIN conversion_reparto r ON r.conversion_id = f.conversion_id
        ${soloGestora}
@@ -460,7 +472,10 @@ export async function getFacturado({ projectId = null, projectIds = null, from =
        SELECT c.producto_contratado_id AS product_id,
               ${PRODUCTO} AS producto,
               ${SIN_ASIGNAR} AS sin_asignar,
-              COALESCE(SUM(rep.facturado * rep.peso), 0)::numeric AS facturado,
+              -- Lo facturado SIN los abonos; los abonos, en su columna (#534).
+              COALESCE(SUM((rep.facturado - rep.rectificado) * rep.peso), 0)::numeric AS facturado,
+              COALESCE(SUM(rep.rectificado * rep.peso), 0)::numeric AS rectificado,
+              COALESCE(SUM(rep.peso) FILTER (WHERE rep.rectificado <> 0), 0)::float8 AS ventas_rectificadas,
               COALESCE(SUM(rep.peso) FILTER (WHERE rep.con_factura), 0)::float8 AS ventas
          FROM rep
          JOIN conversions c ON c.id = rep.conversion_id
@@ -480,7 +495,11 @@ export async function getFacturado({ projectId = null, projectIds = null, from =
   const fila = (f) => ({ facturado: cent(f.facturado), ventas: cent(f.ventas) });
 
   const gestoras = porGestora.filter((f) => f.user_id != null);
-  const productos = porProducto.filter((f) => !f.sin_asignar);
+  // Un producto que este periodo solo tiene un abono no es un producto
+  // vendido: su abono sale en «Rectificativas» y la lista no lo enseña a 0 €.
+  const productos = porProducto.filter((f) => !f.sin_asignar
+    && (Number(f.facturado || 0) !== 0 || Number(f.ventas || 0) > 0));
+  const conAbono = porProducto.filter((f) => Number(f.rectificado || 0) !== 0);
 
   return {
     desde: from, hasta: to,
@@ -489,6 +508,14 @@ export async function getFacturado({ projectId = null, projectIds = null, from =
     sin_gestora: fila(suma(porGestora.filter((f) => f.user_id == null))),
     productos: productos.map((f) => ({ product_id: f.product_id, producto: f.producto, ...fila(f) })),
     sin_producto: fila(suma(porProducto.filter((f) => f.sin_asignar))),
+    // Los abonos del periodo (negativos), fuera de cada producto (#534).
+    rectificativas: {
+      facturado: cent(conAbono.reduce((x, f) => x + Number(f.rectificado || 0), 0)),
+      ventas: cent(conAbono.reduce((x, f) => x + Number(f.ventas_rectificadas || 0), 0)),
+      productos: conAbono
+        .map((f) => ({ product_id: f.product_id, producto: f.producto, facturado: cent(f.rectificado) }))
+        .sort((a, b) => a.facturado - b.facturado),
+    },
   };
 }
 
@@ -674,6 +701,96 @@ export async function getResumenVentas(filtros = {}) {
       importe_pendiente: Number(cuotas[0].importe_pendiente),
       importe_vencido: Number(cuotas[0].importe_vencido),
     },
+  };
+}
+
+/*
+  LAS VENTAS QUE NO DICEN DE QUE FORMACION SON (#41).
+
+  321 ventas cobradas sin curso del catalogo detras --272 en ISEIE y 49 aqui--.
+  La consecuencia no es estetica: sin formacion no se sabe de quien es la
+  comision y NINGUN PROFESOR COBRA por ellas. En los informes salen bajo
+  «servicio academico», que es el texto que traia el pago.
+
+  Esto hace las dos primeras subfases: sacar la lista con lo que se sepa de
+  cada una, y proponer el cruce de las que se puedan por el nombre.
+
+  LO QUE NO HACE: atarlas solo. La sugerencia se propone y la confirma una
+  persona. Atar un cobro a la formacion equivocada es peor que dejarlo sin
+  atar --lo segundo se ve en un aviso; lo primero se paga a quien no era--, y
+  ese aviso ya esta escrito en `scripts/venta-177-sin-formacion.sql`.
+*/
+export async function ventasSinFormacion({ projectId, projectIds = null, from = null, to = null } = {}) {
+  const params = [];
+  const cond = [];
+  const lista = comoLista(projectId, projectIds);
+  if (lista) { params.push(lista); cond.push(`c.project_id = ANY($${params.length}::int[])`); }
+  else cond.push(SIN_PRUEBAS('c.project_id'));
+  cond.push('c.producto_contratado_id IS NULL');
+  // Una venta sin cobrar no es de nadie todavia: la comision nace del cobro.
+  cond.push('EXISTS (SELECT 1 FROM conversion_payments cp WHERE cp.conversion_id = c.id)');
+  if (from) { params.push(from); cond.push(`c.fecha_conversion >= $${params.length}::date`); }
+  if (to) { params.push(to); cond.push(`c.fecha_conversion <= $${params.length}::date`); }
+
+  const { rows } = await query(
+    `SELECT c.id,
+            c.fecha_conversion,
+            c.importe_total,
+            ${NOMBRE_LIMPIO} AS texto,
+            l.nombre AS alumno,
+            l.email  AS alumno_email,
+            (SELECT COALESCE(SUM(cp.importe), 0) FROM conversion_payments cp
+              WHERE cp.conversion_id = c.id) AS cobrado,
+            /*
+              EL CRUCE, con la MISMA regla que usa el alta: mismo nombre sin
+              tildes y sin mayusculas, y SOLO si hay uno. Con dos candidatos no
+              se propone nada — adivinar cual de los dos es exactamente lo que
+              no puede hacer una maquina aqui.
+            */
+            -- CASE WHEN COUNT(*) = 1 THEN MIN(...): devuelve el candidato
+            -- SOLO si es unico. Con dos, null. (Un COUNT(*) OVER () dentro de
+            -- un HAVING no lo admite Postgres, y sin acento grave porque esto
+            -- vive dentro de una plantilla de JS.)
+            (SELECT CASE WHEN COUNT(*) = 1 THEN MIN(pr.id) END FROM products pr
+              WHERE pr.project_id = c.project_id AND pr.active
+                AND LOWER(TRANSLATE(pr.nombre, 'áéíóúÁÉÍÓÚñÑ', 'aeiouAEIOUnN'))
+                  = LOWER(TRANSLATE(${NOMBRE_LIMPIO}, 'áéíóúÁÉÍÓÚñÑ', 'aeiouAEIOUnN'))
+            ) AS sugerencia_id,
+            (SELECT CASE WHEN COUNT(*) = 1 THEN MIN(pr.nombre) END FROM products pr
+              WHERE pr.project_id = c.project_id AND pr.active
+                AND LOWER(TRANSLATE(pr.nombre, 'áéíóúÁÉÍÓÚñÑ', 'aeiouAEIOUnN'))
+                  = LOWER(TRANSLATE(${NOMBRE_LIMPIO}, 'áéíóúÁÉÍÓÚñÑ', 'aeiouAEIOUnN'))
+            ) AS sugerencia_nombre
+       FROM conversions c
+       LEFT JOIN leads l ON l.id = c.lead_id
+      WHERE ${cond.join(' AND ')}
+      ORDER BY c.fecha_conversion DESC, c.id DESC`,
+    params
+  );
+
+  const filas = rows.map((r) => ({
+    id: r.id,
+    fecha: r.fecha_conversion,
+    alumno: r.alumno,
+    alumnoEmail: r.alumno_email,
+    texto: r.texto,
+    importe: Number(r.importe_total),
+    cobrado: Number(r.cobrado),
+    sugerencia: r.sugerencia_id ? { id: r.sugerencia_id, nombre: r.sugerencia_nombre } : null,
+  }));
+
+  return {
+    filas,
+    total: filas.length,
+    conSugerencia: filas.filter((f) => f.sugerencia).length,
+    // Sin texto no hay nada que cruzar: esas son las que hay que mirar a mano.
+    sinTexto: filas.filter((f) => !f.texto).length,
+    // Lo VENDIDO y lo COBRADO, por separado. La pantalla habla de ventas cobradas
+    // y la comision nace del cobro, asi que la tarjeta suma `cobrado`: sumar el
+    // total de la venta y rotularlo «cobrados» enseñaba 4.200 € arriba y 2.800 €
+    // en la fila de esa misma venta.
+    importe: Number(filas.reduce((s, f) => s + f.importe, 0).toFixed(2)),
+    cobrado: Number(filas.reduce((s, f) => s + f.cobrado, 0).toFixed(2)),
   };
 }
 

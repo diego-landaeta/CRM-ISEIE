@@ -4,10 +4,10 @@ import { getGscMetrics, getGscConsolidated, type GscMetrics, type GscConsolidate
 export type Preset = '7d' | '14d' | '28d' | '90d';
 
 export const PRESET_PERIODS: Record<Preset, { label: string; days: number }> = {
-  '7d': { label: 'Ultimos 7 dias', days: 7 },
-  '14d': { label: 'Ultimos 14 dias', days: 14 },
-  '28d': { label: 'Ultimos 28 dias', days: 28 },
-  '90d': { label: 'Ultimos 90 dias', days: 90 },
+  '7d': { label: 'Últimos 7 días', days: 7 },
+  '14d': { label: 'Últimos 14 días', days: 14 },
+  '28d': { label: 'Últimos 28 días', days: 28 },
+  '90d': { label: 'Últimos 90 días', days: 90 },
 };
 
 export interface DateRange { fechaDesde: string; fechaHasta: string }

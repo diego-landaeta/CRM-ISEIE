@@ -133,7 +133,7 @@ function QueNoEsEsto() {
       </p>
 
       <Link
-        to="/captacion/webhooks"
+        to="/webhooks"
         className="flex items-start gap-3 rounded-md border border-border bg-card p-3 transition-colors hover:bg-muted"
       >
         <ArrowSquareOut size={16} className="mt-0.5 shrink-0 text-muted-foreground" />
@@ -160,7 +160,7 @@ function QueNoEsEsto() {
       </Link>
 
       <Link
-        to="/productos/woocommerce"
+        to="/woocommerce"
         className="flex items-start gap-3 rounded-md border border-border bg-card p-3 transition-colors hover:bg-muted"
       >
         <ShoppingBag size={16} className="mt-0.5 shrink-0 text-muted-foreground" />

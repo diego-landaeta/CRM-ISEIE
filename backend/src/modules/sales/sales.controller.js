@@ -156,6 +156,26 @@ export async function resumenVentas(req, res, next) {
 }
 
 // GET /api/sales/por-asesora
+/**
+ * Las ventas sin formacion del catalogo (#41).
+ *
+ * Solo admin: es la lista de lo que no cuadra de un proyecto entero, con
+ * nombre y correo de cada alumno.
+ */
+export async function sinFormacion(req, res, next) {
+  try {
+    const { projectId, projectIds } = await proyectosDelAmbito(req);
+    res.json({
+      success: true,
+      data: await salesService.ventasSinFormacion({
+        projectId, projectIds,
+        from: req.query.from || null,
+        to: req.query.to || null,
+      }),
+    });
+  } catch (err) { next(err); }
+}
+
 export async function ventasPorAsesora(req, res, next) {
   try {
     res.json({ success: true, data: await salesService.getVentasPorAsesora(filtrosDeQuery(req)) });

@@ -134,7 +134,7 @@ export default function RevenuePage() {
       <div className="bg-card p-6 rounded-lg border border-border">
         <div className="mb-6">
           <h3 className="font-semibold">Evolucion de Ingresos</h3>
-          <p className="text-[11px] text-muted-foreground mt-0.5">Ultimos 6 meses</p>
+          <p className="text-[11px] text-muted-foreground mt-0.5">Últimos 6 meses</p>
         </div>
         <ResponsiveContainer width="100%" height={240}>
           <AreaChart data={monthly}>
@@ -156,7 +156,7 @@ export default function RevenuePage() {
       <div className="bg-card rounded-lg border border-border overflow-x-auto">
         <div className="p-5">
           <h3 className="font-semibold">Conversiones Recientes</h3>
-          <p className="text-[11px] text-muted-foreground mt-0.5">Ultimos pagos registrados</p>
+          <p className="text-[11px] text-muted-foreground mt-0.5">Últimos pagos registrados</p>
         </div>
         {loading ? (
           <SkeletonTable rows={4} columns={5} className="border-0 rounded-none" />

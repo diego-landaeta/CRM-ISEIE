@@ -426,7 +426,7 @@ const VISTAS = {
   historial: 'TRUE',
 };
 
-export async function deLaVista({ vista, issuerIds, issuerId = null, colaboradorId = null, periodo = null, estado = null }) {
+export async function deLaVista({ vista, issuerIds, issuerId = null, colaboradorId = null, periodo = null, estado = null, q = null }) {
   const { rows } = await query(
     `SELECT * FROM (
        ${FILA_DE_LISTA}
@@ -435,11 +435,14 @@ export async function deLaVista({ vista, issuerIds, issuerId = null, colaborador
           AND ($2::int IS NULL OR f.issuer_id = $2)
           AND ($3::int IS NULL OR f.colaborador_id = $3)
           AND ($4::date IS NULL OR f.periodo = $4::date)
+          -- El buscador (Ctrl K, #591): sin acentos en el nombre.
+          AND ($6::text IS NULL OR unaccent(c.nombre) ILIKE unaccent($6) OR c.email ILIKE $6
+               OR f.numero_factura ILIKE $6 OR f.numero_recepcion ILIKE $6)
      ) t
      WHERE ($5::text IS NULL OR t.estado = $5 OR ($5 = 'no_cuadra' AND t.cuadra = false AND t.estado <> 'anulada'))
      ORDER BY t.periodo DESC, t.colaborador_nombre, t.empresa, t.id
      LIMIT 1000`,
-    [issuerIds, issuerId, colaboradorId, periodo, estado],
+    [issuerIds, issuerId, colaboradorId, periodo, estado, q ? `%${q}%` : null],
   );
   return rows;
 }

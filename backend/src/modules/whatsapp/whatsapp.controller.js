@@ -1,6 +1,7 @@
 import * as model from './whatsapp.model.js';
 import { createSchema, updateSchema } from './whatsapp.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
+import { query } from '../../shared/config/db.js';
 import { proyectosDelAmbito, comoLista } from '../../shared/utils/ambito.js';
 import { actividadEnWhatsapp } from './actividad.model.js';
 import { usuarioObjetivo } from './chat.controller.js';
@@ -67,11 +68,19 @@ export async function listTemplates(req, res, next) {
     // Con una EMPRESA puesta llegan sus campus y no hace falta uno concreto.
     // Antes se pedia igualmente (`?? proyecto(req)`) y, al no venir, esto
     // contestaba «projectId requerido»: la pantalla lo pintaba como «este
-    // proyecto no tiene plantillas». Diego, 28/09 (visto en MultiCRM).
-    const deLaEmpresa = Array.isArray(ambito.projectIds) && ambito.projectIds.length > 0;
+    // proyecto no tiene plantillas». Diego, 28/09, con CEDIA en /testeo.
+    let { projectIds } = ambito;
+    // «Todos los proyectos» de super admin o soporte (#218): sin campus y sin
+    // empresa, las de todos los campus, sin los de pruebas. Antes, «projectId
+    // requerido», y el Seguimiento se quedaba sin plantillas.
+    if (!ambito.projectId && !projectIds) {
+      const { rows } = await query('SELECT id FROM projects WHERE active AND NOT COALESCE(es_prueba, false)');
+      projectIds = rows.map((r) => Number(r.id));
+    }
+    const deLaEmpresa = Array.isArray(projectIds) && projectIds.length > 0;
     res.json({ success: true, data: await model.listTemplates({
       projectId: deLaEmpresa ? null : (ambito.projectId ?? proyecto(req)),
-      projectIds: ambito.projectIds,
+      projectIds,
       userId: await duenoDeLasPersonales(req),
     })});
   } catch (err) { next(err); }

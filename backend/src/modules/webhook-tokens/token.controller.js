@@ -1,10 +1,34 @@
 import { z } from 'zod';
 import * as model from './token.model.js';
-import * as matriculaModel from '../matriculas/matricula.model.js';
+import { applyMapping } from './mapeo.js';
+import { recibirAdmision } from '../matriculas/admision.service.js';
+import { conArchivos } from '../matriculas/admision.archivos.js';
 import * as leadModel from '../leads/lead.model.js';
 import { duplicadoParaAlta, apuntarReenvio, avisarDuplicado } from '../leads/duplicado-en-alta.js';
 import { decidirFormulario, apuntarFormulario } from '../asignacion/asignacion.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
+import { tieneRol } from '../../shared/utils/roles.js';
+import { campusDeLaPersona } from '../../shared/utils/ambito.js';
+
+/**
+ * Cada admin, solo los webhooks de sus campus; el super admin, todos. Lo mismo que
+ * el webhook de transferencias: un campus que no es suyo es un 403.
+ */
+async function comprobarCampus(req, projectId) {
+  if (tieneRol(req.user, 'superadmin')) return;
+  const mios = await campusDeLaPersona(req.user?.userId);
+  if (!mios.includes(Number(projectId))) {
+    throw new AppError('Ese campus no es tuyo: solo puedes usar los campus en los que estás.', 403, 'FORBIDDEN');
+  }
+}
+
+/** El token, si existe y esta persona puede con él. */
+async function elToken(req) {
+  const t = await model.findById(parseInt(req.params.id));
+  if (!t) throw new AppError('Token no encontrado', 404, 'NOT_FOUND');
+  await comprobarCampus(req, t.project_id);
+  return t;
+}
 
 const createSchema = z.object({
   project_id: z.number().int().positive(),
@@ -23,6 +47,7 @@ export async function list(req, res, next) {
   try {
     const projectId = parseInt(req.query.projectId);
     if (!projectId) throw new AppError('projectId requerido', 400, 'PROJECT_REQUIRED');
+    await comprobarCampus(req, projectId);
     res.json({ success: true, data: await model.listByProject(projectId, req.query.kind) });
   } catch (err) { next(err); }
 }
@@ -31,6 +56,7 @@ export async function create(req, res, next) {
   try {
     const parsed = createSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError('Datos invalidos', 400, 'VALIDATION_ERROR');
+    await comprobarCampus(req, parsed.data.project_id);
     res.status(201).json({ success: true, data: await model.create({ ...parsed.data, created_by: req.user.userId }) });
   } catch (err) { next(err); }
 }
@@ -39,6 +65,7 @@ export async function update(req, res, next) {
   try {
     const parsed = updateSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError('Datos invalidos', 400, 'VALIDATION_ERROR');
+    await elToken(req);
     const r = await model.update(parseInt(req.params.id), parsed.data);
     if (!r) throw new AppError('Token no encontrado', 404, 'NOT_FOUND');
     res.json({ success: true, data: r });
@@ -46,12 +73,16 @@ export async function update(req, res, next) {
 }
 
 export async function remove(req, res, next) {
-  try { await model.remove(parseInt(req.params.id)); res.json({ success: true }); }
-  catch (err) { next(err); }
+  try {
+    await elToken(req);
+    await model.remove(parseInt(req.params.id));
+    res.json({ success: true });
+  } catch (err) { next(err); }
 }
 
 export async function startListening(req, res, next) {
   try {
+    await elToken(req);
     const t = await model.setListenMode(parseInt(req.params.id), true);
     if (!t) throw new AppError('Token no encontrado', 404, 'NOT_FOUND');
     res.json({ success: true, data: t });
@@ -60,6 +91,7 @@ export async function startListening(req, res, next) {
 
 export async function stopListening(req, res, next) {
   try {
+    await elToken(req);
     const t = await model.setListenMode(parseInt(req.params.id), false);
     if (!t) throw new AppError('Token no encontrado', 404, 'NOT_FOUND');
     res.json({ success: true, data: t });
@@ -68,8 +100,7 @@ export async function stopListening(req, res, next) {
 
 export async function getStatus(req, res, next) {
   try {
-    const t = await model.findById(parseInt(req.params.id));
-    if (!t) throw new AppError('Token no encontrado', 404, 'NOT_FOUND');
+    const t = await elToken(req);
     res.json({ success: true, data: {
       awaiting_sample: t.awaiting_sample,
       sample_payload: t.sample_payload,
@@ -80,57 +111,29 @@ export async function getStatus(req, res, next) {
   } catch (err) { next(err); }
 }
 
-function resolvePath(obj, path) {
-  if (!path) return undefined;
-  return path.split('.').reduce((acc, k) => (acc == null ? undefined : acc[k]), obj);
-}
-
-function applyMapping(body, mapping) {
-  if (!mapping || Object.keys(mapping).length === 0) return body;
-  const out = {};
-  for (const [target, source] of Object.entries(mapping)) {
-    const v = resolvePath(body, source);
-    if (v !== undefined) out[target] = v;
-  }
-  return out;
-}
-
 // PUBLICO: recibe payload via webhook token, crea entidad segun kind
 export async function publicReceive(req, res, next) {
   try {
-    const tok = await model.findByToken(req.params.token);
+    // Ya lo buscó el portero (portero.js) antes de leer el envío; si se llega sin él, se busca aquí.
+    const tok = req.webhookToken || await model.findByToken(req.params.token);
     if (!tok) throw new AppError('Token invalido o inactivo', 404, 'INVALID_TOKEN');
 
     // Modo escucha: capturar payload sin procesar
     if (tok.awaiting_sample) {
-      await model.saveSample(tok.id, req.body || {});
+      // Con los archivos del multipart como marca, para mapearlos igual que el resto (#198).
+      await model.saveSample(tok.id, conArchivos(req.body, req.files));
       return res.json({ success: true, data: { mode: 'listen', captured: true, message: 'Payload capturado. El admin puede mapearlo en el CRM.' } });
     }
 
-    const mapped = applyMapping(req.body || {}, tok.field_mapping || {});
     await model.recordUse(tok.id);
 
+    // La solicitud de admisión (#198): datos, documentos y persona. Ver admision.service.js.
     if (tok.kind === 'matriculas') {
-      // Dedupe por DNI o email
-      const dedupe = mapped.dni || mapped.email || null;
-      if (dedupe) {
-        const existing = await matriculaModel.findByDedupe(tok.project_id, dedupe);
-        if (existing) {
-          return res.status(200).json({ success: true, data: { matricula_id: existing.id, action: 'duplicate_skipped' } });
-        }
-      }
-      const created = await matriculaModel.create({
-        project_id: tok.project_id,
-        dni: mapped.dni || null,
-        titulo: mapped.titulo || null,
-        notas: mapped.notas || null,
-        datos_admision: req.body,
-        source: 'webhook',
-        dedupe_key: dedupe,
-        estado: 'solicitud_admision',
-      });
-      return res.status(201).json({ success: true, data: { matricula_id: created.id, action: 'created' } });
+      const r = await recibirAdmision(tok, req.body || {}, req.files || []);
+      return res.status(r.status).json({ success: true, data: r.data });
     }
+
+    const mapped = applyMapping(req.body || {}, tok.field_mapping || {});
 
     if (tok.kind === 'leads') {
       if (!mapped.nombre || !mapped.email) throw new AppError('nombre y email requeridos tras mapeo', 400, 'VALIDATION_ERROR');

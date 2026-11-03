@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import * as model from './payroll.model.js';
 import { AppError } from '../../shared/utils/AppError.js';
-import { proyectosDelAmbito } from '../../shared/utils/ambito.js';
+import { proyectosDelAmbito, campusDeTodos } from '../../shared/utils/ambito.js';
 
 const planSchema = z.object({
   project_id: z.number().int().positive(),
@@ -34,7 +34,9 @@ const adjSchema = z.object({
  */
 async function ambito(req) {
   const { projectId, projectIds } = await proyectosDelAmbito(req);
-  if (!projectId && !projectIds) throw new AppError('projectId requerido', 400, 'PROJECT_REQUIRED');
+  // «Todos los proyectos» de super admin o soporte (#218): todos los campus
+  // menos los de pruebas. Antes, «projectId requerido».
+  if (!projectId && !projectIds) return { projectId: null, projectIds: await campusDeTodos(req) };
   return { projectId, projectIds };
 }
 

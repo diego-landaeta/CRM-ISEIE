@@ -3,6 +3,7 @@ import { ArrowLeft, UserCircle, ChatCircleText } from '@phosphor-icons/react';
 import type { Conversation, Message } from '../api/messages.api';
 import MessageBubble from './MessageBubble';
 import ChatInput from './ChatInput';
+import { MARCA } from '@/shared/config/marca';
 
 interface Props {
   conversation: Conversation | null;
@@ -31,7 +32,7 @@ export default function ChatPanel({ conversation, messages, loading, currentUser
             <ChatCircleText size={40} weight="thin" />
           </div>
           <div>
-            <p className="text-lg font-medium text-foreground/70">MultiCRM Chat</p>
+            <p className="text-lg font-medium text-foreground/70">{MARCA} · Chat</p>
             <p className="text-xs mt-1">Selecciona una conversación o inicia una nueva</p>
           </div>
         </div>

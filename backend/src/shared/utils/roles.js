@@ -81,6 +81,64 @@ export function colaboradorPuede(ruta) {
 }
 
 /**
+ * Lo unico que puede pedir un tutor (#187): «solo sus consultas y sus metricas;
+ * nada de ventas, finanzas ni prospectos. Se comprueba en el servidor, no solo
+ * en el menu». Antes, aunque el menu no se lo enseñara, un tutor podia leer por
+ * la API los prospectos y las ventas de su campus (/api/leads y /api/conversions
+ * solo piden token).
+ *
+ * Es lo que pide hoy su pantalla —Mis cursos, sus comisiones, su perfil, los
+ * avisos— y nada mas. Sus cosas en /api/tutores ya se recortan en el
+ * controlador: un tutor solo ve lo suyo.
+ */
+export const RUTAS_DEL_TUTOR = [
+  /^\/api\/auth(?:\/|$)/,
+  /^\/api\/tutores(?:\/|$)/,
+  // Sus consultas de alumnos (#188): el controlador le deja solo las suyas.
+  /^\/api\/consultas(?:\/|$)/,
+  // Sus cursos pendientes (#336): el servicio le deja solo los que tiene asignados.
+  /^\/api\/cursos-pendientes(?:\/|$)/,
+  /^\/api\/notifications(?:\/|$)/,
+  /^\/api\/novedades(?:\/|$)/,
+  // Los mensajes internos entre usuarios del CRM (la campana de «Mensajes»).
+  /^\/api\/mensajes(?:\/|$)/,
+  // Si le esta sonando una llamada: lo pregunta la cabecera a cualquiera.
+  /^\/api\/whatsapp\/sonando\/?$/,
+  /^\/api\/permissions\/system-defaults\/?$/,
+  /^\/api\/users\/mis-avisos\/?$/,
+  /^\/api\/users\/\d+\/(?:avatar|views)\/?$/,
+];
+
+/** Las listas cerradas, por rol. Quien solo tiene roles de aqui, solo pide lo suyo. */
+const RUTAS_POR_ROL = {
+  colaborador: RUTAS_DEL_COLABORADOR,
+  tutor: RUTAS_DEL_TUTOR,
+};
+
+/** Tutor y NADA MAS. A quien ademas es gestora no se le cierra nada. */
+export function soloEsTutor(user) {
+  const suyos = rolesDe(user);
+  return suyos.length > 0 && suyos.every((r) => r === 'tutor');
+}
+
+export function tutorPuede(ruta) {
+  const limpia = String(ruta || '').split('?')[0];
+  return RUTAS_DEL_TUTOR.some((re) => re.test(limpia));
+}
+
+/**
+ * Si todos los roles de la persona tienen lista cerrada (colaborador, tutor o
+ * los dos), devuelve si esta ruta esta en alguna de SUS listas. Si tiene algun
+ * rol sin lista (gestora, admin…), null: no se le recorta nada aqui.
+ */
+export function rutaDeRolCerrado(user, ruta) {
+  const suyos = rolesDe(user);
+  if (!suyos.length || !suyos.every((r) => RUTAS_POR_ROL[r])) return null;
+  const limpia = String(ruta || '').split('?')[0];
+  return suyos.some((r) => RUTAS_POR_ROL[r].some((re) => re.test(limpia)));
+}
+
+/**
  * Deja la lista de añadidos como debe guardarse.
  *
  * Sin repetidos, sin el rol principal --estaria dos veces-- y SIN superadmin:

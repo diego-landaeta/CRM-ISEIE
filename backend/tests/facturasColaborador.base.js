@@ -113,6 +113,8 @@ function filaLista(f) {
     base: n2(f.base), total: n2(f.total), horas: n2(f.horas), cuadra: f.cuadra ?? null,
     importe_pdf: n2(f.importe_pdf), mime: f.mime ?? null,
     pagada_at: f.pagada_at ?? null, forma_pago: f.forma_pago ?? null, referencia_pago: f.referencia_pago ?? null,
+    // f.moneda de FILA_DE_LISTA (247): la columna es NOT NULL DEFAULT 'EUR'.
+    moneda: f.moneda ?? 'EUR',
     con_justificante: Boolean(f.justificante),
     estado: estado(f),
   };
@@ -272,7 +274,7 @@ const CONSULTAS = [
     }
     return filas(lista);
   }],
-  [(s) => s.includes('INSERT INTO facturas_colaborador') && s.includes('token_semilla'), ([colaboradorId, issuerId, periodo, esperado, hash, caduca, semilla]) => {
+  [(s) => s.includes('INSERT INTO facturas_colaborador') && s.includes('token_semilla'), ([colaboradorId, issuerId, periodo, esperado, hash, caduca, semilla, moneda]) => {
     const choca = datos.facturas.some((f) => f.colaborador_id === Number(colaboradorId) && f.issuer_id === Number(issuerId)
       && f.periodo === periodo && !f.anulada_at);
     if (choca) return filas([]);
@@ -280,6 +282,8 @@ const CONSULTAS = [
       id: ++datos.sec.factura, colaborador_id: Number(colaboradorId), issuer_id: Number(issuerId), periodo,
       importe_esperado: esperado, token_hash: hash, caduca_at: caduca, token_semilla: semilla, created_at: new Date(),
       importe: null, subida_at: null, enviado_at: null, abierto_at: null, anulada_at: null,
+      // La de la ficha (247); la columna es NOT NULL DEFAULT 'EUR'.
+      moneda: moneda || 'EUR',
     };
     datos.facturas.push(f);
     return filas([{ id: f.id }]);
@@ -340,12 +344,19 @@ const CONSULTAS = [
   [(s) => s.includes('pg_advisory_xact_lock'), () => nada()],
   [(s) => s.includes('WHERE periodo = $1::date AND numero_recepcion IS NOT NULL'), ([periodo]) =>
     filas([{ n: datos.facturas.filter((f) => f.periodo === periodo && f.numero_recepcion).length }])],
-  [(s) => s.includes('SET subida_at = NOW(), numero_recepcion = $2'), (p) => {
-    const [id, numeroRecepcion, importe, numeroFactura, archivoKey, nombreOriginal, mime, tamano, sha256, b, iva, irpf, total, horas, cuadra, importePdf] = p;
-    Object.assign(factura(id), {
-      subida_at: new Date(), numero_recepcion: numeroRecepcion, importe, numero_factura: numeroFactura,
+  // Subir la factura. Desde «este mes no facturo» (246) y la moneda (247) el UPDATE
+  // limpia también `sin_factura_*` y toma la moneda elegida al subir (`$17`, o la
+  // que ya tenía). Antes el simulador buscaba la frase vieja, no reconocía la
+  // consulta y la subida daba 500 en todas las pruebas (CI rota desde el 02/11).
+  [(s) => s.includes('SET subida_at = NOW(),') && s.includes('numero_recepcion = $2'), (p) => {
+    const [id, numeroRecepcion, importe, numeroFactura, archivoKey, nombreOriginal, mime, tamano, sha256, b, iva, irpf, total, horas, cuadra, importePdf, moneda] = p;
+    const f = factura(id);
+    Object.assign(f, {
+      subida_at: new Date(), sin_factura_at: null, sin_factura_motivo: null,
+      numero_recepcion: numeroRecepcion, importe, numero_factura: numeroFactura,
       archivo_key: archivoKey, nombre_original: nombreOriginal, mime, tamano, sha256,
       base: b, iva, irpf, total, horas, cuadra, importe_pdf: importePdf,
+      moneda: moneda ?? f.moneda,
     });
     return filas([]);
   }],
@@ -436,7 +447,7 @@ const CONSULTAS = [
         const l = filaLista(f);
         return {
           id: f.id, colaborador: c.nombre, area: c.area, nif: c.nif ?? null, numero_factura: f.numero_factura,
-          importe: n2(f.importe), importe_esperado: n2(f.importe_esperado), diferencia: l.diferencia,
+          importe: n2(f.importe), importe_esperado: n2(f.importe_esperado), moneda: l.moneda, diferencia: l.diferencia,
           subida_at: f.subida_at, numero_recepcion: f.numero_recepcion, archivo_key: f.archivo_key,
         };
       })

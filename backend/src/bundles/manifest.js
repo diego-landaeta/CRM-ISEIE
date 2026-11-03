@@ -13,19 +13,19 @@ export const BUNDLES = {
   core: {
     label: 'Core (obligatorio)',
     description: 'Auth, users, projects. Siempre activo.',
-    modules: ['auth', 'users', 'projects', 'credentials', 'field-definitions', 'project-channels', 'permissions', 'connectors', 'webhooks-salientes', 'asignacion', 'messages', 'notifications', 'registro', 'correos', 'novedades', 'mcp', 'certifex', 'tasks'],
+    modules: ['auth', 'users', 'projects', 'credentials', 'field-definitions', 'project-channels', 'permissions', 'connectors', 'webhooks-salientes', 'asignacion', 'messages', 'notifications', 'registro', 'correos', 'novedades', 'mcp', 'certifex', 'tasks', 'soporte', 'moodle'],
     requires: [],
   },
   leads: {
     label: 'Leads / Captacion',
     description: 'Pipeline + audiencias + forms + webhooks',
-    modules: ['leads', 'proceso', 'feedback', 'convocatorias', 'forms', 'webhook-tokens', 'audiences', 'make', 'meta-ads', 'widget', 'whatsapp'],
+    modules: ['leads', 'actividad', 'proceso', 'feedback', 'convocatorias', 'forms', 'webhook-tokens', 'audiences', 'make', 'meta-ads', 'widget', 'whatsapp'],
     requires: ['core'],
   },
   comercial: {
     label: 'Comercial / Ventas',
     description: 'Productos + conversiones + comisiones + tutores + matriculas + dossiers',
-    modules: ['products', 'product-categories', 'conversions', 'sales', 'commissions', 'tutores', 'matriculas', 'dossiers', 'documents'],
+    modules: ['products', 'product-categories', 'cursos-pendientes', 'conversions', 'sales', 'commissions', 'tutores', 'consultas', 'matriculas', 'dossiers', 'documents'],
     requires: ['core'],
   },
   accounting: {
@@ -43,7 +43,7 @@ export const BUNDLES = {
   ia: {
     label: 'IA & Insights',
     description: 'Stripe IA dashboard + Reportes IA + Chat IA',
-    modules: ['ia-monitor', 'reports-ia', 'claude-chat'],
+    modules: ['ia-monitor', 'reports-ia', 'ia-analisis', 'claude-chat'],
     requires: ['core'],
   },
   marketing: {

@@ -59,6 +59,10 @@ vi.mock('../src/modules/reports/report.model.js', () => ({
   overview: (...a) => overview(...a),
   miPuesto: (...a) => miPuesto(...a),
   ventasVendedora: vi.fn(async () => []),
+  // Los contactos por campus y por gestora (#270): aqui no se prueban, solo hace
+  // falta que existan para que el correo los pida.
+  contactosPorCampus: vi.fn(async () => []),
+  contactosPorGestora: vi.fn(async () => []),
 }));
 vi.mock('../src/modules/proceso/proceso.model.js', () => ({
   resumenDeLaCola: vi.fn(async () => ({ esta_semana: 4, atrasados: 1, hoy: 0, manana: 0 })),

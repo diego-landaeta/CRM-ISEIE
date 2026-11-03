@@ -38,6 +38,7 @@ export const TARGETS_CATALOG = {
     { key: 'utm_source',  label: 'UTM source',     type: 'string', group: 'UTM' },
     { key: 'utm_medium',  label: 'UTM medium',     type: 'string', group: 'UTM' },
     { key: 'utm_campaign',label: 'UTM campaign',   type: 'string', group: 'UTM' },
+    { key: 'referrer',    label: 'Referrer (de dónde venía)', type: 'string', group: 'UTM' },
     { key: 'custom_fields.*', label: 'Campo personalizado (custom_fields)', type: 'wildcard_object', group: 'Custom' },
   ],
 

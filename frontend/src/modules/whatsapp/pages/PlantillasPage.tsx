@@ -2,12 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   WhatsappLogo, Plus, Trash, FloppyDisk, Users, User,
-  MagnifyingGlass, Copy, Check, ImageSquare, PencilSimple, ChatText,
+  MagnifyingGlass, Copy, Check, ImageSquare, PencilSimple, ChatText, Question,
 } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
 import { VARIABLES as VARIABLES_PLANTILLA } from '../lib/plantilla';
+import Tour, { tourPendiente } from '../components/Tour';
+import { PASOS_DE_PLANTILLAS, VISTO_PLANTILLAS } from '../components/tourDePlantillas';
 import { whatsappApi, type PlantillaWhatsapp } from '../api/whatsapp.api';
 import usePermission from '@/shared/hooks/usePermission';
 
@@ -83,6 +85,12 @@ export default function PlantillasWhatsappPage() {
 
   const [lista, setLista] = useState<PlantillaWhatsapp[]>([]);
   const [cargando, setCargando] = useState(true);
+
+  /**
+   * El tutorial guiado, la primera vez y solo cuando hay algo que señalar
+   * (#129). Sobre una pantalla todavia vacia, los carteles apuntan al aire.
+   */
+  const [tour, setTour] = useState(false);
   const [borrador, setBorrador] = useState<Record<number, { label: string; body: string }>>({});
   const [nueva, setNueva] = useState<{ label: string; body: string; ambito: 'compartida' | 'personal' } | null>(null);
   // Borrado en dos pasos en vez de un diálogo: ISEIE tiene useConfirm() y el
@@ -104,6 +112,12 @@ export default function PlantillasWhatsappPage() {
       setBorrador({});
     } finally { setCargando(false); }
   }, [projectId, issuerId]);
+
+  // Se enseña cuando ya hay plantillas delante: es lo que el recorrido señala.
+  useEffect(() => {
+    if (cargando || lista.length === 0) return;
+    if (tourPendiente(VISTO_PLANTILLAS)) setTour(true);
+  }, [cargando, lista.length]);
 
   useEffect(() => { cargar(); }, [cargar]);
 
@@ -228,7 +242,13 @@ export default function PlantillasWhatsappPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button type="button"
+          {/* Para volver a verlo (#576): solo se abre solo la primera vez. */}
+          <button type="button" onClick={() => setTour(true)}
+            aria-label="Ver el tutorial" title="Ver el recorrido por esta pantalla"
+            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border text-sm font-medium hover:bg-muted/60">
+            <Question size={14} weight="bold" /> Tutorial
+          </button>
+          <button type="button" data-tour="modo"
             onClick={() => { setModo(modo === 'consulta' ? 'editar' : 'consulta'); setNueva(null); }}
             className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border text-sm font-medium hover:bg-muted/60">
             {modo === 'consulta'
@@ -236,7 +256,11 @@ export default function PlantillasWhatsappPage() {
               : <><MagnifyingGlass size={14} weight="bold" /> Consultar</>}
           </button>
           {modo === 'editar' && !nueva && (
-            <button type="button"
+            <button type="button" data-tour="nueva"
+              disabled={!projectId}
+              title={projectId
+                ? 'Escribir una plantilla nueva'
+                : 'Para escribir una hay que elegir un campus: la plantilla se guarda en uno concreto'}
               onClick={() => setNueva({ label: '', body: '', ambito: esAdmin ? 'compartida' : 'personal' })}
               className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90">
               <Plus size={14} weight="bold" /> Nueva
@@ -293,7 +317,7 @@ export default function PlantillasWhatsappPage() {
                         </span>
                       )}
                     </h3>
-                    <button type="button" onClick={() => copiar(t)}
+                    <button type="button" onClick={() => copiar(t)} data-tour="copiar"
                       className="inline-flex flex-shrink-0 items-center gap-1 h-8 px-2.5 rounded-md border border-border text-xs font-semibold hover:bg-muted/60">
                       {copiada === t.id
                         ? <><Check size={13} weight="bold" className="text-emerald-600" /> Copiado</>
@@ -322,7 +346,7 @@ export default function PlantillasWhatsappPage() {
               `{telefono}` mal escritos que nunca se rellenaban.
               Se inserta donde tenga el cursor, no al final: si no, hay que
               cortar y pegar para ponerlo en su sitio. */}
-          <div className="text-xs text-muted-foreground">
+          <div className="text-xs text-muted-foreground" data-tour="insertar">
             <span className="mr-1">Insertar dato:</span>
             {VARIABLES.map((v) => (
               <button
@@ -427,6 +451,17 @@ export default function PlantillasWhatsappPage() {
             })}
           </div>
         </>
+      )}
+
+      {/* El tutorial guiado que pidio Diego. Cuatro pasos, no veinte: uno
+          largo se cierra a la mitad y no ha servido de nada. */}
+      {tour && (
+        <Tour
+          pasos={PASOS_DE_PLANTILLAS}
+          clave={VISTO_PLANTILLAS}
+          alCerrar={() => setTour(false)}
+          alEntrar={(p) => { if (p.vista === 'editar' || p.vista === 'consulta') setModo(p.vista); }}
+        />
       )}
     </div>
   );

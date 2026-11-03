@@ -80,7 +80,9 @@ export async function comprobarInterruptor(req, res, next) {
       id: null,
     });
   } catch (err) {
-    logger.warn({ err: err.message }, 'MCP: no se pudo leer el interruptor; se deja pasar');
+    // En error y no en aviso (#262): un interruptor que no se puede leer es un interruptor
+    // que no se puede apagar, y eso hay que verlo.
+    logger.error({ err: err.message }, 'MCP: no se pudo leer el interruptor; se deja pasar');
     return next();
   }
 }

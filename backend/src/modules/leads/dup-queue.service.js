@@ -41,10 +41,12 @@ export async function enqueue({ leadId, originalLeadId, projectId, matchByEmail 
 /**
  * Lista entradas de la cola para admin/superadmin.
  */
-export async function list({ projectId = null, status = 'pending', limit = 100 } = {}) {
+export async function list({ projectId = null, projectIds = null, status = 'pending', limit = 100 } = {}) {
   const params = [status, limit];
-  const projectFilter = projectId ? `AND q.project_id = $3` : '';
-  if (projectId) params.push(projectId);
+  // `projectIds`: los campus de quien mira (`listaDelAmbito`); null = todo el CRM.
+  const projectFilter = projectIds ? 'AND q.project_id = ANY($3::int[])' : projectId ? 'AND q.project_id = $3' : '';
+  if (projectIds) params.push(projectIds.map(Number));
+  else if (projectId) params.push(projectId);
   const { rows } = await query(
     `SELECT q.id, q.lead_id, q.original_lead_id, q.project_id,
             q.match_by_email, q.match_by_phone, q.source, q.status,
@@ -72,9 +74,9 @@ export async function list({ projectId = null, status = 'pending', limit = 100 }
   return rows;
 }
 
-export async function counts(projectId = null) {
-  const params = projectId ? [projectId] : [];
-  const where = projectId ? `WHERE project_id = $1` : '';
+export async function counts(projectId = null, projectIds = null) {
+  const params = projectIds ? [projectIds.map(Number)] : projectId ? [projectId] : [];
+  const where = projectIds ? 'WHERE project_id = ANY($1::int[])' : projectId ? 'WHERE project_id = $1' : '';
   const { rows } = await query(
     `SELECT status, COUNT(*)::int AS n FROM lead_duplicate_review_queue ${where} GROUP BY status`,
     params

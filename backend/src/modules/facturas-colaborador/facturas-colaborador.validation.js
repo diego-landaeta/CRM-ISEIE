@@ -145,6 +145,8 @@ export const vistaSchema = z.object({
   colaboradorId: z.coerce.number().int().positive().max(2147483647).optional(),
   periodo: mes.optional(),
   estado: z.enum(['sin_enviar', 'enviado', 'abierto', 'recibida', 'anulada', 'no_enviado', 'caducado', 'no_cuadra']).optional(),
+  // El buscador (Ctrl K, #591): número de factura o de recepción, colaborador o su correo.
+  q: z.string().trim().min(2, 'Escribe al menos dos letras').max(100).optional(),
 });
 
 export const costePorCampusSchema = z.object({ periodo: mes, issuerId: z.coerce.number().int().positive().max(2147483647).optional() });

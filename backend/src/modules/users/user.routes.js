@@ -32,6 +32,8 @@ router.patch('/mis-avisos', userController.cambiarMiAviso);
 router.get('/', puede('users.view'), userController.list);
 // El buscador (Ctrl K, gemela de CRM#591). Antes que `/:id`, o «buscar» se leería como un id.
 router.get('/buscar', puede('users.view'), userController.buscar);
+// Qué roles puede dar quien da de alta (gemela de CRM#644). El mismo permiso que el alta, y antes que `/:id`.
+router.get('/roles-asignables', puede('users.create'), userController.rolesAsignables);
 router.get('/activity-log', puede('users.view'), userController.activityLog);
 
 // Disponibilidad (rutas con path fijo antes de las que tienen :id)

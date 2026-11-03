@@ -187,7 +187,7 @@ describe('un Claude que se conecta se valida UNA vez y no caduca por horas', () 
       .set('Authorization', `Bearer ${jwtDe(ANA)}`).send({ decision: 'autorizar' });
     expect(d.status).toBe(200);
 
-    const codigo = (await request.post('/api/mcp/panel/codigo').set('Authorization', `Bearer ${jwtDe(ANA)}`).send({})).body.data.codigo;
+    const codigo = (await request.post(`/api/mcp/panel/tokens/${URL_ANA.id}/codigo`).set('Authorization', `Bearer ${jwtDe(ANA)}`).send({})).body.data.codigo;
     const des = await llamar(URL_ANA.token, CLAUDE.access_token, 'desbloquear', { codigo });
     expect(des.ok).toBe(true);
     expect(des.texto).toMatch(/No volverá a pedir el código/);
@@ -275,7 +275,7 @@ describe('un Claude conectado a la manera de antes (la URL sola): su dueño se e
     const claude = await conectarClaude(URL_LUIS.token);
     const [c] = await q(`SELECT id FROM mcp_conexiones WHERE token_id = $1`, [URL_LUIS.id]);
     await request.patch(`/api/mcp/panel/conexiones/${c.id}`).set('Authorization', `Bearer ${jwtDe(LUIS)}`).send({ decision: 'autorizar' });
-    const codigo = (await request.post('/api/mcp/panel/codigo').set('Authorization', `Bearer ${jwtDe(LUIS)}`).send({})).body.data.codigo;
+    const codigo = (await request.post(`/api/mcp/panel/tokens/${URL_LUIS.id}/codigo`).set('Authorization', `Bearer ${jwtDe(LUIS)}`).send({})).body.data.codigo;
     expect((await llamar(URL_LUIS.token, claude.access_token, 'desbloquear', { codigo })).ok).toBe(true);
     expect((await llamar(URL_LUIS.token, claude.access_token, 'mis_proyectos')).ok).toBe(true);
     expect(await textoDeLaUrl(LUIS, URL_LUIS.id)).toBe('1 Claude autorizado y desbloqueado');

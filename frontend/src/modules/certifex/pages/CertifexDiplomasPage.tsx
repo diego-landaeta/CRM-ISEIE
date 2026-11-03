@@ -26,7 +26,7 @@ import {
   type PestanaDiplomas, type ProgramaDelCrm, type ProgramaOficial, type ResultadoAprobarEmitir, type ResumenDiplomas, type Solicitud, type Terminado,
 } from '../api/certifex.api';
 import {
-  Avance, AvisoCasiListo, AvisoDireccionPublica, Buscador, EnElCrmEtiqueta, Etiqueta, FIRMA_EN_DIPLOMA, PON_EL_DNI, Pestana, TITULO_SIN_DNI, tieneDni,
+  Avance, AvisoCasiListo, AvisoDireccionPublica, avisoSinTerminar, Buscador, EnElCrmEtiqueta, Entregas, Etiqueta, FIRMA_EN_DIPLOMA, PON_EL_DNI, Pestana, TITULO_SIN_DNI, tieneDni,
 } from '../components/piezas';
 
 /**
@@ -535,8 +535,9 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
   const [curso, setCurso] = useState('');
   const [desde, setDesde] = useState('');
   const [hasta, setHasta] = useState('');
-  const [buscar, setBuscar] = useState('');
-  const [q, setQ] = useState('');
+  // `?buscar=` lo trae el buscador (Ctrl K, #591): la pestaña sale ya filtrada por ese alumno.
+  const [buscar, setBuscar] = useState(() => params.get('buscar') ?? '');
+  const [q, setQ] = useState(() => (params.get('buscar') ?? '').trim());
   const [filtroAviso, setFiltroAviso] = useState<FiltroAviso | ''>('');
   const [pagina, setPagina] = useState(1);
   const [recarga, setRecarga] = useState(0);
@@ -571,6 +572,8 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
   const [creandoNuevo, setCreandoNuevo] = useState(false);
   // «Pasar a pendientes» (22/10/2026): la matrícula que se está pidiendo, para su botón.
   const [pidiendo, setPidiendo] = useState<number | null>(null);
+  // #629: a quien no ha terminado (sin nota o con calificadas < 100 %) se le pasa solo tras confirmar.
+  const [confirmarPedir, setConfirmarPedir] = useState<{ c: Terminado; mensaje: string } | null>(null);
   // El error del servidor en un diálogo con texto (rechazar, revocar, corregir): el
   // diálogo sigue abierto y no pierde lo escrito.
   const [errorDialogo, setErrorDialogo] = useState<string | null>(null);
@@ -858,20 +861,31 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
    * pendientes»): pide el diploma en Certifex sobre la matrícula de Moodle de quien terminó
    * sin pedirlo. Queda en «Por decidir», con el nombre de Moodle: se revisa con «Editar».
    */
-  async function pasarAPendientes(c: Terminado) {
+  // `forzar` (#629): solo tras confirmar en la página que se pide sin terminar.
+  async function pasarAPendientes(c: Terminado, forzar = false) {
     setPidiendo(c.matriculaId);
     try {
-      const r = await diplomasApi.pedir({ matriculaId: c.matriculaId, centro: c.centro, cursoRef: c.curso.ref });
+      const r = await diplomasApi.pedir({ matriculaId: c.matriculaId, centro: c.centro, cursoRef: c.curso.ref, ...(forzar ? { forzar: true } : {}) });
       toast({
         title: r.data.yaPedido ? 'Ya estaba en Pendientes' : 'Pasado a Pendientes',
         description: `${r.data.nombre} · ${r.data.curso}. Apruébalo y emítelo desde allí; revisa antes su nombre y su DNI con «Editar».`,
       });
       recargar();
     } catch (e) {
-      toast({ title: 'No se ha pasado a Pendientes', description: (e as Error).message, variant: 'destructive' });
+      // El servidor ve algo que la fila no (datos más nuevos): la misma confirmación.
+      const err = e as Error & { data?: { code?: string } };
+      if (!forzar && err.data?.code === 'SIN_TERMINAR') setConfirmarPedir({ c, mensaje: err.message });
+      else toast({ title: 'No se ha pasado a Pendientes', description: err.message, variant: 'destructive' });
     } finally {
       setPidiendo(null);
     }
+  }
+
+  /** Antes de pedir: sin terminar (#629), primero la confirmación en la página. */
+  function pedirAPendientes(c: Terminado) {
+    const aviso = avisoSinTerminar(c);
+    if (aviso) setConfirmarPedir({ c, mensaje: aviso });
+    else void pasarAPendientes(c);
   }
 
   async function copiarEnlace(d: Diploma) {
@@ -1238,6 +1252,7 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
                       <td className="px-2 py-3 text-right">
                         <div className="tabular-nums">{notaTexto(c.notaFinal, c.umbral)}</div>
                         <div className="mt-1"><Avance hechas={c.actividades.calificadas} total={c.actividades.total} /></div>
+                        <div className="mt-0.5"><Entregas e={c.entregas} /></div>
                       </td>
                       <td className="px-2 py-3"><EnElCrmEtiqueta crm={c.crm} /></td>
                       <td className={cn('whitespace-nowrap px-2 py-3 text-xs', soloLectura && 'pr-4')}>
@@ -1248,7 +1263,7 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
                           <Button size="sm" variant="secondary" disabled={trabajando || pidiendo !== null} aria-busy={pidiendo === c.matriculaId}
                             aria-label={`Pasar a pendientes a ${c.titular.nombre || c.titular.email || `la matrícula ${c.matriculaId}`}`}
                             title="Pide el diploma por el alumno: pasa a Pendientes para revisarlo, aprobarlo y emitirlo"
-                            onClick={() => void pasarAPendientes(c)}>
+                            onClick={() => pedirAPendientes(c)}>
                             <HourglassMedium size={14} className="mr-1.5" /> {pidiendo === c.matriculaId ? 'Pasando…' : 'Pasar a pendientes'}
                           </Button>
                         </td>
@@ -1588,6 +1603,26 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
       )}
 
       {/* Confirmaciones */}
+      {/* #629: pasar a Pendientes a quien no ha terminado, solo confirmándolo. */}
+      <ConfirmDialog
+        open={!!confirmarPedir}
+        title="Pasar a pendientes sin terminar"
+        message={confirmarPedir && (
+          <>
+            {confirmarPedir.mensaje}
+            <span className="mt-2 block">Quedará en Pendientes, por decidir, como si lo hubiera pedido el alumno. Queda a tu nombre.</span>
+          </>
+        )}
+        confirmLabel="Pasar a pendientes"
+        tone="warning"
+        loading={pidiendo !== null}
+        onCancel={() => setConfirmarPedir(null)}
+        onConfirm={() => {
+          const x = confirmarPedir;
+          setConfirmarPedir(null);
+          if (x) void pasarAPendientes(x.c, true);
+        }}
+      />
       <ConfirmDialog
         open={dialogo?.tipo === 'aprobarEmitir' || dialogo?.tipo === 'emitir'}
         title={dialogo?.tipo === 'aprobarEmitir' ? `Aprobar y emitir ${dialogo.ids.length}` : dialogo?.tipo === 'emitir' ? `Emitir ${dialogo.ids.length}` : ''}

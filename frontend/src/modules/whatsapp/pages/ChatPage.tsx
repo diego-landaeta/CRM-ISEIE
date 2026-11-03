@@ -2394,7 +2394,7 @@ export default function ChatPage() {
             </div>
             <div className="wa-panel-cuerpo">
               <p className="wa-panel-nota">
-                El CRM no le enviara nada mas a <strong>{conv ? nombreDe(conv) : ''}</strong>,
+                El CRM no le enviará nada más a <strong>{conv ? nombreDe(conv) : ''}</strong>,
                 ni con plantilla ni «solo una última vez». Se puede quitar después.
               </p>
               <input autoFocus value={motivoNuevo} onChange={(e) => setMotivoNuevo(e.target.value)}

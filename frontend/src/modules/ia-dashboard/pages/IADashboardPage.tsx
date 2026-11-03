@@ -162,7 +162,7 @@ export default function IADashboardPage() {
                   </span>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground mb-4">Ultimos 12 meses</p>
+              <p className="text-xs text-muted-foreground mb-4">Últimos 12 meses</p>
               <ResponsiveContainer width="100%" height={220} minHeight={200}>
                 <LineChart data={metrics.evolution12Months} margin={{ top: 5, right: 12, left: 0, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="2 4" stroke="#f3f4f6" />

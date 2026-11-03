@@ -481,3 +481,108 @@ export async function sendMcpAlertasEmail({ para, alertas, enlace }) {
   });
   return await sendEmail({ to: para, subject, htmlContent, textContent, tags: ['mcp-alertas', 'crm'] });
 }
+
+/**
+ * Aviso de ticket nuevo (#38).
+ *
+ * VA A DONDE DIGA `SOPORTE_EMAIL`, Y SI ESTA VACIA NO SE MANDA NADA.
+ *
+ * El ticket pide avisar «al correo de destino» sin decir cual. Inventarse una
+ * direccion es peor que no mandar: el aviso se daria por hecho y no llegaria a
+ * nadie. Vacia, la funcion dice por que no salio y el ticket queda guardado
+ * igual — que es lo que de verdad importaba, porque antes no se guardaba en
+ * ningun sitio.
+ */
+export async function sendTicketNuevoEmail({ ticket, autor }) {
+  const destino = String(process.env.SOPORTE_EMAIL || '').trim();
+  if (!destino) return { sent: false, reason: 'SIN_SOPORTE_EMAIL' };
+
+  const base = (process.env.CRM_BASE_URL || 'http://localhost:5173/crm').replace(/\/+$/, '');
+  const link = `${base}/soporte`;
+  const GRAVEDAD = { low: 'Baja', medium: 'Media', high: 'Alta', critical: 'Critica' };
+  const CLASE = { bug: 'Averia', feature: 'Mejora', question: 'Duda' };
+
+  // Todo lo que escribe quien abre el ticket entra ESCAPADO: es texto libre y
+  // llega a un buzon interno. Sin esto, un titulo con HTML pone enlaces o
+  // contenido ajeno dentro de un correo en el que el equipo confia.
+  const e = plantilla.esc;
+  const saltos = (v) => String(e(v)).split('\n').join('<br>');
+  const campo = (rotulo, valor) => (valor
+    ? `<p style="margin:10px 0"><strong>${rotulo}</strong><br>${saltos(valor)}</p>`
+    : '');
+
+  const subject = `[${CLASE[ticket.kind] || ticket.kind} · ${GRAVEDAD[ticket.severity] || ticket.severity}] ${ticket.title}`;
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html><body style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; color:#1f2937; max-width:640px; margin:0 auto; padding:24px;">
+      <p style="margin:0 0 4px; font-size:12px; color:#6b7280;">
+        ${CLASE[ticket.kind] || ticket.kind} · ${GRAVEDAD[ticket.severity] || ticket.severity}${ticket.projectName ? ` · ${e(ticket.projectName)}` : ''}
+      </p>
+      <h2 style="margin:0 0 12px; font-size:19px;">${e(ticket.title)}</h2>
+      <p style="font-size:13px; color:#6b7280; margin:0 0 16px;">
+        Lo abre <strong>${e(autor?.nombre || autor?.email || 'alguien del equipo')}</strong>.
+      </p>
+      ${campo('Que pasa', ticket.description)}
+      ${campo('Pasos para reproducirlo', ticket.steps)}
+      ${campo('Que deberia pasar', ticket.expected)}
+      ${campo('Que pasa en su lugar', ticket.actual)}
+      ${campo('Por que importa', ticket.whyItMatters)}
+      ${ticket.url ? `<p style="margin:10px 0; font-size:13px;"><strong>Donde</strong><br><code style="background:#f3f4f6; padding:3px 6px; border-radius:4px; word-break:break-all;">${e(ticket.url)}</code></p>` : ''}
+      <p style="text-align:center; margin:28px 0;">
+        <a href="${link}" style="background:#3b82f6; color:#fff; padding:11px 22px; border-radius:8px; text-decoration:none; font-weight:bold; display:inline-block;">Abrir en el CRM</a>
+      </p>
+      <p style="font-size:12px; color:#9ca3af;">Ticket #${ticket.id} · responde desde el CRM, no a este correo.</p>
+    </body></html>`;
+
+  const textContent = [
+    subject,
+    '',
+    `Lo abre ${autor?.nombre || 'alguien del equipo'}.`,
+    '',
+    ticket.description || '',
+    ticket.steps ? `Pasos:\n${ticket.steps}` : '',
+    ticket.url ? `Donde: ${ticket.url}` : '',
+    '',
+    `Abrir en el CRM: ${link}`,
+  ].filter(Boolean).join('\n');
+
+  return await sendEmail({
+    to: [{ email: destino }],
+    subject,
+    htmlContent,
+    textContent,
+    tags: ['soporte', 'crm'],
+  });
+}
+
+/**
+ * El correo de «he olvidado la contraseña» (#37).
+ *
+ * Lleva al MISMO sitio que el del alta —`/set-password?token=`—, porque es el
+ * mismo camino. Lo que cambia es el texto: a quien recupera no se le da la
+ * bienvenida, y sobre todo se le dice que hacer si NO ha sido el, que es la
+ * unica señal que tiene alguien de que le estan intentando entrar.
+ */
+export async function sendPasswordResetEmail({ nombre, email, setPasswordToken, baseUrl }) {
+  const P = plantilla;
+  const link = `${baseUrl}/set-password?token=${encodeURIComponent(setPasswordToken)}`;
+  const { htmlContent, textContent } = P.correo({
+    proyecto: MARCA_CORREOS,
+    titulo: 'Recuperar contraseña',
+    saludo: nombre,
+    resumen: 'Pon una contraseña nueva para entrar al CRM',
+    bloques: [
+      P.parrafo('Has pedido recuperar tu contraseña del CRM. Pon una nueva desde aquí:'),
+      P.boton({ texto: 'Poner una contraseña nueva', url: link }),
+      P.nota('El enlace caduca en 24 horas y solo sirve una vez.'),
+      letraPequena('Si no has sido tú, ignora este correo: tu contraseña sigue como estaba y el enlace caduca solo. Si se repite, avisa a quien administra el CRM.'),
+    ],
+  });
+  return await sendEmail({
+    to: [{ email, name: nombre }],
+    subject: 'Recuperar tu contraseña del CRM',
+    htmlContent,
+    textContent,
+    tags: ['password-reset', 'crm'],
+  });
+}

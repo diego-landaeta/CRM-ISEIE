@@ -343,12 +343,13 @@ describe('facturas de colaboradores (#202) · el ZIP del mes', () => {
     await libro.xlsx.load(await zip.file('resumen.xlsx').async('nodebuffer'));
     const hoja = libro.getWorksheet('Resumen');
     expect(hoja.getRow(1).values.slice(1)).toEqual([
-      'Colaborador', 'Área', 'NIF', 'Número de factura', 'Importe', 'Acordado', 'Diferencia', 'Fecha de subida', 'Número de recepción',
+      'Colaborador', 'Área', 'NIF', 'Número de factura', 'Importe', 'Acordado', 'Diferencia', 'Moneda', 'Fecha de subida', 'Número de recepción',
     ]);
     const deLaura = [2, 3].map((n) => hoja.getRow(n).values.slice(1)).find((f) => f[0] === 'laura');
-    expect(deLaura.slice(0, 7)).toEqual(['laura', 'SEO', '', 'F-laura', 636, 600, 36]);
-    expect(deLaura[7]).toBeInstanceOf(Date);
-    expect(deLaura[8]).toMatch(/^REC-2026-05-/);
+    // La moneda (#584), detrás de la diferencia: sin decir otra, EUR.
+    expect(deLaura.slice(0, 8)).toEqual(['laura', 'SEO', '', 'F-laura', 636, 600, 36, 'EUR']);
+    expect(deLaura[8]).toBeInstanceOf(Date);
+    expect(deLaura[9]).toMatch(/^REC-2026-05-/);
   });
 
   it('la fecha de subida, en hora de Madrid; y dos con el mismo nombre no se pisan', async () => {
@@ -367,7 +368,7 @@ describe('facturas de colaboradores (#202) · el ZIP del mes', () => {
     const libro = new ExcelJS.Workbook();
     await libro.xlsx.load(await zip.file('resumen.xlsx').async('nodebuffer'));
     const deLaura = [2, 3].map((n) => libro.getWorksheet('Resumen').getRow(n).values.slice(1)).find((r) => r[0] === 'laura');
-    expect(deLaura[7].toISOString()).toBe('2026-06-01T12:44:00.000Z');
+    expect(deLaura[8].toISOString()).toBe('2026-06-01T12:44:00.000Z');
     expect(zip.file(nombre('laura')).date.toISOString()).toBe('2026-06-01T12:44:00.000Z');
   });
 

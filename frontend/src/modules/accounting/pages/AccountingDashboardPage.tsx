@@ -350,7 +350,7 @@ export default function AccountingDashboardPage() {
 
             {cxc.num > cuentas_por_cobrar.length && (
               <p className="mt-3 text-[11px] text-muted-foreground">
-                Mostrando las {cuentas_por_cobrar.length} mas proximas a vencer de {cxc.num}.{' '}
+                Mostrando las {cuentas_por_cobrar.length} más próximas a vencer de {cxc.num}.{' '}
                 <button type="button" onClick={() => navigate('/accounting/receivable')} className="text-primary hover:underline">Ver todas</button>
               </p>
             )}

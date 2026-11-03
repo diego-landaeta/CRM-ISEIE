@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Plus, Robot, PencilSimple, Trash, ArrowClockwise, PlugsConnected } from '@phosphor-icons/react';
+import { Plus, Robot, PencilSimple, Trash, ArrowClockwise, PlugsConnected, Info } from '@phosphor-icons/react';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { toast } from '@/shared/hooks/useToast';
 import { useProjectContext } from '@/contexts/ProjectContext';
@@ -31,8 +31,20 @@ function fecha(iso: string | null | undefined): string {
   return new Date(iso).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-/** `onCambio`: para que el resto del panel («Código para Claude») se entere de una URL nueva o desbloqueada. */
-export default function ConexionesClaude({ onCambio }: { onCambio?: () => void } = {}) {
+/**
+ * `onCambio`: para que el resto del panel se entere de una URL nueva o desbloqueada.
+ *
+ * `todasSusUrls` (#260): todas las URLs vivas de la persona, estén o no en el
+ * ámbito que se mira arriba. Las que esta lista no enseña (ni la de «URLs sin
+ * conexión», `urlsSueltas`) se avisan aquí: la pantalla no puede esconder una
+ * URL y a la vez dar a entender que no hay ninguna. `undefined` = el código está
+ * apagado: no hace falta avisar.
+ */
+export default function ConexionesClaude({ onCambio, todasSusUrls, urlsSueltas = [] }: {
+  onCambio?: () => void;
+  todasSusUrls?: { id: number; nombre: string; ambito: string | null }[];
+  urlsSueltas?: number[];
+} = {}) {
   const { activeProject, activeIssuerId, activeIssuer, isAllProjects } = useProjectContext() as {
     activeProject: { id: number; nombre?: string } | null;
     activeIssuerId: number | null;
@@ -69,7 +81,7 @@ export default function ConexionesClaude({ onCambio }: { onCambio?: () => void }
 
   useEffect(() => { cargar(); }, [cargar]);
 
-  // Tras sacar o desbloquear una URL cambia también «Código para Claude», que es del panel.
+  // Tras sacar o desbloquear una URL se recarga también el panel.
   const recargarTodo = () => { cargar(); onCambio?.(); };
 
   async function urlNueva(c: Conector) {
@@ -99,6 +111,11 @@ export default function ConexionesClaude({ onCambio }: { onCambio?: () => void }
     }
   }
 
+  // Sus URLs vivas que ni esta lista ni «URLs sin conexión» enseñan. No se calcula
+  // mientras carga: con la lista a medias saldría el aviso de URLs que sí están.
+  const visibles = new Set<number>([...urlsSueltas, ...conexiones.map((c) => c.mcp_mio?.id).filter((id): id is number => !!id)]);
+  const enOtroAmbito = cargando ? [] : (todasSusUrls || []).filter((u) => !visibles.has(u.id));
+
   return (
     <div className="bg-card border border-border rounded-lg overflow-hidden">
       <div className="p-4 border-b border-border flex flex-wrap items-center gap-2">
@@ -118,6 +135,17 @@ export default function ConexionesClaude({ onCambio }: { onCambio?: () => void }
           <Plus size={14} weight="bold" /> Nueva conexión con Claude
         </button>
       </div>
+
+      {enOtroAmbito.length > 0 && (
+        <p className="flex items-start gap-1.5 border-b border-border bg-muted/40 px-4 py-2 text-xs text-muted-foreground" role="status">
+          <Info size={14} weight="bold" className="mt-0.5 shrink-0 text-primary" />
+          <span>
+            Tienes {enOtroAmbito.length} {enOtroAmbito.length === 1 ? 'URL' : 'URLs'} en {enOtroAmbito.length === 1 ? 'una conexión' : 'conexiones'} de otro ámbito
+            ({enOtroAmbito.map((u) => (u.ambito ? `${u.nombre} · ${u.ambito}` : u.nombre)).join('; ')}):
+            cambia el ámbito de arriba para {enOtroAmbito.length === 1 ? 'verla' : 'verlas'} y sacar su código allí.
+          </span>
+        </p>
+      )}
 
       {cargando && !conexiones.length ? (
         <p className="p-6 text-center text-sm text-muted-foreground">Cargando…</p>

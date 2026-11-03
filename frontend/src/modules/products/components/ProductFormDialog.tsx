@@ -11,9 +11,10 @@ import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
 import { uploadProductImage, deleteProductImage, getProductImageUrl } from '../api/products.api';
 import { toast } from '@/shared/hooks/useToast';
 import { useConfirm } from '@/shared/components/ui/useConfirm';
-
-const inputClass = 'w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground';
-const smallInput = 'w-full h-9 px-3 rounded-lg border border-border bg-muted/50 text-sm outline-none focus:border-primary';
+import { avisoDeLoQueFalta, numerosMalEscritos, type Falta } from '@/shared/lib/loQueFalta';
+import Field from '@/shared/components/ui/Field';
+import FilaCampos from '@/shared/components/ui/FilaCampos';
+import { inputClass } from '@/shared/lib/ui';
 
 // react-hook-form no siempre devuelve un string en `.message`: con campos que
 // son una unión o que pasan por `preprocess` puede venir el objeto de error
@@ -21,15 +22,29 @@ const smallInput = 'w-full h-9 px-3 rounded-lg border border-border bg-muted/50 
 const textoError = (e: any): string | undefined =>
   (typeof e?.message === 'string' ? e.message : undefined);
 
-function Field({ label, error, hint, children }: { label: string; error?: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="text-xs text-muted-foreground mb-1.5 block px-1">{label}</label>
-      {children}
-      {hint && <p className="text-[11px] text-muted-foreground mt-1 px-1">{hint}</p>}
-      {error && <p className="text-xs text-red-500 mt-1 px-1">{error}</p>}
-    </div>
-  );
+// Los campos que pueden fallar al validar, con el nombre que se ve en
+// pantalla: el aviso dice EN QUÉ campo está el problema (#106).
+const ETIQUETAS: Record<string, string> = {
+  nombre: 'Nombre', precio: 'Precio', num_modulos: 'Nº módulos',
+  plazas_totales: 'Plazas de la convocatoria', plazas_ocupadas_previas: 'Ya ocupadas antes del CRM',
+  url_info: 'URL de información / landing', stripe_link: 'Enlace de pago Stripe',
+};
+
+// Cada error del esquema, dicho dentro de la lista de «Faltan datos» como en
+// los demás formularios (#106). Antes salía «Nombre: Es obligatorio: escríbelo».
+const EN_LA_LISTA: Record<string, string> = {
+  'Falta el nombre': 'el nombre',
+  'El nombre debe tener al menos 2 caracteres': 'un nombre de al menos 2 letras',
+  'Escribe un número entero, 0 o mayor': 'un número entero (0 o más)',
+  'El precio no puede ser negativo': 'un precio de 0 o más',
+  'Como mucho 2 decimales (céntimos)': 'un precio con 2 decimales como mucho',
+  'Como mucho 500 caracteres': '500 caracteres como mucho',
+};
+function faltaDelEsquema(campo: string, mensaje: string): Falta {
+  const etiqueta = ETIQUETAS[campo] || campo;
+  return mensaje === 'Falta el nombre'
+    ? { title: 'Falta el nombre', description: 'Escríbelo en «Nombre».', que: 'el nombre en «Nombre»' }
+    : { title: `Revisa «${etiqueta}»`, description: mensaje, que: `${EN_LA_LISTA[mensaje] || mensaje.toLowerCase()} en «${etiqueta}»` };
 }
 
 interface ProductFormDialogProps {
@@ -156,7 +171,7 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }: 
       setImageUrl(updated.image_url_signed || null);
       toast({ title: 'Imagen subida' });
     } catch (e: any) {
-      toast({ title: 'Error subiendo imagen', description: e?.data?.error || e.message, variant: 'destructive' });
+      toast({ title: 'No se pudo subir la imagen', description: e?.data?.error || e.message, variant: 'destructive' });
     } finally {
       setImageUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -172,7 +187,7 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }: 
       setImageUrl(null);
       toast({ title: 'Imagen eliminada' });
     } catch (e: any) {
-      toast({ title: 'Error', description: e?.data?.error || e.message, variant: 'destructive' });
+      toast({ title: 'No se pudo eliminar la imagen', description: e?.data?.error || e.message, variant: 'destructive' });
     } finally {
       setImageUploading(false);
     }
@@ -180,7 +195,11 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }: 
 
   if (!open) return null;
 
-  async function handleFormSubmit(data: any) {
+  async function handleFormSubmit(data: any, evento?: { target?: EventTarget | null }) {
+    // Sin el globo del navegador (noValidate), «2-» en un número llega vacío:
+    // se avisa aquí en vez de guardarlo como si no se hubiera escrito (#106).
+    const falta = avisoDeLoQueFalta(numerosMalEscritos(evento?.target as Element | null));
+    if (falta) { toast(falta); return; }
     const payload = {
       ...data,
       precio: data.precio === '' || data.precio === null || Number.isNaN(data.precio) ? null : Number(data.precio),
@@ -207,26 +226,32 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }: 
           </button>
         </div>
 
-        <form onSubmit={handleSubmit(handleFormSubmit, (errs) => {
-          // No fallar en silencio: si la validación bloquea el submit, avisar qué campo.
-          const msgs = Object.values(errs).map((e: any) => e?.message).filter(Boolean);
-          toast({ title: 'Revisa el formulario', description: msgs.join(' · ') || 'Hay campos inválidos', variant: 'destructive' });
-        })} className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Nombre *" error={(errors as any).nombre?.message as any}>
-              <input {...register('nombre')} placeholder={`Nombre del ${productoLabel.toLowerCase()}`} className={inputClass} />
+        <form onSubmit={handleSubmit(handleFormSubmit, (errs, evento) => {
+          // No fallar en silencio: todo lo que falla, de una vez y diciendo el
+          // campo (#106).
+          const faltan = numerosMalEscritos(evento?.target as Element | null).concat(Object.entries(errs)
+            .filter(([, e]: [string, any]) => typeof e?.message === 'string')
+            .map(([k, e]: [string, any]) => faltaDelEsquema(k, e.message)));
+          toast(avisoDeLoQueFalta(faltan) || { title: 'Revisa el formulario', description: 'Hay campos inválidos', variant: 'destructive' });
+        // noValidate: el aviso lo da el esquema, diciendo el campo, y no el
+        // globo del navegador (#106).
+        })} noValidate className="space-y-3">
+          <FilaCampos>
+            <Field label="Nombre" htmlFor="producto-nombre" required error={textoError(errors.nombre)}>
+              <input autoComplete="off" id="producto-nombre" {...register('nombre')} placeholder={`Nombre del ${productoLabel.toLowerCase()}`} className={inputClass} />
             </Field>
-            <Field label="SKU / código" error={(errors as any).sku?.message as any}>
-              <input {...register('sku')} placeholder="opcional" className={inputClass} />
+            <Field label="SKU / código" htmlFor="producto-sku" error={textoError(errors.sku)}>
+              <input autoComplete="off" id="producto-sku" {...register('sku')} placeholder="opcional" className={inputClass} />
             </Field>
-          </div>
+          </FilaCampos>
 
-          <Field label="Descripción" error={(errors as any).descripcion?.message as any}>
-            <textarea
+          <Field label="Descripción" htmlFor="producto-descripcion" error={textoError(errors.descripcion)}>
+            <textarea autoComplete="off"
               {...register('descripcion')}
               placeholder="Descripción corta..."
               rows={2}
-              className="w-full px-4 py-3 rounded-md border border-border bg-muted/50 text-sm outline-none resize-none focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card"
+              id="producto-descripcion"
+              className={`${inputClass} h-auto py-2 resize-none`}
             />
           </Field>
 
@@ -291,16 +316,17 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }: 
             <div className="flex items-center gap-2 text-[11px] font-medium text-muted-foreground">
               <CurrencyEur size={12} /> Precio y venta
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <Field label="Precio" error={(errors as any).precio?.message as any}>
-                <input {...register('precio')} type="number" step="0.01" min="0" placeholder="0.00" className={smallInput} />
+            <FilaCampos columnas={3}>
+              <Field label="Precio" htmlFor="producto-precio" error={textoError(errors.precio)}>
+                <input autoComplete="off" id="producto-precio" {...register('precio')} type="number" step="0.01" min="0" placeholder="0.00" className={inputClass} />
               </Field>
-              <Field label="Moneda">
+              <Field label="Moneda" htmlFor="producto-moneda">
                 <Controller
                   name={'moneda' as any}
                   control={control as any}
                   render={({ field }) => (
                     <Select<string>
+                      id="producto-moneda"
                       value={(field.value as any) || 'EUR'}
                       onChange={field.onChange}
                       options={[
@@ -314,18 +340,20 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }: 
                   )}
                 />
               </Field>
-              <Field label="Duración" hint="ej: 8 sesiones">
-                <input {...register('duracion')} placeholder="opcional" className={smallInput} />
+              <Field label="Duración" htmlFor="producto-duracion" hint="ej: 8 sesiones">
+                <input autoComplete="off" id="producto-duracion" {...register('duracion')} placeholder="opcional" className={inputClass} />
               </Field>
-            </div>
-            <Field label="URL de información / landing" error={(errors as any).url_info?.message as any}>
-              <input {...register('url_info')} placeholder="https://..." className={smallInput} />
+            </FilaCampos>
+            <Field label="URL de información / landing" htmlFor="producto-url-info" error={textoError(errors.url_info)}>
+              <input autoComplete="off" id="producto-url-info" {...register('url_info')} placeholder="https://..." className={inputClass} />
             </Field>
-            <Field label="Enlace de pago Stripe (opcional)" error={(errors as any).stripe_link?.message as any}>
-              <input {...register('stripe_link')} placeholder="https://buy.stripe.com/..." className={smallInput + ' font-mono text-xs'} />
+            <Field label="Enlace de pago Stripe (opcional)" htmlFor="producto-stripe-link" error={textoError(errors.stripe_link)}>
+              <input autoComplete="off" id="producto-stripe-link" {...register('stripe_link')} placeholder="https://buy.stripe.com/..." className={`${inputClass} font-mono`} />
             </Field>
-            <Field label="Régimen fiscal (IVA)" hint="Déjalo por defecto salvo que el producto tenga un régimen fijo (p. ej. formación exenta de IVA).">
+            <Field label="Régimen fiscal (IVA)" htmlFor="producto-regimen"
+              hint="Déjalo por defecto salvo que el producto tenga un régimen fijo (p. ej. formación exenta de IVA).">
               <Select<string>
+                id="producto-regimen"
                 value={regimenSel}
                 onChange={setRegimenSel}
                 options={[
@@ -343,17 +371,17 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }: 
               Datos del programa <span className="font-normal normal-case opacity-70">(importados de WP/WC, editables)</span>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-              <Field label="Horas">
-                <input {...register('horas')} placeholder="ej: 1500 horas" className={smallInput} />
+              <Field label="Horas" htmlFor="producto-horas">
+                <input autoComplete="off" id="producto-horas" {...register('horas')} placeholder="ej: 1500 horas" className={inputClass} />
               </Field>
-              <Field label="Nº módulos">
-                <input {...register('num_modulos')} type="number" min="0" placeholder="ej: 10" className={smallInput} />
+              <Field label="Nº módulos" htmlFor="producto-num-modulos" error={textoError(errors.num_modulos)}>
+                <input autoComplete="off" id="producto-num-modulos" {...register('num_modulos')} type="number" min="0" placeholder="ej: 10" className={inputClass} />
               </Field>
-              <Field label="Modalidad">
-                <input {...register('modalidad')} placeholder="Online, Presencial..." className={smallInput} />
+              <Field label="Modalidad" htmlFor="producto-modalidad">
+                <input autoComplete="off" id="producto-modalidad" {...register('modalidad')} placeholder="Online, Presencial..." className={inputClass} />
               </Field>
-              <Field label="Fecha de inicio">
-                <input {...register('fecha_inicio_texto')} placeholder="DD-MM-YYYY" className={smallInput} />
+              <Field label="Fecha de inicio" htmlFor="producto-fecha-inicio-texto">
+                <input autoComplete="off" id="producto-fecha-inicio-texto" {...register('fecha_inicio_texto')} placeholder="DD-MM-YYYY" className={inputClass} />
               </Field>
             </div>
           </div>
@@ -364,14 +392,14 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }: 
               Convocatoria <span className="font-normal normal-case opacity-70">(las plazas salen en las plantillas del proceso comercial)</span>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-              <Field label="Plazas de la convocatoria" error={textoError(errors.plazas_totales)}>
-                <input {...register('plazas_totales')} type="number" min="0" placeholder="en blanco: sin cuenta de plazas" className={smallInput} />
+              <Field label="Plazas de la convocatoria" htmlFor="producto-plazas-totales" error={textoError(errors.plazas_totales)}>
+                <input autoComplete="off" id="producto-plazas-totales" {...register('plazas_totales')} type="number" min="0" placeholder="en blanco: sin cuenta de plazas" className={inputClass} />
               </Field>
-              <Field label="Ya ocupadas antes del CRM" error={textoError(errors.plazas_ocupadas_previas)}>
-                <input {...register('plazas_ocupadas_previas')} type="number" min="0" placeholder="0" className={smallInput} />
+              <Field label="Ya ocupadas antes del CRM" htmlFor="producto-plazas-ocupadas-previas" error={textoError(errors.plazas_ocupadas_previas)}>
+                <input autoComplete="off" id="producto-plazas-ocupadas-previas" {...register('plazas_ocupadas_previas')} type="number" min="0" placeholder="0" className={inputClass} />
               </Field>
-              <Field label="Cierre de convocatoria" error={textoError(errors.fecha_cierre_convocatoria)}>
-                <input {...register('fecha_cierre_convocatoria')} type="date" className={smallInput} />
+              <Field label="Cierre de convocatoria" htmlFor="producto-fecha-cierre-convocatoria" error={textoError(errors.fecha_cierre_convocatoria)}>
+                <input id="producto-fecha-cierre-convocatoria" {...register('fecha_cierre_convocatoria')} type="date" className={inputClass} />
               </Field>
             </div>
             {/* Las ocupadas y las libres no se teclean: las cuenta el servidor desde
@@ -413,11 +441,12 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }: 
                   </span>
                 </summary>
                 <div className="px-3 pb-3">
-                  <textarea
+                  <textarea autoComplete="off"
                     {...register(f.name as any)}
                     rows={6}
                     placeholder={`Pegado por el scraper. Si está vacío puedes editarlo.`}
-                    className="w-full px-3 py-2 rounded-md border border-border bg-muted/30 text-xs leading-relaxed resize-y font-sans"
+                    aria-label={f.label}
+                    className={`${inputClass} h-auto py-2 resize-y leading-relaxed`}
                   />
                 </div>
               </details>

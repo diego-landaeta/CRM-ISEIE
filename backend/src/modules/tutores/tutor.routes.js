@@ -40,6 +40,8 @@ router.get('/anuncios', puede('tutores.gestionar'), ctrl.anunciosDeTutores);
 router.get('/curso/:productId', puede('tutores.mis_cursos', 'tutores.gestionar'), ctrl.cursoDetalle);
 router.get('/curso/:productId/brochure', puede('tutores.mis_cursos', 'tutores.gestionar'), ctrl.brochureDelCurso);
 
+// El buscador (Ctrl K, #591). Antes que `/:id`, o «buscar» se leería como un id.
+router.get('/buscar', puede('tutores.gestionar'), ctrl.buscar);
 router.get('/', puede('tutores.gestionar'), ctrl.listar);
 router.post('/', puede('tutores.gestionar'), ctrl.alta);
 router.get('/:id', ctrl.ficha);
@@ -50,5 +52,14 @@ router.patch('/:id/cobra-desde', puede('tutores.gestionar'), ctrl.cambiarCobraDe
 router.post('/:id/contrasena', puede('tutores.contrasena'), ctrl.cambiarContrasena);
 router.post('/:id/reactivar', puede('tutores.gestionar'), ctrl.reactivarTutor);
 router.delete('/:id', puede('tutores.gestionar'), ctrl.retirarTutor);
+
+// Consultas de alumnos, fase 1 (#187): en qué campus atiende, por campus o por
+// empresa entera, si está matriculado en cada uno y «No disponible».
+router.get('/:id/campus', ctrl.campusDelTutor);
+router.post('/:id/campus', puede('tutores.gestionar'), ctrl.asignarCampus);
+router.post('/:id/campus/comprobar', puede('tutores.gestionar'), ctrl.comprobarCampus);
+router.post('/:id/empresas', puede('tutores.gestionar'), ctrl.asignarEmpresa);
+router.delete('/:id/empresas/:issuerId', puede('tutores.gestionar'), ctrl.quitarEmpresa);
+router.patch('/:id/disponible', puede('tutores.gestionar'), ctrl.cambiarDisponible);
 
 export default router;

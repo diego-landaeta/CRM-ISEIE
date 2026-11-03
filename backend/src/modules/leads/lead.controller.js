@@ -5,7 +5,7 @@ import { webhookLeadSchema, listLeadsSchema, updateStatusSchema, createInteracti
 import * as dupQueue from './dup-queue.service.js';
 import * as leadProducts from './lead-products.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
-import { veTodoElCrm, campusDeLaPersona } from '../../shared/utils/ambito.js';
+import { veTodoElCrm, campusDeLaPersona, listaDelAmbito } from '../../shared/utils/ambito.js';
 import { leadsToWasapiCsv, leadsToWasapiXlsx, detectCountry } from '../../shared/utils/wasapiCsv.js';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
 import { soloLoSuyo } from '../../shared/utils/roles.js';
@@ -312,7 +312,11 @@ export async function addInteraction(req, res, next) {
     if (!parsed.success) {
       throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
     }
-    const result = await leadService.addInteraction(id, parsed.data.tipo, parsed.data.nota, req.user.userId, parsed.data.fecha);
+    // El paso que se atiende desde la cola se marca solo si puede marcar pasos,
+    // que es el mismo permiso que pide la checklist (PATCH /proceso/paso-lead).
+    const pasoId = parsed.data.paso_id && await tienePermiso(req, 'proceso.trabajar')
+      ? parsed.data.paso_id : null;
+    const result = await leadService.addInteraction(id, parsed.data.tipo, parsed.data.nota, req.user.userId, parsed.data.fecha, { pasoId });
     res.status(201).json({ success: true, data: result });
   } catch (err) { next(err); }
 }
@@ -555,10 +559,11 @@ export async function getLeadSequences(req, res, next) {
 // ── #13 Cola de revisión de duplicados ─────────────────────────
 export async function listReviewQueue(req, res, next) {
   try {
-    const projectId = req.query.projectId ? parseInt(req.query.projectId) : null;
+    // Solo la de sus campus: sin campus, antes salía la cola de TODAS las empresas.
+    const projectIds = await listaDelAmbito(req);
     const status = req.query.status || 'pending';
-    const result = await dupQueue.list({ projectId, status });
-    const counts = await dupQueue.counts(projectId);
+    const result = await dupQueue.list({ projectIds, status });
+    const counts = await dupQueue.counts(null, projectIds);
     res.json({ success: true, data: result, counts });
   } catch (err) { next(err); }
 }
@@ -567,6 +572,12 @@ export async function decideReviewQueue(req, res, next) {
   try {
     const queueId = parseInt(req.params.id);
     if (isNaN(queueId)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    // Decidir sobre un duplicado de otra empresa: «no encontrado», como si no existiera.
+    const { rows: [entrada] } = await query('SELECT project_id FROM lead_duplicate_review_queue WHERE id = $1', [queueId]);
+    if (!entrada) throw new AppError('Entrada no encontrada', 404, 'NOT_FOUND');
+    if (!veTodoElCrm(req.user) && !(await campusDeLaPersona(req.user.userId)).includes(Number(entrada.project_id))) {
+      throw new AppError('Entrada no encontrada', 404, 'NOT_FOUND');
+    }
     const { action, notas } = req.body || {};
     const result = await dupQueue.decide({ queueId, action, notas, userId: req.user.userId });
     res.json({ success: true, data: result });

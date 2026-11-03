@@ -11,4 +11,6 @@ export default function InfoField({ label, children }: { label: string; children
   );
 }
 
-export const inputClass = 'w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10 focus:bg-card placeholder:text-muted-foreground';
+// La clase común de los campos (#106), una sola en todo el CRM. Se reenvía
+// para no tocar a quien ya la importa de aquí.
+export { inputClass } from '@/shared/lib/ui';

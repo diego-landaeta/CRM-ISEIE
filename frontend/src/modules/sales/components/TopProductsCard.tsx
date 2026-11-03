@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Trophy } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
+import { nombreDelRango } from '@/shared/lib/rangosDeFecha';
 
 interface Row {
   product_id: number | null;
@@ -49,6 +50,10 @@ export default function TopProductsCard({ projectId, responsableId = null, days 
   const [sinCobro, setSinCobro] = useState<SinCobro | null>(null);
   const [loading, setLoading] = useState(true);
   const esFacturado = medida === 'facturado';
+  // Lo que enseña, dicho como es (#223): con un rango de la pantalla, ese
+  // periodo («Este mes», «1–30 sep»); sin rango ni días, de verdad histórico.
+  const periodo = (from && to ? nombreDelRango({ from, to }) : null)
+    ?? (days ? `Últimos ${days}d` : 'Histórico');
 
   useEffect(() => {
     let cancelled = false;
@@ -100,7 +105,7 @@ export default function TopProductsCard({ projectId, responsableId = null, days 
           <Trophy size={16} weight="duotone" className="text-amber-500" />
           {title}
         </h3>
-        <span className="text-[11px] text-muted-foreground">{days ? `Últimos ${days}d` : 'Histórico'}</span>
+        <span className="text-[11px] text-muted-foreground">{periodo}</span>
       </div>
       {loading ? (
         <div className="space-y-2">
@@ -109,7 +114,7 @@ export default function TopProductsCard({ projectId, responsableId = null, days 
           ))}
         </div>
       ) : rows.length === 0 && !sinAsignar ? (
-        <p className="text-xs text-muted-foreground text-center py-4">Sin ventas registradas todavía.</p>
+        <p className="text-xs text-muted-foreground text-center py-4">{from && to ? `Sin ventas en este periodo (${periodo}).` : 'Sin ventas registradas todavía.'}</p>
       ) : (
         <ul className="divide-y divide-border">
           {rows.map((r, i) => (
