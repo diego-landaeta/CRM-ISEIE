@@ -3,6 +3,45 @@ import { logger } from '../../shared/utils/logger.js';
 import { resolvePath } from '../connectors/connectors.adapters.js';
 import * as model from './make.model.js';
 import * as leadService from '../leads/lead.service.js';
+import { query } from '../../shared/config/db.js';
+import { notifyAdmins } from '../notifications/notifications.service.js';
+import { deducirMapeo, alcanzaParaCrear } from './make.campos-habituales.js';
+
+export const AVISO_SIN_MAPEO = 'Sin mapeo: campos reconocidos por su nombre';
+
+/** `email ← email · nombre ← full_name`, para el historial y el aviso. */
+export function describirMapeo(mapeo) {
+  return Object.entries(mapeo || {}).map(([d, r]) => `${d} ← ${r}`).join(' · ');
+}
+
+/**
+ * Avisa a los admins de que un webhook activo no tiene mapeo (#627).
+ *
+ * Uno al día por webhook como mucho: el ICTESS mandó 15 en una semana y quince
+ * avisos iguales no dicen más que uno. Nunca falla ni hace esperar a Make.
+ */
+export function avisarFaltaMapeo(hook, { mapeo = null, rechazado = false } = {}) {
+  (async () => {
+    const { rows } = await query(
+      `SELECT 1 FROM admin_notifications
+        WHERE type = 'make_sin_mapeo'
+          AND metadata->>'webhook_id' = $1
+          AND created_at > NOW() - INTERVAL '24 hours'
+        LIMIT 1`,
+      [String(hook.id)]
+    );
+    if (rows.length) return;
+    await notifyAdmins({
+      type: 'make_sin_mapeo',
+      title: `Webhook de Make sin mapeo: ${hook.label || hook.slug}`,
+      message: rechazado
+        ? 'Está en activo sin mapeo y el envío no trae ni correo ni nombre reconocibles: se ha rechazado. Guarda el mapeo.'
+        : `Está en activo sin mapeo. Los prospectos entran con los campos reconocidos por su nombre (${describirMapeo(mapeo)}). Guarda el mapeo para no depender de eso.`,
+      link_path: `/make-webhooks/${hook.id}`,
+      metadata: { webhook_id: String(hook.id), project_id: hook.project_id },
+    });
+  })().catch((err) => logger.warn({ err: err.message, webhookId: hook.id }, 'Make: no se pudo avisar de la falta de mapeo'));
+}
 
 // Aplica field_mapping a un payload raw → objeto con shape esperado por
 // leadService.processWebhook (nombre, email, telefono, responsable_email,
@@ -76,15 +115,24 @@ export async function handleIncoming({ slug, secret, payload, overrides = {}, ip
 
   // Modo activo: aplicar mapping y crear lead via processWebhook (reutiliza
   // toda la lógica de duplicados/spam/round-robin/idempotency ya existente)
-  if (!hook.field_mapping || Object.keys(hook.field_mapping).length === 0) {
+  //
+  // Sin mapeo (#627): antes se rechazaba el envío entero y, si no entraba por
+  // otro lado, el prospecto se perdía —Make no reintenta—. Ahora se buscan los campos por su nombre
+  // habitual (`email`, `full_name`, `phone_complete`, `course`…), se crea el
+  // prospecto y se avisa al admin. Solo se rechaza si no aparece ni el correo
+  // ni el nombre.
+  const sinMapeo = !hook.field_mapping || Object.keys(hook.field_mapping).length === 0;
+  const mapeo = sinMapeo ? deducirMapeo(payload) : hook.field_mapping;
+  if (sinMapeo && !alcanzaParaCrear(mapeo)) {
     await model.logDelivery({
       webhook_id: hook.id, result: 'rejected', payload, mapped: null,
-      error_message: 'field_mapping vacío en modo active',
+      error_message: 'field_mapping vacío en modo active y no se reconoce ni el correo ni el nombre',
     });
+    avisarFaltaMapeo(hook, { rechazado: true });
     throw new AppError('Mapping no configurado', 400, 'NO_MAPPING');
   }
 
-  const mapped = applyMapping(payload, hook.field_mapping);
+  const mapped = applyMapping(payload, mapeo);
   // Aplicar overrides desde headers/query (responsable_email/nombre).
   // Estos ganan sobre lo mapeado del body.
   for (const [k, v] of Object.entries(overrides || {})) {
@@ -114,8 +162,11 @@ export async function handleIncoming({ slug, secret, payload, overrides = {}, ip
     await model.logDelivery({
       webhook_id: hook.id, result: 'accepted', lead_id: result.lead_id,
       payload, mapped,
+      // Queda en el historial del webhook: entró, pero sin mapeo guardado.
+      error_message: sinMapeo ? `${AVISO_SIN_MAPEO}: ${describirMapeo(mapeo)}` : null,
     });
-    return { mode: 'active', ...result };
+    if (sinMapeo) avisarFaltaMapeo(hook, { mapeo });
+    return { mode: 'active', ...result, ...(sinMapeo ? { sin_mapeo: true, mapeo_deducido: mapeo } : {}) };
   } catch (err) {
     await model.bumpCounter(hook.id, { ok: false, errorMsg: err.message });
     await model.logDelivery({
