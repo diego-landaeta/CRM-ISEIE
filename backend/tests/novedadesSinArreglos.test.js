@@ -51,11 +51,11 @@ describe('cada versión trae sus listas', () => {
 });
 
 describe('el correo y el PDF no revientan, con arreglos y sin ellos', () => {
-  it.each(['2.5.19', '2.2.0'])('el correo de la %s', (n) => {
+  it.each(['2.6.0', '2.5.19', '2.2.0'])('el correo de la %s', (n) => {
     expect(() => correoDe(versionDe(n), 'Ana')).not.toThrow();
   });
 
-  it.each(['2.5.19', '2.2.0'])('el PDF de la %s', async (n) => {
+  it.each(['2.6.0', '2.5.19', '2.2.0'])('el PDF de la %s', async (n) => {
     const pdf = await pdfDeVersion(versionDe(n), { crm: CRM, baseUrl: 'https://crm.test' });
     expect(pdf.length).toBeGreaterThan(1000);
   });
