@@ -6,7 +6,7 @@ export const leadSchema = z.object({
   // marcado, handleFormSubmit genera "Anónimo (tel ...)" automaticamente.
   nombre: z.string().max(200).optional().or(z.literal('')),
   // Email opcional: si viene, debe ser válido; vacío también acepta
-  email: z.string().email('Email no valido').optional().or(z.literal('')),
+  email: z.string().email('Email no válido: escríbelo como nombre@dominio.com').optional().or(z.literal('')),
   telefono: z.string().optional().or(z.literal('')),
   // Quien se contacta por usuario y no da numero. No sustituye al
   // telefono: mucha gente tiene los dos.

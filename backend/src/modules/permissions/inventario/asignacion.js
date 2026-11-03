@@ -18,13 +18,20 @@
 export const PROPIA = 'propia';
 
 export const PROPIAS = {
+  // «Qué ha pasado hoy» (#13): cualquiera con sesión, cada uno con lo suyo; el recorte lo pone el servidor.
+  actividad: ['GET /'],
   auth: ['POST /logout', 'GET /me', 'POST /change-password', 'PATCH /me'],
   commissions: ['GET /me', 'GET /me/stats'],
   // Una consulta, su tutor o administración de su campus (exigirVer); la
   // bandeja y escribir a un alumno, lo de cada tutor.
   consultas: ['GET /mias', 'GET /adjuntos/:id', 'POST /mensajes/:mensajeId/reintentar', 'POST /alumnos/:id/escribir',
     'GET /:id', 'POST /:id/responder', 'POST /:id/cerrar'],
-  mcp: ['GET /panel/', 'DELETE /panel/tokens/:id', 'PATCH /panel/conexiones/:id'],
+  // Cursos pendientes (#336): sin roleGuard a propósito, el recorte va en el
+  // servicio (una tutora ve los suyos, una gestora los de sus campus, un admin
+  // los de los suyos). Cuando haya un permiso propio del módulo, aquí se quita.
+  'cursos-pendientes': ['GET /resumen', 'GET /', 'POST /', 'GET /:id', 'PATCH /:id', 'POST /:id/publicar',
+    'POST /:id/alumnas', 'PATCH /:id/alumnas/:alumnaId'],
+  mcp: ['GET /panel/','DELETE /panel/tokens/:id', 'PATCH /panel/conexiones/:id'],
   notifications: ['GET /', 'GET /unread-count', 'GET /preferences', 'PUT /preferences', 'PATCH /read-group',
     'PATCH /:id/read', 'PATCH /mark-all-read'],
   // El catálogo y las vistas los lee la pantalla de cualquiera («Mis
@@ -34,6 +41,11 @@ export const PROPIAS = {
   // La ficha del tutor: la suya, cualquier tutor; la de otro, con «Gestionar
   // colaboraciones» (condición `tutores.ficha_ajena`).
   tutores: ['GET /:id', 'PATCH /:id/perfil', 'GET /:id/campus'],
+  // Soporte (#38): cualquiera con sesión abre un ticket y ve LOS SUYOS; quien administra (admin, soporte,
+  // superadmin) responde, cambia el estado y ve los de su alcance. Lo recorta el controlador (`alcanceDe`),
+  // como en Consultas: no hay una clave de catálogo por detrás, el comportamiento es el de antes de #423.
+  soporte: ['GET /', 'POST /', 'GET /tiempos', 'GET /adjuntos/:adjuntoId', 'GET /:id', 'POST /:id/mensajes',
+    'PATCH /:id/estado', 'POST /:id/adjuntos', 'DELETE /:id'],
   users: ['POST /:id/avatar', 'DELETE /:id/avatar', 'GET /:id/views', 'PATCH /:id/views', 'GET /mis-avisos', 'PATCH /mis-avisos'],
   whatsapp: ['GET /usuarios', 'GET /sonando'],
 };

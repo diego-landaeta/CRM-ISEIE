@@ -29,6 +29,7 @@ const { default: mcp } = await import('../src/modules/mcp/index.js');
 const { default: conectores } = await import('../src/modules/connectors/index.js');
 const { errorHandler } = await import('../src/shared/middleware/errorHandler.js');
 const conexiones = await import('../src/modules/mcp/mcp.conexiones.js');
+const { generarCodigo, huellaCodigo } = await import('../src/modules/mcp/mcp.desbloqueo.js');
 
 const app = express();
 app.use(express.json());
@@ -60,10 +61,22 @@ async function token(u, nombre = 'Claude') {
   return r.body.data;
 }
 
-async function pedirCodigo(u) {
-  const r = await request.post('/api/mcp/panel/codigo').set('Authorization', `Bearer ${jwtDe(u)}`).send({});
+// #260: el código se saca desde la fila de una URL y solo vale para ella.
+async function pedirCodigo(u, tok) {
+  const r = await request.post(`/api/mcp/panel/tokens/${await tokenIdDe(tok)}/codigo`).set('Authorization', `Bearer ${jwtDe(u)}`).send({});
   expect(r.status).toBe(201);
   return r.body.data.codigo;
+}
+
+// Un código para una URL sin pasar por el panel: la URL puede estar bloqueada, y entonces
+// el panel se niega a sacarlo (pero alguien puede tener uno sacado de antes).
+async function codigoPorSql(u, tok) {
+  const codigo = generarCodigo();
+  await q(
+    `INSERT INTO mcp_codigos (user_id, token_id, codigo_hash, caduca_at) VALUES ($1, $2, $3, NOW() + INTERVAL '10 minutes')`,
+    [u.id, await tokenIdDe(tok), huellaCodigo(codigo)]
+  );
+  return codigo;
 }
 
 // #326: con el código obligatorio, la URL sola ya no da datos: Claude se
@@ -153,15 +166,23 @@ describe('sin código no sale ningún dato', () => {
     for (const h of ['mis_proyectos', 'buscar_prospectos', 'listar_ventas', 'resumen_facturas']) {
       const r = await llamar(TOKEN_ANA, h);
       expect(r.ok).toBe(false);
-      expect(r.texto).toMatch(/Código para Claude/);
+      expect(r.texto).toMatch(/Sacar código/);
     }
+  });
+
+  it('y remite a la fila de SU URL, por su nombre (#260)', async () => {
+    const r = await llamar(TOKEN_ANA, 'mis_proyectos');
+    expect(r.texto).toContain('en la fila de la URL «Claude»');
+    expect(r.texto).toContain('Un código solo vale para la URL en cuya fila se sacó');
+    const otra = await llamar(TOKEN_ANA_2, 'mis_proyectos');
+    expect(otra.texto).toContain('en la fila de la URL «Otro equipo»');
   });
 
   it('y dice cómo seguir si Claude no ve «desbloquear»: el botón del panel (#192, 05/10)', async () => {
     const r = await llamar(TOKEN_ANA, 'mis_proyectos');
     expect(r.texto).toContain('Si no tienes la herramienta «desbloquear», no pidas el código (no podrías usarlo): pide a la persona que pulse «Desbloquear desde aquí»');
     // El botón va primero: con él al final, claude.ai pedía antes el código (06/10).
-    expect(r.texto.indexOf('Desbloquear desde aquí')).toBeLessThan(r.texto.indexOf('Código para Claude'));
+    expect(r.texto.indexOf('Desbloquear desde aquí')).toBeLessThan(r.texto.indexOf('Sacar código'));
   });
 
   it('y queda en la auditoría como rechazada', async () => {
@@ -169,16 +190,18 @@ describe('sin código no sale ningún dato', () => {
       `SELECT ok, error FROM mcp_auditoria WHERE user_id = $1 AND herramienta = 'mis_proyectos' ORDER BY id DESC LIMIT 1`, [ANA.id]
     );
     expect(f.ok).toBe(false);
-    expect(f.error).toMatch(/Código para Claude/);
+    expect(f.error).toMatch(/Sacar código/);
   });
 });
 
 describe('el código', () => {
   it('se pide en el panel, con formato XXXX-XXXX, y se guarda solo su huella', async () => {
-    const codigo = await pedirCodigo(ANA);
+    const codigo = await pedirCodigo(ANA, TOKEN_ANA);
     expect(codigo).toMatch(/^[A-Z2-9]{4}-[A-Z2-9]{4}$/);
-    const filas = await q(`SELECT codigo_hash FROM mcp_codigos WHERE user_id = $1`, [ANA.id]);
+    const filas = await q(`SELECT codigo_hash, token_id FROM mcp_codigos WHERE user_id = $1`, [ANA.id]);
     expect(JSON.stringify(filas)).not.toContain(codigo.replace('-', ''));
+    // Y nace atado a su URL (#260), no a la persona.
+    expect(filas.every((f) => f.token_id !== null)).toBe(true);
   });
 
   it('quien no tiene acceso al MCP no puede pedir código', async () => {
@@ -187,12 +210,12 @@ describe('el código', () => {
       [`${MARCA} GESTOR`, `gestor@${MARCA.toLowerCase()}.test`]
     );
     ids.users.push(g.id);
-    const r = await request.post('/api/mcp/panel/codigo').set('Authorization', `Bearer ${jwtDe(g)}`).send({});
+    const r = await request.post(`/api/mcp/panel/tokens/${await tokenIdDe(TOKEN_ANA)}/codigo`).set('Authorization', `Bearer ${jwtDe(g)}`).send({});
     expect(r.status).toBe(403);
   });
 
   it('desbloquea la conexión y entonces sí hay datos', async () => {
-    const codigo = await pedirCodigo(ANA);
+    const codigo = await pedirCodigo(ANA, TOKEN_ANA);
     // Claude puede escribirlo en minúsculas o sin guion.
     const d = await llamar(TOKEN_ANA, 'desbloquear', { codigo: codigo.toLowerCase().replace('-', ' ') });
     expect(d.ok).toBe(true);
@@ -205,7 +228,7 @@ describe('el código', () => {
   });
 
   it('un código ya usado no vale', async () => {
-    const codigo = await pedirCodigo(ANA);
+    const codigo = await pedirCodigo(ANA, TOKEN_ANA_2);
     expect((await llamar(TOKEN_ANA_2, 'desbloquear', { codigo })).ok).toBe(true);
     await q(`UPDATE mcp_conexiones SET desbloqueada_at = NULL WHERE token_id = $1`, [await tokenIdDe(TOKEN_ANA_2)]);
     const r = await llamar(TOKEN_ANA_2, 'desbloquear', { codigo });
@@ -214,20 +237,20 @@ describe('el código', () => {
   });
 
   it('un código caducado no vale', async () => {
-    const codigo = await pedirCodigo(ANA);
+    const codigo = await pedirCodigo(ANA, TOKEN_ANA_2);
     await q(`UPDATE mcp_codigos SET caduca_at = NOW() - INTERVAL '1 second' WHERE user_id = $1 AND usado_at IS NULL`, [ANA.id]);
     expect((await llamar(TOKEN_ANA_2, 'desbloquear', { codigo })).ok).toBe(false);
   });
 
   it('pedir otro anula el anterior', async () => {
-    const viejo = await pedirCodigo(ANA);
-    const nuevo = await pedirCodigo(ANA);
+    const viejo = await pedirCodigo(ANA, TOKEN_ANA_2);
+    const nuevo = await pedirCodigo(ANA, TOKEN_ANA_2);
     expect((await llamar(TOKEN_ANA_2, 'desbloquear', { codigo: viejo })).ok).toBe(false);
     expect((await llamar(TOKEN_ANA_2, 'desbloquear', { codigo: nuevo })).ok).toBe(true);
   });
 
   it('el código de otra persona no vale, y lo dice (Diego, 13/10): no suma fallo y avisa', async () => {
-    const deAna = await pedirCodigo(ANA);
+    const deAna = await pedirCodigo(ANA, TOKEN_ANA_2);
     const r = await llamar(TOKEN_LUIS, 'desbloquear', { codigo: deAna });
     expect(r.ok).toBe(false);
     expect(r.texto).toContain(`esta URL del MCP es de ${MARCA} LUIS; usa tu propia URL`);
@@ -251,13 +274,13 @@ describe('el código', () => {
 describe('sin caducidad por horas (Carlos, 13/10; #326)', () => {
   it('desbloqueado, sigue dando datos aunque pasen horas sin usarlo y más de las 9 h de antes', async () => {
     const id = await tokenIdDe(TOKEN_ANA);
-    expect((await llamar(TOKEN_ANA, 'desbloquear', { codigo: await pedirCodigo(ANA) })).ok).toBe(true);
+    expect((await llamar(TOKEN_ANA, 'desbloquear', { codigo: await pedirCodigo(ANA, TOKEN_ANA) })).ok).toBe(true);
     await q(`UPDATE mcp_conexiones SET desbloqueada_at = NOW() - INTERVAL '3 days', last_used_at = NOW() - INTERVAL '3 days' WHERE token_id = $1`, [id]);
     expect((await llamar(TOKEN_ANA, 'mis_proyectos')).ok).toBe(true);
   });
 
   it('y Claude lo dice al desbloquear: no volverá a pedir el código', async () => {
-    const r = await llamar(TOKEN_ANA, 'desbloquear', { codigo: await pedirCodigo(ANA) });
+    const r = await llamar(TOKEN_ANA, 'desbloquear', { codigo: await pedirCodigo(ANA, TOKEN_ANA) });
     expect(r.texto).toBe('Desbloqueado. Ya puedes consultar el CRM. No volverá a pedir el código mientras esta conexión de Claude siga autorizada.');
   });
 
@@ -294,14 +317,15 @@ describe('se bloquea al quinto fallo', () => {
   });
 
   it('bloqueada, ni el código bueno vale ni sale ningún dato', async () => {
-    const bueno = await pedirCodigo(LUIS);
+    // Uno sacado de antes: con la URL bloqueada, el panel ya no deja sacarlos (#260).
+    const bueno = await codigoPorSql(LUIS, TOKEN_FALLOS);
     expect((await llamar(TOKEN_FALLOS, 'desbloquear', { codigo: bueno })).texto).toMatch(/bloqueada hasta/);
     expect((await llamar(TOKEN_FALLOS, 'mis_proyectos')).texto).toMatch(/bloqueada hasta/);
   });
 
   it('pasado el bloqueo, el código bueno vuelve a valer', async () => {
     await q(`UPDATE mcp_tokens SET bloqueado_hasta = NOW() - INTERVAL '1 second' WHERE id = $1`, [await tokenIdDe(TOKEN_FALLOS)]);
-    const bueno = await pedirCodigo(LUIS);
+    const bueno = await pedirCodigo(LUIS, TOKEN_FALLOS);
     expect((await llamar(TOKEN_FALLOS, 'desbloquear', { codigo: bueno })).ok).toBe(true);
     expect((await llamar(TOKEN_FALLOS, 'mis_proyectos')).ok).toBe(true);
   });
@@ -338,7 +362,7 @@ describe('el estado de cada URL en el panel, sin horas (#326)', () => {
   });
 
   it('desbloqueado: sin ninguna hora, porque ya no caduca', async () => {
-    expect((await llamar(TOK, 'desbloquear', { codigo: await pedirCodigo(U) })).ok).toBe(true);
+    expect((await llamar(TOK, 'desbloquear', { codigo: await pedirCodigo(U, TOK) })).ok).toBe(true);
     const e = await suEstado();
     expect(e).toMatchObject({ estado: 'desbloqueada', hasta: null, texto: '1 Claude autorizado y desbloqueado' });
     expect(e.texto).not.toMatch(hhmm);
@@ -356,41 +380,133 @@ describe('el estado de cada URL en el panel, sin horas (#326)', () => {
     process.env.MCP_CODIGO_OBLIGATORIO = 'false';
     const p = await panelDe(U);
     expect(p.tokens.find((t) => t.id === ID).codigo).toBeNull();
-    expect(p.codigo.resumen).toBeNull();
+    expect(p.codigo.urls).toEqual([]);
     expect(p.codigo).not.toHaveProperty('inactividadMin');
-  });
-
-  it('«Código para Claude», con una sola URL: el estado actual de esa URL', async () => {
-    const { resumen } = (await panelDe(U)).codigo;
-    expect(resumen.total).toBe(1);
-    expect(resumen.una).toMatchObject({ id: ID, nombre: 'Estados', estado: 'desbloqueada' });
-    expect(resumen.texto).toBe('1 Claude autorizado y desbloqueado');
   });
 });
 
-describe('«Código para Claude» con varias URLs: el estado actual de todas, en una línea', () => {
-  it('resume cuántas hay desbloqueadas, bloqueadas y cerradas, sin elegir ninguna', async () => {
-    const V = await persona('VARIAS', 'admin');
-    const abierta = await token(V, 'Abierta');
-    const bloqueada = await token(V, 'Bloqueada');
-    await token(V, 'Cerrada');
-    await llaveDe(abierta.token);
-    expect((await desbloquearDesdeAqui(V, abierta.id)).status).toBe(200);
-    await q(`UPDATE mcp_tokens SET bloqueado_hasta = NOW() + INTERVAL '15 minutes' WHERE id = $1`, [bloqueada.id]);
-    const { resumen } = (await panelDe(V)).codigo;
-    expect(resumen.total).toBe(3);
-    expect(resumen.una).toBeNull();
-    expect(resumen.texto).toBe('Tus 3 URLs: 1 desbloqueada, 1 bloqueada, 1 cerrada');
+// ─── #260 (Diego, 07/10): el código es de una URL, se saca desde su fila ───
+
+describe('#260 · el código va con su URL', () => {
+  let U; let A; let B; let IDA; let IDB;
+  const sacar = (u, id) => request.post(`/api/mcp/panel/tokens/${id}/codigo`).set('Authorization', `Bearer ${jwtDe(u)}`).send({});
+  beforeAll(async () => {
+    U = await persona('PORURL', 'admin');
+    A = (await token(U, 'URL A')).token;
+    B = (await token(U, 'URL B')).token;
+    IDA = await tokenIdDe(A);
+    IDB = await tokenIdDe(B);
   });
 
-  it('cuenta también las URLs de las conexiones de Claude', async () => {
-    const W = await persona('MIXTA', 'admin');
-    await token(W, 'Suelta');
-    const cx = await request.post('/api/connectors').set('Authorization', `Bearer ${jwtDe(W)}`)
-      .send({ project_id: ids.projects[0], type: 'mcp', label: `${MARCA} Mixta`, alcance: 'campus' });
+  it('se saca desde la fila de la URL: nace con su token_id y solo se guarda la huella', async () => {
+    const r = await sacar(U, IDA);
+    expect(r.status).toBe(201);
+    expect(r.body.data).toMatchObject({ id: IDA, minutos: 10 });
+    expect(r.body.data.codigo).toMatch(/^[A-Z2-9]{4}-[A-Z2-9]{4}$/);
+    const [fila] = await q(`SELECT token_id, user_id, usado_at FROM mcp_codigos WHERE codigo_hash = $1`, [huellaCodigo(r.body.data.codigo)]);
+    expect(fila).toMatchObject({ token_id: IDA, user_id: U.id, usado_at: null });
+  });
+
+  it('la ruta de antes, la suelta de la persona, ya no existe', async () => {
+    const r = await request.post('/api/mcp/panel/codigo').set('Authorization', `Bearer ${jwtDe(U)}`).send({});
+    expect(r.status).toBe(404);
+  });
+
+  it('sin URL no hay código: una que no existe, 404 y no se crea nada', async () => {
+    const antes = (await q(`SELECT COUNT(*)::int AS n FROM mcp_codigos WHERE user_id = $1`, [U.id]))[0].n;
+    expect((await sacar(U, 2147483000)).status).toBe(404);
+    expect((await q(`SELECT COUNT(*)::int AS n FROM mcp_codigos WHERE user_id = $1`, [U.id]))[0].n).toBe(antes);
+  });
+
+  it('ni para la URL de otra persona', async () => {
+    const antes = (await q(`SELECT COUNT(*)::int AS n FROM mcp_codigos WHERE user_id = ANY($1::int[])`, [[U.id, LUIS.id]]))[0].n;
+    expect((await sacar(U, await tokenIdDe(TOKEN_LUIS))).status).toBe(404);
+    expect((await sacar(LUIS, IDA)).status).toBe(404);
+    expect((await q(`SELECT COUNT(*)::int AS n FROM mcp_codigos WHERE user_id = ANY($1::int[])`, [[U.id, LUIS.id]]))[0].n).toBe(antes);
+  });
+
+  it('ni para una URL revocada ni caducada', async () => {
+    const rev = await token(U, 'Revocada');
+    expect((await sacar(U, rev.id)).status).toBe(201);
+    await q(`UPDATE mcp_tokens SET revoked_at = NOW() WHERE id = $1`, [rev.id]);
+    expect((await sacar(U, rev.id)).status).toBe(404);
+    const cad = await token(U, 'Caducada');
+    await q(`UPDATE mcp_tokens SET expires_at = NOW() - INTERVAL '1 minute' WHERE id = $1`, [cad.id]);
+    expect((await sacar(U, cad.id)).status).toBe(404);
+  });
+
+  it('ni para una URL bloqueada por códigos falsos: 409 y dice hasta cuándo', async () => {
+    const blo = await token(U, 'Bloqueada');
+    await q(`UPDATE mcp_tokens SET bloqueado_hasta = NOW() + INTERVAL '15 minutes' WHERE id = $1`, [blo.id]);
+    const r = await sacar(U, blo.id);
+    expect(r.status).toBe(409);
+    expect(r.body.code).toBe('MCP_URL_BLOQUEADA');
+  });
+
+  it('con el código apagado no hace falta: 400', async () => {
+    process.env.MCP_CODIGO_OBLIGATORIO = 'false';
+    expect((await sacar(U, IDA)).status).toBe(400);
+  });
+
+  it('un código sacado para la URL A desbloquea la A', async () => {
+    const codigo = await pedirCodigo(U, A);
+    expect((await llamar(A, 'desbloquear', { codigo })).ok).toBe(true);
+    expect((await llamar(A, 'mis_proyectos')).ok).toBe(true);
+  });
+
+  it('...y NO desbloquea la B: lo dice, suma fallo y no se gasta', async () => {
+    const codigo = await pedirCodigo(U, A);
+    const antes = (await q(`SELECT fallos_codigo FROM mcp_tokens WHERE id = $1`, [IDB]))[0].fallos_codigo;
+    const r = await llamar(B, 'desbloquear', { codigo });
+    expect(r.ok).toBe(false);
+    expect(r.texto).toContain('Ese código es de otra URL de la persona («URL A»)');
+    expect(r.texto).toMatch(/Quedan \d intentos/);
+    expect((await q(`SELECT fallos_codigo FROM mcp_tokens WHERE id = $1`, [IDB]))[0].fallos_codigo).toBe(antes + 1);
+    expect((await llamar(B, 'mis_proyectos')).ok).toBe(false);
+    // Sin gastarse: sigue valiendo en la A.
+    await q(`UPDATE mcp_conexiones SET desbloqueada_at = NULL WHERE token_id = $1`, [IDA]);
+    expect((await llamar(A, 'desbloquear', { codigo })).ok).toBe(true);
+  });
+
+  it('y la B se desbloquea con SU código', async () => {
+    expect((await llamar(B, 'desbloquear', { codigo: await pedirCodigo(U, B) })).ok).toBe(true);
+    expect((await llamar(B, 'mis_proyectos')).ok).toBe(true);
+  });
+
+  it('pedir otro para la A anula el anterior de la A, pero no toca el de la B', async () => {
+    const deB = await pedirCodigo(U, B);
+    const viejoA = await pedirCodigo(U, A);
+    const nuevoA = await pedirCodigo(U, A);
+    await q(`UPDATE mcp_conexiones SET desbloqueada_at = NULL WHERE token_id = ANY($1::int[])`, [[IDA, IDB]]);
+    expect((await llamar(A, 'desbloquear', { codigo: viejoA })).ok).toBe(false);
+    expect((await llamar(A, 'desbloquear', { codigo: nuevoA })).ok).toBe(true);
+    expect((await llamar(B, 'desbloquear', { codigo: deB })).ok).toBe(true);
+  });
+
+  it('un código de antes de esta versión, sin URL, ya no vale en ninguna', async () => {
+    const viejo = generarCodigo();
+    await q(
+      `INSERT INTO mcp_codigos (user_id, token_id, codigo_hash, caduca_at) VALUES ($1, NULL, $2, NOW() + INTERVAL '10 minutes')`,
+      [U.id, huellaCodigo(viejo)]
+    );
+    await q(`UPDATE mcp_conexiones SET desbloqueada_at = NULL WHERE token_id = $1`, [IDA]);
+    const r = await llamar(A, 'desbloquear', { codigo: viejo });
+    expect(r.ok).toBe(false);
+    expect(r.texto).toMatch(/no vale/);
+  });
+
+  it('el panel trae TODAS sus URLs vivas, estén o no en el ámbito que mira, para avisar de las que la lista esconde', async () => {
+    const cx = await request.post('/api/connectors').set('Authorization', `Bearer ${jwtDe(U)}`)
+      .send({ project_id: ids.projects[0], type: 'mcp', label: `${MARCA} Otro ámbito`, alcance: 'campus' });
     expect(cx.status).toBe(201);
-    const { resumen } = (await panelDe(W)).codigo;
-    expect(resumen.texto).toBe('Tus 2 URLs: 2 cerradas');
+    const { codigo } = await panelDe(U);
+    expect(codigo).not.toHaveProperty('resumen');
+    const nombres = codigo.urls.map((u) => u.nombre);
+    expect(nombres).toEqual(expect.arrayContaining(['URL A', 'URL B', `${MARCA} Otro ámbito`]));
+    // Y dónde está cada una (el campus de su conexión), para decir a cuál cambiar.
+    expect(codigo.urls.find((u) => u.nombre === `${MARCA} Otro ámbito`).ambito).toBe(`${MARCA} Campus`);
+    expect(nombres).not.toContain('Revocada');
+    expect(nombres).not.toContain('Caducada');
   });
 });
 
@@ -412,6 +528,14 @@ describe('«Desbloquear desde aquí» (opción 3 de Diego)', () => {
     expect(r.status).toBe(200);
     expect(r.body.data.codigo.estado).toBe('desbloqueada');
     expect((await llamar(TOK, 'mis_proyectos')).ok).toBe(true);
+  });
+
+  it('no borra los fallos de código: ese contador solo lo vacía un código bueno (#262)', async () => {
+    await q(`UPDATE mcp_tokens SET fallos_codigo = 3 WHERE id = $1`, [ID]);
+    expect((await desbloquearDesdeAqui(U, ID)).status).toBe(200);
+    const [t] = await q(`SELECT fallos_codigo FROM mcp_tokens WHERE id = $1`, [ID]);
+    expect(t.fallos_codigo).toBe(3);
+    await q(`UPDATE mcp_tokens SET fallos_codigo = 0 WHERE id = $1`, [ID]);
   });
 
   it('desbloquea sin código y sin caducidad (#326)', async () => {
@@ -578,7 +702,7 @@ describe('#326 · un Claude nuevo queda pendiente hasta que el dueño lo autoriz
   });
 
   it('con el código bueno, aún pendiente: lo acepta pero sigue sin datos y dice que falta autorizar', async () => {
-    const d = await llamar(TOK, 'desbloquear', { codigo: await pedirCodigo(U) }, MIO.llave);
+    const d = await llamar(TOK, 'desbloquear', { codigo: await pedirCodigo(U, TOK) }, MIO.llave);
     expect(d.ok).toBe(true);
     expect(d.texto).toMatch(/Falta un paso: esta conexión de Claude está pendiente de autorizar/);
     expect((await llamar(TOK, 'mis_proyectos', {}, MIO.llave)).ok).toBe(false);
@@ -613,7 +737,7 @@ describe('#326 · un Claude nuevo queda pendiente hasta que el dueño lo autoriz
   });
 
   it('y aunque consiga un código bueno de la dueña, sigue sin datos', async () => {
-    expect((await llamar(TOK, 'desbloquear', { codigo: await pedirCodigo(U) }, INTRUSO.llave)).ok).toBe(true);
+    expect((await llamar(TOK, 'desbloquear', { codigo: await pedirCodigo(U, TOK) }, INTRUSO.llave)).ok).toBe(true);
     expect((await llamar(TOK, 'mis_proyectos', {}, INTRUSO.llave)).ok).toBe(false);
   });
 
@@ -622,7 +746,7 @@ describe('#326 · un Claude nuevo queda pendiente hasta que el dueño lo autoriz
     const r = await llamar(TOK, 'mis_proyectos', {}, INTRUSO.llave);
     expect(r.ok).toBe(false);
     expect(r.texto).toMatch(/ha rechazado esta conexión/);
-    expect((await llamar(TOK, 'desbloquear', { codigo: await pedirCodigo(U) }, INTRUSO.llave)).ok).toBe(false);
+    expect((await llamar(TOK, 'desbloquear', { codigo: await pedirCodigo(U, TOK) }, INTRUSO.llave)).ok).toBe(false);
     expect((await llamar(TOK, 'mis_proyectos', {}, MIO.llave)).ok).toBe(true);
     // Rechazado, ya no sale en el panel.
     const e = (await panelDe(U)).tokens.find((t) => t.id === ID).codigo;

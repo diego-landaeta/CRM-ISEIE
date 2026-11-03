@@ -87,8 +87,7 @@ const RUTAS_DEL_TUTOR = [
   /^\/api\/users\/\d+\/(?:avatar|views)\/?$/,
 ];
 
-// ISEIE solo tiene el corte del colaborador: el del tutor (#187) es del 360.
-const RUTAS_POR_ROL = { colaborador: RUTAS_DEL_COLABORADOR };
+const RUTAS_POR_ROL = { colaborador: RUTAS_DEL_COLABORADOR, tutor: RUTAS_DEL_TUTOR };
 
 /**
  * `rutaDeRolCerrado` (shared/utils/roles.js) tal cual: si TODOS sus roles tienen

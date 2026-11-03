@@ -10,7 +10,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 
 process.env.LOG_LEVEL = 'silent';
 const inv = await import('../src/modules/permissions/inventario/index.js');
-const { CAMBIOS_DE_MENU } = await import('../src/modules/permissions/inventario/cambios-aprobados.js');
+const { CAMBIOS_DE_MENU, cambioPrevisto } = await import('../src/modules/permissions/inventario/cambios-aprobados.js');
 const { resolverPermisos } = await import('../src/modules/permissions/resolver.js');
 const { excepcionesDeCasillas } = await import('../src/modules/permissions/casillas.js');
 
@@ -29,7 +29,7 @@ beforeAll(async () => {
 }, 60000);
 
 const casos = CAMBIOS_DE_MENU.flatMap((c) => Object.entries(c.perfiles).flatMap(([perfil, lineas]) =>
-  lineas.map((l) => ({ id: c.id, perfil, signo: l[0], entrada: l.slice(2), ruta: c.rutas[l.slice(2)] }))));
+  lineas.map((l) => ({ id: c.id, acompanaA: c.acompanaA, perfil, signo: l[0], entrada: l.slice(2), ruta: c.rutas[l.slice(2)] }))));
 
 describe('los cambios del menú no cambian el acceso (#423, punto 6)', () => {
   it('cada entrada tiene su ruta y su perfil', () => {
@@ -50,6 +50,13 @@ describe('los cambios del menú no cambian el acceso (#423, punto 6)', () => {
       const antes = inv.puedeAntes(p, fila);
       const despues = inv.puedeDespues(p, fila, mapa);
       const esperado = x.signo === '+';
+      // El menú que acompaña a un cambio de ACCESO aprobado (p. ej. `webhooks-solo-admin`, 2.6.0):
+      // la ruta cambia de verdad, y ese cambio tiene que estar en la lista de Diego.
+      if (x.acompanaA) {
+        const aprobado = cambioPrevisto(x.ruta, p.role)?.id === x.acompanaA;
+        if (antes === esperado || despues !== esperado || !aprobado) mal.push(`${x.perfil} ${x.signo} ${x.entrada} (${x.ruta}): antes ${antes}, ahora ${despues}, aprobado ${aprobado}`);
+        continue;
+      }
       if (antes !== esperado || despues !== esperado) mal.push(`${x.perfil} ${x.signo} ${x.entrada} (${x.ruta}): antes ${antes}, ahora ${despues}`);
     }
     expect(mal).toEqual([]);

@@ -78,6 +78,16 @@ export const CAMBIOS = [
     aprobadoPor: DIEGO,
   },
   {
+    id: 'metas-sin-soporte-ni-pm',
+    que: 'Poner o borrar una meta de ventas: admin (la de la gente de sus campus), gestora (la suya) y superadmin. Soporte y project manager, no.',
+    motivo: 'Las dos rutas de metas no pedían ningún rol: cualquier sesión que llegara, soporte y project manager incluidos, fijaba o borraba la meta de cualquiera (IDOR, PR #434). Lo hacían por un descuido de la ruta, no porque alguien se lo diera.',
+    filas: ['POST /api/ventas/goals', 'DELETE /api/ventas/goals/:id'],
+    roles: ['soporte', 'project_manager'],
+    sentido: 'pierde',
+    // Pendiente: hay que aprobarlo en la #423 (lo cierra un agujero, pero cambia el acceso de tres roles).
+    aprobadoPor: null,
+  },
+  {
     id: 'superadmin-su-correo',
     que: 'El superadmin también puede cambiar su propio correo desde «Mi perfil».',
     motivo: 'Hoy esa ruta es solo del tutor. En el catálogo el superadmin lo tiene todo, sin excepciones; el resto de roles sigue igual.',
@@ -85,6 +95,19 @@ export const CAMBIOS = [
     roles: ['superadmin'],
     sentido: 'gana',
     aprobadoPor: DIEGO,
+  },
+  {
+    id: 'webhooks-solo-admin',
+    que: 'Los webhooks que reciben prospectos y matrículas (Captación › Webhooks): solo el admin y el superadmin, cada uno los de sus campus. Gestoras, soporte y project manager dejan de verlos y de tocarlos.',
+    motivo: 'Paridad 2.6.0 con MultiCRM (#198, 20/10): el webhook de admisión lleva los documentos del alumno y el token de cada webhook es la llave para meter datos en el CRM. Allí se cerró a admin y superadmin; en ISEIE se trae igual.',
+    filas: [
+      'GET /api/webhook-tokens/', 'GET /api/webhook-tokens/:id/status', 'POST /api/webhook-tokens/',
+      'PATCH /api/webhook-tokens/:id', 'DELETE /api/webhook-tokens/:id',
+      'POST /api/webhook-tokens/:id/listen', 'POST /api/webhook-tokens/:id/listen/stop',
+    ],
+    roles: ['gestor', 'soporte', 'project_manager', 'tutor', 'colaborador'],
+    sentido: 'pierde',
+    aprobadoPor: 'Diego, 02/11 (la 2.6.0 de ISEIE, tal cual MultiCRM)',
   },
 ];
 
@@ -167,13 +190,25 @@ export const CAMBIOS_POR_DATOS = [
  */
 export const CAMBIOS_DE_MENU = [
   {
+    id: 'menu-facturacion',
+    que: '«Finanzas › Facturación» la ve quien puede facturar: el admin, quien lleva la cola (la casilla «factura_manager») y quien es admin como rol de más.',
+    motivo: 'Antes la entrada preguntaba por `factura_manager` como si fuera un permiso y solo la veía el superadmin, aunque el servidor ya les dejaba entrar a todos ellos.',
+    perfiles: {
+      admin: ['+ Finanzas › Facturación'],
+      'gestora con factura_manager': ['+ Finanzas › Facturación'],
+      'gestora+admin': ['+ Finanzas › Facturación'],
+    },
+    rutas: { 'Finanzas › Facturación': 'GET /api/invoices/' },
+    aprobadoPor: DIEGO,
+  },
+  {
     id: 'menu-sin-403',
     que: 'El menú deja de enseñar lo que daba 403: 12 entradas a soporte y 3 al project manager.',
     motivo: 'Soporte lo veía todo por un atajo del menú («ve todo»), y el project manager las pantallas de la gestora; al entrar, el servidor les respondía 403. Ninguno pierde nada que pudiera usar.',
     perfiles: {
       soporte: [
         '- Clientes › Diplomas', '- Equipo de Desarrollo › Por revisar', '- Equipo de Desarrollo › Configurar tablero', '- Conexión › Conectores', '- Conexión › Webhook de transferencias',
-        '- Equipo de Desarrollo › Mi factura', '- Equipo de Desarrollo › Tablero', '- Finanzas › Facturas de colaboradores',
+        '- Equipo de Desarrollo › Mi factura', '- Equipo de Desarrollo › Mi tablero', '- Finanzas › Facturas de colaboradores',
         '- Tutores › Comisiones', '- Tutores › Mis cursos', '- Tutores › Sin tutor', '- Tutores › Tutores',
       ],
       project_manager: ['- Clientes › Matrículas', '- Principal › WhatsApp › Chat', '- Principal › WhatsApp › Conexión'],
@@ -185,7 +220,7 @@ export const CAMBIOS_DE_MENU = [
       'Conexión › Conectores': 'GET /api/connectors/',
       'Conexión › Webhook de transferencias': 'GET /api/webhooks-salientes/',
       'Equipo de Desarrollo › Mi factura': 'GET /api/facturas-colaborador/mias',
-      'Equipo de Desarrollo › Tablero': 'GET /api/tasks/',
+      'Equipo de Desarrollo › Mi tablero': 'GET /api/tasks/',
       'Finanzas › Facturas de colaboradores': 'GET /api/facturas-colaborador/facturas',
       'Tutores › Comisiones': 'GET /api/tutores/comisiones',
       'Tutores › Mis cursos': 'GET /api/tutores/colaboraciones',
@@ -196,6 +231,15 @@ export const CAMBIOS_DE_MENU = [
       'Principal › WhatsApp › Conexión': 'GET /api/whatsapp/conexion',
     },
     aprobadoPor: DIEGO,
+  },
+  {
+    id: 'menu-webhooks-solo-admin',
+    que: 'Captación › Webhooks sale del menú de soporte: va con el cambio de acceso `webhooks-solo-admin` (paridad 2.6.0 con MultiCRM, #198).',
+    motivo: 'Aquí el menú SÍ acompaña a un cambio de acceso: la ruta deja de responder a soporte. Por eso no va en `menu-sin-403`, y la prueba comprueba que el cambio de acceso está aprobado.',
+    acompanaA: 'webhooks-solo-admin',
+    perfiles: { soporte: ['- Captación › Webhooks'] },
+    rutas: { 'Captación › Webhooks': 'GET /api/webhook-tokens/' },
+    aprobadoPor: 'Diego, 02/11 (la 2.6.0 de ISEIE, tal cual MultiCRM)',
   },
 ];
 

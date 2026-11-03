@@ -93,7 +93,7 @@ export default function SpamReportDialog({ open, onClose, leadId, leadNombre, on
             type="button"
             onClick={handleSubmit}
             disabled={!canSubmit}
-            className="h-9 px-4 rounded-md bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold transition-colors disabled:opacity-50"
+            className="h-9 px-4 rounded-md bg-destructive hover:bg-destructive/90 text-destructive-foreground text-sm font-semibold transition-colors disabled:opacity-50"
           >
             {submitting ? 'Enviando…' : 'Reportar spam'}
           </button>

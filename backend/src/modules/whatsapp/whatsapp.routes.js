@@ -60,6 +60,9 @@ router.get('/usuarios', chat.usuarios);
 router.get('/forma-avisos', puede('whatsapp.forma_avisos'), chat.formaDeAvisos);
 router.delete('/forma-avisos', puede('whatsapp.forma_avisos'), chat.olvidarFormaDeAvisos);
 
+// Voz frente a texto en lo que sale (#128). Como el banco: quien usa o supervisa
+// WhatsApp. Lo que ve lo recorta el servicio (una gestora, solo su fila).
+router.get('/voz-o-texto', usaOSupervisa, chat.vozOTextoCtrl);
 router.get('/banco', usaOSupervisa, chat.banco);
 router.get('/banco/numeros', usaOSupervisa, chat.bancoNumeros);
 

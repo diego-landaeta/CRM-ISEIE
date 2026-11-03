@@ -114,7 +114,9 @@ export const SECCIONES = [
           a('view', 'Ver sus ventas', 'Sus cifras: por cliente, por producto, facturado y su evolución.', TODOS),
           a('registrar', 'Registrar una venta', 'Apuntar una venta nueva desde Ventas.', COMERCIAL),
           a('view_equipo', 'Ver las ventas del equipo', 'El resumen y las ventas por asesora de todo el equipo.', ADMIN_SOPORTE, { requiere: ['ventas.view'] }),
-          a('metas', 'Metas de venta', 'Poner y quitar metas (una gestora, solo la suya).', TODOS),
+          // Solo admin y gestora (IDOR de las metas): antes la ruta no pedía rol y un tutor, soporte o project
+          // manager podía fijar o borrar la meta de cualquiera. Cambio pendiente de aprobar: `metas-sin-soporte-ni-pm`.
+          a('metas', 'Metas de venta', 'Poner y quitar metas (una gestora, solo la suya; un admin, la de su gente).', ['admin', 'gestor'], { nunca: ['tutor', 'soporte', 'project_manager', 'colaborador'] }),
         ],
       },
     ],
@@ -177,12 +179,10 @@ export const SECCIONES = [
       },
       {
         clave: 'webhooks', nombre: 'Webhooks de entrada', acciones: [
-          // ISEIE (#230): la lista y su estado las pedía cualquiera con sesión, y crearlos,
-          // cambiarlos y borrarlos, admin y soporte. Así se queda.
-          a('view', 'Ver webhooks', 'Los webhooks que reciben prospectos y su estado (de sus campus).', TODOS),
-          a('create', 'Crear webhooks', 'Un webhook nuevo.', ADMIN_SOPORTE),
-          a('edit', 'Editar webhooks', 'Cambiarlo o ponerlo a escuchar.', ADMIN_SOPORTE),
-          a('delete', 'Borrar webhooks', 'Quitar un webhook.', ADMIN_SOPORTE),
+          a('view', 'Ver webhooks', 'Los webhooks que reciben prospectos y su estado (de sus campus).', ADMIN),
+          a('create', 'Crear webhooks', 'Un webhook nuevo.', ADMIN),
+          a('edit', 'Editar webhooks', 'Cambiarlo o ponerlo a escuchar.', ADMIN),
+          a('delete', 'Borrar webhooks', 'Quitar un webhook.', ADMIN),
         ],
       },
       {
@@ -228,6 +228,7 @@ export const SECCIONES = [
           a('view', 'Ver WooCommerce', 'La conexión, el mapeo y las importaciones.', ADMIN_SOPORTE),
           a('edit', 'Configurar WooCommerce', 'Credenciales y mapeo de campos.', ADMIN_SOPORTE),
           a('sync', 'Importar de WooCommerce', 'Lanzar una importación de productos.', ADMIN_SOPORTE),
+          a('pedidos', 'Pedidos de WooCommerce', 'Ver los pedidos de sus campus, traerlos a mano, encender su sincronización y generar el secreto del aviso (#14).', ADMIN),
         ],
       },
     ],
@@ -243,6 +244,14 @@ export const SECCIONES = [
           a('ajustes', 'Ajustes de comisiones', 'Cambiar los porcentajes y reglas de las comisiones.', ADMIN, { requiere: ['tutores.gestionar'] }),
           a('contrasena', 'Contraseña de un tutor', 'Ponerle contraseña nueva a un tutor de sus campus.', ADMIN, { requiere: ['tutores.gestionar'] }),
           a('cambiar_correo', 'Correo de un tutor', 'Cambiar el correo de un tutor (es el de su factura).', NADIE, { requiere: ['tutores.gestionar'] }),
+        ],
+      },
+      {
+        // Consultas de alumnos (#188). El tutor, las suyas; administración, el panel.
+        clave: 'consultas', nombre: 'Consultas de alumnos', acciones: [
+          a('view', 'Ver el panel de consultas', 'Las consultas de los alumnos de sus campus, la carga de cada tutor y las métricas de todos.', ADMIN_SOPORTE),
+          a('gestionar', 'Gestionar consultas', 'Reasignar una consulta a otro tutor, leer los campus ahora, sincronizar alumnos y el token de cada tutor.', ADMIN_SOPORTE),
+          a('atender', 'Atender sus consultas', 'Su bandeja: responder y cerrar sus consultas, escribir a sus alumnos, su carga de trabajo y sus métricas.', ['tutor'], { independiente: true, propia: true }),
         ],
       },
     ],
@@ -347,6 +356,8 @@ export const SECCIONES = [
         clave: 'reports', nombre: 'Reportes', acciones: [
           a('mis_informes', 'Ver informes', 'Los informes de ventas, prospectos y seguimiento (una gestora, los suyos).', TODOS, { independiente: true }),
           a('view', 'Ver el resumen general', 'El resumen de todo el equipo.', ADMIN_SOPORTE),
+          a('dinero', 'Dónde poner el dinero', 'Ventas y gasto de publicidad por canal y campaña, contra el periodo anterior.', ADMIN),
+          a('editar_baremo', 'Cambiar el baremo de la tasa de cierre', 'Los tramos que dicen qué significa cada tasa (buena, regular...) por campus; el general, solo el super admin.', ADMIN),
           a('puesto_ajeno', 'El puesto de otra gestora', 'Ver en qué puesto va otra gestora del ranking.', ADMIN_SOPORTE, { requiere: ['reports.mis_informes'], independiente: true }),
         ],
       },
@@ -354,6 +365,15 @@ export const SECCIONES = [
         clave: 'feedback', nombre: 'Feedback', acciones: [
           a('view', 'Ver feedback', 'El panel y las respuestas de los clientes.', TODOS),
           a('enviar', 'Enviar la encuesta', 'Mandar, o no, la encuesta revisada a un cliente.', TODOS),
+        ],
+      },
+      // ISEIE no tiene los análisis IA guardados ni el monitor ni el chat de IA
+      // del 360; solo «Pregunta a tus datos» (/informes/preguntar, #580), que
+      // pide este permiso. Mismas claves y roles que en MultiCRM.
+      {
+        clave: 'reports_ia', nombre: 'Análisis IA', acciones: [
+          a('view', 'Ver análisis IA', 'Los análisis generados de cada proyecto.', TODOS),
+          a('generar', 'Generar análisis IA', 'Pedir un análisis nuevo y exportarlo.', ADMIN_SOPORTE),
         ],
       },
     ],
@@ -419,6 +439,14 @@ export const SECCIONES = [
           a('edit', 'Editar conectores', 'Cambiarlo, probarlo e importar.', ADMIN),
           a('delete', 'Borrar conectores', 'Quitar un conector.', ADMIN),
           a('sistema', 'Conectores de todo el sistema', 'Conectores que valen para todas las empresas.', NADIE),
+        ],
+      },
+      {
+        clave: 'moodle', nombre: 'Moodle', acciones: [
+          // Cursos, alumnos y recursos del Moodle de cada campus (#335). Antes: soloRoles('superadmin', 'admin').
+          a('view', 'Ver el Moodle de los campus', 'Los cursos, alumnos y recursos del Moodle de cada campus. Solo lectura.', ADMIN),
+          // Conectar un Moodle es guardar una credencial: antes soloRoles('superadmin'); NADIE = solo superadmin.
+          a('conectar', 'Conectar un Moodle', 'Guardar o quitar el token de un campus.', NADIE),
         ],
       },
       {

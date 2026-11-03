@@ -14,6 +14,12 @@ import MarcaSection from './MarcaSection';
 import CampusPorEmpresa, { marcarVarios } from '@/shared/components/CampusPorEmpresa';
 import PermisosDePersona from '@/modules/permissions/components/PermisosDePersona';
 import { avisoCambioCorreo, confirmacionCambioCorreo, problemaDeContrasena } from '@/shared/lib/credenciales';
+// «Usuario» como los demás formularios (#106, como en MultiCRM): todo lo que
+// falta en un solo aviso, Escape cierra y sin autocompletado del navegador.
+import { avisoDeLoQueFalta } from '@/shared/lib/loQueFalta';
+import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // Cada item de la nav interna. Si tiene `external: true` se muestra con el
 // icono de "abrir en otra página" y al hacer click navega a esa ruta.
@@ -331,7 +337,7 @@ function UsersSection({ isAdmin }) {
   );
 }
 
-function EditUserModal({ user, projects, onClose, onSaved, empresas, faltaMigracionEmpresas = false }) {
+export function EditUserModal({ user, projects, onClose, onSaved, empresas, faltaMigracionEmpresas = false }) {
   const { user: me } = useAuth();
   const isSuperadmin = me?.role === 'superadmin';
   const [nombre, setNombre] = useState(user.nombre || '');
@@ -356,6 +362,8 @@ function EditUserModal({ user, projects, onClose, onSaved, empresas, faltaMigrac
   const [newPass2, setNewPass2] = useState('');
   const [saving, setSaving] = useState(false);
   const [savingPass, setSavingPass] = useState(false);
+  // Escape cierra, como los demás formularios (#106).
+  useEscapeKey(onClose);
   // Las empresas enteras (#220). Diego, 10/10: «Un admin puede tener los
   // proyectos futuros, pero de SU empresa». Solo las da el super admin.
   const puedeDarEmpresas = Array.isArray(empresas) && !faltaMigracionEmpresas;
@@ -384,15 +392,20 @@ function EditUserModal({ user, projects, onClose, onSaved, empresas, faltaMigrac
   }
 
   async function save() {
-    if (nombre.trim().length < 2) { toast({ title: 'Nombre inválido', variant: 'destructive' }); return; }
+    // Lo que falta o está mal, en un solo aviso que dice dónde (#106).
+    const faltan = [];
+    if (!nombre.trim()) faltan.push({ title: 'Falta el nombre', description: 'Escríbelo en «Nombre».', que: 'el nombre en «Nombre»' });
+    else if (nombre.trim().length < 2) faltan.push({ title: 'Nombre demasiado corto', description: 'En «Nombre», al menos 2 caracteres.', que: 'un nombre de al menos 2 letras en «Nombre»' });
+    const falta = avisoDeLoQueFalta(faltan);
+    if (falta) { toast(falta); return; }
     const projList = Object.entries(assigned).map(([projectId, recibeLeads]) => ({ projectId: Number(projectId), recibeLeads: !!recibeLeads }));
     // El correo solo si ha cambiado, y solo lo cambia el super admin (#248). Antes
     // de guardar, lo que supone: sobre todo si recibe prospectos por Make.
     const correoNuevo = email.trim().toLowerCase();
     const cambiaCorreo = isSuperadmin && correoNuevo !== String(user.email || '').toLowerCase();
     if (cambiaCorreo) {
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correoNuevo)) {
-        toast({ title: 'Email inválido', description: 'Revisa el formato del email.', variant: 'destructive' });
+      if (!EMAIL_RE.test(correoNuevo)) {
+        toast({ title: 'Email no válido', description: 'Escríbelo en «Email» como nombre@dominio.com.', variant: 'destructive' });
         return;
       }
       const aviso = await avisoCambioCorreo(user.id).catch(() => null);
@@ -445,12 +458,12 @@ function EditUserModal({ user, projects, onClose, onSaved, empresas, faltaMigrac
         </div>
         <div className="space-y-3">
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Nombre</label>
-            <input value={nombre} onChange={(e) => setNombre(e.target.value)} className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm" />
+            <label htmlFor="edit-user-nombre" className="text-xs text-muted-foreground mb-1 block">Nombre</label>
+            <input id="edit-user-nombre" autoComplete="off" value={nombre} onChange={(e) => setNombre(e.target.value)} className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm" />
           </div>
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Email</label>
-            <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" maxLength={255}
+            <label htmlFor="edit-user-email" className="text-xs text-muted-foreground mb-1 block">Email</label>
+            <input id="edit-user-email" autoComplete="off" value={email} onChange={(e) => setEmail(e.target.value)} type="email" maxLength={255}
               readOnly={!isSuperadmin} disabled={!isSuperadmin}
               className={`w-full h-9 px-3 rounded-md border border-border bg-background text-sm ${isSuperadmin ? '' : 'opacity-60 cursor-not-allowed'}`} />
             <p className="text-[10px] text-muted-foreground mt-1">
@@ -511,8 +524,8 @@ function EditUserModal({ user, projects, onClose, onSaved, empresas, faltaMigrac
             </p>
           </div>
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Teléfono (WhatsApp)</label>
-            <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+34 600 000 000" className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm" />
+            <label htmlFor="edit-user-tel" className="text-xs text-muted-foreground mb-1 block">Teléfono (WhatsApp)</label>
+            <input id="edit-user-tel" autoComplete="off" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+34 600 000 000" className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm" />
             <p className="text-[10px] text-muted-foreground mt-1">Se usa para el widget de WhatsApp y el contacto del gestor.</p>
           </div>
           <div>
@@ -574,12 +587,14 @@ function EditUserModal({ user, projects, onClose, onSaved, empresas, faltaMigrac
   );
 }
 
-function InviteUserModal({ projects, onClose, onCreated, empresas, faltaMigracionEmpresas = false }) {
+export function InviteUserModal({ projects, onClose, onCreated, empresas, faltaMigracionEmpresas = false }) {
   const [nombre, setNombre] = useState('');
   const [email, setEmail] = useState('');
   const [role, setRole] = useState('gestor');
   const [assigned, setAssigned] = useState({}); // { [projectId]: recibeLeads }
   const [saving, setSaving] = useState(false);
+  // Escape cierra, como los demás formularios (#106).
+  useEscapeKey(onClose);
   // Las empresas enteras (#220). Diego, 10/10: «Un admin puede tener los
   // proyectos futuros, pero de SU empresa». Solo las da el super admin.
   const puedeDarEmpresas = Array.isArray(empresas) && !faltaMigracionEmpresas;
@@ -605,20 +620,25 @@ function InviteUserModal({ projects, onClose, onCreated, empresas, faltaMigracio
   }
 
   async function submit() {
-    if (nombre.trim().length < 2) { toast({ title: 'Nombre inválido', description: 'Mínimo 2 caracteres', variant: 'destructive' }); return; }
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) { toast({ title: 'Email inválido', variant: 'destructive' }); return; }
     const projList = Object.entries(assigned).map(([projectId, recibeLeads]) => ({ projectId: Number(projectId), recibeLeads: !!recibeLeads }));
     // Un admin o una gestora sin campus entraría a un CRM vacío (#220). Al
     // admin le vale una empresa entera; a la gestora, no.
     const conEmpresa = (role === 'admin' || role === 'colaborador') && puedeDarEmpresas && empresasEnteras.length > 0;
+    // Todo lo que falta o está mal, de una vez y diciendo dónde (#106).
+    const faltan = [];
+    if (!nombre.trim()) faltan.push({ title: 'Falta el nombre', description: 'Escríbelo en «Nombre y apellido».', que: 'el nombre en «Nombre y apellido»' });
+    else if (nombre.trim().length < 2) faltan.push({ title: 'Nombre demasiado corto', description: 'En «Nombre y apellido», al menos 2 caracteres.', que: 'un nombre de al menos 2 letras en «Nombre y apellido»' });
+    if (!email.trim()) faltan.push({ title: 'Falta el email', description: 'Escríbelo en «Email» como nombre@dominio.com.', que: 'el email en «Email»' });
+    else if (!EMAIL_RE.test(email.trim())) faltan.push({ title: 'Email no válido', description: 'Escríbelo en «Email» como nombre@dominio.com.', que: 'un email válido en «Email» (nombre@dominio.com)' });
     if ((role === 'admin' || role === 'gestor') && projList.length === 0 && !conEmpresa) {
-      toast({
+      faltan.push({
         title: 'Falta el campus',
         description: role === 'admin' && puedeDarEmpresas ? 'Marca al menos un campus o una empresa entera.' : 'Marca al menos un campus.',
-        variant: 'destructive',
+        que: 'al menos un campus en «Proyectos asignados»',
       });
-      return;
     }
+    const falta = avisoDeLoQueFalta(faltan);
+    if (falta) { toast(falta); return; }
     setSaving(true);
     try {
       await client.post('/users', {
@@ -642,12 +662,12 @@ function InviteUserModal({ projects, onClose, onCreated, empresas, faltaMigracio
         </div>
         <div className="space-y-3">
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Nombre y apellido *</label>
-            <input value={nombre} onChange={(e) => setNombre(e.target.value)} className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm" placeholder="Ej: Fabiola Comercial" />
+            <label htmlFor="invite-user-nombre" className="text-xs text-muted-foreground mb-1 block">Nombre y apellido *</label>
+            <input id="invite-user-nombre" autoComplete="off" value={nombre} onChange={(e) => setNombre(e.target.value)} className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm" placeholder="Ej: Fabiola Comercial" />
           </div>
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Email *</label>
-            <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm" placeholder="persona@empresa.com" />
+            <label htmlFor="invite-user-email" className="text-xs text-muted-foreground mb-1 block">Email *</label>
+            <input id="invite-user-email" autoComplete="off" value={email} onChange={(e) => setEmail(e.target.value)} type="email" className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm" placeholder="persona@empresa.com" />
           </div>
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">Rol *</label>

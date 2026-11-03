@@ -23,6 +23,13 @@ beforeAll(() => {
       });
     }
     const u = String(url);
+    // Conexión → Moodle (2.6.0): la API devuelve los campus dentro de un objeto.
+    if (u.includes('/moodle/campus')) {
+      return Promise.resolve({
+        ok: true, status: 200, headers: { get: () => 'application/json' },
+        json: () => Promise.resolve({ success: true, data: { campus: [], funciones: [] } }),
+      });
+    }
     // Endpoints que devuelven array en la app real (mayoría son listas o catálogos).
     const isList = /\/(leads|products|conversions|notifications|matriculas|forms|expenses|payments|email-sequences|email-templates|reports|status|commissions|payroll|accounts-payable|shortcuts|categories|field-definitions|make-webhooks|woocommerce|wc|credentials|users|availability|deliveries|sync-runs|rules|periods|spam-reports|sales|interactions|reminders)(\/|\?|$)/.test(u)
       || u.includes('/by-lead/') || u.includes('/dashboard-summary') || u.includes('/stats')
@@ -88,6 +95,9 @@ const ALL_STATIC_ROUTES = [
   '/documentos', '/documentos/config',
   '/roles', '/informes', '/notificaciones', '/notifications',
   '/activity', '/status', '/perfil', '/configuracion',
+  // Lo nuevo de la 2.6.0 (paridad con MultiCRM).
+  '/consultas', '/consultas/alumnos', '/consultas/carga', '/consultas/tutores', '/consultas/metricas',
+  '/conexion/moodle', '/ventas/sin-formacion', '/informes/preguntar',
 ];
 
 describe('app boot routes', () => {

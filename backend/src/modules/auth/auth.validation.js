@@ -53,3 +53,15 @@ export const updateMyProfileSchema = z.object({
 export const updateMyEmailSchema = z.object({
   email: z.string().trim().toLowerCase().email('Correo no válido').max(255),
 });
+/**
+ * Lo unico que se pide para recuperar: el correo (#37).
+ *
+ * Que el formato sea invalido SI se contesta con un 400 — eso no delata a
+ * nadie, porque «pepe@» no es la direccion de ningun empleado. Lo que no se
+ * puede contestar distinto es un correo bien formado que no existe.
+ */
+export const olvidoSchema = z.object({
+  // trim ANTES de validar (« a@b.com » no es un error) y tope de 254, el maximo
+  // de una direccion: sin el, el cuerpo podia traer un «correo» de megas.
+  email: z.string().trim().max(254, 'Email invalido').email('Email invalido').transform((v) => v.toLowerCase()),
+});

@@ -1,11 +1,11 @@
+import { inputClass } from '@/shared/lib/ui';
 import { useState, useRef, useEffect } from 'react';
 import { MagnifyingGlass, Plus, X, CaretDown } from '@phosphor-icons/react';
 import Portal from '@/shared/components/ui/portal';
-import Select from '@/shared/components/ui/Select';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
+import CascadaDeCategorias from '@/modules/product-categories/components/CascadaDeCategorias';
 
-const inputClass = 'w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm outline-none focus:border-primary';
 
 interface ProductOption {
   id: number;
@@ -20,9 +20,11 @@ interface Props {
   projectId: number | null | undefined;
   projectLabel?: string;
   onProductCreated?: (p: ProductOption) => void;
+  /** El `id` del botón, para que la etiqueta de un `Field` (`htmlFor`) lo enfoque. */
+  id?: string;
 }
 
-export default function ProductCombobox({ value, onChange, products, projectId, projectLabel = 'Producto', onProductCreated }: Props) {
+export default function ProductCombobox({ value, onChange, products, projectId, projectLabel = 'Producto', onProductCreated, id }: Props) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [newOpen, setNewOpen] = useState(false);
@@ -45,8 +47,11 @@ export default function ProductCombobox({ value, onChange, products, projectId, 
   return (
     <div className="relative" ref={ref}>
       <button
+        id={id}
         type="button"
         onClick={() => setOpen(!open)}
+        aria-haspopup="listbox"
+        aria-expanded={open ? 'true' : 'false'}
         className={inputClass + ' flex items-center justify-between text-left'}
       >
         <span className={selected ? '' : 'text-muted-foreground'}>
@@ -60,7 +65,7 @@ export default function ProductCombobox({ value, onChange, products, projectId, 
           <div className="p-2 border-b border-border">
             <div className="relative">
               <MagnifyingGlass size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <input
+              <input autoComplete="off"
                 autoFocus
                 value={search}
                 onChange={e => setSearch(e.target.value)}
@@ -100,7 +105,7 @@ export default function ProductCombobox({ value, onChange, products, projectId, 
             <button
               type="button"
               onClick={() => { setNewOpen(true); setOpen(false); }}
-              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-primary text-white text-sm font-semibold hover:bg-primary/90"
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90"
             >
               <Plus size={14} weight="bold" /> Añadir {projectLabel.toLowerCase()} nuevo
             </button>
@@ -153,8 +158,6 @@ function NewProductDialog({ projectId, projectLabel, initialName = '', onClose, 
     })();
   }, [projectId]);
 
-  const parentCategories = categories.filter(c => !c.parent_id);
-  const subcategories = categories.filter(c => String(c.parent_id) === String(data.categoria_id));
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -187,33 +190,28 @@ function NewProductDialog({ projectId, projectLabel, initialName = '', onClose, 
             <button type="button" onClick={onClose} aria-label="Cerrar" className="p-1.5 rounded hover:bg-muted"><X size={18} /></button>
           </div>
           <div className="space-y-3">
-            <input
+            <input autoComplete="off"
               autoFocus required placeholder={`Nombre del ${projectLabel.toLowerCase()}`}
               value={data.nombre} onChange={e => setData({ ...data, nombre: e.target.value })}
               className={inputClass}
             />
-            <div className="grid grid-cols-2 gap-2">
-              <Select<string>
-                value={data.categoria_id}
-                onChange={(v) => setData({ ...data, categoria_id: v, subcategoria_id: '' })}
-                options={[
-                  { value: '', label: 'Sin categoria' },
-                  ...parentCategories.map(c => ({ value: String(c.id), label: c.nombre })),
-                ]}
-                ariaLabel="Categoría"
-              />
-              <Select<string>
-                value={data.subcategoria_id}
-                onChange={(v) => setData({ ...data, subcategoria_id: v })}
-                options={[
-                  { value: '', label: subcategories.length ? 'Sin subcategoria' : '—' },
-                  ...subcategories.map(c => ({ value: String(c.id), label: c.nombre })),
-                ]}
-                ariaLabel="Subcategoría"
-                disabled={!subcategories.length}
-              />
-            </div>
-            <textarea
+            {/* El mismo selector que la ficha del producto (#2). Aqui habia dos
+                desplegables: uno con las de primer nivel y otro con sus hijas
+                directas. El arbol tiene cinco niveles, asi que crear un curso
+                desde la ficha de un prospecto no podia dejarlo mas hondo del
+                segundo — y ahi es donde estan casi todos. */}
+            <CascadaDeCategorias
+              categorias={categories}
+              valor={data.categoria_id ? Number(data.categoria_id) : null}
+              onCambiar={(id) => setData({
+                ...data,
+                categoria_id: id ? String(id) : '',
+                // Producto nuevo: no hay nada anterior que conservar y la ruta
+                // entera va en `categoria_id`.
+                subcategoria_id: '',
+              })}
+            />
+            <textarea autoComplete="off"
               placeholder="Descripción (opcional)"
               value={data.descripcion} onChange={e => setData({ ...data, descripcion: e.target.value })}
               className={inputClass + ' h-20 py-2 resize-none'}
@@ -221,7 +219,7 @@ function NewProductDialog({ projectId, projectLabel, initialName = '', onClose, 
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg border border-border bg-card text-sm font-semibold hover:bg-muted">Cancelar</button>
-            <button type="submit" disabled={saving} className="px-4 py-2 rounded-lg bg-primary text-white text-sm font-semibold hover:bg-primary/90 disabled:opacity-50">{saving ? 'Guardando...' : `Crear ${projectLabel.toLowerCase()}`}</button>
+            <button type="submit" disabled={saving} className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50">{saving ? 'Guardando...' : `Crear ${projectLabel.toLowerCase()}`}</button>
           </div>
         </form>
       </div>

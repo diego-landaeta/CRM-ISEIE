@@ -21,6 +21,12 @@ import * as conexiones from './mcp.conexiones.js';
  *
  * Los fallos y el bloqueo de 15 minutos siguen siendo de la URL: quien prueba
  * códigos a ciegas la bloquea para todas sus conexiones.
+ *
+ * EL CÓDIGO ES DE UNA URL (#260, Diego 07/10). Se saca desde la fila de cada URL
+ * (`POST /panel/tokens/:id/codigo`), nace con su `token_id` y SOLO desbloquea
+ * esa URL: usado con otra, no vale. Antes era de la persona y el panel sacaba
+ * uno aunque no hubiera ninguna URL viva en el ámbito que se estaba mirando.
+ * Sin URL no hay código.
  */
 
 /** Se lee en cada llamada: cambiar el .env y reiniciar basta, y las pruebas pueden tocarlo. */
@@ -61,11 +67,19 @@ export function huellaCodigo(codigo) {
 // «desbloquear». Para eso está el botón del panel, y el mensaje lo pone PRIMERO:
 // probado con claude.ai (06/10), con el botón al final Claude pedía antes el
 // código, que sin la herramienta no puede usar.
-export const MENSAJE_SIN_DESBLOQUEAR =
-  'Esta conexión con el CRM necesita desbloquearse para dar datos. '
-  + 'Si no tienes la herramienta «desbloquear», no pidas el código (no podrías usarlo): pide a la persona que pulse '
-  + '«Desbloquear desde aquí» en el CRM → Conexión → MCP, junto a su URL, y después vuelve a consultar. '
-  + 'Si la tienes, pide a la persona el código de CRM → Conexión → MCP → «Código para Claude» y llama a «desbloquear» con él.';
+//
+// #260: el código es de una URL, así que el mensaje remite a la fila de ESA URL.
+// `url`: el nombre con el que la persona la reconoce. Empieza igual que siempre
+// (`BARRERA_DEL_CODIGO` de mcp.alertas.js lo reconoce por el principio).
+export function mensajeSinDesbloquear(url = null) {
+  const cual = url ? `de la URL «${url}»` : 'de la URL con la que está conectado este Claude';
+  return 'Esta conexión con el CRM necesita desbloquearse para dar datos. '
+    + 'Si no tienes la herramienta «desbloquear», no pidas el código (no podrías usarlo): pide a la persona que pulse '
+    + `«Desbloquear desde aquí» en el CRM → Conexión → MCP, en la fila ${cual}, y después vuelve a consultar. `
+    + `Si la tienes, pide a la persona el código ${cual}: se saca en esa misma fila, con «Sacar código». `
+    + 'Un código solo vale para la URL en cuya fila se sacó. Cuando lo tengas, llama a «desbloquear» con él.';
+}
+export const MENSAJE_SIN_DESBLOQUEAR = mensajeSinDesbloquear();
 
 // #326: cada Claude conectado a una URL espera a que el dueño lo autorice.
 export const MENSAJE_PENDIENTE =
@@ -91,22 +105,50 @@ function cuando(fecha) {
 
 // ─── Base de datos ────────────────────────────────────────────────────────
 
-/** Un código nuevo para la persona. Anula los que tuviera sin usar: solo vale el último. */
-export async function crearCodigo(userId) {
+/** El nombre con el que la persona reconoce una URL (el de su conexión, o el que le puso). */
+export async function nombreDeLaUrl(tokenId) {
+  const { rows: [r] } = await query(
+    `SELECT COALESCE(c.label, t.nombre) AS nombre
+       FROM mcp_tokens t LEFT JOIN project_connectors c ON c.id = t.connector_id
+      WHERE t.id = $1`,
+    [tokenId]
+  );
+  return r?.nombre || null;
+}
+
+/**
+ * Un código nuevo PARA ESTA URL (#260). Anula los que tuviera sin usar para la
+ * misma URL: solo vale el último. Los de sus otras URLs no se tocan.
+ *
+ * Devuelve { resultado } con uno de:
+ *   'ok'            trae `codigo`, `caducaAt` y `minutos`
+ *   'no_encontrada' no existe, es de otra persona, está revocada o caducada
+ *   'ya_bloqueada'  bloqueada por códigos falsos: se espera a `hasta`
+ */
+export async function crearCodigo({ userId, tokenId }) {
+  const { rows: [t] } = await query(
+    `SELECT id, (bloqueado_hasta IS NOT NULL AND bloqueado_hasta > NOW()) AS bloqueado, bloqueado_hasta
+       FROM mcp_tokens
+      WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > NOW())`,
+    [tokenId, userId]
+  );
+  if (!t) return { resultado: 'no_encontrada' };
+  if (t.bloqueado) return { resultado: 'ya_bloqueada', hasta: t.bloqueado_hasta };
+
   const { minutosCodigo } = config();
   const codigo = generarCodigo();
   await query(
     `UPDATE mcp_codigos SET anulado_at = NOW()
-      WHERE user_id = $1 AND usado_at IS NULL AND anulado_at IS NULL`,
-    [userId]
+      WHERE user_id = $1 AND token_id = $2 AND usado_at IS NULL AND anulado_at IS NULL`,
+    [userId, tokenId]
   );
   const { rows } = await query(
-    `INSERT INTO mcp_codigos (user_id, codigo_hash, caduca_at)
-     VALUES ($1, $2, NOW() + make_interval(mins => $3::int))
+    `INSERT INTO mcp_codigos (user_id, token_id, codigo_hash, caduca_at)
+     VALUES ($1, $2, $3, NOW() + make_interval(mins => $4::int))
      RETURNING id, caduca_at`,
-    [userId, huellaCodigo(codigo), minutosCodigo]
+    [userId, tokenId, huellaCodigo(codigo), minutosCodigo]
   );
-  return { codigo, caducaAt: rows[0].caduca_at, minutos: minutosCodigo };
+  return { resultado: 'ok', codigo, caducaAt: rows[0].caduca_at, minutos: minutosCodigo };
 }
 
 /** Si la URL está bloqueada por códigos falsos AHORA. El desbloqueo es de cada conexión (#326). */
@@ -181,26 +223,6 @@ export async function estadoParaElPanel(tokenIds) {
 }
 
 /**
- * «El estado actual en una línea» para «Código para Claude» (#192, Diego 05/10).
- *
- * Con una sola URL, la línea es la suya (`una`, con su botón). Con varias, un
- * resumen de todas, sin elegir ninguna por la persona. null con el código
- * apagado o sin URLs.
- */
-export function resumenParaElPanel(urls, estados) {
-  const conEstado = (urls || []).filter((u) => estados.get(u.id)).map((u) => ({ ...u, ...estados.get(u.id) }));
-  if (!conEstado.length) return null;
-  if (conEstado.length === 1) return { total: 1, una: conEstado[0], texto: conEstado[0].texto };
-  const de = (estado) => conEstado.filter((u) => u.estado === estado).length;
-  const partes = [];
-  if (de('pendiente')) partes.push(`${de('pendiente')} con un Claude pendiente de autorizar`);
-  if (de('desbloqueada')) partes.push(`${de('desbloqueada')} desbloqueada${de('desbloqueada') === 1 ? '' : 's'}`);
-  if (de('bloqueada')) partes.push(`${de('bloqueada')} bloqueada${de('bloqueada') === 1 ? '' : 's'}`);
-  if (de('sin_desbloquear')) partes.push(`${de('sin_desbloquear')} cerrada${de('sin_desbloquear') === 1 ? '' : 's'}`);
-  return { total: conEstado.length, una: null, texto: `Tus ${conEstado.length} URLs: ${partes.join(', ')}` };
-}
-
-/**
  * «Desbloquear desde aquí» (#192, Diego 05/10, opción 3): la persona, que ya ha
  * entrado al CRM, desbloquea SU URL desde el panel, sin código. Desde la #326
  * desbloquea los Claude AUTORIZADOS de esa URL; los pendientes, no: primero hay
@@ -223,7 +245,9 @@ export async function desbloquearDesdePanel({ userId, tokenId }) {
   if (t.bloqueado) return { resultado: 'ya_bloqueada', hasta: t.bloqueado_hasta };
   const cuantas = await conexiones.desbloquearAutorizadasDeLaUrl(tokenId);
   if (!cuantas) return { resultado: 'sin_autorizadas' };
-  await query(`UPDATE mcp_tokens SET fallos_codigo = 0 WHERE id = $1`, [tokenId]);
+  // NO se pone `fallos_codigo` a 0 (#262): el contador está para parar a quien prueba
+  // códigos, y un botón que lo borrara sería otra forma de saltárselo. Solo lo vacía
+  // un código bueno.
   return { resultado: 'ok', cuantas };
 }
 
@@ -236,6 +260,8 @@ export async function desbloquearDesdePanel({ userId, tokenId }) {
  *   'de_otra_persona'  es un código vigente, pero de OTRA persona: la URL se está
  *                      usando por quien no es su dueño; trae `urlDe` y `codigoDe`
  *                      ({ id, nombre }). No suma fallo
+ *   'de_otra_url'      es un código vigente de esta persona, pero de OTRA de sus
+ *                      URLs (#260): aquí no vale. Suma fallo; trae `quedan` y `urlDe`
  *   'incorrecto'       no vale (mal escrito, caducado o usado); trae `quedan`
  *   'bloqueada'        acaba de llegar al tope de fallos; trae `hasta`
  *   'ya_bloqueada'     estaba bloqueada de antes; trae `hasta`
@@ -250,8 +276,8 @@ export async function intentarDesbloqueo({ userId, tokenId, conexionId, codigo }
   if (estado.bloqueado) return { resultado: 'ya_bloqueada', hasta: estado.bloqueado_hasta };
 
   const { rows: usado } = await query(
-    `UPDATE mcp_codigos SET usado_at = NOW(), token_id = $3
-      WHERE user_id = $1 AND codigo_hash = $2
+    `UPDATE mcp_codigos SET usado_at = NOW()
+      WHERE user_id = $1 AND codigo_hash = $2 AND token_id = $3
         AND usado_at IS NULL AND anulado_at IS NULL AND caduca_at > NOW()
       RETURNING id`,
     [userId, huellaCodigo(codigo), tokenId]
@@ -306,7 +332,24 @@ export async function intentarDesbloqueo({ userId, tokenId, conexionId, codigo }
     [tokenId, maxFallos, bloqueoMin]
   );
   if (f[0]?.bloqueado) return { resultado: 'bloqueada', hasta: f[0].bloqueado_hasta };
-  return { resultado: 'incorrecto', quedan: maxFallos - (f[0]?.fallos_codigo || 0) };
+  const quedan = maxFallos - (f[0]?.fallos_codigo || 0);
+
+  // ¿Es un código bueno de esta persona, pero de OTRA de sus URLs? (#260.) Se le
+  // dice, para que no dé vueltas. SÍ suma fallo (arriba): decir «este código
+  // existe» sin contar sería probar códigos gratis para quien tuviera una URL de
+  // la persona. El código no se gasta: sigue valiendo en la fila donde se sacó.
+  const { rows: [deOtra] } = await query(
+    `SELECT COALESCE(pc.label, t.nombre) AS nombre
+       FROM mcp_codigos c
+       JOIN mcp_tokens t ON t.id = c.token_id
+       LEFT JOIN project_connectors pc ON pc.id = t.connector_id
+      WHERE c.user_id = $1 AND c.codigo_hash = $2 AND c.token_id <> $3
+        AND c.usado_at IS NULL AND c.anulado_at IS NULL AND c.caduca_at > NOW()
+      LIMIT 1`,
+    [userId, huellaCodigo(codigo), tokenId]
+  );
+  if (deOtra) return { resultado: 'de_otra_url', quedan, urlDe: deOtra.nombre };
+  return { resultado: 'incorrecto', quedan };
 }
 
 /**

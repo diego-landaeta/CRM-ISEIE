@@ -19,6 +19,9 @@ export const webhookLeadSchema = z.object({
   utm_campaign: z.string().max(255).optional(),
   utm_content: z.string().max(255).optional(),
   utm_term: z.string().max(255).optional(),
+  // De dónde venía la persona (document.referrer). Va junto a las UTM porque
+  // ChatGPT a veces no manda utm_source y a veces no manda referrer (#48).
+  referrer: z.string().max(2000).optional(),
   // Make puede decidir el canal directamente (override de la deteccion automatica)
   canal: z.enum(['meta_ads', 'google_ads', 'tiktok_ads', 'organico', 'chatgpt_ia', 'directo', 'referido', 'whatsapp']).optional(),
   // Asignacion explicita desde Make (saltea round-robin si vienen).

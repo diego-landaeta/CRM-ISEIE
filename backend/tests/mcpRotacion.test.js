@@ -228,6 +228,21 @@ describe('la vuelta: aviso antes de caducar', () => {
   });
 });
 
+describe('la vuelta: a un tutor no se le escribe (#262)', () => {
+  it('su URL por caducar no genera correo ni se marca como avisada', async () => {
+    const u = await crearUrl(GESTOR, 'de quien pasa a tutor');
+    await q(`UPDATE mcp_tokens SET expires_at = NOW() + INTERVAL '2 days', last_used_at = NOW() WHERE id = $1`, [u.id]);
+    await q(`UPDATE users SET role = 'tutor' WHERE id = $1`, [GESTOR.id]);
+    try {
+      await vuelta();
+      expect(correos.sendMcpCaducidadEmail.mock.calls.filter(([a]) => a.persona.email === GESTOR.email)).toHaveLength(0);
+      expect((await fila(u.id)).aviso_caducidad_at).toBeNull();
+    } finally {
+      await q(`UPDATE users SET role = 'gestor' WHERE id = $1`, [GESTOR.id]);
+    }
+  });
+});
+
 describe('revocar o pausar', () => {
   it('revocar a mano deja el motivo «manual»', async () => {
     const u = await crearUrl(ANA, 'a mano');

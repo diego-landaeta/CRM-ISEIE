@@ -19,7 +19,7 @@ const KNOWN_LEAD_FIELDS = new Set([
   'producto_interes', 'producto_interes_sku', 'producto_interes_id',
   'landing_url', 'canal', 'notas',
   'idempotency_key',
-  'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term',
+  'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'referrer',
 ]);
 
 export function applyMapping(payload, fieldMapping) {

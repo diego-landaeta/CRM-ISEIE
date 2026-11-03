@@ -44,7 +44,8 @@ export const SECTIONS = [
     tabs: [
       { to: '/products',                       label: 'Catálogo',          icon: Package,        end: true },
       { to: '/products/tree',                  label: 'Árbol',             icon: Tree },
-      { to: '/products/pending',               label: 'Cursos pendientes', icon: GraduationCap, roles: ['admin', 'superadmin'] },
+      // Por campus, con tutora y fecha (#336): también gestoras y tutoras, como en MultiCRM.
+      { to: '/products/pending',               label: 'Cursos pendientes', icon: GraduationCap, roles: ['admin', 'superadmin', 'gestor', 'tutor'] },
       { to: '/configuracion/categorias-arbol', label: 'Categorías',        icon: TreeStructure },
       { to: '/woocommerce',                    label: 'WooCommerce',       icon: ShoppingCart,  roles: ['admin', 'superadmin'] },
     ],
@@ -64,6 +65,9 @@ export const SECTIONS = [
       { to: '/commissions',                   label: 'Comisiones',        icon: CurrencyEur },
       { to: '/payroll',                       label: 'Nóminas',           icon: ChartLineUp, roles: ['admin', 'superadmin'] },
       { to: '/accounting/pendiente-facturar', label: 'Pendientes facturar', icon: Calculator, roles: ['admin', 'superadmin'] },
+      // Al lado de «pendientes de facturar» porque es su pariente: cosas cobradas
+      // a las que les falta un dato para poder cerrarse (#41), como en MultiCRM.
+      { to: '/ventas/sin-formacion',          label: 'Sin formación',     icon: GraduationCap },
       { to: '/accounting/pagos-stripe',       label: 'Pagos Stripe',      icon: Calculator,  roles: ['admin', 'superadmin'] },
       { to: '/accounting/facturas',           label: 'Facturación',       icon: Receipt,     roles: ['admin', 'superadmin', 'soporte'] },
       // Facturas de colaboradores (#202): en evaluación, solo en /staging y en local.

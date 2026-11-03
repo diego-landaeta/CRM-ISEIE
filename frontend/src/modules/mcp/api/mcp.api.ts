@@ -65,7 +65,10 @@ export interface McpHerramienta {
   nombre: string;
   titulo: string;
   descripcion: string;
+  /** El apartado de «Consultas disponibles» en que se enseña. */
+  grupo: string;
 }
+
 
 export interface McpEstado {
   tieneAcceso: boolean;
@@ -85,14 +88,11 @@ export interface McpEstado {
   codigo?: {
     obligatorio: boolean; minutosCodigo: number;
     /**
-     * El estado actual en una línea, de todas sus URLs. Con una sola, `una`
-     * trae la suya (y su botón); con varias, `texto` las resume.
+     * TODAS sus URLs vivas, estén en el ámbito que se mira o no (#260): para
+     * avisar de las que la lista de conexiones no enseña. `ambito`: dónde está
+     * su conexión («ICTESS», «Todo el sistema»…); null en una URL suelta.
      */
-    resumen?: {
-      total: number;
-      una: (McpEstadoCodigo & { id: number; nombre: string }) | null;
-      texto: string;
-    } | null;
+    urls?: { id: number; nombre: string; ambito: string | null }[];
   };
   /** Super admin: los Claude conectados de otras personas, para poder rechazarlos (#326). */
   conexionesDelEquipo?: McpConexionClaude[] | null;
@@ -171,8 +171,8 @@ export const urlDelMcp = () => `${window.location.origin}${API_BASE_URL}/mcp`;
 export const mcpApi = {
   estado: () => client.get('/mcp/panel'),
   crearToken: (nombre: string) => client.post('/mcp/panel/tokens', { nombre }),
-  /** Código para darle a Claude (#192): un solo uso, caduca en minutos. */
-  crearCodigo: () => client.post('/mcp/panel/codigo', {}),
+  /** Código para darle a Claude (#192): de UNA URL (#260), un solo uso, caduca en minutos. */
+  crearCodigo: (tokenId: number) => client.post(`/mcp/panel/tokens/${tokenId}/codigo`, {}),
   revocarToken: (id: number) => client.delete(`/mcp/panel/tokens/${id}`),
   /** «Desbloquear desde aquí» (#192): sin pasar por Claude. Solo una URL tuya. */
   desbloquearUrl: (id: number) => client.post(`/mcp/panel/tokens/${id}/desbloquear`, {}),

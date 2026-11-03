@@ -2,6 +2,7 @@ import { logger } from '../shared/utils/logger.js';
 import { query } from '../shared/config/db.js';
 import * as wcModel from '../modules/woocommerce/wc.model.js';
 import { runFullImport } from '../modules/woocommerce/wc.controller.js';
+import { sincronizarPedidos } from '../modules/woocommerce/wc.orders.js';
 import { vigilar } from './latido.js';
 
 const TICK_MS = parseInt(process.env.WC_SYNC_TICK_MS || String(5 * 60 * 1000)); // 5 min default
@@ -55,6 +56,14 @@ async function syncProject(creds) {
     await runFullImport(creds, creds.project_id, runId);
     await query(`UPDATE wc_credentials SET last_sync_at = NOW() WHERE project_id = $1`, [creds.project_id]);
     logger.info({ projectId: creds.project_id }, 'WC auto-sync OK (full import)');
+    // Los pedidos (#14), si la tienda los tiene encendidos. Un fallo aquí no tumba
+    // la sincronización de productos, que ya salió bien: se anota y la próxima
+    // vuelta pide desde donde se quedó.
+    if (creds.sync_orders && creds.consumer_key) {
+      try { await sincronizarPedidos(creds); } catch (err) {
+        logger.error({ projectId: creds.project_id, err: err.message }, 'WC: fallo al sincronizar los pedidos');
+      }
+    }
   } catch (err) {
     if (runId) await wcModel.finishRun(runId, { status: 'error', error_message: err.message?.slice(0, 1000) });
     logger.error({ err, projectId: creds.project_id }, 'WC auto-sync error');

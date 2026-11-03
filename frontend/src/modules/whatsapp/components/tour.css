@@ -1,0 +1,138 @@
+/* El recorrido guiado, con sus propios colores.
+ *
+ * Vivia en `chat.css`, que solo se carga en la pantalla del chat. Desde que
+ * las plantillas tienen su propio recorrido (#129) eso ya no valia: el cartel
+ * se montaba sin una sola regla, se iba al final del documento y no lo veia
+ * nadie — decia «1 de 4» a 2.800 px de altura.
+ *
+ * Las variables se repiten aqui con su valor por defecto en vez de heredarse
+ * de `chat.css`: este componente se usa fuera del chat, y una variable que no
+ * existe no falla, simplemente pinta transparente. Donde chat.css este
+ * cargado, mandan las suyas.
+ */
+.wa-tour {
+  --wa-tour-panel:    var(--wa-panel, #111b21);
+  --wa-tour-cabecera: var(--wa-cabecera, #202c33);
+  --wa-tour-borde:    var(--wa-borde, #222d34);
+  --wa-tour-texto:    var(--wa-texto, #e9edef);
+  --wa-tour-apagado:  var(--wa-apagado, #8696a0);
+  --wa-tour-verde:    var(--wa-verde, #00a884);
+  /* El velo. Un solo valor para las dos capas que lo pintan, o se suman. */
+  --wa-tour-velo:     rgba(0, 0, 0, .42);
+}
+
+/* ── El recorrido guiado ─────────────────────────────────────────────────────
+ *
+ * Seis pasos señalando lo que ya tiene delante, la primera vez que entra. La
+ * guia escrita esta bien, pero nadie la lee antes de empezar. */
+
+.wa-tour { position: fixed; inset: 0; z-index: 60; background: var(--wa-tour-velo); }
+
+/* CUANDO HAY RECUADRO, EL FONDO NO PINTA VELO.
+
+   Lo pinta la sombra del propio recuadro —asi es como se ve claro lo de dentro
+   y oscuro lo de fuera sin recortar nada—. Con los dos a la vez el velo se
+   aplicaba DOS VECES y la pantalla quedaba casi negra: se notaba poco sobre el
+   chat, que ya es oscuro, y mucho en cualquier pantalla clara del CRM. */
+.wa-tour:has(.wa-tour-foco) { background: transparent; }
+
+/* El recuadro de lo que se explica: se ve a traves del velo. */
+.wa-tour-foco {
+  position: fixed;
+  border: 2px solid var(--wa-tour-verde, #00a884);
+  border-radius: 8px;
+  /* El velo se pinta AQUI, con la sombra: por eso lo de dentro del recuadro se
+     ve claro y el resto oscuro, sin recortar nada. El halo verde de fuera es
+     para que el recuadro se encuentre de un vistazo en una pantalla grande. */
+  box-shadow: 0 0 0 9999px var(--wa-tour-velo),
+              0 0 0 4px rgba(0, 168, 132, 0.35);
+  pointer-events: none;
+  transition: all 0.18s ease;
+}
+
+.wa-tour-cartel {
+  position: fixed;
+  /* En un movil de 320 px, 300 fijos mas los margenes se salen por un lado. El
+     componente sigue calculando con 300 para colocarlo; esto solo lo encoge
+     cuando no cabe, que es justo lo que hacia falta. */
+  width: min(300px, calc(100vw - 24px));
+  background: var(--wa-tour-panel, #111b21);
+  border: 1px solid var(--wa-tour-borde, #222d34);
+  border-radius: 10px;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5);
+  color: var(--wa-tour-texto, #e9edef);
+  overflow: hidden;
+}
+.wa-tour-cabecera {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 11px 14px;
+  background: var(--wa-tour-cabecera, #202c33);
+  border-bottom: 1px solid var(--wa-tour-borde, #222d34);
+  font-size: 14px; font-weight: 600;
+}
+.wa-tour-texto {
+  margin: 0; padding: 13px 14px;
+  font-size: 13px; line-height: 1.55;
+  color: var(--wa-tour-apagado, #8696a0);
+  /* Alto minimo para que el pie no baile.
+   *
+   * Cada paso tiene un texto de distinto largo, asi que el cartel cambiaba de
+   * alto y «Siguiente» aparecia a distinta altura en cada uno: se pulsa nueve
+   * veces seguidas y hay que ir persiguiendolo con el raton. Con un minimo que
+   * cubre los textos normales, el pie cae en el mismo sitio; los dos o tres
+   * pasos mas largos lo empujan un poco y no hay mas remedio, pero el salto
+   * pasa de constante a excepcional. */
+  min-height: 161px;
+  box-sizing: content-box;
+}
+.wa-tour-pie {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 10px 14px;
+  background: var(--wa-tour-cabecera, #202c33);
+  border-top: 1px solid var(--wa-tour-borde, #222d34);
+}
+/* El pie no se parte.
+ *
+ * Con la cuenta y dos botones en 300 px, el navegador partia las palabras: «2 de
+ * 9» en tres lineas y «Enlazar mi numero» en otras tres. Los botones no rompen
+ * texto, la cuenta no se encoge por debajo de lo que ocupa, y si aun asi no
+ * cabe, el pie pasa a dos filas en vez de deformarse. */
+.wa-tour-pie { flex-wrap: wrap; row-gap: 8px; }
+.wa-tour-cuenta {
+  font-size: 11.5px; color: var(--wa-tour-apagado, #8696a0);
+  white-space: nowrap; flex: 0 0 auto;
+}
+.wa-tour-botones { flex-wrap: wrap; justify-content: flex-end; }
+.wa-tour-botones button { white-space: nowrap; }
+
+/* Cuando el paso LLEVA a algun sitio, ese boton ocupa su propia fila entera.
+ *
+ * «Atras» + «Enlazar mi numero» + la cuenta no caben en 300 px: se iban a una
+ * segunda fila igualmente, pero descolgados a la derecha y con el conjunto
+ * desequilibrado. Puesto a proposito y a todo lo ancho se lee como lo que es:
+ * lo que hay que pulsar. */
+.wa-tour-pie.wa-tour-con-accion { flex-wrap: wrap; }
+.wa-tour-pie.wa-tour-con-accion .wa-tour-accion {
+  flex: 1 0 100%;
+  /* La alineacion, aqui: al sacar el boton de `.wa-tour-botones` dejo de
+     heredar el `inline-flex` de aquel grupo, y el texto y la flecha se
+     apilaban en dos lineas con la flecha suelta debajo, a la izquierda. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+/* Cuanto queda, sin tener que leerlo. Va pegada al borde de arriba del pie. */
+.wa-tour-avance {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  height: 2px;
+  background: var(--wa-tour-borde, #222d34);
+}
+.wa-tour-avance span {
+  display: block; height: 100%;
+  background: var(--wa-tour-verde, #00a884);
+  transition: width 0.2s ease;
+}
+.wa-tour-botones { display: flex; gap: 6px; }
+.wa-tour-botones button { display: inline-flex; align-items: center; gap: 4px; }

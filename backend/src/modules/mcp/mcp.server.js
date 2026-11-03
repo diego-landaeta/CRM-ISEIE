@@ -50,6 +50,8 @@ export function crearServidor({ ambito, tokenId, conexion = null, origen = {}, a
         'CRM del ecosistema ISEIE/ISEIH. Solo consulta: no se puede crear, cambiar ni borrar nada. '
         + 'Empieza por «mis_proyectos» para saber a qué campus y empresas tienes acceso. '
         + 'Importes en euros salvo que se indique moneda. Fechas en formato AAAA-MM-DD. '
+        + 'Las herramientas «moodle_*» consultan el Moodle de cada campus: si un campus sale en «campus_con_error» (sin Moodle, token no válido o sin respuesta), '
+        + 'díselo a la persona; nunca lo cuentes como cero cursos o cero alumnos. '
         + 'Los correos y teléfonos salen enmascarados y, en los listados, los clientes con nombre abreviado: '
         + 'pide datos_completos: true solo si la persona necesita contactar a alguien (queda registrado).',
     }
@@ -140,10 +142,11 @@ async function barreraDeDesbloqueo(tokenId, conexion) {
   if (estado.bloqueado) {
     return `Esta conexión está bloqueada hasta las ${horaLocal(estado.bloqueado_hasta)} por fallar el código demasiadas veces.`;
   }
-  if (!conexion) return desbloqueo.MENSAJE_SIN_DESBLOQUEAR;
+  if (!conexion) return desbloqueo.mensajeSinDesbloquear(await desbloqueo.nombreDeLaUrl(tokenId));
   if (conexion.estado === 'rechazada') return desbloqueo.MENSAJE_RECHAZADA;
   if (conexion.estado !== 'autorizada') return desbloqueo.MENSAJE_PENDIENTE;
-  if (!conexion.desbloqueada_at) return desbloqueo.MENSAJE_SIN_DESBLOQUEAR;
+  // #260: el código es de una URL, así que el mensaje dice de cuál.
+  if (!conexion.desbloqueada_at) return desbloqueo.mensajeSinDesbloquear(await desbloqueo.nombreDeLaUrl(tokenId));
   return null;
 }
 
@@ -161,8 +164,8 @@ function registrarDesbloquear(server, { ambito, tokenId, conexion, origen }) {
     'desbloquear',
     {
       title: 'Desbloquear con el código del CRM',
-      description: 'Desbloquea esta conexión con el código que la persona saca en el CRM → Conexión → MCP → «Código para Claude». '
-        + 'Úsala cuando una consulta conteste que hace falta un código, y pídeselo a la persona: no lo inventes.',
+      description: 'Desbloquea esta conexión con el código que la persona saca en el CRM → Conexión → MCP, en la fila de la URL con la que está conectado este Claude (botón «Sacar código»). '
+        + 'El código solo vale para esa URL. Úsala cuando una consulta conteste que hace falta un código, y pídeselo a la persona: no lo inventes.',
       inputSchema: { codigo: z.string().min(4).max(20).describe('El código que te dé la persona, por ejemplo K7QM-2XPA') },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
@@ -175,7 +178,7 @@ function registrarDesbloquear(server, { ambito, tokenId, conexion, origen }) {
         // llave de la URL sola) no hay nada que desbloquear.
         if (!conexion) {
           error = 'SIN_CONEXION';
-          return { isError: true, content: [{ type: 'text', text: desbloqueo.MENSAJE_SIN_DESBLOQUEAR }] };
+          return { isError: true, content: [{ type: 'text', text: desbloqueo.mensajeSinDesbloquear(await desbloqueo.nombreDeLaUrl(tokenId)) }] };
         }
         if (conexion.estado === 'rechazada') {
           error = 'CONEXION_RECHAZADA';
@@ -201,6 +204,14 @@ function registrarDesbloquear(server, { ambito, tokenId, conexion, origen }) {
             + 'Cada persona tiene su URL y sus códigos, y un código solo vale con la URL de quien lo sacó. '
             + 'Pide a la persona que conecte su Claude con SU URL (CRM → Conexión → MCP; la pone en Claude, en Configuración → Conectores) '
             + 'y use allí su código. Este intento no cuenta como fallo.' }] };
+        }
+        if (r.resultado === 'de_otra_url') {
+          // #260: un código bueno, pero de otra URL de la misma persona. Cuenta como fallo.
+          error = 'CODIGO_DE_OTRA_URL';
+          return { isError: true, content: [{ type: 'text', text:
+            `Ese código es de otra URL de la persona («${r.urlDe}»), no de la que usa este Claude. `
+            + 'Pídele el código de la fila de la URL con la que está conectado este Claude (CRM → Conexión → MCP → «Sacar código»). '
+            + `Quedan ${r.quedan} intentos antes de bloquear la conexión.` }] };
         }
         if (r.resultado === 'incorrecto') {
           error = 'CODIGO_INCORRECTO';

@@ -29,6 +29,34 @@ export function normalizarTelefono(bruto: string | null | undefined): string | n
   return '+' + limpio;
 }
 
+/**
+ * Por qué este número no puede existir (#42).
+ *
+ * En producción hay doce teléfonos como «+340» o «+5823232». El enlace de
+ * WhatsApp abre un chat que no lleva a nadie, no salta ningún error, y la
+ * gestora apunta «no contesta» — cuando lo que pasa es que el número está
+ * mal desde que entró el formulario.
+ *
+ * NO se comprueba si el número EXISTE: eso no se puede saber sin preguntarle
+ * a WhatsApp. Se comprueba lo que es imposible por longitud, que es donde
+ * están los doce. Un número de 7 dígitos contando el prefijo del país no es
+ * de nadie, y E.164 no admite más de 15.
+ *
+ * Se queda como AVISO, no como bloqueo: el número sigue ahí y el botón
+ * sigue estando. Bloquear por una regla de longitud, con países que no
+ * conocemos, es peor que avisar.
+ */
+export function telefonoImposible(bruto: string | null | undefined): 'corto' | 'largo' | null {
+  const n = normalizarTelefono(bruto);
+  // Lo que `normalizarTelefono` ya rechaza no llega aquí como «imposible»:
+  // no hay teléfono que avisar, y de eso se encarga quien lo pinte.
+  if (!n) return null;
+  const digitos = n.length - 1;
+  if (digitos < 8) return 'corto';
+  if (digitos > 15) return 'largo';
+  return null;
+}
+
 /** Solo los dígitos, que es lo que quieren wa.me y web.whatsapp.com. */
 export function telefonoParaWhatsapp(bruto: string | null | undefined): string | null {
   const n = normalizarTelefono(bruto);

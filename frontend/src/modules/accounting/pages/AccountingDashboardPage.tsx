@@ -10,8 +10,11 @@ import PageHeader from '@/shared/components/ui/PageHeader';
 import KpiCard from '@/shared/components/ui/KpiCard';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { SkeletonCard } from '@/shared/components/ui/SkeletonTable';
+import { useStripeMonitor } from '@/modules/ia-dashboard/hooks/useStripeMonitor';
+import PorQueSeVan from '@/modules/ia-dashboard/components/PorQueSeVan';
 import {
   CurrencyEur,
+  UsersThree,
   Wallet,
   TrendUp,
   TrendDown,
@@ -35,6 +38,31 @@ const DEFAULT_TO = new Date().toISOString().slice(0, 10);
 export default function AccountingDashboardPage() {
   const navigate = useNavigate();
   const { activeProject, activeIssuerId } = useProjectContext();
+
+  /**
+   * En un proyecto IA este panel enseña MENOS (#44).
+   *
+   * Una suscripcion se cobra o no se cobra: no hay «por cobrar», ni
+   * «vencido», ni una vendedora detras de cada alta. Y no se emite factura
+   * por cada cobro de 4,90 EUR, asi que «Facturado» sale a cero siempre.
+   *
+   * Lo que si aplica se queda: lo cobrado, los gastos --que los hay, del
+   * software de la propia app-- y el balance.
+   */
+  const esIA = activeProject?.type === 'ia';
+
+  /**
+   * Y lo que SÍ tiene un proyecto IA, aqui mismo.
+   *
+   * Al quitar lo que no aplica, el panel se quedaba en tres numeros y dos
+   * graficas. El hueco se llena con lo de su propio negocio --cuanto entra
+   * al mes de forma recurrente, cuantos pagan, cuantos se dieron de alta y
+   * cuantos se fueron-- que hasta ahora vivia en otra pantalla.
+   *
+   * Con esto sobra la pantalla «Resumen»: eran dos sitios contando lo mismo
+   * del mismo proyecto, que es como se llega a que digan cifras distintas.
+   */
+  const { metrics: ia } = useStripeMonitor(esIA ? activeProject?.id : undefined);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [range, setRange] = useUrlFilters({ from: DEFAULT_FROM, to: DEFAULT_TO });
@@ -149,6 +177,7 @@ export default function AccountingDashboardPage() {
           label="Ingresos cobrados"
           value={fmt(ingresos.total_cobrado)}
         />
+        {!esIA && (<>
         <KpiCard
           icon={Receipt}
           iconBg="bg-sky-50 text-sky-600 dark:bg-sky-950/30 dark:text-sky-400"
@@ -174,6 +203,7 @@ export default function AccountingDashboardPage() {
           badgeColor="bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400"
           trend="down"
         />
+        </>)}
         <KpiCard
           icon={TrendDown}
           iconBg="bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400"
@@ -189,6 +219,30 @@ export default function AccountingDashboardPage() {
           value={fmt(balance)}
         />
       </div>
+
+      {/* Lo recurrente: lo que de verdad define a una suscripcion. Solo
+          cuando hay conexion con Stripe; sin clave no se pinta un cuadro de
+          ceros, que es peor que no pintar nada. */}
+      {esIA && ia && ia.mrr > 0 && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <KpiCard icon={CurrencyEur}
+            iconBg="bg-primary/10 text-primary"
+            label="MRR" value={fmt(ia.mrr)} />
+          <KpiCard icon={UsersThree}
+            iconBg="bg-success-soft text-success-soft-foreground"
+            label="Suscripciones activas" value={String(ia.activeSubs)} />
+          <KpiCard icon={TrendUp}
+            iconBg="bg-info-soft text-info-soft-foreground"
+            label="Altas del mes" value={String(ia.newSubs)} />
+          <KpiCard icon={TrendDown}
+            iconBg="bg-destructive-soft text-destructive-soft-foreground"
+            label="Bajas del mes" value={String(ia.cancelledSubs)} trend="down" />
+        </div>
+      )}
+
+      {esIA && (
+        <PorQueSeVan datos={ia?.porQueSeVan} comentarios={ia?.comentariosDeBaja} />
+      )}
 
       {/* Graficas */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -225,7 +279,8 @@ export default function AccountingDashboardPage() {
         </div>
       </div>
 
-      {/* Ventas por vendedora */}
+      {/* Ventas por vendedora. En IA no hay: la gente se suscribe sola. */}
+      {!esIA && (
       <div className="bg-card border border-border rounded-lg p-4">
         <h3 className="font-semibold mb-3">Ventas por vendedora</h3>
         {vend.length === 0 ? (
@@ -257,8 +312,11 @@ export default function AccountingDashboardPage() {
           </div>
         )}
       </div>
+      )}
 
-      {/* Cuentas por cobrar */}
+      {/* Cuentas por cobrar. Tampoco en IA: Stripe cobra o no cobra, no deja
+          una deuda pendiente que perseguir. */}
+      {!esIA && (
       <div className="bg-card border border-border rounded-lg p-4">
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-semibold">Cuentas por cobrar ({cxc.num})</h3>
@@ -357,6 +415,7 @@ export default function AccountingDashboardPage() {
           </>
         )}
       </div>
+      )}
     </div>
   );
 }

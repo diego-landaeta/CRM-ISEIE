@@ -137,6 +137,10 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
   useEffect(() => { setPage(1); }, [activeProject?.id, effectiveResponsableId, filterCurso, rango.from, rango.to]);
 
   useEffect(() => {
+    // LA RESPUESTA VIEJA NO PISA A LA NUEVA. Dos peticiones seguidas (cambiar
+    // de filtro) y la primera puede volver después: sin esto la pantalla
+    // enseñaba el resultado del filtro ANTERIOR, con un número plausible.
+    let cancelado = false;
     (async () => {
       setLoading(true);
       try {
@@ -154,6 +158,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
         // se quedan; solo se vacia la lista. Antes un 500 aqui lo borraba todo.
         const resFilas = conFechas
           ? await client.get('/conversions/filas', { params }).catch(() => null) : null;
+        if (cancelado) return;
         if (res.success) {
           setItems(res.data || []);
           setTotal(res.pagination?.total ?? (res.data || []).length);
@@ -170,9 +175,11 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
           setTotales(res.totales || { importe: 0, pagado: 0, pendiente: 0, iva: 0, facturadas: 0, sinFactura: 0, noRequiereFactura: 0, pendientesDeFacturar: 0, facturasDeAntes: { n: 0, importe: 0 }, facturadoEnPeriodo: { n: 0, importe: 0 }, cobrosDelPeriodo: { matricula: { n: 0, importe: 0 }, cuotas: { n: 0, importe: 0 } }, facturasPorClase: { venta: { n: 0, importe: 0 }, cuota: { n: 0, importe: 0 }, parte: { n: 0, importe: 0 }, suelta: { n: 0, importe: 0 } }, porProyecto: [] });
         }
       } catch {
+        if (cancelado) return;
         setItems([]); setTotal(0); setFilas([]); setTotalFilas(0); setTotales({ importe: 0, pagado: 0, pendiente: 0, iva: 0, facturadas: 0, sinFactura: 0, noRequiereFactura: 0, pendientesDeFacturar: 0, facturasDeAntes: { n: 0, importe: 0 }, facturadoEnPeriodo: { n: 0, importe: 0 }, cobrosDelPeriodo: { matricula: { n: 0, importe: 0 }, cuotas: { n: 0, importe: 0 } }, facturasPorClase: { venta: { n: 0, importe: 0 }, cuota: { n: 0, importe: 0 }, parte: { n: 0, importe: 0 }, suelta: { n: 0, importe: 0 } }, porProyecto: [] });
-      } finally { setLoading(false); }
+      } finally { if (!cancelado) setLoading(false); }
     })();
+    return () => { cancelado = true; };
   }, [activeProject?.id, reloadKey, effectiveResponsableId, page, filterCurso, rango.from, rango.to]);
 
   async function abrirCuotas() {
@@ -238,6 +245,14 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
           className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-md border border-border text-sm font-semibold hover:bg-muted"
         >
           Análisis
+        </button>
+        {/* «Sin formación» (#41): las ventas que no dicen de qué formación son. */}
+        <button
+          type="button"
+          onClick={() => navigate('/ventas/sin-formacion')}
+          className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-md border border-border text-sm font-semibold hover:bg-muted"
+        >
+          Sin formación
         </button>
         {activeProject?.id && (
           <button

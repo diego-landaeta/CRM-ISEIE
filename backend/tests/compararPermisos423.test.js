@@ -146,7 +146,7 @@ describe('antes y después de #423, persona por persona (#423)', () => {
     const conCasilla = resultado.diferencias.filter((d) => ids.users.includes(d.persona.id)
       && d.persona.role !== 'superadmin' && d.persona.roles_extra.length === 0 && !d.persona.custom_role
       && (d.persona.factura_manager || d.persona.editar_fechas_factura || d.persona.gestor_colaboraciones || d.persona.usa_mcp || d.persona.usa_whatsapp === false)
-      && !['roles-sin-soporte', 'admin-roles-entero', 'roles-a-medida-sin-soporte', 'excepciones-sin-soporte', 'rol-de-otros-con-permiso', 'cola-entera'].includes(d.cambio?.id));
+      && !['roles-sin-soporte', 'admin-roles-entero', 'roles-a-medida-sin-soporte', 'excepciones-sin-soporte', 'rol-de-otros-con-permiso', 'cola-entera', 'metas-sin-soporte-ni-pm', 'webhooks-solo-admin'].includes(d.cambio?.id));
     expect(conCasilla.map((d) => `${d.persona.role} · ${d.fila.id}`)).toEqual([]);
   });
 });

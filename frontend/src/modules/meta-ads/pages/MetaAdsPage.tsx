@@ -295,7 +295,7 @@ export default function MetaAdsPage() {
           </button>
           <button onClick={() => setTab('roi')}
             className={`px-3 py-1.5 rounded-md text-sm font-semibold ${tab === 'roi' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-muted-foreground'}`}>
-            ROI (asociaciones manuales)
+            Del gasto a la venta
           </button>
           <button onClick={() => setTab('manual')}
             className={`px-3 py-1.5 rounded-md text-sm font-semibold ${tab === 'manual' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-muted-foreground'}`}>
@@ -739,54 +739,80 @@ function ProductLinks({ links }: { links: Array<{ scope: string; id: string; nam
   );
 }
 
+/**
+ * Del gasto a la venta, no al lead (#53): por campaña, lo que costó, cuántas
+ * ventas trajo, cuánto se ha cobrado de verdad y qué retorno deja.
+ *
+ * Hay dos lecturas del mismo rango de fechas, y se enseñan las dos porque
+ * responden a cosas distintas: la del retorno mira lo que han cobrado HASTA HOY
+ * los leads captados en el rango (una campaña de hace dos meses sigue cobrando),
+ * y «Entró en el periodo» mira la caja del rango, sea de cuando sea el lead.
+ */
 function RoiTable({ rows, currency }: { rows: MetaRoiRow[]; currency: string }) {
   if (rows.length === 0) {
     return (
       <p className="p-6 text-center text-sm text-muted-foreground">
-        Sin datos de ROI. Asocia productos a las campañas (botón "Asociar" en la tabla de Campañas)
-        para que el CRM cruce el gasto Meta con las ventas registradas.
+        Sin datos en este rango. Aquí salen las campañas con gasto o con prospectos que llegaron por ellas
+        (el CRM lee la campaña de la UTM del prospecto).
       </p>
     );
   }
+  const tono = (n: number | null) => (n == null ? '' : n >= 0 ? 'text-success' : 'text-destructive');
+  const pct = (n: number | null) => (n == null ? '—' : `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`);
   return (
     <div className="overflow-x-auto">
+      <p className="px-4 py-2 text-xs text-muted-foreground border-b border-border">
+        Una venta es la que ya tiene algún cobro. Lo cobrado sale de los cobros apuntados, no de lo que declara la venta.
+        «Retorno» compara el gasto del rango con lo que han cobrado hasta hoy los prospectos captados en ese rango;
+        «Entró en el periodo» es lo que se ha cobrado dentro del rango, de prospectos de cualquier fecha.
+      </p>
       <table className="w-full text-sm">
         <thead className="bg-muted/50 text-[11px] text-muted-foreground">
           <tr>
             <th className="text-left px-4 py-2 font-medium">Campaña</th>
-            <th className="text-left px-3 py-2 font-medium">Productos asociados</th>
             <th className="text-right px-3 py-2 font-medium">Gasto</th>
-            <th className="text-right px-3 py-2 font-medium">Ventas · Facturado</th>
-            <th className="text-right px-3 py-2 font-medium">Ganancia</th>
-            <th className="text-right px-3 py-2 font-medium">ROI</th>
+            <th className="text-right px-3 py-2 font-medium">Prospectos · coste</th>
+            <th className="text-right px-3 py-2 font-medium">Ventas · coste por venta</th>
+            <th className="text-right px-3 py-2 font-medium">Vendido · Cobrado</th>
+            <th className="text-right px-3 py-2 font-medium">Retorno</th>
+            <th className="text-right px-3 py-2 font-medium">Entró en el periodo</th>
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => {
-            const roiTone = r.roi_pct == null ? '' : r.roi_pct >= 0 ? 'text-emerald-600' : 'text-red-600';
-            return (
-              <tr key={r.campaign_id} className="border-t border-border hover:bg-muted/30">
-                <td className="px-4 py-2.5">
-                  <p className="font-medium truncate max-w-xs" title={r.nombre}>{r.nombre}</p>
-                  <p className="text-[10px] text-muted-foreground">{r.status}</p>
-                </td>
-                <td className="px-3 py-2.5 text-xs">
-                  {r.n_productos_asociados === 0
-                    ? <span className="text-muted-foreground italic">— sin productos asociados —</span>
-                    : <span className="truncate block max-w-md" title={r.productos_nombres || ''}>{r.productos_nombres}</span>}
-                </td>
-                <td className="px-3 py-2.5 text-right tabular-nums font-semibold">{fmtMoney(r.spend, currency)}</td>
-                <td className="px-3 py-2.5 text-right tabular-nums text-xs">
-                  <span className="font-semibold">{r.ventas}</span> · <span>{fmtMoney(r.facturado, currency)}</span><br />
-                  <span className="text-muted-foreground">Cobrado: {fmtMoney(r.cobrado, currency)}</span>
-                </td>
-                <td className="px-3 py-2.5 text-right tabular-nums font-semibold">{fmtMoney(r.ganancia, currency)}</td>
-                <td className={`px-3 py-2.5 text-right tabular-nums font-bold ${roiTone}`}>
-                  {r.roi_pct == null ? '—' : `${r.roi_pct >= 0 ? '+' : ''}${r.roi_pct.toFixed(1)}%`}
-                </td>
-              </tr>
-            );
-          })}
+          {rows.map((r) => (
+            <tr key={r.campaign_id} className="border-t border-border hover:bg-muted/30">
+              <td className="px-4 py-2.5">
+                <p className="font-medium truncate max-w-xs" title={r.nombre}>{r.nombre}</p>
+                <p className="text-[10px] text-muted-foreground">{r.status}</p>
+              </td>
+              <td className="px-3 py-2.5 text-right tabular-nums font-semibold">{fmtMoney(r.spend, currency)}</td>
+              <td className="px-3 py-2.5 text-right tabular-nums text-xs">
+                <span className="font-semibold">{fmtNum(r.leads_crm)}</span>
+                <br />
+                <span className="text-muted-foreground">{r.coste_por_lead != null ? fmtMoney(r.coste_por_lead, currency) : '—'}</span>
+              </td>
+              <td className="px-3 py-2.5 text-right tabular-nums text-xs">
+                <span className="font-semibold">{fmtNum(r.ventas)}</span>
+                <br />
+                <span className="text-muted-foreground">{r.coste_por_venta != null ? fmtMoney(r.coste_por_venta, currency) : '—'}</span>
+              </td>
+              <td className="px-3 py-2.5 text-right tabular-nums text-xs">
+                <span>{fmtMoney(r.vendido, currency)}</span>
+                <br />
+                <span className="font-semibold">{fmtMoney(r.cobrado, currency)}</span>
+              </td>
+              <td className={`px-3 py-2.5 text-right tabular-nums font-bold ${tono(r.roi_pct)}`}>
+                {fmtMoney(r.retorno, currency)}
+                <br />
+                <span className="text-xs">{pct(r.roi_pct)}</span>
+              </td>
+              <td className={`px-3 py-2.5 text-right tabular-nums text-xs ${tono(r.roi_en_periodo_pct)}`}>
+                {fmtMoney(r.cobrado_en_periodo, currency)}
+                <br />
+                <span>{fmtMoney(r.retorno_en_periodo, currency)} · {pct(r.roi_en_periodo_pct)}</span>
+              </td>
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>

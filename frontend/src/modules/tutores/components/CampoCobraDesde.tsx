@@ -1,4 +1,6 @@
 import { cobraDesdeActual, textoCobraDesdeActual } from '../lib/colaboraciones';
+import Field from '@/shared/components/ui/Field';
+import { inputClass } from '@/shared/lib/ui';
 
 /*
   «Cobra desde» en Editar tutor.
@@ -35,26 +37,25 @@ export default function CampoCobraDesde({
   const sinActivas = !actual.grupos.length;
   const corte = aplicaDesde ? String(aplicaDesde).slice(0, 10) : null;
 
+  // El Field común (#106). Las ayudas van aparte y no en `hint`: son dos, y
+  // la primera cambia de color cuando sus formaciones no van a la par.
   return (
     <div className="border-t border-border pt-3">
-      <label htmlFor="tutor-cobra-desde" className="text-xs font-semibold">Cobra desde</label>
-      <input id="tutor-cobra-desde" type="date" value={valor} disabled={sinActivas}
-        onChange={(e) => onCambio(e.target.value)}
-        className="mt-1 w-full h-9 px-2.5 rounded-md border border-border bg-background text-sm tabular-nums
-                   disabled:opacity-60 disabled:cursor-not-allowed" />
-      {sinActivas ? (
-        <p className="text-[11px] text-muted-foreground mt-1">
-          No tiene formaciones activas: añádele una primero.
-        </p>
-      ) : (
+      <Field label="Cobra desde" htmlFor="tutor-cobra-desde" disabled={sinActivas}
+        hint={sinActivas ? 'No tiene formaciones activas: añádele una primero.' : undefined}>
+        <input id="tutor-cobra-desde" type="date" value={valor} disabled={sinActivas}
+          onChange={(e) => onCambio(e.target.value)}
+          className={`${inputClass} tabular-nums disabled:opacity-60 disabled:cursor-not-allowed`} />
+      </Field>
+      {!sinActivas && (
         <>
           {ahora && (
-            <p className={`text-[11px] mt-1 ${actual.distintas ? 'text-warning-soft-foreground font-medium' : 'text-muted-foreground'}`}>
+            <p className={`mt-1 px-1 text-secundario ${actual.distintas ? 'text-warning-soft-foreground font-medium' : 'text-muted-foreground'}`}>
               {ahora}
               {actual.distintas && ' Si cambias la fecha, todas pasan a la misma.'}
             </p>
           )}
-          <p className="text-[11px] text-muted-foreground mt-1">
+          <p className="mt-1 px-1 text-secundario text-muted-foreground">
             {corte && `Las comisiones nunca cuentan antes del ${enCastellano(corte)}. `}
             Cambiar la fecha no toca las comisiones ya generadas; pulsa Calcular en
             Comisiones para añadir las que falten.

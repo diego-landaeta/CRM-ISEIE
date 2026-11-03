@@ -73,6 +73,34 @@ export async function create(data) {
     base = Number(base.toFixed(2)); ivaImp = Number(ivaImp.toFixed(2)); total = Number(total.toFixed(2));
     const finalImporte = total;
 
+    /*
+      EL CURSO SALE DE LAS LINEAS CUANDO NO VIENE PUESTO (#41).
+
+      Una venta con varios articulos nacia SIEMPRE sin curso: el dialogo manda
+      `producto_contratado_id: null` a proposito --son varias lineas, no cabe
+      una sola FK-- y el texto queda como «1x Curso A + 2x Curso B», que no
+      cruza con nada del catalogo.
+
+      Consecuencia: NINGUN PROFESOR COBRA COMISION por ellas, y se quedan en la
+      lista del #41 para siempre. Son 321 ventas asi entre los dos CRM.
+
+      Pero las lineas SI guardan su `product_id`. Si todas las que lo tienen
+      apuntan al MISMO curso --lo normal: una venta de un curso partida en
+      varias lineas, o con cantidad-- entonces ese es el curso de la venta y se
+      pone.
+
+      Si apuntan a cursos DISTINTOS no se inventa nada: ahi de verdad no hay un
+      curso unico, y la venta sale en la lista del #41 para mirarla a mano. Es
+      la misma regla que el cruce por nombre: con dos candidatos, ninguno.
+    */
+    let cursoId = producto_contratado_id || null;
+    if (!cursoId && Array.isArray(items) && items.length) {
+      const deLasLineas = [...new Set(
+        items.map((it) => it?.product_id).filter((x) => x != null).map(Number)
+      )];
+      if (deLasLineas.length === 1) cursoId = deLasLineas[0];
+    }
+
     // INSERT conversion (IVA + descuento)
     const { rows: convRows } = await client.query(
       `INSERT INTO conversions
@@ -83,12 +111,24 @@ export async function create(data) {
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, COALESCE($9, CURRENT_DATE), $10,
                $11, $12, $13, $14, $15, $16, $17, $18, $19)
        RETURNING *`,
-      [lead_id, project_id, producto_contratado, producto_contratado_id || null,
+      [lead_id, project_id, producto_contratado, cursoId,
        finalImporte, importe_pagado, metodo_pago, fecha_compromiso_pago, fecha_conversion, notas_pago,
        isExento ? 0 : ivaPctVal, isIncluido, isExento, base, ivaImp,
        Number(subtotalBruto.toFixed(2)), descTipo, descVal, descImporte]
     );
     const conversion = convRows[0];
+
+    // La solicitud de admisión de esa persona (#198): suele llegar ANTES que la
+    // venta («una solicitud llega antes de que haya venta», Diego 01/10). Si está
+    // en este campus y aún no tiene venta, se une ahora a esta (la más reciente).
+    await client.query(
+      `UPDATE matriculas SET conversion_id = $1, updated_at = NOW()
+        WHERE id = (SELECT id FROM matriculas
+                     WHERE project_id = $2 AND lead_id = $3 AND conversion_id IS NULL
+                     ORDER BY COALESCE(webhook_received_at, created_at) DESC, id DESC
+                     LIMIT 1)`,
+      [conversion.id, project_id, lead_id]
+    );
 
     // INSERT items (si vienen)
     if (Array.isArray(items) && items.length > 0) {

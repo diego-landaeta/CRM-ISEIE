@@ -18,7 +18,7 @@ import { cn } from '@/shared/lib/utils';
 import client from '@/shared/api/client';
 import NotificationsBell from './NotificationsBell';
 import { isBetaAllowed, BETA_MODE, BETA_VERSION } from '@/shared/config/betaConfig';
-import { PROCESO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
+import { PROCESO_EN_PRUEBAS, SOLO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 import { CERTIFEX_PANEL } from '@/shared/lib/certifexPanel';
 
 const ROLE_LABELS = { superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor', soporte: 'Soporte', tutor: 'Tutor', colaborador: 'Colaborador' };
@@ -137,7 +137,8 @@ export const NAV_SECTIONS = [
     label: 'Catálogo',
     items: [
       { to: '/products',   label: 'Productos',  icon: Package, sectionPrefixes: ['/products'], permiso: 'products.view' },
-      { to: '/products/pending', label: 'Cursos pendientes', icon: Clock, roles: ['admin', 'superadmin'], permiso: 'products.view' },
+      // Por campus, con tutora y fecha (#336): también gestoras y tutoras, como en MultiCRM.
+      { to: '/products/pending', label: 'Cursos pendientes', icon: Clock, roles: ['admin', 'superadmin', 'gestor', 'tutor'], permiso: 'products.view' },
       { to: '/woocommerce', label: 'WooCommerce', icon: ShoppingBag, roles: ['admin', 'superadmin'], permiso: 'woocommerce.view' },
       { to: '/configuracion/categorias-arbol', label: 'Árbol de categorías', icon: Sliders, roles: ['admin', 'superadmin'], permiso: 'products.categorias' },
       // «Certificados» (/documentos) fuera del menú: estaba vacío, y los títulos
@@ -150,6 +151,8 @@ export const NAV_SECTIONS = [
       { to: '/tutores', label: 'Tutores', icon: GraduationCap, roles: ['admin', 'superadmin'], sectionPrefixes: ['/tutores'], permiso: 'tutores.gestionar', oPermiso: 'tutores.gestionar' },
       // Lo unico que ve un tutor: sus cursos y lo que le corresponde.
       { to: '/mis-cursos', label: 'Mis cursos', icon: GraduationCap, roles: ['tutor'], permiso: 'tutores.mis_cursos' },
+      // Consultas de alumnos (#188), como en MultiCRM: el tutor, su bandeja; administración, todas.
+      { to: '/consultas', label: 'Consultas', icon: ChatCircleText, roles: ['admin', 'superadmin', 'tutor'], statusTag: 'Pruebas', sectionPrefixes: ['/consultas'], permiso: ['consultas.view', 'consultas.atender'], oPermiso: 'consultas.view' },
       { to: '/tutores/sin-tutor', label: 'Sin tutor', icon: Warning, roles: ['admin', 'superadmin'], permiso: 'tutores.gestionar', oPermiso: 'tutores.gestionar' },
       { to: '/tutores/comisiones', label: 'Comisiones', icon: Coins, roles: ['admin', 'superadmin'], permiso: 'tutores.gestionar', oPermiso: 'tutores.gestionar' },
     ],
@@ -183,6 +186,9 @@ export const NAV_SECTIONS = [
       { to: '/informes',     label: 'Reportes',      icon: ChartLineUp, sectionPrefixes: ['/informes', '/activity'] },
       // Por que no compran (#170). Fuera de produccion hasta aprobarlo.
       ...(PROCESO_EN_PRUEBAS ? [{ to: '/informes/feedback', label: 'Feedback', icon: ChatCircleText, roles: ['admin', 'superadmin'], permiso: 'feedback.view' }] : []),
+      // Preguntarle a los datos (#30), como en MultiCRM: solo en pruebas hasta que
+      // haya clave y tope de gasto (#22).
+      ...(SOLO_EN_PRUEBAS ? [{ to: '/informes/preguntar', label: 'Pregunta a tus datos', icon: Sparkle, roles: ['admin', 'superadmin'], permiso: 'reports_ia.generar' }] : []),
       // Próximamente (#226): en MultiCRM la pantalla existe pero está aparcada
       // —fuera de su menú hasta la fase 5— y depende de la API de Claude, cuya
       // clave y cuyo módulo (`claude-chat`) ISEIE no tiene.
@@ -214,6 +220,8 @@ export const NAV_SECTIONS = [
     label: 'Conexión',
     items: [
       { to: '/conexion/mcp', label: 'MCP', icon: Robot, accesoMcp: true },
+      // #335, como en MultiCRM: los cursos, alumnos y recursos de los Moodle de cada campus.
+      { to: '/conexion/moodle', label: 'Moodle', icon: GraduationCap, roles: ['admin', 'superadmin'], permiso: 'moodle.view' },
       { to: '/conexion/conectores', label: 'Conectores', icon: CloudArrowDown, roles: ['admin', 'superadmin'], permiso: 'connectors.view' },
       // Diego, 15/10: «un apartado en Conexión para enviar esos datos ÚNICAMENTE
       // CUANDO SE PONGA DATOS POR TRANSFERENCIA BANCARIA / DEPÓSITO BANCARIO».

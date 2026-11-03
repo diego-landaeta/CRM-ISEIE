@@ -1,5 +1,6 @@
 import { useEffect, useState, lazy, Suspense } from 'react';
 import { toast } from '@/shared/hooks/useToast';
+import { useAuth } from '@/contexts/AuthContext';
 import Portal from '@/shared/components/ui/portal';
 
 const ConfirmDialog = lazy(() => import('@/shared/components/ui/ConfirmDialog'));
@@ -8,7 +9,8 @@ import {
   Ticket, Plus, X, Bug, Lightning, Question, Trash, ClockCounterClockwise, ArrowLeft,
 } from '@phosphor-icons/react';
 import {
-  listTickets, updateTicketStatus, deleteTicket,
+  listTickets, updateTicketStatus, deleteTicket, ticketsViejos,
+  type Ticket as TicketDato,
   TICKET_STATUS, TICKET_SEVERITY, TICKET_KIND,
 } from '../lib/tickets';
 
@@ -26,16 +28,27 @@ const KIND_ICON = { bug: Bug, feature: Lightning, question: Question };
 export default function TicketsLauncher() {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState('list'); // 'list' | 'create'
-  const [tickets, setTickets] = useState(() => listTickets());
+  // Arranca vacio y se carga en el efecto: los tickets ya no estan en el
+  // navegador, vienen del servidor (#38). El evento `crm:tickets-changed` que
+  // ya existia sigue siendo lo que dispara la recarga, asi que nada mas de
+  // este componente cambia.
+  const [tickets, setTickets] = useState<TicketDato[]>([]);
+  // Los que quedaron en el localStorage de esta maquina. No se migran —desde
+  // el servidor no se alcanzan— y la pantalla lo dice en vez de que
+  // desaparezcan sin explicacion.
+  const [viejos] = useState(() => ticketsViejos());
 
   useEffect(() => {
-    function onChange() { setTickets(listTickets()); }
+    let vivo = true;
+    function onChange() { listTickets().then((t) => { if (vivo) setTickets(t); }); }
+    onChange();
     function onOpen() { setOpen(true); setView('list'); }
     function onOpenCreate() { setOpen(true); setView('create'); }
     window.addEventListener('crm:tickets-changed', onChange);
     window.addEventListener('crm:open-tickets', onOpen);
     window.addEventListener('crm:open-ticket-create', onOpenCreate);
     return () => {
+      vivo = false;
       window.removeEventListener('crm:tickets-changed', onChange);
       window.removeEventListener('crm:open-tickets', onOpen);
       window.removeEventListener('crm:open-ticket-create', onOpenCreate);
@@ -167,6 +180,10 @@ function TicketCard({ ticket }) {
   const kind = TICKET_KIND[ticket.kind] || TICKET_KIND.question;
   const KindIcon = KIND_ICON[ticket.kind] || Question;
   const [confirmOpen, setConfirmOpen] = useState(false);
+  // Cambiar el estado y borrar un ticket es cosa de quien administra (el servidor lo exige igual:
+  // a un usuario raso le devolvería 403 y, como estas llamadas no muestran el error, fallaría callado).
+  const { user } = useAuth() as { user: { role?: string } | null };
+  const administra = ['admin', 'superadmin', 'soporte'].includes(user?.role ?? '');
 
   function cycleStatus() {
     const order: Array<'open' | 'in_review' | 'resolved' | 'closed'> = ['open', 'in_review', 'resolved', 'closed'];
@@ -193,14 +210,16 @@ function TicketCard({ ticket }) {
         <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{kind.label}</span>
         <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${TONE_BG[status.tone]}`}>{status.label}</span>
         <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${TONE_BG[severity.tone]}`}>{severity.label}</span>
-        <div className="ml-auto flex items-center gap-0.5">
-          <button onClick={cycleStatus} title="Avanzar estado" aria-label="Cambiar estado" className="h-6 w-6 inline-flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted">
-            <ClockCounterClockwise size={12} />
-          </button>
-          <button onClick={handleDelete} title="Eliminar" aria-label="Eliminar ticket" className="h-6 w-6 inline-flex items-center justify-center rounded text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30">
-            <Trash size={12} />
-          </button>
-        </div>
+        {administra && (
+          <div className="ml-auto flex items-center gap-0.5">
+            <button onClick={cycleStatus} title="Avanzar estado" aria-label="Cambiar estado" className="h-6 w-6 inline-flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted">
+              <ClockCounterClockwise size={12} />
+            </button>
+            <button onClick={handleDelete} title="Eliminar" aria-label="Eliminar ticket" className="h-6 w-6 inline-flex items-center justify-center rounded text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30">
+              <Trash size={12} />
+            </button>
+          </div>
+        )}
       </header>
       <p className="text-sm font-semibold leading-snug">{ticket.title}</p>
       {ticket.description && <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5 whitespace-pre-wrap">{ticket.description}</p>}

@@ -132,3 +132,20 @@ export const busquedaDeTutorSchema = z.object({
   campaignId: z.string().trim().max(50).nullable().optional(),
   nota: z.string().trim().max(500).nullable().optional(),
 });
+
+/*
+  Consultas de alumnos, fase 1 (#187): una empresa entera, un campus y
+  «No disponible» (vacaciones o baja).
+*/
+export const empresaDelTutorSchema = z.object({
+  issuerId: z.coerce.number({ invalid_type_error: 'Elige una empresa' }).int().positive('Elige una empresa'),
+});
+
+export const campusDelTutorSchema = z.object({
+  projectId: z.coerce.number({ invalid_type_error: 'Elige un campus' }).int().positive('Elige un campus'),
+});
+
+export const disponibleSchema = z.object({
+  disponible: z.boolean({ required_error: 'Falta si está disponible o no' }),
+  motivo: z.string().trim().max(200, 'El motivo, en 200 caracteres como mucho').nullable().optional(),
+});
