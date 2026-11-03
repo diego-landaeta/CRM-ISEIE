@@ -15,7 +15,7 @@ export default function SoportePage() {
     <div className="space-y-5 pb-8">
       <PageHeader
         title="Novedades"
-        subtitle="Ultimas actualizaciones, mejoras y arreglos del CRM"
+        subtitle="Últimas actualizaciones, mejoras y arreglos del CRM"
       />
 
       {/* Hint sutil sobre el flotante de tickets */}

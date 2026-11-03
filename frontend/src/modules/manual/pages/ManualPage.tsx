@@ -11,6 +11,7 @@ import {
   MagnifyingGlass as Search, Command, Lightning,
   PlugsConnected, CalendarBlank,
 } from '@phosphor-icons/react';
+import { MARCA } from '@/shared/config/marca';
 
 /* ─── Navigation ──────────────────────────────────────────── */
 const SECTIONS = [
@@ -264,7 +265,7 @@ export default function ManualPage() {
             Manual de usuario.
           </h1>
           <p className="text-lg text-muted-foreground mt-4 max-w-2xl leading-relaxed">
-            Guía completa de MultiCRM. Todos los módulos, flujos y atajos en un único sitio,
+            Guía completa de {MARCA}. Todos los módulos, flujos y atajos en un único sitio,
             organizados para que encuentres lo que buscas en menos de 30 segundos.
           </p>
 
@@ -304,9 +305,9 @@ export default function ManualPage() {
 
         {/* ── INTRODUCCIÓN ── */}
         <SectionHeader id="introduccion" icon={BookOpen} label="Introducción" color="blue"
-          description="¿Qué es MultiCRM y cómo está organizado?" />
+          description={`¿Qué es ${MARCA} y cómo está organizado?`} />
         <P>
-          MultiCRM es un CRM interno multi-proyecto para gestionar el ciclo completo de ventas:
+          {MARCA} es un CRM interno multi-proyecto para gestionar el ciclo completo de ventas:
           captación de prospectos, conversión, cobro y análisis de campañas. Cada usuario pertenece
           a uno o más proyectos que se seleccionan en el desplegable del menú lateral.
         </P>
