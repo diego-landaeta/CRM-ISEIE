@@ -38,7 +38,10 @@ app.use(errorHandler);
 const request = supertest(app);
 
 const MARCA = `IAHTTP${Date.now().toString(36)}`;
-const ids = { users: [] };
+const ids = { users: [], projects: [] };
+// Dos campus propios: la base de ISEIE (y la de la CI) no trae los 1 y 2 de los datos
+// de ejemplo de MultiCRM.
+let P1; let P2;
 const U = {};
 
 const q = (sql, p) => pool.query(sql, p).then((r) => r.rows);
@@ -65,19 +68,26 @@ async function persona(clave, role, campus = []) {
 }
 
 beforeAll(async () => {
-  await persona('ADMIN1', 'admin', [1]);
-  await persona('ADMIN12', 'admin', [1, 2]);
-  await persona('GESTORA', 'gestor', [1]);
+  for (const c of ['a', 'b']) {
+    const [p] = await q('INSERT INTO projects (nombre, slug, webhook_api_key) VALUES ($1, $2, $3) RETURNING id',
+      [`${MARCA} ${c}`, `${MARCA.toLowerCase()}-${c}`, `${MARCA}-${c}`]);
+    ids.projects.push(p.id);
+  }
+  [P1, P2] = ids.projects;
+  await persona('ADMIN1', 'admin', [P1]);
+  await persona('ADMIN12', 'admin', [P1, P2]);
+  await persona('GESTORA', 'gestor', [P1]);
   // Sin fila en la base: un superadmin NO se resuelve por `user_projects` (ve todo) y
   // el token basta. Crearlo activo es justo lo que desajustaba a Certifex.
   U.SUPER = { id: 987654321, role: 'superadmin' };
   registrar({ userId: U.SUPER.id, role: 'superadmin' });
-  await persona('LIMITE', 'admin', [1]);
+  await persona('LIMITE', 'admin', [P1]);
 });
 
 afterAll(async () => {
   await q('DELETE FROM user_projects WHERE user_id = ANY($1::int[])', [ids.users]);
   await q('DELETE FROM users WHERE id = ANY($1::int[])', [ids.users]);
+  await q('DELETE FROM projects WHERE id = ANY($1::int[])', [ids.projects]);
   await pool.end();
 });
 
@@ -109,24 +119,24 @@ describe('el alcance sale de la sesion', () => {
   it('un admin sin elegir campus mide SOLO los suyos', async () => {
     await preguntar(U.ADMIN12);
     const { alcance } = servicio.preguntar.mock.calls[0][0];
-    expect([...alcance.projectIds].sort()).toEqual([1, 2]);
+    expect([...alcance.projectIds].sort()).toEqual([P1, P2].sort());
   });
 
   it('un admin que pide un campus que no es suyo recibe un 403 y no se pregunta nada', async () => {
-    const r = await preguntar(U.ADMIN1, undefined, '?projectId=2');
+    const r = await preguntar(U.ADMIN1, undefined, `?projectId=${P2}`);
     expect(r.status).toBe(403);
     expect(servicio.preguntar).not.toHaveBeenCalled();
   });
 
   it('un admin que pide uno suyo, mide ese', async () => {
-    await preguntar(U.ADMIN12, undefined, '?projectId=2');
-    expect(servicio.preguntar.mock.calls[0][0].alcance).toMatchObject({ projectId: 2 });
+    await preguntar(U.ADMIN12, undefined, `?projectId=${P2}`);
+    expect(servicio.preguntar.mock.calls[0][0].alcance).toMatchObject({ projectId: P2 });
   });
 
   it('el cuerpo no puede colar un proyecto: solo cuenta la sesion', async () => {
-    await preguntar(U.ADMIN1, { pregunta: 'ventas del proyecto 2', projectId: 2, projectIds: [2, 3] });
+    await preguntar(U.ADMIN1, { pregunta: 'ventas del proyecto 2', projectId: P2, projectIds: [P2, P2 + 1000] });
     const { alcance } = servicio.preguntar.mock.calls[0][0];
-    expect(alcance.projectIds).toEqual([1]);
+    expect(alcance.projectIds).toEqual([P1]);
     expect(JSON.stringify(alcance)).not.toContain('3');
   });
 

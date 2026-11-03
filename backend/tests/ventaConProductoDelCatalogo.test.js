@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import app from '../src/app.js';
 import pool from '../src/shared/config/db.js';
+import jwt from 'jsonwebtoken';
 
 /**
  * El programa de una venta es el del catálogo, no el nombre del cliente (#160).
@@ -23,12 +24,16 @@ import pool from '../src/shared/config/db.js';
  */
 
 const request = supertest(app);
-const PROYECTO = 1;
+// Campus y superadmin propios: la base de ISEIE (y la de la CI) no trae el
+// proyecto 1 ni el usuario de los datos de ejemplo de MultiCRM.
+let PROYECTO;
+let superId;
+const MARCA_VPC = `VPC${Date.now().toString(36)}`;
 const FECHA = '2026-03-11';
 const CATALOGO = 'Curso Producto Catalogo Test';
 const MIGRACION = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
-  '../migrations/231_producto_de_las_ventas_viejas.sql'
+  '../migrations/268_producto_de_las_ventas_viejas.sql'
 );
 
 let token;
@@ -51,9 +56,13 @@ const textoDe = async (id) =>
     .rows[0].producto_contratado;
 
 beforeAll(async () => {
-  const login = await request.post('/api/auth/login')
-    .send({ email: 'diego@empresa.com', password: 'CrmTemp2026!' });
-  token = login.body.data.accessToken;
+  PROYECTO = (await pool.query(
+    'INSERT INTO projects (nombre, slug, webhook_api_key) VALUES ($1, $2, $2) RETURNING id',
+    [MARCA_VPC, MARCA_VPC.toLowerCase()])).rows[0].id;
+  superId = (await pool.query(
+    `INSERT INTO users (nombre, email, password_hash, role, active) VALUES ($1, $2, 'x', 'superadmin', TRUE) RETURNING id`,
+    [MARCA_VPC, `${MARCA_VPC.toLowerCase()}@test-producto.com`])).rows[0].id;
+  token = jwt.sign({ userId: superId, role: 'superadmin' }, process.env.JWT_SECRET, { expiresIn: '10m' });
 
   const { rows: pr } = await pool.query(
     `INSERT INTO products (project_id, nombre, precio, active)
@@ -64,8 +73,8 @@ beforeAll(async () => {
     // `fecha_solicitud` además de `created_at`: el CRM no deja vender antes de
     // que el prospecto entre, y mira la primera de las dos.
     `INSERT INTO leads (project_id, nombre, email, status, responsable_id, created_at, fecha_solicitud)
-     VALUES ($1, 'Pedro Sanchez Producto Test', 'pedro-producto@test-producto.com', 'en_seguimiento', 2, $2, $2)
-     RETURNING id`, [PROYECTO, '2026-03-01 09:00:00']);
+     VALUES ($1, 'Pedro Sanchez Producto Test', 'pedro-producto@test-producto.com', 'en_seguimiento', $3, $2, $2)
+     RETURNING id`, [PROYECTO, '2026-03-01 09:00:00', superId]);
   leadId = rows[0].id;
 });
 
@@ -79,6 +88,9 @@ afterAll(async () => {
   await pool.query('DELETE FROM lead_status_history WHERE lead_id = $1', [leadId]);
   await pool.query('DELETE FROM leads WHERE id = $1', [leadId]);
   await pool.query('DELETE FROM products WHERE id = $1', [productoId]);
+  await pool.query('DELETE FROM user_activity_log WHERE user_id = $1', [superId]).catch(() => {});
+  await pool.query('DELETE FROM users WHERE id = $1', [superId]).catch(() => {});
+  await pool.query('DELETE FROM projects WHERE id = $1', [PROYECTO]).catch(() => {});
   await pool.end();
 });
 

@@ -48,7 +48,12 @@ export const webhookLeadSchema = z.object({
 );
 
 export const listLeadsSchema = z.object({
-  projectId: z.coerce.number().int().positive(),
+  projectId: z.coerce.number().int().positive().optional(),
+  // Vista de varios campus: lista CSV de IDs ("1,2,3"), como en MultiCRM. La usan
+  // el buscador y la prueba de ámbito (leadsAmbito): sin esto, `?projectIds=` daba
+  // 400 y el recorte de campus ajenos del controlador nunca se ejercía.
+  projectIds: z.string().regex(/^\d+(,\d+)*$/).optional()
+    .transform((v) => (v ? v.split(',').map(Number) : undefined)),
   status: z.enum(['nuevo', 'por_contactar', 'contactado', 'en_seguimiento', 'convertido', 'no_interesado', 'proxima_convocatoria']).optional(),
   // En que paso del proceso comercial va. Diego: «en filtros que diga
   // proceso de ventas y puedas elegir cual». La clave y no el id: los pasos son
@@ -79,7 +84,10 @@ export const listLeadsSchema = z.object({
   conConversion: z.coerce.boolean().optional(),
   // Filtro operativo exclusivo de Clientes. No depende de importes de venta.
   installmentStatus: z.enum(['pending', 'completed', 'no_plan']).optional(),
-});
+}).refine(
+  (d) => d.projectId || (d.projectIds && d.projectIds.length > 0),
+  { message: 'projectId o projectIds requerido', path: ['projectId'] },
+);
 
 export const checkDuplicateSchema = z.object({
   project_id: z.number().int().positive(),

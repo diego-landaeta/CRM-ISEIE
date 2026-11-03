@@ -1420,8 +1420,7 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver análisis IA | `reports_ia.view` | Los análisis generados de cada proyecto. | Admin, Gestora, Soporte, Project manager |  |
-| Generar análisis IA | `reports_ia.generar` | Pedir un análisis nuevo y exportarlo. | Admin, Soporte | `reports_ia.view` |
+| Generar análisis IA | `reports_ia.generar` | Pedir un análisis nuevo y exportarlo. | Admin, Soporte |  |
 
 ## Clientes
 

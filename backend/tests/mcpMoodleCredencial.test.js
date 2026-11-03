@@ -1,4 +1,4 @@
-import { describe, it, expect, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import pool from '../src/shared/config/db.js';
 import * as credenciales from '../src/modules/credentials/credentials.model.js';
 import { credencialesMoodle, ErrorMoodle } from '../src/modules/mcp/mcp.moodle.cliente.js';
@@ -16,16 +16,27 @@ const MARCA = `MDL${Date.now().toString(36)}`;
 const TOKEN = `tok${MARCA}0123456789abcdef`;
 let proyecto;
 const creadas = [];
+// Tres campus propios: la base de ISEIE (y la de la CI) no trae proyectos.
+const campus = [];
+beforeAll(async () => {
+  for (const c of ['a', 'b', 'c']) {
+    const { rows } = await pool.query(
+      'INSERT INTO projects (nombre, slug, webhook_api_key) VALUES ($1, $2, $2) RETURNING id',
+      [`${MARCA} ${c}`, `${MARCA.toLowerCase()}-${c}`]);
+    campus.push(rows[0].id);
+  }
+});
 
 afterAll(async () => {
   for (const id of creadas) await pool.query('DELETE FROM api_credentials WHERE id = $1', [id]);
+  await pool.query('DELETE FROM api_credentials WHERE project_id = ANY($1::int[])', [campus]);
+  await pool.query('DELETE FROM projects WHERE id = ANY($1::int[])', [campus]);
   await pool.end();
 });
 
 describe('la credencial moodle de un campus, en la base', () => {
   it('se puede guardar (el enum la admite), cifrada, y el MCP la lee', async () => {
-    const { rows } = await pool.query('SELECT id FROM projects WHERE active = true ORDER BY id LIMIT 1');
-    proyecto = rows[0].id;
+    proyecto = campus[0];
     // Si ya hubiera una de otro, no se pisa: no es nuestra.
     const previa = await pool.query(
       `SELECT 1 FROM api_credentials WHERE service = 'moodle' AND project_id = $1 AND COALESCE(metadata->>'entorno','produccion') = 'produccion'`,
@@ -50,12 +61,14 @@ describe('la credencial moodle de un campus, en la base', () => {
   });
 
   it('la de «pruebas» no se usa en el MCP', async () => {
-    const { rows } = await pool.query('SELECT id FROM projects WHERE active = true ORDER BY id DESC LIMIT 1');
-    const otro = rows[0].id;
+    const otro = campus[1];
     const previa = await pool.query(`SELECT 1 FROM api_credentials WHERE service = 'moodle' AND project_id = $1`, [otro]);
     if (previa.rowCount) return;
+    // ISEIE no separa las claves por entorno (la #80 de MultiCRM): la de pruebas es la
+    // que lleva `entorno: 'pruebas'` en su metadata, que es lo que mira el MCP.
     const cred = await credenciales.upsert({
-      project_id: otro, service: 'moodle', value: JSON.stringify({ url: 'https://pruebas.test', token: TOKEN }), entorno: 'pruebas',
+      project_id: otro, service: 'moodle', value: JSON.stringify({ url: 'https://pruebas.test', token: TOKEN }),
+      metadata: { entorno: 'pruebas' },
     }).catch((e) => e);
     if (cred instanceof Error) return; // sin la migracion de entornos en esta base: nada que probar
     creadas.push(cred.id);
@@ -64,9 +77,7 @@ describe('la credencial moodle de un campus, en la base', () => {
 
   it('un valor que no es JSON se lee como error de credencial, sin repetir el valor', async () => {
     expect(ErrorMoodle).toBeTruthy();
-    const { rows } = await pool.query('SELECT id FROM projects WHERE active = true ORDER BY id OFFSET 1 LIMIT 1');
-    if (!rows[0]) return;
-    const id = rows[0].id;
+    const id = campus[2];
     const previa = await pool.query(`SELECT 1 FROM api_credentials WHERE service = 'moodle' AND project_id = $1`, [id]);
     if (previa.rowCount) return;
     const cred = await credenciales.upsert({ project_id: id, service: 'moodle', value: `no-json-${TOKEN}`, entorno: 'produccion' });

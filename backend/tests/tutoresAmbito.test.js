@@ -232,14 +232,13 @@ describe('tutores y formaciones: solo los de tus campus', () => {
   });
 });
 
+// En ISEIE no hay «Avisar tutor» (el correo de facturación al tutor es de MultiCRM):
+// las dos rutas no existen, y nadie —ni una gestora ni un admin— llega a nada.
 describe('el correo de facturación al tutor', () => {
-  it('quien no gestiona (una gestora) ni lo ve ni lo manda', async () => {
-    expect((await request.get(url(`/comisiones/aviso?tutorId=${TUTOR_AMBOS.id}&periodo=${PERIODO}`)).set(como(GESTORA))).status).toBe(403);
-    expect((await request.post(url('/comisiones/avisar')).set(como(GESTORA)).send({ tutorId: TUTOR_AMBOS.id, periodo: PERIODO })).status).toBe(403);
-  });
-
-  it('un admin, solo a los tutores de sus campus', async () => {
-    expect((await request.get(url(`/comisiones/aviso?tutorId=${TUTOR_OTRO.id}&periodo=${PERIODO}`)).set(como(ADMIN))).status).toBe(404);
-    expect((await request.post(url('/comisiones/avisar')).set(como(ADMIN)).send({ tutorId: TUTOR_OTRO.id, periodo: PERIODO })).status).toBe(404);
+  it('no existe en ISEIE: ni lo ve ni lo manda nadie', async () => {
+    for (const quien of [GESTORA, ADMIN]) {
+      expect((await request.get(url(`/comisiones/aviso?tutorId=${TUTOR_AMBOS.id}&periodo=${PERIODO}`)).set(como(quien))).status).toBe(404);
+      expect((await request.post(url('/comisiones/avisar')).set(como(quien)).send({ tutorId: TUTOR_AMBOS.id, periodo: PERIODO })).status).toBe(404);
+    }
   });
 });

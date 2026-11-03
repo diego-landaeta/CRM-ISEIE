@@ -13,13 +13,19 @@ import pool from '../src/shared/config/db.js';
  */
 
 const request = supertest(app);
-const PROJECT_SLUG = 'psiko-aprende';
+// Un campus propio de la prueba: la base de ISEIE (y la de la CI) no trae el
+// «psiko-aprende» de los datos de ejemplo de MultiCRM.
+const PROJECT_SLUG = `origen-${Date.now().toString(36)}`;
+let projectId;
 const DOMINIO = 'test-origen.com';
 let apiKey;
 let n = 0;
 
 beforeAll(async () => {
-  const { rows } = await pool.query(`SELECT webhook_api_key FROM projects WHERE slug = $1`, [PROJECT_SLUG]);
+  const { rows } = await pool.query(
+    'INSERT INTO projects (nombre, slug, webhook_api_key) VALUES ($1, $1, $2) RETURNING id, webhook_api_key',
+    [PROJECT_SLUG, `${PROJECT_SLUG}-key`]);
+  projectId = rows[0].id;
   apiKey = rows[0].webhook_api_key;
 });
 
@@ -29,6 +35,8 @@ afterAll(async () => {
     await pool.query(`DELETE FROM ${t} WHERE lead_id IN ${ids}`);
   }
   await pool.query(`DELETE FROM leads WHERE email LIKE '%@${DOMINIO}'`);
+  // Lo que haya colgado del campus (registros de reparto…) no debe tumbar la limpieza.
+  await pool.query('DELETE FROM projects WHERE id = $1', [projectId]).catch(() => {});
   await pool.end();
 });
 

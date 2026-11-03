@@ -66,7 +66,13 @@ async function venta({ texto, productoId = null, conCobro = true, total = 300, c
 }
 
 let idUnico;
+// Quien apunta el cambio de estado (`lead_status_history.changed_by`, NOT NULL y con
+// clave foránea): una persona propia, no el usuario 1 de los datos de ejemplo de MultiCRM.
+let QUIEN;
 beforeAll(async () => {
+  QUIEN = (await pool.query(
+    `INSERT INTO users (nombre, email, password_hash, role) VALUES ('SinFormacion Quien', $1, 'x', 'admin') RETURNING id`,
+    [`sinform-quien-${Date.now().toString(36)}@test.com`])).rows[0].id;
   const { rows } = await pool.query(
     `INSERT INTO projects (nombre, slug, webhook_api_key, type)
      VALUES ('SinFormacion Test', 'sinformacion-test', 'whk_sinform_test', 'crm') RETURNING id`);
@@ -87,6 +93,8 @@ afterAll(async () => {
   }
   await pool.query('DELETE FROM products WHERE id = ANY($1::int[])', [creado.productos]);
   await pool.query('DELETE FROM projects WHERE id = $1', [PROYECTO]);
+  await pool.query('DELETE FROM user_activity_log WHERE user_id = $1', [QUIEN]).catch(() => {});
+  await pool.query('DELETE FROM users WHERE id = $1', [QUIEN]).catch(() => {});
   await pool.end();
 });
 
@@ -203,7 +211,7 @@ describe('cerrar el grifo: el curso sale de las lineas', () => {
       importe_total: 300, importe_pagado: 0, items,
       // `lead_status_history.changed_by` es NOT NULL: el modelo apunta quién
       // pasó el lead a convertido. Sin esto la creación se cae entera.
-      changed_by: 1,
+      changed_by: QUIEN,
     });
     creado.ventas.push(c.id);
     return c;
@@ -248,7 +256,7 @@ describe('cerrar el grifo: el curso sale de las lineas', () => {
       lead_id: leadId, project_id: PROYECTO,
       producto_contratado: 'Diplomado en Neurociencia',
       producto_contratado_id: idUnico,
-      importe_total: 300, importe_pagado: 0, changed_by: 1,
+      importe_total: 300, importe_pagado: 0, changed_by: QUIEN,
       items: [{ product_id: otro, descripcion: 'Curso Que No Manda', cantidad: 1, precio_unitario: 300 }],
     });
     creado.ventas.push(c.id);

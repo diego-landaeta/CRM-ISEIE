@@ -375,10 +375,10 @@ export const SECCIONES = [
       },
       // ISEIE no tiene los análisis IA guardados ni el monitor ni el chat de IA
       // del 360; solo «Pregunta a tus datos» (/informes/preguntar, #580), que
-      // pide este permiso. Mismas claves y roles que en MultiCRM.
+      // pide `reports_ia.generar` (misma clave y roles que en MultiCRM). Sin la
+      // pantalla de análisis guardados, `reports_ia.view` no lo pide nadie aquí.
       {
         clave: 'reports_ia', nombre: 'Análisis IA', acciones: [
-          a('view', 'Ver análisis IA', 'Los análisis generados de cada proyecto.', TODOS),
           a('generar', 'Generar análisis IA', 'Pedir un análisis nuevo y exportarlo.', ADMIN_SOPORTE),
         ],
       },

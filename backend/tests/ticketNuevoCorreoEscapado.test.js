@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import pool from '../src/shared/config/db.js';
 import { sendTicketNuevoEmail } from '../src/shared/services/brevo.service.js';
 
@@ -14,27 +14,40 @@ import { sendTicketNuevoEmail } from '../src/shared/services/brevo.service.js';
  */
 
 const ASUNTO = '[test-escapado] ';
-let anterior;
+
+// En ISEIE `email_envios` no guarda el cuerpo del correo (en MultiCRM sí, desde la
+// pantalla Correos). Aquí se mira lo que se le MANDARÍA a Brevo: con una clave de
+// pega, el destino en la lista blanca del freno y `fetch` simulado, nada sale.
+const ENV = ['SOPORTE_EMAIL', 'BREVO_API_KEY', 'EMAIL_LISTA_BLANCA'];
+const antes = {};
+const enviados = [];
 
 beforeAll(async () => {
-  anterior = process.env.SOPORTE_EMAIL;
+  for (const k of ENV) antes[k] = process.env[k];
   process.env.SOPORTE_EMAIL = 'soporte@test-escapado.com';
+  process.env.BREVO_API_KEY = 'clave-de-pega-para-la-prueba';
+  process.env.EMAIL_LISTA_BLANCA = 'soporte@test-escapado.com';
+  vi.stubGlobal('fetch', vi.fn(async (_url, init) => {
+    enviados.push(JSON.parse(init.body));
+    return { ok: true, status: 201, json: async () => ({ messageId: 'prueba' }), text: async () => '' };
+  }));
   await pool.query('DELETE FROM email_envios WHERE asunto LIKE $1', [`%${ASUNTO}%`]);
 });
 
 afterAll(async () => {
-  if (anterior === undefined) delete process.env.SOPORTE_EMAIL;
-  else process.env.SOPORTE_EMAIL = anterior;
+  vi.unstubAllGlobals();
+  for (const k of ENV) {
+    if (antes[k] === undefined) delete process.env[k];
+    else process.env[k] = antes[k];
+  }
   await pool.query('DELETE FROM email_envios WHERE asunto LIKE $1', [`%${ASUNTO}%`]);
   await pool.end();
 });
 
 async function htmlDeLoQueSale(ticket, autor = { nombre: 'Laura' }) {
+  enviados.length = 0;
   await sendTicketNuevoEmail({ ticket, autor });
-  const { rows } = await pool.query(
-    `SELECT cuerpo_html FROM email_envios WHERE asunto LIKE $1 ORDER BY id DESC LIMIT 1`,
-    [`%${ASUNTO}%`]);
-  return rows[0]?.cuerpo_html || '';
+  return enviados.at(-1)?.htmlContent || '';
 }
 
 const base = {

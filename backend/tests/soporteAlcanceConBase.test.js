@@ -11,8 +11,11 @@ import * as model from '../src/modules/soporte/soporte.model.js';
  * no los de otra empresa.
  */
 
-const CAMPUS_MIO = 1;
-const CAMPUS_AJENO = 2;
+// Dos campus propios: la base de ISEIE (y la de la CI) no trae los 1 y 2 de los
+// datos de ejemplo de MultiCRM, y la clave foránea de `tickets` lo exige.
+let CAMPUS_MIO;
+let CAMPUS_AJENO;
+const MARCA = `SOPAL${Date.now().toString(36)}`;
 const ids = {};
 let autorA;
 let autorB;
@@ -26,6 +29,11 @@ async function ticket({ autor, proyecto, titulo }) {
 }
 
 beforeAll(async () => {
+  const campus = async (c) => (await pool.query(
+    'INSERT INTO projects (nombre, slug, webhook_api_key) VALUES ($1, $2, $2) RETURNING id',
+    [`${MARCA} ${c}`, `${MARCA.toLowerCase()}-${c}`])).rows[0].id;
+  CAMPUS_MIO = await campus('mio');
+  CAMPUS_AJENO = await campus('ajeno');
   const mk = async (email) => (await pool.query(
     `INSERT INTO users (nombre, email, password_hash, role, active)
      VALUES ($1, $2, 'x', 'gestor', TRUE) RETURNING id`, [email, email])).rows[0].id;
@@ -41,6 +49,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await pool.query('DELETE FROM tickets WHERE titulo LIKE $1', ['[alcance]%']);
   await pool.query('DELETE FROM users WHERE email LIKE $1', ['%@test-soporte.com']);
+  await pool.query('DELETE FROM projects WHERE id = ANY($1::int[])', [[CAMPUS_MIO, CAMPUS_AJENO]]);
   await pool.end();
 });
 

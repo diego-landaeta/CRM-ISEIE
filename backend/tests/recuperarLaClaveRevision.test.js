@@ -65,7 +65,9 @@ beforeAll(async () => {
   const p = await pool.query(`SELECT id FROM projects ORDER BY id LIMIT 1`);
   projectId = p.rows[0]?.id;
   if (projectId == null) {
-    const n = await pool.query(`INSERT INTO projects (nombre) VALUES ('Proyecto test revision') RETURNING id`);
+    // En ISEIE `slug` y `webhook_api_key` son NOT NULL (la base de la CI no trae proyectos).
+    const marca = `revision-clave-${Date.now().toString(36)}`;
+    const n = await pool.query(`INSERT INTO projects (nombre, slug, webhook_api_key) VALUES ('Proyecto test revision', $1, $1) RETURNING id`, [marca]);
     projectId = n.rows[0].id;
   }
   await pool.query(`INSERT INTO user_projects (user_id, project_id, orden_cola) VALUES ($1, $2, 1)`, [tutorId, projectId]);

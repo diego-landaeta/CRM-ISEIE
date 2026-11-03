@@ -247,15 +247,17 @@ describe('catalogo_completo: activas e inactivas, SKU, categorías e importacion
 
 describe('correos: enviados, recibidos, frenados y fallidos', () => {
   beforeAll(async () => {
-    const fila = (estado, direccion, etiquetas, proyecto) => q(
-      `INSERT INTO email_envios (destinatarios, asunto, etiquetas, project_id, estado, direccion, remitente)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [`secreto@${MARCA.toLowerCase()}.test`, `${MARCA} asunto privado`, etiquetas, proyecto, estado, direccion, `remite@${MARCA.toLowerCase()}.test`]);
+    // En ISEIE `email_envios` no tiene buzón de entrada (ni `direccion` ni
+    // `remitente`, ni el estado «recibido»): solo lo que sale. `direccion` se
+    // queda en la firma para que las filas se lean igual que en MultiCRM.
+    const fila = (estado, _direccion, etiquetas, proyecto) => q(
+      `INSERT INTO email_envios (destinatarios, asunto, etiquetas, project_id, estado)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [`secreto@${MARCA.toLowerCase()}.test`, `${MARCA} asunto privado`, etiquetas, proyecto, estado]);
     await fila('enviado', 'salida', ['lead-assigned', 'crm'], P);
     await fila('enviado', 'salida', ['lead-assigned', 'crm'], P);
     await fila('bloqueado', 'salida', ['welcome-user', 'crm'], P);
     await fila('fallido', 'salida', ['welcome-user', 'crm'], P);
-    await fila('recibido', 'entrada', null, P);
     for (let i = 0; i < 3; i += 1) await fila('enviado', 'salida', ['lead-assigned', 'crm'], OTRO);
     await fila('enviado', 'salida', ['aviso-tutor'], null);
     const [s] = await q(
@@ -266,10 +268,10 @@ describe('correos: enviados, recibidos, frenados y fallidos', () => {
 
   it('las cifras son las del campus pedido (y los sin campus no se cuelan)', async () => {
     const { datos } = await ver(ADMIN, 'correos');
-    expect(datos).toMatchObject({ correos: 5, enviados: 2, recibidos: 1, frenados: 1, fallidos: 1 });
-    expect(datos.por_campus).toEqual([expect.objectContaining({ campus: `${MARCA} a`, correos: 5 })]);
+    expect(datos).toMatchObject({ correos: 4, enviados: 2, recibidos: 0, frenados: 1, fallidos: 1 });
+    expect(datos.por_campus).toEqual([expect.objectContaining({ campus: `${MARCA} a`, correos: 4 })]);
     const doble = (await ver(ADMIN, 'correos', {}, [P, OTRO])).datos;
-    expect(doble).toMatchObject({ correos: 8, enviados: 5 });
+    expect(doble).toMatchObject({ correos: 7, enviados: 5 });
   });
 
   it('por tipo: la etiqueta de cada correo, sin la genérica «crm»', async () => {

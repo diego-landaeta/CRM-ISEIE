@@ -10,13 +10,16 @@ import jwt from 'jsonwebtoken';
  * requerido» (a un admin ya le recortaba a los suyos). Ahora: todos los campus
  * menos los de pruebas, con `campusDeTodos`.
  *
+ * En ISEIE solo Nóminas: el módulo de Pagos Stripe de ISEIE es otro (sin la #44 ni
+ * «Todos» en su modelo) y esa parte de la tanda 2 no se portó en la 2.6.0.
+ *
  *   npx vitest run tests/stripeNominasTodos218.test.js
  */
 
 const { default: pool } = await import('../src/shared/config/db.js');
 const { errorHandler } = await import('../src/shared/middleware/errorHandler.js');
 const { campusDeTodos } = await import('../src/shared/utils/ambito.js');
-const modulos = await Promise.all(['stripe-payments', 'payroll'].map((m) => import(`../src/modules/${m}/index.js`).then((x) => x.default)));
+const modulos = await Promise.all(['payroll'].map((m) => import(`../src/modules/${m}/index.js`).then((x) => x.default)));
 
 const app = express();
 app.use(express.json());
@@ -68,8 +71,6 @@ describe('campusDeTodos', () => {
 
 describe('sin campus ya no es «projectId requerido» (#218)', () => {
   it.each([
-    ['Pagos Stripe, la lista', '/api/stripe-payments?limit=10'],
-    ['Pagos Stripe, las cifras', '/api/stripe-payments/stats'],
     ['Nóminas, los planes', '/api/payroll/plans'],
   ])('%s, como super admin', async (_n, ruta) => {
     const r = await request.get(ruta).set(como(SUPER));
@@ -77,7 +78,6 @@ describe('sin campus ya no es «projectId requerido» (#218)', () => {
   });
 
   it('y a un admin, como ya era', async () => {
-    expect((await request.get('/api/stripe-payments?limit=10').set(como(ADMIN))).status).toBe(200);
     expect((await request.get('/api/payroll/plans').set(como(ADMIN))).status).toBe(200);
   });
 });
