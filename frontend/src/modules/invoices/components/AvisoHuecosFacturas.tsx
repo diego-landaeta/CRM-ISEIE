@@ -59,7 +59,7 @@ export default function AvisoHuecosFacturas({ projectId }: { projectId?: number 
             Una serie fiscal no debería tener huecos. O falta cargar esas facturas,
             o alguien numeró a mano saltándose un número.
           </p>
-          <Link to="/finanzas/facturas/nueva"
+          <Link to="/accounting/facturas/nueva"
             className="inline-flex items-center mt-2 h-7 px-2.5 rounded border border-amber-400 dark:border-amber-700 text-amber-900 dark:text-amber-200 text-xs font-semibold hover:bg-amber-100 dark:hover:bg-amber-900/40">
             Emitir la que falta
           </Link>

@@ -78,6 +78,14 @@ export async function getById(req, res, next) {
   } catch (err) { next(err); }
 }
 
+/** Los roles que quien pregunta puede dar en un alta, y si no, qué le falta (Tony, 03/11). */
+export async function rolesAsignables(req, res, next) {
+  try {
+    const { rolesAsignables: calcular } = await import('../permissions/permissions.editar.js');
+    res.json({ success: true, data: await calcular(req.user) });
+  } catch (err) { next(err); }
+}
+
 export async function create(req, res, next) {
   try {
     const parsed = createUserSchema.safeParse(req.body);

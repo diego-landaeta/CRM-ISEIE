@@ -216,6 +216,12 @@ export default function MakeWebhookDetailPage() {
             <p className="text-[11px] text-muted-foreground mt-0.5">Aplica el mapeo y crea leads en el CRM.</p>
           </button>
         </div>
+        {hook.mode === 'active' && Object.keys(hook.field_mapping || {}).length === 0 && (
+          <p className="mt-2 text-[11px] rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 text-amber-800 dark:text-amber-300 p-2">
+            Activo sin mapeo guardado: los prospectos entran con los campos reconocidos por su nombre habitual
+            (<code>email</code>, <code>full_name</code>, <code>phone_complete</code>, <code>course</code>…). Guarda el mapeo para no depender de eso.
+          </p>
+        )}
       </div>
 
       {/* URL + Secret */}
@@ -347,7 +353,8 @@ export default function MakeWebhookDetailPage() {
                 }`}>{d.result}</span>
                 <span className="text-muted-foreground tabular-nums">{new Date(d.received_at).toLocaleString('es-ES')}</span>
                 {d.lead_id && <a href={`/leads/${d.lead_id}`} className="text-primary underline">lead #{d.lead_id}</a>}
-                {d.error_message && <span className="text-red-600 truncate" title={d.error_message}>- {d.error_message}</span>}
+                {/* #627: un envío aceptado con nota es uno que entró sin mapeo: aviso, no error. */}
+                {d.error_message && <span className={`${d.result === 'accepted' ? 'text-amber-700 dark:text-amber-400' : 'text-red-600'} truncate`} title={d.error_message}>- {d.error_message}</span>}
               </div>
             ))}
           </div>
