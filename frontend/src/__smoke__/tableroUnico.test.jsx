@@ -126,7 +126,9 @@ describe('un solo tablero', () => {
     const hoy = hoyEnOficina();
     const mesPasado = moverReferencia('mes', hoy, -1);
     api.getTasks.mockResolvedValue([
-      ...TAREAS.slice(0, 1),
+      // La otra, creada HOY: con su fecha fija de octubre, en noviembre también era «de antes»
+      // y la línea decía «2 sin cerrar» (la prueba dependía del mes en que se pasaba).
+      { ...TAREAS[0], created_at: `${hoy}T09:00:00Z` },
       tarea(9, 'Pendiente del mes pasado', 2, 'Ruth Sánchez', { status: 'en_curso', created_at: `${mesPasado.slice(0, 8)}10T10:00:00Z` }),
     ]);
     abrir();

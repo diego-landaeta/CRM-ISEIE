@@ -45,6 +45,10 @@ vi.mock('@/modules/sales/components/TopProductsCard', () => ({ default: () => nu
 vi.mock('@/modules/sales/components/CursosVendidosCard', () => ({ default: () => null }));
 vi.mock('@/shared/components/dashboard/ConversionFunnel', () => ({ default: () => null }));
 vi.mock('@/shared/components/dashboard/PerformanceInsights', () => ({ default: () => null }));
+// Lo nuevo de la 2.6.0 en el Dashboard (#203, #13): piden la sesión y su API, y aquí
+// solo se mira el ranking.
+vi.mock('@/modules/reports/components/ActividadPorComercial', () => ({ TarjetaActividad: () => null, default: () => null }));
+vi.mock('@/shared/components/dashboard/ActividadDeHoy', () => ({ default: () => null }));
 
 import DashboardPage from '@/shared/pages/DashboardPage';
 

@@ -199,29 +199,6 @@ export const CAMBIOS_POR_DATOS = [
  */
 export const CAMBIOS_DE_MENU = [
   {
-    id: 'menu-claves-admin',
-    que: '«Sistema › Claves y variables» la ve también el admin, con las claves de sus campus (CRM#632).',
-    motivo: 'Va con el cambio `admin-ve-claves`: el admin ya puede leerlas en el servidor, y el menú se la enseña.',
-    perfiles: {
-      admin: ['+ Sistema › Claves y variables'],
-      'gestora+admin': ['+ Sistema › Claves y variables'],
-    },
-    rutas: { 'Sistema › Claves y variables': 'GET /api/credentials/' },
-    aprobadoPor: 'Diego, 03/11',
-  },
-  {
-    id: 'menu-facturacion',
-    que: '«Finanzas › Facturación» la ve quien puede facturar: el admin, quien lleva la cola (la casilla «factura_manager») y quien es admin como rol de más.',
-    motivo: 'Antes la entrada preguntaba por `factura_manager` como si fuera un permiso y solo la veía el superadmin, aunque el servidor ya les dejaba entrar a todos ellos.',
-    perfiles: {
-      admin: ['+ Finanzas › Facturación'],
-      'gestora con factura_manager': ['+ Finanzas › Facturación'],
-      'gestora+admin': ['+ Finanzas › Facturación'],
-    },
-    rutas: { 'Finanzas › Facturación': 'GET /api/invoices/' },
-    aprobadoPor: DIEGO,
-  },
-  {
     id: 'menu-sin-403',
     que: 'El menú deja de enseñar lo que daba 403: 12 entradas a soporte y 3 al project manager.',
     motivo: 'Soporte lo veía todo por un atajo del menú («ve todo»), y el project manager las pantallas de la gestora; al entrar, el servidor les respondía 403. Ninguno pierde nada que pudiera usar.',

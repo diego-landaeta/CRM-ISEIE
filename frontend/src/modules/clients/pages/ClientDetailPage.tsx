@@ -9,6 +9,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { abrirChatCrm } from '@/shared/lib/abrirChatCrm';
 import client from '@/shared/api/client';
 import { useAuth } from '@/contexts/AuthContext';
+import usePermission from '@/shared/hooks/usePermission';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { conversionsApi } from '@/modules/conversions/api/conversions.api';
 import { toast } from '@/shared/hooks/useToast';
@@ -113,6 +114,9 @@ export default function ClientDetailPage() {
     navigate(destino);
   }
   const { user } = useAuth();
+  // «Borrar cliente» pide su permiso (#423); `can` se usaba sin declararlo y la
+  // ficha de un cliente reventaba («can is not defined») al abrirla un superadmin.
+  const { can } = usePermission();
   const { activeProject } = useProjectContext();
 
   const [lead, setLead] = useState<Lead | null>(null);
