@@ -13178,6 +13178,28 @@
   "puertas": []
  },
  {
+  "id": "GET /api/users/roles-asignables",
+  "tipo": "ruta",
+  "modulo": "users",
+  "metodo": "GET",
+  "ruta": "/api/users/roles-asignables",
+  "relativa": "GET /roles-asignables",
+  "controlador": "rolesAsignables",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "users.create"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/users/activity-log",
   "tipo": "ruta",
   "modulo": "users",
