@@ -413,6 +413,16 @@ export async function getTopProducts({ projectId, projectIds = null, limit = 10,
  * «VENTAS» = ventas con alguna factura (no abono) emitida en el periodo. Una
  * venta con tres facturas de cuotas en el mismo mes es una venta.
  *
+ * LAS RECTIFICATIVAS, APARTE EN LOS PRODUCTOS (#534). Restaban dentro de su
+ * producto: en octubre, «Cuentoterapia −541,67 €» (108,33 € facturados menos la
+ * R-2026/0002 de −650 €) y «Tarot Terapéutico (dolor emocional) 0,00 €». Ahora
+ * cada producto enseña lo FACTURADO (sin abonos) y los abonos van en su fila,
+ * `rectificativas`, con su detalle por producto. El total no cambia:
+ *
+ *   gestoras + sin_gestora  =  total  =  productos + sin_producto + rectificativas
+ *
+ * Las gestoras siguen netas (con sus abonos dentro): es su ranking.
+ *
  * @param {{ projectId?, projectIds?, from?, to?, responsableId? }} opts
  *   `responsableId`: solo la parte de esa gestora (una gestora ve lo suyo).
  */
@@ -430,6 +440,8 @@ export async function getFacturado({ projectId = null, projectIds = null, from =
   const CTE = `WITH fac AS (
       SELECT i.conversion_id,
              SUM(${IMPORTE_FACTURADO}) AS facturado,
+             -- Lo que restan los abonos (negativo): va aparte en los productos.
+             COALESCE(SUM(${IMPORTE_FACTURADO}) FILTER (WHERE i.tipo = 'rectificativa'), 0) AS rectificado,
              BOOL_OR(i.tipo = 'normal') AS con_factura
         FROM invoices i
         JOIN conversions c ON c.id = i.conversion_id
@@ -437,7 +449,7 @@ export async function getFacturado({ projectId = null, projectIds = null, from =
        GROUP BY i.conversion_id
     ),
     rep AS (
-      SELECT f.conversion_id, f.facturado, f.con_factura, r.vendedora_id, r.peso
+      SELECT f.conversion_id, f.facturado, f.rectificado, f.con_factura, r.vendedora_id, r.peso
         FROM fac f
         JOIN conversion_reparto r ON r.conversion_id = f.conversion_id
        ${soloGestora}
@@ -460,7 +472,10 @@ export async function getFacturado({ projectId = null, projectIds = null, from =
        SELECT c.producto_contratado_id AS product_id,
               ${PRODUCTO} AS producto,
               ${SIN_ASIGNAR} AS sin_asignar,
-              COALESCE(SUM(rep.facturado * rep.peso), 0)::numeric AS facturado,
+              -- Lo facturado SIN los abonos; los abonos, en su columna (#534).
+              COALESCE(SUM((rep.facturado - rep.rectificado) * rep.peso), 0)::numeric AS facturado,
+              COALESCE(SUM(rep.rectificado * rep.peso), 0)::numeric AS rectificado,
+              COALESCE(SUM(rep.peso) FILTER (WHERE rep.rectificado <> 0), 0)::float8 AS ventas_rectificadas,
               COALESCE(SUM(rep.peso) FILTER (WHERE rep.con_factura), 0)::float8 AS ventas
          FROM rep
          JOIN conversions c ON c.id = rep.conversion_id
@@ -480,7 +495,11 @@ export async function getFacturado({ projectId = null, projectIds = null, from =
   const fila = (f) => ({ facturado: cent(f.facturado), ventas: cent(f.ventas) });
 
   const gestoras = porGestora.filter((f) => f.user_id != null);
-  const productos = porProducto.filter((f) => !f.sin_asignar);
+  // Un producto que este periodo solo tiene un abono no es un producto
+  // vendido: su abono sale en «Rectificativas» y la lista no lo enseña a 0 €.
+  const productos = porProducto.filter((f) => !f.sin_asignar
+    && (Number(f.facturado || 0) !== 0 || Number(f.ventas || 0) > 0));
+  const conAbono = porProducto.filter((f) => Number(f.rectificado || 0) !== 0);
 
   return {
     desde: from, hasta: to,
@@ -489,6 +508,14 @@ export async function getFacturado({ projectId = null, projectIds = null, from =
     sin_gestora: fila(suma(porGestora.filter((f) => f.user_id == null))),
     productos: productos.map((f) => ({ product_id: f.product_id, producto: f.producto, ...fila(f) })),
     sin_producto: fila(suma(porProducto.filter((f) => f.sin_asignar))),
+    // Los abonos del periodo (negativos), fuera de cada producto (#534).
+    rectificativas: {
+      facturado: cent(conAbono.reduce((x, f) => x + Number(f.rectificado || 0), 0)),
+      ventas: cent(conAbono.reduce((x, f) => x + Number(f.ventas_rectificadas || 0), 0)),
+      productos: conAbono
+        .map((f) => ({ product_id: f.product_id, producto: f.producto, facturado: cent(f.rectificado) }))
+        .sort((a, b) => a.facturado - b.facturado),
+    },
   };
 }
 

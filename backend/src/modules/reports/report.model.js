@@ -1158,7 +1158,12 @@ export async function asesorasPorMes({ projectId, projectIds, from, to, asesoraI
               COALESCE(SUM(peso) FILTER (WHERE NOT es_primero), 0)::float8 AS mensualidades,
               COALESCE(SUM(imp) FILTER (WHERE clase = 'periodo'), 0) AS cobrado_del_periodo,
               COALESCE(SUM(imp) FILTER (WHERE clase = 'cuotas'), 0) AS cobrado_en_cuotas,
-              COALESCE(SUM(peso) FILTER (WHERE clase = 'cuotas'), 0)::float8 AS cobros_en_cuotas
+              COALESCE(SUM(peso) FILTER (WHERE clase = 'cuotas'), 0)::float8 AS cobros_en_cuotas,
+              -- CUANTOS COBROS (#534): el numero que va con lo cobrado. Antes,
+              -- al lado de «18.048 € cobrados» se ponia el numero de ventas
+              -- nuevas (43), que cuenta otra cosa. SUM(peso): un cobro de una
+              -- venta compartida cuenta su parte en cada gestora y uno en el total.
+              COALESCE(SUM(peso), 0)::float8 AS cobros
          FROM cobros_base
         GROUP BY 1, 2
      ),
@@ -1227,6 +1232,7 @@ export async function asesorasPorMes({ projectId, projectIds, from, to, asesoraI
               - ROUND(COALESCE(cm.cobrado_en_cuotas, 0), 2) AS cobrado_anteriores,
             ROUND(COALESCE(cm.cobrado_en_cuotas, 0), 2) AS cobrado_en_cuotas,
             COALESCE(cm.cobros_en_cuotas, 0) AS cobros_en_cuotas,
+            COALESCE(cm.cobros, 0) AS cobros,
             COALESCE(am.ventas, 0) AS ventas_anteriores,
             COALESCE(am.grandes, '[]'::json) AS anteriores_grandes,
             ROUND(COALESCE(vm.pendiente, 0), 2) AS pendiente,
@@ -2004,12 +2010,12 @@ export async function miPuesto({ userId, projectId, projectIds, from, to, base =
   const filas = await asesorasPorMes({ projectId, projectIds, from, to, asesoraId: null, base, agrupar: 'rango' });
 
   const vacia = (id, nombre) => ({
-    user_id: id, nombre, leads: 0, ventas: 0, vendido: 0, cobrado: 0, facturado: 0, pendiente: 0,
+    user_id: id, nombre, leads: 0, ventas: 0, vendido: 0, cobrado: 0, cobros: 0, facturado: 0, pendiente: 0,
     cobrado_del_periodo: 0, cobrado_anteriores: 0, cobrado_en_cuotas: 0,
     ventas_anteriores: 0, anteriores_grandes: [],
   });
   const sumar = (a, f) => {
-    for (const k of ['leads', 'ventas', 'vendido', 'cobrado', 'facturado', 'pendiente',
+    for (const k of ['leads', 'ventas', 'vendido', 'cobrado', 'cobros', 'facturado', 'pendiente',
       'cobrado_del_periodo', 'cobrado_en_cuotas', 'ventas_anteriores']) {
       a[k] += Number(f[k]) || 0;
     }
@@ -2053,6 +2059,8 @@ export async function miPuesto({ userId, projectId, projectIds, from, to, base =
       .filter((g) => g.importe >= ANTERIOR_GRANDE)
       .sort((x, y) => y.importe - x.importe || x.venta_id - y.venta_id)
       .slice(0, ANTERIORES_A_LA_VISTA);
+    // Los cobros de una venta compartida van por partes: el total, entero.
+    a.cobros = Math.round(a.cobros * 10) / 10;
     a.tasa = tasaDe(a);
     return a;
   };
@@ -2074,6 +2082,7 @@ export async function miPuesto({ userId, projectId, projectIds, from, to, base =
     ventas: a.ventas,
     vendido: a.vendido,
     cobrado: a.cobrado,
+    cobros: a.cobros,
     cobrado_del_periodo: a.cobrado_del_periodo,
     cobrado_anteriores: a.cobrado_anteriores,
     cobrado_en_cuotas: a.cobrado_en_cuotas,
@@ -2105,6 +2114,9 @@ export async function miPuesto({ userId, projectId, projectIds, from, to, base =
     de: tabla.length,
     nombre: yo.nombre,
     ...cifras(yo),
+    // LA MEDIA DE LAS GESTORAS, sin «Sin gestora»: es contra la que se mide
+    // cada una. La fila Total (`total.tasa`) la incluye y por eso da otra
+    // cifra (13,4 % frente a 17,6 % en octubre, #534): la pantalla dice cuál es cuál.
     tasa_equipo: equipo.leads > 0 ? Math.round((equipo.ventas / equipo.leads) * 1000) / 10 : 0,
     ventas_equipo: equipo.ventas,
     cobrado_equipo: cent(equipo.cobrado),
