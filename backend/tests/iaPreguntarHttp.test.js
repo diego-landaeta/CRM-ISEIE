@@ -137,7 +137,11 @@ describe('el alcance sale de la sesion', () => {
     await preguntar(U.ADMIN1, { pregunta: 'ventas del proyecto 2', projectId: P2, projectIds: [P2, P2 + 1000] });
     const { alcance } = servicio.preguntar.mock.calls[0][0];
     expect(alcance.projectIds).toEqual([P1]);
-    expect(JSON.stringify(alcance)).not.toContain('3');
+    // Ninguno de los que colaba el cuerpo (con campus propios, sus ids son los de la base,
+    // no 2 y 3: se mira el valor exacto y no un dígito suelto).
+    expect(alcance.projectId ?? null).toBeNull();
+    expect(alcance.projectIds).not.toContain(P2);
+    expect(alcance.projectIds).not.toContain(P2 + 1000);
   });
 
   it('el superadmin sin elegir nada no tiene recorte', async () => {
