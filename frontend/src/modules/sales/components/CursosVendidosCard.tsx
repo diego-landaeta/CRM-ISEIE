@@ -13,6 +13,10 @@ interface Row {
 
 /** Lo que suma la tarjeta: lo da el servidor, no la suma de las filas. */
 interface Totales { ventas: number; facturado: number }
+/** Los abonos del periodo, fuera de cada producto (#534). `facturado` es negativo. */
+interface Rectificativas extends Totales {
+  productos: Array<{ product_id: number | null; producto: string; facturado: number }>;
+}
 /** Ventas que aún no tienen ningún cobro (#225). */
 interface SinCobro { ventas: number; importe: number }
 
@@ -95,6 +99,10 @@ export default function CursosVendidosCard({ projectId, issuerId = null, respons
   // su total sin decirlo: es la venta de 200 € que faltaba en ISEIE (#225).
   const [sinPrograma, setSinPrograma] = useState<Totales | null>(null);
   const [sinCobro, setSinCobro] = useState<SinCobro | null>(null);
+  // LAS RECTIFICATIVAS, APARTE (#534). Restaban dentro de su producto y
+  // dejaban filas como «Cuentoterapia −541,67 €»: ahora cada producto enseña
+  // lo facturado y los abonos van en su fila. El total de arriba no cambia.
+  const [rectificativas, setRectificativas] = useState<Rectificativas | null>(null);
   const [loading, setLoading] = useState(true);
 
   const propio = useMemo(() => rangeFor(period, customFrom, customTo), [period, customFrom, customTo]);
@@ -103,7 +111,7 @@ export default function CursosVendidosCard({ projectId, issuerId = null, respons
   const esFacturado = medida === 'facturado';
 
   useEffect(() => {
-    const limpiar = () => { setRows([]); setTotales(null); setSinPrograma(null); setSinCobro(null); };
+    const limpiar = () => { setRows([]); setTotales(null); setSinPrograma(null); setSinCobro(null); setRectificativas(null); };
     if (customIncompleto) { limpiar(); setLoading(false); return; }
     let cancelled = false;
     setLoading(true);
@@ -120,6 +128,8 @@ export default function CursosVendidosCard({ projectId, issuerId = null, respons
         setTotales(d?.total || null);
         const sp = d?.sin_producto;
         setSinPrograma(sp && (sp.ventas > 0 || sp.facturado !== 0) ? sp : null);
+        const re = d?.rectificativas;
+        setRectificativas(re && Number(re.facturado) !== 0 ? re : null);
         setSinCobro(null);
       })
       // LAS VENTAS (#225): con algún cobro, como las tarjetas de arriba.
@@ -130,6 +140,7 @@ export default function CursosVendidosCard({ projectId, issuerId = null, respons
         const sa = r?.sinAsignar;
         setSinPrograma(sa && sa.ventas > 0 ? { ventas: sa.ventas, facturado: sa.facturado } : null);
         setSinCobro(r?.sinCobro && r.sinCobro.ventas > 0 ? r.sinCobro : null);
+        setRectificativas(null);
       });
     peticion
       .catch(() => { if (!cancelled) limpiar(); })
@@ -147,7 +158,7 @@ export default function CursosVendidosCard({ projectId, issuerId = null, respons
     : rows.reduce((s, r) => s + (r.ventas || 0), 0) + (sinPrograma?.ventas || 0);
   const totalImporte = totales ? Number(totales.facturado) || 0
     : rows.reduce((s, r) => s + Number(r.facturado || 0), 0) + Number(sinPrograma?.facturado || 0);
-  const vacia = rows.length === 0 && !sinPrograma;
+  const vacia = rows.length === 0 && !sinPrograma && !rectificativas;
 
   return (
     <div className={`bg-card border border-border rounded-lg p-4 ${className}`}>
@@ -252,6 +263,23 @@ export default function CursosVendidosCard({ projectId, issuerId = null, respons
               </div>
               <span className="inline-flex items-center justify-center min-w-[2rem] h-6 px-2 rounded-full bg-warning-soft text-warning-soft-foreground text-xs font-bold tabular-nums">
                 {fmtNum(sinPrograma.ventas)}
+              </span>
+            </li>
+          )}
+          {/* Los abonos, en su fila y dentro del total: la lista suma lo de
+              arriba y ningún producto sale en negativo (#534). */}
+          {rectificativas && (
+            <li className="py-2 flex items-center gap-3"
+              title={rectificativas.productos.map((x) => `${x.producto}: ${fmt(x.facturado)}`).join('\n')}>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium truncate">Rectificativas (abonos)</p>
+                <p className="text-[11px] text-muted-foreground truncate">
+                  {fmt(rectificativas.facturado)} · {rectificativas.productos.map((x) => x.producto).join(', ')}
+                </p>
+              </div>
+              <span className="inline-flex items-center justify-center min-w-[2rem] h-6 px-2 rounded-full bg-muted text-muted-foreground text-xs font-bold tabular-nums"
+                aria-label={`${fmtNum(rectificativas.ventas)} ventas con abono`}>
+                {fmtNum(rectificativas.ventas)}
               </span>
             </li>
           )}
