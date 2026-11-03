@@ -295,6 +295,9 @@ export const pedirDiplomaSchema = z.object({
   matriculaId: z.number().int().positive(),
   centro,
   cursoRef: z.number().int().positive().optional(),
+  // #629: sin terminar (avance de calificadas < 100 % o sin nota) solo se pide con la
+  // confirmación de la página, que manda `forzar: true`.
+  forzar: z.boolean().optional(),
 });
 
 /** Sincronizar el temario de una formación del catálogo con la página del curso (12/10). */

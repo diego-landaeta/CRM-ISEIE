@@ -70,6 +70,11 @@ export interface Candidato {
   umbral: number | null;
   completado: boolean | null;
   actividades: { total: number; calificadas: number };
+  /**
+   * Tareas entregadas / tareas que cuenta el plugin de Moodle: es lo que usa Certifex para
+   * dar por terminado (#629). null si el campus aún no lo manda.
+   */
+  entregas?: { total: number; entregadas: number; en: string } | null;
   propuesto: boolean;
   nexpediente: string | null;
   /**
@@ -488,7 +493,8 @@ export const diplomasApi = {
    * el nombre, el correo y el curso con lo que dice Certifex; `cursoRef` solo ayuda a
    * encontrarla. Queda en «Por decidir».
    */
-  pedir: (d: { matriculaId: number; centro: string; cursoRef?: number }) =>
+  /** `forzar`: solo tras confirmar en la página que se pide sin terminar (#629). */
+  pedir: (d: { matriculaId: number; centro: string; cursoRef?: number; forzar?: boolean }) =>
     client.post('/certifex/diplomas/pedir', d) as R<{ matriculaId: number; centro: string; curso: string; nombre: string; yaPedido: boolean }>,
   /** Las formaciones del catálogo del proyecto de ese campus, para elegir la vendida. */
   formaciones: (centro: string) => client.get(`/certifex/diplomas/formaciones?${qs({ centro })}`) as R<CatalogoDelCampus>,
