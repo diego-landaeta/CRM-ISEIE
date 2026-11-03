@@ -86,6 +86,15 @@ export const CAMBIOS = [
     sentido: 'gana',
     aprobadoPor: DIEGO,
   },
+  {
+    id: 'admin-ve-claves',
+    que: 'Ver qué claves hay (sin su valor): también el admin, solo las de sus campus y que existen las generales. Guardar, probar y borrar siguen siendo de soporte.',
+    motivo: 'CRM#632 / ISEIE#359, auditoría del 03/11: en Informes el admin pedía /credentials (¿está la clave de Claude?) y le daba 403. Diego: «el admin debe ver todo de todo», con los datos de sus campus.',
+    filas: ['GET /api/credentials/'],
+    roles: ['admin'],
+    sentido: 'gana',
+    aprobadoPor: 'Diego, 03/11',
+  },
 ];
 
 /** ¿Está aprobado (o pendiente de aprobar en esta lista) que esta fila cambie para este rol? */

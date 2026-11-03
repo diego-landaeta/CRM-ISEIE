@@ -11,7 +11,498 @@
 /** Cómo se llama este CRM y su color: portada del PDF y cabecera del correo. */
 export const CRM = { nombre: 'CRM ISEIE', color: '#002776' };
 
-export const VERSIONES = [
+const LISTA = [
+  {
+    "version": "2.5.19",
+    "fecha": "2026-11-02",
+    "titulo": "Versión 2.5.19",
+    "intro": "El reparto de prospectos por actividad, las pulsaciones del botón de WhatsApp de las webs, las facturas de colaboradores en su moneda, el buscador nuevo y más seguridad: cada uno ve solo lo de sus campus. Esto es lo que ha llegado de la 2.5.0 a la 2.5.19.",
+    "grupos": [
+      {
+        "titulo": "Prospectos y reparto",
+        "items": [
+          {
+            "titulo": "Los prospectos se reparten por actividad",
+            "texto": "Un prospecto nuevo va a una gestora que esté trabajando: la que ha tenido actividad en los últimos 5 minutos. Cada campus reparte aparte, y vale igual para lo que llega por Make que para los formularios que entran directos al CRM. Se mira y se ajusta en Conexión → Asignación de leads, por empresa o por campus.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/conexion/asignacion-leads",
+            "boton": "Ir a Asignación de leads"
+          },
+          {
+            "titulo": "Los formularios marcan los duplicados",
+            "texto": "Si la persona ya estaba en el CRM, el prospecto nuevo sale unido al anterior como duplicado, también cuando entra por un formulario del propio CRM.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": null,
+            "boton": null
+          },
+          {
+            "titulo": "De dónde llegó cada prospecto",
+            "texto": "El correo «Resumen del día» dice si cada prospecto entró por un formulario, por WhatsApp o lo dio de alta alguien a mano.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": null,
+            "boton": null
+          },
+          {
+            "titulo": "La gestora que está trabajando, sombreada",
+            "texto": "En Prospectos se ve sombreada la gestora que está activa ahora mismo.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/leads",
+            "boton": "Ir a Prospectos"
+          }
+        ]
+      },
+      {
+        "titulo": "WhatsApp",
+        "items": [
+          {
+            "titulo": "Cuántas veces se pulsa el botón de cada web",
+            "texto": "Captación → WhatsApp cuenta las pulsaciones del botón de WhatsApp de cada web y las cruza con las altas que llegan por WhatsApp. Con una empresa o «Todos» arriba, salen sumadas.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/captacion/whatsapp",
+            "boton": "Ir al botón de WhatsApp"
+          },
+          {
+            "titulo": "Apuntar un contacto desde el chat",
+            "texto": "Desde el chat se apunta una llamada, un correo, un WhatsApp o una nota. Lo que no es nota cuenta como contacto con la persona y como actividad para el reparto.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/whatsapp",
+            "boton": "Abrir WhatsApp"
+          },
+          {
+            "titulo": "WhatsApp → Actividad",
+            "texto": "Si cada gestora responde: los chats que tiene, los respondidos, los que esperan respuesta y lo que tarda en contestar.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/whatsapp/actividad",
+            "boton": "Ver la actividad"
+          },
+          {
+            "titulo": "El saludo del botón de la web",
+            "texto": "El mensaje que se escribe solo al pulsar el botón saluda a la gestora, en vez de «Hola, soy …».",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": null,
+            "boton": null
+          }
+        ]
+      },
+      {
+        "titulo": "Finanzas",
+        "items": [
+          {
+            "titulo": "Facturas de colaboradores en su moneda",
+            "texto": "Cada empresa de la ficha del colaborador lleva su moneda, euros o dólares, y la factura del mes la hereda; al subirla se puede cambiar. Los totales se suman cada moneda por su lado, sin convertir.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/accounting/facturas-colaboradores",
+            "boton": "Ir a Facturas de colaboradores"
+          },
+          {
+            "titulo": "«Este mes no facturo a esta empresa»",
+            "texto": "Desde el enlace del correo, el colaborador avisa de que este mes no factura a una empresa. Ya no le llega el recordatorio del día 5 ni cuenta como pendiente. Se deshace desde el mismo enlace o subiendo la factura.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/accounting/facturas-colaboradores",
+            "boton": "Ir a Facturas de colaboradores"
+          },
+          {
+            "titulo": "Facturación respeta las fechas",
+            "texto": "Las tarjetas de arriba y «Ventas sin factura» cuentan solo lo de las fechas elegidas.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/accounting/facturas",
+            "boton": "Ir a Facturación"
+          }
+        ]
+      },
+      {
+        "titulo": "Buscar y pantallas",
+        "items": [
+          {
+            "titulo": "El buscador (Ctrl K), nuevo",
+            "texto": "Encuentra personas, productos, ventas por su número, facturas, tareas y usuarios. Da igual escribir con o sin tildes («gonzalez» encuentra «González») y los teléfonos se encuentran por sus cifras. Cada uno solo encuentra lo que puede abrir.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin",
+              "soporte"
+            ],
+            "ruta": null,
+            "boton": null
+          },
+          {
+            "titulo": "Feedback abre con todo",
+            "texto": "El panel de Feedback abre en «Desde siempre», también con «Todos los proyectos» arriba. Antes abría en «Este mes» y a principio de mes parecía vacío.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/informes/feedback",
+            "boton": "Ir a Feedback"
+          },
+          {
+            "titulo": "El tablero de tareas, por empresa",
+            "texto": "Con una empresa o un campus arriba, el tablero, «Por revisar» y las cifras del equipo enseñan solo las tareas de esa empresa.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/tareas",
+            "boton": "Abrir el tablero"
+          },
+          {
+            "titulo": "Análisis IA para cualquier campus",
+            "texto": "El análisis con IA sale para cualquier campus, y las pantallas ya no enseñan datos de ejemplo cuando no hay datos de verdad.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": null,
+            "boton": null
+          }
+        ]
+      },
+      {
+        "titulo": "Seguridad",
+        "items": [
+          {
+            "titulo": "Cada uno, solo lo de sus campus",
+            "texto": "Prospectos, facturas y sus cifras enseñan solo los campus de quien mira: pedir los de otro campus da «sin acceso». El project manager y quien tiene la gestora como rol de más ven solo lo suyo.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": null,
+            "boton": null
+          }
+        ]
+      }
+    ],
+    "arreglos": [
+      "El botón de la cola del día ya no apunta contactos que la gestora no ha hecho.",
+      "El PDF de una factura con caracteres raros en la dirección (como «n⁰») ya se descarga, se genera y se envía.",
+      "La ficha de un producto ya carga: decía siempre «Producto no encontrado».",
+      "Diplomas ya no desaparece del menú después de una actualización.",
+      "Cada diploma de Certifex sale con el centro exacto de su campus.",
+      "En el proceso comercial, las plantillas de cada paso salen al pulsarlo.",
+      "En Facturas de colaboradores, una leyenda explica cada estado."
+    ]
+  },
+  {
+    "version": "2.4.5",
+    "fecha": "2026-10-28",
+    "titulo": "Versión 2.4.5",
+    "intro": "Un permiso para cada acción, como en Shopify, y un solo tablero de tareas con filtros. Esto es lo que ha llegado de la 2.4.0 a la 2.4.5.",
+    "grupos": [
+      {
+        "titulo": "Roles y permisos",
+        "items": [
+          {
+            "titulo": "Un permiso para cada acción",
+            "texto": "En Roles cada pantalla tiene sus casillas: ver, crear, editar, borrar… Cada rol trae las suyas de serie y a una persona se le pueden dar o quitar sueltas. Nadie puede dar un permiso que no tiene.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/roles",
+            "boton": "Ir a Roles"
+          }
+        ]
+      },
+      {
+        "titulo": "Tareas",
+        "items": [
+          {
+            "titulo": "Un solo tablero, con filtros",
+            "texto": "Un tablero de cuatro columnas, sin bloques por persona. Arriba se elige Mis tareas, Mi equipo o Todo, y se filtra por persona, equipo, área, etiqueta, prioridad, campus o solo las vencidas. El periodo, por día, semana o mes.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/tareas",
+            "boton": "Abrir el tablero"
+          },
+          {
+            "titulo": "Cuándo se creó y cuándo se terminó",
+            "texto": "Cada tarjeta lo dice, y la ficha de la tarea dice también quién la cerró y su fecha límite.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/tareas",
+            "boton": "Abrir el tablero"
+          },
+          {
+            "titulo": "«Todo» del mes para admin y superadmin",
+            "texto": "Admin y superadmin ven todas las tareas del mes, y lo que no se cerró pasa solo al mes siguiente.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/tareas",
+            "boton": "Abrir el tablero"
+          },
+          {
+            "titulo": "El equipo de una tarea es el de quien la lleva",
+            "texto": "Una tarea cuenta en el equipo de la persona que la lleva, no en el de quien la creó.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": null,
+            "boton": null
+          }
+        ]
+      }
+    ],
+    "arreglos": [
+      "El recorrido guiado ya no tapa la ficha de una tarea: «Crear tarea» vuelve a guardar, y los avisos dicen qué falta."
+    ]
+  },
+  {
+    "version": "2.3.1",
+    "fecha": "2026-10-26",
+    "titulo": "Versión 2.3.1",
+    "intro": "El tablero de tareas por empresa y con equipos, los correos de las tareas y más datos para el Claude conectado al CRM. Esto es lo que ha llegado con la 2.3.0 y la 2.3.1.",
+    "grupos": [
+      {
+        "titulo": "Tareas",
+        "items": [
+          {
+            "titulo": "Equipos con cargos y supervisor",
+            "texto": "El tablero es por empresa. Cada equipo tiene cargos por nivel y un supervisor: cada uno se crea sus tareas y las puede dar a quien está por debajo en su equipo. Mover y comentar una tarea lo hacen quien la lleva, su supervisor y el superadmin.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/tareas",
+            "boton": "Abrir el tablero"
+          },
+          {
+            "titulo": "«Mi tablero»",
+            "texto": "Junta lo que llevas, lo que supervisas y lo que creaste.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/tareas",
+            "boton": "Abrir Mi tablero"
+          },
+          {
+            "titulo": "Correo al cambiar de estado",
+            "texto": "Cuando una tarea cambia de columna, avisa a quien la lleva, a su supervisor y a quien la creó. Varios cambios seguidos llegan en un solo correo.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": null,
+            "boton": null
+          },
+          {
+            "titulo": "El resumen de la tarde",
+            "texto": "De lunes a viernes, a las 18:00 de Venezuela, un correo con lo que hiciste hoy y lo que te falta, con lo vencido primero.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": null,
+            "boton": null
+          }
+        ]
+      },
+      {
+        "titulo": "Claude conectado al CRM",
+        "items": [
+          {
+            "titulo": "Publicidad y actividad por comercial",
+            "texto": "Claude puede consultar las cuentas y las campañas de publicidad (solo admin y superadmin, y nunca enseña el token) y lo que ha hecho cada comercial entre dos fechas. Quien no es admin solo se ve a sí misma.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/conexion/mcp",
+            "boton": "Ir a Conexión → MCP"
+          }
+        ]
+      }
+    ],
+    "arreglos": [
+      "La tabla de Usuarios ya no se sale por la derecha y la columna «Acciones» queda siempre a la vista."
+    ]
+  },
+  {
+    "version": "2.2.21",
+    "fecha": "2026-10-26",
+    "titulo": "Versión 2.2.21",
+    "intro": "El DNI en los diplomas, emitir sin ser admin, los webhooks de cada empresa por separado y una tanda de arreglos en Facturación y en las sesiones. Esto es lo que ha llegado de la 2.2.9 a la 2.2.21.",
+    "grupos": [
+      {
+        "titulo": "Diplomas de Certifex",
+        "items": [
+          {
+            "titulo": "El DNI, obligatorio para emitir",
+            "texto": "Se rellena en «Revisar datos antes de aprobar» o en «Nuevo diploma». Sin DNI, el diploma no se emite.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/matriculas/diplomas",
+            "boton": "Ir a Diplomas"
+          },
+          {
+            "titulo": "Emitir sin ser admin",
+            "texto": "El permiso «Diplomas (Certifex) · Emitir» deja emitir a quien se le dé, por ejemplo a una gestora. Se da en Roles o en la ficha de la persona.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/roles",
+            "boton": "Ir a Roles"
+          },
+          {
+            "titulo": "«Pasar a pendientes»",
+            "texto": "En Diplomas y en Emisiones, para devolver una solicitud a pendientes sin perderla.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/matriculas/diplomas",
+            "boton": "Ir a Diplomas"
+          },
+          {
+            "titulo": "Diplomas sin ser admin",
+            "texto": "Ver Diplomas ya no pide ser admin, y a una tutora se le pueden añadir formaciones de otro campus.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/matriculas/diplomas",
+            "boton": "Ir a Diplomas"
+          }
+        ]
+      },
+      {
+        "titulo": "Webhooks y Make",
+        "items": [
+          {
+            "titulo": "Los envíos de cada empresa, aparte",
+            "texto": "Los webhooks de una empresa no se ven desde otra, y desde un campus se ven los de los demás campus de su empresa.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/conexion/webhook-transferencias",
+            "boton": "Abrir el webhook"
+          },
+          {
+            "titulo": "«Enviar prueba» con datos reales",
+            "texto": "La prueba sale con la misma forma que un aviso de verdad: campus, empresa, cuenta, quien la lanza y el importe de la transferencia. El aviso trae también los campos sueltos que esperan los escenarios de Make.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/conexion/webhook-transferencias",
+            "boton": "Abrir el webhook"
+          }
+        ]
+      },
+      {
+        "titulo": "Facturación",
+        "items": [
+          {
+            "titulo": "Proforma y cola por campus",
+            "texto": "«Emitir proforma» usa el campus de cada venta, y con una empresa arriba hay una cola por cada campus. Una venta con cobros dice «Cobrada · factúrala desde la cola».",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/accounting/facturas",
+            "boton": "Ir a Facturación"
+          },
+          {
+            "titulo": "«¿Ha pagado?» hay que elegirlo",
+            "texto": "Al convertir un prospecto en venta ya no viene puesto «Sin pago»: hay que elegirlo, porque la forma de pago sola no apunta el cobro.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": null,
+            "boton": null
+          }
+        ]
+      },
+      {
+        "titulo": "Meta Ads",
+        "items": [
+          {
+            "titulo": "Solo ver, para el equipo",
+            "texto": "Con el permiso «Meta Ads · Ver», se ven los anuncios de sus campus. Conectar, sincronizar y asociar siguen siendo de admin.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/meta-ads",
+            "boton": "Ir a Meta Ads"
+          }
+        ]
+      }
+    ],
+    "arreglos": [
+      "Filtrar por gestora en el resumen de Ventas ya no da error.",
+      "En «Editar» de un diploma ya no salen horas por módulo, solo las totales.",
+      "Facturación vuelve al menú de las gestoras que facturan.",
+      "Al cambiar el rol de alguien o desactivarlo, su sesión de antes deja de valer al momento.",
+      "El Claude conectado como antes de la última actualización avisa una vez de que hay que volver a conectarlo."
+    ]
+  },
   {
     "version": "2.2.0",
     "fecha": "2026-10-16",
@@ -38,7 +529,7 @@ export const VERSIONES = [
               "admin",
               "superadmin"
             ],
-            "ruta": "/clientes/matriculas/diplomas",
+            "ruta": "/matriculas/diplomas",
             "boton": "Ir a Diplomas"
           },
           {
@@ -68,7 +559,7 @@ export const VERSIONES = [
               "admin",
               "superadmin"
             ],
-            "ruta": "/clientes/matriculas/diplomas",
+            "ruta": "/matriculas/diplomas",
             "boton": "Ir a Diplomas"
           },
           {
@@ -78,7 +569,7 @@ export const VERSIONES = [
               "admin",
               "superadmin"
             ],
-            "ruta": "/clientes/matriculas/diplomas",
+            "ruta": "/matriculas/diplomas",
             "boton": "Ir a Diplomas"
           }
         ]
@@ -172,7 +663,7 @@ export const VERSIONES = [
               "superadmin",
               "gestor"
             ],
-            "ruta": "/finanzas/facturas",
+            "ruta": "/accounting/facturas",
             "boton": "Ir a Facturas"
           },
           {
@@ -818,6 +1309,18 @@ export const VERSIONES = [
     ]
   }
 ];
+
+/**
+ * Cada versión con sus listas aunque no traiga alguna. La 2.2.0 no tenía
+ * `arreglos`, y la pantalla, el PDF, el correo y la campana hacían
+ * `v.arreglos.length`: Novedades salía en «Algo se ha roto». Una versión sin
+ * arreglos es una lista vacía, no un fallo (CRM#625 / ISEIE#352, de Hugo).
+ */
+export const VERSIONES = LISTA.map((v) => ({
+  ...v,
+  grupos: (v.grupos || []).map((g) => ({ ...g, items: g.items || [] })),
+  arreglos: v.arreglos || [],
+}));
 
 export const ACTUAL = VERSIONES[0];
 
