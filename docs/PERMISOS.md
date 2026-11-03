@@ -1415,7 +1415,7 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver claves | `credentials.view` | Qué claves hay, sin verlas, y su registro. | Soporte |  |
+| Ver claves | `credentials.view` | Qué claves hay, sin verlas, y su registro. El admin, las de sus campus. | Admin, Soporte |  |
 | Guardar claves | `credentials.edit` | Guardar, probar y quitar claves de servicios. | Soporte | `credentials.view` |
 
 ### Documentos

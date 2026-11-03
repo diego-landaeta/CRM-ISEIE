@@ -81,8 +81,8 @@ describe('Configuración › Roles (#423)', () => {
     for (const quien of ['soporte', 'gestoraA']) {
       expect((await request.put('/api/permissions/roles/fijos/gestor').set(como(quien)).send({ permisos: { 'leads.export': true } })).status).toBe(403);
     }
-    // «Ver claves» es de soporte: el admin no lo tiene y no se lo pone a un rol.
-    const sin = await request.put('/api/permissions/roles/fijos/gestor').set(como('adminA')).send({ permisos: { 'credentials.view': true } });
+    // «Guardar claves» es de soporte: el admin no lo tiene y no se lo pone a un rol.
+    const sin = await request.put('/api/permissions/roles/fijos/gestor').set(como('adminA')).send({ permisos: { 'credentials.edit': true } });
     expect(sin.status).toBe(403);
     expect(sin.body.code).toBe('NO_LO_TIENES');
     expect(await q(`SELECT 1 FROM role_permission_overrides WHERE role = 'gestor' AND resource = 'credentials'`)).toEqual([]);
@@ -162,8 +162,8 @@ describe('la ficha de cada persona (#423)', () => {
     }
   });
 
-  it('nadie da lo que no tiene: un admin no da «Ver claves»', async () => {
-    const r = await request.put(`/api/permissions/personas/${U.gestoraA.id}/excepciones`).set(como('adminA')).send({ cambios: { 'credentials.view': true } });
+  it('nadie da lo que no tiene: un admin no da «Guardar claves»', async () => {
+    const r = await request.put(`/api/permissions/personas/${U.gestoraA.id}/excepciones`).set(como('adminA')).send({ cambios: { 'credentials.edit': true } });
     expect(r.status).toBe(403);
     expect(r.body.code).toBe('NO_LO_TIENES');
   });
@@ -177,7 +177,7 @@ describe('la ficha de cada persona (#423)', () => {
   it('todo o nada: si una clave no se puede dar, no se guarda ninguna ni hay apunte', async () => {
     const antes = (await registroDe(U.gestoraA.id)).length;
     const r = await request.put(`/api/permissions/personas/${U.gestoraA.id}/excepciones`).set(como('adminA'))
-      .send({ cambios: { 'leads.export': true, 'credentials.view': true } });
+      .send({ cambios: { 'leads.export': true, 'credentials.edit': true } });
     expect(r.status).toBe(403);
     expect(await q(`SELECT 1 FROM user_permission_overrides WHERE user_id = $1 AND resource = 'leads'`, [U.gestoraA.id])).toEqual([]);
     expect((await registroDe(U.gestoraA.id)).length).toBe(antes);
@@ -188,7 +188,7 @@ describe('roles a medida (#423)', () => {
   it('el superadmin lo crea a partir de un rol fijo; el admin también, sin darle lo que no tiene; soporte, no', async () => {
     expect((await request.post('/api/permissions/roles/a-medida').set(como('soporte')).send({ nombre: 'x', base: 'gestor' })).status).toBe(403);
     const sin = await request.post('/api/permissions/roles/a-medida').set(como('adminA'))
-      .send({ nombre: `${MARCA} admin con claves`, base: 'gestor', permisos: { 'credentials.view': true } });
+      .send({ nombre: `${MARCA} admin con claves`, base: 'gestor', permisos: { 'credentials.edit': true } });
     expect(sin.status).toBe(403);
     expect(sin.body.code).toBe('NO_LO_TIENES');
     const delAdmin = await request.post('/api/permissions/roles/a-medida').set(como('adminA'))
@@ -227,7 +227,7 @@ describe('roles a medida (#423)', () => {
 
   it('un admin no da un rol a medida que trae lo que él no tiene', async () => {
     const r = await request.post('/api/permissions/roles/a-medida').set(como('superadmin'))
-      .send({ nombre: `${MARCA} con claves`, base: 'gestor', permisos: { 'credentials.view': true } });
+      .send({ nombre: `${MARCA} con claves`, base: 'gestor', permisos: { 'credentials.edit': true } });
     roles.push(r.body.data.id);
     const x = await request.put(`/api/permissions/personas/${U.gestoraA.id}/rol-a-medida`).set(como('adminA')).send({ customRoleId: r.body.data.id });
     expect(x.status).toBe(403);
