@@ -324,3 +324,74 @@ describe('«Pasar a pendientes»', () => {
     }
   });
 });
+
+/**
+ * #629 / CRM-ISEIE #356: Certifex daba por terminado a quien entregó solo las tareas
+ * VISIBLES (un máster con los módulos ocultos: el módulo 1 ya era «todas»), y «Pasar a
+ * pendientes» no miraba ni el avance ni la nota. Ahora, sin terminar, 409 SIN_TERMINAR
+ * con el aviso, y solo pasa con `forzar: true` (lo que manda el panel tras confirmar).
+ */
+describe('«Pasar a pendientes» sin terminar (#629)', () => {
+  // El caso real: entregó las 2 tareas visibles del módulo 1, 0 % calificado y sin nota.
+  const comoElMaster = { notaFinal: null, actividades: { total: 10, calificadas: 0 }, entregas: { total: 2, entregadas: 2, en: '2026-11-02T08:00:00.000Z' } };
+  const conCandidato = async (cambios, prueba) => {
+    const i = CANDIDATOS.findIndex((c) => c.matriculaId === SIN_PEDIR);
+    const antes = CANDIDATOS[i];
+    CANDIDATOS[i] = { ...antes, ...cambios };
+    try { await prueba(); } finally { CANDIDATOS[i] = antes; }
+  };
+
+  it('sin nota y con el avance a medias: 409 SIN_TERMINAR con lo que falta, y no se pide nada', async () => {
+    await conCandidato(comoElMaster, async () => {
+      const r = await post('/diplomas/pedir', { matriculaId: SIN_PEDIR, centro: 'ICTESS' });
+      expect(r.status).toBe(409);
+      expect(r.body.code).toBe('SIN_TERMINAR');
+      expect(r.body.error).toBe('Ha entregado 2 de 2 tareas visibles, tiene 0 de 10 actividades calificadas y no tiene nota: ¿seguro?');
+      expect(escrituras()).toEqual([]);
+    });
+  });
+
+  it('con `forzar: true` (tras confirmar en la página) sí se pide', async () => {
+    await conCandidato(comoElMaster, async () => {
+      const r = await post('/diplomas/pedir', { matriculaId: SIN_PEDIR, centro: 'ICTESS', forzar: true });
+      expect(r.status, JSON.stringify(r.body)).toBe(200);
+      expect(escrituras()).toEqual(['/matriculas']);
+    });
+  });
+
+  it('`forzar: false` es como no mandarlo: 409', async () => {
+    await conCandidato(comoElMaster, async () => {
+      expect((await post('/diplomas/pedir', { matriculaId: SIN_PEDIR, centro: 'ICTESS', forzar: false })).body.code).toBe('SIN_TERMINAR');
+      expect(escrituras()).toEqual([]);
+    });
+  });
+
+  it('solo falta la nota (todo calificado): también pide confirmar', async () => {
+    await conCandidato({ notaFinal: null, entregas: { total: 3, entregadas: 1, en: '2026-11-02T08:00:00.000Z' } }, async () => {
+      const r = await post('/diplomas/pedir', { matriculaId: SIN_PEDIR, centro: 'ICTESS' });
+      expect(r.status).toBe(409);
+      expect(r.body.error).toBe('Solo ha entregado 1 de 3 tareas visibles y no tiene nota: ¿seguro?');
+    });
+  });
+
+  it('con nota pero el avance de calificadas por debajo del 100 %: también', async () => {
+    await conCandidato({ notaFinal: 7, actividades: { total: 4, calificadas: 3 }, entregas: null }, async () => {
+      const r = await post('/diplomas/pedir', { matriculaId: SIN_PEDIR, centro: 'ICTESS' });
+      expect(r.status).toBe(409);
+      expect(r.body.error).toBe('No hay datos de sus tareas entregadas y tiene 3 de 4 actividades calificadas: ¿seguro?');
+    });
+  });
+
+  it('con nota y un campus que no publica actividades (total 0): no se sabe el avance y pasa sin confirmar', async () => {
+    await conCandidato({ notaFinal: 6, actividades: { total: 0, calificadas: 0 } }, async () => {
+      expect((await post('/diplomas/pedir', { matriculaId: SIN_PEDIR, centro: 'ICTESS' })).status).toBe(200);
+    });
+  });
+
+  it('`forzar` no se cuela como otra cosa que un booleano: 400', async () => {
+    await conCandidato(comoElMaster, async () => {
+      expect((await post('/diplomas/pedir', { matriculaId: SIN_PEDIR, centro: 'ICTESS', forzar: 'si' })).status).toBe(400);
+      expect(escrituras()).toEqual([]);
+    });
+  });
+});
