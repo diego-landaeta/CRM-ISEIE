@@ -67,6 +67,10 @@ describe('los cambios del menú no cambian el acceso (#423, punto 6)', () => {
       // CRM#632): antes no entraba, y el menú enseña lo que ahora sí abre.
       const aprobado = [p.role, ...(p.roles_extra || [])].some((r) => cambioPrevisto(x.ruta, r));
       if (aprobado && !antes && despues === esperado) continue;
+      // Una ruta que antes no existía (`antes` null) no esconde ningún cambio de
+      // acceso: basta con que ahora diga lo que enseña el menú (Cursos pendientes,
+      // que el project manager ve desde el 04/11, `menu-pm-ve-todo`).
+      if (antes === null && despues === esperado) continue;
       if (antes !== esperado || despues !== esperado) mal.push(`${x.perfil} ${x.signo} ${x.entrada} (${x.ruta}): antes ${antes}, ahora ${despues}`);
     }
     expect(mal).toEqual([]);

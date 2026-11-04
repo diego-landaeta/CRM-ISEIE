@@ -63,8 +63,14 @@ router.delete('/forma-avisos', puede('whatsapp.forma_avisos'), chat.olvidarForma
 // Voz frente a texto en lo que sale (#128). Como el banco: quien usa o supervisa
 // WhatsApp. Lo que ve lo recorta el servicio (una gestora, solo su fila).
 router.get('/voz-o-texto', usaOSupervisa, chat.vozOTextoCtrl);
-router.get('/banco', usaOSupervisa, chat.banco);
-router.get('/banco/numeros', usaOSupervisa, chat.bancoNumeros);
+// Y quien solo lo VE (`whatsapp.banco`, el project manager, Diego 04/11): las
+// líneas de sus campus, sin entrar en la sesión de nadie.
+const bancoGuard = puede('whatsapp.usar', 'whatsapp.supervisar', 'whatsapp.banco', {
+  mensaje: 'No tienes activado el WhatsApp del CRM. Lo enciende quien administra, en tu ficha de usuario.',
+  code: 'SIN_WHATSAPP',
+});
+router.get('/banco', bancoGuard, chat.banco);
+router.get('/banco/numeros', bancoGuard, chat.bancoNumeros);
 
 // Las etiquetas de WhatsApp de esta sesion (#128, #138). Son las del movil de
 // la gestora, no el estado del prospecto que filtra la lista.

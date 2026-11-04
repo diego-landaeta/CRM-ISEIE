@@ -76,9 +76,9 @@ export const NAV_SECTIONS = [
           // la deja tocar el suyo.
           { to: '/whatsapp/conexion', label: 'Conexión', permiso: 'whatsapp.usar' },
           { to: '/whatsapp/plantillas', label: 'Plantillas', permiso: 'whatsapp.plantillas' },
-          // El servidor pide usarlo o supervisarlo (`usaOSupervisa`); sin esto el menú se lo
-          // enseñaba al project manager y le daba 403 (#631, gemela de CRM#643).
-          { to: '/whatsapp/banco', label: 'Banco de mensajes', permiso: ['whatsapp.usar', 'whatsapp.supervisar'] },
+          // El servidor pide usarlo, supervisarlo o verlo (#631; `whatsapp.banco`, el project
+          // manager, Diego 04/11: «el project manager ve todo», con las líneas de sus campus).
+          { to: '/whatsapp/banco', label: 'Banco de mensajes', permiso: ['whatsapp.usar', 'whatsapp.supervisar', 'whatsapp.banco'] },
           // Si cada gestora responde y lo que apunta (Diego, 30/10). Para quien ve Reportes.
           { to: '/whatsapp/actividad', label: 'Actividad', permiso: 'reports.view' },
           { to: '/whatsapp/ayuda', label: 'Cómo se usa' },
@@ -333,6 +333,10 @@ export function canSeeItem(item, role, soloColaboraciones, permisos, can) {
 
   if (!item.roles) return true;
   if (es('superadmin', 'soporte')) return true;
+  // El project manager ve todo (Diego, 04/11): cada pantalla cuyo permiso tiene
+  // (ya mirado arriba), aunque su rol no esté en `roles`. Lo de dentro, de sus
+  // campus: lo recorta el servidor.
+  if (es('project_manager') && item.permiso && !item.comingSoon) return true;
   return item.roles.some((r) => roles.includes(r)) || porPermiso;
 }
 

@@ -48,6 +48,11 @@ const ADMIN_SOPORTE = ['admin', 'soporte'];
 const SOPORTE = ['soporte'];
 const COMERCIAL = ['admin', 'gestor', 'soporte'];
 const NADIE = [];
+// Diego, 04/11: «el project manager ve todo». Cada acción de VER, y solo de ver,
+// la trae también el project manager. Su ALCANCE no cambia: sus campus (ámbito.js),
+// y donde la pantalla recorta a una gestora a lo suyo, a él también.
+const PM = 'project_manager';
+const yPM = (roles) => [...roles, PM];
 
 const a = (accion, nombre, descripcion, roles, extra = {}) => ({ accion, nombre, descripcion, roles, ...extra });
 
@@ -56,7 +61,7 @@ export const ROLES_FIJOS = [
   { clave: 'admin', nombre: 'Admin', descripcion: 'Lleva sus campus: prospectos, ventas, finanzas y su equipo.' },
   { clave: 'gestor', nombre: 'Gestora', descripcion: 'Atiende prospectos y registra ventas, solo los suyos.' },
   { clave: 'soporte', nombre: 'Soporte', descripcion: 'Soporte técnico: ve todos los campus y la configuración del sistema.' },
-  { clave: 'project_manager', nombre: 'Project manager', descripcion: 'Lleva las solicitudes de cambio; en lo demás, como una gestora.' },
+  { clave: 'project_manager', nombre: 'Project manager', descripcion: 'Lleva las solicitudes de cambio y ve todas las pantallas de sus campus, sin tocarlas; en lo demás, como una gestora.' },
   { clave: 'tutor', nombre: 'Tutor', descripcion: 'Da clase: sus cursos, sus comisiones y su perfil.' },
   { clave: 'colaborador', nombre: 'Colaborador', descripcion: 'Externo: su tablero de tareas y su factura del mes. Nada más.' },
 ];
@@ -78,7 +83,7 @@ export const SECCIONES = [
           a('reportar_spam', 'Marcar como spam', 'Avisar de que un prospecto es spam.', ADMIN_SOPORTE),
           // ISEIE (#230): la lista y el contador de avisos los veía también el admin; resolverlos,
           // solo soporte y el superadmin (antes, roleGuard de admin y de superadmin).
-          a('spam', 'Ver avisos de spam', 'La lista de avisos de spam y cuántos hay.', ADMIN_SOPORTE),
+          a('spam', 'Ver avisos de spam', 'La lista de avisos de spam y cuántos hay.', yPM(ADMIN_SOPORTE)),
           a('spam_resolver', 'Resolver avisos de spam', 'Dar por bueno o descartar un aviso de spam.', SOPORTE, { requiere: ['leads.spam'] }),
           a('enviar_correo', 'Escribir a un prospecto', 'Mandar un correo desde la ficha.', TODOS),
           a('exportar_wasapi', 'Exportar para Wasapi', 'Descargar la lista de prospectos con el formato de Wasapi.', TODOS),
@@ -109,6 +114,10 @@ export const SECCIONES = [
           a('usar', 'Usar su WhatsApp', 'Enlazar su número y atender sus chats desde el CRM.', COMERCIAL,
             { nunca: ['tutor', 'colaborador'], nuncaPrincipal: ['tutor', 'colaborador', 'project_manager'], soloPrincipal: true, propia: true }),
           a('supervisar', 'Supervisar el WhatsApp de otros', 'Abrir la sesión de otra persona de sus campus y el banco de mensajes de todas.', ADMIN, { nunca: ['tutor', 'colaborador'], soloPrincipal: true }),
+          // Diego, 04/11 («el project manager ve todo»): el banco, en solo lectura y de las líneas de
+          // sus campus, sin entrar en la sesión de nadie (eso es supervisar, que también deja escribir).
+          a('banco', 'Ver el banco de mensajes', 'Buscar en el respaldo de los mensajes de WhatsApp de las personas de sus campus. Solo lectura.', [PM],
+            { nunca: ['tutor', 'colaborador'], nuncaPrincipal: ['tutor', 'colaborador'], soloPrincipal: true }),
           a('cola', 'Ver la cola de WhatsApp', 'Los prospectos que esperan respuesta por WhatsApp.', TODOS),
           a('plantillas', 'Sus plantillas', 'Crear y usar sus propias plantillas de mensaje.', TODOS, { propia: true }),
           a('plantillas_compartidas', 'Plantillas compartidas', 'Crear y cambiar las plantillas de todo el equipo, y las de otras personas.', ADMIN_SOPORTE, { requiere: ['whatsapp.plantillas'], soloPrincipal: true }),
@@ -119,7 +128,7 @@ export const SECCIONES = [
         clave: 'ventas', nombre: 'Ventas', acciones: [
           a('view', 'Ver sus ventas', 'Sus cifras: por cliente, por producto, facturado y su evolución.', TODOS),
           a('registrar', 'Registrar una venta', 'Apuntar una venta nueva desde Ventas.', COMERCIAL),
-          a('view_equipo', 'Ver las ventas del equipo', 'El resumen y las ventas por asesora de todo el equipo.', ADMIN_SOPORTE, { requiere: ['ventas.view'] }),
+          a('view_equipo', 'Ver las ventas del equipo', 'El resumen y las ventas por asesora de todo el equipo.', yPM(ADMIN_SOPORTE), { requiere: ['ventas.view'] }),
           // Solo admin y gestora (IDOR de las metas): antes la ruta no pedía rol y un tutor, soporte o project
           // manager podía fijar o borrar la meta de cualquiera. Cambio pendiente de aprobar: `metas-sin-soporte-ni-pm`.
           a('metas', 'Metas de venta', 'Poner y quitar metas (una gestora, solo la suya; un admin, la de su gente).', ['admin', 'gestor'], { nunca: ['tutor', 'soporte', 'project_manager', 'colaborador'] }),
@@ -177,7 +186,7 @@ export const SECCIONES = [
       },
       {
         clave: 'make', nombre: 'Make', acciones: [
-          a('view', 'Ver escenarios de Make', 'Las entradas de Make y lo que han entregado.', ADMIN_SOPORTE),
+          a('view', 'Ver escenarios de Make', 'Las entradas de Make y lo que han entregado.', yPM(ADMIN_SOPORTE)),
           a('create', 'Crear entradas de Make', 'Una entrada nueva.', ADMIN_SOPORTE),
           a('edit', 'Editar entradas de Make', 'Cambiarla o renovar su secreto.', ADMIN_SOPORTE),
           a('delete', 'Borrar entradas de Make', 'Quitar una entrada.', ADMIN_SOPORTE),
@@ -185,7 +194,7 @@ export const SECCIONES = [
       },
       {
         clave: 'webhooks', nombre: 'Webhooks de entrada', acciones: [
-          a('view', 'Ver webhooks', 'Los webhooks que reciben prospectos y su estado (de sus campus).', ADMIN),
+          a('view', 'Ver webhooks', 'Los webhooks que reciben prospectos y su estado (de sus campus).', yPM(ADMIN)),
           a('create', 'Crear webhooks', 'Un webhook nuevo.', ADMIN),
           a('edit', 'Editar webhooks', 'Cambiarlo o ponerlo a escuchar.', ADMIN),
           a('delete', 'Borrar webhooks', 'Quitar un webhook.', ADMIN),
@@ -204,7 +213,7 @@ export const SECCIONES = [
     recursos: [
       {
         clave: 'meta_ads', nombre: 'Meta Ads', acciones: [
-          a('view', 'Ver Meta Ads', 'Cuentas, campañas, anuncios y su rendimiento.', ADMIN_SOPORTE),
+          a('view', 'Ver Meta Ads', 'Cuentas, campañas, anuncios y su rendimiento.', yPM(ADMIN_SOPORTE)),
           a('edit', 'Conectar y sincronizar Meta Ads', 'Conectar cuentas, sincronizarlas y asociar campañas a productos.', ADMIN_SOPORTE),
         ],
       },
@@ -231,7 +240,7 @@ export const SECCIONES = [
       },
       {
         clave: 'woocommerce', nombre: 'WooCommerce', acciones: [
-          a('view', 'Ver WooCommerce', 'La conexión, el mapeo y las importaciones.', ADMIN_SOPORTE),
+          a('view', 'Ver WooCommerce', 'La conexión, el mapeo y las importaciones.', yPM(ADMIN_SOPORTE)),
           a('edit', 'Configurar WooCommerce', 'Credenciales y mapeo de campos.', ADMIN_SOPORTE),
           a('sync', 'Importar de WooCommerce', 'Lanzar una importación de productos.', ADMIN_SOPORTE),
           a('pedidos', 'Pedidos de WooCommerce', 'Ver los pedidos de sus campus, traerlos a mano, encender su sincronización y generar el secreto del aviso (#14).', ADMIN),
@@ -255,7 +264,7 @@ export const SECCIONES = [
       {
         // Consultas de alumnos (#188). El tutor, las suyas; administración, el panel.
         clave: 'consultas', nombre: 'Consultas de alumnos', acciones: [
-          a('view', 'Ver el panel de consultas', 'Las consultas de los alumnos de sus campus, la carga de cada tutor y las métricas de todos.', ADMIN_SOPORTE),
+          a('view', 'Ver el panel de consultas', 'Las consultas de los alumnos de sus campus, la carga de cada tutor y las métricas de todos.', yPM(ADMIN_SOPORTE)),
           a('gestionar', 'Gestionar consultas', 'Reasignar una consulta a otro tutor, leer los campus ahora, sincronizar alumnos y el token de cada tutor.', ADMIN_SOPORTE),
           a('atender', 'Atender sus consultas', 'Su bandeja: responder y cerrar sus consultas, escribir a sus alumnos, su carga de trabajo y sus métricas.', ['tutor'], { independiente: true, propia: true }),
         ],
@@ -267,8 +276,8 @@ export const SECCIONES = [
     recursos: [
       {
         clave: 'accounting', nombre: 'Caja', acciones: [
-          a('view', 'Ver el dashboard de finanzas', 'La caja del mes.', ADMIN_SOPORTE),
-          a('por_cobrar', 'Cuentas por cobrar', 'Lo pendiente de cobro (una gestora, lo suyo).', COMERCIAL, { independiente: true }),
+          a('view', 'Ver el dashboard de finanzas', 'La caja del mes.', yPM(ADMIN_SOPORTE)),
+          a('por_cobrar', 'Cuentas por cobrar', 'Lo pendiente de cobro (una gestora, lo suyo).', yPM(COMERCIAL), { independiente: true }),
         ],
       },
       {
@@ -302,7 +311,7 @@ export const SECCIONES = [
       },
       {
         clave: 'expenses', nombre: 'Egresos', acciones: [
-          a('view', 'Ver egresos', 'Los gastos y sus comprobantes.', ADMIN_SOPORTE),
+          a('view', 'Ver egresos', 'Los gastos y sus comprobantes.', yPM(ADMIN_SOPORTE)),
           a('create', 'Apuntar egresos', 'Un gasto nuevo con su comprobante.', ADMIN_SOPORTE),
           a('edit', 'Editar egresos', 'Cambiar un gasto.', ADMIN_SOPORTE),
           a('delete', 'Borrar egresos', 'Quitar un gasto.', ADMIN_SOPORTE),
@@ -310,7 +319,7 @@ export const SECCIONES = [
       },
       {
         clave: 'accounts_payable', nombre: 'Cuentas por pagar', acciones: [
-          a('view', 'Ver cuentas por pagar', 'Lo pendiente de pago.', ADMIN_SOPORTE),
+          a('view', 'Ver cuentas por pagar', 'Lo pendiente de pago.', yPM(ADMIN_SOPORTE)),
           a('create', 'Apuntar cuentas por pagar', 'Una deuda nueva.', ADMIN_SOPORTE),
           a('edit', 'Editar y pagar', 'Cambiarla y apuntar pagos.', ADMIN_SOPORTE),
           a('delete', 'Borrar cuentas por pagar', 'Quitarla.', ADMIN_SOPORTE),
@@ -318,7 +327,7 @@ export const SECCIONES = [
       },
       {
         clave: 'commissions', nombre: 'Comisiones del equipo', acciones: [
-          a('view', 'Ver comisiones', 'Las comisiones del equipo comercial y sus reglas.', ADMIN_SOPORTE),
+          a('view', 'Ver comisiones', 'Las comisiones del equipo comercial y sus reglas.', yPM(ADMIN_SOPORTE)),
           a('edit', 'Recalcular comisiones', 'Volver a calcular la comisión de una venta.', ADMIN_SOPORTE),
           a('pagar', 'Pagar comisiones', 'Marcar una comisión como pagada.', ADMIN_SOPORTE),
           a('reglas', 'Reglas de comisión', 'Crear, cambiar y quitar las reglas.', SOPORTE),
@@ -326,7 +335,7 @@ export const SECCIONES = [
       },
       {
         clave: 'payroll', nombre: 'Nóminas', acciones: [
-          a('view', 'Ver nóminas', 'Planes, horas y periodos.', ADMIN_SOPORTE),
+          a('view', 'Ver nóminas', 'Planes, horas y periodos.', yPM(ADMIN_SOPORTE)),
           a('create', 'Apuntar horas', 'Registrar horas trabajadas.', COMERCIAL, { independiente: true }),
           a('edit', 'Gestionar nóminas', 'Planes, generar, cerrar y pagar periodos, ajustes.', ADMIN_SOPORTE),
           a('delete', 'Borrar en nóminas', 'Quitar planes, horas y ajustes.', ADMIN_SOPORTE),
@@ -341,7 +350,7 @@ export const SECCIONES = [
       {
         clave: 'facturas_colaborador', nombre: 'Facturas de colaboradores', acciones: [
           a('subir', 'Subir su factura', '«Mi factura»: el colaborador sube la suya del mes.', ['colaborador'], { propia: true }),
-          a('ver_todas', 'Ver las facturas', 'Las facturas de los colaboradores de sus empresas.', ADMIN),
+          a('ver_todas', 'Ver las facturas', 'Las facturas de los colaboradores de sus empresas.', yPM(ADMIN)),
           a('gestionar', 'Gestionar colaboradores', 'Dar de alta colaboradores y reenviarles el enlace.', ADMIN),
           a('anular', 'Anular facturas de colaboradores', 'Anular una factura recibida.', ADMIN, { requiere: ['facturas_colaborador.ver_todas'] }),
           a('pagar', 'Pagar facturas de colaboradores', 'Marcarlas pagadas con su justificante.', ADMIN, { requiere: ['facturas_colaborador.ver_todas'] }),
@@ -349,7 +358,7 @@ export const SECCIONES = [
       },
       {
         clave: 'integrations', nombre: 'Integraciones', acciones: [
-          a('view', 'Ver integraciones', 'Los servicios conectados (Stripe, Brevo…).', ADMIN_SOPORTE),
+          a('view', 'Ver integraciones', 'Los servicios conectados (Stripe, Brevo…).', yPM(ADMIN_SOPORTE)),
           a('edit', 'Configurar integraciones', 'Conectarlos, probarlos y desconectarlos.', ADMIN_SOPORTE),
         ],
       },
@@ -361,10 +370,10 @@ export const SECCIONES = [
       {
         clave: 'reports', nombre: 'Reportes', acciones: [
           a('mis_informes', 'Ver informes', 'Los informes de ventas, prospectos y seguimiento (una gestora, los suyos).', TODOS, { independiente: true }),
-          a('view', 'Ver el resumen general', 'El resumen de todo el equipo.', ADMIN_SOPORTE),
-          a('dinero', 'Dónde poner el dinero', 'Ventas y gasto de publicidad por canal y campaña, contra el periodo anterior.', ADMIN),
+          a('view', 'Ver el resumen general', 'El resumen de todo el equipo.', yPM(ADMIN_SOPORTE)),
+          a('dinero', 'Dónde poner el dinero', 'Ventas y gasto de publicidad por canal y campaña, contra el periodo anterior.', yPM(ADMIN)),
           a('editar_baremo', 'Cambiar el baremo de la tasa de cierre', 'Los tramos que dicen qué significa cada tasa (buena, regular...) por campus; el general, solo el super admin.', ADMIN),
-          a('puesto_ajeno', 'El puesto de otra gestora', 'Ver en qué puesto va otra gestora del ranking.', ADMIN_SOPORTE, { requiere: ['reports.mis_informes'], independiente: true }),
+          a('puesto_ajeno', 'El puesto de otra gestora', 'Ver en qué puesto va otra gestora del ranking.', yPM(ADMIN_SOPORTE), { requiere: ['reports.mis_informes'], independiente: true }),
         ],
       },
       {
@@ -398,7 +407,7 @@ export const SECCIONES = [
       },
       {
         clave: 'matriculas', nombre: 'Matrículas', acciones: [
-          a('view', 'Ver matrículas', 'Las matrículas y sus documentos.', COMERCIAL),
+          a('view', 'Ver matrículas', 'Las matrículas y sus documentos.', yPM(COMERCIAL)),
           a('create', 'Crear matrículas', 'Una matrícula nueva.', COMERCIAL),
           a('edit', 'Editar matrículas', 'Cambiar datos y subir documentos.', COMERCIAL),
           a('cambiar_estado', 'Cambiar el estado', 'Validar, rechazar o cerrar una matrícula.', ADMIN_SOPORTE),
@@ -407,10 +416,10 @@ export const SECCIONES = [
       },
       {
         clave: 'diplomas', nombre: 'Diplomas (Certifex)', acciones: [
-          a('view', 'Ver diplomas', 'La pantalla Diplomas en solo lectura (de sus campus).', ADMIN),
+          a('view', 'Ver diplomas', 'La pantalla Diplomas en solo lectura (de sus campus).', yPM(ADMIN)),
           // Diego, 22/10 (#437/#438): «que Dayana pueda emitir». Quien emite también ve.
           a('emit', 'Emitir diplomas', 'Revisar los datos (nombre, DNI, correo, formación), pasar a pendientes, aprobar y emitir, enviar el diploma al alumno y crear uno nuevo, en sus campus. Rechazar, corregir y revocar, no.', ADMIN, { independiente: true }),
-          a('view_emisiones', 'Ver emisiones y firmas', 'El historial de emisiones, las formaciones y las firmas.', ADMIN),
+          a('view_emisiones', 'Ver emisiones y firmas', 'El historial de emisiones, las formaciones y las firmas.', yPM(ADMIN)),
           a('aprobar', 'Aprobar y emitir', 'Aprobar, rechazar y emitir diplomas, y crear uno nuevo.', ADMIN),
           a('edit', 'Corregir diplomas', 'Corregir datos, subir la firma y sincronizar formaciones.', ADMIN),
           a('avisar', 'Avisar al alumno', 'Mandar el aviso de diploma emitido o rechazado.', ADMIN),
@@ -420,7 +429,7 @@ export const SECCIONES = [
       },
       {
         clave: 'certifex_consultas', nombre: 'Consultas de Certifex', acciones: [
-          a('view', 'Ver consultas', 'Lo que escriben los centros desde la web de Certifex.', ADMIN_SOPORTE),
+          a('view', 'Ver consultas', 'Lo que escriben los centros desde la web de Certifex.', yPM(ADMIN_SOPORTE)),
           a('edit', 'Responder consultas', 'Marcar una consulta como atendida.', ADMIN_SOPORTE),
         ],
       },
@@ -440,7 +449,7 @@ export const SECCIONES = [
       },
       {
         clave: 'connectors', nombre: 'Conectores', acciones: [
-          a('view', 'Ver conectores', 'Los conectores de sus campus.', ADMIN),
+          a('view', 'Ver conectores', 'Los conectores de sus campus.', yPM(ADMIN)),
           a('create', 'Crear conectores', 'Un conector nuevo.', ADMIN),
           a('edit', 'Editar conectores', 'Cambiarlo, probarlo e importar.', ADMIN),
           a('delete', 'Borrar conectores', 'Quitar un conector.', ADMIN),
@@ -450,14 +459,14 @@ export const SECCIONES = [
       {
         clave: 'moodle', nombre: 'Moodle', acciones: [
           // Cursos, alumnos y recursos del Moodle de cada campus (#335). Antes: soloRoles('superadmin', 'admin').
-          a('view', 'Ver el Moodle de los campus', 'Los cursos, alumnos y recursos del Moodle de cada campus. Solo lectura.', ADMIN),
+          a('view', 'Ver el Moodle de los campus', 'Los cursos, alumnos y recursos del Moodle de cada campus. Solo lectura.', yPM(ADMIN)),
           // Conectar un Moodle es guardar una credencial: antes soloRoles('superadmin'); NADIE = solo superadmin.
           a('conectar', 'Conectar un Moodle', 'Guardar o quitar el token de un campus.', NADIE),
         ],
       },
       {
         clave: 'webhooks_salientes', nombre: 'Webhooks de salida', acciones: [
-          a('view', 'Ver webhooks de salida', 'Los avisos que el CRM manda a otros sistemas y sus envíos.', ADMIN),
+          a('view', 'Ver webhooks de salida', 'Los avisos que el CRM manda a otros sistemas y sus envíos.', yPM(ADMIN)),
           a('create', 'Crear webhooks de salida', 'Uno nuevo.', ADMIN),
           a('edit', 'Editar webhooks de salida', 'Cambiarlo, probarlo y reenviar.', ADMIN),
           a('delete', 'Borrar webhooks de salida', 'Quitarlo.', ADMIN),
@@ -472,7 +481,7 @@ export const SECCIONES = [
       {
         clave: 'novedades', nombre: 'Novedades', acciones: [
           a('view', 'Ver novedades', 'Lo que trae cada versión del CRM.', TODOS_Y_TUTOR),
-          a('envios', 'Ver a quién llegó', 'A quién se ha mandado cada versión.', ADMIN_SOPORTE),
+          a('envios', 'Ver a quién llegó', 'A quién se ha mandado cada versión.', yPM(ADMIN_SOPORTE)),
           a('enviar', 'Mandar novedades', 'Mandar el correo de una versión.', SOPORTE),
         ],
       },
@@ -493,12 +502,12 @@ export const SECCIONES = [
       },
       {
         clave: 'registro', nombre: 'Registro', acciones: [
-          a('view', 'Ver el registro', 'Quién cambió qué y cuándo.', ADMIN_SOPORTE),
+          a('view', 'Ver el registro', 'Quién cambió qué y cuándo.', yPM(ADMIN_SOPORTE)),
         ],
       },
       {
         clave: 'status', nombre: 'Estado del sistema', acciones: [
-          a('view', 'Ver el estado', 'Errores, piezas y correos del sistema.', ADMIN_SOPORTE),
+          a('view', 'Ver el estado', 'Errores, piezas y correos del sistema.', yPM(ADMIN_SOPORTE)),
           a('edit', 'Apuntar incidencias', 'Abrir y cerrar incidencias y cambiar el estado de cada pieza.', ADMIN_SOPORTE),
         ],
       },
@@ -506,7 +515,7 @@ export const SECCIONES = [
         clave: 'credentials', nombre: 'Claves y variables', acciones: [
           // El admin las ve, de sus campus (CRM#632 / ISEIE#359, Diego 03/11: «el
           // admin debe ver todo de todo»). Guardar sigue siendo de soporte.
-          a('view', 'Ver claves', 'Qué claves hay, sin verlas, y su registro. El admin, las de sus campus.', ADMIN_SOPORTE),
+          a('view', 'Ver claves', 'Qué claves hay, sin verlas, y su registro. El admin, las de sus campus.', yPM(ADMIN_SOPORTE)),
           a('edit', 'Guardar claves', 'Guardar, probar y quitar claves de servicios.', SOPORTE),
         ],
       },
@@ -516,7 +525,7 @@ export const SECCIONES = [
           a('create', 'Generar documentos', 'Generar, regenerar y reenviar documentos.', ADMIN_SOPORTE),
           a('numeracion', 'Numeración', 'Ver y cambiar el siguiente número.', ADMIN_SOPORTE),
           a('delete', 'Borrar documentos', 'Quitar un documento.', ADMIN_SOPORTE),
-          a('auditar', 'Auditoría de documentos', 'Quién generó y descargó cada documento.', SOPORTE),
+          a('auditar', 'Auditoría de documentos', 'Quién generó y descargó cada documento.', yPM(SOPORTE)),
         ],
       },
     ],
@@ -526,7 +535,7 @@ export const SECCIONES = [
     recursos: [
       {
         clave: 'users', nombre: 'Usuarios', acciones: [
-          a('view', 'Ver usuarios', 'La lista del equipo y su disponibilidad.', ADMIN_SOPORTE),
+          a('view', 'Ver usuarios', 'La lista del equipo y su disponibilidad.', yPM(ADMIN_SOPORTE)),
           a('create', 'Crear usuarios', 'Dar de alta a alguien (con su bienvenida por correo).', ADMIN_SOPORTE),
           a('edit', 'Editar usuarios', 'Datos, campus, disponibilidad y reactivar.', ADMIN_SOPORTE),
           a('delete', 'Desactivar usuarios', 'Dar de baja a alguien.', ADMIN_SOPORTE),
@@ -538,7 +547,7 @@ export const SECCIONES = [
       },
       {
         clave: 'roles', nombre: 'Roles y permisos', acciones: [
-          a('view', 'Ver roles', 'Qué trae cada rol y los roles a medida.', ADMIN),
+          a('view', 'Ver roles', 'Qué trae cada rol y los roles a medida.', yPM(ADMIN)),
           // Diego, 26/10: el admin SIGUE cambiando lo que trae cada rol y los
           // roles a medida, como antes de #423; soporte, no. Y nadie le pone a un
           // rol lo que él mismo no tiene (permissions.editar.js).

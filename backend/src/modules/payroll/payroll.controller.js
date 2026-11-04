@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import * as model from './payroll.model.js';
 import { AppError } from '../../shared/utils/AppError.js';
-import { proyectosDelAmbito, campusDeTodos } from '../../shared/utils/ambito.js';
+import { proyectosDelAmbito, campusDeTodos, exigirCampusSuyo } from '../../shared/utils/ambito.js';
 
 const planSchema = z.object({
   project_id: z.number().int().positive(),
@@ -82,6 +82,8 @@ export const getPeriod = async (req, res, next) => {
   try {
     const p = await model.getPeriod(parseInt(req.params.id));
     if (!p) throw new AppError('Periodo no encontrado', 404, 'NOT_FOUND');
+    // La nómina de otro campus, como si no existiera (Diego, 04/11).
+    await exigirCampusSuyo(req, p.project_id, 'Periodo no encontrado');
     res.json({ success: true, data: p });
   } catch (e) { next(e); }
 };

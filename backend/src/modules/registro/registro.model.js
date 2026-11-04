@@ -111,8 +111,16 @@ export const olvidarTablas = () => { existentes = null; };
  * FUERA en vez de traerlas todas — buscar «lo que hizo Laura» y que salgan los
  * webhooks es justo lo que hace inutil un filtro.
  */
-function condiciones({ fechaCol, usuarioCol }, { desde, hasta, usuarioId }, params) {
+function condiciones({ fechaCol, usuarioCol, campusCol = null }, { desde, hasta, usuarioId, campus }, params) {
   const trozos = [];
+  // Quien no ve el CRM entero, solo lo de SUS campus (Diego, 04/11; antes un
+  // admin o un project manager de una empresa leía el registro de todas). Una
+  // fuente sin campus (documentos, tareas, errores del sistema) no le aplica.
+  if (campus) {
+    if (!campusCol) return null;
+    params.push(campus);
+    trozos.push(`${campusCol} = ANY($${params.length}::int[])`);
+  }
   if (desde)  { params.push(desde); trozos.push(`${fechaCol} >= $${params.length}`); }
   if (hasta)  { params.push(hasta); trozos.push(`${fechaCol} < ($${params.length}::date + 1)`); }
   if (usuarioId) {
@@ -126,7 +134,7 @@ function condiciones({ fechaCol, usuarioCol }, { desde, hasta, usuarioId }, para
 /** Cambios en la ficha de un prospecto. */
 async function deFichas(filtros, limite) {
   const params = [];
-  const donde = condiciones({ fechaCol: 'a.changed_at', usuarioCol: 'a.changed_by_user_id' }, filtros, params);
+  const donde = condiciones({ fechaCol: 'a.changed_at', usuarioCol: 'a.changed_by_user_id', campusCol: 'l.project_id' }, filtros, params);
   if (donde === null) return [];
   params.push(limite);
   const { rows } = await query(
@@ -204,7 +212,7 @@ async function deDocumentos(filtros, limite) {
 /** Inicios de sesion, credenciales, WhatsApp: lo que ya escribe medio CRM. */
 async function deUsuarios(filtros, limite) {
   const params = [];
-  const donde = condiciones({ fechaCol: 'l.created_at', usuarioCol: 'l.user_id' }, filtros, params);
+  const donde = condiciones({ fechaCol: 'l.created_at', usuarioCol: 'l.user_id', campusCol: "(CASE WHEN l.details->>'project_id' ~ '^[0-9]+$' THEN (l.details->>'project_id')::int END)" }, filtros, params);
   if (donde === null) return [];
   params.push(limite);
   const { rows } = await query(
@@ -300,7 +308,7 @@ async function deTareas(filtros, limite) {
 /** Cada entrega de webhook, con su resultado. */
 async function deWebhooks(filtros, limite) {
   const params = [];
-  const donde = condiciones({ fechaCol: 'd.received_at', usuarioCol: null }, filtros, params);
+  const donde = condiciones({ fechaCol: 'd.received_at', usuarioCol: null, campusCol: 'w.project_id' }, filtros, params);
   if (donde === null) return [];
   params.push(limite);
   const { rows } = await query(
@@ -361,7 +369,7 @@ async function deWebhooks(filtros, limite) {
  */
 async function deCorreos(filtros, limite) {
   const params = [];
-  const donde = condiciones({ fechaCol: 'e.created_at', usuarioCol: null }, filtros, params);
+  const donde = condiciones({ fechaCol: 'e.created_at', usuarioCol: null, campusCol: 'e.project_id' }, filtros, params);
   if (donde === null) return [];
   params.push(limite);
   const { rows } = await query(
@@ -453,7 +461,8 @@ export const TOPE = 500;
  * El registro.
  *
  * @param {'general'|'todos'} vista
- * @param {{desde?, hasta?, usuarioId?, fuentes?, busca?, limite?}} filtros
+ * @param {{desde?, hasta?, usuarioId?, fuentes?, busca?, limite?, campus?}} filtros
+ *   `campus`: los campus a los que se recorta (null, todo el CRM).
  */
 export async function listar({ vista = 'general', ...filtros } = {}) {
   const limite = Math.min(Number(filtros.limite) || 100, TOPE);

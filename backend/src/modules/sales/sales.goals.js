@@ -16,7 +16,7 @@ function currentPeriodo() {
  * Devuelve también la meta cuando existe.
  */
 export async function getGestoresStats({
-  projectId = null, periodo = null, from = null, to = null,
+  projectId = null, projectIds = null, periodo = null, from = null, to = null,
 } = {}) {
   // periodo='all' → todas las ventas (sin filtro de mes). Default = mes actual.
   const allTime = periodo === 'all';
@@ -26,13 +26,15 @@ export async function getGestoresStats({
   const porFechas = Boolean(from && to);
   const params = [];
 
-  const projectFilter = projectId
-    ? `AND c.project_id = $${params.push(projectId)}`
+  // Un campus o una lista (los suyos): `comoLista` deja los dos casos en una.
+  const lista = comoLista(projectId, projectIds);
+  const projectFilter = lista
+    ? `AND c.project_id = ANY($${params.push(lista)}::int[])`
     // Sin proyecto elegido, «todos» no incluye el de pruebas: ventas
     // inventadas no pueden aparecer en el total de nadie. Hoy ISEIE no tiene
     // ninguno, pero se escribe igual que en el CRM hermano.
     : `AND ${SIN_PRUEBAS('c.project_id')}`;
-  const idxProyecto = projectId ? params.length : null;
+  const idxProyecto = lista ? params.length : null;
   /*
     Quien sale en la tabla: quien trabaja en ese proyecto.
 
@@ -42,10 +44,10 @@ export async function getGestoresStats({
     CRM hermano --con sociedades de siete campus-- las 2 ventas de una gestora
     salian como 14. Se escribe igual en los dos para que no vuelva a pasar.
   */
-  const userProjectJoin = projectId
+  const userProjectJoin = lista
     ? `AND EXISTS (SELECT 1 FROM user_projects up
                     WHERE up.user_id = u.id AND up.active = TRUE
-                      AND up.project_id = $${idxProyecto})`
+                      AND up.project_id = ANY($${idxProyecto}::int[]))`
     : '';
 
   let dateFilter = '';
@@ -69,7 +71,7 @@ export async function getGestoresStats({
         AND NOT COALESCE(u.gestor_colaboraciones, false)
         AND EXISTS (SELECT 1 FROM user_projects up
                      WHERE up.user_id = u.id AND up.active = TRUE
-                       AND ${idxProyecto ? `up.project_id = $${idxProyecto}` : SIN_PRUEBAS('up.project_id')}
+                       AND ${idxProyecto ? `up.project_id = ANY($${idxProyecto}::int[])` : SIN_PRUEBAS('up.project_id')}
                        AND (u.role = 'gestor' OR (u.role IN ('admin','superadmin') AND up.recibe_leads = TRUE))))`;
 
   const { rows: stats } = await query(
@@ -106,15 +108,15 @@ export async function getGestoresStats({
   let goalByUser = {};
   if (!allTime) {
     const goalsParams = [per];
-    const projectGoalFilter = projectId
-      ? `AND (g.project_id = $2 OR g.project_id IS NULL)` : '';
+    const projectGoalFilter = lista
+      ? `AND (g.project_id = ANY($2::int[]) OR g.project_id IS NULL)` : '';
     const { rows: goals } = await query(
       `SELECT g.user_id, g.meta_ventas, g.meta_facturacion, g.notas, g.set_by_user_id,
               su.nombre AS set_by_nombre
        FROM sales_goals g
        LEFT JOIN users su ON su.id = g.set_by_user_id
        WHERE g.periodo_yyyymm = $1 ${projectGoalFilter}`,
-      projectId ? [...goalsParams, projectId] : goalsParams
+      lista ? [...goalsParams, lista] : goalsParams
     );
     goalByUser = Object.fromEntries(goals.map((g) => [g.user_id, g]));
   }

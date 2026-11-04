@@ -9,6 +9,7 @@ import { decidirFormulario, apuntarFormulario } from '../asignacion/asignacion.s
 import { AppError } from '../../shared/utils/AppError.js';
 import { tieneRol } from '../../shared/utils/roles.js';
 import { campusDeLaPersona } from '../../shared/utils/ambito.js';
+import { tienePermiso } from '../../shared/middleware/permissions.js';
 
 /**
  * Cada admin, solo los webhooks de sus campus; el super admin, todos. Lo mismo que
@@ -48,7 +49,11 @@ export async function list(req, res, next) {
     const projectId = parseInt(req.query.projectId);
     if (!projectId) throw new AppError('projectId requerido', 400, 'PROJECT_REQUIRED');
     await comprobarCampus(req, projectId);
-    res.json({ success: true, data: await model.listByProject(projectId, req.query.kind) });
+    const filas = await model.listByProject(projectId, req.query.kind);
+    // Quien solo los VE (el project manager, Diego 04/11) no se lleva el token:
+    // con él se meten prospectos en el CRM. Se le enseña el principio.
+    const verToken = await tienePermiso(req, 'webhooks.edit');
+    res.json({ success: true, data: verToken ? filas : filas.map((f) => ({ ...f, token: `${String(f.token || '').slice(0, 4)}…`, token_oculto: true })) });
   } catch (err) { next(err); }
 }
 

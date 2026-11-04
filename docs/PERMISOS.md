@@ -1041,8 +1041,8 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | formaDeAvisos | `GET /api/whatsapp/forma-avisos` | sesión · soloRoles(soporte, superadmin) | superadmin, soporte | `whatsapp.forma_avisos` |
 | olvidarFormaDeAvisos | `DELETE /api/whatsapp/forma-avisos` | sesión · soloRoles(soporte, superadmin) | superadmin, soporte | `whatsapp.forma_avisos` |
 | vozOTextoCtrl | `GET /api/whatsapp/voz-o-texto` | (no existía) | (ruta nueva) | `whatsapp.usar` |
-| banco | `GET /api/whatsapp/banco` | sesión · a mano: chat.controller.js · sesionesQuePuedeMirar | superadmin, admin, gestor, soporte (salvo con «usa_whatsapp» apagado) | `whatsapp.usar` o `whatsapp.supervisar` |
-| bancoNumeros | `GET /api/whatsapp/banco/numeros` | sesión · a mano: chat.controller.js · sesionesQuePuedeMirar | superadmin, admin, gestor, soporte (salvo con «usa_whatsapp» apagado) | `whatsapp.usar` o `whatsapp.supervisar` |
+| banco | `GET /api/whatsapp/banco` | sesión · a mano: chat.controller.js · sesionesQuePuedeMirar | superadmin, admin, gestor, soporte (salvo con «usa_whatsapp» apagado) | `whatsapp.usar` o `whatsapp.supervisar` o `whatsapp.banco` |
+| bancoNumeros | `GET /api/whatsapp/banco/numeros` | sesión · a mano: chat.controller.js · sesionesQuePuedeMirar | superadmin, admin, gestor, soporte (salvo con «usa_whatsapp» apagado) | `whatsapp.usar` o `whatsapp.supervisar` o `whatsapp.banco` |
 | etiquetasDeWhatsapp | `GET /api/whatsapp/etiquetas` | sesión · a mano: chat.controller.js · usuarioObjetivo (rol con WhatsApp + casilla usa_whatsapp) | superadmin, admin, gestor, soporte (salvo con «usa_whatsapp» apagado) | `whatsapp.usar` |
 | chats | `GET /api/whatsapp/chats` | sesión · a mano: chat.controller.js · usuarioObjetivo (rol con WhatsApp + casilla usa_whatsapp) | superadmin, admin, gestor, soporte (salvo con «usa_whatsapp» apagado) | `whatsapp.usar` |
 | abrirChat | `POST /api/whatsapp/chats` | sesión · a mano: chat.controller.js · usuarioObjetivo (rol con WhatsApp + casilla usa_whatsapp) | superadmin, admin, gestor, soporte (salvo con «usa_whatsapp» apagado) | `whatsapp.usar` |
@@ -1127,7 +1127,7 @@ lo que pide para tener sentido (editar pide ver).
 | Asignar prospectos | `leads.assign` | Cambiar la gestora de un prospecto y repartir los que no tienen. | Admin, Soporte | `leads.view` |
 | Revisar duplicados | `leads.duplicados` | Ver la cola de posibles duplicados y decidir qué se hace con cada uno. | Admin, Soporte | `leads.view` |
 | Marcar como spam | `leads.reportar_spam` | Avisar de que un prospecto es spam. | Admin, Soporte | `leads.view` |
-| Ver avisos de spam | `leads.spam` | La lista de avisos de spam y cuántos hay. | Admin, Soporte | `leads.view` |
+| Ver avisos de spam | `leads.spam` | La lista de avisos de spam y cuántos hay. | Admin, Soporte, Project manager | `leads.view` |
 | Resolver avisos de spam | `leads.spam_resolver` | Dar por bueno o descartar un aviso de spam. | Soporte | `leads.spam`, `leads.view` |
 | Escribir a un prospecto | `leads.enviar_correo` | Mandar un correo desde la ficha. | Admin, Gestora, Soporte, Project manager | `leads.view` |
 | Exportar para Wasapi | `leads.exportar_wasapi` | Descargar la lista de prospectos con el formato de Wasapi. | Admin, Gestora, Soporte, Project manager | `leads.view` |
@@ -1157,6 +1157,7 @@ lo que pide para tener sentido (editar pide ver).
 |---|---|---|---|---|
 | Usar su WhatsApp | `whatsapp.usar` | Enlazar su número y atender sus chats desde el CRM. · nunca: Tutor, Colaborador · nunca si su rol principal es: Tutor, Colaborador, Project manager | Admin, Gestora, Soporte |  |
 | Supervisar el WhatsApp de otros | `whatsapp.supervisar` | Abrir la sesión de otra persona de sus campus y el banco de mensajes de todas. · nunca: Tutor, Colaborador | Admin |  |
+| Ver el banco de mensajes | `whatsapp.banco` | Buscar en el respaldo de los mensajes de WhatsApp de las personas de sus campus. Solo lectura. · nunca: Tutor, Colaborador · nunca si su rol principal es: Tutor, Colaborador | Project manager |  |
 | Ver la cola de WhatsApp | `whatsapp.cola` | Los prospectos que esperan respuesta por WhatsApp. | Admin, Gestora, Soporte, Project manager |  |
 | Sus plantillas | `whatsapp.plantillas` | Crear y usar sus propias plantillas de mensaje. | Admin, Gestora, Soporte, Project manager |  |
 | Plantillas compartidas | `whatsapp.plantillas_compartidas` | Crear y cambiar las plantillas de todo el equipo, y las de otras personas. | Admin, Soporte | `whatsapp.plantillas` |
@@ -1168,7 +1169,7 @@ lo que pide para tener sentido (editar pide ver).
 |---|---|---|---|---|
 | Ver sus ventas | `ventas.view` | Sus cifras: por cliente, por producto, facturado y su evolución. | Admin, Gestora, Soporte, Project manager |  |
 | Registrar una venta | `ventas.registrar` | Apuntar una venta nueva desde Ventas. | Admin, Gestora, Soporte | `ventas.view` |
-| Ver las ventas del equipo | `ventas.view_equipo` | El resumen y las ventas por asesora de todo el equipo. | Admin, Soporte | `ventas.view` |
+| Ver las ventas del equipo | `ventas.view_equipo` | El resumen y las ventas por asesora de todo el equipo. | Admin, Soporte, Project manager | `ventas.view` |
 | Metas de venta | `ventas.metas` | Poner y quitar metas (una gestora, solo la suya; un admin, la de su gente). · nunca: Tutor, Soporte, Project manager, Colaborador | Admin, Gestora | `ventas.view` |
 
 ## Tareas
@@ -1221,7 +1222,7 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver escenarios de Make | `make.view` | Las entradas de Make y lo que han entregado. | Admin, Soporte |  |
+| Ver escenarios de Make | `make.view` | Las entradas de Make y lo que han entregado. | Admin, Soporte, Project manager |  |
 | Crear entradas de Make | `make.create` | Una entrada nueva. | Admin, Soporte | `make.view` |
 | Editar entradas de Make | `make.edit` | Cambiarla o renovar su secreto. | Admin, Soporte | `make.view` |
 | Borrar entradas de Make | `make.delete` | Quitar una entrada. | Admin, Soporte | `make.view` |
@@ -1230,7 +1231,7 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver webhooks | `webhooks.view` | Los webhooks que reciben prospectos y su estado (de sus campus). | Admin |  |
+| Ver webhooks | `webhooks.view` | Los webhooks que reciben prospectos y su estado (de sus campus). | Admin, Project manager |  |
 | Crear webhooks | `webhooks.create` | Un webhook nuevo. | Admin | `webhooks.view` |
 | Editar webhooks | `webhooks.edit` | Cambiarlo o ponerlo a escuchar. | Admin | `webhooks.view` |
 | Borrar webhooks | `webhooks.delete` | Quitar un webhook. | Admin | `webhooks.view` |
@@ -1248,7 +1249,7 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver Meta Ads | `meta_ads.view` | Cuentas, campañas, anuncios y su rendimiento. | Admin, Soporte |  |
+| Ver Meta Ads | `meta_ads.view` | Cuentas, campañas, anuncios y su rendimiento. | Admin, Soporte, Project manager |  |
 | Conectar y sincronizar Meta Ads | `meta_ads.edit` | Conectar cuentas, sincronizarlas y asociar campañas a productos. | Admin, Soporte | `meta_ads.view` |
 
 ## Catálogo
@@ -1275,7 +1276,7 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver WooCommerce | `woocommerce.view` | La conexión, el mapeo y las importaciones. | Admin, Soporte |  |
+| Ver WooCommerce | `woocommerce.view` | La conexión, el mapeo y las importaciones. | Admin, Soporte, Project manager |  |
 | Configurar WooCommerce | `woocommerce.edit` | Credenciales y mapeo de campos. | Admin, Soporte | `woocommerce.view` |
 | Importar de WooCommerce | `woocommerce.sync` | Lanzar una importación de productos. | Admin, Soporte | `woocommerce.view` |
 | Pedidos de WooCommerce | `woocommerce.pedidos` | Ver los pedidos de sus campus, traerlos a mano, encender su sincronización y generar el secreto del aviso (#14). | Admin | `woocommerce.view` |
@@ -1297,7 +1298,7 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver el panel de consultas | `consultas.view` | Las consultas de los alumnos de sus campus, la carga de cada tutor y las métricas de todos. | Admin, Soporte |  |
+| Ver el panel de consultas | `consultas.view` | Las consultas de los alumnos de sus campus, la carga de cada tutor y las métricas de todos. | Admin, Soporte, Project manager |  |
 | Gestionar consultas | `consultas.gestionar` | Reasignar una consulta a otro tutor, leer los campus ahora, sincronizar alumnos y el token de cada tutor. | Admin, Soporte | `consultas.view` |
 | Atender sus consultas | `consultas.atender` | Su bandeja: responder y cerrar sus consultas, escribir a sus alumnos, su carga de trabajo y sus métricas. | Tutor |  |
 
@@ -1307,8 +1308,8 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver el dashboard de finanzas | `accounting.view` | La caja del mes. | Admin, Soporte |  |
-| Cuentas por cobrar | `accounting.por_cobrar` | Lo pendiente de cobro (una gestora, lo suyo). | Admin, Gestora, Soporte |  |
+| Ver el dashboard de finanzas | `accounting.view` | La caja del mes. | Admin, Soporte, Project manager |  |
+| Cuentas por cobrar | `accounting.por_cobrar` | Lo pendiente de cobro (una gestora, lo suyo). | Admin, Gestora, Soporte, Project manager |  |
 
 ### Conversiones
 
@@ -1345,7 +1346,7 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver egresos | `expenses.view` | Los gastos y sus comprobantes. | Admin, Soporte |  |
+| Ver egresos | `expenses.view` | Los gastos y sus comprobantes. | Admin, Soporte, Project manager |  |
 | Apuntar egresos | `expenses.create` | Un gasto nuevo con su comprobante. | Admin, Soporte | `expenses.view` |
 | Editar egresos | `expenses.edit` | Cambiar un gasto. | Admin, Soporte | `expenses.view` |
 | Borrar egresos | `expenses.delete` | Quitar un gasto. | Admin, Soporte | `expenses.view` |
@@ -1354,7 +1355,7 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver cuentas por pagar | `accounts_payable.view` | Lo pendiente de pago. | Admin, Soporte |  |
+| Ver cuentas por pagar | `accounts_payable.view` | Lo pendiente de pago. | Admin, Soporte, Project manager |  |
 | Apuntar cuentas por pagar | `accounts_payable.create` | Una deuda nueva. | Admin, Soporte | `accounts_payable.view` |
 | Editar y pagar | `accounts_payable.edit` | Cambiarla y apuntar pagos. | Admin, Soporte | `accounts_payable.view` |
 | Borrar cuentas por pagar | `accounts_payable.delete` | Quitarla. | Admin, Soporte | `accounts_payable.view` |
@@ -1363,7 +1364,7 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver comisiones | `commissions.view` | Las comisiones del equipo comercial y sus reglas. | Admin, Soporte |  |
+| Ver comisiones | `commissions.view` | Las comisiones del equipo comercial y sus reglas. | Admin, Soporte, Project manager |  |
 | Recalcular comisiones | `commissions.edit` | Volver a calcular la comisión de una venta. | Admin, Soporte | `commissions.view` |
 | Pagar comisiones | `commissions.pagar` | Marcar una comisión como pagada. | Admin, Soporte | `commissions.view` |
 | Reglas de comisión | `commissions.reglas` | Crear, cambiar y quitar las reglas. | Soporte | `commissions.view` |
@@ -1372,7 +1373,7 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver nóminas | `payroll.view` | Planes, horas y periodos. | Admin, Soporte |  |
+| Ver nóminas | `payroll.view` | Planes, horas y periodos. | Admin, Soporte, Project manager |  |
 | Apuntar horas | `payroll.create` | Registrar horas trabajadas. | Admin, Gestora, Soporte |  |
 | Gestionar nóminas | `payroll.edit` | Planes, generar, cerrar y pagar periodos, ajustes. | Admin, Soporte | `payroll.view` |
 | Borrar en nóminas | `payroll.delete` | Quitar planes, horas y ajustes. | Admin, Soporte | `payroll.view` |
@@ -1389,7 +1390,7 @@ lo que pide para tener sentido (editar pide ver).
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
 | Subir su factura | `facturas_colaborador.subir` | «Mi factura»: el colaborador sube la suya del mes. | Colaborador |  |
-| Ver las facturas | `facturas_colaborador.ver_todas` | Las facturas de los colaboradores de sus empresas. | Admin |  |
+| Ver las facturas | `facturas_colaborador.ver_todas` | Las facturas de los colaboradores de sus empresas. | Admin, Project manager |  |
 | Gestionar colaboradores | `facturas_colaborador.gestionar` | Dar de alta colaboradores y reenviarles el enlace. | Admin |  |
 | Anular facturas de colaboradores | `facturas_colaborador.anular` | Anular una factura recibida. | Admin | `facturas_colaborador.ver_todas` |
 | Pagar facturas de colaboradores | `facturas_colaborador.pagar` | Marcarlas pagadas con su justificante. | Admin | `facturas_colaborador.ver_todas` |
@@ -1398,7 +1399,7 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver integraciones | `integrations.view` | Los servicios conectados (Stripe, Brevo…). | Admin, Soporte |  |
+| Ver integraciones | `integrations.view` | Los servicios conectados (Stripe, Brevo…). | Admin, Soporte, Project manager |  |
 | Configurar integraciones | `integrations.edit` | Conectarlos, probarlos y desconectarlos. | Admin, Soporte | `integrations.view` |
 
 ## Análisis
@@ -1408,10 +1409,10 @@ lo que pide para tener sentido (editar pide ver).
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
 | Ver informes | `reports.mis_informes` | Los informes de ventas, prospectos y seguimiento (una gestora, los suyos). | Admin, Gestora, Soporte, Project manager |  |
-| Ver el resumen general | `reports.view` | El resumen de todo el equipo. | Admin, Soporte |  |
-| Dónde poner el dinero | `reports.dinero` | Ventas y gasto de publicidad por canal y campaña, contra el periodo anterior. | Admin | `reports.view` |
+| Ver el resumen general | `reports.view` | El resumen de todo el equipo. | Admin, Soporte, Project manager |  |
+| Dónde poner el dinero | `reports.dinero` | Ventas y gasto de publicidad por canal y campaña, contra el periodo anterior. | Admin, Project manager | `reports.view` |
 | Cambiar el baremo de la tasa de cierre | `reports.editar_baremo` | Los tramos que dicen qué significa cada tasa (buena, regular...) por campus; el general, solo el super admin. | Admin | `reports.view` |
-| El puesto de otra gestora | `reports.puesto_ajeno` | Ver en qué puesto va otra gestora del ranking. | Admin, Soporte | `reports.mis_informes` |
+| El puesto de otra gestora | `reports.puesto_ajeno` | Ver en qué puesto va otra gestora del ranking. | Admin, Soporte, Project manager | `reports.mis_informes` |
 
 ### Feedback
 
@@ -1442,7 +1443,7 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver matrículas | `matriculas.view` | Las matrículas y sus documentos. | Admin, Gestora, Soporte |  |
+| Ver matrículas | `matriculas.view` | Las matrículas y sus documentos. | Admin, Gestora, Soporte, Project manager |  |
 | Crear matrículas | `matriculas.create` | Una matrícula nueva. | Admin, Gestora, Soporte | `matriculas.view` |
 | Editar matrículas | `matriculas.edit` | Cambiar datos y subir documentos. | Admin, Gestora, Soporte | `matriculas.view` |
 | Cambiar el estado | `matriculas.cambiar_estado` | Validar, rechazar o cerrar una matrícula. | Admin, Soporte | `matriculas.view` |
@@ -1452,9 +1453,9 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver diplomas | `diplomas.view` | La pantalla Diplomas en solo lectura (de sus campus). | Admin |  |
+| Ver diplomas | `diplomas.view` | La pantalla Diplomas en solo lectura (de sus campus). | Admin, Project manager |  |
 | Emitir diplomas | `diplomas.emit` | Revisar los datos (nombre, DNI, correo, formación), pasar a pendientes, aprobar y emitir, enviar el diploma al alumno y crear uno nuevo, en sus campus. Rechazar, corregir y revocar, no. | Admin |  |
-| Ver emisiones y firmas | `diplomas.view_emisiones` | El historial de emisiones, las formaciones y las firmas. | Admin | `diplomas.view` |
+| Ver emisiones y firmas | `diplomas.view_emisiones` | El historial de emisiones, las formaciones y las firmas. | Admin, Project manager | `diplomas.view` |
 | Aprobar y emitir | `diplomas.aprobar` | Aprobar, rechazar y emitir diplomas, y crear uno nuevo. | Admin | `diplomas.view` |
 | Corregir diplomas | `diplomas.edit` | Corregir datos, subir la firma y sincronizar formaciones. | Admin | `diplomas.view` |
 | Avisar al alumno | `diplomas.avisar` | Mandar el aviso de diploma emitido o rechazado. | Admin | `diplomas.view` |
@@ -1465,7 +1466,7 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver consultas | `certifex_consultas.view` | Lo que escriben los centros desde la web de Certifex. | Admin, Soporte |  |
+| Ver consultas | `certifex_consultas.view` | Lo que escriben los centros desde la web de Certifex. | Admin, Soporte, Project manager |  |
 | Responder consultas | `certifex_consultas.edit` | Marcar una consulta como atendida. | Admin, Soporte | `certifex_consultas.view` |
 
 ## Conexión
@@ -1482,7 +1483,7 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver conectores | `connectors.view` | Los conectores de sus campus. | Admin |  |
+| Ver conectores | `connectors.view` | Los conectores de sus campus. | Admin, Project manager |  |
 | Crear conectores | `connectors.create` | Un conector nuevo. | Admin | `connectors.view` |
 | Editar conectores | `connectors.edit` | Cambiarlo, probarlo e importar. | Admin | `connectors.view` |
 | Borrar conectores | `connectors.delete` | Quitar un conector. | Admin | `connectors.view` |
@@ -1492,14 +1493,14 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver el Moodle de los campus | `moodle.view` | Los cursos, alumnos y recursos del Moodle de cada campus. Solo lectura. | Admin |  |
+| Ver el Moodle de los campus | `moodle.view` | Los cursos, alumnos y recursos del Moodle de cada campus. Solo lectura. | Admin, Project manager |  |
 | Conectar un Moodle | `moodle.conectar` | Guardar o quitar el token de un campus. | solo superadmin | `moodle.view` |
 
 ### Webhooks de salida
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver webhooks de salida | `webhooks_salientes.view` | Los avisos que el CRM manda a otros sistemas y sus envíos. | Admin |  |
+| Ver webhooks de salida | `webhooks_salientes.view` | Los avisos que el CRM manda a otros sistemas y sus envíos. | Admin, Project manager |  |
 | Crear webhooks de salida | `webhooks_salientes.create` | Uno nuevo. | Admin | `webhooks_salientes.view` |
 | Editar webhooks de salida | `webhooks_salientes.edit` | Cambiarlo, probarlo y reenviar. | Admin | `webhooks_salientes.view` |
 | Borrar webhooks de salida | `webhooks_salientes.delete` | Quitarlo. | Admin | `webhooks_salientes.view` |
@@ -1512,7 +1513,7 @@ lo que pide para tener sentido (editar pide ver).
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
 | Ver novedades | `novedades.view` | Lo que trae cada versión del CRM. | Admin, Gestora, Soporte, Project manager, Tutor |  |
-| Ver a quién llegó | `novedades.envios` | A quién se ha mandado cada versión. | Admin, Soporte | `novedades.view` |
+| Ver a quién llegó | `novedades.envios` | A quién se ha mandado cada versión. | Admin, Soporte, Project manager | `novedades.view` |
 | Mandar novedades | `novedades.enviar` | Mandar el correo de una versión. | Soporte | `novedades.view` |
 
 ### Mensajes internos
@@ -1536,20 +1537,20 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver el registro | `registro.view` | Quién cambió qué y cuándo. | Admin, Soporte |  |
+| Ver el registro | `registro.view` | Quién cambió qué y cuándo. | Admin, Soporte, Project manager |  |
 
 ### Estado del sistema
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver el estado | `status.view` | Errores, piezas y correos del sistema. | Admin, Soporte |  |
+| Ver el estado | `status.view` | Errores, piezas y correos del sistema. | Admin, Soporte, Project manager |  |
 | Apuntar incidencias | `status.edit` | Abrir y cerrar incidencias y cambiar el estado de cada pieza. | Admin, Soporte | `status.view` |
 
 ### Claves y variables
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver claves | `credentials.view` | Qué claves hay, sin verlas, y su registro. El admin, las de sus campus. | Admin, Soporte |  |
+| Ver claves | `credentials.view` | Qué claves hay, sin verlas, y su registro. El admin, las de sus campus. | Admin, Soporte, Project manager |  |
 | Guardar claves | `credentials.edit` | Guardar, probar y quitar claves de servicios. | Soporte | `credentials.view` |
 
 ### Documentos
@@ -1560,7 +1561,7 @@ lo que pide para tener sentido (editar pide ver).
 | Generar documentos | `documents.create` | Generar, regenerar y reenviar documentos. | Admin, Soporte | `documents.view` |
 | Numeración | `documents.numeracion` | Ver y cambiar el siguiente número. | Admin, Soporte | `documents.view` |
 | Borrar documentos | `documents.delete` | Quitar un documento. | Admin, Soporte | `documents.view` |
-| Auditoría de documentos | `documents.auditar` | Quién generó y descargó cada documento. | Soporte | `documents.view` |
+| Auditoría de documentos | `documents.auditar` | Quién generó y descargó cada documento. | Soporte, Project manager | `documents.view` |
 
 ## Configuración
 
@@ -1568,7 +1569,7 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver usuarios | `users.view` | La lista del equipo y su disponibilidad. | Admin, Soporte |  |
+| Ver usuarios | `users.view` | La lista del equipo y su disponibilidad. | Admin, Soporte, Project manager |  |
 | Crear usuarios | `users.create` | Dar de alta a alguien (con su bienvenida por correo). | Admin, Soporte | `users.view` |
 | Editar usuarios | `users.edit` | Datos, campus, disponibilidad y reactivar. | Admin, Soporte | `users.view` |
 | Desactivar usuarios | `users.delete` | Dar de baja a alguien. | Admin, Soporte | `users.view` |
@@ -1581,7 +1582,7 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver roles | `roles.view` | Qué trae cada rol y los roles a medida. | Admin |  |
+| Ver roles | `roles.view` | Qué trae cada rol y los roles a medida. | Admin, Project manager |  |
 | Cambiar roles | `roles.edit` | Cambiar lo que trae un rol fijo y crear o cambiar roles a medida (para todas las empresas), sin darles lo que uno no tiene. | Admin | `roles.view` |
 
 ### Proyectos

@@ -1,13 +1,15 @@
 import * as model from './registro.model.js';
 import { listarSchema } from './registro.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
+import { campusParaRecortar } from '../../shared/utils/ambito.js';
 
 /** El registro, para la pantalla. */
 export async function listar(req, res, next) {
   try {
     const parsed = listarSchema.safeParse(req.query);
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
-    const r = await model.listar(parsed.data);
+    // De sus campus, salvo super admin y soporte (Diego, 04/11).
+    const r = await model.listar({ ...parsed.data, campus: await campusParaRecortar(req) });
     res.json({ success: true, data: r });
   } catch (err) { next(err); }
 }
@@ -50,7 +52,7 @@ export async function csv(req, res, next) {
   try {
     const parsed = listarSchema.safeParse(req.query);
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
-    const { filas } = await model.listar({ ...parsed.data, limite: model.TOPE });
+    const { filas } = await model.listar({ ...parsed.data, limite: model.TOPE, campus: await campusParaRecortar(req) });
 
     const cabecera = ['Cuándo', 'Fuente', 'Usuario', 'Acción', 'Qué pasó', 'Entidad', 'Id', 'Correcto'];
     const lineas = [cabecera.map(campo).join(';')];

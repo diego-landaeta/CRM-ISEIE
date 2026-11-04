@@ -79,7 +79,9 @@ export async function ultimos({ limite = 100, estado = null, etiqueta = null } =
  * `estado` filtra por enviado / fallido / bloqueado, que es la pregunta que uno
  * se hace de verdad: «¿que NO salio?».
  */
-export async function ultimosEnvios({ estado = null, limite = 50 } = {}) {
+// `campus`: los de esos campus y los de ninguno; null, todos (Diego, 04/11:
+// quien no ve el CRM entero, los de los suyos).
+export async function ultimosEnvios({ estado = null, limite = 50, campus = null } = {}) {
   try {
     const tope = Math.min(Math.max(parseInt(limite, 10) || 50, 1), 200);
     const { rows } = await query(
@@ -87,9 +89,10 @@ export async function ultimosEnvios({ estado = null, limite = 50 } = {}) {
               estado, intentos, error, created_at
          FROM email_envios
         WHERE ($1::text IS NULL OR estado = $1)
+          AND ($3::int[] IS NULL OR project_id = ANY($3::int[]) OR project_id IS NULL)
         ORDER BY created_at DESC, id DESC
         LIMIT $2`,
-      [estado || null, tope]
+      [estado || null, tope, campus]
     );
     return rows;
   } catch (err) {
@@ -99,13 +102,14 @@ export async function ultimosEnvios({ estado = null, limite = 50 } = {}) {
 }
 
 /** Cuantos de cada estado en las ultimas 24 horas, para el resumen de arriba. */
-export async function resumenEnvios() {
+export async function resumenEnvios({ campus = null } = {}) {
   try {
     const { rows } = await query(
       `SELECT estado, count(*)::int AS n
          FROM email_envios
         WHERE created_at > NOW() - INTERVAL '24 hours'
-        GROUP BY estado`
+          AND ($1::int[] IS NULL OR project_id = ANY($1::int[]) OR project_id IS NULL)
+        GROUP BY estado`, [campus]
     );
     const r = { enviado: 0, fallido: 0, bloqueado: 0 };
     for (const f of rows) r[f.estado] = f.n;

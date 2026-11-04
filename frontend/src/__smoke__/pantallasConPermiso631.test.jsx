@@ -100,6 +100,12 @@ describe('#631 · rutaPermitida', () => {
     expect(rutaPermitida('/accounting/receivable/', () => false)).toBe(false);
   });
 
+  it('el Banco también se abre con solo verlo (`whatsapp.banco`); el chat, no', () => {
+    expect(rutaPermitida('/whatsapp/banco', (k) => k === 'whatsapp.banco')).toBe(true);
+    expect(rutaPermitida('/whatsapp', (k) => k === 'whatsapp.banco')).toBe(false);
+    expect(rutaPermitida('/whatsapp/chat', (k) => k === 'whatsapp.banco')).toBe(false);
+  });
+
   it('WhatsApp: Banco y el chat por `/whatsapp` piden usarlo o supervisarlo', () => {
     for (const ruta of ['/whatsapp', '/whatsapp/banco']) {
       expect(rutaPermitida(ruta, () => false)).toBe(false);
@@ -118,7 +124,8 @@ describe('#631 · rutaPermitida', () => {
       '/leads/duplicados': ['leads.duplicados'],
       '/tutores': ['tutores.gestionar'],
       '/tareas/revisar': ['tasks.close'],
-      '/whatsapp/banco': ['whatsapp.usar', 'whatsapp.supervisar'],
+      // Y verlo (`whatsapp.banco`): el project manager, que ve todo (Diego, 04/11).
+      '/whatsapp/banco': ['whatsapp.usar', 'whatsapp.supervisar', 'whatsapp.banco'],
     };
     for (const role of ROLES) {
       const can = canDe(role);

@@ -1,6 +1,7 @@
 import * as userService from './user.service.js';
 import * as userModel from './user.model.js';
 import { createUserSchema, updateUserSchema, listUsersSchema, adminSetPasswordSchema, activityLogSchema, buscarUsersSchema } from './user.validation.js';
+import { campusParaRecortar } from '../../shared/utils/ambito.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { veTodoElCrm, campusDeLaPersona } from '../../shared/utils/ambito.js';
 import { saveLocal, getLocal, deleteLocal } from '../../shared/services/localStorage.service.js';
@@ -29,13 +30,32 @@ export async function buscar(req, res, next) {
   } catch (err) { next(err); }
 }
 
+/**
+ * A quién ve en Usuarios quien pregunta (Diego, 04/11: «el project manager ve
+ * todo», de sus campus). Quien solo VE la lista —sin «Editar usuarios»— la ve de
+ * la gente de sus campus; quien la administra, como hasta hoy. `null` = sin recorte.
+ */
+export async function campusDeLaLista(req) {
+  if (veTodoElCrm(req.user) || await tienePermiso(req, 'users.edit')) return null;
+  return campusParaRecortar(req);
+}
+
+/** La ficha de otra persona, si la lista se le recorta: solo si comparten campus. */
+export async function exigirPersonaDeSusCampus(req, id) {
+  if (Number(id) === Number(req.user?.userId)) return;
+  const campus = await campusDeLaLista(req);
+  if (!campus) return;
+  const suyos = await campusDeLaPersona(id);
+  if (!suyos.some((c) => campus.includes(c))) throw new AppError('Usuario no encontrado', 404, 'USER_NOT_FOUND');
+}
+
 export async function list(req, res, next) {
   try {
     const parsed = listUsersSchema.safeParse(req.query);
     if (!parsed.success) {
       throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
     }
-    const result = await userService.list(parsed.data);
+    const result = await userService.list({ ...parsed.data, campus: await campusDeLaLista(req) });
     res.json({
       success: true,
       data: result.users,
@@ -73,6 +93,7 @@ export async function getById(req, res, next) {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    await exigirPersonaDeSusCampus(req, id);
     const user = await userService.getById(id);
     res.json({ success: true, data: user });
   } catch (err) { next(err); }
