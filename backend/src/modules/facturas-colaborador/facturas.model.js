@@ -1,4 +1,6 @@
 import pool, { query } from '../../shared/config/db.js';
+import { base } from '../../shared/services/email-plantilla.service.js';
+import { empresaCorta } from './facturas.emails.js';
 
 /*
   Facturas de colaboradores (#202) · las facturas del mes, en la base.
@@ -72,7 +74,9 @@ const CAMPOS_ENLACE = `
   ii.razon_social, ii.nif AS empresa_nif, ii.direccion, ii.cp, ii.ciudad, ii.pais, ii.logo_url,
   ce.modalidad, ce.importe_fijo, ce.tarifa_hora, ce.iva_pct, ce.irpf_pct, ce.moneda AS moneda_acordada,
   f.base, f.iva, f.irpf, f.total, f.horas, f.cuadra, f.importe_pdf, f.mime,
-  to_char(f.pagada_at, 'YYYY-MM-DD') AS pagada_at, f.pagada_por, f.forma_pago, f.referencia_pago, f.justificante`;
+  to_char(f.pagada_at, 'YYYY-MM-DD') AS pagada_at, f.pagada_por, f.forma_pago, f.referencia_pago, f.justificante,
+  f.pago_confirmado_at, f.pago_valoracion, f.pago_comentario, f.pago_feedback_at,
+  f.pago_no_recibido_at, f.pago_no_recibido_comentario`;
 
 /** La fila de un enlace, por la huella de su token. */
 export async function porTokenHash(tokenHash) {
@@ -166,18 +170,48 @@ export async function sinSubir(periodo) {
 }
 
 /**
- * La marca con la que salen los correos de una empresa: uno de sus campus,
- * mejor el que tiene remitente «no contestar» (#177). Da el logo de la cabecera
- * y, por `projectId`, la cuenta y el remitente de la marca en Brevo.
+ * El logo de la empresa para un correo, o null. Un correo necesita una
+ * dirección absoluta: la de fuera tal cual; la del logo subido al CRM
+ * (`/api/invoices/issuers/:id/logo`, pública) con la raíz del CRM delante.
+ */
+export function logoDeLaEmpresa({ id, logo_url: logoUrl, con_logo_subido: subido }) {
+  const u = String(logoUrl || '').trim();
+  if (/^https?:\/\//i.test(u)) return u;
+  if (u.startsWith('/api/')) return `${base()}${u}`;
+  if (subido) return `${base()}/api/invoices/issuers/${id}/logo`;
+  return null;
+}
+
+/**
+ * La marca con la que salen los correos de una empresa: la de la EMPRESA de la
+ * factura (Diego, 04/11), no la de uno de sus campus. Antes la cabecera llevaba
+ * el nombre y el logo del campus con remitente «no contestar», y los de CEDIA
+ * salían como Fono Aprende.
+ *
+ *   - `nombre`: la razón social corta («CEDIA»), la misma que firma el remitente.
+ *   - `logo_url`: el logo de la empresa si lo tiene; si no, ninguno (nunca el de
+ *     un campus). Sin `slug` ni `emoji`: la plantilla no busca el de un campus.
+ *   - `id`: uno de sus campus, mejor el del remitente «no contestar» (#177), SOLO
+ *     para `projectId` en Brevo: la cuenta y la dirección que ya funcionan. No
+ *     pinta nada en el correo. Sin campus, null: sale por la cuenta del CRM.
  */
 export async function marcaDeLaEmpresa(issuerId) {
   const { rows } = await query(
-    `SELECT id, nombre, slug, logo_url, emoji FROM projects
-      WHERE sociedad_emisora_id = $1 AND active = true
-      ORDER BY (remitente_no_contestar IS NULL), id LIMIT 1`,
+    `SELECT i.id, i.razon_social, i.logo_url, (i.logo_key IS NOT NULL) AS con_logo_subido,
+            (SELECT p.id FROM projects p
+              WHERE p.sociedad_emisora_id = i.id AND p.active = true
+              ORDER BY (p.remitente_no_contestar IS NULL), p.id LIMIT 1) AS campus_id
+       FROM invoice_issuers i
+      WHERE i.id = $1`,
     [issuerId],
   );
-  return rows[0] || null;
+  const e = rows[0];
+  if (!e) return null;
+  return {
+    id: e.campus_id === null ? null : Number(e.campus_id),
+    nombre: empresaCorta(e.razon_social),
+    logo_url: logoDeLaEmpresa(e),
+  };
 }
 
 /** A quién avisar en la campana: los admins de los campus de esa empresa y los super admin. */
@@ -308,7 +342,10 @@ export async function marcarPagada(db, id, { fecha, porUserId, forma, justifican
 export async function deshacerPago(db, id) {
   await db.query(
     `UPDATE facturas_colaborador
-        SET pagada_at = NULL, pagada_por = NULL, forma_pago = NULL, justificante = NULL, referencia_pago = NULL
+        SET pagada_at = NULL, pagada_por = NULL, forma_pago = NULL, justificante = NULL, referencia_pago = NULL,
+            -- La confirmación y la opinión eran de ese pago: quedan en el registro (270).
+            pago_confirmado_at = NULL, pago_valoracion = NULL, pago_comentario = NULL, pago_feedback_at = NULL,
+            pago_no_recibido_at = NULL, pago_no_recibido_comentario = NULL
       WHERE id = $1`,
     [id],
   );
@@ -393,6 +430,10 @@ const FILA_DE_LISTA = `SELECT f.id, f.colaborador_id, f.issuer_id, to_char(f.per
               -- El pago, que no se mezcla con el estado de la factura.
               to_char(f.pagada_at, 'YYYY-MM-DD') AS pagada_at, f.forma_pago, f.referencia_pago,
               (f.justificante IS NOT NULL) AS con_justificante,
+              -- El colaborador confirmó que le llegó el pago, y su opinión (270).
+              f.pago_confirmado_at, f.pago_valoracion, f.pago_comentario,
+              -- «No lo he recibido» (272): la lista lo enseña mientras no confirme.
+              f.pago_no_recibido_at, f.pago_no_recibido_comentario,
               ${ESTADO} AS estado
          FROM facturas_colaborador f
          JOIN colaboradores c ON c.id = f.colaborador_id

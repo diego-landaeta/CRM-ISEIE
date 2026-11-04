@@ -494,6 +494,11 @@ const EVENTO: Record<string, string> = {
   recibida: 'Factura recibida', acuse: 'Acuse enviado', recordatorio: 'Recordatorio enviado',
   anulada: 'Factura anulada', reenviado: 'Enlace nuevo', caducado: 'Enlace caducado',
   pagada: 'Factura pagada', pago_deshecho: 'Pago deshecho', aviso_pago: 'Aviso de pago enviado',
+  // Los avisos a la empresa y la confirmación del colaborador (Diego, 04/11).
+  aviso_empresa: 'Aviso a la empresa enviado', aviso_empresa_fallido: 'No se pudo avisar a la empresa',
+  pago_confirmado: 'Pago confirmado por el colaborador', pago_opinion: 'Opinión del colaborador sobre el pago',
+  pago_no_recibido: 'El colaborador dice que no lo ha recibido',
+  aviso_no_recibido: 'Aviso a la empresa: pago no recibido', aviso_no_recibido_fallido: 'No se pudo avisar a la empresa del pago no recibido',
 };
 
 const CAMPO: Record<string, string> = {
@@ -577,6 +582,9 @@ function detalleDe(l: LineaRegistro, nombreDe: (id: number) => string) {
   const antes = d.antes as { fecha?: string; forma_pago?: FormaPago } | undefined;
   if (antes?.fecha) partes.push(`era ${(antes.forma_pago && FORMA_PAGO_ES[antes.forma_pago]) || 'pago'} del ${diaDelPago(antes.fecha)}`);
   if (d.motivo) partes.push(`«${d.motivo}»`);
+  // Su opinión del pago (04/11): «4/5 · «Todo bien»».
+  if (d.valoracion) partes.push(`${d.valoracion}/5`);
+  if (d.comentario) partes.push(`«${d.comentario}»`);
   if (d.desde) partes.push(`desde ${mesEscrito(String(d.desde))}`);
   if (d.para) partes.push(`a ${d.para}`);
   if (l.evento === 'cambio') return [cambiosDe(d, nombreDe), l.usuario_nombre ? `por ${l.usuario_nombre}` : null, l.ip ? ipCorta(l.ip) : null].filter(Boolean).join(' · ');

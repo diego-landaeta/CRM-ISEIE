@@ -6,6 +6,7 @@ import { puede } from '../../shared/middleware/permissions.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import * as ctrl from './facturas-colaborador.controller.js';
 import * as facturas from './facturas.controller.js';
+import * as avisos from './avisos.controller.js';
 import { TOPE_BYTES } from './facturas.service.js';
 
 const router = Router();
@@ -51,6 +52,17 @@ router.delete('/enlace/:token/sin-factura', limite(20), codigoConFormato, factur
 // El archivo guardado en disco (sin R2), con enlace firmado de 15 min (revisión del 10/10).
 router.get('/archivo-local/:id', limite(60), facturas.archivoLocal);
 router.get('/justificante-local/:id', limite(60), facturas.justificanteLocal);
+
+// «He recibido el pago y lo confirmo» (Diego, 04/11): el botón del correo de «Factura
+// pagada». Sin usuario: el enlace firmado es la llave. Confirmar vale una vez; la
+// opinión (1 a 5 y un comentario), también, y después de confirmar.
+const pagoConFormato = (req, res, next) => (/^\d{1,10}\.\d{1,4}\.[A-Za-z0-9_-]{43}$/.test(String(req.params.token || ''))
+  ? next() : next(new AppError('Este enlace no existe o ya no es válido', 404, 'NOT_FOUND')));
+router.get('/pago/:token', limite(60), pagoConFormato, avisos.verPago);
+router.post('/pago/:token/confirmar', limite(20), pagoConFormato, avisos.confirmarPago);
+router.post('/pago/:token/opinion', limite(20), pagoConFormato, avisos.opinarDelPago);
+// «No lo he recibido» (Diego, 04/11): una vez, avisa a la empresa; confirmar después lo cierra.
+router.post('/pago/:token/no-recibido', limite(20), pagoConFormato, avisos.noRecibido);
 
 // ─── «Mi factura»: el colaborador con usuario en el CRM, solo lo suyo ───
 // Son las únicas de este módulo que puede pedir el rol colaborador
