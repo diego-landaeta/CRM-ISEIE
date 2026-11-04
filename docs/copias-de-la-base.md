@@ -8,7 +8,7 @@ Lo que encontró la auditoría del 03/11/2026, en los dos servidores:
 
 Esta guía instala tres cosas: la copia diaria, la purga de los `.tgz` y la rotación de los logs. Lo instala quien tiene acceso al VPS (Diego), y el orden importa: **primero las copias y después la purga.**
 
-| | 360 (187.124.128.126) | ISEIE (72.60.90.135, compartido) |
+| | 360 | ISEIE (VPS compartido) |
 |---|---|---|
 | Bases | `crm_prod_db crm_test_db` | `crm_iseie crm_iseie_staging` |
 | Destino fuera del VPS | `r2-copias:crm-copias/360` | `r2-copias:crm-copias/iseie` |
