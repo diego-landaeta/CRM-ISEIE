@@ -41,7 +41,8 @@ const one = (sql, p) => q(sql, p).then((r) => r[0]);
 const ids = { users: [], projects: [], leads: [], issuers: [], products: [] };
 
 // Las excepciones que se le dan al admin de empresa (las que se pueden acotar a sus campus).
-const EXCEPCIONES = [['leads', 'restaurar'], ['leads', 'spam'], ['projects', 'edit'], ['commissions', 'reglas']];
+// En ISEIE ver los avisos de spam (`leads.spam`) ya es del admin; resolverlos es `leads.spam_resolver`.
+const EXCEPCIONES = [['leads', 'restaurar'], ['leads', 'spam_resolver'], ['projects', 'edit'], ['commissions', 'reglas']];
 
 let MIO; let AJENO; let EMPRESA; let OTRA_EMPRESA;
 let SUPER; let SOPORTE; let ADMIN; let ADMIN_SIN; let ADMIN_TODO; let GESTORA;
