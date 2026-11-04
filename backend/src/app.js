@@ -29,6 +29,7 @@ import invoicesModule from './modules/invoices/index.js';
 // Diego lo apruebe con FACTURAS_COLABORADOR_EN_PRODUCCION=1.
 import facturasColaboradorModule from './modules/facturas-colaborador/index.js';
 import { startFacturasColaboradorScheduler } from './jobs/facturasColaboradorJob.js';
+import { startFacturasColaboradorAvisosScheduler } from './jobs/facturasColaboradorAvisosJob.js';
 import widgetModule from './modules/widget/index.js';
 import expensesModule from './modules/expenses/index.js';
 import accountsPayableModule from './modules/accounts-payable/index.js';
@@ -542,6 +543,12 @@ if (process.env.NODE_ENV !== 'test') {
         startFacturasColaboradorScheduler();
       } catch (err) {
         logger.error({ err }, 'Facturas de colaboradores: la tarea del mes falló al arrancar');
+      }
+      // Los avisos a la empresa: «Han llegado N facturas» y «Faltan por pagar» (Diego, 04/11).
+      try {
+        startFacturasColaboradorAvisosScheduler();
+      } catch (err) {
+        logger.error({ err }, 'Facturas de colaboradores: los avisos a la empresa fallaron al arrancar');
       }
     }
     // Los reintentos del webhook de transferencias (se apaga con WEBHOOKS_SALIENTES_DISABLED=1).

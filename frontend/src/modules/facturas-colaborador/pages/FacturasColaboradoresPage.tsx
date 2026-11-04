@@ -22,6 +22,7 @@ import {
 } from '../components/DialogosFacturas';
 import ListaDeFacturas, { CostePorCampus } from '../components/ListaDeFacturas';
 import EtiquetaDelPdf from '../components/EtiquetaDelPdf';
+import ConfirmacionDelPago from '../components/ConfirmacionDelPago';
 import LeyendaFacturas, { ACCION } from '../components/LeyendaFacturas';
 
 /**
@@ -332,6 +333,7 @@ function DelMes({ empresas, empresa }: { empresas: EmpresaDelGrupo[]; empresa: n
                             className="rounded-full px-2 py-0.5 text-xs font-semibold whitespace-nowrap bg-success-soft text-success-soft-foreground">
                             Pagada {diaDelPago(f.pagada_at)}
                           </span>
+                          <ConfirmacionDelPago f={f} />
                         </div>
                       )}
                     </td>

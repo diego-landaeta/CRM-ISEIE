@@ -144,6 +144,10 @@ export interface FacturaDelMes {
   forma_pago: FormaPago | null;
   referencia_pago: string | null;
   con_justificante: boolean;
+  /** El colaborador confirmó desde el correo que le llegó el pago, y su opinión (Diego, 04/11). */
+  pago_confirmado_at?: string | null;
+  pago_valoracion?: number | null;
+  pago_comentario?: string | null;
   estado: EstadoFactura;
 }
 
@@ -166,6 +170,21 @@ export interface LineaRegistro {
   detalle: Record<string, unknown>;
   usuario_nombre: string | null;
   factura_id?: number | null;
+}
+
+/** Lo que ve el colaborador al abrir el botón «He recibido el pago y lo confirmo» (Diego, 04/11). */
+export interface PagoDelColaborador {
+  colaborador: string;
+  empresa: string;
+  marca: { nombre: string; logo_url: string | null } | null;
+  mes: string;
+  numero_factura: string | null;
+  importe: number | null;
+  moneda: Moneda;
+  pagada_at: string; // AAAA-MM-DD
+  forma_pago: FormaPago | null;
+  confirmado_at: string | null;
+  opinion: { valoracion: number | null; comentario: string | null; at: string } | null;
 }
 
 /** Lo que ve el colaborador en su enlace o en «Mi factura». */
@@ -331,6 +350,12 @@ export const facturasColaboradorApi = {
     client.post(`${BASE}/enlace/${token}/sin-factura`, { motivo: motivo || null }) as R<FacturaDelColaborador>,
   quitarSinFacturaPorEnlace: (token: string) =>
     client.delete(`${BASE}/enlace/${token}/sin-factura`) as R<FacturaDelColaborador>,
+
+  // ── «He recibido el pago y lo confirmo» (sin usuario, desde el correo de «Factura pagada») ──
+  verPago: (token: string) => client.get(`${BASE}/pago/${token}`) as R<PagoDelColaborador>,
+  confirmarPago: (token: string) => client.post(`${BASE}/pago/${token}/confirmar`) as R<PagoDelColaborador>,
+  opinarDelPago: (token: string, valoracion: number | null, comentario: string) =>
+    client.post(`${BASE}/pago/${token}/opinion`, { valoracion, comentario: comentario || null }) as R<PagoDelColaborador>,
 
   // ── «Mi factura» (colaborador con usuario) ──
   mias: () => client.get(`${BASE}/mias`) as R<FacturaDelColaborador[]>,

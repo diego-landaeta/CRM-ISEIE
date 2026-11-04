@@ -4212,6 +4212,42 @@
   "puertas": []
  },
  {
+  "id": "GET /api/facturas-colaborador/pago/:token",
+  "tipo": "ruta",
+  "modulo": "facturas-colaborador",
+  "metodo": "GET",
+  "ruta": "/api/facturas-colaborador/pago/:token",
+  "relativa": "GET /pago/:token",
+  "controlador": null,
+  "publica": true,
+  "guardias": [],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/facturas-colaborador/pago/:token/confirmar",
+  "tipo": "ruta",
+  "modulo": "facturas-colaborador",
+  "metodo": "POST",
+  "ruta": "/api/facturas-colaborador/pago/:token/confirmar",
+  "relativa": "POST /pago/:token/confirmar",
+  "controlador": null,
+  "publica": true,
+  "guardias": [],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/facturas-colaborador/pago/:token/opinion",
+  "tipo": "ruta",
+  "modulo": "facturas-colaborador",
+  "metodo": "POST",
+  "ruta": "/api/facturas-colaborador/pago/:token/opinion",
+  "relativa": "POST /pago/:token/opinion",
+  "controlador": null,
+  "publica": true,
+  "guardias": [],
+  "puertas": []
+ },
+ {
   "id": "GET /api/facturas-colaborador/mias",
   "tipo": "ruta",
   "modulo": "facturas-colaborador",

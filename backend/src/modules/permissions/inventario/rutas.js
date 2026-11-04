@@ -19,7 +19,7 @@ const MODULOS = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../.
 // Se nombran para que un guardia nuevo sin regla no se cuele entre ellos.
 export const TECNICOS = new Set([
   'multerMiddleware', 'validatePdfMagicBytes', 'rateLimit', 'limite', 'recibir',
-  'codigoConFormato', 'urlPersonal', 'metodoNoPermitido', 'jsonParser', 'urlencodedParser', 'textParser',
+  'codigoConFormato', 'pagoConFormato', 'urlPersonal', 'metodoNoPermitido', 'jsonParser', 'urlencodedParser', 'textParser',
   'comprobarInterruptor', 'verificarTokenMcp', 'metadatosServidor', 'rawParser',
   'recibirArchivoSubido', 'guardarCuerpoCrudo',
   // Guardas de ALCANCE POR CAMPUS de facturas (IDOR): no deciden quien tiene el permiso (lo dice el

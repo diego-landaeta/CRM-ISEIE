@@ -13,6 +13,7 @@ import { enUtf8 } from '../whatsapp/media.service.js';
 import { calcularDesglose } from './desglose.js';
 import { leerImporteDelPdf, cuadraConElPdf } from './importePdf.js';
 import { conMoneda, porMoneda } from './moneda.js';
+import { urlDeConfirmacion } from './avisos.service.js';
 
 /*
   Facturas de colaboradores (#202) · el mes, el enlace y la subida.
@@ -740,7 +741,10 @@ async function mandarAvisoDePago(id) {
     if (!f?.pagada_at) return;
     // La vez que se paga: si se deshace y se vuelve a pagar, aunque sea el mismo día, sale otro aviso.
     const vez = await model.vecesQue(id, 'pagada');
-    const r = await enviarAvisoDePago({ f, vez, marca: await model.marcaDeLaEmpresa(f.issuer_id) });
+    // El botón «He recibido el pago y lo confirmo» (Diego, 04/11), con el enlace de esta vez.
+    let urlConfirmar = null;
+    try { urlConfirmar = urlDeConfirmacion(id, vez); } catch (err) { logger.warn({ err: err.message, facturaId: id }, 'Aviso de pago sin el botón de confirmar'); }
+    const r = await enviarAvisoDePago({ f, vez, marca: await model.marcaDeLaEmpresa(f.issuer_id), urlConfirmar });
     if (r?.sent) await anotar(pool, { facturaId: id, evento: 'aviso_pago', detalle: { para: f.colaborador_email } });
   } catch (err) {
     logger.error({ err: err.message, facturaId: id }, 'No se pudo mandar el aviso de pago de la factura de colaborador');
