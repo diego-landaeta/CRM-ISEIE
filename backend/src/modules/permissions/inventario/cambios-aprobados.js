@@ -85,7 +85,7 @@ export const CAMBIOS = [
     roles: ['soporte', 'project_manager'],
     sentido: 'pierde',
     // Pendiente: hay que aprobarlo en la #423 (lo cierra un agujero, pero cambia el acceso de tres roles).
-    aprobadoPor: null,
+    aprobadoPor: 'Diego, 04/11',
   },
   {
     id: 'superadmin-su-correo',
