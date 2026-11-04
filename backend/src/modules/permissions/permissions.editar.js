@@ -226,6 +226,14 @@ export async function exigirQueNoDeMasDeLoQueTiene(quien, userId, { role, roles_
   if (deMas.length) {
     throw new AppError(`Ese rol le daría lo que tú no tienes: ${deMas.slice(0, 3).join(', ')}${deMas.length > 3 ? '…' : ''}`, 403, 'NO_LO_TIENES');
   }
+  // El rol soporte ve TODAS las empresas. Lo da el superadmin (y soporte, en
+  // el alta, arriba); un admin de empresa no, aunque con excepciones llegue a
+  // tener todos los permisos que trae: lo que no cabe en el catálogo es el
+  // alcance, y soporte es justo eso.
+  if (!tieneRol(quien, 'soporte') && [role, ...(roles_extra || [])].includes('soporte')) {
+    const yaLoEra = [datos?.usuario?.role, ...(datos?.usuario?.roles_extra || [])].includes('soporte');
+    if (!yaLoEra) throw new AppError('El rol soporte lo da el superadmin', 403, 'SOPORTE_SOLO_SUPERADMIN');
+  }
 }
 
 /**
