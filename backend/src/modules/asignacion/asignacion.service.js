@@ -150,12 +150,24 @@ export async function decidir(config, datos, opciones = {}) {
           ...valido.data, responsable_id: elegida.id, idempotency_key: `asignacion-${datos.uid}`,
         });
         if (r?.lead_id) { await model.ponerLead(dec.id, r.lead_id); dec.lead_id = r.lead_id; }
+        // El mismo formulario ya había entrado por otro camino (ISECD: el formulario de la
+        // web llega directo al CRM y además por Make) y el CRM lo ha juntado con el lead que
+        // ya existía. Ese lead es de quien ya lo tiene: el escenario tiene que avisar a ELLA,
+        // no a la que se eligió aquí. Si no, a una le llega por el bot y a otra en el CRM
+        // (lead 4450, 04/11: Make avisó a Ana y el CRM se lo dio a Dayana).
+        const deVerdad = r?.responsable_id ? Number(r.responsable_id) : null;
+        if (deVerdad && deVerdad !== Number(elegida.id)) {
+          await model.ponerResponsable(dec.id, deVerdad);
+          dec.responsable_id = deVerdad;
+          logger.info({ decision: dec.id, lead: r.lead_id, elegida: elegida.id, responsable: deVerdad },
+            'asignación: el lead ya existía; el escenario avisa a quien lo tiene');
+        }
       } catch (err) {
         logger.warn({ err: err.message, decision: dec.id }, 'asignación: no se pudo crear el lead; se queda la decisión y el envío');
       }
     }
     setImmediate(() => { procesarEnvio(dec.id).catch(() => {}); });
-    return respuestaDe(dec, await model.personas([elegida.id]));
+    return respuestaDe(dec, await model.personas([dec.responsable_id ?? elegida.id]));
   });
 }
 
