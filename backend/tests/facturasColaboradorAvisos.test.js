@@ -28,6 +28,9 @@ import {
 } from '../src/modules/facturas-colaborador/avisos.service.js';
 import { armarLlegadas, armarPorPagar, destinatariosDe } from '../src/modules/facturas-colaborador/avisos.emails.js';
 import { runPorPagar, startFacturasColaboradorAvisosScheduler } from '../src/jobs/facturasColaboradorAvisosJob.js';
+import * as facturas from '../src/modules/facturas-colaborador/facturas.model.js';
+import { armarAvisoDePago } from '../src/modules/facturas-colaborador/facturas.emails.js';
+import { base } from '../src/shared/services/email-plantilla.service.js';
 
 /**
  * Facturas de colaboradores (#202) · los avisos de Diego del 04/11.
@@ -186,9 +189,11 @@ describe('aviso de llegada a la empresa (CRM#613, Diego 04/11)', () => {
     expect(c.htmlContent).toContain('marzo 2026');
     expect(c.htmlContent).toContain('972,00 €');
     expect(c.htmlContent).toContain('300,00 US$');
-    // Con el botón al CRM y la marca del campus (P.correo, norma del 10/10).
+    // Con el botón al CRM y la marca de la EMPRESA (Diego, 04/11): su nombre, no
+    // el del campus; el campus solo pone el remitente de Brevo (projectId).
     expect(c.htmlContent).toContain('/accounting/facturas-colaboradores?vista=enviadas');
-    expect(c.htmlContent).toContain(`${MARCA} Campus A`);
+    expect(c.htmlContent).not.toContain(`${MARCA} Campus A`);
+    expect(c.htmlContent).toContain(`CRM de ${MARCA}A`);
     expect(c.projectId).toBe(P.A.id);
     // Las copias adjuntas.
     expect(c.attachment).toHaveLength(3);
@@ -297,7 +302,9 @@ describe('resumen diario «Faltan facturas por pagar» (Diego 04/11)', () => {
     expect(c.htmlContent).toContain(`${MARCA} pedro`);
     expect(c.htmlContent).toContain('12 días');
     expect(c.htmlContent).toContain('/accounting/facturas-colaboradores?vista=por_pagar');
-    expect(c.htmlContent).toContain(`${MARCA} Campus A`);
+    // La marca de la empresa, no la del campus (Diego, 04/11).
+    expect(c.htmlContent).toContain(`CRM de ${MARCA}A`);
+    expect(c.htmlContent).not.toContain(`${MARCA} Campus A`);
     expect(c.clave).toBe(`facturas-colaborador-por-pagar-${E.A.id}-2026-11-05`);
     const [fila5] = await resumenesDeA('2026-11-05');
     expect(fila5).toMatchObject({ enviado: true, facturas: pendientes });
@@ -368,6 +375,11 @@ describe('«He recibido el pago y lo confirmo» y su opinión (Diego 04/11)', ()
     await vi.waitFor(() => expect(correosA(C.laura.email)).toHaveLength(1));
     const [c] = correosA(C.laura.email);
     expect(c.htmlContent).toContain('He recibido el pago y lo confirmo');
+    // Con la marca de la empresa; el campus solo pone el remitente de Brevo.
+    expect(c.htmlContent).toContain(`CRM de ${MARCA}A`);
+    expect(c.htmlContent).not.toContain(`${MARCA} Campus A`);
+    expect(c.htmlContent).not.toContain('https://logo.prueba/marca.png');
+    expect(c.projectId).toBe(P.A.id);
     token = enlaceDelCorreo(c);
     expect(token).toBe(tokenDeConfirmacion(F.laura, 1));
   });
@@ -379,7 +391,8 @@ describe('«He recibido el pago y lo confirmo» y su opinión (Diego 04/11)', ()
       colaborador: `${MARCA} laura`, mes: 'marzo de 2026', importe: 600, moneda: 'EUR',
       pagada_at: '2026-11-03', forma_pago: 'transferencia', confirmado_at: null, opinion: null,
     });
-    expect(res.body.data.marca).toMatchObject({ nombre: `${MARCA} Campus A` });
+    // La página lleva la marca de la empresa, como el correo (Diego, 04/11).
+    expect(res.body.data.marca).toEqual({ nombre: `${MARCA}A`, logo_url: null });
   });
 
   it('abrir el enlace (GET), aunque sea varias veces, no confirma nada ni deja rastro', async () => {
@@ -493,9 +506,10 @@ describe('«No lo he recibido» (Diego 04/11)', () => {
     await vi.waitFor(() => expect(avisosNoRecibido()).toHaveLength(1));
     const c = avisosNoRecibido()[0];
     expect(c.subject).toBe(`${MARCA} ana dice que no ha recibido el pago · marzo 2026 · ${MARCA}A`);
-    for (const t of [`${MARCA} ana`, 'F-ana', '300,00 US$', '03/11/2026', 'TRF-NOREC', 'Me llegó otra cantidad', `${MARCA} Campus A`]) {
+    for (const t of [`${MARCA} ana`, 'F-ana', '300,00 US$', '03/11/2026', 'TRF-NOREC', 'Me llegó otra cantidad', `CRM de ${MARCA}A`]) {
       expect(c.htmlContent).toContain(t);
     }
+    expect(c.htmlContent).not.toContain(`${MARCA} Campus A`);
     expect(c.htmlContent).toContain('/accounting/facturas-colaboradores?vista=pagadas');
     expect(c.clave).toBe(`facturas-colaborador-no-recibido-${F.ana}-1`);
     await vi.waitFor(async () => expect(await registro(F.ana, 'aviso_no_recibido')).toHaveLength(1));
@@ -552,5 +566,66 @@ describe('«No lo he recibido» (Diego 04/11)', () => {
       expect(ev.detalle.motivo).toContain('no tiene correo de facturación');
     });
     expect(sendEmail.mock.calls.filter((x) => x[0].subject.includes('dice que no ha recibido'))).toHaveLength(0);
+  });
+});
+
+/* ──────────────── 4. La marca de los correos: la de la EMPRESA (Diego, 04/11) ──────────────── */
+
+describe('los correos de facturas de colaboradores llevan la marca de la empresa, no la de un campus', () => {
+  // Como CEDIA: varios campus (uno con remitente «no contestar» y su logo) y la
+  // empresa sin logo. Antes la cabecera salía con el nombre y el logo de ese campus.
+  const empresaCon = async (clave, { logoUrl = null, logoKey = null } = {}) => {
+    E[clave] = await one(
+      'INSERT INTO invoice_issuers (razon_social, nif, logo_url, logo_key) VALUES ($1, $2, $3, $4) RETURNING id, razon_social',
+      [`${MARCA}${clave} Investigación y Desarrollo SL`, `B${clave}${Date.now().toString().slice(-6)}`, logoUrl, logoKey]);
+    P[`${clave}1`] = await one(
+      `INSERT INTO projects (nombre, slug, webhook_api_key, sociedad_emisora_id, logo_url)
+       VALUES ($1, $2, $3, $4, 'https://logo.prueba/campus-1.png') RETURNING id`,
+      [`${MARCA} Campus ${clave}1`, `${MARCA.toLowerCase()}-${clave.toLowerCase()}1`, `${MARCA}-key-${clave}1`, E[clave].id]);
+    P[`${clave}2`] = await one(
+      `INSERT INTO projects (nombre, slug, webhook_api_key, sociedad_emisora_id, logo_url, remitente_no_contestar)
+       VALUES ($1, $2, $3, $4, 'https://logo.prueba/campus-2.png', 'noresponder@campus.prueba') RETURNING id`,
+      [`${MARCA} Campus ${clave}2`, `${MARCA.toLowerCase()}-${clave.toLowerCase()}2`, `${MARCA}-key-${clave}2`, E[clave].id]);
+    return E[clave];
+  };
+  const pagada = (empresa) => ({
+    razon_social: empresa.razon_social, periodo: MARZO, importe: 500, moneda: 'EUR', pagada_at: '2026-11-03',
+    forma_pago: 'transferencia', colaborador_nombre: `${MARCA} laura`, numero_factura: 'F-1',
+  });
+
+  it('sin logo de la empresa: su nombre corto y ningún logo; el campus «no contestar» solo pone el remitente', async () => {
+    const e = await empresaCon('MC');
+    const marca = await facturas.marcaDeLaEmpresa(e.id);
+    expect(marca).toEqual({ id: P.MC2.id, nombre: `${MARCA}MC`, logo_url: null });
+
+    const c = armarAvisoDePago({ f: pagada(e), marca });
+    expect(c.fromName).toBe(`${MARCA}MC · Facturación`);
+    expect(c.htmlContent).toContain(`CRM de ${MARCA}MC`);
+    for (const nada of [`${MARCA} Campus MC1`, `${MARCA} Campus MC2`, 'logo.prueba', '/projects/']) {
+      expect(c.htmlContent).not.toContain(nada);
+    }
+    expect(c.textContent).not.toContain(`${MARCA} Campus`);
+  });
+
+  it('con logo de la empresa, ese logo (absoluto, para que se vea en el correo)', async () => {
+    const fuera = await empresaCon('LF', { logoUrl: 'https://empresa.prueba/logo.png' });
+    expect((await facturas.marcaDeLaEmpresa(fuera.id)).logo_url).toBe('https://empresa.prueba/logo.png');
+    const c = armarAvisoDePago({ f: pagada(fuera), marca: await facturas.marcaDeLaEmpresa(fuera.id) });
+    expect(c.htmlContent).toContain('https://empresa.prueba/logo.png');
+    expect(c.htmlContent).not.toContain('logo.prueba/campus');
+
+    // El subido al CRM se guarda con la ruta de la API: se completa con la raíz del CRM.
+    const subido = await empresaCon('LS', { logoUrl: '/api/invoices/issuers/1/logo?v=1', logoKey: 'logos/x.png' });
+    expect((await facturas.marcaDeLaEmpresa(subido.id)).logo_url).toBe(`${base()}/api/invoices/issuers/1/logo?v=1`);
+    expect(facturas.logoDeLaEmpresa({ id: 7, logo_url: null, con_logo_subido: true }))
+      .toBe(`${base()}/api/invoices/issuers/7/logo`);
+    expect(facturas.logoDeLaEmpresa({ id: 7, logo_url: '', con_logo_subido: false })).toBeNull();
+  });
+
+  it('una empresa sin campus sale con su nombre y por la cuenta del CRM', async () => {
+    E.SC = await one('INSERT INTO invoice_issuers (razon_social, nif) VALUES ($1, $2) RETURNING id',
+      [`${MARCA}SC Consultoría SL`, `BSC${Date.now().toString().slice(-6)}`]);
+    expect(await facturas.marcaDeLaEmpresa(E.SC.id)).toEqual({ id: null, nombre: `${MARCA}SC`, logo_url: null });
+    expect(await facturas.marcaDeLaEmpresa(2147483646)).toBeNull();
   });
 });

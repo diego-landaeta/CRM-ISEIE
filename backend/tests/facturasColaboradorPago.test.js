@@ -191,9 +191,11 @@ describe('facturas de colaboradores (#202) · marcar pagada', () => {
       const correo = sendEmail.mock.calls[0][0];
       expect(correo.to).toEqual([{ email: 'aviso@test.local', name: 'aviso' }]);
       expect(correo.subject).toBe('Tu factura de mayo para Alfa está pagada · 636,00 € · transferencia del 05/06');
-      // Sale por la cuenta y el remitente de un campus de su empresa (el que tiene «no contestar»).
+      // Sale por la cuenta y el remitente de un campus de su empresa (el que tiene «no contestar»),
+      // pero con la marca de la EMPRESA: su nombre, no el del campus (Diego, 04/11).
       expect(correo.projectId).toBe(P.A);
-      expect(correo.htmlContent).toContain('Campus Alfa');
+      expect(correo.htmlContent).toContain('CRM de Alfa');
+      expect(correo.htmlContent).not.toContain('Campus Alfa');
 
       // Se deshace y se vuelve a pagar el mismo día (otra forma de pago): sale otro aviso, con otra clave.
       expect((await request.post(`${API}/facturas/${F.aviso}/deshacer-pago`).set(como('adminA')).send({ motivo: 'Era Bizum' })).status).toBe(200);
