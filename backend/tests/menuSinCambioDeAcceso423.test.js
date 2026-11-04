@@ -21,6 +21,12 @@ const PERFILES = {
   project_manager: inv.personaDePrueba('project_manager'),
   'gestora con factura_manager': inv.personaDePrueba('gestor', { factura_manager: true }),
   'gestora+admin': inv.personaDePrueba('gestor', { roles_extra: ['admin'] }),
+  gestora: inv.personaDePrueba('gestor'),
+  'gestora+tutor': inv.personaDePrueba('gestor', { roles_extra: ['tutor'] }),
+  'gestora con editar_fechas_factura': inv.personaDePrueba('gestor', { editar_fechas_factura: true }),
+  'gestora con usa_mcp': inv.personaDePrueba('gestor', { usa_mcp: true }),
+  'gestora con diplomas.view': inv.personaDePrueba('gestor', { excepciones: { 'diplomas.view': true } }),
+  'gestora con tasks.close': inv.personaDePrueba('gestor', { excepciones: { 'tasks.view_own': true, 'tasks.close': true, 'tasks.manage': true } }),
 };
 
 let porId;

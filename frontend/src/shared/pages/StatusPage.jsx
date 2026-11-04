@@ -5,6 +5,7 @@ import client from '@/shared/api/client';
 // —Componentes e Incidencias—; no lo sustituyen.
 import PiezasDelSistema from '@/modules/status/components/PiezasDelSistema';
 import CorreosEnviados from '@/modules/status/components/CorreosEnviados';
+import usePermission from '@/shared/hooks/usePermission';
 
 const STATUS_META = {
   operational: { label: 'Operativo',    tone: 'green',  Icon: CheckCircle },
@@ -22,6 +23,11 @@ const TONE_CLASS = {
 };
 
 export default function StatusPage() {
+  // Las piezas y los correos piden `status.view` (#631, gemela de CRM#643): sin
+  // él el servidor da 403, así que ni se piden ni se pintan. Componentes e
+  // incidencias son públicos y se quedan para todos.
+  const { can } = usePermission();
+  const veEstado = can('status.view');
   const [components, setComponents] = useState([]);
   const [incidents, setIncidents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -122,9 +128,9 @@ export default function StatusPage() {
           </div>
         </section>
       )}
-      <PiezasDelSistema />
+      {veEstado && <PiezasDelSistema />}
 
-      <CorreosEnviados />
+      {veEstado && <CorreosEnviados />}
     </div>
   );
 }

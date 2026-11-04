@@ -91,7 +91,8 @@ export default function ComisionesTutoresPage() {
       const [r, l, a, sf] = await Promise.all([
         tutoresApi.resumenComisiones({ periodo, projectId, issuerId }),
         tutoresApi.comisiones({ periodo, projectId, issuerId }),
-        tutoresApi.ajustes(),
+        // Los ajustes son de quien gestiona tutores; sin eso, 403 (#631).
+        puede ? tutoresApi.ajustes() : Promise.resolve({ success: false, data: null }),
         tutoresApi.pagosSinFormacion(`${periodo}-01`, finDeMes, projectId, issuerId),
       ]);
       setResumen(r.success ? (r.data || []) : []);
@@ -99,7 +100,7 @@ export default function ComisionesTutoresPage() {
       setAjustes(a.success ? a.data : null);
       setSinFormacion(sf.success ? (sf.data || []) : []);
     } finally { setCargando(false); }
-  }, [periodo, projectId, issuerId]);
+  }, [periodo, projectId, issuerId, puede]);
 
   useEffect(() => { if (puede) cargar(); }, [cargar, puede]);
 

@@ -238,14 +238,16 @@ export default function TutoresPage() {
 
   // El arranque del modulo manda sobre la fecha por defecto: si las comisiones
   // empiezan en agosto, proponer hoy solo invita a ponerlo mal.
+  // Los ajustes son de quien gestiona tutores; sin eso, 403 (#631).
   useEffect(() => {
+    if (!puede) return;
     tutoresApi.ajustes().then((r) => {
       if (!r.success || !r.data) return;
       setAjustes(r.data);
       const arranque = String(r.data.aplica_desde).slice(0, 10);
       setNuevaFecha(arranque > hoy() ? arranque : hoy());
     }).catch(() => { /* se queda con hoy */ });
-  }, []);
+  }, [puede]);
 
   // Cerrar con Escape, que es lo que hace todo el mundo antes de buscar la X.
   // Todas las ventanas, no solo el alta y la formación; y con un desplegable

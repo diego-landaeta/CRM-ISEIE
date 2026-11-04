@@ -12,6 +12,32 @@ import SectionTabs from './SectionTabs';
 import BetaDisclaimer from '@/shared/components/ui/BetaDisclaimer';
 import { useAuth } from '@/contexts/AuthContext';
 import { tieneWhatsapp } from '@/shared/lib/roles';
+import EmptyState from '@/shared/components/ui/EmptyState';
+import { LockKey } from '@phosphor-icons/react';
+import usePermission from '@/shared/hooks/usePermission';
+import { rutaPermitida } from './Sidebar';
+
+/**
+ * Una pantalla que el menú no le enseña —le falta su permiso— tampoco se abre
+ * escribiendo la dirección (#631, gemela de CRM#643): dice «No tienes acceso» en
+ * vez de abrirse a medias y llenarse de 403.
+ */
+function PantallaConPermiso({ pathname, children }) {
+  const { can } = usePermission();
+  const { permissions } = useAuth();
+  // Sin el mapa de permisos todavía (al entrar), `can` dice que no a todo: no se
+  // decide nada hasta que llegue, o saldría un «No tienes acceso» falso.
+  if (!permissions || rutaPermitida(pathname, can)) return children;
+  return (
+    <div className="p-6 max-w-2xl mx-auto">
+      <EmptyState
+        icon={LockKey}
+        title="No tienes acceso a esta pantalla"
+        description="Si crees que deberías verla, pídeselo a un administrador."
+      />
+    </div>
+  );
+}
 // Avisa de un mensaje entrante desde cualquier pantalla. Antes de esto el CRM
 // no avisaba de nada cuando entraba un WhatsApp.
 const AvisoDeMensaje = lazy(() => import('./AvisoDeMensaje'));
@@ -130,7 +156,9 @@ export default function AppLayout() {
           </div>
         }>
           <div key={pathname} className="animate-in fade-in duration-200">
-            <Outlet />
+            <PantallaConPermiso pathname={pathname}>
+              <Outlet />
+            </PantallaConPermiso>
           </div>
         </Suspense>
       </main>

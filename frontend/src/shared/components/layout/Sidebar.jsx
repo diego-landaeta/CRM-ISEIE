@@ -76,7 +76,9 @@ export const NAV_SECTIONS = [
           // la deja tocar el suyo.
           { to: '/whatsapp/conexion', label: 'Conexión', permiso: 'whatsapp.usar' },
           { to: '/whatsapp/plantillas', label: 'Plantillas', permiso: 'whatsapp.plantillas' },
-          { to: '/whatsapp/banco', label: 'Banco de mensajes' },
+          // El servidor pide usarlo o supervisarlo (`usaOSupervisa`); sin esto el menú se lo
+          // enseñaba al project manager y le daba 403 (#631, gemela de CRM#643).
+          { to: '/whatsapp/banco', label: 'Banco de mensajes', permiso: ['whatsapp.usar', 'whatsapp.supervisar'] },
           // Si cada gestora responde y lo que apunta (Diego, 30/10). Para quien ve Reportes.
           { to: '/whatsapp/actividad', label: 'Actividad', permiso: 'reports.view' },
           { to: '/whatsapp/ayuda', label: 'Cómo se usa' },
@@ -332,6 +334,39 @@ export function canSeeItem(item, role, soloColaboraciones, permisos, can) {
   if (!item.roles) return true;
   if (es('superadmin', 'soporte')) return true;
   return item.roles.some((r) => roles.includes(r)) || porPermiso;
+}
+
+/**
+ * ¿Puede abrir esta pantalla, por la dirección? (#631, gemela de CRM#643)
+ *
+ * El menú ya esconde lo que no se puede usar cuando la entrada declara su
+ * `permiso`, pero escribiendo la dirección la pantalla se abría igual y luego
+ * llegaba el 403. Esta es la misma regla, para la ruta: todas las entradas del
+ * menú que llevan a ella; si alguna pide `permiso` y ninguna lo cumple (ni su
+ * `oPermiso`), está cerrada. Solo el permiso, nunca el rol (#230): los `roles`
+ * de cada entrada dicen a quién se le enseña de serie, no quién entra. Lo que no
+ * está en el menú (fichas de detalle…) no se toca.
+ */
+const SIN_ENTRADA = {
+  // El chat de WhatsApp también se abre por `/whatsapp` (App.jsx), sin entrada.
+  '/whatsapp': ['whatsapp.usar', 'whatsapp.supervisar'],
+};
+
+export function rutaPermitida(pathname, can) {
+  const ruta = String(pathname || '').replace(/\/+$/, '') || '/';
+  const tiene = (claves) => typeof can === 'function' && [].concat(claves).some((p) => can(p) === true);
+  const suyas = [];
+  const recorrer = (items) => {
+    for (const it of items || []) {
+      if (it.to && !it.href && it.to === ruta) suyas.push(it);
+      if (it.children) recorrer(it.children);
+    }
+  };
+  for (const s of NAV_SECTIONS) recorrer(s.items);
+  // Rutas sin entrada propia en el menú: su permiso, aquí.
+  if (!suyas.length && SIN_ENTRADA[ruta]) suyas.push({ permiso: SIN_ENTRADA[ruta] });
+  if (!suyas.length) return true;
+  return suyas.some((it) => !it.permiso || tiene(it.permiso) || (it.oPermiso && tiene(it.oPermiso)));
 }
 
 /** Vanessa y quien lleve las colaboraciones: solo tutores. Un admin con la casilla NO se recorta. */

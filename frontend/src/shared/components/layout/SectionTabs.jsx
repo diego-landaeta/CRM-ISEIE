@@ -2,6 +2,8 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { getSectionForPath, visibleTabsForRole } from '@/shared/lib/sections';
 import { cn } from '@/shared/lib/utils';
+import usePermission from '@/shared/hooks/usePermission';
+import { rutaPermitida } from './Sidebar';
 
 /**
  * Barra de tabs horizontal que aparece automáticamente cuando la ruta actual
@@ -13,14 +15,19 @@ import { cn } from '@/shared/lib/utils';
  */
 export default function SectionTabs() {
   const { pathname } = useLocation();
-  const { user } = useAuth();
+  const { user, permissions } = useAuth();
+  const { can } = usePermission();
   const role = user?.role || 'gestor';
 
   const section = getSectionForPath(pathname);
   if (!section) return null;
   if (section.roles && !section.roles.includes(role) && role !== 'superadmin' && role !== 'soporte') return null;
 
-  const tabs = visibleTabsForRole(section.tabs, role);
+  // Una pestaña que lleva a una pantalla sin permiso tampoco se enseña (#631,
+  // gemela de CRM#643): la misma regla que el menú y la ruta. Sin el mapa de
+  // permisos todavía, no se decide nada.
+  const tabs = visibleTabsForRole(section.tabs, role)
+    .filter((t) => !permissions || rutaPermitida(t.to, can));
   if (tabs.length <= 1) return null; // Sin hermanos visibles no merece la barra.
 
   const SectionIcon = section.icon;
