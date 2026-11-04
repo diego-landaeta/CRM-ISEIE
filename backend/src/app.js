@@ -390,6 +390,7 @@ async function recuperarAdjuntosDeWhatsapp() {
            FROM wa_mensajes m
            JOIN wa_conversaciones c ON c.id = m.conversacion_id
           WHERE m.media_url IS NULL
+            AND NOT m.media_irrecuperable
             AND m.tipo NOT IN ('texto', 'otro')
             AND m.wa_id IS NOT NULL`
       );

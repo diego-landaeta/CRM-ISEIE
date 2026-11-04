@@ -239,6 +239,7 @@ El CRM no distingue cuál de los dos hay detrás.
 | `WA_TOPE_MINUTO` / `_HORA` / `_DIA` | 6 / 60 / 300 | Topes de ritmo |
 | `WA_PAUSA_MS` | 1500 | Espera entre mensajes seguidos |
 | `WA_MEDIA_DIAS` | 30 | Cuánto historial de adjuntos se baja solo |
+| `WA_MEDIA_INTENTOS` | 3 | Intentos antes de dar un adjunto por perdido: ni el arranque ni «reintentar» lo vuelven a pedir (#365, migración 270) |
 | `UPLOADS_DIR` | `/var/crm-uploads` | Dónde se guardan los archivos |
 
 ### Base de datos
