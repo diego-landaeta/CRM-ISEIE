@@ -72,7 +72,8 @@ const CAMPOS_ENLACE = `
   ii.razon_social, ii.nif AS empresa_nif, ii.direccion, ii.cp, ii.ciudad, ii.pais, ii.logo_url,
   ce.modalidad, ce.importe_fijo, ce.tarifa_hora, ce.iva_pct, ce.irpf_pct, ce.moneda AS moneda_acordada,
   f.base, f.iva, f.irpf, f.total, f.horas, f.cuadra, f.importe_pdf, f.mime,
-  to_char(f.pagada_at, 'YYYY-MM-DD') AS pagada_at, f.pagada_por, f.forma_pago, f.referencia_pago, f.justificante`;
+  to_char(f.pagada_at, 'YYYY-MM-DD') AS pagada_at, f.pagada_por, f.forma_pago, f.referencia_pago, f.justificante,
+  f.pago_confirmado_at, f.pago_valoracion, f.pago_comentario, f.pago_feedback_at`;
 
 /** La fila de un enlace, por la huella de su token. */
 export async function porTokenHash(tokenHash) {
@@ -308,7 +309,9 @@ export async function marcarPagada(db, id, { fecha, porUserId, forma, justifican
 export async function deshacerPago(db, id) {
   await db.query(
     `UPDATE facturas_colaborador
-        SET pagada_at = NULL, pagada_por = NULL, forma_pago = NULL, justificante = NULL, referencia_pago = NULL
+        SET pagada_at = NULL, pagada_por = NULL, forma_pago = NULL, justificante = NULL, referencia_pago = NULL,
+            -- La confirmación y la opinión eran de ese pago: quedan en el registro (270).
+            pago_confirmado_at = NULL, pago_valoracion = NULL, pago_comentario = NULL, pago_feedback_at = NULL
       WHERE id = $1`,
     [id],
   );
@@ -393,6 +396,8 @@ const FILA_DE_LISTA = `SELECT f.id, f.colaborador_id, f.issuer_id, to_char(f.per
               -- El pago, que no se mezcla con el estado de la factura.
               to_char(f.pagada_at, 'YYYY-MM-DD') AS pagada_at, f.forma_pago, f.referencia_pago,
               (f.justificante IS NOT NULL) AS con_justificante,
+              -- El colaborador confirmó que le llegó el pago, y su opinión (270).
+              f.pago_confirmado_at, f.pago_valoracion, f.pago_comentario,
               ${ESTADO} AS estado
          FROM facturas_colaborador f
          JOIN colaboradores c ON c.id = f.colaborador_id

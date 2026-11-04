@@ -55,6 +55,8 @@ const InvoiceCreatePage = lazy(() => import('./modules/invoices/pages/InvoiceCre
 const FacturasColaboradoresPage = lazy(() => import('./modules/facturas-colaborador/pages/FacturasColaboradoresPage'));
 const MiFacturaPage = lazy(() => import('./modules/facturas-colaborador/pages/MiFacturaPage'));
 const FacturaEnlacePage = lazy(() => import('./modules/facturas-colaborador/pages/FacturaEnlacePage'));
+// «He recibido el pago y lo confirmo» (Diego, 04/11): el botón del correo de «Factura pagada».
+const FacturaPagoPage = lazy(() => import('./modules/facturas-colaborador/pages/FacturaPagoPage'));
 const RevenuePage = lazy(() => import('./modules/revenue/pages/RevenuePage'));
 const ChannelsConfigPage = lazy(() => import('./modules/settings/pages/ChannelsConfigPage'));
 const ShortcutsConfigPage = lazy(() => import('./modules/settings/pages/ShortcutsConfigPage'));
@@ -230,6 +232,8 @@ function App() {
         {/* El enlace personal del colaborador (#202): sin usuario, el enlace es la llave.
             Si la API no está montada (producción sin aprobar), dice que el enlace no vale. */}
         <Route path="/factura-colaborador/:token" element={<FacturaEnlacePage />} />
+        {/* Y la confirmación del pago, desde el correo de «Factura pagada»: también sin usuario. */}
+        <Route path="/factura-colaborador/pago/:token" element={<FacturaPagoPage />} />
 
         {/* Privadas (con layout) */}
         <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>

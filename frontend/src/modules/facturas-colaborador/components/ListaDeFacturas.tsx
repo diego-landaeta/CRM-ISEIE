@@ -12,6 +12,7 @@ import {
 } from '../api/facturasColaborador.api';
 import { DeshacerPagoDialog, PagarDialog, RegistroDialog, errorDe, esMes } from './DialogosFacturas';
 import EtiquetaDelPdf from './EtiquetaDelPdf';
+import ConfirmacionDelPago from './ConfirmacionDelPago';
 import LeyendaFacturas, { ACCION } from './LeyendaFacturas';
 
 /*
@@ -212,6 +213,7 @@ export default function ListaDeFacturas({ vista, empresas, empresa }: {
                           <div className="text-xs text-muted-foreground mt-0.5">
                             {f.forma_pago ? FORMA_PAGO_ES[f.forma_pago] : ''}{f.referencia_pago ? ` · ref. ${f.referencia_pago}` : ''}
                           </div>
+                          <ConfirmacionDelPago f={f} />
                         </>
                       ) : f.subida_at && !f.anulada_at ? (
                         <span className="rounded-full px-2 py-0.5 text-xs font-semibold bg-warning-soft text-warning-soft-foreground">Por pagar</span>
