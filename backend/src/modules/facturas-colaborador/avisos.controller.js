@@ -1,6 +1,6 @@
 import * as service from './avisos.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
-import { opinionDelPagoSchema } from './facturas-colaborador.validation.js';
+import { opinionDelPagoSchema, noRecibidoSchema } from './facturas-colaborador.validation.js';
 
 /*
   «He recibido el pago y lo confirmo» (Diego, 04/11): las rutas del enlace del
@@ -29,4 +29,11 @@ export const opinarDelPago = accion(async (req, res) => {
   const r = opinionDelPagoSchema.safeParse(req.body ?? {});
   if (!r.success) throw new AppError(r.error.errors[0]?.message || 'Datos inválidos', 400, 'VALIDATION_ERROR');
   res.json({ success: true, data: await service.opinarDelPago(req.params.token, r.data, ipDe(req)) });
+});
+
+// «No lo he recibido» (Diego, 04/11), con un comentario opcional.
+export const noRecibido = accion(async (req, res) => {
+  const r = noRecibidoSchema.safeParse(req.body ?? {});
+  if (!r.success) throw new AppError(r.error.errors[0]?.message || 'Datos inválidos', 400, 'VALIDATION_ERROR');
+  res.json({ success: true, data: await service.noRecibido(req.params.token, r.data, ipDe(req)) });
 });

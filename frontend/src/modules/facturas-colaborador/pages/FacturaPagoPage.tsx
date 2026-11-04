@@ -16,6 +16,9 @@ import {
  * vea. La página enseña la factura y el botón; la confirmación va al pulsarlo
  * (POST), una sola vez. Después, si quiere, su opinión: de 1 a 5 y un
  * comentario, también una sola vez.
+ *
+ * Al lado, «No lo he recibido» (Diego, 04/11): también por POST y una vez, con un
+ * comentario opcional; avisa a la empresa. Después puede seguir confirmando.
  */
 export default function FacturaPagoPage() {
   const { token = '' } = useParams();
@@ -27,6 +30,9 @@ export default function FacturaPagoPage() {
   const [errorOpinion, setErrorOpinion] = useState<string | null>(null);
   const [confirmando, setConfirmando] = useState(false);
   const [errorConfirmar, setErrorConfirmar] = useState<string | null>(null);
+  const [diciendoQueNo, setDiciendoQueNo] = useState(false);
+  const [comentarioNo, setComentarioNo] = useState('');
+  const [avisando, setAvisando] = useState(false);
 
   useEffect(() => {
     let vivo = true;
@@ -51,6 +57,19 @@ export default function FacturaPagoPage() {
       setErrorConfirmar(err?.data?.error || err?.message || 'No se ha podido confirmar. Prueba otra vez.');
     } finally {
       setConfirmando(false);
+    }
+  }
+
+  async function noLoHeRecibido() {
+    setAvisando(true);
+    setErrorConfirmar(null);
+    try {
+      setPago((await facturasColaboradorApi.noRecibido(token, comentarioNo.trim())).data);
+      setDiciendoQueNo(false);
+    } catch (err: any) {
+      setErrorConfirmar(err?.data?.error || err?.message || 'No se ha podido avisar. Prueba otra vez.');
+    } finally {
+      setAvisando(false);
     }
   }
 
@@ -93,11 +112,41 @@ export default function FacturaPagoPage() {
               {pago.forma_pago ? FORMA_PAGO_ES[pago.forma_pago] : 'Pago'} del {diaDelPago(pago.pagada_at)}
               {pago.numero_factura ? ` · factura ${pago.numero_factura}` : ''}
             </p>
-            <p>Cuando lo veas en tu cuenta, confírmalo:</p>
+            {pago.no_recibido ? (
+              <p role="status" className="rounded-md bg-warning-soft text-warning-soft-foreground px-3 py-2">
+                Nos dijiste que no lo has recibido{pago.no_recibido.comentario ? ` («${pago.no_recibido.comentario}»)` : ''} y hemos
+                avisado a {pago.empresa}. Cuando te llegue, confírmalo aquí:
+              </p>
+            ) : (
+              <p>Cuando lo veas en tu cuenta, confírmalo:</p>
+            )}
             {errorConfirmar && <p role="alert" className="text-destructive text-secundario">{errorConfirmar}</p>}
-            <Button onClick={confirmar} disabled={confirmando}>
-              {confirmando ? 'Confirmando…' : 'He recibido el pago y lo confirmo'}
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={confirmar} disabled={confirmando || avisando}>
+                {confirmando ? 'Confirmando…' : 'He recibido el pago y lo confirmo'}
+              </Button>
+              {!pago.no_recibido && !diciendoQueNo && (
+                <Button variant="outline" onClick={() => setDiciendoQueNo(true)} disabled={confirmando}>No lo he recibido</Button>
+              )}
+            </div>
+            {!pago.no_recibido && diciendoQueNo && (
+              <section className="space-y-3 border-t border-border pt-4" aria-labelledby="no-recibido-titulo">
+                <h2 id="no-recibido-titulo" className="font-semibold">No lo he recibido</h2>
+                <p className="text-secundario text-muted-foreground">Avisaremos a {pago.empresa} para que lo revise.</p>
+                <label className="block space-y-1">
+                  <span className="text-secundario">¿Algo que debamos saber? <span className="text-muted-foreground">(opcional)</span></span>
+                  <textarea value={comentarioNo} onChange={(e) => setComentarioNo(e.target.value)} maxLength={1000} rows={3}
+                    placeholder="Por ejemplo: me llegó otra cantidad"
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="destructive" onClick={noLoHeRecibido} disabled={avisando}>
+                    {avisando ? 'Avisando…' : 'Avisar de que no lo he recibido'}
+                  </Button>
+                  <Button variant="ghost" onClick={() => setDiciendoQueNo(false)} disabled={avisando}>Cancelar</Button>
+                </div>
+              </section>
+            )}
           </div>
         ) : (
           <>

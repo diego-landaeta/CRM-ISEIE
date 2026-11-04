@@ -454,3 +454,103 @@ describe('«He recibido el pago y lo confirmo» y su opinión (Diego 04/11)', ()
     expect((await request.get(`${API}/pago/${nuevo}`)).body.data.confirmado_at).toBeNull();
   });
 });
+
+/* ─────────────────────────── 4. «No lo he recibido» ─────────────────────────── */
+
+describe('«No lo he recibido» (Diego 04/11)', () => {
+  let token;
+  const pagar = (ids) => request.post(`${API}/facturas/pagar`).set('Authorization', `Bearer ${tokenAdmin}`)
+    .field('ids', ids.join(',')).field('fecha', '2026-11-03').field('forma_pago', 'transferencia')
+    .field('referencia_pago', 'TRF-NOREC');
+  const noRec = (id) => one(
+    'SELECT pago_no_recibido_at, pago_no_recibido_comentario, pago_confirmado_at FROM facturas_colaborador WHERE id = $1', [id]);
+  const avisosNoRecibido = () => correosA(CORREO_A).filter((c) => c.subject.includes('dice que no ha recibido el pago'));
+
+  it('el correo de «Factura pagada» sigue con su enlace; abrirlo (GET) no apunta nada', async () => {
+    encender();
+    sendEmail.mockClear();
+    expect((await pagar([F.ana])).status).toBe(200);
+    await vi.waitFor(() => expect(correosA(C.ana.email)).toHaveLength(1));
+    token = tokenDeConfirmacion(F.ana, 1);
+    for (let i = 0; i < 3; i++) expect((await request.get(`${API}/pago/${token}`)).status).toBe(200);
+    expect((await noRec(F.ana)).pago_no_recibido_at).toBeNull();
+    expect(await registro(F.ana, 'pago_no_recibido')).toHaveLength(0);
+    expect(avisosNoRecibido()).toHaveLength(0);
+  });
+
+  it('al pulsarlo (POST) se apunta con su comentario y avisa enseguida a la empresa', async () => {
+    encender();
+    sendEmail.mockClear();
+    const res = await request.post(`${API}/pago/${token}/no-recibido`).send({ comentario: '  Me llegó otra cantidad  ' });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.data.no_recibido).toMatchObject({ comentario: 'Me llegó otra cantidad' });
+    expect(res.body.data.confirmado_at).toBeNull();
+    const f = await noRec(F.ana);
+    expect(f.pago_no_recibido_at).not.toBeNull();
+    expect(f.pago_no_recibido_comentario).toBe('Me llegó otra cantidad');
+    const [ev] = await registro(F.ana, 'pago_no_recibido');
+    expect(ev.detalle).toMatchObject({ comentario: 'Me llegó otra cantidad' });
+    await vi.waitFor(() => expect(avisosNoRecibido()).toHaveLength(1));
+    const c = avisosNoRecibido()[0];
+    expect(c.subject).toBe(`${MARCA} ana dice que no ha recibido el pago · marzo 2026 · ${MARCA}A`);
+    for (const t of [`${MARCA} ana`, 'F-ana', '300,00 US$', '03/11/2026', 'TRF-NOREC', 'Me llegó otra cantidad', `${MARCA} Campus A`]) {
+      expect(c.htmlContent).toContain(t);
+    }
+    expect(c.htmlContent).toContain('/accounting/facturas-colaboradores?vista=pagadas');
+    expect(c.clave).toBe(`facturas-colaborador-no-recibido-${F.ana}-1`);
+    await vi.waitFor(async () => expect(await registro(F.ana, 'aviso_no_recibido')).toHaveLength(1));
+  });
+
+  it('una sola vez: la segunda no apunta ni avisa otra vez', async () => {
+    encender();
+    sendEmail.mockClear();
+    const otra = await request.post(`${API}/pago/${token}/no-recibido`).send({});
+    expect(otra.status).toBe(409);
+    expect(await registro(F.ana, 'pago_no_recibido')).toHaveLength(1);
+    expect(avisosNoRecibido()).toHaveLength(0);
+  });
+
+  it('en la lista sale con su comentario', async () => {
+    const res = await request.get(`${API}/facturas?vista=pagadas&periodo=2026-03`).set('Authorization', `Bearer ${tokenAdmin}`);
+    const f = res.body.data.facturas.find((x) => x.id === F.ana);
+    expect(f.pago_no_recibido_at).not.toBeNull();
+    expect(f.pago_no_recibido_comentario).toBe('Me llegó otra cantidad');
+    expect(f.pago_confirmado_at).toBeNull();
+  });
+
+  it('si después confirma que sí, queda confirmado (y ya no puede decir que no)', async () => {
+    const res = await request.post(`${API}/pago/${token}/confirmar`);
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.data.confirmado_at).not.toBeNull();
+    expect((await noRec(F.ana)).pago_confirmado_at).not.toBeNull();
+    expect((await request.post(`${API}/pago/${token}/no-recibido`).send({})).status).toBe(409);
+  });
+
+  it('el comentario tiene tope, y un enlace tocado no vale', async () => {
+    const [id, vez, sig] = token.split('.');
+    const tocado = `${id}.${vez}.${sig.slice(0, -1)}${sig.endsWith('A') ? 'B' : 'A'}`;
+    expect((await request.post(`${API}/pago/${tocado}/no-recibido`).send({})).status).toBe(404);
+    expect((await request.post(`${API}/pago/${token}/no-recibido`).send({ comentario: 'x'.repeat(1001) })).status).toBe(400);
+  });
+
+  it('si se deshace el pago se borra, y el enlace deja de valer', async () => {
+    const des = await request.post(`${API}/facturas/${F.ana}/deshacer-pago`).set('Authorization', `Bearer ${tokenAdmin}`)
+      .send({ motivo: 'Fecha equivocada' });
+    expect(des.status, JSON.stringify(des.body)).toBe(200);
+    expect(await noRec(F.ana)).toMatchObject({ pago_no_recibido_at: null, pago_no_recibido_comentario: null, pago_confirmado_at: null });
+    expect((await request.post(`${API}/pago/${token}/no-recibido`).send({})).status).toBe(404);
+  });
+
+  it('sin correo de facturación en la empresa, queda en el registro', async () => {
+    encender();
+    sendEmail.mockClear();
+    expect((await pagar([F.deB])).status).toBe(200);
+    const t = tokenDeConfirmacion(F.deB, 1);
+    expect((await request.post(`${API}/pago/${t}/no-recibido`).send({})).status).toBe(200);
+    await vi.waitFor(async () => {
+      const [ev] = await registro(F.deB, 'aviso_no_recibido_fallido');
+      expect(ev.detalle.motivo).toContain('no tiene correo de facturación');
+    });
+    expect(sendEmail.mock.calls.filter((x) => x[0].subject.includes('dice que no ha recibido'))).toHaveLength(0);
+  });
+});

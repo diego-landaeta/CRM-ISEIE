@@ -497,6 +497,8 @@ const EVENTO: Record<string, string> = {
   // Los avisos a la empresa y la confirmación del colaborador (Diego, 04/11).
   aviso_empresa: 'Aviso a la empresa enviado', aviso_empresa_fallido: 'No se pudo avisar a la empresa',
   pago_confirmado: 'Pago confirmado por el colaborador', pago_opinion: 'Opinión del colaborador sobre el pago',
+  pago_no_recibido: 'El colaborador dice que no lo ha recibido',
+  aviso_no_recibido: 'Aviso a la empresa: pago no recibido', aviso_no_recibido_fallido: 'No se pudo avisar a la empresa del pago no recibido',
 };
 
 const CAMPO: Record<string, string> = {
