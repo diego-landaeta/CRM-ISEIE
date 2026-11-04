@@ -1,12 +1,14 @@
+import { comoLista } from '../../shared/utils/ambito.js';
 import { query, getClient } from '../../shared/config/db.js';
 import { logger } from '../../shared/utils/logger.js';
 
 // ===== RULES =====
 
-export async function listRules({ projectId, userId, productId }) {
+export async function listRules({ projectId, projectIds = null, userId, productId }) {
   const conds = ['cr.active = true'];
   const params = []; let idx = 1;
-  if (projectId) { conds.push(`cr.project_id = $${idx++}`); params.push(projectId); }
+  const idsRegla = comoLista(projectId, projectIds);
+  if (idsRegla) { conds.push(`cr.project_id = ANY($${idx++}::int[])`); params.push(idsRegla); }
   if (userId)    { conds.push(`cr.user_id = $${idx++}`);    params.push(userId); }
   if (productId) { conds.push(`cr.product_id = $${idx++}`); params.push(productId); }
   const { rows } = await query(
@@ -81,16 +83,18 @@ export async function findRule({ userId, productId }) {
 
 // ===== COMMISSIONS =====
 
-export async function listCommissions({ userId, estado, from, to, projectId }) {
+export async function listCommissions({ userId, estado, from, to, projectId, projectIds = null }) {
   const conds = [];
   const params = []; let idx = 1;
   if (userId) { conds.push(`c.user_id = $${idx++}`); params.push(userId); }
   if (estado) { conds.push(`c.estado = $${idx++}`); params.push(estado); }
   if (from)   { conds.push(`c.created_at >= $${idx++}`); params.push(from); }
   if (to)     { conds.push(`c.created_at <= $${idx++}`); params.push(to); }
-  if (projectId) {
-    conds.push(`EXISTS (SELECT 1 FROM conversions cv WHERE cv.id = c.conversion_id AND cv.project_id = $${idx++})`);
-    params.push(projectId);
+  // Un campus o una lista de ellos (los suyos, `proyectosDelAmbito`).
+  const idsCom = comoLista(projectId, projectIds);
+  if (idsCom) {
+    conds.push(`EXISTS (SELECT 1 FROM conversions cv WHERE cv.id = c.conversion_id AND cv.project_id = ANY($${idx++}::int[]))`);
+    params.push(idsCom);
   }
   const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
   const { rows } = await query(
@@ -270,13 +274,15 @@ export async function payCommission(id, fechaPago, notas) {
   return commission;
 }
 
-export async function getStats({ userId, projectId, from, to }) {
+export async function getStats({ userId, projectId, projectIds = null, from, to }) {
   const conds = [];
   const params = []; let idx = 1;
   if (userId)    { conds.push(`c.user_id = $${idx++}`); params.push(userId); }
-  if (projectId) {
-    conds.push(`EXISTS (SELECT 1 FROM conversions cv WHERE cv.id = c.conversion_id AND cv.project_id = $${idx++})`);
-    params.push(projectId);
+  // Un campus o una lista de ellos (los suyos, `proyectosDelAmbito`).
+  const idsCom = comoLista(projectId, projectIds);
+  if (idsCom) {
+    conds.push(`EXISTS (SELECT 1 FROM conversions cv WHERE cv.id = c.conversion_id AND cv.project_id = ANY($${idx++}::int[]))`);
+    params.push(idsCom);
   }
   if (from) { conds.push(`c.created_at >= $${idx++}`); params.push(from); }
   if (to)   { conds.push(`c.created_at <= $${idx++}`); params.push(to); }

@@ -100,9 +100,12 @@ export async function getCorreos(req, res, next) {
     const estado = ['enviado', 'fallido', 'bloqueado'].includes(req.query.estado)
       ? req.query.estado
       : null;
+    // De sus campus, salvo super admin y soporte (Diego, 04/11).
+    const { campusParaRecortar } = await import('../../shared/utils/ambito.js');
+    const campus = await campusParaRecortar(req);
     const [envios, resumen] = await Promise.all([
-      ultimosEnvios({ estado, limite: req.query.limit }),
-      resumenEnvios(),
+      ultimosEnvios({ estado, limite: req.query.limit, campus }),
+      resumenEnvios({ campus }),
     ]);
     res.json({ success: true, data: { envios, resumen } });
   } catch (err) { next(err); }

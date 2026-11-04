@@ -83,13 +83,14 @@ export async function facturado(req, res, next) {
 // GET /api/sales/gestores-stats?periodo=YYYY-MM&projectId=N — ventas + metas por gestor
 export async function gestoresStats(req, res, next) {
   try {
-    const projectId = req.query.projectId ? parseInt(req.query.projectId) : null;
+    // De sus campus (Diego, 04/11; antes, sin campus, las de todo el CRM).
+    const { projectId, projectIds } = await proyectosDelAmbito(req);
     const periodo = req.query.periodo || null;
     // Las fechas mandan sobre el mes.
     const re = /^\d{4}-\d{2}-\d{2}$/;
     const from = re.test(req.query.from || '') ? req.query.from : null;
     const to = re.test(req.query.to || '') ? req.query.to : null;
-    const result = await goalsService.getGestoresStats({ projectId, periodo, from, to });
+    const result = await goalsService.getGestoresStats({ projectId, projectIds, periodo, from, to });
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
 }

@@ -43,7 +43,7 @@ export async function buscar({ q, campus, limit = 5 }) {
 // Quien necesita a TODO el personal —la pantalla de Usuarios, las nominas— lo
 // pide con incluirTodos. Es al reves de como estaba: lo seguro es lo de por
 // defecto, y ver a todos es lo que hay que pedir.
-export async function findAll({ active, role, projectId, page, limit, incluirTodos = false }) {
+export async function findAll({ active, role, projectId, page, limit, incluirTodos = false, campus = null }) {
   const conditions = [];
   const params = [];
   let paramIdx = 1;
@@ -66,6 +66,12 @@ export async function findAll({ active, role, projectId, page, limit, incluirTod
   if (projectId) {
     conditions.push(`EXISTS (SELECT 1 FROM user_projects up WHERE up.user_id = u.id AND up.project_id = $${paramIdx++})`);
     params.push(projectId);
+  }
+  // Solo quien está en uno de esos campus (`campus`, Diego 04/11: quien solo ve
+  // la lista, la de los suyos). EXISTS y no JOIN: un JOIN repetiría a quien está en varios.
+  if (Array.isArray(campus)) {
+    conditions.push(`EXISTS (SELECT 1 FROM user_projects up WHERE up.user_id = u.id AND up.active AND up.project_id = ANY($${paramIdx++}::int[]))`);
+    params.push(campus);
   }
 
   const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';

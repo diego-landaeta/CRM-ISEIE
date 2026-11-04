@@ -47,6 +47,18 @@ export async function campusDeLaPersona(userId) {
 }
 
 /**
+ * Los campus a los que se recorta lo que ve esta persona: `null` para quien ve
+ * el CRM entero (super admin y soporte); el resto, los suyos, o `[-1]` (que no
+ * casa con nada) si no tiene ninguno. Para las consultas que filtran con
+ * `= ANY($n::int[])` (Diego, 04/11: el project manager ve todo, pero lo suyo).
+ */
+export async function campusParaRecortar(req) {
+  if (veTodoElCrm(req.user)) return null;
+  const mios = await campusDeLaPersona(req.user?.userId);
+  return mios.length ? mios : [-1];
+}
+
+/**
  * Que la cosa (un prospecto, una regla, un campus…) sea de uno de SUS campus.
  *
  * Para los permisos que de serie solo trae soporte y que un admin de empresa

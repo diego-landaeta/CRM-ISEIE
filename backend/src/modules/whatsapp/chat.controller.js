@@ -12,7 +12,7 @@ import { query } from '../../shared/config/db.js';
 import { respuestaLlamadaSchema } from './whatsapp.validation.js';
 import { porQueNoPuede, porQueNoUsa, tienePermisoDeUsar } from './roles.js';
 import { explicarPermisosRecordados } from '../permissions/permissions.service.js';
-import { proyectosDelAmbito, comoLista } from '../../shared/utils/ambito.js';
+import { proyectosDelAmbito, comoLista, campusDeLaPersona } from '../../shared/utils/ambito.js';
 
 import { TOPE_WHATSAPP_BYTES } from '../../shared/middleware/upload.js';
 
@@ -150,6 +150,16 @@ async function miConversacion(req, id) {
 async function sesionesQuePuedeMirar(req) {
   // #423: quien supervisa ve todas las líneas; quien usa el suyo, la suya.
   if (await puedeWa(req, 'whatsapp.supervisar')) return null;
+  // «Ver el banco de mensajes» (Diego, 04/11: el project manager ve todo): las
+  // líneas de quien está o estuvo en uno de SUS campus, en solo lectura. Nunca
+  // todas: un banco con conversaciones de clientes de otra empresa no es suyo.
+  if (await puedeWa(req, 'whatsapp.banco')) {
+    const mios = await campusDeLaPersona(req.user.userId);
+    const { rows } = await query(
+      'SELECT DISTINCT user_id FROM user_projects WHERE project_id = ANY($1::int[])', [mios.length ? mios : [-1]]);
+    const ids = new Set([Number(req.user.userId), ...rows.map((r) => Number(r.user_id))]);
+    return [...ids].map((id) => evolution.instanciaDe(id));
+  }
   // Una gestora, a su numero y punto. Es un respaldo con conversaciones de
   // clientes dentro: nunca todas las lineas para cualquiera.
   //
