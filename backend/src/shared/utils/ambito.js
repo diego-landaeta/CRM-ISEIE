@@ -47,6 +47,21 @@ export async function campusDeLaPersona(userId) {
 }
 
 /**
+ * Que la cosa (un prospecto, una regla, un campus…) sea de uno de SUS campus.
+ *
+ * Para los permisos que de serie solo trae soporte y que un admin de empresa
+ * puede recibir como excepción (restaurar prospectos, avisos de spam, reglas de
+ * comisión, configurar un campus): con la excepción actúa en lo suyo, no en el
+ * CRM entero. Fuera de sus campus es un 404, como si no existiera: no se
+ * confirma que haya algo de otra empresa con ese id. Superadmin y soporte, todo.
+ */
+export async function exigirCampusSuyo(req, projectId, mensaje = 'No encontrado', code = 'NOT_FOUND') {
+  if (veTodoElCrm(req.user)) return;
+  const mios = await campusDeLaPersona(req.user?.userId);
+  if (projectId == null || !mios.includes(Number(projectId))) throw new AppError(mensaje, 404, code);
+}
+
+/**
  * Resuelve el ámbito que pide la petición.
  *
  * Devuelve `{ projectId, projectIds }` para pasárselo tal cual al modelo:

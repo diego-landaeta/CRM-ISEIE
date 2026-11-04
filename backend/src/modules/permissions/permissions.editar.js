@@ -213,6 +213,14 @@ export async function exigirQueNoDeMasDeLoQueTiene(quien, userId, { role, roles_
   // el rol a alguien que ya existe sigue las reglas de siempre.
   if (!userId && puedeDarDeAltaComoSoporte(quien, { role, roles_extra })) return;
   const datos = userId ? await model.datosDePermisos(userId) : null;
+  // El rol soporte ve TODAS las empresas. Lo da el superadmin (y soporte, en
+  // el alta, arriba); un admin de empresa no, aunque con excepciones llegue a
+  // tener todos los permisos que trae: lo que no cabe en el catálogo es el
+  // alcance, y soporte es justo eso.
+  if (!tieneRol(quien, 'soporte') && [role, ...(roles_extra || [])].includes('soporte')) {
+    const yaLoEra = [datos?.usuario?.role, ...(datos?.usuario?.roles_extra || [])].includes('soporte');
+    if (!yaLoEra) throw new AppError('El rol soporte lo da el superadmin', 403, 'SOPORTE_SOLO_SUPERADMIN');
+  }
   const ajustesRol = datos ? datos.ajustesRol : await model.ajustesDeRoles();
   const comoEs = datos
     ? { role: datos.usuario.role, roles_extra: datos.usuario.roles_extra, customRole: datos.customRole, excepciones: datos.excepciones }
