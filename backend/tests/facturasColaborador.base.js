@@ -312,10 +312,15 @@ const CONSULTAS = [
     filas(datos.facturas.filter((f) => f.periodo === periodo && !f.subida_at && !f.anulada_at
       && (!f.caduca_at || new Date(f.caduca_at) > new Date())).sort((a, b) => a.id - b.id)
       .map((f) => ({ id: f.id, token_semilla: f.token_semilla, token_hash: f.token_hash })))],
-  [(s) => s.includes('ORDER BY (remitente_no_contestar IS NULL)'), ([issuerId]) => {
+  // La marca de los correos: la de la empresa, con uno de sus campus (mejor el del
+  // remitente «no contestar») solo para el remitente de Brevo (Diego, 04/11).
+  [(s) => s.includes('AS campus_id') && s.includes('FROM invoice_issuers i'), ([issuerId]) => {
+    const e = datos.issuers.find((x) => x.id === Number(issuerId));
+    if (!e) return filas([]);
     const p = datos.projects.filter((x) => x.sociedad_emisora_id === Number(issuerId) && x.active !== false)
       .sort((a, b) => (Number(!a.remitente_no_contestar) - Number(!b.remitente_no_contestar)) || a.id - b.id)[0];
-    return filas(p ? [{ id: p.id, nombre: p.nombre, slug: p.slug, logo_url: p.logo_url ?? null, emoji: p.emoji ?? null }] : []);
+    return filas([{ id: e.id, razon_social: e.razon_social, logo_url: e.logo_url ?? null,
+      con_logo_subido: Boolean(e.logo_key), campus_id: p ? p.id : null }]);
   }],
   [(s) => s.includes("u.role = 'superadmin'") && s.includes('UNION'), ([issuerId]) => {
     const ids = new Set(datos.users.filter((u) => u.active !== false && u.role === 'superadmin').map((u) => u.id));
