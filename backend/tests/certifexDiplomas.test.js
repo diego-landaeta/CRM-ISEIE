@@ -1279,6 +1279,11 @@ describe('«ha terminado la formacion»: aviso de Certifex y lista', () => {
   });
 
   it('se guarda una vez por matricula y suena la campana de administracion de ese campus', async () => {
+    // Los super admin que hay antes Y después del aviso: los demás ficheros crean y borran
+    // los suyos a la vez, y uno creado (o borrado) en medio no puede contar (fallaba a
+    // ratos en la CI de MultiCRM, 04/11).
+    const superAdmins = async () => (await pool.query(`SELECT id FROM users WHERE active AND role = 'superadmin'`)).rows.map((u) => u.id);
+    const antes = await superAdmins();
     const r = await avisar(completado());
     expect(r.status).toBe(201);
     expect(r.body.data).toMatchObject({ estado: 'nueva', duplicada: false });
@@ -1290,7 +1295,8 @@ describe('«ha terminado la formacion»: aviso de Certifex y lista', () => {
     await vi.waitFor(() => expect(avisos).toHaveLength(1));
     expect(avisos[0]).toMatchObject({ type: 'certifex_completado', link_path: '/matriculas/diplomas?pestana=terminados' });
     expect(avisos[0].title).toContain('Lucía Terminó');
-    const { rows: sas } = await pool.query(`SELECT id FROM users WHERE active AND role = 'superadmin'`);
+    const despues = new Set(await superAdmins());
+    const sas = antes.filter((u) => despues.has(u)).map((id) => ({ id }));
     for (const u of sas) expect(avisos[0].targetUserIds).toContain(u.id);
 
     // Un reintento de Certifex: ni duplica ni vuelve a avisar.

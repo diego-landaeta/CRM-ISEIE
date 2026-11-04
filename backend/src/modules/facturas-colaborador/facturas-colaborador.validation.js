@@ -182,3 +182,12 @@ export const pagarSchema = z.object({
 export const deshacerPagoSchema = z.object({
   motivo: z.string().trim().min(3, 'Escribe por qué se deshace el pago').max(1000, 'El motivo es demasiado largo: 1000 caracteres como mucho'),
 });
+
+// Su opinión del pago, desde el correo de «Factura pagada» (Diego, 04/11): de 1 a 5
+// y un comentario, los dos opcionales (pero al menos uno, lo mira el servicio).
+export const opinionDelPagoSchema = z.object({
+  valoracion: z.coerce.number({ invalid_type_error: 'La valoración va de 1 a 5' })
+    .int('La valoración va de 1 a 5').min(1, 'La valoración va de 1 a 5').max(5, 'La valoración va de 1 a 5')
+    .nullable().optional(),
+  comentario: z.string().max(1000, 'El comentario pasa de 1.000 caracteres').nullable().optional(),
+});
