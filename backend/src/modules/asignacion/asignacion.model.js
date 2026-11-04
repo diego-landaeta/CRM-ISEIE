@@ -154,6 +154,11 @@ export async function ponerLead(id, leadId) {
   await query('UPDATE asignacion_decisiones SET lead_id = $2, updated_at = NOW() WHERE id = $1', [id, leadId]);
 }
 
+/** Cuando el lead ya existía y es de otra gestora: la decisión pasa a ser de ella. */
+export async function ponerResponsable(id, responsableId) {
+  await query('UPDATE asignacion_decisiones SET responsable_id = $2, updated_at = NOW() WHERE id = $1', [id, responsableId]);
+}
+
 export async function reclamar(id) {
   const { rows } = await query(
     `UPDATE asignacion_decisiones
