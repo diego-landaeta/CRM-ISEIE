@@ -1,0 +1,2 @@
+# Los scripts de servidor se ejecutan en Linux: con CRLF fallan al arrancar.
+*.sh text eol=lf
