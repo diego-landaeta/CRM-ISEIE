@@ -81,7 +81,7 @@ export default function SelectorDeSesion({
           compacto ? 'h-8 px-2.5 text-xs' : 'h-9 px-3 text-sm'
         }`}
       >
-        <WhatsappLogo size={compacto ? 14 : 16} weight="fill" className="text-emerald-600 shrink-0" />
+        <WhatsappLogo size={compacto ? 14 : 16} weight="fill" className="text-success shrink-0" />
         <span className="truncate max-w-[180px]">
           {valor.esMia ? 'Mi WhatsApp' : `WhatsApp de ${valor.nombre}`}
         </span>
@@ -124,7 +124,7 @@ export default function SelectorDeSesion({
                   <span
                     className={`w-2 h-2 rounded-full shrink-0 ${
                       bloqueada ? 'bg-muted-foreground/30'
-                      : u.conectado ? 'bg-emerald-500' : 'bg-muted-foreground/40'
+                      : u.conectado ? 'bg-success' : 'bg-muted-foreground/40'
                     }`}
                     title={bloqueada ? 'sin WhatsApp' : (u.conectado ? 'enlazado' : 'sin enlazar')}
                   />

@@ -232,7 +232,7 @@ export default function PlantillasWhatsappPage() {
       <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <WhatsappLogo size={26} weight="duotone" className="text-emerald-600" />
+            <WhatsappLogo size={26} weight="duotone" className="text-success" />
             Plantillas de WhatsApp
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
@@ -307,7 +307,7 @@ export default function PlantillasWhatsappPage() {
                       <span className="truncate">{t.label}</span>
                       {t.pide_adjunto && (
                         <span title="Va con una imagen detrás"
-                          className="inline-flex flex-shrink-0 items-center gap-1 rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
+                          className="inline-flex flex-shrink-0 items-center gap-1 rounded bg-info-soft px-1.5 py-0.5 text-[10px] font-semibold text-info-soft-foreground">
                           <ImageSquare size={11} weight="bold" /> imagen
                         </span>
                       )}
@@ -320,7 +320,7 @@ export default function PlantillasWhatsappPage() {
                     <button type="button" onClick={() => copiar(t)} data-tour="copiar"
                       className="inline-flex flex-shrink-0 items-center gap-1 h-8 px-2.5 rounded-md border border-border text-xs font-semibold hover:bg-muted/60">
                       {copiada === t.id
-                        ? <><Check size={13} weight="bold" className="text-emerald-600" /> Copiado</>
+                        ? <><Check size={13} weight="bold" className="text-success" /> Copiado</>
                         : <><Copy size={13} weight="bold" /> Copiar</>}
                     </button>
                   </div>
@@ -328,7 +328,7 @@ export default function PlantillasWhatsappPage() {
                       que leerlo antes de mandarlo. Quien los rellena es el chat. */}
                   <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground/90">{t.body}</p>
                   {t.pista && (
-                    <p className="mt-2 rounded bg-amber-50 px-2 py-1.5 text-[11px] text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+                    <p className="mt-2 rounded bg-warning-soft px-2 py-1.5 text-[11px] text-warning-soft-foreground">
                       {t.pista}
                     </p>
                   )}
@@ -429,8 +429,8 @@ export default function PlantillasWhatsappPage() {
                         title={t.ambito === 'compartida' ? 'Desaparece para todo el equipo' : 'Solo desaparece para ti'}
                         className={`h-8 grid place-items-center rounded-md border text-xs font-semibold transition-colors ${
                           porBorrar === t.id
-                            ? 'px-2.5 border-red-500 text-red-600 dark:text-red-400'
-                            : 'w-8 border-border text-muted-foreground hover:text-red-600'
+                            ? 'px-2.5 border-destructive text-destructive-soft-foreground'
+                            : 'w-8 border-border text-muted-foreground hover:text-destructive-soft-foreground'
                         }`}>
                         {porBorrar === t.id ? '¿Seguro?' : <Trash size={14} />}
                       </button>

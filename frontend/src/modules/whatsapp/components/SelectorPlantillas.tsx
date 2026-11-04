@@ -321,7 +321,7 @@ export default function SelectorPlantillas({
         {/* 2 · Error */}
         {error && (
           <div className="wa-plantillas-aviso">
-            <WarningCircle size={16} className="text-amber-600 dark:text-amber-400" aria-hidden="true" />
+            <WarningCircle size={16} className="text-warning-soft-foreground" aria-hidden="true" />
             <span>{error}</span>
           </div>
         )}

@@ -23,11 +23,11 @@ import { chatApi, type RespuestaFicha } from '../api/whatsapp.api';
  */
 
 const ESTADOS: Record<string, string> = {
-  nuevo: 'bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-300',
-  contactado: 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300',
-  interesado: 'bg-violet-100 text-violet-800 dark:bg-violet-950/40 dark:text-violet-300',
-  convertido: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300',
-  perdido: 'bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-300',
+  nuevo: 'bg-info-soft text-info-soft-foreground',
+  contactado: 'bg-warning-soft text-warning-soft-foreground',
+  interesado: 'bg-indigo-soft text-indigo-soft-foreground',
+  convertido: 'bg-success-soft text-success-soft-foreground',
+  perdido: 'bg-destructive-soft text-destructive-soft-foreground',
 };
 const ESTADO_POR_DEFECTO = 'bg-muted text-muted-foreground';
 
@@ -195,7 +195,7 @@ export default function FichaProspecto({
             {/* 2 · Error, con salida */}
             {!cargando && error && (
               <div className="text-center py-4">
-                <WarningCircle size={28} className="mx-auto text-amber-600 dark:text-amber-400" aria-hidden="true" />
+                <WarningCircle size={28} className="mx-auto text-warning-soft-foreground" aria-hidden="true" />
                 <p className="mt-2 text-sm text-foreground">{error}</p>
                 <button
                   type="button"
