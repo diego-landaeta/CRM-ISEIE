@@ -1,4 +1,4 @@
--- 270 · Adjuntos de WhatsApp que ya no se pueden bajar (#365, gemela de CRM#638, donde es la 240)
+-- 271 · Adjuntos de WhatsApp que ya no se pueden bajar (#365, gemela de CRM#638, donde es la 240)
 --
 -- Auditoría del 03/11: 3.252 errores en 7 días de `/chat/getBase64FromMediaMessage` («Message not
 -- found»), en ráfagas de 130 o 260 que coinciden con los despliegues. Al arrancar, el CRM volvía a

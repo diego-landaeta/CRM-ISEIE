@@ -296,7 +296,7 @@ export const MAX_INTENTOS = Number(process.env.WA_MEDIA_INTENTOS || 3);
 /**
  * Anota un intento fallido y, al llegar al tope, lo marca como irrecuperable.
  *
- * Nunca lanza: si no se puede anotar (por ejemplo, sin la migracion 270), la
+ * Nunca lanza: si no se puede anotar (por ejemplo, sin la migracion 271), la
  * cola sigue con el siguiente en vez de pararse.
  */
 async function anotarFallo(query, mensajeId) {

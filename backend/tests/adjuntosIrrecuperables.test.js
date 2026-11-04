@@ -64,7 +64,7 @@ describe('la cola anota cada fallo (#365)', () => {
     expect(query.mock.calls.some((c) => sql(c).includes('media_intentos = media_intentos + 1') && c[1][0] === 8)).toBe(true);
   });
 
-  it('si no se puede anotar (sin la migracion 270), la cola sigue con el siguiente', async () => {
+  it('si no se puede anotar (sin la migracion 271), la cola sigue con el siguiente', async () => {
     bajarMedia.mockResolvedValue({ ok: false });
     query.mockRejectedValueOnce(new Error('column "media_intentos" does not exist'));
     media.encolar(tarea(9));
