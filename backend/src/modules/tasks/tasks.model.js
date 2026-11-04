@@ -1,14 +1,17 @@
 import { query, getClient } from '../../shared/config/db.js';
-import { existeEquipos } from './tasks.equipos.model.js';
+import { existeEquipos, existeTipos, sqlConTablero } from './tasks.equipos.model.js';
 
 // Quien tiene tablero de tareas: el equipo de desarrollo (Diego, 09/10: «las
 // tareas son del equipo de desarrollo, las gestoras no tienen tareas»). Ni
 // gestoras, ni soporte, ni project manager, ni tutores (un tutor que trabaje en
 // el equipo entra con el rol colaborador).
+//
+// Tutores (Diego, 04/11/2026): «un tablero de tutores separado del de
+// colaboradores». Un tutor tiene tablero mientras esté en un equipo de TUTORES
+// (task_teams.tipo): lo decide `sqlConTablero` (tasks.equipos.model.js).
 export const ROLES_TAREAS = ['superadmin', 'admin', 'colaborador'];
 
-const CON_TABLERO = `(u.role::text = ANY($ROLES::text[]) OR u.roles_extra::text[] && $ROLES::text[])`;
-const conTablero = (n) => CON_TABLERO.replaceAll('$ROLES', `$${n}`);
+const conTablero = (n, tipos) => sqlConTablero('u', n, tipos);
 
 /**
  * La gente del ámbito (#245, decisiones de Diego del 08/10).
@@ -897,10 +900,11 @@ export async function findAssignees(ambito = null, yo = null, ambitoAsignar = nu
     params.push(ambitoAsignar);
     asignable = asignableEnAmbito('u.id', params.length, yoEn());
   }
+  const tipos = await existeTipos();
   const { rows } = await query(
     `SELECT u.id, u.nombre, u.email, u.role, ${asignable} AS asignable
        FROM users u
-      WHERE u.active AND ${conTablero(1)} ${filtro}
+      WHERE u.active AND ${conTablero(1, tipos)} ${filtro}
       ORDER BY u.nombre ASC`,
     params
   );
@@ -915,9 +919,10 @@ export async function personaAsignable(personaId, ambito, yo) {
 }
 
 export async function findUserBasic(id) {
+  const tipos = await existeTipos();
   const { rows } = await query(
     `SELECT u.id, u.nombre, u.email, u.active, u.role::text AS role,
-            (u.role::text = ANY($2::text[]) OR u.roles_extra::text[] && $2::text[]) AS con_tablero
+            ${conTablero(2, tipos)} AS con_tablero
        FROM users u WHERE u.id = $1`,
     [id, ROLES_TAREAS]
   );
@@ -963,7 +968,7 @@ export async function getTeamMetrics(projectId = null, areaId = null, ambito = n
        COUNT(t.id) FILTER (WHERE t.status = 'hecha' AND t.completed_at >= date_trunc('month', NOW()))::int AS completed_this_month
      FROM users u
      LEFT JOIN tasks t ON t.assigned_to = u.id ${filtroProyecto} ${filtroArea}
-     WHERE u.active AND ${conTablero(1)} ${filtroGente}
+     WHERE u.active AND ${conTablero(1, await existeTipos())} ${filtroGente}
      GROUP BY u.id, u.nombre, u.email, u.role
      ORDER BY open_tasks DESC, u.nombre ASC`,
     params
@@ -1305,7 +1310,7 @@ export async function findDailyDigest(aviso, hoy, tz = 'Europe/Madrid') {
        JOIN tasks t ON t.assigned_to = u.id
       WHERE u.active
         AND u.email IS NOT NULL
-        AND ${conTablero(4)}
+        AND ${conTablero(4, await existeTipos())}
         AND t.archived_at IS NULL
         AND t.status <> 'hecha'
         AND t.due_date < (($2::date + 1)::timestamp AT TIME ZONE $3)

@@ -1178,11 +1178,11 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver su tablero | `tasks.view_own` | Entrar al tablero y ver las tareas que tiene asignadas. | Admin, Colaborador |  |
+| Ver su tablero | `tasks.view_own` | Entrar al tablero y ver las tareas que tiene asignadas. | Admin, Colaborador, Tutor |  |
 | Ver todo el equipo | `tasks.view_all` | El tablero de cualquiera, «Todo el equipo» y las métricas. | Admin |  |
 | Crear tareas | `tasks.create` | Crearse tareas. | Admin, Colaborador | `tasks.view_own` |
 | Asignar tareas | `tasks.assign` | Asignar o reasignar tareas a otras personas. | Admin | `tasks.view_own` |
-| Editar tareas | `tasks.edit` | Cambiar, mover y completar las tareas que puede ver. | Admin, Colaborador | `tasks.view_own` |
+| Editar tareas | `tasks.edit` | Cambiar, mover y completar las tareas que puede ver. | Admin, Colaborador, Tutor | `tasks.view_own` |
 | Archivar tareas | `tasks.delete` | Archivar cualquier tarea y borrar comentarios ajenos. | Admin | `tasks.view_own` |
 | Aprobar y cerrar | `tasks.close` | Aprobar, devolver, cerrar y reabrir tareas en «Por revisar». | Admin | `tasks.view_own` |
 | Configurar el tablero | `tasks.manage` | Columnas, áreas y proyectos del tablero. | Admin | `tasks.view_own` |

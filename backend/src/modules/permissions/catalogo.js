@@ -141,11 +141,14 @@ export const SECCIONES = [
     recursos: [
       {
         clave: 'tasks', nombre: 'Tablero de tareas', acciones: [
-          a('view_own', 'Ver su tablero', 'Entrar al tablero y ver las tareas que tiene asignadas.', ['admin', 'colaborador']),
+          // El tutor, el suyo (Diego, 04/11): sus tareas y las de su equipo de TUTORES. Lo
+          // de desarrollo no lo ve: no es de ese equipo (tasks.equipos.model.js).
+          a('view_own', 'Ver su tablero', 'Entrar al tablero y ver las tareas que tiene asignadas.', ['admin', 'colaborador', 'tutor']),
           a('view_all', 'Ver todo el equipo', 'El tablero de cualquiera, «Todo el equipo» y las métricas.', ADMIN),
           a('create', 'Crear tareas', 'Crearse tareas.', ['admin', 'colaborador'], { requiere: ['tasks.view_own'] }),
           a('assign', 'Asignar tareas', 'Asignar o reasignar tareas a otras personas.', ADMIN, { requiere: ['tasks.view_own'] }),
-          a('edit', 'Editar tareas', 'Cambiar, mover y completar las tareas que puede ver.', ['admin', 'colaborador'], { requiere: ['tasks.view_own'] }),
+          // El tutor, para mover las suyas (04/11): mover y comentar siguen siendo solo de quien la lleva o la supervisa.
+          a('edit', 'Editar tareas', 'Cambiar, mover y completar las tareas que puede ver.', ['admin', 'colaborador', 'tutor'], { requiere: ['tasks.view_own'] }),
           a('delete', 'Archivar tareas', 'Archivar cualquier tarea y borrar comentarios ajenos.', ADMIN, { requiere: ['tasks.view_own'] }),
           a('close', 'Aprobar y cerrar', 'Aprobar, devolver, cerrar y reabrir tareas en «Por revisar».', ADMIN, { requiere: ['tasks.view_own'] }),
           a('manage', 'Configurar el tablero', 'Columnas, áreas y proyectos del tablero.', ADMIN, { requiere: ['tasks.view_own'] }),
