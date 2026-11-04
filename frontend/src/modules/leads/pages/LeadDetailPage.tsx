@@ -260,7 +260,9 @@ export default function LeadDetailPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 space-y-4">
-          <LeadInfoCard lead={lead} onUpdate={updateLead} />
+          <LeadInfoCard lead={lead} onUpdate={updateLead}
+            onLlamada={(nota) => addInteraction('llamada', nota)}
+            onWhatsapp={(nota) => addInteraction('whatsapp', nota)} />
           {/* El proceso de ventas, fuera de produccion hasta aprobarlo (28/09). */}
           {PROCESO_EN_PRUEBAS && (
           <AgendaDelProspecto

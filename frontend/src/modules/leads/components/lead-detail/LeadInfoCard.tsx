@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
-import { PencilSimple, X, Check } from '@phosphor-icons/react';
-import { telefonoImposible } from '@/shared/lib/telefono';
+import { PencilSimple, X, Check, PhoneCall, WhatsappLogo } from '@phosphor-icons/react';
+import { useNavigate } from 'react-router-dom';
+import { abrirChatCrm } from '@/shared/lib/abrirChatCrm';
+import { telefonoParaWhatsapp, telefonoImposible } from '@/shared/lib/telefono';
 import { toast } from '@/shared/hooks/useToast';
 import InfoField, { inputClass } from './InfoField';
 import Field from '@/shared/components/ui/Field';
@@ -11,6 +13,11 @@ import type { Lead } from '@/shared/types';
 interface LeadInfoCardProps {
   lead: Lead;
   onUpdate: (fields: Partial<Lead>) => Promise<unknown> | unknown;
+  /** Apunta la llamada en el historial de contactos. Opcional: sin esto el
+   *  boton marca igual, solo que no queda registrada. */
+  onLlamada?: (nota: string) => Promise<unknown> | unknown;
+  /** Apunta el contacto por WhatsApp. Mismo trato que la llamada. */
+  onWhatsapp?: (nota: string) => Promise<unknown> | unknown;
 }
 
 const CANAL_OPTIONS = [
@@ -24,7 +31,8 @@ const CANAL_OPTIONS = [
   { value: 'chatgpt_ia', label: 'ChatGPT IA' },
 ];
 
-export default function LeadInfoCard({ lead, onUpdate }: LeadInfoCardProps) {
+export default function LeadInfoCard({ lead, onUpdate, onLlamada, onWhatsapp }: LeadInfoCardProps) {
+  const navigate = useNavigate();
   const [editMode, setEditMode] = useState(false);
   const [nombre, setNombre] = useState('');
   const [email, setEmail] = useState('');
@@ -32,6 +40,65 @@ export default function LeadInfoCard({ lead, onUpdate }: LeadInfoCardProps) {
   const [notas, setNotas] = useState('');
   const [canal, setCanal] = useState('');
   const [loading, setLoading] = useState(false);
+  const [llamando, setLlamando] = useState(false);
+  const [abriendoWa, setAbriendoWa] = useState(false);
+
+  /**
+   * Marca y apunta.
+   *
+   * El registro va PRIMERO. Al reves, `tel:` cambia de aplicacion y en un movil
+   * eso puede congelar la pestaña antes de que salga la peticion: se llamaria
+   * sin que quedara constancia, que es justo lo que se viene a resolver.
+   */
+  /**
+   * Abre la conversacion DENTRO del CRM, no wa.me en otra pestaña.
+   *
+   * Hasta ahora este boton solo estaba en el LISTADO de prospectos: quien
+   * entraba en la ficha para mirar el historial tenia que volver atras para
+   * escribirle. Es el sitio donde mas falta hace, porque es donde se decide
+   * que decirle.
+   */
+  async function abrirWhatsapp() {
+    setAbriendoWa(true);
+    try {
+      const destino = await abrirChatCrm({ leadId: lead.id, telefono: lead.telefono });
+      if (!destino) {
+        toast({
+          title: 'No se ha podido abrir el chat',
+          description: 'Comprueba en WhatsApp · Conexion que tu numero sigue enlazado.',
+          variant: 'destructive',
+        });
+        return;
+      }
+      // El registro NO puede tragarse su error en silencio: si falla, la gestora
+      // habla con la persona creyendo que queda apuntado y en la ficha no hay
+      // nada. Se abre el chat igual, pero se dice.
+      try {
+        await onWhatsapp?.('Contacto por WhatsApp (desde la ficha)');
+      } catch {
+        toast({
+          title: 'El contacto no ha quedado registrado',
+          description: 'El chat se abre igual, pero apuntalo a mano.',
+          variant: 'destructive',
+        });
+      }
+      navigate(destino);
+    } finally { setAbriendoWa(false); }
+  }
+
+  async function llamar() {
+    setLlamando(true);
+    try {
+      await onLlamada?.('Llamada desde el móvil (marcada desde la ficha)');
+    } catch {
+      // Que no quede apuntado no puede impedir llamar: el trabajo es hablar con
+      // la persona, no alimentar el historial.
+      toast({ title: 'No se pudo apuntar la llamada', description: 'Se marca igual.' });
+    } finally {
+      setLlamando(false);
+      window.location.href = `tel:${String(lead.telefono).replace(/[^0-9+]/g, '')}`;
+    }
+  }
 
   useEffect(() => {
     if (editMode && lead) {
@@ -107,9 +174,36 @@ export default function LeadInfoCard({ lead, onUpdate }: LeadInfoCardProps) {
           <InfoField label="Nombre">{lead.nombre}</InfoField>
           <InfoField label="Email">{lead.email}</InfoField>
           <InfoField label="Teléfono">
-            {lead.telefono || 'Sin teléfono'}
+            {lead.telefono ? (
+              <span className="inline-flex items-center gap-2">
+                {lead.telefono}
+                {/* Llamar desde la ficha. El CRM prepara, el telefono llama:
+                    por WhatsApp no hay canal de audio y por la linea normal el
+                    navegador tampoco marca. Lo que aporta es que la llamada
+                    QUEDE — hasta ahora las que salian no aparecian en ningun
+                    historial y se perdia media conversacion con el prospecto. */}
+                <button type="button" onClick={llamar} disabled={llamando}
+                  title="Llamar desde el movil y apuntarlo"
+                  className="inline-flex items-center gap-1 h-6 px-2 rounded-md border border-border
+                             text-xs text-muted-foreground hover:text-foreground hover:bg-muted">
+                  <PhoneCall size={12} />
+                  {llamando ? 'Apuntando…' : 'Llamar'}
+                </button>
+                {/* Con el criterio del backend: si no hay numero utilizable no
+                    se ofrece el boton, en vez de ofrecerlo y que el chat falle. */}
+                {telefonoParaWhatsapp(lead.telefono) && (
+                  <button type="button" onClick={abrirWhatsapp} disabled={abriendoWa}
+                    title="Abrir la conversacion en el CRM"
+                    className="inline-flex items-center gap-1 h-6 px-2 rounded-md border border-border
+                               text-xs text-muted-foreground hover:text-success hover:bg-muted">
+                    <WhatsappLogo size={12} />
+                    {abriendoWa ? 'Abriendo…' : 'WhatsApp'}
+                  </button>
+                )}
+              </span>
+            ) : 'Sin teléfono'}
             {/* Un número que no puede ser de nadie (#42). En producción hay
-                varios así —«+340», «+5823232»—: el chat se abre, no contesta
+                doce así —«+340», «+5823232»—: el chat se abre, no contesta
                 nadie, y la gestora apunta «no responde». Se avisa, no se
                 bloquea: la regla es de longitud y hay países que no
                 conocemos. */}
