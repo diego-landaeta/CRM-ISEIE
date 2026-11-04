@@ -7,7 +7,7 @@ import * as model from './avisos.model.js';
 import * as facturas from './facturas.model.js';
 import { anotar } from './facturas-colaborador.model.js';
 import { leer as leerArchivo } from './almacen.js';
-import { enviarLlegadas, enviarPorPagar, destinatariosDe } from './avisos.emails.js';
+import { enviarLlegadas, enviarPorPagar, enviarNoRecibido, destinatariosDe } from './avisos.emails.js';
 
 /*
   Facturas de colaboradores (#202) · los avisos de Diego del 04/11.
@@ -204,6 +204,10 @@ async function paraLaPagina(f) {
     opinion: f.pago_feedback_at
       ? { valoracion: f.pago_valoracion, comentario: f.pago_comentario, at: f.pago_feedback_at }
       : null,
+    // «No lo he recibido»: lo dijo (y quizá después confirmó).
+    no_recibido: f.pago_no_recibido_at
+      ? { at: f.pago_no_recibido_at, comentario: f.pago_no_recibido_comentario }
+      : null,
   };
 }
 
@@ -235,4 +239,48 @@ export async function opinarDelPago(token, { valoracion = null, comentario = nul
     detalle: { valoracion: valoracion || null, ...(texto ? { comentario: texto } : {}) },
   });
   return paraLaPagina(await facturas.porId(f.id, null));
+}
+
+/**
+ * «No lo he recibido» (Diego, 04/11): una vez y sin haber confirmado. Se apunta
+ * en la factura y en su registro, y sale enseguida el aviso al correo de
+ * facturación de la empresa (sin esperar: la página contesta ya). Si después
+ * confirma, queda confirmado y la lista deja de enseñar el aviso.
+ */
+export async function noRecibido(token, { comentario = null } = {}, ip) {
+  const f = await facturaDelEnlace(token);
+  if (f.pago_confirmado_at) throw new AppError('Ya confirmaste que lo habías recibido', 409, 'YA_CONFIRMADO');
+  if (f.pago_no_recibido_at) throw new AppError('Ya nos lo dijiste: la empresa está avisada', 409, 'YA_AVISADO');
+  const texto = typeof comentario === 'string' ? comentario.trim().slice(0, 1000) : '';
+  if (!(await model.marcarNoRecibido(f.id, texto || null))) {
+    throw new AppError('Ya nos lo dijiste: la empresa está avisada', 409, 'YA_AVISADO');
+  }
+  await anotar(pool, {
+    facturaId: f.id, evento: 'pago_no_recibido', ip, detalle: texto ? { comentario: texto } : {},
+  });
+  const vez = await facturas.vecesQue(f.id, 'pagada');
+  avisarNoRecibido(f.id, vez).catch((err) => logger.error({ err: err.message, facturaId: f.id }, 'Aviso de pago no recibido: falló'));
+  return paraLaPagina(await facturas.porId(f.id, null));
+}
+
+/** El aviso a la empresa del «No lo he recibido». */
+export async function avisarNoRecibido(id, vez) {
+  const f = await facturas.porId(id, null);
+  if (!f?.pago_no_recibido_at) return { sent: false };
+  const empresa = await model.empresa(f.issuer_id);
+  const para = destinatariosDe(empresa?.email);
+  if (!para.length) {
+    await anotar(pool, { facturaId: id, evento: 'aviso_no_recibido_fallido', detalle: { motivo: 'La empresa no tiene correo de facturación' } });
+    return { sent: false, reason: 'SIN_CORREO' };
+  }
+  const r = await enviarNoRecibido({
+    empresa, f, comentario: f.pago_no_recibido_comentario, marca: await facturas.marcaDeLaEmpresa(f.issuer_id), para, vez,
+  });
+  const destino = para.map((d) => d.email).join(', ');
+  if (r?.sent) {
+    await anotar(pool, { facturaId: id, evento: 'aviso_no_recibido', detalle: { para: destino } });
+  } else if (r && !r.simulated && !NO_ES_FALLO.has(r.reason)) {
+    await anotar(pool, { facturaId: id, evento: 'aviso_no_recibido_fallido', detalle: { para: destino, motivo: r.reason || r.error || 'desconocido' } });
+  }
+  return r;
 }

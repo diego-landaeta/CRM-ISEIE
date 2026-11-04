@@ -124,3 +124,17 @@ export async function guardarOpinion(id, { valoracion, comentario }) {
   );
   return rowCount > 0;
 }
+
+/**
+ * «No lo he recibido» (272): una vez, sin confirmar todavía. Devuelve true si
+ * lo ha apuntado ahora.
+ */
+export async function marcarNoRecibido(id, comentario) {
+  const { rowCount } = await query(
+    `UPDATE facturas_colaborador SET pago_no_recibido_at = NOW(), pago_no_recibido_comentario = $2
+      WHERE id = $1 AND pagada_at IS NOT NULL AND anulada_at IS NULL
+        AND pago_confirmado_at IS NULL AND pago_no_recibido_at IS NULL`,
+    [id, comentario ?? null],
+  );
+  return rowCount > 0;
+}

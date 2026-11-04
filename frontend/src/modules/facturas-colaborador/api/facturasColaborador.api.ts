@@ -148,6 +148,9 @@ export interface FacturaDelMes {
   pago_confirmado_at?: string | null;
   pago_valoracion?: number | null;
   pago_comentario?: string | null;
+  /** «No lo he recibido» (04/11): lo dijo el colaborador; la lista lo enseña mientras no confirme. */
+  pago_no_recibido_at?: string | null;
+  pago_no_recibido_comentario?: string | null;
   estado: EstadoFactura;
 }
 
@@ -185,6 +188,8 @@ export interface PagoDelColaborador {
   forma_pago: FormaPago | null;
   confirmado_at: string | null;
   opinion: { valoracion: number | null; comentario: string | null; at: string } | null;
+  /** «No lo he recibido»: cuándo lo dijo y su comentario. */
+  no_recibido?: { at: string; comentario: string | null } | null;
 }
 
 /** Lo que ve el colaborador en su enlace o en «Mi factura». */
@@ -354,6 +359,8 @@ export const facturasColaboradorApi = {
   // ── «He recibido el pago y lo confirmo» (sin usuario, desde el correo de «Factura pagada») ──
   verPago: (token: string) => client.get(`${BASE}/pago/${token}`) as R<PagoDelColaborador>,
   confirmarPago: (token: string) => client.post(`${BASE}/pago/${token}/confirmar`) as R<PagoDelColaborador>,
+  noRecibido: (token: string, comentario: string) =>
+    client.post(`${BASE}/pago/${token}/no-recibido`, { comentario: comentario || null }) as R<PagoDelColaborador>,
   opinarDelPago: (token: string, valoracion: number | null, comentario: string) =>
     client.post(`${BASE}/pago/${token}/opinion`, { valoracion, comentario: comentario || null }) as R<PagoDelColaborador>,
 
