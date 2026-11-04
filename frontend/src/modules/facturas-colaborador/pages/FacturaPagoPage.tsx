@@ -11,9 +11,11 @@ import {
  * correo de «Factura pagada». Sin usuario ni contraseña: el enlace firmado es la
  * llave, y solo sirve para el pago de esa factura.
  *
- * Al abrirla queda confirmado (el botón del correo ya dice «lo confirmo»): una
- * sola vez, la segunda solo enseña la fecha. Debajo, si quiere, su opinión: de
- * 1 a 5 y un comentario, también una sola vez.
+ * Abrirla NO confirma nada (Diego, 04/11): los antivirus y filtros de correo de
+ * las empresas abren los enlaces solos y lo confirmarían sin que la persona lo
+ * vea. La página enseña la factura y el botón; la confirmación va al pulsarlo
+ * (POST), una sola vez. Después, si quiere, su opinión: de 1 a 5 y un
+ * comentario, también una sola vez.
  */
 export default function FacturaPagoPage() {
   const { token = '' } = useParams();
@@ -23,20 +25,34 @@ export default function FacturaPagoPage() {
   const [comentario, setComentario] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [errorOpinion, setErrorOpinion] = useState<string | null>(null);
+  const [confirmando, setConfirmando] = useState(false);
+  const [errorConfirmar, setErrorConfirmar] = useState<string | null>(null);
 
   useEffect(() => {
     let vivo = true;
     (async () => {
       try {
+        // Solo mirar: confirmar es pulsar el botón.
         const visto = (await facturasColaboradorApi.verPago(token)).data;
-        const r = visto.confirmado_at ? visto : (await facturasColaboradorApi.confirmarPago(token)).data;
-        if (vivo) setPago(r);
+        if (vivo) setPago(visto);
       } catch (err: any) {
         if (vivo) setError(err?.data?.error || err?.message || 'Este enlace no existe o ya no es válido');
       }
     })();
     return () => { vivo = false; };
   }, [token]);
+
+  async function confirmar() {
+    setConfirmando(true);
+    setErrorConfirmar(null);
+    try {
+      setPago((await facturasColaboradorApi.confirmarPago(token)).data);
+    } catch (err: any) {
+      setErrorConfirmar(err?.data?.error || err?.message || 'No se ha podido confirmar. Prueba otra vez.');
+    } finally {
+      setConfirmando(false);
+    }
+  }
 
   async function opinar() {
     setEnviando(true);
@@ -66,6 +82,23 @@ export default function FacturaPagoPage() {
           <p role="alert" className="rounded-md bg-destructive-soft text-destructive-soft-foreground px-3 py-2">{error}</p>
         ) : !pago ? (
           <p className="text-muted-foreground">Cargando…</p>
+        ) : !pago.confirmado_at ? (
+          <div className="space-y-4">
+            <h1 className="text-xl font-semibold">Tu factura está pagada</h1>
+            <p>
+              Hola, {pago.colaborador}. {pago.empresa} ha pagado tu factura de {pago.mes}
+              {pago.importe !== null ? <> · <strong className="tabular-nums">{euros(pago.importe, pago.moneda)}</strong></> : null}.
+            </p>
+            <p className="text-secundario text-muted-foreground">
+              {pago.forma_pago ? FORMA_PAGO_ES[pago.forma_pago] : 'Pago'} del {diaDelPago(pago.pagada_at)}
+              {pago.numero_factura ? ` · factura ${pago.numero_factura}` : ''}
+            </p>
+            <p>Cuando lo veas en tu cuenta, confírmalo:</p>
+            {errorConfirmar && <p role="alert" className="text-destructive text-secundario">{errorConfirmar}</p>}
+            <Button onClick={confirmar} disabled={confirmando}>
+              {confirmando ? 'Confirmando…' : 'He recibido el pago y lo confirmo'}
+            </Button>
+          </div>
         ) : (
           <>
             <div className="flex items-start gap-3">

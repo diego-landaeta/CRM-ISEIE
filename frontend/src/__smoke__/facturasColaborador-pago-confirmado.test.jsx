@@ -5,8 +5,9 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 /**
  * #202 · «He recibido el pago y lo confirmo» (Diego, 04/11). El botón del correo de
- * «Factura pagada» abre esta página sin entrar: al abrirla queda confirmado, y
- * debajo puede dejar su opinión (1 a 5 y un comentario). En las listas de
+ * «Factura pagada» abre esta página sin entrar. Abrirla no confirma nada (los
+ * filtros de correo abren los enlaces solos): se confirma al pulsar el botón, y
+ * después puede dejar su opinión (1 a 5 y un comentario). En las listas de
  * administración se ve «Pago confirmado por el colaborador» y su opinión.
  */
 
@@ -34,14 +35,28 @@ beforeEach(() => { api.verPago.mockReset(); api.confirmarPago.mockReset(); api.o
 afterEach(cleanup);
 
 describe('la página de «He recibido el pago y lo confirmo»', () => {
-  it('al abrirla confirma el pago (una vez) y enseña su factura', async () => {
+  it('abrirla NO confirma (los filtros de correo abren los enlaces solos): enseña la factura y el botón', async () => {
+    api.verPago.mockResolvedValue({ data: pago() });
+    abrir();
+    expect(await screen.findByRole('button', { name: 'He recibido el pago y lo confirmo' })).toBeTruthy();
+    expect(screen.getByText(/tu factura de octubre de 2026/)).toBeTruthy();
+    expect(screen.getByText(/636,00/)).toBeTruthy();
+    expect(api.confirmarPago).not.toHaveBeenCalled();
+    expect(screen.queryByText('Pago confirmado')).toBeNull();
+    // Ni la valoración: sale después de confirmar.
+    expect(screen.queryByRole('radio')).toBeNull();
+  });
+
+  it('al pulsar el botón confirma, una vez, y sale la valoración', async () => {
     api.verPago.mockResolvedValue({ data: pago() });
     api.confirmarPago.mockResolvedValue({ data: pago({ confirmado_at: '2026-11-04T09:00:00Z' }) });
     abrir();
+    fireEvent.click(await screen.findByRole('button', { name: 'He recibido el pago y lo confirmo' }));
     expect(await screen.findByText('Pago confirmado')).toBeTruthy();
+    expect(api.confirmarPago).toHaveBeenCalledTimes(1);
     expect(api.confirmarPago).toHaveBeenCalledWith('12.1.firma');
-    expect(screen.getByText(/factura de octubre de 2026 para CEDIA/)).toBeTruthy();
-    expect(screen.getByText(/636,00/)).toBeTruthy();
+    expect(screen.getByRole('radio', { name: '4 de 5' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'He recibido el pago y lo confirmo' })).toBeNull();
   });
 
   it('si ya estaba confirmado no lo vuelve a pedir', async () => {
