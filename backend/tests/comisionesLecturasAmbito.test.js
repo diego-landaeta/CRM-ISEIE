@@ -15,7 +15,7 @@ import jwt from 'jsonwebtoken';
  * sus campus de esa empresa y un campus ajeno es un 403. Superadmin y soporte
  * siguen viéndolo todo.
  *
- *   npx vitest run tests/comisionesAmbito.test.js --pool=forks --poolOptions.forks.singleFork=true
+ *   npx vitest run tests/comisionesLecturasAmbito.test.js --pool=forks --poolOptions.forks.singleFork=true
  */
 
 const { default: pool } = await import('../src/shared/config/db.js');
