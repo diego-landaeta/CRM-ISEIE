@@ -916,6 +916,22 @@
   .wa-panel { max-width: calc(100vw - 24px); }
 }
 
+/* La cabecera del chat en el telefono, en dos filas (#180, como CRM#128).
+   Medido a 390 px en el 360: las acciones (estado + cuatro botones) ocupaban
+   255 de los 359 px y al nombre le quedaban CERO — no se veia con quien se
+   hablaba y el boton de prohibir salia cortado. Achicar los botones no vale:
+   bajan del minimo tactil. Asi que arriba van la flecha, el avatar y el nombre a
+   todo lo ancho, y debajo el estado y los iconos, a la derecha. */
+@media (max-width: 640px) {
+  .wa-marco .cs-conversation-header { flex-wrap: wrap; row-gap: 4px; }
+  .wa-marco .cs-conversation-header__content { flex: 1 1 0; min-width: 0; }
+  .wa-marco .cs-conversation-header__actions {
+    flex: 1 0 100%;
+    justify-content: flex-end;
+    margin-left: 0;
+  }
+}
+
 /* Volver a la lista, en pantallas estrechas. */
 .wa-volver {
   display: grid; place-items: center;
