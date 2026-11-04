@@ -278,7 +278,7 @@ export default function BancoPage() {
       </div>
 
       {error && (
-        <div className="flex items-start gap-2.5 p-3 rounded-lg border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/30 text-sm text-red-700 dark:text-red-300">
+        <div className="flex items-start gap-2.5 p-3 rounded-lg border border-destructive/30 bg-destructive-soft text-sm text-destructive-soft-foreground">
           <Warning size={16} weight="bold" className="flex-shrink-0 mt-0.5" />
           {error}
         </div>
@@ -383,7 +383,7 @@ export default function BancoPage() {
                           )}
                         </td>
                         <td className="px-4 py-2.5 whitespace-nowrap">
-                          <span className={m.direccion === 'entrante' ? 'text-muted-foreground' : 'text-emerald-600 dark:text-emerald-400'}>
+                          <span className={m.direccion === 'entrante' ? 'text-muted-foreground' : 'text-success'}>
                             {m.direccion === 'entrante' ? 'Recibido' : 'Enviado'}
                           </span>
                         </td>

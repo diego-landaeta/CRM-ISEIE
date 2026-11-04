@@ -231,7 +231,7 @@ export default function ConexionPage() {
             quedaba con dos centimetros y salia una palabra por linea. El ancho
             minimo del bloque de texto es lo que fuerza a los botones a bajar. */}
         <div className="flex flex-wrap items-start gap-3">
-          <WhatsappLogo size={32} weight="duotone" className="text-emerald-600 shrink-0" />
+          <WhatsappLogo size={32} weight="duotone" className="text-success shrink-0" />
           <div className="flex-1 min-w-[220px]">
             <h1 className="text-lg font-bold">
               {sesion.esMia ? 'Tu WhatsApp' : `WhatsApp de ${sesion.nombre}`}
@@ -260,12 +260,12 @@ export default function ConexionPage() {
             <span className="text-muted-foreground">Comprobando…</span>
           ) : !estado.configurado ? (
             <>
-              <WarningCircle size={18} weight="fill" className="text-amber-500 shrink-0" />
-              <span className="text-amber-700 dark:text-amber-400">{estado.motivo}</span>
+              <WarningCircle size={18} weight="fill" className="text-warning-soft-foreground shrink-0" />
+              <span className="text-warning-soft-foreground">{estado.motivo}</span>
             </>
           ) : conectado ? (
             <>
-              <CheckCircle size={18} weight="fill" className="text-emerald-600 shrink-0" />
+              <CheckCircle size={18} weight="fill" className="text-success shrink-0" />
               <span>
                 Conectado como{' '}
                 <strong>{estado.nombre || (estado.numero ? `+${estado.numero}` : estado.instancia)}</strong>
@@ -273,8 +273,8 @@ export default function ConexionPage() {
             </>
           ) : (
             <>
-              <WarningCircle size={18} weight="fill" className="text-amber-500 shrink-0" />
-              <span className="text-amber-700 dark:text-amber-400">
+              <WarningCircle size={18} weight="fill" className="text-warning-soft-foreground shrink-0" />
+              <span className="text-warning-soft-foreground">
                 Todavía no has enlazado tu número.
               </span>
             </>
@@ -285,13 +285,13 @@ export default function ConexionPage() {
             apilados dejaban media pantalla vacia a la derecha. */}
         <div className="grid lg:grid-cols-2 gap-4 items-start">
         {estado?.configurado && !conectado && !qr && (
-          <div className="mt-4 border border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/20 rounded-lg p-4">
-            <p className="font-semibold text-amber-900 dark:text-amber-200 mb-2 text-sm">
+          <div className="mt-4 border border-warning/30 bg-warning-soft rounded-lg p-4">
+            <p className="font-semibold text-warning-soft-foreground mb-2 text-sm">
               {sesion.esMia
                 ? 'Antes de enlazar tu número, lee esto'
                 : `Vas a enlazar el número de ${sesion.nombre}. Que lo lea esa persona:`}
             </p>
-            <ul className="text-sm text-amber-800 dark:text-amber-300/90 space-y-1.5 leading-relaxed">
+            <ul className="text-sm text-warning-soft-foreground space-y-1.5 leading-relaxed">
               <li>· El número queda vinculado al CRM. Esta <strong>no es la vía oficial de
                   WhatsApp</strong> y WhatsApp <strong>puede bloquearlo</strong>.</li>
               <li>· Mejor un <strong>número de empresa, nunca el personal</strong>. Si lo
@@ -302,17 +302,17 @@ export default function ConexionPage() {
               <li>· Se puede <strong>desvincular cuando se quiera</strong>, desde aquí o desde
                   Dispositivos vinculados en el móvil.</li>
             </ul>
-            <label className="flex items-start gap-2 mt-3 pt-3 border-t border-amber-200 dark:border-amber-900/60 cursor-pointer">
+            <label className="flex items-start gap-2 mt-3 pt-3 border-t border-warning/30 cursor-pointer">
               <input type="checkbox" checked={enterado} className="mt-0.5"
                 onChange={(e) => setEnterado(e.target.checked)} />
-              <span className="text-sm font-medium text-amber-900 dark:text-amber-200">
+              <span className="text-sm font-medium text-warning-soft-foreground">
                 {sesion.esMia
                   ? 'Lo he leído y enlazo mi número sabiéndolo'
                   : `${sesion.nombre} lo ha leído y enlaza su número sabiéndolo`}
               </span>
             </label>
             {!sesion.esMia && (
-              <p className="text-xs text-amber-700 dark:text-amber-400/80 mt-2">
+              <p className="text-xs text-warning-soft-foreground/80 mt-2">
                 Queda escrito que lo enlazaste tu en su nombre.
               </p>
             )}
@@ -347,7 +347,7 @@ export default function ConexionPage() {
               ] as const).map((o) => (
                 <label key={o.id}
                   className={`flex gap-2.5 items-start p-2.5 rounded-md border cursor-pointer ${
-                    modo === o.id ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/20' : 'border-border hover:bg-muted/50'}`}>
+                    modo === o.id ? 'border-success bg-success-soft' : 'border-border hover:bg-muted/50'}`}>
                   <input type="radio" name="modo" checked={modo === o.id}
                     onChange={() => setModo(o.id)} className="mt-0.5" />
                   <span className="text-sm leading-tight">
@@ -355,8 +355,8 @@ export default function ConexionPage() {
                     {'etiqueta' in o && o.etiqueta && (
                       <span className={`ml-1.5 text-[11px] px-1.5 py-0.5 rounded font-semibold ${
                         o.etiqueta === 'recomendado'
-                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300'
-                          : 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300'}`}>
+                          ? 'bg-success-soft text-success-soft-foreground'
+                          : 'bg-warning-soft text-warning-soft-foreground'}`}>
                         {o.etiqueta}
                       </span>
                     )}
@@ -372,7 +372,7 @@ export default function ConexionPage() {
         <div className="mt-4 flex flex-wrap gap-2">
           {estado?.configurado && !conectado && (
             <button type="button" onClick={() => pedirQR()} disabled={pidiendo || (!enterado && !qr)}
-              className="h-9 px-3 rounded-md bg-emerald-600 text-white text-sm font-semibold inline-flex items-center gap-2 hover:bg-emerald-700 disabled:opacity-50">
+              className="h-9 px-3 rounded-md bg-success text-success-foreground text-sm font-semibold inline-flex items-center gap-2 hover:bg-success/90 disabled:opacity-50">
               <QrCode size={16} weight="bold" />
               {pidiendo
                 ? (reintento ? `Reintentando (${reintento} de 3)…` : 'Pidiendo código…')
@@ -382,7 +382,7 @@ export default function ConexionPage() {
           )}
           {conectado && (
             <button type="button" onClick={() => setConfirmando(true)} disabled={cerrando}
-              className="h-9 px-3 rounded-md border border-red-300 dark:border-red-900 text-red-700 dark:text-red-400 text-sm font-semibold inline-flex items-center gap-2 hover:bg-red-50 dark:hover:bg-red-950/30 disabled:opacity-50">
+              className="h-9 px-3 rounded-md border border-destructive/30 text-destructive-soft-foreground text-sm font-semibold inline-flex items-center gap-2 hover:bg-destructive-soft disabled:opacity-50">
               <SignOut size={16} weight="bold" />
               {cerrando ? 'Desvinculando…' : 'Desvincular mi número'}
             </button>
@@ -415,7 +415,7 @@ export default function ConexionPage() {
           {sync?.entrando ? (
             <>
               <p className="font-semibold flex items-center gap-2">
-                <ArrowsClockwise size={16} className="animate-spin text-emerald-600" />
+                <ArrowsClockwise size={16} className="animate-spin text-success" />
                 Trayendo las conversaciones…
               </p>
               {/* El porcentaje es el que manda Baileys en cada tanda, no uno
@@ -444,7 +444,7 @@ export default function ConexionPage() {
                     role="progressbar" aria-valuenow={sync.progreso}
                     aria-valuemin={0} aria-valuemax={100}
                     aria-label="Historial traido">
-                    <div className="h-full bg-emerald-600 transition-[width] duration-500"
+                    <div className="h-full bg-success transition-[width] duration-500"
                       style={{ width: `${sync.progreso}%` }} />
                   </div>
                 </div>

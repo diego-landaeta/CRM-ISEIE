@@ -18,7 +18,7 @@ import {
 function Paso({ n, titulo, children }: { n: number; titulo: string; children: React.ReactNode }) {
   return (
     <li className="flex gap-3">
-      <span className="shrink-0 w-6 h-6 rounded-full bg-emerald-600 text-white text-xs font-bold grid place-items-center mt-0.5">
+      <span className="shrink-0 w-6 h-6 rounded-full bg-success text-success-foreground text-xs font-bold grid place-items-center mt-0.5">
         {n}
       </span>
       <div className="min-w-0">
@@ -49,7 +49,7 @@ function CaminoEnElMovil() {
       {pantallas.map((p, i) => (
         <div key={p.titulo} className="flex items-center gap-3">
           <div className="w-[132px] rounded-lg border border-border bg-muted/40 overflow-hidden">
-            <div className="bg-emerald-700 text-white text-[10px] font-semibold px-2 py-1.5 truncate">
+            <div className="bg-success text-success-foreground text-[10px] font-semibold px-2 py-1.5 truncate">
               {p.titulo}
             </div>
             <ul className="p-1.5 space-y-1">
@@ -57,7 +57,7 @@ function CaminoEnElMovil() {
                 <li key={f}
                   className={`text-[10px] leading-tight px-1.5 py-1 rounded ${
                     f === p.marca
-                      ? 'bg-emerald-600 text-white font-semibold'
+                      ? 'bg-success text-success-foreground font-semibold'
                       : 'text-muted-foreground'
                   }`}>
                   {f}
@@ -79,7 +79,7 @@ function Bloque({ icono, titulo, children }: { icono: React.ReactNode; titulo: s
   return (
     <section className="bg-card border border-border rounded-lg p-5">
       <h2 className="font-bold flex items-center gap-2 mb-3">
-        <span className="text-emerald-600">{icono}</span> {titulo}
+        <span className="text-success">{icono}</span> {titulo}
       </h2>
       {children}
     </section>
@@ -100,7 +100,7 @@ export default function AyudaPage() {
             entera y ademas depende de la ruta relativa, asi que se rompe segun
             de donde cuelgue el CRM (/crm, /testeo). */}
         <button type="button" onClick={() => { reiniciarTour(); navigate('/whatsapp/chat'); }}
-          className="mt-3 h-9 px-3 rounded-md bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700">
+          className="mt-3 h-9 px-3 rounded-md bg-success text-success-foreground text-sm font-semibold hover:bg-success/90">
           Ver el recorrido por el chat
         </button>
       </div>
@@ -156,14 +156,14 @@ export default function AyudaPage() {
         </p>
         <ul className="text-sm text-muted-foreground space-y-2 leading-relaxed">
           <li className="flex gap-2">
-            <WarningCircle size={16} className="text-amber-500 shrink-0 mt-0.5" />
+            <WarningCircle size={16} className="text-warning-soft-foreground shrink-0 mt-0.5" />
             <span>
               <strong className="text-foreground">Cómo se nota:</strong> arriba del chat pone «No tienes
               WhatsApp enlazado», y la caja de escribir se pone gris. No te deja escribir al vacio.
             </span>
           </li>
           <li className="flex gap-2">
-            <CheckCircle size={16} className="text-emerald-600 shrink-0 mt-0.5" />
+            <CheckCircle size={16} className="text-success shrink-0 mt-0.5" />
             <span>
               <strong className="text-foreground">Qué hacer:</strong> ve a Conexión y vuelve a enlazar.
               Muchas veces se reconecta solo en cuanto el móvil recupera internet.
@@ -224,7 +224,7 @@ export default function AyudaPage() {
             </span>
           </li>
           <li className="flex gap-2">
-            <WarningCircle size={16} className="shrink-0 mt-0.5 text-amber-500" />
+            <WarningCircle size={16} className="shrink-0 mt-0.5 text-warning-soft-foreground" />
             <span>
               <strong className="text-foreground">Un mensaje con ⚠ no salió.</strong> Debajo tiene
               «Reintentar»: lo vuelve a mandar con el mismo texto, no hay que reescribirlo.
@@ -265,7 +265,7 @@ export default function AyudaPage() {
             </span>
           </li>
           <li className="flex gap-2">
-            <WarningCircle size={16} className="shrink-0 mt-0.5 text-amber-500" />
+            <WarningCircle size={16} className="shrink-0 mt-0.5 text-warning-soft-foreground" />
             <span>
               <strong className="text-foreground">Una plantilla no es permiso para el envio masivo.</strong>{' '}
               Mandar el mismo texto identico a cincuenta personas seguidas es de las cosas que mas
@@ -287,7 +287,7 @@ export default function AyudaPage() {
         </p>
         <ul className="text-sm text-muted-foreground space-y-2.5 leading-relaxed">
           <li className="flex gap-2">
-            <PhoneX size={16} className="shrink-0 mt-0.5 text-rose-500" />
+            <PhoneX size={16} className="shrink-0 mt-0.5 text-destructive-soft-foreground" />
             <span>
               <strong className="text-foreground">Si te llaman y no lo coges</strong>, sale en el chat
               como una línea con su hora — «Llamada perdida, 16:42» — y la conversacion se te marca
@@ -297,7 +297,7 @@ export default function AyudaPage() {
             </span>
           </li>
           <li className="flex gap-2">
-            <BellRinging size={16} className="shrink-0 mt-0.5 text-emerald-600" />
+            <BellRinging size={16} className="shrink-0 mt-0.5 text-success" />
             <span>
               <strong className="text-foreground">Mientras suena te avisa el CRM</strong>, estés donde
               estés dentro de el — en Prospectos, en Facturacion, donde sea. Sale un cartel abajo a la
@@ -324,7 +324,7 @@ export default function AyudaPage() {
             </span>
           </li>
           <li className="flex gap-2">
-            <WarningCircle size={16} className="shrink-0 mt-0.5 text-amber-500" />
+            <WarningCircle size={16} className="shrink-0 mt-0.5 text-warning-soft-foreground" />
             <span>
               Si activas el rechazo automático, <strong className="text-foreground">no prometas
               horarios</strong> en el mensaje. Un «te llamamos en cinco minutos» que no se cumple
@@ -335,15 +335,15 @@ export default function AyudaPage() {
       </Bloque>
 
       {/* ── Lo que no hay que hacer ─────────────────────────────────────── */}
-      <section className="border border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/20 rounded-lg p-5">
-        <h2 className="font-bold flex items-center gap-2 mb-1 text-amber-900 dark:text-amber-200">
+      <section className="border border-warning/30 bg-warning-soft rounded-lg p-5">
+        <h2 className="font-bold flex items-center gap-2 mb-1 text-warning-soft-foreground">
           <Prohibit size={20} weight="duotone" /> 6 · Lo que hace que bloqueen un número
         </h2>
-        <p className="text-sm text-amber-800 dark:text-amber-300/90 mb-3 leading-relaxed">
+        <p className="text-sm text-warning-soft-foreground mb-3 leading-relaxed">
           No es que WhatsApp descubra que usas el CRM. Es que <strong>la gente te reporte</strong>. Todo
           lo de abajo lleva a eso.
         </p>
-        <ul className="text-sm text-amber-800 dark:text-amber-300/90 space-y-2 leading-relaxed">
+        <ul className="text-sm text-warning-soft-foreground space-y-2 leading-relaxed">
           <li>· <strong>Escribir a quien no dejó su teléfono</strong> en un formulario nuestro. El CRM
             te deja hacerlo —hay motivos buenos: un antiguo alumno, una madre preguntando por su
             hijo— pero <strong>queda anotado</strong>, y es lo que más rápido lleva a que reporten
@@ -355,7 +355,7 @@ export default function AyudaPage() {
           <li>· <strong>Usar tu número personal.</strong> Si lo bloquean pierdes también tus
             conversaciones privadas.</li>
         </ul>
-        <p className="text-sm text-amber-800 dark:text-amber-300/90 mt-3 pt-3 border-t border-amber-200 dark:border-amber-900/60 leading-relaxed">
+        <p className="text-sm text-warning-soft-foreground mt-3 pt-3 border-t border-warning/30 leading-relaxed">
           El CRM tiene topes puestos: <strong>6 mensajes por minuto, 60 por hora, 300 al día</strong>, y
           una pausa entre uno y otro. Son por número — lo que mande un companero no te frena a ti.
           Si te sale «vas muy rápido», espera: te esta protegiendo.

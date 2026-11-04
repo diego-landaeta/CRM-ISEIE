@@ -1439,14 +1439,14 @@ export default function ChatPage() {
   return (
     <div className={`space-y-2 ${aPantalla ? 'wa-completa' : ''}`}>
       <div className="wa-barra-superior flex items-center gap-2 text-xs bg-card border border-border rounded-lg px-3 py-1.5">
-        <span className={`wa-punto-estado w-2 h-2 rounded-full ${conexion?.conectado ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+        <span className={`wa-punto-estado w-2 h-2 rounded-full ${conexion?.conectado ? 'bg-success' : 'bg-warning'}`} />
         {conexion?.conectado
           ? <span className="text-muted-foreground">
               {sesion.esMia ? 'Tu WhatsApp' : `WhatsApp de ${sesion.nombre}`}: <strong className="text-foreground">
                 {conexion.nombre || (conexion.numero ? `+${conexion.numero}` : conexion.instancia)}
               </strong>
             </span>
-          : <span className="wa-sin-enlazar text-amber-700 dark:text-amber-400">
+          : <span className="wa-sin-enlazar text-warning-soft-foreground">
               {/* Si miras la sesion de otra persona, «no tienes WhatsApp
                   enlazado» es mentira: la que no lo tiene es ella. */}
               {sesion.esMia
