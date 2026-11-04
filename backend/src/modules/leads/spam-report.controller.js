@@ -2,6 +2,18 @@ import { z } from 'zod';
 import { query } from '../../shared/config/db.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import * as leadService from './lead.service.js';
+import { veTodoElCrm, campusDeLaPersona, exigirCampusSuyo } from '../../shared/utils/ambito.js';
+
+/**
+ * Los campus cuyos avisos ve quien pregunta: `null` = todos (superadmin y
+ * soporte). Un admin al que se le da `leads.spam` como excepción revisa los
+ * avisos de SUS campus, no los de otras empresas.
+ */
+async function campusDeLosAvisos(req) {
+  if (veTodoElCrm(req.user)) return null;
+  const mios = await campusDeLaPersona(req.user?.userId);
+  return mios.length ? mios : [-1];
+}
 
 // Motivo OBLIGATORIO (min 3 chars). El equipo necesita trazabilidad del por qué
 // se reportó como spam — no debería poder reportarse en blanco.
@@ -55,8 +67,9 @@ export async function reportSpam(req, res, next) {
 }
 
 // GET /api/leads/spam-reports  (superadmin)
-export async function listPending(_req, res, next) {
+export async function listPending(req, res, next) {
   try {
+    const campus = await campusDeLosAvisos(req);
     const { rows } = await query(
       `SELECT r.id, r.lead_id, r.motivo, r.status, r.created_at,
               l.nombre AS lead_nombre, l.email AS lead_email, l.telefono AS lead_telefono,
@@ -67,17 +80,22 @@ export async function listPending(_req, res, next) {
          JOIN projects p ON p.id = r.project_id
          JOIN users u ON u.id = r.reported_by
         WHERE r.status = 'pending'
-        ORDER BY r.created_at DESC`
+          AND ($1::int[] IS NULL OR r.project_id = ANY($1::int[]))
+        ORDER BY r.created_at DESC`,
+      [campus]
     );
     res.json({ success: true, data: rows });
   } catch (err) { next(err); }
 }
 
 // GET /api/leads/spam-reports/count  (superadmin)
-export async function countPending(_req, res, next) {
+export async function countPending(req, res, next) {
   try {
+    const campus = await campusDeLosAvisos(req);
     const { rows } = await query(
-      `SELECT COUNT(*)::int AS count FROM lead_spam_reports WHERE status = 'pending'`
+      `SELECT COUNT(*)::int AS count FROM lead_spam_reports
+        WHERE status = 'pending' AND ($1::int[] IS NULL OR project_id = ANY($1::int[]))`,
+      [campus]
     );
     res.json({ success: true, data: { count: rows[0].count } });
   } catch (err) { next(err); }
@@ -92,10 +110,11 @@ export async function resolveReport(req, res, next) {
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
 
     const { rows: reports } = await query(
-      `SELECT id, lead_id, motivo, status FROM lead_spam_reports WHERE id = $1`,
+      `SELECT id, lead_id, project_id, motivo, status FROM lead_spam_reports WHERE id = $1`,
       [reportId]
     );
     if (!reports[0]) throw new AppError('Reporte no encontrado', 404, 'REPORT_NOT_FOUND');
+    await exigirCampusSuyo(req, reports[0].project_id, 'Reporte no encontrado', 'REPORT_NOT_FOUND');
     if (reports[0].status !== 'pending') {
       throw new AppError('Reporte ya resuelto', 400, 'REPORT_ALREADY_RESOLVED');
     }
