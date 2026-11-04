@@ -1,5 +1,8 @@
 import { NavLink } from 'react-router-dom';
 import { cn } from '@/shared/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
+import usePermission from '@/shared/hooks/usePermission';
+import { rutaPermitida } from '@/shared/components/layout/Sidebar';
 
 interface Tab {
   label: string;
@@ -16,6 +19,13 @@ interface Props {
 }
 
 export default function SubNav({ tabs, sectionLabel, sectionIcon: Icon }: Props) {
+  // Una pestaña que lleva a una pantalla sin permiso no se enseña (#631): con la
+  // misma regla que el menú y la ruta. Antes Finanzas enseñaba a todos Nóminas,
+  // Integraciones o Por cobrar, y al pulsar llegaba el 403. Sin el mapa de
+  // permisos todavía, se enseñan todas (no se decide nada a medias).
+  const { can } = usePermission();
+  const { permissions } = useAuth() as { permissions?: Record<string, boolean> | null };
+  const visibles = permissions ? tabs.filter((t) => rutaPermitida(t.to, can)) : tabs;
   return (
     <nav
       className={cn(
@@ -33,7 +43,7 @@ export default function SubNav({ tabs, sectionLabel, sectionIcon: Icon }: Props)
           {sectionLabel}
         </span>
       )}
-      {tabs.map((tab) => (
+      {visibles.map((tab) => (
         <NavLink
           key={tab.to}
           to={tab.to}

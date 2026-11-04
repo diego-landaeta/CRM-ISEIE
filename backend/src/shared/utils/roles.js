@@ -71,6 +71,9 @@ export const RUTAS_DEL_COLABORADOR = [
   // Meta Ads, solo ver y solo con su permiso (`meta_ads.view`, 26/10/2026): la
   // guardia de la ruta lo mira; sin él, 403 igual.
   /^\/api\/meta-ads(?:\/|$)/,
+  // «Mis preferencias» lee el catálogo del menú para «Mi vista», como el tutor
+  // (más abajo). Es solo la lista de nombres; sin ella, 403 al abrirla (#631).
+  /^\/api\/permissions\/system-defaults\/?$/,
   /^\/api\/users\/mis-avisos\/?$/,
   /^\/api\/users\/\d+\/(?:avatar|views)\/?$/,
 ];

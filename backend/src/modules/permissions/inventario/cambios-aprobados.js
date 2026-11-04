@@ -238,6 +238,22 @@ export const CAMBIOS_DE_MENU = [
     rutas: { 'Captación › Webhooks': 'GET /api/webhook-tokens/' },
     aprobadoPor: 'Diego, 02/11 (la 2.6.0 de ISEIE, tal cual MultiCRM)',
   },
+  {
+    // Gemela de CRM#643. En ISEIE solo el Banco: Status tiene aquí una parte
+    // pública (componentes e incidencias), así que se queda en el menú y lo que
+    // pide `status.view` se esconde dentro de la pantalla.
+    id: 'menu-sin-403-631',
+    que: '«WhatsApp › Banco de mensajes» lo ve quien puede usar o supervisar WhatsApp. El project manager deja de verlo.',
+    motivo: 'La auditoría del 03/11 (#631, CRM-ISEIE#358): se le abría y el servidor le daba 403 (`usaOSupervisa`). Diego pidió esconder lo que no se puede usar.',
+    perfiles: {
+      project_manager: ['- Principal › WhatsApp › Banco de mensajes'],
+    },
+    rutas: {
+      'Principal › WhatsApp › Banco de mensajes': 'GET /api/whatsapp/banco',
+    },
+    // Pendiente: Diego pidió esconder lo que da 403 (#631); el cambio de menú se le pide en la PR.
+    aprobadoPor: null,
+  },
 ];
 
 /** `{ perfil: ['+ …', '- …'] }`, todos los cambios de menú juntos. */
@@ -250,9 +266,11 @@ export function cambiosDeMenuPorPerfil() {
 }
 
 /**
- * Reglas nuevas que dependen de lo que se MANDA, no de quién entra a la ruta:
- * la comparación no las ve (la ruta sigue abierta), pero cambian lo que se
- * puede hacer. Van en la misma lista para Diego.
+ * Reglas nuevas que la comparación no ve, pero que cambian lo que se puede
+ * hacer: las que dependen de lo que se MANDA (la ruta sigue abierta) y los
+ * cambios en el corte del colaborador (`RUTAS_DEL_COLABORADOR`, que la
+ * comparación evalúa con la copia congelada de antes). Van en la misma lista
+ * para Diego.
  */
 export const CAMBIOS_DE_REGLA = [
   {
@@ -262,5 +280,14 @@ export const CAMBIOS_DE_REGLA = [
     roles: ['admin', 'soporte'],
     sentido: 'pierde',
     aprobadoPor: DIEGO,
+  },
+  {
+    id: 'colaborador-catalogo-del-menu',
+    que: 'El colaborador puede leer `GET /api/permissions/system-defaults`: lo que trae de serie cada rol, la lista que usa «Mis preferencias › Mi vista» para los nombres del menú. El tutor ya podía.',
+    motivo: 'La auditoría del 03/11 (#631): «Mis preferencias» le daba 403 al colaborador. Solo es lectura y no trae datos de nadie, pero es una ruta más que deja pasar el corte del colaborador.',
+    roles: ['colaborador'],
+    sentido: 'gana',
+    // Pendiente: se le pide a Diego en la PR #643.
+    aprobadoPor: null,
   },
 ];

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Key, UsersThree } from '@phosphor-icons/react';
 import * as tasksApi from '@/modules/tasks/api/tasks.api';
+import usePermission from '@/shared/hooks/usePermission';
 
 /**
  * Tus equipos del tablero, con tu cargo (Diego, 26/10/2026: «la tarjeta y el
@@ -10,11 +11,15 @@ import * as tasksApi from '@/modules/tasks/api/tasks.api';
  */
 export default function MisEquipos() {
   const [equipos, setEquipos] = useState(null);
+  const { can } = usePermission();
+  // Sin tablero no hay equipos: no se pregunta, que el servidor da 403 (#631).
+  const conTablero = can('tasks.view_own') || can('tasks.view_all');
   useEffect(() => {
+    if (!conTablero) { setEquipos(false); return undefined; }
     let vivo = true;
     tasksApi.getMyTeams().then((e) => { if (vivo) setEquipos(e); }).catch(() => { if (vivo) setEquipos(false); });
     return () => { vivo = false; };
-  }, []);
+  }, [conTablero]);
 
   return (
     <div className="bg-card border border-border rounded-2xl p-5 space-y-3">
