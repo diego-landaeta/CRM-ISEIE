@@ -191,3 +191,8 @@ export const opinionDelPagoSchema = z.object({
     .nullable().optional(),
   comentario: z.string().max(1000, 'El comentario pasa de 1.000 caracteres').nullable().optional(),
 });
+
+// «No lo he recibido» (Diego, 04/11): el comentario es opcional («me llegó otra cantidad»).
+export const noRecibidoSchema = z.object({
+  comentario: z.string().max(1000, 'El comentario pasa de 1.000 caracteres').nullable().optional(),
+});

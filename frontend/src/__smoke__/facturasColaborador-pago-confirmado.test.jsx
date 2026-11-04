@@ -11,7 +11,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
  * administración se ve «Pago confirmado por el colaborador» y su opinión.
  */
 
-const { api } = vi.hoisted(() => ({ api: { verPago: vi.fn(), confirmarPago: vi.fn(), opinarDelPago: vi.fn() } }));
+const { api } = vi.hoisted(() => ({ api: { verPago: vi.fn(), confirmarPago: vi.fn(), opinarDelPago: vi.fn(), noRecibido: vi.fn() } }));
 vi.mock('@/modules/facturas-colaborador/api/facturasColaborador.api', async (original) => ({
   ...(await original()),
   facturasColaboradorApi: api,
@@ -31,7 +31,7 @@ const abrir = () => render(
   </MemoryRouter>,
 );
 
-beforeEach(() => { api.verPago.mockReset(); api.confirmarPago.mockReset(); api.opinarDelPago.mockReset(); });
+beforeEach(() => { api.verPago.mockReset(); api.confirmarPago.mockReset(); api.opinarDelPago.mockReset(); api.noRecibido.mockReset(); });
 afterEach(cleanup);
 
 describe('la página de «He recibido el pago y lo confirmo»', () => {
@@ -86,7 +86,45 @@ describe('la página de «He recibido el pago y lo confirmo»', () => {
   });
 });
 
+describe('«No lo he recibido» (Diego, 04/11)', () => {
+  it('junto a «He recibido…», y abrir la página no avisa de nada', async () => {
+    api.verPago.mockResolvedValue({ data: pago() });
+    abrir();
+    expect(await screen.findByRole('button', { name: 'No lo he recibido' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'He recibido el pago y lo confirmo' })).toBeTruthy();
+    expect(api.noRecibido).not.toHaveBeenCalled();
+  });
+
+  it('al pulsarlo pide un comentario opcional y avisa (una vez); después puede seguir confirmando', async () => {
+    api.verPago.mockResolvedValue({ data: pago() });
+    api.noRecibido.mockResolvedValue({ data: pago({ no_recibido: { at: '2026-11-04T10:00:00Z', comentario: 'Me llegó otra cantidad' } }) });
+    abrir();
+    fireEvent.click(await screen.findByRole('button', { name: 'No lo he recibido' }));
+    expect(api.noRecibido).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText(/Algo que debamos saber/), { target: { value: ' Me llegó otra cantidad ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Avisar de que no lo he recibido' }));
+    await waitFor(() => expect(api.noRecibido).toHaveBeenCalledWith('12.1.firma', 'Me llegó otra cantidad'));
+    expect((await screen.findByRole('status')).textContent).toContain('hemos');
+    expect(screen.queryByRole('button', { name: 'No lo he recibido' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'He recibido el pago y lo confirmo' })).toBeTruthy();
+    expect(api.noRecibido).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('en la lista de administración', () => {
+  it('«El colaborador dice que no lo ha recibido», en aviso y con su comentario, mientras no confirme', () => {
+    render(<ConfirmacionDelPago f={{ pagada_at: '2026-11-03', pago_confirmado_at: null, pago_no_recibido_at: '2026-11-04T10:00:00Z', pago_no_recibido_comentario: 'Me llegó otra cantidad' }} />);
+    const etiqueta = screen.getByText(/El colaborador dice que no lo ha recibido/);
+    expect(etiqueta.className).toContain('destructive');
+    expect(screen.getByText(/«Me llegó otra cantidad»/)).toBeTruthy();
+  });
+
+  it('si después confirma, el aviso se cierra: sale confirmado', () => {
+    render(<ConfirmacionDelPago f={{ pagada_at: '2026-11-03', pago_confirmado_at: '2026-11-05T09:00:00Z', pago_no_recibido_at: '2026-11-04T10:00:00Z', pago_no_recibido_comentario: 'x' }} />);
+    expect(screen.queryByText(/dice que no lo ha recibido/)).toBeNull();
+    expect(screen.getByText(/Pago confirmado por el colaborador/)).toBeTruthy();
+  });
+
   it('«Pago confirmado por el colaborador» con sus estrellas y su comentario', () => {
     render(<ConfirmacionDelPago f={{ pagada_at: '2026-11-03', pago_confirmado_at: '2026-11-04T09:00:00Z', pago_valoracion: 4, pago_comentario: 'Llegó tarde' }} />);
     expect(screen.getByText(/Pago confirmado por el colaborador/)).toBeTruthy();

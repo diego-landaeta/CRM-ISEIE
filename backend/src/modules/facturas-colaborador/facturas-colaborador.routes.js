@@ -61,6 +61,8 @@ const pagoConFormato = (req, res, next) => (/^\d{1,10}\.\d{1,4}\.[A-Za-z0-9_-]{4
 router.get('/pago/:token', limite(60), pagoConFormato, avisos.verPago);
 router.post('/pago/:token/confirmar', limite(20), pagoConFormato, avisos.confirmarPago);
 router.post('/pago/:token/opinion', limite(20), pagoConFormato, avisos.opinarDelPago);
+// «No lo he recibido» (Diego, 04/11): una vez, avisa a la empresa; confirmar después lo cierra.
+router.post('/pago/:token/no-recibido', limite(20), pagoConFormato, avisos.noRecibido);
 
 // ─── «Mi factura»: el colaborador con usuario en el CRM, solo lo suyo ───
 // Son las únicas de este módulo que puede pedir el rol colaborador

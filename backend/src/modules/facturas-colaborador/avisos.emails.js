@@ -166,3 +166,49 @@ export async function enviarPorPagar({ empresa, facturas, marca = null, para, di
     clave: `facturas-colaborador-por-pagar-${empresa.id}-${dia}`,
   });
 }
+
+const FORMAS_PAGO = { transferencia: 'Transferencia', bizum: 'Bizum', paypal: 'PayPal', efectivo: 'Efectivo', otro: 'Otra' };
+/** «2026-11-03» → «03/11/2026». */
+const fechaCorta = (dia) => (dia ? `${String(dia).slice(8, 10)}/${String(dia).slice(5, 7)}/${String(dia).slice(0, 4)}` : '—');
+
+/**
+ * «El colaborador dice que no ha recibido el pago» (Diego, 04/11): al correo de
+ * facturación de la empresa, en cuanto pulsa «No lo he recibido» en el correo de
+ * «Factura pagada». Con la factura, el pago (fecha, forma y referencia) y lo que
+ * haya escrito.
+ */
+export function armarNoRecibido({ empresa, f, comentario = null, marca = null }) {
+  const corta = empresaCorta(empresa.razon_social);
+  const asunto = `${f.colaborador_nombre} dice que no ha recibido el pago · ${mesDe(f.periodo)} · ${corta}`;
+  const { htmlContent, textContent } = correo({
+    proyecto: marca || MARCA_POR_DEFECTO,
+    titulo: 'Un colaborador dice que no ha recibido el pago',
+    resumen: `${f.colaborador_nombre} · ${importeDe(f)} · pago del ${fechaCorta(f.pagada_at)}`,
+    bloques: [
+      parrafo(`<strong>${esc(f.colaborador_nombre)}</strong> ha pulsado «No lo he recibido» en el correo de «Factura pagada» de <strong>${esc(empresa.razon_social)}</strong>.`),
+      nota([
+        `Factura: <strong>${esc(f.numero_factura || '—')}</strong>${f.numero_recepcion ? ` · ${esc(f.numero_recepcion)}` : ''}`,
+        `Mes: <strong>${esc(mesDe(f.periodo))}</strong>`,
+        `Importe: <strong>${esc(importeDe(f))}</strong>`,
+        `Pago: <strong>${esc(FORMAS_PAGO[f.forma_pago] || 'Pago')} del ${esc(fechaCorta(f.pagada_at))}</strong>`,
+        f.referencia_pago ? `Referencia del pago: <strong>${esc(f.referencia_pago)}</strong>` : null,
+      ].filter(Boolean).join('<br>')),
+      comentario ? parrafo(`Lo que dice: «${esc(comentario)}»`) : parrafo('No ha dejado ningún comentario.'),
+      boton({ texto: 'Ver la factura en el CRM', url: urlDeLaLista('pagadas') }),
+      parrafo(`<span class="tenue" style="color:${T.tenue};font-size:12px">Si después confirma que lo ha recibido, lo verás en la lista como «Pago confirmado por el colaborador».</span>`),
+    ],
+  });
+  return { asunto, htmlContent, textContent, fromName: `${corta} · Facturación` };
+}
+
+/** Manda el aviso. La clave lleva la vez que se pagó: uno por pago. */
+export async function enviarNoRecibido({ empresa, f, comentario = null, marca = null, para, vez = 1 }) {
+  const c = armarNoRecibido({ empresa, f, comentario, marca });
+  return despachar({
+    projectId: marca?.id ?? null,
+    to: para, subject: c.asunto, htmlContent: c.htmlContent, textContent: c.textContent,
+    fromName: c.fromName,
+    tags: ['facturas-colaborador', 'pago-no-recibido'],
+    clave: `facturas-colaborador-no-recibido-${f.id}-${vez}`,
+  });
+}
