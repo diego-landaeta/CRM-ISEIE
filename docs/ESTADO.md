@@ -82,13 +82,7 @@ node scripts/test-rbac.mjs       # 20 tests RBAC (necesita GESTOR_EMAIL/PASSWORD
 
 ### Backups
 
-```bash
-# Manual
-bash scripts/backup-db.sh
-
-# Programado (en VPS, cron diario 03:00)
-0 3 * * * /opt/crm-iseie/scripts/backup-db.sh >> /var/log/crm-iseie-backup.log 2>&1
-```
+Copia diaria de `crm_iseie` y `crm_iseie_staging` con `scripts/servidor/copia-base.sh`: comprobada, en 700/600, con rotación y copia fuera del VPS. Instalación (cron en `/etc/cron.d`, **nunca con `crontab -`**), restauración y rotación de logs: [copias-de-la-base.md](copias-de-la-base.md) (#361).
 
 ### Observabilidad
 
