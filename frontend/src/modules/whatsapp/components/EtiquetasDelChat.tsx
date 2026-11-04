@@ -82,6 +82,10 @@ export default function EtiquetasDelChat({
         onClick={() => setAbierto((v) => !v)}
         className="wa-btn-etiquetas"
         aria-expanded={abierto}
+        // Sin esto el lector de pantalla anunciaba el contador («2») como nombre del botón.
+        aria-label={puestas.length
+          ? `Etiquetas de WhatsApp (${puestas.length}): ${puestas.map((p) => p.nombre).join(', ')}`
+          : 'Poner una etiqueta de WhatsApp'}
         title={puestas.length
           ? `Etiquetas de WhatsApp: ${puestas.map((p) => p.nombre).join(', ')}`
           : 'Poner una etiqueta de WhatsApp'}

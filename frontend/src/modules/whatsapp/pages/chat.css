@@ -26,16 +26,22 @@
   --wa-texto:        hsl(var(--foreground));
   --wa-apagado:      hsl(var(--muted-foreground));  /* horas, subtitulos */
   --wa-borde:        hsl(var(--border));
-  --wa-hover:        hsl(var(--accent));
+  /* No --accent: en claro casi no se distingue de --muted (95 % frente a 96 %
+     de luz), y la cabecera y la barra de escribir son --muted. En el 360, donde
+     son identicos, el buscador de chats y el hover de los botones redondos no
+     se veian en claro (visto en captura). Un velo del color del texto se nota
+     sobre cualquier superficie y tema. */
+  --wa-hover:        hsl(var(--foreground) / 0.08);
   --wa-tic-azul:     hsl(var(--info));
   --wa-verde:        hsl(var(--success));           /* acentos, badge de no leidos */
   /* Lo que va encima del verde (badge, boton) y del rojo. */
   --wa-sobre-verde:  hsl(var(--success-foreground));
   --wa-rojo:         hsl(var(--destructive));
   --wa-sobre-rojo:   hsl(var(--destructive-foreground));
-  /* El rojo como LETRA. En ISEIE no existe --destructive-text (el 360 lo tiene
-     desde su #32) y --destructive es rojo-500, que como letra no llega a 4,5:1
-     sobre blanco: se usa el rojo de los avisos suaves, que trae su par oscuro. */
+  /* El rojo de LETRA casi siempre va sobre --wa-cabecera (la pildora de la
+     llamada perdida, el aviso de «no conectado»), no sobre blanco. ISEIE no
+     tiene un token de rojo para letra y --destructive (rojo-500) no llega a
+     4,5:1: se usa el red-700 de la pareja suave (~6:1), que trae su par oscuro. */
   --wa-rojo-texto:   hsl(var(--destructive-soft-foreground));
   /* Velos para hover y bordes sobre el panel: el color del texto con poca
      opacidad. En oscuro aclaran y en claro oscurecen, que es lo que hacia el
@@ -108,7 +114,10 @@
   border-bottom: 1px solid var(--wa-borde);
 }
 .wa-marco .cs-conversation:hover,
-.wa-marco .cs-conversation.cs-conversation--active { background-color: var(--wa-hover); }
+.wa-marco .cs-conversation.cs-conversation--active { background-color: hsl(var(--accent)); }
+/* Aqui --accent y no el velo: la fila va sobre la tarjeta (--wa-panel), donde
+   el accent si se distingue, y es opaco; con el velo, el adelanto gris de la
+   fila elegida bajaba a 4,25:1 en claro (medido). */
 /* Los fondos del kit, apagados a la brava.
  *
  * El kit trae `background-color:#f6fbff` y `color:rgba(0,0,0,.87)` en el nombre
@@ -153,6 +162,9 @@
   color: var(--wa-texto);
   border-radius: 8px;
 }
+/* El velo es translucido: si lo llevan la caja y el campo, se suma y sale una
+   banda mas oscura dentro (visto en captura). Lo pinta solo la caja. */
+.wa-marco .cs-search__input { background-color: transparent; }
 .wa-marco .cs-search__input::placeholder { color: var(--wa-apagado); }
 .wa-marco .cs-search__search-icon { color: var(--wa-apagado); }
 
@@ -846,7 +858,9 @@
 
 /* «Grupos» no es un estado de prospecto, asi que no lleva su paleta: gris
  * neutro para que se lea como lo que es, un filtro de otra clase. */
-.wa-et-grupos { background: var(--wa-velo-fuerte); color: var(--wa-apagado); }
+/* Opaco (--wa-cabecera) y no un velo: con el velo al 16 % el gris de la letra
+   se quedaba en 4,25:1 en claro (medido). */
+.wa-et-grupos { background: var(--wa-cabecera); color: var(--wa-apagado); }
 .wa-cita-texto {
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
   overflow: hidden;
@@ -1410,11 +1424,18 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  /* Un minimo SIEMPRE visible (#128): con dos o tres etiquetas el nombre
+     encogia hasta cero y la fila salia sin nombre, sin hora y sin contador. */
+  flex: 1 1 auto;
+  min-width: 5ch;
 }
-/* No se encoge y no parte el nombre: con la lista estrecha, lo que cede es el
-   nombre con sus puntos suspensivos, no la etiqueta. */
+/* Cede despues del nombre: con la lista estrecha, primero el nombre se corta
+   con puntos suspensivos y, si no cabe aun asi, la etiqueta tambien. */
 .wa-fila-etiqueta {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 2.5em;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: 10px;
   font-weight: 600;
   line-height: 1;
@@ -1454,12 +1475,6 @@
 .wa-estado-elegir {
   appearance: none;
   -webkit-appearance: none;
-  /* Sin esto el control se pinta con el lienzo CLARO del sistema y los fondos
-     de `.wa-et-*` —que son translucidos a proposito— quedan encima de blanco:
-     la pildora salia azul palido con letra oscura en medio de un tema oscuro.
-     Es la misma trampa de siempre, pero con quien pinta el control siendo el
-     navegador y no nosotros. */
-  color-scheme: dark;
   font-size: 12px;
   font-weight: 500;
   line-height: 1;
@@ -1469,6 +1484,10 @@
   cursor: pointer;
   max-width: 150px;
 }
+/* La lista nativa del desplegable la pinta el navegador: en oscuro se le pide
+   su variante oscura, y en claro la clara. Antes iba `color-scheme: dark` fijo,
+   de cuando el panel era oscuro en los dos temas (#128, punto 3). */
+.dark .wa-estado-elegir { color-scheme: dark; }
 .wa-estado-elegir:focus-visible {
   outline: 2px solid var(--wa-verde);
   outline-offset: 2px;
@@ -1479,14 +1498,15 @@
   background: var(--wa-panel);
   color: var(--wa-texto);
 }
-/* El fondo, OPACO y calculado del color del propio estado.
-   `.wa-et-*` los da translucidos, que va bien sobre una fila de la lista pero
-   no sobre un control: el navegador pinta su lienzo debajo y —diga lo que diga
-   `color-scheme`— sale claro. Aqui se mezcla el color del texto con el de la
-   cabecera y queda la misma pildora, opaca, sin depender de quien pinte debajo.
-   Con `select.` para ganar a `.wa-et-*` sin importar el orden del fichero. */
-select.wa-estado-elegir {
-  background-color: color-mix(in srgb, currentColor 20%, var(--wa-cabecera));
+/* El fondo de la pildora sale de `.wa-et-*`, que desde el #128 (punto 3) son
+   los tokens «soft» del CRM: ya son OPACOS, asi que no hace falta mezclar nada.
+   Antes aqui se mezclaba el color del texto al 20 % con la cabecera, porque las
+   etiquetas eran translucidas; con los tokens, en claro esa mezcla dejaba
+   «Contactado» en 3,84:1 (medido en pantalla) y la pildora soft da 5,3:1.
+   La cabecera es solo la reserva para un estado que no tenga `.wa-et-*`: va
+   aqui, antes de las etiquetas, para que cualquiera de ellas le gane. */
+.wa-estado-elegir {
+  background-color: var(--wa-cabecera);
 }
 
 /* Los colores de las etiquetas, con los tokens «soft» del CRM (#128, punto 3).
@@ -1499,11 +1519,11 @@ select.wa-estado-elegir {
    especificidad gana la ultima, y puesta al final dejaba TODAS las etiquetas
    grises. Se vio en la captura, no leyendo. Sirve para un estado que aparezca
    mañana y no este aqui: gris legible, no un hueco sin texto. */
-.wa-fila-etiqueta, .wa-etiqueta { background: var(--wa-velo); color: var(--wa-apagado); }
+.wa-fila-etiqueta, .wa-etiqueta { background: var(--wa-cabecera); color: var(--wa-apagado); }
 
 /* Un grupo no es un estado de prospecto: gris azulado, para que se lea como
    lo que es —una propiedad del chat— y no como una fase del embudo. */
-.wa-et-grupo          { background: var(--wa-velo-fuerte); color: var(--wa-apagado); }
+.wa-et-grupo          { background: var(--wa-cabecera); color: var(--wa-apagado); }
 
 /* Las etiquetas del WhatsApp de la gestora (#128, #138).
    Con borde y sin relleno, al reves que las del estado: son de OTRO sitio —las
