@@ -8,7 +8,7 @@ import supertest from 'supertest';
  * Ficha de Diego (07/10): con FACTURAS_COLABORADOR_CORREOS_ACTIVOS apagado, `sendEmail`
  * no se llama nunca; encendido (con `sendEmail` simulado), sale el correo correcto a la
  * persona correcta. En ISEIE, además: la plantilla común (`P.correo`) con la marca de
- * la empresa, y la de ISEIE si la empresa no tiene un campus activo con la suya.
+ * la empresa (su nombre y su logo, nunca los de un campus; Diego, 04/11).
  */
 
 vi.mock('../src/shared/config/db.js', async () => (await import('./facturasColaborador.base.js')).moduloDb);
@@ -35,7 +35,7 @@ const request = supertest(await montarApp());
 const PERIODO = '2026-07-01';
 const EMPRESA = 3;          // con un campus con su logo y su remitente «no contestar»
 const CAMPUS = 30;
-const SIN_CAMPUS = 4;       // sin ningún campus activo: los correos salen con la marca de ISEIE
+const SIN_CAMPUS = 4;       // sin ningún campus activo: los correos salen con su nombre, por la cuenta del CRM
 const laura = { nombre: 'Laura Gómez', email: 'laura@test.local' };
 const marta = { nombre: 'Marta Ruiz', email: 'marta@test.local' };
 
@@ -104,9 +104,12 @@ describe('facturas de colaboradores (#202) · correos encendidos', () => {
     expect(c.htmlContent).toContain('Servicios de desarrollo web · julio 2026');
     expect(c.htmlContent).toContain('Calle Mayor, 1');
     expect(c.htmlContent).toContain('Subir mi factura de julio');
-    // Con la marca de la empresa: su logo en la cabecera y su campus para el remitente de Brevo.
+    // Con la marca de la EMPRESA (Diego, 04/11): su nombre en la cabecera, sin el
+    // logo ni el nombre del campus. El campus solo pone el remitente de Brevo.
     expect(c.projectId).toBe(CAMPUS);
-    expect(c.htmlContent).toContain('https://logo.prueba/marca.png');
+    expect(c.htmlContent).not.toContain('https://logo.prueba/marca.png');
+    expect(c.htmlContent).not.toContain('Campus Gamma');
+    expect(c.htmlContent).toContain('CRM de Gamma');
     // La plantilla común del CRM (P.correo): su pie y su versión en texto plano, con el botón.
     expect(c.htmlContent).toContain('Te lo manda el');
     expect(c.textContent).toContain('factura-colaborador/');
@@ -120,15 +123,16 @@ describe('facturas de colaboradores (#202) · correos encendidos', () => {
     expect((await request.get(`${API}/enlace/${enlace}`)).body.data.estado).toBe('abierto');
   });
 
-  it('una empresa sin campus activo con su marca: el correo sale con la de ISEIE', async () => {
+  it('una empresa sin campus activo: el correo sale con su nombre y por la cuenta del CRM', async () => {
     encender();
     sendEmail.mockClear();
     expect((await request.post(`${API}/facturas/${fila(marta.id).id}/reenviar`).set(como('super'))).status).toBe(200);
     const [c] = correosA(marta.email);
     expect(c.subject).toBe('Tu factura de julio para Delta · 600,00 €');
     expect(c.projectId).toBeNull();
-    expect(c.htmlContent).toContain('ISEIE');
-    expect(c.htmlContent).toContain('iseie-icon-192.png');
+    // La marca es la de la empresa de la factura (Diego, 04/11), no la de ISEIE.
+    expect(c.htmlContent).toContain('CRM de Delta');
+    expect(c.htmlContent).not.toContain('iseie-icon-192.png');
   });
 
   it('el recordatorio del día 5 lleva el mismo enlace, y no se repite', async () => {

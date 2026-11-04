@@ -90,11 +90,10 @@ export async function listCommissions({ userId, estado, from, to, projectId, pro
   if (estado) { conds.push(`c.estado = $${idx++}`); params.push(estado); }
   if (from)   { conds.push(`c.created_at >= $${idx++}`); params.push(from); }
   if (to)     { conds.push(`c.created_at <= $${idx++}`); params.push(to); }
-  // Un campus o una lista de ellos (los suyos, `proyectosDelAmbito`).
-  const idsCom = comoLista(projectId, projectIds);
-  if (idsCom) {
+  const idsAmbito = comoLista(projectId, projectIds);
+  if (idsAmbito) {
     conds.push(`EXISTS (SELECT 1 FROM conversions cv WHERE cv.id = c.conversion_id AND cv.project_id = ANY($${idx++}::int[]))`);
-    params.push(idsCom);
+    params.push(idsAmbito);
   }
   const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
   const { rows } = await query(
@@ -278,11 +277,10 @@ export async function getStats({ userId, projectId, projectIds = null, from, to 
   const conds = [];
   const params = []; let idx = 1;
   if (userId)    { conds.push(`c.user_id = $${idx++}`); params.push(userId); }
-  // Un campus o una lista de ellos (los suyos, `proyectosDelAmbito`).
-  const idsCom = comoLista(projectId, projectIds);
-  if (idsCom) {
+  const idsAmbito = comoLista(projectId, projectIds);
+  if (idsAmbito) {
     conds.push(`EXISTS (SELECT 1 FROM conversions cv WHERE cv.id = c.conversion_id AND cv.project_id = ANY($${idx++}::int[]))`);
-    params.push(idsCom);
+    params.push(idsAmbito);
   }
   if (from) { conds.push(`c.created_at >= $${idx++}`); params.push(from); }
   if (to)   { conds.push(`c.created_at <= $${idx++}`); params.push(to); }

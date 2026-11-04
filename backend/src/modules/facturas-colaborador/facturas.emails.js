@@ -18,9 +18,10 @@ import {
 */
 
 /**
- * La marca de la cabecera cuando la empresa no tiene un campus activo con la
- * suya: la de ISEIE, como el resto de correos de este CRM (brevo.service.js,
- * MARCA_CORREOS). En MultiCRM esto quedaba sin marca («CRM»).
+ * La marca de la cabecera si no se pudo leer la de la empresa (la factura no
+ * tiene empresa): la de ISEIE, como el resto de correos de este CRM
+ * (brevo.service.js, MARCA_CORREOS). Lo normal es la de la empresa de la
+ * factura, con su nombre y su logo (marcaDeLaEmpresa, Diego 04/11).
  */
 export const MARCA_POR_DEFECTO = { nombre: 'ISEIE', slug: 'iseie' };
 

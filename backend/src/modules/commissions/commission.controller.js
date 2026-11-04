@@ -1,4 +1,4 @@
-import { exigirCampusSuyo, proyectosDelAmbito } from '../../shared/utils/ambito.js';
+import { proyectosDelAmbito, exigirCampusSuyo } from '../../shared/utils/ambito.js';
 import { query } from '../../shared/config/db.js';
 
 // `commissions.reglas` de serie es de soporte; a un admin de empresa se le
@@ -16,8 +16,9 @@ import * as model from './commission.model.js';
 // ===== RULES (superadmin only via routes) =====
 export async function listRules(req, res, next) {
   try {
+    // El campus o la empresa los resuelve `proyectosDelAmbito`, siempre dentro
+    // de los campus de quien pide (superadmin y soporte, todos).
     const { userId, productId } = req.query;
-    // De sus campus (Diego, 04/11; antes el campus de la dirección sin comprobar y, sin él, todo el CRM).
     const rows = await model.listRules({
       ...(await proyectosDelAmbito(req)),
       userId: userId ? Number(userId) : null,
@@ -73,10 +74,9 @@ export async function listMine(req, res, next) {
 export async function listAll(req, res, next) {
   try {
     const { userId, estado, from, to } = req.query;
-    // De sus campus (Diego, 04/11; antes el campus de la dirección sin comprobar y, sin él, todo el CRM).
     const rows = await model.listCommissions({
-      ...(await proyectosDelAmbito(req)),
       userId: userId ? Number(userId) : null,
+      ...(await proyectosDelAmbito(req)),
       estado: estado || null,
       from: from || null,
       to: to || null,
@@ -100,10 +100,9 @@ export async function statsMine(req, res, next) {
 export async function statsAll(req, res, next) {
   try {
     const { userId, from, to } = req.query;
-    // De sus campus (Diego, 04/11; antes el campus de la dirección sin comprobar y, sin él, todo el CRM).
     const s = await model.getStats({
-      ...(await proyectosDelAmbito(req)),
       userId: userId ? Number(userId) : null,
+      ...(await proyectosDelAmbito(req)),
       from: from || null,
       to: to || null,
     });
