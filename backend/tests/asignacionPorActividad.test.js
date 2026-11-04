@@ -79,6 +79,7 @@ afterAll(async () => {
   await q('DELETE FROM asignacion_destinos WHERE project_id = ANY($1::int[])', [[ids.project, ids.otro]]);
   await q('DELETE FROM actividad_crm WHERE user_id = ANY($1::int[])', [us]);
   await q('DELETE FROM leads WHERE project_id = ANY($1::int[])', [[ids.project, ids.otro]]);
+  await q('DELETE FROM products WHERE project_id = ANY($1::int[])', [[ids.project, ids.otro]]);
   await q('DELETE FROM user_projects WHERE user_id = ANY($1::int[])', [us]);
   await q('DELETE FROM user_activity_log WHERE user_id = ANY($1::int[])', [us]);
   await q('DELETE FROM users WHERE id = ANY($1::int[])', [us]);
@@ -180,6 +181,30 @@ describe('a quién y a qué escenario', () => {
     await llamada('bea');
     const r = await entrar('ana-y-bea');
     expect(r.body.data.gestora.id).toBe(U.bea.id);
+  });
+
+  it('el lead ya había entrado por el formulario (ISECD, lead 4450): Make avisa a quien lo tiene, no a la elegida', async () => {
+    // La web manda el formulario directo al CRM (se lo da a Cris) y además por Make,
+    // que pregunta aquí con Ana activa. El CRM junta los dos en el lead de Cris:
+    // el escenario tiene que avisar a Cris, o a Ana le llega por el bot y no lo tiene.
+    const email = `isecd_${MARCA.toLowerCase()}@cliente.test`;
+    const prod = await one(`INSERT INTO products (project_id, nombre, precio, moneda, active) VALUES ($1, $2, 100, 'EUR', true) RETURNING id`,
+      [ids.project, `${MARCA} Máster en OSINT`]);
+    const yaEstaba = await one(`INSERT INTO leads (project_id, nombre, email, telefono, responsable_id, producto_interes_id) VALUES ($1, $2, $3, '+34600000000', $4, $5) RETURNING id`,
+      [ids.project, `${MARCA} cliente isecd`, email, U.cris.id, prod.id]);
+    await sinActividad();
+    await llamada('ana');
+    sendEmail.mockClear();
+    const r = await entrar('isecd', { email, producto_interes_id: prod.id });
+    expect(r.body.data).toMatchObject({ escenario: 2, lead_id: yaEstaba.id, gestora: { id: U.cris.id } });
+    const leads = await q('SELECT id, responsable_id FROM leads WHERE email = $1 AND deleted_at IS NULL', [email]);
+    expect(leads).toEqual([{ id: yaEstaba.id, responsable_id: U.cris.id }]);
+    const dec = await one('SELECT responsable_id FROM asignacion_decisiones WHERE uid = $1', [`${MARCA}-isecd`]);
+    expect(dec.responsable_id).toBe(U.cris.id);
+    await esperar();
+    const [correo] = correosA(MAIL2);
+    expect(correo.textContent).toContain(`GESTORA ASIGNADA: ${MARCA} cris`);
+    expect(correo.textContent).not.toContain(`GESTORA ASIGNADA: ${MARCA} ana`);
   });
 
   it('crear un lead a mano cuenta como acción (actividad_crm)', async () => {
