@@ -5,7 +5,7 @@ import { webhookLeadSchema, listLeadsSchema, updateStatusSchema, createInteracti
 import * as dupQueue from './dup-queue.service.js';
 import * as leadProducts from './lead-products.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
-import { veTodoElCrm, campusDeLaPersona, listaDelAmbito } from '../../shared/utils/ambito.js';
+import { veTodoElCrm, campusDeLaPersona, listaDelAmbito, exigirCampusSuyo } from '../../shared/utils/ambito.js';
 import { leadsToWasapiCsv, leadsToWasapiXlsx, detectCountry } from '../../shared/utils/wasapiCsv.js';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
 import { soloLoSuyo } from '../../shared/utils/roles.js';
@@ -515,6 +515,10 @@ export async function restore(req, res, next) {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    // `leads.restaurar` como excepción a un admin: solo los de sus campus.
+    const { rows: [lead] } = await query('SELECT project_id FROM leads WHERE id = $1', [id]);
+    if (!lead) throw new AppError('Lead no encontrado', 404, 'LEAD_NOT_FOUND');
+    await exigirCampusSuyo(req, lead.project_id, 'Lead no encontrado', 'LEAD_NOT_FOUND');
     const result = await leadService.restore(id);
     res.json({ success: true, data: result });
   } catch (err) { next(err); }

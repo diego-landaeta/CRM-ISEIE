@@ -209,6 +209,10 @@ export async function exigirQuePuedaTocarA(quien, userId) {
 export async function exigirQueNoDeMasDeLoQueTiene(quien, userId, { role, roles_extra }) {
   const deMas = await loQueDariaDeMas(quien, userId, { role, roles_extra });
   if (!deMas.length) return;
+  if (deMas.includes(SOPORTE_SOLO_SUPERADMIN)) {
+    throw new AppError('El rol soporte lo da el superadmin', 403, 'SOPORTE_SOLO_SUPERADMIN',
+      { faltan: deMas, cuantos: 1, roles: ['soporte'] });
+  }
   // Qué rol quitar (Tony, 03/11: cinco intentos sin saber cuál sobraba). Cada
   // rol pedido, mirado solo; si ninguno falla solo, es la suma de los añadidos.
   const extras = (roles_extra || []).filter((r) => r && r !== role);
@@ -243,8 +247,21 @@ export async function loQueDariaDeMas(quien, userId, { role, roles_extra }, pre 
     ...comoEs, ajustesRol, role: role ?? comoEs.role, roles_extra: roles_extra ?? comoEs.roles_extra,
   }).mapa;
   const mios = pre.mios ?? (await explicarPermisos(quien.userId)).mapa;
-  return ACCIONES.filter((x) => !x.propia && despues[x.clave] && !antes[x.clave] && !mios[x.clave]).map((x) => x.nombre);
+  const deMas = ACCIONES.filter((x) => !x.propia && despues[x.clave] && !antes[x.clave] && !mios[x.clave]).map((x) => x.nombre);
+  if (deMas.length) return deMas;
+  // El rol soporte ve TODAS las empresas. Lo da el superadmin (y soporte, en
+  // el alta, arriba); un admin de empresa no, aunque con excepciones llegue a
+  // tener todos los permisos que trae: lo que no cabe en el catálogo es el
+  // alcance, y soporte es justo eso.
+  if (!tieneRol(quien, 'soporte') && [role, ...(roles_extra || [])].includes('soporte')) {
+    const yaLoEra = [datos?.usuario?.role, ...(datos?.usuario?.roles_extra || [])].includes('soporte');
+    if (!yaLoEra) return [SOPORTE_SOLO_SUPERADMIN];
+  }
+  return [];
 }
+
+/** Lo que sale en «le faltaría» cuando un admin intenta dar el rol soporte. */
+export const SOPORTE_SOLO_SUPERADMIN = 'El rol soporte (lo da el superadmin)';
 
 /**
  * Para el formulario de alta (Tony, 03/11): qué roles puede dar quien pregunta,

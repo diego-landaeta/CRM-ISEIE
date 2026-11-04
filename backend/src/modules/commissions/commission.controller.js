@@ -1,3 +1,14 @@
+import { exigirCampusSuyo } from '../../shared/utils/ambito.js';
+import { query } from '../../shared/config/db.js';
+
+// `commissions.reglas` de serie es de soporte; a un admin de empresa se le
+// puede dar como excepción, y entonces toca solo las reglas de SUS campus:
+// la de otro campus es un 404, como si no existiera.
+async function exigirReglaSuya(req, id) {
+  const { rows: [r] } = await query('SELECT project_id FROM commission_rules WHERE id = $1', [id]);
+  if (!r) throw new AppError('No encontrado', 404, 'NOT_FOUND');
+  await exigirCampusSuyo(req, r.project_id);
+}
 import { AppError } from '../../shared/utils/AppError.js';
 import { ruleSchema, ruleUpdateSchema, paySchema } from './commission.validation.js';
 import * as model from './commission.model.js';
@@ -19,6 +30,7 @@ export async function createRule(req, res, next) {
   try {
     const parsed = ruleSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError(parsed.error.issues[0]?.message || 'Invalid', 400, 'VALIDATION_ERROR');
+    await exigirCampusSuyo(req, parsed.data.project_id, 'Proyecto no encontrado');
     const r = await model.createRule(parsed.data);
     res.status(201).json({ success: true, data: r });
   } catch (err) { next(err); }
@@ -28,6 +40,7 @@ export async function updateRule(req, res, next) {
   try {
     const parsed = ruleUpdateSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError(parsed.error.issues[0]?.message || 'Invalid', 400, 'VALIDATION_ERROR');
+    await exigirReglaSuya(req, Number(req.params.id));
     const r = await model.updateRule(Number(req.params.id), parsed.data);
     if (!r) throw new AppError('No encontrado', 404, 'NOT_FOUND');
     res.json({ success: true, data: r });
@@ -36,6 +49,7 @@ export async function updateRule(req, res, next) {
 
 export async function deleteRule(req, res, next) {
   try {
+    await exigirReglaSuya(req, Number(req.params.id));
     await model.deleteRule(Number(req.params.id));
     res.json({ success: true });
   } catch (err) { next(err); }
