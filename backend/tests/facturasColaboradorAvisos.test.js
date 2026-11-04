@@ -382,6 +382,14 @@ describe('«He recibido el pago y lo confirmo» y su opinión (Diego 04/11)', ()
     expect(res.body.data.marca).toMatchObject({ nombre: `${MARCA} Campus A` });
   });
 
+  it('abrir el enlace (GET), aunque sea varias veces, no confirma nada ni deja rastro', async () => {
+    // Los antivirus y filtros de correo de las empresas abren los enlaces solos (Diego, 04/11).
+    for (let i = 0; i < 3; i++) expect((await request.get(`${API}/pago/${token}`)).status).toBe(200);
+    expect(await fila(F.laura)).toMatchObject({ pago_confirmado_at: null, pago_feedback_at: null });
+    expect(await registro(F.laura, 'pago_confirmado')).toHaveLength(0);
+    expect((await request.get(`${API}/pago/${token}`)).body.data.confirmado_at).toBeNull();
+  });
+
   it('opinar antes de confirmar no se puede', async () => {
     const res = await request.post(`${API}/pago/${token}/opinion`).send({ valoracion: 5 });
     expect(res.status).toBe(409);
