@@ -207,6 +207,13 @@ export const PUERTAS = [
     donde: 'webhooks-salientes.controller.js · esSuperadmin', controladores: ['crear', 'cambiar'],
     condicion: 'webhooks para todas las empresas',
   },
+  {
+    // Diego, 03/11 (#620). Antes de esto el registro no recortaba nada: admin y
+    // soporte veían todas las filas, también las de todo el sistema.
+    id: 'registro.sistema', modulo: 'registro', regla: 'adminYSoporte',
+    donde: 'registro.controller.js · alcance', controladores: ['listar', 'fuentes', 'csv'],
+    condicion: 'lo que no es de ningún campus: errores y tareas programadas',
+  },
 
   // ── Lo de cada uno ──
   {

@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-771 rutas en 58 módulos, y 28 acciones con condición dentro de una ruta.
+771 rutas en 58 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -775,6 +775,9 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | listar | `GET /api/registro/` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `registro.view` |
 | fuentes | `GET /api/registro/fuentes` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `registro.view` |
 | csv | `GET /api/registro/csv` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `registro.view` |
+| listar · lo que no es de ningún campus: errores y tareas programadas | `GET /api/registro/` | (no existía) | (ruta nueva) | `registro.sistema` |
+| fuentes · lo que no es de ningún campus: errores y tareas programadas | `GET /api/registro/fuentes` | (no existía) | (ruta nueva) | `registro.sistema` |
+| csv · lo que no es de ningún campus: errores y tareas programadas | `GET /api/registro/csv` | (no existía) | (ruta nueva) | `registro.sistema` |
 
 ## reports
 
@@ -1537,7 +1540,8 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver el registro | `registro.view` | Quién cambió qué y cuándo. | Admin, Soporte, Project manager |  |
+| Ver el registro | `registro.view` | Quién cambió qué y cuándo (lo de sus campus). | Admin, Soporte, Project manager |  |
+| Ver lo del sistema en el registro | `registro.sistema` | Lo que no es de ningún campus: errores y tareas programadas. | Soporte | `registro.view` |
 
 ### Estado del sistema
 

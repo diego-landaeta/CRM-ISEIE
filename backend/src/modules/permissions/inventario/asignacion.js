@@ -96,6 +96,7 @@ export const CONDICIONES = {
   'sales.sin_gestora': 'conversions.sin_gestora',
   'reports.puesto_ajeno': 'reports.puesto_ajeno',
   'consultas.las_de_todos': 'consultas.view',
+  'registro.sistema': 'registro.sistema',
 };
 
 /**
