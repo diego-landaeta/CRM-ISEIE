@@ -844,6 +844,29 @@
   "puertas": []
  },
  {
+  "id": "GET /api/certifex/diplomas/envios",
+  "tipo": "ruta",
+  "modulo": "certifex",
+  "metodo": "GET",
+  "ruta": "/api/certifex/diplomas/envios",
+  "relativa": "GET /diplomas/envios",
+  "controlador": "envios",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "diplomas.view",
+     "diplomas.emit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "POST /api/certifex/diplomas/editar",
   "tipo": "ruta",
   "modulo": "certifex",
