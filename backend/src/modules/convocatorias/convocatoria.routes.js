@@ -20,6 +20,9 @@ router.patch('/ofrecimientos/:id', puede('convocatorias.ofrecer'), ctrl.actualiz
 // Crear y cambiar convocatorias es de la casa, no de cada gestora: quien las
 // crea decide los topes de descuento.
 router.get('/', puede('convocatorias.view'), projectAccess, ctrl.listar);
+// Con «Todos» o una empresa (#218): las de todos los campus de quien pide. Sin
+// `projectAccess`: el controlador recorta por ámbito.
+router.get('/ambito', puede('convocatorias.view'), ctrl.listarDelAmbito);
 router.post('/', puede('convocatorias.create'), projectAccess, ctrl.crear);
 router.patch('/:id', puede('convocatorias.edit'), projectAccess, ctrl.editar);
 

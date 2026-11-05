@@ -3004,6 +3004,28 @@
   "puertas": []
  },
  {
+  "id": "GET /api/convocatorias/ambito",
+  "tipo": "ruta",
+  "modulo": "convocatorias",
+  "metodo": "GET",
+  "ruta": "/api/convocatorias/ambito",
+  "relativa": "GET /ambito",
+  "controlador": "listarDelAmbito",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "convocatorias.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "POST /api/convocatorias/",
   "tipo": "ruta",
   "modulo": "convocatorias",
