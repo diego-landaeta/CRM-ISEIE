@@ -3,6 +3,7 @@ import * as model from './wc.model.js';
 import * as catModel from '../product-categories/category.model.js';
 import { query } from '../../shared/config/db.js';
 import { AppError } from '../../shared/utils/AppError.js';
+import { listaDelAmbito, campusDeTodos } from '../../shared/utils/ambito.js';
 import { logger } from '../../shared/utils/logger.js';
 import { inspectSchema, resolvePath } from '../connectors/connectors.adapters.js';
 import { TARGETS_CATALOG, TRANSFORMS_CATALOG } from '../connectors/connectors.targets.js';
@@ -82,6 +83,13 @@ export const setMappings = async (req, res, next) => {
   } catch (e) { next(e); }
 };
 
+// GET /api/woocommerce/estado — cada campus de quien pide, solo para ver (#218).
+export const estado = async (req, res, next) => {
+  try {
+    const lista = (await listaDelAmbito(req)) || await campusDeTodos(req);
+    res.json({ success: true, data: await model.estadoDeLosCampus(lista) });
+  } catch (e) { next(e); }
+};
 export const listRuns = async (req, res, next) => {
   try { res.json({ success: true, data: await model.listRuns(pid(req)) }); } catch (e) { next(e); }
 };

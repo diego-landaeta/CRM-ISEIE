@@ -2,12 +2,18 @@ import * as ProductService from './product.service.js';
 import { createProductSchema, updateProductSchema } from './product.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { query } from '../../shared/config/db.js';
+import { listaDelAmbito, campusDeTodos } from '../../shared/utils/ambito.js';
 
 export async function list(req, res, next) {
   try {
     const categoryId = req.query.categoryId ? parseInt(req.query.categoryId) : null;
     const includeInactive = req.query.includeInactive === 'true';
-    const products = await ProductService.listByProject(req.projectId, { categoryId, includeInactive });
+    // `/ambito` (#218): con «Todos» o una empresa, los campus de quien pide; si
+    // no, el campus que ha comprobado `projectAccess`.
+    const campus = req.path === '/ambito'
+      ? ((await listaDelAmbito(req)) || await campusDeTodos(req))
+      : req.projectId;
+    const products = await ProductService.listByProject(campus, { categoryId, includeInactive });
     // Resolver presigned URLs en paralelo solo para los que tienen image_url.
     const enriched = await Promise.all(products.map(async (p) => {
       if (!p.image_url) return p;

@@ -61,7 +61,16 @@ export async function getTree(projectId) {
   return roots;
 }
 
-// Cadena ancestral desde la raiz hasta la categoria dada
+// El árbol de cada campus, para «Todos» o una empresa (#218): uno por campus,
+// con su nombre. Un campus sin categorías sale igual, con el árbol vacío.
+export async function arbolesDeLosCampus(projectIds) {
+  const { rows } = await query(
+    'SELECT id, nombre FROM projects WHERE id = ANY($1::int[]) AND active ORDER BY nombre',
+    [projectIds]);
+  return Promise.all(rows.map(async (p) => ({ id: p.id, nombre: p.nombre, arbol: await getTree(p.id) })));
+}
+
+// Cadena ancestral desde la raíz hasta la categoría dada
 export async function getAncestors(categoryId) {
   const { rows } = await query(
     `WITH RECURSIVE chain AS (
