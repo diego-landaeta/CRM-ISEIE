@@ -28,6 +28,7 @@ import {
 import {
   Avance, AvisoCasiListo, AvisoDireccionPublica, avisoSinTerminar, Buscador, EnElCrmEtiqueta, Entregas, Etiqueta, FIRMA_EN_DIPLOMA, PON_EL_DNI, Pestana, TITULO_SIN_DNI, tieneDni,
 } from '../components/piezas';
+import EnviosDelDiploma from '../components/EnviosDelDiploma';
 
 /**
  * Certifex · Diplomas (#272): lo que los alumnos piden desde Moodle y los diplomas ya
@@ -2527,6 +2528,8 @@ function VisorPdf({ d, version, alCerrar, alEnviar, sinImprenta = false }: {
               {alEnviar && <Button size="sm" disabled={!pdf} onClick={alEnviar}><PaperPlaneTilt size={14} className="mr-1.5" /> Está bien: enviar al alumno</Button>}
             </div>
           </div>
+          {/* Justificante del envío (05/11/2026): cada correo al alumno y su PDF. */}
+          <EnviosDelDiploma nexpediente={d.nexpediente} />
           <div className="flex-1 overflow-auto p-2 sm:p-4">
             {error ? (
               <div className="space-y-3 rounded-md border border-dashed border-border p-6 text-center">

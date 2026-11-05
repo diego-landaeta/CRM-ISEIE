@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-775 rutas en 58 módulos, y 31 acciones con condición dentro de una ruta.
+777 rutas en 58 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -90,6 +90,8 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | porAvisar | `GET /api/certifex/diplomas/por-avisar` | sesión · rol (admin, superadmin) o permiso diplomas.view | superadmin, admin y quien tenga el permiso por rol a medida o excepción | `diplomas.view` o `diplomas.emit` |
 | terminados | `GET /api/certifex/diplomas/terminados` | sesión · rol (admin, superadmin) o permiso diplomas.view | superadmin, admin y quien tenga el permiso por rol a medida o excepción | `diplomas.view` o `diplomas.emit` |
 | diplomas | `GET /api/certifex/diplomas` | sesión · rol (admin, superadmin) o permiso diplomas.view | superadmin, admin y quien tenga el permiso por rol a medida o excepción | `diplomas.view` o `diplomas.emit` |
+| envios | `GET /api/certifex/diplomas/:nexp/envios` | (no existía) | (ruta nueva) | `diplomas.view` o `diplomas.emit` |
+| justificante | `GET /api/certifex/diplomas/:nexp/justificante` | (no existía) | (ruta nueva) | `diplomas.view` o `diplomas.emit` |
 | editar | `POST /api/certifex/diplomas/editar` | sesión · rol (admin, superadmin) o permiso diplomas.emit | superadmin, admin y quien tenga el permiso por rol a medida o excepción | `diplomas.emit` |
 | pedir | `POST /api/certifex/diplomas/pedir` | sesión · rol (admin, superadmin) o permiso diplomas.emit | superadmin, admin y quien tenga el permiso por rol a medida o excepción | `diplomas.emit` |
 | aprobarEmitir | `POST /api/certifex/diplomas/aprobar-emitir` | sesión · rol (admin, superadmin) o permiso diplomas.emit | superadmin, admin y quien tenga el permiso por rol a medida o excepción | `diplomas.emit` |

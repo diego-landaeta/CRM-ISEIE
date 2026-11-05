@@ -5,6 +5,7 @@ import { uploadImage } from '../../shared/middleware/upload.js';
 import * as ctrl from './certifex.controller.js';
 import * as emisiones from './certifex.emisiones.js';
 import * as diplomas from './certifex.diplomas.js';
+import * as justificante from './certifex.justificante.js';
 
 const router = Router();
 
@@ -49,6 +50,11 @@ router.get('/diplomas/por-avisar', verDiplomas, diplomas.porAvisar);
 // Solo consulta: Moodle los da por terminados y aun no han pedido el diploma.
 router.get('/diplomas/terminados', verDiplomas, diplomas.terminados);
 router.get('/diplomas', verDiplomas, diplomas.diplomas);
+// Justificante del envio (05/11/2026): los envios de un diploma (fecha, destinatario,
+// asunto, messageId de Brevo) y su PDF. Es leer lo que Certifex registro: quien ve
+// Diplomas, y solo de sus campus (lo mira el controlador).
+router.get('/diplomas/:nexp/envios', verDiplomas, justificante.envios);
+router.get('/diplomas/:nexp/justificante', verDiplomas, justificante.justificante);
 
 // EMITIR Diplomas sin ser admin. Diego, 22/10/2026: «que Dayana pueda emitir, no la
 // dejan; puede hacerlo». Admin y superadmin por su rol, y ademas quien tenga
