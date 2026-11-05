@@ -13,6 +13,7 @@ import RecorridoGuiado, { recorridoPendiente } from '@/shared/components/ui/Reco
 import { CLAVE_RECORRIDO_TABLERO, PASOS_TABLERO } from '../lib/recorridoTablero';
 import Select from '@/shared/components/ui/Select';
 import { agruparPorEmpresa, campusConEmpresa, empresaCorta } from '../lib/campusPorEmpresa';
+import { pestanasDeEquipos, pestanaValida } from '../lib/pestanasEquipo';
 import { Button } from '@/shared/components/ui/button';
 import { inputClass } from '@/shared/lib/ui';
 import * as tasksApi from '../api/tasks.api';
@@ -143,7 +144,14 @@ export default function TasksPage() {
   // El recorrido guiado (12/10): solo la primera vez, y cuando se pida con «Recorrido».
   const [recorrido, setRecorrido] = useState(false);
 
-  const teamIdElegido = filtros.equipo === '' ? undefined : filtros.equipo === 'sin' ? 0 : Number(filtros.equipo);
+  // Una pestaña por equipo, si está en más de uno (Diego, 04/11/2026): quien lleva
+  // las colaboraciones ve el tablero de colaboradores y el de tutores por separado.
+  const pestanas = useMemo(() => pestanasDeEquipos(misEquipos, { conTodos: canViewAll }), [misEquipos, canViewAll]);
+  const equipoElegido = pestanaValida(pestanas, filtros.equipo);
+  useEffect(() => {
+    if (equipoElegido !== filtros.equipo) setFiltros((f) => ({ ...f, equipo: equipoElegido }));
+  }, [equipoElegido, filtros.equipo]);
+  const teamIdElegido = equipoElegido === '' ? undefined : equipoElegido === 'sin' ? 0 : Number(equipoElegido);
 
   // Por empresa, no por campus (Diego, 10/10). En MultiCRM, con una empresa o un
   // campus en la cabecera, solo los de esa empresa. En ISEIE no hay cabecera:
@@ -367,7 +375,8 @@ export default function TasksPage() {
   };
   if (filtros.search) activos.push({ clave: 'search', texto: `«${filtros.search}»`, quitar: quitar('search') });
   if (filtros.personaId) activos.push({ clave: 'persona', texto: `Persona: ${opcionesPersona.find((o) => o.value === filtros.personaId)?.label || '…'}`, quitar: quitar('personaId') });
-  if (filtros.equipo) {
+  // Con pestañas, el equipo lo dice la pestaña: no es un filtro que quitar.
+  if (filtros.equipo && pestanas.length === 0) {
     const e = equipos.find((x) => String(x.id) === filtros.equipo);
     activos.push({ clave: 'equipo', texto: `Equipo: ${filtros.equipo === 'sin' ? 'sin equipo' : e ? nombreEquipo(e) : '…'}`, quitar: quitar('equipo') });
   }
@@ -380,7 +389,8 @@ export default function TasksPage() {
   if (rango) activos.push({ clave: 'periodo', texto: etiquetaDePeriodo(tipoPeriodo, rango), quitar: () => setTipoPeriodo('todo') });
 
   function quitarFiltros() {
-    setFiltros(SIN_FILTROS);
+    // La pestaña de equipo se queda: no es un filtro.
+    setFiltros((f) => ({ ...SIN_FILTROS, equipo: pestanas.length ? f.equipo : '' }));
     setBusqueda('');
     setTipoPeriodo('todo');
     setReferencia(hoyEnOficina());
@@ -447,6 +457,22 @@ export default function TasksPage() {
         )}
       />
 
+      {!enRevisar && pestanas.length > 0 && (
+        <div role="tablist" aria-label="Equipos" className="flex flex-wrap gap-1 border-b border-border">
+          {pestanas.map((p) => {
+            const activa = p.value === equipoElegido;
+            return (
+              <button key={p.value || 'todos'} type="button" role="tab" aria-selected={activa}
+                onClick={() => setFiltros((f) => ({ ...f, equipo: p.value }))}
+                className={`px-3 py-2 text-sm font-medium -mb-px border-b-2 transition-colors ${activa
+                  ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
+                {p.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {!enRevisar && (
         <div className="bg-card border border-border rounded-lg p-3 space-y-2.5" data-recorrido="filtros">
           {/* Los filtros, en una sola fila (se parte en el móvil) y combinables. */}
@@ -466,7 +492,7 @@ export default function TasksPage() {
               disabled={soloLoSuyo}
               ariaLabel="Persona" size="sm" className="w-44"
             />
-            {equiposActivos.length > 0 && (
+            {equiposActivos.length > 0 && pestanas.length === 0 && (
               <Select<string>
                 value={filtros.equipo}
                 onChange={(v) => setFiltros((f) => ({ ...f, equipo: v }))}

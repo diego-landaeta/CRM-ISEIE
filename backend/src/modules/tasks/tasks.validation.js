@@ -141,6 +141,8 @@ export const createTeamSchema = z.object({
   name: nombreEquipo,
   color: colorTablero.optional(),
   sort_order: z.number().int().min(0).max(2147483647).optional(),
+  // De colaboradores (desarrollo, SEO…) o de tutores (04/11/2026). Solo al crearlo.
+  tipo: z.enum(['colaboradores', 'tutores']).optional(),
 });
 export const updateTeamSchema = z.object({
   name: nombreEquipo.optional(),

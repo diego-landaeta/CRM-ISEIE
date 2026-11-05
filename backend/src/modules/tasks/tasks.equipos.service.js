@@ -138,11 +138,13 @@ export async function ponerMiembro(user, teamId, userId, { team_role_id: roleId 
   await equipoDeSuEmpresa(user, teamId);
   const cargo = await eqModel.cargoPorId(teamId, roleId);
   if (!cargo || !cargo.is_active) throw new AppError('Ese cargo no es de este equipo o está archivado', 400, 'VALIDATION_ERROR');
-  const { rows: [persona] } = await query(
-    `SELECT id, active, (role::text = ANY($2::text[]) OR roles_extra::text[] && $2::text[]) AS con_tablero FROM users WHERE id = $1`,
-    [userId, ['superadmin', 'admin', 'colaborador']]);
-  if (!persona || !persona.active || !persona.con_tablero) {
-    throw new AppError('Esa persona no existe, está inactiva o no tiene tablero de tareas', 400, 'VALIDATION_ERROR');
+  // Con tablero, en cualquier equipo; un tutor, solo en uno de tutores (04/11/2026).
+  const { existe, puede, tipo } = await eqModel.puedeEstarEn(teamId, userId);
+  if (!existe) throw new AppError('Esa persona no existe o está inactiva', 400, 'VALIDATION_ERROR');
+  if (!puede) {
+    throw new AppError(tipo === 'tutores'
+      ? 'Esa persona no tiene tablero de tareas ni es tutor'
+      : 'Esa persona no tiene tablero de tareas: a un tutor solo se le mete en un equipo de tutores', 400, 'VALIDATION_ERROR');
   }
   if (!(await eqModel.esDeLaEmpresa(teamId, userId))) {
     throw new AppError('Esa persona no es de la empresa del equipo', 400, 'VALIDATION_ERROR');

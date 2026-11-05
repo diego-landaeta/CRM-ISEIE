@@ -218,6 +218,14 @@ export const CAMBIOS_POR_DATOS = [
     aprobadoPor: DIEGO,
   },
   {
+    id: 'tutores-tablero',
+    que: 'El tutor tiene tablero de tareas: «Ver su tablero» y «Editar tareas» de serie. Ve sus tareas y las de su equipo de TUTORES; el de desarrollo, no. Quien es tutor además de otro rol (una gestora que también da clase) también lo gana.',
+    motivo: 'Diego (04/11): «un tablero de tutores separado del de colaboradores», para quien lleva las colaboraciones de los profesores y sus tutores. Las tareas que ve las decide el servicio (sus equipos); mover y comentar siguen siendo de quien la lleva o la supervisa.',
+    explica: ({ persona, fila, despues }) => despues === true && fila.modulo === 'tasks'
+      && [persona.role, ...persona.roles_extra].includes('tutor'),
+    aprobadoPor: 'Diego, 04/11',
+  },
+  {
     id: 'superadmin-todo',
     que: 'El superadmin lo puede todo, también lo que una casilla o una regla suelta le quitaba (su WhatsApp apagado, el correo de «Mi perfil»).',
     motivo: 'En el catálogo el superadmin no tiene excepciones.',
@@ -335,6 +343,17 @@ export const CAMBIOS_DE_MENU = [
     },
     aprobadoPor: 'Diego, 04/11',
   },
+  {
+    id: 'tutores-tablero',
+    que: '«Mi tablero» la ve también el tutor: su tablero de tutores.',
+    motivo: 'Va con el cambio `tutores-tablero`: el tutor gana «Ver su tablero» y la ruta del tablero (Diego, 04/11).',
+    perfiles: {
+      tutor: ['+ Equipo de Desarrollo › Mi tablero'],
+      'gestora+tutor': ['+ Equipo de Desarrollo › Mi tablero'],
+    },
+    rutas: { 'Equipo de Desarrollo › Mi tablero': 'GET /api/tasks/' },
+    aprobadoPor: 'Diego, 04/11',
+  },
 ];
 
 /** `{ perfil: ['+ …', '- …'] }`, todos los cambios de menú juntos. */
@@ -367,6 +386,14 @@ export const CAMBIOS_DE_REGLA = [
     que: 'El colaborador puede leer `GET /api/permissions/system-defaults`: lo que trae de serie cada rol, la lista que usa «Mis preferencias › Mi vista» para los nombres del menú. El tutor ya podía.',
     motivo: 'La auditoría del 03/11 (#631): «Mis preferencias» le daba 403 al colaborador. Solo es lectura y no trae datos de nadie, pero es una ruta más que deja pasar el corte del colaborador.',
     roles: ['colaborador'],
+    sentido: 'gana',
+    aprobadoPor: 'Diego, 04/11',
+  },
+  {
+    id: 'tutores-tablero',
+    que: 'El tutor puede pedir `/api/tasks`: su tablero de tutores. Ve sus tareas y las de su equipo de TUTORES (un equipo de tipo «tutores»); el de desarrollo, no. Solo tiene tablero de verdad —sale como responsable, en las cifras y en los resúmenes— mientras esté en un equipo de tutores.',
+    motivo: 'Diego (04/11): «un tablero de tutores separado del de colaboradores». Es una ruta más que deja pasar el corte del tutor (`RUTAS_DEL_TUTOR`); el resto del tablero lo recorta el servicio.',
+    roles: ['tutor'],
     sentido: 'gana',
     aprobadoPor: 'Diego, 04/11',
   },

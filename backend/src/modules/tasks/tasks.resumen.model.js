@@ -6,6 +6,7 @@
 // la base con AT TIME ZONE.
 import { query } from '../../shared/config/db.js';
 import { ROLES_TAREAS, existeSupervisor } from './tasks.model.js';
+import { existeTipos, sqlConTablero } from './tasks.equipos.model.js';
 
 const INICIO = (d, z) => `((${d}::date)::timestamp AT TIME ZONE ${z})`;
 const FIN = (d, z, mas = 1) => `(((${d}::date) + ${mas})::timestamp AT TIME ZONE ${z})`;
@@ -17,12 +18,13 @@ const FIN = (d, z, mas = 1) => `(((${d}::date) + ${mas})::timestamp AT TIME ZONE
  */
 export async function findCandidatosResumen(aviso, dia, zona, { soloUserIds = null } = {}) {
   const sup = await existeSupervisor();
+  const tipos = await existeTipos();
   const { rows } = await query(
     `SELECT u.id, u.nombre, u.email
        FROM users u
       WHERE u.active
         AND u.email IS NOT NULL
-        AND (u.role::text = ANY($4::text[]) OR u.roles_extra::text[] && $4::text[])
+        AND ${sqlConTablero('u', 4, tipos)}
         AND NOT EXISTS (SELECT 1 FROM avisos_apagados a WHERE a.user_id = u.id AND a.aviso = $1)
         AND ($5::int[] IS NULL OR u.id = ANY($5::int[]))
         AND (

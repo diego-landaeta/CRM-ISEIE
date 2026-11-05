@@ -101,6 +101,9 @@ export const RUTAS_DEL_TUTOR = [
   /^\/api\/consultas(?:\/|$)/,
   // Sus cursos pendientes (#336): el servicio le deja solo los que tiene asignados.
   /^\/api\/cursos-pendientes(?:\/|$)/,
+  // Su tablero de tutores (Diego, 04/11): el servicio le deja ver solo lo suyo y lo
+  // de su equipo de tutores; lo de desarrollo, no (no es de ese equipo).
+  /^\/api\/tasks(?:\/|$)/,
   /^\/api\/notifications(?:\/|$)/,
   /^\/api\/novedades(?:\/|$)/,
   // Los mensajes internos entre usuarios del CRM (la campana de «Mensajes»).

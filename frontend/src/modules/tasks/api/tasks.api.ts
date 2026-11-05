@@ -301,7 +301,7 @@ export async function getTeam(id: number): Promise<Team & { miembros: TeamMember
   return data;
 }
 
-export async function createTeam(body: { issuer_id: number; name: string; color?: string }): Promise<Team> {
+export async function createTeam(body: { issuer_id: number; name: string; color?: string; tipo?: 'colaboradores' | 'tutores' }): Promise<Team> {
   const { data } = await client.post<Team>('/tasks/teams', body);
   return data;
 }
