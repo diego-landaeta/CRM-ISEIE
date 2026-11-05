@@ -61,6 +61,12 @@ vi.mock('@/modules/certifex/api/certifex.api', () => ({
     terminados: async () => ({ data: { filas: [], total: 0, pagina: 1, tam: 50 } }),
     formaciones: async () => ({ data: { proyecto: null, motivo: null, formaciones: [] } }),
     firma: vi.fn(),
+    // Justificante del envío (05/11/2026): la ficha enseña los envíos también en solo lectura.
+    envios: async () => ({ data: { credencial: { nexpediente: 'ISEIE-2026-000005-AAAA', centro: 'ISEIE' }, envios: [{
+      id: 7, tipo: 'credencial', en: '2026-11-05T13:03:12.000Z', resultado: 'enviado', aprobadoPor: 'Adriana (CRM)',
+      destinatario: 'alumno5@prueba.test', asunto: 'Tu diploma', messageId: '<x@y>', sinDetalle: false,
+    }] } }),
+    justificante: vi.fn(),
   },
 }));
 
@@ -98,6 +104,9 @@ describe('Diplomas en solo lectura', () => {
     const visor = await screen.findByRole('dialog');
     expect(within(visor).queryByRole('button', { name: /enviar al alumno/i })).toBeNull();
     expect(within(visor).queryByText(/imprenta/i)).toBeNull();
+    // Quien solo ve Diplomas ve los envíos y descarga su justificante (es leer).
+    expect(await within(visor).findByText('Enviado el 05/11/2026 14:03 a alumno5@prueba.test')).toBeTruthy();
+    expect(within(visor).getByRole('button', { name: /Descargar justificante/ })).toBeTruthy();
   });
 
   it('Emitidos: ver el PDF y copiar el enlace; nada de enviar, corregir ni revocar', async () => {

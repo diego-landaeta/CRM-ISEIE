@@ -365,6 +365,23 @@ export interface Diploma {
 }
 
 /**
+ * Un correo al alumno de un diploma, tal y como lo registró Certifex (justificante del
+ * envío, 05/11/2026). `sinDetalle`: es de antes de que Certifex guardara el destinatario,
+ * el asunto y el identificador de Brevo.
+ */
+export interface EnvioDiploma {
+  id: number;
+  tipo: 'credencial' | 'rechazo';
+  en: string;
+  resultado: ResultadoAviso;
+  aprobadoPor: string;
+  destinatario: string | null;
+  asunto: string | null;
+  messageId: string | null;
+  sinDetalle: boolean;
+}
+
+/**
  * «Terminaron sin pedir»: Moodle da la formación por terminada y el alumno aún no ha
  * pedido su diploma. Solo consulta. `aviso`: cuándo lo dio Moodle por terminado y cuándo
  * llegó el aviso al CRM (null si no llegó).
@@ -496,6 +513,23 @@ export const diplomasApi = {
   /** `forzar`: solo tras confirmar en la página que se pide sin terminar (#629). */
   pedir: (d: { matriculaId: number; centro: string; cursoRef?: number; forzar?: boolean }) =>
     client.post('/certifex/diplomas/pedir', d) as R<{ matriculaId: number; centro: string; curso: string; nombre: string; yaPedido: boolean }>,
+  /** Los correos al alumno de un diploma (justificante del envío). */
+  envios: (nexpediente: string) =>
+    client.get(`/certifex/diplomas/${encodeURIComponent(nexpediente)}/envios`) as R<{ credencial: { nexpediente: string; centro: string }; envios: EnvioDiploma[] }>,
+  /** El justificante de un envío en PDF (sin `envioId`, el del último correo del diploma). */
+  justificante: async (nexpediente: string, envioId?: number): Promise<{ blob: Blob; nombre: string }> => {
+    const t = getAccessToken();
+    const q = envioId != null ? `?envio=${encodeURIComponent(String(envioId))}` : '';
+    const r = await fetch(`${API_BASE_URL}/certifex/diplomas/${encodeURIComponent(nexpediente)}/justificante${q}`, {
+      credentials: 'include',
+      headers: t ? { Authorization: `Bearer ${t}` } : {},
+    });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      throw new Error(d?.error || `Error ${r.status}`);
+    }
+    return { blob: await r.blob(), nombre: `justificante-envio-${nexpediente}.pdf` };
+  },
   /** Las formaciones del catálogo del proyecto de ese campus, para elegir la vendida. */
   formaciones: (centro: string) => client.get(`/certifex/diplomas/formaciones?${qs({ centro })}`) as R<CatalogoDelCampus>,
   /** Los módulos de esa formación, leídos de la página del curso y guardados en el catálogo (12/10). */
