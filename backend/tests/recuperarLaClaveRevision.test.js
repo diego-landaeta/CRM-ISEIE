@@ -62,19 +62,19 @@ beforeAll(async () => {
     `INSERT INTO users (nombre, email, password_hash, role) VALUES ('Tutor Revision', $1, 'hash-viejo', 'tutor') RETURNING id`,
     [CORREO_TUTOR]);
   tutorId = t.rows[0].id;
-  const p = await pool.query(`SELECT id FROM projects ORDER BY id LIMIT 1`);
-  projectId = p.rows[0]?.id;
-  if (projectId == null) {
-    // En ISEIE `slug` y `webhook_api_key` son NOT NULL (la base de la CI no trae proyectos).
-    const marca = `revision-clave-${Date.now().toString(36)}`;
-    const n = await pool.query(`INSERT INTO projects (nombre, slug, webhook_api_key) VALUES ('Proyecto test revision', $1, $1) RETURNING id`, [marca]);
-    projectId = n.rows[0].id;
-  }
+  // Su propio campus, siempre. Antes cogía «el primero de la base», y en la CI
+  // (que no trae proyectos) ese era el de otra prueba que corre en paralelo y lo
+  // borra al acabar: el tutor se quedaba sin campus y dejaba de salir en la lista.
+  // En ISEIE `slug` y `webhook_api_key` son NOT NULL.
+  const marca = `revision-clave-${Date.now().toString(36)}`;
+  const n = await pool.query(`INSERT INTO projects (nombre, slug, webhook_api_key) VALUES ('Proyecto test revision', $1, $1) RETURNING id`, [marca]);
+  projectId = n.rows[0].id;
   await pool.query(`INSERT INTO user_projects (user_id, project_id, orden_cola) VALUES ($1, $2, 1)`, [tutorId, projectId]);
 });
 
 afterAll(async () => {
   await limpiar();
+  if (projectId) await pool.query('DELETE FROM projects WHERE id = $1', [projectId]);
   await pool.end();
 });
 
