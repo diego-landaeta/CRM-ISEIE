@@ -357,11 +357,37 @@ export interface Diploma {
   /** Null si Certifex no tiene dirección pública (`sinEnlaces` en la lista dice por qué). */
   verificarUrl: string | null;
   diplomaUrl: string | null;
-  aviso: { resultado: ResultadoAviso; en: string; por: string } | null;
+  /** `porNombre`: el nombre en el CRM de quien lo aprobó (`por` es «correo (CRM …)»). */
+  aviso: { resultado: ResultadoAviso; en: string; por: string; porNombre?: string | null } | null;
+  /** El correo del alumno, al que Certifex manda el diploma (05/11/2026). Null si no se sabe. */
+  titularEmail?: string | null;
   /** Lo emitió este CRM («persona (CRM …)»). Lo emitido fuera no está «pendiente de aviso». */
   emitidoEnCrm?: boolean;
   /** Su diploma tiene versión de imprenta A3 (hoy, solo ISEIE). La da Certifex. */
   imprenta?: boolean;
+}
+
+/** Un correo del diploma, según Brevo (la misma cuenta que usa Certifex). */
+export interface EnvioBrevo {
+  messageId: string;
+  asunto: string | null;
+  remitente: string | null;
+  destinatario: string | null;
+  enviadoEn: string | null;
+  entregadoEn: string | null;
+  abiertoEn: string | null;
+  problemas: { evento: string; fecha: string; motivo: string | null }[];
+}
+
+export interface EnviosDeDiploma {
+  nexpediente: string;
+  centro: string;
+  alumno: string | null;
+  titulacion: string | null;
+  email: string | null;
+  envios: EnvioBrevo[];
+  /** Por qué la lista está vacía (Brevo sin configurar, caído, sin correos…). */
+  motivo: string | null;
 }
 
 /**
@@ -434,6 +460,9 @@ export const diplomasApi = {
     client.get(`/certifex/diplomas/por-avisar?${qs(f)}`) as R<{ porAvisar: Solicitud[]; sinEmitir: Solicitud[]; truncado?: boolean }>,
   diplomas: (f: FiltrosDiplomas & { estado?: 'vigentes' | 'revocados' | 'todos'; aviso?: FiltroAviso }) =>
     client.get(`/certifex/diplomas?${qs(f)}`) as R<Pagina<Diploma>>,
+  /** Los correos del diploma en Brevo: enviado, entregado, abierto, Message-ID (justificante). */
+  envios: (nexpediente: string) =>
+    client.get(`/certifex/diplomas/envios?${qs({ exp: nexpediente })}`) as R<EnviosDeDiploma>,
   aprobarEmitir: (matriculaIds: number[]) =>
     client.post('/certifex/diplomas/aprobar-emitir', { matriculaIds }) as R<{ resultados: ResultadoAprobarEmitir[] }>,
   /** Emitir lo ya aprobado (reintento), también con el programa del CRM. */
