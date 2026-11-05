@@ -48,7 +48,8 @@ let pedidas = [];
 function certifex(p) {
   if (p.ruta === '/yo') return { status: 200, body: { nombre: 'CRM local', centros: [MIO, AJENO] } };
   if (p.ruta === '/diplomas') {
-    const filas = [diploma(NEXP_MIO, MIO), diploma(NEXP_AJENO, AJENO), diploma(NEXP_SIN_CORREO, MIO, 'Luis Sin Correo')]
+    const avisado = { ...diploma(NEXP_MIO, MIO), emitidaPor: 'x (CRM local)', aviso: { resultado: 'enviado', en: '2026-11-05T18:28:00.000Z', por: `${gente.conPermiso.email} (CRM local)` } };
+    const filas = [avisado, diploma(NEXP_AJENO, AJENO), diploma(NEXP_SIN_CORREO, MIO, 'Luis Sin Correo')]
       .filter((d) => !p.query.q || d.nexpediente.includes(p.query.q));
     return { status: 200, body: { filas, total: filas.length, pagina: 1, tam: 5 } };
   }
@@ -171,6 +172,18 @@ describe('GET /api/certifex/diplomas/envios', () => {
     const r = await pedir(NEXP_SIN_CORREO);
     expect(r.status).toBe(200);
     expect(r.body.data).toMatchObject({ email: null, envios: [], motivo: expect.stringMatching(/no tiene el correo/) });
+  });
+});
+
+describe('«Aviso al alumno» en Emitidos', () => {
+  it('cada fila trae a QUIÉN se manda (el titular) y el nombre de quien lo aprobó', async () => {
+    const r = await como('conPermiso')(request.get(`/api/certifex/diplomas?estado=vigentes&centro=${MIO}`));
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    const d = r.body.data.filas.find((x) => x.nexpediente === NEXP_MIO);
+    expect(d.titularEmail).toBe(CORREO);
+    expect(d.aviso).toMatchObject({ resultado: 'enviado', porNombre: 'Envios conPermiso' });
+    // Lo emitido fuera del CRM y sin aviso no se busca: sin correo, sin romper nada.
+    expect(r.body.data.filas.find((x) => x.nexpediente === NEXP_SIN_CORREO).titularEmail).toBeNull();
   });
 });
 

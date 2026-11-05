@@ -148,3 +148,48 @@ export async function envios(req, res, next) {
     res.json({ success: true, data: { ...base, email, envios: lista, motivo } });
   } catch (err) { next(err); }
 }
+
+// ─────────────────────────────────────────────── columna «Aviso al alumno»
+
+/**
+ * Para la columna «Aviso al alumno» de Emitidos (Diego, 05/11/2026: «sale mi correo y creo
+ * que se lo mandó a mí»): a QUIÉN se manda el diploma —el correo del titular, el mismo al
+ * que Certifex lo envía— y el NOMBRE de quien aprobó el aviso. Pone en cada fila
+ * `titularEmail` y, si hay aviso, `aviso.porNombre`. Si algo falla, la lista sale igual.
+ *
+ * El correo sale de las matrículas aprobadas de Certifex (lo emitido desde el CRM se
+ * aprobó antes); lo emitido fuera del CRM y sin aviso no se busca.
+ */
+export async function conDestinatario(filas, { query }) {
+  for (const d of filas) {
+    d.titularEmail = null;
+    if (d.aviso) d.aviso.porNombre = null;
+  }
+  const buscados = new Set(filas.filter((d) => d.aviso || d.emitidoEnCrm).map((d) => d.nexpediente));
+  if (buscados.size) {
+    try {
+      const centros = [...new Set(filas.map((d) => String(d.centro).toUpperCase()))];
+      const params = centros.length === 1 ? { estado: 'aprobada', centro: centros[0] } : { estado: 'aprobada' };
+      const r = await recorrer('/candidatos', params, {
+        filtro: (c) => buscados.has(c.nexpediente),
+        completo: (h) => h.length >= buscados.size,
+      });
+      const porExp = new Map(r.filas.map((c) => [c.nexpediente, String(c?.titular?.email || '').trim().toLowerCase() || null]));
+      for (const d of filas) d.titularEmail = porExp.get(d.nexpediente) ?? null;
+    } catch (err) {
+      logger.warn({ err: err.message }, 'diplomas: sin el correo de los alumnos');
+    }
+  }
+  // «persona@x (CRM …)» → el nombre de esa persona en el CRM, si existe.
+  const correoDe = (por) => String(por || '').replace(/\s*\(CRM\b[^)]*\)\s*$/i, '').trim().toLowerCase();
+  const correos = [...new Set(filas.filter((d) => d.aviso?.por).map((d) => correoDe(d.aviso.por)).filter((c) => c.includes('@')))];
+  if (correos.length) {
+    try {
+      const { rows } = await query('SELECT lower(email) AS email, nombre FROM users WHERE lower(email) = ANY($1::text[])', [correos]);
+      const nombres = new Map(rows.map((u) => [u.email, u.nombre]));
+      for (const d of filas) if (d.aviso?.por) d.aviso.porNombre = nombres.get(correoDe(d.aviso.por)) || null;
+    } catch (err) {
+      logger.warn({ err: err.message }, 'diplomas: sin el nombre de quien aprobó');
+    }
+  }
+}
