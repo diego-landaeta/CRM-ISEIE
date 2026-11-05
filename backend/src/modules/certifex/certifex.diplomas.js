@@ -8,6 +8,7 @@ import { sincronizarTemario } from '../products/temario.js';
 import { certifex, recorrer } from './certifex.cliente.js';
 import { alcanceDe, acotar, exigirCentro, exigirExpedientes, NO_ENCONTRADA } from './certifex.alcance.js';
 import { prepararEmision, emitirConPrograma, emitirMatriculas, resultadoBloqueado } from './certifex.emision.js';
+import { conDestinatario } from './certifex.envios.js';
 import { conFirma, correoDe, firmaTransparente, guardarFirmaSubida, origenesDeFirma, pngDe } from './certifex.firma.js';
 import {
   listarSolicitudesSchema, listarDiplomasSchema, porAvisarSchema, aprobarEmitirSchema, rechazarSchema, emitirDiplomasSchema,
@@ -794,6 +795,8 @@ export async function diplomas(req, res, next) {
       estado: f.estado ?? 'vigentes', centro: ambito.centro, q: f.q,
     }, f, { fecha: (d) => d?.emitidoEn, extra: ambos(filtros.length ? (d) => filtros.every((fn) => fn(d)) : null, deMisCentros(ambito)) });
     for (const d of data.filas) d.emitidoEnCrm = emitidoPorElCrm(d);
+    // A quién se manda (el titular) y quién lo aprobó, para «Aviso al alumno» (05/11/2026).
+    await conDestinatario(data.filas, { query });
     res.json({ success: true, data });
   } catch (err) { next(err); }
 }

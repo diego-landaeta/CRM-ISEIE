@@ -28,6 +28,7 @@ import {
 import {
   Avance, AvisoCasiListo, AvisoDireccionPublica, avisoSinTerminar, Buscador, EnElCrmEtiqueta, Entregas, Etiqueta, FIRMA_EN_DIPLOMA, PON_EL_DNI, Pestana, TITULO_SIN_DNI, tieneDni,
 } from '../components/piezas';
+import EnviosBrevo, { fechaHoraMadrid } from '../components/EnviosBrevo';
 
 /**
  * Certifex · Diplomas (#272): lo que los alumnos piden desde Moodle y los diplomas ya
@@ -384,23 +385,63 @@ const lineaPrograma = (p: ProgramaDelCrm | null | undefined) => {
 /** ¿Lo emitió este CRM? Un Certifex/CRM anterior no manda la marca: se da por hecho que sí. */
 const delCrm = (d: Pick<Diploma, 'emitidoEnCrm'>) => d.emitidoEnCrm !== false;
 
-function EstadoAviso({ d }: { d: Diploma }) {
+const NO_SALIO: Record<string, string> = {
+  correo_apagado: 'el correo está apagado en el servidor de Certifex',
+  sin_correo: 'el alumno no tiene correo en Certifex',
+  error: 'falló el envío',
+};
+
+/** «Enviado el 05/11/2026 a las 19:28» (hora de Madrid). */
+const elDiaALas = (iso: string) => {
+  const [dia, hora] = fechaHoraMadrid(iso).split(' ');
+  return dia ? `el ${dia} a las ${hora}` : '';
+};
+
+/**
+ * «Aviso al alumno» (Diego, 05/11/2026: salía el correo de quien APROBÓ y parecía el
+ * destinatario). Ahora: qué pasó y cuándo (hora de Madrid), A QUIÉN se manda —el correo
+ * del alumno— y, pequeño, quién lo aprobó; con «Ver envío» a la ficha (Brevo).
+ */
+function EstadoAviso({ d, verEnvio }: { d: Diploma; verEnvio?: () => void }) {
   const a = d.aviso;
+  const ver = verEnvio && (
+    <button type="button" onClick={verEnvio} className="mt-0.5 text-[11px] font-medium text-primary underline-offset-2 hover:underline">
+      Ver envío
+    </button>
+  );
+  const destino = d.titularEmail ? <div className="max-w-[220px] truncate text-xs" title={d.titularEmail}>a {d.titularEmail}</div> : null;
+  const aprobado = a && (
+    <div className="max-w-[220px] truncate text-[11px] text-muted-foreground" title={a.por}>aprobado por {a.porNombre || a.por.replace(/\s*\(CRM\b[^)]*\)\s*$/i, '')}</div>
+  );
   if (!a && !delCrm(d)) {
     return (
-      <StatusDot tono="neutral" title={`Lo emitió ${d.emitidaPor || 'alguien'} fuera del CRM: nadie del CRM tiene que avisar. Si hace falta, «Reenviar».`}>
-        Emitido fuera del CRM
-      </StatusDot>
+      <div>
+        <StatusDot tono="neutral" title={`Lo emitió ${d.emitidaPor || 'alguien'} fuera del CRM: nadie del CRM tiene que avisar. Si hace falta, «Reenviar».`}>
+          Emitido fuera del CRM
+        </StatusDot>
+        {ver}
+      </div>
     );
   }
-  if (!a) return <StatusDot tono="warning">Pendiente de aviso</StatusDot>;
-  const detalle = <div className="mt-0.5 max-w-[180px] truncate text-[11px] text-muted-foreground" title={a.por}>{fecha(a.en)} · {a.por}</div>;
-  if (a.resultado === 'enviado') return <div><StatusDot tono="success">Enviado</StatusDot>{detalle}</div>;
-  if (a.resultado === 'correo_apagado') {
-    return <div><StatusDot tono="warning" title="Se aprobó el envío, pero el correo está apagado en el servidor de Certifex: no ha salido">Aviso aprobado (correo apagado)</StatusDot>{detalle}</div>;
+  if (!a) {
+    return (
+      <div>
+        <StatusDot tono="warning">Pendiente de aviso</StatusDot>
+        <div className="text-[11px] text-muted-foreground">Aún no se ha enviado{d.titularEmail ? ` a ${d.titularEmail}` : ''}</div>
+        {ver}
+      </div>
+    );
   }
-  if (a.resultado === 'sin_correo') return <div><StatusDot tono="danger" title="El alumno no tiene correo en Certifex">Sin correo</StatusDot>{detalle}</div>;
-  return <div><StatusDot tono="danger">Error al enviar</StatusDot>{detalle}</div>;
+  if (a.resultado === 'enviado') {
+    return <div><StatusDot tono="success">Enviado {elDiaALas(a.en)}</StatusDot>{destino}{aprobado}{ver}</div>;
+  }
+  return (
+    <div>
+      <StatusDot tono={a.resultado === 'correo_apagado' ? 'warning' : 'danger'}>No salió {elDiaALas(a.en)}</StatusDot>
+      <div className="text-[11px]">Motivo: {NO_SALIO[a.resultado] || a.resultado}</div>
+      {destino}{aprobado}{ver}
+    </div>
+  );
 }
 
 function IconoAccion({ etiqueta, onClick, children, disabled, peligro }: {
@@ -522,7 +563,9 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
   // Administración: todo. Con `soloEmitir`, solo lo de emitir; con `soloLectura`, nada.
   const administra = !soloLectura && !soloEmitir;
   const [params, setParams] = useSearchParams();
-  const pestana: PestanaDiplomas = (PESTANAS.find((p) => p.clave === params.get('pestana'))?.clave) ?? 'pendientes';
+  // «emitidos» es el nombre que se ve: también vale en la URL (la clave sigue siendo `enviados`).
+  const pestanaUrl = params.get('pestana') === 'emitidos' ? 'enviados' : params.get('pestana');
+  const pestana: PestanaDiplomas = (PESTANAS.find((p) => p.clave === pestanaUrl)?.clave) ?? 'pendientes';
   const irA = (p: PestanaDiplomas) => setParams(p === 'pendientes' ? {} : { pestana: p }, { replace: true });
 
   const [conexion, setConexion] = useState<ConexionCertifex | null>(null);
@@ -564,6 +607,31 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
   const [correoApagado, setCorreoApagado] = useState(false);
   const [exportando, setExportando] = useState(false);
   const [visor, setVisor] = useState<{ d: Pick<Diploma, 'nexpediente' | 'alumno' | 'titulacion' | 'centro' | 'aviso' | 'diplomaUrl' | 'imprenta'>; enviable: boolean } | null>(null);
+  // La ficha de un diploma tiene su propia dirección (05/11/2026): `?pestana=emitidos&exp=…`
+  // la abre directamente, con sus «Envíos», para pasar el enlace a quien lo necesite.
+  const expUrl = params.get('exp')?.trim().toUpperCase() || null;
+  const conExp = (exp: string | null) => setParams((prev) => {
+    const n = new URLSearchParams(prev);
+    if (exp) n.set('exp', exp); else n.delete('exp');
+    return n;
+  }, { replace: true });
+  const abrirFicha = (d: NonNullable<typeof visor>['d'], enviable: boolean) => { setVisor({ d, enviable }); conExp(d.nexpediente); };
+  const cerrarFicha = () => { setVisor(null); conExp(null); };
+  useEffect(() => {
+    if (!expUrl || visor?.d.nexpediente === expUrl) return;
+    let vivo = true;
+    Promise.resolve()
+      .then(() => diplomasApi.diplomas({ estado: 'todos', q: expUrl, pagina: 1, tam: 5 }))
+      .then((r) => {
+        const d = r?.data?.filas?.find((x) => x.nexpediente === expUrl);
+        if (!vivo) return;
+        if (d) setVisor({ d, enviable: !soloLectura && !d.revocada && !d.aviso && delCrm(d) });
+        else toast({ title: 'No se encontró ese diploma', description: `${expUrl} no existe o no es de tus campus.`, variant: 'destructive' });
+      })
+      .catch((e) => { if (vivo) toast({ title: 'No se pudo abrir el diploma', description: (e as Error).message, variant: 'destructive' }); });
+    return () => { vivo = false; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expUrl]);
   // Tras corregir, el PDF cambia: se pide otra vez sin caché.
   const [versiones, setVersiones] = useState<Record<string, number>>({});
   // «Editar»: revisar los datos de una solicitud antes de aprobarla.
@@ -1284,7 +1352,7 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
                 alternar={(k) => alternar(setElegidasAviso, k)}
                 todas={() => setElegidasAviso(elegidasAviso.size === despues.porAvisar.length ? new Set() : new Set(despues.porAvisar.map((c) => c.nexpediente!)))}
                 ocupado={trabajando}
-                verPdf={(c) => c.diploma && setVisor({ d: c.diploma, enviable: !soloLectura })}
+                verPdf={(c) => c.diploma && abrirFicha(c.diploma, !soloLectura)}
                 enviar={(exps) => setDialogo({ tipo: 'avisos', exps, reenvio: false })}
                 soloLectura={soloLectura}
               />
@@ -1499,7 +1567,7 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
                       <td className="px-2 py-3"><div className="max-w-[170px] truncate" title={d.titulacion}>{d.titulacion}</div><div className="text-xs text-muted-foreground">{nombreCampus(d.centro)}</div></td>
                       <td className="whitespace-nowrap px-2 py-3 text-xs">{fecha(d.emitidoEn)}<div className="max-w-[120px] truncate text-muted-foreground" title={d.emitidaPor ?? undefined}>{d.emitidaPor}</div></td>
                       {pestana === 'enviados' ? (
-                        <td className="px-2 py-3"><EstadoAviso d={d} /></td>
+                        <td className="px-2 py-3"><EstadoAviso d={d} verEnvio={() => abrirFicha(d, !soloLectura && !d.aviso && delCrm(d))} /></td>
                       ) : (
                         <>
                           <td className="whitespace-nowrap px-2 py-3 text-xs">{fecha(d.revocacion?.en)}<div className="max-w-[160px] truncate text-muted-foreground" title={d.revocacion?.por ?? undefined}>{d.revocacion?.por || '—'}</div></td>
@@ -1523,7 +1591,7 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
                             )
                           )}
                           {/* Revocado, Certifex ya no sirve su PDF (404): solo el enlace, que dice «revocado». */}
-                          {pestana === 'enviados' && <IconoAccion etiqueta="Ver PDF" onClick={() => setVisor({ d, enviable: !soloLectura && !d.aviso && delCrm(d) })}><FilePdf size={15} /></IconoAccion>}
+                          {pestana === 'enviados' && <IconoAccion etiqueta="Ver PDF" onClick={() => abrirFicha(d, !soloLectura && !d.aviso && delCrm(d))}><FilePdf size={15} /></IconoAccion>}
                           <IconoAccion etiqueta={d.verificarUrl ? 'Copiar enlace de verificación' : 'Sin enlace público: Certifex no tiene una dirección que abra desde fuera'} disabled={!d.verificarUrl} onClick={() => copiarEnlace(d)}><LinkSimple size={15} /></IconoAccion>
                           {pestana === 'enviados' && administra && (
                             <>
@@ -1766,8 +1834,8 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
         <VisorPdf
           d={visor.d}
           version={versiones[visor.d.nexpediente]}
-          alCerrar={() => setVisor(null)}
-          alEnviar={visor.enviable && !soloLectura ? () => { const exp = visor.d.nexpediente; setVisor(null); setDialogo({ tipo: 'avisos', exps: [exp], reenvio: false }); } : undefined}
+          alCerrar={cerrarFicha}
+          alEnviar={visor.enviable && !soloLectura ? () => { const exp = visor.d.nexpediente; cerrarFicha(); setDialogo({ tipo: 'avisos', exps: [exp], reenvio: false }); } : undefined}
           sinImprenta={!administra}
         />
       )}
@@ -2527,6 +2595,8 @@ function VisorPdf({ d, version, alCerrar, alEnviar, sinImprenta = false }: {
               {alEnviar && <Button size="sm" disabled={!pdf} onClick={alEnviar}><PaperPlaneTilt size={14} className="mr-1.5" /> Está bien: enviar al alumno</Button>}
             </div>
           </div>
+          {/* Justificante del envío (05/11/2026): los correos del diploma según Brevo. */}
+          <EnviosBrevo nexpediente={d.nexpediente} />
           <div className="flex-1 overflow-auto p-2 sm:p-4">
             {error ? (
               <div className="space-y-3 rounded-md border border-dashed border-border p-6 text-center">
