@@ -1,5 +1,5 @@
 import * as Conv from './convocatoria.service.js';
-import { listaDelAmbito } from '../../shared/utils/ambito.js';
+import { listaDelAmbito, campusDeTodos } from '../../shared/utils/ambito.js';
 import {
   crearConvocatoriaSchema, editarConvocatoriaSchema,
   ofrecerSchema, actualizarOfrecimientoSchema,
@@ -22,6 +22,18 @@ const proyectos = (req) => listaDelAmbito(req);
 export async function listar(req, res, next) {
   try {
     const data = await Conv.listar(req.projectId, {
+      incluirInactivas: req.query.incluirInactivas === 'true',
+    });
+    res.json({ success: true, data });
+  } catch (err) { next(err); }
+}
+
+// GET /api/convocatorias/ambito — las de todos los campus de quien pide, para
+// «Todos» o una empresa (#218, Diego 04/11). Crear sigue siendo de un campus.
+export async function listarDelAmbito(req, res, next) {
+  try {
+    const campus = (await listaDelAmbito(req)) || await campusDeTodos(req);
+    const data = await Conv.listar(campus, {
       incluirInactivas: req.query.incluirInactivas === 'true',
     });
     res.json({ success: true, data });

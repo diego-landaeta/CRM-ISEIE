@@ -24,15 +24,18 @@ const COMPRO = `EXISTS (
 const COLS = `id, project_id, nombre, descripcion, activa,
               tope_nueva, tope_habilitada, nota_interna, created_at, updated_at`;
 
+// Un campus o varios (#218: con «Todos» o una empresa, los del ámbito). Cada
+// convocatoria lleva el nombre de su campus, para la columna «Campus».
 export async function listar(projectId, { incluirInactivas = false } = {}) {
   const { rows } = await query(
     `SELECT ${COLS},
+            (SELECT nombre FROM projects p WHERE p.id = convocatorias.project_id) AS proyecto_nombre,
             (SELECT count(*)::int FROM convocatoria_ofrecimientos o
               WHERE o.convocatoria_id = convocatorias.id) AS ofrecimientos
        FROM convocatorias
-      WHERE project_id = $1 ${incluirInactivas ? '' : 'AND activa = true'}
+      WHERE project_id = ANY($1::int[]) ${incluirInactivas ? '' : 'AND activa = true'}
       ORDER BY activa DESC, nombre`,
-    [projectId]
+    [[].concat(projectId).map(Number)]
   );
   return rows;
 }
@@ -149,6 +152,7 @@ export async function pendientesDeRespuesta({ projectIds, asesoraId }) {
   const { rows } = await query(
     `SELECT ${COLS_OFR}, c.nombre AS convocatoria, l.nombre AS lead_nombre,
             u.nombre AS gestora,
+            (SELECT nombre FROM projects p WHERE p.id = o.project_id) AS proyecto_nombre,
             (CURRENT_DATE - o.fecha_resultado) AS dias_de_retraso
        FROM convocatoria_ofrecimientos o
        JOIN convocatorias c ON c.id = o.convocatoria_id

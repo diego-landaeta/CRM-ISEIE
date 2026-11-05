@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-771 rutas en 58 módulos, y 28 acciones con condición dentro de una ruta.
+775 rutas en 58 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -232,6 +232,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | ofrecer | `POST /api/convocatorias/:id/ofrecer` | sesión | superadmin, admin, gestor, soporte, project_manager | `convocatorias.ofrecer` |
 | actualizarOfrecimiento | `PATCH /api/convocatorias/ofrecimientos/:id` | sesión | superadmin, admin, gestor, soporte, project_manager | `convocatorias.ofrecer` |
 | listar | `GET /api/convocatorias/` | sesión · projectAccess (campus) | superadmin, admin, gestor, soporte, project_manager | `convocatorias.view` |
+| listarDelAmbito | `GET /api/convocatorias/ambito` | (no existía) | (ruta nueva) | `convocatorias.view` |
 | crear | `POST /api/convocatorias/` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo · projectAccess (campus) | superadmin, admin, soporte | `convocatorias.create` |
 | editar | `PATCH /api/convocatorias/:id` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo · projectAccess (campus) | superadmin, admin, soporte | `convocatorias.edit` |
 
@@ -718,6 +719,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
 |---|---|---|---|---|
 | getTree | `GET /api/product-categories/tree` | sesión | superadmin, admin, gestor, soporte, project_manager | `products.view` |
+| arbolesDelAmbito | `GET /api/product-categories/ambito` | (no existía) | (ruta nueva) | `products.view` |
 | listByProject | `GET /api/product-categories/project/:projectId` | sesión | superadmin, admin, gestor, soporte, project_manager | `products.view` |
 | getAncestors | `GET /api/product-categories/:id/ancestors` | sesión | superadmin, admin, gestor, soporte, project_manager | `products.view` |
 | create | `POST /api/product-categories/` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `products.categorias` |
@@ -729,6 +731,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
 |---|---|---|---|---|
 | list | `GET /api/products/` | sesión · projectAccess (campus) | superadmin, admin, gestor, soporte, project_manager | `products.view` |
+| list | `GET /api/products/ambito` | (no existía) | (ruta nueva) | `products.view` |
 | exportAll | `GET /api/products/export` | sesión · projectAccess (campus) | superadmin, admin, gestor, soporte, project_manager | `products.export` |
 | leadsStats | `GET /api/products/leads-stats` | sesión · projectAccess (campus) | superadmin, admin, gestor, soporte, project_manager | `products.view` |
 | getById | `GET /api/products/:id` | sesión · projectAccess (campus) | superadmin, admin, gestor, soporte, project_manager | `products.view` |
@@ -775,6 +778,9 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | listar | `GET /api/registro/` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `registro.view` |
 | fuentes | `GET /api/registro/fuentes` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `registro.view` |
 | csv | `GET /api/registro/csv` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `registro.view` |
+| listar · lo que no es de ningún campus: errores y tareas programadas | `GET /api/registro/` | (no existía) | (ruta nueva) | `registro.sistema` |
+| fuentes · lo que no es de ningún campus: errores y tareas programadas | `GET /api/registro/fuentes` | (no existía) | (ruta nueva) | `registro.sistema` |
+| csv · lo que no es de ningún campus: errores y tareas programadas | `GET /api/registro/csv` | (no existía) | (ruta nueva) | `registro.sistema` |
 
 ## reports
 
@@ -1095,6 +1101,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | listMappings | `GET /api/woocommerce/mappings` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `woocommerce.view` |
 | setMappings | `PUT /api/woocommerce/mappings` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `woocommerce.edit` |
 | listRuns | `GET /api/woocommerce/runs` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `woocommerce.view` |
+| estado | `GET /api/woocommerce/estado` | (no existía) | (ruta nueva) | `woocommerce.view` |
 | getCurrentRun | `GET /api/woocommerce/runs/current` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `woocommerce.view` |
 | importNow | `POST /api/woocommerce/runs/start` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `woocommerce.sync` |
 | autoDiscoverCpts | `POST /api/woocommerce/auto-discover-cpts` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `woocommerce.sync` |
@@ -1537,7 +1544,8 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver el registro | `registro.view` | Quién cambió qué y cuándo. | Admin, Soporte, Project manager |  |
+| Ver el registro | `registro.view` | Quién cambió qué y cuándo (lo de sus campus). | Admin, Soporte, Project manager |  |
+| Ver lo del sistema en el registro | `registro.sistema` | Lo que no es de ningún campus: errores y tareas programadas. | Soporte | `registro.view` |
 
 ### Estado del sistema
 

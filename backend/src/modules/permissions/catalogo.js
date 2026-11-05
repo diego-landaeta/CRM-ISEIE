@@ -505,7 +505,12 @@ export const SECCIONES = [
       },
       {
         clave: 'registro', nombre: 'Registro', acciones: [
-          a('view', 'Ver el registro', 'Quién cambió qué y cuándo.', yPM(ADMIN_SOPORTE)),
+          // El project manager también lo ve, de sus campus (Diego, 04/11, pm-ve-todo).
+          a('view', 'Ver el registro', 'Quién cambió qué y cuándo (lo de sus campus).', yPM(ADMIN_SOPORTE)),
+          // Diego, 03/11 (#620): lo que no es de ningún campus —errores del servidor,
+          // tareas programadas— solo para soporte (y super admin). Los inicios de sesión
+          // de la gente de sus campus los ve quien ve el registro (Diego, 04/11).
+          a('sistema', 'Ver lo del sistema en el registro', 'Lo que no es de ningún campus: errores y tareas programadas.', SOPORTE, { requiere: ['registro.view'] }),
         ],
       },
       {

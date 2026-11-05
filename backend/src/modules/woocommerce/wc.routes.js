@@ -19,6 +19,9 @@ router.get('/mappings', puede('woocommerce.view'), projectAccess, ctrl.listMappi
 router.put('/mappings', puede('woocommerce.edit'), projectAccess, ctrl.setMappings);
 
 router.get('/runs', puede('woocommerce.view'), projectAccess, ctrl.listRuns);
+// Con «Todos» o una empresa (#218): el estado de cada campus de quien pide, solo
+// para ver. Sin `projectAccess`: el controlador recorta por ámbito.
+router.get('/estado', puede('woocommerce.view'), ctrl.estado);
 router.get('/runs/current', puede('woocommerce.view'), projectAccess, ctrl.getCurrentRun);
 router.post('/runs/start', puede('woocommerce.sync'), projectAccess, ctrl.importNow);
 router.post('/auto-discover-cpts', puede('woocommerce.sync'), projectAccess, ctrl.autoDiscoverCpts);

@@ -1,15 +1,29 @@
 import * as model from './registro.model.js';
 import { listarSchema } from './registro.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
-import { campusParaRecortar } from '../../shared/utils/ambito.js';
+import { listaDelAmbito } from '../../shared/utils/ambito.js';
+import { tienePermiso } from '../../shared/middleware/permissions.js';
+
+/**
+ * Qué puede ver quien mira (Diego, 03/11, #620): lo que tiene campus, solo de
+ * los suyos (`listaDelAmbito`: super admin y soporte, todos); lo que no tiene
+ * campus —errores, tareas programadas—, solo con `registro.sistema`; un inicio de
+ * sesión sin campus, si la persona es de sus campus (Diego, 04/11).
+ * La lista, las fuentes y el CSV usan lo mismo.
+ */
+async function alcance(req) {
+  return {
+    campus: await listaDelAmbito(req),
+    sistema: await tienePermiso(req, 'registro.sistema'),
+  };
+}
 
 /** El registro, para la pantalla. */
 export async function listar(req, res, next) {
   try {
     const parsed = listarSchema.safeParse(req.query);
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
-    // De sus campus, salvo super admin y soporte (Diego, 04/11).
-    const r = await model.listar({ ...parsed.data, campus: await campusParaRecortar(req) });
+    const r = await model.listar({ ...parsed.data, ...(await alcance(req)) });
     res.json({ success: true, data: r });
   } catch (err) { next(err); }
 }
@@ -18,9 +32,11 @@ export async function listar(req, res, next) {
 export async function fuentes(req, res, next) {
   try {
     const hay = await model.tablasQueHay();
+    const { sistema } = await alcance(req);
     res.json({
       success: true,
-      data: model.NOMBRES_FUENTE.map((n) => ({
+      // Sin `registro.sistema`, las fuentes que nunca traen campus no se ofrecen.
+      data: model.NOMBRES_FUENTE.filter((n) => sistema || !model.FUENTES[n].sinCampus).map((n) => ({
         nombre: n,
         titulo: model.FUENTES[n].titulo,
         sistema: model.FUENTES[n].sistema,
@@ -52,7 +68,8 @@ export async function csv(req, res, next) {
   try {
     const parsed = listarSchema.safeParse(req.query);
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
-    const { filas } = await model.listar({ ...parsed.data, limite: model.TOPE, campus: await campusParaRecortar(req) });
+    // El mismo recorte que la lista: se descarga lo que se ve.
+    const { filas } = await model.listar({ ...parsed.data, ...(await alcance(req)), limite: model.TOPE });
 
     const cabecera = ['Cuándo', 'Fuente', 'Usuario', 'Acción', 'Qué pasó', 'Entidad', 'Id', 'Correcto'];
     const lineas = [cabecera.map(campo).join(';')];

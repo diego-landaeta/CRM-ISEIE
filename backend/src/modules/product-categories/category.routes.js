@@ -9,6 +9,9 @@ router.use(verifyToken);
 
 // Solo de un campus de quien pide (projectAccess): antes valía el id de cualquiera.
 router.get('/tree', puede('products.view'), projectAccess, ctrl.getTree);
+// Con «Todos» o una empresa (#218): el árbol de cada campus de quien pide. Antes
+// de `/:id/...`; sin `projectAccess`, el controlador recorta por ámbito.
+router.get('/ambito', puede('products.view'), ctrl.arbolesDelAmbito);
 router.get('/project/:projectId', puede('products.view'), ctrl.listByProject);
 router.get('/:id/ancestors', puede('products.view'), ctrl.getAncestors);
 router.post('/', puede('products.categorias'), ctrl.create);

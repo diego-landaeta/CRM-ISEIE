@@ -104,7 +104,33 @@ export async function listRuns(projectId) {
   return rows;
 }
 
-// Run mas reciente (en curso si hay uno corriendo, o el ultimo finalizado)
+/*
+  EL ESTADO DE CADA CAMPUS, PARA «TODOS» O UNA EMPRESA (#218, Diego 04/11).
+  Solo para ver: si hay tienda conectada y cómo fue la última importación.
+  Nunca las claves ni la dirección de la tienda: para eso se entra en el campus.
+*/
+export async function estadoDeLosCampus(projectIds) {
+  const { rows } = await query(
+    `SELECT p.id, p.nombre,
+            (c.id IS NOT NULL) AS conectado,
+            COALESCE(c.active, false) AS activo,
+            c.last_sync_at,
+            r.status AS ultima_estado, r.started_at AS ultima_inicio, r.finished_at AS ultima_fin,
+            r.total_fetched, r.total_created, r.total_updated
+       FROM projects p
+       LEFT JOIN wc_credentials c ON c.project_id = p.id
+       LEFT JOIN LATERAL (
+         SELECT status, started_at, finished_at, total_fetched, total_created, total_updated
+           FROM wc_import_runs WHERE project_id = p.id ORDER BY started_at DESC LIMIT 1
+       ) r ON TRUE
+      WHERE p.id = ANY($1::int[]) AND p.active
+      ORDER BY p.nombre`,
+    [projectIds]
+  );
+  return rows;
+}
+
+// Run más reciente (en curso si hay uno corriendo, o el último finalizado)
 export async function getCurrentRun(projectId) {
   const { rows } = await query(
     `SELECT id, status, total_fetched, total_created, total_updated, total_skipped,

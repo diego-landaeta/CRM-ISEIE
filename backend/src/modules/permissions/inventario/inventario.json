@@ -3004,6 +3004,28 @@
   "puertas": []
  },
  {
+  "id": "GET /api/convocatorias/ambito",
+  "tipo": "ruta",
+  "modulo": "convocatorias",
+  "metodo": "GET",
+  "ruta": "/api/convocatorias/ambito",
+  "relativa": "GET /ambito",
+  "controlador": "listarDelAmbito",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "convocatorias.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "POST /api/convocatorias/",
   "tipo": "ruta",
   "modulo": "convocatorias",
@@ -10313,6 +10335,28 @@
   "puertas": []
  },
  {
+  "id": "GET /api/product-categories/ambito",
+  "tipo": "ruta",
+  "modulo": "product-categories",
+  "metodo": "GET",
+  "ruta": "/api/product-categories/ambito",
+  "relativa": "GET /ambito",
+  "controlador": "arbolesDelAmbito",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "products.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/product-categories/project/:projectId",
   "tipo": "ruta",
   "modulo": "product-categories",
@@ -10444,6 +10488,28 @@
    {
     "tipo": "alcance",
     "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/products/ambito",
+  "tipo": "ruta",
+  "modulo": "products",
+  "metodo": "GET",
+  "ruta": "/api/products/ambito",
+  "relativa": "GET /ambito",
+  "controlador": "list",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "products.view"
+    ]
    }
   ],
   "puertas": []
@@ -16419,6 +16485,28 @@
   "puertas": []
  },
  {
+  "id": "GET /api/woocommerce/estado",
+  "tipo": "ruta",
+  "modulo": "woocommerce",
+  "metodo": "GET",
+  "ruta": "/api/woocommerce/estado",
+  "relativa": "GET /estado",
+  "controlador": "estado",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "woocommerce.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/woocommerce/runs/current",
   "tipo": "ruta",
   "modulo": "woocommerce",
@@ -16985,6 +17073,42 @@
   "condicion": "webhooks para todas las empresas",
   "regla": "soloSuperadmin",
   "puerta": "webhooks-salientes.todas"
+ },
+ {
+  "id": "GET /api/registro/ · registro.sistema",
+  "tipo": "condicion",
+  "modulo": "registro",
+  "metodo": "GET",
+  "ruta": "/api/registro/",
+  "controlador": "listar",
+  "publica": false,
+  "condicion": "lo que no es de ningún campus: errores y tareas programadas",
+  "regla": "adminYSoporte",
+  "puerta": "registro.sistema"
+ },
+ {
+  "id": "GET /api/registro/fuentes · registro.sistema",
+  "tipo": "condicion",
+  "modulo": "registro",
+  "metodo": "GET",
+  "ruta": "/api/registro/fuentes",
+  "controlador": "fuentes",
+  "publica": false,
+  "condicion": "lo que no es de ningún campus: errores y tareas programadas",
+  "regla": "adminYSoporte",
+  "puerta": "registro.sistema"
+ },
+ {
+  "id": "GET /api/registro/csv · registro.sistema",
+  "tipo": "condicion",
+  "modulo": "registro",
+  "metodo": "GET",
+  "ruta": "/api/registro/csv",
+  "controlador": "csv",
+  "publica": false,
+  "condicion": "lo que no es de ningún campus: errores y tareas programadas",
+  "regla": "adminYSoporte",
+  "puerta": "registro.sistema"
  },
  {
   "id": "GET /api/informes/mi-puesto · reports.puesto_ajeno",
