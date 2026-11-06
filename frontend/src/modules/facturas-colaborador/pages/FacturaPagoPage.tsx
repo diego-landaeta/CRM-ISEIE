@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { CheckCircle, Star } from '@phosphor-icons/react';
 import { Button } from '@/shared/components/ui/button';
 import {
@@ -30,7 +30,9 @@ export default function FacturaPagoPage() {
   const [errorOpinion, setErrorOpinion] = useState<string | null>(null);
   const [confirmando, setConfirmando] = useState(false);
   const [errorConfirmar, setErrorConfirmar] = useState<string | null>(null);
-  const [diciendoQueNo, setDiciendoQueNo] = useState(false);
+  // Con ?no=1 (el botón «No lo he recibido» del correo) abre ya el cuadro para contarlo.
+  const [params] = useSearchParams();
+  const [diciendoQueNo, setDiciendoQueNo] = useState(params.get('no') === '1');
   const [comentarioNo, setComentarioNo] = useState('');
   const [avisando, setAvisando] = useState(false);
 
