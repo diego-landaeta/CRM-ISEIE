@@ -8,7 +8,7 @@ import { saveLocal, getLocal, deleteLocal } from '../../shared/services/localSto
 import { createInvoiceSchema, setSequenceSchema, updateConfigSchema, issuerSchema, cobrarProformaSchema } from './invoices.validation.js';
 import { proyectosDelAmbito, veTodoElCrm, campusDeLaPersona, campusDeTodos } from '../../shared/utils/ambito.js';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
-import { soloLoSuyo } from '../../shared/utils/roles.js';
+import { alcanceComercial } from '../../shared/utils/roles.js';
 
 function logoExt(mime) {
   if (mime === 'image/png') return 'png';
@@ -65,7 +65,8 @@ export async function list(req, res, next) {
     }
     const projectIds = todos ? await campusDeTodos(req) : await campusPermitidos(req, pid);
     // Gestor: solo ve SUS facturas (las de sus leads). Admin/superadmin, todas.
-    const responsableId = soloLoSuyo(req.user) ? req.user.userId : null;
+    // Con equipo comercial (09/11/2026), las suyas y las de sus gestoras.
+    const responsableId = await alcanceComercial(req.user);
     const data = await model.list({ projectId: pid, projectIds, issuerId: issuerId && isAdmin ? issuerId : null,
       estado, search, from, to, tipo, responsableId,
       page: Number(page) || 1, limit: Math.min(Number(limit) || 50, 200) });

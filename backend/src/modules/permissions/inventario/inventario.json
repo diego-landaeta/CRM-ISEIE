@@ -14985,6 +14985,50 @@
   "puertas": []
  },
  {
+  "id": "GET /api/users/:id/equipo-comercial",
+  "tipo": "ruta",
+  "modulo": "users",
+  "metodo": "GET",
+  "ruta": "/api/users/:id/equipo-comercial",
+  "relativa": "GET /:id/equipo-comercial",
+  "controlador": "getEquipoComercial",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "users.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PUT /api/users/:id/equipo-comercial",
+  "tipo": "ruta",
+  "modulo": "users",
+  "metodo": "PUT",
+  "ruta": "/api/users/:id/equipo-comercial",
+  "relativa": "PUT /:id/equipo-comercial",
+  "controlador": "setEquipoComercial",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "equipos.gestionar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "POST /api/users/:id/availability-blocks",
   "tipo": "ruta",
   "modulo": "users",

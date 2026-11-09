@@ -110,7 +110,8 @@ export async function cola({ projectId, responsableId, estado, productoId, soloS
   const cond = ['l.deleted_at IS NULL', "l.status NOT IN ('convertido', 'no_interesado')"];
   const params = [];
   if (projectId) { params.push(projectId); cond.push(`l.project_id = $${params.length}`); }
-  if (responsableId) { params.push(responsableId); cond.push(`l.responsable_id = $${params.length}`); }
+  // Una o varias (el equipo de una administradora, 09/11/2026).
+  if (responsableId) { params.push([].concat(responsableId).map(Number)); cond.push(`l.responsable_id = ANY($${params.length}::int[])`); }
   if (estado) { params.push(estado); cond.push(`l.status = $${params.length}`); }
   if (productoId) { params.push(productoId); cond.push(`l.producto_interes_id = $${params.length}`); }
   // Sin telefono no hay nada que hacer aqui.

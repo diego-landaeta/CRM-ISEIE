@@ -1,6 +1,7 @@
 import * as userService from './user.service.js';
 import * as userModel from './user.model.js';
-import { createUserSchema, updateUserSchema, listUsersSchema, adminSetPasswordSchema, activityLogSchema, buscarUsersSchema } from './user.validation.js';
+import { createUserSchema, updateUserSchema, listUsersSchema, adminSetPasswordSchema, activityLogSchema, buscarUsersSchema, equipoComercialSchema } from './user.validation.js';
+import { equipoComercial, ponerEquipoComercial } from './user.equipo.js';
 import { campusParaRecortar } from '../../shared/utils/ambito.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { veTodoElCrm, campusDeLaPersona } from '../../shared/utils/ambito.js';
@@ -400,5 +401,37 @@ export async function cambiarMiAviso(req, res, next) {
         [req.user.userId, aviso]);
     }
     res.json({ success: true, data: { aviso, encendido: Boolean(encendido) } });
+  } catch (err) { next(err); }
+}
+
+/**
+ * GET /api/users/:id/equipo-comercial — las gestoras que lleva esa persona y
+ * quién más podría entrar (09/11/2026). Quien puede ver usuarios, dentro de
+ * sus campus.
+ */
+export async function getEquipoComercial(req, res, next) {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    await exigirPersonaDeSusCampus(req, id);
+    res.json({ success: true, data: await equipoComercial(id) });
+  } catch (err) { next(err); }
+}
+
+/**
+ * PUT /api/users/:id/equipo-comercial { gestoraIds } — cambia el equipo entero
+ * (`equipos.gestionar`, de serie solo super admin). Surte efecto en la
+ * siguiente petición de esa persona.
+ */
+export async function setEquipoComercial(req, res, next) {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    const parsed = equipoComercialSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
+    }
+    await exigirPersonaDeSusCampus(req, id);
+    res.json({ success: true, data: await ponerEquipoComercial(id, parsed.data.gestoraIds, req.user.userId) });
   } catch (err) { next(err); }
 }

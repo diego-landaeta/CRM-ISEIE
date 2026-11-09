@@ -1,4 +1,4 @@
-import { construirAmbito, huella, pareceToken, puedeUsarMcp } from './mcp.acceso.js';
+import { construirAmbito, alcanceDelMcp, huella, pareceToken, puedeUsarMcp } from './mcp.acceso.js';
 import * as model from './mcp.model.js';
 import * as conexiones from './mcp.conexiones.js';
 import * as desbloqueo from './mcp.desbloqueo.js';
@@ -125,7 +125,7 @@ async function seguir(req, res, next, vivo, conexion) {
       if (limite.ids) proyectos = proyectos.filter((p) => limite.ids.includes(Number(p.id)));
     }
     const origen = { ip: req.ip, cliente: req.headers['user-agent'] || null };
-    req.mcp = { ambito: construirAmbito(user, proyectos), tokenId: vivo.token_id, conexion, origen };
+    req.mcp = { ambito: construirAmbito(user, proyectos, await alcanceDelMcp(user)), tokenId: vivo.token_id, conexion, origen };
     if (conexion) conexiones.marcarUso(conexion.id).catch(() => {});
     // Desde dónde (#194). req.ip ya viene del X-Forwarded-For de nginx
     // (`trust proxy`); el cliente es el User-Agent: «Claude-User» desde

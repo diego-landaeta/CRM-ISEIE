@@ -554,6 +554,13 @@ export const SECCIONES = [
         ],
       },
       {
+        // Carlos, 09/11/2026: una administradora puede llevar a unas gestoras
+        // concretas y ver lo suyo (migración 274, `alcanceComercial`).
+        clave: 'equipos', nombre: 'Equipos comerciales', acciones: [
+          a('gestionar', 'Equipo comercial de una administradora', 'Decidir qué gestoras tiene a su cargo una administradora.', NADIE, { requiere: ['users.view'] }),
+        ],
+      },
+      {
         clave: 'roles', nombre: 'Roles y permisos', acciones: [
           a('view', 'Ver roles', 'Qué trae cada rol y los roles a medida.', yPM(ADMIN)),
           // Diego, 26/10: el admin SIGUE cambiando lo que trae cada rol y los

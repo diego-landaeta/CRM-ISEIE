@@ -6,7 +6,7 @@ import { proyectosDelAmbito, comoLista } from '../../shared/utils/ambito.js';
 import { actividadEnWhatsapp } from './actividad.model.js';
 import { usuarioObjetivo } from './chat.controller.js';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
-import { soloLoSuyo } from '../../shared/utils/roles.js';
+import { alcanceComercial, personasDentro } from '../../shared/utils/roles.js';
 
 function proyecto(req) {
   const p = req.query.projectId || req.body?.projectId;
@@ -155,9 +155,10 @@ export async function cola(req, res, next) {
   try {
     // Una gestora ve SU cola, ignorando lo que pida por query. Un admin puede
     // mirar la de quien quiera, o la de todos si no pide a nadie.
-    const responsableId = soloLoSuyo(req.user)
-      ? req.user.userId
-      : (req.query.responsableId ? parseInt(req.query.responsableId) : null);
+    // Con equipo comercial (09/11/2026), la suya y la de sus gestoras.
+    const alcance = await alcanceComercial(req.user);
+    const pedido = req.query.responsableId ? parseInt(req.query.responsableId) : null;
+    const responsableId = alcance ? personasDentro(alcance, pedido) : pedido;
 
     res.json({ success: true, data: await model.cola({
       projectId: proyecto(req),

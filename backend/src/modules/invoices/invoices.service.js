@@ -8,7 +8,7 @@ import { getLocal } from '../../shared/services/localStorage.service.js';
 import * as integrationsModel from '../integrations/integrations.model.js';
 import * as model from './invoices.model.js';
 import { query } from '../../shared/config/db.js';
-import { soloLoSuyo } from '../../shared/utils/roles.js';
+import { alcanceComercial } from '../../shared/utils/roles.js';
 
 const PDF_DIR = process.env.INVOICES_PDF_DIR || path.join(process.cwd(), 'uploads', 'invoices');
 
@@ -896,7 +896,9 @@ export async function cobrarProforma(invoiceId, { importe, fecha, metodo, notas,
   if (!(await model.tieneLaClave(user.userId, 'facturas.cola'))) {
     throw new AppError('Solo quien gestiona la facturación puede pasar una proforma a factura.', 403, 'FORBIDDEN');
   }
-  if (soloLoSuyo(user) && !(await model.esProformaDe(user.userId, invoiceId))) {
+  // Las suyas; con equipo comercial (09/11/2026), también las de sus gestoras.
+  const alcance = await alcanceComercial(user);
+  if (alcance && !(await model.esProformaDe(alcance, invoiceId))) {
     throw new AppError('Solo puedes cobrar tus propias proformas.', 403, 'FORBIDDEN');
   }
   const motivo = await model.motivoParaNoCobrarProforma(prof, { importe, fecha });

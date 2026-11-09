@@ -790,8 +790,9 @@ export async function findAll({ projectId, projectIds, status, pasoProceso, resp
   if (unassigned) {
     conditions.push(`l.responsable_id IS NULL`);
   } else if (responsableId) {
-    conditions.push(`l.responsable_id = $${paramIdx++}`);
-    params.push(responsableId);
+    // Una persona o una lista (el equipo de una administradora, 09/11/2026).
+    conditions.push(`l.responsable_id = ANY($${paramIdx++}::int[])`);
+    params.push([].concat(responsableId).map(Number));
   }
   if (canal) {
     conditions.push(`EXISTS (SELECT 1 FROM lead_utms lu WHERE lu.lead_id = l.id AND lu.canal_detectado = $${paramIdx++})`);
@@ -1306,11 +1307,15 @@ export async function getLeadProjectId(leadId) {
 // ============================================================
 
 // Panel "Hoy" - actividad del dia, reminders pendientes, alertas
-export async function getTodaySummary({ userId, role, soloSuyo, projectId, projectIds = null }) {
+export async function getTodaySummary({ userId, role, soloSuyo, personas, projectId, projectIds = null }) {
   // Usamos parametros para evitar SQL injection
   // Solo lo suyo: la gestora, el project manager y quien tiene la gestora añadida (02/11,
   // `soloLoSuyo` de shared/utils/roles.js). Sin `soloSuyo`, por el rol, como antes.
-  const userIdParam = (soloSuyo ?? role === 'gestor') ? userId : null;
+  // `personas` (09/11/2026): el alcance comercial ya calculado --ella sola, o
+  // ella y su equipo (`alcanceComercial`)--. null = sin límite por persona.
+  const userIdParam = personas !== undefined
+    ? (Array.isArray(personas) && personas.length ? personas.map(Number) : null)
+    : ((soloSuyo ?? role === 'gestor') ? [Number(userId)] : null);
   // Uno o varios campus en la MISMA consulta (#224). Con una empresa elegida
   // el Dashboard pedia esto una vez por campus —siete con CEDIA, cada una con
   // seis consultas seguidas— y sumaba en el navegador. Ahora es una sola
@@ -1327,7 +1332,7 @@ export async function getTodaySummary({ userId, role, soloSuyo, projectId, proje
      JOIN leads l ON l.id = lr.lead_id
      WHERE lr.completado = false
        AND lr.fecha_recordatorio <= CURRENT_DATE
-       AND ($1::int IS NULL OR lr.created_by = $1)
+       AND ($1::int[] IS NULL OR lr.created_by = ANY($1::int[]))
        AND ($2::int[] IS NULL OR l.project_id = ANY($2::int[]))
      ORDER BY lr.fecha_recordatorio ASC, lr.id DESC
      LIMIT 20`,
@@ -1337,7 +1342,7 @@ export async function getTodaySummary({ userId, role, soloSuyo, projectId, proje
   const { rows: nuevosHoy } = await query(
     `SELECT COUNT(*) FROM leads l
      WHERE l.fecha_solicitud::date = CURRENT_DATE
-       AND ($1::int IS NULL OR l.responsable_id = $1)
+       AND ($1::int[] IS NULL OR l.responsable_id = ANY($1::int[]))
        AND ($2::int[] IS NULL OR l.project_id = ANY($2::int[]))`,
     [userIdParam, pidParam]
   );
@@ -1345,7 +1350,7 @@ export async function getTodaySummary({ userId, role, soloSuyo, projectId, proje
   const { rows: nuevosSemana } = await query(
     `SELECT COUNT(*) FROM leads l
      WHERE l.fecha_solicitud >= CURRENT_DATE - INTERVAL '7 days'
-       AND ($1::int IS NULL OR l.responsable_id = $1)
+       AND ($1::int[] IS NULL OR l.responsable_id = ANY($1::int[]))
        AND ($2::int[] IS NULL OR l.project_id = ANY($2::int[]))`,
     [userIdParam, pidParam]
   );
@@ -1356,7 +1361,7 @@ export async function getTodaySummary({ userId, role, soloSuyo, projectId, proje
      LEFT JOIN projects p ON p.id = l.project_id
      WHERE l.status NOT IN ('convertido', 'no_interesado')
        AND EXTRACT(DAY FROM NOW() - GREATEST(l.updated_at, COALESCE((SELECT MAX(fecha) FROM lead_interactions WHERE lead_id = l.id), l.created_at))) > p.dias_alerta_inactividad
-       AND ($1::int IS NULL OR l.responsable_id = $1)
+       AND ($1::int[] IS NULL OR l.responsable_id = ANY($1::int[]))
        AND ($2::int[] IS NULL OR l.project_id = ANY($2::int[]))`,
     [userIdParam, pidParam]
   );
@@ -1368,7 +1373,7 @@ export async function getTodaySummary({ userId, role, soloSuyo, projectId, proje
      WHERE c.importe_pagado < c.importe_total
        AND c.fecha_compromiso_pago IS NOT NULL
        AND c.fecha_compromiso_pago < CURRENT_DATE
-       AND ($1::int IS NULL OR l.responsable_id = $1)
+       AND ($1::int[] IS NULL OR l.responsable_id = ANY($1::int[]))
        AND ($2::int[] IS NULL OR c.project_id = ANY($2::int[]))`,
     [userIdParam, pidParam]
   );
@@ -1379,7 +1384,7 @@ export async function getTodaySummary({ userId, role, soloSuyo, projectId, proje
      JOIN conversions c ON c.id = cp.conversion_id
      LEFT JOIN leads l ON l.id = c.lead_id
      WHERE cp.fecha = CURRENT_DATE
-       AND ($1::int IS NULL OR l.responsable_id = $1)
+       AND ($1::int[] IS NULL OR l.responsable_id = ANY($1::int[]))
        AND ($2::int[] IS NULL OR c.project_id = ANY($2::int[]))`,
     [userIdParam, pidParam]
   );
@@ -1402,7 +1407,7 @@ export async function getStats(projectId, { responsableId = null, dateFrom = nul
   const params = [Array.isArray(projectId) ? projectId.map(Number) : [Number(projectId)]];
   let idx = 2;
   const extra = [];
-  if (responsableId) { extra.push(`responsable_id = $${idx++}`); params.push(responsableId); }
+  if (responsableId) { extra.push(`responsable_id = ANY($${idx++}::int[])`); params.push([].concat(responsableId).map(Number)); }
   if (productId)     { extra.push(`producto_interes_id = $${idx++}`); params.push(productId); }
   const APP_TZ = process.env.APP_TIMEZONE || 'Europe/Madrid';
   if (dateFrom) {
@@ -1448,8 +1453,8 @@ export async function getDashboardSummary(projectId, { days = 30, responsableId 
   const params = [projectId, days];
   let respFilter = '';
   if (responsableId) {
-    params.push(responsableId);
-    respFilter = ` AND responsable_id = $3`;
+    params.push([].concat(responsableId).map(Number));
+    respFilter = ` AND responsable_id = ANY($3::int[])`;
   }
   const { rows } = await query(
     `SELECT

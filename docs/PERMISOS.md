@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-776 rutas en 58 módulos, y 31 acciones con condición dentro de una ruta.
+778 rutas en 58 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -998,6 +998,8 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | avisoCorreo | `GET /api/users/:id/aviso-correo` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo · soloRoles(superadmin) | superadmin | `users.aviso_correo` |
 | setAvailability | `PATCH /api/users/:id/availability` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `users.edit` |
 | listBlocks | `GET /api/users/:id/availability-blocks` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `users.view` |
+| getEquipoComercial | `GET /api/users/:id/equipo-comercial` | (no existía) | (ruta nueva) | `users.view` |
+| setEquipoComercial | `PUT /api/users/:id/equipo-comercial` | (no existía) | (ruta nueva) | `equipos.gestionar` |
 | createBlock | `POST /api/users/:id/availability-blocks` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `users.edit` |
 | create · dar empresas enteras a un admin, o cambiar el correo de alguien | `POST /api/users/` | cuando dar empresas enteras a un admin, o cambiar el correo de alguien: a mano, user.controller.js · create/update | superadmin | `users.empresas` |
 | update · dar empresas enteras a un admin, o cambiar el correo de alguien | `PATCH /api/users/:id` | cuando dar empresas enteras a un admin, o cambiar el correo de alguien: a mano, user.controller.js · create/update | superadmin | `users.empresas` |
@@ -1586,6 +1588,12 @@ lo que pide para tener sentido (editar pide ver).
 | Contraseña de otros | `users.contrasena` | Ponerle contraseña a otra persona (un admin, a tutores de sus campus). | Admin | `users.view` |
 | Empresas enteras y correos | `users.empresas` | Dar empresas enteras a un admin y cambiar el correo de alguien. | solo superadmin | `users.view` |
 | Aviso de cambio de correo | `users.aviso_correo` | Ver el aviso que recibe quien cambia de correo. | solo superadmin | `users.view` |
+
+### Equipos comerciales
+
+| Permiso | Clave | Qué deja hacer | De serie | Necesita |
+|---|---|---|---|---|
+| Equipo comercial de una administradora | `equipos.gestionar` | Decidir qué gestoras tiene a su cargo una administradora. | solo superadmin | `users.view` |
 
 ### Roles y permisos
 
