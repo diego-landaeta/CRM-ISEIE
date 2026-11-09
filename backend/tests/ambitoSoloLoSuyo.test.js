@@ -58,7 +58,8 @@ describe('el listado de prospectos aplica el alcance', () => {
     const next = vi.fn();
     await list({ query: { projectId: '3', responsableId: '7' }, user }, res(), next);
     expect(next).not.toHaveBeenCalled();
-    expect(leadService.list.mock.calls[0][0]).toMatchObject({ responsableId: 66, unassigned: false });
+    // Desde el equipo comercial (09/11/2026) el recorte va como lista: [ella].
+    expect(leadService.list.mock.calls[0][0]).toMatchObject({ responsableId: [66], unassigned: false });
   });
   it('un admin con la gestora añadida sigue viendo los de quien pida', async () => {
     await list({ query: { projectId: '3', responsableId: '7' }, user: u('admin', ['gestor']) }, res(), vi.fn());
@@ -79,11 +80,13 @@ describe('nadie vuelve a decidir el alcance por el rol principal', () => {
   it('ningún sitio de alcance queda con `role === \'gestor\'`', () => {
     expect(lineas).toEqual([]);
   });
-  it('cada módulo de alcance usa soloLoSuyo', () => {
+  // Desde el 09/11/2026 lo hacen por `alcanceComercial`, que parte de `soloLoSuyo`
+  // y le suma el equipo comercial de una administradora.
+  it('cada módulo de alcance usa soloLoSuyo o alcanceComercial', () => {
     for (const f of ['leads/lead.controller.js', 'leads/lead.service.js', 'conversions/conversion.controller.js',
       'invoices/invoices.controller.js', 'invoices/invoices.service.js', 'accounting/accounting.controller.js',
       'sales/sales.controller.js', 'sales/sales.goals.js', 'whatsapp/whatsapp.controller.js']) {
-      expect(readFileSync(new URL(`../src/modules/${f}`, import.meta.url), 'utf8'), f).toMatch(/soloLoSuyo\(/);
+      expect(readFileSync(new URL(`../src/modules/${f}`, import.meta.url), 'utf8'), f).toMatch(/soloLoSuyo\(|alcanceComercial\(/);
     }
   });
 });

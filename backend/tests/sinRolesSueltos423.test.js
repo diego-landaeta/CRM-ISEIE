@@ -39,7 +39,7 @@ const DECLARADAS = {
   'invoices/invoices.model.js': [1, 'alcance: admin y superadmin, todas las facturas'],
   'leads/lead.model.js': [1, 'alcance: el resumen del día de la gestora'],
   'leads/lead.service.js': [2, 'alcance y comportamiento: interacciones propias; el reparto no da a tutores'],
-  'mcp/mcp.acceso.js': [1, 'alcance: soloLoSuyo, lo que ve por el MCP quien no es admin'],
+  'mcp/mcp.acceso.js': [2, 'alcance: soloLoSuyo, lo que ve por el MCP quien no es admin; al super admin no le recorta el equipo comercial'],
   'mcp/mcp.actividad.js': [1, 'alcance: el superadmin ve la actividad de todos'],
   'mcp/mcp.controller.js': [4, 'alcance y avisos: soloLoSuyo, por qué un rol no se marca, campus'],
   'mcp/mcp.model.js': [2, 'alcance: personas y campus de quien pregunta'],

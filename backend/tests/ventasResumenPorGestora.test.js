@@ -64,9 +64,10 @@ describe('Ventas filtradas por gestora (500 del 22/10/2026)', () => {
     const cuotas = consultas.find((c) => /conversion_installments/.test(c.sql));
     const sinCobro = consultas.find((c) => /con_proforma/.test(c.sql));
     // Filtro: campus, desde, hasta, gestora (reparto) y búsqueda.
-    expect(cuotas.params.slice(1)).toEqual(['2026-10-01', '2026-10-31', '14', '%Bárbara%']);
+    // La gestora va como lista desde el equipo comercial (09/11/2026).
+    expect(cuotas.params.slice(1)).toEqual(['2026-10-01', '2026-10-31', [14], '%Bárbara%']);
     // Las tarjetas, lo mismo y al final la gestora otra vez, para su parte (PESO).
-    expect(tarjetas.params).toEqual([...cuotas.params, 14]);
+    expect(tarjetas.params).toEqual([...cuotas.params, [14]]);
     expect(sinCobro.params).toEqual(tarjetas.params);
   });
 
@@ -74,7 +75,7 @@ describe('Ventas filtradas por gestora (500 del 22/10/2026)', () => {
     await getResumenVentas({ responsableId: '14' });
     await getResumenVentas({ responsableId: '7' });
     const cuotas = consultas.filter((c) => /conversion_installments/.test(c.sql));
-    expect(cuotas.map((c) => c.params)).toEqual([['14'], ['7']]);
+    expect(cuotas.map((c) => c.params)).toEqual([[[14]], [[7]]]);
   });
 
   it('las otras vistas de Ventas por gestora tampoco fallan', async () => {
