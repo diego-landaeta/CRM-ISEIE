@@ -270,6 +270,21 @@ export function personasDentro(alcance, pedido) {
   return alcance;
 }
 
+/**
+ * El alcance SOLO si lleva un equipo comercial (QA del 09/11/2026); null si no.
+ *
+ * Para las pantallas que una gestora sigue viendo como siempre (el panel
+ * «Último lead de cada gestora», la cola de facturación, el selector de
+ * WhatsApp, los desplegables de gestora…) pero que a una líder le enseñaban
+ * todo el campus. Una gestora sola tiene alcance `[ella]`; una líder,
+ * `[ella, ...sus gestoras]`, y nunca está en su propio equipo
+ * (`NO_A_SI_MISMA`), así que «más de uno» es «lleva equipo».
+ */
+export async function alcanceDeLider(user) {
+  const alcance = await alcanceComercial(user);
+  return Array.isArray(alcance) && alcance.length > 1 ? alcance : null;
+}
+
 /** Si esa persona entra en el alcance (null = entra cualquiera). */
 export function dentroDelAlcance(alcance, personaId) {
   if (!alcance) return true;

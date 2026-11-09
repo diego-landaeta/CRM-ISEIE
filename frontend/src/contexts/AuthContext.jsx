@@ -20,11 +20,20 @@ export function AuthProvider({ children }) {
   // suelta en el panel de permisos no le llegaba nunca. En MultiCRM, Ana,
   // Dayana y Yosbely tenian «venta sin gestora» y no les salia (28/09).
   const [permissions, setPermissions] = useState(null);
+  // El equipo comercial que lleva (QA del 09/11/2026): null si no lleva
+  // ninguno; si lleva, [ella, ...sus gestoras]. Llega con /auth/me, al lado de
+  // los permisos. Con él, los desplegables de gestora ofrecen solo su equipo y
+  // se esconden los botones que el servidor le niega.
+  const [alcanceComercial, setAlcanceComercial] = useState(null);
   // Ni el refresh ni el login los traen: se piden aparte y sin esperar. Hasta
   // que llegan, vale la tabla del rol, que es lo que habia.
   const cargarPermisos = useCallback(() => {
     client.get('/auth/me')
-      .then((me) => { if (me.success) setPermissions(me.data.permissions || null); })
+      .then((me) => {
+        if (!me.success) return;
+        setPermissions(me.data.permissions || null);
+        setAlcanceComercial(me.data.alcance_comercial || null);
+      })
       .catch(() => {});
   }, []);
   const initialized = useRef(false);
@@ -69,6 +78,7 @@ export function AuthProvider({ children }) {
     setOnAuthFailure(() => {
       setUser(null);
       setPermissions(null);
+      setAlcanceComercial(null);
       setProjects([]);
       setActiveProjectId(null);
       setAccessToken(null);
@@ -104,6 +114,7 @@ export function AuthProvider({ children }) {
     setAccessToken(null);
     setUser(null);
     setPermissions(null);
+    setAlcanceComercial(null);
     setProjects([]);
     setActiveProjectId(null);
   }, []);
@@ -117,6 +128,7 @@ export function AuthProvider({ children }) {
       if (res.success) {
         setUser(res.data.user);
         setPermissions(res.data.permissions || null);
+        setAlcanceComercial(res.data.alcance_comercial || null);
         setProjects(res.data.projects || []);
       }
     } catch { /* ignore */ }
@@ -125,6 +137,7 @@ export function AuthProvider({ children }) {
   const value = useMemo(() => ({
     user,
     permissions,
+    alcanceComercial,
     projects,
     activeProject,
     activeProjectId: activeProject?.id || null,
@@ -133,7 +146,7 @@ export function AuthProvider({ children }) {
     login,
     logout,
     refreshUser,
-  }), [user, permissions, projects, activeProject, isAuthenticated, loading, login, logout, refreshUser]);
+  }), [user, permissions, alcanceComercial, projects, activeProject, isAuthenticated, loading, login, logout, refreshUser]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

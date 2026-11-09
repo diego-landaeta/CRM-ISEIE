@@ -1,4 +1,5 @@
 import * as authService from './auth.service.js';
+import { alcanceDeLider } from '../../shared/utils/roles.js';
 import { sanitizeProjects } from './auth.service.js';
 import * as authModel from './auth.model.js';
 import * as userService from '../users/user.service.js';
@@ -177,10 +178,15 @@ export async function me(req, res, next) {
 
     // Los permisos NO pueden tumbar /me: si fallan, la pantalla se queda con
     // la tabla del rol, que es lo que tenia hasta ahora.
-    const [projects, permissions] = await Promise.all([
+    const [projects, permissions, equipo] = await Promise.all([
       authModel.getUserProjects(user.id, user.role),
       buildPermissionsMap(user.id, user.role, user.custom_role_id, user.roles_extra)
         .catch(() => ({})),
+      // El equipo comercial que lleva (QA del 09/11/2026): con él, la pantalla
+      // le ofrece en los desplegables solo a su gestoras y esconde lo que el
+      // servidor le niega (corregir, abonar, borrar facturas…). Tampoco puede
+      // tumbar /me: sin él, la pantalla se queda como estaba.
+      alcanceDeLider(req.user).catch(() => null),
     ]);
 
     res.json({
@@ -203,8 +209,11 @@ export async function me(req, res, next) {
           // Para que la pantalla no pregunte por WhatsApp a quien lo tiene
           // apagado (QA de Diego, 22/10, punto 8). null = sin la columna.
           usa_whatsapp: user.usa_whatsapp ?? null,
+          lleva_equipo: Boolean(equipo),
         },
         permissions,
+        // null = sin recorte por equipo; si lleva uno, [ella, ...sus gestoras].
+        alcance_comercial: equipo,
         view: {},
         projects: sanitizeProjects(projects, user.role),
       },

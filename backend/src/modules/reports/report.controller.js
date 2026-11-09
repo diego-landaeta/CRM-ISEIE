@@ -10,7 +10,7 @@ import {
   proyectosDeLaPersona, ayerEnMadrid,
 } from '../mcp/mcp.model.js';
 import { construirAmbito, acotarProyectos, responsableImpuesto, alcanceDelMcp } from '../mcp/mcp.acceso.js';
-import { alcanceComercial, personasDentro } from '../../shared/utils/roles.js';
+import { alcanceComercial, alcanceDeLider, dentroDelAlcance, personasDentro } from '../../shared/utils/roles.js';
 
 // A que proyectos se acota el informe.
 //
@@ -126,6 +126,12 @@ export async function miPuesto(req, res, next) {
   try {
     const esJefe = await tienePermiso(req, 'reports.puesto_ajeno');
     const pedido = req.query.gestoraId ? Number(req.query.gestoraId) : null;
+    // Quien lleva un equipo comercial (QA del 09/11/2026): el puesto de una
+    // gestora de fuera, no; y de la tabla, solo las filas de su equipo.
+    const lider = await alcanceDeLider(req.user);
+    if (esJefe && pedido && !dentroDelAlcance(lider, pedido)) {
+      throw new AppError('Esa gestora no está en tu equipo', 403, 'FUERA_DE_TU_EQUIPO');
+    }
     const userId = esJefe && pedido ? pedido : req.user.userId;
     const { from, to, ...ambito } = await rangoDeQuery(req);
     // Por defecto, EL MES EN CURSO. Con el historico entero el puesto casi no
@@ -139,12 +145,19 @@ export async function miPuesto(req, res, next) {
     // `asesoraId` se queda fuera a proposito: recorta el informe a UNA persona
     // y aqui hace falta la tabla entera para saber en que puesto va.
     const { asesoraId, base, ...sinAsesora } = ambito;
-    res.json({ success: true, data: await model.miPuesto({
+    const data = await model.miPuesto({
       userId, from: desde, to: hasta, ...sinAsesora, esJefe,
       // Por fecha de VENTA salvo que pidan lo contrario: es lo que la gestora
       // reconoce como suyo el dia que cierra.
       base: ['factura', 'cerrado'].includes(req.query.base) ? req.query.base : 'cobro',
-    }) });
+    });
+    if (lider && Array.isArray(data.tabla)) {
+      data.tabla = data.tabla.filter((f) => dentroDelAlcance(lider, f.user_id));
+      // «Sin gestora» y el total son del campus entero: para ella, no.
+      data.sin_gestora = null;
+      data.total = null;
+    }
+    res.json({ success: true, data });
   } catch (err) { next(err); }
 }
 

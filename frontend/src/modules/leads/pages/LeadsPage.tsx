@@ -417,7 +417,8 @@ export default function LeadsPage() {
   useEffect(() => {
     if (user?.role !== 'superadmin' && user?.role !== 'admin') return;
     const pidParam = activeProject?.id && activeProject.id > 0 ? `&projectId=${activeProject.id}` : '';
-    client.get(`/users?limit=100${pidParam}`)
+    // alcance=comercial: a quien lleva un equipo, solo su equipo (QA 09/11/2026).
+    client.get(`/users?limit=100&alcance=comercial${pidParam}`)
       .then((res) => {
         if (res.success) setGestores(res.data || []);
       })

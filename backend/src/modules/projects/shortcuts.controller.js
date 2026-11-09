@@ -2,6 +2,7 @@ import { query } from '../../shared/config/db.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { gestoresDelReparto } from '../leads/reparto.js';
 import { activasEntre } from '../asignacion/asignacion.actividad.js';
+import { alcanceDeLider, dentroDelAlcance } from '../../shared/utils/roles.js';
 
 // GET /api/projects/:id/ultimo-lead — que ha recibido cada gestora, de verdad
 //
@@ -48,8 +49,12 @@ export async function getUltimoLead(req, res, next) {
         if (!yaEsta.has(g.id)) yaEsta.set(g.id, g);
       }
     }
-    const gestores = [...yaEsta.values()];
-    const projectId = proyectos && proyectos.length === 1 ? proyectos[0] : null;
+    // Una líder de equipo comercial (QA del 09/11/2026) ve a ella y a sus
+    // gestoras: el panel le enseñaba las diez del campus, con el nombre y el
+    // curso del último prospecto de cada una. Una gestora y una admin sin
+    // equipo, como siempre.
+    const lider = await alcanceDeLider(req.user);
+    const gestores = [...yaEsta.values()].filter((g) => dentroDelAlcance(lider, g.id));
 
     // Y ademas, quien HA RECIBIDO leads este mes aunque hoy no este en el
     // reparto — de vacaciones, o se fue. Sus numeros son historia y esconderlos
@@ -172,13 +177,18 @@ export async function getQueueState(req, res, next) {
       ? gestores.find(g => g.id === state[0].last_assigned_user_id) || null
       : null;
 
+    // Una líder de equipo comercial: el turno se calcula con todo el campus
+    // (es el de verdad), pero de nombres solo salen ella y su equipo.
+    const lider = await alcanceDeLider(req.user);
+    const visible = (g) => (g && dentroDelAlcance(lider, g.id) ? g : null);
+
     res.json({
       success: true,
       data: {
-        gestores,
+        gestores: gestores.filter((g) => dentroDelAlcance(lider, g.id)),
         last_assigned_at: state[0]?.updated_at || null,
-        last_gestor: lastGestor,
-        next_gestor: nextGestor,
+        last_gestor: visible(lastGestor),
+        next_gestor: visible(nextGestor),
       },
     });
   } catch (err) { next(err); }

@@ -101,6 +101,9 @@ const db = vi.hoisted(() => {
       const filas = filtrar(s, params).sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id - a.id);
       return { rows: filas.slice(offset, offset + limit) };
     }
+    // ¿Lleva equipo comercial? (QA del 09/11/2026: quien lo lleva solo ve lo
+    // de su equipo.) Aquí nadie lo lleva: el registro, como siempre.
+    if (s.startsWith('SELECT gestora_id FROM equipo_comercial WHERE lider_id = $1')) return { rows: [] };
     // El errorHandler apunta los 5xx en status_errors: se deja pasar.
     if (s.startsWith('INSERT INTO status_errors') || s.startsWith('DELETE FROM status_errors')) return { rows: [] };
     throw new Error(`Consulta no prevista en la prueba: ${s.slice(0, 120)}`);

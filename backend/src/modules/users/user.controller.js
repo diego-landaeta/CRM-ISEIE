@@ -9,6 +9,7 @@ import { saveLocal, getLocal, deleteLocal } from '../../shared/services/localSto
 import { mimeToExt, extToMime } from '../../shared/utils/mime.js';
 import crypto from 'crypto';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
+import { alcanceDeLider } from '../../shared/utils/roles.js';
 
 /**
  * GET /api/users/buscar?q=&projectIds= — el buscador (Ctrl K, gemela de CRM#591).
@@ -56,7 +57,9 @@ export async function list(req, res, next) {
     if (!parsed.success) {
       throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
     }
-    const result = await userService.list({ ...parsed.data, campus: await campusDeLaLista(req) });
+    const { alcance, ...filtros } = parsed.data;
+    const soloIds = alcance === 'comercial' ? await alcanceDeLider(req.user) : null;
+    const result = await userService.list({ ...filtros, campus: await campusDeLaLista(req), soloIds });
     res.json({
       success: true,
       data: result.users,
@@ -77,7 +80,10 @@ export async function activityLog(req, res, next) {
     const { userId, action, search, limit, offset } = parsed.data;
     const ambito = veTodoElCrm(req.user)
       ? null
-      : { userId: req.user.userId, projectIds: await campusDeLaPersona(req.user.userId) };
+      : { userId: req.user.userId, projectIds: await campusDeLaPersona(req.user.userId),
+          // Quien lleva un equipo comercial (QA del 09/11/2026): lo suyo y lo
+          // de su equipo, no lo de todo el campus.
+          soloIds: await alcanceDeLider(req.user) };
     const result = await userModel.listActivityLog({
       userId: userId ?? null,
       action: action || null,
