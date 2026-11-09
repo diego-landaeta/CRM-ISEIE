@@ -80,7 +80,10 @@ export async function activityLog(req, res, next) {
     const { userId, action, search, limit, offset } = parsed.data;
     const ambito = veTodoElCrm(req.user)
       ? null
-      : { userId: req.user.userId, projectIds: await campusDeLaPersona(req.user.userId) };
+      : { userId: req.user.userId, projectIds: await campusDeLaPersona(req.user.userId),
+          // Quien lleva un equipo comercial (QA del 09/11/2026): lo suyo y lo
+          // de su equipo, no lo de todo el campus.
+          soloIds: await alcanceDeLider(req.user) };
     const result = await userModel.listActivityLog({
       userId: userId ?? null,
       action: action || null,

@@ -24,6 +24,7 @@ const modulos = await Promise.all([
   import('../src/modules/auth/index.js'),
   import('../src/modules/permissions/index.js'),
   import('../src/modules/conversions/index.js'),
+  import('../src/modules/commissions/index.js'),
 ]);
 const { errorHandler } = await import('../src/shared/middleware/errorHandler.js');
 const { usuarioObjetivo } = await import('../src/modules/whatsapp/chat.controller.js');
@@ -95,6 +96,11 @@ beforeAll(async () => {
     `INSERT INTO expenses (project_id, concepto, importe, fecha, categoria)
      VALUES ($1, $2, 50, CURRENT_DATE, 'otros') RETURNING id`, [P, `${MARCA} gasto`]);
   ids.expenses.push(e.id);
+  // Comisión de cada venta para su gestora, y un apunte de actividad de cada una.
+  await q(`INSERT INTO commissions (conversion_id, user_id, importe_base, pct, importe_comision)
+           VALUES ($1, $2, 100, 10, 10), ($3, $4, 100, 10, 10)`, [V.L1, G1.id, V.L3, G3.id]);
+  await q(`INSERT INTO user_activity_log (user_id, action, details) VALUES ($1, 'login', '{}'), ($2, 'login', '{}')`,
+    [G1.id, G3.id]);
   // Raquel lleva a G1 y G2; G3 es de fuera. Lo pone el super admin.
   const r = await request.put(`/api/users/${RAQUEL.id}/equipo-comercial`).set(como(SUPER))
     .send({ gestoraIds: [G1.id, G2.id] });
@@ -108,6 +114,7 @@ afterAll(async () => {
   await q('DELETE FROM user_activity_log WHERE user_id = ANY($1::int[])', [ids.users]).catch(() => {});
   await q('DELETE FROM invoices WHERE id = ANY($1::int[])', [ids.invoices]);
   await q('DELETE FROM expenses WHERE id = ANY($1::int[])', [ids.expenses]);
+  await q('DELETE FROM commissions WHERE conversion_id = ANY($1::int[])', [ids.conversions]);
   await q('DELETE FROM conversion_vendedoras WHERE conversion_id = ANY($1::int[])', [ids.conversions]);
   await q('DELETE FROM lead_interactions WHERE lead_id = ANY($1::int[])', [ids.leads]);
   await q('DELETE FROM conversion_payments WHERE conversion_id = ANY($1::int[])', [ids.conversions]);
@@ -278,6 +285,32 @@ describe('extra: repartir una venta (GET/PUT /api/conversions/:id/reparto)', () 
     expect(r.status, JSON.stringify(r.body)).toBe(403);
     expect(r.body.code).toBe('FUERA_DE_TU_EQUIPO');
     expect(await q('SELECT 1 FROM conversion_vendedoras WHERE conversion_id = $1', [V.L1])).toHaveLength(0);
+  });
+});
+
+describe('extra: comisiones del equipo y registro de actividad', () => {
+  const comisiones = async (u, extra = '') => ok(await request.get(`/api/commissions?projectId=${P}${extra}`).set(como(u)))
+    .map((c) => Number(c.user_id));
+  const actividad = async (u) => ok(await request.get(`/api/users/activity-log?search=${MARCA}&limit=500`).set(como(u)))
+    .map((a) => Number(a.user_id));
+
+  it('comisiones: Raquel, las de su equipo (pedir a G3 no ensancha); Daniela, todas', async () => {
+    expect(await comisiones(RAQUEL)).toEqual([G1.id]);
+    expect(await comisiones(RAQUEL, `&userId=${G3.id}`)).toEqual([G1.id]);
+    expect((await comisiones(DANIELA)).sort()).toEqual([G1.id, G3.id].sort());
+  });
+
+  it('totales de comisiones: Raquel, los de su equipo; Daniela, los de todas', async () => {
+    const t = async (u) => ok(await request.get(`/api/commissions/stats?projectId=${P}`).set(como(u)));
+    expect(Number((await t(RAQUEL)).total)).toBe(10);
+    expect(Number((await t(DANIELA)).total)).toBe(20);
+  });
+
+  it('actividad: Raquel no ve la de G3; Daniela sí', async () => {
+    const deRaquel = await actividad(RAQUEL);
+    expect(deRaquel).toContain(G1.id);
+    expect(deRaquel).not.toContain(G3.id);
+    expect(await actividad(DANIELA)).toEqual(expect.arrayContaining([G1.id, G3.id]));
   });
 });
 

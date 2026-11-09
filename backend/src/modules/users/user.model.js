@@ -377,6 +377,7 @@ export async function listActivityLog({
        SELECT 1 FROM user_projects up
         WHERE up.user_id = a.user_id AND up.active = true
           AND up.project_id = ANY(${p(ambito.projectIds || [])}::int[])))`);
+    if (Array.isArray(ambito.soloIds)) where.push(`a.user_id = ANY(${p(ambito.soloIds.map(Number))}::int[])`);
   }
   if (userId) where.push(`a.user_id = ${p(userId)}`);
   if (action) where.push(action.includes('%') ? `a.action LIKE ${p(action)}` : `a.action = ${p(action)}`);

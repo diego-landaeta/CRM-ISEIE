@@ -86,7 +86,8 @@ export async function findRule({ userId, productId }) {
 export async function listCommissions({ userId, estado, from, to, projectId, projectIds = null }) {
   const conds = [];
   const params = []; let idx = 1;
-  if (userId) { conds.push(`c.user_id = $${idx++}`); params.push(userId); }
+  // Una persona o una lista (el equipo comercial de una líder, 09/11/2026).
+  if (userId) { conds.push(`c.user_id = ANY($${idx++}::int[])`); params.push([].concat(userId).map(Number)); }
   if (estado) { conds.push(`c.estado = $${idx++}`); params.push(estado); }
   if (from)   { conds.push(`c.created_at >= $${idx++}`); params.push(from); }
   if (to)     { conds.push(`c.created_at <= $${idx++}`); params.push(to); }
@@ -276,7 +277,7 @@ export async function payCommission(id, fechaPago, notas) {
 export async function getStats({ userId, projectId, projectIds = null, from, to }) {
   const conds = [];
   const params = []; let idx = 1;
-  if (userId)    { conds.push(`c.user_id = $${idx++}`); params.push(userId); }
+  if (userId)    { conds.push(`c.user_id = ANY($${idx++}::int[])`); params.push([].concat(userId).map(Number)); }
   const idsAmbito = comoLista(projectId, projectIds);
   if (idsAmbito) {
     conds.push(`EXISTS (SELECT 1 FROM conversions cv WHERE cv.id = c.conversion_id AND cv.project_id = ANY($${idx++}::int[]))`);
