@@ -25,6 +25,7 @@ const modulos = await Promise.all([
   import('../src/modules/permissions/index.js'),
   import('../src/modules/conversions/index.js'),
   import('../src/modules/commissions/index.js'),
+  import('../src/modules/reports/index.js'),
 ]);
 const { errorHandler } = await import('../src/shared/middleware/errorHandler.js');
 const { usuarioObjetivo } = await import('../src/modules/whatsapp/chat.controller.js');
@@ -311,6 +312,29 @@ describe('extra: comisiones del equipo y registro de actividad', () => {
     expect(deRaquel).toContain(G1.id);
     expect(deRaquel).not.toContain(G3.id);
     expect(await actividad(DANIELA)).toEqual(expect.arrayContaining([G1.id, G3.id]));
+  });
+});
+
+describe('extra: «mi puesto» del ranking (GET /api/informes/mi-puesto)', () => {
+  const puesto = (u, extra = '') => request.get(`/api/informes/mi-puesto?projectId=${P}${extra}`).set(como(u));
+
+  it('Raquel: el puesto de G3 (de fuera), 403; el de G1, sí', async () => {
+    const r = await puesto(RAQUEL, `&gestoraId=${G3.id}`);
+    expect(r.status, JSON.stringify(r.body)).toBe(403);
+    expect(r.body.code).toBe('FUERA_DE_TU_EQUIPO');
+    expect((await puesto(RAQUEL, `&gestoraId=${G1.id}`)).status).toBe(200);
+  });
+
+  it('la tabla de Raquel solo trae a su equipo y sin los totales del campus; la de Daniela, a todas', async () => {
+    const deRaquel = ok(await puesto(RAQUEL));
+    const filas = (deRaquel.tabla || []).map((f) => Number(f.user_id));
+    expect(filas).toContain(G1.id);
+    expect(filas).not.toContain(G3.id);
+    expect(deRaquel.total).toBeNull();
+    expect(deRaquel.sin_gestora).toBeNull();
+    const deDaniela = ok(await puesto(DANIELA));
+    expect(deDaniela.tabla.map((f) => Number(f.user_id))).toEqual(expect.arrayContaining([G1.id, G3.id]));
+    expect(deDaniela.total).not.toBeNull();
   });
 });
 
