@@ -279,6 +279,16 @@ describe('Claude (MCP) respeta el equipo', () => {
   });
 });
 
+describe('corregir y abonar facturas: solo la administradora sin equipo (Diego 09/11)', () => {
+  it('Raquel (con equipo) no gestiona ninguna factura; Daniela (sin equipo) sí', async () => {
+    const { esFacturaQueGestiona } = await import('../src/modules/invoices/invoices.model.js');
+    // El id de factura da igual: el corte es por quién pide, antes de mirar la factura.
+    expect(await esFacturaQueGestiona(RAQUEL.id, 'admin', 0)).toBe(false);
+    expect(await esFacturaQueGestiona(DANIELA.id, 'admin', 0)).toBe(true);
+    expect(await esFacturaQueGestiona(SUPER.id, 'superadmin', 0)).toBe(true);
+  });
+});
+
 describe('cambiar el equipo surte efecto en la siguiente petición', () => {
   it('quitarle a G1: Raquel deja de ver su prospecto y su venta', async () => {
     const r = await ponerEquipo(SUPER, RAQUEL, [G2.id]);

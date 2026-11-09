@@ -3,6 +3,7 @@ import { AppError } from '../../shared/utils/AppError.js';
 import { issuerFiscalStatus } from '../../shared/utils/spanishTaxId.js';
 import { resolveRegimenClave } from './fiscal-engine.js';
 import { comoLista } from '../../shared/utils/ambito.js';
+import { gestorasACargo } from '../../shared/utils/roles.js';
 import { CLASE_FACTURA, SOSPECHA_DUPLICADA } from './clase.sql.js';
 
 // Sociedad emisora de un proyecto (null si no tiene). Helper para numeración.
@@ -731,10 +732,14 @@ export async function puedeEmitirFactura(userId) {
 }
 
 // ¿Es una factura que esta persona gestiona? El permiso («Corregir y abonar»)
-// lo pide la ruta; esto es el ALCANCE (#423): admin y superadmin, cualquiera;
-// el resto, solo las de sus prospectos.
+// lo pide la ruta; esto es el ALCANCE (#423): superadmin, cualquiera; admin,
+// cualquiera SALVO si lleva un equipo comercial (#415, Diego 09/11: «solo
+// Daniela»): la coordinadora de un equipo no corrige ni abona ninguna factura,
+// ni las de su equipo; eso queda para la administradora sin equipo. El resto,
+// solo las de sus prospectos.
 export async function esFacturaQueGestiona(userId, role, invoiceId) {
-  if (role === 'admin' || role === 'superadmin') return true;
+  if (role === 'superadmin') return true;
+  if (role === 'admin') return (await gestorasACargo(userId)).length === 0;
   const { rows } = await query(
     `SELECT 1 FROM invoices i
        LEFT JOIN conversions cv ON cv.id = i.conversion_id
