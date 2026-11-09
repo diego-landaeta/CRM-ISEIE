@@ -41,6 +41,12 @@ export interface UsePermissionResult {
   roles: UserRole[];
   tieneRol: (...roles: UserRole[]) => boolean;
   isAdmin: boolean;
+  /**
+   * Si lleva un equipo comercial (QA del 09/11/2026). El servidor le recorta
+   * los datos a ella y su equipo y le niega corregir, abonar y borrar facturas;
+   * la pantalla lo usa para no ofrecerle lo que le va a dar 403.
+   */
+  llevaEquipo: boolean;
 }
 
 /**
@@ -67,7 +73,7 @@ export function crearCan(user: Parameters<typeof rolesDe>[0] | null | undefined,
 }
 
 export default function usePermission(): UsePermissionResult {
-  const { user, permissions } = useAuth();
+  const { user, permissions, alcanceComercial } = useAuth();
   const can = crearCan(user, permissions);
 
   return {
@@ -76,5 +82,6 @@ export default function usePermission(): UsePermissionResult {
     roles: rolesDe(user),
     tieneRol: (...roles: UserRole[]) => tieneRolDe(user, ...roles),
     isAdmin: tieneRolDe(user, 'admin', 'superadmin'),
+    llevaEquipo: Array.isArray(alcanceComercial) && alcanceComercial.length > 1,
   };
 }

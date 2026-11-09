@@ -180,7 +180,8 @@ export default function ColaDelDiaPage() {
   // La lista de gestoras, solo para quien puede filtrar por ellas.
   useEffect(() => {
     if (!esAdmin) return;
-    client.get(`/users?limit=100${proyecto ? `&projectId=${proyecto}` : ''}`)
+    // alcance=comercial: a quien lleva un equipo, solo su equipo (QA 09/11/2026).
+    client.get(`/users?limit=100&alcance=comercial${proyecto ? `&projectId=${proyecto}` : ''}`)
       .then((r: any) => {
         if (!r?.success) return;
         setGestoras((r.data || [])

@@ -58,7 +58,8 @@ export default function SalesPage() {
   useEffect(() => {
     if (!isAdmin) return;
     const pid = projectIdParam ? `&projectId=${projectIdParam}` : '';
-    client.get(`/users?limit=100${pid}`).then((r) => setGestores(r.success ? (r.data || []) : [])).catch(() => {});
+    // alcance=comercial: a quien lleva un equipo, solo su equipo (QA 09/11/2026).
+    client.get(`/users?limit=100&alcance=comercial${pid}`).then((r) => setGestores(r.success ? (r.data || []) : [])).catch(() => {});
   }, [isAdmin, projectIdParam]);
 
   return (

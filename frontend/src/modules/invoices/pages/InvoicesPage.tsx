@@ -50,8 +50,12 @@ export default function InvoicesPage() {
   // eliminar, abonar) es «Corregir y abonar» —el backend valida además que sean
   // SUS facturas—; quien factura de verdad, «Emitir desde la cola». Los totales
   // de la sociedad, las ventas sin factura y los cobros sueltos son trabajo suyo.
-  const { can } = usePermission();
+  const { can, llevaEquipo } = usePermission();
   const canManage = can('facturas.gestionar');
+  // Corregir, abonar, asociar a una venta y borrar: quien lleva un equipo
+  // comercial no gestiona ninguna factura (Diego, 09/11: «solo Daniela»; el
+  // servidor le da 403). No se le enseña lo que no puede hacer (QA 09/11).
+  const gestionaFacturas = canManage && !llevaEquipo;
   const puedeFacturar = can('facturas.cola');
   const pid = activeProject?.id;
   // «Todos los proyectos» (#218): sin campus, las de todos los suyos. El servidor
@@ -707,7 +711,7 @@ export default function InvoicesPage() {
                       )}
                       {/* Corregir una factura YA emitida/pagada (IVA, datos, concepto) — admin.
                           Usa el MISMO panel completo que crear/editar (?editId). */}
-                      {inv.estado !== 'borrador' && inv.estado !== 'cancelada' && canManage && (
+                      {inv.estado !== 'borrador' && inv.estado !== 'cancelada' && gestionaFacturas && (
                         <Link to={`nueva?editId=${inv.id}`}
                           title="Editar IVA, datos del cliente o concepto"
                           className="h-7 px-2 rounded border border-sky-300 text-sky-700 dark:text-sky-300 text-[11px] font-semibold hover:bg-sky-50 dark:hover:bg-sky-950/30 inline-flex items-center gap-1">
@@ -747,7 +751,7 @@ export default function InvoicesPage() {
                           <CheckCircle size={11} weight="bold" /> Cobrada
                         </button>
                       )}
-                      {inv.estado !== 'borrador' && inv.tipo !== 'rectificativa' && canManage && (
+                      {inv.estado !== 'borrador' && inv.tipo !== 'rectificativa' && gestionaFacturas && (
                         <button onClick={() => rectificar(inv)}
                           title="Crear factura rectificativa (de abono)"
                           className="h-7 px-2 rounded border border-rose-300 text-[11px] text-rose-600 hover:bg-rose-50 inline-flex items-center gap-1">
@@ -755,7 +759,7 @@ export default function InvoicesPage() {
                         </button>
                       )}
                       {/* Asociar la factura a una venta del cliente — Opción B. */}
-                      {inv.estado !== 'cancelada' && canManage && (
+                      {inv.estado !== 'cancelada' && gestionaFacturas && (
                         <button onClick={() => setAsociarInv(inv)}
                           title="Asociar esta factura a una venta del cliente"
                           className="h-7 px-2 rounded border border-border text-[11px] hover:bg-muted inline-flex items-center gap-1">
@@ -763,7 +767,7 @@ export default function InvoicesPage() {
                         </button>
                       )}
                       {/* Eliminar factura + liberar número (errores de carga) — admin. */}
-                      {canManage && inv.estado !== 'cancelada' && (
+                      {gestionaFacturas && inv.estado !== 'cancelada' && (
                         <button onClick={() => setDeletingInv(inv)}
                           title="Eliminar la factura y liberar su número (se equivocaron al cargarla)"
                           className="h-7 px-2 rounded border border-red-300 text-[11px] text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 inline-flex items-center gap-1">
