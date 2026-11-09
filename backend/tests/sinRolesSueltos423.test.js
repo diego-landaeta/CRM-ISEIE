@@ -36,7 +36,7 @@ const DECLARADAS = {
   'facturas-colaborador/facturas-colaborador.service.js': [1, 'alcance: el superadmin, todas las empresas'],
   'feedback/feedback.controller.js': [1, 'alcance: la gestora, sus prospectos'],
   'invoices/invoices.controller.js': [1, 'alcance: la gestora, sus facturas; filtrar por empresa'],
-  'invoices/invoices.model.js': [1, 'alcance: admin y superadmin, todas las facturas'],
+  'invoices/invoices.model.js': [2, 'alcance: superadmin, todas las facturas; admin, todas salvo si lleva un equipo comercial (#415)'],
   'leads/lead.model.js': [1, 'alcance: el resumen del día de la gestora'],
   'leads/lead.service.js': [2, 'alcance y comportamiento: interacciones propias; el reparto no da a tutores'],
   'mcp/mcp.acceso.js': [2, 'alcance: soloLoSuyo, lo que ve por el MCP quien no es admin; al super admin no le recorta el equipo comercial'],

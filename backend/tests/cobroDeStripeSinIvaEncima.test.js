@@ -67,6 +67,9 @@ function responder(sql, p = []) {
   }
   if (/^SELECT id, importe_previsto FROM conversion_installments/.test(s)) return r([]);
 
+  // ¿La admin lleva un equipo comercial? (#415: si lo lleva no corrige facturas). Aquí, no.
+  if (/^SELECT gestora_id FROM equipo_comercial WHERE lider_id = \$1/.test(s)) return r([]);
+
   // Facturas
   if (/FROM invoices i LEFT JOIN projects p ON p\.id = i\.project_id/.test(s)) {
     const i = db.invoices.get(Number(p[0]));
