@@ -23,6 +23,7 @@ const modulos = await Promise.all([
   import('../src/modules/users/index.js'),
   import('../src/modules/auth/index.js'),
   import('../src/modules/permissions/index.js'),
+  import('../src/modules/conversions/index.js'),
 ]);
 const { errorHandler } = await import('../src/shared/middleware/errorHandler.js');
 const { usuarioObjetivo } = await import('../src/modules/whatsapp/chat.controller.js');
@@ -107,6 +108,8 @@ afterAll(async () => {
   await q('DELETE FROM user_activity_log WHERE user_id = ANY($1::int[])', [ids.users]).catch(() => {});
   await q('DELETE FROM invoices WHERE id = ANY($1::int[])', [ids.invoices]);
   await q('DELETE FROM expenses WHERE id = ANY($1::int[])', [ids.expenses]);
+  await q('DELETE FROM conversion_vendedoras WHERE conversion_id = ANY($1::int[])', [ids.conversions]);
+  await q('DELETE FROM lead_interactions WHERE lead_id = ANY($1::int[])', [ids.leads]);
   await q('DELETE FROM conversion_payments WHERE conversion_id = ANY($1::int[])', [ids.conversions]);
   await q('DELETE FROM conversions WHERE id = ANY($1::int[])', [ids.conversions]);
   await q('DELETE FROM leads WHERE id = ANY($1::int[])', [ids.leads]);
@@ -255,6 +258,26 @@ describe('5. La pantalla: /auth/me y los desplegables de gestora', () => {
   it('un valor desconocido de alcance, 400', async () => {
     const r = await request.get('/api/users?alcance=todo').set(como(RAQUEL));
     expect(r.status).toBe(400);
+  });
+});
+
+describe('extra: repartir una venta (GET/PUT /api/conversions/:id/reparto)', () => {
+  const candidatas = async (u) => ok(await request.get(`/api/conversions/${V.L1}/reparto`).set(como(u)))
+    .candidatas.map((c) => Number(c.id));
+
+  it('Raquel: las candidatas son ella y su equipo; Daniela, todo el campus', async () => {
+    const deRaquel = await candidatas(RAQUEL);
+    expect(deRaquel).toEqual(expect.arrayContaining([RAQUEL.id, G1.id, G2.id]));
+    expect(deRaquel).not.toContain(G3.id);
+    expect(await candidatas(DANIELA)).toEqual(expect.arrayContaining([G3.id]));
+  });
+
+  it('Raquel no le da a G3 (de fuera) parte de una venta de su equipo: 403 y no se guarda', async () => {
+    const r = await request.put(`/api/conversions/${V.L1}/reparto`).set(como(RAQUEL))
+      .send({ partes: [{ user_id: G1.id, porcentaje: 50 }, { user_id: G3.id, porcentaje: 50 }] });
+    expect(r.status, JSON.stringify(r.body)).toBe(403);
+    expect(r.body.code).toBe('FUERA_DE_TU_EQUIPO');
+    expect(await q('SELECT 1 FROM conversion_vendedoras WHERE conversion_id = $1', [V.L1])).toHaveLength(0);
   });
 });
 
