@@ -239,13 +239,17 @@ describe('cada consulta va acotada a los campus de la persona', () => {
     expect(consultas[0].params[0]).toEqual([10]);
   });
 
+  // Desde el equipo comercial (09/11/2026) la persona impuesta puede ir sola (7)
+  // o como lista (`= ANY(...)`): [7] para una gestora.
+  const lleva7 = (params) => (params || []).some((p) => p === 7 || (Array.isArray(p) && p.length === 1 && p[0] === 7));
+
   it('a un gestor se le impone su id en todas las consultas de datos', async () => {
     await ejecutarTodas(ambitoDe('gestor'));
     const deDatos = consultas.filter((c) =>
       /\b(leads l|conversions c|invoices i)\b/.test(c.sql) && !/lead_interactions|WHERE c\.lead_id/.test(c.sql));
     expect(deDatos.length).toBeGreaterThan(10);
     for (const { params } of deDatos) {
-      expect(params).toContain(7);
+      expect(lleva7(params), JSON.stringify(params)).toBe(true);
     }
   });
 
@@ -263,7 +267,7 @@ describe('cada consulta va acotada a los campus de la persona', () => {
         expect(consultas).toEqual([]);
       } else {
         expect(consultas.length).toBeGreaterThan(0);
-        for (const { params } of consultas) expect(params).toContain(7);
+        for (const { params } of consultas) expect(lleva7(params), `${tipo}: ${JSON.stringify(params)}`).toBe(true);
       }
     }
   });
@@ -275,8 +279,8 @@ describe('cada consulta va acotada a los campus de la persona', () => {
     await HERRAMIENTAS.find((h) => h.nombre === 'actividad_por_comercial').ejecutar(ambitoDe('gestor'), ARGS.actividad_por_comercial);
     expect(consultas.length).toBe(3);
     for (const { sql, params } of consultas) {
-      expect(sql).toMatch(/li\.created_by = \$\d|m\.enviado_por = \$\d/);
-      expect(params).toContain(7);
+      expect(sql).toMatch(/li\.created_by = (ANY\()?\$\d|m\.enviado_por = (ANY\()?\$\d/);
+      expect(lleva7(params)).toBe(true);
     }
   });
 

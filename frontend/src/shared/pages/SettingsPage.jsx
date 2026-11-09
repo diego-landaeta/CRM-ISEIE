@@ -14,6 +14,7 @@ import usePermission from '@/shared/hooks/usePermission';
 import MarcaSection from './MarcaSection';
 import CampusPorEmpresa, { marcarVarios } from '@/shared/components/CampusPorEmpresa';
 import PermisosDePersona from '@/modules/permissions/components/PermisosDePersona';
+import EquipoComercial from '@/modules/equipo-comercial/components/EquipoComercial';
 import { avisoCambioCorreo, confirmacionCambioCorreo, problemaDeContrasena } from '@/shared/lib/credenciales';
 // «Usuario» como los demás formularios (#106, como en MultiCRM): todo lo que
 // falta en un solo aviso, Escape cierra y sin autocompletado del navegador.
@@ -567,6 +568,7 @@ export function EditUserModal({ user, projects, onClose, onSaved, empresas, falt
           </button>
         </div>
         {verPermisos && <PermisosDePersona userId={user.id} onClose={() => setVerPermisos(false)} />}
+        <EquipoComercial userId={user.id} />
 
         <div className="flex justify-end gap-2">
           <button onClick={onClose} className="h-9 px-4 rounded-md border border-border text-sm font-medium hover:bg-muted">Cancelar</button>

@@ -2,7 +2,7 @@ import * as model from './accounting.model.js';
 import { proyectosDelAmbito } from '../../shared/utils/ambito.js';
 import { accountingDashboardSchema } from './accounting.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
-import { soloLoSuyo } from '../../shared/utils/roles.js';
+import { alcanceComercial, personasDentro } from '../../shared/utils/roles.js';
 
 // GET /accounting/receivable — cuentas por cobrar con filtros gestora/proyecto/periodo.
 // El gestor solo ve las suyas (se fuerza su responsableId).
@@ -10,7 +10,9 @@ export async function receivable(req, res, next) {
   try {
     const projectId = req.query.projectId ? Number(req.query.projectId) : null;
     let responsableId = req.query.responsableId ? Number(req.query.responsableId) : null;
-    if (soloLoSuyo(req.user)) responsableId = req.user.userId; // seguridad
+    // seguridad; con equipo comercial (09/11/2026), las suyas y las de sus gestoras
+    const alcance = await alcanceComercial(req.user);
+    if (alcance) responsableId = personasDentro(alcance, responsableId);
     const from = req.query.from || null;
     const to = req.query.to || null;
     const data = await model.getReceivable({ projectId, responsableId, from, to });

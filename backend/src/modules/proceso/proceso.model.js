@@ -305,8 +305,8 @@ export async function colaDelDia({
   // reventaba con «bind message supplies 2 parameters, but requires 1». No
   // salto antes porque el controlador siempre manda una lista con algo.
   if (Array.isArray(projectIds) && projectIds.length) par.push(projectIds.map(Number));
-  const pAses = asesoraId ? `AND l.responsable_id = $${i++}` : '';
-  if (asesoraId) par.push(asesoraId);
+  const pAses = asesoraId ? `AND l.responsable_id = ANY($${i++}::int[])` : '';
+  if (asesoraId) par.push([].concat(asesoraId).map(Number));
   // EL TRAMO de arriba («Atrasados», «Para hoy», «Para mañana», «Esta semana»)
   // lo aplica el SERVIDOR, con su «hoy»: el mismo de los contadores y de
   // `dias_de_retraso`. Antes lo filtraba la pantalla sobre la página que le
@@ -458,8 +458,8 @@ export async function resumenDeLaCola({ projectIds, asesoraId }) {
   // reventaba con «bind message supplies 2 parameters, but requires 1». No
   // salto antes porque el controlador siempre manda una lista con algo.
   if (Array.isArray(projectIds) && projectIds.length) par.push(projectIds.map(Number));
-  const pAses = asesoraId ? `AND l.responsable_id = $${i++}` : '';
-  if (asesoraId) par.push(asesoraId);
+  const pAses = asesoraId ? `AND l.responsable_id = ANY($${i++}::int[])` : '';
+  if (asesoraId) par.push([].concat(asesoraId).map(Number));
 
   const { rows } = await query(
     `WITH pendientes AS (
@@ -497,8 +497,8 @@ export async function resumenPorPaso({ projectIds, asesoraId }) {
     ? `AND ls.project_id = ANY($${i++}::int[])`
     : 'AND ls.project_id NOT IN (SELECT id FROM projects WHERE es_prueba)';
   if (Array.isArray(projectIds) && projectIds.length) par.push(projectIds.map(Number));
-  const pAses = asesoraId ? `AND l.responsable_id = $${i++}` : '';
-  if (asesoraId) par.push(asesoraId);
+  const pAses = asesoraId ? `AND l.responsable_id = ANY($${i++}::int[])` : '';
+  if (asesoraId) par.push([].concat(asesoraId).map(Number));
 
   const { rows } = await query(
     `WITH pendientes AS (
@@ -632,8 +632,8 @@ export async function baseDeSeguimiento({
     ? `AND l.project_id = ANY($${i++}::int[])`
     : `AND l.project_id NOT IN (SELECT id FROM projects WHERE es_prueba)`;
   if (ids) par.push(ids);
-  const pAses = asesoraId ? `AND l.responsable_id = $${i++}` : '';
-  if (asesoraId) par.push(asesoraId);
+  const pAses = asesoraId ? `AND l.responsable_id = ANY($${i++}::int[])` : '';
+  if (asesoraId) par.push([].concat(asesoraId).map(Number));
   const ULTIMO_SQL = `(SELECT max(li.fecha) FROM lead_interactions li
                     WHERE li.lead_id = l.id AND li.tipo <> 'nota')`;
   const ULTIMO = ULTIMO_SQL;
@@ -776,8 +776,8 @@ export async function resumenDeSeguimiento({
     ? `AND l.project_id = ANY($${i++}::int[])`
     : `AND l.project_id NOT IN (SELECT id FROM projects WHERE es_prueba)`;
   if (ids) par.push(ids);
-  const pAses = asesoraId ? `AND l.responsable_id = $${i++}` : '';
-  if (asesoraId) par.push(asesoraId);
+  const pAses = asesoraId ? `AND l.responsable_id = ANY($${i++}::int[])` : '';
+  if (asesoraId) par.push([].concat(asesoraId).map(Number));
   const pDesde = `$${i++}`; par.push(Number(desdeDias) || 15);
   const pDescanso = `$${i++}`; par.push(Number(descansoDias) || 30);
 

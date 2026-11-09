@@ -298,11 +298,13 @@ export async function getTopProducts({ projectId, projectIds = null, limit = 10,
   // del importe: una venta atendida entre dos es media para cada una.
   let PESO = '1';
   if (responsableId) {
-    params.push(responsableId);
+    // Una o varias (el equipo de una administradora, 09/11/2026): la parte de
+    // todas ellas juntas.
+    params.push(idsDe(responsableId));
     where.push(`EXISTS (SELECT 1 FROM conversion_reparto rx
-                         WHERE rx.conversion_id = c.id AND rx.vendedora_id = $${params.length})`);
-    PESO = `COALESCE((SELECT r.peso FROM conversion_reparto r
-                       WHERE r.conversion_id = c.id AND r.vendedora_id = $${params.length}), 1)`;
+                         WHERE rx.conversion_id = c.id AND rx.vendedora_id = ANY($${params.length}::int[]))`);
+    PESO = `COALESCE((SELECT SUM(r.peso) FROM conversion_reparto r
+                       WHERE r.conversion_id = c.id AND r.vendedora_id = ANY($${params.length}::int[])), 1)`;
   }
   if (days) { params.push(days); where.push(`c.fecha_conversion >= (CURRENT_DATE - ($${params.length}::int))`); }
   // Rango de fechas explícito (tiene prioridad de uso desde el frontend: hoy/semana/mes/personalizado).
@@ -435,7 +437,7 @@ export async function getFacturado({ projectId = null, projectIds = null, from =
   if (from) { params.push(from); w.push(`i.fecha_emision >= $${params.length}::date`); }
   if (to) { params.push(to); w.push(`i.fecha_emision <= $${params.length}::date`); }
   let soloGestora = '';
-  if (responsableId) { params.push(responsableId); soloGestora = `WHERE r.vendedora_id = $${params.length}`; }
+  if (responsableId) { params.push(idsDe(responsableId)); soloGestora = `WHERE r.vendedora_id = ANY($${params.length}::int[])`; }
 
   const CTE = `WITH fac AS (
       SELECT i.conversion_id,
@@ -525,6 +527,10 @@ export async function getFacturado({ projectId = null, projectIds = null, from =
 // ---------------------------------------------------------------------------
 const VENDEDORA = 'COALESCE(cv.vendedora_id, l.responsable_id)';
 // Lo mismo donde la consulta no trae unido leads y la conversion se llama 'c'.
+// La persona del filtro puede ser una o una lista (el equipo de una
+// administradora, 09/11/2026): todas las comparaciones van con `= ANY(...)`.
+const idsDe = (v) => [].concat(v).map(Number);
+
 const VENDEDORA_C = 'COALESCE(c.vendedora_id, (SELECT responsable_id FROM leads WHERE id = c.lead_id))';
 
 // Quita tildes en SQL. Se usa en la busqueda para que "Barbara" encuentre a "Barbara".
@@ -551,8 +557,8 @@ function filtrosVentas({ projectId, from, to, responsableId, search }, startIdx 
   // lista solo cuatro. Daniela, 21/09.
   if (responsableId) {
     cond.push(`EXISTS (SELECT 1 FROM conversion_reparto r
-                        WHERE r.conversion_id = cv.id AND r.vendedora_id = $${idx++})`);
-    params.push(responsableId);
+                        WHERE r.conversion_id = cv.id AND r.vendedora_id = ANY($${idx++}::int[]))`);
+    params.push(idsDe(responsableId));
   }
   // Recortado, igual que en leads: un espacio pegado al nombre vaciaba la lista.
   const termino = typeof search === 'string' ? search.trim() : '';
@@ -593,9 +599,9 @@ function filtrosVentas({ projectId, from, to, responsableId, search }, startIdx 
 function pesoDe(responsableId, params, idx) {
   if (!responsableId) return { PESO: '1', params: [...params], idx };
   return {
-    PESO: `COALESCE((SELECT r.peso FROM conversion_reparto r
-                      WHERE r.conversion_id = cv.id AND r.vendedora_id = $${idx}), 1)`,
-    params: [...params, Number(responsableId)],
+    PESO: `COALESCE((SELECT SUM(r.peso) FROM conversion_reparto r
+                      WHERE r.conversion_id = cv.id AND r.vendedora_id = ANY($${idx}::int[])), 1)`,
+    params: [...params, idsDe(responsableId)],
     idx: idx + 1,
   };
 }
@@ -932,7 +938,7 @@ export async function getDesglose({ projectId = null, from = null, to = null, re
   const pv = [];
   const wv = [];
   if (projectId) { pv.push(projectId); wv.push(`c.project_id = $${pv.length}`); }
-  if (responsableId) { pv.push(responsableId); wv.push(`${VENDEDORA_C} = $${pv.length}`); }
+  if (responsableId) { pv.push(idsDe(responsableId)); wv.push(`${VENDEDORA_C} = ANY($${pv.length}::int[])`); }
   if (from) { pv.push(from); wv.push(`c.fecha_conversion >= $${pv.length}::date`); }
   if (to) { pv.push(to); wv.push(`c.fecha_conversion <= $${pv.length}::date`); }
   wv.push('NOT c.es_mensualidad');
@@ -950,7 +956,7 @@ export async function getDesglose({ projectId = null, from = null, to = null, re
   const pc = [];
   const wc = [];
   if (projectId) { pc.push(projectId); wc.push(`c.project_id = $${pc.length}`); }
-  if (responsableId) { pc.push(responsableId); wc.push(`${VENDEDORA_C} = $${pc.length}`); }
+  if (responsableId) { pc.push(idsDe(responsableId)); wc.push(`${VENDEDORA_C} = ANY($${pc.length}::int[])`); }
   if (from) { pc.push(from); wc.push(`cp.fecha >= $${pc.length}::date`); }
   if (to) { pc.push(to); wc.push(`cp.fecha <= $${pc.length}::date`); }
 
@@ -1013,8 +1019,8 @@ async function tramo({ projectId, from, to, responsableId, porMes }) {
     'EXISTS (SELECT 1 FROM conversion_payments cpx WHERE cpx.conversion_id = c.id)'];
   if (projectId) { pv.push(projectId); wv.push(`c.project_id = $${pv.length}`); }
   if (responsableId) {
-    pv.push(responsableId);
-    wv.push(`COALESCE(c.vendedora_id, (SELECT responsable_id FROM leads WHERE id = c.lead_id)) = $${pv.length}`);
+    pv.push(idsDe(responsableId));
+    wv.push(`COALESCE(c.vendedora_id, (SELECT responsable_id FROM leads WHERE id = c.lead_id)) = ANY($${pv.length}::int[])`);
   }
   pv.push(from); const iFrom = pv.length;
   pv.push(to); const iTo = pv.length;
@@ -1032,8 +1038,8 @@ async function tramo({ projectId, from, to, responsableId, porMes }) {
   const wc = [];
   if (projectId) { pc.push(projectId); wc.push(`c.project_id = $${pc.length}`); }
   if (responsableId) {
-    pc.push(responsableId);
-    wc.push(`COALESCE(c.vendedora_id, (SELECT responsable_id FROM leads WHERE id = c.lead_id)) = $${pc.length}`);
+    pc.push(idsDe(responsableId));
+    wc.push(`COALESCE(c.vendedora_id, (SELECT responsable_id FROM leads WHERE id = c.lead_id)) = ANY($${pc.length}::int[])`);
   }
   pc.push(from); const cFrom = pc.length;
   pc.push(to); const cTo = pc.length;
@@ -1049,7 +1055,7 @@ async function tramo({ projectId, from, to, responsableId, porMes }) {
   const pl = [];
   const wl = ['l.deleted_at IS NULL'];
   if (projectId) { pl.push(projectId); wl.push(`l.project_id = $${pl.length}`); }
-  if (responsableId) { pl.push(responsableId); wl.push(`l.responsable_id = $${pl.length}`); }
+  if (responsableId) { pl.push(idsDe(responsableId)); wl.push(`l.responsable_id = ANY($${pl.length}::int[])`); }
   pl.push(from); const lFrom = pl.length;
   pl.push(to); const lTo = pl.length;
   const { rows: leads } = await query(

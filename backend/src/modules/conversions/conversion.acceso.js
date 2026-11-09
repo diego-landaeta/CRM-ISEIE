@@ -1,7 +1,7 @@
 import { query } from '../../shared/config/db.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { campusDeLaPersona, veTodoElCrm } from '../../shared/utils/ambito.js';
-import { soloLoSuyo } from '../../shared/utils/roles.js';
+import { alcanceComercial } from '../../shared/utils/roles.js';
 
 /**
  * Quién puede tocar UNA venta (y sus cuotas, pagos, devoluciones y reparto).
@@ -18,6 +18,8 @@ import { soloLoSuyo } from '../../shared/utils/roles.js';
  *   · además, la gestora, solo las suyas: es la responsable del prospecto, la
  *     vendedora de la venta o está en su reparto (el mismo criterio con el que
  *     se le filtra el listado).
+ *   · una administradora con equipo comercial (09/11/2026), las suyas y las de
+ *     sus gestoras, con el mismo criterio.
  *
  * Se engancha con `router.param`, así que cubre todas las rutas con esos
  * parámetros, también las que se añadan mañana, sin acordarse de nada en cada
@@ -28,19 +30,22 @@ async function puede(user, { project_id, responsable_id = null, vendedora_id = n
   if (veTodoElCrm(user)) return true;
   const mios = await campusDeLaPersona(user?.userId);
   if (!mios.includes(Number(project_id))) return false;
-  if (!soloLoSuyo(user)) return true;
-  return [responsable_id, vendedora_id].some((x) => x != null && Number(x) === Number(user.userId)) || en_reparto;
+  const alcance = await alcanceComercial(user);
+  if (!alcance) return true;
+  return [responsable_id, vendedora_id].some((x) => x != null && alcance.includes(Number(x))) || en_reparto;
 }
 
 const PROHIBIDO = () => new AppError('No tienes acceso a esa venta', 403, 'FORBIDDEN');
 
 async function exigirVenta(req, conversionId) {
+  // «En su reparto»: ella o, si tiene equipo, alguna de sus gestoras.
+  const alcance = await alcanceComercial(req.user);
   const { rows: [v] } = await query(
     `SELECT c.id, c.project_id, c.vendedora_id, l.responsable_id,
-            EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id = $2) AS en_reparto
+            EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id = ANY($2::int[])) AS en_reparto
        FROM conversions c JOIN leads l ON l.id = c.lead_id
       WHERE c.id = $1`,
-    [conversionId, req.user?.userId ?? 0]
+    [conversionId, alcance || [Number(req.user?.userId ?? 0)]]
   );
   if (!v) throw new AppError('Venta no encontrada', 404, 'CONVERSION_NOT_FOUND');
   if (!(await puede(req.user, v))) throw PROHIBIDO();

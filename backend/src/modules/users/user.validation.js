@@ -146,3 +146,12 @@ export const activityLogSchema = z.object({
   limit: z.coerce.number().int().min(1).max(500).default(100),
   offset: z.coerce.number().int().min(0).default(0),
 });
+
+// El equipo comercial de una administradora (09/11/2026, migración 274): la
+// lista entera de gestoras que lleva. Vacía = sin equipo (ve como siempre).
+export const equipoComercialSchema = z.object({
+  gestoraIds: z.array(z.number().int().positive(), {
+    required_error: 'Falta la lista de gestoras (gestoraIds)',
+    invalid_type_error: 'gestoraIds tiene que ser una lista de números',
+  }).max(200, 'Demasiadas gestoras'),
+}).strict();

@@ -10,7 +10,7 @@ import * as leadProducts from './lead-products.service.js';
 import { deducirCanal } from './canal.js';
 import { planificarPasosDeLead, ajustarPaso } from '../proceso/proceso.model.js';
 import { cruzarConPulsacion } from '../widget/widget.pulsaciones.js';
-import { soloLoSuyo } from '../../shared/utils/roles.js';
+import { alcanceComercial, dentroDelAlcance } from '../../shared/utils/roles.js';
 
 // Dispara secuencias de email activas. STUB v1 mientras email-sequences no este portado.
 async function triggerSequences(_triggerEvent, _leadId, _projectId) {
@@ -612,7 +612,8 @@ export async function updateInteractionFn(leadId, interactionId, fields, request
   const interaction = await leadModel.findInteractionById(interactionId);
   if (!interaction) throw new AppError('Interacción no encontrada', 404, 'INTERACTION_NOT_FOUND');
   if (interaction.lead_id !== leadId) throw new AppError('Interacción no pertenece al lead', 400, 'WRONG_LEAD');
-  if (soloLoSuyo(requestUser) && interaction.created_by !== requestUser.userId) {
+  // Las suyas; con equipo (09/11/2026), también las de sus gestoras.
+  if (!dentroDelAlcance(await alcanceComercial(requestUser), interaction.created_by)) {
     throw new AppError('No tienes permiso para editar esta interacción', 403, 'FORBIDDEN');
   }
   const updated = await leadModel.updateInteraction(interactionId, fields);
@@ -624,7 +625,7 @@ export async function deleteInteractionFn(leadId, interactionId, requestUser) {
   const interaction = await leadModel.findInteractionById(interactionId);
   if (!interaction) throw new AppError('Interacción no encontrada', 404, 'INTERACTION_NOT_FOUND');
   if (interaction.lead_id !== leadId) throw new AppError('Interacción no pertenece al lead', 400, 'WRONG_LEAD');
-  if (soloLoSuyo(requestUser) && interaction.created_by !== requestUser.userId) {
+  if (!dentroDelAlcance(await alcanceComercial(requestUser), interaction.created_by)) {
     throw new AppError('No tienes permiso para eliminar esta interacción', 403, 'FORBIDDEN');
   }
   await leadModel.deleteInteraction(interactionId);

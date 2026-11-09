@@ -9,7 +9,8 @@ import {
   actividadPorComercial, detalleActividadPorComercial, TIPOS_DE_DETALLE,
   proyectosDeLaPersona, ayerEnMadrid,
 } from '../mcp/mcp.model.js';
-import { construirAmbito, acotarProyectos, responsableImpuesto } from '../mcp/mcp.acceso.js';
+import { construirAmbito, acotarProyectos, responsableImpuesto, alcanceDelMcp } from '../mcp/mcp.acceso.js';
+import { alcanceComercial, personasDentro } from '../../shared/utils/roles.js';
 
 // A que proyectos se acota el informe.
 //
@@ -40,7 +41,12 @@ export async function overview(req, res, next) {
 // A quien se recorta el informe. Una gestora solo ve lo suyo, y se decide aqui
 // —no con lo que llegue por la URL— para que no pueda pedir lo de otra.
 // Admin y superadmin ven todo, o lo de una en concreto si lo piden.
-export function asesoraDelInforme(req) {
+//
+// Una administradora con equipo comercial (09/11/2026): ella y sus gestoras, o
+// una de ellas si la pide. Devuelve entonces una LISTA (el modelo la acepta).
+export async function asesoraDelInforme(req) {
+  const alcance = await alcanceComercial(req.user);
+  if (alcance && alcance.length > 1) return personasDentro(alcance, req.query.asesoraId);
   const rol = req.user?.role;
   if (rol === 'admin' || rol === 'superadmin') {
     return req.query.asesoraId ? Number(req.query.asesoraId) : null;
@@ -56,7 +62,7 @@ function makeReport(fn) {
         ...(await proyectosDelInforme(req)),
         from: from || null,
         to: to || null,
-        asesoraId: asesoraDelInforme(req),
+        asesoraId: await asesoraDelInforme(req),
       });
       res.json({ success: true, data });
     } catch (err) { next(err); }
@@ -85,7 +91,7 @@ async function rangoDeQuery(req) {
     to: re.test(req.query.to || '') ? req.query.to : null,
     // Por aqui pasan el panel del Resumen, los rankings y el detalle. Sin esto
     // una gestora veia los numeros de todos.
-    asesoraId: asesoraDelInforme(req),
+    asesoraId: await asesoraDelInforme(req),
     // Base de conteo: 'factura' (que se emitio este mes) o 'cobro' (cuanto
     // dinero entro). Por defecto factura, que es como cuenta la contabilidad;
     // con cobro se caian del mes las facturas emitidas en un mes y cobradas en
@@ -303,7 +309,7 @@ async function ambitoDeActividad(req) {
   // Un campus de pruebas solo se ve si se elige él o su empresa (migración
   // 148); con «Todos», no. Claude no los ve nunca.
   const eligeAlgo = Boolean(req.query.projectId || req.query.issuerId);
-  const ambito = construirAmbito(user, await proyectosDeLaPersona(user, { conPruebas: eligeAlgo }));
+  const ambito = construirAmbito(user, await proyectosDeLaPersona(user, { conPruebas: eligeAlgo }), await alcanceDelMcp(user));
   const projectIds = acotarProyectos(ambito, {
     proyecto_id: req.query.projectId ? Number(req.query.projectId) : null,
     sociedad_id: req.query.issuerId ? Number(req.query.issuerId) : null,
@@ -351,7 +357,12 @@ export async function actividadComercialDetalle(req, res, next) {
     if (!TIPOS_DE_DETALLE.includes(tipo)) {
       throw new AppError(`Tipo no válido: ${tipo || '(vacío)'}.`, 400, 'TIPO_NO_VALIDO');
     }
-    const userId = responsableId ?? Number(req.query.userId);
+    // Con equipo, una de su equipo; fuera de él, no.
+    const pedido = Number(req.query.userId);
+    if (Array.isArray(responsableId) && req.query.userId && !responsableId.includes(pedido)) {
+      throw new AppError('Esa persona no es de tu equipo.', 403, 'FUERA_DE_TU_EQUIPO');
+    }
+    const userId = Array.isArray(responsableId) ? pedido : (responsableId ?? pedido);
     if (!Number.isInteger(userId) || userId <= 0) {
       throw new AppError('Falta la comercial (userId).', 400, 'FALTA_COMERCIAL');
     }

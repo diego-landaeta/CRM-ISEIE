@@ -187,3 +187,91 @@ export function soloLoSuyo(user) {
   if (suyos.some((r) => VEN_TODO_EL_CAMPUS.includes(r))) return false;
   return suyos.some((r) => COMERCIAL_PROPIO.includes(r));
 }
+
+
+/*
+  EL EQUIPO COMERCIAL DE UNA ADMINISTRADORA (Carlos, 09/11/2026).
+
+  «Raquel pasa a ser administradora como Daniela: no recibe leads y puede ver
+  los leads y la gestión de las diferentes compañeras. Daniela puede ver todas.
+  Raquel podrá ver sus comerciales asignadas (pueden variar).»
+
+  Hasta ahora había dos alcances: todo el campus o solo lo suyo. Este es el
+  tercero: lo suyo Y lo de las gestoras que tiene a su cargo (tabla
+  `equipo_comercial`, migración 274). Quién lleva a quién lo decide quien
+  tenga el permiso `equipos.gestionar`.
+
+  `alcanceComercial(user)` devuelve:
+    · null  → sin límite por persona: ve todo lo de sus campus.
+    · [ids] → solo lo de esas personas (la primera, ella misma).
+
+  Orden de las reglas:
+    1. Super admin o soporte → null, siempre.
+    2. Con equipo a su cargo → [ella, ...sus gestoras], sea cual sea su rol.
+    3. Solo lo suyo (gestora, project manager) → [ella].
+    4. El resto (una admin sin equipo, como Daniela) → null.
+
+  El recorte por campus/empresa (`shared/utils/ambito.js`) se aplica ADEMÁS:
+  esto solo dice de QUIÉN, no DÓNDE.
+
+  Se calcula una vez por petición: la respuesta se guarda pegada al objeto
+  `req.user`, que es nuevo en cada petición. Cambiar el equipo surte efecto en
+  la siguiente, sin caché que vaciar.
+*/
+const alcancePorPeticion = new WeakMap();
+
+/** Los ids de las gestoras que tiene a su cargo esa persona (vacío si ninguna). */
+export async function gestorasACargo(liderId) {
+  const id = Number(liderId);
+  if (!Number.isInteger(id) || id <= 0) return [];
+  // Import tardío: este fichero lo usan pruebas puras que no deben abrir la base.
+  const { query } = await import('../config/db.js');
+  const r = await query(
+    'SELECT gestora_id FROM equipo_comercial WHERE lider_id = $1 ORDER BY gestora_id', [id]);
+  return (r?.rows || []).map((f) => Number(f.gestora_id));
+}
+
+async function calcularAlcance(user) {
+  if (tieneRol(user, 'superadmin', 'soporte')) return null;
+  const id = Number(user.userId ?? user.id);
+  const equipo = await gestorasACargo(id);
+  if (equipo.length) return [id, ...equipo.filter((g) => g !== id)];
+  if (soloLoSuyo(user)) return [id];
+  return null;
+}
+
+export function alcanceComercial(user) {
+  if (!user || typeof user !== 'object') return Promise.resolve(null);
+  let p = alcancePorPeticion.get(user);
+  if (!p) {
+    p = calcularAlcance(user);
+    alcancePorPeticion.set(user, p);
+    // Un fallo de la base no se queda guardado para el resto de la petición.
+    p.catch(() => alcancePorPeticion.delete(user));
+  }
+  return p;
+}
+
+/**
+ * A quién se recorta una consulta que además trae un filtro por persona.
+ *
+ *   · Sin alcance (ve todo): lo que pida, o nadie en concreto.
+ *   · Con alcance: lo que pida si está dentro; si no pide o pide a alguien de
+ *     fuera, todo su alcance (lo de fuera se ignora, como hasta ahora se
+ *     ignoraba el `responsableId` que mandaba una gestora).
+ *
+ * Devuelve null (sin filtro) o una lista de ids para `campo = ANY($n::int[])`.
+ */
+export function personasDentro(alcance, pedido) {
+  const n = pedido != null && pedido !== '' ? Number(pedido) : null;
+  const valido = Number.isInteger(n) && n > 0 ? n : null;
+  if (!alcance) return valido ? [valido] : null;
+  if (valido && alcance.includes(valido)) return [valido];
+  return alcance;
+}
+
+/** Si esa persona entra en el alcance (null = entra cualquiera). */
+export function dentroDelAlcance(alcance, personaId) {
+  if (!alcance) return true;
+  return personaId != null && alcance.includes(Number(personaId));
+}

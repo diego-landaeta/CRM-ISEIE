@@ -184,7 +184,8 @@ export async function getReceivable({ projectId = null, responsableId = null, fr
   const params = [];
   let i = 1;
   if (projectId)     { conds.push(`c.project_id = $${i++}`); params.push(projectId); }
-  if (responsableId) { conds.push(`l.responsable_id = $${i++}`); params.push(responsableId); }
+  // Una o varias (el equipo de una administradora, 09/11/2026).
+  if (responsableId) { conds.push(`l.responsable_id = ANY($${i++}::int[])`); params.push([].concat(responsableId).map(Number)); }
   const extra = conds.length ? ' AND ' + conds.join(' AND ') : '';
   // Rango de vencimiento (opcional). Se aplica a la fecha de cada fila (vence).
   const fromCond = from ? ` AND vence >= $${i++}` : '';

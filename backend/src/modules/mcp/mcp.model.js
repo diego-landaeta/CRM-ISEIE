@@ -1,4 +1,5 @@
 import { query, getClient } from '../../shared/config/db.js';
+import { personasDentro } from '../../shared/utils/roles.js';
 import { registrarCambio } from '../permissions/permissions.model.js';
 import { getReceivable } from '../accounting/accounting.model.js';
 import { RIGE_HOY, formacionesSinTutor } from '../tutores/tutor.model.js';
@@ -344,6 +345,10 @@ export async function registrarAuditoria({ userId, tokenId, herramienta, paramet
  * Arranca un WHERE con el ambito ya puesto. Devuelve `add(sql, valor)`, que
  * sustituye `?` por el siguiente `$n`: asi ningun valor va pegado al SQL.
  */
+// La persona impuesta puede ser una o una lista: el equipo de una administradora
+// con gestoras a su cargo (09/11/2026). Por eso se compara con `= ANY(...)`.
+const idsDe = (v) => [].concat(v).map(Number);
+
 function condiciones(colProyecto, projectIds) {
   const cond = [`${colProyecto} = ANY($1::int[])`];
   const params = [projectIds];
@@ -391,7 +396,7 @@ export async function equipoDeLosCampus({ projectIds, incluirInactivos = false }
 function filtrosProspectos({ projectIds, responsableId, gestoraId, programa, estado, texto, desde, hasta, canal }) {
   const f = condiciones('l.project_id', projectIds);
   f.cond.push('l.deleted_at IS NULL');
-  if (responsableId) f.add('l.responsable_id = ?', responsableId);
+  if (responsableId) f.add('l.responsable_id = ANY(?::int[])', idsDe(responsableId));
   // Por gestora y por programa (#325). La gestora la pide quien ve todo el campus;
   // a quien ve solo lo suyo ya se le impone `responsableId` arriba.
   if (gestoraId) f.add('l.responsable_id = ?', gestoraId);
@@ -442,7 +447,7 @@ export async function verProspecto({ id, projectIds, responsableId }) {
   const f = condiciones('l.project_id', projectIds);
   f.cond.push('l.deleted_at IS NULL');
   f.add('l.id = ?', id);
-  if (responsableId) f.add('l.responsable_id = ?', responsableId);
+  if (responsableId) f.add('l.responsable_id = ANY(?::int[])', idsDe(responsableId));
 
   const { rows } = await query(
     `SELECT l.id, l.nombre, l.email, l.telefono, l.status AS estado, l.notas,
@@ -539,7 +544,7 @@ function filtrosVentas({ projectIds, responsableId, vendedoraId, facturada, desd
   // Ventas tampoco las cuenta.
   f.cond.push('NOT COALESCE(c.es_mensualidad, false)');
   if (responsableId) {
-    f.add('EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id = ?)', responsableId);
+    f.add('EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id = ANY(?::int[]))', idsDe(responsableId));
   }
   // Una vendedora concreta (#325). Solo la pide quien ve todo el campus: a una gestora
   // se le impone ella misma arriba (responsableId) y esto no la ensancha.
@@ -617,7 +622,7 @@ export async function resumenVentas(filtros) {
 function filtrosFacturas({ projectIds, responsableId, estado, tipo, texto, desde, hasta }) {
   const f = condiciones('i.project_id', projectIds);
   // Igual que el listado de Facturas: la gestora ve las de lo que vendio ella.
-  if (responsableId) f.add('COALESCE(cv.vendedora_id, l.responsable_id) = ?', responsableId);
+  if (responsableId) f.add('COALESCE(cv.vendedora_id, l.responsable_id) = ANY(?::int[])', idsDe(responsableId));
   if (estado) f.add('i.estado::text = ?', estado);
   if (tipo) f.add('i.tipo::text = ?', tipo);
   if (texto) f.add('(i.cliente_nombre ILIKE ? OR i.codigo ILIKE ?)', `%${texto}%`, `%${texto}%`);
@@ -1374,7 +1379,7 @@ export async function actividadPorComercial({ projectIds, responsableId = null, 
   const f = condiciones('l.project_id', projectIds);
   f.cond.push('l.deleted_at IS NULL');
   // Quien solo ve lo suyo se ve a sí misma: sus contactos, en la ficha que sea.
-  if (responsableId) f.add('li.created_by = ?', responsableId);
+  if (responsableId) f.add('li.created_by = ANY(?::int[])', idsDe(responsableId));
   f.add(`${fechaLocal('li.fecha')} >= ?::date`, desde);
   f.add(`${fechaLocal('li.fecha')} <= ?::date`, hasta);
   const { rows: contactos } = await query(
@@ -1409,7 +1414,7 @@ export async function actividadPorComercial({ projectIds, responsableId = null, 
   // no tiene autora va a «Sin asignar», para que el total cuadre (#128).
   const w = condiciones('l.project_id', projectIds);
   w.cond.push('l.deleted_at IS NULL', `m.direccion = 'saliente'`);
-  if (responsableId) w.add('m.enviado_por = ?', responsableId);
+  if (responsableId) w.add('m.enviado_por = ANY(?::int[])', idsDe(responsableId));
   w.add(`${fechaLocal('m.ts')} >= ?::date`, desde);
   w.add(`${fechaLocal('m.ts')} <= ?::date`, hasta);
   const { rows: mensajes } = await query(
@@ -1504,7 +1509,7 @@ const enteros = (fila, claves) => Object.fromEntries(claves.map((k) => [k, enter
  */
 export async function resumenMatriculas({ projectIds, asesoraId = null, from = null, to = null }) {
   const f = condiciones('m.project_id', projectIds);
-  if (asesoraId) f.add('COALESCE(c.vendedora_id, l.responsable_id) = ?', asesoraId);
+  if (asesoraId) f.add('COALESCE(c.vendedora_id, l.responsable_id) = ANY(?::int[])', idsDe(asesoraId));
   if (from) f.add(`${fechaLocal('m.created_at')} >= ?::date`, from);
   if (to) f.add(`${fechaLocal('m.created_at')} <= ?::date`, to);
   const DE = `FROM matriculas m
@@ -1699,7 +1704,7 @@ export async function resumenWhatsapp({ projectIds, asesoraId = null, from = nul
   const f = condiciones('COALESCE(l.project_id, c.project_id)', projectIds);
   f.cond.push(`c.jid NOT LIKE '%@g.us'`);
   if (asesoraId) {
-    f.add(`(l.responsable_id = ? OR substring(c.instancia from '-u([0-9]+)$') = ?::text)`, asesoraId, String(asesoraId));
+    f.add(`(l.responsable_id = ANY(?::int[]) OR substring(c.instancia from '-u([0-9]+)$') = ANY(?::text[]))`, idsDe(asesoraId), idsDe(asesoraId).map(String));
   }
   if (from) f.add(`${fechaLocal('m.ts')} >= ?::date`, from);
   if (to) f.add(`${fechaLocal('m.ts')} <= ?::date`, to);
@@ -1759,7 +1764,7 @@ export async function resumenWhatsapp({ projectIds, asesoraId = null, from = nul
  */
 export async function resumenSolicitudes({ projectIds, asesoraId = null, from = null, to = null }) {
   const f = condiciones('r.project_id', projectIds);
-  if (asesoraId) f.add('r.solicitante_user_id = ?', asesoraId);
+  if (asesoraId) f.add('r.solicitante_user_id = ANY(?::int[])', idsDe(asesoraId));
   if (from) f.add('r.fecha_solicitud >= ?::date', from);
   if (to) f.add('r.fecha_solicitud <= ?::date', to);
   const [{ rows: porEstado }, { rows: porCampus }, { rows: recientes }] = await Promise.all([
@@ -1947,7 +1952,7 @@ export async function saludDeCobro({ projectIds, responsableId = null, hoy = hoy
 async function cifrasDeClientes({ projectIds, responsableId, texto, desde, hasta }) {
   const f = condiciones('l.project_id', projectIds);
   f.cond.push('l.deleted_at IS NULL');
-  if (responsableId) f.add('l.responsable_id = ?', responsableId);
+  if (responsableId) f.add('l.responsable_id = ANY(?::int[])', idsDe(responsableId));
   if (texto) {
     f.add('(l.nombre ILIKE ? OR l.email ILIKE ? OR l.telefono ILIKE ? OR l.whatsapp_usuario ILIKE ?)',
       `%${texto}%`, `%${texto}%`, `%${texto}%`, `%${texto}%`);
@@ -1987,7 +1992,8 @@ async function cifrasDeClientes({ projectIds, responsableId, texto, desde, hasta
  */
 export async function clientesDe({ projectIds, responsableId = null, gestoraId = null, texto = null, desde = null, hasta = null, pagina = 1, limite = 25 }) {
   // A quien ve solo lo suyo se le impone ella misma; quien ve todo el campus puede acotar a una gestora.
-  const gestora = responsableId || gestoraId || null;
+  // Con equipo (09/11/2026) `responsableId` es una lista y la gestora pedida la estrecha.
+  const gestora = personasDentro(responsableId ? idsDe(responsableId) : null, gestoraId);
   const termino = typeof texto === 'string' && texto.trim() ? texto.trim() : null;
   const [lista, cifras, cobros] = await Promise.all([
     clientesDeLeads({
