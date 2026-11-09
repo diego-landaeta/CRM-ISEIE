@@ -9,6 +9,7 @@ import { saveLocal, getLocal, deleteLocal } from '../../shared/services/localSto
 import { mimeToExt, extToMime } from '../../shared/utils/mime.js';
 import crypto from 'crypto';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
+import { alcanceDeLider } from '../../shared/utils/roles.js';
 
 /**
  * GET /api/users/buscar?q=&projectIds= — el buscador (Ctrl K, gemela de CRM#591).
@@ -56,7 +57,9 @@ export async function list(req, res, next) {
     if (!parsed.success) {
       throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
     }
-    const result = await userService.list({ ...parsed.data, campus: await campusDeLaLista(req) });
+    const { alcance, ...filtros } = parsed.data;
+    const soloIds = alcance === 'comercial' ? await alcanceDeLider(req.user) : null;
+    const result = await userService.list({ ...filtros, campus: await campusDeLaLista(req), soloIds });
     res.json({
       success: true,
       data: result.users,

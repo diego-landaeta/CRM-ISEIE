@@ -135,6 +135,10 @@ export const listUsersSchema = z.object({
   limit: z.coerce.number().int().positive().max(100).default(20),
   // La pantalla de Usuarios los pide expresamente; el resto de listas no.
   incluirTodos: z.enum(['true', 'false']).optional().transform((v) => v === 'true'),
+  // Los desplegables de gestora (Prospectos, Ventas, la Cola, Reasignar…):
+  // a quien lleva un equipo comercial, solo ella y su equipo (QA del 09/11/2026).
+  // A los demás no les cambia nada.
+  alcance: z.enum(['comercial']).optional(),
 });
 
 // El registro de «Actividad». Un `userId` que no es número era un 500 de

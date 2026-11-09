@@ -8,7 +8,7 @@ import { saveLocal, getLocal, deleteLocal } from '../../shared/services/localSto
 import { createInvoiceSchema, setSequenceSchema, updateConfigSchema, issuerSchema, cobrarProformaSchema } from './invoices.validation.js';
 import { proyectosDelAmbito, veTodoElCrm, campusDeLaPersona, campusDeTodos } from '../../shared/utils/ambito.js';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
-import { alcanceComercial } from '../../shared/utils/roles.js';
+import { alcanceComercial, alcanceDeLider } from '../../shared/utils/roles.js';
 
 function logoExt(mime) {
   if (mime === 'image/png') return 'png';
@@ -92,7 +92,9 @@ export async function stats(req, res, next) {
     const todos = !issuerId && !req.query.projectId;
     const pid = req.query.projectId ? Number(req.query.projectId) : null;
     const projectIds = todos ? await campusDeTodos(req) : await campusPermitidos(req, pid);
-    res.json({ success: true, data: await model.getStats({ projectId: pid, projectIds, issuerId, ...periodo(req) }) });
+    // Con equipo comercial (QA del 09/11/2026), los de ella y su equipo.
+    const personas = await alcanceDeLider(req.user);
+    res.json({ success: true, data: await model.getStats({ projectId: pid, projectIds, issuerId, ...periodo(req), personas }) });
   } catch (e) { next(e); }
 }
 
@@ -668,7 +670,8 @@ export async function deleteTemplate(req, res, next) {
 export async function ventasSinFactura(req, res, next) {
   try {
     const pid = projectId(req);
-    res.json({ success: true, data: await model.listVentasSinFactura({ projectId: pid, from: periodo(req).from, to: periodo(req).to }) });
+    res.json({ success: true, data: await model.listVentasSinFactura({ projectId: pid, from: periodo(req).from, to: periodo(req).to,
+      personas: await alcanceDeLider(req.user) }) });
   } catch (e) { next(e); }
 }
 
@@ -716,7 +719,9 @@ export async function facturacionAlDia(req, res, next) {
   try {
     const projectId = parseInt(req.query.projectId);
     if (!projectId) throw new AppError('projectId requerido', 400, 'MISSING_PROJECT');
-    res.json({ success: true, data: await service.getFacturacionAlDia(projectId) });
+    // Con equipo comercial (QA del 09/11/2026), solo lo de ella y su equipo.
+    const personas = await alcanceDeLider(req.user);
+    res.json({ success: true, data: await service.getFacturacionAlDia(projectId, { personas }) });
   } catch (err) { next(err); }
 }
 
@@ -749,7 +754,7 @@ export async function generarDeCola(req, res, next) {
       throw new AppError('Solo quien gestiona la facturacion puede emitir desde la cola', 403, 'FORBIDDEN');
     }
     const inv = await service.generarFacturaDePago(projectId, paymentId, req.user.userId,
-      { forzar: req.body?.forzar === true });
+      { forzar: req.body?.forzar === true, personas: await alcanceDeLider(req.user) });
     res.json({ success: true, data: inv });
   } catch (err) { next(err); }
 }
@@ -762,6 +767,11 @@ export async function emitirColaHasta(req, res, next) {
     if (!projectId || !hasta) throw new AppError('projectId y hasta requeridos', 400, 'BAD_REQUEST');
     if (!(await tienePermiso(req, 'facturas.cola'))) {
       throw new AppError('Solo quien gestiona la facturacion puede emitir desde la cola', 403, 'FORBIDDEN');
+    }
+    // «Emitir hasta» emite la cola ENTERA del campus: con equipo comercial no
+    // (QA del 09/11/2026); sus cobros, uno a uno desde su cola.
+    if (await alcanceDeLider(req.user)) {
+      throw new AppError('Emitir la cola entera es de administración sin equipo: emite tus cobros uno a uno.', 403, 'FUERA_DE_TU_EQUIPO');
     }
     res.json({ success: true, data: await service.emitirColaHasta(projectId, hasta, req.user.userId) });
   } catch (err) { next(err); }

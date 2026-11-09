@@ -6,7 +6,7 @@ import { proyectosDelAmbito, comoLista } from '../../shared/utils/ambito.js';
 import { actividadEnWhatsapp } from './actividad.model.js';
 import { usuarioObjetivo } from './chat.controller.js';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
-import { alcanceComercial, personasDentro } from '../../shared/utils/roles.js';
+import { alcanceComercial, alcanceDeLider, dentroDelAlcance, personasDentro } from '../../shared/utils/roles.js';
 
 function proyecto(req) {
   const p = req.query.projectId || req.body?.projectId;
@@ -147,7 +147,11 @@ export async function actividad(req, res, next) {
     const desde = fecha(req.query.from) || hasta;
     const ambito = await proyectosDelAmbito(req);
     const projectIds = comoLista(ambito.projectId, ambito.projectIds);
-    res.json({ success: true, data: await actividadEnWhatsapp({ projectIds, desde, hasta }) });
+    const datos = await actividadEnWhatsapp({ projectIds, desde, hasta });
+    // Quien lleva un equipo comercial (QA del 09/11/2026): ella y su equipo.
+    const lider = await alcanceDeLider(req.user);
+    if (lider) datos.filas = datos.filas.filter((f) => dentroDelAlcance(lider, f.id));
+    res.json({ success: true, data: datos });
   } catch (e) { next(e); }
 }
 
