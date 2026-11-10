@@ -183,6 +183,8 @@ export async function sinFormacion(req, res, next) {
         projectId, projectIds,
         from: req.query.from || null,
         to: req.query.to || null,
+        // Alumnos e importes: quien lleva un equipo comercial, los de su equipo (09/11/2026).
+        responsableId: await alcanceComercial(req.user),
       }),
     });
   } catch (err) { next(err); }

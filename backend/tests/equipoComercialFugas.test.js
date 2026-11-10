@@ -316,7 +316,9 @@ describe('extra: comisiones del equipo y registro de actividad', () => {
 });
 
 describe('extra: «mi puesto» del ranking (GET /api/informes/mi-puesto)', () => {
-  const puesto = (u, extra = '') => request.get(`/api/informes/mi-puesto?projectId=${P}${extra}`).set(como(u));
+  // Con el rango puesto: por defecto es «este mes» en hora local, y la base
+  // puede ir ya por el día siguiente (UTC): de noche la tabla salía vacía.
+  const puesto = (u, extra = '') => request.get(`/api/informes/mi-puesto?projectId=${P}&from=2000-01-01&to=2999-12-31${extra}`).set(como(u));
 
   it('Raquel: el puesto de G3 (de fuera), 403; el de G1, sí', async () => {
     const r = await puesto(RAQUEL, `&gestoraId=${G3.id}`);
