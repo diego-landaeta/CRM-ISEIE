@@ -158,9 +158,9 @@ function informe({ personas, filas, diferencias, sinExplicar }, detalle) {
   }
   // El menú no es una ruta: sus cambios van aparte, pero en la misma lista para Diego.
   L.push('');
-  L.push('Cambios del menú (ninguno de acceso: lo que sale ya respondía, lo que se va daba 403):');
+  L.push('Cambios del menú (ninguno de acceso: lo que sale ya respondía, lo que se va daba 403 o solo se esconde):');
   for (const c of CAMBIOS_DE_MENU) {
-    L.push(`  ${c.id} — ${c.que}`);
+    L.push(`  ${c.id}${c.soloMenu ? ' [solo menú]' : ''} — ${c.que}`);
     for (const [perfil, lineas] of Object.entries(c.perfiles)) L.push(`    ${perfil}: ${lineas.join(', ')}`);
   }
   L.push('');
