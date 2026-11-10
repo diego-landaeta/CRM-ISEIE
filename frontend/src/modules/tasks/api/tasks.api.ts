@@ -19,6 +19,7 @@ import type {
   TeamMember,
   TeamRole,
   MyTeam,
+  HistorialTarea,
 } from '../types';
 
 /**
@@ -108,14 +109,32 @@ export async function approveTask(id: number): Promise<Task> {
   return data as Task;
 }
 
-export async function getReviewTasks(ambito: Ambito = {}): Promise<Task[]> {
-  const { data } = await client.get<Task[]>('/tasks/review', { params: ambito });
-  return data ?? [];
-}
+export type HistorialParams = Ambito & {
+  ver?: 'mias' | 'equipo' | 'todo';
+  /** 0 = «Sin equipo». */
+  team_id?: number;
+  /** Quien la hizo (el responsable). */
+  assigned_to?: number;
+  /** El día del cierre, en días de la oficina (YYYY-MM-DD). */
+  desde?: string;
+  hasta?: string;
+  search?: string;
+  page?: number;
+  limit?: number;
+};
 
-export async function getReviewCount(ambito: Ambito = {}): Promise<{ count: number }> {
-  const { data } = await client.get<{ count: number }>('/tasks/review/count', { params: ambito });
-  return data ?? { count: 0 };
+export type Paginacion = { total: number; page: number; limit: number; totalPages: number };
+
+/**
+ * «Historial de tareas» (CRM-ISEIE#419): lo hecho, con quién lo hizo, quién lo cerró y
+ * cuándo. Sustituye a «Por revisar» y su contador: ya no hay bandeja de aprobar.
+ */
+export async function getHistorial(params: HistorialParams = {}): Promise<{ filas: HistorialTarea[]; paginacion: Paginacion }> {
+  const limpios = Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined && v !== ''));
+  const res = await client.get<HistorialTarea[]>('/tasks/historial', { params: limpios });
+  const paginacion: Paginacion = res.pagination
+    ?? { total: res.data?.length ?? 0, page: 1, limit: res.data?.length ?? 0, totalPages: 1 };
+  return { filas: res.data ?? [], paginacion };
 }
 
 export async function archiveTask(id: number): Promise<Task> {
@@ -306,7 +325,7 @@ export async function createTeam(body: { issuer_id: number; name: string; color?
   return data;
 }
 
-export async function updateTeam(id: number, body: Partial<Pick<Team, 'name' | 'color' | 'is_active' | 'sort_order'>>): Promise<Team> {
+export async function updateTeam(id: number, body: Partial<Pick<Team, 'name' | 'color' | 'is_active' | 'sort_order' | 'de_programacion'>>): Promise<Team> {
   const { data } = await client.patch<Team>(`/tasks/teams/${id}`, body);
   return data;
 }

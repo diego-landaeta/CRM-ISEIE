@@ -17,6 +17,7 @@ const { excepcionesDeCasillas } = await import('../src/modules/permissions/casil
 // Los perfiles de la foto del menú (frontend/src/test/menuPorPerfil423.test.jsx).
 const PERFILES = {
   superadmin: inv.personaDePrueba('superadmin'),
+  colaborador: inv.personaDePrueba('colaborador'),
   admin: inv.personaDePrueba('admin'),
   tutor: inv.personaDePrueba('tutor'),
   soporte: inv.personaDePrueba('soporte'),
@@ -37,7 +38,11 @@ beforeAll(async () => {
 }, 60000);
 
 const casos = CAMBIOS_DE_MENU.flatMap((c) => Object.entries(c.perfiles).flatMap(([perfil, lineas]) =>
-  lineas.map((l) => ({ id: c.id, acompanaA: c.acompanaA, perfil, signo: l[0], entrada: l.slice(2), ruta: c.rutas[l.slice(2)], soloMenu: Boolean(c.soloMenu) }))));
+  lineas.map((l) => ({
+    id: c.id, perfil, signo: l[0], entrada: l.slice(2), ruta: c.rutas[l.slice(2)],
+    soloMenu: Boolean(c.soloMenu),
+    quitada: (c.quitadas || []).includes(l.slice(2)) && !!c.aprobadoPor,
+  }))));
 
 describe('los cambios del menú no cambian el acceso (#423, punto 6)', () => {
   it('cada entrada tiene su ruta y su perfil', () => {
@@ -59,7 +64,12 @@ describe('los cambios del menú no cambian el acceso (#423, punto 6)', () => {
       // Diego 10/11): basta con que la ruta, si la tiene, siga existiendo
       // —responde igual que antes—; no tiene que dar 403.
       if (x.soloMenu) { if (x.ruta && !fila) mal.push(`${x.ruta}: no existe`); continue; }
+      // Una pantalla que se quita entera con su ruta (`quitadas`, CRM-ISEIE#419: «Por
+      // revisar»): no se le cierra a nadie, ya no existe. Basta con que de verdad
+      // ya no esté en el inventario.
+      if (!fila && x.signo === '-' && x.quitada) continue;
       if (!fila) { mal.push(`${x.ruta}: no existe`); continue; }
+      if (x.quitada) { mal.push(`${x.ruta}: se dice quitada y sigue existiendo`); continue; }
       const mapa = resolverPermisos({ role: p.role, roles_extra: p.roles_extra, excepciones: excepcionesDeCasillas(p) }).mapa;
       const antes = inv.puedeAntes(p, fila);
       const despues = inv.puedeDespues(p, fila, mapa);

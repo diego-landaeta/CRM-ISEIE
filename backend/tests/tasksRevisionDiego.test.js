@@ -316,10 +316,11 @@ describe('C · Configuración › Roles: permisos de Tareas por rol', () => {
     expect((await permisosDeRol('superadmin', 'tutor', { 'tasks.close': true })).status).toBe(400);
   });
 
-  it('un rol del sistema: darle «Aprobar y cerrar» le deja cerrar lo que lleva, y /auth/me lo refleja', async () => {
-    // 26/10/2026: aprobar es del supervisor; la clave deja cerrar arrastrando a quien la lleva.
+  it('un rol del sistema: darle «Devolver tareas» le deja devolver lo que ve, y /auth/me lo refleja', async () => {
+    // CRM-ISEIE#419: quien la lleva la cierra sin la clave; la clave es para devolver.
     const t = await crear('adminA', { title: 'A cerrar por el PM', assigned_to: U.pm.id });
-    const cerrar = () => request.patch(`/api/tasks/${t.id}/move`).set(como('pm')).send({ status: 'hecha' });
+    expect((await request.patch(`/api/tasks/${t.id}/move`).set(como('pm')).send({ status: 'hecha' })).status).toBe(200);
+    const cerrar = () => request.patch(`/api/tasks/${t.id}/return`).set(como('pm')).send({ comment: 'Me la devuelvo' });
     try {
       expect((await cerrar()).status).toBe(403);
 

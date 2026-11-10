@@ -141,10 +141,11 @@ describe('el tablero es del equipo de desarrollo', () => {
     expect(consulta).toMatch(/user_projects/);
   });
 
-  it('«Por revisar» (26/10/2026) es de quien supervisa: responde a todos, y a quien no supervisa nada, vacío', async () => {
-    expect((await request.get('/api/tasks/review').set(como('colaboradora'))).status).toBe(200);
-    expect((await request.get('/api/tasks/review').set(como('admin'))).status).toBe(200);
-    expect((await request.get('/api/tasks/review/count').set(como('colaboradora'))).body.data).toEqual({ count: 0 });
+  it('«Historial de tareas» (CRM-ISEIE#419) responde a quien tiene tablero; «Por revisar» y su contador ya no existen', async () => {
+    expect((await request.get('/api/tasks/historial').set(como('colaboradora'))).status).toBe(200);
+    expect((await request.get('/api/tasks/historial').set(como('admin'))).status).toBe(200);
+    expect((await request.get('/api/tasks/review').set(como('admin'))).status).not.toBe(200);
+    expect((await request.get('/api/tasks/review/count').set(como('colaboradora'))).status).not.toBe(200);
   });
 });
 
@@ -203,10 +204,11 @@ describe('los permisos de Tareas por rol (Configuración › Roles)', () => {
     expect(res.status).toBe(400);
   });
 
-  it('con «Aprobar y cerrar» dado al colaborador, ya revisa', async () => {
+  it('con «Devolver tareas» dado al colaborador no le sale ninguna bandeja: el historial, como a todos (CRM-ISEIE#419)', async () => {
     await request.put('/api/permissions/role-permissions/colaborador')
       .set(como('super')).send({ permissions: { 'tasks.close': true } });
-    expect((await request.get('/api/tasks/review').set(como('colaboradora'))).status).toBe(200);
+    expect((await request.get('/api/tasks/historial').set(como('colaboradora'))).status).toBe(200);
+    expect((await request.get('/api/tasks/review/count').set(como('colaboradora'))).status).not.toBe(200);
   });
 });
 

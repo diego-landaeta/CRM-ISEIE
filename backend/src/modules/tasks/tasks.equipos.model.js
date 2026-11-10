@@ -45,6 +45,33 @@ export function sqlConTablero(u, idx, tipos) {
 const colTipo = (t, tipos) => (tipos ? `${t}.tipo` : `'colaboradores'::text`);
 
 /*
+  Equipos de programación (migración 276, CRM-ISEIE#419): sus tareas las cierra
+  el supervisor (Diego) o un superadmin, no quien la lleva. Hasta que se pase la
+  migración, ninguno lo es: todas las tareas las cierra quien las hace.
+*/
+let hayProgramacion = false;
+export async function existeProgramacion() {
+  if (hayProgramacion) return true;
+  const { rows } = await query(
+    `SELECT EXISTS (SELECT 1 FROM information_schema.columns
+                     WHERE table_name = 'task_teams' AND column_name = 'de_programacion') AS hay`);
+  hayProgramacion = rows[0]?.hay === true;
+  return hayProgramacion;
+}
+/** Solo para las pruebas. */
+export function olvidarProgramacion() { hayProgramacion = false; }
+
+/** ¿Es de programación el equipo `t`? (SQL; sin la migración, FALSE). */
+export const colProgramacion = (t, prog) => (prog ? `COALESCE(${t}.de_programacion, FALSE)` : 'FALSE');
+
+/** ¿Es de programación este equipo? */
+export async function equipoDeProgramacion(teamId) {
+  if (!teamId || !(await existeProgramacion())) return false;
+  const { rows } = await query('SELECT de_programacion FROM task_teams WHERE id = $1', [teamId]);
+  return rows[0]?.de_programacion === true;
+}
+
+/*
   Equipos del tablero, con cargos por nivel (migración 235; Diego, 26/10/2026).
 
   Aquí solo SQL. Quién puede qué lo decide `tasks.reglas.js` y el servicio.
@@ -72,8 +99,9 @@ export const CARGOS_DE_SERIE = [
 
 const n = (v) => (v == null ? null : Number(v));
 
-const camposEquipo = (tipos) => `
+const camposEquipo = (tipos, prog = false) => `
   tm.id, tm.issuer_id, ii.razon_social AS empresa, tm.name, ${colTipo('tm', tipos)} AS tipo, tm.color, tm.is_active, tm.sort_order,
+  ${colProgramacion('tm', prog)} AS de_programacion,
   tm.created_at, tm.updated_at,
   (SELECT COUNT(*)::int FROM task_team_members m WHERE m.team_id = tm.id) AS miembros,
   COALESCE((SELECT json_agg(json_build_object('id', r.id, 'name', r.name, 'level', r.level::float8,
@@ -86,9 +114,9 @@ const camposEquipo = (tipos) => `
  * los equipos en los que está esa persona.
  */
 export async function listarEquipos({ issuerIds = null, soloDe = null, incluirArchivados = false } = {}) {
-  const tipos = await existeTipos();
+  const [tipos, prog] = await Promise.all([existeTipos(), existeProgramacion()]);
   const { rows } = await query(
-    `SELECT ${camposEquipo(tipos)}
+    `SELECT ${camposEquipo(tipos, prog)}
        FROM task_teams tm
        JOIN invoice_issuers ii ON ii.id = tm.issuer_id
       WHERE ($1::int[] IS NULL OR tm.issuer_id = ANY($1::int[]))
@@ -101,9 +129,9 @@ export async function listarEquipos({ issuerIds = null, soloDe = null, incluirAr
 }
 
 export async function equipoPorId(id) {
-  const tipos = await existeTipos();
+  const [tipos, prog] = await Promise.all([existeTipos(), existeProgramacion()]);
   const { rows } = await query(
-    `SELECT ${camposEquipo(tipos)} FROM task_teams tm JOIN invoice_issuers ii ON ii.id = tm.issuer_id WHERE tm.id = $1`, [id]);
+    `SELECT ${camposEquipo(tipos, prog)} FROM task_teams tm JOIN invoice_issuers ii ON ii.id = tm.issuer_id WHERE tm.id = $1`, [id]);
   return rows[0] || null;
 }
 
@@ -185,7 +213,7 @@ export async function nivelesEn(teamId, userIds) {
   return new Map(rows.map((r) => [Number(r.user_id), { nivel: n(r.nivel), cargo: r.cargo }]));
 }
 
-export async function crearEquipo({ issuer_id, name, color = 'gray', sort_order = 0, created_by, tipo = 'colaboradores' }) {
+export async function crearEquipo({ issuer_id, name, color = 'gray', sort_order = 0, created_by, tipo = 'colaboradores', de_programacion = false }) {
   const tipos = await existeTipos();
   const db = await getClient();
   try {
@@ -197,6 +225,9 @@ export async function crearEquipo({ issuer_id, name, color = 'gray', sort_order 
       : await db.query(
         `INSERT INTO task_teams (issuer_id, name, color, sort_order, created_by) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
         [issuer_id, name, color, sort_order, created_by]);
+    if (de_programacion && await existeProgramacion()) {
+      await db.query('UPDATE task_teams SET de_programacion = TRUE WHERE id = $1', [t.id]);
+    }
     for (const c of CARGOS_DE_SERIE) {
       await db.query('INSERT INTO task_team_roles (team_id, name, level, sort_order) VALUES ($1, $2, $3, $4)',
         [t.id, c.name, c.level, c.sort_order]);
@@ -213,6 +244,7 @@ export async function crearEquipo({ issuer_id, name, color = 'gray', sort_order 
 
 export async function actualizarEquipo(id, campos) {
   const permitidos = ['name', 'color', 'is_active', 'sort_order'];
+  if (await existeProgramacion()) permitidos.push('de_programacion');
   const sets = []; const params = [];
   for (const k of permitidos) {
     if (campos[k] !== undefined) { params.push(campos[k]); sets.push(`${k} = $${params.length}`); }

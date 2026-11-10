@@ -374,6 +374,27 @@ export const CAMBIOS_DE_MENU = [
     },
     aprobadoPor: 'Diego, 10/11',
   },
+  {
+    id: 'historial-de-tareas',
+    que: '«Equipo de Desarrollo › Por revisar» desaparece y en su sitio sale «Historial de tareas» a quien tiene tablero (CRM-ISEIE#419).',
+    motivo: 'Diego y Carlos (10/11): quien hace la tarea la pasa a «Hecha» él mismo; las de programación las cierra Diego. Ya no hay una bandeja de «por aprobar» ni su contador (tampoco para Carlos): la pantalla y su ruta (`/api/tasks/review`) se quitan enteras. El historial enseña lo hecho con el alcance del tablero: no abre nada que no se viera ya en «Mi tablero».',
+    perfiles: {
+      superadmin: ['- Equipo de Desarrollo › Por revisar', '+ Equipo de Desarrollo › Historial de tareas'],
+      admin: ['- Equipo de Desarrollo › Por revisar', '+ Equipo de Desarrollo › Historial de tareas'],
+      'gestora+admin': ['- Equipo de Desarrollo › Por revisar', '+ Equipo de Desarrollo › Historial de tareas'],
+      // Quien tiene tablero sin «Aprobar y cerrar»: no tenía «Por revisar» y gana el historial de lo suyo.
+      colaborador: ['+ Equipo de Desarrollo › Historial de tareas'],
+      tutor: ['+ Equipo de Desarrollo › Historial de tareas'],
+      'gestora+tutor': ['+ Equipo de Desarrollo › Historial de tareas'],
+    },
+    rutas: {
+      'Equipo de Desarrollo › Por revisar': 'GET /api/tasks/review',
+      'Equipo de Desarrollo › Historial de tareas': 'GET /api/tasks/historial',
+    },
+    // La pantalla se va con su ruta: no es que se le cierre a alguien, es que ya no existe.
+    quitadas: ['Equipo de Desarrollo › Por revisar'],
+    aprobadoPor: 'Diego, 10/11',
+  },
 ];
 
 /**
@@ -428,5 +449,13 @@ export const CAMBIOS_DE_REGLA = [
     roles: ['tutor'],
     sentido: 'gana',
     aprobadoPor: 'Diego, 04/11',
+  },
+  {
+    id: 'historial-de-tareas',
+    que: 'El tutor puede pedir `/api/tasks/historial`: lo hecho de su tablero de tutores (lo suyo y lo de su equipo), con quién y cuándo.',
+    motivo: 'CRM-ISEIE#419 (Diego y Carlos, 10/11): «Por revisar» pasa a «Historial de tareas». Ya entraba por `/api/tasks` en el corte del tutor (`tutores-tablero`); el historial no enseña nada que no viera ya en su tablero.',
+    roles: ['tutor'],
+    sentido: 'gana',
+    aprobadoPor: 'Diego, 10/11',
   },
 ];

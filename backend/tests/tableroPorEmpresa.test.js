@@ -45,12 +45,12 @@ describe('el tablero con una empresa arriba', () => {
   });
 });
 
-describe('«Por revisar» y las cifras del equipo, también por empresa (30/10)', () => {
+describe('el historial y las cifras del equipo, también por empresa (30/10)', () => {
   const conEquipos = () => query.mockImplementation(async () => ({ rows: [{ hay: true, total: 0 }], rowCount: 1 }));
-  it('el contador de «Por revisar»', async () => {
+  it('el historial de tareas (CRM-ISEIE#419), que sustituye al contador de «Por revisar»', async () => {
     conEquipos();
-    await model.countReview(null, 3, { deLaCabecera: [4, 13] });
-    const [sql, params] = query.mock.calls.find(([s]) => /en_revision/.test(s));
+    await model.findTasks({ status: 'hecha', con_cierre: true, orden: 'cierre', de_la_cabecera: [4, 13] });
+    const [sql, params] = query.mock.calls.find(([s]) => /completed_by/.test(s));
     expect(sql).toMatch(/tt_c\.issuer_id/);
     expect(params).toContainEqual([4, 13]);
   });
