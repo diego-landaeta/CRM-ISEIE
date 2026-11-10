@@ -31,17 +31,23 @@ async function elToken(req) {
   return t;
 }
 
+// A quién avisa por correo una solicitud de admisión nueva (#714): el aviso no lleva
+// datos (admision.aviso.js). Hasta 10 direcciones.
+const avisoEmails = z.array(z.string().trim().toLowerCase().email().max(200)).max(10);
+
 const createSchema = z.object({
   project_id: z.number().int().positive(),
   kind: z.enum(['matriculas', 'leads', 'custom']),
   field_mapping: z.record(z.string(), z.string()).optional(),
   notas: z.string().max(500).optional(),
+  aviso_emails: avisoEmails.optional(),
 });
 
 const updateSchema = z.object({
   active: z.boolean().optional(),
   field_mapping: z.record(z.string(), z.string()).optional(),
   notas: z.string().max(500).optional(),
+  aviso_emails: avisoEmails.optional(),
 }).refine(d => Object.keys(d).length > 0);
 
 export async function list(req, res, next) {

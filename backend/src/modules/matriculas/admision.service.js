@@ -7,6 +7,7 @@ import { firmaTransparente } from '../certifex/certifex.firma.js';
 import { applyMapping } from '../webhook-tokens/mapeo.js';
 import * as model from './matricula.model.js';
 import { obtenerArchivo, conArchivos } from './admision.archivos.js';
+import { avisarAdmision } from './admision.aviso.js';
 
 /**
  * EL WEBHOOK DE ADMISIÓN (#198).
@@ -226,6 +227,13 @@ export async function recibirAdmision(token, body, archivos = [], opcionesArchiv
 
   const persona = {};
   for (const campo of CAMPOS_PERSONA) persona[campo] = texto(mapeado[campo], campo);
+  // Los apellidos, aparte en casi todos los formularios (ISEIH, Psiko, Fono, Academia
+  // IA: `nombre` y `apellidos`, #714): se añaden al nombre. El mapeo es de un campo a un
+  // dato, así que sin esto el nombre se quedaba sin apellidos.
+  const apellidos = texto(mapeado.apellidos, 'nombre');
+  if (apellidos && !(persona.nombre || '').toLowerCase().includes(apellidos.toLowerCase())) {
+    persona.nombre = `${persona.nombre ? `${persona.nombre} ` : ''}${apellidos}`.slice(0, LARGO.nombre);
+  }
   if (persona.email) persona.email = persona.email.toLowerCase();
   persona.fecha_nacimiento = fechaDeNacimiento(mapeado.fecha_nacimiento);
 
@@ -308,7 +316,12 @@ export async function recibirAdmision(token, body, archivos = [], opcionesArchiv
   }
   if (rechazados.length) logger.warn({ matriculaId: matricula.id, projectId, rechazados }, 'Admisión: documentos rechazados');
 
+  // El aviso por correo, sin datos (#714): sin esperarlo, para no cambiar el tiempo de
+  // la respuesta (ver RESPUESTA_FIJA_MS). `avisarAdmision` no lanza nunca.
+  const aviso = (opcionesArchivo.avisar || avisarAdmision)({ token, matriculaId: matricula.id, curso: persona.curso_solicitado || persona.titulo });
+
   return responder({
+    aviso,
     matriculaId: matricula.id,
     accion: 'created',
     leadId: prospecto.leadId,
