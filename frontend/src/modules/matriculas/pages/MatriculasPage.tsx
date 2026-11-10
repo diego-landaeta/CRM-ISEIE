@@ -130,6 +130,30 @@ export default function MatriculasPage() {
   // Los campus entre los que se puede filtrar. Con un campus en la cabecera no hay nada que elegir.
   const campusDelAmbito = campusElegido ? [] : campusDelServidor;
   const [detail, setDetail] = useState(null);
+
+  // El enlace del aviso por correo (#714): /matriculas?matricula=ID abre su
+  // ficha. El correo no lleva datos; la ficha, sí, y pide sesión y permiso como siempre.
+  const matriculaDelEnlace = params.get('matricula');
+  useEffect(() => {
+    if (!matriculaDelEnlace || !/^[1-9]\d{0,14}$/.test(matriculaDelEnlace)) return;
+    let vivo = true;
+    client.get(`/matriculas/${matriculaDelEnlace}`)
+      .then((res) => { if (vivo && res?.success && res.data?.id) setDetail(res.data); })
+      .catch((err: any) => {
+        const e = err?.data?.error;
+        const motivo = typeof e === 'string' ? e : (typeof e?.message === 'string' ? e.message : 'Puede que no sea de tus campus.');
+        if (vivo) toast({ title: 'No se puede abrir esa solicitud', description: motivo, variant: 'destructive' });
+      });
+    return () => { vivo = false; };
+  }, [matriculaDelEnlace]);
+  const cerrarFicha = () => {
+    setDetail(null);
+    if (params.get('matricula')) {
+      const sin = new URLSearchParams(params);
+      sin.delete('matricula');
+      setParams(sin, { replace: true });
+    }
+  };
   const [rechazoTarget, setRechazoTarget] = useState(null);
 
   // Al cambiar la cabecera, el campus filtrado puede dejar de ser de este ámbito.
@@ -434,7 +458,7 @@ export default function MatriculasPage() {
           cambiar el estado a admin y super admin (a la gestora le daba 403). La
           clave con el estado vuelve a montar la ficha con lo nuevo tras validar. */}
       {detail && (
-        <MatriculaDetail key={`${detail.id}-${detail.estado}`} matricula={detail} onClose={() => setDetail(null)} onChange={() => load()}
+        <MatriculaDetail key={`${detail.id}-${detail.estado}`} matricula={detail} onClose={cerrarFicha} onChange={() => load()}
           onEstado={tieneRol('superadmin', 'admin') ? handleEstado : undefined} pausada={!!rechazoTarget} />
       )}
       <PromptDialog

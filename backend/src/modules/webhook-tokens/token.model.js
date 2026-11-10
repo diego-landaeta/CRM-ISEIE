@@ -42,15 +42,16 @@ export async function saveSample(id, payload) {
 export async function create(data) {
   const token = `${data.kind}_${crypto.randomBytes(16).toString('hex')}`;
   const { rows } = await query(
-    `INSERT INTO project_webhook_tokens (project_id, kind, token, field_mapping, notas, created_by)
-     VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-    [data.project_id, data.kind, token, JSON.stringify(data.field_mapping || {}), data.notas || null, data.created_by || null]
+    `INSERT INTO project_webhook_tokens (project_id, kind, token, field_mapping, notas, created_by, aviso_emails)
+     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+    [data.project_id, data.kind, token, JSON.stringify(data.field_mapping || {}), data.notas || null, data.created_by || null, data.aviso_emails || []]
   );
   return rows[0];
 }
 
 export async function update(id, fields) {
-  const allowed = ['active', 'field_mapping', 'notas'];
+  // aviso_emails (#714): TEXT[], va tal cual; pg convierte la lista.
+  const allowed = ['active', 'field_mapping', 'notas', 'aviso_emails'];
   const jsonbFields = new Set(['field_mapping']);
   const sets = []; const params = []; let idx = 1;
   for (const k of allowed) if (fields[k] !== undefined) {
