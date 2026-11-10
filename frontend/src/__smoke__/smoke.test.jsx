@@ -49,6 +49,12 @@ beforeAll(() => {
         carga_por_tutora: null, indicadores: null });
     }
     // Las ventas por vendedora del panel de Finanzas: una lista.
+    // La tarjeta «Actividad por comercial» del Dashboard: con `{}` se rompía al
+    // leer las fechas. Se llega al Dashboard por las direcciones de IA apagadas (#30).
+    if (u.includes('/informes/actividad-comercial')) {
+      const equipo = { llamadas: 0, whatsapp: 0, whatsapp_texto: 0, whatsapp_voz: 0, correos: 0, personas: 0, toques: 0 };
+      return forma({ desde: '2026-11-09', hasta: '2026-11-09', equipo, filas: [] });
+    }
     if (u.includes('/informes/ventas-vendedora')) return forma([]);
     // Ventas por cliente y por país (pantalla Ventas): listas.
     if (u.includes('/ventas/por-cliente') || u.includes('/ventas/paises')) return forma([]);

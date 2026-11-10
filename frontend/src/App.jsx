@@ -376,17 +376,17 @@ function App() {
           <Route path="/informes" element={<ReportsPage />} />
           {/* Las pantallas de IA del CRM (#30) están apagadas (Diego, 10/11/2026:
               se usa Claude por el MCP). Quien entre por su dirección va al
-              inicio, sin error. Se encienden con `PANTALLAS_IA`.
+              inicio (/dashboard), sin error. Se encienden con `PANTALLAS_IA`.
               Pregunta a tus datos, además, solo en pruebas, y solo con su
               permiso aunque se escriba la dirección a mano (#580). */}
           <Route path="/informes/preguntar"
             element={PANTALLAS_IA && SOLO_EN_PRUEBAS
               ? <ConPermiso permiso="reports_ia.generar" a="/informes"><PreguntarPage /></ConPermiso>
-              : <Navigate to={PANTALLAS_IA ? '/informes' : '/'} replace />} />
+              : <Navigate to={PANTALLAS_IA ? '/informes' : '/dashboard'} replace />} />
           {/* Chat IA no tiene pantalla en ISEIE (era «Próximamente»): su dirección,
-              al inicio en vez de «Página no encontrada». */}
-          <Route path="/chat-ia" element={<Navigate to="/" replace />} />
-          <Route path="/ai-chat" element={<Navigate to="/" replace />} />
+              al inicio (/dashboard) en vez de «Página no encontrada». */}
+          <Route path="/chat-ia" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/ai-chat" element={<Navigate to="/dashboard" replace />} />
           {/* El panel de feedback, fuera de produccion hasta aprobarlo. */}
           <Route path="/informes/feedback"
             element={PROCESO_EN_PRUEBAS ? <FeedbackPanelPage /> : <Navigate to="/informes" replace />} />
@@ -419,7 +419,7 @@ function App() {
             copiaron de MultiCRM y cuatro llevaban a «Página no encontrada»:
             /informes/ia, /mensajes, /chat-ia y /configuracion/plantillas-email
             no existen en ISEIE. Las dos sin pantalla equivalente se quitan.
-            (/chat-ia y /ai-chat llevan al inicio desde el 10/11, arriba: #30.) */}
+            (/chat-ia y /ai-chat llevan a /dashboard desde el 10/11, arriba: #30.) */}
         <Route path="/reports/ia" element={<Navigate to="/informes" replace />} />
         <Route path="/reports" element={<Navigate to="/informes" replace />} />
         <Route path="/sales" element={<Navigate to="/ventas" replace />} />

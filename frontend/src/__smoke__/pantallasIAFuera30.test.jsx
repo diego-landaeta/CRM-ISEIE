@@ -8,7 +8,7 @@ import { Routes, Navigate, createRoutesFromChildren, matchRoutes } from 'react-r
 
   «Pregunta a tus datos» y «Chat IA» (que era «Próximamente») no salen en el
   menú ni en el buscador (Ctrl+K), para ningún rol; y quien entra por su
-  dirección va al inicio, sin «Página no encontrada». ISEIE no tiene «Análisis
+  dirección va al inicio (/dashboard), sin «Página no encontrada». ISEIE no tiene «Análisis
   IA» ni dock flotante. El código se queda: con `VITE_PANTALLAS_IA=1` vuelven
   (la última prueba). La gemela vive en MultiCRM (`src/test/pantallasIAFuera30`).
 */
@@ -72,7 +72,7 @@ describe('#30 · entrar por la dirección lleva al inicio, sin error', () => {
     return buscarRoutes(el.props?.children);
   }
 
-  it.each([...RUTAS_IA, '/ai-chat'])('%s → /', async (ruta) => {
+  it.each([...RUTAS_IA, '/ai-chat'])('%s → /dashboard', async (ruta) => {
     const { default: App } = await import('@/App');
     const RUTAS = createRoutesFromChildren(buscarRoutes(App()).props.children);
     const m = matchRoutes(RUTAS, ruta);
@@ -82,7 +82,8 @@ describe('#30 · entrar por la dirección lleva al inicio, sin error', () => {
     expect(ultima.route.path).not.toBe('*');
     const el = ultima.route.element;
     expect(isValidElement(el) && el.type === Navigate, ruta).toBe(true);
-    expect(el.props.to).toBe('/');
+    // El inicio de ISEIE: `/` solo redirige a /dashboard (`RootRedirect`).
+    expect(el.props.to).toBe('/dashboard');
   }, 60000);
 });
 
