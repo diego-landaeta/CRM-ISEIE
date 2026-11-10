@@ -3,9 +3,14 @@ import { verifyToken } from '../../shared/middleware/auth.js';
 import { puede } from '../../shared/middleware/permissions.js';
 import { ambitoDelProceso } from './proceso.ambito.js';
 import * as ctrl from './proceso.controller.js';
+import { prospectoPorId } from '../conversions/conversion.acceso.js';
 
 const router = Router();
 router.use(verifyToken);
+// El prospecto de la URL (`/lead/:leadId`), de sus campus y de su alcance: una
+// gestora, los suyos; quien lleva un equipo comercial, los de su equipo (QA del
+// 09/11/2026). Antes se leían (y se replanificaban) los de cualquiera por el id.
+router.param('leadId', prospectoPorId);
 
 // LEER los pasos lo puede hacer cualquiera con acceso al proyecto: la gestora
 // necesita saber en que paso va cada prospecto, que es de lo que va todo esto.

@@ -726,7 +726,7 @@ export async function getResumenVentas(filtros = {}) {
   atar --lo segundo se ve en un aviso; lo primero se paga a quien no era--, y
   ese aviso ya esta escrito en `scripts/venta-177-sin-formacion.sql`.
 */
-export async function ventasSinFormacion({ projectId, projectIds = null, from = null, to = null } = {}) {
+export async function ventasSinFormacion({ projectId, projectIds = null, from = null, to = null, responsableId = null } = {}) {
   const params = [];
   const cond = [];
   const lista = comoLista(projectId, projectIds);
@@ -737,6 +737,12 @@ export async function ventasSinFormacion({ projectId, projectIds = null, from = 
   cond.push('EXISTS (SELECT 1 FROM conversion_payments cp WHERE cp.conversion_id = c.id)');
   if (from) { params.push(from); cond.push(`c.fecha_conversion >= $${params.length}::date`); }
   if (to) { params.push(to); cond.push(`c.fecha_conversion <= $${params.length}::date`); }
+  // De una gestora o de un equipo comercial (09/11/2026): por el reparto.
+  if (responsableId) {
+    params.push([].concat(responsableId).map(Number));
+    cond.push(`EXISTS (SELECT 1 FROM conversion_reparto rx
+                        WHERE rx.conversion_id = c.id AND rx.vendedora_id = ANY($${params.length}::int[]))`);
+  }
 
   const { rows } = await query(
     `SELECT c.id,

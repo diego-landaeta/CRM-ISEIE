@@ -5,6 +5,7 @@ import { traduccionesSchema, limpiarTraducciones, textosPorIdioma, idiomaDe } fr
 import { gestorasParaLaWeb } from '../asignacion/asignacion.widget.js';
 import { apuntarPulsacion, resumenDePulsaciones } from './widget.pulsaciones.js';
 import { proyectosDelAmbito, comoLista } from '../../shared/utils/ambito.js';
+import { alcanceDeLider, dentroDelAlcance } from '../../shared/utils/roles.js';
 import { createHash } from 'node:crypto';
 
 // Endpoint PUBLICO: GET /api/widget/whatsapp/:projectId.js
@@ -98,7 +99,12 @@ export async function pulsaciones(req, res, next) {
     // proyectosDelAmbito ya recorta a los campus de cada persona.
     const ambito = await proyectosDelAmbito(req);
     const projectIds = comoLista(ambito.projectId, ambito.projectIds);
-    res.json({ success: true, data: { from, to, ...(await resumenDePulsaciones({ projectIds, from, to })) } });
+    const resumen = await resumenDePulsaciones({ projectIds, from, to });
+    // Por gestora: quien lleva un equipo comercial, solo ella y su equipo (QA
+    // del 09/11/2026). Las páginas son de la web, no de nadie: se quedan.
+    const lider = await alcanceDeLider(req.user);
+    if (lider) resumen.porGestora = resumen.porGestora.filter((g) => dentroDelAlcance(lider, g.id));
+    res.json({ success: true, data: { from, to, ...resumen } });
   } catch (e) { next(e); }
 }
 
