@@ -98,6 +98,7 @@ export function EquiposConfig() {
                 <span className="font-semibold truncate">{t.name}</span>
                 <span className="text-xs text-muted-foreground truncate">· {t.empresa}</span>
                 {t.tipo === 'tutores' && <span className="text-[10px] uppercase font-semibold text-muted-foreground">Tutores</span>}
+                {t.de_programacion && <span className="text-[10px] uppercase font-semibold text-muted-foreground">Programación</span>}
                 {!t.is_active && <span className="text-[10px] uppercase font-semibold text-muted-foreground">Archivado</span>}
               </span>
               <span className="text-xs text-muted-foreground flex items-center gap-1"><Users size={13} /> {t.miembros}</span>
@@ -147,6 +148,19 @@ function Detalle({ equipo, alCambiar }: { equipo: Team; alCambiar: () => void })
           {equipo.is_active ? <><Archive size={14} className="mr-1" /> Archivar</> : <><ArrowCounterClockwise size={14} className="mr-1" /> Recuperar</>}
         </Button>
       </div>
+
+      {/* CRM-ISEIE#419: en un equipo de programación, quien lleva la tarea la manda a
+          «En revisión» y la cierra su supervisor; en los demás, la cierra él. */}
+      {equipo.tipo !== 'tutores' && (
+        <label className="flex items-start gap-2 text-sm">
+          <input type="checkbox" className="mt-0.5" checked={!!equipo.de_programacion}
+            onChange={(e) => hecho(() => tasksApi.updateTeam(equipo.id, { de_programacion: e.target.checked }), 'No se pudo cambiar')} />
+          <span>
+            Equipo de programación
+            <span className="block text-xs text-muted-foreground">Sus tareas las cierra el supervisor: quien la lleva la manda a «En revisión».</span>
+          </span>
+        </label>
+      )}
 
       <div className="space-y-2">
         <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Cargos (de más a menos nivel)</h4>

@@ -17,7 +17,7 @@ const COLABORADOR = ['tasks.view_own', 'tasks.create', 'tasks.edit', 'facturas_c
 describe('menú · equipo de desarrollo', () => {
   it('un colaborador ve Tareas, «Mi factura» y sus preferencias; nada de prospectos, ventas ni finanzas', () => {
     const ve = loQueVe(['colaborador'], COLABORADOR);
-    expect(ve).toEqual(expect.arrayContaining(['/tareas', '/mi-factura', '/preferencias']));
+    expect(ve).toEqual(expect.arrayContaining(['/tareas', '/tareas/historial', '/mi-factura', '/preferencias']));
     for (const no of ['/leads', '/ventas', '/accounting/facturas', '/meta-ads', '/tareas/revisar', '/tareas/configurar']) {
       expect(ve, no).not.toContain(no);
     }
@@ -30,8 +30,11 @@ describe('menú · equipo de desarrollo', () => {
     expect(ve).not.toContain('/leads');
   });
 
-  it('«Por revisar», solo con «Aprobar y cerrar»', () => {
-    expect(loQueVe(['colaborador'], [...COLABORADOR, 'tasks.close'])).toContain('/tareas/revisar');
+  it('«Por revisar» ya no está, ni con «Devolver tareas»; «Historial de tareas», con su tablero (CRM-ISEIE#419)', () => {
+    const ve = loQueVe(['colaborador'], [...COLABORADOR, 'tasks.close']);
+    expect(ve).not.toContain('/tareas/revisar');
+    expect(ve).toContain('/tareas/historial');
+    expect(loQueVe(['colaborador'], ['facturas_colaborador.subir'])).not.toContain('/tareas/historial');
   });
 
   it('un colaborador con «Diplomas · Ver» sigue sin Diplomas (no es para él)', () => {
