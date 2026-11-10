@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   MagnifyingGlass, SquaresFour, Users, Package, Receipt, Kanban, UserGear,
-  Power, Command, Plus,
+  Power, Command, Plus, ChalkboardTeacher, Invoice, Certificate, GraduationCap,
 } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
@@ -15,6 +15,7 @@ import {
   esSoloColaboraciones,
 } from '@/shared/components/layout/Sidebar';
 import { isBetaAllowed } from '@/shared/config/betaConfig';
+import { CERTIFEX_PANEL } from '@/shared/lib/certifexPanel';
 import { rolesDe } from '@/shared/lib/roles';
 import client from '@/shared/api/client';
 
@@ -29,6 +30,8 @@ import client from '@/shared/api/client';
   - Personas, productos, ventas por número, facturas, tareas y usuarios del
     equipo, cada tipo SOLO con su permiso efectivo (/auth/me). El ámbito (sus
     campus; si es gestora, solo lo suyo) lo pone la ruta del servidor.
+  - Tutores, facturas de colaboradores, diplomas y cursos de Moodle (CRM#591,
+    21783e99), igual que en MultiCRM y con las rutas de este CRM.
   - Sin acentos y el teléfono por cifras: lo hace el servidor (migración 248).
 
   `includeConverted` no se puede quitar: sin él, /leads añade «status <>
@@ -68,26 +71,29 @@ export function paginasDelBuscador({ user, can }) {
 
 /**
  * Qué tipos de resultado busca alguien: los permisos que protegen su pantalla,
- * los efectivos (con sus excepciones). Quien es SOLO tutor no busca personas
- * ni productos (decisión de Diego, 02/11): el catálogo le da `leads.view` y
- * `products.view`, pero su menú no tiene ninguna de las dos.
+ * los efectivos (con sus excepciones). Sin excepciones por rol: el tutor solo
+ * tiene lo suyo en el catálogo (Diego, 03/11, CRM#591), así que tampoco lo busca.
  */
-export function queBusca({ user, can }) {
+export function queBusca({ can }) {
   const tiene = (p) => typeof can === 'function' && can(p) === true;
-  const roles = rolesDe(user);
-  const soloTutor = roles.length === 1 && roles[0] === 'tutor';
-  const personas = !soloTutor && tiene('leads.view');
-  const productos = !soloTutor && tiene('products.view');
+  const personas = tiene('leads.view');
+  const productos = tiene('products.view');
   return {
     personas,
     clientes: personas && tiene('clients.view'),
     productos,
     crearProspecto: personas && tiene('leads.create'),
     crearProducto: productos && tiene('products.create'),
-    ventas: !soloTutor && tiene('conversions.view'),
-    facturas: !soloTutor && tiene('facturas.view'),
+    ventas: tiene('conversions.view'),
+    facturas: tiene('facturas.view'),
     tareas: tiene('tasks.view_own') || tiene('tasks.view_all'),
     usuarios: tiene('users.view'),
+    // Tutores: quien gestiona colaboraciones (sin DNI ni IBAN: eso, en su ficha).
+    tutores: tiene('tutores.gestionar'),
+    facturasColaborador: tiene('facturas_colaborador.ver_todas'),
+    // Diplomas: con la pantalla encendida (como el menú) y su permiso.
+    diplomas: CERTIFEX_PANEL && (tiene('diplomas.view') || tiene('diplomas.emit')),
+    cursosMoodle: tiene('moodle.view'),
   };
 }
 
@@ -100,6 +106,14 @@ export const destinoDeFactura = (f) => (f.conversion_id ? `/ventas/${f.conversio
 export const destinoDeTarea = (t) => `/tareas?id=${t.id}`;
 // La lista de usuarios de Configuración no tiene buscador: se abre la pestaña.
 export const destinoDeUsuario = () => '/configuracion';
+// Tampoco un tutor: la lista de Tutores, filtrada por su nombre.
+export const destinoDeTutor = (t) => `/tutores?buscar=${encodeURIComponent(t.nombre || t.email || '')}`;
+// La factura de un colaborador: el Historial, con su colaborador y su mes.
+export const destinoDeFacturaColaborador = (f) => `/accounting/facturas-colaboradores?vista=historial&colaborador=${f.colaborador_id}${f.periodo ? `&periodo=${f.periodo}` : ''}`;
+// Un diploma: Emitidos (clave `enviados`) o Revocados, filtrado por el alumno.
+export const destinoDeDiploma = (d) => `/matriculas/diplomas?pestana=${d.revocada ? 'revocados' : 'enviados'}&buscar=${encodeURIComponent(d.alumno || d.nexpediente || '')}`;
+// Un curso de Moodle: la pantalla de su campus, con su nombre en el buscador y todos los estados.
+export const destinoDeCursoMoodle = (c, campus) => `/conexion/moodle/${campus}?estado=todos&q=${encodeURIComponent(c.nombre || '')}`;
 
 /** «1234» o «#1234»: el número de una venta. */
 export const numeroDeVenta = (q) => (/^#?\d{1,9}$/.test(q.trim()) ? q.trim().replace('#', '') : null);
@@ -107,8 +121,24 @@ export const numeroDeVenta = (q) => (/^#?\d{1,9}$/.test(q.trim()) ? q.trim().rep
 export const terminoDeFactura = (q) => q.trim().replace(/^f\s*-?\s*(?=\d)/i, '');
 /** Letras a partir de las que se pregunta al servidor. */
 export const MIN_SERVIDOR = 2;
+/**
+ * Diplomas y cursos de Moodle se preguntan EN VIVO a Certifex y a cada Moodle:
+ * desde tres letras, y por su lado, sin hacer esperar al resto de resultados.
+ */
+export const MIN_REMOTO = 3;
 
-const VACIO = { personas: [], productos: [], ventas: [], facturas: [], tareas: [], usuarios: [] };
+/** «2026-10» → «Octubre 2026», como lo dice la pantalla de facturas de colaboradores. */
+export function nombreDelMes(periodo) {
+  if (!/^\d{4}-\d{2}$/.test(periodo || '')) return periodo || '';
+  const s = new Date(Number(periodo.slice(0, 4)), Number(periodo.slice(5, 7)) - 1, 1)
+    .toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }).replace(' de ', ' ');
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+const VACIO = {
+  personas: [], productos: [], ventas: [], facturas: [], tareas: [], usuarios: [],
+  tutores: [], facturasColaborador: [], diplomas: [], cursosMoodle: [],
+};
 
 export default function CommandPalette() {
   const { user, logout, permissions } = useAuth();
@@ -124,7 +154,7 @@ export default function CommandPalette() {
   const { activeProject } = useProjectContext() || {};
   const idsDelAmbito = useIdsDelAmbito();
   const pages = useMemo(() => paginasDelBuscador({ user, can }), [user, can]);
-  const busca = useMemo(() => queBusca({ user, can }), [user, can]);
+  const busca = useMemo(() => queBusca({ can }), [can]);
   const [res, setRes] = useState(VACIO);
   const [buscando, setBuscando] = useState(false);
   const catalogos = useRef(new Map());
@@ -169,7 +199,10 @@ export default function CommandPalette() {
     if (!campus.length || !Object.values(b).some(Boolean)) return vaciar();
     const ambito = unCampus ? `projectId=${activeProject.id}` : `projectIds=${campus.join(',')}`;
     const pedir = (url) => client.get(url).catch(() => ({ success: false }));
-    const lista = (r) => (r?.success && Array.isArray(r.data) ? r.data.slice(0, 5) : []);
+    const lista = (r, campo) => {
+      const l = r?.success ? (campo ? r.data?.[campo] : r.data) : null;
+      return Array.isArray(l) ? l.slice(0, 5) : [];
+    };
     const t = encodeURIComponent(texto);
     const numero = numeroDeVenta(texto);
     const catalogoDe = (pid) => {
@@ -181,9 +214,34 @@ export default function CommandPalette() {
       return catalogos.current.get(pid);
     };
 
+    // Usuarios y tutores: acotados al campus de arriba si hay uno; si no, sin
+    // acotar (al superadmin le saldría solo quien tiene campus).
+    const ambitoUsuarios = unCampus ? `&projectIds=${activeProject.id}` : '';
+
     setBuscando(true);
     try {
-      const [personas, catalogo, venta, facturas, tareas, usuarios] = await Promise.all([
+      // Lo remoto (Certifex y Moodle) sale a la vez pero no se espera: llega cuando llega.
+      const remoto = texto.length >= MIN_REMOTO && (b.diplomas || (b.cursosMoodle && unCampus));
+      // Lo que traiga lo remoto de ESTA búsqueda: si llega antes que lo demás, lo
+      // recoge el resto al pintar; si llega después, se pinta solo.
+      let remotoLlegado = null;
+      let principalPintado = false;
+      if (remoto) {
+        Promise.all([
+          b.diplomas ? pedir(`/certifex/diplomas?estado=todos&q=${t}&tam=5`) : null,
+          b.cursosMoodle && unCampus
+            ? pedir(`/moodle/cursos?proyecto_id=${activeProject.id}&estado=todos&texto=${t}&limite=5&con_alumnos=0`)
+            : null,
+        ]).then(([diplomasRes, moodleRes]) => {
+          if (!vigente()) return;
+          remotoLlegado = {
+            diplomas: lista(diplomasRes, 'filas'),
+            cursosMoodle: lista(moodleRes, 'cursos').map((c) => ({ ...c, campus: activeProject.id })),
+          };
+          if (principalPintado) setRes((antes) => ({ ...antes, ...remotoLlegado }));
+        });
+      }
+      const [personas, catalogo, venta, facturas, tareas, usuarios, tutores, facturasCol] = await Promise.all([
         b.personas ? pedir(`/leads?${ambito}&search=${t}&limit=5${b.clientes ? '&includeConverted=1' : ''}`) : null,
         b.productos
           ? Promise.all(campus.map(catalogoDe)).then((ls) => { const vistos = new Set(); return ls.flat().filter((p) => !vistos.has(p.id) && vistos.add(p.id)); })
@@ -192,7 +250,10 @@ export default function CommandPalette() {
         // `GET /invoices` entiende un campus cada vez: facturas, solo con un campus arriba.
         b.facturas && unCampus ? pedir(`/invoices?projectId=${activeProject.id}&search=${encodeURIComponent(terminoDeFactura(texto))}&limit=5`) : null,
         b.tareas ? pedir(`/tasks?search=${t}`) : null,
-        b.usuarios ? pedir(`/users/buscar?q=${t}${unCampus ? `&projectIds=${activeProject.id}` : ''}`) : null,
+        b.usuarios ? pedir(`/users/buscar?q=${t}${ambitoUsuarios}`) : null,
+        b.tutores ? pedir(`/tutores/buscar?q=${t}${ambitoUsuarios}`) : null,
+        // Las de sus campus: lo recorta el servidor.
+        b.facturasColaborador ? pedir(`/facturas-colaborador/facturas?vista=historial&q=${t}`) : null,
       ]);
       if (!vigente()) return;
       const normQ = sinAcentos(texto);
@@ -203,7 +264,13 @@ export default function CommandPalette() {
         facturas: lista(facturas),
         tareas: lista(tareas),
         usuarios: lista(usuarios),
+        tutores: lista(tutores),
+        facturasColaborador: lista(facturasCol, 'facturas'),
+        // Lo remoto, si ya llegó; si no, vacío hasta que llegue (nunca lo de la búsqueda anterior).
+        diplomas: remotoLlegado?.diplomas ?? [],
+        cursosMoodle: remotoLlegado?.cursosMoodle ?? [],
       });
+      principalPintado = true;
     } catch {
       if (vigente()) vaciar();
     } finally {
@@ -254,6 +321,23 @@ export default function CommandPalette() {
       ...res.usuarios.map((u) => ({
         id: `user-${u.id}`, label: u.nombre, icon: UserGear, group: 'Usuarios', to: destinoDeUsuario(u),
         sublabel: [u.email, u.active === false ? 'Inactivo' : ''].filter(Boolean).join(' · '),
+      })),
+      ...res.tutores.map((tu) => ({
+        id: `tutor-${tu.id}`, label: tu.nombre, icon: ChalkboardTeacher, group: 'Tutores', to: destinoDeTutor(tu),
+        sublabel: [tu.email, tu.marcas, tu.active === false ? 'Retirado' : ''].filter(Boolean).join(' · '),
+      })),
+      ...res.facturasColaborador.map((f) => ({
+        id: `factcol-${f.id}`, icon: Invoice, group: 'Facturas de colaboradores', to: destinoDeFacturaColaborador(f),
+        label: `${f.colaborador_nombre} · ${f.numero_factura ? `factura ${f.numero_factura}` : nombreDelMes(f.periodo)}`,
+        sublabel: [f.numero_factura ? nombreDelMes(f.periodo) : '', f.empresa, euros(f.importe), f.estado].filter(Boolean).join(' · '),
+      })),
+      ...res.diplomas.map((d) => ({
+        id: `diploma-${d.id ?? d.nexpediente}`, label: d.alumno || d.nexpediente, icon: Certificate, group: 'Diplomas', to: destinoDeDiploma(d),
+        sublabel: [d.nexpediente, d.titulacion, d.revocada ? 'Revocado' : ''].filter(Boolean).join(' · '),
+      })),
+      ...res.cursosMoodle.map((c) => ({
+        id: `moodle-${c.id}`, label: c.nombre, icon: GraduationCap, group: 'Cursos de Moodle', to: destinoDeCursoMoodle(c, c.campus),
+        sublabel: [c.nombre_corto, c.categoria, c.estado].filter(Boolean).join(' · '),
       })),
       ...paginas.filter(casa),
       ...acciones.filter(casa),

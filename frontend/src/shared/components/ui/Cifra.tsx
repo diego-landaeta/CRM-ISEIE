@@ -47,7 +47,10 @@ export function Cifra({
     <Elemento
       {...(onClick ? { type: 'button' as const, onClick } : {})}
       className={cn(
-        'flex min-w-0 items-start gap-3 rounded-lg border border-border bg-card p-4 text-left shadow-sm transition-colors',
+        // En el móvil el icono va encima del número: a dos por fila, al lado del
+        // icono un importe como «4950,00 €» se salía del recuadro. Desde `sm`,
+        // como siempre.
+        'flex min-w-0 flex-col items-start gap-2 rounded-lg border border-border bg-card p-4 text-left shadow-sm transition-colors sm:flex-row sm:gap-3',
         onClick && 'hover:border-muted-foreground/40 hover:bg-muted/40 focus:outline-none focus:ring-2 focus:ring-ring/40',
         activo && 'border-primary/50 bg-primary/5',
       )}
@@ -55,9 +58,10 @@ export function Cifra({
       <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-md', TONOS[tono])}>
         <Icon size={17} weight="regular" />
       </span>
-      <span className="min-w-0">
+      <span className="w-full min-w-0 sm:w-auto">
         <span className="block truncate text-xs text-muted-foreground">{etiqueta}</span>
-        <span className="block text-[1.75rem] font-semibold tabular-nums leading-none">{valor}</span>
+        {/* 20px en el móvil y los 28px de siempre desde `sm`. */}
+        <span className="block text-xl font-semibold tabular-nums leading-tight sm:text-[1.75rem] sm:leading-none">{valor}</span>
         <span className="mt-1 block text-xs text-muted-foreground">{detalle}</span>
       </span>
     </Elemento>

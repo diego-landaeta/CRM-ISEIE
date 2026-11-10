@@ -7,9 +7,10 @@ import { normalizePhone } from '../../shared/utils/normalizePhone.js';
 import { notifyAdmins } from '../notifications/notifications.service.js';
 import * as dupQueue from './dup-queue.service.js';
 import * as leadProducts from './lead-products.service.js';
-import { planificarPasosDeLead } from '../proceso/proceso.model.js';
+import { deducirCanal } from './canal.js';
+import { planificarPasosDeLead, ajustarPaso } from '../proceso/proceso.model.js';
 import { cruzarConPulsacion } from '../widget/widget.pulsaciones.js';
-import { soloLoSuyo } from '../../shared/utils/roles.js';
+import { alcanceComercial, dentroDelAlcance } from '../../shared/utils/roles.js';
 
 // Dispara secuencias de email activas. STUB v1 mientras email-sequences no este portado.
 async function triggerSequences(_triggerEvent, _leadId, _projectId) {
@@ -17,24 +18,11 @@ async function triggerSequences(_triggerEvent, _leadId, _projectId) {
 }
 
 // ============================================================
-// DETECCION DE CANAL POR UTMs
+// DETECCION DE CANAL
 // ============================================================
-
-function detectChannel(utmSource, utmMedium) {
-  if (!utmSource && !utmMedium) return 'directo';
-
-  const source = (utmSource || '').toLowerCase();
-  const medium = (utmMedium || '').toLowerCase();
-
-  if (source.includes('facebook') || source.includes('instagram') || source.includes('fb') || source.includes('meta')) return 'meta_ads';
-  if (source.includes('google') && (medium === 'cpc' || medium === 'ppc')) return 'google_ads';
-  if (source.includes('tiktok')) return 'tiktok_ads';
-  if (source.includes('chatgpt') || source.includes('openai')) return 'chatgpt_ia';
-  if (medium === 'referral' || source.includes('referido')) return 'referido';
-  if (medium === 'organic' || source.includes('google') || source.includes('bing')) return 'organico';
-
-  return 'directo';
-}
+//
+// La regla vive en ./canal.js (#48): una sola para el alta de un prospecto y
+// para el script que la aplica hacia atrás. Aquí solo se llama.
 
 /**
  * Saca las UTM de dentro de la propia direccion.
@@ -181,6 +169,19 @@ async function _createLeadCore(project, leadData) {
     duplicate.producto_interes_id === productoInteresId
   );
 
+  // Canal: override de Make > deteccion automatica por UTMs.
+  //
+  // Se declara AQUI y no mas abajo porque el burst-merge de justo debajo lo
+  // devuelve, y `const` no se puede leer antes de su linea: daba
+  // `ReferenceError: Cannot access 'canalDetectado' before initialization`, o
+  // sea un 500 cada vez que entraba esa rama.
+  const canalDetectado = leadData.canal || deducirCanal({
+    utm_source: leadData.utm_source,
+    utm_medium: leadData.utm_medium,
+    referrer: leadData.referrer,
+    landing_url: leadData.landing_url,
+  });
+
   // Burst-merge: si el MISMO email/tel pide el MISMO producto en una ventana
   // corta (default 2min), no creamos un lead nuevo — sumamos una interacción
   // al lead original. Esto agrupa los rebotes de Make / form duplicados y
@@ -220,9 +221,6 @@ async function _createLeadCore(project, leadData) {
   );
   const propuestoDe = esPropuesto ? converted.id : null;
 
-  // Canal: override de Make > deteccion automatica por UTMs
-  const canalDetectado = leadData.canal || detectChannel(leadData.utm_source, leadData.utm_medium);
-
   // Si es spam recurrente, no malgastamos un slot del round-robin.
   // Forzamos responsable null pasandolo como flag y luego lo soft-deleteamos.
   const skipAssign = !!spamHistory;
@@ -252,6 +250,7 @@ async function _createLeadCore(project, leadData) {
       utm_content: leadData.utm_content || null,
       utm_term: leadData.utm_term || null,
       landing_url: leadData.landing_url || null,
+      referrer: leadData.referrer || null,
       canal_detectado: canalDetectado,
     },
   });
@@ -548,20 +547,62 @@ async function contactoDeLaColaSobra(leadId, userId) {
   return rows[0] || {};
 }
 
-export async function addInteraction(leadId, tipo, nota, userId, fecha) {
+/**
+ * «Contactar» en la cola del día cierra el paso que la cola enseñaba (#212,
+ * gemela de diego-landaeta/CRM#259).
+ *
+ * Diego, 07/10: «si en la cola del día hice el seguimiento 3 y le doy a
+ * contactar, se guarda pero aún se mantiene, y la checklist no lo guarda. Si lo
+ * hago luego en la checklist, sí sale». Pasaba porque la cola solo apuntaba el
+ * contacto y dejaba que la regla de los contactos (pasoCerrado.js) dedujera el
+ * paso. Esa regla cierra UN paso por día de contacto: si esa mañana ya se había
+ * hablado con la persona, el seguimiento 3 se quedaba abierto y la persona
+ * volvía a la cola. Y la checklist, que desde el 09/10 es manual, lo enseñaba
+ * «por hacer» siempre (617 de los 632 «Contactar» de la cola en producción).
+ *
+ * Ahora el paso se marca hecho por el MISMO camino que la checklist
+ * (`ajustarPaso`, que recoloca los que quedan). Solo un paso de esta persona y
+ * que siga pendiente: un id de otra persona o uno ya hecho no se tocan.
+ */
+async function marcarPasoDeLaCola(leadId, pasoId, userId) {
+  const { rows } = await query(
+    `SELECT id FROM lead_steps WHERE id = $1 AND lead_id = $2 AND estado = 'pendiente'`,
+    [pasoId, leadId]);
+  if (!rows[0]) return null;
+  return ajustarPaso(pasoId, { estado: 'hecho' }, userId);
+}
+
+export async function addInteraction(leadId, tipo, nota, userId, fecha, { pasoId = null } = {}) {
   const lead = await leadModel.findByIdLight(leadId);
   if (!lead) throw new AppError('Lead no encontrado', 404, 'LEAD_NOT_FOUND');
+
+  // Una nota interna no es haber hablado con nadie: no cierra ningún paso.
+  const cierraPaso = pasoId && tipo !== 'nota';
 
   if (NOTA_DE_LA_COLA.test(nota || '')) {
     const { ya_apuntado, rafaga } = await contactoDeLaColaSobra(leadId, userId);
     if (rafaga) {
       throw new AppError('Más despacio: un contacto por persona. Este no se ha apuntado.', 429, 'DEMASIADO_RAPIDO');
     }
-    // Ya apuntó algo suyo en esta persona: el botón solo la saca de la cola.
-    if (ya_apuntado) return { id: ya_apuntado, lead_id: leadId, ya_apuntado: true };
+    // Ya apuntó algo suyo en esta persona: no se crea otro contacto, pero el
+    // paso que la cola enseñaba sí se cierra; si no, volvía a salir (#212).
+    if (ya_apuntado) {
+      const r = { id: ya_apuntado, lead_id: leadId, ya_apuntado: true };
+      if (!cierraPaso) return r;
+      const paso = await marcarPasoDeLaCola(leadId, pasoId, userId);
+      return { ...r, paso_hecho: paso ? paso.id : null };
+    }
   }
 
-  return await leadModel.createInteraction(leadId, tipo, nota, userId, fecha);
+  const interaccion = await leadModel.createInteraction(leadId, tipo, nota, userId, fecha);
+  if (!cierraPaso) return interaccion;
+
+  // Si falla, el contacto se queda apuntado; el paso se puede marcar en la ficha.
+  const pasoHecho = await marcarPasoDeLaCola(leadId, pasoId, userId).catch((err) => {
+    logger.warn({ err: err.message, leadId, pasoId }, 'No se pudo marcar el paso de la cola');
+    return null;
+  });
+  return { ...interaccion, paso_hecho: pasoHecho ? pasoHecho.id : null };
 }
 
 // Edición de una interacción existente. Gestor solo puede editar las suyas;
@@ -571,7 +612,8 @@ export async function updateInteractionFn(leadId, interactionId, fields, request
   const interaction = await leadModel.findInteractionById(interactionId);
   if (!interaction) throw new AppError('Interacción no encontrada', 404, 'INTERACTION_NOT_FOUND');
   if (interaction.lead_id !== leadId) throw new AppError('Interacción no pertenece al lead', 400, 'WRONG_LEAD');
-  if (soloLoSuyo(requestUser) && interaction.created_by !== requestUser.userId) {
+  // Las suyas; con equipo (09/11/2026), también las de sus gestoras.
+  if (!dentroDelAlcance(await alcanceComercial(requestUser), interaction.created_by)) {
     throw new AppError('No tienes permiso para editar esta interacción', 403, 'FORBIDDEN');
   }
   const updated = await leadModel.updateInteraction(interactionId, fields);
@@ -583,7 +625,7 @@ export async function deleteInteractionFn(leadId, interactionId, requestUser) {
   const interaction = await leadModel.findInteractionById(interactionId);
   if (!interaction) throw new AppError('Interacción no encontrada', 404, 'INTERACTION_NOT_FOUND');
   if (interaction.lead_id !== leadId) throw new AppError('Interacción no pertenece al lead', 400, 'WRONG_LEAD');
-  if (soloLoSuyo(requestUser) && interaction.created_by !== requestUser.userId) {
+  if (!dentroDelAlcance(await alcanceComercial(requestUser), interaction.created_by)) {
     throw new AppError('No tienes permiso para eliminar esta interacción', 403, 'FORBIDDEN');
   }
   await leadModel.deleteInteraction(interactionId);

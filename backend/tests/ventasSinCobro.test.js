@@ -83,8 +83,9 @@ describe('las tarjetas de Ventas y las ventas sin cobro', () => {
   it('por gestora, las sin cobro también van con su parte del reparto', async () => {
     await getResumenVentas({ projectId: 1, from: '2026-09-01', to: '2026-09-30', responsableId: 7 });
     const sinCobro = consultas.find((c) => /con_proforma/.test(c.sql));
-    expect(sinCobro.sql).toMatch(/r\.vendedora_id = \$\d+/);
-    expect(sinCobro.sql).toMatch(/SUM\(cv\.importe_total \* COALESCE\(\(SELECT r\.peso/);
+    // Una o varias (el equipo de una administradora, 09/11/2026): la suma de sus partes.
+    expect(sinCobro.sql).toMatch(/r\.vendedora_id = ANY\(\$\d+::int\[\]\)/);
+    expect(sinCobro.sql).toMatch(/SUM\(cv\.importe_total \* COALESCE\(\(SELECT SUM\(r\.peso\)/);
   });
 });
 
@@ -117,7 +118,7 @@ describe('«Cursos vendidos» con la regla de las tarjetas', () => {
 
   it('por gestora mira el reparto, igual que las tarjetas', async () => {
     await getTopProducts({ projectId: 1, from: '2026-09-01', to: '2026-09-30', responsableId: 7 });
-    expect(consultas[0].sql).toMatch(/FROM conversion_reparto rx\s+WHERE rx\.conversion_id = c\.id AND rx\.vendedora_id = \$2/);
+    expect(consultas[0].sql).toMatch(/FROM conversion_reparto rx\s+WHERE rx\.conversion_id = c\.id AND rx\.vendedora_id = ANY\(\$2::int\[\]\)/);
     expect(consultas[0].sql).not.toMatch(/l\.responsable_id/);
   });
 });

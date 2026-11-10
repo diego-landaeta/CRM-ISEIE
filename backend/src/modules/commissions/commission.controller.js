@@ -1,4 +1,5 @@
 import { proyectosDelAmbito, exigirCampusSuyo } from '../../shared/utils/ambito.js';
+import { alcanceDeLider, personasDentro } from '../../shared/utils/roles.js';
 import { query } from '../../shared/config/db.js';
 
 // `commissions.reglas` de serie es de soporte; a un admin de empresa se le
@@ -71,11 +72,19 @@ export async function listMine(req, res, next) {
   } catch (err) { next(err); }
 }
 
+// Quien lleva un equipo comercial (QA del 09/11/2026): las suyas y las de su
+// equipo; pedir a alguien de fuera no ensancha nada (`personasDentro`).
+async function deQuien(req) {
+  const pedido = req.query.userId ? Number(req.query.userId) : null;
+  const lider = await alcanceDeLider(req.user);
+  return lider ? personasDentro(lider, pedido) : pedido;
+}
+
 export async function listAll(req, res, next) {
   try {
-    const { userId, estado, from, to } = req.query;
+    const { estado, from, to } = req.query;
     const rows = await model.listCommissions({
-      userId: userId ? Number(userId) : null,
+      userId: await deQuien(req),
       ...(await proyectosDelAmbito(req)),
       estado: estado || null,
       from: from || null,
@@ -99,9 +108,9 @@ export async function statsMine(req, res, next) {
 
 export async function statsAll(req, res, next) {
   try {
-    const { userId, from, to } = req.query;
+    const { from, to } = req.query;
     const s = await model.getStats({
-      userId: userId ? Number(userId) : null,
+      userId: await deQuien(req),
       ...(await proyectosDelAmbito(req)),
       from: from || null,
       to: to || null,

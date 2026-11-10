@@ -15,7 +15,7 @@
  */
 export const EN_EL_SERVIDOR = [
   'leads.delete', 'facturas_colaborador.%', 'diplomas.view', 'diplomas.emit', 'tasks.%', 'conversions.sin_gestora',
-  // Meta Ads · Ver (26/10): rolOPermiso en las rutas de Meta.
+  // Meta Ads · Ver (ISEIE#264, 26/10): rolOPermiso en las rutas de Meta.
   'meta_ads.view',
 ];
 

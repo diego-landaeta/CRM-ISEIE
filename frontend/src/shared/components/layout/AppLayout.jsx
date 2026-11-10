@@ -11,19 +11,48 @@ import ShortcutsFAB from '@/shared/components/ui/ShortcutsFAB';
 import SectionTabs from './SectionTabs';
 import BetaDisclaimer from '@/shared/components/ui/BetaDisclaimer';
 import { useAuth } from '@/contexts/AuthContext';
-import { soloEsColaborador } from '@/shared/lib/roles';
+import { tieneWhatsapp } from '@/shared/lib/roles';
+import EmptyState from '@/shared/components/ui/EmptyState';
+import { LockKey } from '@phosphor-icons/react';
+import usePermission from '@/shared/hooks/usePermission';
+import { rutaPermitida } from './Sidebar';
+
+/**
+ * Una pantalla que el menú no le enseña —le falta su permiso— tampoco se abre
+ * escribiendo la dirección (#631, gemela de CRM#643): dice «No tienes acceso» en
+ * vez de abrirse a medias y llenarse de 403.
+ */
+function PantallaConPermiso({ pathname, children }) {
+  const { can } = usePermission();
+  const { permissions } = useAuth();
+  // Sin el mapa de permisos todavía (al entrar), `can` dice que no a todo: no se
+  // decide nada hasta que llegue, o saldría un «No tienes acceso» falso.
+  if (!permissions || rutaPermitida(pathname, can)) return children;
+  return (
+    <div className="p-6 max-w-2xl mx-auto">
+      <EmptyState
+        icon={LockKey}
+        title="No tienes acceso a esta pantalla"
+        description="Si crees que deberías verla, pídeselo a un administrador."
+      />
+    </div>
+  );
+}
 // Avisa de un mensaje entrante desde cualquier pantalla. Antes de esto el CRM
 // no avisaba de nada cuando entraba un WhatsApp.
 const AvisoDeMensaje = lazy(() => import('./AvisoDeMensaje'));
+// Los tickets de soporte (#38): en Soporte y en el Manual, como el icono del 360 (#611).
+const TicketsLauncher = lazy(() => import('@/modules/soporte/components/TicketsLauncher'));
 
 const COLLAPSED_KEY = 'crm.sidebar.collapsed';
 
 export default function AppLayout() {
-  const { user } = useAuth();
-  // Quien es solo colaborador (#210) no tiene WhatsApp: el servidor le responde
-  // 403, y el aviso de mensajes preguntaba cada pocos segundos (QA del 07/10 en
-  // MultiCRM).
-  const esSoloColaborador = soloEsColaborador(user);
+  const { permissions } = useAuth();
+  // Quien no tiene WhatsApp —el colaborador (#210, QA del 07/10), el tutor (QA
+  // del 22/10)…— recibe un 403 del servidor, y el aviso de mensajes preguntaba
+  // cada pocos segundos. Se decide con el mismo criterio que el servidor: su
+  // permiso (#423), como en MultiCRM.
+  const sinWhatsapp = !tieneWhatsapp(permissions);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem(COLLAPSED_KEY) === '1'; } catch { return false; }
@@ -127,7 +156,9 @@ export default function AppLayout() {
           </div>
         }>
           <div key={pathname} className="animate-in fade-in duration-200">
-            <Outlet />
+            <PantallaConPermiso pathname={pathname}>
+              <Outlet />
+            </PantallaConPermiso>
           </div>
         </Suspense>
       </main>
@@ -136,9 +167,14 @@ export default function AppLayout() {
           manda y no lo ve nadie. Estuvo asi hasta el 19/08 y por eso «guardar
           un prospecto no hacia nada» — el servidor devolvia el motivo del
           rechazo y la pantalla se lo callaba. */}
-      {!esSoloColaborador && (
+      {!sinWhatsapp && (
         <Suspense fallback={null}>
           <AvisoDeMensaje />
+        </Suspense>
+      )}
+      {(pathname.startsWith('/manual') || pathname === '/soporte') && !mobileOpen && (
+        <Suspense fallback={null}>
+          <TicketsLauncher />
         </Suspense>
       )}
       <Toaster />

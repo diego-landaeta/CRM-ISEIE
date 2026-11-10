@@ -180,7 +180,11 @@ async function exigirEnAmbito(personaId, user) {
  * 09/10): un admin de CEDIA, a gente de sus campus de CEDIA. A un colaborador
  * sin campus, solo el superadmin. El superadmin, a cualquiera.
  */
-async function exigirResponsableEnAmbito(personaId, user, que = 'asignar tareas') {
+async function exigirResponsableEnAmbito(personaId, user, que = 'asignar tareas', teamId = null) {
+  // Dentro de un mismo equipo, sí (04/11/2026): el equipo ya es de UNA empresa
+  // y a él solo entra gente de esa empresa, también los tutores que lo son por
+  // `tutor_empresas`, que no tienen campus propio.
+  if (teamId && (await eqModel.nivelesEn(teamId, [user.userId, personaId])).size === 2) return;
   const ambito = await ambitoDe(user);
   if (!(await taskModel.personaAsignable(personaId, ambito, user.userId))) {
     throw new AppError(`Solo puedes ${que} a gente de tu empresa`, 403, 'FORBIDDEN');
@@ -456,7 +460,7 @@ async function validarSupervisor(supervisorId, responsableId, user, p, teamId = 
     throw new AppError('Falta aplicar la migración 234: todavía no se puede poner supervisor', 409, 'FALTA_MIGRACION');
   }
   const persona = await validarResponsable(supervisorId);
-  await exigirResponsableEnAmbito(supervisorId, user, 'poner de supervisor');
+  await exigirResponsableEnAmbito(supervisorId, user, 'poner de supervisor', teamId);
   const r = await reglas.supervisorValido(teamId, responsableId, persona);
   exigir(r.ok, r.motivo);
 }
@@ -565,6 +569,15 @@ export async function listAssignees(user, q = {}) {
   const delega = teamId ? await reglas.puedeDelegarEn(teamId, user, p) : false;
   exigir(p.viewAll || p.assign || p.manage || delega, 'No tienes permiso para ver el equipo');
   const lista = await taskModel.findAssignees(await ambitoDe(user, q), user.userId, await ambitoDe(user));
+  // Con equipo, también su gente aunque no tenga campus en el ámbito (04/11/2026:
+  // los tutores de una empresa entran por `tutor_empresas`, sin campus propio).
+  if (teamId) {
+    const ya = new Set(lista.map((g) => Number(g.id)));
+    for (const m of await eqModel.miembrosDe(teamId)) {
+      if (m.active && !ya.has(Number(m.id))) lista.push({ id: m.id, nombre: m.nombre, email: m.email, role: m.role, asignable: true });
+    }
+    lista.sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), 'es'));
+  }
   // Con sus equipos: la ficha enseña el de quien la va a llevar (27/10/2026).
   const equiposDe = await eqModel.equiposDeLaGente(lista.map((g) => g.id));
   const gente = lista.map((g) => ({ ...g, equipos: equiposDe.get(Number(g.id)) || [] }));
@@ -606,7 +619,7 @@ export async function createTask(data, user) {
   await validarColumna(status);
   if (responsable !== user.userId) {
     await validarResponsable(responsable);
-    await exigirResponsableEnAmbito(responsable, user);
+    await exigirResponsableEnAmbito(responsable, user, undefined, equipo?.id ?? null);
   }
   if (data.supervisor_id) await validarSupervisor(data.supervisor_id, responsable, user, p, equipo?.id ?? null);
   if (data.project_id) await validarAccesoProyecto(data.project_id, user);
@@ -677,7 +690,7 @@ export async function updateTask(id, rawFields, user) {
 
   if (cambiaResponsable && fields.assigned_to) {
     await validarResponsable(fields.assigned_to);
-    if (fields.assigned_to !== user.userId) await exigirResponsableEnAmbito(fields.assigned_to, user);
+    if (fields.assigned_to !== user.userId) await exigirResponsableEnAmbito(fields.assigned_to, user, undefined, teamId);
   }
   if (cambiaResponsable || cambiaEquipo) {
     await exigirAsignable(teamId, user, p, responsable);

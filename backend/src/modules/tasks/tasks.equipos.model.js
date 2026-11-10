@@ -3,6 +3,48 @@ import { query, getClient } from '../../shared/config/db.js';
 const ROLES_TAREAS = ['superadmin', 'admin', 'colaborador'];
 
 /*
+  Equipos de tutores (migración «equipos_de_tutores»; Diego, 04/11/2026): «un tablero
+  de tutores separado del de colaboradores». Un equipo es de tipo
+  'colaboradores' (los de siempre: desarrollo, SEO…) o 'tutores'. A uno de
+  tutores se puede meter a tutores; a uno de colaboradores, solo a gente con
+  tablero, como hasta hoy.
+
+  Un tutor tiene tablero SOLO mientras esté en un equipo de tutores activo: así
+  no sale en la lista de responsables ni en las cifras de nadie por ser tutor.
+*/
+export const TIPOS_DE_EQUIPO = ['colaboradores', 'tutores'];
+
+let hayTipos = false;
+export async function existeTipos() {
+  if (hayTipos) return true;
+  const { rows } = await query(
+    `SELECT EXISTS (SELECT 1 FROM information_schema.columns
+                     WHERE table_name = 'task_teams' AND column_name = 'tipo') AS hay`);
+  hayTipos = rows[0]?.hay === true;
+  return hayTipos;
+}
+/** Solo para las pruebas. */
+export function olvidarTipos() { hayTipos = false; }
+
+const ES_TUTOR = (u) => `(${u}.role::text = 'tutor' OR 'tutor' = ANY(COALESCE(${u}.roles_extra, '{}')::text[]))`;
+
+/**
+ * ¿Tiene tablero? (SQL). `u` es el alias de users e `idx` el número del
+ * parámetro con ROLES_TAREAS. Con la migración de tipos, también el tutor que
+ * está en un equipo de tutores activo.
+ */
+export function sqlConTablero(u, idx, tipos) {
+  const base = `(${u}.role::text = ANY($${idx}::text[]) OR ${u}.roles_extra::text[] && $${idx}::text[])`;
+  if (!tipos) return base;
+  return `(${base} OR (${ES_TUTOR(u)}
+      AND EXISTS (SELECT 1 FROM task_team_members m_tut JOIN task_teams t_tut ON t_tut.id = m_tut.team_id
+                   WHERE m_tut.user_id = ${u}.id AND t_tut.is_active AND t_tut.tipo = 'tutores')))`;
+}
+
+/** El tipo de un equipo en SQL: sin la migración, todos son de colaboradores. */
+const colTipo = (t, tipos) => (tipos ? `${t}.tipo` : `'colaboradores'::text`);
+
+/*
   Equipos del tablero, con cargos por nivel (migración 235; Diego, 26/10/2026).
 
   Aquí solo SQL. Quién puede qué lo decide `tasks.reglas.js` y el servicio.
@@ -30,8 +72,8 @@ export const CARGOS_DE_SERIE = [
 
 const n = (v) => (v == null ? null : Number(v));
 
-const CAMPOS_EQUIPO = `
-  tm.id, tm.issuer_id, ii.razon_social AS empresa, tm.name, tm.color, tm.is_active, tm.sort_order,
+const camposEquipo = (tipos) => `
+  tm.id, tm.issuer_id, ii.razon_social AS empresa, tm.name, ${colTipo('tm', tipos)} AS tipo, tm.color, tm.is_active, tm.sort_order,
   tm.created_at, tm.updated_at,
   (SELECT COUNT(*)::int FROM task_team_members m WHERE m.team_id = tm.id) AS miembros,
   COALESCE((SELECT json_agg(json_build_object('id', r.id, 'name', r.name, 'level', r.level::float8,
@@ -44,8 +86,9 @@ const CAMPOS_EQUIPO = `
  * los equipos en los que está esa persona.
  */
 export async function listarEquipos({ issuerIds = null, soloDe = null, incluirArchivados = false } = {}) {
+  const tipos = await existeTipos();
   const { rows } = await query(
-    `SELECT ${CAMPOS_EQUIPO}
+    `SELECT ${camposEquipo(tipos)}
        FROM task_teams tm
        JOIN invoice_issuers ii ON ii.id = tm.issuer_id
       WHERE ($1::int[] IS NULL OR tm.issuer_id = ANY($1::int[]))
@@ -58,8 +101,9 @@ export async function listarEquipos({ issuerIds = null, soloDe = null, incluirAr
 }
 
 export async function equipoPorId(id) {
+  const tipos = await existeTipos();
   const { rows } = await query(
-    `SELECT ${CAMPOS_EQUIPO} FROM task_teams tm JOIN invoice_issuers ii ON ii.id = tm.issuer_id WHERE tm.id = $1`, [id]);
+    `SELECT ${camposEquipo(tipos)} FROM task_teams tm JOIN invoice_issuers ii ON ii.id = tm.issuer_id WHERE tm.id = $1`, [id]);
   return rows[0] || null;
 }
 
@@ -80,8 +124,10 @@ export async function miembrosDe(teamId) {
 /** Los equipos y cargos de una persona, con los niveles extremos de cada equipo. */
 export async function equiposDeLaPersona(userId) {
   if (!(await existeEquipos())) return [];
+  const tipos = await existeTipos();
   const { rows } = await query(
-    `SELECT tm.id AS team_id, tm.name AS team_name, tm.color AS team_color, tm.issuer_id, ii.razon_social AS empresa,
+    `SELECT tm.id AS team_id, tm.name AS team_name, tm.color AS team_color, ${colTipo('tm', tipos)} AS team_tipo,
+            tm.issuer_id, ii.razon_social AS empresa,
             r.id AS team_role_id, r.name AS cargo, r.level::float8 AS nivel,
             (SELECT MIN(r2.level)::float8 FROM task_team_members m2 JOIN task_team_roles r2 ON r2.id = m2.team_role_id
               WHERE m2.team_id = tm.id) AS nivel_min_miembros,
@@ -105,8 +151,10 @@ export async function equiposDeLaGente(userIds) {
   const ids = [...new Set((userIds || []).filter(Boolean).map(Number))];
   const out = new Map();
   if (!ids.length || !(await existeEquipos())) return out;
+  const tipos = await existeTipos();
   const { rows } = await query(
-    `SELECT m.user_id, tm.id AS team_id, tm.name AS team_name, tm.issuer_id, ii.razon_social AS empresa,
+    `SELECT m.user_id, tm.id AS team_id, tm.name AS team_name, ${colTipo('tm', tipos)} AS team_tipo,
+            tm.issuer_id, ii.razon_social AS empresa,
             r.name AS cargo, r.level::float8 AS nivel
        FROM task_team_members m
        JOIN task_teams tm ON tm.id = m.team_id AND tm.is_active
@@ -137,14 +185,18 @@ export async function nivelesEn(teamId, userIds) {
   return new Map(rows.map((r) => [Number(r.user_id), { nivel: n(r.nivel), cargo: r.cargo }]));
 }
 
-export async function crearEquipo({ issuer_id, name, color = 'gray', sort_order = 0, created_by }) {
+export async function crearEquipo({ issuer_id, name, color = 'gray', sort_order = 0, created_by, tipo = 'colaboradores' }) {
+  const tipos = await existeTipos();
   const db = await getClient();
   try {
     await db.query('BEGIN');
-    const { rows: [t] } = await db.query(
-      `INSERT INTO task_teams (issuer_id, name, color, sort_order, created_by) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-      [issuer_id, name, color, sort_order, created_by]
-    );
+    const { rows: [t] } = tipos
+      ? await db.query(
+        `INSERT INTO task_teams (issuer_id, name, color, sort_order, created_by, tipo) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+        [issuer_id, name, color, sort_order, created_by, tipo])
+      : await db.query(
+        `INSERT INTO task_teams (issuer_id, name, color, sort_order, created_by) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+        [issuer_id, name, color, sort_order, created_by]);
     for (const c of CARGOS_DE_SERIE) {
       await db.query('INSERT INTO task_team_roles (team_id, name, level, sort_order) VALUES ($1, $2, $3, $4)',
         [t.id, c.name, c.level, c.sort_order]);
@@ -214,18 +266,20 @@ export async function quitarMiembro(teamId, userId) {
 }
 
 /**
- * Quién se puede meter en un equipo: gente activa con tablero que sea de la
- * empresa del equipo (un campus suyo o la empresa entera en `user_empresas`).
+ * Quién se puede meter en un equipo: gente activa de la empresa del equipo (un
+ * campus suyo o la empresa entera en `user_empresas`) que tenga tablero. En un
+ * equipo de tutores, también los tutores (04/11/2026), que pueden ser de la
+ * empresa por `tutor_empresas`.
  */
 export async function candidatosDe(teamId) {
+  const tipos = await existeTipos();
   const { rows } = await query(
     `SELECT u.id, u.nombre, u.email, u.role::text AS role
        FROM users u, task_teams tm
       WHERE tm.id = $1 AND u.active
-        AND (u.role::text = ANY($2::text[]) OR u.roles_extra::text[] && $2::text[])
-        AND (EXISTS (SELECT 1 FROM user_empresas ue WHERE ue.user_id = u.id AND ue.issuer_id = tm.issuer_id)
-             OR EXISTS (SELECT 1 FROM user_projects up JOIN projects p ON p.id = up.project_id
-                         WHERE up.user_id = u.id AND up.active AND p.sociedad_emisora_id = tm.issuer_id))
+        AND ((u.role::text = ANY($2::text[]) OR u.roles_extra::text[] && $2::text[])
+             OR (${colTipo('tm', tipos)} = 'tutores' AND ${ES_TUTOR('u')}))
+        AND ${deLaEmpresaDelEquipo('u.id', 'tm')}
         AND NOT EXISTS (SELECT 1 FROM task_team_members m WHERE m.team_id = tm.id AND m.user_id = u.id)
       ORDER BY u.nombre`,
     [teamId, ROLES_TAREAS]
@@ -233,16 +287,39 @@ export async function candidatosDe(teamId) {
   return rows;
 }
 
+/** SQL: la persona `col` es de la empresa del equipo `tm` (un campus, la empresa entera o, si es tutor, sus empresas). */
+function deLaEmpresaDelEquipo(col, tm) {
+  return `(EXISTS (SELECT 1 FROM user_empresas ue WHERE ue.user_id = ${col} AND ue.issuer_id = ${tm}.issuer_id)
+       OR EXISTS (SELECT 1 FROM user_projects up JOIN projects p ON p.id = up.project_id
+                   WHERE up.user_id = ${col} AND up.active AND p.sociedad_emisora_id = ${tm}.issuer_id)
+       OR EXISTS (SELECT 1 FROM tutor_empresas te WHERE te.tutor_id = ${col} AND te.issuer_id = ${tm}.issuer_id))`;
+}
+
 /** ¿Es esta persona de la empresa del equipo? (para meterla). */
 export async function esDeLaEmpresa(teamId, userId) {
   const { rows } = await query(
-    `SELECT 1 FROM task_teams tm WHERE tm.id = $1 AND (
-       EXISTS (SELECT 1 FROM user_empresas ue WHERE ue.user_id = $2 AND ue.issuer_id = tm.issuer_id)
-       OR EXISTS (SELECT 1 FROM user_projects up JOIN projects p ON p.id = up.project_id
-                   WHERE up.user_id = $2 AND up.active AND p.sociedad_emisora_id = tm.issuer_id))`,
+    `SELECT 1 FROM task_teams tm WHERE tm.id = $1 AND ${deLaEmpresaDelEquipo('$2::int', 'tm')}`,
     [teamId, userId]
   );
   return rows.length > 0;
+}
+
+/**
+ * ¿Puede estar en este equipo? Con tablero (superadmin, admin, colaborador), en
+ * cualquiera; un tutor, solo en uno de tutores (04/11/2026).
+ */
+export async function puedeEstarEn(teamId, userId) {
+  const tipos = await existeTipos();
+  const { rows: [r] } = await query(
+    `SELECT u.active,
+            (u.role::text = ANY($3::text[]) OR u.roles_extra::text[] && $3::text[]) AS con_tablero,
+            ${ES_TUTOR('u')} AS es_tutor,
+            ${colTipo('tm', tipos)} AS tipo
+       FROM users u, task_teams tm WHERE u.id = $2 AND tm.id = $1`,
+    [teamId, userId, ROLES_TAREAS]
+  );
+  if (!r || !r.active) return { existe: false, puede: false, tipo: null };
+  return { existe: true, puede: r.con_tablero || (r.tipo === 'tutores' && r.es_tutor), tipo: r.tipo };
 }
 
 /** Las empresas de unos campus (para decir qué equipos ve quien mira). */

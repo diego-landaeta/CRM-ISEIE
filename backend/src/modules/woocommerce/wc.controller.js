@@ -3,6 +3,7 @@ import * as model from './wc.model.js';
 import * as catModel from '../product-categories/category.model.js';
 import { query } from '../../shared/config/db.js';
 import { AppError } from '../../shared/utils/AppError.js';
+import { listaDelAmbito, campusDeTodos } from '../../shared/utils/ambito.js';
 import { logger } from '../../shared/utils/logger.js';
 import { inspectSchema, resolvePath } from '../connectors/connectors.adapters.js';
 import { TARGETS_CATALOG, TRANSFORMS_CATALOG } from '../connectors/connectors.targets.js';
@@ -37,11 +38,21 @@ function pid(req) {
   return p;
 }
 
+/**
+ * Las credenciales como las ve la pantalla: ningún secreto sale. Antes solo se tapaba
+ * consumer_secret y la contraseña de aplicación de WordPress, el token y el secreto
+ * del aviso viajaban en claro (#14).
+ */
+function enmascarar(c) {
+  const tapa = (v) => (v ? '****' : v);
+  return { ...c, consumer_secret: '****', wp_app_password: tapa(c.wp_app_password), wp_query_token: tapa(c.wp_query_token), webhook_secret: tapa(c.webhook_secret) };
+}
+
 export const getCreds = async (req, res, next) => {
   try {
     const c = await model.getCreds(pid(req));
     if (!c) return res.json({ success: true, data: null });
-    res.json({ success: true, data: { ...c, consumer_secret: '****' } });
+    res.json({ success: true, data: enmascarar(c) });
   } catch (e) { next(e); }
 };
 export const upsertCreds = async (req, res, next) => {
@@ -53,7 +64,7 @@ export const upsertCreds = async (req, res, next) => {
       throw new AppError(`Campo invalido: ${fieldPath} - ${first.message}`, 400, 'VALIDATION_ERROR');
     }
     const r = await model.upsertCreds(parsed.data.project_id, parsed.data);
-    res.json({ success: true, data: { ...r, consumer_secret: '****' } });
+    res.json({ success: true, data: enmascarar(r) });
   } catch (e) { next(e); }
 };
 export const deleteCreds = async (req, res, next) => {
@@ -72,6 +83,13 @@ export const setMappings = async (req, res, next) => {
   } catch (e) { next(e); }
 };
 
+// GET /api/woocommerce/estado — cada campus de quien pide, solo para ver (#218).
+export const estado = async (req, res, next) => {
+  try {
+    const lista = (await listaDelAmbito(req)) || await campusDeTodos(req);
+    res.json({ success: true, data: await model.estadoDeLosCampus(lista) });
+  } catch (e) { next(e); }
+};
 export const listRuns = async (req, res, next) => {
   try { res.json({ success: true, data: await model.listRuns(pid(req)) }); } catch (e) { next(e); }
 };

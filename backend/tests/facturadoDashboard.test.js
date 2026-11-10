@@ -98,8 +98,9 @@ describe('lo facturado del Dashboard', () => {
     porGestora = [{ user_id: 7, nombre: 'Dayana', facturado: '372.50', ventas: 0.5 }];
     porProducto = [{ product_id: 11, producto: 'Curso de Redes', sin_asignar: false, facturado: '372.50', ventas: 0.5 }];
     const r = await getFacturado({ projectIds: [1], from: '2026-10-01', to: '2026-10-31', responsableId: 7 });
-    expect(consultas[0].sql).toMatch(/WHERE r\.vendedora_id = \$4/);
-    expect(consultas[0].params[3]).toBe(7);
+    // Una persona o una lista (el equipo de una administradora, 09/11/2026).
+    expect(consultas[0].sql).toMatch(/WHERE r\.vendedora_id = ANY\(\$4::int\[\]\)/);
+    expect(consultas[0].params[3]).toEqual([7]);
     expect(r.sin_gestora).toEqual({ facturado: 0, ventas: 0 });
     expect(r.total).toEqual({ facturado: 372.5, ventas: 0.5 });
   });

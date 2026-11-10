@@ -6983,20 +6983,12 @@
     "tipo": "token"
    },
    {
-    "tipo": "rolOPermiso",
+    "tipo": "roles",
     "roles": [
      "admin",
-     "superadmin",
-     "soporte"
+     "superadmin"
     ],
-    "clave": "meta_ads.view",
-    "claves": [
-     "meta_ads.view"
-    ]
-   },
-   {
-    "tipo": "alcance",
-    "nombre": "deSusCampus"
+    "atajoSoporte": true
    }
   ],
   "puertas": []
@@ -7015,20 +7007,12 @@
     "tipo": "token"
    },
    {
-    "tipo": "rolOPermiso",
+    "tipo": "roles",
     "roles": [
      "admin",
-     "superadmin",
-     "soporte"
+     "superadmin"
     ],
-    "clave": "meta_ads.view",
-    "claves": [
-     "meta_ads.view"
-    ]
-   },
-   {
-    "tipo": "alcance",
-    "nombre": "deSusCampus"
+    "atajoSoporte": true
    }
   ],
   "puertas": []
@@ -7053,10 +7037,6 @@
      "superadmin"
     ],
     "atajoSoporte": true
-   },
-   {
-    "tipo": "alcance",
-    "nombre": "deSusCampus"
    }
   ],
   "puertas": []
@@ -7171,20 +7151,12 @@
     "tipo": "token"
    },
    {
-    "tipo": "rolOPermiso",
+    "tipo": "roles",
     "roles": [
      "admin",
-     "superadmin",
-     "soporte"
+     "superadmin"
     ],
-    "clave": "meta_ads.view",
-    "claves": [
-     "meta_ads.view"
-    ]
-   },
-   {
-    "tipo": "alcance",
-    "nombre": "deSusCampus"
+    "atajoSoporte": true
    }
   ],
   "puertas": []
@@ -7203,20 +7175,12 @@
     "tipo": "token"
    },
    {
-    "tipo": "rolOPermiso",
+    "tipo": "roles",
     "roles": [
      "admin",
-     "superadmin",
-     "soporte"
+     "superadmin"
     ],
-    "clave": "meta_ads.view",
-    "claves": [
-     "meta_ads.view"
-    ]
-   },
-   {
-    "tipo": "alcance",
-    "nombre": "deSusCampus"
+    "atajoSoporte": true
    }
   ],
   "puertas": []
@@ -7235,20 +7199,12 @@
     "tipo": "token"
    },
    {
-    "tipo": "rolOPermiso",
+    "tipo": "roles",
     "roles": [
      "admin",
-     "superadmin",
-     "soporte"
+     "superadmin"
     ],
-    "clave": "meta_ads.view",
-    "claves": [
-     "meta_ads.view"
-    ]
-   },
-   {
-    "tipo": "alcance",
-    "nombre": "deSusCampus"
+    "atajoSoporte": true
    }
   ],
   "puertas": []
@@ -7267,20 +7223,12 @@
     "tipo": "token"
    },
    {
-    "tipo": "rolOPermiso",
+    "tipo": "roles",
     "roles": [
      "admin",
-     "superadmin",
-     "soporte"
+     "superadmin"
     ],
-    "clave": "meta_ads.view",
-    "claves": [
-     "meta_ads.view"
-    ]
-   },
-   {
-    "tipo": "alcance",
-    "nombre": "deSusCampus"
+    "atajoSoporte": true
    }
   ],
   "puertas": []
@@ -7299,20 +7247,12 @@
     "tipo": "token"
    },
    {
-    "tipo": "rolOPermiso",
+    "tipo": "roles",
     "roles": [
      "admin",
-     "superadmin",
-     "soporte"
+     "superadmin"
     ],
-    "clave": "meta_ads.view",
-    "claves": [
-     "meta_ads.view"
-    ]
-   },
-   {
-    "tipo": "alcance",
-    "nombre": "deSusCampus"
+    "atajoSoporte": true
    }
   ],
   "puertas": []
@@ -7331,20 +7271,12 @@
     "tipo": "token"
    },
    {
-    "tipo": "rolOPermiso",
+    "tipo": "roles",
     "roles": [
      "admin",
-     "superadmin",
-     "soporte"
+     "superadmin"
     ],
-    "clave": "meta_ads.view",
-    "claves": [
-     "meta_ads.view"
-    ]
-   },
-   {
-    "tipo": "alcance",
-    "nombre": "deSusCampus"
+    "atajoSoporte": true
    }
   ],
   "puertas": []
@@ -7369,10 +7301,6 @@
      "superadmin"
     ],
     "atajoSoporte": true
-   },
-   {
-    "tipo": "alcance",
-    "nombre": "deSusCampus"
    }
   ],
   "puertas": []
@@ -7391,20 +7319,12 @@
     "tipo": "token"
    },
    {
-    "tipo": "rolOPermiso",
+    "tipo": "roles",
     "roles": [
      "admin",
-     "superadmin",
-     "soporte"
+     "superadmin"
     ],
-    "clave": "meta_ads.view",
-    "claves": [
-     "meta_ads.view"
-    ]
-   },
-   {
-    "tipo": "alcance",
-    "nombre": "deSusCampus"
+    "atajoSoporte": true
    }
   ],
   "puertas": []
@@ -7429,10 +7349,6 @@
      "superadmin"
     ],
     "atajoSoporte": true
-   },
-   {
-    "tipo": "alcance",
-    "nombre": "deSusCampus"
    }
   ],
   "puertas": []
@@ -7451,20 +7367,12 @@
     "tipo": "token"
    },
    {
-    "tipo": "rolOPermiso",
+    "tipo": "roles",
     "roles": [
      "admin",
-     "superadmin",
-     "soporte"
+     "superadmin"
     ],
-    "clave": "meta_ads.view",
-    "claves": [
-     "meta_ads.view"
-    ]
-   },
-   {
-    "tipo": "alcance",
-    "nombre": "deSusCampus"
+    "atajoSoporte": true
    }
   ],
   "puertas": []
@@ -7483,20 +7391,12 @@
     "tipo": "token"
    },
    {
-    "tipo": "rolOPermiso",
+    "tipo": "roles",
     "roles": [
      "admin",
-     "superadmin",
-     "soporte"
+     "superadmin"
     ],
-    "clave": "meta_ads.view",
-    "claves": [
-     "meta_ads.view"
-    ]
-   },
-   {
-    "tipo": "alcance",
-    "nombre": "deSusCampus"
+    "atajoSoporte": true
    }
   ],
   "puertas": []

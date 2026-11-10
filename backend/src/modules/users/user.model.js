@@ -43,7 +43,7 @@ export async function buscar({ q, campus, limit = 5 }) {
 // Quien necesita a TODO el personal —la pantalla de Usuarios, las nominas— lo
 // pide con incluirTodos. Es al reves de como estaba: lo seguro es lo de por
 // defecto, y ver a todos es lo que hay que pedir.
-export async function findAll({ active, role, projectId, page, limit, incluirTodos = false }) {
+export async function findAll({ active, role, projectId, page, limit, incluirTodos = false, campus = null, soloIds = null }) {
   const conditions = [];
   const params = [];
   let paramIdx = 1;
@@ -66,6 +66,17 @@ export async function findAll({ active, role, projectId, page, limit, incluirTod
   if (projectId) {
     conditions.push(`EXISTS (SELECT 1 FROM user_projects up WHERE up.user_id = u.id AND up.project_id = $${paramIdx++})`);
     params.push(projectId);
+  }
+  // Solo quien está en uno de esos campus (`campus`, Diego 04/11: quien solo ve
+  // la lista, la de los suyos). EXISTS y no JOIN: un JOIN repetiría a quien está en varios.
+  if (Array.isArray(campus)) {
+    conditions.push(`EXISTS (SELECT 1 FROM user_projects up WHERE up.user_id = u.id AND up.active AND up.project_id = ANY($${paramIdx++}::int[]))`);
+    params.push(campus);
+  }
+  // Solo esas personas (`alcance=comercial`: la líder y su equipo).
+  if (Array.isArray(soloIds)) {
+    conditions.push(`u.id = ANY($${paramIdx++}::int[])`);
+    params.push(soloIds.map(Number));
   }
 
   const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
@@ -366,6 +377,7 @@ export async function listActivityLog({
        SELECT 1 FROM user_projects up
         WHERE up.user_id = a.user_id AND up.active = true
           AND up.project_id = ANY(${p(ambito.projectIds || [])}::int[])))`);
+    if (Array.isArray(ambito.soloIds)) where.push(`a.user_id = ANY(${p(ambito.soloIds.map(Number))}::int[])`);
   }
   if (userId) where.push(`a.user_id = ${p(userId)}`);
   if (action) where.push(action.includes('%') ? `a.action LIKE ${p(action)}` : `a.action = ${p(action)}`);

@@ -192,15 +192,16 @@ describe('(d) overview con gestora: lo suyo, no lo del equipo (el bug de «Tu se
     const deLeads = consultas.filter((c) => /FROM leads|FROM \(SELECT \* FROM leads/.test(c.sql) && !/FROM projects p/.test(c.sql));
     expect(deLeads.length).toBe(3);
     for (const { sql, params } of deLeads) {
-      expect(sql).toMatch(/responsable_id = \$4/);
-      expect(params).toEqual([[1], '2026-10-12', '2026-10-18', 7]);
+      // La gestora va como lista desde el equipo comercial (09/11/2026).
+      expect(sql).toMatch(/responsable_id = ANY\(\$4::int\[\]\)/);
+      expect(params).toEqual([[1], '2026-10-12', '2026-10-18', [7]]);
     }
     const ventas = consultas.find((c) => /as ventas_brutas/.test(c.sql));
-    expect(ventas.sql).toMatch(/EXISTS \(SELECT 1 FROM conversion_reparto r WHERE r\.conversion_id = conversions\.id AND r\.vendedora_id = \$4\)/);
-    expect(ventas.sql).toMatch(/SUM\(\(SELECT r\.peso FROM conversion_reparto r/);
+    expect(ventas.sql).toMatch(/EXISTS \(SELECT 1 FROM conversion_reparto r WHERE r\.conversion_id = conversions\.id AND r\.vendedora_id = ANY\(\$4::int\[\]\)\)/);
+    expect(ventas.sql).toMatch(/SUM\(\(SELECT SUM\(r\.peso\) FROM conversion_reparto r/);
     const cobros = consultas.find((c) => /FROM conversion_payments cp/.test(c.sql));
-    expect(cobros.params).toEqual([[1], 7]);
-    expect(cobros.sql).toMatch(/r\.vendedora_id = \$2/);
+    expect(cobros.params).toEqual([[1], [7]]);
+    expect(cobros.sql).toMatch(/r\.vendedora_id = ANY\(\$2::int\[\]\)/);
   });
 
   it('sin gestora, igual que siempre: ni filtro ni peso', async () => {
@@ -235,7 +236,7 @@ describe('el detalle de cada caja (lo que se abre al pulsar)', () => {
   it('filtra por la misma caja que la tabla, con el periodo del mes recortado al rango', async () => {
     await detalleMetrica({ projectIds: [1], from: '2026-10-12', to: '2026-10-18', mes: '2026-10', tipo: 'cobros-anteriores', base: 'cobro', asesoraId: 7 });
     const { sql, params } = consultas[0];
-    expect(params).toEqual([[1], '2026-10-12', '2026-10-18', 7]);
+    expect(params).toEqual([[1], '2026-10-12', '2026-10-18', [7]]);
     expect(sql).toMatch(/END\) = 'anteriores'/);
     expect(sql).toMatch(/ROUND\(cp\.importe \* r\.peso, 2\) AS importe/);
   });

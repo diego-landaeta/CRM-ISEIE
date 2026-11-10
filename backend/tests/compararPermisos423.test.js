@@ -132,7 +132,9 @@ describe('antes y después de #423, persona por persona (#423)', () => {
 
   it('un rol de más no da WhatsApp ni el MCP: los decide el rol principal (punto 6)', () => {
     const conRolDeMas = resultado.diferencias.filter((d) => ids.users.includes(d.persona.id)
-      && d.persona.roles_extra.length > 0 && ['whatsapp', 'mcp'].includes(d.fila.modulo));
+      && d.persona.roles_extra.length > 0 && ['whatsapp', 'mcp'].includes(d.fila.modulo)
+      // El banco del project manager lo trae su rol PRINCIPAL (Diego, 04/11), no el de más.
+      && d.cambio?.id !== 'pm-ve-todo');
     expect(conRolDeMas.map((d) => `${[d.persona.role, ...d.persona.roles_extra].join('+')} · ${d.fila.id}`)).toEqual([]);
   });
 
@@ -146,7 +148,11 @@ describe('antes y después de #423, persona por persona (#423)', () => {
     const conCasilla = resultado.diferencias.filter((d) => ids.users.includes(d.persona.id)
       && d.persona.role !== 'superadmin' && d.persona.roles_extra.length === 0 && !d.persona.custom_role
       && (d.persona.factura_manager || d.persona.editar_fechas_factura || d.persona.gestor_colaboraciones || d.persona.usa_mcp || d.persona.usa_whatsapp === false)
-      && !['roles-sin-soporte', 'admin-roles-entero', 'roles-a-medida-sin-soporte', 'excepciones-sin-soporte', 'rol-de-otros-con-permiso', 'cola-entera'].includes(d.cambio?.id));
+      && !['roles-sin-soporte', 'admin-roles-entero', 'roles-a-medida-sin-soporte', 'excepciones-sin-soporte', 'rol-de-otros-con-permiso', 'cola-entera', 'metas-sin-soporte-ni-pm', 'webhooks-solo-admin',
+        // Va por el rol (CRM#632): al admin con una casilla le cambia igual.
+        'admin-ve-claves',
+        // Y el project manager que ve todo (Diego, 04/11): por su rol, con casilla o sin ella.
+        'pm-ve-todo'].includes(d.cambio?.id));
     expect(conCasilla.map((d) => `${d.persona.role} · ${d.fila.id}`)).toEqual([]);
   });
 });

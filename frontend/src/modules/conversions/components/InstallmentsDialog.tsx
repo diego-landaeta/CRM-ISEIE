@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { X, CalendarBlank, Plus, Trash, CheckCircle, Coins } from '@phosphor-icons/react';
 import { conversionsApi, type Conversion } from '../api/conversions.api';
 import { toast } from '@/shared/hooks/useToast';
+import Select from '@/shared/components/ui/Select';
 import { formatCurrency, formatDate } from '@/shared/lib/format';
 
 interface Installment {
@@ -28,6 +29,9 @@ interface Props {
   onClose: () => void;
   onSaved?: () => void;
 }
+
+// Los conceptos de siempre; también se puede escribir otro.
+const CONCEPTOS_CUOTA = ['Mensualidad', 'Matrícula', 'Cuota del curso', 'Materiales', 'Certificado', 'Reserva de plaza'];
 
 // Diálogo para gestionar las cuotas de una conversión.
 // - Si la conversión es de pago único: ofrece "Convertir a fraccionado" (N cuotas mensuales o personalizadas).
@@ -481,21 +485,29 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
               </div>
 
               <div>
-                <label className="text-[11px] font-semibold text-muted-foreground mb-1 block">Concepto de las cuotas (opcional)</label>
-                <input
-                  list="conceptos-cuota" value={concepto}
-                  onChange={(e) => setConcepto(e.target.value)}
-                  placeholder="Elige uno o escribe el tuyo (otros)…"
-                  className="w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm"
-                />
-                <datalist id="conceptos-cuota">
-                  <option value="Mensualidad" />
-                  <option value="Matrícula" />
-                  <option value="Cuota del curso" />
-                  <option value="Materiales" />
-                  <option value="Certificado" />
-                  <option value="Reserva de plaza" />
-                </datalist>
+                <label htmlFor="cuotas-concepto" className="text-[11px] font-semibold text-muted-foreground mb-1 block">Concepto de las cuotas (opcional)</label>
+                {/* Sin datalist: la lista del navegador tenía otro estilo y mezclaba
+                    lo escrito antes en otras casillas. Como el producto de Nueva
+                    venta: los de siempre en el desplegable y debajo, otro (#106). */}
+                <div className="space-y-1.5">
+                  <Select<string>
+                    value={CONCEPTOS_CUOTA.includes(concepto) ? concepto : ''}
+                    onChange={(v) => setConcepto(v)}
+                    options={[
+                      { value: '', label: 'Seleccionar o escribir abajo' },
+                      ...CONCEPTOS_CUOTA.map((c) => ({ value: c, label: c })),
+                    ]}
+                    ariaLabel="Concepto de las cuotas"
+                  />
+                  <input
+                    id="cuotas-concepto" value={concepto}
+                    onChange={(e) => setConcepto(e.target.value)}
+                    placeholder="Escribe o selecciona del listado"
+                    aria-label="Escribir el concepto"
+                    autoComplete="off"
+                    className="w-full h-9 px-3 rounded-md border border-border bg-muted/50 text-sm"
+                  />
+                </div>
                 <p className="text-[10px] text-muted-foreground mt-0.5">Aparece en cada cuota. Predefinidos o texto libre.</p>
               </div>
 
@@ -510,7 +522,7 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
                         next[i] = { ...next[i], importe_previsto: Number(e.target.value) || 0 };
                         setDraftInstallments(next);
                       }}
-                      className="flex-1 h-8 px-2 rounded-md border border-border bg-muted/50 text-sm tabular-nums"
+                      className="flex-1 min-w-0 h-8 px-2 rounded-md border border-border bg-muted/50 text-sm tabular-nums"
                     />
                     <input
                       type="date" value={c.fecha_vencimiento}

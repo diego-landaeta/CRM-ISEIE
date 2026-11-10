@@ -8,6 +8,7 @@ import { sincronizarTemario } from '../products/temario.js';
 import { certifex, recorrer } from './certifex.cliente.js';
 import { alcanceDe, acotar, exigirCentro, exigirExpedientes, NO_ENCONTRADA } from './certifex.alcance.js';
 import { prepararEmision, emitirConPrograma, emitirMatriculas, resultadoBloqueado } from './certifex.emision.js';
+import { conDestinatario } from './certifex.envios.js';
 import { conFirma, correoDe, firmaTransparente, guardarFirmaSubida, origenesDeFirma, pngDe } from './certifex.firma.js';
 import {
   listarSolicitudesSchema, listarDiplomasSchema, porAvisarSchema, aprobarEmitirSchema, rechazarSchema, emitirDiplomasSchema,
@@ -601,7 +602,36 @@ async function candidatoDe(matriculaId, centro, cursoRef) {
 }
 
 /**
- * POST /diplomas/pedir { matriculaId, centro, cursoRef? } — «Pasar a pendientes». Diego,
+ * ¿Le falta algo para darlo por terminado? (#629 / CRM-ISEIE #356). null si no.
+ *
+ * Certifex lo da por terminado si ha entregado todas las tareas que cuenta su plugin, y
+ * hasta el plugin 2.8.2 contaba solo las visibles: en un máster con los módulos ocultos,
+ * entregar el módulo 1 ya era «todas». Así que antes de pedirle el diploma se mira lo
+ * que de verdad dice que terminó: la nota y las actividades calificadas. Con el campus sin
+ * actividades publicadas (total 0) el avance no se sabe y no cuenta como que falte.
+ * La misma regla y el mismo texto están en el frontal (piezas.tsx, `avisoSinTerminar`).
+ */
+export function avisoSinTerminar(c) {
+  const total = Number(c?.actividades?.total) || 0;
+  const calificadas = Number(c?.actividades?.calificadas) || 0;
+  const faltaAvance = total > 0 && calificadas < total;
+  const faltaNota = c?.notaFinal == null;
+  if (!faltaAvance && !faltaNota) return null;
+  const e = c?.entregas;
+  const partes = [];
+  if (e && Number(e.total) > 0) {
+    partes.push(`${Number(e.entregadas) < Number(e.total) ? 'Solo ha' : 'Ha'} entregado ${Number(e.entregadas)} de ${Number(e.total)} tareas visibles`);
+  } else {
+    partes.push('No hay datos de sus tareas entregadas');
+  }
+  if (faltaAvance) partes.push(`tiene ${calificadas} de ${total} actividades calificadas`);
+  if (faltaNota) partes.push('no tiene nota');
+  const frase = partes.length > 1 ? `${partes.slice(0, -1).join(', ')} y ${partes[partes.length - 1]}` : partes[0];
+  return { faltaAvance, faltaNota, mensaje: `${frase}: ¿seguro?` };
+}
+
+/**
+ * POST /diplomas/pedir { matriculaId, centro, cursoRef?, forzar? } — «Pasar a pendientes». Diego,
  * 22/10/2026: «que se pueda pasar de sin emitir a pendientes». Hay alumnos con su
  * matrícula de Moodle (y su nota) que no salen en Pendientes porque Moodle no los da por
  * terminados o porque no han pedido el diploma: en Emisiones salen como «Sin emitir» o
@@ -618,6 +648,10 @@ async function candidatoDe(matriculaId, centro, cursoRef) {
  * Si Certifex no devuelve esa matrícula (`vinculadaMoodle` y el mismo `matriculaId`), NO
  * se da por hecho: error claro, diciendo lo que ha hecho en su lugar. Si ya tenía diploma
  * o ya estaba pedida, se dice y no se pide otra vez.
+ *
+ * Sin terminar (#629: avance de calificadas < 100 % o sin nota) devuelve 409
+ * `SIN_TERMINAR` con el aviso, salvo que llegue `forzar: true`, que el panel manda solo
+ * tras confirmarlo en la página. Lo de quién lo forzó queda en el log.
  */
 export async function pedir(req, res, next) {
   try {
@@ -636,6 +670,8 @@ export async function pedir(req, res, next) {
     if (Number(c.curso?.ref) >= REF_CURSO_CRM) {
       throw new AppError('Esta matrícula no viene de Moodle: se creó desde el CRM. Búscala en Pendientes.', 409, 'NO_ES_DE_MOODLE');
     }
+    const sinTerminar = avisoSinTerminar(c);
+    if (sinTerminar && !d.forzar) throw new AppError(sinTerminar.mensaje, 409, 'SIN_TERMINAR');
     const email = String(c.titular?.email ?? '').trim().toLowerCase() || null;
     const dni = String(c.titular?.dni ?? '').trim() || null;
     if (!email && !dni) {
@@ -672,7 +708,10 @@ export async function pedir(req, res, next) {
     if (r.nexpediente) {
       throw new AppError(`Ya tiene el diploma emitido (${r.nexpediente}): está en Emitidos.`, 409, 'YA_EMITIDO');
     }
-    logger.info({ userId: req.user.userId, centro: cod, matriculaId: d.matriculaId, yaPedido: !!r.yaExistia }, 'Certifex: pasado a Pendientes desde el CRM');
+    logger.info({
+      userId: req.user.userId, centro: cod, matriculaId: d.matriculaId, yaPedido: !!r.yaExistia,
+      ...(sinTerminar ? { forzado: true, faltaNota: sinTerminar.faltaNota, faltaAvance: sinTerminar.faltaAvance } : {}),
+    }, 'Certifex: pasado a Pendientes desde el CRM');
     res.json({
       success: true,
       data: { matriculaId: d.matriculaId, centro: cod, curso, nombre, yaPedido: !!r.yaExistia },
@@ -756,6 +795,8 @@ export async function diplomas(req, res, next) {
       estado: f.estado ?? 'vigentes', centro: ambito.centro, q: f.q,
     }, f, { fecha: (d) => d?.emitidoEn, extra: ambos(filtros.length ? (d) => filtros.every((fn) => fn(d)) : null, deMisCentros(ambito)) });
     for (const d of data.filas) d.emitidoEnCrm = emitidoPorElCrm(d);
+    // A quién se manda (el titular) y quién lo aprobó, para «Aviso al alumno» (05/11/2026).
+    await conDestinatario(data.filas, { query });
     res.json({ success: true, data });
   } catch (err) { next(err); }
 }

@@ -1,12 +1,15 @@
+import { comoLista } from '../../shared/utils/ambito.js';
 import { query, getClient } from '../../shared/config/db.js';
 import * as expenseService from '../expenses/expense.service.js';
 import { logger } from '../../shared/utils/logger.js';
 
-function buildFilters({ projectId, estado, from, to }) {
+function buildFilters({ projectId, projectIds = null, estado, from, to }) {
   const conds = [];
   const params = [];
   let idx = 1;
-  if (projectId) { conds.push(`ap.project_id = $${idx++}`); params.push(projectId); }
+  // Una EMPRESA son sus campus; `comoLista` deja los dos casos en una lista.
+  const ids = comoLista(projectId, projectIds);
+  if (ids) { conds.push(`ap.project_id = ANY($${idx++}::int[])`); params.push(ids); }
   if (estado) { conds.push(`ap.estado = $${idx++}`); params.push(estado); }
   if (from) { conds.push(`ap.fecha_factura >= $${idx++}`); params.push(from); }
   if (to) { conds.push(`ap.fecha_factura <= $${idx++}`); params.push(to); }
@@ -146,11 +149,12 @@ export async function addPayment(payableId, data, userId) {
   }
 }
 
-export async function getStats({ projectId, from, to }) {
+export async function getStats({ projectId, projectIds = null, from, to }) {
   const conds = [];
   const params = [];
   let idx = 1;
-  if (projectId) { conds.push(`project_id = $${idx++}`); params.push(projectId); }
+  const idsStats = comoLista(projectId, projectIds);
+  if (idsStats) { conds.push(`project_id = ANY($${idx++}::int[])`); params.push(idsStats); }
   if (from) { conds.push(`fecha_factura >= $${idx++}`); params.push(from); }
   if (to) { conds.push(`fecha_factura <= $${idx++}`); params.push(to); }
   const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';

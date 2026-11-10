@@ -18,7 +18,7 @@ import { cn } from '@/shared/lib/utils';
 import client from '@/shared/api/client';
 import NotificationsBell from './NotificationsBell';
 import { isBetaAllowed, BETA_MODE, BETA_VERSION } from '@/shared/config/betaConfig';
-import { PROCESO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
+import { PROCESO_EN_PRUEBAS, SOLO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 import { CERTIFEX_PANEL } from '@/shared/lib/certifexPanel';
 
 const ROLE_LABELS = { superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor', soporte: 'Soporte', tutor: 'Tutor', colaborador: 'Colaborador' };
@@ -76,7 +76,9 @@ export const NAV_SECTIONS = [
           // la deja tocar el suyo.
           { to: '/whatsapp/conexion', label: 'Conexión', permiso: 'whatsapp.usar' },
           { to: '/whatsapp/plantillas', label: 'Plantillas', permiso: 'whatsapp.plantillas' },
-          { to: '/whatsapp/banco', label: 'Banco de mensajes' },
+          // El servidor pide usarlo, supervisarlo o verlo (#631; `whatsapp.banco`, el project
+          // manager, Diego 04/11: «el project manager ve todo», con las líneas de sus campus).
+          { to: '/whatsapp/banco', label: 'Banco de mensajes', permiso: ['whatsapp.usar', 'whatsapp.supervisar', 'whatsapp.banco'] },
           // Si cada gestora responde y lo que apunta (Diego, 30/10). Para quien ve Reportes.
           { to: '/whatsapp/actividad', label: 'Actividad', permiso: 'reports.view' },
           { to: '/whatsapp/ayuda', label: 'Cómo se usa' },
@@ -97,7 +99,8 @@ export const NAV_SECTIONS = [
   {
     label: 'Equipo de Desarrollo',
     items: [
-      { to: '/tareas', label: 'Mi tablero', icon: Kanban, roles: ROLES_TAREAS, end: true, permiso: 'tasks.view_own', oPermiso: 'tasks.view_own' },
+      // El tutor, su tablero de tutores (Diego, 04/11): con «Ver su tablero».
+      { to: '/tareas', label: 'Mi tablero', icon: Kanban, roles: [...ROLES_TAREAS, 'tutor'], end: true, permiso: 'tasks.view_own', oPermiso: 'tasks.view_own' },
       { to: '/tareas/revisar', label: 'Por revisar', icon: CheckSquare, roles: ROLES_TAREAS, permiso: 'tasks.close', oPermiso: 'tasks.close' },
       { to: '/tareas/configurar', label: 'Configurar tablero', icon: SlidersHorizontal, roles: ROLES_TAREAS, permiso: 'tasks.manage', oPermiso: 'tasks.manage' },
       // «Mi factura» (#202): el colaborador con usuario sube aquí su factura del mes.
@@ -137,7 +140,8 @@ export const NAV_SECTIONS = [
     label: 'Catálogo',
     items: [
       { to: '/products',   label: 'Productos',  icon: Package, sectionPrefixes: ['/products'], permiso: 'products.view' },
-      { to: '/products/pending', label: 'Cursos pendientes', icon: Clock, roles: ['admin', 'superadmin'], permiso: 'products.view' },
+      // Por campus, con tutora y fecha (#336): también gestoras y tutoras, como en MultiCRM.
+      { to: '/products/pending', label: 'Cursos pendientes', icon: Clock, roles: ['admin', 'superadmin', 'gestor', 'tutor'], permiso: 'products.view' },
       { to: '/woocommerce', label: 'WooCommerce', icon: ShoppingBag, roles: ['admin', 'superadmin'], permiso: 'woocommerce.view' },
       { to: '/configuracion/categorias-arbol', label: 'Árbol de categorías', icon: Sliders, roles: ['admin', 'superadmin'], permiso: 'products.categorias' },
       // «Certificados» (/documentos) fuera del menú: estaba vacío, y los títulos
@@ -150,6 +154,8 @@ export const NAV_SECTIONS = [
       { to: '/tutores', label: 'Tutores', icon: GraduationCap, roles: ['admin', 'superadmin'], sectionPrefixes: ['/tutores'], permiso: 'tutores.gestionar', oPermiso: 'tutores.gestionar' },
       // Lo unico que ve un tutor: sus cursos y lo que le corresponde.
       { to: '/mis-cursos', label: 'Mis cursos', icon: GraduationCap, roles: ['tutor'], permiso: 'tutores.mis_cursos' },
+      // Consultas de alumnos (#188), como en MultiCRM: el tutor, su bandeja; administración, todas.
+      { to: '/consultas', label: 'Consultas', icon: ChatCircleText, roles: ['admin', 'superadmin', 'tutor'], statusTag: 'Pruebas', sectionPrefixes: ['/consultas'], permiso: ['consultas.view', 'consultas.atender'], oPermiso: 'consultas.view' },
       { to: '/tutores/sin-tutor', label: 'Sin tutor', icon: Warning, roles: ['admin', 'superadmin'], permiso: 'tutores.gestionar', oPermiso: 'tutores.gestionar' },
       { to: '/tutores/comisiones', label: 'Comisiones', icon: Coins, roles: ['admin', 'superadmin'], permiso: 'tutores.gestionar', oPermiso: 'tutores.gestionar' },
     ],
@@ -183,6 +189,9 @@ export const NAV_SECTIONS = [
       { to: '/informes',     label: 'Reportes',      icon: ChartLineUp, sectionPrefixes: ['/informes', '/activity'] },
       // Por que no compran (#170). Fuera de produccion hasta aprobarlo.
       ...(PROCESO_EN_PRUEBAS ? [{ to: '/informes/feedback', label: 'Feedback', icon: ChatCircleText, roles: ['admin', 'superadmin'], permiso: 'feedback.view' }] : []),
+      // Preguntarle a los datos (#30), como en MultiCRM: solo en pruebas hasta que
+      // haya clave y tope de gasto (#22).
+      ...(SOLO_EN_PRUEBAS ? [{ to: '/informes/preguntar', label: 'Pregunta a tus datos', icon: Sparkle, roles: ['admin', 'superadmin'], permiso: 'reports_ia.generar' }] : []),
       // Próximamente (#226): en MultiCRM la pantalla existe pero está aparcada
       // —fuera de su menú hasta la fase 5— y depende de la API de Claude, cuya
       // clave y cuyo módulo (`claude-chat`) ISEIE no tiene.
@@ -214,6 +223,8 @@ export const NAV_SECTIONS = [
     label: 'Conexión',
     items: [
       { to: '/conexion/mcp', label: 'MCP', icon: Robot, accesoMcp: true },
+      // #335, como en MultiCRM: los cursos, alumnos y recursos de los Moodle de cada campus.
+      { to: '/conexion/moodle', label: 'Moodle', icon: GraduationCap, roles: ['admin', 'superadmin'], permiso: 'moodle.view' },
       { to: '/conexion/conectores', label: 'Conectores', icon: CloudArrowDown, roles: ['admin', 'superadmin'], permiso: 'connectors.view' },
       // Diego, 15/10: «un apartado en Conexión para enviar esos datos ÚNICAMENTE
       // CUANDO SE PONGA DATOS POR TRANSFERENCIA BANCARIA / DEPÓSITO BANCARIO».
@@ -323,7 +334,44 @@ export function canSeeItem(item, role, soloColaboraciones, permisos, can) {
 
   if (!item.roles) return true;
   if (es('superadmin', 'soporte')) return true;
+  // El project manager ve todo (Diego, 04/11): cada pantalla cuyo permiso tiene
+  // (ya mirado arriba), aunque su rol no esté en `roles`. Lo de dentro, de sus
+  // campus: lo recorta el servidor.
+  if (es('project_manager') && item.permiso && !item.comingSoon) return true;
   return item.roles.some((r) => roles.includes(r)) || porPermiso;
+}
+
+/**
+ * ¿Puede abrir esta pantalla, por la dirección? (#631, gemela de CRM#643)
+ *
+ * El menú ya esconde lo que no se puede usar cuando la entrada declara su
+ * `permiso`, pero escribiendo la dirección la pantalla se abría igual y luego
+ * llegaba el 403. Esta es la misma regla, para la ruta: todas las entradas del
+ * menú que llevan a ella; si alguna pide `permiso` y ninguna lo cumple (ni su
+ * `oPermiso`), está cerrada. Solo el permiso, nunca el rol (#230): los `roles`
+ * de cada entrada dicen a quién se le enseña de serie, no quién entra. Lo que no
+ * está en el menú (fichas de detalle…) no se toca.
+ */
+const SIN_ENTRADA = {
+  // El chat de WhatsApp también se abre por `/whatsapp` (App.jsx), sin entrada.
+  '/whatsapp': ['whatsapp.usar', 'whatsapp.supervisar'],
+};
+
+export function rutaPermitida(pathname, can) {
+  const ruta = String(pathname || '').replace(/\/+$/, '') || '/';
+  const tiene = (claves) => typeof can === 'function' && [].concat(claves).some((p) => can(p) === true);
+  const suyas = [];
+  const recorrer = (items) => {
+    for (const it of items || []) {
+      if (it.to && !it.href && it.to === ruta) suyas.push(it);
+      if (it.children) recorrer(it.children);
+    }
+  };
+  for (const s of NAV_SECTIONS) recorrer(s.items);
+  // Rutas sin entrada propia en el menú: su permiso, aquí.
+  if (!suyas.length && SIN_ENTRADA[ruta]) suyas.push({ permiso: SIN_ENTRADA[ruta] });
+  if (!suyas.length) return true;
+  return suyas.some((it) => !it.permiso || tiene(it.permiso) || (it.oPermiso && tiene(it.oPermiso)));
 }
 
 /** Vanessa y quien lleve las colaboraciones: solo tutores. Un admin con la casilla NO se recorta. */

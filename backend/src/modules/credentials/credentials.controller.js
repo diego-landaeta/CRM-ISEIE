@@ -4,12 +4,30 @@ import { AppError } from '../../shared/utils/AppError.js';
 import { query } from '../../shared/config/db.js';
 import { decrypt } from '../../shared/utils/crypto.js';
 import { refreshGoogleAdsAccessToken } from '../../shared/services/googleAds.service.js';
+import { veTodoElCrm, campusDeLaPersona } from '../../shared/utils/ambito.js';
+
+/**
+ * Lo que ve de las claves quien no ve todo el CRM (CRM#632 / ISEIE#359).
+ *
+ * El admin recibía 403 en Informes al preguntar si la clave de Claude está
+ * puesta. Diego, 03/11: «el admin debe ver todo de todo», cada uno con los datos
+ * de sus campus. Superadmin y soporte, todo. El admin, las de SUS campus y que
+ * existen las generales (la de Claude), sin los últimos caracteres de esas, que
+ * no son suyas. Guardar, probar y borrar siguen siendo de soporte.
+ */
+async function recortar(req, filas) {
+  if (veTodoElCrm(req.user)) return filas;
+  const mios = await campusDeLaPersona(req.user?.userId);
+  return filas
+    .filter((c) => c.project_id == null || mios.includes(Number(c.project_id)))
+    .map((c) => (c.project_id == null ? { ...c, masked_value: '••••••••' } : c));
+}
 
 export async function list(req, res, next) {
   try {
     const parsed = listCredentialsSchema.safeParse(req.query);
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
-    const creds = await model.list(parsed.data);
+    const creds = await recortar(req, await model.list(parsed.data));
     res.json({ success: true, data: creds });
   } catch (err) { next(err); }
 }

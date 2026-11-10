@@ -2,11 +2,13 @@ import { Router } from 'express';
 import { verifyToken } from '../../shared/middleware/auth.js';
 import { puede } from '../../shared/middleware/permissions.js';
 import * as ctrl from './sequence.controller.js';
+import { projectAccess } from '../../shared/middleware/projectAccess.js';
 
 const router = Router();
 router.use(verifyToken);
 
-router.get('/', puede('email_sequences.view'), ctrl.list);
+// Solo de un campus de quien pide (projectAccess): antes valía el id de cualquiera.
+router.get('/', puede('email_sequences.view'), projectAccess, ctrl.list);
 router.get('/runs', puede('email_sequences.view'), ctrl.listRuns);
 router.get('/:id', puede('email_sequences.view'), ctrl.getById);
 router.post('/', puede('email_sequences.create'), ctrl.create);

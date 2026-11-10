@@ -5,10 +5,10 @@ import { webhookLeadSchema, listLeadsSchema, updateStatusSchema, createInteracti
 import * as dupQueue from './dup-queue.service.js';
 import * as leadProducts from './lead-products.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
-import { veTodoElCrm, campusDeLaPersona, exigirCampusSuyo } from '../../shared/utils/ambito.js';
+import { veTodoElCrm, campusDeLaPersona, listaDelAmbito, exigirCampusSuyo } from '../../shared/utils/ambito.js';
 import { leadsToWasapiCsv, leadsToWasapiXlsx, detectCountry } from '../../shared/utils/wasapiCsv.js';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
-import { soloLoSuyo } from '../../shared/utils/roles.js';
+import { soloLoSuyo, alcanceComercial, personasDentro, dentroDelAlcance } from '../../shared/utils/roles.js';
 
 // ============================================================
 // WEBHOOK (publico, autenticado por API key en header)
@@ -27,12 +27,17 @@ import { soloLoSuyo } from '../../shared/utils/roles.js';
 // historial. Va en TODO handler que reciba un :id de lead: la ficha estaba
 // protegida pero seis puertas al mismo lead no lo estaban, y por ahi se leia y
 // se escribia el historial de fichas ajenas (#109).
+//
+// Con equipo comercial (09/11/2026): una administradora con gestoras a su
+// cargo alcanza los suyos y los de ellas; los de otra compañera, igual que una
+// gestora, no.
 async function exigirQueSeaSuyo(req, leadId) {
-  if (!soloLoSuyo(req.user)) return;              // admin, superadmin y soporte ven todo
+  const alcance = await alcanceComercial(req.user);
+  if (!alcance) return;                           // admin sin equipo, superadmin y soporte ven todo
   const { rows } = await query(
     'SELECT responsable_id FROM leads WHERE id = $1 AND deleted_at IS NULL', [leadId]);
   if (!rows.length) throw new AppError('Contacto no encontrado', 404, 'NOT_FOUND');
-  if (rows[0].responsable_id !== req.user.userId) {
+  if (!dentroDelAlcance(alcance, rows[0].responsable_id)) {
     throw new AppError('Ese contacto es de otra gestora', 403, 'NO_ES_TUYO');
   }
 }
@@ -87,9 +92,14 @@ export async function list(req, res, next) {
     }
     // SEGURIDAD: el rol 'gestor' SOLO puede ver leads asignados a él.
     // Ignoramos cualquier responsableId/unassigned que venga del cliente.
-    if (soloLoSuyo(req.user)) {
-      filters.responsableId = req.user.userId;
+    // Con equipo (09/11/2026): ella y sus gestoras; si filtra por una de
+    // ellas, esa. Los sin asignar no son de nadie de su equipo.
+    const alcance = await alcanceComercial(req.user);
+    if (alcance) {
+      filters.responsableId = personasDentro(alcance, filters.responsableId);
       filters.unassigned = false;
+    }
+    if (soloLoSuyo(req.user)) {
       // Filtros operativos (admin/superadmin); gestor no los usa.
       filters.duplicated = false;
       filters.reincidente = false;
@@ -133,9 +143,9 @@ export async function exportWasapi(req, res, next) {
     };
 
     // Gestor solo ve los suyos — bloqueamos cualquier override por query.
-    if (soloLoSuyo(req.user)) {
-      filters.responsableId = req.user.userId;
-    }
+    // Con equipo, los suyos y los de sus gestoras (09/11/2026).
+    const alcance = await alcanceComercial(req.user);
+    if (alcance) filters.responsableId = personasDentro(alcance, filters.responsableId);
 
     const result = await leadModel.findAll(filters);
     let leads = result.leads.map((l) => ({
@@ -243,6 +253,7 @@ export async function today(req, res, next) {
       userId: req.user.userId,
       role: req.user.role,
       soloSuyo: soloLoSuyo(req.user),
+      personas: await alcanceComercial(req.user),
       projectId: projectId && !isNaN(projectId) ? projectId : null,
       projectIds: await campusPedidos(req),
     });
@@ -266,7 +277,9 @@ export async function stats(req, res, next) {
       search: req.query.search || null,
     };
     // SEGURIDAD: gestor solo ve sus propios stats, ignoramos responsableId del query.
-    if (soloLoSuyo(req.user)) opts.responsableId = req.user.userId;
+    // Con equipo, los de su equipo (09/11/2026).
+    const alcance = await alcanceComercial(req.user);
+    if (alcance) opts.responsableId = personasDentro(alcance, opts.responsableId);
     const data = await leadService.getStats(lista || projectId, opts);
     res.json({ success: true, data });
   } catch (err) { next(err); }
@@ -278,7 +291,8 @@ export async function dashboardSummary(req, res, next) {
     if (isNaN(projectId)) throw new AppError('projectId requerido', 400, 'MISSING_PROJECT');
     const days = Math.max(1, Math.min(365, parseInt(req.query.days) || 30));
     const opts = { days };
-    if (soloLoSuyo(req.user)) opts.responsableId = req.user.userId;
+    const alcance = await alcanceComercial(req.user);
+    if (alcance) opts.responsableId = alcance;
     const data = await leadModel.getDashboardSummary(projectId, opts);
     res.json({ success: true, data });
   } catch (err) { next(err); }
@@ -312,7 +326,11 @@ export async function addInteraction(req, res, next) {
     if (!parsed.success) {
       throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
     }
-    const result = await leadService.addInteraction(id, parsed.data.tipo, parsed.data.nota, req.user.userId, parsed.data.fecha);
+    // El paso que se atiende desde la cola se marca solo si puede marcar pasos,
+    // que es el mismo permiso que pide la checklist (PATCH /proceso/paso-lead).
+    const pasoId = parsed.data.paso_id && await tienePermiso(req, 'proceso.trabajar')
+      ? parsed.data.paso_id : null;
+    const result = await leadService.addInteraction(id, parsed.data.tipo, parsed.data.nota, req.user.userId, parsed.data.fecha, { pasoId });
     res.status(201).json({ success: true, data: result });
   } catch (err) { next(err); }
 }
@@ -528,6 +546,16 @@ export async function reassign(req, res, next) {
     if (!parsed.success) {
       throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
     }
+    // Una administradora con equipo (09/11/2026) solo reparte entre ella y sus
+    // gestoras, y solo lo que ya es de ellas. A una gestora sin equipo no se le
+    // cambia nada: lo que tenga por su permiso sigue igual.
+    const alcance = await alcanceComercial(req.user);
+    if (alcance && alcance.length > 1) {
+      await exigirQueSeaSuyo(req, id);
+      if (!dentroDelAlcance(alcance, parsed.data.responsable_id)) {
+        throw new AppError('Solo puedes pasárselo a alguien de tu equipo', 403, 'FUERA_DE_TU_EQUIPO');
+      }
+    }
     const result = await leadService.reassign(id, parsed.data.responsable_id, req.user.userId);
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
@@ -559,10 +587,11 @@ export async function getLeadSequences(req, res, next) {
 // ── #13 Cola de revisión de duplicados ─────────────────────────
 export async function listReviewQueue(req, res, next) {
   try {
-    const projectId = req.query.projectId ? parseInt(req.query.projectId) : null;
+    // Solo la de sus campus: sin campus, antes salía la cola de TODAS las empresas.
+    const projectIds = await listaDelAmbito(req);
     const status = req.query.status || 'pending';
-    const result = await dupQueue.list({ projectId, status });
-    const counts = await dupQueue.counts(projectId);
+    const result = await dupQueue.list({ projectIds, status });
+    const counts = await dupQueue.counts(null, projectIds);
     res.json({ success: true, data: result, counts });
   } catch (err) { next(err); }
 }
@@ -571,6 +600,12 @@ export async function decideReviewQueue(req, res, next) {
   try {
     const queueId = parseInt(req.params.id);
     if (isNaN(queueId)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    // Decidir sobre un duplicado de otra empresa: «no encontrado», como si no existiera.
+    const { rows: [entrada] } = await query('SELECT project_id FROM lead_duplicate_review_queue WHERE id = $1', [queueId]);
+    if (!entrada) throw new AppError('Entrada no encontrada', 404, 'NOT_FOUND');
+    if (!veTodoElCrm(req.user) && !(await campusDeLaPersona(req.user.userId)).includes(Number(entrada.project_id))) {
+      throw new AppError('Entrada no encontrada', 404, 'NOT_FOUND');
+    }
     const { action, notas } = req.body || {};
     const result = await dupQueue.decide({ queueId, action, notas, userId: req.user.userId });
     res.json({ success: true, data: result });

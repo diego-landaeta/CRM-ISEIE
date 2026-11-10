@@ -130,7 +130,7 @@ export default function Llamar({
                 llamada es la mitad del sentido de este boton, y callarlo deja
                 un hueco en el historial del prospecto sin que nadie lo sepa. */}
             <p className={`text-xs text-center flex items-center justify-center gap-1.5 ${
-              apuntada ? 'text-muted-foreground' : 'text-amber-700 dark:text-amber-400'
+              apuntada ? 'text-muted-foreground' : 'text-warning-soft-foreground'
             }`}>
               <Phone size={12} weight="fill" aria-hidden="true" />
               {apuntada

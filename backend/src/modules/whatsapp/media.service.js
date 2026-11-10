@@ -286,6 +286,33 @@ let trabajando = false;
 // descargar» porque tenia 17.000 stickers por delante.
 const DIAS_HISTORIAL = Number(process.env.WA_MEDIA_DIAS || 30);
 
+// Cuantas veces se pide un adjunto antes de darlo por perdido (#638).
+//
+// Evolution solo puede descifrar lo que aun tiene; lo que ya no («Message not
+// found») no va a volver. Sin tope se volvia a pedir en cada arranque: 3.252
+// errores en 7 dias, en rafagas de 130 o 260 justo despues de cada despliegue.
+export const MAX_INTENTOS = Number(process.env.WA_MEDIA_INTENTOS || 3);
+
+/**
+ * Anota un intento fallido y, al llegar al tope, lo marca como irrecuperable.
+ *
+ * Nunca lanza: si no se puede anotar (por ejemplo, sin la migracion 271), la
+ * cola sigue con el siguiente en vez de pararse.
+ */
+async function anotarFallo(query, mensajeId) {
+  try {
+    await query(
+      `UPDATE wa_mensajes
+          SET media_intentos = media_intentos + 1,
+              media_irrecuperable = media_intentos + 1 >= $2
+        WHERE id = $1`,
+      [mensajeId, MAX_INTENTOS]
+    );
+  } catch (err) {
+    logger.warn({ err: err.message, mensajeId }, 'Cola de adjuntos: no se pudo anotar el intento');
+  }
+}
+
 /**
  * ¿Merece la pena bajar este adjunto ahora?
  *
@@ -347,10 +374,12 @@ async function trabajar() {
         hechos++;
       } else {
         fallados++;
+        await anotarFallo(query, t.mensajeId);
       }
     } catch (err) {
       fallados++;
       logger.warn({ err: err.message, mensajeId: t.mensajeId }, 'Cola de adjuntos: fallo uno');
+      await anotarFallo(query, t.mensajeId);
     }
     // Cada 50, un parte: sin esto no habia forma de saber si seguia viva.
     if ((hechos + fallados) % 50 === 0) {
@@ -381,6 +410,7 @@ export async function reencolarPendientes(instancia, limite = 5000) {
        FROM wa_mensajes m
        JOIN wa_conversaciones c ON c.id = m.conversacion_id
       WHERE m.media_url IS NULL
+        AND NOT m.media_irrecuperable
         AND m.tipo NOT IN ('texto', 'otro')
         AND m.wa_id IS NOT NULL
         AND c.instancia = $1
@@ -429,7 +459,7 @@ export async function pendientesEnBase() {
     const { query } = await import('../../shared/config/db.js');
     const { rows } = await query(
       `SELECT COUNT(*)::int n FROM wa_mensajes
-        WHERE media_url IS NULL AND tipo NOT IN ('texto', 'otro')`
+        WHERE media_url IS NULL AND NOT media_irrecuperable AND tipo NOT IN ('texto', 'otro')`
     );
     if (rows[0].n > 0) {
       logger.warn({ pendientes: rows[0].n }, 'WhatsApp: mensajes con archivo que no llego a bajarse');

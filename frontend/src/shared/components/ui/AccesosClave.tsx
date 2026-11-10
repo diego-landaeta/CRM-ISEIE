@@ -3,6 +3,9 @@ import type { IconProps } from '@phosphor-icons/react';
 import { useNavigate } from 'react-router-dom';
 import Card from './Card';
 import { cn } from '@/shared/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
+import usePermission from '@/shared/hooks/usePermission';
+import { rutaPermitida } from '@/shared/components/layout/Sidebar';
 // Traído de MultiCRM. ISEIE no tiene su escala de texto (text-seccion,
 // text-secundario, text-normal): van text-base, text-xs y text-sm.
 
@@ -37,6 +40,11 @@ export default function AccesosClave({
   subtitulo?: string;
 }) {
   const navigate = useNavigate();
+  // Un acceso a una pantalla sin permiso no se enseña, con la regla del menú
+  // (#631). Sin el mapa de permisos todavía, se enseñan todos.
+  const { can } = usePermission();
+  const { permissions } = useAuth() as { permissions?: Record<string, boolean> | null };
+  const visibles = permissions ? accesos.filter((a) => rutaPermitida(a.to, can)) : accesos;
 
   return (
     <Card>
@@ -46,7 +54,7 @@ export default function AccesosClave({
       </div>
 
       <ul className="mt-4 space-y-1.5">
-        {accesos.map(({ label, detail, icon: Icon, to, badge }) => (
+        {visibles.map(({ label, detail, icon: Icon, to, badge }) => (
           <li key={to}>
             <button
               type="button"

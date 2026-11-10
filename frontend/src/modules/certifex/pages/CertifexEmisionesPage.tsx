@@ -13,7 +13,7 @@ import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
 import PromptDialog from '@/shared/components/ui/PromptDialog';
 import { Button } from '@/shared/components/ui/button';
 import { cn } from '@/shared/lib/utils';
-import { Avance, AvisoCasiListo, AvisoDireccionPublica, Barra, Buscador, Decision, EnElCrmEtiqueta, Etiqueta, LogoCampus, Pestana, euros } from '../components/piezas';
+import { Avance, AvisoCasiListo, AvisoDireccionPublica, avisoSinTerminar, Barra, Buscador, Decision, EnElCrmEtiqueta, Entregas, Etiqueta, LogoCampus, Pestana, euros } from '../components/piezas';
 import {
   diplomasApi,
   emisionesApi,
@@ -231,6 +231,8 @@ export default function CertifexEmisionesPage({ embebida = false }: { embebida?:
   const [abierta, setAbierta] = useState<Candidato | null>(null);
   // «Pasar a pendientes» (22/10/2026): la matrícula que se está pidiendo, para su botón.
   const [pidiendo, setPidiendo] = useState<number | null>(null);
+  // #629: a quien no ha terminado (sin nota o con calificadas < 100 %) se le pasa solo tras confirmar.
+  const [confirmarPedir, setConfirmarPedir] = useState<{ c: Candidato; mensaje: string } | null>(null);
 
   const base = conexion?.urlPublica ?? null;
 
@@ -408,20 +410,31 @@ export default function CertifexEmisionesPage({ embebida = false }: { embebida?:
    * Pendientes: Moodle no lo da por terminado o el alumno no lo ha pedido. Esto lo pide
    * por él sobre esta misma matrícula de Moodle, y se aprueba y emite desde Diplomas.
    */
-  async function pasarAPendientes(c: Candidato) {
+  // `forzar` (#629): solo tras confirmar en la página que se pide sin terminar.
+  async function pasarAPendientes(c: Candidato, forzar = false) {
     setPidiendo(c.matriculaId);
     try {
-      const r = await diplomasApi.pedir({ matriculaId: c.matriculaId, centro: c.centro, cursoRef: c.curso.ref });
+      const r = await diplomasApi.pedir({ matriculaId: c.matriculaId, centro: c.centro, cursoRef: c.curso.ref, ...(forzar ? { forzar: true } : {}) });
       toast({
         title: r.data.yaPedido ? 'Ya estaba en Pendientes' : 'Pasado a Pendientes',
         description: `${r.data.nombre} · ${r.data.curso}. Apruébalo y emítelo desde allí (Matrículas › Diplomas › Pendientes).`,
       });
       await cargarFilas();
     } catch (e) {
-      toast({ title: 'No se ha pasado a Pendientes', description: (e as Error).message, variant: 'destructive' });
+      // El servidor ve algo que la fila no (datos más nuevos): la misma confirmación.
+      const err = e as Error & { data?: { code?: string } };
+      if (!forzar && err.data?.code === 'SIN_TERMINAR') setConfirmarPedir({ c, mensaje: err.message });
+      else toast({ title: 'No se ha pasado a Pendientes', description: err.message, variant: 'destructive' });
     } finally {
       setPidiendo(null);
     }
+  }
+
+  /** Antes de pedir: sin terminar (#629), primero la confirmación en la página. */
+  function pedirAPendientes(c: Candidato) {
+    const aviso = avisoSinTerminar(c);
+    if (aviso) setConfirmarPedir({ c, mensaje: aviso });
+    else void pasarAPendientes(c);
   }
 
   const acciones = (
@@ -645,6 +658,7 @@ export default function CertifexEmisionesPage({ embebida = false }: { embebida?:
                             )}
                           </div>
                           <div className="mt-1"><Avance hechas={c.actividades.calificadas} total={c.actividades.total} /></div>
+                          <div className="mt-0.5"><Entregas e={c.entregas} /></div>
                         </td>
                         <td className="px-2 py-2.5 align-top"><EnElCrmEtiqueta crm={c.crm} /></td>
                         <td className="px-2 py-2.5 align-top">
@@ -663,7 +677,7 @@ export default function CertifexEmisionesPage({ embebida = false }: { embebida?:
                               <Button size="sm" variant="outline" disabled={trabajando || pidiendo !== null} aria-busy={pidiendo === c.matriculaId}
                                 aria-label={`Pasar a pendientes a ${c.titular.nombre || c.titular.email || `la matrícula ${c.matriculaId}`}`}
                                 title="Pide el diploma por el alumno: pasa a Diplomas › Pendientes para revisarlo, aprobarlo y emitirlo"
-                                onClick={() => void pasarAPendientes(c)}>
+                                onClick={() => pedirAPendientes(c)}>
                                 <HourglassMedium size={14} className="mr-1.5" /> {pidiendo === c.matriculaId ? 'Pasando…' : 'Pasar a pendientes'}
                               </Button>
                             </div>
@@ -719,6 +733,26 @@ export default function CertifexEmisionesPage({ embebida = false }: { embebida?:
       )}
 
       {/* Confirmaciones, con los diálogos del CRM. */}
+      {/* #629: pasar a Pendientes a quien no ha terminado, solo confirmándolo. */}
+      <ConfirmDialog
+        open={!!confirmarPedir}
+        title="Pasar a pendientes sin terminar"
+        message={confirmarPedir && (
+          <>
+            {confirmarPedir.mensaje}
+            <span className="mt-2 block">Quedará en Pendientes, por decidir, como si lo hubiera pedido el alumno. Queda a tu nombre.</span>
+          </>
+        )}
+        confirmLabel="Pasar a pendientes"
+        tone="warning"
+        loading={pidiendo !== null}
+        onCancel={() => setConfirmarPedir(null)}
+        onConfirm={() => {
+          const x = confirmarPedir;
+          setConfirmarPedir(null);
+          if (x) void pasarAPendientes(x.c, true);
+        }}
+      />
       <ConfirmDialog
         open={!!accion && accion.tipo !== 'rechazar'}
         title={accion?.tipo === 'emitirTodo'
@@ -851,6 +885,7 @@ function Ficha({ c, campus, base, ocupado, alCerrar, alAprobar, alRechazar, alEm
                 </span>
               ))}
               {dato('Avance', <Avance hechas={c.actividades.calificadas} total={c.actividades.total} />)}
+              {dato('Tareas entregadas', <Entregas e={c.entregas} />)}
               {c.crm !== undefined && dato('En el CRM', c.crm === null ? 'Ese correo no está en el CRM' : (
                 <span className="inline-flex flex-col gap-1">
                   <EnElCrmEtiqueta crm={c.crm} />

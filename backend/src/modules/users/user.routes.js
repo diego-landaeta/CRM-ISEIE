@@ -32,6 +32,8 @@ router.patch('/mis-avisos', userController.cambiarMiAviso);
 router.get('/', puede('users.view'), userController.list);
 // El buscador (Ctrl K, gemela de CRM#591). Antes que `/:id`, o «buscar» se leería como un id.
 router.get('/buscar', puede('users.view'), userController.buscar);
+// Qué roles puede dar quien da de alta (gemela de CRM#644). El mismo permiso que el alta, y antes que `/:id`.
+router.get('/roles-asignables', puede('users.create'), userController.rolesAsignables);
 router.get('/activity-log', puede('users.view'), userController.activityLog);
 
 // Disponibilidad (rutas con path fijo antes de las que tienen :id)
@@ -48,6 +50,9 @@ router.patch('/:id/password', puede('users.contrasena'), userController.setPassw
 router.get('/:id/aviso-correo', puede('users.aviso_correo'), userController.avisoCorreo);
 router.patch('/:id/availability', puede('users.edit'), availabilityController.setAvailability);
 router.get('/:id/availability-blocks', puede('users.view'), availabilityController.listBlocks);
+// El equipo comercial de una administradora (09/11/2026, migración 274).
+router.get('/:id/equipo-comercial', puede('users.view'), userController.getEquipoComercial);
+router.put('/:id/equipo-comercial', puede('equipos.gestionar'), userController.setEquipoComercial);
 router.post('/:id/availability-blocks', puede('users.edit'), availabilityController.createBlock);
 
 export default router;

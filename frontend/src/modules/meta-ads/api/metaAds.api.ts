@@ -76,17 +76,33 @@ export interface MetaAd {
   ctr: number | null;
 }
 
+/**
+ * Del gasto a la venta (#53): campaña → lead → venta → cobrado. `ventas` son las
+ * que ya tienen un cobro (la regla de «Ventas»); `cobrado` sale de los apuntes.
+ * Dos lecturas del mismo rango: la COHORTE (`cobrado`, `retorno`, `roi_pct`: lo
+ * que han cobrado hasta hoy los leads captados en el rango) y la CAJA
+ * (`cobrado_en_periodo`…: lo que ha entrado en el rango, sea de cuando sea el lead).
+ */
 export interface MetaRoiRow {
   campaign_id: string;
   nombre: string;
   status?: string | null;
   spend: number;
   leads_meta: number;
+  leads_crm: number;
   ventas: number;
+  vendido: number;
+  /** Igual que `vendido` (nombre de antes). */
   facturado: number;
   cobrado: number;
+  cobrado_en_periodo: number;
+  coste_por_lead: number | null;
+  coste_por_venta: number | null;
+  retorno: number;
+  retorno_en_periodo: number;
   ganancia: number;
   roi_pct: number | null;
+  roi_en_periodo_pct: number | null;
   n_productos_asociados: number;
   productos_nombres?: string | null;
 }

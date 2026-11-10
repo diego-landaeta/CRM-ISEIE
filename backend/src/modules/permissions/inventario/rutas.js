@@ -22,8 +22,16 @@ export const TECNICOS = new Set([
   'codigoConFormato', 'pagoConFormato', 'urlPersonal', 'metodoNoPermitido', 'jsonParser', 'urlencodedParser', 'textParser',
   'comprobarInterruptor', 'verificarTokenMcp', 'metadatosServidor', 'rawParser',
   'recibirArchivoSubido', 'guardarCuerpoCrudo',
+  // Guardas de ALCANCE POR CAMPUS de facturas (IDOR): no deciden quien tiene el permiso (lo dice el
+  // `puede(...)` de la misma ruta), solo recortan a SUS campus lo que ya tenia permiso para tocar.
+  'facturaDeSuCampus', 'campusDelCuerpo', 'prospectoDelParametro', 'ventaDelParametro',
   // Subida de archivos (multer) de las consultas y del webhook de admisión.
   'conAdjuntos', 'conArchivos',
+  // El projectId de Integraciones, que sea un número (QA del 22/10, punto 5).
+  'projectIdConFormato',
+  // Guardas de ALCANCE POR CAMPUS (IDOR): no deciden quien tiene el permiso (eso lo dice el `puede(...)`
+  // de la misma ruta), solo recortan a SUS campus lo que ya tenia permiso para tocar.
+  'puedeCrearEn', 'deSuCampus',
 ]);
 
 /** El trozo de ruta de un `router.use('/panel', sub)`, sacado de su expresión. */

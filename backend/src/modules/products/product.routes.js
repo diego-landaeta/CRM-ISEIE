@@ -11,6 +11,10 @@ const router = Router();
 router.use(verifyToken);
 
 router.get('/', puede('products.view'), projectAccess, ProductController.list);
+// El catálogo de todos los campus de quien pide, para «Todos» o una empresa
+// (#218, Diego 04/11). Solo leer: crear o editar sigue siendo de UN campus.
+// Antes de `/:id`; sin `projectAccess`, porque el controlador recorta por ámbito.
+router.get('/ambito', puede('products.view'), ProductController.list);
 router.get('/export', puede('products.export'), projectAccess, ProductController.exportAll);
 router.get('/leads-stats', puede('products.view'), projectAccess, ProductController.leadsStats);
 router.get('/:id', puede('products.view'), projectAccess, ProductController.getById);

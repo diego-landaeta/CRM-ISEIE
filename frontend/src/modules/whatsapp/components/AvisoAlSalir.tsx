@@ -122,8 +122,8 @@ export default function AvisoAlSalir({ activo }: { activo: boolean }) {
           className="w-full max-w-sm rounded-lg border border-border bg-background shadow-xl p-5"
         >
           <div className="flex items-start gap-3">
-            <span className="shrink-0 rounded-full p-2 bg-amber-100 dark:bg-amber-950/40
-                             text-amber-700 dark:text-amber-400" aria-hidden="true">
+            <span className="shrink-0 rounded-full p-2 bg-warning-soft
+                             text-warning-soft-foreground" aria-hidden="true">
               <WarningCircle size={18} weight="fill" />
             </span>
             <div className="min-w-0">

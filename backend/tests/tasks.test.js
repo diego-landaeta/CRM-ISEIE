@@ -100,9 +100,12 @@ describe('quien entra al tablero', () => {
     expect(res.status).toBe(401);
   });
 
-  it('el tutor no tiene tablero: 403', async () => {
+  // Desde el 04/11 el tutor tiene su tablero de TUTORES (tableroDeTutores.test.js):
+  // sin equipo de tutores, entra y lo ve vacío; lo de otros, no.
+  it('el tutor entra a su tablero (de tutores): vacío si no está en ningún equipo', async () => {
     const res = await request.get('/api/tasks').set(como('tutor'));
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual([]);
   });
 
   it('el colaborador si: 200', async () => {

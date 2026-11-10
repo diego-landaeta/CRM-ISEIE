@@ -207,13 +207,38 @@ export async function exigirQuePuedaTocarA(quien, userId) {
  * lo `propia` del catálogo (sus cursos, su factura: un admin da de alta a un tutor).
  */
 export async function exigirQueNoDeMasDeLoQueTiene(quien, userId, { role, roles_extra }) {
-  if (quien.role === 'superadmin') return;
+  const deMas = await loQueDariaDeMas(quien, userId, { role, roles_extra });
+  if (!deMas.length) return;
+  if (deMas.includes(SOPORTE_SOLO_SUPERADMIN)) {
+    throw new AppError('El rol soporte lo da el superadmin', 403, 'SOPORTE_SOLO_SUPERADMIN',
+      { faltan: deMas, cuantos: 1, roles: ['soporte'] });
+  }
+  // Qué rol quitar (Tony, 03/11: cinco intentos sin saber cuál sobraba). Cada
+  // rol pedido, mirado solo; si ninguno falla solo, es la suma de los añadidos.
+  const extras = (roles_extra || []).filter((r) => r && r !== role);
+  const culpables = [];
+  if (role && (await loQueDariaDeMas(quien, userId, { role, roles_extra: [] })).length) culpables.push(role);
+  for (const r of extras) {
+    if ((await loQueDariaDeMas(quien, userId, { role: null, roles_extra: [r] })).length) culpables.push(r);
+  }
+  throw new AppError(
+    `Ese rol le daría lo que tú no tienes: ${deMas.slice(0, 3).join(', ')}${deMas.length > 3 ? '…' : ''}`,
+    403, 'NO_LO_TIENES', { faltan: deMas.slice(0, 3), cuantos: deMas.length, roles: culpables.length ? culpables : extras });
+}
+
+/**
+ * La misma regla, sin lanzar: lo que GANARÍA la persona y quien la cambia no
+ * tiene (nombres del catálogo). Vacía = se puede. `pre` ahorra repetir lo de
+ * quien pregunta cuando se mira rol por rol (`rolesAsignables`).
+ */
+export async function loQueDariaDeMas(quien, userId, { role, roles_extra }, pre = {}) {
+  if (quien.role === 'superadmin') return [];
   // Diego, 26/10: soporte SIGUE dando de alta admins, gestoras y colaboradores,
   // como hasta hoy. Solo en el ALTA (userId null) y solo esos roles: cambiarle
   // el rol a alguien que ya existe sigue las reglas de siempre.
-  if (!userId && puedeDarDeAltaComoSoporte(quien, { role, roles_extra })) return;
+  if (!userId && puedeDarDeAltaComoSoporte(quien, { role, roles_extra })) return [];
   const datos = userId ? await model.datosDePermisos(userId) : null;
-  const ajustesRol = datos ? datos.ajustesRol : await model.ajustesDeRoles();
+  const ajustesRol = datos ? datos.ajustesRol : (pre.ajustesRol ?? await model.ajustesDeRoles());
   const comoEs = datos
     ? { role: datos.usuario.role, roles_extra: datos.usuario.roles_extra, customRole: datos.customRole, excepciones: datos.excepciones }
     : { role: null, roles_extra: [], customRole: null, excepciones: {} };
@@ -221,19 +246,41 @@ export async function exigirQueNoDeMasDeLoQueTiene(quien, userId, { role, roles_
   const despues = resolverPermisos({
     ...comoEs, ajustesRol, role: role ?? comoEs.role, roles_extra: roles_extra ?? comoEs.roles_extra,
   }).mapa;
-  const mios = (await explicarPermisos(quien.userId)).mapa;
+  const mios = pre.mios ?? (await explicarPermisos(quien.userId)).mapa;
   const deMas = ACCIONES.filter((x) => !x.propia && despues[x.clave] && !antes[x.clave] && !mios[x.clave]).map((x) => x.nombre);
-  if (deMas.length) {
-    throw new AppError(`Ese rol le daría lo que tú no tienes: ${deMas.slice(0, 3).join(', ')}${deMas.length > 3 ? '…' : ''}`, 403, 'NO_LO_TIENES');
-  }
+  if (deMas.length) return deMas;
   // El rol soporte ve TODAS las empresas. Lo da el superadmin (y soporte, en
   // el alta, arriba); un admin de empresa no, aunque con excepciones llegue a
   // tener todos los permisos que trae: lo que no cabe en el catálogo es el
   // alcance, y soporte es justo eso.
   if (!tieneRol(quien, 'soporte') && [role, ...(roles_extra || [])].includes('soporte')) {
     const yaLoEra = [datos?.usuario?.role, ...(datos?.usuario?.roles_extra || [])].includes('soporte');
-    if (!yaLoEra) throw new AppError('El rol soporte lo da el superadmin', 403, 'SOPORTE_SOLO_SUPERADMIN');
+    if (!yaLoEra) return [SOPORTE_SOLO_SUPERADMIN];
   }
+  return [];
+}
+
+/** Lo que sale en «le faltaría» cuando un admin intenta dar el rol soporte. */
+export const SOPORTE_SOLO_SUPERADMIN = 'El rol soporte (lo da el superadmin)';
+
+/**
+ * Para el formulario de alta (Tony, 03/11): qué roles puede dar quien pregunta,
+ * como principal y como añadido, y si no, los tres primeros permisos que le
+ * faltan. Sale de `loQueDariaDeMas`: la regla es la misma que al guardar.
+ */
+export async function rolesAsignables(quien) {
+  const pre = { ajustesRol: await model.ajustesDeRoles(), mios: (await explicarPermisos(quien.userId))?.mapa || {} };
+  const fila = (deMas) => ({ puede: deMas.length === 0, faltan: deMas.slice(0, 3), cuantos: deMas.length });
+  const roles = [];
+  for (const r of ROLES_FIJOS) {
+    const principal = fila(await loQueDariaDeMas(quien, null, { role: r.clave, roles_extra: [] }, pre));
+    // Superadmin no se da como añadido (el formulario no lo ofrece): lo mismo que como principal.
+    const anadido = r.clave === 'superadmin'
+      ? principal
+      : fila(await loQueDariaDeMas(quien, null, { role: null, roles_extra: [r.clave] }, pre));
+    roles.push({ rol: r.clave, nombre: r.nombre, principal, anadido });
+  }
+  return roles;
 }
 
 /**

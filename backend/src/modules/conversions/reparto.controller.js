@@ -11,6 +11,7 @@
 import { z } from 'zod';
 import { query, getClient } from '../../shared/config/db.js';
 import { AppError } from '../../shared/utils/AppError.js';
+import { alcanceDeLider, dentroDelAlcance } from '../../shared/utils/roles.js';
 
 // Entre dos y cinco personas. Una sola no es un reparto: para eso ya está
 // cambiar la vendedora de la venta, y admitirlo aquí crearía dos maneras
@@ -80,6 +81,9 @@ export async function get(req, res, next) {
         ORDER BY u.nombre`,
       [venta.project_id]
     );
+    // Quien lleva un equipo comercial (QA del 09/11/2026) reparte solo entre
+    // ella y su equipo, como al reasignar un prospecto.
+    const lider = await alcanceDeLider(req.user);
 
     const total = Number(venta.importe_total) || 0;
     res.json({
@@ -104,7 +108,7 @@ export async function get(req, res, next) {
         repartida_por: partes[0]?.repartida_por || null,
         repartida_el: partes[0]?.repartida_el || null,
         nota: partes[0]?.nota || null,
-        candidatas,
+        candidatas: candidatas.filter((c) => dentroDelAlcance(lider, c.id)),
       },
     });
   } catch (err) { next(err); }
@@ -120,6 +124,13 @@ export async function set(req, res, next) {
     const { partes, nota } = parsed.data;
 
     const venta = await traerVenta(id);
+
+    // Quien lleva un equipo comercial (QA del 09/11/2026): el mérito no sale del
+    // equipo ni entra en él gente de fuera. Lo mismo que al reasignar.
+    const lider = await alcanceDeLider(req.user);
+    if (lider && partes.some((p) => !dentroDelAlcance(lider, p.user_id))) {
+      throw new AppError('Solo puedes repartir la venta entre tú y las gestoras de tu equipo', 403, 'FUERA_DE_TU_EQUIPO');
+    }
 
     // Nadie dos veces en la misma venta.
     const ids = partes.map((p) => p.user_id);

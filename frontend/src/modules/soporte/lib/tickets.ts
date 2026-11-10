@@ -1,6 +1,21 @@
-// Storage local de tickets de soporte. Cuando exista /api/tickets, este modulo
-// se reemplaza por el cliente API. La forma de los datos esta diseñada para
-// migrar sin tocar la UI.
+// Los tickets de soporte, contra el servidor (#38).
+//
+// Esto ERA storage local, con esta nota: «cuando exista /api/tickets, este
+// modulo se reemplaza por el cliente API. La forma de los datos esta diseñada
+// para migrar sin tocar la UI». Ya existe, y la forma se ha respetado: los
+// tipos `Ticket`, `TicketStatus` y `CreateTicketInput` son los mismos, asi que
+// los componentes no cambian de aspecto.
+//
+// LO UNICO QUE CAMBIA ES QUE AHORA SON ASINCRONAS. Una llamada al servidor no
+// puede no serlo, y fingir lo contrario con una cache local devolveria datos
+// viejos sin avisar.
+//
+// LOS QUE HUBIERA EN EL NAVEGADOR NO SE TRAEN. Estan en el `localStorage` de
+// cada maquina y desde aqui no se alcanzan los de nadie mas. `ticketsViejos()`
+// los devuelve para que la pantalla pueda decirlo en vez de hacerlos
+// desaparecer en silencio.
+
+import client from '@/shared/api/client';
 
 export type TicketStatus = 'open' | 'in_review' | 'resolved' | 'closed';
 export type TicketSeverity = 'low' | 'medium' | 'high' | 'critical';
@@ -60,22 +75,36 @@ export const TICKET_KIND: Record<TicketKind, { label: string; icon: string }> = 
   question:{ label: 'Pregunta', icon: 'Question' },
 };
 
-function readAll(): Ticket[] {
+/** Avisa a las pantallas abiertas de que la lista ha cambiado. Lo escuchaba
+ *  ya el lanzador, asi que se mantiene y no hay que tocarlo. */
+function avisar() {
+  window.dispatchEvent(new Event('crm:tickets-changed'));
+}
+
+/**
+ * Los tickets que quedaron en el navegador de esta maquina.
+ *
+ * No se migran: estan en `localStorage` y desde el servidor no se alcanzan.
+ * Se devuelven para que la pantalla pueda decir que estan ahi en vez de que
+ * desaparezcan sin explicacion.
+ */
+export function ticketsViejos(): Ticket[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const list = JSON.parse(raw);
+    const list = raw ? JSON.parse(raw) : [];
     return Array.isArray(list) ? list : [];
   } catch { return []; }
 }
 
-function writeAll(list: Ticket[]): void {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(list)); } catch {}
-  window.dispatchEvent(new Event('crm:tickets-changed'));
+export async function listTickets(): Promise<Ticket[]> {
+  const r = await client.get<Ticket[]>('/soporte', { params: { limit: 200 } })
+    .catch(() => ({ success: false, data: [] as Ticket[] }));
+  return r.success && Array.isArray(r.data) ? r.data : [];
 }
 
-export function listTickets(): Ticket[] {
-  return readAll().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+export async function getTicket(id: string): Promise<Ticket | null> {
+  const r = await client.get<Ticket>(`/soporte/${id}`).catch(() => ({ success: false, data: null }));
+  return r.success ? (r.data as Ticket) : null;
 }
 
 export interface CreateTicketInput {
@@ -93,64 +122,59 @@ export interface CreateTicketInput {
   projectName?: string | null;
 }
 
-export function createTicket(input: CreateTicketInput): Ticket {
-  const {
-    kind, severity, title, description,
-    steps, expected, actual,
-    whyItMatters,
-    url, attachments,
-    projectId, projectName,
-  } = input;
-  const id = 'tkt-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
-  const now = new Date().toISOString();
-  const ticket: Ticket = {
-    id,
-    kind: kind || 'question',
-    severity: severity || 'low',
-    title: title?.trim() || '(sin titulo)',
-    description: description?.trim() || '',
-    steps: steps?.trim() || '',
-    expected: expected?.trim() || '',
-    actual: actual?.trim() || '',
-    whyItMatters: whyItMatters?.trim() || '',
-    url: url?.trim() || '',
-    attachments: Array.isArray(attachments) ? attachments : [],
-    status: 'open',
-    projectId: projectId ?? null,
-    projectName: projectName ?? null,
-    createdAt: now,
-    updatedAt: now,
-    comments: [],
-  };
-  const next = [ticket, ...readAll()];
-  writeAll(next);
+export async function createTicket(input: CreateTicketInput): Promise<Ticket | null> {
+  const r = await client.post<Ticket>('/soporte', {
+    kind: input.kind || 'question',
+    severity: input.severity || 'low',
+    title: input.title?.trim() || '(sin titulo)',
+    description: input.description,
+    steps: input.steps,
+    expected: input.expected,
+    actual: input.actual,
+    whyItMatters: input.whyItMatters,
+    url: input.url,
+    projectId: input.projectId ?? null,
+  }).catch(() => ({ success: false, data: null }));
+
+  if (!r.success || !r.data) return null;
+  const ticket = r.data as Ticket;
+
+  // Los adjuntos van DESPUES y de uno en uno: el ticket tiene que existir
+  // antes de poder colgarle nada. Si alguno falla, el ticket ya esta guardado
+  // — que es lo que de verdad importaba.
+  for (const a of input.attachments || []) {
+    try {
+      const fd = new FormData();
+      fd.append('file', await comoFichero(a));
+      await client.post(`/soporte/${ticket.id}/adjuntos`, fd);
+    } catch { /* el ticket sigue en pie */ }
+  }
+
+  avisar();
   return ticket;
 }
 
-export function updateTicketStatus(id: string, status: TicketStatus): Ticket | null {
-  const list = readAll();
-  const idx = list.findIndex((t) => t.id === id);
-  if (idx === -1) return null;
-  list[idx] = { ...list[idx], status, updatedAt: new Date().toISOString() };
-  writeAll(list);
-  return list[idx];
+/** El formulario los trae como `dataUrl`; el servidor los quiere como fichero. */
+async function comoFichero(a: TicketAttachment): Promise<File> {
+  const blob = await (await fetch(a.dataUrl)).blob();
+  return new File([blob], a.name, { type: blob.type });
 }
 
-export function addComment(id: string, body: string): Ticket | null {
-  const list = readAll();
-  const idx = list.findIndex((t) => t.id === id);
-  if (idx === -1) return null;
-  const comment: TicketComment = { id: Date.now(), body: body.trim(), createdAt: new Date().toISOString() };
-  list[idx] = {
-    ...list[idx],
-    comments: [...(list[idx].comments || []), comment],
-    updatedAt: new Date().toISOString(),
-  };
-  writeAll(list);
-  return list[idx];
+export async function updateTicketStatus(id: string, status: TicketStatus): Promise<Ticket | null> {
+  const r = await client.patch<Ticket>(`/soporte/${id}/estado`, { status })
+    .catch(() => ({ success: false, data: null }));
+  avisar();
+  return r.success ? (r.data as Ticket) : null;
 }
 
-export function deleteTicket(id: string): void {
-  const next = readAll().filter((t) => t.id !== id);
-  writeAll(next);
+export async function addComment(id: string, body: string): Promise<Ticket | null> {
+  const r = await client.post<Ticket>(`/soporte/${id}/mensajes`, { body: body.trim() })
+    .catch(() => ({ success: false, data: null }));
+  avisar();
+  return r.success ? (r.data as Ticket) : null;
+}
+
+export async function deleteTicket(id: string): Promise<void> {
+  await client.delete(`/soporte/${id}`).catch(() => {});
+  avisar();
 }

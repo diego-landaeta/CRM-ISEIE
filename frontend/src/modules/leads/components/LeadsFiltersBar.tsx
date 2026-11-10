@@ -438,7 +438,7 @@ export default function LeadsFiltersBar(props: Props) {
       {showAssignBtn && (
         <button
           onClick={onAssignPending}
-          className="ml-auto h-9 px-3 rounded-md bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold whitespace-nowrap inline-flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-amber-400/40"
+          className="ml-auto h-9 px-3 rounded-md bg-warning hover:bg-warning/90 text-warning-foreground text-xs font-bold whitespace-nowrap inline-flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-warning/40"
           title="Aplica round-robin a todos los prospectos sin responsable"
         >
           <WarningCircle size={13} weight="fill" />

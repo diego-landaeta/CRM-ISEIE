@@ -71,8 +71,9 @@ export async function resumenDelDia({ projectIds = null, asesoraId = null, refer
   let i = 2;
   const filtroProyL = lista ? `AND l.project_id = ANY($${i++}::int[])` : `AND ${SIN_PRUEBAS('l.project_id')}`;
   if (lista) pL.push(lista);
-  const filtroAsesoraL = asesoraId != null ? `AND l.responsable_id = $${i++}` : '';
-  if (asesoraId != null) pL.push(asesoraId);
+  // Una persona o una lista (el equipo de una administradora, 09/11/2026).
+  const filtroAsesoraL = asesoraId != null ? `AND l.responsable_id = ANY($${i++}::int[])` : '';
+  if (asesoraId != null) pL.push([].concat(asesoraId).map(Number));
 
   const { rows: leadsRows } = await query(
     `SELECT CASE WHEN l.created_at::date = ${REF} THEN 'hoy' ELSE 'ayer' END AS dia,
@@ -98,8 +99,8 @@ export async function resumenDelDia({ projectIds = null, asesoraId = null, refer
   const filtroProyV = lista ? `AND cv.project_id = ANY($${j++}::int[])` : `AND ${SIN_PRUEBAS('cv.project_id')}`;
   if (lista) pV.push(lista);
   const filtroAsesoraV = asesoraId != null
-    ? `AND COALESCE(cv.vendedora_id, l.responsable_id) = $${j++}` : '';
-  if (asesoraId != null) pV.push(asesoraId);
+    ? `AND COALESCE(cv.vendedora_id, l.responsable_id) = ANY($${j++}::int[])` : '';
+  if (asesoraId != null) pV.push([].concat(asesoraId).map(Number));
 
   const { rows: ventasRows } = await query(
     `SELECT CASE WHEN cv.fecha_conversion = ${REF} THEN 'hoy' ELSE 'ayer' END AS dia,

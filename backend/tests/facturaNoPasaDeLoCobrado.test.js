@@ -166,8 +166,10 @@ describe('de quien es una factura, para una gestora', () => {
     respuestas = [{ rows: [] }, { rows: [{ total: 0 }] }];
     await real.list({ projectId: 4, responsableId: 11 });
     const lista = consultas[0];
-    expect(lista.sql).toMatch(/i\.created_by = \$\d+\s+OR COALESCE\(cv\.vendedora_id, l\.responsable_id\) = \$\d+/);
-    expect(lista.params).toContain(11);
+    // La persona va como lista desde el equipo comercial (09/11/2026): [ella] o
+    // ella y sus gestoras.
+    expect(lista.sql).toMatch(/i\.created_by = ANY\(\$\d+::int\[\]\)\s+OR COALESCE\(cv\.vendedora_id, l\.responsable_id\) = ANY\(\$\d+::int\[\]\)/);
+    expect(lista.params).toContainEqual([11]);
     // Y el recuento, con la misma condicion: si no, la paginacion no cuadra.
     expect(consultas[1].sql).toContain('i.created_by =');
   });
@@ -179,7 +181,7 @@ describe('de quien es una factura, para una gestora', () => {
     await real.list({ projectId: 4, responsableId: 11 });
     const sql = consultas[0].sql;
     expect(sql).toMatch(/COALESCE\(cv\.vendedora_id, l\.responsable_id\) IS NULL/);
-    expect(sql).toMatch(/user_projects up\s+WHERE up\.user_id = \$\d+ AND up\.project_id = i\.project_id AND up\.active/);
+    expect(sql).toMatch(/user_projects up\s+WHERE up\.user_id = ANY\(\$\d+::int\[\]\) AND up\.project_id = i\.project_id AND up\.active/);
   });
 
   it('y puede tocar la suya aunque no tenga ficha', async () => {
@@ -187,7 +189,8 @@ describe('de quien es una factura, para una gestora', () => {
     respuestas = [{ rows: [{ '?column?': 1 }] }];
     expect(await real.esFacturaQueGestiona(11, 'gestor', 392)).toBe(true);
     const sql = consultas[0].sql;
-    expect(sql).toContain('i.created_by = $2');
+    expect(sql).toContain('i.created_by = ANY($2::int[])');
+    expect(consultas[0].params[1]).toEqual([11]);
     expect(sql).toContain('LEFT JOIN conversions cv');
   });
 

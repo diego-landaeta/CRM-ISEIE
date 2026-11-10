@@ -7,7 +7,7 @@
 // Para mover un item de "Proximamente" a operativo, agregalo a BETA_ROUTES.
 // ============================================================
 
-export const BETA_VERSION = '2.2.0';
+export const BETA_VERSION = '2.6.0';
 
 export const BETA_MODE: boolean = String(import.meta.env.VITE_BETA_MODE || '').toLowerCase() === 'true';
 
@@ -36,6 +36,7 @@ export const BETA_ROUTES: readonly string[] = [
   '/whatsapp',                      // WhatsApp: cola, plantillas y el panel del equipo
   '/tutores',                       // Tutores: alta, colaboraciones y comisiones
   '/mis-cursos',                    // La pantalla del propio tutor
+  '/consultas',                     // Consultas de alumnos (#187–#190): bandeja, carga, tutores y métricas (2.6.0)
   '/secuencias-email',               // Email
   '/email-templates',
   '/documentos',                    // Documentos PDF

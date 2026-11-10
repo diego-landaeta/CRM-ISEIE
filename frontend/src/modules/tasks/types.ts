@@ -145,6 +145,8 @@ export interface Team {
   issuer_id: number;
   empresa: string;
   name: string;
+  /** De colaboradores (desarrollo, SEO…) o de tutores (04/11/2026). */
+  tipo?: TipoEquipo;
   color: string;
   is_active: boolean;
   sort_order: number;
@@ -164,10 +166,13 @@ export interface TeamMember {
 }
 
 /** Un equipo de quien mira, con su cargo. */
+export type TipoEquipo = 'colaboradores' | 'tutores';
+
 export interface MyTeam {
   team_id: number;
   team_name: string;
   team_color: string;
+  team_tipo?: TipoEquipo;
   issuer_id: number;
   empresa: string;
   team_role_id: number;

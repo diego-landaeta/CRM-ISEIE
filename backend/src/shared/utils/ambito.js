@@ -47,6 +47,18 @@ export async function campusDeLaPersona(userId) {
 }
 
 /**
+ * Los campus a los que se recorta lo que ve esta persona: `null` para quien ve
+ * el CRM entero (super admin y soporte); el resto, los suyos, o `[-1]` (que no
+ * casa con nada) si no tiene ninguno. Para las consultas que filtran con
+ * `= ANY($n::int[])` (Diego, 04/11: el project manager ve todo, pero lo suyo).
+ */
+export async function campusParaRecortar(req) {
+  if (veTodoElCrm(req.user)) return null;
+  const mios = await campusDeLaPersona(req.user?.userId);
+  return mios.length ? mios : [-1];
+}
+
+/**
  * Que la cosa (un prospecto, una regla, un campus…) sea de uno de SUS campus.
  *
  * Para los permisos que de serie solo trae soporte y que un admin de empresa
@@ -99,6 +111,45 @@ export async function proyectosDelAmbito(req) {
     return pedido;
   }
   return { projectId: null, projectIds: mios.length ? mios : [-1] };
+}
+
+/**
+ * El ámbito como UNA lista de campus, entienda la pantalla lo que entienda:
+ * `?projectIds=1,2,3` (Seguimiento, la Cola…), `?projectId=` o `?issuerId=`.
+ *
+ * Siempre dentro de lo suyo, igual que `proyectosDelAmbito`: lo ajeno se cae, y
+ * si no queda nada es `[-1]`, que no casa con nada (nunca «todos»). Sin pedir
+ * nada, sus campus. Solo super admin y soporte reciben `null` («todo el CRM»).
+ *
+ * Antes cada módulo leía `projectIds` a su manera y sin recortar: un admin de
+ * CEDIA veía el seguimiento y los informes de ICTESS cambiando la URL.
+ */
+export async function listaDelAmbito(req) {
+  const varios = String(req.query?.projectIds || '').split(',')
+    .map((n) => Number(n)).filter((n) => Number.isInteger(n) && n > 0);
+  if (varios.length && !req.query?.issuerId) {
+    if (veTodoElCrm(req.user)) return varios;
+    const mios = await campusDeLaPersona(req.user?.userId);
+    const quedan = varios.filter((id) => mios.includes(id));
+    return quedan.length ? quedan : [-1];
+  }
+  const { projectId, projectIds } = await proyectosDelAmbito(req);
+  return comoLista(projectId, projectIds);
+}
+
+/**
+ * «Todos los proyectos» como UNA lista (#218): los campus de quien pide; super
+ * admin y soporte, todos los activos menos los de pruebas (la regla de la 148:
+ * un campus de pruebas solo se ve si se elige). Para los modelos que, sin lista,
+ * devolverían todo, también lo de pruebas.
+ */
+export async function campusDeTodos(req) {
+  if (!veTodoElCrm(req.user)) {
+    const mios = await campusDeLaPersona(req.user?.userId);
+    return mios.length ? mios : [-1];
+  }
+  const { rows } = await query('SELECT id FROM projects WHERE active AND NOT COALESCE(es_prueba, false) ORDER BY id');
+  return rows.map((r) => Number(r.id));
 }
 
 /**

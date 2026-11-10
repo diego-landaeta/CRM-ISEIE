@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { AppError } from '../../shared/utils/AppError.js';
 import * as model from './category.model.js';
+import { listaDelAmbito, campusDeTodos } from '../../shared/utils/ambito.js';
 
 const createSchema = z.object({
   project_id: z.number().int().positive(),
@@ -66,7 +67,16 @@ export async function getTree(req, res, next) {
   } catch (err) { next(err); }
 }
 
-// GET /api/product-categories/:id/ancestors — breadcrumb desde raiz hasta esta cat
+// GET /api/product-categories/ambito — el árbol de cada campus de quien pide
+// (#218, Diego 04/11). Solo leer: crear o cambiar categorías sigue siendo de un campus.
+export async function arbolesDelAmbito(req, res, next) {
+  try {
+    const lista = (await listaDelAmbito(req)) || await campusDeTodos(req);
+    res.json({ success: true, data: await model.arbolesDeLosCampus(lista) });
+  } catch (err) { next(err); }
+}
+
+// GET /api/product-categories/:id/ancestors — breadcrumb desde raíz hasta esta cat
 export async function getAncestors(req, res, next) {
   try {
     const ancestors = await model.getAncestors(Number(req.params.id));

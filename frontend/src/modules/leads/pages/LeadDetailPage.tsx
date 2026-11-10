@@ -118,7 +118,8 @@ export default function LeadDetailPage() {
 
   useEffect(() => {
     if (!isAdmin || gestores.length > 0) return;
-    client.get('/users?limit=100')
+    // alcance=comercial: a quien lleva un equipo, solo su equipo (QA 09/11/2026).
+    client.get('/users?limit=100&alcance=comercial')
       .then((res) => { if (res.success) setGestores(res.data || []); })
       .catch(() => {});
   }, [isAdmin, gestores.length]);
@@ -260,7 +261,9 @@ export default function LeadDetailPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 space-y-4">
-          <LeadInfoCard lead={lead} onUpdate={updateLead} />
+          <LeadInfoCard lead={lead} onUpdate={updateLead}
+            onLlamada={(nota) => addInteraction('llamada', nota)}
+            onWhatsapp={(nota) => addInteraction('whatsapp', nota)} />
           {/* El proceso de ventas, fuera de produccion hasta aprobarlo (28/09). */}
           {PROCESO_EN_PRUEBAS && (
           <AgendaDelProspecto

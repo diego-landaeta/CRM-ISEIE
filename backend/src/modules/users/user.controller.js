@@ -1,12 +1,15 @@
 import * as userService from './user.service.js';
 import * as userModel from './user.model.js';
-import { createUserSchema, updateUserSchema, listUsersSchema, adminSetPasswordSchema, activityLogSchema, buscarUsersSchema } from './user.validation.js';
+import { createUserSchema, updateUserSchema, listUsersSchema, adminSetPasswordSchema, activityLogSchema, buscarUsersSchema, equipoComercialSchema } from './user.validation.js';
+import { equipoComercial, ponerEquipoComercial } from './user.equipo.js';
+import { campusParaRecortar } from '../../shared/utils/ambito.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { veTodoElCrm, campusDeLaPersona } from '../../shared/utils/ambito.js';
 import { saveLocal, getLocal, deleteLocal } from '../../shared/services/localStorage.service.js';
 import { mimeToExt, extToMime } from '../../shared/utils/mime.js';
 import crypto from 'crypto';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
+import { alcanceDeLider } from '../../shared/utils/roles.js';
 
 /**
  * GET /api/users/buscar?q=&projectIds= — el buscador (Ctrl K, gemela de CRM#591).
@@ -29,13 +32,34 @@ export async function buscar(req, res, next) {
   } catch (err) { next(err); }
 }
 
+/**
+ * A quién ve en Usuarios quien pregunta (Diego, 04/11: «el project manager ve
+ * todo», de sus campus). Quien solo VE la lista —sin «Editar usuarios»— la ve de
+ * la gente de sus campus; quien la administra, como hasta hoy. `null` = sin recorte.
+ */
+export async function campusDeLaLista(req) {
+  if (veTodoElCrm(req.user) || await tienePermiso(req, 'users.edit')) return null;
+  return campusParaRecortar(req);
+}
+
+/** La ficha de otra persona, si la lista se le recorta: solo si comparten campus. */
+export async function exigirPersonaDeSusCampus(req, id) {
+  if (Number(id) === Number(req.user?.userId)) return;
+  const campus = await campusDeLaLista(req);
+  if (!campus) return;
+  const suyos = await campusDeLaPersona(id);
+  if (!suyos.some((c) => campus.includes(c))) throw new AppError('Usuario no encontrado', 404, 'USER_NOT_FOUND');
+}
+
 export async function list(req, res, next) {
   try {
     const parsed = listUsersSchema.safeParse(req.query);
     if (!parsed.success) {
       throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
     }
-    const result = await userService.list(parsed.data);
+    const { alcance, ...filtros } = parsed.data;
+    const soloIds = alcance === 'comercial' ? await alcanceDeLider(req.user) : null;
+    const result = await userService.list({ ...filtros, campus: await campusDeLaLista(req), soloIds });
     res.json({
       success: true,
       data: result.users,
@@ -56,7 +80,10 @@ export async function activityLog(req, res, next) {
     const { userId, action, search, limit, offset } = parsed.data;
     const ambito = veTodoElCrm(req.user)
       ? null
-      : { userId: req.user.userId, projectIds: await campusDeLaPersona(req.user.userId) };
+      : { userId: req.user.userId, projectIds: await campusDeLaPersona(req.user.userId),
+          // Quien lleva un equipo comercial (QA del 09/11/2026): lo suyo y lo
+          // de su equipo, no lo de todo el campus.
+          soloIds: await alcanceDeLider(req.user) };
     const result = await userModel.listActivityLog({
       userId: userId ?? null,
       action: action || null,
@@ -73,8 +100,17 @@ export async function getById(req, res, next) {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    await exigirPersonaDeSusCampus(req, id);
     const user = await userService.getById(id);
     res.json({ success: true, data: user });
+  } catch (err) { next(err); }
+}
+
+/** Los roles que quien pregunta puede dar en un alta, y si no, qué le falta (Tony, 03/11). */
+export async function rolesAsignables(req, res, next) {
+  try {
+    const { rolesAsignables: calcular } = await import('../permissions/permissions.editar.js');
+    res.json({ success: true, data: await calcular(req.user) });
   } catch (err) { next(err); }
 }
 
@@ -330,6 +366,9 @@ const AVISOS = [
     detalle: 'Cuando aprueban una tarea tuya y pasa a «Hecha».' },
   { aviso: 'tarea_comentario', titulo: 'Comentario en tu tarea',
     detalle: 'Cuando alguien comenta en una tarea que tienes asignada.' },
+  // Cursos pendientes (#336), en cursos-pendientes.correos.js.
+  { aviso: 'cursos_pendientes', titulo: 'Cursos pendientes',
+    detalle: 'Cuando te asignan un curso, se acerca o pasa su fecha, o hay alumnas sin habilitar; y el resumen de los lunes (super admin).' },
   { aviso: 'tarea_supervisor', titulo: 'Tarea que supervisas',
     detalle: 'Cuando te ponen de supervisor de una tarea y cuando está lista para revisar.' },
   { aviso: 'tarea_estado', titulo: 'Cambio de estado de una tarea',
@@ -368,5 +407,37 @@ export async function cambiarMiAviso(req, res, next) {
         [req.user.userId, aviso]);
     }
     res.json({ success: true, data: { aviso, encendido: Boolean(encendido) } });
+  } catch (err) { next(err); }
+}
+
+/**
+ * GET /api/users/:id/equipo-comercial — las gestoras que lleva esa persona y
+ * quién más podría entrar (09/11/2026). Quien puede ver usuarios, dentro de
+ * sus campus.
+ */
+export async function getEquipoComercial(req, res, next) {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    await exigirPersonaDeSusCampus(req, id);
+    res.json({ success: true, data: await equipoComercial(id) });
+  } catch (err) { next(err); }
+}
+
+/**
+ * PUT /api/users/:id/equipo-comercial { gestoraIds } — cambia el equipo entero
+ * (`equipos.gestionar`, de serie solo super admin). Surte efecto en la
+ * siguiente petición de esa persona.
+ */
+export async function setEquipoComercial(req, res, next) {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    const parsed = equipoComercialSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
+    }
+    await exigirPersonaDeSusCampus(req, id);
+    res.json({ success: true, data: await ponerEquipoComercial(id, parsed.data.gestoraIds, req.user.userId) });
   } catch (err) { next(err); }
 }

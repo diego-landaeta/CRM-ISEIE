@@ -34,9 +34,10 @@ export function puedeEditar(rol: string | undefined): boolean {
 
 export default function ProcesoPage() {
   const { user } = useAuth() as { user: { role?: string } | null };
-  const { activeProject, activeIssuer } = useProjectContext() as {
+  const { activeProject, activeIssuer, isAllProjects } = useProjectContext() as {
     activeProject: { id?: number; nombre?: string } | null;
     activeIssuer: { id?: number; nombre?: string } | null;
+    isAllProjects?: boolean;
   };
   const admin = puedeEditar(user?.role);
 
@@ -52,7 +53,10 @@ export default function ProcesoPage() {
   // separado: entonces hay dos respuestas distintas y hay que elegir.
   const campus = useProyectosDelAmbito<{ id: number; nombre: string }>();
   const [soloCampus, setSoloCampus] = useState<number | null>(null);
-  useEffect(() => { setSoloCampus(null); }, [activeIssuer?.id]);
+  useEffect(() => { setSoloCampus(null); }, [activeIssuer?.id, isAllProjects]);
+  // Con «Todos los proyectos» (#218) no hay una empresa que editar de golpe: el
+  // mismo desplegable pide el campus, entre todos los suyos.
+  const todos = Boolean(isAllProjects && !activeIssuer);
   const elegido = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
   const projectId = elegido ?? soloCampus;
   // Con empresa y sin campus a dedo, se pide por empresa.
@@ -194,15 +198,15 @@ export default function ProcesoPage() {
               </span>
             )}
           </p>
-          {activeIssuer && !elegido && campus.length > 0 && (
+          {(activeIssuer || todos) && !elegido && campus.length > 0 && (
             <select
               value={soloCampus ?? ''}
               onChange={(e) => setSoloCampus(e.target.value ? Number(e.target.value) : null)}
               className="h-8 px-2 rounded-md border border-border bg-card text-normal focus:outline-none focus:ring-2 focus:ring-primary/40"
-              aria-label={`Campus de ${activeIssuer.nombre}`}
+              aria-label={activeIssuer ? `A qué campus de ${activeIssuer.nombre} afecta lo que edites` : 'De qué campus es el proceso'}
             >
-              <option value="">Elige uno…</option>
-              {campus.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+              <option value="">{activeIssuer ? `Toda la empresa · los ${campus.length} campus` : 'Elige un campus…'}</option>
+              {campus.map((c) => <option key={c.id} value={c.id}>{activeIssuer ? `Solo ${c.nombre}` : c.nombre}</option>)}
             </select>
           )}
         </div>
@@ -241,8 +245,10 @@ export default function ProcesoPage() {
       ) : !projectId && !issuerId ? (
         <EmptyState
           icon={ListChecks}
-          title="Elige un proyecto"
-          description="Elige un proyecto o una empresa en el selector de la cabecera."
+          title={todos ? 'Elige un campus' : 'Elige un proyecto'}
+          description={todos
+            ? 'Con «Todos los proyectos», elige en el desplegable de arriba de qué campus es el proceso.'
+            : 'Elige un proyecto o una empresa en el selector de la cabecera.'}
         />
       ) : pasos.length === 0 ? (
         <EmptyState

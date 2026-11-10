@@ -47,6 +47,14 @@ export default {
           soft: 'hsl(var(--info-soft))',
           'soft-foreground': 'hsl(var(--info-soft-foreground))',
         },
+        // El índigo del tema (#199: «Datos validados» en Matrículas). Se usa
+        // como bg-indigo-soft / text-indigo-soft-foreground, nunca con número.
+        indigo: {
+          DEFAULT: 'hsl(var(--indigo))',
+          foreground: 'hsl(var(--indigo-foreground))',
+          soft: 'hsl(var(--indigo-soft))',
+          'soft-foreground': 'hsl(var(--indigo-soft-foreground))',
+        },
         muted: {
           DEFAULT: 'hsl(var(--muted))',
           foreground: 'hsl(var(--muted-foreground))',

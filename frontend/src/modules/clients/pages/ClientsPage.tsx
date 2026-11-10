@@ -260,8 +260,9 @@ export default function ClientsPage() {
       setGestores([]);
       return;
     }
+    // alcance=comercial: a quien lleva un equipo, solo su equipo (QA 09/11/2026).
     client
-      .get(`/users?active=true&role=gestor&projectId=${activeProject.id}&limit=100`)
+      .get(`/users?active=true&role=gestor&projectId=${activeProject.id}&limit=100&alcance=comercial`)
       .then((response) => {
         if (response.success) {
           setGestores((response.data as Array<{ id: number; nombre: string }>) || []);

@@ -1,7 +1,12 @@
+// @vitest-environment jsdom
+// ProcesoPage trae el contexto de proyecto, que toca `document` al cargarse:
+// sin jsdom el fichero entero fallaba con «document is not defined».
 import { describe, it, expect } from 'vitest';
 import { mensajeDeError } from '@/modules/proceso/api/proceso.api';
 import { nombreDeCanal, iconoDeCanal, CANALES } from '@/modules/proceso/lib/canales';
-import { textoDeDias, puedeEditar } from '@/modules/proceso/pages/ProcesoPage';
+import { puedeEditar } from '@/modules/proceso/pages/ProcesoPage';
+// textoDeDias vive en lib/cuando desde que la cola y la ficha también lo usan.
+import { textoDeDias } from '@/modules/proceso/lib/cuando';
 
 /*
   El proceso comercial (#115).

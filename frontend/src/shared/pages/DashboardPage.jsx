@@ -2,6 +2,9 @@ import { lazy, Suspense, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useDashboard } from '@/shared/hooks/useDashboard';
+import ActividadDeHoy from '@/shared/components/dashboard/ActividadDeHoy';
+import { TarjetaActividad } from '@/modules/reports/components/ActividadPorComercial';
+import { ambitoComoObjeto } from '@/shared/lib/ambitoInforme';
 import { useStripeMonitor } from '@/modules/ia-dashboard/hooks/useStripeMonitor';
 
 const LeadDrawer = lazy(() => import('@/modules/leads/components/LeadDrawer'));
@@ -225,42 +228,50 @@ export default function DashboardPage() {
           bandera. */}
       <ComoVoy medida="facturado" />
 
+      {/* Actividad por comercial de ayer (#203, parte B), como en MultiCRM. Al
+          admin, las 3 primeras y el equipo; a una gestora, su línea (lo recorta
+          el servidor). */}
+      <TarjetaActividad ambito={ambitoComoObjeto({ activeProject })} />
+
+      {/* Qué ha pasado hoy (#13): altas, ventas, estados y contactos. Cada gestora ve lo suyo. */}
+      <ActividadDeHoy projectId={proyectoReal} mostrarProyecto={!proyectoReal} />
+
       {/* SECCION HOY */}
       {today && (
         <div className="bg-gradient-to-br from-blue-50 to-violet-50 dark:from-blue-950/30 dark:to-violet-950/30 border border-border rounded-lg p-4">
           <div className="flex items-center justify-between mb-3">
             <div>
-              <h2 className="font-semibold text-base">Tu dia de hoy</h2>
-              <p className="text-xs text-muted-foreground">Seguimientos pendientes y actividad del dia</p>
+              <h2 className="font-semibold text-base">Tu día de hoy</h2>
+              <p className="text-xs text-muted-foreground">Seguimientos pendientes y actividad del día</p>
             </div>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-3">
-            <button onClick={() => navigate('/prospectos?qf=urgent')}
+            <button onClick={() => navigate('/leads?qf=urgent')}
               className="bg-card rounded-md p-3 border border-border text-left hover:border-orange-300 hover:bg-orange-50/30 dark:hover:bg-orange-950/10 transition-colors">
               <p className="text-xs font-medium text-muted-foreground">Pendientes</p>
               <p className="text-2xl font-semibold tabular-nums text-orange-600">{today.reminders_pendientes?.length || 0}</p>
-              <p className="text-[10px] text-muted-foreground">reminders hoy</p>
+              <p className="text-[10px] text-muted-foreground">recordatorios hoy</p>
             </button>
-            <button onClick={() => navigate('/prospectos')}
+            <button onClick={() => navigate('/leads')}
               className="bg-card rounded-md p-3 border border-border text-left hover:border-blue-300 hover:bg-blue-50/30 dark:hover:bg-blue-950/10 transition-colors">
               <p className="text-xs font-medium text-muted-foreground">Nuevos</p>
               <p className="text-2xl font-semibold tabular-nums text-blue-600">{today.nuevos_hoy || 0}</p>
               <p className="text-[10px] text-muted-foreground">hoy ({today.nuevos_semana || 0} semana)</p>
             </button>
-            <button onClick={() => navigate('/prospectos?qf=no-contact')}
+            <button onClick={() => navigate('/leads?qf=no-contact')}
               className="bg-card rounded-md p-3 border border-border text-left hover:border-amber-300 hover:bg-amber-50/30 dark:hover:bg-amber-950/10 transition-colors">
               <p className="text-xs font-medium text-muted-foreground">Inactivos</p>
               <p className="text-2xl font-semibold tabular-nums text-amber-600">{today.inactivos || 0}</p>
               <p className="text-[10px] text-muted-foreground">prospectos sin actividad</p>
             </button>
-            <button onClick={() => navigate('/finanzas/por-cobrar')}
+            <button onClick={() => navigate('/accounting/receivable')}
               className="bg-card rounded-md p-3 border border-border text-left hover:border-red-300 hover:bg-red-50/30 dark:hover:bg-red-950/10 transition-colors">
               <p className="text-xs font-medium text-muted-foreground">Cobros vencidos</p>
               <p className="text-2xl font-semibold tabular-nums text-red-600">{today.cobros_vencidos || 0}</p>
-              <p className="text-[10px] text-muted-foreground">pagos atrasados</p>
+              <p className="text-[10px] text-muted-foreground" title="Cuenta ventas con saldo pendiente y fecha de pago ya pasada. «Cuentas por cobrar» (Finanzas) cuenta cuotas e importes; son dos cifras distintas.">ventas con la fecha de pago pasada</p>
             </button>
-            <button onClick={() => navigate('/finanzas/ingresos')}
+            <button onClick={() => navigate('/accounting/income')}
               className="bg-card rounded-md p-3 border border-border text-left hover:border-emerald-300 hover:bg-emerald-50/30 dark:hover:bg-emerald-950/10 transition-colors">
               <p className="text-xs font-medium text-muted-foreground">Ingresos hoy</p>
               <p className="text-2xl font-semibold tabular-nums text-emerald-600">{new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(today.ingresos_hoy || 0)}</p>
@@ -292,7 +303,7 @@ export default function DashboardPage() {
                 ))}
                 {today.reminders_pendientes.length > 5 && (
                   <p className="text-xs text-center text-muted-foreground pt-1">
-                    + {today.reminders_pendientes.length - 5} mas pendientes
+                    + {today.reminders_pendientes.length - 5} más pendientes
                   </p>
                 )}
               </div>
@@ -301,7 +312,7 @@ export default function DashboardPage() {
             <div className="bg-card border border-border rounded-lg p-4 text-center">
               <CheckCircle size={20} className="text-emerald-500 mx-auto mb-1" weight="regular" />
               <p className="text-sm font-semibold">Nada pendiente para hoy</p>
-              <p className="text-xs text-muted-foreground">Al dia con los seguimientos</p>
+              <p className="text-xs text-muted-foreground">Al día con los seguimientos</p>
             </div>
           )}
         </div>
@@ -344,7 +355,7 @@ export default function DashboardPage() {
         <div className="bg-card p-5 rounded-lg border border-border">
           <div className="mb-4">
             <h3 className="font-semibold">Prospectos por estado</h3>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Distribucion actual del pipeline</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Distribución actual del pipeline</p>
           </div>
           {total === 0 ? (
             <div className="h-[220px] flex items-center justify-center">
@@ -370,7 +381,7 @@ export default function DashboardPage() {
         <div className="bg-card p-5 rounded-lg border border-border">
           <div className="mb-4">
             <h3 className="font-semibold">Prospectos por canal</h3>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Origenes de los prospectos recientes</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Orígenes de los prospectos recientes</p>
           </div>
           {channelBarData.length === 0 ? (
             <div className="h-[220px] flex items-center justify-center">
@@ -425,10 +436,10 @@ export default function DashboardPage() {
         <div className="p-4 flex items-center justify-between">
           <div>
             <h3 className="font-semibold">Prospectos recientes</h3>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Ultimos 10 prospectos registrados</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Últimos 10 prospectos registrados</p>
           </div>
           <button
-            onClick={() => navigate('/prospectos')}
+            onClick={() => navigate('/leads')}
             aria-label="Ver todos los prospectos"
             className="h-9 text-xs font-semibold text-muted-foreground hover:text-foreground border border-border bg-card px-3 rounded-lg hover:bg-muted transition-all duration-200 flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2"
           >
@@ -443,7 +454,7 @@ export default function DashboardPage() {
             description="Aun no hay prospectos para este proyecto. Apareceran aqui cuando alguien complete un formulario o llegue via webhook."
             action={
               <button
-                onClick={() => navigate('/prospectos')}
+                onClick={() => navigate('/leads')}
                 className="text-xs font-semibold text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2 rounded"
               >
                 Ir a Gestión de Prospectos

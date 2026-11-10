@@ -7,6 +7,7 @@ import { resumenDeLaCola } from '../modules/proceso/proceso.model.js';
 // listado (`contarFiltrosRapidos`) y un import por nombre tumbaria el modulo.
 // Sin ellos, el correo de la gestora sale sin el bloque de recordatorios.
 import * as leadModel from '../modules/leads/lead.model.js';
+import { lecturaDeLaSemana } from '../modules/ia-analisis/lectura.js';
 import { versionDe } from '../modules/feedback/cabecera.js';
 import { ENTRA_SOLO, POR_WHATSAPP } from '../shared/utils/origenDelLead.js';
 
@@ -602,22 +603,105 @@ export const LEYENDA_ORIGEN = `<div style="font-size:11px;color:${GRIS};margin-t
 
 // ─── DIRECCIÓN, cada tarde: «Resumen del día», por empresa ───────────────────
 
-async function porGestoraHoy(ids, dia) {
-  const { rows } = await query(
-    `SELECT u.nombre,
-            (SELECT count(*)::int FROM leads l WHERE l.responsable_id = u.id AND l.deleted_at IS NULL
-               AND l.project_id = ANY($1::int[]) AND l.created_at::date = $2::date) AS leads,
-            o.formularios, o.whatsapp,
-            (SELECT count(*)::int FROM lead_interactions i JOIN leads l ON l.id = i.lead_id
-              WHERE l.responsable_id = u.id AND l.project_id = ANY($1::int[]) AND i.fecha::date = $2::date) AS contactos
-       FROM users u
-      CROSS JOIN LATERAL (SELECT ${ORIGEN_DE_LOS_LEADS('l')}
-              FROM leads l WHERE l.responsable_id = u.id AND l.deleted_at IS NULL
-               AND l.project_id = ANY($1::int[]) AND l.created_at::date = $2::date) o
-      WHERE u.active AND u.role = 'gestor'
-        AND EXISTS (SELECT 1 FROM user_projects up WHERE up.user_id = u.id AND up.active AND up.project_id = ANY($1::int[]))
-      ORDER BY u.nombre`, [ids, dia]);
-  return rows;
+/**
+ * Prospectos, contactos y ventas de CADA persona que vende en esos campus, en un
+ * rango (#270).
+ *
+ * Antes era `porGestoraHoy`, con `u.role = 'gestor'` a fuego: quien es admin y
+ * además vende —el «Y además es… Gestor» de la ficha— no salía, y sus ventas
+ * tampoco aparecían aunque estuvieran en las del campus. Ahora la lista sale de
+ * la ACTIVIDAD: quien tiene prospectos nuevos, contactos o ventas en el rango
+ * aparece, sea cual sea su rol, y quien no ha hecho nada no ocupa una fila.
+ *
+ * Cada cifra sale de la fuente de Reportes: los prospectos, por su fecha de alta
+ * y por quien los lleva; los contactos, de `contactosPorGestora`; las ventas,
+ * de `ventasVendedora`. Las ventas sin vendedora salen como «Sin gestora», como
+ * en el ranking del semanal, para que lo de la tabla sume lo del campus.
+ */
+export async function actividadPorGestora(ids, from, to) {
+  const [{ rows: leads }, contactos, ventas] = await Promise.all([
+    query(
+      `SELECT u.nombre, count(*)::int AS leads,
+            ${ORIGEN_DE_LOS_LEADS('l')}
+         FROM leads l JOIN users u ON u.id = l.responsable_id
+        WHERE l.deleted_at IS NULL AND l.project_id = ANY($1::int[])
+          AND l.created_at::date >= $2::date AND l.created_at::date <= $3::date
+        GROUP BY u.nombre`, [ids, from, to]),
+    informes.contactosPorGestora({ projectIds: ids, from, to }),
+    informes.ventasVendedora({ projectIds: ids, from, to }).catch(() => []),
+  ]);
+  const SIN = 'Sin asignar';
+  const porNombre = new Map();
+  const fila = (nombre) => {
+    const clave = String(nombre || '').trim();
+    if (!porNombre.has(clave)) porNombre.set(clave, { nombre: clave, leads: 0, formularios: 0, whatsapp: 0, contactos: 0, ventas: 0, sinGestora: clave === SIN });
+    return porNombre.get(clave);
+  };
+  for (const r of leads) {
+    const f = fila(r.nombre);
+    f.leads += n(r.leads); f.formularios += n(r.formularios); f.whatsapp += n(r.whatsapp);
+  }
+  for (const r of contactos) fila(r.nombre).contactos += n(r.contactos);
+  for (const v of ventas) { if (v.vendedora) fila(v.vendedora).ventas += n(v.ventas); }
+  return [...porNombre.values()]
+    .filter((g) => g.nombre && (g.leads || g.contactos || g.ventas))
+    // «Sin gestora» al final: no compite con nadie.
+    .sort((a, b) => Number(a.sinGestora) - Number(b.sinGestora) || a.nombre.localeCompare(b.nombre, 'es'));
+}
+
+const CABECERAS_ACTIVIDAD = ['Gestora', 'Prospectos', 'Contactos', 'Ventas'];
+
+/** La fila de una persona en «Por gestora». «Sin gestora» va en cursiva y gris. */
+export function filaDeGestora(g) {
+  const celdas = [g.sinGestora ? '<em>Sin gestora</em>' : esc(g.nombre), prospectosConOrigen(g), entero(g.contactos), entero(g.ventas)];
+  return g.sinGestora ? { celdas, estilo: `;color:${GRIS}` } : celdas;
+}
+
+const APAGADO = '#9ca3af';
+
+/**
+ * La tabla «Por campus»: TODOS los campus de la empresa, también los que no han
+ * tenido movimiento, que salen en gris (#270: «también los que están a 0»). Un
+ * campus parado es justo lo que dirección quiere ver, y antes se escondía.
+ *
+ * Con `antes` (el semanal), cada cifra lleva al lado la de la semana anterior.
+ * `filas`: `[{ nombre, ahora: {leads, contactos, ventas}, antes?: {…} }]`.
+ */
+export function tablaPorCampus(filas, { conAnterior = false } = {}) {
+  const celda = (ahora, antes) => (conAnterior
+    ? `${entero(ahora)} <span style="font-size:11px;color:${APAGADO}">(ant. ${entero(antes)})</span>`
+    : entero(ahora));
+  const cuerpo = filas.map((f) => {
+    const a = f.ahora; const b = f.antes || {};
+    const celdas = [
+      esc(f.nombre),
+      celda(a.leads, b.leads), celda(a.contactos, b.contactos), celda(a.ventas, b.ventas),
+    ];
+    const parado = !(a.leads || a.contactos || a.ventas);
+    return parado ? { celdas, estilo: `;color:${APAGADO}` } : celdas;
+  });
+  return tabla(['Campus', 'Prospectos', 'Contactos', 'Ventas'], cuerpo);
+}
+
+/**
+ * La tabla de arriba del todo cuando una persona recibe VARIAS empresas
+ * (Manuel recibe todas): una línea por empresa y el total de todas, para ver de
+ * un vistazo dónde se mueve el negocio antes de entrar en cada una (#270).
+ * `etiquetaCobrado`: «Cobrado hoy» en el diario, «Cobrado» en el semanal.
+ */
+export function tablaResumenPorEmpresa(empresas, { etiquetaCobrado = 'Cobrado' } = {}) {
+  if (empresas.length < 2) return '';
+  const total = empresas.reduce((t, e) => ({
+    leads: t.leads + n(e.leads), contactos: t.contactos + n(e.contactos),
+    ventas: t.ventas + n(e.ventas), cobrado: t.cobrado + n(e.cobrado),
+  }), { leads: 0, contactos: 0, ventas: 0, cobrado: 0 });
+  const cuerpo = empresas.map((e) => [esc(e.nombre), entero(e.leads), entero(e.contactos), entero(e.ventas), eur(e.cobrado)]);
+  cuerpo.push({
+    celdas: ['<strong>Total</strong>', ...[entero(total.leads), entero(total.contactos), entero(total.ventas), eur(total.cobrado)].map((c) => `<strong>${c}</strong>`)],
+    estilo: `;border-top:2px solid ${LINEA}`,
+  });
+  return `<div style="font-size:13px;font-weight:bold;color:${GRIS};margin:18px 0 0">Resumen por empresa</div>`
+    + tabla(['Empresa', 'Prospectos', 'Contactos', 'Ventas', etiquetaCobrado], cuerpo);
 }
 
 export async function correoDiarioDireccion(persona, ahora = new Date()) {
@@ -625,31 +709,33 @@ export async function correoDiarioDireccion(persona, ahora = new Date()) {
   if (!empresas.length) return null;
   const hoyIso = iso(ahora);
   const partes = [];
+  const resumen = [];
   for (const e of empresas) {
     const ids = e.campus.map((c) => c.id);
-    const [dia, cola, cobradoHoy, ventas, gestoras] = await Promise.all([
+    const [dia, cola, cobradoHoy, gestoras, contactosCampus] = await Promise.all([
       resumenDelDia({ projectIds: ids, referencia: hoyIso }),
       resumenDeLaCola({ projectIds: ids }),
       cobrado({ from: hoyIso, to: hoyIso, projectIds: ids }),
-      informes.ventasVendedora({ projectIds: ids, from: hoyIso, to: hoyIso }).catch(() => []),
-      porGestoraHoy(ids, hoyIso),
+      actividadPorGestora(ids, hoyIso, hoyIso),
+      informes.contactosPorCampus({ projectIds: ids, from: hoyIso, to: hoyIso }),
     ]);
     const hoy = dia.find((x) => x.dia === 'hoy') || {};
     const ayer = dia.find((x) => x.dia === 'ayer') || {};
-    const ventasDe = (nombre) => n((ventas.find((v) => v.vendedora === nombre) || {}).ventas);
-    const filas = gestoras
-      .map((g) => ({ ...g, ventas: ventasDe(g.nombre) }))
-      .filter((g) => g.leads || g.contactos || g.ventas)
-      .map((g) => [esc(g.nombre), prospectosConOrigen(g), entero(g.contactos), entero(g.ventas)]);
-    // Por campus, cuando la empresa tiene varios: dónde entra y dónde se vende.
+    const filas = gestoras.map(filaDeGestora);
+    const contactosDe = (id) => n((contactosCampus.find((c) => c.project_id === id) || {}).contactos);
+    resumen.push({
+      nombre: e.nombre, leads: n(hoy.leads), contactos: contactosCampus.reduce((t, c) => t + n(c.contactos), 0),
+      ventas: n(hoy.ventas), cobrado: cobradoHoy,
+    });
+    // Por campus, cuando la empresa tiene varios: TODOS, también los parados.
     let porCampus = '';
     if (e.campus.length > 1) {
-      const filasCampus = [];
-      for (const c of e.campus) {
-        const d = (await resumenDelDia({ projectIds: [c.id], referencia: hoyIso })).find((x) => x.dia === 'hoy') || {};
-        if (d.leads || d.ventas) filasCampus.push([esc(c.nombre), entero(d.leads), entero(d.ventas)]);
-      }
-      porCampus = filasCampus.length ? `<div style="font-size:13px;font-weight:bold;color:${GRIS};margin:18px 0 0">Por campus</div>${tabla(['Campus', 'Prospectos', 'Ventas'], filasCampus)}` : '';
+      const dias = await Promise.all(e.campus.map((c) => resumenDelDia({ projectIds: [c.id], referencia: hoyIso })));
+      const filasCampus = e.campus.map((c, i) => {
+        const d = dias[i].find((x) => x.dia === 'hoy') || {};
+        return { nombre: c.nombre, ahora: { leads: n(d.leads), contactos: contactosDe(c.id), ventas: n(d.ventas) } };
+      });
+      porCampus = `<div style="font-size:13px;font-weight:bold;color:${GRIS};margin:18px 0 0">Por campus</div>${tablaPorCampus(filasCampus)}`;
     }
     partes.push([
       apartado(e.nombre, { logoUrl: e.logoUrl, detalle: e.campus.length > 1 ? `${e.campus.length} campus: ${e.campus.map((c) => esc(c.nombre)).join(', ')}` : '' }),
@@ -659,7 +745,7 @@ export async function correoDiarioDireccion(persona, ahora = new Date()) {
         { etiqueta: 'Cobrado hoy', valor: eur(cobradoHoy) },
         { etiqueta: 'Pasos atrasados', valor: entero(cola.atrasados), nota: `${entero(hoy.sin_tocar)} de hoy sin contactar` },
       ]),
-      filas.length ? `<div style="font-size:13px;font-weight:bold;color:${GRIS};margin:18px 0 0">Por gestora</div>${tabla(['Gestora', 'Prospectos', 'Contactos', 'Ventas'], filas)}${LEYENDA_ORIGEN}` : parrafo(`<span style="color:${GRIS}">Hoy no hay actividad de gestoras que contar.</span>`),
+      filas.length ? `<div style="font-size:13px;font-weight:bold;color:${GRIS};margin:18px 0 0">Por gestora</div>${tabla(CABECERAS_ACTIVIDAD, filas)}${LEYENDA_ORIGEN}` : parrafo(`<span style="color:${GRIS}">Hoy no hay actividad de gestoras que contar.</span>`),
       porCampus,
     ].join(''));
   }
@@ -670,7 +756,7 @@ export async function correoDiarioDireccion(persona, ahora = new Date()) {
       preTitulo: 'Resumen del día',
       titulo: `${diaSemana(ahora)[0].toUpperCase()}${diaSemana(ahora).slice(1)}`,
       subtitulo: `${empresas.length > 1 ? `Tus ${empresas.length} empresas, cada una con sus cifras.` : 'Cómo ha ido el día.'} Hoy cuenta <strong>${tramoDeHoy(ahora)}</strong>, y «vs. ayer» lo compara con el día entero de ayer. Ventas y cobrado: los que llevan fecha de hoy.`,
-      contenido: partes.join('') + boton('Abrir Reportes', `${base()}${R.informes}`),
+      contenido: tablaResumenPorEmpresa(resumen, { etiquetaCobrado: 'Cobrado hoy' }) + partes.join('') + boton('Abrir Reportes', `${base()}${R.informes}`),
     }),
   };
 }
@@ -682,14 +768,18 @@ export async function correoSemanalDireccion(persona, ahora = new Date()) {
   if (!empresas.length) return null;
   const { semana, anterior } = semanas(ahora);
   const partes = [];
+  const resumen = [];
   for (const e of empresas) {
     const ids = e.campus.map((c) => c.id);
-    const [s, a, cob, cobA, puesto] = await Promise.all([
+    const [s, a, cob, cobA, puesto, gestoras, contactosSemana, contactosAnterior] = await Promise.all([
       informes.overview({ projectIds: ids, ...semana }),
       informes.overview({ projectIds: ids, ...anterior }),
       cobrado({ ...semana, projectIds: ids }),
       cobrado({ ...anterior, projectIds: ids }),
       informes.miPuesto({ userId: persona.id, projectIds: ids, ...semana, esJefe: true }).catch(() => null),
+      actividadPorGestora(ids, semana.from, semana.to),
+      informes.contactosPorCampus({ projectIds: ids, ...semana }),
+      informes.contactosPorCampus({ projectIds: ids, ...anterior }),
     ]);
     const ls = s.leads || {}; const la = a.leads || {};
     const cs = s.conversions || {}; const ca = a.conversions || {};
@@ -700,6 +790,50 @@ export async function correoSemanalDireccion(persona, ahora = new Date()) {
     // del Total es el de la tarjeta de arriba —los dos son los pagos
     // registrados de la semana por su fecha de cobro—.
     const ranking = tablaDelRanking(puesto, { periodo: 'semana' });
+
+    resumen.push({
+      nombre: e.nombre, leads: n(ls.total), contactos: contactosSemana.reduce((t, c) => t + n(c.contactos), 0),
+      ventas: n(cs.total), cobrado: cob,
+    });
+
+    // Por campus, con la semana anterior al lado (#270): TODOS los campus de la
+    // empresa, también los parados, que salen en gris.
+    const contactosDe = (lista, id) => n((lista.find((c) => c.project_id === id) || {}).contactos);
+    let porCampus = '';
+    if (e.campus.length > 1) {
+      const dos = await Promise.all(e.campus.map((c) => Promise.all([
+        informes.overview({ projectIds: [c.id], ...semana }),
+        informes.overview({ projectIds: [c.id], ...anterior }),
+      ])));
+      const filasCampus = e.campus.map((c, i) => {
+        const [ahoraC, antesC] = dos[i];
+        return {
+          nombre: c.nombre,
+          ahora: { leads: n(ahoraC.leads?.total), contactos: contactosDe(contactosSemana, c.id), ventas: n(ahoraC.conversions?.total) },
+          antes: { leads: n(antesC.leads?.total), contactos: contactosDe(contactosAnterior, c.id), ventas: n(antesC.conversions?.total) },
+        };
+      });
+      porCampus = `<div style="font-size:13px;font-weight:bold;color:${GRIS};margin:18px 0 0">Por campus · con la semana anterior</div>${tablaPorCampus(filasCampus, { conAnterior: true })}`;
+    }
+    const porGestora = gestoras.length
+      ? `<div style="font-size:13px;font-weight:bold;color:${GRIS};margin:18px 0 0">Por gestora · prospectos, contactos y ventas de la semana</div>${tabla(CABECERAS_ACTIVIDAD, gestoras.map(filaDeGestora))}${LEYENDA_ORIGEN}`
+      : '';
+
+    // LA LECTURA DE LA SEMANA, escrita por IA (#30). Apagada por defecto:
+    // `IA_ANALISIS_SEMANAL=1` la enciende. Lee las mismas cifras que las tarjetas
+    // de arriba y NO sale si alguna cifra del texto no esta en ellas. Si no hay
+    // clave, el tope esta agotado o la IA falla, devuelve `null` y el correo sale
+    // exactamente como siempre: el reporte no depende de ella.
+    const lectura = process.env.IA_ANALISIS_SEMANAL === '1'
+      ? await lecturaDeLaSemana({
+        empresa: e.nombre,
+        periodo: semana,
+        esta: { prospectos: n(ls.total), convertidos: n(ls.convertido), ventas: n(cs.total), cobrado: n(cob) },
+        anterior: { prospectos: n(la.total), convertidos: n(la.convertido), ventas: n(ca.total), cobrado: n(cobA) },
+        userId: persona.id,
+      })
+      : null;
+
     partes.push([
       apartado(e.nombre, { logoUrl: e.logoUrl, detalle: e.campus.length > 1 ? `${e.campus.length} campus` : '' }),
       tarjetas([
@@ -708,6 +842,13 @@ export async function correoSemanalDireccion(persona, ahora = new Date()) {
         { etiqueta: 'Cobrado', valor: eur(cob), cmp: comparar(cob, cobA), nota: 'por fecha de cobro' },
         { etiqueta: 'Conversión', valor: `${entero(tasa)} %`, nota: `la anterior ${entero(tasaA)} %` },
       ]),
+      porCampus,
+      porGestora,
+      lectura
+        ? `<div style="font-size:13px;font-weight:bold;color:${GRIS};margin:18px 0 4px">Lectura de la semana</div>`
+          + `<div style="font-size:14px;line-height:1.5">${esc(lectura.texto)}</div>`
+          + `<div style="font-size:11px;color:${GRIS};margin-top:4px">Escrita por IA a partir de las cifras de arriba.</div>`
+        : '',
       ranking ? `<div style="font-size:13px;font-weight:bold;color:${GRIS};margin:18px 0 0">Ranking de la semana · por lo cobrado</div>${ranking}` : '',
     ].join(''));
   }
@@ -718,7 +859,7 @@ export async function correoSemanalDireccion(persona, ahora = new Date()) {
       preTitulo: 'Reporte semanal',
       titulo: `Semana del ${bonita(semana.from)} al ${bonita(semana.to)}`,
       subtitulo: `${empresas.length > 1 ? `Tus ${empresas.length} empresas, cada una con sus cifras. ` : ''}Comparada con la semana anterior. El ranking es por lo cobrado, como en «Cómo voy», y separa de dónde viene cada euro; prospectos y ventas cuentan como Reportes, y lo cobrado sale de los pagos registrados.`,
-      contenido: partes.join('') + boton('Abrir Reportes', `${base()}${R.informes}`),
+      contenido: tablaResumenPorEmpresa(resumen) + partes.join('') + boton('Abrir Reportes', `${base()}${R.informes}`),
     }),
   };
 }

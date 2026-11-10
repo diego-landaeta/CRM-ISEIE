@@ -199,8 +199,14 @@ describe('Ver: mis tareas, mi equipo, todo', () => {
     // Pedir a otra persona no la abre.
     expect(await tablero('diana', { ver: 'todo', assigned_to: U.pedro.id })).toEqual(['de_pedro_en_equipo']);
     expect(await tablero('diana', { ver: 'todo', assigned_to: U.ajeno.id })).toEqual([]);
-    // Ni cambiar de empresa arriba.
-    expect(await tablero('diana', { ver: 'todo', issuerId: E.OTRA })).toEqual(todo);
+    // Ni cambiar de empresa arriba la abre: desde el 30/10 una empresa arriba ESTRECHA el tablero a las tareas
+    // de esa empresa (tableroPorEmpresa.test.js), pero nunca saca nada que «Todo» no tuviera.
+    const deOtra = await tablero('diana', { ver: 'todo', issuerId: E.OTRA });
+    for (const t of deOtra) expect(todo).toContain(t);
+    expect(deOtra).not.toContain('de_pedro_en_equipo'); // el equipo es de CEDIA: con otra empresa arriba no sale
+    expect(deOtra).not.toContain('de_ajeno');
+    // Con su propia empresa arriba, el tablero es el mismo.
+    expect(await tablero('diana', { ver: 'todo', issuerId: E.CEDIA })).toEqual(todo);
   });
 
   it('sin `ver`, lo de antes: `mias=true` es «Mis tareas» y nada es «Todo»', async () => {

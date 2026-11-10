@@ -44,14 +44,14 @@ export default function CreateTicketForm({ onSubmitted }: { onSubmitted?: () => 
     expected: '',
     actual: '',
     whyItMatters: '',
-    url: window.location.origin + location.pathname,
+    url: window.location.href,
   });
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    setForm((f) => ({ ...f, url: window.location.origin + location.pathname }));
+    setForm((f) => ({ ...f, url: window.location.href }));
   }, [location.pathname]);
 
   function patch(diff: Partial<FormState>) { setForm((f) => ({ ...f, ...diff })); }

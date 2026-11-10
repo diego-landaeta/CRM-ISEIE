@@ -80,7 +80,8 @@ beforeAll(async () => {
       [`${codigo} campus`, `${codigo.toLowerCase()}-${sufijo}`])).rows[0].id);
   }
   // La gestora a la que se le da el permiso, otra del mismo campus sin él, un project
-  // manager (para probarlo por rol sin tocar a todas las gestoras) y un admin de otro campus.
+  // manager (para probarlo por rol sin tocar a todas las gestoras; lo trae de serie desde el
+  // 04/11) y un admin de otro campus.
   await persona('conPermiso', 'gestor', [proyectos[0]]);
   await persona('sinPermiso', 'gestor', [proyectos[0]]);
   await persona('pm', 'project_manager', [proyectos[0]]);
@@ -198,25 +199,27 @@ describe('por persona, desde Configuración › Roles', () => {
 });
 
 describe('por rol, desde Configuración › Roles', () => {
-  it('el super admin y el admin cambian un rol entero; dárselo hace que lo vea y quitárselo, que no', async () => {
-    expect((await como('pm')(request.get('/api/certifex/diplomas'))).status).toBe(403);
-    // Diego, 26/10: el admin sigue cambiando lo que trae cada rol (y «Diplomas · Ver» lo tiene).
-    const delAdmin = await como('adminAjeno')(request.put('/api/permissions/claves/diplomas.view/rol/project_manager')).send({ permitido: true });
-    expect(delAdmin.status, JSON.stringify(delAdmin.body)).toBe(200);
-    expect((await como('adminAjeno')(request.put('/api/permissions/claves/diplomas.view/rol/project_manager')).send({ permitido: false })).status).toBe(200);
-
-    const si = await como('sa')(request.put('/api/permissions/claves/diplomas.view/rol/project_manager')).send({ permitido: true });
-    expect(si.status, JSON.stringify(si.body)).toBe(200);
-    expect(si.body.data).toMatchObject({ roleKey: 'project_manager', permitido: true });
+  it('el super admin y el admin cambian un rol entero; quitárselo hace que no lo vea y devolvérselo, que sí', async () => {
+    // El project manager trae «Diplomas · Ver» de serie desde el 04/11 (Diego: «el project
+    // manager ve todo»). Se prueba al revés que antes: quitárselo al rol y devolvérselo.
     expect((await como('pm')(request.get('/api/certifex/diplomas'))).status).toBe(200);
-    const defaults = await como('sa')(request.get('/api/permissions/system-defaults'));
-    expect(defaults.body.data.roles.project_manager['diplomas.view']).toBe(true);
+    // Diego, 26/10: el admin sigue cambiando lo que trae cada rol (y «Diplomas · Ver» lo tiene).
+    const delAdmin = await como('adminAjeno')(request.put('/api/permissions/claves/diplomas.view/rol/project_manager')).send({ permitido: false });
+    expect(delAdmin.status, JSON.stringify(delAdmin.body)).toBe(200);
+    expect((await como('adminAjeno')(request.put('/api/permissions/claves/diplomas.view/rol/project_manager')).send({ permitido: true })).status).toBe(200);
 
     const no = await como('sa')(request.put('/api/permissions/claves/diplomas.view/rol/project_manager')).send({ permitido: false });
-    expect(no.body.data.permitido).toBe(false);
+    expect(no.status, JSON.stringify(no.body)).toBe(200);
+    expect(no.body.data).toMatchObject({ roleKey: 'project_manager', permitido: false });
+    expect((await como('pm')(request.get('/api/certifex/diplomas'))).status).toBe(403);
+    const defaults = await como('sa')(request.get('/api/permissions/system-defaults'));
+    expect(defaults.body.data.roles.project_manager['diplomas.view']).toBe(false);
+
+    const si = await como('sa')(request.put('/api/permissions/claves/diplomas.view/rol/project_manager')).send({ permitido: true });
+    expect(si.body.data.permitido).toBe(true);
     // Lo que vuelve a ser como el código no deja fila.
     expect((await pool.query(`SELECT 1 FROM role_permission_overrides WHERE role = 'project_manager' AND resource = 'diplomas'`)).rows).toEqual([]);
-    expect((await como('pm')(request.get('/api/certifex/diplomas'))).status).toBe(403);
+    expect((await como('pm')(request.get('/api/certifex/diplomas'))).status).toBe(200);
   });
 
   it('a admin, superadmin, tutor o colaborador no se les cambia (400); otra clave, tampoco', async () => {

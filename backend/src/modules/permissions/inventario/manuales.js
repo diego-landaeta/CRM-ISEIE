@@ -78,11 +78,13 @@ export const PUERTAS = [
     donde: 'tutor.controller.js · exigirGestion',
     controladores: ['listar', 'alta', 'crearColaboracion', 'editarColaboracion', 'cambiarCobraDesde',
       'borrarColaboracion', 'ajustes', 'calcular', 'formacionesSinTutor', 'marcarBusqueda',
-      'anunciosDeTutores', 'pagosSinFormacion', 'retirarTutor', 'reactivarTutor', 'cambiarEstadoComision'],
+      'anunciosDeTutores', 'pagosSinFormacion', 'retirarTutor', 'reactivarTutor', 'cambiarEstadoComision',
+      // Sus campus y empresas (#187, staging 22/10): exigirTutorGestionable.
+      'asignarCampus', 'comprobarCampus', 'asignarEmpresa', 'quitarEmpresa', 'cambiarDisponible'],
   },
   {
     id: 'tutores.ficha_ajena', modulo: 'tutores', regla: 'tutoresGestionar',
-    donde: 'tutor.controller.js · exigirGestion', controladores: ['ficha', 'guardarPerfil'],
+    donde: 'tutor.controller.js · exigirGestion', controladores: ['ficha', 'guardarPerfil', 'campusDelTutor'],
     condicion: 'la ficha de otro tutor (la suya, el tutor siempre)',
   },
   {
@@ -101,7 +103,33 @@ export const PUERTAS = [
     donde: 'tutor.controller.js', controladores: ['guardarAjustes', 'liquidar', 'revertirComision', 'cambiarContrasena'],
   },
 
-  // (Consultas de alumnos, #188 de MultiCRM: no existe en ISEIE.)
+  // ── Consultas de alumnos (#188, staging 22/10) ──
+  {
+    id: 'consultas.administracion', modulo: 'consultas', regla: 'consultasAdministracion',
+    donde: 'consultas.controller.js · esAdministracion / exigirVer(…) === «admin»',
+    controladores: ['panel', 'leerAhora', 'panelDeTutores', 'sincronizarAlumnosAhora', 'campusSinTutor',
+      'tutoresPosibles', 'reasignar'],
+    alcance: 'el admin, solo las consultas de sus campus',
+  },
+  {
+    id: 'consultas.tutor', modulo: 'consultas', regla: 'consultasTutor',
+    donde: 'consultas.controller.js · esTutorUsuario', controladores: ['miCarga', 'guardarMiCarga'],
+  },
+  {
+    id: 'consultas.lo_suyo', modulo: 'consultas', regla: 'consultasTutor',
+    donde: 'consultas.controller.js · quienYAmbito (sin ?todas)', controladores: ['alumnosSinMensajes', 'verMetricas'],
+    alcance: 'el tutor, solo lo suyo',
+  },
+  {
+    id: 'consultas.las_de_todos', modulo: 'consultas', regla: 'consultasAdministracion',
+    donde: 'consultas.controller.js · quienYAmbito (?todas=1)', controladores: ['alumnosSinMensajes', 'verMetricas'],
+    condicion: 'las de todos los tutores (?todas=1)',
+  },
+  {
+    id: 'consultas.token_del_tutor', modulo: 'consultas', regla: 'consultasGestionTutor',
+    donde: 'consultas.controller.js · exigirGestionDelTutor', controladores: ['tokensDelTutor', 'guardarToken'],
+    alcance: 'el admin, solo los campus que comparte con el tutor',
+  },
 
   // ── Usuarios ──
   {
@@ -179,6 +207,13 @@ export const PUERTAS = [
     donde: 'webhooks-salientes.controller.js · esSuperadmin', controladores: ['crear', 'cambiar'],
     condicion: 'webhooks para todas las empresas',
   },
+  {
+    // Diego, 03/11 (#620). Antes de esto el registro no recortaba nada: admin y
+    // soporte veían todas las filas, también las de todo el sistema.
+    id: 'registro.sistema', modulo: 'registro', regla: 'adminYSoporte',
+    donde: 'registro.controller.js · alcance', controladores: ['listar', 'fuentes', 'csv'],
+    condicion: 'lo que no es de ningún campus: errores y tareas programadas',
+  },
 
   // ── Lo de cada uno ──
   {
@@ -220,5 +255,6 @@ export const ALCANCE = [
   { modulo: 'certifex', donde: 'certifex.alcance.js', que: 'diplomas de los campus de cada uno' },
   { modulo: 'tutores', donde: 'tutor.controller.js · exigirTutorDeMisCampus', que: 'fichas de tutores de sus campus' },
   { modulo: 'facturas-colaborador', donde: 'facturas-colaborador.service.js · ambitoDe', que: 'facturas de las empresas de sus campus' },
+  { modulo: 'consultas', donde: 'consultas.controller.js · exigirVer, escribirAlAlumno', que: 'cada consulta, su tutor; administración, las de sus campus (superadmin y soporte, todas)' },
   { modulo: 'webhook-tokens', donde: 'token.controller.js · comprobarCampus', que: 'cada admin, los webhooks de sus campus; el superadmin, todos' },
 ];

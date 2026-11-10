@@ -46,11 +46,12 @@ describe('El build de producción y su .env.production', () => {
     expect(build()).toEqual({ comprobado: true, faltan: [] });
   });
 
-  it('una variable a medias también para: con solo dos de cuatro, dice las otras dos', () => {
+  // Desde ISEIE#318 (30/10) también VITE_CERTIFEX_PANEL: son cinco, y con dos puestas faltan tres.
+  it('una variable a medias también para: con solo dos de cinco, dice las otras tres', () => {
     fs.writeFileSync(path.join(dir, '.env.production'), 'VITE_API_URL=https://crm.iseie.com/api\n# VITE_PROCESO_EN_PRUEBAS=true\nVITE_BETA_MODE=true\n');
     let error;
     try { build(); } catch (e) { error = e; }
-    expect(error?.message).toMatch(/faltan VITE_MODULOS_APAGADOS, VITE_PROCESO_EN_PRUEBAS\./);
+    expect(error?.message).toMatch(/faltan VITE_MODULOS_APAGADOS, VITE_PROCESO_EN_PRUEBAS, VITE_CERTIFEX_PANEL\./);
   });
 
   it('una vacía cuenta como puesta (VITE_MODULOS_APAGADOS= es «ninguno apagado»)', () => {

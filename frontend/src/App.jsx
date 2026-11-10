@@ -1,7 +1,9 @@
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Suspense, lazy, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { PROCESO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
+import { PROCESO_EN_PRUEBAS, SOLO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
+import ConPermiso from '@/shared/components/layout/ConPermiso';
+import { MARCA } from '@/shared/config/marca';
 
 // Layout y guardas
 const AppLayout = lazy(() => import('./shared/components/layout/AppLayout'));
@@ -46,6 +48,14 @@ const TutoresPage = lazy(() => import('./modules/tutores/pages/TutoresPage'));
 const ComisionesTutoresPage = lazy(() => import('./modules/tutores/pages/ComisionesTutoresPage'));
 const FormacionesSinTutorPage = lazy(() => import('./modules/tutores/pages/FormacionesSinTutorPage'));
 const MisCursosPage = lazy(() => import('./modules/tutores/pages/MisCursosPage'));
+// Consultas de alumnos (#188): la bandeja del tutor y el panel de administración.
+const ConsultasPage = lazy(() => import('./modules/consultas/pages/ConsultasPage'));
+const ConsultaPage = lazy(() => import('./modules/consultas/pages/ConsultaPage'));
+// Fase 3 (#189): alumnos sin mensajes, carga de trabajo, panel de tutores y métricas.
+const AlumnosSinMensajesPage = lazy(() => import('./modules/consultas/pages/AlumnosSinMensajesPage'));
+const MiCargaPage = lazy(() => import('./modules/consultas/pages/MiCargaPage'));
+const TutoresConsultasPage = lazy(() => import('./modules/consultas/pages/TutoresConsultasPage'));
+const MetricasConsultasPage = lazy(() => import('./modules/consultas/pages/MetricasConsultasPage'));
 const InvoicesPage = lazy(() => import('./modules/invoices/pages/InvoicesPage'));
 const InvoicingConfigPage = lazy(() => import('./modules/invoices/pages/InvoicingConfigPage'));
 const InvoiceTemplateEditorPage = lazy(() => import('./modules/invoices/pages/InvoiceTemplateEditorPage'));
@@ -69,6 +79,7 @@ const ExpensesPage = lazy(() => import('./modules/expenses/pages/ExpensesPage'))
 const ProfilePage = lazy(() => import('./shared/pages/ProfilePage'));
 const SettingsPage = lazy(() => import('./shared/pages/SettingsPage'));
 const SalesAnalysisPage = lazy(() => import('./modules/sales/pages/SalesAnalysisPage'));
+const VentasSinFormacionPage = lazy(() => import('./modules/sales/pages/VentasSinFormacionPage'));
 const SaleDetailPage = lazy(() => import('./modules/sales/pages/SaleDetailPage'));
 const SalesPage = lazy(() => import('./modules/sales/pages/SalesPage'));
 const MetaAdsPage = lazy(() => import('./modules/meta-ads/pages/MetaAdsPage'));
@@ -77,6 +88,9 @@ const ChangeRequestDetailPage = lazy(() => import('./modules/change-requests/pag
 const DupReviewQueuePage = lazy(() => import('./modules/leads/pages/DupReviewQueuePage'));
 const DuplicatesPage = lazy(() => import('./modules/leads/pages/DuplicatesPage'));
 const ReportsPage = lazy(() => import('./shared/pages/ReportsPage'));
+// Preguntarle a los datos en lenguaje natural (#30), como en MultiCRM. Solo en
+// pruebas hasta que Diego ponga la clave y el tope de gasto (#22).
+const PreguntarPage = lazy(() => import('./modules/ia-analisis/pages/PreguntarPage'));
 // El feedback de «¿por que has desistido?» (#169, #170): la encuesta es PUBLICA.
 const FeedbackEncuestaPage = lazy(() => import('./modules/feedback/pages/FeedbackEncuestaPage'));
 const FeedbackPanelPage = lazy(() => import('./modules/feedback/pages/FeedbackPanelPage'));
@@ -95,6 +109,9 @@ const FieldDefinitionsPage = lazy(() => import('./modules/field-definitions/page
 const CategoriesTreePage = lazy(() => import('./modules/product-categories/pages/CategoriesTreePage'));
 const MatriculasPage = lazy(() => import('./modules/matriculas/pages/MatriculasPage'));
 const McpPage = lazy(() => import('./modules/mcp/pages/McpPage'));
+// Conexión → Moodle (#335): cursos, alumnos y recursos de cada campus, como en MultiCRM.
+const MoodlePage = lazy(() => import('./modules/moodle/pages/MoodlePage'));
+const MoodleCampusPage = lazy(() => import('./modules/moodle/pages/MoodleCampusPage'));
 const ConnectorsPage = lazy(() => import('./modules/connectors/pages/ConnectorsPage'));
 // Conexión → Webhook de transferencias (Diego, 15/10), como en MultiCRM.
 const WebhookTransferenciasPage = lazy(() => import('./modules/webhooks-salientes/pages/WebhookTransferenciasPage'));
@@ -151,6 +168,16 @@ const ROUTE_TITLES = {
   '/payroll':                         'Nóminas',
   '/matriculas':                      'Matrículas',
   '/conexion/mcp':                    'MCP',
+  '/conexion/moodle':                 'Moodle',
+  '/consultas':                       'Consultas',
+  '/consultas/alumnos':               'Alumnos sin mensajes',
+  '/consultas/carga':                 'Mi carga',
+  '/consultas/tutores':               'Tutores de consultas',
+  '/consultas/metricas':              'Métricas de consultas',
+  '/informes/preguntar':              'Pregunta a tus datos',
+  '/ventas/sin-formacion':            'Ventas sin formación',
+  '/products/pending':                'Cursos pendientes',
+  '/soporte':                         'Soporte',
   '/conexion/conectores':             'Conectores',
   '/conexion/webhook-transferencias': 'Webhook de transferencias',
   '/conexion/asignacion-leads':       'Asignación de leads',
@@ -191,7 +218,7 @@ function ScrollToTop() {
 function DocumentTitle() {
   const { pathname } = useLocation();
   useEffect(() => {
-    const base = 'CRM ISEIE';
+    const base = MARCA;
     const route = ROUTE_TITLES[pathname];
     document.title = route ? `${route} — ${base}` : base;
   }, [pathname]);
@@ -256,6 +283,8 @@ function App() {
           <Route path="/products/tree" element={<ProductsTreePage />} />
           <Route path="/products/:id" element={<ProductDetailPage />} />
           <Route path="/ventas/analisis" element={<SalesAnalysisPage />} />
+          {/* Ventas cobradas sin formación asignada. Antes que `:id`. */}
+          <Route path="/ventas/sin-formacion" element={<VentasSinFormacionPage />} />
           <Route path="/ventas/:id" element={<SaleDetailPage />} />
           <Route path="/ventas" element={<SalesPage />} />
           <Route path="/meta-ads" element={<MetaAdsPage />} />
@@ -293,6 +322,9 @@ function App() {
           <Route path="/matriculas" element={<MatriculasPage />} />
           {/* Conexión → MCP y Conectores, como en MultiCRM. Quién puede usar el MCP lo decide el servidor. */}
           <Route path="/conexion/mcp" element={<McpPage />} />
+          {/* Conexión → Moodle (#335). Solo super admin y admin: lo corta el servidor. */}
+          <Route path="/conexion/moodle" element={<MoodlePage />} />
+          <Route path="/conexion/moodle/:campusId" element={<MoodleCampusPage />} />
           <Route path="/conexion/conectores" element={<ConnectorsPage />} />
           {/* Conexión → Webhook de transferencias. Solo super admin y admin: lo corta el servidor. */}
           <Route path="/conexion/webhook-transferencias" element={<WebhookTransferenciasPage />} />
@@ -319,6 +351,13 @@ function App() {
           <Route path="/tutores/comisiones" element={<ComisionesTutoresPage />} />
           <Route path="/tutores/sin-tutor" element={<FormacionesSinTutorPage />} />
           <Route path="/mis-cursos" element={<MisCursosPage />} />
+          {/* Consultas de alumnos (#187–#190), como en MultiCRM. */}
+          <Route path="/consultas" element={<ConsultasPage />} />
+          <Route path="/consultas/alumnos" element={<AlumnosSinMensajesPage />} />
+          <Route path="/consultas/carga" element={<MiCargaPage />} />
+          <Route path="/consultas/tutores" element={<TutoresConsultasPage />} />
+          <Route path="/consultas/metricas" element={<MetricasConsultasPage />} />
+          <Route path="/consultas/:id" element={<ConsultaPage />} />
           <Route path="/make-webhooks" element={<MakeWebhooksPage />} />
           <Route path="/make-webhooks/:id" element={<MakeWebhookDetailPage />} />
           {/* Antes /webhooks redirigía a Make: dos entradas del menú para la
@@ -334,6 +373,12 @@ function App() {
           <Route path="/configuracion/campos" element={<FieldDefinitionsPage />} />
           <Route path="/roles" element={<RolesPage />} />
           <Route path="/informes" element={<ReportsPage />} />
+          {/* Pregunta a tus datos (#30): solo en pruebas, y solo con su permiso
+              aunque se escriba la dirección a mano (#580). */}
+          <Route path="/informes/preguntar"
+            element={SOLO_EN_PRUEBAS
+              ? <ConPermiso permiso="reports_ia.generar" a="/informes"><PreguntarPage /></ConPermiso>
+              : <Navigate to="/informes" replace />} />
           {/* El panel de feedback, fuera de produccion hasta aprobarlo. */}
           <Route path="/informes/feedback"
             element={PROCESO_EN_PRUEBAS ? <FeedbackPanelPage /> : <Navigate to="/informes" replace />} />

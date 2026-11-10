@@ -3,9 +3,14 @@ import { verifyToken } from '../../shared/middleware/auth.js';
 import { puede } from '../../shared/middleware/permissions.js';
 import { projectAccess } from '../../shared/middleware/projectAccess.js';
 import * as ctrl from './convocatoria.controller.js';
+import { prospectoPorId } from '../conversions/conversion.acceso.js';
 
 const router = Router();
 router.use(verifyToken);
+// El prospecto de la URL (`/lead/:leadId`), de sus campus y de su alcance: una
+// gestora, los suyos; quien lleva un equipo comercial, los de su equipo (QA del
+// 09/11/2026). Antes se leían (y se replanificaban) los de cualquiera por el id.
+router.param('leadId', prospectoPorId);
 
 // Sin `projectAccess`: pueden ser de todos los proyectos a la vez, y el
 // recorte por gestora lo hace el controlador.
@@ -20,6 +25,9 @@ router.patch('/ofrecimientos/:id', puede('convocatorias.ofrecer'), ctrl.actualiz
 // Crear y cambiar convocatorias es de la casa, no de cada gestora: quien las
 // crea decide los topes de descuento.
 router.get('/', puede('convocatorias.view'), projectAccess, ctrl.listar);
+// Con «Todos» o una empresa (#218): las de todos los campus de quien pide. Sin
+// `projectAccess`: el controlador recorta por ámbito.
+router.get('/ambito', puede('convocatorias.view'), ctrl.listarDelAmbito);
 router.post('/', puede('convocatorias.create'), projectAccess, ctrl.crear);
 router.patch('/:id', puede('convocatorias.edit'), projectAccess, ctrl.editar);
 

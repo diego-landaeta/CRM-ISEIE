@@ -14,7 +14,11 @@ import { listCandidateUsers, listActiveWidgetUsers } from '../src/modules/widget
  * Contra Postgres de verdad: lo que falla aqui es el WHERE.
  */
 
-const PROYECTO = 1;
+// Un campus propio de la prueba, no el «1»: la base de la CI (y la de ISEIE) no
+// trae datos de ejemplo, el 1 no existe y el INSERT en user_projects reventaba
+// por la clave foránea (CI roja desde el 02/11).
+let PROYECTO;
+const MARCA = `WSGA${Date.now().toString(36)}`;
 // SIN superadmin, a proposito: otras pruebas de la suite (Certifex) comparan «los
 // superadmin activos» con quienes recibieron un aviso, y uno que aparece y
 // desaparece mientras tanto las desajusta (rompio el CI de otra rama). Con el
@@ -24,6 +28,10 @@ const ROLES = ['gestor', 'admin', 'soporte', 'tutor'];
 const ids = {};
 
 beforeAll(async () => {
+  const { rows: [p] } = await pool.query(
+    'INSERT INTO projects (nombre, slug, webhook_api_key) VALUES ($1, $2, $3) RETURNING id',
+    [`${MARCA} widget`, MARCA.toLowerCase(), `${MARCA}-key`]);
+  PROYECTO = p.id;
   for (const role of ROLES) {
     const { rows } = await pool.query(
       `INSERT INTO users (nombre, email, password_hash, role, active,
@@ -42,6 +50,7 @@ afterAll(async () => {
   const todos = Object.values(ids);
   await pool.query('DELETE FROM user_projects WHERE user_id = ANY($1::int[])', [todos]);
   await pool.query('DELETE FROM users WHERE id = ANY($1::int[])', [todos]);
+  if (PROYECTO) await pool.query('DELETE FROM projects WHERE id = $1', [PROYECTO]);
   await pool.end();
 });
 

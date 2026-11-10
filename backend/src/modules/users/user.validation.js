@@ -135,6 +135,10 @@ export const listUsersSchema = z.object({
   limit: z.coerce.number().int().positive().max(100).default(20),
   // La pantalla de Usuarios los pide expresamente; el resto de listas no.
   incluirTodos: z.enum(['true', 'false']).optional().transform((v) => v === 'true'),
+  // Los desplegables de gestora (Prospectos, Ventas, la Cola, Reasignar…):
+  // a quien lleva un equipo comercial, solo ella y su equipo (QA del 09/11/2026).
+  // A los demás no les cambia nada.
+  alcance: z.enum(['comercial']).optional(),
 });
 
 // El registro de «Actividad». Un `userId` que no es número era un 500 de
@@ -146,3 +150,12 @@ export const activityLogSchema = z.object({
   limit: z.coerce.number().int().min(1).max(500).default(100),
   offset: z.coerce.number().int().min(0).default(0),
 });
+
+// El equipo comercial de una administradora (09/11/2026, migración 274): la
+// lista entera de gestoras que lleva. Vacía = sin equipo (ve como siempre).
+export const equipoComercialSchema = z.object({
+  gestoraIds: z.array(z.number().int().positive(), {
+    required_error: 'Falta la lista de gestoras (gestoraIds)',
+    invalid_type_error: 'gestoraIds tiene que ser una lista de números',
+  }).max(200, 'Demasiadas gestoras'),
+}).strict();

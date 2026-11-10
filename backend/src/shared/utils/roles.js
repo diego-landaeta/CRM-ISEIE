@@ -71,6 +71,9 @@ export const RUTAS_DEL_COLABORADOR = [
   // Meta Ads, solo ver y solo con su permiso (`meta_ads.view`, 26/10/2026): la
   // guardia de la ruta lo mira; sin él, 403 igual.
   /^\/api\/meta-ads(?:\/|$)/,
+  // «Mis preferencias» lee el catálogo del menú para «Mi vista», como el tutor
+  // (más abajo). Es solo la lista de nombres; sin ella, 403 al abrirla (#631).
+  /^\/api\/permissions\/system-defaults\/?$/,
   /^\/api\/users\/mis-avisos\/?$/,
   /^\/api\/users\/\d+\/(?:avatar|views)\/?$/,
 ];
@@ -78,6 +81,67 @@ export const RUTAS_DEL_COLABORADOR = [
 export function colaboradorPuede(ruta) {
   const limpia = String(ruta || '').split('?')[0];
   return RUTAS_DEL_COLABORADOR.some((re) => re.test(limpia));
+}
+
+/**
+ * Lo unico que puede pedir un tutor (#187): «solo sus consultas y sus metricas;
+ * nada de ventas, finanzas ni prospectos. Se comprueba en el servidor, no solo
+ * en el menu». Antes, aunque el menu no se lo enseñara, un tutor podia leer por
+ * la API los prospectos y las ventas de su campus (/api/leads y /api/conversions
+ * solo piden token).
+ *
+ * Es lo que pide hoy su pantalla —Mis cursos, sus comisiones, su perfil, los
+ * avisos— y nada mas. Sus cosas en /api/tutores ya se recortan en el
+ * controlador: un tutor solo ve lo suyo.
+ */
+export const RUTAS_DEL_TUTOR = [
+  /^\/api\/auth(?:\/|$)/,
+  /^\/api\/tutores(?:\/|$)/,
+  // Sus consultas de alumnos (#188): el controlador le deja solo las suyas.
+  /^\/api\/consultas(?:\/|$)/,
+  // Sus cursos pendientes (#336): el servicio le deja solo los que tiene asignados.
+  /^\/api\/cursos-pendientes(?:\/|$)/,
+  // Su tablero de tutores (Diego, 04/11): el servicio le deja ver solo lo suyo y lo
+  // de su equipo de tutores; lo de desarrollo, no (no es de ese equipo).
+  /^\/api\/tasks(?:\/|$)/,
+  /^\/api\/notifications(?:\/|$)/,
+  /^\/api\/novedades(?:\/|$)/,
+  // Los mensajes internos entre usuarios del CRM (la campana de «Mensajes»).
+  /^\/api\/mensajes(?:\/|$)/,
+  // Si le esta sonando una llamada: lo pregunta la cabecera a cualquiera.
+  /^\/api\/whatsapp\/sonando\/?$/,
+  /^\/api\/permissions\/system-defaults\/?$/,
+  /^\/api\/users\/mis-avisos\/?$/,
+  /^\/api\/users\/\d+\/(?:avatar|views)\/?$/,
+];
+
+/** Las listas cerradas, por rol. Quien solo tiene roles de aqui, solo pide lo suyo. */
+const RUTAS_POR_ROL = {
+  colaborador: RUTAS_DEL_COLABORADOR,
+  tutor: RUTAS_DEL_TUTOR,
+};
+
+/** Tutor y NADA MAS. A quien ademas es gestora no se le cierra nada. */
+export function soloEsTutor(user) {
+  const suyos = rolesDe(user);
+  return suyos.length > 0 && suyos.every((r) => r === 'tutor');
+}
+
+export function tutorPuede(ruta) {
+  const limpia = String(ruta || '').split('?')[0];
+  return RUTAS_DEL_TUTOR.some((re) => re.test(limpia));
+}
+
+/**
+ * Si todos los roles de la persona tienen lista cerrada (colaborador, tutor o
+ * los dos), devuelve si esta ruta esta en alguna de SUS listas. Si tiene algun
+ * rol sin lista (gestora, admin…), null: no se le recorta nada aqui.
+ */
+export function rutaDeRolCerrado(user, ruta) {
+  const suyos = rolesDe(user);
+  if (!suyos.length || !suyos.every((r) => RUTAS_POR_ROL[r])) return null;
+  const limpia = String(ruta || '').split('?')[0];
+  return suyos.some((r) => RUTAS_POR_ROL[r].some((re) => re.test(limpia)));
 }
 
 /**
@@ -122,4 +186,107 @@ export function soloLoSuyo(user) {
   const suyos = rolesDe(user);
   if (suyos.some((r) => VEN_TODO_EL_CAMPUS.includes(r))) return false;
   return suyos.some((r) => COMERCIAL_PROPIO.includes(r));
+}
+
+
+/*
+  EL EQUIPO COMERCIAL DE UNA ADMINISTRADORA (Carlos, 09/11/2026).
+
+  «Raquel pasa a ser administradora como Daniela: no recibe leads y puede ver
+  los leads y la gestión de las diferentes compañeras. Daniela puede ver todas.
+  Raquel podrá ver sus comerciales asignadas (pueden variar).»
+
+  Hasta ahora había dos alcances: todo el campus o solo lo suyo. Este es el
+  tercero: lo suyo Y lo de las gestoras que tiene a su cargo (tabla
+  `equipo_comercial`, migración 274). Quién lleva a quién lo decide quien
+  tenga el permiso `equipos.gestionar`.
+
+  `alcanceComercial(user)` devuelve:
+    · null  → sin límite por persona: ve todo lo de sus campus.
+    · [ids] → solo lo de esas personas (la primera, ella misma).
+
+  Orden de las reglas:
+    1. Super admin o soporte → null, siempre.
+    2. Con equipo a su cargo → [ella, ...sus gestoras], sea cual sea su rol.
+    3. Solo lo suyo (gestora, project manager) → [ella].
+    4. El resto (una admin sin equipo, como Daniela) → null.
+
+  El recorte por campus/empresa (`shared/utils/ambito.js`) se aplica ADEMÁS:
+  esto solo dice de QUIÉN, no DÓNDE.
+
+  Se calcula una vez por petición: la respuesta se guarda pegada al objeto
+  `req.user`, que es nuevo en cada petición. Cambiar el equipo surte efecto en
+  la siguiente, sin caché que vaciar.
+*/
+const alcancePorPeticion = new WeakMap();
+
+/** Los ids de las gestoras que tiene a su cargo esa persona (vacío si ninguna). */
+export async function gestorasACargo(liderId) {
+  const id = Number(liderId);
+  if (!Number.isInteger(id) || id <= 0) return [];
+  // Import tardío: este fichero lo usan pruebas puras que no deben abrir la base.
+  const { query } = await import('../config/db.js');
+  const r = await query(
+    'SELECT gestora_id FROM equipo_comercial WHERE lider_id = $1 ORDER BY gestora_id', [id]);
+  return (r?.rows || []).map((f) => Number(f.gestora_id));
+}
+
+async function calcularAlcance(user) {
+  if (tieneRol(user, 'superadmin', 'soporte')) return null;
+  const id = Number(user.userId ?? user.id);
+  const equipo = await gestorasACargo(id);
+  if (equipo.length) return [id, ...equipo.filter((g) => g !== id)];
+  if (soloLoSuyo(user)) return [id];
+  return null;
+}
+
+export function alcanceComercial(user) {
+  if (!user || typeof user !== 'object') return Promise.resolve(null);
+  let p = alcancePorPeticion.get(user);
+  if (!p) {
+    p = calcularAlcance(user);
+    alcancePorPeticion.set(user, p);
+    // Un fallo de la base no se queda guardado para el resto de la petición.
+    p.catch(() => alcancePorPeticion.delete(user));
+  }
+  return p;
+}
+
+/**
+ * A quién se recorta una consulta que además trae un filtro por persona.
+ *
+ *   · Sin alcance (ve todo): lo que pida, o nadie en concreto.
+ *   · Con alcance: lo que pida si está dentro; si no pide o pide a alguien de
+ *     fuera, todo su alcance (lo de fuera se ignora, como hasta ahora se
+ *     ignoraba el `responsableId` que mandaba una gestora).
+ *
+ * Devuelve null (sin filtro) o una lista de ids para `campo = ANY($n::int[])`.
+ */
+export function personasDentro(alcance, pedido) {
+  const n = pedido != null && pedido !== '' ? Number(pedido) : null;
+  const valido = Number.isInteger(n) && n > 0 ? n : null;
+  if (!alcance) return valido ? [valido] : null;
+  if (valido && alcance.includes(valido)) return [valido];
+  return alcance;
+}
+
+/**
+ * El alcance SOLO si lleva un equipo comercial (QA del 09/11/2026); null si no.
+ *
+ * Para las pantallas que una gestora sigue viendo como siempre (el panel
+ * «Último lead de cada gestora», la cola de facturación, el selector de
+ * WhatsApp, los desplegables de gestora…) pero que a una líder le enseñaban
+ * todo el campus. Una gestora sola tiene alcance `[ella]`; una líder,
+ * `[ella, ...sus gestoras]`, y nunca está en su propio equipo
+ * (`NO_A_SI_MISMA`), así que «más de uno» es «lleva equipo».
+ */
+export async function alcanceDeLider(user) {
+  const alcance = await alcanceComercial(user);
+  return Array.isArray(alcance) && alcance.length > 1 ? alcance : null;
+}
+
+/** Si esa persona entra en el alcance (null = entra cualquiera). */
+export function dentroDelAlcance(alcance, personaId) {
+  if (!alcance) return true;
+  return personaId != null && alcance.includes(Number(personaId));
 }

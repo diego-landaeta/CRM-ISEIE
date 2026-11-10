@@ -120,6 +120,32 @@ export async function create(data, userId) {
     }
   }
 
+  /*
+    Y EL CAMINO CONTRARIO: con el id del catalogo, el nombre sale de ahi (#160).
+
+    `createSale` manda como `producto_contratado` el NOMBRE DEL CLIENTE
+    --«override por service si tiene lookup», dice su comentario-- contando con
+    que este bloque lo corrija. Pero el de arriba solo va de texto a id, y
+    cuando el id ya viene puesto no se ejecuta: el texto se quedaba tal cual.
+    Resultado, toda venta registrada desde el formulario guardaba al cliente
+    como producto, y la lista de Ventas enseñaba «Pedro Sanchez» en la columna
+    de programa.
+
+    El id manda sobre el texto libre, siempre: el texto es lo que alguien
+    tecleo, el id es lo que eligio de una lista.
+  */
+  if (data.producto_contratado_id) {
+    try {
+      const { rows } = await query(
+        `SELECT nombre FROM products WHERE id = $1 AND project_id = $2`,
+        [data.producto_contratado_id, data.project_id]
+      );
+      if (rows[0]?.nombre) data.producto_contratado = rows[0].nombre;
+    } catch (err) {
+      logger.warn({ err: err.message }, 'nombre del producto por id fallo (no bloqueante)');
+    }
+  }
+
   const conv = await conversionModel.create({ ...data, changed_by: userId });
 
   // Si al cliente ya se le habia emitido una PROFORMA antes de registrar la venta,

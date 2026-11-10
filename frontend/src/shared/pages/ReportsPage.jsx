@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import {
   ChartLineUp, ChartBar, ChartPie, ChartDonut, Download,
   Users, Receipt, CurrencyEur, ArrowsClockwise, TrendUp, TrendDown,
@@ -22,6 +22,13 @@ import { ATAJOS, rangoPorDefecto, atajoDe } from '@/shared/lib/rangosDeFecha';
 import PanelSeguimiento from '@/shared/components/PanelSeguimiento';
 import FeedbackEnReportes from '@/modules/feedback/components/FeedbackEnReportes';
 import { PROCESO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
+import usePermission from '@/shared/hooks/usePermission';
+import { ambitoComoObjeto } from '@/shared/lib/ambitoInforme';
+// Lo nuevo de Reportes en MultiCRM (2.6.0): actividad por comercial (#203),
+// tasa de cierre con su baremo (#39) y «¿Dónde ponemos el dinero?» (#56).
+import ActividadPorComercial from '@/modules/reports/components/ActividadPorComercial';
+import TasaDeCierre from '@/modules/reports/components/TasaDeCierre';
+import DondePonerElDinero from '@/modules/reports/components/DondePonerElDinero';
 
 const REPORT_CATEGORIES = [
   {
@@ -304,7 +311,23 @@ function Kpi({ icon: Icon, label, value, trend, spark, accent = 'sky' }) {
   );
 }
 
+/**
+ * Reportes es de quien tiene permiso para ver informes (#203 B, como en
+ * MultiCRM). Aquí el permiso es `reports.mis_informes`, no `reports.view`: en
+ * ISEIE la pantalla se arma con `/informes/panel`, que también ven las
+ * gestoras (lo suyo). Quien no lo tiene recibiría solo avisos de «No tienes
+ * permiso»: va al Dashboard. Sin el mapa de permisos todavía, no se pinta ni se
+ * pide nada.
+ */
 export default function ReportsPage() {
+  const { permissions } = useAuth();
+  const { can } = usePermission();
+  if (!permissions) return null;
+  if (!can('reports.mis_informes')) return <Navigate to="/dashboard" replace />;
+  return <PantallaDeReportes />;
+}
+
+function PantallaDeReportes() {
   const { activeProject, user } = useAuth();
   // Arranca en el MES en curso, no en los ultimos 30 dias.
   const [rango, setRango] = useState(() => rangoPorDefecto());
@@ -511,6 +534,28 @@ export default function ReportsPage() {
         </div>
       </header>
 
+      {/* Qué periodo se está viendo, dicho con palabras (#325): cada cifra de
+          abajo es de este periodo, no del histórico. */}
+      {rango.from && rango.to && (
+        <p className="text-xs text-muted-foreground" data-testid="periodo-del-informe">
+          Periodo que estás viendo: <strong className="text-foreground">
+            {new Date(`${rango.from}T00:00:00`).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
+            {' – '}
+            {new Date(`${rango.to}T00:00:00`).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
+          </strong>
+          {atajoActivo ? ` (${ATAJOS.find((a) => a.clave === atajoActivo)?.etiqueta})` : ' (a medida)'}.
+          {' '}Al abrir Reportes empieza en «Este mes»; las cifras de abajo son de este periodo, no del histórico.
+        </p>
+      )}
+
+      {/* Actividad por comercial (#203, parte B): arriba del todo, «es lo
+          primero que se mira por la mañana». Con sus propios atajos (Ayer por
+          defecto), aparte del periodo del resto del informe. */}
+      <ActividadPorComercial ambito={ambitoComoObjeto({ activeProject })} />
+
+      {/* La tasa de cierre (#39), con su «¿de dónde sale?» y su baremo. */}
+      <TasaDeCierre activeProject={activeProject} from={rango.from} to={rango.to} />
+
       {/* Seguimiento y tiempos: el mismo bloque que el CRM hermano. */}
       <PanelSeguimiento projectId={activeProject?.id} from={rango.from} to={rango.to}
         onDatos={setPanelSeguimiento} />
@@ -573,6 +618,9 @@ export default function ReportsPage() {
 
           {/* Paises y formaciones: en pantalla, no solo descargables. */}
           <RankingsPanel from={rango.from} to={rango.to} />
+
+          {/* ¿Dónde ponemos el dinero? (#56): por canal y campaña, contra el periodo anterior. Solo admin. */}
+          <DondePonerElDinero from={rango.from} to={rango.to} />
 
           {/* Por qué no compran: las cifras de «Análisis → Feedback», con este
               rango. Como todo el feedback, de momento solo en pruebas. */}

@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { enteroEnv } from './mcp.config.js';
 import { AppError } from '../../shared/utils/AppError.js';
+import { gestorasACargo } from '../../shared/utils/roles.js';
 
 /**
  * Quien puede usar el MCP y que puede ver. Aqui NO hay SQL: son reglas puras,
@@ -87,15 +88,35 @@ export function soloLoSuyo(user) {
  * `proyectos` = [{ id, nombre, sociedad_id, sociedad_nombre }]. Los de prueba y
  * los inactivos ya vienen filtrados por el modelo.
  */
-export function construirAmbito(user, proyectos) {
+export function construirAmbito(user, proyectos, alcance) {
+  const solo = soloLoSuyo(user);
   return {
     userId: user.id,
     nombre: user.nombre,
     role: user.role,
-    soloLoSuyo: soloLoSuyo(user),
+    soloLoSuyo: solo,
+    // De QUIÉN puede ver (09/11/2026): null = de todos en sus campus; si no,
+    // la lista (ella sola, o ella y su equipo comercial). Ver `alcanceDelMcp`.
+    alcance: alcance !== undefined ? alcance : (solo ? [Number(user.id)] : null),
     proyectos,
     projectIds: proyectos.map((p) => Number(p.id)),
   };
+}
+
+/**
+ * De quién ve una persona en el MCP (09/11/2026, equipo comercial).
+ *
+ * La misma regla de siempre del MCP (super admin y admin, todo; el resto, lo
+ * suyo) MÁS el equipo: quien tiene gestoras a su cargo en `equipo_comercial`
+ * ve lo suyo y lo de ellas, sea cual sea su rol. Al super admin no le recorta
+ * nada. No se usa `alcanceComercial` tal cual porque el MCP es más estricto con
+ * soporte (ve lo suyo) y no se quiere ensanchar.
+ */
+export async function alcanceDelMcp(user) {
+  if (!user || user.role === 'superadmin') return null;
+  const equipo = await gestorasACargo(user.id);
+  if (equipo.length) return [Number(user.id), ...equipo.filter((g) => g !== Number(user.id))];
+  return soloLoSuyo(user) ? [Number(user.id)] : null;
 }
 
 /**
@@ -136,7 +157,15 @@ export function acotarProyectos(ambito, { proyecto_id, sociedad_id } = {}) {
  * nadie si ve todo su campus. No se acepta de fuera.
  */
 export function responsableImpuesto(ambito) {
+  // Con equipo, la lista entera; las consultas comparan con `= ANY(...)`.
+  if (Array.isArray(ambito.alcance) && ambito.alcance.length > 1) return ambito.alcance;
   return ambito.soloLoSuyo ? ambito.userId : null;
+}
+
+/** Si esa persona entra en lo que ve (sin alcance, cualquiera de sus campus). */
+export function personaDentro(ambito, personaId) {
+  const alcance = ambito.alcance !== undefined ? ambito.alcance : (ambito.soloLoSuyo ? [Number(ambito.userId)] : null);
+  return !alcance || alcance.includes(Number(personaId));
 }
 
 // ─── Tokens ───────────────────────────────────────────────────────────────

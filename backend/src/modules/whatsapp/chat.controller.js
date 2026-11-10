@@ -1,4 +1,5 @@
 import * as model from './chat.model.js';
+import { vozOTextoDeLaPeticion } from './vozOTexto.js';
 import * as servicio from './chat.service.js';
 import * as politica from './politica.js';
 import * as evolution from './evolution.client.js';
@@ -11,7 +12,8 @@ import { query } from '../../shared/config/db.js';
 import { respuestaLlamadaSchema } from './whatsapp.validation.js';
 import { porQueNoPuede, porQueNoUsa, tienePermisoDeUsar } from './roles.js';
 import { explicarPermisosRecordados } from '../permissions/permissions.service.js';
-import { proyectosDelAmbito, comoLista } from '../../shared/utils/ambito.js';
+import { proyectosDelAmbito, comoLista, campusDeLaPersona } from '../../shared/utils/ambito.js';
+import { alcanceDeLider, dentroDelAlcance } from '../../shared/utils/roles.js';
 
 import { TOPE_WHATSAPP_BYTES } from '../../shared/middleware/upload.js';
 
@@ -39,6 +41,8 @@ async function puedeWa(req, clave) {
  *   · admin:      solo quien comparta proyecto con el. Un administrador de una
  *                 marca no tiene por que leer los mensajes de la gestora de
  *                 otra; eso no es supervision, es curiosear.
+ *   · quien lleva un equipo comercial (QA del 09/11/2026): ademas, solo las
+ *                 gestoras de su equipo. Compartir campus no basta.
  *   · el resto:   su propia sesion y punto. Si mandan un `usuarioId` que no es
  *                 el suyo, se rechaza — no se ignora en silencio, porque
  *                 ignorarlo esconde un intento que conviene ver.
@@ -90,6 +94,9 @@ export async function usuarioObjetivo(req) {
   if (!u || !u.active) throw new AppError('Esa persona no existe o esta desactivada', 404, 'NO_EXISTE');
   if (req.user.role !== 'superadmin' && !u.comparten) {
     throw new AppError('Esa persona no esta en tus proyectos', 403, 'FUERA_DE_TUS_PROYECTOS');
+  }
+  if (!dentroDelAlcance(await alcanceDeLider(req.user), pedido)) {
+    throw new AppError('Esa persona no esta en tu equipo', 403, 'FUERA_DE_TU_EQUIPO');
   }
   // Y el candado del rol, AQUI tambien. Que la lista lo diga no basta: sin esto,
   // quien acertara el `usuarioId` de un tutor trabajaria sobre su sesion aunque
@@ -148,7 +155,22 @@ async function miConversacion(req, id) {
  */
 async function sesionesQuePuedeMirar(req) {
   // #423: quien supervisa ve todas las líneas; quien usa el suyo, la suya.
-  if (await puedeWa(req, 'whatsapp.supervisar')) return null;
+  // Quien lleva un equipo comercial (QA del 09/11/2026), aunque supervise,
+  // solo la suya y las de su equipo: es la misma regla que `usuarioObjetivo`.
+  if (await puedeWa(req, 'whatsapp.supervisar')) {
+    const lider = await alcanceDeLider(req.user);
+    return lider ? lider.map((id) => evolution.instanciaDe(id)) : null;
+  }
+  // «Ver el banco de mensajes» (Diego, 04/11: el project manager ve todo): las
+  // líneas de quien está o estuvo en uno de SUS campus, en solo lectura. Nunca
+  // todas: un banco con conversaciones de clientes de otra empresa no es suyo.
+  if (await puedeWa(req, 'whatsapp.banco')) {
+    const mios = await campusDeLaPersona(req.user.userId);
+    const { rows } = await query(
+      'SELECT DISTINCT user_id FROM user_projects WHERE project_id = ANY($1::int[])', [mios.length ? mios : [-1]]);
+    const ids = new Set([Number(req.user.userId), ...rows.map((r) => Number(r.user_id))]);
+    return [...ids].map((id) => evolution.instanciaDe(id));
+  }
   // Una gestora, a su numero y punto. Es un respaldo con conversaciones de
   // clientes dentro: nunca todas las lineas para cualquiera.
   //
@@ -1242,6 +1264,11 @@ export async function usuarios(req, res, next) {
                 AND up.project_id = ANY($2::int[])))`
       : '';
     const par = campus ? [yo, campus] : [yo];
+    // Quien lleva un equipo comercial (QA del 09/11/2026): ella y su equipo,
+    // no todo el campus. Es la misma regla que `usuarioObjetivo`.
+    const lider = await alcanceDeLider(req.user);
+    const delEquipo = lider ? `AND u.id = ANY($${par.length + 1}::int[])` : '';
+    if (lider) par.push(lider);
 
     const { rows } = await query(
       soloMio
@@ -1259,6 +1286,7 @@ export async function usuarios(req, res, next) {
                  FROM users u
                 WHERE u.active
                   ${deLaEmpresa}
+                  ${delEquipo}
                 ORDER BY (u.id = $1) DESC, u.nombre`
             // EXISTS y no DISTINCT con dos JOIN.
             //
@@ -1281,6 +1309,7 @@ export async function usuarios(req, res, next) {
                      WHERE b.user_id = u.id AND b.active
                   )
                   ${deLaEmpresa}
+                  ${delEquipo}
                 ORDER BY (u.id = $1) DESC, u.nombre`),
       // La rama de «solo yo» usa un solo parametro: pasarle dos lo rechaza
       // Postgres con «bind message supplies 2 parameters».
@@ -1432,5 +1461,17 @@ export async function editarMensaje(req, res, next) {
       instancia: await instanciaObjetivo(req),
     });
     res.json({ success: true, data: fila });
+  } catch (err) { next(err); }
+}
+
+/**
+ * GET /api/whatsapp/voz-o-texto
+ *
+ * Cuanto se manda por voz y cuanto escrito (#128). Solo lo SALIENTE: lo que
+ * entra lo decide el cliente y no dice nada de como trabaja el equipo.
+ */
+export async function vozOTextoCtrl(req, res, next) {
+  try {
+    res.json({ success: true, data: await vozOTextoDeLaPeticion(req) });
   } catch (err) { next(err); }
 }

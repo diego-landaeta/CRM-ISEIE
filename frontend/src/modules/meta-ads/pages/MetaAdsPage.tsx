@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState, lazy, Suspense } from 'react';
+import { useCampusDeLaPantalla } from '@/shared/hooks/useCampusDeLaPantalla';
+import ElegirCampus from '@/shared/components/ui/ElegirCampus';
 import { ArrowsClockwise, PlugsConnected, Receipt, Eye, CursorClick, Target, ChartLineUp, Warning, Gear, CaretRight, CaretDown, Plus, CaretUpDown } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { metaApi, MetaAccount, MetaCampaign, MetaDashboard, MetaRoiRow, MetaAdSet, MetaAd } from '../api/metaAds.api';
@@ -29,11 +31,15 @@ const STATUS_TONE: Record<string, string> = {
 };
 
 export default function MetaAdsPage() {
-  const { activeProject, user } = useAuth() as {
-    activeProject: { id?: number; nombre?: string } | null;
+  const { user } = useAuth() as {
     user: { role?: string; roles_extra?: string[] } | null;
   };
-  const projectId = activeProject?.id;
+  // La publicidad es de UN campus: cada uno tiene su cuenta de anuncios (Diego,
+  // 15/09: «publicidad individual»). Con una empresa o «Todos» arriba, ya no se
+  // tapia: se elige aquí cuál (#218, tanda 3).
+  const campus = useCampusDeLaPantalla();
+  const projectId = campus.id;
+  const selector = <ElegirCampus campus={campus} que="sus anuncios" />;
   // Quien la ve por `meta_ads.view` (26/10/2026: el equipo de desarrollo) solo
   // CONSULTA: conectar, sincronizar, configurar y asociar son de administración
   // (el servidor también se lo niega).
@@ -127,10 +133,13 @@ export default function MetaAdsPage() {
   const currency = account?.currency || 'EUR';
 
   // Estados de página
-  if (!projectId || projectId === -1) {
+  if (!projectId) {
     return (
-      <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-lg p-6 text-center text-sm text-amber-800 dark:text-amber-300">
-        Selecciona un proyecto en la barra superior.
+      <div className="space-y-3">
+        {selector}
+        <div className="bg-warning-soft border border-warning/30 rounded-lg p-6 text-center text-sm text-warning-soft-foreground">
+          Elige el campus: cada uno tiene su cuenta de anuncios.
+        </div>
       </div>
     );
   }
@@ -139,14 +148,18 @@ export default function MetaAdsPage() {
   }
   if (soloVer && accounts.length === 0) {
     return (
-      <div className="bg-info-soft border border-border rounded-lg p-6 text-center text-sm">
-        Este campus no tiene ninguna cuenta de Meta conectada todavía.
+      <div className="space-y-3">
+        {selector}
+        <div className="bg-info-soft border border-border rounded-lg p-6 text-center text-sm">
+          Este campus no tiene ninguna cuenta de Meta conectada todavía.
+        </div>
       </div>
     );
   }
   if (accounts.length === 0 || showAddAccount) {
     return (
       <div className="space-y-3">
+        {selector}
         {showAddAccount && (
           <button onClick={() => setShowAddAccount(false)}
             className="text-xs text-muted-foreground hover:text-foreground">
@@ -156,7 +169,7 @@ export default function MetaAdsPage() {
         <Suspense fallback={null}>
           <ConnectWizard
             projectId={projectId}
-            projectName={activeProject?.nombre}
+            projectName={campus.nombre}
             onConnected={() => { setShowAddAccount(false); loadAccounts(); }}
           />
         </Suspense>
@@ -167,6 +180,7 @@ export default function MetaAdsPage() {
 
   return (
     <div className="space-y-5 pb-8">
+      {selector}
       {/* Header con selector de cuenta (cuando hay >1) + info + acciones */}
       <div className="bg-card border border-border rounded-lg p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -295,7 +309,7 @@ export default function MetaAdsPage() {
           </button>
           <button onClick={() => setTab('roi')}
             className={`px-3 py-1.5 rounded-md text-sm font-semibold ${tab === 'roi' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-muted-foreground'}`}>
-            ROI (asociaciones manuales)
+            Del gasto a la venta
           </button>
           <button onClick={() => setTab('manual')}
             className={`px-3 py-1.5 rounded-md text-sm font-semibold ${tab === 'manual' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-muted-foreground'}`}>
@@ -739,54 +753,80 @@ function ProductLinks({ links }: { links: Array<{ scope: string; id: string; nam
   );
 }
 
+/**
+ * Del gasto a la venta, no al lead (#53): por campaña, lo que costó, cuántas
+ * ventas trajo, cuánto se ha cobrado de verdad y qué retorno deja.
+ *
+ * Hay dos lecturas del mismo rango de fechas, y se enseñan las dos porque
+ * responden a cosas distintas: la del retorno mira lo que han cobrado HASTA HOY
+ * los leads captados en el rango (una campaña de hace dos meses sigue cobrando),
+ * y «Entró en el periodo» mira la caja del rango, sea de cuando sea el lead.
+ */
 function RoiTable({ rows, currency }: { rows: MetaRoiRow[]; currency: string }) {
   if (rows.length === 0) {
     return (
       <p className="p-6 text-center text-sm text-muted-foreground">
-        Sin datos de ROI. Asocia productos a las campañas (botón "Asociar" en la tabla de Campañas)
-        para que el CRM cruce el gasto Meta con las ventas registradas.
+        Sin datos en este rango. Aquí salen las campañas con gasto o con prospectos que llegaron por ellas
+        (el CRM lee la campaña de la UTM del prospecto).
       </p>
     );
   }
+  const tono = (n: number | null) => (n == null ? '' : n >= 0 ? 'text-success' : 'text-destructive');
+  const pct = (n: number | null) => (n == null ? '—' : `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`);
   return (
     <div className="overflow-x-auto">
+      <p className="px-4 py-2 text-xs text-muted-foreground border-b border-border">
+        Una venta es la que ya tiene algún cobro. Lo cobrado sale de los cobros apuntados, no de lo que declara la venta.
+        «Retorno» compara el gasto del rango con lo que han cobrado hasta hoy los prospectos captados en ese rango;
+        «Entró en el periodo» es lo que se ha cobrado dentro del rango, de prospectos de cualquier fecha.
+      </p>
       <table className="w-full text-sm">
         <thead className="bg-muted/50 text-[11px] text-muted-foreground">
           <tr>
             <th className="text-left px-4 py-2 font-medium">Campaña</th>
-            <th className="text-left px-3 py-2 font-medium">Productos asociados</th>
             <th className="text-right px-3 py-2 font-medium">Gasto</th>
-            <th className="text-right px-3 py-2 font-medium">Ventas · Facturado</th>
-            <th className="text-right px-3 py-2 font-medium">Ganancia</th>
-            <th className="text-right px-3 py-2 font-medium">ROI</th>
+            <th className="text-right px-3 py-2 font-medium">Prospectos · coste</th>
+            <th className="text-right px-3 py-2 font-medium">Ventas · coste por venta</th>
+            <th className="text-right px-3 py-2 font-medium">Vendido · Cobrado</th>
+            <th className="text-right px-3 py-2 font-medium">Retorno</th>
+            <th className="text-right px-3 py-2 font-medium">Entró en el periodo</th>
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => {
-            const roiTone = r.roi_pct == null ? '' : r.roi_pct >= 0 ? 'text-emerald-600' : 'text-red-600';
-            return (
-              <tr key={r.campaign_id} className="border-t border-border hover:bg-muted/30">
-                <td className="px-4 py-2.5">
-                  <p className="font-medium truncate max-w-xs" title={r.nombre}>{r.nombre}</p>
-                  <p className="text-[10px] text-muted-foreground">{r.status}</p>
-                </td>
-                <td className="px-3 py-2.5 text-xs">
-                  {r.n_productos_asociados === 0
-                    ? <span className="text-muted-foreground italic">— sin productos asociados —</span>
-                    : <span className="truncate block max-w-md" title={r.productos_nombres || ''}>{r.productos_nombres}</span>}
-                </td>
-                <td className="px-3 py-2.5 text-right tabular-nums font-semibold">{fmtMoney(r.spend, currency)}</td>
-                <td className="px-3 py-2.5 text-right tabular-nums text-xs">
-                  <span className="font-semibold">{r.ventas}</span> · <span>{fmtMoney(r.facturado, currency)}</span><br />
-                  <span className="text-muted-foreground">Cobrado: {fmtMoney(r.cobrado, currency)}</span>
-                </td>
-                <td className="px-3 py-2.5 text-right tabular-nums font-semibold">{fmtMoney(r.ganancia, currency)}</td>
-                <td className={`px-3 py-2.5 text-right tabular-nums font-bold ${roiTone}`}>
-                  {r.roi_pct == null ? '—' : `${r.roi_pct >= 0 ? '+' : ''}${r.roi_pct.toFixed(1)}%`}
-                </td>
-              </tr>
-            );
-          })}
+          {rows.map((r) => (
+            <tr key={r.campaign_id} className="border-t border-border hover:bg-muted/30">
+              <td className="px-4 py-2.5">
+                <p className="font-medium truncate max-w-xs" title={r.nombre}>{r.nombre}</p>
+                <p className="text-[10px] text-muted-foreground">{r.status}</p>
+              </td>
+              <td className="px-3 py-2.5 text-right tabular-nums font-semibold">{fmtMoney(r.spend, currency)}</td>
+              <td className="px-3 py-2.5 text-right tabular-nums text-xs">
+                <span className="font-semibold">{fmtNum(r.leads_crm)}</span>
+                <br />
+                <span className="text-muted-foreground">{r.coste_por_lead != null ? fmtMoney(r.coste_por_lead, currency) : '—'}</span>
+              </td>
+              <td className="px-3 py-2.5 text-right tabular-nums text-xs">
+                <span className="font-semibold">{fmtNum(r.ventas)}</span>
+                <br />
+                <span className="text-muted-foreground">{r.coste_por_venta != null ? fmtMoney(r.coste_por_venta, currency) : '—'}</span>
+              </td>
+              <td className="px-3 py-2.5 text-right tabular-nums text-xs">
+                <span>{fmtMoney(r.vendido, currency)}</span>
+                <br />
+                <span className="font-semibold">{fmtMoney(r.cobrado, currency)}</span>
+              </td>
+              <td className={`px-3 py-2.5 text-right tabular-nums font-bold ${tono(r.roi_pct)}`}>
+                {fmtMoney(r.retorno, currency)}
+                <br />
+                <span className="text-xs">{pct(r.roi_pct)}</span>
+              </td>
+              <td className={`px-3 py-2.5 text-right tabular-nums text-xs ${tono(r.roi_en_periodo_pct)}`}>
+                {fmtMoney(r.cobrado_en_periodo, currency)}
+                <br />
+                <span>{fmtMoney(r.retorno_en_periodo, currency)} · {pct(r.roi_en_periodo_pct)}</span>
+              </td>
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>

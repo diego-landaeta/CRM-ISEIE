@@ -191,8 +191,9 @@ function recorte({ projectIds, gestoraId, deUsuario, desde, hasta }, par) {
     trozos.push('AND f.project_id NOT IN (SELECT id FROM projects WHERE COALESCE(es_prueba, false))');
   }
   if (gestoraId) {
-    par.push(Number(gestoraId));
-    trozos.push(`AND f.gestora_id = $${par.length}`);
+    // Una o varias (el equipo de una administradora, 09/11/2026).
+    par.push([].concat(gestoraId).map(Number));
+    trozos.push(`AND f.gestora_id = ANY($${par.length}::int[])`);
   }
   if (deUsuario) {
     par.push(Number(deUsuario));

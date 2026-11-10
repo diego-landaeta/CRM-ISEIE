@@ -49,8 +49,10 @@ const LIST_COLS = [
   "LEFT(p.descripcion, 280) AS descripcion",
 ].join(', ');
 
+// Un campus o varios (#218: con «Todos» o una empresa, los del ámbito). Cada
+// fila lleva el nombre de su campus, para la columna «Campus».
 export async function findByProject(projectId, { includeInactive = false, categoryId = null } = {}) {
-  const params = [projectId];
+  const params = [[].concat(projectId).map(Number)];
   let categoryFilter = '';
   if (categoryId) {
     // Filtra por categoría incluyendo TODOS sus descendientes (CTE recursivo)
@@ -65,12 +67,14 @@ export async function findByProject(projectId, { includeInactive = false, catego
     params.push(categoryId);
   }
   const base = `SELECT ${LIST_COLS}, ${PLAZAS_COLS},
-                       c.nombre as categoria_nombre, sc.nombre as subcategoria_nombre
+                       c.nombre as categoria_nombre, sc.nombre as subcategoria_nombre,
+                       pr.nombre as proyecto_nombre
                 FROM products p
+                LEFT JOIN projects pr ON pr.id = p.project_id
                 LEFT JOIN product_categories c ON c.id = p.categoria_id
                 LEFT JOIN product_categories sc ON sc.id = p.subcategoria_id
                 ${PLAZAS_JOIN}
-                WHERE p.project_id = $1 ${categoryFilter}`;
+                WHERE p.project_id = ANY($1::int[]) ${categoryFilter}`;
   const sql = includeInactive
     ? base + ' ORDER BY p.created_at DESC'
     : base + ' AND p.active = true ORDER BY p.created_at DESC';

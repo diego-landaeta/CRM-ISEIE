@@ -13,7 +13,8 @@ const BYPASS = String(import.meta.env.VITE_DEV_BYPASS_AUTH || '').toLowerCase() 
 // Esto es el recorte de la barra de direcciones. El de verdad esta en el
 // servidor, que le fuerza su propio identificador; aqui solo se evita que vea
 // pantallas que no son suyas.
-const RUTAS_DEL_TUTOR = ['/mis-cursos', '/preferencias', '/perfil', '/set-password'];
+// /consultas: su bandeja de consultas de alumnos (#188).
+const RUTAS_DEL_TUTOR = ['/mis-cursos', '/consultas', '/preferencias', '/perfil', '/set-password'];
 
 function tutorPuede(pathname) {
   return RUTAS_DEL_TUTOR.some((p) => pathname === p || pathname.startsWith(p + '/'));

@@ -63,8 +63,6 @@ const RUTAS_DEL_COLABORADOR = [
   /^\/api\/notifications(?:\/|$)/,
   /^\/api\/users\/mis-avisos\/?$/,
   /^\/api\/users\/\d+\/(?:avatar|views)\/?$/,
-  // Meta Ads, solo con su permiso (26/10, ya en main).
-  /^\/api\/meta-ads(?:\/|$)/,
 ];
 
 /** La ruta del inventario («/api/users/:id/avatar») como una URL de verdad. */
@@ -89,8 +87,7 @@ const RUTAS_DEL_TUTOR = [
   /^\/api\/users\/\d+\/(?:avatar|views)\/?$/,
 ];
 
-// En PRODUCCIÓN solo está el corte del colaborador: el del tutor (#187) no ha llegado.
-const RUTAS_POR_ROL = { colaborador: RUTAS_DEL_COLABORADOR };
+const RUTAS_POR_ROL = { colaborador: RUTAS_DEL_COLABORADOR, tutor: RUTAS_DEL_TUTOR };
 
 /**
  * `rutaDeRolCerrado` (shared/utils/roles.js) tal cual: si TODOS sus roles tienen

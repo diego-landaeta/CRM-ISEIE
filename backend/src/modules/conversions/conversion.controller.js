@@ -11,7 +11,7 @@ import {
 } from './conversion.validation.js';
 import { METODOS_QUE_DISPARAN } from '../webhooks-salientes/webhooks-salientes.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
-import { soloLoSuyo } from '../../shared/utils/roles.js';
+import { alcanceComercial, personasDentro, dentroDelAlcance } from '../../shared/utils/roles.js';
 
 export async function create(req, res, next) {
   try {
@@ -28,9 +28,9 @@ export async function list(req, res, next) {
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
     const filters = { ...parsed.data };
     // SEGURIDAD: gestor solo ve sus propias ventas, ignora filtro responsableId externo.
-    if (soloLoSuyo(req.user)) {
-      filters.responsableId = req.user.userId;
-    }
+    // Con equipo comercial (09/11/2026), las suyas y las de sus gestoras.
+    const alcance = await alcanceComercial(req.user);
+    if (alcance) filters.responsableId = personasDentro(alcance, filters.responsableId);
     const result = await conversionService.list(filters);
     res.json({
       success: true,
@@ -53,7 +53,8 @@ export async function cuotas(req, res, next) {
     if (!from || !to) throw new AppError('Hacen falta las dos fechas', 400, 'VALIDATION_ERROR');
 
     let responsableId = req.query.responsableId ? parseInt(req.query.responsableId, 10) : null;
-    if (soloLoSuyo(req.user)) responsableId = req.user.userId;
+    const alcance = await alcanceComercial(req.user);
+    if (alcance) responsableId = personasDentro(alcance, responsableId);
 
     const data = await conversionModel.cuotasDelPeriodo({
       projectId: req.query.projectId ? parseInt(req.query.projectId, 10) : null,
@@ -75,7 +76,8 @@ export async function filas(req, res, next) {
     if (!from || !to) throw new AppError('Hacen falta las dos fechas', 400, 'VALIDATION_ERROR');
     let responsableId = req.query.responsableId ? parseInt(req.query.responsableId, 10) : null;
     // Igual que en el listado: una gestora ve lo suyo, escriba lo que escriba.
-    if (soloLoSuyo(req.user)) responsableId = req.user.userId;
+    const alcance = await alcanceComercial(req.user);
+    if (alcance) responsableId = personasDentro(alcance, responsableId);
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));
     const r = await conversionModel.filasDelPeriodo({
@@ -132,11 +134,12 @@ export async function removePayment(req, res, next) {
     const paymentId = parseInt(req.params.paymentId);
     if (isNaN(paymentId)) throw new AppError('ID invalido', 400, 'INVALID_ID');
     // RBAC: gestor solo puede borrar pagos de leads asignados a él.
-    if (soloLoSuyo(req.user)) {
+    const alcance = await alcanceComercial(req.user);
+    if (alcance) {
       const { getPaymentOwnership } = await import('./conversion.model.js');
       const own = await getPaymentOwnership(paymentId);
       if (!own) throw new AppError('Pago no encontrado', 404, 'PAYMENT_NOT_FOUND');
-      if (own.responsable_id !== req.user.userId) {
+      if (!dentroDelAlcance(alcance, own.responsable_id)) {
         throw new AppError('Solo puedes borrar pagos de tus propios clientes', 403, 'FORBIDDEN_PAYMENT');
       }
     }
@@ -162,11 +165,12 @@ export async function remove(req, res, next) {
     // RBAC: gestor solo puede borrar conversiones de sus propios leads
     const existing = await conversionService.getById(id);
     if (!existing) throw new AppError('Conversión no encontrada', 404, 'CONVERSION_NOT_FOUND');
-    if (soloLoSuyo(req.user)) {
+    const alcance = await alcanceComercial(req.user);
+    if (alcance) {
       const { rows } = await (await import('../../shared/config/db.js')).query(
         `SELECT responsable_id FROM leads WHERE id = $1`, [existing.lead_id]
       );
-      if (rows[0]?.responsable_id !== req.user.userId) {
+      if (!dentroDelAlcance(alcance, rows[0]?.responsable_id)) {
         throw new AppError('Solo puedes borrar conversiones de tus propios clientes', 403, 'FORBIDDEN_CONVERSION');
       }
     }
@@ -285,7 +289,8 @@ export async function listProductos(req, res, next) {
   try {
     const projectId = req.query.projectId ? parseInt(req.query.projectId) : null;
     let responsableId = req.query.responsableId ? parseInt(req.query.responsableId) : null;
-    if (soloLoSuyo(req.user)) responsableId = req.user.userId;
+    const alcance = await alcanceComercial(req.user);
+    if (alcance) responsableId = personasDentro(alcance, responsableId);
     const data = await conversionService.listProductos({ projectId, responsableId });
     res.json({ success: true, data });
   } catch (err) { next(err); }

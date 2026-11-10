@@ -151,7 +151,11 @@ describe('el tablero es del equipo de desarrollo', () => {
 describe('el colaborador solo llega a Tareas', () => {
   it('solo colaborador: lo demás del CRM, 403 aunque la ruta solo pida token', async () => {
     expect((await request.get('/api/leads').set(como('colaboradora'))).status).toBe(403);
-    expect((await request.get('/api/permissions/system-defaults').set(como('colaboradora'))).status).toBe(403);
+    expect((await request.get('/api/permissions/catalogo').set(como('colaboradora'))).status).toBe(403);
+  });
+
+  it('pero sí lee el catálogo del menú que usa «Mis preferencias» (#631, gemela de CRM#643)', async () => {
+    expect((await request.get('/api/permissions/system-defaults').set(como('colaboradora'))).status).toBe(200);
   });
 
   it('con otro rol encima no se le recorta nada', async () => {

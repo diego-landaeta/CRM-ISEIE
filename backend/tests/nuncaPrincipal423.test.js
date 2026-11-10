@@ -19,6 +19,7 @@ process.env.LOG_LEVEL = 'silent';
 const inv = await import('../src/modules/permissions/inventario/index.js');
 const { resolverPermisos } = await import('../src/modules/permissions/resolver.js');
 const { POR_CLAVE, vetada } = await import('../src/modules/permissions/catalogo.js');
+const { cambioPrevisto } = await import('../src/modules/permissions/inventario/cambios-aprobados.js');
 
 const ROLES = ['admin', 'gestor', 'soporte', 'project_manager', 'tutor', 'colaborador'];
 let filas;
@@ -30,7 +31,10 @@ beforeAll(async () => {
 function diferencias(role, extra) {
   const p = inv.personaDePrueba(role, { roles_extra: extra });
   const { mapa } = resolverPermisos({ role, roles_extra: extra });
-  return filas.filter((f) => inv.puedeAntes(p, f) !== inv.puedeDespues(p, f, mapa))
+  // Lo que cambia por el ROL PRINCIPAL y está aprobado (`pm-ve-todo`: el banco del
+  // project manager, Diego 04/11) no lo trae el rol de más: no cuenta aquí.
+  return filas.filter((f) => !cambioPrevisto(f.id, role))
+    .filter((f) => inv.puedeAntes(p, f) !== inv.puedeDespues(p, f, mapa))
     .map((f) => `${f.id}: ${inv.puedeAntes(p, f)} → ${inv.puedeDespues(p, f, mapa)}`);
 }
 

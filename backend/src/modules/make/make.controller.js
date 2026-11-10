@@ -1,4 +1,6 @@
 import { AppError } from '../../shared/utils/AppError.js';
+import { exigirCampusSuyo } from '../../shared/utils/ambito.js';
+import { tienePermiso } from '../../shared/middleware/permissions.js';
 import * as svc from './make.service.js';
 import { createWebhookSchema, updateWebhookSchema } from './make.validation.js';
 
@@ -58,6 +60,10 @@ export async function getById(req, res, next) {
     const id = parseInt(req.params.id);
     const hook = await svc.model.findById(id);
     if (!hook) throw new AppError('Webhook no encontrado', 404, 'NOT_FOUND');
+    // De sus campus (antes, el de cualquiera con su id), y el secreto solo a quien
+    // puede editarlo: quien solo lo ve (el project manager, Diego 04/11) no lo necesita.
+    await exigirCampusSuyo(req, hook.project_id, 'Webhook no encontrado');
+    if (!(await tienePermiso(req, 'make.edit'))) delete hook.secret;
     res.json({ success: true, data: hook });
   } catch (err) { next(err); }
 }
@@ -101,6 +107,10 @@ export async function deliveries(req, res, next) {
   try {
     const id = parseInt(req.params.id);
     const limit = Math.min(parseInt(req.query.limit) || 30, 100);
+    // Las entregas llevan los datos de cada alumno: solo las de sus campus.
+    const hook = await svc.model.findById(id);
+    if (!hook) throw new AppError('Webhook no encontrado', 404, 'NOT_FOUND');
+    await exigirCampusSuyo(req, hook.project_id, 'Webhook no encontrado');
     const items = await svc.model.listDeliveries(id, limit);
     res.json({ success: true, data: items });
   } catch (err) { next(err); }

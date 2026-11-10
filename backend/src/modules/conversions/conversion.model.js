@@ -73,6 +73,34 @@ export async function create(data) {
     base = Number(base.toFixed(2)); ivaImp = Number(ivaImp.toFixed(2)); total = Number(total.toFixed(2));
     const finalImporte = total;
 
+    /*
+      EL CURSO SALE DE LAS LINEAS CUANDO NO VIENE PUESTO (#41).
+
+      Una venta con varios articulos nacia SIEMPRE sin curso: el dialogo manda
+      `producto_contratado_id: null` a proposito --son varias lineas, no cabe
+      una sola FK-- y el texto queda como «1x Curso A + 2x Curso B», que no
+      cruza con nada del catalogo.
+
+      Consecuencia: NINGUN PROFESOR COBRA COMISION por ellas, y se quedan en la
+      lista del #41 para siempre. Son 321 ventas asi entre los dos CRM.
+
+      Pero las lineas SI guardan su `product_id`. Si todas las que lo tienen
+      apuntan al MISMO curso --lo normal: una venta de un curso partida en
+      varias lineas, o con cantidad-- entonces ese es el curso de la venta y se
+      pone.
+
+      Si apuntan a cursos DISTINTOS no se inventa nada: ahi de verdad no hay un
+      curso unico, y la venta sale en la lista del #41 para mirarla a mano. Es
+      la misma regla que el cruce por nombre: con dos candidatos, ninguno.
+    */
+    let cursoId = producto_contratado_id || null;
+    if (!cursoId && Array.isArray(items) && items.length) {
+      const deLasLineas = [...new Set(
+        items.map((it) => it?.product_id).filter((x) => x != null).map(Number)
+      )];
+      if (deLasLineas.length === 1) cursoId = deLasLineas[0];
+    }
+
     // INSERT conversion (IVA + descuento)
     const { rows: convRows } = await client.query(
       `INSERT INTO conversions
@@ -83,12 +111,24 @@ export async function create(data) {
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, COALESCE($9, CURRENT_DATE), $10,
                $11, $12, $13, $14, $15, $16, $17, $18, $19)
        RETURNING *`,
-      [lead_id, project_id, producto_contratado, producto_contratado_id || null,
+      [lead_id, project_id, producto_contratado, cursoId,
        finalImporte, importe_pagado, metodo_pago, fecha_compromiso_pago, fecha_conversion, notas_pago,
        isExento ? 0 : ivaPctVal, isIncluido, isExento, base, ivaImp,
        Number(subtotalBruto.toFixed(2)), descTipo, descVal, descImporte]
     );
     const conversion = convRows[0];
+
+    // La solicitud de admisión de esa persona (#198): suele llegar ANTES que la
+    // venta («una solicitud llega antes de que haya venta», Diego 01/10). Si está
+    // en este campus y aún no tiene venta, se une ahora a esta (la más reciente).
+    await client.query(
+      `UPDATE matriculas SET conversion_id = $1, updated_at = NOW()
+        WHERE id = (SELECT id FROM matriculas
+                     WHERE project_id = $2 AND lead_id = $3 AND conversion_id IS NULL
+                     ORDER BY COALESCE(webhook_received_at, created_at) DESC, id DESC
+                     LIMIT 1)`,
+      [conversion.id, project_id, lead_id]
+    );
 
     // INSERT items (si vienen)
     if (Array.isArray(items) && items.length > 0) {
@@ -252,7 +292,7 @@ export async function findAll({ projectId, leadId, responsableId, pendiente, ven
 
   if (projectId) { conditions.push(`c.project_id = $${idx++}`); params.push(projectId); }
   if (leadId) { conditions.push(`c.lead_id = $${idx++}`); params.push(leadId); }
-  if (responsableId) { conditions.push(`EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id = $${idx++})`); params.push(responsableId); }
+  if (responsableId) { conditions.push(`EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id = ANY($${idx++}::int[]))`); params.push([].concat(responsableId).map(Number)); }
   if (pendiente === 'true') { conditions.push(`c.importe_pagado < c.importe_total`); }
   if (pendiente === 'false') { conditions.push(`c.importe_pagado >= c.importe_total`); }
   if (vencido === 'true') {
@@ -357,7 +397,7 @@ export async function findAll({ projectId, leadId, responsableId, pendiente, ven
     // Los mismos recortes que la lista y que «Por proyecto»: gestora y curso.
     // Sin esto la tarjeta decia 3 cuotas y la lista enseñaba 1 al filtrar.
     let porGestora = '', porProducto = '';
-    if (responsableId) { args.push(responsableId); porGestora = `AND EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = cv.id AND r.vendedora_id = $${args.length})`; }
+    if (responsableId) { args.push([].concat(responsableId).map(Number)); porGestora = `AND EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = cv.id AND r.vendedora_id = ANY($${args.length}::int[]))`; }
     if (producto) { args.push(String(producto).trim()); porProducto = `AND TRIM(cv.producto_contratado) = $${args.length}`; }
     const { rows: [fa] } = await query(
       `WITH f AS (
@@ -414,7 +454,7 @@ export async function findAll({ projectId, leadId, responsableId, pendiente, ven
     // Los MISMOS recortes que las tarjetas --gestora y curso--, o la columna no
     // sumaria la tarjeta en cuanto se filtre. Salio en la revision.
     let porGestora = '', porProducto = '';
-    if (responsableId) { args.push(responsableId); porGestora = `AND EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id = $${args.length})`; }
+    if (responsableId) { args.push([].concat(responsableId).map(Number)); porGestora = `AND EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id = ANY($${args.length}::int[]))`; }
     if (producto) { args.push(String(producto).trim()); porProducto = `AND TRIM(c.producto_contratado) = $${args.length}`; }
     const { rows } = await query(
       `WITH v AS (
@@ -556,8 +596,8 @@ export async function cuotasDelPeriodo({
   if (projectId) { args.push(projectId); alcance = `i.project_id = $${args.length}`; }
   let porGestora = '';
   if (responsableId) {
-    args.push(responsableId);
-    porGestora = `AND EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id = $${args.length})`;
+    args.push([].concat(responsableId).map(Number));
+    porGestora = `AND EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id = ANY($${args.length}::int[]))`;
   }
   args.push(limit);
 
@@ -611,8 +651,8 @@ export async function filasDelPeriodo({
   if (projectId) { args.push(projectId); alcanceC = `c.project_id = $${args.length}`; alcanceI = `i.project_id = $${args.length}`; }
   let porGestora = '';
   if (responsableId) {
-    args.push(responsableId);
-    porGestora = `AND EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id = $${args.length})`;
+    args.push([].concat(responsableId).map(Number));
+    porGestora = `AND EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id = ANY($${args.length}::int[]))`;
   }
   let porProducto = '';
   if (producto) {
@@ -877,7 +917,7 @@ export async function listProductos({ projectId, responsableId }) {
   const params = [];
   let idx = 1;
   if (projectId) { cond.push(`c.project_id = $${idx++}`); params.push(projectId); }
-  if (responsableId) { cond.push(`EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id = $${idx++})`); params.push(responsableId); }
+  if (responsableId) { cond.push(`EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id = ANY($${idx++}::int[]))`); params.push([].concat(responsableId).map(Number)); }
   const { rows } = await query(
     `SELECT DISTINCT TRIM(c.producto_contratado) AS producto
        FROM conversions c

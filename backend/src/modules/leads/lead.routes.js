@@ -4,6 +4,7 @@ import { puede } from '../../shared/middleware/permissions.js';
 import * as leadController from './lead.controller.js';
 import * as leadEmailsController from './lead-emails.controller.js';
 import * as spamReportController from './spam-report.controller.js';
+import { projectAccess } from '../../shared/middleware/projectAccess.js';
 
 const router = Router();
 
@@ -40,7 +41,8 @@ router.patch('/spam-reports/:reportId', puede('leads.spam_resolver'), spamReport
 router.get('/review-queue',              puede('leads.duplicados'), leadController.listReviewQueue);
 // #102 - Repaso de duplicados sobre lo que YA hay guardado. Va antes de
 // '/:id' o Express se lo come como si 'duplicados' fuera un identificador.
-router.get('/duplicados',                puede('leads.duplicados'), leadController.listDuplicateGroups);
+// Solo de un campus de quien pide (projectAccess): antes valía el id de cualquiera.
+router.get('/duplicados',                puede('leads.duplicados'), projectAccess, leadController.listDuplicateGroups);
 router.post('/review-queue/:id/decide',  puede('leads.duplicados'), leadController.decideReviewQueue);
 
 // #18 Multi-cursos por lead

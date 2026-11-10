@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { ArrowClockwise, FileText } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
 import usePermission from '@/shared/hooks/usePermission';
@@ -49,8 +50,10 @@ export default function ListaDeFacturas({ vista, empresas, empresa }: {
   // Con una empresa en la cabecera, esa: el desplegable no le lleva la contraria.
   const [elegida, setIssuerId] = useState('');
   const issuerId = empresa ? String(empresa) : elegida;
-  const [colaboradorId, setColaboradorId] = useState('');
-  const [periodo, setPeriodo] = useState('');
+  // `?colaborador=` y `?periodo=` los trae el buscador (Ctrl K, #591): abre esa factura filtrada.
+  const [params] = useSearchParams();
+  const [colaboradorId, setColaboradorId] = useState(() => params.get('colaborador') ?? '');
+  const [periodo, setPeriodo] = useState(() => params.get('periodo') ?? '');
   const [estado, setEstado] = useState('');
   const [colaboradores, setColaboradores] = useState<{ id: number; nombre: string }[]>([]);
   const [datos, setDatos] = useState<{ resumen: { total: number; importe: number; pendiente: number; por_moneda?: SumaPorMoneda<'importe' | 'pendiente'>[] }; facturas: FacturaDelMes[] } | null>(null);
@@ -64,8 +67,11 @@ export default function ListaDeFacturas({ vista, empresas, empresa }: {
 
   // El filtro por colaborador: la lista la da «Colaboradores» (si no se puede pedir, no sale).
   // Con una empresa en la cabecera, solo quienes le facturan; al cambiarla, se quita el elegido.
+  // Al abrir no: el que trae la dirección (`?colaborador=`, del buscador) se queda.
+  const empresaAnterior = useRef(empresa);
   useEffect(() => {
-    setColaboradorId('');
+    if (empresaAnterior.current !== empresa) setColaboradorId('');
+    empresaAnterior.current = empresa;
     facturasColaboradorApi.colaboradores({ estado: 'todos', issuerId: empresa ?? undefined })
       .then((r) => setColaboradores(r.data.map((c) => ({ id: c.id, nombre: c.nombre }))))
       .catch(() => setColaboradores([]));

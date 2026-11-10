@@ -55,6 +55,11 @@ export interface CifrasSeparadas {
   ventas: number;
   vendido: number;
   cobrado: number;
+  /**
+   * Cuántos cobros (#534). Es el número que va con lo cobrado: el de ventas
+   * (`ventas`) cuenta las ventas NUEVAS del periodo, que es otra cosa.
+   */
+  cobros?: number;
   /** Cobros de ventas cuya fecha de venta cae en el periodo. */
   cobrado_del_periodo: number;
   /** Cobros de ventas de antes, sin las cuotas. */
@@ -117,6 +122,10 @@ const numero = (n: number) =>
 const euros = (n: number) =>
   new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
     .format(Number(n || 0));
+
+/** «82 cobros», «1 cobro». */
+const cuantos = (n: number | undefined, uno: string, varios: string) =>
+  `${numero(Number(n || 0))} ${Number(n || 0) === 1 ? uno : varios}`;
 
 /** «30/09» a partir de '2026-09-30'. */
 function diaMes(iso: string) {
@@ -372,7 +381,9 @@ export default function ComoVoy({
       // las filas visibles y el dinero sin gestora no salía en ningún sitio.
       // Es la misma cifra que la fila Total y que la tarjeta Cobrado del mes.
       ventas: d?.total ? Number(d.total.ventas || 0) : t.reduce((s, x) => s + Number(x.ventas || 0), 0),
+      vendido: d?.total ? Number(d.total.vendido || 0) : t.reduce((s, x) => s + Number(x.vendido || 0), 0),
       cobrado: d?.total ? Number(d.total.cobrado || 0) : t.reduce((s, x) => s + Number(x.cobrado || 0), 0),
+      cobros: d?.total ? Number(d.total.cobros || 0) : t.reduce((s, x) => s + Number(x.cobros || 0), 0),
     };
   }, [d]);
 
@@ -403,23 +414,42 @@ export default function ComoVoy({
             <p className="flex items-baseline gap-2">
               <Users size={compacto ? 15 : 18} weight="duotone" className="translate-y-0.5 text-primary" />
               <span className={compacto ? 'text-normal' : 'text-seccion'}>
+                {/* CADA IMPORTE CON SU RECUENTO (#534). Antes Prospectos decía
+                    «18.048 € cobrados · 43 ventas»: el importe eran los cobros
+                    del mes y el 43, las ventas NUEVAS. Ahora lo cobrado va con
+                    cuántos cobros, lo facturado con cuántas ventas facturadas y
+                    las ventas nuevas aparte, cada una con su nombre. */}
                 {fact ? (
                   // EL TOTAL, con lo que no es de ninguna gestora dentro: es
                   // la misma cifra que «Productos vendidos · Mes».
-                  <>
+                  <span title="Facturas y abonos emitidos este mes, por su fecha de factura. Una venta cuenta una vez aunque tenga varias facturas.">
                     El equipo este mes: <strong>{euros(fact.total.facturado)}</strong> facturados
-                    {' · '}{numero(fact.total.ventas)} {fact.total.ventas === 1 ? 'venta' : 'ventas'}
-                  </>
+                    {' · '}{cuantos(fact.total.ventas, 'venta facturada', 'ventas facturadas')}
+                  </span>
                 ) : (
-                  <>
+                  <span title="Los pagos registrados este mes, por su fecha de cobro.">
                     El equipo este mes: <strong>{euros(equipo.cobrado)}</strong> cobrados
-                    {' · '}{numero(equipo.ventas)} {equipo.ventas === 1 ? 'venta' : 'ventas'}
-                  </>
+                    {' · '}{cuantos(equipo.cobros, 'cobro', 'cobros')}
+                  </span>
                 )}
               </span>
             </p>
             <p className="text-secundario tabular-nums text-muted-foreground">
-              Tasa media <strong className="text-foreground">{numero(d.tasa_equipo)} %</strong>
+              {/* Lo que el otro panel enseña, para que las dos pantallas se
+                  puedan cuadrar sin abrir el ranking. */}
+              {fact && d.total ? (
+                <span title="Los pagos registrados este mes, por su fecha de cobro: lo mismo que el panel de Prospectos.">
+                  {euros(equipo.cobrado)} cobrados · {cuantos(equipo.cobros, 'cobro', 'cobros')}
+                </span>
+              ) : (
+                <span title="Ventas cerradas este mes, por su fecha de venta.">
+                  {cuantos(equipo.ventas, 'venta nueva', 'ventas nuevas')} · {euros(equipo.vendido)} vendidos
+                </span>
+              )}
+              {' · '}
+              <span title="Ventas entre prospectos de las gestoras, sin «Sin gestora». La fila Total del ranking sí la incluye, y por eso da otra cifra.">
+                Tasa media de las gestoras <strong className="text-foreground">{numero(d.tasa_equipo)} %</strong>
+              </span>
               {' · '}{equipo.gente} {equipo.gente === 1 ? 'persona' : 'personas'}
             </p>
           </div>
@@ -515,7 +545,10 @@ export default function ComoVoy({
                       <td className="py-1 pr-2">Total</td>
                       <CeldasDeCifras f={d.total} fuerte />
                       <td className="py-1 pr-2 text-right tabular-nums">{d.total.leads}</td>
-                      <td className="py-1 text-right tabular-nums">{numero(d.total.tasa)} %</td>
+                      <td className="py-1 text-right tabular-nums"
+                        title="Con «Sin gestora». La «Tasa media de las gestoras» de arriba no la lleva: por eso son cifras distintas.">
+                        {numero(d.total.tasa)} %
+                      </td>
                     </tr>
                   )}
                   {(d.tabla || []).length === 0 && !d.total?.cobrado && (
@@ -625,7 +658,8 @@ export default function ComoVoy({
               </p>
               <p className="text-secundario tabular-nums text-muted-foreground">
                 <strong className="text-foreground">{euros(d.cobrado)}</strong> cobrados
-                {' · '}{numero(d.ventas)} {d.ventas === 1 ? 'venta' : 'ventas'}
+                {' · '}{cuantos(d.cobros, 'cobro', 'cobros')}
+                {' · '}{cuantos(d.ventas, 'venta nueva', 'ventas nuevas')}
                 {d.leads > 0 && <> · {d.leads} {d.leads === 1 ? 'prospecto' : 'prospectos'}</>}
               </p>
               {/* De dónde viene lo cobrado (19/10/2026): si es de una venta
