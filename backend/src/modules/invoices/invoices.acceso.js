@@ -1,6 +1,8 @@
 import { query } from '../../shared/config/db.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { campusDeLaPersona, veTodoElCrm } from '../../shared/utils/ambito.js';
+import { alcanceComercial } from '../../shared/utils/roles.js';
+import { esProformaDe as esFacturaDe } from './invoices.model.js';
 
 /**
  * Una factura, solo para quien trabaja en su campus.
@@ -31,6 +33,14 @@ export async function facturaDeSuCampus(req, res, next) {
     const { rows: [f] } = await query('SELECT project_id FROM invoices WHERE id = $1', [id]);
     if (!f) throw new AppError('Factura no encontrada', 404, 'NOT_FOUND');
     if (!(await puedeEnCampus(req.user, f.project_id))) throw PROHIBIDO();
+    // Y de su alcance (QA del 09/11/2026): una gestora, las suyas; quien lleva un
+    // equipo comercial, las de su equipo. La lista ya se recortaba así, pero con
+    // el id en la URL se abría (y se descargaba) cualquiera del campus.
+    const alcance = await alcanceComercial(req.user);
+    if (alcance) {
+      // `esProformaDe` es el criterio de la lista (`FACTURA_DE`), valga para la clase que valga.
+      if (!(await esFacturaDe(alcance, id))) throw PROHIBIDO();
+    }
     next();
   } catch (err) { next(err); }
 }

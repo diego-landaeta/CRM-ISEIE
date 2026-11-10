@@ -3,9 +3,14 @@ import { verifyToken } from '../../shared/middleware/auth.js';
 import { puede } from '../../shared/middleware/permissions.js';
 import { projectAccess } from '../../shared/middleware/projectAccess.js';
 import * as ctrl from './convocatoria.controller.js';
+import { prospectoPorId } from '../conversions/conversion.acceso.js';
 
 const router = Router();
 router.use(verifyToken);
+// El prospecto de la URL (`/lead/:leadId`), de sus campus y de su alcance: una
+// gestora, los suyos; quien lleva un equipo comercial, los de su equipo (QA del
+// 09/11/2026). Antes se leían (y se replanificaban) los de cualquiera por el id.
+router.param('leadId', prospectoPorId);
 
 // Sin `projectAccess`: pueden ser de todos los proyectos a la vez, y el
 // recorte por gestora lo hace el controlador.

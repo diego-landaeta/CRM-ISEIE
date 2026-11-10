@@ -1932,7 +1932,7 @@ const ES_MENSUALIDAD = `(
 // lleva un total mas bajo sin enterarse.
 //
 // Esto lo devuelve para poder avisarle ANTES de descargar.
-export async function ventasSinFacturaEnRango({ projectId, projectIds, from, to }) {
+export async function ventasSinFacturaEnRango({ projectId, projectIds, from, to, asesoraId = null }) {
   const lista = comoLista(projectId, projectIds);
   const { rows } = await query(
     `SELECT cv.id, COALESCE(l.nombre, '—') AS cliente,
@@ -1950,9 +1950,12 @@ export async function ventasSinFacturaEnRango({ projectId, projectIds, from, to 
           SELECT 1 FROM invoices i
            WHERE i.tipo <> 'proforma' AND i.estado <> 'cancelada'
              AND (i.conversion_id = cv.id OR i.payment_id = cp.id))
+        -- De una gestora o de un equipo comercial: por el reparto, como el resto.
+        AND ($4::int[] IS NULL OR EXISTS (SELECT 1 FROM conversion_reparto r
+                                           WHERE r.conversion_id = cv.id AND r.vendedora_id = ANY($4::int[])))
       GROUP BY cv.id, l.nombre, cv.producto_contratado
       ORDER BY ultimo_cobro DESC, cobrado DESC`,
-    [lista, from || null, to || null]
+    [lista, from || null, to || null, asesoraId ? idsDe(asesoraId) : null]
   );
   return {
     ventas: rows.length,

@@ -33,6 +33,10 @@ export async function overview(req, res, next) {
       ...(await proyectosDelInforme(req)),
       from: from || null,
       to: to || null,
+      // El modelo ya sabía recortar por persona y nadie se lo pedía: quien lleva
+      // un equipo comercial veía el ranking de todas las gestoras del campus
+      // (QA del 09/11/2026). Lo mismo que el resto de informes.
+      asesoraId: await asesoraDelInforme(req),
     });
     res.json({ success: true, data });
   } catch (err) { next(err); }
@@ -306,6 +310,8 @@ export async function avisoSinFactura(req, res, next) {
     const r = await rangoDeQuery(req);
     res.json({ success: true, data: await model.ventasSinFacturaEnRango({
       projectId: r.projectId, projectIds: r.projectIds, from: r.from, to: r.to,
+      // Clientes e importes: una gestora, los suyos; un equipo, los de su equipo (09/11/2026).
+      asesoraId: r.asesoraId,
     })});
   } catch (err) { next(err); }
 }
