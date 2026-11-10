@@ -6,7 +6,16 @@
 // la base con AT TIME ZONE.
 import { query } from '../../shared/config/db.js';
 import { ROLES_TAREAS, existeSupervisor } from './tasks.model.js';
-import { existeTipos, sqlConTablero } from './tasks.equipos.model.js';
+import { existeTipos, existeProgramacion, sqlConTablero } from './tasks.equipos.model.js';
+
+/*
+  «Esperan tu revisión» (CRM-ISEIE#419): solo lo de programación, que es lo único que
+  espera a su supervisor. Lo demás lo cierra quien lo hace: a nadie le queda una
+  tarea «por aprobar» (tampoco a Carlos). Sin la migración 275, nada.
+*/
+const ES_DE_PROGRAMACION = (t, prog) => (prog
+  ? `EXISTS (SELECT 1 FROM task_teams tp WHERE tp.id = ${t}.team_id AND tp.de_programacion)`
+  : 'FALSE');
 
 const INICIO = (d, z) => `((${d}::date)::timestamp AT TIME ZONE ${z})`;
 const FIN = (d, z, mas = 1) => `(((${d}::date) + ${mas})::timestamp AT TIME ZONE ${z})`;
@@ -18,7 +27,7 @@ const FIN = (d, z, mas = 1) => `(((${d}::date) + ${mas})::timestamp AT TIME ZONE
  */
 export async function findCandidatosResumen(aviso, dia, zona, { soloUserIds = null } = {}) {
   const sup = await existeSupervisor();
-  const tipos = await existeTipos();
+  const [tipos, prog] = await Promise.all([existeTipos(), existeProgramacion()]);
   const { rows } = await query(
     `SELECT u.id, u.nombre, u.email
        FROM users u
@@ -35,7 +44,8 @@ export async function findCandidatosResumen(aviso, dia, zona, { soloUserIds = nu
           OR EXISTS (SELECT 1 FROM tasks t
                       WHERE t.assigned_to = u.id AND t.archived_at IS NULL AND t.status <> 'hecha')
           ${sup ? `OR EXISTS (SELECT 1 FROM tasks t
-                      WHERE t.supervisor_id = u.id AND t.archived_at IS NULL AND t.status = 'en_revision')` : ''}
+                      WHERE t.supervisor_id = u.id AND t.archived_at IS NULL AND t.status = 'en_revision'
+                        AND ${ES_DE_PROGRAMACION('t', prog)})` : ''}
         )
       ORDER BY u.nombre`,
     [aviso, dia, zona, ROLES_TAREAS, soloUserIds]
@@ -46,6 +56,7 @@ export async function findCandidatosResumen(aviso, dia, zona, { soloUserIds = nu
 /** Lo que hizo hoy y lo que le falta a una persona. */
 export async function findResumenDelDia(userId, dia, zona) {
   const sup = await existeSupervisor();
+  const prog = await existeProgramacion();
   const entreHoy = `e.created_at >= ${INICIO('$2', '$3')} AND e.created_at < ${FIN('$2', '$3')}`;
 
   const [movs, comentarios, creadas, abiertas, revisar] = await Promise.all([
@@ -94,6 +105,7 @@ export async function findResumenDelDia(userId, dia, zona) {
         `SELECT t.id, t.title, t.due_date, ua.nombre AS assigned_to_name
            FROM tasks t LEFT JOIN users ua ON ua.id = t.assigned_to
           WHERE t.supervisor_id = $1 AND t.archived_at IS NULL AND t.status = 'en_revision'
+            AND ${ES_DE_PROGRAMACION('t', prog)}
           ORDER BY t.due_date ASC NULLS LAST, t.updated_at`,
         [userId])
       : Promise.resolve({ rows: [] }),

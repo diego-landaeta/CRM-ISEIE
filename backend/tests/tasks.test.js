@@ -144,10 +144,11 @@ describe('crear y asignar', () => {
     expect(res.status).toBe(403);
   });
 
-  it('nadie salvo admin crea una tarea ya «Hecha»: 403', async () => {
+  it('CRM-ISEIE#419: cada uno se crea la suya ya «Hecha», con su fecha de cierre', async () => {
     const res = await request.post('/api/tasks').set(como('gestora'))
       .send({ title: 'Ya cerrada', status: 'hecha' });
-    expect(res.status).toBe(403);
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    expect(res.body.data.completed_at).not.toBeNull();
   });
 
   it('el admin asigna a una gestora, y a ella le suena la campana', async () => {
@@ -237,9 +238,11 @@ describe('mover: la regla de «Hecha» (decision 4)', () => {
     expect(aviso?.type).toBe('task_estado_cambiado');
   });
 
-  it('la gestora no puede pasarla a «Hecha»: 403', async () => {
+  it('CRM-ISEIE#419: la gestora, que la lleva, la pasa a «Hecha» ella misma y la reabre', async () => {
     const res = await request.patch(`/api/tasks/${t.id}/move`).set(como('gestora')).send({ status: 'hecha' });
-    expect(res.status).toBe(403);
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.data.completed_by).toBe(U.gestora.id);
+    expect((await request.patch(`/api/tasks/${t.id}/move`).set(como('gestora')).send({ status: 'en_curso' })).status).toBe(200);
   });
 
   it('el admin, que la supervisa, la cierra y se guarda la fecha de cierre', async () => {
@@ -249,9 +252,9 @@ describe('mover: la regla de «Hecha» (decision 4)', () => {
     expect(res.body.data.completed_at).not.toBeNull();
   });
 
-  it('la gestora no puede reabrirla: 403', async () => {
-    const res = await request.patch(`/api/tasks/${t.id}/move`).set(como('gestora')).send({ status: 'en_curso' });
-    expect(res.status).toBe(403);
+  it('quien ni la lleva ni la supervisa no la reabre: 403', async () => {
+    const res = await request.patch(`/api/tasks/${t.id}/move`).set(como('otraGestora')).send({ status: 'en_curso' });
+    expect([403, 404]).toContain(res.status);
   });
 
   it('el admin, que la supervisa, la devuelve a «En curso» y la fecha de cierre se vacia', async () => {
@@ -263,7 +266,7 @@ describe('mover: la regla de «Hecha» (decision 4)', () => {
   it('el historial lo cuenta todo, con quien y cuando', async () => {
     const res = await request.get(`/api/tasks/${t.id}`).set(como('admin'));
     const tipos = res.body.data.events.map((e) => e.event_type);
-    expect(tipos.filter((x) => x === 'status_changed')).toHaveLength(3);
+    expect(tipos.filter((x) => x === 'status_changed')).toHaveLength(5);
     expect(tipos).toContain('created');
     expect(res.body.data.events.every((e) => e.user_name && e.created_at)).toBe(true);
   });

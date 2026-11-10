@@ -12714,35 +12714,12 @@
   "puertas": []
  },
  {
-  "id": "GET /api/tasks/review",
+  "id": "GET /api/tasks/historial",
   "tipo": "ruta",
   "modulo": "tasks",
   "metodo": "GET",
-  "ruta": "/api/tasks/review",
-  "relativa": "GET /review",
-  "controlador": null,
-  "publica": false,
-  "guardias": [
-   {
-    "tipo": "token"
-   },
-   {
-    "tipo": "puede",
-    "claves": [
-     "tasks.view_own",
-     "tasks.view_all"
-    ]
-   }
-  ],
-  "puertas": []
- },
- {
-  "id": "GET /api/tasks/review/count",
-  "tipo": "ruta",
-  "modulo": "tasks",
-  "metodo": "GET",
-  "ruta": "/api/tasks/review/count",
-  "relativa": "GET /review/count",
+  "ruta": "/api/tasks/historial",
+  "relativa": "GET /historial",
   "controlador": null,
   "publica": false,
   "guardias": [

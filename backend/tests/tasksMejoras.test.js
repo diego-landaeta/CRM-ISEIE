@@ -173,7 +173,7 @@ describe('A · el historial no se llena de reordenaciones', () => {
   });
 });
 
-describe('1 · Por revisar', () => {
+describe('1 · Revisión: ya no hay bandeja (CRM-ISEIE#419); aprobar y devolver siguen', () => {
   let paraAprobar;
   let paraDevolver;
 
@@ -187,22 +187,9 @@ describe('1 · Por revisar', () => {
     }
   });
 
-  it('la lista trae las que supervisa, por fecha límite, con lo que hace falta para revisar', async () => {
-    const res = await request.get('/api/tasks/review').set(como('admin'));
-    expect(res.status).toBe(200);
-    const mias = res.body.data.filter((t) => [paraAprobar.id, paraDevolver.id].includes(t.id));
-    expect(mias.map((t) => t.id)).toEqual([paraDevolver.id, paraAprobar.id]);
-    for (const k of ['assigned_to_name', 'area_name', 'project_name', 'external_project_name', 'due_date',
-      'checklist_total', 'checklist_completed', 'last_comment']) {
-      expect(mias[0]).toHaveProperty(k);
-    }
-  });
-
-  it('el número para el selector y el menú', async () => {
-    const res = await request.get('/api/tasks/review/count').set(como('admin'));
-    expect(res.body.data.count).toBeGreaterThanOrEqual(2);
-    const sinPermiso = await request.get('/api/tasks/review/count').set(como('gestora'));
-    expect(sinPermiso.body.data.count).toBe(0);
+  it('«Por revisar» y su contador ya no existen: nadie tiene una bandeja de «por aprobar»', async () => {
+    expect((await request.get('/api/tasks/review').set(como('admin'))).status).not.toBe(200);
+    expect((await request.get('/api/tasks/review/count').set(como('admin'))).status).not.toBe(200);
   });
 
   it('aprobar la pasa a «Hecha» con su fecha de cierre y avisa a la persona', async () => {
@@ -243,34 +230,40 @@ describe('1 · Por revisar', () => {
   });
 });
 
-describe('3 · permisos: aprobar es del supervisor (26/10/2026), no de la clave', () => {
+describe('3 · permisos (CRM-ISEIE#419): cierra quien la lleva o la supervisa; devuelven quien la creó, el supervisor y quien tiene la clave', () => {
   let t;
   beforeEach(async () => {
     t = await crear('admin', { title: `Permisos ${Math.random()}`, assigned_to: U.colaborador.id, supervisor_id: U.colaborador2.id });
     expect((await mover('colaborador', t.id, { status: 'en_revision' })).status).toBe(200);
   });
 
-  it('quien no la supervisa no la aprueba ni la devuelve, tenga o no «Aprobar y cerrar»', async () => {
+  it('quien ni la lleva ni la supervisa no la aprueba, tenga o no la clave; tampoco la devuelve si no la creó ni tiene la clave', async () => {
     for (const quien of ['gestora', 'gestoraConCierre', 'admin', 'adminSinCierre']) {
-      expect((await request.patch(`/api/tasks/${t.id}/approve`).set(como(quien))).status, quien).toBe(403);
-      expect((await request.patch(`/api/tasks/${t.id}/return`).set(como(quien)).send({ comment: 'x' })).status, quien).toBe(403);
+      expect([403, 404], quien).toContain((await request.patch(`/api/tasks/${t.id}/approve`).set(como(quien))).status);
     }
-    expect((await mover('gestora', t.id, { status: 'hecha' })).status).toBe(403);
-    // «Por revisar» le sale vacío: no supervisa ninguna.
-    const lista = await request.get('/api/tasks/review').set(como('gestora'));
-    expect(lista.status).toBe(200);
-    expect(lista.body.data.map((x) => x.id)).not.toContain(t.id);
+    for (const quien of ['gestora', 'adminSinCierre']) {
+      expect([403, 404], quien).toContain((await request.patch(`/api/tasks/${t.id}/return`).set(como(quien)).send({ comment: 'x' })).status);
+    }
+    expect([403, 404]).toContain((await mover('gestora', t.id, { status: 'hecha' })).status);
+  });
+
+  it('quien la creó (el admin) la devuelve con un comentario, aunque no la supervise', async () => {
+    const res = await request.patch(`/api/tasks/${t.id}/return`).set(como('admin')).send({ comment: 'Falta el pie' });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.data.status).toBe('en_curso');
   });
 
   it('el supervisor la aprueba aunque no tenga «Aprobar y cerrar»', async () => {
     expect((await request.patch(`/api/tasks/${t.id}/approve`).set(como('colaborador2'))).status).toBe(200);
   });
 
-  it('quien la lleva, con «Aprobar y cerrar», la cierra arrastrando; sin ella, no', async () => {
+  it('quien la lleva la cierra arrastrando, tenga o no la clave (CRM-ISEIE#419)', async () => {
     const suya = await crear('gestoraConCierre', { title: `Mía ${Math.random()}` });
     expect((await mover('gestoraConCierre', suya.id, { status: 'hecha' })).status).toBe(200);
     const otra = await crear('gestora', { title: `Mía ${Math.random()}` });
-    expect((await mover('gestora', otra.id, { status: 'hecha' })).status).toBe(403);
+    expect((await mover('gestora', otra.id, { status: 'hecha' })).status).toBe(200);
+    // Y quien la lleva también la cierra estando «En revisión».
+    expect((await request.patch(`/api/tasks/${t.id}/approve`).set(como('colaborador'))).status).toBe(200);
   });
 
   it('sin tasks.manage no se configura el tablero', async () => {

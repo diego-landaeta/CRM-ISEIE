@@ -78,6 +78,13 @@ export interface Task {
   assigned_cargo?: string | null;
   /** Si quien mira puede moverla (arrastrarla): el responsable, el supervisor o un superadmin. */
   puede_mover?: boolean;
+  /**
+   * Si quien mira puede pasarla a «Hecha» o reabrirla (CRM-ISEIE#419): quien la lleva,
+   * el supervisor o un superadmin; si es de programación, solo el supervisor o un superadmin.
+   */
+  puede_cerrar?: boolean;
+  /** Su equipo es de programación: quien la lleva la manda a revisar y la cierra su supervisor. */
+  de_programacion?: boolean;
   created_by: number;
   created_by_name?: string | null;
   /** Cuándo pasó a «Hecha» (se borra si vuelve atrás). */
@@ -101,8 +108,11 @@ export interface Task {
 export interface TaskPermisos {
   mover: boolean;
   comentar: boolean;
+  /** Aprobar lo que está «En revisión»: lo mismo que cerrar (CRM-ISEIE#419). */
   revisar: boolean;
   cerrar: boolean;
+  /** Devolverla a «En curso» con un comentario: quien la creó, el supervisor o un admin. */
+  devolver?: boolean;
   editar: boolean;
   delegar: boolean;
 }
@@ -114,6 +124,30 @@ export interface TaskDetail extends Task {
   tags: TaskTag[];
   links: TaskLink[];
   events: TaskEvent[];
+}
+
+/** Una fila del «Historial de tareas» (CRM-ISEIE#419). */
+export interface HistorialTarea {
+  id: number;
+  title: string;
+  assigned_to: number | null;
+  assigned_to_name: string | null;
+  created_by: number;
+  created_by_name: string | null;
+  supervisor_id: number | null;
+  supervisor_name: string | null;
+  completed_by: number | null;
+  completed_by_name: string | null;
+  completed_at: string;
+  created_at: string;
+  due_date: string | null;
+  team_id: number | null;
+  team_name: string | null;
+  de_programacion: boolean;
+  project_name: string | null;
+  external_project_name: string | null;
+  area_name: string | null;
+  area_color: string | null;
 }
 
 export interface Assignee {
@@ -147,6 +181,8 @@ export interface Team {
   name: string;
   /** De colaboradores (desarrollo, SEO…) o de tutores (04/11/2026). */
   tipo?: TipoEquipo;
+  /** Sus tareas las cierra el supervisor, no quien las lleva (CRM-ISEIE#419). */
+  de_programacion?: boolean;
   color: string;
   is_active: boolean;
   sort_order: number;
