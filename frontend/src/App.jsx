@@ -2,6 +2,7 @@ import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Suspense, lazy, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { PROCESO_EN_PRUEBAS, SOLO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
+import { PANTALLAS_IA } from '@/shared/lib/pantallasIA';
 import ConPermiso from '@/shared/components/layout/ConPermiso';
 import { MARCA } from '@/shared/config/marca';
 
@@ -373,12 +374,19 @@ function App() {
           <Route path="/configuracion/campos" element={<FieldDefinitionsPage />} />
           <Route path="/roles" element={<RolesPage />} />
           <Route path="/informes" element={<ReportsPage />} />
-          {/* Pregunta a tus datos (#30): solo en pruebas, y solo con su permiso
-              aunque se escriba la dirección a mano (#580). */}
+          {/* Las pantallas de IA del CRM (#30) están apagadas (Diego, 10/11/2026:
+              se usa Claude por el MCP). Quien entre por su dirección va al
+              inicio, sin error. Se encienden con `PANTALLAS_IA`.
+              Pregunta a tus datos, además, solo en pruebas, y solo con su
+              permiso aunque se escriba la dirección a mano (#580). */}
           <Route path="/informes/preguntar"
-            element={SOLO_EN_PRUEBAS
+            element={PANTALLAS_IA && SOLO_EN_PRUEBAS
               ? <ConPermiso permiso="reports_ia.generar" a="/informes"><PreguntarPage /></ConPermiso>
-              : <Navigate to="/informes" replace />} />
+              : <Navigate to={PANTALLAS_IA ? '/informes' : '/'} replace />} />
+          {/* Chat IA no tiene pantalla en ISEIE (era «Próximamente»): su dirección,
+              al inicio en vez de «Página no encontrada». */}
+          <Route path="/chat-ia" element={<Navigate to="/" replace />} />
+          <Route path="/ai-chat" element={<Navigate to="/" replace />} />
           {/* El panel de feedback, fuera de produccion hasta aprobarlo. */}
           <Route path="/informes/feedback"
             element={PROCESO_EN_PRUEBAS ? <FeedbackPanelPage /> : <Navigate to="/informes" replace />} />
@@ -410,7 +418,8 @@ function App() {
         {/* Cada redirección lleva a una pantalla que existe AQUÍ (#226). Se
             copiaron de MultiCRM y cuatro llevaban a «Página no encontrada»:
             /informes/ia, /mensajes, /chat-ia y /configuracion/plantillas-email
-            no existen en ISEIE. Las dos sin pantalla equivalente se quitan. */}
+            no existen en ISEIE. Las dos sin pantalla equivalente se quitan.
+            (/chat-ia y /ai-chat llevan al inicio desde el 10/11, arriba: #30.) */}
         <Route path="/reports/ia" element={<Navigate to="/informes" replace />} />
         <Route path="/reports" element={<Navigate to="/informes" replace />} />
         <Route path="/sales" element={<Navigate to="/ventas" replace />} />

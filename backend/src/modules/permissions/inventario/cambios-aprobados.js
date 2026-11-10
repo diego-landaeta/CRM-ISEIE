@@ -354,13 +354,45 @@ export const CAMBIOS_DE_MENU = [
     rutas: { 'Equipo de Desarrollo › Mi tablero': 'GET /api/tasks/' },
     aprobadoPor: 'Diego, 04/11',
   },
+  {
+    id: 'menu-sin-pantallas-ia',
+    que: 'Las pantallas de IA del CRM salen del menú y del buscador para todos: «Análisis › Pregunta a tus datos» y «Análisis › Chat IA» (que era «Próximamente»). Su dirección lleva al inicio.',
+    motivo: 'Diego (10/11/2026): el chatbot de IA del CRM ya no va, porque se usa Claude por el MCP (#30 de MultiCRM, aquí #11). Solo se esconden: el acceso no cambia, el servidor responde igual y el código se queda. Se vuelven a encender con `VITE_PANTALLAS_IA=1` en el frontal.',
+    // Solo menú: no cambia el acceso (ni gana ni pierde nadie), así que la ruta
+    // no tiene que dar 403. `menuSinCambioDeAcceso423` comprueba que sigue ahí.
+    soloMenu: true,
+    perfiles: {
+      superadmin: ['- Análisis › Pregunta a tus datos', '- Análisis › Chat IA'],
+      admin: ['- Análisis › Pregunta a tus datos', '- Análisis › Chat IA'],
+      soporte: ['- Análisis › Pregunta a tus datos', '- Análisis › Chat IA'],
+      'gestora+admin': ['- Análisis › Pregunta a tus datos', '- Análisis › Chat IA'],
+    },
+    rutas: {
+      'Análisis › Pregunta a tus datos': 'POST /api/ia-analisis/preguntar',
+      // «Próximamente»: en ISEIE no tiene pantalla ni ruta en el servidor.
+      'Análisis › Chat IA': null,
+    },
+    aprobadoPor: 'Diego, 10/11',
+  },
 ];
 
-/** `{ perfil: ['+ …', '- …'] }`, todos los cambios de menú juntos. */
+/**
+ * `{ perfil: ['+ …', '- …'] }`, todos los cambios de menú juntos, en orden: si
+ * uno posterior quita lo que otro anterior añadía (o al revés), se anulan y la
+ * entrada queda como en la foto (lo mismo que en MultiCRM).
+ */
 export function cambiosDeMenuPorPerfil() {
   const out = {};
   for (const c of CAMBIOS_DE_MENU) {
-    for (const [perfil, lineas] of Object.entries(c.perfiles)) out[perfil] = [...(out[perfil] || []), ...lineas];
+    for (const [perfil, lineas] of Object.entries(c.perfiles)) {
+      const lista = out[perfil] || [];
+      for (const l of lineas) {
+        const contraria = `${l[0] === '+' ? '-' : '+'}${l.slice(1)}`;
+        const i = lista.indexOf(contraria);
+        if (i >= 0) lista.splice(i, 1); else lista.push(l);
+      }
+      out[perfil] = lista;
+    }
   }
   return out;
 }

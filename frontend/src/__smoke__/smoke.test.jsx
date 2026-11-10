@@ -132,6 +132,8 @@ const ALL_STATIC_ROUTES = [
   // Lo nuevo de la 2.6.0 (paridad con MultiCRM).
   '/consultas', '/consultas/alumnos', '/consultas/carga', '/consultas/tutores', '/consultas/metricas',
   '/conexion/moodle', '/ventas/sin-formacion', '/informes/preguntar',
+  // Las pantallas de IA, apagadas (#30, Diego 10/11): su dirección lleva al inicio.
+  '/chat-ia', '/ai-chat',
 ];
 
 describe('app boot routes', () => {
