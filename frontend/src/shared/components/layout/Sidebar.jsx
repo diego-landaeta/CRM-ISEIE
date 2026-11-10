@@ -20,6 +20,7 @@ import NotificationsBell from './NotificationsBell';
 import { isBetaAllowed, BETA_MODE, BETA_VERSION } from '@/shared/config/betaConfig';
 import { PROCESO_EN_PRUEBAS, SOLO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 import { CERTIFEX_PANEL } from '@/shared/lib/certifexPanel';
+import { PANTALLAS_IA } from '@/shared/lib/pantallasIA';
 
 const ROLE_LABELS = { superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor', soporte: 'Soporte', tutor: 'Tutor', colaborador: 'Colaborador', tutor_redactor: 'Tutor redactor' };
 
@@ -192,13 +193,19 @@ export const NAV_SECTIONS = [
       { to: '/informes',     label: 'Reportes',      icon: ChartLineUp, sectionPrefixes: ['/informes', '/activity'] },
       // Por que no compran (#170). Fuera de produccion hasta aprobarlo.
       ...(PROCESO_EN_PRUEBAS ? [{ to: '/informes/feedback', label: 'Feedback', icon: ChatCircleText, roles: ['admin', 'superadmin'], permiso: 'feedback.view' }] : []),
-      // Preguntarle a los datos (#30), como en MultiCRM: solo en pruebas hasta que
-      // haya clave y tope de gasto (#22).
-      ...(SOLO_EN_PRUEBAS ? [{ to: '/informes/preguntar', label: 'Pregunta a tus datos', icon: Sparkle, roles: ['admin', 'superadmin'], permiso: 'reports_ia.generar' }] : []),
-      // Próximamente (#226): en MultiCRM la pantalla existe pero está aparcada
-      // —fuera de su menú hasta la fase 5— y depende de la API de Claude, cuya
-      // clave y cuyo módulo (`claude-chat`) ISEIE no tiene.
-      { to: '/chat-ia',     label: 'Chat IA',       icon: ChatCircleText, roles: ['admin', 'superadmin'], comingSoon: true },
+      // Las pantallas de IA del CRM (#30) —Pregunta a tus datos y Chat IA— están
+      // APAGADAS (Diego, 10/11/2026: se usa Claude por el MCP), como en MultiCRM.
+      // Se encienden juntas con `PANTALLAS_IA` (`shared/lib/pantallasIA.js`).
+      ...(PANTALLAS_IA
+        ? [
+          // Preguntarle a los datos (#30): además, solo en pruebas hasta que
+          // haya clave y tope de gasto (#22).
+          ...(SOLO_EN_PRUEBAS ? [{ to: '/informes/preguntar', label: 'Pregunta a tus datos', icon: Sparkle, roles: ['admin', 'superadmin'], permiso: 'reports_ia.generar' }] : []),
+          // Próximamente (#226): depende de la API de Claude, cuya clave y cuyo
+          // módulo (`claude-chat`) ISEIE no tiene.
+          { to: '/chat-ia',     label: 'Chat IA',       icon: ChatCircleText, roles: ['admin', 'superadmin'], comingSoon: true },
+        ]
+        : []),
     ],
   },
   {
