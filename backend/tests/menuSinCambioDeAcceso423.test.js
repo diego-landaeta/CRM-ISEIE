@@ -39,7 +39,7 @@ beforeAll(async () => {
 
 const casos = CAMBIOS_DE_MENU.flatMap((c) => Object.entries(c.perfiles).flatMap(([perfil, lineas]) =>
   lineas.map((l) => ({
-    id: c.id, perfil, signo: l[0], entrada: l.slice(2), ruta: c.rutas[l.slice(2)],
+    id: c.id, acompanaA: c.acompanaA, perfil, signo: l[0], entrada: l.slice(2), ruta: c.rutas[l.slice(2)],
     soloMenu: Boolean(c.soloMenu),
     quitada: (c.quitadas || []).includes(l.slice(2)) && !!c.aprobadoPor,
   }))));
