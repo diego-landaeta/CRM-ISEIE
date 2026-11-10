@@ -142,6 +142,7 @@ const ConvocatoriasPage = lazy(() => import('./modules/convocatorias/pages/Convo
 // El tablero de tareas del equipo (#210, como en MultiCRM): solo en pruebas.
 const TasksPage = lazy(() => import('./modules/tasks/pages/TasksPage'));
 const TaskBoardConfigPage = lazy(() => import('./modules/tasks/pages/TaskBoardConfigPage'));
+const TasksHistoryPage = lazy(() => import('./modules/tasks/pages/TasksHistoryPage'));
 const AunNoConectadoPage = lazy(() => import('./shared/pages/AunNoConectadoPage'));
 
 const ROUTE_TITLES = {
@@ -195,7 +196,7 @@ const ROUTE_TITLES = {
   '/configuracion/campos':            'Campos personalizados',
   '/roles':                           'Roles',
   '/tareas':                          'Tablero',
-  '/tareas/revisar':                  'Por revisar',
+  '/tareas/historial':                'Historial de tareas',
   '/tareas/configurar':               'Configurar tablero',
   '/status':                          'Status',
   '/registro':                        'Registro',
@@ -398,7 +399,9 @@ function App() {
           <Route path="/configuracion" element={<SettingsPage />} />
           {/* Equipo de Desarrollo (#210): sin aprobar para producción, solo en /staging. */}
           <Route path="/tareas" element={<TasksPage />} />
-          <Route path="/tareas/revisar" element={<TasksPage />} />
+          {/* «Por revisar» pasó a «Historial de tareas» (CRM-ISEIE#419): el enlace viejo lleva al nuevo. */}
+          <Route path="/tareas/historial" element={<TasksHistoryPage />} />
+          <Route path="/tareas/revisar" element={<Navigate to="/tareas/historial" replace />} />
           <Route path="/tareas/configurar" element={<TaskBoardConfigPage />} />
         </Route>
 

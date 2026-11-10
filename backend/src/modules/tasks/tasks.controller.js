@@ -7,6 +7,7 @@ import {
   moveTaskSchema,
   returnTaskSchema,
   listTasksQuerySchema,
+  historialQuerySchema,
   metricsQuerySchema,
   ambitoQuerySchema,
   addChecklistItemSchema,
@@ -135,14 +136,10 @@ export const approve = accion(async (req, res) => {
   res.json({ success: true, data });
 });
 
-export const reviewTasks = accion(async (req, res) => {
-  const data = await taskService.getReviewTasks(quien(req), validar(ambitoQuerySchema, req.query));
-  res.json({ success: true, data });
-});
-
-export const reviewCount = accion(async (req, res) => {
-  const data = await taskService.getReviewCount(quien(req), validar(ambitoQuerySchema, req.query));
-  res.json({ success: true, data });
+// «Historial de tareas» (CRM-ISEIE#419): sustituye a «Por revisar» y su contador.
+export const historial = accion(async (req, res) => {
+  const { data, pagination } = await taskService.getHistorial(quien(req), validar(historialQuerySchema, req.query));
+  res.json({ success: true, data, pagination });
 });
 
 /* --- Personas, Etiquetas y Métricas --- */

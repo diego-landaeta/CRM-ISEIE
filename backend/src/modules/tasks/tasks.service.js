@@ -25,8 +25,9 @@ import {
 // Por debajo de este hueco entre dos vecinas se renumera la columna.
 const HUECO_MINIMO = 0.001;
 
-// Las dos columnas con reglas (decisión 4 de la #210): «En revisión» es lo que
-// sale en «Por revisar» y «Hecha» la que cierra.
+// Las dos columnas con reglas (decisión 4 de la #210): «Hecha» la que cierra y
+// «En revisión» donde el programador deja lo suyo para que lo cierre Diego
+// (CRM-ISEIE#419: lo demás lo cierra quien lo hace, sin pasar por ella).
 const EN_REVISION = 'en_revision';
 const HECHA = 'hecha';
 
@@ -191,20 +192,24 @@ async function exigirResponsableEnAmbito(personaId, user, que = 'asignar tareas'
   }
 }
 
+const SOLO_CIERRA = 'Esta tarea la cierra quien la lleva, su supervisor o un superadmin';
+const SOLO_CIERRA_PROGRAMACION = 'Es de programación: mándala a «En revisión» y la cierra su supervisor';
+const motivoDeCierre = (t) => (reglas.esDeProgramacion(t) ? SOLO_CIERRA_PROGRAMACION : SOLO_CIERRA);
+
 /**
- * Aprobar o devolver (Diego, 26/10/2026: «solo superadmin pueden mover las
- * tareas de lugar, y quienes supervisan»): el superadmin y el supervisor de la
- * tarea. Ni el admin ni un cargo alto, si no la supervisan.
+ * Aprobar (CRM-ISEIE#419): lo cierra quien puede cerrarla (`reglas.puedeCerrar`).
+ * Devolver: quien la creó, el supervisor, el superadmin o quien tiene
+ * tasks.close, si la ve. Fuera de su ámbito la tarea no existe (404); dentro,
+ * si no le toca, 403.
  */
-async function tareaRevisable(id, user) {
-  const task = await taskModel.findTaskById(id);
-  if (!task || task.archived_at) {
-    throw new AppError('Tarea no encontrada', 404, 'NOT_FOUND');
-  }
-  if (!reglas.puedeRevisar(task, user)) {
-    // Fuera de su ámbito la tarea no existe (404); dentro, no es suya (403).
-    await tareaVisible(id, user);
-    exigir(false, 'Solo el supervisor de la tarea o un superadmin la aprueban o la devuelven');
+async function tareaRevisable(id, user, que = 'aprobar') {
+  const p = await permisosDe(user);
+  const task = await tareaVisible(id, user, p);
+  if (que === 'devolver') {
+    exigir(reglas.puedeDevolver(task, user, p),
+      'La devuelven quien la creó, su supervisor o un admin');
+  } else {
+    exigir(reglas.puedeCerrar(task, user), motivoDeCierre(task));
   }
   return task;
 }
@@ -503,23 +508,17 @@ export async function listTasks(user, q) {
   //   · «Mi equipo»: eso y lo de sus equipos;
   //   · «Todo»: con «Ver todo», la gente de su ámbito (empresa o campus de
   //     arriba); sin él, lo mismo que «Mi equipo». El filtro nunca abre más.
-  const ver = q.ver || (q.mias ? 'mias' : 'todo');
-  const ambito = p.viewAll && ver === 'todo' ? await ambitoDe(user, q) : null;
   // Con una empresa o un campus arriba, en cualquier vista, solo las tareas de esa
-  // empresa (30/10). Sin nada arriba, como siempre.
-  const deLaCabecera = await campusDeLaCabecera(q);
+  // empresa (30/10). Sin nada arriba, como siempre. «Mis tareas»: lo suyo, sea
+  // quien sea (también el admin y el superadmin).
+  const alcance = await alcanceDeLaVista(user, p, q);
 
   if (q.project_id) {
     await validarAccesoProyecto(q.project_id, user);
   }
 
   const tareas = await taskModel.findTasks({
-    ambito,
-    de_la_cabecera: deLaCabecera,
-    yo: user.userId,
-    visibles_para: p.viewAll && ver === 'todo' ? null : user.userId,
-    // «Mis tareas»: lo suyo, sea quien sea (también el admin y el superadmin).
-    mias_de: ver === 'mias' ? user.userId : null,
+    ...alcance,
     assigned_to: q.assigned_to,
     team_id: q.team_id,
     project_id: q.project_id,
@@ -536,8 +535,12 @@ export async function listTasks(user, q) {
     periodo_hasta: q.periodo_hasta,
     incluir_archivadas: p.viewAll ? q.incluir_archivadas : false,
   });
-  // Lo que el tablero necesita para dejar arrastrar o no cada tarjeta.
-  return tareas.map((t) => ({ ...t, puede_mover: reglas.puedeMoverYComentar(t, user) && (p.edit || reglas.esSuperadmin(user)) }));
+  // Lo que el tablero necesita para dejar arrastrar o no cada tarjeta, y a «Hecha».
+  return tareas.map((t) => ({
+    ...t,
+    puede_mover: reglas.puedeMoverYComentar(t, user) && (p.edit || reglas.esSuperadmin(user)),
+    puede_cerrar: reglas.puedeCerrar(t, user),
+  }));
 }
 
 export async function getTaskById(id, user) {
@@ -611,9 +614,14 @@ export async function createTask(data, user) {
   else delete data.team_id;
   const equipo = teamId ? { id: teamId } : null;
   await exigirAsignable(equipo?.id ?? null, user, p, responsable);
-  // Decisión 4, también al crear: si no, crearla ya cerrada se saltaba la regla.
-  exigir(data.status !== HECHA || p.close,
-    'Solo quienes tienen permiso de cierre pueden crear una tarea como Hecha');
+  // Crearla ya cerrada es cerrarla (CRM-ISEIE#419): la misma regla que al moverla.
+  if (data.status === HECHA) {
+    const deProgramacion = teamId ? await eqModel.equipoDeProgramacion(teamId) : false;
+    exigir(reglas.puedeCerrar({
+      assigned_to: responsable, created_by: user.userId, supervisor_id: data.supervisor_id ?? null,
+      de_programacion: deProgramacion,
+    }, user), deProgramacion ? SOLO_CIERRA_PROGRAMACION : 'Solo quien la va a llevar puede crearla ya «Hecha»');
+  }
 
   const status = data.status || 'por_hacer';
   await validarColumna(status);
@@ -765,16 +773,13 @@ export async function moveTask(id, { status, prev_id, next_id }, user) {
   const p = await permisosDe(user);
   const currentTask = await tareaVisible(id, user, p);
   // Moverla (también reordenar): el superadmin, el supervisor y quien la lleva
-  // (26/10/2026). Cerrarla o reabrirla: el supervisor o el superadmin, o quien
-  // la lleva si además tiene «Aprobar y cerrar».
+  // (26/10/2026). Cerrarla o reabrirla (CRM-ISEIE#419): quien la lleva, el supervisor
+  // o el superadmin; si es de programación, el supervisor o el superadmin.
   exigirMover(currentTask, user, p);
   const cierraOReabre = (status === HECHA) !== (currentTask.status === HECHA);
 
   if (status !== currentTask.status) await validarColumna(status);
-  exigir(!(cierraOReabre && status === HECHA) || reglas.puedeCerrar(currentTask, user, p),
-    'Solo el supervisor o un superadmin marcan esta tarea como Hecha');
-  exigir(!(cierraOReabre && currentTask.status === HECHA) || reglas.puedeCerrar(currentTask, user, p),
-    'Solo el supervisor o un superadmin reabren una tarea completada');
+  exigir(!cierraOReabre || reglas.puedeCerrar(currentTask, user), motivoDeCierre(currentTask));
 
   const vecinas = () => taskModel.findNeighbors(status, currentTask.assigned_to, { prev_id, next_id, sin: id });
   let { prevPos: prev, nextPos: next } = await vecinas();
@@ -812,11 +817,14 @@ export async function moveTask(id, { status, prev_id, next_id }, user) {
     event_type: 'status_changed',
     details: { old_status: currentTask.status, new_status: status },
   });
+  // «Quién la cerró» sale de ese evento (CRM-ISEIE#419): se vuelve a leer para devolverlo ya bien.
+  const devuelta = status === HECHA ? (await taskModel.findTaskById(id)) || movedTask : movedTask;
 
   const [deNombre, aNombre] = await Promise.all([nombreDeColumna(currentTask.status), nombreDeColumna(status)]);
   const texto = `«${currentTask.title}» pasó de ${deNombre} a ${aNombre}.`;
 
-  // A quien la creó: cuando pasa a «En revisión» o a «Hecha».
+  // A quien la creó: cuando pasa a «En revisión» o a «Hecha» (si la cierra quien
+  // la lleva, quien la creó se entera aquí y la puede devolver).
   if ([EN_REVISION, HECHA].includes(status)
       && currentTask.created_by && currentTask.created_by !== user.userId) {
     await notifyUsers({
@@ -851,7 +859,11 @@ export async function moveTask(id, { status, prev_id, next_id }, user) {
   }
 
   // Al supervisor, por correo, cuando está lista para revisar (Diego, 26/10/2026).
-  if (status === EN_REVISION && currentTask.supervisor_id && currentTask.supervisor_id !== user.userId) {
+  // Desde la CRM-ISEIE#419 solo se espera revisión en programación: en lo demás, el
+  // supervisor recibe el correo de cambio de estado, como el resto.
+  const paraRevisar = status === EN_REVISION && reglas.esDeProgramacion(currentTask)
+    && currentTask.supervisor_id && currentTask.supervisor_id !== user.userId;
+  if (paraRevisar) {
     const autor = await taskModel.findUserBasic(user.userId);
     await correoA(currentTask.supervisor_id, AVISO_TAREA_SUPERVISOR,
       (persona) => enviarCorreoParaRevisar({ persona, tarea: movedTask, quien: autor }));
@@ -868,11 +880,11 @@ export async function moveTask(id, { status, prev_id, next_id }, user) {
     taskId: id, de: currentTask.status, a: status, autorId: user.userId,
     yaConCorreo: [
       status === HECHA ? currentTask.assigned_to : null,
-      status === EN_REVISION ? currentTask.supervisor_id : null,
+      paraRevisar ? currentTask.supervisor_id : null,
     ],
   });
 
-  return movedTask;
+  return devuelta;
 }
 
 export async function archiveTask(id, user) {
@@ -896,35 +908,83 @@ export async function archiveTask(id, user) {
   return archived;
 }
 
-/* --- Por revisar --- */
+/* --- Historial de tareas (CRM-ISEIE#419) --- */
 
 /**
- * Las tareas «En revisión» de su ámbito, por fecha límite, y además las que
- * supervisa (26/10/2026). La lista es de quien tiene «Aprobar y cerrar»; el
- * supervisor sin él revisa desde la tarjeta (le llega el correo con el enlace).
+ * Qué se ve, según «Ver» (Mis tareas / Mi equipo / Todo) y el permiso: lo mismo
+ * que el tablero. «Todo» sin «Ver todo» es «Mi equipo»; el filtro nunca abre más.
  */
-export async function getReviewTasks(user, q = {}) {
-  // El superadmin, todas las de su ámbito; el resto, las que supervisa
-  // (26/10/2026: aprobar es del supervisor o del superadmin).
-  if (reglas.esSuperadmin(user)) {
-    return taskModel.findTasks({
-      status: EN_REVISION, orden: 'vencimiento', ambito: await ambitoDe(user, q), yo: user.userId,
-      de_la_cabecera: await campusDeLaCabecera(q),
-    });
-  }
-  return taskModel.findTasks({ status: EN_REVISION, orden: 'vencimiento', supervisor_id: user.userId, de_la_cabecera: await campusDeLaCabecera(q) });
+async function alcanceDeLaVista(user, p, q, verPorDefecto = 'todo') {
+  const ver = q.ver || (q.mias ? 'mias' : verPorDefecto);
+  const todo = p.viewAll && ver === 'todo';
+  return {
+    ambito: todo ? await ambitoDe(user, q) : null,
+    de_la_cabecera: await campusDeLaCabecera(q),
+    yo: user.userId,
+    visibles_para: todo ? null : user.userId,
+    mias_de: ver === 'mias' ? user.userId : null,
+  };
 }
 
-export async function getReviewCount(user, q = {}) {
-  if (reglas.esSuperadmin(user)) {
-    return { count: await taskModel.countReview(await ambitoDe(user, q), user.userId, { deLaCabecera: await campusDeLaCabecera(q) }) };
-  }
-  return { count: (await taskModel.findTasks({ status: EN_REVISION, supervisor_id: user.userId, de_la_cabecera: await campusDeLaCabecera(q) })).length };
+/**
+ * «Historial de tareas»: sustituye a «Por revisar» (CRM-ISEIE#419). Lo hecho, con
+ * quién lo hizo (el responsable), quién lo cerró y cuándo, de lo más reciente a
+ * lo más antiguo. Por persona, equipo y periodo (el día del cierre). Cada uno ve
+ * lo suyo y lo de sus equipos; con «Ver todo», lo de su ámbito. No es una
+ * bandeja: nadie tiene nada «por aprobar».
+ */
+export async function getHistorial(user, q = {}) {
+  const p = await permisosDe(user);
+  exigir(p.viewAll || p.viewOwn, 'No tienes permiso para ver el tablero de tareas');
+  const tareas = await taskModel.findTasks({
+    ...(await alcanceDeLaVista(user, p, q)),
+    status: HECHA,
+    con_cierre: true,
+    orden: 'cierre',
+    assigned_to: q.assigned_to,
+    team_id: q.team_id,
+    search: q.search,
+    cerradas_desde: q.desde,
+    cerradas_hasta: q.hasta,
+  });
+  const page = q.page || 1;
+  const limit = q.limit || 50;
+  const desde = (page - 1) * limit;
+  const filas = tareas.slice(desde, desde + limit).map((t) => ({
+    id: t.id,
+    title: t.title,
+    assigned_to: t.assigned_to,
+    assigned_to_name: t.assigned_to_name,
+    created_by: t.created_by,
+    created_by_name: t.created_by_name,
+    supervisor_id: t.supervisor_id,
+    supervisor_name: t.supervisor_name,
+    completed_by: t.completed_by,
+    completed_by_name: t.completed_by_name,
+    completed_at: t.completed_at,
+    created_at: t.created_at,
+    due_date: t.due_date,
+    team_id: t.team_id,
+    team_name: t.team_name,
+    de_programacion: t.de_programacion,
+    project_name: t.project_name,
+    external_project_name: t.external_project_name,
+    area_name: t.area_name,
+    area_color: t.area_color,
+  }));
+  return {
+    data: filas,
+    pagination: { total: tareas.length, page, limit, totalPages: Math.max(1, Math.ceil(tareas.length / limit)) },
+  };
 }
 
-/** Aprobar: de «En revisión» a «Hecha», en una transacción. */
+/**
+ * Aprobar: de «En revisión» a «Hecha», en una transacción. Desde la CRM-ISEIE#419
+ * solo hace falta en programación (lo cierra el supervisor); lo demás lo cierra
+ * quien lo lleva moviéndolo a «Hecha».
+ */
 export async function approveTask(id, user) {
-  await tareaRevisable(id, user);
+  await tareaRevisable(id, user, 'aprobar');
 
   const result = await taskModel.approveTaskAtomic({ taskId: id, user });
   if (!result) throw new AppError('Tarea no encontrada', 404, 'NOT_FOUND');
@@ -953,16 +1013,17 @@ export async function approveTask(id, user) {
 }
 
 /**
- * Devolver: de «En revisión» a «En curso» con el porqué. Mover y comentar van
- * en la misma transacción (tasks.model.js): nunca queda movida sin el motivo.
+ * Devolver: de «En revisión» o de «Hecha» (CRM-ISEIE#419) a «En curso» con el porqué.
+ * Mover y comentar van en la misma transacción (tasks.model.js): nunca queda
+ * movida sin el motivo.
  */
 export async function returnTask(id, { comment }, user) {
-  await tareaRevisable(id, user);
+  await tareaRevisable(id, user, 'devolver');
 
   const result = await taskModel.returnTaskAtomic({ taskId: id, comment, user });
   if (!result) throw new AppError('Tarea no encontrada', 404, 'NOT_FOUND');
   if (result.noEnRevision) {
-    throw new AppError('Solo se devuelve una tarea que está «En revisión»', 409, 'NOT_IN_REVIEW');
+    throw new AppError('Solo se devuelve una tarea que está «En revisión» o «Hecha»', 409, 'NOT_IN_REVIEW');
   }
 
   const { task, oldTask } = result;
@@ -982,7 +1043,7 @@ export async function returnTask(id, { comment }, user) {
   }
   // Al supervisor y a quien la creó, con el motivo; quien la lleva ya tiene «Tarea devuelta».
   await anotarCambioDeEstado({
-    taskId: id, de: EN_REVISION, a: task.status || 'en_curso', autorId: user.userId,
+    taskId: id, de: oldTask.status, a: task.status || 'en_curso', autorId: user.userId,
     accion: 'devuelta', comentario: comment, yaConCorreo: [oldTask.assigned_to],
   });
 

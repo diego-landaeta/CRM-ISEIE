@@ -9,7 +9,7 @@ import {
   ChatText,
   Receipt, Coins, Wrench, ShoppingBag, ChatCircleText, Wallet, Bank, Shuffle, Clock, GitMerge, CopySimple,
   UsersThree, CloudArrowDown,
-  GraduationCap, Warning, Certificate, ClipboardText, ChatsCircle, Kanban, CheckSquare, SlidersHorizontal } from '@phosphor-icons/react';
+  GraduationCap, Warning, Certificate, ClipboardText, ChatsCircle, Kanban, ClockCounterClockwise, SlidersHorizontal } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { rolesDe } from '@/shared/lib/roles';
 import usePermission from '@/shared/hooks/usePermission';
@@ -93,15 +93,17 @@ export const NAV_SECTIONS = [
     ],
   },
   // El tablero del equipo (#210, como en MultiCRM). Es lo único que ve quien es
-  // solo colaborador. «Por revisar» y «Configurar tablero» se enseñan por
-  // permiso (`permiso`), no por rol: lo que se cambie en Configuración › Roles
-  // manda también aquí. Aprobada para producción en la 2.2.0 (Diego, 16/10).
+  // solo colaborador. «Configurar tablero» se enseña por permiso (`permiso`), no
+  // por rol: lo que se cambie en Configuración › Roles manda también aquí.
+  // Aprobada para producción en la 2.2.0 (Diego, 16/10). «Por revisar» pasó a
+  // «Historial de tareas» (CRM-ISEIE#419): quien hace la tarea la cierra él
+  // mismo y nadie tiene una bandeja de «por aprobar» (tampoco Carlos).
   {
     label: 'Equipo de Desarrollo',
     items: [
       // El tutor, su tablero de tutores (Diego, 04/11): con «Ver su tablero».
       { to: '/tareas', label: 'Mi tablero', icon: Kanban, roles: [...ROLES_TAREAS, 'tutor'], end: true, permiso: 'tasks.view_own', oPermiso: 'tasks.view_own' },
-      { to: '/tareas/revisar', label: 'Por revisar', icon: CheckSquare, roles: ROLES_TAREAS, permiso: 'tasks.close', oPermiso: 'tasks.close' },
+      { to: '/tareas/historial', label: 'Historial de tareas', icon: ClockCounterClockwise, roles: [...ROLES_TAREAS, 'tutor'], permiso: 'tasks.view_own', oPermiso: 'tasks.view_own' },
       { to: '/tareas/configurar', label: 'Configurar tablero', icon: SlidersHorizontal, roles: ROLES_TAREAS, permiso: 'tasks.manage', oPermiso: 'tasks.manage' },
       // «Mi factura» (#202): el colaborador con usuario sube aquí su factura del mes.
       // Aquí, junto a su tablero, como en MultiCRM: es lo otro que ve un colaborador.
@@ -307,7 +309,7 @@ export function canSeeItem(item, role, soloColaboraciones, permisos, can) {
     // Lo que no es de su rol, solo si se le ha dado a propósito para él (Meta
     // Ads, 26/10/2026). `oPermiso` a secas no basta: Diplomas no es para un colaborador.
     if (item.colaboradorConPermiso) return typeof can === 'function' && can(item.colaboradorConPermiso) === true;
-    // «Por revisar» y «Configurar tablero», solo con su clave (como en MultiCRM).
+    // «Historial de tareas» y «Configurar tablero», solo con su clave (como en MultiCRM).
     if (item.permiso && String(item.permiso).includes('.') && !(typeof can === 'function' && can(item.permiso) === true)) return false;
     return Array.isArray(item.roles) && item.roles.includes('colaborador');
   }
