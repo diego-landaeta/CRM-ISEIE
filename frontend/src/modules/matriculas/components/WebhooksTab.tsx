@@ -18,6 +18,7 @@ interface WebhookToken {
   last_used_at?: string;
   field_mapping?: Record<string, string>;
   sample_payload?: any;
+  aviso_emails?: string[];
 }
 
 interface Project {
@@ -29,6 +30,8 @@ interface Project {
 // si el formulario ya manda estos nombres, no hace falta mapear nada.
 const MATRICULA_TARGETS = [
   { key: 'nombre', label: 'Nombre' },
+  // Casi todos los formularios mandan los apellidos aparte (#714): se añaden al nombre.
+  { key: 'apellidos', label: 'Apellidos' },
   { key: 'email', label: 'Email' },
   { key: 'telefono', label: 'Teléfono' },
   { key: 'documento_tipo', label: 'Tipo de documento' },
@@ -167,6 +170,11 @@ function WebhookCard({ token, onEdit, onDelete }: { token: WebhookToken; onEdit:
           <Copy size={12} />
         </button>
       </div>
+      <p className="text-xs text-muted-foreground">
+        {(token.aviso_emails || []).length > 0
+          ? <>Avisa por correo, sin datos, a: <strong className="text-foreground">{(token.aviso_emails || []).join(', ')}</strong></>
+          : 'No avisa a nadie por correo: las solicitudes se ven en la lista.'}
+      </p>
       {Object.keys(token.field_mapping || {}).length > 0 && (
         <pre className="text-[10px] p-2 bg-muted/30 rounded overflow-x-auto">{JSON.stringify(token.field_mapping, null, 2)}</pre>
       )}
@@ -184,6 +192,7 @@ function WebhookEditor({ token, onSave, onClose }: EditorProps) {
   const [notas, setNotas] = useState<string>(token?.notas || '');
   const [active, setActive] = useState<boolean>(token ? token.active : true);
   const [mapping, setMapping] = useState<Record<string, string>>(token?.field_mapping || {});
+  const [avisos, setAvisos] = useState<string>((token?.aviso_emails || []).join(', '));
   const [samplePayload, setSamplePayload] = useState<any>(token?.sample_payload || null);
   const [listening, setListening] = useState(false);
   const [mapPath, setMapPath] = useState<string | null>(null);
@@ -220,7 +229,11 @@ function WebhookEditor({ token, onSave, onClose }: EditorProps) {
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, [pollRef]);
 
   function save() {
-    onSave({ notas, active, field_mapping: mapping });
+    const aviso_emails = avisos.split(/[\s,;]+/).map((e) => e.trim().toLowerCase()).filter(Boolean);
+    const mal = aviso_emails.find((e) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
+    if (mal) { toast({ title: 'Revisa los correos del aviso', description: `«${mal}» no es un correo.`, variant: 'destructive' }); return; }
+    if (aviso_emails.length > 10) { toast({ title: 'Como mucho 10 correos en el aviso', variant: 'destructive' }); return; }
+    onSave({ notas, active, field_mapping: mapping, aviso_emails });
   }
 
   const url = token?.token ? `${window.location.origin}${(import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '')}/api/webhook-tokens/receive/${token.token}` : null;
@@ -242,6 +255,15 @@ function WebhookEditor({ token, onSave, onClose }: EditorProps) {
         </div>
         <div className="p-5 space-y-4 text-sm">
           <input value={notas} onChange={e => setNotas(e.target.value)} placeholder="Nombre / Descripción (ej: Form admisión web 2026)" className="w-full h-9 px-3 rounded-lg border border-border bg-muted/30 focus:outline-none focus:ring-2 focus:ring-primary/40" />
+
+          {/* El aviso sin datos (#714): la solicitud se queda en el CRM y el correo solo avisa. */}
+          <div className="space-y-1">
+            <label htmlFor="webhook-aviso-emails" className="text-[11px] font-bold uppercase text-muted-foreground">Avisar por correo a</label>
+            <input id="webhook-aviso-emails" value={avisos} onChange={e => setAvisos(e.target.value)} placeholder="admisiones@tucampus.com, otra@tucampus.com" className="w-full h-9 px-3 rounded-lg border border-border bg-muted/30 focus:outline-none focus:ring-2 focus:ring-primary/40" />
+            <p className="text-xs text-muted-foreground">
+              El aviso dice solo que ha llegado una solicitud, el curso y su número, con un botón a la ficha. <strong>Sin nombre, sin DNI y sin adjuntos</strong>: los datos y los documentos se quedan en el CRM. Separa los correos con comas; vacío, no avisa a nadie.
+            </p>
+          </div>
 
           {url && (
             <div className="p-3 rounded-xl bg-muted/30 border border-border space-y-2">

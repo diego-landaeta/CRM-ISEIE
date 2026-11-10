@@ -11,7 +11,7 @@ import { existeTipos, existeProgramacion, sqlConTablero } from './tasks.equipos.
 /*
   «Esperan tu revisión» (CRM-ISEIE#419): solo lo de programación, que es lo único que
   espera a su supervisor. Lo demás lo cierra quien lo hace: a nadie le queda una
-  tarea «por aprobar» (tampoco a Carlos). Sin la migración 275, nada.
+  tarea «por aprobar» (tampoco a Carlos). Sin la migración 276, nada.
 */
 const ES_DE_PROGRAMACION = (t, prog) => (prog
   ? `EXISTS (SELECT 1 FROM task_teams tp WHERE tp.id = ${t}.team_id AND tp.de_programacion)`

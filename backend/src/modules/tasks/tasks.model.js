@@ -120,7 +120,7 @@ const columnasSupervisor = (hay) => (hay
 const joinSupervisor = (hay) => (hay ? '\n  LEFT JOIN users u_sup ON u_sup.id = t.supervisor_id' : '');
 
 // El equipo de la tarea y el cargo de quien la lleva en él (migración 235). Si
-// el equipo es de programación (migración 275, CRM-ISEIE#419), la cierra el supervisor.
+// el equipo es de programación (migración 276, CRM-ISEIE#419), la cierra el supervisor.
 const columnasEquipo = (eq, prog = false) => (eq
   ? `t.team_id,
   tm_t.name AS team_name,

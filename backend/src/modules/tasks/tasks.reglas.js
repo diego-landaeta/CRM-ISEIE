@@ -48,7 +48,7 @@ export function puedeMoverYComentar(t, user) {
   return quienLaLleva(t) === user.userId || esSupervisor(t, user);
 }
 
-/** ¿Es de programación? Lo dice su equipo (migración 275; sin ella, ninguna). */
+/** ¿Es de programación? Lo dice su equipo (migración 276; sin ella, ninguna). */
 export const esDeProgramacion = (t) => t?.de_programacion === true;
 
 /**

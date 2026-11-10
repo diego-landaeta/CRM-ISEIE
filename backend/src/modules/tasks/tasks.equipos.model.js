@@ -45,7 +45,7 @@ export function sqlConTablero(u, idx, tipos) {
 const colTipo = (t, tipos) => (tipos ? `${t}.tipo` : `'colaboradores'::text`);
 
 /*
-  Equipos de programación (migración 275, CRM-ISEIE#419): sus tareas las cierra
+  Equipos de programación (migración 276, CRM-ISEIE#419): sus tareas las cierra
   el supervisor (Diego) o un superadmin, no quien la lleva. Hasta que se pase la
   migración, ninguno lo es: todas las tareas las cierra quien las hace.
 */
