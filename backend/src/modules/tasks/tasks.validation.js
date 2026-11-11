@@ -143,15 +143,14 @@ export const createTeamSchema = z.object({
   sort_order: z.number().int().min(0).max(2147483647).optional(),
   // De colaboradores (desarrollo, SEO…) o de tutores (04/11/2026). Solo al crearlo.
   tipo: z.enum(['colaboradores', 'tutores']).optional(),
-  // Sus tareas las cierra el supervisor, no quien las lleva (CRM-ISEIE#419).
-  de_programacion: z.boolean().optional(),
+  // `de_programacion` ya no se pide (11/11/2026): una tarea con supervisor la
+  // cierra él, sea del equipo que sea.
 });
 export const updateTeamSchema = z.object({
   name: nombreEquipo.optional(),
   color: colorTablero.optional(),
   is_active: z.boolean().optional(),
   sort_order: z.number().int().min(0).max(2147483647).optional(),
-  de_programacion: z.boolean().optional(),
 }).refine((d) => Object.keys(d).length > 0, { message: 'No se envió ningún campo para cambiar' });
 export const createTeamRoleSchema = z.object({
   name: z.string().trim().min(1, 'El nombre del cargo es obligatorio').max(60),

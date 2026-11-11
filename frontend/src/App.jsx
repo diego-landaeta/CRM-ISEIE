@@ -388,6 +388,11 @@ function App() {
               al inicio (/dashboard) en vez de «Página no encontrada». */}
           <Route path="/chat-ia" element={<Navigate to="/dashboard" replace />} />
           <Route path="/ai-chat" element={<Navigate to="/dashboard" replace />} />
+          {/* «Análisis IA» (/informes/ia) es de MultiCRM: ISEIE no tiene esa
+              pantalla. Quien llegue con la dirección (un enlace o un favorito
+              de allí) va al inicio, como las otras dos, y no a «Página no
+              encontrada» (QA del 11/11). */}
+          <Route path="/informes/ia" element={<Navigate to="/dashboard" replace />} />
           {/* El panel de feedback, fuera de produccion hasta aprobarlo. */}
           <Route path="/informes/feedback"
             element={PROCESO_EN_PRUEBAS ? <FeedbackPanelPage /> : <Navigate to="/informes" replace />} />
@@ -422,7 +427,8 @@ function App() {
             copiaron de MultiCRM y cuatro llevaban a «Página no encontrada»:
             /informes/ia, /mensajes, /chat-ia y /configuracion/plantillas-email
             no existen en ISEIE. Las dos sin pantalla equivalente se quitan.
-            (/chat-ia y /ai-chat llevan a /dashboard desde el 10/11, arriba: #30.) */}
+            (/chat-ia y /ai-chat llevan a /dashboard desde el 10/11, y
+            /informes/ia desde el 11/11, arriba: #30.) */}
         <Route path="/reports/ia" element={<Navigate to="/informes" replace />} />
         <Route path="/reports" element={<Navigate to="/informes" replace />} />
         <Route path="/sales" element={<Navigate to="/ventas" replace />} />

@@ -52,8 +52,8 @@ import type {
  * equipo / Todo) sustituye al selector de antes, y el servidor manda: «Todo»
  * nunca abre más de lo que deja el permiso.
  *
- * CRM-ISEIE#419 (10/11/2026): quien la lleva la pasa a «Hecha» él mismo (las de
- * programación las cierra su supervisor). «Por revisar» pasó a ser el
+ * CRM-ISEIE#419 (10/11/2026): quien la lleva la pasa a «Hecha» él mismo (las que
+ * tienen supervisor las cierra él: 11/11/2026). «Por revisar» pasó a ser el
  * «Historial de tareas», en su propia página.
  */
 
@@ -284,7 +284,7 @@ export default function TasksPage() {
   // Arrastrar es mover (26/10/2026): lo dice el servidor de cada tarjeta
   // (el responsable, el supervisor o un superadmin). Sin el dato, la regla de antes.
   // Una hecha solo la saca quien puede cerrarla (CRM-ISEIE#419: `puede_cerrar`).
-  const puedeCerrar = (t: Task) => t.puede_cerrar ?? (t.assigned_to === yo || t.supervisor_id === yo);
+  const puedeCerrar = (t: Task) => t.puede_cerrar ?? (t.supervisor_id != null ? t.supervisor_id === yo : t.assigned_to === yo);
   const puedeArrastrar = (t: Task) => (t.puede_mover ?? puedeEditarTarea(t, yo, { edit: canEdit, viewAll: canViewAll }))
     && (t.status !== 'hecha' || puedeCerrar(t));
 
@@ -303,9 +303,9 @@ export default function TasksPage() {
     if (status === 'hecha' && t.status !== 'hecha' && !puedeCerrar(t)) {
       toast({
         title: 'Esta no la cierras tú',
-        description: t.de_programacion
-          ? 'Es de programación: llévala a «En revisión» y la cierra su supervisor.'
-          : 'La cierra quien la lleva o su supervisor.',
+        description: t.supervisor_id != null
+          ? 'Tiene supervisor: llévala a «En revisión» y la cierra él.'
+          : 'La cierra quien la lleva.',
         variant: 'destructive',
       });
       return;

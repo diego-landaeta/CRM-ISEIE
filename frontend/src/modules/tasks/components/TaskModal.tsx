@@ -123,23 +123,25 @@ export function TaskModal({
   const esSupervisor = !!task && task.supervisor_id === currentUserId;
   // Lo que dice el servidor de esta tarea (26/10/2026): mover y comentar, el
   // responsable, el supervisor y el superadmin; editar, quien la creó o delega.
-  // Cerrar (CRM-ISEIE#419): quien la lleva, el supervisor o un superadmin; si es de
-  // programación, el supervisor o un superadmin. Devolver: quien la creó, el
-  // supervisor o quien tiene «Devolver tareas» (tasks.close).
+  // Cerrar (CRM-ISEIE#419; 11/11/2026): si tiene supervisor, solo él; si no, quien la
+  // lleva o un superadmin. Devolver: quien la creó, el supervisor o quien tiene
+  // «Devolver tareas» (tasks.close).
   const permisosTarea = task?.permisos;
   const puedeMover = !editando || (permisosTarea ? permisosTarea.mover : true);
   const puedeComentar = !editando || (permisosTarea ? permisosTarea.comentar : true);
   const puedeCerrarla = permisosTarea
     ? permisosTarea.cerrar
-    : esSupervisor || (!!task && task.assigned_to === currentUserId && !task.de_programacion);
+    : (task?.supervisor_id != null ? esSupervisor : (!!task && task.assigned_to === currentUserId));
   const puedeDevolverla = permisosTarea?.devolver
     ?? (esSupervisor || canClose || (!!task && task.created_by === currentUserId));
-  // Al crearla: «Hecha» solo si es para uno mismo (o con la clave); el servidor
-  // dice que no si es de programación.
-  const puedeCrearHecha = canClose || assignedTo === currentUserId;
   // Delegar: «Asignar» en todos, o tener a alguien por debajo en alguno de sus equipos.
   const equiposDondeDelego = misEquipos.filter((m) => m.puede_delegar).map((m) => m.team_id);
   const puedeDelegarAqui = canAssign || equiposDondeDelego.length > 0;
+  // Al crearla: «Hecha» solo si es para uno mismo (o con la clave). Con
+  // supervisor (se manda solo si puede delegar), solo si el supervisor es uno
+  // mismo: la cierra él (11/11/2026).
+  const conSupervisor = puedeDelegarAqui && !!supervisorId;
+  const puedeCrearHecha = conSupervisor ? supervisorId === currentUserId : (canClose || assignedTo === currentUserId);
   const clavesDelego = equiposDondeDelego.join(',');
   const gruposDeCampus = useMemo(() => agruparPorEmpresa(projects), [projects]);
   // Una tarea ya guardada con un campus de otra empresa no pierde el suyo al abrirla.
@@ -256,12 +258,22 @@ export function TaskModal({
     is_active: true,
   }));
 
+  // El estado en el que está siempre sale (si no, a quien no puede reabrirla el
+  // selector le salía vacío); los demás, según lo que pueda hacer.
   const opcionesEstado = columnasDisponibles
-    .filter((c) => (editando ? puedeCerrarla : puedeCrearHecha)
+    .filter((c) => (editando && c.key === task?.status)
+      || (editando ? puedeCerrarla : puedeCrearHecha)
       || (c.key !== 'hecha' && (!editando || task?.status !== 'hecha')))
     .map((c) => ({ value: c.key, label: c.name }));
 
   const estadoBloqueado = editando && ((task?.status === 'hecha' && !puedeCerrarla) || !puedeMover);
+  // Por qué no se puede cambiar, y qué le queda a quien mira (11/11/2026).
+  const motivoEstadoBloqueado = !puedeMover
+    ? 'La mueven quien la lleva, su supervisor o un superadmin.'
+    : `Ya está hecha: la reabre ${task?.supervisor_id != null ? 'su supervisor' : 'quien la lleva'}.`;
+  const textoEstadoBloqueado = puedeDevolverla && ['hecha', 'en_revision'].includes(task?.status ?? '')
+    ? `${motivoEstadoBloqueado} Tú puedes devolverla a «En curso» con «Devolver».`
+    : motivoEstadoBloqueado;
   // Al crear, todo se puede. Al editar, el admin y la persona asignada (Diego,
   // 08/10 y WhatsApp 09/10): los demás la ven y la comentan con los campos
   // bloqueados, y quien tiene «Asignar» puede reasignarla.
@@ -478,8 +490,8 @@ export function TaskModal({
                       <Check size={13} className="mr-1" /> Hecha
                     </Button>
                   )}
-                  {!['en_revision', 'hecha'].includes(task.status) && !puedeCerrarla && puedeMover && task.de_programacion && (
-                    <Button type="button" size="sm" variant="outline" className="text-xs h-7.5 px-2" title="Es de programación: la cierra su supervisor"
+                  {!['en_revision', 'hecha'].includes(task.status) && !puedeCerrarla && puedeMover && task.supervisor_id != null && (
+                    <Button type="button" size="sm" variant="outline" className="text-xs h-7.5 px-2" title="Tiene supervisor: la cierra él"
                       onClick={() => moverA('en_revision', 'Mandada a revisar', 'No se pudo mandar a revisar')}>
                       <Eye size={13} className="mr-1" /> Mandar a revisar
                     </Button>
@@ -600,7 +612,7 @@ export function TaskModal({
                       ))}
                     </select>
                     {estadoBloqueado && (
-                      <p className="text-[11px] text-muted-foreground mt-0.5">Solo quienes tienen permiso pueden reabrir tareas completadas.</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5" data-testid="estado-bloqueado">{textoEstadoBloqueado}</p>
                     )}
                   </div>
 
@@ -1051,7 +1063,7 @@ export function TaskModal({
       {/* Diálogo de Devolución de Tarea */}
       {mostrarDialogoDevolver && (
         <Portal>
-          <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
             <div className="w-full max-w-md bg-card border border-border rounded-xl shadow-2xl p-5 space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-base font-bold text-foreground">Devolver tarea a «En curso»</h3>

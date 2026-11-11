@@ -245,14 +245,15 @@ describe('resumen de la tarde', () => {
     const movida = await nuevaTarea('movida');
     await mover(movida, 'en_curso');
     await request.post(`/api/tasks/${movida.id}/comments`).set(como('dev')).send({ content: 'Voy con ello' });
-    // Programación (CRM-ISEIE#419): solo eso espera a su supervisor. Lo demás «En revisión» no le sale.
+    // 11/11/2026: al supervisor le sale lo suyo «En revisión», sea del equipo que
+    // sea (el equipo de programación ya no cuenta). Sin supervisor, no espera a nadie.
     const empresa = await one('INSERT INTO invoice_issuers (razon_social, nif) VALUES ($1, $2) RETURNING id', [`${MARCA} Empresa`, `${MARCA}-E`]);
     const equipo = await one(`INSERT INTO task_teams (issuer_id, name, de_programacion) VALUES ($1, $2, TRUE) RETURNING id`, [empresa.id, `${MARCA} Desarrollo`]);
     const revisar = await nuevaTarea('para revisar');
     await q('UPDATE tasks SET team_id = $2 WHERE id = $1', [revisar.id, equipo.id]);
     await mover(revisar, 'en_revision');
-    const sinProgramacion = await nuevaTarea('revisión que no es de programación');
-    await mover(sinProgramacion, 'en_revision');
+    const sinSupervisor = await nuevaTarea('revisión sin supervisor', { supervisor_id: null });
+    await mover(sinSupervisor, 'en_revision');
 
     sendEmail.mockClear();
     const r = await runTareasResumen({ forzar: true, soloUserIds: ids() });
@@ -278,7 +279,7 @@ describe('resumen de la tarde', () => {
     const [aSup] = correosA('sup', 'tareas-resumen');
     expect(aSup.htmlContent).toContain('Esperan tu revisión (1)');
     expect(aSup.htmlContent).toContain(`${MARCA} para revisar`);
-    expect(aSup.htmlContent).not.toContain(`${MARCA} revisión que no es de programación`);
+    expect(aSup.htmlContent).not.toContain(`${MARCA} revisión sin supervisor`);
     // Quien las creó: «Creaste».
     const [aJefe] = correosA('jefe', 'tareas-resumen');
     expect(aJefe.htmlContent).toContain('Creaste');
@@ -290,7 +291,7 @@ describe('resumen de la tarde', () => {
     const r2 = await runTareasResumen({ forzar: true, soloUserIds: ids() });
     expect(r2.repetidos).toBe(3);
     expect(correos().filter((c) => c.tags?.includes('tareas-resumen'))).toHaveLength(0);
-    await q('DELETE FROM tasks WHERE id = ANY($1::int[])', [[revisar.id, sinProgramacion.id]]);
+    await q('DELETE FROM tasks WHERE id = ANY($1::int[])', [[revisar.id, sinSupervisor.id]]);
     await q('DELETE FROM task_teams WHERE id = $1', [equipo.id]);
     await q('DELETE FROM invoice_issuers WHERE id = $1', [empresa.id]);
   });

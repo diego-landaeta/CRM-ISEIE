@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  ArrowClockwise, ArrowLeft, CaretLeft, CaretRight, CheckCircle, Code, MagnifyingGlass,
+  ArrowClockwise, ArrowLeft, CaretLeft, CaretRight, CheckCircle, MagnifyingGlass,
 } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import usePermission from '@/shared/hooks/usePermission';
@@ -238,9 +238,6 @@ export default function TasksHistoryPage() {
                   </button>
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                     {f.team_name && <span>{f.team_name}</span>}
-                    {f.de_programacion && (
-                      <span className="inline-flex items-center gap-1" title="La cierra su supervisor"><Code size={11} aria-hidden /> Programación</span>
-                    )}
                     {(f.project_name || f.external_project_name) && <span>{f.project_name || f.external_project_name}</span>}
                     {f.area_name && <span>{f.area_name}</span>}
                   </div>

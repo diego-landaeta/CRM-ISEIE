@@ -3,24 +3,26 @@ import supertest from 'supertest';
 import jwt from 'jsonwebtoken';
 import app from '../src/app.js';
 import pool from '../src/shared/config/db.js';
-import { findResumenDelDia } from '../src/modules/tasks/tasks.resumen.model.js';
+import { findResumenDelDia, findCandidatosResumen } from '../src/modules/tasks/tasks.resumen.model.js';
 import { cerrarLasEnRevision } from '../src/modules/tasks/tasks.cierre-en-revision.js';
 
 /**
  * CRM-ISEIE#419 (gemela CRM-ISEIE#419) · la regla del último comentario (Diego y
- * Carlos, 10/11/2026), contra la base de verdad:
+ * Carlos, 10/11/2026; supervisor, Diego 11/11/2026), contra la base de verdad:
  *
- *   A · quien hace la tarea la pasa a «Hecha» él mismo, y queda quién y cuándo;
- *       quien no la lleva ni la supervisa, no.
+ *   A · sin supervisor, quien hace la tarea la pasa a «Hecha» él mismo, y queda
+ *       quién y cuándo; quien no la lleva ni la supervisa, no.
  *   B · quien la creó, el supervisor o un admin la devuelven a «En curso» con un
  *       comentario; quien no, no.
- *   C · programación: el programador la manda a revisar y la cierra su
- *       supervisor (Diego). Ni el programador ni un admin la cierran.
+ *   C · con supervisor: quien la lleva la manda a revisar y la cierra su
+ *       supervisor, y nadie más (ni quien la creó, ni un admin, ni otro
+ *       superadmin). Da igual el equipo: `de_programacion` ya no se lee.
  *   D · «Historial de tareas»: lo cerrado, con quién lo hizo, quién lo cerró y
  *       cuándo; por persona, equipo y periodo; cada uno, lo de su alcance.
- *   E · Carlos (superadmin) no tiene bandeja ni contador de «por aprobar».
- *   F · la migración de datos: las que estaban «En revisión» se cierran con la
- *       fecha de su último movimiento; se puede simular y pasar dos veces.
+ *   E · Carlos (superadmin) no tiene bandeja ni contador de «por aprobar»; el
+ *       resumen de la tarde le pide a cada supervisor lo suyo «En revisión».
+ *   F · la migración de datos: las que estaban «En revisión» SIN supervisor se
+ *       cierran con la fecha de su último movimiento; las supervisadas, no.
  *
  *   npm --prefix backend run db:preparar
  *   cd backend && npx vitest run tests/tareasHistorial419.test.js
@@ -203,37 +205,72 @@ describe('B · devolver a «En curso» con un comentario', () => {
   });
 });
 
-describe('C · programación: la cierra Diego, su supervisor', () => {
+describe('C · con supervisor la cierra su supervisor, y nadie más', () => {
   let t;
   beforeAll(async () => {
     t = await crear('admin', { title: `${MARCA} Endpoint de facturas`, assigned_to: U.dev1.id, supervisor_id: U.diego.id });
     expect(t.team_id).toBe(EQ.Desarrollo);
-    expect(t.de_programacion).toBe(true);
+    // La columna del equipo ya no sale ni se lee (11/11/2026).
+    expect(t).not.toHaveProperty('de_programacion');
   });
 
-  it('el programador no la pasa a «Hecha» (ni al crearla), ni la aprueba: la manda a revisar', async () => {
+  it('quien la lleva no la pasa a «Hecha» (ni la crea ya hecha), ni la aprueba: la manda a revisar', async () => {
     const res = await mover('dev1', t.id, 'hecha');
     expect(res.status).toBe(403);
-    expect(res.body.error).toMatch(/programación/);
+    expect(res.body.error).toMatch(/supervisor/);
     const ficha = await request.get(`/api/tasks/${t.id}`).set(como('dev1'));
-    expect(ficha.body.data.permisos).toMatchObject({ cerrar: false, mover: true });
-    expect((await request.post('/api/tasks').set(como('dev1')).send({ title: `${MARCA} Ya hecha`, status: 'hecha' })).status).toBe(403);
+    expect(ficha.body.data.permisos).toMatchObject({ cerrar: false, revisar: false, mover: true });
+    const tablero = await request.get('/api/tasks?ver=mias').set(como('dev1'));
+    expect(tablero.body.data.find((x) => x.id === t.id)?.puede_cerrar).toBe(false);
+    const yaHecha = await request.post('/api/tasks').set(como('admin'))
+      .send({ title: `${MARCA} Ya hecha supervisada`, assigned_to: U.admin.id, supervisor_id: U.diego.id, status: 'hecha' });
+    expect(yaHecha.status).toBe(403);
+    expect(yaHecha.body.error).toMatch(/supervisor/);
     expect((await mover('dev1', t.id, 'en_revision')).status).toBe(200);
     expect((await request.patch(`/api/tasks/${t.id}/approve`).set(como('dev1'))).status).toBe(403);
   });
 
-  it('un admin con la clave no la cierra (no es su supervisor), aunque la haya creado', async () => {
+  it('ni quien la creó, ni otro admin, ni otro superadmin (Carlos) la cierran', async () => {
     expect((await request.patch(`/api/tasks/${t.id}/approve`).set(como('admin'))).status).toBe(403);
     expect((await request.patch(`/api/tasks/${t.id}/approve`).set(como('admin2'))).status).toBe(403);
+    expect((await request.patch(`/api/tasks/${t.id}/approve`).set(como('carlos'))).status).toBe(403);
+    expect((await mover('carlos', t.id, 'hecha')).status).toBe(403);
+    const ficha = await request.get(`/api/tasks/${t.id}`).set(como('carlos'));
+    expect(ficha.body.data.permisos).toMatchObject({ cerrar: false, revisar: false });
+    expect((await one('SELECT status FROM tasks WHERE id = $1', [t.id])).status).toBe('en_revision');
   });
 
-  it('Diego, su supervisor, la cierra; y queda que la cerró él', async () => {
+  it('Diego, su supervisor, la cierra; queda que la cerró él; solo él la reabre', async () => {
+    const ficha = await request.get(`/api/tasks/${t.id}`).set(como('diego'));
+    expect(ficha.body.data.permisos).toMatchObject({ cerrar: true, revisar: true });
     const res = await request.patch(`/api/tasks/${t.id}/approve`).set(como('diego'));
     expect(res.status, JSON.stringify(res.body)).toBe(200);
     expect(res.body.data.status).toBe('hecha');
     expect(res.body.data.completed_by).toBe(U.diego.id);
-    // El programador no la reabre; Diego sí.
     expect((await mover('dev1', t.id, 'en_curso')).status).toBe(403);
+    expect((await mover('carlos', t.id, 'en_curso')).status).toBe(403);
+    expect((await mover('diego', t.id, 'en_curso')).status).toBe(200);
+  });
+
+  it('da igual el equipo: en SEO, con supervisor, tampoco la cierra quien la lleva', async () => {
+    const seo = await crear('admin', { title: `${MARCA} Auditoría SEO`, assigned_to: U.seo1.id, supervisor_id: U.admin2.id });
+    expect(seo.team_id).toBe(EQ.SEO);
+    expect((await mover('seo1', seo.id, 'hecha')).status).toBe(403);
+    expect((await mover('seo1', seo.id, 'en_revision')).status).toBe(200);
+    const ok = await request.patch(`/api/tasks/${seo.id}/approve`).set(como('admin2'));
+    expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+    expect(ok.body.data.completed_by).toBe(U.admin2.id);
+  });
+
+  it('sin supervisor la cierra quien la lleva, aunque su equipo siga marcado de programación en la base', async () => {
+    expect((await one('SELECT de_programacion FROM task_teams WHERE id = $1', [EQ.Desarrollo])).de_programacion).toBe(true);
+    const libre = await crear('admin', { title: `${MARCA} Ajuste sin supervisor`, assigned_to: U.dev2.id });
+    expect(libre.team_id).toBe(EQ.Desarrollo);
+    const res = await mover('dev2', libre.id, 'hecha');
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.data.completed_by).toBe(U.dev2.id);
+    // Y crearla ya hecha, para sí y sin supervisor, también.
+    expect((await request.post('/api/tasks').set(como('dev1')).send({ title: `${MARCA} Ya hecha`, status: 'hecha' })).status).toBe(201);
   });
 });
 
@@ -257,8 +294,9 @@ describe('D · Historial de tareas', () => {
     expect(filas[0]).toMatchObject({
       assigned_to: U.dev2.id, assigned_to_name: `${MARCA} dev2`,
       completed_by: U.diego.id, completed_by_name: `${MARCA} diego`,
-      team_name: `${MARCA} Desarrollo`, de_programacion: true,
+      team_name: `${MARCA} Desarrollo`,
     });
+    expect(filas[0]).not.toHaveProperty('de_programacion');
     expect(filas[0].completed_at).toBeTruthy();
     expect(filas[1]).toMatchObject({ completed_by: U.seo2.id, team_name: `${MARCA} SEO` });
     // Solo lo hecho: lo que sigue abierto no sale.
@@ -266,8 +304,10 @@ describe('D · Historial de tareas', () => {
   });
 
   it('se filtra por persona, por equipo y por periodo (el día del cierre)', async () => {
-    const porPersona = await historial('admin', `?ver=todo&assigned_to=${U.dev2.id}`);
-    expect(porPersona.body.data.map((x) => x.id)).toEqual([deDev.id]);
+    const porPersona = (await historial('admin', `?ver=todo&assigned_to=${U.dev2.id}`)).body.data;
+    expect(porPersona.map((x) => x.id)).toContain(deDev.id);
+    expect(porPersona.map((x) => x.id)).not.toContain(deSeo.id);
+    expect(porPersona.every((x) => x.assigned_to === U.dev2.id)).toBe(true);
     const porEquipo = await historial('admin', `?ver=todo&team_id=${EQ.SEO}`);
     expect(porEquipo.body.data.map((x) => x.id)).toContain(deSeo.id);
     expect(porEquipo.body.data.map((x) => x.id)).not.toContain(deDev.id);
@@ -310,17 +350,31 @@ describe('E · Carlos no aprueba tareas', () => {
     expect((await request.get('/api/tasks/review/count').set(como('carlos'))).status).not.toBe(200);
   });
 
-  it('aunque supervise una tarea que no es de programación y esté «En revisión», su resumen no le pide revisarla', async () => {
+  it('el resumen de la tarde le pide a cada supervisor lo suyo «En revisión», sea del equipo que sea', async () => {
+    const hoy = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Caracas' }).format(new Date());
+    // Una de SEO que supervisa Carlos: se la pide a él (y no a Diego).
     const t = await crear('carlos', { title: `${MARCA} Supervisa Carlos`, assigned_to: U.seo2.id, supervisor_id: U.carlos.id });
     expect((await mover('seo2', t.id, 'en_revision')).status).toBe(200);
-    const hoy = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Caracas' }).format(new Date());
-    const datos = await findResumenDelDia(U.carlos.id, hoy, 'America/Caracas');
-    expect(datos.falta.revisar.map((x) => x.id)).not.toContain(t.id);
-    // Y a Diego, que supervisa programación, sí le sale lo suyo.
+    // Una de Desarrollo que supervisa Diego: a Diego.
     const p = await crear('admin', { title: `${MARCA} Para Diego`, assigned_to: U.dev1.id, supervisor_id: U.diego.id });
     expect((await mover('dev1', p.id, 'en_revision')).status).toBe(200);
-    const deDiego = await findResumenDelDia(U.diego.id, hoy, 'America/Caracas');
-    expect(deDiego.falta.revisar.map((x) => x.id)).toContain(p.id);
+    // Una «En revisión» sin supervisor no espera a nadie.
+    const suelta = await crear('seo1', { title: `${MARCA} Revisión sin supervisor` });
+    expect((await mover('seo1', suelta.id, 'en_revision')).status).toBe(200);
+
+    const deCarlos = (await findResumenDelDia(U.carlos.id, hoy, 'America/Caracas')).falta.revisar.map((x) => x.id);
+    expect(deCarlos).toContain(t.id);
+    expect(deCarlos).not.toContain(p.id);
+    const deDiego = (await findResumenDelDia(U.diego.id, hoy, 'America/Caracas')).falta.revisar.map((x) => x.id);
+    expect(deDiego).toContain(p.id);
+    expect(deDiego).not.toContain(t.id);
+    for (const quien of ['carlos', 'diego', 'admin', 'seo1']) {
+      const r = (await findResumenDelDia(U[quien].id, hoy, 'America/Caracas')).falta.revisar.map((x) => x.id);
+      expect(r).not.toContain(suelta.id);
+    }
+    // Y Carlos, que solo la supervisa, entra en el reparto del resumen por ella.
+    const candidatos = await findCandidatosResumen(`prueba_${MARCA}`, hoy, 'America/Caracas', { soloUserIds: [U.carlos.id] });
+    expect(candidatos.map((x) => x.id)).toEqual([U.carlos.id]);
   });
 });
 
@@ -328,6 +382,7 @@ describe('F · migración de datos: las que estaban «En revisión» se cierran'
   let conMovimiento;
   let sinEventos;
   let archivada;
+  let supervisada;
   const movidaEl = new Date('2026-11-01T10:00:00.000Z');
   const tocadaEl = new Date('2026-10-20T08:30:00.000Z');
 
@@ -347,9 +402,13 @@ describe('F · migración de datos: las que estaban «En revisión» se cierran'
     archivada = await one(
       `INSERT INTO tasks (title, status, assigned_to, created_by, archived_at) VALUES ($1, 'en_revision', $2, $2, NOW()) RETURNING id`,
       [`${MARCA} archivada`, U.seo1.id]);
+    // Con supervisor: esa la cierra él, a mano (Diego, 11/11/2026). El guion no la toca.
+    supervisada = await one(
+      `INSERT INTO tasks (title, status, assigned_to, created_by, supervisor_id) VALUES ($1, 'en_revision', $2, $3, $4) RETURNING id`,
+      [`${MARCA} vieja supervisada`, U.dev1.id, U.admin.id, U.diego.id]);
   });
 
-  const nuestras = () => [conMovimiento.id, sinEventos.id, archivada.id];
+  const nuestras = () => [conMovimiento.id, sinEventos.id, archivada.id, supervisada.id];
 
   it('simular: cuenta y no cambia nada', async () => {
     const db = await pool.connect();
@@ -377,6 +436,9 @@ describe('F · migración de datos: las que estaban «En revisión» se cierran'
     expect(b.status).toBe('hecha');
     expect(new Date(b.completed_at).toISOString()).toBe(tocadaEl.toISOString());
     expect((await one('SELECT status FROM tasks WHERE id = $1', [archivada.id])).status).toBe('en_revision');
+    const sup = await one('SELECT status, completed_at FROM tasks WHERE id = $1', [supervisada.id]);
+    expect(sup).toEqual({ status: 'en_revision', completed_at: null });
+    expect(await q(`SELECT 1 FROM task_events WHERE task_id = $1 AND details->>'action' = 'cierre_419'`, [supervisada.id])).toEqual([]);
 
     const ev = await one(`SELECT user_id, details, created_at FROM task_events
                            WHERE task_id = $1 AND event_type = 'status_changed' ORDER BY id DESC LIMIT 1`, [conMovimiento.id]);

@@ -72,7 +72,9 @@ describe('#30 · entrar por la dirección lleva al inicio, sin error', () => {
     return buscarRoutes(el.props?.children);
   }
 
-  it.each([...RUTAS_IA, '/ai-chat'])('%s → /dashboard', async (ruta) => {
+  // `/informes/ia` («Análisis IA», de MultiCRM) no es pantalla aquí, pero su
+  // dirección tampoco da «Página no encontrada» (QA del 11/11).
+  it.each([...RUTAS_IA, '/ai-chat', '/informes/ia'])('%s → /dashboard', async (ruta) => {
     const { default: App } = await import('@/App');
     const RUTAS = createRoutesFromChildren(buscarRoutes(App()).props.children);
     const m = matchRoutes(RUTAS, ruta);

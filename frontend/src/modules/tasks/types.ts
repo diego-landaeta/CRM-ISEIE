@@ -79,12 +79,10 @@ export interface Task {
   /** Si quien mira puede moverla (arrastrarla): el responsable, el supervisor o un superadmin. */
   puede_mover?: boolean;
   /**
-   * Si quien mira puede pasarla a «Hecha» o reabrirla (CRM-ISEIE#419): quien la lleva,
-   * el supervisor o un superadmin; si es de programación, solo el supervisor o un superadmin.
+   * Si quien mira puede pasarla a «Hecha» o reabrirla (CRM-ISEIE#419; 11/11/2026): si
+   * tiene supervisor, solo él; si no, quien la lleva o un superadmin.
    */
   puede_cerrar?: boolean;
-  /** Su equipo es de programación: quien la lleva la manda a revisar y la cierra su supervisor. */
-  de_programacion?: boolean;
   created_by: number;
   created_by_name?: string | null;
   /** Cuándo pasó a «Hecha» (se borra si vuelve atrás). */
@@ -143,7 +141,6 @@ export interface HistorialTarea {
   due_date: string | null;
   team_id: number | null;
   team_name: string | null;
-  de_programacion: boolean;
   project_name: string | null;
   external_project_name: string | null;
   area_name: string | null;
@@ -181,8 +178,6 @@ export interface Team {
   name: string;
   /** De colaboradores (desarrollo, SEO…) o de tutores (04/11/2026). */
   tipo?: TipoEquipo;
-  /** Sus tareas las cierra el supervisor, no quien las lleva (CRM-ISEIE#419). */
-  de_programacion?: boolean;
   color: string;
   is_active: boolean;
   sort_order: number;
