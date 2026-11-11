@@ -30,9 +30,9 @@ export const puedeTenerEmpresa = (role, rolesExtra = []) =>
 export const createUserSchema = z.object({
   nombre: z.string().min(2, 'Nombre minimo 2 caracteres').max(200),
   email: z.string().email('Email invalido').transform((v) => v.toLowerCase().trim()),
-  role: z.enum(['admin', 'gestor', 'soporte', 'tutor', 'colaborador'], { message: 'Rol debe ser admin, gestor, soporte, tutor o colaborador' }),
+  role: z.enum(['admin', 'gestor', 'soporte', 'tutor', 'colaborador', 'tutor_redactor'], { message: 'Rol debe ser admin, gestor, soporte, tutor, colaborador o tutor redactor' }),
   // Roles de MAS. Superadmin no cabe: un rol añadido no puede dar acceso total.
-  roles_extra: z.array(z.enum(['admin', 'gestor', 'soporte', 'tutor', 'colaborador'])).optional(),
+  roles_extra: z.array(z.enum(['admin', 'gestor', 'soporte', 'tutor', 'colaborador', 'tutor_redactor'])).optional(),
   // Legacy: lista de ids (recibe_leads queda en false).
   projectIds: z.array(z.number().int().positive()).optional().default([]),
   // Nuevo: lista con flag recibe_leads por proyecto.
@@ -92,8 +92,8 @@ export const updateUserSchema = z.object({
   // Con el correo nuevo, mandarle el enlace para poner contraseña allí (#246).
   // A un tutor no le sale nada mientras siga el freno.
   reenviarEnlace: z.boolean().optional(),
-  role: z.enum(['admin', 'gestor', 'soporte', 'tutor', 'colaborador']).optional(),
-  roles_extra: z.array(z.enum(['admin', 'gestor', 'soporte', 'tutor', 'colaborador'])).optional(),
+  role: z.enum(['admin', 'gestor', 'soporte', 'tutor', 'colaborador', 'tutor_redactor']).optional(),
+  roles_extra: z.array(z.enum(['admin', 'gestor', 'soporte', 'tutor', 'colaborador', 'tutor_redactor'])).optional(),
   // «Se dedica solo a colaboraciones»: no da permisos (eso es «Gestionar
   // colaboraciones»), cambia lo que le toca: no entra en el reparto ni en las
   // listas de gestoras.
@@ -129,7 +129,7 @@ export const buscarUsersSchema = z.object({
 
 export const listUsersSchema = z.object({
   active: z.enum(['true', 'false']).optional(),
-  role: z.enum(['superadmin', 'admin', 'gestor', 'soporte', 'tutor', 'colaborador']).optional(),
+  role: z.enum(['superadmin', 'admin', 'gestor', 'soporte', 'tutor', 'colaborador', 'tutor_redactor']).optional(),
   projectId: z.coerce.number().int().positive().optional(),
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(100).default(20),

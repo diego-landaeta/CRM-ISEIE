@@ -9,7 +9,8 @@ import { existeEquipos, existeTipos, sqlConTablero } from './tasks.equipos.model
 // Tutores (Diego, 04/11/2026): «un tablero de tutores separado del de
 // colaboradores». Un tutor tiene tablero mientras esté en un equipo de TUTORES
 // (task_teams.tipo): lo decide `sqlConTablero` (tasks.equipos.model.js).
-export const ROLES_TAREAS = ['superadmin', 'admin', 'colaborador'];
+// El tutor redactor (CRM#708) tiene su tablero como un colaborador.
+export const ROLES_TAREAS = ['superadmin', 'admin', 'colaborador', 'tutor_redactor'];
 
 const conTablero = (n, tipos) => sqlConTablero('u', n, tipos);
 
@@ -197,7 +198,7 @@ export async function findTasks({
   assigned_to, project_id, external_project_id, area_id, status, priority, search, tag, vencidas, desde, hasta,
   periodo_desde, periodo_hasta, incluir_archivadas = false, orden = 'tablero', ambito = null, yo = null, supervisor_id = null, tambien_supervisa = null,
   team_id, visibles_para = null, mias_de = null, de_la_cabecera = null,
-  cerradas_desde = null, cerradas_hasta = null, con_cierre = false,
+  cerradas_desde = null, cerradas_hasta = null, con_cierre = false, por_persona = false,
 }) {
   const { sup: hay, eq } = await extras();
   const conditions = [];
@@ -297,6 +298,21 @@ export async function findTasks({
   }
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  // «Por integrante» (Historial de tareas, CRM-ISEIE#419): cuántas hizo cada uno, con
+  // los MISMOS filtros que la lista. Los JOIN son de una fila por tarea y el
+  // ámbito va con EXISTS: contar no multiplica.
+  if (por_persona) {
+    const { rows } = await query(
+      `SELECT t.assigned_to AS id, u_assign.nombre AS nombre, COUNT(*)::int AS total
+       ${joins(hay, eq)}
+       ${whereClause}
+       GROUP BY t.assigned_to, u_assign.nombre
+       ORDER BY total DESC, u_assign.nombre ASC`,
+      params
+    );
+    return rows;
+  }
 
   const sql = `
     SELECT ${columnas(hay, eq)},${con_cierre ? `

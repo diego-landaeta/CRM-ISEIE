@@ -1,6 +1,6 @@
 import { query, getClient } from '../../shared/config/db.js';
 // Los mismos roles con tablero que tasks.model.js (ROLES_TAREAS); aquí copiados para no importarse en círculo.
-const ROLES_TAREAS = ['superadmin', 'admin', 'colaborador'];
+const ROLES_TAREAS = ['superadmin', 'admin', 'colaborador', 'tutor_redactor'];
 
 /*
   Equipos de tutores (migración «equipos_de_tutores»; Diego, 04/11/2026): «un tablero

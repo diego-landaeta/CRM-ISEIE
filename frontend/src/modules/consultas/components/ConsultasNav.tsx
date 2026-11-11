@@ -2,7 +2,7 @@ import { ChatCircleText, UserCircleMinus, Gauge, UsersThree, ChartBar } from '@p
 import { useCallback, useRef } from 'react';
 import SubNav from '@/shared/components/ui/SubNav';
 import { useAuth } from '@/contexts/AuthContext';
-import { tieneRol } from '@/shared/lib/roles';
+import { tieneRol, ROLES_DE_TUTOR } from '@/shared/lib/roles';
 import usePermission from '@/shared/hooks/usePermission';
 
 /*
@@ -16,7 +16,7 @@ export function useQuienSoy() {
   // Lo que dice el servidor (#423): sale si salía antes Y tiene el permiso.
   const { can } = usePermission();
   return {
-    esTutor: tieneRol(user as never, 'tutor') && can('consultas.atender'),
+    esTutor: tieneRol(user as never, ...ROLES_DE_TUTOR) && can('consultas.atender'),
     // Como el servidor (`veTodoElCrm`): superadmin y soporte solo como rol principal.
     esAdmin: (['superadmin', 'soporte'].includes(user?.role || '') || tieneRol(user as never, 'admin')) && can('consultas.view'),
   };
