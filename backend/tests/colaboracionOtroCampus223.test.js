@@ -60,9 +60,10 @@ function contestar(sql, params = []) {
         && c.vigente_desde <= fin && (c.vigente_hasta || '9999-12-31') >= desde),
     };
   }
-  if (/SELECT id FROM users WHERE id = \$1 AND role = 'tutor' FOR UPDATE/.test(s)) {
+  // El tutor redactor (CRM-ISEIE#420) también es tutor.
+  if (/SELECT id FROM users WHERE id = \$1 AND role IN \('tutor', 'tutor_redactor'\) FOR UPDATE/.test(s)) {
     const u = estado.usuarios[params[0]];
-    return { rows: u?.role === 'tutor' ? [{ id: params[0] }] : [] };
+    return { rows: ['tutor', 'tutor_redactor'].includes(u?.role) ? [{ id: params[0] }] : [] };
   }
   if (/INSERT INTO user_projects/.test(s)) {
     const [uid, pid] = params;

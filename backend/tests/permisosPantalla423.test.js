@@ -72,7 +72,7 @@ describe('Configuración › Roles (#423)', () => {
     expect((await request.get('/api/permissions/roles').set(como('superadmin'))).status).toBe(200);
     const r = await request.get('/api/permissions/roles').set(como('adminA'));
     expect(r.status).toBe(200);
-    expect(r.body.data.fijos.map((x) => x.clave)).toEqual(['superadmin', 'admin', 'gestor', 'soporte', 'project_manager', 'tutor', 'colaborador']);
+    expect(r.body.data.fijos.map((x) => x.clave)).toEqual(['superadmin', 'admin', 'gestor', 'soporte', 'project_manager', 'tutor', 'colaborador', 'tutor_redactor']);
     expect((await request.get('/api/permissions/roles').set(como('gestoraA'))).status).toBe(403);
     expect((await request.get('/api/permissions/roles').set(como('soporte'))).status).toBe(403);
   });

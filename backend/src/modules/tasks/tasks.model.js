@@ -9,7 +9,8 @@ import { existeEquipos, existeTipos, sqlConTablero } from './tasks.equipos.model
 // Tutores (Diego, 04/11/2026): «un tablero de tutores separado del de
 // colaboradores». Un tutor tiene tablero mientras esté en un equipo de TUTORES
 // (task_teams.tipo): lo decide `sqlConTablero` (tasks.equipos.model.js).
-export const ROLES_TAREAS = ['superadmin', 'admin', 'colaborador'];
+// El tutor redactor (CRM#708) tiene su tablero como un colaborador.
+export const ROLES_TAREAS = ['superadmin', 'admin', 'colaborador', 'tutor_redactor'];
 
 const conTablero = (n, tipos) => sqlConTablero('u', n, tipos);
 
