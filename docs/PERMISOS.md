@@ -1164,9 +1164,9 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Usar su WhatsApp | `whatsapp.usar` | Enlazar su número y atender sus chats desde el CRM. · nunca: Tutor, Colaborador · nunca si su rol principal es: Tutor, Colaborador, Project manager | Admin, Gestora, Soporte |  |
-| Supervisar el WhatsApp de otros | `whatsapp.supervisar` | Abrir la sesión de otra persona de sus campus y el banco de mensajes de todas. · nunca: Tutor, Colaborador | Admin |  |
-| Ver el banco de mensajes | `whatsapp.banco` | Buscar en el respaldo de los mensajes de WhatsApp de las personas de sus campus. Solo lectura. · nunca: Tutor, Colaborador · nunca si su rol principal es: Tutor, Colaborador | Project manager |  |
+| Usar su WhatsApp | `whatsapp.usar` | Enlazar su número y atender sus chats desde el CRM. · nunca: Tutor, Colaborador, Tutor redactor · nunca si su rol principal es: Tutor, Colaborador, Tutor redactor, Project manager | Admin, Gestora, Soporte |  |
+| Supervisar el WhatsApp de otros | `whatsapp.supervisar` | Abrir la sesión de otra persona de sus campus y el banco de mensajes de todas. · nunca: Tutor, Colaborador, Tutor redactor | Admin |  |
+| Ver el banco de mensajes | `whatsapp.banco` | Buscar en el respaldo de los mensajes de WhatsApp de las personas de sus campus. Solo lectura. · nunca: Tutor, Colaborador, Tutor redactor · nunca si su rol principal es: Tutor, Colaborador, Tutor redactor | Project manager |  |
 | Ver la cola de WhatsApp | `whatsapp.cola` | Los prospectos que esperan respuesta por WhatsApp. | Admin, Gestora, Soporte, Project manager |  |
 | Sus plantillas | `whatsapp.plantillas` | Crear y usar sus propias plantillas de mensaje. | Admin, Gestora, Soporte, Project manager |  |
 | Plantillas compartidas | `whatsapp.plantillas_compartidas` | Crear y cambiar las plantillas de todo el equipo, y las de otras personas. | Admin, Soporte | `whatsapp.plantillas` |
@@ -1187,11 +1187,11 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver su tablero | `tasks.view_own` | Entrar al tablero y ver las tareas que tiene asignadas. | Admin, Colaborador, Tutor |  |
+| Ver su tablero | `tasks.view_own` | Entrar al tablero y ver las tareas que tiene asignadas. | Admin, Colaborador, Tutor, Tutor redactor |  |
 | Ver todo el equipo | `tasks.view_all` | El tablero de cualquiera, «Todo el equipo» y las métricas. | Admin |  |
-| Crear tareas | `tasks.create` | Crearse tareas. | Admin, Colaborador | `tasks.view_own` |
+| Crear tareas | `tasks.create` | Crearse tareas. | Admin, Colaborador, Tutor redactor | `tasks.view_own` |
 | Asignar tareas | `tasks.assign` | Asignar o reasignar tareas a otras personas. | Admin | `tasks.view_own` |
-| Editar tareas | `tasks.edit` | Cambiar, mover y completar las tareas que puede ver. | Admin, Colaborador, Tutor | `tasks.view_own` |
+| Editar tareas | `tasks.edit` | Cambiar, mover y completar las tareas que puede ver. | Admin, Colaborador, Tutor, Tutor redactor | `tasks.view_own` |
 | Archivar tareas | `tasks.delete` | Archivar cualquier tarea y borrar comentarios ajenos. | Admin | `tasks.view_own` |
 | Devolver tareas | `tasks.close` | Devolver a «En curso», con un comentario, las tareas hechas o en revisión que puede ver. | Admin | `tasks.view_own` |
 | Configurar el tablero | `tasks.manage` | Columnas, áreas y proyectos del tablero. | Admin | `tasks.view_own` |
@@ -1296,7 +1296,7 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Sus cursos y comisiones | `tutores.mis_cursos` | El tutor ve sus colaboraciones, sus cursos y sus comisiones. | Tutor |  |
+| Sus cursos y comisiones | `tutores.mis_cursos` | El tutor ve sus colaboraciones, sus cursos y sus comisiones. | Tutor, Tutor redactor |  |
 | Gestionar colaboraciones | `tutores.gestionar` | Dar de alta tutores, asignarles cursos, calcular sus comisiones y ver las fichas de los de sus campus. | Admin |  |
 | Liquidar comisiones | `tutores.liquidar` | Pagar o revertir las comisiones de un tutor (mueve dinero). | Admin | `tutores.gestionar` |
 | Ajustes de comisiones | `tutores.ajustes` | Cambiar los porcentajes y reglas de las comisiones. | Admin | `tutores.gestionar` |
@@ -1309,7 +1309,7 @@ lo que pide para tener sentido (editar pide ver).
 |---|---|---|---|---|
 | Ver el panel de consultas | `consultas.view` | Las consultas de los alumnos de sus campus, la carga de cada tutor y las métricas de todos. | Admin, Soporte, Project manager |  |
 | Gestionar consultas | `consultas.gestionar` | Reasignar una consulta a otro tutor, leer los campus ahora, sincronizar alumnos y el token de cada tutor. | Admin, Soporte | `consultas.view` |
-| Atender sus consultas | `consultas.atender` | Su bandeja: responder y cerrar sus consultas, escribir a sus alumnos, su carga de trabajo y sus métricas. | Tutor |  |
+| Atender sus consultas | `consultas.atender` | Su bandeja: responder y cerrar sus consultas, escribir a sus alumnos, su carga de trabajo y sus métricas. | Tutor, Tutor redactor |  |
 
 ## Finanzas
 
@@ -1398,7 +1398,7 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Subir su factura | `facturas_colaborador.subir` | «Mi factura»: el colaborador sube la suya del mes. | Colaborador |  |
+| Subir su factura | `facturas_colaborador.subir` | «Mi factura»: el colaborador sube la suya del mes. | Colaborador, Tutor redactor |  |
 | Ver las facturas | `facturas_colaborador.ver_todas` | Las facturas de los colaboradores de sus empresas. | Admin, Project manager |  |
 | Gestionar colaboradores | `facturas_colaborador.gestionar` | Dar de alta colaboradores y reenviarles el enlace. | Admin |  |
 | Anular facturas de colaboradores | `facturas_colaborador.anular` | Anular una factura recibida. | Admin | `facturas_colaborador.ver_todas` |
@@ -1484,7 +1484,7 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Usar el MCP | `mcp.usar` | Conectar su Claude al CRM con su URL personal. · nunca: Tutor · nunca si su rol principal es: Tutor | Admin |  |
+| Usar el MCP | `mcp.usar` | Conectar su Claude al CRM con su URL personal. · nunca: Tutor, Tutor redactor · nunca si su rol principal es: Tutor, Tutor redactor | Admin |  |
 | Administrar el MCP | `mcp.administrar` | Dar o quitar el MCP a personas de sus campus y ver qué se ha consultado. | Admin |  |
 | Apagar el MCP | `mcp.supervisar` | El interruptor de emergencia y rechazar conexiones ajenas. | solo superadmin |  |
 

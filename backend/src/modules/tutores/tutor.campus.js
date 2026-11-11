@@ -26,9 +26,9 @@ import {
   usuarioPorCorreo, estadoDeLaMatricula, MoodleError,
 } from '../../shared/services/moodle.client.js';
 
-// Tutor = rol principal o añadido. `roles_extra` es un array de ENUM: se pide
+// Tutor = rol principal o añadido; el tutor redactor (CRM#708) también. `roles_extra` es un array de ENUM: se pide
 // como texto para poder compararlo.
-const ES_TUTOR = `(u.role = 'tutor' OR 'tutor' = ANY(COALESCE(u.roles_extra, '{}')::text[]))`;
+const ES_TUTOR = `(u.role IN ('tutor', 'tutor_redactor') OR COALESCE(u.roles_extra, '{}')::text[] && ARRAY['tutor', 'tutor_redactor'])`;
 
 /** ¿Este usuario es tutor (como rol principal o añadido)? */
 export async function esTutor(userId) {

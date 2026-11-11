@@ -83,7 +83,7 @@ export async function panelDeTutores(projectIds = null) {
        JOIN suyos s ON s.tutor_id = u.id
        JOIN projects pr ON pr.id = s.project_id
        LEFT JOIN invoice_issuers ii ON ii.id = pr.sociedad_emisora_id
-      WHERE u.active AND (u.role = 'tutor' OR 'tutor' = ANY(COALESCE(u.roles_extra, '{}')::text[]))
+      WHERE u.active AND (u.role IN ('tutor', 'tutor_redactor') OR COALESCE(u.roles_extra, '{}')::text[] && ARRAY['tutor', 'tutor_redactor'])
         ${projectIds ? 'AND s.project_id = ANY($1::int[])' : ''}
       GROUP BY u.id
       ORDER BY u.nombre`, projectIds ? [projectIds] : []);

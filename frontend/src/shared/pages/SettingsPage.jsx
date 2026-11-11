@@ -502,6 +502,8 @@ export function EditUserModal({ user, projects, onClose, onSaved, empresas, falt
               <option value="soporte">Soporte</option>
               {/* Tablero de tareas (#210): equipo de desarrollo, solo ve sus Tareas. */}
               <option value="colaborador">Colaborador</option>
+              {/* CRM-ISEIE#420: hace los cursos y responde en Moodle. */}
+              <option value="tutor_redactor">Tutor redactor</option>
             </select>
           </div>
           <div>
@@ -510,7 +512,7 @@ export function EditUserModal({ user, projects, onClose, onSaved, empresas, falt
                 clase no tiene que elegir. Solo SUMAN permisos; el principal
                 sigue siendo el de arriba. */}
             <div className="flex flex-wrap gap-1.5">
-              {['gestor', 'admin', 'soporte', 'tutor', 'colaborador'].filter((r) => r !== role).map((r) => {
+              {['gestor', 'admin', 'soporte', 'tutor', 'colaborador', 'tutor_redactor'].filter((r) => r !== role).map((r) => {
                 const puesto = rolesExtra.includes(r);
                 return (
                   <button
@@ -521,7 +523,7 @@ export function EditUserModal({ user, projects, onClose, onSaved, empresas, falt
                     className={'rounded-md border px-2.5 py-1 text-xs transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40 '
                       + (puesto ? 'border-primary bg-primary/10 font-semibold text-primary' : 'border-border hover:bg-muted')}
                   >
-                    {r === 'gestor' ? 'Gestor' : r === 'admin' ? 'Admin' : r === 'soporte' ? 'Soporte' : r === 'colaborador' ? 'Colaborador' : 'Tutor'}
+                    {r === 'gestor' ? 'Gestor' : r === 'admin' ? 'Admin' : r === 'soporte' ? 'Soporte' : r === 'colaborador' ? 'Colaborador' : r === 'tutor_redactor' ? 'Tutor redactor' : 'Tutor'}
                   </button>
                 );
               })}
@@ -601,6 +603,7 @@ const ROLES_ALTA = [
   ['admin', 'Admin — acceso operativo completo'],
   ['soporte', 'Soporte — tickets y consultas'],
   ['colaborador', 'Colaborador — solo su tablero de Tareas'],
+  ['tutor_redactor', 'Tutor redactor — su tablero, su factura, sus consultas y sus cursos'],
 ];
 
 export function InviteUserModal({ projects, onClose, onCreated, empresas, faltaMigracionEmpresas = false }) {
