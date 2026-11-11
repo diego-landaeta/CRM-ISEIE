@@ -2,10 +2,22 @@ import { Router } from 'express';
 import { verifyToken } from '../../shared/middleware/auth.js';
 import { puede } from '../../shared/middleware/permissions.js';
 import * as ctrl from './tasks.controller.js';
+import * as github from './tasks.github.controller.js';
 
 const router = Router();
 
 router.use(verifyToken);
+
+// GitHub (CRM-ISEIE#435): el tablero, al día con las issues del repositorio. Solo con
+// «Conectar con GitHub» (de serie, el superadmin; ya trae ver el tablero). Van
+// ANTES de la puerta general para que su clave sea la única que las guarda (y
+// así salga en el inventario de permisos). El webhook va aparte (app.js).
+router.get('/github', puede('tasks.github'), github.githubEstado);
+router.patch('/github', puede('tasks.github'), github.githubConfig);
+router.put('/github/secretos', puede('tasks.github'), github.githubSecretos);
+router.put('/github/usuarios/:login', puede('tasks.github'), github.githubPonerUsuario);
+router.delete('/github/usuarios/:login', puede('tasks.github'), github.githubQuitarUsuario);
+
 // A la puerta del tablero basta con poder ver alguno (#423); cada acción mira
 // su clave dentro del servicio (tasks.service.js · permisosDe).
 router.use(puede('tasks.view_own', 'tasks.view_all'));

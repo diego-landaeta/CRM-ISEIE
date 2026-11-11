@@ -13,8 +13,9 @@ import * as tasksApi from '../api/tasks.api';
 import { BOARD_COLORS, boardColor } from '../lib/taskUi';
 import type { Assignee, TaskArea, TaskColumn, TaskExternalProject } from '../types';
 import { EquiposConfig } from '../components/EquiposConfig';
+import { GithubConfig } from '../components/GithubConfig';
 
-type Pestana = 'columnas' | 'areas' | 'proyectos' | 'equipos';
+type Pestana = 'columnas' | 'areas' | 'proyectos' | 'equipos' | 'github';
 
 const COLORES = Object.entries(BOARD_COLORS).map(([value, c]) => ({ value, label: c.label }));
 const errorDe = (err: unknown) => (err instanceof Error && err.message) ? err.message : 'Inténtalo de nuevo.';
@@ -62,7 +63,9 @@ export default function TaskBoardConfigPage() {
       />
       <div role="tablist" aria-label="Qué configurar" className="inline-flex bg-muted p-0.5 rounded-md text-sm">
         {([['columnas', 'Columnas'], ['areas', 'Áreas'], ['proyectos', 'Proyectos propios'],
-          ...(can('tasks.manage_teams') ? [['equipos', 'Equipos'] as const] : [])] as const).map(([k, l]) => (
+          ...(can('tasks.manage_teams') ? [['equipos', 'Equipos'] as const] : []),
+          // CRM-ISEIE#435: el tablero, al día con GitHub. Solo el superadmin (tasks.github).
+          ...(can('tasks.github') ? [['github', 'GitHub'] as const] : [])] as const).map(([k, l]) => (
           <button key={k} type="button" role="tab" aria-selected={pestana === k} onClick={() => setPestana(k)}
             className={`px-3 py-1.5 rounded font-medium ${pestana === k ? 'bg-card shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
             {l}
@@ -73,6 +76,7 @@ export default function TaskBoardConfigPage() {
       {pestana === 'areas' && <Areas />}
       {pestana === 'proyectos' && <Proyectos />}
       {pestana === 'equipos' && can('tasks.manage_teams') && <EquiposConfig />}
+      {pestana === 'github' && can('tasks.github') && <GithubConfig />}
     </div>
   );
 }

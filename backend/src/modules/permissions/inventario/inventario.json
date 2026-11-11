@@ -12622,6 +12622,116 @@
   "puertas": []
  },
  {
+  "id": "GET /api/tasks/github",
+  "tipo": "ruta",
+  "modulo": "tasks",
+  "metodo": "GET",
+  "ruta": "/api/tasks/github",
+  "relativa": "GET /github",
+  "controlador": "githubEstado",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tasks.github"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PATCH /api/tasks/github",
+  "tipo": "ruta",
+  "modulo": "tasks",
+  "metodo": "PATCH",
+  "ruta": "/api/tasks/github",
+  "relativa": "PATCH /github",
+  "controlador": "githubConfig",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tasks.github"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PUT /api/tasks/github/secretos",
+  "tipo": "ruta",
+  "modulo": "tasks",
+  "metodo": "PUT",
+  "ruta": "/api/tasks/github/secretos",
+  "relativa": "PUT /github/secretos",
+  "controlador": "githubSecretos",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tasks.github"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PUT /api/tasks/github/usuarios/:login",
+  "tipo": "ruta",
+  "modulo": "tasks",
+  "metodo": "PUT",
+  "ruta": "/api/tasks/github/usuarios/:login",
+  "relativa": "PUT /github/usuarios/:login",
+  "controlador": "githubPonerUsuario",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tasks.github"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "DELETE /api/tasks/github/usuarios/:login",
+  "tipo": "ruta",
+  "modulo": "tasks",
+  "metodo": "DELETE",
+  "ruta": "/api/tasks/github/usuarios/:login",
+  "relativa": "DELETE /github/usuarios/:login",
+  "controlador": "githubQuitarUsuario",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tasks.github"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/tasks/metrics",
   "tipo": "ruta",
   "modulo": "tasks",

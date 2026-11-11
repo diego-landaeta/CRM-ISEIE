@@ -156,6 +156,8 @@ export const SECCIONES = [
           // Diego, 26/10/2026: «Admin y superadmin pueden crear, renombrar y archivar
           // equipos y gestionar sus miembros y encargados».
           a('manage_teams', 'Gestionar equipos', 'Crear, renombrar y archivar equipos del tablero, sus cargos y quién está en cada uno.', ADMIN, { requiere: ['tasks.view_own'] }),
+          // CRM-ISEIE#435 (Diego, 11/11/2026): el tablero, al día con las issues de GitHub. Solo el superadmin.
+          a('github', 'Conectar con GitHub', 'El repositorio, el equipo, el supervisor, los secretos y quién es quién en GitHub.', NADIE, { requiere: ['tasks.view_own'] }),
         ],
       },
     ],

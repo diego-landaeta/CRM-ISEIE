@@ -354,3 +354,51 @@ export async function removeTeamMember(teamId: number, userId: number): Promise<
   const { data } = await client.delete<TeamMember[]>(`/tasks/teams/${teamId}/members/${userId}`);
   return data ?? [];
 }
+
+/* --- GitHub (CRM-ISEIE#435): el tablero, al día con las issues del repositorio --- */
+
+export type GithubEstado = {
+  /** GITHUB_TABLERO_ACTIVO en el servidor. Apagado, el webhook no está montado. */
+  activo: boolean;
+  config: {
+    repo: string; team_id: number | null; team_name: string | null;
+    supervisor_id: number | null; supervisor_name: string | null; copia_repo: string | null; updated_at: string;
+  } | null;
+  /** Lo que falta para que el webhook escriba en el tablero (vacío = listo). */
+  falta: string[];
+  /** Si están guardados: nunca se devuelven. */
+  secretos: { webhook_secret: boolean; token: boolean };
+  webhook_url: string;
+  eventos: string[];
+  equipos: { id: number; name: string; empresa: string | null }[];
+  personas: { id: number; nombre: string }[];
+  usuarios: { login: string; user_id: number; nombre: string; active: boolean; issues: number }[];
+  sin_usuario: { login: string; issues: number }[];
+  resumen: { total: number; abiertas: number; cerradas: number; por_definir: number; ultima_sincronizacion: string | null };
+  entregas: { evento: string; accion: string | null; number: number | null; resultado: string | null; recibida_at: string }[];
+};
+
+export async function getGithub(): Promise<GithubEstado> {
+  const { data } = await client.get<GithubEstado>('/tasks/github');
+  return data;
+}
+
+export async function updateGithub(body: { repo?: string; team_id?: number | null; supervisor_id?: number | null; copia_repo?: string | null }): Promise<GithubEstado> {
+  const { data } = await client.patch<GithubEstado>('/tasks/github', body);
+  return data;
+}
+
+export async function setGithubSecretos(body: { webhook_secret?: string; token?: string }): Promise<{ webhook_secret: boolean; token: boolean }> {
+  const { data } = await client.put<{ webhook_secret: boolean; token: boolean }>('/tasks/github/secretos', body);
+  return data;
+}
+
+export async function setGithubUsuario(login: string, userId: number): Promise<{ login: string; recolocadas: number }> {
+  const { data } = await client.put<{ login: string; recolocadas: number }>(`/tasks/github/usuarios/${encodeURIComponent(login)}`, { user_id: userId });
+  return data;
+}
+
+export async function removeGithubUsuario(login: string): Promise<{ login: string; recolocadas: number }> {
+  const { data } = await client.delete<{ login: string; recolocadas: number }>(`/tasks/github/usuarios/${encodeURIComponent(login)}`);
+  return data;
+}

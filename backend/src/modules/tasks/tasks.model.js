@@ -182,11 +182,13 @@ const joins = (hay, eq = false) => `
   —arrastrándola, aprobándola o, desde la CRM-ISEIE#419, quien la lleva—, del
   historial (`task_events`). Si nació ya hecha, quien la creó.
 */
-const COLUMNAS_CIERRE = `CASE WHEN t.status = 'hecha' THEN COALESCE(cierre.user_id, t.created_by) END AS completed_by,
-       CASE WHEN t.status = 'hecha' THEN COALESCE(u_cierre.nombre, u_create.nombre) END AS completed_by_name`;
+// Si la cerró GitHub (CRM-ISEIE#435: el webhook o la importación, `action: 'github'`),
+// no hay persona: «La cerró» dice «GitHub».
+const COLUMNAS_CIERRE = `CASE WHEN t.status = 'hecha' AND cierre.action IS DISTINCT FROM 'github' THEN COALESCE(cierre.user_id, t.created_by) END AS completed_by,
+       CASE WHEN t.status = 'hecha' THEN CASE WHEN cierre.action = 'github' THEN 'GitHub' ELSE COALESCE(u_cierre.nombre, u_create.nombre) END END AS completed_by_name`;
 const JOIN_CIERRE = `
      LEFT JOIN LATERAL (
-       SELECT te.user_id FROM task_events te
+       SELECT te.user_id, te.details->>'action' AS action FROM task_events te
         WHERE te.task_id = t.id AND te.event_type = 'status_changed' AND te.details->>'new_status' = 'hecha'
         ORDER BY te.created_at DESC, te.id DESC LIMIT 1) cierre ON t.status = 'hecha'
      LEFT JOIN users u_cierre ON u_cierre.id = cierre.user_id`;
@@ -661,7 +663,8 @@ export async function createTaskEvent({ task_id, user_id, event_type, details = 
 
 export async function findTaskEvents(task_id) {
   const { rows } = await query(
-    `SELECT te.id, te.task_id, te.user_id, u.nombre AS user_name,
+    `SELECT te.id, te.task_id, te.user_id,
+            COALESCE(u.nombre, CASE WHEN te.details->>'action' = 'github' THEN 'GitHub' END) AS user_name,
             te.event_type, te.details, te.created_at
        FROM task_events te
        LEFT JOIN users u ON u.id = te.user_id
