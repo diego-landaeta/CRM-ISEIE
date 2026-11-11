@@ -59,6 +59,20 @@ export function soloEsColaborador(user: Quien | null | undefined): boolean {
 }
 
 /**
+ * Tutor redactor y NADA MÁS (CRM#708): su tablero, su factura del mes, sus
+ * consultas y sus cursos. El corte de verdad lo hace el servidor
+ * (`RUTAS_DEL_TUTOR_REDACTOR`); esto evita pintarle pantallas que le
+ * responderían 403.
+ */
+export function soloEsTutorRedactor(user: Quien | null | undefined): boolean {
+  const suyos = rolesDe(user);
+  return suyos.length > 0 && suyos.every((r) => r === 'tutor_redactor');
+}
+
+/** Los roles que dan clase: donde se pregunta «¿es tutor?», el redactor también cuenta. */
+export const ROLES_DE_TUTOR: UserRole[] = ['tutor', 'tutor_redactor'];
+
+/**
  * Los permisos con los que el servidor contesta a los avisos de WhatsApp
  * (`usaOSupervisa` en whatsapp.routes.js: `/sin-leer` y `/respuesta-llamada`).
  * Una prueba comprueba que no se separan.

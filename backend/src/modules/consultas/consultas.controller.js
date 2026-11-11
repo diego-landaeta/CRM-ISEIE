@@ -1,7 +1,7 @@
 import { AppError } from '../../shared/utils/AppError.js';
 import { query } from '../../shared/config/db.js';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
-import { tieneRol } from '../../shared/utils/roles.js';
+import { tieneRol, ROLES_DE_TUTOR } from '../../shared/utils/roles.js';
 import { proyectosDelAmbito, veTodoElCrm, campusDeLaPersona, comoLista } from '../../shared/utils/ambito.js';
 import { saveLocal, getLocal } from '../../shared/services/localStorage.service.js';
 import { tutoresQueRecibenConsultas, campusDelTutor } from '../tutores/tutor.campus.js';
@@ -240,7 +240,7 @@ async function quienYAmbito(req) {
     return { todas: true, projectIds: comoLista(projectId, projectIds) };
   }
   // alcance #423: lo suyo solo existe para quien es tutor (el superadmin no tiene «lo suyo»).
-  if (!(await tienePermiso(req, 'consultas.atender')) || !tieneRol(req.user, 'tutor')) {
+  if (!(await tienePermiso(req, 'consultas.atender')) || !tieneRol(req.user, ...ROLES_DE_TUTOR)) {
     throw new AppError('Esto es de cada tutor: pide las de todos', 403, 'FORBIDDEN');
   }
   return { todas: false, tutorId: req.user.userId };
@@ -271,7 +271,7 @@ export async function escribirAlAlumno(req, res, next) {
 // GET /api/consultas/carga  — «Mi carga de trabajo»
 // alcance #423: la carga es de un tutor; quien no lo es no tiene «la suya».
 const exigirSerTutor = (req) => {
-  if (!tieneRol(req.user, 'tutor')) throw new AppError('La carga es de cada tutor', 403, 'FORBIDDEN');
+  if (!tieneRol(req.user, ...ROLES_DE_TUTOR)) throw new AppError('La carga es de cada tutor', 403, 'FORBIDDEN');
 };
 
 export async function miCarga(req, res, next) {

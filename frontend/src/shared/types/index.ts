@@ -28,7 +28,7 @@ export type LeadOrigen =
   | 'chatgpt_ia'
   | 'otro';
 
-export type UserRole = 'superadmin' | 'admin' | 'gestor' | 'soporte' | 'tutor' | 'colaborador';
+export type UserRole = 'superadmin' | 'admin' | 'gestor' | 'soporte' | 'tutor' | 'colaborador' | 'tutor_redactor';
 
 export type ProjectType = 'crm' | 'ia';
 

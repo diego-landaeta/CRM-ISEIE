@@ -10,7 +10,7 @@ import * as leadProducts from './lead-products.service.js';
 import { deducirCanal } from './canal.js';
 import { planificarPasosDeLead, ajustarPaso } from '../proceso/proceso.model.js';
 import { cruzarConPulsacion } from '../widget/widget.pulsaciones.js';
-import { alcanceComercial, dentroDelAlcance } from '../../shared/utils/roles.js';
+import { alcanceComercial, dentroDelAlcance, ROLES_DE_TUTOR } from '../../shared/utils/roles.js';
 
 // Dispara secuencias de email activas. STUB v1 mientras email-sequences no este portado.
 async function triggerSequences(_triggerEvent, _leadId, _projectId) {
@@ -656,7 +656,9 @@ export async function reassign(leadId, newResponsableId, userId) {
     `SELECT nombre, role, COALESCE(gestor_colaboraciones, false) AS colaboraciones
        FROM users WHERE id = $1 AND active = true`, [newResponsableId]);
   if (!destino.length) throw new AppError('Esa persona no existe o está desactivada', 400, 'DESTINO_INVALIDO');
-  if (destino[0].role === 'tutor') {
+  const quien = destino[0];
+  // El tutor redactor (CRM#708) tampoco lleva prospectos.
+  if (ROLES_DE_TUTOR.includes(quien.role)) {
     throw new AppError(`${destino[0].nombre} es profesor: no lleva prospectos`, 400, 'NO_ATIENDE_PROSPECTOS');
   }
   if (destino[0].colaboraciones) {
