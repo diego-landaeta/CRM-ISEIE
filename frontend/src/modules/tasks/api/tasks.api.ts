@@ -325,7 +325,7 @@ export async function createTeam(body: { issuer_id: number; name: string; color?
   return data;
 }
 
-export async function updateTeam(id: number, body: Partial<Pick<Team, 'name' | 'color' | 'is_active' | 'sort_order' | 'de_programacion'>>): Promise<Team> {
+export async function updateTeam(id: number, body: Partial<Pick<Team, 'name' | 'color' | 'is_active' | 'sort_order'>>): Promise<Team> {
   const { data } = await client.patch<Team>(`/tasks/teams/${id}`, body);
   return data;
 }

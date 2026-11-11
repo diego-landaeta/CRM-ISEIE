@@ -3,7 +3,8 @@
   y Carlos, 10/11/2026): «no se vuelven a pasar por revisión: al salir esta
   versión, se cierran como hechas con la fecha de su último movimiento».
 
-  Para cada tarea viva en «En revisión»:
+  Para cada tarea viva en «En revisión» SIN SUPERVISOR (Diego, 11/11/2026: las
+  que tienen supervisor las cierra él, a mano; esas se quedan como están):
     · pasa a «Hecha», al final de la columna de quien la lleva;
     · `completed_at` = la fecha de su último movimiento (su último cambio de
       columna en `task_events`; si no hay ninguno, su `updated_at`);
@@ -30,6 +31,11 @@ export const MARCA_CIERRE = 'cierre_419';
 export async function cerrarLasEnRevision(db, { aplicar = false, soloTareas = null } = {}) {
   await db.query('BEGIN');
   try {
+    // Sin la columna del supervisor (migración vieja), ninguna lo tiene.
+    const { rows: [col] } = await db.query(
+      `SELECT EXISTS (SELECT 1 FROM information_schema.columns
+                       WHERE table_name = 'tasks' AND column_name = 'supervisor_id') AS hay`);
+    const sinSupervisor = col?.hay ? 'AND t.supervisor_id IS NULL' : '';
     // FOR UPDATE: si alguien la mueve mientras tanto, espera; nada se cierra dos veces.
     const { rows: tareas } = await db.query(
       `SELECT t.id, t.title, t.assigned_to, COALESCE(t.assigned_to, t.created_by) AS cerrada_por,
@@ -38,6 +44,7 @@ export async function cerrarLasEnRevision(db, { aplicar = false, soloTareas = nu
          FROM tasks t
         WHERE t.status = 'en_revision' AND t.archived_at IS NULL
           AND ($1::int[] IS NULL OR t.id = ANY($1::int[]))
+          ${sinSupervisor}
         ORDER BY t.id
         FOR UPDATE OF t`,
       [soloTareas]

@@ -1,5 +1,5 @@
 import { query, getClient } from '../../shared/config/db.js';
-import { existeEquipos, existeTipos, existeProgramacion, colProgramacion, sqlConTablero } from './tasks.equipos.model.js';
+import { existeEquipos, existeTipos, sqlConTablero } from './tasks.equipos.model.js';
 
 // Quien tiene tablero de tareas: el equipo de desarrollo (Diego, 09/10: «las
 // tareas son del equipo de desarrollo, las gestoras no tienen tareas»). Ni
@@ -119,33 +119,31 @@ const columnasSupervisor = (hay) => (hay
   NULL::text AS supervisor_name,`);
 const joinSupervisor = (hay) => (hay ? '\n  LEFT JOIN users u_sup ON u_sup.id = t.supervisor_id' : '');
 
-// El equipo de la tarea y el cargo de quien la lleva en él (migración 235). Si
-// el equipo es de programación (migración 276, CRM-ISEIE#419), la cierra el supervisor.
-const columnasEquipo = (eq, prog = false) => (eq
+// El equipo de la tarea y el cargo de quien la lleva en él (migración 235).
+// `de_programacion` ya no sale (11/11/2026): quien cierra lo dice el supervisor.
+const columnasEquipo = (eq) => (eq
   ? `t.team_id,
   tm_t.name AS team_name,
   tm_t.color AS team_color,
-  ${colProgramacion('tm_t', prog)} AS de_programacion,
   (SELECT r_c.name FROM task_team_members m_c JOIN task_team_roles r_c ON r_c.id = m_c.team_role_id
     WHERE m_c.team_id = t.team_id AND m_c.user_id = t.assigned_to) AS assigned_cargo,`
   : `NULL::int AS team_id,
   NULL::text AS team_name,
   NULL::text AS team_color,
-  FALSE AS de_programacion,
   NULL::text AS assigned_cargo,`);
 const joinEquipo = (eq) => (eq ? '\n  LEFT JOIN task_teams tm_t ON tm_t.id = t.team_id' : '');
 
-/** Lo que hay en la base: supervisor, equipos y equipos de programación (cada uno con su migración). */
+/** Lo que hay en la base: supervisor y equipos (cada uno con su migración). */
 async function extras() {
-  const [sup, eq, prog] = await Promise.all([existeSupervisor(), existeEquipos(), existeProgramacion()]);
-  return { sup, eq, prog: eq && prog };
+  const [sup, eq] = await Promise.all([existeSupervisor(), existeEquipos()]);
+  return { sup, eq };
 }
 
 // Las columnas de una tarjeta. `position` es NUMERIC y pg lo devolveria como
 // texto: se pasa a numero para que el tablero pueda calcular puntos medios.
-const columnas = (hay, eq = false, prog = false) => `
+const columnas = (hay, eq = false) => `
   ${columnasSupervisor(hay)}
-  ${columnasEquipo(eq, prog)}
+  ${columnasEquipo(eq)}
   t.id,
   t.title,
   t.description,
@@ -199,7 +197,7 @@ export async function findTasks({
   team_id, visibles_para = null, mias_de = null, de_la_cabecera = null,
   cerradas_desde = null, cerradas_hasta = null, con_cierre = false,
 }) {
-  const { sup: hay, eq, prog } = await extras();
+  const { sup: hay, eq } = await extras();
   const conditions = [];
   const params = [];
   const add = (sql, value) => {
@@ -299,7 +297,7 @@ export async function findTasks({
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
   const sql = `
-    SELECT ${columnas(hay, eq, prog)},${con_cierre ? `
+    SELECT ${columnas(hay, eq)},${con_cierre ? `
       ${COLUMNAS_CIERRE},` : ''}
       (SELECT COUNT(*)::int FROM task_checklist_items ci WHERE ci.task_id = t.id) AS checklist_total,
       (SELECT COUNT(*)::int FROM task_checklist_items ci WHERE ci.task_id = t.id AND ci.is_completed) AS checklist_completed,
@@ -334,9 +332,9 @@ export async function personaEnAmbito(personaId, ambito, yo) {
 }
 
 export async function findTaskById(id) {
-  const { sup: hay, eq, prog } = await extras();
+  const { sup: hay, eq } = await extras();
   const { rows } = await query(
-    `SELECT ${columnas(hay, eq, prog)},
+    `SELECT ${columnas(hay, eq)},
        (SELECT cm.content FROM task_comments cm WHERE cm.task_id = t.id ORDER BY cm.created_at DESC, cm.id DESC LIMIT 1) AS last_comment,
        ${COLUMNAS_CIERRE}
      ${joins(hay, eq)}${JOIN_CIERRE}

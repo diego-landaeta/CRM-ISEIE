@@ -238,11 +238,10 @@ describe('mover: la regla de «Hecha» (decision 4)', () => {
     expect(aviso?.type).toBe('task_estado_cambiado');
   });
 
-  it('CRM-ISEIE#419: la gestora, que la lleva, la pasa a «Hecha» ella misma y la reabre', async () => {
+  it('con supervisor (11/11/2026): la gestora, que la lleva, no la pasa a «Hecha»: la cierra su supervisor', async () => {
     const res = await request.patch(`/api/tasks/${t.id}/move`).set(como('gestora')).send({ status: 'hecha' });
-    expect(res.status, JSON.stringify(res.body)).toBe(200);
-    expect(res.body.data.completed_by).toBe(U.gestora.id);
-    expect((await request.patch(`/api/tasks/${t.id}/move`).set(como('gestora')).send({ status: 'en_curso' })).status).toBe(200);
+    expect(res.status).toBe(403);
+    expect(res.body.error).toMatch(/supervisor/);
   });
 
   it('el admin, que la supervisa, la cierra y se guarda la fecha de cierre', async () => {
@@ -266,7 +265,7 @@ describe('mover: la regla de «Hecha» (decision 4)', () => {
   it('el historial lo cuenta todo, con quien y cuando', async () => {
     const res = await request.get(`/api/tasks/${t.id}`).set(como('admin'));
     const tipos = res.body.data.events.map((e) => e.event_type);
-    expect(tipos.filter((x) => x === 'status_changed')).toHaveLength(5);
+    expect(tipos.filter((x) => x === 'status_changed')).toHaveLength(3);
     expect(tipos).toContain('created');
     expect(res.body.data.events.every((e) => e.user_name && e.created_at)).toBe(true);
   });
