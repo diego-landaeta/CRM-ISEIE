@@ -20,6 +20,7 @@ import type {
   TeamRole,
   MyTeam,
   HistorialTarea,
+  FichaDeIntegrante,
 } from '../types';
 
 /**
@@ -129,12 +130,16 @@ export type Paginacion = { total: number; page: number; limit: number; totalPage
  * «Historial de tareas» (CRM-ISEIE#419): lo hecho, con quién lo hizo, quién lo cerró y
  * cuándo. Sustituye a «Por revisar» y su contador: ya no hay bandeja de aprobar.
  */
-export async function getHistorial(params: HistorialParams = {}): Promise<{ filas: HistorialTarea[]; paginacion: Paginacion }> {
+export async function getHistorial(params: HistorialParams = {}): Promise<{
+  filas: HistorialTarea[]; paginacion: Paginacion; porPersona: FichaDeIntegrante[];
+}> {
   const limpios = Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined && v !== ''));
   const res = await client.get<HistorialTarea[]>('/tasks/historial', { params: limpios });
   const paginacion: Paginacion = res.pagination
     ?? { total: res.data?.length ?? 0, page: 1, limit: res.data?.length ?? 0, totalPages: 1 };
-  return { filas: res.data ?? [], paginacion };
+  // «Por integrante» (11/11/2026): lo cuenta el servidor, con el alcance de la lista.
+  const porPersona: FichaDeIntegrante[] = Array.isArray(res.por_persona) ? res.por_persona : [];
+  return { filas: res.data ?? [], paginacion, porPersona };
 }
 
 export async function archiveTask(id: number): Promise<Task> {
