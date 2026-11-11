@@ -2,6 +2,9 @@
 // regla del tablero (CRM-ISEIE#419): quien hace la tarea la pasa a «Hecha» él mismo,
 // y las que esperaban revisión no se vuelven a revisar.
 //
+// SALVO LAS QUE TIENEN SUPERVISOR (Diego, 11/11/2026): esas las cierra su
+// supervisor, a mano; el guion no las toca ni las cuenta.
+//
 //   node scripts/cerrar-en-revision-419.mjs             solo cuenta: no escribe nada
 //   node scripts/cerrar-en-revision-419.mjs --aplicar   las cierra, en una sola transacción
 //
@@ -37,7 +40,8 @@ try {
   for (const t of r.tareas) {
     console.log(`  #${t.id}  ${fecha(t.completed_at)}  ${String(t.title).slice(0, 70)}`);
   }
-  console.log(`\n  ${r.total} tarea(s) «En revisión» ${aplicar ? 'cerradas como «Hecha».' : 'se cerrarían. Simulación: no se ha cambiado nada (añade --aplicar).'}\n`);
+  console.log(`\n  ${r.total} tarea(s) «En revisión» sin supervisor ${aplicar ? 'cerradas como «Hecha».' : 'se cerrarían. Simulación: no se ha cambiado nada (añade --aplicar).'}`);
+  console.log('  Las que tienen supervisor no se tocan: las cierra él, a mano.\n');
 } catch (err) {
   console.error('  Falló, no se ha cambiado nada:', err.message);
   process.exitCode = 1;

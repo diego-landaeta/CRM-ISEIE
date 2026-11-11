@@ -262,8 +262,8 @@ describe('3 · permisos (CRM-ISEIE#419): cierra quien la lleva o la supervisa; d
     expect((await mover('gestoraConCierre', suya.id, { status: 'hecha' })).status).toBe(200);
     const otra = await crear('gestora', { title: `Mía ${Math.random()}` });
     expect((await mover('gestora', otra.id, { status: 'hecha' })).status).toBe(200);
-    // Y quien la lleva también la cierra estando «En revisión».
-    expect((await request.patch(`/api/tasks/${t.id}/approve`).set(como('colaborador'))).status).toBe(200);
+    // Con supervisor (11/11/2026), quien la lleva no la aprueba: la cierra el supervisor.
+    expect((await request.patch(`/api/tasks/${t.id}/approve`).set(como('colaborador'))).status).toBe(403);
   });
 
   it('sin tasks.manage no se configura el tablero', async () => {

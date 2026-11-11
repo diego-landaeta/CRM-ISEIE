@@ -192,9 +192,10 @@ async function exigirResponsableEnAmbito(personaId, user, que = 'asignar tareas'
   }
 }
 
-const SOLO_CIERRA = 'Esta tarea la cierra quien la lleva, su supervisor o un superadmin';
-const SOLO_CIERRA_PROGRAMACION = 'Es de programación: mándala a «En revisión» y la cierra su supervisor';
-const motivoDeCierre = (t) => (reglas.esDeProgramacion(t) ? SOLO_CIERRA_PROGRAMACION : SOLO_CIERRA);
+const SOLO_CIERRA = 'Esta tarea la cierra quien la lleva o un superadmin';
+// Con supervisor, la cierra él y nadie más (Diego, 11/11/2026).
+const SOLO_CIERRA_SUPERVISOR = 'Tiene supervisor: mándala a «En revisión» y la cierra su supervisor';
+const motivoDeCierre = (t) => (reglas.tieneSupervisor(t) ? SOLO_CIERRA_SUPERVISOR : SOLO_CIERRA);
 
 /**
  * Aprobar (CRM-ISEIE#419): lo cierra quien puede cerrarla (`reglas.puedeCerrar`).
@@ -616,11 +617,9 @@ export async function createTask(data, user) {
   await exigirAsignable(equipo?.id ?? null, user, p, responsable);
   // Crearla ya cerrada es cerrarla (CRM-ISEIE#419): la misma regla que al moverla.
   if (data.status === HECHA) {
-    const deProgramacion = teamId ? await eqModel.equipoDeProgramacion(teamId) : false;
-    exigir(reglas.puedeCerrar({
-      assigned_to: responsable, created_by: user.userId, supervisor_id: data.supervisor_id ?? null,
-      de_programacion: deProgramacion,
-    }, user), deProgramacion ? SOLO_CIERRA_PROGRAMACION : 'Solo quien la va a llevar puede crearla ya «Hecha»');
+    const nueva = { assigned_to: responsable, created_by: user.userId, supervisor_id: data.supervisor_id ?? null };
+    exigir(reglas.puedeCerrar(nueva, user), reglas.tieneSupervisor(nueva)
+      ? SOLO_CIERRA_SUPERVISOR : 'Solo quien la va a llevar puede crearla ya «Hecha»');
   }
 
   const status = data.status || 'por_hacer';
@@ -774,7 +773,7 @@ export async function moveTask(id, { status, prev_id, next_id }, user) {
   const currentTask = await tareaVisible(id, user, p);
   // Moverla (también reordenar): el superadmin, el supervisor y quien la lleva
   // (26/10/2026). Cerrarla o reabrirla (CRM-ISEIE#419): quien la lleva, el supervisor
-  // o el superadmin; si es de programación, el supervisor o el superadmin.
+  // o el superadmin; si tiene supervisor, solo su supervisor (11/11/2026).
   exigirMover(currentTask, user, p);
   const cierraOReabre = (status === HECHA) !== (currentTask.status === HECHA);
 
@@ -859,9 +858,9 @@ export async function moveTask(id, { status, prev_id, next_id }, user) {
   }
 
   // Al supervisor, por correo, cuando está lista para revisar (Diego, 26/10/2026).
-  // Desde la CRM-ISEIE#419 solo se espera revisión en programación: en lo demás, el
-  // supervisor recibe el correo de cambio de estado, como el resto.
-  const paraRevisar = status === EN_REVISION && reglas.esDeProgramacion(currentTask)
+  // Desde el 11/11/2026, toda tarea con supervisor la cierra él: le llega cuando
+  // se la mandan a «En revisión» (antes, solo en programación).
+  const paraRevisar = status === EN_REVISION && reglas.tieneSupervisor(currentTask)
     && currentTask.supervisor_id && currentTask.supervisor_id !== user.userId;
   if (paraRevisar) {
     const autor = await taskModel.findUserBasic(user.userId);
@@ -966,7 +965,6 @@ export async function getHistorial(user, q = {}) {
     due_date: t.due_date,
     team_id: t.team_id,
     team_name: t.team_name,
-    de_programacion: t.de_programacion,
     project_name: t.project_name,
     external_project_name: t.external_project_name,
     area_name: t.area_name,
@@ -979,8 +977,9 @@ export async function getHistorial(user, q = {}) {
 }
 
 /**
- * Aprobar: de «En revisión» a «Hecha», en una transacción. Desde la CRM-ISEIE#419
- * solo hace falta en programación (lo cierra el supervisor); lo demás lo cierra
+ * Aprobar: de «En revisión» a «Hecha», en una transacción. Desde el 11/11/2026
+ * es lo que hace el supervisor con las tareas que supervisa (antes, solo en
+ * programación); las que no tienen supervisor las cierra
  * quien lo lleva moviéndolo a «Hecha».
  */
 export async function approveTask(id, user) {

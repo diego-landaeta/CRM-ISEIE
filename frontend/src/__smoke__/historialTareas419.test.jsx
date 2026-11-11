@@ -5,15 +5,28 @@ import { MemoryRouter } from 'react-router-dom';
 
 /*
   CRM-ISEIE#419 (Diego y Carlos, 10/11/2026): quien hace la tarea la pasa a «Hecha»
-  él mismo, sin pasar por «En revisión»; las de programación las manda a revisar
-  y las cierra su supervisor. «Por revisar» pasa a «Historial de tareas».
+  él mismo, sin pasar por «En revisión». «Por revisar» pasa a «Historial de tareas».
+
+  Diego, 11/11/2026: lo decide el SUPERVISOR, no el equipo. Con supervisor, quien
+  la lleva solo la manda a revisar y la cierra su supervisor (nadie más, tampoco
+  otro superadmin); sin supervisor, la cierra quien la lleva. La casilla «Equipo
+  de programación» sale de «Gestionar equipos».
 */
 
-const api = vi.hoisted(() => ({ tarea: null, historial: [] }));
+const EQUIPO = {
+  id: 3, issuer_id: 1, empresa: 'Empresa', name: 'Desarrollo y SEO', tipo: 'colaboradores', color: 'blue',
+  is_active: true, sort_order: 0, miembros: 2,
+  cargos: [{ id: 1, name: 'Encargado', level: 2, sort_order: 1, is_active: true }, { id: 2, name: 'Miembro', level: 1, sort_order: 2, is_active: true }],
+};
+const api = vi.hoisted(() => ({ tarea: null, historial: [], equipos: [] }));
 vi.mock('@/modules/tasks/api/tasks.api', () => ({
   getTaskById: vi.fn(async () => api.tarea),
   getAssignees: vi.fn(async () => []),
-  getTeams: vi.fn(async () => [{ id: 3, name: 'Desarrollo y SEO', is_active: true }]),
+  getTeams: vi.fn(async () => api.equipos),
+  getTeamEmpresas: vi.fn(async () => [{ id: 1, razon_social: 'Empresa' }]),
+  getTeam: vi.fn(async () => ({ miembros: [] })),
+  getTeamCandidates: vi.fn(async () => []),
+  updateTeam: vi.fn(async () => ({})),
   moveTask: vi.fn(async () => ({})),
   approveTask: vi.fn(async () => ({})),
   returnTask: vi.fn(async () => ({})),
@@ -31,44 +44,71 @@ const tasksApi = await import('@/modules/tasks/api/tasks.api');
 const { TaskModal } = await import('@/modules/tasks/components/TaskModal');
 const { default: TasksHistoryPage } = await import('@/modules/tasks/pages/TasksHistoryPage');
 const { NAV_SECTIONS } = await import('@/shared/components/layout/Sidebar');
+const { EquiposConfig } = await import('@/modules/tasks/components/EquiposConfig');
 
 const base = {
   id: 7, title: 'Maquetar la home', description: null, status: 'en_curso', position: 1000, priority: 'media',
   due_date: null, project_id: null, external_project_id: null, area_id: null, assigned_to: 20, assigned_to_name: 'Diana',
   supervisor_id: 30, supervisor_name: 'Ángel', created_by: 10, completed_at: null, archived_at: null,
   created_at: '2026-10-26T10:00:00Z', updated_at: '2026-10-26T10:00:00Z', tags: [],
-  team_id: 3, team_name: 'SEO', team_color: 'blue', assigned_cargo: 'Miembro', de_programacion: false,
+  team_id: 3, team_name: 'Desarrollo y SEO', team_color: 'blue', assigned_cargo: 'Miembro',
 };
+const COLUMNAS = [
+  { key: 'por_hacer', name: 'Por hacer', is_active: true }, { key: 'en_curso', name: 'En curso', is_active: true },
+  { key: 'en_revision', name: 'En revisión', is_active: true }, { key: 'hecha', name: 'Hecha', is_active: true },
+];
 const PERMISOS = { mover: true, comentar: true, revisar: false, cerrar: false, devolver: false, editar: false, delegar: false };
 const noop = () => {};
 
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
-function abrir(extra = {}, permisos = {}) {
-  api.tarea = { ...base, ...extra, checklist: [], comments: [], links: [], events: [], permisos: { ...PERMISOS, ...permisos } };
+function abrir(extra = {}, permisos = {}, { sinPermisos = false, columnas = [{ key: 'en_curso', name: 'En curso', is_active: true }] } = {}) {
+  api.tarea = { ...base, ...extra, checklist: [], comments: [], links: [], events: [], ...(sinPermisos ? {} : { permisos: { ...PERMISOS, ...permisos } }) };
   render(
     <MemoryRouter>
       <TaskModal open taskId={7} onClose={noop} onChanged={noop} currentUserId={20} canAssign={false} canArchiveAny={false}
-        assignees={[]} projects={[]} columns={[{ key: 'en_curso', name: 'En curso', is_active: true }]} />
+        assignees={[]} projects={[]} columns={columnas} />
     </MemoryRouter>
   );
 }
 
 describe('la ficha: el botón de «Hecha» para quien la lleva', () => {
-  it('quien la lleva (y puede cerrarla) ve «Hecha», y la pasa a «Hecha» sin pasar por revisión', async () => {
-    abrir({}, { cerrar: true, revisar: true });
+  it('sin supervisor: quien la lleva (y puede cerrarla) ve «Hecha», y la pasa a «Hecha» sin pasar por revisión', async () => {
+    abrir({ supervisor_id: null, supervisor_name: null }, { cerrar: true, revisar: true });
     const boton = await screen.findByRole('button', { name: /^Hecha$/ });
     fireEvent.click(boton);
     await waitFor(() => expect(tasksApi.moveTask).toHaveBeenCalledWith(7, { status: 'hecha' }));
     expect(screen.queryByRole('button', { name: /Mandar a revisar/ })).toBeNull();
   });
 
-  it('programación: quien la lleva no ve «Hecha», sino «Mandar a revisar»', async () => {
-    abrir({ de_programacion: true }, { cerrar: false });
+  it('con supervisor: quien la lleva no ve «Hecha», sino «Mandar a revisar» (sea del equipo que sea)', async () => {
+    abrir({}, { cerrar: false });
     const boton = await screen.findByRole('button', { name: /Mandar a revisar/ });
     expect(screen.queryByRole('button', { name: /^Hecha$/ })).toBeNull();
     fireEvent.click(boton);
     await waitFor(() => expect(tasksApi.moveTask).toHaveBeenCalledWith(7, { status: 'en_revision' }));
+  });
+
+  it('sin el dato del servidor, la ficha decide igual: con supervisor, quien la lleva no la cierra', async () => {
+    abrir({}, {}, { sinPermisos: true });
+    expect(await screen.findByRole('button', { name: /Mandar a revisar/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^Hecha$/ })).toBeNull();
+    cleanup();
+    abrir({ supervisor_id: null, supervisor_name: null }, {}, { sinPermisos: true });
+    expect(await screen.findByRole('button', { name: /^Hecha$/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Mandar a revisar/ })).toBeNull();
+  });
+
+  it('«En revisión»: su supervisor ve «Aprobar»; otro superadmin (sin «cerrar») no ve cómo cerrarla', async () => {
+    abrir({ status: 'en_revision', assigned_to: 21, assigned_to_name: 'Dev', supervisor_id: 20 }, { cerrar: true, revisar: true });
+    const aprobar = await screen.findByRole('button', { name: /Aprobar/ });
+    fireEvent.click(aprobar);
+    await waitFor(() => expect(tasksApi.approveTask).toHaveBeenCalledWith(7));
+    cleanup();
+    abrir({ status: 'en_revision', assigned_to: 21, assigned_to_name: 'Dev', supervisor_id: 30 }, { cerrar: false, revisar: false, mover: true, devolver: true });
+    await screen.findByRole('button', { name: /Devolver/ });
+    expect(screen.queryByRole('button', { name: /Aprobar/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Hecha$/ })).toBeNull();
   });
 
   it('quien no la puede cerrar ni mover no ve ningún botón de cierre', async () => {
@@ -76,6 +116,29 @@ describe('la ficha: el botón de «Hecha» para quien la lleva', () => {
     await screen.findAllByText(/Solo el responsable, el supervisor o un superadmin/);
     expect(screen.queryByRole('button', { name: /^Hecha$/ })).toBeNull();
     expect(screen.queryByRole('button', { name: /Mandar a revisar/ })).toBeNull();
+  });
+
+  it('la ventana de «Devolver» queda por encima de la ficha y devuelve con el comentario', async () => {
+    abrir({ status: 'hecha', completed_at: '2026-11-10T10:00:00Z' }, { devolver: true });
+    fireEvent.click(await screen.findByRole('button', { name: /Devolver/ }));
+    const titulo = await screen.findByText('Devolver tarea a «En curso»');
+    // `z-60` no existe en Tailwind 3: la ventana quedaba detrás de la ficha (z-50).
+    const capa = titulo.closest('.fixed');
+    expect(capa?.className).toMatch(/z-\[60\]/);
+    expect(capa?.className).not.toMatch(/(^|\s)z-60(\s|$)/);
+    fireEvent.change(screen.getByPlaceholderText(/Explica qué debe revisarse/), { target: { value: 'Falta el pie' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Devolver tarea' }));
+    await waitFor(() => expect(tasksApi.returnTask).toHaveBeenCalledWith(7, 'Falta el pie'));
+  });
+
+  it('el selector «Estado» de una hecha que no puede reabrir no sale vacío: enseña «Hecha» y qué le queda', async () => {
+    abrir({ status: 'hecha', completed_at: '2026-11-10T10:00:00Z', assigned_to: 21, created_by: 20 }, { devolver: true, cerrar: false }, { columnas: COLUMNAS });
+    const aviso = await screen.findByTestId('estado-bloqueado');
+    expect(aviso.textContent).toMatch(/la reabre su supervisor/);
+    expect(aviso.textContent).toMatch(/devolverla a «En curso»/);
+    const select = aviso.parentElement.querySelector('select');
+    expect([...select.options].map((o) => o.value)).toEqual(['hecha']);
+    expect(select.value).toBe('hecha');
   });
 
   it('una hecha: quien la creó (o un admin) ve «Devolver»; quien no, no', async () => {
@@ -105,14 +168,15 @@ describe('la página del historial', () => {
       id: 11, title: 'Endpoint de facturas', assigned_to: 21, assigned_to_name: 'Diana', created_by: 10, created_by_name: 'Julián',
       supervisor_id: 30, supervisor_name: 'Diego', completed_by: 30, completed_by_name: 'Diego',
       completed_at: '2026-11-09T15:30:00Z', created_at: '2026-11-01T10:00:00Z', due_date: null,
-      team_id: 3, team_name: 'Desarrollo y SEO', de_programacion: true,
+      team_id: 3, team_name: 'Desarrollo y SEO',
       project_name: null, external_project_name: null, area_name: null, area_color: null,
     }];
     render(<MemoryRouter><TasksHistoryPage /></MemoryRouter>);
     expect(await screen.findByText('Endpoint de facturas')).toBeTruthy();
     expect(screen.getByText('La hizo')).toBeTruthy();
     expect(screen.getByText('La cerró')).toBeTruthy();
-    expect(screen.getByText('Programación')).toBeTruthy();
+    // La marca «Programación» ya no sale (11/11/2026).
+    expect(screen.queryByText('Programación')).toBeNull();
     expect(screen.getAllByText(/Diego/).length).toBeGreaterThan(0);
     // Pide el mes en curso con el alcance del tablero.
     const pedido = tasksApi.getHistorial.mock.calls[0][0];
@@ -120,5 +184,17 @@ describe('la página del historial', () => {
     expect(pedido.desde).toMatch(/^\d{4}-\d{2}-01$/);
     // Ni rastro de una bandeja de aprobar.
     expect(screen.queryByText(/Aprobar/)).toBeNull();
+  });
+});
+
+describe('Gestionar equipos', () => {
+  it('ya no tiene la casilla «Equipo de programación» (11/11/2026)', async () => {
+    api.equipos = [EQUIPO];
+    render(<MemoryRouter><EquiposConfig /></MemoryRouter>);
+    fireEvent.click(await screen.findByText('Desarrollo y SEO'));
+    await screen.findByText(/Cargos \(de más a menos nivel\)/);
+    expect(screen.queryByText(/Equipo de programación/)).toBeNull();
+    expect(screen.queryByText('Programación')).toBeNull();
+    expect(tasksApi.updateTeam).not.toHaveBeenCalled();
   });
 });

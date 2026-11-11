@@ -50,7 +50,7 @@ export const PASOS_TABLERO: PasoRecorrido[] = [
   {
     donde: '[data-recorrido="historial"]',
     titulo: 'Historial de tareas',
-    texto: 'Cada uno pasa sus tareas a «Hecha» cuando las termina; las de programación las manda a «En revisión» y las cierra su supervisor. Aquí queda lo hecho: quién lo hizo, quién lo cerró y cuándo. Quien la creó, su supervisor o un admin pueden devolverla a «En curso» con un comentario.',
+    texto: 'Cada uno pasa sus tareas a «Hecha» cuando las termina; las que tienen supervisor se mandan a «En revisión» y las cierra él. Aquí queda lo hecho: quién lo hizo, quién lo cerró y cuándo. Quien la creó, su supervisor o un admin pueden devolverla a «En curso» con un comentario.',
   },
   {
     donde: '[data-recorrido="configurar"]',

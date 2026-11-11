@@ -15,9 +15,13 @@ import * as eqModel from './tasks.equipos.model.js';
     10/11/2026: «que cada persona pueda mover sus tareas a "Hecha"»): quien la
     lleva, el supervisor y el superadmin, sin pasar por «En revisión». Queda
     apuntado quién la cerró y cuándo (`task_events` y `completed_at`).
-    EXCEPCIÓN, programación (el equipo de la tarea lo es: `de_programacion`):
-    quien la lleva solo la manda a «En revisión»; la cierran el supervisor
-    (Diego) o un superadmin.
+    EXCEPCIÓN, la tarea tiene SUPERVISOR (Diego, 11/11/2026): quien la lleva no
+    la pasa a «Hecha» (ni la crea ya hecha); la manda a «En revisión» y la
+    cierra su supervisor, y nadie más: tampoco otro superadmin (Carlos no
+    aprueba tareas). Sin supervisor, la cierra quien la lleva (o un superadmin).
+    Antes lo decidía el equipo (`task_teams.de_programacion`, migración 276),
+    pero «Desarrollo y SEO» es un solo equipo y la gente de SEO tampoco podía
+    cerrar. La columna sigue en la base y ya no se lee.
   · DEVOLVER a «En curso» con un comentario (de «En revisión» o de «Hecha»):
     quien la creó, el supervisor, el superadmin o quien tiene «Devolver tareas»
     (tasks.close: el admin de serie), si la ve.
@@ -48,17 +52,17 @@ export function puedeMoverYComentar(t, user) {
   return quienLaLleva(t) === user.userId || esSupervisor(t, user);
 }
 
-/** ¿Es de programación? Lo dice su equipo (migración 276; sin ella, ninguna). */
-export const esDeProgramacion = (t) => t?.de_programacion === true;
+/** ¿Tiene supervisor? Entonces la cierra él (Diego, 11/11/2026). */
+export const tieneSupervisor = (t) => t?.supervisor_id != null;
 
 /**
- * Cerrar (a «Hecha», también aprobar lo que está «En revisión») o reabrir: quien
- * la lleva, el supervisor y el superadmin. Programación: el supervisor y el
- * superadmin; quien la lleva, no (la manda a «En revisión»).
+ * Cerrar (a «Hecha», también aprobar lo que está «En revisión») o reabrir.
+ * Con supervisor: solo su supervisor (ni quien la lleva ni otro superadmin).
+ * Sin supervisor: quien la lleva o un superadmin.
  */
 export function puedeCerrar(t, user) {
-  if (esSuperadmin(user) || esSupervisor(t, user)) return true;
-  return !esDeProgramacion(t) && quienLaLleva(t) === user.userId;
+  if (tieneSupervisor(t)) return esSupervisor(t, user);
+  return esSuperadmin(user) || quienLaLleva(t) === user.userId;
 }
 
 /** Devolver a «En curso» con un comentario: quien la creó, el supervisor, el superadmin o quien tiene tasks.close. */

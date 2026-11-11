@@ -150,7 +150,7 @@ export const SECCIONES = [
           // El tutor, para mover las suyas (04/11): mover y comentar siguen siendo solo de quien la lleva o la supervisa.
           a('edit', 'Editar tareas', 'Cambiar, mover y completar las tareas que puede ver.', ['admin', 'colaborador', 'tutor'], { requiere: ['tasks.view_own'] }),
           a('delete', 'Archivar tareas', 'Archivar cualquier tarea y borrar comentarios ajenos.', ADMIN, { requiere: ['tasks.view_own'] }),
-          // CRM-ISEIE#419: cada uno cierra lo suyo (y la programación, su supervisor); esta clave es la del admin para devolverla.
+          // CRM-ISEIE#419: cada uno cierra lo suyo (y la que tiene supervisor, su supervisor: 11/11/2026); esta clave es la del admin para devolverla.
           a('close', 'Devolver tareas', 'Devolver a «En curso», con un comentario, las tareas hechas o en revisión que puede ver.', ADMIN, { requiere: ['tasks.view_own'] }),
           a('manage', 'Configurar el tablero', 'Columnas, áreas y proyectos del tablero.', ADMIN, { requiere: ['tasks.view_own'] }),
           // Diego, 26/10/2026: «Admin y superadmin pueden crear, renombrar y archivar

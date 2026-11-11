@@ -177,14 +177,15 @@ describe('A · por empresa, no por campus', () => {
       expect((await request.get(`/api/tasks/${tarea.id}`).set(como('angel'))).status).toBe(200);
     });
 
-    it('programación (CRM-ISEIE#419): Diana no la cierra; la pasa a «En revisión», a Ángel le llega el correo, y la aprueba sin la clave', async () => {
-      // La tarea, en un equipo de programación: la cierra su supervisor.
+    it('con supervisor (11/11/2026): Diana no la cierra; la pasa a «En revisión», a Ángel le llega el correo, y la aprueba sin la clave', async () => {
+      // La tarea tiene supervisor: la cierra él. El equipo da igual (la marca
+      // `de_programacion` sigue en la base y ya no se lee).
       const eq = await one(`INSERT INTO task_teams (issuer_id, name, de_programacion) VALUES ($1, $2, TRUE) RETURNING id`,
         [E.CEDIA, `${MARCA} Desarrollo`]);
       await q('UPDATE tasks SET team_id = $2 WHERE id = $1', [tarea.id, eq.id]);
       const cerrar = await request.patch(`/api/tasks/${tarea.id}/move`).set(como('diana')).send({ status: 'hecha' });
       expect(cerrar.status).toBe(403);
-      expect(cerrar.body.error).toMatch(/programación/);
+      expect(cerrar.body.error).toMatch(/supervisor/);
       sendEmail.mockClear();
       const mov = await request.patch(`/api/tasks/${tarea.id}/move`).set(como('diana')).send({ status: 'en_revision' });
       expect(mov.status, JSON.stringify(mov.body)).toBe(200);
