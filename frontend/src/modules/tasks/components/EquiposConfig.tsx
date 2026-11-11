@@ -148,6 +148,9 @@ function Detalle({ equipo, alCambiar }: { equipo: Team; alCambiar: () => void })
         </Button>
       </div>
 
+      {/* La casilla «Equipo de programación» (CRM-ISEIE#419) ya no está (11/11/2026):
+          quién cierra una tarea no lo dice su equipo, sino si tiene supervisor. */}
+
       <div className="space-y-2">
         <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Cargos (de más a menos nivel)</h4>
         <ul className="space-y-1">

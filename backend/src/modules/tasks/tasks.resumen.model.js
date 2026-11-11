@@ -8,6 +8,13 @@ import { query } from '../../shared/config/db.js';
 import { ROLES_TAREAS, existeSupervisor } from './tasks.model.js';
 import { existeTipos, sqlConTablero } from './tasks.equipos.model.js';
 
+/*
+  «Esperan tu revisión» (Diego, 11/11/2026): a cada supervisor, lo suyo que está
+  «En revisión». Una tarea con supervisor solo la cierra él; las que no lo
+  tienen las cierra quien las hace y no esperan a nadie. Antes (CRM-ISEIE#419) solo
+  contaba lo de programación (`task_teams.de_programacion`, que ya no se usa).
+*/
+
 const INICIO = (d, z) => `((${d}::date)::timestamp AT TIME ZONE ${z})`;
 const FIN = (d, z, mas = 1) => `(((${d}::date) + ${mas})::timestamp AT TIME ZONE ${z})`;
 

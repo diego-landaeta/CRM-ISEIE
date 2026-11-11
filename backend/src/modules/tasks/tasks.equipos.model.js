@@ -45,6 +45,15 @@ export function sqlConTablero(u, idx, tipos) {
 const colTipo = (t, tipos) => (tipos ? `${t}.tipo` : `'colaboradores'::text`);
 
 /*
+  `task_teams.de_programacion` (migración 276, CRM-ISEIE#419) YA NO SE USA (Diego,
+  11/11/2026). Decía qué equipos cerraba el supervisor, pero «Desarrollo y SEO»
+  es un solo equipo y la gente de SEO tampoco podía cerrar. Ahora lo decide la
+  tarea: si tiene supervisor, la cierra él (`tasks.reglas.js`, `puedeCerrar`).
+  La columna se queda en la base (ya está aplicada) y aquí no se lee ni se
+  escribe: no la vuelvas a usar.
+*/
+
+/*
   Equipos del tablero, con cargos por nivel (migración 235; Diego, 26/10/2026).
 
   Aquí solo SQL. Quién puede qué lo decide `tasks.reglas.js` y el servicio.

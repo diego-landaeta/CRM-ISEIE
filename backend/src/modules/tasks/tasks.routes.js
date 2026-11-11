@@ -16,9 +16,9 @@ router.get('/metrics/areas', ctrl.teamMetricsByArea);
 router.get('/assignees', ctrl.assignees);
 router.get('/tags', ctrl.tagNames);
 
-// Vista por revisar
-router.get('/review', ctrl.reviewTasks);
-router.get('/review/count', ctrl.reviewCount);
+// Historial de tareas (CRM-ISEIE#419): lo hecho, quién y cuándo. Sustituye a «Por
+// revisar»: ya no hay bandeja ni contador de «por aprobar».
+router.get('/historial', ctrl.historial);
 
 // Equipos (26/10/2026): ver los suyos; gestionarlos, con «Gestionar equipos».
 router.get('/teams', ctrl.listTeams);

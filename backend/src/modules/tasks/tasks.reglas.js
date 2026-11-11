@@ -11,8 +11,20 @@ import * as eqModel from './tasks.equipos.model.js';
     tarea y quien la lleva (sin responsable, quien la creó). Nadie más: ni el
     admin ni un cargo alto, si no la supervisa ni la lleva. La ven, si su ámbito
     les deja, pero no la mueven ni la comentan.
-  · CERRAR (llevarla a «Hecha» o sacarla), APROBAR y DEVOLVER: el superadmin y
-    el supervisor; quien la lleva, solo si además tiene «Aprobar y cerrar».
+  · CERRAR (llevarla a «Hecha» o sacarla) y APROBAR (CRM-ISEIE#419, Diego y Carlos,
+    10/11/2026: «que cada persona pueda mover sus tareas a "Hecha"»): quien la
+    lleva, el supervisor y el superadmin, sin pasar por «En revisión». Queda
+    apuntado quién la cerró y cuándo (`task_events` y `completed_at`).
+    EXCEPCIÓN, la tarea tiene SUPERVISOR (Diego, 11/11/2026): quien la lleva no
+    la pasa a «Hecha» (ni la crea ya hecha); la manda a «En revisión» y la
+    cierra su supervisor, y nadie más: tampoco otro superadmin (Carlos no
+    aprueba tareas). Sin supervisor, la cierra quien la lleva (o un superadmin).
+    Antes lo decidía el equipo (`task_teams.de_programacion`, migración 276),
+    pero «Desarrollo y SEO» es un solo equipo y la gente de SEO tampoco podía
+    cerrar. La columna sigue en la base y ya no se lee.
+  · DEVOLVER a «En curso» con un comentario (de «En revisión» o de «Hecha»):
+    quien la creó, el supervisor, el superadmin o quien tiene «Devolver tareas»
+    (tasks.close: el admin de serie), si la ve.
   · EDITAR LOS DEMÁS CAMPOS (título, descripción, fecha, responsable,
     supervisor, equipo, etiquetas): quien la creó, el superadmin, y quien puede
     delegar en ese equipo sobre quien la lleva (admin y superadmin en todos).
@@ -40,14 +52,22 @@ export function puedeMoverYComentar(t, user) {
   return quienLaLleva(t) === user.userId || esSupervisor(t, user);
 }
 
-/** Aprobar, devolver, y cerrar o reabrir desde «Por revisar». */
-export function puedeRevisar(t, user) {
-  return esSuperadmin(user) || esSupervisor(t, user);
+/** ¿Tiene supervisor? Entonces la cierra él (Diego, 11/11/2026). */
+export const tieneSupervisor = (t) => t?.supervisor_id != null;
+
+/**
+ * Cerrar (a «Hecha», también aprobar lo que está «En revisión») o reabrir.
+ * Con supervisor: solo su supervisor (ni quien la lleva ni otro superadmin).
+ * Sin supervisor: quien la lleva o un superadmin.
+ */
+export function puedeCerrar(t, user) {
+  if (tieneSupervisor(t)) return esSupervisor(t, user);
+  return esSuperadmin(user) || quienLaLleva(t) === user.userId;
 }
 
-/** Cerrar o reabrir arrastrando: el que revisa, o quien la lleva con «Aprobar y cerrar». */
-export function puedeCerrar(t, user, p) {
-  return puedeRevisar(t, user) || (quienLaLleva(t) === user.userId && p?.close === true);
+/** Devolver a «En curso» con un comentario: quien la creó, el supervisor, el superadmin o quien tiene tasks.close. */
+export function puedeDevolver(t, user, p) {
+  return esSuperadmin(user) || esSupervisor(t, user) || t.created_by === user.userId || p?.close === true;
 }
 
 /** Su nivel en el equipo, o null si no está. */
@@ -115,8 +135,10 @@ export async function permisosDeLaTarea(t, user, p) {
   return {
     mover: puedeMoverYComentar(t, user),
     comentar: puedeMoverYComentar(t, user),
-    revisar: puedeRevisar(t, user),
-    cerrar: puedeCerrar(t, user, p),
+    // Aprobar lo que está «En revisión» es cerrarla (CRM-ISEIE#419).
+    revisar: puedeCerrar(t, user),
+    cerrar: puedeCerrar(t, user),
+    devolver: puedeDevolver(t, user, p),
     editar: await puedeEditarCampos(t, user, p),
     delegar: await puedeDelegarEn(t.team_id, user, p),
   };

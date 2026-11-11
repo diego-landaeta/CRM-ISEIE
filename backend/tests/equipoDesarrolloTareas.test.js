@@ -103,6 +103,7 @@ afterAll(async () => {
   process.env.TAREAS_CORREOS_ACTIVOS = correoAnterior;
   const usuarios = Object.values(U).map((u) => u.id);
   await q('DELETE FROM tasks WHERE created_by = ANY($1::int[]) OR assigned_to = ANY($1::int[])', [usuarios]);
+  await q('DELETE FROM task_teams WHERE issuer_id = ANY($1::int[])', [ids.issuers]);
   await q('DELETE FROM admin_notifications WHERE target_user_ids && $1::int[]', [usuarios]);
   await q('DELETE FROM user_permission_overrides WHERE user_id = ANY($1::int[])', [usuarios]);
   await q('DELETE FROM user_empresas WHERE user_id = ANY($1::int[])', [usuarios]);
@@ -176,16 +177,23 @@ describe('A · por empresa, no por campus', () => {
       expect((await request.get(`/api/tasks/${tarea.id}`).set(como('angel'))).status).toBe(200);
     });
 
-    it('cuando Diana la pasa a «En revisión», a Ángel le llega el correo, y la aprueba sin «Aprobar y cerrar»', async () => {
+    it('con supervisor (11/11/2026): Diana no la cierra; la pasa a «En revisión», a Ángel le llega el correo, y la aprueba sin la clave', async () => {
+      // La tarea tiene supervisor: la cierra él. El equipo da igual (la marca
+      // `de_programacion` sigue en la base y ya no se lee).
+      const eq = await one(`INSERT INTO task_teams (issuer_id, name, de_programacion) VALUES ($1, $2, TRUE) RETURNING id`,
+        [E.CEDIA, `${MARCA} Desarrollo`]);
+      await q('UPDATE tasks SET team_id = $2 WHERE id = $1', [tarea.id, eq.id]);
+      const cerrar = await request.patch(`/api/tasks/${tarea.id}/move`).set(como('diana')).send({ status: 'hecha' });
+      expect(cerrar.status).toBe(403);
+      expect(cerrar.body.error).toMatch(/supervisor/);
       sendEmail.mockClear();
       const mov = await request.patch(`/api/tasks/${tarea.id}/move`).set(como('diana')).send({ status: 'en_revision' });
       expect(mov.status, JSON.stringify(mov.body)).toBe(200);
       await esperar();
-      expect(correosA('angel').map((c) => c.subject)).toEqual([`Para revisar: ${MARCA} Para Diana`]);
-      // En su «Por revisar» le salen las que supervisa (26/10/2026), sin «Aprobar y cerrar».
-      const lista = await request.get('/api/tasks/review').set(como('angel'));
-      expect(lista.status).toBe(200);
-      expect(lista.body.data.map((x) => x.id)).toContain(tarea.id);
+      // El asunto lleva el equipo (conEquipo, tasks.emails.js).
+      expect(correosA('angel').map((c) => c.subject)).toEqual([`Para revisar · ${MARCA} Desarrollo: ${MARCA} Para Diana`]);
+      // Ya no hay «Por revisar» (CRM-ISEIE#419): le llega el correo y la abre desde él.
+      expect((await request.get('/api/tasks/review').set(como('angel'))).status).not.toBe(200);
       const ok = await request.patch(`/api/tasks/${tarea.id}/approve`).set(como('angel'));
       expect(ok.status, JSON.stringify(ok.body)).toBe(200);
       expect(ok.body.data.status).toBe('hecha');

@@ -123,7 +123,8 @@ describe('#631 · rutaPermitida', () => {
       '/configuracion/categorias-arbol': ['products.categorias'],
       '/leads/duplicados': ['leads.duplicados'],
       '/tutores': ['tutores.gestionar'],
-      '/tareas/revisar': ['tasks.close'],
+      // «Por revisar» pasó a «Historial de tareas» (CRM-ISEIE#419): lo ve quien tiene tablero.
+      '/tareas/historial': ['tasks.view_own'],
       // Y verlo (`whatsapp.banco`): el project manager, que ve todo (Diego, 04/11).
       '/whatsapp/banco': ['whatsapp.usar', 'whatsapp.supervisar', 'whatsapp.banco'],
     };

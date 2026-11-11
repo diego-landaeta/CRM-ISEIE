@@ -78,6 +78,11 @@ export interface Task {
   assigned_cargo?: string | null;
   /** Si quien mira puede moverla (arrastrarla): el responsable, el supervisor o un superadmin. */
   puede_mover?: boolean;
+  /**
+   * Si quien mira puede pasarla a «Hecha» o reabrirla (CRM-ISEIE#419; 11/11/2026): si
+   * tiene supervisor, solo él; si no, quien la lleva o un superadmin.
+   */
+  puede_cerrar?: boolean;
   created_by: number;
   created_by_name?: string | null;
   /** Cuándo pasó a «Hecha» (se borra si vuelve atrás). */
@@ -101,8 +106,11 @@ export interface Task {
 export interface TaskPermisos {
   mover: boolean;
   comentar: boolean;
+  /** Aprobar lo que está «En revisión»: lo mismo que cerrar (CRM-ISEIE#419). */
   revisar: boolean;
   cerrar: boolean;
+  /** Devolverla a «En curso» con un comentario: quien la creó, el supervisor o un admin. */
+  devolver?: boolean;
   editar: boolean;
   delegar: boolean;
 }
@@ -114,6 +122,29 @@ export interface TaskDetail extends Task {
   tags: TaskTag[];
   links: TaskLink[];
   events: TaskEvent[];
+}
+
+/** Una fila del «Historial de tareas» (CRM-ISEIE#419). */
+export interface HistorialTarea {
+  id: number;
+  title: string;
+  assigned_to: number | null;
+  assigned_to_name: string | null;
+  created_by: number;
+  created_by_name: string | null;
+  supervisor_id: number | null;
+  supervisor_name: string | null;
+  completed_by: number | null;
+  completed_by_name: string | null;
+  completed_at: string;
+  created_at: string;
+  due_date: string | null;
+  team_id: number | null;
+  team_name: string | null;
+  project_name: string | null;
+  external_project_name: string | null;
+  area_name: string | null;
+  area_color: string | null;
 }
 
 export interface Assignee {

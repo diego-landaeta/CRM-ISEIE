@@ -202,7 +202,7 @@ function Columnas() {
   return (
     <section className="space-y-3">
       <p className="text-sm text-muted-foreground">
-        Las 4 fijas no se archivan: «En revisión» es lo que sale en «Por revisar» y «Hecha» la que cierra.
+        Las 4 fijas no se archivan: «En revisión» es donde el programador deja lo suyo para que lo cierre su supervisor y «Hecha» la que cierra.
         Una columna con tareas tampoco: primero hay que moverlas.
       </p>
       <form onSubmit={crear} className="bg-card border border-border rounded-lg p-3 flex flex-wrap items-center gap-2">

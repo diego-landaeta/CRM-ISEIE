@@ -143,6 +143,8 @@ export const createTeamSchema = z.object({
   sort_order: z.number().int().min(0).max(2147483647).optional(),
   // De colaboradores (desarrollo, SEO…) o de tutores (04/11/2026). Solo al crearlo.
   tipo: z.enum(['colaboradores', 'tutores']).optional(),
+  // `de_programacion` ya no se pide (11/11/2026): una tarea con supervisor la
+  // cierra él, sea del equipo que sea.
 });
 export const updateTeamSchema = z.object({
   name: nombreEquipo.optional(),
@@ -198,6 +200,25 @@ export const listTasksQuerySchema = z.object({
   message: 'El periodo necesita su principio y su final',
 }).refine((q) => !q.periodo_desde || q.periodo_desde <= q.periodo_hasta, {
   message: 'El periodo no puede acabar antes de empezar',
+});
+
+/**
+ * «Historial de tareas» (CRM-ISEIE#419): lo hecho, con quién lo hizo, quién lo cerró
+ * y cuándo. Por persona (quien la hizo), equipo y periodo (el día del cierre,
+ * en días de la oficina). `ver` como en el tablero: nunca abre más que el permiso.
+ */
+export const historialQuerySchema = z.object({
+  ...ambitoQuery,
+  ver: z.enum(VISTAS_TABLERO).optional(),
+  team_id: z.coerce.number().int().min(0).optional(),
+  assigned_to: z.coerce.number().int().positive().optional(),
+  desde: dia.optional(),
+  hasta: dia.optional(),
+  search: z.string().trim().max(100).optional(),
+  page: z.coerce.number().int().min(1).max(100000).optional().default(1),
+  limit: z.coerce.number().int().min(1).max(200).optional().default(50),
+}).refine((q) => !q.desde || !q.hasta || q.desde <= q.hasta, {
+  message: 'La fecha «desde» no puede ser posterior a «hasta»',
 });
 
 export const metricsQuerySchema = z.object({

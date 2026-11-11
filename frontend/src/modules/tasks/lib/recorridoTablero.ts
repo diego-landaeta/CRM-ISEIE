@@ -48,9 +48,9 @@ export const PASOS_TABLERO: PasoRecorrido[] = [
     texto: 'Título, responsable, fecha límite, prioridad, área y campus o proyecto propio. Un admin solo asigna a gente de sus campus. A quien se la asignas le llega un aviso en la campana y un correo con la marca del campus.',
   },
   {
-    donde: 'a[href*="tareas/revisar"]',
-    titulo: 'Por revisar',
-    texto: 'Las tareas que el equipo dio por terminadas. Apruébalas para pasarlas a «Hecha», o devuélvelas con el motivo: vuelven a «En curso» y el motivo queda como comentario.',
+    donde: '[data-recorrido="historial"]',
+    titulo: 'Historial de tareas',
+    texto: 'Cada uno pasa sus tareas a «Hecha» cuando las termina; las que tienen supervisor se mandan a «En revisión» y las cierra él. Aquí queda lo hecho: quién lo hizo, quién lo cerró y cuándo. Quien la creó, su supervisor o un admin pueden devolverla a «En curso» con un comentario.',
   },
   {
     donde: '[data-recorrido="configurar"]',
