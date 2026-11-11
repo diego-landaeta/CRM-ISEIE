@@ -138,8 +138,9 @@ export const approve = accion(async (req, res) => {
 
 // «Historial de tareas» (CRM-ISEIE#419): sustituye a «Por revisar» y su contador.
 export const historial = accion(async (req, res) => {
-  const { data, pagination } = await taskService.getHistorial(quien(req), validar(historialQuerySchema, req.query));
-  res.json({ success: true, data, pagination });
+  const { data, por_persona, pagination } = await taskService.getHistorial(quien(req), validar(historialQuerySchema, req.query));
+  // `por_persona`: las fichas «por integrante» (11/11/2026), del mismo alcance que la lista.
+  res.json({ success: true, data, por_persona, pagination });
 });
 
 /* --- Personas, Etiquetas y Métricas --- */

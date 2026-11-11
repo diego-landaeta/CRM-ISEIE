@@ -147,6 +147,13 @@ export interface HistorialTarea {
   area_color: string | null;
 }
 
+/** Una ficha «por integrante» del historial: quién hizo y cuántas (11/11/2026). */
+export interface FichaDeIntegrante {
+  id: number;
+  nombre: string;
+  total: number;
+}
+
 export interface Assignee {
   id: number;
   nombre: string;

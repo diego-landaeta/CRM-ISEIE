@@ -48,6 +48,34 @@ describe('menú · equipo de desarrollo', () => {
   });
 });
 
+describe('«Historial de tareas»: cada uno con tablero lo tiene (Diego, 11/11/2026)', () => {
+  // Quien tiene «Mi tablero» tiene también su historial, sin abrir permisos nuevos:
+  // los dos piden «Ver su tablero» (tasks.view_own). Gemela de la de MultiCRM.
+  const PERFILES = {
+    colaborador: [['colaborador'], COLABORADOR],
+    'tutor con tablero': [['tutor'], ['tasks.view_own', 'tasks.edit']],
+    'gestora + tutor': [['gestor', 'tutor'], ['tasks.view_own', 'tasks.edit']],
+    'gestora con «Ver su tablero»': [['gestor'], ['tasks.view_own']],
+    'project manager con «Ver su tablero»': [['project_manager'], ['tasks.view_own']],
+    admin: [['admin'], ['tasks.view_own', 'tasks.view_all', 'tasks.manage']],
+  };
+  for (const [nombre, [roles, permisos]] of Object.entries(PERFILES)) {
+    it(`${nombre}: «Mi tablero» y «Historial de tareas»`, () => {
+      const ve = loQueVe(roles, permisos);
+      expect(ve).toContain('/tareas');
+      expect(ve).toContain('/tareas/historial');
+    });
+  }
+
+  it('sin «Ver su tablero», ni el tablero ni el historial', () => {
+    for (const roles of [['gestor'], ['tutor']]) {
+      const ve = loQueVe(roles, []);
+      expect(ve).not.toContain('/tareas');
+      expect(ve).not.toContain('/tareas/historial');
+    }
+  });
+});
+
 describe('«Mi tablero» (Diego, 26/10/2026)', () => {
   it('la entrada del menú se llama «Mi tablero»', () => {
     const entrada = NAV_SECTIONS.flatMap((s) => s.items).find((i) => i.to === '/tareas');

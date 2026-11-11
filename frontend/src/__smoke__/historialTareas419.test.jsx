@@ -18,7 +18,7 @@ const EQUIPO = {
   is_active: true, sort_order: 0, miembros: 2,
   cargos: [{ id: 1, name: 'Encargado', level: 2, sort_order: 1, is_active: true }, { id: 2, name: 'Miembro', level: 1, sort_order: 2, is_active: true }],
 };
-const api = vi.hoisted(() => ({ tarea: null, historial: [], equipos: [] }));
+const api = vi.hoisted(() => ({ tarea: null, historial: [], equipos: [], porPersona: [] }));
 vi.mock('@/modules/tasks/api/tasks.api', () => ({
   getTaskById: vi.fn(async () => api.tarea),
   getAssignees: vi.fn(async () => []),
@@ -31,7 +31,7 @@ vi.mock('@/modules/tasks/api/tasks.api', () => ({
   approveTask: vi.fn(async () => ({})),
   returnTask: vi.fn(async () => ({})),
   getHistorial: vi.fn(async () => ({
-    filas: api.historial, paginacion: { total: api.historial.length, page: 1, limit: 50, totalPages: 1 },
+    filas: api.historial, paginacion: { total: api.historial.length, page: 1, limit: 50, totalPages: 1 }, porPersona: api.porPersona,
   })),
 }));
 vi.mock('@/contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 20, nombre: 'Diana', role: 'colaborador' } }) }));
@@ -45,6 +45,7 @@ const { TaskModal } = await import('@/modules/tasks/components/TaskModal');
 const { default: TasksHistoryPage } = await import('@/modules/tasks/pages/TasksHistoryPage');
 const { NAV_SECTIONS } = await import('@/shared/components/layout/Sidebar');
 const { EquiposConfig } = await import('@/modules/tasks/components/EquiposConfig');
+const { ordenarFichas, alternarPersona } = await import('@/modules/tasks/lib/porIntegrante');
 
 const base = {
   id: 7, title: 'Maquetar la home', description: null, status: 'en_curso', position: 1000, priority: 'media',
@@ -184,6 +185,51 @@ describe('la página del historial', () => {
     expect(pedido.desde).toMatch(/^\d{4}-\d{2}-01$/);
     // Ni rastro de una bandeja de aprobar.
     expect(screen.queryByText(/Aprobar/)).toBeNull();
+  });
+});
+
+describe('«Por integrante» (Diego, 11/11/2026)', () => {
+  it('«Yo» primero (aunque no tenga ninguna) y el resto de más a menos', () => {
+    const fichas = [{ id: 31, nombre: 'Bea', total: 2 }, { id: 30, nombre: 'Ángel', total: 5 }, { id: 32, nombre: 'Ana', total: 2 }];
+    expect(ordenarFichas(fichas, 20, 'Diana').map((f) => [f.id, f.total])).toEqual([[20, 0], [30, 5], [32, 2], [31, 2]]);
+    expect(ordenarFichas([...fichas, { id: 20, nombre: 'Diana', total: 1 }], 20).map((f) => f.id)).toEqual([20, 30, 32, 31]);
+    expect(alternarPersona('', 30)).toBe(30);
+    expect(alternarPersona(30, 30)).toBe('');
+    expect(alternarPersona(30, 31)).toBe(31);
+  });
+
+  it('una ficha por persona con su total, «Yo» primero; pulsar filtra, volver a pulsar lo quita, y cuadra con «Persona»', async () => {
+    api.historial = [];
+    // El servidor las manda de más a menos; «Yo» va primero igual.
+    api.porPersona = [{ id: 30, nombre: 'Ángel', total: 5 }, { id: 20, nombre: 'Diana', total: 3 }, { id: 31, nombre: 'Bea', total: 1 }];
+    render(<MemoryRouter><TasksHistoryPage /></MemoryRouter>);
+    const zona = await screen.findByTestId('fichas-por-integrante');
+    const fichas = [...zona.querySelectorAll('button')];
+    expect(fichas.map((b) => b.textContent)).toEqual(['Yo3 tareas', 'Ángel5 tareas', 'Bea1 tarea']);
+    expect(fichas.every((b) => b.getAttribute('aria-pressed') === 'false')).toBe(true);
+
+    fireEvent.click(fichas[1]);
+    await waitFor(() => expect(tasksApi.getHistorial).toHaveBeenLastCalledWith(expect.objectContaining({ assigned_to: 30 })));
+    const elegida = () => screen.getByTestId('fichas-por-integrante').querySelectorAll('button[aria-pressed="true"]');
+    await waitFor(() => expect(elegida()).toHaveLength(1));
+    const angel = elegida()[0];
+    expect(angel.textContent).toMatch(/Ángel/);
+    expect(angel.getAttribute('title')).toBe('Quitar el filtro de persona');
+    // El desplegable «Persona» dice lo mismo.
+    expect(screen.getByRole('combobox', { name: 'Persona' }).textContent).toMatch(/Ángel/);
+
+    fireEvent.click(angel);
+    await waitFor(() => expect(tasksApi.getHistorial.mock.lastCall[0].assigned_to).toBeUndefined());
+    expect(screen.getByRole('combobox', { name: 'Persona' }).textContent).toMatch(/Cualquier persona/);
+    await waitFor(() => expect(elegida()).toHaveLength(0));
+  });
+
+  it('sin ninguna ficha del servidor no pinta la fila', async () => {
+    api.porPersona = [];
+    render(<MemoryRouter><TasksHistoryPage /></MemoryRouter>);
+    await screen.findByText(/No hay tareas hechas/);
+    expect(screen.queryByTestId('fichas-por-integrante')).toBeNull();
+    api.porPersona = [];
   });
 });
 
