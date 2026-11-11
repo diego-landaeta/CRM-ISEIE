@@ -35,7 +35,7 @@ export const ROLES_QUE_ADMINISTRAN = ['superadmin', 'admin'];
  * Roles a los que NO se les puede dar la casilla. Un tutor es externo: ve sus
  * alumnos por su pantalla, no el CRM.
  */
-export const ROLES_SIN_MCP = ['tutor'];
+export const ROLES_SIN_MCP = ['tutor', 'tutor_redactor'];
 
 /**
  * Caducidad y rotación de las URLs (#194). Se lee del .env en cada llamada.

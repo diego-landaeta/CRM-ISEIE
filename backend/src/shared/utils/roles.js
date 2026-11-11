@@ -115,10 +115,41 @@ export const RUTAS_DEL_TUTOR = [
   /^\/api\/users\/\d+\/(?:avatar|views)\/?$/,
 ];
 
+/**
+ * Lo unico que puede pedir un tutor redactor (CRM#708): hace los cursos y
+ * responde en Moodle. Su tablero y su factura del mes, como un colaborador, y
+ * sus consultas de alumnos y sus cursos, como un tutor. Nada de prospectos,
+ * ventas ni finanzas: todo lo demas, 403 aunque la ruta solo pida token.
+ */
+export const RUTAS_DEL_TUTOR_REDACTOR = [
+  /^\/api\/auth(?:\/|$)/,
+  /^\/api\/tasks(?:\/|$)/,
+  /^\/api\/facturas-colaborador\/mias(?:\/|$)/,
+  /^\/api\/tutores(?:\/|$)/,
+  /^\/api\/consultas(?:\/|$)/,
+  /^\/api\/notifications(?:\/|$)/,
+  /^\/api\/permissions\/system-defaults\/?$/,
+  /^\/api\/users\/mis-avisos\/?$/,
+  /^\/api\/users\/\d+\/(?:avatar|views)\/?$/,
+];
+
+/**
+ * Los roles que dan clase: el tutor y el tutor redactor (CRM#708). Donde el
+ * CRM pregunta «¿es tutor?» para recortar a lo suyo (sus consultas, sus cursos,
+ * sus comisiones) o para listar tutores, el redactor cuenta como tutor.
+ */
+export const ROLES_DE_TUTOR = ['tutor', 'tutor_redactor'];
+
+/** Si su rol PRINCIPAL es de tutor (lo que antes era `role === 'tutor'`). */
+export function esRolDeTutor(rol) {
+  return ROLES_DE_TUTOR.includes(rol);
+}
+
 /** Las listas cerradas, por rol. Quien solo tiene roles de aqui, solo pide lo suyo. */
 const RUTAS_POR_ROL = {
   colaborador: RUTAS_DEL_COLABORADOR,
   tutor: RUTAS_DEL_TUTOR,
+  tutor_redactor: RUTAS_DEL_TUTOR_REDACTOR,
 };
 
 /** Tutor y NADA MAS. A quien ademas es gestora no se le cierra nada. */

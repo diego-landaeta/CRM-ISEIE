@@ -86,10 +86,12 @@ export function ColaboradorDialog({ colaborador, empresas, alCerrar, alGuardar }
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Su usuario del CRM, si lo tiene: los que tienen el rol colaborador (#210).
+  // Su usuario del CRM, si lo tiene: los que tienen el rol colaborador (#210)
+  // o tutor redactor (CRM#708), que también sube su factura del mes.
   useEffect(() => {
-    client.get('/users?role=colaborador&active=true&limit=100')
-      .then((r: any) => setUsuarios(r.data || []))
+    Promise.all(['colaborador', 'tutor_redactor'].map((rol) =>
+      client.get(`/users?role=${rol}&active=true&limit=100`).then((r: any) => r.data || []).catch(() => [])))
+      .then((listas: UsuarioColaborador[][]) => setUsuarios(listas.flat()))
       .catch(() => setUsuarios([]));
   }, []);
 

@@ -38,7 +38,7 @@ function comprobarEmpresas(empresas, ambito) {
 
 async function comprobarUsuario(userId) {
   if (userId && !(await model.esUsuarioColaborador(userId))) {
-    throw new AppError('El usuario elegido tiene que tener el rol colaborador', 400, 'VALIDATION_ERROR');
+    throw new AppError('El usuario elegido tiene que tener el rol colaborador o tutor redactor', 400, 'VALIDATION_ERROR');
   }
 }
 

@@ -1,6 +1,6 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { soloEsTutor, soloEsColaborador } from '@/shared/lib/roles';
+import { soloEsTutor, soloEsColaborador, soloEsTutorRedactor } from '@/shared/lib/roles';
 
 // Dev-only bypass: si VITE_DEV_BYPASS_AUTH=true en .env.local, deja pasar sin login.
 // Solo para validar UI/menus en local sin backend. NUNCA activar en producción.
@@ -29,6 +29,15 @@ const RUTAS_DEL_COLABORADOR = ['/tareas', '/mi-factura', '/meta-ads', '/preferen
 
 function colaboradorPuede(pathname) {
   return RUTAS_DEL_COLABORADOR.some((p) => pathname === p || pathname.startsWith(p + '/'));
+}
+
+// Lo unico que abre un tutor redactor (CRM#708): su tablero y su factura, como
+// un colaborador, y sus consultas y sus cursos, como un tutor. El corte de
+// verdad esta en el servidor (`RUTAS_DEL_TUTOR_REDACTOR`).
+const RUTAS_DEL_TUTOR_REDACTOR = ['/tareas', '/mi-factura', '/mis-cursos', '/consultas', '/preferencias', '/perfil', '/set-password'];
+
+function redactorPuede(pathname) {
+  return RUTAS_DEL_TUTOR_REDACTOR.some((p) => pathname === p || pathname.startsWith(p + '/'));
 }
 
 export default function ProtectedRoute({ children }) {
@@ -60,6 +69,10 @@ export default function ProtectedRoute({ children }) {
 
   // A su tablero (aprobado para producción en la 2.2.0).
   if (soloEsColaborador(user) && !colaboradorPuede(location.pathname)) {
+    return <Navigate to="/tareas" replace />;
+  }
+
+  if (soloEsTutorRedactor(user) && !redactorPuede(location.pathname)) {
     return <Navigate to="/tareas" replace />;
   }
 

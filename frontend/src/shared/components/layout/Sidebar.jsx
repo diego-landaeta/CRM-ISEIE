@@ -22,10 +22,11 @@ import { PROCESO_EN_PRUEBAS, SOLO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 import { CERTIFEX_PANEL } from '@/shared/lib/certifexPanel';
 import { PANTALLAS_IA } from '@/shared/lib/pantallasIA';
 
-const ROLE_LABELS = { superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor', soporte: 'Soporte', tutor: 'Tutor', colaborador: 'Colaborador' };
+const ROLE_LABELS = { superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor', soporte: 'Soporte', tutor: 'Tutor', colaborador: 'Colaborador', tutor_redactor: 'Tutor redactor' };
 
 // Quién tiene tablero de tareas: el mismo `ROLES_TAREAS` que el backend (#210).
-const ROLES_TAREAS = ['superadmin', 'admin', 'colaborador'];
+// El tutor redactor (CRM-ISEIE#420) tiene su tablero como un colaborador.
+const ROLES_TAREAS = ['superadmin', 'admin', 'colaborador', 'tutor_redactor'];
 
 // NAV_SECTIONS: agrupaciones del sidebar. Las "secciones" (Prospectos,
 // Captación, Productos, Contabilidad) son ahora una sola entrada en el
@@ -108,7 +109,7 @@ export const NAV_SECTIONS = [
       { to: '/tareas/configurar', label: 'Configurar tablero', icon: SlidersHorizontal, roles: ROLES_TAREAS, permiso: 'tasks.manage', oPermiso: 'tasks.manage' },
       // «Mi factura» (#202): el colaborador con usuario sube aquí su factura del mes.
       // Aquí, junto a su tablero, como en MultiCRM: es lo otro que ve un colaborador.
-      { to: '/mi-factura', label: 'Mi factura', icon: Receipt, roles: ['colaborador'], permiso: 'facturas_colaborador.subir' },
+      { to: '/mi-factura', label: 'Mi factura', icon: Receipt, roles: ['colaborador', 'tutor_redactor'], permiso: 'facturas_colaborador.subir' },
     ],
   },
   {
@@ -156,9 +157,9 @@ export const NAV_SECTIONS = [
     items: [
       { to: '/tutores', label: 'Tutores', icon: GraduationCap, roles: ['admin', 'superadmin'], sectionPrefixes: ['/tutores'], permiso: 'tutores.gestionar', oPermiso: 'tutores.gestionar' },
       // Lo unico que ve un tutor: sus cursos y lo que le corresponde.
-      { to: '/mis-cursos', label: 'Mis cursos', icon: GraduationCap, roles: ['tutor'], permiso: 'tutores.mis_cursos' },
+      { to: '/mis-cursos', label: 'Mis cursos', icon: GraduationCap, roles: ['tutor', 'tutor_redactor'], permiso: 'tutores.mis_cursos' },
       // Consultas de alumnos (#188), como en MultiCRM: el tutor, su bandeja; administración, todas.
-      { to: '/consultas', label: 'Consultas', icon: ChatCircleText, roles: ['admin', 'superadmin', 'tutor'], statusTag: 'Pruebas', sectionPrefixes: ['/consultas'], permiso: ['consultas.view', 'consultas.atender'], oPermiso: 'consultas.view' },
+      { to: '/consultas', label: 'Consultas', icon: ChatCircleText, roles: ['admin', 'superadmin', 'tutor', 'tutor_redactor'], statusTag: 'Pruebas', sectionPrefixes: ['/consultas'], permiso: ['consultas.view', 'consultas.atender'], oPermiso: 'consultas.view' },
       { to: '/tutores/sin-tutor', label: 'Sin tutor', icon: Warning, roles: ['admin', 'superadmin'], permiso: 'tutores.gestionar', oPermiso: 'tutores.gestionar' },
       { to: '/tutores/comisiones', label: 'Comisiones', icon: Coins, roles: ['admin', 'superadmin'], permiso: 'tutores.gestionar', oPermiso: 'tutores.gestionar' },
     ],
@@ -252,7 +253,7 @@ export const NAV_SECTIONS = [
       { to: '/solicitudes-cambio', label: 'Solicitudes de cambio', icon: GitMerge, permiso: 'change_requests.view' },
       { to: '/notificaciones', label: 'Notificaciones',   icon: Bell },
       // El tutor entra aqui: es donde cambia su contraseña.
-      { to: '/preferencias',    label: 'Mis preferencias', icon: Sliders, roles: ['superadmin', 'admin', 'gestor', 'tutor', 'colaborador'] },
+      { to: '/preferencias',    label: 'Mis preferencias', icon: Sliders, roles: ['superadmin', 'admin', 'gestor', 'tutor', 'colaborador', 'tutor_redactor'] },
       { to: '/soporte',        label: 'Soporte',          icon: Headset },
       { to: '/manual',         label: 'Manual del CRM',   icon: BookOpen },
       { to: '/status',         label: 'Status',           icon: Pulse },
@@ -319,6 +320,11 @@ export function canSeeItem(item, role, soloColaboraciones, permisos, can) {
     // «Historial de tareas» y «Configurar tablero», solo con su clave (como en MultiCRM).
     if (item.permiso && String(item.permiso).includes('.') && !(typeof can === 'function' && can(item.permiso) === true)) return false;
     return Array.isArray(item.roles) && item.roles.includes('colaborador');
+  }
+  // Y para quien es SOLO tutor redactor (CRM-ISEIE#420): su tablero, su factura,
+  // sus consultas y sus cursos. El servidor le responde 403 en todo lo demas.
+  if (roles.length > 0 && roles.every((r) => r === 'tutor_redactor')) {
+    return Array.isArray(item.roles) && item.roles.includes('tutor_redactor');
   }
   // Un gestor de colaboraciones se dedica SOLO a los tutores: no lleva
   // prospectos, ni ventas, ni finanzas. Se declara lo que puede ver, igual que
