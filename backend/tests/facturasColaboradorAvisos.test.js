@@ -382,6 +382,9 @@ describe('«He recibido el pago y lo confirmo» y su opinión (Diego 04/11)', ()
     expect(c.projectId).toBe(P.A.id);
     token = enlaceDelCorreo(c);
     expect(token).toBe(tokenDeConfirmacion(F.laura, 1));
+    // Y el segundo botón, «No lo he recibido» (Diego 05/11: en el correo, no solo en la página).
+    expect(c.htmlContent).toContain('No lo he recibido');
+    expect(c.htmlContent).toContain(`factura-colaborador/pago/${token}?no=1`);
   });
 
   it('el enlace se abre sin entrar y enseña su factura, sin confirmar todavía', async () => {

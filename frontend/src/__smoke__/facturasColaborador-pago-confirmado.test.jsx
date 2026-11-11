@@ -35,6 +35,21 @@ beforeEach(() => { api.verPago.mockReset(); api.confirmarPago.mockReset(); api.o
 afterEach(cleanup);
 
 describe('la página de «He recibido el pago y lo confirmo»', () => {
+  it('con ?no=1 (el botón «No lo he recibido» del correo) abre ya el cuadro, sin avisar todavía', async () => {
+    api.verPago.mockResolvedValue({ data: pago() });
+    render(
+      <MemoryRouter initialEntries={['/factura-colaborador/pago/12.1.firma?no=1']}>
+        <Routes><Route path="/factura-colaborador/pago/:token" element={<FacturaPagoPage />} /></Routes>
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('heading', { name: 'No lo he recibido' })).toBeTruthy();
+    // Abrirla no avisa a la empresa ni confirma: eso pasa al enviar o al pulsar.
+    expect(api.noRecibido).not.toHaveBeenCalled();
+    expect(api.confirmarPago).not.toHaveBeenCalled();
+    // Y sigue pudiendo confirmar si al final sí le ha llegado.
+    expect(screen.getByRole('button', { name: 'He recibido el pago y lo confirmo' })).toBeTruthy();
+  });
+
   it('abrirla NO confirma (los filtros de correo abren los enlaces solos): enseña la factura y el botón', async () => {
     api.verPago.mockResolvedValue({ data: pago() });
     abrir();
