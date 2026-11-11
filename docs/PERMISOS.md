@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-777 rutas en 58 módulos, y 31 acciones con condición dentro de una ruta.
+782 rutas en 58 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -879,6 +879,11 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 
 | Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
 |---|---|---|---|---|
+| githubEstado | `GET /api/tasks/github` | (no existía) | (ruta nueva) | `tasks.github` |
+| githubConfig | `PATCH /api/tasks/github` | (no existía) | (ruta nueva) | `tasks.github` |
+| githubSecretos | `PUT /api/tasks/github/secretos` | (no existía) | (ruta nueva) | `tasks.github` |
+| githubPonerUsuario | `PUT /api/tasks/github/usuarios/:login` | (no existía) | (ruta nueva) | `tasks.github` |
+| githubQuitarUsuario | `DELETE /api/tasks/github/usuarios/:login` | (no existía) | (ruta nueva) | `tasks.github` |
 | (anónima) | `GET /api/tasks/metrics` | sesión · soloRoles(superadmin, admin, colaborador) | superadmin, admin, colaborador | `tasks.view_own` o `tasks.view_all` |
 | (anónima) | `GET /api/tasks/metrics/areas` | sesión · soloRoles(superadmin, admin, colaborador) | superadmin, admin, colaborador | `tasks.view_own` o `tasks.view_all` |
 | (anónima) | `GET /api/tasks/assignees` | sesión · soloRoles(superadmin, admin, colaborador) | superadmin, admin, colaborador | `tasks.view_own` o `tasks.view_all` |
@@ -1196,6 +1201,7 @@ lo que pide para tener sentido (editar pide ver).
 | Devolver tareas | `tasks.close` | Devolver a «En curso», con un comentario, las tareas hechas o en revisión que puede ver. | Admin | `tasks.view_own` |
 | Configurar el tablero | `tasks.manage` | Columnas, áreas y proyectos del tablero. | Admin | `tasks.view_own` |
 | Gestionar equipos | `tasks.manage_teams` | Crear, renombrar y archivar equipos del tablero, sus cargos y quién está en cada uno. | Admin | `tasks.view_own` |
+| Conectar con GitHub | `tasks.github` | El repositorio, el equipo, el supervisor, los secretos y quién es quién en GitHub. | solo superadmin | `tasks.view_own` |
 
 ## Captación
 

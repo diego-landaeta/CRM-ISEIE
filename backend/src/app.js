@@ -78,6 +78,8 @@ import actividadModule from './modules/actividad/index.js';
 import cursosPendientesModule from './modules/cursos-pendientes/index.js';
 import iaAnalisisModule from './modules/ia-analisis/index.js';
 import wcWebhook from './modules/woocommerce/wc.webhook.js';
+import githubWebhook from './modules/tasks/tasks.github.webhook.js';
+import { githubTableroActivo } from './modules/tasks/tasks.github.js';
 import { startFeedbackDia7Scheduler } from './jobs/feedbackDia7Scheduler.js';
 import { startNovedadesScheduler } from './jobs/novedadesScheduler.js';
 import convocatoriasModule from './modules/convocatorias/index.js';
@@ -149,6 +151,12 @@ app.use('/api/webhook-tokens/receive/:token', porteroDelWebhook, topeDelEnvio,
 
 // El aviso de WooCommerce (#14) lleva su propio parser, en bruto, para poder comprobar la firma.
 app.use('/api/woocommerce/webhook', wcWebhook);
+
+// El aviso de GitHub (CRM-ISEIE#435): las issues del repositorio, al tablero. Firmado
+// (X-Hub-Signature-256), con su parser en bruto. Solo con el tablero montado y
+// GITHUB_TABLERO_ACTIVO encendido (apagado de serie): si no, 404.
+if (tareasActivas() && githubTableroActivo()) app.use('/api/github/webhook', githubWebhook);
+else logger.info('Rutas SKIP (GITHUB_TABLERO_ACTIVO apagado): /api/github/webhook');
 
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true, limit: '5mb' }));
