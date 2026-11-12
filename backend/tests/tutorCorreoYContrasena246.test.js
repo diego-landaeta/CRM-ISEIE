@@ -21,6 +21,9 @@ vi.mock('../src/shared/config/db.js', () => ({
     if (/SELECT nombre, email FROM users WHERE id/.test(sql)) return { rows: [usuarios.get(params[0])].filter(Boolean) };
     if (/FROM users u\s+WHERE u.active AND u.email IS NOT NULL/.test(sql)) return { rows: [{ id: 1, email: 'sa@x.com', nombre: 'Super' }, { id: 7, email: 'ad@x.com', nombre: 'Admin' }] };
     if (/FROM user_projects up JOIN projects p/.test(sql)) return { rows: [{ id: 3, nombre: 'ISEIE', slug: 'iseie', logo_url: null, emoji: null }] };
+    // La marca del tutor, por `marca.service` (11/11): sus campus y, con uno, el suyo.
+    if (/JOIN user_projects up ON up.user_id = u.id/.test(sql)) return { rows: [{ project_id: 3 }] };
+    if (/p\.id = ANY\(\$1::int\[\]\)/.test(sql)) return { rows: [{ id: 3, nombre: 'ISEIE', slug: 'iseie', logo_url: null, emoji: null, sociedad_id: 6 }] };
     return { rows: [] };
   }),
 }));
