@@ -5,6 +5,8 @@ import * as integrationsModel from '../integrations/integrations.model.js';
 import { query } from '../../shared/config/db.js';
 import * as model from './stripe-payments.model.js';
 import * as tutores from '../tutores/tutor.model.js';
+// Ventas a plazos: al asociar un cargo, su suscripción se apunta y se cierra al completar el pago (#747).
+import { trasAsociarCargo } from './suscripciones.service.js';
 
 async function getStripeKey(projectId) {
   try {
@@ -216,6 +218,7 @@ export async function syncStripePayments(projectId, { fullHistory = false, retry
         const dbRow = await model.upsertPayment(payment);
         try { await autoLinkIfPossible(projectId, payment, dbRow); }
         catch (e) { logger.warn({ chargeId: ch.id, err: e.message }, 'autoLink fail'); }
+        await trasAsociarCargo(dbRow.id);
         if (ch.disputed) {
           await fetchAndUpdateDispute(apiKey, projectId, ch);
           disputesFound++;
@@ -335,6 +338,8 @@ export async function manualLink(stripePaymentId, { leadId, conversionId, userId
       'cargo asociado SIN registrar cobro: no consta como cobrado en Stripe');
   }
   await model.linkPayment(stripePaymentId, { leadId, conversionId, conversionPaymentId: cpId, userId, method: yaExistia ? 'manual_dedup' : 'manual' });
+  // Asociado a mano también cuenta: si era la última cuota, la suscripción se cierra (#747).
+  if (cpId) await trasAsociarCargo(stripePaymentId);
   // Asociar el cargo NO emite la factura: el cobro queda registrado en la venta y
   // espera en la cola. La emite una persona cuando comprueba que los datos del
   // cliente estan bien.
@@ -447,6 +452,7 @@ export async function handleWebhookEvent(projectId, event) {
       const payment = chargeToPayment(obj, projectId);
       const dbRow = await model.upsertPayment(payment);
       try { await autoLinkIfPossible(projectId, payment, dbRow); } catch (e) { logger.warn({ err: e.message }, 'autoLink wh fail'); }
+      if (event.type === 'charge.succeeded') await trasAsociarCargo(dbRow.id);
       if (obj.disputed && apiKey) await fetchAndUpdateDispute(apiKey, projectId, obj);
       // Un reembolso no acaba en stripe_payments: si el alumno recupera su
       // dinero, hay que registrar la devolucion en su venta y deshacer la
@@ -483,6 +489,7 @@ export async function handleWebhookEvent(projectId, event) {
           const payment = chargeToPayment(ch, projectId);
           const dbRow = await model.upsertPayment(payment);
           try { await autoLinkIfPossible(projectId, payment, dbRow); } catch {}
+          if (event.type === 'payment_intent.succeeded') await trasAsociarCargo(dbRow.id);
         } catch (e) { logger.warn({ err: e.message }, 'fetch charge from PI failed'); }
       }
       return { processed: event.type, stripeId: obj.id };
