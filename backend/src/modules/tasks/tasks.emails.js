@@ -5,6 +5,7 @@
 import { sendEmail } from '../../shared/services/brevo.service.js';
 import { logger } from '../../shared/utils/logger.js';
 import { query } from '../../shared/config/db.js';
+import { marcaDeLaEmpresa } from '../../shared/services/marca.service.js';
 import {
   correo, parrafo, boton, nota, seccion, esc, enlace, T,
 } from '../../shared/services/email-plantilla.service.js';
@@ -76,17 +77,30 @@ export async function despacharCorreo({ to, subject, htmlContent, textContent, t
 }
 
 /**
- * La marca del campus de una tarea: logo y nombre para la cabecera, y el proyecto por el
- * que sale el correo. Una tarea sin campus (o de un proyecto propio) va con la del CRM.
+ * La marca de una tarea: logo y nombre para la cabecera, y el proyecto por el
+ * que sale el correo.
+ *
+ *   · Con campus, la de ese campus (su cuenta, su «no responder», su nombre).
+ *   · Sin campus pero de un equipo, la de la EMPRESA del equipo (11/11): el
+ *     equipo «Desarrollo y SEO» es de CEDIA, y su tarea «Poner el vídeo en la
+ *     portada (ISEIH, Psiko y Fono)» es de la empresa, no de un campus. Nombre
+ *     corto y logo de la empresa si lo tiene; nunca el de uno de sus campus.
+ *   · Ni campus ni equipo (o un proyecto propio), la del CRM.
  */
 export async function marcaDeTarea(tarea) {
-  if (!tarea?.project_id) return null;
   try {
-    const { rows: [p] } = await query(
-      'SELECT id, nombre, slug, logo_url, emoji FROM projects WHERE id = $1', [tarea.project_id]);
-    return p || null;
+    if (tarea?.project_id) {
+      const { rows: [p] } = await query(
+        'SELECT id, nombre, slug, logo_url, emoji FROM projects WHERE id = $1', [tarea.project_id]);
+      return p || null;
+    }
+    if (tarea?.team_id) {
+      const { rows: [t] } = await query('SELECT issuer_id FROM task_teams WHERE id = $1', [tarea.team_id]);
+      return t?.issuer_id ? await marcaDeLaEmpresa(t.issuer_id) : null;
+    }
+    return null;
   } catch (err) {
-    logger.warn({ err: err.message, taskId: tarea.id }, 'Correo de tareas: no se pudo leer la marca del campus');
+    logger.warn({ err: err.message, taskId: tarea?.id }, 'Correo de tareas: no se pudo leer la marca de la tarea');
     return null;
   }
 }
@@ -306,7 +320,7 @@ export async function enviarCorreoComentario({ persona, tarea, quien, comentario
 }
 
 /** El correo de cada mañana: lo que vence hoy y lo vencido. */
-export function armarCorreoDelDia({ persona, tareas, hoy = new Date() }) {
+export function armarCorreoDelDia({ persona, tareas, hoy = new Date(), marca = null }) {
   // «Hoy» y «vencida» con el día de la oficina, no con el del servidor (UTC).
   const dia = (d) => new Intl.DateTimeFormat('en-CA', {
     timeZone: tz(), year: 'numeric', month: '2-digit', day: '2-digit',
@@ -321,7 +335,7 @@ export function armarCorreoDelDia({ persona, tareas, hoy = new Date() }) {
   const lista = (ts) => parrafo(`<ul style="padding-left:18px;margin:0">${ts.map(linea).join('')}</ul>`);
 
   const { htmlContent, textContent } = correo({
-    proyecto: MARCA_CRM,
+    proyecto: marca || MARCA_CRM,
     titulo: 'Tus tareas de hoy',
     saludo: persona.nombre,
     resumen: `${deHoy.length} para hoy y ${vencidas.length} ${vencidas.length === 1 ? 'vencida' : 'vencidas'}`,
@@ -417,7 +431,7 @@ export async function enviarCorreoCambioEstado({ persona, tarea, clave, ...resto
  * Las vencidas, primero y en rojo. `columnas` traduce la clave del estado al
  * nombre de su columna en el tablero.
  */
-export function armarCorreoResumen({ persona, datos, dia, zona = 'America/Caracas', columnas = {} }) {
+export function armarCorreoResumen({ persona, datos, dia, zona = 'America/Caracas', columnas = {}, marca = null }) {
   const nombreEstado = (k) => columnas[k] || ESTADOS[k] || k;
   const fecha = (d) => new Date(d).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', timeZone: zona });
   const rojo = T.destructivo;
@@ -481,7 +495,9 @@ export function armarCorreoResumen({ persona, datos, dia, zona = 'America/Caraca
   if (falta.revisar.length) partes.push(`${falta.revisar.length} por revisar`);
 
   const { htmlContent, textContent } = correo({
-    proyecto: MARCA_CRM,
+    // La marca de la persona (11/11): la de su empresa si todos sus campus son
+    // de una; si mezcla empresas, la del CRM. Nunca la de un campus suelto suyo.
+    proyecto: marca || MARCA_CRM,
     titulo: 'Tu resumen del día en el tablero',
     saludo: persona.nombre,
     resumen: `Hoy: ${nHizo} ${nHizo === 1 ? 'movimiento' : 'movimientos'} · Te quedan ${partes.join(', ')}`,

@@ -59,7 +59,9 @@ const pintar = () => render(<MemoryRouter><DashboardPage /></MemoryRouter>);
 describe('El ranking de gestoras no depende de la bandera del proceso', () => {
   it('el Dashboard YA CARGADO enseña «Cómo voy» con la bandera apagada (antes, nada)', () => {
     pintar();
-    expect(screen.getByTestId('como-voy')).toHaveAttribute('data-medida', 'facturado');
+    // Por lo cobrado (12/11/2026, «los rankings de todas las vistas, por lo cobrado»):
+    // sin `medida`, que es lo de serie. Antes iba con medida="facturado" (#224).
+    expect(screen.getByTestId('como-voy')).toHaveAttribute('data-medida', '');
   });
 
   it('y no lo pinta dos veces mientras carga: va en la página, no en el «Cargando datos…»', () => {

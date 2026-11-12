@@ -20,6 +20,7 @@ import NotificationsBell from './NotificationsBell';
 import { isBetaAllowed, BETA_MODE, BETA_VERSION } from '@/shared/config/betaConfig';
 import { PROCESO_EN_PRUEBAS, SOLO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 import { CERTIFEX_PANEL } from '@/shared/lib/certifexPanel';
+import { PANTALLAS_IA } from '@/shared/lib/pantallasIA';
 
 const ROLE_LABELS = { superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor', soporte: 'Soporte', tutor: 'Tutor', colaborador: 'Colaborador', tutor_redactor: 'Tutor redactor' };
 
@@ -192,13 +193,19 @@ export const NAV_SECTIONS = [
       { to: '/informes',     label: 'Reportes',      icon: ChartLineUp, sectionPrefixes: ['/informes', '/activity'] },
       // Por que no compran (#170). Fuera de produccion hasta aprobarlo.
       ...(PROCESO_EN_PRUEBAS ? [{ to: '/informes/feedback', label: 'Feedback', icon: ChatCircleText, roles: ['admin', 'superadmin'], permiso: 'feedback.view' }] : []),
-      // Preguntarle a los datos (#30), como en MultiCRM: solo en pruebas hasta que
-      // haya clave y tope de gasto (#22).
-      ...(SOLO_EN_PRUEBAS ? [{ to: '/informes/preguntar', label: 'Pregunta a tus datos', icon: Sparkle, roles: ['admin', 'superadmin'], permiso: 'reports_ia.generar' }] : []),
-      // Próximamente (#226): en MultiCRM la pantalla existe pero está aparcada
-      // —fuera de su menú hasta la fase 5— y depende de la API de Claude, cuya
-      // clave y cuyo módulo (`claude-chat`) ISEIE no tiene.
-      { to: '/chat-ia',     label: 'Chat IA',       icon: ChatCircleText, roles: ['admin', 'superadmin'], comingSoon: true },
+      // Las pantallas de IA del CRM (#30) —Pregunta a tus datos y Chat IA— están
+      // APAGADAS (Diego, 10/11/2026: se usa Claude por el MCP), como en MultiCRM.
+      // Se encienden juntas con `PANTALLAS_IA` (`shared/lib/pantallasIA.js`).
+      ...(PANTALLAS_IA
+        ? [
+          // Preguntarle a los datos (#30): además, solo en pruebas hasta que
+          // haya clave y tope de gasto (#22).
+          ...(SOLO_EN_PRUEBAS ? [{ to: '/informes/preguntar', label: 'Pregunta a tus datos', icon: Sparkle, roles: ['admin', 'superadmin'], permiso: 'reports_ia.generar' }] : []),
+          // Próximamente (#226): depende de la API de Claude, cuya clave y cuyo
+          // módulo (`claude-chat`) ISEIE no tiene.
+          { to: '/chat-ia',     label: 'Chat IA',       icon: ChatCircleText, roles: ['admin', 'superadmin'], comingSoon: true },
+        ]
+        : []),
     ],
   },
   {
@@ -737,12 +744,12 @@ export default function Sidebar({ collapsed = false, onToggleCollapsed, onNaviga
             <div className="flex-1 min-w-0 flex items-center gap-1.5">
               <img src="/iseie-logo-color.png" alt="ISEIE" className="h-7 w-auto object-contain object-left dark:hidden" />
               <img src="/iseie-logo.png"       alt="ISEIE" className="h-7 w-auto object-contain object-left hidden dark:block" />
-              {/* La versión, como en MultiCRM (Diego, 19/10: «actualiza producción a la 2.2.0»). */}
+              {/* La versión, como en MultiCRM. Sale de la etiqueta de Git al compilar (11/11). */}
               <span
-                title={`Versión ${BETA_VERSION} — beta`}
+                title={BETA_VERSION ? `Versión ${BETA_VERSION} — beta` : 'Beta'}
                 className="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 text-[9px] font-bold uppercase tracking-wider self-start"
               >
-                Beta {BETA_VERSION}
+                Beta{BETA_VERSION ? ` ${BETA_VERSION}` : ''}
               </span>
             </div>
           </>

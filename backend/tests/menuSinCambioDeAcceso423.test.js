@@ -40,6 +40,7 @@ beforeAll(async () => {
 const casos = CAMBIOS_DE_MENU.flatMap((c) => Object.entries(c.perfiles).flatMap(([perfil, lineas]) =>
   lineas.map((l) => ({
     id: c.id, acompanaA: c.acompanaA, perfil, signo: l[0], entrada: l.slice(2), ruta: c.rutas[l.slice(2)],
+    soloMenu: Boolean(c.soloMenu),
     quitada: (c.quitadas || []).includes(l.slice(2)) && !!c.aprobadoPor,
   }))));
 
@@ -47,7 +48,9 @@ describe('los cambios del menú no cambian el acceso (#423, punto 6)', () => {
   it('cada entrada tiene su ruta y su perfil', () => {
     expect(casos.length).toBeGreaterThan(0);
     for (const x of casos) {
-      expect(x.ruta, `${x.perfil} · ${x.entrada}`).toBeTruthy();
+      // Lo que solo se esconde puede no tener ruta («Próximamente»): lo dice con `null`.
+      if (x.soloMenu) expect(x.ruta !== undefined, `${x.perfil} · ${x.entrada}`).toBe(true);
+      else expect(x.ruta, `${x.perfil} · ${x.entrada}`).toBeTruthy();
       expect(PERFILES[x.perfil], x.perfil).toBeTruthy();
     }
   });
@@ -57,6 +60,10 @@ describe('los cambios del menú no cambian el acceso (#423, punto 6)', () => {
     for (const x of casos) {
       const p = PERFILES[x.perfil];
       const fila = porId.get(x.ruta);
+      // Solo se esconde del menú, sin tocar el acceso (`menu-sin-pantallas-ia`,
+      // Diego 10/11): basta con que la ruta, si la tiene, siga existiendo
+      // —responde igual que antes—; no tiene que dar 403.
+      if (x.soloMenu) { if (x.ruta && !fila) mal.push(`${x.ruta}: no existe`); continue; }
       // Una pantalla que se quita entera con su ruta (`quitadas`, CRM-ISEIE#419: «Por
       // revisar»): no se le cierra a nadie, ya no existe. Basta con que de verdad
       // ya no esté en el inventario.

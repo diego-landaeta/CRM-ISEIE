@@ -14,7 +14,8 @@ import { OPCIONES_VER, vistaInicialDe, type VerTablero } from '../lib/taskUi';
 import {
   etiquetaDePeriodo, fechaYHora, hoyEnOficina, moverReferencia, rangoDePeriodo, type TipoPeriodo,
 } from '../lib/periodo';
-import type { Assignee, HistorialTarea, Team } from '../types';
+import { alternarPersona, ordenarFichas } from '../lib/porIntegrante';
+import type { Assignee, FichaDeIntegrante, HistorialTarea, Team } from '../types';
 
 /*
  * «HISTORIAL DE TAREAS» (CRM-ISEIE#419, Diego y Carlos, 10/11/2026). Sustituye a «Por
@@ -23,6 +24,11 @@ import type { Assignee, HistorialTarea, Team } from '../types';
  * lo hizo, quién lo cerró y cuándo; por persona, equipo y periodo. Lo que se ve
  * es lo del tablero: cada uno lo suyo y lo de su equipo; con «Ver todo», todo
  * lo de su empresa.
+ *
+ * «Por integrante» (Diego, 11/11/2026): encima de la lista, una ficha por
+ * persona con cuántas hizo en el periodo y con los filtros de arriba; primero
+ * «Yo». Pulsarla filtra a esa persona (lo mismo que el desplegable «Persona»).
+ * Los totales los cuenta el servidor con el mismo alcance que la lista.
  */
 
 const PERIODOS: ReadonlyArray<{ value: TipoPeriodo; label: string }> = [
@@ -60,6 +66,7 @@ export default function TasksHistoryPage() {
   const [pagina, setPagina] = useState(1);
 
   const [filas, setFilas] = useState<HistorialTarea[]>([]);
+  const [porPersona, setPorPersona] = useState<FichaDeIntegrante[]>([]);
   const [paginacion, setPaginacion] = useState<tasksApi.Paginacion | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -85,7 +92,7 @@ export default function TasksHistoryPage() {
     setCargando(true);
     setError(null);
     try {
-      const { filas: lista, paginacion: pag } = await tasksApi.getHistorial({
+      const { filas: lista, paginacion: pag, porPersona: fichas } = await tasksApi.getHistorial({
         ...(ver === 'todo' ? ambito : {}),
         ver,
         assigned_to: personaId || undefined,
@@ -98,13 +105,17 @@ export default function TasksHistoryPage() {
       });
       setFilas(lista);
       setPaginacion(pag);
+      setPorPersona(fichas);
       setPersonasVistas((antes) => {
         const mapa = new Map(antes.map((p) => [p.id, p]));
         for (const f of lista) if (f.assigned_to && f.assigned_to_name) mapa.set(f.assigned_to, { id: f.assigned_to, nombre: f.assigned_to_name });
+        // Las de las fichas también: el desplegable «Persona» tiene a todas las de arriba.
+        for (const f of fichas) if (f.id && f.nombre) mapa.set(f.id, { id: f.id, nombre: f.nombre });
         return mapa.size === antes.length ? antes : [...mapa.values()];
       });
     } catch (err) {
       setFilas([]);
+      setPorPersona([]);
       setPaginacion(null);
       setError(errorDe(err));
     } finally {
@@ -115,12 +126,17 @@ export default function TasksHistoryPage() {
   useEffect(() => { cargar(); }, [cargar]);
 
   const opcionesPersona = useMemo(() => {
-    const base = assignees.length > 0 ? assignees.map((a) => ({ id: a.id, nombre: a.nombre })) : personasVistas;
+    // Las asignables y, además, las que salen en las fichas o en la lista (alguien
+    // que ya no está activo sigue teniendo su ficha, y elegirla tiene que cuadrar aquí).
+    const mapa = new Map(assignees.map((a) => [a.id, { id: a.id, nombre: a.nombre }]));
+    for (const p of personasVistas) if (!mapa.has(p.id)) mapa.set(p.id, p);
+    const base = [...mapa.values()];
     const lista = base.some((p) => p.id === yo) ? base : [{ id: yo, nombre: user?.nombre || 'Yo' }, ...base];
     return [...lista].sort((a, b) => (a.id === yo ? -1 : b.id === yo ? 1 : a.nombre.localeCompare(b.nombre, 'es')))
       .map((p) => ({ value: p.id as number | '', label: p.id === yo ? `${p.nombre} (yo)` : p.nombre }));
   }, [assignees, personasVistas, yo, user?.nombre]);
   const equiposActivos = equipos.filter((e) => e.is_active);
+  const fichas = useMemo(() => ordenarFichas(porPersona, yo, user?.nombre || 'Yo'), [porPersona, yo, user?.nombre]);
 
   if (!canViewOwn && !canViewAll) {
     return (
@@ -207,6 +223,35 @@ export default function TasksHistoryPage() {
           {cargando ? 'Cargando…' : `${etiquetaDePeriodo(tipoPeriodo, rango)} · ${total} ${total === 1 ? 'tarea hecha' : 'tareas hechas'}`}
         </p>
       </div>
+
+      {!error && porPersona.length > 0 && (
+        <section aria-label="Por integrante" className="space-y-1.5">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Por integrante</h2>
+          <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1" data-testid="fichas-por-integrante">
+            {fichas.map((f) => {
+              const elegida = personaId === f.id;
+              const esYo = f.id === yo;
+              return (
+                <button
+                  key={f.id}
+                  type="button"
+                  aria-pressed={elegida}
+                  title={elegida ? 'Quitar el filtro de persona' : `Ver solo lo que hizo ${esYo ? 'yo' : f.nombre}`}
+                  onClick={() => setPersonaId((actual) => alternarPersona(actual, f.id))}
+                  className={`flex-shrink-0 min-w-[8.5rem] max-w-[14rem] rounded-lg border px-3 py-2 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${elegida
+                    ? 'border-primary bg-primary/10'
+                    : 'border-border bg-card hover:bg-muted'}`}
+                >
+                  <span className="block truncate text-xs font-medium text-muted-foreground">{esYo ? 'Yo' : f.nombre}</span>
+                  <span className="block text-lg font-semibold tabular-nums leading-tight">
+                    {f.total} <span className="text-xs font-normal text-muted-foreground">{f.total === 1 ? 'tarea' : 'tareas'}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {error ? (
         <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive-soft text-destructive-soft-foreground p-6 text-center space-y-3">

@@ -46,6 +46,9 @@ export async function getUserProjects(userId, role) {
       `SELECT p.id, p.nombre, p.slug, p.emoji, p.type, p.webhook_api_key,
               p.modules, p.sidebar_labels, p.theme_color,
               p.sociedad_emisora_id, s.razon_social AS sociedad_nombre,
+              -- La marca de la EMPRESA, para el menú con una empresa elegida (11/11).
+              s.alias AS sociedad_alias, s.logo_url AS sociedad_logo_url,
+              (s.logo_key IS NOT NULL) AS sociedad_logo_subido,
               -- Los de pruebas no entran en «Todos» (148); el frontal lo necesita (#346).
               COALESCE(p.es_prueba, false) AS es_prueba
        FROM projects p
@@ -59,6 +62,9 @@ export async function getUserProjects(userId, role) {
     `SELECT p.id, p.nombre, p.slug, p.emoji, p.type, p.webhook_api_key,
             p.modules, p.sidebar_labels, p.theme_color,
             p.sociedad_emisora_id, s.razon_social AS sociedad_nombre,
+              -- La marca de la EMPRESA, para el menú con una empresa elegida (11/11).
+              s.alias AS sociedad_alias, s.logo_url AS sociedad_logo_url,
+              (s.logo_key IS NOT NULL) AS sociedad_logo_subido,
             COALESCE(p.es_prueba, false) AS es_prueba
      FROM user_projects up
      JOIN projects p ON p.id = up.project_id
