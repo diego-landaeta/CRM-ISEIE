@@ -51,11 +51,12 @@ describe('el colaborador y «Mi factura»', () => {
     expect(screen.getByText('Su tablero')).toBeTruthy();
   });
 
-  it('«Mi factura» está en su menú (solo para el rol colaborador)', () => {
+  it('«Mi factura» está en su menú (colaborador y tutor redactor)', () => {
     const entradas = NAV_SECTIONS.flatMap((s) => s.items);
     const mia = entradas.find((e) => e.to === '/mi-factura');
     expect(mia).toBeTruthy();
-    expect(mia.roles).toEqual(['colaborador']);
+    // Desde el 11/11 también el tutor redactor sube su factura del mes (#420).
+    expect(mia.roles).toEqual(['colaborador', 'tutor_redactor']);
     // Y lo de administración no lleva el rol colaborador.
     expect(entradas.find((e) => e.to === '/accounting/facturas-colaboradores').roles).not.toContain('colaborador');
   });
