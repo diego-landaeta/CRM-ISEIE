@@ -51,6 +51,7 @@ import webhooksSalientesModule from './modules/webhooks-salientes/index.js';
 import asignacionModule from './modules/asignacion/index.js';
 import { registrarActividad } from './shared/middleware/registrarActividad.js';
 import { startWebhooksSalientesScheduler } from './jobs/webhooksSalientesScheduler.js';
+import { startCopiaDiariaScheduler } from './jobs/copiaDiariaJob.js';
 import { startAsignacionScheduler } from './jobs/asignacionScheduler.js';
 import projectChannelsModule from './modules/project-channels/index.js';
 import installationModule from './modules/installation/index.js';
@@ -58,6 +59,7 @@ import credentialsModule from './modules/credentials/index.js';
 import dossiersModule from './modules/dossiers/index.js';
 import reportsModule from './modules/reports/index.js';
 import clientErrorsModule from './modules/client-errors/index.js';
+import copiaDiariaModule from './modules/copia-diaria/index.js';
 import changeRequestsModule from './modules/change-requests/index.js';
 // El proceso comercial (#87): los pasos, y de ahí la cola del día.
 import procesoModule from './modules/proceso/index.js';
@@ -317,6 +319,8 @@ const MODULES = [
   dossiersModule,
   reportsModule,
   clientErrorsModule,
+  // La descarga de la copia diaria de la base (enlace firmado; con la copia apagada, 404).
+  copiaDiariaModule,
   changeRequestsModule,
   statusModule,
   procesoModule,
@@ -551,6 +555,12 @@ if (process.env.NODE_ENV !== 'test') {
       } catch (err) {
         logger.error({ err }, 'Facturas de colaboradores: los avisos a la empresa fallaron al arrancar');
       }
+    }
+    // La copia diaria de la base, cifrada y por correo (11/11). Apagada de serie: COPIA_DIARIA_ACTIVA.
+    try {
+      startCopiaDiariaScheduler();
+    } catch (err) {
+      logger.error({ err }, 'Copia diaria de la base: falló al arrancar');
     }
     // Los reintentos del webhook de transferencias (se apaga con WEBHOOKS_SALIENTES_DISABLED=1).
     try {

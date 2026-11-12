@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-777 rutas en 58 módulos, y 31 acciones con condición dentro de una ruta.
+778 rutas en 59 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -236,6 +236,12 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | listarDelAmbito | `GET /api/convocatorias/ambito` | (no existía) | (ruta nueva) | `convocatorias.view` |
 | crear | `POST /api/convocatorias/` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo · projectAccess (campus) | superadmin, admin, soporte | `convocatorias.create` |
 | editar | `PATCH /api/convocatorias/:id` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo · projectAccess (campus) | superadmin, admin, soporte | `convocatorias.edit` |
+
+## copia-diaria
+
+| Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
+|---|---|---|---|---|
+| descargar | `GET /api/copia-diaria/descarga/:fichero` | (no existía) | (ruta nueva) | — |
 
 ## credentials
 
