@@ -744,12 +744,12 @@ export default function Sidebar({ collapsed = false, onToggleCollapsed, onNaviga
             <div className="flex-1 min-w-0 flex items-center gap-1.5">
               <img src="/iseie-logo-color.png" alt="ISEIE" className="h-7 w-auto object-contain object-left dark:hidden" />
               <img src="/iseie-logo.png"       alt="ISEIE" className="h-7 w-auto object-contain object-left hidden dark:block" />
-              {/* La versión, como en MultiCRM (Diego, 19/10: «actualiza producción a la 2.2.0»). */}
+              {/* La versión, como en MultiCRM. Sale de la etiqueta de Git al compilar (11/11). */}
               <span
-                title={`Versión ${BETA_VERSION} — beta`}
+                title={BETA_VERSION ? `Versión ${BETA_VERSION} — beta` : 'Beta'}
                 className="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 text-[9px] font-bold uppercase tracking-wider self-start"
               >
-                Beta {BETA_VERSION}
+                Beta{BETA_VERSION ? ` ${BETA_VERSION}` : ''}
               </span>
             </div>
           </>

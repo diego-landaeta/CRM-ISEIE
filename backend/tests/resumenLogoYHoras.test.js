@@ -15,7 +15,13 @@ vi.mock('../src/shared/config/db.js', () => ({
     if (sql.includes('FROM user_projects up')) return { rows: campus };
     if (sql.includes('FROM invoice_issuers')) {
       // Si se volviera a pedir la imagen de facturacion, aqui esta el sello.
-      return { rows: [{ id: 6, razon_social: 'ISEIE Innovation School SL', logo_url: SELLO }, { id: 8, razon_social: 'CEDIA', logo_url: SELLO }] };
+      // Una empresa de varios campus lleva el SUYO si lo tiene (11/11): CEDIA no
+      // tiene; ICTESS, sí.
+      return { rows: [
+        { id: 6, razon_social: 'ISEIE Innovation School SL', logo_url: SELLO },
+        { id: 8, razon_social: 'CEDIA', logo_url: null },
+        { id: 9, razon_social: 'Ictess Ingeniería e Innovación SL', logo_url: 'https://ictess.com/logo.png' },
+      ] };
     }
     if (sql.includes('FROM projects p WHERE id = ANY')) return { rows: marcas };
     return { rows: [] };
@@ -56,6 +62,13 @@ describe('el logo de cada empresa', () => {
     const [e] = await C.empresasDe({ id: 1, role: 'admin' });
     expect(e.campus).toHaveLength(2);
     expect(e.logoUrl).toBeNull();
+  });
+
+  it('una empresa de varios campus con logo propio lleva el suyo (ICTESS), no el de un campus', async () => {
+    campus = [{ id: 4, nombre: 'ICTESS', sociedad_id: 9 }, { id: 13, nombre: 'ICTESS US', sociedad_id: 9 }];
+    marcas = [{ id: 4, nombre: 'ICTESS', logo_url: 'https://ictess.com/campus.png' }];
+    const [e] = await C.empresasDe({ id: 1, role: 'admin' });
+    expect(e.logoUrl).toBe('https://ictess.com/logo.png');
   });
 
   it('un campus sin logo va sin imagen (con el filete de color)', async () => {
