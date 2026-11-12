@@ -9,6 +9,7 @@ import { comoLista } from '../../shared/utils/roles.js';
 import { revokeAllUserTokens, logActivity } from '../auth/auth.model.js';
 import { sendWelcomeUserEmail, sendCorreoCambiadoEmail, sendEmail } from '../../shared/services/brevo.service.js';
 import { notifyUsers } from '../notifications/notifications.service.js';
+import { marcaDeLaPersona, remitenteDe } from '../../shared/services/marca.service.js';
 
 // A LOS TUTORES NO SE LES MANDA NADA. TODAVIA NO.
 //
@@ -149,15 +150,11 @@ export async function avisarCorreoDeTutorCambiado({ tutorId, nombre, de, a }) {
     targetUserIds: gente.map((g) => g.id), type: 'tutor_correo_cambiado', title: titulo, message: texto,
     link_path: '/tutores', metadata: { tutor_id: tutorId, de, a }, triggered_by_user_id: tutorId,
   });
-  // Con la plantilla común y la marca de su campus (Diego, 10/10: «cada correo
-  // con un formato completo y lindo, y con el branding»). Antes iba en texto plano.
-  const { rows: [marca] } = await query(
-    `SELECT p.id, p.nombre, p.slug, p.logo_url, p.emoji
-       FROM user_projects up JOIN projects p ON p.id = up.project_id AND p.active = true
-      WHERE up.user_id = $1
-      ORDER BY (p.remitente_no_contestar IS NULL), p.id LIMIT 1`,
-    [tutorId]
-  );
+  // Con la plantilla común y la marca del tutor (Diego, 10/10: «cada correo
+  // con un formato completo y lindo, y con el branding»). La de su campus si es
+  // uno; si son varios de una empresa, la de la EMPRESA (11/11), y no la del
+  // primero con remitente, que en CEDIA era Fono Aprende.
+  const marca = await marcaDeLaPersona({ userId: tutorId }).catch(() => null);
   for (const g of gente) {
     const { htmlContent, textContent } = P.correo({
       proyecto: marca || {},
@@ -172,7 +169,7 @@ export async function avisarCorreoDeTutorCambiado({ tutorId, nombre, de, a }) {
       ],
     });
     sendEmail({
-      to: g.email, subject: titulo, htmlContent, textContent, projectId: marca?.id ?? null,
+      to: g.email, subject: titulo, htmlContent, textContent, ...remitenteDe(marca),
       tags: ['tutor-correo-cambiado'],
       clave: `tutor-correo-${tutorId}-${g.id}-${a}`,
     }).catch((err) => logger.error({ err: err.message, a: g.id }, 'Fallo avisando del correo de tutor cambiado'));

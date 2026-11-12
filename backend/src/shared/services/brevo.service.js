@@ -4,6 +4,7 @@ import { getDecryptedValue } from '../../modules/credentials/credentials.model.j
 import { query } from '../config/db.js';
 import { yaSeEnvio, registrar } from './email-log.service.js';
 import { dejaPasar, porQueSeParo } from './email-freno.service.js';
+import { marcaDeLaPersona as marcaDeLaPersonaComun, remitenteDe } from './marca.service.js';
 
 const BREVO_API_URL = 'https://api.brevo.com/v3';
 const FROM_EMAIL = process.env.BREVO_FROM_EMAIL || 'no-reply@crm-test.local';
@@ -208,23 +209,15 @@ async function sendEmail({ to, subject, htmlContent, textContent, tags = [], pro
 // ============================================================
 
 /**
- * La marca con la que le llega un correo a una persona del equipo: su primer
- * campus activo, mejor el que tiene remitente «no contestar» (#177). Si no tiene
- * ninguno, la del CRM. Da el logo de la cabecera y, por su id, la cuenta y el
- * remitente de esa marca en Brevo.
+ * La marca con la que le llega un correo a una persona del equipo: la de sus
+ * campus (`marca.service.js`). Un campus, el suyo; varios de una empresa, la
+ * EMPRESA («CEDIA»), y no el primero de ellos con remitente —que en CEDIA era
+ * Fono Aprende y le daba la bienvenida «al CRM de Fono Aprende» a quien trabaja
+ * para los ocho (11/11)—; empresas mezcladas o ninguna, la del CRM.
  */
 async function marcaDeLaPersona(email) {
   try {
-    const { rows } = await query(
-      `SELECT p.id, p.nombre, p.slug, p.logo_url, p.emoji
-         FROM users u
-         JOIN user_projects up ON up.user_id = u.id
-         JOIN projects p ON p.id = up.project_id AND p.active = true
-        WHERE lower(u.email) = lower($1)
-        ORDER BY (p.remitente_no_contestar IS NULL), p.id LIMIT 1`,
-      [email],
-    );
-    return rows[0] || null;
+    return await marcaDeLaPersonaComun({ email });
   } catch {
     return null;
   }
@@ -254,7 +247,9 @@ export async function sendWelcomeUserEmail({ nombre, email, setPasswordToken, ba
     subject,
     htmlContent,
     textContent,
-    projectId: marca?.id ?? null,
+    // La cuenta y el nombre del remitente, los de la marca: con la de una
+    // empresa, la cuenta del CRM y «CEDIA» como nombre.
+    ...remitenteDe(marca),
     tags: ['welcome-user', 'crm'],
   });
 }

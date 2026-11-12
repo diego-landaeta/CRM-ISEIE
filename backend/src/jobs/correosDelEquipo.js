@@ -9,6 +9,7 @@ import { resumenDeLaCola } from '../modules/proceso/proceso.model.js';
 import * as leadModel from '../modules/leads/lead.model.js';
 import { lecturaDeLaSemana } from '../modules/ia-analisis/lectura.js';
 import { versionDe } from '../modules/feedback/cabecera.js';
+import { marcaDeLosCampus, logoDeEmpresa } from '../shared/services/marca.service.js';
 import { ENTRA_SOLO, POR_WHATSAPP } from '../shared/utils/origenDelLead.js';
 
 /**
@@ -105,11 +106,21 @@ const GRIS = '#5b6572';
 const TINTA = '#1d2530';
 const LINEA = '#e6e9ee';
 
-/** El correo entero: cabecera de marca, título, contenido y pie. */
-export function envoltorio({ cabeceraUrl = null, preTitulo, titulo, subtitulo = '', contenido, pie = '' }) {
+/**
+ * El correo entero: cabecera de marca, título, contenido y pie.
+ *
+ * La cabecera: la imagen de la marca del campus si la hay; si no, una franja
+ * con el nombre. Con `marca` (la de una EMPRESA de varios campus, 11/11) la
+ * franja lleva su nombre corto y su logo si lo tiene, en vez de «MultiCRM».
+ */
+export function envoltorio({ cabeceraUrl = null, marca = null, preTitulo, titulo, subtitulo = '', contenido, pie = '' }) {
+  const nombre = marca?.nombre || CRM.nombre;
+  const logo = marca?.logo_url
+    ? `<img src="${esc(marca.logo_url)}" alt="" height="32" style="display:inline-block;height:32px;width:auto;max-width:140px;border:0;vertical-align:middle;background:#ffffff;border-radius:6px;padding:4px;margin-right:12px">`
+    : '';
   const cabecera = cabeceraUrl
-    ? `<img src="${esc(cabeceraUrl)}" width="600" alt="${esc(CRM.nombre)}" style="display:block;width:100%;max-width:600px;height:auto;border:0;border-radius:12px 12px 0 0">`
-    : `<div style="background:${CRM.color};border-radius:12px 12px 0 0;padding:20px 28px;color:#ffffff;font:bold 18px Arial,Helvetica,sans-serif">${esc(CRM.nombre)}</div>`;
+    ? `<img src="${esc(cabeceraUrl)}" width="600" alt="${esc(nombre)}" style="display:block;width:100%;max-width:600px;height:auto;border:0;border-radius:12px 12px 0 0">`
+    : `<div style="background:${CRM.color};border-radius:12px 12px 0 0;padding:20px 28px;color:#ffffff;font:bold 18px Arial,Helvetica,sans-serif">${logo}<span style="vertical-align:middle">${esc(nombre)}</span></div>`;
   return `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head>
 <body style="margin:0;padding:0;background:#f2f4f7">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f2f4f7"><tr><td align="center" style="padding:24px 12px">
@@ -351,7 +362,9 @@ export async function empresasDe(persona) {
   }
   const ids = [...new Set(campus.map((c) => c.sociedad_id).filter(Boolean))];
   const { rows: socs } = ids.length
-    ? await query('SELECT id, razon_social FROM invoice_issuers WHERE id = ANY($1::int[])', [ids])
+    ? await query(
+      `SELECT id, razon_social, alias, logo_url, (logo_key IS NOT NULL) AS con_logo_subido
+         FROM invoice_issuers WHERE id = ANY($1::int[])`, [ids])
     : { rows: [] };
   const grupos = new Map();
   for (const c of campus) {
@@ -361,6 +374,7 @@ export async function empresasDe(persona) {
       grupos.set(clave, {
         nombre: s ? s.razon_social : c.nombre,
         logoUrl: null,
+        sociedad: s || null,
         campus: [],
       });
     }
@@ -372,8 +386,9 @@ export async function empresasDe(persona) {
     pon el logo en ambos». Va dibujado sobre el color de la marca (la insignia
     de `cabecera.js`), porque el logo de ISEIE es blanco.
 
-    Solo si la empresa es un campus. Una con varios (CEDIA, siete) no tiene un
-    logo suyo, y poner el de uno de sus campus seria decir que es ese.
+    Solo si la empresa es un campus. Una con varios (CEDIA, ocho) lleva el logo
+    de la EMPRESA si lo tiene (ICTESS, el suyo; 11/11) y si no, ninguno: poner
+    el de uno de sus campus seria decir que es ese.
   */
   const solos = [...grupos.values()].filter((g) => g.campus.length === 1).map((g) => g.campus[0].id);
   const { rows: marcas } = solos.length
@@ -384,13 +399,31 @@ export async function empresasDe(persona) {
   for (const g of grupos.values()) {
     const m = g.campus.length === 1 ? marcas.find((x) => x.id === g.campus[0].id) : null;
     if (m?.logo_url) g.logoUrl = `${base()}/api/f/insignia/${m.id}?v=${versionDe({ ...m, proyecto: m.nombre })}`;
+    else if (g.campus.length > 1 && g.sociedad) g.logoUrl = logoDeEmpresa(g.sociedad);
+    delete g.sociedad;
   }
   // La que tiene mas campus, primero: suele ser la que mas pesa.
   return [...grupos.values()].sort((a, b) => b.campus.length - a.campus.length || a.nombre.localeCompare(b.nombre, 'es'));
 }
 
-/** La cabecera de marca: la del campus si solo hay uno; si no, la del CRM. */
+/**
+ * La cabecera de marca, como `{ cabeceraUrl }` o `{ marca }` para `envoltorio`:
+ *
+ *   · un campus, la imagen de su marca;
+ *   · varios de UNA empresa, la de la empresa (11/11): «CEDIA» y su logo si lo
+ *     tiene. Antes salía «MultiCRM» a quien trabaja solo para CEDIA;
+ *   · si no, la del CRM (y en ISEIE, que es una sola marca, la de ISEIE).
+ */
 async function cabeceraPara(campus) {
+  if (campus.length > 1) {
+    const marca = await marcaDeLosCampus(campus.map((c) => c.id)).catch(() => null);
+    if (marca?.de_empresa) return { marca: { nombre: marca.nombre, logo_url: marca.logo_url } };
+  }
+  return { cabeceraUrl: await imagenDeCabecera(campus) };
+}
+
+/** La imagen de la cabecera: la del campus si solo hay uno; si no, ninguna (la del CRM). */
+async function imagenDeCabecera(campus) {
   if (campus.length !== 1) {
     // ISEIE es una sola marca: aunque alguien no tenga campus asignados, su
     // cabecera es la de ISEIE.
@@ -504,7 +537,7 @@ export async function correoDiarioGestora(persona, ahora = new Date()) {
   return {
     asunto: `Tu día y lo de mañana · ${bonita(hoyIso)}`,
     html: envoltorio({
-      cabeceraUrl: await cabeceraPara(campus),
+      ...(await cabeceraPara(campus)),
       preTitulo: 'Tu día y lo de mañana',
       titulo: `${primerNombre(persona.nombre) ? `${primerNombre(persona.nombre)}, así` : 'Así'} va tu trabajo`,
       subtitulo: 'Lo que hiciste hoy y lo que te espera mañana. Cada «abrir» te deja en el CRM con eso puesto, y el número de allí es el mismo que el de aquí.',
@@ -563,7 +596,7 @@ export async function correoSemanalGestora(persona, ahora = new Date()) {
   return {
     asunto: `Tu semana · del ${bonita(semana.from)} al ${bonita(semana.to)}`,
     html: envoltorio({
-      cabeceraUrl: await cabeceraPara(campus),
+      ...(await cabeceraPara(campus)),
       preTitulo: 'Tu semana',
       titulo: `${primerNombre(persona.nombre) ? `${primerNombre(persona.nombre)}, así` : 'Así'} fue tu semana`,
       subtitulo: 'Tus números, los de la semana anterior y la media del equipo. Cuentan igual que «Cómo voy» y Reportes.',
@@ -752,7 +785,7 @@ export async function correoDiarioDireccion(persona, ahora = new Date()) {
   return {
     asunto: `Resumen del día · ${bonita(hoyIso)}${empresas.length > 1 ? ` · ${empresas.length} empresas` : ` · ${empresas[0].nombre}`}`,
     html: envoltorio({
-      cabeceraUrl: empresas.length === 1 ? await cabeceraPara(empresas[0].campus) : await cabeceraPara([]),
+      ...(await cabeceraPara(empresas.length === 1 ? empresas[0].campus : [])),
       preTitulo: 'Resumen del día',
       titulo: `${diaSemana(ahora)[0].toUpperCase()}${diaSemana(ahora).slice(1)}`,
       subtitulo: `${empresas.length > 1 ? `Tus ${empresas.length} empresas, cada una con sus cifras.` : 'Cómo ha ido el día.'} Hoy cuenta <strong>${tramoDeHoy(ahora)}</strong>, y «vs. ayer» lo compara con el día entero de ayer. Ventas y cobrado: los que llevan fecha de hoy.`,
@@ -855,7 +888,7 @@ export async function correoSemanalDireccion(persona, ahora = new Date()) {
   return {
     asunto: `Reporte semanal · del ${bonita(semana.from)} al ${bonita(semana.to)}${empresas.length > 1 ? ` · ${empresas.length} empresas` : ` · ${empresas[0].nombre}`}`,
     html: envoltorio({
-      cabeceraUrl: empresas.length === 1 ? await cabeceraPara(empresas[0].campus) : await cabeceraPara([]),
+      ...(await cabeceraPara(empresas.length === 1 ? empresas[0].campus : [])),
       preTitulo: 'Reporte semanal',
       titulo: `Semana del ${bonita(semana.from)} al ${bonita(semana.to)}`,
       subtitulo: `${empresas.length > 1 ? `Tus ${empresas.length} empresas, cada una con sus cifras. ` : ''}Comparada con la semana anterior. El ranking es por lo cobrado, como en «Cómo voy», y separa de dónde viene cada euro; prospectos y ventas cuentan como Reportes, y lo cobrado sale de los pagos registrados.`,
