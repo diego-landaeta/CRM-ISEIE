@@ -137,7 +137,7 @@ export const INFORMES = {
     soloAdmin: true,
   },
   metas_gestoras: {
-    descripcion: 'La meta de ventas y de facturación de cada gestora y su avance en el periodo (solo super admin y admin). Acepta desde y hasta.',
+    descripcion: 'La meta de ventas y de importe de cada gestora y su avance en el periodo, por lo cobrado (cobros por su fecha de cobro); trae también lo vendido (solo super admin y admin). Acepta desde y hasta.',
     ejecutar: ({ projectIds, from, to }) => metas.getGestoresStats({ projectIds, from: from || null, to: to || null }),
     soloAdmin: true,
   },
