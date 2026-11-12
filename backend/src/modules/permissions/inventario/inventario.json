@@ -3101,6 +3101,18 @@
   "puertas": []
  },
  {
+  "id": "GET /api/copia-diaria/descarga/:fichero",
+  "tipo": "ruta",
+  "modulo": "copia-diaria",
+  "metodo": "GET",
+  "ruta": "/api/copia-diaria/descarga/:fichero",
+  "relativa": "GET /descarga/:fichero",
+  "controlador": "descargar",
+  "publica": true,
+  "guardias": [],
+  "puertas": []
+ },
+ {
   "id": "GET /api/credentials/",
   "tipo": "ruta",
   "modulo": "credentials",
