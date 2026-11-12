@@ -6,6 +6,8 @@
  * viven en /prospectos, en ISEIE en /leads—.
  */
 export const CRM_CORREOS = {
+  // La marca de los correos que no son de ningún campus (la copia diaria de la base).
+  marca: { nombre: 'ISEIE', slug: 'iseie' },
   nombre: 'CRM ISEIE',
   color: '#002776',
   rutas: {
