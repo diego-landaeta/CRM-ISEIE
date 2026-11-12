@@ -225,8 +225,12 @@ export default function DashboardPage() {
           desde el 28/09 (480e7de), además, detrás de PROCESO_EN_PRUEBAS. El
           ranking no es el proceso comercial: va a producción por su cuenta
           desde el 08/10 («por lo cobrado»), así que no depende de esa
-          bandera. */}
-      <ComoVoy medida="facturado" />
+          bandera.
+          12/11/2026, Diego: «los montos de los rankings de todas las vistas
+          son del monto cobrado». El ranking de aquí vuelve a lo cobrado,
+          como en Prospectos, Clientes, Ventas y Reportes (iba por lo
+          facturado desde el #224). */}
+      <ComoVoy />
 
       {/* Actividad por comercial de ayer (#203, parte B), como en MultiCRM. Al
           admin, las 3 primeras y el equipo; a una gestora, su línea (lo recorta
@@ -416,9 +420,9 @@ export default function DashboardPage() {
       </div>
 
       {/* Cursos vendidos (hoy / semana / mes / personalizado) + Programas más vendidos.
-          EL DASHBOARD CUENTA LO FACTURADO (#224, Diego 10/10), aquí y en el
-          bloque del equipo de arriba: las dos tarjetas y el bloque salen de
-          `/ventas/facturado`, así que con el mismo mes dan la misma cifra. */}
+          Las dos tarjetas de productos cuentan lo FACTURADO (#224, Diego
+          10/10) y salen de `/ventas/facturado`. El ranking de gestoras de
+          arriba, no: desde el 12/11/2026 va por lo cobrado. */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Suspense fallback={null}>
           <CursosVendidosCard projectId={proyectoReal} medida="facturado" />
