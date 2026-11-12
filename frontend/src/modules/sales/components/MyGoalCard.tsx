@@ -7,7 +7,9 @@ interface MyStats {
   user_id: number;
   nombre?: string;
   ventas: number;
-  facturado: number;
+  /** Lo vendido en el mes (importe total de sus ventas). */
+  vendido: number;
+  /** Lo cobrado en el mes, por la fecha del cobro: lo que cuenta para la meta. */
   cobrado: number;
   meta_ventas: number | null;
   meta_facturacion: number | null;
@@ -117,8 +119,11 @@ export default function MyGoalCard({ projectId, className = '', periodo: periodo
           )}
         </div>
         <div>
-          <p className="text-[11px] text-muted-foreground mb-0.5">Facturado</p>
-          <p className="text-xl font-bold tabular-nums">{fmt(stats.facturado)}{stats.meta_facturacion != null && <span className="text-sm text-muted-foreground font-normal"> / {fmt(stats.meta_facturacion)}</span>}</p>
+          {/* LO COBRADO, no lo vendido (12/11/2026): los cobros del mes por su
+              fecha, cuotas de ventas anteriores incluidas. Es la cifra del
+              ranking. Antes ponía «Facturado» y era lo vendido en el mes. */}
+          <p className="text-[11px] text-muted-foreground mb-0.5" title="Los cobros del mes por su fecha de cobro, con las cuotas de ventas anteriores. Es la cifra del ranking.">Cobrado</p>
+          <p className="text-xl font-bold tabular-nums">{fmt(stats.cobrado)}{stats.meta_facturacion != null && <span className="text-sm text-muted-foreground font-normal"> / {fmt(stats.meta_facturacion)}</span>}</p>
           {stats.meta_facturacion != null && stats.meta_facturacion > 0 && (
             <div className="mt-1.5 h-1.5 rounded-full bg-muted overflow-hidden">
               <div className={`h-full ${pctF >= 100 ? 'bg-emerald-500' : pctF >= 50 ? 'bg-amber-500' : 'bg-red-400'}`} style={{ width: `${pctF}%` }} />
@@ -132,7 +137,7 @@ export default function MyGoalCard({ projectId, className = '', periodo: periodo
           <div className="grid grid-cols-2 gap-2">
             <input type="number" min="0" placeholder="Meta ventas" value={metaVentas} onChange={(e) => setMetaVentas(e.target.value)}
               className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
-            <input type="number" min="0" step="0.01" placeholder="Meta facturación €" value={metaFact} onChange={(e) => setMetaFact(e.target.value)}
+            <input type="number" min="0" step="0.01" placeholder="Meta cobrado €" value={metaFact} onChange={(e) => setMetaFact(e.target.value)}
               className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
           </div>
           <div className="flex justify-end gap-2">

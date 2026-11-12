@@ -14,7 +14,9 @@ interface GestorRow {
   ventas: number;
   /** Cuantas de esas ventas comparte con alguien. Metrica suya, no de la empresa. */
   compartidas?: number;
-  facturado: number;
+  /** Lo vendido: importe total de las ventas del periodo. */
+  vendido: number;
+  /** Lo cobrado en el periodo, por la fecha del cobro. Manda en el ranking y en la meta. */
   cobrado: number;
   /** Recibe leads en el ambito: si sale sin esto es porque vendio en el periodo. */
   recibe_leads?: boolean;
@@ -140,8 +142,12 @@ export default function GestoresStatsTable({ projectId, className = '', canEdit 
               <tr>
                 <th className="text-left py-2 font-medium">Gestor</th>
                 <th className="text-right py-2 font-medium">Ventas / Meta</th>
-                <th className="text-right py-2 font-medium">Facturado / Meta</th>
-                <th className="text-right py-2 font-medium">Cobrado</th>
+                {/* LO COBRADO manda (12/11/2026): ordena la tabla y se mide
+                    contra la meta. Antes la columna decía «Facturado» y era lo
+                    vendido; y «Cobrado» era lo pagado de las ventas del mes, sin
+                    las cuotas de ventas anteriores. */}
+                <th className="text-right py-2 font-medium" title="Los cobros del periodo por su fecha de cobro, con las cuotas de ventas anteriores. Es la cifra del ranking.">Cobrado / Meta</th>
+                <th className="text-right py-2 font-medium" title="El importe total de las ventas cerradas en el periodo.">Vendido</th>
                 {canEdit && <th className="w-10"></th>}
               </tr>
             </thead>
@@ -192,7 +198,7 @@ export default function GestoresStatsTable({ projectId, className = '', canEdit 
                           className="w-24 h-8 px-2 rounded border border-border bg-card text-right text-sm" />
                       ) : (
                         <>
-                          <span className="font-semibold">{fmt(r.facturado)}</span>
+                          <span className="font-semibold text-green-600">{fmt(r.cobrado)}</span>
                           <span className="text-muted-foreground text-xs block">{r.meta_facturacion != null ? `meta ${fmt(r.meta_facturacion)}` : 'sin meta'}</span>
                           {r.meta_facturacion != null && r.meta_facturacion > 0 && (
                             <div className="mt-1 h-1 rounded-full bg-muted overflow-hidden ml-auto" style={{ maxWidth: 100 }}>
@@ -202,7 +208,7 @@ export default function GestoresStatsTable({ projectId, className = '', canEdit 
                         </>
                       )}
                     </td>
-                    <td className="py-2.5 text-right tabular-nums text-green-600">{fmt(r.cobrado)}</td>
+                    <td className="py-2.5 text-right tabular-nums text-muted-foreground">{fmt(r.vendido)}</td>
                     {canEdit && (
                       <td className="py-2.5 text-right">
                         {isEditing ? (
