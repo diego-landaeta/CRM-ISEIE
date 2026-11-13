@@ -1,7 +1,7 @@
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import * as model from './certifex.model.js';
-import { certifex, certifexTieneRuta, recorrer } from './certifex.cliente.js';
+import { certifex, certifexTieneRuta } from './certifex.cliente.js';
 import { alcanceDe, exigirCentro } from './certifex.alcance.js';
 import { emitidoPorElCrm } from './certifex.diplomas.js';
 import { revertirSchema, mensajeDeValidacion } from './certifex.validation.js';
@@ -43,19 +43,6 @@ function parsear(schema, datos) {
 async function diplomaPorNumero(nexp) {
   const d = await certifex('GET', `/diplomas?${new URLSearchParams({ estado: 'todos', q: nexp, pagina: '1', tam: '5' })}`);
   return (Array.isArray(d?.filas) ? d.filas : []).find((x) => x.nexpediente === nexp) ?? null;
-}
-
-/**
- * La matrícula de Certifex que tiene ese número: entre las aprobadas de su campus, la que
- * lo lleva. Es como «Emitidos, falta enviarlos» empareja solicitud y diploma. null si no
- * está (no impide revertir: solo se apunta sin matrícula).
- */
-async function matriculaDe(nexp, centro) {
-  const r = await recorrer('/candidatos', { estado: 'aprobada', centro }, {
-    filtro: (c) => c.nexpediente === nexp,
-    completo: (hallados) => hallados.length > 0,
-  });
-  return r.filas[0]?.matriculaId ?? null;
 }
 
 /** El correo de «persona (CRM X)», como lo devuelve Certifex en la anulación. */
@@ -103,7 +90,7 @@ export async function revertir(req, res, next) {
 
     if (dip.anulada) {
       // Ya revertido. Si el CRM no lo tenía apuntado (se cortó justo después de que
-      // Certifex lo hiciera), se apunta ahora con lo que dice Certifex: no se pierde.
+      // Certifex lo hiciera), se apunta ahora con lo que dice Certifex, matrícula incluida.
       await apuntarDesdeCertifex(dip).catch((e) => logger.warn({ err: e.message, nexpediente: d.nexpediente }, 'Certifex: no se pudo apuntar una reversión ya hecha'));
       throw new AppError('Ya está revertido: ese número está anulado. Búscalo en «Aprobados sin diploma» para volver a emitirlo.', 409, 'YA_REVERTIDO');
     }
@@ -111,10 +98,10 @@ export async function revertir(req, res, next) {
     if (dip.aviso) throw new AppError('Ya se ha enviado al alumno: no se revierte. Si está mal, hay que revocarlo.', 409, 'YA_ENVIADO');
     if (!emitidoPorElCrm(dip)) throw new AppError('Este diploma no se emitió desde el CRM: no se revierte desde aquí.', 409, 'EMITIDO_FUERA');
 
-    // Antes de tocar nada: si Certifex no deja buscar la matrícula, no se revierte.
-    const matriculaId = await matriculaDe(d.nexpediente, dip.centro);
-
     const hecho = await certifex('POST', '/revertir', { nexpediente: d.nexpediente, motivo, revertidoPor: req.user.email });
+    // La matrícula que vuelve a «Aprobados sin diploma» la dice Certifex (la de esa persona y
+    // ese curso), no el navegador.
+    const matriculaId = Number.isSafeInteger(hecho?.matriculaId) ? hecho.matriculaId : null;
     logger.info({ userId: req.user.userId, nexpediente: d.nexpediente, matriculaId }, 'Certifex: diploma revertido');
 
     let registrado = false;
@@ -139,7 +126,8 @@ async function apuntarDesdeCertifex(dip) {
   if (await model.reversionDe(dip.nexpediente)) return;
   const a = dip.anulacion ?? {};
   await model.apuntarReversion({
-    nexpediente: dip.nexpediente, matriculaId: null, centro: String(dip.centro).toUpperCase(), alumno: dip.alumno ?? null,
+    nexpediente: dip.nexpediente, matriculaId: Number.isSafeInteger(a.matriculaId) ? a.matriculaId : null,
+    centro: String(dip.centro).toUpperCase(), alumno: dip.alumno ?? null,
     titulacion: dip.titulacion ?? null, motivo: a.motivo || '(sin motivo en Certifex)', revertidoPor: null,
     revertidoPorEmail: correoDe(a.por) || '(desconocido)', revertidoEn: a.en ?? null,
   });

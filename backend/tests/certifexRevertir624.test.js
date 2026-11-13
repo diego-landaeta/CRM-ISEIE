@@ -114,7 +114,9 @@ let CANDIDATOS;
 
 let pedidas = [];
 let conRuta = true;
-let alRevertir = (p) => ({ status: 200, body: { ok: true, nexpediente: p.cuerpo.nexpediente, anulada: { en: '2026-11-13T09:30:00.000Z', por: `${p.cuerpo.revertidoPor} (CRM 360)`, motivo: p.cuerpo.motivo } } });
+// Como Certifex: la matrícula de esa persona y ese curso (la de EXP es la 101).
+const MATRICULA_DE = { [EXP]: 101 };
+let alRevertir = (p) => ({ status: 200, body: { ok: true, nexpediente: p.cuerpo.nexpediente, anulada: { en: '2026-11-13T09:30:00.000Z', por: `${p.cuerpo.revertidoPor} (CRM 360)`, motivo: p.cuerpo.motivo }, matriculaId: MATRICULA_DE[p.cuerpo.nexpediente] ?? null } });
 const fetchReal = globalThis.fetch;
 beforeAll(() => {
   globalThis.fetch = vi.fn(async (url, opts = {}) => {
@@ -152,13 +154,13 @@ beforeEach(() => {
   tablaExiste = true;
   fallaApunte = false;
   conRuta = true;
-  alRevertir = (p) => ({ status: 200, body: { ok: true, nexpediente: p.cuerpo.nexpediente, anulada: { en: '2026-11-13T09:30:00.000Z', por: `${p.cuerpo.revertidoPor} (CRM 360)`, motivo: p.cuerpo.motivo } } });
+  alRevertir = (p) => ({ status: 200, body: { ok: true, nexpediente: p.cuerpo.nexpediente, anulada: { en: '2026-11-13T09:30:00.000Z', por: `${p.cuerpo.revertidoPor} (CRM 360)`, motivo: p.cuerpo.motivo }, matriculaId: MATRICULA_DE[p.cuerpo.nexpediente] ?? null } });
   DIPLOMAS = [
     diploma(EXP),
     diploma(EXP_ENVIADO, { aviso: { resultado: 'enviado', en: '2026-11-04T10:00:00.000Z', por: 'x (CRM 360)' } }),
     diploma(EXP_REVOCADO, { revocada: true, revocacion: { en: '2026-11-04T10:00:00.000Z', motivo: 'error', por: 'x' } }),
     diploma(EXP_FUERA, { emitidaPor: 'admin@certifex.tech' }),
-    diploma(EXP_ANULADO, { anulada: true, anulacion: { en: '2026-11-05T10:00:00.000Z', motivo: 'temario de Moodle', por: 'pepe@prueba.test (CRM 360)', sustituidaPor: null } }),
+    diploma(EXP_ANULADO, { anulada: true, anulacion: { en: '2026-11-05T10:00:00.000Z', motivo: 'temario de Moodle', por: 'pepe@prueba.test (CRM 360)', sustituidaPor: null, matriculaId: 105 } }),
   ];
   CANDIDATOS = [candidato(101, EXP), candidato(102, EXP_ENVIADO)];
   olvidarCapacidades();
@@ -226,7 +228,7 @@ describe('POST /api/certifex/diplomas/revertir', () => {
     expect(r.body.code).toBe('YA_REVERTIDO');
     expect(llegoARevertir()).toHaveLength(0);
     expect(registro).toHaveLength(1);
-    expect(registro[0]).toMatchObject({ nexpediente: EXP_ANULADO, motivo: 'temario de Moodle', revertido_por_email: 'pepe@prueba.test', revertido_por: null, revertido_en: '2026-11-05T10:00:00.000Z' });
+    expect(registro[0]).toMatchObject({ nexpediente: EXP_ANULADO, matricula_id: 105, motivo: 'temario de Moodle', revertido_por_email: 'pepe@prueba.test', revertido_por: null, revertido_en: '2026-11-05T10:00:00.000Z' });
     // Otra vez: no lo duplica.
     expect((await revertir(ADMIN, { nexpediente: EXP_ANULADO })).status).toBe(409);
     expect(registro).toHaveLength(1);
@@ -276,11 +278,20 @@ describe('POST /api/certifex/diplomas/revertir', () => {
     expect(r.body.data.aviso).toMatch(/no lo pudo apuntar/);
   });
 
-  it('sin la matrícula en Certifex, revierte igual y lo apunta sin ella', async () => {
-    CANDIDATOS = [];
-    const r = await revertir(ADMIN);
-    expect(r.status).toBe(200);
-    expect(registro[0].matricula_id).toBeNull();
+  it('la matrícula la dice Certifex: no se recorren las aprobadas del campus', async () => {
+    expect((await revertir(ADMIN)).status).toBe(200);
+    expect(pedidas.filter((p) => p.ruta === '/candidatos')).toHaveLength(0);
+  });
+
+  it('si Certifex no da matrícula (o da algo que no es un id), revierte igual y lo apunta sin ella', async () => {
+    for (const valor of [null, 'abc', 1.5]) {
+      registro = [];
+      alRevertir = (p) => ({ status: 200, body: { ok: true, nexpediente: p.cuerpo.nexpediente, anulada: { en: '2026-11-13T09:30:00.000Z', por: 'x', motivo: 'm' }, matriculaId: valor } });
+      const r = await revertir(ADMIN);
+      expect(r.status).toBe(200);
+      expect(r.body.data.matriculaId).toBeNull();
+      expect(registro[0].matricula_id).toBeNull();
+    }
   });
 });
 
