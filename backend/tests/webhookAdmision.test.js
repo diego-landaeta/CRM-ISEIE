@@ -318,13 +318,17 @@ describe('se une a la persona («que se sincronicen con el mail»)', () => {
     expect((await q('SELECT count(*)::int AS n FROM leads WHERE project_id = $1 AND lower(email) = $2', [PROYECTO.id, correo('rosa')]))[0].n).toBe(1);
   });
 
-  it('si no hay correo que coincida, por el teléfono', async () => {
+  it('POR EL TELÉFONO, NO: con el teléfono de otra persona y otro correo, ficha propia (13/11)', async () => {
     const [l] = await q(`INSERT INTO leads (project_id, nombre, email, telefono) VALUES ($1, 'Telmo', $2, '+34 611 222 333') RETURNING id`,
       [PROYECTO.id, correo('telmo-viejo')]);
-    // El CRM compara los teléfonos con su prefijo (claveTelefono de lead.model.js): «+34 611 222 333» = «0034611222333».
+    // El mismo teléfono con otro formato («+34 611 222 333» = «0034611222333») y otro correo:
+    // antes se unía a la ficha de Telmo y su gestora veía el DNI y la firma de otra persona.
     const r = await recibir().send({ nombre: 'Telmo', email: correo('telmo-nuevo'), telefono: '0034611222333' });
     const m = await enviada(r);
-    expect(m.lead_id).toBe(l.id);
+    expect(m.lead_id).not.toBe(l.id);
+    expect(m.lead_id).not.toBeNull();
+    const [nueva] = await q('SELECT email FROM leads WHERE id = $1', [m.lead_id]);
+    expect(nueva.email).toBe(correo('telmo-nuevo'));
     // El buscador de Matrículas la encuentra también por el correo que escribió en el formulario.
     const { matriculas } = await matriculaModel.findAll({ projectId: PROYECTO.id, search: correo('telmo-nuevo') });
     expect(matriculas.map((x) => x.id)).toContain(m.id);
