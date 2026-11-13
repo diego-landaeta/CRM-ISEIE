@@ -31,6 +31,8 @@ interface Matricula {
   lead_telefono?: string;
   curso?: string;
   campus_nombre?: string;
+  /** La empresa del campus (13/11/2026). */
+  empresa_nombre?: string | null;
   gestora_nombre?: string;
   recibida_at?: string;
   source?: string;
@@ -256,7 +258,7 @@ export default function MatriculaDetail({ matricula, onClose, onChange, onEstado
                   {ESTADO_LABEL[m.estado] || m.estado}
                 </span>
               )}
-              <p className="text-xs text-muted-foreground truncate">{[m.curso, m.campus_nombre].filter(Boolean).join(' · ') || '—'}</p>
+              <p className="text-xs text-muted-foreground truncate">{[m.curso, m.campus_nombre, m.empresa_nombre].filter(Boolean).join(' · ') || '—'}</p>
             </div>
             <button onClick={onClose} aria-label="Cerrar detalle"
               className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-primary/40">

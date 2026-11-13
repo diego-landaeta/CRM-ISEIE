@@ -80,7 +80,7 @@ describe('el listado sigue a la cabecera', () => {
     expect(await etiqueta('Rechazada')).toContain('bg-destructive-soft');
   });
 
-  it('las columnas de Diego: Persona · Curso · Campus · Recibida · Estado · Documentos · Venta', async () => {
+  it('las columnas de Diego: Persona · Curso · Empresa · campus · Recibida · Estado · Documentos · Venta', async () => {
     cabecera.value = { activeIssuerId: null, activeIssuer: null, activeProject: { id: -1 } };
     get.mockResolvedValue({ ...VACIA, data: [
       { id: 1, estado: 'solicitud_admision', lead_nombre: 'María López', lead_email: 'maria@x.es', curso: 'Máster en Psicología',
@@ -92,7 +92,7 @@ describe('el listado sigue a la cabecera', () => {
     abrir();
     await screen.findAllByText('María López');
     const cabeceras = screen.getAllByRole('columnheader').map((th) => th.textContent);
-    expect(cabeceras.slice(0, 7)).toEqual(['Persona', 'Curso', 'Campus', 'Recibida (hora de Madrid)', 'Estado', 'Documentos', 'Venta']);
+    expect(cabeceras.slice(0, 7)).toEqual(['Persona', 'Curso', 'Empresa · campus', 'Recibida (hora de Madrid)', 'Estado', 'Documentos', 'Venta']);
     expect(screen.getAllByText('Máster en Psicología').length).toBeGreaterThan(0);
     expect(screen.getAllByText('ISEIE Madrid').length).toBeGreaterThan(0);
     // Documentos: los cinco de Diego, con su nombre al pasar el ratón; una marca
