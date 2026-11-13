@@ -24,8 +24,8 @@ import { avisarAdmision } from './admision.aviso.js';
  *   2. Los documentos (DNI por las dos caras, foto, título, firma), como archivo,
  *      URL o imagen en texto (admision.archivos.js). La firma, transparente y
  *      recortada al trazo, como la del diploma (#349).
- *   3. Se une a la persona: su prospecto por el correo y, si no, por el número de
- *      documento (nunca por el teléfono); si no existe, se crea SIN GESTORA (ver
+ *   3. Se une a la persona: su prospecto por el correo y, si no, por el móvil (si
+ *      solo hay una ficha con él); si no existe, se crea SIN GESTORA (ver
  *      `prospectoDe`). Y su venta, si la hay. Su DNI, dirección y país pasan a los
  *      datos fiscales de la ficha que estén vacíos (`completarDatosFiscales`).
  *   4. El mismo envío dos veces no crea dos matrículas (`envio_huella`).
@@ -108,44 +108,36 @@ export function huellaDelEnvio(body, archivos = []) {
 }
 
 /**
- * El número de documento para compararlo: sin espacios, puntos ni guiones, y en
- * mayúsculas («12.345.678-z» = «12345678Z»). Con menos de 5 caracteres no vale
- * para unir a nadie (un «1» o un «-» del formulario uniría a cualquiera): null.
+ * El móvil para compararlo: solo los dígitos y, de ellos, los 9 últimos, para que no
+ * importe el prefijo («+34 611 222 333», «0034611222333» y «611222333» son el mismo).
+ * Con menos de 7 dígitos no es un móvil y no une a nadie: null.
  */
-export function documentoNormalizado(v) {
-  const t = String(v ?? '').replace(/[\s.-]/g, '').toUpperCase();
-  return t.length >= 5 ? t : null;
+export function movilNormalizado(v) {
+  const d = String(v ?? '').replace(/\D/g, '');
+  return d.length >= 7 ? d.slice(-9) : null;
 }
-/** Lo mismo en SQL, para la columna de la base. */
-const DOC_SQL = (col) => `upper(regexp_replace(COALESCE(${col}, ''), '[[:space:].-]', '', 'g'))`;
+/** Los dígitos de la columna, en SQL. */
+const DIGITOS_SQL = (col) => `regexp_replace(COALESCE(${col}, ''), '[^0-9]', '', 'g')`;
 
 /**
- * La ficha de la persona en ese campus por su número de documento (13/11/2026: «que
- * esos datos de matriculación se puedan vincular a su gestora y a las facturas»):
- * primero el documento fiscal de la ficha y, si ninguna lo tiene, el NIF de una
- * factura del campus, con la ficha de esa factura o la de su venta.
+ * Las fichas del campus con ese móvil (13/11/2026, Diego: «une por correo o móvil»):
+ * las que acaban en los mismos dígitos. Hasta dos: con una basta saber que hay más.
  */
-async function prospectoPorDocumento(projectId, dni) {
-  const doc = documentoNormalizado(dni);
-  if (!doc) return null;
-  const ficha = await query(
+async function fichasPorMovil(projectId, telefono) {
+  const movil = movilNormalizado(telefono);
+  if (!movil) return [];
+  const { rows } = await query(
     `SELECT l.id FROM leads l
-      WHERE l.project_id = $1 AND l.deleted_at IS NULL AND ${DOC_SQL('l.identificacion_fiscal')} = $2
-      ORDER BY l.created_at DESC, l.id DESC LIMIT 1`, [projectId, doc]);
-  if (ficha.rows[0]) return ficha.rows[0].id;
-  const factura = await query(
-    `SELECT l.id FROM invoices i
-       LEFT JOIN conversions c ON c.id = i.conversion_id
-       JOIN leads l ON l.id = COALESCE(i.lead_id, c.lead_id) AND l.project_id = i.project_id AND l.deleted_at IS NULL
-      WHERE i.project_id = $1 AND ${DOC_SQL('i.cliente_nif')} = $2
-      ORDER BY i.fecha_emision DESC, i.id DESC LIMIT 1`, [projectId, doc]);
-  return factura.rows[0]?.id ?? null;
+      WHERE l.project_id = $1 AND l.deleted_at IS NULL
+        AND length(${DIGITOS_SQL('l.telefono')}) >= 7
+        AND right(${DIGITOS_SQL('l.telefono')}, $3) = $2
+      ORDER BY l.created_at DESC, l.id DESC LIMIT 2`, [projectId, movil, movil.length]);
+  return rows.map((r) => r.id);
 }
 
 /**
  * El prospecto de la persona en ese campus: primero por el correo y, si no, por el
- * número de documento (`prospectoPorDocumento`). Nunca por el teléfono (ver abajo).
- * Si no existe y llegan nombre y correo, se crea.
+ * móvil (`fichasPorMovil`). Si no existe y llegan nombre y correo, se crea.
  *
  * SIN GESTORA (decidido el 20/10, Diego lo puede cambiar): quien rellena la
  * solicitud de admisión ya se está matriculando, no hay nada que venderle. Si
@@ -155,20 +147,21 @@ async function prospectoPorDocumento(projectId, dni) {
  * solicitud sale igualmente en Matrículas, y se le puede asignar gestora a mano.
  */
 async function prospectoDe(projectId, persona, huella) {
-  // SOLO POR EL CORREO (13/11/2026). Por el teléfono, una solicitud con el teléfono de
-  // otra persona (mal escrito, o compartido en una familia o una centralita) quedaba en
-  // la ficha de esa otra persona, con el DNI y la firma a la vista de su gestora. Pasó
-  // en las pruebas del 13/11 con dos fichas reales. Carlos pidió «que se sincronicen
-  // con el mail». Sin correo ni documento, la solicitud queda sin ficha y se vincula a mano.
+  // POR EL CORREO Y, SI NO, POR EL MÓVIL (13/11/2026). Una solicitud con el teléfono
+  // de otra persona (mal escrito, o compartido en una familia o una centralita) puede
+  // caer en la ficha de esa otra persona, con el DNI y la firma a la vista de su
+  // gestora: pasó en las pruebas del 13/11 con dos fichas reales, y por eso se quitó.
+  // Diego lo vuelve a pedir («une por correo o móvil»), con dos frenos: el correo
+  // manda (se mira antes) y, si el móvil está en MÁS DE UNA ficha del campus, no se
+  // une a ninguna, porque no hay forma de saber cuál es; queda la nota en `interno`.
   if (persona.email) {
     const existente = await leadModel.findDuplicateByEmailOrPhone(persona.email, null, projectId);
     if (existente) return { leadId: existente.id, creado: false, por: 'correo' };
   }
-  // Y POR EL DOCUMENTO (13/11/2026) cuando el correo no está en ninguna ficha: el
-  // alumno pone en la solicitud otro correo que el que dio a su gestora, pero su DNI
-  // es el de la factura. El documento es suyo, no de su familia: no pasa lo del teléfono.
-  const porDocumento = await prospectoPorDocumento(projectId, persona.dni);
-  if (porDocumento) return { leadId: porDocumento, creado: false, por: 'documento' };
+  const porMovil = await fichasPorMovil(projectId, persona.telefono);
+  if (porMovil.length === 1) return { leadId: porMovil[0], creado: false, por: 'movil' };
+  // Tampoco se crea otra ficha con ese móvil: se vincula a mano a la que sea.
+  if (porMovil.length > 1) return { leadId: null, creado: false, nota: 'movil_en_varias_fichas' };
   if (!persona.nombre || !persona.email) return { leadId: null, creado: false };
   const lead = await leadModel.createLeadWithRoundRobin({
     projectId,
@@ -430,6 +423,7 @@ export async function recibirAdmision(token, body, archivos = [], opcionesArchiv
     leadId: prospecto.leadId,
     leadCreado: prospecto.creado,
     unidaPor: prospecto.por || null,
+    nota: prospecto.nota || null,
     conversionId,
     documentos: { guardados, rechazados },
   });

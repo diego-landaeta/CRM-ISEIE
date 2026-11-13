@@ -14,7 +14,7 @@ import path from 'node:path';
  * Diego (WhatsApp, 20/10): «un webhook abierto que reciba [los datos de admisión]
  * y luego se pueda mapear, por campus», y que se una a la persona por el correo.
  * Lo que pide la #198: archivos (multipart, URL o base64; JPG, PNG, WEBP, PDF;
- * 10 MB; tipo real), campos propios, vincular por email y luego teléfono (si no
+ * 10 MB; tipo real), campos propios, vincular por email y luego móvil (si no
  * existe se crea) y con la venta, e idempotente.
  *
  *   docker compose -f docker-compose.dev.yml up -d && npm run db:preparar
@@ -34,7 +34,7 @@ const { errorHandler } = await import('../src/shared/middleware/errorHandler.js'
 const tokenModel = await import('../src/modules/webhook-tokens/token.model.js');
 const matriculaModel = await import('../src/modules/matriculas/matricula.model.js');
 const { obtenerArchivo, desdeUrl, ipPrivada, tipoReal } = await import('../src/modules/matriculas/admision.archivos.js');
-const { fechaDeNacimiento, documentoNormalizado } = await import('../src/modules/matriculas/admision.service.js');
+const { fechaDeNacimiento, movilNormalizado } = await import('../src/modules/matriculas/admision.service.js');
 const certifexModel = await import('../src/modules/certifex/certifex.model.js');
 
 const app = express();
@@ -319,20 +319,39 @@ describe('se une a la persona («que se sincronicen con el mail»)', () => {
     expect((await q('SELECT count(*)::int AS n FROM leads WHERE project_id = $1 AND lower(email) = $2', [PROYECTO.id, correo('rosa')]))[0].n).toBe(1);
   });
 
-  it('POR EL TELÉFONO, NO: con el teléfono de otra persona y otro correo, ficha propia (13/11)', async () => {
-    const [l] = await q(`INSERT INTO leads (project_id, nombre, email, telefono) VALUES ($1, 'Telmo', $2, '+34 611 222 333') RETURNING id`,
-      [PROYECTO.id, correo('telmo-viejo')]);
-    // El mismo teléfono con otro formato («+34 611 222 333» = «0034611222333») y otro correo:
-    // antes se unía a la ficha de Telmo y su gestora veía el DNI y la firma de otra persona.
-    const r = await recibir().send({ nombre: 'Telmo', email: correo('telmo-nuevo'), telefono: '0034611222333' });
-    const m = await enviada(r);
-    expect(m.lead_id).not.toBe(l.id);
-    expect(m.lead_id).not.toBeNull();
-    const [nueva] = await q('SELECT email FROM leads WHERE id = $1', [m.lead_id]);
-    expect(nueva.email).toBe(correo('telmo-nuevo'));
-    // El buscador de Matrículas la encuentra también por el correo que escribió en el formulario.
-    const { matriculas } = await matriculaModel.findAll({ projectId: PROYECTO.id, search: correo('telmo-nuevo') });
-    expect(matriculas.map((x) => x.id)).toContain(m.id);
+  it('POR EL MÓVIL si el correo no está en ninguna ficha: da igual el prefijo (13/11, «une por correo o móvil»)', async () => {
+    const [l] = await q(`INSERT INTO leads (project_id, nombre, email, telefono, responsable_id) VALUES ($1, 'Telmo', $2, '+34 611 222 333', $3) RETURNING id`,
+      [PROYECTO.id, correo('telmo-gestora'), GESTORA.id]);
+    // Otro correo, y el móvil sin prefijo: es su ficha, con su gestora.
+    const r = await admitir({ nombre: 'Telmo', email: correo('telmo-formulario'), telefono: '611 22 23 33' });
+    expect(r.interno).toMatchObject({ accion: 'created', leadId: l.id, leadCreado: false, unidaPor: 'movil', nota: null });
+    expect((await q('SELECT count(*)::int AS n FROM leads WHERE project_id = $1 AND lower(email) = $2', [PROYECTO.id, correo('telmo-formulario')]))[0].n).toBe(0);
+    const { matriculas } = await matriculaModel.findAll({ projectId: PROYECTO.id, search: correo('telmo-formulario') });
+    expect(matriculas.find((x) => x.id === r.interno.matriculaId)).toMatchObject({ gestora_id: GESTORA.id });
+    // Y con otro prefijo (0034…) también.
+    const otra = await admitir({ nombre: 'Telmo', email: correo('telmo-otra'), telefono: '0034611222333', curso_solicitado: 'Otro curso' });
+    expect(otra.interno).toMatchObject({ leadId: l.id, unidaPor: 'movil' });
+  });
+
+  it('el móvil en DOS fichas del campus: no se une a ninguna ni se crea otra, y queda la nota', async () => {
+    await q(`INSERT INTO leads (project_id, nombre, email, telefono) VALUES ($1, 'Madre', $2, '+57 300 444 5555'), ($1, 'Hija', $3, '3004445555')`,
+      [PROYECTO.id, correo('madre'), correo('hija')]);
+    const r = await admitir({ nombre: 'Hija', email: correo('hija-formulario'), telefono: '0057 300 444 5555' });
+    expect(r.interno).toMatchObject({ accion: 'created', leadId: null, leadCreado: false, nota: 'movil_en_varias_fichas' });
+    expect((await q('SELECT count(*)::int AS n FROM leads WHERE project_id = $1 AND lower(email) = $2', [PROYECTO.id, correo('hija-formulario')]))[0].n).toBe(0);
+  });
+
+  it('el correo gana al móvil, y un número de menos de 7 dígitos no une a nadie', async () => {
+    const [porCorreo] = await q(`INSERT INTO leads (project_id, nombre, email) VALUES ($1, 'Carla Correo', $2) RETURNING id`, [PROYECTO.id, correo('carla')]);
+    await q(`INSERT INTO leads (project_id, nombre, email, telefono) VALUES ($1, 'Otra con ese móvil', $2, '+34 655 777 888')`, [PROYECTO.id, correo('otra-movil')]);
+    const r = await admitir({ nombre: 'Carla', email: correo('carla'), telefono: '655777888' });
+    expect(r.interno).toMatchObject({ leadId: porCorreo.id, unidaPor: 'correo' });
+    await q(`INSERT INTO leads (project_id, nombre, email, telefono) VALUES ($1, 'Corto', $2, '123456')`, [PROYECTO.id, correo('corto')]);
+    const corto = await admitir({ nombre: 'Corto', email: correo('corto-nuevo'), telefono: '123456' });
+    expect(corto.interno).toMatchObject({ leadCreado: true, unidaPor: null });
+    expect(movilNormalizado('+34 611 222 333')).toBe('611222333');
+    expect(movilNormalizado('0057 300 444 5555')).toBe('004445555');
+    expect(movilNormalizado('12-34-56')).toBeNull();
   });
 
   it('si no existe, se crea el prospecto SIN GESTORA (fuera del reparto; decidido el 20/10)', async () => {
@@ -365,42 +384,6 @@ describe('se une a la persona («que se sincronicen con el mail»)', () => {
       lead_id: m.lead_id, project_id: PROYECTO.id, producto_contratado: 'Curso Tardío', importe_total: 300, importe_pagado: 0,
     });
     expect((await matricula(m.id)).conversion_id).toBe(c.id);
-  });
-
-  it('POR EL DOCUMENTO cuando el correo no está en ninguna ficha: con puntos, guiones y minúsculas (13/11)', async () => {
-    const [l] = await q(`INSERT INTO leads (project_id, nombre, email, identificacion_fiscal, responsable_id)
-                         VALUES ($1, 'Dora Documento', $2, '41.234.567-k', $3) RETURNING id`, [PROYECTO.id, correo('dora-gestora'), GESTORA.id]);
-    // Otro correo que el que dio a su gestora, pero su documento.
-    const r = await admitir({ nombre: 'Dora', email: correo('dora-formulario'), dni: '41234567K' });
-    expect(r.interno).toMatchObject({ accion: 'created', leadId: l.id, leadCreado: false, unidaPor: 'documento' });
-    expect((await q('SELECT count(*)::int AS n FROM leads WHERE project_id = $1 AND lower(email) = $2', [PROYECTO.id, correo('dora-formulario')]))[0].n).toBe(0);
-    // Y en la lista sale con su gestora.
-    const { matriculas } = await matriculaModel.findAll({ projectId: PROYECTO.id, search: correo('dora-formulario') });
-    expect(matriculas.find((x) => x.id === r.interno.matriculaId)).toMatchObject({ gestora_id: GESTORA.id, gestora_nombre: `${MARCA} Gestora` });
-  });
-
-  it('y si ninguna ficha tiene el documento, por el NIF de una factura del campus: la ficha de su venta, y la venta', async () => {
-    const [l] = await q(`INSERT INTO leads (project_id, nombre, email) VALUES ($1, 'Fabio Factura', $2) RETURNING id`, [PROYECTO.id, correo('fabio')]);
-    const [c] = await q(`INSERT INTO conversions (lead_id, project_id, producto_contratado, importe_total) VALUES ($1, $2, 'Curso F', 500) RETURNING id`, [l.id, PROYECTO.id]);
-    // Sin lead_id en la factura, como en la carga histórica: la ficha sale de su venta.
-    await q(`INSERT INTO invoices (project_id, ano, numero, codigo, cliente_nombre, cliente_nif, cliente_direccion, cliente_ciudad, cliente_cp, cliente_pais,
-                                   items, base_imponible, total, conversion_id)
-             VALUES ($1, 2026, 1, $2, 'Fabio', 'z 2468135 q', 'Calle 1', 'Madrid', '28001', 'España', '[]'::jsonb, 500, 500, $3)`,
-    [PROYECTO.id, `${MARCA}-F1`, c.id]);
-    const r = await admitir({ nombre: 'Fabio', email: correo('fabio-otro'), dni: 'Z2468135Q' });
-    expect(r.interno).toMatchObject({ leadId: l.id, unidaPor: 'documento', conversionId: c.id });
-  });
-
-  it('el correo manda sobre el documento, y un documento corto («1-2») no une a nadie', async () => {
-    const [porCorreo] = await q(`INSERT INTO leads (project_id, nombre, email) VALUES ($1, 'Carla Correo', $2) RETURNING id`, [PROYECTO.id, correo('carla')]);
-    await q(`INSERT INTO leads (project_id, nombre, email, identificacion_fiscal) VALUES ($1, 'Otra con su DNI', $2, '55555555A')`, [PROYECTO.id, correo('otra-dni')]);
-    const r = await admitir({ nombre: 'Carla', email: correo('carla'), dni: '55555555A' });
-    expect(r.interno).toMatchObject({ leadId: porCorreo.id, unidaPor: 'correo' });
-    await q(`INSERT INTO leads (project_id, nombre, email, identificacion_fiscal) VALUES ($1, 'Doc corto', $2, '12')`, [PROYECTO.id, correo('corto')]);
-    const corto = await admitir({ nombre: 'Corto', email: correo('corto-nuevo'), dni: '1-2' });
-    expect(corto.interno).toMatchObject({ leadCreado: true });
-    expect(documentoNormalizado(' 12.345.678-z ')).toBe('12345678Z');
-    expect(documentoNormalizado('1-2')).toBeNull();
   });
 
   it('los datos de la solicitud pasan a la ficha fiscal SOLO donde está vacía: nunca encima (13/11)', async () => {
