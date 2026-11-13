@@ -106,7 +106,9 @@ export default function TutoresPage() {
   const puede = can('tutores.gestionar');
   // El correo de un tutor, solo el super admin (#248). La contraseña, también el
   // admin (Diego, 09/10, #246).
-  const esSuperadmin = user?.role === 'superadmin' && can('tutores.cambiar_correo');
+  // Basta el permiso (el superadmin lo tiene siempre): se le da a quien administración diga
+  // desde su ficha de permisos. Antes pedía además ser superadmin y la excepción no servía.
+  const puedeCambiarCorreo = can('tutores.cambiar_correo');
   const puedeContrasena = (user?.role === 'superadmin' || user?.role === 'admin') && can('tutores.contrasena');
   const projectId = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
   // Dar de alta no obliga a tener un campus arriba (#219): sin él, el
@@ -333,13 +335,13 @@ export default function TutoresPage() {
 
   async function guardarDatos() {
     if (!elegido) return;
-    const correoEscrito = esSuperadmin ? datos.email : '';
+    const correoEscrito = puedeCambiarCorreo ? datos.email : '';
     if (avisar(faltaNombre(datos.nombre)
       || (correoEscrito.trim() ? correoMalo(correoEscrito) : null))) return;
     // El correo solo lo cambia el super admin (#248); a los demás el campo les
     // sale bloqueado y el servidor les contesta 403.
     const correoNuevo = datos.email.trim().toLowerCase();
-    const cambiaCorreo = esSuperadmin && correoNuevo !== (elegido.email || '').toLowerCase();
+    const cambiaCorreo = puedeCambiarCorreo && correoNuevo !== (elegido.email || '').toLowerCase();
     if (cambiaCorreo) {
       const aviso = await avisoCambioCorreo(elegido.id).catch(() => null);
       if (!window.confirm(confirmacionCambioCorreo(elegido.nombre || 'este tutor', elegido.email || '—', correoNuevo, aviso))) return;
@@ -1300,15 +1302,15 @@ export default function TutoresPage() {
 
             {/* El correo es la CREDENCIAL, no un dato de contacto: al cambiarlo,
                 con el viejo ya no se entra. De ahi la casilla de reenviar. */}
-            <Field label="Correo" disabled={!esSuperadmin} htmlFor="datos-email"
-              hint={esSuperadmin ? 'Es con lo que entra al CRM.' : 'Solo un superadmin puede cambiar el correo.'}>
+            <Field label="Correo" disabled={!puedeCambiarCorreo} htmlFor="datos-email"
+              hint={puedeCambiarCorreo ? 'Es con lo que entra al CRM.' : 'Solo quien tiene el permiso «Correo de un tutor» puede cambiarlo.'}>
               <input autoComplete="off" id="datos-email" type="email" value={datos.email}
                 onChange={(e) => setDatos({ ...datos, email: e.target.value })}
-                readOnly={!esSuperadmin} disabled={!esSuperadmin}
-                className={`${inputClass} ${esSuperadmin ? '' : 'opacity-60 cursor-not-allowed'}`} />
+                readOnly={!puedeCambiarCorreo} disabled={!puedeCambiarCorreo}
+                className={`${inputClass} ${puedeCambiarCorreo ? '' : 'opacity-60 cursor-not-allowed'}`} />
             </Field>
 
-            {esSuperadmin && datos.email.trim().toLowerCase() !== (elegido.email || '').toLowerCase() && (
+            {puedeCambiarCorreo && datos.email.trim().toLowerCase() !== (elegido.email || '').toLowerCase() && (
               <div className="rounded-md border border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40 px-3 py-2 space-y-2">
                 <p className="text-[11px] text-amber-800 dark:text-amber-300">
                   El correo es con lo que entra al CRM. Al cambiarlo se cierran sus
