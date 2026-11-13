@@ -245,6 +245,21 @@ export async function recibirAdmision(token, body, archivos = [], opcionesArchiv
     .then((archivo) => (archivo ? prepararDocumento(tipo, archivo) : null))
     .then((archivo) => ({ archivo }), (error) => ({ error }))));
 
+  // UN ENVÍO VACÍO NO ES UNA SOLICITUD (13/11/2026). En Psiko entró una con un único
+  // campo, `_cors`: una petición previa del formulario, sin nada de la persona. Se
+  // guardaba como solicitud vacía y sin ficha. Sin nombre, correo, teléfono, documento
+  // de identidad ni ningún archivo, se contesta 400 y no se guarda nada. No delata a
+  // nadie: no depende de si la persona existe.
+  const hayPersona = ['nombre', 'email', 'telefono', 'dni'].some((c) => persona[c]);
+  const hayDocumento = obtenidos.some((o) => o.archivo);
+  if (!hayPersona && !hayDocumento) {
+    return {
+      status: 400,
+      data: { recibido: false, error: 'Solicitud vacía: falta el nombre, el correo o algún documento.' },
+      interno: { accion: 'vacia' },
+    };
+  }
+
   const salida = Date.now() + (opcionesArchivo.respuestaMs ?? RESPUESTA_FIJA_MS);
   const responder = async (interno) => { await esperarHasta(salida); return respuesta(huella, interno); };
 

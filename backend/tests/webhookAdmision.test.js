@@ -132,6 +132,20 @@ describe('los datos de la persona, en campos propios', () => {
     expect((await historial(m.id)).map((e) => e.evento)).toEqual(['recibida']);
   });
 
+  it('un envío vacío (p. ej. solo `_cors`) no es una solicitud: 400 y no se guarda nada (13/11)', async () => {
+    const cuantas = async () => (await q('SELECT count(*)::int AS n FROM matriculas WHERE project_id = $1', [PROYECTO.id]))[0].n;
+    const antes = await cuantas();
+    for (const cuerpo of [{ _cors: '1' }, {}, { acepta_terminos: 'on', comentarios: '' }]) {
+      const r = await recibir().send(cuerpo);
+      expect(r.status).toBe(400);
+      expect(r.body).toMatchObject({ success: false, data: { recibido: false } });
+    }
+    expect(await cuantas()).toBe(antes);
+    // Con solo el correo sí es una solicitud.
+    const r = await recibir().send({ email: correo('solo-correo') });
+    expect(r.status).toBe(200);
+  });
+
   it('con mapeo: cada formulario manda sus propios nombres (Elementor, Gravity…)', async () => {
     const t = await tokenModel.create({ project_id: PROYECTO.id, kind: 'matriculas', field_mapping: {
       nombre: 'your-name', email: 'fields.correo', dni: 'fields.documento', curso_solicitado: 'form.curso',
