@@ -208,6 +208,12 @@ export const avisosRechazoSchema = z.object({
 export const revocarSchema = z.object({ nexpediente: nexp, motivo });
 
 /**
+ * Revertir (#351): un diploma emitido desde el CRM y aun sin enviar. El numero se anula
+ * y la matricula vuelve a «Aprobados sin diploma». Motivo obligatorio, como revocar.
+ */
+export const revertirSchema = z.object({ nexpediente: nexp, motivo });
+
+/**
  * El programa a imprimir escrito a mano. Mismos limites que Certifex (validarProgramaCrm):
  * horas enteras de 1 a 5000, hasta 100 modulos, titulo de 1 a 300 caracteres y horas de
  * modulo de 0 a 2000. Pasarse ahi anula la emision entera, asi que no se guarda.

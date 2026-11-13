@@ -1197,6 +1197,50 @@
   "puertas": []
  },
  {
+  "id": "GET /api/certifex/diplomas/revertir",
+  "tipo": "ruta",
+  "modulo": "certifex",
+  "metodo": "GET",
+  "ruta": "/api/certifex/diplomas/revertir",
+  "relativa": "GET /diplomas/revertir",
+  "controlador": "disponibilidad",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "diplomas.revertir"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/certifex/diplomas/revertir",
+  "tipo": "ruta",
+  "modulo": "certifex",
+  "metodo": "POST",
+  "ruta": "/api/certifex/diplomas/revertir",
+  "relativa": "POST /diplomas/revertir",
+  "controlador": "revertir",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "diplomas.revertir"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "POST /api/certifex/diplomas/corregir",
   "tipo": "ruta",
   "modulo": "certifex",

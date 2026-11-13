@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-778 rutas en 59 módulos, y 31 acciones con condición dentro de una ruta.
+780 rutas en 59 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -106,6 +106,8 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | rechazar | `POST /api/certifex/diplomas/rechazar` | sesión · roleGuard(admin, superadmin, soporte) +superadmin +soporte por el atajo · soloRoles(admin, superadmin) | superadmin, admin | `diplomas.aprobar` |
 | avisosRechazo | `POST /api/certifex/diplomas/avisos-rechazo` | sesión · roleGuard(admin, superadmin, soporte) +superadmin +soporte por el atajo · soloRoles(admin, superadmin) | superadmin, admin | `diplomas.avisar` |
 | revocar | `POST /api/certifex/diplomas/revocar` | sesión · roleGuard(admin, superadmin, soporte) +superadmin +soporte por el atajo · soloRoles(admin, superadmin) | superadmin, admin | `diplomas.revocar` |
+| disponibilidad | `GET /api/certifex/diplomas/revertir` | (no existía) | (ruta nueva) | `diplomas.revertir` |
+| revertir | `POST /api/certifex/diplomas/revertir` | (no existía) | (ruta nueva) | `diplomas.revertir` |
 | corregir | `POST /api/certifex/diplomas/corregir` | sesión · roleGuard(admin, superadmin, soporte) +superadmin +soporte por el atajo · soloRoles(admin, superadmin) | superadmin, admin | `diplomas.edit` |
 | subirFirma | `POST /api/certifex/diplomas/firma` | sesión · roleGuard(admin, superadmin, soporte) +superadmin +soporte por el atajo · soloRoles(admin, superadmin) | superadmin, admin | `diplomas.edit` |
 | verFirma | `GET /api/certifex/diplomas/firma/:matriculaId` | sesión · roleGuard(admin, superadmin, soporte) +superadmin +soporte por el atajo · soloRoles(admin, superadmin) | superadmin, admin | `diplomas.view_emisiones` |
@@ -1475,6 +1477,7 @@ lo que pide para tener sentido (editar pide ver).
 | Corregir diplomas | `diplomas.edit` | Corregir datos, subir la firma y sincronizar formaciones. | Admin | `diplomas.view` |
 | Avisar al alumno | `diplomas.avisar` | Mandar el aviso de diploma emitido o rechazado. | Admin | `diplomas.view` |
 | Revocar diplomas | `diplomas.revocar` | Anular un diploma ya emitido. | Admin | `diplomas.view` |
+| Revertir diplomas | `diplomas.revertir` | Anular el número de un diploma emitido desde el CRM y aún sin enviar, para corregirlo y volver a emitirlo: vuelve a «Aprobados sin diploma» y sale con otro número. | Admin | `diplomas.view` |
 | Diploma para imprenta | `diplomas.imprenta` | Descargar el diploma en formato de imprenta. | Admin | `diplomas.view` |
 
 ### Consultas de Certifex

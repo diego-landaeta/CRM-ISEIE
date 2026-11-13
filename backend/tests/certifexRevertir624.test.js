@@ -1,0 +1,330 @@
+import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
+
+/**
+ * «Revertir» un diploma de «Emitidos, falta enviarlos al alumno» (#351).
+ *
+ * Diego, 03/11/2026, sobre CEDIA-2026-000011-B5HQ: «que en esta sección se puedan revertir,
+ * porque este, por ejemplo, tiene los módulos malos; reviértelo para que lo modifiquen».
+ * Certifex lo hace (POST /revertir, su 0045: el número se anula y la matrícula vuelve a
+ * «aprobada sin diploma»). Aquí se fija lo del CRM, lo que pide la issue:
+ *
+ *  · OK a nombre del usuario con sesión (nunca el del cuerpo), y queda apuntado en el CRM
+ *    con la matrícula que dice Certifex;
+ *  · 403 sin `diplomas.revertir`; 404 a un admin de otro campus;
+ *  · 409 si ya se envió, está revocado, ya revertido o no lo emitió el CRM, y en esos casos
+ *    no se le pide nada a Certifex;
+ *  · motivo obligatorio (400);
+ *  · mientras Certifex no tenga la ruta (o el CRM la tabla), 503 sin tocar nada, y la
+ *    disponibilidad lo dice para que el botón no se ofrezca;
+ *  · «por avisar» trae, en «Aprobados sin diploma», lo revertido.
+ *
+ * Sin base ni Certifex: la base se dobla con lo justo y `fetch` contesta como /api/crm/v1.
+ */
+
+// ── la base: el alcance y el registro de reversiones; lo demás, vacío ────────────
+const PROYECTOS = [{ id: 1, nombre: 'Psiko Aprende', slug: 'psiko' }, { id: 2, nombre: 'ISEIE', slug: 'iseie' }];
+const campusDe = { 71: [1], 72: [1], 73: [2] };
+let registro = [];
+let tablaExiste = true;
+let fallaApunte = false;
+vi.mock('../src/shared/config/db.js', () => {
+  const fila = (r) => ({ ...r });
+  const query = vi.fn(async (text, params) => {
+    if (/FROM user_projects WHERE user_id = \$1/.test(text)) return { rows: (campusDe[params[0]] ?? []).map((id) => ({ project_id: id })) };
+    if (/SELECT id, nombre, slug FROM projects/.test(text)) return { rows: PROYECTOS };
+    if (/to_regclass\('public\.certifex_reversiones'\)/.test(text)) {
+      if (tablaExiste === 'falla') throw new Error('la base no contesta (simulado)');
+      return { rows: [{ existe: tablaExiste }] };
+    }
+    if (/INSERT INTO certifex_reversiones/.test(text)) {
+      if (fallaApunte) throw new Error('la base no contesta (simulado)');
+      if (registro.some((x) => x.nexpediente === params[0])) return { rows: [] };
+      const r = {
+        id: registro.length + 1, nexpediente: params[0], matricula_id: params[1], centro: params[2], alumno: params[3], titulacion: params[4],
+        motivo: params[5], revertido_por: params[6], revertido_por_email: params[7], revertido_en: params[8] ?? '2026-11-13T10:00:00.000Z',
+      };
+      registro.push(r);
+      return { rows: [fila(r)] };
+    }
+    if (/SELECT \* FROM certifex_reversiones WHERE nexpediente = \$1/.test(text)) {
+      return { rows: registro.filter((x) => x.nexpediente === params[0]).map(fila) };
+    }
+    if (/SELECT DISTINCT ON \(matricula_id\) \* FROM certifex_reversiones/.test(text)) {
+      const ultimas = new Map();
+      for (const r of [...registro].sort((a, b) => a.revertido_en.localeCompare(b.revertido_en))) {
+        if (params[0].includes(Number(r.matricula_id))) ultimas.set(Number(r.matricula_id), r);
+      }
+      return { rows: [...ultimas.values()].map(fila) };
+    }
+    return { rows: [] };
+  });
+  return { query, getClient: vi.fn(), default: { query, end: vi.fn() } };
+});
+vi.mock('../src/modules/permissions/permissions.service.js', () => import('./helpers/permisosSinBase.js'));
+const { registrar } = await import('./helpers/permisosSinBase.js');
+
+process.env.CERTIFEX_API_URL = 'https://certifex.test';
+process.env.CERTIFEX_CRM_CLAVE = 'cfx_crm_clave-de-prueba-624-revertir';
+
+const { default: express } = await import('express');
+const { default: supertest } = await import('supertest');
+const { default: jwt } = await import('jsonwebtoken');
+const { default: router } = await import('../src/modules/certifex/certifex.routes.js');
+const { olvidarCapacidades } = await import('../src/modules/certifex/certifex.cliente.js');
+
+const app = express();
+app.use(express.json());
+app.use('/api/certifex', router);
+app.use((err, _req, res, _next) => res.status(err.statusCode || 500).json({ success: false, error: err.message, code: err.code }));
+const request = supertest(app);
+
+const token = (userId, role) =>
+  jwt.sign({ userId, email: `u${userId}@prueba.test`, role, roles_extra: [] }, process.env.JWT_SECRET, { expiresIn: '5m' });
+registrar({ userId: 71, role: 'admin' });
+// Emite y revoca, pero no revierte: el permiso nuevo es otro.
+registrar({ userId: 72, role: 'gestor', excepciones: { 'diplomas.emit': true, 'diplomas.revocar': true } });
+registrar({ userId: 73, role: 'admin' });
+registrar({ userId: 74, role: 'superadmin' });
+const ADMIN = token(71, 'admin'); // de Psiko
+const SIN_PERMISO = token(72, 'gestor');
+const ADMIN_ISEIE = token(73, 'admin'); // de otro campus
+const SUPER = token(74, 'superadmin');
+
+// ── Certifex de mentira ──────────────────────────────────────────────────────
+const EXP = 'PSIKO-2026-000101-AAAA';
+const EXP_ENVIADO = 'PSIKO-2026-000102-BBBB';
+const EXP_REVOCADO = 'PSIKO-2026-000103-CCCC';
+const EXP_FUERA = 'PSIKO-2026-000104-DDDD';
+const EXP_ANULADO = 'PSIKO-2026-000105-EEEE';
+const diploma = (nexpediente, extra = {}) => ({
+  nexpediente, centro: 'PSIKO', alumno: 'Marta López Gil', titulacion: 'Curso en Nutrición', cursoRef: 34,
+  emitidoEn: '2026-11-03T10:00:00.000Z', emitidaPor: 'diego@prueba.test (CRM 360)', revocada: false, revocacion: null,
+  anulada: false, anulacion: null, aviso: null, ...extra,
+});
+let DIPLOMAS;
+const candidato = (matriculaId, nexpediente) => ({
+  matriculaId, centro: 'PSIKO',
+  titular: { nombre: 'Marta López Gil', email: 'marta@prueba.test', dni: '12345678Z' },
+  curso: { ref: 34, nombre: 'Curso en Nutrición Terapéutica y Funcional' }, notaFinal: 8, umbral: 5, completado: true,
+  actividades: { total: 4, calificadas: 4 }, entregas: null, terminado: true, propuesto: true, nexpediente,
+  solicitud: { en: '2026-11-02T09:00:00.000Z', nombre: 'Marta López Gil', nombreAlumno: null, revisado: null },
+  programa: null, decision: { decision: 'aprobada', motivo: null, decididoPor: 'x', decididoEn: '2026-11-03T10:00:00.000Z', refExterna: null },
+});
+let CANDIDATOS;
+
+let pedidas = [];
+let conRuta = true;
+let alRevertir = (p) => ({ status: 200, body: { ok: true, nexpediente: p.cuerpo.nexpediente, anulada: { en: '2026-11-13T09:30:00.000Z', por: `${p.cuerpo.revertidoPor} (CRM 360)`, motivo: p.cuerpo.motivo } } });
+const fetchReal = globalThis.fetch;
+beforeAll(() => {
+  globalThis.fetch = vi.fn(async (url, opts = {}) => {
+    if (!String(url).startsWith('https://certifex.test/')) return fetchReal(url, opts);
+    const u = new URL(String(url));
+    const p = { ruta: u.pathname.replace('/api/crm/v1', ''), query: Object.fromEntries(u.searchParams), metodo: opts.method, cuerpo: opts.body ? JSON.parse(opts.body) : null };
+    pedidas.push(p);
+    const responder = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+    if (p.ruta === '/yo') return responder({ nombre: 'CRM 360', centros: ['PSIKO', 'ISEIE'] });
+    if (p.ruta === '/diplomas') {
+      const est = p.query.estado ?? 'vigentes';
+      const f = DIPLOMAS.filter((d) => (!p.query.q || d.nexpediente === p.query.q) && (!p.query.centro || d.centro === p.query.centro)
+        && (est === 'todos' || (est === 'revocados' ? d.revocada : est === 'anulados' ? d.anulada : !d.revocada && !d.anulada)));
+      return responder({ filas: f, total: f.length });
+    }
+    if (p.ruta === '/candidatos') {
+      const f = p.query.estado === 'aprobada' ? CANDIDATOS.filter((c) => !p.query.centro || c.centro === p.query.centro) : [];
+      return responder({ filas: f, total: f.length });
+    }
+    if (p.ruta === '/revertir') {
+      // Como el Certifex de verdad: sin la ruta, su 404 genérico; con ella, valida
+      // `revertidoPor` antes de buscar nada (400 con un cuerpo vacío).
+      if (!conRuta) return responder({ error: 'No encontrado.' }, 404);
+      if (!p.cuerpo?.revertidoPor) return responder({ error: 'Falta revertidoPor: el usuario del CRM que revierte.' }, 400);
+      const r = await alRevertir(p);
+      return responder(r.body, r.status);
+    }
+    return responder({ error: 'No encontrado.' }, 404);
+  });
+});
+afterAll(() => { globalThis.fetch = fetchReal; });
+beforeEach(() => {
+  pedidas = [];
+  registro = [];
+  tablaExiste = true;
+  fallaApunte = false;
+  conRuta = true;
+  alRevertir = (p) => ({ status: 200, body: { ok: true, nexpediente: p.cuerpo.nexpediente, anulada: { en: '2026-11-13T09:30:00.000Z', por: `${p.cuerpo.revertidoPor} (CRM 360)`, motivo: p.cuerpo.motivo } } });
+  DIPLOMAS = [
+    diploma(EXP),
+    diploma(EXP_ENVIADO, { aviso: { resultado: 'enviado', en: '2026-11-04T10:00:00.000Z', por: 'x (CRM 360)' } }),
+    diploma(EXP_REVOCADO, { revocada: true, revocacion: { en: '2026-11-04T10:00:00.000Z', motivo: 'error', por: 'x' } }),
+    diploma(EXP_FUERA, { emitidaPor: 'admin@certifex.tech' }),
+    diploma(EXP_ANULADO, { anulada: true, anulacion: { en: '2026-11-05T10:00:00.000Z', motivo: 'temario de Moodle', por: 'pepe@prueba.test (CRM 360)', sustituidaPor: null } }),
+  ];
+  CANDIDATOS = [candidato(101, EXP), candidato(102, EXP_ENVIADO)];
+  olvidarCapacidades();
+});
+
+const MOTIVO = 'Se emitió con las actividades de Moodle; se reemite con el temario oficial';
+const revertir = (tk, cuerpo = {}) => request.post('/api/certifex/diplomas/revertir').set('Authorization', `Bearer ${tk}`)
+  .send({ nexpediente: EXP, motivo: MOTIVO, ...cuerpo });
+const llegoARevertir = () => pedidas.filter((p) => p.ruta === '/revertir' && p.cuerpo?.nexpediente);
+
+describe('POST /api/certifex/diplomas/revertir', () => {
+  it('revierte a nombre del usuario con sesión (no del cuerpo) y lo apunta con la matrícula de Certifex', async () => {
+    const r = await revertir(ADMIN, { revertidoPor: 'otra@persona.test', matriculaId: 999 });
+    expect(r.status).toBe(200);
+    const [p] = llegoARevertir();
+    expect(p.cuerpo).toEqual({ nexpediente: EXP, motivo: MOTIVO, revertidoPor: 'u71@prueba.test' });
+    expect(r.body.data).toMatchObject({ ok: true, nexpediente: EXP, matriculaId: 101, registrado: true });
+    expect(registro).toHaveLength(1);
+    expect(registro[0]).toMatchObject({
+      nexpediente: EXP, matricula_id: 101, centro: 'PSIKO', alumno: 'Marta López Gil', titulacion: 'Curso en Nutrición',
+      motivo: MOTIVO, revertido_por: 71, revertido_por_email: 'u71@prueba.test', revertido_en: '2026-11-13T09:30:00.000Z',
+    });
+  });
+
+  it('el motivo, como lo guarda Certifex (espacios seguidos, uno)', async () => {
+    const r = await revertir(ADMIN, { motivo: '  Temario   de\nMoodle  ' });
+    expect(r.status).toBe(200);
+    expect(llegoARevertir()[0].cuerpo.motivo).toBe('Temario de Moodle');
+    expect(registro[0].motivo).toBe('Temario de Moodle');
+  });
+
+  it('un superadmin, en cualquier campus', async () => {
+    expect((await revertir(SUPER)).status).toBe(200);
+  });
+
+  it('403 sin `diplomas.revertir` (aunque emita y revoque), y no llega a Certifex', async () => {
+    const r = await revertir(SIN_PERMISO);
+    expect(r.status).toBe(403);
+    expect(pedidas.filter((p) => p.ruta === '/revertir')).toHaveLength(0);
+    expect((await request.get('/api/certifex/diplomas/revertir').set('Authorization', `Bearer ${SIN_PERMISO}`)).status).toBe(403);
+  });
+
+  it('404 a un admin de otro campus, y 404 si no existe; no llega a Certifex', async () => {
+    expect((await revertir(ADMIN_ISEIE)).status).toBe(404);
+    expect((await revertir(ADMIN, { nexpediente: 'PSIKO-2026-999999-ZZZZ' })).status).toBe(404);
+    expect(llegoARevertir()).toHaveLength(0);
+    expect(registro).toHaveLength(0);
+  });
+
+  it.each([
+    ['ya enviado al alumno', EXP_ENVIADO, 'YA_ENVIADO'],
+    ['revocado', EXP_REVOCADO, 'REVOCADO'],
+    ['emitido fuera del CRM', EXP_FUERA, 'EMITIDO_FUERA'],
+  ])('409 si está %s, y no llega a Certifex', async (_caso, nexpediente, code) => {
+    const r = await revertir(ADMIN, { nexpediente });
+    expect(r.status).toBe(409);
+    expect(r.body.code).toBe(code);
+    expect(llegoARevertir()).toHaveLength(0);
+    expect(registro).toHaveLength(0);
+  });
+
+  it('409 si ya está revertido; y si el CRM no lo tenía apuntado, lo apunta con lo que dice Certifex', async () => {
+    const r = await revertir(ADMIN, { nexpediente: EXP_ANULADO });
+    expect(r.status).toBe(409);
+    expect(r.body.code).toBe('YA_REVERTIDO');
+    expect(llegoARevertir()).toHaveLength(0);
+    expect(registro).toHaveLength(1);
+    expect(registro[0]).toMatchObject({ nexpediente: EXP_ANULADO, motivo: 'temario de Moodle', revertido_por_email: 'pepe@prueba.test', revertido_por: null, revertido_en: '2026-11-05T10:00:00.000Z' });
+    // Otra vez: no lo duplica.
+    expect((await revertir(ADMIN, { nexpediente: EXP_ANULADO })).status).toBe(409);
+    expect(registro).toHaveLength(1);
+  });
+
+  it('si Certifex dice que no (p. ej. lo enviaron entre medias), su error tal cual y no se apunta nada', async () => {
+    alRevertir = () => ({ status: 409, body: { error: 'Ya se entregó al alumno, así que no se revierte (se revoca): …' } });
+    const r = await revertir(ADMIN);
+    expect(r.status).toBe(409);
+    expect(r.body.error).toMatch(/Ya se entregó/);
+    expect(registro).toHaveLength(0);
+  });
+
+  it.each([
+    ['sin motivo', { motivo: undefined }],
+    ['motivo vacío', { motivo: '   ' }],
+    ['motivo de 2 letras', { motivo: 'ab' }],
+    ['motivo de más de 500', { motivo: 'x'.repeat(501) }],
+    ['número mal escrito', { nexpediente: 'no-es-un-numero' }],
+  ])('400 con %s, y no llega a Certifex', async (_caso, cuerpo) => {
+    const r = await revertir(ADMIN, cuerpo);
+    expect(r.status).toBe(400);
+    expect(llegoARevertir()).toHaveLength(0);
+  });
+
+  it('sin la ruta en Certifex: 503 antes de tocar nada', async () => {
+    conRuta = false;
+    const r = await revertir(ADMIN);
+    expect(r.status).toBe(503);
+    expect(r.body.code).toBe('CERTIFEX_SIN_REVERTIR');
+    expect(llegoARevertir()).toHaveLength(0);
+  });
+
+  it('sin la tabla del CRM (migración 280): 503 antes de llamar a Certifex', async () => {
+    tablaExiste = false;
+    const r = await revertir(ADMIN);
+    expect(r.status).toBe(503);
+    expect(r.body.code).toBe('CRM_SIN_MIGRACION');
+    expect(pedidas.filter((p) => p.ruta === '/revertir')).toHaveLength(0);
+  });
+
+  it('revertido en Certifex pero el CRM no lo pudo apuntar: 200 con el aviso, sin fingir que quedó apuntado', async () => {
+    fallaApunte = true;
+    const r = await revertir(ADMIN);
+    expect(r.status).toBe(200);
+    expect(r.body.data).toMatchObject({ registrado: false });
+    expect(r.body.data.aviso).toMatch(/no lo pudo apuntar/);
+  });
+
+  it('sin la matrícula en Certifex, revierte igual y lo apunta sin ella', async () => {
+    CANDIDATOS = [];
+    const r = await revertir(ADMIN);
+    expect(r.status).toBe(200);
+    expect(registro[0].matricula_id).toBeNull();
+  });
+});
+
+describe('GET /api/certifex/diplomas/revertir (¿se puede usar?)', () => {
+  const disp = (tk = ADMIN) => request.get('/api/certifex/diplomas/revertir').set('Authorization', `Bearer ${tk}`);
+
+  it('sí, con la tabla y la ruta en Certifex (la sonda va con el cuerpo vacío)', async () => {
+    const r = await disp();
+    expect(r.body.data).toEqual({ disponible: true, motivo: null });
+    expect(pedidas.filter((p) => p.ruta === '/revertir')).toEqual([expect.objectContaining({ metodo: 'POST', cuerpo: {} })]);
+  });
+
+  it('no, si Certifex no tiene la ruta (falta su 0045)', async () => {
+    conRuta = false;
+    const r = await disp();
+    expect(r.body.data.disponible).toBe(false);
+    expect(r.body.data.motivo).toMatch(/0045/);
+  });
+
+  it('no, si falta la migración del CRM (y lo dice)', async () => {
+    tablaExiste = false;
+    const r = await disp();
+    expect(r.body.data).toMatchObject({ disponible: false });
+    expect(r.body.data.motivo).toMatch(/280/);
+  });
+
+  it('no, con el motivo, si la base no contesta', async () => {
+    tablaExiste = 'falla';
+    const r = await disp();
+    expect(r.body.data.disponible).toBe(false);
+    expect(r.body.data.motivo).toMatch(/base del CRM/);
+  });
+});
+
+describe('«por avisar»: lo revertido, en «Aprobados sin diploma»', () => {
+  it('cada fila trae la última reversión de su matrícula', async () => {
+    // Tras revertir, Certifex ya no da número a esa matrícula: sale entre «sin emitir».
+    expect((await revertir(ADMIN)).status).toBe(200);
+    CANDIDATOS = [{ ...candidato(101, null) }];
+    DIPLOMAS = DIPLOMAS.map((d) => (d.nexpediente === EXP ? { ...d, anulada: true } : d));
+    const r = await request.get('/api/certifex/diplomas/por-avisar').set('Authorization', `Bearer ${ADMIN}`);
+    expect(r.status).toBe(200);
+    const fila = r.body.data.sinEmitir.find((c) => c.matriculaId === 101);
+    expect(fila.revertido).toEqual({ nexpediente: EXP, motivo: MOTIVO, por: 'u71@prueba.test', en: '2026-11-13T09:30:00.000Z' });
+    expect(r.body.data.porAvisar.map((c) => c.nexpediente)).not.toContain(EXP);
+  });
+});

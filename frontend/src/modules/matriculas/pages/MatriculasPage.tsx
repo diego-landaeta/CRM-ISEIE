@@ -275,7 +275,7 @@ export default function MatriculasPage() {
           <EmptyState icon={SealCheck} title="Solo administración" description="Los diplomas los aprueba, envía y revoca administración. Para verlos, pide que te den «Diplomas (Certifex) · Ver»." />
         ) : (
           <Suspense fallback={<SkeletonTable rows={5} columns={6} />}>
-            <CertifexDiplomasPage soloLectura={diplomasSoloLectura} soloEmitir={diplomasSoloEmitir} />
+            <CertifexDiplomasPage soloLectura={diplomasSoloLectura} soloEmitir={diplomasSoloEmitir} puedeRevertir={can('diplomas.revertir')} />
           </Suspense>
         )
       ) : enCertificaciones ? (

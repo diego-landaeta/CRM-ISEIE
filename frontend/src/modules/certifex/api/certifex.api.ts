@@ -340,8 +340,21 @@ export interface Solicitud extends Candidato {
   firma?: FirmaDelAlumno | null;
   /** El aviso de rechazo que ya se aprobó (solo en las rechazadas). */
   avisoRechazo?: { en: string; por: string; resultado: string } | null;
+  /**
+   * Solo en «Aprobados sin diploma» (#351): la última vez que se revirtió su diploma (el
+   * número anulado, por qué, quién y cuándo), o null.
+   */
+  revertido?: Revertido | null;
   /** Solo en «por avisar»: el diploma emitido. */
   diploma?: Diploma | null;
+}
+
+/** Una reversión apuntada en el CRM (#351, migración 280). */
+export interface Revertido {
+  nexpediente: string;
+  motivo: string;
+  por: string;
+  en: string;
 }
 
 export interface Diploma {
@@ -354,6 +367,12 @@ export interface Diploma {
   emitidaPor: string | null;
   revocada: boolean;
   revocacion: { en: string | null; motivo: string | null; por: string | null } | null;
+  /**
+   * #351: revertido antes de enviarlo (Certifex 0045). El número queda anulado; `sustituidaPor`
+   * es el que salió al volver a emitir. Un Certifex anterior no lo manda.
+   */
+  anulada?: boolean;
+  anulacion?: { en: string | null; motivo: string | null; por: string | null; sustituidaPor: string | null } | null;
   /** Null si Certifex no tiene dirección pública (`sinEnlaces` en la lista dice por qué). */
   verificarUrl: string | null;
   diplomaUrl: string | null;
@@ -473,6 +492,19 @@ export const diplomasApi = {
   avisos: (nexpedientes: string[]) => client.post('/certifex/diplomas/avisos', { nexpedientes }) as R<RespuestaAvisos>,
   avisosRechazo: (matriculaIds: number[]) =>
     client.post('/certifex/diplomas/avisos-rechazo', { matriculaIds }) as R<RespuestaAvisosRechazo>,
+  /** ¿El Certifex conectado ya revierte (su 0045)? Si no, `motivo` dice por qué (#351). */
+  revertirDisponible: () =>
+    client.get('/certifex/diplomas/revertir') as R<{ disponible: boolean; motivo: string | null }>,
+  /**
+   * «Revertir» (#351): el número se anula (no vale ni se reutiliza) y la matrícula vuelve a
+   * «Aprobados sin diploma» para editarla y volver a emitir, con otro número. `aviso`:
+   * revertido en Certifex, pero el CRM no lo pudo apuntar.
+   */
+  revertir: (nexpediente: string, motivo: string) =>
+    client.post('/certifex/diplomas/revertir', { nexpediente, motivo }) as R<{
+      ok: true; nexpediente: string; anulada: { en: string; por: string; motivo: string };
+      matriculaId: number | null; registrado: boolean; aviso?: string;
+    }>,
   revocar: (nexpediente: string, motivo: string) =>
     client.post('/certifex/diplomas/revocar', { nexpediente, motivo }) as R<{ ok: true; nexpediente: string }>,
   corregirNombre: (nexpediente: string, valor: string, motivo: string) =>

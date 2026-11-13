@@ -9,6 +9,7 @@ import { certifex, recorrer } from './certifex.cliente.js';
 import { alcanceDe, acotar, exigirCentro, exigirExpedientes, NO_ENCONTRADA } from './certifex.alcance.js';
 import { prepararEmision, emitirConPrograma, emitirMatriculas, resultadoBloqueado } from './certifex.emision.js';
 import { conDestinatario } from './certifex.envios.js';
+import { conReversiones } from './certifex.revertir.js';
 import { conFirma, correoDe, firmaTransparente, guardarFirmaSubida, origenesDeFirma, pngDe } from './certifex.firma.js';
 import {
   listarSolicitudesSchema, listarDiplomasSchema, porAvisarSchema, aprobarEmitirSchema, rechazarSchema, emitirDiplomasSchema,
@@ -211,6 +212,8 @@ export async function porAvisar(req, res, next) {
     await conEdicion([...data.porAvisar, ...data.sinEmitir]);
     await conLoDelCrm([...data.porAvisar, ...data.sinEmitir], req.user);
     await conProgramaCrm(data.sinEmitir);
+    // #351: lo que vuelve aquí tras «Revertir» dice qué número se anuló, quién y por qué.
+    await conReversiones(data.sinEmitir);
     res.json({ success: true, data });
   } catch (err) { next(err); }
 }
