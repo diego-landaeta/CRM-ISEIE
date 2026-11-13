@@ -395,6 +395,22 @@ export async function createRectificativa(originalId, { motivo, userId, parcial 
   }
 }
 
+/**
+ * TODAS las facturas de una venta (13/11/2026, la ficha de la matrícula): con una
+ * factura por cobro (migración 107) una venta puede tener varias, y también la
+ * proforma y los abonos. Lo justo para listarlas; la factura entera, en su ficha.
+ */
+export async function findAllByConversion(conversionId) {
+  const { rows } = await query(
+    `SELECT id, codigo, tipo, estado, fecha_emision, total, moneda, total_divisa
+       FROM invoices
+      WHERE conversion_id = $1
+      ORDER BY fecha_emision, id`,
+    [conversionId]
+  );
+  return rows;
+}
+
 export async function findByConversion(conversionId) {
   const { rows } = await query(
     // Devuelve el documento vigente de la conversión: prefiere la factura fiscal
