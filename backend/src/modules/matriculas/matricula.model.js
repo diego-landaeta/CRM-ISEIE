@@ -106,13 +106,16 @@ export async function findAll({ projectId, projectIds = null, estado, search, ca
             p.nombre as campus_nombre,
             -- La empresa del campus (13/11/2026: «que se diferencie a quién pertenece»).
             COALESCE(s.alias, s.razon_social) as empresa_nombre,
-            COALESCE(m.webhook_received_at, m.created_at) as recibida_at
+            COALESCE(m.webhook_received_at, m.created_at) as recibida_at,
+            -- La gestora de su ficha (13/11/2026: «que se puedan vincular a su gestora»).
+            g.id as gestora_id, g.nombre as gestora_nombre
      FROM matriculas m
      LEFT JOIN leads l ON l.id = m.lead_id
      LEFT JOIN conversions c ON c.id = m.conversion_id
      LEFT JOIN users u ON u.id = m.validated_by
      LEFT JOIN projects p ON p.id = m.project_id
      LEFT JOIN invoice_issuers s ON s.id = p.sociedad_emisora_id
+     LEFT JOIN users g ON g.id = l.responsable_id
      ${where}
      -- Primero lo que pide acción (Solicitud y Datos validados) y después por
      -- fecha de llegada (#199, ideas de Diego del 01/10).

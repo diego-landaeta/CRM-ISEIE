@@ -5,6 +5,7 @@ import Portal from '@/shared/components/ui/portal';
 import { toast } from '@/shared/hooks/useToast';
 import { CheckCircle, XCircle, Upload, X, Copy, FilePdf, ArrowSquareOut } from '@phosphor-icons/react';
 import { ESTADO_LABEL, ESTADO_COLOR, enHoraDeMadrid } from '../lib/estados';
+import { invoicesApi } from '@/modules/invoices/api/invoices.api';
 
 /**
  * La ficha de una matrícula (#199), «en un panel lateral como la de los
@@ -12,7 +13,8 @@ import { ESTADO_LABEL, ESTADO_COLOR, enHoraDeMadrid } from '../lib/estados';
  *   - cabecera: el nombre, la etiqueta de estado, el curso y el campus;
  *   - datos de la persona, con botón para copiar;
  *   - documentos en miniatura, con visor grande (o de PDF) y «Reemplazar»;
- *   - vínculos: su prospecto, su venta y su gestora;
+ *   - vínculos: su prospecto, su venta y su gestora (que se asigna desde aquí);
+ *   - las facturas de su venta;
  *   - historial;
  *   - acciones según el estado.
  *
@@ -33,7 +35,9 @@ interface Matricula {
   campus_nombre?: string;
   /** La empresa del campus (13/11/2026). */
   empresa_nombre?: string | null;
-  gestora_nombre?: string;
+  gestora_id?: number | null;
+  gestora_nombre?: string | null;
+  project_id?: number;
   recibida_at?: string;
   source?: string;
   validated_at?: string;
@@ -58,6 +62,43 @@ interface Props {
   onEstado?: (m: Matricula, estado: string) => void;
   /** Hay otra ventana encima (la de «Rechazar»): Esc es suyo, no de la ficha. */
   pausada?: boolean;
+  /** `leads.assign`: asigna la gestora de la ficha desde aquí (13/11/2026). */
+  puedeAsignar?: boolean;
+  /** `facturas.view`: ve las facturas de la venta (13/11/2026). */
+  verFacturas?: boolean;
+}
+
+/** Una factura de la venta, lo justo para la lista (GET /invoices/by-conversion/:id?todas=1). */
+interface Factura {
+  id: number;
+  codigo: string;
+  tipo?: string | null;
+  estado: string;
+  fecha_emision: string;
+  total: number | string;
+  moneda?: string | null;
+  total_divisa?: number | string | null;
+}
+interface Gestora { id: number; nombre: string; role?: string }
+
+const ESTADO_FACTURA: Record<string, string> = {
+  borrador: 'Borrador', emitida: 'Emitida', enviada: 'Enviada', pagada: 'Pagada', cancelada: 'Anulada',
+};
+const TIPO_FACTURA: Record<string, string> = { proforma: 'proforma', rectificativa: 'abono' };
+/** La fecha de la factura (un DATE: «2026-11-13» o con la hora) → «13/11/2026». */
+const fechaFactura = (f: string) => {
+  const [a, m, d] = String(f || '').slice(0, 10).split('-');
+  return d ? `${d}/${m}/${a}` : '—';
+};
+/** El importe en su moneda: la de la factura si no es en euros. */
+function importeFactura(f: Factura) {
+  const enDivisa = f.moneda && f.moneda !== 'EUR' && f.total_divisa != null;
+  const valor = Number(enDivisa ? f.total_divisa : f.total);
+  try {
+    return new Intl.NumberFormat('es-ES', { style: 'currency', currency: enDivisa ? String(f.moneda) : 'EUR' }).format(valor);
+  } catch {
+    return `${valor.toFixed(2)} ${enDivisa ? f.moneda : 'EUR'}`;
+  }
 }
 
 /**
@@ -137,7 +178,7 @@ const conArticulo = (nombre: string) => {
   return /^(Foto|Firma)/.test(nombre) ? `la ${nombre.toLowerCase()}` : `el ${nombre.toLowerCase()}`;
 };
 
-export default function MatriculaDetail({ matricula, onClose, onChange, onEstado, pausada = false }: Props) {
+export default function MatriculaDetail({ matricula, onClose, onChange, onEstado, pausada = false, puedeAsignar = false, verFacturas = false }: Props) {
   const [m, setM] = useState<Matricula>(matricula);
   // Si ya se ha escrito en «A mano», lo que llegue del servidor no lo pisa.
   const tocado = useRef(false);
@@ -155,6 +196,63 @@ export default function MatriculaDetail({ matricula, onClose, onChange, onEstado
       if (res?.success && (res.data as Matricula)?.id) { conservarLoEscrito(res.data as Matricula); return res.data as Matricula; }
     } catch { /* se queda con lo que hay */ }
     return null;
+  }
+
+  // Las facturas de su venta (13/11/2026): todas, también la proforma y los abonos.
+  // Sin permiso para ver facturas no se piden. El servidor mira además el campus y,
+  // a una gestora, que la venta sea suya.
+  const [facturas, setFacturas] = useState<Factura[] | null>(null);
+  const conversionId = m.conversion_id;
+  useEffect(() => {
+    if (!verFacturas || !conversionId) return undefined;
+    let vivo = true;
+    setFacturas(null);
+    client.get(`/invoices/by-conversion/${conversionId}?todas=1`)
+      .then((res) => { if (vivo) setFacturas(Array.isArray(res?.data) ? (res.data as Factura[]) : []); })
+      .catch(() => { if (vivo) setFacturas([]); });
+    return () => { vivo = false; };
+  }, [verFacturas, conversionId]);
+
+  // La gestora, desde la matrícula (13/11/2026): las del campus de la solicitud. La
+  // misma reasignación que la ficha del prospecto (PATCH /leads/:id/reassign).
+  const [eligiendo, setEligiendo] = useState(false);
+  const [gestoras, setGestoras] = useState<Gestora[] | null>(null);
+  const [elegida, setElegida] = useState('');
+  const [asignando, setAsignando] = useState(false);
+  useEffect(() => {
+    if (!eligiendo || gestoras || !m.project_id) return undefined;
+    let vivo = true;
+    // alcance=comercial: a quien lleva un equipo, solo su equipo (como en Prospectos).
+    client.get(`/users?limit=100&active=true&alcance=comercial&projectId=${m.project_id}`)
+      .then((res) => {
+        if (!vivo) return;
+        const todas = Array.isArray(res?.data) ? (res.data as Gestora[]) : [];
+        setGestoras(todas.filter((g) => g.role === 'gestor' || g.role === 'admin'));
+      })
+      .catch(() => {
+        if (!vivo) return;
+        setGestoras([]);
+        toast({ title: 'No se han podido cargar las gestoras', variant: 'destructive' });
+      });
+    return () => { vivo = false; };
+  }, [eligiendo, gestoras, m.project_id]);
+
+  async function asignarGestora() {
+    if (!elegida || !m.lead_id) return;
+    setAsignando(true);
+    try {
+      await client.patch(`/leads/${m.lead_id}/reassign`, { responsable_id: Number(elegida) });
+      toast({ title: 'Gestora asignada' });
+      setEligiendo(false);
+      setElegida('');
+      await recargar();
+      onChange();
+    } catch (err: unknown) {
+      const e = err as { data?: { error?: string }; message?: string };
+      toast({ title: 'No se ha podido asignar', description: e?.data?.error || e?.message, variant: 'destructive' });
+    } finally {
+      setAsignando(false);
+    }
   }
 
   // Al abrirla.
@@ -353,9 +451,66 @@ export default function MatriculaDetail({ matricula, onClose, onChange, onEstado
                 <div><dt className="text-[11px] text-muted-foreground">Venta</dt>
                   <dd>{m.conversion_id ? <Link to={`/ventas/${m.conversion_id}`} className="text-primary hover:underline inline-flex items-center gap-1">Ver venta <ArrowSquareOut size={12} /></Link> : <span className="text-muted-foreground">Sin venta</span>}</dd></div>
                 <div><dt className="text-[11px] text-muted-foreground">Gestora</dt>
-                  <dd className="truncate">{m.gestora_nombre || <span className="text-muted-foreground">Sin gestora</span>}</dd></div>
+                  <dd className="truncate">
+                    {m.gestora_nombre || <span className="text-muted-foreground">Sin gestora</span>}
+                    {/* Sin ficha no hay a quién asignarla: primero se vincula al prospecto. */}
+                    {puedeAsignar && m.lead_id && !eligiendo && (
+                      <button type="button" onClick={() => setEligiendo(true)}
+                        className="ml-2 text-xs font-semibold text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-primary/40 rounded">
+                        {m.gestora_id ? 'Cambiar' : 'Asignar'}
+                      </button>
+                    )}
+                  </dd></div>
               </dl>
+              {eligiendo && (
+                <div className="mt-2 flex items-center gap-2">
+                  <select aria-label="Gestora de la ficha" value={elegida} onChange={(e) => setElegida(e.target.value)}
+                    disabled={!gestoras || asignando}
+                    className="h-9 flex-1 min-w-0 rounded-md border border-border bg-card px-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40">
+                    <option value="">{gestoras ? (gestoras.length ? 'Elige una gestora' : 'No hay gestoras en este campus') : 'Cargando…'}</option>
+                    {(gestoras || []).map((g) => <option key={g.id} value={String(g.id)}>{g.nombre}</option>)}
+                  </select>
+                  <button type="button" onClick={asignarGestora} disabled={!elegida || asignando}
+                    className="h-9 px-3 rounded-md bg-primary text-primary-foreground text-xs font-bold disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-primary/40">
+                    {asignando ? 'Asignando…' : 'Asignar'}
+                  </button>
+                  <button type="button" onClick={() => { setEligiendo(false); setElegida(''); }}
+                    className="h-9 px-3 rounded-md border border-border text-xs font-semibold hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary/40">
+                    Cancelar
+                  </button>
+                </div>
+              )}
             </section>
+
+            {/* Las facturas de la venta (13/11/2026): número, fecha, importe, estado y su PDF. */}
+            {verFacturas && m.conversion_id ? (
+              <section aria-label="Facturas de la venta">
+                <h3 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-2">Facturas de la venta</h3>
+                {facturas === null ? (
+                  <p className="text-xs text-muted-foreground">Cargando…</p>
+                ) : facturas.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">La venta aún no tiene facturas.</p>
+                ) : (
+                  <ul className="divide-y divide-border text-sm">
+                    {facturas.map((f) => (
+                      <li key={f.id} className="py-1.5 flex items-center gap-3">
+                        <span className="font-semibold tabular-nums">
+                          {f.codigo}{f.tipo && TIPO_FACTURA[f.tipo] ? <span className="font-normal text-muted-foreground"> ({TIPO_FACTURA[f.tipo]})</span> : null}
+                        </span>
+                        <span className="text-xs text-muted-foreground tabular-nums">{fechaFactura(f.fecha_emision)}</span>
+                        <span className="ml-auto tabular-nums">{importeFactura(f)}</span>
+                        <span className="text-[10px] font-bold uppercase text-muted-foreground">{ESTADO_FACTURA[f.estado] || f.estado}</span>
+                        <button type="button" onClick={() => { invoicesApi.openPdf(f.id).catch(() => toast({ title: 'No se ha podido abrir la factura', variant: 'destructive' })); }}
+                          aria-label={`Abrir la factura ${f.codigo}`} title="Abrir el PDF"
+                          className="p-1 rounded text-primary hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary/40">
+                          <FilePdf size={16} />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+            ) : null}
 
             {/* Historial. */}
             <section aria-label="Historial">
