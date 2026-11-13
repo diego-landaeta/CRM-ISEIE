@@ -33,6 +33,12 @@ function valida(schema, datos) {
   return r.data;
 }
 
+/**
+ * Cuántas filas hay en total aunque la lista venga recortada por su tope: lo trae cada
+ * fila (`COUNT(*) OVER ()`). Sin filas, 0.
+ */
+const totalDe = (filas) => (filas.length ? Number(filas[0].total) || filas.length : 0);
+
 /** Que pueda ver esta consulta: su tutor, o administración de ese campus. */
 async function exigirVer(req, c) {
   if (!c) throw new AppError('Consulta no encontrada', 404, 'NOT_FOUND');
@@ -50,10 +56,8 @@ async function exigirVer(req, c) {
 export async function mias(req, res, next) {
   try {
     const f = valida(listarSchema, req.query);
-    res.json({ success: true, data: {
-      consultas: await model.listar({ tutorId: req.user.userId, estado: f.estado, buscar: f.buscar }),
-      plazoHoras: model.PLAZO_HORAS,
-    } });
+    const consultas = await model.listar({ tutorId: req.user.userId, estado: f.estado, buscar: f.buscar });
+    res.json({ success: true, data: { consultas, total: totalDe(consultas), plazoHoras: model.PLAZO_HORAS } });
   } catch (err) { next(err); }
 }
 
@@ -62,12 +66,10 @@ export async function panel(req, res, next) {
   try {
     const f = valida(listarSchema, req.query);
     const { projectId, projectIds } = await proyectosDelAmbito(req);
-    res.json({ success: true, data: {
-      consultas: await model.listar({
-        projectIds: comoLista(projectId, projectIds), estado: f.estado, sinTutor: Boolean(f.sinTutor), buscar: f.buscar,
-      }),
-      plazoHoras: model.PLAZO_HORAS,
-    } });
+    const consultas = await model.listar({
+      projectIds: comoLista(projectId, projectIds), estado: f.estado, sinTutor: Boolean(f.sinTutor), buscar: f.buscar,
+    });
+    res.json({ success: true, data: { consultas, total: totalDe(consultas), plazoHoras: model.PLAZO_HORAS } });
   } catch (err) { next(err); }
 }
 
@@ -250,8 +252,9 @@ async function quienYAmbito(req) {
 export async function alumnosSinMensajes(req, res, next) {
   try {
     const q = await quienYAmbito(req);
+    const lista = await alumnos.sinMensajes(q.todas ? { projectIds: q.projectIds } : { tutorId: q.tutorId });
     res.json({ success: true, data: {
-      alumnos: await alumnos.sinMensajes(q.todas ? { projectIds: q.projectIds } : { tutorId: q.tutorId }),
+      alumnos: lista, total: totalDe(lista),
       diasAmbar: alumnos.DIAS_AMBAR, diasRojo: alumnos.DIAS_ROJO,
     } });
   } catch (err) { next(err); }

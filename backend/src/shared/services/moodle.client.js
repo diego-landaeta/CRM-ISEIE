@@ -248,6 +248,16 @@ export async function cursosDe(conexion, moodleUserId, opciones) {
   return (Array.isArray(r) ? r : []).map((c) => ({ id: Number(c.id), nombre: c.fullname || c.shortname || null }));
 }
 
+/** Roles (nombre corto) del equipo del curso: quien tiene uno de estos no es alumno. */
+export const ROLES_DE_EQUIPO = new Set(['editingteacher', 'teacher', 'manager', 'coursecreator']);
+
+/**
+ * ¿Es alumno del curso? Quien tiene algún rol y ninguno del equipo, aunque su rol no se
+ * llame «student» (un campus puede tener «alumno» u otro rol propio). Es el mismo criterio
+ * que «Mi campus» en el CRM 360 (cuando llegue aquí, que lo use desde este módulo).
+ */
+export const esAlumno = (g) => (g.roles || []).length > 0 && !g.roles.some((r) => ROLES_DE_EQUIPO.has(r));
+
 /**
  * Los matriculados ACTIVOS de un curso, con su rol y su último acceso. Solo
  * activos (decisión 8: fuera bajas): `onlyactive`.

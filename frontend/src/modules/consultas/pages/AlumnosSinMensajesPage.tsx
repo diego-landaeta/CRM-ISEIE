@@ -81,6 +81,8 @@ export default function AlumnosSinMensajesPage() {
   };
   const [vista, setVista] = useState<'mias' | 'todas'>(esTutor ? 'mias' : 'todas');
   const [lista, setLista] = useState<AlumnoSinMensajes[]>([]);
+  // Cuántos hay aunque la lista venga recortada (el servidor trae como mucho 1000).
+  const [total, setTotal] = useState(0);
   const [dias, setDias] = useState({ ambar: 5, rojo: 7 });
   const [cargando, setCargando] = useState(true);
   const [abierto, setAbierto] = useState<number | null>(null);
@@ -96,10 +98,15 @@ export default function AlumnosSinMensajesPage() {
     try {
       const r = await consultasApi.alumnosSinMensajes(vista === 'todas' ? ambito : undefined);
       if (!vale()) return;
-      if (r.success && r.data) { setLista(r.data.alumnos); setDias({ ambar: r.data.diasAmbar, rojo: r.data.diasRojo }); }
+      if (r.success && r.data) {
+        setLista(r.data.alumnos);
+        setTotal(r.data.total ?? r.data.alumnos.length);
+        setDias({ ambar: r.data.diasAmbar, rojo: r.data.diasRojo });
+      }
     } catch (e) {
       if (!vale()) return;
       setLista([]);
+      setTotal(0);
       toast({ title: 'No se han podido cargar los alumnos', description: mensajeDeError(e), variant: 'destructive' });
     } finally { if (vale()) setCargando(false); }
   }, [vista, ambito, nueva]);
@@ -149,6 +156,12 @@ export default function AlumnosSinMensajesPage() {
         Días sin contacto desde la matrícula: ámbar desde el día {dias.ambar} y rojo desde el {dias.rojo}.
         La lista se actualiza con el campus una vez al día.
       </p>
+
+      {!cargando && total > lista.length && (
+        <p className="text-xs text-muted-foreground" role="status">
+          Se ven los {lista.length} más antiguos de {total}. Los demás saldrán a medida que se contacte con estos.
+        </p>
+      )}
 
       {cargando ? (
         <p className="text-sm text-muted-foreground">Cargando…</p>
