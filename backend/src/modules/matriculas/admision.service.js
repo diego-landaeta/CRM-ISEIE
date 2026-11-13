@@ -24,8 +24,10 @@ import { avisarAdmision } from './admision.aviso.js';
  *   2. Los documentos (DNI por las dos caras, foto, título, firma), como archivo,
  *      URL o imagen en texto (admision.archivos.js). La firma, transparente y
  *      recortada al trazo, como la del diploma (#349).
- *   3. Se une a la persona: su prospecto por el correo y, si no, por el teléfono;
- *      si no existe, se crea SIN GESTORA (ver `prospectoDe`). Y su venta, si la hay.
+ *   3. Se une a la persona: su prospecto por el correo y, si no, por el móvil (si
+ *      solo hay una ficha con él); si no existe, se crea SIN GESTORA (ver
+ *      `prospectoDe`). Y su venta, si la hay. Su DNI, dirección y país pasan a los
+ *      datos fiscales de la ficha que estén vacíos (`completarDatosFiscales`).
  *   4. El mismo envío dos veces no crea dos matrículas (`envio_huella`).
  *
  * Un documento que no vale (no es imagen ni PDF, pasa de 10 MB, la URL no
@@ -50,7 +52,8 @@ export const DOCUMENTOS = { dni_frente: 'dni', dni_dorso: 'dni_dorso', foto: 'fo
 const CLAVE = { dni: 'dni_doc_key', dni_dorso: 'dni_dorso_key', foto: 'foto_key', titulo: 'titulo_doc_key', firma: 'firma_key' };
 const URL_DOC = { dni: 'dni_doc_url', dni_dorso: 'dni_dorso_url', foto: 'foto_url', titulo: 'titulo_doc_url', firma: 'firma_url' };
 
-const LARGO = { nombre: 200, email: 200, telefono: 50, documento_tipo: 30, dni: 40, pais: 80, curso_solicitado: 255 };
+const LARGO = { nombre: 200, email: 200, telefono: 50, documento_tipo: 30, dni: 40, pais: 80, curso_solicitado: 255,
+  ciudad: 120, codigo_postal: 20 };
 
 /** ¿Es un archivo del multipart o una imagen en texto, no un dato? */
 const esArchivo = (v) => (v && typeof v === 'object' && !Array.isArray(v) && v.__archivo)
@@ -105,9 +108,36 @@ export function huellaDelEnvio(body, archivos = []) {
 }
 
 /**
- * El prospecto de la persona en ese campus: primero por el correo, luego por el
- * teléfono (findDuplicateByEmailOrPhone ya ordena así). Si no existe y llegan
- * nombre y correo, se crea.
+ * El móvil para compararlo: solo los dígitos y, de ellos, los 9 últimos, para que no
+ * importe el prefijo («+34 611 222 333», «0034611222333» y «611222333» son el mismo).
+ * Con menos de 7 dígitos no es un móvil y no une a nadie: null.
+ */
+export function movilNormalizado(v) {
+  const d = String(v ?? '').replace(/\D/g, '');
+  return d.length >= 7 ? d.slice(-9) : null;
+}
+/** Los dígitos de la columna, en SQL. */
+const DIGITOS_SQL = (col) => `regexp_replace(COALESCE(${col}, ''), '[^0-9]', '', 'g')`;
+
+/**
+ * Las fichas del campus con ese móvil (13/11/2026, Diego: «une por correo o móvil»):
+ * las que acaban en los mismos dígitos. Hasta dos: con una basta saber que hay más.
+ */
+async function fichasPorMovil(projectId, telefono) {
+  const movil = movilNormalizado(telefono);
+  if (!movil) return [];
+  const { rows } = await query(
+    `SELECT l.id FROM leads l
+      WHERE l.project_id = $1 AND l.deleted_at IS NULL
+        AND length(${DIGITOS_SQL('l.telefono')}) >= 7
+        AND right(${DIGITOS_SQL('l.telefono')}, $3) = $2
+      ORDER BY l.created_at DESC, l.id DESC LIMIT 2`, [projectId, movil, movil.length]);
+  return rows.map((r) => r.id);
+}
+
+/**
+ * El prospecto de la persona en ese campus: primero por el correo y, si no, por el
+ * móvil (`fichasPorMovil`). Si no existe y llegan nombre y correo, se crea.
  *
  * SIN GESTORA (decidido el 20/10, Diego lo puede cambiar): quien rellena la
  * solicitud de admisión ya se está matriculando, no hay nada que venderle. Si
@@ -117,14 +147,21 @@ export function huellaDelEnvio(body, archivos = []) {
  * solicitud sale igualmente en Matrículas, y se le puede asignar gestora a mano.
  */
 async function prospectoDe(projectId, persona, huella) {
-  // SOLO POR EL CORREO (13/11/2026). Por el teléfono, una solicitud con el teléfono de
-  // otra persona (mal escrito, o compartido en una familia o una centralita) quedaba en
-  // la ficha de esa otra persona, con el DNI y la firma a la vista de su gestora. Pasó
-  // en las pruebas del 13/11 con dos fichas reales. Carlos pidió «que se sincronicen
-  // con el mail». Sin correo, la solicitud queda sin ficha y se vincula a mano.
-  if (!persona.email) return { leadId: null, creado: false };
-  const existente = await leadModel.findDuplicateByEmailOrPhone(persona.email, null, projectId);
-  if (existente) return { leadId: existente.id, creado: false };
+  // POR EL CORREO Y, SI NO, POR EL MÓVIL (13/11/2026). Una solicitud con el teléfono
+  // de otra persona (mal escrito, o compartido en una familia o una centralita) puede
+  // caer en la ficha de esa otra persona, con el DNI y la firma a la vista de su
+  // gestora: pasó en las pruebas del 13/11 con dos fichas reales, y por eso se quitó.
+  // Diego lo vuelve a pedir («une por correo o móvil»), con dos frenos: el correo
+  // manda (se mira antes) y, si el móvil está en MÁS DE UNA ficha del campus, no se
+  // une a ninguna, porque no hay forma de saber cuál es; queda la nota en `interno`.
+  if (persona.email) {
+    const existente = await leadModel.findDuplicateByEmailOrPhone(persona.email, null, projectId);
+    if (existente) return { leadId: existente.id, creado: false, por: 'correo' };
+  }
+  const porMovil = await fichasPorMovil(projectId, persona.telefono);
+  if (porMovil.length === 1) return { leadId: porMovil[0], creado: false, por: 'movil' };
+  // Tampoco se crea otra ficha con ese móvil: se vincula a mano a la que sea.
+  if (porMovil.length > 1) return { leadId: null, creado: false, nota: 'movil_en_varias_fichas' };
   if (!persona.nombre || !persona.email) return { leadId: null, creado: false };
   const lead = await leadModel.createLeadWithRoundRobin({
     projectId,
@@ -140,6 +177,34 @@ async function prospectoDe(projectId, persona, huella) {
     idempotencyKey: `admision:${huella}`,
   });
   return { leadId: lead.id, creado: true };
+}
+
+/**
+ * Los datos de la solicitud a la ficha fiscal (13/11/2026): el documento, la
+ * dirección, la ciudad, el código postal y el país, SOLO en los que estén vacíos.
+ * Nunca se escribe encima de lo que ya tiene: lo puso la gestora o salió en una
+ * factura, y una solicitud con una errata no lo puede cambiar.
+ *
+ * El país tiene «España» por defecto en la base (migración 090), así que en casi
+ * todas las fichas nunca está vacío. Se cambia solo si sigue con ese valor y la ficha
+ * no tiene ni documento ni dirección fiscal: nadie ha rellenado sus datos fiscales.
+ */
+export async function completarDatosFiscales(leadId, datos) {
+  const v = (x) => (x == null || x === '' ? null : x);
+  const { rowCount } = await query(
+    `UPDATE leads SET
+       identificacion_fiscal = CASE WHEN NULLIF(btrim(identificacion_fiscal), '') IS NULL THEN COALESCE($2, identificacion_fiscal) ELSE identificacion_fiscal END,
+       direccion_fiscal      = CASE WHEN NULLIF(btrim(direccion_fiscal), '') IS NULL THEN COALESCE($3, direccion_fiscal) ELSE direccion_fiscal END,
+       ciudad_fiscal         = CASE WHEN NULLIF(btrim(ciudad_fiscal), '') IS NULL THEN COALESCE($4, ciudad_fiscal) ELSE ciudad_fiscal END,
+       codigo_postal_fiscal  = CASE WHEN NULLIF(btrim(codigo_postal_fiscal), '') IS NULL THEN COALESCE($5, codigo_postal_fiscal) ELSE codigo_postal_fiscal END,
+       pais_fiscal           = CASE WHEN NULLIF(btrim(pais_fiscal), '') IS NULL
+                                      OR (pais_fiscal = 'España' AND NULLIF(btrim(identificacion_fiscal), '') IS NULL
+                                          AND NULLIF(btrim(direccion_fiscal), '') IS NULL)
+                                    THEN COALESCE($6, pais_fiscal) ELSE pais_fiscal END
+     WHERE id = $1 AND deleted_at IS NULL
+       AND COALESCE($2, $3, $4, $5, $6) IS NOT NULL`,
+    [leadId, v(datos.dni), v(datos.direccion), v(datos.ciudad), v(datos.codigo_postal), v(datos.pais)]);
+  return rowCount > 0;
 }
 
 /** La venta de ese prospecto en ese campus que aún no tiene matrícula (la más reciente). */
@@ -241,6 +306,9 @@ export async function recibirAdmision(token, body, archivos = [], opcionesArchiv
   }
   if (persona.email) persona.email = persona.email.toLowerCase();
   persona.fecha_nacimiento = fechaDeNacimiento(mapeado.fecha_nacimiento);
+  // La ciudad y el código postal no tienen columna en la matrícula (van en el envío):
+  // solo para los datos fiscales de la ficha (`completarDatosFiscales`).
+  const fiscal = { ciudad: texto(mapeado.ciudad, 'ciudad'), codigo_postal: texto(mapeado.codigo_postal, 'codigo_postal') };
 
   // Los documentos, ANTES de mirar si la persona ya existe (ver RESPUESTA_FIJA_MS), a la
   // vez (un formulario puede mandar cinco enlaces: uno detrás de otro, la web daba el
@@ -281,6 +349,14 @@ export async function recibirAdmision(token, body, archivos = [], opcionesArchiv
   } catch (err) {
     // Sin prospecto la solicitud se guarda igual; se puede vincular después.
     logger.warn({ err: err.message, projectId }, 'Admisión: no se pudo unir ni crear el prospecto');
+  }
+  if (prospecto.leadId) {
+    try {
+      await completarDatosFiscales(prospecto.leadId, { ...persona, ...fiscal });
+    } catch (err) {
+      // La solicitud se guarda igual: los datos fiscales se pueden poner a mano.
+      logger.warn({ err: err.message, projectId, leadId: prospecto.leadId }, 'Admisión: no se pudieron pasar los datos fiscales a la ficha');
+    }
   }
   let conversionId = await ventaDe(projectId, prospecto.leadId);
 
@@ -346,6 +422,8 @@ export async function recibirAdmision(token, body, archivos = [], opcionesArchiv
     accion: 'created',
     leadId: prospecto.leadId,
     leadCreado: prospecto.creado,
+    unidaPor: prospecto.por || null,
+    nota: prospecto.nota || null,
     conversionId,
     documentos: { guardados, rechazados },
   });

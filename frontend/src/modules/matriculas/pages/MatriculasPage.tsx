@@ -373,6 +373,8 @@ export default function MatriculasPage() {
                     {/* La empresa y el campus de cada solicitud (13/11/2026): con «Todos» o una empresa arriba
                         se mezclan campus de varias, y tiene que verse a quién pertenece cada una. */}
                     <th className="text-left px-4 py-2.5 font-bold">Empresa · campus</th>
+                    {/* La gestora de su ficha (13/11/2026: «que se puedan vincular a su gestora»). */}
+                    <th className="text-left px-4 py-2.5 font-bold">Gestora</th>
                     <th className="text-left px-4 py-2.5 font-bold">Recibida <span className="font-medium normal-case">(hora de Madrid)</span></th>
                     <th className="text-center px-4 py-2.5 font-bold">Estado</th>
                     <th className="text-left px-4 py-2.5 font-bold">Documentos</th>
@@ -391,6 +393,9 @@ export default function MatriculasPage() {
                       <td className="px-4 py-3 text-xs">
                         <div className="font-semibold">{m.empresa_nombre || 'Sin empresa'}</div>
                         <div className="text-muted-foreground">{m.campus_nombre || '—'}</div>
+                      </td>
+                      <td className="px-4 py-3 text-xs">
+                        {m.gestora_nombre || <span className="text-muted-foreground">Sin gestora</span>}
                       </td>
                       <td className="px-4 py-3 text-xs tabular-nums whitespace-nowrap">{enHoraDeMadrid(m.recibida_at)}</td>
                       <td className="px-4 py-3 text-center">
@@ -427,6 +432,7 @@ export default function MatriculasPage() {
                     <p className="text-[11px] text-muted-foreground truncate">
                       {m.curso || 'Sin curso'}{m.campus_nombre ? ` · ${m.campus_nombre}` : ''}{m.empresa_nombre ? ` · ${m.empresa_nombre}` : ''}
                     </p>
+                    <p className="text-[11px] text-muted-foreground truncate">{m.gestora_nombre ? `Gestora: ${m.gestora_nombre}` : 'Sin gestora'}</p>
                     <div className="flex items-center gap-3 text-[11px] pt-0.5">
                       <Documentos documentos={m.documentos} />
                       <Venta conversionId={m.conversion_id} />
@@ -464,7 +470,8 @@ export default function MatriculasPage() {
           clave con el estado vuelve a montar la ficha con lo nuevo tras validar. */}
       {detail && (
         <MatriculaDetail key={`${detail.id}-${detail.estado}`} matricula={detail} onClose={cerrarFicha} onChange={() => load()}
-          onEstado={tieneRol('superadmin', 'admin') ? handleEstado : undefined} pausada={!!rechazoTarget} />
+          onEstado={tieneRol('superadmin', 'admin') ? handleEstado : undefined} pausada={!!rechazoTarget}
+          puedeAsignar={can('leads.assign')} verFacturas={can('facturas.view')} />
       )}
       <PromptDialog
         open={!!rechazoTarget}
