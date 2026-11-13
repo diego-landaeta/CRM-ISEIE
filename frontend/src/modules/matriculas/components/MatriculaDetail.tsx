@@ -451,12 +451,15 @@ export default function MatriculaDetail({ matricula, onClose, onChange, onEstado
                 <div><dt className="text-[11px] text-muted-foreground">Venta</dt>
                   <dd>{m.conversion_id ? <Link to={`/ventas/${m.conversion_id}`} className="text-primary hover:underline inline-flex items-center gap-1">Ver venta <ArrowSquareOut size={12} /></Link> : <span className="text-muted-foreground">Sin venta</span>}</dd></div>
                 <div><dt className="text-[11px] text-muted-foreground">Gestora</dt>
-                  <dd className="truncate">
-                    {m.gestora_nombre || <span className="text-muted-foreground">Sin gestora</span>}
+                  {/* El nombre, recortado en su línea; el botón, debajo: dentro del recorte quedaba tapado. */}
+                  <dd className="min-w-0">
+                    <span className="block truncate" title={m.gestora_nombre || undefined}>
+                      {m.gestora_nombre || <span className="text-muted-foreground">Sin gestora</span>}
+                    </span>
                     {/* Sin ficha no hay a quién asignarla: primero se vincula al prospecto. */}
                     {puedeAsignar && m.lead_id && !eligiendo && (
                       <button type="button" onClick={() => setEligiendo(true)}
-                        className="ml-2 text-xs font-semibold text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-primary/40 rounded">
+                        className="mt-0.5 text-xs font-semibold text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-primary/40 rounded">
                         {m.gestora_id ? 'Cambiar' : 'Asignar'}
                       </button>
                     )}
