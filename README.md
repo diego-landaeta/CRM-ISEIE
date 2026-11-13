@@ -113,7 +113,7 @@ esa lista o parecerá que no funciona.
 
 ## Empezar en tu equipo
 
-Hacen falta **Node 20 o superior**, **Docker** y **git**. Ni acceso al servidor,
+Hacen falta **Node 22 o superior** (producción y CI usan el 24; versión en `.nvmrc`), **Docker** y **git**. Ni acceso al servidor,
 ni credenciales de producción.
 
 ```bash
