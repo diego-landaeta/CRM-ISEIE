@@ -117,8 +117,13 @@ export function huellaDelEnvio(body, archivos = []) {
  * solicitud sale igualmente en Matrículas, y se le puede asignar gestora a mano.
  */
 async function prospectoDe(projectId, persona, huella) {
-  if (!persona.email && !persona.telefono) return { leadId: null, creado: false };
-  const existente = await leadModel.findDuplicateByEmailOrPhone(persona.email, persona.telefono, projectId);
+  // SOLO POR EL CORREO (13/11/2026). Por el teléfono, una solicitud con el teléfono de
+  // otra persona (mal escrito, o compartido en una familia o una centralita) quedaba en
+  // la ficha de esa otra persona, con el DNI y la firma a la vista de su gestora. Pasó
+  // en las pruebas del 13/11 con dos fichas reales. Carlos pidió «que se sincronicen
+  // con el mail». Sin correo, la solicitud queda sin ficha y se vincula a mano.
+  if (!persona.email) return { leadId: null, creado: false };
+  const existente = await leadModel.findDuplicateByEmailOrPhone(persona.email, null, projectId);
   if (existente) return { leadId: existente.id, creado: false };
   if (!persona.nombre || !persona.email) return { leadId: null, creado: false };
   const lead = await leadModel.createLeadWithRoundRobin({
