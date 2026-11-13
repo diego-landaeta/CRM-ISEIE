@@ -86,6 +86,12 @@ describe('el registro', () => {
     expect(await model.ultimasReversionesDe([])).toEqual(new Map());
   });
 
+  it('de una lista de números, dice cuáles están apuntados', async () => {
+    const ya = await model.reversionesApuntadas([EXP(1), EXP(2), EXP(8), null, EXP(1)]);
+    expect([...ya].sort()).toEqual([EXP(1), EXP(2)]);
+    expect(await model.reversionesApuntadas([])).toEqual(new Set());
+  });
+
   it('sin hora de Certifex, se apunta con la de ahora', async () => {
     const antes = Date.now();
     const r = await model.apuntarReversion(base({ nexpediente: EXP(4), revertidoEn: null }));

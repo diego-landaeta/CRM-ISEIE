@@ -61,6 +61,12 @@ export interface ConexionCertifex {
 
 /** Una matrícula de Certifex a decidir (o ya decidida). Contrato: docs/integracion-crm.md. */
 export interface Candidato {
+  /**
+   * #351, prevención: el programa que se imprimiría si se emite ahora y lo revisado a mano.
+   * Lo traen Diplomas y Emisiones en lo que no tiene título; sin el dato, no se sabe.
+   */
+  programaCrm?: ProgramaDelCrm | null;
+  edicion?: EdicionSolicitud | null;
   matriculaId: number;
   centro: string;
   /** `dni`: el DNI / NIE / pasaporte que se imprime. Obligatorio para emitir (Diego, 20/10). */
@@ -186,9 +192,10 @@ export const emisionesApi = {
   estado: () => client.get('/certifex/emisiones/estado') as R<ConexionCertifex>,
   centros: () => client.get('/certifex/emisiones/centros') as R<CampusCertifex[]>,
   cursos: (centro: string) => client.get(`/certifex/emisiones/cursos?centro=${encodeURIComponent(centro)}`) as R<CursoCertifex[]>,
-  listar: (f: { estado?: EstadoEmision; centro?: string; pagina?: number; curso?: number; q?: string } = {}) => {
+  /** `conPrograma` (#351, prevención): que cada fila sin título traiga `programaCrm` y `edicion`. */
+  listar: (f: { estado?: EstadoEmision; centro?: string; pagina?: number; curso?: number; q?: string; conPrograma?: boolean } = {}) => {
     const p = new URLSearchParams();
-    for (const [k, v] of Object.entries(f)) if (v) p.set(k, String(v));
+    for (const [k, v] of Object.entries(f)) if (v) p.set(k, k === 'conPrograma' ? '1' : String(v));
     return client.get(`/certifex/emisiones?${p.toString()}`) as R<PaginaCandidatos>;
   },
   decidir: (items: { matriculaId: number; decision: 'aprobada' | 'rechazada'; motivo?: string | null }[]) =>

@@ -7,6 +7,7 @@ import { config, urlPublica, direccionPublica, certifex, recorrer } from './cert
 import { alcanceDe, centrosPermitidos, acotar, exigirCentro, exigirMatriculas, exigirExpedientes } from './certifex.alcance.js';
 import { datosPara, emitirMatriculas } from './certifex.emision.js';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
+import { conEdicion, conProgramaCrm } from './certifex.diplomas.js';
 
 export { certifex };
 
@@ -66,7 +67,7 @@ export async function estado(req, res, next) {
 
 export async function listar(req, res, next) {
   try {
-    const f = parsear(listarEmisionesSchema, req.query);
+    const { conPrograma, ...f } = parsear(listarEmisionesSchema, req.query);
     const ambito = acotar(await alcanceDe(req.user), f.centro);
     const pagina = f.pagina ?? 1;
     const tam = f.tam ?? 50;
@@ -82,6 +83,17 @@ export async function listar(req, res, next) {
       const p = new URLSearchParams();
       for (const [k, v] of Object.entries({ ...f, centro: ambito.centro ?? f.centro })) if (v !== undefined) p.set(k, String(v));
       data = await certifex('GET', `/candidatos?${p.toString()}`);
+    }
+    if (Array.isArray(data?.filas) && conPrograma === '1') {
+      // #351, prevención: lo revisado a mano y el programa que se imprimiría si se emite
+      // ahora, como en Diplomas, para avisar antes de «Aprobar y emitir» lo que saldría «Con
+      // lo de Moodle». Si no se puede saber, el listado sale igual, sin el dato.
+      try {
+        await conEdicion(data.filas);
+        await conProgramaCrm(data.filas);
+      } catch (e) {
+        logger.warn({ err: e.message }, 'Certifex: no se pudo saber el programa de Emisiones');
+      }
     }
     if (Array.isArray(data?.filas)) await conLoDelCrm(data.filas, req.user);
     res.json({ success: true, data });

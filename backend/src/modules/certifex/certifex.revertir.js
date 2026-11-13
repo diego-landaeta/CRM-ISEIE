@@ -134,6 +134,37 @@ async function apuntarDesdeCertifex(dip) {
 }
 
 /**
+ * Lo que Certifex tiene revertido en estos campus y el CRM no tiene apuntado (Certifex lo
+ * hizo pero el apunte del CRM falló, o se cortó la respuesta): se apunta ahora, con lo que
+ * dice Certifex (quién, cuándo, por qué y la matrícula). Así el registro del CRM no pierde
+ * ninguna (#351: «queda en el CRM y en Certifex quién, cuándo, por qué y qué número»).
+ *
+ * Solo con un Certifex que ya revierte y con la tabla del CRM puesta; lo más reciente (una
+ * página de 200). Nada de esto impide ver el listado: si falla, queda en el log.
+ */
+export async function completarReversiones(ambito) {
+  try {
+    if (ambito?.vacio) return;
+    if (!(await model.tablaReversionesExiste())) return;
+    if (!(await certifexTieneRuta('/revertir'))) return;
+    const params = { estado: 'anulados', pagina: '1', tam: '200' };
+    if (ambito?.centro) params.centro = ambito.centro;
+    const d = await certifex('GET', `/diplomas?${new URLSearchParams(params)}`);
+    const filas = (Array.isArray(d?.filas) ? d.filas : [])
+      .filter((f) => f?.anulada && f.nexpediente && (!ambito?.centros || ambito.centros.has(String(f.centro).toUpperCase())));
+    if (!filas.length) return;
+    const ya = await model.reversionesApuntadas(filas.map((f) => f.nexpediente));
+    for (const f of filas) {
+      if (ya.has(f.nexpediente)) continue;
+      await apuntarDesdeCertifex(f);
+      logger.warn({ nexpediente: f.nexpediente }, 'Certifex: reversión que faltaba en el CRM, apuntada ahora');
+    }
+  } catch (e) {
+    logger.warn({ err: e.message }, 'Certifex: no se pudieron completar las reversiones');
+  }
+}
+
+/**
  * Para «Aprobados sin diploma»: la última reversión de cada matrícula (`revertido`), o
  * null. Si la base no contesta, el listado sale igual, sin el dato.
  */

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowClockwise, ArrowSquareOut, Books, Buildings, CaretDown, Certificate, CheckCircle, DownloadSimple,
-  GraduationCap, HourglassMedium, Lightning, PlugsConnected, SealCheck, X, XCircle,
+  GraduationCap, HourglassMedium, Lightning, NotePencil, PlugsConnected, SealCheck, Warning, X, XCircle,
 } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
 import PageHeader from '@/shared/components/ui/PageHeader';
@@ -284,7 +284,7 @@ export default function CertifexEmisionesPage({ embebida = false }: { embebida?:
     if (!centro) return;
     setCargandoFilas(true);
     try {
-      const r = await emisionesApi.listar({ estado, centro, curso: curso ?? undefined, q: q || undefined, pagina });
+      const r = await emisionesApi.listar({ estado, centro, curso: curso ?? undefined, q: q || undefined, pagina, conPrograma: true });
       setFilas(r.data.filas);
       setTotal(r.data.total);
       setTam(r.data.tam);
@@ -311,6 +311,27 @@ export default function CertifexEmisionesPage({ embebida = false }: { embebida?:
   const seleccion = [...elegidas].map((id) => porId.get(id)).filter((c): c is Candidato => !!c);
   const emitibles = seleccion.filter((c) => c.decision?.decision === 'aprobada' && !c.nexpediente);
   const sinTitulo = seleccion.filter((c) => !c.nexpediente);
+  /**
+   * #351, prevención (la misma regla que Diplomas): de lo que se va a emitir, lo que
+   * saldría sin el temario oficial de la formación vendida —«Con lo de Moodle»: sin programa
+   * del CRM, o con sus horas pero sin módulos— y lo que NO se emitirá (revisado a mano y
+   * aun así sin programa: el servidor no lo emite). Sin el dato, no se dice nada.
+   */
+  const avisosDeTemario = (ids: number[]) => {
+    const noSeEmitiran: Candidato[] = [];
+    const sinTemario: Candidato[] = [];
+    for (const id of ids) {
+      const c = porId.get(id);
+      if (!c || c.programaCrm === undefined) continue;
+      const p = c.programaCrm?.programa;
+      if (!p && c.edicion) noSeEmitiran.push(c);
+      else if (!p || p.modulos.length === 0) sinTemario.push(c);
+    }
+    return { noSeEmitiran, sinTemario };
+  };
+  /** «Editar» vive en Diplomas: se abre allí, con esa solicitud ya buscada. */
+  const enDiplomas = (c: Candidato) =>
+    `${import.meta.env.BASE_URL}clientes/matriculas/diplomas?buscar=${encodeURIComponent(c.titular.email || c.titular.nombre || '')}`;
   const todasElegidas = filas.length > 0 && filas.every((f) => elegidas.has(f.matriculaId));
   const paginas = Math.max(1, Math.ceil(total / tam));
   const nombre = (id: number | null) => {
@@ -765,6 +786,53 @@ export default function CertifexEmisionesPage({ embebida = false }: { embebida?:
               ? <>Todo lo aprobado y sin título de <strong>{cursoElegido?.cursoNombre ?? elegido?.nombre}</strong>. </>
               : accion?.tipo === 'aprobarEmitir' ? 'Se aprueban y se emiten en Certifex. ' : 'Se emiten en Certifex. '}
             Cada título gasta un número de expediente en un registro que <strong>no se borra</strong>: si luego resulta que no tocaba, solo se puede revocar. Queda a tu nombre.
+            {/* #351, prevención: lo que saldría «Con lo de Moodle», dicho antes y con «Editar». */}
+            {(accion?.tipo === 'aprobarEmitir' || accion?.tipo === 'emitir') && (() => {
+              const { noSeEmitiran, sinTemario } = avisosDeTemario(accion.ids);
+              const lista = (cs: Candidato[]) => (
+                <ul className="mt-1.5 max-h-36 space-y-1 overflow-y-auto">
+                  {cs.slice(0, 5).map((c) => (
+                    <li key={c.matriculaId} className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <span className="min-w-0 truncate">{c.titular.nombre ?? c.titular.email} · {c.curso.nombre}{c.programaCrm?.motivo ? ` · ${c.programaCrm.motivo}` : ''}</span>
+                      <Button asChild size="sm" variant="outline">
+                        <a href={enDiplomas(c)} target="_blank" rel="noreferrer noopener" aria-label={`Editar los datos de ${c.titular.nombre ?? c.titular.email} en Diplomas antes de emitir`}>
+                          <NotePencil size={14} className="mr-1.5" /> Editar
+                        </a>
+                      </Button>
+                    </li>
+                  ))}
+                  {cs.length > 5 && <li className="text-xs text-muted-foreground">y {cs.length - 5} más.</li>}
+                </ul>
+              );
+              return (
+                <>
+                  {noSeEmitiran.length > 0 && (
+                    <div className="mt-3 rounded-md border border-destructive/30 bg-destructive-soft px-3 py-2 text-foreground" role="note">
+                      <p className="flex items-start gap-1.5 font-semibold text-destructive-soft-foreground">
+                        <Warning size={16} className="mt-0.5 flex-none" />
+                        {noSeEmitiran.length === 1 ? 'No se emitirá' : `${noSeEmitiran.length} no se emitirán`}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {noSeEmitiran.length === 1 ? 'Tiene' : 'Tienen'} datos revisados a mano y con ellos no sale el programa. Revísalo con «Editar» (en Diplomas): elige la formación o escribe el temario.
+                      </p>
+                      {lista(noSeEmitiran)}
+                    </div>
+                  )}
+                  {sinTemario.length > 0 && (
+                    <div className="mt-3 rounded-md border border-border bg-warning-soft/40 px-3 py-2 text-foreground" role="note">
+                      <p className="flex items-start gap-1.5 font-semibold">
+                        <Warning size={16} className="mt-0.5 flex-none text-warning-soft-foreground" />
+                        {sinTemario.length === 1 ? 'Saldrá «Con lo de Moodle»' : `${sinTemario.length} saldrán «Con lo de Moodle»`}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {sinTemario.length === 1 ? 'No tiene' : 'No tienen'} el temario de la formación vendida: el diploma llevaría las actividades del curso de Moodle en su lugar. Si no es lo que quieres, elige la formación con «Editar» (en Diplomas) antes de emitir.
+                      </p>
+                      {lista(sinTemario)}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </>
         }
         confirmLabel="Emitir"

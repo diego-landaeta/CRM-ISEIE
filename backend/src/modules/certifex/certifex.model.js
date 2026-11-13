@@ -502,6 +502,14 @@ export async function apuntarReversion(r) {
   return ya[0] ? { ...filaReversion(ya[0]), nueva: false } : null;
 }
 
+/** De esos números, los que ya están apuntados (Set). */
+export async function reversionesApuntadas(nexpedientes) {
+  const lista = [...new Set((nexpedientes ?? []).filter(Boolean).map(String))];
+  if (!lista.length) return new Set();
+  const { rows } = await query('SELECT nexpediente FROM certifex_reversiones WHERE nexpediente = ANY($1::text[])', [lista]);
+  return new Set(rows.map((r) => r.nexpediente));
+}
+
 /** ¿Está apuntado este número? */
 export async function reversionDe(nexpediente) {
   const { rows } = await query('SELECT * FROM certifex_reversiones WHERE nexpediente = $1', [nexpediente]);

@@ -96,6 +96,9 @@ export const listarEmisionesSchema = z.object({
   tam: z.coerce.number().int().positive().max(200).optional(),
   curso: z.coerce.number().int().optional(),
   q: z.string().trim().max(100).optional(),
+  // #351, prevención: con `conPrograma=1`, cada fila sin título trae el programa que se
+  // imprimiría (`programaCrm`) y lo revisado a mano (`edicion`). Sin él, como siempre.
+  conPrograma: z.enum(['0', '1']).optional(),
 });
 
 export const cursosSchema = z.object({

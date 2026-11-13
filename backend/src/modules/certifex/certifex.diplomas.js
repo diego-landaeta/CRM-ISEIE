@@ -9,7 +9,7 @@ import { certifex, recorrer } from './certifex.cliente.js';
 import { alcanceDe, acotar, exigirCentro, exigirExpedientes, NO_ENCONTRADA } from './certifex.alcance.js';
 import { prepararEmision, emitirConPrograma, emitirMatriculas, resultadoBloqueado } from './certifex.emision.js';
 import { conDestinatario } from './certifex.envios.js';
-import { conReversiones } from './certifex.revertir.js';
+import { completarReversiones, conReversiones } from './certifex.revertir.js';
 import { conFirma, correoDe, firmaTransparente, guardarFirmaSubida, origenesDeFirma, pngDe } from './certifex.firma.js';
 import {
   listarSolicitudesSchema, listarDiplomasSchema, porAvisarSchema, aprobarEmitirSchema, rechazarSchema, emitirDiplomasSchema,
@@ -133,7 +133,7 @@ export async function solicitudes(req, res, next) {
  * formacion elegida y el programa editado, con quien y cuando. null si no hay nada.
  * Si la base no contesta, el listado sale igual, sin ediciones.
  */
-async function conEdicion(filas) {
+export async function conEdicion(filas) {
   const sinTitulo = filas.filter((c) => !c.nexpediente);
   for (const c of filas) c.edicion = null;
   if (!sinTitulo.length) return;
@@ -149,7 +149,7 @@ async function conEdicion(filas) {
  * El programa que se imprimiria si se emite ahora (`programaCrm`): el de la formacion
  * vendida, o null con el motivo. Es lo que se revisa antes de aprobar.
  */
-async function conProgramaCrm(filas) {
+export async function conProgramaCrm(filas) {
   const sinTitulo = filas.filter((c) => !c.nexpediente);
   for (const c of filas) c.programaCrm = null;
   const m = await programasPara(sinTitulo.map(datosDeCandidato));
@@ -213,6 +213,7 @@ export async function porAvisar(req, res, next) {
     await conLoDelCrm([...data.porAvisar, ...data.sinEmitir], req.user);
     await conProgramaCrm(data.sinEmitir);
     // #351: lo que vuelve aquí tras «Revertir» dice qué número se anuló, quién y por qué.
+    await completarReversiones(ambito);
     await conReversiones(data.sinEmitir);
     res.json({ success: true, data });
   } catch (err) { next(err); }

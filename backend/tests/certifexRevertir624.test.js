@@ -46,6 +46,9 @@ vi.mock('../src/shared/config/db.js', () => {
       registro.push(r);
       return { rows: [fila(r)] };
     }
+    if (/SELECT nexpediente FROM certifex_reversiones WHERE nexpediente = ANY/.test(text)) {
+      return { rows: registro.filter((x) => params[0].includes(x.nexpediente)).map((x) => ({ nexpediente: x.nexpediente })) };
+    }
     if (/SELECT \* FROM certifex_reversiones WHERE nexpediente = \$1/.test(text)) {
       return { rows: registro.filter((x) => x.nexpediente === params[0]).map(fila) };
     }
@@ -323,6 +326,57 @@ describe('GET /api/certifex/diplomas/revertir (¿se puede usar?)', () => {
     const r = await disp();
     expect(r.body.data.disponible).toBe(false);
     expect(r.body.data.motivo).toMatch(/base del CRM/);
+  });
+});
+
+describe('«por avisar»: lo que Certifex revirtió y el CRM no apuntó, se apunta', () => {
+  const porAvisar = () => request.get('/api/certifex/diplomas/por-avisar').set('Authorization', `Bearer ${ADMIN}`);
+
+  it('al cargar, apunta la reversión que faltaba, con su matrícula, una sola vez', async () => {
+    expect((await porAvisar()).status).toBe(200);
+    expect(registro).toEqual([expect.objectContaining({ nexpediente: EXP_ANULADO, matricula_id: 105, revertido_por_email: 'pepe@prueba.test', motivo: 'temario de Moodle' })]);
+    expect((await porAvisar()).status).toBe(200);
+    expect(registro).toHaveLength(1);
+  });
+
+  it('lo de un campus que no es suyo no lo apunta', async () => {
+    DIPLOMAS = DIPLOMAS.map((d) => (d.nexpediente === EXP_ANULADO ? { ...d, centro: 'ISEIE' } : d));
+    expect((await porAvisar()).status).toBe(200);
+    expect(registro).toHaveLength(0);
+  });
+
+  it('con un Certifex que aún no revierte, ni lo pregunta; y si algo falla, el listado sale igual', async () => {
+    conRuta = false;
+    expect((await porAvisar()).status).toBe(200);
+    expect(pedidas.some((p) => p.ruta === '/diplomas' && p.query.estado === 'anulados')).toBe(false);
+    conRuta = true;
+    olvidarCapacidades();
+    fallaApunte = true;
+    expect((await porAvisar()).status).toBe(200);
+    expect(registro).toHaveLength(0);
+  });
+});
+
+describe('Emisiones trae lo que se imprimiría (punto 3, prevención)', () => {
+  it('cada fila sin título trae `programaCrm` y `edicion`, como Diplomas; con título, no se calcula', async () => {
+    CANDIDATOS = [candidato(101, null), candidato(102, EXP_ENVIADO)];
+    const r = await request.get('/api/certifex/emisiones?estado=aprobada&centro=PSIKO&conPrograma=1').set('Authorization', `Bearer ${ADMIN}`);
+    expect(r.status).toBe(200);
+    const [sin, con] = [r.body.data.filas.find((c) => c.matriculaId === 101), r.body.data.filas.find((c) => c.matriculaId === 102)];
+    // Sin venta en el CRM de mentira: sin programa, con su motivo (es lo que se avisa).
+    expect(sin.programaCrm).toMatchObject({ programa: null });
+    expect(sin.edicion).toBeNull();
+    expect(con.programaCrm).toBeNull();
+    // A Certifex no le llega el parámetro: es del CRM.
+    expect(pedidas.filter((p) => p.ruta === '/candidatos').every((p) => !('conPrograma' in p.query))).toBe(true);
+  });
+
+  it('sin `conPrograma`, el listado es el de siempre (sin esos campos)', async () => {
+    CANDIDATOS = [candidato(101, null)];
+    const r = await request.get('/api/certifex/emisiones?estado=aprobada&centro=PSIKO').set('Authorization', `Bearer ${ADMIN}`);
+    expect(r.status).toBe(200);
+    expect(r.body.data.filas[0]).not.toHaveProperty('programaCrm');
+    expect(r.body.data.filas[0]).not.toHaveProperty('edicion');
   });
 });
 
