@@ -34,7 +34,7 @@ const { errorHandler } = await import('../src/shared/middleware/errorHandler.js'
 const tokenModel = await import('../src/modules/webhook-tokens/token.model.js');
 const matriculaModel = await import('../src/modules/matriculas/matricula.model.js');
 const { obtenerArchivo, desdeUrl, ipPrivada, tipoReal } = await import('../src/modules/matriculas/admision.archivos.js');
-const { fechaDeNacimiento } = await import('../src/modules/matriculas/admision.service.js');
+const { fechaDeNacimiento, documentoNormalizado } = await import('../src/modules/matriculas/admision.service.js');
 const certifexModel = await import('../src/modules/certifex/certifex.model.js');
 
 const app = express();
@@ -87,6 +87,7 @@ beforeAll(async () => {
 afterAll(async () => {
   fs.rmSync(CARPETA, { recursive: true, force: true });
   await q(`DELETE FROM matriculas WHERE project_id = $1`, [PROYECTO.id]);
+  await q(`DELETE FROM invoices WHERE project_id = $1`, [PROYECTO.id]);
   await q(`DELETE FROM conversions WHERE project_id = $1`, [PROYECTO.id]);
   await q(`DELETE FROM leads WHERE project_id = $1`, [PROYECTO.id]);
   await q(`DELETE FROM project_webhook_tokens WHERE project_id = $1`, [PROYECTO.id]);
@@ -364,6 +365,72 @@ describe('se une a la persona («que se sincronicen con el mail»)', () => {
       lead_id: m.lead_id, project_id: PROYECTO.id, producto_contratado: 'Curso Tardío', importe_total: 300, importe_pagado: 0,
     });
     expect((await matricula(m.id)).conversion_id).toBe(c.id);
+  });
+
+  it('POR EL DOCUMENTO cuando el correo no está en ninguna ficha: con puntos, guiones y minúsculas (13/11)', async () => {
+    const [l] = await q(`INSERT INTO leads (project_id, nombre, email, identificacion_fiscal, responsable_id)
+                         VALUES ($1, 'Dora Documento', $2, '41.234.567-k', $3) RETURNING id`, [PROYECTO.id, correo('dora-gestora'), GESTORA.id]);
+    // Otro correo que el que dio a su gestora, pero su documento.
+    const r = await admitir({ nombre: 'Dora', email: correo('dora-formulario'), dni: '41234567K' });
+    expect(r.interno).toMatchObject({ accion: 'created', leadId: l.id, leadCreado: false, unidaPor: 'documento' });
+    expect((await q('SELECT count(*)::int AS n FROM leads WHERE project_id = $1 AND lower(email) = $2', [PROYECTO.id, correo('dora-formulario')]))[0].n).toBe(0);
+    // Y en la lista sale con su gestora.
+    const { matriculas } = await matriculaModel.findAll({ projectId: PROYECTO.id, search: correo('dora-formulario') });
+    expect(matriculas.find((x) => x.id === r.interno.matriculaId)).toMatchObject({ gestora_id: GESTORA.id, gestora_nombre: `${MARCA} Gestora` });
+  });
+
+  it('y si ninguna ficha tiene el documento, por el NIF de una factura del campus: la ficha de su venta, y la venta', async () => {
+    const [l] = await q(`INSERT INTO leads (project_id, nombre, email) VALUES ($1, 'Fabio Factura', $2) RETURNING id`, [PROYECTO.id, correo('fabio')]);
+    const [c] = await q(`INSERT INTO conversions (lead_id, project_id, producto_contratado, importe_total) VALUES ($1, $2, 'Curso F', 500) RETURNING id`, [l.id, PROYECTO.id]);
+    // Sin lead_id en la factura, como en la carga histórica: la ficha sale de su venta.
+    await q(`INSERT INTO invoices (project_id, ano, numero, codigo, cliente_nombre, cliente_nif, cliente_direccion, cliente_ciudad, cliente_cp, cliente_pais,
+                                   items, base_imponible, total, conversion_id)
+             VALUES ($1, 2026, 1, $2, 'Fabio', 'y 7654321 g', 'Calle 1', 'Madrid', '28001', 'España', '[]'::jsonb, 500, 500, $3)`,
+    [PROYECTO.id, `${MARCA}-F1`, c.id]);
+    const r = await admitir({ nombre: 'Fabio', email: correo('fabio-otro'), dni: 'Y7654321G' });
+    expect(r.interno).toMatchObject({ leadId: l.id, unidaPor: 'documento', conversionId: c.id });
+  });
+
+  it('el correo manda sobre el documento, y un documento corto («1-2») no une a nadie', async () => {
+    const [porCorreo] = await q(`INSERT INTO leads (project_id, nombre, email) VALUES ($1, 'Carla Correo', $2) RETURNING id`, [PROYECTO.id, correo('carla')]);
+    await q(`INSERT INTO leads (project_id, nombre, email, identificacion_fiscal) VALUES ($1, 'Otra con su DNI', $2, '55555555A')`, [PROYECTO.id, correo('otra-dni')]);
+    const r = await admitir({ nombre: 'Carla', email: correo('carla'), dni: '55555555A' });
+    expect(r.interno).toMatchObject({ leadId: porCorreo.id, unidaPor: 'correo' });
+    await q(`INSERT INTO leads (project_id, nombre, email, identificacion_fiscal) VALUES ($1, 'Doc corto', $2, '12')`, [PROYECTO.id, correo('corto')]);
+    const corto = await admitir({ nombre: 'Corto', email: correo('corto-nuevo'), dni: '1-2' });
+    expect(corto.interno).toMatchObject({ leadCreado: true });
+    expect(documentoNormalizado(' 12.345.678-z ')).toBe('12345678Z');
+    expect(documentoNormalizado('1-2')).toBeNull();
+  });
+
+  it('los datos de la solicitud pasan a la ficha fiscal SOLO donde está vacía: nunca encima (13/11)', async () => {
+    const [l] = await q(`INSERT INTO leads (project_id, nombre, email, direccion_fiscal, codigo_postal_fiscal)
+                         VALUES ($1, 'Fina Fiscal', $2, 'Calle Vieja 9', '  ') RETURNING id`, [PROYECTO.id, correo('fina')]);
+    await admitir({ nombre: 'Fina', email: correo('fina'), dni: '33333333P', direccion: 'Calle Nueva 1', pais: 'México', ciudad: 'Puebla', codigo_postal: '72000' });
+    const [f] = await q('SELECT identificacion_fiscal, direccion_fiscal, ciudad_fiscal, codigo_postal_fiscal, pais_fiscal FROM leads WHERE id = $1', [l.id]);
+    expect(f).toEqual({
+      identificacion_fiscal: '33333333P', // vacío: se rellena
+      direccion_fiscal: 'Calle Vieja 9',   // ya tenía: no se toca
+      ciudad_fiscal: 'Puebla',
+      codigo_postal_fiscal: '72000',       // solo espacios cuenta como vacío
+      pais_fiscal: 'España',               // alguien rellenó sus datos fiscales: el «España» es suyo
+    });
+  });
+
+  it('el país «España» por defecto de la base sí se cambia si nadie ha rellenado los datos fiscales', async () => {
+    const r = await admitir({ nombre: 'Pablo País', email: correo('pablo'), dni: '44444444W', pais: 'Colombia' });
+    const [f] = await q('SELECT identificacion_fiscal, pais_fiscal FROM leads WHERE id = $1', [r.interno.leadId]);
+    expect(f).toEqual({ identificacion_fiscal: '44444444W', pais_fiscal: 'Colombia' });
+  });
+
+  it('la lista de Matrículas trae la gestora de la ficha, y nada si no la tiene', async () => {
+    const [l] = await q(`INSERT INTO leads (project_id, nombre, email, responsable_id) VALUES ($1, 'Gema', $2, $3) RETURNING id`, [PROYECTO.id, correo('gema'), GESTORA.id]);
+    const con = await admitir({ nombre: 'Gema', email: correo('gema') });
+    const sin = await admitir({ nombre: 'Sin Gestora', email: correo('sin-gestora') });
+    const { matriculas } = await matriculaModel.findAll({ projectId: PROYECTO.id });
+    expect(con.interno.leadId).toBe(l.id);
+    expect(matriculas.find((x) => x.id === con.interno.matriculaId)).toMatchObject({ gestora_id: GESTORA.id, gestora_nombre: `${MARCA} Gestora` });
+    expect(matriculas.find((x) => x.id === sin.interno.matriculaId)).toMatchObject({ gestora_id: null, gestora_nombre: null });
   });
 
   it('Certifex encuentra su firma por el correo mapeado (aunque el formulario no lo llame «email»)', async () => {

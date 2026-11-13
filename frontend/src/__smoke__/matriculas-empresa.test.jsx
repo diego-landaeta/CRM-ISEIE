@@ -84,7 +84,7 @@ describe('el listado sigue a la cabecera', () => {
     cabecera.value = { activeIssuerId: null, activeIssuer: null, activeProject: { id: -1 } };
     get.mockResolvedValue({ ...VACIA, data: [
       { id: 1, estado: 'solicitud_admision', lead_nombre: 'María López', lead_email: 'maria@x.es', curso: 'Máster en Psicología',
-        campus_nombre: 'ISEIE Madrid', recibida_at: '2026-10-01T09:12:00Z', conversion_id: null,
+        campus_nombre: 'ISEIE Madrid', recibida_at: '2026-10-01T09:12:00Z', conversion_id: null, gestora_nombre: 'Lucía',
         documentos: { dni_frente: true, dni_dorso: false, foto: false, titulo: false, firma: false } },
       { id: 2, estado: 'validada', lead_nombre: 'Hugo Pascual', curso: 'Máster en Logopedia', campus_nombre: 'ISEIE Bogotá',
         recibida_at: '2026-09-28T10:00:00Z', conversion_id: 44, documentos: { dni_frente: true, titulo: true, firma: true } },
@@ -92,7 +92,10 @@ describe('el listado sigue a la cabecera', () => {
     abrir();
     await screen.findAllByText('María López');
     const cabeceras = screen.getAllByRole('columnheader').map((th) => th.textContent);
-    expect(cabeceras.slice(0, 7)).toEqual(['Persona', 'Curso', 'Empresa · campus', 'Recibida (hora de Madrid)', 'Estado', 'Documentos', 'Venta']);
+    expect(cabeceras.slice(0, 8)).toEqual(['Persona', 'Curso', 'Empresa · campus', 'Gestora', 'Recibida (hora de Madrid)', 'Estado', 'Documentos', 'Venta']);
+    // La gestora de su ficha (13/11/2026), o «Sin gestora».
+    expect(screen.getAllByText('Lucía').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Sin gestora').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Máster en Psicología').length).toBeGreaterThan(0);
     expect(screen.getAllByText('ISEIE Madrid').length).toBeGreaterThan(0);
     // Documentos: los cinco de Diego, con su nombre al pasar el ratón; una marca

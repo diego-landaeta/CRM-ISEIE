@@ -38,6 +38,9 @@ const MATRICULA_TARGETS = [
   { key: 'dni', label: 'DNI / Nº de documento' },
   { key: 'fecha_nacimiento', label: 'Fecha de nacimiento' },
   { key: 'direccion', label: 'Dirección' },
+  // La ciudad y el código postal solo van a los datos fiscales de la ficha (13/11/2026).
+  { key: 'ciudad', label: 'Ciudad' },
+  { key: 'codigo_postal', label: 'Código postal' },
   { key: 'pais', label: 'País' },
   { key: 'estudios', label: 'Estudios' },
   { key: 'curso_solicitado', label: 'Curso solicitado' },
