@@ -385,9 +385,9 @@ describe('se une a la persona («que se sincronicen con el mail»)', () => {
     // Sin lead_id en la factura, como en la carga histórica: la ficha sale de su venta.
     await q(`INSERT INTO invoices (project_id, ano, numero, codigo, cliente_nombre, cliente_nif, cliente_direccion, cliente_ciudad, cliente_cp, cliente_pais,
                                    items, base_imponible, total, conversion_id)
-             VALUES ($1, 2026, 1, $2, 'Fabio', 'y 7654321 g', 'Calle 1', 'Madrid', '28001', 'España', '[]'::jsonb, 500, 500, $3)`,
+             VALUES ($1, 2026, 1, $2, 'Fabio', 'z 2468135 q', 'Calle 1', 'Madrid', '28001', 'España', '[]'::jsonb, 500, 500, $3)`,
     [PROYECTO.id, `${MARCA}-F1`, c.id]);
-    const r = await admitir({ nombre: 'Fabio', email: correo('fabio-otro'), dni: 'Y7654321G' });
+    const r = await admitir({ nombre: 'Fabio', email: correo('fabio-otro'), dni: 'Z2468135Q' });
     expect(r.interno).toMatchObject({ leadId: l.id, unidaPor: 'documento', conversionId: c.id });
   });
 
