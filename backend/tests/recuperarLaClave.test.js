@@ -214,3 +214,36 @@ describe('al poner la contraseña con el enlace', () => {
     expect(modelo.revokeAllUserTokens).not.toHaveBeenCalled();
   });
 });
+
+describe('el freno de los tutores (NO_ESCRIBIR_A_TUTORES)', () => {
+  // Sin CORREOS_A_TUTORES=1 el freno esta puesto: a un tutor no se le escribe.
+  const TUTORA = { id: 7, email: 'tutora@empresa.com', nombre: 'Tutora', role: 'tutor', roles_extra: [] };
+
+  it('a una tutora no se le genera enlace ni se le manda nada, y queda apuntado', async () => {
+    modelo.findActiveUserByEmail.mockResolvedValue(TUTORA);
+    const { res, error } = await pedirRecuperacion(TUTORA.email);
+    expect(error).toBeNull();
+    expect(modelo.setRecoveryToken).not.toHaveBeenCalled();
+    expect(enviado).not.toHaveBeenCalled();
+    expect(modelo.logActivity).toHaveBeenCalledWith(TUTORA.id, 'password_reset_frenado', null, null);
+    // Y la respuesta es la misma que para cualquier otro correo: no delata nada.
+    modelo.findActiveUserByEmail.mockResolvedValue(null);
+    const otra = await pedirRecuperacion('nadie@empresa.com');
+    expect(res.codigo).toBe(otra.res.codigo);
+    expect(res.cuerpo).toEqual(otra.res.cuerpo);
+  });
+
+  it('tambien si es tutora por un rol añadido (roles_extra)', async () => {
+    modelo.findActiveUserByEmail.mockResolvedValue({ ...TUTORA, role: 'colaborador', roles_extra: ['tutor'] });
+    await pedirRecuperacion(TUTORA.email);
+    expect(modelo.setRecoveryToken).not.toHaveBeenCalled();
+    expect(enviado).not.toHaveBeenCalled();
+  });
+
+  it('a quien no es tutor si le llega el enlace', async () => {
+    modelo.findActiveUserByEmail.mockResolvedValue({ ...LAURA, role: 'gestor', roles_extra: [] });
+    await pedirRecuperacion(LAURA.email);
+    expect(modelo.setRecoveryToken).toHaveBeenCalled();
+    expect(enviado).toHaveBeenCalled();
+  });
+});
