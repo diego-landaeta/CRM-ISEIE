@@ -18,7 +18,7 @@
 import { query } from '../../shared/config/db.js';
 import { logger } from '../../shared/utils/logger.js';
 import {
-  cursosDe, matriculadosDe, conversacionesDe, MoodleError,
+  cursosDe, matriculadosDe, conversacionesDe, MoodleError, esAlumno,
 } from '../../shared/services/moodle.client.js';
 import { conexionDelCampus } from '../tutores/tutor.campus.js';
 import { campusConConsultas, enviarAlCampus } from './consultas.service.js';
@@ -73,7 +73,9 @@ export async function sincronizarAlumnos(projectId, opciones = {}) {
       // Solo los cursos que imparte (donde es profesor), no en los que está de alumno.
       const yo = gente.find((g) => g.id === tutor.moodleId);
       if (!yo || !yo.roles.some((r) => ROLES_PROFESOR.has(r))) continue;
-      for (const a of gente.filter((g) => g.id !== tutor.moodleId && g.roles.includes('student'))) {
+      // Alumno = cualquier rol que no sea del equipo, como en «Mi campus»: con solo
+      // «student», un campus con su propio rol de alumno no salía aquí.
+      for (const a of gente.filter((g) => g.id !== tutor.moodleId && esAlumno(g))) {
         const r = await query(
           `INSERT INTO tutor_alumnos (project_id, tutor_id, alumno_moodle_id, curso_moodle_id, curso_nombre,
                                       alumno_nombre, alumno_email, ultimo_acceso, con_conversacion, activo, visto_at)
@@ -146,9 +148,13 @@ export async function marcarContactado(projectId, tutorId, alumnoMoodleId, cuand
     [projectId, tutorId, alumnoMoodleId, cuando]);
 }
 
+/** Como mucho, cuántos alumnos trae la lista (los más antiguos). */
+export const TOPE_SIN_MENSAJES = 1000;
+
 /**
  * «Alumnos sin mensajes»: activos, sin conversación con su tutor ni en el campus
- * ni en el CRM. Los más antiguos arriba.
+ * ni en el CRM. Los más antiguos arriba. Cada fila lleva `total`: cuántos hay aunque
+ * pasen del tope, para que la pantalla diga cuántos no se ven.
  */
 export async function sinMensajes({ tutorId = null, projectIds = null } = {}) {
   const where = ['ta.activo', 'NOT ta.con_conversacion',
@@ -176,12 +182,13 @@ export async function sinMensajes({ tutorId = null, projectIds = null } = {}) {
      SELECT g.id, g.project_id, pr.nombre AS campus, g.tutor_id, u.nombre AS tutor,
             g.alumno_nombre, g.alumno_email, g.curso_nombre, g.matriculado_desde, g.matricula_aproximada,
             g.ultimo_acceso,
-            FLOOR(EXTRACT(EPOCH FROM (NOW() - g.matriculado_desde)) / 86400)::int AS dias
+            FLOOR(EXTRACT(EPOCH FROM (NOW() - g.matriculado_desde)) / 86400)::int AS dias,
+            COUNT(*) OVER ()::int AS total
        FROM g
        JOIN projects pr ON pr.id = g.project_id
        JOIN users u ON u.id = g.tutor_id
       ORDER BY g.matriculado_desde ASC, g.id
-      LIMIT 1000`, p);
+      LIMIT ${TOPE_SIN_MENSAJES}`, p);
   return rows.map((r) => ({ ...r, color: r.dias >= DIAS_ROJO ? 'rojo' : r.dias >= DIAS_AMBAR ? 'ambar' : 'verde' }));
 }
 

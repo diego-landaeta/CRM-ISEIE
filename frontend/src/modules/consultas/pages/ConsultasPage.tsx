@@ -82,6 +82,8 @@ export default function ConsultasPage() {
   // Solo vale la respuesta de la última petición: una vieja que llegue tarde no pisa la lista.
   const ultima = useRef(0);
   const [lista, setLista] = useState<ConsultaFila[]>([]);
+  // Cuántas hay aunque la lista venga recortada (el servidor trae como mucho 200).
+  const [total, setTotal] = useState(0);
   const [plazo, setPlazo] = useState(24);
   const [cargando, setCargando] = useState(true);
   const [leyendo, setLeyendo] = useState(false);
@@ -96,11 +98,12 @@ export default function ConsultasPage() {
     try {
       const r = vista === 'mias' ? await consultasApi.mias(f) : await consultasApi.panel(ambito, { ...f, sinTutor });
       if (yo !== ultima.current) return;
-      if (r.success && r.data) { setLista(r.data.consultas); setPlazo(r.data.plazoHoras); }
+      if (r.success && r.data) { setLista(r.data.consultas); setTotal(r.data.total ?? r.data.consultas.length); setPlazo(r.data.plazoHoras); }
     } catch (e: unknown) {
       if (yo !== ultima.current) return;
       // Sin datos viejos debajo de la cabecera nueva: si no se ha podido cargar, la lista va vacía.
       setLista([]);
+      setTotal(0);
       const err = e as { data?: { error?: string }; message?: string };
       toast({ title: 'No se han podido cargar las consultas', description: err?.data?.error || err?.message, variant: 'destructive' });
     } finally { if (yo === ultima.current) setCargando(false); }
@@ -206,6 +209,12 @@ export default function ConsultasPage() {
         <EmptyState icon={ChatCircleText} title={pestana === 'pendientes' ? 'Nada pendiente' : 'No hay consultas aquí'}
           description={pestana === 'pendientes' ? 'Ningún alumno espera respuesta.' : 'Cambia de pestaña o de filtro.'} />
       ) : (
+        <>
+        {total > lista.length && (
+          <p className="text-xs text-muted-foreground" role="status">
+            Se ven {lista.length} de {total}. Para encontrar una que no sale, búscala por el alumno, el correo o el curso.
+          </p>
+        )}
         <ul className="divide-y divide-border rounded-lg border border-border bg-card" aria-label="Consultas">
           {lista.map((c) => (
             <li key={c.id}>
@@ -224,6 +233,7 @@ export default function ConsultasPage() {
             </li>
           ))}
         </ul>
+        </>
       )}
     </div>
   );

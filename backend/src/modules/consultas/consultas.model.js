@@ -313,7 +313,12 @@ const COLUMNAS_LISTA = `
 /**
  * La lista: la bandeja de un tutor (`tutorId`) o el panel de administración
  * (`projectIds`, filtros). Las abiertas primero y, dentro, por antigüedad: la
- * que más lleva esperando, arriba.
+ * que más lleva esperando, arriba. Después las respondidas y las cerradas, las más
+ * recientes arriba: antes iban también de la más antigua a la más nueva y, pasado el
+ * tope, las que no salían eran justo las últimas.
+ *
+ * Cada fila lleva `total`: cuántas encajan con el filtro aunque pasen del tope, para que
+ * la pantalla diga cuántas no se ven en vez de callárselo.
  */
 export async function listar({ tutorId = null, projectIds = null, estado = null, sinTutor = false, buscar = null, limite = 200 } = {}) {
   const where = [];
@@ -330,14 +335,15 @@ export async function listar({ tutorId = null, projectIds = null, estado = null,
   }
   p.push(Math.min(Number(limite) || 200, 500));
   const { rows } = await query(
-    `SELECT ${COLUMNAS_LISTA}
+    `SELECT ${COLUMNAS_LISTA}, COUNT(*) OVER ()::int AS total
        FROM consultas c
        JOIN projects p ON p.id = c.project_id
        LEFT JOIN invoice_issuers ii ON ii.id = c.issuer_id
        LEFT JOIN users u ON u.id = c.tutor_id
       ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
       ORDER BY (c.estado = 'abierta') DESC, (c.estado = 'respondida') DESC,
-               COALESCE(c.espera_desde, c.entrada_at) ASC
+               CASE WHEN c.estado = 'abierta' THEN COALESCE(c.espera_desde, c.entrada_at) END ASC,
+               COALESCE(c.espera_desde, c.entrada_at) DESC, c.id DESC
       LIMIT $${p.length}`,
     p
   );
