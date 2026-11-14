@@ -213,7 +213,7 @@ export async function porAvisar(req, res, next) {
     await conLoDelCrm([...data.porAvisar, ...data.sinEmitir], req.user);
     await conProgramaCrm(data.sinEmitir);
     // #351: lo que vuelve aquí tras «Revertir» dice qué número se anuló, quién y por qué.
-    await completarReversiones(ambito);
+    await completarReversiones(ambito, req);
     await conReversiones(data.sinEmitir);
     res.json({ success: true, data });
   } catch (err) { next(err); }
@@ -371,7 +371,16 @@ async function solicitudDe(matriculaId) {
     filtro: (c) => c.matriculaId === matriculaId,
     completo: (hallados) => hallados.length >= 1,
   });
-  return r.filas[0] ?? null;
+  if (r.filas[0]) return r.filas[0];
+  // #351, prevención: desde Certificaciones › Emisiones también se revisa (formación,
+  // programa, correo y DNI) una matrícula que el alumno no ha pedido. Solo si no es una
+  // solicitud: lo de siempre no cambia. El nombre sigue siendo solo de las solicitudes
+  // (vive en Certifex, en la solicitud): sin ella, Certifex lo rechaza.
+  const t = await recorrer('/candidatos', { estado: 'todas' }, {
+    filtro: (c) => c.matriculaId === matriculaId,
+    completo: (hallados) => hallados.length >= 1,
+  });
+  return t.filas[0] ?? null;
 }
 
 /**
@@ -786,7 +795,11 @@ async function contarPorEnviar(ambito) {
   return r.filas.length;
 }
 
-/** Los diplomas emitidos: vigentes (pestaña Enviados) o revocados, con su aviso. */
+/**
+ * Los diplomas emitidos: vigentes (pestaña Enviados), revocados o, desde la #351,
+ * anulados (pestaña Revertidos: el número anulado, quién, cuándo, por qué y con qué número
+ * se volvió a emitir), con su aviso.
+ */
 export async function diplomas(req, res, next) {
   try {
     const f = parsear(listarDiplomasSchema, req.query);

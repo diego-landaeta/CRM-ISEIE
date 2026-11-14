@@ -249,7 +249,8 @@ export const emisionesApi = {
 // --- Diplomas (#272): lo que el alumno pide desde Moodle y los diplomas emitidos ---
 // Emitir NO avisa al alumno: el correo sale solo cuando alguien lo aprueba aquí.
 
-export type PestanaDiplomas = 'pendientes' | 'terminados' | 'enviados' | 'rechazados' | 'revocados';
+/** `revertidos` (#351): los números anulados al revertir, con quién, cuándo, por qué y el nuevo. */
+export type PestanaDiplomas = 'pendientes' | 'terminados' | 'enviados' | 'rechazados' | 'revocados' | 'revertidos';
 export type ResultadoAviso = 'enviado' | 'correo_apagado' | 'sin_correo' | 'error';
 /** 'fuera': emitido fuera del CRM (desde Certifex, o los antiguos) y sin aviso. */
 export type FiltroAviso = 'pendiente' | 'fuera' | 'enviado' | 'no_salio';
@@ -484,7 +485,7 @@ export const diplomasApi = {
     client.get(`/certifex/diplomas/terminados?${qs(f)}`) as R<Pagina<Terminado>>,
   porAvisar: (f: { centro?: string; q?: string }) =>
     client.get(`/certifex/diplomas/por-avisar?${qs(f)}`) as R<{ porAvisar: Solicitud[]; sinEmitir: Solicitud[]; truncado?: boolean }>,
-  diplomas: (f: FiltrosDiplomas & { estado?: 'vigentes' | 'revocados' | 'todos'; aviso?: FiltroAviso }) =>
+  diplomas: (f: FiltrosDiplomas & { estado?: 'vigentes' | 'revocados' | 'anulados' | 'todos'; aviso?: FiltroAviso }) =>
     client.get(`/certifex/diplomas?${qs(f)}`) as R<Pagina<Diploma>>,
   /** Los correos del diploma en Brevo: enviado, entregado, abierto, Message-ID (justificante). */
   envios: (nexpediente: string) =>

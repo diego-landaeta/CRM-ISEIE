@@ -84,7 +84,8 @@ export async function listar(req, res, next) {
       for (const [k, v] of Object.entries({ ...f, centro: ambito.centro ?? f.centro })) if (v !== undefined) p.set(k, String(v));
       data = await certifex('GET', `/candidatos?${p.toString()}`);
     }
-    if (Array.isArray(data?.filas) && conPrograma === '1') {
+    // Solo a quien puede emitir desde aquí: es para el aviso de antes de emitir.
+    if (Array.isArray(data?.filas) && conPrograma === '1' && (await tienePermiso(req, 'diplomas.aprobar'))) {
       // #351, prevención: lo revisado a mano y el programa que se imprimiría si se emite
       // ahora, como en Diplomas, para avisar antes de «Aprobar y emitir» lo que saldría «Con
       // lo de Moodle». Si no se puede saber, el listado sale igual, sin el dato.

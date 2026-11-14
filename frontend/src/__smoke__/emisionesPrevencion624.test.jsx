@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, cleanup, fireEvent, within } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, within, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 /*
@@ -10,7 +10,8 @@ import { MemoryRouter } from 'react-router-dom';
 
   Lo que se fija:
    · lo que no tiene el temario oficial (sin programa del CRM, o con horas y sin módulos) se
-     avisa como «Con lo de Moodle», con «Editar», que abre esa solicitud en Diplomas;
+     avisa como «Con lo de Moodle», con «Editar», que abre aquí mismo la revisión (también
+     de una matrícula que el alumno no ha pedido: sin el nombre, que es de la solicitud);
    · lo revisado a mano que aun así no tiene programa, como «No se emitirá»;
    · lo que tiene programa, sin aviso; y sin el dato (no se pudo saber), tampoco.
 */
@@ -33,7 +34,13 @@ const FILAS = [
   }),
   // Sin el dato (el servidor no pudo saberlo): no se avisa de nada.
   fila(5, 'Elena Sin Dato', { programaCrm: undefined }),
+  // Con solicitud (lo pidió el alumno) y sin programa.
+  fila(6, 'Fran Con Solicitud', {
+    solicitud: { en: '2026-11-02T09:00:00Z', nombre: 'Fran Con Solicitud', nombreAlumno: 'Fran Con Solicitud', revisado: null },
+    programaCrm: { programa: null, formacion: null, motivo: 'No tiene ninguna venta en Psiko.' },
+  }),
 ];
+const editar = vi.hoisted(() => ({ llamadas: [] }));
 
 vi.mock('@/shared/hooks/useToast', () => ({ toast: () => {}, useToast: () => ({ toasts: [], addListener: () => () => {} }) }));
 vi.mock('@/modules/certifex/api/certifex.api', () => ({
@@ -43,10 +50,15 @@ vi.mock('@/modules/certifex/api/certifex.api', () => ({
     cursos: async () => ({ data: [] }),
     listar: vi.fn(async () => ({ data: { filas: FILAS, total: FILAS.length, pagina: 1, tam: 50 } })),
   },
-  diplomasApi: { pedir: vi.fn() },
+  diplomasApi: {
+    pedir: vi.fn(),
+    formaciones: async () => ({ data: { proyecto: { id: 1, nombre: 'Psiko' }, motivo: null, formaciones: [] } }),
+    editar: async (cambios) => { editar.llamadas.push(cambios); return { data: { matriculaId: cambios.matriculaId } }; },
+  },
 }));
 
 const { default: CertifexEmisionesPage } = await import('@/modules/certifex/pages/CertifexEmisionesPage');
+const { emisionesApi } = await import('@/modules/certifex/api/certifex.api');
 
 afterEach(cleanup);
 
@@ -60,23 +72,42 @@ async function aprobarYEmitir(nombres) {
 }
 
 describe('#351 prevención en Emisiones: antes de «Aprobar y emitir»', () => {
-  it('avisa de lo que saldría «Con lo de Moodle» (sin programa, o sin módulos), con «Editar» en Diplomas', async () => {
+  it('avisa de lo que saldría «Con lo de Moodle» (sin programa, o sin módulos), con «Editar»', async () => {
     const d = await aprobarYEmitir(['Berta Con Moodle', 'Carla Sin Modulos']);
     expect(within(d).getByText('2 saldrán «Con lo de Moodle»')).toBeTruthy();
     expect(within(d).getByText(/elige la formación con «Editar»/)).toBeTruthy();
-    const editar = within(d).getByRole('link', { name: /Editar los datos de Berta Con Moodle en Diplomas/ });
-    expect(editar.getAttribute('href')).toMatch(/\/matriculas\/diplomas\?buscar=alumno2%40prueba\.test$/);
-    // En este CRM, Diplomas cuelga de /matriculas (sin /clientes): la ruta tiene que existir.
-    expect(editar.getAttribute('href')).not.toMatch(/clientes/);
-    expect(editar.getAttribute('target')).toBe('_blank');
-    expect(within(d).getByRole('link', { name: /Editar los datos de Carla Sin Modulos/ })).toBeTruthy();
+    expect(within(d).getByRole('button', { name: /Editar los datos de Berta Con Moodle antes de emitir/ })).toBeTruthy();
+    expect(within(d).getByRole('button', { name: /Editar los datos de Carla Sin Modulos antes de emitir/ })).toBeTruthy();
+  });
+
+  it('«Editar» abre aquí la revisión de una matrícula que no pidió el alumno (sin el nombre) y guarda; luego recarga', async () => {
+    editar.llamadas.length = 0;
+    const d = await aprobarYEmitir(['Berta Con Moodle']);
+    fireEvent.click(within(d).getByRole('button', { name: /Editar los datos de Berta Con Moodle antes de emitir/ }));
+    const r = await screen.findByRole('dialog', { name: 'Revisar datos antes de aprobar' });
+    expect(within(r).getByText(/no ha pedido el diploma: sale el nombre de Moodle/)).toBeTruthy();
+    expect(within(r).queryByLabelText(/^Nombre para el diploma/)).toBeNull();
+    const cargasAntes = emisionesApi.listar.mock.calls.length;
+    fireEvent.change(within(r).getByPlaceholderText('Ej.: 12345678Z'), { target: { value: '87654321X' } });
+    fireEvent.click(within(r).getByRole('button', { name: 'Guardar' }));
+    await waitFor(() => expect(editar.llamadas).toHaveLength(1));
+    expect(editar.llamadas[0]).toEqual({ matriculaId: 2, dni: '87654321X' });
+    await waitFor(() => expect(emisionesApi.listar.mock.calls.length).toBeGreaterThan(cargasAntes));
+  });
+
+  it('con solicitud, la revisión sí deja tocar el nombre', async () => {
+    const d = await aprobarYEmitir(['Fran Con Solicitud']);
+    fireEvent.click(within(d).getByRole('button', { name: /Editar los datos de Fran Con Solicitud antes de emitir/ }));
+    const r = await screen.findByRole('dialog', { name: 'Revisar datos antes de aprobar' });
+    expect(within(r).getByDisplayValue('Fran Con Solicitud')).toBeTruthy();
+    expect(within(r).queryByText(/no ha pedido el diploma/)).toBeNull();
   });
 
   it('lo revisado a mano sin programa: «No se emitirá», no «saldrá con lo de Moodle»', async () => {
     const d = await aprobarYEmitir(['Diana Revisada Sinprograma']);
     expect(within(d).getByText('No se emitirá')).toBeTruthy();
     expect(within(d).queryByText(/Con lo de Moodle/)).toBeNull();
-    expect(within(d).getByRole('link', { name: /Editar los datos de Diana Revisada Sinprograma/ })).toBeTruthy();
+    expect(within(d).getByRole('button', { name: /Editar los datos de Diana Revisada Sinprograma/ })).toBeTruthy();
   });
 
   it('lo que tiene programa del CRM, o del que no se sabe, sin aviso', async () => {

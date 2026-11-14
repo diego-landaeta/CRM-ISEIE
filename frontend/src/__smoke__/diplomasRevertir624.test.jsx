@@ -82,8 +82,16 @@ vi.mock('@/modules/certifex/api/certifex.api', () => ({
     resumen: async () => ({ data: { pendientes: 4, rechazadas: 0, vigentes: 2, revocados: 0, terminados: 0, porAvisar: 2, sinEmitir: 1, porEnviar: 2 } }),
     solicitudes: async () => ({ data: { filas: datos.pendientes, total: datos.pendientes.length, pagina: 1, tam: 50 } }),
     porAvisar: vi.fn(async () => ({ data: { porAvisar: datos.porAvisar, sinEmitir: datos.sinEmitir } })),
-    // Por enlace (?exp=), un número revertido: Certifex lo da como anulado.
-    diplomas: async (f) => ({ data: { filas: f?.q === 'CEDIA-2026-000009-X1YZ' ? [{
+    // Emitidos: uno emitido desde Emisiones y sin enviar, otro ya enviado, otro de fuera.
+    // Revertidos (anulados): el revertido. Por enlace (?exp=): el revertido.
+    diplomas: async (f) => (f?.estado === 'vigentes' ? { data: { filas: [
+      { nexpediente: 'CEDIA-2026-000020-E1MS', centro: 'ISEIH', alumno: 'Iris Desde Emisiones', titulacion: 'Curso', cursoRef: 12, emitidoEn: '2026-11-03T10:00:00Z',
+        emitidaPor: 'Diego (CRM 360)', revocada: false, revocacion: null, verificarUrl: null, diplomaUrl: null, aviso: null, emitidoEnCrm: true },
+      { nexpediente: 'CEDIA-2026-000021-ENVI', centro: 'ISEIH', alumno: 'Juan Ya Enviado', titulacion: 'Curso', cursoRef: 12, emitidoEn: '2026-11-03T10:00:00Z',
+        emitidaPor: 'Diego (CRM 360)', revocada: false, revocacion: null, verificarUrl: null, diplomaUrl: null, aviso: { resultado: 'enviado', en: '2026-11-04T10:00:00Z', por: 'x' }, emitidoEnCrm: true },
+      { nexpediente: 'CEDIA-2026-000022-FUER', centro: 'ISEIH', alumno: 'Kike De Fuera', titulacion: 'Curso', cursoRef: 12, emitidoEn: '2026-11-03T10:00:00Z',
+        emitidaPor: 'admin@certifex.tech', revocada: false, revocacion: null, verificarUrl: null, diplomaUrl: null, aviso: null, emitidoEnCrm: false },
+    ], total: 3, pagina: 1, tam: 50 } } : { data: { filas: f?.estado === 'anulados' || f?.q === 'CEDIA-2026-000009-X1YZ' ? [{
       nexpediente: 'CEDIA-2026-000009-X1YZ', centro: 'ISEIH', alumno: 'Hugo Revertido', titulacion: 'Curso', cursoRef: 12, emitidoEn: '2026-11-03T10:00:00Z',
       emitidaPor: 'Diego (CRM 360)', revocada: false, revocacion: null, verificarUrl: null, diplomaUrl: null, aviso: null, emitidoEnCrm: true,
       anulada: true, anulacion: { en: '2026-11-12T10:00:00Z', motivo: 'Con lo de Moodle', por: 'ana@prueba.test (CRM 360)', sustituidaPor: null, matriculaId: 8 },
@@ -202,6 +210,41 @@ describe('un número anulado abierto por enlace', () => {
     expect(t.description).toMatch(/Aprobados sin diploma/);
     expect(screen.queryByRole('button', { name: /Enviar diploma al alumno/ })).toBeNull();
     expect(screen.queryByRole('dialog')).toBeNull();
+  });
+});
+
+describe('«Revertir» también en Emitidos (lo emitido desde Emisiones y sin enviar)', () => {
+  it('sale en lo del CRM sin enviar; no en lo enviado ni en lo de fuera; y revierte por su número', async () => {
+    render(<MemoryRouter initialEntries={['/?pestana=emitidos']}><CertifexDiplomasPage puedeRevertir /></MemoryRouter>);
+    const iris = (await screen.findByText('Iris Desde Emisiones')).closest('tr');
+    const b = within(iris).getByRole('button', { name: 'Revertir CEDIA-2026-000020-E1MS' });
+    await waitFor(() => expect(b.disabled).toBe(false));
+    expect(within(screen.getByText('Juan Ya Enviado').closest('tr')).queryByRole('button', { name: /^Revertir/ })).toBeNull();
+    expect(within(screen.getByText('Kike De Fuera').closest('tr')).queryByRole('button', { name: /^Revertir/ })).toBeNull();
+    fireEvent.click(b);
+    const dialogo = await screen.findByRole('dialog', { name: 'Revertir CEDIA-2026-000020-E1MS' });
+    expect(within(dialogo).getByText(/Iris Desde Emisiones vuelve a estar aprobado sin diploma/)).toBeTruthy();
+    fireEvent.change(within(dialogo).getByLabelText(/Motivo/), { target: { value: MOTIVO } });
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Revertir' }));
+    await waitFor(() => expect(diplomasApi.revertir).toHaveBeenCalledWith('CEDIA-2026-000020-E1MS', MOTIVO));
+  });
+
+  it('sin el permiso, no sale', async () => {
+    render(<MemoryRouter initialEntries={['/?pestana=emitidos']}><CertifexDiplomasPage /></MemoryRouter>);
+    await screen.findByText('Iris Desde Emisiones');
+    expect(screen.queryAllByRole('button', { name: /^Revertir/ })).toHaveLength(0);
+  });
+});
+
+describe('la pestaña «Revertidos»', () => {
+  it('enseña el número anulado, quién, cuándo, por qué y si se reemitió', async () => {
+    render(<MemoryRouter initialEntries={['/?pestana=revertidos']}><CertifexDiplomasPage /></MemoryRouter>);
+    const fila = (await screen.findByText('Hugo Revertido')).closest('tr');
+    expect(within(fila).getByText('CEDIA-2026-000009-X1YZ')).toBeTruthy();
+    expect(within(fila).getByText(/ana@prueba\.test \(CRM 360\)/)).toBeTruthy();
+    expect(within(fila).getByText('«Con lo de Moodle»')).toBeTruthy();
+    expect(within(fila).getByText(/Todavía no/)).toBeTruthy();
+    expect(screen.getAllByText('Revertidos').length).toBeGreaterThan(0);
   });
 });
 

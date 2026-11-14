@@ -3,6 +3,7 @@ import { logger } from '../../shared/utils/logger.js';
 import * as model from './certifex.model.js';
 import { certifex, certifexTieneRuta } from './certifex.cliente.js';
 import { alcanceDe, exigirExpedientes } from './certifex.alcance.js';
+import { tienePermiso } from '../../shared/middleware/permissions.js';
 import { emitidoPorElCrm } from './certifex.diplomas.js';
 import { revertirSchema, mensajeDeValidacion } from './certifex.validation.js';
 
@@ -32,6 +33,7 @@ import { revertirSchema, mensajeDeValidacion } from './certifex.validation.js';
 const SIN_TABLA = 'Falta aplicar en la base del CRM la migración 280 (certifex_reversiones).';
 const SIN_CERTIFEX = 'El Certifex conectado todavía no permite revertir diplomas (falta desplegar su migración 0045 y POST /revertir).';
 const NO_ENCONTRADO = 'Diploma no encontrado.';
+const ROTULO_AVISO = { correo_apagado: 'el correo está apagado en el servidor', sin_correo: 'el alumno no tiene correo', error: 'el envío falló' };
 
 function parsear(schema, datos) {
   const r = schema.safeParse(datos);
@@ -95,10 +97,20 @@ export async function revertir(req, res, next) {
       throw new AppError('Ya está revertido: ese número está anulado. Búscalo en «Aprobados sin diploma» para volver a emitirlo.', 409, 'YA_REVERTIDO');
     }
     if (dip.revocada) throw new AppError('Está revocado: no se revierte.', 409, 'REVOCADO');
-    if (dip.aviso) throw new AppError('Ya se ha enviado al alumno: no se revierte. Si está mal, hay que revocarlo.', 409, 'YA_ENVIADO');
+    if (dip.aviso) {
+      // Para Certifex, un aviso APROBADO ya es «entregado» (la misma regla que corregir el
+      // programa, 0041), haya salido el correo o no. Se dice lo que pasó de verdad.
+      const salio = dip.aviso.resultado === 'enviado';
+      throw new AppError(salio
+        ? 'Ya se ha enviado al alumno: no se revierte. Si está mal, hay que revocarlo.'
+        : `Ya se aprobó el aviso al alumno (${ROTULO_AVISO[dip.aviso.resultado] ?? dip.aviso.resultado}) y eso ya cuenta como entregado: no se revierte. Si está mal, hay que revocarlo.`,
+      409, 'YA_ENVIADO');
+    }
     if (!emitidoPorElCrm(dip)) throw new AppError('Este diploma no se emitió desde el CRM: no se revierte desde aquí.', 409, 'EMITIDO_FUERA');
 
-    const hecho = await certifex('POST', '/revertir', { nexpediente: d.nexpediente, motivo, revertidoPor: req.user.email });
+    // Certifex puede esperar hasta 30 s a que acabe un envío del aviso de ESTE diploma (su
+    // cerrojo): el CRM espera más, para no decir «no responde» a algo que acaba haciéndose.
+    const hecho = await certifex('POST', '/revertir', { nexpediente: d.nexpediente, motivo, revertidoPor: req.user.email }, { timeoutMs: 45_000 });
     // La matrícula que vuelve a «Aprobados sin diploma» la dice Certifex (la de esa persona y
     // ese curso), no el navegador.
     const matriculaId = Number.isSafeInteger(hecho?.matriculaId) ? hecho.matriculaId : null;
@@ -142,9 +154,18 @@ async function apuntarDesdeCertifex(dip) {
  * Solo con un Certifex que ya revierte y con la tabla del CRM puesta; lo más reciente (una
  * página de 200). Nada de esto impide ver el listado: si falla, queda en el log.
  */
-export async function completarReversiones(ambito) {
+const COMPLETAR_CADA_MS = 60_000;
+const completadas = new Map();
+
+export async function completarReversiones(ambito, req) {
   try {
     if (ambito?.vacio) return;
+    // Escribe en el registro: solo con el permiso de revertir, y como mucho una vez por
+    // minuto y por ámbito (es un repaso, no hace falta en cada carga de la pantalla).
+    if (req && !(await tienePermiso(req, 'diplomas.revertir'))) return;
+    const clave = ambito?.centro ?? [...(ambito?.centros ?? [])].sort().join(',') ?? '*';
+    if (Date.now() - (completadas.get(clave) ?? 0) < COMPLETAR_CADA_MS) return;
+    completadas.set(clave, Date.now());
     if (!(await model.tablaReversionesExiste())) return;
     if (!(await certifexTieneRuta('/revertir'))) return;
     const params = { estado: 'anulados', pagina: '1', tam: '200' };
@@ -162,6 +183,11 @@ export async function completarReversiones(ambito) {
   } catch (e) {
     logger.warn({ err: e.message }, 'Certifex: no se pudieron completar las reversiones');
   }
+}
+
+/** Para las pruebas: olvida cuándo se repasó cada ámbito. */
+export function olvidarRepasos() {
+  completadas.clear();
 }
 
 /**

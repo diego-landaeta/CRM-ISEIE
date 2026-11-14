@@ -178,7 +178,8 @@ export const listarSolicitudesSchema = z.object({
 });
 
 export const listarDiplomasSchema = z.object({
-  estado: z.enum(['vigentes', 'revocados', 'todos']).optional(),
+  // `anulados` (#351): los revertidos antes de enviarlos.
+  estado: z.enum(['vigentes', 'revocados', 'anulados', 'todos']).optional(),
   aviso: z.enum(['pendiente', 'fuera', 'enviado', 'no_salio']).optional(),
   ...filtrosPanel,
 }).refine((f) => f.curso === undefined || f.centro, { message: 'Para filtrar por formacion elige antes el campus', path: ['curso'] });

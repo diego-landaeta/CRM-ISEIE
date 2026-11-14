@@ -13,6 +13,7 @@ import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
 import PromptDialog from '@/shared/components/ui/PromptDialog';
 import { Button } from '@/shared/components/ui/button';
 import { cn } from '@/shared/lib/utils';
+import { DialogoEditar } from './CertifexDiplomasPage';
 import { Avance, AvisoCasiListo, AvisoDireccionPublica, avisoSinTerminar, Barra, Buscador, Decision, EnElCrmEtiqueta, Entregas, Etiqueta, LogoCampus, Pestana, euros } from '../components/piezas';
 import {
   diplomasApi,
@@ -229,6 +230,9 @@ export default function CertifexEmisionesPage({ embebida = false }: { embebida?:
   const [lote, setLote] = useState<{ hechas: number; total: number } | null>(null);
   const [fallos, setFallos] = useState<{ quien: string; error: string }[]>([]);
   const [abierta, setAbierta] = useState<Candidato | null>(null);
+  // #351, prevención: «Editar» (formación, programa, correo, DNI) desde el aviso de antes de
+  // emitir, aquí mismo: una matrícula que el alumno no ha pedido no sale en Diplomas.
+  const [editando, setEditando] = useState<Candidato | null>(null);
   // «Pasar a pendientes» (22/10/2026): la matrícula que se está pidiendo, para su botón.
   const [pidiendo, setPidiendo] = useState<number | null>(null);
   // #629: a quien no ha terminado (sin nota o con calificadas < 100 %) se le pasa solo tras confirmar.
@@ -329,9 +333,6 @@ export default function CertifexEmisionesPage({ embebida = false }: { embebida?:
     }
     return { noSeEmitiran, sinTemario };
   };
-  /** «Editar» vive en Diplomas: se abre allí, con esa solicitud ya buscada. */
-  const enDiplomas = (c: Candidato) =>
-    `${import.meta.env.BASE_URL}matriculas/diplomas?buscar=${encodeURIComponent(c.titular.email || c.titular.nombre || '')}`;
   const todasElegidas = filas.length > 0 && filas.every((f) => elegidas.has(f.matriculaId));
   const paginas = Math.max(1, Math.ceil(total / tam));
   const nombre = (id: number | null) => {
@@ -794,10 +795,9 @@ export default function CertifexEmisionesPage({ embebida = false }: { embebida?:
                   {cs.slice(0, 5).map((c) => (
                     <li key={c.matriculaId} className="flex flex-wrap items-center justify-between gap-2 text-xs">
                       <span className="min-w-0 truncate">{c.titular.nombre ?? c.titular.email} · {c.curso.nombre}{c.programaCrm?.motivo ? ` · ${c.programaCrm.motivo}` : ''}</span>
-                      <Button asChild size="sm" variant="outline">
-                        <a href={enDiplomas(c)} target="_blank" rel="noreferrer noopener" aria-label={`Editar los datos de ${c.titular.nombre ?? c.titular.email} en Diplomas antes de emitir`}>
-                          <NotePencil size={14} className="mr-1.5" /> Editar
-                        </a>
+                      <Button type="button" size="sm" variant="outline" onClick={() => { setAccion(null); setEditando(c); }}
+                        aria-label={`Editar los datos de ${c.titular.nombre ?? c.titular.email} antes de emitir`}>
+                        <NotePencil size={14} className="mr-1.5" /> Editar
                       </Button>
                     </li>
                   ))}
@@ -813,7 +813,7 @@ export default function CertifexEmisionesPage({ embebida = false }: { embebida?:
                         {noSeEmitiran.length === 1 ? 'No se emitirá' : `${noSeEmitiran.length} no se emitirán`}
                       </p>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        {noSeEmitiran.length === 1 ? 'Tiene' : 'Tienen'} datos revisados a mano y con ellos no sale el programa. Revísalo con «Editar» (en Diplomas): elige la formación o escribe el temario.
+                        {noSeEmitiran.length === 1 ? 'Tiene' : 'Tienen'} datos revisados a mano y con ellos no sale el programa. Revísalo con «Editar»: elige la formación o escribe el temario.
                       </p>
                       {lista(noSeEmitiran)}
                     </div>
@@ -825,7 +825,7 @@ export default function CertifexEmisionesPage({ embebida = false }: { embebida?:
                         {sinTemario.length === 1 ? 'Saldrá «Con lo de Moodle»' : `${sinTemario.length} saldrán «Con lo de Moodle»`}
                       </p>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        {sinTemario.length === 1 ? 'No tiene' : 'No tienen'} el temario de la formación vendida: el diploma llevaría las actividades del curso de Moodle en su lugar. Si no es lo que quieres, elige la formación con «Editar» (en Diplomas) antes de emitir.
+                        {sinTemario.length === 1 ? 'No tiene' : 'No tienen'} el temario de la formación vendida: el diploma llevaría las actividades del curso de Moodle en su lugar. Si no es lo que quieres, elige la formación con «Editar» antes de emitir.
                       </p>
                       {lista(sinTemario)}
                     </div>
@@ -861,6 +861,20 @@ export default function CertifexEmisionesPage({ embebida = false }: { embebida?:
           if (a?.tipo === 'rechazar') void rechazar(a.ids, motivo.trim());
         }}
       />
+
+      {editando && (
+        <DialogoEditar
+          c={editando}
+          puedeSincronizar={false}
+          alCerrar={() => setEditando(null)}
+          alGuardar={() => {
+            const quien = editando.titular.nombre ?? editando.titular.email ?? `Matrícula #${editando.matriculaId}`;
+            setEditando(null);
+            toast({ title: 'Datos revisados', description: `${quien}: al emitir se usará lo que has guardado.` });
+            void cargarFilas();
+          }}
+        />
+      )}
 
       {abierta && (
         <Ficha

@@ -74,6 +74,7 @@ const { default: supertest } = await import('supertest');
 const { default: jwt } = await import('jsonwebtoken');
 const { default: router } = await import('../src/modules/certifex/certifex.routes.js');
 const { olvidarCapacidades } = await import('../src/modules/certifex/certifex.cliente.js');
+const { olvidarRepasos } = await import('../src/modules/certifex/certifex.revertir.js');
 
 const app = express();
 app.use(express.json());
@@ -86,6 +87,9 @@ const token = (userId, role) =>
 registrar({ userId: 71, role: 'admin' });
 // Emite y revoca, pero no revierte: el permiso nuevo es otro.
 registrar({ userId: 72, role: 'gestor', excepciones: { 'diplomas.emit': true, 'diplomas.revocar': true } });
+registrar({ userId: 79, role: 'gestor', excepciones: { 'diplomas.view': true, 'diplomas.view_emisiones': true } });
+const SOLO_VE = jwt.sign({ userId: 79, email: 'u79@prueba.test', role: 'gestor', roles_extra: [] }, process.env.JWT_SECRET, { expiresIn: '5m' });
+campusDe[79] = [1];
 registrar({ userId: 73, role: 'admin' });
 registrar({ userId: 74, role: 'superadmin' });
 const ADMIN = token(71, 'admin'); // de Psiko
@@ -167,6 +171,7 @@ beforeEach(() => {
   ];
   CANDIDATOS = [candidato(101, EXP), candidato(102, EXP_ENVIADO)];
   olvidarCapacidades();
+  olvidarRepasos();
 });
 
 const MOTIVO = 'Se emitió con las actividades de Moodle; se reemite con el temario oficial';
@@ -235,6 +240,15 @@ describe('POST /api/certifex/diplomas/revertir', () => {
     // Otra vez: no lo duplica.
     expect((await revertir(ADMIN, { nexpediente: EXP_ANULADO })).status).toBe(409);
     expect(registro).toHaveLength(1);
+  });
+
+  it('aviso aprobado pero el correo no salió: 409 que lo dice (no «ya se ha enviado»), sin llamar a Certifex', async () => {
+    DIPLOMAS.push(diploma('PSIKO-2026-000106-FFFF', { aviso: { resultado: 'correo_apagado', en: '2026-11-04T10:00:00.000Z', por: 'x (CRM 360)' } }));
+    const r = await revertir(ADMIN, { nexpediente: 'PSIKO-2026-000106-FFFF' });
+    expect(r.status).toBe(409);
+    expect(r.body.error).toMatch(/aprobó el aviso.*correo está apagado.*cuenta como entregado/);
+    expect(r.body.error).not.toMatch(/Ya se ha enviado/);
+    expect(llegoARevertir()).toHaveLength(0);
   });
 
   it('si Certifex dice que no (p. ej. lo enviaron entre medias), su error tal cual y no se apunta nada', async () => {
@@ -345,12 +359,27 @@ describe('«por avisar»: lo que Certifex revirtió y el CRM no apuntó, se apun
     expect(registro).toHaveLength(0);
   });
 
+  it('quien no puede revertir no escribe en el registro al cargar (solo lo ve)', async () => {
+    const r = await request.get('/api/certifex/diplomas/por-avisar').set('Authorization', `Bearer ${SOLO_VE}`);
+    expect(r.status).toBe(200);
+    expect(registro).toHaveLength(0);
+    expect(pedidas.some((p) => p.ruta === '/diplomas' && p.query.estado === 'anulados')).toBe(false);
+  });
+
+  it('como mucho una vez por minuto: la segunda carga ni pregunta a Certifex', async () => {
+    expect((await porAvisar()).status).toBe(200);
+    pedidas = [];
+    expect((await porAvisar()).status).toBe(200);
+    expect(pedidas.some((p) => p.ruta === '/diplomas' && p.query.estado === 'anulados')).toBe(false);
+  });
+
   it('con un Certifex que aún no revierte, ni lo pregunta; y si algo falla, el listado sale igual', async () => {
     conRuta = false;
     expect((await porAvisar()).status).toBe(200);
     expect(pedidas.some((p) => p.ruta === '/diplomas' && p.query.estado === 'anulados')).toBe(false);
     conRuta = true;
     olvidarCapacidades();
+    olvidarRepasos();
     fallaApunte = true;
     expect((await porAvisar()).status).toBe(200);
     expect(registro).toHaveLength(0);
@@ -371,12 +400,48 @@ describe('Emisiones trae lo que se imprimiría (punto 3, prevención)', () => {
     expect(pedidas.filter((p) => p.ruta === '/candidatos').every((p) => !('conPrograma' in p.query))).toBe(true);
   });
 
+  it('a quien solo ve Emisiones (no emite) no se le calcula: es para el aviso de antes de emitir', async () => {
+    CANDIDATOS = [candidato(101, null)];
+    const r = await request.get('/api/certifex/emisiones?estado=aprobada&centro=PSIKO&conPrograma=1').set('Authorization', `Bearer ${SOLO_VE}`);
+    expect(r.status).toBe(200);
+    expect(r.body.data.filas[0]).not.toHaveProperty('programaCrm');
+  });
+
   it('sin `conPrograma`, el listado es el de siempre (sin esos campos)', async () => {
     CANDIDATOS = [candidato(101, null)];
     const r = await request.get('/api/certifex/emisiones?estado=aprobada&centro=PSIKO').set('Authorization', `Bearer ${ADMIN}`);
     expect(r.status).toBe(200);
     expect(r.body.data.filas[0]).not.toHaveProperty('programaCrm');
     expect(r.body.data.filas[0]).not.toHaveProperty('edicion');
+  });
+});
+
+describe('«Editar» una matrícula sin solicitud (desde Emisiones)', () => {
+  it('se encuentra entre todas las matrículas si no es una solicitud, y se guarda el programa', async () => {
+    const sinPedir = { ...candidato(110, null), solicitud: null };
+    CANDIDATOS = [sinPedir];
+    const fetchAntes = globalThis.fetch;
+    // Certifex: entre las solicitudes no está; entre todas, sí.
+    globalThis.fetch = vi.fn(async (url, opts) => {
+      const u = new URL(String(url));
+      if (u.pathname.endsWith('/candidatos')) {
+        pedidas.push({ ruta: '/candidatos', query: Object.fromEntries(u.searchParams) });
+        const f = u.searchParams.get('solicitadas') === '1' ? [] : [sinPedir];
+        return new Response(JSON.stringify({ filas: f, total: f.length }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return fetchAntes(url, opts);
+    });
+    try {
+      const r = await request.post('/api/certifex/diplomas/editar').set('Authorization', `Bearer ${ADMIN}`)
+        .send({ matriculaId: 110, programa: { horas: 100, modulos: [{ titulo: 'Bases', horas: 100 }] } });
+      // Lo encuentra (no 404) en la segunda búsqueda, la de todas.
+      expect(r.status, JSON.stringify(r.body)).toBe(200);
+      const cand = pedidas.filter((p) => p.ruta === '/candidatos');
+      expect(cand[0].query).toMatchObject({ solicitadas: '1' });
+      expect(cand[1].query).not.toHaveProperty('solicitadas');
+    } finally {
+      globalThis.fetch = fetchAntes;
+    }
   });
 });
 
