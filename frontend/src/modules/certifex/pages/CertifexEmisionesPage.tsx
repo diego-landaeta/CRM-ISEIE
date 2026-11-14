@@ -331,7 +331,7 @@ export default function CertifexEmisionesPage({ embebida = false }: { embebida?:
   };
   /** «Editar» vive en Diplomas: se abre allí, con esa solicitud ya buscada. */
   const enDiplomas = (c: Candidato) =>
-    `${import.meta.env.BASE_URL}clientes/matriculas/diplomas?buscar=${encodeURIComponent(c.titular.email || c.titular.nombre || '')}`;
+    `${import.meta.env.BASE_URL}matriculas/diplomas?buscar=${encodeURIComponent(c.titular.email || c.titular.nombre || '')}`;
   const todasElegidas = filas.length > 0 && filas.every((f) => elegidas.has(f.matriculaId));
   const paginas = Math.max(1, Math.ceil(total / tam));
   const nombre = (id: number | null) => {

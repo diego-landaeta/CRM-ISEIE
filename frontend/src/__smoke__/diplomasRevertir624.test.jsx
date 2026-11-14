@@ -82,7 +82,12 @@ vi.mock('@/modules/certifex/api/certifex.api', () => ({
     resumen: async () => ({ data: { pendientes: 4, rechazadas: 0, vigentes: 2, revocados: 0, terminados: 0, porAvisar: 2, sinEmitir: 1, porEnviar: 2 } }),
     solicitudes: async () => ({ data: { filas: datos.pendientes, total: datos.pendientes.length, pagina: 1, tam: 50 } }),
     porAvisar: vi.fn(async () => ({ data: { porAvisar: datos.porAvisar, sinEmitir: datos.sinEmitir } })),
-    diplomas: async () => ({ data: { filas: [], total: 0, pagina: 1, tam: 50 } }),
+    // Por enlace (?exp=), un número revertido: Certifex lo da como anulado.
+    diplomas: async (f) => ({ data: { filas: f?.q === 'CEDIA-2026-000009-X1YZ' ? [{
+      nexpediente: 'CEDIA-2026-000009-X1YZ', centro: 'ISEIH', alumno: 'Hugo Revertido', titulacion: 'Curso', cursoRef: 12, emitidoEn: '2026-11-03T10:00:00Z',
+      emitidaPor: 'Diego (CRM 360)', revocada: false, revocacion: null, verificarUrl: null, diplomaUrl: null, aviso: null, emitidoEnCrm: true,
+      anulada: true, anulacion: { en: '2026-11-12T10:00:00Z', motivo: 'Con lo de Moodle', por: 'ana@prueba.test (CRM 360)', sustituidaPor: null, matriculaId: 8 },
+    }] : [], total: 0, pagina: 1, tam: 50 } }),
     terminados: async () => ({ data: { filas: [], total: 0, pagina: 1, tam: 50 } }),
     formaciones: vi.fn(async () => ({ data: { proyecto: { id: 3, nombre: 'ISEIH' }, motivo: null, formaciones: [] } })),
     revertirDisponible: vi.fn(async () => ({ data: datos.disponible })),
@@ -185,6 +190,18 @@ describe('«Revertir» en «Emitidos, falta enviarlos al alumno»', () => {
     fireEvent.change(within(dialogo).getByLabelText(/Motivo/), { target: { value: MOTIVO } });
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Revertir' }));
     await waitFor(() => expect(datos.toasts.at(-1)).toMatchObject({ title: 'Revertido, con un aviso', variant: 'destructive' }));
+  });
+});
+
+describe('un número anulado abierto por enlace', () => {
+  it('dice que está anulado (quién, por qué) y no abre la ficha ni ofrece «Enviar»', async () => {
+    render(<MemoryRouter initialEntries={['/?pestana=emitidos&exp=CEDIA-2026-000009-X1YZ']}><CertifexDiplomasPage puedeRevertir /></MemoryRouter>);
+    await waitFor(() => expect(datos.toasts.some((t) => /CEDIA-2026-000009-X1YZ está anulado/.test(t.title))).toBe(true));
+    const t = datos.toasts.find((x) => /está anulado/.test(x.title));
+    expect(t.description).toMatch(/ana@prueba\.test.*Con lo de Moodle/);
+    expect(t.description).toMatch(/Aprobados sin diploma/);
+    expect(screen.queryByRole('button', { name: /Enviar diploma al alumno/ })).toBeNull();
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 });
 

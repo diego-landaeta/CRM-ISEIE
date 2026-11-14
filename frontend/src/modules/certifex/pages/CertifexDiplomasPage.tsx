@@ -632,7 +632,17 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
       .then((r) => {
         const d = r?.data?.filas?.find((x) => x.nexpediente === expUrl);
         if (!vivo) return;
-        if (d) setVisor({ d, enviable: !soloLectura && !d.revocada && !d.aviso && delCrm(d) });
+        // #351: un número revertido está anulado: ni su PDF ni su envío valen. Se dice.
+        if (d?.anulada) {
+          const a = d.anulacion;
+          toast({
+            title: `${expUrl} está anulado (revertido)`,
+            description: `${a?.por ? `Lo revirtió ${a.por}` : 'Se revirtió'}${a?.en ? ` el ${fecha(a.en)}` : ''}${a?.motivo ? `: ${a.motivo}` : ''}. ${a?.sustituidaPor ? `Se volvió a emitir con ${a.sustituidaPor}.` : 'Está en «Aprobados sin diploma» para volver a emitirlo.'}`,
+          });
+          conExp(null);
+          return;
+        }
+        if (d) setVisor({ d, enviable: !soloLectura && !d.revocada && !d.anulada && !d.aviso && delCrm(d) });
         else toast({ title: 'No se encontró ese diploma', description: `${expUrl} no existe o no es de tus campus.`, variant: 'destructive' });
       })
       .catch((e) => { if (vivo) toast({ title: 'No se pudo abrir el diploma', description: (e as Error).message, variant: 'destructive' }); });

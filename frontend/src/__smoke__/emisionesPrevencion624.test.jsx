@@ -65,7 +65,9 @@ describe('#351 prevención en Emisiones: antes de «Aprobar y emitir»', () => {
     expect(within(d).getByText('2 saldrán «Con lo de Moodle»')).toBeTruthy();
     expect(within(d).getByText(/elige la formación con «Editar»/)).toBeTruthy();
     const editar = within(d).getByRole('link', { name: /Editar los datos de Berta Con Moodle en Diplomas/ });
-    expect(editar.getAttribute('href')).toMatch(/clientes\/matriculas\/diplomas\?buscar=alumno2%40prueba\.test$/);
+    expect(editar.getAttribute('href')).toMatch(/\/matriculas\/diplomas\?buscar=alumno2%40prueba\.test$/);
+    // En este CRM, Diplomas cuelga de /matriculas (sin /clientes): la ruta tiene que existir.
+    expect(editar.getAttribute('href')).not.toMatch(/clientes/);
     expect(editar.getAttribute('target')).toBe('_blank');
     expect(within(d).getByRole('link', { name: /Editar los datos de Carla Sin Modulos/ })).toBeTruthy();
   });

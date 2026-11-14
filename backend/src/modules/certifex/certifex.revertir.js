@@ -2,7 +2,7 @@ import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import * as model from './certifex.model.js';
 import { certifex, certifexTieneRuta } from './certifex.cliente.js';
-import { alcanceDe, exigirCentro } from './certifex.alcance.js';
+import { alcanceDe, exigirExpedientes } from './certifex.alcance.js';
 import { emitidoPorElCrm } from './certifex.diplomas.js';
 import { revertirSchema, mensajeDeValidacion } from './certifex.validation.js';
 
@@ -83,10 +83,10 @@ export async function revertir(req, res, next) {
     if (!(await model.tablaReversionesExiste())) throw new AppError(`${SIN_TABLA} No se ha revertido nada.`, 503, 'CRM_SIN_MIGRACION');
     if (!(await certifexTieneRuta('/revertir'))) throw new AppError(`${SIN_CERTIFEX} No se ha revertido nada.`, 503, 'CERTIFEX_SIN_REVERTIR');
 
-    const alcance = await alcanceDe(req.user);
+    // El alcance por campus, como revocar y corregir: 404 si el número no es de sus campus.
+    await exigirExpedientes(await alcanceDe(req.user), [d.nexpediente]);
     const dip = await diplomaPorNumero(d.nexpediente);
     if (!dip) throw new AppError(NO_ENCONTRADO, 404, 'NOT_FOUND');
-    exigirCentro(alcance, dip.centro, NO_ENCONTRADO);
 
     if (dip.anulada) {
       // Ya revertido. Si el CRM no lo tenía apuntado (se cortó justo después de que
