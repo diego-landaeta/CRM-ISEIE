@@ -375,6 +375,9 @@ const AVISOS = [
     detalle: 'Cuando cambia de estado una tarea que llevas, supervisas o creaste (si se mueve varias veces seguidas, un solo correo).' },
   { aviso: 'tareas_resumen', titulo: 'Tu resumen de tareas',
     detalle: 'De lunes a viernes por la tarde: lo que hiciste hoy en el tablero y lo que te falta.' },
+  // Consultas de alumnos (#769), en consultas.plazos.js. Solo administración.
+  { aviso: 'consulta_fuera_de_plazo', titulo: 'Consulta fuera de plazo',
+    detalle: 'Cuando la consulta de un alumno de tus campus pasa el plazo sin respuesta del tutor. Solo administración.' },
 ];
 
 export async function misAvisos(req, res, next) {
