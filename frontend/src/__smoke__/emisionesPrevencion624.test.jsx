@@ -63,8 +63,8 @@ const { emisionesApi } = await import('@/modules/certifex/api/certifex.api');
 afterEach(cleanup);
 
 /** Elige esas filas y pulsa «Aprobar y emitir»: devuelve el diálogo de confirmación. */
-async function aprobarYEmitir(nombres) {
-  render(<MemoryRouter><CertifexEmisionesPage embebida /></MemoryRouter>);
+async function aprobarYEmitir(nombres, props = { puedeEditar: true }) {
+  render(<MemoryRouter><CertifexEmisionesPage embebida {...props} /></MemoryRouter>);
   await screen.findByText('Ana Con Programa');
   for (const n of nombres) fireEvent.click(screen.getByRole('checkbox', { name: `Elegir a ${n}` }));
   fireEvent.click(screen.getByRole('button', { name: /^Aprobar y emitir \(/ }));
@@ -91,8 +91,28 @@ describe('#351 prevención en Emisiones: antes de «Aprobar y emitir»', () => {
     fireEvent.change(within(r).getByPlaceholderText('Ej.: 12345678Z'), { target: { value: '87654321X' } });
     fireEvent.click(within(r).getByRole('button', { name: 'Guardar' }));
     await waitFor(() => expect(editar.llamadas).toHaveLength(1));
-    expect(editar.llamadas[0]).toEqual({ matriculaId: 2, dni: '87654321X' });
+    // Sin solicitud: el campus y el correo, para que el servidor la encuentre (no se guardan).
+    expect(editar.llamadas[0]).toEqual({ matriculaId: 2, dni: '87654321X', centro: 'PSIKO', q: 'alumno2@prueba.test' });
     await waitFor(() => expect(emisionesApi.listar.mock.calls.length).toBeGreaterThan(cargasAntes));
+    // Vuelve a la confirmación del mismo lote, con lo elegido intacto.
+    const otra = await screen.findByRole('dialog', { name: /Aprobar y emitir 1/ });
+    expect(within(otra).getByText('Saldrá «Con lo de Moodle»')).toBeTruthy();
+    expect(screen.getByRole('checkbox', { name: 'Elegir a Berta Con Moodle' }).checked).toBe(true);
+  });
+
+  it('cancelar la revisión vuelve a la confirmación', async () => {
+    const d = await aprobarYEmitir(['Berta Con Moodle']);
+    fireEvent.click(within(d).getByRole('button', { name: /Editar los datos de Berta Con Moodle antes de emitir/ }));
+    const r = await screen.findByRole('dialog', { name: 'Revisar datos antes de aprobar' });
+    fireEvent.click(within(r).getByRole('button', { name: 'Cancelar' }));
+    expect(await screen.findByRole('dialog', { name: /Aprobar y emitir 1/ })).toBeTruthy();
+  });
+
+  it('sin el permiso de emitir (el que pide guardar), no hay «Editar»: se dice quién lo revisa', async () => {
+    const d = await aprobarYEmitir(['Berta Con Moodle'], {});
+    expect(within(d).getByText('Saldrá «Con lo de Moodle»')).toBeTruthy();
+    expect(within(d).queryByRole('button', { name: /Editar los datos/ })).toBeNull();
+    expect(within(d).getByText('Lo revisa quien emite diplomas.')).toBeTruthy();
   });
 
   it('con solicitud, la revisión sí deja tocar el nombre', async () => {

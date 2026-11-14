@@ -324,6 +324,12 @@ export interface CambiosSolicitud {
   emailCrm?: string | null;
   productoId?: number | null;
   programa?: ProgramaOficial | null;
+  /**
+   * #351: solo para encontrar una matrícula que no es una solicitud (desde Emisiones): su
+   * campus y su correo acotan la búsqueda en Certifex. No se guardan.
+   */
+  centro?: string;
+  q?: string;
 }
 
 /**
@@ -388,6 +394,11 @@ export interface Diploma {
   aviso: { resultado: ResultadoAviso; en: string; por: string; porNombre?: string | null } | null;
   /** El correo del alumno, al que Certifex manda el diploma (05/11/2026). Null si no se sabe. */
   titularEmail?: string | null;
+  /**
+   * #351: entregado para Certifex (aviso aprobado, haya salido o no, o correo enviado desde su
+   * panel). Lo entregado no se revierte. Un Certifex anterior no lo manda.
+   */
+  entregado?: boolean;
   /** Lo emitió este CRM («persona (CRM …)»). Lo emitido fuera no está «pendiente de aviso». */
   emitidoEnCrm?: boolean;
   /** Su diploma tiene versión de imprenta A3 (hoy, solo ISEIE). La da Certifex. */

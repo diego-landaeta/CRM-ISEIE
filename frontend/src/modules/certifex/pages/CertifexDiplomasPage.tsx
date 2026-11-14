@@ -655,6 +655,7 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
   const [versiones, setVersiones] = useState<Record<string, number>>({});
   // «Editar»: revisar los datos de una solicitud antes de aprobarla.
   const [editando, setEditando] = useState<Solicitud | null>(null);
+  const [totalRevertidos, setTotalRevertidos] = useState<number | null>(null);
   // «Nuevo diploma» (19/10): desde cero, eligiendo cliente y formación.
   const [creandoNuevo, setCreandoNuevo] = useState(false);
   // «Pasar a pendientes» (22/10/2026): la matrícula que se está pidiendo, para su botón.
@@ -742,6 +743,13 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
   useEffect(() => {
     if (!conexion?.conectado) return;
     diplomasApi.resumen(centro || undefined).then((r) => setResumen(r.data)).catch(() => setResumen(null));
+    // #351: cuántos revertidos (aparte del resumen, cuya forma no cambia). Si Certifex aún no
+    // los conoce, la pestaña sale sin número.
+    // Dentro de la promesa: si el contador falla (o no está), la pantalla sigue igual.
+    Promise.resolve()
+      .then(() => diplomasApi.diplomas({ estado: 'anulados', centro: centro || undefined, pagina: 1, tam: 1 }))
+      .then((r) => setTotalRevertidos(Number(r?.data?.total ?? 0)))
+      .catch(() => setTotalRevertidos(null));
   }, [conexion?.conectado, centro, recarga]);
 
   useEffect(() => {
@@ -864,7 +872,7 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
     if (p === 'terminados') return resumen.terminados;
     if (p === 'enviados') return resumen.vigentes;
     if (p === 'rechazados') return resumen.rechazadas;
-    if (p === 'revertidos') return undefined; // sin contador: se ve al abrirla
+    if (p === 'revertidos') return totalRevertidos ?? undefined;
     return resumen.revocados;
   };
 
@@ -1689,7 +1697,7 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
                           <IconoAccion etiqueta={d.verificarUrl ? 'Copiar enlace de verificación' : 'Sin enlace público: Certifex no tiene una dirección que abra desde fuera'} disabled={!d.verificarUrl} onClick={() => copiarEnlace(d)}><LinkSimple size={15} /></IconoAccion>
                           {/* #351: lo emitido desde el CRM y aún sin enviar se revierte también aquí
                               (p. ej. lo emitido desde Certificaciones › Emisiones, que no sale en Pendientes). */}
-                          {pestana === 'enviados' && puedeRevertir && !soloLectura && !d.aviso && !d.revocada && !d.anulada && delCrm(d) && (
+                          {pestana === 'enviados' && puedeRevertir && !soloLectura && !d.aviso && !d.entregado && !d.revocada && !d.anulada && delCrm(d) && (
                             <IconoAccion etiqueta={motivoSinRevertir ?? `Revertir ${d.nexpediente}`} disabled={trabajando || !!motivoSinRevertir}
                               onClick={() => abrir({ tipo: 'revertir', nexpediente: d.nexpediente, quien: d.alumno })}><ArrowCounterClockwise size={15} /></IconoAccion>
                           )}
@@ -2103,7 +2111,7 @@ function BloquePorAvisar({ filas, nombreCampus, elegidas, alternar, todas, ocupa
                       <Button size="sm" variant="outline" onClick={() => verPdf(c)}><FilePdf size={14} className="mr-1.5" /> Ver PDF</Button>
                       {!soloLectura && <Button size="sm" disabled={ocupado} onClick={() => enviar([k])}><PaperPlaneTilt size={14} className="mr-1.5" /> Enviar diploma al alumno</Button>}
                       {/* #351: solo lo emitido desde el CRM (lo emitido fuera no se revierte desde aquí). */}
-                      {revertir && c.diploma && delCrm(c.diploma) && (
+                      {revertir && c.diploma && delCrm(c.diploma) && !c.diploma.entregado && (
                         <Button size="sm" variant="outline" disabled={ocupado || !!motivoSinRevertir}
                           title={motivoSinRevertir ?? 'Anular este número para corregirlo y volver a emitirlo (saldrá con otro número)'}
                           aria-label={`Revertir ${k}`}
@@ -2477,6 +2485,9 @@ export function DialogoEditar({ c, alCerrar, alGuardar, alCambiarFirma, puedeSin
   if (tocado && prog.programa && !mismoPrograma(prog.programa, ed?.programaEditado)) cambios.programa = prog.programa;
   if (!tocado && ed?.programaEditado) cambios.programa = null;
   const hayCambios = Object.keys(cambios).length > 1;
+  // Sin solicitud (desde Emisiones), el servidor la busca en su campus: se le dice cuál.
+  const envio: CambiosSolicitud = conSolicitud ? cambios
+    : { ...cambios, centro: c.centro, ...(c.titular.email ? { q: c.titular.email } : {}) };
   const listo = !guardando && hayCambios && !errorNombre && !errorDni && !errorCorreo && !prog.error;
 
   // Con cambios sin guardar, Escape, el fondo o «Cancelar» preguntan antes de descartar.
@@ -2494,7 +2505,7 @@ export function DialogoEditar({ c, alCerrar, alGuardar, alCambiarFirma, puedeSin
     setGuardando(true);
     setError(null);
     try {
-      const r = await diplomasApi.editar(cambios);
+      const r = await diplomasApi.editar(envio);
       alGuardar(r.data);
     } catch (e) {
       setError((e as Error).message);

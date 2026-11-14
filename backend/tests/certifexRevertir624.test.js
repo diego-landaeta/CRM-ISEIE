@@ -242,6 +242,14 @@ describe('POST /api/certifex/diplomas/revertir', () => {
     expect(registro).toHaveLength(1);
   });
 
+  it('entregado desde el panel de Certifex (sin aviso del CRM): 409 que lo dice, sin llamar a Certifex', async () => {
+    DIPLOMAS.push(diploma('PSIKO-2026-000107-GGGG', { entregado: true }));
+    const r = await revertir(ADMIN, { nexpediente: 'PSIKO-2026-000107-GGGG' });
+    expect(r.status).toBe(409);
+    expect(r.body.error).toMatch(/desde el panel de Certifex/);
+    expect(llegoARevertir()).toHaveLength(0);
+  });
+
   it('aviso aprobado pero el correo no salió: 409 que lo dice (no «ya se ha enviado»), sin llamar a Certifex', async () => {
     DIPLOMAS.push(diploma('PSIKO-2026-000106-FFFF', { aviso: { resultado: 'correo_apagado', en: '2026-11-04T10:00:00.000Z', por: 'x (CRM 360)' } }));
     const r = await revertir(ADMIN, { nexpediente: 'PSIKO-2026-000106-FFFF' });
@@ -417,31 +425,91 @@ describe('Emisiones trae lo que se imprimiría (punto 3, prevención)', () => {
 });
 
 describe('«Editar» una matrícula sin solicitud (desde Emisiones)', () => {
-  it('se encuentra entre todas las matrículas si no es una solicitud, y se guarda el programa', async () => {
-    const sinPedir = { ...candidato(110, null), solicitud: null };
-    CANDIDATOS = [sinPedir];
+  const sinPedir = () => ({ ...candidato(110, null), solicitud: null });
+  // Certifex: entre las solicitudes no está; entre las de su campus, sí (o lo que diga `entre`).
+  const conCertifex = async (entre, fn) => {
     const fetchAntes = globalThis.fetch;
-    // Certifex: entre las solicitudes no está; entre todas, sí.
     globalThis.fetch = vi.fn(async (url, opts) => {
       const u = new URL(String(url));
       if (u.pathname.endsWith('/candidatos')) {
-        pedidas.push({ ruta: '/candidatos', query: Object.fromEntries(u.searchParams) });
-        const f = u.searchParams.get('solicitadas') === '1' ? [] : [sinPedir];
-        return new Response(JSON.stringify({ filas: f, total: f.length }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        const q = Object.fromEntries(u.searchParams);
+        pedidas.push({ ruta: '/candidatos', query: q });
+        const r = q.solicitadas === '1' ? { filas: [], total: 0 } : entre(q);
+        return new Response(JSON.stringify(r), { status: 200, headers: { 'Content-Type': 'application/json' } });
       }
       return fetchAntes(url, opts);
     });
-    try {
-      const r = await request.post('/api/certifex/diplomas/editar').set('Authorization', `Bearer ${ADMIN}`)
-        .send({ matriculaId: 110, programa: { horas: 100, modulos: [{ titulo: 'Bases', horas: 100 }] } });
-      // Lo encuentra (no 404) en la segunda búsqueda, la de todas.
+    try { return await fn(); } finally { globalThis.fetch = fetchAntes; }
+  };
+  const editar = (cuerpo) => request.post('/api/certifex/diplomas/editar').set('Authorization', `Bearer ${ADMIN}`)
+    .send({ matriculaId: 110, programa: { horas: 100, modulos: [{ titulo: 'Bases', horas: 100 }] }, ...cuerpo });
+  const busquedas = () => pedidas.filter((p) => p.ruta === '/candidatos').map((p) => p.query);
+
+  it('con su campus y su correo, la encuentra entre las de ese campus (no entre todas) y guarda', async () => {
+    await conCertifex((q) => ({ filas: q.centro === 'PSIKO' ? [sinPedir()] : [], total: 1 }), async () => {
+      const r = await editar({ centro: 'PSIKO', q: 'marta@prueba.test' });
       expect(r.status, JSON.stringify(r.body)).toBe(200);
-      const cand = pedidas.filter((p) => p.ruta === '/candidatos');
-      expect(cand[0].query).toMatchObject({ solicitadas: '1' });
-      expect(cand[1].query).not.toHaveProperty('solicitadas');
-    } finally {
-      globalThis.fetch = fetchAntes;
-    }
+    });
+    const [primera, segunda] = busquedas();
+    expect(primera).toMatchObject({ solicitadas: '1' });
+    expect(segunda).toMatchObject({ estado: 'todas', centro: 'PSIKO', q: 'marta@prueba.test' });
+    expect(segunda).not.toHaveProperty('solicitadas');
+  });
+
+  it('si por el correo no sale, la busca en su campus sin él', async () => {
+    await conCertifex((q) => ({ filas: q.q ? [] : [sinPedir()], total: 1 }), async () => {
+      expect((await editar({ centro: 'PSIKO', q: 'otro@correo.test' })).status).toBe(200);
+    });
+    expect(busquedas().slice(1).map((q) => q.q ?? null)).toEqual(['otro@correo.test', null]);
+  });
+
+  it('sin campus, no se busca fuera de las solicitudes: 404, con una sola búsqueda', async () => {
+    await conCertifex(() => ({ filas: [sinPedir()], total: 1 }), async () => {
+      expect((await editar({})).status).toBe(404);
+    });
+    expect(busquedas()).toHaveLength(1);
+  });
+
+  it('si Certifex corta la lista antes de encontrarla, 503 «no se pudo comprobar», no un falso «no existe»', async () => {
+    // Páginas llenas y un total enorme: `recorrer` llega a su tope sin encontrarla.
+    const llena = Array.from({ length: 200 }, (_, i) => ({ ...candidato(50_000 + i, null), solicitud: null }));
+    await conCertifex(() => ({ filas: llena, total: 1_000_000 }), async () => {
+      const r = await editar({ centro: 'PSIKO' });
+      expect(r.status).toBe(503);
+      expect(r.body.code).toBe('CERTIFEX_LISTA_CORTADA');
+    });
+  });
+
+  it('fuera de sus campus, aunque el cuerpo diga uno suyo: 404 (el alcance es el de la matrícula)', async () => {
+    await conCertifex(() => ({ filas: [{ ...sinPedir(), centro: 'ISEIE' }], total: 1 }), async () => {
+      expect((await editar({ centro: 'PSIKO' })).status).toBe(404);
+    });
+  });
+});
+
+describe('Revertidos: las fechas son las de la reversión', () => {
+  it('desde/hasta filtra por cuándo se revirtió, no por cuándo se emitió', async () => {
+    DIPLOMAS = [
+      diploma('PSIKO-2026-000201-AAAA', { emitidoEn: '2026-10-01T10:00:00.000Z', anulada: true, anulacion: { en: '2026-11-10T10:00:00.000Z', motivo: 'm', por: 'x', sustituidaPor: null, matriculaId: null } }),
+      diploma('PSIKO-2026-000202-BBBB', { emitidoEn: '2026-11-10T10:00:00.000Z', anulada: true, anulacion: { en: '2026-10-01T10:00:00.000Z', motivo: 'm', por: 'x', sustituidaPor: null, matriculaId: null } }),
+    ];
+    const r = await request.get('/api/certifex/diplomas?estado=anulados&desde=2026-11-01&hasta=2026-11-30').set('Authorization', `Bearer ${ADMIN}`);
+    expect(r.status).toBe(200);
+    expect(r.body.data.filas.map((d) => d.nexpediente)).toEqual(['PSIKO-2026-000201-AAAA']);
+  });
+});
+
+describe('el repaso de reversiones, si Certifex falla, se reintenta en la siguiente carga', () => {
+  it('no se apunta como hecho un repaso que falló', async () => {
+    const porAvisar = () => request.get('/api/certifex/diplomas/por-avisar').set('Authorization', `Bearer ${ADMIN}`);
+    fallaApunte = true;
+    expect((await porAvisar()).status).toBe(200);
+    expect(registro).toHaveLength(0);
+    fallaApunte = false;
+    pedidas = [];
+    expect((await porAvisar()).status).toBe(200);
+    expect(pedidas.some((p) => p.ruta === '/diplomas' && p.query.estado === 'anulados')).toBe(true);
+    expect(registro.map((x) => x.nexpediente)).toEqual([EXP_ANULADO]);
   });
 });
 

@@ -305,7 +305,7 @@ export default function MatriculasPage() {
               </div>
             )}
             <Suspense fallback={<SkeletonTable rows={5} columns={6} />}>
-              {vistaCert === 'consultas' ? <CertifexConsultasPage embebida /> : <CertifexEmisionesPage embebida />}
+              {vistaCert === 'consultas' ? <CertifexConsultasPage embebida /> : <CertifexEmisionesPage embebida puedeEditar={can('diplomas.emit')} />}
             </Suspense>
           </div>
         )

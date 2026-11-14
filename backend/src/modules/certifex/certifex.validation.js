@@ -269,6 +269,10 @@ export const dniObligatorio = z.preprocess((v) => (v === undefined ? null : v), 
 
 export const editarSchema = z.object({
   matriculaId: z.number().int().positive(),
+  // #351: solo para encontrar una matrícula que no es una solicitud (Emisiones): el
+  // campus y el correo acotan la búsqueda. No dan alcance: se comprueba con la matrícula.
+  centro: centro.optional(),
+  q: z.string().trim().max(100).optional(),
   nombre: nombreDiploma.optional(),
   dni: dniDiploma.optional(),
   emailCrm: z.preprocess(

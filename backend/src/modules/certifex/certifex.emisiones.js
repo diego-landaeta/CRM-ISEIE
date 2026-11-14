@@ -7,7 +7,7 @@ import { config, urlPublica, direccionPublica, certifex, recorrer } from './cert
 import { alcanceDe, centrosPermitidos, acotar, exigirCentro, exigirMatriculas, exigirExpedientes } from './certifex.alcance.js';
 import { datosPara, emitirMatriculas } from './certifex.emision.js';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
-import { conEdicion, conProgramaCrm } from './certifex.diplomas.js';
+import { conEdicion, conProgramaCrm } from './certifex.enriquecer.js';
 
 export { certifex };
 

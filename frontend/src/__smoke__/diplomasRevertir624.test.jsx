@@ -91,7 +91,10 @@ vi.mock('@/modules/certifex/api/certifex.api', () => ({
         emitidaPor: 'Diego (CRM 360)', revocada: false, revocacion: null, verificarUrl: null, diplomaUrl: null, aviso: { resultado: 'enviado', en: '2026-11-04T10:00:00Z', por: 'x' }, emitidoEnCrm: true },
       { nexpediente: 'CEDIA-2026-000022-FUER', centro: 'ISEIH', alumno: 'Kike De Fuera', titulacion: 'Curso', cursoRef: 12, emitidoEn: '2026-11-03T10:00:00Z',
         emitidaPor: 'admin@certifex.tech', revocada: false, revocacion: null, verificarUrl: null, diplomaUrl: null, aviso: null, emitidoEnCrm: false },
-    ], total: 3, pagina: 1, tam: 50 } } : { data: { filas: f?.estado === 'anulados' || f?.q === 'CEDIA-2026-000009-X1YZ' ? [{
+      // Entregado desde el panel de Certifex: sin aviso del CRM, pero entregado.
+      { nexpediente: 'CEDIA-2026-000023-PANL', centro: 'ISEIH', alumno: 'Luz Por El Panel', titulacion: 'Curso', cursoRef: 12, emitidoEn: '2026-11-03T10:00:00Z',
+        emitidaPor: 'Diego (CRM 360)', revocada: false, revocacion: null, verificarUrl: null, diplomaUrl: null, aviso: null, entregado: true, emitidoEnCrm: true },
+    ], total: 4, pagina: 1, tam: 50 } } : { data: { filas: f?.estado === 'anulados' || f?.q === 'CEDIA-2026-000009-X1YZ' ? [{
       nexpediente: 'CEDIA-2026-000009-X1YZ', centro: 'ISEIH', alumno: 'Hugo Revertido', titulacion: 'Curso', cursoRef: 12, emitidoEn: '2026-11-03T10:00:00Z',
       emitidaPor: 'Diego (CRM 360)', revocada: false, revocacion: null, verificarUrl: null, diplomaUrl: null, aviso: null, emitidoEnCrm: true,
       anulada: true, anulacion: { en: '2026-11-12T10:00:00Z', motivo: 'Con lo de Moodle', por: 'ana@prueba.test (CRM 360)', sustituidaPor: null, matriculaId: 8 },
@@ -221,6 +224,7 @@ describe('«Revertir» también en Emitidos (lo emitido desde Emisiones y sin en
     await waitFor(() => expect(b.disabled).toBe(false));
     expect(within(screen.getByText('Juan Ya Enviado').closest('tr')).queryByRole('button', { name: /^Revertir/ })).toBeNull();
     expect(within(screen.getByText('Kike De Fuera').closest('tr')).queryByRole('button', { name: /^Revertir/ })).toBeNull();
+    expect(within(screen.getByText('Luz Por El Panel').closest('tr')).queryByRole('button', { name: /^Revertir/ })).toBeNull();
     fireEvent.click(b);
     const dialogo = await screen.findByRole('dialog', { name: 'Revertir CEDIA-2026-000020-E1MS' });
     expect(within(dialogo).getByText(/Iris Desde Emisiones vuelve a estar aprobado sin diploma/)).toBeTruthy();
