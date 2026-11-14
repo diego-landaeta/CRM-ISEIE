@@ -111,7 +111,11 @@ export const destinoDeTutor = (t) => `/tutores?buscar=${encodeURIComponent(t.nom
 // La factura de un colaborador: el Historial, con su colaborador y su mes.
 export const destinoDeFacturaColaborador = (f) => `/accounting/facturas-colaboradores?vista=historial&colaborador=${f.colaborador_id}${f.periodo ? `&periodo=${f.periodo}` : ''}`;
 // Un diploma: Emitidos (clave `enviados`) o Revocados, filtrado por el alumno.
-export const destinoDeDiploma = (d) => `/matriculas/diplomas?pestana=${d.revocada ? 'revocados' : 'enviados'}&buscar=${encodeURIComponent(d.alumno || d.nexpediente || '')}`;
+// #351: un número revertido (anulado) no está en Emitidos: su matrícula está en Pendientes ›
+// «Aprobados sin diploma», que es la pestaña por defecto (sin `pestana`).
+export const destinoDeDiploma = (d) => d.anulada
+  ? `/matriculas/diplomas?buscar=${encodeURIComponent(d.alumno || d.nexpediente || '')}`
+  : `/matriculas/diplomas?pestana=${d.revocada ? 'revocados' : 'enviados'}&buscar=${encodeURIComponent(d.alumno || d.nexpediente || '')}`;
 // Un curso de Moodle: la pantalla de su campus, con su nombre en el buscador y todos los estados.
 export const destinoDeCursoMoodle = (c, campus) => `/conexion/moodle/${campus}?estado=todos&q=${encodeURIComponent(c.nombre || '')}`;
 
@@ -333,7 +337,7 @@ export default function CommandPalette() {
       })),
       ...res.diplomas.map((d) => ({
         id: `diploma-${d.id ?? d.nexpediente}`, label: d.alumno || d.nexpediente, icon: Certificate, group: 'Diplomas', to: destinoDeDiploma(d),
-        sublabel: [d.nexpediente, d.titulacion, d.revocada ? 'Revocado' : ''].filter(Boolean).join(' · '),
+        sublabel: [d.nexpediente, d.titulacion, d.revocada ? 'Revocado' : d.anulada ? 'Anulado (revertido)' : ''].filter(Boolean).join(' · '),
       })),
       ...res.cursosMoodle.map((c) => ({
         id: `moodle-${c.id}`, label: c.nombre, icon: GraduationCap, group: 'Cursos de Moodle', to: destinoDeCursoMoodle(c, c.campus),
