@@ -375,6 +375,15 @@ describe('el repaso de reversiones (tarea programada): lo que Certifex revirtió
     expect(registro).toHaveLength(1);
   });
 
+  it('solo apunta lo que revirtió ESTE CRM: lo revertido por otro CRM (un campus compartido) no', async () => {
+    DIPLOMAS = [
+      ...DIPLOMAS,
+      diploma('PSIKO-2026-000106-FFFF', { anulada: true, anulacion: { en: '2026-11-06T10:00:00.000Z', motivo: 'm', por: 'luis@prueba.test (CRM-ISEIE)', sustituidaPor: null, matriculaId: 106 } }),
+    ];
+    expect(await completarReversiones()).toEqual({ apuntadas: 1 });
+    expect(registro.map((x) => x.nexpediente)).toEqual([EXP_ANULADO]);
+  });
+
   it('cargar «Diplomas» (un GET) ya no escribe en el registro ni pregunta por los anulados', async () => {
     const r = await request.get('/api/certifex/diplomas/por-avisar').set('Authorization', `Bearer ${ADMIN}`);
     expect(r.status).toBe(200);

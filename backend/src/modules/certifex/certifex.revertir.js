@@ -46,6 +46,16 @@ async function diplomaPorNumero(nexp) {
   return (Array.isArray(d?.filas) ? d.filas : []).find((x) => x.nexpediente === nexp) ?? null;
 }
 
+/**
+ * « (CRM X)»: cómo firma Certifex lo que hace este CRM (su `actorCrm`/`etiquetaCrm`): el nombre de
+ * la clave tal cual si ya empieza por «CRM», y si no, «CRM » delante. Lo da Certifex en GET /yo.
+ */
+function sufijoDeEsteCrm(yo) {
+  const nombre = String(yo?.nombre ?? '').trim();
+  if (!nombre) throw new AppError('Certifex no dijo el nombre de este CRM (GET /yo).', 502, 'CERTIFEX_ERROR');
+  return ` (${/^crm\b/i.test(nombre) ? nombre : `CRM ${nombre}`})`;
+}
+
 /** El correo de «persona (CRM X)», como lo devuelve Certifex en la anulación. */
 const correoDe = (por) => String(por ?? '').replace(/\s*\([^()]*\)\s*$/, '').trim() || String(por ?? '');
 
@@ -175,7 +185,12 @@ async function apuntarDesdeCertifex(dip) {
 export async function completarReversiones() {
   if (!(await model.tablaReversionesExiste())) return { apuntadas: 0, motivo: 'sin la tabla del CRM' };
   if (!(await certifexPuede('revertir'))) return { apuntadas: 0, motivo: 'Certifex aún no revierte' };
-  const { filas } = await recorrer('/diplomas', { estado: 'anulados' }, { filtro: (f) => !!(f?.anulada && f.nexpediente) });
+  // Solo lo que revirtió ESTE CRM: si un campus estuviera conectado a dos, lo que revirtió el otro
+  // es del otro (Certifex ya solo deja revertir al que emitió; 12.ª auditoría, punto 4).
+  const sufijo = sufijoDeEsteCrm(await certifex('GET', '/yo'));
+  const { filas } = await recorrer('/diplomas', { estado: 'anulados' }, {
+    filtro: (f) => !!(f?.anulada && f.nexpediente) && String(f.anulacion?.por ?? '').trimEnd().endsWith(sufijo),
+  });
   if (!filas.length) return { apuntadas: 0 };
   const ya = await model.reversionesApuntadas(filas.map((f) => f.nexpediente));
   let apuntadas = 0;
