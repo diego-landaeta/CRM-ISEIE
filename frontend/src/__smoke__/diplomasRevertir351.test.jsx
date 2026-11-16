@@ -272,18 +272,6 @@ describe('«Revertir» también en Emitidos (lo emitido desde Emisiones y sin en
     await waitFor(() => expect(diplomasApi.revertir).toHaveBeenCalledWith('CEDIA-2026-000020-E1MS', MOTIVO));
   });
 
-  it('…y en «Emitidos, falta enviarlos» de Pendientes, igual: «Enviar» sí, «Revertir» no', async () => {
-    datos.deOtroCrm = true;
-    try {
-      abrir({ puedeRevertir: true });
-      const eva = await filaDe('Eva Con Moodle');
-      expect(within(eva).getByRole('button', { name: /Enviar diploma al alumno/ })).toBeTruthy();
-      expect(within(eva).queryByRole('button', { name: /^Revertir/ })).toBeNull();
-    } finally {
-      datos.deOtroCrm = false;
-    }
-  });
-
   it('lo emitido por OTRO CRM del campus: se puede enviar, pero no sale «Revertir» (14.ª auditoría)', async () => {
     datos.deOtroCrm = true;
     try {
@@ -291,6 +279,18 @@ describe('«Revertir» también en Emitidos (lo emitido desde Emisiones y sin en
       const iris = (await screen.findByText('Iris Desde Emisiones')).closest('tr');
       expect(within(iris).getByRole('button', { name: 'Enviar al alumno' })).toBeTruthy();
       expect(within(iris).queryByRole('button', { name: /^Revertir/ })).toBeNull();
+    } finally {
+      datos.deOtroCrm = false;
+    }
+  });
+
+  it('…y en «Emitidos, falta enviarlos» de Pendientes, igual: «Enviar» sí, «Revertir» no', async () => {
+    datos.deOtroCrm = true;
+    try {
+      abrir({ puedeRevertir: true });
+      const eva = await filaDe('Eva Con Moodle');
+      expect(within(eva).getByRole('button', { name: /Enviar diploma al alumno/ })).toBeTruthy();
+      expect(within(eva).queryByRole('button', { name: /^Revertir/ })).toBeNull();
     } finally {
       datos.deOtroCrm = false;
     }
