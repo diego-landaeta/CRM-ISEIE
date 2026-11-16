@@ -823,3 +823,16 @@ describe('lo que emitió o revirtió OTRO CRM del campus (13.ª auditoría, punt
     expect(registro.map((x) => x.nexpediente)).toEqual(['PSIKO-2026-000109-IIII']);
   });
 });
+
+describe('el alcance de «Revertir» es el de revocar y corregir (`exigirExpedientes`), con una sola consulta (13.ª auditoría, punto 6)', () => {
+  it('un superadmin (sin alcance que mirar): también una sola consulta del diploma', async () => {
+    expect((await revertir(SUPER)).status).toBe(200);
+    expect(pedidas.filter((p) => p.ruta === '/diplomas' && p.query.q === EXP)).toHaveLength(1);
+  });
+
+  it('un admin de otro campus recibe 404 aunque el diploma viniera sin campus (el alcance va antes que el 502)', async () => {
+    DIPLOMAS = DIPLOMAS.map((d) => (d.nexpediente === EXP ? { ...d, centro: null } : d));
+    expect((await revertir(ADMIN_ISEIE)).status).toBe(404);
+    expect(llegoARevertir()).toHaveLength(0);
+  });
+});

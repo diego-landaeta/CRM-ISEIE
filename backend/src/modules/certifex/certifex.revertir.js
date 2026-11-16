@@ -2,7 +2,7 @@ import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import * as model from './certifex.model.js';
 import { certifex, certifexPuede, recorrer } from './certifex.cliente.js';
-import { alcanceDe, exigirCentro } from './certifex.alcance.js';
+import { alcanceDe, exigirExpedientes } from './certifex.alcance.js';
 import { emitidoPorElCrm } from './certifex.marcas.js';
 import { revertirSchema, mensajeDeValidacion } from './certifex.validation.js';
 
@@ -97,12 +97,15 @@ export async function revertir(req, res, next) {
     if (!(await model.tablaReversionesExiste())) throw new AppError(`${SIN_TABLA} No se ha revertido nada.`, 503, 'CRM_SIN_MIGRACION');
     if (!(await certifexPuede('revertir'))) throw new AppError(`${SIN_CERTIFEX} No se ha revertido nada.`, 503, 'CERTIFEX_SIN_REVERTIR');
 
-    // El diploma, una sola vez, y con él el alcance por campus (como revocar y corregir): 404 si no
-    // existe o no es de sus campus. Sin campus no se puede saber de quién es ni apuntarlo: no se toca.
-    const dip = await diplomaPorNumero(d.nexpediente);
+    // El alcance por campus, como revocar y corregir (Diego: «como hacen `revocar` y `corregir`
+    // (`exigirExpedientes`)»): 404 si no existe o no es de sus campus. Devuelve el diploma que ha
+    // consultado, y se usa ese: Certifex no se pregunta dos veces. Sin alcance que mirar (super
+    // admin), se pide aquí. Un diploma sin campus (en Certifex no existe: `proyecto_id not null`) da
+    // 404 a quien tiene alcance, y 502 al resto: no se puede saber de quién es ni apuntarlo.
+    const consultados = await exigirExpedientes(await alcanceDe(req.user), [d.nexpediente]);
+    const dip = consultados?.get(d.nexpediente) ?? await diplomaPorNumero(d.nexpediente);
     if (!dip) throw new AppError(NO_ENCONTRADO, 404, 'NOT_FOUND');
     if (!centroDe(dip)) throw new AppError('Certifex no dice de qué campus es ese diploma: no se ha revertido nada.', 502, 'CERTIFEX_ERROR');
-    exigirCentro(await alcanceDe(req.user), centroDe(dip), NO_ENCONTRADO);
 
     if (dip.anulada) {
       // Ya revertido. Si el CRM no lo tenía apuntado (se cortó justo después de que
