@@ -96,8 +96,9 @@ vi.mock('@/modules/certifex/api/certifex.api', () => ({
         emitidaPor: 'Diego (CRM 360)', revocada: false, revocacion: null, verificarUrl: null, diplomaUrl: null, aviso: null, entregado: true, emitidoEnCrm: true },
     ], total: 4, pagina: 1, tam: 50 } } : { data: { filas: f?.estado === 'anulados' || f?.q === 'CEDIA-2026-000009-X1YZ' ? [{
       nexpediente: 'CEDIA-2026-000009-X1YZ', centro: 'ISEIH', alumno: 'Hugo Revertido', titulacion: 'Curso', cursoRef: 12, emitidoEn: '2026-11-03T10:00:00Z',
-      emitidaPor: 'Diego (CRM 360)', revocada: false, revocacion: null, verificarUrl: null, diplomaUrl: null, aviso: null, emitidoEnCrm: true,
-      anulada: true, anulacion: { en: '2026-11-12T10:00:00Z', motivo: 'Con lo de Moodle', por: 'ana@prueba.test (CRM 360)', sustituidaPor: null, matriculaId: 8 },
+      // Con enlace de verificación (Certifex lo manda igual): la pantalla no debe ofrecerlo.
+      emitidaPor: 'Diego (CRM 360)', revocada: false, revocacion: null, verificarUrl: 'https://certifex.test/c/CEDIA-2026-000009-X1YZ', diplomaUrl: null, aviso: null, emitidoEnCrm: true,
+      anulada: true, anulacion: { en: '2026-11-12T10:00:00Z', motivo: 'Con lo de Moodle', por: 'ana@prueba.test (CRM 360)', sustituidaPor: null, matriculaId: 8, ...(datos.anulacionExtra ?? {}) },
     }] : [], total: 0, pagina: 1, tam: 50 } }),
     terminados: async () => ({ data: { filas: [], total: 0, pagina: 1, tam: 50 } }),
     formaciones: vi.fn(async () => ({ data: { proyecto: { id: 3, nombre: 'ISEIH' }, motivo: null, formaciones: [] } })),
@@ -249,6 +250,25 @@ describe('la pestaña «Revertidos»', () => {
     expect(within(fila).getByText('«Con lo de Moodle»')).toBeTruthy();
     expect(within(fila).getByText(/Todavía no/)).toBeTruthy();
     expect(screen.getAllByText('Revertidos').length).toBeGreaterThan(0);
+  });
+
+  it('no ofrece copiar el enlace de verificación de un número anulado (daría «no existe»)', async () => {
+    render(<MemoryRouter initialEntries={['/?pestana=revertidos']}><CertifexDiplomasPage /></MemoryRouter>);
+    const fila = (await screen.findByText('Hugo Revertido')).closest('tr');
+    expect(within(fila).queryByLabelText(/enlace/i)).toBeNull();
+  });
+
+  it('revertido dos veces: dice que el número con que se reemitió también se revirtió, y cuál vale hoy', async () => {
+    datos.anulacionExtra = { sustituidaPor: 'CEDIA-2026-000010-S2DO', vigente: 'CEDIA-2026-000011-T3RC' };
+    try {
+      render(<MemoryRouter initialEntries={['/?pestana=revertidos']}><CertifexDiplomasPage /></MemoryRouter>);
+      const fila = (await screen.findByText('Hugo Revertido')).closest('tr');
+      expect(within(fila).getByText('CEDIA-2026-000010-S2DO')).toBeTruthy();
+      expect(within(fila).getByText(/también revertido; hoy vale/)).toBeTruthy();
+      expect(within(fila).getByText('CEDIA-2026-000011-T3RC')).toBeTruthy();
+    } finally {
+      datos.anulacionExtra = undefined;
+    }
   });
 });
 

@@ -74,7 +74,7 @@ const { default: supertest } = await import('supertest');
 const { default: jwt } = await import('jsonwebtoken');
 const { default: router } = await import('../src/modules/certifex/certifex.routes.js');
 const { olvidarCapacidades } = await import('../src/modules/certifex/certifex.cliente.js');
-const { olvidarRepasos } = await import('../src/modules/certifex/certifex.revertir.js');
+const { completarReversiones } = await import('../src/modules/certifex/certifex.revertir.js');
 
 const app = express();
 app.use(express.json());
@@ -121,6 +121,7 @@ let CANDIDATOS;
 
 let pedidas = [];
 let conRuta = true;
+let yoFalla = false;
 // Como Certifex: la matrícula de esa persona y ese curso (la de EXP es la 101).
 const MATRICULA_DE = { [EXP]: 101 };
 let alRevertir = (p) => ({ status: 200, body: { ok: true, nexpediente: p.cuerpo.nexpediente, anulada: { en: '2026-11-13T09:30:00.000Z', por: `${p.cuerpo.revertidoPor} (CRM 360)`, motivo: p.cuerpo.motivo }, matriculaId: MATRICULA_DE[p.cuerpo.nexpediente] ?? null } });
@@ -132,7 +133,11 @@ beforeAll(() => {
     const p = { ruta: u.pathname.replace('/api/crm/v1', ''), query: Object.fromEntries(u.searchParams), metodo: opts.method, cuerpo: opts.body ? JSON.parse(opts.body) : null };
     pedidas.push(p);
     const responder = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
-    if (p.ruta === '/yo') return responder({ nombre: 'CRM 360', centros: ['PSIKO', 'ISEIE'] });
+    // Como el Certifex de verdad: dice en `capacidades` lo que sabe hacer (sin la 0045, no «revertir»).
+    if (p.ruta === '/yo') {
+      if (yoFalla) return responder({ error: 'Error interno' }, 500);
+      return responder({ nombre: 'CRM 360', centros: ['PSIKO', 'ISEIE'], ...(conRuta ? { capacidades: ['revertir'] } : {}) });
+    }
     if (p.ruta === '/diplomas') {
       const est = p.query.estado ?? 'vigentes';
       const f = DIPLOMAS.filter((d) => (!p.query.q || d.nexpediente === p.query.q) && (!p.query.centro || d.centro === p.query.centro)
@@ -164,6 +169,7 @@ beforeEach(() => {
   tablaExiste = true;
   fallaApunte = false;
   conRuta = true;
+  yoFalla = false;
   alRevertir = (p) => ({ status: 200, body: { ok: true, nexpediente: p.cuerpo.nexpediente, anulada: { en: '2026-11-13T09:30:00.000Z', por: `${p.cuerpo.revertidoPor} (CRM 360)`, motivo: p.cuerpo.motivo }, matriculaId: MATRICULA_DE[p.cuerpo.nexpediente] ?? null } });
   DIPLOMAS = [
     diploma(EXP),
@@ -174,7 +180,6 @@ beforeEach(() => {
   ];
   CANDIDATOS = [candidato(101, EXP), candidato(102, EXP_ENVIADO)];
   olvidarCapacidades();
-  olvidarRepasos();
 });
 
 const MOTIVO = 'Se emitió con las actividades de Moodle; se reemite con el temario oficial';
@@ -326,10 +331,18 @@ describe('POST /api/certifex/diplomas/revertir', () => {
 describe('GET /api/certifex/diplomas/revertir (¿se puede usar?)', () => {
   const disp = (tk = ADMIN) => request.get('/api/certifex/diplomas/revertir').set('Authorization', `Bearer ${tk}`);
 
-  it('sí, con la tabla y la ruta en Certifex (la sonda va con el cuerpo vacío)', async () => {
+  it('sí, con la tabla y «revertir» en las capacidades de Certifex (lo dice /yo: no se llama a /revertir)', async () => {
     const r = await disp();
     expect(r.body.data).toEqual({ disponible: true, motivo: null });
-    expect(pedidas.filter((p) => p.ruta === '/revertir')).toEqual([expect.objectContaining({ metodo: 'POST', cuerpo: {} })]);
+    expect(pedidas.filter((p) => p.ruta === '/yo')).toEqual([expect.objectContaining({ metodo: 'GET' })]);
+    expect(pedidas.filter((p) => p.ruta === '/revertir')).toEqual([]);
+  });
+
+  it('si no se puede preguntar a Certifex, no disponible y lo dice (no «no lo tiene»)', async () => {
+    yoFalla = true;
+    const r = await disp();
+    expect(r.body.data.disponible).toBe(false);
+    expect(r.body.data.motivo).toMatch(/No se pudo comprobar si Certifex permite revertir/);
   });
 
   it('no, si Certifex no tiene la ruta (falta su 0045)', async () => {
@@ -354,46 +367,39 @@ describe('GET /api/certifex/diplomas/revertir (¿se puede usar?)', () => {
   });
 });
 
-describe('«por avisar»: lo que Certifex revirtió y el CRM no apuntó, se apunta', () => {
-  const porAvisar = () => request.get('/api/certifex/diplomas/por-avisar').set('Authorization', `Bearer ${ADMIN}`);
-
-  it('al cargar, apunta la reversión que faltaba, con su matrícula, una sola vez', async () => {
-    expect((await porAvisar()).status).toBe(200);
-    expect(registro).toEqual([expect.objectContaining({ nexpediente: EXP_ANULADO, matricula_id: 105, revertido_por_email: 'pepe@prueba.test', motivo: 'temario de Moodle' })]);
-    expect((await porAvisar()).status).toBe(200);
+describe('el repaso de reversiones (tarea programada): lo que Certifex revirtió y el CRM no apuntó, se apunta', () => {
+  it('apunta la reversión que faltaba, con su matrícula, una sola vez', async () => {
+    expect(await completarReversiones()).toEqual({ apuntadas: 1 });
+    expect(registro).toEqual([expect.objectContaining({ nexpediente: EXP_ANULADO, matricula_id: 105, revertido_por: null, revertido_por_email: 'pepe@prueba.test', motivo: 'temario de Moodle' })]);
+    expect(await completarReversiones()).toEqual({ apuntadas: 0 });
     expect(registro).toHaveLength(1);
   });
 
-  it('lo de un campus que no es suyo no lo apunta', async () => {
-    DIPLOMAS = DIPLOMAS.map((d) => (d.nexpediente === EXP_ANULADO ? { ...d, centro: 'ISEIE' } : d));
-    expect((await porAvisar()).status).toBe(200);
-    expect(registro).toHaveLength(0);
-  });
-
-  it('quien no puede revertir no escribe en el registro al cargar (solo lo ve)', async () => {
-    const r = await request.get('/api/certifex/diplomas/por-avisar').set('Authorization', `Bearer ${SOLO_VE}`);
+  it('cargar «Diplomas» (un GET) ya no escribe en el registro ni pregunta por los anulados', async () => {
+    const r = await request.get('/api/certifex/diplomas/por-avisar').set('Authorization', `Bearer ${ADMIN}`);
     expect(r.status).toBe(200);
     expect(registro).toHaveLength(0);
     expect(pedidas.some((p) => p.ruta === '/diplomas' && p.query.estado === 'anulados')).toBe(false);
   });
 
-  it('como mucho una vez por minuto: la segunda carga ni pregunta a Certifex', async () => {
-    expect((await porAvisar()).status).toBe(200);
-    pedidas = [];
-    expect((await porAvisar()).status).toBe(200);
-    expect(pedidas.some((p) => p.ruta === '/diplomas' && p.query.estado === 'anulados')).toBe(false);
-  });
-
-  it('con un Certifex que aún no revierte, ni lo pregunta; y si algo falla, el listado sale igual', async () => {
+  it('con un Certifex que aún no revierte, o sin la tabla del CRM, no hace nada', async () => {
     conRuta = false;
-    expect((await porAvisar()).status).toBe(200);
-    expect(pedidas.some((p) => p.ruta === '/diplomas' && p.query.estado === 'anulados')).toBe(false);
+    expect(await completarReversiones()).toMatchObject({ apuntadas: 0 });
+    expect(pedidas.some((p) => p.ruta === '/diplomas')).toBe(false);
     conRuta = true;
     olvidarCapacidades();
-    olvidarRepasos();
-    fallaApunte = true;
-    expect((await porAvisar()).status).toBe(200);
+    tablaExiste = false;
+    expect(await completarReversiones()).toMatchObject({ apuntadas: 0 });
     expect(registro).toHaveLength(0);
+  });
+
+  it('si falla, lo dice (la tarea anota el fallo) y la vuelta siguiente lo apunta', async () => {
+    fallaApunte = true;
+    await expect(completarReversiones()).rejects.toThrow(/no contesta/);
+    expect(registro).toHaveLength(0);
+    fallaApunte = false;
+    expect(await completarReversiones()).toEqual({ apuntadas: 1 });
+    expect(registro.map((x) => x.nexpediente)).toEqual([EXP_ANULADO]);
   });
 });
 
@@ -459,6 +465,18 @@ describe('«Editar» una matrícula sin solicitud (desde Emisiones)', () => {
     expect(segunda).not.toHaveProperty('solicitadas');
   });
 
+  it('sin solicitud, solo la formación y su programa: nombre, DNI o correo dan 400 y no se manda nada a Certifex', async () => {
+    for (const extra of [{ dni: '12345678Z' }, { emailCrm: 'otra@prueba.test' }, { nombre: 'Marta López Gil' }]) {
+      pedidas = [];
+      await conCertifex((q) => ({ filas: q.centro === 'PSIKO' ? [sinPedir()] : [], total: 1 }), async () => {
+        const r = await editar({ centro: 'PSIKO', q: 'marta@prueba.test', ...extra });
+        expect(r.status, JSON.stringify(extra)).toBe(400);
+        expect(r.body.error).toMatch(/solo se elige la formación vendida y su programa/);
+      });
+      expect(pedidas.some((p) => p.ruta.startsWith('/solicitudes/'))).toBe(false);
+    }
+  });
+
   it('si por el correo no sale, la busca en su campus sin él', async () => {
     await conCertifex((q) => ({ filas: q.q ? [] : [sinPedir()], total: 1 }), async () => {
       expect((await editar({ centro: 'PSIKO', q: 'otro@correo.test' })).status).toBe(200);
@@ -499,20 +517,6 @@ describe('Revertidos: las fechas son las de la reversión', () => {
     const r = await request.get('/api/certifex/diplomas?estado=anulados&desde=2026-11-01&hasta=2026-11-30').set('Authorization', `Bearer ${ADMIN}`);
     expect(r.status).toBe(200);
     expect(r.body.data.filas.map((d) => d.nexpediente)).toEqual(['PSIKO-2026-000201-AAAA']);
-  });
-});
-
-describe('el repaso de reversiones, si Certifex falla, se reintenta en la siguiente carga', () => {
-  it('no se apunta como hecho un repaso que falló', async () => {
-    const porAvisar = () => request.get('/api/certifex/diplomas/por-avisar').set('Authorization', `Bearer ${ADMIN}`);
-    fallaApunte = true;
-    expect((await porAvisar()).status).toBe(200);
-    expect(registro).toHaveLength(0);
-    fallaApunte = false;
-    pedidas = [];
-    expect((await porAvisar()).status).toBe(200);
-    expect(pedidas.some((p) => p.ruta === '/diplomas' && p.query.estado === 'anulados')).toBe(true);
-    expect(registro.map((x) => x.nexpediente)).toEqual([EXP_ANULADO]);
   });
 });
 
@@ -558,9 +562,7 @@ describe('lo que encontró la 6.ª auditoría', () => {
 
   it('el repaso de reversiones recorre todas las páginas de Certifex, no solo la primera', async () => {
     DIPLOMAS = Array.from({ length: 230 }, (_, i) => anulado(i));
-    const r = await request.get('/api/certifex/diplomas/por-avisar').set('Authorization', `Bearer ${ADMIN}`);
-    expect(r.status).toBe(200);
-    expect(registro).toHaveLength(230);
+    expect(await completarReversiones()).toEqual({ apuntadas: 230 });
     expect(registro.some((x) => x.nexpediente === anulado(229).nexpediente)).toBe(true);
     expect(pedidas.filter((p) => p.ruta === '/diplomas' && p.query.estado === 'anulados').map((p) => p.query.pagina)).toEqual(['1', '2']);
   });

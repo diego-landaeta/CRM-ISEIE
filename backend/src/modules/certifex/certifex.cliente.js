@@ -93,42 +93,40 @@ export async function certifex(metodo, ruta, cuerpo, { timeoutMs = 20_000 } = {}
 // ─────────────────────────────────────────────── lo que sabe hacer el Certifex conectado
 
 /**
- * ¿El Certifex conectado tiene ya esta ruta POST? Se pregunta con un cuerpo vacio: si la
- * tiene, contesta con SU error de validacion (400, o el 404/409 de lo que no encuentra);
- * si no, con su 404 generico «No encontrado.». Asi el CRM no ofrece un boton que fallaria
- * a medias mientras Certifex no este desplegado (#351). Se recuerda 5 minutos.
+ * ¿El Certifex conectado sabe hacer esto (p. ej. `revertir`, #351)? Lo dice el propio Certifex
+ * en `GET /yo` (`capacidades`): así el CRM no ofrece un botón que fallaría a medias mientras
+ * Certifex no esté desplegado, y sin llamar a la ruta para averiguarlo (una ruta que cambia
+ * datos no se usa como sonda; 7.ª auditoría). Un Certifex anterior no trae `capacidades`: no la
+ * tiene. Se recuerda 5 minutos.
  *
- * Si no se puede saber (Certifex no contesta, la clave no vale, un proxy devuelve HTML),
- * lanza ese error: no se confunde «no se pudo preguntar» con «no lo tiene».
+ * Si no se puede saber (Certifex no contesta, la clave no vale, contesta algo que no es su
+ * JSON), lanza ese error: no se confunde «no se pudo preguntar» con «no lo tiene».
  */
 const CAPACIDAD_MS = 5 * 60_000;
-let capacidades = new Map();
+let capacidades = null;
 
-export async function certifexTieneRuta(ruta) {
-  const sabido = capacidades.get(ruta);
-  if (sabido && Date.now() < sabido.hasta) return sabido.valor;
-  let valor;
-  try {
-    await certifex('POST', ruta, {}, { timeoutMs: 10_000 });
-    valor = true; // un 200 con el cuerpo vacio no deberia pasar, pero la ruta existe
-  } catch (e) {
-    // Solo cuenta lo que contesta Certifex con su JSON (`{ error }`). Sin el, `certifex()`
-    // pone «Certifex respondio N»: no se sabe de quien es la respuesta.
-    const deCertifex = e.code === 'CERTIFEX_ERROR' && !/^Certifex respondio \d+$/.test(String(e.message));
-    if (deCertifex && e.statusCode === 404 && String(e.message).trim() === 'No encontrado.') valor = false;
-    else if (deCertifex && [400, 404, 409, 422].includes(e.statusCode)) valor = true;
-    else {
-      logger.warn({ err: e.message, code: e.code, ruta }, 'Certifex: no se pudo saber si tiene la ruta');
+export async function certifexPuede(capacidad) {
+  if (!capacidades || Date.now() >= capacidades.hasta) {
+    let yo;
+    try {
+      yo = await certifex('GET', '/yo', undefined, { timeoutMs: 10_000 });
+    } catch (e) {
+      logger.warn({ err: e.message, code: e.code }, 'Certifex: no se pudo saber lo que sabe hacer');
       throw e;
     }
+    if (!yo || typeof yo !== 'object' || !Array.isArray(yo.centros)) {
+      logger.warn('Certifex: /yo no contestó con su JSON');
+      throw new AppError('Certifex no contestó como se esperaba al preguntarle qué sabe hacer.', 502, 'CERTIFEX_ERROR');
+    }
+    const lista = Array.isArray(yo.capacidades) ? yo.capacidades.filter((x) => typeof x === 'string') : [];
+    capacidades = { lista: new Set(lista), hasta: Date.now() + CAPACIDAD_MS };
   }
-  capacidades.set(ruta, { valor, hasta: Date.now() + CAPACIDAD_MS });
-  return valor;
+  return capacidades.lista.has(capacidad);
 }
 
 /** Para las pruebas: olvida lo sabido de Certifex. */
 export function olvidarCapacidades() {
-  capacidades = new Map();
+  capacidades = null;
 }
 
 // ─────────────────────────────────────────────── recorrer paginas de Certifex

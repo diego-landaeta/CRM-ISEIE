@@ -13,7 +13,7 @@ import { fileURLToPath } from 'url';
  *    última; y una sin matrícula no aparece en ninguna;
  *  · sin hora de Certifex, se apunta con la de ahora.
  *
- *   npx vitest run tests/certifexRevertir624Base.test.js
+ *   npx vitest run tests/certifexRevertir351Base.test.js
  */
 
 process.env.LOG_LEVEL = 'silent';

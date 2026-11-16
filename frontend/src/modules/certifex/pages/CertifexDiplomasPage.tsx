@@ -49,6 +49,16 @@ import EnviosBrevo, { fechaHoraMadrid } from '../components/EnviosBrevo';
  *     lo que no debía emitirse.
  */
 
+
+/** #351: qué decir de un número revertido: con cuál se volvió a emitir y cuál vale hoy. */
+function textoReemision(a: { sustituidaPor: string | null; vigente?: string | null } | null | undefined): string {
+  if (!a?.sustituidaPor) return 'Está en «Aprobados sin diploma» (o en Emisiones) para volver a emitirlo.';
+  if (a.vigente === undefined || a.vigente === a.sustituidaPor) return `Se volvió a emitir con ${a.sustituidaPor}.`;
+  return a.vigente
+    ? `Se volvió a emitir con ${a.sustituidaPor}, que también se revirtió; hoy vale ${a.vigente}.`
+    : `Se volvió a emitir con ${a.sustituidaPor}, que también se revirtió; aún no tiene otro.`;
+}
+
 const PESTANAS: { clave: PestanaDiplomas; rotulo: string }[] = [
   { clave: 'pendientes', rotulo: 'Pendientes' },
   { clave: 'terminados', rotulo: 'Terminaron sin pedir' },
@@ -639,7 +649,7 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
           const a = d.anulacion;
           toast({
             title: `${expUrl} está anulado (revertido)`,
-            description: `${a?.por ? `Lo revirtió ${a.por}` : 'Se revirtió'}${a?.en ? ` el ${fecha(a.en)}` : ''}${a?.motivo ? `: ${a.motivo}` : ''}. ${a?.sustituidaPor ? `Se volvió a emitir con ${a.sustituidaPor}.` : 'Está en «Aprobados sin diploma» para volver a emitirlo.'}`,
+            description: `${a?.por ? `Lo revirtió ${a.por}` : 'Se revirtió'}${a?.en ? ` el ${fecha(a.en)}` : ''}${a?.motivo ? `: ${a.motivo}` : ''}. ${textoReemision(a)}`,
           });
           conExp(null);
           return;
@@ -1667,7 +1677,15 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
                           <td className="whitespace-nowrap px-2 py-3 text-xs">{fecha(d.anulacion?.en)}<div className="max-w-[160px] truncate text-muted-foreground" title={d.anulacion?.por ?? undefined}>{d.anulacion?.por || '—'}</div></td>
                           <td className="px-2 py-3"><p className="max-w-[260px] text-sm italic text-muted-foreground">«{d.anulacion?.motivo || 'sin motivo'}»</p></td>
                           <td className="px-2 py-3">{d.anulacion?.sustituidaPor
-                            ? <span className="select-all font-mono text-[11px] text-primary">{d.anulacion.sustituidaPor}</span>
+                            ? <>
+                                <span className="select-all font-mono text-[11px] text-primary">{d.anulacion.sustituidaPor}</span>
+                                {/* Revertido más de una vez: ese también está anulado. Se dice cuál vale hoy. */}
+                                {d.anulacion.vigente !== undefined && d.anulacion.vigente !== d.anulacion.sustituidaPor && (
+                                  <div className="text-[11px] text-muted-foreground">
+                                    {d.anulacion.vigente ? <>también revertido; hoy vale <span className="select-all font-mono text-primary">{d.anulacion.vigente}</span></> : 'también revertido; aún sin otro'}
+                                  </div>
+                                )}
+                              </>
                             : <span className="text-xs text-muted-foreground">Todavía no (está en «Aprobados sin diploma» o en Emisiones)</span>}</td>
                         </>
                       ) : (
@@ -1694,7 +1712,8 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
                           )}
                           {/* Revocado, Certifex ya no sirve su PDF (404): solo el enlace, que dice «revocado». */}
                           {pestana === 'enviados' && <IconoAccion etiqueta="Ver PDF" onClick={() => abrirFicha(d, !soloLectura && !d.aviso && delCrm(d))}><FilePdf size={15} /></IconoAccion>}
-                          <IconoAccion etiqueta={d.verificarUrl ? 'Copiar enlace de verificación' : 'Sin enlace público: Certifex no tiene una dirección que abra desde fuera'} disabled={!d.verificarUrl} onClick={() => copiarEnlace(d)}><LinkSimple size={15} /></IconoAccion>
+                          {/* Un número anulado (Revertidos) no se verifica: su enlace da «no existe». No se ofrece. */}
+                          {!d.anulada && <IconoAccion etiqueta={d.verificarUrl ? 'Copiar enlace de verificación' : 'Sin enlace público: Certifex no tiene una dirección que abra desde fuera'} disabled={!d.verificarUrl} onClick={() => copiarEnlace(d)}><LinkSimple size={15} /></IconoAccion>}
                           {/* #351: lo emitido desde el CRM y aún sin enviar se revierte también aquí
                               (p. ej. lo emitido desde Certificaciones › Emisiones, que no sale en Pendientes). */}
                           {pestana === 'enviados' && puedeRevertir && !soloLectura && !d.aviso && !d.entregado && !d.revocada && !d.anulada && delCrm(d) && (
@@ -2470,16 +2489,18 @@ export function DialogoEditar({ c, alCerrar, alGuardar, alCambiarFirma, puedeSin
     ? 'Falta el nombre: es el que se imprimirá en el diploma.'
     : !nombreValido(nombreD) ? MSG_NOMBRE : null;
   const correoN = correo.trim().toLowerCase();
-  const errorCorreo = correoN && !CORREO.test(correoN) ? 'Ese correo no es válido.' : null;
+  const errorCorreo = conSolicitud && correoN && !CORREO.test(correoN) ? 'Ese correo no es válido.' : null;
   const prog = tocado ? deForm(form) : { programa: null, error: null };
 
   const dniN = normalizarDni(dniD);
-  const errorDni = errorDeDni(dniN);
+  const errorDni = conSolicitud ? errorDeDni(dniN) : null;
 
   const cambios: CambiosSolicitud = { matriculaId: c.matriculaId };
   if (conSolicitud && nombreN !== normalizarNombre(c.solicitud?.nombre ?? '')) cambios.nombre = nombreN;
-  if (dniN !== (c.titular.dni ?? '').toUpperCase()) cambios.dni = dniN || null;
-  if (correoN !== (ed?.emailCrm ?? '')) cambios.emailCrm = correoN || null;
+  // Sin solicitud (desde Emisiones, #351) solo se elige la formación y su programa: ni el DNI ni
+  // el correo se cambian desde aquí (el servidor tampoco lo admite).
+  if (conSolicitud && dniN !== (c.titular.dni ?? '').toUpperCase()) cambios.dni = dniN || null;
+  if (conSolicitud && correoN !== (ed?.emailCrm ?? '')) cambios.emailCrm = correoN || null;
   const productoN = producto ? Number(producto) : null;
   if (productoN !== (ed?.productoId ?? null)) cambios.productoId = productoN;
   if (tocado && prog.programa && !mismoPrograma(prog.programa, ed?.programaEditado)) cambios.programa = prog.programa;
@@ -2551,6 +2572,9 @@ export function DialogoEditar({ c, alCerrar, alGuardar, alCambiarFirma, puedeSin
                 <span className="block text-xs font-medium text-muted-foreground">Nombre para el diploma</span>
                 <span className="text-foreground">{c.titular.nombre || '—'}</span>
                 <span className="mt-1 block text-xs text-muted-foreground">El alumno no ha pedido el diploma: sale el nombre de Moodle. Para revisarlo, pásalo a Pendientes.</span>
+                <span className="mt-2 block text-xs font-medium text-muted-foreground">DNI / NIE / pasaporte</span>
+                <span className="text-foreground">{c.titular.dni || '—'}</span>
+                <span className="mt-1 block text-xs text-muted-foreground">Aquí solo se elige la formación vendida y su programa.</span>
               </p>
             ) : (
             <label className="block text-sm">
@@ -2562,7 +2586,9 @@ export function DialogoEditar({ c, alCerrar, alGuardar, alCambiarFirma, puedeSin
             </label>
             )}
 
-            {/* DNI: vive en Certifex, en el alumno, y se imprime junto al nombre (Carlos, 20/10). */}
+            {/* DNI: vive en Certifex, en el alumno, y se imprime junto al nombre (Carlos, 20/10).
+                Sin solicitud (desde Emisiones, #351) solo se elige la formación y su programa. */}
+            {conSolicitud && (<>
             <label className="block text-sm">
               <span className="text-xs font-medium text-muted-foreground">DNI / NIE / pasaporte (obligatorio)</span>
               <input value={dniD} onChange={(e) => setDniD(e.target.value)} maxLength={30} placeholder="Ej.: 12345678Z" aria-invalid={!!errorDni}
@@ -2586,6 +2612,7 @@ export function DialogoEditar({ c, alCerrar, alGuardar, alCambiarFirma, puedeSin
               </span>
               {errorCorreo && <span className="mt-0.5 block text-xs text-destructive">{errorCorreo}</span>}
             </label>
+            </>)}
 
             <div className="text-sm">
               <span className="text-xs font-medium text-muted-foreground">Formación vendida</span>

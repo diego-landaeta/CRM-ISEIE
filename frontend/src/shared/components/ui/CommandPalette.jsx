@@ -111,18 +111,23 @@ export const destinoDeTutor = (t) => `/tutores?buscar=${encodeURIComponent(t.nom
 // La factura de un colaborador: el Historial, con su colaborador y su mes.
 export const destinoDeFacturaColaborador = (f) => `/accounting/facturas-colaboradores?vista=historial&colaborador=${f.colaborador_id}${f.periodo ? `&periodo=${f.periodo}` : ''}`;
 // Un diploma: Emitidos (clave `enviados`) o Revocados, filtrado por el alumno.
-// #351: un número revertido (anulado) no está en Emitidos. Si ya se reemitió, lleva al número
-// NUEVO en Emitidos; si no, su matrícula está en Pendientes › «Aprobados sin diploma», que es
-// la pestaña por defecto (sin `pestana`).
+// #351: un número revertido (anulado) no está en Emitidos. Si hoy vale otro número para esa
+// matrícula (`vigente`), lleva a ese en Emitidos. Si no, a Revertidos, con el número anulado: es
+// donde está seguro (su matrícula puede estar en Pendientes o en Emisiones, según si el alumno
+// pidió el diploma), y ahí dice si ya se volvió a emitir. Un Certifex anterior no manda `vigente`:
+// entonces vale `sustituidaPor`.
+const vigenteDe = (d) => (d.anulacion && 'vigente' in d.anulacion ? d.anulacion.vigente : d.anulacion?.sustituidaPor) || null;
 export const destinoDeDiploma = (d) => {
-  if (d.anulada && d.anulacion?.sustituidaPor) {
-    return `/matriculas/diplomas?pestana=enviados&buscar=${encodeURIComponent(d.anulacion.sustituidaPor)}`;
+  if (d.anulada) {
+    const v = vigenteDe(d);
+    return v
+      ? `/matriculas/diplomas?pestana=enviados&buscar=${encodeURIComponent(v)}`
+      : `/matriculas/diplomas?pestana=revertidos&buscar=${encodeURIComponent(d.nexpediente || d.alumno || '')}`;
   }
-  if (d.anulada) return `/matriculas/diplomas?buscar=${encodeURIComponent(d.alumno || d.nexpediente || '')}`;
   return `/matriculas/diplomas?pestana=${d.revocada ? 'revocados' : 'enviados'}&buscar=${encodeURIComponent(d.alumno || d.nexpediente || '')}`;
 };
-// Lo que dice la fila de un diploma anulado: si ya tiene sustituto, cuál.
-const rotuloAnulado = (d) => (d.anulacion?.sustituidaPor ? `Anulado (revertido) · reemitido como ${d.anulacion.sustituidaPor}` : 'Anulado (revertido)');
+// Lo que dice la fila de un diploma anulado: si hoy vale otro número, cuál.
+const rotuloAnulado = (d) => (vigenteDe(d) ? `Anulado (revertido) · hoy vale ${vigenteDe(d)}` : 'Anulado (revertido)');
 // Un curso de Moodle: la pantalla de su campus, con su nombre en el buscador y todos los estados.
 export const destinoDeCursoMoodle = (c, campus) => `/conexion/moodle/${campus}?estado=todos&q=${encodeURIComponent(c.nombre || '')}`;
 

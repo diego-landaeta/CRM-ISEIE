@@ -383,10 +383,11 @@ export interface Diploma {
   revocacion: { en: string | null; motivo: string | null; por: string | null } | null;
   /**
    * #351: revertido antes de enviarlo (Certifex 0045). El número queda anulado; `sustituidaPor`
-   * es el que salió al volver a emitir. Un Certifex anterior no lo manda.
+   * es el que salió al volver a emitir y `vigente`, el que vale hoy (si se revirtió más de una
+   * vez, `sustituidaPor` también está anulado). Un Certifex anterior no los manda.
    */
   anulada?: boolean;
-  anulacion?: { en: string | null; motivo: string | null; por: string | null; sustituidaPor: string | null } | null;
+  anulacion?: { en: string | null; motivo: string | null; por: string | null; sustituidaPor: string | null; vigente?: string | null } | null;
   /** Null si Certifex no tiene dirección pública (`sinEnlaces` en la lista dice por qué). */
   verificarUrl: string | null;
   diplomaUrl: string | null;

@@ -9,7 +9,7 @@ import { certifex, recorrer } from './certifex.cliente.js';
 import { alcanceDe, acotar, exigirCentro, exigirExpedientes, NO_ENCONTRADA } from './certifex.alcance.js';
 import { prepararEmision, emitirConPrograma, emitirMatriculas, resultadoBloqueado } from './certifex.emision.js';
 import { conDestinatario } from './certifex.envios.js';
-import { completarReversiones, conReversiones } from './certifex.revertir.js';
+import { conReversiones } from './certifex.revertir.js';
 import { conEdicion, conProgramaCrm } from './certifex.enriquecer.js';
 import { emitidoPorElCrm } from './certifex.marcas.js';
 
@@ -191,7 +191,7 @@ export async function porAvisar(req, res, next) {
     await conLoDelCrm([...data.porAvisar, ...data.sinEmitir], req.user);
     await conProgramaCrm(data.sinEmitir);
     // #351: lo que vuelve aquí tras «Revertir» dice qué número se anuló, quién y por qué.
-    await completarReversiones(ambito, req);
+    // (Lo que faltara apuntar lo apunta una tarea programada: un GET no escribe.)
     await conReversiones(data.sinEmitir);
     res.json({ success: true, data });
   } catch (err) { next(err); }
@@ -397,6 +397,16 @@ export async function editar(req, res, next) {
     exigirCentro(await alcanceDe(req.user), c.centro, 'Esa solicitud no esta en Certifex (o no es de tus campus).');
     if (c.nexpediente) {
       throw new AppError(`Ya tiene el diploma emitido (${c.nexpediente}): se cambia con «Corregir», no aqui.`, 409, 'YA_EMITIDO');
+    }
+    // Una matrícula que el alumno no ha pedido (desde Certificaciones › Emisiones, #351) solo se
+    // edita para lo que pide la issue: elegir la formación vendida y su programa, que es lo que
+    // decide qué se imprime en vez de lo de Moodle. Su nombre, su DNI y su correo no se tocan
+    // desde aquí (7.ª auditoría): no hay solicitud que revisar.
+    if (!c.solicitud) {
+      const otros = ['nombre', 'dni', 'emailCrm'].filter((k) => d[k] !== undefined);
+      if (otros.length) {
+        throw new AppError('En una matrícula que el alumno no ha pedido solo se elige la formación vendida y su programa: el nombre, el DNI y el correo no se cambian desde aquí.', 400, 'VALIDATION_ERROR');
+      }
     }
     if (d.productoId != null) {
       const { formaciones: lista, motivo } = await formacionesDeCentro(c.centro);

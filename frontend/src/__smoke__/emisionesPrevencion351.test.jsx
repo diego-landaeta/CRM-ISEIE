@@ -52,7 +52,9 @@ vi.mock('@/modules/certifex/api/certifex.api', () => ({
   },
   diplomasApi: {
     pedir: vi.fn(),
-    formaciones: async () => ({ data: { proyecto: { id: 1, nombre: 'Psiko' }, motivo: null, formaciones: [] } }),
+    formaciones: async () => ({ data: { proyecto: { id: 1, nombre: 'Psiko' }, motivo: null, formaciones: [
+      { id: 7, nombre: 'Máster en Psicología Clínica', horas: 100, modulos: [{ titulo: 'Módulo 1', horas: 100 }], activa: true },
+    ] } }),
     editar: async (cambios) => { editar.llamadas.push(cambios); return { data: { matriculaId: cambios.matriculaId } }; },
   },
 }));
@@ -80,19 +82,23 @@ describe('#351 prevención en Emisiones: antes de «Aprobar y emitir»', () => {
     expect(within(d).getByRole('button', { name: /Editar los datos de Carla Sin Modulos antes de emitir/ })).toBeTruthy();
   });
 
-  it('«Editar» abre aquí la revisión de una matrícula que no pidió el alumno (sin el nombre) y guarda; luego recarga', async () => {
+  it('«Editar» abre aquí la revisión de una matrícula que no pidió el alumno: solo la formación vendida (ni nombre, ni DNI, ni correo); guarda y recarga', async () => {
     editar.llamadas.length = 0;
     const d = await aprobarYEmitir(['Berta Con Moodle']);
     fireEvent.click(within(d).getByRole('button', { name: /Editar los datos de Berta Con Moodle antes de emitir/ }));
     const r = await screen.findByRole('dialog', { name: 'Revisar datos antes de aprobar' });
     expect(within(r).getByText(/no ha pedido el diploma: sale el nombre de Moodle/)).toBeTruthy();
     expect(within(r).queryByLabelText(/^Nombre para el diploma/)).toBeNull();
+    // Sin solicitud, el DNI y el correo no se editan desde aquí (7.ª auditoría).
+    expect(within(r).queryByPlaceholderText('Ej.: 12345678Z')).toBeNull();
+    expect(within(r).queryByText('Correo del alumno en el CRM')).toBeNull();
     const cargasAntes = emisionesApi.listar.mock.calls.length;
-    fireEvent.change(within(r).getByPlaceholderText('Ej.: 12345678Z'), { target: { value: '87654321X' } });
+    fireEvent.click(await within(r).findByRole('combobox', { name: 'Formación vendida' }));
+    fireEvent.mouseDown(await screen.findByRole('option', { name: /Máster en Psicología Clínica/ }));
     fireEvent.click(within(r).getByRole('button', { name: 'Guardar' }));
     await waitFor(() => expect(editar.llamadas).toHaveLength(1));
     // Sin solicitud: el campus y el correo, para que el servidor la encuentre (no se guardan).
-    expect(editar.llamadas[0]).toEqual({ matriculaId: 2, dni: '87654321X', centro: 'PSIKO', q: 'alumno2@prueba.test' });
+    expect(editar.llamadas[0]).toEqual({ matriculaId: 2, productoId: 7, centro: 'PSIKO', q: 'alumno2@prueba.test' });
     await waitFor(() => expect(emisionesApi.listar.mock.calls.length).toBeGreaterThan(cargasAntes));
     // Vuelve a la confirmación del mismo lote, con lo elegido intacto.
     const otra = await screen.findByRole('dialog', { name: /Aprobar y emitir 1/ });

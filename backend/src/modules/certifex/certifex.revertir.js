@@ -1,9 +1,8 @@
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import * as model from './certifex.model.js';
-import { certifex, certifexTieneRuta, recorrer } from './certifex.cliente.js';
+import { certifex, certifexPuede, recorrer } from './certifex.cliente.js';
 import { alcanceDe, exigirExpedientes } from './certifex.alcance.js';
-import { tienePermiso } from '../../shared/middleware/permissions.js';
 import { emitidoPorElCrm } from './certifex.marcas.js';
 import { revertirSchema, mensajeDeValidacion } from './certifex.validation.js';
 
@@ -67,7 +66,7 @@ export async function disponibilidad(req, res, next) {
     let disponible = false;
     let motivo = null;
     try {
-      disponible = await certifexTieneRuta('/revertir');
+      disponible = await certifexPuede('revertir');
       if (!disponible) motivo = SIN_CERTIFEX;
     } catch (e) {
       motivo = `No se pudo comprobar si Certifex permite revertir: ${String(e.message || 'no contesta').replace(/\.\s*$/, '')}.`;
@@ -83,7 +82,7 @@ export async function revertir(req, res, next) {
     // Como lo guarda Certifex (espacios seguidos, uno), para que los dos registros digan lo mismo.
     const motivo = d.motivo.replace(/\s+/g, ' ').trim();
     if (!(await model.tablaReversionesExiste())) throw new AppError(`${SIN_TABLA} No se ha revertido nada.`, 503, 'CRM_SIN_MIGRACION');
-    if (!(await certifexTieneRuta('/revertir'))) throw new AppError(`${SIN_CERTIFEX} No se ha revertido nada.`, 503, 'CERTIFEX_SIN_REVERTIR');
+    if (!(await certifexPuede('revertir'))) throw new AppError(`${SIN_CERTIFEX} No se ha revertido nada.`, 503, 'CERTIFEX_SIN_REVERTIR');
 
     // El alcance por campus, como revocar y corregir: 404 si el número no es de sus campus.
     await exigirExpedientes(await alcanceDe(req.user), [d.nexpediente]);
@@ -162,51 +161,31 @@ async function apuntarDesdeCertifex(dip) {
   });
 }
 
-const COMPLETAR_CADA_MS = 60_000;
-const completadas = new Map();
-
 /**
- * Lo que Certifex tiene revertido en estos campus y el CRM no tiene apuntado (Certifex lo
- * hizo pero el apunte del CRM falló, o se cortó la respuesta): se apunta ahora, con lo que
- * dice Certifex (quién, cuándo, por qué y la matrícula). Así el registro del CRM no pierde
- * ninguna (#351: «queda en el CRM y en Certifex quién, cuándo, por qué y qué número»).
+ * Lo que Certifex tiene revertido y el CRM no tiene apuntado (Certifex lo hizo pero el apunte
+ * del CRM falló, o se cortó la respuesta): se apunta ahora, con lo que dice Certifex (quién,
+ * cuándo, por qué y la matrícula). Así el registro del CRM no pierde ninguna (#351: «queda en
+ * el CRM y en Certifex quién, cuándo, por qué y qué número»).
  *
- * Solo con un Certifex que ya revierte y con la tabla del CRM puesta; todas las páginas (los
- * anulados son pocos: se revierte a mano, uno a uno). Nada de esto impide ver el listado: si
- * falla, queda en el log.
+ * Lo hace una tarea programada (`jobs/certifexReversionesScheduler.js`), no la carga de una
+ * pantalla: un GET no escribe (7.ª auditoría). Recorre los campus de la clave de este CRM, todas
+ * las páginas (los anulados son pocos: se revierte a mano, uno a uno). Solo con un Certifex que
+ * ya revierte y con la tabla del CRM puesta; si no, no hace nada. Devuelve cuántas apuntó.
  */
-export async function completarReversiones(ambito, req) {
-  // Escribe en el registro: solo con el permiso de revertir, y como mucho una vez por minuto
-  // y por ámbito (es un repaso, no hace falta en cada carga de la pantalla). La hora se
-  // apunta solo si el repaso sale bien: si Certifex falla, se reintenta en la siguiente carga.
-  const clave = ambito?.centro ?? [...(ambito?.centros ?? [])].sort().join(',');
-  try {
-    if (ambito?.vacio) return;
-    if (req && !(await tienePermiso(req, 'diplomas.revertir'))) return;
-    if (Date.now() - (completadas.get(clave) ?? 0) < COMPLETAR_CADA_MS) return;
-    if (!(await model.tablaReversionesExiste())) return;
-    if (!(await certifexTieneRuta('/revertir'))) return;
-    const params = { estado: 'anulados' };
-    if (ambito?.centro) params.centro = ambito.centro;
-    const { filas } = await recorrer('/diplomas', params, {
-      filtro: (f) => !!(f?.anulada && f.nexpediente && (!ambito?.centros || ambito.centros.has(String(f.centro).toUpperCase()))),
-    });
-    if (!filas.length) { completadas.set(clave, Date.now()); return; }
-    const ya = await model.reversionesApuntadas(filas.map((f) => f.nexpediente));
-    for (const f of filas) {
-      if (ya.has(f.nexpediente)) continue;
-      await apuntarDesdeCertifex(f);
-      logger.warn({ nexpediente: f.nexpediente }, 'Certifex: reversión que faltaba en el CRM, apuntada ahora');
-    }
-    completadas.set(clave, Date.now());
-  } catch (e) {
-    logger.warn({ err: e.message }, 'Certifex: no se pudieron completar las reversiones');
+export async function completarReversiones() {
+  if (!(await model.tablaReversionesExiste())) return { apuntadas: 0, motivo: 'sin la tabla del CRM' };
+  if (!(await certifexPuede('revertir'))) return { apuntadas: 0, motivo: 'Certifex aún no revierte' };
+  const { filas } = await recorrer('/diplomas', { estado: 'anulados' }, { filtro: (f) => !!(f?.anulada && f.nexpediente) });
+  if (!filas.length) return { apuntadas: 0 };
+  const ya = await model.reversionesApuntadas(filas.map((f) => f.nexpediente));
+  let apuntadas = 0;
+  for (const f of filas) {
+    if (ya.has(f.nexpediente)) continue;
+    await apuntarDesdeCertifex(f);
+    apuntadas += 1;
+    logger.warn({ nexpediente: f.nexpediente }, 'Certifex: reversión que faltaba en el CRM, apuntada ahora');
   }
-}
-
-/** Para las pruebas: olvida cuándo se repasó cada ámbito. */
-export function olvidarRepasos() {
-  completadas.clear();
+  return { apuntadas };
 }
 
 /**
