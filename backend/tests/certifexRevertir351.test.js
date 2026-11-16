@@ -46,6 +46,10 @@ vi.mock('../src/shared/config/db.js', () => {
       registro.push(r);
       return { rows: [fila(r)] };
     }
+    if (/SELECT DISTINCT matricula_id FROM certifex_reversiones/.test(text)) {
+      const centros = params[0];
+      return { rows: [...new Set(registro.filter((x) => x.matricula_id != null && (!centros || centros.includes(String(x.centro).toUpperCase()))).map((x) => x.matricula_id))].map((m) => ({ matricula_id: m })) };
+    }
     if (/SELECT nexpediente FROM certifex_reversiones WHERE nexpediente = ANY/.test(text)) {
       return { rows: registro.filter((x) => params[0].includes(x.nexpediente)).map((x) => ({ nexpediente: x.nexpediente })) };
     }
@@ -148,8 +152,12 @@ beforeAll(() => {
       return responder({ filas: f.slice((pag - 1) * tam, pag * tam), total: f.length });
     }
     if (p.ruta === '/candidatos') {
-      const f = p.query.estado === 'aprobada' ? CANDIDATOS.filter((c) => !p.query.centro || c.centro === p.query.centro) : [];
-      return responder({ filas: f, total: f.length });
+      // Como Certifex: `solicitadas=1`, solo lo que pidió el alumno; `curso`, solo ese curso.
+      const f = p.query.estado === 'aprobada' ? CANDIDATOS.filter((c) => (!p.query.centro || c.centro === p.query.centro)
+        && (p.query.solicitadas !== '1' || c.solicitud) && (!p.query.curso || String(c.curso.ref) === String(p.query.curso))) : [];
+      const pagC = Number(p.query.pagina || 1);
+      const tamC = Number(p.query.tam || 50);
+      return responder({ filas: f.slice((pagC - 1) * tamC, pagC * tamC), total: f.length });
     }
     if (p.ruta === '/revertir') {
       // Como el Certifex de verdad: sin la ruta, su 404 genérico; con ella, valida
@@ -678,6 +686,56 @@ describe('«¿Se puede revertir?» si se olvida lo sabido a mitad de pregunta (1
     const pendiente = certifexPuede('revertir');
     olvidarCapacidades(); // a mitad de la pregunta a /yo
     await expect(pendiente).resolves.toBe(true);
+  });
+});
+
+describe('lo emitido desde Emisiones, al revertirlo, vuelve a «Aprobados sin diploma» (12.ª auditoría, punto 3)', () => {
+  const porAvisar = () => request.get('/api/certifex/diplomas/por-avisar').set('Authorization', `Bearer ${ADMIN}`);
+  const sinPedir = (id) => ({ ...candidato(id, null), solicitud: null });
+  const anuladoDe = (n, matriculaId, extra = {}) => diploma(`PSIKO-2026-${String(700000 + n).padStart(6, '0')}-RVRT`, {
+    anulada: true, anulacion: { en: '2026-11-14T10:00:00.000Z', motivo: 'm', por: 'u71@prueba.test (CRM 360)', sustituidaPor: null, vigente: null, matriculaId }, ...extra,
+  });
+  const apuntada = (nexpediente, matriculaId) => registro.push({ id: registro.length + 1, nexpediente, matricula_id: matriculaId, centro: 'PSIKO', alumno: 'x', titulacion: 'x', motivo: 'Con lo de Moodle', revertido_por: 71, revertido_por_email: 'u71@prueba.test', revertido_en: '2026-11-14T10:00:00.000Z' });
+
+  it('sale en «Aprobados sin diploma», con su reversión, aunque el alumno no lo pidiera', async () => {
+    const a = anuladoDe(1, 120);
+    DIPLOMAS = [...DIPLOMAS, a];
+    CANDIDATOS = [...CANDIDATOS, sinPedir(120)];
+    apuntada(a.nexpediente, 120);
+    const r = await porAvisar();
+    expect(r.status).toBe(200);
+    const fila = r.body.data.sinEmitir.find((c) => c.matriculaId === 120);
+    expect(fila).toBeTruthy();
+    expect(fila.solicitud).toBeNull();
+    expect(fila.revertido).toMatchObject({ nexpediente: a.nexpediente, motivo: 'Con lo de Moodle' });
+    // Buscada solo en su curso, no en todo el campus.
+    expect(pedidas.some((p) => p.ruta === '/candidatos' && p.query.curso === '34' && p.query.solicitadas === undefined)).toBe(true);
+  });
+
+  it('deja de pedir páginas en cuanto la encuentra (no recorre todo el curso)', async () => {
+    const a = anuladoDe(3, 130);
+    DIPLOMAS = [...DIPLOMAS, a];
+    CANDIDATOS = [...CANDIDATOS, sinPedir(130), ...Array.from({ length: 250 }, (_, i) => sinPedir(5000 + i))];
+    apuntada(a.nexpediente, 130);
+    const r = await porAvisar();
+    expect(r.body.data.sinEmitir.map((c) => c.matriculaId)).toContain(130);
+    expect(pedidas.filter((p) => p.ruta === '/candidatos' && p.query.curso === '34').map((p) => p.query.pagina)).toEqual(['1']);
+  });
+
+  it('si ya se reemitió (tiene un número que vale), no', async () => {
+    const a = anuladoDe(2, 121, { anulacion: { en: '2026-11-14T10:00:00.000Z', motivo: 'm', por: 'u71@prueba.test (CRM 360)', sustituidaPor: 'PSIKO-2026-000999-NUEV', vigente: 'PSIKO-2026-000999-NUEV', matriculaId: 121 } });
+    DIPLOMAS = [...DIPLOMAS, a];
+    CANDIDATOS = [...CANDIDATOS, sinPedir(121)];
+    apuntada(a.nexpediente, 121);
+    const r = await porAvisar();
+    expect(r.body.data.sinEmitir.map((c) => c.matriculaId)).not.toContain(121);
+  });
+
+  it('sin ninguna reversión apuntada de esos campus, ni se pregunta a Certifex por los anulados', async () => {
+    CANDIDATOS = [...CANDIDATOS, sinPedir(122)];
+    const r = await porAvisar();
+    expect(r.body.data.sinEmitir.map((c) => c.matriculaId)).not.toContain(122);
+    expect(pedidas.some((p) => p.ruta === '/diplomas' && p.query.estado === 'anulados')).toBe(false);
   });
 });
 

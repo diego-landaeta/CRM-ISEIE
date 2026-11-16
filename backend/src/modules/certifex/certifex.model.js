@@ -529,6 +529,20 @@ export async function reversionDe(nexpediente) {
   return filaReversion(rows[0]);
 }
 
+/**
+ * Las matrículas con alguna reversión apuntada, de un campus o de varios (sin campus: todas). Para
+ * saber si hace falta buscar en Certifex las revertidas que no son solicitudes.
+ */
+export async function matriculasRevertidas({ centro = null, centros = null } = {}) {
+  const lista = centro ? [String(centro).toUpperCase()] : centros ? [...centros].map((c) => String(c).toUpperCase()) : null;
+  const { rows } = await query(
+    `SELECT DISTINCT matricula_id FROM certifex_reversiones
+      WHERE matricula_id IS NOT NULL AND ($1::text[] IS NULL OR upper(centro) = ANY($1::text[]))`,
+    [lista],
+  );
+  return new Set(rows.map((r) => Number(r.matricula_id)));
+}
+
 /** La última reversión de cada matrícula (Map matriculaId → reversión). */
 export async function ultimasReversionesDe(matriculaIds) {
   const ids = [...new Set((matriculaIds ?? []).filter((x) => Number.isSafeInteger(Number(x))).map(Number))];

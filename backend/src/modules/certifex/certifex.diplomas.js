@@ -153,12 +153,56 @@ async function conAvisoRechazo(filas) {
  *    Es el «pendiente de aviso»: ver el PDF y, si esta bien, enviarlo al alumno.
  *  · `sinEmitir`: aprobadas sin diploma (la emision fallo o se corto). Se reintenta.
  */
+/**
+ * #351: las matrículas cuyo diploma se REVIRTIÓ y que no son solicitudes (se emitieron desde
+ * Certificaciones › Emisiones, sin que el alumno lo pidiera). Diego: «Tras revertir, la fila …
+ * vuelve a «Aprobados sin diploma», donde ya funciona «Editar» (formación y programa) y «Emitir»».
+ * Esa lista sale de las solicitudes aprobadas; estas no lo son, así que se buscan aparte: los
+ * anulados de Certifex que aún no tienen número que valga (`vigente`), y de ellos su matrícula
+ * aprobada y sin diploma, buscada solo en su curso. Solo se pregunta a Certifex si el registro del
+ * CRM tiene alguna matrícula revertida de esos campus que no esté ya en la lista (lo normal es que
+ * no). Si algo falla, la lista sale sin ellas.
+ */
+async function revertidasSinPedir({ centro, centros, deMios, q, vistas }) {
+  try {
+    if (!(await model.tablaReversionesExiste())) return [];
+    const revertidas = await model.matriculasRevertidas({ centro, centros });
+    if (![...revertidas].some((id) => !vistas.has(id))) return [];
+    if (!(await certifexPuede('revertir'))) return [];
+    const sinNumero = (a) => ('vigente' in a ? a.vigente == null : a.sustituidaPor == null);
+    const anulados = await recorrer('/diplomas', { estado: 'anulados', centro }, {
+      filtro: (d) => !!(d?.anulada && d.anulacion?.matriculaId && deMios(d) && sinNumero(d.anulacion)
+        && revertidas.has(d.anulacion.matriculaId) && !vistas.has(d.anulacion.matriculaId)),
+    });
+    const grupos = new Map();
+    for (const d of anulados.filas) {
+      const clave = `${String(d.centro).toUpperCase()}|${d.cursoRef}`;
+      const g = grupos.get(clave) ?? { centro: String(d.centro).toUpperCase(), curso: d.cursoRef, ids: new Set() };
+      g.ids.add(d.anulacion.matriculaId);
+      grupos.set(clave, g);
+    }
+    const filas = [];
+    for (const g of grupos.values()) {
+      const r = await recorrer('/candidatos', { estado: 'aprobada', centro: g.centro, curso: g.curso, q }, {
+        filtro: (c) => g.ids.has(c.matriculaId) && !c.nexpediente && !c.solicitud,
+        completo: (hallados) => hallados.length >= g.ids.size,
+      });
+      filas.push(...r.filas);
+    }
+    return filas;
+  } catch (e) {
+    logger.warn({ err: e.message }, 'Certifex: no se pudieron traer las revertidas sin solicitud');
+    return [];
+  }
+}
+
 async function despuesDeAprobar({ centro, centros = null, q }) {
   if (centros && centros.size === 0) return { porAvisar: [], sinEmitir: [], truncado: false };
   const deMios = (row) => !centros || centros.has(String(row?.centro).toUpperCase());
   const aprobadas = await recorrer('/candidatos', { estado: 'aprobada', solicitadas: '1', centro, q }, { filtro: deMios });
   const conTitulo = aprobadas.filas.filter((c) => c.nexpediente);
   const sinEmitir = aprobadas.filas.filter((c) => !c.nexpediente);
+  sinEmitir.push(...await revertidasSinPedir({ centro, centros, deMios, q, vistas: new Set(aprobadas.filas.map((c) => c.matriculaId)) }));
   if (!conTitulo.length) return { porAvisar: [], sinEmitir, truncado: aprobadas.truncado };
 
   const buscados = new Set(conTitulo.map((c) => c.nexpediente));
