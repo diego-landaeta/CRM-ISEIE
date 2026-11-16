@@ -39,7 +39,7 @@ describe('#351 · el buscador con un número revertido', () => {
   });
 
   it('se volvió a emitir y se revocó: dice «curso cerrado», no «también revertido» (13.ª auditoría)', () => {
-    expect(rotuloAnulado({ anulada: true, anulacion: { sustituidaPor: 'E-2', vigente: null, cursoCerrado: true } })).toMatch(/se revocó: curso cerrado/);
+    expect(rotuloAnulado({ anulada: true, anulacion: { sustituidaPor: 'E-2', vigente: null, cursoCerrado: true } })).toMatch(/se revocó un diploma de ese curso: curso cerrado/);
     expect(rotuloAnulado({ anulada: true, anulacion: { sustituidaPor: 'E-2', vigente: 'E-3', cursoCerrado: false } })).toBe('Anulado (revertido) · hoy vale E-3');
     expect(rotuloAnulado({ anulada: true, anulacion: { sustituidaPor: null, vigente: null, cursoCerrado: false } })).toBe('Anulado (revertido)');
   });

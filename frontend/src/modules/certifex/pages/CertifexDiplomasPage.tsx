@@ -53,8 +53,9 @@ import EnviosBrevo, { fechaHoraMadrid } from '../components/EnviosBrevo';
 /** #351: qué decir de un número revertido: con cuál se volvió a emitir y cuál vale hoy. */
 function textoReemision(a: { sustituidaPor: string | null; vigente?: string | null; cursoCerrado?: boolean } | null | undefined): string {
   if (!a?.sustituidaPor) return 'Está en «Aprobados sin diploma» para volver a emitirlo.';
-  // Se volvió a emitir y se revocó: el curso quedó cerrado para esa persona (no se emite otro).
-  if (a.cursoCerrado) return `Se volvió a emitir con ${a.sustituidaPor}, y después se revocó: ese curso queda cerrado para el alumno, no se vuelve a emitir.`;
+  // Un diploma de ese curso se revocó (el reemitido o uno posterior de la cadena: no se sabe cuál):
+  // el curso quedó cerrado para esa persona y no se emite otro.
+  if (a.cursoCerrado) return `Se volvió a emitir con ${a.sustituidaPor}, y después se revocó un diploma de ese curso: queda cerrado para el alumno, no se vuelve a emitir.`;
   if (a.vigente === undefined || a.vigente === a.sustituidaPor) return `Se volvió a emitir con ${a.sustituidaPor}.`;
   return a.vigente
     ? `Se volvió a emitir con ${a.sustituidaPor}, que también se revirtió; hoy vale ${a.vigente}.`
@@ -1713,9 +1714,9 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
                           <td className="px-2 py-3">{d.anulacion?.sustituidaPor
                             ? <>
                                 <span className="select-all font-mono text-[11px] text-primary">{d.anulacion.sustituidaPor}</span>
-                                {/* Se volvió a emitir y se revocó: el curso quedó cerrado (no «también revertido»). */}
+                                {/* Después se revocó un diploma de ese curso (este u otro posterior): curso cerrado. */}
                                 {d.anulacion.cursoCerrado ? (
-                                  <div className="text-[11px] text-muted-foreground">revocado después: curso cerrado, no se vuelve a emitir</div>
+                                  <div className="text-[11px] text-muted-foreground">después se revocó un diploma de ese curso: curso cerrado, no se vuelve a emitir</div>
                                 ) : null}
                                 {/* Revertido más de una vez: ese también está anulado. Se dice cuál vale hoy. */}
                                 {!d.anulacion.cursoCerrado && d.anulacion.vigente !== undefined && d.anulacion.vigente !== d.anulacion.sustituidaPor && (

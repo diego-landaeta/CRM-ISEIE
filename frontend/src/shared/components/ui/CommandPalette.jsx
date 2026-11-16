@@ -128,7 +128,7 @@ export const destinoDeDiploma = (d) => {
 };
 // Lo que dice la fila de un diploma anulado: si hoy vale otro número, cuál.
 export const rotuloAnulado = (d) => (d.anulacion?.cursoCerrado
-  ? 'Anulado (revertido) · se volvió a emitir y se revocó: curso cerrado'
+  ? 'Anulado (revertido) · se revocó un diploma de ese curso: curso cerrado'
   : vigenteDe(d) ? `Anulado (revertido) · hoy vale ${vigenteDe(d)}` : 'Anulado (revertido)');
 // Un curso de Moodle: la pantalla de su campus, con su nombre en el buscador y todos los estados.
 export const destinoDeCursoMoodle = (c, campus) => `/conexion/moodle/${campus}?estado=todos&q=${encodeURIComponent(c.nombre || '')}`;

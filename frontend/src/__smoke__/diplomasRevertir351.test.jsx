@@ -414,7 +414,9 @@ describe('la pestaña «Revertidos»', () => {
     try {
       render(<MemoryRouter initialEntries={['/?pestana=revertidos']}><CertifexDiplomasPage /></MemoryRouter>);
       const fila = (await screen.findByText('Hugo Revertido')).closest('tr');
-      expect(within(fila).getByText(/curso cerrado, no se vuelve a emitir/)).toBeTruthy();
+      expect(within(fila).getByText(/se revocó un diploma de ese curso: curso cerrado/)).toBeTruthy();
+      // No dice que el revocado fuera el reemitido (pudo ser otro posterior de la cadena).
+      expect(within(fila).queryByText(/revocado después/)).toBeNull();
       expect(within(fila).queryByText(/también revertido/)).toBeNull();
     } finally {
       datos.anulacionExtra = undefined;
@@ -425,7 +427,8 @@ describe('la pestaña «Revertidos»', () => {
     datos.toasts.length = 0;
     try {
       render(<MemoryRouter initialEntries={['/?exp=CEDIA-2026-000009-X1YZ']}><CertifexDiplomasPage /></MemoryRouter>);
-      await waitFor(() => expect(datos.toasts.some((t) => /se revocó: ese curso queda cerrado/.test(t.description ?? ''))).toBe(true));
+      await waitFor(() => expect(datos.toasts.some((t) => /se revocó un diploma de ese curso: queda cerrado/.test(t.description ?? ''))).toBe(true));
+      expect(datos.toasts.some((t) => /S2DO, y después se revocó:/.test(t.description ?? ''))).toBe(false);
     } finally {
       datos.anulacionExtra = undefined;
     }
