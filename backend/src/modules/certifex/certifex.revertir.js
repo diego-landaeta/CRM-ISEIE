@@ -2,7 +2,7 @@ import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import * as model from './certifex.model.js';
 import { certifex, certifexPuede, recorrer } from './certifex.cliente.js';
-import { alcanceDe, exigirExpedientes } from './certifex.alcance.js';
+import { alcanceDe, exigirCentro } from './certifex.alcance.js';
 import { emitidoPorElCrm } from './certifex.marcas.js';
 import { revertirSchema, mensajeDeValidacion } from './certifex.validation.js';
 
@@ -56,6 +56,9 @@ function sufijoDeEsteCrm(yo) {
   return ` (${/^crm\b/i.test(nombre) ? nombre : `CRM ${nombre}`})`;
 }
 
+/** El campus del diploma, en mayúsculas, o null si Certifex no lo dice (nunca «UNDEFINED»). */
+const centroDe = (dip) => (dip?.centro ? String(dip.centro).trim().toUpperCase() || null : null);
+
 /** El correo de «persona (CRM X)», como lo devuelve Certifex en la anulación. */
 const correoDe = (por) => String(por ?? '').replace(/\s*\([^()]*\)\s*$/, '').trim() || String(por ?? '');
 
@@ -94,10 +97,12 @@ export async function revertir(req, res, next) {
     if (!(await model.tablaReversionesExiste())) throw new AppError(`${SIN_TABLA} No se ha revertido nada.`, 503, 'CRM_SIN_MIGRACION');
     if (!(await certifexPuede('revertir'))) throw new AppError(`${SIN_CERTIFEX} No se ha revertido nada.`, 503, 'CERTIFEX_SIN_REVERTIR');
 
-    // El alcance por campus, como revocar y corregir: 404 si el número no es de sus campus.
-    await exigirExpedientes(await alcanceDe(req.user), [d.nexpediente]);
+    // El diploma, una sola vez, y con él el alcance por campus (como revocar y corregir): 404 si no
+    // existe o no es de sus campus. Sin campus no se puede saber de quién es ni apuntarlo: no se toca.
     const dip = await diplomaPorNumero(d.nexpediente);
     if (!dip) throw new AppError(NO_ENCONTRADO, 404, 'NOT_FOUND');
+    if (!centroDe(dip)) throw new AppError('Certifex no dice de qué campus es ese diploma: no se ha revertido nada.', 502, 'CERTIFEX_ERROR');
+    exigirCentro(await alcanceDe(req.user), centroDe(dip), NO_ENCONTRADO);
 
     if (dip.anulada) {
       // Ya revertido. Si el CRM no lo tenía apuntado (se cortó justo después de que
@@ -146,7 +151,7 @@ export async function revertir(req, res, next) {
     let aviso;
     try {
       await model.apuntarReversion({
-        nexpediente: d.nexpediente, matriculaId, centro: String(dip.centro).toUpperCase(), alumno: dip.alumno ?? null,
+        nexpediente: d.nexpediente, matriculaId, centro: centroDe(dip), alumno: dip.alumno ?? null,
         titulacion: dip.titulacion ?? null, motivo, revertidoPor: req.user.userId ?? null, revertidoPorEmail: req.user.email,
         revertidoEn: hecho?.anulada?.en ?? null,
       });
@@ -161,11 +166,12 @@ export async function revertir(req, res, next) {
 
 /** Apunta en el CRM una reversión que Certifex ya tiene y el CRM no (lo que dice Certifex). */
 async function apuntarDesdeCertifex(dip) {
+  if (!centroDe(dip)) throw new AppError(`Certifex no dice de qué campus es ${dip?.nexpediente}: no se apunta.`, 502, 'CERTIFEX_ERROR');
   if (await model.reversionDe(dip.nexpediente)) return;
   const a = dip.anulacion ?? {};
   await model.apuntarReversion({
     nexpediente: dip.nexpediente, matriculaId: Number.isSafeInteger(a.matriculaId) ? a.matriculaId : null,
-    centro: String(dip.centro).toUpperCase(), alumno: dip.alumno ?? null,
+    centro: centroDe(dip), alumno: dip.alumno ?? null,
     titulacion: dip.titulacion ?? null, motivo: a.motivo || '(sin motivo en Certifex)', revertidoPor: null,
     revertidoPorEmail: correoDe(a.por) || '(desconocido)', revertidoEn: a.en ?? null,
   });
@@ -196,6 +202,8 @@ export async function completarReversiones() {
   let apuntadas = 0;
   for (const f of filas) {
     if (ya.has(f.nexpediente)) continue;
+    // Sin campus no se puede apuntar (ni saber de quién es): se dice y se sigue con los demás.
+    if (!centroDe(f)) { logger.warn({ nexpediente: f.nexpediente }, 'Certifex: reversión sin campus, no se apunta'); continue; }
     await apuntarDesdeCertifex(f);
     apuntadas += 1;
     logger.warn({ nexpediente: f.nexpediente }, 'Certifex: reversión que faltaba en el CRM, apuntada ahora');

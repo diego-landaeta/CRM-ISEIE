@@ -739,3 +739,30 @@ describe('lo emitido desde Emisiones, al revertirlo, vuelve a «Aprobados sin di
   });
 });
 
+describe('al revertir, el diploma se pide una vez y nunca se apunta un campus «UNDEFINED» (12.ª auditoría, punto 5)', () => {
+  it('una sola consulta del diploma a Certifex por reversión (el alcance usa ese mismo dato)', async () => {
+    expect((await revertir(ADMIN)).status).toBe(200);
+    expect(pedidas.filter((p) => p.ruta === '/diplomas' && p.query.q === EXP)).toHaveLength(1);
+  });
+
+  it('sigue dando 404 a un admin de otro campus, sin revertir nada', async () => {
+    expect((await revertir(ADMIN_ISEIE)).status).toBe(404);
+    expect(llegoARevertir()).toHaveLength(0);
+  });
+
+  it('si Certifex no dice el campus del diploma: no se revierte nada (502), y no se apunta', async () => {
+    DIPLOMAS = DIPLOMAS.map((d) => (d.nexpediente === EXP ? { ...d, centro: null } : d));
+    const r = await revertir(SUPER);
+    expect(r.status).toBe(502);
+    expect(llegoARevertir()).toHaveLength(0);
+    expect(registro).toHaveLength(0);
+  });
+
+  it('el repaso se salta un revertido sin campus y apunta los demás', async () => {
+    DIPLOMAS = [...DIPLOMAS, diploma('PSIKO-2026-000107-GGGG', { centro: '', anulada: true, anulacion: { en: '2026-11-06T10:00:00.000Z', motivo: 'm', por: 'x@prueba.test (CRM 360)', sustituidaPor: null, matriculaId: 107 } })];
+    expect(await completarReversiones()).toEqual({ apuntadas: 1 });
+    expect(registro.map((x) => x.nexpediente)).toEqual([EXP_ANULADO]);
+    expect(registro.some((x) => x.centro === 'UNDEFINED' || !x.centro)).toBe(false);
+  });
+});
+
