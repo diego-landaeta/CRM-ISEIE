@@ -36,13 +36,14 @@ export default function StatusPage() {
     let cancelled = false;
     async function load() {
       try {
-        const [comps, incs] = await Promise.all([
-          client.get('/status/components').then((r) => Array.isArray(r?.data) ? r.data : []).catch(() => []),
-          client.get('/status/incidents?status=active').then((r) => Array.isArray(r?.data) ? r.data : []).catch(() => []),
-        ]);
+        // GET /status trae los componentes (con su comprobación en vivo) y SOLO las
+        // incidencias activas. Antes se pedía `/status/components`, que no existe
+        // (404 → sin componentes → «Hay incidencias activas» con todo bien), y
+        // `/status/incidents?status=active`, que ignora el filtro y da el historial.
+        const estado = await client.get('/status').then((r) => r?.data || {}).catch(() => ({}));
         if (!cancelled) {
-          setComponents(comps);
-          setIncidents(incs);
+          setComponents(Array.isArray(estado.components) ? estado.components : []);
+          setIncidents(Array.isArray(estado.active_incidents) ? estado.active_incidents : []);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -52,7 +53,9 @@ export default function StatusPage() {
     return () => { cancelled = true; };
   }, []);
 
-  const allOperational = components.length > 0 && components.every((c) => c.status === 'operational');
+  // Todo bien = ninguna incidencia activa y ningún componente fuera de «Operativo».
+  // Sin componentes registrados no es una incidencia.
+  const allOperational = !loading && incidents.length === 0 && components.every((c) => c.status === 'operational');
 
   return (
     <div className="space-y-6">
