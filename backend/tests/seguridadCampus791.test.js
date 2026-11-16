@@ -12,12 +12,12 @@ const { registrar } = await import('./helpers/permisosSinBase.js');
  *    campus suyo pasa; en otro es un 404; superadmin y soporte, todo.
  * 2. Proyectos: el listado y la ficha devolvían `webhook_api_key` de todos los
  *    campus a cualquiera con `projects.view` (todo el mundo). Ahora solo a quien
- *    tiene `projects.edit`, y en sus campus.
+ *    tiene `projects.edit` o `webhooks.edit` (el admin), y en sus campus.
  */
 
 // ── Doble de la base ────────────────────────────────────────────────────────
 // Campus: 1 y 2 de la gestora 9; 3 de otra empresa. Formularios: 50 en el 1, 70 en el 3.
-const CAMPUS = { 9: [1, 2], 11: [1] };
+const CAMPUS = { 9: [1, 2], 11: [1], 12: [2] };
 const FORMS = { 50: 1, 70: 3 };
 vi.mock('../src/shared/config/db.js', () => ({
   query: vi.fn(async (sql, params = []) => {
@@ -54,7 +54,8 @@ const { default: formRouter } = await import('../src/modules/forms/form.routes.j
 const GESTORA = registrar({ userId: 9, role: 'gestor' });
 const TUTORA = registrar({ userId: 21, role: 'tutor' });
 const SUPER = registrar({ userId: 1, role: 'superadmin' });
-const ADMIN_CONFIG = registrar({ userId: 11, role: 'admin', excepciones: { 'projects.edit': true } });
+const ADMIN = registrar({ userId: 11, role: 'admin' });
+const SOPORTE_CAMPUS = registrar({ userId: 12, role: 'gestor', excepciones: { 'projects.edit': true } });
 
 async function guardia(fn, user, { params = {}, body = {} } = {}) {
   let error = null; let paso = false;
@@ -129,10 +130,16 @@ describe('proyectos: la clave del webhook solo a quien puede configurar ese camp
     expect(cuerpo.data).not.toHaveProperty('webhook_api_key');
   });
 
-  it('con projects.edit, la de sus campus y no la de otro', async () => {
-    const { cuerpo } = await llamar(projectCtrl.list, ADMIN_CONFIG);
+  it('el admin (webhooks.edit de serie): la de sus campus y no la de otro', async () => {
+    const { cuerpo } = await llamar(projectCtrl.list, ADMIN);
     const clave = Object.fromEntries(cuerpo.data.map((p) => [p.id, p.webhook_api_key]));
     expect(clave).toEqual({ 1: 'clave-1', 2: undefined, 3: undefined });
+  });
+
+  it('con projects.edit como excepción, igual: solo en sus campus', async () => {
+    const { cuerpo } = await llamar(projectCtrl.list, SOPORTE_CAMPUS);
+    const clave = Object.fromEntries(cuerpo.data.map((p) => [p.id, p.webhook_api_key]));
+    expect(clave).toEqual({ 1: undefined, 2: 'clave-2', 3: undefined });
   });
 
   it('el superadmin las ve todas', async () => {

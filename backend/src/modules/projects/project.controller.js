@@ -26,11 +26,12 @@ async function exigirQuePuedaConfigurar(req, id, cambios = {}) {
  *
  * `projects.view` lo tiene todo el mundo (tutores incluidos) y el listado y la
  * ficha devolvían `webhook_api_key` de TODOS los campus: con ella se dan de alta
- * prospectos en el CRM. Ahora va solo a quien tiene `projects.edit` (es quien la
- * regenera) y en SUS campus (superadmin y soporte, en todos). Al resto, sin ella.
+ * prospectos en el CRM. Ahora va solo a quien tiene `projects.edit` (la regenera)
+ * o `webhooks.edit` (monta los webhooks de entrada; el admin, de serie), y en SUS
+ * campus (superadmin y soporte, en todos). Al resto (gestoras, tutores…), sin ella.
  */
 async function sinClavesAjenas(req, proyectos) {
-  const puedeConfigurar = await tienePermiso(req, 'projects.edit');
+  const puedeConfigurar = await tienePermiso(req, 'projects.edit', 'webhooks.edit');
   const todos = veTodoElCrm(req.user);
   const suyos = puedeConfigurar && !todos ? new Set(await campusDeLaPersona(req.user?.userId)) : null;
   return proyectos.map((p) => {
