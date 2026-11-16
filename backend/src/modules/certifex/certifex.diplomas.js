@@ -148,12 +148,6 @@ async function conAvisoRechazo(filas) {
 }
 
 /**
- * Lo que espera a una persona DESPUES de aprobar, dentro de las solicitudes:
- *  · `porAvisar`: con diploma emitido y vigente, y ningun aviso aprobado todavia.
- *    Es el «pendiente de aviso»: ver el PDF y, si esta bien, enviarlo al alumno.
- *  · `sinEmitir`: aprobadas sin diploma (la emision fallo o se corto). Se reintenta.
- */
-/**
  * #351: las matrículas cuyo diploma se REVIRTIÓ y que no son solicitudes (se emitieron desde
  * Certificaciones › Emisiones, sin que el alumno lo pidiera). Diego: «Tras revertir, la fila …
  * vuelve a «Aprobados sin diploma», donde ya funciona «Editar» (formación y programa) y «Emitir»».
@@ -213,6 +207,13 @@ export function olvidarResueltas() {
   resueltas.clear();
 }
 
+/**
+ * Lo que espera a una persona DESPUES de aprobar, dentro de las solicitudes:
+ *  · `porAvisar`: con diploma emitido y vigente, y ningun aviso aprobado todavia.
+ *    Es el «pendiente de aviso»: ver el PDF y, si esta bien, enviarlo al alumno.
+ *  · `sinEmitir`: aprobadas sin diploma (la emision fallo o se corto, o se revirtio para
+ *    corregirlo, #351; tambien lo revertido que no era una solicitud: `revertidasSinPedir`).
+ */
 async function despuesDeAprobar({ centro, centros = null, q }) {
   if (centros && centros.size === 0) return { porAvisar: [], sinEmitir: [], truncado: false };
   const deMios = (row) => !centros || centros.has(String(row?.centro).toUpperCase());
