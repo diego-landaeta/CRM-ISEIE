@@ -67,11 +67,18 @@ export async function findPagoDuplicado(conversionId, importe, fecha, stripeId =
   // cuadre. Sin esto, reorganizar una venta o perder el enlace hacia que el
   // reintento de "cargos sin asociar" registrara el cobro por segunda vez.
   if (stripeId) {
-    const { rows: porId } = await query(
+    // El id EXACTO, no un trozo: con LIKE '%id%', «ch_x_r1» coincidía con la nota
+    // de «ch_x_r10» y el cargo se daba por duplicado (la prueba de los 30 cargos
+    // de stripeCobroUnaVez680 fallaba a ratos por eso). Delante y detrás, nada que
+    // pueda ser parte de un id (letra, número o guion bajo).
+    // Los ids de Stripe solo llevan letras, números y guion bajo: así no hay nada que escapar.
+    const idStripe = String(stripeId);
+    const idExacto = /^[A-Za-z0-9_]+$/.test(idStripe) ? `(^|[^A-Za-z0-9_])${idStripe}([^A-Za-z0-9_]|$)` : null;
+    const { rows: porId } = idExacto === null ? { rows: [] } : await query(
       `SELECT cp.id FROM conversion_payments cp
-        WHERE cp.notas LIKE '%' || $1 || '%'
+        WHERE cp.notas ~ $1
         ORDER BY cp.id LIMIT 1`,
-      [stripeId]
+      [idExacto]
     );
     if (porId[0]) return porId[0];
   }
