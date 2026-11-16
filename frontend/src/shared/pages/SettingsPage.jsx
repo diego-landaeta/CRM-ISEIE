@@ -5,13 +5,14 @@ import {
   Users, Calendar, ShieldCheck, TextT, TreeStructure,
   Megaphone, FileText, PlugsConnected, Envelope, EnvelopeOpen, Lightning,
   ListNumbers, Key, Lock, ArrowSquareOut, Plus, WarningCircle,
-  Wrench, X, Palette,
+  Wrench, X, Palette, GlobeHemisphereWest,
 } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 import { useConfirm } from '@/shared/components/ui/useConfirm';
 import usePermission from '@/shared/hooks/usePermission';
 import MarcaSection from './MarcaSection';
+import PaisesPorCampus from '@/modules/settings/components/PaisesPorCampus';
 import CampusPorEmpresa, { marcarVarios } from '@/shared/components/CampusPorEmpresa';
 import PermisosDePersona from '@/modules/permissions/components/PermisosDePersona';
 import EquipoComercial from '@/modules/equipo-comercial/components/EquipoComercial';
@@ -42,6 +43,8 @@ const NAV = [
   { label: 'Numeración docs',      icon: ListNumbers,    to: '/documentos/config' },
   // La marca en correos y formularios: logo, colores, remitente y su Brevo.
   { id: 'marca',        label: 'Marca',         icon: Palette, embedded: true },
+  // País de entrada por subdominio de cada campus (#221).
+  { id: 'paises',       label: 'Países por subdominio', icon: GlobeHemisphereWest, embedded: true },
   { id: 'integrations', label: 'APIs globales', icon: Key, embedded: true },
   { id: 'security',     label: 'Seguridad',     icon: Lock, embedded: true },
 ];
@@ -144,6 +147,9 @@ export default function SettingsPage() {
           )}
           {tab === 'marca' && (
             <MarcaSection isAdmin={isAdmin} />
+          )}
+          {tab === 'paises' && (
+            <PaisesPorCampus />
           )}
           {tab === 'integrations' && (
             <IntegrationsSection isAdmin={isAdmin} />

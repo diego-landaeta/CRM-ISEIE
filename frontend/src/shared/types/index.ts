@@ -139,6 +139,8 @@ export interface Lead {
   utm_content?: string | null;
   utm_term?: string | null;
   landing_url?: string | null;
+  // País de entrada (#221): código ISO del subdominio por el que entró, o null.
+  pais_origen?: string | null;
   // Algunos endpoints de detalle inyectan interacciones/recordatorios
   interactions?: Interaction[];
   reminders?: Reminder[];

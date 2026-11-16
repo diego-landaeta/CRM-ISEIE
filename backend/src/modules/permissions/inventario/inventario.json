@@ -11596,6 +11596,28 @@
   "puertas": []
  },
  {
+  "id": "GET /api/informes/paises-entrada",
+  "tipo": "ruta",
+  "modulo": "reports",
+  "metodo": "GET",
+  "ruta": "/api/informes/paises-entrada",
+  "relativa": "GET /paises-entrada",
+  "controlador": "paisesEntrada",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "reports.mis_informes"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/informes/formaciones",
   "tipo": "ruta",
   "modulo": "reports",

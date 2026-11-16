@@ -74,6 +74,7 @@ import AtajosDeFicha from '../components/AtajosDeFicha';
 import ReminderQuickDialog from '../components/ReminderQuickDialog';
 import BulkActionBar from '../components/BulkActionBar';
 import usePermission from '@/shared/hooks/usePermission';
+import { etiquetaCampusPais, nombreDelPais } from '@/shared/lib/paises';
 import { getLeadPriority, getPriorityStyle } from '../lib/leadPriority';
 import { getLeadExportColumns } from '../lib/leadFormat';
 import { yaPaso } from '@/shared/lib/fechas';
@@ -160,6 +161,7 @@ export default function LeadsPage() {
     filterEstado, setFilterEstado,
     filterPaso, setFilterPaso,
     filterOrigen, setFilterOrigen,
+    filterPais, setFilterPais,
     filterResponsable, setFilterResponsable,
     filterProducto, setFilterProducto,
     dateFrom, dateTo, setDateRange,
@@ -922,6 +924,8 @@ export default function LeadsPage() {
         filterPaso={filterPaso} setFilterPaso={setFilterPaso}
         pasosDelProceso={pasosDelProceso}
         filterOrigen={filterOrigen} setFilterOrigen={setFilterOrigen}
+        filterPais={filterPais} setFilterPais={setFilterPais}
+        campusDePaises={projects}
         filterResponsable={filterResponsable} setFilterResponsable={setFilterResponsable}
         filterProducto={filterProducto} setFilterProducto={setFilterProducto}
         dateFrom={dateFrom} dateTo={dateTo} setDateRange={setDateRange}
@@ -1070,10 +1074,14 @@ export default function LeadsPage() {
                     {!lead.valor_oportunidad && <span className="text-muted-foreground/60">—</span>}
                   </td>
                   {showProjectColumn && (
-                    <td className="px-5 py-3.5 text-xs text-muted-foreground">{lead.proyecto_nombre || '—'}</td>
+                    <td className="px-5 py-3.5 text-xs text-muted-foreground">{etiquetaCampusPais(lead.proyecto_nombre, lead.pais_origen) || '—'}</td>
                   )}
                   <td className="px-5 py-3.5">
                     <ChannelBadge channel={lead.origen} />
+                    {/* Con un solo campus no hay columna de campus: el país va aquí (#221). */}
+                    {!showProjectColumn && lead.pais_origen && (
+                      <span className="block mt-0.5 text-xs text-muted-foreground">{nombreDelPais(lead.pais_origen)}</span>
+                    )}
                   </td>
                   <td className="px-5 py-3.5">
                     <QuickStatusChange

@@ -1,6 +1,7 @@
 import { query } from '../../shared/config/db.js';
 import { ALTA_POR_WHATSAPP } from '../../shared/utils/origenDelLead.js';
 import { SIN_PRUEBAS } from '../../shared/utils/ambito.js';
+import { paisDeEntrada } from '../leads/pais.js';
 
 /*
   LAS PULSACIONES DEL BOTÓN DE WHATSAPP DE LAS WEBS (Diego, 29/10).
@@ -91,11 +92,16 @@ export async function cruzarConPulsacion({ leadId, projectId, userId }) {
   const p = rows[0];
   if (!p) return null;
   if (p.pagina) {
-    await query(
+    const { rowCount } = await query(
       `UPDATE leads SET landing_url = $2, updated_at = NOW()
         WHERE id = $1 AND COALESCE(landing_url, '') = ''`,
       [leadId, p.pagina]
     );
+    // Y con la página, su país de entrada (#221), si el subdominio lo dice.
+    const pais = rowCount ? await paisDeEntrada({ query }, projectId, p.pagina) : null;
+    if (pais) {
+      await query('UPDATE leads SET pais_origen = $2 WHERE id = $1 AND pais_origen IS NULL', [leadId, pais]);
+    }
   }
   return p;
 }

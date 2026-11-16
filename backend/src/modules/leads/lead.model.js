@@ -3,6 +3,7 @@ import { PASO_CERRADO } from '../../shared/utils/pasoCerrado.js';
 import { EN_EL_PROCESO } from '../../shared/utils/enElProceso.js';
 import { recolocarPasos } from '../../shared/utils/recolocarPasos.js';
 import { logger } from '../../shared/utils/logger.js';
+import { paisDeEntrada, sqlPaisDelLead } from './pais.js';
 
 // ============================================================
 // WEBHOOK + ROUND-ROBIN
@@ -540,6 +541,15 @@ export async function createLeadWithRoundRobin({ projectId, nombre, email, telef
     );
     const lead = leadRows[0];
 
+    // El país de entrada (#221): el subdominio por el que entró y la tabla de su
+    // campus. Va aquí porque por aquí pasan TODAS las altas (webhook, Make,
+    // formularios, alta manual, admisión). Sin dirección o sin tabla, nada.
+    const pais = await paisDeEntrada(client, projectId, landingUrl || utms?.landing_url || null);
+    if (pais) {
+      await client.query('UPDATE leads SET pais_origen = $2 WHERE id = $1', [lead.id, pais]);
+      lead.pais_origen = pais;
+    }
+
     // Guardar UTMs si hay datos relevantes. Antes esto SOLO insertaba si había
     // utm_source/medium/campaign, ignorando canal_detectado. Resultado: al crear
     // manualmente con "WhatsApp" el canal no se guardaba. Ahora también dispara
@@ -704,7 +714,7 @@ export function condicionDeBusqueda(search, { col = '', idx }) {
   return { sql: `(${conds.join(' OR ')})`, params, siguiente };
 }
 
-export async function findAll({ projectId, projectIds, status, pasoProceso, responsableId, unassigned, canal, productId, search, page, limit, includeConverted, dateFrom, dateTo, sort, dir, duplicated, reincidente, conConversion, installmentStatus }) {
+export async function findAll({ projectId, projectIds, status, pasoProceso, responsableId, unassigned, canal, paisEntrada = null, productId, search, page, limit, includeConverted, dateFrom, dateTo, sort, dir, duplicated, reincidente, conConversion, installmentStatus }) {
   const conditions = [];
   const params = [];
   let paramIdx = 1;
@@ -797,6 +807,11 @@ export async function findAll({ projectId, projectIds, status, pasoProceso, resp
   if (canal) {
     conditions.push(`EXISTS (SELECT 1 FROM lead_utms lu WHERE lu.lead_id = l.id AND lu.canal_detectado = $${paramIdx++})`);
     params.push(canal);
+  }
+  // País de entrada (#221): un código ISO o `sin_pais`.
+  if (paisEntrada) {
+    conditions.push(`${sqlPaisDelLead('l')} = $${paramIdx++}`);
+    params.push(paisEntrada);
   }
   if (productId) {
     conditions.push(conConversion
@@ -954,6 +969,7 @@ export async function findAll({ projectId, projectIds, status, pasoProceso, resp
     `SELECT l.id, l.nombre, l.email, l.telefono, l.whatsapp_usuario, l.status, l.fecha_solicitud, l.dossier_enviado, l.lead_duplicado_de,
             l.reincidente, l.es_propuesto, l.propuesto_de, l.updated_at, l.created_at,
             l.landing_url,
+            l.pais_origen,
             l.project_id,
             l.responsable_id,
             proj.nombre AS proyecto_nombre,
@@ -1399,7 +1415,7 @@ export async function getTodaySummary({ userId, role, soloSuyo, personas, projec
   };
 }
 
-export async function getStats(projectId, { responsableId = null, dateFrom = null, dateTo = null, productId = null, canal = null, search = null } = {}) {
+export async function getStats(projectId, { responsableId = null, dateFrom = null, dateTo = null, productId = null, canal = null, paisEntrada = null, search = null } = {}) {
   // Los chips de stats deben reflejar los mismos filtros que el listado, no el
   // total global del proyecto. WHERE incremental igual que findAll.
   // `projectId` puede ser una LISTA de campus (#224): el Dashboard con una
@@ -1422,6 +1438,7 @@ export async function getStats(projectId, { responsableId = null, dateFrom = nul
     extra.push(`EXISTS (SELECT 1 FROM lead_utms lu WHERE lu.lead_id = leads.id AND lu.canal_detectado = $${idx++})`);
     params.push(canal);
   }
+  if (paisEntrada) { extra.push(`${sqlPaisDelLead('')} = $${idx++}`); params.push(paisEntrada); }
   // La misma búsqueda que la lista: sin acentos y el teléfono por cifras.
   const busqueda = condicionDeBusqueda(search, { idx });
   if (busqueda) {

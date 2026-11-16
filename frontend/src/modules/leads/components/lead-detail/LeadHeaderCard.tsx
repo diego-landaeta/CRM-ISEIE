@@ -5,6 +5,7 @@ import StatusBadge from '@/shared/components/ui/StatusBadge';
 import { getLeadPriority, getPriorityStyle } from '../../lib/leadPriority';
 import { avatarColor, getInitials } from './InfoField';
 import type { Lead } from '@/shared/types';
+import { etiquetaCampusPais } from '@/shared/lib/paises';
 import usePermission from '@/shared/hooks/usePermission';
 
 // Repartir la venta de este prospecto entre dos gestoras. Se carga aparte
@@ -72,7 +73,8 @@ export default function LeadHeaderCard({ lead, isAdmin, onReassign, onBack }: Le
               </div>
               <p className="text-muted-foreground text-xs mt-0.5">
                 Prospecto #{lead.id} · creado {lead.created_at ? new Date(lead.created_at).toLocaleString('es-ES', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '--'}
-                {lead.proyecto_nombre && <> · {lead.proyecto_nombre}</>}
+                {/* «Fono Aprende · Chile»: el campus y el país por el que entró (#221). */}
+                {lead.proyecto_nombre && <> · {etiquetaCampusPais(lead.proyecto_nombre, lead.pais_origen)}</>}
               </p>
             </div>
           </div>

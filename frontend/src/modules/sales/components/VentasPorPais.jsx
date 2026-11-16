@@ -46,7 +46,7 @@ function Aviso({ activo, payload }) {
   );
 }
 
-export default function VentasPorPais({ projectId = null, from = null, to = null, responsableId = null, top = 8 }) {
+export default function VentasPorPais({ projectId = null, from = null, to = null, responsableId = null, paisEntrada = null, top = 8 }) {
   const [filas, setFilas] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState(null);
@@ -66,12 +66,13 @@ export default function VentasPorPais({ projectId = null, from = null, to = null
     if (projectId) params.projectId = projectId;
     if (from && to) { params.from = from; params.to = to; }
     if (responsableId) params.responsableId = responsableId;
+    if (paisEntrada) params.paisEntrada = paisEntrada;
     client.get('/ventas/paises', { params })
       .then((r) => { if (vivo) setFilas(r.success ? (r.data || []) : []); })
       .catch((e) => { if (vivo) setError(e?.message || 'No se pudieron cargar los países'); })
       .finally(() => { if (vivo) setCargando(false); });
     return () => { vivo = false; };
-  }, [projectId, from, to, responsableId]);
+  }, [projectId, from, to, responsableId, paisEntrada]);
 
   const { conPais, sinTelefono, total } = useMemo(() => {
     const limpias = filas.map((f) => ({
