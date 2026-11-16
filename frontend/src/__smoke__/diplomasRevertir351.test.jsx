@@ -154,8 +154,16 @@ describe('«Revertir» en «Emitidos, falta enviarlos al alumno»', () => {
     expect(diplomasApi.revertirDisponible).not.toHaveBeenCalled();
   });
 
-  it('en solo lectura tampoco, aunque traiga el permiso', async () => {
+  it('va con su propio permiso: quien puede revertir lo ve aunque no emita (el resto, solo lectura)', async () => {
     abrir({ puedeRevertir: true, soloLectura: true });
+    const fila = await filaDe('Eva Con Moodle');
+    expect(within(fila).getByRole('button', { name: /^Revertir / })).toBeTruthy();
+    // Lo demás sigue siendo de solo lectura: no hay «Enviar».
+    expect(within(fila).queryByRole('button', { name: /Enviar diploma al alumno/ })).toBeNull();
+  });
+
+  it('en solo lectura y sin el permiso de revertir, no sale', async () => {
+    abrir({ puedeRevertir: false, soloLectura: true });
     await filaDe('Eva Con Moodle');
     expect(screen.queryAllByRole('button', { name: /^Revertir / })).toHaveLength(0);
   });

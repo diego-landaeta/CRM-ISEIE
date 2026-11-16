@@ -711,7 +711,9 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
   // botón sale desactivado con el motivo; nunca un error a medias. null = sí se puede.
   const [motivoSinRevertir, setMotivoSinRevertir] = useState<string | null>(COMPROBANDO_REVERTIR);
   useEffect(() => {
-    if (!puedeRevertir || soloLectura) return;
+    // #351: «Revertir» va con su propio permiso (`diplomas.revertir`), no con el de emitir: quien
+    // lo tiene lo ve aunque el resto de la pantalla sea de solo lectura (12.ª auditoría).
+    if (!puedeRevertir) return;
     // Solo cuando se SABE que no está conectado; mientras carga, «Comprobando…».
     if (conexion && !conexion.conectado) { setMotivoSinRevertir('Certifex no está conectado.'); return; }
     if (!conexion?.conectado) { setMotivoSinRevertir(COMPROBANDO_REVERTIR); return; }
@@ -721,7 +723,7 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
       .then((r) => { if (vivo) setMotivoSinRevertir(r.data.disponible ? null : (r.data.motivo || 'Certifex todavía no permite revertir diplomas.')); })
       .catch((e) => { if (vivo) setMotivoSinRevertir(`No se pudo comprobar si Certifex permite revertir: ${(e as Error).message}`); });
     return () => { vivo = false; };
-  }, [puedeRevertir, soloLectura, conexion, recarga]);
+  }, [puedeRevertir, conexion, recarga]);
 
   /** El nombre del campus, si Certifex lo da; si no, su código. */
   const nombreCampus = useMemo(() => {
@@ -1477,7 +1479,7 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
                 verPdf={(c) => c.diploma && abrirFicha(c.diploma, !soloLectura)}
                 enviar={(exps) => setDialogo({ tipo: 'avisos', exps, reenvio: false })}
                 soloLectura={soloLectura}
-                revertir={puedeRevertir && !soloLectura ? (c) => abrir({ tipo: 'revertir', nexpediente: c.nexpediente!, quien: nombre(c.matriculaId) }) : undefined}
+                revertir={puedeRevertir ? (c) => abrir({ tipo: 'revertir', nexpediente: c.nexpediente!, quien: nombre(c.matriculaId) }) : undefined}
                 motivoSinRevertir={motivoSinRevertir}
               />
             )}
@@ -1741,7 +1743,7 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
                           {!d.anulada && <IconoAccion etiqueta={d.verificarUrl ? 'Copiar enlace de verificación' : 'Sin enlace público: Certifex no tiene una dirección que abra desde fuera'} disabled={!d.verificarUrl} onClick={() => copiarEnlace(d)}><LinkSimple size={15} /></IconoAccion>}
                           {/* #351: lo emitido desde el CRM y aún sin enviar se revierte también aquí
                               (p. ej. lo emitido desde Certificaciones › Emisiones, que no sale en Pendientes). */}
-                          {pestana === 'enviados' && puedeRevertir && !soloLectura && !d.aviso && !d.entregado && !d.revocada && !d.anulada && delCrm(d) && (
+                          {pestana === 'enviados' && puedeRevertir && !d.aviso && !d.entregado && !d.revocada && !d.anulada && delCrm(d) && (
                             <IconoAccion etiqueta={motivoSinRevertir ?? `Revertir ${d.nexpediente}`} disabled={trabajando || !!motivoSinRevertir}
                               onClick={() => abrir({ tipo: 'revertir', nexpediente: d.nexpediente, quien: d.alumno })}><ArrowCounterClockwise size={15} /></IconoAccion>
                           )}
