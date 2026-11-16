@@ -392,7 +392,11 @@ export interface Diploma {
    * vez, `sustituidaPor` también está anulado). Un Certifex anterior no los manda.
    */
   anulada?: boolean;
-  anulacion?: { en: string | null; motivo: string | null; por: string | null; sustituidaPor: string | null; vigente?: string | null } | null;
+  /**
+   * `cursoCerrado`: una credencial de esa persona y ese curso está revocada (revocar cierra el curso:
+   * ya no se vuelve a emitir). `porEsteCrm`: lo revirtió este CRM. Un Certifex anterior no los manda.
+   */
+  anulacion?: { en: string | null; motivo: string | null; por: string | null; porEsteCrm?: boolean; sustituidaPor: string | null; vigente?: string | null; cursoCerrado?: boolean } | null;
   /** Null si Certifex no tiene dirección pública (`sinEnlaces` en la lista dice por qué). */
   verificarUrl: string | null;
   diplomaUrl: string | null;

@@ -51,8 +51,10 @@ import EnviosBrevo, { fechaHoraMadrid } from '../components/EnviosBrevo';
 
 
 /** #351: qué decir de un número revertido: con cuál se volvió a emitir y cuál vale hoy. */
-function textoReemision(a: { sustituidaPor: string | null; vigente?: string | null } | null | undefined): string {
+function textoReemision(a: { sustituidaPor: string | null; vigente?: string | null; cursoCerrado?: boolean } | null | undefined): string {
   if (!a?.sustituidaPor) return 'Está en «Aprobados sin diploma» (o en Emisiones) para volver a emitirlo.';
+  // Se volvió a emitir y se revocó: el curso quedó cerrado para esa persona (no se emite otro).
+  if (a.cursoCerrado) return `Se volvió a emitir con ${a.sustituidaPor}, y después se revocó: ese curso queda cerrado para el alumno, no se vuelve a emitir.`;
   if (a.vigente === undefined || a.vigente === a.sustituidaPor) return `Se volvió a emitir con ${a.sustituidaPor}.`;
   return a.vigente
     ? `Se volvió a emitir con ${a.sustituidaPor}, que también se revirtió; hoy vale ${a.vigente}.`
@@ -1706,8 +1708,12 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
                           <td className="px-2 py-3">{d.anulacion?.sustituidaPor
                             ? <>
                                 <span className="select-all font-mono text-[11px] text-primary">{d.anulacion.sustituidaPor}</span>
+                                {/* Se volvió a emitir y se revocó: el curso quedó cerrado (no «también revertido»). */}
+                                {d.anulacion.cursoCerrado ? (
+                                  <div className="text-[11px] text-muted-foreground">revocado después: curso cerrado, no se vuelve a emitir</div>
+                                ) : null}
                                 {/* Revertido más de una vez: ese también está anulado. Se dice cuál vale hoy. */}
-                                {d.anulacion.vigente !== undefined && d.anulacion.vigente !== d.anulacion.sustituidaPor && (
+                                {!d.anulacion.cursoCerrado && d.anulacion.vigente !== undefined && d.anulacion.vigente !== d.anulacion.sustituidaPor && (
                                   <div className="text-[11px] text-muted-foreground">
                                     {d.anulacion.vigente ? <>también revertido; hoy vale <span className="select-all font-mono text-primary">{d.anulacion.vigente}</span></> : 'también revertido; aún sin otro'}
                                   </div>
