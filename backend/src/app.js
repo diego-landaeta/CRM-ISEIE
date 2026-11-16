@@ -153,6 +153,13 @@ app.use('/api/webhook-tokens/receive/:token', porteroDelWebhook, topeDelEnvio,
 // El aviso de WooCommerce (#14) lleva su propio parser, en bruto, para poder comprobar la firma.
 app.use('/api/woocommerce/webhook', wcWebhook);
 
+// El aviso de Stripe (CRM#680), igual: en bruto y ANTES del express.json general. La firma
+// se calcula sobre el cuerpo tal cual llega; el express.json de abajo lo convertía en
+// objeto antes de llegar al módulo, el raw() de su ruta ya no hacía nada y la firma se
+// comprobaba contra «[object Object]»: se rechazaban todos los avisos (los cobros solo
+// entraban por el sondeo de cada 5 minutos).
+app.use('/api/stripe-webhook', express.raw({ type: 'application/json', limit: '2mb' }));
+
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 app.use(cookieParser());
