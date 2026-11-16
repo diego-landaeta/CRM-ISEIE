@@ -52,7 +52,7 @@ import EnviosBrevo, { fechaHoraMadrid } from '../components/EnviosBrevo';
 
 /** #351: qué decir de un número revertido: con cuál se volvió a emitir y cuál vale hoy. */
 function textoReemision(a: { sustituidaPor: string | null; vigente?: string | null; cursoCerrado?: boolean } | null | undefined): string {
-  if (!a?.sustituidaPor) return 'Está en «Aprobados sin diploma» (o en Emisiones) para volver a emitirlo.';
+  if (!a?.sustituidaPor) return 'Está en «Aprobados sin diploma» para volver a emitirlo.';
   // Se volvió a emitir y se revocó: el curso quedó cerrado para esa persona (no se emite otro).
   if (a.cursoCerrado) return `Se volvió a emitir con ${a.sustituidaPor}, y después se revocó: ese curso queda cerrado para el alumno, no se vuelve a emitir.`;
   if (a.vigente === undefined || a.vigente === a.sustituidaPor) return `Se volvió a emitir con ${a.sustituidaPor}.`;
@@ -1020,7 +1020,12 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
     const r = await diplomasApi.revertir(nexpediente, motivo);
     toast(r.data.aviso
       ? { title: 'Revertido, con un aviso', description: r.data.aviso, variant: 'destructive' }
-      : { title: 'Diploma revertido', description: `${nexpediente} queda anulado. Vuelve a estar aprobado sin diploma («Aprobados sin diploma», o Certificaciones › Emisiones): corrige lo que haga falta con «Editar» y emítelo; saldrá con otro número.` });
+      : {
+        title: 'Diploma revertido',
+        description: soloLectura
+          ? `${nexpediente} queda anulado. Vuelve a «Aprobados sin diploma»: quien emite diplomas puede corregirlo con «Editar» y emitirlo; saldrá con otro número.`
+          : `${nexpediente} queda anulado. Vuelve a «Aprobados sin diploma»: corrige lo que haga falta con «Editar» y emítelo; saldrá con otro número.`,
+      });
   });
 
   const revocar = (d: Diploma, motivo: string) => ejecutarEnDialogo(async () => {
@@ -1719,7 +1724,7 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
                                   </div>
                                 )}
                               </>
-                            : <span className="text-xs text-muted-foreground">Todavía no (está en «Aprobados sin diploma» o en Emisiones)</span>}</td>
+                            : <span className="text-xs text-muted-foreground">Todavía no (está en «Aprobados sin diploma»)</span>}</td>
                         </>
                       ) : (
                         <>
@@ -2014,9 +2019,9 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
         message={dialogo?.tipo === 'revertir' ? (
           <>
             <strong>El número {dialogo.nexpediente} se anula</strong>: deja de valer en la verificación pública, su PDF ya no se puede
-            enviar, y no se vuelve a usar. {dialogo.quien} vuelve a estar aprobado sin diploma («Aprobados sin diploma», o
-            Certificaciones › Emisiones si no lo pidió el alumno), donde puedes corregir la formación y el programa con «Editar» y
-            emitirlo de nuevo: <strong>saldrá con otro número</strong>. No se avisa al alumno.
+            enviar, y no se vuelve a usar. {dialogo.quien} vuelve a «Aprobados sin diploma», donde{' '}
+            {soloLectura ? 'quien emite diplomas puede' : 'puedes'} corregir la formación y el programa con «Editar» y emitirlo de nuevo:{' '}
+            <strong>saldrá con otro número</strong>. No se avisa al alumno.
           </>
         ) : ''}
         label="Motivo (queda registrado con el número anulado)"

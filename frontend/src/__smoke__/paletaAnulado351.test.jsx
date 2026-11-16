@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 /**
  * #351 · El buscador (Ctrl K) y un número revertido: no está en Emitidos (está anulado). Lleva
  * al número que vale hoy para esa matrícula, en Emitidos; si no hay, a Revertidos, donde está el
- * anulado (su matrícula puede estar en Pendientes o en Emisiones).
+ * anulado (ahí dice si ya se volvió a emitir).
  *
  *   npx vitest run src/__smoke__/paletaAnulado351.test.jsx
  */

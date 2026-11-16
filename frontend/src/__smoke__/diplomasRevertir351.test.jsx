@@ -177,6 +177,24 @@ describe('«Revertir» en «Emitidos, falta enviarlos al alumno»', () => {
     expect(b.disabled).toBe(true);
   });
 
+  it('el diálogo dice a dónde vuelve (siempre «Aprobados sin diploma») y quién lo corrige (13.ª auditoría, punto 5)', async () => {
+    abrir({ puedeRevertir: true });
+    let dialogo = await pulsarRevertir(await filaDe('Eva Con Moodle'));
+    expect(within(dialogo).getByText(/puedes corregir la formación/)).toBeTruthy();
+    expect(within(dialogo).queryByText(/Emisiones/)).toBeNull();
+    cleanup();
+    // Quien solo puede revertir (no emite): no se le dice que lo corrija él.
+    abrir({ puedeRevertir: true, soloLectura: true });
+    dialogo = await pulsarRevertir(await filaDe('Eva Con Moodle'));
+    expect(within(dialogo).getByText(/quien emite diplomas puede corregir/)).toBeTruthy();
+    expect(within(dialogo).queryByText(/puedes corregir/)).toBeNull();
+    fireEvent.change(within(dialogo).getByLabelText(/Motivo/), { target: { value: MOTIVO } });
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Revertir' }));
+    await waitFor(() => expect(datos.toasts.at(-1)).toMatchObject({ title: 'Diploma revertido' }));
+    expect(datos.toasts.at(-1).description).toMatch(/quien emite diplomas puede corregirlo/);
+    expect(datos.toasts.at(-1).description).not.toMatch(/Emisiones/);
+  });
+
   it('el diálogo dice que el número se anula y que sale otro; pide el motivo y manda número y motivo', async () => {
     abrir({ puedeRevertir: true });
     const dialogo = await pulsarRevertir(await filaDe('Eva Con Moodle'));
@@ -242,7 +260,7 @@ describe('«Revertir» también en Emitidos (lo emitido desde Emisiones y sin en
     expect(within(screen.getByText('Luz Por El Panel').closest('tr')).queryByRole('button', { name: /^Revertir/ })).toBeNull();
     fireEvent.click(b);
     const dialogo = await screen.findByRole('dialog', { name: 'Revertir CEDIA-2026-000020-E1MS' });
-    expect(within(dialogo).getByText(/Iris Desde Emisiones vuelve a estar aprobado sin diploma/)).toBeTruthy();
+    expect(within(dialogo).getByText(/Iris Desde Emisiones vuelve a «Aprobados sin diploma»/)).toBeTruthy();
     fireEvent.change(within(dialogo).getByLabelText(/Motivo/), { target: { value: MOTIVO } });
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Revertir' }));
     await waitFor(() => expect(diplomasApi.revertir).toHaveBeenCalledWith('CEDIA-2026-000020-E1MS', MOTIVO));
