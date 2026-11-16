@@ -85,14 +85,20 @@ vi.mock('@/modules/certifex/api/certifex.api', () => ({
   diplomasApi: {
     resumen: async () => ({ data: { pendientes: 4, rechazadas: 0, vigentes: 2, revocados: 0, terminados: 0, porAvisar: 2, sinEmitir: 1, porEnviar: 2 } }),
     solicitudes: async () => ({ data: { filas: datos.pendientes, total: datos.pendientes.length, pagina: 1, tam: 50 } }),
-    porAvisar: vi.fn(async () => ({ data: { porAvisar: datos.porAvisar, sinEmitir: datos.sinEmitir } })),
+    // `datos.deOtroCrm`: los «por avisar» los emitió otro CRM del campus (se envían, no se revierten aquí).
+    porAvisar: vi.fn(async () => ({ data: {
+      porAvisar: datos.deOtroCrm ? datos.porAvisar.map((c) => ({ ...c, diploma: c.diploma && { ...c.diploma, revertibleAqui: false } })) : datos.porAvisar,
+      sinEmitir: datos.sinEmitir,
+    } })),
     // Emitidos: uno emitido desde Emisiones y sin enviar, otro ya enviado, otro de fuera.
     // Revertidos (anulados): el revertido. Por enlace (?exp=): el revertido.
     // `datos.sinRevertir`: el Certifex conectado aún no revierte; el servidor lo dice así en «anulados».
     // `datos.lento`: el contador de «todos los campus» tarda y, cuando llega, dice que no hay «Revertidos».
     diplomas: async (f) => (datos.lento && f?.estado === 'anulados' && f?.tam === 1 && !f?.centro ? datos.lento.then(() => ({ data: { filas: [], total: 0, pagina: 1, tam: 1, sinRevertir: true } })) : datos.contadorFalla && f?.estado === 'anulados' && f?.tam === 1 ? Promise.reject(new Error('sin red')) : datos.sinRevertir && f?.estado === 'anulados' ? { data: { filas: [], total: 0, pagina: 1, tam: 1, sinRevertir: true } } : f?.estado === 'vigentes' ? { data: { filas: [
       { nexpediente: 'CEDIA-2026-000020-E1MS', centro: 'ISEIH', alumno: 'Iris Desde Emisiones', titulacion: 'Curso', cursoRef: 12, emitidoEn: '2026-11-03T10:00:00Z',
-        emitidaPor: 'Diego (CRM 360)', revocada: false, revocacion: null, verificarUrl: null, diplomaUrl: null, aviso: null, emitidoEnCrm: true },
+        emitidaPor: 'Diego (CRM 360)', revocada: false, revocacion: null, verificarUrl: null, diplomaUrl: null, aviso: null, emitidoEnCrm: true,
+        // `datos.deOtroCrm`: lo emitió otro CRM del campus (se envía, pero no se revierte aquí).
+        ...(datos.deOtroCrm ? { revertibleAqui: false } : {}) },
       { nexpediente: 'CEDIA-2026-000021-ENVI', centro: 'ISEIH', alumno: 'Juan Ya Enviado', titulacion: 'Curso', cursoRef: 12, emitidoEn: '2026-11-03T10:00:00Z',
         emitidaPor: 'Diego (CRM 360)', revocada: false, revocacion: null, verificarUrl: null, diplomaUrl: null, aviso: { resultado: 'enviado', en: '2026-11-04T10:00:00Z', por: 'x' }, emitidoEnCrm: true },
       { nexpediente: 'CEDIA-2026-000022-FUER', centro: 'ISEIH', alumno: 'Kike De Fuera', titulacion: 'Curso', cursoRef: 12, emitidoEn: '2026-11-03T10:00:00Z',
@@ -264,6 +270,30 @@ describe('«Revertir» también en Emitidos (lo emitido desde Emisiones y sin en
     fireEvent.change(within(dialogo).getByLabelText(/Motivo/), { target: { value: MOTIVO } });
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Revertir' }));
     await waitFor(() => expect(diplomasApi.revertir).toHaveBeenCalledWith('CEDIA-2026-000020-E1MS', MOTIVO));
+  });
+
+  it('…y en «Emitidos, falta enviarlos» de Pendientes, igual: «Enviar» sí, «Revertir» no', async () => {
+    datos.deOtroCrm = true;
+    try {
+      abrir({ puedeRevertir: true });
+      const eva = await filaDe('Eva Con Moodle');
+      expect(within(eva).getByRole('button', { name: /Enviar diploma al alumno/ })).toBeTruthy();
+      expect(within(eva).queryByRole('button', { name: /^Revertir/ })).toBeNull();
+    } finally {
+      datos.deOtroCrm = false;
+    }
+  });
+
+  it('lo emitido por OTRO CRM del campus: se puede enviar, pero no sale «Revertir» (14.ª auditoría)', async () => {
+    datos.deOtroCrm = true;
+    try {
+      render(<MemoryRouter initialEntries={['/?pestana=emitidos']}><CertifexDiplomasPage puedeRevertir /></MemoryRouter>);
+      const iris = (await screen.findByText('Iris Desde Emisiones')).closest('tr');
+      expect(within(iris).getByRole('button', { name: 'Enviar al alumno' })).toBeTruthy();
+      expect(within(iris).queryByRole('button', { name: /^Revertir/ })).toBeNull();
+    } finally {
+      datos.deOtroCrm = false;
+    }
   });
 
   it('sin el permiso, no sale', async () => {

@@ -411,6 +411,11 @@ export interface Diploma {
   entregado?: boolean;
   /** Lo emitió este CRM («persona (CRM …)»). Lo emitido fuera no está «pendiente de aviso». */
   emitidoEnCrm?: boolean;
+  /**
+   * #351: este CRM lo puede revertir (lo emitió él, según Certifex: con dos CRM en un campus, cada
+   * uno lo suyo). Solo decide «Revertir»; «Enviar» sigue con `emitidoEnCrm`. Sin el campo, sí.
+   */
+  revertibleAqui?: boolean;
   /** Su diploma tiene versión de imprenta A3 (hoy, solo ISEIE). La da Certifex. */
   imprenta?: boolean;
 }

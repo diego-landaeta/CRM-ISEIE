@@ -3,7 +3,7 @@ import { logger } from '../../shared/utils/logger.js';
 import * as model from './certifex.model.js';
 import { certifex, certifexPuede, recorrer } from './certifex.cliente.js';
 import { alcanceDe, exigirExpedientes } from './certifex.alcance.js';
-import { emitidoPorElCrm } from './certifex.marcas.js';
+import { emitidoPorElCrm, revertiblePorEsteCrm } from './certifex.marcas.js';
 import { revertirSchema, mensajeDeValidacion } from './certifex.validation.js';
 
 /**
@@ -126,13 +126,9 @@ export async function revertir(req, res, next) {
     // Entregado sin aviso del CRM: el correo salió desde el panel de Certifex (lo dice Certifex
     // en `entregado`; un Certifex anterior no lo manda y entonces lo comprueba él).
     if (dip.entregado === true) throw new AppError('Ya se entregó al alumno desde el panel de Certifex: no se revierte. Si está mal, hay que revocarlo.', 409, 'YA_ENVIADO');
-    if (!emitidoPorElCrm(dip)) {
-      // Lo emitió OTRO CRM del mismo campus (Certifex lo dice en `deEsteCrm`): se dice así.
-      if (dip.deEsteCrm === false && /\(CRM\b[^()]*\)\s*$/i.test(String(dip.emitidaPor ?? ''))) {
-        throw new AppError('Este diploma lo emitió otro CRM: lo revierte el que lo emitió.', 409, 'OTRO_CRM');
-      }
-      throw new AppError('Este diploma no se emitió desde el CRM: no se revierte desde aquí.', 409, 'EMITIDO_FUERA');
-    }
+    if (!emitidoPorElCrm(dip)) throw new AppError('Este diploma no se emitió desde el CRM: no se revierte desde aquí.', 409, 'EMITIDO_FUERA');
+    // Lo emitió OTRO CRM del mismo campus (Certifex lo dice en `deEsteCrm`): lo revierte ese.
+    if (!revertiblePorEsteCrm(dip)) throw new AppError('Este diploma lo emitió otro CRM: lo revierte el que lo emitió.', 409, 'OTRO_CRM');
 
     // Certifex puede esperar hasta 30 s a que acabe un envío del aviso de ESTE diploma (su
     // cerrojo): el CRM espera más, para no decir «no responde» a algo que acaba haciéndose.

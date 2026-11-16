@@ -11,7 +11,7 @@ import { prepararEmision, emitirConPrograma, emitirMatriculas, resultadoBloquead
 import { conDestinatario } from './certifex.envios.js';
 import { conReversiones } from './certifex.revertir.js';
 import { conEdicion, conProgramaCrm } from './certifex.enriquecer.js';
-import { emitidoPorElCrm } from './certifex.marcas.js';
+import { emitidoPorElCrm, revertiblePorEsteCrm } from './certifex.marcas.js';
 
 // Se siguen exportando desde aquí (los usaban así); viven en sus módulos (#351: sin ciclos).
 export { conEdicion, conProgramaCrm, emitidoPorElCrm };
@@ -248,7 +248,12 @@ export async function porAvisar(req, res, next) {
     const data = ambito.vacio
       ? { porAvisar: [], sinEmitir: [], truncado: false }
       : await despuesDeAprobar({ centro: ambito.centro, centros: ambito.centros ?? null, q: f.q });
-    for (const c of data.porAvisar) if (c.diploma) c.diploma.emitidoEnCrm = emitidoPorElCrm(c.diploma);
+    // `emitidoEnCrm`: decide «Enviar»; `revertibleAqui`: solo «Revertir» (#351, 14.ª auditoría).
+    for (const c of data.porAvisar) {
+      if (!c.diploma) continue;
+      c.diploma.emitidoEnCrm = emitidoPorElCrm(c.diploma);
+      c.diploma.revertibleAqui = revertiblePorEsteCrm(c.diploma);
+    }
     await conEdicion([...data.porAvisar, ...data.sinEmitir]);
     await conLoDelCrm([...data.porAvisar, ...data.sinEmitir], req.user);
     await conProgramaCrm(data.sinEmitir);
@@ -885,7 +890,11 @@ export async function diplomas(req, res, next) {
       pararPorFecha: f.estado !== 'anulados',
       extra: ambos(filtros.length ? (d) => filtros.every((fn) => fn(d)) : null, deMisCentros(ambito)),
     });
-    for (const d of data.filas) d.emitidoEnCrm = emitidoPorElCrm(d);
+    // `emitidoEnCrm`: decide «Enviar»; `revertibleAqui`: solo «Revertir» (#351, 14.ª auditoría).
+    for (const d of data.filas) {
+      d.emitidoEnCrm = emitidoPorElCrm(d);
+      d.revertibleAqui = revertiblePorEsteCrm(d);
+    }
     // A quién se manda (el titular) y quién lo aprobó, para «Aviso al alumno» (05/11/2026).
     await conDestinatario(data.filas, { query });
     res.json({ success: true, data });

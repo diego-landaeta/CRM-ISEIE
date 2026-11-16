@@ -807,10 +807,19 @@ describe('lo que emitió o revirtió OTRO CRM del campus (13.ª auditoría, punt
     expect((await revertir(ADMIN)).status).toBe(200);
   });
 
-  it('en el listado, lo de otro CRM no cuenta como «emitido en el CRM» (no se le ofrece «Revertir»)', async () => {
+  it('en el listado, lo de otro CRM se puede ENVIAR (sigue «emitido en el CRM») pero no revertir aquí (14.ª auditoría)', async () => {
     DIPLOMAS = DIPLOMAS.map((d) => (d.nexpediente === EXP ? { ...d, deEsteCrm: false } : d));
     const r = await request.get('/api/certifex/diplomas?estado=vigentes').set('Authorization', `Bearer ${ADMIN}`);
-    expect(r.body.data.filas.find((d) => d.nexpediente === EXP).emitidoEnCrm).toBe(false);
+    expect(r.body.data.filas.find((d) => d.nexpediente === EXP)).toMatchObject({ emitidoEnCrm: true, revertibleAqui: false });
+    // Y sigue contando en «Pendiente de aviso» (lo que hay que enviar).
+    const p = await request.get('/api/certifex/diplomas?estado=vigentes&aviso=pendiente').set('Authorization', `Bearer ${ADMIN}`);
+    expect(p.body.data.filas.map((d) => d.nexpediente)).toContain(EXP);
+  });
+
+  it('lo emitido por este CRM: se envía y se revierte', async () => {
+    DIPLOMAS = DIPLOMAS.map((d) => (d.nexpediente === EXP ? { ...d, deEsteCrm: true } : d));
+    const r = await request.get('/api/certifex/diplomas?estado=vigentes').set('Authorization', `Bearer ${ADMIN}`);
+    expect(r.body.data.filas.find((d) => d.nexpediente === EXP)).toMatchObject({ emitidoEnCrm: true, revertibleAqui: true });
   });
 
   it('el repaso usa `porEsteCrm` de Certifex cuando viene: lo de otro no, lo suyo aunque la firma sea antigua', async () => {

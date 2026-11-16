@@ -1754,7 +1754,7 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
                           {!d.anulada && <IconoAccion etiqueta={d.verificarUrl ? 'Copiar enlace de verificación' : 'Sin enlace público: Certifex no tiene una dirección que abra desde fuera'} disabled={!d.verificarUrl} onClick={() => copiarEnlace(d)}><LinkSimple size={15} /></IconoAccion>}
                           {/* #351: lo emitido desde el CRM y aún sin enviar se revierte también aquí
                               (p. ej. lo emitido desde Certificaciones › Emisiones, que no sale en Pendientes). */}
-                          {pestana === 'enviados' && puedeRevertir && !d.aviso && !d.entregado && !d.revocada && !d.anulada && delCrm(d) && (
+                          {pestana === 'enviados' && puedeRevertir && !d.aviso && !d.entregado && !d.revocada && !d.anulada && delCrm(d) && d.revertibleAqui !== false && (
                             <IconoAccion etiqueta={motivoSinRevertir ?? `Revertir ${d.nexpediente}`} disabled={trabajando || !!motivoSinRevertir}
                               onClick={() => abrir({ tipo: 'revertir', nexpediente: d.nexpediente, quien: d.alumno })}><ArrowCounterClockwise size={15} /></IconoAccion>
                           )}
@@ -2168,7 +2168,7 @@ function BloquePorAvisar({ filas, nombreCampus, elegidas, alternar, todas, ocupa
                       <Button size="sm" variant="outline" onClick={() => verPdf(c)}><FilePdf size={14} className="mr-1.5" /> Ver PDF</Button>
                       {!soloLectura && <Button size="sm" disabled={ocupado} onClick={() => enviar([k])}><PaperPlaneTilt size={14} className="mr-1.5" /> Enviar diploma al alumno</Button>}
                       {/* #351: solo lo emitido desde el CRM (lo emitido fuera no se revierte desde aquí). */}
-                      {revertir && c.diploma && delCrm(c.diploma) && !c.diploma.entregado && (
+                      {revertir && c.diploma && delCrm(c.diploma) && c.diploma.revertibleAqui !== false && !c.diploma.entregado && (
                         <Button size="sm" variant="outline" disabled={ocupado || !!motivoSinRevertir}
                           title={motivoSinRevertir ?? 'Anular este número para corregirlo y volver a emitirlo (saldrá con otro número)'}
                           aria-label={`Revertir ${k}`}
