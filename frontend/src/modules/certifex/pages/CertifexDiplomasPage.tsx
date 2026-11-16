@@ -668,6 +668,7 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
   const [totalRevertidos, setTotalRevertidos] = useState<number | null>(null);
   // #351: con un Certifex que aún no revierte (sin su 0045) no hay «Revertidos»: la pestaña no sale.
   const [sinRevertidos, setSinRevertidos] = useState(false);
+  const [mirarRevertidos, setMirarRevertidos] = useState(0);
   // «Nuevo diploma» (19/10): desde cero, eligiendo cliente y formación.
   const [creandoNuevo, setCreandoNuevo] = useState(false);
   // «Pasar a pendientes» (22/10/2026): la matrícula que se está pidiendo, para su botón.
@@ -755,14 +756,28 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
   useEffect(() => {
     if (!conexion?.conectado) return;
     diplomasApi.resumen(centro || undefined).then((r) => setResumen(r.data)).catch(() => setResumen(null));
+  }, [conexion?.conectado, centro, recarga]);
+
+  useEffect(() => {
+    if (!conexion?.conectado) return;
     // #351: cuántos revertidos (aparte del resumen, cuya forma no cambia). Si Certifex aún no
     // los conoce, la pestaña sale sin número.
     // Dentro de la promesa: si el contador falla (o no está), la pantalla sigue igual.
     Promise.resolve()
       .then(() => diplomasApi.diplomas({ estado: 'anulados', centro: centro || undefined, pagina: 1, tam: 1 }))
       .then((r) => { setSinRevertidos(r?.data?.sinRevertir === true); setTotalRevertidos(Number(r?.data?.total ?? 0)); })
-      .catch(() => setTotalRevertidos(null));
-  }, [conexion?.conectado, centro, recarga]);
+      // Si no se pudo saber, la pestaña se enseña (sin número): ocultarla es solo para cuando
+      // Certifex DICE que aún no revierte.
+      .catch(() => { setSinRevertidos(false); setTotalRevertidos(null); });
+  }, [conexion?.conectado, centro, recarga, mirarRevertidos]);
+
+  // #351: sin «Revertidos» (Certifex aún no revierte), se vuelve a mirar cada 30 s: desplegado
+  // Certifex, la pestaña sale sola, sin recargar la página.
+  useEffect(() => {
+    if (!sinRevertidos) return;
+    const t = setTimeout(() => setMirarRevertidos((n) => n + 1), 30_000);
+    return () => clearTimeout(t);
+  }, [sinRevertidos, mirarRevertidos]);
 
   useEffect(() => {
     if (!conexion?.conectado) return;

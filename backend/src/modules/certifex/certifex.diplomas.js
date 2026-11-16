@@ -817,8 +817,9 @@ export async function diplomas(req, res, next) {
     }, f, {
       // En Revertidos (#351) «desde/hasta» es cuándo se revirtió, que es lo que enseña.
       fecha: (d) => (f.estado === 'anulados' ? d?.anulacion?.en : d?.emitidoEn),
-      // Certifex ordena por la emisión, no por la reversión: con «desde» en Revertidos no se
-      // puede dejar de pedir por fecha (uno emitido hace meses pudo revertirse hoy).
+      // En Revertidos no se deja de pedir por fecha: el Certifex actual los ordena por la
+      // reversión, pero uno anterior los ordenaba por la emisión (uno emitido hace meses pudo
+      // revertirse hoy), y no compensa arriesgarse a saltarse alguno. Son pocos.
       pararPorFecha: f.estado !== 'anulados',
       extra: ambos(filtros.length ? (d) => filtros.every((fn) => fn(d)) : null, deMisCentros(ambito)),
     });

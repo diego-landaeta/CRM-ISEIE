@@ -642,3 +642,24 @@ describe('con un Certifex que aún no revierte (9.ª auditoría)', () => {
   });
 });
 
+describe('«¿Se puede revertir?» con varias peticiones a la vez (10.ª auditoría)', () => {
+  it('una sola pregunta a /yo, aunque lleguen varias con el dato caducado', async () => {
+    const { certifexPuede } = await import('../src/modules/certifex/certifex.cliente.js');
+    pedidas = [];
+    const r = await Promise.all([certifexPuede('revertir'), certifexPuede('revertir'), certifexPuede('revertir')]);
+    expect(r).toEqual([true, true, true]);
+    expect(pedidas.filter((p) => p.ruta === '/yo')).toHaveLength(1);
+  });
+
+  it('si esa pregunta falla, las que esperaban fallan con ella y la siguiente vuelve a preguntar', async () => {
+    const { certifexPuede } = await import('../src/modules/certifex/certifex.cliente.js');
+    yoFalla = true;
+    const r = await Promise.allSettled([certifexPuede('revertir'), certifexPuede('revertir')]);
+    expect(r.map((x) => x.status)).toEqual(['rejected', 'rejected']);
+    expect(pedidas.filter((p) => p.ruta === '/yo')).toHaveLength(1);
+    yoFalla = false;
+    expect(await certifexPuede('revertir')).toBe(true);
+    expect(pedidas.filter((p) => p.ruta === '/yo')).toHaveLength(2);
+  });
+});
+

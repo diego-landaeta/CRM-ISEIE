@@ -106,24 +106,32 @@ export async function certifex(metodo, ruta, cuerpo, { timeoutMs = 20_000 } = {}
 const CAPACIDAD_MS = 5 * 60_000;
 const SIN_CAPACIDAD_MS = 30_000;
 let capacidades = null;
+// La pregunta a /yo en curso: si llegan varias peticiones a la vez con el dato caducado, todas
+// esperan a la misma respuesta en vez de preguntar cada una.
+let preguntando = null;
+
+async function preguntarCapacidades() {
+  let yo;
+  try {
+    yo = await certifex('GET', '/yo', undefined, { timeoutMs: 10_000 });
+  } catch (e) {
+    logger.warn({ err: e.message, code: e.code }, 'Certifex: no se pudo saber lo que sabe hacer');
+    throw e;
+  }
+  if (!yo || typeof yo !== 'object' || !Array.isArray(yo.centros)) {
+    logger.warn('Certifex: /yo no contestó con su JSON');
+    throw new AppError('Certifex no contestó como se esperaba al preguntarle qué sabe hacer.', 502, 'CERTIFEX_ERROR');
+  }
+  const lista = Array.isArray(yo.capacidades) ? yo.capacidades.filter((x) => typeof x === 'string') : [];
+  capacidades = { lista: new Set(lista), en: Date.now() };
+}
 
 export async function certifexPuede(capacidad) {
   const edad = capacidades ? Date.now() - capacidades.en : Infinity;
   const vale = capacidades && (capacidades.lista.has(capacidad) ? edad < CAPACIDAD_MS : edad < SIN_CAPACIDAD_MS);
   if (!vale) {
-    let yo;
-    try {
-      yo = await certifex('GET', '/yo', undefined, { timeoutMs: 10_000 });
-    } catch (e) {
-      logger.warn({ err: e.message, code: e.code }, 'Certifex: no se pudo saber lo que sabe hacer');
-      throw e;
-    }
-    if (!yo || typeof yo !== 'object' || !Array.isArray(yo.centros)) {
-      logger.warn('Certifex: /yo no contestó con su JSON');
-      throw new AppError('Certifex no contestó como se esperaba al preguntarle qué sabe hacer.', 502, 'CERTIFEX_ERROR');
-    }
-    const lista = Array.isArray(yo.capacidades) ? yo.capacidades.filter((x) => typeof x === 'string') : [];
-    capacidades = { lista: new Set(lista), en: Date.now() };
+    preguntando ??= preguntarCapacidades().finally(() => { preguntando = null; });
+    await preguntando;
   }
   return capacidades.lista.has(capacidad);
 }
@@ -131,6 +139,7 @@ export async function certifexPuede(capacidad) {
 /** Para las pruebas: olvida lo sabido de Certifex. */
 export function olvidarCapacidades() {
   capacidades = null;
+  preguntando = null;
 }
 
 // ─────────────────────────────────────────────── recorrer paginas de Certifex

@@ -89,7 +89,7 @@ vi.mock('@/modules/certifex/api/certifex.api', () => ({
     // Emitidos: uno emitido desde Emisiones y sin enviar, otro ya enviado, otro de fuera.
     // Revertidos (anulados): el revertido. Por enlace (?exp=): el revertido.
     // `datos.sinRevertir`: el Certifex conectado aún no revierte; el servidor lo dice así en «anulados».
-    diplomas: async (f) => (datos.sinRevertir && f?.estado === 'anulados' ? { data: { filas: [], total: 0, pagina: 1, tam: 1, sinRevertir: true } } : f?.estado === 'vigentes' ? { data: { filas: [
+    diplomas: async (f) => (datos.contadorFalla && f?.estado === 'anulados' && f?.tam === 1 ? Promise.reject(new Error('sin red')) : datos.sinRevertir && f?.estado === 'anulados' ? { data: { filas: [], total: 0, pagina: 1, tam: 1, sinRevertir: true } } : f?.estado === 'vigentes' ? { data: { filas: [
       { nexpediente: 'CEDIA-2026-000020-E1MS', centro: 'ISEIH', alumno: 'Iris Desde Emisiones', titulacion: 'Curso', cursoRef: 12, emitidoEn: '2026-11-03T10:00:00Z',
         emitidaPor: 'Diego (CRM 360)', revocada: false, revocacion: null, verificarUrl: null, diplomaUrl: null, aviso: null, emitidoEnCrm: true },
       { nexpediente: 'CEDIA-2026-000021-ENVI', centro: 'ISEIH', alumno: 'Juan Ya Enviado', titulacion: 'Curso', cursoRef: 12, emitidoEn: '2026-11-03T10:00:00Z',
@@ -275,6 +275,41 @@ describe('la pestaña «Revertidos»', () => {
     cleanup();
     render(<MemoryRouter><CertifexDiplomasPage /></MemoryRouter>);
     expect(await screen.findByRole('button', { name: /^Revertidos/ })).toBeTruthy();
+  });
+
+  it('si no se puede contar (falla la consulta), la pestaña SALE igual, sin número: solo se oculta si Certifex dice que no revierte', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    datos.sinRevertir = true;
+    try {
+      render(<MemoryRouter><CertifexDiplomasPage /></MemoryRouter>);
+      await screen.findByText(/Emitidos/);
+      await waitFor(() => expect(screen.queryByRole('button', { name: /^Revertidos/ })).toBeNull());
+      // Ahora no se puede saber (falla la consulta): no se da por hecho que no hay.
+      datos.sinRevertir = false;
+      datos.contadorFalla = true;
+      await vi.advanceTimersByTimeAsync(31_000);
+      expect(await screen.findByRole('button', { name: /^Revertidos/ })).toBeTruthy();
+    } finally {
+      datos.contadorFalla = false;
+      datos.sinRevertir = false;
+      vi.useRealTimers();
+    }
+  });
+
+  it('desplegado Certifex, la pestaña sale sola (se vuelve a mirar a los 30 s), sin recargar', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    datos.sinRevertir = true;
+    try {
+      render(<MemoryRouter><CertifexDiplomasPage /></MemoryRouter>);
+      await screen.findByText(/Emitidos/);
+      await waitFor(() => expect(screen.queryByRole('button', { name: /^Revertidos/ })).toBeNull());
+      datos.sinRevertir = false; // se despliega Certifex
+      await vi.advanceTimersByTimeAsync(31_000);
+      expect(await screen.findByRole('button', { name: /^Revertidos/ })).toBeTruthy();
+    } finally {
+      datos.sinRevertir = false;
+      vi.useRealTimers();
+    }
   });
 
   it('las fechas de esta pestaña son las de la reversión, y así se rotulan', async () => {
