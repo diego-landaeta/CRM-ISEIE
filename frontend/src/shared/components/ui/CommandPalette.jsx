@@ -112,10 +112,10 @@ export const destinoDeTutor = (t) => `/tutores?buscar=${encodeURIComponent(t.nom
 export const destinoDeFacturaColaborador = (f) => `/accounting/facturas-colaboradores?vista=historial&colaborador=${f.colaborador_id}${f.periodo ? `&periodo=${f.periodo}` : ''}`;
 // Un diploma: Emitidos (clave `enviados`) o Revocados, filtrado por el alumno.
 // #351: un número revertido (anulado) no está en Emitidos. Si hoy vale otro número para esa
-// matrícula (`vigente`), lleva a ese en Emitidos. Si no, a Revertidos, con el número anulado: es
-// donde está seguro (su matrícula puede estar en Pendientes o en Emisiones, según si el alumno
-// pidió el diploma), y ahí dice si ya se volvió a emitir. Un Certifex anterior no manda `vigente`:
-// entonces vale `sustituidaPor`.
+// matrícula (`vigente`), lleva a ese en Emitidos. Si no, a Revertidos, con el número anulado: ahí
+// dice si ya se volvió a emitir o si el curso quedó cerrado (y su matrícula está en «Aprobados sin
+// diploma» mientras no se reemita). Un Certifex anterior no manda `vigente`: entonces vale
+// `sustituidaPor`.
 const vigenteDe = (d) => (d.anulacion && 'vigente' in d.anulacion ? d.anulacion.vigente : d.anulacion?.sustituidaPor) || null;
 export const destinoDeDiploma = (d) => {
   if (d.anulada) {
