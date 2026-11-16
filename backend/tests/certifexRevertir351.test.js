@@ -295,7 +295,7 @@ describe('POST /api/certifex/diplomas/revertir', () => {
     expect(llegoARevertir()).toHaveLength(0);
   });
 
-  it('sin la tabla del CRM (migración 280): 503 antes de llamar a Certifex', async () => {
+  it('sin la tabla del CRM (migración 279): 503 antes de llamar a Certifex', async () => {
     tablaExiste = false;
     const r = await revertir(ADMIN);
     expect(r.status).toBe(503);
@@ -356,7 +356,7 @@ describe('GET /api/certifex/diplomas/revertir (¿se puede usar?)', () => {
     tablaExiste = false;
     const r = await disp();
     expect(r.body.data).toMatchObject({ disponible: false });
-    expect(r.body.data.motivo).toMatch(/280/);
+    expect(r.body.data.motivo).toMatch(/279/);
   });
 
   it('no, con el motivo, si la base no contesta', async () => {
@@ -601,3 +601,44 @@ describe('lo que encontró la 6.ª auditoría', () => {
     expect(pedidas.filter((p) => p.ruta === '/diplomas' && p.query.estado === 'vigentes').map((p) => p.query.pagina)).toEqual(['1']);
   });
 });
+
+describe('con un Certifex que aún no revierte (9.ª auditoría)', () => {
+  it('«Revertidos» no pregunta a Certifex (que daría error): lista vacía con `sinRevertir`', async () => {
+    conRuta = false;
+    const r = await request.get('/api/certifex/diplomas?estado=anulados').set('Authorization', `Bearer ${ADMIN}`);
+    expect(r.status).toBe(200);
+    expect(r.body.data).toMatchObject({ filas: [], total: 0, sinRevertir: true });
+    expect(pedidas.some((p) => p.ruta === '/diplomas')).toBe(false);
+  });
+
+  it('con un Certifex que sí revierte, «Revertidos» sale como siempre (sin `sinRevertir`)', async () => {
+    const r = await request.get('/api/certifex/diplomas?estado=anulados').set('Authorization', `Bearer ${ADMIN}`);
+    expect(r.status).toBe(200);
+    expect(r.body.data.sinRevertir).toBeUndefined();
+    expect(r.body.data.filas.map((d) => d.nexpediente)).toEqual([EXP_ANULADO]);
+  });
+
+  it('un «no» se recuerda solo 30 s: desplegado Certifex, el botón se activa enseguida; un «sí», 5 min', async () => {
+    const ahora = Date.now();
+    const reloj = vi.spyOn(Date, 'now');
+    try {
+      reloj.mockReturnValue(ahora);
+      conRuta = false;
+      const disp = () => request.get('/api/certifex/diplomas/revertir').set('Authorization', `Bearer ${ADMIN}`);
+      expect((await disp()).body.data.disponible).toBe(false);
+      conRuta = true; // se despliega Certifex
+      reloj.mockReturnValue(ahora + 20_000);
+      expect((await disp()).body.data.disponible).toBe(false); // aún lo recordado
+      reloj.mockReturnValue(ahora + 31_000);
+      expect((await disp()).body.data.disponible).toBe(true);
+      // El «sí» dura 5 minutos: sin volver a preguntar.
+      const antes = pedidas.filter((p) => p.ruta === '/yo').length;
+      reloj.mockReturnValue(ahora + 31_000 + 4 * 60_000);
+      expect((await disp()).body.data.disponible).toBe(true);
+      expect(pedidas.filter((p) => p.ruta === '/yo').length).toBe(antes);
+    } finally {
+      reloj.mockRestore();
+    }
+  });
+});
+

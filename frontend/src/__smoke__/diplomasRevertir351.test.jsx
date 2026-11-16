@@ -88,7 +88,8 @@ vi.mock('@/modules/certifex/api/certifex.api', () => ({
     porAvisar: vi.fn(async () => ({ data: { porAvisar: datos.porAvisar, sinEmitir: datos.sinEmitir } })),
     // Emitidos: uno emitido desde Emisiones y sin enviar, otro ya enviado, otro de fuera.
     // Revertidos (anulados): el revertido. Por enlace (?exp=): el revertido.
-    diplomas: async (f) => (f?.estado === 'vigentes' ? { data: { filas: [
+    // `datos.sinRevertir`: el Certifex conectado aún no revierte; el servidor lo dice así en «anulados».
+    diplomas: async (f) => (datos.sinRevertir && f?.estado === 'anulados' ? { data: { filas: [], total: 0, pagina: 1, tam: 1, sinRevertir: true } } : f?.estado === 'vigentes' ? { data: { filas: [
       { nexpediente: 'CEDIA-2026-000020-E1MS', centro: 'ISEIH', alumno: 'Iris Desde Emisiones', titulacion: 'Curso', cursoRef: 12, emitidoEn: '2026-11-03T10:00:00Z',
         emitidaPor: 'Diego (CRM 360)', revocada: false, revocacion: null, verificarUrl: null, diplomaUrl: null, aviso: null, emitidoEnCrm: true },
       { nexpediente: 'CEDIA-2026-000021-ENVI', centro: 'ISEIH', alumno: 'Juan Ya Enviado', titulacion: 'Curso', cursoRef: 12, emitidoEn: '2026-11-03T10:00:00Z',
@@ -260,6 +261,20 @@ describe('la pestaña «Revertidos»', () => {
     render(<MemoryRouter initialEntries={['/?pestana=revertidos']}><CertifexDiplomasPage /></MemoryRouter>);
     const fila = (await screen.findByText('Hugo Revertido')).closest('tr');
     expect(within(fila).queryByLabelText(/enlace/i)).toBeNull();
+  });
+
+  it('con un Certifex que aún no revierte, la pestaña no sale (no hay esa lista); con uno que sí, sale', async () => {
+    datos.sinRevertir = true;
+    try {
+      render(<MemoryRouter><CertifexDiplomasPage /></MemoryRouter>);
+      await screen.findByText(/Emitidos/);
+      await waitFor(() => expect(screen.queryByRole('button', { name: /^Revertidos/ })).toBeNull());
+    } finally {
+      datos.sinRevertir = false;
+    }
+    cleanup();
+    render(<MemoryRouter><CertifexDiplomasPage /></MemoryRouter>);
+    expect(await screen.findByRole('button', { name: /^Revertidos/ })).toBeTruthy();
   });
 
   it('las fechas de esta pestaña son las de la reversión, y así se rotulan', async () => {

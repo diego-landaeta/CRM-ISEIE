@@ -368,7 +368,7 @@ export interface Solicitud extends Candidato {
   diploma?: Diploma | null;
 }
 
-/** Una reversión apuntada en el CRM (#351, migración 280). */
+/** Una reversión apuntada en el CRM (#351, migración 279). */
 export interface Revertido {
   nexpediente: string;
   motivo: string;
@@ -503,7 +503,8 @@ export const diplomasApi = {
   porAvisar: (f: { centro?: string; q?: string }) =>
     client.get(`/certifex/diplomas/por-avisar?${qs(f)}`) as R<{ porAvisar: Solicitud[]; sinEmitir: Solicitud[]; truncado?: boolean }>,
   diplomas: (f: FiltrosDiplomas & { estado?: 'vigentes' | 'revocados' | 'anulados' | 'todos'; aviso?: FiltroAviso }) =>
-    client.get(`/certifex/diplomas?${qs(f)}`) as R<Pagina<Diploma>>,
+    // `sinRevertir` (#351): con `anulados`, el Certifex conectado aún no revierte (no hay esa lista).
+    client.get(`/certifex/diplomas?${qs(f)}`) as R<Pagina<Diploma> & { sinRevertir?: boolean }>,
   /** Los correos del diploma en Brevo: enviado, entregado, abierto, Message-ID (justificante). */
   envios: (nexpediente: string) =>
     client.get(`/certifex/diplomas/envios?${qs({ exp: nexpediente })}`) as R<EnviosDeDiploma>,

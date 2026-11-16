@@ -465,7 +465,7 @@ export async function completadosDe(matriculaIds) {
 // ─────────────────────────────────────────────── diplomas revertidos (#351)
 
 /**
- * ¿Está aplicada la migración 280, y el CRM puede usarla? (El código puede llegar al servidor
+ * ¿Está aplicada la migración 279, y el CRM puede usarla? (El código puede llegar al servidor
  * antes que ella.) Que la tabla exista no basta: las migraciones se pasan como `postgres`, y
  * sin los permisos el CRM no podría apuntar la reversión; Certifex anularía el número y el CRM
  * se quedaría sin rastro. Así que también se mira que pueda leerla y escribir en ella.

@@ -5,7 +5,7 @@ import { conLoDelCrm, exigirMisMatriculas } from './certifex.emisiones.js';
 import * as model from './certifex.model.js';
 import { formacionesDeCentro, proyectoDeCentro } from './certifex.programa.js';
 import { sincronizarTemario } from '../products/temario.js';
-import { certifex, recorrer } from './certifex.cliente.js';
+import { certifex, certifexPuede, recorrer } from './certifex.cliente.js';
 import { alcanceDe, acotar, exigirCentro, exigirExpedientes, NO_ENCONTRADA } from './certifex.alcance.js';
 import { prepararEmision, emitirConPrograma, emitirMatriculas, resultadoBloqueado } from './certifex.emision.js';
 import { conDestinatario } from './certifex.envios.js';
@@ -803,6 +803,12 @@ export async function diplomas(req, res, next) {
     const f = parsear(listarDiplomasSchema, req.query);
     const ambito = acotar(await alcanceDe(req.user), f.centro);
     if (ambito.vacio) return res.json({ success: true, data: paginaVacia(f) });
+    // #351: un Certifex que aún no revierte (sin su 0045) no conoce «anulados» y contestaría con un
+    // error. Se dice que no lo hay (`sinRevertir`): la pantalla oculta esa pestaña. Si no se puede
+    // saber, se pregunta igual y lo que conteste Certifex es lo que se ve.
+    if (f.estado === 'anulados' && (await certifexPuede('revertir').catch(() => true)) === false) {
+      return res.json({ success: true, data: { ...paginaVacia(f), sinRevertir: true } });
+    }
     const filtros = [];
     if (f.curso !== undefined) filtros.push((d) => Number(d.cursoRef) === f.curso);
     if (f.aviso) filtros.push(AVISO[f.aviso]);

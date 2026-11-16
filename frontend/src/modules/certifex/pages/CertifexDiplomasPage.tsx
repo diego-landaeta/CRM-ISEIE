@@ -666,6 +666,8 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
   // «Editar»: revisar los datos de una solicitud antes de aprobarla.
   const [editando, setEditando] = useState<Solicitud | null>(null);
   const [totalRevertidos, setTotalRevertidos] = useState<number | null>(null);
+  // #351: con un Certifex que aún no revierte (sin su 0045) no hay «Revertidos»: la pestaña no sale.
+  const [sinRevertidos, setSinRevertidos] = useState(false);
   // «Nuevo diploma» (19/10): desde cero, eligiendo cliente y formación.
   const [creandoNuevo, setCreandoNuevo] = useState(false);
   // «Pasar a pendientes» (22/10/2026): la matrícula que se está pidiendo, para su botón.
@@ -758,7 +760,7 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
     // Dentro de la promesa: si el contador falla (o no está), la pantalla sigue igual.
     Promise.resolve()
       .then(() => diplomasApi.diplomas({ estado: 'anulados', centro: centro || undefined, pagina: 1, tam: 1 }))
-      .then((r) => setTotalRevertidos(Number(r?.data?.total ?? 0)))
+      .then((r) => { setSinRevertidos(r?.data?.sinRevertir === true); setTotalRevertidos(Number(r?.data?.total ?? 0)); })
       .catch(() => setTotalRevertidos(null));
   }, [conexion?.conectado, centro, recarga]);
 
@@ -1313,7 +1315,7 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
       <Card padding="none">
         {/* Pestañas y filtros */}
         <CardSection className="flex flex-wrap items-center gap-2">
-          {PESTANAS.map((p) => (
+          {PESTANAS.filter((p) => p.clave !== 'revertidos' || !sinRevertidos || pestana === 'revertidos').map((p) => (
             <Pestana key={p.clave} activa={pestana === p.clave} cuenta={contar(p.clave)} onClick={() => irA(p.clave)}>{p.rotulo}</Pestana>
           ))}
         </CardSection>
