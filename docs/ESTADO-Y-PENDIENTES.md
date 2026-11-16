@@ -1142,6 +1142,11 @@ Sigue igual: `meta_adset_products` y `meta_campaign_products` están **a cero**.
 Eso no es un fallo, es trabajo que nadie ha hecho: el botón *Asociar* de cada
 fila no se ha usado nunca. Ver [[project-meta-sin-asociar-productos]].
 
+**Desde #362 (16/11)** la sincronización asocia sola cada conjunto a la
+formación cuyo enlace (`products.url_info`) coincide con la URL de destino de
+sus anuncios: solo si coincide UNA formación activa, marcada `origen = 'auto'`.
+Lo que haga una persona con *Asociar* manda y la sincronización ya no lo toca.
+
 ### Qué haría, por orden
 
 1. **El mensaje y el filtro** (1). Barato: decir «elige un proyecto» cuando es

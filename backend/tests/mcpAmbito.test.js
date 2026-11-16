@@ -153,6 +153,8 @@ const ARGS = {
   resumen_facturas: {},
   cobros_pendientes: { limite: 50 },
   meta_ads: { vista: 'campanas', desde: '2026-01-01', hasta: '2026-09-01', limite: 30 },
+  meta_conjuntos: { desde: '2026-09-01', hasta: '2026-09-30', estado: 'todos', cuenta_id: 'act_1', texto: 'máster', creados_desde: '2026-09-01', pagina: 1, limite: 25 },
+  meta_anuncios: { desde: '2026-09-01', hasta: '2026-09-30', estado: 'pausados', conjunto_id: '1', pagina: 1, limite: 25 },
   clientes: { texto: 'ana', desde: '2026-01-01', hasta: '2026-09-01', pagina: 1, limite: 25 },
   equipo: { incluir_inactivos: true },
   informe: { tipo: 'resumen_mensual', desde: '2026-01-01', hasta: '2026-09-01' },
@@ -405,7 +407,8 @@ describe('el catálogo (#215: «¿cuánto cuesta el Máster X en Psiko?»)', () 
 });
 
 describe('la publicidad (#235: «¿cuánto hemos gastado en Meta y cuánto ha vendido?»)', () => {
-  const PUBLICIDAD = ['cuentas_publicitarias', 'resumen_publicidad', 'campanas_publicitarias'];
+  // Y los conjuntos y anuncios de Meta (#362).
+  const PUBLICIDAD = ['cuentas_publicitarias', 'resumen_publicidad', 'campanas_publicitarias', 'meta_conjuntos', 'meta_anuncios'];
 
   it('a una gestora se le niega sin llegar a la base', async () => {
     for (const n of PUBLICIDAD) {

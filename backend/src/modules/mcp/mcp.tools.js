@@ -304,6 +304,8 @@ export const GRUPO_DE_CONSULTA = Object.freeze({
   resumen_publicidad: 'Publicidad',
   campanas_publicitarias: 'Publicidad',
   meta_ads: 'Publicidad',
+  meta_conjuntos: 'Publicidad',
+  meta_anuncios: 'Publicidad',
   actividad_por_comercial: 'Equipo y actividad',
   equipo: 'Equipo y actividad',
   clientes: 'Campus y prospectos',
@@ -312,6 +314,26 @@ export const GRUPO_DE_CONSULTA = Object.freeze({
   moodle_recursos_externos: 'Moodle de los campus',
   moodle_estructura: 'Moodle de los campus',
   informe: 'Informes',
+});
+
+/** Los filtros de «meta_conjuntos» y «meta_anuncios» (#362). */
+const FILTROS_META = {
+  cuenta_id: z.string().regex(/^(act_)?\d{1,30}$/, 'El id de la cuenta de Meta: act_ y números').optional()
+    .describe('Una cuenta de Meta («cuenta_meta» de «cuentas_publicitarias», act_…). Un campus puede tener varias.'),
+  campana_id: z.string().max(50).optional().describe('Una campaña (id de Meta, de «campanas_publicitarias» o de «meta_conjuntos»)'),
+  estado: z.enum(['todos', 'activos', 'pausados', 'archivados']).default('todos')
+    .describe('activos: entregando; pausados: pausados ellos o su campaña; archivados: archivados o borrados. Por defecto, todos.'),
+  texto: z.string().max(100).optional().describe('Parte del nombre, sin distinguir mayúsculas ni tildes'),
+  creados_desde: fecha.optional().describe('Solo los creados en Meta desde este día (AAAA-MM-DD, día de Madrid)'),
+  creados_hasta: fecha.optional().describe('Solo los creados en Meta hasta este día (AAAA-MM-DD)'),
+  solo_con_gasto: z.boolean().default(false).describe('true: solo los que han gastado en el periodo'),
+};
+
+/** De los argumentos de Claude, los filtros que entiende el modelo. */
+const filtrosMeta = (a) => ({
+  desde: a.desde, hasta: a.hasta, cuenta: a.cuenta_id, campanaId: a.campana_id, estado: a.estado, texto: a.texto,
+  creadosDesde: a.creados_desde, creadosHasta: a.creados_hasta, soloConGasto: a.solo_con_gasto === true,
+  pagina: a.pagina, limite: a.limite,
 });
 
 /** De una campaña de la pantalla de Meta, lo que le sirve a Claude (sin ids internos de la cuenta publicitaria). */
@@ -554,7 +576,8 @@ export const HERRAMIENTAS = [
   {
     nombre: 'listar_formaciones',
     titulo: 'Formaciones y precios',
-    descripcion: 'El catálogo de tus campus: cada formación activa (o también las inactivas con incluir_inactivas) con su SKU, precio, moneda, campus y enlace a la web, como la pantalla de Productos. '
+    descripcion: 'El catálogo de tus campus: cada formación activa (o también las inactivas con incluir_inactivas) con su SKU, precio, moneda, campus, enlace a la web '
+      + 'y categoría (curso, diplomado, máster…, con su subcategoría si la tiene), como la pantalla de Productos. '
       + 'Busca por nombre sin distinguir mayúsculas ni tildes. Devuelve una página y el total: con muchas, pide un nombre o usa «resumen_catalogo». '
       + 'Si una formación no tiene precio, contesta que en el CRM no consta; no lo deduzcas ni lo inventes. No da ventas.',
     entrada: {
@@ -804,6 +827,57 @@ export const HERRAMIENTAS = [
         }
       }
       return { vista: a.vista, desde: a.desde || null, hasta: a.hasta || null, campus };
+    },
+  },
+  // Conjuntos y anuncios de Meta (#362): para «qué formaciones cambiamos esta
+  // semana, cuáles se quedan y qué creativos cambiamos». Solo lectura de lo que
+  // ya guarda el CRM; nada va a Meta. Solo super admin y admin, como meta_ads.
+  {
+    nombre: 'meta_conjuntos',
+    titulo: 'Conjuntos de anuncios de Meta',
+    descripcion: 'Cada conjunto de anuncios (ad set) de Meta de tus campus, TAMBIÉN los pausados y los que no han gastado en el periodo: id, nombre exacto, '
+      + 'cuenta de Meta (id y nombre; un campus puede tener varias y salen separadas, con un resumen en «por_cuenta»), campus, campaña, estado, '
+      + 'fecha de creación y de inicio, gasto, impresiones y clics del periodo (desde/hasta; sin fechas, todo lo sincronizado), '
+      + 'gasto de TODA la vida (gasto_total, el que da Meta), cuántos anuncios tiene y las formaciones asociadas (origen: manual, auto —por la URL de sus anuncios— o campaña). '
+      + 'Filtra por cuenta, campaña, estado (activos, pausados, archivados), nombre y fecha de creación (creados_desde/creados_hasta). '
+      + 'Para «¿qué formaciones cambiamos esta semana?»: los creados esta semana (creados_desde) y los activos frente a los pausados; los anuncios de cada uno, con «meta_anuncios». '
+      + 'Ordenados por gasto del periodo; devuelve una página y el total (solo super admin y admin).',
+    entrada: {
+      ...AMBITO,
+      ...PERIODO,
+      ...FILTROS_META,
+      ...PAGINA,
+    },
+    ejecutar: async (ambito, a) => {
+      const { projectIds } = acotar(ambito, a);
+      soloAdministracion(ambito, 'meta_conjuntos');
+      periodoEnOrden(a);
+      periodoEnOrden({ desde: a.creados_desde, hasta: a.creados_hasta });
+      return conTope(model.conjuntosDeMeta({ projectIds, ...filtrosMeta(a) }), TOPE_INFORME_MS, 'meta_conjuntos');
+    },
+  },
+  {
+    nombre: 'meta_anuncios',
+    titulo: 'Anuncios de Meta y su URL de destino',
+    descripcion: 'Cada anuncio (creativo) de Meta de tus campus, también los pausados y los que no han gastado: id, nombre, conjunto, campaña, cuenta, estado, '
+      + 'fecha de creación (un anuncio no tiene fecha de inicio propia: empieza con su conjunto, «fecha_inicio_del_conjunto»), gasto, impresiones y clics del periodo, '
+      + 'gasto de toda la vida y la URL de DESTINO (la de la web a la que lleva). «formato»: enlace, carrusel (todas las URLs en «todas_las_urls»; la principal es la de la primera tarjeta), '
+      + 'video, dinamico, formulario_instantaneo (sin URL: es un formulario de Meta), publicacion_existente (el enlace no viene en el anuncio) o sin_enlace. '
+      + 'Filtra por conjunto (conjunto_id de «meta_conjuntos»), cuenta, campaña, estado, nombre y fecha de creación: «¿qué creativos cambiamos esta semana?» son los creados esta semana. '
+      + 'Ordenados por gasto del periodo; devuelve una página y el total (solo super admin y admin).',
+    entrada: {
+      ...AMBITO,
+      ...PERIODO,
+      conjunto_id: z.string().max(50).optional().describe('Un conjunto de anuncios (conjunto_id de «meta_conjuntos»)'),
+      ...FILTROS_META,
+      ...PAGINA,
+    },
+    ejecutar: async (ambito, a) => {
+      const { projectIds } = acotar(ambito, a);
+      soloAdministracion(ambito, 'meta_anuncios');
+      periodoEnOrden(a);
+      periodoEnOrden({ desde: a.creados_desde, hasta: a.creados_hasta });
+      return conTope(model.anunciosDeMeta({ projectIds, conjuntoId: a.conjunto_id, ...filtrosMeta(a) }), TOPE_INFORME_MS, 'meta_anuncios');
     },
   },
   {
