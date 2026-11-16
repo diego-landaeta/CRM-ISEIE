@@ -64,7 +64,7 @@ async function notifyExpired(cred, errorCode, errorMessage, adminEmails) {
     bloques: [
       P.parrafo(`La conexión con Google Ads de <strong>${P.esc(projectLabel)}</strong> ha dejado de ser válida. Las métricas no se sincronizarán hasta que un superadmin vuelva a autorizar la cuenta.`),
       P.nota(`Código: <strong>${P.esc(errorCode)}</strong>${errorMessage ? `<br>${P.esc(errorMessage)}` : ''}`),
-      P.boton({ texto: 'Volver a conectar', url: P.enlace('/finanzas/integraciones') }),
+      P.boton({ texto: 'Volver a conectar', url: P.enlace('/accounting/integrations') }),
       P.parrafo('<span style="font-size:13px;line-height:20px;color:#71717a">Suele pasar porque se retiró el acceso desde Google, se suspendió la aplicación o la conexión llevaba más de seis meses sin usarse.</span>'),
     ],
   });

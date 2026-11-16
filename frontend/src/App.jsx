@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { PROCESO_EN_PRUEBAS, SOLO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 import { PANTALLAS_IA } from '@/shared/lib/pantallasIA';
 import ConPermiso from '@/shared/components/layout/ConPermiso';
+import RedirigeA from '@/shared/components/RedirigeA';
 import { MARCA } from '@/shared/config/marca';
 
 // Layout y guardas
@@ -436,6 +437,18 @@ function App() {
         <Route path="/preferences" element={<Navigate to="/preferencias" replace />} />
         <Route path="/email-sequences" element={<Navigate to="/secuencias-email" replace />} />
         <Route path="/configuracion/email-templates" element={<Navigate to="/email-templates" replace />} />
+        {/* Direcciones de MultiCRM que el servidor de aquí llegó a mandar
+            (CRM#633, ISEIE#360): avisos y correos de «prospecto sin tocar»
+            (/prospectos/:id), de cursos pendientes (/productos/pendientes), de
+            Google Ads (/finanzas/integraciones) y los atajos de proyecto, que
+            se guardan en la base con su ruta (/clientes, /formularios). Los ya
+            enviados siguen funcionando; `RedirigeA` conserva el id y el `?`. */}
+        <Route path="/prospectos" element={<RedirigeA a="/leads" />} />
+        <Route path="/prospectos/:id" element={<RedirigeA a="/leads/:id" />} />
+        <Route path="/productos/pendientes" element={<RedirigeA a="/products/pending" />} />
+        <Route path="/finanzas/integraciones" element={<RedirigeA a="/accounting/integrations" />} />
+        <Route path="/clientes" element={<RedirigeA a="/clients" />} />
+        <Route path="/formularios" element={<RedirigeA a="/forms" />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </Suspense>
