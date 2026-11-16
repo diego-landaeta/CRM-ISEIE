@@ -3,7 +3,8 @@ import * as service from './project.service.js';
 import { createProjectSchema, updateProjectSchema, createSociedadSchema } from './project.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { query } from '../../shared/config/db.js';
-import { veTodoElCrm, exigirCampusSuyo } from '../../shared/utils/ambito.js';
+import { veTodoElCrm, exigirCampusSuyo, campusDeLaPersona } from '../../shared/utils/ambito.js';
+import { tienePermiso } from '../../shared/middleware/permissions.js';
 
 // `projects.edit` de serie es de soporte. A un admin de empresa se le puede
 // dar como excepción para configurar SUS campus (datos, módulos, columnas,
@@ -20,10 +21,30 @@ async function exigirQuePuedaConfigurar(req, id, cambios = {}) {
   }
 }
 
+/**
+ * La clave del webhook de un campus (CRM#791), solo para quien puede configurarlo.
+ *
+ * `projects.view` lo tiene todo el mundo (tutores incluidos) y el listado y la
+ * ficha devolvían `webhook_api_key` de TODOS los campus: con ella se dan de alta
+ * prospectos en el CRM. Ahora va solo a quien tiene `projects.edit` (la regenera)
+ * o `webhooks.edit` (monta los webhooks de entrada; el admin, de serie), y en SUS
+ * campus (superadmin y soporte, en todos). Al resto (gestoras, tutores…), sin ella.
+ */
+async function sinClavesAjenas(req, proyectos) {
+  const puedeConfigurar = await tienePermiso(req, 'projects.edit', 'webhooks.edit');
+  const todos = veTodoElCrm(req.user);
+  const suyos = puedeConfigurar && !todos ? new Set(await campusDeLaPersona(req.user?.userId)) : null;
+  return proyectos.map((p) => {
+    if (puedeConfigurar && (todos || suyos.has(Number(p.id)))) return p;
+    const { webhook_api_key: _clave, ...resto } = p;
+    return resto;
+  });
+}
+
 export async function list(req, res, next) {
   try {
     const projects = await model.findAll({ active: req.query.active });
-    res.json({ success: true, data: projects });
+    res.json({ success: true, data: await sinClavesAjenas(req, projects) });
   } catch (err) { next(err); }
 }
 
@@ -33,7 +54,8 @@ export async function getById(req, res, next) {
     if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
     const project = await model.findById(id);
     if (!project) throw new AppError('Proyecto no encontrado', 404, 'NOT_FOUND');
-    res.json({ success: true, data: project });
+    const [visible] = await sinClavesAjenas(req, [project]);
+    res.json({ success: true, data: visible });
   } catch (err) { next(err); }
 }
 
