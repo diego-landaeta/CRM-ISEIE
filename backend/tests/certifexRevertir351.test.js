@@ -663,3 +663,12 @@ describe('«¿Se puede revertir?» con varias peticiones a la vez (10.ª auditor
   });
 });
 
+describe('«¿Se puede revertir?» si se olvida lo sabido a mitad de pregunta (11.ª auditoría)', () => {
+  it('no se rompe: contesta con lo que dijo Certifex en esa pregunta', async () => {
+    const { certifexPuede } = await import('../src/modules/certifex/certifex.cliente.js');
+    const pendiente = certifexPuede('revertir');
+    olvidarCapacidades(); // a mitad de la pregunta a /yo
+    await expect(pendiente).resolves.toBe(true);
+  });
+});
+

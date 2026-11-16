@@ -124,16 +124,16 @@ async function preguntarCapacidades() {
   }
   const lista = Array.isArray(yo.capacidades) ? yo.capacidades.filter((x) => typeof x === 'string') : [];
   capacidades = { lista: new Set(lista), en: Date.now() };
+  return capacidades;
 }
 
 export async function certifexPuede(capacidad) {
   const edad = capacidades ? Date.now() - capacidades.en : Infinity;
   const vale = capacidades && (capacidades.lista.has(capacidad) ? edad < CAPACIDAD_MS : edad < SIN_CAPACIDAD_MS);
-  if (!vale) {
-    preguntando ??= preguntarCapacidades().finally(() => { preguntando = null; });
-    await preguntando;
-  }
-  return capacidades.lista.has(capacidad);
+  // Se contesta con la respuesta que se ha recibido, no releyendo `capacidades`: si entretanto se
+  // olvidó lo sabido (`olvidarCapacidades`), no se rompe.
+  const sabido = vale ? capacidades : await (preguntando ??= preguntarCapacidades().finally(() => { preguntando = null; }));
+  return sabido.lista.has(capacidad);
 }
 
 /** Para las pruebas: olvida lo sabido de Certifex. */

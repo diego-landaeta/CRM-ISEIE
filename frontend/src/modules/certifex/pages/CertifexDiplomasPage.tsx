@@ -763,12 +763,16 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
     // #351: cuántos revertidos (aparte del resumen, cuya forma no cambia). Si Certifex aún no
     // los conoce, la pestaña sale sin número.
     // Dentro de la promesa: si el contador falla (o no está), la pantalla sigue igual.
+    // `vivo`: una respuesta que llega tarde (de otro campus, o de una vuelta anterior) no pisa la
+    // de ahora.
+    let vivo = true;
     Promise.resolve()
       .then(() => diplomasApi.diplomas({ estado: 'anulados', centro: centro || undefined, pagina: 1, tam: 1 }))
-      .then((r) => { setSinRevertidos(r?.data?.sinRevertir === true); setTotalRevertidos(Number(r?.data?.total ?? 0)); })
+      .then((r) => { if (vivo) { setSinRevertidos(r?.data?.sinRevertir === true); setTotalRevertidos(Number(r?.data?.total ?? 0)); } })
       // Si no se pudo saber, la pestaña se enseña (sin número): ocultarla es solo para cuando
-      // Certifex DICE que aún no revierte.
-      .catch(() => { setSinRevertidos(false); setTotalRevertidos(null); });
+      // Certifex DICE que aún no revierte. (Y si no revierte, al abrirla sale vacía, sin error.)
+      .catch(() => { if (vivo) { setSinRevertidos(false); setTotalRevertidos(null); } });
+    return () => { vivo = false; };
   }, [conexion?.conectado, centro, recarga, mirarRevertidos]);
 
   // #351: sin «Revertidos» (Certifex aún no revierte), se vuelve a mirar cada 30 s: desplegado

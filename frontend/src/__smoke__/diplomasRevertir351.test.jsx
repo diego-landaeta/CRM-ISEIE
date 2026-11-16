@@ -89,7 +89,8 @@ vi.mock('@/modules/certifex/api/certifex.api', () => ({
     // Emitidos: uno emitido desde Emisiones y sin enviar, otro ya enviado, otro de fuera.
     // Revertidos (anulados): el revertido. Por enlace (?exp=): el revertido.
     // `datos.sinRevertir`: el Certifex conectado aún no revierte; el servidor lo dice así en «anulados».
-    diplomas: async (f) => (datos.contadorFalla && f?.estado === 'anulados' && f?.tam === 1 ? Promise.reject(new Error('sin red')) : datos.sinRevertir && f?.estado === 'anulados' ? { data: { filas: [], total: 0, pagina: 1, tam: 1, sinRevertir: true } } : f?.estado === 'vigentes' ? { data: { filas: [
+    // `datos.lento`: el contador de «todos los campus» tarda y, cuando llega, dice que no hay «Revertidos».
+    diplomas: async (f) => (datos.lento && f?.estado === 'anulados' && f?.tam === 1 && !f?.centro ? datos.lento.then(() => ({ data: { filas: [], total: 0, pagina: 1, tam: 1, sinRevertir: true } })) : datos.contadorFalla && f?.estado === 'anulados' && f?.tam === 1 ? Promise.reject(new Error('sin red')) : datos.sinRevertir && f?.estado === 'anulados' ? { data: { filas: [], total: 0, pagina: 1, tam: 1, sinRevertir: true } } : f?.estado === 'vigentes' ? { data: { filas: [
       { nexpediente: 'CEDIA-2026-000020-E1MS', centro: 'ISEIH', alumno: 'Iris Desde Emisiones', titulacion: 'Curso', cursoRef: 12, emitidoEn: '2026-11-03T10:00:00Z',
         emitidaPor: 'Diego (CRM 360)', revocada: false, revocacion: null, verificarUrl: null, diplomaUrl: null, aviso: null, emitidoEnCrm: true },
       { nexpediente: 'CEDIA-2026-000021-ENVI', centro: 'ISEIH', alumno: 'Juan Ya Enviado', titulacion: 'Curso', cursoRef: 12, emitidoEn: '2026-11-03T10:00:00Z',
@@ -293,6 +294,24 @@ describe('la pestaña «Revertidos»', () => {
       datos.contadorFalla = false;
       datos.sinRevertir = false;
       vi.useRealTimers();
+    }
+  });
+
+  it('una respuesta que llega tarde (del campus de antes) no pisa la del campus elegido', async () => {
+    let soltar;
+    datos.lento = new Promise((r) => { soltar = r; });
+    try {
+      render(<MemoryRouter><CertifexDiplomasPage /></MemoryRouter>);
+      await screen.findByText(/Emitidos/);
+      // Se elige un campus mientras la de «todos» sigue en camino.
+      fireEvent.click(await screen.findByRole('combobox', { name: 'Campus' }));
+      fireEvent.mouseDown(await screen.findByRole('option', { name: 'ISEIH' }));
+      expect(await screen.findByRole('button', { name: /^Revertidos/ })).toBeTruthy();
+      soltar(); // llega tarde la de «todos», que decía que no hay
+      await new Promise((r) => setTimeout(r, 50));
+      expect(screen.getByRole('button', { name: /^Revertidos/ })).toBeTruthy();
+    } finally {
+      datos.lento = undefined;
     }
   });
 
