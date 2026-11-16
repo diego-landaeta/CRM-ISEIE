@@ -52,10 +52,15 @@ import EnviosBrevo, { fechaHoraMadrid } from '../components/EnviosBrevo';
 
 /** #351: qué decir de un número revertido: con cuál se volvió a emitir y cuál vale hoy. */
 function textoReemision(a: { sustituidaPor: string | null; vigente?: string | null; cursoCerrado?: boolean } | null | undefined): string {
+  // Un diploma de ese curso se revocó (el reemitido, uno posterior de la cadena u otro: no se sabe
+  // cuál): el curso quedó cerrado para esa persona y no se emite otro. Se mira ANTES que si se
+  // reemitió, como en el buscador (`rotuloAnulado`): sin reemitir, no está para volver a emitirlo.
+  if (a?.cursoCerrado) {
+    return a.sustituidaPor
+      ? `Se volvió a emitir con ${a.sustituidaPor}, y después se revocó un diploma de ese curso: queda cerrado para el alumno, no se vuelve a emitir.`
+      : 'Se revocó un diploma de ese curso: queda cerrado para el alumno, no se vuelve a emitir.';
+  }
   if (!a?.sustituidaPor) return 'Está en «Aprobados sin diploma» para volver a emitirlo.';
-  // Un diploma de ese curso se revocó (el reemitido o uno posterior de la cadena: no se sabe cuál):
-  // el curso quedó cerrado para esa persona y no se emite otro.
-  if (a.cursoCerrado) return `Se volvió a emitir con ${a.sustituidaPor}, y después se revocó un diploma de ese curso: queda cerrado para el alumno, no se vuelve a emitir.`;
   if (a.vigente === undefined || a.vigente === a.sustituidaPor) return `Se volvió a emitir con ${a.sustituidaPor}.`;
   return a.vigente
     ? `Se volvió a emitir con ${a.sustituidaPor}, que también se revirtió; hoy vale ${a.vigente}.`
@@ -1725,7 +1730,10 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
                                   </div>
                                 )}
                               </>
-                            : <span className="text-xs text-muted-foreground">Todavía no (está en «Aprobados sin diploma»)</span>}</td>
+                            : d.anulacion?.cursoCerrado
+                              // Sin reemitir y con un diploma de ese curso revocado: no vuelve a «Aprobados sin diploma».
+                              ? <span className="text-xs text-muted-foreground">No: se revocó un diploma de ese curso, curso cerrado</span>
+                              : <span className="text-xs text-muted-foreground">Todavía no (está en «Aprobados sin diploma»)</span>}</td>
                         </>
                       ) : (
                         <>

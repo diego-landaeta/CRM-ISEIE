@@ -170,9 +170,11 @@ async function revertidasSinPedir({ centro, centros, deMios, q, vistas }) {
     });
     // Ya se volvió a emitir (tenga hoy o no un número que valga): esa matrícula tiene un número y no
     // vuelve aquí por esta reversión (si se revierte el nuevo, es otra reversión). Se recuerda.
-    for (const d of anulados.filas) if (d.anulacion?.sustituidaPor) resueltas.add(d.nexpediente);
+    // Con el curso cerrado (se revocó un diploma de ese curso, y revocar no se deshace) tampoco: no se
+    // vuelve a emitir (15.ª auditoría: lo mismo que dicen el panel y el buscador).
+    for (const d of anulados.filas) if (d.anulacion?.sustituidaPor || d.anulacion?.cursoCerrado) resueltas.add(d.nexpediente);
     // Sin reemitir: la matrícula sigue sin número (aprobada y sin diploma).
-    anulados.filas = anulados.filas.filter((d) => !d.anulacion.sustituidaPor && !vistas.has(d.anulacion.matriculaId));
+    anulados.filas = anulados.filas.filter((d) => !d.anulacion.sustituidaPor && !d.anulacion.cursoCerrado && !vistas.has(d.anulacion.matriculaId));
     const grupos = new Map();
     for (const d of anulados.filas) {
       const clave = `${String(d.centro).toUpperCase()}|${d.cursoRef}`;

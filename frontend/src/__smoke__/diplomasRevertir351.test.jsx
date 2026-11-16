@@ -434,6 +434,28 @@ describe('la pestaña «Revertidos»', () => {
     }
   });
 
+  it('SIN reemitir y con el curso cerrado: dice «curso cerrado», no «está en Aprobados sin diploma» (15.ª auditoría)', async () => {
+    datos.anulacionExtra = { sustituidaPor: null, vigente: null, cursoCerrado: true };
+    try {
+      render(<MemoryRouter initialEntries={['/?pestana=revertidos']}><CertifexDiplomasPage /></MemoryRouter>);
+      const fila = (await screen.findByText('Hugo Revertido')).closest('tr');
+      expect(within(fila).getByText(/se revocó un diploma de ese curso, curso cerrado/)).toBeTruthy();
+      expect(within(fila).queryByText(/Aprobados sin diploma/)).toBeNull();
+    } finally {
+      datos.anulacionExtra = undefined;
+    }
+    cleanup();
+    datos.anulacionExtra = { sustituidaPor: null, vigente: null, cursoCerrado: true };
+    datos.toasts.length = 0;
+    try {
+      render(<MemoryRouter initialEntries={['/?exp=CEDIA-2026-000009-X1YZ']}><CertifexDiplomasPage /></MemoryRouter>);
+      await waitFor(() => expect(datos.toasts.some((t) => /\. Se revocó un diploma de ese curso: queda cerrado/.test(t.description ?? ''))).toBe(true));
+      expect(datos.toasts.some((t) => /Aprobados sin diploma/.test(t.description ?? ''))).toBe(false);
+    } finally {
+      datos.anulacionExtra = undefined;
+    }
+  });
+
   it('revertido dos veces: dice que el número con que se reemitió también se revirtió, y cuál vale hoy', async () => {
     datos.anulacionExtra = { sustituidaPor: 'CEDIA-2026-000010-S2DO', vigente: 'CEDIA-2026-000011-T3RC' };
     try {

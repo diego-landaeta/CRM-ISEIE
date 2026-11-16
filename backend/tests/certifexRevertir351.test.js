@@ -757,6 +757,18 @@ describe('lo emitido desde Emisiones, al revertirlo, vuelve a «Aprobados sin di
     expect(pedidas.some((p) => p.ruta === '/diplomas' && p.query.estado === 'anulados')).toBe(false);
   });
 
+  it('…y SIN reemitir pero con el curso cerrado (se revocó otro diploma de ese curso), tampoco (15.ª auditoría)', async () => {
+    const a = anuladoDe(6, 133, { anulacion: { en: '2026-11-14T10:00:00.000Z', motivo: 'm', por: 'u71@prueba.test (CRM 360)', sustituidaPor: null, vigente: null, cursoCerrado: true, matriculaId: 133 } });
+    DIPLOMAS = [...DIPLOMAS, a];
+    CANDIDATOS = [...CANDIDATOS, sinPedir(133)];
+    apuntada(a.nexpediente, 133);
+    const r = await porAvisar();
+    expect(r.body.data.sinEmitir.map((c) => c.matriculaId)).not.toContain(133);
+    pedidas = [];
+    await porAvisar();
+    expect(pedidas.some((p) => p.ruta === '/diplomas' && p.query.estado === 'anulados')).toBe(false);
+  });
+
   it('sin ninguna reversión apuntada de esos campus, ni se pregunta a Certifex por los anulados', async () => {
     CANDIDATOS = [...CANDIDATOS, sinPedir(122)];
     const r = await porAvisar();
