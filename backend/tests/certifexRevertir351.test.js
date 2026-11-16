@@ -46,9 +46,9 @@ vi.mock('../src/shared/config/db.js', () => {
       registro.push(r);
       return { rows: [fila(r)] };
     }
-    if (/SELECT DISTINCT matricula_id FROM certifex_reversiones/.test(text)) {
+    if (/SELECT nexpediente, matricula_id FROM certifex_reversiones/.test(text)) {
       const centros = params[0];
-      return { rows: [...new Set(registro.filter((x) => x.matricula_id != null && (!centros || centros.includes(String(x.centro).toUpperCase()))).map((x) => x.matricula_id))].map((m) => ({ matricula_id: m })) };
+      return { rows: registro.filter((x) => x.matricula_id != null && (!centros || centros.includes(String(x.centro).toUpperCase()))).map((x) => ({ nexpediente: x.nexpediente, matricula_id: x.matricula_id })) };
     }
     if (/SELECT nexpediente FROM certifex_reversiones WHERE nexpediente = ANY/.test(text)) {
       return { rows: registro.filter((x) => params[0].includes(x.nexpediente)).map((x) => ({ nexpediente: x.nexpediente })) };
@@ -78,6 +78,7 @@ const { default: supertest } = await import('supertest');
 const { default: jwt } = await import('jsonwebtoken');
 const { default: router } = await import('../src/modules/certifex/certifex.routes.js');
 const { olvidarCapacidades } = await import('../src/modules/certifex/certifex.cliente.js');
+const { olvidarResueltas } = await import('../src/modules/certifex/certifex.diplomas.js');
 const { completarReversiones } = await import('../src/modules/certifex/certifex.revertir.js');
 
 const app = express();
@@ -188,6 +189,7 @@ beforeEach(() => {
   ];
   CANDIDATOS = [candidato(101, EXP), candidato(102, EXP_ENVIADO)];
   olvidarCapacidades();
+  olvidarResueltas();
 });
 
 const MOTIVO = 'Se emitió con las actividades de Moodle; se reemite con el temario oficial';
@@ -729,6 +731,30 @@ describe('lo emitido desde Emisiones, al revertirlo, vuelve a «Aprobados sin di
     apuntada(a.nexpediente, 121);
     const r = await porAvisar();
     expect(r.body.data.sinEmitir.map((c) => c.matriculaId)).not.toContain(121);
+  });
+
+  it('una vez reemitida, esa reversión ya no hace preguntar a Certifex en cada carga (13.ª auditoría, punto 4)', async () => {
+    const a = anuladoDe(4, 131, { anulacion: { en: '2026-11-14T10:00:00.000Z', motivo: 'm', por: 'u71@prueba.test (CRM 360)', sustituidaPor: 'PSIKO-2026-000998-REEM', vigente: 'PSIKO-2026-000998-REEM', matriculaId: 131 } });
+    DIPLOMAS = [...DIPLOMAS, a];
+    apuntada(a.nexpediente, 131);
+    await porAvisar();
+    expect(pedidas.filter((p) => p.ruta === '/diplomas' && p.query.estado === 'anulados')).toHaveLength(1);
+    pedidas = [];
+    await porAvisar();
+    await porAvisar();
+    expect(pedidas.some((p) => p.ruta === '/diplomas' && p.query.estado === 'anulados')).toBe(false);
+  });
+
+  it('…y reemitida y después revocada (curso cerrado), tampoco: no vuelve a «Aprobados sin diploma»', async () => {
+    const a = anuladoDe(5, 132, { anulacion: { en: '2026-11-14T10:00:00.000Z', motivo: 'm', por: 'u71@prueba.test (CRM 360)', sustituidaPor: 'PSIKO-2026-000997-REVO', vigente: null, cursoCerrado: true, matriculaId: 132 } });
+    DIPLOMAS = [...DIPLOMAS, a];
+    CANDIDATOS = [...CANDIDATOS, { ...candidato(132, null), solicitud: null }];
+    apuntada(a.nexpediente, 132);
+    const r = await porAvisar();
+    expect(r.body.data.sinEmitir.map((c) => c.matriculaId)).not.toContain(132);
+    pedidas = [];
+    await porAvisar();
+    expect(pedidas.some((p) => p.ruta === '/diplomas' && p.query.estado === 'anulados')).toBe(false);
   });
 
   it('sin ninguna reversión apuntada de esos campus, ni se pregunta a Certifex por los anulados', async () => {

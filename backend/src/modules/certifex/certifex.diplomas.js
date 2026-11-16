@@ -160,20 +160,25 @@ async function conAvisoRechazo(filas) {
  * Esa lista sale de las solicitudes aprobadas; estas no lo son, así que se buscan aparte: los
  * anulados de Certifex que aún no tienen número que valga (`vigente`), y de ellos su matrícula
  * aprobada y sin diploma, buscada solo en su curso. Solo se pregunta a Certifex si el registro del
- * CRM tiene alguna matrícula revertida de esos campus que no esté ya en la lista (lo normal es que
- * no). Si algo falla, la lista sale sin ellas.
+ * CRM tiene alguna reversión de esos campus que no esté resuelta (ver `resueltas`) y cuya matrícula
+ * no esté ya en la lista (lo normal es que no). Si algo falla, la lista sale sin ellas.
  */
 async function revertidasSinPedir({ centro, centros, deMios, q, vistas }) {
   try {
     if (!(await model.tablaReversionesExiste())) return [];
-    const revertidas = await model.matriculasRevertidas({ centro, centros });
-    if (![...revertidas].some((id) => !vistas.has(id))) return [];
+    const pendientes = (await model.reversionesConMatricula({ centro, centros }))
+      .filter((r) => !vistas.has(r.matriculaId) && !resueltas.has(r.nexpediente));
+    if (!pendientes.length) return [];
     if (!(await certifexPuede('revertir'))) return [];
-    const sinNumero = (a) => ('vigente' in a ? a.vigente == null : a.sustituidaPor == null);
+    const matriculas = new Set(pendientes.map((r) => r.matriculaId));
     const anulados = await recorrer('/diplomas', { estado: 'anulados', centro }, {
-      filtro: (d) => !!(d?.anulada && d.anulacion?.matriculaId && deMios(d) && sinNumero(d.anulacion)
-        && revertidas.has(d.anulacion.matriculaId) && !vistas.has(d.anulacion.matriculaId)),
+      filtro: (d) => !!(d?.anulada && d.anulacion?.matriculaId && deMios(d) && matriculas.has(d.anulacion.matriculaId)),
     });
+    // Ya se volvió a emitir (tenga hoy o no un número que valga): esa matrícula tiene un número y no
+    // vuelve aquí por esta reversión (si se revierte el nuevo, es otra reversión). Se recuerda.
+    for (const d of anulados.filas) if (d.anulacion?.sustituidaPor) resueltas.add(d.nexpediente);
+    // Sin reemitir: la matrícula sigue sin número (aprobada y sin diploma).
+    anulados.filas = anulados.filas.filter((d) => !d.anulacion.sustituidaPor && !vistas.has(d.anulacion.matriculaId));
     const grupos = new Map();
     for (const d of anulados.filas) {
       const clave = `${String(d.centro).toUpperCase()}|${d.cursoRef}`;
@@ -194,6 +199,18 @@ async function revertidasSinPedir({ centro, centros, deMios, q, vistas }) {
     logger.warn({ err: e.message }, 'Certifex: no se pudieron traer las revertidas sin solicitud');
     return [];
   }
+}
+
+/**
+ * Los números anulados que ya se volvieron a emitir: una vez reemitidos, su matrícula ya no vuelve
+ * a «Aprobados sin diploma» por esa reversión. Se recuerdan (en este proceso) para no preguntar a
+ * Certifex en cada carga (13.ª auditoría, punto 4).
+ */
+const resueltas = new Set();
+
+/** Para las pruebas: olvida qué reversiones estaban resueltas. */
+export function olvidarResueltas() {
+  resueltas.clear();
 }
 
 async function despuesDeAprobar({ centro, centros = null, q }) {
