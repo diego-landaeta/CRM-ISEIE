@@ -114,8 +114,10 @@ export async function listCampaigns({ adAccountId, accessToken, effectiveStatuse
  * Lista AdSets de la cuenta (snapshot estado/budget). Pagina automáticamente.
  */
 export async function listAdSets({ adAccountId, accessToken, limit = 500 }) {
+  // created_time (#362): la fecha de creación del conjunto, que no se pedía.
   const fields = ['id', 'name', 'campaign_id', 'status', 'effective_status', 'optimization_goal',
-                  'billing_event', 'daily_budget', 'lifetime_budget', 'start_time', 'end_time'].join(',');
+                  'billing_event', 'daily_budget', 'lifetime_budget', 'start_time', 'end_time',
+                  'created_time'].join(',');
   let next = `/${adAccountId}/adsets?fields=${fields}&limit=${limit}`;
   const out = [];
   while (next) {
@@ -129,11 +131,22 @@ export async function listAdSets({ adAccountId, accessToken, limit = 500 }) {
 }
 
 /**
- * Lista Ads (anuncios individuales) de la cuenta. Snapshot creativo.
+ * Campos del creativo de los que sale la URL de destino del anuncio (#362):
+ * ver `destinoDelCreativo` en meta-ads.enlaces.js. Van dentro de la misma
+ * llamada de anuncios (expansión de campos): no cuestan llamadas aparte.
  */
-export async function listAds({ adAccountId, accessToken, limit = 500 }) {
+export const CAMPOS_DEL_CREATIVO = ['id', 'object_story_spec', 'asset_feed_spec', 'url_tags',
+  'object_url', 'link_url', 'object_story_id', 'effective_object_story_id'];
+
+/**
+ * Lista Ads (anuncios individuales) de la cuenta. Snapshot creativo.
+ *
+ * Páginas de 200 y no de 500: con el creativo entero cada anuncio pesa más, y
+ * Meta corta las respuestas grandes («Please reduce the amount of data»).
+ */
+export async function listAds({ adAccountId, accessToken, limit = 200 }) {
   const fields = ['id', 'name', 'adset_id', 'campaign_id', 'status', 'effective_status',
-                  'creative{id}', 'created_time'].join(',');
+                  `creative{${CAMPOS_DEL_CREATIVO.join(',')}}`, 'created_time'].join(',');
   let next = `/${adAccountId}/ads?fields=${fields}&limit=${limit}`;
   const out = [];
   while (next) {
@@ -178,6 +191,36 @@ export async function fetchDailyInsights({ adAccountId, accessToken, since, unti
         cpc: row.cpc ? Number(row.cpc) : null,
         cpm: row.cpm ? Number(row.cpm) : null,
         leads: Number(leads),
+      });
+    }
+    next = data.paging?.next || null;
+    if (!next) break;
+    await sleep(2000);
+  }
+  return out;
+}
+
+/**
+ * Gasto, impresiones y clics de TODA la vida de cada conjunto o anuncio (#362),
+ * tal como los cuenta Meta: insights con `date_preset=maximum` y sin desglose por
+ * día. Una llamada por nivel (más sus páginas, de 500 filas). Meta solo devuelve
+ * los que han tenido entrega: el que no sale, no ha gastado nunca.
+ * `maximum` llega hasta 37 meses atrás, que es lo que guarda Meta.
+ */
+export async function fetchLifetimeInsights({ adAccountId, accessToken, level = 'adset' }) {
+  const idField = level === 'ad' ? 'ad_id' : 'adset_id';
+  const fields = `${idField},spend,impressions,clicks`;
+  let next = `/${adAccountId}/insights?level=${level}&date_preset=maximum&fields=${fields}&limit=500`;
+  const out = [];
+  while (next) {
+    const data = await metaFetch(next, accessToken);
+    for (const row of data.data || []) {
+      if (!row[idField]) continue;
+      out.push({
+        id: String(row[idField]),
+        spend: Number(row.spend || 0),
+        impressions: Number(row.impressions || 0),
+        clicks: Number(row.clicks || 0),
       });
     }
     next = data.paging?.next || null;
