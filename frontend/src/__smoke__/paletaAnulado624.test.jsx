@@ -21,6 +21,13 @@ describe('#351 · el buscador con un número revertido', () => {
       .toBe('/matriculas/diplomas?buscar=Ana%20G%C3%B3mez');
   });
 
+  it('si ya se reemitió, lleva al número NUEVO en Emitidos (no a Pendientes, donde ya no está)', () => {
+    expect(destinoDeDiploma({ alumno: 'Ana Gómez', nexpediente: 'E-1', anulada: true, revocada: false, anulacion: { sustituidaPor: 'E-2' } }))
+      .toBe('/matriculas/diplomas?pestana=enviados&buscar=E-2');
+    expect(destinoDeDiploma({ alumno: 'Ana', nexpediente: 'E-1', anulada: true, anulacion: { sustituidaPor: null } }))
+      .toBe('/matriculas/diplomas?buscar=Ana');
+  });
+
   it('lo vigente y lo revocado, como siempre', () => {
     expect(destinoDeDiploma({ alumno: 'Ana', revocada: false })).toContain('pestana=enviados');
     expect(destinoDeDiploma({ alumno: 'Ana', revocada: true })).toContain('pestana=revocados');

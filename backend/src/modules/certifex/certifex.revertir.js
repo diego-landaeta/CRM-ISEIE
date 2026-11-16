@@ -1,7 +1,7 @@
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import * as model from './certifex.model.js';
-import { certifex, certifexTieneRuta } from './certifex.cliente.js';
+import { certifex, certifexTieneRuta, recorrer } from './certifex.cliente.js';
 import { alcanceDe, exigirExpedientes } from './certifex.alcance.js';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
 import { emitidoPorElCrm } from './certifex.marcas.js';
@@ -30,7 +30,7 @@ import { revertirSchema, mensajeDeValidacion } from './certifex.validation.js';
  *    `disponibilidad` se lo dice a la pantalla para que el botón no se ofrezca.
  */
 
-const SIN_TABLA = 'Falta aplicar en la base del CRM la migración 280 (certifex_reversiones).';
+const SIN_TABLA = 'Falta aplicar en la base del CRM la migración 280 (certifex_reversiones), o el CRM no tiene permiso sobre ella.';
 const SIN_CERTIFEX = 'El Certifex conectado todavía no permite revertir diplomas (falta desplegar su migración 0045 y POST /revertir).';
 const NO_ENCONTRADO = 'Diploma no encontrado.';
 const ROTULO_AVISO = { correo_apagado: 'el correo está apagado en el servidor', sin_correo: 'el alumno no tiene correo', error: 'el envío falló' };
@@ -113,7 +113,21 @@ export async function revertir(req, res, next) {
 
     // Certifex puede esperar hasta 30 s a que acabe un envío del aviso de ESTE diploma (su
     // cerrojo): el CRM espera más, para no decir «no responde» a algo que acaba haciéndose.
-    const hecho = await certifex('POST', '/revertir', { nexpediente: d.nexpediente, motivo, revertidoPor: req.user.email }, { timeoutMs: 45_000 });
+    let hecho;
+    try {
+      hecho = await certifex('POST', '/revertir', { nexpediente: d.nexpediente, motivo, revertidoPor: req.user.email }, { timeoutMs: 45_000 });
+    } catch (e) {
+      // Otro lo revirtió entre la comprobación de arriba y esta llamada: está hecho. Se apunta
+      // lo que dice Certifex y se contesta como arriba, en vez de enseñar un error.
+      if (e.certifexCode === 'anulada') {
+        const ahora = await diplomaPorNumero(d.nexpediente).catch(() => null);
+        if (ahora?.anulada) {
+          await apuntarDesdeCertifex(ahora).catch((x) => logger.warn({ err: x.message, nexpediente: d.nexpediente }, 'Certifex: no se pudo apuntar una reversión ya hecha'));
+        }
+        throw new AppError('Ya está revertido: ese número está anulado. Búscalo en «Aprobados sin diploma» para volver a emitirlo.', 409, 'YA_REVERTIDO');
+      }
+      throw e;
+    }
     // La matrícula que vuelve a «Aprobados sin diploma» la dice Certifex (la de esa persona y
     // ese curso), no el navegador.
     const matriculaId = Number.isSafeInteger(hecho?.matriculaId) ? hecho.matriculaId : null;
@@ -157,8 +171,9 @@ const completadas = new Map();
  * dice Certifex (quién, cuándo, por qué y la matrícula). Así el registro del CRM no pierde
  * ninguna (#351: «queda en el CRM y en Certifex quién, cuándo, por qué y qué número»).
  *
- * Solo con un Certifex que ya revierte y con la tabla del CRM puesta; lo más reciente (una
- * página de 200). Nada de esto impide ver el listado: si falla, queda en el log.
+ * Solo con un Certifex que ya revierte y con la tabla del CRM puesta; todas las páginas (los
+ * anulados son pocos: se revierte a mano, uno a uno). Nada de esto impide ver el listado: si
+ * falla, queda en el log.
  */
 export async function completarReversiones(ambito, req) {
   // Escribe en el registro: solo con el permiso de revertir, y como mucho una vez por minuto
@@ -171,11 +186,11 @@ export async function completarReversiones(ambito, req) {
     if (Date.now() - (completadas.get(clave) ?? 0) < COMPLETAR_CADA_MS) return;
     if (!(await model.tablaReversionesExiste())) return;
     if (!(await certifexTieneRuta('/revertir'))) return;
-    const params = { estado: 'anulados', pagina: '1', tam: '200' };
+    const params = { estado: 'anulados' };
     if (ambito?.centro) params.centro = ambito.centro;
-    const d = await certifex('GET', `/diplomas?${new URLSearchParams(params)}`);
-    const filas = (Array.isArray(d?.filas) ? d.filas : [])
-      .filter((f) => f?.anulada && f.nexpediente && (!ambito?.centros || ambito.centros.has(String(f.centro).toUpperCase())));
+    const { filas } = await recorrer('/diplomas', params, {
+      filtro: (f) => !!(f?.anulada && f.nexpediente && (!ambito?.centros || ambito.centros.has(String(f.centro).toUpperCase()))),
+    });
     if (!filas.length) { completadas.set(clave, Date.now()); return; }
     const ya = await model.reversionesApuntadas(filas.map((f) => f.nexpediente));
     for (const f of filas) {

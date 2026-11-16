@@ -137,7 +137,10 @@ beforeAll(() => {
       const est = p.query.estado ?? 'vigentes';
       const f = DIPLOMAS.filter((d) => (!p.query.q || d.nexpediente === p.query.q) && (!p.query.centro || d.centro === p.query.centro)
         && (est === 'todos' || (est === 'revocados' ? d.revocada : est === 'anulados' ? d.anulada : !d.revocada && !d.anulada)));
-      return responder({ filas: f, total: f.length });
+      // Por páginas, como Certifex (sin `pagina`, la primera de 50).
+      const pag = Number(p.query.pagina || 1);
+      const tam = Number(p.query.tam || 50);
+      return responder({ filas: f.slice((pag - 1) * tam, pag * tam), total: f.length });
     }
     if (p.ruta === '/candidatos') {
       const f = p.query.estado === 'aprobada' ? CANDIDATOS.filter((c) => !p.query.centro || c.centro === p.query.centro) : [];
@@ -524,5 +527,65 @@ describe('«por avisar»: lo revertido, en «Aprobados sin diploma»', () => {
     const fila = r.body.data.sinEmitir.find((c) => c.matriculaId === 101);
     expect(fila.revertido).toEqual({ nexpediente: EXP, motivo: MOTIVO, por: 'u71@prueba.test', en: '2026-11-13T09:30:00.000Z' });
     expect(r.body.data.porAvisar.map((c) => c.nexpediente)).not.toContain(EXP);
+  });
+});
+
+describe('lo que encontró la 6.ª auditoría', () => {
+  const anulado = (n, extra = {}) => diploma(`PSIKO-2026-${String(300000 + n).padStart(6, '0')}-ZZZZ`, {
+    anulada: true, anulacion: { en: '2026-11-05T10:00:00.000Z', motivo: 'm', por: 'pepe@prueba.test (CRM 360)', sustituidaPor: null, matriculaId: 5000 + n }, ...extra,
+  });
+
+  it('si otro lo revirtió justo a la vez, Certifex dice «anulada» (code): 409 «ya revertido» y se apunta lo de Certifex', async () => {
+    alRevertir = () => {
+      DIPLOMAS = DIPLOMAS.map((d) => (d.nexpediente === EXP
+        ? { ...d, anulada: true, anulacion: { en: '2026-11-13T09:00:00.000Z', motivo: 'lo hizo otro', por: 'otra@prueba.test (CRM 360)', sustituidaPor: null, matriculaId: 101 } }
+        : d));
+      return { status: 409, body: { error: 'Ya está revertido: ese número está anulado.', code: 'anulada' } };
+    };
+    const r = await revertir(ADMIN);
+    expect(r.status).toBe(409);
+    expect(r.body.code).toBe('YA_REVERTIDO');
+    expect(registro).toEqual([expect.objectContaining({ nexpediente: EXP, matricula_id: 101, motivo: 'lo hizo otro', revertido_por_email: 'otra@prueba.test' })]);
+  });
+
+  it('otro 409 de Certifex (sin code «anulada»): su error tal cual, sin apuntar nada', async () => {
+    alRevertir = () => ({ status: 409, body: { error: 'Ahora mismo se está enviando el aviso de este diploma: no se ha revertido.', code: 'ocupada' } });
+    const r = await revertir(ADMIN);
+    expect(r.status).toBe(409);
+    expect(r.body.error).toMatch(/enviando el aviso/);
+    expect(registro).toHaveLength(0);
+  });
+
+  it('el repaso de reversiones recorre todas las páginas de Certifex, no solo la primera', async () => {
+    DIPLOMAS = Array.from({ length: 230 }, (_, i) => anulado(i));
+    const r = await request.get('/api/certifex/diplomas/por-avisar').set('Authorization', `Bearer ${ADMIN}`);
+    expect(r.status).toBe(200);
+    expect(registro).toHaveLength(230);
+    expect(registro.some((x) => x.nexpediente === anulado(229).nexpediente)).toBe(true);
+    expect(pedidas.filter((p) => p.ruta === '/diplomas' && p.query.estado === 'anulados').map((p) => p.query.pagina)).toEqual(['1', '2']);
+  });
+
+  it('Revertidos con «desde»: no deja de pedir por fecha (Certifex ordena por la emisión, no por la reversión)', async () => {
+    // 200 revertidos hace tiempo, en orden, y en la 2.ª página uno revertido hoy (emitido hace meses).
+    DIPLOMAS = [
+      ...Array.from({ length: 200 }, (_, i) => anulado(i, {
+        emitidoEn: new Date(Date.UTC(2026, 9, 30) - i * 3_600_000).toISOString(),
+        anulacion: { en: new Date(Date.UTC(2026, 9, 30) - i * 3_600_000).toISOString(), motivo: 'm', por: 'x', sustituidaPor: null, matriculaId: null },
+      })),
+      anulado(999, { emitidoEn: '2026-06-01T10:00:00.000Z', anulacion: { en: '2026-11-10T10:00:00.000Z', motivo: 'm', por: 'x', sustituidaPor: null, matriculaId: null } }),
+    ];
+    const r = await request.get('/api/certifex/diplomas?estado=anulados&desde=2026-11-01').set('Authorization', `Bearer ${ADMIN}`);
+    expect(r.status).toBe(200);
+    expect(r.body.data.filas.map((d) => d.nexpediente)).toEqual([anulado(999).nexpediente]);
+  });
+
+  it('en Enviados (vigentes) la parada por fecha sigue: con «desde», no pide la página que ya es toda anterior', async () => {
+    DIPLOMAS = Array.from({ length: 401 }, (_, i) => diploma(`PSIKO-2026-${String(400000 + i).padStart(6, '0')}-YYYY`, {
+      emitidoEn: new Date(Date.UTC(2026, 9, 30) - i * 3_600_000).toISOString(),
+    }));
+    const r = await request.get('/api/certifex/diplomas?estado=vigentes&desde=2026-11-01').set('Authorization', `Bearer ${ADMIN}`);
+    expect(r.status).toBe(200);
+    expect(r.body.data.filas).toEqual([]);
+    expect(pedidas.filter((p) => p.ruta === '/diplomas' && p.query.estado === 'vigentes').map((p) => p.query.pagina)).toEqual(['1']);
   });
 });

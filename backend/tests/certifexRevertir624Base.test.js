@@ -55,6 +55,56 @@ describe('la migración 280', () => {
     expect(obligatorias).toEqual(['id', 'nexpediente', 'centro', 'motivo', 'revertido_por_email', 'revertido_en', 'apuntado_en']);
   });
 
+  it('da los permisos a crm_user / crm_iseie_user (las migraciones se pasan como postgres)', async () => {
+    // En la base local el rol del otro CRM no existe: se crea para la prueba y se quita al final.
+    const { rows: hay } = await pool.query(`SELECT 1 FROM pg_roles WHERE rolname = 'crm_iseie_user'`);
+    if (!hay.length) await pool.query('CREATE ROLE crm_iseie_user NOLOGIN');
+    try {
+      await pool.query(SQL_280);
+      const { rows } = await pool.query(
+        `SELECT has_table_privilege('crm_iseie_user', 'certifex_reversiones', 'SELECT, INSERT, UPDATE, DELETE') AS tabla,
+                has_sequence_privilege('crm_iseie_user', 'certifex_reversiones_id_seq', 'USAGE') AS secuencia`);
+      expect(rows[0]).toEqual({ tabla: true, secuencia: true });
+    } finally {
+      if (!hay.length) {
+        await pool.query('REVOKE ALL ON certifex_reversiones FROM crm_iseie_user');
+        await pool.query('REVOKE ALL ON SEQUENCE certifex_reversiones_id_seq FROM crm_iseie_user');
+        await pool.query('DROP ROLE crm_iseie_user');
+      }
+    }
+  });
+
+  it('con la tabla pero sin permiso sobre ella, el CRM dice que no está lista (y no ofrece revertir)', async () => {
+    const rol = `zprueba_sin_permiso_${MARCA.toLowerCase()}`;
+    await pool.query(`CREATE ROLE ${rol} NOLOGIN`);
+    const c = await pool.connect();
+    try {
+      await c.query(`SET ROLE ${rol}`);
+      expect(await model.tablaReversionesExiste(c)).toBe(false);
+      await c.query('RESET ROLE');
+      // Con la secuencia pero sin la tabla, no.
+      await c.query(`GRANT USAGE ON SEQUENCE certifex_reversiones_id_seq TO ${rol}`);
+      await c.query(`SET ROLE ${rol}`);
+      expect(await model.tablaReversionesExiste(c)).toBe(false);
+      await c.query('RESET ROLE');
+      // Con la tabla pero sin la secuencia, tampoco: el INSERT la necesita.
+      await c.query(`REVOKE USAGE ON SEQUENCE certifex_reversiones_id_seq FROM ${rol}`);
+      await c.query(`GRANT SELECT, INSERT ON certifex_reversiones TO ${rol}`);
+      await c.query(`SET ROLE ${rol}`);
+      expect(await model.tablaReversionesExiste(c)).toBe(false);
+      await c.query('RESET ROLE');
+      await c.query(`GRANT USAGE ON SEQUENCE certifex_reversiones_id_seq TO ${rol}`);
+      await c.query(`SET ROLE ${rol}`);
+      expect(await model.tablaReversionesExiste(c)).toBe(true);
+    } finally {
+      await c.query('RESET ROLE').catch(() => {});
+      c.release();
+      await pool.query(`REVOKE ALL ON certifex_reversiones FROM ${rol}`);
+      await pool.query(`REVOKE ALL ON SEQUENCE certifex_reversiones_id_seq FROM ${rol}`);
+      await pool.query(`DROP ROLE ${rol}`);
+    }
+  });
+
   it('no admite una reversión sin motivo, sin quién o sin campus', async () => {
     await expect(model.apuntarReversion(base({ nexpediente: EXP(9), motivo: '   ' }))).rejects.toThrow(/certifex_reversiones_motivo/);
     await expect(model.apuntarReversion(base({ nexpediente: EXP(9), revertidoPorEmail: null }))).rejects.toThrow(/revertido_por_email/);

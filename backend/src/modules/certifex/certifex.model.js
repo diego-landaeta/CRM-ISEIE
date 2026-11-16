@@ -464,9 +464,20 @@ export async function completadosDe(matriculaIds) {
 
 // ─────────────────────────────────────────────── diplomas revertidos (#351)
 
-/** ¿Está aplicada la migración 280? (El código puede llegar al servidor antes que ella.) */
-export async function tablaReversionesExiste() {
-  const { rows } = await query(`SELECT to_regclass('public.certifex_reversiones') IS NOT NULL AS existe`);
+/**
+ * ¿Está aplicada la migración 280, y el CRM puede usarla? (El código puede llegar al servidor
+ * antes que ella.) Que la tabla exista no basta: las migraciones se pasan como `postgres`, y
+ * sin los permisos el CRM no podría apuntar la reversión; Certifex anularía el número y el CRM
+ * se quedaría sin rastro. Así que también se mira que pueda leerla y escribir en ella.
+ */
+export async function tablaReversionesExiste(db = { query }) {
+  const { rows } = await db.query(
+    `SELECT CASE WHEN to_regclass('public.certifex_reversiones') IS NULL
+                   OR to_regclass('public.certifex_reversiones_id_seq') IS NULL THEN false
+                 ELSE has_table_privilege(to_regclass('public.certifex_reversiones'), 'SELECT, INSERT')
+                  AND has_sequence_privilege(to_regclass('public.certifex_reversiones_id_seq'), 'USAGE')
+            END AS existe`,
+  );
   return !!rows[0]?.existe;
 }
 

@@ -48,3 +48,16 @@ CREATE TABLE IF NOT EXISTS certifex_reversiones (
 -- «Aprobados sin diploma» enseña la última reversión de cada matrícula.
 CREATE INDEX IF NOT EXISTS idx_certifex_reversiones_matricula
   ON certifex_reversiones (matricula_id, revertido_en DESC);
+
+-- Las migraciones se pasan como `postgres` (docs/README.md): sin esto el CRM no podría
+-- apuntar las reversiones. Lo mismo que las demás tablas nuevas (p. ej. la 274).
+DO $$
+DECLARE r text;
+BEGIN
+  FOREACH r IN ARRAY ARRAY['crm_user', 'crm_iseie_user'] LOOP
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = r) THEN
+      EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON certifex_reversiones TO %I', r);
+      EXECUTE format('GRANT USAGE, SELECT ON SEQUENCE certifex_reversiones_id_seq TO %I', r);
+    END IF;
+  END LOOP;
+END $$;

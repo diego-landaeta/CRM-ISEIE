@@ -8,5 +8,8 @@
  * ¿Lo emitió un CRM? Certifex guarda en `emitidaPor` «persona (CRM …)» cuando la emisión es
  * del CRM. Lo emitido fuera (desde el panel de Certifex, o los antiguos de 2023 y 2024)
  * no esta «pendiente de aviso»: nadie del CRM lo aprobo ni tiene que mandarlo.
+ *
+ * La misma expresión que `emitidaDesdeUnCrm` de Certifex (src/api/revertir.ts): así el CRM y
+ * Certifex dicen lo mismo de qué se puede revertir.
  */
-export const emitidoPorElCrm = (d) => /\(CRM\b[^)]*\)\s*$/i.test(String(d?.emitidaPor ?? ''));
+export const emitidoPorElCrm = (d) => /\(CRM\b[^()]*\)\s*$/i.test(String(d?.emitidaPor ?? ''));

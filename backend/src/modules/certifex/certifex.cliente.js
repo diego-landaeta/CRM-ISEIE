@@ -80,7 +80,13 @@ export async function certifex(metodo, ruta, cuerpo, { timeoutMs = 20_000 } = {}
   }
   const datos = await r.json().catch(() => null);
   if (r.status === 401) throw new AppError('Certifex no acepta la clave de este CRM (CERTIFEX_CRM_CLAVE).', 502, 'CERTIFEX_CLAVE');
-  if (!r.ok) throw new AppError(datos?.error || `Certifex respondio ${r.status}`, r.status >= 500 ? 502 : r.status, 'CERTIFEX_ERROR');
+  if (!r.ok) {
+    const err = new AppError(datos?.error || `Certifex respondio ${r.status}`, r.status >= 500 ? 502 : r.status, 'CERTIFEX_ERROR');
+    // El `code` de Certifex, si lo manda (p. ej. /revertir), para distinguir sin leer el texto.
+    // No sale en la respuesta del CRM: solo lo usa quien llama.
+    if (typeof datos?.code === 'string') Object.defineProperty(err, 'certifexCode', { value: datos.code, enumerable: false });
+    throw err;
+  }
   return datos;
 }
 

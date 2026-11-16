@@ -69,7 +69,7 @@ export function diaDe(iso) {
  * fechas, curso (en diplomas), estado del aviso o `todo=1` (exportar) se recorre y se
  * pagina aqui.
  */
-async function listado(ruta, params, f, { fecha, extra = null }) {
+async function listado(ruta, params, f, { fecha, extra = null, pararPorFecha = true }) {
   const pagina = f.pagina ?? 1;
   const tam = f.tam ?? 50;
   const conFechas = !!(f.desde || f.hasta);
@@ -89,9 +89,10 @@ async function listado(ruta, params, f, { fecha, extra = null }) {
   };
   const r = await recorrer(ruta, params, {
     filtro: (row) => enRango(row) && (!extra || extra(row)),
-    // Lo de antes de `desde` ya no puede entrar si lo que sigue es aun mas antiguo.
+    // Lo de antes de `desde` ya no puede entrar si lo que sigue es aun mas antiguo. Solo si
+    // `fecha` es por lo que Certifex ordena (lo mas reciente primero); si no, se recorre todo.
     fecha,
-    antiguo: f.desde ? (row) => { const d = diaDe(fecha(row)); return !!d && d < f.desde; } : null,
+    antiguo: f.desde && pararPorFecha ? (row) => { const d = diaDe(fecha(row)); return !!d && d < f.desde; } : null,
   });
   if (f.todo === '1') return { filas: r.filas, total: r.filas.length, pagina: 1, tam: r.filas.length, truncado: r.truncado };
   return { filas: r.filas.slice((pagina - 1) * tam, pagina * tam), total: r.filas.length, pagina, tam, truncado: r.truncado };
@@ -800,6 +801,9 @@ export async function diplomas(req, res, next) {
     }, f, {
       // En Revertidos (#351) «desde/hasta» es cuándo se revirtió, que es lo que enseña.
       fecha: (d) => (f.estado === 'anulados' ? d?.anulacion?.en : d?.emitidoEn),
+      // Certifex ordena por la emisión, no por la reversión: con «desde» en Revertidos no se
+      // puede dejar de pedir por fecha (uno emitido hace meses pudo revertirse hoy).
+      pararPorFecha: f.estado !== 'anulados',
       extra: ambos(filtros.length ? (d) => filtros.every((fn) => fn(d)) : null, deMisCentros(ambito)),
     });
     for (const d of data.filas) d.emitidoEnCrm = emitidoPorElCrm(d);
