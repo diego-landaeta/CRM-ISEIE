@@ -766,3 +766,34 @@ describe('al revertir, el diploma se pide una vez y nunca se apunta un campus «
   });
 });
 
+
+describe('lo que emitió o revirtió OTRO CRM del campus (13.ª auditoría, punto 2)', () => {
+  it('Certifex dice `deEsteCrm: false`: 409 «lo emitió otro CRM», sin llamar a /revertir', async () => {
+    DIPLOMAS = DIPLOMAS.map((d) => (d.nexpediente === EXP ? { ...d, emitidaPor: 'luis@prueba.test (CRM-ISEIE)', deEsteCrm: false } : d));
+    const r = await revertir(ADMIN);
+    expect(r.status).toBe(409);
+    expect(r.body.code).toBe('OTRO_CRM');
+    expect(llegoARevertir()).toHaveLength(0);
+  });
+
+  it('Certifex dice `deEsteCrm: true` aunque la firma sea antigua: se revierte', async () => {
+    DIPLOMAS = DIPLOMAS.map((d) => (d.nexpediente === EXP ? { ...d, emitidaPor: 'diego@prueba.test (CRM CRM 360)', deEsteCrm: true } : d));
+    expect((await revertir(ADMIN)).status).toBe(200);
+  });
+
+  it('en el listado, lo de otro CRM no cuenta como «emitido en el CRM» (no se le ofrece «Revertir»)', async () => {
+    DIPLOMAS = DIPLOMAS.map((d) => (d.nexpediente === EXP ? { ...d, deEsteCrm: false } : d));
+    const r = await request.get('/api/certifex/diplomas?estado=vigentes').set('Authorization', `Bearer ${ADMIN}`);
+    expect(r.body.data.filas.find((d) => d.nexpediente === EXP).emitidoEnCrm).toBe(false);
+  });
+
+  it('el repaso usa `porEsteCrm` de Certifex cuando viene: lo de otro no, lo suyo aunque la firma sea antigua', async () => {
+    DIPLOMAS = [
+      ...DIPLOMAS.filter((d) => d.nexpediente !== EXP_ANULADO),
+      diploma('PSIKO-2026-000108-HHHH', { anulada: true, anulacion: { en: '2026-11-06T10:00:00.000Z', motivo: 'm', por: 'x@prueba.test (CRM 360)', porEsteCrm: false, sustituidaPor: null, matriculaId: 108 } }),
+      diploma('PSIKO-2026-000109-IIII', { anulada: true, anulacion: { en: '2026-11-06T10:00:00.000Z', motivo: 'm', por: 'y@prueba.test (CRM CRM 360)', porEsteCrm: true, sustituidaPor: null, matriculaId: 109 } }),
+    ];
+    expect(await completarReversiones()).toEqual({ apuntadas: 1 });
+    expect(registro.map((x) => x.nexpediente)).toEqual(['PSIKO-2026-000109-IIII']);
+  });
+});

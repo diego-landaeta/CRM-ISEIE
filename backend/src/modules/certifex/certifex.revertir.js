@@ -123,7 +123,13 @@ export async function revertir(req, res, next) {
     // Entregado sin aviso del CRM: el correo salió desde el panel de Certifex (lo dice Certifex
     // en `entregado`; un Certifex anterior no lo manda y entonces lo comprueba él).
     if (dip.entregado === true) throw new AppError('Ya se entregó al alumno desde el panel de Certifex: no se revierte. Si está mal, hay que revocarlo.', 409, 'YA_ENVIADO');
-    if (!emitidoPorElCrm(dip)) throw new AppError('Este diploma no se emitió desde el CRM: no se revierte desde aquí.', 409, 'EMITIDO_FUERA');
+    if (!emitidoPorElCrm(dip)) {
+      // Lo emitió OTRO CRM del mismo campus (Certifex lo dice en `deEsteCrm`): se dice así.
+      if (dip.deEsteCrm === false && /\(CRM\b[^()]*\)\s*$/i.test(String(dip.emitidaPor ?? ''))) {
+        throw new AppError('Este diploma lo emitió otro CRM: lo revierte el que lo emitió.', 409, 'OTRO_CRM');
+      }
+      throw new AppError('Este diploma no se emitió desde el CRM: no se revierte desde aquí.', 409, 'EMITIDO_FUERA');
+    }
 
     // Certifex puede esperar hasta 30 s a que acabe un envío del aviso de ESTE diploma (su
     // cerrojo): el CRM espera más, para no decir «no responde» a algo que acaba haciéndose.
@@ -192,10 +198,14 @@ export async function completarReversiones() {
   if (!(await model.tablaReversionesExiste())) return { apuntadas: 0, motivo: 'sin la tabla del CRM' };
   if (!(await certifexPuede('revertir'))) return { apuntadas: 0, motivo: 'Certifex aún no revierte' };
   // Solo lo que revirtió ESTE CRM: si un campus estuviera conectado a dos, lo que revirtió el otro
-  // es del otro (Certifex ya solo deja revertir al que emitió; 12.ª auditoría, punto 4).
+  // es del otro (12.ª auditoría, punto 4). Lo dice Certifex en cada anulado (`porEsteCrm`, con su
+  // regla); un Certifex anterior no lo manda, y entonces se mira la firma « (CRM X)».
   const sufijo = sufijoDeEsteCrm(await certifex('GET', '/yo'));
+  const deEste = (f) => (typeof f.anulacion?.porEsteCrm === 'boolean'
+    ? f.anulacion.porEsteCrm
+    : String(f.anulacion?.por ?? '').trimEnd().endsWith(sufijo));
   const { filas } = await recorrer('/diplomas', { estado: 'anulados' }, {
-    filtro: (f) => !!(f?.anulada && f.nexpediente) && String(f.anulacion?.por ?? '').trimEnd().endsWith(sufijo),
+    filtro: (f) => !!(f?.anulada && f.nexpediente) && deEste(f),
   });
   if (!filas.length) return { apuntadas: 0 };
   const ya = await model.reversionesApuntadas(filas.map((f) => f.nexpediente));
