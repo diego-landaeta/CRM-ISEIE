@@ -424,6 +424,16 @@ describe('Emisiones trae lo que se imprimiría (punto 3, prevención)', () => {
     expect(r.body.data.filas[0]).not.toHaveProperty('programaCrm');
   });
 
+  it('una matrícula revertida trae su reversión (el número anulado, quién y por qué); las demás, null', async () => {
+    expect((await revertir(ADMIN)).status).toBe(200);
+    CANDIDATOS = [candidato(101, null), candidato(102, null)];
+    const r = await request.get('/api/certifex/emisiones?estado=aprobada&centro=PSIKO&conPrograma=1').set('Authorization', `Bearer ${ADMIN}`);
+    expect(r.status).toBe(200);
+    const [a, b] = r.body.data.filas;
+    expect(a.revertido).toEqual({ nexpediente: EXP, motivo: MOTIVO, por: 'u71@prueba.test', en: '2026-11-13T09:30:00.000Z' });
+    expect(b.revertido).toBeNull();
+  });
+
   it('sin `conPrograma`, el listado es el de siempre (sin esos campos)', async () => {
     CANDIDATOS = [candidato(101, null)];
     const r = await request.get('/api/certifex/emisiones?estado=aprobada&centro=PSIKO').set('Authorization', `Bearer ${ADMIN}`);

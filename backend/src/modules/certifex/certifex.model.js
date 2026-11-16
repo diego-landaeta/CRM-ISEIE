@@ -474,7 +474,9 @@ export async function tablaReversionesExiste(db = { query }) {
   const { rows } = await db.query(
     `SELECT CASE WHEN to_regclass('public.certifex_reversiones') IS NULL
                    OR to_regclass('public.certifex_reversiones_id_seq') IS NULL THEN false
-                 ELSE has_table_privilege(to_regclass('public.certifex_reversiones'), 'SELECT, INSERT')
+                 -- Uno a uno: con varios a la vez («SELECT, INSERT») vale con tener CUALQUIERA.
+                 ELSE has_table_privilege(to_regclass('public.certifex_reversiones'), 'SELECT')
+                  AND has_table_privilege(to_regclass('public.certifex_reversiones'), 'INSERT')
                   AND has_sequence_privilege(to_regclass('public.certifex_reversiones_id_seq'), 'USAGE')
             END AS existe`,
   );

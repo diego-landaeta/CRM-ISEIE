@@ -8,6 +8,7 @@ import { alcanceDe, centrosPermitidos, acotar, exigirCentro, exigirMatriculas, e
 import { datosPara, emitirMatriculas } from './certifex.emision.js';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
 import { conEdicion, conProgramaCrm } from './certifex.enriquecer.js';
+import { conReversiones } from './certifex.revertir.js';
 
 export { certifex };
 
@@ -96,6 +97,9 @@ export async function listar(req, res, next) {
         logger.warn({ err: e.message }, 'Certifex: no se pudo saber el programa de Emisiones');
       }
     }
+    // #351: una matrícula revertida (su diploma se anuló para corregirlo) lo dice también aquí,
+    // con el número anulado, quién y por qué: si el alumno no lo pidió, es aquí donde está.
+    if (Array.isArray(data?.filas) && conPrograma === '1') await conReversiones(data.filas.filter((c) => !c.nexpediente));
     if (Array.isArray(data?.filas)) await conLoDelCrm(data.filas, req.user);
     res.json({ success: true, data });
   } catch (err) { next(err); }

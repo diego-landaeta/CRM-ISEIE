@@ -67,6 +67,11 @@ export interface Candidato {
    */
   programaCrm?: ProgramaDelCrm | null;
   edicion?: EdicionSolicitud | null;
+  /**
+   * #351: la última vez que se revirtió su diploma (el número anulado, por qué, quién y
+   * cuándo), o null. Lo traen «Aprobados sin diploma» y Emisiones, en lo que no tiene título.
+   */
+  revertido?: Revertido | null;
   matriculaId: number;
   centro: string;
   /** `dni`: el DNI / NIE / pasaporte que se imprime. Obligatorio para emitir (Diego, 20/10). */

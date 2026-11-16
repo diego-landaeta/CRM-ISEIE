@@ -25,7 +25,10 @@ const fila = (id, nombre, extra = {}) => ({
   ...extra,
 });
 const FILAS = [
-  fila(1, 'Ana Con Programa'),
+  fila(1, 'Ana Con Programa', {
+    // Su diploma se revirtió (#351): lo dice la fila.
+    revertido: { nexpediente: 'PSIKO-2026-000009-X1YZ', motivo: 'Con lo de Moodle', por: 'ana@prueba.test', en: '2026-11-12T10:00:00Z' },
+  }),
   fila(2, 'Berta Con Moodle', { programaCrm: { programa: null, formacion: null, motivo: 'No tiene ninguna venta en Psiko.' } }),
   fila(3, 'Carla Sin Modulos', { programaCrm: { programa: { horas: 100, modulos: [] }, formacion: null, motivo: null, editado: false, elegida: false } }),
   fila(4, 'Diana Revisada Sinprograma', {
@@ -72,6 +75,18 @@ async function aprobarYEmitir(nombres, props = { puedeEditar: true }) {
   fireEvent.click(screen.getByRole('button', { name: /^Aprobar y emitir \(/ }));
   return screen.findByRole('dialog');
 }
+
+describe('#351 · una matrícula revertida lo dice en Emisiones', () => {
+  it('«Revertido · nº anulado», con quién y por qué al pasar por encima', async () => {
+    render(<MemoryRouter><CertifexEmisionesPage embebida puedeEditar /></MemoryRouter>);
+    const filaAna = (await screen.findByText('Ana Con Programa')).closest('tr');
+    const marca = within(filaAna).getByText('PSIKO-2026-000009-X1YZ').closest('div');
+    expect(marca.textContent).toMatch(/Revertido · PSIKO-2026-000009-X1YZ anulado/);
+    expect(marca.getAttribute('title')).toMatch(/ana@prueba\.test.*Con lo de Moodle/);
+    // Las demás, sin marca.
+    expect(within((await screen.findByText('Berta Con Moodle')).closest('tr')).queryByText(/Revertido ·/)).toBeNull();
+  });
+});
 
 describe('#351 prevención en Emisiones: antes de «Aprobar y emitir»', () => {
   it('avisa de lo que saldría «Con lo de Moodle» (sin programa, o sin módulos), con «Editar»', async () => {

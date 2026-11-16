@@ -66,6 +66,10 @@ const datos = vi.hoisted(() => {
   };
 });
 
+// El Excel: se recoge lo que se exportaría, sin generar el fichero.
+const exportado = vi.hoisted(() => ({ ultimo: null }));
+vi.mock('@/shared/lib/export', () => ({ runExport: async (o) => { exportado.ultimo = o; } }));
+
 vi.mock('@/shared/hooks/useToast', () => ({
   toast: (t) => { datos.toasts.push(t); },
   useToast: () => ({ toasts: [], addListener: () => () => {} }),
@@ -256,6 +260,28 @@ describe('la pestaña «Revertidos»', () => {
     render(<MemoryRouter initialEntries={['/?pestana=revertidos']}><CertifexDiplomasPage /></MemoryRouter>);
     const fila = (await screen.findByText('Hugo Revertido')).closest('tr');
     expect(within(fila).queryByLabelText(/enlace/i)).toBeNull();
+  });
+
+  it('las fechas de esta pestaña son las de la reversión, y así se rotulan', async () => {
+    render(<MemoryRouter initialEntries={['/?pestana=revertidos']}><CertifexDiplomasPage /></MemoryRouter>);
+    await screen.findByText('Hugo Revertido');
+    expect(screen.getByText(/Revertido desde/i)).toBeTruthy();
+    expect(screen.queryByText(/Emitido desde/i)).toBeNull();
+  });
+
+  it('el Excel trae «Vale hoy»: el número que vale (si se revirtió dos veces, «Reemitido como» también está anulado)', async () => {
+    datos.anulacionExtra = { sustituidaPor: 'CEDIA-2026-000010-S2DO', vigente: 'CEDIA-2026-000011-T3RC' };
+    try {
+      render(<MemoryRouter initialEntries={['/?pestana=revertidos']}><CertifexDiplomasPage /></MemoryRouter>);
+      await screen.findByText('Hugo Revertido');
+      fireEvent.click(screen.getByRole('button', { name: /Exportar a Excel/ }));
+      await waitFor(() => expect(exportado.ultimo).not.toBeNull());
+      expect(exportado.ultimo.columns.map((c) => c.label)).toEqual(expect.arrayContaining(['Reemitido como', 'Vale hoy']));
+      expect(exportado.ultimo.rows[0]).toMatchObject({ reemitidoComo: 'CEDIA-2026-000010-S2DO', valeHoy: 'CEDIA-2026-000011-T3RC' });
+    } finally {
+      datos.anulacionExtra = undefined;
+      exportado.ultimo = null;
+    }
   });
 
   it('revertido dos veces: dice que el número con que se reemitió también se revirtió, y cuál vale hoy', async () => {

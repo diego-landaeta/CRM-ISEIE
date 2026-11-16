@@ -87,6 +87,17 @@ describe('la migración 280', () => {
       await c.query(`SET ROLE ${rol}`);
       expect(await model.tablaReversionesExiste(c)).toBe(false);
       await c.query('RESET ROLE');
+      // Con la secuencia y solo LEER la tabla, no: hay que poder apuntar (y con solo escribir, tampoco).
+      await c.query(`GRANT SELECT ON certifex_reversiones TO ${rol}`);
+      await c.query(`SET ROLE ${rol}`);
+      expect(await model.tablaReversionesExiste(c)).toBe(false);
+      await c.query('RESET ROLE');
+      await c.query(`REVOKE SELECT ON certifex_reversiones FROM ${rol}`);
+      await c.query(`GRANT INSERT ON certifex_reversiones TO ${rol}`);
+      await c.query(`SET ROLE ${rol}`);
+      expect(await model.tablaReversionesExiste(c)).toBe(false);
+      await c.query('RESET ROLE');
+      await c.query(`REVOKE INSERT ON certifex_reversiones FROM ${rol}`);
       // Con la tabla pero sin la secuencia, tampoco: el INSERT la necesita.
       await c.query(`REVOKE USAGE ON SEQUENCE certifex_reversiones_id_seq FROM ${rol}`);
       await c.query(`GRANT SELECT, INSERT ON certifex_reversiones TO ${rol}`);

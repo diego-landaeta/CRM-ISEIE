@@ -1093,6 +1093,9 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
         revertidoPor: d.anulacion?.por ?? '',
         motivoReversion: d.anulacion?.motivo ?? '',
         reemitidoComo: d.anulacion?.sustituidaPor ?? '',
+        // El que vale hoy (si se revirtió dos veces, «Reemitido como» también está anulado). Un
+        // Certifex que aún no manda `vigente`: el de «Reemitido como».
+        valeHoy: (d.anulacion && d.anulacion.vigente !== undefined ? d.anulacion.vigente : d.anulacion?.sustituidaPor) ?? '',
         verificar: d.verificarUrl ?? '',
       });
       const deTerminado = (c: Terminado): FilaX => ({
@@ -1137,7 +1140,7 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
             // #351: el número anulado, quién, cuándo, por qué y con cuál se volvió a emitir.
             ? [col('nexpediente', 'Nº expediente anulado', 24), col('alumno', 'Alumno', 32), col('campus', 'Campus', 20), col('titulacion', 'Titulación', 48),
               col('emitido', 'Emitido', F), col('emitidaPor', 'Emitido por', 34), col('revertidoEn', 'Revertido', F), col('revertidoPor', 'Revertido por', 34),
-              col('motivoReversion', 'Motivo', 48), col('reemitidoComo', 'Reemitido como', 24)]
+              col('motivoReversion', 'Motivo', 48), col('reemitidoComo', 'Reemitido como', 24), col('valeHoy', 'Vale hoy', 24)]
           : pestana === 'revocados'
             // Revocado no hay aviso que enseñar: sin esas columnas.
             ? [col('nexpediente', 'Nº expediente', 24), col('alumno', 'Alumno', 32), col('campus', 'Campus', 20), col('titulacion', 'Titulación', 48),
@@ -1193,7 +1196,8 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
     );
   }
 
-  const fechaRotulo = pestana === 'enviados' || pestana === 'revocados' || pestana === 'revertidos' ? 'Emitido' : 'Solicitado';
+  // En Revertidos (#351) las fechas son las de la reversión (es por lo que filtra el servidor).
+  const fechaRotulo = pestana === 'revertidos' ? 'Revertido' : pestana === 'enviados' || pestana === 'revocados' ? 'Emitido' : 'Solicitado';
   // En bloque solo lo emitido por el CRM: lo de fuera se reenvía de uno en uno, a propósito.
   const enviables = [...elegidas].filter((k) => diplomas.some((d) => d.nexpediente === k && (delCrm(d) || d.aviso)));
   const conAviso = enviables.filter((k) => diplomas.find((d) => d.nexpediente === k)?.aviso).length;

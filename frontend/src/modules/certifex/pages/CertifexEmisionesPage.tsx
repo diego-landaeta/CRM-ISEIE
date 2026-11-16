@@ -700,6 +700,13 @@ export default function CertifexEmisionesPage({ embebida = false, puedeEditar = 
                               <Certificate size={14} /> {c.nexpediente}
                             </span>
                           ) : c.propuesto ? <Etiqueta tono="neutral">Propuesto</Etiqueta> : <span className="text-xs text-muted-foreground">Sin emitir</span>}
+                          {/* #351: su diploma se revirtió para corregirlo; el número anulado ya no vale. */}
+                          {!c.nexpediente && c.revertido && (
+                            <div className="mt-1 max-w-[220px] text-[11px] text-muted-foreground"
+                              title={`Lo revirtió ${c.revertido.por} el ${new Date(c.revertido.en).toLocaleDateString('es-ES')}: ${c.revertido.motivo}`}>
+                              Revertido · <span className="font-mono">{c.revertido.nexpediente}</span> anulado
+                            </div>
+                          )}
                           {/* Sin diploma y sin pedir: no está en Diplomas › Pendientes. Se pasa desde aquí. */}
                           {!c.nexpediente && !c.solicitud && (
                             <div className="mt-1.5" onClick={(e) => e.stopPropagation()}>
