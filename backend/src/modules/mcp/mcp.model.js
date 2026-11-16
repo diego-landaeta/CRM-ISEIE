@@ -953,9 +953,13 @@ export async function listarFormaciones({ projectIds, texto, incluirInactivas = 
   const { limit, offset } = paginado(pagina, limite);
   const { rows } = await query(
     `SELECT p.id, p.nombre AS curso, pr.nombre AS campus, p.project_id AS campus_id,
-            p.precio, p.moneda, p.url_info AS enlace, p.sku, p.active AS activa
+            p.precio, p.moneda, p.url_info AS enlace, p.sku, p.active AS activa,
+            -- La categoría (curso, diplomado, máster…), como en la ficha (#362, puerta 4).
+            cat.nombre AS categoria, sub.nombre AS subcategoria
        FROM products p
        JOIN projects pr ON pr.id = p.project_id
+       LEFT JOIN product_categories cat ON cat.id = p.categoria_id
+       LEFT JOIN product_categories sub ON sub.id = p.subcategoria_id
       ${f.where()}
       ORDER BY pr.nombre, p.nombre, p.id
       LIMIT ${limit} OFFSET ${offset}`,
@@ -1352,6 +1356,229 @@ export async function campanasPublicitarias({ projectIds, desde, hasta, limite =
     total: campanas.length,
     ...(campanas.length > limite ? { aviso: `Hay ${campanas.length} campañas con gasto o prospectos: estas son las ${limite} que más han gastado.` } : {}),
     campanas: filas,
+  };
+}
+
+// ─── Conjuntos y anuncios de Meta (#362) ──────────────────────────────────
+//
+// Para «qué formaciones cambiamos esta semana, cuáles se quedan y qué
+// creativos cambiamos» (Manuel). Parten de las tablas de conjuntos y anuncios,
+// NO de las diarias: salen también los pausados y los que no han gastado en el
+// periodo. El gasto del periodo se suma de las diarias, como la pantalla; el de
+// toda la vida es el que da Meta (`lifetime_*`), que NO es `total_spend`: eso es
+// solo lo de los días sincronizados (desde 90 días antes de conectar la cuenta).
+// La cuenta sale siempre aparte: un campus puede tener varias (Psiko, tres).
+
+const ESTADOS_META = {
+  activos: ['ACTIVE'],
+  pausados: ['PAUSED', 'CAMPAIGN_PAUSED', 'ADSET_PAUSED'],
+  archivados: ['ARCHIVED', 'DELETED'],
+};
+
+export const AVISO_GASTO_TOTAL = '«gasto_total» es el de toda la vida, tal como lo da Meta. Donde viene vacío, aún no se ha pedido a Meta: '
+  + '«gasto_sincronizado» es solo lo de los días que tiene el CRM (desde 90 días antes de conectar la cuenta), no lo digas como total.';
+
+/** La cuenta de Meta tal como la guarda el CRM: «act_» y el número. */
+export const cuentaDeMeta = (v) => (v == null ? null : (/^\d+$/.test(String(v)) ? `act_${v}` : String(v)));
+
+/** Las condiciones de las dos consultas. `t` es la tabla de la que se lista (ma o mad). */
+function filtrosMeta(t, { projectIds, cuenta, campanaId, conjuntoId, estado, texto, creadosDesde, creadosHasta }) {
+  const f = condiciones(`${t}.project_id`, projectIds);
+  if (cuenta) f.add('mc.ad_account_id = ?', cuentaDeMeta(cuenta));
+  if (campanaId) f.add(`${t}.campaign_id = ?`, String(campanaId));
+  if (conjuntoId) f.add(`${t}.adset_id = ?`, String(conjuntoId));
+  if (estado && ESTADOS_META[estado]) f.add(`COALESCE(${t}.effective_status, ${t}.status) = ANY(?::text[])`, ESTADOS_META[estado]);
+  if (texto) f.add(`${SIN_TILDES(`${t}.nombre`)} LIKE ?`, `%${comoTexto(texto)}%`);
+  if (creadosDesde) f.add(`${fechaLocal(`${t}.created_time`)} >= ?::date`, creadosDesde);
+  if (creadosHasta) f.add(`${fechaLocal(`${t}.created_time`)} <= ?::date`, creadosHasta);
+  return f;
+}
+
+/** El gasto del periodo, de la tabla diaria (`g.gasto`, `g.impresiones`, `g.clics`). */
+function gastoDelPeriodo(f, { diaria, id, t, desde, hasta }) {
+  const cond = [`d.${id} = ${t}.${id}`];
+  if (desde) { f.params.push(desde); cond.push(`d.date >= $${f.params.length}::date`); }
+  if (hasta) { f.params.push(hasta); cond.push(`d.date <= $${f.params.length}::date`); }
+  return `LEFT JOIN LATERAL (
+         SELECT SUM(d.spend) AS gasto, SUM(d.impressions) AS impresiones, SUM(d.clicks) AS clics
+           FROM ${diaria} d WHERE ${cond.join(' AND ')}
+       ) g ON TRUE`;
+}
+
+const dinero = (v) => (v == null ? null : redondeo(Number(v)));
+const entero0 = (v) => (v == null ? null : Number(v));
+
+/** Lo común de una fila de conjunto o de anuncio: campus, cuenta, campaña y cifras. */
+function cifrasMeta(r) {
+  const sinTotal = r.lifetime_spend == null;
+  return {
+    campus_id: r.campus_id,
+    campus: r.campus,
+    cuenta: { id: r.cuenta_id || null, nombre: r.cuenta_nombre || null },
+    campana: { id: r.campaign_id || null, nombre: r.campana || null },
+    moneda: r.moneda || null,
+    gasto_periodo: dinero(r.gasto) ?? 0,
+    impresiones_periodo: Number(r.impresiones || 0),
+    clics_periodo: Number(r.clics || 0),
+    gasto_total: dinero(r.lifetime_spend),
+    impresiones_totales: entero0(r.lifetime_impressions),
+    clics_totales: entero0(r.lifetime_clicks),
+    gasto_total_al: r.lifetime_synced_at || null,
+    ...(sinTotal ? { gasto_sincronizado: dinero(r.total_spend) ?? 0 } : {}),
+  };
+}
+
+const COLUMNAS_COMUNES = (t) => `
+       ${t}.status, ${t}.effective_status, ${t}.created_time,
+       ${t}.total_spend, ${t}.lifetime_spend, ${t}.lifetime_impressions, ${t}.lifetime_clicks, ${t}.lifetime_synced_at,
+       pr.id AS campus_id, pr.nombre AS campus,
+       mc.ad_account_id AS cuenta_id, acc.ad_account_nombre AS cuenta_nombre, acc.currency AS moneda,
+       mc.campaign_id, mc.nombre AS campana,
+       COALESCE(g.gasto, 0) AS gasto, COALESCE(g.impresiones, 0) AS impresiones, COALESCE(g.clics, 0) AS clics`;
+
+// La cuenta, por campus Y por id: la misma cuenta puede estar en dos campus.
+const JOIN_CUENTA = `LEFT JOIN meta_ad_accounts acc ON acc.project_id = mc.project_id AND acc.ad_account_id = mc.ad_account_id`;
+
+/**
+ * Los conjuntos de anuncios de esos campus, con su cuenta, campaña, estado,
+ * fechas, gasto del periodo y de toda la vida, cuántos anuncios tienen y la
+ * formación (o formaciones) a la que están asociados.
+ */
+export async function conjuntosDeMeta({ projectIds, desde, hasta, cuenta, campanaId, estado, texto, creadosDesde, creadosHasta, soloConGasto = false, pagina = 1, limite = 25 }) {
+  const f = filtrosMeta('ma', { projectIds, cuenta, campanaId, estado, texto, creadosDesde, creadosHasta });
+  const gasto = gastoDelPeriodo(f, { diaria: 'meta_adsets_daily', id: 'adset_id', t: 'ma', desde, hasta });
+  if (soloConGasto) f.cond.push('COALESCE(g.gasto, 0) > 0');
+  const desdeDonde = `FROM meta_adsets ma
+       JOIN meta_campaigns mc ON mc.campaign_id = ma.campaign_id
+       JOIN projects pr ON pr.id = ma.project_id
+       ${JOIN_CUENTA}
+       ${gasto}`;
+  const { limit, offset } = paginado(pagina, limite);
+  const [{ rows }, { rows: porCuenta }] = await Promise.all([
+    query(
+      `SELECT ma.adset_id, ma.nombre, ma.daily_budget, ma.start_time, ma.end_time, ${COLUMNAS_COMUNES('ma')},
+              an.anuncios, an.anuncios_activos, fp.formaciones
+       ${desdeDonde}
+       LEFT JOIN LATERAL (
+         SELECT COUNT(*)::int AS anuncios,
+                COUNT(*) FILTER (WHERE COALESCE(ad.effective_status, ad.status) = 'ACTIVE')::int AS anuncios_activos
+           FROM meta_ads ad WHERE ad.adset_id = ma.adset_id
+       ) an ON TRUE
+       -- Las formaciones: las del conjunto (a mano o automáticas) y las de su campaña.
+       LEFT JOIN LATERAL (
+         SELECT json_agg(json_build_object('id', p.id, 'nombre', p.nombre, 'origen', x.origen) ORDER BY p.nombre, x.origen) AS formaciones
+           FROM (SELECT mp.product_id, mp.origen::text AS origen FROM meta_adset_products mp WHERE mp.adset_id = ma.adset_id
+                 UNION ALL
+                 SELECT cp.product_id, 'campaña'::text FROM meta_campaign_products cp WHERE cp.campaign_id = ma.campaign_id) x
+           JOIN products p ON p.id = x.product_id
+       ) fp ON TRUE
+      ${f.where()}
+      ORDER BY COALESCE(g.gasto, 0) DESC, ma.nombre, ma.adset_id
+      LIMIT ${limit} OFFSET ${offset}`,
+      f.params
+    ),
+    query(
+      `SELECT pr.nombre AS campus, mc.ad_account_id AS cuenta_id, acc.ad_account_nombre AS cuenta_nombre, acc.currency AS moneda,
+              COUNT(*)::int AS conjuntos,
+              COUNT(*) FILTER (WHERE COALESCE(ma.effective_status, ma.status) = 'ACTIVE')::int AS activos,
+              COALESCE(SUM(g.gasto), 0) AS gasto
+       ${desdeDonde}
+      ${f.where()}
+      GROUP BY pr.nombre, mc.ad_account_id, acc.ad_account_nombre, acc.currency
+      ORDER BY pr.nombre, acc.ad_account_nombre, mc.ad_account_id`,
+      f.params
+    ),
+  ]);
+  const total = porCuenta.reduce((s, c) => s + Number(c.conjuntos || 0), 0);
+  const conjuntos = rows.map((r) => ({
+    conjunto_id: r.adset_id,
+    nombre: r.nombre,
+    estado: r.effective_status || r.status || null,
+    estado_configurado: r.status || null,
+    ...cifrasMeta(r),
+    fecha_creacion: r.created_time || null,
+    fecha_inicio: r.start_time || null,
+    fecha_fin: r.end_time || null,
+    presupuesto_diario: numero(r.daily_budget),
+    anuncios: Number(r.anuncios || 0),
+    anuncios_activos: Number(r.anuncios_activos || 0),
+    formaciones: Array.isArray(r.formaciones) ? r.formaciones : [],
+  }));
+  return {
+    desde: desde || null,
+    hasta: hasta || null,
+    total,
+    pagina,
+    paginas: Math.max(1, Math.ceil(total / limite)),
+    por_cuenta: porCuenta.map((c) => ({
+      campus: c.campus, cuenta: { id: c.cuenta_id || null, nombre: c.cuenta_nombre || null }, moneda: c.moneda || null,
+      conjuntos: Number(c.conjuntos || 0), activos: Number(c.activos || 0), gasto_periodo: dinero(c.gasto) ?? 0,
+    })),
+    ...(conjuntos.some((c) => c.gasto_total == null) ? { aviso_gasto_total: AVISO_GASTO_TOTAL } : {}),
+    conjuntos,
+  };
+}
+
+/**
+ * Los anuncios (creativos) de esos campus: conjunto, estado, fechas, gasto del
+ * periodo y de toda la vida, y la URL de destino que se saca del creativo.
+ */
+export async function anunciosDeMeta({ projectIds, desde, hasta, cuenta, campanaId, conjuntoId, estado, texto, creadosDesde, creadosHasta, soloConGasto = false, pagina = 1, limite = 25 }) {
+  const f = filtrosMeta('mad', { projectIds, cuenta, campanaId, conjuntoId, estado, texto, creadosDesde, creadosHasta });
+  const gasto = gastoDelPeriodo(f, { diaria: 'meta_ads_daily', id: 'ad_id', t: 'mad', desde, hasta });
+  if (soloConGasto) f.cond.push('COALESCE(g.gasto, 0) > 0');
+  const desdeDonde = `FROM meta_ads mad
+       JOIN meta_adsets ma ON ma.adset_id = mad.adset_id
+       JOIN meta_campaigns mc ON mc.campaign_id = mad.campaign_id
+       JOIN projects pr ON pr.id = mad.project_id
+       ${JOIN_CUENTA}
+       ${gasto}`;
+  const { limit, offset } = paginado(pagina, limite);
+  const [{ rows }, { rows: [cuenta0] }] = await Promise.all([
+    query(
+      `SELECT mad.ad_id, mad.nombre, mad.creative_id, mad.url_destino, mad.urls_destino, mad.formato_creativo,
+              mad.lead_form_id, mad.url_tags, ${COLUMNAS_COMUNES('mad')},
+              ma.adset_id, ma.nombre AS conjunto, ma.start_time AS inicio_conjunto
+       ${desdeDonde}
+      ${f.where()}
+      ORDER BY COALESCE(g.gasto, 0) DESC, mad.nombre, mad.ad_id
+      LIMIT ${limit} OFFSET ${offset}`,
+      f.params
+    ),
+    query(`SELECT COUNT(*)::int AS total ${desdeDonde} ${f.where()}`, f.params),
+  ]);
+  const total = Number(cuenta0?.total || 0);
+  const anuncios = rows.map((r) => {
+    const urls = Array.isArray(r.urls_destino) ? r.urls_destino : [];
+    return {
+      anuncio_id: r.ad_id,
+      nombre: r.nombre,
+      estado: r.effective_status || r.status || null,
+      estado_configurado: r.status || null,
+      conjunto: { id: r.adset_id || null, nombre: r.conjunto || null },
+      ...cifrasMeta(r),
+      fecha_creacion: r.created_time || null,
+      // Un anuncio no tiene fecha de inicio propia en Meta: empieza con su conjunto.
+      fecha_inicio_del_conjunto: r.inicio_conjunto || null,
+      url_destino: r.url_destino || null,
+      ...(urls.length > 1 ? { todas_las_urls: urls } : {}),
+      formato: r.formato_creativo || null,
+      ...(r.lead_form_id ? { formulario_id: r.lead_form_id } : {}),
+      creativo_id: r.creative_id || null,
+      ...(r.url_tags ? { parametros_url: r.url_tags } : {}),
+    };
+  });
+  return {
+    desde: desde || null,
+    hasta: hasta || null,
+    total,
+    pagina,
+    paginas: Math.max(1, Math.ceil(total / limite)),
+    ...(anuncios.some((a) => a.gasto_total == null) ? { aviso_gasto_total: AVISO_GASTO_TOTAL } : {}),
+    ...(anuncios.some((a) => a.formato == null) ? {
+      aviso_url: 'Donde «formato» viene vacío, el anuncio no se ha vuelto a sincronizar desde que el CRM guarda la URL: no es que no tenga.',
+    } : {}),
+    anuncios,
   };
 }
 
