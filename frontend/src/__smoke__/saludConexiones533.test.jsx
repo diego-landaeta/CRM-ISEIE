@@ -62,7 +62,8 @@ describe('#533 · Salud de las conexiones', () => {
     expect(within(filas[2]).getAllByText('Caída').length).toBeGreaterThan(0);
     expect(within(filas[2]).getByText('El token del campus no vale (caducado o mal copiado).')).toBeInTheDocument();
     expect(screen.getByText('1 campus con algo caído')).toBeInTheDocument();
-  });
+    // El primer render carga el módulo y los iconos: en un equipo lento pasa de 5 s.
+  }, 20000);
 
   it('con una empresa arriba, pide la de esa empresa', async () => {
     ctx.valor = { activeProject: { id: -1 }, activeIssuerId: 7 };
