@@ -47,6 +47,12 @@ function responder(sql, p = []) {
   const s = sql.replace(/\s+/g, ' ').trim();
   sqls.push(s);
   if (/^(BEGIN|COMMIT|ROLLBACK)$/.test(s)) return r([]);
+  // El enlace de un cargo va de uno en uno (CRM#680): se reserva el cargo (aquí siempre libre,
+  // sin cobro ni método previo) y al acabar se suelta la reserva si no se enlazó.
+  if (/^UPDATE stripe_payments sp SET link_method = \$2, linked_at = NOW\(\)/.test(s)) {
+    return r([{ id: Number(p[0]), conversion_id: null, conversion_payment_id: null, metodo_antes: null, enlazado_antes: null }]);
+  }
+  if (/^UPDATE stripe_payments SET link_method = \$2, linked_at = \$3 WHERE id = \$1 AND link_method = \$4$/.test(s)) return r([]);
 
   // conversion.model.addPayment
   if (/^SELECT id, importe_total, importe_pagado FROM conversions WHERE id = \$1 FOR UPDATE/.test(s)) {
