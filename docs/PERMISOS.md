@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-779 rutas en 59 módulos, y 31 acciones con condición dentro de una ruta.
+783 rutas en 60 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -325,6 +325,15 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | createExpense | `POST /api/expenses/` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `expenses.create` |
 | updateExpense | `PATCH /api/expenses/:id` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `expenses.edit` |
 | deleteExpense | `DELETE /api/expenses/:id` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `expenses.delete` |
+
+## factura-automatica
+
+| Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
+|---|---|---|---|---|
+| estado | `GET /api/factura-automatica/venta/:conversionId` | (no existía) | (ruta nueva) | `facturas.view` |
+| reenviar | `POST /api/factura-automatica/venta/:conversionId/reenviar` | (no existía) | (ruta nueva) | `facturas.cola` |
+| formulario | `GET /api/fd/:token` | (no existía) | (ruta nueva) | — |
+| responder | `POST /api/fd/:token` | (no existía) | (ruta nueva) | — |
 
 ## facturas-colaborador
 

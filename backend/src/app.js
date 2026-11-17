@@ -65,6 +65,8 @@ import changeRequestsModule from './modules/change-requests/index.js';
 import procesoModule from './modules/proceso/index.js';
 // «¿Por que has desistido?» (#169) y su panel (#170).
 import feedbackModule from './modules/feedback/index.js';
+// Factura automática con formulario de datos fiscales (#452, gemela de CRM#764): apagada de serie.
+import facturaAutomaticaModule from './modules/factura-automatica/index.js';
 import novedadesModule from './modules/novedades/index.js';
 import certifexModule from './modules/certifex/index.js';
 // Sistema → Registro (#111), como en MultiCRM: quién hizo qué y los sucesos del sistema.
@@ -81,6 +83,7 @@ import cursosPendientesModule from './modules/cursos-pendientes/index.js';
 import iaAnalisisModule from './modules/ia-analisis/index.js';
 import wcWebhook from './modules/woocommerce/wc.webhook.js';
 import { startFeedbackDia7Scheduler } from './jobs/feedbackDia7Scheduler.js';
+import { startFacturaAutomaticaScheduler } from './jobs/facturaAutomaticaScheduler.js';
 import { startNovedadesScheduler } from './jobs/novedadesScheduler.js';
 import convocatoriasModule from './modules/convocatorias/index.js';
 import { startEmailSequenceScheduler } from './jobs/emailSequenceScheduler.js';
@@ -333,6 +336,7 @@ const MODULES = [
   statusModule,
   procesoModule,
   feedbackModule,
+  facturaAutomaticaModule,
   novedadesModule,
   convocatoriasModule,
   // Certifex: el CRM aprueba y Certifex emite (Matrículas → Certificaciones).
@@ -508,6 +512,7 @@ if (process.env.NODE_ENV !== 'test') {
         // Ventas a plazos: cerrar la suscripción de Stripe al completar el pago (#747).
         startSuscripcionesPlazosScheduler();
         startFeedbackDia7Scheduler();
+        startFacturaAutomaticaScheduler();
         startNovedadesScheduler();
         startResumenDiarioScheduler();
         startReporteSemanalScheduler();
