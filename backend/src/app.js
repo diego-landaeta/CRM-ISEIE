@@ -25,6 +25,8 @@ import accountingModule from './modules/accounting/index.js';
 import integrationsModule from './modules/integrations/index.js';
 import stripePaymentsModule from './modules/stripe-payments/index.js';
 import invoicesModule from './modules/invoices/index.js';
+// Auditoría de facturación cada 2 horas y pausa de la emisión (#765).
+import facturacionAuditoriaModule from './modules/facturacion-auditoria/index.js';
 // Facturas de colaboradores (#202, como en MultiCRM): solo en pruebas hasta que
 // Diego lo apruebe con FACTURAS_COLABORADOR_EN_PRODUCCION=1.
 import facturasColaboradorModule from './modules/facturas-colaborador/index.js';
@@ -53,6 +55,7 @@ import webhooksSalientesModule from './modules/webhooks-salientes/index.js';
 import asignacionModule from './modules/asignacion/index.js';
 import { registrarActividad } from './shared/middleware/registrarActividad.js';
 import { startWebhooksSalientesScheduler } from './jobs/webhooksSalientesScheduler.js';
+import { startFacturacionAuditoriaScheduler } from './jobs/facturacionAuditoriaJob.js';
 import { startAsignacionScheduler } from './jobs/asignacionScheduler.js';
 import projectChannelsModule from './modules/project-channels/index.js';
 import installationModule from './modules/installation/index.js';
@@ -304,6 +307,7 @@ const MODULES = [
   integrationsModule,
   stripePaymentsModule,
   invoicesModule,
+  facturacionAuditoriaModule,
   // Facturas de colaboradores (#202): la lista, el enlace del mes y «Mi factura».
   // Solo en pruebas también en el servidor: en producción ni la API ni la tarea del mes.
   ...(facturasColaboradorActivas() ? [facturasColaboradorModule] : []),
@@ -577,6 +581,12 @@ if (process.env.NODE_ENV !== 'test') {
       } catch (err) {
         logger.error({ err }, 'Facturas de colaboradores: los avisos a la empresa fallaron al arrancar');
       }
+    }
+    // La auditoría de facturación cada 2 horas (#765). Apagada de serie: FACTURACION_AUDITORIA_ACTIVA.
+    try {
+      startFacturacionAuditoriaScheduler();
+    } catch (err) {
+      logger.error({ err }, 'Auditoría de facturación: falló al arrancar');
     }
     // Los reintentos del webhook de transferencias (se apaga con WEBHOOKS_SALIENTES_DISABLED=1).
     try {

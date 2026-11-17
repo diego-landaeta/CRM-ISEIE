@@ -253,6 +253,13 @@ function autoInvoiceDeSiempre(conversionId, userId = null, paymentInfo = null) {
       return;
     }
 
+    // Facturacion pausada por la auditoria (#765): el cobro espera en la cola
+    // de la pausa y se factura, en orden de cobro, al reanudar.
+    if (paymentInfo?.paymentId) {
+      const auditoria = await import('../facturacion-auditoria/facturacion-auditoria.service.js');
+      if (await auditoria.encolarSiPausada({ paymentId: paymentInfo.paymentId, conversionId, userId })) return;
+    }
+
     const inv = paymentInfo?.paymentId
       ? await m.emitirFacturaDePago(conversionId, paymentInfo, userId)
       : await m.autoEmitirPorPago(conversionId, userId);

@@ -14,5 +14,7 @@ export const CRM_CORREOS = {
     seguimiento: '/leads/seguimiento',
     informes: '/informes',
     ventas: '/ventas',
+    // La pantalla de facturas (los avisos de la auditoría de facturación, #765).
+    facturas: '/accounting/facturas',
   },
 };
