@@ -143,6 +143,12 @@ export const TIPOS = {
     clase: AVISO, etiqueta: 'Factura de colaborador', agrupa: false,
     descripcion: 'Cuando un colaborador sube su factura del mes',
   },
+  // Monitask (#236): la factura por horas de un colaborador no cuadra con
+  // Monitask (pasa del margen). A quien la paga, antes de pagarla.
+  monitask_descuadre: {
+    clase: ACCION, etiqueta: 'Horas que no cuadran con Monitask', agrupa: false,
+    descripcion: 'Cuando las horas de la factura de un colaborador se separan de las de Monitask más del margen',
+  },
   // Cursos pendientes para las tutoras (#336): lo que pide hacer algo va arriba.
   curso_pendiente_asignado: {
     clase: ACCION, etiqueta: 'Curso pendiente asignado', agrupa: false,

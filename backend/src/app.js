@@ -30,6 +30,7 @@ import invoicesModule from './modules/invoices/index.js';
 import facturasColaboradorModule from './modules/facturas-colaborador/index.js';
 // Registro automático de cobros: PayPal y extractos del banco (#766). Cada parte, con su interruptor.
 import cobrosExternosModule from './modules/cobros-externos/index.js';
+import monitaskModule from './modules/monitask/index.js';
 import { startFacturasColaboradorScheduler } from './jobs/facturasColaboradorJob.js';
 import { startFacturasColaboradorAvisosScheduler } from './jobs/facturasColaboradorAvisosJob.js';
 import widgetModule from './modules/widget/index.js';
@@ -93,6 +94,7 @@ import { startReminderScheduler } from './jobs/reminderScheduler.js';
 import { startWooCommerceSyncScheduler } from './jobs/wooCommerceSyncScheduler.js';
 import { startStripePaymentsSyncScheduler } from './jobs/stripePaymentsSyncScheduler.js';
 import { startPaypalCobrosSyncScheduler } from './jobs/paypalCobrosSyncScheduler.js';
+import { startMonitaskSyncScheduler } from './jobs/monitaskSyncScheduler.js';
 import { startTutorCommissionsScheduler } from './jobs/tutorCommissionsScheduler.js';
 import { startTutoresCampusScheduler } from './jobs/tutoresCampusScheduler.js';
 import { startConsultasCampusScheduler } from './jobs/consultasCampusScheduler.js';
@@ -309,6 +311,8 @@ const MODULES = [
   ...(facturasColaboradorActivas() ? [facturasColaboradorModule] : []),
   // Cobros de PayPal y extractos del banco (#766): cada ruta contesta 404 con su interruptor apagado.
   cobrosExternosModule,
+  // Monitask (#236): cada ruta contesta 404 con MONITASK_ACTIVO apagado.
+  monitaskModule,
   widgetModule,
   expensesModule,
   accountsPayableModule,
@@ -528,6 +532,12 @@ if (process.env.NODE_ENV !== 'test') {
       startPaypalCobrosSyncScheduler();
     } catch (err) {
       logger.error({ err }, 'PayPal: el sondeo de cobros falló al arrancar');
+    }
+    // Monitask (#236): cada noche, solo con MONITASK_ACTIVO=1.
+    try {
+      startMonitaskSyncScheduler();
+    } catch (err) {
+      logger.error({ err }, 'Monitask: la sincronización nocturna falló al arrancar');
     }
     // Seguridad del MCP (#237, desde #194 y #195): fuera del bloque de Stripe
     // a propósito, para que apagar la sincronización de Stripe no la apague.
