@@ -372,6 +372,14 @@ export const SECCIONES = [
         ],
       },
       {
+        // Monitask (#236): qué hace cada colaborador y el cotejo de horas con sus
+        // facturas. Solo admin y superadmin (Manuel, 05/10): es actividad de personas.
+        clave: 'monitask', nombre: 'Monitask', acciones: [
+          a('view', 'Ver la actividad de Monitask', 'Horas, % de actividad, proyectos y tareas de cada persona, y el cotejo con las horas de sus facturas (de sus empresas).', ADMIN),
+          a('configurar', 'Configurar Monitask', 'Conectar la cuenta de Monitask, sincronizar y emparejar sus personas con las del CRM.', ADMIN, { independiente: true }),
+        ],
+      },
+      {
         clave: 'integrations', nombre: 'Integraciones', acciones: [
           a('view', 'Ver integraciones', 'Los servicios conectados (Stripe, Brevo…).', yPM(ADMIN_SOPORTE)),
           a('edit', 'Configurar integraciones', 'Conectarlos, probarlos y desconectarlos.', ADMIN_SOPORTE),

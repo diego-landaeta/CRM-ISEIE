@@ -9,7 +9,7 @@ import {
   ChatText,
   Receipt, Coins, Wrench, ShoppingBag, ChatCircleText, Wallet, Bank, Shuffle, Clock, GitMerge, CopySimple,
   UsersThree, CloudArrowDown,
-  GraduationCap, Warning, Certificate, ClipboardText, ChatsCircle, Kanban, ClockCounterClockwise, SlidersHorizontal } from '@phosphor-icons/react';
+  GraduationCap, Warning, Certificate, ClipboardText, ChatsCircle, Kanban, ClockCounterClockwise, SlidersHorizontal, Timer } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { rolesDe } from '@/shared/lib/roles';
 import usePermission from '@/shared/hooks/usePermission';
@@ -110,6 +110,9 @@ export const NAV_SECTIONS = [
       // «Mi factura» (#202): el colaborador con usuario sube aquí su factura del mes.
       // Aquí, junto a su tablero, como en MultiCRM: es lo otro que ve un colaborador.
       { to: '/mi-factura', label: 'Mi factura', icon: Receipt, roles: ['colaborador', 'tutor_redactor'], permiso: 'facturas_colaborador.subir' },
+      // Monitask (#236): qué hace cada colaborador y el cotejo con sus facturas. Solo en
+      // /staging y local hasta que Diego lo apruebe; además, con MONITASK_ACTIVO en el servidor.
+      ...(SOLO_EN_PRUEBAS ? [{ to: '/equipo/actividad', label: 'Actividad', icon: Timer, roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'monitask.view' }] : []),
     ],
   },
   {

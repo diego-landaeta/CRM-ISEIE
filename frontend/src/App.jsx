@@ -36,6 +36,8 @@ const PendienteFacturarPage = lazy(() => import('./modules/accounting/pages/Pend
 const StripePaymentsPage = lazy(() => import('./modules/accounting/pages/StripePaymentsPage'));
 // Cobros de PayPal y extractos del banco (#766).
 const CobrosExternosPage = lazy(() => import('./modules/accounting/pages/CobrosExternosPage'));
+// Equipo › Actividad (#236): lo que registra Monitask y el cotejo con las facturas.
+const MonitaskActividadPage = lazy(() => import('./modules/monitask/pages/MonitaskActividadPage'));
 const WhatsappWidgetPage = lazy(() => import('./modules/widget/pages/WhatsappWidgetPage'));
 // Todo WhatsApp pasa por aqui: el chat, con quien enlaza su numero y sus
 // plantillas. La pantalla del equipo y «Mi WhatsApp» eran del metodo viejo —el
@@ -172,6 +174,7 @@ const ROUTE_TITLES = {
   '/accounting/facturas/configuracion':'Configuración de facturación',
   '/accounting/facturas-colaboradores': 'Facturas de colaboradores',
   '/mi-factura':                      'Mi factura',
+  '/equipo/actividad':                'Actividad del equipo',
   '/payroll':                         'Nóminas',
   '/matriculas':                      'Solicitud de admisión',
   '/conexion/mcp':                    'MCP',
@@ -317,6 +320,8 @@ function App() {
           <Route path="/accounting/facturas-colaboradores"
             element={<FacturasColaboradoresPage />} />
           <Route path="/mi-factura" element={<MiFacturaPage />} />
+          {/* Monitask (#236): la pantalla dice si el servidor lo tiene apagado (MONITASK_ACTIVO). */}
+          <Route path="/equipo/actividad" element={<ConPermiso permiso="monitask.view"><MonitaskActividadPage /></ConPermiso>} />
           <Route path="/revenue" element={<RevenuePage />} />
           <Route path="/clients" element={<ClientsPage />} />
           <Route path="/clients/:id" element={<ClientDetailPage />} />

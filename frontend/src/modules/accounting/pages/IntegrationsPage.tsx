@@ -3,6 +3,7 @@ import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EstadoDeLaSincronizacion from '../components/EstadoDeLaSincronizacion';
+import MonitaskCard from '@/modules/monitask/components/MonitaskCard';
 import { toast } from '@/shared/hooks/useToast';
 import {
   CreditCard, EnvelopeSimple, CheckCircle, WarningCircle, Eye, EyeSlash,
@@ -99,6 +100,10 @@ export default function IntegrationsPage() {
           </p>
         </div>
       </div>
+
+      {/* Monitask (#236): de todo el CRM, no de un campus. Sale sola si el servidor
+          lo tiene encendido (MONITASK_ACTIVO) y quien mira puede configurarlo. */}
+      <MonitaskCard />
 
       {!pid ? (
         <div className="bg-card border border-border rounded-lg p-8 text-center text-muted-foreground">
