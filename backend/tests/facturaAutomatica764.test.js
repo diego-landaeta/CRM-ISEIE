@@ -215,9 +215,10 @@ describe('#452 · del pago a la factura', () => {
     await expect(fa.verFormulario(token)).rejects.toMatchObject({ code: 'ENLACE_NO_VALE' });
     await expect(fa.responder(token, FORMULARIO)).rejects.toMatchObject({ code: 'ENLACE_NO_VALE' });
 
-    // Cuota 2: sin volver a preguntar.
+    // Cuota 2: sin volver a preguntar. Por otro importe: la misma venta, el
+    // mismo total y la misma semana es una «posible duplicada» (CRM#819).
     correos.length = 0;
-    const pago2 = await pagar(v);
+    const pago2 = await pagar(v, 150);
     await fa.alCobrar({ conversionId: v.id, paymentId: pago2 });
     const facturas = await facturasDe(v);
     expect(facturas).toHaveLength(2);
@@ -228,7 +229,9 @@ describe('#452 · del pago a la factura', () => {
 
   it('día 7 sin respuesta y ficha completa → factura con la ficha', async () => {
     const v = await venta();
-    const pago = await pagar(v);
+    // 120 €: con 100 se pareceria a la de la prueba anterior (misma alumna,
+    // mismo total, misma semana) y seria una «posible duplicada» (CRM#819).
+    const pago = await pagar(v, 120);
     await fa.alCobrar({ conversionId: v.id, paymentId: pago });
     const token = enlaceDe(correos[0]);
     await q(`UPDATE factura_datos_fiscales SET caduca_at = NOW() - INTERVAL '1 minute' WHERE conversion_id = $1`, [v.id]);
