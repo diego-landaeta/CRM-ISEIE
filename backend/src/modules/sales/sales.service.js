@@ -547,11 +547,13 @@ const SIN_TILDES = (expr) =>
 // `sinCobro = true` da lo contrario de la segunda regla: las ventas del mismo
 // filtro que aún NO tienen ningún cobro. Es la cifra que va al lado de las
 // tarjetas como «sin cobro (en proformas)» (#225).
-function filtrosVentas({ projectId, from, to, responsableId, search, paisEntrada = null }, startIdx = 1, { sinCobro = false } = {}) {
+function filtrosVentas({ projectId, projectIds = null, from, to, responsableId, search, paisEntrada = null }, startIdx = 1, { sinCobro = false } = {}) {
   const cond = [];
   const params = [];
   let idx = startIdx;
-  if (projectId) { cond.push(`cv.project_id = $${idx++}`); params.push(projectId); }
+  // Un campus o la lista de los de quien pide (CRM#245): sin lista, como antes.
+  const lista = comoLista(projectId, projectIds);
+  if (lista) { cond.push(`cv.project_id = ANY($${idx++}::int[])`); params.push(lista); }
   // País de entrada del prospecto de la venta (#221).
   if (paisEntrada) { cond.push(`${sqlPaisDeLaVenta('cv')} = $${idx++}`); params.push(paisEntrada); }
   if (from) { cond.push(`cv.fecha_conversion >= $${idx++}`); params.push(from); }
@@ -956,10 +958,11 @@ const ES_MATRICULA = `(NOT c.es_mensualidad AND NOT EXISTS (
      WHERE p0.conversion_id = cp.conversion_id
        AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id))))`;
 
-export async function getDesglose({ projectId = null, from = null, to = null, responsableId = null, paisEntrada = null } = {}) {
+export async function getDesglose({ projectId = null, projectIds = null, from = null, to = null, responsableId = null, paisEntrada = null } = {}) {
+  const lista = comoLista(projectId, projectIds);
   const pv = [];
   const wv = [];
-  if (projectId) { pv.push(projectId); wv.push(`c.project_id = $${pv.length}`); }
+  if (lista) { pv.push(lista); wv.push(`c.project_id = ANY($${pv.length}::int[])`); }
   if (paisEntrada) { pv.push(paisEntrada); wv.push(`${sqlPaisDeLaVenta('c')} = $${pv.length}`); }
   if (responsableId) { pv.push(idsDe(responsableId)); wv.push(`${VENDEDORA_C} = ANY($${pv.length}::int[])`); }
   if (from) { pv.push(from); wv.push(`c.fecha_conversion >= $${pv.length}::date`); }
@@ -978,7 +981,7 @@ export async function getDesglose({ projectId = null, from = null, to = null, re
 
   const pc = [];
   const wc = [];
-  if (projectId) { pc.push(projectId); wc.push(`c.project_id = $${pc.length}`); }
+  if (lista) { pc.push(lista); wc.push(`c.project_id = ANY($${pc.length}::int[])`); }
   if (paisEntrada) { pc.push(paisEntrada); wc.push(`${sqlPaisDeLaVenta('c')} = $${pc.length}`); }
   if (responsableId) { pc.push(idsDe(responsableId)); wc.push(`${VENDEDORA_C} = ANY($${pc.length}::int[])`); }
   if (from) { pc.push(from); wc.push(`cp.fecha >= $${pc.length}::date`); }
@@ -1033,7 +1036,8 @@ function restarDias(fecha, dias) {
 }
 
 // Un tramo: ventas, dinero y leads agrupados por dia o por mes.
-async function tramo({ projectId, from, to, responsableId, porMes, paisEntrada = null }) {
+async function tramo({ projectId, projectIds = null, from, to, responsableId, porMes, paisEntrada = null }) {
+  const lista = comoLista(projectId, projectIds);
   const corte = porMes ? "to_char(date_trunc('month', %s), 'YYYY-MM')"
     : "to_char(%s, 'YYYY-MM-DD')";
 
@@ -1041,7 +1045,7 @@ async function tramo({ projectId, from, to, responsableId, porMes, paisEntrada =
   const wv = ['NOT c.es_mensualidad',
     // Una venta sin ningun cobro es una proforma que no se pago.
     'EXISTS (SELECT 1 FROM conversion_payments cpx WHERE cpx.conversion_id = c.id)'];
-  if (projectId) { pv.push(projectId); wv.push(`c.project_id = $${pv.length}`); }
+  if (lista) { pv.push(lista); wv.push(`c.project_id = ANY($${pv.length}::int[])`); }
   if (paisEntrada) { pv.push(paisEntrada); wv.push(`${sqlPaisDeLaVenta('c')} = $${pv.length}`); }
   if (responsableId) {
     pv.push(idsDe(responsableId));
@@ -1061,7 +1065,7 @@ async function tramo({ projectId, from, to, responsableId, porMes, paisEntrada =
 
   const pc = [];
   const wc = [];
-  if (projectId) { pc.push(projectId); wc.push(`c.project_id = $${pc.length}`); }
+  if (lista) { pc.push(lista); wc.push(`c.project_id = ANY($${pc.length}::int[])`); }
   if (paisEntrada) { pc.push(paisEntrada); wc.push(`${sqlPaisDeLaVenta('c')} = $${pc.length}`); }
   if (responsableId) {
     pc.push(idsDe(responsableId));
@@ -1080,7 +1084,7 @@ async function tramo({ projectId, from, to, responsableId, porMes, paisEntrada =
 
   const pl = [];
   const wl = ['l.deleted_at IS NULL'];
-  if (projectId) { pl.push(projectId); wl.push(`l.project_id = $${pl.length}`); }
+  if (lista) { pl.push(lista); wl.push(`l.project_id = ANY($${pl.length}::int[])`); }
   if (paisEntrada) { pl.push(paisEntrada); wl.push(`${sqlPaisDelLead('l')} = $${pl.length}`); }
   if (responsableId) { pl.push(idsDe(responsableId)); wl.push(`l.responsable_id = ANY($${pl.length}::int[])`); }
   pl.push(from); const lFrom = pl.length;
@@ -1134,7 +1138,7 @@ async function tramo({ projectId, from, to, responsableId, porMes, paisEntrada =
   };
 }
 
-export async function getSerieVentas({ projectId = null, from = null, to = null, responsableId = null, paisEntrada = null } = {}) {
+export async function getSerieVentas({ projectId = null, projectIds = null, from = null, to = null, responsableId = null, paisEntrada = null } = {}) {
   const hoy = new Date().toISOString().slice(0, 10);
   const desde = from || `${new Date().getFullYear()}-01-01`;
   const hasta = to || hoy;
@@ -1142,15 +1146,15 @@ export async function getSerieVentas({ projectId = null, from = null, to = null,
   // Hasta dos meses se ve por dias; a partir de ahi, por meses.
   const porMes = dias > 62;
 
-  const actual = await tramo({ projectId, from: desde, to: hasta, responsableId, porMes, paisEntrada });
+  const actual = await tramo({ projectId, projectIds, from: desde, to: hasta, responsableId, porMes, paisEntrada });
 
   // El periodo justo anterior, del mismo tamaño.
   const finAnterior = restarDias(desde, 1);
   const iniAnterior = restarDias(desde, dias);
-  const previo = await tramo({ projectId, from: iniAnterior, to: finAnterior, responsableId, porMes, paisEntrada });
+  const previo = await tramo({ projectId, projectIds, from: iniAnterior, to: finAnterior, responsableId, porMes, paisEntrada });
 
   // Y el historial completo mes a mes, desde que hay datos.
-  const historial = await tramo({ projectId, from: '2026-01-01', to: hoy, responsableId, porMes: true, paisEntrada });
+  const historial = await tramo({ projectId, projectIds, from: '2026-01-01', to: hoy, responsableId, porMes: true, paisEntrada });
 
   const varia = (a, b) => (b ? Math.round(((a - b) / b) * 1000) / 10 : (a ? 100 : 0));
 

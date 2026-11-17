@@ -10,16 +10,43 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
  * informes y correos, sea cual sea la zona de la sesión.
  *
  * La sesión se abre a propósito en una zona lejana para que el día de la base
- * y el de Madrid NO coincidan a la hora a la que corre la prueba: por la mañana
- * de Madrid, Pago Pago (UTC-11) aún va por ayer; por la tarde, Kiritimati
- * (UTC+14) ya va por mañana. Con `CURRENT_DATE`, la tercera prueba falla.
+ * y el de Madrid NO coincidan a la hora a la que corre la prueba. Con
+ * `CURRENT_DATE`, la tercera prueba falla.
  *
  *   DATABASE_URL=... node scripts/db-preparar.mjs
  *   npx vitest run tests/fechaDeLaVentaEnMadrid693.test.js
  */
 
-const horaMadrid = Number(new Date().toLocaleString('en-GB', { timeZone: 'Europe/Madrid', hour: '2-digit', hourCycle: 'h23' }));
-const LEJOS = horaMadrid < 12 ? 'Pacific/Pago_Pago' : 'Pacific/Kiritimati';
+// LA ZONA LEJANA, SEGÚN LA HORA (17/11/2026). Las dos zonas más extremas que
+// existen: UTC-12 (`Etc/GMT+12`, el signo va al revés) y UTC+14 (`Etc/GMT-14`).
+// Con `o` = desfase de Madrid (+1 en invierno, +2 en verano), UTC-12 va por otro
+// día mientras Madrid no llegue a las 12+o, y UTC+14 desde las 10+o hasta la
+// medianoche de Madrid. Se corta a las 11+o: cada una queda con una hora de
+// margen como mínimo, en invierno y en verano.
+// El único cambio sin margen es la medianoche de Madrid (ahí cambia el propio
+// «hoy»): si falta menos de un minuto, se espera a que pase.
+// Antes: Pago Pago (UTC-11) / Kiritimati por la hora 12 en punto, con cero
+// margen en un caso; y, sobre todo, la primera prueba devolvía al pool una
+// conexión con la sesión en Pago Pago, que es la que cogía la tercera: por la
+// tarde de Madrid, Pago Pago ya va por el mismo día y la guarda fallaba.
+function zonaLejana(instante) {
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/Madrid', hourCycle: 'h23',
+      year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
+    }).formatToParts(instante).map(({ type, value }) => [type, Number(value)])
+  );
+  const desfase = Math.round((Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - instante) / 3600000);
+  const esperar = p.hour === 23 && p.minute === 59 ? (61 - p.second) * 1000 : 0;
+  return { zona: p.hour < 11 + desfase ? 'Etc/GMT+12' : 'Etc/GMT-14', esperar };
+}
+
+let eleccion = zonaLejana(Date.now());
+if (eleccion.esperar) {
+  await new Promise((r) => setTimeout(r, eleccion.esperar));
+  eleccion = zonaLejana(Date.now());
+}
+const LEJOS = eleccion.zona;
 const base = new URL(process.env.DATABASE_URL);
 base.searchParams.set('options', `-c TimeZone=${LEJOS}`);
 process.env.DATABASE_URL = base.toString();
@@ -65,7 +92,8 @@ describe('#693 · el día por defecto de una venta', () => {
       expect(a.oficina).toBe(b.oficina);
       expect(a.oficina).toBe(hoyMadridJs());
     } finally {
-      c.release();
+      // Fuera del pool: con la sesión cambiada, la cogería la tercera prueba.
+      c.release(true);
     }
   });
 
@@ -79,7 +107,8 @@ describe('#693 · el día por defecto de una venta', () => {
 
   it('una venta registrada sin fecha lleva el día de Madrid, y su pago inicial también', async () => {
     // La sesión de la base va por otro día: si esto no se cumple, la prueba no prueba nada.
-    const [sesion] = await q('SELECT CURRENT_DATE::text AS d');
+    const [sesion] = await q(`SELECT CURRENT_DATE::text AS d, current_setting('TimeZone') AS zona`);
+    expect(sesion.zona).toBe(LEJOS);
     expect(sesion.d).not.toBe(hoyMadridJs());
     const venta = await create({
       lead_id: lead.id, project_id: proyecto.id, producto_contratado: `${MARCA} curso`,
