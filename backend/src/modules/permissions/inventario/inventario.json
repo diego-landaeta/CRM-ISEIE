@@ -4197,6 +4197,94 @@
   "puertas": []
  },
  {
+  "id": "GET /api/facturacion-auditoria/estado",
+  "tipo": "ruta",
+  "modulo": "facturacion-auditoria",
+  "metodo": "GET",
+  "ruta": "/api/facturacion-auditoria/estado",
+  "relativa": "GET /estado",
+  "controlador": "estado",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "facturas.auditoria"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/facturacion-auditoria/historial",
+  "tipo": "ruta",
+  "modulo": "facturacion-auditoria",
+  "metodo": "GET",
+  "ruta": "/api/facturacion-auditoria/historial",
+  "relativa": "GET /historial",
+  "controlador": "historial",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "facturas.auditoria"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/facturacion-auditoria/auditar",
+  "tipo": "ruta",
+  "modulo": "facturacion-auditoria",
+  "metodo": "POST",
+  "ruta": "/api/facturacion-auditoria/auditar",
+  "relativa": "POST /auditar",
+  "controlador": "auditar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "facturas.auditoria"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/facturacion-auditoria/reanudar",
+  "tipo": "ruta",
+  "modulo": "facturacion-auditoria",
+  "metodo": "POST",
+  "ruta": "/api/facturacion-auditoria/reanudar",
+  "relativa": "POST /reanudar",
+  "controlador": "reanudar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "facturas.auditoria"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/facturas-colaborador/enlace/:token",
   "tipo": "ruta",
   "modulo": "facturas-colaborador",

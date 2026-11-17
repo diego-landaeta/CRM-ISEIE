@@ -311,6 +311,7 @@ export const SECCIONES = [
           a('emitir', 'Poner número al cobrar', 'Que el cobro salga facturado y la proforma sin esperar visto bueno.', ADMIN),
           a('gestionar', 'Corregir y abonar', 'Corregir, abonar (rectificativa), asociar a una venta y borrar facturas (una gestora, las suyas).', ADMIN),
           a('cola', 'Emitir desde la cola', 'Emitir los cobros de la cola, cobrar proformas y mover la fecha «al día».', NADIE),
+          a('auditoria', 'Auditoría de facturación', 'Ver el aviso de facturación pausada, auditar y reanudarla con «Marcar como solucionado».', ADMIN),
           a('editar_fechas', 'Cambiar fechas', 'Cambiar la fecha de emisión y de pago, sin tocar importes.', ADMIN),
           a('edit', 'Editar facturas', 'Cambiar cualquier dato de una factura.', ADMIN_SOPORTE),
           a('configurar', 'Configurar la facturación', 'Empresas emisoras, regímenes, plantillas, series y ajustes.', ADMIN_SOPORTE),

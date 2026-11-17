@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-779 rutas en 59 módulos, y 31 acciones con condición dentro de una ruta.
+783 rutas en 60 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -325,6 +325,15 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | createExpense | `POST /api/expenses/` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `expenses.create` |
 | updateExpense | `PATCH /api/expenses/:id` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `expenses.edit` |
 | deleteExpense | `DELETE /api/expenses/:id` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `expenses.delete` |
+
+## facturacion-auditoria
+
+| Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
+|---|---|---|---|---|
+| estado | `GET /api/facturacion-auditoria/estado` | (no existía) | (ruta nueva) | `facturas.auditoria` |
+| historial | `GET /api/facturacion-auditoria/historial` | (no existía) | (ruta nueva) | `facturas.auditoria` |
+| auditar | `POST /api/facturacion-auditoria/auditar` | (no existía) | (ruta nueva) | `facturas.auditoria` |
+| reanudar | `POST /api/facturacion-auditoria/reanudar` | (no existía) | (ruta nueva) | `facturas.auditoria` |
 
 ## facturas-colaborador
 
@@ -1354,6 +1363,7 @@ lo que pide para tener sentido (editar pide ver).
 | Poner número al cobrar | `facturas.emitir` | Que el cobro salga facturado y la proforma sin esperar visto bueno. | Admin | `facturas.view` |
 | Corregir y abonar | `facturas.gestionar` | Corregir, abonar (rectificativa), asociar a una venta y borrar facturas (una gestora, las suyas). | Admin | `facturas.view` |
 | Emitir desde la cola | `facturas.cola` | Emitir los cobros de la cola, cobrar proformas y mover la fecha «al día». | solo superadmin | `facturas.view` |
+| Auditoría de facturación | `facturas.auditoria` | Ver el aviso de facturación pausada, auditar y reanudarla con «Marcar como solucionado». | Admin | `facturas.view` |
 | Cambiar fechas | `facturas.editar_fechas` | Cambiar la fecha de emisión y de pago, sin tocar importes. | Admin | `facturas.view` |
 | Editar facturas | `facturas.edit` | Cambiar cualquier dato de una factura. | Admin, Soporte | `facturas.view` |
 | Configurar la facturación | `facturas.configurar` | Empresas emisoras, regímenes, plantillas, series y ajustes. | Admin, Soporte | `facturas.view` |
