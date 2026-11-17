@@ -130,7 +130,8 @@ describe('los filtros', () => {
     informesApp.use(informes.prefix, informes.router);
     informesApp.use(errorHandler);
     const req = supertest(informesApp);
-    const hoy = new Date().toISOString().slice(0, 10);
+    // «Hoy» en hora de Madrid, como cuenta el informe: en UTC, entre las 23:00 y las 00:00 caía en otro día.
+    const hoy = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Madrid' }).format(new Date());
     const r = await req.get(`/api/informes/paises-entrada?projectId=${projectId}&from=${hoy}&to=${hoy}`).set(auth);
     expect(r.status, JSON.stringify(r.body)).toBe(200);
     const chile = r.body.data.find((f) => f.pais === 'CL' && f.project_id === projectId);
