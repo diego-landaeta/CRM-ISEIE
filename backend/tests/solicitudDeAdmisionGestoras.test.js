@@ -38,11 +38,13 @@ const ids = { users: [], projects: [], leads: [], matriculas: [] };
 let P; let OTRO; let ANA; let BEA; let EXTRA; let GESTORA_OTRO;
 let DE_ANA; let DE_BEA; let SIN_PROSPECTO; let DEL_OTRO;
 
-const como = (u) => ({ Authorization: `Bearer ${jwt.sign({ userId: u.id, role: u.role }, process.env.JWT_SECRET, { expiresIn: '10m' })}` });
+// Con sus roles de más, como el token de verdad (sin ellos, quien es colaborador de rol
+// principal se queda en las rutas del colaborador).
+const como = (u) => ({ Authorization: `Bearer ${jwt.sign({ userId: u.id, role: u.role, roles_extra: u.roles_extra || [] }, process.env.JWT_SECRET, { expiresIn: '10m' })}` });
 
 async function persona(n, role, campus = [], extra = []) {
   const [u] = await q(
-    `INSERT INTO users (nombre, email, password_hash, role, roles_extra) VALUES ($1, $2, 'x', $3, $4::user_role[]) RETURNING id, role`,
+    `INSERT INTO users (nombre, email, password_hash, role, roles_extra) VALUES ($1, $2, 'x', $3, $4::user_role[]) RETURNING id, role, roles_extra::text[] AS roles_extra`,
     [`${MARCA} ${n}`, `${n.toLowerCase()}@${MARCA.toLowerCase()}.test`, role, extra]);
   ids.users.push(u.id);
   for (const c of campus) await q('INSERT INTO user_projects (user_id, project_id) VALUES ($1, $2)', [u.id, c]);
