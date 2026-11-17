@@ -96,9 +96,11 @@ export function yaPaso(iso?: string | null): boolean {
 
   `fecha_conversion` es un DATE. Para saber qué día poner por defecto en una
   venta nueva se usaba `new Date().toISOString().slice(0, 10)`, que es el día en
-  UTC: en España, de 00:00 a 02:00 aún decía «ayer»; en Bogotá o Caracas, desde
-  las 19:00-20:00 ya decía «mañana». El criterio del CRM es la hora de Madrid,
-  la misma que usa el servidor (`APP_TIMEZONE`, por defecto Europe/Madrid).
+  UTC: de 00:00 a 02:00 de Madrid (01:00 en invierno) aún decía «ayer», estuviera
+  donde estuviera quien la registraba. El criterio del CRM es la hora de Madrid,
+  la misma que usa el servidor (`APP_TIMEZONE`, por defecto Europe/Madrid): una
+  gestora de Bogotá que registra a las 19:30 de allí ve ya el día siguiente,
+  porque en Madrid ya lo es.
 */
 export const ZONA_DEL_CRM = 'Europe/Madrid';
 

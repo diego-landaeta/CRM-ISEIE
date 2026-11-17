@@ -170,8 +170,7 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
     importe_pagado: '0',
     metodo_pago: 'tarjeta',
     fecha_compromiso_pago: '',
-    // El día de Madrid, no el de UTC: a las 00:30 en España salía «ayer» y por
-    // la tarde en Latinoamérica, «mañana» (#693).
+    // El día de Madrid, no el de UTC: a las 00:30 de Madrid salía «ayer» (#693).
     fecha_conversion: hoyEnMadrid(),
     notas_pago: '',
     iva_pct: '21',
