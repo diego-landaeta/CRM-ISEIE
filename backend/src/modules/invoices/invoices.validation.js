@@ -12,6 +12,9 @@ export const createInvoiceSchema = z.object({
   // «Emitir igualmente» cuando el CRM avisa de que la factura pasa de lo
   // cobrado de la venta.
   permitirMasDeLoCobrado: z.coerce.boolean().optional(),
+  // «Emitir igualmente» cuando el CRM avisa de que ya hay una factura del mismo
+  // cliente por el mismo importe en la misma semana (POSIBLE_DUPLICADA, CRM#819).
+  confirmar_duplicada: z.boolean().optional(),
   leadId: z.number().int().positive().optional(),
   // 'proforma' = presupuesto no fiscal. 'normal' = factura. (rectificativa va por su ruta)
   tipo: z.enum(['normal', 'proforma']).optional(),

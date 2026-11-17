@@ -47,8 +47,12 @@ export default function EmitirBorradorDialog({ invoice, onClose, onEmitted }: { 
         clienteCiudad: ciudad.trim(), clienteCp: cp.trim(), clientePais: pais.trim(),
       };
       const res = esBorrador
-        ? await emitirPreguntandoSiPasa((permitir) =>
-            invoicesApi.emitir(invoice.id, permitir ? { ...payload, permitirMasDeLoCobrado: true } : payload))
+        ? await emitirPreguntandoSiPasa((permitir, duplicada) =>
+            invoicesApi.emitir(invoice.id, {
+              ...payload,
+              ...(permitir ? { permitirMasDeLoCobrado: true } : {}),
+              ...(duplicada ? { confirmar_duplicada: true } : {}),
+            }))
         : await invoicesApi.completarDatos(invoice.id, payload);
       if (res.success && res.data) onEmitted(res.data.codigo || '', invoice.id);
       else toast({ title: 'Error', description: (res as { error?: string }).error || 'No se pudo emitir', variant: 'destructive' });

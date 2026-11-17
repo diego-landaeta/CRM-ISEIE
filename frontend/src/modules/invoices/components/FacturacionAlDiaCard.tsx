@@ -12,11 +12,15 @@ import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 import { CreditCard, User, Receipt, CheckCircle } from '@phosphor-icons/react';
 import usePermission from '@/shared/hooks/usePermission';
+import { posibleDuplicada, preguntarSiEmitirDuplicada, fechaLegible, type OtraFactura } from '../lib/posibleDuplicada';
 
 type ColaItem = {
   payment_id: number; conversion_id: number; fecha: string; importe: number;
   cliente: string | null; producto: string | null; gestora: string | null;
   origen: 'stripe' | 'manual'; es_el_siguiente: boolean;
+  // «posible duplicada» (CRM#819): ya hay una factura de este cliente por el
+  // mismo importe esa semana. La emision automatica no la saca; aqui se ve por que.
+  motivo?: string | null; posible_duplicada?: OtraFactura | null;
   /** Factura automática (#452): en qué están los datos fiscales de esa venta. */
   datos_fiscales?: { estado: 'pendiente' | 'respondido' | 'ficha' | 'revision'; caduca_at: string; motivo: string | null } | null;
 };
@@ -84,12 +88,13 @@ export default function FacturacionAlDiaCard({ projectId, titulo, ocultarSiVacia
   useEffect(() => { cargar(); }, [cargar]);
 
 
-  async function generar(paymentId: number, forzar = false) {
+  async function generar(paymentId: number, forzar = false, confirmarDuplicada = false) {
     if (!projectId) return;
     setGenerando(paymentId);
     try {
       const r = await client.post<{ codigo?: string }>('/invoices/cola/generar',
-        { projectId, paymentId, ...(forzar ? { forzar: true } : {}) });
+        { projectId, paymentId, ...(forzar ? { forzar: true } : {}),
+          ...(confirmarDuplicada ? { confirmar_duplicada: true } : {}) });
       if (r.success) {
         toast({ title: 'Factura generada', description: r.data?.codigo || '' });
         cargar();
@@ -101,6 +106,13 @@ export default function FacturacionAlDiaCard({ projectId, titulo, ocultarSiVacia
         if (window.confirm(`${e.data.error}\n\n¿Emitirla igualmente, fuera de orden?`)) {
           setGenerando(null);
           return generar(paymentId, true);
+        }
+      } else if (!confirmarDuplicada && posibleDuplicada(err)) {
+        // Ya hay una factura de este cliente por el mismo importe esa semana
+        // (CRM#819): se pregunta; con «Emitir igualmente» se manda confirmada.
+        if (await preguntarSiEmitirDuplicada(posibleDuplicada(err) as OtraFactura)) {
+          setGenerando(null);
+          return generar(paymentId, forzar, true);
         }
       } else {
         toast({
@@ -215,6 +227,16 @@ export default function FacturacionAlDiaCard({ projectId, titulo, ocultarSiVacia
                     <td className="px-2 py-1.5 text-muted-foreground whitespace-nowrap">{fecha(c.fecha)}</td>
                     <td className="px-2 py-1.5 truncate max-w-[170px]">
                       {c.cliente || '—'}
+                      {c.motivo && (
+                        <span
+                          className="block w-fit mt-0.5 px-1.5 rounded bg-warning-soft text-warning-soft-foreground text-[10px] font-semibold"
+                          title={c.posible_duplicada
+                            ? `Ya existe la factura ${c.posible_duplicada.numero} de este cliente por el mismo importe el día ${fechaLegible(c.posible_duplicada.fecha)}.`
+                            : undefined}
+                        >
+                          {c.motivo}
+                        </span>
+                      )}
                       <EstadoDatosFiscales d={c.datos_fiscales} />
                     </td>
                     <td className="px-2 py-1.5 truncate max-w-[130px] text-muted-foreground">{c.gestora || '—'}</td>

@@ -6,6 +6,7 @@ import { comoLista } from '../../shared/utils/ambito.js';
 import { gestorasACargo } from '../../shared/utils/roles.js';
 import { CLASE_FACTURA, SOSPECHA_DUPLICADA } from './clase.sql.js';
 import { recalcularCobrado } from '../conversions/cobrado.js';
+import { frenarSiPosibleDuplicada, vieneConfirmada } from './posible-duplicada.js';
 // La pausa de la auditoria de facturacion (#765). Apagada, no hace nada.
 import { exigirFacturacionActiva } from '../facturacion-auditoria/facturacion-auditoria.pausa.js';
 
@@ -190,6 +191,24 @@ export async function create(data, userId) {
     // Decisión de negocio: las PROFORMAS comparten el MISMO correlativo que las
     // facturas normales (misma serie y contador) y se numeran igual.
     const serie = (iss?.serie && iss.serie.trim()) || data.serie || 'A';
+    /*
+      ANTES DE NUMERAR: mirar si ya hay una factura igual (posible-duplicada.js).
+
+      17/11/2026: administracion emitio una factura y luego otra para el mismo
+      cobro y el mismo cliente, con el nombre cambiado solo por un espacio, y el
+      CRM no dijo nada. Ahora se mira el mismo cliente --nombre normalizado o
+      NIF-- o la misma venta, el mismo total y 7 dias (CRM-ISEIE#500). No es un
+      muro: dos cobros de verdad iguales existen, y se sigue con
+      `confirmar_duplicada`. Lo que no puede pasar es que salga sin que nadie
+      lo vea. Va antes de numerar para no quemar un correlativo.
+    */
+    if (!isBorrador && !isProforma && data.tipo !== 'rectificativa') {
+      await frenarSiPosibleDuplicada({
+        nombre: data.clienteNombre, nif: data.clienteNif, total: data.total,
+        fecha: data.fechaEmision || null, conversionId: data.conversionId || null,
+      }, { confirmada: vieneConfirmada(data), exec: (sql, params) => client.query(sql, params) });
+    }
+
     // Con la facturacion pausada por la auditoria (#765) no se gasta ningun
     // numero nuevo. Un borrador si se guarda: no es documento fiscal.
     if (!isBorrador) await exigirFacturacionActiva({ paymentId: data.paymentId || null });
@@ -1069,7 +1088,7 @@ export async function esProformaDe(userId, invoiceId) {
 // con la que sale sola la factura automatica. Con ella, los datos del cliente son
 // los que dio el alumno (o los de su ficha ya validados) y la factura queda
 // marcada con `datos_fiscales_id`. Sin ella, todo como siempre.
-export async function emitirFacturaDePago(conversionId, { paymentId, importe, saltarTotal = false, datosFiscales = null }, userId = null) {
+export async function emitirFacturaDePago(conversionId, { paymentId, importe, saltarTotal = false, datosFiscales = null, confirmarDuplicada = false }, userId = null) {
   if (!conversionId || !paymentId) return null;
   const monto = Number(importe) || 0;
   if (monto <= 0) return null;
@@ -1216,6 +1235,10 @@ export async function emitirFacturaDePago(conversionId, { paymentId, importe, sa
     projectId: conv.project_id,
     conversionId,
     paymentId,
+    // El aviso de posible duplicada (CRM-ISEIE#500) vale tambien aqui. Desde la
+    // cola, quien factura lo confirma; la emision automatica no confirma nunca,
+    // asi que no emite y el cobro se queda en la cola con ese motivo.
+    confirmarDuplicada,
     leadId: conv.lead_id,
     ...clienteDeLaFactura(conv, datosFiscales),
     clienteTelefono: telefonoClienteFactura(conv),
@@ -1373,6 +1396,15 @@ export async function emitirBorrador(id, patch = {}) {
         ivaIncluido: inv.iva_incluido, ...cuadre,
       });
       if (motivo) throw new AppError(motivo, 409, 'MAS_QUE_LO_COBRADO');
+    }
+
+    // Y la misma que al crearla: ¿hay ya una factura igual de este cliente? Con
+    // los datos ya completados y sin contarse a si misma (CRM-ISEIE#500).
+    if (inv.tipo === 'normal') {
+      await frenarSiPosibleDuplicada({
+        nombre: merged.cliente_nombre, nif: merged.cliente_nif, total: inv.total,
+        fecha: inv.fecha_emision || null, conversionId: inv.conversion_id || null, excluirId: inv.id,
+      }, { confirmada: vieneConfirmada(patch), exec: (sql, params) => client.query(sql, params) });
     }
 
     // Gating fiscal del emisor (igual que en create): NIF inválido bloquea.
