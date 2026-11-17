@@ -311,6 +311,7 @@ export const SECCIONES = [
           a('emitir', 'Poner número al cobrar', 'Que el cobro salga facturado y la proforma sin esperar visto bueno.', ADMIN),
           a('gestionar', 'Corregir y abonar', 'Corregir, abonar (rectificativa), asociar a una venta y borrar facturas (una gestora, las suyas).', ADMIN),
           a('cola', 'Emitir desde la cola', 'Emitir los cobros de la cola, cobrar proformas y mover la fecha «al día».', NADIE),
+          a('auditoria', 'Auditoría de facturación', 'Ver el aviso de facturación pausada, auditar y reanudarla con «Marcar como solucionado».', ADMIN),
           a('editar_fechas', 'Cambiar fechas', 'Cambiar la fecha de emisión y de pago, sin tocar importes.', ADMIN),
           a('edit', 'Editar facturas', 'Cambiar cualquier dato de una factura.', ADMIN_SOPORTE),
           a('configurar', 'Configurar la facturación', 'Empresas emisoras, regímenes, plantillas, series y ajustes.', ADMIN_SOPORTE),
@@ -355,6 +356,13 @@ export const SECCIONES = [
         ],
       },
       {
+        // Registro automático de cobros (#766): PayPal y los extractos del banco.
+        clave: 'cobros_externos', nombre: 'Cobros de PayPal y del banco', acciones: [
+          a('view', 'Ver cobros de PayPal y del banco', 'Los cobros que entran por PayPal y los abonos de los extractos del banco.', yPM(ADMIN_SOPORTE)),
+          a('edit', 'Registrar cobros de PayPal y del banco', 'Sincronizar PayPal, subir extractos y decidir a qué venta va cada abono dudoso.', ADMIN_SOPORTE),
+        ],
+      },
+      {
         clave: 'facturas_colaborador', nombre: 'Facturas de colaboradores', acciones: [
           a('subir', 'Subir su factura', '«Mi factura»: el colaborador sube la suya del mes.', ['colaborador', 'tutor_redactor'], { propia: true }),
           a('ver_todas', 'Ver las facturas', 'Las facturas de los colaboradores de sus empresas.', yPM(ADMIN)),
@@ -381,6 +389,8 @@ export const SECCIONES = [
           a('dinero', 'Dónde poner el dinero', 'Ventas y gasto de publicidad por canal y campaña, contra el periodo anterior.', yPM(ADMIN)),
           a('editar_baremo', 'Cambiar el baremo de la tasa de cierre', 'Los tramos que dicen qué significa cada tasa (buena, regular...) por campus; el general, solo el super admin.', ADMIN),
           a('puesto_ajeno', 'El puesto de otra gestora', 'Ver en qué puesto va otra gestora del ranking.', yPM(ADMIN_SOPORTE), { requiere: ['reports.mis_informes'], independiente: true }),
+          // #772: el informe del mes por equipo y comercial y el ZIP de facturas de la empresa para la gestoría.
+          a('informe_mensual', 'Informe mensual para la gestoría', 'Ver y bajar el informe de ventas del mes por equipo y por comercial, y el ZIP con las facturas emitidas de una empresa.', yPM(ADMIN)),
         ],
       },
       {
