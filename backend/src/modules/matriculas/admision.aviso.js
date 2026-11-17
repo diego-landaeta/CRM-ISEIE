@@ -69,10 +69,10 @@ export function armarAviso({ marca = {}, matriculaId, curso = null }) {
     resumen: `Ha llegado una solicitud de admisión a ${campus}. Ábrela en el CRM.`,
     bloques: [
       parrafo(`Ha llegado una <strong>solicitud de admisión</strong> a ${esc(campus)}${c ? ` para <strong>${esc(c)}</strong>` : ''}.`),
-      nota(`Solicitud nº <strong>${esc(String(matriculaId))}</strong><br>Los datos y los documentos (DNI, firma, título) están solo en el CRM, en Matrículas. Por protección de datos este correo no los lleva.`),
+      nota(`Solicitud nº <strong>${esc(String(matriculaId))}</strong><br>Los datos y los documentos (DNI, firma, título) están solo en el CRM, en Solicitud de admisión. Por protección de datos este correo no los lleva.`),
       boton({ texto: 'Abrir la solicitud', url: enlace(`matriculas?matricula=${encodeURIComponent(matriculaId)}`) }),
       // Sin «apagar en Mis preferencias»: quien lo recibe puede ser un buzón sin usuario en el CRM.
-      parrafo('<span style="font-size:13px;color:#71717a">Recibes este aviso porque tu dirección está en el webhook de admisión de este campus (Matrículas → Webhooks).</span>'),
+      parrafo('<span style="font-size:13px;color:#71717a">Recibes este aviso porque tu dirección está en el webhook de admisión de este campus (Solicitud de admisión → Webhooks de admisión).</span>'),
     ],
   });
   return { asunto: `${titulo} · ${campus}`, htmlContent, textContent };

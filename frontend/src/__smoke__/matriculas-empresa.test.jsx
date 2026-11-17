@@ -13,7 +13,7 @@ import { MemoryRouter } from 'react-router-dom';
 const { cabecera, get, roles } = vi.hoisted(() => ({ cabecera: { value: {} }, get: vi.fn(), roles: { value: ['superadmin'] } }));
 
 vi.mock('@/contexts/ProjectContext', () => ({ useProjectContext: () => cabecera.value }));
-vi.mock('@/shared/hooks/usePermission', () => ({ default: () => ({ can: () => true, tieneRol: (...r) => r.some((x) => roles.value.includes(x)) }) }));
+vi.mock('@/shared/hooks/usePermission', () => ({ default: () => ({ can: (k) => k !== 'matriculas.cambiar_estado' || roles.value.some((x) => ['superadmin', 'admin', 'soporte'].includes(x)), tieneRol: (...r) => r.some((x) => roles.value.includes(x)) }) }));
 vi.mock('@/shared/api/client', () => ({ default: { get, post: vi.fn(), patch: vi.fn() }, API_BASE_URL: '/crm/api' }));
 
 import MatriculasPage from '@/modules/matriculas/pages/MatriculasPage';
@@ -39,7 +39,7 @@ describe('el listado sigue a la cabecera', () => {
     await waitFor(() => expect(get).toHaveBeenCalled());
     expect(pedido().get('issuerId')).toBe('7');
     expect(pedido().get('projectId')).toBeNull();
-    expect(await screen.findByText('0 matrículas en CEDIA')).toBeTruthy();
+    expect(await screen.findByText('0 solicitudes en CEDIA')).toBeTruthy();
   });
 
   it('con «Todos los proyectos»: pide sin campus y no se queda cargando', async () => {
@@ -56,7 +56,7 @@ describe('el listado sigue a la cabecera', () => {
     abrir();
     await waitFor(() => expect(get).toHaveBeenCalled());
     expect(pedido().get('projectId')).toBe('3');
-    expect(await screen.findByText('0 matrículas en ISEIE Online')).toBeTruthy();
+    expect(await screen.findByText('0 solicitudes en ISEIE Online')).toBeTruthy();
   });
 
   it('arriba, la cifra de Solicitudes', async () => {
@@ -134,7 +134,7 @@ describe('el listado sigue a la cabecera', () => {
     abrir();
     await screen.findByText('Aún no ha llegado ninguna solicitud');
     fireEvent.change(screen.getByLabelText('Buscar por nombre, email o DNI'), { target: { value: 'nadie' } });
-    expect(await screen.findByText('Ninguna matrícula con estos filtros')).toBeTruthy();
+    expect(await screen.findByText('Ninguna solicitud con estos filtros')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Quitar filtros' }));
     await screen.findByText('Aún no ha llegado ninguna solicitud');
     expect(pedido().get('search')).toBeNull();
@@ -208,12 +208,12 @@ describe('lo que salió en la revisión', () => {
   const fila = { id: 1, estado: 'solicitud_admision', lead_nombre: 'María López', documentos: {} };
   const conFila = async (url) => (url.startsWith('/matriculas?') ? { ...VACIA, data: [fila] } : { success: true, data: fila });
 
-  it('la gestora no ve los botones de estado (el servidor no la deja: le daba 403)', async () => {
+  it('la gestora no ve los botones de estado: no tiene `matriculas.cambiar_estado` (el servidor le daría 403)', async () => {
     roles.value = ['gestor'];
     cabecera.value = { activeIssuerId: null, activeIssuer: null, activeProject: { id: -1 } };
     get.mockImplementation(conFila);
     abrir();
-    fireEvent.click((await screen.findAllByRole('button', { name: 'Ver detalle de matrícula' }))[0]);
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Ver la solicitud de admisión' }))[0]);
     await screen.findByRole('heading', { name: 'María López' });
     expect(screen.queryByRole('button', { name: /Validar datos/ })).toBeNull();
     expect(screen.queryByRole('button', { name: /Rechazar/ })).toBeNull();
@@ -224,7 +224,7 @@ describe('lo que salió en la revisión', () => {
     cabecera.value = { activeIssuerId: null, activeIssuer: null, activeProject: { id: -1 } };
     get.mockImplementation(conFila);
     abrir();
-    fireEvent.click((await screen.findAllByRole('button', { name: 'Ver detalle de matrícula' }))[0]);
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Ver la solicitud de admisión' }))[0]);
     expect(await screen.findByRole('button', { name: /Validar datos/ })).toBeTruthy();
   });
 
@@ -252,7 +252,7 @@ describe('lo que salió en la revisión', () => {
     abrir();
     fireEvent.click(await screen.findByRole('button', { name: /Filtros/ }));
     fireEvent.change(screen.getByLabelText('Campus'), { target: { value: '3' } });
-    expect(await screen.findByText('2 matrículas en ISEIE Bogotá')).toBeTruthy();
+    expect(await screen.findByText('2 solicitudes en ISEIE Bogotá')).toBeTruthy();
     expect(pedido().get('campusId')).toBe('3');
   });
 });
