@@ -311,6 +311,7 @@ export const SECCIONES = [
           a('emitir', 'Poner número al cobrar', 'Que el cobro salga facturado y la proforma sin esperar visto bueno.', ADMIN),
           a('gestionar', 'Corregir y abonar', 'Corregir, abonar (rectificativa), asociar a una venta y borrar facturas (una gestora, las suyas).', ADMIN),
           a('cola', 'Emitir desde la cola', 'Emitir los cobros de la cola, cobrar proformas y mover la fecha «al día».', NADIE),
+          a('auditoria', 'Auditoría de facturación', 'Ver el aviso de facturación pausada, auditar y reanudarla con «Marcar como solucionado».', ADMIN),
           a('editar_fechas', 'Cambiar fechas', 'Cambiar la fecha de emisión y de pago, sin tocar importes.', ADMIN),
           a('edit', 'Editar facturas', 'Cambiar cualquier dato de una factura.', ADMIN_SOPORTE),
           a('configurar', 'Configurar la facturación', 'Empresas emisoras, regímenes, plantillas, series y ajustes.', ADMIN_SOPORTE),
@@ -352,6 +353,13 @@ export const SECCIONES = [
         clave: 'stripe', nombre: 'Pagos de Stripe', acciones: [
           a('view', 'Ver pagos de Stripe', 'Los cobros por Stripe, y traer los nuevos.', TODOS),
           a('edit', 'Asociar pagos de Stripe', 'Enlazar un pago con su venta y llevar las disputas.', ADMIN_SOPORTE),
+        ],
+      },
+      {
+        // Registro automático de cobros (#766): PayPal y los extractos del banco.
+        clave: 'cobros_externos', nombre: 'Cobros de PayPal y del banco', acciones: [
+          a('view', 'Ver cobros de PayPal y del banco', 'Los cobros que entran por PayPal y los abonos de los extractos del banco.', yPM(ADMIN_SOPORTE)),
+          a('edit', 'Registrar cobros de PayPal y del banco', 'Sincronizar PayPal, subir extractos y decidir a qué venta va cada abono dudoso.', ADMIN_SOPORTE),
         ],
       },
       {
