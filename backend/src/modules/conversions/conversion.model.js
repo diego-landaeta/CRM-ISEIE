@@ -2,6 +2,16 @@ import { query, getClient } from '../../shared/config/db.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { CLASE_FACTURA, FACTURA_REAL } from '../invoices/clase.sql.js';
 
+// EL DÍA DE UNA VENTA ES EL DE MADRID (#693). `CURRENT_DATE` es el día en la
+// zona de la sesión de PostgreSQL, que en el servidor no tiene por qué ser la
+// de la oficina: una venta registrada a las 00:30 de España quedaba con fecha
+// de ayer si la base va en UTC. Mismo criterio que informes y correos
+// (`APP_TIMEZONE`, por defecto Europe/Madrid). Validado: solo letras, '/', '_',
+// '+', '-' (es un nombre de zona, va dentro del SQL).
+const ZONA_APP = /^[A-Za-z_+\-/]+$/.test(process.env.APP_TIMEZONE || '')
+  ? process.env.APP_TIMEZONE : 'Europe/Madrid';
+export const HOY_EN_LA_OFICINA = `(NOW() AT TIME ZONE '${ZONA_APP}')::date`;
+
 const LEAD_EXISTS_SQL = `SELECT id, project_id FROM leads WHERE id = $1`;
 
 export async function leadBelongsToProject(leadId, projectId) {
@@ -108,7 +118,7 @@ export async function create(data) {
          metodo_pago, fecha_compromiso_pago, fecha_conversion, notas_pago,
          iva_pct, iva_incluido, iva_exento, base_imponible, iva_importe,
          subtotal_bruto, descuento_tipo, descuento_valor, descuento_importe)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, COALESCE($9, CURRENT_DATE), $10,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, COALESCE($9::date, ${HOY_EN_LA_OFICINA}), $10,
                $11, $12, $13, $14, $15, $16, $17, $18, $19)
        RETURNING *`,
       [lead_id, project_id, producto_contratado, cursoId,
@@ -152,7 +162,7 @@ export async function create(data) {
     if (Number(importe_pagado) > 0) {
       const { rows: firstPay } = await client.query(
         `INSERT INTO conversion_payments (conversion_id, importe, fecha, notas, metodo)
-         VALUES ($1, $2, COALESCE($3, CURRENT_DATE), $4, $5) RETURNING id, importe, metodo`,
+         VALUES ($1, $2, COALESCE($3::date, ${HOY_EN_LA_OFICINA}), $4, $5) RETURNING id, importe, metodo`,
         [conversion.id, importe_pagado, fecha_conversion, 'Pago inicial',
          (metodo_pago_inicial || (metodo_pago && metodo_pago !== 'fraccionado' ? metodo_pago : 'tarjeta'))]
       );

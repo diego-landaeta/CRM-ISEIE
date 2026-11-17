@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import client from '@/shared/api/client';
+import { formatDate } from '@/shared/lib/format';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import KpiCard from '@/shared/components/ui/KpiCard';
 import EmptyState from '@/shared/components/ui/EmptyState';
@@ -20,8 +21,12 @@ function fmt(n: unknown) {
     style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2,
   }).format(Number(n || 0));
 }
+// La fecha de la venta es un DATE («2026-10-12»). `new Date('2026-10-12')` es
+// medianoche UTC y, en un navegador de Latinoamérica, el 11 por la tarde: la
+// lista (Finanzas › Ventas) decía 12 y este detalle 11 (#693). Mismo
+// formateador que la lista, que lee el día tal cual.
 function fecha(d: unknown) {
-  return d ? new Date(String(d)).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+  return d ? formatDate(String(d)) : '—';
 }
 
 type Cuota = {
