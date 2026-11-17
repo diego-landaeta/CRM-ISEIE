@@ -17,7 +17,23 @@ type ColaItem = {
   payment_id: number; conversion_id: number; fecha: string; importe: number;
   cliente: string | null; producto: string | null; gestora: string | null;
   origen: 'stripe' | 'manual'; es_el_siguiente: boolean;
+  /** Factura automática (#452): en qué están los datos fiscales de esa venta. */
+  datos_fiscales?: { estado: 'pendiente' | 'respondido' | 'ficha' | 'revision'; caduca_at: string; motivo: string | null } | null;
 };
+
+/** La etiqueta de la factura automática, debajo del cliente. Sin ella, nada. */
+function EstadoDatosFiscales({ d }: { d: ColaItem['datos_fiscales'] }) {
+  if (!d) return null;
+  const texto = {
+    pendiente: `Esperando datos del alumno (hasta el ${new Date(d.caduca_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })})`,
+    respondido: 'Datos del alumno: sale sola',
+    ficha: 'Con los datos de la ficha: sale sola',
+    revision: 'Revisar datos: no sale sola',
+  }[d.estado];
+  if (!texto) return null;
+  const tono = d.estado === 'revision' ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground';
+  return <span className={`block text-[10px] ${tono}`} title={d.motivo || undefined}>{texto}</span>;
+}
 type PorDia = { dia: string; cobros: number; importe: number };
 type Proforma = {
   id: number; total: number | string; created_at: string;
@@ -197,7 +213,10 @@ export default function FacturacionAlDiaCard({ projectId, titulo, ocultarSiVacia
                     }`}
                   >
                     <td className="px-2 py-1.5 text-muted-foreground whitespace-nowrap">{fecha(c.fecha)}</td>
-                    <td className="px-2 py-1.5 truncate max-w-[170px]">{c.cliente || '—'}</td>
+                    <td className="px-2 py-1.5 truncate max-w-[170px]">
+                      {c.cliente || '—'}
+                      <EstadoDatosFiscales d={c.datos_fiscales} />
+                    </td>
                     <td className="px-2 py-1.5 truncate max-w-[130px] text-muted-foreground">{c.gestora || '—'}</td>
                     <td className="px-2 py-1.5">
                       <span className="inline-flex items-center gap-1 text-muted-foreground">

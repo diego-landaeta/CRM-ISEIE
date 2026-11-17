@@ -25,6 +25,8 @@ import accountingModule from './modules/accounting/index.js';
 import integrationsModule from './modules/integrations/index.js';
 import stripePaymentsModule from './modules/stripe-payments/index.js';
 import invoicesModule from './modules/invoices/index.js';
+// Auditoría de facturación cada 2 horas y pausa de la emisión (#765).
+import facturacionAuditoriaModule from './modules/facturacion-auditoria/index.js';
 // Facturas de colaboradores (#202, como en MultiCRM): solo en pruebas hasta que
 // Diego lo apruebe con FACTURAS_COLABORADOR_EN_PRODUCCION=1.
 import facturasColaboradorModule from './modules/facturas-colaborador/index.js';
@@ -54,6 +56,8 @@ import asignacionModule from './modules/asignacion/index.js';
 import { registrarActividad } from './shared/middleware/registrarActividad.js';
 import { startWebhooksSalientesScheduler } from './jobs/webhooksSalientesScheduler.js';
 import { startCopiaDiariaScheduler } from './jobs/copiaDiariaJob.js';
+import { startFacturacionAuditoriaScheduler } from './jobs/facturacionAuditoriaJob.js';
+import { startInformeMensualScheduler } from './jobs/informeMensualJob.js';
 import { startBrevoBloqueadosScheduler } from './jobs/brevoBloqueadosScheduler.js';
 import { startAsignacionScheduler } from './jobs/asignacionScheduler.js';
 import projectChannelsModule from './modules/project-channels/index.js';
@@ -63,11 +67,14 @@ import dossiersModule from './modules/dossiers/index.js';
 import reportsModule from './modules/reports/index.js';
 import clientErrorsModule from './modules/client-errors/index.js';
 import copiaDiariaModule from './modules/copia-diaria/index.js';
+import informeMensualModule from './modules/informe-mensual/index.js';
 import changeRequestsModule from './modules/change-requests/index.js';
 // El proceso comercial (#87): los pasos, y de ahí la cola del día.
 import procesoModule from './modules/proceso/index.js';
 // «¿Por que has desistido?» (#169) y su panel (#170).
 import feedbackModule from './modules/feedback/index.js';
+// Factura automática con formulario de datos fiscales (#452, gemela de CRM#764): apagada de serie.
+import facturaAutomaticaModule from './modules/factura-automatica/index.js';
 import novedadesModule from './modules/novedades/index.js';
 import certifexModule from './modules/certifex/index.js';
 // Sistema → Registro (#111), como en MultiCRM: quién hizo qué y los sucesos del sistema.
@@ -84,6 +91,7 @@ import cursosPendientesModule from './modules/cursos-pendientes/index.js';
 import iaAnalisisModule from './modules/ia-analisis/index.js';
 import wcWebhook from './modules/woocommerce/wc.webhook.js';
 import { startFeedbackDia7Scheduler } from './jobs/feedbackDia7Scheduler.js';
+import { startFacturaAutomaticaScheduler } from './jobs/facturaAutomaticaScheduler.js';
 import { startNovedadesScheduler } from './jobs/novedadesScheduler.js';
 import convocatoriasModule from './modules/convocatorias/index.js';
 import { startEmailSequenceScheduler } from './jobs/emailSequenceScheduler.js';
@@ -305,6 +313,7 @@ const MODULES = [
   integrationsModule,
   stripePaymentsModule,
   invoicesModule,
+  facturacionAuditoriaModule,
   // Facturas de colaboradores (#202): la lista, el enlace del mes y «Mi factura».
   // Solo en pruebas también en el servidor: en producción ni la API ni la tarea del mes.
   ...(facturasColaboradorActivas() ? [facturasColaboradorModule] : []),
@@ -334,6 +343,8 @@ const MODULES = [
   credentialsModule,
   dossiersModule,
   reportsModule,
+  // El informe mensual por equipo y comercial y el ZIP de facturas para la gestoría (#772).
+  informeMensualModule,
   clientErrorsModule,
   // La descarga de la copia diaria de la base (enlace firmado; con la copia apagada, 404).
   copiaDiariaModule,
@@ -341,6 +352,7 @@ const MODULES = [
   statusModule,
   procesoModule,
   feedbackModule,
+  facturaAutomaticaModule,
   novedadesModule,
   convocatoriasModule,
   // Certifex: el CRM aprueba y Certifex emite (Matrículas → Certificaciones).
@@ -516,6 +528,7 @@ if (process.env.NODE_ENV !== 'test') {
         // Ventas a plazos: cerrar la suscripción de Stripe al completar el pago (#747).
         startSuscripcionesPlazosScheduler();
         startFeedbackDia7Scheduler();
+        startFacturaAutomaticaScheduler();
         startNovedadesScheduler();
         startResumenDiarioScheduler();
         startReporteSemanalScheduler();
@@ -586,6 +599,18 @@ if (process.env.NODE_ENV !== 'test') {
       startCopiaDiariaScheduler();
     } catch (err) {
       logger.error({ err }, 'Copia diaria de la base: falló al arrancar');
+    }
+    // La auditoría de facturación cada 2 horas (#765). Apagada de serie: FACTURACION_AUDITORIA_ACTIVA.
+    try {
+      startFacturacionAuditoriaScheduler();
+    } catch (err) {
+      logger.error({ err }, 'Auditoría de facturación: falló al arrancar');
+    }
+    // El informe del mes y las facturas a la gestoría (#772). Apagado de serie: INFORME_MENSUAL_ACTIVO.
+    try {
+      startInformeMensualScheduler();
+    } catch (err) {
+      logger.error({ err }, 'Informe mensual a la gestoría: falló al arrancar');
     }
     // Correos del equipo bloqueados en Brevo (17/11). Apagada de serie: BREVO_BLOQUEADOS_ACTIVO.
     try {

@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { logger } from '../../shared/utils/logger.js';
+import { activa as facturaAutomaticaActiva } from '../factura-automatica/factura-automatica.config.js';
 import { decrypt } from '../../shared/utils/crypto.js';
 import * as integrationsModel from '../integrations/integrations.model.js';
 import { query } from '../../shared/config/db.js';
@@ -214,6 +215,9 @@ async function enlazarSiSePuede(projectId, payment, dbRow) {
   // numeradas con lo que hubiera en la ficha en ese momento.
   logger.info({ conversionId: conv.id, paymentId: cpId, stripeId: payment.stripe_id },
     'cobro de Stripe registrado; queda en la cola de facturacion');
+  // Factura automatica (#452), si esta encendida en este campus: pide los datos
+  // fiscales al alumno o, si ya los dio, emite la de este cobro.
+  facturaAutomatica(conv.id, cpId);
 }
 
 // Trae detalle completo de dispute desde Stripe API (incluye evidence_due_by)
@@ -398,7 +402,19 @@ export async function manualLink(stripePaymentId, { leadId, conversionId, userId
   if (cpId) {
     logger.info({ conversionId, paymentId: cpId, stripePaymentId },
       'cargo de Stripe asociado a mano; queda en la cola de facturacion');
+    if (!yaExistia) facturaAutomatica(conversionId, cpId); // #452, si esta encendida
   }
+}
+
+/**
+ * Factura automatica (#452). No bloquea: el cobro ya esta apuntado y, si esto
+ * falla, sigue en la cola como siempre. Apagada, ni siquiera carga el modulo.
+ */
+function facturaAutomatica(conversionId, paymentId) {
+  if (!facturaAutomaticaActiva() || !conversionId || !paymentId) return;
+  import('../factura-automatica/factura-automatica.service.js')
+    .then((fa) => fa.alCobrar({ conversionId, paymentId }))
+    .catch((err) => logger.warn({ err: err.message, conversionId, paymentId }, 'factura automatica: fallo con un cobro de Stripe'));
 }
 
 export async function updateDisputeDecision(stripePaymentId, { decision, notes, userId }) {
