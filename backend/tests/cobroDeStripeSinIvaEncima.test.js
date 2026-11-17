@@ -54,10 +54,24 @@ function responder(sql, p = []) {
   }
   if (/^UPDATE stripe_payments SET link_method = \$2, linked_at = \$3 WHERE id = \$1 AND link_method = \$4$/.test(s)) return r([]);
 
-  // conversion.model.addPayment
-  if (/^SELECT id, importe_total, importe_pagado FROM conversions WHERE id = \$1 FOR UPDATE/.test(s)) {
+  // conversion.model.addPayment. Lo cobrado sale de los pagos (#692).
+  const sumaPagos = (id) => [...db.payments.values()]
+    .filter((x) => x.conversion_id === id)
+    .reduce((t, x) => Number((t + x.importe).toFixed(2)), 0);
+  if (/^SELECT c\.id, c\.importe_total, \(SELECT COALESCE\(SUM\(cp\.importe\), 0\) FROM conversion_payments cp WHERE cp\.conversion_id = c\.id\) AS cobrado FROM conversions c WHERE c\.id = \$1 FOR UPDATE/.test(s)) {
     const c = db.conversions.get(Number(p[0]));
-    return r(c ? [{ ...c }] : []);
+    return r(c ? [{ ...c, cobrado: sumaPagos(c.id) }] : []);
+  }
+  // cobrado.js · recalcularCobrado: importe_pagado = suma de los pagos (#692).
+  if (/^UPDATE conversions c SET importe_pagado = \(SELECT COALESCE\(SUM\(cp\.importe\), 0\)/.test(s)) {
+    const c = db.conversions.get(Number(p[0]));
+    if (!c) return r([]);
+    c.importe_pagado = sumaPagos(c.id);
+    return r([{ importe_pagado: c.importe_pagado }]);
+  }
+  if (/^SELECT conversion_id FROM conversion_payments WHERE id = \$1$/.test(s)) {
+    const cp = db.payments.get(Number(p[0]));
+    return r(cp ? [{ conversion_id: cp.conversion_id }] : []);
   }
   if (/^INSERT INTO conversion_payments/.test(s)) {
     const cp = {
