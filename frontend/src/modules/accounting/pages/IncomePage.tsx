@@ -95,7 +95,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
     importe: 0, pagado: 0, pendiente: 0, iva: 0,
     facturadas: 0, sinFactura: 0, noRequiereFactura: 0, pendientesDeFacturar: 0, facturasDeAntes: { n: 0, importe: 0 },
     facturadoEnPeriodo: { n: 0, importe: 0 },
-    cobrosDelPeriodo: { matricula: { n: 0, importe: 0 }, cuotas: { n: 0, importe: 0 } }, facturasPorClase: { venta: { n: 0, importe: 0 }, cuota: { n: 0, importe: 0 }, parte: { n: 0, importe: 0 }, suelta: { n: 0, importe: 0 } }, porProyecto: [],
+    cobrosDelPeriodo: { matricula: { n: 0, importe: 0 }, cuotas: { n: 0, importe: 0 } }, facturasPorClase: { venta: { n: 0, importe: 0 }, cuota: { n: 0, importe: 0 }, parte: { n: 0, importe: 0 }, suelta: { n: 0, importe: 0 } }, porProyecto: [], cobradoDeMas: { n: 0, importe: 0 },
   });
   // Por defecto, ESTE MES. Diego: «por defecto es este mes». Sin fechas la
   // lista era el historico entero, y la etiqueta venta/cuota solo tiene sentido
@@ -172,11 +172,11 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
           } else { setFilas([]); setTotalFilas(0); }
           // Los totales vienen del servidor sobre TODO el filtro; antes se
           // sumaban las filas cargadas y las tarjetas no cuadraban nunca.
-          setTotales(res.totales || { importe: 0, pagado: 0, pendiente: 0, iva: 0, facturadas: 0, sinFactura: 0, noRequiereFactura: 0, pendientesDeFacturar: 0, facturasDeAntes: { n: 0, importe: 0 }, facturadoEnPeriodo: { n: 0, importe: 0 }, cobrosDelPeriodo: { matricula: { n: 0, importe: 0 }, cuotas: { n: 0, importe: 0 } }, facturasPorClase: { venta: { n: 0, importe: 0 }, cuota: { n: 0, importe: 0 }, parte: { n: 0, importe: 0 }, suelta: { n: 0, importe: 0 } }, porProyecto: [] });
+          setTotales(res.totales || { importe: 0, pagado: 0, pendiente: 0, iva: 0, facturadas: 0, sinFactura: 0, noRequiereFactura: 0, pendientesDeFacturar: 0, facturasDeAntes: { n: 0, importe: 0 }, facturadoEnPeriodo: { n: 0, importe: 0 }, cobrosDelPeriodo: { matricula: { n: 0, importe: 0 }, cuotas: { n: 0, importe: 0 } }, facturasPorClase: { venta: { n: 0, importe: 0 }, cuota: { n: 0, importe: 0 }, parte: { n: 0, importe: 0 }, suelta: { n: 0, importe: 0 } }, porProyecto: [], cobradoDeMas: { n: 0, importe: 0 } });
         }
       } catch {
         if (cancelado) return;
-        setItems([]); setTotal(0); setFilas([]); setTotalFilas(0); setTotales({ importe: 0, pagado: 0, pendiente: 0, iva: 0, facturadas: 0, sinFactura: 0, noRequiereFactura: 0, pendientesDeFacturar: 0, facturasDeAntes: { n: 0, importe: 0 }, facturadoEnPeriodo: { n: 0, importe: 0 }, cobrosDelPeriodo: { matricula: { n: 0, importe: 0 }, cuotas: { n: 0, importe: 0 } }, facturasPorClase: { venta: { n: 0, importe: 0 }, cuota: { n: 0, importe: 0 }, parte: { n: 0, importe: 0 }, suelta: { n: 0, importe: 0 } }, porProyecto: [] });
+        setItems([]); setTotal(0); setFilas([]); setTotalFilas(0); setTotales({ importe: 0, pagado: 0, pendiente: 0, iva: 0, facturadas: 0, sinFactura: 0, noRequiereFactura: 0, pendientesDeFacturar: 0, facturasDeAntes: { n: 0, importe: 0 }, facturadoEnPeriodo: { n: 0, importe: 0 }, cobrosDelPeriodo: { matricula: { n: 0, importe: 0 }, cuotas: { n: 0, importe: 0 } }, facturasPorClase: { venta: { n: 0, importe: 0 }, cuota: { n: 0, importe: 0 }, parte: { n: 0, importe: 0 }, suelta: { n: 0, importe: 0 } }, porProyecto: [], cobradoDeMas: { n: 0, importe: 0 } });
       } finally { if (!cancelado) setLoading(false); }
     })();
     return () => { cancelado = true; };
@@ -406,6 +406,17 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
           format={fmt}
         />
       </div>
+
+      {/* #692: «Cobrado» y «Pagado» salen ya de los pagos registrados, como en
+          Análisis y en el ranking. Si alguna venta suma más pagos que su
+          importe, se dice aquí en vez de dejar que se compense con otras. */}
+      {(totales.cobradoDeMas?.n ?? 0) > 0 && (
+        <p role="note" className="text-xs rounded-md border border-warning/40 bg-warning-soft text-warning-soft-foreground px-3 py-2">
+          <strong>{totales.cobradoDeMas.n}</strong>{' '}
+          {totales.cobradoDeMas.n === 1 ? 'venta de estas tiene' : 'ventas de estas tienen'} pagos por encima de su importe:{' '}
+          <strong>{fmt(totales.cobradoDeMas.importe)}</strong> de más. Suele ser un cobro repetido o un importe mal puesto.
+        </p>
+      )}
 
 
       {/* Con una empresa elegida: en que campus hubo ventas y cuotas. La suma

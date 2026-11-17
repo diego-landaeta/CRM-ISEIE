@@ -1,4 +1,5 @@
 import { query } from '../../shared/config/db.js';
+import { recalcularCobrado } from '../conversions/cobrado.js';
 
 export async function upsertPayment(p) {
   const { rows } = await query(
@@ -121,11 +122,13 @@ export async function createConversionPayment(conversionId, amount, fecha, notas
   return rows[0].id;
 }
 
-export async function updateConversionPaid(conversionId, addAmount) {
-  await query(
-    `UPDATE conversions SET importe_pagado = LEAST(importe_total, importe_pagado + $1), updated_at=NOW() WHERE id=$2`,
-    [addAmount, conversionId]
-  );
+// El cobro ya está apuntado en `conversion_payments`: lo cobrado de la venta
+// pasa a ser la suma de sus pagos (#692). Antes se sumaba el cargo y se topaba
+// en el total (`LEAST`): si Stripe cobraba de más, la venta decía «pagada» con
+// menos de lo que sumaban sus pagos, y Análisis enseñaba más cobrado que
+// vendido. El importe se deja en la firma por compatibilidad.
+export async function updateConversionPaid(conversionId, _addAmount) {
+  await recalcularCobrado({ query }, conversionId);
 }
 
 // Las condiciones del listado, en un solo sitio: las usan tanto listPayments

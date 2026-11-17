@@ -1,4 +1,5 @@
 import { query, getClient } from '../../shared/config/db.js';
+import { recalcularCobrado } from './cobrado.js';
 
 export async function listByConversion(conversionId) {
   // Se añade la factura emitida por el pago de cada cuota (por payment_id) para
@@ -95,11 +96,8 @@ export async function markPaid(id, { fecha_cobro, importe_cobrado, metodo, notas
        VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
       [inst.conversion_id, importe_cobrado || inst.importe_previsto, fecha_cobro, notas || `Cuota ${inst.numero}`, metodo || null, referencia || null]
     );
-    // Actualizar conversion importe_pagado
-    await c.query(
-      `UPDATE conversions SET importe_pagado = importe_pagado + $1, updated_at = NOW() WHERE id = $2`,
-      [importe_cobrado || inst.importe_previsto, inst.conversion_id]
-    );
+    // importe_pagado = suma de los pagos, con el de esta cuota dentro (#692).
+    await recalcularCobrado(c, inst.conversion_id);
     // Marcar cuota
     const { rows } = await c.query(
       `UPDATE conversion_installments
@@ -157,13 +155,8 @@ export async function editPaid(id, { fecha_cobro, importe_cobrado, metodo, refer
         [newImporte, newFecha, inst.payment_id, newMetodo, referencia !== undefined, referencia || null]
       );
     }
-    // Ajustar importe_pagado de la conversión si cambió el monto
-    if (diff !== 0) {
-      await c.query(
-        `UPDATE conversions SET importe_pagado = importe_pagado + $1, updated_at = NOW() WHERE id = $2`,
-        [diff, inst.conversion_id]
-      );
-    }
+    // Si cambió el monto, importe_pagado vuelve a ser la suma de los pagos (#692).
+    if (diff !== 0) await recalcularCobrado(c, inst.conversion_id);
     // Actualizar cuota
     const { rows } = await c.query(
       `UPDATE conversion_installments
@@ -194,11 +187,8 @@ export async function unpay(id) {
     if (inst.payment_id) {
       await c.query(`DELETE FROM conversion_payments WHERE id = $1`, [inst.payment_id]);
     }
-    // Restar importe del total pagado
-    await c.query(
-      `UPDATE conversions SET importe_pagado = GREATEST(0, importe_pagado - $1), updated_at = NOW() WHERE id = $2`,
-      [Number(inst.importe_cobrado || 0), inst.conversion_id]
-    );
+    // Lo que queda de los pagos (#692).
+    await recalcularCobrado(c, inst.conversion_id);
     // Limpiar la cuota
     const { rows } = await c.query(
       `UPDATE conversion_installments

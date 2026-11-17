@@ -38,6 +38,9 @@ type Pago = {
 type Venta = {
   id: number; lead_id: number; producto_contratado: string;
   importe_total: string | number; importe_pagado: string | number; importe_pendiente: string | number;
+  // #692: `importe_pagado` ya es la suma de los pagos; el guardado en la venta
+  // viene aparte para avisar si no cuadra. Opcionales: un servidor anterior no los manda.
+  importe_pagado_guardado?: string | number | null; cobrado_de_mas?: string | number | null;
   fecha_conversion: string; fecha_compromiso_pago: string | null; metodo_pago: string | null;
   notas_pago: string | null; lead_nombre: string; lead_email: string; proyecto_nombre: string;
   payments?: Pago[]; installments?: Cuota[]; items?: Array<{ id: number; descripcion: string; cantidad: number; precio_unitario: string | number }>;
@@ -93,6 +96,9 @@ export default function SaleDetailPage() {
   const cuotasPend = cuotas.filter((c) => !c.fecha_cobro);
   const cuotasVenc = cuotasPend.filter((c) => new Date(c.fecha_vencimiento) < new Date());
   const deAnteriores = cuotas.filter((c) => (c.notas || '').toLowerCase().includes('facturacion anterior'));
+  const cobradoDeMas = Number(venta.cobrado_de_mas || 0);
+  const guardado = venta.importe_pagado_guardado;
+  const noCuadra = guardado != null && Math.abs(Number(guardado) - Number(venta.importe_pagado || 0)) > 0.005;
 
   return (
     <div className="space-y-5 pb-8">
@@ -136,6 +142,20 @@ export default function SaleDetailPage() {
           : 'bg-muted text-muted-foreground'}
           label="Cuotas vencidas" value={String(cuotasVenc.length)} trend="down" />
       </div>
+
+      {/* #692: «Cobrado» es lo que suman los pagos de abajo. Si el importe que
+          guardaba la venta dice otra cosa, se avisa: se corrige venta a venta. */}
+      {noCuadra && (
+        <p role="alert" className="text-xs rounded-md border border-warning/40 bg-warning-soft text-warning-soft-foreground px-3 py-2">
+          El cobrado que tenía apuntado la venta ({fmt(guardado)}) no coincide con sus pagos registrados
+          ({fmt(venta.importe_pagado)}). Aquí se cuenta lo de los pagos. Hay que revisarla: o falta apuntar un pago o sobra el importe.
+        </p>
+      )}
+      {cobradoDeMas > 0.005 && (
+        <p role="note" className="text-xs rounded-md border border-warning/40 bg-warning-soft text-warning-soft-foreground px-3 py-2">
+          Sus pagos suman {fmt(cobradoDeMas)} más que el importe de la venta. Suele ser un cobro repetido o un importe mal puesto.
+        </p>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Primera columna: los datos y quien la vendio, uno debajo del otro. */}

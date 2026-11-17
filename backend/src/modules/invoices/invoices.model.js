@@ -5,6 +5,7 @@ import { resolveRegimenClave } from './fiscal-engine.js';
 import { comoLista } from '../../shared/utils/ambito.js';
 import { gestorasACargo } from '../../shared/utils/roles.js';
 import { CLASE_FACTURA, SOSPECHA_DUPLICADA } from './clase.sql.js';
+import { recalcularCobrado } from '../conversions/cobrado.js';
 
 // Sociedad emisora de un proyecto (null si no tiene). Helper para numeración.
 async function issuerOfProject(exec, projectId) {
@@ -1519,12 +1520,12 @@ export async function updateBorrador(id, data, { soloBorrador = true } = {}) {
       } else if (cambiaElTotal) {
         await client.query(`UPDATE conversion_payments SET importe = $1 WHERE id = $2`, [nuevoTotal, inv.payment_id]);
         await client.query(`UPDATE conversion_installments SET importe_cobrado = $1 WHERE payment_id = $2 AND fecha_cobro IS NOT NULL`, [nuevoTotal, inv.payment_id]);
-        if (inv.conversion_id) {
-          await client.query(
-            `UPDATE conversions SET importe_pagado = GREATEST(0, importe_pagado + $1), updated_at = NOW() WHERE id = $2`,
-            [nuevoTotal - viejoTotal, inv.conversion_id]
-          );
-        }
+        // La venta del COBRO, y su cobrado desde los pagos (#692). Antes sumaba
+        // la diferencia con el total de la FACTURA, que no tiene por qué ser lo
+        // que decía el cobro, y el desfase se quedaba en la venta.
+        const { rows: [delCobro] } = await client.query(
+          'SELECT conversion_id FROM conversion_payments WHERE id = $1', [inv.payment_id]);
+        if (delCobro?.conversion_id) await recalcularCobrado(client, delCobro.conversion_id);
       }
     }
     await client.query('COMMIT');

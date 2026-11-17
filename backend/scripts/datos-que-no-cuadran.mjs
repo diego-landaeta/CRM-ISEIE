@@ -3,7 +3,7 @@
 //   node scripts/datos-que-no-cuadran.mjs
 //
 // ─────────────────────────────────────────────────────────────────────────────
-// SOLO MIRA. No arregla nada, y es a propósito: cada una de estas cuatro cosas
+// SOLO MIRA. No arregla nada, y es a propósito: cada una de estas cosas
 // se decide caso por caso. Un alumno con tres ventas puede haber comprado tres
 // cursos o puede ser una cuota metida como venta nueva, y eso no lo puede
 // decidir un script —lo segundo infla las ventas y parte el plan de pago, lo
@@ -101,6 +101,42 @@ const REVISIONES = [
            GROUP BY p.conversion_id, l.nombre, p.importe, p.fecha
           HAVING count(*) > 1
            ORDER BY count(*) DESC, p.conversion_id`,
+  },
+  {
+    // #692. Desde ese arreglo el campo se recalcula de los pagos en cada
+    // cobro, y las pantallas de Ventas suman los pagos: lo que salga aquí es
+    // de antes y ya no crece solo.
+    titulo: 'Cobrado guardado distinto de sus pagos',
+    duele: 'La venta decía «pagada» (o «pendiente») por un importe guardado que '
+         + 'no coincide con los pagos apuntados. Reportes y otras pantallas leen ese '
+         + 'importe; Ventas, Análisis y el ranking, los pagos.',
+    haz: 'Una a una: si el cobro existió, apuntar el pago que falta; si no, '
+       + 'poner importe_pagado a la suma de sus pagos. Sin pagos y [demo]: es de pruebas.',
+    sql: `SELECT c.id AS venta, c.project_id, c.fecha_conversion,
+                 c.importe_total, c.importe_pagado AS guardado,
+                 COALESCE(p.suma, 0) AS pagos, COALESCE(p.n, 0) AS n_pagos,
+                 c.importe_pagado - COALESCE(p.suma, 0) AS diferencia
+            FROM conversions c
+            LEFT JOIN (SELECT conversion_id, SUM(importe) AS suma, COUNT(*) AS n
+                         FROM conversion_payments GROUP BY conversion_id) p
+                   ON p.conversion_id = c.id
+           WHERE ABS(c.importe_pagado - COALESCE(p.suma, 0)) > 0.005
+           ORDER BY ABS(c.importe_pagado - COALESCE(p.suma, 0)) DESC, c.id`,
+  },
+  {
+    titulo: 'Ventas con más pagos que su importe',
+    duele: 'Hacían salir «Pendiente de cobro» negativo en Análisis (#692): lo de '
+         + 'más de una venta restaba de lo que deben las demás.',
+    haz: 'Mirar si hay un cobro repetido (ver «Cobros repetidos en el libro») o '
+       + 'si el importe de la venta está mal puesto. No borrar pagos sin justificarlo.',
+    sql: `SELECT c.id AS venta, c.project_id, c.fecha_conversion, c.importe_total,
+                 SUM(cp.importe) AS pagos, COUNT(*) AS n_pagos,
+                 SUM(cp.importe) - c.importe_total AS de_mas
+            FROM conversions c
+            JOIN conversion_payments cp ON cp.conversion_id = c.id
+           GROUP BY c.id
+          HAVING SUM(cp.importe) > c.importe_total + 0.005
+           ORDER BY SUM(cp.importe) - c.importe_total DESC`,
   },
   {
     titulo: 'Ventas sin formación identificada',
