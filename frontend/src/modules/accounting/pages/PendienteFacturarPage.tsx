@@ -13,6 +13,7 @@ import Portal from '@/shared/components/ui/portal';
 import { toast } from '@/shared/hooks/useToast';
 import { Receipt, PencilSimple, X, FloppyDisk, ArrowSquareOut } from '@phosphor-icons/react';
 import { useNavigate } from 'react-router-dom';
+import { rutaApp } from '@/shared/lib/rutaApp';
 
 interface Conversion {
   id: number;
@@ -296,7 +297,7 @@ function EditDialog({ conversion, onClose, onSaved }: { conversion: Conversion; 
               </select>
             </div>
             <a
-              href={`/leads/${conversion.lead_id}`}
+              href={rutaApp(`/leads/${conversion.lead_id}`)}
               className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
             >
               <ArrowSquareOut size={11} weight="bold" /> Ver perfil del cliente

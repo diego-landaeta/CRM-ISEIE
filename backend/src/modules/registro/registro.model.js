@@ -184,7 +184,7 @@ async function deFichas(filtros, limite) {
     entidad: 'lead',
     entidad_id: r.lead_id,
     entidad_nombre: r.lead_nombre,
-    enlace: r.lead_id ? `/crm/leads/${r.lead_id}` : null,
+    enlace: r.lead_id ? `/leads/${r.lead_id}` : null,
     ok: true,
     detalle: { campo: r.campo, antes: r.antes, despues: r.despues },
   }));
@@ -368,7 +368,7 @@ async function deWebhooks(filtros, limite) {
     entidad: r.lead_id ? 'lead' : 'webhook',
     entidad_id: r.lead_id || null,
     entidad_nombre: r.webhook || null,
-    enlace: r.lead_id ? `/crm/leads/${r.lead_id}` : null,
+    enlace: r.lead_id ? `/leads/${r.lead_id}` : null,
     ok: r.result !== 'rejected',
     // El `payload` NO viaja. Lleva datos del formulario —nombre, email,
     // telefono— y esto es una lista, no una ficha: si hace falta ver el cuerpo,
