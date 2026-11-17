@@ -1,4 +1,5 @@
 import { AppError } from '../../shared/utils/AppError.js';
+import { activa as facturaAutomaticaActiva } from '../factura-automatica/factura-automatica.config.js';
 import * as conversionModel from './conversion.model.js';
 import * as commissionModel from '../commissions/commission.model.js';
 import * as seqModel from '../email-sequences/sequence.model.js';
@@ -193,6 +194,25 @@ export async function create(data, userId) {
 // - Con paymentInfo {paymentId, importe} → factura por ese abono.
 // - Sin paymentInfo (legacy) → factura por el total de la conversión.
 export function autoInvoice(conversionId, userId = null, paymentInfo = null) {
+  /*
+    FACTURA AUTOMATICA CON FORMULARIO (#452, gemela de CRM#764). Solo con
+    FACTURA_AUTOMATICA_ACTIVA encendido y en los campus de
+    FACTURA_AUTOMATICA_CAMPUS: en vez de emitir en el acto con la ficha, pide
+    los datos fiscales al alumno y emite con ellos (ver modules/factura-automatica).
+    Apagado, o si la venta no le toca (ya se facturaba a mano, tiene proforma),
+    sigue el camino de siempre, el de abajo.
+  */
+  if (paymentInfo?.paymentId && facturaAutomaticaActiva()) {
+    import('../factura-automatica/factura-automatica.service.js')
+      .then((fa) => fa.alCobrar({ conversionId, paymentId: paymentInfo.paymentId }))
+      .then((tomado) => { if (!tomado) autoInvoiceDeSiempre(conversionId, userId, paymentInfo); })
+      .catch((err) => logger.warn({ err: err.message, conversionId }, 'factura automatica: fallo (no bloqueante)'));
+    return;
+  }
+  autoInvoiceDeSiempre(conversionId, userId, paymentInfo);
+}
+
+function autoInvoiceDeSiempre(conversionId, userId = null, paymentInfo = null) {
   (async () => {
     // El cobro se asocia siempre, pero la factura espera a que la facturacion
     // este al dia hasta esa fecha. Si no, la numeracion se adelantaria a quien

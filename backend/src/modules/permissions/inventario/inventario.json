@@ -4403,6 +4403,74 @@
   "puertas": []
  },
  {
+  "id": "GET /api/factura-automatica/venta/:conversionId",
+  "tipo": "ruta",
+  "modulo": "factura-automatica",
+  "metodo": "GET",
+  "ruta": "/api/factura-automatica/venta/:conversionId",
+  "relativa": "GET /venta/:conversionId",
+  "controlador": "estado",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "facturas.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/factura-automatica/venta/:conversionId/reenviar",
+  "tipo": "ruta",
+  "modulo": "factura-automatica",
+  "metodo": "POST",
+  "ruta": "/api/factura-automatica/venta/:conversionId/reenviar",
+  "relativa": "POST /venta/:conversionId/reenviar",
+  "controlador": "reenviar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "facturas.cola"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/fd/:token",
+  "tipo": "ruta",
+  "modulo": "factura-automatica",
+  "metodo": "GET",
+  "ruta": "/api/fd/:token",
+  "relativa": "GET /:token",
+  "controlador": "formulario",
+  "publica": true,
+  "guardias": [],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/fd/:token",
+  "tipo": "ruta",
+  "modulo": "factura-automatica",
+  "metodo": "POST",
+  "ruta": "/api/fd/:token",
+  "relativa": "POST /:token",
+  "controlador": "responder",
+  "publica": true,
+  "guardias": [],
+  "puertas": []
+ },
+ {
   "id": "GET /api/facturas-colaborador/enlace/:token",
   "tipo": "ruta",
   "modulo": "facturas-colaborador",

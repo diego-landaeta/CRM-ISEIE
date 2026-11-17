@@ -804,6 +804,10 @@ export async function getFacturacionAlDia(projectId, { personas = null } = {}) {
   const entera = await model.listPagosSinFactura(projectId);
   const primero = entera[0]?.payment_id;
   const cola = entera.filter(cobroDelEquipo(personas));
+  // Factura automática (#452): qué pasa con los datos fiscales de cada venta.
+  // Apagada, el mapa viene vacío y la cola sale como siempre.
+  const { estadosParaCola } = await import('../factura-automatica/factura-automatica.service.js');
+  const datosFiscales = await estadosParaCola([...new Set(cola.slice(0, 200).map((p) => Number(p.conversion_id)))]);
   return {
     ...estado,
     pagos_sin_factura: cola.length,
@@ -822,6 +826,10 @@ export async function getFacturacionAlDia(projectId, { personas = null } = {}) {
       origen: p.de_stripe ? 'stripe' : 'manual',
       // El primero es el que toca; los demas esperan a que salgan los anteriores.
       es_el_siguiente: p.payment_id === primero,
+      datos_fiscales: (() => {
+        const d = datosFiscales.get(Number(p.conversion_id));
+        return d ? { estado: d.estado, caduca_at: d.caduca_at, motivo: d.motivo_revision || d.ultimo_error || null } : null;
+      })(),
     })),
     por_dia: Object.values(cola.reduce((acc, p) => {
       const d = String(p.fecha).slice(0, 10);

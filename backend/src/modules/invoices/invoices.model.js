@@ -907,6 +907,33 @@ function nombreClienteFactura(conv) {
   return razonSocial || conv.lead_nombre || 'Cliente';
 }
 
+// Los datos del cliente de una factura por cobro: los de la ficha, como
+// siempre, o los de la factura automatica (#452) si los hay.
+function clienteDeLaFactura(conv, df = null) {
+  if (df) {
+    return {
+      clienteNombre: df.nombre,
+      clienteTipo: df.cliente_tipo || null,
+      clienteNif: df.nif || undefined,
+      clienteDireccion: df.direccion || undefined,
+      clienteCiudad: df.ciudad || undefined,
+      clienteCp: df.codigo_postal || undefined,
+      clientePais: df.pais || 'España',
+      clienteEmail: df.email || conv.lead_email || null,
+    };
+  }
+  return {
+    clienteNombre: nombreClienteFactura(conv),
+    clienteTipo: conv.cliente_tipo || null,
+    clienteNif: conv.identificacion_fiscal || undefined,
+    clienteDireccion: conv.direccion_fiscal || undefined,
+    clienteCiudad: conv.ciudad_fiscal || undefined,
+    clienteCp: conv.codigo_postal_fiscal || undefined,
+    clientePais: conv.pais_fiscal || 'España',
+    clienteEmail: conv.lead_email || null,
+  };
+}
+
 function telefonoClienteFactura(conv) {
   const telefonoFiscal = conv.cliente_tipo === 'empresa'
     ? String(conv.custom_fields?.telefono_facturacion || '').trim()
@@ -1032,7 +1059,11 @@ export async function esProformaDe(userId, invoiceId) {
 // (índice único parcial) → reintentos/reejecuciones no duplican.
 // EXCEPCIÓN: si la conversión tiene una PROFORMA (número reservado), el pago la
 // convierte en factura con ese número, en vez de crear una factura nueva.
-export async function emitirFacturaDePago(conversionId, { paymentId, importe, saltarTotal = false }, userId = null) {
+// `datosFiscales` (#452, gemela de CRM#764): la fila de `factura_datos_fiscales`
+// con la que sale sola la factura automatica. Con ella, los datos del cliente son
+// los que dio el alumno (o los de su ficha ya validados) y la factura queda
+// marcada con `datos_fiscales_id`. Sin ella, todo como siempre.
+export async function emitirFacturaDePago(conversionId, { paymentId, importe, saltarTotal = false, datosFiscales = null }, userId = null) {
   if (!conversionId || !paymentId) return null;
   const monto = Number(importe) || 0;
   if (monto <= 0) return null;
@@ -1111,6 +1142,10 @@ export async function emitirFacturaDePago(conversionId, { paymentId, importe, sa
   // Solo una proforma CON numero: la que una gestora deja esperando aprobacion es
   // un borrador sin numero, y convertirla daria una factura sin numero.
   const prof = await proformaQueSeConvierte(conversionId);
+  // Una proforma lleva los datos que puso una persona: la convierte una persona.
+  if (prof && datosFiscales) {
+    throw new AppError('Esta venta tiene una proforma: se convierte desde la cola.', 409, 'TIENE_PROFORMA');
+  }
   if (prof) return await _convertirProformaEnFactura(prof, conv, paymentId, fechaPago);
 
   // ¿Ya hay una factura por el TOTAL de la conversión (ex-proforma o completa)?
@@ -1172,14 +1207,7 @@ export async function emitirFacturaDePago(conversionId, { paymentId, importe, sa
     conversionId,
     paymentId,
     leadId: conv.lead_id,
-    clienteNombre: nombreClienteFactura(conv),
-    clienteTipo: conv.cliente_tipo || null,
-    clienteNif: conv.identificacion_fiscal || undefined,
-    clienteDireccion: conv.direccion_fiscal || undefined,
-    clienteCiudad: conv.ciudad_fiscal || undefined,
-    clienteCp: conv.codigo_postal_fiscal || undefined,
-    clientePais: conv.pais_fiscal || 'España',
-    clienteEmail: conv.lead_email || null,
+    ...clienteDeLaFactura(conv, datosFiscales),
     clienteTelefono: telefonoClienteFactura(conv),
     items: [{ descripcion: concepto, cantidad: 1, precio_unitario: base }],
     baseImponible: base,
@@ -1200,6 +1228,11 @@ export async function emitirFacturaDePago(conversionId, { paymentId, importe, sa
   // Un pago recibido → factura PAGADA (no 'emitida'), con la fecha del cobro.
   if (inv?.id) {
     try { await markPaid(inv.id, fechaPago); inv.estado = 'pagada'; inv.fecha_pago = fechaPago; } catch { /* no bloqueante */ }
+  }
+  // Salio sola (#452): queda dicho en la factura, con que datos.
+  if (inv?.id && datosFiscales?.id) {
+    await query('UPDATE invoices SET datos_fiscales_id = $2 WHERE id = $1', [inv.id, datosFiscales.id]);
+    inv.datos_fiscales_id = datosFiscales.id;
   }
   return inv;
 }
