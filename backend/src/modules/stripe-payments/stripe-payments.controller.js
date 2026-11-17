@@ -115,21 +115,21 @@ export async function webhook(req, res, next) {
       logger.error({ projectId: pid },
         'Webhook de Stripe RECHAZADO: el proyecto no tiene secreto configurado. ' +
         'Ponlo en Integraciones; mientras tanto los cobros entran por el sondeo.');
-      anotaWebhook('stripe', 'rechazado', 'el proyecto no tiene el secreto configurado');
+      anotaWebhook('stripe', 'rechazado', 'el proyecto no tiene el secreto configurado', pid);
       return res.status(400).send('webhook secret no configurado para este proyecto');
     }
     if (!service.verifyStripeSignature(rawBody, sigHeader, secret)) {
       logger.warn({ projectId: pid }, 'Webhook de Stripe con firma invalida');
-      anotaWebhook('stripe', 'rechazado', 'firma invalida');
+      anotaWebhook('stripe', 'rechazado', 'firma invalida', pid);
       return res.status(400).send('Firma invalida');
     }
     const event = JSON.parse(rawBody);
     const result = await service.handleWebhookEvent(pid, event);
-    anotaWebhook('stripe', 'aceptado');
+    anotaWebhook('stripe', 'aceptado', null, pid);
     res.json({ received: true, ...result });
   } catch (e) {
     logger.error({ e: e.message }, 'webhook stripe failed');
-    anotaWebhook('stripe', 'error', e.message);
+    anotaWebhook('stripe', 'error', e.message, Number(req.params.projectId) || null);
     res.status(500).send(`Error: ${e.message}`);
   }
 }
