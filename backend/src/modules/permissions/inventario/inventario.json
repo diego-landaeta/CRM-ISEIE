@@ -14970,6 +14970,28 @@
   "puertas": []
  },
  {
+  "id": "GET /api/users/brevo-bloqueos",
+  "tipo": "ruta",
+  "modulo": "users",
+  "metodo": "GET",
+  "ruta": "/api/users/brevo-bloqueos",
+  "relativa": "GET /brevo-bloqueos",
+  "controlador": "brevoBloqueos",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "users.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/users/availability",
   "tipo": "ruta",
   "modulo": "users",
@@ -15164,6 +15186,28 @@
     "tipo": "puede",
     "claves": [
      "users.aviso_correo"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "DELETE /api/users/:id/brevo-bloqueo",
+  "tipo": "ruta",
+  "modulo": "users",
+  "metodo": "DELETE",
+  "ruta": "/api/users/:id/brevo-bloqueo",
+  "relativa": "DELETE /:id/brevo-bloqueo",
+  "controlador": "desbloquearBrevo",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "users.brevo_desbloquear"
     ]
    }
   ],

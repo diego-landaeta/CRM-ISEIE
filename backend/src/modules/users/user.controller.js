@@ -444,3 +444,30 @@ export async function setEquipoComercial(req, res, next) {
     res.json({ success: true, data: await ponerEquipoComercial(id, parsed.data.gestoraIds, req.user.userId) });
   } catch (err) { next(err); }
 }
+
+/**
+ * GET /api/users/brevo-bloqueos — quién del equipo tiene el correo bloqueado en
+ * Brevo (migración 290), para la marca de la lista y de la ficha. Con el mismo
+ * recorte que la lista. `activo` dice si la vigilancia está encendida: apagada,
+ * el botón de desbloquear no tiene sentido. Gemela de MultiCRM.
+ */
+export async function brevoBloqueos(req, res, next) {
+  try {
+    const { abiertos } = await import('./brevo-bloqueos.js');
+    const { bloqueadosActivo } = await import('../../shared/services/brevo-bloqueados.service.js');
+    const activo = bloqueadosActivo();
+    const bloqueos = activo ? await abiertos({ campus: await campusDeLaLista(req) }) : [];
+    res.json({ success: true, data: { activo, bloqueos } });
+  } catch (err) { next(err); }
+}
+
+/** DELETE /api/users/:id/brevo-bloqueo — «Desbloquear en Brevo» (permiso users.brevo_desbloquear). */
+export async function desbloquearBrevo(req, res, next) {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    await exigirPersonaDeSusCampus(req, id);
+    const { desbloquear } = await import('./brevo-bloqueos.js');
+    res.json({ success: true, data: await desbloquear({ userId: id, porQuien: req.user?.userId }) });
+  } catch (err) { next(err); }
+}

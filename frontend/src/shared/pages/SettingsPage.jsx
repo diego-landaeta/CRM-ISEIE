@@ -21,6 +21,8 @@ import { avisoCambioCorreo, confirmacionCambioCorreo, problemaDeContrasena } fro
 // falta en un solo aviso, Escape cierra y sin autocompletado del navegador.
 import { avisoDeLoQueFalta } from '@/shared/lib/loQueFalta';
 import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
+import BrevoBloqueoAviso from '@/modules/settings/components/BrevoBloqueoAviso';
+import { desbloquearBrevo, listBrevoBloqueos, porPersona, textoDelBloqueo } from '@/shared/lib/brevoBloqueo';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 import { listRolesAsignables, mensajeNoLoTienes, motivoNoAsignable, NOMBRE_ROL, porRol } from '@/shared/lib/rolesAsignables';
@@ -200,6 +202,28 @@ function UsersSection({ isAdmin }) {
   const [loading, setLoading] = useState(true);
   const [showInvite, setShowInvite] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
+  const { can } = usePermission();
+  // Correos que Brevo no entrega (migración 290). Si falla o está apagado, sin
+  // marcas: la lista sigue igual.
+  const [bloqueosBrevo, setBloqueosBrevo] = useState(() => new Map());
+  function cargarBloqueosBrevo() {
+    listBrevoBloqueos()
+      .then((r) => setBloqueosBrevo(porPersona(r.bloqueos)))
+      .catch(() => setBloqueosBrevo(new Map()));
+  }
+  useEffect(() => { cargarBloqueosBrevo(); }, []);
+  async function desbloquearEnBrevo(u) {
+    try {
+      await desbloquearBrevo(u.id);
+      toast({
+        title: 'Desbloqueado en Brevo',
+        description: `Los correos del CRM vuelven a salir hacia ${u.email}. Si el buzón no existe, Brevo lo volverá a bloquear.`,
+      });
+      cargarBloqueosBrevo();
+    } catch (e) {
+      toast({ title: 'No se pudo desbloquear', description: e?.data?.error || e?.message, variant: 'destructive' });
+    }
+  }
 
   async function load() {
     setLoading(true);
@@ -299,6 +323,12 @@ function UsersSection({ isAdmin }) {
                     <span className={`text-[11px] font-semibold ${u.active ? 'text-emerald-600' : 'text-muted-foreground'}`}>
                       {u.active ? 'Activo' : 'Inactivo'}
                     </span>
+                    {bloqueosBrevo.get(u.id) && (
+                      <span className="mt-0.5 flex items-center gap-1 text-[11px] font-semibold text-destructive" title={textoDelBloqueo(bloqueosBrevo.get(u.id))}>
+                        <span className="w-1.5 h-1.5 rounded-full bg-destructive flex-shrink-0" />
+                        Correo bloqueado en Brevo
+                      </span>
+                    )}
                   </td>
                   {isAdmin && (
                     <td className="px-4 py-3 text-right whitespace-nowrap">
@@ -338,6 +368,8 @@ function UsersSection({ isAdmin }) {
           projects={projects || []}
           empresas={esSuperadmin ? empresas : undefined}
           faltaMigracionEmpresas={faltaMigracionEmpresas}
+          bloqueoBrevo={bloqueosBrevo.get(editingUser.id) || null}
+          onDesbloquearBrevo={can('users.brevo_desbloquear') ? () => desbloquearEnBrevo(editingUser) : undefined}
           onClose={() => setEditingUser(null)}
           onSaved={() => { setEditingUser(null); load(); }}
         />
@@ -346,7 +378,7 @@ function UsersSection({ isAdmin }) {
   );
 }
 
-export function EditUserModal({ user, projects, onClose, onSaved, empresas, faltaMigracionEmpresas = false }) {
+export function EditUserModal({ user, projects, onClose, onSaved, empresas, faltaMigracionEmpresas = false, bloqueoBrevo = null, onDesbloquearBrevo }) {
   const { user: me } = useAuth();
   const isSuperadmin = me?.role === 'superadmin';
   const [nombre, setNombre] = useState(user.nombre || '');
@@ -469,6 +501,7 @@ export function EditUserModal({ user, projects, onClose, onSaved, empresas, falt
           </div>
           <button onClick={onClose} className="p-1 rounded hover:bg-muted"><X size={16} weight="bold" /></button>
         </div>
+        {bloqueoBrevo && <BrevoBloqueoAviso bloqueo={bloqueoBrevo} onDesbloquear={onDesbloquearBrevo} />}
         <div className="space-y-3">
           <div>
             <label htmlFor="edit-user-nombre" className="text-xs text-muted-foreground mb-1 block">Nombre</label>

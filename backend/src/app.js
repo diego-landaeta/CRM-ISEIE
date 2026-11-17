@@ -54,6 +54,7 @@ import asignacionModule from './modules/asignacion/index.js';
 import { registrarActividad } from './shared/middleware/registrarActividad.js';
 import { startWebhooksSalientesScheduler } from './jobs/webhooksSalientesScheduler.js';
 import { startCopiaDiariaScheduler } from './jobs/copiaDiariaJob.js';
+import { startBrevoBloqueadosScheduler } from './jobs/brevoBloqueadosScheduler.js';
 import { startAsignacionScheduler } from './jobs/asignacionScheduler.js';
 import projectChannelsModule from './modules/project-channels/index.js';
 import installationModule from './modules/installation/index.js';
@@ -585,6 +586,12 @@ if (process.env.NODE_ENV !== 'test') {
       startCopiaDiariaScheduler();
     } catch (err) {
       logger.error({ err }, 'Copia diaria de la base: falló al arrancar');
+    }
+    // Correos del equipo bloqueados en Brevo (17/11). Apagada de serie: BREVO_BLOQUEADOS_ACTIVO.
+    try {
+      startBrevoBloqueadosScheduler();
+    } catch (err) {
+      logger.error({ err }, 'Correos bloqueados en Brevo: la vigilancia falló al arrancar');
     }
     // Los reintentos del webhook de transferencias (se apaga con WEBHOOKS_SALIENTES_DISABLED=1).
     try {
