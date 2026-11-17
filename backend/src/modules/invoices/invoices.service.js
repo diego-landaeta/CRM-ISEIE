@@ -10,6 +10,8 @@ import * as model from './invoices.model.js';
 import { duplicadasDeLaCola, MOTIVO_EN_COLA } from './posible-duplicada.js';
 import { query } from '../../shared/config/db.js';
 import { alcanceComercial } from '../../shared/utils/roles.js';
+// La pausa de la auditoria de facturacion (#765). Apagada, no hace nada.
+import { exigirFacturacionActiva } from '../facturacion-auditoria/facturacion-auditoria.pausa.js';
 
 const PDF_DIR = process.env.INVOICES_PDF_DIR || path.join(process.cwd(), 'uploads', 'invoices');
 
@@ -813,6 +815,10 @@ export async function getFacturacionAlDia(projectId, { personas = null } = {}) {
   } catch (err) {
     logger.warn({ err: err.message, projectId }, 'no se pudo mirar si la cola tiene posibles duplicadas');
   }
+  // Factura automática (#452): qué pasa con los datos fiscales de cada venta.
+  // Apagada, el mapa viene vacío y la cola sale como siempre.
+  const { estadosParaCola } = await import('../factura-automatica/factura-automatica.service.js');
+  const datosFiscales = await estadosParaCola([...new Set(cola.slice(0, 200).map((p) => Number(p.conversion_id)))]);
   return {
     ...estado,
     pagos_sin_factura: cola.length,
@@ -833,6 +839,10 @@ export async function getFacturacionAlDia(projectId, { personas = null } = {}) {
       es_el_siguiente: p.payment_id === primero,
       motivo: duplicadas.has(Number(p.payment_id)) ? MOTIVO_EN_COLA : null,
       posible_duplicada: duplicadas.get(Number(p.payment_id)) || null,
+      datos_fiscales: (() => {
+        const d = datosFiscales.get(Number(p.conversion_id));
+        return d ? { estado: d.estado, caduca_at: d.caduca_at, motivo: d.motivo_revision || d.ultimo_error || null } : null;
+      })(),
     })),
     por_dia: Object.values(cola.reduce((acc, p) => {
       const d = String(p.fecha).slice(0, 10);
@@ -863,6 +873,9 @@ export async function generarFacturaDePago(projectId, paymentId, userId, { forza
   if (!cobroDelEquipo(personas)(pg)) {
     throw new AppError('Ese cobro es de una gestora que no está en tu equipo.', 403, 'FUERA_DE_TU_EQUIPO');
   }
+  // Con la facturacion pausada por la auditoria (#765), la cola no emite. Se
+  // mira antes que el orden para que el motivo que se lee sea el de verdad.
+  await exigirFacturacionActiva({ paymentId: pg.payment_id });
   if (!forzar && await model.hayPendientesAnteriores(projectId, pg.fecha, pg.payment_id)) {
     throw new AppError(
       'Hay cobros anteriores sin facturar. Se emiten por orden de fecha para que la numeración no se descoloque.',
@@ -930,6 +943,9 @@ export async function cobrarProforma(invoiceId, { importe, fecha, metodo, notas,
   }
   const motivo = await model.motivoParaNoCobrarProforma(prof, { importe, fecha });
   if (motivo) throw new AppError(motivo.texto, 409, motivo.code);
+  // Antes de apuntar el cobro: con la facturacion pausada (#765) la proforma no
+  // pasaria a factura y el cobro quedaria a medias.
+  await exigirFacturacionActiva();
 
   // Import dinamico: conversion.service ya importa este modulo de la misma forma.
   // Aqui addPayment ademas intenta facturar solo (en ISEIE autoInvoice no esta
@@ -966,6 +982,9 @@ export async function emitirColaHasta(projectId, hasta, userId) {
     } catch (err) {
       fallidas.push({ payment_id: pg.payment_id, cliente: pg.cliente, error: err.message });
       logger.warn({ paymentId: pg.payment_id, err: err.message }, 'no se pudo emitir la factura de la cola');
+      // Facturacion pausada por la auditoria (#765): los que siguen tampoco
+      // saldrian, y van en orden. Se para aqui.
+      if (err?.code === 'FACTURACION_PAUSADA') break;
     }
   }
   return { emitidas: emitidas.length, detalle: emitidas, fallidas };
