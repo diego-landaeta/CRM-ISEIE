@@ -4,6 +4,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import client from '@/shared/api/client';
+import { formatDate } from '@/shared/lib/format';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
@@ -45,9 +46,12 @@ function fmt(n: number | string): string {
   }).format(Number(n || 0));
 }
 
+// Las fechas de venta llegan como DATE («2026-10-12»): `new Date()` las lee
+// en UTC y en Latinoamérica salían un día antes (#693). `formatDate` lee el día
+// tal cual y, si trae hora, la respeta.
 function fmtDate(d?: string | null): string {
   if (!d) return '—';
-  return new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+  return formatDate(d);
 }
 
 const PER_PAGE = 50;
