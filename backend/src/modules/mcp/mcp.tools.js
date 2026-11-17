@@ -178,9 +178,12 @@ export const INFORMES = {
   // Todas devuelven cifras y listas cortas. Sin correos, teléfonos ni textos de
   // mensajes; los clientes que aparecen (solo en «whatsapp») salen abreviados.
   matriculas: {
-    descripcion: 'La pantalla de Matrículas en cifras: cuántas hay por estado (pendientes, validadas, rechazadas…), por producto, por campus y por mes de alta. '
-      + 'Acepta desde y hasta (por fecha de alta). Una gestora solo cuenta las de sus ventas.',
-    ejecutar: ({ projectIds, asesoraId, from, to }) => model.resumenMatriculas({ projectIds, asesoraId, from, to }),
+    descripcion: 'La pantalla Solicitud de admisión en cifras: cuántas hay por estado (pendientes, validadas, rechazadas…), por producto, por campus y por mes de alta. '
+      + 'Acepta desde y hasta (por fecha de alta). Cuenta las de los campus de quien pregunta, también a una gestora (como la pantalla).',
+    // Sin `asesoraId` (Diego, 17/11/2026: «que todas las gestoras puedan ver en Matrículas
+    // la información»): la pantalla enseña a la gestora todas las solicitudes de SUS campus,
+    // y Claude cuenta lo mismo. El recorte por campus (`projectIds`) sigue.
+    ejecutar: ({ projectIds, from, to }) => model.resumenMatriculas({ projectIds, from, to }),
   },
   catalogo_completo: {
     descripcion: 'El catálogo por dentro, por campus: formaciones activas e inactivas, cuántas no tienen SKU o lo repiten o no tienen precio, el árbol de categorías '

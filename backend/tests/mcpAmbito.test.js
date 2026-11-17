@@ -260,6 +260,11 @@ describe('cada consulta va acotada a los campus de la persona', () => {
     // 19/10/2026; sigue siendo solo de admin. Si un
     // informe nuevo hace lo mismo, esta prueba lo caza antes de que Claude le
     // cuente a una gestora los totales de todo el campus.
+    //
+    // La excepción, a propósito: lo que la gestora ya ve ENTERO en su pantalla se le
+    // cuenta entero de SUS campus (nunca de otros). Diego, 17/11/2026: Solicitud de
+    // admisión (`matriculas`), «que todas las gestoras puedan ver la información».
+    const DEL_CAMPUS_PARA_LA_GESTORA = ['matriculas'];
     const informe = HERRAMIENTAS.find((h) => h.nombre === 'informe');
     for (const tipo of Object.keys(INFORMES)) {
       consultas.length = 0;
@@ -267,6 +272,12 @@ describe('cada consulta va acotada a los campus de la persona', () => {
       if (r instanceof Error) {
         expect(r.code).toBe('MCP_INFORME_SOLO_ADMIN');
         expect(consultas).toEqual([]);
+      } else if (DEL_CAMPUS_PARA_LA_GESTORA.includes(tipo)) {
+        expect(consultas.length).toBeGreaterThan(0);
+        for (const { params } of consultas) {
+          const lista = (params || []).find((p) => Array.isArray(p));
+          expect([...(lista || [])].sort(), `${tipo}: ${JSON.stringify(params)}`).toEqual(PROYECTOS.map((p) => p.id).sort());
+        }
       } else {
         expect(consultas.length).toBeGreaterThan(0);
         for (const { params } of consultas) expect(lleva7(params), `${tipo}: ${JSON.stringify(params)}`).toBe(true);
