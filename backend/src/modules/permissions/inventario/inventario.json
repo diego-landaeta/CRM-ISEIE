@@ -5750,6 +5750,84 @@
   "puertas": []
  },
  {
+  "id": "GET /api/informe-mensual/descarga/:issuerId/:periodo",
+  "tipo": "ruta",
+  "modulo": "informe-mensual",
+  "metodo": "GET",
+  "ruta": "/api/informe-mensual/descarga/:issuerId/:periodo",
+  "relativa": "GET /descarga/:issuerId/:periodo",
+  "controlador": "descargarConEnlace",
+  "publica": true,
+  "guardias": [],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/informe-mensual/",
+  "tipo": "ruta",
+  "modulo": "informe-mensual",
+  "metodo": "GET",
+  "ruta": "/api/informe-mensual/",
+  "relativa": "GET /",
+  "controlador": "informe",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "reports.informe_mensual"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/informe-mensual/excel",
+  "tipo": "ruta",
+  "modulo": "informe-mensual",
+  "metodo": "GET",
+  "ruta": "/api/informe-mensual/excel",
+  "relativa": "GET /excel",
+  "controlador": "excel",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "reports.informe_mensual"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/informe-mensual/zip",
+  "tipo": "ruta",
+  "modulo": "informe-mensual",
+  "metodo": "GET",
+  "ruta": "/api/informe-mensual/zip",
+  "relativa": "GET /zip",
+  "controlador": "zip",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "reports.informe_mensual"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/installation/",
   "tipo": "ruta",
   "modulo": "installation",

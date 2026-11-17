@@ -61,7 +61,7 @@ export const BUNDLES = {
   reports: {
     label: 'Reportes basicos',
     description: 'Dashboards y reportes consolidados',
-    modules: ['reports'],
+    modules: ['reports', 'informe-mensual'],
     requires: ['core'],
   },
 };
