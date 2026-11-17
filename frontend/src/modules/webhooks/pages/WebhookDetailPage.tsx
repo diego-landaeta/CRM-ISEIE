@@ -23,7 +23,7 @@ interface DestinationOption {
 
 const DESTINATIONS: ReadonlyArray<DestinationOption> = [
   { v: 'lead', label: 'Lead / Prospecto', Icon: Users, desc: 'Crea un lead en el embudo (round-robin de gestores)' },
-  { v: 'matricula', label: 'Matrícula', Icon: GraduationCap, desc: 'Crea una solicitud de admisión en estado pendiente' },
+  { v: 'matricula', label: 'Solicitud de admisión', Icon: GraduationCap, desc: 'Crea una solicitud de admisión en estado pendiente' },
 ];
 
 type WebhookDetail = Webhook & { awaiting_sample?: boolean };

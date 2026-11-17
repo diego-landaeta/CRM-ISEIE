@@ -1506,15 +1506,15 @@ lo que pide para tener sentido (editar pide ver).
 | Borrar clientes | `clients.delete` | Quitar un cliente. (solo pantalla) | Admin | `clients.view` |
 | Exportar clientes | `clients.export` | Descargar en CSV los clientes que se ven. (solo pantalla) | Admin | `clients.view` |
 
-### Matrículas
+### Solicitud de admisión
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver matrículas | `matriculas.view` | Las matrículas y sus documentos. | Admin, Gestora, Soporte, Project manager |  |
-| Crear matrículas | `matriculas.create` | Una matrícula nueva. | Admin, Gestora, Soporte | `matriculas.view` |
-| Editar matrículas | `matriculas.edit` | Cambiar datos y subir documentos. | Admin, Gestora, Soporte | `matriculas.view` |
-| Cambiar el estado | `matriculas.cambiar_estado` | Validar, rechazar o cerrar una matrícula. | Admin, Soporte | `matriculas.view` |
-| Borrar matrículas | `matriculas.delete` | Quitar una matrícula. | Admin, Soporte | `matriculas.view` |
+| Ver solicitudes de admisión | `matriculas.view` | Las solicitudes de admisión de sus campus, con sus datos y sus documentos. | Admin, Gestora, Soporte, Project manager |  |
+| Crear solicitudes de admisión | `matriculas.create` | Una solicitud de admisión nueva. | Admin, Gestora, Soporte | `matriculas.view` |
+| Editar solicitudes de admisión | `matriculas.edit` | Cambiar datos y subir documentos. | Admin, Gestora, Soporte | `matriculas.view` |
+| Cambiar el estado | `matriculas.cambiar_estado` | Validar, rechazar o cerrar una solicitud de admisión. | Admin, Soporte | `matriculas.view` |
+| Borrar solicitudes de admisión | `matriculas.delete` | Quitar una solicitud de admisión. | Admin, Soporte | `matriculas.view` |
 
 ### Diplomas (Certifex)
 

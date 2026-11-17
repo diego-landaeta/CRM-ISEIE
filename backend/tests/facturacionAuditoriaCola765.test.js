@@ -95,6 +95,13 @@ describe('auditoría de facturación contra la base (#765)', { timeout: 60000 },
        SELECT $2, lower(serie) || ' ', ano, numero, codigo, 'Otro', '12345678Z', 'x', 'y', '28001', 'España',
               items, 50, 50, issuer_id FROM invoices WHERE id = $1 RETURNING id`,
       [primera.id, otro.id]);
+    // Las dos se hicieron «a las 00:00 de hoy» en Madrid: en UTC (la zona de la
+    // base de la CI) eso aún es ayer. La auditoría cuenta por días de Madrid y
+    // tiene que verlas igual; así la prueba no depende de la hora a la que corra
+    // (antes fallaba de 00:00 a 01:00 de Madrid y pasaba el resto del día).
+    await q(
+      `UPDATE invoices SET created_at = ($2::date::timestamp AT TIME ZONE 'Europe/Madrid') WHERE id = ANY($1::int[])`,
+      [[primera.id, repetida.id], HOY]);
 
     const r = await servicio.auditar({ origen: 'programada' });
     const mias = r.incidencias.filter((i) => i.serie === SERIE);

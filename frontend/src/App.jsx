@@ -173,7 +173,7 @@ const ROUTE_TITLES = {
   '/accounting/facturas-colaboradores': 'Facturas de colaboradores',
   '/mi-factura':                      'Mi factura',
   '/payroll':                         'Nóminas',
-  '/matriculas':                      'Matrículas',
+  '/matriculas':                      'Solicitud de admisión',
   '/conexion/mcp':                    'MCP',
   '/conexion/moodle':                 'Moodle',
   '/consultas':                       'Consultas',

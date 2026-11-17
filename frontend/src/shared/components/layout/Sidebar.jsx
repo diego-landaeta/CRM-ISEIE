@@ -218,7 +218,7 @@ export const NAV_SECTIONS = [
       { to: '/clients',    label: 'Clientes',   icon: UserCheck, sectionPrefixes: ['/clients'], permiso: 'clients.view' },
       { to: '/leads/revision-duplicados', label: 'Revisión duplicados', icon: GitMerge, roles: ['admin', 'superadmin'], permiso: 'leads.duplicados' },
       { to: '/leads/duplicados', label: 'Buscar duplicados', icon: CopySimple, roles: ['admin', 'superadmin'], permiso: 'leads.duplicados' },
-      { to: '/matriculas', label: 'Matrículas', icon: UserCheck, permiso: 'matriculas.view' },
+      { to: '/matriculas', label: 'Solicitud de admisión', icon: UserCheck, permiso: 'matriculas.view' },
       // Diplomas de Certifex (#272): lo que piden los alumnos desde Moodle, aprobarlo,
       // enviarlo y revocarlo. Administración, como en MultiCRM, y además, para VERLO en
       // solo lectura, quien tenga `diplomas.view` (#223, `oPermiso`), y para emitir,
