@@ -30,7 +30,9 @@ export async function create(req, res, next) {
 
 export async function topProducts(req, res, next) {
   try {
-    const projectId = req.query.projectId ? parseInt(req.query.projectId) : null;
+    // Solo dentro de los campus de quien pide (CRM#245): antes el `projectId`
+    // iba tal cual y, sin él, salían los de todos.
+    const { projectId, projectIds } = await proyectosDelAmbito(req);
     const limit = Math.min(parseInt(req.query.limit) || 10, 50);
     const days = req.query.days ? parseInt(req.query.days) : null; // null = all-time
     // Rango de fechas explícito YYYY-MM-DD (hoy/semana/mes/personalizado). Se ignora si el formato no es válido.
@@ -42,7 +44,7 @@ export async function topProducts(req, res, next) {
     // Con equipo comercial (09/11/2026), el suyo y el de sus gestoras.
     const alcance = await alcanceComercial(req.user);
     if (alcance) responsableId = personasDentro(alcance, responsableId);
-    const result = await salesService.getTopProducts({ projectId, limit, days, from, to, responsableId });
+    const result = await salesService.getTopProducts({ projectId, projectIds, limit, days, from, to, responsableId });
     // `data` sigue siendo la lista, como siempre: el panel de inicio la lee así
     // y no tiene por qué enterarse. Lo que no es un programa va aparte, y los
     // totales y las ventas sin cobro también (#225): el total lo da el
@@ -150,7 +152,11 @@ async function filtrosDeQuery(req) {
   const alcance = await alcanceComercial(req.user);
   if (alcance) responsableId = personasDentro(alcance, responsableId);
   return {
-    projectId: req.query.projectId ? parseInt(req.query.projectId) : null,
+    // Un campus, una empresa o «Todos», SIEMPRE dentro de los campus de quien
+    // pide (CRM#245, gemela #369). Antes el `projectId` llegaba tal cual: un
+    // admin veía el resumen, las ventas por asesora y por cliente y la serie de
+    // un campus que no es suyo cambiando la URL, y sin campus, los de todos.
+    ...(await proyectosDelAmbito(req)),
     from: dateRe2.test(req.query.from || '') ? req.query.from : null,
     to: dateRe2.test(req.query.to || '') ? req.query.to : null,
     responsableId,
@@ -213,7 +219,7 @@ export async function desglose(req, res, next) {
   try {
     const dateRe = /^\d{4}-\d{2}-\d{2}$/;
     const data = await salesService.getDesglose({
-      projectId: req.query.projectId ? parseInt(req.query.projectId) : null,
+      ...(await proyectosDelAmbito(req)),
       from: dateRe.test(req.query.from || '') ? req.query.from : null,
       to: dateRe.test(req.query.to || '') ? req.query.to : null,
       // Una gestora ve su propio reparto, no el del proyecto entero.
@@ -236,6 +242,7 @@ export async function paises(req, res, next) {
     const hoy = new Date().toISOString().slice(0, 10);
     const data = await reportModel.paisesMasVendidos({
       projectId: f.projectId,
+      projectIds: f.projectIds,
       from: f.from || `${new Date().getFullYear()}-01-01`,
       to: f.to || hoy,
       asesoraId: f.responsableId,
