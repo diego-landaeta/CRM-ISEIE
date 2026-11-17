@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { verifyToken } from '../../shared/middleware/auth.js';
+import { puede } from '../../shared/middleware/permissions.js';
 import { uploadDoc } from '../../shared/middleware/upload.js';
 import * as ctrl from './soporte.controller.js';
 
@@ -40,6 +41,22 @@ router.post('/', crearTicketLimiter, ctrl.crear);
 // «tiempos» o «adjuntos» — y el fallo no es un 404 limpio, es un NaN que
 // llega a la consulta.
 router.get('/tiempos', ctrl.tiempos);
+
+// Pedir acceso o permiso (CRM#820): un ticket del tipo «acceso» en esta misma
+// bandeja. Pedir, cualquiera con sesion (tambien el tutor, el colaborador y el
+// tutor redactor: su ruta esta en sus listas cerradas, shared/utils/roles.js);
+// ver y moverlas, soporte y admin. Con su propio tope, como abrir un ticket.
+const pedirAccesoLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => `acceso-nuevo-${req.user?.userId || 'anon'}`,
+  message: { success: false, error: 'Has pedido muchos accesos seguidos. Intentalo de nuevo en un rato.', code: 'RATE_LIMITED' },
+});
+router.post('/accesos', puede('accesos.pedir'), pedirAccesoLimiter, ctrl.pedirAcceso);
+router.get('/accesos', puede('accesos.view'), ctrl.listarAccesos);
+router.patch('/accesos/:id', puede('accesos.gestionar'), ctrl.gestionarAcceso);
 router.get('/adjuntos/:adjuntoId', ctrl.descargarAdjunto);
 
 router.get('/:id', ctrl.porId);

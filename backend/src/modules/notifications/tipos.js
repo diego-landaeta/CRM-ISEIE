@@ -72,6 +72,17 @@ export const TIPOS = {
     clase: ACCION, etiqueta: 'Ticket de soporte', agrupa: false,
     descripcion: 'Alguien del equipo ha reportado una averia o pedido algo',
   },
+  // CRM#820: alguien pide un alta, un permiso, un campus o Claude. Le llega a
+  // soporte y a los admins del campus que puedan verlo; hay que prepararlo.
+  acceso_pedido: {
+    clase: ACCION, etiqueta: 'Petición de acceso', agrupa: false,
+    descripcion: 'Alguien del equipo pide un alta, un permiso, un campus o Claude',
+  },
+  // Y a quien la pidió, cuando soporte la mueve: en preparación, hecha o rechazada.
+  acceso_respondido: {
+    clase: AVISO, etiqueta: 'Tu petición de acceso', agrupa: false,
+    descripcion: 'Soporte ha movido una petición de acceso tuya',
+  },
   dup_review_pending: {
     clase: ACCION, etiqueta: 'Duplicados por revisar', agrupa: true,
     descripcion: 'Hay fichas esperando en la cola de revisión',

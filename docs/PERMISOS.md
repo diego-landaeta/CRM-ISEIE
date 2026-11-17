@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-779 rutas en 59 módulos, y 31 acciones con condición dentro de una ruta.
+782 rutas en 59 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -849,6 +849,9 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | listar | `GET /api/soporte/` | (no existía) | (ruta nueva) | lo de cada uno |
 | crear | `POST /api/soporte/` | (no existía) | (ruta nueva) | lo de cada uno |
 | tiempos | `GET /api/soporte/tiempos` | (no existía) | (ruta nueva) | lo de cada uno |
+| pedirAcceso | `POST /api/soporte/accesos` | (no existía) | (ruta nueva) | `accesos.pedir` |
+| listarAccesos | `GET /api/soporte/accesos` | (no existía) | (ruta nueva) | `accesos.view` |
+| gestionarAcceso | `PATCH /api/soporte/accesos/:id` | (no existía) | (ruta nueva) | `accesos.gestionar` |
 | descargarAdjunto | `GET /api/soporte/adjuntos/:adjuntoId` | (no existía) | (ruta nueva) | lo de cada uno |
 | porId | `GET /api/soporte/:id` | (no existía) | (ruta nueva) | lo de cada uno |
 | responder | `POST /api/soporte/:id/mensajes` | (no existía) | (ruta nueva) | lo de cada uno |
@@ -1537,6 +1540,14 @@ lo que pide para tener sentido (editar pide ver).
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
 | Usar los mensajes | `mensajes.usar` | Escribirse con el resto del equipo. | Admin, Gestora, Soporte, Project manager, Tutor |  |
+
+### Peticiones de acceso
+
+| Permiso | Clave | Qué deja hacer | De serie | Necesita |
+|---|---|---|---|---|
+| Pedir acceso o permiso | `accesos.pedir` | Pedir un alta, un permiso, un campus o Claude: queda como ticket de Soporte para que lo prepare soporte. | Admin, Gestora, Soporte, Project manager, Tutor, Colaborador, Tutor redactor |  |
+| Ver las peticiones de acceso | `accesos.view` | Las peticiones de acceso del equipo (un admin, las de sus campus). | Admin, Soporte |  |
+| Gestionar las peticiones de acceso | `accesos.gestionar` | Marcarlas en preparación, hechas o rechazadas y contestar a quien las pidió. | Admin, Soporte | `accesos.view` |
 
 ### Solicitudes de cambio
 

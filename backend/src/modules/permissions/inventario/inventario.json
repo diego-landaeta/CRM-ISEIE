@@ -12238,6 +12238,72 @@
   "puertas": []
  },
  {
+  "id": "POST /api/soporte/accesos",
+  "tipo": "ruta",
+  "modulo": "soporte",
+  "metodo": "POST",
+  "ruta": "/api/soporte/accesos",
+  "relativa": "POST /accesos",
+  "controlador": "pedirAcceso",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "accesos.pedir"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/soporte/accesos",
+  "tipo": "ruta",
+  "modulo": "soporte",
+  "metodo": "GET",
+  "ruta": "/api/soporte/accesos",
+  "relativa": "GET /accesos",
+  "controlador": "listarAccesos",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "accesos.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PATCH /api/soporte/accesos/:id",
+  "tipo": "ruta",
+  "modulo": "soporte",
+  "metodo": "PATCH",
+  "ruta": "/api/soporte/accesos/:id",
+  "relativa": "PATCH /accesos/:id",
+  "controlador": "gestionarAcceso",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "accesos.gestionar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/soporte/adjuntos/:adjuntoId",
   "tipo": "ruta",
   "modulo": "soporte",
