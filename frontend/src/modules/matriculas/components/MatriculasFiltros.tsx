@@ -121,7 +121,7 @@ export default function MatriculasFiltros({ filtros, onCambio, cursos, campus }:
         <div
           ref={panelRef}
           role="dialog"
-          aria-label="Filtros de matrículas"
+          aria-label="Filtros de las solicitudes de admisión"
           style={{ position: 'fixed', top: pos.top, left: pos.left, width: pos.width, zIndex: 1000 }}
           className="bg-card border border-border rounded-lg shadow-dialog px-3 py-2.5 space-y-1.5"
         >

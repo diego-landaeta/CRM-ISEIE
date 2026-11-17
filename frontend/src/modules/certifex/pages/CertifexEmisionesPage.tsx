@@ -417,7 +417,7 @@ export default function CertifexEmisionesPage({ embebida = false }: { embebida?:
       const r = await diplomasApi.pedir({ matriculaId: c.matriculaId, centro: c.centro, cursoRef: c.curso.ref, ...(forzar ? { forzar: true } : {}) });
       toast({
         title: r.data.yaPedido ? 'Ya estaba en Pendientes' : 'Pasado a Pendientes',
-        description: `${r.data.nombre} · ${r.data.curso}. Apruébalo y emítelo desde allí (Matrículas › Diplomas › Pendientes).`,
+        description: `${r.data.nombre} · ${r.data.curso}. Apruébalo y emítelo desde allí (Solicitud de admisión › Diplomas › Pendientes).`,
       });
       await cargarFilas();
     } catch (e) {

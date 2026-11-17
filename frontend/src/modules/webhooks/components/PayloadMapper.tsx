@@ -170,7 +170,7 @@ export default function PayloadMapper({ payload, mapping, destination = 'lead', 
         </div>
         <div className="border border-border rounded-xl p-3 space-y-2">
           <p className="text-[11px] font-bold uppercase text-muted-foreground">
-            Mapping → {destination === 'matricula' ? 'Matrícula' : 'Lead'}
+            Mapping → {destination === 'matricula' ? 'Solicitud de admisión' : 'Lead'}
           </p>
           {targets.map((t) => {
             const paths = pathsOf(mapping[t.key]);
