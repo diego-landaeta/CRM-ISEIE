@@ -1539,6 +1539,224 @@
   "puertas": []
  },
  {
+  "id": "GET /api/cobros-externos/estado",
+  "tipo": "ruta",
+  "modulo": "cobros-externos",
+  "metodo": "GET",
+  "ruta": "/api/cobros-externos/estado",
+  "relativa": "GET /estado",
+  "controlador": "estado",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "cobros_externos.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/cobros-externos/paypal",
+  "tipo": "ruta",
+  "modulo": "cobros-externos",
+  "metodo": "GET",
+  "ruta": "/api/cobros-externos/paypal",
+  "relativa": "GET /paypal",
+  "controlador": "listarPaypal",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "cobros_externos.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/cobros-externos/paypal/sincronizar",
+  "tipo": "ruta",
+  "modulo": "cobros-externos",
+  "metodo": "POST",
+  "ruta": "/api/cobros-externos/paypal/sincronizar",
+  "relativa": "POST /paypal/sincronizar",
+  "controlador": "sincronizarPaypal",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "cobros_externos.edit"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/cobros-externos/paypal/:id/enlazar",
+  "tipo": "ruta",
+  "modulo": "cobros-externos",
+  "metodo": "POST",
+  "ruta": "/api/cobros-externos/paypal/:id/enlazar",
+  "relativa": "POST /paypal/:id/enlazar",
+  "controlador": "enlazarPaypal",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "cobros_externos.edit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/cobros-externos/banco/extractos",
+  "tipo": "ruta",
+  "modulo": "cobros-externos",
+  "metodo": "GET",
+  "ruta": "/api/cobros-externos/banco/extractos",
+  "relativa": "GET /banco/extractos",
+  "controlador": "listarExtractos",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "cobros_externos.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/cobros-externos/banco/extractos",
+  "tipo": "ruta",
+  "modulo": "cobros-externos",
+  "metodo": "POST",
+  "ruta": "/api/cobros-externos/banco/extractos",
+  "relativa": "POST /banco/extractos",
+  "controlador": "subirExtracto",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "cobros_externos.edit"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/cobros-externos/banco/movimientos",
+  "tipo": "ruta",
+  "modulo": "cobros-externos",
+  "metodo": "GET",
+  "ruta": "/api/cobros-externos/banco/movimientos",
+  "relativa": "GET /banco/movimientos",
+  "controlador": "listarMovimientos",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "cobros_externos.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/cobros-externos/banco/movimientos/:id/confirmar",
+  "tipo": "ruta",
+  "modulo": "cobros-externos",
+  "metodo": "POST",
+  "ruta": "/api/cobros-externos/banco/movimientos/:id/confirmar",
+  "relativa": "POST /banco/movimientos/:id/confirmar",
+  "controlador": "confirmarMovimiento",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "cobros_externos.edit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/cobros-externos/banco/movimientos/:id/descartar",
+  "tipo": "ruta",
+  "modulo": "cobros-externos",
+  "metodo": "POST",
+  "ruta": "/api/cobros-externos/banco/movimientos/:id/descartar",
+  "relativa": "POST /banco/movimientos/:id/descartar",
+  "controlador": "descartarMovimiento",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "cobros_externos.edit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/paypal-webhook/:projectId",
+  "tipo": "ruta",
+  "modulo": "cobros-externos",
+  "metodo": "POST",
+  "ruta": "/api/paypal-webhook/:projectId",
+  "relativa": "POST /:projectId",
+  "controlador": "webhookPaypal",
+  "publica": true,
+  "guardias": [],
+  "puertas": []
+ },
+ {
   "id": "GET /api/commissions/rules",
   "tipo": "ruta",
   "modulo": "commissions",

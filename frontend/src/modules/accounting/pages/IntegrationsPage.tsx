@@ -10,7 +10,7 @@ import {
 } from '@phosphor-icons/react';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────
-type Provider = 'stripe' | 'brevo' | 'moodle';
+type Provider = 'stripe' | 'brevo' | 'moodle' | 'paypal';
 interface Integration {
   id?: number;
   project_id?: number;
@@ -107,6 +107,8 @@ export default function IntegrationsPage() {
       ) : (
         <div className="space-y-5">
           <StripeCard projectId={pid} />
+          {/* PayPal (#766): solo si el servidor tiene encendido PAYPAL_COBROS_ACTIVO. */}
+          <PaypalSiEstaEncendido key={`paypal-${pid}`} projectId={pid} />
           <BrevoCard projectId={pid} />
           <MoodleCard projectId={pid} />
         </div>
@@ -546,6 +548,202 @@ function BrevoCard({ projectId }: { projectId: number }) {
           {data?.has_secret && (
             <button onClick={clear}
               className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-red-300 dark:border-red-900 bg-card text-sm font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 ml-auto">
+              <Trash size={14} weight="bold" /> Eliminar
+            </button>
+          )}
+        </div>
+      </div>
+      {loading && <div className="px-5 py-3 text-xs text-muted-foreground border-t border-border">Cargando…</div>}
+    </div>
+  );
+}
+
+// ─── PayPal (#766) ─────────────────────────────────────────────────────────
+// Los cobros de la cuenta PayPal Business del campus: el CRM los lee (sondeo
+// cada 30 minutos y, si se da de alta, el webhook) y los registra en su venta.
+// Solo lectura: con estas credenciales el CRM no cobra ni devuelve nada.
+const EVENTOS_PAYPAL = [
+  'PAYMENT.CAPTURE.COMPLETED', 'PAYMENT.CAPTURE.PENDING', 'PAYMENT.CAPTURE.DENIED',
+  'PAYMENT.CAPTURE.REVERSED', 'PAYMENT.CAPTURE.REFUNDED', 'PAYMENT.SALE.COMPLETED',
+] as const;
+
+function urlWebhookPaypal(projectId: number): string {
+  const base = (import.meta.env.VITE_API_URL as string | undefined) || `${window.location.origin}/api`;
+  return `${base.replace(/\/+$/, '')}/paypal-webhook/${projectId}`;
+}
+
+function PaypalSiEstaEncendido({ projectId }: { projectId: number }) {
+  const [encendido, setEncendido] = useState(false);
+  useEffect(() => {
+    let vivo = true;
+    client.get<{ paypal: boolean }>('/cobros-externos/estado')
+      .then((r) => { if (vivo) setEncendido(!!r.data?.paypal); })
+      .catch(() => { /* sin permiso o sin módulo: no se enseña */ });
+    return () => { vivo = false; };
+  }, []);
+  return encendido ? <PaypalCard projectId={projectId} /> : null;
+}
+
+function PaypalCard({ projectId }: { projectId: number }) {
+  const [data, setData] = useState<Integration | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [showHelp, setShowHelp] = useState(false);
+  const [clientId, setClientId] = useState('');
+  const [secret, setSecret] = useState('');
+  const [showKey, setShowKey] = useState(false);
+  const [modo, setModo] = useState<'live' | 'sandbox'>('live');
+  const [webhookId, setWebhookId] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await client.get<Integration>(`/integrations/paypal?projectId=${projectId}`);
+      if (res.success) {
+        const d = res.data || EMPTY('paypal');
+        setData(d);
+        setClientId((d.config_public?.client_id as string) || '');
+        setModo(d.config_public?.modo === 'sandbox' ? 'sandbox' : 'live');
+        setWebhookId((d.config_public?.webhook_id as string) || '');
+      }
+    } catch {/* ignore */} finally { setLoading(false); }
+  }, [projectId]);
+  useEffect(() => { load(); }, [load]);
+
+  async function save() {
+    setSaving(true);
+    try {
+      const body: Record<string, unknown> = {
+        projectId, provider: 'paypal', active: true,
+        config_public: { client_id: clientId.trim(), modo, webhook_id: webhookId.trim() || null },
+      };
+      if (secret.trim()) body.api_key = secret.trim();
+      const res = await client.put<Integration>('/integrations', body);
+      if (res.success) {
+        setData(res.data || null);
+        setSecret('');
+        toast({ title: 'PayPal guardado', description: 'El secreto queda cifrado en la base.' });
+      }
+    } catch (e: unknown) {
+      const err = e as { data?: { error?: string }; message?: string };
+      toast({ title: 'Error', description: err?.data?.error || err?.message, variant: 'destructive' });
+    } finally { setSaving(false); }
+  }
+
+  async function test() {
+    setTesting(true);
+    try {
+      const res = await client.post<{ ok: boolean; message: string }>(`/integrations/paypal/test?projectId=${projectId}`);
+      if (res.success) toast({ title: '✓ Conexión OK', description: res.data?.message });
+      else toast({ title: 'Test falló', description: res.data?.message || 'Error desconocido', variant: 'destructive' });
+      await load();
+    } catch (e: unknown) {
+      const err = e as { data?: { error?: string } };
+      toast({ title: 'Test falló', description: err?.data?.error || 'Error de red', variant: 'destructive' });
+    } finally { setTesting(false); }
+  }
+
+  async function clear() {
+    if (!confirm('¿Borrar las credenciales de PayPal de este campus? Los cobros ya registrados se quedan.')) return;
+    try {
+      await client.delete(`/integrations/paypal?projectId=${projectId}`);
+      toast({ title: 'PayPal eliminado' });
+      setData(EMPTY('paypal')); setSecret(''); setClientId(''); setWebhookId('');
+    } catch (e: unknown) {
+      const err = e as { message?: string };
+      toast({ title: 'Error', description: err?.message, variant: 'destructive' });
+    }
+  }
+
+  return (
+    <div className="bg-card border border-border rounded-lg overflow-hidden">
+      <div className="px-5 py-4 border-b border-border flex items-start gap-3">
+        <div className="w-10 h-10 rounded-lg bg-info-soft text-info-soft-foreground flex items-center justify-center flex-shrink-0">
+          <CreditCard size={22} weight="duotone" />
+        </div>
+        <div className="flex-1">
+          <h3 className="font-semibold text-base flex items-center gap-2">PayPal</h3>
+          <p className="text-xs text-muted-foreground">Los cobros de la cuenta PayPal Business de este campus entran solos en su venta (por el correo del cliente o la referencia «venta-N»).</p>
+        </div>
+        <StatusPill data={data} />
+      </div>
+
+      <div className="p-5 space-y-4">
+        <button onClick={() => setShowHelp((v) => !v)}
+          className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline">
+          <Question size={12} weight="bold" /> {showHelp ? 'Ocultar tutorial' : 'Cómo sacar las credenciales de PayPal'}
+        </button>
+        {showHelp && (
+          <div className="rounded-md border border-border bg-muted/30 p-3 text-xs space-y-2">
+            <ol className="list-decimal list-inside space-y-1 pl-1 text-muted-foreground">
+              <li>Entra con la cuenta <strong>Business</strong> del campus en <a href="https://developer.paypal.com/dashboard/applications/live" target="_blank" rel="noopener noreferrer" className="text-primary inline-flex items-center gap-0.5 hover:underline">developer.paypal.com <ArrowSquareOut size={10} weight="bold" /></a> → <strong>Apps &amp; Credentials</strong>, en modo <strong>Live</strong>.</li>
+              <li>Crea una aplicación REST (por ejemplo «CRM»). Copia su <strong>Client ID</strong> y su <strong>Secret</strong>.</li>
+              <li>En la aplicación, activa <strong>Transaction search</strong> (la lectura de movimientos). Sin eso, el sondeo no ve nada.</li>
+              <li>Opcional, para no esperar al sondeo: en la misma aplicación, <strong>Add webhook</strong> con la dirección de abajo y los eventos de la lista. Copia el <strong>Webhook ID</strong> que te da y pégalo aquí.</li>
+              <li>Guarda y pulsa <strong>Probar conexión</strong>.</li>
+            </ol>
+            <div>
+              <p className="font-semibold">Dirección del webhook</p>
+              <code className="block mt-1 px-2 py-1 rounded bg-card break-all">{urlWebhookPaypal(projectId)}</code>
+            </div>
+            <div>
+              <p className="font-semibold">Eventos</p>
+              <p className="text-muted-foreground">{EVENTOS_PAYPAL.join(', ')}</p>
+            </div>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="text-[11px] font-semibold text-muted-foreground mb-1 block">Client ID *</label>
+            <input value={clientId} onChange={(e) => setClientId(e.target.value)}
+              className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm font-mono" />
+          </div>
+          <div>
+            <label className="text-[11px] font-semibold text-muted-foreground mb-1 block">Modo</label>
+            <select value={modo} onChange={(e) => setModo(e.target.value === 'sandbox' ? 'sandbox' : 'live')}
+              className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm">
+              <option value="live">Live (cobros de verdad)</option>
+              <option value="sandbox">Sandbox (pruebas de PayPal)</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label className="text-[11px] font-semibold text-muted-foreground mb-1 block">
+            Secret {data?.has_secret && <span className="font-normal text-muted-foreground/80 ml-1">(actualmente: <code className="bg-muted px-1 rounded text-[10px]">{data.secret_preview}</code> — deja vacío para no cambiar)</span>}
+          </label>
+          <div className="relative">
+            <input type={showKey ? 'text' : 'password'} value={secret} onChange={(e) => setSecret(e.target.value)}
+              placeholder={data?.has_secret ? 'Sin cambios' : 'El Secret de la aplicación REST'}
+              className="w-full h-10 pl-3 pr-10 rounded-md border border-border bg-card text-sm font-mono" />
+            <button type="button" onClick={() => setShowKey((v) => !v)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground">
+              {showKey ? <EyeSlash size={14} /> : <Eye size={14} />}
+            </button>
+          </div>
+        </div>
+        <div>
+          <label className="text-[11px] font-semibold text-muted-foreground mb-1 block">Webhook ID (opcional)</label>
+          <input value={webhookId} onChange={(e) => setWebhookId(e.target.value)} placeholder="Sin webhook: solo el sondeo"
+            className="w-full h-10 px-3 rounded-md border border-border bg-card text-sm font-mono" />
+        </div>
+
+        <TestStatus data={data} />
+
+        <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
+          <button onClick={save} disabled={saving || !clientId.trim() || (!data?.has_secret && !secret.trim())}
+            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50">
+            <FloppyDisk size={14} weight="bold" /> {saving ? 'Guardando…' : 'Guardar'}
+          </button>
+          <button onClick={test} disabled={testing || !data?.has_secret}
+            title={!data?.has_secret ? 'Guarda primero las credenciales' : 'Probar conexión con PayPal'}
+            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted disabled:opacity-50">
+            <PlugsConnected size={14} weight="bold" /> {testing ? 'Probando…' : 'Probar conexión'}
+          </button>
+          {data?.has_secret && (
+            <button onClick={clear}
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-destructive/30 bg-card text-sm font-semibold text-destructive hover:bg-destructive-soft ml-auto">
               <Trash size={14} weight="bold" /> Eliminar
             </button>
           )}
