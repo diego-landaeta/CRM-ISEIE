@@ -52,6 +52,7 @@ import asignacionModule from './modules/asignacion/index.js';
 import { registrarActividad } from './shared/middleware/registrarActividad.js';
 import { startWebhooksSalientesScheduler } from './jobs/webhooksSalientesScheduler.js';
 import { startCopiaDiariaScheduler } from './jobs/copiaDiariaJob.js';
+import { startInformeMensualScheduler } from './jobs/informeMensualJob.js';
 import { startAsignacionScheduler } from './jobs/asignacionScheduler.js';
 import projectChannelsModule from './modules/project-channels/index.js';
 import installationModule from './modules/installation/index.js';
@@ -60,6 +61,7 @@ import dossiersModule from './modules/dossiers/index.js';
 import reportsModule from './modules/reports/index.js';
 import clientErrorsModule from './modules/client-errors/index.js';
 import copiaDiariaModule from './modules/copia-diaria/index.js';
+import informeMensualModule from './modules/informe-mensual/index.js';
 import changeRequestsModule from './modules/change-requests/index.js';
 // El proceso comercial (#87): los pasos, y de ahí la cola del día.
 import procesoModule from './modules/proceso/index.js';
@@ -326,6 +328,8 @@ const MODULES = [
   credentialsModule,
   dossiersModule,
   reportsModule,
+  // El informe mensual por equipo y comercial y el ZIP de facturas para la gestoría (#772).
+  informeMensualModule,
   clientErrorsModule,
   // La descarga de la copia diaria de la base (enlace firmado; con la copia apagada, 404).
   copiaDiariaModule,
@@ -571,6 +575,12 @@ if (process.env.NODE_ENV !== 'test') {
       startCopiaDiariaScheduler();
     } catch (err) {
       logger.error({ err }, 'Copia diaria de la base: falló al arrancar');
+    }
+    // El informe del mes y las facturas a la gestoría (#772). Apagado de serie: INFORME_MENSUAL_ACTIVO.
+    try {
+      startInformeMensualScheduler();
+    } catch (err) {
+      logger.error({ err }, 'Informe mensual a la gestoría: falló al arrancar');
     }
     // Los reintentos del webhook de transferencias (se apaga con WEBHOOKS_SALIENTES_DISABLED=1).
     try {
