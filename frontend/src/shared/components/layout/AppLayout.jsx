@@ -61,6 +61,8 @@ const AvisoDeMensaje = lazy(() => import('./AvisoDeMensaje'));
 const TicketsLauncher = lazy(() => import('@/modules/soporte/components/TicketsLauncher'));
 // «Pedir acceso o permiso» (gemela de CRM#820): desde el menú de usuario y desde «No tienes acceso».
 const PedirAcceso = lazy(() => import('@/modules/soporte/components/PedirAcceso'));
+// Facturación pausada por la auditoría (#765): solo superadmin y admin, en todas las pantallas.
+const AvisoFacturacionPausada = lazy(() => import('@/modules/invoices/components/AvisoFacturacionPausada'));
 
 const COLLAPSED_KEY = 'crm.sidebar.collapsed';
 
@@ -168,6 +170,11 @@ export default function AppLayout() {
         )}
       >
         <SectionTabs />
+        {/* El aviso de la facturación pausada (#765). Fuera del `key` de la ruta:
+            no parpadea al cambiar de pantalla. Sin permiso o apagada, no pinta nada. */}
+        <Suspense fallback={null}>
+          <AvisoFacturacionPausada />
+        </Suspense>
         <Suspense fallback={
           <div className="flex items-center justify-center py-20">
             <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />

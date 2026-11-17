@@ -154,6 +154,15 @@ export const TIPOS = {
     clase: AVISO, etiqueta: 'Factura de colaborador', agrupa: false,
     descripcion: 'Cuando un colaborador sube su factura del mes',
   },
+  // La auditoría de facturación (#765): la pausa pide que alguien la resuelva.
+  facturacion_pausada: {
+    clase: ACCION, etiqueta: 'Facturación pausada', agrupa: false,
+    descripcion: 'La auditoría de cada 2 horas ha encontrado un error y ha pausado la emisión de facturas',
+  },
+  facturacion_reanudada: {
+    clase: AVISO, etiqueta: 'Facturación reanudada', agrupa: false,
+    descripcion: 'La auditoría ha salido limpia y se ha reanudado la emisión de facturas',
+  },
   // Cursos pendientes para las tutoras (#336): lo que pide hacer algo va arriba.
   curso_pendiente_asignado: {
     clase: ACCION, etiqueta: 'Curso pendiente asignado', agrupa: false,

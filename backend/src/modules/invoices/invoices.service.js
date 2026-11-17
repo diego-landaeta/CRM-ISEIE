@@ -9,6 +9,8 @@ import * as integrationsModel from '../integrations/integrations.model.js';
 import * as model from './invoices.model.js';
 import { query } from '../../shared/config/db.js';
 import { alcanceComercial } from '../../shared/utils/roles.js';
+// La pausa de la auditoria de facturacion (#765). Apagada, no hace nada.
+import { exigirFacturacionActiva } from '../facturacion-auditoria/facturacion-auditoria.pausa.js';
 
 const PDF_DIR = process.env.INVOICES_PDF_DIR || path.join(process.cwd(), 'uploads', 'invoices');
 
@@ -860,6 +862,9 @@ export async function generarFacturaDePago(projectId, paymentId, userId, { forza
   if (!cobroDelEquipo(personas)(pg)) {
     throw new AppError('Ese cobro es de una gestora que no está en tu equipo.', 403, 'FUERA_DE_TU_EQUIPO');
   }
+  // Con la facturacion pausada por la auditoria (#765), la cola no emite. Se
+  // mira antes que el orden para que el motivo que se lee sea el de verdad.
+  await exigirFacturacionActiva({ paymentId: pg.payment_id });
   if (!forzar && await model.hayPendientesAnteriores(projectId, pg.fecha, pg.payment_id)) {
     throw new AppError(
       'Hay cobros anteriores sin facturar. Se emiten por orden de fecha para que la numeración no se descoloque.',
@@ -927,6 +932,9 @@ export async function cobrarProforma(invoiceId, { importe, fecha, metodo, notas,
   }
   const motivo = await model.motivoParaNoCobrarProforma(prof, { importe, fecha });
   if (motivo) throw new AppError(motivo.texto, 409, motivo.code);
+  // Antes de apuntar el cobro: con la facturacion pausada (#765) la proforma no
+  // pasaria a factura y el cobro quedaria a medias.
+  await exigirFacturacionActiva();
 
   // Import dinamico: conversion.service ya importa este modulo de la misma forma.
   // Aqui addPayment ademas intenta facturar solo (en ISEIE autoInvoice no esta
@@ -963,6 +971,9 @@ export async function emitirColaHasta(projectId, hasta, userId) {
     } catch (err) {
       fallidas.push({ payment_id: pg.payment_id, cliente: pg.cliente, error: err.message });
       logger.warn({ paymentId: pg.payment_id, err: err.message }, 'no se pudo emitir la factura de la cola');
+      // Facturacion pausada por la auditoria (#765): los que siguen tampoco
+      // saldrian, y van en orden. Se para aqui.
+      if (err?.code === 'FACTURACION_PAUSADA') break;
     }
   }
   return { emitidas: emitidas.length, detalle: emitidas, fallidas };

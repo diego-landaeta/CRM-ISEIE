@@ -6,6 +6,8 @@ import { comoLista } from '../../shared/utils/ambito.js';
 import { gestorasACargo } from '../../shared/utils/roles.js';
 import { CLASE_FACTURA, SOSPECHA_DUPLICADA } from './clase.sql.js';
 import { recalcularCobrado } from '../conversions/cobrado.js';
+// La pausa de la auditoria de facturacion (#765). Apagada, no hace nada.
+import { exigirFacturacionActiva } from '../facturacion-auditoria/facturacion-auditoria.pausa.js';
 
 // Sociedad emisora de un proyecto (null si no tiene). Helper para numeración.
 async function issuerOfProject(exec, projectId) {
@@ -188,6 +190,9 @@ export async function create(data, userId) {
     // Decisión de negocio: las PROFORMAS comparten el MISMO correlativo que las
     // facturas normales (misma serie y contador) y se numeran igual.
     const serie = (iss?.serie && iss.serie.trim()) || data.serie || 'A';
+    // Con la facturacion pausada por la auditoria (#765) no se gasta ningun
+    // numero nuevo. Un borrador si se guarda: no es documento fiscal.
+    if (!isBorrador) await exigirFacturacionActiva({ paymentId: data.paymentId || null });
     // Borrador: NO consume correlativo. numero/codigo quedan NULL hasta emitir.
     const numero = isBorrador ? null : await nextNumero(client, data.projectId, iss?.id || null, ano, serie);
     const codigo = isBorrador ? null : `${ano}/${String(numero).padStart(4, '0')}`;
@@ -849,6 +854,7 @@ async function numerarBorrador(invoiceId) {
     const { rows: sel } = await client.query(`SELECT * FROM invoices WHERE id = $1 FOR UPDATE`, [invoiceId]);
     const inv = sel[0];
     if (!inv || inv.estado !== 'borrador') { await client.query('COMMIT'); return inv || null; }
+    await exigirFacturacionActiva({ paymentId: inv.payment_id || null });
     const ano = new Date().getFullYear();
     const serie = (inv.serie && inv.serie.trim()) || 'A';
     const numero = await nextNumero(client, inv.project_id, inv.issuer_id || null, ano, serie);
@@ -1146,7 +1152,11 @@ export async function emitirFacturaDePago(conversionId, { paymentId, importe, sa
   if (prof && datosFiscales) {
     throw new AppError('Esta venta tiene una proforma: se convierte desde la cola.', 409, 'TIENE_PROFORMA');
   }
-  if (prof) return await _convertirProformaEnFactura(prof, conv, paymentId, fechaPago);
+  if (prof) {
+    // Pasar la proforma a factura tambien es emitir (#765).
+    await exigirFacturacionActiva({ paymentId });
+    return await _convertirProformaEnFactura(prof, conv, paymentId, fechaPago);
+  }
 
   // ¿Ya hay una factura por el TOTAL de la conversión (ex-proforma o completa)?
   // No se crea otra por pago: solo se marca pagada cuando la venta queda saldada.
@@ -1375,6 +1385,9 @@ export async function emitirBorrador(id, patch = {}) {
           400, 'ISSUER_NIF_INVALID');
       }
     }
+
+    // Con la facturacion pausada por la auditoria no se emite (#765).
+    await exigirFacturacionActiva({ paymentId: inv.payment_id || null });
 
     // Numeración fiscal AHORA (el borrador nunca consumió número).
     // Respeta un número YA reservado (borrador con hueco reservado, p.ej. 0612);
