@@ -224,7 +224,21 @@ export async function tokenVigente({ forzar = false } = {}) {
   }
   // Dos peticiones a la vez no renuevan dos veces: con refresh tokens de un solo uso,
   // la segunda gastaría uno ya cambiado y tumbaría la conexión.
-  if (!renovando) renovando = renovarAhora(c).finally(() => { renovando = null; });
+  // Y se relee la conexión dentro: quien llegue cuando otra ya renovó no puede usar el
+  // refresh token viejo (ya cambiado), que Monitask rechazaría y tumbaría la conexión.
+  if (!renovando) {
+    renovando = (async () => {
+      const fresca = await model.conexion();
+      const venceAhora = fresca?.access_caduca_at ? new Date(fresca.access_caduca_at).getTime() : 0;
+      if (!forzar && fresca?.access_cifrado && venceAhora - Date.now() > SEGUNDOS_DE_MARGEN_DEL_TOKEN * 1000) {
+        return descifrar(fresca.access_cifrado, fresca.access_iv, fresca.access_tag);
+      }
+      if (!fresca?.refresh_cifrado) {
+        throw new AppError('Monitask no está conectado: pulsa «Conectar con Monitask» en Integraciones', 409, 'MONITASK_SIN_CONECTAR');
+      }
+      return renovarAhora(fresca);
+    })().finally(() => { renovando = null; });
+  }
   return renovando;
 }
 
