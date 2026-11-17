@@ -28,6 +28,8 @@ import invoicesModule from './modules/invoices/index.js';
 // Facturas de colaboradores (#202, como en MultiCRM): solo en pruebas hasta que
 // Diego lo apruebe con FACTURAS_COLABORADOR_EN_PRODUCCION=1.
 import facturasColaboradorModule from './modules/facturas-colaborador/index.js';
+// Registro automático de cobros: PayPal y extractos del banco (#766). Cada parte, con su interruptor.
+import cobrosExternosModule from './modules/cobros-externos/index.js';
 import { startFacturasColaboradorScheduler } from './jobs/facturasColaboradorJob.js';
 import { startFacturasColaboradorAvisosScheduler } from './jobs/facturasColaboradorAvisosJob.js';
 import widgetModule from './modules/widget/index.js';
@@ -90,6 +92,7 @@ import { startMetaAdsSyncScheduler } from './jobs/metaAdsSyncScheduler.js';
 import { startReminderScheduler } from './jobs/reminderScheduler.js';
 import { startWooCommerceSyncScheduler } from './jobs/wooCommerceSyncScheduler.js';
 import { startStripePaymentsSyncScheduler } from './jobs/stripePaymentsSyncScheduler.js';
+import { startPaypalCobrosSyncScheduler } from './jobs/paypalCobrosSyncScheduler.js';
 import { startTutorCommissionsScheduler } from './jobs/tutorCommissionsScheduler.js';
 import { startTutoresCampusScheduler } from './jobs/tutoresCampusScheduler.js';
 import { startConsultasCampusScheduler } from './jobs/consultasCampusScheduler.js';
@@ -159,6 +162,8 @@ app.use('/api/woocommerce/webhook', wcWebhook);
 // comprobaba contra «[object Object]»: se rechazaban todos los avisos (los cobros solo
 // entraban por el sondeo de cada 5 minutos).
 app.use('/api/stripe-webhook', express.raw({ type: 'application/json', limit: '2mb' }));
+// Igual el de PayPal (#766): la firma se comprueba con el cuerpo tal cual llegó.
+app.use('/api/paypal-webhook', express.raw({ type: 'application/json', limit: '1mb' }));
 
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true, limit: '5mb' }));
@@ -302,6 +307,8 @@ const MODULES = [
   // Facturas de colaboradores (#202): la lista, el enlace del mes y «Mi factura».
   // Solo en pruebas también en el servidor: en producción ni la API ni la tarea del mes.
   ...(facturasColaboradorActivas() ? [facturasColaboradorModule] : []),
+  // Cobros de PayPal y extractos del banco (#766): cada ruta contesta 404 con su interruptor apagado.
+  cobrosExternosModule,
   widgetModule,
   expensesModule,
   accountsPayableModule,
@@ -514,6 +521,13 @@ if (process.env.NODE_ENV !== 'test') {
       } catch (err) {
         logger.error({ err }, 'Stripe sync scheduler fallo al arrancar');
       }
+    }
+    // Cobros de PayPal (#766): fuera del bloque de Stripe, con su propio
+    // interruptor (PAYPAL_COBROS_ACTIVO=1); apagado, no arranca.
+    try {
+      startPaypalCobrosSyncScheduler();
+    } catch (err) {
+      logger.error({ err }, 'PayPal: el sondeo de cobros falló al arrancar');
     }
     // Seguridad del MCP (#237, desde #194 y #195): fuera del bloque de Stripe
     // a propósito, para que apagar la sincronización de Stripe no la apague.

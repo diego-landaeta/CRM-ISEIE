@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-779 rutas en 59 módulos, y 31 acciones con condición dentro de una ruta.
+789 rutas en 60 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -133,6 +133,21 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
 |---|---|---|---|---|
 | (anónima) | `POST /api/client-errors/` | nada (pública) | cualquiera, sin sesión | — |
+
+## cobros-externos
+
+| Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
+|---|---|---|---|---|
+| estado | `GET /api/cobros-externos/estado` | (no existía) | (ruta nueva) | `cobros_externos.view` |
+| listarPaypal | `GET /api/cobros-externos/paypal` | (no existía) | (ruta nueva) | `cobros_externos.view` |
+| sincronizarPaypal | `POST /api/cobros-externos/paypal/sincronizar` | (no existía) | (ruta nueva) | `cobros_externos.edit` |
+| enlazarPaypal | `POST /api/cobros-externos/paypal/:id/enlazar` | (no existía) | (ruta nueva) | `cobros_externos.edit` |
+| listarExtractos | `GET /api/cobros-externos/banco/extractos` | (no existía) | (ruta nueva) | `cobros_externos.view` |
+| subirExtracto | `POST /api/cobros-externos/banco/extractos` | (no existía) | (ruta nueva) | `cobros_externos.edit` |
+| listarMovimientos | `GET /api/cobros-externos/banco/movimientos` | (no existía) | (ruta nueva) | `cobros_externos.view` |
+| confirmarMovimiento | `POST /api/cobros-externos/banco/movimientos/:id/confirmar` | (no existía) | (ruta nueva) | `cobros_externos.edit` |
+| descartarMovimiento | `POST /api/cobros-externos/banco/movimientos/:id/descartar` | (no existía) | (ruta nueva) | `cobros_externos.edit` |
+| webhookPaypal | `POST /api/paypal-webhook/:projectId` | (no existía) | (ruta nueva) | — |
 
 ## commissions
 
@@ -1400,6 +1415,13 @@ lo que pide para tener sentido (editar pide ver).
 |---|---|---|---|---|
 | Ver pagos de Stripe | `stripe.view` | Los cobros por Stripe, y traer los nuevos. | Admin, Gestora, Soporte, Project manager |  |
 | Asociar pagos de Stripe | `stripe.edit` | Enlazar un pago con su venta y llevar las disputas. | Admin, Soporte | `stripe.view` |
+
+### Cobros de PayPal y del banco
+
+| Permiso | Clave | Qué deja hacer | De serie | Necesita |
+|---|---|---|---|---|
+| Ver cobros de PayPal y del banco | `cobros_externos.view` | Los cobros que entran por PayPal y los abonos de los extractos del banco. | Admin, Soporte, Project manager |  |
+| Registrar cobros de PayPal y del banco | `cobros_externos.edit` | Sincronizar PayPal, subir extractos y decidir a qué venta va cada abono dudoso. | Admin, Soporte | `cobros_externos.view` |
 
 ### Facturas de colaboradores
 

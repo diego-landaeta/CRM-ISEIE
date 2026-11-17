@@ -279,7 +279,7 @@ export async function update(id, fields) {
 export async function addPayment(conversionId, data, { userId = null } = {}) {
   const { permitir_duplicado, ...pago } = data || {};
   const result = await conversionModel.addPayment(conversionId, pago,
-    { allowDuplicate: !!permitir_duplicado });
+    { allowDuplicate: !!permitir_duplicado, manual: true });
   if (result.error === 'NOT_FOUND') throw new AppError('Conversion no encontrada', 404, 'CONVERSION_NOT_FOUND');
   if (result.error === 'OVERPAY') throw new AppError('El importe excede el pendiente', 400, 'OVERPAY');
   if (result.error === 'DUPLICATE') {
@@ -288,6 +288,14 @@ export async function addPayment(conversionId, data, { userId = null } = {}) {
       `Ya hay un pago de ${Number(d.importe).toFixed(2)} EUR el ${String(d.fecha).slice(0, 10)} en esta venta. `
       + 'Si de verdad son dos cobros distintos, marca la casilla de duplicado permitido.',
       409, 'DUPLICATE_PAYMENT');
+  }
+  if (result.error === 'DUPLICATE_AUTOMATICO') {
+    const d = result.existing;
+    const deDonde = d.origen === 'paypal' ? 'PayPal' : 'el extracto del banco';
+    throw new AppError(
+      `Ese cobro ya entró solo desde ${deDonde}: ${Number(d.importe).toFixed(2)} EUR el ${String(d.fecha).slice(0, 10)}. `
+      + 'No se puede apuntar otra vez a mano.',
+      409, 'DUPLICATE_AUTOMATIC_PAYMENT');
   }
   // Recalcular comision en cada pago (importe_base = importe_pagado actualizado)
   commissionModel.recalculateCommission(conversionId).catch(err =>

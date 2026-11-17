@@ -775,7 +775,7 @@ export async function update(id, fields) {
 // Lo usa el cobro automático de Stripe: el dinero entró de verdad, y cuando excede el total
 // lo que suele estar mal es el total previsto, no el cobro. El flujo manual sigue bloqueado.
 // `referencia`: la del banco en una transferencia o un depósito (migración 206).
-export async function addPayment(conversionId, { importe, fecha, notas, metodo, referencia }, opts = {}) {
+export async function addPayment(conversionId, { importe, fecha, notas, metodo, referencia, origen, origen_ref }, opts = {}) {
   const client = await getClient();
   try {
     await client.query('BEGIN');
@@ -799,6 +799,31 @@ export async function addPayment(conversionId, { importe, fecha, notas, metodo, 
       return { error: 'OVERPAY' };
     }
 
+    // UN COBRO QUE YA ENTRÓ SOLO NO SE APUNTA OTRA VEZ A MANO (#766).
+    //
+    // La casilla «duplicado permitido» es para dos cobros de verdad iguales
+    // (dos cuotas el mismo día). Pero si el que ya está lo registró el CRM desde
+    // PayPal o desde el extracto del banco, el de la mano es ese mismo dinero:
+    // ahí la casilla no vale. Va ANTES del aviso de duplicado normal para que la
+    // pantalla no pregunte «¿registrarlo igualmente?» y luego diga que no.
+    // Solo se mira en lo que apunta una persona (`opts.manual`); los registros
+    // automáticos ya buscan su equivalente antes.
+    if (opts.manual) {
+      const { rows: auto } = await client.query(
+        `SELECT id, importe, fecha, notas, metodo, origen FROM conversion_payments
+          WHERE conversion_id = $1
+            AND origen IS NOT NULL
+            AND ABS(importe - $2::numeric) < 0.01
+            AND ABS(fecha - COALESCE($3::date, CURRENT_DATE)) <= 3
+          ORDER BY id LIMIT 1`,
+        [conversionId, importe, fecha]
+      );
+      if (auto[0]) {
+        await client.query('ROLLBACK');
+        return { error: 'DUPLICATE_AUTOMATICO', existing: auto[0] };
+      }
+    }
+
     // Anti-duplicado: el mismo importe en la misma venta con menos de 3 dias
     // de diferencia es casi siempre el mismo cobro metido dos veces (a mano y
     // por la sincronizacion de Stripe). Se puede forzar con allowDuplicate.
@@ -818,11 +843,13 @@ export async function addPayment(conversionId, { importe, fecha, notas, metodo, 
     }
 
     // INSERT payment
+    // `origen`/`origen_ref` (#766): de dónde vino el cobro (PayPal, el banco) y su
+    // id allí. Hay un índice único detrás: el mismo cobro no entra dos veces.
     const { rows: payRows } = await client.query(
-      `INSERT INTO conversion_payments (conversion_id, importe, fecha, notas, metodo, referencia)
-       VALUES ($1, $2, COALESCE($3, CURRENT_DATE), $4, $5, $6)
+      `INSERT INTO conversion_payments (conversion_id, importe, fecha, notas, metodo, referencia, origen, origen_ref)
+       VALUES ($1, $2, COALESCE($3, CURRENT_DATE), $4, $5, $6, $7, $8)
        RETURNING *`,
-      [conversionId, importe, fecha, notas, metodo || null, referencia || null]
+      [conversionId, importe, fecha, notas, metodo || null, referencia || null, origen || null, origen_ref || null]
     );
 
     // importe_pagado = suma de los pagos, con este ya dentro (#692).
