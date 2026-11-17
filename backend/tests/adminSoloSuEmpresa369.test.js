@@ -22,6 +22,12 @@ import jwt from 'jsonwebtoken';
  *
  * En ISEIE hoy hay una sola empresa, pero el ámbito por empresa (`issuerId`) es
  * el mismo código que en MultiCRM: si entra otra sociedad, tiene que recortar igual.
+ *
+ * Esta prueba encontró una fuga que en ISEIE seguía abierta: Ventas (resumen,
+ * por asesora, por cliente, desglose, países, serie y más vendidos) usaba el
+ * `projectId` de la URL tal cual. Un admin veía las ventas de un campus que no
+ * es suyo cambiando la URL, y sin campus, las de todos. Ahora pasa por
+ * `proyectosDelAmbito`, como en MultiCRM.
  */
 
 const { default: pool } = await import('../src/shared/config/db.js');
@@ -181,8 +187,35 @@ describe('Facturas: solo las de su campus', () => {
   });
 });
 
-describe('un campus de la otra empresa, pedido a mano: 403 en las tres', () => {
-  it.each(['/api/tutores', '/api/ventas/resumen', '/api/invoices'])('%s', async (ruta) => {
+/*
+ * La serie de Ventas (la gráfica y su comparación) trae tres tramos: el
+ * periodo, el anterior y el historial mes a mes. El periodo se recortaba, pero
+ * el anterior y el historial se pedían sin la lista de campus: con «Todos», el
+ * historial de una admin sumaba los campus de TODAS las empresas.
+ */
+describe('Serie de ventas: también el historial, solo lo suyo', () => {
+  const ventasDelHistorial = (r) => r.body.data.meses.reduce((a, m) => a + m.ventas, 0);
+
+  it('sin proyecto: su venta y nada más, en el periodo y en el historial', async () => {
+    const r = await pedir(MIREIA, '/api/ventas/serie');
+    expect(r.status).toBe(200);
+    expect(r.body.data.totales.ventas).toBe(1);
+    expect(ventasDelHistorial(r)).toBe(1);
+  });
+
+  it('con el issuerId de la otra empresa: cero también en el historial', async () => {
+    const r = await pedir(MIREIA, `/api/ventas/serie?issuerId=${ICTESS}`);
+    expect(r.body.data.totales.ventas).toBe(0);
+    expect(ventasDelHistorial(r)).toBe(0);
+  });
+
+  it('el super admin, con esa empresa, sí la ve', async () => {
+    expect(ventasDelHistorial(await pedir(SUPER, `/api/ventas/serie?issuerId=${ICTESS}`))).toBe(1);
+  });
+});
+
+describe('un campus de la otra empresa, pedido a mano: 403', () => {
+  it.each(['/api/tutores', '/api/ventas/resumen', '/api/ventas/serie', '/api/invoices'])('%s', async (ruta) => {
     expect((await pedir(MIREIA, `${ruta}?projectId=${CAMPUS_ICTESS}`)).status).toBe(403);
   });
 });
