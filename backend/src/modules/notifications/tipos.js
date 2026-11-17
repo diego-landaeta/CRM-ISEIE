@@ -203,6 +203,13 @@ export const TIPOS = {
     clase: ACCION, etiqueta: 'Moodle de un campus', agrupa: false,
     descripcion: 'El Moodle de un campus no responde o su token ya no vale',
   },
+  // #471: la renovación diaria de un token de Meta Ads o de Instagram ha fallado,
+  // o el token caduca en menos de 7 días. Hay que volver a conectar la cuenta.
+  // Una vez por fallo y una por fecha de caducidad (jobs/metaTokensScheduler.js).
+  meta_token: {
+    clase: ACCION, etiqueta: 'Token de Meta o Instagram', agrupa: false,
+    descripcion: 'La renovación de un token de Meta Ads o Instagram ha fallado, o el token caduca en menos de 7 días',
+  },
   // MCP (Diego, 22/10): tu Claude consulta con la URL sola, conectado como antes
   // de la #326, y el CRM no le da datos. Hay que conectarlo una vez. Como mucho
   // uno al día por URL (mcp.conexiones.js).
