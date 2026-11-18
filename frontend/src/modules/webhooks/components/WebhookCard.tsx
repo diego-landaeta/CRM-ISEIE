@@ -7,7 +7,7 @@ interface DestMeta { Icon: PhosphorIcon; label: string; }
 
 const DEST_META: Record<WebhookDestination, DestMeta> = {
   lead: { Icon: Users, label: 'Lead' },
-  matricula: { Icon: GraduationCap, label: 'Matrícula' },
+  matricula: { Icon: GraduationCap, label: 'Solicitud de admisión' },
 };
 
 // La card recibe webhook con un campo extra `awaiting_sample` derivado en server

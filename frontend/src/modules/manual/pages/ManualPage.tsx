@@ -20,7 +20,7 @@ const SECTIONS = [
   { id: 'prospectos',   label: 'Prospectos',   icon: Users },
   { id: 'clientes',     label: 'Clientes',     icon: UserCheck },
   { id: 'productos',    label: 'Productos',    icon: Package },
-  { id: 'matriculas',   label: 'Matrículas',   icon: GraduationCap },
+  { id: 'matriculas',   label: 'Solicitud de admisión',   icon: GraduationCap },
   { id: 'campanas',     label: 'Campañas',     icon: Megaphone },
   { id: 'seo',          label: 'Tráfico orgánico', icon: MagnifyingGlass },
   { id: 'ia',           label: 'IA y Reportes', icon: Robot },
@@ -506,7 +506,7 @@ export default function ManualPage() {
         </Callout>
 
         {/* ── MATRÍCULAS ── */}
-        <SectionHeader id="matriculas" icon={GraduationCap} label="Matrículas" color="indigo"
+        <SectionHeader id="matriculas" icon={GraduationCap} label="Solicitud de admisión" color="indigo"
           description="Solicitudes de admisión para proyectos educativos" />
         <P>
           Módulo específico para gestionar el proceso de admisión de alumnos, desde la solicitud inicial hasta la validación.
@@ -523,7 +523,7 @@ export default function ManualPage() {
 
         <SubHeader>Webhooks de admisión</SubHeader>
         <P>
-          Las matrículas pueden llegar automáticamente desde formularios externos.
+          Las solicitudes de admisión llegan automáticamente desde formularios externos.
           En la pestaña «Webhooks de admisión» genera tokens, obtén el endpoint y configura tu formulario.
         </P>
 
@@ -825,7 +825,7 @@ export default function ManualPage() {
             activar el proyecto. Vacío = color por defecto del CRM.
           </FeatureCard>
           <FeatureCard icon={ToggleRight} title="Módulos activos" color="green">
-            Activa o desactiva Leads, Matrículas, Contabilidad, Documentos, etc. Solo aparecen en el menú
+            Activa o desactiva Leads, Solicitud de admisión, Contabilidad, Documentos, etc. Solo aparecen en el menú
             los módulos habilitados.
           </FeatureCard>
           <FeatureCard icon={LockKey} title="API keys" color="violet">

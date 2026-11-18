@@ -62,6 +62,8 @@ export interface CreateInvoiceBody {
   borrador?: boolean;
   /** «Emitir igualmente» cuando el CRM avisa de que pasa de lo cobrado de la venta. */
   permitirMasDeLoCobrado?: boolean;
+  /** «Emitir igualmente» tras el aviso de posible duplicada (CRM#819). */
+  confirmar_duplicada?: boolean;
 }
 
 export interface ProjectInvoicingConfig {
@@ -322,7 +324,7 @@ export const invoicesApi = {
   /** Asociar una factura existente a una venta (conversión) del cliente — Opción B. */
   asociarVenta: (id: number, conversionId: number) => client.patch<Invoice>(`/invoices/${id}/asociar`, { conversionId }),
   /** Validar y emitir un borrador (opcionalmente completando datos del cliente). */
-  emitir: (id: number, patch?: Partial<{ clienteNombre: string; clienteNif: string; clienteDireccion: string; clienteCiudad: string; clienteCp: string; clientePais: string; clienteEmail: string | null; clienteTelefono: string | null; permitirMasDeLoCobrado: boolean }>) => client.post<Invoice>(`/invoices/${id}/emitir`, patch || {}),
+  emitir: (id: number, patch?: Partial<{ clienteNombre: string; clienteNif: string; clienteDireccion: string; clienteCiudad: string; clienteCp: string; clientePais: string; clienteEmail: string | null; clienteTelefono: string | null; permitirMasDeLoCobrado: boolean; confirmar_duplicada: boolean }>) => client.post<Invoice>(`/invoices/${id}/emitir`, patch || {}),
   getOne: (id: number) => client.get<Invoice>(`/invoices/${id}`),
   /** Completar datos fiscales del cliente en una factura YA emitida (auto-emitida al pagar). */
   completarDatos: (id: number, patch: Partial<{ clienteNombre: string; clienteNif: string; clienteDireccion: string; clienteCiudad: string; clienteCp: string; clientePais: string; clienteEmail: string | null; clienteTelefono: string | null }>) => client.post<Invoice>(`/invoices/${id}/completar-datos`, patch),

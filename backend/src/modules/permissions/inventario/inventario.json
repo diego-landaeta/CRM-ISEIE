@@ -9306,6 +9306,239 @@
   "puertas": []
  },
  {
+  "id": "GET /api/monitask/estado",
+  "tipo": "ruta",
+  "modulo": "monitask",
+  "metodo": "GET",
+  "ruta": "/api/monitask/estado",
+  "relativa": "GET /estado",
+  "controlador": "estado",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "monitask.view",
+     "monitask.configurar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PUT /api/monitask/conexion",
+  "tipo": "ruta",
+  "modulo": "monitask",
+  "metodo": "PUT",
+  "ruta": "/api/monitask/conexion",
+  "relativa": "PUT /conexion",
+  "controlador": "guardarApp",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "monitask.configurar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "DELETE /api/monitask/conexion",
+  "tipo": "ruta",
+  "modulo": "monitask",
+  "metodo": "DELETE",
+  "ruta": "/api/monitask/conexion",
+  "relativa": "DELETE /conexion",
+  "controlador": "desconectar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "monitask.configurar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/monitask/conexion/autorizar",
+  "tipo": "ruta",
+  "modulo": "monitask",
+  "metodo": "POST",
+  "ruta": "/api/monitask/conexion/autorizar",
+  "relativa": "POST /conexion/autorizar",
+  "controlador": "autorizar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "monitask.configurar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/monitask/sincronizar",
+  "tipo": "ruta",
+  "modulo": "monitask",
+  "metodo": "POST",
+  "ruta": "/api/monitask/sincronizar",
+  "relativa": "POST /sincronizar",
+  "controlador": "sincronizar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "monitask.configurar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/monitask/personas",
+  "tipo": "ruta",
+  "modulo": "monitask",
+  "metodo": "GET",
+  "ruta": "/api/monitask/personas",
+  "relativa": "GET /personas",
+  "controlador": "personas",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "monitask.configurar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PATCH /api/monitask/personas/:id",
+  "tipo": "ruta",
+  "modulo": "monitask",
+  "metodo": "PATCH",
+  "ruta": "/api/monitask/personas/:id",
+  "relativa": "PATCH /personas/:id",
+  "controlador": "emparejar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "monitask.configurar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/monitask/actividad",
+  "tipo": "ruta",
+  "modulo": "monitask",
+  "metodo": "GET",
+  "ruta": "/api/monitask/actividad",
+  "relativa": "GET /actividad",
+  "controlador": "actividad",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "monitask.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/monitask/actividad/:id/dias",
+  "tipo": "ruta",
+  "modulo": "monitask",
+  "metodo": "GET",
+  "ruta": "/api/monitask/actividad/:id/dias",
+  "relativa": "GET /actividad/:id/dias",
+  "controlador": "dias",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "monitask.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/monitask/cotejo",
+  "tipo": "ruta",
+  "modulo": "monitask",
+  "metodo": "GET",
+  "ruta": "/api/monitask/cotejo",
+  "relativa": "GET /cotejo",
+  "controlador": "cotejo",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "monitask.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/monitask/oauth/callback",
+  "tipo": "ruta",
+  "modulo": "monitask",
+  "metodo": "GET",
+  "ruta": "/api/monitask/oauth/callback",
+  "relativa": "GET /callback",
+  "controlador": "vueltaOAuth",
+  "publica": true,
+  "guardias": [],
+  "puertas": []
+ },
+ {
   "id": "GET /api/moodle/campus",
   "tipo": "ruta",
   "modulo": "moodle",

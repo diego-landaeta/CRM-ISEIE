@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-803 rutas en 63 módulos, y 31 acciones con condición dentro de una ruta.
+814 rutas en 64 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -663,6 +663,22 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | setAdSetAssociations | `POST /api/meta-ads/adset-associations` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `meta_ads.edit` |
 | getRoi | `GET /api/meta-ads/roi` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `meta_ads.view` |
 | getProductsView | `GET /api/meta-ads/products-view` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `meta_ads.view` |
+
+## monitask
+
+| Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
+|---|---|---|---|---|
+| estado | `GET /api/monitask/estado` | (no existía) | (ruta nueva) | `monitask.view` o `monitask.configurar` |
+| guardarApp | `PUT /api/monitask/conexion` | (no existía) | (ruta nueva) | `monitask.configurar` |
+| desconectar | `DELETE /api/monitask/conexion` | (no existía) | (ruta nueva) | `monitask.configurar` |
+| autorizar | `POST /api/monitask/conexion/autorizar` | (no existía) | (ruta nueva) | `monitask.configurar` |
+| sincronizar | `POST /api/monitask/sincronizar` | (no existía) | (ruta nueva) | `monitask.configurar` |
+| personas | `GET /api/monitask/personas` | (no existía) | (ruta nueva) | `monitask.configurar` |
+| emparejar | `PATCH /api/monitask/personas/:id` | (no existía) | (ruta nueva) | `monitask.configurar` |
+| actividad | `GET /api/monitask/actividad` | (no existía) | (ruta nueva) | `monitask.view` |
+| dias | `GET /api/monitask/actividad/:id/dias` | (no existía) | (ruta nueva) | `monitask.view` |
+| cotejo | `GET /api/monitask/cotejo` | (no existía) | (ruta nueva) | `monitask.view` |
+| vueltaOAuth | `GET /api/monitask/oauth/callback` | (no existía) | (ruta nueva) | — |
 
 ## moodle
 
@@ -1463,6 +1479,13 @@ lo que pide para tener sentido (editar pide ver).
 | Anular facturas de colaboradores | `facturas_colaborador.anular` | Anular una factura recibida. | Admin | `facturas_colaborador.ver_todas` |
 | Pagar facturas de colaboradores | `facturas_colaborador.pagar` | Marcarlas pagadas con su justificante. | Admin | `facturas_colaborador.ver_todas` |
 
+### Monitask
+
+| Permiso | Clave | Qué deja hacer | De serie | Necesita |
+|---|---|---|---|---|
+| Ver la actividad de Monitask | `monitask.view` | Horas, % de actividad, proyectos y tareas de cada persona, y el cotejo con las horas de sus facturas (de sus empresas). | Admin |  |
+| Configurar Monitask | `monitask.configurar` | Conectar la cuenta de Monitask, sincronizar y emparejar sus personas con las del CRM. | Admin |  |
+
 ### Integraciones
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
@@ -1508,15 +1531,15 @@ lo que pide para tener sentido (editar pide ver).
 | Borrar clientes | `clients.delete` | Quitar un cliente. (solo pantalla) | Admin | `clients.view` |
 | Exportar clientes | `clients.export` | Descargar en CSV los clientes que se ven. (solo pantalla) | Admin | `clients.view` |
 
-### Matrículas
+### Solicitud de admisión
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Ver matrículas | `matriculas.view` | Las matrículas y sus documentos. | Admin, Gestora, Soporte, Project manager |  |
-| Crear matrículas | `matriculas.create` | Una matrícula nueva. | Admin, Gestora, Soporte | `matriculas.view` |
-| Editar matrículas | `matriculas.edit` | Cambiar datos y subir documentos. | Admin, Gestora, Soporte | `matriculas.view` |
-| Cambiar el estado | `matriculas.cambiar_estado` | Validar, rechazar o cerrar una matrícula. | Admin, Soporte | `matriculas.view` |
-| Borrar matrículas | `matriculas.delete` | Quitar una matrícula. | Admin, Soporte | `matriculas.view` |
+| Ver solicitudes de admisión | `matriculas.view` | Las solicitudes de admisión de sus campus, con sus datos y sus documentos. | Admin, Gestora, Soporte, Project manager |  |
+| Crear solicitudes de admisión | `matriculas.create` | Una solicitud de admisión nueva. | Admin, Gestora, Soporte | `matriculas.view` |
+| Editar solicitudes de admisión | `matriculas.edit` | Cambiar datos y subir documentos. | Admin, Gestora, Soporte | `matriculas.view` |
+| Cambiar el estado | `matriculas.cambiar_estado` | Validar, rechazar o cerrar una solicitud de admisión. | Admin, Soporte | `matriculas.view` |
+| Borrar solicitudes de admisión | `matriculas.delete` | Quitar una solicitud de admisión. | Admin, Soporte | `matriculas.view` |
 
 ### Diplomas (Certifex)
 

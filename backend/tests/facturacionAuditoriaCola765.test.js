@@ -41,9 +41,11 @@ const SERIE = `T${Date.now().toString(36).slice(-6).toUpperCase()}`;
 const q = (sql, params) => pool.query(sql, params).then((r) => r.rows);
 let proyecto; let otro; let emisora; let lead; let venta; let repetida;
 
-const cobro = async (fecha) => (await q(
-  `INSERT INTO conversion_payments (conversion_id, importe, fecha) VALUES ($1, 100, $2) RETURNING id`,
-  [venta.id, fecha]))[0].id;
+// Cada cobro con su importe: dos de 100 € de la misma venta en la misma semana
+// son una «posible duplicada» (CRM#819) y la emision automatica no los saca.
+const cobro = async (fecha, importe = 100) => (await q(
+  `INSERT INTO conversion_payments (conversion_id, importe, fecha) VALUES ($1, $3, $2) RETURNING id`,
+  [venta.id, fecha, importe]))[0].id;
 
 beforeAll(async () => {
   // Una pausa abierta que dejara otra ejecución local no puede tapar esta.
@@ -93,6 +95,13 @@ describe('auditoría de facturación contra la base (#765)', { timeout: 60000 },
        SELECT $2, lower(serie) || ' ', ano, numero, codigo, 'Otro', '12345678Z', 'x', 'y', '28001', 'España',
               items, 50, 50, issuer_id FROM invoices WHERE id = $1 RETURNING id`,
       [primera.id, otro.id]);
+    // Las dos se hicieron «a las 00:00 de hoy» en Madrid: en UTC (la zona de la
+    // base de la CI) eso aún es ayer. La auditoría cuenta por días de Madrid y
+    // tiene que verlas igual; así la prueba no depende de la hora a la que corra
+    // (antes fallaba de 00:00 a 01:00 de Madrid y pasaba el resto del día).
+    await q(
+      `UPDATE invoices SET created_at = ($2::date::timestamp AT TIME ZONE 'Europe/Madrid') WHERE id = ANY($1::int[])`,
+      [[primera.id, repetida.id], HOY]);
 
     const r = await servicio.auditar({ origen: 'programada' });
     const mias = r.incidencias.filter((i) => i.serie === SERIE);
@@ -120,8 +129,8 @@ describe('auditoría de facturación contra la base (#765)', { timeout: 60000 },
   });
 
   it('los cobros que entran se encolan y salen EN ORDEN DE COBRO al reanudar, solo si la auditoría sale limpia', async () => {
-    const elDeHoy = await cobro(HOY);    // entra primero…
-    const elDeAyer = await cobro(AYER);  // …pero se cobró antes
+    const elDeHoy = await cobro(HOY, 130);    // entra primero…
+    const elDeAyer = await cobro(AYER, 120);  // …pero se cobró antes
     expect(await servicio.encolarSiPausada({ paymentId: elDeHoy, conversionId: venta.id })).toBe(true);
     expect(await servicio.encolarSiPausada({ paymentId: elDeAyer, conversionId: venta.id })).toBe(true);
 
