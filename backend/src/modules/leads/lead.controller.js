@@ -3,6 +3,7 @@ import { query } from '../../shared/config/db.js';
 import * as leadModel from './lead.model.js';
 import { webhookLeadSchema, listLeadsSchema, updateStatusSchema, createInteractionSchema, updateInteractionSchema, createReminderSchema, reassignSchema, updateLeadSchema, createLeadManualSchema } from './lead.validation.js';
 import * as dupQueue from './dup-queue.service.js';
+import { leerFiltroPais } from './pais.js';
 import * as leadProducts from './lead-products.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { veTodoElCrm, campusDeLaPersona, listaDelAmbito, exigirCampusSuyo } from '../../shared/utils/ambito.js';
@@ -274,6 +275,8 @@ export async function stats(req, res, next) {
       dateTo: req.query.dateTo || null,
       productId: req.query.productId ? parseInt(req.query.productId) : null,
       canal: req.query.canal || null,
+      // País de entrada (#221). Lo que no sea un código ni `sin_pais` se ignora.
+      paisEntrada: leerFiltroPais(req.query.paisEntrada),
       search: req.query.search || null,
     };
     // SEGURIDAD: gestor solo ve sus propios stats, ignoramos responsableId del query.

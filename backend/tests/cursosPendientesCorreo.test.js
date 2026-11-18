@@ -37,7 +37,7 @@ async function persona(n, { active = true } = {}) {
 }
 const aviso = (extra = {}) => ({
   clave: `${MARCA}-clave`, targetUserIds: [TUTORA.id, APAGADA.id, INACTIVA.id], type: 'curso_pendiente_retrasado',
-  title: `Retrasado: ${MARCA} Curso`, message: 'Campus A. Tenía que estar el 2026-10-01.', link_path: '/productos/pendientes?curso=7', ...extra,
+  title: `Retrasado: ${MARCA} Curso`, message: 'Campus A. Tenía que estar el 2026-10-01.', link_path: '/products/pending?curso=7', ...extra,
 });
 
 beforeAll(async () => {
@@ -69,7 +69,7 @@ describe('el correo de cursos pendientes', () => {
     expect(enviados[0].to).toEqual([{ email: TUTORA.email, name: TUTORA.nombre }]);
     expect(enviados[0].subject).toBe(`Retrasado: ${MARCA} Curso`);
     expect(enviados[0].clave).toBe(`${MARCA}-clave-${TUTORA.id}`);
-    expect(enviados[0].htmlContent).toContain('productos/pendientes?curso=7');
+    expect(enviados[0].htmlContent).toContain('products/pending?curso=7');
   });
 
   it('un fallo de Brevo no tumba el aviso ni lanza', async () => {
@@ -80,7 +80,7 @@ describe('el correo de cursos pendientes', () => {
   });
 
   it('el correo escapa lo que viene de la base', () => {
-    const c = armarCorreo({ persona: { nombre: 'Ana' }, titulo: `Retrasado: <b>${MARCA}</b>`, mensaje: 'A & B', link_path: '/productos/pendientes' });
+    const c = armarCorreo({ persona: { nombre: 'Ana' }, titulo: `Retrasado: <b>${MARCA}</b>`, mensaje: 'A & B', link_path: '/products/pending' });
     expect(c.htmlContent).not.toContain(`<b>${MARCA}</b>`);
     expect(c.htmlContent).toContain('&lt;b&gt;');
   });

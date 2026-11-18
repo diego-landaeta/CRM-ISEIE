@@ -11,6 +11,14 @@
     · FUERA DE PLAZO: se pasó. A administración (los super admin y los admin
       de ese campus), un aviso en la campana. Una vez por espera. También las
       que no tienen tutor.
+
+  #769 (Manuel, 13/11: «primero recordatorio al tutor; si sigue sin resolverse,
+  aviso a administración», con 24-48 h): los dos escalones tienen su propio
+  umbral en horas, CONSULTAS_RECORDATORIO_HORAS y CONSULTAS_AVISO_ADMIN_HORAS.
+  Sin ponerlas, lo de siempre (3/4 del plazo y el plazo). El plazo del semáforo
+  y de las métricas sigue siendo CONSULTAS_PLAZO_HORAS. Y el aviso a
+  administración puede ir también por correo (CONSULTAS_AVISO_ADMIN_CORREO=1;
+  apagado por defecto); cada persona lo apaga en «Mis preferencias».
     · CARGA DESACTUALIZADA (decisión 9): el tutor lleva más de una semana sin
       tocar «Mi carga de trabajo». Correo y campana, y no se repite hasta que
       pase otra semana.
@@ -30,11 +38,31 @@ import {
 } from '../../shared/services/email-plantilla.service.js';
 import { NO_ESCRIBIR_A_TUTORES } from '../../shared/config/frenoTutores.js';
 import { notifyUsers } from '../notifications/notifications.service.js';
+import { AVISO_CONSULTA_FUERA_DE_PLAZO } from './consultas.avisosCorreo.js';
 import { PLAZO_HORAS } from './consultas.model.js';
 import { DIAS_CARGA } from './consultas.carga.js';
 
 /** Qué parte del plazo tiene que pasar para recordárselo al tutor: la del ámbar del semáforo. */
 export const PARTE_DEL_PLAZO = 0.75;
+
+const horasDe = (valor) => {
+  const n = Number(valor);
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
+
+/**
+ * Los dos umbrales, en horas desde que el alumno espera (#769). Funciones y no
+ * constantes para que las pruebas pasen su entorno. El aviso a administración
+ * nunca va antes que el recordatorio al tutor.
+ */
+export function umbralesDeAviso(env = process.env) {
+  const recordatorio = horasDe(env.CONSULTAS_RECORDATORIO_HORAS) ?? PLAZO_HORAS * PARTE_DEL_PLAZO;
+  const administracion = Math.max(horasDe(env.CONSULTAS_AVISO_ADMIN_HORAS) ?? PLAZO_HORAS, recordatorio);
+  return { recordatorio, administracion };
+}
+
+/** ¿El aviso a administración sale también por correo? Solo con CONSULTAS_AVISO_ADMIN_CORREO=1. */
+export const correoAAdministracion = (env = process.env) => env.CONSULTAS_AVISO_ADMIN_CORREO === '1';
 
 const ESPERA = 'COALESCE(c.espera_desde, c.entrada_at)';
 
@@ -45,8 +73,8 @@ async function apuntarEvento(consultaId, tipo, detalle) {
     [consultaId, tipo, detalle]);
 }
 
-/** Las abiertas, con tutor, que ya pasaron la parte del plazo y no se le han recordado en esta espera. */
-async function cercaDelPlazo(ahora, projectIds) {
+/** Las abiertas, con tutor, que ya pasaron el umbral del recordatorio y no se le han recordado en esta espera. */
+async function cercaDelPlazo(ahora, projectIds, horas) {
   const { rows } = await query(
     `SELECT c.id, c.project_id, c.tutor_id, c.alumno_nombre, c.curso_nombre, ${ESPERA} AS espera,
             pr.nombre AS campus, pr.logo_url, pr.emoji, u.nombre AS tutor_nombre, u.email AS tutor_email,
@@ -59,15 +87,15 @@ async function cercaDelPlazo(ahora, projectIds) {
         AND (c.recordatorio_plazo_at IS NULL OR c.recordatorio_plazo_at < ${ESPERA})
         AND ($3::int[] IS NULL OR c.project_id = ANY($3::int[]))
       ORDER BY ${ESPERA}`,
-    [ahora, PLAZO_HORAS * PARTE_DEL_PLAZO, projectIds]);
+    [ahora, horas, projectIds]);
   return rows;
 }
 
-/** Las abiertas que ya se pasaron del plazo y no se han avisado en esta espera (con tutor o sin él). */
-async function fueraDelPlazo(ahora, projectIds) {
+/** Las abiertas que ya pasaron el umbral de administración y no se han avisado en esta espera (con tutor o sin él). */
+async function fueraDelPlazo(ahora, projectIds, horas) {
   const { rows } = await query(
-    `SELECT c.id, c.project_id, c.tutor_id, c.alumno_nombre, ${ESPERA} AS espera,
-            pr.nombre AS campus, u.nombre AS tutor_nombre,
+    `SELECT c.id, c.project_id, c.tutor_id, c.alumno_nombre, c.curso_nombre, ${ESPERA} AS espera,
+            pr.nombre AS campus, pr.logo_url, pr.emoji, u.nombre AS tutor_nombre,
             EXTRACT(EPOCH FROM ($1::timestamptz - ${ESPERA})) / 3600.0 AS horas
        FROM consultas c
        JOIN projects pr ON pr.id = c.project_id
@@ -77,7 +105,7 @@ async function fueraDelPlazo(ahora, projectIds) {
         AND (c.aviso_fuera_plazo_at IS NULL OR c.aviso_fuera_plazo_at < ${ESPERA})
         AND ($3::int[] IS NULL OR c.project_id = ANY($3::int[]))
       ORDER BY ${ESPERA}`,
-    [ahora, PLAZO_HORAS, projectIds]);
+    [ahora, horas, projectIds]);
   return rows;
 }
 
@@ -94,12 +122,13 @@ export async function administracionDelCampus(projectId) {
 
 async function recordarAlTutor(c, enviar) {
   const horas = Number(c.horas);
-  const quedan = Math.max(0, PLAZO_HORAS - horas);
+  const quedan = PLAZO_HORAS - horas;
+  const cuantoQueda = quedan >= 1 ? `quedan ${horasTexto(quedan)} para el plazo de ${PLAZO_HORAS} h` : `ya pasa del plazo de ${PLAZO_HORAS} h`;
   await notifyUsers({
     targetUserIds: [Number(c.tutor_id)],
     type: 'consulta_cerca_del_plazo',
     title: `${c.alumno_nombre || 'Un alumno'} espera respuesta`,
-    message: `${c.campus} · lleva ${horasTexto(horas)}; quedan ${horasTexto(quedan)} para el plazo de ${PLAZO_HORAS} h`,
+    message: `${c.campus} · lleva ${horasTexto(horas)}; ${cuantoQueda}`,
     link_path: `/consultas/${c.id}`,
     metadata: { consulta_id: c.id, project_id: c.project_id },
   });
@@ -129,7 +158,41 @@ async function recordarAlTutor(c, enviar) {
   await apuntarEvento(c.id, 'recordatorio_plazo', { horas: Math.round(horas * 10) / 10, correo: correoEnviado });
 }
 
-async function avisarAAdministracion(c) {
+/**
+ * Correo a administración (#769), detrás de la campana y con la misma frase. Solo a
+ * quien está activo, tiene correo y no lo ha apagado. Uno por consulta, espera y
+ * persona (clave de idempotencia). Un fallo de correo no rompe el aviso.
+ */
+async function correoFueraDePlazo(c, destinatarios, horas, enviar) {
+  const { rows } = await query(
+    `SELECT u.id, u.nombre, u.email FROM users u
+      WHERE u.id = ANY($1::int[]) AND u.active AND u.email IS NOT NULL
+        AND NOT EXISTS (SELECT 1 FROM avisos_apagados a WHERE a.user_id = u.id AND a.aviso = $2)`,
+    [destinatarios, AVISO_CONSULTA_FUERA_DE_PLAZO]);
+  let enviados = 0;
+  for (const p of rows) {
+    const { htmlContent, textContent } = correo({
+      proyecto: { nombre: c.campus, logo_url: c.logo_url, emoji: c.emoji },
+      titulo: 'Consulta fuera de plazo',
+      saludo: p.nombre || null,
+      resumen: `${c.alumno_nombre || 'Un alumno'} lleva ${horasTexto(horas)} sin respuesta`,
+      bloques: [
+        parrafo(`<strong>${esc(c.alumno_nombre || 'Un alumno')}</strong>${c.curso_nombre ? ` (${esc(c.curso_nombre)})` : ''} lleva <strong>${horasTexto(horas)}</strong> sin respuesta. ${c.tutor_nombre ? `Tutor: ${esc(c.tutor_nombre)}.` : 'No tiene tutor asignado.'}`),
+        boton({ texto: 'Ver la consulta', url: enlace(`consultas/${c.id}`) }),
+        nota('Desde la consulta puedes reasignarla a otro tutor. Puedes apagar estos correos en «Mis preferencias».'),
+      ],
+    });
+    const r = await enviar({
+      to: p.email, subject: `[${c.campus}] Consulta fuera de plazo`, htmlContent, textContent,
+      tags: ['consultas', 'administracion', 'plazo'], projectId: c.project_id,
+      clave: `consultas-fuera-plazo-${c.id}-${new Date(c.espera).toISOString()}-${p.id}`,
+    }).catch((err) => ({ sent: false, error: err.message }));
+    if (r?.sent) enviados += 1;
+  }
+  return enviados;
+}
+
+async function avisarAAdministracion(c, enviar, env) {
   const horas = Number(c.horas);
   const destinatarios = await administracionDelCampus(c.project_id);
   // Sin nadie, nada: una lista vacía en la campana se entendería como «para todos».
@@ -143,21 +206,33 @@ async function avisarAAdministracion(c) {
       metadata: { consulta_id: c.id, project_id: c.project_id, tutor_id: c.tutor_id },
     });
   }
+  let correos = 0;
+  if (destinatarios.length && correoAAdministracion(env)) {
+    try { correos = await correoFueraDePlazo(c, destinatarios, horas, enviar); } catch (err) {
+      logger.warn({ consultaId: c.id, err: err.message }, 'consultas: el correo de fuera de plazo ha fallado');
+    }
+  }
   await query('UPDATE consultas SET aviso_fuera_plazo_at = NOW() WHERE id = $1', [c.id]);
-  await apuntarEvento(c.id, 'fuera_de_plazo', { horas: Math.round(horas * 10) / 10, avisados: destinatarios.length });
+  await apuntarEvento(c.id, 'fuera_de_plazo', { horas: Math.round(horas * 10) / 10, avisados: destinatarios.length, correos });
 }
 
-/** Una vuelta: recordatorios a los tutores y avisos a administración. `projectIds`: solo esos campus (null = todos). */
-export async function revisarPlazos({ ahora = new Date(), enviar = sendEmail, projectIds = null } = {}) {
+/**
+ * Una vuelta: recordatorios a los tutores y avisos a administración. `projectIds`: solo
+ * esos campus (null = todos). `env`: de donde salen los umbrales y el interruptor del correo.
+ */
+export async function revisarPlazos({
+  ahora = new Date(), enviar = sendEmail, projectIds = null, env = process.env,
+} = {}) {
   const r = { recordatorios: 0, fueraDePlazo: 0, errores: 0 };
-  for (const c of await cercaDelPlazo(ahora, projectIds)) {
+  const umbral = umbralesDeAviso(env);
+  for (const c of await cercaDelPlazo(ahora, projectIds, umbral.recordatorio)) {
     try { await recordarAlTutor(c, enviar); r.recordatorios += 1; } catch (err) {
       r.errores += 1;
       logger.warn({ consultaId: c.id, err: err.message }, 'consultas: el recordatorio de plazo ha fallado');
     }
   }
-  for (const c of await fueraDelPlazo(ahora, projectIds)) {
-    try { await avisarAAdministracion(c); r.fueraDePlazo += 1; } catch (err) {
+  for (const c of await fueraDelPlazo(ahora, projectIds, umbral.administracion)) {
+    try { await avisarAAdministracion(c, enviar, env); r.fueraDePlazo += 1; } catch (err) {
       r.errores += 1;
       logger.warn({ consultaId: c.id, err: err.message }, 'consultas: el aviso de fuera de plazo ha fallado');
     }

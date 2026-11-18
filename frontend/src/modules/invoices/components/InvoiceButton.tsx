@@ -111,8 +111,9 @@ export default function InvoiceButton({ projectId, leadId, conversionId, items, 
         return;
       }
 
-      const res = await emitirPreguntandoSiPasa((permitir) => invoicesApi.create({
+      const res = await emitirPreguntandoSiPasa((permitir, duplicada) => invoicesApi.create({
         ...(permitir ? { permitirMasDeLoCobrado: true } : {}),
+        ...(duplicada ? { confirmar_duplicada: true } : {}),
         projectId, leadId, conversionId,
         borrador: complete ? undefined : true,
         clienteNombre: d.nombre,

@@ -95,6 +95,12 @@ async function _createLeadCore(project, leadData) {
   // llego con `utm_source=fb` dentro de la direccion y se guardo como «directo».
   //
   // Este es el sitio por el que pasan las dos.
+  //
+  // La página también puede llegar como `page_url` (Elementor, Make): sin
+  // `landing_url`, se usa esa. De ella salen el canal, el producto y el país (#221).
+  if (!leadData.landing_url && typeof leadData.page_url === 'string' && leadData.page_url.trim()) {
+    leadData.landing_url = leadData.page_url.trim();
+  }
   for (const k of ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term']) {
     if (!leadData[k]) {
       const deLaUrl = utmsDeLaUrl(leadData?.landing_url);

@@ -42,7 +42,10 @@ export const NOMBRES_HABITUALES = {
     'product', 'programa', 'formacion', 'master', 'diplomado'],
   notas: ['message', 'mensaje', 'notas', 'notes', 'comentarios', 'comentario',
     'comments', 'consulta', 'observaciones'],
-  landing_url: ['landing_url', 'page_url', 'url', 'pagina', 'page'],
+  // La página del formulario. Elementor la manda como «Page URL» (→ `page_url`);
+  // de ella salen el canal, el producto y el país de entrada (#221).
+  landing_url: ['landing_url', 'page_url', 'pageurl', 'url_de_la_pagina', 'url_pagina', 'pagina_url',
+    'landing_page', 'landing', 'source_url', 'form_url', 'current_url', 'url', 'pagina', 'page'],
   referrer: ['referrer', 'referer'],
   utm_source: ['utm_source'],
   utm_medium: ['utm_medium'],
@@ -103,6 +106,43 @@ export function deducirMapeo(payload) {
     }
   }
   return mapeo;
+}
+
+/** ¿Parece una dirección web? («https://cl.fonoaprende.com/…» o «cl.fonoaprende.com/…»). */
+function pareceUrl(v) {
+  if (typeof v !== 'string') return false;
+  const t = v.trim();
+  if (!t || /\s/.test(t)) return false;
+  return /^https?:\/\//i.test(t) || /^[a-z0-9-]+(\.[a-z0-9-]+)+(\/|$)/i.test(t);
+}
+
+/**
+ * La página del formulario dentro de un envío de Make, venga con el nombre que
+ * venga (#221). Se usa cuando el mapeo del webhook no trae `landing_url`: así,
+ * en cuanto Make mande la página, el prospecto entra con su país aunque nadie
+ * toque el mapeo. Busca:
+ *   · los nombres habituales (`landing_url`, `page_url`, «Page URL»…) en el
+ *     primer nivel o en un objeto anidado una vez (`data.page_url`);
+ *   · el formato de Elementor con «datos avanzados»: `meta.page_url.value`.
+ * Solo devuelve algo que parezca una dirección web; si no, null.
+ */
+export function urlDeLaPagina(payload) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
+  const rutas = rutasConValor(payload);
+  for (const n of NOMBRES_HABITUALES.landing_url) {
+    for (const { ruta } of rutas.filter((r) => r.nombre === n)) {
+      const valor = ruta.split('.').reduce((o, k) => (o == null ? o : o[k]), payload);
+      if (pareceUrl(valor)) return String(valor).trim();
+    }
+  }
+  const meta = payload.meta;
+  if (meta && typeof meta === 'object') {
+    for (const [k, v] of Object.entries(meta)) {
+      if (normalizarNombre(k) !== 'page_url' || !v || typeof v !== 'object') continue;
+      if (pareceUrl(v.value)) return String(v.value).trim();
+    }
+  }
+  return null;
 }
 
 /** `true` si con este mapeo se puede crear un prospecto (correo o nombre). */

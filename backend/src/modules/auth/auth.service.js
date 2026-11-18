@@ -4,6 +4,9 @@ import crypto from 'crypto';
 import { AppError } from '../../shared/utils/AppError.js';
 import * as authModel from './auth.model.js';
 import { buildPermissionsMap } from '../permissions/permissions.service.js';
+import { NO_ESCRIBIR_A_TUTORES } from '../../shared/config/frenoTutores.js';
+import { ROLES_DE_TUTOR } from '../../shared/utils/roles.js';
+import { logger } from '../../shared/utils/logger.js';
 
 const BCRYPT_ROUNDS = 12;
 // Access token de 8h: el usuario aguanta una jornada completa sin necesitar
@@ -198,6 +201,9 @@ const RECOVERY_EXPIRY_HOURS = 24;
 /** Minutos durante los que un enlace recien emitido impide emitir otro. */
 const RECOVERY_REENVIO_MIN = 5;
 
+/** ¿Es tutor (o tutor redactor), de rol principal o de mas? Para el freno. */
+const esTutor = (u) => [u?.role, ...(u?.roles_extra || [])].some((r) => ROLES_DE_TUTOR.includes(r));
+
 /**
  * «He olvidado la contraseña» (#37).
  *
@@ -220,6 +226,18 @@ const RECOVERY_REENVIO_MIN = 5;
 export async function pedirRecuperacion(email, baseUrl) {
   const user = await authModel.findActiveUserByEmail(String(email || '').trim());
   if (!user) return;
+
+  // El freno de los tutores (NO_ESCRIBIR_A_TUTORES), como en `cambiarCorreo`:
+  // mientras siga puesto, a un tutor no se le manda nada. Tampoco se le toca el
+  // token: un enlace que no va a llegar solo pisaria el de su alta, si lo tiene.
+  // Queda en el log y en el registro, y la respuesta HTTP es la misma: el
+  // controlador no espera a nada de esto.
+  if (NO_ESCRIBIR_A_TUTORES && esTutor(user)) {
+    logger.warn({ userId: user.id },
+      'recuperacion de contraseña de un tutor SIN enviar el enlace: los avisos a tutores estan cortados (15/09)');
+    await authModel.logActivity(user.id, 'password_reset_frenado', null, null);
+    return;
+  }
 
   const rawToken = crypto.randomBytes(32).toString('hex');
   const expires = new Date();

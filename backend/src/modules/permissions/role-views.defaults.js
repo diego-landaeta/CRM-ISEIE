@@ -51,7 +51,7 @@ export const SIDEBAR_ITEMS_CATALOG = [
   { id: 'dashboard',           label: 'Dashboard' },
   { id: 'leads',               label: 'Prospectos' },
   { id: 'clients',             label: 'Clientes' },
-  { id: 'matriculas',          label: 'Matrículas' },
+  { id: 'matriculas',          label: 'Solicitud de admisión' },
   { id: 'email_sequences',     label: 'Email seguimiento' },
   { id: 'campaigns',           label: 'Campañas (Meta/Google/SEO)' },
   { id: 'forms',               label: 'Formularios' },

@@ -16,6 +16,7 @@ import type { Lead } from '@/shared/types';
 import Field from '@/shared/components/ui/Field';
 import FilaCampos from '@/shared/components/ui/FilaCampos';
 import { inputClass } from '@/shared/lib/ui';
+import { rutaApp } from '@/shared/lib/rutaApp';
 
 interface CustomFieldDef {
   id: number;
@@ -293,7 +294,7 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
                       </>
                     );
                     return isMine ? (
-                      <a key={d.id} href={`/crm/leads/${d.id}`} target="_blank" rel="noopener noreferrer"
+                      <a key={d.id} href={rutaApp(`/leads/${d.id}`)} target="_blank" rel="noopener noreferrer"
                         className="text-[11px] text-amber-700 dark:text-amber-300 hover:underline flex items-center gap-1 mt-0.5"
                       >{inner}</a>
                     ) : (

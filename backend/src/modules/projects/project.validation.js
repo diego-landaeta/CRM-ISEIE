@@ -1,5 +1,17 @@
 import { z } from 'zod';
 
+/**
+ * La tabla de países de un campus (#221): { "cl": "CL", "mx": "MX" }. Se
+ * guarda ya limpia (prefijo en minúscula, código en mayúscula) para que lo que
+ * se ve en la pantalla sea exactamente lo que usa el alta.
+ */
+export const paisesPorSubdominio = z.record(
+  z.string().trim().toLowerCase()
+    .regex(/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/, 'Prefijo no válido: letras, números y guiones (cl, mx…)')
+    .refine((k) => k !== 'www', '«www» no es un país: el dominio raíz no lleva país'),
+  z.string().trim().toUpperCase().regex(/^[A-Z]{2}$/, 'País no válido: código ISO de dos letras (CL, MX…)'),
+).refine((m) => Object.keys(m).length <= 60, 'Demasiados países');
+
 export const createProjectSchema = z.object({
   nombre: z.string().min(1).max(200),
   slug: z.string().regex(/^[a-z0-9-]+$/, 'Slug solo minusculas, numeros y guiones').min(1).max(100),
@@ -51,6 +63,9 @@ export const updateProjectSchema = z.object({
   remitente_no_contestar: z.preprocess((v) => (v === '' ? null : v), z.string().email('Correo no válido').max(255).nullable().optional()),
   auto_email_documents: z.boolean().optional(),
   sociedad_emisora_id: z.number().int().positive().nullable().optional(),
+  // País por subdominio (#221): prefijo → código ISO de dos letras. Vacío = el
+  // campus no separa por país. `www` no es un país.
+  paises_por_subdominio: paisesPorSubdominio.optional(),
 }).refine(d => Object.keys(d).length > 0, { message: 'Al menos un campo' });
 
 export const createSociedadSchema = z.object({

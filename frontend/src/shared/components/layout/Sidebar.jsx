@@ -9,7 +9,8 @@ import {
   ChatText,
   Receipt, Coins, Wrench, ShoppingBag, ChatCircleText, Wallet, Bank, Shuffle, Clock, GitMerge, CopySimple,
   UsersThree, CloudArrowDown,
-  GraduationCap, Warning, Certificate, ClipboardText, ChatsCircle, Kanban, ClockCounterClockwise, SlidersHorizontal } from '@phosphor-icons/react';
+  GraduationCap, Warning, Certificate, ClipboardText, ChatsCircle, Kanban, ClockCounterClockwise, SlidersHorizontal, Key, Timer } from '@phosphor-icons/react';
+import { abrirPedirAcceso } from '@/modules/soporte/lib/accesos';
 import { useAuth } from '@/contexts/AuthContext';
 import { rolesDe } from '@/shared/lib/roles';
 import usePermission from '@/shared/hooks/usePermission';
@@ -110,6 +111,9 @@ export const NAV_SECTIONS = [
       // «Mi factura» (#202): el colaborador con usuario sube aquí su factura del mes.
       // Aquí, junto a su tablero, como en MultiCRM: es lo otro que ve un colaborador.
       { to: '/mi-factura', label: 'Mi factura', icon: Receipt, roles: ['colaborador', 'tutor_redactor'], permiso: 'facturas_colaborador.subir' },
+      // Monitask (#236): qué hace cada colaborador y el cotejo con sus facturas. Solo en
+      // /staging y local hasta que Diego lo apruebe; además, con MONITASK_ACTIVO en el servidor.
+      ...(SOLO_EN_PRUEBAS ? [{ to: '/equipo/actividad', label: 'Actividad', icon: Timer, roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'monitask.view' }] : []),
     ],
   },
   {
@@ -181,6 +185,9 @@ export const NAV_SECTIONS = [
       { to: '/payroll',              label: 'Nóminas',            icon: Coins,      roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'payroll.view' },
       { to: '/accounting/pendiente-facturar', label: 'Pendientes de facturar', icon: WarningCircle, roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'facturas.view' },
       { to: '/accounting/pagos-stripe', label: 'Pagos Stripe',    icon: PlugsConnected, roles: ['admin', 'superadmin'], permiso: 'stripe.view' },
+      // Registro automático de cobros (#766): solo en /staging y en local hasta que
+      // Diego lo apruebe. Además, cada parte va con su interruptor del servidor.
+      ...(SOLO_EN_PRUEBAS ? [{ to: '/accounting/cobros-externos', label: 'PayPal y banco', icon: Wallet, roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'cobros_externos.view' }] : []),
       { to: '/accounting/facturas', label: 'Facturación', icon: FilePdf, roles: ['admin', 'superadmin', 'soporte', 'gestor'], sectionPrefixes: ['/accounting/facturas'], permiso: ['facturas.emitir', 'facturas.configurar'], oPermiso: 'facturas.emitir' },
       // Facturas de colaboradores (#202): en evaluación, solo en /staging y en local.
       { to: '/accounting/facturas-colaboradores', label: 'Facturas de colaboradores', icon: Receipt, roles: ['admin', 'superadmin'], permiso: 'facturas_colaborador.ver_todas' },
@@ -215,7 +222,7 @@ export const NAV_SECTIONS = [
       { to: '/clients',    label: 'Clientes',   icon: UserCheck, sectionPrefixes: ['/clients'], permiso: 'clients.view' },
       { to: '/leads/revision-duplicados', label: 'Revisión duplicados', icon: GitMerge, roles: ['admin', 'superadmin'], permiso: 'leads.duplicados' },
       { to: '/leads/duplicados', label: 'Buscar duplicados', icon: CopySimple, roles: ['admin', 'superadmin'], permiso: 'leads.duplicados' },
-      { to: '/matriculas', label: 'Matrículas', icon: UserCheck, permiso: 'matriculas.view' },
+      { to: '/matriculas', label: 'Solicitud de admisión', icon: UserCheck, permiso: 'matriculas.view' },
       // Diplomas de Certifex (#272): lo que piden los alumnos desde Moodle, aprobarlo,
       // enviarlo y revocarlo. Administración, como en MultiCRM, y además, para VERLO en
       // solo lectura, quien tenga `diplomas.view` (#223, `oPermiso`), y para emitir,
@@ -387,6 +394,27 @@ export function rutaPermitida(pathname, can) {
   if (!suyas.length && SIN_ENTRADA[ruta]) suyas.push({ permiso: SIN_ENTRADA[ruta] });
   if (!suyas.length) return true;
   return suyas.some((it) => !it.permiso || tiene(it.permiso) || (it.oPermiso && tiene(it.oPermiso)));
+}
+
+/**
+ * La clave del permiso que le falta para abrir esta pantalla (gemela de
+ * CRM#820), para que «No tienes acceso» ofrezca pedir ESE. Con la misma regla
+ * que `rutaPermitida`: la primera clave del catálogo que pide su entrada del
+ * menú y no tiene. `null` si la puede abrir o no se sabe cuál es.
+ */
+export function permisoQueFalta(pathname, can) {
+  if (rutaPermitida(pathname, can)) return null;
+  const ruta = String(pathname || '').replace(/\/+$/, '') || '/';
+  const claves = [];
+  const recorrer = (items) => {
+    for (const it of items || []) {
+      if (it.to && !it.href && it.to === ruta && it.permiso) claves.push(...[].concat(it.permiso));
+      if (it.children) recorrer(it.children);
+    }
+  };
+  for (const s of NAV_SECTIONS) recorrer(s.items);
+  if (!claves.length && SIN_ENTRADA[ruta]) claves.push(...[].concat(SIN_ENTRADA[ruta]));
+  return claves.find((c) => String(c).includes('.') && !(typeof can === 'function' && can(c) === true)) || null;
 }
 
 /** Vanessa y quien lleve las colaboraciones: solo tutores. Un admin con la casilla NO se recorta. */
@@ -860,6 +888,14 @@ export default function Sidebar({ collapsed = false, onToggleCollapsed, onNaviga
             >
               <Headset size={15} />
               Soporte
+            </button>
+            {/* Gemela de CRM#820: un alta, un permiso, un campus o Claude, a soporte como ticket. Para todos. */}
+            <button
+              onClick={() => { setUserMenuOpen(false); abrirPedirAcceso(); }}
+              className="w-full flex items-center gap-2.5 px-3 py-2 text-[13px] hover:bg-secondary/60 text-foreground"
+            >
+              <Key size={15} />
+              Pedir acceso o permiso
             </button>
             <div className="my-1 border-t border-border" />
             <button

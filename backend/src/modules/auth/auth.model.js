@@ -150,10 +150,12 @@ export async function logActivity(userId, action, details, ipAddress) {
  *
  * Solo lo que hace falta para mandarle el enlace. Una baja no recupera
  * contraseña: se le cerro la puerta a proposito y esto seria una rendija.
+ * Los roles, para el freno de los tutores (NO_ESCRIBIR_A_TUTORES): a un tutor
+ * no se le manda el enlace mientras siga puesto.
  */
 export async function findActiveUserByEmail(email) {
   const { rows } = await query(
-    `SELECT id, email, nombre
+    `SELECT id, email, nombre, role, roles_extra::text[] AS roles_extra
      FROM users
      WHERE LOWER(email) = LOWER($1) AND active = true`,
     [email]

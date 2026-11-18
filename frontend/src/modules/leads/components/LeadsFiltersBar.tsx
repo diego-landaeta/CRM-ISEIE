@@ -19,6 +19,7 @@ import DateRangeFilter from './DateRangeFilter';
 import { PROCESO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 // ISEIE es single-project: NO usamos MultiProjectPicker (no aplica).
 import usePermission from '@/shared/hooks/usePermission';
+import { nombreDelPais, opcionesDePais } from '@/shared/lib/paises';
 
 const STATUS_LABELS: Record<string, string> = {
   nuevo: 'Nuevo',
@@ -70,6 +71,10 @@ interface Props {
   /** Los pasos del proyecto, para poder nombrarlos. */
   pasosDelProceso: Array<{ clave: string; nombre: string; orden: number }>;
   filterOrigen: string; setFilterOrigen: (v: string) => void;
+  /** País de entrada (#221): código ISO o `sin_pais`. Vacío = todos. */
+  filterPais: string; setFilterPais: (v: string) => void;
+  /** Los campus que se ven, con su tabla de países: de ahí salen las opciones. */
+  campusDePaises?: Array<{ id: number; paises_por_subdominio?: Record<string, string> | null }>;
   filterResponsable: string; setFilterResponsable: (v: string) => void;
   filterProducto: string; setFilterProducto: (v: string) => void;
   dateFrom: string; dateTo: string; setDateRange: (from: string, to: string) => void;
@@ -90,12 +95,19 @@ export default function LeadsFiltersBar(props: Props) {
     activeProject,
     gestores, products, user, filterPaso, setFilterPaso, pasosDelProceso,
     search, setSearch, filterEstado, setFilterEstado,
-    filterOrigen, setFilterOrigen, filterResponsable, setFilterResponsable,
+    filterOrigen, setFilterOrigen, filterPais, setFilterPais, campusDePaises = [], filterResponsable, setFilterResponsable,
     filterProducto, setFilterProducto, dateFrom, dateTo, setDateRange,
     sortMode, setSortMode, sortDir, setSortDir, quickFilter, setQuickFilter, quickCounts,
     filterDup, setFilterDup, filterReincidente, setFilterReincidente,
     stats, leadsCount, filteredCount, onAssignPending,
   } = props;
+
+  // Los países que se pueden elegir: los de la tabla de los campus que se ven (#221).
+  const opcionesPais = opcionesDePais(
+    activeProject?.id && activeProject.id > 0
+      ? campusDePaises.filter((p) => p.id === activeProject.id)
+      : campusDePaises,
+  );
 
   // Lo que dice el servidor (#423): sale si salía antes Y tiene el permiso.
   const { can } = usePermission();
@@ -153,6 +165,7 @@ export default function LeadsFiltersBar(props: Props) {
   if (search.trim()) activePills.push({ key: 'search', label: `🔎 "${search.slice(0, 20)}${search.length > 20 ? '…' : ''}"`, onClear: () => setSearch('') });
   if (filterEstado) activePills.push({ key: 'estado', label: STATUS_LABELS[filterEstado] || filterEstado, onClear: () => setFilterEstado('') });
   if (filterOrigen) activePills.push({ key: 'origen', label: ORIGEN_LABELS[filterOrigen] || filterOrigen, onClear: () => setFilterOrigen('') });
+  if (filterPais) activePills.push({ key: 'pais', label: nombreDelPais(filterPais), onClear: () => setFilterPais('') });
   if (filterResponsable) {
     const label = filterResponsable === 'unassigned'
       ? 'Sin asignar'
@@ -172,6 +185,7 @@ export default function LeadsFiltersBar(props: Props) {
     setSearch('');
     setFilterEstado('');
     setFilterOrigen('');
+    setFilterPais('');
     setFilterResponsable('');
     setFilterProducto('');
     setDateRange('', '');
@@ -279,6 +293,26 @@ export default function LeadsFiltersBar(props: Props) {
                     maxWidth="100%"
                   />
                 </Row>
+                {/* País de entrada (#221): solo si algún campus de la vista
+                    separa por país (o si ya viene puesto en la dirección). */}
+                {(opcionesPais.length > 0 || filterPais) && (
+                  <Row label="País">
+                    <select
+                      value={filterPais}
+                      onChange={(e) => setFilterPais(e.target.value)}
+                      className="w-full h-9 px-3 rounded-md border border-border bg-muted/40 text-sm"
+                      aria-label="País de entrada"
+                    >
+                      <option value="">Todos los países</option>
+                      {opcionesPais.map((o) => (
+                        <option key={o.valor} value={o.valor}>{o.etiqueta}</option>
+                      ))}
+                      {filterPais && !opcionesPais.some((o) => o.valor === filterPais) && (
+                        <option value={filterPais}>{nombreDelPais(filterPais)}</option>
+                      )}
+                    </select>
+                  </Row>
+                )}
                 {isAdmin && (
                   <Row label="Gestor">
                     <SearchableSelect

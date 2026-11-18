@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { logger } from '../../shared/utils/logger.js';
+import { activa as facturaAutomaticaActiva } from '../factura-automatica/factura-automatica.config.js';
 import { decrypt } from '../../shared/utils/crypto.js';
 import * as integrationsModel from '../integrations/integrations.model.js';
 import { query } from '../../shared/config/db.js';
@@ -109,7 +110,59 @@ export async function reengancharCobro(payment, dbRow) {
     'cargo de Stripe sin cobro: enganchado al cobro que ya estaba');
 }
 
+// Marca de «lo está enlazando alguien ahora» en link_method. Empieza por «auto» para que
+// la pantalla de cargos, si la llega a ver, lo cuente como automático.
+const ENLAZANDO = 'auto_enlazando';
+// Si el proceso muere con la reserva puesta, pasado este tiempo otro la puede retomar.
+const RESERVA_MINUTOS = 2;
+
+/**
+ * Enlaza un cargo con su venta, de UNO EN UNO por cargo (gemela de CRM#680 / CRM#635).
+ *
+ * El mismo cargo llega por varios caminos: el aviso de Stripe, el sondeo de cada 5 minutos
+ * y el botón «Sincronizar». Si dos llegaban a la vez, los dos veían la fila aún sin venta,
+ * los dos pasaban por la comprobación de duplicados antes de que el otro escribiera y los
+ * dos sumaban el cobro: la venta acababa con el mismo pago dos veces.
+ *
+ * Ahora el cargo se RESERVA con una sola sentencia: quien recibe la fila lo enlaza y los
+ * demás no hacen nada (ya lo está haciendo otro). Nadie se queda esperando con una conexión
+ * cogida: un bloqueo de sesión retendría una conexión mientras el enlace pide otras al
+ * mismo pool (max 20), y con ~20 cargos distintos a la vez se agotaría y se perderían
+ * cobros sin aviso.
+ *
+ * La reserva pisa link_method y linked_at, así que la sentencia devuelve también los
+ * valores de antes: son los que ve el enlace y los que vuelven a la fila si no se enlaza.
+ */
 async function autoLinkIfPossible(projectId, payment, dbRow) {
+  const { rows: [reservada] } = await query(
+    `UPDATE stripe_payments sp
+        SET link_method = $2, linked_at = NOW()
+       FROM (SELECT id, link_method, linked_at FROM stripe_payments WHERE id = $1 FOR UPDATE) antes
+      WHERE sp.id = antes.id
+        AND sp.conversion_payment_id IS NULL
+        AND (sp.link_method IS DISTINCT FROM $2 OR sp.linked_at < NOW() - make_interval(mins => $3))
+      RETURNING sp.*, antes.link_method AS metodo_antes, antes.linked_at AS enlazado_antes`,
+    [dbRow.id, ENLAZANDO, RESERVA_MINUTOS]
+  );
+  if (!reservada) return; // ya tiene su cobro, o lo está enlazando otro ahora mismo
+
+  // Una reserva caducada no guarda lo de antes: se deja sin método, como un cargo nuevo.
+  const metodo = reservada.metodo_antes === ENLAZANDO ? null : reservada.metodo_antes;
+  const enlazado = reservada.metodo_antes === ENLAZANDO ? null : reservada.enlazado_antes;
+  try {
+    return await enlazarSiSePuede(projectId, payment, { ...reservada, link_method: metodo, linked_at: enlazado });
+  } finally {
+    // Si se enlazó, linkPayment ya cambió link_method y esto no toca nada. Si no (sin lead,
+    // otra moneda, un error…), la fila vuelve a como estaba para el siguiente intento.
+    await query(
+      `UPDATE stripe_payments SET link_method = $2, linked_at = $3 WHERE id = $1 AND link_method = $4`,
+      [dbRow.id, metodo, enlazado, ENLAZANDO]
+    ).catch((e) => logger.error({ err: e.message, projectId, stripeId: dbRow.stripe_id },
+      'stripe: no se pudo soltar la reserva del cargo; caduca sola en 2 minutos'));
+  }
+}
+
+async function enlazarSiSePuede(projectId, payment, dbRow) {
   if (dbRow.conversion_id) {
     await reengancharCobro(payment, dbRow);
     return;
@@ -162,6 +215,9 @@ async function autoLinkIfPossible(projectId, payment, dbRow) {
   // numeradas con lo que hubiera en la ficha en ese momento.
   logger.info({ conversionId: conv.id, paymentId: cpId, stripeId: payment.stripe_id },
     'cobro de Stripe registrado; queda en la cola de facturacion');
+  // Factura automatica (#452), si esta encendida en este campus: pide los datos
+  // fiscales al alumno o, si ya los dio, emite la de este cobro.
+  facturaAutomatica(conv.id, cpId);
 }
 
 // Trae detalle completo de dispute desde Stripe API (incluye evidence_due_by)
@@ -217,7 +273,7 @@ export async function syncStripePayments(projectId, { fullHistory = false, retry
         const payment = chargeToPayment(ch, projectId);
         const dbRow = await model.upsertPayment(payment);
         try { await autoLinkIfPossible(projectId, payment, dbRow); }
-        catch (e) { logger.warn({ chargeId: ch.id, err: e.message }, 'autoLink fail'); }
+        catch (e) { logger.error({ err: e.message, projectId, stripeId: ch.id }, 'stripe: el cargo no se pudo enlazar con su venta (sondeo)'); }
         await trasAsociarCargo(dbRow.id);
         if (ch.disputed) {
           await fetchAndUpdateDispute(apiKey, projectId, ch);
@@ -346,7 +402,19 @@ export async function manualLink(stripePaymentId, { leadId, conversionId, userId
   if (cpId) {
     logger.info({ conversionId, paymentId: cpId, stripePaymentId },
       'cargo de Stripe asociado a mano; queda en la cola de facturacion');
+    if (!yaExistia) facturaAutomatica(conversionId, cpId); // #452, si esta encendida
   }
+}
+
+/**
+ * Factura automatica (#452). No bloquea: el cobro ya esta apuntado y, si esto
+ * falla, sigue en la cola como siempre. Apagada, ni siquiera carga el modulo.
+ */
+function facturaAutomatica(conversionId, paymentId) {
+  if (!facturaAutomaticaActiva() || !conversionId || !paymentId) return;
+  import('../factura-automatica/factura-automatica.service.js')
+    .then((fa) => fa.alCobrar({ conversionId, paymentId }))
+    .catch((err) => logger.warn({ err: err.message, conversionId, paymentId }, 'factura automatica: fallo con un cobro de Stripe'));
 }
 
 export async function updateDisputeDecision(stripePaymentId, { decision, notes, userId }) {
@@ -451,7 +519,8 @@ export async function handleWebhookEvent(projectId, event) {
     case 'charge.failed': {
       const payment = chargeToPayment(obj, projectId);
       const dbRow = await model.upsertPayment(payment);
-      try { await autoLinkIfPossible(projectId, payment, dbRow); } catch (e) { logger.warn({ err: e.message }, 'autoLink wh fail'); }
+      try { await autoLinkIfPossible(projectId, payment, dbRow); }
+      catch (e) { logger.error({ err: e.message, projectId, stripeId: payment.stripe_id }, 'stripe: el cargo no se pudo enlazar con su venta (aviso)'); }
       if (event.type === 'charge.succeeded') await trasAsociarCargo(dbRow.id);
       if (obj.disputed && apiKey) await fetchAndUpdateDispute(apiKey, projectId, obj);
       // Un reembolso no acaba en stripe_payments: si el alumno recupera su
@@ -488,7 +557,8 @@ export async function handleWebhookEvent(projectId, event) {
           const ch = await stripeGet(apiKey, `/v1/charges/${obj.latest_charge}`);
           const payment = chargeToPayment(ch, projectId);
           const dbRow = await model.upsertPayment(payment);
-          try { await autoLinkIfPossible(projectId, payment, dbRow); } catch {}
+          try { await autoLinkIfPossible(projectId, payment, dbRow); }
+          catch (e) { logger.error({ err: e.message, projectId, stripeId: payment.stripe_id }, 'stripe: el cargo no se pudo enlazar con su venta (payment_intent)'); }
           if (event.type === 'payment_intent.succeeded') await trasAsociarCargo(dbRow.id);
         } catch (e) { logger.warn({ err: e.message }, 'fetch charge from PI failed'); }
       }

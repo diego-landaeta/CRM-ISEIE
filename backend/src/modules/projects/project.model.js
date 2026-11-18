@@ -14,7 +14,10 @@ export async function findAll({ active }) {
             p.logo_url, p.color_cabecera, p.remitente_no_contestar,
             p.webhook_api_key, p.meta_account_id, p.google_account_id,
             p.gsc_property, p.dias_alerta_inactividad, p.active, p.created_at, p.updated_at,
-            p.sociedad_emisora_id, s.razon_social AS sociedad_nombre
+            p.sociedad_emisora_id, s.razon_social AS sociedad_nombre,
+            -- País por subdominio (#221, migración 279). Con to_jsonb: sin la
+            -- migración sale vacío en vez de tumbar el listado de campus.
+            COALESCE(to_jsonb(p) -> 'paises_por_subdominio', '{}'::jsonb) AS paises_por_subdominio
      FROM projects p
      LEFT JOIN invoice_issuers s ON s.id = p.sociedad_emisora_id
      ${where}
@@ -29,7 +32,8 @@ export async function findById(id) {
             modules, shortcuts, external_panels, sidebar_labels, theme_color, auto_email_documents,
             logo_url, color_cabecera, remitente_no_contestar,
             webhook_api_key, meta_account_id, google_account_id,
-            gsc_property, dias_alerta_inactividad, active, created_at, updated_at
+            gsc_property, dias_alerta_inactividad, active, created_at, updated_at,
+            COALESCE(to_jsonb(projects) -> 'paises_por_subdominio', '{}'::jsonb) AS paises_por_subdominio
      FROM projects WHERE id = $1`,
     [id]
   );
@@ -82,12 +86,14 @@ export async function update(id, fields, db = { query }) {
                    'lead_base_fields_config', 'lead_columns', 'external_panels', 'sidebar_labels',
                    'theme_color', 'auto_email_documents', 'sociedad_emisora_id',
                    // La marca en correos y formularios (migraciones 168 y 170).
-                   'color_cabecera', 'remitente_no_contestar'];
+                   'color_cabecera', 'remitente_no_contestar',
+                   // País por subdominio (#221, migración 279).
+                   'paises_por_subdominio'];
   const sets = [];
   const params = [];
   let idx = 1;
   const jsonbFields = new Set(['modules', 'lead_base_fields_config', 'lead_columns',
-    'external_panels', 'sidebar_labels']);
+    'external_panels', 'sidebar_labels', 'paises_por_subdominio']);
   for (const k of allowed) {
     if (fields[k] !== undefined) {
       sets.push(`${k} = $${idx++}`);

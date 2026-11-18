@@ -10,6 +10,13 @@ import { API_BASE_URL } from '@/shared/api/client';
  *   <ErrorBoundary>
  *     <App />
  *   </ErrorBoundary>
+ *
+ * Con `dentro`, para la pantalla que va dentro del marco (AppLayout): el aviso
+ * ocupa solo el hueco de la pantalla y el menú sigue ahí (CRM#625, ISEIE#352).
+ * Novedades rota tapaba el CRM entero, sin menú, y al navegar el aviso se
+ * quedaba puesto hasta recargar, porque el único ErrorBoundary estaba por
+ * encima del Router. AppLayout lo monta dentro del `key={pathname}`: cambiar
+ * de pantalla lo vuelve a montar limpio.
  */
 export default class ErrorBoundary extends Component {
   constructor(props) {
@@ -54,7 +61,12 @@ export default class ErrorBoundary extends Component {
     if (!this.state.error) return this.props.children;
 
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+      <div
+        role="alert"
+        className={this.props.dentro
+          ? 'flex items-center justify-center py-16 px-2'
+          : 'min-h-screen bg-background flex items-center justify-center p-6'}
+      >
         <div className="bg-card border border-border rounded-xl shadow-lg max-w-md w-full p-6 text-center">
           <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-950/30 flex items-center justify-center mx-auto mb-4">
             <WarningCircle size={24} weight="regular" className="text-red-600 dark:text-red-400" />

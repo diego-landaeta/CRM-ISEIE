@@ -29,6 +29,8 @@ import { ambitoComoObjeto } from '@/shared/lib/ambitoInforme';
 import ActividadPorComercial from '@/modules/reports/components/ActividadPorComercial';
 import TasaDeCierre from '@/modules/reports/components/TasaDeCierre';
 import DondePonerElDinero from '@/modules/reports/components/DondePonerElDinero';
+import PaisesDeEntrada from '@/modules/reports/components/PaisesDeEntrada';
+import InformeMensual from '@/modules/reports/components/InformeMensual';
 
 const REPORT_CATEGORIES = [
   {
@@ -619,6 +621,9 @@ function PantallaDeReportes() {
           {/* Paises y formaciones: en pantalla, no solo descargables. */}
           <RankingsPanel from={rango.from} to={rango.to} />
 
+          {/* Por campus y país de entrada (#221): solo si algún campus separa por país. */}
+          <PaisesDeEntrada from={rango.from} to={rango.to} project={activeProject} />
+
           {/* ¿Dónde ponemos el dinero? (#56): por canal y campaña, contra el periodo anterior. Solo admin. */}
           <DondePonerElDinero from={rango.from} to={rango.to} />
 
@@ -629,6 +634,9 @@ function PantallaDeReportes() {
           )}
 
           <ReportsDownloadSection projectId={activeProject?.id} projectName={activeProject?.nombre} from={rango.from} to={rango.to} />
+
+          {/* El informe del mes por equipo y comercial, y el ZIP de facturas para la gestoría (#772). */}
+          <InformeMensual issuerId={null} />
         </>
       )}
 

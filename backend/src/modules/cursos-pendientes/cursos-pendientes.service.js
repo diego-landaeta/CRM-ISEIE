@@ -409,7 +409,7 @@ export async function marcarAlumna(user, cursoId, alumnaId, { estado, avisada })
 
 // ── Avisos ────────────────────────────────────────────────────────────────
 
-const enlace = (id) => `/productos/pendientes?curso=${id}`;
+const enlace = (id) => `/products/pending?curso=${id}`;
 
 async function avisarTutora(tipo, curso, tutorId, user) {
   if (tipo !== 'asignado') return;
@@ -539,7 +539,7 @@ export async function resumenDeLaSemana({ ahora = new Date() } = {}) {
     targetUserIds: supers.map((u) => u.id), type: 'curso_pendiente_semana',
     title: `Cursos pendientes: ${total} abiertos, ${campus.reduce((s, c) => s + c.retrasados, 0)} retrasados`,
     message: [...lineas, alDia.length ? `Al día: ${alDia.join(', ')}.` : null, tutoras.length ? `Carga: ${tutoras.join('; ')}.` : null].filter(Boolean).join(' · '),
-    link_path: '/productos/pendientes',
+    link_path: '/products/pending',
   });
   return { enviado: true, campus: lineas.length };
 }

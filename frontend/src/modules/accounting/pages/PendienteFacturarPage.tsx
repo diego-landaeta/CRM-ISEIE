@@ -4,6 +4,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import client from '@/shared/api/client';
+import { formatDate } from '@/shared/lib/format';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
@@ -12,6 +13,7 @@ import Portal from '@/shared/components/ui/portal';
 import { toast } from '@/shared/hooks/useToast';
 import { Receipt, PencilSimple, X, FloppyDisk, ArrowSquareOut } from '@phosphor-icons/react';
 import { useNavigate } from 'react-router-dom';
+import { rutaApp } from '@/shared/lib/rutaApp';
 
 interface Conversion {
   id: number;
@@ -45,9 +47,12 @@ function fmt(n: number | string): string {
   }).format(Number(n || 0));
 }
 
+// Las fechas de venta llegan como DATE («2026-10-12»): `new Date()` las lee
+// en UTC y en Latinoamérica salían un día antes (#693). `formatDate` lee el día
+// tal cual y, si trae hora, la respeta.
 function fmtDate(d?: string | null): string {
   if (!d) return '—';
-  return new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+  return formatDate(d);
 }
 
 const PER_PAGE = 50;
@@ -292,7 +297,7 @@ function EditDialog({ conversion, onClose, onSaved }: { conversion: Conversion; 
               </select>
             </div>
             <a
-              href={`/leads/${conversion.lead_id}`}
+              href={rutaApp(`/leads/${conversion.lead_id}`)}
               className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
             >
               <ArrowSquareOut size={11} weight="bold" /> Ver perfil del cliente

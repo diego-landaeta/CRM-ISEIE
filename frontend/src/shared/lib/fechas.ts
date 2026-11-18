@@ -90,3 +90,35 @@ export function yaPaso(iso?: string | null): boolean {
   const t = new Date(iso).getTime();
   return !Number.isNaN(t) && t < Date.now();
 }
+
+/*
+  EL DÍA DE UNA VENTA ES EL DE MADRID (#693).
+
+  `fecha_conversion` es un DATE. Para saber qué día poner por defecto en una
+  venta nueva se usaba `new Date().toISOString().slice(0, 10)`, que es el día en
+  UTC: de 00:00 a 02:00 de Madrid (01:00 en invierno) aún decía «ayer», estuviera
+  donde estuviera quien la registraba. El criterio del CRM es la hora de Madrid,
+  la misma que usa el servidor (`APP_TIMEZONE`, por defecto Europe/Madrid): una
+  gestora de Bogotá que registra a las 19:30 de allí ve ya el día siguiente,
+  porque en Madrid ya lo es.
+*/
+export const ZONA_DEL_CRM = 'Europe/Madrid';
+
+/** «2026-10-12»: el día que es en Madrid en ese instante (por defecto, ahora). */
+export function hoyEnMadrid(ahora: Date = new Date()): string {
+  // 'sv-SE' escribe la fecha como AAAA-MM-DD, que es lo que espera un DATE.
+  return ahora.toLocaleDateString('sv-SE', { timeZone: ZONA_DEL_CRM });
+}
+
+/**
+ * Suma meses a un día «AAAA-MM-DD» sin pasar por la zona del navegador.
+ * `new Date('2026-03-01')` es medianoche UTC; con `setMonth` (hora local) y
+ * vuelta a `toISOString`, en Latinoamérica la cuota del 1 de abril salía el 29
+ * de marzo. Todo en UTC, el día no se mueve.
+ */
+export function sumarMeses(iso: string, meses: number): string {
+  const d = new Date(`${String(iso).slice(0, 10)}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return iso;
+  d.setUTCMonth(d.getUTCMonth() + meses);
+  return d.toISOString().slice(0, 10);
+}

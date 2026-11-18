@@ -2,6 +2,7 @@
 // para facilitar su test unitario y aliviar el archivo principal.
 import type { Lead } from '@/shared/types';
 import type { ExportColumn } from '@/shared/lib/export';
+import { nombreDelPais } from '@/shared/lib/paises';
 import { soloFecha, diasHasta } from '@/shared/lib/fechas';
 
 const AVATAR_COLORS: ReadonlyArray<string> = [
@@ -86,6 +87,8 @@ const STATUS_LABELS_ES: Record<string, string> = {
 export function getLeadExportColumns(): ExportColumn<Lead>[] {
   return [
     { key: 'proyecto', label: 'Proyecto', type: 'string', value: (l) => l.proyecto_nombre || '', width: 18 },
+    // País de entrada (#221): el del subdominio por el que entró.
+    { key: 'pais_entrada', label: 'País de entrada', type: 'string', value: (l) => nombreDelPais(l.pais_origen), width: 14 },
     { key: 'nombre', label: 'Nombre', type: 'string', value: (l) => l.nombre || '', width: 24 },
     { key: 'email', label: 'Email', type: 'string', value: (l) => l.email || '', width: 28 },
     { key: 'telefono', label: 'Teléfono', type: 'string', value: (l) => l.telefono || '', width: 16 },

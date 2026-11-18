@@ -1583,6 +1583,224 @@
   "puertas": []
  },
  {
+  "id": "GET /api/cobros-externos/estado",
+  "tipo": "ruta",
+  "modulo": "cobros-externos",
+  "metodo": "GET",
+  "ruta": "/api/cobros-externos/estado",
+  "relativa": "GET /estado",
+  "controlador": "estado",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "cobros_externos.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/cobros-externos/paypal",
+  "tipo": "ruta",
+  "modulo": "cobros-externos",
+  "metodo": "GET",
+  "ruta": "/api/cobros-externos/paypal",
+  "relativa": "GET /paypal",
+  "controlador": "listarPaypal",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "cobros_externos.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/cobros-externos/paypal/sincronizar",
+  "tipo": "ruta",
+  "modulo": "cobros-externos",
+  "metodo": "POST",
+  "ruta": "/api/cobros-externos/paypal/sincronizar",
+  "relativa": "POST /paypal/sincronizar",
+  "controlador": "sincronizarPaypal",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "cobros_externos.edit"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/cobros-externos/paypal/:id/enlazar",
+  "tipo": "ruta",
+  "modulo": "cobros-externos",
+  "metodo": "POST",
+  "ruta": "/api/cobros-externos/paypal/:id/enlazar",
+  "relativa": "POST /paypal/:id/enlazar",
+  "controlador": "enlazarPaypal",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "cobros_externos.edit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/cobros-externos/banco/extractos",
+  "tipo": "ruta",
+  "modulo": "cobros-externos",
+  "metodo": "GET",
+  "ruta": "/api/cobros-externos/banco/extractos",
+  "relativa": "GET /banco/extractos",
+  "controlador": "listarExtractos",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "cobros_externos.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/cobros-externos/banco/extractos",
+  "tipo": "ruta",
+  "modulo": "cobros-externos",
+  "metodo": "POST",
+  "ruta": "/api/cobros-externos/banco/extractos",
+  "relativa": "POST /banco/extractos",
+  "controlador": "subirExtracto",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "cobros_externos.edit"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/cobros-externos/banco/movimientos",
+  "tipo": "ruta",
+  "modulo": "cobros-externos",
+  "metodo": "GET",
+  "ruta": "/api/cobros-externos/banco/movimientos",
+  "relativa": "GET /banco/movimientos",
+  "controlador": "listarMovimientos",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "cobros_externos.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/cobros-externos/banco/movimientos/:id/confirmar",
+  "tipo": "ruta",
+  "modulo": "cobros-externos",
+  "metodo": "POST",
+  "ruta": "/api/cobros-externos/banco/movimientos/:id/confirmar",
+  "relativa": "POST /banco/movimientos/:id/confirmar",
+  "controlador": "confirmarMovimiento",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "cobros_externos.edit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/cobros-externos/banco/movimientos/:id/descartar",
+  "tipo": "ruta",
+  "modulo": "cobros-externos",
+  "metodo": "POST",
+  "ruta": "/api/cobros-externos/banco/movimientos/:id/descartar",
+  "relativa": "POST /banco/movimientos/:id/descartar",
+  "controlador": "descartarMovimiento",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "cobros_externos.edit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/paypal-webhook/:projectId",
+  "tipo": "ruta",
+  "modulo": "cobros-externos",
+  "metodo": "POST",
+  "ruta": "/api/paypal-webhook/:projectId",
+  "relativa": "POST /:projectId",
+  "controlador": "webhookPaypal",
+  "publica": true,
+  "guardias": [],
+  "puertas": []
+ },
+ {
   "id": "GET /api/commissions/rules",
   "tipo": "ruta",
   "modulo": "commissions",
@@ -4241,6 +4459,162 @@
   "puertas": []
  },
  {
+  "id": "GET /api/factura-automatica/venta/:conversionId",
+  "tipo": "ruta",
+  "modulo": "factura-automatica",
+  "metodo": "GET",
+  "ruta": "/api/factura-automatica/venta/:conversionId",
+  "relativa": "GET /venta/:conversionId",
+  "controlador": "estado",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "facturas.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/factura-automatica/venta/:conversionId/reenviar",
+  "tipo": "ruta",
+  "modulo": "factura-automatica",
+  "metodo": "POST",
+  "ruta": "/api/factura-automatica/venta/:conversionId/reenviar",
+  "relativa": "POST /venta/:conversionId/reenviar",
+  "controlador": "reenviar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "facturas.cola"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/fd/:token",
+  "tipo": "ruta",
+  "modulo": "factura-automatica",
+  "metodo": "GET",
+  "ruta": "/api/fd/:token",
+  "relativa": "GET /:token",
+  "controlador": "formulario",
+  "publica": true,
+  "guardias": [],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/fd/:token",
+  "tipo": "ruta",
+  "modulo": "factura-automatica",
+  "metodo": "POST",
+  "ruta": "/api/fd/:token",
+  "relativa": "POST /:token",
+  "controlador": "responder",
+  "publica": true,
+  "guardias": [],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/facturacion-auditoria/estado",
+  "tipo": "ruta",
+  "modulo": "facturacion-auditoria",
+  "metodo": "GET",
+  "ruta": "/api/facturacion-auditoria/estado",
+  "relativa": "GET /estado",
+  "controlador": "estado",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "facturas.auditoria"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/facturacion-auditoria/historial",
+  "tipo": "ruta",
+  "modulo": "facturacion-auditoria",
+  "metodo": "GET",
+  "ruta": "/api/facturacion-auditoria/historial",
+  "relativa": "GET /historial",
+  "controlador": "historial",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "facturas.auditoria"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/facturacion-auditoria/auditar",
+  "tipo": "ruta",
+  "modulo": "facturacion-auditoria",
+  "metodo": "POST",
+  "ruta": "/api/facturacion-auditoria/auditar",
+  "relativa": "POST /auditar",
+  "controlador": "auditar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "facturas.auditoria"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/facturacion-auditoria/reanudar",
+  "tipo": "ruta",
+  "modulo": "facturacion-auditoria",
+  "metodo": "POST",
+  "ruta": "/api/facturacion-auditoria/reanudar",
+  "relativa": "POST /reanudar",
+  "controlador": "reanudar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "facturas.auditoria"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/facturas-colaborador/enlace/:token",
   "tipo": "ruta",
   "modulo": "facturas-colaborador",
@@ -5420,6 +5794,84 @@
   "puertas": []
  },
  {
+  "id": "GET /api/informe-mensual/descarga/:issuerId/:periodo",
+  "tipo": "ruta",
+  "modulo": "informe-mensual",
+  "metodo": "GET",
+  "ruta": "/api/informe-mensual/descarga/:issuerId/:periodo",
+  "relativa": "GET /descarga/:issuerId/:periodo",
+  "controlador": "descargarConEnlace",
+  "publica": true,
+  "guardias": [],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/informe-mensual/",
+  "tipo": "ruta",
+  "modulo": "informe-mensual",
+  "metodo": "GET",
+  "ruta": "/api/informe-mensual/",
+  "relativa": "GET /",
+  "controlador": "informe",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "reports.informe_mensual"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/informe-mensual/excel",
+  "tipo": "ruta",
+  "modulo": "informe-mensual",
+  "metodo": "GET",
+  "ruta": "/api/informe-mensual/excel",
+  "relativa": "GET /excel",
+  "controlador": "excel",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "reports.informe_mensual"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/informe-mensual/zip",
+  "tipo": "ruta",
+  "modulo": "informe-mensual",
+  "metodo": "GET",
+  "ruta": "/api/informe-mensual/zip",
+  "relativa": "GET /zip",
+  "controlador": "zip",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "reports.informe_mensual"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/installation/",
   "tipo": "ruta",
   "modulo": "installation",
@@ -5485,6 +5937,50 @@
    {
     "tipo": "alcance",
     "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/integrations/salud",
+  "tipo": "ruta",
+  "modulo": "integrations",
+  "metodo": "GET",
+  "ruta": "/api/integrations/salud",
+  "relativa": "GET /salud",
+  "controlador": "salud",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "integrations.salud"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/integrations/salud/comprobar",
+  "tipo": "ruta",
+  "modulo": "integrations",
+  "metodo": "POST",
+  "ruta": "/api/integrations/salud/comprobar",
+  "relativa": "POST /salud/comprobar",
+  "controlador": "comprobar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "integrations.salud"
+    ]
    }
   ],
   "puertas": []
@@ -8898,6 +9394,239 @@
   "puertas": []
  },
  {
+  "id": "GET /api/monitask/estado",
+  "tipo": "ruta",
+  "modulo": "monitask",
+  "metodo": "GET",
+  "ruta": "/api/monitask/estado",
+  "relativa": "GET /estado",
+  "controlador": "estado",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "monitask.view",
+     "monitask.configurar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PUT /api/monitask/conexion",
+  "tipo": "ruta",
+  "modulo": "monitask",
+  "metodo": "PUT",
+  "ruta": "/api/monitask/conexion",
+  "relativa": "PUT /conexion",
+  "controlador": "guardarApp",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "monitask.configurar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "DELETE /api/monitask/conexion",
+  "tipo": "ruta",
+  "modulo": "monitask",
+  "metodo": "DELETE",
+  "ruta": "/api/monitask/conexion",
+  "relativa": "DELETE /conexion",
+  "controlador": "desconectar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "monitask.configurar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/monitask/conexion/autorizar",
+  "tipo": "ruta",
+  "modulo": "monitask",
+  "metodo": "POST",
+  "ruta": "/api/monitask/conexion/autorizar",
+  "relativa": "POST /conexion/autorizar",
+  "controlador": "autorizar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "monitask.configurar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/monitask/sincronizar",
+  "tipo": "ruta",
+  "modulo": "monitask",
+  "metodo": "POST",
+  "ruta": "/api/monitask/sincronizar",
+  "relativa": "POST /sincronizar",
+  "controlador": "sincronizar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "monitask.configurar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/monitask/personas",
+  "tipo": "ruta",
+  "modulo": "monitask",
+  "metodo": "GET",
+  "ruta": "/api/monitask/personas",
+  "relativa": "GET /personas",
+  "controlador": "personas",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "monitask.configurar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PATCH /api/monitask/personas/:id",
+  "tipo": "ruta",
+  "modulo": "monitask",
+  "metodo": "PATCH",
+  "ruta": "/api/monitask/personas/:id",
+  "relativa": "PATCH /personas/:id",
+  "controlador": "emparejar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "monitask.configurar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/monitask/actividad",
+  "tipo": "ruta",
+  "modulo": "monitask",
+  "metodo": "GET",
+  "ruta": "/api/monitask/actividad",
+  "relativa": "GET /actividad",
+  "controlador": "actividad",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "monitask.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/monitask/actividad/:id/dias",
+  "tipo": "ruta",
+  "modulo": "monitask",
+  "metodo": "GET",
+  "ruta": "/api/monitask/actividad/:id/dias",
+  "relativa": "GET /actividad/:id/dias",
+  "controlador": "dias",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "monitask.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/monitask/cotejo",
+  "tipo": "ruta",
+  "modulo": "monitask",
+  "metodo": "GET",
+  "ruta": "/api/monitask/cotejo",
+  "relativa": "GET /cotejo",
+  "controlador": "cotejo",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "monitask.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/monitask/oauth/callback",
+  "tipo": "ruta",
+  "modulo": "monitask",
+  "metodo": "GET",
+  "ruta": "/api/monitask/oauth/callback",
+  "relativa": "GET /callback",
+  "controlador": "vueltaOAuth",
+  "publica": true,
+  "guardias": [],
+  "puertas": []
+ },
+ {
   "id": "GET /api/moodle/campus",
   "tipo": "ruta",
   "modulo": "moodle",
@@ -11640,6 +12369,28 @@
   "puertas": []
  },
  {
+  "id": "GET /api/informes/paises-entrada",
+  "tipo": "ruta",
+  "modulo": "reports",
+  "metodo": "GET",
+  "ruta": "/api/informes/paises-entrada",
+  "relativa": "GET /paises-entrada",
+  "controlador": "paisesEntrada",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "reports.mis_informes"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/informes/formaciones",
   "tipo": "ruta",
   "modulo": "reports",
@@ -12255,6 +13006,72 @@
   "guardias": [
    {
     "tipo": "token"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/soporte/accesos",
+  "tipo": "ruta",
+  "modulo": "soporte",
+  "metodo": "POST",
+  "ruta": "/api/soporte/accesos",
+  "relativa": "POST /accesos",
+  "controlador": "pedirAcceso",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "accesos.pedir"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/soporte/accesos",
+  "tipo": "ruta",
+  "modulo": "soporte",
+  "metodo": "GET",
+  "ruta": "/api/soporte/accesos",
+  "relativa": "GET /accesos",
+  "controlador": "listarAccesos",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "accesos.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PATCH /api/soporte/accesos/:id",
+  "tipo": "ruta",
+  "modulo": "soporte",
+  "metodo": "PATCH",
+  "ruta": "/api/soporte/accesos/:id",
+  "relativa": "PATCH /accesos/:id",
+  "controlador": "gestionarAcceso",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "accesos.gestionar"
+    ]
    }
   ],
   "puertas": []
@@ -14774,6 +15591,28 @@
   "puertas": []
  },
  {
+  "id": "GET /api/users/brevo-bloqueos",
+  "tipo": "ruta",
+  "modulo": "users",
+  "metodo": "GET",
+  "ruta": "/api/users/brevo-bloqueos",
+  "relativa": "GET /brevo-bloqueos",
+  "controlador": "brevoBloqueos",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "users.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/users/availability",
   "tipo": "ruta",
   "modulo": "users",
@@ -14968,6 +15807,28 @@
     "tipo": "puede",
     "claves": [
      "users.aviso_correo"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "DELETE /api/users/:id/brevo-bloqueo",
+  "tipo": "ruta",
+  "modulo": "users",
+  "metodo": "DELETE",
+  "ruta": "/api/users/:id/brevo-bloqueo",
+  "relativa": "DELETE /:id/brevo-bloqueo",
+  "controlador": "desbloquearBrevo",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "users.brevo_desbloquear"
     ]
    }
   ],

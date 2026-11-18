@@ -5,6 +5,10 @@ import { resolveRegimenClave } from './fiscal-engine.js';
 import { comoLista } from '../../shared/utils/ambito.js';
 import { gestorasACargo } from '../../shared/utils/roles.js';
 import { CLASE_FACTURA, SOSPECHA_DUPLICADA } from './clase.sql.js';
+import { recalcularCobrado } from '../conversions/cobrado.js';
+import { frenarSiPosibleDuplicada, vieneConfirmada } from './posible-duplicada.js';
+// La pausa de la auditoria de facturacion (#765). Apagada, no hace nada.
+import { exigirFacturacionActiva } from '../facturacion-auditoria/facturacion-auditoria.pausa.js';
 
 // Sociedad emisora de un proyecto (null si no tiene). Helper para numeración.
 async function issuerOfProject(exec, projectId) {
@@ -187,6 +191,27 @@ export async function create(data, userId) {
     // Decisión de negocio: las PROFORMAS comparten el MISMO correlativo que las
     // facturas normales (misma serie y contador) y se numeran igual.
     const serie = (iss?.serie && iss.serie.trim()) || data.serie || 'A';
+    /*
+      ANTES DE NUMERAR: mirar si ya hay una factura igual (posible-duplicada.js).
+
+      17/11/2026: administracion emitio una factura y luego otra para el mismo
+      cobro y el mismo cliente, con el nombre cambiado solo por un espacio, y el
+      CRM no dijo nada. Ahora se mira el mismo cliente --nombre normalizado o
+      NIF-- o la misma venta, el mismo total y 7 dias (CRM-ISEIE#500). No es un
+      muro: dos cobros de verdad iguales existen, y se sigue con
+      `confirmar_duplicada`. Lo que no puede pasar es que salga sin que nadie
+      lo vea. Va antes de numerar para no quemar un correlativo.
+    */
+    if (!isBorrador && !isProforma && data.tipo !== 'rectificativa') {
+      await frenarSiPosibleDuplicada({
+        nombre: data.clienteNombre, nif: data.clienteNif, total: data.total,
+        fecha: data.fechaEmision || null, conversionId: data.conversionId || null,
+      }, { confirmada: vieneConfirmada(data), exec: (sql, params) => client.query(sql, params) });
+    }
+
+    // Con la facturacion pausada por la auditoria (#765) no se gasta ningun
+    // numero nuevo. Un borrador si se guarda: no es documento fiscal.
+    if (!isBorrador) await exigirFacturacionActiva({ paymentId: data.paymentId || null });
     // Borrador: NO consume correlativo. numero/codigo quedan NULL hasta emitir.
     const numero = isBorrador ? null : await nextNumero(client, data.projectId, iss?.id || null, ano, serie);
     const codigo = isBorrador ? null : `${ano}/${String(numero).padStart(4, '0')}`;
@@ -848,6 +873,7 @@ async function numerarBorrador(invoiceId) {
     const { rows: sel } = await client.query(`SELECT * FROM invoices WHERE id = $1 FOR UPDATE`, [invoiceId]);
     const inv = sel[0];
     if (!inv || inv.estado !== 'borrador') { await client.query('COMMIT'); return inv || null; }
+    await exigirFacturacionActiva({ paymentId: inv.payment_id || null });
     const ano = new Date().getFullYear();
     const serie = (inv.serie && inv.serie.trim()) || 'A';
     const numero = await nextNumero(client, inv.project_id, inv.issuer_id || null, ano, serie);
@@ -904,6 +930,33 @@ function nombreClienteFactura(conv) {
     ? String(conv.custom_fields?.razon_social || '').trim()
     : '';
   return razonSocial || conv.lead_nombre || 'Cliente';
+}
+
+// Los datos del cliente de una factura por cobro: los de la ficha, como
+// siempre, o los de la factura automatica (#452) si los hay.
+function clienteDeLaFactura(conv, df = null) {
+  if (df) {
+    return {
+      clienteNombre: df.nombre,
+      clienteTipo: df.cliente_tipo || null,
+      clienteNif: df.nif || undefined,
+      clienteDireccion: df.direccion || undefined,
+      clienteCiudad: df.ciudad || undefined,
+      clienteCp: df.codigo_postal || undefined,
+      clientePais: df.pais || 'España',
+      clienteEmail: df.email || conv.lead_email || null,
+    };
+  }
+  return {
+    clienteNombre: nombreClienteFactura(conv),
+    clienteTipo: conv.cliente_tipo || null,
+    clienteNif: conv.identificacion_fiscal || undefined,
+    clienteDireccion: conv.direccion_fiscal || undefined,
+    clienteCiudad: conv.ciudad_fiscal || undefined,
+    clienteCp: conv.codigo_postal_fiscal || undefined,
+    clientePais: conv.pais_fiscal || 'España',
+    clienteEmail: conv.lead_email || null,
+  };
 }
 
 function telefonoClienteFactura(conv) {
@@ -1031,7 +1084,11 @@ export async function esProformaDe(userId, invoiceId) {
 // (índice único parcial) → reintentos/reejecuciones no duplican.
 // EXCEPCIÓN: si la conversión tiene una PROFORMA (número reservado), el pago la
 // convierte en factura con ese número, en vez de crear una factura nueva.
-export async function emitirFacturaDePago(conversionId, { paymentId, importe, saltarTotal = false }, userId = null) {
+// `datosFiscales` (#452, gemela de CRM#764): la fila de `factura_datos_fiscales`
+// con la que sale sola la factura automatica. Con ella, los datos del cliente son
+// los que dio el alumno (o los de su ficha ya validados) y la factura queda
+// marcada con `datos_fiscales_id`. Sin ella, todo como siempre.
+export async function emitirFacturaDePago(conversionId, { paymentId, importe, saltarTotal = false, datosFiscales = null, confirmarDuplicada = false }, userId = null) {
   if (!conversionId || !paymentId) return null;
   const monto = Number(importe) || 0;
   if (monto <= 0) return null;
@@ -1110,7 +1167,15 @@ export async function emitirFacturaDePago(conversionId, { paymentId, importe, sa
   // Solo una proforma CON numero: la que una gestora deja esperando aprobacion es
   // un borrador sin numero, y convertirla daria una factura sin numero.
   const prof = await proformaQueSeConvierte(conversionId);
-  if (prof) return await _convertirProformaEnFactura(prof, conv, paymentId, fechaPago);
+  // Una proforma lleva los datos que puso una persona: la convierte una persona.
+  if (prof && datosFiscales) {
+    throw new AppError('Esta venta tiene una proforma: se convierte desde la cola.', 409, 'TIENE_PROFORMA');
+  }
+  if (prof) {
+    // Pasar la proforma a factura tambien es emitir (#765).
+    await exigirFacturacionActiva({ paymentId });
+    return await _convertirProformaEnFactura(prof, conv, paymentId, fechaPago);
+  }
 
   // ¿Ya hay una factura por el TOTAL de la conversión (ex-proforma o completa)?
   // No se crea otra por pago: solo se marca pagada cuando la venta queda saldada.
@@ -1170,15 +1235,12 @@ export async function emitirFacturaDePago(conversionId, { paymentId, importe, sa
     projectId: conv.project_id,
     conversionId,
     paymentId,
+    // El aviso de posible duplicada (CRM-ISEIE#500) vale tambien aqui. Desde la
+    // cola, quien factura lo confirma; la emision automatica no confirma nunca,
+    // asi que no emite y el cobro se queda en la cola con ese motivo.
+    confirmarDuplicada,
     leadId: conv.lead_id,
-    clienteNombre: nombreClienteFactura(conv),
-    clienteTipo: conv.cliente_tipo || null,
-    clienteNif: conv.identificacion_fiscal || undefined,
-    clienteDireccion: conv.direccion_fiscal || undefined,
-    clienteCiudad: conv.ciudad_fiscal || undefined,
-    clienteCp: conv.codigo_postal_fiscal || undefined,
-    clientePais: conv.pais_fiscal || 'España',
-    clienteEmail: conv.lead_email || null,
+    ...clienteDeLaFactura(conv, datosFiscales),
     clienteTelefono: telefonoClienteFactura(conv),
     items: [{ descripcion: concepto, cantidad: 1, precio_unitario: base }],
     baseImponible: base,
@@ -1199,6 +1261,11 @@ export async function emitirFacturaDePago(conversionId, { paymentId, importe, sa
   // Un pago recibido → factura PAGADA (no 'emitida'), con la fecha del cobro.
   if (inv?.id) {
     try { await markPaid(inv.id, fechaPago); inv.estado = 'pagada'; inv.fecha_pago = fechaPago; } catch { /* no bloqueante */ }
+  }
+  // Salio sola (#452): queda dicho en la factura, con que datos.
+  if (inv?.id && datosFiscales?.id) {
+    await query('UPDATE invoices SET datos_fiscales_id = $2 WHERE id = $1', [inv.id, datosFiscales.id]);
+    inv.datos_fiscales_id = datosFiscales.id;
   }
   return inv;
 }
@@ -1331,6 +1398,15 @@ export async function emitirBorrador(id, patch = {}) {
       if (motivo) throw new AppError(motivo, 409, 'MAS_QUE_LO_COBRADO');
     }
 
+    // Y la misma que al crearla: ¿hay ya una factura igual de este cliente? Con
+    // los datos ya completados y sin contarse a si misma (CRM-ISEIE#500).
+    if (inv.tipo === 'normal') {
+      await frenarSiPosibleDuplicada({
+        nombre: merged.cliente_nombre, nif: merged.cliente_nif, total: inv.total,
+        fecha: inv.fecha_emision || null, conversionId: inv.conversion_id || null, excluirId: inv.id,
+      }, { confirmada: vieneConfirmada(patch), exec: (sql, params) => client.query(sql, params) });
+    }
+
     // Gating fiscal del emisor (igual que en create): NIF inválido bloquea.
     if (inv.issuer_id) {
       const r = await client.query(`SELECT * FROM invoice_issuers WHERE id = $1`, [inv.issuer_id]);
@@ -1341,6 +1417,9 @@ export async function emitirBorrador(id, patch = {}) {
           400, 'ISSUER_NIF_INVALID');
       }
     }
+
+    // Con la facturacion pausada por la auditoria no se emite (#765).
+    await exigirFacturacionActiva({ paymentId: inv.payment_id || null });
 
     // Numeración fiscal AHORA (el borrador nunca consumió número).
     // Respeta un número YA reservado (borrador con hueco reservado, p.ej. 0612);
@@ -1519,12 +1598,12 @@ export async function updateBorrador(id, data, { soloBorrador = true } = {}) {
       } else if (cambiaElTotal) {
         await client.query(`UPDATE conversion_payments SET importe = $1 WHERE id = $2`, [nuevoTotal, inv.payment_id]);
         await client.query(`UPDATE conversion_installments SET importe_cobrado = $1 WHERE payment_id = $2 AND fecha_cobro IS NOT NULL`, [nuevoTotal, inv.payment_id]);
-        if (inv.conversion_id) {
-          await client.query(
-            `UPDATE conversions SET importe_pagado = GREATEST(0, importe_pagado + $1), updated_at = NOW() WHERE id = $2`,
-            [nuevoTotal - viejoTotal, inv.conversion_id]
-          );
-        }
+        // La venta del COBRO, y su cobrado desde los pagos (#692). Antes sumaba
+        // la diferencia con el total de la FACTURA, que no tiene por qué ser lo
+        // que decía el cobro, y el desfase se quedaba en la venta.
+        const { rows: [delCobro] } = await client.query(
+          'SELECT conversion_id FROM conversion_payments WHERE id = $1', [inv.payment_id]);
+        if (delCobro?.conversion_id) await recalcularCobrado(client, delCobro.conversion_id);
       }
     }
     await client.query('COMMIT');
