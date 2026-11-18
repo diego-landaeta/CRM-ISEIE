@@ -7,7 +7,16 @@ import { query } from '../../shared/config/db.js';
 import * as model from './stripe-payments.model.js';
 import * as tutores from '../tutores/tutor.model.js';
 // Ventas a plazos: al asociar un cargo, su suscripción se apunta y se cierra al completar el pago (#747).
-import { trasAsociarCargo } from './suscripciones.service.js';
+import { trasAsociarCargo, claveDeStripe, suscripcionDelCargo } from './suscripciones.service.js';
+// Cada pago a su venta y la compra directa crea la suya (puerta 6, #487; gemela de CRM#848).
+import {
+  pedidoDeLaWeb, formacionDelPedido, elegirVenta, crearVentaDeCompraDirecta, compraDirectaActiva, configCompraDirecta,
+  PEDIDO_SIN_LEER,
+} from './compra-directa.service.js';
+// El interruptor de las reglas nuevas de asociación (apagado de serie).
+import { asociacionV2Activa } from './asociacion.config.js';
+
+export { asociacionV2Activa };
 
 async function getStripeKey(projectId) {
   try {
@@ -133,7 +142,7 @@ const RESERVA_MINUTOS = 2;
  * La reserva pisa link_method y linked_at, así que la sentencia devuelve también los
  * valores de antes: son los que ve el enlace y los que vuelven a la fila si no se enlaza.
  */
-async function autoLinkIfPossible(projectId, payment, dbRow) {
+async function autoLinkIfPossible(projectId, payment, dbRow, opciones = {}) {
   const { rows: [reservada] } = await query(
     `UPDATE stripe_payments sp
         SET link_method = $2, linked_at = NOW()
@@ -150,7 +159,7 @@ async function autoLinkIfPossible(projectId, payment, dbRow) {
   const metodo = reservada.metodo_antes === ENLAZANDO ? null : reservada.metodo_antes;
   const enlazado = reservada.metodo_antes === ENLAZANDO ? null : reservada.enlazado_antes;
   try {
-    return await enlazarSiSePuede(projectId, payment, { ...reservada, link_method: metodo, linked_at: enlazado });
+    return await enlazarSiSePuede(projectId, payment, { ...reservada, link_method: metodo, linked_at: enlazado }, opciones);
   } finally {
     // Si se enlazó, linkPayment ya cambió link_method y esto no toca nada. Si no (sin lead,
     // otra moneda, un error…), la fila vuelve a como estaba para el siguiente intento.
@@ -162,12 +171,133 @@ async function autoLinkIfPossible(projectId, payment, dbRow) {
   }
 }
 
-async function enlazarSiSePuede(projectId, payment, dbRow) {
+/**
+ * De qué suscripción de Stripe viene un cargo SIN venta (puerta 6, gemela de CRM#848).
+ *
+ * Una renovación pagada con otro correo no encaja por correo, pero su suscripción
+ * es la de la venta (#747 la apunta en `conversions.stripe_subscription_id`). Se
+ * pregunta a Stripe UNA vez por cargo y se apunta en él (`suscripcion_buscada`);
+ * solo si el cargo tiene cliente de Stripe, que es lo que tienen los de
+ * suscripción. Si Stripe falla no se marca nada: se reintenta en la siguiente.
+ */
+export async function suscripcionDelCargoSuelto(projectId, payment, dbRow, {
+  clave = claveDeStripe, delCargo = suscripcionDelCargo,
+} = {}) {
+  if (dbRow.stripe_subscription_id) return dbRow.stripe_subscription_id;
+  if (dbRow.suscripcion_buscada) return null;
+  if (!(payment.customer_stripe_id || dbRow.customer_stripe_id)) return null;
+  try {
+    const apiKey = await clave(projectId);
+    if (!apiKey) return null;
+    const sub = await delCargo(apiKey, payment.stripe_id || dbRow.stripe_id);
+    await model.guardarSuscripcionDelCargo(dbRow.id, sub);
+    return sub;
+  } catch (e) {
+    logger.warn({ projectId, stripeId: payment.stripe_id || dbRow.stripe_id, err: e.message },
+      'stripe: no se pudo saber de qué suscripción viene el cargo');
+    return null;
+  }
+}
+
+/**
+ * A QUÉ VENTA VA, COMO SIEMPRE (con el interruptor apagado): la venta más
+ * reciente de la ficha más nueva con ese correo, y solo si la ficha está
+ * «convertida». Si hay ficha pero no venta, el cargo queda «pendiente» en ella.
+ * Devuelve { conv, ficha, metodoAuto } o null si no se asocia.
+ */
+async function ventaComoSiempre(projectId, payment, dbRow) {
+  const lead = await model.findLeadByEmail(projectId, payment.customer_email);
+  if (!lead) return null;
+  const conv = lead.status === 'convertido' ? await model.findConversionByLeadId(lead.id) : null;
+  if (!conv) {
+    await model.linkPayment(dbRow.id, { leadId: lead.id, conversionId: null, conversionPaymentId: null, userId: null, method: 'auto_pending' });
+    return null;
+  }
+  return { conv, ficha: lead, metodoAuto: 'auto_email' };
+}
+
+/**
+ * A QUÉ VENTA VA, CON LAS REGLAS NUEVAS (puerta 6, gemela de CRM#848; solo con el
+ * interruptor STRIPE_ASOCIACION_V2_ACTIVA encendido). Por orden:
+ *
+ *   1. Por el correo, como siempre: la venta más reciente de la ficha más nueva.
+ *      Ya no hace falta que la ficha esté «convertida»: si tiene venta, la
+ *      venta manda.
+ *   2. Si es una compra en la web (pedido de WooCommerce), su formación decide:
+ *      la venta de ESA formación entre todas las fichas con ese correo; una
+ *      compra de un curso nuevo no se cuelga de la venta de otro. Y si la ficha
+ *      más nueva no tenía venta, se mira en las de antes (duplicados).
+ *   3. Por la suscripción de Stripe: la venta que la tiene, aunque el correo no
+ *      encaje.
+ *   4. Compra directa sin venta (solo desde la pasada de compras directas, con
+ *      su interruptor y su espera): se crea la venta, sin gestora.
+ *
+ * Lo que no encaje se queda «sin asociar», como antes.
+ *
+ * `sinEsperarALaTienda` (lo pide el aviso de Stripe): el pedido se lee solo si ya
+ * está guardado en el CRM. Si hay que pedírselo a la tienda, no se decide nada
+ * aquí —devuelve { aplazado: true }— y quien llama lo enlaza después, ya fuera de
+ * la respuesta a Stripe.
+ */
+async function ventaConLasReglasNuevas(projectId, payment, dbRow, { compraDirecta = false, sinEsperarALaTienda = false } = {}) {
+  const email = payment.customer_email || dbRow.customer_email || null;
+  const pedido = pedidoDeLaWeb(payment.metadata ?? dbRow.metadata);
+  let formacion = null;
+  if (pedido) {
+    formacion = await formacionDelPedido(projectId, pedido, { soloGuardado: sinEsperarALaTienda });
+    if (formacion === PEDIDO_SIN_LEER) return { aplazado: true };
+  }
+  const lead = email ? await model.findLeadByEmail(projectId, email) : null;
+  let conv = lead ? await model.findConversionByLeadId(lead.id) : null;
+  let ficha = lead;
+  let metodoAuto = 'auto_email';
+
+  if (lead && (!conv || formacion)) {
+    const elegida = elegirVenta(await model.ventasPorCorreo(projectId, email), formacion?.id);
+    conv = elegida;
+    if (elegida) ficha = { id: elegida.lead_id };
+  }
+
+  if (!conv) {
+    const sub = await suscripcionDelCargoSuelto(projectId, payment, dbRow);
+    const deLaSuscripcion = sub ? await model.ventaDeLaSuscripcion(projectId, sub) : null;
+    if (deLaSuscripcion) {
+      conv = deLaSuscripcion;
+      ficha = { id: deLaSuscripcion.lead_id };
+      metodoAuto = 'auto_suscripcion';
+    }
+  }
+
+  // Solo la pide la pasada de compras directas, que ya mira el interruptor y la espera.
+  if (!conv && compraDirecta && pedido) {
+    try {
+      const creada = await crearVentaDeCompraDirecta({ projectId, payment: { ...payment, customer_email: email }, lead, formacion, orderId: pedido });
+      if (creada) {
+        conv = { id: creada.id };
+        ficha = { id: creada.lead_id };
+        metodoAuto = 'auto_compra_directa';
+      }
+    } catch (e) {
+      logger.warn({ projectId, stripeId: payment.stripe_id, err: e.message, code: e.code },
+        'compra directa: no se pudo crear la venta; el cargo se queda sin asociar');
+    }
+  }
+
+  if (!conv) {
+    if (lead) await model.linkPayment(dbRow.id, { leadId: lead.id, conversionId: null, conversionPaymentId: null, userId: null, method: 'auto_pending' });
+    return null;
+  }
+  return { conv, ficha, metodoAuto };
+}
+
+async function enlazarSiSePuede(projectId, payment, dbRow, { compraDirecta = false, sinEsperarALaTienda = false } = {}) {
   if (dbRow.conversion_id) {
     await reengancharCobro(payment, dbRow);
     return;
   }
-  if (payment.status !== 'succeeded' || !payment.customer_email) return;
+  // Apagado el interruptor, como siempre: sin correo en el cargo no se hace nada.
+  const v2 = asociacionV2Activa();
+  if (payment.status !== 'succeeded' || (!v2 && !payment.customer_email)) return;
   // Un cargo en otra moneda solo vale si su importe ya viene liquidado en euros.
   // Los importados sin el balance_transaction guardaron el importe en la moneda
   // del cargo: asociarlos meteria 270.000 pesos colombianos como 270.000 euros.
@@ -177,17 +307,13 @@ async function enlazarSiSePuede(projectId, payment, dbRow) {
       'cargo en moneda extranjera sin convertir a euros: no se asocia');
     return;
   }
-  const lead = await model.findLeadByEmail(projectId, payment.customer_email);
-  if (!lead) return;
-  if (lead.status !== 'convertido') {
-    await model.linkPayment(dbRow.id, { leadId: lead.id, conversionId: null, conversionPaymentId: null, userId: null, method: 'auto_pending' });
-    return;
-  }
-  const conv = await model.findConversionByLeadId(lead.id);
-  if (!conv) {
-    await model.linkPayment(dbRow.id, { leadId: lead.id, conversionId: null, conversionPaymentId: null, userId: null, method: 'auto_pending' });
-    return;
-  }
+
+  const destino = v2
+    ? await ventaConLasReglasNuevas(projectId, payment, dbRow, { compraDirecta, sinEsperarALaTienda })
+    : await ventaComoSiempre(projectId, payment, dbRow);
+  if (destino?.aplazado) return { aplazado: true };
+  if (!destino) return;
+  const { conv, ficha, metodoAuto } = destino;
   const fecha = new Date(payment.stripe_created_at * 1000).toISOString().slice(0, 10);
   // ¿Es realmente un duplicado? Lo es cuando la asesora ya registró ESE MISMO cobro a mano:
   // mismo importe y fecha muy próxima en la misma venta. No basta con que la venta esté
@@ -196,7 +322,7 @@ async function enlazarSiSePuede(projectId, payment, dbRow) {
   const dup = await model.findPagoDuplicado(conv.id, payment.amount, fecha, payment.stripe_id);
   if (dup) {
     // Se vincula al pago que ya existe (y a su factura, si la tiene) SIN volver a sumar.
-    await model.linkPayment(dbRow.id, { leadId: lead.id, conversionId: conv.id, conversionPaymentId: dup.id, userId: null, method: 'auto_dedup' });
+    await model.linkPayment(dbRow.id, { leadId: ficha.id, conversionId: conv.id, conversionPaymentId: dup.id, userId: null, method: 'auto_dedup' });
     return;
   }
   // Registrar el cobro con la MISMA lógica que un pago manual (conversion.model.addPayment):
@@ -208,7 +334,7 @@ async function enlazarSiSePuede(projectId, payment, dbRow) {
   }, { allowOverpay: true, allowDuplicate: true });
   if (res?.error || !res?.payment) return;
   const cpId = res.payment.id;
-  await model.linkPayment(dbRow.id, { leadId: lead.id, conversionId: conv.id, conversionPaymentId: cpId, userId: null, method: 'auto_email' });
+  await model.linkPayment(dbRow.id, { leadId: ficha.id, conversionId: conv.id, conversionPaymentId: cpId, userId: null, method: metodoAuto });
   // El cobro queda registrado en la venta y espera EN LA COLA de facturacion.
   // La factura NO sale sola: la emite una persona cuando comprueba que los datos
   // del cliente estan bien. Antes se emitia aqui mismo, y salian facturas
@@ -309,6 +435,9 @@ export async function syncStripePayments(projectId, { fullHistory = false, retry
           status: row.status,
           amount: Number(row.amount),
           customer_email: row.customer_email,
+          customer_name: row.customer_name,
+          customer_stripe_id: row.customer_stripe_id,
+          metadata: row.metadata,
           currency: row.currency,
           stripe_created_at: Number(row.stripe_created_at),
           stripe_id: row.stripe_id,
@@ -335,6 +464,19 @@ export async function syncStripePayments(projectId, { fullHistory = false, retry
     logger.warn({ err: e.message }, 'no se pudo reintentar la asociacion de pendientes');
   }
 
+  // Las compras directas en la web que siguen sin venta (puerta 6). Con su
+  // interruptor: apagado no hace nada. Va también en el sondeo porque una compra
+  // en la web no la registra nadie: si esperara al botón, no saldría. Pero en el
+  // sondeo, una vez por hora y campus como mucho: un pedido que la tienda no
+  // encuentra se volvería a pedir cada 5 minutos.
+  let ventasCreadas = 0;
+  const ultima = ULTIMA_PASADA_COMPRAS.get(projectId) || 0;
+  if (retryPending || Date.now() - ultima > PASADA_COMPRAS_CADA_MS) {
+    ULTIMA_PASADA_COMPRAS.set(projectId, Date.now());
+    try { ventasCreadas = (await comprasDirectasSinVenta(projectId)).creadas; }
+    catch (e) { logger.warn({ projectId, err: e.message }, 'compra directa: la pasada falló; se reintenta en la siguiente'); }
+  }
+
   await model.upsertSyncState(projectId, {
     last_sync_at: new Date().toISOString(),
     last_full_sync_at: fullHistory ? new Date().toISOString() : (state?.last_full_sync_at || null),
@@ -343,8 +485,54 @@ export async function syncStripePayments(projectId, { fullHistory = false, retry
     last_error: null,
   });
 
-  logger.info({ projectId, imported, disputesFound, pages, reasociados }, 'Stripe sync OK');
-  return { imported, disputes: disputesFound, pages, reasociados };
+  logger.info({ projectId, imported, disputesFound, pages, reasociados, ventasCreadas }, 'Stripe sync OK');
+  return { imported, disputes: disputesFound, pages, reasociados, ventasCreadas };
+}
+
+// Cuándo pasó por última vez la pasada de compras directas en cada campus (en memoria).
+const ULTIMA_PASADA_COMPRAS = new Map();
+const PASADA_COMPRAS_CADA_MS = 60 * 60 * 1000;
+
+/**
+ * LA PASADA DE COMPRAS DIRECTAS (puerta 6, gemela de CRM#848).
+ *
+ * Los cargos de pedidos de la web que llevan más de COMPRA_DIRECTA_ESPERA_HORAS sin
+ * venta: se vuelven a intentar asociar (la asesora pudo registrarla mientras) y, si
+ * nada encaja, se crea la venta sin gestora con la formación del pedido. Pasa por la
+ * misma reserva que todo enlace: aunque coincidan el sondeo y el botón, una venta
+ * por cargo.
+ */
+export async function comprasDirectasSinVenta(projectId, { env = process.env, limite = 25 } = {}) {
+  // Crear la venta es la regla 4 de las nuevas: sin ellas encendidas, tampoco.
+  if (!compraDirectaActiva(env) || !asociacionV2Activa(env)) return { mirados: 0, creadas: 0 };
+  const { esperaHoras, dias } = configCompraDirecta(env);
+  const filas = await model.listComprasDirectasSinVenta(projectId, { esperaHoras, dias, limit: limite });
+  let creadas = 0;
+  for (const row of filas) {
+    try {
+      await autoLinkIfPossible(projectId, {
+        stripe_id: row.stripe_id,
+        status: row.status,
+        amount: Number(row.amount),
+        currency: row.currency,
+        customer_email: row.customer_email,
+        customer_name: row.customer_name,
+        customer_stripe_id: row.customer_stripe_id,
+        metadata: row.metadata,
+        stripe_created_at: Number(row.stripe_created_at),
+      }, row, { compraDirecta: true });
+      const despues = await model.getById(row.id);
+      if (despues?.link_method === 'auto_compra_directa') {
+        creadas += 1;
+        // Como cualquier cargo recién asociado: su suscripción, si la tiene (#747).
+        await trasAsociarCargo(row.id);
+      }
+    } catch (e) {
+      logger.warn({ projectId, stripeId: row.stripe_id, err: e.message }, 'compra directa: el cargo no se pudo procesar');
+    }
+  }
+  if (filas.length) logger.info({ projectId, mirados: filas.length, creadas }, 'compras directas sin venta: pasada hecha');
+  return { mirados: filas.length, creadas };
 }
 
 export async function manualLink(stripePaymentId, { leadId, conversionId, userId }) {
@@ -507,6 +695,29 @@ async function propagarReembolso(charge, projectId) {
   }
 }
 
+/**
+ * El enlace de un cargo que llega por el AVISO de Stripe (puerta 6, gemela de CRM#848).
+ *
+ * Stripe espera la respuesta unos segundos y reintenta si no llega. Por eso aquí
+ * el pedido de la web se lee solo si ya está guardado en el CRM; si hay que
+ * pedírselo a la tienda (hasta 15 s), el cargo se enlaza DESPUÉS, fuera de la
+ * respuesta. Pasa por la misma reserva que todo enlace: no se apunta dos veces.
+ * Con el interruptor de las reglas nuevas apagado nunca se aplaza nada.
+ */
+async function enlazarDesdeElAviso(projectId, payment, dbRow) {
+  const r = await autoLinkIfPossible(projectId, payment, dbRow, { sinEsperarALaTienda: true });
+  if (!r?.aplazado) return;
+  setImmediate(() => {
+    autoLinkIfPossible(projectId, payment, dbRow)
+      .then(async () => {
+        // Como cualquier cargo recién asociado: su suscripción, si la tiene (#747).
+        if ((await model.getById(dbRow.id))?.conversion_payment_id) await trasAsociarCargo(dbRow.id);
+      })
+      .catch((e) => logger.warn({ err: e.message, projectId, stripeId: payment.stripe_id },
+        'stripe: el cargo de un pedido de la web no se pudo enlazar tras el aviso; queda sin asociar'));
+  });
+}
+
 export async function handleWebhookEvent(projectId, event) {
   const apiKey = await getStripeKey(projectId);
   const obj = event.data?.object;
@@ -519,7 +730,7 @@ export async function handleWebhookEvent(projectId, event) {
     case 'charge.failed': {
       const payment = chargeToPayment(obj, projectId);
       const dbRow = await model.upsertPayment(payment);
-      try { await autoLinkIfPossible(projectId, payment, dbRow); }
+      try { await enlazarDesdeElAviso(projectId, payment, dbRow); }
       catch (e) { logger.error({ err: e.message, projectId, stripeId: payment.stripe_id }, 'stripe: el cargo no se pudo enlazar con su venta (aviso)'); }
       if (event.type === 'charge.succeeded') await trasAsociarCargo(dbRow.id);
       if (obj.disputed && apiKey) await fetchAndUpdateDispute(apiKey, projectId, obj);
@@ -557,7 +768,7 @@ export async function handleWebhookEvent(projectId, event) {
           const ch = await stripeGet(apiKey, `/v1/charges/${obj.latest_charge}`);
           const payment = chargeToPayment(ch, projectId);
           const dbRow = await model.upsertPayment(payment);
-          try { await autoLinkIfPossible(projectId, payment, dbRow); }
+          try { await enlazarDesdeElAviso(projectId, payment, dbRow); }
           catch (e) { logger.error({ err: e.message, projectId, stripeId: payment.stripe_id }, 'stripe: el cargo no se pudo enlazar con su venta (payment_intent)'); }
           if (event.type === 'payment_intent.succeeded') await trasAsociarCargo(dbRow.id);
         } catch (e) { logger.warn({ err: e.message }, 'fetch charge from PI failed'); }
