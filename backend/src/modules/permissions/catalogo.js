@@ -573,6 +573,8 @@ export const SECCIONES = [
           a('contrasena', 'Contraseña de otros', 'Ponerle contraseña a otra persona (un admin, a tutores de sus campus).', ADMIN),
           a('empresas', 'Empresas enteras y correos', 'Dar empresas enteras a un admin y cambiar el correo de alguien.', NADIE),
           a('aviso_correo', 'Aviso de cambio de correo', 'Ver el aviso que recibe quien cambia de correo.', NADIE),
+          // 17/11/2026: una gestora de ISEIE, tres semanas sin avisos por un rebote duro en Brevo.
+          a('brevo_desbloquear', 'Desbloquear correos en Brevo', 'Sacar de la lista de bloqueados de Brevo el correo de alguien del equipo para que vuelvan a llegarle los avisos.', ADMIN),
         ],
       },
       {

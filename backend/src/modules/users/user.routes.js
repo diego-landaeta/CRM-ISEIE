@@ -37,6 +37,8 @@ router.get('/roles-asignables', puede('users.create'), userController.rolesAsign
 router.get('/activity-log', puede('users.view'), userController.activityLog);
 
 // Disponibilidad (rutas con path fijo antes de las que tienen :id)
+// Quién tiene el correo bloqueado en Brevo (migración 290). Antes que `/:id`.
+router.get('/brevo-bloqueos', puede('users.view'), userController.brevoBloqueos);
 router.get('/availability', puede('users.view'), availabilityController.listAvailability);
 router.delete('/availability-blocks/:blockId', puede('users.edit'), availabilityController.deleteBlock);
 
@@ -48,6 +50,8 @@ router.patch('/:id/reactivate', puede('users.edit'), userController.reactivate);
 router.patch('/:id/password', puede('users.contrasena'), userController.setPassword);
 // Antes de cambiar un correo, el aviso de Make (#248).
 router.get('/:id/aviso-correo', puede('users.aviso_correo'), userController.avisoCorreo);
+// «Desbloquear en Brevo»: solo superadmin y admin (catálogo).
+router.delete('/:id/brevo-bloqueo', puede('users.brevo_desbloquear'), userController.desbloquearBrevo);
 router.patch('/:id/availability', puede('users.edit'), availabilityController.setAvailability);
 router.get('/:id/availability-blocks', puede('users.view'), availabilityController.listBlocks);
 // El equipo comercial de una administradora (09/11/2026, migración 274).

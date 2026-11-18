@@ -206,6 +206,12 @@ export const TIPOS = {
     clase: ACCION, etiqueta: 'Carga de trabajo sin actualizar', agrupa: false,
     descripcion: 'Llevas más de una semana sin actualizar tu carga de trabajo',
   },
+  // 17/11/2026: Brevo ha bloqueado el correo de alguien del equipo y no le llega
+  // ningún aviso. Va a superadmins y admins de sus campus, una vez por bloqueo.
+  brevo_bloqueado: {
+    clase: ACCION, etiqueta: 'Correo bloqueado en Brevo', agrupa: false,
+    descripcion: 'A alguien del equipo no le llegan los correos del CRM porque Brevo bloquea su dirección',
+  },
   // MCP (#326): un Claude se ha conectado con tu URL y espera a que lo autorices.
   // Si no eres tú, es que la URL se ha colado: hay que rechazarlo.
   mcp_conexion_nueva: {
