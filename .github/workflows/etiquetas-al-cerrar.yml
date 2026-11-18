@@ -1,0 +1,51 @@
+# Una issue cerrada no está «en revisión» ni «para producción» (CRM-ISEIE#435, gemela de CRM#737).
+#
+# Mientras el tablero se llevaba a mano, las etiquetas de estado se quitaban a
+# mano al cerrar cada issue, y se olvidaban. Esto las quita solo:
+#   · al cerrarse una issue, las de esa issue;
+#   · lanzado a mano (Actions › Etiquetas al cerrar › Run workflow), las de
+#     TODAS las issues cerradas, por si quedó alguna de antes.
+#
+# Solo quita etiquetas: no lee nada del CRM ni escribe nada más. La tarjeta del
+# tablero la lleva a «Hecha» el webhook (tasks.github.sync.js), que también le
+# quita esas etiquetas en el CRM.
+name: Etiquetas al cerrar
+
+on:
+  issues:
+    types: [closed]
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  quitar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Quitar las etiquetas de estado
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          NUMERO: ${{ github.event.issue.number }}
+        run: |
+          set -euo pipefail
+          # Las mismas que ETIQUETAS_DE_ESTADO en backend/src/modules/tasks/tasks.github.js.
+          ETIQUETAS=("en espera" "en proceso" "en revisión" "para producción")
+          quitadas=0
+          quitar() { # $1 = número de la issue, $2 = etiqueta
+            if gh api -X DELETE "repos/$REPO/issues/$1/labels/$(jq -rn --arg e "$2" '$e | @uri')" >/dev/null 2>&1; then
+              echo "#$1: fuera «$2»"
+              quitadas=$((quitadas + 1))
+            fi
+          }
+          for e in "${ETIQUETAS[@]}"; do
+            if [ -n "${NUMERO:-}" ]; then
+              numeros="$NUMERO"
+            else
+              numeros=$(gh api -X GET --paginate "repos/$REPO/issues" -f state=closed -f per_page=100 -f labels="$e" \
+                --jq '.[] | select(.pull_request | not) | .number')
+            fi
+            for n in $numeros; do quitar "$n" "$e"; done
+          done
+          echo "Etiquetas quitadas: $quitadas"
