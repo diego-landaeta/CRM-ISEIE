@@ -1,5 +1,6 @@
 import { query, getClient } from '../../shared/config/db.js';
 import { COBRADO_DE, recalcularCobrado } from './cobrado.js';
+import { activa as matriculaMoodleActiva } from '../matricula-moodle/matricula-moodle.config.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { CLASE_FACTURA, FACTURA_REAL } from '../invoices/clase.sql.js';
 
@@ -171,6 +172,21 @@ export async function create(data) {
       conversion._initial_payment_importe = Number(firstPay[0].importe);
       // Para el webhook de transferencias (206): el servicio avisa tras el COMMIT.
       conversion._initial_payment_metodo = firstPay[0].metodo;
+    }
+
+    // Fecha de inicio del curso (#767). Aparte del INSERT y solo si llega: así
+    // crear una venta sin ella no depende de que la migración 311 esté puesta.
+    if (data.fecha_inicio) {
+      await client.query('UPDATE conversions SET fecha_inicio = $2 WHERE id = $1', [conversion.id, data.fecha_inicio]);
+      conversion.fecha_inicio = data.fecha_inicio;
+    }
+
+    // El pago inicial es el único cobro que no pasa por `recalcularCobrado`
+    // (el campo se escribe en el INSERT): la matrícula en Moodle se programa
+    // aquí, en la misma transacción. Apagado el interruptor, no hace nada.
+    if (Number(importe_pagado) > 0 && matriculaMoodleActiva()) {
+      const { alCambiarElCobro } = await import('../matricula-moodle/matricula-moodle.service.js');
+      await alCambiarElCobro(client, conversion.id, { antes: 0, ahora: Number(importe_pagado) });
     }
 
     // Cambiar status del lead a convertido
@@ -749,7 +765,8 @@ export async function filasDelPeriodo({
 }
 
 export async function update(id, fields) {
-  const allowed = ['producto_contratado', 'producto_contratado_id', 'importe_total', 'metodo_pago', 'fecha_compromiso_pago', 'fecha_conversion', 'notas_pago'];
+  // `fecha_inicio` (#767) solo se escribe si llega: sin la 311, el resto sigue igual.
+  const allowed = ['producto_contratado', 'producto_contratado_id', 'importe_total', 'metodo_pago', 'fecha_compromiso_pago', 'fecha_conversion', 'notas_pago', 'fecha_inicio'];
   const sets = [];
   const params = [];
   let idx = 1;
@@ -970,6 +987,12 @@ export async function deletePayment(paymentId) {
 }
 
 export async function deleteConversion(id) {
+  // Matrícula en Moodle (#767): la que aún no está hecha se cancela; la fila se
+  // queda (sin venta) para saber qué pasó. Apagado el interruptor, nada.
+  if (matriculaMoodleActiva()) {
+    const { alBorrarLaVenta } = await import('../matricula-moodle/matricula-moodle.service.js');
+    await alBorrarLaVenta(id);
+  }
   await query(`DELETE FROM conversions WHERE id = $1`, [id]);
 }
 

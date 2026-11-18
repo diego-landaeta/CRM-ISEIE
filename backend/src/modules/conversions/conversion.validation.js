@@ -26,6 +26,8 @@ export const createConversionSchema = z.object({
   fecha_compromiso_pago: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato fecha: YYYY-MM-DD').optional().nullable(),
   fecha_conversion: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato fecha: YYYY-MM-DD').optional(),
   notas_pago: z.string().max(2000).optional().nullable(),
+  // Inicio del curso pactado con el alumno (#767): la matrícula en Moodle va el día anterior.
+  fecha_inicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato fecha: YYYY-MM-DD').optional().nullable(),
   // Multi-item + IVA + descuento
   items: z.array(conversionItemSchema).optional(),
   iva_pct: z.number().min(0).max(100).optional(),
@@ -47,6 +49,7 @@ export const updateConversionSchema = z.object({
   fecha_compromiso_pago: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   fecha_conversion: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   notas_pago: z.string().max(2000).nullable().optional(),
+  fecha_inicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
 }).refine((d) => Object.keys(d).length > 0, { message: 'Al menos un campo requerido' });
 
 export const createPaymentSchema = z.object({
