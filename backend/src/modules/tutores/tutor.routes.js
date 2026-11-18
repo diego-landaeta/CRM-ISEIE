@@ -38,6 +38,9 @@ router.get('/anuncios', puede('tutores.gestionar'), ctrl.anunciosDeTutores);
 
 // La ficha del curso que imparte, sin poder tocarla.
 router.get('/curso/:productId', puede('tutores.mis_cursos', 'tutores.gestionar'), ctrl.cursoDetalle);
+// «Mi campus» (#408, gemela de CRM#681): sus cursos de Moodle con alumnos, dudas y entregas
+// por corregir, y lo que tiene por desarrollar. Solo lee Moodle; solo lo suyo.
+router.get('/mi-campus', puede('tutores.mis_cursos'), ctrl.miCampus);
 router.get('/curso/:productId/brochure', puede('tutores.mis_cursos', 'tutores.gestionar'), ctrl.brochureDelCurso);
 
 // El buscador (Ctrl K, #591). Antes que `/:id`, o «buscar» se leería como un id.

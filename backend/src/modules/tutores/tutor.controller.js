@@ -11,6 +11,7 @@ import {
   empresaDelTutorSchema, campusDelTutorSchema, disponibleSchema,
 } from './tutor.validation.js';
 import * as campusTutor from './tutor.campus.js';
+import * as campusDeLaTutora from './tutor.micampus.js';
 import {
   misCampus, exigirTutorDeMisCampus, exigirFormacionMia, exigirProyectoMio, exigirColaboracionMia,
   exigirComisionesMias, recortarProyectos,
@@ -580,6 +581,18 @@ export async function cursoDetalle(req, res, next) {
     // caduca, para que no acabe una direccion permanente reenviada por ahi.
     c.brochure = await model.brochureDelCurso(productId);
     res.json({ success: true, data: c });
+  } catch (err) { next(err); }
+}
+
+// GET /api/tutores/mi-campus — «Mi campus» (#408, gemela de CRM#681): sus cursos de Moodle con
+// los alumnos (último acceso y % hecho), sus dudas abiertas y las entregas sin corregir, y lo
+// que tiene por desarrollar. Solo lo suyo: el id sale de la sesión, nunca de la URL.
+// Aquí no se corrige desde el CRM (eso va con el plugin de Moodle, #406): cada entrega lleva
+// su enlace al calificador de Moodle.
+export async function miCampus(req, res, next) {
+  try {
+    const refrescar = req.query.refrescar === '1';
+    res.json({ success: true, data: await campusDeLaTutora.miCampus(req.user.userId, { refrescar }) });
   } catch (err) { next(err); }
 }
 

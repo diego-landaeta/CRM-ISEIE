@@ -55,6 +55,8 @@ const TutoresPage = lazy(() => import('./modules/tutores/pages/TutoresPage'));
 const ComisionesTutoresPage = lazy(() => import('./modules/tutores/pages/ComisionesTutoresPage'));
 const FormacionesSinTutorPage = lazy(() => import('./modules/tutores/pages/FormacionesSinTutorPage'));
 const MisCursosPage = lazy(() => import('./modules/tutores/pages/MisCursosPage'));
+// «Mi campus» (#408, gemela de CRM#681): lo que la tutora tiene por hacer en Moodle.
+const MiCampusPage = lazy(() => import('./modules/tutores/pages/MiCampusPage'));
 // Consultas de alumnos (#188): la bandeja del tutor y el panel de administración.
 const ConsultasPage = lazy(() => import('./modules/consultas/pages/ConsultasPage'));
 const ConsultaPage = lazy(() => import('./modules/consultas/pages/ConsultaPage'));
@@ -181,6 +183,7 @@ const ROUTE_TITLES = {
   '/matriculas':                      'Solicitud de admisión',
   '/conexion/mcp':                    'MCP',
   '/conexion/moodle':                 'Moodle',
+  '/mis-cursos/campus':               'Mi campus',
   '/consultas':                       'Consultas',
   '/consultas/alumnos':               'Alumnos sin mensajes',
   '/consultas/carga':                 'Mi carga',
@@ -370,6 +373,8 @@ function App() {
           <Route path="/tutores/comisiones" element={<ComisionesTutoresPage />} />
           <Route path="/tutores/sin-tutor" element={<FormacionesSinTutorPage />} />
           <Route path="/mis-cursos" element={<MisCursosPage />} />
+          {/* «Mi campus» (#408): bajo /mis-cursos para que el tutor ya pueda abrirlo (ProtectedRoute, betaConfig). */}
+          <Route path="/mis-cursos/campus" element={<MiCampusPage />} />
           {/* Consultas de alumnos (#187–#190), como en MultiCRM. */}
           <Route path="/consultas" element={<ConsultasPage />} />
           <Route path="/consultas/alumnos" element={<AlumnosSinMensajesPage />} />

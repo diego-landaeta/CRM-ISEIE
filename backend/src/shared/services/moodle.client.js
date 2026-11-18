@@ -275,7 +275,7 @@ export const ROLES_DE_EQUIPO = new Set(['editingteacher', 'teacher', 'manager', 
 /**
  * ¿Es alumno del curso? Quien tiene algún rol y ninguno del equipo, aunque su rol no se
  * llame «student» (un campus puede tener «alumno» u otro rol propio). Lo usan «Mi campus»
- * (tutor.micampus.js, que de momento solo lee el aviso de entregas sin corregir) y
+ * (tutor.micampus.js, que lee también el aviso de entregas sin corregir) y
  * «Alumnos sin mensajes»: los dos tienen que contar a los mismos.
  */
 export const esAlumno = (g) => (g.roles || []).length > 0 && !g.roles.some((r) => ROLES_DE_EQUIPO.has(r));

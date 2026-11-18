@@ -205,8 +205,10 @@ describe('#681 · aviso a la tutora de las entregas sin corregir de más de 48 h
     expect(enviados).toHaveLength(2);
     const uno = enviados.find((m) => m.to === `uno@${MARCA.toLowerCase()}.test`);
     expect(uno.subject).toMatch(/2 entregas sin corregir desde hace más de 48 h/);
-    // Sin «Mi campus» en ISEIE (llega con la #408): ni botón ni enlace a una pantalla que no existe.
-    expect(uno.htmlContent).not.toContain('mis-cursos');
+    // «Mi campus» (#408): el botón lleva a verlas; corregir, en Moodle (aquí no hay plugin, #406).
+    expect(uno.htmlContent).toContain('mis-cursos/campus');
+    expect(uno.htmlContent).toContain('Se corrigen en Moodle');
+    expect(uno.htmlContent).not.toContain('desde el CRM');
     expect(uno.htmlContent).toContain('https://campus1.test/mod/assign/view.php?id=7&amp;action=grader&amp;userid=900');
     expect(uno.htmlContent).toContain('https://campus1.test/mod/assign/view.php?id=8&amp;action=grader&amp;userid=900');
     expect(uno.htmlContent).not.toContain('userid=901');
@@ -218,8 +220,9 @@ describe('#681 · aviso a la tutora de las entregas sin corregir de más de 48 h
     expect(filas.map((f) => [Number(f.tutor_id), f.tarea_id, f.alumno_moodle_id, f.por_correo]))
       .toEqual([[T1, 77, 900, true], [T1, 78, 900, true], [T2, 88, 950, true]]);
     // Y en la campana, un aviso por tutora.
-    const avisos = await q(`SELECT target_user_ids FROM admin_notifications WHERE type = 'entregas_sin_corregir' AND target_user_ids && $1::int[]`, [ids]);
+    const avisos = await q(`SELECT target_user_ids, link_path FROM admin_notifications WHERE type = 'entregas_sin_corregir' AND target_user_ids && $1::int[]`, [ids]);
     expect(avisos).toHaveLength(2);
+    expect(avisos.map((a) => a.link_path)).toEqual(['/mis-cursos/campus', '/mis-cursos/campus']);
   });
 
   it('no repite: la segunda vuelta no avisa de nada', async () => {

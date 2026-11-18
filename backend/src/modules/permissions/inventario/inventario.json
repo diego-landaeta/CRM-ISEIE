@@ -15216,6 +15216,28 @@
   ]
  },
  {
+  "id": "GET /api/tutores/mi-campus",
+  "tipo": "ruta",
+  "modulo": "tutores",
+  "metodo": "GET",
+  "ruta": "/api/tutores/mi-campus",
+  "relativa": "GET /mi-campus",
+  "controlador": "miCampus",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tutores.mis_cursos"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/tutores/curso/:productId/brochure",
   "tipo": "ruta",
   "modulo": "tutores",

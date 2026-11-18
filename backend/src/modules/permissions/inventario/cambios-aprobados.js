@@ -297,6 +297,18 @@ export const CAMBIOS_DE_MENU = [
     aprobadoPor: 'Diego, 02/11 (la 2.6.0 de ISEIE, tal cual MultiCRM)',
   },
   {
+    id: 'menu-mi-campus',
+    que: '«Tutores › Mi campus»: la tutora ve sus cursos de Moodle con lo que tiene por corregir, sus dudas, sus alumnos y lo que tiene por desarrollar (CRM-ISEIE#408, gemela de CRM#681).',
+    motivo: 'Pantalla nueva con el mismo permiso que «Mis cursos» (`tutores.mis_cursos`); el servidor solo enseña lo de la tutora de la sesión. «Mis cursos» se queda en el menú (aquí no va como pestaña, a diferencia del 360).',
+    perfiles: {
+      superadmin: ['+ Tutores › Mi campus'],
+      tutor: ['+ Tutores › Mi campus'],
+      'gestora+tutor': ['+ Tutores › Mi campus'],
+    },
+    rutas: { 'Tutores › Mi campus': 'GET /api/tutores/mi-campus' },
+    aprobadoPor: 'Pendiente de Diego (PR de la #408)',
+  },
+  {
     // Gemela de CRM#643. En ISEIE solo el Banco: Status tiene aquí una parte
     // pública (componentes e incidencias), así que se queda en el menú y lo que
     // pide `status.view` se esconde dentro de la pantalla.

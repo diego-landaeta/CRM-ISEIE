@@ -20,10 +20,10 @@
 
   GEMELA (CRM-ISEIE#457, porte de la parte 7 de la #681 del CRM 360, PR CRM#736): en
   el 360 el correo y la campana llevan a «Mi campus» (`mis-cursos/campus`), donde la
-  tutora corrige desde el CRM. Aquí esa pantalla aún no existe (llega con la
-  #406/#408) y `/mis-cursos` es la de sus comisiones: el correo va sin ese botón, la
-  campana sin enlace, y se corrige en Moodle con el enlace de cada entrega. Al portar
-  «Mi campus», poner `MI_CAMPUS = 'mis-cursos/campus'` y vuelven el botón y el enlace.
+  tutora corrige desde el CRM. Aquí «Mi campus» llegó con la #408 y está en la misma
+  dirección, pero se corrige en Moodle (corregir desde el CRM va con el plugin, #406):
+  el botón lleva a «Mi campus» para verlas juntas y la nota del correo dice que se
+  corrigen en Moodle, con el enlace de cada entrega.
 */
 import { query } from '../../shared/config/db.js';
 import { logger } from '../../shared/utils/logger.js';
@@ -41,10 +41,10 @@ import { leerSusCampus } from './tutor.micampus.js';
 export const HORAS_SIN_CORREGIR = 48;
 
 /**
- * «Mi campus», donde la tutora ve y corrige sus entregas. En ISEIE aún no existe (ver la
- * cabecera): null = el correo sin ese botón y la campana sin enlace.
+ * «Mi campus» (#408), donde la tutora ve sus entregas por corregir. Aquí no se corrige en
+ * el CRM (ver la cabecera): el botón lleva a verlas y la nota dice que se corrigen en Moodle.
  */
-const MI_CAMPUS = null;
+const MI_CAMPUS = 'mis-cursos/campus';
 
 const fecha = (d) => new Intl.DateTimeFormat('es-ES', {
   day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: process.env.APP_TIMEZONE || 'Europe/Madrid',
@@ -130,7 +130,7 @@ export function cuerpoDelAviso({ tutora, entregas, marca, ahora = new Date() }) 
   const varios = new Set(entregas.map((e) => e.projectId)).size > 1;
   const bloques = [
     parrafo(`Tienes <strong>${plural(entregas.length, 'entrega', 'entregas')}</strong> de tus alumnos que ${entregas.length === 1 ? 'lleva' : 'llevan'} más de ${HORAS_SIN_CORREGIR} h sin corregir. Cuanto antes tengan la nota, antes siguen con el curso.`),
-    ...(MI_CAMPUS ? [boton({ texto: 'Corregir en Mi campus', url: enlace(MI_CAMPUS) })] : []),
+    boton({ texto: 'Verlas en Mi campus', url: enlace(MI_CAMPUS) }),
   ];
   for (const [titulo, lista] of grupos) {
     bloques.push(seccion(varios ? titulo : titulo.split(' · ').slice(1).join(' · ')));
@@ -138,9 +138,7 @@ export function cuerpoDelAviso({ tutora, entregas, marca, ahora = new Date() }) 
       + `Entregada el ${esc(fecha(e.entregadaAt))} (hace ${plural(dias(e.entregadaAt, ahora), 'día', 'días')}) · `
       + `<a href="${esc(e.corregirUrl)}">Abrir en Moodle</a>`).join('<br><br>')));
   }
-  bloques.push(nota(MI_CAMPUS
-    ? 'Si la corriges desde el CRM, la nota llega igual a Moodle. Cada entrega se avisa una sola vez; si el alumno la vuelve a entregar, cuenta como nueva.'
-    : 'Se corrigen en Moodle, desde el enlace de cada una. Cada entrega se avisa una sola vez; si el alumno la vuelve a entregar, cuenta como nueva.'));
+  bloques.push(nota('Se corrigen en Moodle, desde el enlace de cada una. Cada entrega se avisa una sola vez; si el alumno la vuelve a entregar, cuenta como nueva.'));
   return correo({
     proyecto: marca.proyecto,
     titulo: 'Entregas sin corregir',
@@ -158,7 +156,7 @@ async function avisarATutora(tutora, entregas, { enviar, freno, ahora }) {
     type: 'entregas_sin_corregir',
     title: `${plural(nuevas.length, 'entrega lleva', 'entregas llevan')} más de ${HORAS_SIN_CORREGIR} h sin corregir`,
     message: [...new Set(nuevas.map((e) => e.curso || e.campus))].slice(0, 3).join(' · '),
-    link_path: MI_CAMPUS ? `/${MI_CAMPUS}` : null,
+    link_path: `/${MI_CAMPUS}`,
     metadata: { tutor_id: tutora.id, entregas: nuevas.length },
   });
   if (freno) {

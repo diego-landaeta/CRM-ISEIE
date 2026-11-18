@@ -164,8 +164,10 @@ export const NAV_SECTIONS = [
     label: 'Tutores',
     items: [
       { to: '/tutores', label: 'Tutores', icon: GraduationCap, roles: ['admin', 'superadmin'], sectionPrefixes: ['/tutores'], permiso: 'tutores.gestionar', oPermiso: 'tutores.gestionar' },
-      // Lo unico que ve un tutor: sus cursos y lo que le corresponde.
-      { to: '/mis-cursos', label: 'Mis cursos', icon: GraduationCap, roles: ['tutor', 'tutor_redactor'], permiso: 'tutores.mis_cursos' },
+      // #408 (gemela de CRM#681): sus cursos en Moodle, con lo que tiene por corregir y contestar.
+      { to: '/mis-cursos/campus', label: 'Mi campus', icon: ClipboardText, roles: ['tutor', 'tutor_redactor'], statusTag: 'Pruebas', permiso: 'tutores.mis_cursos' },
+      // Lo unico que ve un tutor: sus cursos y lo que le corresponde. `end`: no se marca en «Mi campus».
+      { to: '/mis-cursos', label: 'Mis cursos', icon: GraduationCap, roles: ['tutor', 'tutor_redactor'], end: true, permiso: 'tutores.mis_cursos' },
       // Consultas de alumnos (#188), como en MultiCRM: el tutor, su bandeja; administración, todas.
       { to: '/consultas', label: 'Consultas', icon: ChatCircleText, roles: ['admin', 'superadmin', 'tutor', 'tutor_redactor'], statusTag: 'Pruebas', sectionPrefixes: ['/consultas'], permiso: ['consultas.view', 'consultas.atender'], oPermiso: 'consultas.view' },
       { to: '/tutores/sin-tutor', label: 'Sin tutor', icon: Warning, roles: ['admin', 'superadmin'], permiso: 'tutores.gestionar', oPermiso: 'tutores.gestionar' },
