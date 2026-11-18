@@ -110,7 +110,12 @@ async function crearVentaDelLink(projectId, payment, link) {
       fecha_pago: fecha,
       vendedora_id: link.created_by ? Number(link.created_by) : undefined,
       notas: `Pagada con el link de pago n.º ${link.id} (Stripe ${payment.stripe_id}). Venta creada por el CRM al llegar el cobro.`,
-    }, null);
+    }, null, {
+      // Sin nadie delante para decidir: no se para por «venta repetida» (CRM#898).
+      // La de este curso en la misma ficha ya se buscó arriba; si repite otra,
+      // sale en Ventas · «Posibles repetidas».
+      comprobarRepetida: false,
+    });
     logger.info({ projectId, linkId: link.id, conversionId: venta.conversion_id, vendedoraId: link.created_by, stripeId: payment.stripe_id },
       'links de pago: venta creada al pagarse el link');
     return venta.conversion_id;

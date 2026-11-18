@@ -23,6 +23,8 @@ router.get('/productos', puede('conversions.view'), ctrl.listProductos);
 // Antes de /:id, o Express intentaria leer «cuotas» como un identificador.
 router.get('/cuotas', puede('conversions.view'), ctrl.cuotas);
 router.get('/filas', puede('conversions.view'), ctrl.filas);
+// Ventas del mismo alumno y programa, para revisar (CRM#898). Quien puede editar ventas.
+router.get('/posibles-repetidas', puede('conversions.edit'), ctrl.posiblesRepetidas);
 router.get('/by-lead/:leadId', puede('conversions.view'), ctrl.listByLead);
 router.get('/:id', puede('conversions.view'), ctrl.getById);
 
