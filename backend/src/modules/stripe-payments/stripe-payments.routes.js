@@ -2,6 +2,7 @@ import { Router, raw } from 'express';
 import { verifyToken } from '../../shared/middleware/auth.js';
 import { puede } from '../../shared/middleware/permissions.js';
 import * as ctrl from './stripe-payments.controller.js';
+import * as disputas from './disputas.controller.js';
 import { projectAccess } from '../../shared/middleware/projectAccess.js';
 
 // Router autenticado (montado en /api/stripe-payments)
@@ -17,6 +18,11 @@ router.get('/stats', puede('stripe.view'), ctrl.stats);
 router.post('/sync', puede('stripe.view'), projectAccess, ctrl.sync);
 // Cargos sueltos y cobros sin cargo de una venta, para enlazarlos (CRM#888).
 router.get('/de-la-venta/:conversionId', puede('stripe.edit'), ctrl.deLaVenta);
+// Disputas (#396): solo lectura, admin y super admin (y soporte), cada uno en sus
+// campus. Antes de `/:id`: con el comodin por delante, `/disputas` se leeria
+// como el cargo con id «disputas».
+router.get('/disputas', puede('stripe.edit'), disputas.listar);
+router.post('/disputas/sincronizar', puede('stripe.edit'), projectAccess, disputas.sincronizar);
 router.get('/:id', puede('stripe.view'), ctrl.getOne);
 
 // Asociar o desasociar a mano y decidir disputas: solo admin y superadmin.
