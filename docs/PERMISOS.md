@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-828 rutas en 64 módulos, y 31 acciones con condición dentro de una ruta.
+829 rutas en 64 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -393,6 +393,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | (anónima) | `GET /api/facturas-colaborador/facturas/:id/archivo` | sesión · checkPermission(facturas_colaborador.ver_todas) sin roles de más | superadmin, admin y quien tenga el permiso por rol a medida o excepción | `facturas_colaborador.ver_todas` |
 | (anónima) | `GET /api/facturas-colaborador/facturas/:id/registro` | sesión · checkPermission(facturas_colaborador.ver_todas) sin roles de más | superadmin, admin y quien tenga el permiso por rol a medida o excepción | `facturas_colaborador.ver_todas` |
 | (anónima) | `GET /api/facturas-colaborador/facturas/:id/desglose` | sesión · checkPermission(facturas_colaborador.ver_todas) sin roles de más | superadmin, admin y quien tenga el permiso por rol a medida o excepción | `facturas_colaborador.ver_todas` |
+| (anónima) | `POST /api/facturas-colaborador/facturas/:id/validar` | (no existía) | (ruta nueva) | `facturas_colaborador.validar` |
 | (anónima) | `POST /api/facturas-colaborador/facturas/:id/anular` | sesión · checkPermission(facturas_colaborador.anular) sin roles de más | superadmin, admin y quien tenga el permiso por rol a medida o excepción | `facturas_colaborador.anular` |
 | (anónima) | `POST /api/facturas-colaborador/facturas/:id/reenviar` | sesión · checkPermission(facturas_colaborador.gestionar) sin roles de más | superadmin, admin y quien tenga el permiso por rol a medida o excepción | `facturas_colaborador.gestionar` |
 | (anónima) | `POST /api/facturas-colaborador/facturas/pagar` | sesión · checkPermission(facturas_colaborador.pagar) sin roles de más | superadmin, admin y quien tenga el permiso por rol a medida o excepción | `facturas_colaborador.pagar` |
@@ -1488,9 +1489,10 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Subir su factura | `facturas_colaborador.subir` | «Mi factura»: el colaborador sube la suya del mes. | Colaborador, Tutor redactor |  |
+| Subir su factura | `facturas_colaborador.subir` | «Mi factura»: el colaborador, o la vendedora de la lista, sube la suya del mes. | Colaborador, Tutor redactor |  |
 | Ver las facturas | `facturas_colaborador.ver_todas` | Las facturas de los colaboradores de sus empresas. | Admin, Project manager |  |
 | Gestionar colaboradores | `facturas_colaborador.gestionar` | Dar de alta colaboradores y reenviarles el enlace. | Admin |  |
+| Validar facturas de colaboradores | `facturas_colaborador.validar` | Revisar una factura recibida y darla por buena: solo entonces se puede pagar. | Admin | `facturas_colaborador.ver_todas` |
 | Anular facturas de colaboradores | `facturas_colaborador.anular` | Anular una factura recibida. | Admin | `facturas_colaborador.ver_todas` |
 | Pagar facturas de colaboradores | `facturas_colaborador.pagar` | Marcarlas pagadas con su justificante. | Admin | `facturas_colaborador.ver_todas` |
 

@@ -1,4 +1,14 @@
-import { euros, pdfFrenteAEscrito, type FacturaDelMes } from '../api/facturasColaborador.api';
+import { euros, pdfFrenteAEscrito, type FacturaDelMes, type Tipo } from '../api/facturasColaborador.api';
+
+/** «Vendedora» junto al nombre (CRM#710): sus facturas se distinguen de las de los colaboradores. */
+export function EtiquetaVendedora({ tipo }: { tipo?: Tipo }) {
+  if (tipo !== 'vendedora') return null;
+  return (
+    <span className="ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide align-middle bg-info-soft text-info-soft-foreground">
+      Vendedora
+    </span>
+  );
+}
 
 /*
   La etiqueta del PDF en las listas de administración (#202). Corrección de

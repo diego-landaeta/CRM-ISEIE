@@ -9,10 +9,10 @@ import Select from '@/shared/components/ui/Select';
 import { inputClass } from '@/shared/lib/ui';
 import {
   ESTADO, FORMA_PAGO_ES, diaDelPago, empresaCorta, enSusMonedas, euros, facturasColaboradorApi, fechaHora, primeraMayuscula, urlDelArchivo,
-  type CosteDeCampus, type EmpresaDelGrupo, type EstadoFactura, type FacturaDelMes, type SumaPorMoneda, type VistaDeFacturas,
+  type CosteDeCampus, type EmpresaDelGrupo, type EstadoFactura, type FacturaDelMes, type SumaPorMoneda, type Tipo, type VistaDeFacturas,
 } from '../api/facturasColaborador.api';
 import { DeshacerPagoDialog, PagarDialog, RegistroDialog, errorDe, esMes } from './DialogosFacturas';
-import EtiquetaDelPdf from './EtiquetaDelPdf';
+import EtiquetaDelPdf, { EtiquetaVendedora } from './EtiquetaDelPdf';
 import ConfirmacionDelPago from './ConfirmacionDelPago';
 import LeyendaFacturas, { ACCION } from './LeyendaFacturas';
 
@@ -27,12 +27,14 @@ import LeyendaFacturas, { ACCION } from './LeyendaFacturas';
 // Sin filtros puestos no se dice «con estos filtros» (ni se propone cambiarlos).
 const VACIO: Record<VistaDeFacturas, string> = {
   enviadas: 'Ninguna factura enviada con estos filtros',
+  por_validar: 'Nada por validar con estos filtros',
   por_pagar: 'Nada por pagar con estos filtros',
   pagadas: 'Ninguna pagada con estos filtros',
   historial: 'Nada con estos filtros',
 };
 const VACIO_SIN_FILTROS: Record<VistaDeFacturas, string> = {
   enviadas: 'Todavía no hay facturas enviadas',
+  por_validar: 'No hay nada pendiente de validar',
   por_pagar: 'No hay nada pendiente de pagar',
   pagadas: 'Todavía no hay facturas pagadas',
   historial: 'Todavía no hay facturas',
@@ -42,8 +44,10 @@ const nombreDelMes = (periodo: string) => primeraMayuscula(
   new Date(Number(periodo.slice(0, 4)), Number(periodo.slice(5, 7)) - 1, 1).toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }),
 ).replace(' de ', ' ');
 
-export default function ListaDeFacturas({ vista, empresas, empresa }: {
+export default function ListaDeFacturas({ vista, empresas, empresa, tipo = '' }: {
   vista: VistaDeFacturas; empresas: EmpresaDelGrupo[];
+  /** «Vendedoras / Colaboradores» (CRM#710): vacío, todos. */
+  tipo?: '' | Tipo;
   /** La empresa de la cabecera (Diego, 10/10: «son por EMPRESA»), o null con «Todos los proyectos». */
   empresa: number | null;
 }) {
@@ -64,6 +68,9 @@ export default function ListaDeFacturas({ vista, empresas, empresa }: {
   const [registro, setRegistro] = useState<FacturaDelMes | null>(null);
   const { can } = usePermission();
   const puedePagar = can('facturas_colaborador.pagar');
+  // «Validar» (CRM#710): primero se valida, después se paga.
+  const puedeValidar = can('facturas_colaborador.validar');
+  const [validando, setValidando] = useState<number | null>(null);
 
   // El filtro por colaborador: la lista la da «Colaboradores» (si no se puede pedir, no sale).
   // Con una empresa en la cabecera, solo quienes le facturan; al cambiarla, se quita el elegido.
@@ -72,10 +79,10 @@ export default function ListaDeFacturas({ vista, empresas, empresa }: {
   useEffect(() => {
     if (empresaAnterior.current !== empresa) setColaboradorId('');
     empresaAnterior.current = empresa;
-    facturasColaboradorApi.colaboradores({ estado: 'todos', issuerId: empresa ?? undefined })
+    facturasColaboradorApi.colaboradores({ estado: 'todos', issuerId: empresa ?? undefined, tipo: tipo || undefined })
       .then((r) => setColaboradores(r.data.map((c) => ({ id: c.id, nombre: c.nombre }))))
       .catch(() => setColaboradores([]));
-  }, [empresa]);
+  }, [empresa, tipo]);
 
   // Solo cuenta la última petición: si se cambia de filtro rápido, la respuesta del
   // anterior no puede pisar la tabla (y «Marcar pagadas» pagaría las filas de otro filtro).
@@ -84,7 +91,7 @@ export default function ListaDeFacturas({ vista, empresas, empresa }: {
     const esta = ++peticion.current;
     setCargando(true);
     try {
-      const r = await facturasColaboradorApi.vista({ vista, issuerId, colaboradorId, periodo, estado });
+      const r = await facturasColaboradorApi.vista({ vista, issuerId, colaboradorId, periodo, estado, tipo });
       if (esta !== peticion.current) return;
       setDatos(r.data);
       setMarcadas(new Set());
@@ -92,7 +99,7 @@ export default function ListaDeFacturas({ vista, empresas, empresa }: {
       if (esta !== peticion.current) return;
       toast({ title: 'No se pudo cargar la lista', description: errorDe(err), variant: 'destructive' });
     } finally { if (esta === peticion.current) setCargando(false); }
-  }, [vista, issuerId, colaboradorId, periodo, estado]);
+  }, [vista, issuerId, colaboradorId, periodo, estado, tipo]);
 
   useEffect(() => { void cargar(); }, [cargar]);
 
@@ -103,6 +110,20 @@ export default function ListaDeFacturas({ vista, empresas, empresa }: {
       window.open(urlDelArchivo(r.data.url), '_blank', 'noopener');
     } catch (err) {
       toast({ title: `No se pudo abrir el ${que}`, description: errorDe(err), variant: 'destructive' });
+    }
+  }
+
+  async function validar(f: FacturaDelMes) {
+    if (validando) return;
+    setValidando(f.id);
+    try {
+      await facturasColaboradorApi.validar(f.id);
+      toast({ title: 'Factura validada', description: `${f.colaborador_nombre}: ya se puede pagar.` });
+      void cargar();
+    } catch (err) {
+      toast({ title: 'No se pudo validar', description: errorDe(err), variant: 'destructive' });
+    } finally {
+      setValidando(null);
     }
   }
 
@@ -200,7 +221,7 @@ export default function ListaDeFacturas({ vista, empresas, empresa }: {
                         <input type="checkbox" aria-label={`Marcar ${quien(f)}`} checked={marcadas.has(f.id)} onChange={() => alternar(f.id)} />
                       </td>
                     )}
-                    <td className="px-2 py-2 font-medium">{f.colaborador_nombre}</td>
+                    <td className="px-2 py-2 font-medium">{f.colaborador_nombre}<EtiquetaVendedora tipo={f.tipo} /></td>
                     <td className="px-2 py-2 whitespace-nowrap" title={f.empresa}>{empresaCorta(f.empresa)}</td>
                     <td className="px-2 py-2 whitespace-nowrap">{nombreDelMes(f.periodo)}</td>
                     <td className="px-2 py-2">
@@ -222,7 +243,8 @@ export default function ListaDeFacturas({ vista, empresas, empresa }: {
                           <ConfirmacionDelPago f={f} />
                         </>
                       ) : f.subida_at && !f.anulada_at ? (
-                        <span className="rounded-full px-2 py-0.5 text-xs font-semibold bg-warning-soft text-warning-soft-foreground">Por pagar</span>
+                        // Primero se valida, después se paga (CRM#710).
+                        <span className="rounded-full px-2 py-0.5 text-xs font-semibold bg-warning-soft text-warning-soft-foreground">{f.validada_at ? 'Por pagar' : 'Por validar'}</span>
                       ) : '—'}
                     </td>
                     <td className="px-2 py-2">
@@ -231,7 +253,11 @@ export default function ListaDeFacturas({ vista, empresas, empresa }: {
                           <Button variant="ghost" size="sm" className="px-2" title="Ver el archivo" aria-label="Ver el archivo" onClick={() => abrir(f, 'archivo')}><ACCION.archivo.Icono size={15} /></Button>
                         )}
                         <Button variant="ghost" size="sm" className="px-2" title="Ver el registro" aria-label="Ver el registro" onClick={() => setRegistro(f)}><ACCION.registro.Icono size={15} /></Button>
-                        {puedePagar && f.subida_at && !f.anulada_at && !f.pagada_at && (
+                        {puedeValidar && f.subida_at && !f.anulada_at && !f.validada_at && (
+                          <Button variant="ghost" size="sm" className="px-2" title="Validar" aria-label="Validar"
+                            disabled={validando !== null} onClick={() => validar(f)}><ACCION.validar.Icono size={15} /></Button>
+                        )}
+                        {puedePagar && f.subida_at && f.validada_at && !f.anulada_at && !f.pagada_at && (
                           <Button variant="ghost" size="sm" className="px-2" title="Marcar pagada" aria-label="Marcar pagada" onClick={() => setPagar([f])}><ACCION.pagar.Icono size={15} /></Button>
                         )}
                         {f.pagada_at && f.con_justificante && (

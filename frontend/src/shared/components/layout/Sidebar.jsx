@@ -110,7 +110,10 @@ export const NAV_SECTIONS = [
       { to: '/tareas/configurar', label: 'Configurar tablero', icon: SlidersHorizontal, roles: ROLES_TAREAS, permiso: 'tasks.manage', oPermiso: 'tasks.manage' },
       // «Mi factura» (#202): el colaborador con usuario sube aquí su factura del mes.
       // Aquí, junto a su tablero, como en MultiCRM: es lo otro que ve un colaborador.
-      { to: '/mi-factura', label: 'Mi factura', icon: Receipt, roles: ['colaborador', 'tutor_redactor'], permiso: 'facturas_colaborador.subir' },
+      // Y la vendedora de la lista (CRM-ISEIE#422): con su ficha se le da «Subir su factura» a ella
+      // (`oPermiso`), sin perder lo que ve como gestora. `conFicha`: solo quien tiene ficha viva;
+      // un super admin (que lo puede todo) no la ve si no factura.
+      { to: '/mi-factura', label: 'Mi factura', icon: Receipt, roles: ['colaborador', 'tutor_redactor'], permiso: 'facturas_colaborador.subir', oPermiso: 'facturas_colaborador.subir', conFicha: true },
       // Monitask (#236): qué hace cada colaborador y el cotejo con sus facturas. Solo en
       // /staging y local hasta que Diego lo apruebe; además, con MONITASK_ACTIVO en el servidor.
       ...(SOLO_EN_PRUEBAS ? [{ to: '/equipo/actividad', label: 'Actividad', icon: Timer, roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'monitask.view' }] : []),
@@ -312,6 +315,10 @@ export function canSeeItem(item, role, soloColaboraciones, permisos, can) {
   // con uno (Diplomas: ver O emitir).
   if (item.permiso && !(typeof can === 'function' && [].concat(item.permiso).some((p) => can(p) === true))) return false;
   if (!tieneLosDeMas(item, can)) return false;
+  // «Mi factura» (CRM-ISEIE#422): quien no es colaborador ni tutor redactor la ve solo si
+  // tiene ficha viva en Facturas de colaboradores (`factura_propia`, de /auth/me): la
+  // lista explícita de vendedoras, no el rol. Ni el super admin sin ficha.
+  if (item.conFicha && !es('colaborador', 'tutor_redactor') && permisos?.factura_propia !== true) return false;
   // MCP de Claude: «Usar el MCP» del catálogo, como el servidor.
   // Va ANTES del atajo de soporte y del recorte del tutor: «roles únicamente».
   if (item.accesoMcp) return tieneAccesoMcp(can);

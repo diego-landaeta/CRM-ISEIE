@@ -90,8 +90,9 @@ async function colaborador(clave, empresa) {
 async function recibida(clave, colab, empresa, { periodo = MARZO, importe = 600, moneda = 'EUR', hace = 10 } = {}) {
   F[clave] = (await one(
     `INSERT INTO facturas_colaborador
-       (colaborador_id, issuer_id, periodo, subida_at, numero_recepcion, importe, moneda, numero_factura, archivo_key, tamano)
-     VALUES ($1, $2, $3, NOW() - make_interval(mins => $4::int), $5, $6, $7, $8, $9, 30) RETURNING id`,
+       (colaborador_id, issuer_id, periodo, subida_at, numero_recepcion, importe, moneda, numero_factura, archivo_key, tamano, validada_at)
+     -- Recibida y ya validada por la empresa (CRM#710): lo que aquí se prueba es el aviso y el pago.
+     VALUES ($1, $2, $3, NOW() - make_interval(mins => $4::int), $5, $6, $7, $8, $9, 30, NOW()) RETURNING id`,
     [colab.id, empresa.id, periodo, hace, `REC-AV-${clave}-${MARCA}`, importe, moneda, `F-${clave}`,
       `facturas-colaborador/2026-03/${clave}/2026-03_${MARCA}_${clave}.pdf`])).id;
   return F[clave];
