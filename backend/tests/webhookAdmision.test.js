@@ -14,8 +14,9 @@ import path from 'node:path';
  * Diego (WhatsApp, 20/10): «un webhook abierto que reciba [los datos de admisión]
  * y luego se pueda mapear, por campus», y que se una a la persona por el correo.
  * Lo que pide la #198: archivos (multipart, URL o base64; JPG, PNG, WEBP, PDF;
- * 10 MB; tipo real), campos propios, vincular por email y luego móvil (si no
- * existe se crea) y con la venta, e idempotente.
+ * 10 MB; tipo real), campos propios, vincular por email y luego móvil y con la
+ * venta, e idempotente. Si la persona no tiene ficha, NO se crea (Diego, 18/11:
+ * «no es para vender, solamente es respaldo de datos»).
  *
  *   docker compose -f docker-compose.dev.yml up -d && npm run db:preparar
  *   npx vitest run tests/webhookAdmision.test.js
@@ -74,7 +75,8 @@ const historial = async (id) => (await q('SELECT evento, documento FROM matricul
 beforeAll(async () => {
   [PROYECTO] = await q(`INSERT INTO projects (nombre, slug, webhook_api_key) VALUES ($1, $2, $3) RETURNING id`,
     [`${MARCA} Campus`, MARCA.toLowerCase(), `${MARCA}-key`]);
-  // Una gestora en el campus: si el prospecto nuevo entrara en el reparto, se lo llevaría ella.
+  // Una gestora en el campus: la dueña de las fichas que se unen, y la que se llevaría
+  // un prospecto si la solicitud lo creara (no debe: 18/11).
   [GESTORA] = await q(`INSERT INTO users (nombre, email, password_hash, role) VALUES ($1, $2, 'x', 'gestor') RETURNING id`,
     [`${MARCA} Gestora`, correo('gestora')]);
   await q('INSERT INTO user_projects (user_id, project_id) VALUES ($1, $2)', [GESTORA.id, PROYECTO.id]);
@@ -324,7 +326,7 @@ describe('se une a la persona («que se sincronicen con el mail»)', () => {
       [PROYECTO.id, correo('telmo-gestora'), GESTORA.id]);
     // Otro correo, y el móvil sin prefijo: es su ficha, con su gestora.
     const r = await admitir({ nombre: 'Telmo', email: correo('telmo-formulario'), telefono: '611 22 23 33' });
-    expect(r.interno).toMatchObject({ accion: 'created', leadId: l.id, leadCreado: false, unidaPor: 'movil', nota: null });
+    expect(r.interno).toMatchObject({ accion: 'created', leadId: l.id, unidaPor: 'movil', nota: null });
     expect((await q('SELECT count(*)::int AS n FROM leads WHERE project_id = $1 AND lower(email) = $2', [PROYECTO.id, correo('telmo-formulario')]))[0].n).toBe(0);
     const { matriculas } = await matriculaModel.findAll({ projectId: PROYECTO.id, search: correo('telmo-formulario') });
     expect(matriculas.find((x) => x.id === r.interno.matriculaId)).toMatchObject({ gestora_id: GESTORA.id });
@@ -337,7 +339,7 @@ describe('se une a la persona («que se sincronicen con el mail»)', () => {
     await q(`INSERT INTO leads (project_id, nombre, email, telefono) VALUES ($1, 'Madre', $2, '+57 300 444 5555'), ($1, 'Hija', $3, '3004445555')`,
       [PROYECTO.id, correo('madre'), correo('hija')]);
     const r = await admitir({ nombre: 'Hija', email: correo('hija-formulario'), telefono: '0057 300 444 5555' });
-    expect(r.interno).toMatchObject({ accion: 'created', leadId: null, leadCreado: false, nota: 'movil_en_varias_fichas' });
+    expect(r.interno).toMatchObject({ accion: 'created', leadId: null, nota: 'movil_en_varias_fichas' });
     expect((await q('SELECT count(*)::int AS n FROM leads WHERE project_id = $1 AND lower(email) = $2', [PROYECTO.id, correo('hija-formulario')]))[0].n).toBe(0);
   });
 
@@ -348,18 +350,22 @@ describe('se une a la persona («que se sincronicen con el mail»)', () => {
     expect(r.interno).toMatchObject({ leadId: porCorreo.id, unidaPor: 'correo' });
     await q(`INSERT INTO leads (project_id, nombre, email, telefono) VALUES ($1, 'Corto', $2, '123456')`, [PROYECTO.id, correo('corto')]);
     const corto = await admitir({ nombre: 'Corto', email: correo('corto-nuevo'), telefono: '123456' });
-    expect(corto.interno).toMatchObject({ leadCreado: true, unidaPor: null });
+    expect(corto.interno).toMatchObject({ leadId: null, unidaPor: null });
     expect(movilNormalizado('+34 611 222 333')).toBe('611222333');
     expect(movilNormalizado('0057 300 444 5555')).toBe('004445555');
     expect(movilNormalizado('12-34-56')).toBeNull();
   });
 
-  it('si no existe, se crea el prospecto SIN GESTORA (fuera del reparto; decidido el 20/10)', async () => {
-    const r = await recibir().send({ nombre: 'Nuevo Alumno', email: correo('nuevo') });
+  it('si no existe, NO se crea prospecto: la solicitud queda sin vincular (Diego, 18/11: «solamente es respaldo de datos»)', async () => {
+    const r = await recibir().send({ nombre: 'Nuevo Alumno', email: correo('nuevo'), telefono: '+34 622 000 111' });
+    expect(r.status).toBe(200);
     const m = await enviada(r);
-    const [l] = await q('SELECT responsable_id, notas FROM leads WHERE id = $1', [m.lead_id]);
-    expect(l.responsable_id).toBeNull();
-    expect(l.notas).toBe('Creado por la solicitud de admisión');
+    expect(m).toMatchObject({ estado: 'solicitud_admision', email: correo('nuevo') });
+    expect(m.lead_id).toBeNull();
+    // Ninguna ficha con ese correo ni ninguna creada por la admisión en el campus.
+    expect((await q('SELECT count(*)::int AS n FROM leads WHERE lower(email) = $1', [correo('nuevo')]))[0].n).toBe(0);
+    expect((await q(`SELECT count(*)::int AS n FROM leads l WHERE l.project_id = $1 AND (l.notas = 'Creado por la solicitud de admisión'
+      OR EXISTS (SELECT 1 FROM lead_utms u WHERE u.lead_id = l.id AND u.utm_source = 'admision'))`, [PROYECTO.id]))[0].n).toBe(0);
   });
 
   it('sin correo no se crea prospecto (es obligatorio en la ficha): la solicitud queda sin vincular', async () => {
@@ -375,8 +381,12 @@ describe('se une a la persona («que se sincronicen con el mail»)', () => {
   });
 
   it('y si la venta llega DESPUÉS de la solicitud («cuando la haya»), se une al registrarla', async () => {
+    // La ficha la crea la gestora que le está vendiendo (la solicitud ya no la crea, 18/11).
+    const [l] = await q(`INSERT INTO leads (project_id, nombre, email, responsable_id) VALUES ($1, 'Venta Tardía', $2, $3) RETURNING id`,
+      [PROYECTO.id, correo('tardia'), GESTORA.id]);
     const r = await recibir().send({ nombre: 'Venta Tardía', email: correo('tardia') });
     const m = await enviada(r);
+    expect(m.lead_id).toBe(l.id);
     expect(m.conversion_id).toBeNull();
     // La venta, como la registra el CRM (conversion.model.create: todas pasan por ahí).
     const { create: crearVenta } = await import('../src/modules/conversions/conversion.model.js');
@@ -401,12 +411,14 @@ describe('se une a la persona («que se sincronicen con el mail»)', () => {
   });
 
   it('el país «España» por defecto de la base sí se cambia si nadie ha rellenado los datos fiscales', async () => {
+    const [l] = await q(`INSERT INTO leads (project_id, nombre, email) VALUES ($1, 'Pablo País', $2) RETURNING id`, [PROYECTO.id, correo('pablo')]);
     const r = await admitir({ nombre: 'Pablo País', email: correo('pablo'), dni: '44444444W', pais: 'Colombia' });
-    const [f] = await q('SELECT identificacion_fiscal, pais_fiscal FROM leads WHERE id = $1', [r.interno.leadId]);
+    expect(r.interno.leadId).toBe(l.id);
+    const [f] = await q('SELECT identificacion_fiscal, pais_fiscal FROM leads WHERE id = $1', [l.id]);
     expect(f).toEqual({ identificacion_fiscal: '44444444W', pais_fiscal: 'Colombia' });
   });
 
-  it('la lista de Matrículas trae la gestora de la ficha, y nada si no la tiene', async () => {
+  it('la lista de Matrículas trae la gestora de la ficha, y nada si no hay ficha (no se asigna a nadie)', async () => {
     const [l] = await q(`INSERT INTO leads (project_id, nombre, email, responsable_id) VALUES ($1, 'Gema', $2, $3) RETURNING id`, [PROYECTO.id, correo('gema'), GESTORA.id]);
     const con = await admitir({ nombre: 'Gema', email: correo('gema') });
     const sin = await admitir({ nombre: 'Sin Gestora', email: correo('sin-gestora') });
@@ -480,8 +492,9 @@ describe('ni el tiempo ni los documentos delatan si la persona ya existe (caja n
     const prospecto = await cronometrar({ nombre: 'Ya Prospecto', email: correo('ya-prospecto') });
     const repetida = await cronometrar({ nombre: 'Ya Pidió', email: correo('ya-pidio'), curso_solicitado: 'Otro' });
     expect([nuevo.r.interno.accion, prospecto.r.interno.accion, repetida.r.interno.accion]).toEqual(['created', 'created', 'duplicate_skipped']);
-    expect(nuevo.r.interno.leadCreado).toBe(true);
-    expect(prospecto.r.interno.leadCreado).toBe(false);
+    // El correo nuevo no tiene ficha y no se le crea (18/11); el prospecto, se une.
+    expect(nuevo.r.interno.leadId).toBeNull();
+    expect(prospecto.r.interno.leadId).toBeTruthy();
     // Arriba, margen de sobra: un runner lento de GitHub no debe tumbar la prueba.
     for (const { ms } of [nuevo, prospecto, repetida]) {
       expect(ms).toBeGreaterThanOrEqual(FIJO - 5);
