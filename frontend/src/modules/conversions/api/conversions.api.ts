@@ -17,7 +17,7 @@ export interface Payment {
   metodo?: string | null;
   /** Referencia del banco de una transferencia o un depósito. */
   referencia?: string | null;
-  cuota_numero?: number | null;
+  cuota_numero?: number | string | null;
   pagado_por_stripe?: boolean;
   created_at?: string;
   // Factura de ESTE pago (una factura por pago). Null si aún no tiene.
@@ -158,7 +158,7 @@ export const conversionsApi = {
     client.get(`/conversions/${id}/installments`),
   payInstallment: (
     instId: number,
-    data: { importe_cobrado: number; fecha_cobro?: string; metodo?: string | null; notas?: string | null; referencia?: string | null },
+    data: { importe_cobrado: number; fecha_cobro?: string; metodo?: string | null; notas?: string | null; referencia?: string | null; confirmar?: boolean },
   ): Promise<ApiResponse<any>> =>
     client.post(`/conversions/installments/${instId}/pay`, data),
   updateInstallment: (
