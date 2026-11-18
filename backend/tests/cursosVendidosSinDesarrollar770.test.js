@@ -183,6 +183,9 @@ describe('vender un curso sin desarrollar', () => {
     const hecho = await producto('Curso hecho en líneas', { sin_desarrollar: false });
     const sinHacer = await producto('Diplomado en Duelo', { responsable: TUTORA.id });
     await vender(await alumna('Dora'), {
+      // En ISEIE la venta siempre lleva el nombre del producto (lo exige la
+      // validación y la columna no admite vacío); la pantalla lo manda.
+      producto_contratado: 'Uno y Dos',
       items: [
         { descripcion: 'Uno', cantidad: 1, precio_unitario: 400, product_id: hecho },
         { descripcion: 'Dos', cantidad: 1, precio_unitario: 500, product_id: sinHacer },
