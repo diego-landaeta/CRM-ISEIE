@@ -25,9 +25,10 @@ import { avisarAdmision } from './admision.aviso.js';
  *      URL o imagen en texto (admision.archivos.js). La firma, transparente y
  *      recortada al trazo, como la del diploma (#349).
  *   3. Se une a la persona: su prospecto por el correo y, si no, por el móvil (si
- *      solo hay una ficha con él); si no existe, se crea SIN GESTORA (ver
- *      `prospectoDe`). Y su venta, si la hay. Su DNI, dirección y país pasan a los
- *      datos fiscales de la ficha que estén vacíos (`completarDatosFiscales`).
+ *      solo hay una ficha con él). Si no tiene ficha, NO se crea ninguna: la
+ *      solicitud se guarda sola (decisión de Diego, 18/11; ver `prospectoDe`). Y su
+ *      venta, si la hay. Su DNI, dirección y país pasan a los datos fiscales de la
+ *      ficha que estén vacíos (`completarDatosFiscales`).
  *   4. El mismo envío dos veces no crea dos matrículas (`envio_huella`).
  *
  * Un documento que no vale (no es imagen ni PDF, pasa de 10 MB, la URL no
@@ -136,17 +137,20 @@ async function fichasPorMovil(projectId, telefono) {
 }
 
 /**
- * El prospecto de la persona en ese campus: primero por el correo y, si no, por el
- * móvil (`fichasPorMovil`). Si no existe y llegan nombre y correo, se crea.
+ * La ficha de la persona en ese campus, si ya la tiene: primero por el correo y, si
+ * no, por el móvil (`fichasPorMovil`). Si no la tiene, NO se crea.
  *
- * SIN GESTORA (decidido el 20/10, Diego lo puede cambiar): quien rellena la
- * solicitud de admisión ya se está matriculando, no hay nada que venderle. Si
- * entrara en el reparto, a una gestora le caería «un prospecto nuevo» que ya
- * compró, contaría en su cola y en sus cifras, y podría llamar a alguien ya
- * matriculado. Si existe, se une a su ficha con su gestora de siempre; la
- * solicitud sale igualmente en Matrículas, y se le puede asignar gestora a mano.
+ * LA SOLICITUD DE ADMISIÓN ES RESPALDO DE DATOS PARA MATRICULAR, NO UN PROSPECTO
+ * (Diego, 18/11/2026): «no es para gestionar ni vender; […] solamente es respaldo de
+ * datos», «debe salir para todos los gestores, no asignarse a nadie; es la copia
+ * para cuando las gestoras venden o están a punto de vender, para matricular».
+ * Hasta el 18/11 se creaba un prospecto sin gestora (decisión del 20/10); esos
+ * prospectos se borraron y ya no se crea ninguno. Si la persona tiene ficha (la
+ * gestora que le está vendiendo), la solicitud se une a ella, con su venta y sus
+ * datos fiscales vacíos; si no, se guarda sola (`lead_id` NULL) y la ven todas las
+ * gestoras del campus en Solicitud de admisión, sin que entre en el reparto.
  */
-async function prospectoDe(projectId, persona, huella) {
+async function prospectoDe(projectId, persona) {
   // POR EL CORREO Y, SI NO, POR EL MÓVIL (13/11/2026). Una solicitud con el teléfono
   // de otra persona (mal escrito, o compartido en una familia o una centralita) puede
   // caer en la ficha de esa otra persona, con el DNI y la firma a la vista de su
@@ -156,27 +160,13 @@ async function prospectoDe(projectId, persona, huella) {
   // une a ninguna, porque no hay forma de saber cuál es; queda la nota en `interno`.
   if (persona.email) {
     const existente = await leadModel.findDuplicateByEmailOrPhone(persona.email, null, projectId);
-    if (existente) return { leadId: existente.id, creado: false, por: 'correo' };
+    if (existente) return { leadId: existente.id, por: 'correo' };
   }
   const porMovil = await fichasPorMovil(projectId, persona.telefono);
-  if (porMovil.length === 1) return { leadId: porMovil[0], creado: false, por: 'movil' };
-  // Tampoco se crea otra ficha con ese móvil: se vincula a mano a la que sea.
-  if (porMovil.length > 1) return { leadId: null, creado: false, nota: 'movil_en_varias_fichas' };
-  if (!persona.nombre || !persona.email) return { leadId: null, creado: false };
-  const lead = await leadModel.createLeadWithRoundRobin({
-    projectId,
-    nombre: persona.nombre,
-    email: persona.email,
-    telefono: persona.telefono,
-    productoInteresId: null,
-    notas: 'Creado por la solicitud de admisión',
-    landingUrl: null,
-    utms: { utm_source: 'admision', utm_medium: 'webhook' },
-    customFields: {},
-    skipRoundRobin: true,
-    idempotencyKey: `admision:${huella}`,
-  });
-  return { leadId: lead.id, creado: true };
+  if (porMovil.length === 1) return { leadId: porMovil[0], por: 'movil' };
+  if (porMovil.length > 1) return { leadId: null, nota: 'movil_en_varias_fichas' };
+  // Sin ficha: la solicitud queda sola, sin prospecto (18/11/2026, ver arriba).
+  return { leadId: null };
 }
 
 /**
@@ -249,12 +239,12 @@ const respuesta = (huella, interno) => ({ status: 200, data: { recibido: true, e
 /**
  * Y TARDA LO MISMO PASE LO QUE PASE. La respuesta ya no decía nada, pero el tiempo
  * sí (prueba de caja negra, 24/10): un correo nuevo tardaba unos 10 ms más que uno
- * que ya era prospecto (se crea el prospecto), y una solicitud repetida volvía antes
+ * que ya era prospecto (entonces se creaba el prospecto), y una solicitud repetida volvía antes
  * de descargar sus documentos, así que poniendo de documento un enlace propio se
  * sabía si esa persona ya había mandado la suya. Por eso los documentos se descargan
  * y preparan SIEMPRE, antes de mirar nada de la persona, y desde ahí la respuesta
  * sale a los RESPUESTA_FIJA_MS: lo que depende de si la persona existe (buscarla,
- * crearla, guardar la solicitud) pasa dentro de ese tiempo. Todo sigue en el momento:
+ * unirla a su ficha, guardar la solicitud) pasa dentro de ese tiempo. Todo sigue en el momento:
  * si la base falla, la web recibe el error y puede reenviar, como antes.
  *
  * 500 ms y no 300: guardar una solicitud nueva con documentos grandes (2 × 9 MB) tardó
@@ -343,12 +333,12 @@ export async function recibirAdmision(token, body, archivos = [], opcionesArchiv
     if (existente) return responder({ matriculaId: existente.id, accion: 'duplicate_skipped' });
   }
 
-  let prospecto = { leadId: null, creado: false };
+  let prospecto = { leadId: null };
   try {
-    prospecto = await prospectoDe(projectId, persona, huella);
+    prospecto = await prospectoDe(projectId, persona);
   } catch (err) {
     // Sin prospecto la solicitud se guarda igual; se puede vincular después.
-    logger.warn({ err: err.message, projectId }, 'Admisión: no se pudo unir ni crear el prospecto');
+    logger.warn({ err: err.message, projectId }, 'Admisión: no se pudo buscar la ficha de la persona');
   }
   if (prospecto.leadId) {
     try {
@@ -421,7 +411,6 @@ export async function recibirAdmision(token, body, archivos = [], opcionesArchiv
     matriculaId: matricula.id,
     accion: 'created',
     leadId: prospecto.leadId,
-    leadCreado: prospecto.creado,
     unidaPor: prospecto.por || null,
     nota: prospecto.nota || null,
     conversionId,
