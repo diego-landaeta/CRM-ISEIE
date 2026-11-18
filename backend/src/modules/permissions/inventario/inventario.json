@@ -6287,6 +6287,10 @@
     "claves": [
      "facturas.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -7090,6 +7094,28 @@
     "tipo": "puede",
     "claves": [
      "facturas.anular"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/invoices/:id/anular",
+  "tipo": "ruta",
+  "modulo": "invoices",
+  "metodo": "POST",
+  "ruta": "/api/invoices/:id/anular",
+  "relativa": "POST /:id/anular",
+  "controlador": "anular",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "facturas.gestionar"
     ]
    }
   ],
@@ -13586,6 +13612,10 @@
     "claves": [
      "stripe.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []

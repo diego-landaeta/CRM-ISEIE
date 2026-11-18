@@ -1,5 +1,13 @@
 import { z } from 'zod';
 
+// Anular una factura (CRM#793): siempre con su motivo, que queda apuntado.
+export const anularSchema = z.object({
+  motivo: z.string({ required_error: 'Indica el motivo de la anulación', invalid_type_error: 'Indica el motivo de la anulación' })
+    .trim()
+    .min(3, 'Indica el motivo de la anulación')
+    .max(500, 'El motivo no puede pasar de 500 caracteres'),
+});
+
 const itemSchema = z.object({
   descripcion: z.string().min(1),
   cantidad: z.number().positive().default(1),

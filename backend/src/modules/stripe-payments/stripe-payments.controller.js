@@ -3,7 +3,21 @@ import * as service from './stripe-payments.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import { anotaWebhook } from '../status/webhooks.js';
-import { exigirCampusSuyo } from '../../shared/utils/ambito.js';
+import { exigirCampusSuyo, proyectosDelAmbito, campusDeTodos } from '../../shared/utils/ambito.js';
+
+/**
+ * El ámbito de la lista y las cifras (#428), como en el 360 (CRM#717).
+ *
+ * Iban con el `projectId` que mandara el navegador, sin mirar de quién es: un
+ * admin sin ese campus veía sus cargos (importe, correo y nombre del cliente) y
+ * sus cifras. Ahora, un campus ajeno es 403; sin pedir ninguno, los suyos (super
+ * admin y soporte, todos menos los de pruebas).
+ */
+async function ambitoDeLaLista(req) {
+  const ambito = await proyectosDelAmbito(req);
+  if (!ambito.projectId && !ambito.projectIds) return { projectId: null, projectIds: await campusDeTodos(req) };
+  return ambito;
+}
 
 function projectId(req) {
   const pid = Number(req.query.projectId || req.body?.projectId);
@@ -13,10 +27,10 @@ function projectId(req) {
 
 export async function list(req, res, next) {
   try {
-    const pid = projectId(req);
+    const ambito = await ambitoDeLaLista(req);
     const { status, linked, search, from, to, page, limit, facturables, sinEquivalente } = req.query;
     const data = await model.listPayments({
-      projectId: pid, status, linked, search, from, to,
+      ...ambito, status, linked, search, from, to,
       facturables: facturables === '1' || facturables === 'true',
       sinEquivalente: sinEquivalente === '1' || sinEquivalente === 'true',
       page: Number(page) || 1,
@@ -28,16 +42,19 @@ export async function list(req, res, next) {
 
 export async function stats(req, res, next) {
   try {
-    const pid = projectId(req);
+    const ambito = await ambitoDeLaLista(req);
+    const pid = ambito.projectId;
     const { status, linked, search, from, to, facturables, sinEquivalente } = req.query;
     // Los mismos filtros que el listado: si no, la cabecera cuenta una cosa y la
     // tabla de debajo otra.
     const s = await model.getStats({
-      projectId: pid, status, linked, search, from, to,
+      ...ambito, status, linked, search, from, to,
       facturables: facturables === '1' || facturables === 'true',
       sinEquivalente: sinEquivalente === '1' || sinEquivalente === 'true',
     });
-    const sync = await model.getSyncState(pid);
+    // El estado de la sincronización es de UNA cuenta de Stripe: con varios
+    // campus no hay una sola, así que no se dice ninguna.
+    const sync = pid ? await model.getSyncState(pid) : null;
     res.json({ success: true, data: { ...s, sync } });
   } catch (e) { next(e); }
 }
@@ -55,23 +72,36 @@ export async function sync(req, res, next) {
   }
 }
 
+/**
+ * El cargo del id de la ruta, si es de uno de los campus de quien pide (#428).
+ *
+ * Ver un cargo, asociarlo, desasociarlo y decidir su disputa iban solo por el id:
+ * con permiso de ver pagos se leía el cargo de cualquier campus (importe, correo y
+ * nombre del cliente), y con el de editar se movía dinero de otra empresa. Fuera de
+ * sus campus es un 404, como si no existiera, igual que en el resto del CRM.
+ */
+async function cargoSuyo(req) {
+  const row = await model.getById(Number(req.params.id));
+  if (!row) throw new AppError('Pago no encontrado', 404, 'NOT_FOUND');
+  await exigirCampusSuyo(req, row.project_id, 'Pago no encontrado');
+  return row;
+}
+
 export async function getOne(req, res, next) {
   try {
-    const id = Number(req.params.id);
-    const row = await model.getById(id);
-    if (!row) throw new AppError('Pago no encontrado', 404, 'NOT_FOUND');
+    const row = await cargoSuyo(req);
     res.json({ success: true, data: row });
   } catch (e) { next(e); }
 }
 
 export async function link(req, res, next) {
   try {
-    const id = Number(req.params.id);
+    const cargo = await cargoSuyo(req);
     const { leadId, conversionId, conversionPaymentId, invoiceId } = req.body || {};
     // Con el cobro o la factura de ese pago (CRM-ISEIE#559): se enlaza ahí, sin
     // crear otro cobro aunque el importe o la fecha no coincidan.
     if (conversionPaymentId || invoiceId) {
-      const r = await service.enlazarConCobro(id, {
+      const r = await service.enlazarConCobro(cargo.id, {
         conversionPaymentId: conversionPaymentId ? Number(conversionPaymentId) : null,
         invoiceId: invoiceId ? Number(invoiceId) : null,
         userId: req.user?.userId,
@@ -79,7 +109,15 @@ export async function link(req, res, next) {
       return res.json({ success: true, data: r });
     }
     if (!leadId && !conversionId) throw new AppError('leadId o conversionId requerido', 400, 'BAD_REQUEST');
-    await service.manualLink(id, { leadId, conversionId, userId: req.user?.userId });
+    // La venta y el prospecto, del MISMO campus que el cargo (#428): si no, un cobro de
+    // un campus acababa sumado a una venta de otro (y en la factura de otra sociedad).
+    if (conversionId && await model.campusDeLaVenta(conversionId) !== Number(cargo.project_id)) {
+      throw new AppError('Venta no encontrada', 404, 'NOT_FOUND');
+    }
+    if (leadId && await model.campusDelLead(leadId) !== Number(cargo.project_id)) {
+      throw new AppError('Lead no encontrado', 404, 'NOT_FOUND');
+    }
+    await service.manualLink(cargo.id, { leadId, conversionId, userId: req.user?.userId });
     res.json({ success: true });
   } catch (e) { next(e); }
 }
@@ -115,19 +153,19 @@ export async function deLaVenta(req, res, next) {
 
 export async function unlink(req, res, next) {
   try {
-    const id = Number(req.params.id);
-    await model.linkPayment(id, { leadId: null, conversionId: null, conversionPaymentId: null, userId: req.user?.userId, method: null });
+    const cargo = await cargoSuyo(req);
+    await model.linkPayment(cargo.id, { leadId: null, conversionId: null, conversionPaymentId: null, userId: req.user?.userId, method: null });
     res.json({ success: true });
   } catch (e) { next(e); }
 }
 
 export async function updateDispute(req, res, next) {
   try {
-    const id = Number(req.params.id);
     const { decision, notes } = req.body || {};
     const allowed = ['pending', 'accept_refund', 'contest', 'won', 'lost', 'closed'];
     if (!allowed.includes(decision)) throw new AppError(`decision debe ser: ${allowed.join(', ')}`, 400, 'BAD_DECISION');
-    await service.updateDisputeDecision(id, { decision, notes, userId: req.user?.userId });
+    const cargo = await cargoSuyo(req);
+    await service.updateDisputeDecision(cargo.id, { decision, notes, userId: req.user?.userId });
     res.json({ success: true });
   } catch (e) { next(e); }
 }

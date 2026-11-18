@@ -1,4 +1,5 @@
 import { query } from '../../shared/config/db.js';
+import { comoLista } from '../../shared/utils/ambito.js';
 import { recalcularCobrado } from '../conversions/cobrado.js';
 
 export async function upsertPayment(p) {
@@ -246,9 +247,11 @@ export async function updateConversionPaid(conversionId, _addAmount) {
 // Las condiciones del listado, en un solo sitio: las usan tanto listPayments
 // como getStats. Antes getStats solo miraba el proyecto, asi que los totales de
 // arriba ignoraban el rango de fechas y el resto de filtros de abajo.
-function construirFiltro({ projectId, status, linked, search, from, to, facturables, sinEquivalente }) {
-  const conds = ['sp.project_id = $1'];
-  const params = [projectId];
+function construirFiltro({ projectId, projectIds = null, status, linked, search, from, to, facturables, sinEquivalente }) {
+  // Un campus o varios (los de quien pide, #428): siempre como lista. Sin
+  // ninguno, una lista vacía, que no casa con nada (nunca «todos»).
+  const conds = ['sp.project_id = ANY($1::int[])'];
+  const params = [comoLista(projectId, projectIds) || []];
   let i = 2;
   if (status) { conds.push(`sp.status = $${i++}`); params.push(status); }
   if (linked === 'yes') conds.push('sp.conversion_id IS NOT NULL');
@@ -321,8 +324,8 @@ function construirFiltro({ projectId, status, linked, search, from, to, facturab
   return { where: conds.join(' AND '), params };
 }
 
-export async function listPayments({ projectId, status, linked, search, from, to, facturables, sinEquivalente, page = 1, limit = 50 }) {
-  const { where, params } = construirFiltro({ projectId, status, linked, search, from, to, facturables, sinEquivalente });
+export async function listPayments({ projectId, projectIds = null, status, linked, search, from, to, facturables, sinEquivalente, page = 1, limit = 50 }) {
+  const { where, params } = construirFiltro({ projectId, projectIds, status, linked, search, from, to, facturables, sinEquivalente });
   const offset = (page - 1) * limit;
   const { rows } = await query(
     // Se añade a QUÉ pertenece el cobro: el curso/concepto de la conversión y la
@@ -354,6 +357,18 @@ export async function getById(id) {
   return rows[0] || null;
 }
 
+/** El campus de una venta, o null si no existe (#428: asociar solo dentro del campus del cargo). */
+export async function campusDeLaVenta(conversionId) {
+  const { rows } = await query('SELECT project_id FROM conversions WHERE id = $1', [conversionId]);
+  return rows[0] ? Number(rows[0].project_id) : null;
+}
+
+/** El campus de un prospecto, o null si no existe. */
+export async function campusDelLead(leadId) {
+  const { rows } = await query('SELECT project_id FROM leads WHERE id = $1', [leadId]);
+  return rows[0] ? Number(rows[0].project_id) : null;
+}
+
 export async function listProjectsWithStripe() {
   const { rows } = await query(
     `SELECT DISTINCT project_id FROM project_integrations
@@ -365,8 +380,8 @@ export async function listProjectsWithStripe() {
 // Los totales de la cabecera responden al MISMO filtro que el listado: si
 // arriba pone un rango de fechas, las cifras son de ese rango. Antes eran
 // siempre las del historico completo y no cuadraban con lo que se veia debajo.
-export async function getStats({ projectId, status, linked, search, from, to, facturables, sinEquivalente }) {
-  const { where, params } = construirFiltro({ projectId, status, linked, search, from, to, facturables, sinEquivalente });
+export async function getStats({ projectId, projectIds = null, status, linked, search, from, to, facturables, sinEquivalente }) {
+  const { where, params } = construirFiltro({ projectId, projectIds, status, linked, search, from, to, facturables, sinEquivalente });
   const { rows } = await query(
     `SELECT
        COUNT(*)::int AS total,

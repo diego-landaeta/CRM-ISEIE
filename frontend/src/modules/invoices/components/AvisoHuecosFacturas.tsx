@@ -19,7 +19,8 @@ import client from '@/shared/api/client';
   Aquí sólo se enseñan, y se enseñan donde se trabaja.
 */
 
-type Respuesta = { ano: number; serie: string; siguiente: number; codigo: string; huecos: number[] };
+type Anulada = { numero: number; codigo: string | null; motivo: string | null; fecha: string | null };
+type Respuesta = { ano: number; serie: string; siguiente: number; codigo: string; huecos: number[]; anuladas?: Anulada[] };
 
 export default function AvisoHuecosFacturas({ projectId }: { projectId?: number | null }) {
   const [datos, setDatos] = useState<Respuesta | null>(null);
@@ -35,7 +36,11 @@ export default function AvisoHuecosFacturas({ projectId }: { projectId?: number 
     return () => { vivo = false; };
   }, [projectId]);
 
-  if (!datos || !datos.huecos?.length) return null;
+  // Las ANULADAS (CRM#793) no son un hueco: siguen en la serie con su abono.
+  // Se dicen con su motivo para que el número quede explicado.
+  const anuladas = datos?.anuladas || [];
+  if (!datos || (!datos.huecos?.length && !anuladas.length)) return null;
+  if (!datos.huecos?.length) return <ListaDeAnuladas serie={datos.serie} anuladas={anuladas} />;
 
   const n = datos.huecos.length;
   const lista = datos.huecos
@@ -57,14 +62,46 @@ export default function AvisoHuecosFacturas({ projectId }: { projectId?: number 
           </p>
           <p className="text-xs text-amber-700 dark:text-amber-400 mt-1.5">
             Una serie fiscal no debería tener huecos. O falta cargar esas facturas,
-            o alguien numeró a mano saltándose un número.
+            o alguien numeró a mano saltándose un número, o se borraron cuando aún se
+            podía. Desde el 18/11 una factura emitida no se borra: se anula con su motivo.
           </p>
+          {anuladas.length > 0 && <ListaDeAnuladas serie={datos.serie} anuladas={anuladas} dentro />}
           <Link to="/accounting/facturas/nueva"
             className="inline-flex items-center mt-2 h-7 px-2.5 rounded border border-amber-400 dark:border-amber-700 text-amber-900 dark:text-amber-200 text-xs font-semibold hover:bg-amber-100 dark:hover:bg-amber-900/40">
             Emitir la que falta
           </Link>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Las anuladas de la serie, con su motivo: su número está, no es un hueco. */
+function ListaDeAnuladas({ serie, anuladas, dentro = false }: { serie: string; anuladas: Anulada[]; dentro?: boolean }) {
+  const lista = (
+    <ul className="mt-1 space-y-0.5 text-xs">
+      {anuladas.map((a) => (
+        <li key={a.numero} className="break-words">
+          <b className="tabular-nums">{a.codigo || a.numero}</b> anulada{a.motivo ? `: ${a.motivo}` : ''}
+        </li>
+      ))}
+    </ul>
+  );
+  if (dentro) {
+    return (
+      <div className="mt-2 text-warning-soft-foreground">
+        <p className="text-xs font-semibold">Y estas están anuladas (no son huecos: tienen su abono):</p>
+        {lista}
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-lg border border-border bg-muted/40 p-3 sm:p-4 text-muted-foreground">
+      <p className="text-sm font-semibold text-foreground">
+        {anuladas.length === 1 ? `Una factura anulada en la serie ${serie}` : `${anuladas.length} facturas anuladas en la serie ${serie}`}
+      </p>
+      <p className="text-xs mt-0.5">Su número sigue en la serie y su abono la deja a cero.</p>
+      {lista}
     </div>
   );
 }
