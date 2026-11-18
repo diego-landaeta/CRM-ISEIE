@@ -50,27 +50,40 @@ function entrada(to) {
   return hallada;
 }
 
-describe('Webhooks pide lo que pide el servidor (/api/forms)', () => {
-  const webhooks = entrada('/webhooks');
+// Desde la gemela de CRM#755, Captación › Webhooks es la pestaña Prospectos de
+// Conexión › Webhooks (`/conexion/webhooks/prospectos`), y la entrada del menú junta tres.
+describe('Los webhooks de captación piden lo que pide el servidor (/api/forms)', () => {
+  const PESTANA = '/conexion/webhooks/prospectos';
+  const webhooks = entrada('/conexion/webhooks');
   const ve = (role, excepciones) => canSeeItem(webhooks, rolesDe({ role }), false, {}, canDe(role, excepciones));
+  // Sin las otras dos partes de la entrada (Make y transferencias), para mirar solo esta.
+  const soloCaptacion = { 'make.view': false, 'webhooks_salientes.view': false };
+
+  it('la entrada vieja ya no está en el menú: se movió, no se duplicó', () => {
+    expect(entrada('/webhooks')).toBeNull();
+    expect(webhooks).toBeTruthy();
+  });
 
   it('el admin y el project manager, con sus permisos de serie, la siguen viendo y abriendo', () => {
     expect(ve('admin')).toBe(true);
     expect(ve('project_manager')).toBe(true);
-    expect(rutaPermitida('/webhooks', canDe('admin'))).toBe(true);
-    expect(rutaPermitida('/webhooks', canDe('project_manager'))).toBe(true);
+    expect(ve('admin', soloCaptacion)).toBe(true);
+    expect(rutaPermitida(PESTANA, canDe('admin'))).toBe(true);
+    expect(rutaPermitida(PESTANA, canDe('project_manager'))).toBe(true);
   });
 
-  it('con «Ver webhooks» pero sin «Ver formularios» no sale ni se abre: la lista es /api/forms y daba 403', () => {
+  it('con «Ver webhooks» pero sin «Ver formularios» no se abre: la lista es /api/forms y daba 403', () => {
     const sinFormularios = { 'forms.view': false };
     expect(mapaDe('admin', sinFormularios)['webhooks.view']).toBe(true);
-    expect(ve('admin', sinFormularios)).toBe(false);
-    expect(rutaPermitida('/webhooks', canDe('admin', sinFormularios))).toBe(false);
+    // La pestaña, cerrada. La entrada solo sale si le queda otra de sus partes.
+    expect(rutaPermitida(PESTANA, canDe('admin', sinFormularios))).toBe(false);
+    expect(ve('admin', { ...soloCaptacion, ...sinFormularios })).toBe(false);
+    expect(ve('admin', sinFormularios)).toBe(true);
   });
 
-  it('sigue pidiendo «Ver webhooks», como aprobó Diego: soporte no la ve', () => {
-    expect(ve('soporte')).toBe(false);
-    expect(rutaPermitida('/webhooks', canDe('soporte'))).toBe(false);
+  it('sigue pidiendo «Ver webhooks», como aprobó Diego: soporte no entra a los de captación', () => {
+    expect(rutaPermitida(PESTANA, canDe('soporte'))).toBe(false);
+    expect(ve('soporte', soloCaptacion)).toBe(false);
   });
 });
 

@@ -53,7 +53,7 @@ export default function MakeWebhooksPage() {
       });
       if (res.success && res.data) {
         toast({ title: 'Webhook creado en modo test' });
-        navigate(`/make-webhooks/${res.data.id}`);
+        navigate(`/conexion/webhooks/make/${res.data.id}`);
       }
     } catch (err: any) {
       toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' });
@@ -89,7 +89,7 @@ export default function MakeWebhooksPage() {
           {items.map((w) => (
             <button
               key={w.id}
-              onClick={() => navigate(`/make-webhooks/${w.id}`)}
+              onClick={() => navigate(`/conexion/webhooks/make/${w.id}`)}
               className="text-left bg-card border border-border rounded-lg p-4 hover:border-primary/40 transition-colors"
             >
               <div className="flex items-start justify-between gap-3">
