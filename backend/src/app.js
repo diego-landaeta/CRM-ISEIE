@@ -113,6 +113,7 @@ import { startConsultasAlumnosScheduler } from './jobs/consultasAlumnosScheduler
 import { startConsultasResumenScheduler } from './jobs/consultasResumenScheduler.js';
 import { startConsultasPlazoScheduler } from './jobs/consultasPlazoScheduler.js';
 import { startConsultasCargaScheduler } from './jobs/consultasCargaScheduler.js';
+import { startCertifexReversionesScheduler } from './jobs/certifexReversionesScheduler.js';
 import { startVigilanteCatalogoScheduler } from './jobs/vigilanteCatalogoScheduler.js';
 import { startLeadSinTocarScheduler } from './jobs/leadSinTocarScheduler.js';
 import { startCursosPendientesScheduler } from './jobs/cursosPendientesScheduler.js';
@@ -571,7 +572,8 @@ if (process.env.NODE_ENV !== 'test') {
     // Lo nuevo de la 2.6.0. Cada uno se apaga con su interruptor del .env, que
     // mira el propio trabajo: TUTORES_CAMPUS_DISABLED, CONSULTAS_CAMPUS_DISABLED,
     // CONSULTAS_ALUMNOS_DISABLED, CONSULTAS_RESUMEN_DISABLED, CONSULTAS_PLAZO_DISABLED,
-    // CONSULTAS_CARGA_RECORDATORIO_DISABLED, CURSOS_PENDIENTES_DISABLED y MOODLE_AVISOS_DISABLED.
+    // CONSULTAS_CARGA_RECORDATORIO_DISABLED, CURSOS_PENDIENTES_DISABLED, MOODLE_AVISOS_DISABLED y
+    // CERTIFEX_REVERSIONES_DISABLED (diplomas revertidos que el CRM no llegó a apuntar, #351).
     for (const [nombre, arrancar] of [
       ['tutores en los campus', startTutoresCampusScheduler],
       ['consultas de los campus', startConsultasCampusScheduler],
@@ -581,6 +583,7 @@ if (process.env.NODE_ENV !== 'test') {
       ['carga de los tutores', startConsultasCargaScheduler],
       ['cursos pendientes', startCursosPendientesScheduler],
       ['avisos del Moodle', startMoodleAvisosScheduler],
+      ['diplomas revertidos', startCertifexReversionesScheduler],
     ]) {
       try {
         arrancar();

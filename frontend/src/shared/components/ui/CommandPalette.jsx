@@ -111,7 +111,27 @@ export const destinoDeTutor = (t) => `/tutores?buscar=${encodeURIComponent(t.nom
 // La factura de un colaborador: el Historial, con su colaborador y su mes.
 export const destinoDeFacturaColaborador = (f) => `/accounting/facturas-colaboradores?vista=historial&colaborador=${f.colaborador_id}${f.periodo ? `&periodo=${f.periodo}` : ''}`;
 // Un diploma: Emitidos (clave `enviados`) o Revocados, filtrado por el alumno.
-export const destinoDeDiploma = (d) => `/matriculas/diplomas?pestana=${d.revocada ? 'revocados' : 'enviados'}&buscar=${encodeURIComponent(d.alumno || d.nexpediente || '')}`;
+// #351: un número revertido (anulado) no está en Emitidos. Si hoy vale otro número para esa
+// matrícula (`vigente`), lleva a ese en Emitidos. Si no, a Revertidos, con el número anulado, y
+// ahí dice en cuál de estos casos está:
+//  · curso cerrado (se revocó un diploma de ese curso): no se vuelve a emitir;
+//  · se volvió a emitir, y ese también se revirtió;
+//  · todavía no se volvió a emitir: su matrícula está en «Aprobados sin diploma».
+// Un Certifex anterior no manda `vigente`: entonces vale `sustituidaPor`.
+const vigenteDe = (d) => (d.anulacion && 'vigente' in d.anulacion ? d.anulacion.vigente : d.anulacion?.sustituidaPor) || null;
+export const destinoDeDiploma = (d) => {
+  if (d.anulada) {
+    const v = vigenteDe(d);
+    return v
+      ? `/matriculas/diplomas?pestana=enviados&buscar=${encodeURIComponent(v)}`
+      : `/matriculas/diplomas?pestana=revertidos&buscar=${encodeURIComponent(d.nexpediente || d.alumno || '')}`;
+  }
+  return `/matriculas/diplomas?pestana=${d.revocada ? 'revocados' : 'enviados'}&buscar=${encodeURIComponent(d.alumno || d.nexpediente || '')}`;
+};
+// Lo que dice la fila de un diploma anulado: si hoy vale otro número, cuál.
+export const rotuloAnulado = (d) => (d.anulacion?.cursoCerrado
+  ? 'Anulado (revertido) · se revocó un diploma de ese curso: curso cerrado'
+  : vigenteDe(d) ? `Anulado (revertido) · hoy vale ${vigenteDe(d)}` : 'Anulado (revertido)');
 // Un curso de Moodle: la pantalla de su campus, con su nombre en el buscador y todos los estados.
 export const destinoDeCursoMoodle = (c, campus) => `/conexion/moodle/${campus}?estado=todos&q=${encodeURIComponent(c.nombre || '')}`;
 
@@ -333,7 +353,7 @@ export default function CommandPalette() {
       })),
       ...res.diplomas.map((d) => ({
         id: `diploma-${d.id ?? d.nexpediente}`, label: d.alumno || d.nexpediente, icon: Certificate, group: 'Diplomas', to: destinoDeDiploma(d),
-        sublabel: [d.nexpediente, d.titulacion, d.revocada ? 'Revocado' : ''].filter(Boolean).join(' · '),
+        sublabel: [d.nexpediente, d.titulacion, d.revocada ? 'Revocado' : d.anulada ? rotuloAnulado(d) : ''].filter(Boolean).join(' · '),
       })),
       ...res.cursosMoodle.map((c) => ({
         id: `moodle-${c.id}`, label: c.nombre, icon: GraduationCap, group: 'Cursos de Moodle', to: destinoDeCursoMoodle(c, c.campus),
