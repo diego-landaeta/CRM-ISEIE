@@ -94,8 +94,8 @@ export const INFORMES = {
     ejecutar: reportes.seguimientoYTiempos,
   },
   cobros_mensuales: {
-    descripcion: 'Dinero cobrado mes a mes: cada pago registrado, por su FECHA DE COBRO (la base de Finanzas). Es la respuesta a «cuánto dinero entró en tal mes».',
-    ejecutar: reportes.cobrosMensuales,
+    descripcion: 'Dinero cobrado mes a mes: cada pago registrado, por su FECHA DE COBRO (la base de Finanzas), y cada reembolso en negativo por su fecha (tipo «reembolso»), así que la suma de un mes es lo que de verdad se quedó. Es la respuesta a «cuánto dinero entró en tal mes». Para ver cada cargo de Stripe con su estado, «listar_pagos_stripe».',
+    ejecutar: reportes.cobrosMensualesNetos,
   },
   paises: {
     descripcion: 'Países que más compran.',
@@ -293,6 +293,7 @@ export const GRUPO_DE_CONSULTA = Object.freeze({
   resumen_prospectos: 'Campus y prospectos',
   listar_ventas: 'Ventas, facturas y cobros',
   resumen_ventas: 'Ventas, facturas y cobros',
+  listar_pagos_stripe: 'Ventas, facturas y cobros',
   listar_facturas: 'Ventas, facturas y cobros',
   resumen_facturas: 'Ventas, facturas y cobros',
   cobros_pendientes: 'Ventas, facturas y cobros',
@@ -376,7 +377,9 @@ export const HERRAMIENTAS = [
     // En esta lista, «nombre» es el de un cliente: sale abreviado (#196).
     listasDeClientes: ['prospectos'],
     titulo: 'Buscar prospectos',
-    descripcion: 'Busca prospectos (leads) por estado, canal, texto (nombre, email o teléfono), gestora, programa de interés y fechas de solicitud. Cada fila trae el último contacto, el próximo (según el proceso comercial), el paso en el que va y lo vendido. Devuelve una página de resultados y el total.',
+    descripcion: 'Busca prospectos (leads) por estado, canal, texto (nombre, email o teléfono), gestora, programa de interés, fechas de solicitud '
+      + 'y la publicidad de Meta de la que vinieron (conjunto o anuncio). Cada fila trae el último contacto, el próximo (según el proceso comercial), '
+      + 'el paso en el que va, lo vendido y, si vino de Meta, su campaña, conjunto y anuncio (id y nombre). Devuelve una página de resultados y el total.',
     entrada: { ...DATOS_COMPLETOS,
       ...AMBITO,
       estado: z.string().max(40).optional().describe('nuevo, por_contactar, contactado, en_seguimiento, convertido, no_interesado…'),
@@ -384,21 +387,28 @@ export const HERRAMIENTAS = [
       texto: z.string().max(100).optional().describe('Busca en nombre, email o teléfono'),
       gestora_id: z.number().int().positive().optional().describe('Solo los de una gestora (id de «ventas_por_asesora»). Quien ve solo lo suyo no puede pedir los de otra.'),
       programa: z.string().max(100).optional().describe('Parte del nombre del programa de interés, sin tildes ni mayúsculas (por ejemplo «coaching»)'),
+      // Puerta 8 (#487; gemela de CRM#806): por la publicidad de Meta.
+      conjunto_id: z.string().regex(/^\d{1,30}$/, 'Solo dígitos').optional()
+        .describe('Solo los que vinieron de este conjunto de anuncios de Meta (id de «meta_conjuntos»)'),
+      conjunto: z.string().max(100).optional()
+        .describe('Parte del nombre del conjunto de anuncios de Meta, sin tildes ni mayúsculas'),
+      anuncio_id: z.string().regex(/^\d{1,30}$/, 'Solo dígitos').optional()
+        .describe('Solo los que vinieron de este anuncio de Meta (id de «meta_anuncios»)'),
       ...PERIODO,
       ...PAGINA,
     },
     ejecutar: async (ambito, a) => {
-      const { gestora_id: gestoraId, ...resto } = a;
+      const { gestora_id: gestoraId, conjunto_id: conjuntoId, anuncio_id: anuncioId, ...resto } = a;
       if (gestoraId && !personaDentro(ambito, gestoraId)) {
         throw new AppError('Solo ves tus propios prospectos: no puedes pedir los de otra gestora.', 403, 'MCP_FUERA_DE_AMBITO');
       }
-      return model.buscarProspectos({ ...resto, gestoraId, ...acotar(ambito, a) });
+      return model.buscarProspectos({ ...resto, gestoraId, conjuntoId, anuncioId, ...acotar(ambito, a) });
     },
   },
   {
     nombre: 'ver_prospecto',
     titulo: 'Ver un prospecto',
-    descripcion: 'Ficha de un prospecto: datos de contacto, origen, últimas interacciones y sus ventas.',
+    descripcion: 'Ficha de un prospecto: datos de contacto, origen (con la campaña, el conjunto y el anuncio de Meta si vino de ahí, y la URL del anuncio), últimas interacciones y sus ventas.',
     entrada: { ...DATOS_COMPLETOS, id: z.number().int().positive().describe('Id del prospecto') },
     ejecutar: async (ambito, a) => {
       const r = await model.verProspecto({ id: a.id, ...acotar(ambito, {}) });
@@ -443,6 +453,35 @@ export const HERRAMIENTAS = [
       + 'Para comparar gestoras no uses esto: se miden por lo cobrado, con el informe «ranking_gestoras».',
     entrada: { ...AMBITO, ...PERIODO },
     ejecutar: (ambito, a) => model.resumenVentas({ ...a, ...acotar(ambito, a) }),
+  },
+  {
+    // Puerta 3 del conector (gemela de CRM#806): los cargos de Stripe uno a uno.
+    nombre: 'listar_pagos_stripe',
+    titulo: 'Pagos de Stripe, uno a uno',
+    descripcion: 'Cada cargo de Stripe, como en Finanzas → Pagos Stripe: fecha, importe en euros, estado (cobrado, reembolsado, '
+      + 'reembolsado_en_parte o fallido), lo reembolsado y el neto, la venta y la formación si está asociado, y si es el primer '
+      + 'pago, una cuota («cuota 2 de 3») u otro pago. Las fechas son días de Madrid. Trae además las cifras del periodo entero '
+      + '(cobrado, reembolsado, neto, fallidos y sin asociar). Solo super admin y admin.',
+    entrada: { ...DATOS_COMPLETOS,
+      ...AMBITO,
+      ...PERIODO,
+      estado: z.enum(['todos', 'cobrado', 'reembolsado', 'fallido']).default('todos')
+        .describe('cobrado: sin reembolso; reembolsado: con reembolso total o en parte; fallido: no se cobró. Por defecto, todos.'),
+      sin_asociar: z.boolean().optional()
+        .describe('true: solo los cobrados que no están asociados a ninguna venta; false: solo los asociados'),
+      ...PAGINA,
+    },
+    ejecutar: async (ambito, a) => {
+      // Primero el campus (un campus ajeno se rechaza como tal) y después el rol,
+      // como «listar_tutores».
+      const acotado = acotar(ambito, a);
+      soloAdministracion(ambito, 'listar_pagos_stripe');
+      periodoEnOrden(a);
+      return model.listarPagosStripe({
+        desde: a.desde, hasta: a.hasta, estado: a.estado, sinAsociar: a.sin_asociar,
+        pagina: a.pagina, limite: a.limite, ...acotado,
+      });
+    },
   },
   {
     nombre: 'listar_facturas',
