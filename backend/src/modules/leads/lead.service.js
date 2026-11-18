@@ -1,7 +1,6 @@
 import { AppError } from '../../shared/utils/AppError.js';
 import * as leadModel from './lead.model.js';
 import { query } from '../../shared/config/db.js';
-import { sendLeadAssignedEmail } from '../../shared/services/brevo.service.js';
 import { logger } from '../../shared/utils/logger.js';
 import { normalizePhone } from '../../shared/utils/normalizePhone.js';
 import { notifyAdmins } from '../notifications/notifications.service.js';
@@ -10,6 +9,7 @@ import * as leadProducts from './lead-products.service.js';
 import { deducirCanal } from './canal.js';
 import { planificarPasosDeLead, ajustarPaso } from '../proceso/proceso.model.js';
 import { cruzarConPulsacion } from '../widget/widget.pulsaciones.js';
+import { avisarGestoraDelLeadNuevo } from './aviso-gestora.js';
 import { alcanceComercial, dentroDelAlcance, ROLES_DE_TUTOR } from '../../shared/utils/roles.js';
 
 // Dispara secuencias de email activas. STUB v1 mientras email-sequences no este portado.
@@ -330,25 +330,10 @@ async function _createLeadCore(project, leadData) {
     }
   }
 
-  // Notificar al gestor asignado (async - no bloquea respuesta del webhook <500ms)
-  if (lead.responsableId) {
-    (async () => {
-      try {
-        const { rows } = await query(`SELECT id, nombre, email FROM users WHERE id = $1`, [lead.responsableId]);
-        if (rows[0]?.email) {
-          const baseUrl = process.env.CRM_BASE_URL || 'http://localhost:5173/crm';
-          await sendLeadAssignedEmail({
-            gestor: rows[0],
-            lead: { id: lead.id, nombre: lead.nombre, email: lead.email, telefono: lead.telefono },
-            proyecto: { id: project.id, nombre: project.nombre, slug: project.slug, logo_url: project.logo_url, emoji: project.emoji },
-            baseUrl,
-          });
-        }
-      } catch (err) {
-        logger.warn({ err: err.message, leadId: lead.id }, 'Notificacion gestor fallo');
-      }
-    })();
-  }
+  // La campana y el correo a su gestora salen de `aviso-gestora.js`, el mismo
+  // sitio que usan el webhook de formularios y el de token (gemela de MultiCRM,
+  // revisión del reparto 18/11). Antes aquí solo salía el correo.
+  avisarGestoraDelLeadNuevo({ lead, proyecto: project, canal: canalDetectado });
 
   return {
     lead_id: lead.id,
