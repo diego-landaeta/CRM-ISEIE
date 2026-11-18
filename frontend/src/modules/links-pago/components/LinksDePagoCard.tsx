@@ -7,6 +7,7 @@ import usePermission from '@/shared/hooks/usePermission';
 import { toast } from '@/shared/hooks/useToast';
 import { SOLO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 import { useLinksPagoEncendidos } from '@/shared/lib/linksPago';
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import {
   listarLinks, crearLink, anularLink, verConfig,
   type LinkDePago, type ConfigLinks, type EstadoLink,
@@ -74,9 +75,11 @@ interface Props {
    * contra lo que se mide el tope de descuento, como en el servidor (fase 3).
    */
   pendiente?: number;
+  /** En la ficha de la venta: con su recorrido guiado y «Ver recorrido» (18/11). */
+  conRecorrido?: boolean;
 }
 
-export default function LinksDePagoCard({ projectId, leadId, conversionId, productoId, pendiente }: Props) {
+export default function LinksDePagoCard({ projectId, leadId, conversionId, productoId, pendiente, conRecorrido = false }: Props) {
   const { can } = usePermission();
   const encendidos = useLinksPagoEncendidos();
   const puedeCrear = can('links_pago.crear');
@@ -115,22 +118,26 @@ export default function LinksDePagoCard({ projectId, leadId, conversionId, produ
   }
 
   return (
-    <div className="bg-card p-5 rounded-lg border border-border">
-      <div className="flex items-center justify-between gap-3 mb-3">
+    <div className="bg-card p-5 rounded-lg border border-border" data-recorrido="links-pago">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
         <h3 className="font-semibold flex items-center gap-2">
           <LinkSimple size={16} weight="regular" aria-hidden="true" /> Links de pago
           {SOLO_EN_PRUEBAS && (
             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-warning-soft text-warning-soft-foreground">PRUEBAS</span>
           )}
         </h3>
-        {puedeCrear && (
-          <button type="button" onClick={() => setCreando(true)}
-            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90">
-            <Plus size={14} weight="bold" aria-hidden="true" /> Crear link de pago
-          </button>
-        )}
+        <span className="flex flex-wrap items-center gap-2">
+          {conRecorrido && <VerRecorrido id="link-de-pago" listo={!cargando} compacto />}
+          {puedeCrear && (
+            <button type="button" onClick={() => setCreando(true)} data-recorrido="links-crear"
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90">
+              <Plus size={14} weight="bold" aria-hidden="true" /> Crear link de pago
+            </button>
+          )}
+        </span>
       </div>
 
+      <div data-recorrido="links-lista">
       {cargando && <p className="text-xs text-muted-foreground">Cargando…</p>}
       {!cargando && links.length === 0 && (
         <p className="text-sm text-muted-foreground">Todavía no se le ha mandado ningún link de pago.</p>
@@ -174,6 +181,7 @@ export default function LinksDePagoCard({ projectId, leadId, conversionId, produ
           })}
         </ul>
       )}
+      </div>
 
       {creando && (
         <CrearLinkDialog
