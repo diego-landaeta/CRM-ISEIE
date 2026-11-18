@@ -2,6 +2,7 @@ import { Router, raw } from 'express';
 import { verifyToken } from '../../shared/middleware/auth.js';
 import { puede } from '../../shared/middleware/permissions.js';
 import * as ctrl from './stripe-payments.controller.js';
+import { projectAccess } from '../../shared/middleware/projectAccess.js';
 
 // Router autenticado (montado en /api/stripe-payments)
 const router = Router();
@@ -12,7 +13,8 @@ router.use(verifyToken);
 // que el match se haga solo.
 router.get('/', puede('stripe.view'), ctrl.list);
 router.get('/stats', puede('stripe.view'), ctrl.stats);
-router.post('/sync', puede('stripe.view'), ctrl.sync);
+// Solo los campus de quien lo pide (#428): antes el projectId del cuerpo iba tal cual.
+router.post('/sync', puede('stripe.view'), projectAccess, ctrl.sync);
 // Cargos sueltos y cobros sin cargo de una venta, para enlazarlos (CRM#888).
 router.get('/de-la-venta/:conversionId', puede('stripe.edit'), ctrl.deLaVenta);
 router.get('/:id', puede('stripe.view'), ctrl.getOne);
