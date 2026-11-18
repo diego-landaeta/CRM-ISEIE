@@ -7,6 +7,7 @@ import { Progress } from '@/shared/components/ui/progress';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/shared/components/ui/accordion';
 import { UploadSimple, FileText, DownloadSimple, WarningCircle, Eye, EyeSlash } from '@phosphor-icons/react';
 import { getDossierUrl } from '../api/dossiers.api';
+import usePermission from '@/shared/hooks/usePermission';
 
 function formatBytes(bytes) {
   if (!bytes) return '—';
@@ -28,6 +29,10 @@ export default function DossierPanel({ productId, projectId }) {
     upload, download,
   } = useDossiers(productId, projectId);
 
+  // Subir pide `dossiers.upload` en el servidor: sin él, la zona de subida no
+  // sale (antes se veía y el servidor lo rechazaba).
+  const { can } = usePermission();
+  const puedeSubir = can('dossiers.upload');
   const [pendingFile, setPendingFile] = useState(null);
   const [uploadError, setUploadError] = useState(null);
   // CRM-149: preview inline del PDF activo (presigned URL en iframe).
@@ -66,7 +71,7 @@ export default function DossierPanel({ productId, projectId }) {
     onDrop,
     accept: { 'application/pdf': ['.pdf'] },
     maxFiles: 1,
-    disabled: uploading,
+    disabled: uploading || !puedeSubir,
   });
 
   async function handleUpload() {
@@ -115,7 +120,11 @@ export default function DossierPanel({ productId, projectId }) {
         </div>
       )}
 
-      <div
+      {!puedeSubir && !activeDossier && !loading && (
+        <p className="text-sm text-muted-foreground">Este producto todavía no tiene dossier.</p>
+      )}
+
+      {puedeSubir && <div
         {...getRootProps()}
         className={`flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 text-center cursor-pointer transition-colors ${
           isDragActive ? 'border-primary bg-primary/5' : 'border-muted-foreground/25 hover:border-primary/50'
@@ -131,9 +140,9 @@ export default function DossierPanel({ productId, projectId }) {
             <p className="text-sm text-muted-foreground mt-1">Solo PDF, maximo 20 MB</p>
           </>
         )}
-      </div>
+      </div>}
 
-      {pendingFile && !uploading && (
+      {puedeSubir && pendingFile && !uploading && (
         <div className="flex items-center gap-3 rounded-lg border bg-muted/50 p-3">
           <FileText className="h-5 w-5 text-muted-foreground" />
           <span className="flex-1 truncate text-sm">{pendingFile.name}</span>
