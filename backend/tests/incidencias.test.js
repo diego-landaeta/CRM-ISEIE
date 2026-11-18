@@ -54,9 +54,18 @@ const como = (clave) => ({ Authorization: `Bearer ${T[clave]}` });
  * la PR #612). Diego, 22/10 (#423): nunca crear usuarios con más alcance del
  * necesario en la base compartida. No se borra al final: no es nuestro.
  */
+// En el 360 se usa el superadmin del seed y no se borra (certifexDiplomas
+// cuenta los superadmin activos). La base de pruebas de ISEIE no trae ninguno:
+// si falta, se crea uno propio, como hacen las demás pruebas de aquí, y se borra al final.
+let superadminPropio = false;
 async function superadminDeLaBase() {
-  const u = await one(`SELECT id, email FROM users WHERE role = 'superadmin' AND active ORDER BY id LIMIT 1`);
-  if (!u) throw new Error('La base de pruebas no tiene ningún superadmin activo (npm run db:preparar -- --datos)');
+  let u = await one(`SELECT id, email FROM users WHERE role = 'superadmin' AND active ORDER BY id LIMIT 1`);
+  if (!u) {
+    u = await one(
+      `INSERT INTO users (nombre, email, password_hash, role) VALUES ($1, $2, 'x', 'superadmin') RETURNING id, email`,
+      [`${MARCA} superadmin`, `superadmin_${MARCA.toLowerCase()}@test.local`]);
+    superadminPropio = true;
+  }
   U.superadmin = u.id;
   T.superadmin = jwt.sign({ userId: u.id, email: u.email, role: 'superadmin', roles_extra: [] }, process.env.JWT_SECRET, { expiresIn: '1h' });
 }
@@ -106,8 +115,8 @@ beforeAll(async () => {
 }, 60000);
 
 afterAll(async () => {
-  // Las personas que creó esta prueba: el superadmin es el de la base y se queda.
-  const ids = Object.entries(U).filter(([k]) => k !== 'superadmin').map(([, id]) => id);
+  // Las personas que creó esta prueba: el superadmin de la base se queda (el propio, no).
+  const ids = Object.entries(U).filter(([k]) => k !== 'superadmin' || superadminPropio).map(([, id]) => id);
   await q('DELETE FROM incidencias WHERE que_paso LIKE $1', [`${MARCA}%`]);
   await q('DELETE FROM user_projects WHERE user_id = ANY($1::int[])', [ids]);
   await q('DELETE FROM users WHERE id = ANY($1::int[])', [ids]);
