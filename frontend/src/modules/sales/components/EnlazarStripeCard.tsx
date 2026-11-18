@@ -4,6 +4,7 @@ import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 import usePermission from '@/shared/hooks/usePermission';
 import { formatDate } from '@/shared/lib/format';
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 
 /**
  * «Este cargo de Stripe es ESE cobro», en la ficha de la venta (CRM#888).
@@ -88,19 +89,24 @@ export default function EnlazarStripeCard({ conversionId, onEnlazado }: {
   }
 
   return (
-    <div className="bg-card border border-warning/40 rounded-lg p-4">
-      <h3 className="font-semibold mb-1 flex items-center gap-2">
-        <LinkSimple size={16} weight="bold" /> Cargos de Stripe sin enlazar ({cargos.length})
-      </h3>
+    <div className="bg-card border border-warning/40 rounded-lg p-4" data-recorrido="cargos-sin-enlazar">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+        <h3 className="font-semibold flex items-center gap-2">
+          <LinkSimple size={16} weight="bold" /> Cargos de Stripe sin enlazar ({cargos.length})
+        </h3>
+        {/* El recorrido (18/11): sale solo la primera vez que hay cargos sueltos. */}
+        <VerRecorrido id="cargos-sin-enlazar" compacto />
+      </div>
       <p className="text-xs text-muted-foreground mb-3">
         Si el pago ya está apuntado (o facturado), enlaza el cargo con ese cobro. No se crea otro cobro ni otra factura.
       </p>
       <ul className="space-y-2">
-        {cargos.map((cg) => (
+        {cargos.map((cg, i) => (
           <li key={cg.id} className="flex flex-col sm:flex-row sm:items-center gap-2 text-sm">
             <span className="tabular-nums font-semibold whitespace-nowrap">{eur(cg.importe)}</span>
             <span className="text-muted-foreground whitespace-nowrap">{formatDate(cg.fecha)}</span>
             <select
+              data-recorrido={i === 0 ? 'cargo-cobro' : undefined}
               aria-label={`Cobro para el cargo ${cg.stripe_id}`}
               className="h-8 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-xs"
               value={eleccion[cg.id] ?? ''}
@@ -111,6 +117,7 @@ export default function EnlazarStripeCard({ conversionId, onEnlazado }: {
             </select>
             <button
               type="button"
+              data-recorrido={i === 0 ? 'cargo-enlazar' : undefined}
               disabled={!eleccion[cg.id] || enviando === cg.id}
               onClick={() => enlazar(cg)}
               className="h-8 px-3 rounded-md bg-primary text-primary-foreground text-xs font-semibold disabled:opacity-50"

@@ -163,7 +163,7 @@ export default function SaleDetailPage() {
         </p>
       )}
       {cobradoDeMas > 0.005 && (
-        <p role="note" className="text-xs rounded-md border border-warning/40 bg-warning-soft text-warning-soft-foreground px-3 py-2">
+        <p role="note" data-recorrido="venta-cobrado-de-mas" className="text-xs rounded-md border border-warning/40 bg-warning-soft text-warning-soft-foreground px-3 py-2">
           Sus pagos suman {fmt(cobradoDeMas)} más que el importe de la venta. Suele ser un cobro repetido o un importe mal puesto.
         </p>
       )}
@@ -206,11 +206,11 @@ export default function SaleDetailPage() {
         <RepartoVentaCard conversionId={venta.id} />
         {venta.project_id != null && (
           <LinksDePagoCard projectId={venta.project_id} conversionId={venta.id} productoId={venta.producto_contratado_id}
-            pendiente={pendiente} />
+            pendiente={pendiente} conRecorrido />
         )}
         </div>
 
-        <div className="bg-card border border-border rounded-lg p-4 lg:col-span-2">
+        <div className="bg-card border border-border rounded-lg p-4 lg:col-span-2" data-recorrido="venta-cuotas">
           <h3 className="font-semibold mb-3">Plan de cuotas</h3>
           {cuotas.length === 0 ? (
             <EmptyState icon={Calendar} title="Sin plan de cuotas" description="Esta venta no está fraccionada." />
