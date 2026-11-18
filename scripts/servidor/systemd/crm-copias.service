@@ -1,0 +1,20 @@
+# Copia diaria de las bases (#634). La lanza crm-copias.timer; a mano: systemctl start crm-copias
+# Configuración: /etc/crm-copias/copias.env (ver copias.env.example). Registro: /var/log/crm-copias.log
+[Unit]
+Description=Copia diaria de las bases (CRM, WhatsApp, SQLite) - #634
+Wants=postgresql.service docker.service
+After=postgresql.service docker.service
+OnFailure=crm-copias-aviso.service
+
+[Service]
+Type=oneshot
+User=root
+UMask=0077
+EnvironmentFile=/etc/crm-copias/copias.env
+ExecStart=/usr/local/sbin/crm-copia-base
+StandardOutput=append:/var/log/crm-copias.log
+StandardError=append:/var/log/crm-copias.log
+# Que no le quite CPU ni disco a la API de producción mientras copia.
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=2h
