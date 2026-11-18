@@ -414,7 +414,7 @@ export default function TutoresPage() {
     try {
       const r = await tutoresApi.cambiarContrasena(elegido.id, claveNueva, claveRepetida);
       if (!r.success) throw new Error(r.error || 'no se pudo');
-      toast({ title: 'Contraseña cambiada', description: `${elegido.nombre} ya puede entrar con ella. Sus sesiones abiertas se han cerrado.` });
+      toast({ title: 'Contraseña cambiada', description: `${elegido.nombre} ya puede entrar con ella, y con la anterior no. Una sesión que ya tuviera abierta puede seguir hasta 8 horas.` });
       setPopupClave(false);
       cargar();
     } catch (err) {

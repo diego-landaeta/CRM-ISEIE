@@ -175,17 +175,26 @@ export async function update(req, res, next) {
       // Y nada de lo que gane puede faltarle a quien lo cambia (QA, punto 7).
       await exigirQueNoDeMasDeLoQueTiene(req.user, id, { role: resto.role, roles_extra: resto.roles_extra });
     }
-    // El correo va primero: si choca con el de otro (409), no se guarda nada a medias.
+    // El correo se COMPRUEBA primero y se CAMBIA al final (#262). Si choca con el
+    // de otro (409), no se guarda nada; y si lo que falla es el resto, el correo
+    // tampoco ha cambiado. Antes iba primero entero: con un fallo después, la
+    // pantalla decía «error» y la persona ya entraba con otro correo, sin sus
+    // refresh tokens y con el aviso mandado a la dirección vieja.
+    if (email !== undefined) {
+      await userService.comprobarCambioDeCorreo(id, email, { porUserId: req.user.userId });
+    }
+    let user = Object.keys(resto).length
+      ? await userService.update(id, resto, { porUserId: req.user?.userId ?? null })
+      : await userService.getById(id);
     const correo = email !== undefined
       ? await userService.cambiarCorreo(id, email, {
         reenviarEnlace: reenviarEnlace === true, porUserId: req.user.userId, ip: req.ip,
-        // El rol con el que se va a guardar, para el freno de tutores (#262).
-        rolFinal: resto.role ?? null,
+        // El freno de tutores mira el rol de antes y el de después (#262): aquí
+        // el rol nuevo ya está guardado.
+        rolFinal: resto.role ?? null, rolAntes: antes?.role ?? null,
       })
       : null;
-    const user = Object.keys(resto).length
-      ? await userService.update(id, resto, { porUserId: req.user?.userId ?? null })
-      : await userService.getById(id);
+    if (correo?.cambiado) user = { ...user, email: correo.email };
 
     // Si el cambio de rol le quita WhatsApp, se le desvincula el numero — pero
     // sus conversaciones se quedan. El numero es suyo y no puede seguir
