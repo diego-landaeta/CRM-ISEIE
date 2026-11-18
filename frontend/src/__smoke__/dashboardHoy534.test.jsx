@@ -82,10 +82,12 @@ describe('las cifras de hoy', () => {
     expect(texto(screen.getByText('sin gestora').closest('button'))).toMatch(/566/);
     // En español, Intl no separa los millares con cuatro cifras: «1726».
     expect(texto(screen.getByText('sin actividad').closest('button'))).toMatch(/1726/);
-    // Y esos dos filtros los manda la lista al servidor; los demás, no.
+    // Esos dos filtros los manda la lista al servidor, como todos los rápidos
+    // desde la gemela de la #132 del 360; uno desconocido, no.
     expect(qfDelServidor('sin-gestora')).toBe('sin-gestora');
     expect(qfDelServidor('sin-actividad')).toBe('sin-actividad');
-    expect(qfDelServidor('urgent')).toBe('');
+    expect(qfDelServidor('urgent')).toBe('urgent');
+    expect(qfDelServidor('otra-cosa')).toBe('');
   });
 
   it('una gestora (sin tabla) ve lo suyo y sin la tarjeta Facturado', async () => {

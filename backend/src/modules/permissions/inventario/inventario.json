@@ -7855,6 +7855,28 @@
   "puertas": []
  },
  {
+  "id": "GET /api/leads/quick-counts",
+  "tipo": "ruta",
+  "modulo": "leads",
+  "metodo": "GET",
+  "ruta": "/api/leads/quick-counts",
+  "relativa": "GET /quick-counts",
+  "controlador": "quickCounts",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "leads.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/leads/today",
   "tipo": "ruta",
   "modulo": "leads",

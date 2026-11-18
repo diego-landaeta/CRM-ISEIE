@@ -25,7 +25,7 @@ import { cn } from '@/shared/lib/utils';
  *   · Prospectos y las dos alertas: `/leads/stats` y `/leads/today`, que ya pide
  *     el Dashboard. Cada alerta usa en el servidor la misma condición que el
  *     filtro de la lista a la que lleva, así que la cifra y la lista cuadran.
- *     En ISEIE esos dos filtros los hace el servidor (`?qf=`, `filtrosRapidos.ts`).
+ *     En ISEIE los filtros rápidos los hace el servidor (`?qf=`, `filtrosRapidos.ts`).
  */
 
 export interface CifrasDeHoyProps {

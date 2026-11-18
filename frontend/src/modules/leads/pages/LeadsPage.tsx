@@ -81,7 +81,6 @@ import { yaPaso } from '@/shared/lib/fechas';
 import ParaHoyYManana from '@/shared/components/dashboard/ParaHoyYManana';
 import { PROCESO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 import { qfDelServidor } from '../lib/filtrosRapidos';
-import { entroEnElProceso } from '@/shared/lib/enElProceso';
 import {
   getInitials,
   getAvatarColor,
@@ -268,7 +267,8 @@ export default function LeadsPage() {
       const ignoreFilters = scope === 'todos';
       const todos = await fetchAllForExport({ ignoreFilters });
       if (exportReqRef.current !== myReq) return;
-      setExportRows(ignoreFilters ? todos : aplicarQuickFilter(todos));
+      // El filtro rápido ya lo aplica el servidor (`qf` en la petición).
+      setExportRows(todos);
     } catch (err) {
       if (exportReqRef.current === myReq) toast({ title: 'No se pudo preparar el export', description: err?.message, variant: 'destructive' });
     } finally { if (exportReqRef.current === myReq) setExportLoading(false); }
@@ -335,88 +335,33 @@ export default function LeadsPage() {
   // Si usamos new Date(str) directamente, JS lo interpreta como UTC midnight, que
   // desde TZ negativas (Caracas UTC-4, México UTC-6) cae en el día anterior LOCAL.
   // Extraemos solo la parte YYYY-MM-DD y la construimos como fecha local 00:00.
-  function parseLocalDateOnly(dateStr: string | null | undefined): Date | null {
-    if (!dateStr) return null;
-    const s = String(dateStr).slice(0, 10);
-    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if (!m) return null;
-    return new Date(parseInt(m[1]), parseInt(m[2]) - 1, parseInt(m[3]));
-  }
-
-  // Filtros rapidos client-side (sobre los leads ya cargados)
-  // Filtros rápidos (client-side). Extraído para aplicarlo también al export.
-  function aplicarQuickFilter(lista) {
-    // Las alertas del Dashboard las filtra el servidor (gemela de CRM#884).
-    if (!quickFilter || qfDelServidor(quickFilter)) return lista;
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const tomorrow = new Date(today.getTime() + 86400000);
-    const inWeek = new Date(today.getTime() + 7 * 86400000);
-    return lista.filter(l => {
-      // La barra de vencidos cuenta desde el 01/09 (ver enElProceso.ts).
-      if (!entroEnElProceso(l)) return false;
-      const next = parseLocalDateOnly(l.next_reminder_at);
-      const last = l.last_interaction_at ? new Date(l.last_interaction_at) : null;
-      if (quickFilter === 'overdue') return next && next < today;
-      if (quickFilter === 'today') return next && next.getTime() === today.getTime();
-      if (quickFilter === 'tomorrow') return next && next.getTime() === tomorrow.getTime();
-      if (quickFilter === 'week') return next && next >= today && next <= inWeek;
-      if (quickFilter === 'no-reminder') return !next;
-      if (quickFilter === 'no-contact') return !last && ['nuevo', 'por_contactar'].includes(l.estado);
-      if (quickFilter === 'urgent') {
-        if (next && next <= today) return true;
-        if (!last && ['nuevo', 'por_contactar'].includes(l.estado)) return true;
-        return false;
-      }
-      return true;
-    });
-  }
-
-  const filteredLeads = useMemo(() => {
-    if (!quickFilter || qfDelServidor(quickFilter)) return leads;
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const tomorrow = new Date(today.getTime() + 86400000);
-    const inWeek = new Date(today.getTime() + 7 * 86400000);
-    return leads.filter(l => {
-      // La barra de vencidos cuenta desde el 01/09 (ver enElProceso.ts).
-      if (!entroEnElProceso(l)) return false;
-      const next = parseLocalDateOnly(l.next_reminder_at);
-      const last = l.last_interaction_at ? new Date(l.last_interaction_at) : null;
-      if (quickFilter === 'overdue') return next && next < today;
-      if (quickFilter === 'today') return next && next.getTime() === today.getTime();
-      if (quickFilter === 'tomorrow') return next && next.getTime() === tomorrow.getTime();
-      if (quickFilter === 'week') return next && next >= today && next <= inWeek;
-      if (quickFilter === 'no-reminder') return !next;
-      if (quickFilter === 'no-contact') return !last && ['nuevo', 'por_contactar'].includes(l.estado);
-      if (quickFilter === 'urgent') {
-        if (next && next <= today) return true;
-        if (!last && ['nuevo', 'por_contactar'].includes(l.estado)) return true;
-        return false;
-      }
-      return true;
-    });
-  }, [leads, quickFilter]);
-
-  const quickCounts = useMemo(() => {
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const tomorrow = new Date(today.getTime() + 86400000);
-    const inWeek = new Date(today.getTime() + 7 * 86400000);
-    let overdue = 0, todayCount = 0, tomorrowCount = 0, weekCount = 0, noReminder = 0, noContact = 0;
-    leads.forEach(l => {
-      if (!entroEnElProceso(l)) return;
-      const next = parseLocalDateOnly(l.next_reminder_at);
-      const last = l.last_interaction_at ? new Date(l.last_interaction_at) : null;
-      if (next && next < today) overdue++;
-      if (next && next.getTime() === today.getTime()) todayCount++;
-      if (next && next.getTime() === tomorrow.getTime()) tomorrowCount++;
-      if (next && next >= today && next <= inWeek) weekCount++;
-      if (!next) noReminder++;
-      if (!last && ['nuevo', 'por_contactar'].includes(l.estado)) noContact++;
-    });
-    return { overdue, today: todayCount, tomorrow: tomorrowCount, week: weekCount, noReminder, noContact, urgent: overdue + todayCount + noContact };
-  }, [leads]);
+  // Los filtros rápidos los filtra y los cuenta el SERVIDOR (gemela de la #132 del
+  // 360): antes se aplicaban aquí sobre la página cargada (20 de `total`), así
+  // que «mañana» enseñaba los de mañana que cayeran en esta página, y las
+  // pestañas contaban solo lo cargado. La lista llega ya filtrada (`?qf=`, en
+  // useLeads) y los contadores salen de `/leads/quick-counts`, con la misma
+  // condición (`FILTROS_RAPIDOS` en lead.model.js).
+  const filteredLeads = leads;
+  const [quickCounts, setQuickCounts] = useState({ overdue: 0, today: 0, tomorrow: 0, week: 0, noReminder: 0, noContact: 0, urgent: 0 });
+  useEffect(() => {
+    const pidCuenta = activeProject?.id && activeProject.id > 0 ? activeProject.id : null;
+    if (!pidCuenta) return;
+    let vivo = true;
+    const p = new URLSearchParams({ projectId: String(pidCuenta) });
+    if (filterResponsable && filterResponsable !== 'unassigned') p.set('responsableId', String(filterResponsable));
+    client.get(`/leads/quick-counts?${p.toString()}`)
+      .then((r) => {
+        const d = r?.data as Record<string, number> | undefined;
+        if (!vivo || !r?.success || !d) return;
+        setQuickCounts({
+          overdue: d.overdue || 0, today: d.today || 0, tomorrow: d.tomorrow || 0, week: d.week || 0,
+          noReminder: d.no_reminder || 0, noContact: d.no_contact || 0, urgent: d.urgent || 0,
+        });
+      })
+      .catch(() => {});
+    return () => { vivo = false; };
+    // `leads`: se vuelve a contar cuando cambia la lista (un recordatorio nuevo, un alta).
+  }, [activeProject?.id, filterResponsable, leads]);
 
   // Cargar lista de responsables para el filtro (solo admin/superadmin).
   // Con un proyecto activo, solo los gestores de ESE proyecto.
@@ -852,7 +797,7 @@ export default function LeadsPage() {
           desplegable de filtros, donde no los ve nadie.
 
           «Piden atención» sale de los mismos contadores que los filtros rápidos
-          (`quickCounts`, sobre la página cargada y solo desde el 01/09), así que
+          (`quickCounts`, de `/leads/quick-counts`: todo el campus y solo desde el 01/09), así que
           pulsarla y filtrar por «urgentes» dicen lo mismo. */}
       <CifrasProspectos
         stats={stats}

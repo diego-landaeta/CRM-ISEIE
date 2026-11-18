@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-871 rutas en 67 módulos, y 31 acciones con condición dentro de una ruta.
+872 rutas en 67 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -578,6 +578,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | list | `GET /api/leads/` | sesión | superadmin, admin, gestor, soporte, project_manager | `leads.view` |
 | exportWasapi | `GET /api/leads/export/wasapi` | sesión | superadmin, admin, gestor, soporte, project_manager | `leads.exportar_wasapi` |
 | stats | `GET /api/leads/stats` | sesión | superadmin, admin, gestor, soporte, project_manager | `leads.view` |
+| quickCounts | `GET /api/leads/quick-counts` | (no existía) | (ruta nueva) | `leads.view` |
 | today | `GET /api/leads/today` | sesión | superadmin, admin, gestor, soporte, project_manager | `leads.view` |
 | dashboardSummary | `GET /api/leads/dashboard-summary` | sesión | superadmin, admin, gestor, soporte, project_manager | `leads.view` |
 | lookupByEmail | `GET /api/leads/lookup-by-email` | sesión | superadmin, admin, gestor, soporte, project_manager | `leads.view` |
