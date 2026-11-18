@@ -9,14 +9,16 @@ import MonitaskCard from '@/modules/monitask/components/MonitaskCard';
 import { toast } from '@/shared/hooks/useToast';
 import { apiPublicUrl } from '@/shared/lib/direccionesPublicas';
 import { usePluginMoodle } from '@/shared/lib/pluginMoodle';
+import { SOLO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 import { EtiquetaEnPruebas } from '@/shared/components/ui/EnPruebas';
 import {
   CreditCard, EnvelopeSimple, CheckCircle, WarningCircle, Eye, EyeSlash,
   ArrowSquareOut, FloppyDisk, PlugsConnected, Trash, Question, GraduationCap,
+  LinkSimple, Percent, MinusCircle,
 } from '@phosphor-icons/react';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────
-type Provider = 'stripe' | 'brevo' | 'moodle' | 'paypal';
+type Provider = 'stripe' | 'brevo' | 'moodle' | 'paypal' | 'stripe_links';
 interface Integration {
   id?: number;
   project_id?: number;
@@ -123,6 +125,11 @@ export default function IntegrationsPage() {
           <StripeCard projectId={pid} />
           {/* PayPal (#766): solo si el servidor tiene encendido PAYPAL_COBROS_ACTIVO. */}
           <PaypalSiEstaEncendido key={`paypal-${pid}`} projectId={pid} />
+          {/* Links de pago (#407, gemela de CRM#680): la clave de escritura, aparte de la
+              de lectura de arriba. Solo en /staging y local hasta que Diego lo apruebe. */}
+          {/* `key`: al cambiar de campus la tarjeta empieza de cero; si no,
+              enseñaba un momento el descuento del campus anterior. */}
+          {SOLO_EN_PRUEBAS && <StripeLinksCard key={pid} projectId={pid} />}
           <BrevoCard projectId={pid} />
           <MoodleCard projectId={pid} />
         </div>
@@ -388,6 +395,267 @@ function StripeCard({ projectId }: { projectId: number }) {
             <button onClick={clear}
               className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-red-300 dark:border-red-900 bg-card text-sm font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 ml-auto">
               <Trash size={14} weight="bold" /> Eliminar
+            </button>
+          )}
+        </div>
+      </div>
+      {loading && <div className="px-5 py-3 text-xs text-muted-foreground border-t border-border">Cargando…</div>}
+    </div>
+  );
+}
+
+// ─── Links de pago (Stripe, escritura) ────────────────────────────────────
+// CRM#680, fase 1. La clave que podrá CREAR links de pago, en un hueco aparte de la
+// de lectura del sondeo: si esta falla o se borra, los cobros siguen entrando.
+// «Probar conexión» solo hace GET de un elemento; no crea nada en Stripe.
+const PERMISOS_DE_LA_CLAVE: ReadonlyArray<{ clave: string; nombre: string; nivel: string }> = [
+  { clave: 'payment_links', nombre: 'Payment Links', nivel: 'Escritura' },
+  { clave: 'products', nombre: 'Products', nivel: 'Escritura' },
+  { clave: 'prices', nombre: 'Prices', nivel: 'Escritura' },
+  { clave: 'checkout_sessions', nombre: 'Checkout Sessions', nivel: 'Lectura' },
+];
+
+type Permisos = Record<string, boolean | null>;
+
+function StripeLinksCard({ projectId }: { projectId: number }) {
+  const { can } = usePermission();
+  const puedeEditar = can('integrations.edit');
+  const puedeConfigurar = can('links_pago.configurar');
+  const [data, setData] = useState<Integration | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [apiKey, setApiKey] = useState('');
+  const [showKey, setShowKey] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [permisos, setPermisos] = useState<Permisos | null>(null);
+  // El tope de descuento vive en el campus, no en la clave (migración 312).
+  const [descuento, setDescuento] = useState('');
+  const [descuentoGuardado, setDescuentoGuardado] = useState<number | null>(null);
+  const [guardandoDescuento, setGuardandoDescuento] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await client.get<Integration>(`/integrations/stripe_links?projectId=${projectId}`);
+      if (res.success) setData(res.data || EMPTY('stripe_links'));
+    } catch {/* ignore */} finally { setLoading(false); }
+  }, [projectId]);
+  useEffect(() => { load(); setPermisos(null); }, [load]);
+
+  useEffect(() => {
+    setDescuento('');
+    setDescuentoGuardado(null);
+    if (!puedeConfigurar) return undefined;
+    // Una respuesta que llega tarde, de otro campus, no pisa la de este.
+    let vigente = true;
+    client.get<{ descuento_max_pct: number }>(`/links-pago/config?projectId=${projectId}`)
+      .then((res) => {
+        if (vigente && res.success) {
+          setDescuentoGuardado(res.data.descuento_max_pct);
+          setDescuento(String(res.data.descuento_max_pct));
+        }
+      })
+      .catch(() => { /* la tarjeta sigue sirviendo para la clave */ });
+    return () => { vigente = false; };
+  }, [projectId, puedeConfigurar]);
+
+  async function save() {
+    if (!apiKey.trim()) {
+      toast({ title: 'Falta la clave', description: 'Pega la clave restringida (rk_…) que creó Diego para los links.', variant: 'destructive' });
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await client.put<Integration>('/integrations', {
+        projectId, provider: 'stripe_links', active: true, api_key: apiKey.trim(),
+      });
+      if (res.success) {
+        setData(res.data);
+        setApiKey('');
+        setPermisos(null);
+        toast({ title: 'Clave de links guardada', description: 'Queda cifrada. Pulsa «Probar conexión».' });
+      }
+    } catch (e: unknown) {
+      const err = e as { data?: { error?: string }; message?: string };
+      toast({ title: 'No se ha podido guardar', description: err?.data?.error || err?.message, variant: 'destructive' });
+    } finally { setSaving(false); }
+  }
+
+  async function test() {
+    setTesting(true);
+    try {
+      const res = await client.post<{ ok: boolean; message: string; permisos?: Permisos }>(`/integrations/stripe_links/test?projectId=${projectId}`);
+      setPermisos(res.data?.permisos || null);
+      if (res.success) toast({ title: '✓ Conexión OK', description: res.data?.message });
+      else toast({ title: 'La prueba ha fallado', description: res.data?.message || 'Stripe no ha contestado.', variant: 'destructive' });
+      await load();
+    } catch (e: unknown) {
+      const err = e as { data?: { error?: string } };
+      toast({ title: 'La prueba ha fallado', description: err?.data?.error || 'Error de red', variant: 'destructive' });
+    } finally { setTesting(false); }
+  }
+
+  async function clear() {
+    if (!confirm('¿Quitar la clave de links de pago de este campus? La de lectura (tarjeta «Stripe») no se toca.')) return;
+    try {
+      await client.delete(`/integrations/stripe_links?projectId=${projectId}`);
+      toast({ title: 'Clave de links quitada' });
+      setData(EMPTY('stripe_links')); setApiKey(''); setPermisos(null);
+    } catch (e: unknown) {
+      const err = e as { message?: string };
+      toast({ title: 'No se ha podido quitar', description: err?.message, variant: 'destructive' });
+    }
+  }
+
+  async function guardarDescuento() {
+    const n = Number(descuento.replace(',', '.'));
+    if (!Number.isFinite(n) || n < 0 || n > 100) {
+      toast({ title: 'Descuento no válido', description: 'Un número de 0 a 100.', variant: 'destructive' });
+      return;
+    }
+    setGuardandoDescuento(true);
+    try {
+      const res = await client.put<{ descuento_max_pct: number }>('/links-pago/config', { projectId, descuento_max_pct: n });
+      if (res.success) {
+        setDescuentoGuardado(res.data.descuento_max_pct);
+        setDescuento(String(res.data.descuento_max_pct));
+        toast({ title: 'Descuento máximo guardado', description: `${res.data.descuento_max_pct} % sobre el precio del catálogo.` });
+      }
+    } catch (e: unknown) {
+      const err = e as { data?: { error?: string }; message?: string };
+      toast({ title: 'No se ha podido guardar', description: err?.data?.error || err?.message, variant: 'destructive' });
+    } finally { setGuardandoDescuento(false); }
+  }
+
+  const modo = data?.config_public?.modo;
+  const restringida = String(data?.config_public?.restringida) === 'true';
+  // Lo de la última prueba: el servidor lo guarda, así se ve también al volver.
+  const vistos: Permisos | null = permisos
+    ?? ((data?.config_public as unknown as { permisos?: Permisos | null } | undefined)?.permisos || null);
+  const descuentoCambiado = descuento.trim() !== '' && Number(descuento.replace(',', '.')) !== descuentoGuardado;
+
+  return (
+    <div className="bg-card border border-border rounded-lg overflow-hidden">
+      <div className="px-5 py-4 border-b border-border flex items-start gap-3">
+        <div className="w-10 h-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
+          <LinkSimple size={22} weight="duotone" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className="font-semibold text-base flex flex-wrap items-center gap-2">
+            Links de pago
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-warning-soft text-warning-soft-foreground">PRUEBAS</span>
+          </h3>
+          <p className="text-xs text-muted-foreground">
+            La clave con la que el CRM <strong>creará</strong> links de pago en la cuenta de Stripe de este campus.
+            Va aparte de la de lectura de arriba, que no se toca. Todavía no se crea ningún link: esto deja la clave lista.
+          </p>
+        </div>
+        <StatusPill data={data} />
+      </div>
+
+      <div className="p-5 space-y-4">
+        <div className="rounded-md border border-border bg-muted/30 p-3 text-xs space-y-2">
+          <p className="font-semibold">Qué permisos tiene que llevar la clave restringida</p>
+          <p className="text-muted-foreground">
+            En <a href="https://dashboard.stripe.com/apikeys" target="_blank" rel="noopener noreferrer" className="text-primary inline-flex items-center gap-0.5 hover:underline">dashboard.stripe.com/apikeys <ArrowSquareOut size={10} weight="bold" /></a> →
+            «Create restricted key». Primero en <strong>modo test</strong>. Todo lo demás, en <em>None</em>:
+          </p>
+          <ul className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+            {PERMISOS_DE_LA_CLAVE.map((x) => {
+              const visto = vistos ? vistos[x.clave] : undefined;
+              return (
+                <li key={x.clave} className="flex items-center gap-1.5">
+                  {visto === true && <CheckCircle size={12} weight="fill" className="text-success flex-shrink-0" aria-hidden="true" />}
+                  {visto === false && <WarningCircle size={12} weight="fill" className="text-destructive flex-shrink-0" aria-hidden="true" />}
+                  {(visto === undefined || visto === null) && <MinusCircle size={12} className="text-muted-foreground flex-shrink-0" aria-hidden="true" />}
+                  <span><strong>{x.nombre}</strong> · {x.nivel}</span>
+                  {visto === true && <span className="text-success-soft-foreground">(la lee)</span>}
+                  {visto === false && <span className="text-destructive-soft-foreground">(sin permiso)</span>}
+                </li>
+              );
+            })}
+          </ul>
+          <p className="text-muted-foreground">
+            Con cuotas harán falta también <em>Subscriptions</em> y <em>Subscription Schedules</em> con escritura.
+            «Probar conexión» solo lee (no crea nada en Stripe), así que dice si cada permiso <strong>lee</strong>;
+            la escritura se confirmará con el primer link de prueba.
+          </p>
+        </div>
+
+        <div>
+          <label htmlFor={`stripe-links-key-${projectId}`} className="text-[11px] font-semibold text-muted-foreground mb-1 block">
+            Clave restringida de escritura
+            {data?.has_secret && (
+              <span className="font-normal text-muted-foreground/80 ml-1">
+                (actualmente: <code className="bg-muted px-1 rounded text-[10px]">{data.secret_preview}</code>
+                {modo && <> · {modo === 'live' ? 'LIVE' : 'TEST'}{restringida ? ', restringida' : ', secreta'}</>}
+                {' '}— deja vacío para no cambiar)
+              </span>
+            )}
+          </label>
+          <div className="relative">
+            <input
+              id={`stripe-links-key-${projectId}`}
+              type={showKey ? 'text' : 'password'}
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              autoComplete="off"
+              disabled={!puedeEditar}
+              placeholder={data?.has_secret ? 'Sin cambios' : 'rk_test_… (primero en modo test)'}
+              className="w-full h-10 pl-3 pr-10 rounded-md border border-border bg-card text-sm font-mono disabled:opacity-60"
+            />
+            <button type="button" onClick={() => setShowKey((v) => !v)} aria-label={showKey ? 'Ocultar la clave' : 'Ver la clave'}
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground">
+              {showKey ? <EyeSlash size={14} /> : <Eye size={14} />}
+            </button>
+          </div>
+          {data?.has_secret && modo && !restringida && (
+            <p className="text-[11px] text-warning-soft-foreground mt-1.5">
+              Es la clave secreta de la cuenta (sk_…), con todos los permisos. Mejor una restringida solo para los links.
+            </p>
+          )}
+        </div>
+
+        {puedeConfigurar && (
+          <div className="rounded-md border border-border p-3 space-y-2">
+            <label htmlFor={`links-descuento-${projectId}`} className="text-sm font-semibold flex items-center gap-1.5">
+              <Percent size={14} weight="bold" aria-hidden="true" /> Descuento máximo en este campus
+            </label>
+            <p className="text-xs text-muted-foreground">
+              Lo que una gestora puede rebajar sobre el precio del catálogo al crear un link. Con 0, solo el admin descuenta.
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative w-28">
+                <input id={`links-descuento-${projectId}`} type="number" inputMode="decimal" min={0} max={100} step={0.5}
+                  value={descuento} onChange={(e) => setDescuento(e.target.value)}
+                  className="w-full h-10 pl-3 pr-7 rounded-md border border-border bg-card text-sm tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
+                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-sm text-muted-foreground" aria-hidden="true">%</span>
+              </div>
+              <button onClick={guardarDescuento} disabled={guardandoDescuento || !descuentoCambiado}
+                className="inline-flex items-center gap-1.5 h-10 px-3 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted disabled:opacity-50">
+                <FloppyDisk size={14} weight="bold" /> {guardandoDescuento ? 'Guardando…' : 'Guardar descuento'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        <TestStatus data={data} />
+
+        <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
+          <button onClick={save} disabled={saving || !puedeEditar}
+            title={!puedeEditar ? 'Hace falta «Configurar integraciones»' : undefined}
+            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50">
+            <FloppyDisk size={14} weight="bold" /> {saving ? 'Guardando…' : 'Guardar'}
+          </button>
+          <button onClick={test} disabled={testing || !data?.has_secret || !puedeEditar}
+            title={!data?.has_secret ? 'Guarda primero la clave' : 'Probar la clave con Stripe (solo lee)'}
+            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted disabled:opacity-50">
+            <PlugsConnected size={14} weight="bold" /> {testing ? 'Probando…' : 'Probar conexión'}
+          </button>
+          {data?.has_secret && puedeEditar && (
+            <button onClick={clear}
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-destructive/30 bg-card text-sm font-semibold text-destructive hover:bg-destructive-soft ml-auto">
+              <Trash size={14} weight="bold" /> Quitar
             </button>
           )}
         </div>

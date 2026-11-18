@@ -141,7 +141,9 @@ import { startTasksDailySummaryScheduler } from './jobs/tasksDailySummaryJob.js'
 import { startTareasResumenScheduler } from './jobs/tareasResumenJob.js';
 // Lo que aún no está aprobado para producción: el tablero (#210), las facturas de colaboradores (#202),
 // el aviso de entregas sin corregir (#457) y el plugin del CRM en cada Moodle (#406).
-import { tareasActivas, facturasColaboradorActivas, pluginMoodleActivo } from './shared/config/soloEnPruebas.js';
+import { tareasActivas, facturasColaboradorActivas, linksPagoActivos, pluginMoodleActivo } from './shared/config/soloEnPruebas.js';
+// Links de pago (#407, gemela de CRM#680): solo en pruebas también en el servidor, hasta que Diego lo apruebe.
+import linksPagoModule from './modules/links-pago/index.js';
 import { porteroDelWebhook, topeDelEnvio, traducirTope } from './modules/webhook-tokens/portero.js';
 import { MAX_ENVIO_BYTES } from './modules/matriculas/admision.archivos.js';
 
@@ -412,7 +414,10 @@ const MODULES = [
   iaAnalisisModule,
   // El tablero aún no está aprobado para producción: solo en local y /staging.
   ...(tareasActivas() ? [tasksModule] : []),
+  // Links de pago (#407): solo en pruebas también en el servidor, hasta que Diego lo apruebe.
+  ...(linksPagoActivos() ? [linksPagoModule] : []),
 ];
+if (!linksPagoActivos()) logger.info('Modulo SKIP (solo en pruebas): /api/links-pago');
 if (!tareasActivas()) logger.info('Modulo SKIP (solo en pruebas): /api/tasks');
 
 if (!facturasColaboradorActivas()) logger.info('Modulo SKIP (solo en pruebas): /api/facturas-colaborador');
