@@ -343,3 +343,21 @@ export async function listPendientesDeAsociar(projectId, limit = 500) {
   );
   return rows;
 }
+
+/**
+ * Las columnas dispute_* del cargo, al dia con la disputa guardada (#396). Las
+ * lee la pantalla de Pagos Stripe; la de Disputas lee `stripe_disputes`.
+ * `d` es la fila de `stripe_disputes` (importes ya en unidades).
+ */
+export async function marcarDisputaEnElCargo(projectId, chargeId, d) {
+  if (!chargeId || !d) return;
+  await query(
+    `UPDATE stripe_payments SET
+       disputed = true,
+       dispute_id = $1, dispute_status = $2, dispute_reason = $3,
+       dispute_amount = $4, dispute_evidence_due_by = $5,
+       updated_at = NOW()
+     WHERE project_id = $6 AND stripe_id = $7`,
+    [d.dispute_id, d.status, d.reason, d.amount, d.evidence_due_by, projectId, chargeId]
+  );
+}

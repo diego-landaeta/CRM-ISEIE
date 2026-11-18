@@ -107,6 +107,7 @@ import { startWooCommerceSyncScheduler } from './jobs/wooCommerceSyncScheduler.j
 import { startStripePaymentsSyncScheduler } from './jobs/stripePaymentsSyncScheduler.js';
 import { startPaypalCobrosSyncScheduler } from './jobs/paypalCobrosSyncScheduler.js';
 import { startMonitaskSyncScheduler } from './jobs/monitaskSyncScheduler.js';
+import { startStripeDisputasScheduler } from './jobs/stripeDisputasScheduler.js';
 import { startTutorCommissionsScheduler } from './jobs/tutorCommissionsScheduler.js';
 import { startTutoresCampusScheduler } from './jobs/tutoresCampusScheduler.js';
 import { startConsultasCampusScheduler } from './jobs/consultasCampusScheduler.js';
@@ -567,6 +568,13 @@ if (process.env.NODE_ENV !== 'test') {
       startMonitaskSyncScheduler();
     } catch (err) {
       logger.error({ err }, 'Monitask: la sincronización nocturna falló al arrancar');
+    }
+    // Disputas de Stripe (#396, gemela de CRM#839): traerlas de cada cuenta y avisar
+    // a los admins. Solo con STRIPE_DISPUTAS_ACTIVO=1; apagado, no arranca.
+    try {
+      startStripeDisputasScheduler();
+    } catch (err) {
+      logger.error({ err }, 'Disputas de Stripe: el sondeo falló al arrancar');
     }
     // Seguridad del MCP (#237, desde #194 y #195): fuera del bloque de Stripe
     // a propósito, para que apagar la sincronización de Stripe no la apague.
