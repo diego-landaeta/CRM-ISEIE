@@ -49,12 +49,32 @@ import EnviosBrevo, { fechaHoraMadrid } from '../components/EnviosBrevo';
  *     lo que no debía emitirse.
  */
 
+
+/** #351: qué decir de un número revertido: con cuál se volvió a emitir y cuál vale hoy. */
+function textoReemision(a: { sustituidaPor: string | null; vigente?: string | null; cursoCerrado?: boolean } | null | undefined): string {
+  // Un diploma de ese curso se revocó (el reemitido, uno posterior de la cadena u otro: no se sabe
+  // cuál): el curso quedó cerrado para esa persona y no se emite otro. Se mira ANTES que si se
+  // reemitió, como en el buscador (`rotuloAnulado`): sin reemitir, no está para volver a emitirlo.
+  if (a?.cursoCerrado) {
+    return a.sustituidaPor
+      ? `Se volvió a emitir con ${a.sustituidaPor}, y después se revocó un diploma de ese curso: queda cerrado para el alumno, no se vuelve a emitir.`
+      : 'Se revocó un diploma de ese curso: queda cerrado para el alumno, no se vuelve a emitir.';
+  }
+  if (!a?.sustituidaPor) return 'Está en «Aprobados sin diploma» para volver a emitirlo.';
+  if (a.vigente === undefined || a.vigente === a.sustituidaPor) return `Se volvió a emitir con ${a.sustituidaPor}.`;
+  return a.vigente
+    ? `Se volvió a emitir con ${a.sustituidaPor}, que también se revirtió; hoy vale ${a.vigente}.`
+    : `Se volvió a emitir con ${a.sustituidaPor}, que también se revirtió; aún no tiene otro.`;
+}
+
 const PESTANAS: { clave: PestanaDiplomas; rotulo: string }[] = [
   { clave: 'pendientes', rotulo: 'Pendientes' },
   { clave: 'terminados', rotulo: 'Terminaron sin pedir' },
   { clave: 'enviados', rotulo: 'Emitidos' },
   { clave: 'rechazados', rotulo: 'Rechazados' },
   { clave: 'revocados', rotulo: 'Revocados' },
+  // #351: el historial de lo revertido (el número anulado), también después de reemitir.
+  { clave: 'revertidos', rotulo: 'Revertidos' },
 ];
 
 /** Por llamada: emitir baja el expediente de Moodle en serie (ver TANDA_EMITIR en Emisiones). */
@@ -124,6 +144,8 @@ type Dialogo =
   | { tipo: 'avisos'; exps: string[]; reenvio: boolean; fuera?: boolean }
   | { tipo: 'avisoRechazo'; ids: number[] }
   | { tipo: 'revocar'; d: Diploma }
+  // #351: un diploma de «Emitidos, falta enviarlos» (la fila trae la matrícula y el diploma).
+  | { tipo: 'revertir'; nexpediente: string; quien: string }
   | { tipo: 'corregir'; d: Diploma };
 
 const ROTULO_AVISO: Record<string, string> = {
@@ -384,6 +406,7 @@ const lineaPrograma = (p: ProgramaDelCrm | null | undefined) => {
 
 /** ¿Lo emitió este CRM? Un Certifex/CRM anterior no manda la marca: se da por hecho que sí. */
 const delCrm = (d: Pick<Diploma, 'emitidoEnCrm'>) => d.emitidoEnCrm !== false;
+const COMPROBANDO_REVERTIR = 'Comprobando si Certifex permite revertir…';
 
 const NO_SALIO: Record<string, string> = {
   correo_apagado: 'el correo está apagado en el servidor de Certifex',
@@ -559,7 +582,11 @@ function SaludCampus({ campus }: { campus: CampusCertifex[] | null }) {
  * de administración no le sale: rechazar, el aviso de rechazo, corregir, revocar, la
  * firma, sincronizar el temario del catálogo y el A3 de imprenta.
  */
-export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir = false }: { soloLectura?: boolean; soloEmitir?: boolean } = {}) {
+export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir = false, puedeRevertir = false }: {
+  soloLectura?: boolean; soloEmitir?: boolean;
+  /** #351: quien tiene «Diplomas (Certifex) · Revertir diplomas». */
+  puedeRevertir?: boolean;
+} = {}) {
   // Administración: todo. Con `soloEmitir`, solo lo de emitir; con `soloLectura`, nada.
   const administra = !soloLectura && !soloEmitir;
   const [params, setParams] = useSearchParams();
@@ -625,7 +652,17 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
       .then((r) => {
         const d = r?.data?.filas?.find((x) => x.nexpediente === expUrl);
         if (!vivo) return;
-        if (d) setVisor({ d, enviable: !soloLectura && !d.revocada && !d.aviso && delCrm(d) });
+        // #351: un número revertido está anulado: ni su PDF ni su envío valen. Se dice.
+        if (d?.anulada) {
+          const a = d.anulacion;
+          toast({
+            title: `${expUrl} está anulado (revertido)`,
+            description: `${a?.por ? `Lo revirtió ${a.por}` : 'Se revirtió'}${a?.en ? ` el ${fecha(a.en)}` : ''}${a?.motivo ? `: ${a.motivo}` : ''}. ${textoReemision(a)}`,
+          });
+          conExp(null);
+          return;
+        }
+        if (d) setVisor({ d, enviable: !soloLectura && !d.revocada && !d.anulada && !d.aviso && delCrm(d) });
         else toast({ title: 'No se encontró ese diploma', description: `${expUrl} no existe o no es de tus campus.`, variant: 'destructive' });
       })
       .catch((e) => { if (vivo) toast({ title: 'No se pudo abrir el diploma', description: (e as Error).message, variant: 'destructive' }); });
@@ -636,6 +673,10 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
   const [versiones, setVersiones] = useState<Record<string, number>>({});
   // «Editar»: revisar los datos de una solicitud antes de aprobarla.
   const [editando, setEditando] = useState<Solicitud | null>(null);
+  const [totalRevertidos, setTotalRevertidos] = useState<number | null>(null);
+  // #351: con un Certifex que aún no revierte (sin su 0045) no hay «Revertidos»: la pestaña no sale.
+  const [sinRevertidos, setSinRevertidos] = useState(false);
+  const [mirarRevertidos, setMirarRevertidos] = useState(0);
   // «Nuevo diploma» (19/10): desde cero, eligiendo cliente y formación.
   const [creandoNuevo, setCreandoNuevo] = useState(false);
   // «Pasar a pendientes» (22/10/2026): la matrícula que se está pidiendo, para su botón.
@@ -674,6 +715,24 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
     return () => { vivo = false; };
   }, [comprobar]);
 
+  // #351: ¿se puede revertir ya? Mientras el Certifex conectado no lo permita (su 0045), el
+  // botón sale desactivado con el motivo; nunca un error a medias. null = sí se puede.
+  const [motivoSinRevertir, setMotivoSinRevertir] = useState<string | null>(COMPROBANDO_REVERTIR);
+  useEffect(() => {
+    // #351: «Revertir» va con su propio permiso (`diplomas.revertir`), no con el de emitir: quien
+    // lo tiene lo ve aunque el resto de la pantalla sea de solo lectura (12.ª auditoría).
+    if (!puedeRevertir) return;
+    // Solo cuando se SABE que no está conectado; mientras carga, «Comprobando…».
+    if (conexion && !conexion.conectado) { setMotivoSinRevertir('Certifex no está conectado.'); return; }
+    if (!conexion?.conectado) { setMotivoSinRevertir(COMPROBANDO_REVERTIR); return; }
+    let vivo = true;
+    setMotivoSinRevertir(COMPROBANDO_REVERTIR);
+    diplomasApi.revertirDisponible()
+      .then((r) => { if (vivo) setMotivoSinRevertir(r.data.disponible ? null : (r.data.motivo || 'Certifex todavía no permite revertir diplomas.')); })
+      .catch((e) => { if (vivo) setMotivoSinRevertir(`No se pudo comprobar si Certifex permite revertir: ${(e as Error).message}`); });
+    return () => { vivo = false; };
+  }, [puedeRevertir, conexion, recarga]);
+
   /** El nombre del campus, si Certifex lo da; si no, su código. */
   const nombreCampus = useMemo(() => {
     const m = new Map((campus ?? []).map((c) => [c.codigo, c.nombre || c.codigo]));
@@ -708,6 +767,31 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
     if (!conexion?.conectado) return;
     diplomasApi.resumen(centro || undefined).then((r) => setResumen(r.data)).catch(() => setResumen(null));
   }, [conexion?.conectado, centro, recarga]);
+
+  useEffect(() => {
+    if (!conexion?.conectado) return;
+    // #351: cuántos revertidos (aparte del resumen, cuya forma no cambia). Si Certifex aún no
+    // los conoce, la pestaña sale sin número.
+    // Dentro de la promesa: si el contador falla (o no está), la pantalla sigue igual.
+    // `vivo`: una respuesta que llega tarde (de otro campus, o de una vuelta anterior) no pisa la
+    // de ahora.
+    let vivo = true;
+    Promise.resolve()
+      .then(() => diplomasApi.diplomas({ estado: 'anulados', centro: centro || undefined, pagina: 1, tam: 1 }))
+      .then((r) => { if (vivo) { setSinRevertidos(r?.data?.sinRevertir === true); setTotalRevertidos(Number(r?.data?.total ?? 0)); } })
+      // Si no se pudo saber, la pestaña se enseña (sin número): ocultarla es solo para cuando
+      // Certifex DICE que aún no revierte. (Y si no revierte, al abrirla sale vacía, sin error.)
+      .catch(() => { if (vivo) { setSinRevertidos(false); setTotalRevertidos(null); } });
+    return () => { vivo = false; };
+  }, [conexion?.conectado, centro, recarga, mirarRevertidos]);
+
+  // #351: sin «Revertidos» (Certifex aún no revierte), se vuelve a mirar cada 30 s: desplegado
+  // Certifex, la pestaña sale sola, sin recargar la página.
+  useEffect(() => {
+    if (!sinRevertidos) return;
+    const t = setTimeout(() => setMirarRevertidos((n) => n + 1), 30_000);
+    return () => clearTimeout(t);
+  }, [sinRevertidos, mirarRevertidos]);
 
   useEffect(() => {
     if (!conexion?.conectado) return;
@@ -748,7 +832,7 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
         } else {
           const d = await diplomasApi.diplomas({
             ...filtros,
-            estado: pestana === 'enviados' ? 'vigentes' : 'revocados',
+            estado: pestana === 'enviados' ? 'vigentes' : pestana === 'revertidos' ? 'anulados' : 'revocados',
             aviso: pestana === 'enviados' && filtroAviso ? filtroAviso : undefined,
             pagina,
             tam: TAM,
@@ -775,6 +859,32 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
     return m;
   }, [solicitudes, despues]);
   const nombre = (id: number | null) => (id != null && nombres.get(id)) || `Matrícula #${id}`;
+  /**
+   * #351, prevención: de un lote a emitir, las que saldrían sin el temario oficial de la
+   * formación. Con matrícula de Moodle, «Con lo de Moodle»: sin programa del CRM, o con sus
+   * horas pero sin módulos (Certifex pone entonces las actividades del curso de Moodle, lo
+   * de «tiene los módulos malos»). Creadas desde el CRM, sin programa o sin módulos no
+   * llevan temario.
+   *
+   * Aparte, las que NO se emitirán: con datos revisados a mano («Editar»: formación,
+   * programa o correo del CRM) y aun así sin programa, el servidor no las emite (ver
+   * `prepararEmision` en certifex.emision.js, «tiene datos revisados a mano y con ellos no
+   * sale el programa»). Decir de ellas «saldrá sin el temario» sería falso.
+   * Solo las que se sabe: sin el dato del programa (no se pudo mirar), no se dice nada.
+   */
+  const avisosDeTemario = (ids: number[]) => {
+    const porId = new Map([...solicitudes, ...despues.sinEmitir].map((c) => [c.matriculaId, c]));
+    const noSeEmitiran: Solicitud[] = [];
+    const sinTemario: Solicitud[] = [];
+    for (const id of ids) {
+      const c = porId.get(id);
+      if (!c || c.programaCrm === undefined) continue;
+      const p = c.programaCrm?.programa;
+      if (!p && c.edicion) noSeEmitiran.push(c);
+      else if (!p || p.modulos.length === 0) sinTemario.push(c);
+    }
+    return { noSeEmitiran, sinTemario };
+  };
   const nombreDe = (exp: string | null) => {
     const d = diplomas.find((x) => x.nexpediente === exp) ?? despues.porAvisar.find((c) => c.nexpediente === exp)?.diploma;
     return d ? `${d.alumno} (${exp})` : exp ?? 'Diploma';
@@ -803,6 +913,7 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
     if (p === 'terminados') return resumen.terminados;
     if (p === 'enviados') return resumen.vigentes;
     if (p === 'rechazados') return resumen.rechazadas;
+    if (p === 'revertidos') return totalRevertidos ?? undefined;
     return resumen.revocados;
   };
 
@@ -910,6 +1021,19 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
       : { title: 'Aprobado, pero el correo está apagado', description: 'No ha salido ningún correo: el servidor de Certifex tiene el envío apagado.', variant: 'destructive' });
   }, 'No se pudo enviar el aviso');
 
+  // #351: el número se anula y la fila vuelve a «Aprobados sin diploma» (al recargar).
+  const revertir = (nexpediente: string, motivo: string) => ejecutarEnDialogo(async () => {
+    const r = await diplomasApi.revertir(nexpediente, motivo);
+    toast(r.data.aviso
+      ? { title: 'Revertido, con un aviso', description: r.data.aviso, variant: 'destructive' }
+      : {
+        title: 'Diploma revertido',
+        description: soloLectura
+          ? `${nexpediente} queda anulado. Vuelve a «Aprobados sin diploma»: quien emite diplomas puede corregirlo con «Editar» y emitirlo; saldrá con otro número.`
+          : `${nexpediente} queda anulado. Vuelve a «Aprobados sin diploma»: corrige lo que haga falta con «Editar» y emítelo; saldrá con otro número.`,
+      });
+  });
+
   const revocar = (d: Diploma, motivo: string) => ejecutarEnDialogo(async () => {
     await diplomasApi.revocar(d.nexpediente, motivo);
     toast({ title: 'Diploma revocado', description: `${d.nexpediente}: la verificación pública ya dice «revocado». No se ha avisado al alumno.` });
@@ -1001,6 +1125,13 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
         revocadoEn: fechaExcel(d.revocacion?.en),
         revocadoPor: d.revocacion?.por ?? '',
         motivoRevocacion: d.revocacion?.motivo ?? '',
+        revertidoEn: fechaExcel(d.anulacion?.en),
+        revertidoPor: d.anulacion?.por ?? '',
+        motivoReversion: d.anulacion?.motivo ?? '',
+        reemitidoComo: d.anulacion?.sustituidaPor ?? '',
+        // El que vale hoy (si se revirtió dos veces, «Reemitido como» también está anulado). Un
+        // Certifex que aún no manda `vigente`: el de «Reemitido como».
+        valeHoy: (d.anulacion && d.anulacion.vigente !== undefined ? d.anulacion.vigente : d.anulacion?.sustituidaPor) ?? '',
         verificar: d.verificarUrl ?? '',
       });
       const deTerminado = (c: Terminado): FilaX => ({
@@ -1026,7 +1157,7 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
           filas.push(...despues.sinEmitir.map((c) => deSolicitud(c, 'Aprobado sin diploma')));
         }
       } else {
-        const d = await diplomasApi.diplomas({ ...todo, estado: pestana === 'enviados' ? 'vigentes' : 'revocados', aviso: pestana === 'enviados' && filtroAviso ? filtroAviso : undefined });
+        const d = await diplomasApi.diplomas({ ...todo, estado: pestana === 'enviados' ? 'vigentes' : pestana === 'revertidos' ? 'anulados' : 'revocados', aviso: pestana === 'enviados' && filtroAviso ? filtroAviso : undefined });
         truncado = !!d.data.truncado;
         filas = d.data.filas.map(deDiploma);
       }
@@ -1041,6 +1172,11 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
           ? [col('estado', 'Estado', 22), col('nombreDiploma', 'Nombre para el diploma', 32), col('nombreMoodle', 'Nombre en Moodle', 28), col('email', 'Correo', 34),
             col('campus', 'Campus', 20), col('formacion', 'Formación', 48), col('solicitada', 'Solicitada', F), col('nota', 'Nota', 8, 'number'),
             col('nexpediente', 'Nº expediente', 24), col('decision', 'Decisión', 36), col('decididaEn', 'Decidida', F), col('motivo', 'Motivo', 48), col('avisoRechazo', 'Aviso de rechazo', 36)]
+          : pestana === 'revertidos'
+            // #351: el número anulado, quién, cuándo, por qué y con cuál se volvió a emitir.
+            ? [col('nexpediente', 'Nº expediente anulado', 24), col('alumno', 'Alumno', 32), col('campus', 'Campus', 20), col('titulacion', 'Titulación', 48),
+              col('emitido', 'Emitido', F), col('emitidaPor', 'Emitido por', 34), col('revertidoEn', 'Revertido', F), col('revertidoPor', 'Revertido por', 34),
+              col('motivoReversion', 'Motivo', 48), col('reemitidoComo', 'Reemitido como', 24), col('valeHoy', 'Vale hoy', 24)]
           : pestana === 'revocados'
             // Revocado no hay aviso que enseñar: sin esas columnas.
             ? [col('nexpediente', 'Nº expediente', 24), col('alumno', 'Alumno', 32), col('campus', 'Campus', 20), col('titulacion', 'Titulación', 48),
@@ -1096,7 +1232,8 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
     );
   }
 
-  const fechaRotulo = pestana === 'enviados' || pestana === 'revocados' ? 'Emitido' : 'Solicitado';
+  // En Revertidos (#351) las fechas son las de la reversión (es por lo que filtra el servidor).
+  const fechaRotulo = pestana === 'revertidos' ? 'Revertido' : pestana === 'enviados' || pestana === 'revocados' ? 'Emitido' : 'Solicitado';
   // En bloque solo lo emitido por el CRM: lo de fuera se reenvía de uno en uno, a propósito.
   const enviables = [...elegidas].filter((k) => diplomas.some((d) => d.nexpediente === k && (delCrm(d) || d.aviso)));
   const conAviso = enviables.filter((k) => diplomas.find((d) => d.nexpediente === k)?.aviso).length;
@@ -1212,7 +1349,7 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
       <Card padding="none">
         {/* Pestañas y filtros */}
         <CardSection className="flex flex-wrap items-center gap-2">
-          {PESTANAS.map((p) => (
+          {PESTANAS.filter((p) => p.clave !== 'revertidos' || !sinRevertidos || pestana === 'revertidos').map((p) => (
             <Pestana key={p.clave} activa={pestana === p.clave} cuenta={contar(p.clave)} onClick={() => irA(p.clave)}>{p.rotulo}</Pestana>
           ))}
         </CardSection>
@@ -1260,7 +1397,7 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
           )}
           <div className="min-w-[200px] flex-1 sm:max-w-[300px]">
             <Buscador id="diplomas-buscar" valor={buscar} alCambiar={setBuscar}
-              placeholder={pestana === 'enviados' || pestana === 'revocados' ? 'Nombre, nº de expediente o titulación…' : 'Nombre o correo…'} />
+              placeholder={pestana === 'enviados' || pestana === 'revocados' || pestana === 'revertidos' ? 'Nombre, nº de expediente o titulación…' : 'Nombre o correo…'} />
           </div>
           {hayFiltros && (
             <button type="button" className="h-9 text-xs text-muted-foreground underline hover:text-foreground"
@@ -1355,6 +1492,8 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
                 verPdf={(c) => c.diploma && abrirFicha(c.diploma, !soloLectura)}
                 enviar={(exps) => setDialogo({ tipo: 'avisos', exps, reenvio: false })}
                 soloLectura={soloLectura}
+                revertir={puedeRevertir ? (c) => abrir({ tipo: 'revertir', nexpediente: c.nexpediente!, quien: nombre(c.matriculaId) }) : undefined}
+                motivoSinRevertir={motivoSinRevertir}
               />
             )}
             {despues.sinEmitir.length > 0 && (
@@ -1362,7 +1501,7 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <p className="text-sm font-semibold">Aprobados sin diploma ({despues.sinEmitir.length})</p>
-                    <p className="text-xs text-muted-foreground">El visto bueno está dado, pero la emisión no terminó. Se puede reintentar.</p>
+                    <p className="text-xs text-muted-foreground">El visto bueno está dado y no tienen diploma: la emisión no terminó, o se revirtió para corregirlo. Se puede emitir.</p>
                   </div>
                   {!soloLectura && (
                     <div className="flex flex-col items-end gap-1">
@@ -1385,6 +1524,11 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
                       <Etiqueta tono={!tieneDni(c) ? 'destructive' : c.programaCrm?.programa ? 'info' : 'warning'}>
                         {nombre(c.matriculaId)}{c.solicitud?.revisado ? ' (nombre revisado)' : ''} · {c.curso.nombre} · {lineaPrograma(c.programaCrm)}{tieneDni(c) ? '' : ' · falta el DNI'}
                       </Etiqueta>
+                      {c.revertido && (
+                        <span title={`Revertido por ${c.revertido.por} el ${fecha(c.revertido.en)}: ${c.revertido.motivo}`}>
+                          <Etiqueta tono="neutral">Revertido · {c.revertido.nexpediente} anulado</Etiqueta>
+                        </span>
+                      )}
                       {!soloLectura && (
                         <button type="button" disabled={trabajando} onClick={() => setEditando(c)}
                           aria-label={tieneDni(c) ? `Editar los datos de ${nombre(c.matriculaId)}` : `Poner el DNI de ${nombre(c.matriculaId)}`}
@@ -1538,8 +1682,8 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
         ) : diplomas.length === 0 ? (
           <EmptyState
             icon={pestana === 'enviados' ? Certificate : Prohibit}
-            title={hayFiltros ? 'Nada coincide con los filtros' : pestana === 'enviados' ? 'Todavía no hay diplomas emitidos' : 'No hay diplomas revocados'}
-            description={hayFiltros ? 'Prueba con otros filtros o límpialos.' : pestana === 'enviados' ? 'Al aprobar y emitir una solicitud, el diploma aparece aquí.' : 'Un diploma revocado sale aquí con su motivo, quién y cuándo.'}
+            title={hayFiltros ? 'Nada coincide con los filtros' : pestana === 'enviados' ? 'Todavía no hay diplomas emitidos' : pestana === 'revertidos' ? 'No hay diplomas revertidos' : 'No hay diplomas revocados'}
+            description={hayFiltros ? 'Prueba con otros filtros o límpialos.' : pestana === 'enviados' ? 'Al aprobar y emitir una solicitud, el diploma aparece aquí.' : pestana === 'revertidos' ? 'Un diploma revertido antes de enviarlo sale aquí: el número anulado, quién, cuándo, por qué y con qué número se volvió a emitir.' : 'Un diploma revocado sale aquí con su motivo, quién y cuándo.'}
           />
         ) : (
           <TablaDesplazable>
@@ -1547,10 +1691,10 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
               <thead className="bg-muted/40 text-[11px] uppercase tracking-wide text-muted-foreground">
                 <tr className="border-b border-border">
                   {pestana === 'enviados' && !soloLectura && <th className="w-10 px-4 py-2 text-left"><Casilla id="diplomas-elegir-todas" etiqueta="Elegir toda la página" marcada={todas} alCambiar={() => setElegidas(todas ? new Set() : new Set(filasClave))} /></th>}
-                  <Th className={pestana === 'revocados' || soloLectura ? 'pl-4' : undefined}>Alumno</Th>
+                  <Th className={pestana === 'revocados' || pestana === 'revertidos' || soloLectura ? 'pl-4' : undefined}>Alumno</Th>
                   <Th>Titulación</Th>
                   <Th>Emitido</Th>
-                  {pestana === 'enviados' ? <Th>Aviso al alumno</Th> : <><Th>Revocado</Th><Th>Motivo</Th></>}
+                  {pestana === 'enviados' ? <Th>Aviso al alumno</Th> : pestana === 'revertidos' ? <><Th>Revertido</Th><Th>Motivo</Th><Th>Reemitido como</Th></> : <><Th>Revocado</Th><Th>Motivo</Th></>}
                   <Th className="pr-4 text-right">Acciones</Th>
                 </tr>
               </thead>
@@ -1560,7 +1704,7 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
                   return (
                     <tr key={k} className={cn('align-top transition-colors', elegidas.has(k) ? 'bg-primary/5' : 'hover:bg-muted/40')}>
                       {pestana === 'enviados' && !soloLectura && <td className="px-4 py-3"><Casilla id={`diplomas-elegir-${k}`} etiqueta={`Elegir ${k}`} marcada={elegidas.has(k)} alCambiar={() => alternar(setElegidas, k)} /></td>}
-                      <td className={cn('px-2 py-3', (pestana === 'revocados' || soloLectura) && 'pl-4')}>
+                      <td className={cn('px-2 py-3', (pestana === 'revocados' || pestana === 'revertidos' || soloLectura) && 'pl-4')}>
                         <div className="max-w-[180px] truncate font-semibold" title={d.alumno}>{d.alumno}</div>
                         <div className="select-all font-mono text-[11px] text-primary">{d.nexpediente}</div>
                       </td>
@@ -1568,6 +1712,29 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
                       <td className="whitespace-nowrap px-2 py-3 text-xs">{fecha(d.emitidoEn)}<div className="max-w-[120px] truncate text-muted-foreground" title={d.emitidaPor ?? undefined}>{d.emitidaPor}</div></td>
                       {pestana === 'enviados' ? (
                         <td className="px-2 py-3"><EstadoAviso d={d} verEnvio={() => abrirFicha(d, !soloLectura && !d.aviso && delCrm(d))} /></td>
+                      ) : pestana === 'revertidos' ? (
+                        <>
+                          <td className="whitespace-nowrap px-2 py-3 text-xs">{fecha(d.anulacion?.en)}<div className="max-w-[160px] truncate text-muted-foreground" title={d.anulacion?.por ?? undefined}>{d.anulacion?.por || '—'}</div></td>
+                          <td className="px-2 py-3"><p className="max-w-[260px] text-sm italic text-muted-foreground">«{d.anulacion?.motivo || 'sin motivo'}»</p></td>
+                          <td className="px-2 py-3">{d.anulacion?.sustituidaPor
+                            ? <>
+                                <span className="select-all font-mono text-[11px] text-primary">{d.anulacion.sustituidaPor}</span>
+                                {/* Después se revocó un diploma de ese curso (este u otro posterior): curso cerrado. */}
+                                {d.anulacion.cursoCerrado ? (
+                                  <div className="text-[11px] text-muted-foreground">después se revocó un diploma de ese curso: curso cerrado, no se vuelve a emitir</div>
+                                ) : null}
+                                {/* Revertido más de una vez: ese también está anulado. Se dice cuál vale hoy. */}
+                                {!d.anulacion.cursoCerrado && d.anulacion.vigente !== undefined && d.anulacion.vigente !== d.anulacion.sustituidaPor && (
+                                  <div className="text-[11px] text-muted-foreground">
+                                    {d.anulacion.vigente ? <>también revertido; hoy vale <span className="select-all font-mono text-primary">{d.anulacion.vigente}</span></> : 'también revertido; aún sin otro'}
+                                  </div>
+                                )}
+                              </>
+                            : d.anulacion?.cursoCerrado
+                              // Sin reemitir y con un diploma de ese curso revocado: no vuelve a «Aprobados sin diploma».
+                              ? <span className="text-xs text-muted-foreground">No: se revocó un diploma de ese curso, curso cerrado</span>
+                              : <span className="text-xs text-muted-foreground">Todavía no (está en «Aprobados sin diploma»)</span>}</td>
+                        </>
                       ) : (
                         <>
                           <td className="whitespace-nowrap px-2 py-3 text-xs">{fecha(d.revocacion?.en)}<div className="max-w-[160px] truncate text-muted-foreground" title={d.revocacion?.por ?? undefined}>{d.revocacion?.por || '—'}</div></td>
@@ -1592,7 +1759,14 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
                           )}
                           {/* Revocado, Certifex ya no sirve su PDF (404): solo el enlace, que dice «revocado». */}
                           {pestana === 'enviados' && <IconoAccion etiqueta="Ver PDF" onClick={() => abrirFicha(d, !soloLectura && !d.aviso && delCrm(d))}><FilePdf size={15} /></IconoAccion>}
-                          <IconoAccion etiqueta={d.verificarUrl ? 'Copiar enlace de verificación' : 'Sin enlace público: Certifex no tiene una dirección que abra desde fuera'} disabled={!d.verificarUrl} onClick={() => copiarEnlace(d)}><LinkSimple size={15} /></IconoAccion>
+                          {/* Un número anulado (Revertidos) no se verifica: su enlace da «no existe». No se ofrece. */}
+                          {!d.anulada && <IconoAccion etiqueta={d.verificarUrl ? 'Copiar enlace de verificación' : 'Sin enlace público: Certifex no tiene una dirección que abra desde fuera'} disabled={!d.verificarUrl} onClick={() => copiarEnlace(d)}><LinkSimple size={15} /></IconoAccion>}
+                          {/* #351: lo emitido desde el CRM y aún sin enviar se revierte también aquí
+                              (p. ej. lo emitido desde Certificaciones › Emisiones, que no sale en Pendientes). */}
+                          {pestana === 'enviados' && puedeRevertir && !d.aviso && !d.entregado && !d.revocada && !d.anulada && delCrm(d) && d.revertibleAqui !== false && (
+                            <IconoAccion etiqueta={motivoSinRevertir ?? `Revertir ${d.nexpediente}`} disabled={trabajando || !!motivoSinRevertir}
+                              onClick={() => abrir({ tipo: 'revertir', nexpediente: d.nexpediente, quien: d.alumno })}><ArrowCounterClockwise size={15} /></IconoAccion>
+                          )}
                           {pestana === 'enviados' && administra && (
                             <>
                               <IconoAccion etiqueta="Corregir nombre" disabled={trabajando} onClick={() => abrir({ tipo: 'corregir', d })}><PencilSimple size={15} /></IconoAccion>
@@ -1703,6 +1877,68 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
                 {dialogo.sinDni} sin DNI no {dialogo.sinDni === 1 ? 'entra' : 'entran'}: el DNI es obligatorio en el diploma. Pónselo y emítelo después.
               </strong>
             )}
+            {/* #351, prevención: lo que saldría «Con lo de Moodle», dicho antes y con «Editar» a mano. */}
+            {(dialogo?.tipo === 'aprobarEmitir' || dialogo?.tipo === 'emitir') && (() => {
+              const { noSeEmitiran, sinTemario: moodle } = avisosDeTemario(dialogo.ids);
+              const bloqueadas = noSeEmitiran.length > 0 && (
+                <div className="mt-3 rounded-md border border-destructive/30 bg-destructive-soft px-3 py-2 text-foreground" role="note">
+                  <p className="flex items-start gap-1.5 font-semibold text-destructive-soft-foreground">
+                    <Warning size={16} className="mt-0.5 flex-none" />
+                    {noSeEmitiran.length === 1 ? 'No se emitirá' : `${noSeEmitiran.length} no se emitirán`}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {noSeEmitiran.length === 1 ? 'Tiene' : 'Tienen'} datos revisados a mano y con ellos no sale el programa (el motivo, junto al nombre).
+                    Revísalo con «Editar»: elige la formación o escribe el temario.
+                  </p>
+                  <ul className="mt-1.5 max-h-36 space-y-1 overflow-y-auto">
+                    {noSeEmitiran.slice(0, 5).map((c) => (
+                      <li key={c.matriculaId} className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                        <span className="min-w-0 truncate">{nombre(c.matriculaId)} · {c.curso.nombre}{c.programaCrm?.motivo ? ` · ${c.programaCrm.motivo}` : ''}</span>
+                        <Button type="button" size="sm" variant="outline" onClick={() => { setDialogo(null); setEditando(c); }}
+                          aria-label={`Editar los datos de ${nombre(c.matriculaId)} antes de emitir`}>
+                          <NotePencil size={14} className="mr-1.5" /> Editar
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                  {noSeEmitiran.length > 5 && <p className="mt-1 text-xs text-muted-foreground">y {noSeEmitiran.length - 5} más.</p>}
+                </div>
+              );
+              if (!moodle.length) return bloqueadas || null;
+              const uno = moodle.length === 1;
+              const deMoodle = moodle.every(esDeMoodle);
+              return (
+                <>
+                {bloqueadas}
+                <div className="mt-3 rounded-md border border-border bg-warning-soft/40 px-3 py-2 text-foreground" role="note">
+                  <p className="flex items-start gap-1.5 font-semibold">
+                    <Warning size={16} className="mt-0.5 flex-none text-warning-soft-foreground" />
+                    {deMoodle
+                      ? (uno ? 'Saldrá «Con lo de Moodle»' : `${moodle.length} saldrán «Con lo de Moodle»`)
+                      : (uno ? 'Saldrá sin el temario oficial' : `${moodle.length} saldrán sin el temario oficial`)}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {uno ? 'No tiene' : 'No tienen'} el temario de la formación vendida: {deMoodle
+                      ? 'el diploma llevaría las actividades del curso de Moodle en su lugar.'
+                      : 'el diploma llevaría las actividades del curso de Moodle o, si no viene de Moodle, ningún módulo.'}
+                    {' '}Si no es lo que quieres, elige la formación con «Editar» antes de emitir.
+                  </p>
+                  <ul className="mt-1.5 max-h-36 space-y-1 overflow-y-auto">
+                    {moodle.slice(0, 5).map((c) => (
+                      <li key={c.matriculaId} className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                        <span className="min-w-0 truncate">{nombre(c.matriculaId)} · {c.curso.nombre}</span>
+                        <Button type="button" size="sm" variant="outline" onClick={() => { setDialogo(null); setEditando(c); }}
+                          aria-label={`Editar los datos de ${nombre(c.matriculaId)} antes de emitir`}>
+                          <NotePencil size={14} className="mr-1.5" /> Editar
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                  {moodle.length > 5 && <p className="mt-1 text-xs text-muted-foreground">y {moodle.length - 5} más.</p>}
+                </div>
+                </>
+              );
+            })()}
           </>
         }
         confirmLabel="Emitir"
@@ -1785,6 +2021,31 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
           if (dialogo?.tipo === 'revocar') void revocar(dialogo.d, motivo.trim());
         }}
       />
+      {/* #351: revertir. El diálogo no se cierra hasta que el servidor dice que sí. */}
+      <PromptDialog
+        open={dialogo?.tipo === 'revertir'}
+        title={dialogo?.tipo === 'revertir' ? `Revertir ${dialogo.nexpediente}` : ''}
+        message={dialogo?.tipo === 'revertir' ? (
+          <>
+            <strong>El número {dialogo.nexpediente} se anula</strong>: deja de valer en la verificación pública, su PDF ya no se puede
+            enviar, y no se vuelve a usar. {dialogo.quien} vuelve a «Aprobados sin diploma», donde{' '}
+            {soloLectura ? 'quien emite diplomas puede' : 'puedes'} corregir la formación y el programa con «Editar» y emitirlo de nuevo:{' '}
+            <strong>saldrá con otro número</strong>. No se avisa al alumno.
+          </>
+        ) : ''}
+        label="Motivo (queda registrado con el número anulado)"
+        placeholder="Ej.: se emitió con las actividades de Moodle, no con el temario oficial"
+        confirmLabel="Revertir"
+        multiline
+        minLength={MOTIVO_MIN}
+        maxLength={MOTIVO_MAX}
+        error={dialogo?.tipo === 'revertir' ? errorDialogo : null}
+        loading={trabajando}
+        onCancel={() => !trabajando && setDialogo(null)}
+        onConfirm={(motivo: string) => {
+          if (dialogo?.tipo === 'revertir') void revertir(dialogo.nexpediente, motivo.trim());
+        }}
+      />
       {dialogo?.tipo === 'corregir' && (
         <DialogoCorregir
           d={dialogo.d}
@@ -1846,7 +2107,7 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
 // ─────────────────────────────────────────────────────────────── bloques
 
 /** Lo emitido que espera a que alguien vea el PDF y lo envíe al alumno. */
-function BloquePorAvisar({ filas, nombreCampus, elegidas, alternar, todas, ocupado, verPdf, enviar, soloLectura = false }: {
+function BloquePorAvisar({ filas, nombreCampus, elegidas, alternar, todas, ocupado, verPdf, enviar, soloLectura = false, revertir, motivoSinRevertir = null }: {
   filas: Solicitud[];
   nombreCampus: (codigo: string) => string;
   elegidas: Set<string>;
@@ -1857,6 +2118,10 @@ function BloquePorAvisar({ filas, nombreCampus, elegidas, alternar, todas, ocupa
   enviar: (exps: string[]) => void;
   /** Solo ver el PDF: el envío al alumno es de administración (#223). */
   soloLectura?: boolean;
+  /** #351: con «Diplomas (Certifex) · Revertir diplomas». Sin él, no hay botón. */
+  revertir?: (c: Solicitud) => void;
+  /** Por qué no se puede revertir ahora (Certifex sin su 0045, comprobando…); null = se puede. */
+  motivoSinRevertir?: string | null;
 }) {
   const marcadas = filas.filter((c) => elegidas.has(c.nexpediente!)).map((c) => c.nexpediente!);
   return (
@@ -1911,6 +2176,15 @@ function BloquePorAvisar({ filas, nombreCampus, elegidas, alternar, todas, ocupa
                     <div className="flex justify-end gap-1.5">
                       <Button size="sm" variant="outline" onClick={() => verPdf(c)}><FilePdf size={14} className="mr-1.5" /> Ver PDF</Button>
                       {!soloLectura && <Button size="sm" disabled={ocupado} onClick={() => enviar([k])}><PaperPlaneTilt size={14} className="mr-1.5" /> Enviar diploma al alumno</Button>}
+                      {/* #351: solo lo emitido desde el CRM (lo emitido fuera no se revierte desde aquí). */}
+                      {revertir && c.diploma && delCrm(c.diploma) && c.diploma.revertibleAqui !== false && !c.diploma.entregado && (
+                        <Button size="sm" variant="outline" disabled={ocupado || !!motivoSinRevertir}
+                          title={motivoSinRevertir ?? 'Anular este número para corregirlo y volver a emitirlo (saldrá con otro número)'}
+                          aria-label={`Revertir ${k}`}
+                          onClick={() => revertir(c)}>
+                          <ArrowCounterClockwise size={14} className="mr-1.5" /> Revertir
+                        </Button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -2168,7 +2442,12 @@ function DialogoNuevoDiploma({ campus, alCerrar, alCrear }: {
   );
 }
 
-function DialogoEditar({ c, alCerrar, alGuardar, alCambiarFirma, puedeSincronizar = true }: {
+/**
+ * «Revisar datos antes de aprobar». También desde Certificaciones › Emisiones (#351,
+ * prevención), donde puede no haber solicitud: entonces el nombre no se toca aquí (es el de la
+ * solicitud, que vive en Certifex; sin ella sale el de Moodle) y no bloquea guardar el resto.
+ */
+export function DialogoEditar({ c, alCerrar, alGuardar, alCambiarFirma, puedeSincronizar = true }: {
   c: Solicitud; alCerrar: () => void; alGuardar: (fila: Solicitud) => void;
   /**
    * «Sincronizar módulos con el producto» escribe en el catálogo: es de administración.
@@ -2252,25 +2531,31 @@ function DialogoEditar({ c, alCerrar, alGuardar, alCambiarFirma, puedeSincroniza
   const revisado = c.solicitud?.revisado;
   const delAlumno = c.solicitud?.nombreAlumno ?? c.solicitud?.nombre ?? '';
   const nombreN = nombreValido(nombreD) ?? normalizarNombre(nombreD);
-  const errorNombre = !nombreD.trim()
+  const conSolicitud = !!c.solicitud;
+  const errorNombre = !conSolicitud ? null : !nombreD.trim()
     ? 'Falta el nombre: es el que se imprimirá en el diploma.'
     : !nombreValido(nombreD) ? MSG_NOMBRE : null;
   const correoN = correo.trim().toLowerCase();
-  const errorCorreo = correoN && !CORREO.test(correoN) ? 'Ese correo no es válido.' : null;
+  const errorCorreo = conSolicitud && correoN && !CORREO.test(correoN) ? 'Ese correo no es válido.' : null;
   const prog = tocado ? deForm(form) : { programa: null, error: null };
 
   const dniN = normalizarDni(dniD);
-  const errorDni = errorDeDni(dniN);
+  const errorDni = conSolicitud ? errorDeDni(dniN) : null;
 
   const cambios: CambiosSolicitud = { matriculaId: c.matriculaId };
-  if (nombreN !== normalizarNombre(c.solicitud?.nombre ?? '')) cambios.nombre = nombreN;
-  if (dniN !== (c.titular.dni ?? '').toUpperCase()) cambios.dni = dniN || null;
-  if (correoN !== (ed?.emailCrm ?? '')) cambios.emailCrm = correoN || null;
+  if (conSolicitud && nombreN !== normalizarNombre(c.solicitud?.nombre ?? '')) cambios.nombre = nombreN;
+  // Sin solicitud (desde Emisiones, #351) solo se elige la formación y su programa: ni el DNI ni
+  // el correo se cambian desde aquí (el servidor tampoco lo admite).
+  if (conSolicitud && dniN !== (c.titular.dni ?? '').toUpperCase()) cambios.dni = dniN || null;
+  if (conSolicitud && correoN !== (ed?.emailCrm ?? '')) cambios.emailCrm = correoN || null;
   const productoN = producto ? Number(producto) : null;
   if (productoN !== (ed?.productoId ?? null)) cambios.productoId = productoN;
   if (tocado && prog.programa && !mismoPrograma(prog.programa, ed?.programaEditado)) cambios.programa = prog.programa;
   if (!tocado && ed?.programaEditado) cambios.programa = null;
   const hayCambios = Object.keys(cambios).length > 1;
+  // Sin solicitud (desde Emisiones), el servidor la busca en su campus: se le dice cuál.
+  const envio: CambiosSolicitud = conSolicitud ? cambios
+    : { ...cambios, centro: c.centro, ...(c.titular.email ? { q: c.titular.email } : {}) };
   const listo = !guardando && hayCambios && !errorNombre && !errorDni && !errorCorreo && !prog.error;
 
   // Con cambios sin guardar, Escape, el fondo o «Cancelar» preguntan antes de descartar.
@@ -2288,7 +2573,7 @@ function DialogoEditar({ c, alCerrar, alGuardar, alCambiarFirma, puedeSincroniza
     setGuardando(true);
     setError(null);
     try {
-      const r = await diplomasApi.editar(cambios);
+      const r = await diplomasApi.editar(envio);
       alGuardar(r.data);
     } catch (e) {
       setError((e as Error).message);
@@ -2328,7 +2613,17 @@ function DialogoEditar({ c, alCerrar, alGuardar, alCambiarFirma, puedeSincroniza
           </div>
 
           <div className="flex-1 space-y-5 overflow-y-auto px-5 py-4">
-            {/* Nombre: vive en Certifex, que es quien lo imprime. */}
+            {/* Nombre: vive en Certifex, que es quien lo imprime. Sin solicitud, el de Moodle. */}
+            {!conSolicitud ? (
+              <p className="text-sm">
+                <span className="block text-xs font-medium text-muted-foreground">Nombre para el diploma</span>
+                <span className="text-foreground">{c.titular.nombre || '—'}</span>
+                <span className="mt-1 block text-xs text-muted-foreground">El alumno no ha pedido el diploma: sale el nombre de Moodle. Para revisarlo, pásalo a Pendientes.</span>
+                <span className="mt-2 block text-xs font-medium text-muted-foreground">DNI / NIE / pasaporte</span>
+                <span className="text-foreground">{c.titular.dni || '—'}</span>
+                <span className="mt-1 block text-xs text-muted-foreground">Aquí solo se elige la formación vendida y su programa.</span>
+              </p>
+            ) : (
             <label className="block text-sm">
               <span className="text-xs font-medium text-muted-foreground">Nombre para el diploma</span>
               <input data-autofocus value={nombreD} onChange={(e) => setNombreD(e.target.value)} maxLength={160} aria-invalid={!!errorNombre} className={campo} />
@@ -2336,8 +2631,11 @@ function DialogoEditar({ c, alCerrar, alGuardar, alCambiarFirma, puedeSincroniza
               {revisado && <span className="mt-0.5 block text-xs text-muted-foreground">Revisado por {revisado.por} el {fechaHora(revisado.en)}</span>}
               {errorNombre && <span className="mt-0.5 block text-xs text-destructive" role="alert">{errorNombre}</span>}
             </label>
+            )}
 
-            {/* DNI: vive en Certifex, en el alumno, y se imprime junto al nombre (Carlos, 20/10). */}
+            {/* DNI: vive en Certifex, en el alumno, y se imprime junto al nombre (Carlos, 20/10).
+                Sin solicitud (desde Emisiones, #351) solo se elige la formación y su programa. */}
+            {conSolicitud && (<>
             <label className="block text-sm">
               <span className="text-xs font-medium text-muted-foreground">DNI / NIE / pasaporte (obligatorio)</span>
               <input value={dniD} onChange={(e) => setDniD(e.target.value)} maxLength={30} placeholder="Ej.: 12345678Z" aria-invalid={!!errorDni}
@@ -2361,6 +2659,7 @@ function DialogoEditar({ c, alCerrar, alGuardar, alCambiarFirma, puedeSincroniza
               </span>
               {errorCorreo && <span className="mt-0.5 block text-xs text-destructive">{errorCorreo}</span>}
             </label>
+            </>)}
 
             <div className="text-sm">
               <span className="text-xs font-medium text-muted-foreground">Formación vendida</span>

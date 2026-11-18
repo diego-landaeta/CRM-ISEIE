@@ -96,6 +96,9 @@ export const listarEmisionesSchema = z.object({
   tam: z.coerce.number().int().positive().max(200).optional(),
   curso: z.coerce.number().int().optional(),
   q: z.string().trim().max(100).optional(),
+  // #351, prevención: con `conPrograma=1`, cada fila sin título trae el programa que se
+  // imprimiría (`programaCrm`) y lo revisado a mano (`edicion`). Sin él, como siempre.
+  conPrograma: z.enum(['0', '1']).optional(),
 });
 
 export const cursosSchema = z.object({
@@ -175,7 +178,8 @@ export const listarSolicitudesSchema = z.object({
 });
 
 export const listarDiplomasSchema = z.object({
-  estado: z.enum(['vigentes', 'revocados', 'todos']).optional(),
+  // `anulados` (#351): los revertidos antes de enviarlos.
+  estado: z.enum(['vigentes', 'revocados', 'anulados', 'todos']).optional(),
   aviso: z.enum(['pendiente', 'fuera', 'enviado', 'no_salio']).optional(),
   ...filtrosPanel,
 }).refine((f) => f.curso === undefined || f.centro, { message: 'Para filtrar por formacion elige antes el campus', path: ['curso'] });
@@ -206,6 +210,12 @@ export const avisosRechazoSchema = z.object({
 });
 
 export const revocarSchema = z.object({ nexpediente: nexp, motivo });
+
+/**
+ * Revertir (#351): un diploma emitido desde el CRM y aun sin enviar. El numero se anula
+ * y la matricula vuelve a «Aprobados sin diploma». Motivo obligatorio, como revocar.
+ */
+export const revertirSchema = z.object({ nexpediente: nexp, motivo });
 
 /**
  * El programa a imprimir escrito a mano. Mismos limites que Certifex (validarProgramaCrm):
@@ -259,6 +269,10 @@ export const dniObligatorio = z.preprocess((v) => (v === undefined ? null : v), 
 
 export const editarSchema = z.object({
   matriculaId: z.number().int().positive(),
+  // #351: solo para encontrar una matrícula que no es una solicitud (Emisiones): el
+  // campus y el correo acotan la búsqueda. No dan alcance: se comprueba con la matrícula.
+  centro: centro.optional(),
+  q: z.string().trim().max(100).optional(),
   nombre: nombreDiploma.optional(),
   dni: dniDiploma.optional(),
   emailCrm: z.preprocess(

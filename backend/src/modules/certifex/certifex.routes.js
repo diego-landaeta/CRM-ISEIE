@@ -5,6 +5,7 @@ import { uploadImage } from '../../shared/middleware/upload.js';
 import * as ctrl from './certifex.controller.js';
 import * as emisiones from './certifex.emisiones.js';
 import * as diplomas from './certifex.diplomas.js';
+import * as reversion from './certifex.revertir.js';
 import * as envios from './certifex.envios.js';
 
 const router = Router();
@@ -98,6 +99,11 @@ router.post('/emisiones/emitir', puede('diplomas.aprobar'), emisiones.emitir);
 router.post('/diplomas/rechazar', puede('diplomas.aprobar'), diplomas.rechazar);
 router.post('/diplomas/avisos-rechazo', puede('diplomas.avisar'), diplomas.avisosRechazo);
 router.post('/diplomas/revocar', puede('diplomas.revocar'), diplomas.revocar);
+// #351: revertir un diploma emitido desde el CRM y aún sin enviar (el número se anula y
+// vuelve a «Aprobados sin diploma»). El GET dice si el Certifex conectado ya lo permite
+// (su 0045): sin eso, el botón no se ofrece.
+router.get('/diplomas/revertir', puede('diplomas.revertir'), reversion.disponibilidad);
+router.post('/diplomas/revertir', puede('diplomas.revertir'), reversion.revertir);
 router.post('/diplomas/corregir', puede('diplomas.edit'), diplomas.corregir);
 // La firma del alumno (CRM #349): subirla o cambiarla antes de aprobar, y verla.
 router.post('/diplomas/firma', puede('diplomas.edit'), uploadImage, diplomas.subirFirma);

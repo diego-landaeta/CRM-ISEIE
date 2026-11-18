@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowClockwise, ArrowSquareOut, Books, Buildings, CaretDown, Certificate, CheckCircle, DownloadSimple,
-  GraduationCap, HourglassMedium, Lightning, PlugsConnected, SealCheck, X, XCircle,
+  GraduationCap, HourglassMedium, Lightning, NotePencil, PlugsConnected, SealCheck, Warning, X, XCircle,
 } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
 import PageHeader from '@/shared/components/ui/PageHeader';
@@ -13,6 +13,8 @@ import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
 import PromptDialog from '@/shared/components/ui/PromptDialog';
 import { Button } from '@/shared/components/ui/button';
 import { cn } from '@/shared/lib/utils';
+// #351: el diálogo «Editar» vive en Diplomas; aquí se carga solo cuando se abre.
+const DialogoEditar = lazy(() => import('./CertifexDiplomasPage').then((m) => ({ default: m.DialogoEditar })));
 import { Avance, AvisoCasiListo, AvisoDireccionPublica, avisoSinTerminar, Barra, Buscador, Decision, EnElCrmEtiqueta, Entregas, Etiqueta, LogoCampus, Pestana, euros } from '../components/piezas';
 import {
   diplomasApi,
@@ -204,7 +206,11 @@ function OpcionCurso({ activa, icono: Icono, titulo, r, onClick }: {
  * `embebida`: dentro de Matrículas → Certificaciones. Sin el título grande de página
  * (ya lo pone Matrículas), pero con el estado de la conexión y los botones.
  */
-export default function CertifexEmisionesPage({ embebida = false }: { embebida?: boolean } = {}) {
+export default function CertifexEmisionesPage({ embebida = false, puedeEditar = false }: {
+  embebida?: boolean;
+  /** #351: «Diplomas (Certifex) · Emitir» (lo que pide guardar la revisión): sin él, no hay «Editar». */
+  puedeEditar?: boolean;
+} = {}) {
   const Cabecera = ({ title, subtitle, actions }: { title: string; subtitle?: React.ReactNode; actions?: React.ReactNode }) => (
     embebida
       ? <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground"><div>{subtitle}</div>{actions && <div className="flex flex-wrap gap-2">{actions}</div>}</div>
@@ -229,6 +235,10 @@ export default function CertifexEmisionesPage({ embebida = false }: { embebida?:
   const [lote, setLote] = useState<{ hechas: number; total: number } | null>(null);
   const [fallos, setFallos] = useState<{ quien: string; error: string }[]>([]);
   const [abierta, setAbierta] = useState<Candidato | null>(null);
+  // #351, prevención: «Editar» (formación, programa, correo, DNI) desde el aviso de antes de
+  // emitir, aquí mismo: una matrícula que el alumno no ha pedido no sale en Diplomas.
+  // Con la confirmación de la que se vino, para volver a ella (y a la selección) al acabar.
+  const [editando, setEditando] = useState<{ c: Candidato; volver: Accion } | null>(null);
   // «Pasar a pendientes» (22/10/2026): la matrícula que se está pidiendo, para su botón.
   const [pidiendo, setPidiendo] = useState<number | null>(null);
   // #629: a quien no ha terminado (sin nota o con calificadas < 100 %) se le pasa solo tras confirmar.
@@ -280,16 +290,17 @@ export default function CertifexEmisionesPage({ embebida = false }: { embebida?:
     return () => clearTimeout(t);
   }, [buscar]);
 
-  const cargarFilas = useCallback(async () => {
+  const cargarFilas = useCallback(async ({ conservarSeleccion = false }: { conservarSeleccion?: boolean } = {}) => {
     if (!centro) return;
     setCargandoFilas(true);
     try {
-      const r = await emisionesApi.listar({ estado, centro, curso: curso ?? undefined, q: q || undefined, pagina });
+      const r = await emisionesApi.listar({ estado, centro, curso: curso ?? undefined, q: q || undefined, pagina, conPrograma: true });
       setFilas(r.data.filas);
       setTotal(r.data.total);
       setTam(r.data.tam);
-      // La selección es DE LA PÁGINA: lo que se ve es lo que se decide.
-      setElegidas(new Set());
+      // La selección es DE LA PÁGINA: lo que se ve es lo que se decide. Al volver de «Editar»
+      // (#351) se conserva: es la misma página y el mismo lote a medias.
+      if (!conservarSeleccion) setElegidas(new Set());
     } catch (e) {
       toast({ title: 'No se pudo cargar', description: (e as Error).message, variant: 'destructive' });
     } finally { setCargandoFilas(false); }
@@ -311,6 +322,24 @@ export default function CertifexEmisionesPage({ embebida = false }: { embebida?:
   const seleccion = [...elegidas].map((id) => porId.get(id)).filter((c): c is Candidato => !!c);
   const emitibles = seleccion.filter((c) => c.decision?.decision === 'aprobada' && !c.nexpediente);
   const sinTitulo = seleccion.filter((c) => !c.nexpediente);
+  /**
+   * #351, prevención (la misma regla que Diplomas): de lo que se va a emitir, lo que
+   * saldría sin el temario oficial de la formación vendida —«Con lo de Moodle»: sin programa
+   * del CRM, o con sus horas pero sin módulos— y lo que NO se emitirá (revisado a mano y
+   * aun así sin programa: el servidor no lo emite). Sin el dato, no se dice nada.
+   */
+  const avisosDeTemario = (ids: number[]) => {
+    const noSeEmitiran: Candidato[] = [];
+    const sinTemario: Candidato[] = [];
+    for (const id of ids) {
+      const c = porId.get(id);
+      if (!c || c.programaCrm === undefined) continue;
+      const p = c.programaCrm?.programa;
+      if (!p && c.edicion) noSeEmitiran.push(c);
+      else if (!p || p.modulos.length === 0) sinTemario.push(c);
+    }
+    return { noSeEmitiran, sinTemario };
+  };
   const todasElegidas = filas.length > 0 && filas.every((f) => elegidas.has(f.matriculaId));
   const paginas = Math.max(1, Math.ceil(total / tam));
   const nombre = (id: number | null) => {
@@ -671,6 +700,13 @@ export default function CertifexEmisionesPage({ embebida = false }: { embebida?:
                               <Certificate size={14} /> {c.nexpediente}
                             </span>
                           ) : c.propuesto ? <Etiqueta tono="neutral">Propuesto</Etiqueta> : <span className="text-xs text-muted-foreground">Sin emitir</span>}
+                          {/* #351: su diploma se revirtió para corregirlo; el número anulado ya no vale. */}
+                          {!c.nexpediente && c.revertido && (
+                            <div className="mt-1 max-w-[220px] text-[11px] text-muted-foreground"
+                              title={`Lo revirtió ${c.revertido.por} el ${new Date(c.revertido.en).toLocaleDateString('es-ES')}: ${c.revertido.motivo}`}>
+                              Revertido · <span className="font-mono">{c.revertido.nexpediente}</span> anulado
+                            </div>
+                          )}
                           {/* Sin diploma y sin pedir: no está en Diplomas › Pendientes. Se pasa desde aquí. */}
                           {!c.nexpediente && !c.solicitud && (
                             <div className="mt-1.5" onClick={(e) => e.stopPropagation()}>
@@ -765,6 +801,56 @@ export default function CertifexEmisionesPage({ embebida = false }: { embebida?:
               ? <>Todo lo aprobado y sin título de <strong>{cursoElegido?.cursoNombre ?? elegido?.nombre}</strong>. </>
               : accion?.tipo === 'aprobarEmitir' ? 'Se aprueban y se emiten en Certifex. ' : 'Se emiten en Certifex. '}
             Cada título gasta un número de expediente en un registro que <strong>no se borra</strong>: si luego resulta que no tocaba, solo se puede revocar. Queda a tu nombre.
+            {/* #351, prevención: lo que saldría «Con lo de Moodle», dicho antes y con «Editar». */}
+            {(accion?.tipo === 'aprobarEmitir' || accion?.tipo === 'emitir') && (() => {
+              const { noSeEmitiran, sinTemario } = avisosDeTemario(accion.ids);
+              const lista = (cs: Candidato[]) => (
+                <ul className="mt-1.5 max-h-36 space-y-1 overflow-y-auto">
+                  {cs.slice(0, 5).map((c) => (
+                    <li key={c.matriculaId} className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <span className="min-w-0 truncate">{c.titular.nombre ?? c.titular.email} · {c.curso.nombre}{c.programaCrm?.motivo ? ` · ${c.programaCrm.motivo}` : ''}</span>
+                      {puedeEditar ? (
+                        <Button type="button" size="sm" variant="outline" onClick={() => { const volver = accion; setAccion(null); setEditando({ c, volver }); }}
+                          aria-label={`Editar los datos de ${c.titular.nombre ?? c.titular.email} antes de emitir`}>
+                          <NotePencil size={14} className="mr-1.5" /> Editar
+                        </Button>
+                      ) : (
+                        <span className="text-muted-foreground">Lo revisa quien emite diplomas.</span>
+                      )}
+                    </li>
+                  ))}
+                  {cs.length > 5 && <li className="text-xs text-muted-foreground">y {cs.length - 5} más.</li>}
+                </ul>
+              );
+              return (
+                <>
+                  {noSeEmitiran.length > 0 && (
+                    <div className="mt-3 rounded-md border border-destructive/30 bg-destructive-soft px-3 py-2 text-foreground" role="note">
+                      <p className="flex items-start gap-1.5 font-semibold text-destructive-soft-foreground">
+                        <Warning size={16} className="mt-0.5 flex-none" />
+                        {noSeEmitiran.length === 1 ? 'No se emitirá' : `${noSeEmitiran.length} no se emitirán`}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {noSeEmitiran.length === 1 ? 'Tiene' : 'Tienen'} datos revisados a mano y con ellos no sale el programa. Revísalo con «Editar»: elige la formación o escribe el temario.
+                      </p>
+                      {lista(noSeEmitiran)}
+                    </div>
+                  )}
+                  {sinTemario.length > 0 && (
+                    <div className="mt-3 rounded-md border border-border bg-warning-soft/40 px-3 py-2 text-foreground" role="note">
+                      <p className="flex items-start gap-1.5 font-semibold">
+                        <Warning size={16} className="mt-0.5 flex-none text-warning-soft-foreground" />
+                        {sinTemario.length === 1 ? 'Saldrá «Con lo de Moodle»' : `${sinTemario.length} saldrán «Con lo de Moodle»`}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {sinTemario.length === 1 ? 'No tiene' : 'No tienen'} el temario de la formación vendida: el diploma llevaría las actividades del curso de Moodle en su lugar. Si no es lo que quieres, elige la formación con «Editar» antes de emitir.
+                      </p>
+                      {lista(sinTemario)}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </>
         }
         confirmLabel="Emitir"
@@ -793,6 +879,25 @@ export default function CertifexEmisionesPage({ embebida = false }: { embebida?:
           if (a?.tipo === 'rechazar') void rechazar(a.ids, motivo.trim());
         }}
       />
+
+      {editando && (
+        <Suspense fallback={null}>
+          <DialogoEditar
+            c={editando.c}
+            puedeSincronizar={false}
+            alCerrar={() => { const v = editando.volver; setEditando(null); setAccion(v); }}
+            alGuardar={() => {
+              const { c, volver } = editando;
+              const quien = c.titular.nombre ?? c.titular.email ?? `Matrícula #${c.matriculaId}`;
+              setEditando(null);
+              toast({ title: 'Datos revisados', description: `${quien}: al emitir se usará lo que has guardado.` });
+              // Se recarga lo de la página (con el aviso ya al día) sin perder lo elegido, y se
+              // vuelve a la confirmación del mismo lote.
+              void cargarFilas({ conservarSeleccion: true }).then(() => setAccion(volver));
+            }}
+          />
+        </Suspense>
+      )}
 
       {abierta && (
         <Ficha

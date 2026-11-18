@@ -81,29 +81,32 @@ export function exigirMatriculas(alcance, ids, centroDe) {
 
 /**
  * 404 si alguno de esos diplomas no es de esta persona. Pocos: se busca cada uno por su
- * numero (`q`); muchos: se recorre el listado hasta encontrarlos todos.
+ * numero (`q`); muchos: se recorre el listado hasta encontrarlos todos. Devuelve los diplomas que
+ * ha consultado (Map numero → fila de Certifex), para no volver a pedirlos (#351, «Revertir»); sin
+ * alcance que comprobar (super admin), no consulta nada y devuelve null.
  */
 export async function exigirExpedientes(alcance, nexpedientes) {
-  if (!alcance) return;
+  if (!alcance) return null;
   const buscados = new Set(nexpedientes.map((n) => String(n).toUpperCase()));
-  const centroDe = new Map();
+  const filaDe = new Map();
   if (buscados.size <= 5) {
     for (const nexp of buscados) {
       const d = await certifex('GET', `/diplomas?${new URLSearchParams({ estado: 'todos', q: nexp, pagina: '1', tam: '5' })}`);
       const f = (Array.isArray(d?.filas) ? d.filas : []).find((x) => x.nexpediente === nexp);
-      if (f) centroDe.set(nexp, f.centro);
+      if (f) filaDe.set(nexp, f);
     }
   } else {
     const r = await recorrer('/diplomas', { estado: 'todos' }, {
       filtro: (d) => buscados.has(d.nexpediente),
       completo: (hallados) => hallados.length >= buscados.size,
     });
-    for (const d of r.filas) centroDe.set(d.nexpediente, d.centro);
+    for (const d of r.filas) filaDe.set(d.nexpediente, d);
   }
   for (const nexp of buscados) {
-    const centro = centroDe.get(nexp);
+    const centro = filaDe.get(nexp)?.centro;
     if (!centro || !alcance.has(String(centro).toUpperCase())) throw new AppError(`${NO_ENCONTRADO} (${nexp})`, 404, 'NOT_FOUND');
   }
+  return filaDe;
 }
 
 export { NO_ENCONTRADA };
