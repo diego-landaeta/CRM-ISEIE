@@ -149,6 +149,14 @@ export function marca({ linkId, projectId, leadId, conversionId, userId }) {
   };
 }
 
+/*
+  CUENTAS DE STRIPE COMPARTIDAS. En MultiCRM varios campus pueden compartir una
+  cuenta y declaran `filtro_metadata`; allí el link y su cargo llevan además esa
+  marca de plataforma (CRM#870) para que el sondeo no los deje «sin marcar». En
+  ISEIE cada campus tiene su propia cuenta de Stripe (no hay `filtro_metadata`,
+  como dice `disputas.service.js`), así que basta con la marca `crm_*`.
+*/
+
 /**
  * Crear el link: se apunta, se crea en Stripe y se completa. Si Stripe falla,
  * la fila se borra: no queda un link sin URL que la gestora pueda mandar.

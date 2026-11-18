@@ -16,6 +16,8 @@ vi.mock('@/shared/api/client', () => ({ default: { get, post, put, delete: vi.fn
 vi.mock('@/shared/hooks/useToast', () => ({ toast: vi.fn() }));
 const permisos = vi.hoisted(() => ({ mapa: {} }));
 vi.mock('@/shared/hooks/usePermission', () => ({ default: () => ({ can: (k) => permisos.mapa[k] === true }) }));
+// El servidor tiene los links encendidos (`/auth/me`).
+vi.mock('@/contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 2, funciones: { links_pago: true } } }) }));
 
 const { default: LinksDePagoCard } = await import('@/modules/links-pago/components/LinksDePagoCard');
 const { ReglasDeLosLinks } = await import('@/modules/links-pago/components/ConfigLinksPago');

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// Gemela de la de MultiCRM (#680, fase 1, en su integracionesTodos218). ISEIE no tiene
+// Gemela de la de MultiCRM (CRM#680, fase 1, en su integracionesTodos218). ISEIE no tiene
 // un setup común de pruebas: el entorno, los matchers y la limpieza se ponen aquí.
 import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -18,6 +18,8 @@ vi.mock('@/contexts/ProjectContext', () => ({ useProjectContext: () => ctx.valor
 vi.mock('@/shared/api/client', () => ({ default: { get, put: vi.fn(), post: vi.fn(), delete: vi.fn() } }));
 vi.mock('@/shared/hooks/useToast', () => ({ toast: vi.fn() }));
 vi.mock('@/shared/hooks/usePermission', () => ({ default: () => ({ can: (k) => permisos.mapa[k] === true }) }));
+// El servidor tiene los links encendidos (`/auth/me`, CRM#870).
+vi.mock('@/contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 1, funciones: { links_pago: true } } }) }));
 
 const { default: IntegrationsPage } = await import('@/modules/accounting/pages/IntegrationsPage');
 

@@ -10,6 +10,7 @@ import { toast } from '@/shared/hooks/useToast';
 import { apiPublicUrl } from '@/shared/lib/direccionesPublicas';
 import { usePluginMoodle } from '@/shared/lib/pluginMoodle';
 import { SOLO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
+import { useLinksPagoEncendidos } from '@/shared/lib/linksPago';
 import { ReglasDeLosLinks, WebhookDeLaCuentaBloque } from '@/modules/links-pago/components/ConfigLinksPago';
 import { EtiquetaEnPruebas } from '@/shared/components/ui/EnPruebas';
 import {
@@ -79,6 +80,10 @@ export default function IntegrationsPage() {
   // La salud de las conexiones de cada campus (CRM#533): superadmin y admin.
   const { can } = usePermission();
   const verSalud = can('integrations.salud');
+  // Links de pago (CRM#680): si el servidor los tiene encendidos (`/auth/me`) y
+  // quien mira puede poner la clave o las reglas.
+  const linksPago = useLinksPagoEncendidos()
+    && (can('links_pago.configurar') || can('integrations.edit'));
 
   return (
     <div className="space-y-5 pb-8">
@@ -127,10 +132,11 @@ export default function IntegrationsPage() {
           {/* PayPal (#766): solo si el servidor tiene encendido PAYPAL_COBROS_ACTIVO. */}
           <PaypalSiEstaEncendido key={`paypal-${pid}`} projectId={pid} />
           {/* Links de pago (#407, gemela de CRM#680): la clave de escritura, aparte de la
-              de lectura de arriba. Solo en /staging y local hasta que Diego lo apruebe. */}
+              de lectura de arriba. Sale si el servidor los tiene encendidos: en
+              producción, con LINKS_PAGO_EN_PRODUCCION=1. */}
           {/* `key`: al cambiar de campus la tarjeta empieza de cero; si no,
               enseñaba un momento el descuento del campus anterior. */}
-          {SOLO_EN_PRUEBAS && <StripeLinksCard key={pid} projectId={pid} />}
+          {linksPago && <StripeLinksCard key={pid} projectId={pid} />}
           <BrevoCard projectId={pid} />
           <MoodleCard projectId={pid} />
         </div>
@@ -505,7 +511,9 @@ function StripeLinksCard({ projectId }: { projectId: number }) {
         <div className="flex-1 min-w-0">
           <h3 className="font-semibold text-base flex flex-wrap items-center gap-2">
             Links de pago
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-warning-soft text-warning-soft-foreground">PRUEBAS</span>
+            {SOLO_EN_PRUEBAS && (
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-warning-soft text-warning-soft-foreground">PRUEBAS</span>
+            )}
           </h3>
           <p className="text-xs text-muted-foreground">
             La clave con la que el CRM <strong>creará</strong> links de pago en la cuenta de Stripe de este campus.

@@ -6,6 +6,7 @@ import PromptDialog from '@/shared/components/ui/PromptDialog';
 import usePermission from '@/shared/hooks/usePermission';
 import { toast } from '@/shared/hooks/useToast';
 import { SOLO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
+import { useLinksPagoEncendidos } from '@/shared/lib/linksPago';
 import {
   listarLinks, crearLink, anularLink, verConfig,
   type LinkDePago, type ConfigLinks, type EstadoLink,
@@ -22,7 +23,9 @@ import {
   de descuento del campus), moneda y caducidad. Lo demás lo pone el admin en
   Integraciones › Links de pago. El servidor vuelve a comprobarlo todo.
 
-  Solo en /staging y en local, como el resto de los links hasta que Diego lo apruebe.
+  Sale si el servidor tiene los links encendidos (`/auth/me`; en producción,
+  LINKS_PAGO_EN_PRODUCCION=1) y la persona tiene permiso de links. La etiqueta
+  «PRUEBAS» solo en /staging y en local.
 */
 
 const ESTADOS: Record<EstadoLink, { texto: string; tono: string }> = {
@@ -70,8 +73,9 @@ interface Props {
 
 export default function LinksDePagoCard({ projectId, leadId, conversionId, productoId }: Props) {
   const { can } = usePermission();
+  const encendidos = useLinksPagoEncendidos();
   const puedeCrear = can('links_pago.crear');
-  const puedeVer = puedeCrear || can('links_pago.ver_todos');
+  const puedeVer = encendidos && (puedeCrear || can('links_pago.ver_todos'));
   const [links, setLinks] = useState<LinkDePago[]>([]);
   const [cargando, setCargando] = useState(true);
   const [creando, setCreando] = useState(false);
@@ -87,9 +91,9 @@ export default function LinksDePagoCard({ projectId, leadId, conversionId, produ
     } catch { /* la ficha sigue sirviendo */ } finally { setCargando(false); }
   }, [leadId, conversionId]);
 
-  useEffect(() => { if (SOLO_EN_PRUEBAS && puedeVer) cargar(); }, [cargar, puedeVer]);
+  useEffect(() => { if (puedeVer) cargar(); }, [cargar, puedeVer]);
 
-  if (!SOLO_EN_PRUEBAS || !puedeVer) return null;
+  if (!puedeVer) return null;
 
   async function confirmarAnular(motivo: string) {
     if (!anulando) return;
@@ -110,7 +114,9 @@ export default function LinksDePagoCard({ projectId, leadId, conversionId, produ
       <div className="flex items-center justify-between gap-3 mb-3">
         <h3 className="font-semibold flex items-center gap-2">
           <LinkSimple size={16} weight="regular" aria-hidden="true" /> Links de pago
-          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-warning-soft text-warning-soft-foreground">PRUEBAS</span>
+          {SOLO_EN_PRUEBAS && (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-warning-soft text-warning-soft-foreground">PRUEBAS</span>
+          )}
         </h3>
         {puedeCrear && (
           <button type="button" onClick={() => setCreando(true)}
