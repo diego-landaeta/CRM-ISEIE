@@ -39,12 +39,20 @@ export function facturasColaboradorActivas(env = process.env) {
 }
 
 /**
- * Lo del Moodle que aún no está aprobado para producción. En MultiCRM es el plugin
- * del CRM en cada Moodle (#679, PR CRM#689) y todo lo que va con él; aquí, de momento,
- * solo el aviso de entregas sin corregir (#457: a la tutora a las 48 h y después a
- * administración), que lee Moodle con el token del campus y escribe a tutoras y admins.
- * Mismo nombre e interruptor que en MultiCRM para que el porte de la #406 no tenga
- * que tocarlo. Se aprueba con PLUGIN_MOODLE_EN_PRODUCCION=1.
+ * Lo del Moodle que aún no está aprobado para producción, con el mismo nombre e
+ * interruptor que en MultiCRM (PLUGIN_MOODLE_EN_PRODUCCION=1):
+ *
+ *   · el plugin del CRM en cada Moodle (#406, gemela de MultiCRM #679 / PR #689): todo
+ *     lo que ESCRIBE en un campus o lo cambia — la respuesta de la tutora por el
+ *     plugin, el aviso de disponibilidad, el código de conexión, el repaso de los
+ *     campus conectados y el aviso que el plugin manda al CRM (`/api/moodle-avisos`).
+ *     Diego, revisión de la #689: «que no salga a producción sin verlo»;
+ *   · el aviso de entregas sin corregir (#457: a la tutora a las 48 h y después a
+ *     administración), que lee Moodle con el token del campus y escribe a tutoras y admins.
+ *
+ * Apagado, la respuesta de la tutora sale como hasta ahora (con su token del campus)
+ * y el CRM no acepta avisos del plugin. El plugin también viene apagado de serie en el
+ * propio Moodle (ajustes del plugin).
  */
 export function pluginMoodleActivo(env = process.env) {
   return enPruebasOAprobado('PLUGIN_MOODLE_EN_PRODUCCION', env);

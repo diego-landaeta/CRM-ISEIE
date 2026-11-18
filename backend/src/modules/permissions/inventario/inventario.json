@@ -2493,6 +2493,158 @@
   ]
  },
  {
+  "id": "GET /api/consultas/campus/:projectId/plugin",
+  "tipo": "ruta",
+  "modulo": "consultas",
+  "metodo": "GET",
+  "ruta": "/api/consultas/campus/:projectId/plugin",
+  "relativa": "GET /campus/:projectId/plugin",
+  "controlador": "estadoDelPlugin",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "consultas.gestionar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/consultas/campus/:projectId/plugin/codigo",
+  "tipo": "ruta",
+  "modulo": "consultas",
+  "metodo": "POST",
+  "ruta": "/api/consultas/campus/:projectId/plugin/codigo",
+  "relativa": "POST /campus/:projectId/plugin/codigo",
+  "controlador": "codigoDeConexion",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "consultas.gestionar"
+    ]
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "integrations.edit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "DELETE /api/consultas/campus/:projectId/plugin",
+  "tipo": "ruta",
+  "modulo": "consultas",
+  "metodo": "DELETE",
+  "ruta": "/api/consultas/campus/:projectId/plugin",
+  "relativa": "DELETE /campus/:projectId/plugin",
+  "controlador": "desactivarPlugin",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "consultas.gestionar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/consultas/respuestas",
+  "tipo": "ruta",
+  "modulo": "consultas",
+  "metodo": "GET",
+  "ruta": "/api/consultas/respuestas",
+  "relativa": "GET /respuestas",
+  "controlador": "respuestas",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/consultas/respuestas",
+  "tipo": "ruta",
+  "modulo": "consultas",
+  "metodo": "POST",
+  "ruta": "/api/consultas/respuestas",
+  "relativa": "POST /respuestas",
+  "controlador": "crearRespuesta",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/consultas/respuestas/importar",
+  "tipo": "ruta",
+  "modulo": "consultas",
+  "metodo": "POST",
+  "ruta": "/api/consultas/respuestas/importar",
+  "relativa": "POST /respuestas/importar",
+  "controlador": "importarRespuestas",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PUT /api/consultas/respuestas/:rid",
+  "tipo": "ruta",
+  "modulo": "consultas",
+  "metodo": "PUT",
+  "ruta": "/api/consultas/respuestas/:rid",
+  "relativa": "PUT /respuestas/:rid",
+  "controlador": "cambiarRespuesta",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "DELETE /api/consultas/respuestas/:rid",
+  "tipo": "ruta",
+  "modulo": "consultas",
+  "metodo": "DELETE",
+  "ruta": "/api/consultas/respuestas/:rid",
+  "relativa": "DELETE /respuestas/:rid",
+  "controlador": "borrarRespuesta",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/consultas/",
   "tipo": "ruta",
   "modulo": "consultas",
@@ -2533,6 +2685,22 @@
   "puertas": []
  },
  {
+  "id": "GET /api/consultas/:id/contexto",
+  "tipo": "ruta",
+  "modulo": "consultas",
+  "metodo": "GET",
+  "ruta": "/api/consultas/:id/contexto",
+  "relativa": "GET /:id/contexto",
+  "controlador": "contexto",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "POST /api/consultas/:id/responder",
   "tipo": "ruta",
   "modulo": "consultas",
@@ -2556,6 +2724,22 @@
   "ruta": "/api/consultas/:id/cerrar",
   "relativa": "POST /:id/cerrar",
   "controlador": "cerrar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/consultas/:id/notas",
+  "tipo": "ruta",
+  "modulo": "consultas",
+  "metodo": "POST",
+  "ruta": "/api/consultas/:id/notas",
+  "relativa": "POST /:id/notas",
+  "controlador": "anotar",
   "publica": false,
   "guardias": [
    {
@@ -15818,6 +16002,72 @@
   "puertas": [
    "tutores.gestionar"
   ]
+ },
+ {
+  "id": "POST /api/tutores/:id/campus/:projectId/desvincular",
+  "tipo": "ruta",
+  "modulo": "tutores",
+  "metodo": "POST",
+  "ruta": "/api/tutores/:id/campus/:projectId/desvincular",
+  "relativa": "POST /:id/campus/:projectId/desvincular",
+  "controlador": "desvincularCuenta",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tutores.gestionar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/tutores/:id/campus/:projectId/buscar-cuenta",
+  "tipo": "ruta",
+  "modulo": "tutores",
+  "metodo": "GET",
+  "ruta": "/api/tutores/:id/campus/:projectId/buscar-cuenta",
+  "relativa": "GET /:id/campus/:projectId/buscar-cuenta",
+  "controlador": "buscarCuentaMoodle",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tutores.gestionar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/tutores/:id/campus/:projectId/vincular",
+  "tipo": "ruta",
+  "modulo": "tutores",
+  "metodo": "POST",
+  "ruta": "/api/tutores/:id/campus/:projectId/vincular",
+  "relativa": "POST /:id/campus/:projectId/vincular",
+  "controlador": "vincularCuentaMoodle",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tutores.gestionar"
+    ]
+   }
+  ],
+  "puertas": []
  },
  {
   "id": "POST /api/tutores/:id/empresas",

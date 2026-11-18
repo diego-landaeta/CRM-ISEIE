@@ -10,6 +10,7 @@ import { loginSchema, setPasswordSchema, changePasswordSchema, updateMyProfileSc
 import { sendPasswordResetEmail } from '../../shared/services/brevo.service.js';
 import { logger } from '../../shared/utils/logger.js';
 import { buildPermissionsMap } from '../permissions/permissions.service.js';
+import { pluginMoodleActivo } from '../../shared/config/soloEnPruebas.js';
 
 // /api/auth/me devuelve el mapa de `permissions` calculado (rol, rol a medida
 // y lo dado a una persona suelta), igual que MultiCRM. `view` sigue vacío: la
@@ -212,6 +213,14 @@ export async function me(req, res, next) {
           // «Mi factura» (CRM-ISEIE#422): con ficha viva en Facturas de colaboradores.
           factura_propia: !!user.factura_propia,
           lleva_equipo: Boolean(equipo),
+          // Lo que el SERVIDOR tiene encendido, no la persona (como `funciones.links_pago`
+          // en MultiCRM). Va aquí porque es lo que el frontal ya guarda al entrar.
+          funciones: {
+            // El plugin del CRM en Moodle (#517, gemela de MultiCRM #850): lo mismo que
+            // decide qué rutas se montan (PLUGIN_MOODLE_EN_PRODUCCION). El frontal lo lee de
+            // aquí y no de la compilación: para encenderlo en producción basta con el `.env`.
+            plugin_moodle: pluginMoodleActivo(),
+          },
         },
         permissions,
         // null = sin recorte por equipo; si lleva uno, [ella, ...sus gestoras].

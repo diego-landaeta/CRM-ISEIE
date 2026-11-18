@@ -95,6 +95,7 @@ import actividadModule from './modules/actividad/index.js';
 import cursosPendientesModule from './modules/cursos-pendientes/index.js';
 import iaAnalisisModule from './modules/ia-analisis/index.js';
 import wcWebhook from './modules/woocommerce/wc.webhook.js';
+import moodleAvisos from './modules/consultas/consultas.webhook.js';
 import githubWebhook from './modules/tasks/tasks.github.webhook.js';
 import { githubTableroActivo } from './modules/tasks/tasks.github.js';
 import { startFeedbackDia7Scheduler } from './jobs/feedbackDia7Scheduler.js';
@@ -118,6 +119,7 @@ import { startStripeDisputasScheduler } from './jobs/stripeDisputasScheduler.js'
 import { startTutorCommissionsScheduler } from './jobs/tutorCommissionsScheduler.js';
 import { startTutoresCampusScheduler } from './jobs/tutoresCampusScheduler.js';
 import { startConsultasCampusScheduler } from './jobs/consultasCampusScheduler.js';
+import { startMoodleSincronizacionScheduler } from './jobs/moodleSincronizacionScheduler.js';
 import { startConsultasAlumnosScheduler } from './jobs/consultasAlumnosScheduler.js';
 import { startConsultasResumenScheduler } from './jobs/consultasResumenScheduler.js';
 import { startConsultasPlazoScheduler } from './jobs/consultasPlazoScheduler.js';
@@ -137,8 +139,8 @@ import { startMcpVigilanciaScheduler } from './jobs/mcpVigilanciaScheduler.js';
 import tasksModule from './modules/tasks/index.js';
 import { startTasksDailySummaryScheduler } from './jobs/tasksDailySummaryJob.js';
 import { startTareasResumenScheduler } from './jobs/tareasResumenJob.js';
-// Lo que aún no está aprobado para producción: el tablero (#210), las facturas de colaboradores (#202)
-// y el aviso de entregas sin corregir (#457).
+// Lo que aún no está aprobado para producción: el tablero (#210), las facturas de colaboradores (#202),
+// el aviso de entregas sin corregir (#457) y el plugin del CRM en cada Moodle (#406).
 import { tareasActivas, facturasColaboradorActivas, pluginMoodleActivo } from './shared/config/soloEnPruebas.js';
 import { porteroDelWebhook, topeDelEnvio, traducirTope } from './modules/webhook-tokens/portero.js';
 import { MAX_ENVIO_BYTES } from './modules/matriculas/admision.archivos.js';
@@ -180,6 +182,11 @@ app.use('/api/webhook-tokens/receive/:token', porteroDelWebhook, topeDelEnvio,
 
 // El aviso de WooCommerce (#14) lleva su propio parser, en bruto, para poder comprobar la firma.
 app.use('/api/woocommerce/webhook', wcWebhook);
+// El aviso del plugin del CRM en cada Moodle (#406, gemela de MultiCRM #679): cada mensaje
+// del campus, firmado. Solo en pruebas hasta aprobarlo (PLUGIN_MOODLE_EN_PRODUCCION): sin
+// montar, responde 404 y ningún campus puede conectarse ni avisar al CRM de producción.
+if (pluginMoodleActivo()) app.use('/api/moodle-avisos', moodleAvisos);
+else logger.info('Rutas SKIP (solo en pruebas): /api/moodle-avisos (plugin del CRM en Moodle)');
 
 // El aviso de GitHub (CRM-ISEIE#435): las issues del repositorio, al tablero. Firmado
 // (X-Hub-Signature-256), con su parser en bruto. Solo con el tablero montado y
@@ -617,6 +624,8 @@ if (process.env.NODE_ENV !== 'test') {
       ['cursos pendientes', startCursosPendientesScheduler],
       ['avisos del Moodle', startMoodleAvisosScheduler],
       ['diplomas revertidos', startCertifexReversionesScheduler],
+      // El repaso de los campus con el plugin: solo con el plugin aprobado (PLUGIN_MOODLE_EN_PRODUCCION).
+      ...(pluginMoodleActivo() ? [['repaso de los campus con el plugin', startMoodleSincronizacionScheduler]] : []),
     ]) {
       try {
         arrancar();

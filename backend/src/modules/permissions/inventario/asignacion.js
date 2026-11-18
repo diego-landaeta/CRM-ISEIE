@@ -25,7 +25,8 @@ export const PROPIAS = {
   // Una consulta, su tutor o administración de su campus (exigirVer); la
   // bandeja y escribir a un alumno, lo de cada tutor.
   consultas: ['GET /mias', 'GET /adjuntos/:id', 'POST /mensajes/:mensajeId/reintentar', 'POST /alumnos/:id/escribir',
-    'GET /:id', 'POST /:id/responder', 'POST /:id/cerrar'],
+    'GET /:id', 'GET /:id/contexto', 'POST /:id/responder', 'POST /:id/cerrar', 'POST /:id/notas',
+    'GET /respuestas', 'POST /respuestas', 'POST /respuestas/importar', 'PUT /respuestas/:rid', 'DELETE /respuestas/:rid'],
   // Cursos pendientes (#336): sin roleGuard a propósito, el recorte va en el
   // servicio (una tutora ve los suyos, una gestora los de sus campus, un admin
   // los de los suyos). Cuando haya un permiso propio del módulo, aquí se quita.

@@ -153,7 +153,7 @@ describe('cliente de Moodle (#187)', () => {
   it('busca por correo y dice si está suspendido', async () => {
     const fetchImpl = moodleFalso({ 'ana@campus.es': { id: 7, suspended: 1, fullname: 'Ana' } });
     const u = await usuarioPorCorreo({ url: 'campus.es', token: 'bueno' }, 'Ana@Campus.es', { fetchImpl });
-    expect(u).toEqual({ id: 7, suspendido: true, nombre: 'Ana' });
+    expect(u).toMatchObject({ id: 7, suspendido: true, nombre: 'Ana' });
     expect(await usuarioPorCorreo({ url: 'campus.es', token: 'bueno' }, 'nadie@campus.es', { fetchImpl })).toBeNull();
   });
 

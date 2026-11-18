@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-844 rutas en 66 módulos, y 31 acciones con condición dentro de una ruta.
+857 rutas en 66 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -200,10 +200,20 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | campusSinTutor | `GET /api/consultas/campus-sin-tutor` | (no existía) | (ruta nueva) | `consultas.view` |
 | sincronizarAlumnosAhora | `POST /api/consultas/sincronizar-alumnos` | (no existía) | (ruta nueva) | `consultas.gestionar` |
 | verMetricas | `GET /api/consultas/metricas` | (no existía) | (ruta nueva) | `consultas.atender` |
+| estadoDelPlugin | `GET /api/consultas/campus/:projectId/plugin` | (no existía) | (ruta nueva) | `consultas.gestionar` |
+| codigoDeConexion | `POST /api/consultas/campus/:projectId/plugin/codigo` | (no existía) | (ruta nueva) | `consultas.gestionar` |
+| desactivarPlugin | `DELETE /api/consultas/campus/:projectId/plugin` | (no existía) | (ruta nueva) | `consultas.gestionar` |
+| respuestas | `GET /api/consultas/respuestas` | (no existía) | (ruta nueva) | lo de cada uno |
+| crearRespuesta | `POST /api/consultas/respuestas` | (no existía) | (ruta nueva) | lo de cada uno |
+| importarRespuestas | `POST /api/consultas/respuestas/importar` | (no existía) | (ruta nueva) | lo de cada uno |
+| cambiarRespuesta | `PUT /api/consultas/respuestas/:rid` | (no existía) | (ruta nueva) | lo de cada uno |
+| borrarRespuesta | `DELETE /api/consultas/respuestas/:rid` | (no existía) | (ruta nueva) | lo de cada uno |
 | panel | `GET /api/consultas/` | (no existía) | (ruta nueva) | `consultas.view` |
 | ver | `GET /api/consultas/:id` | (no existía) | (ruta nueva) | lo de cada uno |
+| contexto | `GET /api/consultas/:id/contexto` | (no existía) | (ruta nueva) | lo de cada uno |
 | responder | `POST /api/consultas/:id/responder` | (no existía) | (ruta nueva) | lo de cada uno |
 | cerrar | `POST /api/consultas/:id/cerrar` | (no existía) | (ruta nueva) | lo de cada uno |
+| anotar | `POST /api/consultas/:id/notas` | (no existía) | (ruta nueva) | lo de cada uno |
 | tutoresPosibles | `GET /api/consultas/:id/tutores` | (no existía) | (ruta nueva) | `consultas.gestionar` |
 | reasignar | `POST /api/consultas/:id/reasignar` | (no existía) | (ruta nueva) | `consultas.gestionar` |
 | adjuntoPublico | `GET /api/adjunto-consulta/:token` | (no existía) | (ruta nueva) | — |
@@ -1068,6 +1078,9 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | campusDelTutor | `GET /api/tutores/:id/campus` | (no existía) | (ruta nueva) | lo de cada uno |
 | asignarCampus | `POST /api/tutores/:id/campus` | (no existía) | (ruta nueva) | `tutores.gestionar` |
 | comprobarCampus | `POST /api/tutores/:id/campus/comprobar` | (no existía) | (ruta nueva) | `tutores.gestionar` |
+| desvincularCuenta | `POST /api/tutores/:id/campus/:projectId/desvincular` | (no existía) | (ruta nueva) | `tutores.gestionar` |
+| buscarCuentaMoodle | `GET /api/tutores/:id/campus/:projectId/buscar-cuenta` | (no existía) | (ruta nueva) | `tutores.gestionar` |
+| vincularCuentaMoodle | `POST /api/tutores/:id/campus/:projectId/vincular` | (no existía) | (ruta nueva) | `tutores.gestionar` |
 | asignarEmpresa | `POST /api/tutores/:id/empresas` | (no existía) | (ruta nueva) | `tutores.gestionar` |
 | quitarEmpresa | `DELETE /api/tutores/:id/empresas/:issuerId` | (no existía) | (ruta nueva) | `tutores.gestionar` |
 | cambiarDisponible | `PATCH /api/tutores/:id/disponible` | (no existía) | (ruta nueva) | `tutores.gestionar` |

@@ -16,6 +16,7 @@
   si falta una, Moodle contesta con una excepción y aquí se traduce a algo que se
   entienda, no a «error».
 */
+import { pluginMoodleActivo } from '../config/soloEnPruebas.js';
 
 const TIEMPO_MAXIMO_MS = parseInt(process.env.MOODLE_TIMEOUT_MS || '10000', 10);
 
@@ -62,6 +63,9 @@ export async function llamar({ url, token }, funcion, parametros = {}, { fetchIm
       headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
       body: cuerpo.toString(),
       signal: control.signal,
+      // Un Moodle no redirige su API. Seguir una redirección permitiría que una dirección
+      // pública llevara al CRM a la red interna (la comprobación de la dirección es previa).
+      redirect: 'error',
     });
   } catch (err) {
     const tarde = err?.name === 'AbortError';
@@ -96,7 +100,22 @@ function traducir(datos, funcion) {
   if (/invalidrecord|function.*not.*found|codingerror/i.test(`${codigo} ${datos.message || ''}`)) {
     return new MoodleError(`El servicio del token no tiene la función «${funcion}».`, 'SIN_FUNCION');
   }
-  return new MoodleError(`El campus ha dicho: ${datos.message || codigo || 'error sin detalle'}.`, 'MOODLE');
+  const motivo = motivoDelError(datos) || codigo || 'error sin detalle';
+  return new MoodleError(`El campus ha dicho: ${motivo.replace(/[.\s]+$/, '')}.`, 'MOODLE');
+}
+
+/**
+ * El motivo del error: el `message`, salvo que sea el genérico de Moodle para un
+ * parámetro no válido («Invalid parameter value detected», #689). Ese no explica nada:
+ * el motivo de verdad va en `debuginfo`, que Moodle solo manda con la depuración
+ * encendida. El plugin 1.10.2 ya pone el motivo en `message`; con uno anterior, o con
+ * otra función, se usa `debuginfo` si viene.
+ */
+function motivoDelError(datos) {
+  const mensaje = String(datos.message || '').trim();
+  const debug = String(datos.debuginfo || '').trim();
+  const generico = !mensaje || datos.errorcode === 'invalidparameter' || /^invalid parameter value detected\.?$/i.test(mensaje);
+  return generico && debug ? debug : mensaje;
 }
 
 /** «¿El token vale?» Devuelve el nombre del sitio, la versión y si están las funciones. */
@@ -115,6 +134,43 @@ export async function infoDelCampus(conexion, opciones) {
 }
 
 /**
+ * La cuenta del token: el usuario con el que el CRM habla con el campus
+ * (`crm_servicio` desde el plugin; en conexiones antiguas, el administrador que
+ * creó el token). Nunca es la cuenta de una tutora.
+ */
+export async function cuentaDelToken(conexion, opciones) {
+  const info = await llamar(conexion, 'core_webservice_get_site_info', {}, opciones);
+  return { id: Number(info?.userid) || null, esAdministrador: Boolean(info?.userissiteadmin) };
+}
+
+/**
+ * Si una cuenta cualquiera del campus existe y es administradora del sitio, por el plugin
+ * del CRM (`local_crm_cuenta`, 1.10.2; revisión de la #689). La API de Moodle solo lo dice
+ * de la cuenta del token. Solo lectura.
+ *
+ * Con un plugin anterior (o un campus sin el plugin) la función no está: devuelve null y
+ * quien llama decide sin saberlo. Cualquier otro fallo sube como siempre.
+ */
+export async function cuentaDelCampus(conexion, moodleUserId, opciones) {
+  try {
+    const r = await llamar(conexion, 'local_crm_cuenta', { userid: moodleUserId }, opciones);
+    return { existe: Boolean(r?.existe), esAdministrador: Boolean(r?.siteadmin) };
+  } catch (err) {
+    if (err instanceof MoodleError && (err.codigo === 'SIN_FUNCION' || err.codigo === 'PERMISO')) return null;
+    throw err;
+  }
+}
+
+/** Un usuario del campus por un campo exacto (`id`, `username`, `email`), o null. */
+export async function usuarioPor(conexion, campo, valor, opciones) {
+  const v = String(valor ?? '').trim();
+  if (!v) return null;
+  const lista = await llamar(conexion, 'core_user_get_users_by_field', { field: campo, 'values[0]': v }, opciones);
+  const u = Array.isArray(lista) ? lista[0] : null;
+  return u ? { id: Number(u.id), suspendido: Boolean(u.suspended), nombre: u.fullname || null, email: u.email || null } : null;
+}
+
+/**
  * El usuario del campus con ese correo, o null si no hay ninguno.
  *
  * Moodle busca el correo tal cual se guardó: se pregunta en minúsculas, que es
@@ -125,10 +181,8 @@ export async function usuarioPorCorreo(conexion, correo, opciones) {
   if (!email) return null;
   const variantes = [...new Set([email.toLowerCase(), email])];
   for (const v of variantes) {
-    const lista = await llamar(conexion, 'core_user_get_users_by_field',
-      { field: 'email', 'values[0]': v }, opciones);
-    const u = Array.isArray(lista) ? lista[0] : null;
-    if (u) return { id: Number(u.id), suspendido: Boolean(u.suspended), nombre: u.fullname || null };
+    const u = await usuarioPor(conexion, 'email', v, opciones);
+    if (u) return u;
   }
   return null;
 }
@@ -223,15 +277,48 @@ export async function enviarMensaje(conexion, paraMoodleUserId, texto, opciones)
   return { id: Number(m.msgid), conversacionId: Number(m.conversationid) || null };
 }
 
+/**
+ * Manda un mensaje privado EN NOMBRE de la tutora, por el plugin del CRM
+ * (`local_crm_enviar_mensaje`, #679), con el token del campus: sin el token
+ * personal de cada tutora. El plugin solo deja enviar como personal del campus.
+ *
+ * Con `conversacionId` (plugin 1.9.0) va al chat de grupo del alumno con las tutoras del
+ * curso, donde lo ven todas; sin él, a la conversación privada de los dos.
+ *
+ * Solo en pruebas mientras no se apruebe (PLUGIN_MOODLE_EN_PRODUCCION): apagado no llama
+ * a nadie y falla con 'APAGADO', aunque quien llame se haya saltado su propia comprobación.
+ */
+export async function enviarComoTutor(conexion, desdeMoodleUserId, paraMoodleUserId, texto, { conversacionId = null, ...opciones } = {}) {
+  if (!pluginMoodleActivo()) {
+    throw new MoodleError('El plugin del CRM en Moodle aún no está aprobado en producción.', 'APAGADO');
+  }
+  const r = await llamar(conexion, 'local_crm_enviar_mensaje', {
+    desde: desdeMoodleUserId, para: paraMoodleUserId, texto,
+    ...(conversacionId ? { conversacionid: Number(conversacionId) } : {}),
+  }, opciones);
+  if (!r || !(Number(r.id) > 0)) throw new MoodleError('El campus no ha aceptado el mensaje.', 'NO_ENVIADO');
+  return { id: Number(r.id), conversacionId: Number(r.conversacion_id) || null };
+}
+
 /** El texto de un mensaje de Moodle (viene en HTML) como texto normal. */
 export function textoDeMoodle(html) {
   return String(html || '')
+    // Un enlace con texto propio conserva su dirección; una imagen se dice, no desaparece.
+    .replace(/<a\s[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi, (_, url, txt) => {
+      const limpio = txt.replace(/<[^>]+>/g, '').trim();
+      return !limpio || limpio === url ? url : `${limpio} (${url})`;
+    })
+    .replace(/<img\s[^>]*>/gi, (img) => {
+      const alt = /alt="([^"]*)"/i.exec(img)?.[1]?.trim();
+      return alt ? `[Imagen: ${alt}]` : '[Imagen]';
+    })
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/p>\s*<p[^>]*>/gi, '\n\n')
     .replace(/<[^>]+>/g, '')
     .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"').replace(/&#0?39;/g, "'")
+    .replace(/&#(\d+);/g, (_, n) => { try { return String.fromCodePoint(Number(n)); } catch { return ''; } })
     .replace(/\r\n?/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
@@ -321,10 +408,10 @@ export async function matriculadosDe(conexion, cursoId, opciones) {
 
 // ─── Las tareas (#457, de la parte 7 de la #681 y la #769 del CRM 360) ─────────
 //
-// Solo LECTURA, con el token del campus: lo que necesita el aviso de entregas sin
-// corregir. En el 360 aquí van también `entregasDeTarea`, `notasDeTarea`,
-// `contenidoDelCurso` y `calificarComoTutora` (corregir desde el CRM, parte 4 de la
-// #689); llegan con el porte de la #406/#408.
+// Solo LECTURA, con el token del campus: lo que necesitan el aviso de entregas sin
+// corregir (#457) y la ficha del alumno en Consultas (#406). En el 360 aquí van también
+// `entregasDeTarea`, `notasDeTarea`, `contenidoDelCurso` y `calificarComoTutora`
+// (corregir desde el CRM, parte 4 de la #689); llegan con el porte de la #408.
 
 /** Las tareas (mod_assign) de esos cursos, en UNA llamada: { cursoId: [{ id, cmid, nombre, entrega }] }. */
 export async function tareasDeCursos(conexion, cursoIds, opciones) {
