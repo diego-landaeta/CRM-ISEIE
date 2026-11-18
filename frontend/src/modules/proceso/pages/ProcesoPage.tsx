@@ -3,7 +3,7 @@ import { Plus, PencilSimple, EyeSlash, Eye, DotsSixVertical, Info, ArrowRight, L
 import PageHeader from '@/shared/components/ui/PageHeader';
 import Card from '@/shared/components/ui/Card';
 import EmptyState from '@/shared/components/ui/EmptyState';
-import { useAuth } from '@/contexts/AuthContext';
+import usePermission from '@/shared/hooks/usePermission';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useProyectosDelAmbito } from '@/shared/hooks/useAmbito';
 import { toast } from '@/shared/hooks/useToast';
@@ -24,8 +24,13 @@ import { textoDeDias } from '../lib/cuando';
  * entró un lunes; lo que ordena el proceso es cuánto lleva esperando.
  */
 
-export function puedeEditar(rol: string | undefined): boolean {
-  return rol === 'admin' || rol === 'superadmin';
+/**
+ * Quien puede crear, ordenar, editar y quitar pasos: `proceso.configurar_pasos`,
+ * lo mismo que pide el servidor (proceso.routes.js). Antes miraba el rol y a
+ * soporte, que lo trae de serie, le escondía los botones.
+ */
+export function puedeEditar(can: (permiso: string) => boolean): boolean {
+  return can('proceso.configurar_pasos');
 }
 
 // La frase que dice cuándo toca un paso ya no se escribe aquí: vive en
@@ -33,13 +38,13 @@ export function puedeEditar(rol: string | undefined): boolean {
 // sitio es justo lo que pedía Diego al cerrar el #87.
 
 export default function ProcesoPage() {
-  const { user } = useAuth() as { user: { role?: string } | null };
   const { activeProject, activeIssuer, isAllProjects } = useProjectContext() as {
     activeProject: { id?: number; nombre?: string } | null;
     activeIssuer: { id?: number; nombre?: string } | null;
     isAllProjects?: boolean;
   };
-  const admin = puedeEditar(user?.role);
+  const { can } = usePermission();
+  const admin = puedeEditar(can);
 
   // EL PROCESO ES DE LA EMPRESA, no de cada campus. Diego, 22/09.
   //
