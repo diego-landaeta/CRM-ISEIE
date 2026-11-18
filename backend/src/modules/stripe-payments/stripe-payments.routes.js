@@ -20,6 +20,8 @@ router.post('/sync', puede('stripe.view'), ctrl.sync);
 // como el cargo con id «disputas».
 router.get('/disputas', puede('stripe.edit'), disputas.listar);
 router.post('/disputas/sincronizar', puede('stripe.edit'), projectAccess, disputas.sincronizar);
+// Cargos sueltos y cobros sin cargo de una venta, para enlazarlos (CRM#888).
+router.get('/de-la-venta/:conversionId', puede('stripe.edit'), ctrl.deLaVenta);
 router.get('/:id', puede('stripe.view'), ctrl.getOne);
 
 // Asociar o desasociar a mano y decidir disputas: solo admin y superadmin.

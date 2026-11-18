@@ -2,7 +2,7 @@ import * as leadService from '../leads/lead.service.js';
 import * as conversionService from '../conversions/conversion.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
-import { query } from '../../shared/config/db.js';
+import { query, getClient } from '../../shared/config/db.js';
 import { comoLista, SIN_PRUEBAS } from '../../shared/utils/ambito.js';
 // El país de entrada del prospecto de cada venta (#221).
 import { sqlPaisDeLaVenta, sqlPaisDelLead } from '../leads/pais.js';
@@ -205,6 +205,20 @@ export async function createSale(data, requestUser) {
         }
         installmentsCreated = data.installments.length;
       }
+      // El pago inicial salda su cuota (CRM#888). El plan de este formulario
+      // suma el TOTAL, con el pago de hoy dentro como cuota 1; el pago se
+      // guardaba con la venta y las cuotas después, todas pendientes, y el
+      // cobro del mes siguiente acababa saldando la cuota 1.
+      const { saldarCuotas } = await import('../conversions/saldar-cuotas.js');
+      const c = await getClient();
+      try {
+        await c.query('BEGIN');
+        await saldarCuotas(c, conversion.id);
+        await c.query('COMMIT');
+      } catch (e) {
+        await c.query('ROLLBACK').catch(() => {});
+        throw e;
+      } finally { c.release(); }
       logger.info({ conversionId: conversion.id, installmentsCreated }, 'createSale: cuotas generadas');
     } catch (err) {
       // No rompemos la venta si fallan las cuotas — el gestor las puede crear luego.

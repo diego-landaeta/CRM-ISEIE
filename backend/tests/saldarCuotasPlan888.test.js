@@ -62,6 +62,17 @@ describe('#888 · planificar', () => {
     ]);
   });
 
+  it('los céntimos de un cobro que paga dos cuotas se quedan en la segunda, no parten la tercera', () => {
+    const { acciones } = planificar({
+      total: 714.99, cuotas: [cuota(1, 1, 238.33), cuota(2, 2, 238.33), cuota(3, 3, 238.33)],
+      sueltos: [cobro(1134, 478, '2026-09-07')],
+    });
+    expect(acciones.map((a) => [a.tipo, a.numero, a.cobrado])).toEqual([
+      ['saldar', 1, 238.33],
+      ['saldar', 2, 239.67],
+    ]);
+  });
+
   it('un cobro que no llega salda la cuota EN PARTE y el resto sigue pendiente', () => {
     const { acciones } = planificar({
       total: 600, cuotas: [cuota(1, 1, 200), cuota(2, 2, 200), cuota(3, 3, 200)],

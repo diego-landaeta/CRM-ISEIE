@@ -221,9 +221,29 @@ export async function payInstallment(req, res, next) {
     const instId = parseInt(req.params.instId);
     const parsed = payInstallmentSchema.safeParse(req.body || {});
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
-    const { fecha_cobro, importe_cobrado, metodo, notas, referencia } = parsed.data;
-    const r = await installmentsModel.markPaid(instId, { fecha_cobro, importe_cobrado, metodo, notas, referencia });
+    const { fecha_cobro, importe_cobrado, metodo, notas, referencia, confirmar } = parsed.data;
+    const r = await installmentsModel.markPaid(instId, { fecha_cobro, importe_cobrado, metodo, notas, referencia },
+      { confirmar: !!confirmar });
     if (!r) throw new AppError('Cuota no encontrada', 404, 'NOT_FOUND');
+    // Ya estaba pagada, o hay que preguntar antes de apuntarla (CRM#888).
+    const euros = (n) => Number(n).toFixed(2);
+    if (r.ya_pagada) {
+      const cp = r.cobro;
+      throw new AppError(
+        `Esta cuota ya está pagada${cp ? `: la salda el cobro de ${euros(cp.importe)} EUR del ${cp.fecha}${cp.factura ? ` (factura ${cp.factura})` : ''}` : ''}. `
+        + 'No se ha apuntado nada.', 409, 'CUOTA_YA_PAGADA', { cuota: r.numero, cobro: cp });
+    }
+    if (r.aviso === 'CARGO_STRIPE_SUELTO') {
+      throw new AppError(
+        `Ese pago ya entró por Stripe: un cargo de ${euros(r.cargo.importe)} EUR el ${r.cargo.fecha} de este cliente, `
+        + 'sin enlazar. Enlázalo desde la ficha de la venta en vez de apuntarlo otra vez.',
+        409, 'DUPLICATE_PAYMENT', { cargo: r.cargo });
+    }
+    if (r.aviso === 'PAGO_DE_MAS') {
+      throw new AppError(
+        `La venta ya tiene cobrados ${euros(r.cobrado)} EUR de ${euros(r.total)}: con esta cuota se cobraría de más. `
+        + 'Puede que esta cuota ya esté pagada.', 409, 'DUPLICATE_PAYMENT', { total: r.total, cobrado: r.cobrado });
+    }
     // Auto-factura POR PAGO: cobrar una cuota genera su factura por el importe
     // de ESA cuota (no una general por el total).
     if (r.conversion_id && r.payment_id) {

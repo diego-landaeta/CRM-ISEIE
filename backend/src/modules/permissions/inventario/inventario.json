@@ -13756,6 +13756,28 @@
   "puertas": []
  },
  {
+  "id": "GET /api/stripe-payments/de-la-venta/:conversionId",
+  "tipo": "ruta",
+  "modulo": "stripe-payments",
+  "metodo": "GET",
+  "ruta": "/api/stripe-payments/de-la-venta/:conversionId",
+  "relativa": "GET /de-la-venta/:conversionId",
+  "controlador": "deLaVenta",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "stripe.edit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/stripe-payments/:id",
   "tipo": "ruta",
   "modulo": "stripe-payments",

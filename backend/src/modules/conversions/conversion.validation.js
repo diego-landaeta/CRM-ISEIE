@@ -70,6 +70,8 @@ export const payInstallmentSchema = z.object({
   metodo: z.enum(PAYMENT_METHODS).optional().nullable(),
   notas: z.string().max(500).optional().nullable(),
   referencia,
+  // «Apuntarlo igualmente» tras el aviso de posible duplicado (CRM#888).
+  confirmar: z.boolean().optional(),
 });
 
 // Editar el pago de una cuota ya cobrada: fecha, importe y, desde el 15/10, la

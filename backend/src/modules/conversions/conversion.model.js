@@ -1,5 +1,6 @@
 import { query, getClient } from '../../shared/config/db.js';
 import { COBRADO_DE, recalcularCobrado } from './cobrado.js';
+import { saldarCuotas, cargosStripeSueltos } from './saldar-cuotas.js';
 import { activa as matriculaMoodleActiva } from '../matricula-moodle/matricula-moodle.config.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { CLASE_FACTURA, FACTURA_REAL } from '../invoices/clase.sql.js';
@@ -250,7 +251,10 @@ export async function findById(id) {
   // e incluimos los datos de cliente para que el front sepa si faltan datos.
   const { rows: payments } = await query(
     `SELECT cp.id, cp.importe, cp.fecha, cp.notas, cp.metodo, cp.referencia, cp.created_at,
-            ci.numero AS cuota_numero,
+            -- Un cobro puede saldar más de una cuota (CRM#888): «3, 4», y una
+            -- sola fila por cobro (con el JOIN salía repetido).
+            (SELECT string_agg(ci.numero::text, ', ' ORDER BY ci.numero)
+               FROM conversion_installments ci WHERE ci.payment_id = cp.id) AS cuota_numero,
             (cp.metodo = 'tarjeta_stripe' OR EXISTS (
               SELECT 1 FROM stripe_payments sp
                WHERE sp.conversion_payment_id = cp.id AND sp.status = 'succeeded'
@@ -259,7 +263,6 @@ export async function findById(id) {
             i.tipo AS factura_tipo, i.cliente_nif, i.cliente_direccion, i.cliente_ciudad,
             i.cliente_cp, i.cliente_pais, i.items AS factura_items
        FROM conversion_payments cp
-       LEFT JOIN conversion_installments ci ON ci.payment_id = cp.id
        LEFT JOIN invoices i ON i.payment_id = cp.id AND i.estado <> 'cancelada'
       WHERE cp.conversion_id = $1
       ORDER BY cp.fecha DESC, cp.id DESC`,
@@ -841,6 +844,18 @@ export async function addPayment(conversionId, { importe, fecha, notas, metodo, 
       }
     }
 
+    // ESE PAGO YA ENTRÓ POR STRIPE (CRM#888). Si hay un cargo de Stripe cobrado
+    // y sin enlazar de este cliente por el mismo importe, apuntarlo a mano lo
+    // cuenta dos veces (y acaba con dos facturas). Se avisa como un duplicado:
+    // la pantalla pregunta y, si de verdad es otro pago, se sigue.
+    if (opts.manual && !opts.allowDuplicate) {
+      const [cargo] = await cargosStripeSueltos((s, p) => client.query(s, p), conversionId, { importe });
+      if (cargo) {
+        await client.query('ROLLBACK');
+        return { error: 'CARGO_STRIPE_SUELTO', existing: cargo };
+      }
+    }
+
     // Anti-duplicado: el mismo importe en la misma venta con menos de 3 dias
     // de diferencia es casi siempre el mismo cobro metido dos veces (a mano y
     // por la sincronizacion de Stripe). Se puede forzar con allowDuplicate.
@@ -872,26 +887,12 @@ export async function addPayment(conversionId, { importe, fecha, notas, metodo, 
     // importe_pagado = suma de los pagos, con este ya dentro (#692).
     await recalcularCobrado(client, conversionId);
 
-    // Si la venta es fraccionada, el abono SALDA las cuotas pendientes más
-    // antiguas (FIFO) — igual que "Registrar pago". Así "Abonar" y "Registrar
-    // pago" son el MISMO proceso: el importe resta cuotas y deja de estar vencida.
-    // El sobrante que no complete una cuota queda como abono a cuenta.
-    const { rows: cuotas } = await client.query(
-      `SELECT id, importe_previsto FROM conversion_installments
-        WHERE conversion_id = $1 AND fecha_cobro IS NULL
-        ORDER BY numero ASC FOR UPDATE`, [conversionId]);
-    let restante = Number(importe);
-    const fechaAbono = payRows[0].fecha;
-    for (const q of cuotas) {
-      const prev = Number(q.importe_previsto);
-      if (restante + 0.001 < prev) break; // no alcanza para saldar esta cuota entera
-      await client.query(
-        `UPDATE conversion_installments
-            SET fecha_cobro = $1, importe_cobrado = $2, payment_id = $3, updated_at = NOW()
-          WHERE id = $4`,
-        [fechaAbono, prev, payRows[0].id, q.id]);
-      restante = Number((restante - prev).toFixed(2));
-    }
+    // Si la venta tiene plan de cuotas, el cobro salda la primera pendiente por
+    // número, con su fecha y su importe; y con él, cualquier cobro de antes que
+    // se hubiera quedado sin cuota (CRM#888). Antes solo saldaba si llegaba
+    // para la cuota entera y empezando por la «más antigua»: un pago inicial
+    // suelto hacía que el cobro de septiembre saldara la cuota 1.
+    await saldarCuotas(client, conversionId);
 
     await client.query('COMMIT');
     return { payment: payRows[0], nuevoImportePagado: nuevoTotal };

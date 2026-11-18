@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { logger } from '../../shared/utils/logger.js';
+import { AppError } from '../../shared/utils/AppError.js';
 import { activa as facturaAutomaticaActiva } from '../factura-automatica/factura-automatica.config.js';
 import { decrypt } from '../../shared/utils/crypto.js';
 import * as integrationsModel from '../integrations/integrations.model.js';
@@ -526,6 +527,64 @@ export async function comprasDirectasSinVenta(projectId, { env = process.env, li
   }
   if (filas.length) logger.info({ projectId, mirados: filas.length, creadas }, 'compras directas sin venta: pasada hecha');
   return { mirados: filas.length, creadas };
+}
+
+/**
+ * ENLAZAR UN CARGO CON EL COBRO (O LA FACTURA) DE ESE MISMO PAGO (CRM#888).
+ *
+ * «Asociar» busca solo el cobro equivalente: mismo importe con un euro de
+ * margen y a tres días o menos. Si la gestora lo apuntó con otro importe (la
+ * cuota del plan y no lo que cobró Stripe) o con otra fecha, no lo encuentra y
+ * crea OTRO cobro: el dinero contado dos veces y, después, otra factura.
+ *
+ * Aquí quien enlaza dice cuál es: el cargo queda en ese cobro, sin crear cobro
+ * ni factura y sin tocar su importe (la factura ya emitida manda). El id del
+ * cargo va a las notas del cobro, que es lo que mira `findPagoDuplicado` para
+ * no volver a registrarlo. Errores con `code` para la pantalla.
+ */
+export async function enlazarConCobro(stripePaymentId, { conversionPaymentId = null, invoiceId = null, userId = null }) {
+  const cargo = await model.getById(stripePaymentId);
+  if (!cargo) throw new AppError('Cargo no encontrado', 404, 'NOT_FOUND');
+  if (cargo.status !== 'succeeded') {
+    throw new AppError('Ese cargo no se cobró en Stripe: no se enlaza con un cobro.', 409, 'CARGO_NO_COBRADO');
+  }
+  let pagoId = conversionPaymentId ? Number(conversionPaymentId) : null;
+  if (!pagoId && invoiceId) {
+    const { rows } = await query('SELECT payment_id FROM invoices WHERE id = $1', [invoiceId]);
+    if (!rows[0]) throw new AppError('Factura no encontrada', 404, 'NOT_FOUND');
+    if (!rows[0].payment_id) throw new AppError('Esa factura no tiene cobro al que enlazar el cargo.', 409, 'FACTURA_SIN_COBRO');
+    pagoId = rows[0].payment_id;
+  }
+  if (!pagoId) throw new AppError('Di con qué cobro o factura se enlaza.', 400, 'BAD_REQUEST');
+  const { rows: cobro } = await query(
+    `SELECT cp.id, cp.conversion_id, cp.importe, c.lead_id, c.project_id
+       FROM conversion_payments cp JOIN conversions c ON c.id = cp.conversion_id WHERE cp.id = $1`, [pagoId]);
+  if (!cobro[0]) throw new AppError('Cobro no encontrado', 404, 'NOT_FOUND');
+  if (Number(cobro[0].project_id) !== Number(cargo.project_id)) throw new AppError('Cobro no encontrado', 404, 'NOT_FOUND');
+  if (cargo.conversion_payment_id && Number(cargo.conversion_payment_id) !== pagoId) {
+    throw new AppError('Ese cargo ya está enlazado con otro cobro. Desasócialo antes.', 409, 'CARGO_YA_ENLAZADO');
+  }
+  const { rows: otro } = await query(
+    `SELECT id FROM stripe_payments WHERE conversion_payment_id = $1 AND id <> $2 AND status = 'succeeded' LIMIT 1`,
+    [pagoId, stripePaymentId]);
+  if (otro[0]) throw new AppError('Ese cobro ya tiene otro cargo de Stripe enlazado.', 409, 'COBRO_YA_TIENE_CARGO');
+
+  await model.linkPayment(stripePaymentId, {
+    leadId: cobro[0].lead_id, conversionId: cobro[0].conversion_id, conversionPaymentId: pagoId,
+    userId, method: 'manual_cobro',
+  });
+  if (/^[A-Za-z0-9_]+$/.test(String(cargo.stripe_id || ''))) {
+    await query(
+      `UPDATE conversion_payments SET notas = concat_ws(' · ', NULLIF(notas, ''), 'Stripe ' || $2::text)
+        WHERE id = $1 AND COALESCE(notas, '') NOT LIKE '%' || $2::text || '%'`,
+      [pagoId, cargo.stripe_id]);
+  }
+  if (Math.abs(Number(cargo.amount) - Number(cobro[0].importe)) > 0.01) {
+    logger.info({ stripePaymentId, pagoId, cargo: Number(cargo.amount), cobro: Number(cobro[0].importe) },
+      'cargo enlazado con un cobro de otro importe: manda el cobro (y su factura)');
+  }
+  await trasAsociarCargo(stripePaymentId);
+  return { conversionPaymentId: pagoId, conversionId: cobro[0].conversion_id };
 }
 
 export async function manualLink(stripePaymentId, { leadId, conversionId, userId }) {
