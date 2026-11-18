@@ -399,7 +399,7 @@ export async function enlazarConCobro(stripePaymentId, { conversionPaymentId = n
     logger.info({ stripePaymentId, pagoId, cargo: Number(cargo.amount), cobro: Number(cobro[0].importe) },
       'cargo enlazado con un cobro de otro importe: manda el cobro (y su factura)');
   }
-  await trasAsociarCargo(stripePaymentId);
+  // En ISEIE no hay ventas a plazos por suscripción (trasAsociarCargo, #446): el cobro ya existe, no hay más que hacer.
   return { conversionPaymentId: pagoId, conversionId: cobro[0].conversion_id };
 }
 
