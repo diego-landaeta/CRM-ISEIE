@@ -183,9 +183,15 @@ describe('matriculas: altas por producto, estado y campus', () => {
     expect((await ver(ADMIN, 'matriculas', { desde: '2020-01-01', hasta: '2099-01-01' })).datos.total).toBe(3);
   });
 
-  it('una gestora solo cuenta las matrículas de SUS ventas', async () => {
-    expect((await ver(LAURA, 'matriculas')).datos).toMatchObject({ total: 1, validadas: 1 });
-    expect((await ver(ANA, 'matriculas')).datos).toMatchObject({ total: 1, pendientes: 1, validadas: 0 });
+  // Diego, 17/11/2026: «que todas las gestoras puedan ver en Matrículas (Solicitud de
+  // admisión) la información». La pantalla le enseña a la gestora todas las de SUS
+  // campus, y Claude cuenta lo mismo; las del campus que no es suyo, no.
+  it('una gestora cuenta todas las solicitudes de SU campus, no solo las de sus ventas, y ninguna de otro', async () => {
+    for (const g of [LAURA, ANA]) {
+      const { datos } = await ver(g, 'matriculas');
+      expect(datos).toMatchObject({ total: 3, validadas: 1, pendientes: 1, rechazadas: 0, solicitudes_de_admision: 1 });
+      expect(datos.por_campus).toEqual([expect.objectContaining({ campus: `${MARCA} a`, matriculas: 3 })]);
+    }
   });
 
   it('no sale ningún dato personal', async () => {

@@ -9,7 +9,7 @@ import {
   ChatText,
   Receipt, Coins, Wrench, ShoppingBag, ChatCircleText, Wallet, Bank, Shuffle, Clock, GitMerge, CopySimple,
   UsersThree, CloudArrowDown,
-  GraduationCap, Warning, Certificate, ClipboardText, ChatsCircle, Kanban, ClockCounterClockwise, SlidersHorizontal, Key } from '@phosphor-icons/react';
+  GraduationCap, Warning, Certificate, ClipboardText, ChatsCircle, Kanban, ClockCounterClockwise, SlidersHorizontal, Key, Timer } from '@phosphor-icons/react';
 import { abrirPedirAcceso } from '@/modules/soporte/lib/accesos';
 import { useAuth } from '@/contexts/AuthContext';
 import { rolesDe } from '@/shared/lib/roles';
@@ -111,6 +111,9 @@ export const NAV_SECTIONS = [
       // «Mi factura» (#202): el colaborador con usuario sube aquí su factura del mes.
       // Aquí, junto a su tablero, como en MultiCRM: es lo otro que ve un colaborador.
       { to: '/mi-factura', label: 'Mi factura', icon: Receipt, roles: ['colaborador', 'tutor_redactor'], permiso: 'facturas_colaborador.subir' },
+      // Monitask (#236): qué hace cada colaborador y el cotejo con sus facturas. Solo en
+      // /staging y local hasta que Diego lo apruebe; además, con MONITASK_ACTIVO en el servidor.
+      ...(SOLO_EN_PRUEBAS ? [{ to: '/equipo/actividad', label: 'Actividad', icon: Timer, roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'monitask.view' }] : []),
     ],
   },
   {
@@ -219,7 +222,7 @@ export const NAV_SECTIONS = [
       { to: '/clients',    label: 'Clientes',   icon: UserCheck, sectionPrefixes: ['/clients'], permiso: 'clients.view' },
       { to: '/leads/revision-duplicados', label: 'Revisión duplicados', icon: GitMerge, roles: ['admin', 'superadmin'], permiso: 'leads.duplicados' },
       { to: '/leads/duplicados', label: 'Buscar duplicados', icon: CopySimple, roles: ['admin', 'superadmin'], permiso: 'leads.duplicados' },
-      { to: '/matriculas', label: 'Matrículas', icon: UserCheck, permiso: 'matriculas.view' },
+      { to: '/matriculas', label: 'Solicitud de admisión', icon: UserCheck, permiso: 'matriculas.view' },
       // Diplomas de Certifex (#272): lo que piden los alumnos desde Moodle, aprobarlo,
       // enviarlo y revocarlo. Administración, como en MultiCRM, y además, para VERLO en
       // solo lectura, quien tenga `diplomas.view` (#223, `oPermiso`), y para emitir,

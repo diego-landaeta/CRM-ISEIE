@@ -32,6 +32,7 @@ import facturacionAuditoriaModule from './modules/facturacion-auditoria/index.js
 import facturasColaboradorModule from './modules/facturas-colaborador/index.js';
 // Registro automático de cobros: PayPal y extractos del banco (#766). Cada parte, con su interruptor.
 import cobrosExternosModule from './modules/cobros-externos/index.js';
+import monitaskModule from './modules/monitask/index.js';
 import { startFacturasColaboradorScheduler } from './jobs/facturasColaboradorJob.js';
 import { startFacturasColaboradorAvisosScheduler } from './jobs/facturasColaboradorAvisosJob.js';
 import widgetModule from './modules/widget/index.js';
@@ -58,6 +59,7 @@ import { startWebhooksSalientesScheduler } from './jobs/webhooksSalientesSchedul
 import { startCopiaDiariaScheduler } from './jobs/copiaDiariaJob.js';
 import { startFacturacionAuditoriaScheduler } from './jobs/facturacionAuditoriaJob.js';
 import { startInformeMensualScheduler } from './jobs/informeMensualJob.js';
+import { startBrevoBloqueadosScheduler } from './jobs/brevoBloqueadosScheduler.js';
 import { startAsignacionScheduler } from './jobs/asignacionScheduler.js';
 import projectChannelsModule from './modules/project-channels/index.js';
 import installationModule from './modules/installation/index.js';
@@ -97,10 +99,12 @@ import { startEmailSequenceScheduler } from './jobs/emailSequenceScheduler.js';
 import { startDocumentOrphanScheduler } from './jobs/documentOrphanScheduler.js';
 import { startGoogleAdsTokenScheduler } from './jobs/googleAdsTokenScheduler.js';
 import { startMetaAdsSyncScheduler } from './jobs/metaAdsSyncScheduler.js';
+import { startMetaTokensScheduler } from './jobs/metaTokensScheduler.js';
 import { startReminderScheduler } from './jobs/reminderScheduler.js';
 import { startWooCommerceSyncScheduler } from './jobs/wooCommerceSyncScheduler.js';
 import { startStripePaymentsSyncScheduler } from './jobs/stripePaymentsSyncScheduler.js';
 import { startPaypalCobrosSyncScheduler } from './jobs/paypalCobrosSyncScheduler.js';
+import { startMonitaskSyncScheduler } from './jobs/monitaskSyncScheduler.js';
 import { startTutorCommissionsScheduler } from './jobs/tutorCommissionsScheduler.js';
 import { startTutoresCampusScheduler } from './jobs/tutoresCampusScheduler.js';
 import { startConsultasCampusScheduler } from './jobs/consultasCampusScheduler.js';
@@ -318,6 +322,8 @@ const MODULES = [
   ...(facturasColaboradorActivas() ? [facturasColaboradorModule] : []),
   // Cobros de PayPal y extractos del banco (#766): cada ruta contesta 404 con su interruptor apagado.
   cobrosExternosModule,
+  // Monitask (#236): cada ruta contesta 404 con MONITASK_ACTIVO apagado.
+  monitaskModule,
   widgetModule,
   expensesModule,
   accountsPayableModule,
@@ -502,6 +508,12 @@ if (process.env.NODE_ENV !== 'test') {
         logger.error({ err }, 'Meta Ads sync scheduler fallo al arrancar');
       }
     }
+    // Renovación diaria de tokens de Meta e Instagram (#471). Apagada sin META_TOKENS_RENOVACION_ACTIVA=1.
+    try {
+      startMetaTokensScheduler();
+    } catch (err) {
+      logger.error({ err }, 'Renovación de tokens de Meta fallo al arrancar');
+    }
     if (process.env.REMINDER_DISABLED !== '1') {
       try {
         startReminderScheduler();
@@ -541,6 +553,12 @@ if (process.env.NODE_ENV !== 'test') {
       startPaypalCobrosSyncScheduler();
     } catch (err) {
       logger.error({ err }, 'PayPal: el sondeo de cobros falló al arrancar');
+    }
+    // Monitask (#236): cada noche, solo con MONITASK_ACTIVO=1.
+    try {
+      startMonitaskSyncScheduler();
+    } catch (err) {
+      logger.error({ err }, 'Monitask: la sincronización nocturna falló al arrancar');
     }
     // Seguridad del MCP (#237, desde #194 y #195): fuera del bloque de Stripe
     // a propósito, para que apagar la sincronización de Stripe no la apague.
@@ -610,6 +628,12 @@ if (process.env.NODE_ENV !== 'test') {
       startInformeMensualScheduler();
     } catch (err) {
       logger.error({ err }, 'Informe mensual a la gestoría: falló al arrancar');
+    }
+    // Correos del equipo bloqueados en Brevo (17/11). Apagada de serie: BREVO_BLOQUEADOS_ACTIVO.
+    try {
+      startBrevoBloqueadosScheduler();
+    } catch (err) {
+      logger.error({ err }, 'Correos bloqueados en Brevo: la vigilancia falló al arrancar');
     }
     // Los reintentos del webhook de transferencias (se apaga con WEBHOOKS_SALIENTES_DISABLED=1).
     try {

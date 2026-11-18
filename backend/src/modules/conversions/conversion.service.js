@@ -267,7 +267,16 @@ function autoInvoiceDeSiempre(conversionId, userId = null, paymentInfo = null) {
       logger.info({ conversionId, paymentId: paymentInfo?.paymentId, invoiceId: inv.id, codigo: inv.codigo },
         'auto-factura por pago');
     }
-  })().catch((err) => logger.warn({ err: err.message, conversionId }, 'auto-factura por pago fallo (no bloqueante)'));
+  })().catch((err) => {
+    // Posible duplicada (CRM#819 / CRM-ISEIE#500): la emision automatica no
+    // decide. No emite, y el cobro se queda en la cola con ese motivo.
+    if (err?.code === 'POSIBLE_DUPLICADA') {
+      logger.info({ conversionId, paymentId: paymentInfo?.paymentId, otra: err.data?.otra?.numero },
+        'factura automatica no emitida: posible duplicada; el cobro queda en la cola');
+      return;
+    }
+    logger.warn({ err: err.message, conversionId }, 'auto-factura por pago fallo (no bloqueante)');
+  });
 }
 
 export async function getById(id) {
