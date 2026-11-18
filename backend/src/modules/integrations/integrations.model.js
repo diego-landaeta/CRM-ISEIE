@@ -61,6 +61,19 @@ export async function recordTestResult({ projectId, provider, status, message })
   );
 }
 
+/**
+ * Funde campos en `config_public` sin tocar nada más (ni la clave ni `active`).
+ * `upsert` no vale para esto: sin `active` lo dejaría en false.
+ */
+export async function fundirConfigPublica({ projectId, provider, campos }) {
+  await query(
+    `UPDATE project_integrations
+        SET config_public = COALESCE(config_public, '{}'::jsonb) || $3::jsonb
+      WHERE project_id = $1 AND provider = $2`,
+    [projectId, provider, JSON.stringify(campos)]
+  );
+}
+
 export async function remove(projectId, provider) {
   await query(`DELETE FROM project_integrations WHERE project_id = $1 AND provider = $2`,
     [projectId, provider]);

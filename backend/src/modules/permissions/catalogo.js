@@ -365,6 +365,15 @@ export const SECCIONES = [
         ],
       },
       {
+        // Links de pago (#407, gemela de CRM#680). Sin `view`: cada una ve los que creó con `crear`,
+        // y los de las demás de sus campus con `ver_todos`. Siempre en SUS campus.
+        clave: 'links_pago', nombre: 'Links de pago', acciones: [
+          a('crear', 'Crear links de pago', 'Crear un link de pago de Stripe para un prospecto o una venta de sus campus, y ver los suyos.', COMERCIAL),
+          a('ver_todos', 'Ver los links de todos', 'Los links de pago de todas las personas de sus campus (o de su equipo, si lleva uno).', ADMIN),
+          a('configurar', 'Configurar los links de pago', 'Las reglas de los links de cada campus (descuento máximo, caducidad, cuotas y monedas) y el webhook de su cuenta de Stripe.', ADMIN),
+        ],
+      },
+      {
         clave: 'facturas_colaborador', nombre: 'Facturas de colaboradores', acciones: [
           // La vendedora de la lista (CRM#710) la tiene por excepción, con su ficha: nunca por su rol.
           a('subir', 'Subir su factura', '«Mi factura»: el colaborador, o la vendedora de la lista, sube la suya del mes.', ['colaborador', 'tutor_redactor'], { propia: true }),
