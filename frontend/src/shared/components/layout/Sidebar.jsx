@@ -9,7 +9,8 @@ import {
   ChatText,
   Receipt, Coins, Wrench, ShoppingBag, ChatCircleText, Wallet, Bank, Shuffle, Clock, GitMerge, CopySimple,
   UsersThree, CloudArrowDown,
-  GraduationCap, Warning, Certificate, ClipboardText, ChatsCircle, Kanban, ClockCounterClockwise, SlidersHorizontal, Timer } from '@phosphor-icons/react';
+  GraduationCap, Warning, Certificate, ClipboardText, ChatsCircle, Kanban, ClockCounterClockwise, SlidersHorizontal, Key, Timer } from '@phosphor-icons/react';
+import { abrirPedirAcceso } from '@/modules/soporte/lib/accesos';
 import { useAuth } from '@/contexts/AuthContext';
 import { rolesDe } from '@/shared/lib/roles';
 import usePermission from '@/shared/hooks/usePermission';
@@ -393,6 +394,27 @@ export function rutaPermitida(pathname, can) {
   if (!suyas.length && SIN_ENTRADA[ruta]) suyas.push({ permiso: SIN_ENTRADA[ruta] });
   if (!suyas.length) return true;
   return suyas.some((it) => !it.permiso || tiene(it.permiso) || (it.oPermiso && tiene(it.oPermiso)));
+}
+
+/**
+ * La clave del permiso que le falta para abrir esta pantalla (gemela de
+ * CRM#820), para que «No tienes acceso» ofrezca pedir ESE. Con la misma regla
+ * que `rutaPermitida`: la primera clave del catálogo que pide su entrada del
+ * menú y no tiene. `null` si la puede abrir o no se sabe cuál es.
+ */
+export function permisoQueFalta(pathname, can) {
+  if (rutaPermitida(pathname, can)) return null;
+  const ruta = String(pathname || '').replace(/\/+$/, '') || '/';
+  const claves = [];
+  const recorrer = (items) => {
+    for (const it of items || []) {
+      if (it.to && !it.href && it.to === ruta && it.permiso) claves.push(...[].concat(it.permiso));
+      if (it.children) recorrer(it.children);
+    }
+  };
+  for (const s of NAV_SECTIONS) recorrer(s.items);
+  if (!claves.length && SIN_ENTRADA[ruta]) claves.push(...[].concat(SIN_ENTRADA[ruta]));
+  return claves.find((c) => String(c).includes('.') && !(typeof can === 'function' && can(c) === true)) || null;
 }
 
 /** Vanessa y quien lleve las colaboraciones: solo tutores. Un admin con la casilla NO se recorta. */
@@ -866,6 +888,14 @@ export default function Sidebar({ collapsed = false, onToggleCollapsed, onNaviga
             >
               <Headset size={15} />
               Soporte
+            </button>
+            {/* Gemela de CRM#820: un alta, un permiso, un campus o Claude, a soporte como ticket. Para todos. */}
+            <button
+              onClick={() => { setUserMenuOpen(false); abrirPedirAcceso(); }}
+              className="w-full flex items-center gap-2.5 px-3 py-2 text-[13px] hover:bg-secondary/60 text-foreground"
+            >
+              <Key size={15} />
+              Pedir acceso o permiso
             </button>
             <div className="my-1 border-t border-border" />
             <button
