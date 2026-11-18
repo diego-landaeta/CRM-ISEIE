@@ -3591,6 +3591,119 @@
   "puertas": []
  },
  {
+  "id": "GET /api/diploma-confirmacion/",
+  "tipo": "ruta",
+  "modulo": "diploma-confirmacion",
+  "metodo": "GET",
+  "ruta": "/api/diploma-confirmacion/",
+  "relativa": "GET /",
+  "controlador": "estados",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "diplomas.view",
+     "diplomas.emit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/diploma-confirmacion/pedir",
+  "tipo": "ruta",
+  "modulo": "diploma-confirmacion",
+  "metodo": "POST",
+  "ruta": "/api/diploma-confirmacion/pedir",
+  "relativa": "POST /pedir",
+  "controlador": "pedir",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "diplomas.emit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/diploma-confirmacion/:matriculaId/reenviar",
+  "tipo": "ruta",
+  "modulo": "diploma-confirmacion",
+  "metodo": "POST",
+  "ruta": "/api/diploma-confirmacion/:matriculaId/reenviar",
+  "relativa": "POST /:matriculaId/reenviar",
+  "controlador": "reenviar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "diplomas.emit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/diploma-confirmacion/:matriculaId/aplicar",
+  "tipo": "ruta",
+  "modulo": "diploma-confirmacion",
+  "metodo": "POST",
+  "ruta": "/api/diploma-confirmacion/:matriculaId/aplicar",
+  "relativa": "POST /:matriculaId/aplicar",
+  "controlador": "reaplicar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "diplomas.emit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/cd/:token",
+  "tipo": "ruta",
+  "modulo": "diploma-confirmacion",
+  "metodo": "GET",
+  "ruta": "/api/cd/:token",
+  "relativa": "GET /:token",
+  "controlador": "formulario",
+  "publica": true,
+  "guardias": [],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/cd/:token",
+  "tipo": "ruta",
+  "modulo": "diploma-confirmacion",
+  "metodo": "POST",
+  "ruta": "/api/cd/:token",
+  "relativa": "POST /:token",
+  "controlador": "responder",
+  "publica": true,
+  "guardias": [],
+  "puertas": []
+ },
+ {
   "id": "GET /api/documents/",
   "tipo": "ruta",
   "modulo": "documents",

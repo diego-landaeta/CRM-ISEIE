@@ -78,6 +78,8 @@ import feedbackModule from './modules/feedback/index.js';
 import facturaAutomaticaModule from './modules/factura-automatica/index.js';
 import novedadesModule from './modules/novedades/index.js';
 import certifexModule from './modules/certifex/index.js';
+// El alumno confirma los datos de su diploma antes de emitirlo (gemela de CRM#847). Apagado de serie.
+import diplomaConfirmacionModule from './modules/diploma-confirmacion/index.js';
 // Sistema → Registro (#111), como en MultiCRM: quién hizo qué y los sucesos del sistema.
 import registroModule from './modules/registro/index.js';
 // Sistema → Mensajes: el chat interno del equipo, como en MultiCRM. Migración 232.
@@ -97,6 +99,7 @@ import githubWebhook from './modules/tasks/tasks.github.webhook.js';
 import { githubTableroActivo } from './modules/tasks/tasks.github.js';
 import { startFeedbackDia7Scheduler } from './jobs/feedbackDia7Scheduler.js';
 import { startFacturaAutomaticaScheduler } from './jobs/facturaAutomaticaScheduler.js';
+import { startDiplomaConfirmacionScheduler } from './jobs/diplomaConfirmacionScheduler.js';
 import { startNovedadesScheduler } from './jobs/novedadesScheduler.js';
 import convocatoriasModule from './modules/convocatorias/index.js';
 import { startEmailSequenceScheduler } from './jobs/emailSequenceScheduler.js';
@@ -376,6 +379,8 @@ const MODULES = [
   convocatoriasModule,
   // Certifex: el CRM aprueba y Certifex emite (Matrículas → Certificaciones).
   certifexModule,
+  // El alumno confirma los datos de su diploma antes de emitirlo (gemela de CRM#847). Apagado de serie.
+  diplomaConfirmacionModule,
   // Sistema → Registro (#111): solo lectura sobre lo que ya se apunta. Admin y superadmin.
   registroModule,
   // Mensajes del equipo (/api/mensajes, con /api/messages de alias).
@@ -556,6 +561,7 @@ if (process.env.NODE_ENV !== 'test') {
         startSuscripcionesPlazosScheduler();
         startFeedbackDia7Scheduler();
         startFacturaAutomaticaScheduler();
+        startDiplomaConfirmacionScheduler();
         startNovedadesScheduler();
         startResumenDiarioScheduler();
         startReporteSemanalScheduler();

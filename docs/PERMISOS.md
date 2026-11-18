@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-837 rutas en 65 módulos, y 31 acciones con condición dentro de una ruta.
+843 rutas en 66 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -281,6 +281,17 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | publicar | `POST /api/cursos-pendientes/:id/publicar` | (no existía) | (ruta nueva) | lo de cada uno |
 | sumarAlumna | `POST /api/cursos-pendientes/:id/alumnas` | (no existía) | (ruta nueva) | lo de cada uno |
 | marcarAlumna | `PATCH /api/cursos-pendientes/:id/alumnas/:alumnaId` | (no existía) | (ruta nueva) | lo de cada uno |
+
+## diploma-confirmacion
+
+| Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
+|---|---|---|---|---|
+| estados | `GET /api/diploma-confirmacion/` | (no existía) | (ruta nueva) | `diplomas.view` o `diplomas.emit` |
+| pedir | `POST /api/diploma-confirmacion/pedir` | (no existía) | (ruta nueva) | `diplomas.emit` |
+| reenviar | `POST /api/diploma-confirmacion/:matriculaId/reenviar` | (no existía) | (ruta nueva) | `diplomas.emit` |
+| reaplicar | `POST /api/diploma-confirmacion/:matriculaId/aplicar` | (no existía) | (ruta nueva) | `diplomas.emit` |
+| formulario | `GET /api/cd/:token` | (no existía) | (ruta nueva) | — |
+| responder | `POST /api/cd/:token` | (no existía) | (ruta nueva) | — |
 
 ## documents
 

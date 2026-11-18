@@ -104,6 +104,8 @@ const PreguntarPage = lazy(() => import('./modules/ia-analisis/pages/PreguntarPa
 const FeedbackEncuestaPage = lazy(() => import('./modules/feedback/pages/FeedbackEncuestaPage'));
 // El formulario de datos fiscales de la factura automática (#452): sin sesión, desde el correo.
 const DatosFiscalesPage = lazy(() => import('./modules/factura-automatica/pages/DatosFiscalesPage'));
+// La confirmación de los datos del diploma (gemela de CRM#847): sin sesión, desde el correo.
+const ConfirmarDiplomaPage = lazy(() => import('./modules/diploma-confirmacion/pages/ConfirmarDiplomaPage'));
 const FeedbackPanelPage = lazy(() => import('./modules/feedback/pages/FeedbackPanelPage'));
 const NovedadesPage = lazy(() => import('./modules/novedades/pages/NovedadesPage'));
 const NotificacionesPage = lazy(() => import('./modules/notificaciones/pages/NotificacionesPage'));
@@ -277,6 +279,8 @@ function App() {
         <Route path="/feedback/:token" element={<FeedbackEncuestaPage />} />
         {/* Sin sesion: el alumno da sus datos para la factura (#452). El enlace es la llave. */}
         <Route path="/datos-fiscales/:token" element={<DatosFiscalesPage />} />
+        {/* Sin sesion: el alumno confirma o corrige los datos de su diploma (gemela de CRM#847). El enlace es la llave. */}
+        <Route path="/confirmar-diploma/:token" element={<ConfirmarDiplomaPage />} />
         {/* El enlace personal del colaborador (#202): sin usuario, el enlace es la llave.
             Si la API no está montada (producción sin aprobar), dice que el enlace no vale. */}
         <Route path="/factura-colaborador/:token" element={<FacturaEnlacePage />} />
