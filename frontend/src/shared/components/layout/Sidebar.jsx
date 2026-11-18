@@ -5,11 +5,12 @@ import {
   Moon, Sun, CaretLeft, CaretRight, UserCircle,
   CaretUp, CaretDown, Bell, Pulse, Calculator, Envelope, Globe,
   FilePdf, ShieldCheck, MagnifyingGlass, Headset, BookOpen, Sliders,
-  Megaphone, Robot, Sparkle, PlugsConnected, WebhooksLogo, CreditCard, WarningCircle, WhatsappLogo,
+  Robot, Sparkle, PlugsConnected, WebhooksLogo, CreditCard, WarningCircle, WhatsappLogo,
   ChatText,
   Receipt, Coins, Wrench, ShoppingBag, ChatCircleText, Wallet, Bank, Shuffle, Clock, GitMerge, CopySimple,
   UsersThree, CloudArrowDown,
-  GraduationCap, Warning, Certificate, ClipboardText, ChatsCircle, Kanban, ClockCounterClockwise, SlidersHorizontal, Key, Timer, WarningDiamond } from '@phosphor-icons/react';
+  GraduationCap, Warning, Certificate, ClipboardText, ChatsCircle, Kanban, ClockCounterClockwise, SlidersHorizontal, Key, Timer, WarningDiamond,
+  CalendarCheck, ArrowCounterClockwise } from '@phosphor-icons/react';
 import { abrirPedirAcceso } from '@/modules/soporte/lib/accesos';
 import { useAuth } from '@/contexts/AuthContext';
 import { rolesDe } from '@/shared/lib/roles';
@@ -22,6 +23,7 @@ import { isBetaAllowed, BETA_MODE, BETA_VERSION } from '@/shared/config/betaConf
 import { PROCESO_EN_PRUEBAS, SOLO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 import { CERTIFEX_PANEL } from '@/shared/lib/certifexPanel';
 import { PANTALLAS_IA } from '@/shared/lib/pantallasIA';
+import { reagruparMenu } from './bloquesDelMenu';
 
 const ROLE_LABELS = { superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor', soporte: 'Soporte', tutor: 'Tutor', colaborador: 'Colaborador', tutor_redactor: 'Tutor redactor' };
 
@@ -48,7 +50,13 @@ const ROLES_TAREAS = ['superadmin', 'admin', 'colaborador', 'tutor_redactor'];
 // __smoke__/webhooksJuntos755.test.jsx y el traslado de `trasladosDeMenu.js`.
 export const PERMISOS_WEBHOOKS = ['webhooks.view', 'make.view', 'webhooks_salientes.view'];
 
-export const NAV_SECTIONS = [
+/*
+  LAS SECCIONES DE ANTES, tal cual: cada entrada con sus permisos y sus roles.
+  El menú que se pinta (`NAV_SECTIONS`, abajo) sale de repartirlas por bloques
+  de uso (gemela de CRM#900, `bloquesDelMenu.js`): ahí se dice adónde va cada
+  una, y aquí sigue todo lo que decide quién la ve.
+*/
+export const SECCIONES_DE_ANTES = [
   {
     label: 'Principal',
     items: [
@@ -61,10 +69,12 @@ export const NAV_SECTIONS = [
         defaultOpen: true,
         children: [
           { to: '/leads', label: 'Lista', end: true, sectionPrefixes: ['/leads'], permiso: 'leads.view' },
-          { to: '/leads/cola', label: 'La cola del día', permiso: 'proceso.view' },
+          // La cola y el seguimiento salen del grupo, a «Hoy» (gemela de CRM#900):
+          // llevan su icono porque ahí se pintan sueltos.
+          { to: '/leads/cola', label: 'La cola del día', icon: CalendarCheck, permiso: 'proceso.view' },
           // El quinto paso no cabe en la cola: es toda la base que no compro.
           // Solo en pruebas hasta que se apruebe: ver shared/lib/enPruebas.js.
-          ...(PROCESO_EN_PRUEBAS ? [{ to: '/leads/seguimiento', label: 'Seguimiento de fin de mes', permiso: 'proceso.view' }] : []),
+          ...(PROCESO_EN_PRUEBAS ? [{ to: '/leads/seguimiento', label: 'Seguimiento de fin de mes', icon: ArrowCounterClockwise, permiso: 'proceso.view' }] : []),
           { to: '/leads/proceso', label: 'Proceso comercial', permiso: 'proceso.view' },
           // Las becas y su embudo (#86): a quién se le ofrecieron y en qué acabaron.
           // Sin aprobar para producción (07/10): solo en /staging.
@@ -99,8 +109,8 @@ export const NAV_SECTIONS = [
           // Vuelve cuando se rehaga sobre el chat nuevo.
         ],
       },
-      // Ventas vive en Principal (flujo diario) y también en Finanzas. Clientes
-      // y Revisión duplicados pasan a la sección Clientes al final.
+      // Ventas estaba en Principal y también en Finanzas: con los bloques de uso
+      // queda una sola, en Comercial (gemela de CRM#900).
       { to: '/ventas',      label: 'Ventas',     icon: Receipt, permiso: 'ventas.view' },
     ],
   },
@@ -136,13 +146,10 @@ export const NAV_SECTIONS = [
       // Make y Webhooks estaban aquí: desde la gemela de CRM#755, en Conexión ›
       // Webhooks. Lo que Webhooks pedía además (`forms.view`) va con su parte y su pestaña.
       { to: '/captacion/whatsapp', label: 'Widget web', icon: WhatsappLogo, roles: ['admin', 'superadmin', 'soporte'], permiso: 'widget.view' },
-      // Próximamente (#226): no hay pantalla en ISEIE. La de MultiCRM enseña
-      // datos INVENTADOS —sus llamadas a Meta y Google van con `USE_MOCKS =
-      // true`— y traer cifras falsas a un CRM con dinero real es peor que no
-      // tenerla. Vuelve cuando haya datos de verdad detrás.
-      { to: '/campaigns',       label: 'Campañas',  icon: Megaphone, roles: ['admin', 'superadmin'], comingSoon: true },
-      // Lleva a «Aún no conectado» (#216): enseñaba datos de ejemplo de Search Console.
-      { to: '/seo',             label: 'Tráfico orgánico', icon: MagnifyingGlass, roles: ['admin', 'superadmin'] },
+      // Campañas («Próximamente», #226) y Tráfico orgánico (que llevaba a «Aún no
+      // conectado», #216) salen del menú hasta que tengan pantalla de verdad
+      // (gemela de CRM#900; `menu-sin-proximamente-534`). La dirección /seo sigue
+      // existiendo: solo se quita la entrada.
     ],
   },
   {
@@ -151,7 +158,8 @@ export const NAV_SECTIONS = [
       // Meta Ads: administración por su rol; y en solo lectura a quien se le da
       // `meta_ads.view` (26/10/2026: Jonathan, Gustavo, Ruth, Julián, Jesús), también si es solo colaborador.
       { to: '/meta-ads',   label: 'Meta Ads',   icon: ChartLineUp, roles: ['admin', 'superadmin'], permiso: 'meta_ads.view', oPermiso: 'meta_ads.view', colaboradorConPermiso: 'meta_ads.view' },
-      { to: '/google-ads', label: 'Google Ads', icon: ChartLineUp, roles: ['admin', 'superadmin'], comingSoon: true },
+      // Google Ads («Próximamente», #226) sale del menú hasta que tenga pantalla
+      // (gemela de CRM#900; `menu-sin-proximamente-534`).
     ],
   },
   {
@@ -291,6 +299,10 @@ export const NAV_SECTIONS = [
     ],
   },
 ];
+
+// El menú por bloques de uso (gemela de CRM#900 y #903). Las secciones del menú
+// de ISEIE no llevan icono: solo el nombre.
+export const NAV_SECTIONS = reagruparMenu(SECCIONES_DE_ANTES);
 
 // Interruptor de compilacion para dejar una parte fuera de una instalacion sin
 // borrar su codigo. Se usa con WhatsApp, que en produccion todavia no se enciende
@@ -646,7 +658,7 @@ function NavGroup({ label, icon: Icon, items, defaultOpen, role, soloColab, perm
   );
 }
 
-// Decide qué sección debe estar abierta por defecto: Principal (siempre) +
+// Decide qué sección debe estar abierta por defecto: Hoy y Comercial (siempre) +
 // la que contenga la ruta actual. Devuelve un map { [section.label]: boolean }.
 function defaultOpenSections(sections, pathname) {
   const out = {};
@@ -661,7 +673,8 @@ function defaultOpenSections(sections, pathname) {
       if (it.to && it.to !== '/' && pathname.startsWith(it.to + '/')) return true;
       return false;
     });
-    out[s.label] = s.label === 'Principal' || containsActive;
+    // Abiertos de entrada, lo de cada día: Hoy y Comercial (gemela de CRM#900).
+    out[s.label] = s.label === 'Hoy' || s.label === 'Comercial' || containsActive;
   }
   return out;
 }
@@ -871,7 +884,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapsed, onNaviga
 
       {/* Nav — secciones colapsables. El estado se persiste en localStorage por
           sección. Por defecto se abre la sección que contiene la ruta activa
-          (más "Principal" siempre como ancla). El usuario puede plegar/expandir
+          (más «Hoy» y «Comercial» siempre como ancla). El usuario puede plegar/expandir
           libremente con click en el header de sección. */}
       <CollapsibleNav
         sections={secciones}

@@ -423,6 +423,19 @@ export const CAMBIOS_DE_MENU = [
     // Aprobado por Diego el 18/11 en el CRM 360 (CRM#865), tras probarla en /testeo (permisos por rol, filtros, sin claves, solo lectura y móvil).
     aprobadoPor: 'Diego, 18/11',
   },
+  {
+    id: 'menu-sin-proximamente-534',
+    que: 'Las entradas sin pantalla salen del menú: «Captación › Campañas», «Captación › Tráfico orgánico» y «Publicidad › Google Ads» (gemela de CRM#900, parte 3 de la #534; aquí, CRM-ISEIE#367).',
+    motivo: 'Manuel (29/10) y la maqueta de Diego (03/11): «fuera del menú hasta que funcionen». Campañas y Google Ads eran «Próximamente» (sin enlace) y Tráfico orgánico llevaba a «Aún no conectado»: ninguna enseña nada, así que no cambia el acceso de nadie. Vuelven al menú cuando exista su pantalla.',
+    // Solo menú y sin ruta en el servidor (`null`): no hay pantalla con datos detrás.
+    soloMenu: true,
+    perfiles: Object.fromEntries(['superadmin', 'admin', 'soporte', 'gestora+admin'].map((p) => [p, [
+      '- Captación › Campañas', '- Captación › Tráfico orgánico', '- Publicidad › Google Ads',
+    ]])),
+    rutas: { 'Captación › Campañas': null, 'Captación › Tráfico orgánico': null, 'Publicidad › Google Ads': null },
+    // Diego lo aprobó el 18/11 en el 360 (CRM#903) para los dos CRM.
+    aprobadoPor: 'Diego, 18/11',
+  },
 ];
 
 /**

@@ -102,6 +102,10 @@ const { cambiosDeMenuPorPerfil } = await import('../../../backend/src/modules/pe
 export const CAMBIOS_APROBADOS = cambiosDeMenuPorPerfil();
 // Las entradas que solo cambian de sitio (gemela de CRM#755): `trasladosDeMenu.js`.
 const { aplicarTraslados, TRASLADOS_DE_MENU } = await import('@/shared/components/layout/trasladosDeMenu');
+// El menú por bloques de uso (gemela de CRM#900): la foto es del menú de antes, y
+// se lleva al de ahora con la MISMA tabla que reparte el menú. Solo cambia el
+// sitio; lo que aparezca o desaparezca por otra cosa sigue saltando aquí.
+const { aplicarReubicaciones, reubicar } = await import('@/shared/components/layout/bloquesDelMenu');
 
 describe('menú por perfil (#423)', () => {
   const ahora = Object.fromEntries(Object.entries(PERFILES).map(([k, p]) => [k, menuDe(p, { mapa: mapaDeAhora(p) })]));
@@ -125,7 +129,7 @@ describe('menú por perfil (#423)', () => {
       const aprobado = [...(CAMBIOS_APROBADOS[perfil] || [])].map((l) => l.slice(0, 2) + (RENOMBRADAS[l.slice(2)] || l.slice(2)));
       const conAprobado = new Set(antes);
       for (const l of aprobado) (l[0] === '+' ? conAprobado.add(l.slice(2)) : conAprobado.delete(l.slice(2)));
-      const esperado = new Set(aplicarTraslados([...conAprobado]));
+      const esperado = new Set(aplicarReubicaciones(aplicarTraslados([...conAprobado])));
       const sinAprobar = [
         ...[...despues].filter((x) => !esperado.has(x)).map((x) => `+ ${x}`),
         ...[...esperado].filter((x) => !despues.has(x)).map((x) => `- ${x}`),
@@ -138,7 +142,8 @@ describe('menú por perfil (#423)', () => {
   // exactamente los permisos de las viejas, ni uno más ni uno menos.
   it('cada traslado pide en su entrada nueva los permisos de las viejas, ni uno más', () => {
     for (const t of TRASLADOS_DE_MENU) {
-      const [seccion, etiqueta] = t.a.split(' › ');
+      // `t.a` está escrito con los nombres de antes del reparto por bloques (CRM#900).
+      const [seccion, etiqueta] = reubicar(t.a).split(' › ');
       const entrada = NAV_SECTIONS.find((s) => s.label === seccion)?.items.find((i) => i.label === etiqueta);
       expect(entrada, t.a).toBeTruthy();
       expect(new Set([].concat(entrada.permiso)), t.id).toEqual(new Set(t.de.map((d) => d.permiso)));
