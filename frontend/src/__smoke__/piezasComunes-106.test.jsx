@@ -20,6 +20,7 @@ import Select from '@/shared/components/ui/Select';
 import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
 import { inputClass } from '@/shared/lib/ui';
 import BuscadorEnLista from '@/shared/components/ui/BuscadorEnLista';
+import BuscadorCurso from '@/modules/tutores/components/BuscadorCurso';
 import { avisoDeLoQueFalta, numerosMalEscritos } from '@/shared/lib/loQueFalta';
 
 afterEach(cleanup);
