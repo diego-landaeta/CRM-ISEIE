@@ -757,7 +757,11 @@ export async function generarDeCola(req, res, next) {
       throw new AppError('Solo quien gestiona la facturacion puede emitir desde la cola', 403, 'FORBIDDEN');
     }
     const inv = await service.generarFacturaDePago(projectId, paymentId, req.user.userId,
-      { forzar: req.body?.forzar === true, personas: await alcanceDeLider(req.user) });
+      {
+        forzar: req.body?.forzar === true, personas: await alcanceDeLider(req.user),
+        // «Emitir igualmente» tras el aviso de posible duplicada (CRM#819).
+        confirmarDuplicada: req.body?.confirmar_duplicada === true,
+      });
     res.json({ success: true, data: inv });
   } catch (err) { next(err); }
 }

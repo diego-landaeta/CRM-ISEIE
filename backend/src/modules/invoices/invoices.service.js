@@ -7,6 +7,7 @@ import { decrypt } from '../../shared/utils/crypto.js';
 import { getLocal } from '../../shared/services/localStorage.service.js';
 import * as integrationsModel from '../integrations/integrations.model.js';
 import * as model from './invoices.model.js';
+import { duplicadasDeLaCola, MOTIVO_EN_COLA } from './posible-duplicada.js';
 import { query } from '../../shared/config/db.js';
 import { alcanceComercial } from '../../shared/utils/roles.js';
 // La pausa de la auditoria de facturacion (#765). Apagada, no hace nada.
@@ -806,6 +807,14 @@ export async function getFacturacionAlDia(projectId, { personas = null } = {}) {
   const entera = await model.listPagosSinFactura(projectId);
   const primero = entera[0]?.payment_id;
   const cola = entera.filter(cobroDelEquipo(personas));
+  // Los que se pararian por posible duplicada si se emitieran ahora (CRM#819):
+  // la emision automatica no los emite, y aqui se dice por que siguen.
+  let duplicadas = new Map();
+  try {
+    duplicadas = await duplicadasDeLaCola(cola.slice(0, 200).map((p) => p.payment_id));
+  } catch (err) {
+    logger.warn({ err: err.message, projectId }, 'no se pudo mirar si la cola tiene posibles duplicadas');
+  }
   // Factura automática (#452): qué pasa con los datos fiscales de cada venta.
   // Apagada, el mapa viene vacío y la cola sale como siempre.
   const { estadosParaCola } = await import('../factura-automatica/factura-automatica.service.js');
@@ -828,6 +837,8 @@ export async function getFacturacionAlDia(projectId, { personas = null } = {}) {
       origen: p.de_stripe ? 'stripe' : 'manual',
       // El primero es el que toca; los demas esperan a que salgan los anteriores.
       es_el_siguiente: p.payment_id === primero,
+      motivo: duplicadas.has(Number(p.payment_id)) ? MOTIVO_EN_COLA : null,
+      posible_duplicada: duplicadas.get(Number(p.payment_id)) || null,
       datos_fiscales: (() => {
         const d = datosFiscales.get(Number(p.conversion_id));
         return d ? { estado: d.estado, caduca_at: d.caduca_at, motivo: d.motivo_revision || d.ultimo_error || null } : null;
@@ -851,7 +862,7 @@ export async function setFacturacionAlDia(projectId, alDiaHasta, userId, stripeO
 
 // Genera la factura de UN cobro concreto de la cola. Solo si no queda nada mas
 // antiguo pendiente, para que la numeracion salga en orden. forzar lo salta.
-export async function generarFacturaDePago(projectId, paymentId, userId, { forzar = false, personas = null } = {}) {
+export async function generarFacturaDePago(projectId, paymentId, userId, { forzar = false, personas = null, confirmarDuplicada = false } = {}) {
   const cola = await model.listPagosSinFactura(projectId);
   const pg = cola.find((x) => Number(x.payment_id) === Number(paymentId));
   if (!pg) {
@@ -871,7 +882,7 @@ export async function generarFacturaDePago(projectId, paymentId, userId, { forza
       409, 'HAY_ANTERIORES');
   }
   const inv = await model.emitirFacturaDePago(
-    pg.conversion_id, { paymentId: pg.payment_id, importe: Number(pg.importe), saltarTotal: forzar }, userId
+    pg.conversion_id, { paymentId: pg.payment_id, importe: Number(pg.importe), saltarTotal: forzar, confirmarDuplicada }, userId
   );
   // Que no diga "generada" si no se genero nada.
   //

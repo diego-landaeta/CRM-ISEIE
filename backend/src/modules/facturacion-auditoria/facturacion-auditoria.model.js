@@ -6,13 +6,20 @@ import { query } from '../../shared/config/db.js';
   cola de la pausa).
 */
 
+// El día de Madrid de un instante. El «desde» y el «hasta» de la auditoría son
+// días de Madrid (`hoyEnMadrid`), así que `created_at` se pasa a Madrid antes de
+// compararlo: con `created_at::date` (o `CURRENT_DATE`) manda la zona de la sesión
+// de Postgres y, si es UTC, de 00:00 a 01:00/02:00 de Madrid una factura recién
+// hecha cuenta como de ayer y se queda fuera de la auditoría (#765).
+const DIA_MADRID = (col) => `(${col} AT TIME ZONE 'Europe/Madrid')::date`;
+
 // ── Desde cuándo se audita ──────────────────────────────────────────────────
 
 /** El día guardado de la primera vuelta; si no hay, se guarda hoy. */
 export async function auditarDesdeGuardado() {
   const { rows } = await query(
     `INSERT INTO facturacion_auditoria_estado (id, auditar_desde)
-     VALUES (1, CURRENT_DATE)
+     VALUES (1, ${DIA_MADRID('NOW()')})
      ON CONFLICT (id) DO UPDATE SET auditar_desde = facturacion_auditoria_estado.auditar_desde
      RETURNING auditar_desde::text AS desde`);
   return rows[0].desde;
@@ -47,7 +54,7 @@ export async function numerosRepetidos({ desde }) {
         AND NOT COALESCE(p.es_prueba, false)
       GROUP BY i.ano, upper(btrim(i.serie)), i.numero
      HAVING COUNT(*) > 1
-        AND MAX(GREATEST(i.fecha_emision, i.created_at::date)) >= $1::date
+        AND MAX(GREATEST(i.fecha_emision, ${DIA_MADRID('i.created_at')})) >= $1::date
       ORDER BY 2, 1, 3`,
     [desde]);
   return rows;
@@ -70,8 +77,8 @@ export async function facturasEmitidas({ desde, hasta }) {
         AND i.tipo IN ('normal', 'rectificativa')
         AND i.estado NOT IN ('borrador', 'cancelada')
         AND NOT COALESCE(p.es_prueba, false)
-        AND GREATEST(i.fecha_emision, i.created_at::date) >= $1::date
-        AND GREATEST(i.fecha_emision, i.created_at::date) <= $2::date
+        AND GREATEST(i.fecha_emision, ${DIA_MADRID('i.created_at')}) >= $1::date
+        AND GREATEST(i.fecha_emision, ${DIA_MADRID('i.created_at')}) <= $2::date
       ORDER BY i.serie, i.ano, i.numero`,
     [desde, hasta]);
   return rows;
