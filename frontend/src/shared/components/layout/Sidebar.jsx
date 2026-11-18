@@ -5,7 +5,7 @@ import {
   Moon, Sun, CaretLeft, CaretRight, UserCircle,
   CaretUp, CaretDown, Bell, Pulse, Calculator, Envelope, Globe,
   FilePdf, ShieldCheck, MagnifyingGlass, Headset, BookOpen, Sliders,
-  Megaphone, Robot, Sparkle, PlugsConnected, CreditCard, WarningCircle, WhatsappLogo,
+  Megaphone, Robot, Sparkle, PlugsConnected, WebhooksLogo, CreditCard, WarningCircle, WhatsappLogo,
   ChatText,
   Receipt, Coins, Wrench, ShoppingBag, ChatCircleText, Wallet, Bank, Shuffle, Clock, GitMerge, CopySimple,
   UsersThree, CloudArrowDown,
@@ -39,6 +39,15 @@ const ROLES_TAREAS = ['superadmin', 'admin', 'colaborador', 'tutor_redactor'];
 // enlace). Las que SÍ existen en algún CRM se hacen funcionar donde falten».
 // Lo vigila `__smoke__/menuSinRutasRotas.test.jsx`: cada `to` tiene su <Route> en
 // App.jsx, o lleva `comingSoon: true`.
+// Conexión › Webhooks (gemela de CRM#755): la entrada se ve con el permiso de
+// alguna de las TRES entradas que sustituye (Captación › Webhooks, Captación ›
+// Make y Conexión › Webhook de transferencias), ni uno más: así la ve
+// exactamente quien veía alguna de ellas, también con permisos quitados o dados
+// a mano. Lo demás que reúne el resumen (Stripe, formularios…) tiene su
+// pantalla propia, y dentro cada tarjeta pide su permiso. Lo vigila
+// __smoke__/webhooksJuntos755.test.jsx y el traslado de `trasladosDeMenu.js`.
+export const PERMISOS_WEBHOOKS = ['webhooks.view', 'make.view', 'webhooks_salientes.view'];
+
 export const NAV_SECTIONS = [
   {
     label: 'Principal',
@@ -124,11 +133,8 @@ export const NAV_SECTIONS = [
     items: [
       { to: '/secuencias-email', label: 'Email',     icon: Envelope, roles: ['admin', 'superadmin'], sectionPrefixes: ['/secuencias-email', '/email-templates'], permiso: 'email_sequences.view' },
       { to: '/forms',           label: 'Formularios', icon: Globe,  roles: ['admin', 'superadmin'], sectionPrefixes: ['/forms'], permiso: 'forms.view' },
-      { to: '/make-webhooks',   label: 'Make',      icon: PlugsConnected, roles: ['admin', 'superadmin'], permiso: 'make.view' },
-      // Llevaba a la pantalla de Make (una redirección): dos entradas para lo
-      // mismo. Desde el #226 es la de Webhooks, traída de MultiCRM.
-      // La pantalla lee y escribe en `/api/forms` (son formularios con kind='webhook'): pide también `forms.view`.
-      { to: '/webhooks',        label: 'Webhooks',  icon: PlugsConnected, roles: ['admin', 'superadmin'], permiso: 'webhooks.view', tambienPermiso: 'forms.view' },
+      // Make y Webhooks estaban aquí: desde la gemela de CRM#755, en Conexión ›
+      // Webhooks. Lo que Webhooks pedía además (`forms.view`) va con su parte y su pestaña.
       { to: '/captacion/whatsapp', label: 'Widget web', icon: WhatsappLogo, roles: ['admin', 'superadmin', 'soporte'], permiso: 'widget.view' },
       // Próximamente (#226): no hay pantalla en ISEIE. La de MultiCRM enseña
       // datos INVENTADOS —sus llamadas a Meta y Google van con `USE_MOCKS =
@@ -249,9 +255,15 @@ export const NAV_SECTIONS = [
       // #335, como en MultiCRM: los cursos, alumnos y recursos de los Moodle de cada campus.
       { to: '/conexion/moodle', label: 'Moodle', icon: GraduationCap, roles: ['admin', 'superadmin'], permiso: 'moodle.view' },
       { to: '/conexion/conectores', label: 'Conectores', icon: CloudArrowDown, roles: ['admin', 'superadmin'], permiso: 'connectors.view' },
-      // Diego, 15/10: «un apartado en Conexión para enviar esos datos ÚNICAMENTE
-      // CUANDO SE PONGA DATOS POR TRANSFERENCIA BANCARIA / DEPÓSITO BANCARIO».
-      { to: '/conexion/webhook-transferencias', label: 'Webhook de transferencias', icon: Bank, roles: ['admin', 'superadmin'], permiso: 'webhooks_salientes.view' },
+      // Todos los webhooks en un sitio, señalados por su función (gemela de
+      // CRM#755, Diego 05/11: «hay demasiados y están repartidos por el menú»).
+      // Reúne los que estaban en Captación (Webhooks, Make) y el de
+      // transferencias, que estaba aquí suelto (Diego, 15/10). Se ve con el
+      // permiso de alguna de las tres entradas que sustituye (PERMISOS_WEBHOOKS,
+      // arriba); dentro, cada tarjeta pide el suyo. La de Webhooks pedía además
+      // `forms.view`: la pantalla lee `/api/forms`.
+      { to: '/conexion/webhooks', label: 'Webhooks', icon: WebhooksLogo, roles: ['admin', 'superadmin'], permiso: PERMISOS_WEBHOOKS,
+        partes: [{ permiso: 'webhooks.view', tambienPermiso: 'forms.view' }, { permiso: 'make.view' }, { permiso: 'webhooks_salientes.view' }] },
       { to: '/conexion/asignacion-leads', label: 'Asignación de leads', icon: Shuffle, roles: ['admin', 'superadmin'], permiso: 'webhooks_salientes.view' },
     ],
   },
@@ -319,6 +331,11 @@ export function canSeeItem(item, role, soloColaboraciones, permisos, can) {
   // tiene ficha viva en Facturas de colaboradores (`factura_propia`, de /auth/me): la
   // lista explícita de vendedoras, no el rol. Ni el super admin sin ficha.
   if (item.conFicha && !es('colaborador', 'tutor_redactor') && permisos?.factura_propia !== true) return false;
+  // Una entrada que junta varias (Conexión › Webhooks, gemela de CRM#755): sale
+  // si alguna de sus `partes` se puede abrir, cada una con su permiso y lo que
+  // pide además (`tambienPermiso`), como salían las entradas que sustituye.
+  if (Array.isArray(item.partes) && !item.partes.some((p) => (!p.permiso || (typeof can === 'function' && can(p.permiso) === true))
+    && tieneLosDeMas(p, can))) return false;
   // MCP de Claude: «Usar el MCP» del catálogo, como el servidor.
   // Va ANTES del atajo de soporte y del recorte del tutor: «roles únicamente».
   if (item.accesoMcp) return tieneAccesoMcp(can);
@@ -388,6 +405,17 @@ export function canSeeItem(item, role, soloColaboraciones, permisos, can) {
 const SIN_ENTRADA = {
   // El chat de WhatsApp también se abre por `/whatsapp` (App.jsx), sin entrada.
   '/whatsapp': ['whatsapp.usar', 'whatsapp.supervisar'],
+  // Las pestañas de Conexión › Webhooks (gemela de CRM#755): el permiso de las
+  // entradas que tenían en el menú antes de juntarse.
+  '/conexion/webhooks/prospectos': ['webhooks.view'],
+  '/conexion/webhooks/make': ['make.view'],
+  '/conexion/webhooks/transferencias': ['webhooks_salientes.view'],
+};
+// Lo que esas rutas piden ADEMÁS (todos), como `tambienPermiso` en una entrada
+// del menú. La pestaña Prospectos es la pantalla de Captación › Webhooks, que
+// lee y escribe en `/api/forms`: con `webhooks.view` solo, daba 403.
+const SIN_ENTRADA_TAMBIEN = {
+  '/conexion/webhooks/prospectos': 'forms.view',
 };
 
 export function rutaPermitida(pathname, can) {
@@ -402,7 +430,7 @@ export function rutaPermitida(pathname, can) {
   };
   for (const s of NAV_SECTIONS) recorrer(s.items);
   // Rutas sin entrada propia en el menú: su permiso, aquí.
-  if (!suyas.length && SIN_ENTRADA[ruta]) suyas.push({ permiso: SIN_ENTRADA[ruta] });
+  if (!suyas.length && SIN_ENTRADA[ruta]) suyas.push({ permiso: SIN_ENTRADA[ruta], tambienPermiso: SIN_ENTRADA_TAMBIEN[ruta] });
   if (!suyas.length) return true;
   return suyas.some((it) => tieneLosDeMas(it, can) && (!it.permiso || tiene(it.permiso) || (it.oPermiso && tiene(it.oPermiso))));
 }
@@ -436,7 +464,7 @@ export function permisoQueFalta(pathname, can) {
     }
   };
   for (const s of NAV_SECTIONS) recorrer(s.items);
-  if (!claves.length && SIN_ENTRADA[ruta]) claves.push(...[].concat(SIN_ENTRADA[ruta]));
+  if (!claves.length && SIN_ENTRADA[ruta]) claves.push(...[].concat(SIN_ENTRADA[ruta]), ...[].concat(SIN_ENTRADA_TAMBIEN[ruta] || []));
   return claves.find((c) => String(c).includes('.') && !(typeof can === 'function' && can(c) === true)) || null;
 }
 

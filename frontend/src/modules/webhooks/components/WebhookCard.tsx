@@ -53,7 +53,8 @@ export default function WebhookCard({ webhook, onToggleActive, onToggleListen, o
           {!webhook.active && <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted font-bold">INACTIVO</span>}
         </div>
         <p className="text-xs text-muted-foreground mt-0.5 truncate">
-          {mappedCount} campos mapeados · {webhook.submissions_count || 0} recibidos · <code>{webhook.embed_id}</code>
+          {/* Los que crearon algo; los rechazados están en el historial de su ficha. */}
+          {mappedCount} campos mapeados · {webhook.submissions_count || 0} procesados · <code>{webhook.embed_id}</code>
         </p>
       </div>
 
@@ -86,7 +87,7 @@ export default function WebhookCard({ webhook, onToggleActive, onToggleListen, o
       )}
 
       <Link
-        to={`/webhooks/${webhook.id}`}
+        to={`/conexion/webhooks/prospectos/${webhook.id}`}
         className="flex items-center gap-1 px-3 py-1.5 rounded bg-primary text-primary-foreground text-xs font-bold hover:opacity-90 transition-opacity"
       >
         Detalle <ArrowRight size={12} weight="bold" />

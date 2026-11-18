@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Suspense, lazy, useEffect } from 'react';
+import RedirigirAWebhooks from './modules/webhooks/components/RedirigirAWebhooks';
 import { useAuth } from '@/contexts/AuthContext';
 import { PROCESO_EN_PRUEBAS, SOLO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 import { PANTALLAS_IA } from '@/shared/lib/pantallasIA';
@@ -141,6 +142,9 @@ const MakeWebhookDetailPage = lazy(() => import('./modules/make-webhooks/pages/M
 // pantalla, y la entrada del menú llevaba a la de Make.
 const WebhooksPage = lazy(() => import('./modules/webhooks/pages/WebhooksPage'));
 const WebhookDetailPage = lazy(() => import('./modules/webhooks/pages/WebhookDetailPage'));
+// Conexión → Webhooks (gemela de CRM#755): todos juntos, señalados por su función.
+const WebhooksLayout = lazy(() => import('./modules/webhooks/pages/WebhooksLayout'));
+const WebhooksResumenPage = lazy(() => import('./modules/webhooks/pages/WebhooksResumenPage'));
 const WooCommercePage = lazy(() => import('./modules/woocommerce/pages/WooCommercePage'));
 const ColaDelDiaPage = lazy(() => import('./modules/proceso/pages/ColaDelDiaPage'));
 // El repaso de fin de mes: toda la base que no compro. No es la cola del dia.
@@ -191,13 +195,14 @@ const ROUTE_TITLES = {
   '/products/pending':                'Cursos pendientes',
   '/soporte':                         'Soporte',
   '/conexion/conectores':             'Conectores',
-  '/conexion/webhook-transferencias': 'Webhook de transferencias',
+  '/conexion/webhooks':                'Webhooks',
+  '/conexion/webhooks/prospectos':     'Webhooks de prospectos',
+  '/conexion/webhooks/make':           'Make',
+  '/conexion/webhooks/transferencias': 'Webhook de transferencias',
   '/conexion/asignacion-leads':       'Asignación de leads',
   '/matriculas/certificaciones':      'Certificaciones',
   '/matriculas/diplomas':            'Diplomas',
   '/forms':                           'Formularios',
-  '/make-webhooks':                   'Make',
-  '/webhooks':                        'Webhooks',
   '/accounting':                      'Dashboard de finanzas',
   '/woocommerce':                     'WooCommerce',
   '/secuencias-email':                 'Secuencias de email',
@@ -345,8 +350,18 @@ function App() {
           <Route path="/conexion/moodle" element={<MoodlePage />} />
           <Route path="/conexion/moodle/:campusId" element={<MoodleCampusPage />} />
           <Route path="/conexion/conectores" element={<ConnectorsPage />} />
-          {/* Conexión → Webhook de transferencias. Solo super admin y admin: lo corta el servidor. */}
-          <Route path="/conexion/webhook-transferencias" element={<WebhookTransferenciasPage />} />
+          {/* Conexión → Webhooks (gemela de CRM#755): el resumen por función y, en
+              pestañas, las pantallas que estaban sueltas. Cada una la corta el
+              servidor por su permiso. */}
+          <Route path="/conexion/webhooks" element={<WebhooksLayout />}>
+            <Route index element={<WebhooksResumenPage />} />
+            <Route path="prospectos" element={<WebhooksPage />} />
+            <Route path="prospectos/:id" element={<WebhookDetailPage />} />
+            <Route path="make" element={<MakeWebhooksPage />} />
+            <Route path="make/:id" element={<MakeWebhookDetailPage />} />
+            <Route path="transferencias" element={<WebhookTransferenciasPage />} />
+          </Route>
+          <Route path="/conexion/webhook-transferencias" element={<RedirigirAWebhooks a="/conexion/webhooks/transferencias" />} />
           {/* Conexión → Asignación de leads por actividad (CRM#513). Solo super admin y admin: lo corta el servidor. */}
           <Route path="/conexion/asignacion-leads" element={<AsignacionLeadsPage />} />
           {/* Certifex vive dentro de Matrículas (Diego, 30/09). */}
@@ -377,12 +392,13 @@ function App() {
           <Route path="/consultas/tutores" element={<TutoresConsultasPage />} />
           <Route path="/consultas/metricas" element={<MetricasConsultasPage />} />
           <Route path="/consultas/:id" element={<ConsultaPage />} />
-          <Route path="/make-webhooks" element={<MakeWebhooksPage />} />
-          <Route path="/make-webhooks/:id" element={<MakeWebhookDetailPage />} />
-          {/* Antes /webhooks redirigía a Make: dos entradas del menú para la
-              misma pantalla. Ahora es la suya, como en MultiCRM (#226). */}
-          <Route path="/webhooks" element={<WebhooksPage />} />
-          <Route path="/webhooks/:id" element={<WebhookDetailPage />} />
+          {/* Make y Webhooks vivían aquí (Captación); desde la gemela de CRM#755
+              están en Conexión › Webhooks. Las direcciones de antes redirigen: los
+              avisos de Make enlazan `/make-webhooks/:id`. */}
+          <Route path="/make-webhooks" element={<RedirigirAWebhooks a="/conexion/webhooks/make" />} />
+          <Route path="/make-webhooks/:id" element={<RedirigirAWebhooks a="/conexion/webhooks/make" />} />
+          <Route path="/webhooks" element={<RedirigirAWebhooks a="/conexion/webhooks/prospectos" />} />
+          <Route path="/webhooks/:id" element={<RedirigirAWebhooks a="/conexion/webhooks/prospectos" />} />
           <Route path="/woocommerce" element={<WooCommercePage />} />
           <Route path="/secuencias-email" element={<EmailSequencesPage />} />
           <Route path="/email-templates" element={<EmailTemplatesPage />} />

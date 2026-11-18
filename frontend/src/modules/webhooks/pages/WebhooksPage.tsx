@@ -74,7 +74,7 @@ export default function WebhooksPage() {
       });
       if (res.success && res.data) {
         toast({ title: 'Webhook creado' });
-        navigate(`/webhooks/${res.data.id}`);
+        navigate(`/conexion/webhooks/prospectos/${res.data.id}`);
       }
     } catch (err: any) {
       toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' });
