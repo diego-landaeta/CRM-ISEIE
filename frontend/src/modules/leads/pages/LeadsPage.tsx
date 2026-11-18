@@ -80,6 +80,7 @@ import { getLeadExportColumns } from '../lib/leadFormat';
 import { yaPaso } from '@/shared/lib/fechas';
 import ParaHoyYManana from '@/shared/components/dashboard/ParaHoyYManana';
 import { PROCESO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
+import { qfDelServidor } from '../lib/filtrosRapidos';
 import { entroEnElProceso } from '@/shared/lib/enElProceso';
 import {
   getInitials,
@@ -299,6 +300,8 @@ export default function LeadsPage() {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
       if (v) next.set('qf', v); else next.delete('qf');
+      // Un filtro del servidor cambia lo que hay en cada página: se vuelve a la primera.
+      if (qfDelServidor(v) || qfDelServidor(prev.get('qf'))) next.delete('page');
       if (clearEstado) next.delete('estado');
       return next;
     }, { replace: true, preventScrollReset: true });
@@ -343,7 +346,8 @@ export default function LeadsPage() {
   // Filtros rapidos client-side (sobre los leads ya cargados)
   // Filtros rápidos (client-side). Extraído para aplicarlo también al export.
   function aplicarQuickFilter(lista) {
-    if (!quickFilter) return lista;
+    // Las alertas del Dashboard las filtra el servidor (gemela de CRM#884).
+    if (!quickFilter || qfDelServidor(quickFilter)) return lista;
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const tomorrow = new Date(today.getTime() + 86400000);
@@ -369,7 +373,7 @@ export default function LeadsPage() {
   }
 
   const filteredLeads = useMemo(() => {
-    if (!quickFilter) return leads;
+    if (!quickFilter || qfDelServidor(quickFilter)) return leads;
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const tomorrow = new Date(today.getTime() + 86400000);

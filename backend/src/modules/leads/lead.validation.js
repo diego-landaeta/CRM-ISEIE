@@ -102,6 +102,10 @@ export const listLeadsSchema = z.object({
   conConversion: z.coerce.boolean().optional(),
   // Filtro operativo exclusivo de Clientes. No depende de importes de venta.
   installmentStatus: z.enum(['pending', 'completed', 'no_plan']).optional(),
+  // Filtro rápido que filtra el servidor: las dos alertas del Dashboard (gemela
+  // de CRM#884). Enum porque su valor elige un fragmento de SQL (`FILTROS_RAPIDOS`):
+  // cerrado por construcción, no por confianza.
+  qf: z.enum(['sin-gestora', 'sin-actividad']).optional(),
 }).refine(
   (d) => d.projectId || (d.projectIds && d.projectIds.length > 0),
   { message: 'projectId o projectIds requerido', path: ['projectId'] },

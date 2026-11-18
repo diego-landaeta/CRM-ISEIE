@@ -705,10 +705,45 @@ export function condicionDeBusqueda(search, { col = '', idx }) {
   return { sql: `(${conds.join(' OR ')})`, params, siguiente };
 }
 
-export async function findAll({ projectId, projectIds, status, pasoProceso, responsableId, unassigned, canal, paisEntrada = null, productId, search, page, limit, includeConverted, dateFrom, dateTo, sort, dir, duplicated, reincidente, conConversion, installmentStatus }) {
+/*
+  LAS DOS ALERTAS DEL DASHBOARD (gemela de CRM#884; #534 del 360, parte 5):
+  «Sin gestora» y «Sin actividad». Son botones que llevan a Prospectos ya
+  filtrado, así que la cifra y la lista tienen que salir de la MISMA condición:
+  si no, la tarjeta dice 566 y la lista enseña otra cosa. Las usan la cifra
+  (`getStats`, `getTodaySummary`) y el filtro rápido de la lista (`FILTROS_RAPIDOS`).
+*/
+/** Sin gestora: nadie lo lleva y sigue abierto. `a`: alias de `leads`. */
+export const SIN_GESTORA = (a = 'l') =>
+  `(${a}.responsable_id IS NULL AND ${a}.status NOT IN ('convertido', 'no_interesado'))`;
+/**
+ * Sin actividad: abierto y sin moverse más días que la alerta de su campus
+ * (`projects.dias_alerta_inactividad`), contando desde lo último de la ficha:
+ * su última interacción o su último cambio.
+ */
+export const SIN_ACTIVIDAD = (a = 'l') =>
+  `(${a}.status NOT IN ('convertido', 'no_interesado')
+    AND EXTRACT(DAY FROM NOW() - GREATEST(${a}.updated_at,
+          COALESCE((SELECT MAX(li.fecha) FROM lead_interactions li WHERE li.lead_id = ${a}.id), ${a}.created_at)))
+        > (SELECT pa.dias_alerta_inactividad FROM projects pa WHERE pa.id = ${a}.project_id))`;
+
+/**
+ * Los filtros rápidos que filtra el SERVIDOR (`?qf=`). En ISEIE los demás
+ * (vencidos, hoy, mañana…) siguen filtrándose en la página sobre lo cargado;
+ * estos dos no pueden, porque la alerta del Dashboard cuenta todo el campus y
+ * la lista tiene que enseñar lo mismo, no solo lo de la página que se ve.
+ * Validados como enum en `lead.validation.js`: el valor elige un fragmento de SQL.
+ */
+export const FILTROS_RAPIDOS = {
+  get 'sin-gestora'() { return SIN_GESTORA('l'); },
+  get 'sin-actividad'() { return SIN_ACTIVIDAD('l'); },
+};
+
+export async function findAll({ projectId, projectIds, status, pasoProceso, responsableId, unassigned, canal, paisEntrada = null, productId, search, page, limit, includeConverted, dateFrom, dateTo, sort, dir, duplicated, reincidente, conConversion, installmentStatus, qf }) {
   const conditions = [];
   const params = [];
   let paramIdx = 1;
+  // El filtro rápido del servidor: SQL fijo, sin parámetros.
+  if (qf && Object.prototype.hasOwnProperty.call(FILTROS_RAPIDOS, qf)) conditions.push(FILTROS_RAPIDOS[qf]);
 
   // Vista multi-proyecto: si llega projectIds (array) filtra por IN, sino por projectId único
   if (Array.isArray(projectIds) && projectIds.length > 0) {
@@ -1349,12 +1384,24 @@ export async function getTodaySummary({ userId, role, soloSuyo, personas, projec
     [userIdParam, pidParam]
   );
 
+  // Los nuevos del mes (gemela de CRM#884: la tarjeta «Prospectos» del Dashboard).
+  const { rows: nuevosMes } = await query(
+    `SELECT COUNT(*) FROM leads l
+     WHERE l.deleted_at IS NULL
+       AND COALESCE(l.fecha_solicitud, l.created_at) >= date_trunc('month', CURRENT_DATE)
+       AND ($1::int[] IS NULL OR l.responsable_id = ANY($1::int[]))
+       AND ($2::int[] IS NULL OR l.project_id = ANY($2::int[]))`,
+    [userIdParam, pidParam]
+  );
+
+  // La misma condición que el filtro «Sin actividad» de Prospectos (gemela de
+  // CRM#884): la alerta del Dashboard lleva a esa lista y tienen que dar lo
+  // mismo. Antes contaba también los borrados.
   const { rows: inactivos } = await query(
     `SELECT COUNT(*)
      FROM leads l
-     LEFT JOIN projects p ON p.id = l.project_id
-     WHERE l.status NOT IN ('convertido', 'no_interesado')
-       AND EXTRACT(DAY FROM NOW() - GREATEST(l.updated_at, COALESCE((SELECT MAX(fecha) FROM lead_interactions WHERE lead_id = l.id), l.created_at))) > p.dias_alerta_inactividad
+     WHERE l.deleted_at IS NULL
+       AND ${SIN_ACTIVIDAD('l')}
        AND ($1::int[] IS NULL OR l.responsable_id = ANY($1::int[]))
        AND ($2::int[] IS NULL OR l.project_id = ANY($2::int[]))`,
     [userIdParam, pidParam]
@@ -1387,6 +1434,7 @@ export async function getTodaySummary({ userId, role, soloSuyo, personas, projec
     reminders_pendientes: remRows,
     nuevos_hoy: parseInt(nuevosHoy[0].count),
     nuevos_semana: parseInt(nuevosSemana[0].count),
+    nuevos_mes: parseInt(nuevosMes[0].count),
     inactivos: parseInt(inactivos[0].count),
     cobros_vencidos: parseInt(cobrosVencidos[0].count),
     ingresos_hoy: Number(ingresosHoy[0].total),
@@ -1435,7 +1483,8 @@ export async function getStats(projectId, { responsableId = null, dateFrom = nul
        COUNT(*) FILTER (WHERE status = 'convertido') as convertidos,
        COUNT(*) FILTER (WHERE status = 'no_interesado') as no_interesados,
        COUNT(*) FILTER (WHERE status = 'proxima_convocatoria') as proxima_convocatoria,
-       COUNT(*) FILTER (WHERE responsable_id IS NULL AND status NOT IN ('convertido','no_interesado')) as sin_asignar
+       -- La misma condición que el filtro «Sin gestora» de Prospectos (gemela de CRM#884).
+       COUNT(*) FILTER (WHERE ${SIN_GESTORA('leads')}) as sin_asignar
      FROM leads WHERE project_id = ANY($1::int[]) AND deleted_at IS NULL${where}`,
     params
   );

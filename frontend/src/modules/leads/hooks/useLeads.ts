@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useProjectContext } from '@/contexts/ProjectContext';
+import { useSearchParams } from 'react-router-dom';
 import useUrlFilters from '@/shared/hooks/useUrlFilters';
+import { qfDelServidor } from '../lib/filtrosRapidos';
 import client from '@/shared/api/client';
 import type { ApiResponse, Lead, LeadStatus, LeadOrigen, Interaction, Reminder, Utms } from '@/shared/types';
 
@@ -107,6 +109,10 @@ export function useLeads(): UseLeadsResult {
   // Default CRONOLOGICO ('recent') descendente = mas reciente primero.
   const sortMode = (['value', 'recent', 'urgency', 'recent_value'].includes(sortRaw) ? sortRaw : 'recent') as 'value' | 'recent' | 'urgency' | 'recent_value';
   const sortDir = (dirRaw === 'asc' ? 'asc' : 'desc') as 'asc' | 'desc';
+  // El filtro rápido lo maneja LeadsPage en la dirección (`?qf=`); solo los que
+  // filtra el servidor (las alertas del Dashboard, gemela de CRM#884) van en la petición.
+  const [searchParams] = useSearchParams();
+  const qfServidor = qfDelServidor(searchParams.get('qf'));
 
   const setSearch = useCallback((v: string) => setUrlFilters({ q: v, page: 1 }), [setUrlFilters]);
   const setFilterEstado = useCallback((v: string) => setUrlFilters({ estado: v, page: 1 }), [setUrlFilters]);
@@ -174,6 +180,7 @@ export function useLeads(): UseLeadsResult {
       if (sortDir) params.set('dir', sortDir);
       if (filterDup === '1') params.set('duplicated', 'true');
       if (filterReincidente === '1') params.set('reincidente', 'true');
+      if (qfServidor) params.set('qf', qfServidor);
 
       const res = await client.get(`/leads?${params.toString()}`, { signal: controller.signal });
       if (controller.signal.aborted) return;
@@ -192,7 +199,7 @@ export function useLeads(): UseLeadsResult {
     } finally {
       if (!controller.signal.aborted) setLoading(false);
     }
-  }, [pid, page, debouncedSearch, filterEstado, filterPaso, filterOrigen, filterPais, filterResponsable, filterProducto, dateFrom, dateTo, sortMode, sortDir, filterDup, filterReincidente]);
+  }, [pid, page, debouncedSearch, filterEstado, filterPaso, filterOrigen, filterPais, filterResponsable, filterProducto, dateFrom, dateTo, sortMode, sortDir, filterDup, filterReincidente, qfServidor]);
 
   // Trae TODOS los leads filtrados (sin paginar) para exportar. El listado va de
   // 20 en 20; el export debe llevarse todo lo filtrado. El backend limita el
@@ -217,6 +224,7 @@ export function useLeads(): UseLeadsResult {
         if (dateTo) p.set('dateTo', dateTo);
         if (filterDup === '1') p.set('duplicated', 'true');
         if (filterReincidente === '1') p.set('reincidente', 'true');
+        if (qfServidor) p.set('qf', qfServidor);
       }
       if (sortMode) p.set('sort', sortMode);
       if (sortDir) p.set('dir', sortDir);
@@ -238,7 +246,7 @@ export function useLeads(): UseLeadsResult {
       page += 1;
     }
     return all;
-  }, [pid, debouncedSearch, filterEstado, filterPaso, filterOrigen, filterPais, filterResponsable, filterProducto, dateFrom, dateTo, sortMode, sortDir, filterDup, filterReincidente]);
+  }, [pid, debouncedSearch, filterEstado, filterPaso, filterOrigen, filterPais, filterResponsable, filterProducto, dateFrom, dateTo, sortMode, sortDir, filterDup, filterReincidente, qfServidor]);
 
   useEffect(() => () => {
     if (abortRef.current) abortRef.current.abort();
