@@ -23,9 +23,12 @@ import {
  * es de la cola del día.
  */
 
-type Detalle = { titulo: string; params: Record<string, string> };
+type Detalle = { titulo: string; params: Record<string, string>; total?: number };
 
-const pct = (a: number, b: number) => (b ? `${Math.round((a * 1000) / b) / 10} %` : '—');
+// Con coma, como se escribe en español: «3,5 %» y no «3.5 %».
+const pct = (a: number, b: number) => (b ? `${(Math.round((a * 1000) / b) / 10).toLocaleString('es-ES')} %` : '—');
+// Las personas que se piden para la lista de un número. El servidor da hasta 5000.
+const LIMITE_LISTA = 2000;
 const fecha = (s: string | null) => (s ? new Date(s).toLocaleDateString('es-ES') : '—');
 const MES = (m: string) => {
   const [y, mm] = m.split('-').map(Number);
@@ -56,6 +59,8 @@ export default function FeedbackPanelPage() {
   const [rango, setRango] = useState<{ from: string; to: string }>({ from: '', to: '' });
   const [datos, setDatos] = useState<PanelFeedback | null>(null);
   const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [intento, setIntento] = useState(0);
   const [pestaña, setPestaña] = useState<'empresa' | 'campus' | 'gestora' | 'disparador'>('gestora');
   const [detalle, setDetalle] = useState<Detalle | null>(null);
 
@@ -67,20 +72,27 @@ export default function FeedbackPanelPage() {
     return p;
   }, [issuerEfectivo, activeProject?.id, rango.from, rango.to]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Si falla, se dice y no se enseña nada: antes salía «Todavía no ha
+  // contestado nadie» —como si no hubiera datos— o se quedaban las cifras del
+  // filtro anterior bajo el nuevo (#593).
   useEffect(() => {
     let vivo = true;
     setCargando(true);
+    setError(null);
     traerPanel(base)
       .then((d) => { if (vivo) setDatos(d); })
+      .catch((e) => { if (vivo) { setDatos(null); setError((e as Error)?.message || 'Error desconocido'); } })
       .finally(() => { if (vivo) setCargando(false); });
     return () => { vivo = false; };
-  }, [base]);
+  }, [base, intento]);
 
   const t = datos?.totales;
   const textoMotivo = (clave: string | null) =>
     datos?.motivos.find((m) => m.clave === clave)?.texto || clave || '—';
   const totalRespuestas = (datos?.porMotivo || []).reduce((s, m) => s + m.n, 0);
-  const abrir = (titulo: string, params: Record<string, string>) => setDetalle({ titulo, params });
+  // `total`: cuántas personas dice el número que se pulsa, para avisar si la
+  // lista no las trae todas.
+  const abrir = (titulo: string, params: Record<string, string>, total?: number) => setDetalle({ titulo, params, total });
 
   return (
     <div className="space-y-4">
@@ -100,28 +112,36 @@ export default function FeedbackPanelPage() {
         )}
       />
 
+      {error && (
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm">
+          <span>No se han podido cargar las cifras de feedback: {error}</span>
+          <button type="button" onClick={() => setIntento((n) => n + 1)}
+            className="h-8 rounded-md border border-border bg-card px-3 text-xs font-semibold hover:bg-muted">Reintentar</button>
+        </div>
+      )}
+
       {/* ── Enviados · respondidos · % ─────────────────────────────── */}
       <section className="grid grid-cols-1 gap-3 sm:grid-cols-3" aria-label="Envíos y respuestas">
         <Cifra etiqueta="Enviados" valor={t?.enviados} cargando={cargando}
-          onClick={() => abrir('Enviados', { que: 'enviados' })} />
+          onClick={() => abrir('Enviados', { que: 'enviados' }, t?.enviados)} />
         <Cifra etiqueta="Respondidos" valor={t?.respondidos} cargando={cargando}
-          onClick={() => abrir('Respondidos', { que: 'respondidos' })} />
-        <Cifra etiqueta="Tasa de respuesta" valor={t ? `${t.tasa} %` : undefined} cargando={cargando} />
+          onClick={() => abrir('Respondidos', { que: 'respondidos' }, t?.respondidos)} />
+        <Cifra etiqueta="Tasa de respuesta" valor={t ? `${Number(t.tasa).toLocaleString('es-ES')} %` : undefined} cargando={cargando} />
       </section>
       {t && (t.en_revision + t.bloqueados + t.sin_correo + t.fallidos) > 0 && (
         <p className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
           <span>No salieron y no cuentan como enviados:</span>
-          {t.en_revision > 0 && <BotonTexto onClick={() => abrir('Esperando revisión', { que: 'revision' })}>{t.en_revision} esperando revisión</BotonTexto>}
-          {t.bloqueados > 0 && <BotonTexto onClick={() => abrir('Parados por el freno de pruebas', { que: 'bloqueados' })}>{t.bloqueados} parados por el freno de pruebas</BotonTexto>}
-          {t.sin_correo > 0 && <BotonTexto onClick={() => abrir('Sin correo', { que: 'sin_correo' })}>{t.sin_correo} sin correo</BotonTexto>}
-          {t.fallidos > 0 && <BotonTexto onClick={() => abrir('Fallidos', { que: 'fallidos' })}>{t.fallidos} fallidos</BotonTexto>}
+          {t.en_revision > 0 && <BotonTexto onClick={() => abrir('Esperando revisión', { que: 'revision' }, t.en_revision)}>{t.en_revision} esperando revisión</BotonTexto>}
+          {t.bloqueados > 0 && <BotonTexto onClick={() => abrir('Parados por el freno de pruebas', { que: 'bloqueados' }, t.bloqueados)}>{t.bloqueados} parados por el freno de pruebas</BotonTexto>}
+          {t.sin_correo > 0 && <BotonTexto onClick={() => abrir('Sin correo', { que: 'sin_correo' }, t.sin_correo)}>{t.sin_correo} sin correo</BotonTexto>}
+          {t.fallidos > 0 && <BotonTexto onClick={() => abrir('Fallidos', { que: 'fallidos' }, t.fallidos)}>{t.fallidos} fallidos</BotonTexto>}
         </p>
       )}
 
       {/* ── Por qué no compran ─────────────────────────────────────── */}
       <section className="rounded-lg border border-border bg-card p-4">
         <h2 className="text-base font-semibold">Por qué no compran</h2>
-        {!cargando && totalRespuestas === 0 && (
+        {!cargando && !error && totalRespuestas === 0 && (
           <p className="mt-2 text-sm text-muted-foreground">
             {rango.from || rango.to ? 'Todavía no ha contestado nadie en estas fechas.' : 'Todavía no ha contestado nadie.'}
           </p>
@@ -129,7 +149,7 @@ export default function FeedbackPanelPage() {
         <ul className="mt-3 space-y-2">
           {(datos?.porMotivo || []).map((m) => (
             <li key={m.clave}>
-              <button type="button" onClick={() => abrir(textoMotivo(m.clave), { que: 'respondidos', motivo: m.clave })}
+              <button type="button" onClick={() => abrir(textoMotivo(m.clave), { que: 'respondidos', motivo: m.clave }, m.n)}
                 className="w-full rounded-md px-2 py-1.5 text-left hover:bg-muted/60 focus:outline-none focus:ring-2 focus:ring-ring/40">
                 <span className="flex items-baseline justify-between gap-3 text-sm">
                   <span className={m.clave === 'sin_respuesta' ? 'font-semibold text-warning-soft-foreground' : ''}>
@@ -159,8 +179,10 @@ export default function FeedbackPanelPage() {
                 <h3 className="text-sm font-semibold">{p.clave === 'motivo' ? 'Lo que escribieron en «Otro motivo»' : p.texto}</h3>
                 <p className="text-xs text-muted-foreground">
                   {p.clave === 'motivo'
-                    ? `${p.escritos!.length} de ${p.respondieron} ${p.respondieron === 1 ? 'respuesta' : 'respuestas'}`
+                    ? `${p.escritos_total ?? p.escritos!.length} de ${p.respondieron} ${p.respondieron === 1 ? 'respuesta' : 'respuestas'}`
                     : `${p.respondieron} ${p.respondieron === 1 ? 'respuesta' : 'respuestas'}`}
+                  {/* Se ven los 40 últimos: si hay más, se dice (#593). */}
+                  {(p.escritos_total ?? 0) > (p.escritos || []).length && ` · se ven los ${p.escritos!.length} últimos de ${p.escritos_total} que escribieron`}
                   {p.tipo === 'escala' && p.media != null && <> · media <strong className="text-foreground">{p.media.toLocaleString('es-ES')}</strong> de 5</>}
                   {p.tipo === 'varias' && ' · podían marcar varias'}
                 </p>
@@ -209,7 +231,8 @@ export default function FeedbackPanelPage() {
       <section className="rounded-lg border border-border bg-card p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-base font-semibold">Desglose</h2>
-          <div className="inline-flex rounded-md border border-border p-0.5 text-sm" role="tablist">
+          {/* flex-wrap: las cuatro no caben en un móvil de 375 px. */}
+          <div className="flex flex-wrap gap-0.5 rounded-md border border-border p-0.5 text-sm" role="tablist">
             {([['empresa', 'Por empresa'], ['campus', 'Por campus'], ['gestora', 'Por gestora'], ['disparador', 'Por disparador']] as const).map(([k, etq]) => (
               <button key={k} type="button" role="tab" aria-selected={pestaña === k} onClick={() => setPestaña(k)}
                 className={`rounded px-2.5 py-1 ${pestaña === k ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}>
@@ -232,18 +255,19 @@ export default function FeedbackPanelPage() {
             </thead>
             <tbody>
               {pestaña === 'gestora' && (datos?.porGestora || []).map((g) => {
-                const extra: Record<string, string> = g.gestora_id ? { gestoraId: String(g.gestora_id) } : {};
+                // «Sin gestora» pide los que no tienen: sin esto abría los de todas (#593).
+                const extra: Record<string, string> = { gestoraId: g.gestora_id ? String(g.gestora_id) : 'sin' };
                 return (
                   <tr key={g.gestora_id ?? 'nadie'} className="border-t border-border">
                     <td className="py-2">{g.nombre}</td>
-                    <Num n={g.enviados} onClick={() => abrir(`Enviados · ${g.nombre}`, { que: 'enviados', ...extra })} />
-                    <Num n={g.respondidos} onClick={() => abrir(`Respondidos · ${g.nombre}`, { que: 'respondidos', ...extra })} />
+                    <Num n={g.enviados} onClick={() => abrir(`Enviados · ${g.nombre}`, { que: 'enviados', ...extra }, g.enviados)} />
+                    <Num n={g.respondidos} onClick={() => abrir(`Respondidos · ${g.nombre}`, { que: 'respondidos', ...extra }, g.respondidos)} />
                     <td className="py-2 text-right tabular-nums">{pct(g.respondidos, g.enviados)}</td>
                     <td className="py-2 text-right tabular-nums">
                       {g.notas > 0 ? <>{Number(g.nota_atencion).toLocaleString('es-ES')} <span className="text-xs text-muted-foreground">de 5 · {g.notas}</span></> : <span className="text-muted-foreground">—</span>}
                     </td>
                     <Num n={g.no_le_contestaron} aviso
-                      onClick={() => abrir(`No le contestaron a tiempo · ${g.nombre}`, { que: 'respondidos', motivo: 'sin_respuesta', ...extra })} />
+                      onClick={() => abrir(`No le contestaron a tiempo · ${g.nombre}`, { que: 'respondidos', motivo: 'sin_respuesta', ...extra }, g.no_le_contestaron)} />
                   </tr>
                 );
               })}
@@ -252,9 +276,9 @@ export default function FeedbackPanelPage() {
                 const donde: Record<string, string> = e.issuer_id ? { soloEmpresa: String(e.issuer_id) } : { soloCampus: String(e.project_id) };
                 return (
                   <tr key={`${e.issuer_id}-${e.project_id}`} className="border-t border-border">
-                    <td className="py-2">{e.nombre}{e.issuer_id ? <span className="ml-1 text-xs text-muted-foreground">· {e.campus} campus</span> : null}</td>
-                    <Num n={e.enviados} onClick={() => abrir(`Enviados · ${e.nombre}`, { que: 'enviados', ...donde })} />
-                    <Num n={e.respondidos} onClick={() => abrir(`Respondidos · ${e.nombre}`, { que: 'respondidos', ...donde })} />
+                    <td className="py-2">{e.nombre}{e.issuer_id ? <span className="ml-1 text-xs text-muted-foreground">· {e.campus} campus con envíos</span> : null}</td>
+                    <Num n={e.enviados} onClick={() => abrir(`Enviados · ${e.nombre}`, { que: 'enviados', ...donde }, e.enviados)} />
+                    <Num n={e.respondidos} onClick={() => abrir(`Respondidos · ${e.nombre}`, { que: 'respondidos', ...donde }, e.respondidos)} />
                     <td className="py-2 text-right tabular-nums">{pct(e.respondidos, e.enviados)}</td>
                     <td className="py-2 text-right tabular-nums">{e.nota_atencion != null ? <>{Number(e.nota_atencion).toLocaleString('es-ES')} <span className="text-xs text-muted-foreground">de 5</span></> : <span className="text-muted-foreground">—</span>}</td>
                   </tr>
@@ -263,16 +287,16 @@ export default function FeedbackPanelPage() {
               {pestaña === 'campus' && (datos?.porCampus || []).map((c) => (
                 <tr key={c.project_id} className="border-t border-border">
                   <td className="py-2">{c.nombre}</td>
-                  <Num n={c.enviados} onClick={() => abrir(`Enviados · ${c.nombre}`, { que: 'enviados', soloCampus: String(c.project_id) })} />
-                  <Num n={c.respondidos} onClick={() => abrir(`Respondidos · ${c.nombre}`, { que: 'respondidos', soloCampus: String(c.project_id) })} />
+                  <Num n={c.enviados} onClick={() => abrir(`Enviados · ${c.nombre}`, { que: 'enviados', soloCampus: String(c.project_id) }, c.enviados)} />
+                  <Num n={c.respondidos} onClick={() => abrir(`Respondidos · ${c.nombre}`, { que: 'respondidos', soloCampus: String(c.project_id) }, c.respondidos)} />
                   <td className="py-2 text-right tabular-nums">{pct(c.respondidos, c.enviados)}</td>
                 </tr>
               ))}
               {pestaña === 'disparador' && (datos?.porDisparador || []).map((d) => (
                 <tr key={d.clave} className="border-t border-border">
                   <td className="py-2">{datos?.disparadores[d.clave] || d.clave}</td>
-                  <Num n={d.enviados} onClick={() => abrir(`Enviados · ${datos?.disparadores[d.clave]}`, { que: 'enviados', disparador: d.clave })} />
-                  <Num n={d.respondidos} onClick={() => abrir(`Respondidos · ${datos?.disparadores[d.clave]}`, { que: 'respondidos', disparador: d.clave })} />
+                  <Num n={d.enviados} onClick={() => abrir(`Enviados · ${datos?.disparadores[d.clave]}`, { que: 'enviados', disparador: d.clave }, d.enviados)} />
+                  <Num n={d.respondidos} onClick={() => abrir(`Respondidos · ${datos?.disparadores[d.clave]}`, { que: 'respondidos', disparador: d.clave }, d.respondidos)} />
                   <td className="py-2 text-right tabular-nums">{pct(d.respondidos, d.enviados)}</td>
                 </tr>
               ))}
@@ -295,8 +319,8 @@ export default function FeedbackPanelPage() {
                 <tr key={m.mes} className="border-t border-border">
                   <td className="py-2 capitalize">{MES(m.mes)}</td>
                   {/* Cada número abre quiénes son, de ese mes y dentro del rango de arriba. */}
-                  <Num n={m.enviados} onClick={() => abrir(`Enviados · ${MES(m.mes)}`, { que: 'enviados', ...delMes(m.mes, rango) })} />
-                  <Num n={m.respondidos} onClick={() => abrir(`Respondidos · ${MES(m.mes)}`, { que: 'respondidos', ...delMes(m.mes, rango) })} />
+                  <Num n={m.enviados} onClick={() => abrir(`Enviados · ${MES(m.mes)}`, { que: 'enviados', ...delMes(m.mes, rango) }, m.enviados)} />
+                  <Num n={m.respondidos} onClick={() => abrir(`Respondidos · ${MES(m.mes)}`, { que: 'respondidos', ...delMes(m.mes, rango) }, m.respondidos)} />
                   <td className="py-2 text-right tabular-nums">{pct(m.respondidos, m.enviados)}</td>
                 </tr>
               ))}
@@ -356,7 +380,9 @@ function ListaDeDetras({ detalle, base, textoMotivo, disparadores, onCerrar }: {
   disparadores: Record<string, string>; onCerrar: () => void;
 }) {
   const [filas, setFilas] = useState<FilaFeedback[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => {
+    let vivo = true;
     const p = new URLSearchParams(base);
     const { soloCampus, soloEmpresa, ...resto } = detalle.params;
     // Una empresa concreta desde el desglose: su sociedad, en vez del ámbito de arriba.
@@ -364,20 +390,42 @@ function ListaDeDetras({ detalle, base, textoMotivo, disparadores, onCerrar }: {
     // Un campus concreto desde el desglose: sustituye a la empresa, no se suma.
     if (soloCampus) { p.delete('issuerId'); p.set('projectId', soloCampus); }
     Object.entries(resto).forEach(([k, v]) => p.set(k, v));
+    p.set('limite', String(LIMITE_LISTA));
     setFilas(null);
-    traerLista(p).then(setFilas);
+    setError(null);
+    // Si falla, se dice: antes se quedaba en «Cargando…» para siempre (#593).
+    traerLista(p)
+      .then((f) => { if (vivo) setFilas(f); })
+      .catch((e) => { if (vivo) setError((e as Error)?.message || 'Error desconocido'); });
+    return () => { vivo = false; };
   }, [detalle, base]);
+
+  // Escape cierra, como cualquier ventana.
+  useEffect(() => {
+    const alPulsar = (e: KeyboardEvent) => { if (e.key === 'Escape') onCerrar(); };
+    window.addEventListener('keydown', alPulsar);
+    return () => window.removeEventListener('keydown', alPulsar);
+  }, [onCerrar]);
+
+  const faltan = filas && detalle.total != null && filas.length < detalle.total;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4" onClick={onCerrar}>
       <div role="dialog" aria-modal="true" aria-label={detalle.titulo}
         className="max-h-[85vh] w-full max-w-3xl overflow-hidden rounded-t-xl bg-card sm:rounded-xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <h3 className="font-semibold">{detalle.titulo}{filas ? ` · ${filas.length}` : ''}</h3>
+          <h3 className="font-semibold">{detalle.titulo}{filas ? ` · ${detalle.total ?? filas.length}` : ''}</h3>
           <button type="button" onClick={onCerrar} aria-label="Cerrar" className="rounded p-1 hover:bg-muted"><X size={16} /></button>
         </div>
         <div className="max-h-[70vh] overflow-auto">
-          {!filas && <p className="p-4 text-sm text-muted-foreground">Cargando…</p>}
+          {/* Si la lista no las trae todas, se dice cuántas enseña (#593). */}
+          {faltan && (
+            <p className="border-b border-border bg-muted/40 px-4 py-2 text-xs text-muted-foreground">
+              Se ven las {filas!.length} más recientes de {detalle.total}.
+            </p>
+          )}
+          {error && <p role="alert" className="p-4 text-sm text-destructive">No se ha podido cargar la lista: {error}</p>}
+          {!filas && !error && <p className="p-4 text-sm text-muted-foreground">Cargando…</p>}
           {filas && filas.length === 0 && <p className="p-4 text-sm text-muted-foreground">Nadie.</p>}
           {filas && filas.length > 0 && (
             <table className="w-full min-w-[640px] text-sm">

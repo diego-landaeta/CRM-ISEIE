@@ -33,7 +33,18 @@ export async function registrar({ clave, destinatarios, asunto, etiquetas, proje
       `INSERT INTO email_envios
          (clave, destinatarios, asunto, etiquetas, project_id, estado, intentos, brevo_msg_id, error)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-       ON CONFLICT (clave) WHERE clave IS NOT NULL DO NOTHING`,
+       -- Con la misma clave, el intento nuevo sustituye al que NO salió: si el
+       -- remitente de la marca falla y el reintento por la cuenta del CRM sale,
+       -- el registro tiene que decir «enviado», no quedarse en «fallido» (#593).
+       -- Lo que ya salió no se pisa nunca: es lo que mira yaSeEnvio.
+       ON CONFLICT (clave) WHERE clave IS NOT NULL DO UPDATE
+         SET estado = EXCLUDED.estado,
+             intentos = email_envios.intentos + EXCLUDED.intentos,
+             brevo_msg_id = EXCLUDED.brevo_msg_id,
+             error = EXCLUDED.error,
+             destinatarios = EXCLUDED.destinatarios,
+             asunto = EXCLUDED.asunto
+       WHERE email_envios.estado <> 'enviado'`,
       [clave || null, destinatarios, (asunto || '').slice(0, 500),
        Array.isArray(etiquetas) && etiquetas.length ? etiquetas : null,
        projectId || null, estado,

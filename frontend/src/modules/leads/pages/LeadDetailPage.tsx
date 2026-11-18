@@ -14,6 +14,7 @@ import LeadInfoCard from '../components/lead-detail/LeadInfoCard';
 import LeadProductsCard from '../components/lead-detail/LeadProductsCard';
 import AgendaDelProspecto from '@/modules/proceso/components/AgendaDelProspecto';
 import ConvocatoriasDelProspecto from '@/modules/convocatorias/components/ConvocatoriasDelProspecto';
+import FeedbackDeLaFicha from '@/modules/feedback/components/FeedbackDeLaFicha';
 import { PROCESO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 import LeadUtmsCard from '../components/lead-detail/LeadUtmsCard';
 import LeadInteractionsCard, { InteractionDialog } from '../components/lead-detail/LeadInteractionsCard';
@@ -264,6 +265,10 @@ export default function LeadDetailPage() {
           <LeadInfoCard lead={lead} onUpdate={updateLead}
             onLlamada={(nota) => addInteraction('llamada', nota)}
             onWhatsapp={(nota) => addInteraction('whatsapp', nota)} />
+          {/* El correo de «¿por qué has desistido?» y lo que contestó (#169).
+              El aviso «Te han contestado al feedback» trae aquí, no al panel
+              lateral: sin esto, la gestora llegaba y no veía la respuesta (#593). */}
+          <FeedbackDeLaFicha leadId={lead.id} />
           {/* El proceso de ventas, fuera de produccion hasta aprobarlo (28/09). */}
           {PROCESO_EN_PRUEBAS && (
           <AgendaDelProspecto

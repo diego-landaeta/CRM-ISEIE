@@ -9,8 +9,10 @@ import { vigilar } from './latido.js';
  * envía». El 7 no es un número al azar: es cuando acaba el proceso comercial,
  * así que el correo sale justo cuando ya se ha hecho todo lo que tocaba.
  *
- * Quién entra lo decide `candidatosDelDia7`: su PRIMER CONTACTO fue hace 7 a 30
- * días, no compró, no dijo que no, tiene correo y nunca se le preguntó.
+ * Quién entra lo decide `candidatosDelDia7`: lleva 7 días sin ninguna
+ * interacción (tampoco por WhatsApp) en ninguna de sus fichas, no compró con
+ * ninguna, no dijo que no, tiene correo y nunca se le preguntó. Antes de los
+ * nuevos, cada vuelta reintenta los que fallaron o se quedaron a medias.
  *
  * Se apaga con FEEDBACK_DIA7_DISABLED=1.
  */
@@ -41,11 +43,13 @@ async function vuelta() {
   if (hora < DESDE || hora >= HASTA) return null;
   try {
     const r = await vueltaDelDia7({ pila: PILA, tope: TOPE, maxDias: MAX_DIAS, inicio: INICIO });
-    if (r.pedidos) logger.info(r, 'Feedback del 7.º día: una tanda');
+    if (r.pedidos || r.reintentos) logger.info(r, 'Feedback del 7.º día: una tanda');
     return r;
   } catch (err) {
     logger.error({ err: err.message }, 'Fallo pidiendo el feedback del 7.º día');
-    return null;
+    // Se relanza para que `vigilar` lo apunte: tragárselo dejaba la tarea
+    // «sana» en la pantalla de estado aunque fallara en cada vuelta (#593).
+    throw err;
   }
 }
 
