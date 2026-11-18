@@ -5,7 +5,7 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import client from '@/shared/api/client';
 import { CURRENCIES } from '../currencies';
-import { invoicesApi } from '../api/invoices.api';
+import { invoicesApi, esFacturaEmitida, NO_SE_CAMBIA_EMITIDA } from '../api/invoices.api';
 import type { Issuer, InvoiceItem } from '../api/invoices.api';
 import { emitirPreguntandoSiPasa } from '../lib/masQueLoCobrado';
 import { conversionsApi, type Conversion } from '@/modules/conversions/api/conversions.api';
@@ -81,6 +81,8 @@ export default function InvoiceCreatePage() {
   // como para CORREGIR una factura ya emitida/pagada (IVA, datos, concepto).
   const editId = new URLSearchParams(loc.search).get('editId');
   const [editEstado, setEditEstado] = useState<string | null>(null);
+  // Una EMITIDA no se cambia (CRM#793): se enseña, pero no se guarda.
+  const [editEmitida, setEditEmitida] = useState(false);
   // Si lo que se esta corrigiendo es un abono: cambia el rotulo y el signo.
   const [esAbono, setEsAbono] = useState(false);
   // Fechas de la factura (emisión y pago). Se editan aquí mismo, en el panel.
@@ -379,6 +381,7 @@ export default function InvoiceCreatePage() {
       if (!res.success || !res.data) return;
       const f = res.data as import('../api/invoices.api').Invoice;
       setEditEstado(f.estado || null);
+      setEditEmitida(esFacturaEmitida(f));
         const d10 = (v?: string | null) => (v ? String(v).slice(0, 10) : '');
         setFechaEmision(d10(f.fecha_emision));
         setFechaPago(d10(f.fecha_pago));
@@ -485,6 +488,14 @@ export default function InvoiceCreatePage() {
           </Link>
         )}
       />
+
+      {editEmitida && (
+        <div role="alert" className="rounded-lg border border-warning/30 bg-warning-soft p-3 text-sm text-warning-soft-foreground">
+          <b>Esta factura ya está emitida: no se puede cambiar.</b> Ni el importe, ni el número, ni el cliente,
+          ni la fecha. Si hay que dejarla sin efecto, vuelve a Facturas y pulsa «Anular» indicando el motivo:
+          queda apuntado quién y por qué, y sale su abono.
+        </div>
+      )}
 
       {/* Tipo de documento: factura fiscal vs proforma (presupuesto).
           En EDICIÓN el tipo es FIJO (no se puede convertir una factura emitida en
@@ -853,7 +864,7 @@ export default function InvoiceCreatePage() {
             <FloppyDisk size={15} weight="bold" /> {saving ? 'Emitiendo abono…' : 'Emitir abono'}
           </button>
         ) : (
-          <button onClick={() => generar()} disabled={saving || (!esProforma && fiscalBlock)} title={!esProforma && fiscalBlock ? 'El CIF/NIF de la sociedad no es válido' : undefined} className="h-10 px-5 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1.5">
+          <button onClick={() => generar()} disabled={saving || editEmitida || (!esProforma && fiscalBlock)} title={editEmitida ? NO_SE_CAMBIA_EMITIDA : !esProforma && fiscalBlock ? 'El CIF/NIF de la sociedad no es válido' : undefined} className="h-10 px-5 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1.5">
             <FloppyDisk size={15} weight="bold" /> {saving ? 'Guardando…' : editId ? 'Guardar cambios' : (esProforma ? 'Generar presupuesto' : 'Generar factura')}
           </button>
         )}
