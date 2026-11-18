@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-835 rutas en 65 módulos, y 31 acciones con condición dentro de una ruta.
+836 rutas en 65 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -524,6 +524,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | markPaid | `POST /api/invoices/:id/mark-paid` | sesión | superadmin, admin, gestor, soporte, project_manager | `facturas.cobrar` |
 | cobrarProforma | `POST /api/invoices/:id/cobrar-proforma` | sesión · roleGuard(admin, superadmin, gestor) +superadmin +soporte por el atajo · a mano: invoices.controller.js · esFacturaManager | superadmin y admin/gestor/soporte con «factura_manager» | `facturas.cola` |
 | cancel | `POST /api/invoices/:id/cancel` | sesión | superadmin, admin, gestor, soporte, project_manager | `facturas.anular` |
+| anular | `POST /api/invoices/:id/anular` | (no existía) | (ruta nueva) | `facturas.gestionar` |
 | destroy | `DELETE /api/invoices/:id` | sesión · roleGuard(admin, superadmin, gestor) +superadmin +soporte por el atajo · a mano: invoices.model.js · puedeGestionarFactura | superadmin, admin y gestor con «factura_manager» | `facturas.gestionar` |
 | rectificar | `POST /api/invoices/:id/rectificar` | sesión · roleGuard(admin, superadmin, gestor) +superadmin +soporte por el atajo · a mano: invoices.model.js · puedeGestionarFactura | superadmin, admin y gestor con «factura_manager» | `facturas.gestionar` |
 | emitir | `POST /api/invoices/:id/emitir` | sesión | superadmin, admin, gestor, soporte, project_manager | `facturas.emitir_borrador` |
@@ -1436,10 +1437,10 @@ lo que pide para tener sentido (editar pide ver).
 | Completar datos y marcar entregada | `facturas.completar` | Rellenar los datos fiscales del cliente y marcarla entregada. | Admin, Gestora, Soporte, Project manager | `facturas.view` |
 | Enviar facturas | `facturas.enviar` | Mandar la factura al cliente. | Admin, Gestora, Soporte, Project manager | `facturas.view` |
 | Marcar cobrada | `facturas.cobrar` | Marcar una factura como cobrada. | Admin, Gestora, Soporte, Project manager | `facturas.view` |
-| Anular facturas | `facturas.anular` | Anular una factura sin emitir. | Admin, Gestora, Soporte, Project manager | `facturas.view` |
+| Cancelar borradores y proformas | `facturas.anular` | Cancelar, con su motivo, una factura sin emitir o una proforma. | Admin, Gestora, Soporte, Project manager | `facturas.view` |
 | Emitir un borrador | `facturas.emitir_borrador` | Darle número a un borrador. | Admin, Gestora, Soporte, Project manager | `facturas.view` |
 | Poner número al cobrar | `facturas.emitir` | Que el cobro salga facturado y la proforma sin esperar visto bueno. | Admin | `facturas.view` |
-| Corregir y abonar | `facturas.gestionar` | Corregir, abonar (rectificativa), asociar a una venta y borrar facturas (una gestora, las suyas). | Admin | `facturas.view` |
+| Anular y abonar | `facturas.gestionar` | Anular una emitida con su motivo (sale su abono), abonar (rectificativa), asociar a una venta, y corregir o borrar proformas y borradores (una gestora, las suyas). | Admin | `facturas.view` |
 | Emitir desde la cola | `facturas.cola` | Emitir los cobros de la cola, cobrar proformas y mover la fecha «al día». | solo superadmin | `facturas.view` |
 | Auditoría de facturación | `facturas.auditoria` | Ver el aviso de facturación pausada, auditar y reanudarla con «Marcar como solucionado». | Admin | `facturas.view` |
 | Cambiar fechas | `facturas.editar_fechas` | Cambiar la fecha de emisión y de pago, sin tocar importes. | Admin | `facturas.view` |
