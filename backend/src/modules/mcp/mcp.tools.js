@@ -459,7 +459,8 @@ export const HERRAMIENTAS = [
     nombre: 'listar_pagos_stripe',
     titulo: 'Pagos de Stripe, uno a uno',
     descripcion: 'Cada cargo de Stripe, como en Finanzas → Pagos Stripe: fecha, importe en euros, estado (cobrado, reembolsado, '
-      + 'reembolsado_en_parte o fallido), lo reembolsado y el neto, la venta y la formación si está asociado, y si es el primer '
+      + 'reembolsado_en_parte o fallido), lo reembolsado y el neto, la venta y la formación si está asociado y cómo se asoció '
+      + '(por el correo, por la suscripción, compra directa en la web o a mano), y si es el primer '
       + 'pago, una cuota («cuota 2 de 3») u otro pago. Las fechas son días de Madrid. Trae además las cifras del periodo entero '
       + '(cobrado, reembolsado, neto, fallidos y sin asociar). Solo super admin y admin.',
     entrada: { ...DATOS_COMPLETOS,
