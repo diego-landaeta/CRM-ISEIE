@@ -306,8 +306,8 @@ describe('CRM#764 · si la automática se para, la cola dice por qué y factura 
     await q(`INSERT INTO invoices (project_id, serie, ano, numero, codigo, fecha_emision, cliente_nombre, cliente_nif,
                                    cliente_direccion, cliente_ciudad, cliente_cp, cliente_pais, items, base_imponible,
                                    total, estado, tipo)
-             VALUES ($1, $2, 2026, 9002, $3, CURRENT_DATE, 'Otra Persona 764', $4, 'x', 'x', 'x', 'España', '[]',
-                     100, 100, 'emitida', 'normal')`, [proyecto.id, SERIE, `${SERIE}-9002`, NIE]);
+             VALUES ($1, $2, 2026, 8002, $3, CURRENT_DATE, 'Otra Persona 764', $4, 'x', 'x', 'x', 'España', '[]',
+                     100, 100, 'emitida', 'normal')`, [proyecto.id, SERIE, `${SERIE}-8002`, NIE]);
     const v = await venta({ nombre: 'Luis Gómez Ruiz', email: 'luis.764@example.com' }); // ficha sin NIF
     const pago = await pagar(v, 100);
     await fa.alCobrar({ conversionId: v.id, paymentId: pago });
@@ -347,9 +347,9 @@ describe('CRM#764 · si la automática se para, la cola dice por qué y factura 
       `INSERT INTO invoices (project_id, conversion_id, lead_id, serie, ano, numero, codigo, fecha_emision, cliente_nombre,
                              cliente_nif, cliente_direccion, cliente_ciudad, cliente_cp, cliente_pais, items,
                              base_imponible, total, estado, tipo)
-       VALUES ($1, $2, $3, $4, 2026, 9003, $5, CURRENT_DATE, 'Marta', '—', '—', '—', '—', 'España', '[]', 250, 250,
+       VALUES ($1, $2, $3, $4, 2026, 8003, $5, CURRENT_DATE, 'Marta', '—', '—', '—', '—', 'España', '[]', 250, 250,
                'emitida', 'proforma') RETURNING id`,
-      [proyecto.id, v.id, v.lead_id, SERIE, `${SERIE}-9003`]);
+      [proyecto.id, v.id, v.lead_id, SERIE, `${SERIE}-8003`]);
     await q(
       `INSERT INTO factura_datos_fiscales (conversion_id, project_id, lead_id, estado, origen_datos, caduca_at,
                                            cliente_tipo, nombre, nif, direccion, codigo_postal, ciudad, pais, email)
@@ -369,7 +369,7 @@ describe('CRM#764 · si la automática se para, la cola dice por qué y factura 
     const inv = await invModel.emitirFacturaDePago(v.id, { paymentId: pago, importe: 250 }, null);
     expect(inv.id).toBe(prof.id);
     expect(inv).toMatchObject({
-      tipo: 'normal', codigo: `${SERIE}-9003`, cliente_nombre: 'Marta Ruiz Gil', cliente_nif: '00000001R',
+      tipo: 'normal', codigo: `${SERIE}-8003`, cliente_nombre: 'Marta Ruiz Gil', cliente_nif: '00000001R',
       cliente_ciudad: 'Barcelona', cliente_cp: '08001',
     });
   });
@@ -380,9 +380,9 @@ describe('CRM#764 · si la automática se para, la cola dice por qué y factura 
       `INSERT INTO invoices (project_id, conversion_id, lead_id, serie, ano, numero, codigo, fecha_emision, cliente_nombre,
                              cliente_nif, cliente_direccion, cliente_ciudad, cliente_cp, cliente_pais, items,
                              base_imponible, total, estado, tipo)
-       VALUES ($1, $2, $3, $4, 2026, 9004, $5, CURRENT_DATE, 'Empresa del Pablo SL', 'B12345674', 'Polígono 1',
+       VALUES ($1, $2, $3, $4, 2026, 8004, $5, CURRENT_DATE, 'Empresa del Pablo SL', 'B12345674', 'Polígono 1',
                'Sevilla', '41001', 'España', '[]', 260, 260, 'emitida', 'proforma')`,
-      [proyecto.id, v.id, v.lead_id, SERIE, `${SERIE}-9004`]);
+      [proyecto.id, v.id, v.lead_id, SERIE, `${SERIE}-8004`]);
     await q(
       `INSERT INTO factura_datos_fiscales (conversion_id, project_id, lead_id, estado, origen_datos, caduca_at,
                                            cliente_tipo, nombre, nif, direccion, codigo_postal, ciudad, pais, email)
