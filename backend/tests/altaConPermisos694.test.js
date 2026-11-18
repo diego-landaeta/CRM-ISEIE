@@ -216,7 +216,8 @@ describe('#694 · un admin da de alta con excepciones', () => {
   it('el tutor de su campus, sí (con `projects`, como lo manda la pantalla)', async () => {
     const email = `tutor-con-campus@${MARCA}.test`;
     const { error, estado, cuerpo } = await llamar(userController.create, {
-      body: tutor(email, { projects: [{ projectId: CAMPUS, recibeLeads: false }], excepciones: { 'tasks.view_own': false } }),
+      body: tutor(email, { projects: [{ projectId: CAMPUS, recibeLeads: false }], // Sin su tablero, tampoco «Editar tareas»: lo uno sin lo otro no se guarda (#752).
+      excepciones: { 'tasks.view_own': false, 'tasks.edit': false } }),
       user: comoAdmin });
     expect(error?.message).toBeUndefined();
     expect(estado).toBe(201);
