@@ -31,6 +31,10 @@
  *   independiente no pide el `view` de su recurso: es otra pantalla (cuentas por
  *                cobrar no es «editar» el dashboard de finanzas)
  *
+ * Y cada recurso puede llevar `nota`: lo que decide el acceso a esa pantalla y
+ * no es una casilla (en el tablero, quien cierra una tarea con supervisor). La
+ * ficha de cada persona la enseña junto a sus permisos (#694).
+ *
  * Los valores de `roles` no se han inventado: son quién entra HOY a las rutas
  * de cada clave (`inventario/asignacion.js`), y la prueba
  * `catalogoPermisos.test.js` lo comprueba rol por rol.
@@ -142,7 +146,10 @@ export const SECCIONES = [
     clave: 'tareas', nombre: 'Tareas',
     recursos: [
       {
-        clave: 'tasks', nombre: 'Tablero de tareas', acciones: [
+        clave: 'tasks', nombre: 'Tablero de tareas',
+        // Diego, 11/11/2026 (#694): no es una casilla, y la ficha lo explica.
+        nota: 'Quién cierra una tarea no es una casilla: lo decide la propia tarea. Sin supervisor, la cierra quien la lleva; con supervisor, solo su supervisor (ni quien la lleva ni el superadmin), tenga o no estos permisos. «Devolver tareas» es otra cosa: devolver a «En curso», con un comentario, las ya hechas o en revisión.',
+        acciones: [
           // El tutor, el suyo (Diego, 04/11): sus tareas y las de su equipo de TUTORES. Lo
           // de desarrollo no lo ve: no es de ese equipo (tasks.equipos.model.js).
           // El tutor redactor (CRM#708), como un colaborador: ver, crearse y mover las suyas.
@@ -486,7 +493,9 @@ export const SECCIONES = [
         clave: 'mcp', nombre: 'MCP (Claude)', acciones: [
           // Antes lo decidía el rol principal (mcp.acceso.js · puedeUsarMcp): admin de serie, el
           // resto con la casilla, y un tutor nunca, aunque tuviera otro rol de más (QA, punto 6).
-          a('usar', 'Usar el MCP', 'Conectar su Claude al CRM con su URL personal.', ADMIN, { nunca: ['tutor', 'tutor_redactor'], nuncaPrincipal: ['tutor', 'tutor_redactor'], soloPrincipal: true }),
+          // Diego, 12/11/2026 (#752): el colaborador, como el tutor y el tutor redactor, nunca;
+          // el que lo tenía con la casilla lo pierde (`colaborador-sin-mcp` en cambios-aprobados).
+          a('usar', 'Usar el MCP', 'Conectar su Claude al CRM con su URL personal.', ADMIN, { nunca: ['tutor', 'tutor_redactor', 'colaborador'], nuncaPrincipal: ['tutor', 'tutor_redactor', 'colaborador'], soloPrincipal: true }),
           a('administrar', 'Administrar el MCP', 'Dar o quitar el MCP a personas de sus campus y ver qué se ha consultado.', ADMIN),
           a('supervisar', 'Apagar el MCP', 'El interruptor de emergencia y rechazar conexiones ajenas.', NADIE),
         ],
@@ -763,13 +772,15 @@ export function catalogoParaPantalla() {
     secciones: SECCIONES.map((s) => ({
       clave: s.clave, nombre: s.nombre,
       recursos: s.recursos.map((r) => ({
-        clave: r.clave, nombre: r.nombre,
+        clave: r.clave, nombre: r.nombre, ...(r.nota ? { nota: r.nota } : {}),
         acciones: r.acciones.map((x) => {
           const clave = `${r.clave}.${x.accion}`;
           return {
             clave, accion: x.accion, nombre: x.nombre, descripcion: x.descripcion,
             roles: x.roles, requiere: dependencias(clave), nunca: x.nunca || [], nuncaPrincipal: x.nuncaPrincipal || [],
             soloPantalla: x.soloPantalla === true,
+            // #694: la ficha enseña cada forma de tenerlo.
+            propia: x.propia === true, independiente: x.independiente === true, soloPrincipal: x.soloPrincipal === true,
           };
         }),
       })),

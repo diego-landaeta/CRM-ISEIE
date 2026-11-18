@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-870 rutas en 67 módulos, y 31 acciones con condición dentro de una ruta.
+871 rutas en 67 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -799,6 +799,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | guardarRolAMedida | `PATCH /api/permissions/roles/a-medida/:id` | (no existía) | (ruta nueva) | `roles.edit` |
 | registro | `GET /api/permissions/registro` | (no existía) | (ruta nueva) | `roles.edit` |
 | ficha | `GET /api/permissions/personas/:id` | (no existía) | (ruta nueva) | lo de cada uno |
+| vistaPreviaDeAlta | `POST /api/permissions/vista-previa-alta` | (no existía) | (ruta nueva) | `users.create` |
 | guardarExcepciones | `PUT /api/permissions/personas/:id/excepciones` | (no existía) | (ruta nueva) | `users.excepciones` |
 | cambiarRolAMedida | `PUT /api/permissions/personas/:id/rol-a-medida` | (no existía) | (ruta nueva) | `users.excepciones` |
 | listCustomRoles | `GET /api/permissions/custom-roles` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `roles.view` |
@@ -1650,7 +1651,7 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Usar el MCP | `mcp.usar` | Conectar su Claude al CRM con su URL personal. · nunca: Tutor, Tutor redactor · nunca si su rol principal es: Tutor, Tutor redactor | Admin |  |
+| Usar el MCP | `mcp.usar` | Conectar su Claude al CRM con su URL personal. · nunca: Tutor, Tutor redactor, Colaborador · nunca si su rol principal es: Tutor, Tutor redactor, Colaborador | Admin |  |
 | Administrar el MCP | `mcp.administrar` | Dar o quitar el MCP a personas de sus campus y ver qué se ha consultado. | Admin |  |
 | Apagar el MCP | `mcp.supervisar` | El interruptor de emergencia y rechazar conexiones ajenas. | solo superadmin |  |
 

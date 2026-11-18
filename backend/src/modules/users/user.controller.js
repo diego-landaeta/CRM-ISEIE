@@ -130,7 +130,22 @@ export async function create(req, res, next) {
     // Dar de alta con un rol es darle ese rol: nadie da lo que no tiene (QA de Diego, punto 7).
     const { exigirQueNoDeMasDeLoQueTiene } = await import('../permissions/permissions.editar.js');
     await exigirQueNoDeMasDeLoQueTiene(req.user, null, { role: parsed.data.role, roles_extra: parsed.data.roles_extra || [] });
-    const user = await userService.create(parsed.data, { porUserId: req.user?.userId ?? null });
+    // #694: sus excepciones, ya en el alta. Se comprueban antes de crear nada
+    // (mismas reglas que en su ficha) y se guardan en la misma operación.
+    const { excepciones = {}, ...datos } = parsed.data;
+    const hayExcepciones = Object.keys(excepciones).length > 0;
+    const editar = hayExcepciones ? await import('../permissions/permissions.editar.js') : null;
+    if (hayExcepciones) {
+      if (!(await tienePermiso(req, 'users.excepciones'))) {
+        throw new AppError('Poner excepciones de permisos es «Permisos de cada persona»', 403, 'FORBIDDEN');
+      }
+      await editar.exigirExcepcionesDeAlta(req.user,
+        { role: datos.role, roles_extra: datos.roles_extra || [], projectIds: editar.campusDelAlta(datos) }, excepciones);
+    }
+    const user = await userService.create(datos, {
+      porUserId: req.user?.userId ?? null,
+      alCrear: hayExcepciones ? (u) => editar.guardarExcepciones(u.id, excepciones, req.user, { origen: 'alta_usuario' }) : null,
+    });
     res.status(201).json({ success: true, data: user });
   } catch (err) { next(err); }
 }

@@ -16,6 +16,7 @@ import MarcaSection from './MarcaSection';
 import PaisesPorCampus from '@/modules/settings/components/PaisesPorCampus';
 import CampusPorEmpresa, { marcarVarios } from '@/shared/components/CampusPorEmpresa';
 import PermisosDePersona from '@/modules/permissions/components/PermisosDePersona';
+import PermisosDelAlta from '@/modules/permissions/components/PermisosDelAlta';
 import EquipoComercial from '@/modules/equipo-comercial/components/EquipoComercial';
 import { avisoCambioCorreo, confirmacionCambioCorreo, problemaDeContrasena } from '@/shared/lib/credenciales';
 // «Usuario» como los demás formularios (#106, como en MultiCRM): todo lo que
@@ -412,9 +413,8 @@ export function EditUserModal({ user, projects, onClose, onSaved, empresas, falt
   // Los roles de MAS. Solo suman permisos.
   const [rolesExtra, setRolesExtra] = useState(Array.isArray(user.roles_extra) ? user.roles_extra : []);
   // Facturación y fechas de facturas ya no son casillas de aquí (#230, gemela de
-  // CRM#423): son permisos del catálogo y se dan en «Ver permisos», con su
+  // CRM#423): son permisos del catálogo y se dan en el apartado «Permisos» de la ficha, con su
   // registro de quién y cuándo.
-  const [verPermisos, setVerPermisos] = useState(false);
   const [phone, setPhone] = useState(user.whatsapp_phone || '');
   const [assigned, setAssigned] = useState(() => {
     const m = {};
@@ -626,19 +626,13 @@ export function EditUserModal({ user, projects, onClose, onSaved, empresas, falt
           </div>
         </div>
 
-        {/* Todo lo que puede hacer y de dónde le viene (#230, gemela de CRM#423): su
-            rol, su rol a medida o una excepción suya. Ahí mismo se le cambian. */}
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
-          <span className="text-sm">
-            Permisos
-            <span className="block text-xs text-muted-foreground">Lo que puede hacer, de dónde le viene y sus excepciones.</span>
-          </span>
-          <button type="button" onClick={() => setVerPermisos(true)}
-            className="inline-flex h-9 flex-shrink-0 items-center gap-1.5 rounded-md border border-border px-3 text-sm font-medium hover:bg-muted">
-            Ver permisos
-          </button>
+        {/* Todo lo que puede hacer y de dónde le viene (#230, gemela de CRM#423),
+            siempre a la vista en su ficha (gemela de CRM#698/#752): su rol, su rol
+            a medida o una excepción suya, y ahí mismo se le cambian (cada cambio
+            se guarda al momento). */}
+        <div className="rounded-lg border border-border p-3">
+          <PermisosDePersona userId={user.id} enLinea />
         </div>
-        {verPermisos && <PermisosDePersona userId={user.id} onClose={() => setVerPermisos(false)} />}
         <EquipoComercial userId={user.id} />
 
         <div className="flex justify-end gap-2">
@@ -681,6 +675,9 @@ export function InviteUserModal({ projects, onClose, onCreated, empresas, faltaM
   const [role, setRole] = useState('gestor');
   const [assigned, setAssigned] = useState({}); // { [projectId]: recibeLeads }
   const [saving, setSaving] = useState(false);
+  // Las excepciones de permisos que van con el alta (gemela de CRM#698): se
+  // crean en la misma operación que el usuario.
+  const [excepciones, setExcepciones] = useState({});
   // Escape cierra, como los demás formularios (#106).
   useEscapeKey(onClose);
   // Qué roles puede dar quien invita (gemela de CRM#644: Tony, cinco altas
@@ -747,6 +744,7 @@ export function InviteUserModal({ projects, onClose, onCreated, empresas, faltaM
       await client.post('/users', {
         nombre: nombre.trim(), email: email.trim().toLowerCase(), role, projects: projList,
         ...(conEmpresa ? { empresaIds: empresasEnteras } : {}),
+        ...(Object.keys(excepciones).length ? { excepciones } : {}),
       });
       toast({ title: '✓ Usuario invitado', description: 'Se le envió un email para crear su contraseña.' });
       onCreated();
@@ -819,6 +817,12 @@ export function InviteUserModal({ projects, onClose, onCreated, empresas, faltaM
               esColaborador={role === 'colaborador'}
             />
           </div>
+        </div>
+        {/* Lo que trae el rol, con sus excepciones antes de crearla (gemela de CRM#698). */}
+        <div className="rounded-lg border border-border p-3">
+          <PermisosDelAlta role={role} rolesExtra={[]}
+            projectIds={Object.keys(assigned).map(Number)}
+            excepciones={excepciones} onCambiar={setExcepciones} />
         </div>
         <div className="flex justify-end gap-2 pt-1">
           <button onClick={onClose} className="h-9 px-4 rounded-md border border-border text-sm font-medium hover:bg-muted">Cancelar</button>

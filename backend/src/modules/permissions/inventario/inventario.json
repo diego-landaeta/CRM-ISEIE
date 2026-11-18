@@ -11228,6 +11228,28 @@
   "puertas": []
  },
  {
+  "id": "POST /api/permissions/vista-previa-alta",
+  "tipo": "ruta",
+  "modulo": "permissions",
+  "metodo": "POST",
+  "ruta": "/api/permissions/vista-previa-alta",
+  "relativa": "POST /vista-previa-alta",
+  "controlador": "vistaPreviaDeAlta",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "users.create"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "PUT /api/permissions/personas/:id/excepciones",
   "tipo": "ruta",
   "modulo": "permissions",

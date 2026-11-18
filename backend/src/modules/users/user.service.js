@@ -206,7 +206,7 @@ export async function getById(id) {
   return { ...user, projects, empresa_ids };
 }
 
-export async function create({ nombre, email, role, roles_extra, projectIds, projects, empresaIds }, { porUserId = null } = {}) {
+export async function create({ nombre, email, role, roles_extra, projectIds, projects, empresaIds }, { porUserId = null, alCrear = null } = {}) {
   const existing = await userModel.findByEmail(email);
   if (existing) throw new AppError('Ya existe un usuario con ese email', 409, 'EMAIL_EXISTS');
   // La empresa entera (#220): que exista y que la migracion este, ANTES de
@@ -238,6 +238,20 @@ export async function create({ nombre, email, role, roles_extra, projectIds, pro
     setPasswordToken: tokenHash,
     setPasswordExpires: expires,
   });
+
+  // #694: lo que va con el alta (sus excepciones), ANTES del correo de
+  // bienvenida. Si falla, la persona recién creada se borra: ni queda a medias
+  // ni le llega un correo de una cuenta que no existe.
+  if (alCrear) {
+    try {
+      await alCrear(user);
+    } catch (err) {
+      await query('DELETE FROM user_projects WHERE user_id = $1', [user.id]).catch(() => {});
+      await query('DELETE FROM users WHERE id = $1', [user.id])
+        .catch((e) => logger.error({ err: e.message, userId: user.id }, 'No se pudo deshacer un alta a medias'));
+      throw err;
+    }
+  }
 
   const userProjects = await userModel.getUserProjects(user.id);
   const empresa_ids = await empresas.empresasDelUsuario(user.id);
