@@ -11,6 +11,7 @@ import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 import { useConfirm } from '@/shared/components/ui/useConfirm';
 import usePermission from '@/shared/hooks/usePermission';
+import Select from '@/shared/components/ui/Select';
 import MarcaSection from './MarcaSection';
 import PaisesPorCampus from '@/modules/settings/components/PaisesPorCampus';
 import CampusPorEmpresa, { marcarVarios } from '@/shared/components/CampusPorEmpresa';
@@ -534,16 +535,24 @@ export function EditUserModal({ user, projects, onClose, onSaved, empresas, falt
             ))}
           </div>
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Rol</label>
-            <select value={role} onChange={(e) => setRole(e.target.value)} className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm">
-              <option value="gestor">Gestor</option>
-              <option value="admin">Admin</option>
-              <option value="soporte">Soporte</option>
-              {/* Tablero de tareas (#210): equipo de desarrollo, solo ve sus Tareas. */}
-              <option value="colaborador">Colaborador</option>
-              {/* CRM-ISEIE#420: hace los cursos y responde en Moodle. */}
-              <option value="tutor_redactor">Tutor redactor</option>
-            </select>
+            <label htmlFor="editar-usuario-rol" className="text-xs text-muted-foreground mb-1 block">Rol</label>
+            {/* El desplegable del CRM, no el del navegador (#106). «Colaborador» es el
+                del tablero de tareas (#210) y «Tutor redactor» el de CRM-ISEIE#420. */}
+            <Select
+              id="editar-usuario-rol"
+              value={role}
+              onChange={setRole}
+              ariaLabel="Rol"
+              options={[
+                { value: 'gestor', label: 'Gestor' },
+                { value: 'admin', label: 'Admin' },
+                { value: 'soporte', label: 'Soporte' },
+                { value: 'colaborador', label: 'Colaborador' },
+                { value: 'tutor_redactor', label: 'Tutor redactor' },
+                // Un rol que no está en la lista (super admin, tutor…): se enseña el suyo, no un hueco.
+                ...(['gestor', 'admin', 'soporte', 'colaborador', 'tutor_redactor'].includes(role) ? [] : [{ value: role, label: NOMBRE_ROL[role] || role }]),
+              ]}
+            />
           </div>
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">Y además es…</label>
@@ -747,13 +756,19 @@ export function InviteUserModal({ projects, onClose, onCreated, empresas, faltaM
           </div>
           <div>
             <label htmlFor="invitar-rol" className="text-xs text-muted-foreground mb-1 block">Rol *</label>
-            <select id="invitar-rol" value={role} onChange={(e) => setRole(e.target.value)} className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm">
-              {ROLES_ALTA.map(([v, texto]) => (
-                <option key={v} value={v} disabled={!!motivoPrincipal(v)}>
-                  {motivoPrincipal(v) ? `${NOMBRE_ROL[v]} (no puedes darlo)` : texto}
-                </option>
-              ))}
-            </select>
+            {/* El desplegable del CRM, no el del navegador (#106). El rol que no se puede
+                dar sale en la lista, desactivado y diciéndolo. */}
+            <Select
+              id="invitar-rol"
+              value={role}
+              onChange={setRole}
+              ariaLabel="Rol *"
+              options={ROLES_ALTA.map(([v, texto]) => ({
+                value: v,
+                label: motivoPrincipal(v) ? `${NOMBRE_ROL[v]} (no puedes darlo)` : texto,
+                disabled: !!motivoPrincipal(v),
+              }))}
+            />
             {/* Los roles que no se pueden dar, con su porqué, a la vista sin abrir la lista. */}
             {ROLES_ALTA.some(([v]) => motivoPrincipal(v)) && (
               <ul className="mt-1 space-y-1 text-[10px] text-muted-foreground">
