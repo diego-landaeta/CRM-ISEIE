@@ -37,7 +37,10 @@ vi.mock('@/contexts/ProjectContext', () => ({
     switchProject: vi.fn(),
   }),
 }));
-vi.mock('@/modules/invoices/api/invoices.api', () => ({ invoicesApi: facturas, invoiceFaltantes: () => [] }));
+// Lo demás del módulo (esFacturaEmitida y su aviso, #478), el de verdad.
+vi.mock('@/modules/invoices/api/invoices.api', async (importOriginal) => ({
+  ...(await importOriginal()), invoicesApi: facturas, invoiceFaltantes: () => [],
+}));
 // Lo que no se mira aquí y hace sus propias llamadas.
 vi.mock('@/modules/invoices/components/FacturacionAlDiaCard', () => ({ default: () => null }));
 vi.mock('@/modules/invoices/components/AvisoHuecosFacturas', () => ({ default: () => null }));
@@ -94,13 +97,17 @@ describe('usePermission().llevaEquipo', () => {
 describe('Facturas: los botones que el servidor le niega a quien lleva equipo', () => {
   const pintar = () => render(<MemoryRouter><InvoicesPage /></MemoryRouter>);
 
-  it('admin sin equipo: Editar, Abono, Venta y Eliminar', async () => {
+  // Desde la #478 (gemela de CRM#793, 18/11) una factura EMITIDA no se edita ni se
+  // borra: «Editar» y la papelera salen apagados, con el porqué, y está «Anular».
+  it('admin sin equipo: Abono, Venta y Anular; Editar y Eliminar, apagados por ser emitida', async () => {
     pintar();
     expect(await screen.findByText('Cliente Uno')).toBeInTheDocument();
-    expect(screen.getByTitle('Editar IVA, datos del cliente o concepto')).toBeInTheDocument();
     expect(screen.getByTitle('Crear factura rectificativa (de abono)')).toBeInTheDocument();
     expect(screen.getByTitle('Asociar esta factura a una venta del cliente')).toBeInTheDocument();
-    expect(screen.getByTitle('Eliminar la factura y liberar su número (se equivocaron al cargarla)')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Anular/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Editar: / })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^Eliminar: / })).toBeDisabled();
+    expect(screen.queryByTitle('Editar IVA, datos del cliente o concepto')).not.toBeInTheDocument();
   });
 
   it('con equipo comercial: ninguno de los cuatro', async () => {
@@ -111,6 +118,10 @@ describe('Facturas: los botones que el servidor le niega a quien lleva equipo', 
     expect(screen.queryByTitle('Crear factura rectificativa (de abono)')).not.toBeInTheDocument();
     expect(screen.queryByTitle('Asociar esta factura a una venta del cliente')).not.toBeInTheDocument();
     expect(screen.queryByTitle('Eliminar la factura y liberar su número (se equivocaron al cargarla)')).not.toBeInTheDocument();
+    // Tampoco «Anular» ni los botones apagados de la emitida (#478): no son suyos.
+    expect(screen.queryByRole('button', { name: /^Anular/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Editar: / })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Eliminar: / })).not.toBeInTheDocument();
   });
 });
 
