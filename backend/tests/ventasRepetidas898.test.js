@@ -101,9 +101,11 @@ describe('alta de una venta que el alumno ya tiene', () => {
     const r = await venta({ lead_id: lead.id, importe_total: 300, importe_pagado: 300 });
     expect(r.status, JSON.stringify(r.body)).toBe(409);
     expect(r.body.code).toBe('VENTA_YA_EXISTE');
-    expect(r.body.data.venta).toMatchObject({
-      id: primera, lead_id: lead.id, total: 900, cobrado: 300, pendiente: 600, motivo: 'mismo_prospecto',
-    });
+    // El total es el guardado (en ISEIE el 21 % va encima si no se dice otra
+    // cosa); lo cobrado, el pago inicial; lo pendiente, la diferencia.
+    const [{ total }] = await q('SELECT importe_total::float8 AS total FROM conversions WHERE id = $1', [primera]);
+    expect(r.body.data.venta).toMatchObject({ id: primera, lead_id: lead.id, total, cobrado: 300, motivo: 'mismo_prospecto' });
+    expect(r.body.data.venta.pendiente).toBeCloseTo(total - 300, 2);
     expect(r.body.error).toMatch(/ya tiene una venta de este programa/);
     // Y no deja nada creado.
     const despues = (await q('SELECT count(*)::int AS n FROM conversions WHERE project_id = $1', [PROYECTO]))[0].n;
@@ -187,7 +189,8 @@ describe('Posibles repetidas', () => {
     const deMaria = grupos.find((g) => g.ventas.some((v) => v.id === ids[0]));
     expect(deMaria, JSON.stringify(grupos)).toBeTruthy();
     expect(deMaria.ventas.map((v) => v.id).sort()).toEqual([...ids].sort());
-    expect(deMaria.ventas[0]).toMatchObject({ total: 450, cobrado: 450, pendiente: 0 });
+    // Lo cobrado es la suma de los pagos (#692): estas, sin pagos, deben todo.
+    expect(deMaria.ventas[0]).toMatchObject({ total: 450, cobrado: 0, pendiente: 450 });
 
     // La venta de José creada forzando ya se vio con el aviso: no sale como
     // repetida. Y la de otro programa tampoco.

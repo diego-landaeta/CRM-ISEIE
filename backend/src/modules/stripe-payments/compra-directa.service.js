@@ -204,7 +204,11 @@ export async function crearVentaDeCompraDirecta({ projectId, payment, lead, form
     fecha_pago: fecha,
     sin_gestora: true,
     notas: `Compra directa en la web (pedido n.º ${orderId}, Stripe ${payment.stripe_id}). Venta creada por el CRM al llegar el cobro.`,
-  }, null);
+  }, null, {
+    // Sin nadie delante para decidir: no se para por «venta repetida» (CRM#898).
+    // Si repite otra, sale en Ventas · «Posibles repetidas».
+    comprobarRepetida: false,
+  });
   logger.info({ projectId, conversionId: venta.conversion_id, leadId: venta.lead_id, productoId: formacion.id, stripeId: payment.stripe_id },
     'compra directa: venta creada sin gestora');
   return { id: venta.conversion_id, lead_id: venta.lead_id };

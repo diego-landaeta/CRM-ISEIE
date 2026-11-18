@@ -19,7 +19,13 @@ import { buscarVentaRepetida, errorVentaYaExiste } from '../conversions/venta-re
  *
  * Por la fecha el sistema marca internamente si es retroactiva (informativo).
  */
-export async function createSale(data, requestUser) {
+/*
+ * `opciones.comprobarRepetida` (CRM#898), por defecto sí. Solo la apaga la
+ * compra directa de la web (Stripe): la crea el CRM sin nadie delante que
+ * pueda elegir entre apuntar el cobro o crear otra, y un 409 dejaría el cargo
+ * sin venta. Si repite, sale en «Posibles repetidas».
+ */
+export async function createSale(data, requestUser, { comprobarRepetida: mirarRepetida = true } = {}) {
   const today = new Date().toISOString().slice(0, 10);
   const isRetroactive = data.fecha_pago < today;
   const importePagado = data.importe_pagado ?? data.importe_total;
@@ -37,7 +43,7 @@ export async function createSale(data, requestUser) {
   const forzar = Boolean(data.forzar);
   let repetida = null;
   const comprobarRepetida = async (quien) => {
-    if (!data.producto_interes_id) return;
+    if (!mirarRepetida || !data.producto_interes_id) return;
     repetida = await buscarVentaRepetida({ projectId: data.project_id, productoId: data.producto_interes_id, ...quien });
     if (repetida && !forzar) throw errorVentaYaExiste(repetida);
   };
