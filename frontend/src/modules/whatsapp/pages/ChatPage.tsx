@@ -2381,7 +2381,9 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* «No volver a escribir». Igual: era otro prompt del navegador. */}
+      {/* «No volver a escribir». Igual: era otro prompt del navegador.
+          No hay ruta ni botón para quitarlo (solo POST /chats/:id/no-escribir):
+          el texto no puede prometer que «se puede quitar después». */}
       {pidiendoMotivo && (
         <div className="wa-velo" onClick={() => setPidiendoMotivo(false)}>
           <form className="wa-panel" onClick={(e) => e.stopPropagation()}
@@ -2395,7 +2397,7 @@ export default function ChatPage() {
             <div className="wa-panel-cuerpo">
               <p className="wa-panel-nota">
                 El CRM no le enviará nada más a <strong>{conv ? nombreDe(conv) : ''}</strong>,
-                ni con plantilla ni «solo una última vez». Se puede quitar después.
+                ni con plantilla ni «solo una última vez». Desde el CRM no se puede deshacer.
               </p>
               <input autoFocus value={motivoNuevo} onChange={(e) => setMotivoNuevo(e.target.value)}
                 placeholder="Motivo (opcional): pidió que no le escribieran…" className="wa-campo" />
