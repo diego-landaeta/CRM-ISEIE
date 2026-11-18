@@ -4,6 +4,7 @@ import { EN_EL_PROCESO } from '../../shared/utils/enElProceso.js';
 import { recolocarPasos } from '../../shared/utils/recolocarPasos.js';
 import { logger } from '../../shared/utils/logger.js';
 import { paisDeEntrada, sqlPaisDelLead } from './pais.js';
+import { gestoresDelReparto } from './reparto.js';
 
 // ============================================================
 // WEBHOOK + ROUND-ROBIN
@@ -463,28 +464,18 @@ export async function createLeadWithRoundRobin({ projectId, nombre, email, telef
       }
     }
 
-    // Obtener gestores activos del proyecto.
-    // Filtros: usuario activo + rol admin/gestor + disponible (is_available)
-    //          + sin bloque de ausencia activo para hoy.
-    const { rows: gestorRows } = await client.query(
-      `SELECT up.user_id FROM user_projects up
-       JOIN users u ON u.id = up.user_id
-        AND u.active = true
-        AND u.is_available = true
-        AND (u.role = 'gestor' OR (u.role IN ('admin','superadmin') AND up.recibe_leads = TRUE))
-        -- Quien lleva las colaboraciones de los profesores NO vende: da de alta
-        -- tutores y les toca el porcentaje. Estaba entrando en el reparto solo
-        -- por tener rol de gestora, y un lead que le cae a ella es un lead que
-        -- nadie llama — no es su trabajo ni mira esa bandeja.
-        AND NOT COALESCE(u.gestor_colaboraciones, false)
-       WHERE up.project_id = $1 AND up.active = true
-         AND NOT EXISTS (
-           SELECT 1 FROM user_availability_blocks ab
-           WHERE ab.user_id = u.id
-             AND CURRENT_DATE BETWEEN ab.fecha_inicio AND ab.fecha_fin
-         )
-       ORDER BY up.orden_cola`,
-      [projectId]
+    // Quien entra en el reparto: la lista de `reparto.js`, la misma que usan la
+    // asignacion por actividad y la pantalla de «a quien le toca».
+    //
+    // Aqui habia una copia con `ORDER BY up.orden_cola` a secas. En ISEIE cuatro
+    // gestoras tienen `orden_cola = 0` (revisado el 18/11/2026), y con el empate
+    // Postgres no promete el mismo orden entre dos consultas: la rueda guarda una
+    // POSICION, asi que la misma posicion podia apuntar a otra persona y una
+    // recibir dos seguidos y otra ninguno, sin error y sin rastro. `reparto.js`
+    // desempata por id (gemela de lo que MultiCRM ya hace).
+    const gestorRows = await gestoresDelReparto(
+      (sql, params) => client.query(sql, params),
+      projectId
     );
 
     let responsableId = null;
@@ -510,7 +501,7 @@ export async function createLeadWithRoundRobin({ projectId, nombre, email, telef
     }
 
     if (!responsableId && !skipRoundRobin && gestorRows.length > 0) {
-      const gestores = gestorRows.map(r => r.user_id);
+      const gestores = gestorRows.map(r => r.id);
       const lastIndex = queueRows[0].last_assigned_index;
       const nextIndex = (lastIndex + 1) % gestores.length;
       responsableId = gestores[nextIndex];
@@ -522,7 +513,7 @@ export async function createLeadWithRoundRobin({ projectId, nombre, email, telef
     } else if (advanceRoundRobinAnyway && gestorRows.length > 0) {
       // Lead manual creado por gestor: se queda con quien lo creó (forcedResponsableId)
       // pero avanzamos la cola igual para que el siguiente lead automatico no le toque otra vez.
-      const gestores = gestorRows.map(r => r.user_id);
+      const gestores = gestorRows.map(r => r.id);
       const lastIndex = queueRows[0].last_assigned_index;
       const nextIndex = (lastIndex + 1) % gestores.length;
       await client.query(
@@ -1206,32 +1197,19 @@ export async function reassignPendingRoundRobin(projectId) {
   try {
     await client.query('BEGIN');
 
-    const { rows: gestores } = await client.query(
-      `SELECT up.user_id FROM user_projects up
-       JOIN users u ON u.id = up.user_id
-        AND u.active = true
-        AND u.is_available = true
-        AND (u.role = 'gestor' OR (u.role IN ('admin','superadmin') AND up.recibe_leads = TRUE))
-        -- Quien lleva las colaboraciones de los profesores NO vende: da de alta
-        -- tutores y les toca el porcentaje. Estaba entrando en el reparto solo
-        -- por tener rol de gestora, y un lead que le cae a ella es un lead que
-        -- nadie llama — no es su trabajo ni mira esa bandeja.
-        AND NOT COALESCE(u.gestor_colaboraciones, false)
-       WHERE up.project_id = $1 AND up.active = true
-         AND NOT EXISTS (
-           SELECT 1 FROM user_availability_blocks ab
-           WHERE ab.user_id = u.id
-             AND CURRENT_DATE BETWEEN ab.fecha_inicio AND ab.fecha_fin
-         )
-       ORDER BY up.orden_cola`,
-      [projectId]
+    // La misma lista y el mismo orden que el alta (`reparto.js`): reasignar los
+    // pendientes tiene que repartir entre exactamente la misma gente y con la
+    // misma posicion de la rueda, o el cursor apunta a otra persona.
+    const gestores = await gestoresDelReparto(
+      (sql, params) => client.query(sql, params),
+      projectId
     );
 
     if (gestores.length === 0) {
       await client.query('ROLLBACK');
       return { reassigned: 0, total_pending: 0, reason: 'NO_ACTIVE_GESTORES' };
     }
-    const gestorIds = gestores.map((g) => g.user_id);
+    const gestorIds = gestores.map((g) => g.id);
 
     const { rows: pending } = await client.query(
       // `deleted_at IS NULL` faltaba: sin el, esto repartia tambien las fichas
