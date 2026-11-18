@@ -91,4 +91,22 @@ export function phoneCanonical(raw) {
   return '+' + digits;
 }
 
+/**
+ * El teléfono tal y como se GUARDA en una ficha (17/11/2026): en E.164 si se puede
+ * y, si no, tal cual llegó (recortado). Así nada se pierde: un «No suministrado» o
+ * un número con letras se queda como estaba, para que la gestora lo vea y lo
+ * corrija, en vez de desaparecer.
+ *
+ * Antes solo el webhook de leads y el alta manual pasaban por normalizePhone; el
+ * webhook de formularios, el de tokens y la solicitud de admisión guardaban
+ * «56 912345678» sin el «+», y con eso fallaban el botón de WhatsApp, la llamada y
+ * la detección de duplicados por móvil.
+ */
+export function telefonoParaGuardar(raw) {
+  if (raw == null) return null;
+  const s = String(raw).trim();
+  if (!s) return null;
+  return normalizePhone(s) || s;
+}
+
 export default normalizePhone;

@@ -3,6 +3,7 @@ import { PASO_CERRADO } from '../../shared/utils/pasoCerrado.js';
 import { EN_EL_PROCESO } from '../../shared/utils/enElProceso.js';
 import { recolocarPasos } from '../../shared/utils/recolocarPasos.js';
 import { logger } from '../../shared/utils/logger.js';
+import { telefonoParaGuardar } from '../../shared/utils/normalizePhone.js';
 
 // ============================================================
 // WEBHOOK + ROUND-ROBIN
@@ -530,12 +531,14 @@ export async function createLeadWithRoundRobin({ projectId, nombre, email, telef
       );
     }
 
-    // Crear lead
+    // Crear lead. EL TELÉFONO, CON SU PREFIJO (17/11/2026): por aquí pasan todas las
+    // altas, y el webhook de formularios, el de tokens y la admisión lo traían tal
+    // cual («56 912345678», sin «+»). Normalizado aquí, ninguna vía se lo salta.
     const { rows: leadRows } = await client.query(
       `INSERT INTO leads (project_id, nombre, email, telefono, whatsapp_usuario, producto_interes_id, responsable_id, notas, landing_url, lead_duplicado_de, reincidente, es_propuesto, propuesto_de, custom_fields, idempotency_key)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
        RETURNING id, project_id, nombre, email, telefono, whatsapp_usuario, status, responsable_id, lead_duplicado_de, reincidente, es_propuesto, propuesto_de, fecha_solicitud, created_at`,
-      [projectId, nombre, email, telefono, whatsappUsuario || null, productoInteresId, responsableId, notas, landingUrl, duplicadoDe, reincidente, esPropuesto, propuestoDe,
+      [projectId, nombre, email, telefonoParaGuardar(telefono), whatsappUsuario || null, productoInteresId, responsableId, notas, landingUrl, duplicadoDe, reincidente, esPropuesto, propuestoDe,
        customFields ? JSON.stringify(customFields) : '{}', idempotencyKey]
     );
     const lead = leadRows[0];
