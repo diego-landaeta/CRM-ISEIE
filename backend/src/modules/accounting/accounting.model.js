@@ -2,6 +2,8 @@ import { query } from '../../shared/config/db.js';
 import { condicionDeAmbito } from '../expenses/expense.model.js';
 import { comoLista } from '../../shared/utils/ambito.js';
 import { FACTURA_DE } from '../invoices/invoices.model.js';
+// Lo cobrado de una venta es la suma de sus pagos (#692), no `importe_pagado`.
+import { COBRADO_DE } from '../conversions/cobrado.js';
 
 // ============================================================
 // DASHBOARD ACCOUNTING
@@ -65,7 +67,8 @@ export async function getDashboardStats({ projectId, projectIds = null, from, to
   const { rows: facturadoRows } = await query(
     `SELECT
        COALESCE(SUM(c.importe_total * ${PESO(nP)}), 0) AS total_facturado,
-       COALESCE(SUM((c.importe_total - c.importe_pagado) * ${PESO(nP)}), 0) AS total_pendiente,
+       -- De los pagos y nunca por debajo de 0, venta a venta (#692).
+       COALESCE(SUM(GREATEST(c.importe_total - ${COBRADO_DE('c')}, 0) * ${PESO(nP)}), 0) AS total_pendiente,
        COUNT(*) AS num_conversiones
      FROM conversions c
      WHERE c.fecha_conversion BETWEEN $${fromIdx} AND $${toIdx} ${convProjFilter} ${DEL_EQUIPO(nP)}`,
@@ -109,8 +112,8 @@ export async function getDashboardStats({ projectId, projectIds = null, from, to
   // Cuentas por cobrar (conversions con pendiente, ordenadas por vencimiento)
   const { rows: receivables } = await query(
     `SELECT c.id, c.lead_id, c.producto_contratado,
-            c.importe_total, c.importe_pagado,
-            (c.importe_total - c.importe_pagado) * ${PESO(nB)} AS importe_pendiente,
+            c.importe_total, cob.cobrado AS importe_pagado,
+            (c.importe_total - cob.cobrado) * ${PESO(nB)} AS importe_pendiente,
             c.fecha_compromiso_pago,
             c.fecha_conversion,
             l.nombre as lead_nombre, l.email as lead_email,
@@ -120,9 +123,11 @@ export async function getDashboardStats({ projectId, projectIds = null, from, to
               ELSE false
             END AS vencido
      FROM conversions c
+     -- Lo cobrado, de sus pagos (#692).
+     CROSS JOIN LATERAL (SELECT ${COBRADO_DE('c')} AS cobrado) cob
      LEFT JOIN leads l ON l.id = c.lead_id
      LEFT JOIN projects p ON p.id = c.project_id
-     WHERE c.importe_pagado < c.importe_total ${convProjFilter} ${DEL_EQUIPO(nB)}
+     WHERE cob.cobrado < c.importe_total ${convProjFilter} ${DEL_EQUIPO(nB)}
      ORDER BY c.fecha_compromiso_pago ASC NULLS LAST
      LIMIT 50`,
     conEquipo(base)
@@ -132,14 +137,15 @@ export async function getDashboardStats({ projectId, projectIds = null, from, to
   // contar sobre el sale mal en cuanto hay mas de 50 pendientes.
   const { rows: recTotals } = await query(
     `SELECT COUNT(*)::int AS num,
-            COALESCE(SUM((c.importe_total - c.importe_pagado) * ${PESO(nB)}), 0) AS total,
+            COALESCE(SUM((c.importe_total - cob.cobrado) * ${PESO(nB)}), 0) AS total,
             COALESCE(SUM(CASE WHEN c.fecha_compromiso_pago IS NOT NULL
                                AND c.fecha_compromiso_pago < CURRENT_DATE
-                              THEN (c.importe_total - c.importe_pagado) * ${PESO(nB)} ELSE 0 END), 0) AS total_vencido,
+                              THEN (c.importe_total - cob.cobrado) * ${PESO(nB)} ELSE 0 END), 0) AS total_vencido,
             COUNT(*) FILTER (WHERE c.fecha_compromiso_pago IS NOT NULL
                                AND c.fecha_compromiso_pago < CURRENT_DATE)::int AS num_vencido
      FROM conversions c
-     WHERE c.importe_pagado < c.importe_total ${convProjFilter} ${DEL_EQUIPO(nB)}`,
+     CROSS JOIN LATERAL (SELECT ${COBRADO_DE('c')} AS cobrado) cob
+     WHERE cob.cobrado < c.importe_total ${convProjFilter} ${DEL_EQUIPO(nB)}`,
     conEquipo(base)
   );
 
@@ -256,13 +262,15 @@ export async function getReceivable({ projectId = null, responsableId = null, fr
              c.project_id, p.nombre AS proyecto_nombre,
              l.responsable_id, u.nombre AS gestora_nombre,
              NULL::int AS cuota_numero,
-             (c.importe_total - c.importe_pagado)::numeric AS importe,
+             (c.importe_total - cob.cobrado)::numeric AS importe,
              c.fecha_compromiso_pago AS vence
         FROM conversions c
+        -- Lo cobrado, de sus pagos (#692).
+        CROSS JOIN LATERAL (SELECT ${COBRADO_DE('c')} AS cobrado) cob
         LEFT JOIN leads l ON l.id = c.lead_id
         LEFT JOIN projects p ON p.id = c.project_id
         LEFT JOIN users u ON u.id = l.responsable_id
-       WHERE c.importe_pagado < c.importe_total
+       WHERE cob.cobrado < c.importe_total
          AND NOT EXISTS (SELECT 1 FROM conversion_installments ci2 WHERE ci2.conversion_id = c.id AND ci2.fecha_cobro IS NULL)${extra}
     )
     SELECT *, (vence IS NOT NULL AND vence < CURRENT_DATE) AS vencido

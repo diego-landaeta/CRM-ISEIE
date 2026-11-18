@@ -199,7 +199,10 @@ describe('(d) overview con gestora: lo suyo, no lo del equipo (el bug de «Tu se
     const ventas = consultas.find((c) => /as ventas_brutas/.test(c.sql));
     expect(ventas.sql).toMatch(/EXISTS \(SELECT 1 FROM conversion_reparto r WHERE r\.conversion_id = conversions\.id AND r\.vendedora_id = ANY\(\$4::int\[\]\)\)/);
     expect(ventas.sql).toMatch(/SUM\(\(SELECT SUM\(r\.peso\) FROM conversion_reparto r/);
-    const cobros = consultas.find((c) => /FROM conversion_payments cp/.test(c.sql));
+    // La evolución mensual de cobros. Se busca por su «as ingresos»: desde
+    // #692 el resumen de ventas también lee `conversion_payments` (lo cobrado
+    // de cada venta es la suma de sus pagos).
+    const cobros = consultas.find((c) => /FROM conversion_payments cp/.test(c.sql) && /as ingresos/.test(c.sql));
     expect(cobros.params).toEqual([[1], [7]]);
     expect(cobros.sql).toMatch(/r\.vendedora_id = ANY\(\$2::int\[\]\)/);
   });
