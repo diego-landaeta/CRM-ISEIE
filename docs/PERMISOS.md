@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-866 rutas en 67 módulos, y 31 acciones con condición dentro de una ruta.
+869 rutas en 67 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -284,6 +284,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
 |---|---|---|---|---|
 | resumen | `GET /api/cursos-pendientes/resumen` | (no existía) | (ruta nueva) | lo de cada uno |
+| controlSubidas | `GET /api/cursos-pendientes/subidas` | (no existía) | (ruta nueva) | `tutores.gestionar` |
 | listar | `GET /api/cursos-pendientes/` | (no existía) | (ruta nueva) | lo de cada uno |
 | crear | `POST /api/cursos-pendientes/` | (no existía) | (ruta nueva) | lo de cada uno |
 | detalle | `GET /api/cursos-pendientes/:id` | (no existía) | (ruta nueva) | lo de cada uno |
@@ -291,6 +292,8 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | publicar | `POST /api/cursos-pendientes/:id/publicar` | (no existía) | (ruta nueva) | lo de cada uno |
 | sumarAlumna | `POST /api/cursos-pendientes/:id/alumnas` | (no existía) | (ruta nueva) | lo de cada uno |
 | marcarAlumna | `PATCH /api/cursos-pendientes/:id/alumnas/:alumnaId` | (no existía) | (ruta nueva) | lo de cada uno |
+| abrirSubidas | `POST /api/cursos-pendientes/:id/subidas` | (no existía) | (ruta nueva) | `tutores.gestionar` |
+| marcarSubida | `PATCH /api/cursos-pendientes/:id/subidas/:punto` | (no existía) | (ruta nueva) | `tutores.gestionar` |
 
 ## diploma-confirmacion
 

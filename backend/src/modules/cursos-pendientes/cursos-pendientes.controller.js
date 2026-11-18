@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import * as service from './cursos-pendientes.service.js';
+import * as subidas from './cursos-pendientes.subidas.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { proyectosDelAmbito, comoLista } from '../../shared/utils/ambito.js';
 
@@ -114,5 +115,45 @@ export async function marcarAlumna(req, res, next) {
   try {
     const d = leer(marcarSchema, req.body);
     res.json({ success: true, data: await service.marcarAlumna(req.user, entero.parse(req.params.id), entero.parse(req.params.alumnaId), d) });
+  } catch (err) { next(err); }
+}
+
+// ── Control de subidas (#771) ─────────────────────────────────────────────
+// El permiso lo pone la ruta (`tutores.gestionar`); el campus, `campus(req)` y el servicio.
+
+const PUNTO = z.enum(subidas.PUNTOS.map((p) => p.clave));
+const marcarSubidaSchema = z.object({
+  hecho: z.boolean().optional(),
+  enlace: z.string().trim().max(2000).nullable().optional(),
+  nota: z.string().trim().max(2000).nullable().optional(),
+  fecha_limite: fecha.optional(),
+}).strict();
+
+/** Lo que falta subir, por curso y desde cuándo. `?soloAtrasadas=true`: la vista de administración. */
+export async function controlSubidas(req, res, next) {
+  try {
+    const filas = await subidas.listarPendientes({
+      projectIds: await campus(req),
+      soloAtrasadas: req.query.soloAtrasadas === 'true',
+      incluirHechas: req.query.incluirHechas === 'true',
+    });
+    res.json({ success: true, data: {
+      puntos: subidas.PUNTOS, plazo_dias: subidas.plazoDias(), avisos_activos: subidas.avisosActivos(), filas,
+    } });
+  } catch (err) { next(err); }
+}
+
+export async function abrirSubidas(req, res, next) {
+  try {
+    const r = await service.abrirSubidas(req.user, entero.parse(req.params.id));
+    res.status(r.creados ? 201 : 200).json({ success: true, data: r });
+  } catch (err) { next(err); }
+}
+
+export async function marcarSubida(req, res, next) {
+  try {
+    const punto = leer(PUNTO, req.params.punto);
+    const cambios = leer(marcarSubidaSchema, req.body);
+    res.json({ success: true, data: await service.marcarSubida(req.user, entero.parse(req.params.id), punto, cambios) });
   } catch (err) { next(err); }
 }

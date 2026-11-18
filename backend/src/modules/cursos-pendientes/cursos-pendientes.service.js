@@ -5,6 +5,7 @@ import { campusDeLaPersona, veTodoElCrm } from '../../shared/utils/ambito.js';
 import { notifyUsers } from '../notifications/notifications.service.js';
 import * as model from './cursos-pendientes.model.js';
 import { notificar } from './cursos-pendientes.correos.js';
+import * as subidas from './cursos-pendientes.subidas.js';
 
 /**
  * Cursos pendientes (#336): las reglas.
@@ -89,8 +90,9 @@ export async function resumen(user, { projectIds = null }) {
 
 export async function detalle(user, id) {
   const curso = await cargarVisible(user, id);
-  const [alumnas, historial] = await Promise.all([model.alumnasDe(curso.id), model.historialDe(curso.id)]);
-  return { ...curso, alumnas, historial };
+  const [alumnas, historial, puntos] = await Promise.all([model.alumnasDe(curso.id), model.historialDe(curso.id), subidas.puntosDe(curso.id)]);
+  // La lista de subidas (#771) la ve quien ve el curso; marcarla, quien tiene su permiso.
+  return { ...curso, alumnas, historial, subidas: puntos };
 }
 
 // ── Crear / sumar alumnas ─────────────────────────────────────────────────
@@ -272,6 +274,8 @@ export async function modificar(user, id, cambios) {
     const sets = columnas.map((c, i) => `${c} = $${i + 2}`).join(', ');
     await client.query(`UPDATE cursos_pendientes SET ${sets}, updated_at = NOW() WHERE id = $1`, [curso.id, ...columnas.map((c) => set[c])]);
     for (const [accion, detalle, m] of apuntes) await model.apuntar(curso.id, user.userId, accion, detalle, m, client);
+    // #771 · Punto de unión con la #770: al pasar a «entregado» se abre sola la lista de subidas.
+    if (set.estado === subidas.ESTADO_QUE_ABRE_EL_CONTROL) await subidas.abrirControl(curso.id, { userId: user.userId, client });
     await client.query('COMMIT');
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
@@ -360,6 +364,22 @@ export async function publicar(user, id, { url, sinComprobar = false }) {
   } finally { client.release(); }
   await cerrarSiToca(curso.id, user.userId);
   return model.porId(curso.id);
+}
+
+// ── Control de subidas (#771) ─────────────────────────────────────────────
+// Quién: lo pide el guardia de la ruta (`tutores.gestionar`); el campus, `cargarVisible`.
+
+/** Abre a mano la lista de subidas de un curso (los que ya existían, o mientras no esté «entregado»). */
+export async function abrirSubidas(user, id) {
+  const curso = await cargarVisible(user, id);
+  if (curso.estado === 'cancelado') throw new AppError('Ese curso está cancelado', 409, 'CONFLICT');
+  const creados = await subidas.abrirControl(curso.id, { userId: user.userId });
+  return { creados, subidas: await subidas.puntosDe(curso.id) };
+}
+
+export async function marcarSubida(user, id, punto, cambios) {
+  const curso = await cargarVisible(user, id);
+  return subidas.marcarPunto(user, curso, punto, cambios);
 }
 
 // ── Alumnas ───────────────────────────────────────────────────────────────

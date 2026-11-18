@@ -218,6 +218,11 @@ export const TIPOS = {
     clase: AVISO, etiqueta: 'Fecha de un curso movida otra vez', agrupa: false,
     descripcion: 'La fecha comprometida de un curso se ha movido por segunda vez',
   },
+  // Control de subidas (#771): solo campana, a quien lleva las subidas del campus.
+  curso_pendiente_subida_vencida: {
+    clase: ACCION, etiqueta: 'Subidas de un curso atrasadas', agrupa: false,
+    descripcion: 'Un curso entregado tiene vídeos, módulos o datos de directores sin subir pasada su fecha límite',
+  },
   // Consultas de alumnos (#190, decisión 4): al tutor, cuando una consulta
   // abierta llega a las 3/4 partes del plazo; a administración del campus,
   // cuando se pasa (para reasignarla). Y al tutor, la carga sin actualizar.

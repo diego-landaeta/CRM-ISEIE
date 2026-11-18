@@ -4,9 +4,11 @@ import Portal from '@/shared/components/ui/portal';
 import client from '@/shared/api/client';
 import { inputClass } from '@/shared/lib/ui';
 import { toast } from '@/shared/hooks/useToast';
+import usePermission from '@/shared/hooks/usePermission';
 import {
   cursosApi, ESTADOS, TIPOS, type Alumna, type Detalle,
 } from '../api/cursosPendientes.api';
+import SubidasDelCurso from './SubidasDelCurso';
 
 /**
  * La ficha de un pendiente (#336): lo que hace la tutora y lo que supervisa quien manda.
@@ -30,6 +32,7 @@ const fecha = (iso: string | null) => (iso
 const ACCIONES: Record<string, string> = {
   creado: 'Creado', alumna_sumada: 'Alumna sumada', tutora_cambiada: 'Tutora cambiada', fecha_movida: 'Fecha movida',
   estado_cambiado: 'Estado cambiado', avance: 'Avance', publicado: 'Publicado', alumna_marcada: 'Alumna marcada', cerrado_solo: 'Cerrado solo',
+  subidas_abiertas: 'Lista de subidas abierta', subida_marcada: 'Subida marcada',
 };
 
 interface Tutora { id: number; nombre: string }
@@ -47,6 +50,9 @@ export default function FichaDelPendiente({ id, esTutora, supervisa, onCerrar, o
   const [cancelando, setCancelando] = useState(false);
   const [ocupado, setOcupado] = useState(false);
   const [notas, setNotas] = useState('');
+  // Control de subidas (#771): lo marca quien lleva las colaboraciones (el servidor lo vuelve a mirar).
+  const { can } = usePermission();
+  const puedeMarcarSubidas = can('tutores.gestionar');
 
   const cargar = useCallback(async () => {
     try {
@@ -263,6 +269,11 @@ export default function FichaDelPendiente({ id, esTutora, supervisa, onCerrar, o
                 )}
               </section>
             )}
+
+            <SubidasDelCurso
+              cursoId={c.id} subidas={c.subidas || []} puedeMarcar={puedeMarcarSubidas} cancelado={c.estado === 'cancelado'}
+              onCambio={() => { cargar(); onCambio(); }}
+            />
 
             {/* Historial */}
             <section>

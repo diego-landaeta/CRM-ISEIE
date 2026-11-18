@@ -4,11 +4,13 @@ import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/shared/hooks/useToast';
+import usePermission from '@/shared/hooks/usePermission';
 import {
   cursosApi, ESTADOS, TIPOS, type CursoPendiente, type EstadoCurso, type Resumen,
 } from '../api/cursosPendientes.api';
 import FichaDelPendiente from '../components/FichaDelPendiente';
 import NuevoPendiente from '../components/NuevoPendiente';
+import ControlDeSubidas from '../components/ControlDeSubidas';
 
 /**
  * Cursos pendientes, por campus (#336): sustituye al Excel de las tutoras.
@@ -63,6 +65,13 @@ export default function CursosPendientesPage() {
   const [cargando, setCargando] = useState(true);
   const [abierto, setAbierto] = useState<number | null>(null);
   const [creando, setCreando] = useState(false);
+  // Control de subidas (#771): una segunda vista, para quien lleva las subidas y administración.
+  const { can } = usePermission();
+  const veSubidas = can('tutores.gestionar');
+  const [vista, setVista] = useState<'cursos' | 'subidas'>(
+    () => (new URLSearchParams(window.location.search).get('vista') === 'subidas' ? 'subidas' : 'cursos'),
+  );
+  const enSubidas = veSubidas && vista === 'subidas';
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -135,6 +144,20 @@ export default function CursosPendientesPage() {
         ))}
       </div>
 
+      {veSubidas && (
+        <div className="inline-flex rounded-md border border-border bg-card p-0.5 text-xs font-bold" role="tablist" aria-label="Vista">
+          {([['cursos', 'Cursos'], ['subidas', 'Control de subidas']] as const).map(([v, etiqueta]) => (
+            <button key={v} type="button" role="tab" aria-selected={vista === v} onClick={() => setVista(v)}
+              className={`rounded px-3 py-1.5 ${vista === v ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}>
+              {etiqueta}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {enSubidas ? (
+        <ControlDeSubidas projectId={campus === 'todos' ? null : campus} issuerId={null} onAbrirCurso={setAbierto} />
+      ) : (<>
       <div className="flex flex-wrap items-center gap-2">
         {contadores && (
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
@@ -233,6 +256,7 @@ export default function CursosPendientesPage() {
       {supervisa && resumen?.carga_por_tutora && resumen.carga_por_tutora.length > 0 && (
         <SupervisionCarga resumen={resumen} />
       )}
+      </>)}
 
       {abierto != null && (
         <FichaDelPendiente

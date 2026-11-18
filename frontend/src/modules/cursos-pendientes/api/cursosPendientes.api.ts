@@ -63,7 +63,38 @@ export interface Apunte {
   persona: string | null;
 }
 
-export interface Detalle extends CursoPendiente { alumnas: Alumna[]; historial: Apunte[] }
+/** Un punto del control de subidas (#771): vídeos, módulos o datos de directores. */
+export type PuntoSubida = 'videos_youtube' | 'modulos_moodle' | 'datos_directores_web';
+
+export interface Subida {
+  id: number;
+  curso_id: number;
+  punto: PuntoSubida;
+  nombre: string;
+  fecha_limite: string;
+  hecho: boolean;
+  hecho_at: string | null;
+  hecho_por: string | null;
+  enlace: string | null;
+  nota: string | null;
+  /** Desde cuándo falta (cuando se abrió la lista). */
+  desde: string;
+  atrasado: boolean;
+  dias_esperando: number;
+  /** Días desde la fecha límite; null si está hecho. */
+  dias_de_retraso: number | null;
+}
+
+export interface FilaControl extends Subida { curso: string; estado_curso: EstadoCurso; project_id: number; campus: string }
+
+export interface ControlSubidas {
+  puntos: { clave: PuntoSubida; nombre: string }[];
+  plazo_dias: number;
+  avisos_activos: boolean;
+  filas: FilaControl[];
+}
+
+export interface Detalle extends CursoPendiente { alumnas: Alumna[]; historial: Apunte[]; subidas: Subida[] }
 
 export interface ResumenCampus {
   project_id: number;
@@ -99,6 +130,12 @@ export const cursosApi = {
   sumarAlumna: (id: number, leadId: number) => dato<unknown>(client.post(`/cursos-pendientes/${id}/alumnas`, { lead_id: leadId })),
   marcarAlumna: (id: number, alumnaId: number, cuerpo: { estado?: EstadoAlumna; avisada?: boolean }) =>
     dato<{ alumnas: Alumna[]; curso: CursoPendiente; cerrado: boolean }>(client.patch(`/cursos-pendientes/${id}/alumnas/${alumnaId}`, cuerpo)),
+  // Control de subidas (#771): con «Gestionar colaboraciones».
+  controlSubidas: (params: Record<string, string | number | boolean | undefined> = {}) =>
+    dato<ControlSubidas>(client.get('/cursos-pendientes/subidas', { params })),
+  abrirSubidas: (id: number) => dato<{ creados: number; subidas: Subida[] }>(client.post(`/cursos-pendientes/${id}/subidas`)),
+  marcarSubida: (id: number, punto: PuntoSubida, cuerpo: { hecho?: boolean; enlace?: string | null; nota?: string | null; fecha_limite?: string }) =>
+    dato<Subida[]>(client.patch(`/cursos-pendientes/${id}/subidas/${punto}`, cuerpo)),
 };
 
 export const ESTADOS: Record<EstadoCurso, string> = {

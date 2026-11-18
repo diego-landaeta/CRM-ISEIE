@@ -3663,6 +3663,28 @@
   "puertas": []
  },
  {
+  "id": "GET /api/cursos-pendientes/subidas",
+  "tipo": "ruta",
+  "modulo": "cursos-pendientes",
+  "metodo": "GET",
+  "ruta": "/api/cursos-pendientes/subidas",
+  "relativa": "GET /subidas",
+  "controlador": "controlSubidas",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tutores.gestionar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/cursos-pendientes/",
   "tipo": "ruta",
   "modulo": "cursos-pendientes",
@@ -3770,6 +3792,50 @@
   "guardias": [
    {
     "tipo": "token"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/cursos-pendientes/:id/subidas",
+  "tipo": "ruta",
+  "modulo": "cursos-pendientes",
+  "metodo": "POST",
+  "ruta": "/api/cursos-pendientes/:id/subidas",
+  "relativa": "POST /:id/subidas",
+  "controlador": "abrirSubidas",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tutores.gestionar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PATCH /api/cursos-pendientes/:id/subidas/:punto",
+  "tipo": "ruta",
+  "modulo": "cursos-pendientes",
+  "metodo": "PATCH",
+  "ruta": "/api/cursos-pendientes/:id/subidas/:punto",
+  "relativa": "PATCH /:id/subidas/:punto",
+  "controlador": "marcarSubida",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tutores.gestionar"
+    ]
    }
   ],
   "puertas": []
