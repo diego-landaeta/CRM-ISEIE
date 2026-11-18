@@ -26,6 +26,7 @@ import { query } from '../../shared/config/db.js';
 import * as model from './extracto.model.js';
 import { leerExtracto, huellas, huellaDelFichero } from './extracto.parser.js';
 import { registrarCobroExterno, normalizarTexto } from './enlace.js';
+import { dispararCobro } from '../webhooks-salientes/webhooks-salientes.service.js';
 
 const CENT = 0.01;
 const casa = (a, b) => b != null && Math.abs(Number(a) - Number(b)) < CENT;
@@ -110,6 +111,12 @@ export async function enlazarMovimiento(movId, conversionId, { userId = null, li
       diasMargen: 7,
     });
     if (!res) return { error: 'NOT_FOUND' };
+    // Una transferencia que entra por el extracto es un cobro como el apuntado a
+    // mano: avisa al webhook de transferencias de su campus (206, #773). Solo si
+    // el cobro es NUEVO; si ya estaba apuntado a mano, avisó entonces. Va justo
+    // tras registrarlo (ya con su COMMIT) y sin esperar: si el enlace del
+    // movimiento fallara después, el cobro ya existe y el aviso no se pierde.
+    if (res.metodo === 'nuevo') dispararCobro(res.paymentId, { userId, metodo: 'transferencia' });
     await model.marcarEnlazado(movId, {
       conversionId: res.conversionId ?? conversionId,
       paymentId: res.paymentId,
