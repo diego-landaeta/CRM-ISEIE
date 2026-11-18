@@ -1,7 +1,7 @@
 import {
-  ETIQUETA_POR_DEFINIR, COLOR_POR_DEFINIR, MARCA_GITHUB, RAMA_REVISION,
+  ETIQUETA_POR_DEFINIR, COLOR_POR_DEFINIR, MARCA_GITHUB, RAMA_REVISION, ETIQUETAS_DE_ESTADO,
   issuesDeLaPr, esCopiaDeOtra, copiaDeLaCabecera, tituloDeLaTarea, descripcionDeLaTarea,
-  asignadosDe, urlDeLaIssue,
+  asignadosDe, urlDeLaIssue, urlComparable,
 } from './tasks.github.js';
 
 /*
@@ -29,6 +29,14 @@ import {
   Sin correos ni avisos: los de las tareas los manda el servicio, y aquí se
   escribe directamente en la base (una importación de cientos de issues no
   puede mandar cientos de correos).
+
+  Las tarjetas que ya existen (18/11/2026): hasta ahora el tablero se llevaba a
+  mano y cada tarjeta apunta a su issue con un enlace (`task_links.url`). Esas
+  no se duplican: la primera vez que llega su issue (aviso o importación) se
+  ADOPTAN —se enlazan con la issue y desde ahí GitHub manda en su estado—, sin
+  tocar su texto ni quitarle a quien la lleva (salvo que la issue tenga un
+  asignado con usuario en el CRM). Al cerrarse la issue, la tarjeta pasa a
+  «Hecha» y pierde las etiquetas de estado («en revisión», «para producción»…).
 */
 
 /* --- Configuración --- */
@@ -47,7 +55,7 @@ export async function leerConfig(db) {
 /** Lo que falta para poder escribir en el tablero (vacío = lista). */
 export function faltaEnConfig(cfg) {
   const falta = [];
-  if (!cfg) return ['la configuración (migración 278)'];
+  if (!cfg) return ['la configuración (migración 299)'];
   if (!cfg.repo) falta.push('el repositorio');
   if (!cfg.supervisor_id) falta.push('quién supervisa');
   return falta;
@@ -101,6 +109,10 @@ async function ponerEtiquetaPorDefinir(db, taskId, poner) {
   }
 }
 
+/** `urlComparable` (tasks.github.js), dentro de la base: la columna que se le pase. */
+const sqlUrlComparable = (col) =>
+  `rtrim(split_part(split_part(regexp_replace(lower(btrim(${col})), '^https?://(www[.])?', 'https://'), '#', 1), '?', 1), '/')`;
+
 /** Los dos enlaces de la tarjeta: la issue y, si se sabe, la de la copia de la empresa. Sin repetir. */
 async function ponerEnlaces(db, taskId, { repo, number, copiaRepo, copiaNumber }) {
   const enlaces = [{ url: urlDeLaIssue(repo, number), title: `Issue #${number} en GitHub` }];
@@ -108,13 +120,62 @@ async function ponerEnlaces(db, taskId, { repo, number, copiaRepo, copiaNumber }
     enlaces.push({ url: urlDeLaIssue(copiaRepo, copiaNumber), title: `La misma en la copia de la empresa (#${copiaNumber})` });
   }
   for (const e of enlaces) {
+    // «Sin repetir» también si la puso una persona con otra forma (http, barra final, #ancla).
     await db.query(
       `INSERT INTO task_links (task_id, url, title, created_by)
        SELECT $1::int, $2::varchar, $3::varchar, NULL
-        WHERE NOT EXISTS (SELECT 1 FROM task_links WHERE task_id = $1::int AND url = $2::varchar)`,
-      [taskId, e.url, e.title]
+        WHERE NOT EXISTS (SELECT 1 FROM task_links WHERE task_id = $1::int AND ${sqlUrlComparable('url')} = $4)`,
+      [taskId, e.url, e.title, urlComparable(e.url)]
     );
   }
+}
+
+/** Una tarea hecha no está «en revisión» ni «para producción»: fuera las etiquetas de estado. */
+async function quitarEtiquetasDeEstado(db, taskId) {
+  await db.query('DELETE FROM task_tags WHERE task_id = $1 AND LOWER(name) = ANY($2::text[])', [taskId, ETIQUETAS_DE_ESTADO]);
+}
+
+/**
+ * La tarjeta hecha a mano que ya apunta a esta issue (o a la de la copia), si
+ * hay y no está enlazada con otra: se adopta. Devuelve el vínculo nuevo o null.
+ * Queda como estaba —texto, columna y responsable—, salvo que la issue tenga un
+ * asignado con usuario en el CRM: entonces es suya, como cualquier otra.
+ */
+async function adoptarTarjeta(db, cfg, { repo, number, issue, logins, copiaRepo, copiaNumber }) {
+  const urls = [urlDeLaIssue(repo, number)];
+  if (copiaRepo && copiaNumber) urls.push(urlDeLaIssue(copiaRepo, copiaNumber));
+  const { rows: [t] } = await db.query(
+    `SELECT t.id, t.assigned_to FROM tasks t
+      WHERE EXISTS (SELECT 1 FROM task_links tl WHERE tl.task_id = t.id AND ${sqlUrlComparable('tl.url')} = ANY($1::text[]))
+        AND NOT EXISTS (SELECT 1 FROM github_issue_tareas g WHERE g.task_id = t.id)
+      ORDER BY (t.archived_at IS NULL) DESC, t.id
+      LIMIT 1
+      FOR UPDATE OF t`,
+    [urls.map(urlComparable)]
+  );
+  if (!t) return null;
+
+  if (logins.length) {
+    const { userId, porDefinir } = await resolverResponsable(db, cfg, logins);
+    if (!porDefinir && userId !== Number(t.assigned_to)) {
+      await db.query(
+        `UPDATE tasks SET assigned_to = $2, position = ${finalDeColumna('tasks.status', '$2::int')}, updated_at = NOW() WHERE id = $1`,
+        [t.id, userId]
+      );
+      await evento(db, t.id, 'assigned', { old_assigned_to: t.assigned_to, new_assigned_to: userId, asignados_github: logins });
+    }
+  }
+  // `estado` = 'open': lo que se sabía hasta ahora. Si la issue ya está cerrada,
+  // el paso siguiente la ve «cambiar» y lleva la tarjeta a «Hecha».
+  const { rows: [v] } = await db.query(
+    `INSERT INTO github_issue_tareas (repo, number, node_id, task_id, estado, asignados, por_definir,
+                                      copia_repo, copia_number, github_updated_at, adoptada)
+     VALUES ($1, $2, $3, $4, 'open', $5::text[], FALSE, $6, $7, $8, TRUE)
+     RETURNING *`,
+    [repo, number, issue.node_id || null, t.id, logins, copiaRepo, copiaNumber, issue.updated_at || null]
+  );
+  await evento(db, t.id, 'updated', { campos: ['github'], issue: `${repo}#${number}`, motivo: 'Enlazada con su issue de GitHub' });
+  return v;
 }
 
 async function moverA(db, task, nuevo, { completedAt = null, cuando = null, detalles = {} } = {}) {
@@ -154,10 +215,16 @@ export async function sincronizarIssue(db, cfg, issue, { accion = 'importar', en
   const copiaRepo = copia?.repo || deLaCabecera?.repo || null;
   const copiaNumber = copia?.number || deLaCabecera?.number || null;
 
-  const { rows: [vinculo] } = await db.query(
+  let { rows: [vinculo] } = await db.query(
     'SELECT * FROM github_issue_tareas WHERE lower(repo) = lower($1) AND number = $2 FOR UPDATE',
     [repo, number]
   );
+  // La tarjeta que alguien hizo a mano para esta issue, antes que una nueva.
+  let adoptadaAhora = false;
+  if (!vinculo) {
+    vinculo = await adoptarTarjeta(db, cfg, { repo, number, issue, logins, copiaRepo, copiaNumber });
+    adoptadaAhora = Boolean(vinculo);
+  }
 
   if (!vinculo) {
     const { userId, porDefinir } = await resolverResponsable(db, cfg, logins);
@@ -200,8 +267,9 @@ export async function sincronizarIssue(db, cfg, issue, { accion = 'importar', en
 
   // Archivada en el CRM: se deja como está (solo se pone al día el vínculo).
   if (task && !task.archived_at) {
-    // El texto, cuando GitHub lo cambia (o al importar).
-    if (['edited', 'importar', 'opened'].includes(accion)) {
+    // El texto, cuando GitHub lo cambia (o al importar). Una tarjeta adoptada
+    // guarda el suyo (lo escribió una persona) hasta que editen la issue.
+    if (vinculo.adoptada ? accion === 'edited' : ['edited', 'importar', 'opened'].includes(accion)) {
       const titulo = tituloDeLaTarea(issue);
       const desc = descripcionDeLaTarea(issue);
       const campos = [];
@@ -243,6 +311,7 @@ export async function sincronizarIssue(db, cfg, issue, { accion = 'importar', en
       cambios.push('en curso');
     }
     await ponerEtiquetaPorDefinir(db, task.id, vinculo.por_definir && !cerrada);
+    if (cerrada) await quitarEtiquetasDeEstado(db, task.id);
   }
 
   await ponerEnlaces(db, vinculo.task_id, {
@@ -257,6 +326,9 @@ export async function sincronizarIssue(db, cfg, issue, { accion = 'importar', en
     [vinculo.id, cerrada ? 'closed' : 'open', logins, vinculo.por_definir, issue.node_id || null,
       copiaRepo, copiaNumber, issue.updated_at || null]
   );
+  if (adoptadaAhora) {
+    return { resultado: `enlazada${cambios.length ? `: ${cambios.join(', ')}` : ''}`, task_id: vinculo.task_id };
+  }
   return { resultado: cambios.length ? `al día: ${cambios.join(', ')}` : 'sin cambios', task_id: vinculo.task_id };
 }
 
@@ -388,7 +460,7 @@ export async function importar(db, { issues, prs = [], copias = null, copiaRepo 
     }
 
     const cuenta = {
-      issues: 0, creadas: 0, abiertas: 0, en_revision: 0, cerradas: 0, actualizadas: 0, sin_cambios: 0,
+      issues: 0, creadas: 0, abiertas: 0, en_revision: 0, cerradas: 0, enlazadas: 0, actualizadas: 0, sin_cambios: 0,
       omitidas_copia: 0, por_definir: 0, con_copia: 0,
     };
     for (const issue of [...issues].sort((a, b) => a.number - b.number)) {
@@ -401,6 +473,7 @@ export async function importar(db, { issues, prs = [], copias = null, copiaRepo 
         copia: nCopia && repoCopia ? { repo: repoCopia, number: nCopia } : null,
       });
       if (r.resultado.startsWith('omitida')) { cuenta.omitidas_copia += 1; continue; }
+      if (r.resultado.startsWith('enlazada')) { cuenta.enlazadas += 1; continue; }
       if (r.resultado.startsWith('creada')) {
         cuenta.creadas += 1;
         if (r.resultado === 'creada hecha') cuenta.cerradas += 1;

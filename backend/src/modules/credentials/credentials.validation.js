@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 // «moodle» (migración 264 de ISEIE, 220 del 360): el Moodle de cada campus, para el MCP
 // y las consultas de alumnos. El valor es un JSON {"url":"https://…","token":"…"}.
-// «github» (migración 278, CRM-ISEIE#435): el tablero ↔ GitHub. JSON {"webhook_secret":"…","token":"…"};
+// «github» (migración 299, CRM-ISEIE#435): el tablero ↔ GitHub. JSON {"webhook_secret":"…","token":"…"};
 // se pone desde Configurar tablero › GitHub.
 const SERVICES = ['meta', 'google_ads', 'gsc', 'stripe', 'claude', 'brevo', 'moodle', 'github'];
 

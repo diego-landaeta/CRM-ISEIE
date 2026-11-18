@@ -1,4 +1,4 @@
--- 278 · El tablero de tareas, al día con las issues de GitHub (CRM-ISEIE#435, gemela de CRM#737)
+-- 299 · El tablero de tareas, al día con las issues de GitHub (CRM-ISEIE#435, gemela de CRM#737)
 --
 -- Diego, 11/11/2026: «GitHub manda y el tablero lo refleja». Cada issue del
 -- repositorio de este CRM es una tarea del equipo de desarrollo; el webhook de
@@ -66,11 +66,16 @@ CREATE TABLE IF NOT EXISTS github_issue_tareas (
     comentarios INTEGER NOT NULL DEFAULT 0,
     copia_repo VARCHAR(140),
     copia_number INTEGER,
+    adoptada BOOLEAN NOT NULL DEFAULT FALSE,
     github_updated_at TIMESTAMPTZ,
     ultima_sincronizacion TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT uq_github_issue_tareas UNIQUE (repo, number)
 );
+-- adoptada: la tarjeta ya existía (hecha a mano, con el enlace a la issue en
+-- task_links) y se enlazó en vez de crear otra. Guarda su texto hasta que editen
+-- la issue. Suelta por si la tabla se creó con una versión anterior de esta migración.
+ALTER TABLE github_issue_tareas ADD COLUMN IF NOT EXISTS adoptada BOOLEAN NOT NULL DEFAULT FALSE;
 CREATE INDEX IF NOT EXISTS idx_github_issue_tareas_asignados ON github_issue_tareas USING GIN (asignados);
 
 CREATE TABLE IF NOT EXISTS github_entregas (

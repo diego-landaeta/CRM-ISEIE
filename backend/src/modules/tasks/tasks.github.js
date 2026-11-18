@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 
 /*
-  El tablero, al día con las issues de GitHub (CRM-ISEIE#435, gemela CRM-ISEIE#435).
+  El tablero, al día con las issues de GitHub (CRM-ISEIE#435, gemela CRM#737).
   Diego, 11/11/2026: «GitHub manda y el tablero lo refleja». Solo en ese sentido:
   nada del CRM sube a GitHub (los repositorios son públicos).
 
@@ -17,6 +17,14 @@ export function githubTableroActivo(env = process.env) {
 /** La etiqueta de la tarjeta cuando el asignado de GitHub no tiene usuario en el CRM (o no hay). */
 export const ETIQUETA_POR_DEFINIR = 'Por definir quién lo hará';
 export const COLOR_POR_DEFINIR = 'amber';
+
+/**
+ * Las etiquetas de ESTADO que se ponían a mano mientras el tablero se llevaba a
+ * mano (en GitHub y copiadas en la tarjeta). Una tarea hecha no está «en
+ * revisión» ni «para producción»: al cerrarse la issue se quitan de la tarjeta
+ * (y en GitHub las quita el workflow `etiquetas-al-cerrar.yml`).
+ */
+export const ETIQUETAS_DE_ESTADO = ['en espera', 'en proceso', 'en revisión', 'para producción'];
 
 /** La marca de los eventos que pone el sistema (`task_events.details.action`). */
 export const MARCA_GITHUB = 'github';
@@ -101,3 +109,16 @@ export function asignadosDe(issue) {
 }
 
 export const urlDeLaIssue = (repo, number) => `https://github.com/${repo}/issues/${number}`;
+
+/**
+ * La dirección de un enlace, comparable: sin espacios, en minúsculas, con
+ * https:// y sin www., sin #ancla, sin ?consulta y sin barra final. Así
+ * «http://www.github.com/x/y/issues/7/#issuecomment-1» es la issue 7.
+ * (`SQL_URL_COMPARABLE` hace lo mismo dentro de la base.)
+ */
+export function urlComparable(url) {
+  return String(url || '').trim().toLowerCase()
+    .replace(/^https?:\/\/(www\.)?/, 'https://')
+    .split('#')[0].split('?')[0]
+    .replace(/\/+$/, '');
+}

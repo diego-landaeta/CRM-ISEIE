@@ -12,12 +12,15 @@
 // …» no crean tarea. Responsable: el asignado de GitHub con usuario en el CRM
 // (Configurar tablero › GitHub); si no, el supervisor, «Por definir quién lo hará».
 //
+// Las tarjetas que ya existen (el tablero se llevaba a mano) no se duplican: la
+// que tiene en sus enlaces la dirección de la issue se enlaza con ella.
+//
 // Idempotente: se puede lanzar las veces que haga falta. La segunda no crea
 // nada; solo pone al día lo que cambió en GitHub. Sin correos ni avisos. El
 // detalle, en src/modules/tasks/tasks.github.sync.js.
 //
 // Lee el repositorio, el equipo y el supervisor de la configuración (migración
-// 278 y el panel), y el token de solo lectura de las credenciales (cifrado; sin
+// 299 y el panel), y el token de solo lectura de las credenciales (cifrado; sin
 // token, va sin autenticar: el repositorio es público, con el límite de GitHub).
 // Escribir pide GITHUB_TABLERO_ACTIVO=true. Se niega a tocar una base que no sea
 // la local salvo con PERMITIR_REMOTO=1.
@@ -82,7 +85,7 @@ const cli = new pg.Client({ connectionString: URL_BD });
 await cli.connect();
 try {
   const cfg = await leerConfig(cli);
-  if (!cfg?.repo) throw new Error('No hay repositorio en la configuración (¿falta la migración 278?)');
+  if (!cfg?.repo) throw new Error('No hay repositorio en la configuración (¿falta la migración 299?)');
   const token = await leerToken(cli);
   if (!token) console.log('  (sin token guardado: leo GitHub sin autenticar)');
   const issues = (await todas(`/repos/${cfg.repo}/issues?state=all`, token)).filter((i) => !i.pull_request);
@@ -90,6 +93,7 @@ try {
   const r = await importar(cli, { issues, prs, copias: leerCopias(), copiaRepo: valor('--copia-repo'), aplicar });
   console.log(`\n  ${r.repo}: ${r.issues} issues leídas (${prs.length} PR).`);
   console.log(`    nuevas: ${r.creadas}  (por hacer ${r.abiertas} · en revisión ${r.en_revision} · hechas ${r.cerradas})`);
+  console.log(`    tarjetas hechas a mano, enlazadas con su issue: ${r.enlazadas}`);
   console.log(`    ya estaban: ${r.actualizadas} puestas al día, ${r.sin_cambios} sin cambios`);
   console.log(`    sin tarea (copia de otra): ${r.omitidas_copia}`);
   console.log(`    «Por definir quién lo hará»: ${r.por_definir} · con enlace a la copia: ${r.con_copia}`);

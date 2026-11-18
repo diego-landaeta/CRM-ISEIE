@@ -3,7 +3,7 @@ import supertest from 'supertest';
 import jwt from 'jsonwebtoken';
 
 /**
- * CRM-ISEIE#435 (gemela CRM-ISEIE#435) · el tablero, al día con las issues de GitHub,
+ * CRM-ISEIE#435 (gemela CRM#737) · el tablero, al día con las issues de GitHub,
  * contra la base de verdad:
  *
  *   A · la firma: mala, ausente o de otro secreto → 401 y no se toca nada;
@@ -384,5 +384,77 @@ describe('H · la importación', () => {
     const { l } = await one(
       `SELECT COUNT(*)::int AS l FROM task_links WHERE task_id = (SELECT task_id FROM github_issue_tareas WHERE repo = $1 AND number = 40)`, [REPO]);
     expect(l).toBe(2);
+  });
+});
+
+describe('I · las tarjetas hechas a mano (enlazadas a su issue por task_links.url)', () => {
+  // Hasta el 18/11 el tablero se llevaba a mano: cada tarjeta apunta a su issue
+  // con un enlace, a veces escrito de otra forma (http, www, barra, #ancla).
+  async function tarjetaAMano(number, { status = 'por_hacer', url, etiquetas: tags = [] } = {}) {
+    const t = await one(
+      `INSERT INTO tasks (title, description, status, position, priority, assigned_to, created_by, supervisor_id, team_id)
+       VALUES ($1, 'Escrita a mano', $2, 1000, 'media', $3, $3, $4, $5) RETURNING id`,
+      [`A mano ${number} de ${MARCA}`, status, U.admin.id, U.diego.id, teamId]
+    );
+    await q('INSERT INTO task_links (task_id, url, title) VALUES ($1, $2, $3)',
+      [t.id, url || `https://github.com/${REPO}/issues/${number}`, 'La issue']);
+    for (const name of tags) await q('INSERT INTO task_tags (task_id, name) VALUES ($1, $2)', [t.id, name]);
+    return t.id;
+  }
+
+  it('la dirección de un enlace, comparable', () => {
+    expect(gh.urlComparable(' HTTP://www.GitHub.com/a/b/issues/7/#issuecomment-1 ')).toBe('https://github.com/a/b/issues/7');
+    expect(gh.urlComparable('https://github.com/a/b/issues/7?x=1')).toBe('https://github.com/a/b/issues/7');
+    expect(gh.urlComparable('https://github.com/a/b/issues/70')).not.toBe(gh.urlComparable('https://github.com/a/b/issues/7'));
+  });
+
+  it('al cerrarse la issue, su tarjeta pasa a «Hecha» sin duplicarse, y pierde las etiquetas de estado', async () => {
+    const id = await tarjetaAMano(50, {
+      status: 'en_revision',
+      url: `http://www.github.com/${REPO}/issues/50/#issuecomment-1`,
+      etiquetas: ['en revisión', 'Para producción', 'backend'],
+    });
+    const cerrada = '2026-11-18T09:15:00Z';
+    const res = await aviso('issues', { action: 'closed', issue: issue(50, { state: 'closed', closed_at: cerrada }) });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.data.resultado).toMatch(/^enlazada/);
+
+    const v = await vinculo(50);
+    expect(v.task_id).toBe(id);
+    expect(v.adoptada).toBe(true);
+    const t = await tarea(id);
+    expect(t.status).toBe('hecha');
+    expect(new Date(t.completed_at).toISOString()).toBe(new Date(cerrada).toISOString());
+    // Lo de la persona se queda: quién la lleva y lo que escribió.
+    expect(t.assigned_to).toBe(U.admin.id);
+    expect(t.title).toBe(`A mano 50 de ${MARCA}`);
+    expect(t.description).toBe('Escrita a mano');
+    expect((await etiquetas(id)).sort()).toEqual(['backend']);
+    // Ni tarjeta nueva ni el mismo enlace dos veces.
+    const { n } = await one(`SELECT COUNT(*)::int AS n FROM tasks WHERE title = $1`, [`#50 · Tarea 50 de ${MARCA}`]);
+    expect(n).toBe(0);
+    expect((await q('SELECT 1 FROM task_links WHERE task_id = $1', [id])).length).toBe(1);
+    const ev = await one(`SELECT user_id, details FROM task_events WHERE task_id = $1 AND event_type = 'status_changed' ORDER BY id DESC LIMIT 1`, [id]);
+    expect(ev.user_id).toBeNull();
+    expect(ev.details).toMatchObject({ old_status: 'en_revision', new_status: 'hecha', action: 'github' });
+  });
+
+  it('la importación la enlaza sin moverla ni pisar su texto; un asignado con usuario la hace suya', async () => {
+    const id = await tarjetaAMano(51, { status: 'en_curso' });
+    const cli = await pool.connect();
+    let r;
+    try {
+      r = await importar(cli, { issues: [issue(51, { assignees: [{ login: LOGIN_DEV }] })], prs: [], aplicar: true });
+    } finally { cli.release(); }
+    expect(r).toMatchObject({ creadas: 0, enlazadas: 1 });
+    const t = await tarea(id);
+    expect(t.status).toBe('en_curso');
+    expect(t.title).toBe(`A mano 51 de ${MARCA}`);
+    expect(t.assigned_to).toBe(U.dev.id);
+    expect((await vinculo(51)).task_id).toBe(id);
+
+    // Si editan la issue en GitHub, manda GitHub.
+    await aviso('issues', { action: 'edited', issue: issue(51, { title: 'Título nuevo', assignees: [{ login: LOGIN_DEV }] }) });
+    expect((await tarea(id)).title).toBe('#51 · Título nuevo');
   });
 });
