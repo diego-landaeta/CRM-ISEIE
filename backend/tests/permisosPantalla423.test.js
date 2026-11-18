@@ -227,7 +227,7 @@ describe('roles a medida (#423)', () => {
 
   it('un admin no da un rol a medida que trae lo que él no tiene', async () => {
     const r = await request.post('/api/permissions/roles/a-medida').set(como('superadmin'))
-      .send({ nombre: `${MARCA} con claves`, base: 'gestor', permisos: { 'credentials.edit': true } });
+      .send({ nombre: `${MARCA} con claves`, base: 'gestor', permisos: { 'credentials.view': true, 'credentials.edit': true } });
     roles.push(r.body.data.id);
     const x = await request.put(`/api/permissions/personas/${U.gestoraA.id}/rol-a-medida`).set(como('adminA')).send({ customRoleId: r.body.data.id });
     expect(x.status).toBe(403);

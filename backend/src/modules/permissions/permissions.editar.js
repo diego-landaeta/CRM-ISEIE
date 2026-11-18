@@ -19,7 +19,7 @@ import { query, getClient } from '../../shared/config/db.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import * as model from './permissions.model.js';
 import { explicarPermisos, olvidarPermisos } from './permissions.service.js';
-import { ACCIONES, CLAVES, POR_CLAVE, ROLES_FIJOS, valoresPorDefecto, vetada } from './catalogo.js';
+import { ACCIONES, CLAVES, POR_CLAVE, ROLES_FIJOS, explicarRoturas, roturasNuevas, valoresPorDefecto, vetada } from './catalogo.js';
 import { permisosDelRol, permisosDelRolAMedida, resolverPermisos } from './resolver.js';
 import { tieneRol } from '../../shared/utils/roles.js';
 
@@ -58,6 +58,23 @@ async function exigirQueElRolNoGaneLoQueNoTienes(quien, antes, despues, db) {
   if (deMas.length) {
     throw new AppError(`No puedes ponerle a un rol lo que tú no tienes: ${deMas.slice(0, 3).join(', ')}${deMas.length > 3 ? '…' : ''}`, 403, 'NO_LO_TIENES');
   }
+}
+
+/**
+ * «Requiere» también en el servidor (Diego, #752): lo que se guarda no puede
+ * dejar un permiso marcado sin lo que necesita (`dependencias` del catálogo).
+ * Se mira el resultado FINAL —el rol con sus ajustes, la persona con su rol,
+ * su rol a medida y sus excepciones—, no solo lo que se manda, y en los dos
+ * sentidos: marcar «Editar prospectos» sin «Ver prospectos», y quitar «Ver
+ * prospectos» dejando «Editar prospectos». Solo cuenta lo que rompe ESTE
+ * cambio: lo que ya venía roto se deja estar (`roturasNuevas`).
+ */
+export const FALTA_REQUISITO = 'FALTA_REQUISITO';
+function exigirDependencias(antes, despues) {
+  const roturas = roturasNuevas(antes, despues);
+  if (!roturas.length) return;
+  throw new AppError(explicarRoturas(roturas), 400, FALTA_REQUISITO,
+    { roturas: roturas.map((r) => ({ ...r, nombre: POR_CLAVE[r.clave].nombre, faltaNombre: POR_CLAVE[r.falta].nombre })) });
 }
 
 function soloClavesDelCatalogo(permisos) {
@@ -117,7 +134,9 @@ export async function guardarRolFijo(rol, permisos, quien) {
         await model.registrarCambio(db, { quienId: quien.userId, destino: 'rol', rol, clave: x.clave, antes: antes[x.clave], despues: v, origen: 'pantalla_roles' });
       }
     }
-    return permisosDelRol(rol, await model.ajustesDeRoles(db));
+    const final = permisosDelRol(rol, await model.ajustesDeRoles(db));
+    exigirDependencias(antes, final);
+    return final;
   });
 }
 
@@ -132,6 +151,8 @@ export async function crearRolAMedida({ nombre, descripcion = null, base = 'gest
     // Lo que trae de su rol base no es «darlo»: eso ya lo tiene el rol fijo.
     // Lo que se le marca de más, sí.
     await exigirQueElRolNoGaneLoQueNoTienes(quien, delBase, { ...delBase, ...diferencias }, db);
+    // Lo que trae roto su rol base no es cosa de este rol; lo que le rompen sus diferencias, sí.
+    exigirDependencias(delBase, permisosDelRolAMedida({ base_role: base, permissions: diferencias }, ajustes));
     const { rows: [cr] } = await db.query(
       `INSERT INTO custom_roles (label, description, base_role, permissions) VALUES ($1, $2, $3, $4)
        RETURNING id, label, description, base_role, permissions, active`,
@@ -169,6 +190,7 @@ export async function guardarRolAMedida(id, { nombre, descripcion, base, activo,
     if (activo !== undefined && activo !== cr.active) await reg('activo', cr.active, activo);
     if (nombre !== undefined && nombre !== cr.label) await reg('nombre', cr.label, nombre);
     const despues = permisosDelRolAMedida(nuevo, ajustes);
+    exigirDependencias(antes, despues);
     for (const x of ACCIONES) if (despues[x.clave] !== antes[x.clave]) await reg(x.clave, antes[x.clave], despues[x.clave]);
     return nuevo;
   });
@@ -356,6 +378,7 @@ export async function guardarExcepciones(userId, cambios, quien) {
       }
     }
     const despues = (await explicarPermisos(userId, db)).mapa;
+    exigirDependencias(antes, despues);
     for (const clave of Object.keys(cambios)) {
       const exAntes = datos.excepciones[clave];
       const exDespues = cambios[clave];

@@ -7,7 +7,7 @@ import { cn } from '@/shared/lib/utils';
 import EditorDePermisos from '../components/EditorDePermisos';
 import * as api from '../api/permissions.api';
 import type { Catalogo, ListaDeRoles } from '../api/permissions.api';
-import { accionesDe, cambiadas } from '../lib/permisos';
+import { accionesDe, cambiadas, roturasNuevas } from '../lib/permisos';
 
 /**
  * Configuración › Roles (#423). Como en Shopify: a la izquierda los roles —los
@@ -52,6 +52,8 @@ export default function RolesPage() {
   const valores = borrador || original;
   const editable = puedeCambiar && (medida ? true : !!fijo?.editable);
   const sucio = borrador !== null && cambiadas(original, borrador).length > 0;
+  // #752: lo que el servidor rechazaría por «Requiere». No se deja guardar.
+  const roturas = useMemo(() => (catalogo && borrador ? roturasNuevas(catalogo, original, borrador) : []), [catalogo, original, borrador]);
 
   // Lo que el catálogo no deja dar a este rol (`nunca`, y `nuncaPrincipal`: quien
   // tiene este rol lo tiene como principal).
@@ -202,7 +204,16 @@ export default function RolesPage() {
                   />
                   {editable && (
                     <div className="sticky bottom-0 flex flex-wrap items-center gap-2 border-t border-border bg-card pt-3">
-                      <button type="button" onClick={guardar} disabled={!sucio || guardando}
+                      {roturas.length > 0 && (
+                        <div role="alert" className="w-full rounded-lg border border-border bg-destructive-soft p-3 text-normal text-destructive-soft-foreground">
+                          <p className="font-semibold">No se puede guardar así: hay permisos sin lo que necesitan.</p>
+                          <ul className="mt-1 list-disc space-y-0.5 pl-5">
+                            {roturas.slice(0, 5).map((t) => <li key={t}>{t}</li>)}
+                          </ul>
+                          {roturas.length > 5 && <p className="mt-1">Y {roturas.length - 5} más.</p>}
+                        </div>
+                      )}
+                      <button type="button" onClick={guardar} disabled={!sucio || guardando || roturas.length > 0}
                         className="h-9 rounded-lg bg-primary px-4 text-normal font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50">
                         {guardando ? 'Guardando…' : 'Guardar'}
                       </button>

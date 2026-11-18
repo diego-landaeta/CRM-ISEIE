@@ -668,6 +668,53 @@ export function dependencias(clave) {
   return [...deps];
 }
 
+/**
+ * Lo que tiene marcado un mapa sin lo que necesita: `[{ clave, falta }]`, una
+ * fila por cada dependencia que no está.
+ */
+export function dependenciasRotas(mapa = {}) {
+  const rotas = [];
+  for (const x of ACCIONES) {
+    if (mapa[x.clave] !== true) continue;
+    for (const falta of dependencias(x.clave)) if (mapa[falta] !== true) rotas.push({ clave: x.clave, falta });
+  }
+  return rotas;
+}
+
+/**
+ * Las dependencias que rompe un cambio (Diego, #752): las rotas en `despues`
+ * que no lo estaban en `antes`. Lo que ya venía roto —de serie o guardado antes
+ * de esta comprobación— no se cuenta: no se le pide a nadie arreglar lo que no
+ * ha tocado. Cada fila dice cómo se rompió: `nueva` si se ha marcado algo sin
+ * lo que necesita, `quitada` si se ha quitado algo que otro necesita.
+ */
+export function roturasNuevas(antes = {}, despues = {}) {
+  const ya = new Set(dependenciasRotas(antes).map((r) => `${r.clave}|${r.falta}`));
+  return dependenciasRotas(despues)
+    .filter((r) => !ya.has(`${r.clave}|${r.falta}`))
+    .map((r) => ({ ...r, como: antes[r.clave] === true ? 'quitada' : 'nueva' }));
+}
+
+/**
+ * La frase para quien guarda: qué falta, o qué se queda sin lo que necesita.
+ * Hasta tres; si hay más, «…».
+ */
+export function explicarRoturas(roturas) {
+  const n = (k) => `«${POR_CLAVE[k]?.nombre || k}»`;
+  const frases = [];
+  const nuevas = roturas.filter((r) => r.como === 'nueva');
+  for (const clave of [...new Set(nuevas.map((r) => r.clave))]) {
+    frases.push(`${n(clave)} necesita ${nuevas.filter((r) => r.clave === clave).map((r) => n(r.falta)).join(' y ')}`);
+  }
+  const quitadas = roturas.filter((r) => r.como === 'quitada');
+  for (const falta of [...new Set(quitadas.map((r) => r.falta))]) {
+    const lasQue = quitadas.filter((r) => r.falta === falta).map((r) => n(r.clave));
+    frases.push(`sin ${n(falta)} no sirve ${lasQue.join(' ni ')}: quítalo también o deja ${n(falta)}`);
+  }
+  const texto = frases.slice(0, 3).join('; ') + (frases.length > 3 ? '…' : '');
+  return texto.charAt(0).toUpperCase() + texto.slice(1);
+}
+
 /** Los valores de serie de cada rol fijo: `{ rol: { clave: bool } }`. Superadmin, todo. */
 export function valoresPorDefecto() {
   const out = {};

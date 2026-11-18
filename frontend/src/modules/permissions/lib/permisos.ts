@@ -72,6 +72,27 @@ export function avisosDeDependencias(catalogo: Catalogo, valores: PermissionMap)
     .filter((x) => x.faltan.length > 0);
 }
 
+/**
+ * Lo que este cambio deja sin lo que necesita, como lo mira el servidor al
+ * guardar (#752, `roturasNuevas` de catalogo.js): solo lo que estaba bien y
+ * ahora no. Lo que ya venía así no cuenta, para no bloquear un rol por algo que
+ * nadie ha tocado. Una frase por permiso, lista para enseñar.
+ */
+export function roturasNuevas(catalogo: Catalogo, original: PermissionMap, valores: PermissionMap): string[] {
+  const rotas = (m: PermissionMap) => accionesDe(catalogo)
+    .filter((a) => m[a.clave] === true)
+    .flatMap((a) => a.requiere.filter((r) => m[r] !== true).map((r) => ({ clave: a.clave, falta: r })));
+  const ya = new Set(rotas(original).map((r) => `${r.clave}|${r.falta}`));
+  const nuevas = rotas(valores).filter((r) => !ya.has(`${r.clave}|${r.falta}`));
+  const n = (k: string) => `«${nombreDe(catalogo, k)}»`;
+  return [...new Set(nuevas.map((r) => r.clave))].map((clave) => {
+    const faltan = nuevas.filter((r) => r.clave === clave).map((r) => n(r.falta)).join(' y ');
+    return original[clave] === true
+      ? `Sin ${faltan} no sirve ${n(clave)}: quítalo también o deja ${faltan}.`
+      : `${n(clave)} necesita ${faltan}.`;
+  });
+}
+
 /** Las claves que han cambiado respecto a como estaban. */
 export function cambiadas(original: PermissionMap, valores: PermissionMap): string[] {
   const todas = new Set([...Object.keys(original), ...Object.keys(valores)]);
