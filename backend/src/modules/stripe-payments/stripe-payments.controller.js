@@ -3,7 +3,21 @@ import * as service from './stripe-payments.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import { anotaWebhook } from '../status/webhooks.js';
-import { exigirCampusSuyo } from '../../shared/utils/ambito.js';
+import { exigirCampusSuyo, proyectosDelAmbito, campusDeTodos } from '../../shared/utils/ambito.js';
+
+/**
+ * El ámbito de la lista y las cifras (#428), como en el 360 (CRM#717).
+ *
+ * Iban con el `projectId` que mandara el navegador, sin mirar de quién es: un
+ * admin sin ese campus veía sus cargos (importe, correo y nombre del cliente) y
+ * sus cifras. Ahora, un campus ajeno es 403; sin pedir ninguno, los suyos (super
+ * admin y soporte, todos menos los de pruebas).
+ */
+async function ambitoDeLaLista(req) {
+  const ambito = await proyectosDelAmbito(req);
+  if (!ambito.projectId && !ambito.projectIds) return { projectId: null, projectIds: await campusDeTodos(req) };
+  return ambito;
+}
 
 function projectId(req) {
   const pid = Number(req.query.projectId || req.body?.projectId);
@@ -13,10 +27,10 @@ function projectId(req) {
 
 export async function list(req, res, next) {
   try {
-    const pid = projectId(req);
+    const ambito = await ambitoDeLaLista(req);
     const { status, linked, search, from, to, page, limit, facturables, sinEquivalente } = req.query;
     const data = await model.listPayments({
-      projectId: pid, status, linked, search, from, to,
+      ...ambito, status, linked, search, from, to,
       facturables: facturables === '1' || facturables === 'true',
       sinEquivalente: sinEquivalente === '1' || sinEquivalente === 'true',
       page: Number(page) || 1,
@@ -28,16 +42,19 @@ export async function list(req, res, next) {
 
 export async function stats(req, res, next) {
   try {
-    const pid = projectId(req);
+    const ambito = await ambitoDeLaLista(req);
+    const pid = ambito.projectId;
     const { status, linked, search, from, to, facturables, sinEquivalente } = req.query;
     // Los mismos filtros que el listado: si no, la cabecera cuenta una cosa y la
     // tabla de debajo otra.
     const s = await model.getStats({
-      projectId: pid, status, linked, search, from, to,
+      ...ambito, status, linked, search, from, to,
       facturables: facturables === '1' || facturables === 'true',
       sinEquivalente: sinEquivalente === '1' || sinEquivalente === 'true',
     });
-    const sync = await model.getSyncState(pid);
+    // El estado de la sincronización es de UNA cuenta de Stripe: con varios
+    // campus no hay una sola, así que no se dice ninguna.
+    const sync = pid ? await model.getSyncState(pid) : null;
     res.json({ success: true, data: { ...s, sync } });
   } catch (e) { next(e); }
 }
