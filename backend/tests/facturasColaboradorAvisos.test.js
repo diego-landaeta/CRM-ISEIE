@@ -323,7 +323,8 @@ describe('resumen diario «Faltan facturas por pagar» (Diego 04/11)', () => {
   it('sin pendientes no manda nada', async () => {
     encender();
     // Todas las de A, pagadas.
-    await q("UPDATE facturas_colaborador SET pagada_at = '2026-11-01' WHERE issuer_id = $1 AND subida_at IS NOT NULL", [E.A.id]);
+    // Solo se paga una validada (chk_fc_pagada_validada): se validan a la vez.
+    await q("UPDATE facturas_colaborador SET validada_at = COALESCE(validada_at, subida_at), pagada_at = '2026-11-01' WHERE issuer_id = $1 AND subida_at IS NOT NULL", [E.A.id]);
     sendEmail.mockClear();
     await resumenPorPagar({ ahora: new Date('2026-11-07T09:00:00Z') });
     expect(correosA(CORREO_A)).toHaveLength(0);
@@ -371,6 +372,8 @@ describe('«He recibido el pago y lo confirmo» y su opinión (Diego 04/11)', ()
   it('el correo de «Factura pagada» lleva el botón, con su enlace firmado', async () => {
     encender();
     sendEmail.mockClear();
+    // La subió por su enlace: primero la empresa la valida, después se paga (validar antes de pagar).
+    expect((await request.post(`${API}/facturas/${F.laura}/validar`).set('Authorization', `Bearer ${tokenAdmin}`)).status).toBe(200);
     const res = await pagar([F.laura]);
     expect(res.status, JSON.stringify(res.body)).toBe(200);
     await vi.waitFor(() => expect(correosA(C.laura.email)).toHaveLength(1));
