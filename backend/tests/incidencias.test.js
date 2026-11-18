@@ -239,7 +239,7 @@ describe('crear, editar y cerrar (#253)', () => {
     id = r.body.data.id;
     expect(r.body.data).toMatchObject({
       projectId: P.A, causadaPor: U.gestoraA, entidadTipo: 'lead', entidadId: 4033,
-      gravedad: 'high', estado: 'open', crm: 'multicrm',
+      gravedad: 'high', estado: 'open', crm: 'iseie', // el de serie en ISEIE (migración 306)
       // Repetidos fuera: «capa 8, capa 8» contaría dos veces en las cifras.
       tipos: ['capa8', 'fallo_crm'],
       // Quien la detectó, si no se dice, es quien la apunta.
