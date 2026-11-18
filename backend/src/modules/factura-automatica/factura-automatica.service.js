@@ -283,23 +283,31 @@ async function emitirDeLaFila(filaId) {
   const v = await model.venta(f.conversion_id);
   if (!v) return { emitidas };
   if (!String(v.emisor_nif || '').trim() || /^PENDIENTE-CIF-/i.test(String(v.emisor_nif))) {
-    await model.anotarError(f.id, 'La sociedad emisora del campus no tiene el CIF puesto');
+    await model.anotarError(f.id, 'La sociedad emisora del campus no tiene el CIF puesto', 'EMISOR_SIN_CIF');
     return { emitidas };
   }
 
   const invModel = await import('../invoices/invoices.model.js');
   const invService = await import('../invoices/invoices.service.js');
   let error = null;
+  // El código del motivo va con el texto: la cola lo usa para decir por qué no
+  // salió sola (posible duplicada, pausa de la auditoría, su turno…).
+  let codigo = null;
   for (const cp of await model.cobrosSinFactura(f.conversion_id)) {
     // El orden de la cola: si hay cobros anteriores sin facturar, este espera.
     if (!(await invService.puedeFacturarAhora(v.project_id, cp.fecha, cp.id))) {
       error = 'Espera su turno en la cola: hay cobros anteriores sin facturar';
+      codigo = 'HAY_ANTERIORES';
       break;
     }
     try {
       const inv = await invModel.emitirFacturaDePago(
         f.conversion_id, { paymentId: cp.id, importe: Number(cp.importe), datosFiscales: f }, null);
-      if (!inv?.id) { error = 'El cobro es anterior a la primera factura de la sociedad'; break; }
+      if (!inv?.id) {
+        error = 'El cobro es anterior a la primera factura de la sociedad';
+        codigo = 'ANTES_DEL_ARRANQUE';
+        break;
+      }
       if (Number(inv.datos_fiscales_id) === Number(f.id)) {
         emitidas.push(inv);
         logger.info({ conversionId: f.conversion_id, paymentId: cp.id, codigo: inv.codigo },
@@ -308,12 +316,13 @@ async function emitirDeLaFila(filaId) {
       }
     } catch (err) {
       error = err.message;
+      codigo = err.code || null;
       logger.warn({ err: err.message, conversionId: f.conversion_id, paymentId: cp.id },
         'factura automática: el cobro se queda en la cola');
       break;
     }
   }
-  await model.anotarError(f.id, error);
+  await model.anotarError(f.id, error, codigo);
   if (emitidas.length) {
     await nota(f.lead_id, `🧾 Factura${emitidas.length > 1 ? 's' : ''} emitida${emitidas.length > 1 ? 's' : ''} sola${emitidas.length > 1 ? 's' : ''}: ${emitidas.map((i) => i.codigo).join(', ')}.`);
   }
@@ -374,6 +383,75 @@ export async function reenviar(conversionId) {
   const v = await model.venta(conversionId);
   const r = await mandarPeticion(fila, v, token, { reenvio: true });
   return { enviado: !!r?.sent, caduca_at: fila.caduca_at };
+}
+
+/*
+  LA ETIQUETA DE LA COLA (CRM#764, 18/11).
+
+  La cola decía «Datos del alumno: sale sola» con mirar solo el estado de los
+  datos. Pero con los datos buenos la emisión automática también se para —una
+  posible duplicada (#819), la pausa de la auditoría (#765), el CIF del emisor
+  —, y quien miraba la fila no sabía por qué ese cobro seguía ahí. Ahora la
+  etiqueta dice si sale sola o no y, si no, el motivo de verdad.
+*/
+const MOTIVOS_CORTOS = {
+  POSIBLE_DUPLICADA: 'posible duplicada: confírmala al generarla',
+  FACTURACION_PAUSADA: 'facturación pausada por la auditoría',
+  HAY_ANTERIORES: 'espera su turno: hay cobros anteriores',
+  EMISOR_SIN_CIF: 'la sociedad emisora no tiene el CIF puesto',
+  ANTES_DEL_ARRANQUE: 'el cobro es anterior a la primera factura de la sociedad',
+  TOTAL_CORTO: 'lo facturado no cuadra con lo cobrado',
+  TIENE_PROFORMA: 'la venta tiene una proforma',
+};
+
+/**
+ * «[CODIGO] texto» → { codigo, texto }. Los anotados antes de llevar código
+ * (hasta el 18/11) se reconocen por su texto, que sale de este mismo código.
+ */
+export function motivoDelError(ultimoError) {
+  const t = String(ultimoError || '').trim();
+  if (!t) return { codigo: null, texto: null };
+  const m = /^\[([A-Z_]+)\]\s*/.exec(t);
+  if (m) return { codigo: m[1], texto: t.slice(m[0].length) };
+  const porTexto = [
+    [/^Ya existe la factura .*confírmalo/s, 'POSIBLE_DUPLICADA'],
+    [/facturación está pausada/i, 'FACTURACION_PAUSADA'],
+    [/^Espera su turno/, 'HAY_ANTERIORES'],
+    [/no tiene el CIF/, 'EMISOR_SIN_CIF'],
+    [/anterior a la primera factura/, 'ANTES_DEL_ARRANQUE'],
+  ].find(([re]) => re.test(t));
+  return { codigo: porTexto ? porTexto[1] : null, texto: t };
+}
+
+/**
+ * Lo que la cola enseña de los datos fiscales de una venta. `d`: la fila de
+ * `estadosDe`. `posibleDuplicada` y `pausada` se miran en vivo al pintar la
+ * cola: un cobro que todavía no se ha intentado también se pararía por ellas.
+ *
+ * Devuelve { estado, caduca_at, sale_sola, motivo_codigo, motivo, detalle }.
+ * `sale_sola`: true si la emisión automática lo va a sacar sin que nadie haga
+ * nada (ahora o cuando le toque), false si necesita a una persona.
+ */
+export function comoVaEnLaCola(d, { posibleDuplicada = false, pausada = false } = {}) {
+  if (!d) return null;
+  const base = { estado: d.estado, caduca_at: d.caduca_at, motivo_codigo: null, motivo: null, detalle: null };
+  if (d.estado === 'pendiente') return { ...base, sale_sola: true };
+  if (d.estado === 'revision') {
+    return { ...base, sale_sola: false, motivo_codigo: 'REVISION', motivo: 'faltan datos válidos', detalle: d.motivo_revision || null };
+  }
+  const { codigo, texto } = motivoDelError(d.ultimo_error);
+  // Lo de ahora manda sobre lo anotado: la duplicada y la pausa, en vivo.
+  const ahora = posibleDuplicada ? 'POSIBLE_DUPLICADA' : (pausada ? 'FACTURACION_PAUSADA' : null);
+  const cod = ahora || codigo || (texto ? 'OTRO' : null);
+  if (!cod) return { ...base, sale_sola: true };
+  return {
+    ...base,
+    // Esperar su turno no necesita a nadie: sale sola cuando salgan las anteriores.
+    sale_sola: cod === 'HAY_ANTERIORES',
+    motivo_codigo: cod,
+    motivo: MOTIVOS_CORTOS[cod] || 'no se pudo emitir',
+    detalle: (ahora && ahora !== codigo) ? null : texto,
+  };
 }
 
 /** Para la cola: qué pasa con los datos fiscales de cada venta. */
