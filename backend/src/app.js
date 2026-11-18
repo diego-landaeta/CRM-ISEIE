@@ -118,6 +118,7 @@ import { startVigilanteCatalogoScheduler } from './jobs/vigilanteCatalogoSchedul
 import { startLeadSinTocarScheduler } from './jobs/leadSinTocarScheduler.js';
 import { startSuscripcionesPlazosScheduler } from './jobs/suscripcionesPlazosScheduler.js';
 import { startCursosPendientesScheduler } from './jobs/cursosPendientesScheduler.js';
+import { startEntregasSinCorregirScheduler } from './jobs/entregasSinCorregirScheduler.js';
 import { startResumenDiarioScheduler } from './jobs/resumenDiarioScheduler.js';
 import { startReporteSemanalScheduler } from './jobs/reporteSemanalScheduler.js';
 import { startMcpRotacionScheduler } from './jobs/mcpRotacionScheduler.js';
@@ -127,8 +128,9 @@ import { startMcpVigilanciaScheduler } from './jobs/mcpVigilanciaScheduler.js';
 import tasksModule from './modules/tasks/index.js';
 import { startTasksDailySummaryScheduler } from './jobs/tasksDailySummaryJob.js';
 import { startTareasResumenScheduler } from './jobs/tareasResumenJob.js';
-// Lo que aún no está aprobado para producción: el tablero (#210) y las facturas de colaboradores (#202).
-import { tareasActivas, facturasColaboradorActivas } from './shared/config/soloEnPruebas.js';
+// Lo que aún no está aprobado para producción: el tablero (#210), las facturas de colaboradores (#202)
+// y el aviso de entregas sin corregir (#457).
+import { tareasActivas, facturasColaboradorActivas, pluginMoodleActivo } from './shared/config/soloEnPruebas.js';
 import { porteroDelWebhook, topeDelEnvio, traducirTope } from './modules/webhook-tokens/portero.js';
 import { MAX_ENVIO_BYTES } from './modules/matriculas/admision.archivos.js';
 
@@ -597,6 +599,13 @@ if (process.env.NODE_ENV !== 'test') {
       } catch (err) {
         logger.error({ err }, `${nombre}: el trabajo falló al arrancar`);
       }
+    }
+    // Entregas sin corregir (#457): lee Moodle y escribe a tutoras y administración.
+    // Apagado en producción hasta aprobarlo (PLUGIN_MOODLE_EN_PRODUCCION=1), como en el 360.
+    try {
+      if (pluginMoodleActivo()) startEntregasSinCorregirScheduler();
+    } catch (err) {
+      logger.error({ err }, 'entregas sin corregir: el trabajo falló al arrancar');
     }
     if (process.env.MCP_VIGILANCIA_DISABLED !== '1') {
       try {

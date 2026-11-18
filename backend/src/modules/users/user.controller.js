@@ -378,6 +378,9 @@ const AVISOS = [
   // Consultas de alumnos (#769), en consultas.plazos.js. Solo administración.
   { aviso: 'consulta_fuera_de_plazo', titulo: 'Consulta fuera de plazo',
     detalle: 'Cuando la consulta de un alumno de tus campus pasa el plazo sin respuesta del tutor. Solo administración.' },
+  // Entregas sin corregir (#457), en tutores/tutor.entregasAdministracion.js. Solo administración.
+  { aviso: 'entregas_fuera_de_plazo', titulo: 'Entregas sin corregir fuera de plazo',
+    detalle: 'Cuando una entrega de un alumno de tus campus sigue sin corregir pasado el plazo, o es de un curso sin tutora en el CRM. Solo administración.' },
 ];
 
 export async function misAvisos(req, res, next) {

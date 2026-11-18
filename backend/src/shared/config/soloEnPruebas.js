@@ -37,3 +37,15 @@ export function tareasActivas(env = process.env) {
 export function facturasColaboradorActivas(env = process.env) {
   return enPruebasOAprobado('FACTURAS_COLABORADOR_EN_PRODUCCION', env);
 }
+
+/**
+ * Lo del Moodle que aún no está aprobado para producción. En MultiCRM es el plugin
+ * del CRM en cada Moodle (#679, PR CRM#689) y todo lo que va con él; aquí, de momento,
+ * solo el aviso de entregas sin corregir (#457: a la tutora a las 48 h y después a
+ * administración), que lee Moodle con el token del campus y escribe a tutoras y admins.
+ * Mismo nombre e interruptor que en MultiCRM para que el porte de la #406 no tenga
+ * que tocarlo. Se aprueba con PLUGIN_MOODLE_EN_PRODUCCION=1.
+ */
+export function pluginMoodleActivo(env = process.env) {
+  return enPruebasOAprobado('PLUGIN_MOODLE_EN_PRODUCCION', env);
+}
