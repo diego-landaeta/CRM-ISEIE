@@ -393,7 +393,19 @@ export async function equipoDeLosCampus({ projectIds, incluirInactivos = false }
 
 // ─── Prospectos ───────────────────────────────────────────────────────────
 
-function filtrosProspectos({ projectIds, responsableId, gestoraId, programa, estado, texto, desde, hasta, canal }) {
+/**
+ * La publicidad de Meta de la que vino el prospecto (puerta 8, #487; gemela de
+ * CRM#806): ids y nombres de campaña, conjunto y anuncio. Los nombres salen de las
+ * tablas de Meta del MISMO campus; si aún no se han sincronizado, sale el id solo.
+ */
+const ORIGEN_META = `lu.meta_campaign_id AS meta_campana_id, mca.nombre AS meta_campana,
+            lu.meta_adset_id AS meta_conjunto_id, mas.nombre AS meta_conjunto,
+            lu.meta_ad_id AS meta_anuncio_id, mad.nombre AS meta_anuncio`;
+const JOINS_ORIGEN_META = `LEFT JOIN meta_campaigns mca ON mca.campaign_id = lu.meta_campaign_id AND mca.project_id = l.project_id
+       LEFT JOIN meta_adsets mas ON mas.adset_id = lu.meta_adset_id AND mas.project_id = l.project_id
+       LEFT JOIN meta_ads mad ON mad.ad_id = lu.meta_ad_id AND mad.project_id = l.project_id`;
+
+function filtrosProspectos({ projectIds, responsableId, gestoraId, programa, estado, texto, desde, hasta, canal, conjuntoId, conjunto, anuncioId }) {
   const f = condiciones('l.project_id', projectIds);
   f.cond.push('l.deleted_at IS NULL');
   if (responsableId) f.add('l.responsable_id = ANY(?::int[])', idsDe(responsableId));
@@ -408,6 +420,14 @@ function filtrosProspectos({ projectIds, responsableId, gestoraId, programa, est
   }
   if (estado) f.add('l.status::text = ?', estado);
   if (canal) f.add('EXISTS (SELECT 1 FROM lead_utms cu WHERE cu.lead_id = l.id AND cu.canal_detectado::text = ?)', canal);
+  // Por la publicidad de Meta de la que vino (puerta 8, #487): el conjunto por su
+  // id o por parte de su nombre, y el anuncio por su id.
+  if (conjuntoId) f.add('EXISTS (SELECT 1 FROM lead_utms mu WHERE mu.lead_id = l.id AND mu.meta_adset_id = ?)', String(conjuntoId));
+  if (conjunto) {
+    f.add(`EXISTS (SELECT 1 FROM lead_utms mu JOIN meta_adsets ms ON ms.adset_id = mu.meta_adset_id AND ms.project_id = l.project_id
+                    WHERE mu.lead_id = l.id AND ${SIN_TILDES('ms.nombre')} LIKE ?)`, `%${comoTexto(conjunto)}%`);
+  }
+  if (anuncioId) f.add('EXISTS (SELECT 1 FROM lead_utms mu WHERE mu.lead_id = l.id AND mu.meta_ad_id = ?)', String(anuncioId));
   if (texto) f.add(`(l.nombre ILIKE ? OR l.email ILIKE ? OR l.telefono ILIKE ?)`, `%${texto}%`, `%${texto}%`, `%${texto}%`);
   if (desde) f.add(`${fechaLocal('COALESCE(l.fecha_solicitud, l.created_at)')} >= ?::date`, desde);
   if (hasta) f.add(`${fechaLocal('COALESCE(l.fecha_solicitud, l.created_at)')} <= ?::date`, hasta);
@@ -422,6 +442,7 @@ export async function buscarProspectos(filtros) {
             l.fecha_solicitud, l.project_id AS proyecto_id, p.nombre AS proyecto,
             pr.nombre AS producto_interes, u.nombre AS responsable,
             lu.canal_detectado AS canal,
+            ${ORIGEN_META},
             EXISTS (SELECT 1 FROM conversions c WHERE c.lead_id = l.id) AS es_cliente,
             -- Lo que hace falta para decidir a quién llamar (#325): cuándo se le tocó por última vez,
             -- cuándo toca la próxima, en qué paso del proceso va y cuánto ha comprado.
@@ -434,6 +455,7 @@ export async function buscarProspectos(filtros) {
        LEFT JOIN products pr ON pr.id = l.producto_interes_id
        LEFT JOIN users u ON u.id = l.responsable_id
        LEFT JOIN lead_utms lu ON lu.lead_id = l.id
+       ${JOINS_ORIGEN_META}
       ${f.where()}
       ORDER BY COALESCE(l.fecha_solicitud, l.created_at) DESC, l.id DESC
       LIMIT ${limit} OFFSET ${offset}`,
@@ -454,12 +476,14 @@ export async function verProspecto({ id, projectIds, responsableId }) {
             l.fecha_solicitud, l.created_at, l.project_id AS proyecto_id, p.nombre AS proyecto,
             pr.nombre AS producto_interes, u.nombre AS responsable,
             l.reincidente, l.lead_duplicado_de AS duplicado_de,
-            lu.canal_detectado AS canal, lu.utm_source, lu.utm_medium, lu.utm_campaign
+            lu.canal_detectado AS canal, lu.utm_source, lu.utm_medium, lu.utm_campaign, lu.utm_content, lu.utm_term,
+            ${ORIGEN_META}, lu.meta_origen_por, mad.url_destino AS meta_anuncio_url
        FROM leads l
        JOIN projects p ON p.id = l.project_id
        LEFT JOIN products pr ON pr.id = l.producto_interes_id
        LEFT JOIN users u ON u.id = l.responsable_id
        LEFT JOIN lead_utms lu ON lu.lead_id = l.id
+       ${JOINS_ORIGEN_META}
       ${f.where()}`,
     f.params
   );
@@ -614,6 +638,143 @@ export async function resumenVentas(filtros) {
     cobrado: n('cobrado'),
     pendiente: n('importe_vendido') - n('cobrado'),
     por_proyecto: rows,
+  };
+}
+
+// ─── Pagos de Stripe, uno a uno (puerta 3, CRM#806) ─────────────────────
+//
+// Los cargos que deja el sincronizador en `stripe_payments`, los mismos que
+// Finanzas → Pagos Stripe. Por cada uno: estado, lo reembolsado, la venta y la
+// formación si está asociado, y si es el primer pago, una cuota u otro pago.
+//
+// Monedas. `amount` se guarda ya liquidado en euros (con `metadata.original_amount`
+// cuando el cargo era en otra moneda), pero `refunded_amount` va en la moneda
+// ORIGINAL del cargo (amount_refunded de Stripe): en un cargo en otra moneda se
+// pasa a euros con la proporción de ese mismo cargo. Hasta el 21/07 (c9e89b68)
+// los cargos en otra moneda se guardaban SIN convertir: esos salen con su moneda
+// y fuera de las cifras en euros (`sin_convertir`), en vez de sumar pesos como euros.
+const SIN_CONVERTIR = `(UPPER(COALESCE(sp.currency, 'EUR')) <> 'EUR' AND NOT (COALESCE(sp.metadata, '{}'::jsonb) ? 'original_amount'))`;
+
+// Lo reembolsado en la moneda de `amount`, con tope: nunca más que el cargo (un
+// reembolso total sin `refunded_amount` vale el cargo entero).
+const REEMBOLSADO = `(CASE
+  WHEN sp.refunded THEN sp.amount
+  WHEN COALESCE(sp.refunded_amount, 0) = 0 THEN 0
+  WHEN (sp.metadata->>'original_amount') ~ '^[0-9.]+$' AND (sp.metadata->>'original_amount')::numeric > 0
+    THEN LEAST(sp.amount, ROUND(sp.refunded_amount * sp.amount / (sp.metadata->>'original_amount')::numeric, 2))
+  ELSE LEAST(sp.amount, sp.refunded_amount) END)`;
+
+const ESTADO_PAGO_STRIPE = `(CASE
+  WHEN sp.status = 'succeeded' AND ${REEMBOLSADO} >= sp.amount THEN 'reembolsado'
+  WHEN sp.status = 'succeeded' AND ${REEMBOLSADO} > 0 THEN 'reembolsado_en_parte'
+  WHEN sp.status = 'succeeded' THEN 'cobrado'
+  WHEN sp.status = 'failed' THEN 'fallido'
+  ELSE sp.status END)`;
+
+function filtrosPagosStripe({ projectIds, responsableId, desde, hasta, estado, sinAsociar }) {
+  const f = condiciones('sp.project_id', projectIds);
+  // Quien ve solo lo suyo o lo de su equipo (una líder con rol de admin): los
+  // cargos de SUS ventas, con la misma regla que «listar_ventas». Un cargo sin
+  // asociar no es de nadie y no le sale.
+  if (responsableId) {
+    f.add('EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = sp.conversion_id AND r.vendedora_id = ANY(?::int[]))', idsDe(responsableId));
+  }
+  // Días de Madrid, como el resto del conector.
+  if (desde) f.add(`${fechaLocal('sp.stripe_created_at')} >= ?::date`, desde);
+  if (hasta) f.add(`${fechaLocal('sp.stripe_created_at')} <= ?::date`, hasta);
+  if (estado === 'cobrado') f.cond.push(`sp.status = 'succeeded' AND NOT sp.refunded AND COALESCE(sp.refunded_amount, 0) = 0`);
+  if (estado === 'reembolsado') f.cond.push(`sp.status = 'succeeded' AND (sp.refunded OR COALESCE(sp.refunded_amount, 0) > 0)`);
+  if (estado === 'fallido') f.cond.push(`sp.status = 'failed'`);
+  if (sinAsociar === true) f.cond.push(`sp.status = 'succeeded' AND sp.conversion_id IS NULL`);
+  if (sinAsociar === false) f.cond.push('sp.conversion_id IS NOT NULL');
+  return f;
+}
+
+export async function listarPagosStripe(filtros) {
+  const f = filtrosPagosStripe(filtros);
+  const { limit, offset } = paginado(filtros.pagina, filtros.limite);
+  // Primero la página (CTE) y después, solo para esas filas, la venta, la cuota
+  // y el primer pago: así las subconsultas no corren por cada cargo del filtro.
+  const { rows } = await query(
+    `WITH pagina AS (
+       SELECT sp.* FROM stripe_payments sp
+        ${f.where()}
+        ORDER BY sp.stripe_created_at DESC, sp.id DESC
+        LIMIT ${limit} OFFSET ${offset}
+     )
+     SELECT sp.id, sp.stripe_id,
+            (sp.stripe_created_at AT TIME ZONE '${TZ}') AS fecha,
+            sp.amount AS importe,
+            CASE WHEN ${SIN_CONVERTIR} THEN UPPER(sp.currency) ELSE 'EUR' END AS moneda,
+            ${ESTADO_PAGO_STRIPE} AS estado,
+            ${REEMBOLSADO} AS importe_reembolsado,
+            CASE WHEN sp.status = 'succeeded' THEN sp.amount - ${REEMBOLSADO} ELSE 0 END AS neto,
+            sp.disputed AS disputado,
+            CASE WHEN sp.disputed THEN sp.dispute_status END AS estado_disputa,
+            sp.metadata->>'original_currency' AS moneda_original,
+            sp.metadata->>'original_amount' AS importe_original,
+            COALESCE(l.nombre, sp.customer_name) AS cliente,
+            sp.customer_email AS cliente_email,
+            sp.project_id AS proyecto_id, p.nombre AS campus,
+            sp.conversion_id AS venta_id,
+            COALESCE(pr.nombre, cv.producto_contratado) AS formacion,
+            CASE
+              WHEN sp.conversion_id IS NULL THEN NULL
+              WHEN cuota.numero IS NOT NULL THEN 'cuota ' || cuota.numero || ' de ' || cuota.de
+              WHEN sp.conversion_payment_id IS NULL THEN 'sin cobro apuntado'
+              WHEN primero.id = sp.conversion_payment_id THEN 'primer pago'
+              ELSE 'pago'
+            END AS tipo_de_pago
+       FROM pagina sp
+       JOIN projects p ON p.id = sp.project_id
+       LEFT JOIN conversions cv ON cv.id = sp.conversion_id
+       -- El cliente: el prospecto del cargo o, si no lo tiene apuntado, el de su venta.
+       LEFT JOIN leads l ON l.id = COALESCE(sp.lead_id, cv.lead_id)
+       LEFT JOIN products pr ON pr.id = cv.producto_contratado_id
+       LEFT JOIN LATERAL (
+         SELECT ci.numero,
+                (SELECT COUNT(*) FROM conversion_installments x WHERE x.conversion_id = ci.conversion_id)::int AS de
+           FROM conversion_installments ci
+          WHERE ci.payment_id = sp.conversion_payment_id
+          LIMIT 1
+       ) cuota ON sp.conversion_payment_id IS NOT NULL
+       LEFT JOIN LATERAL (
+         SELECT cp.id FROM conversion_payments cp
+          WHERE cp.conversion_id = sp.conversion_id
+          ORDER BY cp.fecha, cp.id
+          LIMIT 1
+       ) primero ON sp.conversion_id IS NOT NULL
+      ORDER BY sp.stripe_created_at DESC, sp.id DESC`,
+    f.params
+  );
+  // Las cifras del periodo ENTERO con esos filtros, no solo de esta página. En
+  // euros: los cargos antiguos sin convertir se cuentan aparte.
+  const { rows: c } = await query(
+    `SELECT COUNT(*)::int AS total,
+            COUNT(*) FILTER (WHERE sp.status = 'failed')::int AS fallidos,
+            COUNT(*) FILTER (WHERE sp.status = 'succeeded' AND sp.conversion_id IS NULL)::int AS sin_asociar,
+            COUNT(*) FILTER (WHERE ${SIN_CONVERTIR})::int AS sin_convertir,
+            COALESCE(SUM(sp.amount) FILTER (WHERE sp.status = 'succeeded' AND NOT ${SIN_CONVERTIR}), 0) AS cobrado,
+            COALESCE(SUM(${REEMBOLSADO}) FILTER (WHERE sp.status = 'succeeded' AND NOT ${SIN_CONVERTIR}), 0) AS reembolsado
+       FROM stripe_payments sp ${f.where()}`,
+    f.params
+  );
+  const cifras = c[0];
+  const pagina = filtros.pagina || 1;
+  const limite = filtros.limite || 25;
+  return {
+    total: cifras.total,
+    pagina,
+    paginas: Math.max(1, Math.ceil(cifras.total / limite)),
+    cifras: {
+      cobrado: Number(cifras.cobrado),
+      reembolsado: Number(cifras.reembolsado),
+      neto: Math.round((Number(cifras.cobrado) - Number(cifras.reembolsado)) * 100) / 100,
+      fallidos: cifras.fallidos,
+      sin_asociar: cifras.sin_asociar,
+      sin_convertir: cifras.sin_convertir,
+    },
+    pagos: rows,
   };
 }
 

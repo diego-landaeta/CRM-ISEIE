@@ -830,6 +830,48 @@ export async function cobrosMensuales({ projectId, projectIds, from, to, asesora
   return rows;
 }
 
+// 6b) LO MISMO, NETO DE REEMBOLSOS: para el conector de Claude (puerta 3,
+// CRM#806). Son los mismos cobros que «cobrosMensuales» (`tipo: 'cobro'`) y,
+// además, cada reembolso en negativo y por SU fecha (`tipo: 'reembolso'`): así la
+// suma de un mes es lo que de verdad se quedó ese mes. La pantalla de Reportes
+// sigue con «cobrosMensuales» tal cual.
+//
+// Un reembolso que llega de Stripe (`origen = 'stripe'`) se guarda en la moneda
+// ORIGINAL del cargo, mientras que su cobro está en euros liquidados: si el cargo
+// era en otra moneda, se pasa a euros con la proporción de ese cargo. Sin esto,
+// un reembolso de 100.000 COP restaba 100.000 € (revisión de la PR, 16/11).
+export async function cobrosMensualesNetos(filtros) {
+  const cobros = await cobrosMensuales(filtros);
+  const { where, params } = buildFilter(filtros, 'cr.fecha', 'c.project_id');
+  const { rows: reembolsos } = await query(
+    `SELECT to_char(date_trunc('month', cr.fecha), 'YYYY-MM') AS mes,
+            cr.fecha, l.nombre AS cliente, c.producto_contratado AS producto,
+            -(CASE WHEN conv.factor IS NOT NULL THEN ROUND(cr.importe * conv.factor, 2) ELSE cr.importe END) AS importe,
+            'reembolso' AS metodo_pago, p.nombre AS proyecto
+     FROM conversion_refunds cr
+     JOIN conversions c ON c.id = cr.conversion_id
+     LEFT JOIN leads l ON l.id = c.lead_id
+     LEFT JOIN projects p ON p.id = c.project_id
+     LEFT JOIN LATERAL (
+       SELECT sp.amount / (sp.metadata->>'original_amount')::numeric AS factor
+         FROM stripe_payments sp
+        WHERE cr.origen = 'stripe' AND cr.payment_id IS NOT NULL
+          AND sp.conversion_payment_id = cr.payment_id
+          AND (sp.metadata->>'original_amount') ~ '^[0-9.]+$'
+          AND (sp.metadata->>'original_amount')::numeric > 0
+        LIMIT 1
+     ) conv ON true
+     ${where}
+     ORDER BY cr.fecha DESC, cr.id DESC`,
+    params
+  );
+  const hora = (f) => new Date(f).getTime();
+  return [
+    ...cobros.map((r) => ({ ...r, tipo: 'cobro' })),
+    ...reembolsos.map((r) => ({ ...r, tipo: 'reembolso' })),
+  ].sort((a, b) => hora(b.fecha) - hora(a.fecha));
+}
+
 // 7) VENTAS POR VENDEDORA. Ojo con las dos fechas: lo VENDIDO se cuenta por la
 // fecha de la venta, pero lo COBRADO se cuenta por la fecha de cada pago. Antes
 // se sumaba el importe_pagado de las ventas del rango, que mete en el periodo

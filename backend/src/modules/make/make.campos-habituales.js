@@ -52,6 +52,11 @@ export const NOMBRES_HABITUALES = {
   utm_campaign: ['utm_campaign'],
   utm_content: ['utm_content'],
   utm_term: ['utm_term'],
+  // Los ids de Meta de un formulario instantáneo, como los da el módulo de Lead
+  // Ads de Make (puerta 8, #487; gemela de CRM#806).
+  meta_campaign_id: ['meta_campaign_id', 'campaign_id'],
+  meta_adset_id: ['meta_adset_id', 'adset_id', 'ad_set_id'],
+  meta_ad_id: ['meta_ad_id', 'ad_id'],
   responsable_email: ['responsable_email', 'asesora_email', 'gestora_email'],
   responsable_nombre: ['responsable_nombre', 'asesora_nombre', 'gestora_nombre', 'asesora', 'gestora'],
 };
