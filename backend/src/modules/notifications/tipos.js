@@ -122,6 +122,16 @@ export const TIPOS = {
     clase: ACCION, etiqueta: 'Tope de gasto de IA', agrupa: false,
     descripcion: 'El gasto de IA del mes llega al 80 % o al 100 % del tope; al 100 % la IA se para hasta el día 1',
   },
+  // Disputas de Stripe (#396): a los admins de la empresa del campus y a los
+  // super admin. Una por disputa; la respuesta se da en Stripe.
+  stripe_disputa: {
+    clase: ACCION, etiqueta: 'Disputa de Stripe', agrupa: false,
+    descripcion: 'Entra una disputa (contracargo) en la cuenta de Stripe de uno de tus campus',
+  },
+  stripe_disputa_vence: {
+    clase: ACCION, etiqueta: 'Disputa de Stripe a punto de vencer', agrupa: false,
+    descripcion: 'Una disputa sigue sin respuesta en Stripe y vence en pocos días',
+  },
   task_asignada: {
     clase: ACCION, etiqueta: 'Tarea asignada', agrupa: false,
     descripcion: 'Cuando te asignan una tarea del equipo',

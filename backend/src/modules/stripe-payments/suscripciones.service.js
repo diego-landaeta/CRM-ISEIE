@@ -34,6 +34,7 @@
  *     apunta igual y lo que se haría queda en el registro, pero no se cancela.
  */
 import { query } from '../../shared/config/db.js';
+import { asociacionV2Activa } from './asociacion.config.js';
 import { logger } from '../../shared/utils/logger.js';
 import { decrypt } from '../../shared/utils/crypto.js';
 import { urlDeStripe } from '../../shared/config/stripeApi.js';
@@ -129,15 +130,25 @@ export async function suscripcionDelCargo(apiKey, chargeId, { llamar = stripe } 
  */
 export async function apuntarSuscripcion(stripePaymentId, { clave = claveDeStripe, delCargo = suscripcionDelCargo } = {}) {
   const { rows: [sp] } = await query(
-    `SELECT id, project_id, stripe_id, conversion_id, status, suscripcion_buscada
+    `SELECT id, project_id, stripe_id, conversion_id, status, suscripcion_buscada, stripe_subscription_id
        FROM stripe_payments WHERE id = $1`, [stripePaymentId]);
-  if (!sp?.conversion_id || sp.suscripcion_buscada || sp.status !== 'succeeded') return null;
-  const apiKey = await clave(sp.project_id);
-  if (!apiKey) return null;
-  const sub = await delCargo(apiKey, sp.stripe_id);
-  await query(
-    `UPDATE stripe_payments SET stripe_subscription_id = $2, suscripcion_buscada = true WHERE id = $1`,
-    [sp.id, sub]);
+  if (!sp?.conversion_id || sp.status !== 'succeeded') return null;
+  // Con las reglas nuevas apagadas, como siempre: lo ya mirado no se vuelve a tocar.
+  if (sp.suscripcion_buscada && !asociacionV2Activa()) return null;
+  let sub;
+  if (sp.suscripcion_buscada) {
+    // Ya se preguntó cuando el cargo aún no tenía venta (puerta 6, gemela de
+    // CRM#848): no se vuelve a preguntar a Stripe, pero la suscripción que se vio
+    // pasa a la venta.
+    sub = sp.stripe_subscription_id || null;
+  } else {
+    const apiKey = await clave(sp.project_id);
+    if (!apiKey) return null;
+    sub = await delCargo(apiKey, sp.stripe_id);
+    await query(
+      `UPDATE stripe_payments SET stripe_subscription_id = $2, suscripcion_buscada = true WHERE id = $1`,
+      [sp.id, sub]);
+  }
   if (!sub) return null;
   const { rows: [v] } = await query(
     `UPDATE conversions
@@ -253,12 +264,16 @@ export async function trasAsociarCargo(stripePaymentId) {
     // Barato a propósito: se llama con cada cargo del sondeo. Un cargo sin venta,
     // o ya mirado y de una venta sin suscripción, no hace nada más.
     const leer = () => query(
-      `SELECT sp.conversion_id, sp.suscripcion_buscada, c.stripe_subscription_id, c.suscripcion_cerrada_at
+      `SELECT sp.conversion_id, sp.suscripcion_buscada, sp.stripe_subscription_id AS sub_del_cargo,
+              c.stripe_subscription_id, c.suscripcion_cerrada_at
          FROM stripe_payments sp LEFT JOIN conversions c ON c.id = sp.conversion_id
         WHERE sp.id = $1`, [stripePaymentId]).then((r) => r.rows[0]);
     let sp = await leer();
     if (!sp?.conversion_id) return null;
-    if (!sp.suscripcion_buscada) { await apuntarSuscripcion(stripePaymentId); sp = await leer(); }
+    // Sin mirar, o mirado cuando aún no tenía venta y la venta no la tiene (puerta 6).
+    if (!sp.suscripcion_buscada || (asociacionV2Activa() && sp.sub_del_cargo && !sp.stripe_subscription_id)) {
+      await apuntarSuscripcion(stripePaymentId); sp = await leer();
+    }
     if (sp?.stripe_subscription_id && !sp.suscripcion_cerrada_at) return await revisarVenta(sp.conversion_id);
   } catch (err) {
     logger.error({ stripePaymentId, err: err.message }, 'suscripción: no se pudo revisar tras asociar el cargo');

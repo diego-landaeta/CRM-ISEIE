@@ -718,6 +718,17 @@ export async function listarPagosStripe(filtros) {
             sp.project_id AS proyecto_id, p.nombre AS campus,
             sp.conversion_id AS venta_id,
             COALESCE(pr.nombre, cv.producto_contratado) AS formacion,
+            -- Cómo quedó asociado (puerta 6, gemela de CRM#848): sin venta, nada.
+            CASE WHEN sp.conversion_id IS NULL THEN NULL
+                 ELSE CASE sp.link_method
+                   WHEN 'auto_email' THEN 'por el correo'
+                   WHEN 'auto_dedup' THEN 'por el correo (cobro ya apuntado)'
+                   WHEN 'auto_suscripcion' THEN 'por la suscripción'
+                   WHEN 'auto_compra_directa' THEN 'compra directa en la web (venta creada por el CRM)'
+                   WHEN 'manual' THEN 'a mano'
+                   WHEN 'manual_dedup' THEN 'a mano (cobro ya apuntado)'
+                   ELSE 'otro' END
+            END AS asociado_por,
             CASE
               WHEN sp.conversion_id IS NULL THEN NULL
               WHEN cuota.numero IS NOT NULL THEN 'cuota ' || cuota.numero || ' de ' || cuota.de

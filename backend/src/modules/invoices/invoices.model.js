@@ -6,7 +6,10 @@ import { comoLista } from '../../shared/utils/ambito.js';
 import { gestorasACargo } from '../../shared/utils/roles.js';
 import { CLASE_FACTURA, SOSPECHA_DUPLICADA } from './clase.sql.js';
 import { recalcularCobrado } from '../conversions/cobrado.js';
-import { frenarSiPosibleDuplicada, vieneConfirmada } from './posible-duplicada.js';
+import { frenarSiPosibleDuplicada, vieneConfirmada, normalizarNif } from './posible-duplicada.js';
+import { logger } from '../../shared/utils/logger.js';
+// Los datos fiscales que dio el alumno (#452): la fuente de toda factura de su venta.
+import { datosParaFacturar } from '../factura-automatica/factura-automatica.model.js';
 // La pausa de la auditoria de facturacion (#765). Apagada, no hace nada.
 import { exigirFacturacionActiva } from '../facturacion-auditoria/facturacion-auditoria.pausa.js';
 
@@ -959,6 +962,19 @@ function clienteDeLaFactura(conv, df = null) {
   };
 }
 
+// Los datos fiscales que contestó el alumno en el formulario de la factura
+// automatica (CRM#764), o los de su ficha ya validados el dia 7. Null si la venta
+// no los tiene. Si la tabla aun no existe (una base sin la migracion 281), la
+// factura sale como siempre, con la ficha.
+async function datosDelAlumno(conversionId) {
+  try {
+    return await datosParaFacturar(conversionId);
+  } catch (err) {
+    logger.warn({ err: err.message, conversionId }, 'factura: no se pudieron leer los datos fiscales del alumno');
+    return null;
+  }
+}
+
 function telefonoClienteFactura(conv) {
   const telefonoFiscal = conv.cliente_tipo === 'empresa'
     ? String(conv.custom_fields?.telefono_facturacion || '').trim()
@@ -976,7 +992,13 @@ function telefonoClienteFactura(conv) {
 // menor y una fecha posterior. El numero se le dio el dia de la proforma, y
 // numero y fecha van juntos. El cobro guarda su propia fecha en fecha_pago.
 // Diego, 29/09, al pedir el boton «Cobrada».
-async function _convertirProformaEnFactura(prof, conv, paymentId, fechaPago) {
+//
+// LOS DATOS DEL CLIENTE (CRM#764, 18/11). La proforma lleva los que puso una
+// persona, y esos se respetan. Pero si se hizo sin NIF y el alumno ya dio sus
+// datos fiscales en el formulario, la factura sale con los del alumno, enteros
+// (nombre, NIF y direccion juntos: nunca un NIF de uno con el nombre de otro).
+async function _convertirProformaEnFactura(prof, conv, paymentId, fechaPago, df = null) {
+  const cliente = df && !normalizarNif(prof.cliente_nif) ? clienteDeLaFactura(conv, df) : null;
   const total = Number(conv.importe_total) || 0;
   const pagado = Number(conv.importe_pagado) || 0;
   const ivaPct = conv.iva_exento ? 0 : Number(conv.iva_pct ?? 21);
@@ -1000,10 +1022,17 @@ async function _convertirProformaEnFactura(prof, conv, paymentId, fechaPago) {
        -- validez fiscal». Si no se invalida aqui, el documento pasa a ser una
        -- factura de verdad pero quien lo descargue se lleva el papel viejo.
        pdf_path = NULL,
+       cliente_nombre = COALESCE($11, cliente_nombre), cliente_tipo = COALESCE($12, cliente_tipo),
+       cliente_nif = COALESCE($13, cliente_nif), cliente_direccion = COALESCE($14, cliente_direccion),
+       cliente_ciudad = COALESCE($15, cliente_ciudad), cliente_cp = COALESCE($16, cliente_cp),
+       cliente_pais = COALESCE($17, cliente_pais), cliente_email = COALESCE($18, cliente_email),
        updated_at = NOW()
      WHERE id = $1 RETURNING *`,
     [prof.id, saldada ? 'pagada' : 'emitida', fechaPago, paymentId, items, base, ivaPct, ivaImp, total,
-     ivaPct === 0 ? 'Operación exenta de IVA conforme a la normativa aplicable.' : null]);
+     ivaPct === 0 ? 'Operación exenta de IVA conforme a la normativa aplicable.' : null,
+     cliente?.clienteNombre || null, cliente?.clienteTipo || null, cliente?.clienteNif || null,
+     cliente?.clienteDireccion || null, cliente?.clienteCiudad || null, cliente?.clienteCp || null,
+     cliente?.clientePais || null, cliente?.clienteEmail || null]);
   return rows[0];
 }
 
@@ -1126,6 +1155,13 @@ export async function emitirFacturaDePago(conversionId, { paymentId, importe, sa
   const conv = await _convDataParaFactura(conversionId);
   if (!conv) return null;
 
+  // Los datos fiscales que dio el alumno (CRM#764). La emisión automática los trae
+  // en `datosFiscales`; cualquier otro camino (la cola, «Emitir hasta», la
+  // pausa de la auditoría, «Cobrada» en una proforma, el cobro a mano) los
+  // busca aquí. Así la factura sale SIEMPRE con lo que contestó, la emita quien
+  // la emita (CRM#764, 18/11: desde la cola salía con la ficha, NIF «—»).
+  const datosCliente = datosFiscales || await datosDelAlumno(conversionId);
+
   // Fecha real del cobro → la factura sale PAGADA con esa fecha (el dinero ya entró).
   const { rows: payRows } = await query(
     `SELECT cp.fecha, cp.metodo, cp.notas,
@@ -1174,7 +1210,7 @@ export async function emitirFacturaDePago(conversionId, { paymentId, importe, sa
   if (prof) {
     // Pasar la proforma a factura tambien es emitir (#765).
     await exigirFacturacionActiva({ paymentId });
-    return await _convertirProformaEnFactura(prof, conv, paymentId, fechaPago);
+    return await _convertirProformaEnFactura(prof, conv, paymentId, fechaPago, datosCliente);
   }
 
   // ¿Ya hay una factura por el TOTAL de la conversión (ex-proforma o completa)?
@@ -1240,7 +1276,7 @@ export async function emitirFacturaDePago(conversionId, { paymentId, importe, sa
     // asi que no emite y el cobro se queda en la cola con ese motivo.
     confirmarDuplicada,
     leadId: conv.lead_id,
-    ...clienteDeLaFactura(conv, datosFiscales),
+    ...clienteDeLaFactura(conv, datosCliente),
     clienteTelefono: telefonoClienteFactura(conv),
     items: [{ descripcion: concepto, cantidad: 1, precio_unitario: base }],
     baseImponible: base,
@@ -1262,7 +1298,8 @@ export async function emitirFacturaDePago(conversionId, { paymentId, importe, sa
   if (inv?.id) {
     try { await markPaid(inv.id, fechaPago); inv.estado = 'pagada'; inv.fecha_pago = fechaPago; } catch { /* no bloqueante */ }
   }
-  // Salio sola (#452): queda dicho en la factura, con que datos.
+  // Salio sola (#452): queda dicho en la factura, con que datos. Solo la
+  // automatica: la que emite una persona con los datos del alumno no «salio sola».
   if (inv?.id && datosFiscales?.id) {
     await query('UPDATE invoices SET datos_fiscales_id = $2 WHERE id = $1', [inv.id, datosFiscales.id]);
     inv.datos_fiscales_id = datosFiscales.id;
@@ -1635,7 +1672,7 @@ export async function getLeadConversions(leadId) {
   return rows;
 }
 
-export async function getLeadFiscalData(leadId) {
+export async function getLeadFiscalData(leadId, { conversionId = null } = {}) {
   const { rows } = await query(
     `SELECT id, nombre, email, telefono,
             identificacion_fiscal, direccion_fiscal,
@@ -1644,7 +1681,25 @@ export async function getLeadFiscalData(leadId) {
      FROM leads WHERE id = $1 AND deleted_at IS NULL`,
     [leadId]
   );
-  return rows[0] || null;
+  const lead = rows[0] || null;
+  if (!lead || !conversionId) return lead;
+  // La factura de una venta cuyo alumno dio sus datos fiscales (CRM#764): salen
+  // los suyos, como en la emision automatica y en la cola. Solo si la venta es
+  // de este cliente.
+  const df = await datosDelAlumno(conversionId);
+  if (!df || Number(df.lead_id) !== Number(leadId)) return lead;
+  return {
+    ...lead,
+    nombre: df.nombre || lead.nombre,
+    email: df.email || lead.email,
+    identificacion_fiscal: df.nif,
+    direccion_fiscal: df.direccion,
+    ciudad_fiscal: df.ciudad,
+    codigo_postal_fiscal: df.codigo_postal,
+    pais_fiscal: df.pais,
+    cliente_tipo: df.cliente_tipo || lead.cliente_tipo,
+    datos_del_alumno: true,
+  };
 }
 
 // ─── Emisores (multi-empresa) ────────────────────────────────────────────────

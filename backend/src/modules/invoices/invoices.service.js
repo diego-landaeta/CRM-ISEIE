@@ -11,7 +11,7 @@ import { duplicadasDeLaCola, MOTIVO_EN_COLA } from './posible-duplicada.js';
 import { query } from '../../shared/config/db.js';
 import { alcanceComercial } from '../../shared/utils/roles.js';
 // La pausa de la auditoria de facturacion (#765). Apagada, no hace nada.
-import { exigirFacturacionActiva } from '../facturacion-auditoria/facturacion-auditoria.pausa.js';
+import { exigirFacturacionActiva, pausaAbierta } from '../facturacion-auditoria/facturacion-auditoria.pausa.js';
 
 const PDF_DIR = process.env.INVOICES_PDF_DIR || path.join(process.cwd(), 'uploads', 'invoices');
 
@@ -817,8 +817,10 @@ export async function getFacturacionAlDia(projectId, { personas = null } = {}) {
   }
   // Factura automática (#452): qué pasa con los datos fiscales de cada venta.
   // Apagada, el mapa viene vacío y la cola sale como siempre.
-  const { estadosParaCola } = await import('../factura-automatica/factura-automatica.service.js');
+  const { estadosParaCola, comoVaEnLaCola } = await import('../factura-automatica/factura-automatica.service.js');
   const datosFiscales = await estadosParaCola([...new Set(cola.slice(0, 200).map((p) => Number(p.conversion_id)))]);
+  // Con la facturación pausada (#765) nada sale solo: la etiqueta lo dice.
+  const pausada = datosFiscales.size ? !!(await pausaAbierta()) : false;
   return {
     ...estado,
     pagos_sin_factura: cola.length,
@@ -839,10 +841,11 @@ export async function getFacturacionAlDia(projectId, { personas = null } = {}) {
       es_el_siguiente: p.payment_id === primero,
       motivo: duplicadas.has(Number(p.payment_id)) ? MOTIVO_EN_COLA : null,
       posible_duplicada: duplicadas.get(Number(p.payment_id)) || null,
-      datos_fiscales: (() => {
-        const d = datosFiscales.get(Number(p.conversion_id));
-        return d ? { estado: d.estado, caduca_at: d.caduca_at, motivo: d.motivo_revision || d.ultimo_error || null } : null;
-      })(),
+      // Si sale sola o no, y por qué (CRM#764, 18/11: decía «sale sola» de una
+      // que la emisión automática había parado por posible duplicada).
+      datos_fiscales: comoVaEnLaCola(datosFiscales.get(Number(p.conversion_id)), {
+        posibleDuplicada: duplicadas.has(Number(p.payment_id)), pausada,
+      }),
     })),
     por_dia: Object.values(cola.reduce((acc, p) => {
       const d = String(p.fecha).slice(0, 10);

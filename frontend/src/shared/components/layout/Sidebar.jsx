@@ -124,7 +124,8 @@ export const NAV_SECTIONS = [
       { to: '/make-webhooks',   label: 'Make',      icon: PlugsConnected, roles: ['admin', 'superadmin'], permiso: 'make.view' },
       // Llevaba a la pantalla de Make (una redirección): dos entradas para lo
       // mismo. Desde el #226 es la de Webhooks, traída de MultiCRM.
-      { to: '/webhooks',        label: 'Webhooks',  icon: PlugsConnected, roles: ['admin', 'superadmin'], permiso: 'webhooks.view' },
+      // La pantalla lee y escribe en `/api/forms` (son formularios con kind='webhook'): pide también `forms.view`.
+      { to: '/webhooks',        label: 'Webhooks',  icon: PlugsConnected, roles: ['admin', 'superadmin'], permiso: 'webhooks.view', tambienPermiso: 'forms.view' },
       { to: '/captacion/whatsapp', label: 'Widget web', icon: WhatsappLogo, roles: ['admin', 'superadmin', 'soporte'], permiso: 'widget.view' },
       // Próximamente (#226): no hay pantalla en ISEIE. La de MultiCRM enseña
       // datos INVENTADOS —sus llamadas a Meta y Google van con `USE_MOCKS =
@@ -185,6 +186,8 @@ export const NAV_SECTIONS = [
       { to: '/payroll',              label: 'Nóminas',            icon: Coins,      roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'payroll.view' },
       { to: '/accounting/pendiente-facturar', label: 'Pendientes de facturar', icon: WarningCircle, roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'facturas.view' },
       { to: '/accounting/pagos-stripe', label: 'Pagos Stripe',    icon: PlugsConnected, roles: ['admin', 'superadmin'], permiso: 'stripe.view' },
+      // Disputas de Stripe (#396, gemela de CRM#839): solo admin y super admin, cada uno las de sus campus.
+      { to: '/accounting/disputas', label: 'Disputas de Stripe', icon: Warning, roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'stripe.edit' },
       // Registro automático de cobros (#766): solo en /staging y en local hasta que
       // Diego lo apruebe. Además, cada parte va con su interruptor del servidor.
       ...(SOLO_EN_PRUEBAS ? [{ to: '/accounting/cobros-externos', label: 'PayPal y banco', icon: Wallet, roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'cobros_externos.view' }] : []),
@@ -308,6 +311,7 @@ export function canSeeItem(item, role, soloColaboraciones, permisos, can) {
   // diciendo a quién se le enseña de serie. `permiso` puede ser una lista: basta
   // con uno (Diplomas: ver O emitir).
   if (item.permiso && !(typeof can === 'function' && [].concat(item.permiso).some((p) => can(p) === true))) return false;
+  if (!tieneLosDeMas(item, can)) return false;
   // MCP de Claude: «Usar el MCP» del catálogo, como el servidor.
   // Va ANTES del atajo de soporte y del recorte del tutor: «roles únicamente».
   if (item.accesoMcp) return tieneAccesoMcp(can);
@@ -393,7 +397,19 @@ export function rutaPermitida(pathname, can) {
   // Rutas sin entrada propia en el menú: su permiso, aquí.
   if (!suyas.length && SIN_ENTRADA[ruta]) suyas.push({ permiso: SIN_ENTRADA[ruta] });
   if (!suyas.length) return true;
-  return suyas.some((it) => !it.permiso || tiene(it.permiso) || (it.oPermiso && tiene(it.oPermiso)));
+  return suyas.some((it) => tieneLosDeMas(it, can) && (!it.permiso || tiene(it.permiso) || (it.oPermiso && tiene(it.oPermiso))));
+}
+
+/**
+ * `tambienPermiso`: lo que pide ADEMÁS la pantalla, porque es lo que mira el
+ * servidor. Todos, no basta uno. Captación › Webhooks pide `webhooks.view`
+ * —lo que dice el catálogo— pero la pantalla lee y escribe en `/api/forms`
+ * (los webhooks de captación son formularios con `kind='webhook'`), que pide
+ * `forms.*`: con uno solo de los dos la pantalla se abría y daba 403.
+ */
+export function tieneLosDeMas(item, can) {
+  if (!item?.tambienPermiso) return true;
+  return typeof can === 'function' && [].concat(item.tambienPermiso).every((p) => can(p) === true);
 }
 
 /**

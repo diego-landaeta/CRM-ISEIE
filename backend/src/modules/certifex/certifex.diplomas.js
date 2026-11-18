@@ -3,12 +3,18 @@ import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import { conLoDelCrm, exigirMisMatriculas } from './certifex.emisiones.js';
 import * as model from './certifex.model.js';
-import { programasPara, datosDeCandidato, formacionesDeCentro, proyectoDeCentro } from './certifex.programa.js';
+import { formacionesDeCentro, proyectoDeCentro } from './certifex.programa.js';
 import { sincronizarTemario } from '../products/temario.js';
-import { certifex, recorrer } from './certifex.cliente.js';
+import { certifex, certifexPuede, recorrer } from './certifex.cliente.js';
 import { alcanceDe, acotar, exigirCentro, exigirExpedientes, NO_ENCONTRADA } from './certifex.alcance.js';
 import { prepararEmision, emitirConPrograma, emitirMatriculas, resultadoBloqueado } from './certifex.emision.js';
 import { conDestinatario } from './certifex.envios.js';
+import { conReversiones } from './certifex.revertir.js';
+import { conEdicion, conProgramaCrm } from './certifex.enriquecer.js';
+import { emitidoPorElCrm, revertiblePorEsteCrm } from './certifex.marcas.js';
+
+// Se siguen exportando desde aquí (los usaban así); viven en sus módulos (#351: sin ciclos).
+export { conEdicion, conProgramaCrm, emitidoPorElCrm };
 import { conFirma, correoDe, firmaTransparente, guardarFirmaSubida, origenesDeFirma, pngDe } from './certifex.firma.js';
 import {
   listarSolicitudesSchema, listarDiplomasSchema, porAvisarSchema, aprobarEmitirSchema, rechazarSchema, emitirDiplomasSchema,
@@ -63,7 +69,7 @@ export function diaDe(iso) {
  * fechas, curso (en diplomas), estado del aviso o `todo=1` (exportar) se recorre y se
  * pagina aqui.
  */
-async function listado(ruta, params, f, { fecha, extra = null }) {
+async function listado(ruta, params, f, { fecha, extra = null, pararPorFecha = true }) {
   const pagina = f.pagina ?? 1;
   const tam = f.tam ?? 50;
   const conFechas = !!(f.desde || f.hasta);
@@ -83,9 +89,10 @@ async function listado(ruta, params, f, { fecha, extra = null }) {
   };
   const r = await recorrer(ruta, params, {
     filtro: (row) => enRango(row) && (!extra || extra(row)),
-    // Lo de antes de `desde` ya no puede entrar si lo que sigue es aun mas antiguo.
+    // Lo de antes de `desde` ya no puede entrar si lo que sigue es aun mas antiguo. Solo si
+    // `fecha` es por lo que Certifex ordena (lo mas reciente primero); si no, se recorre todo.
     fecha,
-    antiguo: f.desde ? (row) => { const d = diaDe(fecha(row)); return !!d && d < f.desde; } : null,
+    antiguo: f.desde && pararPorFecha ? (row) => { const d = diaDe(fecha(row)); return !!d && d < f.desde; } : null,
   });
   if (f.todo === '1') return { filas: r.filas, total: r.filas.length, pagina: 1, tam: r.filas.length, truncado: r.truncado };
   return { filas: r.filas.slice((pagina - 1) * tam, pagina * tam), total: r.filas.length, pagina, tam, truncado: r.truncado };
@@ -127,34 +134,6 @@ export async function solicitudes(req, res, next) {
   } catch (err) { next(err); }
 }
 
-/**
- * Lo revisado a mano de cada fila sin diploma (`edicion`): el correo del CRM, la
- * formacion elegida y el programa editado, con quien y cuando. null si no hay nada.
- * Si la base no contesta, el listado sale igual, sin ediciones.
- */
-async function conEdicion(filas) {
-  const sinTitulo = filas.filter((c) => !c.nexpediente);
-  for (const c of filas) c.edicion = null;
-  if (!sinTitulo.length) return;
-  try {
-    const m = await model.edicionesDe(sinTitulo.map((c) => c.matriculaId));
-    for (const c of sinTitulo) c.edicion = m.get(c.matriculaId) ?? null;
-  } catch (e) {
-    logger.warn({ err: e.message }, 'Certifex: no se pudo leer lo revisado a mano');
-  }
-}
-
-/**
- * El programa que se imprimiria si se emite ahora (`programaCrm`): el de la formacion
- * vendida, o null con el motivo. Es lo que se revisa antes de aprobar.
- */
-async function conProgramaCrm(filas) {
-  const sinTitulo = filas.filter((c) => !c.nexpediente);
-  for (const c of filas) c.programaCrm = null;
-  const m = await programasPara(sinTitulo.map(datosDeCandidato));
-  for (const c of sinTitulo) c.programaCrm = m.get(c.matriculaId) ?? null;
-}
-
 async function conAvisoRechazo(filas) {
   const rechazadas = filas.filter((c) => c?.decision?.decision === 'rechazada').map((c) => c.matriculaId);
   for (const c of filas) c.avisoRechazo = null;
@@ -169,10 +148,73 @@ async function conAvisoRechazo(filas) {
 }
 
 /**
+ * #351: las matrículas cuyo diploma se REVIRTIÓ y que no son solicitudes (se emitieron desde
+ * Certificaciones › Emisiones, sin que el alumno lo pidiera). Diego: «Tras revertir, la fila …
+ * vuelve a «Aprobados sin diploma», donde ya funciona «Editar» (formación y programa) y «Emitir»».
+ * Esa lista sale de las solicitudes aprobadas; estas no lo son, así que se buscan aparte: los
+ * anulados de Certifex que aún no tienen número que valga (`vigente`), y de ellos su matrícula
+ * aprobada y sin diploma, buscada solo en su curso. Solo se pregunta a Certifex si el registro del
+ * CRM tiene alguna reversión de esos campus que no esté resuelta (ver `resueltas`) y cuya matrícula
+ * no esté ya en la lista (lo normal es que no). Si algo falla, la lista sale sin ellas.
+ */
+async function revertidasSinPedir({ centro, centros, deMios, q, vistas }) {
+  try {
+    if (!(await model.tablaReversionesExiste())) return [];
+    const pendientes = (await model.reversionesConMatricula({ centro, centros }))
+      .filter((r) => !vistas.has(r.matriculaId) && !resueltas.has(r.nexpediente));
+    if (!pendientes.length) return [];
+    if (!(await certifexPuede('revertir'))) return [];
+    const matriculas = new Set(pendientes.map((r) => r.matriculaId));
+    const anulados = await recorrer('/diplomas', { estado: 'anulados', centro }, {
+      filtro: (d) => !!(d?.anulada && d.anulacion?.matriculaId && deMios(d) && matriculas.has(d.anulacion.matriculaId)),
+    });
+    // Ya se volvió a emitir (tenga hoy o no un número que valga): esa matrícula tiene un número y no
+    // vuelve aquí por esta reversión (si se revierte el nuevo, es otra reversión). Se recuerda.
+    // Con el curso cerrado (se revocó un diploma de ese curso, y revocar no se deshace) tampoco: no se
+    // vuelve a emitir (15.ª auditoría: lo mismo que dicen el panel y el buscador).
+    for (const d of anulados.filas) if (d.anulacion?.sustituidaPor || d.anulacion?.cursoCerrado) resueltas.add(d.nexpediente);
+    // Sin reemitir: la matrícula sigue sin número (aprobada y sin diploma).
+    anulados.filas = anulados.filas.filter((d) => !d.anulacion.sustituidaPor && !d.anulacion.cursoCerrado && !vistas.has(d.anulacion.matriculaId));
+    const grupos = new Map();
+    for (const d of anulados.filas) {
+      const clave = `${String(d.centro).toUpperCase()}|${d.cursoRef}`;
+      const g = grupos.get(clave) ?? { centro: String(d.centro).toUpperCase(), curso: d.cursoRef, ids: new Set() };
+      g.ids.add(d.anulacion.matriculaId);
+      grupos.set(clave, g);
+    }
+    const filas = [];
+    for (const g of grupos.values()) {
+      const r = await recorrer('/candidatos', { estado: 'aprobada', centro: g.centro, curso: g.curso, q }, {
+        filtro: (c) => g.ids.has(c.matriculaId) && !c.nexpediente && !c.solicitud,
+        completo: (hallados) => hallados.length >= g.ids.size,
+      });
+      filas.push(...r.filas);
+    }
+    return filas;
+  } catch (e) {
+    logger.warn({ err: e.message }, 'Certifex: no se pudieron traer las revertidas sin solicitud');
+    return [];
+  }
+}
+
+/**
+ * Los números anulados que ya se volvieron a emitir: una vez reemitidos, su matrícula ya no vuelve
+ * a «Aprobados sin diploma» por esa reversión. Se recuerdan (en este proceso) para no preguntar a
+ * Certifex en cada carga (13.ª auditoría, punto 4).
+ */
+const resueltas = new Set();
+
+/** Para las pruebas: olvida qué reversiones estaban resueltas. */
+export function olvidarResueltas() {
+  resueltas.clear();
+}
+
+/**
  * Lo que espera a una persona DESPUES de aprobar, dentro de las solicitudes:
  *  · `porAvisar`: con diploma emitido y vigente, y ningun aviso aprobado todavia.
  *    Es el «pendiente de aviso»: ver el PDF y, si esta bien, enviarlo al alumno.
- *  · `sinEmitir`: aprobadas sin diploma (la emision fallo o se corto). Se reintenta.
+ *  · `sinEmitir`: aprobadas sin diploma (la emision fallo o se corto, o se revirtio para
+ *    corregirlo, #351; tambien lo revertido que no era una solicitud: `revertidasSinPedir`).
  */
 async function despuesDeAprobar({ centro, centros = null, q }) {
   if (centros && centros.size === 0) return { porAvisar: [], sinEmitir: [], truncado: false };
@@ -180,6 +222,7 @@ async function despuesDeAprobar({ centro, centros = null, q }) {
   const aprobadas = await recorrer('/candidatos', { estado: 'aprobada', solicitadas: '1', centro, q }, { filtro: deMios });
   const conTitulo = aprobadas.filas.filter((c) => c.nexpediente);
   const sinEmitir = aprobadas.filas.filter((c) => !c.nexpediente);
+  sinEmitir.push(...await revertidasSinPedir({ centro, centros, deMios, q, vistas: new Set(aprobadas.filas.map((c) => c.matriculaId)) }));
   if (!conTitulo.length) return { porAvisar: [], sinEmitir, truncado: aprobadas.truncado };
 
   const buscados = new Set(conTitulo.map((c) => c.nexpediente));
@@ -207,10 +250,18 @@ export async function porAvisar(req, res, next) {
     const data = ambito.vacio
       ? { porAvisar: [], sinEmitir: [], truncado: false }
       : await despuesDeAprobar({ centro: ambito.centro, centros: ambito.centros ?? null, q: f.q });
-    for (const c of data.porAvisar) if (c.diploma) c.diploma.emitidoEnCrm = emitidoPorElCrm(c.diploma);
+    // `emitidoEnCrm`: decide «Enviar»; `revertibleAqui`: solo «Revertir» (#351, 14.ª auditoría).
+    for (const c of data.porAvisar) {
+      if (!c.diploma) continue;
+      c.diploma.emitidoEnCrm = emitidoPorElCrm(c.diploma);
+      c.diploma.revertibleAqui = revertiblePorEsteCrm(c.diploma);
+    }
     await conEdicion([...data.porAvisar, ...data.sinEmitir]);
     await conLoDelCrm([...data.porAvisar, ...data.sinEmitir], req.user);
     await conProgramaCrm(data.sinEmitir);
+    // #351: lo que vuelve aquí tras «Revertir» dice qué número se anuló, quién y por qué.
+    // (Lo que faltara apuntar lo apunta una tarea programada: un GET no escribe.)
+    await conReversiones(data.sinEmitir);
     res.json({ success: true, data });
   } catch (err) { next(err); }
 }
@@ -371,6 +422,31 @@ async function solicitudDe(matriculaId) {
 }
 
 /**
+ * La matrícula que se va a editar: la solicitud (lo de siempre, una sola búsqueda) o, si no
+ * lo es, una matrícula que el alumno no ha pedido, desde Certificaciones › Emisiones (#351,
+ * prevención). Esa segunda búsqueda va acotada al campus (y al correo, si se sabe) que manda
+ * la pantalla: el campus solo acota, el alcance se comprueba después con el de la matrícula.
+ * Sin campus no se busca fuera de las solicitudes. Si Certifex corta la lista antes de
+ * encontrarla, no se dice «no existe»: se dice que no se pudo comprobar.
+ */
+async function matriculaParaEditar(matriculaId, centro, q) {
+  const s = await solicitudDe(matriculaId);
+  if (s || !centro) return s;
+  const buscar = async (params) => recorrer('/candidatos', { estado: 'todas', centro, ...params }, {
+    filtro: (c) => c.matriculaId === matriculaId,
+    completo: (hallados) => hallados.length >= 1,
+  });
+  let r = q ? await buscar({ q }) : null;
+  if (!r?.filas[0]) r = await buscar({});
+  if (r.filas[0]) return r.filas[0];
+  if (r.truncado) {
+    throw new AppError(`No se ha podido comprobar en Certifex esa matrícula (el campus ${centro} tiene demasiadas): no se ha guardado nada.`, 503, 'CERTIFEX_LISTA_CORTADA');
+  }
+  return null;
+}
+
+
+/**
  * «Editar» en una solicitud sin diploma: revisar con que datos se trabaja antes de
  * aprobar. null en un campo quita esa edicion.
  *
@@ -385,11 +461,21 @@ async function solicitudDe(matriculaId) {
 export async function editar(req, res, next) {
   try {
     const d = parsear(editarSchema, req.body);
-    const c = await solicitudDe(d.matriculaId);
+    const c = await matriculaParaEditar(d.matriculaId, d.centro, d.q);
     if (!c) throw new AppError('Esa solicitud no esta en Certifex (o no es de los campus de este CRM).', 404, 'NOT_FOUND');
     exigirCentro(await alcanceDe(req.user), c.centro, 'Esa solicitud no esta en Certifex (o no es de tus campus).');
     if (c.nexpediente) {
       throw new AppError(`Ya tiene el diploma emitido (${c.nexpediente}): se cambia con «Corregir», no aqui.`, 409, 'YA_EMITIDO');
+    }
+    // Una matrícula que el alumno no ha pedido (desde Certificaciones › Emisiones, #351) solo se
+    // edita para lo que pide la issue: elegir la formación vendida y su programa, que es lo que
+    // decide qué se imprime en vez de lo de Moodle. Su nombre, su DNI y su correo no se tocan
+    // desde aquí (7.ª auditoría): no hay solicitud que revisar.
+    if (!c.solicitud) {
+      const otros = ['nombre', 'dni', 'emailCrm'].filter((k) => d[k] !== undefined);
+      if (otros.length) {
+        throw new AppError('En una matrícula que el alumno no ha pedido solo se elige la formación vendida y su programa: el nombre, el DNI y el correo no se cambian desde aquí.', 400, 'VALIDATION_ERROR');
+      }
     }
     if (d.productoId != null) {
       const { formaciones: lista, motivo } = await formacionesDeCentro(c.centro);
@@ -751,12 +837,6 @@ export async function sincronizarFormacion(req, res, next) {
 
 // ─────────────────────────────────────────────── diplomas emitidos
 
-/**
- * ¿Lo emitio este CRM? Certifex apunta quien emitio como «persona (CRM X)» cuando viene
- * del CRM. Lo emitido fuera (desde el panel de Certifex, o los antiguos de 2023 y 2024)
- * no esta «pendiente de aviso»: nadie del CRM lo aprobo ni tiene que mandarlo.
- */
-export const emitidoPorElCrm = (d) => /\(CRM\b[^)]*\)\s*$/i.test(String(d?.emitidaPor ?? ''));
 
 const AVISO = {
   pendiente: (d) => !d.aviso && emitidoPorElCrm(d),
@@ -782,19 +862,41 @@ async function contarPorEnviar(ambito) {
   return r.filas.length;
 }
 
-/** Los diplomas emitidos: vigentes (pestaña Enviados) o revocados, con su aviso. */
+/**
+ * Los diplomas emitidos: vigentes (pestaña Enviados), revocados o, desde la #351,
+ * anulados (pestaña Revertidos: el número anulado, quién, cuándo, por qué y con qué número
+ * se volvió a emitir), con su aviso.
+ */
 export async function diplomas(req, res, next) {
   try {
     const f = parsear(listarDiplomasSchema, req.query);
     const ambito = acotar(await alcanceDe(req.user), f.centro);
     if (ambito.vacio) return res.json({ success: true, data: paginaVacia(f) });
+    // #351: un Certifex que aún no revierte (sin su 0045) no conoce «anulados» y contestaría con un
+    // error. Se dice que no lo hay (`sinRevertir`): la pantalla oculta esa pestaña. Si no se puede
+    // saber, se pregunta igual y lo que conteste Certifex es lo que se ve.
+    if (f.estado === 'anulados' && (await certifexPuede('revertir').catch(() => true)) === false) {
+      return res.json({ success: true, data: { ...paginaVacia(f), sinRevertir: true } });
+    }
     const filtros = [];
     if (f.curso !== undefined) filtros.push((d) => Number(d.cursoRef) === f.curso);
     if (f.aviso) filtros.push(AVISO[f.aviso]);
     const data = await listado('/diplomas', {
       estado: f.estado ?? 'vigentes', centro: ambito.centro, q: f.q,
-    }, f, { fecha: (d) => d?.emitidoEn, extra: ambos(filtros.length ? (d) => filtros.every((fn) => fn(d)) : null, deMisCentros(ambito)) });
-    for (const d of data.filas) d.emitidoEnCrm = emitidoPorElCrm(d);
+    }, f, {
+      // En Revertidos (#351) «desde/hasta» es cuándo se revirtió, que es lo que enseña.
+      fecha: (d) => (f.estado === 'anulados' ? d?.anulacion?.en : d?.emitidoEn),
+      // En Revertidos no se deja de pedir por fecha: el Certifex actual los ordena por la
+      // reversión, pero uno anterior los ordenaba por la emisión (uno emitido hace meses pudo
+      // revertirse hoy), y no compensa arriesgarse a saltarse alguno. Son pocos.
+      pararPorFecha: f.estado !== 'anulados',
+      extra: ambos(filtros.length ? (d) => filtros.every((fn) => fn(d)) : null, deMisCentros(ambito)),
+    });
+    // `emitidoEnCrm`: decide «Enviar»; `revertibleAqui`: solo «Revertir» (#351, 14.ª auditoría).
+    for (const d of data.filas) {
+      d.emitidoEnCrm = emitidoPorElCrm(d);
+      d.revertibleAqui = revertiblePorEsteCrm(d);
+    }
     // A quién se manda (el titular) y quién lo aprobó, para «Aviso al alumno» (05/11/2026).
     await conDestinatario(data.filas, { query });
     res.json({ success: true, data });

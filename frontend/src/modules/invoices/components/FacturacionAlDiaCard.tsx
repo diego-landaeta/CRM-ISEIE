@@ -13,6 +13,7 @@ import { toast } from '@/shared/hooks/useToast';
 import { CreditCard, User, Receipt, CheckCircle } from '@phosphor-icons/react';
 import usePermission from '@/shared/hooks/usePermission';
 import { posibleDuplicada, preguntarSiEmitirDuplicada, fechaLegible, type OtraFactura } from '../lib/posibleDuplicada';
+import { textoDatosFiscales, necesitaPersona, type DatosFiscalesEnCola } from '../lib/datosFiscalesCola';
 
 type ColaItem = {
   payment_id: number; conversion_id: number; fecha: string; importe: number;
@@ -22,21 +23,23 @@ type ColaItem = {
   // mismo importe esa semana. La emision automatica no la saca; aqui se ve por que.
   motivo?: string | null; posible_duplicada?: OtraFactura | null;
   /** Factura automática (#452): en qué están los datos fiscales de esa venta. */
-  datos_fiscales?: { estado: 'pendiente' | 'respondido' | 'ficha' | 'revision'; caduca_at: string; motivo: string | null } | null;
+  datos_fiscales?: DatosFiscalesEnCola | null;
 };
 
-/** La etiqueta de la factura automática, debajo del cliente. Sin ella, nada. */
+/**
+ * La etiqueta de la factura automática, debajo del cliente. Sin ella, nada.
+ * Solo dice «sale sola» si de verdad va a salir; si no, el motivo (#452, gemela de CRM#764).
+ */
 function EstadoDatosFiscales({ d }: { d: ColaItem['datos_fiscales'] }) {
   if (!d) return null;
-  const texto = {
-    pendiente: `Esperando datos del alumno (hasta el ${new Date(d.caduca_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })})`,
-    respondido: 'Datos del alumno: sale sola',
-    ficha: 'Con los datos de la ficha: sale sola',
-    revision: 'Revisar datos: no sale sola',
-  }[d.estado];
+  const texto = textoDatosFiscales(d);
   if (!texto) return null;
-  const tono = d.estado === 'revision' ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground';
-  return <span className={`block text-[10px] ${tono}`} title={d.motivo || undefined}>{texto}</span>;
+  const tono = necesitaPersona(d) ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground';
+  return (
+    <span className={`block whitespace-normal text-[10px] ${tono}`} title={d.detalle || d.motivo || undefined}>
+      {texto}
+    </span>
+  );
 }
 type PorDia = { dia: string; cobros: number; importe: number };
 type Proforma = {
@@ -88,6 +91,21 @@ export default function FacturacionAlDiaCard({ projectId, titulo, ocultarSiVacia
   useEffect(() => { cargar(); }, [cargar]);
 
 
+  /*
+    POSIBLE DUPLICADA YA SABIDA (#452, gemela de CRM#764, 18/11). Si la fila ya
+    dice que se parece a otra factura --es justo por lo que la emisión
+    automática no la sacó--, se pregunta ANTES de emitir y la emisión viaja con
+    `confirmar_duplicada`. Si no se sabía y el servidor la para, se pregunta
+    igual al volver (más abajo, en `generar`).
+  */
+  async function generarDeLaFila(paymentId: number, otra: OtraFactura | null) {
+    if (otra) {
+      if (!(await preguntarSiEmitirDuplicada(otra))) return;
+      return generar(paymentId, false, true);
+    }
+    return generar(paymentId);
+  }
+
   async function generar(paymentId: number, forzar = false, confirmarDuplicada = false) {
     if (!projectId) return;
     setGenerando(paymentId);
@@ -105,7 +123,8 @@ export default function FacturacionAlDiaCard({ projectId, titulo, ocultarSiVacia
       if (e?.data?.code === 'HAY_ANTERIORES' && !forzar) {
         if (window.confirm(`${e.data.error}\n\n¿Emitirla igualmente, fuera de orden?`)) {
           setGenerando(null);
-          return generar(paymentId, true);
+          // La confirmación de la duplicada que ya se dio sigue valiendo.
+          return generar(paymentId, true, confirmarDuplicada);
         }
       } else if (!confirmarDuplicada && posibleDuplicada(err)) {
         // Ya hay una factura de este cliente por el mismo importe esa semana
@@ -252,7 +271,7 @@ export default function FacturacionAlDiaCard({ projectId, titulo, ocultarSiVacia
                       {puedeFacturar ? (
                         <button
                           type="button"
-                          onClick={() => generar(c.payment_id)}
+                          onClick={() => generarDeLaFila(c.payment_id, c.posible_duplicada || null)}
                           disabled={generando === c.payment_id}
                           className={`h-6 px-2 rounded font-semibold whitespace-nowrap disabled:opacity-40 ${
                             c.es_el_siguiente

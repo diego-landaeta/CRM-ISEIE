@@ -7,6 +7,7 @@ import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import { toast } from '@/shared/hooks/useToast';
+import usePermission from '@/shared/hooks/usePermission';
 import WebhookCard from '../components/WebhookCard';
 import type { Webhook } from '../lib/types';
 
@@ -21,6 +22,12 @@ export default function WebhooksPage() {
   const [loading, setLoading] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<WebhookListItem | null>(null);
   const [creating, setCreating] = useState(false);
+  // Estos webhooks son formularios con `kind='webhook'`: el servidor los guarda en
+  // `/api/forms` y pide `forms.*`. Sin el permiso, el botón no sale (era un 403).
+  const { can } = usePermission();
+  const puedeCrear = can('forms.create');
+  const puedeEditar = can('forms.edit');
+  const puedeBorrar = can('forms.delete');
 
   const load = useCallback(async () => {
     if (!activeProject?.id) return;
@@ -48,7 +55,7 @@ export default function WebhooksPage() {
       next.delete('new');
       setSearchParams(next, { replace: true });
       // createNew necesita activeProject.id, lo haremos cuando esté listo.
-      if (activeProject?.id) createNew();
+      if (activeProject?.id && puedeCrear) createNew();
     }
   }, [searchParams, setSearchParams, activeProject?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -110,7 +117,7 @@ export default function WebhooksPage() {
       <PageHeader
         title="Webhooks"
         subtitle={`${webhooks.length} en ${activeProject?.nombre || 'este proyecto'}`}
-        actions={
+        actions={puedeCrear ? (
           <button
             onClick={createNew}
             disabled={creating}
@@ -119,7 +126,7 @@ export default function WebhooksPage() {
           >
             <Plus size={14} weight="bold" /> <span className="hidden sm:inline">Nuevo webhook</span>
           </button>
-        }
+        ) : undefined}
       />
 
       {loading ? (
@@ -129,7 +136,7 @@ export default function WebhooksPage() {
           icon={PlugsConnected}
           title="Sin webhooks"
           description="Crea un webhook para recibir leads desde sistemas externos (Make, Zapier, n8n, integraciones custom)."
-          action={
+          action={puedeCrear ? (
             <button
               onClick={createNew}
               disabled={creating}
@@ -137,7 +144,7 @@ export default function WebhooksPage() {
             >
               <Plus size={14} weight="bold" /> Nuevo webhook
             </button>
-          }
+          ) : undefined}
         />
       ) : (
         <div className="grid gap-3">
@@ -148,6 +155,8 @@ export default function WebhooksPage() {
               onToggleActive={toggleActive}
               onToggleListen={toggleListen}
               onDelete={setDeleteTarget}
+              puedeEditar={puedeEditar}
+              puedeBorrar={puedeBorrar}
             />
           ))}
         </div>

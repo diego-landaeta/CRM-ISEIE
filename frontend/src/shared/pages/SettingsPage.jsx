@@ -464,7 +464,7 @@ export function EditUserModal({ user, projects, onClose, onSaved, empresas, falt
         ...(puedeDarEmpresas ? { empresaIds: llevaEmpresa ? empresasEnteras : [] } : {}),
       });
       toast(cambiaCorreo
-        ? { title: '✓ Guardado', description: `${nombre.trim()} entra ahora con ${correoNuevo}. Sus sesiones se han cerrado.` }
+        ? { title: '✓ Guardado', description: `${nombre.trim()} entra ahora con ${correoNuevo}. Una sesión que ya tuviera abierta puede seguir hasta 8 horas.` }
         : { title: '✓ Guardado' });
       onSaved();
     } catch (e) {
@@ -483,7 +483,7 @@ export function EditUserModal({ user, projects, onClose, onSaved, empresas, falt
     setSavingPass(true);
     try {
       await client.patch(`/users/${user.id}/password`, { password: newPass, confirmPassword: newPass2 });
-      toast({ title: '✓ Contraseña actualizada', description: `${user.nombre} deberá entrar con la nueva contraseña. Sus sesiones se han cerrado.` });
+      toast({ title: '✓ Contraseña actualizada', description: `${user.nombre} deberá entrar con la nueva contraseña. Una sesión que ya tuviera abierta puede seguir hasta 8 horas.` });
       setNewPass('');
       setNewPass2('');
     } catch (e) {
@@ -515,7 +515,7 @@ export function EditUserModal({ user, projects, onClose, onSaved, empresas, falt
               className={`w-full h-9 px-3 rounded-md border border-border bg-background text-sm ${isSuperadmin ? '' : 'opacity-60 cursor-not-allowed'}`} />
             <p className="text-[10px] text-muted-foreground mt-1">
               {isSuperadmin
-                ? 'Es con lo que entra: al cambiarlo, con el viejo ya no podrá, y se cierran sus sesiones. Se le avisa por correo en la dirección vieja. Si recibe prospectos por Make, cámbialo también allí.'
+                ? 'Es con lo que entra: al cambiarlo, con el viejo ya no podrá (una sesión que ya tuviera abierta puede seguir hasta 8 horas). Se le avisa por correo en la dirección vieja. Si recibe prospectos por Make, cámbialo también allí.'
                 : 'Solo un superadmin puede cambiar el correo.'}
             </p>
             {/* «Reenviar enlace de acceso» al correo nuevo (#246). A un tutor no le
@@ -637,7 +637,7 @@ export function EditUserModal({ user, projects, onClose, onSaved, empresas, falt
                 {savingPass ? '…' : 'Cambiar'}
               </button>
             </div>
-            <p className="text-[10px] text-muted-foreground">Mínimo 8 caracteres, con una mayúscula y un número. Se la comunicas tú al usuario. Al cambiarla, se cierran sus sesiones activas.</p>
+            <p className="text-[10px] text-muted-foreground">Mínimo 8 caracteres, con una mayúscula y un número. Se la comunicas tú al usuario. Al cambiarla, con la anterior ya no entra; una sesión que ya tuviera abierta puede seguir hasta 8 horas.</p>
           </div>
         )}
       </div>

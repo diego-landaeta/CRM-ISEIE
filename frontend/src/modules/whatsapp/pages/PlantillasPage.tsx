@@ -4,7 +4,6 @@ import {
   WhatsappLogo, Plus, Trash, FloppyDisk, Users, User,
   MagnifyingGlass, Copy, Check, ImageSquare, PencilSimple, ChatText, Question,
 } from '@phosphor-icons/react';
-import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
 import { VARIABLES as VARIABLES_PLANTILLA } from '../lib/plantilla';
@@ -70,14 +69,15 @@ const GRUPOS: { clave: string; titulo: string; desc: string; casa: (l: string) =
 ];
 
 export default function PlantillasWhatsappPage() {
-  const { user } = useAuth() as { user: { role?: string } | null };
   const { activeProject, activeIssuerId } = useProjectContext() as {
     activeProject: { id: number; nombre?: string } | null;
     activeIssuerId: number | null;
   };
-  // Lo que dice el servidor (#423): sale si salía antes Y tiene el permiso.
+  // Lo que dice el servidor: `whatsapp.plantillas_compartidas` y nada más
+  // (whatsapp.controller.js). Antes se pedía además ser admin, y soporte, que
+  // lo trae de serie, no podía crear ni tocar las compartidas.
   const { can } = usePermission();
-  const esAdmin = (user?.role === 'admin' || user?.role === 'superadmin') && can('whatsapp.plantillas_compartidas');
+  const esAdmin = can('whatsapp.plantillas_compartidas');
   const projectId = activeProject?.id && activeProject.id !== -1 ? activeProject.id : null;
   // Se LEEN las de toda la empresa; para CREAR una sigue haciendo falta un
   // campus, porque la plantilla se guarda en un proyecto concreto.

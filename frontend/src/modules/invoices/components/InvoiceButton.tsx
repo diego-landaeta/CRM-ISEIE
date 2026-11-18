@@ -68,7 +68,9 @@ export default function InvoiceButton({ projectId, leadId, conversionId, items, 
     setChoiceOpen(false);
     setWorking(true);
     try {
-      const lead = await invoicesApi.leadFiscalData(leadId);
+      // Con la venta: si el alumno contestó el formulario de datos fiscales
+      // (CRM#764), la factura sale con lo que dio, como la automática y la cola.
+      const lead = await invoicesApi.leadFiscalData(leadId, conversionId);
       if (!lead.success || !lead.data) {
         toast({ title: 'Error', description: 'No se pudieron cargar datos del cliente', variant: 'destructive' });
         return;

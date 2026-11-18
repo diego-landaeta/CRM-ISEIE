@@ -107,6 +107,7 @@ import { startWooCommerceSyncScheduler } from './jobs/wooCommerceSyncScheduler.j
 import { startStripePaymentsSyncScheduler } from './jobs/stripePaymentsSyncScheduler.js';
 import { startPaypalCobrosSyncScheduler } from './jobs/paypalCobrosSyncScheduler.js';
 import { startMonitaskSyncScheduler } from './jobs/monitaskSyncScheduler.js';
+import { startStripeDisputasScheduler } from './jobs/stripeDisputasScheduler.js';
 import { startTutorCommissionsScheduler } from './jobs/tutorCommissionsScheduler.js';
 import { startTutoresCampusScheduler } from './jobs/tutoresCampusScheduler.js';
 import { startConsultasCampusScheduler } from './jobs/consultasCampusScheduler.js';
@@ -114,6 +115,7 @@ import { startConsultasAlumnosScheduler } from './jobs/consultasAlumnosScheduler
 import { startConsultasResumenScheduler } from './jobs/consultasResumenScheduler.js';
 import { startConsultasPlazoScheduler } from './jobs/consultasPlazoScheduler.js';
 import { startConsultasCargaScheduler } from './jobs/consultasCargaScheduler.js';
+import { startCertifexReversionesScheduler } from './jobs/certifexReversionesScheduler.js';
 import { startVigilanteCatalogoScheduler } from './jobs/vigilanteCatalogoScheduler.js';
 import { startLeadSinTocarScheduler } from './jobs/leadSinTocarScheduler.js';
 import { startSuscripcionesPlazosScheduler } from './jobs/suscripcionesPlazosScheduler.js';
@@ -570,6 +572,13 @@ if (process.env.NODE_ENV !== 'test') {
     } catch (err) {
       logger.error({ err }, 'Monitask: la sincronización nocturna falló al arrancar');
     }
+    // Disputas de Stripe (#396, gemela de CRM#839): traerlas de cada cuenta y avisar
+    // a los admins. Solo con STRIPE_DISPUTAS_ACTIVO=1; apagado, no arranca.
+    try {
+      startStripeDisputasScheduler();
+    } catch (err) {
+      logger.error({ err }, 'Disputas de Stripe: el sondeo falló al arrancar');
+    }
     // Seguridad del MCP (#237, desde #194 y #195): fuera del bloque de Stripe
     // a propósito, para que apagar la sincronización de Stripe no la apague.
     // Cada uno con su interruptor en el .env, como los demás trabajos.
@@ -583,7 +592,8 @@ if (process.env.NODE_ENV !== 'test') {
     // Lo nuevo de la 2.6.0. Cada uno se apaga con su interruptor del .env, que
     // mira el propio trabajo: TUTORES_CAMPUS_DISABLED, CONSULTAS_CAMPUS_DISABLED,
     // CONSULTAS_ALUMNOS_DISABLED, CONSULTAS_RESUMEN_DISABLED, CONSULTAS_PLAZO_DISABLED,
-    // CONSULTAS_CARGA_RECORDATORIO_DISABLED, CURSOS_PENDIENTES_DISABLED y MOODLE_AVISOS_DISABLED.
+    // CONSULTAS_CARGA_RECORDATORIO_DISABLED, CURSOS_PENDIENTES_DISABLED, MOODLE_AVISOS_DISABLED y
+    // CERTIFEX_REVERSIONES_DISABLED (diplomas revertidos que el CRM no llegó a apuntar, #351).
     for (const [nombre, arrancar] of [
       ['tutores en los campus', startTutoresCampusScheduler],
       ['consultas de los campus', startConsultasCampusScheduler],
@@ -593,6 +603,7 @@ if (process.env.NODE_ENV !== 'test') {
       ['carga de los tutores', startConsultasCargaScheduler],
       ['cursos pendientes', startCursosPendientesScheduler],
       ['avisos del Moodle', startMoodleAvisosScheduler],
+      ['diplomas revertidos', startCertifexReversionesScheduler],
     ]) {
       try {
         arrancar();

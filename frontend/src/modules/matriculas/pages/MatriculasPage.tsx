@@ -275,7 +275,7 @@ export default function MatriculasPage() {
           <EmptyState icon={SealCheck} title="Solo administración" description="Los diplomas los aprueba, envía y revoca administración. Para verlos, pide que te den «Diplomas (Certifex) · Ver»." />
         ) : (
           <Suspense fallback={<SkeletonTable rows={5} columns={6} />}>
-            <CertifexDiplomasPage soloLectura={diplomasSoloLectura} soloEmitir={diplomasSoloEmitir} />
+            <CertifexDiplomasPage soloLectura={diplomasSoloLectura} soloEmitir={diplomasSoloEmitir} puedeRevertir={can('diplomas.revertir')} />
           </Suspense>
         )
       ) : enCertificaciones ? (
@@ -305,7 +305,7 @@ export default function MatriculasPage() {
               </div>
             )}
             <Suspense fallback={<SkeletonTable rows={5} columns={6} />}>
-              {vistaCert === 'consultas' ? <CertifexConsultasPage embebida /> : <CertifexEmisionesPage embebida />}
+              {vistaCert === 'consultas' ? <CertifexConsultasPage embebida /> : <CertifexEmisionesPage embebida puedeEditar={can('diplomas.emit')} />}
             </Suspense>
           </div>
         )
@@ -465,9 +465,10 @@ export default function MatriculasPage() {
 
       </>}
 
-      {/* Los botones de estado, solo para quien puede usarlos: el servidor deja
-          cambiar el estado a admin y super admin (a la gestora le daba 403). La
-          clave con el estado vuelve a montar la ficha con lo nuevo tras validar. */}
+      {/* Los botones de estado, solo para quien puede usarlos: el servidor pide
+          `matriculas.cambiar_estado` (a la gestora le daba 403; soporte lo trae
+          de serie y no le salían). La clave con el estado vuelve a montar la
+          ficha con lo nuevo tras validar. */}
       {detail && (
         <MatriculaDetail key={`${detail.id}-${detail.estado}`} matricula={detail} onClose={cerrarFicha} onChange={() => load()}
           onEstado={can('matriculas.cambiar_estado') ? handleEstado : undefined} pausada={!!rechazoTarget}

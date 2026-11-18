@@ -80,8 +80,66 @@ export async function certifex(metodo, ruta, cuerpo, { timeoutMs = 20_000 } = {}
   }
   const datos = await r.json().catch(() => null);
   if (r.status === 401) throw new AppError('Certifex no acepta la clave de este CRM (CERTIFEX_CRM_CLAVE).', 502, 'CERTIFEX_CLAVE');
-  if (!r.ok) throw new AppError(datos?.error || `Certifex respondio ${r.status}`, r.status >= 500 ? 502 : r.status, 'CERTIFEX_ERROR');
+  if (!r.ok) {
+    const err = new AppError(datos?.error || `Certifex respondio ${r.status}`, r.status >= 500 ? 502 : r.status, 'CERTIFEX_ERROR');
+    // El `code` de Certifex, si lo manda (p. ej. /revertir), para distinguir sin leer el texto.
+    // No sale en la respuesta del CRM: solo lo usa quien llama.
+    if (typeof datos?.code === 'string') Object.defineProperty(err, 'certifexCode', { value: datos.code, enumerable: false });
+    throw err;
+  }
   return datos;
+}
+
+// ─────────────────────────────────────────────── lo que sabe hacer el Certifex conectado
+
+/**
+ * ¿El Certifex conectado sabe hacer esto (p. ej. `revertir`, #351)? Lo dice el propio Certifex
+ * en `GET /yo` (`capacidades`): así el CRM no ofrece un botón que fallaría a medias mientras
+ * Certifex no esté desplegado, y sin llamar a la ruta para averiguarlo (una ruta que cambia
+ * datos no se usa como sonda; 7.ª auditoría). Un Certifex anterior no trae `capacidades`: no la
+ * tiene. Un «sí» se recuerda 5 minutos; un «no», solo 30 segundos: así, al desplegar Certifex con
+ * el CRM ya en marcha, el botón se activa enseguida y no tras 5 minutos.
+ *
+ * Si no se puede saber (Certifex no contesta, la clave no vale, contesta algo que no es su
+ * JSON), lanza ese error: no se confunde «no se pudo preguntar» con «no lo tiene».
+ */
+const CAPACIDAD_MS = 5 * 60_000;
+const SIN_CAPACIDAD_MS = 30_000;
+let capacidades = null;
+// La pregunta a /yo en curso: si llegan varias peticiones a la vez con el dato caducado, todas
+// esperan a la misma respuesta en vez de preguntar cada una.
+let preguntando = null;
+
+async function preguntarCapacidades() {
+  let yo;
+  try {
+    yo = await certifex('GET', '/yo', undefined, { timeoutMs: 10_000 });
+  } catch (e) {
+    logger.warn({ err: e.message, code: e.code }, 'Certifex: no se pudo saber lo que sabe hacer');
+    throw e;
+  }
+  if (!yo || typeof yo !== 'object' || !Array.isArray(yo.centros)) {
+    logger.warn('Certifex: /yo no contestó con su JSON');
+    throw new AppError('Certifex no contestó como se esperaba al preguntarle qué sabe hacer.', 502, 'CERTIFEX_ERROR');
+  }
+  const lista = Array.isArray(yo.capacidades) ? yo.capacidades.filter((x) => typeof x === 'string') : [];
+  capacidades = { lista: new Set(lista), en: Date.now() };
+  return capacidades;
+}
+
+export async function certifexPuede(capacidad) {
+  const edad = capacidades ? Date.now() - capacidades.en : Infinity;
+  const vale = capacidades && (capacidades.lista.has(capacidad) ? edad < CAPACIDAD_MS : edad < SIN_CAPACIDAD_MS);
+  // Se contesta con la respuesta que se ha recibido, no releyendo `capacidades`: si entretanto se
+  // olvidó lo sabido (`olvidarCapacidades`), no se rompe.
+  const sabido = vale ? capacidades : await (preguntando ??= preguntarCapacidades().finally(() => { preguntando = null; }));
+  return sabido.lista.has(capacidad);
+}
+
+/** Para las pruebas: olvida lo sabido de Certifex. */
+export function olvidarCapacidades() {
+  capacidades = null;
+  preguntando = null;
 }
 
 // ─────────────────────────────────────────────── recorrer paginas de Certifex

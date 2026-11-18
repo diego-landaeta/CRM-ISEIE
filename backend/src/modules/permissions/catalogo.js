@@ -454,6 +454,8 @@ export const SECCIONES = [
           a('edit', 'Corregir diplomas', 'Corregir datos, subir la firma y sincronizar formaciones.', ADMIN),
           a('avisar', 'Avisar al alumno', 'Mandar el aviso de diploma emitido o rechazado.', ADMIN),
           a('revocar', 'Revocar diplomas', 'Anular un diploma ya emitido.', ADMIN),
+          // #351 (Diego, 03/11/2026): «que en esta sección se puedan revertir».
+          a('revertir', 'Revertir diplomas', 'Anular el número de un diploma emitido desde el CRM y aún sin enviar, para corregirlo y volver a emitirlo: vuelve a «Aprobados sin diploma» y sale con otro número.', ADMIN),
           a('imprenta', 'Diploma para imprenta', 'Descargar el diploma en formato de imprenta.', ADMIN),
         ],
       },

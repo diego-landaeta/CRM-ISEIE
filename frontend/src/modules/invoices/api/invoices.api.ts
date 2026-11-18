@@ -240,7 +240,9 @@ export const invoicesApi = {
     `/invoices/ventas-sin-factura?${new URLSearchParams({ projectId: String(projectId), ...(periodo.from ? { from: periodo.from } : {}), ...(periodo.to ? { to: periodo.to } : {}) })}`),
   get: (id: number) => client.get<Invoice>(`/invoices/${id}`),
   byConversion: (conversionId: number) => client.get<Invoice | null>(`/invoices/by-conversion/${conversionId}`),
-  leadFiscalData: (leadId: number) => client.get<LeadFiscalData>(`/invoices/lead-fiscal/${leadId}`),
+  /** Con `conversionId`, la factura de esa venta: si el alumno dio sus datos fiscales (#452), vienen esos. */
+  leadFiscalData: (leadId: number, conversionId?: number | null) =>
+    client.get<LeadFiscalData>(`/invoices/lead-fiscal/${leadId}${conversionId ? `?conversionId=${conversionId}` : ''}`),
   create: (body: CreateInvoiceBody) => client.post<Invoice>('/invoices', body),
   /** Editar una factura en BORRADOR (solo admin/superadmin). */
   update: (id: number, body: Partial<CreateInvoiceBody> & { fechaEmision?: string }) => client.patch<Invoice>(`/invoices/${id}`, body),

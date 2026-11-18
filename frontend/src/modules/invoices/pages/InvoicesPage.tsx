@@ -390,13 +390,20 @@ export default function InvoicesPage() {
           <option value="pagada">Pagada</option>
           <option value="cancelada">Cancelada</option>
         </select>
-        <div className="flex items-center gap-1 text-xs">
-          <label className="text-muted-foreground">Desde</label>
-          <input type="date" value={filters.from} onChange={(e) => setFilters(f => ({ ...f, from: e.target.value }))}
-            className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
-          <label className="text-muted-foreground ml-1">Hasta</label>
-          <input type="date" value={filters.to} onChange={(e) => setFilters(f => ({ ...f, to: e.target.value }))}
-            className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
+        {/* En el móvil las dos fechas no caben en una línea: cada una va con su
+            etiqueta y, si no caben, «Hasta» baja a la siguiente. Antes la fila
+            empujaba la página 34 px de lado a 375 px (18/11). */}
+        <div className="flex flex-wrap items-center gap-1 text-xs max-sm:w-full">
+          <span className="flex min-w-0 items-center gap-1 max-sm:flex-1">
+            <label className="text-muted-foreground">Desde</label>
+            <input type="date" value={filters.from} onChange={(e) => setFilters(f => ({ ...f, from: e.target.value }))}
+              className="h-9 min-w-0 px-2 rounded-md border border-border bg-card text-sm max-sm:flex-1" />
+          </span>
+          <span className="flex min-w-0 items-center gap-1 max-sm:flex-1">
+            <label className="text-muted-foreground ml-1">Hasta</label>
+            <input type="date" value={filters.to} onChange={(e) => setFilters(f => ({ ...f, to: e.target.value }))}
+              className="h-9 min-w-0 px-2 rounded-md border border-border bg-card text-sm max-sm:flex-1" />
+          </span>
         </div>
       </div>
 

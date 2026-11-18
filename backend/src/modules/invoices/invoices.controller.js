@@ -150,7 +150,10 @@ export async function byConversion(req, res, next) {
 export async function leadFiscalData(req, res, next) {
   try {
     const leadId = Number(req.params.leadId);
-    const lead = await model.getLeadFiscalData(leadId);
+    // `?conversionId=`: la factura de ESA venta (el botón de la ficha). Si el
+    // alumno dio sus datos fiscales en el formulario (CRM#764), salen esos.
+    const conversionId = Number(req.query.conversionId) || null;
+    const lead = await model.getLeadFiscalData(leadId, { conversionId });
     if (!lead) throw new AppError('Lead no encontrado', 404, 'NOT_FOUND');
     const conversiones = await model.getLeadConversions(leadId);
     res.json({ success: true, data: { ...lead, conversiones } });

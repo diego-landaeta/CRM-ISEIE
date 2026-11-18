@@ -1197,6 +1197,50 @@
   "puertas": []
  },
  {
+  "id": "GET /api/certifex/diplomas/revertir",
+  "tipo": "ruta",
+  "modulo": "certifex",
+  "metodo": "GET",
+  "ruta": "/api/certifex/diplomas/revertir",
+  "relativa": "GET /diplomas/revertir",
+  "controlador": "disponibilidad",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "diplomas.revertir"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/certifex/diplomas/revertir",
+  "tipo": "ruta",
+  "modulo": "certifex",
+  "metodo": "POST",
+  "ruta": "/api/certifex/diplomas/revertir",
+  "relativa": "POST /diplomas/revertir",
+  "controlador": "revertir",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "diplomas.revertir"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "POST /api/certifex/diplomas/corregir",
   "tipo": "ruta",
   "modulo": "certifex",
@@ -13346,6 +13390,54 @@
     "claves": [
      "stripe.view"
     ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/stripe-payments/disputas",
+  "tipo": "ruta",
+  "modulo": "stripe-payments",
+  "metodo": "GET",
+  "ruta": "/api/stripe-payments/disputas",
+  "relativa": "GET /disputas",
+  "controlador": "listar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "stripe.edit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/stripe-payments/disputas/sincronizar",
+  "tipo": "ruta",
+  "modulo": "stripe-payments",
+  "metodo": "POST",
+  "ruta": "/api/stripe-payments/disputas/sincronizar",
+  "relativa": "POST /disputas/sincronizar",
+  "controlador": "sincronizar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "stripe.edit"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
