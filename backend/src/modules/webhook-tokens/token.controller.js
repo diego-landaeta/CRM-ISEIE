@@ -5,6 +5,7 @@ import { recibirAdmision } from '../matriculas/admision.service.js';
 import { conArchivos } from '../matriculas/admision.archivos.js';
 import * as leadModel from '../leads/lead.model.js';
 import { duplicadoParaAlta, apuntarReenvio, avisarDuplicado } from '../leads/duplicado-en-alta.js';
+import { avisarGestoraDelLeadNuevo } from '../leads/aviso-gestora.js';
 import { decidirFormulario, apuntarFormulario } from '../asignacion/asignacion.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { tieneRol } from '../../shared/utils/roles.js';
@@ -171,6 +172,7 @@ export async function publicReceive(req, res, next) {
         customFields: mapped.custom_fields || {},
       });
       avisarDuplicado(lead, dup, { origen: 'webhook con token', productoInteresId });
+      avisarGestoraDelLeadNuevo({ lead, canal: 'webhook' });
       await apuntarFormulario(porActividad, lead, { email: mapped.email, origen: 'webhook con token' });
       return res.status(201).json({ success: true, data: { lead_id: lead.id, action: dup.duplicadoDe ? 'created_duplicate' : 'created' } });
     }
