@@ -1,3 +1,4 @@
+import { apiPublicUrl } from '@/shared/lib/direccionesPublicas';
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { rutaApp } from '@/shared/lib/rutaApp';
@@ -163,8 +164,7 @@ export default function MakeWebhookDetailPage() {
 
   if (loading || !hook) return <div className="p-8 text-muted-foreground">Cargando...</div>;
 
-  const baseUrl = window.location.origin + (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
-  const webhookUrl = `${baseUrl}/api/webhooks/make/${hook.slug}`;
+  const webhookUrl = apiPublicUrl(`/webhooks/make/${hook.slug}`);
   const detectedKeys = hook.sample_payload ? jsonKeys(hook.sample_payload) : [];
 
   return (
