@@ -38,6 +38,7 @@ const StripePaymentsPage = lazy(() => import('./modules/accounting/pages/StripeP
 const CobrosExternosPage = lazy(() => import('./modules/accounting/pages/CobrosExternosPage'));
 // Equipo › Actividad (#236): lo que registra Monitask y el cotejo con las facturas.
 const MonitaskActividadPage = lazy(() => import('./modules/monitask/pages/MonitaskActividadPage'));
+const DisputasStripePage = lazy(() => import('./modules/accounting/pages/DisputasStripePage'));
 const WhatsappWidgetPage = lazy(() => import('./modules/widget/pages/WhatsappWidgetPage'));
 // Todo WhatsApp pasa por aqui: el chat, con quien enlaza su numero y sus
 // plantillas. La pantalla del equipo y «Mi WhatsApp» eran del metodo viejo —el
@@ -170,6 +171,7 @@ const ROUTE_TITLES = {
   '/accounting/integrations':         'Integraciones',
   '/accounting/pendiente-facturar':   'Pendientes de facturar',
   '/accounting/pagos-stripe':         'Pagos Stripe',
+  '/accounting/disputas':             'Disputas de Stripe',
   '/accounting/facturas':             'Facturas',
   '/accounting/facturas/configuracion':'Configuración de facturación',
   '/accounting/facturas-colaboradores': 'Facturas de colaboradores',
@@ -312,6 +314,8 @@ function App() {
           <Route path="/accounting/pendiente-facturar" element={<PendienteFacturarPage />} />
           <Route path="/accounting/pagos-stripe" element={<StripePaymentsPage />} />
           <Route path="/accounting/cobros-externos" element={<CobrosExternosPage />} />
+          {/* Disputas de Stripe (#396): solo lectura, por empresa y por campus. */}
+          <Route path="/accounting/disputas" element={<DisputasStripePage />} />
           <Route path="/accounting/facturas" element={<InvoicesPage />} />
           <Route path="/accounting/facturas/nueva" element={<InvoiceCreatePage />} />
           <Route path="/accounting/facturas/configuracion" element={<InvoicingConfigPage />} />

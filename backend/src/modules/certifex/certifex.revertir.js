@@ -23,13 +23,13 @@ import { revertirSchema, mensajeDeValidacion } from './certifex.validation.js';
  *  · solo lo emitido desde el CRM, sin enviar, sin revocar y sin revertir (409), y en esos
  *    casos no se le pide nada a Certifex (que además lo vuelve a comprobar);
  *  · quien revierte ante Certifex es el usuario con sesión, diga lo que diga el cuerpo;
- *  · queda en el CRM (`certifex_reversiones`, migración 300) DESPUÉS de que Certifex lo
+ *  · queda en el CRM (`certifex_reversiones`, migración 301) DESPUÉS de que Certifex lo
  *    haga, con la matrícula que dice Certifex (no la que diga el navegador);
  *  · mientras el Certifex conectado no tenga la ruta, no se usa: 503 sin tocar nada, y
  *    `disponibilidad` se lo dice a la pantalla para que el botón no se ofrezca.
  */
 
-const SIN_TABLA = 'Falta aplicar en la base del CRM la migración 300 (certifex_reversiones), o el CRM no tiene permiso sobre ella.';
+const SIN_TABLA = 'Falta aplicar en la base del CRM la migración 301 (certifex_reversiones), o el CRM no tiene permiso sobre ella.';
 const SIN_CERTIFEX = 'El Certifex conectado todavía no permite revertir diplomas (falta desplegar su migración 0045 y POST /revertir).';
 const NO_ENCONTRADO = 'Diploma no encontrado.';
 const ROTULO_AVISO = { correo_apagado: 'el correo está apagado en el servidor', sin_correo: 'el alumno no tiene correo', error: 'el envío falló' };

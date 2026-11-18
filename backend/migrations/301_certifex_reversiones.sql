@@ -1,4 +1,5 @@
 -- Diplomas revertidos antes de enviarlos al alumno (#351).
+-- (Nació como 300; renumerada a 301 al fusionar: en staging la 300 es la de las disputas de Stripe.)
 --
 -- ─────────────────────────────────────────────────────────────────────────────
 -- POR QUÉ

@@ -305,7 +305,7 @@ describe('POST /api/certifex/diplomas/revertir', () => {
     expect(llegoARevertir()).toHaveLength(0);
   });
 
-  it('sin la tabla del CRM (migración 300): 503 antes de llamar a Certifex', async () => {
+  it('sin la tabla del CRM (migración 301): 503 antes de llamar a Certifex', async () => {
     tablaExiste = false;
     const r = await revertir(ADMIN);
     expect(r.status).toBe(503);
@@ -366,7 +366,7 @@ describe('GET /api/certifex/diplomas/revertir (¿se puede usar?)', () => {
     tablaExiste = false;
     const r = await disp();
     expect(r.body.data).toMatchObject({ disponible: false });
-    expect(r.body.data.motivo).toMatch(/300/);
+    expect(r.body.data.motivo).toMatch(/301/);
   });
 
   it('no, con el motivo, si la base no contesta', async () => {

@@ -395,6 +395,22 @@ export const CAMBIOS_DE_MENU = [
     quitadas: ['Equipo de Desarrollo › Por revisar'],
     aprobadoPor: 'Diego, 10/11',
   },
+  {
+    id: 'menu-disputas-stripe-396',
+    que: '«Finanzas › Disputas de Stripe»: las disputas abiertas de cada cuenta de Stripe, por empresa y por campus, solo lectura (gemela de CRM#839, tarea 396). La ve quien tiene `stripe.edit` («llevar las disputas»), cada uno en sus campus.',
+    motivo: 'Tarea #396 del tablero (Manuel): ver las disputas abiertas por empresa y proyecto. No cambia el acceso: `stripe.edit` ya decidía las disputas en Pagos Stripe.',
+    perfiles: {
+      superadmin: ['+ Finanzas › Disputas de Stripe'],
+      admin: ['+ Finanzas › Disputas de Stripe'],
+      soporte: ['+ Finanzas › Disputas de Stripe'],
+      'gestora+admin': ['+ Finanzas › Disputas de Stripe'],
+    },
+    rutas: {
+      'Finanzas › Disputas de Stripe': 'GET /api/stripe-payments/disputas',
+    },
+    // Aprobado por Diego el 18/11 en el CRM 360 (CRM#865), tras probarla en /testeo (permisos por rol, filtros, sin claves, solo lectura y móvil).
+    aprobadoPor: 'Diego, 18/11',
+  },
 ];
 
 /**

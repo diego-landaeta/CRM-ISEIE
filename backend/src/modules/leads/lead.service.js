@@ -7,6 +7,8 @@ import { notifyAdmins } from '../notifications/notifications.service.js';
 import * as dupQueue from './dup-queue.service.js';
 import * as leadProducts from './lead-products.service.js';
 import { deducirCanal } from './canal.js';
+// La campaña, el conjunto y el anuncio de Meta de cada prospecto (puerta 8, #487; gemela de CRM#806).
+import { resolverOrigenMeta, formacionDeLaPublicidad, guardarOrigenMeta } from './origen-meta.js';
 import { planificarPasosDeLead, ajustarPaso } from '../proceso/proceso.model.js';
 import { cruzarConPulsacion } from '../widget/widget.pulsaciones.js';
 import { avisarGestoraDelLeadNuevo } from './aviso-gestora.js';
@@ -107,6 +109,15 @@ async function _createLeadCore(project, leadData) {
       if (deLaUrl[k]) leadData[k] = deLaUrl[k];
     }
   }
+  // De qué campaña, conjunto y anuncio de Meta viene (puerta 8, #487). Solo
+  // lee; si falla, el prospecto entra igual, sin ese dato.
+  let origenMeta = null;
+  try {
+    origenMeta = await resolverOrigenMeta(project.id, leadData);
+  } catch (err) {
+    logger.warn({ err: err.message, projectId: project.id }, 'origen de Meta: no se pudo resolver');
+  }
+
   // Idempotency: si Make reintenta con el mismo key dentro de 24h, devolvemos
   // el lead que ya creamos en lugar de duplicar.
   if (leadData.idempotency_key) {
@@ -139,6 +150,16 @@ async function _createLeadCore(project, leadData) {
   if (!productoInteresId && leadData.landing_url) {
     const product = await leadModel.findProductByLandingSlug(leadData.landing_url, project.id);
     if (product) productoInteresId = product.id;
+  }
+  // Y si no vino ninguna, la de su publicidad de Meta: la única del conjunto o de
+  // la campaña (puerta 8). Un formulario instantáneo no trae página de la que
+  // sacarla, pero su conjunto sí suele tener su formación.
+  if (!productoInteresId && origenMeta) {
+    try {
+      productoInteresId = await formacionDeLaPublicidad(project.id, origenMeta);
+    } catch (err) {
+      logger.warn({ err: err.message, projectId: project.id }, 'origen de Meta: no se pudo sacar la formación');
+    }
   }
 
   // Resolver responsable forzado (Make decide): id directo > email > nombre.
@@ -181,12 +202,16 @@ async function _createLeadCore(project, leadData) {
   // devuelve, y `const` no se puede leer antes de su linea: daba
   // `ReferenceError: Cannot access 'canalDetectado' before initialization`, o
   // sea un 500 cada vez que entraba esa rama.
-  const canalDetectado = leadData.canal || deducirCanal({
+  const canalDeducido = deducirCanal({
     utm_source: leadData.utm_source,
     utm_medium: leadData.utm_medium,
     referrer: leadData.referrer,
     landing_url: leadData.landing_url,
   });
+  // Con un anuncio, un conjunto o una campaña de Meta reconocidos, no es «directo»
+  // (un formulario instantáneo de Meta llega por Make sin UTM ni dirección).
+  const canalDetectado = leadData.canal
+    || (origenMeta && canalDeducido === 'directo' ? 'meta_ads' : canalDeducido);
 
   // Burst-merge: si el MISMO email/tel pide el MISMO producto en una ventana
   // corta (default 2min), no creamos un lead nuevo — sumamos una interacción
@@ -260,6 +285,16 @@ async function _createLeadCore(project, leadData) {
       canal_detectado: canalDetectado,
     },
   });
+
+  // El origen de Meta, aparte del alta (puerta 8): si la columna no está o algo
+  // falla, el prospecto ya ha entrado y se completa en la siguiente sincronización.
+  if (origenMeta) {
+    try {
+      await guardarOrigenMeta(lead.id, origenMeta, { canal: canalDetectado });
+    } catch (err) {
+      logger.warn({ err: err.message, leadId: lead.id }, 'origen de Meta: no se pudo guardar');
+    }
+  }
 
   // Si es spam recurrente, lo marcamos como eliminado automaticamente con
   // motivo 'spam' (auditoria) y NO disparamos secuencias ni notificaciones.

@@ -484,6 +484,16 @@ async function despuesDeSincronizar({ account, token, inicio, forzarGastoTotal =
   } catch (err) {
     logger.warn({ err: err.message, account_id: account.id }, 'Meta: falló la asociación automática de conjuntos');
   }
+  // Los prospectos que entraron antes de que llegara su anuncio: ahora ya se sabe
+  // de qué conjunto y anuncio son (puerta 8, #487; gemela de CRM#806). Va después
+  // de la asociación automática, que es de donde sale su formación.
+  try {
+    const { rellenarOrigenMeta } = await import('../leads/origen-meta.js');
+    const r = await rellenarOrigenMeta(account.project_id);
+    if (r.anuncios || r.conjuntos || r.campanas || r.formaciones) logger.info({ account_id: account.id, ...r }, 'Meta: origen de los prospectos completado');
+  } catch (err) {
+    logger.warn({ err: err.message, account_id: account.id }, 'Meta: no se pudo completar el origen de los prospectos');
+  }
 }
 
 /** ¿Se pidió el gasto de toda la vida de esta cuenta hace menos de N horas? */
