@@ -132,8 +132,9 @@ export default function FiscalDataDialog({ projectId, leadId, conversionId, defa
     }
     setSaving(true);
     try {
-      const res = await emitirPreguntandoSiPasa((permitir) => invoicesApi.create({
+      const res = await emitirPreguntandoSiPasa((permitir, duplicada) => invoicesApi.create({
         ...(permitir ? { permitirMasDeLoCobrado: true } : {}),
+        ...(duplicada ? { confirmar_duplicada: true } : {}),
         projectId, leadId, conversionId,
         issuerId: issuerId || undefined,
         tipo: isProforma ? 'proforma' : undefined,

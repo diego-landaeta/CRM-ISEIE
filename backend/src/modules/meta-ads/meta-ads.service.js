@@ -5,11 +5,11 @@ import { logger } from '../../shared/utils/logger.js';
 import * as metaClient from './meta-ads.client.js';
 import { destinoDelCreativo, formacionDelConjunto } from './meta-ads.enlaces.js';
 
-function packToken(plain) {
+export function packToken(plain) {
   const { encrypted, iv, authTag } = encrypt(plain);
   return `${iv}:${authTag}:${encrypted}`;
 }
-function unpackToken(packed) {
+export function unpackToken(packed) {
   const [iv, authTag, encrypted] = String(packed).split(':');
   if (!iv || !authTag || !encrypted) throw new AppError('Token corrupto', 500, 'TOKEN_CORRUPT');
   return decrypt(encrypted, iv, authTag);

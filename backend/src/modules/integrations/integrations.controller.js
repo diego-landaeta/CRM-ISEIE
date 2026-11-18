@@ -5,6 +5,8 @@ import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import { infoDelCampus, urlDelCampus } from '../../shared/services/moodle.client.js';
 import { urlDeStripe } from '../../shared/config/stripeApi.js';
+import { paypalActivo } from '../cobros-externos/interruptores.js';
+import { probarCredenciales as probarPaypal } from '../cobros-externos/paypal.service.js';
 
 /*
   SUPABASE, EL TERCERO (#44).
@@ -26,7 +28,17 @@ import { urlDeStripe } from '../../shared/config/stripeApi.js';
 
 // moodle: el campus del proyecto, para las consultas de alumnos (#187). La
 // dirección va en config_public.url y el token, cifrado, como api_key.
-const SUPPORTED = ['stripe', 'brevo', 'supabase', 'moodle'];
+//
+// paypal: la aplicación REST de la cuenta Business del campus (#766). El secreto,
+// cifrado como api_key; el client id, el modo (live/sandbox) y el id del webhook
+// van en config_public: no son secretos y hacen falta en cada llamada. Solo con
+// PAYPAL_COBROS_ACTIVO=1 (apagado en todas partes); si no, como si no existiera.
+const SUPPORTED = ['stripe', 'brevo', 'supabase', 'moodle', 'paypal'];
+export function proveedorSoportado(provider, env = process.env) {
+  if (!SUPPORTED.includes(provider)) return false;
+  if (provider === 'paypal') return paypalActivo(env);
+  return true;
+}
 
 // Sólo aceptamos los providers conocidos. Cada provider tiene su shape de
 // config_public propia, pero validamos lo mínimo aquí (el detalle de cada
@@ -98,7 +110,7 @@ export async function list(req, res, next) {
 export async function getOne(req, res, next) {
   try {
     const provider = String(req.params.provider || '').toLowerCase();
-    if (!SUPPORTED.includes(provider)) throw new AppError('Provider no soportado', 400, 'BAD_PROVIDER');
+    if (!proveedorSoportado(provider)) throw new AppError('Provider no soportado', 400, 'BAD_PROVIDER');
     const row = await model.get(projectId(req), provider);
     res.json({ success: true, data: sanitize(row) });
   } catch (err) { next(err); }
@@ -110,6 +122,7 @@ export async function upsert(req, res, next) {
     const parsed = upsertSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
     const { provider, active, api_key, webhook_secret, config_public } = parsed.data;
+    if (!proveedorSoportado(provider)) throw new AppError('Provider no soportado', 400, 'BAD_PROVIDER');
     const pid = projectId(req);
     let encryptedFields = {};
     if (api_key && api_key.trim()) {
@@ -125,6 +138,26 @@ export async function upsert(req, res, next) {
     // guardar cualquier otra cosa borraria el secreto sin que nadie se entere.
     const anterior = await model.get(pid, provider);
     let config = { ...(anterior?.config_public || {}), ...(config_public || {}) };
+    if (provider === 'paypal') {
+      // Solo lo que se sabe que es de PayPal (#766): el client id, el modo y el id
+      // del webhook. Lo demás que mande el navegador no se guarda.
+      if (webhook_secret) {
+        throw new AppError('PayPal no usa secreto de webhook: se comprueba con el id del webhook.', 400, 'VALIDATION_ERROR');
+      }
+      const clientId = String(config.client_id || '').trim();
+      if (!/^[A-Za-z0-9_-]{10,128}$/.test(clientId)) {
+        throw new AppError('Falta el client id de la aplicación REST de PayPal (o no tiene buena forma).', 400, 'VALIDATION_ERROR');
+      }
+      const webhookId = String(config.webhook_id || '').trim();
+      if (webhookId && !/^[A-Za-z0-9-]{5,64}$/.test(webhookId)) {
+        throw new AppError('El id del webhook de PayPal no tiene buena forma.', 400, 'VALIDATION_ERROR');
+      }
+      config = {
+        client_id: clientId,
+        modo: config.modo === 'sandbox' ? 'sandbox' : 'live',
+        ...(webhookId ? { webhook_id: webhookId } : {}),
+      };
+    }
     if (provider === 'moodle') {
       // Sin la dirección del campus el token no sirve de nada: se pide aquí y
       // no al probar, para que no se guarde algo que nunca va a funcionar.
@@ -164,7 +197,7 @@ export async function upsert(req, res, next) {
 export async function test(req, res, next) {
   try {
     const provider = String(req.params.provider || '').toLowerCase();
-    if (!SUPPORTED.includes(provider)) throw new AppError('Provider no soportado', 400, 'BAD_PROVIDER');
+    if (!proveedorSoportado(provider)) throw new AppError('Provider no soportado', 400, 'BAD_PROVIDER');
     const pid = projectId(req);
     const row = await model.get(pid, provider);
     if (!row || !row.encrypted_value) {
@@ -184,6 +217,9 @@ export async function test(req, res, next) {
     try {
       if (provider === 'stripe') testResult = await testStripe(apiKey);
       else if (provider === 'brevo') testResult = await testBrevo(apiKey);
+      else if (provider === 'paypal') testResult = await probarPaypal({
+        clientId: row.config_public?.client_id, secret: apiKey, modo: row.config_public?.modo,
+      });
       else if (provider === 'supabase') testResult = await testSupabase(apiKey, row.config_public?.project_ref);
       else if (provider === 'moodle') testResult = await testMoodle(apiKey, row.config_public?.url, undefined, { consultas: row.config_public?.consultas === true });
     } catch (e) {
@@ -202,7 +238,7 @@ export async function test(req, res, next) {
 export async function remove(req, res, next) {
   try {
     const provider = String(req.params.provider || '').toLowerCase();
-    if (!SUPPORTED.includes(provider)) throw new AppError('Provider no soportado', 400, 'BAD_PROVIDER');
+    if (!proveedorSoportado(provider)) throw new AppError('Provider no soportado', 400, 'BAD_PROVIDER');
     await model.remove(projectId(req), provider);
     res.json({ success: true });
   } catch (err) { next(err); }

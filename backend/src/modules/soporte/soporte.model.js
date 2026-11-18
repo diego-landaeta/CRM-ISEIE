@@ -26,6 +26,8 @@ function comoLoEsperaLaPantalla(r) {
     actual: r.observado || '',
     whyItMatters: r.por_que_importa || '',
     url: r.url || '',
+    // Solo en una peticion de acceso (CRM#820): que pide, para quien y donde.
+    acceso: r.acceso || null,
     projectId: r.project_id,
     projectName: r.proyecto_nombre || null,
     autor: r.autor_nombre || null,
@@ -61,6 +63,21 @@ export async function crear({
   return porId(rows[0].id);
 }
 
+/**
+ * Una peticion de acceso (CRM#820): un ticket del tipo `access` con lo que pide
+ * el formulario guardado en `acceso`. El titulo se escribe aqui para que la
+ * lista de tickets lo diga de un vistazo; el texto de la persona va entero en
+ * la descripcion.
+ */
+export async function crearAcceso({ abiertoPor, projectId, titulo, explicacion, url, acceso }) {
+  const { rows } = await query(
+    `INSERT INTO tickets (abierto_por, project_id, kind, severity, titulo, descripcion, url, acceso)
+     VALUES ($1, $2, 'access', 'medium', $3, $4, $5, $6::jsonb) RETURNING id`,
+    [abiertoPor, projectId ?? null, titulo, explicacion, url ?? null, JSON.stringify(acceso)]
+  );
+  return porId(rows[0].id);
+}
+
 export async function porId(id) {
   const { rows } = await query(`${SELECT} WHERE t.id = $1`, [id]);
   return comoLoEsperaLaPantalla(rows[0]);
@@ -73,7 +90,9 @@ export async function porId(id) {
  * administra ve los SUYOS. Un ticket puede llevar dentro una captura con datos
  * de un cliente, asi que no es una lista para todo el mundo.
  */
-export async function listar({ estado, kind, projectId, alcance = null, page = 1, limit = 50 }) {
+export async function listar({
+  estado, kind, projectId, alcance = null, sinAccesosDe = null, page = 1, limit = 50,
+}) {
   const cond = [];
   const params = [];
   let i = 1;
@@ -85,6 +104,12 @@ export async function listar({ estado, kind, projectId, alcance = null, page = 1
   if (alcance) {
     cond.push(`(t.abierto_por = $${i++} OR t.project_id = ANY($${i++}::int[]))`);
     params.push(alcance.userId, (alcance.projectIds || []).map(Number));
+  }
+  // Quien no tiene «Ver las peticiones de acceso» (CRM#820) no ve las de otros,
+  // aunque sean de su campus: solo las que pidio el.
+  if (sinAccesosDe != null) {
+    cond.push(`(t.kind <> 'access' OR t.abierto_por = $${i++})`);
+    params.push(sinAccesosDe);
   }
   const where = cond.length ? `WHERE ${cond.join(' AND ')}` : '';
 

@@ -57,6 +57,15 @@ vi.mock('../src/shared/utils/ambito.js', () => ({
 vi.mock('../src/shared/services/localStorage.service.js', () => ({
   saveLocal: vi.fn(), getLocal: vi.fn(async () => ({ buffer: Buffer.from('x') })), deleteLocal: vi.fn(),
 }));
+// CRM#820: las peticiones de acceso de otros se miran con el catálogo
+// (`accesos.view`). Aquí, los valores de serie: admin, soporte y superadmin.
+vi.mock('../src/shared/middleware/permissions.js', () => ({
+  tienePermiso: async (req, ...claves) => ['admin', 'soporte', 'superadmin'].includes(req.user?.role)
+    && claves.some((c) => c.startsWith('accesos.')),
+}));
+vi.mock('../src/modules/permissions/permissions.service.js', () => ({
+  explicarPermisos: async () => ({ mapa: { 'accesos.view': true } }),
+}));
 
 const ctrl = await import('../src/modules/soporte/soporte.controller.js');
 

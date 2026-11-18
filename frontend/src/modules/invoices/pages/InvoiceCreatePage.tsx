@@ -321,8 +321,12 @@ export default function InvoiceCreatePage() {
         ? (esCorreccion
             ? await invoicesApi.corregir(Number(editId), { ...body, exento: !llevaIva })
             : await invoicesApi.update(Number(editId), body))
-        : await emitirPreguntandoSiPasa((permitir) =>
-            invoicesApi.create(permitir ? { ...body, permitirMasDeLoCobrado: true } : body));
+        : await emitirPreguntandoSiPasa((permitir, duplicada) =>
+            invoicesApi.create({
+              ...body,
+              ...(permitir ? { permitirMasDeLoCobrado: true } : {}),
+              ...(duplicada ? { confirmar_duplicada: true } : {}),
+            }));
       // Fechas: van por su endpoint (respeta el permiso editar_fechas_factura) y
       // solo si de verdad cambiaron.
       if (res.success && editId && puedeFechas

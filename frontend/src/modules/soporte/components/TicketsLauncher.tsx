@@ -6,8 +6,10 @@ import Portal from '@/shared/components/ui/portal';
 const ConfirmDialog = lazy(() => import('@/shared/components/ui/ConfirmDialog'));
 const CreateTicketForm = lazy(() => import('./CreateTicketForm'));
 import {
-  Ticket, Plus, X, Bug, Lightning, Question, Trash, ClockCounterClockwise, ArrowLeft,
+  Ticket, Plus, X, Bug, Lightning, Question, Trash, ClockCounterClockwise, ArrowLeft, Key,
 } from '@phosphor-icons/react';
+import usePermission from '@/shared/hooks/usePermission';
+import { resumenDeAcceso, moverPeticion } from '../lib/accesos';
 import {
   listTickets, updateTicketStatus, deleteTicket, ticketsViejos,
   type Ticket as TicketDato,
@@ -23,7 +25,7 @@ const TONE_BG = {
   violet:  'bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300',
 };
 
-const KIND_ICON = { bug: Bug, feature: Lightning, question: Question };
+const KIND_ICON = { bug: Bug, feature: Lightning, question: Question, access: Key };
 
 export default function TicketsLauncher() {
   const [open, setOpen] = useState(false);
@@ -183,13 +185,19 @@ function TicketCard({ ticket }) {
   // Cambiar el estado y borrar un ticket es cosa de quien administra (el servidor lo exige igual:
   // a un usuario raso le devolvería 403 y, como estas llamadas no muestran el error, fallaría callado).
   const { user } = useAuth() as { user: { role?: string } | null };
-  const administra = ['admin', 'superadmin', 'soporte'].includes(user?.role ?? '');
+  // Una petición de acceso (CRM#820) la mueve quien tiene «Gestionar las peticiones de acceso».
+  const { can } = usePermission();
+  const esAcceso = ticket.kind === 'access';
+  const administra = esAcceso ? can('accesos.gestionar') : ['admin', 'superadmin', 'soporte'].includes(user?.role ?? '');
+  const queSePide = esAcceso ? resumenDeAcceso(ticket.acceso) : [];
 
   function cycleStatus() {
     const order: Array<'open' | 'in_review' | 'resolved' | 'closed'> = ['open', 'in_review', 'resolved', 'closed'];
     const idx = order.indexOf(ticket.status);
     const next = order[(idx + 1) % order.length];
-    updateTicketStatus(ticket.id, next);
+    // Una petición de acceso se mueve por su ruta, que pide «Gestionar las peticiones de acceso».
+    if (esAcceso) moverPeticion(ticket.id, next).catch(() => {});
+    else updateTicketStatus(ticket.id, next);
     toast({ title: `Ticket → ${TICKET_STATUS[next].label}` });
   }
 
@@ -222,6 +230,12 @@ function TicketCard({ ticket }) {
         )}
       </header>
       <p className="text-sm font-semibold leading-snug">{ticket.title}</p>
+      {queSePide.length > 0 && (
+        <ul className="mt-1 space-y-0.5 text-xs">
+          {queSePide.map((l) => <li key={l} className="font-medium">{l}</li>)}
+          {ticket.autor && <li className="text-muted-foreground">Lo pide: {ticket.autor}</li>}
+        </ul>
+      )}
       {ticket.description && <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5 whitespace-pre-wrap">{ticket.description}</p>}
       {ticket.attachments?.length > 0 && (
         <div className="flex gap-1 mt-2 flex-wrap">

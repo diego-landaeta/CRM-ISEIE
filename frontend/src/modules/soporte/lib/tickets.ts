@@ -19,7 +19,9 @@ import client from '@/shared/api/client';
 
 export type TicketStatus = 'open' | 'in_review' | 'resolved' | 'closed';
 export type TicketSeverity = 'low' | 'medium' | 'high' | 'critical';
-export type TicketKind = 'bug' | 'feature' | 'question';
+// 'access' (CRM#820): una petición de acceso. Se crea solo con «Pedir acceso o
+// permiso» (lib/accesos.ts), no con el formulario de siempre.
+export type TicketKind = 'bug' | 'feature' | 'question' | 'access';
 
 export interface TicketAttachment {
   name: string;
@@ -44,6 +46,9 @@ export interface Ticket {
   actual: string;
   whyItMatters: string;
   url: string;
+  /** Solo en una petición de acceso: qué se pide, para quién y dónde. */
+  acceso?: { tipo?: string; permiso?: string; persona?: { nombre?: string | null; correo?: string | null }; campus?: string } | null;
+  autor?: string | null;
   attachments: TicketAttachment[];
   status: TicketStatus;
   projectId: number | null;
@@ -73,6 +78,7 @@ export const TICKET_KIND: Record<TicketKind, { label: string; icon: string }> = 
   bug:     { label: 'Bug',      icon: 'Bug' },
   feature: { label: 'Mejora',   icon: 'Lightning' },
   question:{ label: 'Pregunta', icon: 'Question' },
+  access:  { label: 'Acceso',   icon: 'Key' },
 };
 
 /** Avisa a las pantallas abiertas de que la lista ha cambiado. Lo escuchaba

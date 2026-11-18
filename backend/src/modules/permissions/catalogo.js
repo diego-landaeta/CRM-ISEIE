@@ -311,6 +311,7 @@ export const SECCIONES = [
           a('emitir', 'Poner número al cobrar', 'Que el cobro salga facturado y la proforma sin esperar visto bueno.', ADMIN),
           a('gestionar', 'Corregir y abonar', 'Corregir, abonar (rectificativa), asociar a una venta y borrar facturas (una gestora, las suyas).', ADMIN),
           a('cola', 'Emitir desde la cola', 'Emitir los cobros de la cola, cobrar proformas y mover la fecha «al día».', NADIE),
+          a('auditoria', 'Auditoría de facturación', 'Ver el aviso de facturación pausada, auditar y reanudarla con «Marcar como solucionado».', ADMIN),
           a('editar_fechas', 'Cambiar fechas', 'Cambiar la fecha de emisión y de pago, sin tocar importes.', ADMIN),
           a('edit', 'Editar facturas', 'Cambiar cualquier dato de una factura.', ADMIN_SOPORTE),
           a('configurar', 'Configurar la facturación', 'Empresas emisoras, regímenes, plantillas, series y ajustes.', ADMIN_SOPORTE),
@@ -355,12 +356,27 @@ export const SECCIONES = [
         ],
       },
       {
+        // Registro automático de cobros (#766): PayPal y los extractos del banco.
+        clave: 'cobros_externos', nombre: 'Cobros de PayPal y del banco', acciones: [
+          a('view', 'Ver cobros de PayPal y del banco', 'Los cobros que entran por PayPal y los abonos de los extractos del banco.', yPM(ADMIN_SOPORTE)),
+          a('edit', 'Registrar cobros de PayPal y del banco', 'Sincronizar PayPal, subir extractos y decidir a qué venta va cada abono dudoso.', ADMIN_SOPORTE),
+        ],
+      },
+      {
         clave: 'facturas_colaborador', nombre: 'Facturas de colaboradores', acciones: [
           a('subir', 'Subir su factura', '«Mi factura»: el colaborador sube la suya del mes.', ['colaborador', 'tutor_redactor'], { propia: true }),
           a('ver_todas', 'Ver las facturas', 'Las facturas de los colaboradores de sus empresas.', yPM(ADMIN)),
           a('gestionar', 'Gestionar colaboradores', 'Dar de alta colaboradores y reenviarles el enlace.', ADMIN),
           a('anular', 'Anular facturas de colaboradores', 'Anular una factura recibida.', ADMIN, { requiere: ['facturas_colaborador.ver_todas'] }),
           a('pagar', 'Pagar facturas de colaboradores', 'Marcarlas pagadas con su justificante.', ADMIN, { requiere: ['facturas_colaborador.ver_todas'] }),
+        ],
+      },
+      {
+        // Monitask (#236): qué hace cada colaborador y el cotejo de horas con sus
+        // facturas. Solo admin y superadmin (Manuel, 05/10): es actividad de personas.
+        clave: 'monitask', nombre: 'Monitask', acciones: [
+          a('view', 'Ver la actividad de Monitask', 'Horas, % de actividad, proyectos y tareas de cada persona, y el cotejo con las horas de sus facturas (de sus empresas).', ADMIN),
+          a('configurar', 'Configurar Monitask', 'Conectar la cuenta de Monitask, sincronizar y emparejar sus personas con las del CRM.', ADMIN, { independiente: true }),
         ],
       },
       {
@@ -384,6 +400,8 @@ export const SECCIONES = [
           a('dinero', 'Dónde poner el dinero', 'Ventas y gasto de publicidad por canal y campaña, contra el periodo anterior.', yPM(ADMIN)),
           a('editar_baremo', 'Cambiar el baremo de la tasa de cierre', 'Los tramos que dicen qué significa cada tasa (buena, regular...) por campus; el general, solo el super admin.', ADMIN),
           a('puesto_ajeno', 'El puesto de otra gestora', 'Ver en qué puesto va otra gestora del ranking.', yPM(ADMIN_SOPORTE), { requiere: ['reports.mis_informes'], independiente: true }),
+          // #772: el informe del mes por equipo y comercial y el ZIP de facturas de la empresa para la gestoría.
+          a('informe_mensual', 'Informe mensual para la gestoría', 'Ver y bajar el informe de ventas del mes por equipo y por comercial, y el ZIP con las facturas emitidas de una empresa.', yPM(ADMIN)),
         ],
       },
       {
@@ -416,12 +434,12 @@ export const SECCIONES = [
         ],
       },
       {
-        clave: 'matriculas', nombre: 'Matrículas', acciones: [
-          a('view', 'Ver matrículas', 'Las matrículas y sus documentos.', yPM(COMERCIAL)),
-          a('create', 'Crear matrículas', 'Una matrícula nueva.', COMERCIAL),
-          a('edit', 'Editar matrículas', 'Cambiar datos y subir documentos.', COMERCIAL),
-          a('cambiar_estado', 'Cambiar el estado', 'Validar, rechazar o cerrar una matrícula.', ADMIN_SOPORTE),
-          a('delete', 'Borrar matrículas', 'Quitar una matrícula.', ADMIN_SOPORTE),
+        clave: 'matriculas', nombre: 'Solicitud de admisión', acciones: [
+          a('view', 'Ver solicitudes de admisión', 'Las solicitudes de admisión de sus campus, con sus datos y sus documentos.', yPM(COMERCIAL)),
+          a('create', 'Crear solicitudes de admisión', 'Una solicitud de admisión nueva.', COMERCIAL),
+          a('edit', 'Editar solicitudes de admisión', 'Cambiar datos y subir documentos.', COMERCIAL),
+          a('cambiar_estado', 'Cambiar el estado', 'Validar, rechazar o cerrar una solicitud de admisión.', ADMIN_SOPORTE),
+          a('delete', 'Borrar solicitudes de admisión', 'Quitar una solicitud de admisión.', ADMIN_SOPORTE),
         ],
       },
       {
@@ -501,6 +519,19 @@ export const SECCIONES = [
         ],
       },
       {
+        // CRM#820 (17/11): las peticiones de acceso entran como tickets de Soporte
+        // del tipo «acceso». Pedir lo puede cualquiera con sesión, también quien
+        // tiene la lista de rutas cerrada (tutor, colaborador, tutor redactor):
+        // es justo quien más acaba pidiendo. Ver y gestionar, soporte y admin
+        // (y el superadmin, siempre). Nada de esto crea usuarios ni da permisos.
+        clave: 'accesos', nombre: 'Peticiones de acceso', acciones: [
+          a('pedir', 'Pedir acceso o permiso', 'Pedir un alta, un permiso, un campus o Claude: queda como ticket de Soporte para que lo prepare soporte.',
+            ['admin', 'gestor', 'soporte', 'project_manager', 'tutor', 'colaborador', 'tutor_redactor'], { propia: true, independiente: true }),
+          a('view', 'Ver las peticiones de acceso', 'Las peticiones de acceso del equipo (un admin, las de sus campus).', ADMIN_SOPORTE),
+          a('gestionar', 'Gestionar las peticiones de acceso', 'Marcarlas en preparación, hechas o rechazadas y contestar a quien las pidió.', ADMIN_SOPORTE),
+        ],
+      },
+      {
         clave: 'change_requests', nombre: 'Solicitudes de cambio', acciones: [
           a('view', 'Ver solicitudes', 'Las solicitudes de cambio y sus adjuntos.', TODOS),
           a('create', 'Pedir un cambio', 'Abrir una solicitud.', TODOS),
@@ -558,6 +589,8 @@ export const SECCIONES = [
           a('contrasena', 'Contraseña de otros', 'Ponerle contraseña a otra persona (un admin, a tutores de sus campus).', ADMIN),
           a('empresas', 'Empresas enteras y correos', 'Dar empresas enteras a un admin y cambiar el correo de alguien.', NADIE),
           a('aviso_correo', 'Aviso de cambio de correo', 'Ver el aviso que recibe quien cambia de correo.', NADIE),
+          // 17/11/2026: una gestora de ISEIE, tres semanas sin avisos por un rebote duro en Brevo.
+          a('brevo_desbloquear', 'Desbloquear correos en Brevo', 'Sacar de la lista de bloqueados de Brevo el correo de alguien del equipo para que vuelvan a llegarle los avisos.', ADMIN),
         ],
       },
       {

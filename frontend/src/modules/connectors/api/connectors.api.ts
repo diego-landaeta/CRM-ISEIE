@@ -24,7 +24,7 @@ export const TIPOS = [
 export const DESTINOS = [
   { id: 'product', label: 'Productos' },
   { id: 'lead', label: 'Prospectos' },
-  { id: 'matricula', label: 'Matrículas' },
+  { id: 'matricula', label: 'Solicitud de admisión' },
   { id: 'category', label: 'Categorías' },
 ] as const;
 
