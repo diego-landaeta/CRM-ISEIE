@@ -8018,6 +8018,202 @@
   "puertas": []
  },
  {
+  "id": "GET /api/links-pago/config",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "GET",
+  "ruta": "/api/links-pago/config",
+  "relativa": "GET /config",
+  "controlador": "verConfig",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.configurar",
+     "links_pago.crear"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PUT /api/links-pago/config",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "PUT",
+  "ruta": "/api/links-pago/config",
+  "relativa": "PUT /config",
+  "controlador": "guardarConfig",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.configurar"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/links-pago/webhook",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "GET",
+  "ruta": "/api/links-pago/webhook",
+  "relativa": "GET /webhook",
+  "controlador": "verWebhook",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.configurar"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PUT /api/links-pago/webhook",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "PUT",
+  "ruta": "/api/links-pago/webhook",
+  "relativa": "PUT /webhook",
+  "controlador": "cambiarWebhook",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.configurar"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/links-pago/",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "GET",
+  "ruta": "/api/links-pago/",
+  "relativa": "GET /",
+  "controlador": "listar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.crear",
+     "links_pago.ver_todos"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/links-pago/:id",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "GET",
+  "ruta": "/api/links-pago/:id",
+  "relativa": "GET /:id",
+  "controlador": "detalle",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.crear",
+     "links_pago.ver_todos"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/links-pago/",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "POST",
+  "ruta": "/api/links-pago/",
+  "relativa": "POST /",
+  "controlador": "crear",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.crear"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/links-pago/:id/anular",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "POST",
+  "ruta": "/api/links-pago/:id/anular",
+  "relativa": "POST /:id/anular",
+  "controlador": "anular",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.crear",
+     "links_pago.ver_todos"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/make-webhooks/",
   "tipo": "ruta",
   "modulo": "make",

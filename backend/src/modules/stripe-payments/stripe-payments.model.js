@@ -44,8 +44,120 @@ export async function findLeadByEmail(projectId, email) {
 }
 
 export async function findConversionByLeadId(leadId) {
-  const { rows } = await query(`SELECT id, importe_total, importe_pagado FROM conversions WHERE lead_id=$1 ORDER BY id DESC LIMIT 1`, [leadId]);
+  // Con la formación: la puerta 6 (gemela de CRM#848) la necesita para no colgar
+  // la compra de un curso nuevo en la venta de otro.
+  const { rows } = await query(`SELECT id, importe_total, importe_pagado, producto_contratado_id FROM conversions WHERE lead_id=$1 ORDER BY id DESC LIMIT 1`, [leadId]);
   return rows[0] || null;
+}
+
+/**
+ * Las ventas del campus de TODAS las fichas vivas con ese correo, la más reciente
+ * primero (puerta 6, gemela de CRM#848).
+ *
+ * `findLeadByEmail` se queda con la ficha más nueva, y un duplicado se crea siempre
+ * como ficha nueva (`lead_duplicado_de`): si la alumna volvió a rellenar un
+ * formulario después de comprar, la ficha nueva no tiene venta y el cargo se
+ * quedaba «sin asociar» aunque la venta estuviera en la ficha de antes.
+ */
+export async function ventasPorCorreo(projectId, email) {
+  if (!email) return [];
+  const { rows } = await query(
+    `SELECT c.id, c.lead_id, c.importe_total, c.importe_pagado, c.producto_contratado_id,
+            l.nombre AS lead_nombre, l.responsable_id
+       FROM conversions c
+       JOIN leads l ON l.id = c.lead_id
+      WHERE c.project_id = $1 AND l.project_id = $1
+        AND LOWER(l.email) = LOWER($2) AND l.deleted_at IS NULL
+      ORDER BY c.fecha_conversion DESC NULLS LAST, c.id DESC
+      LIMIT 50`,
+    [projectId, email]
+  );
+  return rows;
+}
+
+/**
+ * La venta de una suscripción de Stripe en este campus (puerta 6): la que la tiene
+ * apuntada (#747) o, si aún no, la de otro cargo de esa misma suscripción que ya
+ * esté asociado. Con dos ventas distintas no se adivina: null.
+ */
+export async function ventaDeLaSuscripcion(projectId, suscripcionId) {
+  if (!suscripcionId) return null;
+  const { rows } = await query(
+    `SELECT DISTINCT c.id, c.lead_id, c.importe_total, c.importe_pagado, c.producto_contratado_id,
+            l.nombre AS lead_nombre, l.responsable_id
+       FROM conversions c
+       LEFT JOIN leads l ON l.id = c.lead_id
+      WHERE c.project_id = $1
+        AND (c.stripe_subscription_id = $2
+             OR c.id IN (SELECT sp.conversion_id FROM stripe_payments sp
+                          WHERE sp.project_id = $1 AND sp.stripe_subscription_id = $2
+                            AND sp.conversion_id IS NOT NULL))
+      LIMIT 2`,
+    [projectId, suscripcionId]
+  );
+  return rows.length === 1 ? rows[0] : null;
+}
+
+/** Apunta en el cargo de qué suscripción viene (o que no viene de ninguna). */
+export async function guardarSuscripcionDelCargo(stripePaymentId, suscripcionId) {
+  await query(
+    `UPDATE stripe_payments SET stripe_subscription_id = $2, suscripcion_buscada = true WHERE id = $1`,
+    [stripePaymentId, suscripcionId || null]
+  );
+}
+
+/**
+ * ¿Hay ya en el campus un cobro apuntado por ese dinero (mismo importe, a tres
+ * días) que no esté atado a ningún cargo de Stripe? Casi siempre es la asesora,
+ * que registró la venta con otro correo. Antes de crear una venta por una compra
+ * directa se mira esto: si lo hay, no se crea nada y lo mira una persona.
+ */
+export async function hayCobroEquivalenteEnElCampus(projectId, importe, fecha) {
+  const { rows } = await query(
+    `SELECT 1
+       FROM conversion_payments cp
+       JOIN conversions c ON c.id = cp.conversion_id
+      WHERE c.project_id = $1
+        AND ABS(cp.importe::numeric - $2::numeric) < 0.01
+        AND ABS(cp.fecha - $3::date) <= 3
+        AND NOT EXISTS (SELECT 1 FROM stripe_payments sp WHERE sp.conversion_payment_id = cp.id)
+      LIMIT 1`,
+    [projectId, importe, fecha]
+  );
+  return rows.length > 0;
+}
+
+/**
+ * Los cargos de compras en la web (llevan el pedido de WooCommerce en `metadata`)
+ * que siguen sin venta pasado el tiempo de espera (puerta 6). Mismo suelo que
+ * `listPendientesDeAsociar`, y además solo los de los últimos `dias`: encender
+ * esto no crea de golpe las ventas de todo el histórico.
+ */
+export async function listComprasDirectasSinVenta(projectId, { esperaHoras = 24, dias = 30, limit = 25 } = {}) {
+  const { rows } = await query(
+    `SELECT id, project_id, stripe_id, status, amount, currency, customer_email, customer_name,
+            customer_stripe_id, metadata,
+            EXTRACT(EPOCH FROM stripe_created_at)::bigint AS stripe_created_at,
+            conversion_id, conversion_payment_id, lead_id
+       FROM stripe_payments
+      WHERE project_id = $1
+        AND status = 'succeeded'
+        AND COALESCE(refunded, false) = false
+        AND conversion_id IS NULL
+        AND conversion_payment_id IS NULL
+        AND UPPER(COALESCE(currency, 'EUR')) = 'EUR'
+        AND COALESCE(metadata, '{}'::jsonb) ? 'order_id'
+        AND stripe_created_at < NOW() - make_interval(hours => $2::int)
+        AND stripe_created_at > NOW() - make_interval(days => $3::int)
+        AND stripe_created_at::date > COALESCE(
+          (SELECT s.stripe_ok_hasta FROM invoicing_status s WHERE s.project_id = $1),
+          (SELECT pr.created_at::date FROM projects pr WHERE pr.id = $1),
+          DATE '1900-01-01')
+      ORDER BY stripe_created_at ASC
+      LIMIT $4`,
+    [projectId, esperaHoras, dias, limit]
+  );
+  return rows;
 }
 
 export async function linkPayment(stripePaymentId, { leadId, conversionId, conversionPaymentId, userId, method }) {
@@ -317,6 +429,7 @@ export async function listConVentaSinCobro(projectId, limit = 500) {
 export async function listPendientesDeAsociar(projectId, limit = 500) {
   const { rows } = await query(
     `SELECT id, project_id, stripe_id, status, amount, currency, customer_email, customer_name,
+            customer_stripe_id, metadata,
             EXTRACT(EPOCH FROM stripe_created_at)::bigint AS stripe_created_at,
             conversion_id, conversion_payment_id, lead_id
        FROM stripe_payments

@@ -116,6 +116,8 @@ import { startConsultasCargaScheduler } from './jobs/consultasCargaScheduler.js'
 import { startCertifexReversionesScheduler } from './jobs/certifexReversionesScheduler.js';
 import { startVigilanteCatalogoScheduler } from './jobs/vigilanteCatalogoScheduler.js';
 import { startLeadSinTocarScheduler } from './jobs/leadSinTocarScheduler.js';
+import { startSuscripcionesPlazosScheduler } from './jobs/suscripcionesPlazosScheduler.js';
+import { startLinksPagoCaducidadScheduler } from './jobs/linksPagoCaducidadScheduler.js';
 import { startCursosPendientesScheduler } from './jobs/cursosPendientesScheduler.js';
 import { startResumenDiarioScheduler } from './jobs/resumenDiarioScheduler.js';
 import { startReporteSemanalScheduler } from './jobs/reporteSemanalScheduler.js';
@@ -126,8 +128,11 @@ import { startMcpVigilanciaScheduler } from './jobs/mcpVigilanciaScheduler.js';
 import tasksModule from './modules/tasks/index.js';
 import { startTasksDailySummaryScheduler } from './jobs/tasksDailySummaryJob.js';
 import { startTareasResumenScheduler } from './jobs/tareasResumenJob.js';
-// Lo que aún no está aprobado para producción: el tablero (#210) y las facturas de colaboradores (#202).
-import { tareasActivas, facturasColaboradorActivas } from './shared/config/soloEnPruebas.js';
+// Lo que aún no está aprobado para producción: el tablero (#210), las facturas de colaboradores (#202),
+// el aviso de entregas sin corregir (#457) y el plugin del CRM en cada Moodle (#406).
+import { tareasActivas, facturasColaboradorActivas, linksPagoActivos } from './shared/config/soloEnPruebas.js';
+// Links de pago (#407, gemela de CRM#680): solo en pruebas también en el servidor, hasta que Diego lo apruebe.
+import linksPagoModule from './modules/links-pago/index.js';
 import { porteroDelWebhook, topeDelEnvio, traducirTope } from './modules/webhook-tokens/portero.js';
 import { MAX_ENVIO_BYTES } from './modules/matriculas/admision.archivos.js';
 
@@ -389,7 +394,10 @@ const MODULES = [
   iaAnalisisModule,
   // El tablero aún no está aprobado para producción: solo en local y /staging.
   ...(tareasActivas() ? [tasksModule] : []),
+  // Links de pago (#407): solo en pruebas también en el servidor, hasta que Diego lo apruebe.
+  ...(linksPagoActivos() ? [linksPagoModule] : []),
 ];
+if (!linksPagoActivos()) logger.info('Modulo SKIP (solo en pruebas): /api/links-pago');
 if (!tareasActivas()) logger.info('Modulo SKIP (solo en pruebas): /api/tasks');
 
 if (!facturasColaboradorActivas()) logger.info('Modulo SKIP (solo en pruebas): /api/facturas-colaborador');
@@ -537,6 +545,8 @@ if (process.env.NODE_ENV !== 'test') {
         startTutorCommissionsScheduler();
         startVigilanteCatalogoScheduler();
         startLeadSinTocarScheduler();
+        // Ventas a plazos: cerrar la suscripción de Stripe al completar el pago (#747).
+        startSuscripcionesPlazosScheduler();
         startFeedbackDia7Scheduler();
         startFacturaAutomaticaScheduler();
         startNovedadesScheduler();
@@ -589,6 +599,15 @@ if (process.env.NODE_ENV !== 'test') {
         arrancar();
       } catch (err) {
         logger.error({ err }, `${nombre}: el trabajo falló al arrancar`);
+      }
+    }
+    // Links de pago (#407, gemela de CRM#680): desactivar en Stripe los que caducan sin
+    // pagar. Solo con los links encendidos (LINKS_PAGO_EN_PRODUCCION); sin interruptor propio.
+    if (linksPagoActivos()) {
+      try {
+        startLinksPagoCaducidadScheduler();
+      } catch (err) {
+        logger.error({ err }, 'Links de pago: la caducidad falló al arrancar');
       }
     }
     if (process.env.MCP_VIGILANCIA_DISABLED !== '1') {
