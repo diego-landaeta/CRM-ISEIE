@@ -53,6 +53,7 @@ export const BETA_ROUTES: readonly string[] = [
   '/set-password',
   '/manual',
   '/soporte',
+  '/incidencias',                   // Incidencias, al lado de Soporte (gemela de CRM#612)
   '/activity',                      // Gestores: actividad
   '/novedades',                     // Lo nuevo de cada versión (2.0.0), con su aviso y su correo
   '/mensajes',                      // Sistema › Mensajes, el chat del equipo (paridad, 2.2.0)

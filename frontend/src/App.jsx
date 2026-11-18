@@ -81,6 +81,7 @@ const ExternalPanelPage = lazy(() => import('./modules/external-panels/pages/Ext
 const ManualPage = lazy(() => import('./modules/manual/pages/ManualPage'));
 const PreferencesPage = lazy(() => import('./modules/preferences/pages/PreferencesPage'));
 const SoportePage = lazy(() => import('./modules/soporte/pages/SoportePage'));
+const IncidenciasPage = lazy(() => import('./modules/incidencias/pages/IncidenciasPage'));
 const CommissionsPage = lazy(() => import('./modules/commissions/pages/CommissionsPage'));
 const ExpensesPage = lazy(() => import('./modules/expenses/pages/ExpensesPage'));
 const ProfilePage = lazy(() => import('./shared/pages/ProfilePage'));
@@ -190,6 +191,7 @@ const ROUTE_TITLES = {
   '/ventas/sin-formacion':            'Ventas sin formación',
   '/products/pending':                'Cursos pendientes',
   '/soporte':                         'Soporte',
+  '/incidencias':                     'Incidencias',
   '/conexion/conectores':             'Conectores',
   '/conexion/webhook-transferencias': 'Webhook de transferencias',
   '/conexion/asignacion-leads':       'Asignación de leads',
@@ -337,6 +339,8 @@ function App() {
           {/* #216: enseñaba datos de ejemplo de Search Console. Hasta que esté conectado (#17). */}
           <Route path="/seo" element={<AunNoConectadoPage titulo="Tráfico orgánico" />} />
           <Route path="/soporte" element={<SoportePage />} />
+          {/* Incidencias (gemela de CRM#612), al lado de Soporte. */}
+          <Route path="/incidencias" element={<IncidenciasPage />} />
           <Route path="/payroll" element={<PayrollPage />} />
           <Route path="/matriculas" element={<MatriculasPage />} />
           {/* Conexión → MCP y Conectores, como en MultiCRM. Quién puede usar el MCP lo decide el servidor. */}

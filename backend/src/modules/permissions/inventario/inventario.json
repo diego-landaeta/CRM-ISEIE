@@ -5816,6 +5816,184 @@
   "puertas": []
  },
  {
+  "id": "GET /api/incidencias/",
+  "tipo": "ruta",
+  "modulo": "incidencias",
+  "metodo": "GET",
+  "ruta": "/api/incidencias/",
+  "relativa": "GET /",
+  "controlador": "listar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "incidencias.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/incidencias/metricas",
+  "tipo": "ruta",
+  "modulo": "incidencias",
+  "metodo": "GET",
+  "ruta": "/api/incidencias/metricas",
+  "relativa": "GET /metricas",
+  "controlador": "metricas",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "incidencias.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/incidencias/adjuntos/:adjuntoId",
+  "tipo": "ruta",
+  "modulo": "incidencias",
+  "metodo": "GET",
+  "ruta": "/api/incidencias/adjuntos/:adjuntoId",
+  "relativa": "GET /adjuntos/:adjuntoId",
+  "controlador": "descargarAdjunto",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "incidencias.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/incidencias/personas",
+  "tipo": "ruta",
+  "modulo": "incidencias",
+  "metodo": "GET",
+  "ruta": "/api/incidencias/personas",
+  "relativa": "GET /personas",
+  "controlador": "personas",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "incidencias.create",
+     "incidencias.edit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/incidencias/",
+  "tipo": "ruta",
+  "modulo": "incidencias",
+  "metodo": "POST",
+  "ruta": "/api/incidencias/",
+  "relativa": "POST /",
+  "controlador": "crear",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "incidencias.create"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/incidencias/:id",
+  "tipo": "ruta",
+  "modulo": "incidencias",
+  "metodo": "GET",
+  "ruta": "/api/incidencias/:id",
+  "relativa": "GET /:id",
+  "controlador": "porId",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "incidencias.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PATCH /api/incidencias/:id",
+  "tipo": "ruta",
+  "modulo": "incidencias",
+  "metodo": "PATCH",
+  "ruta": "/api/incidencias/:id",
+  "relativa": "PATCH /:id",
+  "controlador": "editar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "incidencias.edit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/incidencias/:id/adjuntos",
+  "tipo": "ruta",
+  "modulo": "incidencias",
+  "metodo": "POST",
+  "ruta": "/api/incidencias/:id/adjuntos",
+  "relativa": "POST /:id/adjuntos",
+  "controlador": "subirAdjunto",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "incidencias.create",
+     "incidencias.edit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/informe-mensual/descarga/:issuerId/:periodo",
   "tipo": "ruta",
   "modulo": "informe-mensual",

@@ -9,7 +9,7 @@ import {
   ChatText,
   Receipt, Coins, Wrench, ShoppingBag, ChatCircleText, Wallet, Bank, Shuffle, Clock, GitMerge, CopySimple,
   UsersThree, CloudArrowDown,
-  GraduationCap, Warning, Certificate, ClipboardText, ChatsCircle, Kanban, ClockCounterClockwise, SlidersHorizontal, Key, Timer } from '@phosphor-icons/react';
+  GraduationCap, Warning, Certificate, ClipboardText, ChatsCircle, Kanban, ClockCounterClockwise, SlidersHorizontal, Key, Timer, WarningDiamond } from '@phosphor-icons/react';
 import { abrirPedirAcceso } from '@/modules/soporte/lib/accesos';
 import { useAuth } from '@/contexts/AuthContext';
 import { rolesDe } from '@/shared/lib/roles';
@@ -268,6 +268,9 @@ export const NAV_SECTIONS = [
       // El tutor entra aqui: es donde cambia su contraseña.
       { to: '/preferencias',    label: 'Mis preferencias', icon: Sliders, roles: ['superadmin', 'admin', 'gestor', 'tutor', 'colaborador', 'tutor_redactor'] },
       { to: '/soporte',        label: 'Soporte',          icon: Headset },
+      // Incidencias (gemela de CRM#612), al lado de Soporte. Los mismos roles
+      // que traen `incidencias.view` de serie (la gestora ve las suyas).
+      { to: '/incidencias',    label: 'Incidencias',      icon: WarningDiamond, roles: ['superadmin', 'admin', 'gestor', 'soporte'], permiso: 'incidencias.view' },
       { to: '/manual',         label: 'Manual del CRM',   icon: BookOpen },
       { to: '/status',         label: 'Status',           icon: Pulse },
       // El registro (#111), como en MultiCRM: quién hizo qué y, en «todos», los sucesos

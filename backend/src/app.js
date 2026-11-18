@@ -87,6 +87,8 @@ import mcpModule from './modules/mcp/index.js';
 // cursos pendientes, «qué ha pasado hoy», «Pregunta a tus datos» y los pedidos de WooCommerce.
 import moodleModule from './modules/moodle/index.js';
 import soporteModule from './modules/soporte/index.js';
+// Incidencias (gemela de CRM#612): al lado de Soporte, sobre todo las de capa 8.
+import incidenciasModule from './modules/incidencias/index.js';
 import actividadModule from './modules/actividad/index.js';
 import cursosPendientesModule from './modules/cursos-pendientes/index.js';
 import iaAnalisisModule from './modules/ia-analisis/index.js';
@@ -386,6 +388,8 @@ const MODULES = [
   moodleModule,
   // Soporte (#38): los tickets se guardan en el servidor y llegan a alguien.
   soporteModule,
+  // Incidencias (gemela de CRM#612), al lado de Soporte.
+  incidenciasModule,
   // «Qué ha pasado hoy», para cada gestora con lo suyo (#13).
   actividadModule,
   // Cursos pendientes para las tutoras, por campus (#336).
