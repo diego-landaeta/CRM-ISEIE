@@ -30,6 +30,8 @@ const { default: pool } = await import('../src/shared/config/db.js');
 const conversionModel = await import('../src/modules/conversions/conversion.model.js');
 const fa = await import('../src/modules/factura-automatica/factura-automatica.service.js');
 const df = await import('../src/modules/factura-automatica/datos-fiscales.js');
+const invModel = await import('../src/modules/invoices/invoices.model.js');
+const invService = await import('../src/modules/invoices/invoices.service.js');
 
 const MARCA = `F764_${Date.now().toString(36)}`;
 const SERIE = `T${crypto.randomBytes(3).toString('hex').toUpperCase()}`.slice(0, 7);
@@ -283,5 +285,111 @@ describe('#452 · del pago a la factura', () => {
     } finally {
       delete process.env.FACTURA_AUTOMATICA_INTENTOS;
     }
+  });
+});
+
+/*
+  Probado en /testeo el 18/11: el alumno contestó, la emisión automática se paró
+  por «posible duplicada» (#819) y entonces:
+    · la ficha se quedó sin su NIF (la consulta que lo copia fallaba: «inconsistent
+      types deduced for parameter $7»);
+    · la cola decía «Datos del alumno: sale sola»;
+    · «Generar factura» en la cola la sacaba con la ficha, NIF «—», y ya ni
+      avisaba de la duplicada.
+*/
+describe('CRM#764 · si la automática se para, la cola dice por qué y factura con los datos del alumno', () => {
+  const NIE = 'X1234567L';
+  const LUIS = { ...FORMULARIO, nombre: 'Luis Gómez Ruiz', nif: NIE, email: 'facturas.luis@example.com' };
+
+  it('posible duplicada: la ficha recibe el NIF, la cola dice el motivo y la factura de la cola lleva sus datos', async () => {
+    // Otra factura, de otra persona con ese mismo NIF, por 100 € hoy.
+    await q(`INSERT INTO invoices (project_id, serie, ano, numero, codigo, fecha_emision, cliente_nombre, cliente_nif,
+                                   cliente_direccion, cliente_ciudad, cliente_cp, cliente_pais, items, base_imponible,
+                                   total, estado, tipo)
+             VALUES ($1, $2, 2026, 8002, $3, CURRENT_DATE, 'Otra Persona 764', $4, 'x', 'x', 'x', 'España', '[]',
+                     100, 100, 'emitida', 'normal')`, [proyecto.id, SERIE, `${SERIE}-8002`, NIE]);
+    const v = await venta({ nombre: 'Luis Gómez Ruiz', email: 'luis.764@example.com' }); // ficha sin NIF
+    const pago = await pagar(v, 100);
+    await fa.alCobrar({ conversionId: v.id, paymentId: pago });
+    const r = await fa.responder(enlaceDe(correos[0]), LUIS);
+    expect(r.facturas).toBe(0);
+    const fila = await filaDe(v);
+    expect(fila.estado).toBe('respondido');
+    expect(fila.ultimo_error).toMatch(/^\[POSIBLE_DUPLICADA\] Ya existe la factura/);
+
+    // Sus datos, en la ficha aunque la factura no saliera.
+    const [lead] = await q('SELECT identificacion_fiscal, ciudad_fiscal FROM leads WHERE id = $1', [v.lead_id]);
+    expect(lead).toEqual({ identificacion_fiscal: NIE, ciudad_fiscal: 'Valencia' });
+
+    // La cola: el motivo real, no «sale sola».
+    const estado = await invService.getFacturacionAlDia(proyecto.id);
+    const enCola = estado.cola.find((c) => Number(c.payment_id) === Number(pago));
+    expect(enCola.motivo).toBe('posible duplicada');
+    expect(enCola.datos_fiscales).toMatchObject({ estado: 'respondido', sale_sola: false, motivo_codigo: 'POSIBLE_DUPLICADA' });
+
+    // «Generar factura» sin confirmar: avisa de la duplicada (con el NIF del alumno).
+    await expect(invService.generarFacturaDePago(proyecto.id, pago, null, { forzar: true }))
+      .rejects.toMatchObject({ code: 'POSIBLE_DUPLICADA' });
+    expect(await facturasDe(v)).toHaveLength(0);
+
+    // Confirmada a mano: sale con lo que dio el alumno, y no «salió sola».
+    const inv = await invService.generarFacturaDePago(proyecto.id, pago, null, { forzar: true, confirmarDuplicada: true });
+    expect(inv).toMatchObject({
+      payment_id: pago, cliente_nombre: 'Luis Gómez Ruiz', cliente_nif: NIE, cliente_direccion: 'Avenida del Puerto 22',
+      cliente_cp: '46021', cliente_ciudad: 'Valencia', cliente_email: LUIS.email,
+    });
+    expect(inv.datos_fiscales_id).toBeNull();
+  });
+
+  it('«Cobrada» en una proforma sin NIF y la factura desde la ficha de la venta: con los datos del alumno', async () => {
+    const v = await venta({ nombre: 'Marta Ruiz Gil', email: 'marta.764@example.com' }, 250);
+    const [prof] = await q(
+      `INSERT INTO invoices (project_id, conversion_id, lead_id, serie, ano, numero, codigo, fecha_emision, cliente_nombre,
+                             cliente_nif, cliente_direccion, cliente_ciudad, cliente_cp, cliente_pais, items,
+                             base_imponible, total, estado, tipo)
+       VALUES ($1, $2, $3, $4, 2026, 8003, $5, CURRENT_DATE, 'Marta', '—', '—', '—', '—', 'España', '[]', 250, 250,
+               'emitida', 'proforma') RETURNING id`,
+      [proyecto.id, v.id, v.lead_id, SERIE, `${SERIE}-8003`]);
+    await q(
+      `INSERT INTO factura_datos_fiscales (conversion_id, project_id, lead_id, estado, origen_datos, caduca_at,
+                                           cliente_tipo, nombre, nif, direccion, codigo_postal, ciudad, pais, email)
+       VALUES ($1, $2, $3, 'respondido', 'formulario', NOW() + INTERVAL '7 days', 'particular', 'Marta Ruiz Gil',
+               '00000001R', 'Calle Nueva 5', '08001', 'Barcelona', 'España', 'marta.f@example.com')`,
+      [v.id, proyecto.id, v.lead_id]);
+
+    // La ficha de la venta (el botón «Emitir factura»): los del alumno.
+    expect(await invModel.getLeadFiscalData(v.lead_id, { conversionId: v.id })).toMatchObject({
+      nombre: 'Marta Ruiz Gil', identificacion_fiscal: '00000001R', ciudad_fiscal: 'Barcelona', datos_del_alumno: true,
+    });
+    // Sin la venta, la ficha tal cual.
+    expect((await invModel.getLeadFiscalData(v.lead_id)).identificacion_fiscal).toBeNull();
+
+    // La proforma pasa a factura con el mismo número y los datos del alumno.
+    const pago = await pagar(v, 250);
+    const inv = await invModel.emitirFacturaDePago(v.id, { paymentId: pago, importe: 250 }, null);
+    expect(inv.id).toBe(prof.id);
+    expect(inv).toMatchObject({
+      tipo: 'normal', codigo: `${SERIE}-8003`, cliente_nombre: 'Marta Ruiz Gil', cliente_nif: '00000001R',
+      cliente_ciudad: 'Barcelona', cliente_cp: '08001',
+    });
+  });
+
+  it('una proforma con el NIF puesto por una persona lo conserva', async () => {
+    const v = await venta({ nombre: 'Pablo Sanz Mora', email: 'pablo.764@example.com' }, 260);
+    await q(
+      `INSERT INTO invoices (project_id, conversion_id, lead_id, serie, ano, numero, codigo, fecha_emision, cliente_nombre,
+                             cliente_nif, cliente_direccion, cliente_ciudad, cliente_cp, cliente_pais, items,
+                             base_imponible, total, estado, tipo)
+       VALUES ($1, $2, $3, $4, 2026, 8004, $5, CURRENT_DATE, 'Empresa del Pablo SL', 'B12345674', 'Polígono 1',
+               'Sevilla', '41001', 'España', '[]', 260, 260, 'emitida', 'proforma')`,
+      [proyecto.id, v.id, v.lead_id, SERIE, `${SERIE}-8004`]);
+    await q(
+      `INSERT INTO factura_datos_fiscales (conversion_id, project_id, lead_id, estado, origen_datos, caduca_at,
+                                           cliente_tipo, nombre, nif, direccion, codigo_postal, ciudad, pais, email)
+       VALUES ($1, $2, $3, 'respondido', 'formulario', NOW() + INTERVAL '7 days', 'particular', 'Pablo Sanz Mora',
+               '00000002W', 'Calle Otra 9', '28001', 'Madrid', 'España', 'pablo.f@example.com')`,
+      [v.id, proyecto.id, v.lead_id]);
+    const inv = await invModel.emitirFacturaDePago(v.id, { paymentId: await pagar(v, 260), importe: 260 }, null);
+    expect(inv).toMatchObject({ tipo: 'normal', cliente_nombre: 'Empresa del Pablo SL', cliente_nif: 'B12345674' });
   });
 });

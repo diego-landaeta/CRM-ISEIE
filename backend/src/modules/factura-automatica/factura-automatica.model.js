@@ -44,6 +44,26 @@ export async function deLaVenta(conversionId) {
   return rows[0] || null;
 }
 
+/**
+ * Los datos fiscales con los que se factura la venta, si ya los hay: los que
+ * contestó el alumno o los de su ficha validados el día 7. Null si no.
+ *
+ * Es la fuente de TODAS las facturas de la venta, salgan solas o las emita una
+ * persona (la cola, «Emitir hasta», «Cobrada» en una proforma). Antes solo la
+ * usaba la emisión automática: si esta se paraba (posible duplicada, pausa…),
+ * la factura que se emitía a mano desde la cola salía con la ficha (CRM#764,
+ * 18/11: NIF «—» aunque el alumno lo había dado).
+ */
+export async function datosParaFacturar(conversionId) {
+  if (!conversionId) return null;
+  const { rows } = await query(
+    `SELECT * FROM factura_datos_fiscales
+      WHERE conversion_id = $1 AND estado IN ('respondido', 'ficha') AND nif IS NOT NULL
+      ORDER BY id DESC LIMIT 1`,
+    [conversionId]);
+  return rows[0] || null;
+}
+
 export async function porId(id) {
   const { rows } = await query('SELECT * FROM factura_datos_fiscales WHERE id = $1', [id]);
   return rows[0] || null;
@@ -160,10 +180,16 @@ export async function aRevision(id, motivo) {
   return rows[0] || null;
 }
 
-export async function anotarError(id, error) {
+/**
+ * Por qué no salió sola la última vez (null = salió, o no lo intentó). Con su
+ * código delante, «[POSIBLE_DUPLICADA] Ya existe…»: la cola lo lee para decir
+ * el motivo real en vez de «sale sola» (CRM#764, 18/11).
+ */
+export async function anotarError(id, error, codigo = null) {
+  const texto = error ? `${codigo ? `[${codigo}] ` : ''}${String(error)}`.slice(0, 500) : null;
   await query(
     `UPDATE factura_datos_fiscales SET ultimo_error = $2, updated_at = NOW() WHERE id = $1`,
-    [id, error ? String(error).slice(0, 500) : null]);
+    [id, texto]);
 }
 
 /** Enlace nuevo (reenvío): el anterior deja de valer y el plazo vuelve a contar. */
@@ -221,11 +247,15 @@ export async function cobrosSinFactura(conversionId) {
  */
 export async function copiarAFicha(leadId, d) {
   if (!leadId) return;
+  // `$7::text` en los DOS sitios. Sin el cast, Postgres deducía varchar por la
+  // columna y text por la comparación, y la consulta entera fallaba con
+  // «inconsistent types deduced for parameter $7»: la ficha se quedaba sin el
+  // NIF del alumno y lo que facturaba con la ficha salía con «—» (CRM#764, 18/11).
   await query(
     `UPDATE leads
         SET identificacion_fiscal = $2, direccion_fiscal = $3, ciudad_fiscal = $4,
-            codigo_postal_fiscal = $5, pais_fiscal = $6, cliente_tipo = $7,
-            custom_fields = CASE WHEN $7 = 'empresa'
+            codigo_postal_fiscal = $5, pais_fiscal = $6, cliente_tipo = $7::text,
+            custom_fields = CASE WHEN $7::text = 'empresa'
                                  THEN COALESCE(custom_fields, '{}'::jsonb) || jsonb_build_object('razon_social', $8::text)
                                  ELSE custom_fields END,
             updated_at = NOW()
