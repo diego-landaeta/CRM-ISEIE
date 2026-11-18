@@ -1,4 +1,6 @@
 import { query } from '../../shared/config/db.js';
+// Lo cobrado de una venta es la suma de sus pagos (#692), no `importe_pagado`.
+import { COBRADO_DE } from '../conversions/cobrado.js';
 
 // A que proyectos se acota un informe.
 //
@@ -110,8 +112,11 @@ export async function overview({ projectId, projectIds, from, to, asesoraId }) {
     `SELECT
        ${pAses ? `COALESCE(SUM(${PESO()}), 0)::float8` : 'COUNT(*)::int'} as total,
        COALESCE(SUM(importe_total * ${PESO()}), 0)::numeric as ventas_brutas,
-       COALESCE(SUM(importe_pagado * ${PESO()}), 0)::numeric as cobrado,
-       COALESCE(SUM((importe_total - importe_pagado) * ${PESO()}), 0)::numeric as por_cobrar
+       COALESCE(SUM(${COBRADO_DE('conversions')} * ${PESO()}), 0)::numeric as cobrado,
+       -- Venta a venta y nunca por debajo de 0 (#692): una venta cobrada de
+       -- más no resta de lo que deben las demás. Lo de más va aparte.
+       COALESCE(SUM(GREATEST(importe_total - ${COBRADO_DE('conversions')}, 0) * ${PESO()}), 0)::numeric as por_cobrar,
+       COALESCE(SUM(GREATEST(${COBRADO_DE('conversions')} - importe_total, 0) * ${PESO()}), 0)::numeric as cobrado_de_mas
      FROM conversions
      WHERE 1=1 ${pFilter} ${suVenta()}
        AND (${fromParam}::date IS NULL OR fecha_conversion >= ${fromParam}::date)
@@ -125,7 +130,7 @@ export async function overview({ projectId, projectIds, from, to, asesoraId }) {
                     NULLIF(TRIM(regexp_replace(regexp_replace(regexp_replace(producto_contratado, '^[[:space:]]*Producto/servicio:[[:space:]]*servicio[[:space:]]+acad[eé]mico[,;]?[[:space:]]*', '', 'i'), '^[[:space:]]*pago[[:space:]]+(de[[:space:]]+)?(la[[:space:]]+)?(mensualidad|cuota|matr[ií]cula)[^,]*[,]?[[:space:]]*', '', 'i'), '^[[:space:]]*servicio[[:space:]]+acad[eé]mico[[:space:]]*$', '', 'i')), ''), '— sin producto —') as producto,
             ${pAses ? `COALESCE(SUM(${PESO()}), 0)::float8` : 'COUNT(*)::int'} as ventas,
             COALESCE(SUM(importe_total * ${PESO()}), 0)::numeric as total,
-            COALESCE(SUM(importe_pagado * ${PESO()}), 0)::numeric as cobrado
+            COALESCE(SUM(${COBRADO_DE('conversions')} * ${PESO()}), 0)::numeric as cobrado
      FROM conversions
      WHERE 1=1 ${pFilter} ${suVenta()}
        AND (${fromParam}::date IS NULL OR fecha_conversion >= ${fromParam}::date)
@@ -185,7 +190,7 @@ export async function overview({ projectId, projectIds, from, to, asesoraId }) {
        LEFT JOIN LATERAL (
          SELECT ${pAses ? `SUM(${PESO()})::float8` : 'COUNT(*)::int'} AS total,
                 SUM(importe_total * ${PESO()})  AS facturado,
-                SUM(importe_pagado * ${PESO()}) AS cobrado
+                SUM(${COBRADO_DE('conversions')} * ${PESO()}) AS cobrado
            FROM conversions
           WHERE project_id = p.id ${suVenta()}
             AND (${fromParam}::date IS NULL OR fecha_conversion >= ${fromParam}::date)
@@ -661,7 +666,7 @@ export async function resumenMensual({ projectId, projectIds, from, to, asesoraI
        SELECT to_char(date_trunc('month', fecha_conversion), 'YYYY-MM') AS mes,
               COUNT(*)::int AS convertidos,
               COALESCE(SUM(importe_total),0)::numeric AS ventas,
-              COALESCE(SUM(importe_pagado),0)::numeric AS cobrado
+              COALESCE(SUM(${COBRADO_DE('conversions')}),0)::numeric AS cobrado
        FROM conversions ${cSql} GROUP BY 1
      )
      SELECT COALESCE(e.mes, c.mes) AS mes,
@@ -707,11 +712,11 @@ export async function ventasReport({ projectId, projectIds, from, to, asesoraId 
             l.nombre AS cliente,
             c.producto_contratado AS formacion,
             c.importe_total AS venta_total,
-            c.importe_pagado AS cobrado,
-            (c.importe_total - c.importe_pagado) AS pendiente,
+            cob.cobrado,
+            GREATEST(c.importe_total - cob.cobrado, 0) AS pendiente,
             CASE
-              WHEN c.importe_pagado >= c.importe_total THEN 'Pagada'
-              WHEN c.importe_pagado > 0 THEN 'Pago parcial'
+              WHEN cob.cobrado >= c.importe_total THEN 'Pagada'
+              WHEN cob.cobrado > 0 THEN 'Pago parcial'
               ELSE 'Pendiente'
             END AS estado_pago,
             ${PAIS} AS pais,
@@ -720,6 +725,7 @@ export async function ventasReport({ projectId, projectIds, from, to, asesoraId 
             u.nombre AS responsable,
             p.nombre AS proyecto
      FROM conversions c
+     CROSS JOIN LATERAL (SELECT ${COBRADO_DE('c')} AS cobrado) cob
      LEFT JOIN leads l ON l.id = c.lead_id
      -- Se atribuye a la vendedora de la VENTA; si no la tiene, al responsable del lead.
      LEFT JOIN users u ON u.id = COALESCE(c.vendedora_id, l.responsable_id)
@@ -739,8 +745,8 @@ export async function generalReport({ projectId, projectIds, from, to, asesoraId
             ${PAIS} AS pais,
             prod.nombre AS producto_interes, prod.precio AS valor_estimado,
             conv.producto_contratado, conv.importe_total AS venta_total,
-            conv.importe_pagado AS venta_cobrado,
-            (conv.importe_total - conv.importe_pagado) AS venta_pendiente,
+            conv.cobrado AS venta_cobrado,
+            GREATEST(conv.importe_total - conv.cobrado, 0) AS venta_pendiente,
             conv.metodo_pago, conv.fecha_conversion AS fecha_venta,
             COALESCE(uv.nombre, u.nombre) AS responsable, ${ENTRY} AS fecha_entrada
      FROM (SELECT * FROM leads WHERE deleted_at IS NULL) l
@@ -748,7 +754,8 @@ export async function generalReport({ projectId, projectIds, from, to, asesoraId
      LEFT JOIN users u ON u.id = l.responsable_id
      LEFT JOIN projects p ON p.id = l.project_id
      LEFT JOIN LATERAL (
-       SELECT * FROM conversions c WHERE c.lead_id = l.id
+       -- Lo cobrado, de sus pagos (#692). Sin venta, conv es NULL entero.
+       SELECT c.*, ${COBRADO_DE('c')} AS cobrado FROM conversions c WHERE c.lead_id = l.id
        ORDER BY c.fecha_conversion DESC LIMIT 1
      ) conv ON TRUE
      -- Si la venta tiene vendedora propia, ella manda sobre el responsable del lead.
@@ -767,8 +774,8 @@ export async function generalFacturacionReport({ projectId, projectIds, from, to
     `SELECT p.nombre AS proyecto, l.nombre, l.telefono, l.status AS estado,
             prod.nombre AS producto_interes, prod.precio AS valor_estimado,
             conv.producto_contratado, conv.importe_total AS venta_total,
-            conv.importe_pagado AS venta_cobrado,
-            (conv.importe_total - conv.importe_pagado) AS venta_pendiente,
+            conv.cobrado AS venta_cobrado,
+            GREATEST(conv.importe_total - conv.cobrado, 0) AS venta_pendiente,
             conv.fecha_conversion AS fecha_venta,
             COALESCE(fac.num_facturas, 0) AS num_facturas,
             COALESCE(fac.facturado, 0) AS facturado,
@@ -779,7 +786,8 @@ export async function generalFacturacionReport({ projectId, projectIds, from, to
      LEFT JOIN users u ON u.id = l.responsable_id
      LEFT JOIN projects p ON p.id = l.project_id
      LEFT JOIN LATERAL (
-       SELECT * FROM conversions c WHERE c.lead_id = l.id
+       -- Lo cobrado, de sus pagos (#692). Sin venta, conv es NULL entero.
+       SELECT c.*, ${COBRADO_DE('c')} AS cobrado FROM conversions c WHERE c.lead_id = l.id
        ORDER BY c.fecha_conversion DESC LIMIT 1
      ) conv ON TRUE
      LEFT JOIN LATERAL (
@@ -838,7 +846,8 @@ export async function ventasVendedora({ projectId, projectIds, from, to, asesora
               COALESCE(SUM(r.peso), 0)::float8 AS ventas,
               COUNT(DISTINCT c.lead_id)::int AS clientes,
               COALESCE(SUM(c.importe_total * r.peso), 0)::numeric AS total,
-              COALESCE(SUM((c.importe_total - c.importe_pagado) * r.peso), 0)::numeric AS pendiente
+              -- De los pagos y nunca por debajo de 0, venta a venta (#692).
+              COALESCE(SUM(GREATEST(c.importe_total - ${COBRADO_DE('c')}, 0) * r.peso), 0)::numeric AS pendiente
          FROM conversions c
          JOIN conversion_reparto r ON r.conversion_id = c.id
          LEFT JOIN leads l ON l.id = c.lead_id
@@ -885,11 +894,11 @@ export async function ventasPorAsesoraReport({ projectId, projectIds, from, to, 
             ${PAIS} AS pais,
             c.producto_contratado AS formacion,
             c.importe_total AS venta_total,
-            c.importe_pagado AS cobrado,
-            (c.importe_total - c.importe_pagado) AS pendiente,
+            cob.cobrado,
+            GREATEST(c.importe_total - cob.cobrado, 0) AS pendiente,
             CASE
-              WHEN c.importe_pagado >= c.importe_total THEN 'Pagada'
-              WHEN c.importe_pagado > 0 THEN 'Pago parcial'
+              WHEN cob.cobrado >= c.importe_total THEN 'Pagada'
+              WHEN cob.cobrado > 0 THEN 'Pago parcial'
               ELSE 'Pendiente'
             END AS estado_pago,
             c.metodo_pago,
@@ -902,6 +911,7 @@ export async function ventasPorAsesoraReport({ projectId, projectIds, from, to, 
             ${ENTRY}::date AS fecha_entrada,
             p.nombre AS proyecto
        FROM conversions c
+       CROSS JOIN LATERAL (SELECT ${COBRADO_DE('c')} AS cobrado) cob
        LEFT JOIN leads l ON l.id = c.lead_id
        LEFT JOIN users u ON u.id = COALESCE(c.vendedora_id, l.responsable_id)
        LEFT JOIN projects p ON p.id = c.project_id

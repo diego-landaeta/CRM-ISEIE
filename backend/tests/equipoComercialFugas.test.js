@@ -164,7 +164,9 @@ describe('2. Finanzas › Dashboard (GET /api/accounting/dashboard)', () => {
     expect(d.ingresos.total_facturado).toBe(500);
     expect(d.ingresos.total_emitido).toBe(120);
     expect(d.cuentas_por_cobrar.map((c) => Number(c.id))).toEqual([V.L1]);
-    expect(d.cuentas_por_cobrar_resumen).toMatchObject({ num: 1, total: 500 });
+    // Lo pendiente sale de sus pagos (gemela de CRM#877): 500 de venta y un pago de 100.
+    // Antes salía 500 porque leía `importe_pagado` (0), no los pagos.
+    expect(d.cuentas_por_cobrar_resumen).toMatchObject({ num: 1, total: 400 });
     expect(d.egresos).toMatchObject({ total: 0, num_egresos: 0, por_categoria: [] });
     expect(d.balance).toBeNull();
     expect(d.solo_administracion).toEqual(['egresos', 'balance']);
