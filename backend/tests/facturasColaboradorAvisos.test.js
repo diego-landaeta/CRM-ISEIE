@@ -329,7 +329,9 @@ describe('resumen diario «Faltan facturas por pagar» (Diego 04/11)', () => {
     await resumenPorPagar({ ahora: new Date('2026-11-07T09:00:00Z') });
     expect(correosA(CORREO_A)).toHaveLength(0);
     expect(await resumenesDeA('2026-11-07')).toHaveLength(0);
+    // Y se deja como estaba: sin pagar, y sin validar las que se validaron solo para esto.
     await q('UPDATE facturas_colaborador SET pagada_at = NULL WHERE issuer_id = $1', [E.A.id]);
+    await q('UPDATE facturas_colaborador SET validada_at = NULL WHERE issuer_id = $1 AND validada_at = subida_at', [E.A.id]);
   });
 
   it('el día se cuenta en Madrid', () => {
