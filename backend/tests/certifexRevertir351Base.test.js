@@ -4,9 +4,9 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 /**
- * «Revertir» (#351): la migración 297 y el registro en el CRM, contra la base.
+ * «Revertir» (#351): la migración 300 y el registro en el CRM, contra la base.
  *
- *  · la 297 se aplica y se puede pasar otra vez;
+ *  · la 300 se aplica y se puede pasar otra vez;
  *  · no admite una reversión sin motivo, sin quién o sin campus;
  *  · un número solo se apunta una vez: la segunda no lo duplica ni cambia lo apuntado;
  *  · de varias reversiones de una matrícula (se reemitió y se volvió a revertir), vale la
@@ -21,13 +21,13 @@ const AQUI = path.dirname(fileURLToPath(import.meta.url));
 const { default: pool } = await import('../src/shared/config/db.js');
 const model = await import('../src/modules/certifex/certifex.model.js');
 
-const SQL_297 = fs.readFileSync(path.join(AQUI, '../migrations/297_certifex_reversiones.sql'), 'utf8');
+const SQL_300 = fs.readFileSync(path.join(AQUI, '../migrations/300_certifex_reversiones.sql'), 'utf8');
 // Números y matrículas únicos por ejecución, para no chocar con nada (ni con otra ejecución a la vez).
 const MARCA = Date.now().toString(36).toUpperCase().slice(-4).padStart(4, 'X');
 const EXP = (n) => `ZPRUE-2026-00000${n}-${MARCA}`;
 const MATRICULA = 9_000_000_000 + (Date.now() % 1_000_000);
 
-beforeAll(async () => { await pool.query(SQL_297); });
+beforeAll(async () => { await pool.query(SQL_300); });
 afterAll(async () => {
   try { await pool.query('DELETE FROM certifex_reversiones WHERE nexpediente LIKE $1', [`ZPRUE-2026-%-${MARCA}`]); } catch { /* sin la tabla */ }
   await pool.end();
@@ -38,10 +38,10 @@ const base = (extra = {}) => ({
   motivo: 'Con lo de Moodle', revertidoPor: null, revertidoPorEmail: 'ana@prueba.test', revertidoEn: '2026-11-13T09:30:00.000Z', ...extra,
 });
 
-describe('la migración 297', () => {
+describe('la migración 300', () => {
   it('se puede pasar dos veces más sin error', async () => {
-    await pool.query(SQL_297);
-    await pool.query(SQL_297);
+    await pool.query(SQL_300);
+    await pool.query(SQL_300);
     expect(await model.tablaReversionesExiste()).toBe(true);
   });
 
@@ -60,7 +60,7 @@ describe('la migración 297', () => {
     const { rows: hay } = await pool.query(`SELECT 1 FROM pg_roles WHERE rolname = 'crm_iseie_user'`);
     if (!hay.length) await pool.query('CREATE ROLE crm_iseie_user NOLOGIN');
     try {
-      await pool.query(SQL_297);
+      await pool.query(SQL_300);
       const { rows } = await pool.query(
         `SELECT has_table_privilege('crm_iseie_user', 'certifex_reversiones', 'SELECT, INSERT, UPDATE, DELETE') AS tabla,
                 has_sequence_privilege('crm_iseie_user', 'certifex_reversiones_id_seq', 'USAGE') AS secuencia`);
