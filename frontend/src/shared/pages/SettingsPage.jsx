@@ -69,13 +69,34 @@ const INTEGRATIONS = [
 const comoSeLlama = (u) =>
   (u?.gestor_colaboraciones ? 'colaboraciones' : u?.role);
 
+// Pestañas que piden un permiso para leerse (gemela de CRM#880). Sin él, el
+// servidor contesta 403: Usuarios y Disponibilidad leen `/users*` (users.view)
+// y APIs globales lee `/credentials` (credentials.view). Antes se pintaban
+// igual, y una gestora abría Configuración en Usuarios con tres peticiones
+// fallidas detrás (`users`, `users/brevo-bloqueos`, `users/availability`), o
+// veía las APIs «sin configurar» con un «Configurar» que acababa en 403.
+// Las que no salen aquí no piden permiso para leerse.
+export const PERMISO_DE_PESTANA = {
+  users: 'users.view',
+  availability: 'users.view',
+  integrations: 'credentials.view',
+};
+
+// Adónde va quien no puede abrir Usuarios: Seguridad no pide nada al servidor.
+const PESTANA_SIN_PERMISO = 'security';
+
 export default function SettingsPage() {
   const { user } = useAuth();
-  const [tab, setTab] = useState('users');
+  const { can } = usePermission();
+  const permitida = (id) => !PERMISO_DE_PESTANA[id] || can(PERMISO_DE_PESTANA[id]);
+  const nav = NAV.filter((item) => !item.id || permitida(item.id));
+  const [elegida, setTab] = useState('users');
+  // Sin el permiso de la pestaña elegida (la de entrada es Usuarios), Seguridad.
+  // Se calcula en cada pintado: si el mapa de permisos llega un instante
+  // después, se pasa sola a Usuarios.
+  const tab = permitida(elegida) ? elegida : PESTANA_SIN_PERMISO;
 
   const isAdmin = user?.role === 'superadmin' || user?.role === 'admin';
-
-  const activeNav = NAV.find((n) => n.id === tab) || NAV[0];
 
   return (
     <div className="space-y-6">
@@ -103,7 +124,7 @@ export default function SettingsPage() {
           className="rounded-2xl border border-border bg-card p-2 lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto"
         >
           <div className="flex lg:flex-col gap-1 overflow-x-auto lg:overflow-visible">
-            {NAV.map((item) => {
+            {nav.map((item) => {
               const Icon = item.icon;
               const isActive = item.id === tab;
 

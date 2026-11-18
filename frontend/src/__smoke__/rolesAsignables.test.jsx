@@ -13,7 +13,8 @@ import { MemoryRouter } from 'react-router-dom';
  * NO_LO_TIENES, se dice qué rol quitar.
  */
 
-const ADMIN = { isAuthenticated: true, loading: false, projects: [], user: { id: 1, role: 'admin', roles_extra: [] } };
+// Sin users.view la pestaña Usuarios no sale (gemela de CRM#880); el admin la trae.
+const ADMIN = { isAuthenticated: true, loading: false, projects: [], user: { id: 1, role: 'admin', roles_extra: [] }, permissions: { 'users.view': true } };
 const si = { puede: true, faltan: [], cuantos: 0 };
 const no = { puede: false, faltan: ['Recuperar prospectos borrados', 'Forma de los avisos', 'Ver las credenciales'], cuantos: 6 };
 const LISTA = ['superadmin', 'admin', 'gestor', 'soporte', 'project_manager', 'tutor', 'colaborador'].map((rol) => ({
