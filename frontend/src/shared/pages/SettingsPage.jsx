@@ -69,9 +69,27 @@ const INTEGRATIONS = [
 const comoSeLlama = (u) =>
   (u?.gestor_colaboraciones ? 'colaboraciones' : u?.role);
 
+// Pestañas que piden un permiso para leerse (gemela de CRM#880, QA de /testeo
+// del 18/11/2026). Sin él, el servidor contesta 403: Usuarios y Disponibilidad
+// leen `/users*` (users.view) y APIs globales lee `/credentials`
+// (credentials.view). Antes se pintaban igual, y una gestora veía tres
+// peticiones fallidas detrás del aviso de Usuarios. Las que no salen aquí no
+// piden permiso para leerse.
+export const PERMISO_DE_PESTANA = {
+  users: 'users.view',
+  availability: 'users.view',
+  integrations: 'credentials.view',
+};
+
 export default function SettingsPage() {
   const { user } = useAuth();
-  const [tab, setTab] = useState('users');
+  const { can } = usePermission();
+  const permitida = (id) => !PERMISO_DE_PESTANA[id] || can(PERMISO_DE_PESTANA[id]);
+  const nav = NAV.filter((item) => !item.id || permitida(item.id));
+  const [elegida, setTab] = useState('users');
+  // Sin el permiso de la que se abre de serie (Usuarios), la primera que sí
+  // puede leer; Seguridad, la suya, siempre.
+  const tab = permitida(elegida) ? elegida : (nav.find((n) => n.embedded)?.id || 'security');
 
   const isAdmin = user?.role === 'superadmin' || user?.role === 'admin';
 
@@ -103,7 +121,7 @@ export default function SettingsPage() {
           className="rounded-2xl border border-border bg-card p-2 lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto"
         >
           <div className="flex lg:flex-col gap-1 overflow-x-auto lg:overflow-visible">
-            {NAV.map((item) => {
+            {nav.map((item) => {
               const Icon = item.icon;
               const isActive = item.id === tab;
 
