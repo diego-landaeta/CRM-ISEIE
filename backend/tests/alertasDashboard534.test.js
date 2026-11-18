@@ -21,16 +21,18 @@ let proyecto;
 let gestora;
 
 async function lead(n, { responsable = null, status = 'nuevo', diasQuieto = 0, borrado = false, hace = 0 } = {}) {
+  // Quieto: sin interacciones y sin cambios desde hace `diasQuieto` días. Las
+  // fechas van en el INSERT y no en un UPDATE después: en ISEIE el disparador
+  // `set_updated_at` (migración 001) pone `updated_at = NOW()` en cada UPDATE.
   const l = await uno(
-    `INSERT INTO leads (project_id, nombre, email, responsable_id, status, custom_fields, fecha_solicitud)
-     VALUES ($1, $2, $3, $4, $5, '{}', NOW() - make_interval(days => $6::int)) RETURNING id`,
-    [proyecto.id, `${MARCA} ${n}`, `${n}@${MARCA.toLowerCase()}.test`, responsable, status, hace]
+    `INSERT INTO leads (project_id, nombre, email, responsable_id, status, custom_fields, fecha_solicitud,
+                        created_at, updated_at, deleted_at)
+     VALUES ($1, $2, $3, $4, $5, '{}', NOW() - make_interval(days => $6::int),
+             NOW() - make_interval(days => $7::int), NOW() - make_interval(days => $7::int),
+             CASE WHEN $8::boolean THEN NOW() END)
+     RETURNING id`,
+    [proyecto.id, `${MARCA} ${n}`, `${n}@${MARCA.toLowerCase()}.test`, responsable, status, hace, diasQuieto, borrado]
   );
-  // Quieto: sin interacciones y sin cambios desde hace `diasQuieto` días.
-  await q(`UPDATE leads SET created_at = NOW() - make_interval(days => $2::int),
-                            updated_at = NOW() - make_interval(days => $2::int),
-                            deleted_at = CASE WHEN $3 THEN NOW() END
-            WHERE id = $1`, [l.id, diasQuieto, borrado]);
   return l.id;
 }
 
