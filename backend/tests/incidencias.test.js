@@ -55,17 +55,14 @@ const como = (clave) => ({ Authorization: `Bearer ${T[clave]}` });
  * necesario en la base compartida. No se borra al final: no es nuestro.
  */
 // En el 360 se usa el superadmin del seed y no se borra (certifexDiplomas
-// cuenta los superadmin activos). La base de pruebas de ISEIE no trae ninguno:
-// si falta, se crea uno propio, como hacen las demás pruebas de aquí, y se borra al final.
-let superadminPropio = false;
+// cuenta los superadmin activos). La base de pruebas de ISEIE no trae ninguno, y
+// coger «el primero que haya» cogía a veces el de otra prueba que corre a la vez
+// y lo borra al acabar: el token dejaba de valer a mitad (401/403 a ratos en la
+// CI de staging, 18/11). Aquí se crea siempre uno propio y se borra al final.
 async function superadminDeLaBase() {
-  let u = await one(`SELECT id, email FROM users WHERE role = 'superadmin' AND active ORDER BY id LIMIT 1`);
-  if (!u) {
-    u = await one(
-      `INSERT INTO users (nombre, email, password_hash, role) VALUES ($1, $2, 'x', 'superadmin') RETURNING id, email`,
-      [`${MARCA} superadmin`, `superadmin_${MARCA.toLowerCase()}@test.local`]);
-    superadminPropio = true;
-  }
+  const u = await one(
+    `INSERT INTO users (nombre, email, password_hash, role) VALUES ($1, $2, 'x', 'superadmin') RETURNING id, email`,
+    [`${MARCA} superadmin`, `superadmin_${MARCA.toLowerCase()}@test.local`]);
   U.superadmin = u.id;
   T.superadmin = jwt.sign({ userId: u.id, email: u.email, role: 'superadmin', roles_extra: [] }, process.env.JWT_SECRET, { expiresIn: '1h' });
 }
@@ -115,8 +112,8 @@ beforeAll(async () => {
 }, 60000);
 
 afterAll(async () => {
-  // Las personas que creó esta prueba: el superadmin de la base se queda (el propio, no).
-  const ids = Object.entries(U).filter(([k]) => k !== 'superadmin' || superadminPropio).map(([, id]) => id);
+  // Las personas que creó esta prueba, también su superadmin.
+  const ids = Object.values(U);
   await q('DELETE FROM incidencias WHERE que_paso LIKE $1', [`${MARCA}%`]);
   await q('DELETE FROM user_projects WHERE user_id = ANY($1::int[])', [ids]);
   await q('DELETE FROM users WHERE id = ANY($1::int[])', [ids]);

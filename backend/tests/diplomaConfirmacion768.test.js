@@ -99,10 +99,20 @@ async function pedirUno(c) {
   return tokenDe(r.enlace);
 }
 
+// Quien recibe los avisos de administración del campus. La base de pruebas de
+// ISEIE no trae ningún superadmin ni admin: sin esta persona, «se avisa a
+// administración» dependía de que otra prueba tuviera uno creado en ese momento
+// (falló a ratos en la CI de staging, 18/11).
+let adminDelCampus;
+
 beforeAll(async () => {
   [proyecto] = await q(
     'INSERT INTO projects (nombre, slug, webhook_api_key) VALUES ($1, $2, $3) RETURNING id, nombre',
     [MARCA, MARCA.toLowerCase(), MARCA]);
+  [adminDelCampus] = await q(
+    `INSERT INTO users (nombre, email, password_hash, role) VALUES ($1, $2, 'x', 'admin') RETURNING id`,
+    [`${MARCA} admin`, `admin.${MARCA.toLowerCase()}@test.local`]);
+  await q('INSERT INTO user_projects (user_id, project_id) VALUES ($1, $2)', [adminDelCampus.id, proyecto.id]);
 });
 
 beforeEach(() => {
@@ -120,6 +130,10 @@ afterAll(async () => {
   delete process.env.DIPLOMA_CONFIRMACION_CENTROS;
   await q('DELETE FROM diploma_confirmaciones WHERE centro = $1 OR matricula_id >= $2', [MARCA, BASE]);
   await q('DELETE FROM certifex_solicitudes WHERE centro = $1', [MARCA]);
+  if (adminDelCampus) {
+    await q('DELETE FROM user_projects WHERE user_id = $1', [adminDelCampus.id]);
+    await q('DELETE FROM users WHERE id = $1', [adminDelCampus.id]);
+  }
   if (proyecto) await q('DELETE FROM projects WHERE id = $1', [proyecto.id]);
   await pool.end();
 });
