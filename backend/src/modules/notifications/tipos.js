@@ -111,6 +111,12 @@ export const TIPOS = {
     clase: AVISO, etiqueta: 'Formación terminada sin pedir diploma', agrupa: false,
     descripcion: 'Moodle da la formación por terminada y el alumno aún no ha pedido su diploma',
   },
+  // Confirmación de datos del diploma (#768): a administración del campus, cuando el
+  // alumno confirma o corrige sus datos, vence su plazo o lo corregido no entra en Certifex.
+  diploma_confirmacion: {
+    clase: ACCION, etiqueta: 'Datos del diploma confirmados', agrupa: false,
+    descripcion: 'Un alumno confirma o corrige los datos de su diploma, o vence el plazo para hacerlo',
+  },
   rfc_created: {
     clase: ACCION, etiqueta: 'Solicitud de cambio', agrupa: false,
     descripcion: 'Alguien pide un cambio y hace falta aprobarlo',

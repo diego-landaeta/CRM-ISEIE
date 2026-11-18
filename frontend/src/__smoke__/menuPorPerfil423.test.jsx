@@ -100,6 +100,8 @@ export function menuDe(p, { mapa = legado.mapaDePermisos(p) } = {}) {
  */
 const { cambiosDeMenuPorPerfil } = await import('../../../backend/src/modules/permissions/inventario/cambios-aprobados.js');
 export const CAMBIOS_APROBADOS = cambiosDeMenuPorPerfil();
+// Las entradas que solo cambian de sitio (gemela de CRM#755): `trasladosDeMenu.js`.
+const { aplicarTraslados, TRASLADOS_DE_MENU } = await import('@/shared/components/layout/trasladosDeMenu');
 
 describe('menú por perfil (#423)', () => {
   const ahora = Object.fromEntries(Object.entries(PERFILES).map(([k, p]) => [k, menuDe(p, { mapa: mapaDeAhora(p) })]));
@@ -118,13 +120,31 @@ describe('menú por perfil (#423)', () => {
     it(`${perfil}: el mismo menú que antes, salvo lo aprobado`, () => {
       const antes = new Set(foto[perfil] || []);
       const despues = new Set(ahora[perfil]);
-      const diferencias = [
-        ...[...despues].filter((x) => !antes.has(x)).map((x) => `+ ${x}`),
-        ...[...antes].filter((x) => !despues.has(x)).map((x) => `- ${x}`),
+      // Lo aprobado y los traslados (`trasladosDeMenu.js`) se aplican a la foto, y
+      // lo demás se compara igual.
+      const aprobado = [...(CAMBIOS_APROBADOS[perfil] || [])].map((l) => l.slice(0, 2) + (RENOMBRADAS[l.slice(2)] || l.slice(2)));
+      const conAprobado = new Set(antes);
+      for (const l of aprobado) (l[0] === '+' ? conAprobado.add(l.slice(2)) : conAprobado.delete(l.slice(2)));
+      const esperado = new Set(aplicarTraslados([...conAprobado]));
+      const sinAprobar = [
+        ...[...despues].filter((x) => !esperado.has(x)).map((x) => `+ ${x}`),
+        ...[...esperado].filter((x) => !despues.has(x)).map((x) => `- ${x}`),
       ].sort();
-      expect(diferencias).toEqual([...(CAMBIOS_APROBADOS[perfil] || [])].map((l) => l.slice(0, 2) + (RENOMBRADAS[l.slice(2)] || l.slice(2))).sort());
+      expect(sinAprobar).toEqual([]);
     });
   }
+
+  // Un traslado solo se acepta si NO cambia el acceso: la entrada nueva pide
+  // exactamente los permisos de las viejas, ni uno más ni uno menos.
+  it('cada traslado pide en su entrada nueva los permisos de las viejas, ni uno más', () => {
+    for (const t of TRASLADOS_DE_MENU) {
+      const [seccion, etiqueta] = t.a.split(' › ');
+      const entrada = NAV_SECTIONS.find((s) => s.label === seccion)?.items.find((i) => i.label === etiqueta);
+      expect(entrada, t.a).toBeTruthy();
+      expect(new Set([].concat(entrada.permiso)), t.id).toEqual(new Set(t.de.map((d) => d.permiso)));
+      expect('aprobadoPor' in t, `${t.id}: falta aprobadoPor`).toBe(true);
+    }
+  });
 
   it('la foto de ISEIE: Facturación ya la veían el admin y la gestora con la casilla (allí no estaba el fallo del 360)', () => {
     expect(foto.admin).toContain('Finanzas › Facturación');

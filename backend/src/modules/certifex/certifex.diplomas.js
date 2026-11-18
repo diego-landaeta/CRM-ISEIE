@@ -9,6 +9,7 @@ import { certifex, certifexPuede, recorrer } from './certifex.cliente.js';
 import { alcanceDe, acotar, exigirCentro, exigirExpedientes, NO_ENCONTRADA } from './certifex.alcance.js';
 import { prepararEmision, emitirConPrograma, emitirMatriculas, resultadoBloqueado } from './certifex.emision.js';
 import { conDestinatario } from './certifex.envios.js';
+import { anotarEnvios } from '../diploma-confirmacion/diploma-confirmacion.puerta.js';
 import { conReversiones } from './certifex.revertir.js';
 import { conEdicion, conProgramaCrm } from './certifex.enriquecer.js';
 import { emitidoPorElCrm, revertiblePorEsteCrm } from './certifex.marcas.js';
@@ -389,6 +390,11 @@ export async function avisos(req, res, next) {
     const { nexpedientes } = parsear(avisosSchema, req.body);
     await exigirExpedientes(await alcanceDe(req.user), nexpedientes);
     const data = await certifex('POST', '/avisos', { nexpedientes, aprobadoPor: quien(req) }, { timeoutMs: 120_000 });
+    // Cuándo se le mandó el diploma (#768), en las matrículas con confirmación del alumno.
+    // Solo si el correo de Certifex está encendido: aprobado pero sin salir no es «enviado».
+    if (data?.correoActivo) {
+      await anotarEnvios((data?.resultados ?? []).filter((r) => r?.ok && r?.nexpediente).map((r) => r.nexpediente));
+    }
     logger.info({ userId: req.user.userId, n: nexpedientes.length, correoActivo: data?.correoActivo }, 'Certifex: avisos de diploma aprobados');
     res.json({ success: true, data });
   } catch (err) { next(err); }

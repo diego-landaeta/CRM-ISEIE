@@ -59,6 +59,9 @@ async function fetchWithRetry(fullUrl, fetchOpts, maxRetries = 2) {
       }
       return res;
     } catch (err) {
+      // Cancelada a propósito (AbortController: se cambió de pantalla o de
+      // ámbito): no es un fallo de red y repetirla es pedir lo que ya no se quiere.
+      if (err?.name === 'AbortError' || fetchOpts?.signal?.aborted) throw err;
       // network error (fetch rejected) → también reintentar
       lastError = err;
       if (attempt < maxRetries) {

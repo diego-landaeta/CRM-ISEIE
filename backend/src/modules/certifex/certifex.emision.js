@@ -5,6 +5,7 @@ import { certifex, recorrer } from './certifex.cliente.js';
 import { programasPara, datosDeCandidato, tieneEdicion } from './certifex.programa.js';
 import { alcanceDe, exigirMatriculas } from './certifex.alcance.js';
 import { firmasParaEmitir } from './certifex.firma.js';
+import { bloqueosDeConfirmacion, anotarEmisiones } from '../diploma-confirmacion/diploma-confirmacion.puerta.js';
 
 /**
  * EMITIR CON EL PROGRAMA DEL CRM, desde cualquier pestaña (#272).
@@ -121,6 +122,20 @@ export async function prepararEmision(ids) {
       bloqueadas.set(id, `No se ha emitido: tiene datos revisados a mano y con ellos no sale el programa (${p?.motivo || 'sin motivo'}). Revísalo con «Editar».`);
     }
   }
+  // Los datos confirmados por el alumno (#768). Solo con DIPLOMA_CONFIRMACION_ACTIVA y en
+  // los campus donde esté encendido; apagado, ni una consulta. Como el programa: si la base
+  // no contesta, no se emite nada (saldría sin saber si el alumno confirmó).
+  try {
+    const sinConfirmar = await bloqueosDeConfirmacion(ids, (id) => datos.get(id)?.centro);
+    for (const [id, b] of sinConfirmar) {
+      if (bloqueadas.has(id)) continue;
+      bloqueadas.set(id, b.motivo);
+      codigos.set(id, b.codigo);
+    }
+  } catch (e) {
+    logger.warn({ err: e.message }, 'Certifex: no se pudo mirar la confirmación de datos del alumno');
+    throw new AppError('No se pudo comprobar en el CRM si el alumno confirmó sus datos: no se ha aprobado ni emitido nada. Prueba de nuevo en un momento.', 503, 'CRM_NO_CONTESTA');
+  }
   // La firma del alumno (CRM #349), como el programa: si la base no contesta, no se emite
   // nada (un diploma no se borra, y saldría sin la firma que sí tenía). Con la firma fuera
   // del diploma (FIRMA_EN_DIPLOMA), ni se mira.
@@ -151,7 +166,7 @@ export function resultadoBloqueado(matriculaId, { bloqueadas, codigos = new Map(
  * Devuelve los resultados por matricula y, si la llamada entera fallo, el error tal cual
  * (con su codigo HTTP) para quien quiera relanzarlo.
  */
-export async function emitirConPrograma(emitidaPor, ids, { programas, bloqueadas, codigos = new Map(), firmas = new Map() }) {
+export async function emitirConPrograma(emitidaPor, ids, { datos = null, programas, bloqueadas, codigos = new Map(), firmas = new Map() }) {
   const porId = new Map();
   for (const id of ids) {
     if (bloqueadas.has(id)) porId.set(id, resultadoBloqueado(id, { bloqueadas, codigos }));
@@ -180,6 +195,22 @@ export async function emitirConPrograma(emitidaPor, ids, { programas, bloqueadas
   try {
     const em = await certifex('POST', '/emitir', { items, emitidaPor }, { timeoutMs: 180_000 });
     for (const r of em?.resultados ?? []) porId.set(r.matriculaId, { ...r, ...marca(r) });
+    // Con qué datos salió cada diploma (#768): solo se apunta en las matrículas con
+    // confirmación del alumno, y nunca para la emisión.
+    await anotarEmisiones((em?.resultados ?? []).filter((r) => r.ok && !r.yaExistia && r.nexpediente).map((r) => {
+      const p = programas.get(r.matriculaId);
+      return {
+        matriculaId: r.matriculaId,
+        nexpediente: r.nexpediente,
+        datos: {
+          documento: datos?.get(r.matriculaId)?.dni ?? null,
+          horas: p?.programa?.horas ?? null,
+          formacion: p?.formacion?.nombre ?? null,
+          modulos: p?.programa?.modulos?.length ?? null,
+          emitidaPor,
+        },
+      };
+    }));
     return { porId, error: null };
   } catch (e) {
     return { porId, error: e };
