@@ -25,9 +25,14 @@ import accountingModule from './modules/accounting/index.js';
 import integrationsModule from './modules/integrations/index.js';
 import stripePaymentsModule from './modules/stripe-payments/index.js';
 import invoicesModule from './modules/invoices/index.js';
+// Auditoría de facturación cada 2 horas y pausa de la emisión (#765).
+import facturacionAuditoriaModule from './modules/facturacion-auditoria/index.js';
 // Facturas de colaboradores (#202, como en MultiCRM): solo en pruebas hasta que
 // Diego lo apruebe con FACTURAS_COLABORADOR_EN_PRODUCCION=1.
 import facturasColaboradorModule from './modules/facturas-colaborador/index.js';
+// Registro automático de cobros: PayPal y extractos del banco (#766). Cada parte, con su interruptor.
+import cobrosExternosModule from './modules/cobros-externos/index.js';
+import monitaskModule from './modules/monitask/index.js';
 import { startFacturasColaboradorScheduler } from './jobs/facturasColaboradorJob.js';
 import { startFacturasColaboradorAvisosScheduler } from './jobs/facturasColaboradorAvisosJob.js';
 import widgetModule from './modules/widget/index.js';
@@ -51,6 +56,10 @@ import webhooksSalientesModule from './modules/webhooks-salientes/index.js';
 import asignacionModule from './modules/asignacion/index.js';
 import { registrarActividad } from './shared/middleware/registrarActividad.js';
 import { startWebhooksSalientesScheduler } from './jobs/webhooksSalientesScheduler.js';
+import { startFacturacionAuditoriaScheduler } from './jobs/facturacionAuditoriaJob.js';
+import { startCopiaDiariaScheduler } from './jobs/copiaDiariaJob.js';
+import { startInformeMensualScheduler } from './jobs/informeMensualJob.js';
+import { startBrevoBloqueadosScheduler } from './jobs/brevoBloqueadosScheduler.js';
 import { startAsignacionScheduler } from './jobs/asignacionScheduler.js';
 import projectChannelsModule from './modules/project-channels/index.js';
 import installationModule from './modules/installation/index.js';
@@ -58,11 +67,15 @@ import credentialsModule from './modules/credentials/index.js';
 import dossiersModule from './modules/dossiers/index.js';
 import reportsModule from './modules/reports/index.js';
 import clientErrorsModule from './modules/client-errors/index.js';
+import copiaDiariaModule from './modules/copia-diaria/index.js';
+import informeMensualModule from './modules/informe-mensual/index.js';
 import changeRequestsModule from './modules/change-requests/index.js';
 // El proceso comercial (#87): los pasos, y de ahí la cola del día.
 import procesoModule from './modules/proceso/index.js';
 // «¿Por que has desistido?» (#169) y su panel (#170).
 import feedbackModule from './modules/feedback/index.js';
+// Factura automática con formulario de datos fiscales (#452, gemela de CRM#764): apagada de serie.
+import facturaAutomaticaModule from './modules/factura-automatica/index.js';
 import novedadesModule from './modules/novedades/index.js';
 import certifexModule from './modules/certifex/index.js';
 // Sistema → Registro (#111), como en MultiCRM: quién hizo qué y los sucesos del sistema.
@@ -78,7 +91,10 @@ import actividadModule from './modules/actividad/index.js';
 import cursosPendientesModule from './modules/cursos-pendientes/index.js';
 import iaAnalisisModule from './modules/ia-analisis/index.js';
 import wcWebhook from './modules/woocommerce/wc.webhook.js';
+import githubWebhook from './modules/tasks/tasks.github.webhook.js';
+import { githubTableroActivo } from './modules/tasks/tasks.github.js';
 import { startFeedbackDia7Scheduler } from './jobs/feedbackDia7Scheduler.js';
+import { startFacturaAutomaticaScheduler } from './jobs/facturaAutomaticaScheduler.js';
 import { startNovedadesScheduler } from './jobs/novedadesScheduler.js';
 import convocatoriasModule from './modules/convocatorias/index.js';
 import { startEmailSequenceScheduler } from './jobs/emailSequenceScheduler.js';
@@ -88,6 +104,8 @@ import { startMetaAdsSyncScheduler } from './jobs/metaAdsSyncScheduler.js';
 import { startReminderScheduler } from './jobs/reminderScheduler.js';
 import { startWooCommerceSyncScheduler } from './jobs/wooCommerceSyncScheduler.js';
 import { startStripePaymentsSyncScheduler } from './jobs/stripePaymentsSyncScheduler.js';
+import { startPaypalCobrosSyncScheduler } from './jobs/paypalCobrosSyncScheduler.js';
+import { startMonitaskSyncScheduler } from './jobs/monitaskSyncScheduler.js';
 import { startTutorCommissionsScheduler } from './jobs/tutorCommissionsScheduler.js';
 import { startTutoresCampusScheduler } from './jobs/tutoresCampusScheduler.js';
 import { startConsultasCampusScheduler } from './jobs/consultasCampusScheduler.js';
@@ -150,12 +168,20 @@ app.use('/api/webhook-tokens/receive/:token', porteroDelWebhook, topeDelEnvio,
 // El aviso de WooCommerce (#14) lleva su propio parser, en bruto, para poder comprobar la firma.
 app.use('/api/woocommerce/webhook', wcWebhook);
 
+// El aviso de GitHub (CRM-ISEIE#435): las issues del repositorio, al tablero. Firmado
+// (X-Hub-Signature-256), con su parser en bruto. Solo con el tablero montado y
+// GITHUB_TABLERO_ACTIVO encendido (apagado de serie): si no, 404.
+if (tareasActivas() && githubTableroActivo()) app.use('/api/github/webhook', githubWebhook);
+else logger.info('Rutas SKIP (GITHUB_TABLERO_ACTIVO apagado): /api/github/webhook');
+
 // El aviso de Stripe (CRM#680), igual: en bruto y ANTES del express.json general. La firma
 // se calcula sobre el cuerpo tal cual llega; el express.json de abajo lo convertía en
 // objeto antes de llegar al módulo, el raw() de su ruta ya no hacía nada y la firma se
 // comprobaba contra «[object Object]»: se rechazaban todos los avisos (los cobros solo
 // entraban por el sondeo de cada 5 minutos).
 app.use('/api/stripe-webhook', express.raw({ type: 'application/json', limit: '2mb' }));
+// Igual el de PayPal (#766): la firma se comprueba con el cuerpo tal cual llegó.
+app.use('/api/paypal-webhook', express.raw({ type: 'application/json', limit: '1mb' }));
 
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true, limit: '5mb' }));
@@ -296,9 +322,14 @@ const MODULES = [
   integrationsModule,
   stripePaymentsModule,
   invoicesModule,
+  facturacionAuditoriaModule,
   // Facturas de colaboradores (#202): la lista, el enlace del mes y «Mi factura».
   // Solo en pruebas también en el servidor: en producción ni la API ni la tarea del mes.
   ...(facturasColaboradorActivas() ? [facturasColaboradorModule] : []),
+  // Cobros de PayPal y extractos del banco (#766): cada ruta contesta 404 con su interruptor apagado.
+  cobrosExternosModule,
+  // Monitask (#236): cada ruta contesta 404 con MONITASK_ACTIVO apagado.
+  monitaskModule,
   widgetModule,
   expensesModule,
   accountsPayableModule,
@@ -323,11 +354,16 @@ const MODULES = [
   credentialsModule,
   dossiersModule,
   reportsModule,
+  // El informe mensual por equipo y comercial y el ZIP de facturas para la gestoría (#772).
+  informeMensualModule,
   clientErrorsModule,
+  // La descarga de la copia diaria de la base (enlace firmado; con la copia apagada, 404).
+  copiaDiariaModule,
   changeRequestsModule,
   statusModule,
   procesoModule,
   feedbackModule,
+  facturaAutomaticaModule,
   novedadesModule,
   convocatoriasModule,
   // Certifex: el CRM aprueba y Certifex emite (Matrículas → Certificaciones).
@@ -501,12 +537,26 @@ if (process.env.NODE_ENV !== 'test') {
         startVigilanteCatalogoScheduler();
         startLeadSinTocarScheduler();
         startFeedbackDia7Scheduler();
+        startFacturaAutomaticaScheduler();
         startNovedadesScheduler();
         startResumenDiarioScheduler();
         startReporteSemanalScheduler();
       } catch (err) {
         logger.error({ err }, 'Stripe sync scheduler fallo al arrancar');
       }
+    }
+    // Cobros de PayPal (#766): fuera del bloque de Stripe, con su propio
+    // interruptor (PAYPAL_COBROS_ACTIVO=1); apagado, no arranca.
+    try {
+      startPaypalCobrosSyncScheduler();
+    } catch (err) {
+      logger.error({ err }, 'PayPal: el sondeo de cobros falló al arrancar');
+    }
+    // Monitask (#236): cada noche, solo con MONITASK_ACTIVO=1.
+    try {
+      startMonitaskSyncScheduler();
+    } catch (err) {
+      logger.error({ err }, 'Monitask: la sincronización nocturna falló al arrancar');
     }
     // Seguridad del MCP (#237, desde #194 y #195): fuera del bloque de Stripe
     // a propósito, para que apagar la sincronización de Stripe no la apague.
@@ -558,6 +608,30 @@ if (process.env.NODE_ENV !== 'test') {
       } catch (err) {
         logger.error({ err }, 'Facturas de colaboradores: los avisos a la empresa fallaron al arrancar');
       }
+    }
+    // La auditoría de facturación cada 2 horas (#765). Apagada de serie: FACTURACION_AUDITORIA_ACTIVA.
+    try {
+      startFacturacionAuditoriaScheduler();
+    } catch (err) {
+      logger.error({ err }, 'Auditoría de facturación: falló al arrancar');
+    }
+    // La copia diaria de la base, cifrada y por correo (11/11). Apagada de serie: COPIA_DIARIA_ACTIVA.
+    try {
+      startCopiaDiariaScheduler();
+    } catch (err) {
+      logger.error({ err }, 'Copia diaria de la base: falló al arrancar');
+    }
+    // El informe del mes y las facturas a la gestoría (#772). Apagado de serie: INFORME_MENSUAL_ACTIVO.
+    try {
+      startInformeMensualScheduler();
+    } catch (err) {
+      logger.error({ err }, 'Informe mensual a la gestoría: falló al arrancar');
+    }
+    // Correos del equipo bloqueados en Brevo (17/11). Apagada de serie: BREVO_BLOQUEADOS_ACTIVO.
+    try {
+      startBrevoBloqueadosScheduler();
+    } catch (err) {
+      logger.error({ err }, 'Correos bloqueados en Brevo: la vigilancia falló al arrancar');
     }
     // Los reintentos del webhook de transferencias (se apaga con WEBHOOKS_SALIENTES_DISABLED=1).
     try {

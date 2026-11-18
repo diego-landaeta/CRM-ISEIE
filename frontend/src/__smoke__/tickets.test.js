@@ -90,15 +90,17 @@ describe('los catálogos, que no han cambiado', () => {
     expect(Object.keys(TICKET_SEVERITY)).toEqual(['low', 'medium', 'high', 'critical']);
   });
 
-  it('TICKET_KIND tiene bug/feature/question', () => {
-    expect(Object.keys(TICKET_KIND)).toEqual(['bug', 'feature', 'question']);
+  // 'access' (CRM#820): la petición de acceso. Solo la crea «Pedir acceso o permiso».
+  it('TICKET_KIND tiene bug/feature/question y access', () => {
+    expect(Object.keys(TICKET_KIND)).toEqual(['bug', 'feature', 'question', 'access']);
   });
 
   it('coinciden con lo que acepta el servidor', () => {
     // Si aquí se añadiera un estado que la migración 172 no tiene en su CHECK,
     // la pantalla lo ofrecería y el servidor lo rechazaría con un 500.
     expect(Object.keys(TICKET_STATUS)).toEqual(['open', 'in_review', 'resolved', 'closed']);
-    expect(Object.keys(TICKET_KIND)).toEqual(['bug', 'feature', 'question']);
+    // Y el tipo, con el CHECK de la migración 294 (CRM#820).
+    expect(Object.keys(TICKET_KIND)).toEqual(['bug', 'feature', 'question', 'access']);
   });
 });
 

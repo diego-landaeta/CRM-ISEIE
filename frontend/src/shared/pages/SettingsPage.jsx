@@ -11,6 +11,7 @@ import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 import { useConfirm } from '@/shared/components/ui/useConfirm';
 import usePermission from '@/shared/hooks/usePermission';
+import Select from '@/shared/components/ui/Select';
 import MarcaSection from './MarcaSection';
 import CampusPorEmpresa, { marcarVarios } from '@/shared/components/CampusPorEmpresa';
 import PermisosDePersona from '@/modules/permissions/components/PermisosDePersona';
@@ -20,6 +21,8 @@ import { avisoCambioCorreo, confirmacionCambioCorreo, problemaDeContrasena } fro
 // falta en un solo aviso, Escape cierra y sin autocompletado del navegador.
 import { avisoDeLoQueFalta } from '@/shared/lib/loQueFalta';
 import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
+import BrevoBloqueoAviso from '@/modules/settings/components/BrevoBloqueoAviso';
+import { desbloquearBrevo, listBrevoBloqueos, porPersona, textoDelBloqueo } from '@/shared/lib/brevoBloqueo';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 import { listRolesAsignables, mensajeNoLoTienes, motivoNoAsignable, NOMBRE_ROL, porRol } from '@/shared/lib/rolesAsignables';
@@ -194,6 +197,28 @@ function UsersSection({ isAdmin }) {
   const [loading, setLoading] = useState(true);
   const [showInvite, setShowInvite] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
+  const { can } = usePermission();
+  // Correos que Brevo no entrega (migración 290). Si falla o está apagado, sin
+  // marcas: la lista sigue igual.
+  const [bloqueosBrevo, setBloqueosBrevo] = useState(() => new Map());
+  function cargarBloqueosBrevo() {
+    listBrevoBloqueos()
+      .then((r) => setBloqueosBrevo(porPersona(r.bloqueos)))
+      .catch(() => setBloqueosBrevo(new Map()));
+  }
+  useEffect(() => { cargarBloqueosBrevo(); }, []);
+  async function desbloquearEnBrevo(u) {
+    try {
+      await desbloquearBrevo(u.id);
+      toast({
+        title: 'Desbloqueado en Brevo',
+        description: `Los correos del CRM vuelven a salir hacia ${u.email}. Si el buzón no existe, Brevo lo volverá a bloquear.`,
+      });
+      cargarBloqueosBrevo();
+    } catch (e) {
+      toast({ title: 'No se pudo desbloquear', description: e?.data?.error || e?.message, variant: 'destructive' });
+    }
+  }
 
   async function load() {
     setLoading(true);
@@ -293,6 +318,12 @@ function UsersSection({ isAdmin }) {
                     <span className={`text-[11px] font-semibold ${u.active ? 'text-emerald-600' : 'text-muted-foreground'}`}>
                       {u.active ? 'Activo' : 'Inactivo'}
                     </span>
+                    {bloqueosBrevo.get(u.id) && (
+                      <span className="mt-0.5 flex items-center gap-1 text-[11px] font-semibold text-destructive" title={textoDelBloqueo(bloqueosBrevo.get(u.id))}>
+                        <span className="w-1.5 h-1.5 rounded-full bg-destructive flex-shrink-0" />
+                        Correo bloqueado en Brevo
+                      </span>
+                    )}
                   </td>
                   {isAdmin && (
                     <td className="px-4 py-3 text-right whitespace-nowrap">
@@ -332,6 +363,8 @@ function UsersSection({ isAdmin }) {
           projects={projects || []}
           empresas={esSuperadmin ? empresas : undefined}
           faltaMigracionEmpresas={faltaMigracionEmpresas}
+          bloqueoBrevo={bloqueosBrevo.get(editingUser.id) || null}
+          onDesbloquearBrevo={can('users.brevo_desbloquear') ? () => desbloquearEnBrevo(editingUser) : undefined}
           onClose={() => setEditingUser(null)}
           onSaved={() => { setEditingUser(null); load(); }}
         />
@@ -340,7 +373,7 @@ function UsersSection({ isAdmin }) {
   );
 }
 
-export function EditUserModal({ user, projects, onClose, onSaved, empresas, faltaMigracionEmpresas = false }) {
+export function EditUserModal({ user, projects, onClose, onSaved, empresas, faltaMigracionEmpresas = false, bloqueoBrevo = null, onDesbloquearBrevo }) {
   const { user: me } = useAuth();
   const isSuperadmin = me?.role === 'superadmin';
   const [nombre, setNombre] = useState(user.nombre || '');
@@ -463,6 +496,7 @@ export function EditUserModal({ user, projects, onClose, onSaved, empresas, falt
           </div>
           <button onClick={onClose} className="p-1 rounded hover:bg-muted"><X size={16} weight="bold" /></button>
         </div>
+        {bloqueoBrevo && <BrevoBloqueoAviso bloqueo={bloqueoBrevo} onDesbloquear={onDesbloquearBrevo} />}
         <div className="space-y-3">
           <div>
             <label htmlFor="edit-user-nombre" className="text-xs text-muted-foreground mb-1 block">Nombre</label>
@@ -495,16 +529,24 @@ export function EditUserModal({ user, projects, onClose, onSaved, empresas, falt
             ))}
           </div>
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Rol</label>
-            <select value={role} onChange={(e) => setRole(e.target.value)} className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm">
-              <option value="gestor">Gestor</option>
-              <option value="admin">Admin</option>
-              <option value="soporte">Soporte</option>
-              {/* Tablero de tareas (#210): equipo de desarrollo, solo ve sus Tareas. */}
-              <option value="colaborador">Colaborador</option>
-              {/* CRM-ISEIE#420: hace los cursos y responde en Moodle. */}
-              <option value="tutor_redactor">Tutor redactor</option>
-            </select>
+            <label htmlFor="editar-usuario-rol" className="text-xs text-muted-foreground mb-1 block">Rol</label>
+            {/* El desplegable del CRM, no el del navegador (#106). «Colaborador» es el
+                del tablero de tareas (#210) y «Tutor redactor» el de CRM-ISEIE#420. */}
+            <Select
+              id="editar-usuario-rol"
+              value={role}
+              onChange={setRole}
+              ariaLabel="Rol"
+              options={[
+                { value: 'gestor', label: 'Gestor' },
+                { value: 'admin', label: 'Admin' },
+                { value: 'soporte', label: 'Soporte' },
+                { value: 'colaborador', label: 'Colaborador' },
+                { value: 'tutor_redactor', label: 'Tutor redactor' },
+                // Un rol que no está en la lista (super admin, tutor…): se enseña el suyo, no un hueco.
+                ...(['gestor', 'admin', 'soporte', 'colaborador', 'tutor_redactor'].includes(role) ? [] : [{ value: role, label: NOMBRE_ROL[role] || role }]),
+              ]}
+            />
           </div>
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">Y además es…</label>
@@ -708,13 +750,19 @@ export function InviteUserModal({ projects, onClose, onCreated, empresas, faltaM
           </div>
           <div>
             <label htmlFor="invitar-rol" className="text-xs text-muted-foreground mb-1 block">Rol *</label>
-            <select id="invitar-rol" value={role} onChange={(e) => setRole(e.target.value)} className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm">
-              {ROLES_ALTA.map(([v, texto]) => (
-                <option key={v} value={v} disabled={!!motivoPrincipal(v)}>
-                  {motivoPrincipal(v) ? `${NOMBRE_ROL[v]} (no puedes darlo)` : texto}
-                </option>
-              ))}
-            </select>
+            {/* El desplegable del CRM, no el del navegador (#106). El rol que no se puede
+                dar sale en la lista, desactivado y diciéndolo. */}
+            <Select
+              id="invitar-rol"
+              value={role}
+              onChange={setRole}
+              ariaLabel="Rol *"
+              options={ROLES_ALTA.map(([v, texto]) => ({
+                value: v,
+                label: motivoPrincipal(v) ? `${NOMBRE_ROL[v]} (no puedes darlo)` : texto,
+                disabled: !!motivoPrincipal(v),
+              }))}
+            />
             {/* Los roles que no se pueden dar, con su porqué, a la vista sin abrir la lista. */}
             {ROLES_ALTA.some(([v]) => motivoPrincipal(v)) && (
               <ul className="mt-1 space-y-1 text-[10px] text-muted-foreground">

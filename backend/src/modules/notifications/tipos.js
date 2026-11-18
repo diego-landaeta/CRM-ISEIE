@@ -72,6 +72,17 @@ export const TIPOS = {
     clase: ACCION, etiqueta: 'Ticket de soporte', agrupa: false,
     descripcion: 'Alguien del equipo ha reportado una averia o pedido algo',
   },
+  // CRM#820: alguien pide un alta, un permiso, un campus o Claude. Le llega a
+  // soporte y a los admins del campus que puedan verlo; hay que prepararlo.
+  acceso_pedido: {
+    clase: ACCION, etiqueta: 'Petición de acceso', agrupa: false,
+    descripcion: 'Alguien del equipo pide un alta, un permiso, un campus o Claude',
+  },
+  // Y a quien la pidió, cuando soporte la mueve: en preparación, hecha o rechazada.
+  acceso_respondido: {
+    clase: AVISO, etiqueta: 'Tu petición de acceso', agrupa: false,
+    descripcion: 'Soporte ha movido una petición de acceso tuya',
+  },
   dup_review_pending: {
     clase: ACCION, etiqueta: 'Duplicados por revisar', agrupa: true,
     descripcion: 'Hay fichas esperando en la cola de revisión',
@@ -143,6 +154,21 @@ export const TIPOS = {
     clase: AVISO, etiqueta: 'Factura de colaborador', agrupa: false,
     descripcion: 'Cuando un colaborador sube su factura del mes',
   },
+  // Monitask (#236): la factura por horas de un colaborador no cuadra con
+  // Monitask (pasa del margen). A quien la paga, antes de pagarla.
+  monitask_descuadre: {
+    clase: ACCION, etiqueta: 'Horas que no cuadran con Monitask', agrupa: false,
+    descripcion: 'Cuando las horas de la factura de un colaborador se separan de las de Monitask más del margen',
+  },
+  // La auditoría de facturación (#765): la pausa pide que alguien la resuelva.
+  facturacion_pausada: {
+    clase: ACCION, etiqueta: 'Facturación pausada', agrupa: false,
+    descripcion: 'La auditoría de cada 2 horas ha encontrado un error y ha pausado la emisión de facturas',
+  },
+  facturacion_reanudada: {
+    clase: AVISO, etiqueta: 'Facturación reanudada', agrupa: false,
+    descripcion: 'La auditoría ha salido limpia y se ha reanudado la emisión de facturas',
+  },
   // Cursos pendientes para las tutoras (#336): lo que pide hacer algo va arriba.
   curso_pendiente_asignado: {
     clase: ACCION, etiqueta: 'Curso pendiente asignado', agrupa: false,
@@ -190,6 +216,12 @@ export const TIPOS = {
   carga_desactualizada: {
     clase: ACCION, etiqueta: 'Carga de trabajo sin actualizar', agrupa: false,
     descripcion: 'Llevas más de una semana sin actualizar tu carga de trabajo',
+  },
+  // 17/11/2026: Brevo ha bloqueado el correo de alguien del equipo y no le llega
+  // ningún aviso. Va a superadmins y admins de sus campus, una vez por bloqueo.
+  brevo_bloqueado: {
+    clase: ACCION, etiqueta: 'Correo bloqueado en Brevo', agrupa: false,
+    descripcion: 'A alguien del equipo no le llegan los correos del CRM porque Brevo bloquea su dirección',
   },
   // MCP (#326): un Claude se ha conectado con tu URL y espera a que lo autorices.
   // Si no eres tú, es que la URL se ha colado: hay que rechazarlo.

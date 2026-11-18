@@ -34,6 +34,10 @@ const ReceivablePage = lazy(() => import('./modules/accounting/pages/ReceivableP
 const IntegrationsPage = lazy(() => import('./modules/accounting/pages/IntegrationsPage'));
 const PendienteFacturarPage = lazy(() => import('./modules/accounting/pages/PendienteFacturarPage'));
 const StripePaymentsPage = lazy(() => import('./modules/accounting/pages/StripePaymentsPage'));
+// Cobros de PayPal y extractos del banco (#766).
+const CobrosExternosPage = lazy(() => import('./modules/accounting/pages/CobrosExternosPage'));
+// Equipo › Actividad (#236): lo que registra Monitask y el cotejo con las facturas.
+const MonitaskActividadPage = lazy(() => import('./modules/monitask/pages/MonitaskActividadPage'));
 const WhatsappWidgetPage = lazy(() => import('./modules/widget/pages/WhatsappWidgetPage'));
 // Todo WhatsApp pasa por aqui: el chat, con quien enlaza su numero y sus
 // plantillas. La pantalla del equipo y «Mi WhatsApp» eran del metodo viejo —el
@@ -95,6 +99,8 @@ const ReportsPage = lazy(() => import('./shared/pages/ReportsPage'));
 const PreguntarPage = lazy(() => import('./modules/ia-analisis/pages/PreguntarPage'));
 // El feedback de «¿por que has desistido?» (#169, #170): la encuesta es PUBLICA.
 const FeedbackEncuestaPage = lazy(() => import('./modules/feedback/pages/FeedbackEncuestaPage'));
+// El formulario de datos fiscales de la factura automática (#452): sin sesión, desde el correo.
+const DatosFiscalesPage = lazy(() => import('./modules/factura-automatica/pages/DatosFiscalesPage'));
 const FeedbackPanelPage = lazy(() => import('./modules/feedback/pages/FeedbackPanelPage'));
 const NovedadesPage = lazy(() => import('./modules/novedades/pages/NovedadesPage'));
 const NotificacionesPage = lazy(() => import('./modules/notificaciones/pages/NotificacionesPage'));
@@ -168,6 +174,7 @@ const ROUTE_TITLES = {
   '/accounting/facturas/configuracion':'Configuración de facturación',
   '/accounting/facturas-colaboradores': 'Facturas de colaboradores',
   '/mi-factura':                      'Mi factura',
+  '/equipo/actividad':                'Actividad del equipo',
   '/payroll':                         'Nóminas',
   '/matriculas':                      'Solicitud de admisión',
   '/conexion/mcp':                    'MCP',
@@ -259,6 +266,8 @@ function App() {
         <Route path="/embed/form/:embedId" element={<EmbedFormPage />} />
         {/* Sin sesion: la abre desde el correo quien no compro. */}
         <Route path="/feedback/:token" element={<FeedbackEncuestaPage />} />
+        {/* Sin sesion: el alumno da sus datos para la factura (#452). El enlace es la llave. */}
+        <Route path="/datos-fiscales/:token" element={<DatosFiscalesPage />} />
         {/* El enlace personal del colaborador (#202): sin usuario, el enlace es la llave.
             Si la API no está montada (producción sin aprobar), dice que el enlace no vale. */}
         <Route path="/factura-colaborador/:token" element={<FacturaEnlacePage />} />
@@ -302,6 +311,7 @@ function App() {
           <Route path="/accounting/integrations" element={<IntegrationsPage />} />
           <Route path="/accounting/pendiente-facturar" element={<PendienteFacturarPage />} />
           <Route path="/accounting/pagos-stripe" element={<StripePaymentsPage />} />
+          <Route path="/accounting/cobros-externos" element={<CobrosExternosPage />} />
           <Route path="/accounting/facturas" element={<InvoicesPage />} />
           <Route path="/accounting/facturas/nueva" element={<InvoiceCreatePage />} />
           <Route path="/accounting/facturas/configuracion" element={<InvoicingConfigPage />} />
@@ -310,6 +320,8 @@ function App() {
           <Route path="/accounting/facturas-colaboradores"
             element={<FacturasColaboradoresPage />} />
           <Route path="/mi-factura" element={<MiFacturaPage />} />
+          {/* Monitask (#236): la pantalla dice si el servidor lo tiene apagado (MONITASK_ACTIVO). */}
+          <Route path="/equipo/actividad" element={<ConPermiso permiso="monitask.view"><MonitaskActividadPage /></ConPermiso>} />
           <Route path="/revenue" element={<RevenuePage />} />
           <Route path="/clients" element={<ClientsPage />} />
           <Route path="/clients/:id" element={<ClientDetailPage />} />
