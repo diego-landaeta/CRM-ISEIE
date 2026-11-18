@@ -228,7 +228,7 @@ describe('lo que se lee en cada fila', () => {
     const r = await modelo.listar({ vista: 'general' });
     const f = r.filas.find((x) => x.fuente === 'ficha');
     expect(f.resumen).toBe('Cambió email de «a@b.com» a «c@d.com»');
-    expect(f.enlace).toBe('/crm/leads/7');
+    expect(f.enlace).toBe('/leads/7');
   });
 
   it('una tarea que fallo lo dice, y va marcada como no correcta', async () => {

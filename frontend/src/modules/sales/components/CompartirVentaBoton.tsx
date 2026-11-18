@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { UsersThree, X, CaretRight } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
+import { formatDateNumeric } from '@/shared/lib/format';
 import { toast } from '@/shared/hooks/useToast';
 import DialogoRepartoVenta, { eur, type Reparto } from './DialogoRepartoVenta';
 
@@ -105,7 +106,7 @@ export default function CompartirVentaBoton({ leadId }: { leadId: number }) {
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">{v.producto_contratado || 'Sin producto'}</p>
                       <p className="text-[11px] text-muted-foreground">
-                        {v.fecha_conversion ? new Date(v.fecha_conversion).toLocaleDateString('es-ES') : '--'}
+                        {v.fecha_conversion ? formatDateNumeric(v.fecha_conversion) : '--'}
                         {' · '}{eur(Number(v.importe_total))}
                       </p>
                     </div>

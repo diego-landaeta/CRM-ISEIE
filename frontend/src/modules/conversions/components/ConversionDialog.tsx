@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef, lazy, Suspense, type FormEvent } from 'react';
 import { inputClass } from '@/shared/lib/ui';
+import { hoyEnMadrid, sumarMeses } from '@/shared/lib/fechas';
 import Portal from '@/shared/components/ui/portal';
 import Select from '@/shared/components/ui/Select';
 import Field from '@/shared/components/ui/Field';
@@ -60,10 +61,10 @@ interface Installment {
   fecha_vencimiento: string;
 }
 
+// Sin pasar por la zona del navegador: en Latinoamérica la cuota del día 1
+// salía a finales del mes anterior (#693).
 function addMonths(isoDate: string, months: number): string {
-  const d = new Date(isoDate);
-  d.setMonth(d.getMonth() + months);
-  return d.toISOString().slice(0, 10);
+  return sumarMeses(isoDate, months);
 }
 
 function distributeInstallments(total: number, n: number, fechaInicio: string): Installment[] {
@@ -151,7 +152,7 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
   // Método REAL con el que se cobró la inicial cuando la venta es fraccionada.
   const [metodoInicial, setMetodoInicial] = useState<MetodoPago>('tarjeta');
   const [numCuotas, setNumCuotas] = useState(3);
-  const [fechaPrimeraCuota, setFechaPrimeraCuota] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [fechaPrimeraCuota, setFechaPrimeraCuota] = useState<string>(hoyEnMadrid());
   const [installments, setInstallments] = useState<Installment[]>([]);
   const [installmentsDirty, setInstallmentsDirty] = useState(false);
   const copiedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -169,7 +170,8 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
     importe_pagado: '0',
     metodo_pago: 'tarjeta',
     fecha_compromiso_pago: '',
-    fecha_conversion: new Date().toISOString().slice(0, 10),
+    // El día de Madrid, no el de UTC: a las 00:30 de Madrid salía «ayer» (#693).
+    fecha_conversion: hoyEnMadrid(),
     notas_pago: '',
     iva_pct: '21',
     iva_incluido: true,   // el precio del curso ya es el precio final (IVA incluido)
