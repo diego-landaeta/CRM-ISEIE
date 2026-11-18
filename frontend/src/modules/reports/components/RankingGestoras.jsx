@@ -43,10 +43,12 @@ const eur = (n) => new Intl.NumberFormat('es-ES', {
 const num = (n) => new Intl.NumberFormat('es-ES', { maximumFractionDigits: 1 }).format(Number(n) || 0);
 const pct = (n) => `${new Intl.NumberFormat('es-ES', { maximumFractionDigits: 1 }).format(Number(n) || 0)} %`;
 
+// LO COBRADO, PRIMERO Y DE SERIE (12/11/2026). Diego: «los montos de los
+// rankings de todas las vistas son del monto cobrado». Arrancaba en «Ventas».
 const MEDIDAS = [
+  { clave: 'cobrado', etiqueta: 'Cobrado', fmt: eur },
   { clave: 'ventas', etiqueta: 'Ventas', fmt: num },
   { clave: 'vendido', etiqueta: 'Vendido', fmt: eur },
-  { clave: 'cobrado', etiqueta: 'Cobrado', fmt: eur },
   { clave: 'tasa', etiqueta: 'Tasa de cierre', fmt: pct },
 ];
 
@@ -58,7 +60,7 @@ function corto(nombre) {
 }
 
 export default function RankingGestoras({ asesoras = [], mes }) {
-  const [medida, setMedida] = useState('ventas');
+  const [medida, setMedida] = useState('cobrado');
   const oscuro = usaTemaOscuro();
   const m = MEDIDAS.find((x) => x.clave === medida) || MEDIDAS[0];
 

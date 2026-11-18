@@ -138,6 +138,9 @@ export async function completarDatos(req, res, next) {
 export async function byConversion(req, res, next) {
   try {
     const conversionId = Number(req.params.conversionId);
+    // `?todas=1`: la lista de todas las de la venta (la ficha de la matrícula, 13/11/2026).
+    // La misma guardia de la ruta (campus y, si es gestora, que la venta sea suya).
+    if (req.query.todas === '1') return res.json({ success: true, data: await model.findAllByConversion(conversionId) });
     const inv = await model.findByConversion(conversionId);
     res.json({ success: true, data: inv });
   } catch (e) { next(e); }
@@ -754,7 +757,11 @@ export async function generarDeCola(req, res, next) {
       throw new AppError('Solo quien gestiona la facturacion puede emitir desde la cola', 403, 'FORBIDDEN');
     }
     const inv = await service.generarFacturaDePago(projectId, paymentId, req.user.userId,
-      { forzar: req.body?.forzar === true, personas: await alcanceDeLider(req.user) });
+      {
+        forzar: req.body?.forzar === true, personas: await alcanceDeLider(req.user),
+        // «Emitir igualmente» tras el aviso de posible duplicada (CRM#819).
+        confirmarDuplicada: req.body?.confirmar_duplicada === true,
+      });
     res.json({ success: true, data: inv });
   } catch (err) { next(err); }
 }

@@ -53,7 +53,12 @@ export default function NovedadesPage() {
     traerEnvios(version).then(setEnvios);
   }, [version]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const v = useMemo(() => datos?.versiones.find((x) => x.version === version) || null, [datos, version]);
+  // Una versión sin `grupos` o sin `arreglos` (la 2.2.0 no trae arreglos) se lee
+  // como vacía: antes `v.arreglos.length` tumbaba la pantalla entera («Algo se ha roto»).
+  const v = useMemo(() => {
+    const x = datos?.versiones.find((y) => y.version === version);
+    return x ? { ...x, grupos: x.grupos ?? [], arreglos: x.arreglos ?? [] } : null;
+  }, [datos, version]);
   const total = v ? v.grupos.reduce((s, g) => s + g.items.length, 0) : 0;
   const alEquipo = envios.find((e) => e.alcance === 'equipo');
 

@@ -141,7 +141,7 @@ export async function publicReceive(req, res, next) {
     // La solicitud de admisión (#198): datos, documentos y persona. Ver admision.service.js.
     if (tok.kind === 'matriculas') {
       const r = await recibirAdmision(tok, req.body || {}, req.files || []);
-      return res.status(r.status).json({ success: true, data: r.data });
+      return res.status(r.status).json({ success: r.status < 400, data: r.data });
     }
 
     const mapped = applyMapping(req.body || {}, tok.field_mapping || {});

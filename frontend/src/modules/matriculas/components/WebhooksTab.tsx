@@ -38,6 +38,9 @@ const MATRICULA_TARGETS = [
   { key: 'dni', label: 'DNI / Nº de documento' },
   { key: 'fecha_nacimiento', label: 'Fecha de nacimiento' },
   { key: 'direccion', label: 'Dirección' },
+  // La ciudad y el código postal solo van a los datos fiscales de la ficha (13/11/2026).
+  { key: 'ciudad', label: 'Ciudad' },
+  { key: 'codigo_postal', label: 'Código postal' },
   { key: 'pais', label: 'País' },
   { key: 'estudios', label: 'Estudios' },
   { key: 'curso_solicitado', label: 'Curso solicitado' },
@@ -99,7 +102,7 @@ export default function WebhooksTab({ project }: { project: Project | null | und
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-xs text-muted-foreground">Crea webhooks para recibir solicitudes de admisión desde formularios externos. Cada solicitud crea una matrícula en estado <strong>solicitud_admision</strong>. Dedupe automático por DNI o email.</p>
+        <p className="text-xs text-muted-foreground">Crea webhooks para recibir solicitudes de admisión desde formularios externos. Cada solicitud aparece en esta sección en estado <strong>solicitud_admision</strong>. Dedupe automático por DNI o email.</p>
         <button
           onClick={() => setCreating(true)}
           aria-label="Nuevo webhook"

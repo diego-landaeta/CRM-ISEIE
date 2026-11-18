@@ -92,7 +92,7 @@ function Tarta({ titulo, datos, colores, campoN }) {
   );
 }
 
-export default function DesgloseVentas({ projectId, from, to, responsableId = null }) {
+export default function DesgloseVentas({ projectId, from, to, responsableId = null, paisEntrada = null }) {
   const [data, setData] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [oscuro, setOscuro] = useState(usaTemaOscuro);
@@ -111,12 +111,13 @@ export default function DesgloseVentas({ projectId, from, to, responsableId = nu
     if (from) p.set('from', from);
     if (to) p.set('to', to);
     if (responsableId) p.set('responsableId', String(responsableId));
+    if (paisEntrada) p.set('paisEntrada', paisEntrada);
     client.get(`/ventas/desglose?${p}`)
       .then((r) => { if (vivo) setData(r.success ? r.data : null); })
       .catch(() => { if (vivo) setData(null); })
       .finally(() => { if (vivo) setCargando(false); });
     return () => { vivo = false; };
-  }, [projectId, from, to, responsableId]);
+  }, [projectId, from, to, responsableId, paisEntrada]);
 
   const colores = oscuro ? OSCURO : CLARO;
 

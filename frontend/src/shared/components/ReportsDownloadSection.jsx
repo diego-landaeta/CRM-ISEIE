@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { DownloadSimple, FileXls, FileCsv, CalendarBlank, ChartBar, UsersThree, Receipt, ListChecks, Invoice, Trophy, Eye, X } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
+import { useProjectContext } from '@/contexts/ProjectContext';
+import { nombreDelPais, opcionesDePais } from '@/shared/lib/paises';
 
 const ESTADO = {
   nuevo: 'Nuevo', por_contactar: 'Por contactar', contactado: 'Contactado',
@@ -28,6 +30,7 @@ const REPORTS = [
       { h: 'Proyecto', k: 'proyecto' }, { h: 'Nombre', k: 'nombre' }, { h: 'Teléfono', k: 'telefono' },
       { h: 'Email', k: 'email' }, { h: 'Estado', k: 'estado', t: 'estado' }, { h: 'Producto', k: 'producto' },
       { h: 'Valor estimado', k: 'valor_estimado', t: 'number' }, { h: 'Responsable', k: 'responsable' },
+      { h: 'País de entrada', k: 'pais_entrada', t: 'pais' },
       { h: 'Fecha entrada', k: 'fecha_entrada', t: 'date' },
     ],
   },
@@ -40,6 +43,7 @@ const REPORTS = [
       { h: 'Cobrado €', k: 'cobrado', t: 'number' }, { h: 'Pendiente €', k: 'pendiente', t: 'number' },
       { h: 'Estado pago', k: 'estado_pago' }, { h: 'Estado lead', k: 'estado', t: 'estado' },
       { h: 'Responsable', k: 'responsable' }, { h: 'País', k: 'pais' },
+      { h: 'País de entrada', k: 'pais_entrada', t: 'pais' },
       { h: 'Método', k: 'metodo_pago' }, { h: 'Proyecto', k: 'proyecto' },
     ],
   },
@@ -49,6 +53,7 @@ const REPORTS = [
     cols: [
       { h: 'Proyecto', k: 'proyecto' }, { h: 'Nombre', k: 'nombre' }, { h: 'Teléfono', k: 'telefono' },
       { h: 'Estado', k: 'estado', t: 'estado' }, { h: 'País', k: 'pais' },
+      { h: 'País de entrada', k: 'pais_entrada', t: 'pais' },
       { h: 'Producto interés', k: 'producto_interes' }, { h: 'Valor estimado', k: 'valor_estimado', t: 'number' },
       { h: 'Producto contratado', k: 'producto_contratado' }, { h: 'Venta total', k: 'venta_total', t: 'number' },
       { h: 'Cobrado', k: 'venta_cobrado', t: 'number' }, { h: 'Pendiente', k: 'venta_pendiente', t: 'number' },
@@ -73,6 +78,7 @@ const REPORTS = [
       { h: 'Asesora', k: 'asesora' }, { h: 'Fecha venta', k: 'fecha_venta', t: 'date' },
       { h: 'Cliente', k: 'cliente' }, { h: 'Email', k: 'cliente_email' },
       { h: 'Telefono', k: 'cliente_telefono' }, { h: 'Pais', k: 'pais' },
+      { h: 'País de entrada', k: 'pais_entrada', t: 'pais' },
       { h: 'Formacion', k: 'formacion' }, { h: 'Venta total EUR', k: 'venta_total', t: 'number' },
       { h: 'Cobrado EUR', k: 'cobrado', t: 'number' }, { h: 'Pendiente EUR', k: 'pendiente', t: 'number' },
       { h: 'Estado pago', k: 'estado_pago' }, { h: 'Metodo', k: 'metodo_pago' },
@@ -150,6 +156,7 @@ function scalar(c, row) {
   if (c.t === 'number') { const n = Number(v); return Number.isNaN(n) ? null : n; }
   if (c.t === 'date') return fmtDate(v);
   if (c.t === 'estado') return ESTADO[v] || String(v);
+  if (c.t === 'pais') return nombreDelPais(String(v));
   return String(v);
 }
 
@@ -160,6 +167,7 @@ function csvCell(c, row) {
   const v = row[c.k];
   if (v == null || v === '') return SIN_ASIGNAR.has(c.k) ? 'Sin asignar' : '';
   if (c.t === 'estado') return ESTADO[v] || String(v);
+  if (c.t === 'pais') return nombreDelPais(String(v));
   if (c.t === 'date') return fmtDate(v) || '';
   return String(v);
 }
@@ -169,6 +177,7 @@ function cellText(c, row) {
   const v = row[c.k];
   if (v == null || v === '') return SIN_ASIGNAR.has(c.k) ? 'Sin asignar' : '—';
   if (c.t === 'estado') return ESTADO[v] || String(v);
+  if (c.t === 'pais') return nombreDelPais(String(v));
   if (c.t === 'date') return fmtDate(v) || '—';
   if (c.t === 'number') { const n = Number(v); return Number.isNaN(n) ? String(v) : n.toLocaleString('es-ES'); }
   return String(v);
@@ -186,6 +195,13 @@ export default function ReportsDownloadSection({ projectId, projectName, from: d
   const from = desdeArriba || '';
   const to = hastaArriba || '';
   const [busy, setBusy] = useState(null);
+  // País de entrada (#221): las descargas, solo de un país. Solo sale si algún
+  // campus del ámbito tiene tabla de países.
+  const { projects } = useProjectContext();
+  const [paisEntrada, setPaisEntrada] = useState('');
+  const opcionesPais = opcionesDePais(
+    projectId && projectId > 0 ? (projects || []).filter((x) => x.id === projectId) : projects,
+  );
   const [preview, setPreview] = useState(null); // { report, rows, base }
   const [bajandoTodo, setBajandoTodo] = useState(false);
 
@@ -212,10 +228,12 @@ export default function ReportsDownloadSection({ projectId, projectName, from: d
     if (projectId) p.set('projectId', String(projectId));
     if (dFrom) p.set('from', dFrom);
     if (dTo) p.set('to', dTo);
+    if (paisEntrada) p.set('paisEntrada', paisEntrada);
     const res = await client.get(`/informes/${report.key}?${p.toString()}`);
     const rows = res.data || [];
     const sufijo = dFrom || dTo ? `${dFrom || 'inicio'}_${dTo || 'hoy'}` : 'todo';
-    return { rows, base: `${report.key}-${projectName || 'crm'}-${sufijo}` };
+    const dePais = paisEntrada ? `-${paisEntrada.toLowerCase()}` : '';
+    return { rows, base: `${report.key}-${projectName || 'crm'}${dePais}-${sufijo}` };
   }
 
   async function openPreview(report) {
@@ -270,6 +288,20 @@ export default function ReportsDownloadSection({ projectId, projectName, from: d
             Usan el mismo rango de fechas que has elegido arriba. Descarga en Excel o CSV.
           </p>
         </div>
+        {(opcionesPais.length > 0 || paisEntrada) && (
+          <label className="flex items-center gap-2 text-xs text-muted-foreground">
+            País de entrada
+            <select
+              value={paisEntrada}
+              onChange={(e) => setPaisEntrada(e.target.value)}
+              className="h-9 px-2 rounded-md border border-border bg-card text-sm text-foreground"
+              aria-label="País de entrada de las descargas"
+            >
+              <option value="">Todos</option>
+              {opcionesPais.map((o) => <option key={o.valor} value={o.valor}>{o.etiqueta}</option>)}
+            </select>
+          </label>
+        )}
         <button
           type="button"
           onClick={bajarTodo}

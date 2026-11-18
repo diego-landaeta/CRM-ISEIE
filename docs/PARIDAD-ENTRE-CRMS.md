@@ -7,6 +7,17 @@
 > (escritas aquí con su porqué), **preguntas para Diego** y **pendientes** (se
 > portan, pero no han cabido todavía).
 
+## #362: conjuntos y anuncios de Meta en el conector (16/11/2026)
+
+Entra **a la vez y con el mismo código** en los dos (PR a `staging` en cada
+repo, rama `feat/362-meta-ads-conector`). Herramientas `meta_conjuntos` y
+`meta_anuncios`; categoría en `listar_formaciones`; la sincronización pide
+`created_time` de los conjuntos, el creativo de cada anuncio (URL de destino) y
+el gasto de toda la vida (`date_preset=maximum`), y asocia sola conjunto ↔
+formación por la URL (`origen = 'auto'`; la manual manda). Migración: **257**
+en MultiCRM y **279** en ISEIE (mismo contenido). Pruebas: `metaEnlaces` y
+`metaConjuntosEnClaude`.
+
 ## Estado al 26/10/2026
 
 Comparación de los dos `origin/staging` del 26/10 (MultiCRM `bd6044c3`, ISEIE

@@ -10,8 +10,9 @@ import { MemoryRouter } from 'react-router-dom';
  * vínculos, historial y las acciones según el estado.
  */
 
-const { get } = vi.hoisted(() => ({ get: vi.fn() }));
-vi.mock('@/shared/api/client', () => ({ default: { get, post: vi.fn(), patch: vi.fn() }, API_BASE_URL: '/crm/api' }));
+const { get, patch, openPdf } = vi.hoisted(() => ({ get: vi.fn(), patch: vi.fn(), openPdf: vi.fn() }));
+vi.mock('@/shared/api/client', () => ({ default: { get, post: vi.fn(), patch }, API_BASE_URL: '/crm/api' }));
+vi.mock('@/modules/invoices/api/invoices.api', () => ({ invoicesApi: { openPdf } }));
 vi.mock('@/shared/hooks/useToast', () => ({ toast: vi.fn() }));
 
 import MatriculaDetail from '@/modules/matriculas/components/MatriculaDetail';
@@ -243,5 +244,78 @@ describe('la firma, sobre papel blanco', () => {
     expect(firma.className).toContain('bg-white');
     expect(firma.querySelector('img').className).toContain('object-contain');
     expect(screen.getByRole('button', { name: /Ver DNI/ }).className).not.toContain('bg-white');
+  });
+});
+
+// 13/11/2026: «que esos datos de matriculación se puedan vincular a su gestora y a las facturas».
+describe('la gestora y las facturas, desde la ficha de la matrícula', () => {
+  const abrirCon = (matricula, props) => render(
+    <MemoryRouter><MatriculaDetail matricula={matricula} onClose={() => {}} onChange={() => {}} {...props} /></MemoryRouter>);
+
+  it('las facturas de la venta: número, fecha, importe, estado y su PDF', async () => {
+    const ficha = { ...FICHA, conversion_id: 44 };
+    get.mockImplementation(async (url) => (url.startsWith('/invoices/') ? { success: true, data: [
+      { id: 9, codigo: 'A-2026-0101', tipo: 'normal', estado: 'pagada', fecha_emision: '2026-11-03', total: '250.00', moneda: 'EUR' },
+      { id: 10, codigo: 'A-2026-0090', tipo: 'proforma', estado: 'emitida', fecha_emision: '2026-10-20T00:00:00.000Z', total: '500.00', moneda: 'USD', total_divisa: '540.00' },
+    ] } : { success: true, data: ficha }));
+    openPdf.mockResolvedValue(undefined);
+    abrirCon(ficha, { verFacturas: true });
+    const lista = await screen.findByRole('region', { name: 'Facturas de la venta' });
+    expect(get).toHaveBeenCalledWith('/invoices/by-conversion/44?todas=1');
+    expect(lista.textContent).toContain('A-2026-0101');
+    expect(lista.textContent).toContain('03/11/2026');
+    expect(lista.textContent).toContain('Pagada');
+    expect(lista.textContent).toMatch(/250,00\s*€/);
+    // La proforma, marcada, y en su moneda.
+    expect(lista.textContent).toContain('(proforma)');
+    expect(lista.textContent).toContain('20/10/2026');
+    expect(lista.textContent).toMatch(/540,00/);
+    fireEvent.click(screen.getByRole('button', { name: 'Abrir la factura A-2026-0101' }));
+    expect(openPdf).toHaveBeenCalledWith(9);
+  });
+
+  it('la venta sin facturas lo dice', async () => {
+    const ficha = { ...FICHA, conversion_id: 45 };
+    get.mockImplementation(async (url) => (url.startsWith('/invoices/') ? { success: true, data: [] } : { success: true, data: ficha }));
+    abrirCon(ficha, { verFacturas: true });
+    expect(await screen.findByText('La venta aún no tiene facturas.')).toBeTruthy();
+  });
+
+  it('sin permiso para ver facturas, ni se piden ni se ven', async () => {
+    const ficha = { ...FICHA, conversion_id: 44 };
+    get.mockImplementation(async () => ({ success: true, data: ficha }));
+    abrirCon(ficha, { verFacturas: false });
+    await waitFor(() => expect(get).toHaveBeenCalled());
+    expect(get.mock.calls.some(([url]) => url.startsWith('/invoices/'))).toBe(false);
+    expect(screen.queryByRole('region', { name: 'Facturas de la venta' })).toBeNull();
+  });
+
+  it('«Asignar» la gestora: solo gestoras y admins del campus, con la reasignación de siempre', async () => {
+    const ficha = { ...FICHA, gestora_id: null, gestora_nombre: null, project_id: 5 };
+    get.mockImplementation(async (url) => (url.startsWith('/users') ? { success: true, data: [
+      { id: 7, nombre: 'Lucía', role: 'gestor' }, { id: 8, nombre: 'Un tutor', role: 'tutor' }, { id: 9, nombre: 'Elena', role: 'admin' },
+    ] } : { success: true, data: ficha }));
+    patch.mockResolvedValue({ success: true });
+    abrirCon(ficha, { puedeAsignar: true });
+    expect(screen.getByText('Sin gestora')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Asignar' }));
+    const selector = screen.getByLabelText('Gestora de la ficha');
+    await waitFor(() => expect([...selector.options].map((o) => o.textContent)).toEqual(['Elige una gestora', 'Lucía', 'Elena']));
+    const pedido = get.mock.calls.map(([url]) => url).find((url) => url.startsWith('/users'));
+    expect(new URLSearchParams(pedido.split('?')[1]).get('projectId')).toBe('5');
+    fireEvent.change(selector, { target: { value: '7' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Asignar' }));
+    await waitFor(() => expect(patch).toHaveBeenCalledWith('/leads/3912/reassign', { responsable_id: 7 }));
+  });
+
+  it('con gestora, «Cambiar»; sin permiso o sin ficha, ningún botón', () => {
+    const { unmount } = abrirCon({ ...FICHA, gestora_id: 4 }, { puedeAsignar: true });
+    expect(screen.getByRole('button', { name: 'Cambiar' })).toBeTruthy();
+    unmount();
+    const sinPermiso = abrirCon({ ...FICHA, gestora_id: 4 }, { puedeAsignar: false });
+    expect(screen.queryByRole('button', { name: /^(Cambiar|Asignar)$/ })).toBeNull();
+    sinPermiso.unmount();
+    abrirCon({ ...FICHA, lead_id: null, gestora_id: null, gestora_nombre: null }, { puedeAsignar: true });
+    expect(screen.queryByRole('button', { name: /^(Cambiar|Asignar)$/ })).toBeNull();
   });
 });

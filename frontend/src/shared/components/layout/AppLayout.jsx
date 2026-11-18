@@ -2,6 +2,7 @@ import { useState, useEffect, Suspense, lazy } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Toaster from './Toaster';
+import ErrorBoundary from './ErrorBoundary';
 import { List, X } from '@phosphor-icons/react';
 import { cn } from '@/shared/lib/utils';
 import CommandPalette from '@/shared/components/ui/CommandPalette';
@@ -13,9 +14,10 @@ import BetaDisclaimer from '@/shared/components/ui/BetaDisclaimer';
 import { useAuth } from '@/contexts/AuthContext';
 import { tieneWhatsapp } from '@/shared/lib/roles';
 import EmptyState from '@/shared/components/ui/EmptyState';
-import { LockKey } from '@phosphor-icons/react';
+import { LockKey, Key } from '@phosphor-icons/react';
 import usePermission from '@/shared/hooks/usePermission';
-import { rutaPermitida } from './Sidebar';
+import { rutaPermitida, permisoQueFalta } from './Sidebar';
+import { abrirPedirAcceso } from '@/modules/soporte/lib/accesos';
 
 /**
  * Una pantalla que el menú no le enseña —le falta su permiso— tampoco se abre
@@ -28,12 +30,26 @@ function PantallaConPermiso({ pathname, children }) {
   // Sin el mapa de permisos todavía (al entrar), `can` dice que no a todo: no se
   // decide nada hasta que llegue, o saldría un «No tienes acceso» falso.
   if (!permissions || rutaPermitida(pathname, can)) return children;
+  // CRM#820: en vez de «pídeselo a un administrador» (¿a quién, por dónde?), el
+  // botón pide ESE permiso a soporte, con su clave ya puesta.
+  const falta = permisoQueFalta(pathname, can);
   return (
     <div className="p-6 max-w-2xl mx-auto">
       <EmptyState
         icon={LockKey}
         title="No tienes acceso a esta pantalla"
-        description="Si crees que deberías verla, pídeselo a un administrador."
+        description={falta
+          ? `Te falta el permiso «${falta}». Si lo necesitas, pídeselo a soporte: lo preparan y lo confirma quien pueda darlo.`
+          : 'Si crees que deberías verla, pídeselo a soporte: lo preparan y lo confirma quien pueda darlo.'}
+        action={(
+          <button
+            type="button"
+            onClick={() => abrirPedirAcceso(falta ? { tipo: 'permiso', permiso: falta } : {})}
+            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90"
+          >
+            <Key size={14} weight="bold" /> {falta ? 'Pedir este permiso' : 'Pedir acceso o permiso'}
+          </button>
+        )}
       />
     </div>
   );
@@ -43,6 +59,10 @@ function PantallaConPermiso({ pathname, children }) {
 const AvisoDeMensaje = lazy(() => import('./AvisoDeMensaje'));
 // Los tickets de soporte (#38): en Soporte y en el Manual, como el icono del 360 (#611).
 const TicketsLauncher = lazy(() => import('@/modules/soporte/components/TicketsLauncher'));
+// «Pedir acceso o permiso» (gemela de CRM#820): desde el menú de usuario y desde «No tienes acceso».
+const PedirAcceso = lazy(() => import('@/modules/soporte/components/PedirAcceso'));
+// Facturación pausada por la auditoría (#765): solo superadmin y admin, en todas las pantallas.
+const AvisoFacturacionPausada = lazy(() => import('@/modules/invoices/components/AvisoFacturacionPausada'));
 
 const COLLAPSED_KEY = 'crm.sidebar.collapsed';
 
@@ -150,15 +170,24 @@ export default function AppLayout() {
         )}
       >
         <SectionTabs />
+        {/* El aviso de la facturación pausada (#765). Fuera del `key` de la ruta:
+            no parpadea al cambiar de pantalla. Sin permiso o apagada, no pinta nada. */}
+        <Suspense fallback={null}>
+          <AvisoFacturacionPausada />
+        </Suspense>
         <Suspense fallback={
           <div className="flex items-center justify-center py-20">
             <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
           </div>
         }>
           <div key={pathname} className="animate-in fade-in duration-200">
-            <PantallaConPermiso pathname={pathname}>
-              <Outlet />
-            </PantallaConPermiso>
+            {/* Una pantalla que revienta no se lleva el menú, y al cambiar de
+                pantalla el aviso se va: el `key` lo vuelve a montar (CRM#625). */}
+            <ErrorBoundary dentro>
+              <PantallaConPermiso pathname={pathname}>
+                <Outlet />
+              </PantallaConPermiso>
+            </ErrorBoundary>
           </div>
         </Suspense>
       </main>
@@ -177,6 +206,9 @@ export default function AppLayout() {
           <TicketsLauncher />
         </Suspense>
       )}
+      <Suspense fallback={null}>
+        <PedirAcceso />
+      </Suspense>
       <Toaster />
     </div>
   );

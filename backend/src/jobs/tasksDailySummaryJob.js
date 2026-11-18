@@ -6,6 +6,7 @@ import {
   despacharCorreo,
   AVISO_TAREAS_DEL_DIA,
 } from '../modules/tasks/tasks.emails.js';
+import { marcaDeLaPersona } from '../shared/services/marca.service.js';
 
 /**
  * El correo de cada mañana del tablero de tareas (#210, fase 3): a cada persona,
@@ -43,8 +44,11 @@ export async function runTasksDailySummary({ ahora = new Date(), forzar = false 
   let mandados = 0;
   for (const persona of gente) {
     try {
-      const c = armarCorreoDelDia({ persona, tareas: persona.tareas, hoy: ahora });
+      // La marca de la persona: la de su empresa, no la de un campus suyo (11/11).
+      const marca = await marcaDeLaPersona({ userId: persona.user_id }).catch(() => null);
+      const c = armarCorreoDelDia({ persona, tareas: persona.tareas, hoy: ahora, marca });
       const r = await despacharCorreo({
+        marca,
         to: [{ email: persona.email, name: persona.nombre }],
         subject: c.asunto,
         htmlContent: c.htmlContent,

@@ -5,7 +5,7 @@ import * as model from './make.model.js';
 import * as leadService from '../leads/lead.service.js';
 import { query } from '../../shared/config/db.js';
 import { notifyAdmins } from '../notifications/notifications.service.js';
-import { deducirMapeo, alcanzaParaCrear } from './make.campos-habituales.js';
+import { deducirMapeo, alcanzaParaCrear, urlDeLaPagina } from './make.campos-habituales.js';
 
 export const AVISO_SIN_MAPEO = 'Sin mapeo: campos reconocidos por su nombre';
 
@@ -133,6 +133,13 @@ export async function handleIncoming({ slug, secret, payload, overrides = {}, ip
   }
 
   const mapped = applyMapping(payload, mapeo);
+  // La página del formulario, aunque el mapeo no la tenga (#221). Casi todos los
+  // mapeos se guardaron sin `landing_url`, y por eso esos prospectos entraban
+  // sin dirección y sin país. Si Make la manda (`page_url`, «Page URL»…), se usa.
+  if (!mapped.landing_url) {
+    const pagina = urlDeLaPagina(payload);
+    if (pagina) mapped.landing_url = pagina;
+  }
   // Aplicar overrides desde headers/query (responsable_email/nombre).
   // Estos ganan sobre lo mapeado del body.
   for (const [k, v] of Object.entries(overrides || {})) {

@@ -199,15 +199,15 @@ export async function getQueueState(req, res, next) {
 // vendrá en una migración posterior cuando se porte el módulo completo.
 export const SHORTCUTS_CATALOG = [
   { id: 'new_lead',     label: 'Nuevo prospecto', icon: 'UserPlus',     route: '/leads?new=1' },
-  { id: 'new_client',   label: 'Nuevo cliente',   icon: 'Building',     route: '/clientes?new=1' },
+  { id: 'new_client',   label: 'Nuevo cliente',   icon: 'Building',     route: '/clients?new=1' },
   { id: 'new_product',  label: 'Nuevo producto',  icon: 'Package',      route: '/products?new=1' },
-  { id: 'new_form',     label: 'Nuevo formulario', icon: 'FileText',    route: '/formularios?new=1' },
+  { id: 'new_form',     label: 'Nuevo formulario', icon: 'FileText',    route: '/forms?new=1' },
   { id: 'new_webhook',  label: 'Nuevo webhook',   icon: 'Webhook',      route: '/webhooks?new=1' },
   { id: 'send_email',   label: 'Enviar email',    icon: 'Envelope',     action: 'open_email_dialog' },
   { id: 'reminder',     label: 'Crear recordatorio', icon: 'Bell',      action: 'open_reminder_dialog' },
   { id: 'note',         label: 'Nueva nota',      icon: 'NotePencil',   action: 'open_note_dialog' },
   { id: 'sync_wc',      label: 'Sincronizar WC',  icon: 'ArrowsClockwise', action: 'sync_woocommerce' },
-  { id: 'reports',      label: 'Ver reportes',    icon: 'ChartBar',     route: '/reports' },
+  { id: 'reports',      label: 'Ver reportes',    icon: 'ChartBar',     route: '/informes' },
 ];
 
 // GET /api/projects/shortcuts/catalog (todos los autenticados)

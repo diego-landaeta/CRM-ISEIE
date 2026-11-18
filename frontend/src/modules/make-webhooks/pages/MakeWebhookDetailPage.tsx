@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { rutaApp } from '@/shared/lib/rutaApp';
 import {
   ArrowLeft, Copy, ArrowsClockwise, Trash, Plus, X, PaperPlaneTilt, PencilSimple,
 } from '@phosphor-icons/react';
@@ -352,7 +353,7 @@ export default function MakeWebhookDetailPage() {
                   'bg-amber-100 text-amber-700'
                 }`}>{d.result}</span>
                 <span className="text-muted-foreground tabular-nums">{new Date(d.received_at).toLocaleString('es-ES')}</span>
-                {d.lead_id && <a href={`/leads/${d.lead_id}`} className="text-primary underline">lead #{d.lead_id}</a>}
+                {d.lead_id && <a href={rutaApp(`/leads/${d.lead_id}`)} className="text-primary underline">lead #{d.lead_id}</a>}
                 {/* #627: un envío aceptado con nota es uno que entró sin mapeo: aviso, no error. */}
                 {d.error_message && <span className={`${d.result === 'accepted' ? 'text-amber-700 dark:text-amber-400' : 'text-red-600'} truncate`} title={d.error_message}>- {d.error_message}</span>}
               </div>

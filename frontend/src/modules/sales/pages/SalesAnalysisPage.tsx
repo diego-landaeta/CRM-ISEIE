@@ -29,6 +29,9 @@ type Resumen = {
   ventas: number; clientes: number; asesoras: number;
   importe: number; cobrado: number; pendiente: number;
   liquidadas: number; con_saldo: number; ticket_medio: number;
+  // Lo cobrado por encima del importe de la venta (#692). Opcional: un
+  // servidor anterior no lo manda.
+  cobrado_de_mas?: { ventas: number; importe: number };
   cuotas: {
     ventas_con_plan: number; total: number; cobradas: number; pendientes: number;
     vencidas: number; importe_pendiente: number; importe_vencido: number;
@@ -191,6 +194,18 @@ export default function SalesAnalysisPage() {
                 badge={`${resumen.con_saldo} con saldo`} badgeColor="bg-orange-50 text-orange-600 dark:bg-orange-950/30 dark:text-orange-400"
                 trend="down" />
             </div>
+
+            {/* #692: «Pendiente» ya no baja de 0. Si hay ventas cobradas por
+                encima de su importe, se dice aquí, con cuántas y cuánto, en vez
+                de restarlo de lo que deben las demás. */}
+            {(resumen.cobrado_de_mas?.ventas ?? 0) > 0 && (
+              <p role="note" className="text-xs rounded-md border border-warning/40 bg-warning-soft text-warning-soft-foreground px-3 py-2">
+                <strong>{resumen.cobrado_de_mas!.ventas}</strong>{' '}
+                {resumen.cobrado_de_mas!.ventas === 1 ? 'venta tiene' : 'ventas tienen'} cobrado más que su importe:{' '}
+                <strong>{fmt(resumen.cobrado_de_mas!.importe)}</strong> de más. Va dentro de «Cobrado», no resta del pendiente.
+                Suele ser un cobro repetido o un importe de venta mal puesto: hay que mirarlas una a una.
+              </p>
+            )}
 
             <div className="bg-card border border-border rounded-lg p-4">
               <h3 className="font-semibold mb-3 flex items-center gap-2"><Calendar size={16} weight="bold" /> Cobro fraccionado</h3>

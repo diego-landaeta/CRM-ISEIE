@@ -1,3 +1,5 @@
+import { posibleDuplicada, preguntarSiEmitirDuplicada, type OtraFactura } from './posibleDuplicada';
+
 /**
  * «Esta factura pasa de lo cobrado» (06/10).
  *
@@ -22,19 +24,45 @@ export function pasaDeLoCobrado(x: unknown): string | null {
  * Manda la factura. Si el servidor avisa de que pasa de lo cobrado, lo pregunta
  * y, con un sí, la manda otra vez con `permitir = true`. Con un no, el error
  * sigue su camino y quien llama lo enseña como cualquier otro.
+ *
+ * Y lo mismo con la posible duplicada (CRM#819): si ya hay una factura del
+ * mismo cliente por el mismo importe esa semana, sale el diálogo «¿Emitir otra
+ * igualmente?» y, con un sí, se manda con `confirmarDuplicada = true`. Los dos
+ * avisos pueden salir seguidos: lo ya confirmado no se vuelve a preguntar.
  */
-export async function emitirPreguntandoSiPasa<T>(enviar: (permitir: boolean) => Promise<T>): Promise<T> {
-  const preguntar = (motivo: string) => window.confirm(`${motivo}\n\n¿Emitirla igualmente?`);
-  let primera: T;
-  try {
-    primera = await enviar(false);
-  } catch (e) {
-    const motivo = pasaDeLoCobrado(e);
-    if (motivo && preguntar(motivo)) return enviar(true);
-    throw e;
+export async function emitirPreguntandoSiPasa<T>(
+  enviar: (permitir: boolean, confirmarDuplicada: boolean) => Promise<T>,
+  {
+    preguntar = (motivo: string) => window.confirm(`${motivo}\n\n¿Emitirla igualmente?`),
+    preguntarDuplicada = preguntarSiEmitirDuplicada,
+  }: {
+    preguntar?: (motivo: string) => boolean;
+    preguntarDuplicada?: (otra: OtraFactura) => Promise<boolean>;
+  } = {},
+): Promise<T> {
+  let permitir = false;
+  let confirmarDuplicada = false;
+  // Como mucho, un intento por aviso y el último.
+  for (let intento = 0; ; intento += 1) {
+    let respuesta: T | undefined;
+    let error: unknown = null;
+    try {
+      respuesta = await enviar(permitir, confirmarDuplicada);
+    } catch (e) {
+      error = e;
+    }
+    // Por si la respuesta llega como `{ success: false }` en vez de como error.
+    const lo = error ?? respuesta;
+    if (intento < 2) {
+      const motivo = permitir ? null : pasaDeLoCobrado(lo);
+      if (motivo) {
+        if (preguntar(motivo)) { permitir = true; continue; }
+      } else {
+        const otra = confirmarDuplicada ? null : posibleDuplicada(lo);
+        if (otra && await preguntarDuplicada(otra)) { confirmarDuplicada = true; continue; }
+      }
+    }
+    if (error) throw error;
+    return respuesta as T;
   }
-  // Por si la respuesta llega como `{ success: false }` en vez de como error.
-  const motivo = pasaDeLoCobrado(primera);
-  if (motivo && preguntar(motivo)) return enviar(true);
-  return primera;
 }

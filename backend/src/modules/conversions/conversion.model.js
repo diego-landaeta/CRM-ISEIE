@@ -1,6 +1,17 @@
 import { query, getClient } from '../../shared/config/db.js';
+import { COBRADO_DE, recalcularCobrado } from './cobrado.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { CLASE_FACTURA, FACTURA_REAL } from '../invoices/clase.sql.js';
+
+// EL DÍA DE UNA VENTA ES EL DE MADRID (#693). `CURRENT_DATE` es el día en la
+// zona de la sesión de PostgreSQL, que en el servidor no tiene por qué ser la
+// de la oficina: una venta registrada a las 00:30 de España quedaba con fecha
+// de ayer si la base va en UTC. Mismo criterio que informes y correos
+// (`APP_TIMEZONE`, por defecto Europe/Madrid). Validado: solo letras, '/', '_',
+// '+', '-' (es un nombre de zona, va dentro del SQL).
+const ZONA_APP = /^[A-Za-z_+\-/]+$/.test(process.env.APP_TIMEZONE || '')
+  ? process.env.APP_TIMEZONE : 'Europe/Madrid';
+export const HOY_EN_LA_OFICINA = `(NOW() AT TIME ZONE '${ZONA_APP}')::date`;
 
 const LEAD_EXISTS_SQL = `SELECT id, project_id FROM leads WHERE id = $1`;
 
@@ -108,7 +119,7 @@ export async function create(data) {
          metodo_pago, fecha_compromiso_pago, fecha_conversion, notas_pago,
          iva_pct, iva_incluido, iva_exento, base_imponible, iva_importe,
          subtotal_bruto, descuento_tipo, descuento_valor, descuento_importe)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, COALESCE($9, CURRENT_DATE), $10,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, COALESCE($9::date, ${HOY_EN_LA_OFICINA}), $10,
                $11, $12, $13, $14, $15, $16, $17, $18, $19)
        RETURNING *`,
       [lead_id, project_id, producto_contratado, cursoId,
@@ -152,7 +163,7 @@ export async function create(data) {
     if (Number(importe_pagado) > 0) {
       const { rows: firstPay } = await client.query(
         `INSERT INTO conversion_payments (conversion_id, importe, fecha, notas, metodo)
-         VALUES ($1, $2, COALESCE($3, CURRENT_DATE), $4, $5) RETURNING id, importe, metodo`,
+         VALUES ($1, $2, COALESCE($3::date, ${HOY_EN_LA_OFICINA}), $4, $5) RETURNING id, importe, metodo`,
         [conversion.id, importe_pagado, fecha_conversion, 'Pago inicial',
          (metodo_pago_inicial || (metodo_pago && metodo_pago !== 'fraccionado' ? metodo_pago : 'tarjeta'))]
       );
@@ -187,11 +198,20 @@ export async function create(data) {
 
 export async function findById(id) {
   const { rows } = await query(
+    // Lo cobrado, de los pagos (#692): «Cobrado 430 €» con «Pagos registrados
+    // (0)» era el campo guardado contra la lista de abajo. `importe_pagado`
+    // pisa al de `c.*` (va después); el guardado se devuelve aparte para que
+    // la pantalla avise si no cuadra. Pendiente nunca negativo: lo cobrado de
+    // más va en su propio campo.
     `SELECT c.*,
             l.nombre as lead_nombre, l.email as lead_email,
             p.nombre as proyecto_nombre, p.slug as proyecto_slug,
-            (c.importe_total - c.importe_pagado) AS importe_pendiente
+            cob.cobrado AS importe_pagado,
+            c.importe_pagado AS importe_pagado_guardado,
+            GREATEST(c.importe_total - cob.cobrado, 0) AS importe_pendiente,
+            GREATEST(cob.cobrado - c.importe_total, 0) AS cobrado_de_mas
      FROM conversions c
+     CROSS JOIN LATERAL (SELECT ${COBRADO_DE('c')} AS cobrado) cob
      LEFT JOIN leads l ON l.id = c.lead_id
      LEFT JOIN projects p ON p.id = c.project_id
      WHERE c.id = $1`,
@@ -256,7 +276,10 @@ export async function findByLead(leadId) {
   // Devuelve payments y refunds embebidos (json_agg) para evitar N+1 desde el front.
   const { rows } = await query(
     `SELECT c.*,
-            (c.importe_total - c.importe_pagado) AS importe_pendiente,
+            -- De los pagos, como el detalle de la venta (#692).
+            cob.cobrado AS importe_pagado,
+            GREATEST(c.importe_total - cob.cobrado, 0) AS importe_pendiente,
+            GREATEST(cob.cobrado - c.importe_total, 0) AS cobrado_de_mas,
             COALESCE((SELECT json_agg(ci_row ORDER BY ci_row.orden)
                       FROM (
                         SELECT id, product_id, descripcion, cantidad, precio_unitario, subtotal, orden
@@ -278,6 +301,7 @@ export async function findByLead(leadId) {
                       ) cr_row), '[]'::json) AS refunds,
             COALESCE((SELECT SUM(importe) FROM conversion_refunds WHERE conversion_id = c.id), 0) AS refunds_total
      FROM conversions c
+     CROSS JOIN LATERAL (SELECT ${COBRADO_DE('c')} AS cobrado) cob
      WHERE c.lead_id = $1
      ORDER BY c.fecha_conversion DESC, c.id DESC`,
     [leadId]
@@ -293,10 +317,11 @@ export async function findAll({ projectId, leadId, responsableId, pendiente, ven
   if (projectId) { conditions.push(`c.project_id = $${idx++}`); params.push(projectId); }
   if (leadId) { conditions.push(`c.lead_id = $${idx++}`); params.push(leadId); }
   if (responsableId) { conditions.push(`EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id = ANY($${idx++}::int[]))`); params.push([].concat(responsableId).map(Number)); }
-  if (pendiente === 'true') { conditions.push(`c.importe_pagado < c.importe_total`); }
-  if (pendiente === 'false') { conditions.push(`c.importe_pagado >= c.importe_total`); }
+  // Pagada o no, por lo que suman sus pagos (#692), no por el campo guardado.
+  if (pendiente === 'true') { conditions.push(`${COBRADO_DE('c')} < c.importe_total`); }
+  if (pendiente === 'false') { conditions.push(`${COBRADO_DE('c')} >= c.importe_total`); }
   if (vencido === 'true') {
-    conditions.push(`c.fecha_compromiso_pago IS NOT NULL AND c.fecha_compromiso_pago < CURRENT_DATE AND c.importe_pagado < c.importe_total`);
+    conditions.push(`c.fecha_compromiso_pago IS NOT NULL AND c.fecha_compromiso_pago < CURRENT_DATE AND ${COBRADO_DE('c')} < c.importe_total`);
   }
   // pendingBilling: conversion sin importe (backfill u otras a completar)
   if (pendingBilling === 'true') {
@@ -316,8 +341,13 @@ export async function findAll({ projectId, leadId, responsableId, pendiente, ven
   const { rows: countRows } = await query(
     `SELECT COUNT(*) AS count,
             COALESCE(SUM(c.importe_total), 0) AS total_importe,
-            COALESCE(SUM(c.importe_pagado), 0) AS total_pagado,
-            COALESCE(SUM(c.importe_total - c.importe_pagado), 0) AS total_pendiente,
+            -- «Cobrado de esas ventas» y «Pendiente», de los pagos (#692). Lo
+            -- pendiente no baja de 0 venta a venta: una cobrada de más no
+            -- puede tapar lo que deben otras. Lo de más va aparte.
+            COALESCE(SUM(cob.cobrado), 0) AS total_pagado,
+            COALESCE(SUM(GREATEST(c.importe_total - cob.cobrado, 0)), 0) AS total_pendiente,
+            COALESCE(SUM(GREATEST(cob.cobrado - c.importe_total, 0)), 0) AS total_cobrado_de_mas,
+            COUNT(*) FILTER (WHERE cob.cobrado > c.importe_total + 0.005) AS ventas_cobradas_de_mas,
             COALESCE(SUM(COALESCE(c.iva_importe, c.importe_total * 0.21 / 1.21)), 0) AS total_iva,
             -- Cuantas de estas ventas tienen factura de verdad. Una proforma no
             -- cuenta: es un presupuesto, no obliga a nadie. Una anulada tampoco.
@@ -340,7 +370,9 @@ export async function findAll({ projectId, leadId, responsableId, pendiente, ven
               AND c.factura_no_requerida IS NOT TRUE
               AND COALESCE(c.importe_total, 0) > 0
             ) AS pendientes_de_facturar
-       FROM conversions c ${countJoin} ${where}`,
+       FROM conversions c
+       CROSS JOIN LATERAL (SELECT ${COBRADO_DE('c')} AS cobrado) cob
+       ${countJoin} ${where}`,
     params
   );
   const total = parseInt(countRows[0].count);
@@ -348,6 +380,10 @@ export async function findAll({ projectId, leadId, responsableId, pendiente, ven
     importe: Number(countRows[0].total_importe),
     pagado: Number(countRows[0].total_pagado),
     pendiente: Number(countRows[0].total_pendiente),
+    cobradoDeMas: {
+      n: Number(countRows[0].ventas_cobradas_de_mas),
+      importe: Number(countRows[0].total_cobrado_de_mas),
+    },
     iva: Number(countRows[0].total_iva),
     facturadas: Number(countRows[0].facturadas),
     sinFactura: total - Number(countRows[0].facturadas),
@@ -541,8 +577,9 @@ export async function findAll({ projectId, leadId, responsableId, pendiente, ven
 
   const { rows } = await query(
     `SELECT c.id, c.lead_id, c.project_id, c.producto_contratado,
-            c.importe_total, c.importe_pagado,
-            (c.importe_total - c.importe_pagado) AS importe_pendiente,
+            -- De los pagos (#692): la columna «Pagado» y el estado de la fila.
+            c.importe_total, cob.cobrado AS importe_pagado,
+            GREATEST(c.importe_total - cob.cobrado, 0) AS importe_pendiente,
             c.fecha_compromiso_pago, c.metodo_pago,
             c.fecha_conversion, c.created_at,
             l.nombre as lead_nombre, l.email as lead_email,
@@ -559,6 +596,7 @@ export async function findAll({ projectId, leadId, responsableId, pendiente, ven
               WHERE cv.conversion_id = c.id) AS reparto_nombres,
             p.nombre as proyecto_nombre
      FROM conversions c
+     CROSS JOIN LATERAL (SELECT ${COBRADO_DE('c')} AS cobrado) cob
      LEFT JOIN leads l ON l.id = c.lead_id
      LEFT JOIN users u ON u.id = l.responsable_id
      LEFT JOIN users uv ON uv.id = c.vendedora_id
@@ -666,7 +704,7 @@ export async function filasDelPeriodo({
        SELECT 'venta'::text AS tipo, c.id AS venta_id, c.id AS clave_id, NULL::int AS factura_id,
               c.fecha_conversion AS fecha, c.fecha_conversion AS fecha_de_la_venta,
               c.lead_id, l.nombre::text AS cliente, c.producto_contratado::text AS producto,
-              c.importe_total AS total, c.importe_pagado AS pagado,
+              c.importe_total AS total, ${COBRADO_DE('c')} AS pagado, -- de los pagos (#692)
               -- Todas sus facturas, para verlas en la fila de la venta.
               (SELECT string_agg(x.codigo, ', ' ORDER BY x.numero) FROM invoices x
                 WHERE x.conversion_id = c.id AND x.tipo <> 'proforma' AND x.estado <> 'cancelada') AS factura,
@@ -737,14 +775,17 @@ export async function update(id, fields) {
 // Lo usa el cobro automático de Stripe: el dinero entró de verdad, y cuando excede el total
 // lo que suele estar mal es el total previsto, no el cobro. El flujo manual sigue bloqueado.
 // `referencia`: la del banco en una transferencia o un depósito (migración 206).
-export async function addPayment(conversionId, { importe, fecha, notas, metodo, referencia }, opts = {}) {
+export async function addPayment(conversionId, { importe, fecha, notas, metodo, referencia, origen, origen_ref }, opts = {}) {
   const client = await getClient();
   try {
     await client.query('BEGIN');
 
     // Verificar que la conversion existe y lock
+    // Lo cobrado, de los pagos (#692): partir del acumulado arrastraba
+    // cualquier desfase de antes a la venta para siempre.
     const { rows: convRows } = await client.query(
-      `SELECT id, importe_total, importe_pagado FROM conversions WHERE id = $1 FOR UPDATE`,
+      `SELECT c.id, c.importe_total, ${COBRADO_DE('c')} AS cobrado
+         FROM conversions c WHERE c.id = $1 FOR UPDATE`,
       [conversionId]
     );
     if (!convRows[0]) {
@@ -752,10 +793,35 @@ export async function addPayment(conversionId, { importe, fecha, notas, metodo, 
       return { error: 'NOT_FOUND' };
     }
 
-    const nuevoTotal = Number(convRows[0].importe_pagado) + Number(importe);
+    const nuevoTotal = Number(convRows[0].cobrado) + Number(importe);
     if (!opts.allowOverpay && nuevoTotal > Number(convRows[0].importe_total)) {
       await client.query('ROLLBACK');
       return { error: 'OVERPAY' };
+    }
+
+    // UN COBRO QUE YA ENTRÓ SOLO NO SE APUNTA OTRA VEZ A MANO (#766).
+    //
+    // La casilla «duplicado permitido» es para dos cobros de verdad iguales
+    // (dos cuotas el mismo día). Pero si el que ya está lo registró el CRM desde
+    // PayPal o desde el extracto del banco, el de la mano es ese mismo dinero:
+    // ahí la casilla no vale. Va ANTES del aviso de duplicado normal para que la
+    // pantalla no pregunte «¿registrarlo igualmente?» y luego diga que no.
+    // Solo se mira en lo que apunta una persona (`opts.manual`); los registros
+    // automáticos ya buscan su equivalente antes.
+    if (opts.manual) {
+      const { rows: auto } = await client.query(
+        `SELECT id, importe, fecha, notas, metodo, origen FROM conversion_payments
+          WHERE conversion_id = $1
+            AND origen IS NOT NULL
+            AND ABS(importe - $2::numeric) < 0.01
+            AND ABS(fecha - COALESCE($3::date, CURRENT_DATE)) <= 3
+          ORDER BY id LIMIT 1`,
+        [conversionId, importe, fecha]
+      );
+      if (auto[0]) {
+        await client.query('ROLLBACK');
+        return { error: 'DUPLICATE_AUTOMATICO', existing: auto[0] };
+      }
     }
 
     // Anti-duplicado: el mismo importe en la misma venta con menos de 3 dias
@@ -777,18 +843,17 @@ export async function addPayment(conversionId, { importe, fecha, notas, metodo, 
     }
 
     // INSERT payment
+    // `origen`/`origen_ref` (#766): de dónde vino el cobro (PayPal, el banco) y su
+    // id allí. Hay un índice único detrás: el mismo cobro no entra dos veces.
     const { rows: payRows } = await client.query(
-      `INSERT INTO conversion_payments (conversion_id, importe, fecha, notas, metodo, referencia)
-       VALUES ($1, $2, COALESCE($3, CURRENT_DATE), $4, $5, $6)
+      `INSERT INTO conversion_payments (conversion_id, importe, fecha, notas, metodo, referencia, origen, origen_ref)
+       VALUES ($1, $2, COALESCE($3, CURRENT_DATE), $4, $5, $6, $7, $8)
        RETURNING *`,
-      [conversionId, importe, fecha, notas, metodo || null, referencia || null]
+      [conversionId, importe, fecha, notas, metodo || null, referencia || null, origen || null, origen_ref || null]
     );
 
-    // UPDATE conversion.importe_pagado
-    await client.query(
-      `UPDATE conversions SET importe_pagado = $1, updated_at = NOW() WHERE id = $2`,
-      [nuevoTotal, conversionId]
-    );
+    // importe_pagado = suma de los pagos, con este ya dentro (#692).
+    await recalcularCobrado(client, conversionId);
 
     // Si la venta es fraccionada, el abono SALDA las cuotas pendientes más
     // antiguas (FIFO) — igual que "Registrar pago". Así "Abonar" y "Registrar
@@ -891,10 +956,8 @@ export async function deletePayment(paymentId) {
     );
 
     await client.query(`DELETE FROM conversion_payments WHERE id = $1`, [paymentId]);
-    await client.query(
-      `UPDATE conversions SET importe_pagado = GREATEST(0, importe_pagado - $1), updated_at = NOW() WHERE id = $2`,
-      [rows[0].importe, rows[0].conversion_id]
-    );
+    // Lo que queda de los pagos, no «lo de antes menos este» (#692).
+    await recalcularCobrado(client, rows[0].conversion_id);
 
     await client.query('COMMIT');
     return rows[0];

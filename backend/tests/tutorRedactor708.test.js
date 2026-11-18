@@ -35,6 +35,8 @@ const LO_SUYO = [
   'tasks.view_own', 'tasks.create', 'tasks.edit',
   'facturas_colaborador.subir',
   'tutores.mis_cursos', 'consultas.atender',
+  // CRM#820 (17/11): pedir acceso o permiso a soporte, como todos los roles.
+  'accesos.pedir',
 ];
 
 describe('#708 · el rol en el catálogo', () => {

@@ -4,6 +4,7 @@ import { findAllColumns } from '../modules/tasks/tasks.model.js';
 import * as resumenModel from '../modules/tasks/tasks.resumen.model.js';
 import { armarCorreoResumen, despacharCorreo, AVISO_TAREAS_RESUMEN } from '../modules/tasks/tasks.emails.js';
 import { procesarCambiosDeEstado } from '../modules/tasks/tasks.avisos-estado.js';
+import { marcaDeLaPersona } from '../shared/services/marca.service.js';
 
 /**
  * El resumen de la tarde del tablero (Diego, 26/10/2026: «todos los días de lunes
@@ -96,8 +97,10 @@ export async function runTareasResumen({ ahora = new Date(), forzar = false, sol
         reservado = await resumenModel.reservarResumen(persona.id, dia);
         if (!reservado) { repetidos++; continue; }
       }
-      const c = armarCorreoResumen({ persona, datos, dia, zona, columnas });
+      const marca = await marcaDeLaPersona({ userId: persona.id }).catch(() => null);
+      const c = armarCorreoResumen({ persona, datos, dia, zona, columnas, marca });
       const r = await despacharCorreo({
+        marca,
         to: [{ email: persona.email, name: persona.nombre }],
         subject: c.asunto,
         htmlContent: c.htmlContent,

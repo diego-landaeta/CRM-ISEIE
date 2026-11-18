@@ -78,7 +78,7 @@ function cuerpo(lead) {
     bloques: [
       P.parrafo(`<strong>${P.esc(lead.nombre)}</strong> entró hace ${hace} minutos y todavía no tiene ningún contacto apuntado.`),
       P.nota(`<strong>${P.esc(lead.nombre)}</strong>${datos ? `<br>${datos}` : ''}`),
-      P.boton({ texto: 'Abrir el prospecto', url: P.enlace(`/prospectos/${lead.id}`) }),
+      P.boton({ texto: 'Abrir el prospecto', url: P.enlace(`/leads/${lead.id}`) }),
     ],
     apagar: { texto: 'Este aviso se manda una sola vez por prospecto.' },
   });
@@ -99,7 +99,7 @@ async function vuelta() {
         type: 'lead_sin_tocar',
         title: `Sin contactar: ${lead.nombre}`,
         message: `Entro hace mas de ${MINUTOS} minutos y no tiene ningun contacto apuntado.`,
-        link_path: `/prospectos/${lead.id}`,
+        link_path: `/leads/${lead.id}`,
       }).catch(() => {});
 
       if (!lead.gestora_email) continue;

@@ -57,7 +57,8 @@ export interface ConsultaDetalle extends ConsultaFila {
   puedes: 'tutor' | 'admin';
 }
 
-export interface ListaConsultas { consultas: ConsultaFila[]; plazoHoras: number }
+/** `total`: cuántas encajan con el filtro aunque la lista venga recortada por su tope. */
+export interface ListaConsultas { consultas: ConsultaFila[]; total?: number; plazoHoras: number }
 
 export interface FiltrosConsultas {
   estado?: 'pendientes' | EstadoConsulta;
@@ -181,7 +182,7 @@ export const consultasApi = {
   alumnosSinMensajes: (ambito?: Ambito) =>
     client.get(`/consultas/alumnos-sin-mensajes${qs(ambito ? {
       todas: 1, projectId: ambito.projectId && ambito.projectId > 0 ? ambito.projectId : undefined, issuerId: ambito.issuerId || undefined,
-    } : {})}`) as Promise<ApiResponse<{ alumnos: AlumnoSinMensajes[]; diasAmbar: number; diasRojo: number }>>,
+    } : {})}`) as Promise<ApiResponse<{ alumnos: AlumnoSinMensajes[]; total?: number; diasAmbar: number; diasRojo: number }>>,
   escribirAlAlumno: (id: number, texto: string) =>
     client.post(`/consultas/alumnos/${id}/escribir`, { texto }) as Promise<ApiResponse<{ consultaId: number; enviado: boolean; error: string | null }>>,
   miCarga: () => client.get('/consultas/carga') as Promise<ApiResponse<MiCarga>>,

@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import { comprobarEntornoDeProduccion } from './scripts/entornoDeProduccion.js';
+import { versionDeLaApp } from './scripts/versionDeLaApp.js';
 
 const BASE = process.env.VITE_BASE_PATH || '/';
 
@@ -12,7 +13,13 @@ export default defineConfig(({ command, mode }) => {
   return CONFIG;
 });
 
+// La versión que enseña el menú, de la etiqueta de Git (ver scripts/versionDeLaApp.js).
+const APP_VERSION = versionDeLaApp({ cwd: __dirname });
+
 const CONFIG = {
+  define: {
+    __APP_VERSION__: JSON.stringify(APP_VERSION),
+  },
   plugins: [react()],
   base: BASE,
   resolve: {

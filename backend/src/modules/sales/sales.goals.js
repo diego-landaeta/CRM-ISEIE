@@ -59,6 +59,31 @@ export async function getGestoresStats({
   }
 
   /*
+    LO COBRADO, POR LA FECHA DEL COBRO (Diego, 12/11/2026: «los montos de los
+    rankings de todas las vistas son del monto cobrado»). Antes la columna era
+    lo pagado de las ventas del mes (`importe_pagado` de las ventas cerradas en
+    el periodo): dejaba fuera las cuotas de ventas anteriores y metia lo cobrado
+    en otros meses: una gestora con cuotas de ventas antiguas salía con la
+    mitad de lo que había cobrado. Es la misma cifra que el ranking de «Cómo voy» y los Reportes:
+    cada cobro con su fecha, con la parte de cada gestora en las compartidas.
+  */
+  let cobroFecha = '';
+  if (porFechas) {
+    cobroFecha = `AND cp.fecha >= $${params.push(from)} AND cp.fecha <= $${params.push(to)}`;
+  } else if (!allTime) {
+    cobroFecha = `AND TO_CHAR(cp.fecha, 'YYYY-MM') = $${params.push(per)}`;
+  }
+  const cobroProyecto = lista
+    ? `AND rc.project_id = ANY($${idxProyecto}::int[])`
+    : `AND ${SIN_PRUEBAS('rc.project_id')}`;
+  const COBRADO = `COALESCE((SELECT SUM(cp.importe * rc.peso)
+                               FROM conversion_payments cp
+                               JOIN conversion_reparto rc ON rc.conversion_id = cp.conversion_id
+                              WHERE rc.vendedora_id = u.id
+                                ${cobroFecha}
+                                ${cobroProyecto}), 0)::numeric`;
+
+  /*
     Quien RECIBE LEADS en estos proyectos. Es la misma regla que el reparto
     (lead.model.js): disponible, sin colaboraciones, y si es admin o superadmin
     solo con `recibe_leads` marcado en el proyecto.
@@ -82,8 +107,10 @@ export async function getGestoresStats({
             -- de la empresa en vez de contar la misma venta dos veces.
             COALESCE(SUM(c.peso), 0)::numeric AS ventas,
             COUNT(*) FILTER (WHERE c.compartida)::int AS compartidas,
-            COALESCE(SUM(c.importe_total * c.peso), 0)::numeric AS facturado,
-            COALESCE(SUM(c.importe_pagado * c.peso), 0)::numeric AS cobrado
+            -- Lo VENDIDO: el importe total de las ventas del periodo. Se
+            -- llamaba «facturado» y no lo era (no mira facturas).
+            COALESCE(SUM(c.importe_total * c.peso), 0)::numeric AS vendido,
+            ${COBRADO} AS cobrado
      FROM users u
      -- La venta es de QUIEN LA VENDIO, no de quien lleva la ficha, y puede ser
      -- de DOS personas a la vez.
@@ -100,7 +127,8 @@ export async function getGestoresStats({
      WHERE u.active = TRUE AND u.role IN ('gestor', 'admin', 'superadmin')
        ${userProjectJoin}
      GROUP BY u.id, u.nombre, u.email, u.role, u.is_available, u.gestor_colaboraciones
-     ORDER BY ventas DESC, facturado DESC`,
+     -- El ranking va por lo cobrado; a igual cobrado, por ventas.
+     ORDER BY cobrado DESC, ventas DESC, u.nombre`,
     params
   );
 
@@ -130,10 +158,11 @@ export async function getGestoresStats({
     project_id: projectId,
     // Quien no recibe leads aqui Y no vendio en el periodo, fuera. Quien vendio
     // se queda aunque ya no reciba: su venta es real y no se esconde.
-    gestores: stats.filter((s) => s.recibe_leads || Number(s.ventas) > 0).map((s) => {
+    // Lo mismo con quien cobró: una cuota de una venta vieja también es suya.
+    gestores: stats.filter((s) => s.recibe_leads || Number(s.ventas) > 0 || Number(s.cobrado) > 0).map((s) => {
       const g = goalByUser[s.user_id] || null;
       const ventas = Number(s.ventas);
-      const facturado = Number(s.facturado);
+      const cobrado = Number(s.cobrado);
       return {
         user_id: s.user_id,
         nombre: s.nombre,
@@ -147,14 +176,16 @@ export async function getGestoresStats({
         // Cuantas de esas ventas comparte con otra persona. Es metrica de la
         // gestora, no de la empresa: la venta sigue siendo una.
         compartidas: Number(s.compartidas) || 0,
-        facturado,
-        cobrado: Number(s.cobrado),
+        vendido: Number(s.vendido),
+        cobrado,
         meta_ventas: g ? Number(g.meta_ventas) : null,
+        // La meta de importe se mide contra lo COBRADO (12/11/2026). La
+        // columna conserva su nombre de siempre, `meta_facturacion`.
         meta_facturacion: g ? Number(g.meta_facturacion) : null,
         meta_set_by: g?.set_by_nombre || null,
         meta_notas: g?.notas || null,
         progreso_ventas_pct: g && g.meta_ventas > 0 ? Math.min(100, Math.round((ventas / Number(g.meta_ventas)) * 100)) : null,
-        progreso_facturacion_pct: g && Number(g.meta_facturacion) > 0 ? Math.min(100, Math.round((facturado / Number(g.meta_facturacion)) * 100)) : null,
+        progreso_facturacion_pct: g && Number(g.meta_facturacion) > 0 ? Math.min(100, Math.round((cobrado / Number(g.meta_facturacion)) * 100)) : null,
       };
     }),
   };
@@ -167,7 +198,7 @@ export async function getMyStats(userId, { projectId = null, periodo = null } = 
   const per = periodo || currentPeriodo();
   const all = await getGestoresStats({ projectId, periodo: per });
   const me = all.gestores.find((g) => g.user_id === userId);
-  return me || { user_id: userId, ventas: 0, facturado: 0, cobrado: 0, meta_ventas: null, meta_facturacion: null, periodo: per };
+  return me || { user_id: userId, ventas: 0, vendido: 0, cobrado: 0, meta_ventas: null, meta_facturacion: null, periodo: per };
 }
 
 /**
