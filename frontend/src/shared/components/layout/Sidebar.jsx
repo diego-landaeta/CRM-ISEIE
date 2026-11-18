@@ -167,7 +167,11 @@ export const SECCIONES_DE_ANTES = [
     items: [
       { to: '/products',   label: 'Productos',  icon: Package, sectionPrefixes: ['/products'], permiso: 'products.view' },
       // Por campus, con tutora y fecha (#336): también gestoras y tutoras, como en MultiCRM.
-      { to: '/products/pending', label: 'Cursos pendientes', icon: Clock, roles: ['admin', 'superadmin', 'gestor', 'tutor'], permiso: 'products.view' },
+      // `oPermiso` (gemela de CRM#843): el tutor y el tutor redactor no tienen «Ver
+      // productos», pero sus avisos («Te han asignado un curso») llevan aquí. Con
+      // «Sus cursos» la pantalla se les abre (`rutaPermitida`); el menú no cambia,
+      // porque la entrada sigue pidiendo `products.view` para salir.
+      { to: '/products/pending', label: 'Cursos pendientes', icon: Clock, roles: ['admin', 'superadmin', 'gestor', 'tutor'], permiso: 'products.view', oPermiso: 'tutores.mis_cursos' },
       { to: '/woocommerce', label: 'WooCommerce', icon: ShoppingBag, roles: ['admin', 'superadmin'], permiso: 'woocommerce.view' },
       { to: '/configuracion/categorias-arbol', label: 'Árbol de categorías', icon: Sliders, roles: ['admin', 'superadmin'], permiso: 'products.categorias' },
       // «Certificados» (/documentos) fuera del menú: estaba vacío, y los títulos

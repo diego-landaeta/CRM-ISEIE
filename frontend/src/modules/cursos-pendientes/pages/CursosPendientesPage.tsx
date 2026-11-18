@@ -27,7 +27,8 @@ import ControlDeSubidas from '../components/ControlDeSubidas';
 export const dias = (c: Pick<CursoPendiente, 'dias_para_la_fecha' | 'estado'>): string => {
   const d = c.dias_para_la_fecha;
   if (d == null) return '—';
-  if (['publicado', 'cerrado', 'cancelado'].includes(c.estado)) return '—';
+  // Entregado (#770): la fecha ya no corre para el tutor.
+  if (['entregado', 'publicado', 'cerrado', 'cancelado'].includes(c.estado)) return '—';
   if (d === 0) return 'hoy';
   return d < 0 ? `${d} d` : `+${d} d`;
 };
@@ -40,6 +41,7 @@ const ESTADO_TONO: Record<EstadoCurso, string> = {
   pendiente_asignar: 'bg-warning-soft text-warning-soft-foreground',
   asignado: 'bg-muted text-foreground',
   en_desarrollo: 'bg-primary/10 text-primary',
+  entregado: 'bg-warning-soft text-warning-soft-foreground',
   publicado: 'bg-success-soft text-success-soft-foreground',
   cerrado: 'bg-muted text-muted-foreground',
   cancelado: 'bg-muted text-muted-foreground line-through',
@@ -52,7 +54,8 @@ function Avance({ c }: { c: CursoPendiente }) {
 
 export default function CursosPendientesPage() {
   const { user } = useAuth() as { user: { role?: string; userId?: number; id?: number } | null };
-  const esTutora = user?.role === 'tutor';
+  // El tutor redactor (#708) también desarrolla cursos: ve lo suyo, como una tutora (#770).
+  const esTutora = user?.role === 'tutor' || user?.role === 'tutor_redactor';
   const supervisa = user?.role === 'admin' || user?.role === 'superadmin';
   const puedeCrear = ['admin', 'superadmin', 'soporte', 'gestor'].includes(user?.role || '');
 

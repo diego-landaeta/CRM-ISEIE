@@ -3,6 +3,7 @@ import { logger } from '../../shared/utils/logger.js';
 import { sendEmail } from '../../shared/services/brevo.service.js';
 import { correo, parrafo, boton, nota, esc, enlace } from '../../shared/services/email-plantilla.service.js';
 import { notifyUsers } from '../notifications/notifications.service.js';
+import { NO_ESCRIBIR_A_TUTORES } from '../../shared/config/frenoTutores.js';
 
 /**
  * Los correos de «Cursos pendientes» (#336): la tutora y el admin se enteran sin
@@ -12,6 +13,8 @@ import { notifyUsers } from '../notifications/notifications.service.js';
  *   · Apagados por defecto (CURSOS_PENDIENTES_CORREOS_ACTIVOS=true los enciende),
  *     como los de tareas: con el interruptor apagado se arma el correo y se
  *     registra, pero no se llama a Brevo.
+ *   · A tutores y tutores redactores, nada mientras siga el freno de los
+ *     tutores (CORREOS_A_TUTORES sin poner): solo la campana (#770).
  *   · Cada persona los apaga con el aviso `cursos_pendientes` (avisos_apagados).
  *   · Cada correo lleva clave de idempotencia: un reintento o un reinicio no lo
  *     manda dos veces.
@@ -25,15 +28,22 @@ export const correosActivos = () => {
   return v === 'true' || v === '1';
 };
 
-/** A quién le llega: activos, con correo y sin el aviso apagado. */
+/**
+ * A quién le llega: activos, con correo y sin el aviso apagado. Y, mientras
+ * siga puesto el freno de los tutores (NO_ESCRIBIR_A_TUTORES, desde el 15/09), a
+ * nadie que sea tutor o tutor redactor, sea su rol principal o uno añadido
+ * (#770). Les queda la campana; el correo, cuando se levante el freno.
+ */
 async function conCorreo(userIds) {
   if (!userIds?.length) return [];
   const { rows } = await query(
     `SELECT u.id, u.nombre, u.email
        FROM users u
       WHERE u.id = ANY($1::int[]) AND u.active AND u.email IS NOT NULL
-        AND NOT EXISTS (SELECT 1 FROM avisos_apagados a WHERE a.user_id = u.id AND a.aviso = $2)`,
-    [userIds, AVISO_CURSOS_PENDIENTES]
+        AND NOT EXISTS (SELECT 1 FROM avisos_apagados a WHERE a.user_id = u.id AND a.aviso = $2)
+        AND NOT ($3::boolean AND (u.role::text IN ('tutor', 'tutor_redactor')
+                                  OR COALESCE(u.roles_extra, '{}')::text[] && ARRAY['tutor', 'tutor_redactor']))`,
+    [userIds, AVISO_CURSOS_PENDIENTES, NO_ESCRIBIR_A_TUTORES]
   );
   return rows;
 }

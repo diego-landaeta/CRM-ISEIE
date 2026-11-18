@@ -3,6 +3,7 @@ import * as service from './cursos-pendientes.service.js';
 import * as subidas from './cursos-pendientes.subidas.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { proyectosDelAmbito, comoLista } from '../../shared/utils/ambito.js';
+import { esRolDeTutor } from '../../shared/utils/roles.js';
 
 const entero = z.coerce.number().int().positive();
 const fecha = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha tiene que ser AAAA-MM-DD');
@@ -21,7 +22,7 @@ const modificarSchema = z.object({
   tutor_id: entero.nullable().optional(),
   fecha_comprometida: fecha.optional(),
   motivo: z.string().trim().max(1000).optional(),
-  estado: z.enum(['en_desarrollo', 'cancelado', 'cerrado', 'publicado']).optional(),
+  estado: z.enum(['en_desarrollo', 'entregado', 'cancelado', 'cerrado', 'publicado']).optional(),
   tipo: z.enum(['curso', 'diplomado', 'master']).optional(),
   avance_foto: z.boolean().optional(),
   avance_video: z.boolean().optional(),
@@ -47,12 +48,13 @@ function leer(schema, datos) {
 }
 
 /**
- * Los campus que pide la pantalla, recortados a los de la persona. Una tutora no
+ * Los campus que pide la pantalla, recortados a los de la persona. Una tutora (o
+ * un tutor redactor, #770) no
  * se recorta por campus (ve los cursos que le han asignado), solo se filtra si
  * pide uno.
  */
 async function campus(req) {
-  if (req.user?.role === 'tutor') {
+  if (esRolDeTutor(req.user?.role)) {
     const id = req.query.projectId ? Number(req.query.projectId) : null;
     return id ? [id] : null;
   }

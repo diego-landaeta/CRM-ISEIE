@@ -2,6 +2,7 @@ import { getClient, query } from '../../shared/config/db.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import { campusDeLaPersona, veTodoElCrm } from '../../shared/utils/ambito.js';
+import { esRolDeTutor } from '../../shared/utils/roles.js';
 import { notifyUsers } from '../notifications/notifications.service.js';
 import * as model from './cursos-pendientes.model.js';
 import { notificar } from './cursos-pendientes.correos.js';
@@ -13,8 +14,10 @@ import * as subidas from './cursos-pendientes.subidas.js';
  * Una formación por crear es UN registro dentro de su campus, con tutora, fecha
  * comprometida y estado; las alumnas en espera cuelgan de él.
  *
- * ESTADOS: pendiente_asignar → asignado → en_desarrollo → publicado → cerrado, y
- * cancelado. «Retrasado» no es un estado: es una marca que sale sola.
+ * ESTADOS: pendiente_asignar → asignado → en_desarrollo → entregado → publicado →
+ * cerrado, y cancelado. «Retrasado» no es un estado: es una marca que sale sola.
+ * «Entregado» (#770): el tutor lo da por hecho y falta subirlo; su fecha ya no
+ * corre. Se publica desde «en desarrollo» o desde «entregado».
  *
  *   · asignar tutora (solo admin) pasa de pendiente_asignar a asignado;
  *   · «en desarrollo» exige fecha comprometida (también lo defiende la base);
@@ -23,21 +26,35 @@ import * as subidas from './cursos-pendientes.subidas.js';
  *   · «publicado» solo por `publicar`, que pide la URL definitiva, comprueba que es
  *     del dominio del campus y que responde;
  *   · cuando todas las alumnas dejan de estar «en espera» y el curso está
- *     publicado, pasa solo a «cerrado».
+ *     publicado, pasa solo a «cerrado»;
+ *   · vender un curso marcado «sin desarrollar» en Productos crea el pendiente
+ *     solo (o suma la alumna), lo asigna a su responsable y le avisa con la
+ *     fecha límite (`alVender`, #770).
  *
  * QUIÉN PUEDE QUÉ
  *   · tutora: los que tiene asignados. Estado, avance, fecha (con motivo), notas
- *     y marcar a cada alumna. No asigna ni cancela.
+ *     y marcar a cada alumna. No asigna ni cancela. El tutor redactor (#708)
+ *     cuenta como tutora: es quien hace los cursos.
  *   · gestora / comercial: los de sus campus. Crear uno al vender algo que no
  *     existe y sumar alumnas.
  *   · admin: sus campus, todo. Super admin y soporte: todos.
  */
 
-export const ABIERTOS = ['pendiente_asignar', 'asignado', 'en_desarrollo', 'publicado'];
+export const ABIERTOS = ['pendiente_asignar', 'asignado', 'en_desarrollo', 'entregado', 'publicado'];
 const TIPOS = ['curso', 'diplomado', 'master'];
 
 const esJefe = (user) => ['admin', 'superadmin'].includes(user?.role);
-const esTutora = (user) => user?.role === 'tutor';
+// El tutor redactor (#708) hace los cursos: cuenta como tutora. Antes solo se
+// miraba `tutor`, y asignarle un pendiente a un redactor daba 400.
+const esTutora = (user) => esRolDeTutor(user?.role);
+
+/** ¿Se le puede asignar un pendiente? Tutor o tutor redactor, de alta. */
+export async function esResponsableValido(userId) {
+  const { rows: [t] } = await query(
+    `SELECT id FROM users WHERE id = $1 AND role IN ('tutor', 'tutor_redactor') AND active`, [userId]);
+  return !!t;
+}
+
 const puedeCrear = (user) => ['admin', 'superadmin', 'soporte', 'gestor'].includes(user?.role);
 
 /** Los campus que la persona puede ver; null = todos. */
@@ -205,9 +222,8 @@ export async function modificar(user, id, cambios) {
   // Tutora: solo admin. Pasa de pendiente_asignar a asignado y avisa a la tutora.
   if ('tutor_id' in cambios && cambios.tutor_id !== curso.tutor_id) {
     if (!jefe) throw new AppError('Solo un administrador asigna la tutora', 403, 'FORBIDDEN');
-    if (cambios.tutor_id) {
-      const { rows: [t] } = await query(`SELECT id FROM users WHERE id = $1 AND role = 'tutor' AND active`, [cambios.tutor_id]);
-      if (!t) throw new AppError('Esa persona no es una tutora activa', 400, 'VALIDATION_ERROR');
+    if (cambios.tutor_id && !(await esResponsableValido(cambios.tutor_id))) {
+      throw new AppError('Esa persona no es una tutora ni un tutor redactor activo', 400, 'VALIDATION_ERROR');
     }
     set.tutor_id = cambios.tutor_id || null;
     if (!cambios.tutor_id && curso.estado === 'asignado') set.estado = 'pendiente_asignar';
@@ -232,10 +248,21 @@ export async function modificar(user, id, cambios) {
   if ('estado' in cambios && cambios.estado !== curso.estado) {
     const e = cambios.estado;
     if (e === 'publicado') throw new AppError('Para publicar usa «Marcar publicado», que pide la URL', 400, 'VALIDATION_ERROR');
-    if (e === 'en_desarrollo') {
+    if (e === 'en_desarrollo' && curso.estado === 'entregado') {
+      // Devolverlo: la entrega no vale. Solo quien manda, y con motivo.
+      if (!jefe) throw new AppError('Solo un administrador devuelve un curso entregado', 403, 'FORBIDDEN');
+      if (!motivo) throw new AppError('Devolver un curso entregado exige un motivo', 400, 'MOTIVO_REQUERIDO');
+      set.estado = 'en_desarrollo';
+      if (curso.tutor_id) avisos.push(['devuelto', curso.tutor_id]);
+    } else if (e === 'en_desarrollo') {
       if (curso.estado !== 'asignado' && curso.estado !== 'en_desarrollo') throw new AppError('Primero hay que asignarle una tutora', 409, 'CONFLICT');
       if (!(set.fecha_comprometida || curso.fecha_comprometida)) throw new AppError('Para pasar a «en desarrollo» hace falta la fecha comprometida', 400, 'FECHA_REQUERIDA');
       set.estado = 'en_desarrollo';
+    } else if (e === 'entregado') {
+      // #770: el tutor lo da por hecho y falta subirlo. Solo desde «en desarrollo».
+      if (curso.estado !== 'en_desarrollo') throw new AppError('Solo se entrega un curso que está «en desarrollo»', 409, 'CONFLICT');
+      set.estado = 'entregado';
+      avisos.push(['entregado', null]);
     } else if (e === 'cancelado') {
       if (!jefe) throw new AppError('Solo un administrador cancela', 403, 'FORBIDDEN');
       if (!motivo) throw new AppError('Cancelar exige un motivo', 400, 'MOTIVO_REQUERIDO');
@@ -283,7 +310,10 @@ export async function modificar(user, id, cambios) {
   } finally { client.release(); }
 
   const nuevo = await model.porId(curso.id);
-  for (const [tipo, quien] of avisos) await avisarTutora(tipo, nuevo, quien, user);
+  for (const [tipo, quien] of avisos) {
+    if (tipo === 'entregado') await avisarEntregado(nuevo, user);
+    else await avisarTutora(tipo, nuevo, quien, user, motivo);
+  }
   if (fechaMovida && nuevo.veces_movida_fecha >= 2) await avisarFechaMovida(nuevo, user, motivo);
   return nuevo;
 }
@@ -329,7 +359,9 @@ export async function publicar(user, id, { url, sinComprobar = false }) {
   const curso = await cargarVisible(user, id);
   const jefe = esJefe(user) || user.role === 'soporte';
   if (!jefe && !esTutora(user)) throw new AppError('No puedes publicar', 403, 'FORBIDDEN');
-  if (curso.estado !== 'en_desarrollo') throw new AppError('Solo se publica un curso que está «en desarrollo»', 409, 'CONFLICT');
+  if (!['en_desarrollo', 'entregado'].includes(curso.estado)) {
+    throw new AppError('Solo se publica un curso que está «en desarrollo» o «entregado»', 409, 'CONFLICT');
+  }
   if (sinComprobar) {
     if (!jefe) throw new AppError('Solo un administrador publica sin comprobar', 403, 'FORBIDDEN');
     if (!/^https:\/\//.test(String(url || ''))) throw new AppError('La URL tiene que empezar por https://', 400, 'URL_INVALIDA');
@@ -429,20 +461,47 @@ export async function marcarAlumna(user, cursoId, alumnaId, { estado, avisada })
 
 // ── Avisos ────────────────────────────────────────────────────────────────
 
-const enlace = (id) => `/products/pending?curso=${id}`;
+export const enlace = (id) => `/products/pending?curso=${id}`;
 
-async function avisarTutora(tipo, curso, tutorId, user) {
+const diaDe = (f) => (f ? String(f instanceof Date ? f.toISOString() : f).slice(0, 10) : null);
+const esperando = (n) => (n ? ` · ${n} alumna${n === 1 ? '' : 's'} esperando` : '');
+
+export async function avisarTutora(tipo, curso, tutorId, user, motivo = null) {
+  if (tipo === 'devuelto') {
+    await notifyUsers({
+      targetUserIds: [tutorId], type: 'curso_pendiente_devuelto',
+      title: `Te han devuelto un curso: ${curso.nombre}`,
+      message: `${curso.campus}. Vuelve a «en desarrollo»${motivo ? `. Motivo: ${motivo}` : ''}.`,
+      link_path: enlace(curso.id), triggered_by_user_id: user?.userId || null,
+    }).catch(() => {});
+    return;
+  }
   if (tipo !== 'asignado') return;
+  // Si ya trae fecha (la del plazo de la venta, #770), se le dice cuál es; si no, que la ponga.
+  const fecha = diaDe(curso.fecha_comprometida);
   await notificar({
     clave: `cp-asignado-${curso.id}-${tutorId}`, project_id: curso.project_id,
     targetUserIds: [tutorId], type: 'curso_pendiente_asignado',
     title: `Te han asignado un curso: ${curso.nombre}`,
-    message: `${curso.campus}${curso.alumnas_esperando ? ` · ${curso.alumnas_esperando} alumna${curso.alumnas_esperando === 1 ? '' : 's'} esperando` : ''}. Pon la fecha comprometida.`,
+    message: `${curso.campus}${esperando(curso.alumnas_esperando)}. ${fecha ? `Fecha límite: ${fecha}.` : 'Pon la fecha comprometida.'}`,
     link_path: enlace(curso.id), triggered_by_user_id: user?.userId || null,
   }).catch(() => {});
 }
 
-async function avisarAlumnaNueva(curso, user) {
+/** «Entregado» (#770): administración del campus se entera de que falta subirlo. */
+async function avisarEntregado(curso, user) {
+  const admins = await model.adminsDelCampus(curso.project_id);
+  if (!admins.length) return;
+  await notificar({
+    clave: `cp-entregado-${curso.id}-${diaDe(new Date())}`, project_id: curso.project_id,
+    targetUserIds: admins, type: 'curso_pendiente_entregado',
+    title: `Entregado, falta publicarlo: ${curso.nombre}`,
+    message: `${curso.campus}${curso.tutora ? ` · lo entrega ${curso.tutora}` : ''}${esperando(curso.alumnas_esperando)}.`,
+    link_path: enlace(curso.id), triggered_by_user_id: user?.userId || null,
+  }).catch(() => {});
+}
+
+export async function avisarAlumnaNueva(curso, user) {
   await notifyUsers({
     targetUserIds: [curso.tutor_id], type: 'curso_pendiente_alumna',
     title: `Una alumna más espera: ${curso.nombre}`,

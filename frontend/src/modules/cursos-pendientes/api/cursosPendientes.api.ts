@@ -5,7 +5,8 @@ import client from '@/shared/api/client';
  * es UN registro dentro de su campus; las alumnas en espera cuelgan de él.
  */
 
-export type EstadoCurso = 'pendiente_asignar' | 'asignado' | 'en_desarrollo' | 'publicado' | 'cerrado' | 'cancelado';
+/** «Entregado» (#770): el tutor lo da por hecho y falta subirlo. */
+export type EstadoCurso = 'pendiente_asignar' | 'asignado' | 'en_desarrollo' | 'entregado' | 'publicado' | 'cerrado' | 'cancelado';
 export type TipoCurso = 'curso' | 'diplomado' | 'master';
 export type EstadoAlumna = 'en_espera' | 'habilitada' | 'cancelada';
 
@@ -140,6 +141,6 @@ export const cursosApi = {
 
 export const ESTADOS: Record<EstadoCurso, string> = {
   pendiente_asignar: 'Sin tutora', asignado: 'Asignado', en_desarrollo: 'En desarrollo',
-  publicado: 'Publicado', cerrado: 'Cerrado', cancelado: 'Cancelado',
+  entregado: 'Entregado', publicado: 'Publicado', cerrado: 'Cerrado', cancelado: 'Cancelado',
 };
 export const TIPOS: Record<TipoCurso, string> = { curso: 'Curso', diplomado: 'Diplomado', master: 'Máster' };

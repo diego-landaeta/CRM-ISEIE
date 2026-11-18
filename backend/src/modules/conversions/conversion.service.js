@@ -8,6 +8,7 @@ import { logger } from '../../shared/utils/logger.js';
 import * as leadModel from '../leads/lead.model.js';
 import { dispararCobro } from '../webhooks-salientes/webhooks-salientes.service.js';
 import { buscarVentaRepetida, errorVentaYaExiste, apuntarForzada } from './venta-repetida.js';
+import { alVender } from '../cursos-pendientes/cursos-pendientes.venta.js';
 
 /**
  * SE HA APUNTADO (O CAMBIADO) UN COBRO: el único sitio desde el que
@@ -195,6 +196,12 @@ export async function create(data, userId, opciones = {}) {
   } catch (err) {
     logger.warn({ err: err.message }, 'enganche de proforma suelta fallo (no bloqueante)');
   }
+
+  // Cursos vendidos sin desarrollar (#770): si la venta lleva alguno marcado así
+  // en Productos, se crea su «Curso pendiente» (o se suma la alumna), se asigna
+  // a su responsable y se le avisa con la fecha límite. `alVender` no lanza:
+  // un fallo se queda en el log y la venta sigue.
+  await alVender({ conversionId: conv.id, userId });
 
   // Hook: crear comision automaticamente si hay regla
   commissionModel.createCommissionForConversion(conv.id).catch(err =>
