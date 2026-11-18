@@ -366,3 +366,14 @@ export async function testMoodle(token, url, opciones, { consultas = false } = {
     return { ok: false, message: err.message };
   }
 }
+
+/**
+ * Las mismas pruebas de «Probar conexión», para «Comprobar ahora» de la salud de
+ * las conexiones (CRM#533, `salud.service.js`). Una sola forma de probar cada
+ * proveedor: si cambia aquí, cambia en los dos sitios.
+ */
+export const PROBAR = {
+  stripe: (clave) => testStripe(clave),
+  brevo: (clave) => testBrevo(clave),
+  moodle: (clave, config = {}) => testMoodle(clave, config.url, undefined, { consultas: config.consultas === true }),
+};

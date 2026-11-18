@@ -3,6 +3,8 @@ import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EstadoDeLaSincronizacion from '../components/EstadoDeLaSincronizacion';
+import SaludDeLasConexiones from '../components/SaludDeLasConexiones';
+import usePermission from '@/shared/hooks/usePermission';
 import MonitaskCard from '@/modules/monitask/components/MonitaskCard';
 import { toast } from '@/shared/hooks/useToast';
 import {
@@ -69,6 +71,9 @@ function fmt(d: string | null): string {
 export default function IntegrationsPage() {
   const { activeProject } = useProjectContext() as { activeProject: { id?: number | null; nombre?: string } };
   const pid = activeProject?.id;
+  // La salud de las conexiones de cada campus (CRM#533): superadmin y admin.
+  const { can } = usePermission();
+  const verSalud = can('integrations.salud');
 
   return (
     <div className="space-y-5 pb-8">
@@ -101,6 +106,8 @@ export default function IntegrationsPage() {
         </div>
       </div>
 
+      {/* Todos los campus de quien mira: aquí no hay «Todos» en la cabecera. */}
+      {verSalud && <SaludDeLasConexiones deTodos />}
       {/* Monitask (#236): de todo el CRM, no de un campus. Sale sola si el servidor
           lo tiene encendido (MONITASK_ACTIVO) y quien mira puede configurarlo. */}
       <MonitaskCard />

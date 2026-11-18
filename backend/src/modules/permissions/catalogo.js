@@ -383,6 +383,9 @@ export const SECCIONES = [
         clave: 'integrations', nombre: 'Integraciones', acciones: [
           a('view', 'Ver integraciones', 'Los servicios conectados (Stripe, Brevo…).', yPM(ADMIN_SOPORTE)),
           a('edit', 'Configurar integraciones', 'Conectarlos, probarlos y desconectarlos.', ADMIN_SOPORTE),
+          // CRM#533: la salud de las conexiones de cada campus (y «Comprobar ahora»,
+          // que prueba sin cambiar nada). Solo superadmin y admin, cada uno en lo suyo.
+          a('salud', 'Ver la salud de las conexiones', 'Si cada conexión de sus campus funciona (Stripe, Moodle, WooCommerce, Brevo, Meta, webhooks), con su última señal y el motivo si falla; y comprobarlas ahora.', ADMIN),
         ],
       },
     ],

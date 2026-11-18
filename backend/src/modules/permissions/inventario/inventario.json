@@ -5898,6 +5898,50 @@
   "puertas": []
  },
  {
+  "id": "GET /api/integrations/salud",
+  "tipo": "ruta",
+  "modulo": "integrations",
+  "metodo": "GET",
+  "ruta": "/api/integrations/salud",
+  "relativa": "GET /salud",
+  "controlador": "salud",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "integrations.salud"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/integrations/salud/comprobar",
+  "tipo": "ruta",
+  "modulo": "integrations",
+  "metodo": "POST",
+  "ruta": "/api/integrations/salud/comprobar",
+  "relativa": "POST /salud/comprobar",
+  "controlador": "comprobar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "integrations.salud"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/integrations/:provider",
   "tipo": "ruta",
   "modulo": "integrations",
