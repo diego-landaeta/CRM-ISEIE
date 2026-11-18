@@ -12,6 +12,8 @@ import {
 import { METODOS_QUE_DISPARAN } from '../webhooks-salientes/webhooks-salientes.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { alcanceComercial, personasDentro, dentroDelAlcance } from '../../shared/utils/roles.js';
+import { campusParaRecortar } from '../../shared/utils/ambito.js';
+import { posiblesRepetidas as gruposRepetidos } from './venta-repetida.js';
 
 export async function create(req, res, next) {
   try {
@@ -19,6 +21,26 @@ export async function create(req, res, next) {
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
     const conversion = await conversionService.create(parsed.data, req.user.userId);
     res.status(201).json({ success: true, data: conversion });
+  } catch (err) { next(err); }
+}
+
+// GET /api/conversions/posibles-repetidas?projectId=
+//
+// Los grupos de ventas del mismo alumno y programa en el mismo campus
+// (CRM#898). Solo en los campus de quien pide; una gestora, los grupos donde
+// hay alguna venta suya. Sin `projectId`, todos sus campus.
+export async function posiblesRepetidas(req, res, next) {
+  try {
+    const pid = /^[1-9]\d{0,9}$/.test(String(req.query.projectId ?? '')) ? Number(req.query.projectId) : null;
+    if (req.query.projectId != null && req.query.projectId !== '' && !pid) {
+      throw new AppError('projectId no válido', 400, 'VALIDATION_ERROR');
+    }
+    const suyos = await campusParaRecortar(req);
+    let campus = suyos;
+    if (pid) campus = !suyos || suyos.includes(pid) ? [pid] : [-1];
+    const personas = await alcanceComercial(req.user);
+    const grupos = await gruposRepetidos({ campus, personas });
+    res.json({ success: true, data: grupos });
   } catch (err) { next(err); }
 }
 

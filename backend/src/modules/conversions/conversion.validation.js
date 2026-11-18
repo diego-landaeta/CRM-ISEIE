@@ -36,6 +36,8 @@ export const createConversionSchema = z.object({
   descuento_tipo: z.enum(['none', 'pct', 'monto']).optional(),
   descuento_valor: z.number().min(0).optional(),
   subtotal_bruto: z.number().min(0).optional(),
+  // Crear la venta aunque el alumno ya tenga una de este programa (CRM#898).
+  forzar: z.boolean().optional(),
 }).refine((d) => d.importe_pagado <= d.importe_total + 0.01, {
   message: 'importe_pagado no puede ser mayor que importe_total',
   path: ['importe_pagado'],

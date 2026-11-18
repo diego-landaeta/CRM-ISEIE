@@ -2897,6 +2897,28 @@
   "puertas": []
  },
  {
+  "id": "GET /api/conversions/posibles-repetidas",
+  "tipo": "ruta",
+  "modulo": "conversions",
+  "metodo": "GET",
+  "ruta": "/api/conversions/posibles-repetidas",
+  "relativa": "GET /posibles-repetidas",
+  "controlador": "posiblesRepetidas",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "conversions.edit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/conversions/by-lead/:leadId",
   "tipo": "ruta",
   "modulo": "conversions",
