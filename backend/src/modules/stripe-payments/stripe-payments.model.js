@@ -354,6 +354,18 @@ export async function getById(id) {
   return rows[0] || null;
 }
 
+/** El campus de una venta, o null si no existe (#428: asociar solo dentro del campus del cargo). */
+export async function campusDeLaVenta(conversionId) {
+  const { rows } = await query('SELECT project_id FROM conversions WHERE id = $1', [conversionId]);
+  return rows[0] ? Number(rows[0].project_id) : null;
+}
+
+/** El campus de un prospecto, o null si no existe. */
+export async function campusDelLead(leadId) {
+  const { rows } = await query('SELECT project_id FROM leads WHERE id = $1', [leadId]);
+  return rows[0] ? Number(rows[0].project_id) : null;
+}
+
 export async function listProjectsWithStripe() {
   const { rows } = await query(
     `SELECT DISTINCT project_id FROM project_integrations
