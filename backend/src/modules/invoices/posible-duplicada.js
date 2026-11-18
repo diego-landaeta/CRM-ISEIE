@@ -165,18 +165,27 @@ export function vieneConfirmada(d = {}) {
 export async function duplicadasDeLaCola(paymentIds, exec = query) {
   const ids = (paymentIds || []).map(Number).filter(Number.isInteger);
   if (!ids.length) return new Map();
-  const nombreFactura = `COALESCE(NULLIF(CASE WHEN l.cliente_tipo = 'empresa'
+  // Si el alumno dio sus datos fiscales (CRM#764), la factura saldra con ellos:
+  // se compara con ellos, no con la ficha (CRM#764, 18/11: la emision
+  // automatica se paraba por el NIF del formulario y la cola, que miraba la
+  // ficha sin NIF, no decia «posible duplicada»).
+  const nombreFactura = `COALESCE(fd.nombre, NULLIF(CASE WHEN l.cliente_tipo = 'empresa'
         THEN btrim(l.custom_fields->>'razon_social') END, ''), l.nombre)`;
   const { rows } = await exec(
     `SELECT cp.id AS payment_id, o.*
        FROM conversion_payments cp
        JOIN conversions c ON c.id = cp.conversion_id
        LEFT JOIN leads l ON l.id = c.lead_id
+       LEFT JOIN LATERAL (
+         SELECT f.nombre, f.nif FROM factura_datos_fiscales f
+          WHERE f.conversion_id = c.id AND f.estado IN ('respondido', 'ficha') AND f.nif IS NOT NULL
+          ORDER BY f.id DESC LIMIT 1
+       ) fd ON true
        CROSS JOIN LATERAL (
          SELECT ${COLUMNAS}
            FROM invoices i
           WHERE ${condicionParecida({
-            nombre: nombreFactura, nif: 'l.identificacion_fiscal', total: 'cp.importe',
+            nombre: nombreFactura, nif: 'COALESCE(fd.nif, l.identificacion_fiscal)', total: 'cp.importe',
             fecha: 'NULL', conversionId: 'c.id',
           })}
           ORDER BY ABS(i.fecha_emision::date - CURRENT_DATE), i.id DESC
