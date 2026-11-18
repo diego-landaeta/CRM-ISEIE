@@ -16,6 +16,8 @@ vi.mock('@/shared/api/client', () => ({ default: { get, post, put: vi.fn(), dele
 vi.mock('@/shared/hooks/useToast', () => ({ toast: vi.fn() }));
 const permisos = vi.hoisted(() => ({ mapa: {} }));
 vi.mock('@/shared/hooks/usePermission', () => ({ default: () => ({ can: (k) => permisos.mapa[k] === true }) }));
+// La tarjeta mira en la sesión si los links están encendidos en el servidor (CRM#870).
+vi.mock('@/contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 2, funciones: { links_pago: true } } }) }));
 
 const { default: LinksDePagoCard } = await import('@/modules/links-pago/components/LinksDePagoCard');
 
