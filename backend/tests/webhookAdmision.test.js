@@ -364,7 +364,8 @@ describe('se une a la persona («que se sincronicen con el mail»)', () => {
     expect(m.lead_id).toBeNull();
     // Ninguna ficha con ese correo ni ninguna creada por la admisión en el campus.
     expect((await q('SELECT count(*)::int AS n FROM leads WHERE lower(email) = $1', [correo('nuevo')]))[0].n).toBe(0);
-    expect((await q(`SELECT count(*)::int AS n FROM leads WHERE project_id = $1 AND (utm_source = 'admision' OR notas = 'Creado por la solicitud de admisión')`, [PROYECTO.id]))[0].n).toBe(0);
+    expect((await q(`SELECT count(*)::int AS n FROM leads l WHERE l.project_id = $1 AND (l.notas = 'Creado por la solicitud de admisión'
+      OR EXISTS (SELECT 1 FROM lead_utms u WHERE u.lead_id = l.id AND u.utm_source = 'admision'))`, [PROYECTO.id]))[0].n).toBe(0);
   });
 
   it('sin correo no se crea prospecto (es obligatorio en la ficha): la solicitud queda sin vincular', async () => {
